@@ -1103,19 +1103,24 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
     }
 
-    private _debugGroupStatisticsDrawCall(): void {
+    private _debugGroupStatisticsDrawCall(count: number = 1): void {
         for (let i = this._debugGroupStack.length - 1; i >= 0; i--)
-            ++this._debugGroupStack[i].drawCallCount;
+            this._debugGroupStack[i].drawCallCount += count;
     }
 
-    private _debugGroupStatisticsBufferUpload(): void {
+    private _debugGroupStatisticsBufferUpload(count: number = 1): void {
         for (let i = this._debugGroupStack.length - 1; i >= 0; i--)
-            ++this._debugGroupStack[i].bufferUploadCount;
+            this._debugGroupStack[i].bufferUploadCount += count;
     }
 
-    private _debugGroupStatisticsTextureBind(): void {
+    private _debugGroupStatisticsTextureBind(count: number = 1): void {
         for (let i = this._debugGroupStack.length - 1; i >= 0; i--)
-            ++this._debugGroupStack[i].textureBindCount;
+            this._debugGroupStack[i].textureBindCount += count;
+    }
+
+    private _debugGroupStatisticsTriangles(count: number): void {
+        for (let i = this._debugGroupStack.length - 1; i >= 0; i--)
+            this._debugGroupStack[i].triangleCount += count;
     }
 
     private setRenderPassParameters(colorAttachments: GfxColorAttachment[], numColorAttachments: number, depthStencilAttachment: GfxDepthStencilAttachment | null, clearBits: GLenum, clearColorR: number, clearColorG: number, clearColorB: number, clearColorA: number, depthClearValue: number, stencilClearValue: number): void {
@@ -1251,6 +1256,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const pipeline = this._currentPipeline;
         gl.drawArrays(pipeline.drawMode, firstVertex, count);
         this._debugGroupStatisticsDrawCall();
+        this._debugGroupStatisticsTriangles(count / 3);
     }
 
     private drawIndexed(count: number, firstIndex: number): void {
@@ -1260,6 +1266,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const byteOffset = inputState.indexBufferByteOffset + firstIndex * inputState.indexBufferCompByteSize;
         gl.drawElements(pipeline.drawMode, count, inputState.indexBufferType, byteOffset);
         this._debugGroupStatisticsDrawCall();
+        this._debugGroupStatisticsTriangles(count / 3);
     }
 
     private endPass(resolveColorTo_: GfxTexture | null): void {

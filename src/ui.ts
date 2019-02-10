@@ -1550,6 +1550,8 @@ class StatisticsPanel extends Panel {
         this.fpsGraph.drawText(`FPS: ${renderStatistics.fps | 0}`);
         if (renderStatistics.drawCallCount)
             this.fpsGraph.drawText(`Draw Calls: ${renderStatistics.drawCallCount}`);
+        if (renderStatistics.triangleCount)
+            this.fpsGraph.drawText(`Drawn Triangles: ${renderStatistics.triangleCount}`);
         if (renderStatistics.textureBindCount)
             this.fpsGraph.drawText(`Texture Binds: ${renderStatistics.textureBindCount}`);
         if (renderStatistics.bufferUploadCount)

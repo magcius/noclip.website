@@ -213,6 +213,7 @@ export interface GfxDebugGroup {
     drawCallCount: number;
     textureBindCount: number;
     bufferUploadCount: number;
+    triangleCount: number;
 }
 
 export interface GfxSwapChain {

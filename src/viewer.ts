@@ -95,7 +95,7 @@ export class Viewer {
         this.renderStatisticsTracker.beginFrame();
 
         // TODO(jstpierre): Allocations.
-        const debugGroup: GfxDebugGroup = { name: 'Scene Rendering', drawCallCount: 0, bufferUploadCount: 0, textureBindCount: 0 };
+        const debugGroup: GfxDebugGroup = { name: 'Scene Rendering', drawCallCount: 0, bufferUploadCount: 0, textureBindCount: 0, triangleCount: 0 };
         this.gfxDevice.pushDebugGroup(debugGroup);
 
         const renderPass = this.scene.render(this.gfxDevice, this.viewerRenderInput);
