@@ -571,7 +571,7 @@ function writeStringTable(w: WriteContext, v: StringTable): void {
 }
 
 export function write<T extends {}>(v: T, fileType: FileType = FileType.CRG1, magic?: string): ArrayBuffer {
-    const stream = new WritableStream(new GrowableBuffer(0x1000000));
+    const stream = new WritableStream();
 
     const magics = fileDescriptions[fileType].magics;
 
