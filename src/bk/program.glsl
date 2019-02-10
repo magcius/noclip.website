@@ -30,9 +30,20 @@ void main() {
 #endif
 
 #ifdef FRAG
+vec4 Texture2D_N64_Point(sampler2D t_Texture, vec2 t_TexCoord)
+{
+    return texture(t_Texture, t_TexCoord);
+}
+
+vec4 Texture2D_N64_Average(sampler2D t_Texture, vec2 t_TexCoord)
+{
+    // Unimplemented.
+    return texture(t_Texture, t_TexCoord);
+}
+
 // Implements N64-style "triangle bilienar filtering" with three taps.
 // Based on ArthurCarvalho's implementation, modified by NEC and Jasper for noclip.
-vec4 Texture2D_N64Bilinear(sampler2D t_Texture, vec2 t_TexCoord)
+vec4 Texture2D_N64_Bilerp(sampler2D t_Texture, vec2 t_TexCoord)
 {
     vec2 t_Size = vec2(textureSize(t_Texture, 0));
     vec2 t_Offs = fract(t_TexCoord*t_Size - vec2(0.5));
@@ -43,11 +54,22 @@ vec4 Texture2D_N64Bilinear(sampler2D t_Texture, vec2 t_TexCoord)
     return t_S0 + abs(t_Offs.x)*(t_S1-t_S0) + abs(t_Offs.y)*(t_S2-t_S0);
 }
 
+vec4 Texture2D_N64(sampler2D t_Texture, vec2 t_TexCoord)
+{
+#if defined(USE_TEXTFILT_POINT)
+    return Texture2D_N64_Point(t_Texture, t_TexCoord);
+#elif defined(USE_TEXTFILT_AVERAGE)
+    return Texture2D_N64_Average(t_Texture, t_TexCoord);
+#elif defined(USE_TEXTFILT_BILERP)
+    return Texture2D_N64_Bilerp(t_Texture, t_TexCoord);
+#endif
+}
+
 void main() {
     vec4 t_Color = vec4(1.0);
 
 #ifdef USE_TEXTURE
-    t_Color *= Texture2D_N64Bilinear(u_Texture[0], v_TexCoord.xy);
+    t_Color *= Texture2D_N64(u_Texture[0], v_TexCoord.xy);
 #endif
 
 #ifdef USE_VERTEX_COLOR

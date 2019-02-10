@@ -36,7 +36,10 @@ export function parse(buffer: ArrayBufferSlice, initialZUpd: boolean): Geometry 
     segmentBuffers[0x0f] = textureData;
 
     const state = new F3DEX.RSPState(segmentBuffers);
+    // Z_UPD
     state.gDPSetOtherModeL(5, 1, initialZUpd ? 0x20 : 0x00);
+    // G_TF_BILERP
+    state.gDPSetOtherModeH(12, 2, 0x2000);
 
     F3DEX.runDL_F3DEX(state, 0x09000000);
     const rspOutput = state.finish();

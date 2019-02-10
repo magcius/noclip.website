@@ -6,10 +6,10 @@ import { DeviceProgram, DeviceProgramReflection } from "../Program";
 import { Texture, getFormatString, RSPOutput, Vertex, DrawCall, GeometryMode } from "./f3dex";
 import { GfxDevice, GfxTextureDimension, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxHostAccessPass, GfxBlendMode, GfxBlendFactor, GfxCullMode } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { assert, nArray } from '../util';
+import { assert, nArray, hexzero } from '../util';
 import { GfxRenderInstBuilder, GfxRenderInst, GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
-import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers';
+import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
 import { mat4 } from 'gl-matrix';
 import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
@@ -160,6 +160,12 @@ function translateCullMode(m: number): GfxCullMode {
         return GfxCullMode.FRONT_AND_BACK;
 }
 
+const enum TextFilt {
+    G_TF_POINT   = 0x00,
+    G_TF_AVERAGE = 0x03,
+    G_TF_BILERP  = 0x02,
+}
+
 const modelViewScratch = mat4.create();
 const texMatrixScratch = mat4.create();
 const textureMappings = nArray(2, () => new TextureMapping());
@@ -186,6 +192,14 @@ class DrawCallInstance {
         const shade = (drawCall.SP_GeometryMode & GeometryMode.G_SHADE) !== 0;
         if (shade)
             program.defines.set('USE_VERTEX_COLOR', '1');
+
+        const textFilt = (drawCall.DP_OtherModeH >>> 12) & 0x03;
+        if (textFilt === TextFilt.G_TF_POINT)
+            program.defines.set(`USE_TEXTFILT_POINT`, '1');
+        else if (textFilt === TextFilt.G_TF_AVERAGE)
+            program.defines.set(`USE_TEXTFILT_AVERAGE`, '1');
+        else if (textFilt === TextFilt.G_TF_BILERP)
+            program.defines.set(`USE_TEXTFILT_BILERP`, '1')
 
         this.renderInst.gfxProgram = device.createProgram(program);
 
