@@ -171,7 +171,7 @@ export class MaterialInstance {
         this.templateRenderInst = renderHelper.renderInstBuilder.newRenderInst();
         this.templateRenderInst.name = this.name;
         this.templateRenderInst.gfxProgram = this.materialData.gfxProgram;
-        GX_Material.translateGfxMegaState(this.templateRenderInst.ensureMegaState(), material.gxMaterial);
+        GX_Material.translateGfxMegaState(this.templateRenderInst.setMegaStateFlags(), material.gxMaterial);
         // TODO(jstpierre): Perhaps make this customizable?
         let layer = !material.gxMaterial.ropInfo.depthTest ? GfxRendererLayer.BACKGROUND : GfxRendererLayer.OPAQUE;
         if (material.translucent)

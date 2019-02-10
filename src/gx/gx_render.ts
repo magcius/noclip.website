@@ -111,7 +111,7 @@ export class GXMaterialHelperGfx {
         const program = new GX_Material.GX_Program(material, materialHacks);
         this.templateRenderInst.gfxProgram = device.createProgram(program);
         this.templateRenderInst.name = material.name;
-        GX_Material.translateGfxMegaState(this.templateRenderInst.ensureMegaState(), material);
+        GX_Material.translateGfxMegaState(this.templateRenderInst.setMegaStateFlags(), material);
         this.programKey = device.queryProgram(this.templateRenderInst.gfxProgram).uniqueKey;
         renderHelper.renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, ub_MaterialParams);
     }

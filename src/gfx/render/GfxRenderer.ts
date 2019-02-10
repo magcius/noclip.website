@@ -218,6 +218,10 @@ export class GfxRenderInst {
         this._setFlag(GfxRenderInstFlags.DESTROYED, true);
     }
 
+    public rebuildPipeline(): void {
+        this._setFlag(GfxRenderInstFlags.PIPELINE_DIRTY, true);
+    }
+
     public setPipelineDirect(pipeline: GfxRenderPipeline): void {
         this._pipeline = pipeline;
         this._setFlag(GfxRenderInstFlags.PIPELINE_DIRTY, false);
@@ -255,13 +259,11 @@ export class GfxRenderInst {
     }
 
     public setMegaStateFlags(r: Partial<GfxMegaStateDescriptor> | null = null): GfxMegaStateDescriptor {
-        setMegaStateFlags(this.ensureMegaState(), r);
-        return this._megaState;
-    }
-
-    public ensureMegaState(): GfxMegaStateDescriptor {
         if (this._megaState === this.parentRenderInst._megaState)
             this._megaState = copyMegaState(this.parentRenderInst._megaState);
+        if (r !== null)
+            setMegaStateFlags(this._megaState, r);
+        this._setFlag(GfxRenderInstFlags.PIPELINE_DIRTY, true);
         return this._megaState;
     }
 
