@@ -4,7 +4,7 @@ import { readFileSync } from 'fs';
 import * as Viewer from '../viewer';
 import { DeviceProgram, DeviceProgramReflection } from "../Program";
 import { Texture, getFormatString, RSPOutput, Vertex, DrawCall, GeometryMode } from "./f3dex";
-import { GfxDevice, GfxTextureDimension, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxHostAccessPass, GfxBlendMode, GfxBlendFactor } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxTextureDimension, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxHostAccessPass, GfxBlendMode, GfxBlendFactor, GfxCullMode } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { assert, nArray } from '../util';
 import { GfxRenderInstBuilder, GfxRenderInst, GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
@@ -128,8 +128,8 @@ export class N64Data {
         return device.createSampler({
             wrapS: translateCM(texture.tile.cms),
             wrapT: translateCM(texture.tile.cmt),
-            minFilter: GfxTexFilterMode.BILINEAR,
-            magFilter: GfxTexFilterMode.BILINEAR,
+            minFilter: GfxTexFilterMode.POINT,
+            magFilter: GfxTexFilterMode.POINT,
             mipFilter: GfxMipFilterMode.NO_MIP,
             minLOD: 0, maxLOD: 0,
         });
@@ -145,6 +145,19 @@ export class N64Data {
         device.destroyInputLayout(this.inputLayout);
         device.destroyInputState(this.inputState);
     }
+}
+
+function translateCullMode(m: number): GfxCullMode {
+    const cullFront = !!(m & 0x200);
+    const cullBack = !!(m & 0x400);
+    if (cullFront && cullBack)
+        return GfxCullMode.NONE;
+    else if (cullFront)
+        return GfxCullMode.BACK;
+    else if (cullBack)
+        return GfxCullMode.FRONT;
+    else
+        return GfxCullMode.FRONT_AND_BACK;
 }
 
 const modelViewScratch = mat4.create();
@@ -164,7 +177,11 @@ class DrawCallInstance {
             program.defines.set('USE_TEXTURE', '1');
 
         const zUpd = !!(drawCall.DP_OtherModeL & 0x20);
-        this.renderInst.setMegaStateFlags({ depthWrite: zUpd });
+        const cullMode = translateCullMode(drawCall.SP_GeometryMode);
+        this.renderInst.setMegaStateFlags({
+            depthWrite: zUpd,
+            cullMode,
+        });
 
         const shade = (drawCall.SP_GeometryMode & GeometryMode.G_SHADE) !== 0;
         if (shade)

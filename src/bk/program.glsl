@@ -30,11 +30,24 @@ void main() {
 #endif
 
 #ifdef FRAG
+// Implements N64-style "triangle bilienar filtering" with three taps.
+// Based on ArthurCarvalho's implementation, modified by NEC and Jasper for noclip.
+vec4 Texture2D_N64Bilinear(sampler2D t_Texture, vec2 t_TexCoord)
+{
+    vec2 t_Size = vec2(textureSize(t_Texture, 0));
+    vec2 t_Offs = fract(t_TexCoord*t_Size - vec2(0.5));
+    t_Offs -= step(1.0, t_Offs.x + t_Offs.y);
+    vec4 t_S0 = texture(t_Texture, t_TexCoord - t_Offs / t_Size);
+    vec4 t_S1 = texture(t_Texture, t_TexCoord - vec2(t_Offs.x - sign(t_Offs.x), t_Offs.y) / t_Size);
+    vec4 t_S2 = texture(t_Texture, t_TexCoord - vec2(t_Offs.x, t_Offs.y - sign(t_Offs.y)) / t_Size);
+    return t_S0 + abs(t_Offs.x)*(t_S1-t_S0) + abs(t_Offs.y)*(t_S2-t_S0);
+}
+
 void main() {
     vec4 t_Color = vec4(1.0);
 
 #ifdef USE_TEXTURE
-    t_Color *= texture2D(u_Texture[0], v_TexCoord.xy);
+    t_Color *= Texture2D_N64Bilinear(u_Texture[0], v_TexCoord.xy);
 #endif
 
 #ifdef USE_VERTEX_COLOR

@@ -80,13 +80,9 @@ export class Vertex {
     // Alpha.
     public a: number = 0;
 
-    public _tx: number = 0;
-    public _ty: number = 0;
-
     public copy(v: Vertex): void {
         this.x = v.x; this.y = v.y; this.z = v.z; this.tx = v.tx; this.ty = v.ty;
         this.c0 = v.c0; this.c1 = v.c1; this.c2 = v.c2; this.a = v.a;
-        this._tx = v._tx; this._ty = v._ty;
     }
 }
 
@@ -100,8 +96,6 @@ class StagingVertex extends Vertex {
         this.y = view.getInt16(offs + 0x02);
         this.z = view.getInt16(offs + 0x04);
         // flag (unused)
-        this._tx = view.getInt16(offs + 0x08);
-        this._ty = view.getInt16(offs + 0x0A);
         this.tx = (view.getInt16(offs + 0x08) / 0x40) + 0.5;
         this.ty = (view.getInt16(offs + 0x0A) / 0x40) + 0.5;
         this.c0 = view.getUint8(offs + 0x0C) / 0xFF;
