@@ -1,7 +1,7 @@
 
 import ArrayBufferSlice from "../../ArrayBufferSlice";
 import { readFileSync, writeFileSync } from "fs";
-import { assert, hexzero } from "../../util";
+import { assert, hexzero, hexdump } from "../../util";
 import * as Pako from 'pako';
 import * as BYML from "../../byml";
 
@@ -40,9 +40,8 @@ function getFileBuffer(fs: FS, file: FSFile): ArrayBufferSlice {
         return fs.buffer.subarray(file.dataOffs);
 }
 
-function getFileOffsetBuffer(fs: FS, offset: number): ArrayBufferSlice {
-    const file = fs.files.find((f) => f.fileTableOffs === offset);
-    return getFileBuffer(fs, file);
+function getFileOffsetIndex(fs: FS, offset: number): FSFile | null {
+    return fs.files.find((f) => f.fileTableOffs === offset) || null;
 }
 
 function decompress(buffer: ArrayBufferSlice): ArrayBufferSlice {
@@ -56,17 +55,60 @@ function decompress(buffer: ArrayBufferSlice): ArrayBufferSlice {
     return new ArrayBufferSlice(decompressed.buffer as ArrayBuffer);
 }
 
+interface CRG1File {
+    Data: ArrayBufferSlice;
+}
+
+function extractFile(fileTable: CRG1File[], fs: FS, fsfile: FSFile): number {
+    if (fsfile === null)
+        return -1;
+
+    const index = fileTable.length;
+    const buffer = decompress(getFileBuffer(fs, fsfile));
+    fileTable.push({ Data: buffer });
+    return index;
+}
+
 function extractMap(fs: FS, name: string, sceneID: number, pointer: number, fileOpaque: number, fileAlpha: number): void {
-    const fileOpaqueData = decompress(getFileOffsetBuffer(fs, fileOpaque));
-    const fileAlphaData = fileAlpha !== 0 ? decompress(getFileOffsetBuffer(fs, fileAlpha)) : null;
+    const fileTable: CRG1File[] = [];
 
     const crg1 = {
         Name: name,
         SceneID: sceneID,
-        GeoOpaque: fileOpaqueData,
-        GeoAlpha:  fileAlphaData,
-        Pointer:   pointer,
+        Pointer: pointer,
+        Files: fileTable,
+
+        // Geometry
+        OpaGeoFileId: -1,
+        XluGeoFileId: -1,
+
+        // Skybox
+        OpaSkyboxFileId: -1,
+        OpaSkyboxScale: 1,
+        XluSkyboxFileId: -1,
+        XluSkyboxScale: 1,
     };
+
+    crg1.OpaGeoFileId = extractFile(fileTable, fs, getFileOffsetIndex(fs, fileOpaque));
+    crg1.XluGeoFileId = extractFile(fileTable, fs, getFileOffsetIndex(fs, fileAlpha));
+
+    const f9cae0 = decompress(fs.buffer.slice(0xF9CAE0));
+    const f9cae0View = f9cae0.createDataView();
+    for (let i = 0x87B0; i < 0x8BA0; i += 0x28) {
+        const skyboxTableSceneID  = f9cae0View.getUint16(i + 0x00);
+        if (skyboxTableSceneID === sceneID) {
+            const opaSkyboxId    = f9cae0View.getUint16(i + 0x04);
+            const opaSkyboxScale = f9cae0View.getFloat32(i + 0x08);
+            const xluSkyboxId    = f9cae0View.getUint16(i + 0x10);
+            const xluSkyboxScale = f9cae0View.getFloat32(i + 0x14);
+
+            crg1.OpaSkyboxFileId = extractFile(fileTable, fs, opaSkyboxId > 0 ? fs.files[opaSkyboxId] : null);
+            crg1.OpaSkyboxScale = opaSkyboxScale;
+            crg1.XluSkyboxFileId = extractFile(fileTable, fs, xluSkyboxId > 0 ? fs.files[xluSkyboxId] : null);
+            crg1.XluSkyboxScale = xluSkyboxScale;
+            break;
+        }
+    }
 
     const data = BYML.write(crg1, BYML.FileType.CRG1);
     writeFileSync(`${pathBaseOut}/${hexzero(sceneID, 2).toUpperCase()}_arc.crg1`, Buffer.from(data));

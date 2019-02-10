@@ -5,7 +5,7 @@ import * as F3DEX from "./f3dex";
 
 // Banjo-Kazooie Geometry
 
-interface Geometry {
+export interface Geometry {
     rspOutput: F3DEX.RSPOutput;
 }
 

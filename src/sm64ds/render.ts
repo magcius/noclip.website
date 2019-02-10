@@ -1,5 +1,5 @@
 
-import { mat2d, mat4, vec3, mat3 } from 'gl-matrix';
+import { mat2d, mat4, vec3 } from 'gl-matrix';
 
 import * as BYML from '../byml';
 import * as LZ77 from './lz77';

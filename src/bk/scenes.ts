@@ -1,13 +1,15 @@
 
 import * as Viewer from '../viewer';
-import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import Progressable from '../Progressable';
 import { fetchData } from '../fetch';
 import * as Geo from './geo';
 import * as BYML from '../byml';
 import { FakeTextureHolder, TextureHolder } from '../TextureHolder';
-import { textureToCanvas, N64Renderer, N64Data } from './render';
+import { textureToCanvas, N64Renderer, N64Data, BKPass } from './render';
 import { BasicRendererHelper } from '../oot3d/render';
+import { mat4 } from 'gl-matrix';
+import { transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 
 const pathBase = `bk`;
 
@@ -29,6 +31,24 @@ class BKRenderer extends BasicRendererHelper implements Viewer.SceneGfx {
             this.sceneRenderers[i].prepareToRender(hostAccessPass, viewerInput);
     }
 
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        const hostAccessPass = device.createHostAccessPass();
+        this.prepareToRender(hostAccessPass, viewerInput);
+        device.submitPass(hostAccessPass);
+        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+
+        // First, render the skybox.
+        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, transparentBlackFullClearRenderPassDescriptor);
+        this.viewRenderer.executeOnPass(device, skyboxPassRenderer, BKPass.SKYBOX);
+        skyboxPassRenderer.endPass(null);
+        device.submitPass(skyboxPassRenderer);
+        // Now do main pass.
+        const mainPassRenderer = this.renderTarget.createRenderPass(device, depthClearRenderPassDescriptor);
+        this.viewRenderer.executeOnPass(device, mainPassRenderer, BKPass.MAIN);
+        return mainPassRenderer;
+    }
+
     public destroy(device: GfxDevice): void {
         super.destroy(device);
         for (let i = 0; i < this.sceneRenderers.length; i++)
@@ -43,6 +63,17 @@ class SceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
 
+    private addGeo(device: GfxDevice, viewerTextures: Viewer.Texture[], sceneRenderer: BKRenderer, geo: Geo.Geometry): N64Renderer {
+        for (let i = 0; i < geo.rspOutput.textures.length; i++)
+            viewerTextures.push(textureToCanvas(geo.rspOutput.textures[i]));
+
+        const n64Data = new N64Data(device, geo.rspOutput);
+        sceneRenderer.n64Datas.push(n64Data);
+        const renderer = new N64Renderer(device, n64Data);
+        sceneRenderer.addSceneRenderer(device, renderer);
+        return renderer;
+    }
+
     public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         return fetchData(`${pathBase}/${this.id}_arc.crg1`, abortSignal).then((data) => {
             const obj: any = BYML.parse(data, BYML.FileType.CRG1);
@@ -51,24 +82,28 @@ class SceneDesc implements Viewer.SceneDesc {
             const fakeTextureHolder = new FakeTextureHolder(viewerTextures);
             const sceneRenderer = new BKRenderer(fakeTextureHolder);
 
-            if (obj.GeoOpaque !== null) {
-                const opaGeo = Geo.parse(obj.GeoOpaque, true);
-                for (let i = 0; i < opaGeo.rspOutput.textures.length; i++)
-                    viewerTextures.push(textureToCanvas(opaGeo.rspOutput.textures[i]));
-
-                const opaData = new N64Data(device, opaGeo.rspOutput);
-                sceneRenderer.n64Datas.push(opaData);
-                sceneRenderer.addSceneRenderer(device, new N64Renderer(device, opaData));
+            if (obj.OpaGeoFileId >= 0) {
+                const geo = Geo.parse(obj.Files[obj.OpaGeoFileId].Data, true);
+                this.addGeo(device, viewerTextures, sceneRenderer, geo);
             }
 
-            if (obj.GeoAlpha !== null) {
-                const xluGeo = Geo.parse(obj.GeoAlpha, false);
-                for (let i = 0; i < xluGeo.rspOutput.textures.length; i++)
-                    viewerTextures.push(textureToCanvas(xluGeo.rspOutput.textures[i]));
+            if (obj.XluGeoFileId >= 0) {
+                const geo = Geo.parse(obj.Files[obj.XluGeoFileId].Data, false);
+                this.addGeo(device, viewerTextures, sceneRenderer, geo);
+            }
 
-                const xluData = new N64Data(device, xluGeo.rspOutput);
-                sceneRenderer.n64Datas.push(xluData);
-                sceneRenderer.addSceneRenderer(device, new N64Renderer(device, xluData));
+            if (obj.OpaSkyboxFileId >= 0) {
+                const geo = Geo.parse(obj.Files[obj.OpaSkyboxFileId].Data, true);
+                const renderer = this.addGeo(device, viewerTextures, sceneRenderer, geo);
+                renderer.isSkybox = true;
+                mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [obj.OpaSkyboxScale, obj.OpaSkyboxScale, obj.OpaSkyboxScale]);
+            }
+
+            if (obj.XluSkyboxFileId >= 0) {
+                const geo = Geo.parse(obj.Files[obj.XluSkyboxFileId].Data, false);
+                const renderer = this.addGeo(device, viewerTextures, sceneRenderer, geo);
+                renderer.isSkybox = true;
+                mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [obj.OpaSkyboxScale, obj.OpaSkyboxScale, obj.OpaSkyboxScale]);
             }
 
             return sceneRenderer;

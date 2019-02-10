@@ -4,14 +4,14 @@ import { readFileSync } from 'fs';
 import * as Viewer from '../viewer';
 import { DeviceProgram, DeviceProgramReflection } from "../Program";
 import { Texture, getFormatString, RSPOutput, Vertex, DrawCall, GeometryMode } from "./f3dex";
-import { GfxDevice, GfxTextureDimension, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxHostAccessPass, GfxBlendMode, GfxCompareMode, GfxBlendFactor } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxTextureDimension, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxHostAccessPass, GfxBlendMode, GfxBlendFactor } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { assert, nArray } from '../util';
 import { GfxRenderInstBuilder, GfxRenderInst, GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
 import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers';
 import { mat4 } from 'gl-matrix';
-import { computeViewMatrix } from '../Camera';
+import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
 
 export function textureToCanvas(texture: Texture): Viewer.Texture {
@@ -204,10 +204,14 @@ class DrawCallInstance {
         }
     }
 
-    public prepareToRender(drawParamsBuffer: GfxRenderBuffer, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(drawParamsBuffer: GfxRenderBuffer, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean, modelMatrix: mat4): void {
         let offs = this.renderInst.getUniformBufferOffset(F3DEX_Program.ub_DrawParams);
         const mappedF32 = drawParamsBuffer.mapBufferF32(offs, 12 + 8*2);
-        computeViewMatrix(modelViewScratch, viewerInput.camera);
+        if (isSkybox)
+            computeViewMatrixSkybox(modelViewScratch, viewerInput.camera);
+        else
+            computeViewMatrix(modelViewScratch, viewerInput.camera);
+        mat4.mul(modelViewScratch, modelViewScratch, modelMatrix);
         offs += fillMatrix4x3(mappedF32, offs, modelViewScratch);
 
         this.computeTextureMatrix(texMatrixScratch, 0);
@@ -222,12 +226,19 @@ class DrawCallInstance {
     }
 }
 
+export const enum BKPass {
+    MAIN = 0x01,
+    SKYBOX = 0x02,
+}
+
 export class N64Renderer {
     private sceneParamsBuffer: GfxRenderBuffer;
     private drawParamsBuffer: GfxRenderBuffer;
     private renderInstBuilder: GfxRenderInstBuilder;
     private templateRenderInst: GfxRenderInst;
     private drawCallInstances: DrawCallInstance[] = [];
+    public isSkybox = false;
+    public modelMatrix = mat4.create();
 
     constructor(device: GfxDevice, private n64Data: N64Data) {
         this.sceneParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_SceneParams`);
@@ -260,12 +271,14 @@ export class N64Renderer {
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        this.templateRenderInst.passMask = this.isSkybox ? BKPass.SKYBOX : BKPass.MAIN;
+
         let offs = this.templateRenderInst.getUniformBufferOffset(F3DEX_Program.ub_SceneParams);
         const mappedF32 = this.sceneParamsBuffer.mapBufferF32(offs, 16);
         offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);
 
         for (let i = 0; i < this.drawCallInstances.length; i++)
-            this.drawCallInstances[i].prepareToRender(this.drawParamsBuffer, viewerInput);
+            this.drawCallInstances[i].prepareToRender(this.drawParamsBuffer, viewerInput, this.isSkybox, this.modelMatrix);
 
         this.sceneParamsBuffer.prepareToRender(hostAccessPass);
         this.drawParamsBuffer.prepareToRender(hostAccessPass);
