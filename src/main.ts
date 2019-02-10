@@ -60,7 +60,7 @@ import { atob, btoa } from './Ascii85';
 import { vec3, mat4 } from 'gl-matrix';
 import { GlobalSaveManager, SaveStateLocation } from './SaveManager';
 import { RenderStatistics } from './RenderStatistics';
-import { gfxDeviceGetImpl } from './gfx/platform/GfxPlatformWebGL2';
+import { gfxDeviceGetImpl, createSwapChainForWebGL2 } from './gfx/platform/GfxPlatformWebGL2';
 
 const sceneGroups = [
     "Wii",
@@ -213,6 +213,14 @@ function matchString(d: Uint8Array, offs: number, m: string): boolean {
     return true;
 }
 
+const enum InitErrorCode {
+    SUCCESS,
+    NO_WEBGL2_GENERIC,
+    NO_WEBGL2_SAFARI,
+    GARBAGE_WEBGL2_GENERIC,
+    GARBAGE_WEBGL2_SWIFTSHADER,
+}
+
 const SAVE_STATE_MAGIC = 'NC\0\0';
 class Main {
     public toplevel: HTMLElement;
@@ -240,9 +248,9 @@ class Main {
         this.uiContainers = document.createElement('div');
         this.toplevel.appendChild(this.uiContainers);
 
-        this.viewer = Viewer.make(this.canvas);
-        if (this.viewer === null) {
-            this._makeErrorUI_NoWebGL2();
+        const errorCode = this._initializeViewer();
+        if (errorCode !== InitErrorCode.SUCCESS) {
+            this._makeErrorUI(errorCode);
             return;
         }
 
@@ -308,6 +316,29 @@ class Main {
         }
 
         this._updateLoop(0);
+    }
+
+    private _initializeViewer(): InitErrorCode {
+        const gl = this.canvas.getContext("webgl2", { alpha: false, antialias: false });
+        if (!gl) {
+            if (navigator.vendor.includes('Apple'))
+                return InitErrorCode.NO_WEBGL2_SAFARI;
+            else
+                return InitErrorCode.NO_WEBGL2_GENERIC;
+        }
+
+        // Test for no MS depthbuffer support (as seen in SwiftShader).
+        if (gl.getInternalformatParameter(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, gl.SAMPLES).length === 0) {
+            const ext = gl.getExtension('WEBGL_debug_renderer_info');
+            if (ext && gl.getParameter(ext.UNMASKED_RENDERER_WEBGL).includes('SwiftShader'))
+                return InitErrorCode.GARBAGE_WEBGL2_SWIFTSHADER;
+            else
+                return InitErrorCode.GARBAGE_WEBGL2_GENERIC;
+        }
+
+        const gfxSwapChain = createSwapChainForWebGL2(gl);
+        this.viewer = new Viewer(gfxSwapChain, this.canvas);
+        return InitErrorCode.SUCCESS;
     }
 
     private _exportSaveData() {
@@ -594,7 +625,7 @@ class Main {
         this.ui.sceneSelect.setSceneGroups(this.groups);
     }
 
-    private _makeErrorUI(message: string): void {
+    private _makeErrorMessageUI(message: string): void {
         const errorMessage = createDOMFromString(`
 <div style="display: flex; background-color: #220000; flex-direction: column; position: absolute; top: 0; bottom: 0; left: 0; right: 0; justify-content: center;">
 <div style="display: flex; background-color: #aa2233; justify-content: center; box-shadow: 0 0 32px black;">
@@ -609,12 +640,29 @@ ${message}
         this.uiContainers.appendChild(errorMessage);
     }
 
-    private _makeErrorUI_NoWebGL2(): void {
-        return this._makeErrorUI(`
-<p>Your browser does not appear to have WebGL 2 support. Please check <a href="http://webglreport.com/?v=2">WebGL Report</a> for further details.
-<p>If WebGL Report says your browser supports WebGL 2, please open a <a href="https://github.com/magcius/noclip.website/issues/new">GitHub issue</a> with as much as information as possible.
-<p>Unfortunately, this means that Safari and iOS are not supported. The plan is to support <a href="https://github.com/gpuweb/gpuweb">WebGPU</a> once this arrives.
-<p style="text-align: right">Thanks, Jasper.</p>
+    private _makeErrorUI(errorCode: InitErrorCode): void {
+        if (errorCode === InitErrorCode.NO_WEBGL2_SAFARI)
+            return this._makeErrorMessageUI(`
+<p>This application requires WebGL 2. Unfortunately, that means Safari and iOS are currently not supported. The plan is to support <a href="https://github.com/gpuweb/gpuweb">WebGPU</a> once this arrives.
+`);
+        else if (errorCode === InitErrorCode.NO_WEBGL2_GENERIC)
+            return this._makeErrorMessageUI(`
+<p>Your browser does not appear to have WebGL 2 support.
+<p>If <a href="http://webglreport.com/?v=2">WebGL Report</a> says your browser supports WebGL 2, please open a <a href="https://github.com/magcius/noclip.website/issues/new">GitHub issue</a> with as much as information as possible.
+<p style="text-align: right">Thanks, Jasper.
+`);
+        else if (errorCode === InitErrorCode.GARBAGE_WEBGL2_SWIFTSHADER)
+            return this._makeErrorMessageUI(`
+<p>This application requires hardware acceleration to be enabled.
+<p>Please enable hardware acceleration in your's browser settings.
+<p>If you have enabled hardware acceleration and are still getting this error message, please open a <a href="https://github.com/magcius/noclip.website/issues/new">GitHub issue</a> with as much as information as possible.
+<p style="text-align: right">Thanks, Jasper.
+`);
+        else if (errorCode === InitErrorCode.GARBAGE_WEBGL2_GENERIC)
+            return this._makeErrorMessageUI(`
+<p>This browser has a non-functioning version of WebGL 2 that I have not seen before.
+<p>If <a href="http://webglreport.com/?v=2">WebGL Report</a> says your browser supports WebGL 2, please open a <a href="https://github.com/magcius/noclip.website/issues/new">GitHub issue</a> with as much as information as possible.
+<p style="text-align: right">Thanks, Jasper.
 `);
     }
 

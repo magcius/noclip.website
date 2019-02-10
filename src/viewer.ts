@@ -46,7 +46,6 @@ export class Viewer {
     public rafTime: number = 0;
 
     public gfxDevice: GfxDevice;
-    private gfxSwapChain: GfxSwapChain;
     public viewerRenderInput: ViewerRenderInput;
     public isSceneTimeRunning = true;
     public renderStatisticsTracker = new RenderStatisticsTracker();
@@ -56,18 +55,10 @@ export class Viewer {
     public oncamerachanged: () => void = (() => {});
     public onstatistics: (statistics: RenderStatistics) => void = (() => {});
 
-    public static make(canvas: HTMLCanvasElement): Viewer | null {
-        const gl = canvas.getContext("webgl2", { alpha: false, antialias: false });
-        if (!gl)
-            return null;
-        return new Viewer(gl, canvas);
-    }
-
-    private constructor(gl: WebGL2RenderingContext, public canvas: HTMLCanvasElement) {
+    public constructor(private gfxSwapChain: GfxSwapChain, public canvas: HTMLCanvasElement) {
         this.inputManager = new InputManager(this.canvas);
 
         // GfxDevice.
-        this.gfxSwapChain = createSwapChainForWebGL2(gl);
         this.gfxDevice = this.gfxSwapChain.getDevice();
         this.viewerRenderInput = {
             camera: this.camera,
