@@ -3,7 +3,7 @@ import { GfxInputState, GfxRenderPass, GfxBindings, GfxRenderPipeline, GfxDevice
 import { align, assertExists, assert } from "../../util";
 import { GfxRenderBuffer } from "./GfxRenderBuffer";
 import { TextureMapping } from "../../TextureHolder";
-import { DeviceProgramReflection } from "../../Program";
+import { DeviceProgramReflection, DeviceProgram } from "../../Program";
 import { GfxRenderCache } from "./GfxRenderCache";
 import { setMegaStateFlags, copyMegaState, defaultMegaState } from "../helpers/GfxMegaStateDescriptorHelpers";
 
@@ -127,8 +127,9 @@ function assignRenderInst(dst: GfxRenderInst, src: GfxRenderInst): void {
     dst.sortKey = src.sortKey;
     // TODO(jstpierre): Immutable render flags.
     dst._megaState = src._megaState;
-    dst.gfxProgram = src.gfxProgram;
     dst.inputState = src.inputState;
+    dst.gfxProgram = src.gfxProgram;
+    dst._deviceProgram = src._deviceProgram;
     dst._pipeline = src._pipeline;
     dst._bindingLayouts = src._bindingLayouts;
     dst._samplerBindings = src._samplerBindings.slice();
@@ -179,8 +180,13 @@ export class GfxRenderInst {
     // The pipeline to use for this RenderInst.
     public _pipeline: GfxRenderPipeline | null = null;
 
-    // Pipeline building. The public API to access this is setRenderFlags().
+    // Pipeline building.
+
+    // The public API to access this is setMegaStateFlags().
     public _megaState: GfxMegaStateDescriptor;
+
+    // The public API to access this is setDeviceProgram().
+    public _deviceProgram: DeviceProgram | null = null;
 
     // Bindings state.
     public _bindings: GfxBindings[] = [];
@@ -220,6 +226,11 @@ export class GfxRenderInst {
 
     public rebuildPipeline(): void {
         this._setFlag(GfxRenderInstFlags.PIPELINE_DIRTY, true);
+    }
+
+    public setDeviceProgram(deviceProgram: DeviceProgram): void {
+        this._deviceProgram = deviceProgram;
+        this.rebuildPipeline();
     }
 
     public setPipelineDirect(pipeline: GfxRenderPipeline): void {
@@ -263,7 +274,7 @@ export class GfxRenderInst {
             this._megaState = copyMegaState(this.parentRenderInst._megaState);
         if (r !== null)
             setMegaStateFlags(this._megaState, r);
-        this._setFlag(GfxRenderInstFlags.PIPELINE_DIRTY, true);
+        this.rebuildPipeline();
         return this._megaState;
     }
 
@@ -298,6 +309,10 @@ export class GfxRenderInst {
             return;
 
         const inputLayout = this.inputState !== null ? device.queryInputState(this.inputState).inputLayout : null;
+
+        if (this._deviceProgram !== null)
+            this.gfxProgram = cache.createProgram(device, this._deviceProgram);
+
         this._pipeline = cache.createRenderPipeline(device, {
             topology: GfxPrimitiveTopology.TRIANGLES,
             program: this.gfxProgram,

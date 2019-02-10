@@ -173,7 +173,7 @@ class DrawCallInstance {
     private renderInst: GfxRenderInst;
     private textureEntry: Texture[] = [];
 
-    constructor(private device: GfxDevice, n64Data: N64Data, renderInstBuilder: GfxRenderInstBuilder, private drawCall: DrawCall, private drawIndex: number) {
+    constructor(device: GfxDevice, n64Data: N64Data, renderInstBuilder: GfxRenderInstBuilder, private drawCall: DrawCall, private drawIndex: number) {
         this.renderInst = renderInstBuilder.pushRenderInst();
         renderInstBuilder.newUniformBufferInstance(this.renderInst, F3DEX_Program.ub_DrawParams);
 
@@ -191,15 +191,14 @@ class DrawCallInstance {
         const zUpd = !!(this.drawCall.DP_OtherModeL & 0x20);
         this.renderInst.setMegaStateFlags({ depthWrite: zUpd });
         this.setBackfaceCullingEnabled(true);
-
-        this.createProgram(device, true);
+        this.createProgram(true);
 
         this.renderInst.setSamplerBindingsFromTextureMappings(textureMappings);
 
         this.renderInst.drawIndexes(drawCall.indexCount, drawCall.firstIndex);
     }
 
-    private createProgram(device: GfxDevice, vertexColorsEnabled: boolean): void {
+    private createProgram(vertexColorsEnabled: boolean): void {
         const program = new F3DEX_Program();
         // TODO(jstpierre): texture combiners.
         if (this.drawCall.textureIndices.length)
@@ -217,7 +216,7 @@ class DrawCallInstance {
         else if (textFilt === TextFilt.G_TF_BILERP)
             program.defines.set(`USE_TEXTFILT_BILERP`, '1')
 
-        this.renderInst.gfxProgram = device.createProgram(program);
+        this.renderInst.setDeviceProgram(program);
     }
 
     public setBackfaceCullingEnabled(v: boolean): void {
@@ -226,8 +225,7 @@ class DrawCallInstance {
     }
 
     public setVertexColorsEnabled(v: boolean): void {
-        this.createProgram(this.device, v);
-        this.renderInst.rebuildPipeline();
+        this.createProgram(v);
     }
 
     private computeTextureMatrix(m: mat4, textureEntryIndex: number): void {

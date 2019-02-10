@@ -3,6 +3,8 @@ import MemoizeCache from "./MemoizeCache";
 import CodeEditor from "./CodeEditor";
 import { assertExists, leftPad } from "./util";
 import { BufferLayout, parseBufferLayout } from "./gfx/helpers/UniformBufferHelpers";
+import { GfxDevice } from "./gfx/platform/GfxPlatform";
+import { gfxDeviceGetImpl } from "./gfx/platform/GfxPlatformWebGL2";
 
 interface ProgramWithKey extends WebGLProgram {
     uniqueKey: number;
@@ -67,30 +69,48 @@ export interface SamplerBindingReflection {
 
 export class DeviceProgram {
     public name: string = '(unnamed)';
-    // Add some extra fields so that the monstrosity of frag/vert doesn't show up in Firefox's debugger.
-    public _pad0 = false;
-    public _pad1 = false;
-    public both: string = '';
-    public vert: string = '';
-    public frag: string = '';
 
-    public defines = new Map<string, string>();
-
-    public glProgram: ProgramWithKey;
-    public compileDirty: boolean = true;
-
+    // Reflection.
     public uniformBufferLayouts: BufferLayout[];
     public samplerBindings: SamplerBindingReflection[];
     public totalSamplerBindingsCount: number;
     public uniqueKey: number;
 
+    // Compiled program.
+    public glProgram: ProgramWithKey;
+    public compileDirty: boolean = true;
+    private preprocessedVert: string = '';
+    private preprocessedFrag: string = '';
+
+    // Inputs.
+    public both: string = '';
+    public vert: string = '';
+    public frag: string = '';
+    public defines = new Map<string, string>();
+
+    public static equals(device: GfxDevice, a: DeviceProgram, b: DeviceProgram): boolean {
+        a._ensurePreprocessed(device);
+        b._ensurePreprocessed(device);
+        return a.preprocessedVert === b.preprocessedVert && a.preprocessedFrag === b.preprocessedFrag;
+    }
+
+    private _ensurePreprocessedGL(gl: WebGL2RenderingContext): void {
+        if (this.preprocessedVert === '') {
+            this.preprocessedVert = this.preprocessShader(gl, this.both + this.vert, 'vert');
+            this.preprocessedFrag = this.preprocessShader(gl, this.both + this.frag, 'frag');
+            // TODO(jstpierre): Would love a better place to do this.
+            DeviceProgram.parseReflectionDefinitionsInto(this, this.preprocessedVert);
+        }
+    }
+
+    private _ensurePreprocessed(device: GfxDevice): void {
+        return this._ensurePreprocessedGL(gfxDeviceGetImpl(device).gl);
+    }
+
     public compile(gl: WebGL2RenderingContext, programCache: ProgramCache): void {
         if (this.compileDirty) {
-            const vert = this.preprocessShader(gl, this.both + this.vert, 'vert');
-            const frag = this.preprocessShader(gl, this.both + this.frag, 'frag');
-            // TODO(jstpierre): Would love a better place to do this.
-            DeviceProgram.parseReflectionDefinitionsInto(this, vert);
-            const newProg = programCache.compileProgram(vert, frag);
+            this._ensurePreprocessedGL(gl);
+            const newProg = programCache.compileProgram(this.preprocessedVert, this.preprocessedFrag);
             if (newProg !== null) {
                 this.glProgram = newProg;
                 this.bind(gl, this.glProgram);

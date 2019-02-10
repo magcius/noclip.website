@@ -1,6 +1,7 @@
 
 import { GfxBindingsDescriptor, GfxBindings, GfxDevice, GfxBufferBinding, GfxSamplerBinding, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxMegaStateDescriptor, GfxBindingLayoutDescriptor, GfxProgram, GfxInputLayoutDescriptor, GfxVertexAttributeDescriptor, GfxInputLayout } from "../platform/GfxPlatform";
 import { HashMap, EqualFunc, nullHashFunc } from "../../HashMap";
+import { DeviceProgram } from "../../Program";
 
 function arrayEqual<T>(a: T[], b: T[], e: EqualFunc<T>): boolean {
     if (a.length !== b.length) return false;
@@ -77,10 +78,15 @@ function gfxInputLayoutDescriptorEquals(a: GfxInputLayoutDescriptor, b: GfxInput
     return true;
 }
 
+function deviceProgramEquals(a: DeviceProgram, b: DeviceProgram): boolean {
+    return DeviceProgram.equals(_device, a, b);
+}
+
 export class GfxRenderCache {
     private gfxBindingsCache = new HashMap<GfxBindingsDescriptor, GfxBindings>(gfxBindingsDescriptorEquals, nullHashFunc);
     private gfxRenderPipelinesCache = new HashMap<GfxRenderPipelineDescriptor, GfxRenderPipeline>(gfxRenderPipelineDescriptorEquals, nullHashFunc);
     private gfxInputLayoutsCache = new HashMap<GfxInputLayoutDescriptor, GfxInputLayout>(gfxInputLayoutDescriptorEquals, nullHashFunc);
+    private gfxProgramCache = new HashMap<DeviceProgram, GfxProgram>(deviceProgramEquals, nullHashFunc);
 
     public createBindings(device: GfxDevice, descriptor: GfxBindingsDescriptor): GfxBindings {
         let bindings = this.gfxBindingsCache.get(descriptor);
@@ -111,6 +117,17 @@ export class GfxRenderCache {
         return inputLayout;
     }
 
+    public createProgram(device: GfxDevice, deviceProgram: DeviceProgram): GfxProgram {
+        _device = device;
+
+        let program = this.gfxProgramCache.get(deviceProgram);
+        if (program === null) {
+            program = device.createProgram(deviceProgram);
+            this.gfxProgramCache.insert(deviceProgram, program);
+        }
+        return program;
+    }
+
     public numBindings(): number {
         return this.gfxBindingsCache.size();
     }
@@ -120,6 +137,8 @@ export class GfxRenderCache {
             device.destroyBindings(bindings);
         for (const [descriptor, renderPipeline] of this.gfxRenderPipelinesCache.entries())
             device.destroyRenderPipeline(renderPipeline);
+        for (const [descriptor, program] of this.gfxProgramCache.entries())
+            device.destroyProgram(program);
         this.gfxBindingsCache.clear();
         this.gfxRenderPipelinesCache.clear();
     }
