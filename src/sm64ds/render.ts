@@ -271,8 +271,8 @@ class BMDRenderer {
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        const sceneParamsMapped = this.sceneParamsBuffer.mapBufferF32(this.templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_SceneParams], 16);
-        let offs = this.templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_SceneParams];
+        let offs = this.templateRenderInst.getUniformBufferOffset(NITRO_Program.ub_SceneParams);
+        const sceneParamsMapped = this.sceneParamsBuffer.mapBufferF32(offs, 16);
         offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
 
         this.templateRenderInst.passMask = this.isSkybox ? SM64DSPass.SKYBOX : SM64DSPass.MAIN;
@@ -379,8 +379,8 @@ class BMDRenderer {
                     mat4_from_mat2d(texCoordMat, scratchMat2d);
                 }
 
-                const materialParamsMapped = this.materialParamsBuffer.mapBufferF32(templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_MaterialParams], 12);
-                let offs = templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_MaterialParams];
+                let offs = templateRenderInst.getUniformBufferOffset(NITRO_Program.ub_MaterialParams);
+                const materialParamsMapped = this.materialParamsBuffer.mapBufferF32(offs, 12);
                 offs += fillMatrix4x2(materialParamsMapped, offs, texCoordMat);
                 offs += fillVec4(materialParamsMapped, offs, texCoordMode);
             }
@@ -444,8 +444,8 @@ class BMDRenderer {
                 const prepareToRenderFunc = (hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput) => {
                     materialPrepareToRenderFunc(hostAccessPass, viewerInput);
 
-                    const packetParamsMapped = this.packetParamsBuffer.mapBufferF32(vertexDataCommand.templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_PacketParams], 12);
-                    let offs = vertexDataCommand.templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_PacketParams];
+                    let offs = vertexDataCommand.templateRenderInst.getUniformBufferOffset(NITRO_Program.ub_PacketParams);
+                    const packetParamsMapped = this.packetParamsBuffer.mapBufferF32(offs, 12);
 
                     this.computeModelView(scratchMat4, viewerInput, model.billboard);
                     offs += fillMatrix4x3(packetParamsMapped, offs, scratchMat4);

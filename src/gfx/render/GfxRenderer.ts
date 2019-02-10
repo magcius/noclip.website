@@ -131,8 +131,8 @@ function assignRenderInst(dst: GfxRenderInst, src: GfxRenderInst): void {
     dst.inputState = src.inputState;
     dst._pipeline = src._pipeline;
     dst._bindingLayouts = src._bindingLayouts;
-    dst.samplerBindings = src.samplerBindings.slice();
-    dst.uniformBufferOffsets = src.uniformBufferOffsets.slice();
+    dst._samplerBindings = src._samplerBindings.slice();
+    dst._uniformBufferOffsets = src._uniformBufferOffsets.slice();
 }
 
 const enum GfxRenderInstFlags {
@@ -141,6 +141,7 @@ const enum GfxRenderInstFlags {
     DRAW_INDEXED             = 1 << 2,
     SAMPLER_BINDINGS_INHERIT = 1 << 3,
     BINDINGS_DIRTY           = 1 << 4,
+    PIPELINE_DIRTY           = 1 << 5,
 }
 
 function setBitValue(bucket: number, bit: number, v: boolean): number {
@@ -166,10 +167,6 @@ export class GfxRenderInst {
     public inputState: GfxInputState | null = null;
     public gfxProgram: GfxProgram | null = null;
 
-    // Bindings.
-    public uniformBufferOffsets: number[] = [];
-    public samplerBindings: GfxSamplerBinding[] = [];
-
     // Internal.
 
     // Draw calls.
@@ -177,7 +174,7 @@ export class GfxRenderInst {
     public _drawStart: number = 0;
     public _drawCount: number = 0;
 
-    public _flags: GfxRenderInstFlags = GfxRenderInstFlags.VISIBLE;
+    public _flags: GfxRenderInstFlags = GfxRenderInstFlags.VISIBLE | GfxRenderInstFlags.PIPELINE_DIRTY;
 
     // The pipeline to use for this RenderInst.
     public _pipeline: GfxRenderPipeline | null = null;
@@ -190,6 +187,8 @@ export class GfxRenderInst {
     public _uniformBufferOffsetGroups: number[][] = [];
     public _uniformBufferBindings: GfxBufferBinding[] = [];
     public _bindingLayouts: GfxBindingLayoutDescriptor[];
+    public _uniformBufferOffsets: number[] = [];
+    public _samplerBindings: GfxSamplerBinding[] = [];
 
     constructor(public parentRenderInst: GfxRenderInst = null) {
         if (parentRenderInst !== null)
@@ -221,6 +220,7 @@ export class GfxRenderInst {
 
     public setPipelineDirect(pipeline: GfxRenderPipeline): void {
         this._pipeline = pipeline;
+        this._setFlag(GfxRenderInstFlags.PIPELINE_DIRTY, false);
     }
 
     public setSamplerBindingsInherit(v: boolean = true): void {
@@ -232,14 +232,14 @@ export class GfxRenderInst {
     }
 
     public inheritSamplerBindings(): void {
-        this.setSamplerBindings(this.parentRenderInst.samplerBindings);
+        this.setSamplerBindings(this.parentRenderInst._samplerBindings);
     }
 
     public setSamplerBindings(m: GfxSamplerBinding[], firstSampler: number = 0): void {
         for (let i = 0; i < m.length; i++) {
             const j = firstSampler + i;
-            if (!this.samplerBindings[j] || this.samplerBindings[j].texture !== m[i].texture || this.samplerBindings[j].sampler !== m[i].sampler) {
-                this.samplerBindings[j] = m[i];
+            if (!this._samplerBindings[j] || this._samplerBindings[j].texture !== m[i].texture || this._samplerBindings[j].sampler !== m[i].sampler) {
+                this._samplerBindings[j] = m[i];
                 this._setFlag(GfxRenderInstFlags.BINDINGS_DIRTY, true);
             }
         }
@@ -247,8 +247,8 @@ export class GfxRenderInst {
 
     public setSamplerBindingsFromTextureMappings(m: TextureMapping[]): void {
         for (let i = 0; i < m.length; i++) {
-            if (!this.samplerBindings[i] || this.samplerBindings[i].texture !== m[i].gfxTexture || this.samplerBindings[i].sampler !== m[i].gfxSampler) {
-                this.samplerBindings[i] = { texture: m[i].gfxTexture, sampler: m[i].gfxSampler };
+            if (!this._samplerBindings[i] || this._samplerBindings[i].texture !== m[i].gfxTexture || this._samplerBindings[i].sampler !== m[i].gfxSampler) {
+                this._samplerBindings[i] = { texture: m[i].gfxTexture, sampler: m[i].gfxSampler };
                 this._setFlag(GfxRenderInstFlags.BINDINGS_DIRTY, true);
             }
         }
@@ -278,10 +278,10 @@ export class GfxRenderInst {
     }
 
     public getUniformBufferOffset(i: number): number {
-        if (this.uniformBufferOffsets === null)
+        if (this._uniformBufferOffsets === null)
             return this.parentRenderInst.getUniformBufferOffset(i);
         else
-            return this.uniformBufferOffsets[i];
+            return this._uniformBufferOffsets[i];
     }
 
     public getPassMask(): number {
@@ -292,7 +292,8 @@ export class GfxRenderInst {
     }
 
     public buildPipeline(device: GfxDevice, cache: GfxRenderCache): void {
-        assert(this._pipeline === null);
+        if (!(this._flags & GfxRenderInstFlags.PIPELINE_DIRTY))
+            return;
 
         const inputLayout = this.inputState !== null ? device.queryInputState(this.inputState).inputLayout : null;
         this._pipeline = cache.createRenderPipeline(device, {
@@ -302,6 +303,8 @@ export class GfxRenderInst {
             inputLayout,
             megaStateDescriptor: this._megaState,
         });
+
+        this._setFlag(GfxRenderInstFlags.PIPELINE_DIRTY, false);
     }
 
     public buildBindings(device: GfxDevice, cache: GfxRenderCache): void {
@@ -315,7 +318,7 @@ export class GfxRenderInst {
         for (let i = 0; i < this._bindingLayouts.length; i++) {
             const bindingLayout = this._bindingLayouts[i];
             const uniformBufferBindings = this._uniformBufferBindings.slice(firstUniformBufferBinding, firstUniformBufferBinding + bindingLayout.numUniformBuffers);
-            const samplerBindings = this.samplerBindings.slice(firstSamplerBinding, firstSamplerBinding + bindingLayout.numSamplers);
+            const samplerBindings = this._samplerBindings.slice(firstSamplerBinding, firstSamplerBinding + bindingLayout.numSamplers);
             const bindings = cache.createBindings(device, { bindingLayout, uniformBufferBindings, samplerBindings });
             this._bindings[i] = bindings;
             firstUniformBufferBinding += bindingLayout.numUniformBuffers;
@@ -454,7 +457,7 @@ export class GfxRenderInstBuilder {
 
     public newUniformBufferInstance(renderInst: GfxRenderInst, index: number): number {
         const offs = this.newUniformBufferOffset(index);
-        renderInst.uniformBufferOffsets[index] = offs;
+        renderInst._uniformBufferOffsets[index] = offs;
         return offs;
     }
 
@@ -510,7 +513,7 @@ export class GfxRenderInstBuilder {
             renderInst._uniformBufferOffsetGroups[i] = Array(bindingLayout.numUniformBuffers);
             for (let j = firstUniformBuffer; j < lastUniformBuffer; j++) {
                 const j0 = j - firstUniformBuffer;
-                const { wordOffset } = this.uniformBuffers[j].getGfxBuffer(renderInst.uniformBufferOffsets[j]);
+                const { wordOffset } = this.uniformBuffers[j].getGfxBuffer(renderInst._uniformBufferOffsets[j]);
                 renderInst._uniformBufferOffsetGroups[i][j0] = wordOffset;
             }
 
@@ -521,7 +524,7 @@ export class GfxRenderInstBuilder {
         // TODO(jstpierre): Find a better way to do this.
         let shouldBuildBindings = false;
         if (changedBufferBinding) {
-            if (renderInst.samplerBindings.length === totalSamplerBindings)
+            if (renderInst._samplerBindings.length === totalSamplerBindings)
                 shouldBuildBindings = true;
         }
 

@@ -114,8 +114,8 @@ class Command_Material {
             }
         }
 
-        const materialParamsMapped = materialParamsBuffer.mapBufferF32(this.templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_MaterialParams], 8);
-        let offs = this.templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_MaterialParams];
+        let offs = this.templateRenderInst.getUniformBufferOffset(NITRO_Program.ub_MaterialParams);
+        const materialParamsMapped = materialParamsBuffer.mapBufferF32(offs, 8);
         offs += fillMatrix3x2(materialParamsMapped, offs, scratchTexMatrix);
         offs += fillVec4(materialParamsMapped, offs, 0);
     }
@@ -202,8 +202,8 @@ class Command_Shape {
     }
 
     public prepareToRender(packetParamsBuffer: GfxRenderBuffer, isSkybox: boolean, viewerInput: Viewer.ViewerRenderInput): void {
-        const packetParamsMapped = packetParamsBuffer.mapBufferF32(this.vertexDataCommand.templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_PacketParams], 12);
-        let offs = this.vertexDataCommand.templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_PacketParams];
+        let offs = this.vertexDataCommand.templateRenderInst.getUniformBufferOffset(NITRO_Program.ub_PacketParams);
+        const packetParamsMapped = packetParamsBuffer.mapBufferF32(offs, 12);
 
         this.computeModelView(scratchMat4, viewerInput, isSkybox);
         offs += fillMatrix4x3(packetParamsMapped, offs, scratchMat4);
@@ -355,8 +355,8 @@ export class MDL0Renderer {
 
         this.templateRenderInst.passMask = this.isSkybox ? G3DPass.SKYBOX : G3DPass.MAIN;
 
-        const sceneParamsMapped = this.sceneParamsBuffer.mapBufferF32(this.templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_SceneParams], 16);
-        let offs = this.templateRenderInst.uniformBufferOffsets[NITRO_Program.ub_SceneParams];
+        let offs = this.templateRenderInst.getUniformBufferOffset(NITRO_Program.ub_SceneParams);
+        const sceneParamsMapped = this.sceneParamsBuffer.mapBufferF32(offs, 16);
         offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
 
         for (let i = 0; i < this.nodeCommands.length; i++)

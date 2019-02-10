@@ -159,7 +159,7 @@ class MaterialInstance {
         this.templateRenderInst.visible = visible && this.visible;
 
         if (visible) {
-            let offs = this.templateRenderInst.uniformBufferOffsets[ub_MaterialParams];
+            let offs = this.templateRenderInst.getUniformBufferOffset(ub_MaterialParams);
             const mapped = materialParamsBuffer.mapBufferF32(offs, 20);
             if (this.colorAnimators[0]) {
                 this.colorAnimators[0].calcMaterialColor(scratchColor);
@@ -324,7 +324,7 @@ class ShapeInstance {
                 const boneMatrix = boneMatrices[localMatrixId];
                 mat4.mul(scratchMatrix, viewerInput.camera.viewMatrix, boneMatrix);
 
-                let offs = renderInst.uniformBufferOffsets[OoT3D_Program.ub_PrmParams];
+                let offs = renderInst.getUniformBufferOffset(OoT3D_Program.ub_PrmParams);
                 const prmParamsMapped = prmParamsBuffer.mapBufferF32(offs, 16);
                 offs += fillMatrix4x3(prmParamsMapped, offs, scratchMatrix);
                 offs += fillVec4(prmParamsMapped, offs, this.sepd.position.scale, this.sepd.textureCoord.scale);
@@ -388,8 +388,9 @@ export class CmbRenderer {
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         this.animationController.setTimeInMilliseconds(viewerInput.time);
 
-        const sceneParamsMapped = this.sceneParamsBuffer.mapBufferF32(this.templateRenderInst.uniformBufferOffsets[OoT3D_Program.ub_SceneParams], 16);
-        fillSceneParamsData(sceneParamsMapped, viewerInput.camera, this.templateRenderInst.uniformBufferOffsets[OoT3D_Program.ub_SceneParams]);
+        let offs = this.templateRenderInst.getUniformBufferOffset(OoT3D_Program.ub_SceneParams);
+        const sceneParamsMapped = this.sceneParamsBuffer.mapBufferF32(offs, 16);
+        fillSceneParamsData(sceneParamsMapped, viewerInput.camera, );
 
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].prepareToRender(this.materialParamsBuffer, viewerInput, this.visible);

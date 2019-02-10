@@ -366,8 +366,9 @@ export class SceneRenderer {
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        const sceneParamsMapped = this.sceneParamsBuffer.mapBufferF32(this.templateRenderInst.uniformBufferOffsets[PsychonautsProgram.ub_SceneParams], 16);
-        fillSceneParamsData(sceneParamsMapped, viewerInput.camera, this.templateRenderInst.uniformBufferOffsets[PsychonautsProgram.ub_SceneParams]);
+        let offs = this.templateRenderInst.getUniformBufferOffset(PsychonautsProgram.ub_SceneParams);
+        const sceneParamsMapped = this.sceneParamsBuffer.mapBufferF32(offs, 16);
+        fillSceneParamsData(sceneParamsMapped, viewerInput.camera, offs);
 
         this.domainInstance.prepareToRender(this.meshFragParamsBuffer, true, viewerInput);
 

@@ -117,7 +117,7 @@ export class GXMaterialHelperGfx {
     }
 
     public fillMaterialParamsRaw(materialParams: MaterialParams, renderHelper: GXRenderHelperGfx): void {
-        renderHelper.fillMaterialParams(materialParams, this.templateRenderInst.uniformBufferOffsets[ub_MaterialParams]);
+        renderHelper.fillMaterialParams(materialParams, this.templateRenderInst.getUniformBufferOffset(ub_MaterialParams));
     }
 
     public fillMaterialParams(materialParams: MaterialParams, renderHelper: GXRenderHelperGfx): void {

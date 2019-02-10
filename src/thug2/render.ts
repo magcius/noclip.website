@@ -291,7 +291,7 @@ export class SceneRenderer {
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
         viewerInput.camera.setClipPlanes(20, 500000);
-        const offs = this.templateRenderInst.uniformBufferOffsets[THUG2Program.ub_SceneParams];
+        let offs = this.templateRenderInst.getUniformBufferOffset(THUG2Program.ub_SceneParams);
         const sceneParamsMapped = this.sceneParamsBuffer.mapBufferF32(offs, 16);
         fillSceneParamsData(sceneParamsMapped, viewerInput.camera, offs);
 

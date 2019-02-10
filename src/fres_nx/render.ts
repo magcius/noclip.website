@@ -813,8 +813,8 @@ export class FMDLRenderer {
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        const sceneParamsMapped = this.sceneParamsBuffer.mapBufferF32(this.templateRenderInst.uniformBufferOffsets[AglProgram.ub_SceneParams], 16);
-        let offs = this.templateRenderInst.uniformBufferOffsets[AglProgram.ub_SceneParams];
+        let offs = this.templateRenderInst.getUniformBufferOffset(AglProgram.ub_SceneParams);
+        const sceneParamsMapped = this.sceneParamsBuffer.mapBufferF32(offs, 16);
         offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
 
         for (let i = 0; i < this.fshpInst.length; i++)

@@ -86,7 +86,6 @@ class BackgroundBillboardRenderer {
         this.renderInst.inputState = null;
         this.renderInst.gfxProgram = gfxProgram;
         this.renderInst.setMegaStateFlags(fullscreenMegaState);
-        this.renderInst.samplerBindings = [null];
         this.paramsBufferOffset = renderInstBuilder.newUniformBufferInstance(this.renderInst, 0);
         renderInstBuilder.finish(device, viewRenderer);
     }
