@@ -34,144 +34,6 @@ function compileShader(gl: WebGL2RenderingContext, str: string, type: number) {
     return shader;
 }
 
-abstract class BaseProgram {
-    public name: string = '(unnamed)';
-    // Add some extra fields so that the monstrosity of frag/vert doesn't show up in Firefox's debugger.
-    public _pad0 = false;
-    public _pad1 = false;
-    public both: string = '';
-    public vert: string = '';
-    public frag: string = '';
-
-    public preprocessedVert: string = '';
-    public preprocessedFrag: string = '';
-    public defines = new Map<string, string>();
-
-    private glProg: ProgramWithKey;
-    public forceRecompile: boolean = false;
-
-    public preprocessProgram(): void {
-        this.preprocessedVert = this.preprocessShader(this.both + this.vert, 'vert');
-        this.preprocessedFrag = this.preprocessShader(this.both + this.frag, 'frag');
-    }
-
-    public compile(gl: WebGL2RenderingContext, programCache: ProgramCache) {
-        if (!this.glProg || this.forceRecompile) {
-            this.preprocessProgram();
-            this.forceRecompile = false;
-            const vert = this.preprocessShader2(gl, this.preprocessedVert);
-            const frag = this.preprocessShader2(gl, this.preprocessedFrag);
-            const newProg = programCache.compileProgram(vert, frag);
-            if (newProg !== null) {
-                this.glProg = newProg;
-                this.bind(gl, this.glProg);
-            }
-        }
-
-        if (!this.glProg) {
-            throw new Error();
-        }
-        return this.glProg;
-    }
-
-    protected preprocessShader(source: string, type: "vert" | "frag") {
-        // Garbage WebGL2 shader compiler until I get something better down the line...
-        const lines = source.split('\n').map((n) => {
-            // Remove comments.
-            return n.replace(/[/][/].*$/, '');
-        }).filter((n) => {
-            // Filter whitespace.
-            const isEmpty = !n || /^\s+$/.test(n);
-            return !isEmpty;
-        });
-
-        const defines = [... this.defines.entries()].map((k, v) => `#define ${k} ${v}`).join('\n');
-        const precision = lines.find((line) => line.startsWith('precision')) || 'precision mediump float;';
-        const extensionLines = lines.filter((line) => line.startsWith('#extension'));
-        const extensions = extensionLines.filter((line) =>
-            line.indexOf('GL_EXT_frag_depth') === -1 ||
-            line.indexOf('GL_OES_standard_derivatives') === -1
-        ).join('\n');
-        const rest = lines.filter((line) => !line.startsWith('precision') && !line.startsWith('#extension')).join('\n');
-
-        return `
-#define ${type.toUpperCase()}
-#define attribute in
-#define varying ${type === 'vert' ? 'out' : 'in'}
-#define main${type === 'vert' ? 'VS' : 'PS'} main
-#define gl_FragColor o_color
-#define texture2D texture
-${defines}
-${extensions}
-${precision}
-out vec4 o_color;
-${rest}
-`.trim();
-    }
-
-    protected preprocessShader2(gl: WebGL2RenderingContext, source: string): string {
-        const extensionDefines = assertExists(gl.getSupportedExtensions()).map((s) => {
-            return `#define HAS_${s}`;
-        }).join('\n');
-
-return `
-#version 300 es
-${extensionDefines}
-${source}
-`.trim();
-    }
-
-    public bind(gl: WebGL2RenderingContext, prog: ProgramWithKey): void {
-    }
-
-    public destroy(gl: WebGL2RenderingContext) {
-        // XXX(jstpierre): Should we have refcounting in the program cache?
-    }
-
-    private _editShader(n: 'vert' | 'frag') {
-        const win = assertExists(window.open('about:blank', undefined, `location=off, resizable, alwaysRaised, left=20, top=20, width=1200, height=900`));
-        const init = () => {
-            const editor = new CodeEditor(win.document);
-            const document = win.document;
-            const title = n === 'vert' ? `${this.name} - Vertex Shader` : `${this.name} - Fragment Shader`;
-            document.title = title;
-            document.body.style.margin = '0';
-            const shader: string = this[n];
-            editor.setValue(shader);
-            editor.setFontSize('16px');
-            let timeout: number = 0;
-            editor.onvaluechanged = function() {
-                if (timeout > 0)
-                    clearTimeout(timeout);
-                timeout = window.setTimeout(tryCompile, 500);
-            };
-            const onresize = win.onresize = () => {
-                editor.setSize(document.body.offsetWidth, window.innerHeight);
-            };
-            onresize();
-            const tryCompile = () => {
-                timeout = 0;
-                this[n] = editor.getValue();
-                this.forceRecompile = true;
-            };
-            (win as any).editor = editor;
-            win.document.body.appendChild(editor.elem);
-        };
-        if (win.document.readyState === 'complete')
-            init();
-        else
-            win.onload = init;
-    }
-
-    public editv() {
-        this._editShader('vert');
-    }
-
-    public editf() {
-        this._editShader('frag');
-    }
-}
-
 function findall(haystack: string, needle: RegExp): RegExpExecArray[] {
     const results: RegExpExecArray[] = [];
     while (true) {
@@ -203,15 +65,144 @@ export interface SamplerBindingReflection {
     arraySize: number;
 }
 
-export class DeviceProgram extends BaseProgram {
+export class DeviceProgram {
+    public name: string = '(unnamed)';
+    // Add some extra fields so that the monstrosity of frag/vert doesn't show up in Firefox's debugger.
+    public _pad0 = false;
+    public _pad1 = false;
+    public both: string = '';
+    public vert: string = '';
+    public frag: string = '';
+
+    public defines = new Map<string, string>();
+
+    public glProgram: ProgramWithKey;
+    public compileDirty: boolean = true;
+
     public uniformBufferLayouts: BufferLayout[];
     public samplerBindings: SamplerBindingReflection[];
     public totalSamplerBindingsCount: number;
     public uniqueKey: number;
 
-    public preprocessProgram(): void {
-        super.preprocessProgram();
-        DeviceProgram.parseReflectionDefinitionsInto(this, this.preprocessedVert);
+    public compile(gl: WebGL2RenderingContext, programCache: ProgramCache): void {
+        if (this.compileDirty) {
+            const vert = this.preprocessShader(gl, this.both + this.vert, 'vert');
+            const frag = this.preprocessShader(gl, this.both + this.frag, 'frag');
+            // TODO(jstpierre): Would love a better place to do this.
+            DeviceProgram.parseReflectionDefinitionsInto(this, vert);
+            const newProg = programCache.compileProgram(vert, frag);
+            if (newProg !== null) {
+                this.glProgram = newProg;
+                this.bind(gl, this.glProgram);
+            }
+
+            this.compileDirty = false;
+        }
+
+        if (!this.glProgram)
+            throw new Error();
+    }
+
+    protected preprocessShader(gl: WebGL2RenderingContext, source: string, type: "vert" | "frag") {
+        const extensionDefines = assertExists(gl.getSupportedExtensions()).map((s) => {
+            return `#define HAS_${s}`;
+        }).join('\n');
+
+        // Garbage WebGL2 shader compiler until I get something better down the line...
+        const lines = source.split('\n').map((n) => {
+            // Remove comments.
+            return n.replace(/[/][/].*$/, '');
+        }).filter((n) => {
+            // Filter whitespace.
+            const isEmpty = !n || /^\s+$/.test(n);
+            return !isEmpty;
+        });
+
+        const defines = [... this.defines.entries()].map((k, v) => `#define ${k} ${v}`).join('\n');
+        const precision = lines.find((line) => line.startsWith('precision')) || 'precision mediump float;';
+        const rest = lines.filter((line) => !line.startsWith('precision')).join('\n');
+
+        return `
+#version 300 es
+${extensionDefines}
+${precision}
+#define ${type.toUpperCase()}
+#define attribute in
+#define varying ${type === 'vert' ? 'out' : 'in'}
+#define main${type === 'vert' ? 'VS' : 'PS'} main
+#define gl_FragColor o_color
+#define texture2D texture
+${defines}
+out vec4 o_color;
+${rest}
+`.trim();
+    }
+
+    public bind(gl: WebGL2RenderingContext, prog: ProgramWithKey): void {
+        this.uniqueKey = prog.uniqueKey;
+
+        for (let i = 0; i < this.uniformBufferLayouts.length; i++) {
+            const uniformBufferLayout = this.uniformBufferLayouts[i];
+            gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, uniformBufferLayout.blockName), i);
+        }
+
+        let samplerIndex = 0;
+        for (let i = 0; i < this.samplerBindings.length; i++) {
+            // Assign identities in order.
+            // XXX(jstpierre): This will cause a warning in Chrome, but I don't care rn.
+            // It's more expensive to bind this every frame than respect Chrome's validation wishes...
+            const samplerUniformLocation = gl.getUniformLocation(prog, this.samplerBindings[i].name);
+            gl.useProgram(prog);
+            gl.uniform1iv(samplerUniformLocation, range(samplerIndex, this.samplerBindings[i].arraySize));
+            samplerIndex += this.samplerBindings[i].arraySize;
+        }
+    }
+
+    public destroy(gl: WebGL2RenderingContext) {
+        // XXX(jstpierre): Should we have refcounting in the program cache?
+    }
+
+    private _editShader(n: 'vert' | 'frag') {
+        const win = assertExists(window.open('about:blank', undefined, `location=off, resizable, alwaysRaised, left=20, top=20, width=1200, height=900`));
+        const init = () => {
+            const editor = new CodeEditor(win.document);
+            const document = win.document;
+            const title = n === 'vert' ? `${this.name} - Vertex Shader` : `${this.name} - Fragment Shader`;
+            document.title = title;
+            document.body.style.margin = '0';
+            const shader: string = this[n];
+            editor.setValue(shader);
+            editor.setFontSize('16px');
+            let timeout: number = 0;
+            editor.onvaluechanged = function() {
+                if (timeout > 0)
+                    clearTimeout(timeout);
+                timeout = window.setTimeout(tryCompile, 500);
+            };
+            const onresize = win.onresize = () => {
+                editor.setSize(document.body.offsetWidth, window.innerHeight);
+            };
+            onresize();
+            const tryCompile = () => {
+                timeout = 0;
+                this[n] = editor.getValue();
+                this.compileDirty = true;
+            };
+            (win as any).editor = editor;
+            win.document.body.appendChild(editor.elem);
+        };
+        if (win.document.readyState === 'complete')
+            init();
+        else
+            win.onload = init;
+    }
+
+    public editv() {
+        this._editShader('vert');
+    }
+
+    public editf() {
+        this._editShader('frag');
     }
 
     private static parseReflectionDefinitionsInto(refl: DeviceProgramReflection, vert: string) {
@@ -238,26 +229,6 @@ export class DeviceProgram extends BaseProgram {
         const refl: DeviceProgramReflection = {} as DeviceProgramReflection;
         DeviceProgram.parseReflectionDefinitionsInto(refl, vert);
         return refl;
-    }
-
-    public bind(gl: WebGL2RenderingContext, prog: ProgramWithKey): void {
-        this.uniqueKey = prog.uniqueKey;
-
-        for (let i = 0; i < this.uniformBufferLayouts.length; i++) {
-            const uniformBufferLayout = this.uniformBufferLayouts[i];
-            gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, uniformBufferLayout.blockName), i);
-        }
-
-        let samplerIndex = 0;
-        for (let i = 0; i < this.samplerBindings.length; i++) {
-            // Assign identities in order.
-            // XXX(jstpierre): This will cause a warning in Chrome, but I don't care rn.
-            // It's more expensive to bind this every frame than respect Chrome's validation wishes...
-            const samplerUniformLocation = gl.getUniformLocation(prog, this.samplerBindings[i].name);
-            gl.useProgram(prog);
-            gl.uniform1iv(samplerUniformLocation, range(samplerIndex, this.samplerBindings[i].arraySize));
-            samplerIndex += this.samplerBindings[i].arraySize;
-        }
     }
 }
 

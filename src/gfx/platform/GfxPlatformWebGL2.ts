@@ -759,7 +759,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _programCache: ProgramCache;
     private _createProgram(deviceProgram: DeviceProgram): GfxProgram {
         const gl = this.gl;
-        const gl_program = deviceProgram.compile(gl, this._programCache);
+        deviceProgram.compile(gl, this._programCache);
+        const gl_program = deviceProgram.glProgram;
         const program: GfxProgramP_GL = { _T: _T.Program, gl_program, deviceProgram };
         return program;
     }
@@ -1228,9 +1229,13 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const gl = this.gl;
         this._currentPipeline = pipeline as GfxRenderPipelineP_GL;
         this._setMegaState(this._currentPipeline.megaState);
+
         // Hotpatch support.
-        if (this._currentPipeline.program.deviceProgram.forceRecompile)
-            this._currentPipeline.program.gl_program = this._currentPipeline.program.deviceProgram.compile(gl, this._programCache);
+        if (this._currentPipeline.program.deviceProgram.compileDirty) {
+            this._currentPipeline.program.deviceProgram.compile(gl, this._programCache);
+            this._currentPipeline.program.gl_program = this._currentPipeline.program.deviceProgram.glProgram;
+        }
+
         this._useProgram(this._currentPipeline.program.gl_program);
     }
 
