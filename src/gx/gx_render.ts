@@ -104,16 +104,33 @@ export function fillPacketParamsData(d: Float32Array, packetParams: PacketParams
 export class GXMaterialHelperGfx {
     public templateRenderInst: GfxRenderInst;
     public programKey: number;
+    private materialHacks: GX_Material.GXMaterialHacks = {};
 
-    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, material: GX_Material.GXMaterial, materialHacks?: GX_Material.GXMaterialHacks) {
+    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, private material: GX_Material.GXMaterial, materialHacks?: GX_Material.GXMaterialHacks) {
+        if (materialHacks)
+            Object.assign(this.materialHacks, materialHacks);
+
         this.templateRenderInst = renderHelper.renderInstBuilder.newRenderInst();
-        // TODO(jstpierre): Cache on RenderHelper?
-        const program = new GX_Material.GX_Program(material, materialHacks);
-        this.templateRenderInst.gfxProgram = device.createProgram(program);
         this.templateRenderInst.name = material.name;
+        this.createProgram();
         GX_Material.translateGfxMegaState(this.templateRenderInst.setMegaStateFlags(), material);
-        this.programKey = device.queryProgram(this.templateRenderInst.gfxProgram).uniqueKey;
+        this.programKey = 0;
         renderHelper.renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, ub_MaterialParams);
+    }
+
+    private createProgram(): void {
+        const program = new GX_Material.GX_Program(this.material, this.materialHacks);
+        this.templateRenderInst.setDeviceProgram(program);
+    }
+
+    public setVertexColorsEnabled(v: boolean): void {
+        this.materialHacks.disableVertexColors = !v;
+        this.createProgram();
+    }
+
+    public setTexturesEnabled(v: boolean): void {
+        this.materialHacks.disableTextures = !v;
+        this.createProgram();
     }
 
     public fillMaterialParamsRaw(materialParams: MaterialParams, renderHelper: GXRenderHelperGfx): void {

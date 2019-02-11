@@ -13,6 +13,7 @@ import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
+import { RENDER_HACKS_ICON } from '../bk/scenes';
 
 export class BasicRenderer implements Viewer.SceneGfx {
     private viewRenderer = new GfxRenderInstViewRenderer();
@@ -25,7 +26,25 @@ export class BasicRenderer implements Viewer.SceneGfx {
     }
 
     public createPanels(): UI.Panel[] {
-        return [new UI.LayerPanel(this.modelInstances)];
+        const renderHacksPanel = new UI.Panel();
+        renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        renderHacksPanel.setTitle(RENDER_HACKS_ICON, 'Render Hacks');
+        const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
+        enableVertexColorsCheckbox.onchanged = () => {
+            for (let i = 0; i < this.modelInstances.length; i++)
+                this.modelInstances[i].setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
+        const enableTextures = new UI.Checkbox('Enable Textures', true);
+        enableTextures.onchanged = () => {
+            for (let i = 0; i < this.modelInstances.length; i++)
+                this.modelInstances[i].setTexturesEnabled(enableTextures.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableTextures.elem);
+
+        const layersPanel = new UI.LayerPanel(this.modelInstances);
+
+        return [layersPanel, renderHacksPanel];
     }
 
     public addModelInstance(scene: BMDModelInstance): void {

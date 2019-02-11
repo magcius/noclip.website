@@ -5,7 +5,7 @@ import * as ZSI from './zsi';
 
 import * as Viewer from '../viewer';
 
-import { DeviceProgram } from '../Program';
+import { DeviceProgram, DeviceProgramReflection } from '../Program';
 import AnimationController from '../AnimationController';
 import { mat4 } from 'gl-matrix';
 import { GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler, GfxDevice, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxProgram, GfxHostAccessPass, GfxRenderPass, GfxTextureDimension, GfxInputState, GfxInputLayout } from '../gfx/platform/GfxPlatform';
@@ -15,7 +15,7 @@ import { getTextureFormatName } from './pica_texture';
 import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
 import { nArray, wordCountFromByteCount, assert } from '../util';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
-import { GfxRenderInstBuilder, GfxRenderInst, GfxRenderInstViewRenderer, GfxRendererLayer, makeSortKeyOpaque } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstBuilder, GfxRenderInst, GfxRenderInstViewRenderer, GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderer';
 import { makeFormat, FormatFlags, FormatTypeFlags, FormatCompFlags } from '../gfx/platform/GfxPlatformFormat';
 import { ub_MaterialParams } from '../gx/gx_render';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
@@ -76,7 +76,9 @@ class OoT3D_Program extends DeviceProgram {
     public static a_Color = 2;
     public static a_TexCoord = 3;
 
-    public both = readFileSync('src/oot3d/program.glsl', { encoding: 'utf8' });
+    public static program = readFileSync('src/oot3d/program.glsl', { encoding: 'utf8' });
+    public static programReflection: DeviceProgramReflection = DeviceProgram.parseReflectionDefinitions(OoT3D_Program.program);
+    public both = OoT3D_Program.program;
 }
 
 function fillSceneParamsData(d: Float32Array, camera: Camera, offs: number = 0): void {
@@ -107,8 +109,7 @@ class MaterialInstance {
         this.templateRenderInst = renderInstBuilder.newRenderInst();
         renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, OoT3D_Program.ub_MaterialParams);
         const layer = this.material.isTransparent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
-        const programKey = device.queryProgram(this.templateRenderInst.parentRenderInst.gfxProgram).uniqueKey;
-        this.templateRenderInst.sortKey = makeSortKeyOpaque(layer, programKey);
+        this.templateRenderInst.sortKey = makeSortKey(layer);
         this.templateRenderInst.setMegaStateFlags(this.material.renderFlags);
 
         for (let i = 0; i < this.material.textureBindings.length; i++) {
@@ -341,8 +342,6 @@ class ShapeInstance {
 }
 
 export class CmbRenderer {
-    private gfxProgram: GfxProgram;
-
     public animationController = new AnimationController();
     public visible: boolean = true;
     public boneMatrices: mat4[] = [];
@@ -358,17 +357,26 @@ export class CmbRenderer {
 
     private templateRenderInst: GfxRenderInst;
 
+    private texturesEnabled: boolean = true;
+    private vertexColorsEnabled: boolean = true;
+
     constructor(device: GfxDevice, public textureHolder: CtrTextureHolder, public cmb: CMB.CMB, public name: string = '') {
         this.textureHolder.addTextures(device, cmb.textures.filter((texture) => texture.levels.length > 0));
-        this.gfxProgram = device.createProgram(new OoT3D_Program());
 
         for (let i = 0; i < cmb.materials.length; i++)
             this.materialInstances.push(new MaterialInstance(this.cmb, cmb.materials[i]));
     }
 
-    public addToViewRenderer(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer): void {
-        const programReflection = device.queryProgram(this.gfxProgram);
+    private createProgram(): void {
+        const program = new OoT3D_Program();
+        if (this.texturesEnabled)
+            program.defines.set('USE_TEXTURE', '1');
+        if (this.vertexColorsEnabled)
+            program.defines.set('USE_VERTEX_COLOR', '1');
+        this.templateRenderInst.setDeviceProgram(program);
+    }
 
+    public addToViewRenderer(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer): void {
         // Standard GX binding model of three bind groups.
         const bindingLayouts: GfxBindingLayoutDescriptor[] = [
             { numUniformBuffers: 1, numSamplers: 0, }, // Scene
@@ -376,13 +384,23 @@ export class CmbRenderer {
             { numUniformBuffers: 1, numSamplers: 0, }, // Packet
         ];
 
-        const renderInstBuilder = new GfxRenderInstBuilder(device, programReflection, bindingLayouts, [ this.sceneParamsBuffer, this.materialParamsBuffer, this.prmParamsBuffer ]);
+        const renderInstBuilder = new GfxRenderInstBuilder(device, OoT3D_Program.programReflection, bindingLayouts, [ this.sceneParamsBuffer, this.materialParamsBuffer, this.prmParamsBuffer ]);
         this.templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
-        this.templateRenderInst.gfxProgram = this.gfxProgram;
+        this.createProgram();
         renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, OoT3D_Program.ub_SceneParams);
         this.translateCmb(device, renderInstBuilder, this.cmb);
         renderInstBuilder.popTemplateRenderInst();
         renderInstBuilder.finish(device, viewRenderer);
+    }
+
+    public setVertexColorsEnabled(v: boolean): void {
+        this.vertexColorsEnabled = v;
+        this.createProgram();
+    }
+
+    public setTexturesEnabled(v: boolean): void {
+        this.texturesEnabled = v;
+        this.createProgram();
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
@@ -407,7 +425,6 @@ export class CmbRenderer {
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyProgram(this.gfxProgram);
         this.sceneParamsBuffer.destroy(device);
         this.materialParamsBuffer.destroy(device);
         this.prmParamsBuffer.destroy(device);
@@ -534,6 +551,24 @@ export class RoomRenderer {
             this.transparentMesh.setVisible(visible);
         if (this.wMesh !== null)
             this.wMesh.setVisible(visible);
+    }
+
+    public setVertexColorsEnabled(v: boolean): void {
+        if (this.opaqueMesh !== null)
+            this.opaqueMesh.setVertexColorsEnabled(v);
+        if (this.transparentMesh !== null)
+            this.transparentMesh.setVertexColorsEnabled(v);
+        if (this.wMesh !== null)
+            this.wMesh.setVertexColorsEnabled(v);
+    }
+
+    public setTexturesEnabled(v: boolean): void {
+        if (this.opaqueMesh !== null)
+            this.opaqueMesh.setTexturesEnabled(v);
+        if (this.transparentMesh !== null)
+            this.transparentMesh.setTexturesEnabled(v);
+        if (this.wMesh !== null)
+            this.wMesh.setTexturesEnabled(v);
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {

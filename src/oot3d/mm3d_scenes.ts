@@ -15,36 +15,13 @@ import { SceneGroup } from '../viewer';
 import { assert, readString, leftPad } from '../util';
 import { fetchData, NamedArrayBufferSlice } from '../fetch';
 import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
+import { MultiRoomScene } from './oot3d_scenes';
 
 function maybeDecompress(buffer: ArrayBufferSlice): ArrayBufferSlice {
     if (readString(buffer, 0x00, 0x04) === 'LzS\x01')
         return LzS.decompress(buffer.createDataView());
     else
         return buffer;
-}
-
-class MultiRoomScene extends BasicRendererHelper implements Viewer.SceneGfx {
-    constructor(device: GfxDevice, public scenes: RoomRenderer[], public textureHolder: CtrTextureHolder) {
-        super();
-        for (let i = 0; i < this.scenes.length; i++)
-            this.scenes[i].addToViewRenderer(device, this.viewRenderer);
-    }
-
-    protected prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        for (let i = 0; i < this.scenes.length; i++)
-            this.scenes[i].prepareToRender(hostAccessPass, viewerInput);
-    }
-
-    public destroy(device: GfxDevice): void {
-        super.destroy(device);
-        this.textureHolder.destroy(device);
-        for (let i = 0; i < this.scenes.length; i++)
-            this.scenes[i].destroy(device);
-    }
-
-    public createPanels(): UI.Panel[] {
-        return [new UI.LayerPanel(this.scenes)];
-    }
 }
 
 class SceneDesc implements Viewer.SceneDesc {

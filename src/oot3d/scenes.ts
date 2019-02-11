@@ -10,6 +10,7 @@ import * as UI from '../ui';
 import { CtrTextureHolder, BasicRendererHelper, CmbRenderer } from "./render";
 import { GfxDevice, GfxHostAccessPass } from "../gfx/platform/GfxPlatform";
 import ArrayBufferSlice from '../ArrayBufferSlice';
+import { RENDER_HACKS_ICON } from '../bk/scenes';
 
 export class GrezzoTextureHolder extends CtrTextureHolder {
     public findTextureEntryIndex(name: string): number {
@@ -53,7 +54,24 @@ export class MultiCmbScene extends BasicRendererHelper implements Viewer.SceneGf
     }
 
     public createPanels(): UI.Panel[] {
-        return [new UI.LayerPanel(this.scenes)];
+        const renderHacksPanel = new UI.Panel();
+        renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        renderHacksPanel.setTitle(RENDER_HACKS_ICON, 'Render Hacks');
+        const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
+        enableVertexColorsCheckbox.onchanged = () => {
+            for (let i = 0; i < this.scenes.length; i++)
+                this.scenes[i].setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
+        const enableTextures = new UI.Checkbox('Enable Textures', true);
+        enableTextures.onchanged = () => {
+            for (let i = 0; i < this.scenes.length; i++)
+                this.scenes[i].setTexturesEnabled(enableTextures.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableTextures.elem);
+
+        const layersPanel = new UI.LayerPanel(this.scenes);
+        return [renderHacksPanel, layersPanel];
     }
 }
 

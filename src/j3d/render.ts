@@ -468,14 +468,18 @@ export class BMDModelInstance {
     private shapeInstances: ShapeInstance[] = [];
     private materialInstances: MaterialInstance[] = [];
     private shapeInstanceState: ShapeInstanceState = new ShapeInstanceState();
+    private materialHacks: GX_Material.GXMaterialHacks = {};
 
     constructor(
         device: GfxDevice,
         renderHelper: GXRenderHelperGfx,
         private textureHolder: J3DTextureHolder,
         public bmdModel: BMDModel,
-        public materialHacks?: GX_Material.GXMaterialHacks
+        materialHacks?: GX_Material.GXMaterialHacks
     ) {
+        if (materialHacks)
+            Object.assign(this.materialHacks, materialHacks);
+
         this.modelMatrix = mat4.create();
 
         this.shapeInstances = this.bmdModel.shapeData.map((shapeData) => {
@@ -553,14 +557,14 @@ export class BMDModelInstance {
         this.visible = v;
     }
 
-    public setTexturesEnabled(v: boolean): void {
-        for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].setTexturesEnabled(v);
-    }
-
     public setVertexColorsEnabled(v: boolean): void {
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].setVertexColorsEnabled(v);
+    }
+
+    public setTexturesEnabled(v: boolean): void {
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].setTexturesEnabled(v);
     }
 
     /**

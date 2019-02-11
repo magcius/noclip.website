@@ -111,6 +111,14 @@ class MaterialInstance {
         this.templateRenderInst.sortKey = makeSortKey(layer, this.materialHelper.programKey);
     }
 
+    public setVertexColorsEnabled(v: boolean): void {
+        this.materialHelper.setVertexColorsEnabled(v);
+    }
+
+    public setTexturesEnabled(v: boolean): void {
+        this.materialHelper.setTexturesEnabled(v);
+    }
+
     public bindSRT0(animationController: AnimationController, srt0: BRRES.SRT0): void {
         const material = this.materialData.material;
         for (let i: BRRES.TexMtxIndex = 0; i < BRRES.TexMtxIndex.COUNT; i++) {
@@ -305,6 +313,16 @@ export class MDL0ModelInstance {
         this.execDrawOpList(renderHelper, this.mdl0Model.mdl0.sceneGraph.drawOpaOps, false);
         this.execDrawOpList(renderHelper, this.mdl0Model.mdl0.sceneGraph.drawXluOps, true);
         renderHelper.renderInstBuilder.popTemplateRenderInst();
+    }
+
+    public setVertexColorsEnabled(v: boolean): void {
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].setVertexColorsEnabled(v);
+    }
+
+    public setTexturesEnabled(v: boolean): void {
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].setTexturesEnabled(v);
     }
 
     public bindCHR0(animationController: AnimationController, chr0: BRRES.CHR0): void {

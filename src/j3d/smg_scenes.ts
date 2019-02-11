@@ -536,7 +536,6 @@ class SMGRenderer implements Viewer.SceneGfx {
         scenarioPanel.contents.appendChild(this.scenarioSelect.elem);
 
         const renderHacksPanel = new UI.Panel();
-
         renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         renderHacksPanel.setTitle(RENDER_HACKS_ICON, 'Render Hacks');
         const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);

@@ -58,7 +58,15 @@ void main() {
 
 #ifdef FRAG
 void main() {
-    vec4 t_Color = texture2D(u_Texture[0], v_TexCoord) * v_Color;
+    vec4 t_Color = vec4(1.0, 1.0, 1.0, 1.0);
+
+#ifdef USE_TEXTURE
+    t_Color *= texture2D(u_Texture[0], v_TexCoord);
+#endif
+
+#ifdef USE_VERTEX_COLOR
+    t_Color *= v_Color;
+#endif
 
     t_Color.rgb *= v_LightIntensity;
     t_Color *= u_MaterialColor;

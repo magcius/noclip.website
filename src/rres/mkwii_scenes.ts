@@ -2,6 +2,7 @@
 // Mario Kart Wii
 
 import * as Viewer from '../viewer';
+import * as UI from '../ui';
 import * as BRRES from './brres';
 import * as U8 from './u8';
 import * as Yaz0 from '../compression/Yaz0';
@@ -17,6 +18,7 @@ import { GXRenderHelperGfx } from '../gx/gx_render';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, depthClearRenderPassDescriptor, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { RENDER_HACKS_ICON } from '../bk/scenes';
 
 const enum MKWiiPass { MAIN = 0x01, SKYBOX = 0x02 }
 
@@ -60,6 +62,28 @@ class MarioKartWiiRenderer implements Viewer.SceneGfx {
         this.courseRenderer.bindRRESAnimations(this.animationController, courseRRES);
 
         this.renderHelper.finishBuilder(device, this.viewRenderer);
+    }
+
+    public createPanels(): UI.Panel[] {
+        const renderHacksPanel = new UI.Panel();
+        renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        renderHacksPanel.setTitle(RENDER_HACKS_ICON, 'Render Hacks');
+        const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
+        enableVertexColorsCheckbox.onchanged = () => {
+            const v = enableVertexColorsCheckbox.checked;
+            this.courseRenderer.setVertexColorsEnabled(v);
+            this.skyboxRenderer.setVertexColorsEnabled(v);
+        };
+        renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
+        const enableTextures = new UI.Checkbox('Enable Textures', true);
+        enableTextures.onchanged = () => {
+            const v = enableTextures.checked;
+            this.courseRenderer.setTexturesEnabled(v);
+            this.skyboxRenderer.setTexturesEnabled(v);
+        };
+        renderHacksPanel.contents.appendChild(enableTextures.elem);
+
+        return [renderHacksPanel];
     }
 
     protected prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {

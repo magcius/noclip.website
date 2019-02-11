@@ -1,13 +1,14 @@
 
+import * as Viewer from '../viewer';
+import * as UI from '../ui';
+import * as Yaz0 from '../compression/Yaz0';
+import * as RARC from './rarc';
+
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import Progressable from '../Progressable';
 import { readString, assert } from '../util';
 import { fetchData } from '../fetch';
 
-import * as Viewer from '../viewer';
-import * as Yaz0 from '../compression/Yaz0';
-
-import * as RARC from './rarc';
 import { J3DTextureHolder, BMDModelInstance, BMDModel } from './render';
 import { createModelInstance } from './scenes';
 import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
@@ -19,6 +20,7 @@ import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, ColorTexture, makeClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { colorNew } from '../Color';
+import { RENDER_HACKS_ICON } from '../bk/scenes';
 
 const sjisDecoder = new TextDecoder('sjis');
 
@@ -280,6 +282,26 @@ export class SunshineRenderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice, public textureHolder: J3DTextureHolder, public rarc: RARC.RARC) {
         this.renderHelper = new GXRenderHelperGfx(device);
+    }
+
+    public createPanels(): UI.Panel[] {
+        const renderHacksPanel = new UI.Panel();
+        renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        renderHacksPanel.setTitle(RENDER_HACKS_ICON, 'Render Hacks');
+        const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
+        enableVertexColorsCheckbox.onchanged = () => {
+            for (let i = 0; i < this.modelInstances.length; i++)
+                this.modelInstances[i].setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
+        const enableTextures = new UI.Checkbox('Enable Textures', true);
+        enableTextures.onchanged = () => {
+            for (let i = 0; i < this.modelInstances.length; i++)
+                this.modelInstances[i].setTexturesEnabled(enableTextures.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableTextures.elem);
+
+        return [renderHacksPanel];
     }
 
     public finish(device: GfxDevice): void {

@@ -14,8 +14,9 @@ import { SceneGroup } from '../viewer';
 import { assert } from '../util';
 import { fetchData } from '../fetch';
 import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
+import { RENDER_HACKS_ICON } from '../bk/scenes';
 
-class MultiRoomScene extends BasicRendererHelper implements Viewer.SceneGfx {
+export class MultiRoomScene extends BasicRendererHelper implements Viewer.SceneGfx {
     constructor(device: GfxDevice, public scenes: RoomRenderer[], public textureHolder: CtrTextureHolder) {
         super();
         for (let i = 0; i < this.scenes.length; i++)
@@ -35,7 +36,24 @@ class MultiRoomScene extends BasicRendererHelper implements Viewer.SceneGfx {
     }
 
     public createPanels(): UI.Panel[] {
-        return [new UI.LayerPanel(this.scenes)];
+        const renderHacksPanel = new UI.Panel();
+        renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        renderHacksPanel.setTitle(RENDER_HACKS_ICON, 'Render Hacks');
+        const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
+        enableVertexColorsCheckbox.onchanged = () => {
+            for (let i = 0; i < this.scenes.length; i++)
+                this.scenes[i].setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
+        const enableTextures = new UI.Checkbox('Enable Textures', true);
+        enableTextures.onchanged = () => {
+            for (let i = 0; i < this.scenes.length; i++)
+                this.scenes[i].setTexturesEnabled(enableTextures.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableTextures.elem);
+
+        const layersPanel = new UI.LayerPanel(this.scenes);
+        return [renderHacksPanel, layersPanel];
     }
 }
 

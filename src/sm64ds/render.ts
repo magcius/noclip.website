@@ -7,6 +7,7 @@ import * as NITRO_BMD from './nitro_bmd';
 import * as NITRO_GX from './nitro_gx';
 
 import * as Viewer from '../viewer';
+import * as UI from '../ui';
 
 import { DeviceProgram } from '../Program';
 import Progressable from '../Progressable';
@@ -16,13 +17,14 @@ import { computeModelMatrixYBillboard, computeViewMatrix, computeViewMatrixSkybo
 import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
 import { GfxFormat, GfxBufferUsage, GfxBufferFrequencyHint, GfxBlendMode, GfxBlendFactor, GfxDevice, GfxHostAccessPass, GfxProgram, GfxBindingLayoutDescriptor, GfxBuffer, GfxVertexAttributeFrequency, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxRenderPass, GfxInputState, GfxInputLayout, GfxVertexAttributeDescriptor, GfxTextureDimension } from '../gfx/platform/GfxPlatform';
 import { fillMatrix4x3, fillMatrix4x4, fillVec4, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxRenderInstViewRenderer, GfxRenderInstBuilder, GfxRenderInst, makeSortKeyOpaque } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstViewRenderer, GfxRenderInstBuilder, GfxRenderInst, makeSortKeyOpaque, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { BasicRenderTarget, depthClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import GfxArena from '../gfx/helpers/GfxArena';
 import { getFormatName, parseTexImageParamWrapModeS, parseTexImageParamWrapModeT } from './nitro_tex';
 import { assert } from '../util';
+import { RENDER_HACKS_ICON } from '../bk/scenes';
 
 export class NITRO_Program extends DeviceProgram {
     public static a_Position = 0;
@@ -34,7 +36,7 @@ export class NITRO_Program extends DeviceProgram {
     public static ub_MaterialParams = 1;
     public static ub_PacketParams = 2;
 
-    public both = `
+    public static both = `
 precision mediump float;
 
 // Expected to be constant across the entire scene.
@@ -55,6 +57,8 @@ layout(row_major, std140) uniform ub_PacketParams {
 
 uniform sampler2D u_Texture;
 `;
+
+    public both = NITRO_Program.both;
 
     public vert = `
 layout(location = ${NITRO_Program.a_Position}) in vec3 a_Position;
@@ -82,12 +86,22 @@ in vec2 v_TexCoord;
 in vec4 v_Color;
 
 void main() {
-    gl_FragColor = texture2D(u_Texture, v_TexCoord);
+    gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+
+#ifdef USE_TEXTURE
+    gl_FragColor *= texture2D(u_Texture, v_TexCoord);
+#endif
+
+#ifdef USE_VERTEX_COLOR
     gl_FragColor *= v_Color;
+#endif
+
     if (gl_FragColor.a == 0.0)
         discard;
 }
 `;
+
+    public static programReflection = DeviceProgram.parseReflectionDefinitions(NITRO_Program.both);
 }
 
 function textureToCanvas(bmdTex: NITRO_BMD.Texture): Viewer.Texture {
@@ -250,7 +264,6 @@ class BMDRenderer {
     public extraTexCoordMat: mat2d | null = null;
     public animation: Animation | null = null;
 
-    private gfxProgram: GfxProgram;
     private templateRenderInst: GfxRenderInst;
     private vertexDataCommands: Command_VertexData[] = [];
     private prepareToRenderFuncs: ((hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput) => void)[] = [];
@@ -260,14 +273,34 @@ class BMDRenderer {
     private materialParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_MaterialParams`);
     private packetParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_PacketParams`);
 
+    private texturesEnabled: boolean = true;
+    private vertexColorsEnabled: boolean = true;
+
     constructor(device: GfxDevice, public textureHolder: NITROTextureHolder, public bmdData: BMDData, public crg1Level: CRG1Level | null = null) {
         const bmd = this.bmdData.bmd;
         this.textureHolder.addTextures(device, bmd.textures);
 
-        this.gfxProgram = device.createProgram(new NITRO_Program());
-
         const scaleFactor = bmd.scaleFactor;
         mat4.fromScaling(this.localMatrix, [scaleFactor, scaleFactor, scaleFactor]);
+    }
+
+    private createProgram(): void {
+        const program = new NITRO_Program();
+        if (this.texturesEnabled)
+            program.defines.set('USE_TEXTURE', '1');
+        if (this.vertexColorsEnabled)
+            program.defines.set('USE_VERTEX_COLOR', '1');
+        this.templateRenderInst.setDeviceProgram(program);
+    }
+
+    public setVertexColorsEnabled(v: boolean): void {
+        this.vertexColorsEnabled = v;
+        this.createProgram();
+    }
+
+    public setTexturesEnabled(v: boolean): void {
+        this.texturesEnabled = v;
+        this.createProgram();
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
@@ -286,14 +319,13 @@ class BMDRenderer {
     }
 
     public addToViewRenderer(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer): void {
-        const programReflection = device.queryProgram(this.gfxProgram);
         const bindingLayouts: GfxBindingLayoutDescriptor[] = [];
         bindingLayouts[NITRO_Program.ub_SceneParams]    = { numUniformBuffers: 1, numSamplers: 0 };
         bindingLayouts[NITRO_Program.ub_MaterialParams] = { numUniformBuffers: 1, numSamplers: 1 };
         bindingLayouts[NITRO_Program.ub_PacketParams]   = { numUniformBuffers: 1, numSamplers: 0 };
-        const renderInstBuilder = new GfxRenderInstBuilder(device, programReflection, bindingLayouts, [this.sceneParamsBuffer, this.materialParamsBuffer, this.packetParamsBuffer]);
+        const renderInstBuilder = new GfxRenderInstBuilder(device, NITRO_Program.programReflection, bindingLayouts, [this.sceneParamsBuffer, this.materialParamsBuffer, this.packetParamsBuffer]);
         this.templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
-        this.templateRenderInst.gfxProgram = this.gfxProgram;
+        this.createProgram();
         renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, NITRO_Program.ub_SceneParams);
         this.translateBMD(device, renderInstBuilder);
         renderInstBuilder.popTemplateRenderInst();
@@ -333,9 +365,8 @@ class BMDRenderer {
 
         renderInstBuilder.newUniformBufferInstance(templateRenderInst, NITRO_Program.ub_MaterialParams);
 
-        const layer = material.isTranslucent ? 1 : 0;
-        const programKey = device.queryProgram(this.gfxProgram).uniqueKey;
-        templateRenderInst.sortKey = makeSortKeyOpaque(layer, programKey);
+        const layer = material.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
+        templateRenderInst.sortKey = makeSortKey(layer);
 
         const texCoordMode: NITRO_BMD.TexCoordMode = material.texParams >>> 30;
 
@@ -457,7 +488,6 @@ class BMDRenderer {
     }
 
     public destroy(device: GfxDevice) {
-        device.destroyProgram(this.gfxProgram);
         this.sceneParamsBuffer.destroy(device);
         this.materialParamsBuffer.destroy(device);
         this.packetParamsBuffer.destroy(device);
@@ -475,6 +505,34 @@ class SM64DSRenderer implements Viewer.SceneGfx {
             this.skyboxBMD.addToViewRenderer(device, this.viewRenderer);
         for (let i = 0; i < this.extraBMDs.length; i++)
             this.extraBMDs[i].addToViewRenderer(device, this.viewRenderer);
+    }
+
+    public createPanels(): UI.Panel[] {
+        const renderHacksPanel = new UI.Panel();
+        renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        renderHacksPanel.setTitle(RENDER_HACKS_ICON, 'Render Hacks');
+        const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
+        enableVertexColorsCheckbox.onchanged = () => {
+            const v = enableVertexColorsCheckbox.checked;
+            this.mainBMD.setVertexColorsEnabled(v);
+            if (this.skyboxBMD !== null)
+                this.skyboxBMD.setVertexColorsEnabled(v);
+            for (let i = 0; i < this.extraBMDs.length; i++)
+                this.extraBMDs[i].setVertexColorsEnabled(v);
+        };
+        renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
+        const enableTextures = new UI.Checkbox('Enable Textures', true);
+        enableTextures.onchanged = () => {
+            const v = enableTextures.checked;
+            this.mainBMD.setTexturesEnabled(v);
+            if (this.skyboxBMD !== null)
+                this.skyboxBMD.setTexturesEnabled(v);
+            for (let i = 0; i < this.extraBMDs.length; i++)
+                this.extraBMDs[i].setTexturesEnabled(v);
+        };
+        renderHacksPanel.contents.appendChild(enableTextures.elem);
+
+        return [renderHacksPanel];
     }
 
     protected prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
