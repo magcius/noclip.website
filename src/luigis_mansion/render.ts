@@ -8,7 +8,7 @@ import { MaterialParams, PacketParams, loadTextureFromMipChain, GXMaterialHelper
 import { assert } from "../util";
 import { mat4 } from "gl-matrix";
 import { AABB } from "../Geometry";
-import { GfxTexture, GfxDevice, GfxRenderPass, GfxSampler, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform";
+import { GfxTexture, GfxDevice, GfxRenderPass, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxHostAccessPass } from "../gfx/platform/GfxPlatform";
 import { GfxCoalescedBuffers, GfxBufferCoalescer } from "../gfx/helpers/BufferHelpers";
 import { GfxRenderInst, GfxRenderInstViewRenderer } from "../gfx/render/GfxRenderer";
 import { Camera, computeViewMatrix } from "../Camera";
@@ -195,15 +195,18 @@ export class LuigisMansionRenderer implements Viewer.SceneGfx {
         return [layers];
     }
 
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
-        const hostAccessPass = device.createHostAccessPass();
-
+    private prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         this.renderHelper.fillSceneParams(viewerInput);
-
         for (let i = 0; i < this.binCommands.length; i++)
             this.binCommands[i].prepareToRender(this.renderHelper, viewerInput);
-
         this.renderHelper.prepareToRender(hostAccessPass);
+    }
+
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        this.viewRenderer.prepareToRender(device);
+
+        const hostAccessPass = device.createHostAccessPass();
+        this.prepareToRender(hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
 
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);

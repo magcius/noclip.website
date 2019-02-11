@@ -5,7 +5,7 @@ import { BMD, BMT, HierarchyNode, HierarchyType, MaterialEntry, Shape, ShapeDisp
 import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } from './j3d';
 
 import * as GX_Material from '../gx/gx_material';
-import { MaterialParams, PacketParams, GXTextureHolder, ColorKind, translateTexFilterGfx, translateWrapModeGfx, loadedDataCoalescerGfx, GXShapeHelperGfx, GXRenderHelperGfx, ub_MaterialParams } from '../gx/gx_render';
+import { MaterialParams, PacketParams, GXTextureHolder, ColorKind, translateTexFilterGfx, translateWrapModeGfx, loadedDataCoalescerGfx, GXShapeHelperGfx, GXRenderHelperGfx, ub_MaterialParams, GXMaterialHelperGfx } from '../gx/gx_render';
 
 import { computeViewMatrix, computeModelMatrixBillboard, computeModelMatrixYBillboard, computeViewMatrixSkybox, texEnvMtx, Camera, texProjPerspMtx, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
@@ -46,19 +46,6 @@ class ShapeData {
 
     public destroy(device: GfxDevice) {
         this.shapeHelpers.forEach((shapeHelper) => shapeHelper.destroy(device));
-    }
-}
-
-export class MaterialData {
-    public gfxProgram: GfxProgram;
-
-    constructor(device: GfxDevice, public material: MaterialEntry, hacks?: GX_Material.GXMaterialHacks) {
-        const program = new GX_Material.GX_Program(material.gxMaterial, hacks);
-        this.gfxProgram = device.createProgram(program);
-    }
-
-    public destroy(device: GfxDevice) {
-        device.destroyProgram(this.gfxProgram);
     }
 }
 
@@ -164,21 +151,35 @@ export class MaterialInstance {
     public templateRenderInst: GfxRenderInst;
     private materialParamsBufferOffset: number;
 
-    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, private modelInstance: BMDModelInstance | null, public materialData: MaterialData) {
-        const material = this.materialData.material;
+    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, private modelInstance: BMDModelInstance | null, public material: MaterialEntry, private materialHacks: GX_Material.GXMaterialHacks) {
         this.name = material.name;
 
         this.templateRenderInst = renderHelper.renderInstBuilder.newRenderInst();
         this.templateRenderInst.name = this.name;
-        this.templateRenderInst.gfxProgram = this.materialData.gfxProgram;
+        this.createProgram();
         GX_Material.translateGfxMegaState(this.templateRenderInst.setMegaStateFlags(), material.gxMaterial);
         // TODO(jstpierre): Perhaps make this customizable?
         let layer = !material.gxMaterial.ropInfo.depthTest ? GfxRendererLayer.BACKGROUND : GfxRendererLayer.OPAQUE;
         if (material.translucent)
             layer |= GfxRendererLayer.TRANSLUCENT;
-        this.templateRenderInst.sortKey = makeSortKey(layer, device.queryProgram(this.templateRenderInst.gfxProgram).uniqueKey);
+        this.templateRenderInst.sortKey = makeSortKey(layer);
         // Allocate our material buffer slot.
         this.materialParamsBufferOffset = renderHelper.renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, ub_MaterialParams);
+    }
+
+    private createProgram(): void {
+        const program = new GX_Material.GX_Program(this.material.gxMaterial, this.materialHacks);
+        this.templateRenderInst.setDeviceProgram(program);
+    }
+
+    public setTexturesEnabled(v: boolean): void {
+        this.materialHacks.disableTextures = !v;
+        this.createProgram();
+    }
+
+    public setVertexColorsEnabled(v: boolean): void {
+        this.materialHacks.disableVertexColors = !v;
+        this.createProgram();
     }
 
     public bindTTK1(animationController: AnimationController, ttk1: TTK1): void {
@@ -223,7 +224,7 @@ export class MaterialInstance {
     }
 
     public fillMaterialParams(materialParams: MaterialParams, camera: Camera, bmdModel: BMDModel, textureHolder: GXTextureHolder): void {
-        const material = this.materialData.material;
+        const material = this.material;
 
         this.copyColor(ColorKind.MAT0, material.colorMatRegs[0]);
         this.copyColor(ColorKind.MAT1, material.colorMatRegs[1]);
@@ -373,7 +374,6 @@ export class BMDModel {
 
     private bufferCoalescer: GfxBufferCoalescer;
 
-    public materialData: MaterialData[] = [];
     public shapeData: ShapeData[] = [];
     public hasBillboard: boolean;
 
@@ -382,18 +382,11 @@ export class BMDModel {
         renderHelper: GXRenderHelperGfx,
         public bmd: BMD,
         public bmt: BMT | null = null,
-        public materialHacks?: GX_Material.GXMaterialHacks
     ) {
-        const mat3 = (bmt !== null && bmt.mat3 !== null) ? bmt.mat3 : bmd.mat3;
         const tex1 = (bmt !== null && bmt.tex1 !== null) ? bmt.tex1 : bmd.tex1;
 
         this.tex1Samplers = tex1.samplers;
         this.gfxSamplers = this.tex1Samplers.map((sampler) => BMDModel.translateSampler(device, sampler));
-
-        // Load material data.
-        this.materialData = mat3.materialEntries.map((material) => {
-            return new MaterialData(device, material, this.materialHacks);
-        });
 
         // Load shape data.
         const loadedVertexDatas = [];
@@ -420,7 +413,6 @@ export class BMDModel {
             return;
 
         this.bufferCoalescer.destroy(device);
-        this.materialData.forEach((command) => command.destroy(device));
         this.shapeData.forEach((command) => command.destroy(device));
 
         this.gfxSamplers.forEach((sampler) => device.destroySampler(sampler));
@@ -482,6 +474,7 @@ export class BMDModelInstance {
         renderHelper: GXRenderHelperGfx,
         private textureHolder: J3DTextureHolder,
         public bmdModel: BMDModel,
+        public materialHacks?: GX_Material.GXMaterialHacks
     ) {
         this.modelMatrix = mat4.create();
 
@@ -490,8 +483,10 @@ export class BMDModelInstance {
         });
 
         this.templateRenderInst = renderHelper.renderInstBuilder.pushTemplateRenderInst();
-        this.materialInstances = this.bmdModel.materialData.map((materialData) => {
-            return new MaterialInstance(device, renderHelper, this, materialData);
+
+        const mat3 = (this.bmdModel.bmt !== null && this.bmdModel.bmt.mat3 !== null) ? this.bmdModel.bmt.mat3 : this.bmdModel.bmd.mat3;
+        this.materialInstances = mat3.materialEntries.map((materialEntry) => {
+            return new MaterialInstance(device, renderHelper, this, materialEntry, this.materialHacks);
         });
         renderHelper.renderInstBuilder.popTemplateRenderInst();
 
@@ -523,15 +518,15 @@ export class BMDModelInstance {
                 renderInstBuilder.pushTemplateRenderInst(currentMaterial.templateRenderInst);
                 const shapeInstance = this.shapeInstances[node.shapeIdx];
                 // Translucent draws need to be in-order, for J3D, as far as I can tell?
-                if (currentMaterial.materialData.material.translucent)
+                if (currentMaterial.material.translucent)
                     shapeInstance.sortKeyBias = translucentDrawIndex++;
                 shapeInstance.pushRenderInsts(renderInstBuilder);
                 renderInstBuilder.popTemplateRenderInst();
                 break;
             }
 
-            for (const child of node.children)
-                translateNode(child);
+            for (let i = 0; i < node.children.length; i++)
+                translateNode(node.children[i]);
         };
 
         translateNode(root);
@@ -556,6 +551,16 @@ export class BMDModelInstance {
 
     public setVisible(v: boolean): void {
         this.visible = v;
+    }
+
+    public setTexturesEnabled(v: boolean): void {
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].setTexturesEnabled(v);
+    }
+
+    public setVertexColorsEnabled(v: boolean): void {
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].setVertexColorsEnabled(v);
     }
 
     /**

@@ -281,6 +281,8 @@ class SkywardSwordScene implements Viewer.SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        this.viewRenderer.prepareToRender(device);
+
         this.animationController.setTimeInMilliseconds(viewerInput.time);
 
         const hostAccessPass = device.createHostAccessPass();
@@ -333,7 +335,6 @@ class SkywardSwordScene implements Viewer.SceneGfx {
 
         return modelRenderer;
     }
-
 
     private spawnModelName(device: GfxDevice, renderHelper: GXRenderHelperGfx, rres: BRRES.RRES, modelName: string, namePrefix: string): MDL0ModelInstance {
         const mdl0 = rres.mdl0.find((model) => model.name === modelName);

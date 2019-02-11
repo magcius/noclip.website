@@ -213,7 +213,7 @@ export class TerrainRenderer {
 
         // Compute view projection.
         mat4.mul(scratch, viewerInput.camera.projectionMatrix, viewerInput.camera.viewMatrix);
-        offs = this.templateRenderInst.uniformBufferOffsets[TerrainProgram.ub_SceneParams];
+        offs = this.templateRenderInst.getUniformBufferOffset(TerrainProgram.ub_SceneParams);
         const sceneBuffer = this.sceneUniformBuffer.mapBufferF32(offs, 20);
         offs += fillMatrix4x4(sceneBuffer, offs, scratch);
         offs += fillVec4(sceneBuffer, offs, this.heightScale);

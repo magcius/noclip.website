@@ -453,6 +453,7 @@ class WindWakerRenderer implements Viewer.SceneGfx {
 
     public createPanels(): UI.Panel[] {
         const timeOfDayPanel = new UI.Panel();
+        timeOfDayPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         timeOfDayPanel.setTitle(TIME_OF_DAY_ICON, "Time of Day");
 
         const colorPresets = [ '(no palette)', 'Dusk', 'Morning', 'Day', 'Afternoon', 'Evening', 'Night' ];
@@ -501,6 +502,8 @@ class WindWakerRenderer implements Viewer.SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        this.viewRenderer.prepareToRender(device);
+
         viewerInput.camera.setClipPlanes(20, 500000);
 
         const hostAccessPass = device.createHostAccessPass();

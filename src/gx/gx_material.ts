@@ -215,6 +215,8 @@ type LightingFudgeGenerator = (p: LightingFudgeParams) => string;
 export interface GXMaterialHacks {
     colorLightingFudge?: LightingFudgeGenerator;
     alphaLightingFudge?: LightingFudgeGenerator;
+    disableTextures?: boolean;
+    disableVertexColors?: boolean;
 }
 
 export class GX_Program extends DeviceProgram {
@@ -279,6 +281,10 @@ export class GX_Program extends DeviceProgram {
     }
 
     private generateLightChannel(lightChannel: LightChannelControl, i: number) {
+        // If we have disabled vertex colors, then they are pure white.
+        if (this.hacks !== null && this.hacks.disableVertexColors)
+            return `vec4(1.0, 1.0, 1.0, 1.0)`;
+
         return `vec4(${this.generateColorChannel(lightChannel.colorChannel, i, false)}.rgb, ${this.generateColorChannel(lightChannel.alphaChannel, i, true)}.a)`;
     }
 
@@ -500,6 +506,10 @@ export class GX_Program extends DeviceProgram {
         // Skyward Sword is amazing sometimes. I hope you're happy...
         // assert(stage.texMap !== GX.TexMapID.TEXMAP_NULL);
         if (stage.texMap === GX.TexMapID.TEXMAP_NULL)
+            return 'vec4(1.0, 1.0, 1.0, 1.0)';
+
+        // If we disable textures, then return sampled white.
+        if (this.hacks !== null && this.hacks.disableTextures)
             return 'vec4(1.0, 1.0, 1.0, 1.0)';
 
         return `TextureSample(${stage.texMap}, t_TexCoord)`;

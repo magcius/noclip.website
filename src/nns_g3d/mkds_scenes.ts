@@ -38,6 +38,8 @@ export class CourseRenderer implements Viewer.SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        this.viewRenderer.prepareToRender(device);
+
         const hostAccessPass = device.createHostAccessPass();
         this.prepareToRender(hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);

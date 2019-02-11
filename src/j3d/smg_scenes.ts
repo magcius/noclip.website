@@ -25,6 +25,7 @@ import { GfxRenderInstViewRenderer, GfxRenderInst, GfxRenderInstBuilder } from '
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor, PostFXRenderTarget, ColorAttachment, DepthStencilAttachment, DEFAULT_NUM_SAMPLES, makeEmptyRenderPassDescriptor, copyRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { TransparentBlack } from '../Color';
 import { getPointBezier } from '../Spline';
+import { RENDER_HACKS_ICON } from '../bk/scenes';
 
 const materialHacks: GXMaterialHacks = {
     alphaLightingFudge: (p) => p.matSource,
@@ -367,7 +368,6 @@ function makeFullscreenPassRenderInst(renderInstBuilder: GfxRenderInstBuilder, n
     renderInst.name = name;
     renderInst.gfxProgram = program;
     renderInst.inputState = null;
-    renderInst.samplerBindings = [null];
     renderInst.setMegaStateFlags(fullscreenMegaState);
     return renderInst;
 }
@@ -426,7 +426,7 @@ const bloomClearRenderPassDescriptor: GfxRenderPassDescriptor = {
 
 class SMGRenderer implements Viewer.SceneGfx {
     private sceneGraph: SceneGraph;
-    public textureHolder: J3DTextureHolder
+    public textureHolder: J3DTextureHolder;
 
     // Bloom stuff.
     private bloomRenderInstDownsample: GfxRenderInst;
@@ -535,10 +535,29 @@ class SMGRenderer implements Viewer.SceneGfx {
 
         scenarioPanel.contents.appendChild(this.scenarioSelect.elem);
 
-        return [scenarioPanel];
+        const renderHacksPanel = new UI.Panel();
+
+        renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        renderHacksPanel.setTitle(RENDER_HACKS_ICON, 'Render Hacks');
+        const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
+        enableVertexColorsCheckbox.onchanged = () => {
+            for (let i = 0; i < this.sceneGraph.nodes.length; i++)
+                this.sceneGraph.nodes[i].modelInstance.setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
+        const enableTextures = new UI.Checkbox('Enable Textures', true);
+        enableTextures.onchanged = () => {
+            for (let i = 0; i < this.sceneGraph.nodes.length; i++)
+                this.sceneGraph.nodes[i].modelInstance.setTexturesEnabled(enableTextures.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableTextures.elem);
+
+        return [scenarioPanel, renderHacksPanel];
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        this.viewRenderer.prepareToRender(device);
+
         const hostAccessPass = device.createHostAccessPass();
         this.spawner.prepareToRender(hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
@@ -782,7 +801,7 @@ class ModelCache {
                 return null;
             const rarc = RARC.parse(buffer);
             const bmd = rarc.findFileData(modelFilename) !== null ? BMD.parse(rarc.findFileData(modelFilename)) : null;
-            const bmdModel = new BMDModel(device, renderHelper, bmd, null, materialHacks);
+            const bmdModel = new BMDModel(device, renderHelper, bmd, null);
             textureHolder.addJ3DTextures(device, bmd);
             this.archiveCache.set(archivePath, rarc);
             this.models.push(bmdModel);
@@ -892,7 +911,7 @@ class SMGSpawner {
                 // Trickery.
                 const rarc = this.modelCache.archiveCache.get(arcPath);
 
-                const modelInstance = new BMDModelInstance(device, this.renderHelper, this.textureHolder, bmdModel);
+                const modelInstance = new BMDModelInstance(device, this.renderHelper, this.textureHolder, bmdModel, materialHacks);
                 modelInstance.name = `${objinfo.objName} ${objinfo.objId}`;
 
                 if (tag === SceneGraphTag.Skybox) {

@@ -15,7 +15,7 @@ import { transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDesc
 
 const pathBase = `bk`;
 
-const LAYER_ICON = `<svg viewBox="0 0 16 16" height="20" fill="white"><g transform="translate(0,-1036.3622)"><path d="m 8,1039.2486 -0.21875,0.125 -4.90625,2.4375 5.125,2.5625 5.125,-2.5625 L 8,1039.2486 z m -3,4.5625 -2.125,0.9688 5.125,2.5625 5.125,-2.5625 -2.09375,-0.9688 -3.03125,1.5 -1,-0.5 -0.90625,-0.4375 L 5,1043.8111 z m 0,3 -2.125,0.9688 5.125,2.5625 5.125,-2.5625 -2.09375,-0.9688 -3.03125,1.5 -1,-0.5 -0.90625,-0.4375 L 5,1046.8111 z"/></g></svg>`;
+export const RENDER_HACKS_ICON = `<svg viewBox="0 0 110 105" height="20" fill="white"><path d="M95,5v60H65c0-16.6-13.4-30-30-30V5H95z"/><path d="M65,65c0,16.6-13.4,30-30,30C18.4,95,5,81.6,5,65c0-16.6,13.4-30,30-30v30H65z"/></svg>`;
 
 class BKRenderer extends BasicRendererHelper implements Viewer.SceneGfx {
     private sceneRenderers: N64Renderer[] = [];
@@ -29,7 +29,7 @@ class BKRenderer extends BasicRendererHelper implements Viewer.SceneGfx {
         const renderHacksPanel = new UI.Panel();
 
         renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
-        renderHacksPanel.setTitle(LAYER_ICON, 'Render Hacks');
+        renderHacksPanel.setTitle(RENDER_HACKS_ICON, 'Render Hacks');
         const enableCullingCheckbox = new UI.Checkbox('Enable Culling', true);
         enableCullingCheckbox.onchanged = () => {
             for (let i = 0; i < this.sceneRenderers.length; i++)
@@ -63,6 +63,8 @@ class BKRenderer extends BasicRendererHelper implements Viewer.SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        this.viewRenderer.prepareToRender(device);
+
         const hostAccessPass = device.createHostAccessPass();
         this.prepareToRender(hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);

@@ -70,6 +70,14 @@ export function setSortKeyLayer(sortKey: number, layer: number): number {
     return ((sortKey & 0x00FFFFFF) | ((layer & 0xFF) << 24)) >>> 0;
 }
 
+export function setSortKeyProgramKey(sortKey: number, programKey: number): number {
+    const isTransparent = !!((sortKey >>> 31) & 1);
+    if (isTransparent)
+        return sortKey;
+    else
+        return (sortKey & 0xFFFFFC03) | ((programKey & 0xFF) << 2);
+}
+
 export function setSortKeyBias(sortKey: number, bias: number): number {
     const isTransparent = !!((sortKey >>> 31) & 1);
     if (isTransparent)
@@ -79,7 +87,7 @@ export function setSortKeyBias(sortKey: number, bias: number): number {
 }
 
 export function makeSortKeyOpaque(layer: number, programKey: number): number {
-    return setSortKeyLayer(((programKey & 0xFF) << 2), layer);
+    return setSortKeyLayer(setSortKeyProgramKey(0, programKey), layer);
 }
 
 export function setSortKeyOpaqueDepth(sortKey: number, depthKey: number): number {
@@ -96,7 +104,7 @@ export function setSortKeyTranslucentDepth(sortKey: number, depthKey: number): n
     return ((sortKey & 0xFF0000FF) | (depthKey << 8)) >>> 0;
 }
 
-export function makeSortKey(layer: GfxRendererLayer, programKey: number): number {
+export function makeSortKey(layer: GfxRendererLayer, programKey: number = 0): number {
     if (layer & GfxRendererLayer.TRANSLUCENT)
         return makeSortKeyTranslucent(layer);
     else
@@ -128,8 +136,6 @@ function assignRenderInst(dst: GfxRenderInst, src: GfxRenderInst): void {
     // TODO(jstpierre): Immutable render flags.
     dst._megaState = src._megaState;
     dst.inputState = src.inputState;
-    dst.gfxProgram = src.gfxProgram;
-    dst._deviceProgram = src._deviceProgram;
     dst._pipeline = src._pipeline;
     dst._bindingLayouts = src._bindingLayouts;
     dst._samplerBindings = src._samplerBindings.slice();
@@ -143,6 +149,7 @@ const enum GfxRenderInstFlags {
     SAMPLER_BINDINGS_INHERIT = 1 << 3,
     BINDINGS_DIRTY           = 1 << 4,
     PIPELINE_DIRTY           = 1 << 5,
+    PIPELINE_DIRECT          = 1 << 6,
 }
 
 function setBitValue(bucket: number, bit: number, v: boolean): number {
@@ -230,12 +237,13 @@ export class GfxRenderInst {
 
     public setDeviceProgram(deviceProgram: DeviceProgram): void {
         this._deviceProgram = deviceProgram;
+        this.gfxProgram = null;
         this.rebuildPipeline();
     }
 
     public setPipelineDirect(pipeline: GfxRenderPipeline): void {
         this._pipeline = pipeline;
-        this._setFlag(GfxRenderInstFlags.PIPELINE_DIRTY, false);
+        this._setFlag(GfxRenderInstFlags.PIPELINE_DIRECT, true);
     }
 
     public setSamplerBindingsInherit(v: boolean = true): void {
@@ -304,18 +312,40 @@ export class GfxRenderInst {
             return this.passMask;
     }
 
-    public buildPipeline(device: GfxDevice, cache: GfxRenderCache): void {
-        if (!(this._flags & GfxRenderInstFlags.PIPELINE_DIRTY))
+    private _hasOrInheritsFlag(flag: GfxRenderInstFlags): boolean {
+        if ((this._flags & flag))
+            return true;
+        else if (this.parentRenderInst !== null)
+            return this.parentRenderInst._hasOrInheritsFlag(flag);
+        else
+            return false;
+    }
+
+    private _buildGfxProgram(device: GfxDevice, cache: GfxRenderCache): GfxProgram {
+        if (this.gfxProgram !== null)
+            return this.gfxProgram;
+
+        if (this._deviceProgram !== null) {
+            this.gfxProgram = cache.createProgram(device, this._deviceProgram);
+            return this.gfxProgram;
+        }
+
+        return this.parentRenderInst._buildGfxProgram(device, cache);
+    }
+
+    private buildPipeline(device: GfxDevice, cache: GfxRenderCache): void {
+        if (!this._hasOrInheritsFlag(GfxRenderInstFlags.PIPELINE_DIRTY))
+            return;
+
+        if (this._hasOrInheritsFlag(GfxRenderInstFlags.PIPELINE_DIRECT))
             return;
 
         const inputLayout = this.inputState !== null ? device.queryInputState(this.inputState).inputLayout : null;
 
-        if (this._deviceProgram !== null)
-            this.gfxProgram = cache.createProgram(device, this._deviceProgram);
-
+        const gfxProgram = this._buildGfxProgram(device, cache);
         this._pipeline = cache.createRenderPipeline(device, {
             topology: GfxPrimitiveTopology.TRIANGLES,
-            program: this.gfxProgram,
+            program: gfxProgram,
             bindingLayouts: this._bindingLayouts,
             inputLayout,
             megaStateDescriptor: this._megaState,
@@ -324,11 +354,11 @@ export class GfxRenderInst {
         this._setFlag(GfxRenderInstFlags.PIPELINE_DIRTY, false);
     }
 
-    public buildBindings(device: GfxDevice, cache: GfxRenderCache): void {
-        this._tryInheritSamplerBindings();
-
-        if (!(this._flags & GfxRenderInstFlags.BINDINGS_DIRTY))
+    private buildBindings(device: GfxDevice, cache: GfxRenderCache): void {
+        if (!this._hasOrInheritsFlag(GfxRenderInstFlags.BINDINGS_DIRTY))
             return;
+
+        this._tryInheritSamplerBindings();
 
         let firstUniformBufferBinding = 0;
         let firstSamplerBinding = 0;
@@ -341,7 +371,18 @@ export class GfxRenderInst {
             firstUniformBufferBinding += bindingLayout.numUniformBuffers;
             firstSamplerBinding += bindingLayout.numSamplers;
         }
+
         this._setFlag(GfxRenderInstFlags.BINDINGS_DIRTY, false);
+    }
+
+    public _prepareToRenderLeaf(device: GfxDevice, cache: GfxRenderCache): void {        
+        this.buildPipeline(device, cache);
+        this.buildBindings(device, cache);
+    }
+
+    public _prepareToRenderTemplate(device: GfxDevice, cache: GfxRenderCache): void {
+        this._setFlag(GfxRenderInstFlags.BINDINGS_DIRTY, false);
+        this._setFlag(GfxRenderInstFlags.PIPELINE_DIRTY, false);
     }
 }
 
@@ -355,6 +396,7 @@ export class GfxRenderInstViewRenderer {
     private viewportWidth: number;
     private viewportHeight: number;
     public renderInsts: GfxRenderInst[] = [];
+    public templateRenderInsts: GfxRenderInst[] = [];
     public gfxRenderCache = new GfxRenderCache();
 
     public destroy(device: GfxDevice): void {
@@ -380,6 +422,16 @@ export class GfxRenderInstViewRenderer {
         }
 
         return false;
+    }
+
+    public prepareToRender(device: GfxDevice): void {
+        // Give a chance to all template render insts to rebake, regardless of visiblity.
+        // This is a two-step solution: first, we let leaf render insts update, and then we clear flags on templates.
+        // If we do not do this, we have no way of knowing when to clear template flags.
+        for (let i = 0; i < this.renderInsts.length; i++)
+            this.renderInsts[i]._prepareToRenderLeaf(device, this.gfxRenderCache);
+        for (let i = 0; i < this.templateRenderInsts.length; i++)
+            this.templateRenderInsts[i]._prepareToRenderTemplate(device, this.gfxRenderCache);
     }
 
     public executeOnPass(device: GfxDevice, passRenderer: GfxRenderPass, passMask: number = 1): void {
@@ -408,9 +460,6 @@ export class GfxRenderInstViewRenderer {
             if ((renderInst.getPassMask() & passMask) === 0)
                 continue;
 
-            renderInst.buildPipeline(device, this.gfxRenderCache);
-            renderInst.buildBindings(device, this.gfxRenderCache);
-
             assert(renderInst._pipeline !== null);
             if (currentPipeline !== renderInst._pipeline) {
                 passRenderer.setPipeline(renderInst._pipeline);
@@ -437,6 +486,7 @@ export class GfxRenderInstBuilder {
     private uniformBufferOffsets: number[] = [];
     private uniformBufferWordAlignment: number;
     private newRenderInsts: GfxRenderInst[] = [];
+    private newTemplateRenderInsts: GfxRenderInst[] = [];
     private allRenderInsts: GfxRenderInst[] = [];
     private templateStack: GfxRenderInst[] = [];
 
@@ -483,6 +533,8 @@ export class GfxRenderInstBuilder {
         if (o === null)
             o = this.newRenderInst();
         this.templateStack.unshift(o);
+        // TODO(jstpierre): Yes, I know this list can have duplicates.
+        this.newTemplateRenderInsts.push(o);
         return o;
     }
 
@@ -490,13 +542,13 @@ export class GfxRenderInstBuilder {
         this.templateStack.shift();
     }
 
-    public newRenderInst(baseRenderInst: GfxRenderInst = null): GfxRenderInst {
+    public newRenderInst(baseRenderInst: GfxRenderInst | null = null): GfxRenderInst {
         if (baseRenderInst === null)
             baseRenderInst = this.templateStack[0];
         return new GfxRenderInst(baseRenderInst);
     }
 
-    public pushRenderInst(renderInst: GfxRenderInst = null): GfxRenderInst {
+    public pushRenderInst(renderInst: GfxRenderInst | null = null): GfxRenderInst {
         if (renderInst === null)
             renderInst = this.newRenderInst();
         this.newRenderInsts.push(renderInst);
@@ -566,7 +618,12 @@ export class GfxRenderInstBuilder {
         for (let i = 0; i < this.allRenderInsts.length; i++)
             this.buildRenderInstUniformBufferBindings(this.allRenderInsts[i]);
 
+        for (let i = 0; i < this.newTemplateRenderInsts.length; i++)
+            if (!viewRenderer.templateRenderInsts.includes(this.newTemplateRenderInsts[i]))
+                viewRenderer.templateRenderInsts.push(this.newTemplateRenderInsts[i]);
+
         this.newRenderInsts.length = 0;
+        this.newTemplateRenderInsts.length = 0;
     }
 
     public finish(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer) {

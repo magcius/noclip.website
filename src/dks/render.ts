@@ -309,7 +309,7 @@ export class SceneRenderer {
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         viewerInput.camera.setClipPlanes(20, 500000);
-        const offs = this.templateRenderInst.uniformBufferOffsets[DKSProgram.ub_SceneParams];
+        const offs = this.templateRenderInst.getUniformBufferOffset(DKSProgram.ub_SceneParams);
         const sceneParamsMapped = this.sceneParamsBuffer.mapBufferF32(offs, 16);
         fillSceneParamsData(sceneParamsMapped, viewerInput.camera, offs);
 

@@ -245,8 +245,7 @@ export class Scene implements Viewer.SceneGfx {
         device.submitPass(hostAccessPass);
     }
 
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
-        const hostAccessPass = device.createHostAccessPass();
+    private prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         this.sceneUniformBufferFiller.reset();
         this.sceneUniformBufferFiller.fillMatrix4x4(viewerInput.camera.projectionMatrix);
         this.sceneUniformBufferFiller.fillMatrix4x4(viewerInput.camera.viewMatrix);
@@ -256,6 +255,13 @@ export class Scene implements Viewer.SceneGfx {
             this.ivRenderers[i].prepareToRender(hostAccessPass);
 
         this.sceneUniformBuffer.prepareToRender(hostAccessPass);
+    }
+
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        this.viewRenderer.prepareToRender(device);
+
+        const hostAccessPass = device.createHostAccessPass();
+        this.prepareToRender(hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
 
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);

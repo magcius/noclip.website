@@ -589,10 +589,10 @@ export class Checkbox implements Widget {
         this.toplevel.style.display = 'grid';
         this.toplevel.style.gridTemplateColumns = '1fr 1fr';
         this.toplevel.style.alignItems = 'center';
+        this.toplevel.style.cursor = 'pointer';
         this.toplevel.onclick = this._toggle.bind(this);
 
         this.label = document.createElement('div');
-        this.label.style.fontWeight = 'bold';
         this.label.style.userSelect = 'none';
         this.toplevel.appendChild(this.label);
 
@@ -617,9 +617,13 @@ export class Checkbox implements Widget {
         if (this.checked) {
             this.emblem.style.backgroundColor = HIGHLIGHT_COLOR;
             this.emblem.style.borderColor = 'white';
+            this.label.style.fontWeight = 'bold';
+            this.label.style.color = 'white';
         } else {
             this.emblem.style.backgroundColor = 'transparent';
             this.emblem.style.borderColor = '#aaa';
+            this.label.style.fontWeight = '';
+            this.label.style.color = '#aaa';
         }
     }
 
@@ -1686,6 +1690,7 @@ class About extends Panel {
 <li> Line Chart <span>by</span> Shastry
 <li> Search <span>by</span> Alain W.
 <li> Save <span>by</span> Prime Icons
+<li> Overlap <span>by</span> Zach Bogart
 </ul>
 
 <p class="BuildVersion"><a href="${GITHUB_REVISION_URL}">build ${GIT_SHORT_REVISION}</a></p>

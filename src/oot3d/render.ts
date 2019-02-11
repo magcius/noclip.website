@@ -107,7 +107,7 @@ class MaterialInstance {
         this.templateRenderInst = renderInstBuilder.newRenderInst();
         renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, OoT3D_Program.ub_MaterialParams);
         const layer = this.material.isTransparent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
-        const programKey = device.queryProgram(this.templateRenderInst.gfxProgram).uniqueKey;
+        const programKey = device.queryProgram(this.templateRenderInst.parentRenderInst.gfxProgram).uniqueKey;
         this.templateRenderInst.sortKey = makeSortKeyOpaque(layer, programKey);
         this.templateRenderInst.setMegaStateFlags(this.material.renderFlags);
 
@@ -471,6 +471,8 @@ export abstract class BasicRendererHelper {
     protected abstract prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void;
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        this.viewRenderer.prepareToRender(device);
+
         const hostAccessPass = device.createHostAccessPass();
         this.prepareToRender(hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
