@@ -237,7 +237,10 @@ export class MDL0Renderer {
     private packetParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_PacketParams`);
 
     constructor(device: GfxDevice, public model: NSBMD.MDL0Model, private tex0: TEX0) {
-        this.gfxProgram = device.createProgram(new NITRO_Program());
+        const program = new NITRO_Program();
+        program.defines.set('USE_VERTEX_COLOR', '1');
+        program.defines.set('USE_TEXTURE', '1');
+        this.gfxProgram = device.createProgram(program);
         const posScale = model.posScale * 50;
         mat4.fromScaling(this.modelMatrix, [posScale, posScale, posScale]);
 
