@@ -42,6 +42,12 @@ class BKRenderer extends BasicRendererHelper implements Viewer.SceneGfx {
                 this.sceneRenderers[i].setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
         };
         renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
+        const enableTextures = new UI.Checkbox('Enable Textures', true);
+        enableTextures.onchanged = () => {
+            for (let i = 0; i < this.sceneRenderers.length; i++)
+                this.sceneRenderers[i].setTexturesEnabled(enableTextures.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableTextures.elem);
 
         return [renderHacksPanel];
     }

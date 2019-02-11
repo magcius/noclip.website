@@ -172,6 +172,8 @@ const textureMappings = nArray(2, () => new TextureMapping());
 class DrawCallInstance {
     private renderInst: GfxRenderInst;
     private textureEntry: Texture[] = [];
+    private vertexColorsEnabled = true;
+    private texturesEnabled = true;
 
     constructor(device: GfxDevice, n64Data: N64Data, renderInstBuilder: GfxRenderInstBuilder, private drawCall: DrawCall, private drawIndex: number) {
         this.renderInst = renderInstBuilder.pushRenderInst();
@@ -191,21 +193,21 @@ class DrawCallInstance {
         const zUpd = !!(this.drawCall.DP_OtherModeL & 0x20);
         this.renderInst.setMegaStateFlags({ depthWrite: zUpd });
         this.setBackfaceCullingEnabled(true);
-        this.createProgram(true);
+        this.createProgram();
 
         this.renderInst.setSamplerBindingsFromTextureMappings(textureMappings);
 
         this.renderInst.drawIndexes(drawCall.indexCount, drawCall.firstIndex);
     }
 
-    private createProgram(vertexColorsEnabled: boolean): void {
+    private createProgram(): void {
         const program = new F3DEX_Program();
         // TODO(jstpierre): texture combiners.
-        if (this.drawCall.textureIndices.length)
+        if (this.texturesEnabled && this.drawCall.textureIndices.length)
             program.defines.set('USE_TEXTURE', '1');
 
         const shade = (this.drawCall.SP_GeometryMode & GeometryMode.G_SHADE) !== 0;
-        if (vertexColorsEnabled && shade)
+        if (this.vertexColorsEnabled && shade)
             program.defines.set('USE_VERTEX_COLOR', '1');
 
         const textFilt = (this.drawCall.DP_OtherModeH >>> 12) & 0x03;
@@ -225,7 +227,13 @@ class DrawCallInstance {
     }
 
     public setVertexColorsEnabled(v: boolean): void {
-        this.createProgram(v);
+        this.vertexColorsEnabled = v;
+        this.createProgram();
+    }
+
+    public setTexturesEnabled(v: boolean): void {
+        this.texturesEnabled = v;
+        this.createProgram();
     }
 
     private computeTextureMatrix(m: mat4, textureEntryIndex: number): void {
@@ -318,6 +326,11 @@ export class N64Renderer {
     public setVertexColorsEnabled(v: boolean): void {
         for (let i = 0; i < this.drawCallInstances.length; i++)
             this.drawCallInstances[i].setVertexColorsEnabled(v);
+    }
+
+    public setTexturesEnabled(v: boolean): void {
+        for (let i = 0; i < this.drawCallInstances.length; i++)
+            this.drawCallInstances[i].setTexturesEnabled(v);
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
