@@ -533,8 +533,6 @@ export class GfxRenderInstBuilder {
         if (o === null)
             o = this.newRenderInst();
         this.templateStack.unshift(o);
-        // TODO(jstpierre): Yes, I know this list can have duplicates.
-        this.newTemplateRenderInsts.push(o);
         return o;
     }
 
@@ -542,15 +540,18 @@ export class GfxRenderInstBuilder {
         this.templateStack.shift();
     }
 
-    public newRenderInst(baseRenderInst: GfxRenderInst | null = null): GfxRenderInst {
+    public newRenderInst(baseRenderInst: GfxRenderInst | null = null, isTemplate: boolean = true): GfxRenderInst {
         if (baseRenderInst === null)
             baseRenderInst = this.templateStack[0];
-        return new GfxRenderInst(baseRenderInst);
+        const o = new GfxRenderInst(baseRenderInst);
+        if (isTemplate)
+            this.newTemplateRenderInsts.push(o);
+        return o;
     }
 
     public pushRenderInst(renderInst: GfxRenderInst | null = null): GfxRenderInst {
         if (renderInst === null)
-            renderInst = this.newRenderInst();
+            renderInst = this.newRenderInst(null, false);
         this.newRenderInsts.push(renderInst);
         return renderInst;
     }
