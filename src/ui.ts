@@ -587,7 +587,7 @@ export class Checkbox implements Widget {
     constructor(label: string = '', initiallyChecked: boolean = false) {
         this.toplevel = document.createElement('div');
         this.toplevel.style.display = 'grid';
-        this.toplevel.style.gridTemplateColumns = '1fr 1fr';
+        this.toplevel.style.gridTemplateColumns = '1fr 24px';
         this.toplevel.style.alignItems = 'center';
         this.toplevel.style.cursor = 'pointer';
         this.toplevel.onclick = this._toggle.bind(this);
