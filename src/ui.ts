@@ -1575,7 +1575,7 @@ class StatisticsPanel extends Panel {
     private fpsPoints: number[] = [];
     private fpsColor: Color = { r: 0.4, g: 0.9, b: 0.6, a: 1.0 };
 
-    constructor() {
+    constructor(private viewer: Viewer.Viewer) {
         super();
         this.setTitle(STATISTICS_ICON, 'Statistics');
 
@@ -1609,6 +1609,11 @@ class StatisticsPanel extends Panel {
             this.fpsGraph.drawText(`Texture Binds: ${renderStatistics.textureBindCount}`);
         if (renderStatistics.bufferUploadCount)
             this.fpsGraph.drawText(`Buffer Uploads: ${renderStatistics.bufferUploadCount}`);
+
+        const camPositionX = this.viewer.camera.worldMatrix[12].toFixed(2);
+        const camPositionY = this.viewer.camera.worldMatrix[13].toFixed(2);
+        const camPositionZ = this.viewer.camera.worldMatrix[14].toFixed(2);
+        this.fpsGraph.drawText(`Camera Position: ${camPositionX} ${camPositionY} ${camPositionZ}`);
     }
 }
 
@@ -1781,7 +1786,7 @@ export class UI {
         this.saveStatesPanel = new SaveStatesPanel(viewer.inputManager);
         this.textureViewer = new TextureViewer();
         this.viewerSettings = new ViewerSettings(viewer);
-        this.statisticsPanel = new StatisticsPanel();
+        this.statisticsPanel = new StatisticsPanel(viewer);
         this.about = new About();
 
         this.setScenePanels([]);

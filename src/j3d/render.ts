@@ -10,9 +10,9 @@ import { MaterialParams, PacketParams, GXTextureHolder, ColorKind, translateTexF
 import { computeViewMatrix, computeModelMatrixBillboard, computeModelMatrixYBillboard, computeViewMatrixSkybox, texEnvMtx, Camera, texProjPerspMtx, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
 import AnimationController from '../AnimationController';
-import { nArray, assertExists } from '../util';
+import { nArray, assertExists, assert } from '../util';
 import { AABB } from '../Geometry';
-import { GfxDevice, GfxSampler, GfxProgram } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSampler } from '../gfx/platform/GfxPlatform';
 import { GfxBufferCoalescer, GfxCoalescedBuffers } from '../gfx/helpers/BufferHelpers';
 import { ViewerRenderInput } from '../viewer';
 import { GfxRenderInst, GfxRenderInstBuilder, setSortKeyDepth, GfxRendererLayer, makeSortKey, setSortKeyBias } from '../gfx/render/GfxRenderer';
@@ -101,7 +101,7 @@ export class ShapeInstance {
             }
 
             if (renderInst.visible) {
-                renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
+                renderInst.sortKey = setSortKeyDepth(renderInst.parentRenderInst.sortKey, depth);
                 renderInst.sortKey = setSortKeyBias(renderInst.sortKey, this.sortKeyBias);
                 this.shapeData.shapeHelpers[p].fillPacketParams(packetParams, renderInst, renderHelper);
             }
@@ -158,13 +158,16 @@ export class MaterialInstance {
         this.templateRenderInst.name = this.name;
         this.createProgram();
         GX_Material.translateGfxMegaState(this.templateRenderInst.setMegaStateFlags(), material.gxMaterial);
-        // TODO(jstpierre): Perhaps make this customizable?
         let layer = !material.gxMaterial.ropInfo.depthTest ? GfxRendererLayer.BACKGROUND : GfxRendererLayer.OPAQUE;
-        if (material.translucent)
-            layer |= GfxRendererLayer.TRANSLUCENT;
-        this.templateRenderInst.sortKey = makeSortKey(layer);
+        this.setSortKeyLayer(layer);
         // Allocate our material buffer slot.
         this.materialParamsBufferOffset = renderHelper.renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, ub_MaterialParams);
+    }
+
+    public setSortKeyLayer(layer: GfxRendererLayer): void {
+        if (this.material.translucent)
+            layer |= GfxRendererLayer.TRANSLUCENT;
+        this.templateRenderInst.sortKey = makeSortKey(layer);
     }
 
     private createProgram(): void {
@@ -271,6 +274,7 @@ export class MaterialInstance {
             case 0x00:
             case 0x01: // Delfino Plaza
             case 0x08: // Peach Beach.
+            case 0x0A: // Wind Waker pedestal?
             case 0x0B: // Luigi Circuit
                 // No mapping.
                 mat4.identity(dst);
@@ -296,6 +300,7 @@ export class MaterialInstance {
             switch(texMtx.type) {
             case 0x00:
             case 0x01:
+            case 0x0A:
             case 0x0B:
                 break;
             case 0x06: // Rainbow Road
@@ -449,6 +454,7 @@ export class BMDModelInstance {
     public isSkybox: boolean = false;
     public passMask: number = 0x01;
     public fps: number = 30;
+    public childInstances: BMDModelInstance[] = [];
 
     public modelMatrix: mat4;
 
@@ -460,6 +466,7 @@ export class BMDModelInstance {
     public ank1Animator: ANK1Animator | null = null;
 
     // Temporary state when calculating bone matrices.
+    private parentJointMatrix: mat4 | null = null;
     private jointMatrices: mat4[];
     private jointVisibility: boolean[];
     private bboxScratch: AABB = new AABB();
@@ -523,7 +530,7 @@ export class BMDModelInstance {
                 const shapeInstance = this.shapeInstances[node.shapeIdx];
                 // Translucent draws need to be in-order, for J3D, as far as I can tell?
                 if (currentMaterial.material.translucent)
-                    shapeInstance.sortKeyBias = translucentDrawIndex++;
+                    shapeInstance.sortKeyBias = ++translucentDrawIndex;
                 shapeInstance.pushRenderInsts(renderInstBuilder);
                 renderInstBuilder.popTemplateRenderInst();
                 break;
@@ -538,6 +545,11 @@ export class BMDModelInstance {
 
     public destroy(device: GfxDevice): void {
         this.bmdModel.destroy(device);
+    }
+
+    public setSortKeyLayer(layer: GfxRendererLayer): void {
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].setSortKeyLayer(layer);
     }
 
     public setColorOverride(i: ColorKind, color: GX_Material.Color, useAlpha: boolean = false): void {
@@ -593,6 +605,14 @@ export class BMDModelInstance {
         this.ank1Animator = bindANK1Animator(animationController, ank1);
     }
 
+    public setParentJoint(parent: BMDModelInstance, jointName: string): void {
+        parent.childInstances.push(this);
+        // Find the matrix that corresponds to the bone.
+        const parentJointIndex = parent.bmdModel.bmd.jnt1.joints.findIndex((j) => j.name === jointName);
+        assert(parentJointIndex >= 0);
+        this.parentJointMatrix = parent.jointMatrices[parentJointIndex];
+    }
+
     public getTimeInFrames(milliseconds: number) {
         return (milliseconds / 1000) * this.fps;
     }
@@ -604,8 +624,8 @@ export class BMDModelInstance {
         return false;
     }
 
-    public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput): void {
-        let modelVisible = this.visible;
+    public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput, visible: boolean = true): void {
+        let modelVisible = visible && this.visible;
 
         if (modelVisible) {
             this.templateRenderInst.name = this.name;
@@ -613,16 +633,19 @@ export class BMDModelInstance {
 
             this.animationController.setTimeInMilliseconds(viewerInput.time);
 
+            // Compute our root joint.
+            const rootJointMatrix = matrixScratch;
+            mat4.copy(rootJointMatrix, this.modelMatrix);
+            if (this.parentJointMatrix !== null)
+                mat4.mul(rootJointMatrix, this.parentJointMatrix, rootJointMatrix);
+
             // Billboards shouldn't have their root joint modified, given that we have to compute a new model
             // matrix that faces the camera view.
             // TODO(jstpierre): There's a way to do this without this hackiness, I'm sure of it.
-            const rootJointMatrix = matrixScratch;
-
             if (this.bmdModel.hasBillboard) {
+                mat4.copy(this.shapeInstanceState.modelMatrix, rootJointMatrix);
                 mat4.identity(rootJointMatrix);
-                mat4.copy(this.shapeInstanceState.modelMatrix, this.modelMatrix);
             } else {
-                mat4.copy(rootJointMatrix, this.modelMatrix);
                 mat4.identity(this.shapeInstanceState.modelMatrix);
             }
 
@@ -635,7 +658,7 @@ export class BMDModelInstance {
             //
             // For now, we simply don't cull both of these special cases, hoping they'll be simple enough to just always
             // render. In theory, we could cull billboards using the bounding sphere.
-            const disableCulling = true || this.isSkybox || this.bmdModel.hasBillboard;
+            const disableCulling = this.isSkybox || this.bmdModel.hasBillboard;
 
             this.shapeInstanceState.isSkybox = this.isSkybox;
             this.updateMatrixArray(viewerInput.camera, rootJointMatrix, disableCulling);
@@ -660,6 +683,10 @@ export class BMDModelInstance {
 
         for (let i = 0; i < this.shapeInstances.length; i++)
             this.shapeInstances[i].prepareToRender(renderHelper, depth, viewerInput, this.shapeInstanceState);
+
+        // Update any children.
+        for (let i = 0; i < this.childInstances.length; i++)
+            this.childInstances[i].prepareToRender(renderHelper, viewerInput, modelVisible);
     }
 
     private updateJointMatrixHierarchy(camera: Camera, node: HierarchyNode, parentJointMatrix: mat4, disableCulling: boolean): void {
