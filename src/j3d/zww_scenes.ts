@@ -1352,7 +1352,7 @@ class SceneDesc {
         // Skull
         else if (name === 'Odokuro') fetchArchive(`Odokuro.arc`).then((rarc) => buildModel(rarc, `bdl/odokuro.bdl`));
         // Mailbox
-        else if (name === 'Tpost') fetchArchive(`Toripost.arc`).then((rarc) => buildModel(rarc, `bdl/vpost.bdl`));
+        else if (name === 'Tpost') fetchArchive(`Toripost.arc`).then((rarc) => buildModel(rarc, `bdl/vpost.bdl`).bindANK1(parseBCK(rarc, `bcks/post_wait.bck`)));
         // Sign
         else if (name === 'Kanban') fetchArchive(`Kanban.arc`).then((rarc) => buildModel(rarc, `bdl/kanban.bdl`));
         // Holes you can fall into
