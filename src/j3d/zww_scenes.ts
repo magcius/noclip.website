@@ -610,10 +610,10 @@ class SceneDesc {
         const rarcs = [];
 
         // XXX(jstpierre): This is really terrible code.
-        rarcs.push(this.fetchRarc(`j3d/ww/${this.stageDir}/Stage.arc`, abortSignal));
+        rarcs.push(this.fetchRarc(`j3d/ww/Stage/${this.stageDir}/Stage.arc`, abortSignal));
         for (const r of this.rooms) {
             const roomIdx = Math.abs(r);
-            rarcs.push(this.fetchRarc(`j3d/ww/${this.stageDir}/Room${roomIdx}.arc`, abortSignal));
+            rarcs.push(this.fetchRarc(`j3d/ww/Stage/${this.stageDir}/Room${roomIdx}.arc`, abortSignal));
         }
 
         return Progressable.all(rarcs).then(([stageRarc, ...roomRarcs]) => {
