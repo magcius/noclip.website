@@ -1,7 +1,7 @@
 
 import { mat4, mat2d } from 'gl-matrix';
 
-import { BMD, BMT, HierarchyNode, HierarchyType, MaterialEntry, Shape, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData, DRW1MatrixKind, TTK1Animator, ANK1Animator, bindANK1Animator } from './j3d';
+import { BMD, BMT, HierarchyNode, HierarchyType, MaterialEntry, Shape, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData, DRW1MatrixKind, TTK1Animator, ANK1Animator, bindANK1Animator, BTI } from './j3d';
 import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } from './j3d';
 
 import * as GX_Material from '../gx/gx_material';
@@ -22,6 +22,10 @@ export class J3DTextureHolder extends GXTextureHolder<TEX1_TextureData> {
         this.addTextures(device, bmd.tex1.textureDatas);
         if (bmt)
             this.addTextures(device, bmt.tex1.textureDatas);
+    }
+
+    public addBTITexture(device: GfxDevice, bti: BTI): void {
+        this.addTextures(device, [bti.texture]);
     }
 }
 
@@ -162,6 +166,10 @@ export class MaterialInstance {
         this.setSortKeyLayer(layer);
         // Allocate our material buffer slot.
         this.materialParamsBufferOffset = renderHelper.renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, ub_MaterialParams);
+    }
+
+    public setColorWriteEnabled(colorWrite: boolean): void {
+        this.templateRenderInst.setMegaStateFlags({ colorWrite });
     }
 
     public setSortKeyLayer(layer: GfxRendererLayer): void {
@@ -550,6 +558,10 @@ export class BMDModelInstance {
     public setSortKeyLayer(layer: GfxRendererLayer): void {
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].setSortKeyLayer(layer);
+    }
+
+    public setMaterialColorWriteEnabled(materialName: string, colorWrite: boolean): void {
+        this.materialInstances.find((m) => m.name === materialName).setColorWriteEnabled(colorWrite);
     }
 
     public setColorOverride(i: ColorKind, color: GX_Material.Color, useAlpha: boolean = false): void {

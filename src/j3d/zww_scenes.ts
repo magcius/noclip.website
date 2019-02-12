@@ -12,7 +12,7 @@ import * as UI from '../ui';
 
 import * as GX_Material from '../gx/gx_material';
 
-import { BMD, BTK, BRK, BCK } from './j3d';
+import { BMD, BTK, BRK, BCK, BTI } from './j3d';
 import * as RARC from './rarc';
 import { J3DTextureHolder, BMDModelInstance, BMDModel } from './render';
 import { Camera, computeViewMatrix } from '../Camera';
@@ -692,6 +692,7 @@ class SceneDesc {
         const modelCache = new ModelCache();
 
         // XXX(jstpierre): This is really terrible code.
+        modelCache.fetchArchive(`${pathBase}/Object/System.arc`, abortSignal);
         modelCache.fetchArchive(`${pathBase}/Stage/${this.stageDir}/Stage.arc`, abortSignal);
 
         for (const r of this.rooms) {
@@ -700,12 +701,17 @@ class SceneDesc {
         }
 
         return modelCache.waitForLoad().then(() => {
+            const textureHolder = new J3DTextureHolder();
+
+            const systemArc = modelCache.getArchive(`${pathBase}/Object/System.arc`);
+            textureHolder.addBTITexture(device, BTI.parse(systemArc.findFileData(`dat/toon.bti`), `ZAtoon`));
+            textureHolder.addBTITexture(device, BTI.parse(systemArc.findFileData(`dat/toonex.bti`), `ZBtoonEX`));
+
             const stageRarc = modelCache.getArchive(`${pathBase}/Stage/${this.stageDir}/Stage.arc`);
             const stageDzs = stageRarc.findFileData(`dzs/stage.dzs`);
             const stageDzsHeaders = parseDZSHeaders(stageDzs);
             const mult = stageDzsHeaders.get('MULT');
 
-            const textureHolder = new J3DTextureHolder();
             const wantsSeaPlane = this.stageDir === 'sea';
             const renderer = new WindWakerRenderer(device, modelCache, textureHolder, wantsSeaPlane, stageRarc);
             for (let i = 0; i < this.rooms.length; i++) {
@@ -982,6 +988,14 @@ class SceneDesc {
         // Tetra
         else if (name === 'Zl1') fetchArchive(`Zl.arc`).then((rarc) => {
             const m = buildModel(rarc, `bdlm/zl.bdl`);
+            m.setMaterialColorWriteEnabled("eyeLdamA", false);
+            m.setMaterialColorWriteEnabled("eyeLdamB", false);
+            m.setMaterialColorWriteEnabled("mayuLdamA", false);
+            m.setMaterialColorWriteEnabled("mayuLdamB", false);
+            m.setMaterialColorWriteEnabled("eyeRdamA", false);
+            m.setMaterialColorWriteEnabled("eyeRdamB", false);
+            m.setMaterialColorWriteEnabled("mayuRdamA", false);
+            m.setMaterialColorWriteEnabled("mayuRdamB", false);
             m.bindANK1(parseBCK(rarc, `bcks/wait.bck`));
         });
         // Gonzo
