@@ -27,6 +27,7 @@ import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
 import { BufferFillerHelper } from '../gfx/helpers/UniformBufferHelpers';
 import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { RENDER_HACKS_ICON } from '../bk/scenes';
+import AnimationController from '../AnimationController';
 
 const TIME_OF_DAY_ICON = `<svg viewBox="0 0 100 100" height="20" fill="white"><path d="M50,93.4C74,93.4,93.4,74,93.4,50C93.4,26,74,6.6,50,6.6C26,6.6,6.6,26,6.6,50C6.6,74,26,93.4,50,93.4z M37.6,22.8  c-0.6,2.4-0.9,5-0.9,7.6c0,18.2,14.7,32.9,32.9,32.9c2.6,0,5.1-0.3,7.6-0.9c-4.7,10.3-15.1,17.4-27.1,17.4  c-16.5,0-29.9-13.4-29.9-29.9C20.3,37.9,27.4,27.5,37.6,22.8z"/></svg>`;
 
@@ -565,13 +566,14 @@ class WindWakerRenderer implements Viewer.SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
-        this.viewRenderer.prepareToRender(device);
-
         viewerInput.camera.setClipPlanes(20, 500000);
 
         const hostAccessPass = device.createHostAccessPass();
         this.prepareToRender(hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
+
+        this.viewRenderer.prepareToRender(device);
+
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
         this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
 
@@ -797,12 +799,45 @@ class SceneDesc {
         function parseBCK(rarc: RARC.RARC, path: string) { return BCK.parse(rarc.findFileData(path)).ank1; }
         function parseBRK(rarc: RARC.RARC, path: string) { return BRK.parse(rarc.findFileData(path)).trk1; }
         function parseBTK(rarc: RARC.RARC, path: string) { return BTK.parse(rarc.findFileData(path)).ttk1; }
+        function animFrame(frame: number): AnimationController { const a = new AnimationController(); a.setTimeInFrames(frame); return a; }
 
         // Tremendous special thanks to LordNed, Sage-of-Mirrors & LugoLunatic for their work on actor mapping
         // Heavily based on https://github.com/LordNed/Winditor/blob/master/Editor/resources/ActorDatabase.json
 
+        if (name === 'item') {
+            // Item table provided with the help of the incredible LugoLunatic <3.
+            const itemId = (parameters & 0x000000FF);
+
+            // Heart
+            if (itemId === 0x00) fetchArchive(`Always.arc`).then((rarc) => buildModel(rarc, `bdlm/vlupl.bdl`));
+            // Rupee (Green)
+            else if (itemId === 0x01) fetchArchive(`Always.arc`).then((rarc) => {
+                const m = buildModel(rarc, `bdlm/vlupl.bdl`);
+                m.bindTRK1(parseBRK(rarc, `brk/vlupl.brk`), animFrame(0));
+                m.bindTTK1(parseBTK(rarc, `btk/vlupl.btk`));
+            });
+            // Rupee (Blue)
+            else if (itemId === 0x02) fetchArchive(`Always.arc`).then((rarc) => {
+                const m = buildModel(rarc, `bdlm/vlupl.bdl`);
+                m.bindTRK1(parseBRK(rarc, `brk/vlupl.brk`), animFrame(1));
+                m.bindTTK1(parseBTK(rarc, `btk/vlupl.btk`));
+            });
+            // Rupee (Yellow)
+            else if (itemId === 0x03) fetchArchive(`Always.arc`).then((rarc) => {
+                const m = buildModel(rarc, `bdlm/vlupl.bdl`);
+                m.bindTRK1(parseBRK(rarc, `brk/vlupl.brk`), animFrame(2));
+                m.bindTTK1(parseBTK(rarc, `btk/vlupl.btk`));
+            });
+            // Rupee (Red)
+            else if (itemId === 0x04) fetchArchive(`Always.arc`).then((rarc) => {
+                const m = buildModel(rarc, `bdlm/vlupl.bdl`);
+                m.bindTRK1(parseBRK(rarc, `brk/vlupl.brk`), animFrame(3));
+                m.bindTTK1(parseBTK(rarc, `btk/vlupl.btk`));
+            });
+            else console.warn(`Unknown item: ${itemId}`);
+        }
         // Hyrule Ocean Warp
-        if (name === 'Ghrwp') fetchArchive(`Ghrwp.arc`).then((rarc) => {
+        else if (name === 'Ghrwp') fetchArchive(`Ghrwp.arc`).then((rarc) => {
             const a00 = buildModel(rarc, `bdlm/ghrwpa00.bdl`);
             a00.bindTTK1(parseBTK(rarc, `btk/ghrwpa00.btk`));
             const b00 = buildModel(rarc, `bdlm/ghrwpb00.bdl`);

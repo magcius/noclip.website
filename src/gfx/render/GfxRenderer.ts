@@ -148,8 +148,9 @@ const enum GfxRenderInstFlags {
     DRAW_INDEXED             = 1 << 2,
     SAMPLER_BINDINGS_INHERIT = 1 << 3,
     BINDINGS_DIRTY           = 1 << 4,
-    PIPELINE_DIRTY           = 1 << 5,
-    PIPELINE_DIRECT          = 1 << 6,
+    BINDINGS_CREATED         = 1 << 6,
+    PIPELINE_DIRTY           = 1 << 7,
+    PIPELINE_DIRECT          = 1 << 8,
 }
 
 function setBitValue(bucket: number, bit: number, v: boolean): number {
@@ -182,7 +183,7 @@ export class GfxRenderInst {
     public _drawStart: number = 0;
     public _drawCount: number = 0;
 
-    public _flags: GfxRenderInstFlags = GfxRenderInstFlags.VISIBLE | GfxRenderInstFlags.PIPELINE_DIRTY;
+    public _flags: GfxRenderInstFlags = GfxRenderInstFlags.VISIBLE;
 
     // The pipeline to use for this RenderInst.
     public _pipeline: GfxRenderPipeline | null = null;
@@ -210,13 +211,6 @@ export class GfxRenderInst {
 
     public _setFlag(flag: GfxRenderInstFlags, v: boolean): void {
         this._flags = setBitValue(this._flags, flag, v);
-    }
-
-    private _tryInheritSamplerBindings(): void {
-        if ((this._flags & GfxRenderInstFlags.SAMPLER_BINDINGS_INHERIT)) {
-            this.parentRenderInst._tryInheritSamplerBindings();
-            this.inheritSamplerBindings();
-        }
     }
 
     public set visible(v: boolean) {
@@ -252,10 +246,6 @@ export class GfxRenderInst {
             const parentDirty = !!(this.parentRenderInst._flags & GfxRenderInstFlags.BINDINGS_DIRTY);
             this._setFlag(GfxRenderInstFlags.BINDINGS_DIRTY, parentDirty);
         }
-    }
-
-    public inheritSamplerBindings(): void {
-        this.setSamplerBindings(this.parentRenderInst._samplerBindings);
     }
 
     public setSamplerBindings(m: GfxSamplerBinding[], firstSampler: number = 0): void {
@@ -333,11 +323,11 @@ export class GfxRenderInst {
         return this.parentRenderInst._buildGfxProgram(device, cache);
     }
 
-    private buildPipeline(device: GfxDevice, cache: GfxRenderCache): void {
+    private _buildPipeline(device: GfxDevice, cache: GfxRenderCache): void {
         if (!this._hasOrInheritsFlag(GfxRenderInstFlags.PIPELINE_DIRTY))
             return;
 
-        if (this._hasOrInheritsFlag(GfxRenderInstFlags.PIPELINE_DIRECT))
+        if (this._flags & GfxRenderInstFlags.PIPELINE_DIRECT)
             return;
 
         const inputLayout = this.inputState !== null ? device.queryInputState(this.inputState).inputLayout : null;
@@ -354,11 +344,23 @@ export class GfxRenderInst {
         this._setFlag(GfxRenderInstFlags.PIPELINE_DIRTY, false);
     }
 
-    private buildBindings(device: GfxDevice, cache: GfxRenderCache): void {
+    private _inheritSamplerBindings(): void {
+        this.setSamplerBindings(this.parentRenderInst._samplerBindings);
+    }
+
+    private _tryInheritSamplerBindings(): void {
+        // The return value here is if we should continue building bindings.
+        if ((this._flags & GfxRenderInstFlags.SAMPLER_BINDINGS_INHERIT)) {
+            this.parentRenderInst._tryInheritSamplerBindings();
+            this._inheritSamplerBindings();
+        }
+    }
+
+    private _buildBindings(device: GfxDevice, cache: GfxRenderCache): void {
+        this._tryInheritSamplerBindings();
+
         if (!this._hasOrInheritsFlag(GfxRenderInstFlags.BINDINGS_DIRTY))
             return;
-
-        this._tryInheritSamplerBindings();
 
         let firstUniformBufferBinding = 0;
         let firstSamplerBinding = 0;
@@ -373,11 +375,12 @@ export class GfxRenderInst {
         }
 
         this._setFlag(GfxRenderInstFlags.BINDINGS_DIRTY, false);
+        this._setFlag(GfxRenderInstFlags.BINDINGS_CREATED, true);
     }
 
-    public _prepareToRenderLeaf(device: GfxDevice, cache: GfxRenderCache): void {        
-        this.buildPipeline(device, cache);
-        this.buildBindings(device, cache);
+    public _prepareToRenderLeaf(device: GfxDevice, cache: GfxRenderCache): void {
+        this._buildPipeline(device, cache);
+        this._buildBindings(device, cache);
     }
 
     public _prepareToRenderTemplate(device: GfxDevice, cache: GfxRenderCache): void {
@@ -425,6 +428,12 @@ export class GfxRenderInstViewRenderer {
     }
 
     public prepareToRender(device: GfxDevice): void {
+        // Kill any destroyed instances.
+        for (let i = this.renderInsts.length - 1; i >= 0; i--) {
+            if ((this.renderInsts[i]._flags & GfxRenderInstFlags.DESTROYED))
+                this.renderInsts.splice(i, 1);
+        }
+
         // Give a chance to all template render insts to rebake, regardless of visiblity.
         // This is a two-step solution: first, we let leaf render insts update, and then we clear flags on templates.
         // If we do not do this, we have no way of knowing when to clear template flags.
@@ -435,12 +444,6 @@ export class GfxRenderInstViewRenderer {
     }
 
     public executeOnPass(device: GfxDevice, passRenderer: GfxRenderPass, passMask: number = 1): void {
-        // Kill any destroyed instances.
-        for (let i = this.renderInsts.length - 1; i >= 0; i--) {
-            if ((this.renderInsts[i]._flags & GfxRenderInstFlags.DESTROYED))
-                this.renderInsts.splice(i, 1);
-        }
-
         // Sort our instances.
         this.renderInsts.sort(compareRenderInsts);
 
@@ -457,10 +460,13 @@ export class GfxRenderInstViewRenderer {
             if (!renderInst.visible)
                 break;
 
+            // If we have an unfinished render inst (which is possible!), then don't render it.
+            if (renderInst._pipeline === null || !(renderInst._flags & GfxRenderInstFlags.BINDINGS_CREATED))
+                continue;
+
             if ((renderInst.getPassMask() & passMask) === 0)
                 continue;
 
-            assert(renderInst._pipeline !== null);
             if (currentPipeline !== renderInst._pipeline) {
                 passRenderer.setPipeline(renderInst._pipeline);
                 currentPipeline = renderInst._pipeline;

@@ -5,6 +5,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assert, readString } from '../util';
 
 export interface RARCFile {
+    id: number;
     name: string;
     buffer: ArrayBufferSlice;
 }
@@ -121,7 +122,7 @@ export function parse(buffer: ArrayBufferSlice): RARC {
             } else {
                 const offs = dataOffs + entryDataOffs;
                 const fileBuffer = buffer.slice(offs, offs + entryDataSize);
-                const file: RARCFile = { name, buffer: fileBuffer };
+                const file: RARCFile = { id, name, buffer: fileBuffer };
                 files.push(file);
                 allFiles.push(file);
             }

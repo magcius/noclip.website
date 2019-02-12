@@ -555,14 +555,14 @@ class SMGRenderer implements Viewer.SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
-        this.viewRenderer.prepareToRender(device);
-
         const hostAccessPass = device.createHostAccessPass();
         this.spawner.prepareToRender(hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
         this.mainRenderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
         this.opaqueSceneTexture.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
         this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+
+        this.viewRenderer.prepareToRender(device);
 
         const skyboxPassRenderer = this.mainRenderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
         this.viewRenderer.executeOnPass(device, skyboxPassRenderer, SMGPass.SKYBOX);
