@@ -7,7 +7,7 @@ import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } fr
 import * as GX_Material from '../gx/gx_material';
 import { MaterialParams, PacketParams, GXTextureHolder, ColorKind, translateTexFilterGfx, translateWrapModeGfx, loadedDataCoalescerGfx, GXShapeHelperGfx, GXRenderHelperGfx, ub_MaterialParams, GXMaterialHelperGfx } from '../gx/gx_render';
 
-import { computeViewMatrix, computeModelMatrixBillboard, computeModelMatrixYBillboard, computeViewMatrixSkybox, texEnvMtx, Camera, texProjPerspMtx, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
+import { computeViewMatrix, computeModelMatrixBillboard, computeModelMatrixYBillboard, computeViewMatrixSkybox, texEnvMtx, Camera, texProjPerspMtx, computeViewSpaceDepthFromWorldSpaceAABB, ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
 import AnimationController from '../AnimationController';
 import { nArray, assertExists, assert } from '../util';
@@ -16,6 +16,7 @@ import { GfxDevice, GfxSampler } from '../gfx/platform/GfxPlatform';
 import { GfxBufferCoalescer, GfxCoalescedBuffers } from '../gfx/helpers/BufferHelpers';
 import { ViewerRenderInput } from '../viewer';
 import { GfxRenderInst, GfxRenderInstBuilder, setSortKeyDepth, GfxRendererLayer, makeSortKey, setSortKeyBias } from '../gfx/render/GfxRenderer';
+import { getDebugOverlayCanvas2D, drawWorldSpaceAABB } from '../DebugJunk';
 
 export class J3DTextureHolder extends GXTextureHolder<TEX1_TextureData> {
     public addJ3DTextures(device: GfxDevice, bmd: BMD, bmt: BMT | null = null) {
@@ -456,6 +457,8 @@ export class BMDModel {
 
 }
 
+const bboxScratch = new AABB();
+const screenProjectionScratch = new ScreenSpaceProjection();
 export class BMDModelInstance {
     public name: string = '';
     public visible: boolean = true;
@@ -477,7 +480,6 @@ export class BMDModelInstance {
     private parentJointMatrix: mat4 | null = null;
     private jointMatrices: mat4[];
     private jointVisibility: boolean[];
-    private bboxScratch: AABB = new AABB();
 
     private templateRenderInst: GfxRenderInst;
     private shapeInstances: ShapeInstance[] = [];
@@ -687,10 +689,9 @@ export class BMDModelInstance {
                 this.materialInstances[i].prepareToRender(renderHelper, viewerInput, this.bmdModel, this.textureHolder);
 
             // Use the root joint to calculate depth.
-            const bbox = this.bboxScratch;
             const rootJoint = this.bmdModel.bmd.jnt1.joints[0];
-            bbox.transform(rootJoint.bbox, this.modelMatrix);
-            depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, bbox);
+            bboxScratch.transform(rootJoint.bbox, this.modelMatrix);
+            depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, bboxScratch);
         }
 
         for (let i = 0; i < this.shapeInstances.length; i++)
@@ -704,7 +705,6 @@ export class BMDModelInstance {
     private updateJointMatrixHierarchy(camera: Camera, node: HierarchyNode, parentJointMatrix: mat4, disableCulling: boolean): void {
         // TODO(jstpierre): Don't pointer chase when traversing hierarchy every frame...
         const jnt1 = this.bmdModel.bmd.jnt1;
-        const bbox = this.bboxScratch;
 
         switch (node.type) {
         case HierarchyType.Joint:
@@ -720,14 +720,22 @@ export class BMDModelInstance {
             const dstJointMatrix = this.jointMatrices[jointIndex];
             mat4.mul(dstJointMatrix, parentJointMatrix, jointMatrix);
 
-            if (disableCulling) {
+            // TODO(jstpierre): Use shape visibility if the bbox is empty.
+            if (disableCulling || jnt1.joints[jointIndex].bbox.isEmpty()) {
                 this.jointVisibility[jointIndex] = true;
             } else {
                 // Frustum cull.
                 // Note to future self: joint bboxes do *not* contain their child joints (see: trees in Super Mario Sunshine).
                 // You *cannot* use PARTIAL_INTERSECTION to optimize frustum culling.
-                bbox.transform(jnt1.joints[jointIndex].bbox, dstJointMatrix);
-                this.jointVisibility[jointIndex] = camera.frustum.contains(bbox);
+                bboxScratch.transform(jnt1.joints[jointIndex].bbox, dstJointMatrix);
+                this.jointVisibility[jointIndex] = camera.frustum.contains(bboxScratch);
+
+                if (this.jointVisibility[jointIndex]) {
+                    // Compute screen-space projection and cull based on that.
+                    computeScreenSpaceProjectionFromWorldSpaceAABB(screenProjectionScratch, camera, bboxScratch);
+                    // TODO(jstpierre): make configurable?
+                    this.jointVisibility[jointIndex] = screenProjectionScratch.getScreenArea() >= 0.0003;
+                }
             }
 
             for (let i = 0; i < node.children.length; i++)

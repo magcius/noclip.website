@@ -3,7 +3,7 @@ import { mat4 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import Progressable from '../Progressable';
-import { readString, assertExists, hexzero } from '../util';
+import { readString, assertExists, hexzero, leftPad } from '../util';
 import { fetchData } from '../fetch';
 
 import * as Viewer from '../viewer';
@@ -28,6 +28,7 @@ import { BufferFillerHelper } from '../gfx/helpers/UniformBufferHelpers';
 import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { RENDER_HACKS_ICON } from '../bk/scenes';
 import AnimationController from '../AnimationController';
+import { prepareFrameDebugOverlayCanvas2D } from '../DebugJunk';
 
 const TIME_OF_DAY_ICON = `<svg viewBox="0 0 100 100" height="20" fill="white"><path d="M50,93.4C74,93.4,93.4,74,93.4,50C93.4,26,74,6.6,50,6.6C26,6.6,6.6,26,6.6,50C6.6,74,26,93.4,50,93.4z M37.6,22.8  c-0.6,2.4-0.9,5-0.9,7.6c0,18.2,14.7,32.9,32.9,32.9c2.6,0,5.1-0.3,7.6-0.9c-4.7,10.3-15.1,17.4-27.1,17.4  c-16.5,0-29.9-13.4-29.9-29.9C20.3,37.9,27.4,27.5,37.6,22.8z"/></svg>`;
 
@@ -387,6 +388,7 @@ class SeaPlane {
         device.destroyInputLayout(this.inputLayout);
         device.destroyInputState(this.inputState);
         device.destroyProgram(this.gfxProgram);
+        this.paramsBuffer.destroy(device);
     }
 
     private createBuffers(device: GfxDevice) {
@@ -566,6 +568,8 @@ class WindWakerRenderer implements Viewer.SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        prepareFrameDebugOverlayCanvas2D();
+
         viewerInput.camera.setClipPlanes(20, 500000);
 
         const hostAccessPass = device.createHostAccessPass();
@@ -834,7 +838,7 @@ class SceneDesc {
                 m.bindTRK1(parseBRK(rarc, `brk/vlupl.brk`), animFrame(3));
                 m.bindTTK1(parseBTK(rarc, `btk/vlupl.btk`));
             });
-            else console.warn(`Unknown item: ${itemId}`);
+            else console.warn(`Unknown item: ${hexzero(itemId, 2)}`);
         }
         // Hyrule Ocean Warp
         else if (name === 'Ghrwp') fetchArchive(`Ghrwp.arc`).then((rarc) => {
@@ -1330,6 +1334,8 @@ class SceneDesc {
         });
         // Manny
         else if (name === 'Mn') fetchArchive(`Mn.arc`).then((rarc) => buildModel(rarc, `bdlm/mn.bdl`).bindANK1(parseBCK(rarc, `bcks/mn_wait01.bck`)));
+        // Carlov
+        else if (name === 'Mt') fetchArchive(`Niten.arc`).then((rarc) => buildModel(rarc, `bdlm/mt.bdl`).bindANK1(parseBCK(rarc, `bcks/mt_wait01.bck`)));
         // Small decoration (Always)
         else if (name === 'kotubo') fetchArchive(`Always.arc`).then((rarc) => buildModel(rarc, `bdl/obm_kotubo1.bdl`));
         else if (name === 'ootubo1') fetchArchive(`Always.arc`).then((rarc) => buildModel(rarc, `bdl/obm_ootubo1.bdl`));
@@ -1355,6 +1361,12 @@ class SceneDesc {
         else if (name === 'Tpost') fetchArchive(`Toripost.arc`).then((rarc) => buildModel(rarc, `bdl/vpost.bdl`).bindANK1(parseBCK(rarc, `bcks/post_wait.bck`)));
         // Sign
         else if (name === 'Kanban') fetchArchive(`Kanban.arc`).then((rarc) => buildModel(rarc, `bdl/kanban.bdl`));
+        // Doors
+        else if (name === 'KNOB00') fetchArchive(`Knob.arc`).then((rarc) => {
+            // TODO(jstpierre): Which door?
+            // console.log("DOOR", hexzero(parameters, 8));
+            // buildModel(rarc, `bdl/door_a.bdl`);
+        });
         // Holes you can fall into
         else if (name === 'Pitfall') fetchArchive(`Aana.arc`).then((rarc) => buildModel(rarc, `bdl/aana.bdl`));
         // Warp Pot
@@ -1442,7 +1454,10 @@ class SceneDesc {
         else if (name === 'Roten4') fetchArchive(`Roten.arc`).then((rarc) => buildModel(rarc, `bdl/roten04.bdl`));
         else if (name === 'Fdai') fetchArchive(`Fdai.arc`).then((rarc) => buildModel(rarc, `bdl/fdai.bdl`));
         else if (name === 'GBoard') fetchArchive(`Kaisen_e.arc`).then((rarc) => buildModel(rarc, `bdl/akbod.bdl`));
-        else if (name === 'Paper') fetchArchive(`Opaper.arc`).then((rarc) => buildModel(rarc, `bdl/opaper.bdl`));
+        else if (name === 'Paper') fetchArchive(`Opaper.arc`).then((rarc) => {
+            const m = buildModel(rarc, `bdl/opaper.bdl`);
+            mat4.rotateX(m.modelMatrix, m.modelMatrix, Math.PI / 2);
+        });
         else if (name === 'Cafelmp') fetchArchive(`Cafelmp.arc`).then((rarc) => buildModel(rarc, `bdl/ylamp.bdl`));
         else if (name === 'Pbka') fetchArchive(`Pbka.arc`).then((rarc) => buildModel(rarc, `bdl/pbka.bdl`));
         else if (name === 'Plant') fetchArchive(`Plant.arc`).then((rarc) => buildModel(rarc, `bdl/yrmwd.bdl`));
@@ -1579,6 +1594,54 @@ class SceneDesc {
         else if (name === 'VmsDZ') fetchArchive(`VmsDZ.arc`).then((rarc) => buildModel(rarc, `bdl/vmsdz.bdl`));
         else if (name === 'VmsMS') fetchArchive(`VmsMS.arc`).then((rarc) => buildModel(rarc, `bdl/vmsms.bdl`));
         else if (name === 'Yswdr00') fetchArchive(`Yswdr00.arc`).then((rarc) => buildModel(rarc, `bdlm/yswdr00.bdl`).bindTTK1(parseBTK(rarc, `btk/yswdr00.btk`)));
+        // Nintendo Gallery
+        else if (name === 'Figure') {
+            fetchArchive(`Figure.arc`).then((rarc) => buildModel(rarc, `bdlm/vf_bs.bdl`))
+            const figureId = parameters & 0x000000FF;
+            const baseFilename = `vf_${leftPad(''+figureId, 3)}`;
+            const base = `bdl/${baseFilename}`;
+
+            // Outset Island
+            if (figureId >= 0x00 && figureId <= 0x0D) fetchArchive(`Figure0.arc`).then((rarc) => {
+                buildModel(rarc, `${base}.bdl`).modelMatrix[13] += 100;
+            });
+            // Windfall Island
+            else if (figureId >= 0x0E && figureId <= 0x28) fetchArchive(`Figure1.arc`).then((rarc) => {
+                if (figureId === 16 || figureId === 18) {
+                    buildModel(rarc, `${base}b.bdl`).modelMatrix[13] += 100;
+                } else {
+                    buildModel(rarc, `${base}.bdl`).modelMatrix[13] += 100;
+                }
+            });
+            else if (figureId >= 0x29 && figureId <= 0x40) fetchArchive(`Figure2.arc`).then((rarc) => {
+                // Nintendo is REALLY cool.
+                if (figureId === 61) {
+                    buildModel(rarc, `bdlm/${baseFilename}.bdl`).modelMatrix[13] += 100;
+                } else {
+                    buildModel(rarc, `${base}.bdl`).modelMatrix[13] += 100;
+                }
+
+                // TODO(jstpierre): What are Figure2a/b for? 
+                // fetchArchive(`Figure2a.arc`).then((rarc) => console.log("2a", rarc));
+                // fetchArchive(`Figure2b.arc`).then((rarc) => console.log("2b", rarc));
+            });
+            // Dragon Roost Island
+            else if (figureId >= 0x41 && figureId <= 0x52) fetchArchive(`Figure3.arc`).then((rarc) => {
+                buildModel(rarc, `${base}.bdl`).modelMatrix[13] += 100;
+            });
+            // Forest Haven
+            else if (figureId >= 0x53 && figureId <= 0x60) fetchArchive(`Figure4.arc`).then((rarc) => {
+                buildModel(rarc, `${base}.bdl`).modelMatrix[13] += 100;
+            });
+            // Secret Cavern
+            else if (figureId >= 0x61 && figureId <= 0x73) fetchArchive(`Figure5.arc`).then((rarc) => {
+                buildModel(rarc, `${base}.bdl`).modelMatrix[13] += 100;
+            });
+            // Forsaken Fortress
+            else if (figureId >= 0x74 && figureId <= 0xFF) fetchArchive(`Figure6.arc`).then((rarc) => {
+                buildModel(rarc, `${base}.bdl`).modelMatrix[13] += 100;
+            });
+        }
         // Grass. Procedurally generated by the engine.
         else if (name === 'kusax1' || name === 'kusax7' || name === 'kusax21') return;
         // Flowers. Procedurally generated by the engine.

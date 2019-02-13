@@ -111,6 +111,17 @@ export class AABB {
         v[1] = (this.minY + this.maxY) / 2;
         v[2] = (this.minZ + this.maxZ) / 2;
     }
+
+    public extents(v: vec3): void {
+        v[0] = (this.maxX - this.minX);
+        v[1] = (this.maxY - this.minY);
+        v[2] = (this.maxZ - this.minZ);
+    }
+
+    public isEmpty(): boolean {
+        this.extents(scratchVec3a);
+        return scratchVec3a[0] === 0 && scratchVec3a[1] === 0 && scratchVec3a[2] === 0;
+    }
 }
 
 class FrustumVisualizer {
@@ -179,8 +190,10 @@ export class Frustum {
     public planes: Plane[] = nArray(6, () => new Plane());
 
     private visualizer: FrustumVisualizer | null = null;
-    public makeVisualizer(): void {
-        this.visualizer = new FrustumVisualizer();
+    public makeVisualizer(): FrustumVisualizer {
+        if (this.visualizer === null)
+            this.visualizer = new FrustumVisualizer();
+        return this.visualizer;
     }
 
     public setViewFrustum(left: number, right: number, bottom: number, top: number, n: number, f: number): void {

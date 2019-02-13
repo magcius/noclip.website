@@ -1,5 +1,5 @@
 
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4, vec3, vec4 } from 'gl-matrix';
 import InputManager from './InputManager';
 import { Frustum, AABB } from './Geometry';
 
@@ -103,6 +103,7 @@ export function computeModelMatrixYBillboard(out: mat4, camera: Camera): void {
 }
 
 const scratchVec3 = vec3.create();
+const scratchVec4 = vec4.create();
 
 /**
  * Computes a view-space depth given @param camera and @param aabb in world-space.
@@ -124,6 +125,86 @@ export function computeViewSpaceDepthFromWorldSpaceAABB(camera: Camera, aabb: AA
 export function computeViewSpaceDepthFromWorldSpacePoint(camera: Camera, v: vec3): number {
     vec3.transformMat4(v, v, camera.viewMatrix);
     return Math.max(-v[2], 0);
+}
+
+export function divideByW(dst: vec4, src: vec4): void {
+    const [x, y, z, w] = src;
+    dst[0] = x / w;
+    dst[1] = y / w;
+    dst[2] = z / w;
+    dst[3] = 1.0;
+}
+
+export class ScreenSpaceProjection {
+    // These values are in "flat clip space" (that is, -1 corresponds to the left frustum plane,
+    // and +1 corresponds to the right frustum plane). If the projected area extends beyond these
+    // planes, then these values might go less than -1 or greater than +1. This is normal.
+    public projectedMinX!: number;
+    public projectedMinY!: number;
+    public projectedMaxX!: number;
+    public projectedMaxY!: number;
+
+    constructor() {
+        this.reset();
+    }
+
+    public reset(): void {
+        this.projectedMinX = Infinity;
+        this.projectedMinY = Infinity;
+        this.projectedMaxX = -Infinity;
+        this.projectedMaxY = -Infinity;
+    }
+
+    /**
+     * Returns the screen area, in normalized units, of the projection as a measure from 0 to 1.
+     *
+     * It is possible for this measure to return greater than 1, if a box that is larger than the
+     * whole screen is computed. You need to clamp manually if you do not want this to happen.
+     */
+    public getScreenArea(): number {
+        const extX = (this.projectedMaxX - this.projectedMinX) * 0.5;
+        const extY = (this.projectedMaxY - this.projectedMinY) * 0.5;
+        return extX * extY;
+    }
+
+    public union(projectedX: number, projectedY: number): void {
+        this.projectedMinX = Math.min(this.projectedMinX, projectedX);
+        this.projectedMinY = Math.min(this.projectedMinY, projectedY);
+        this.projectedMaxX = Math.max(this.projectedMaxX, projectedX);
+        this.projectedMaxY = Math.max(this.projectedMaxY, projectedY);
+    }
+}
+
+/**
+ * Computes the area, in screen space (normalized screen space from 0 to 1), that
+ * world-space AABB @param aabb will take up when viewed by @param camera.
+ */
+export function computeScreenSpaceProjectionFromWorldSpaceAABB(screenSpaceProjection: ScreenSpaceProjection, camera: Camera, aabb: AABB, v: vec3 = scratchVec3, v4: vec4 = scratchVec4): void {
+    screenSpaceProjection.reset();
+
+    // Compute the largest bounds (what radius a bounding sphere would have).
+    const extX = aabb.maxX - aabb.minX;
+    const extY = aabb.maxY - aabb.minY;
+    const extZ = aabb.maxZ - aabb.minZ;
+    const radius = Math.max(extX, extY, extZ);
+
+    // Compute view-space center.
+    aabb.centerPoint(v);
+    vec3.transformMat4(v, v, camera.viewMatrix);
+
+    v[2] = -Math.max(Math.abs(v[2] - radius), camera.frustum.near);
+
+    const [viewCenterX, viewCenterY, viewCenterZ] = v;
+
+    // Compute the corners of screen-space square that encloses the sphere.
+    for (let xs = -1; xs <= 1; xs += 2) {
+        for (let ys = -1; ys <= 1; ys += 2) {
+            vec4.set(v4, viewCenterX + radius*xs, viewCenterY + radius*ys, viewCenterZ, 1.0);
+            vec4.transformMat4(v4, v4, camera.projectionMatrix);
+            divideByW(v4, v4);
+            screenSpaceProjection.union(v4[0], v4[1]);
+        }
+    }
 }
 
 export interface CameraController {
