@@ -1521,6 +1521,7 @@ class SceneDesc {
         else if (name === 'Roten4') fetchArchive(`Roten.arc`).then((rarc) => buildModel(rarc, `bdl/roten04.bdl`));
         else if (name === 'Fdai') fetchArchive(`Fdai.arc`).then((rarc) => buildModel(rarc, `bdl/fdai.bdl`));
         else if (name === 'GBoard') fetchArchive(`Kaisen_e.arc`).then((rarc) => buildModel(rarc, `bdl/akbod.bdl`));
+        else if (name === 'Nzfall') fetchArchive(`Pfall.arc`).then((rarc) => buildModel(rarc, `bdl/nz.bdl`).bindANK1(parseBCK(rarc, `bcks/nz_wait.bck`)));
         else if (name === 'Paper') fetchArchive(`Opaper.arc`).then((rarc) => {
             const m = buildModel(rarc, `bdl/opaper.bdl`);
             mat4.rotateX(m.modelMatrix, m.modelMatrix, Math.PI / 2);
@@ -1554,6 +1555,9 @@ class SceneDesc {
         else if (name === 'nezuana') fetchArchive(`Nzg.arc`).then((rarc) => buildModel(rarc, `bdl/kana_00.bdl`));
         else if (name === 'Shmrgrd') fetchArchive(`Shmrgrd.arc`).then((rarc) => buildModel(rarc, `bdl/shmrgrd.bdl`));
         else if (name === 'ATdoor') fetchArchive(`Atdoor.arc`).then((rarc) => buildModel(rarc, `bdl/sdoor01.bdl`));
+        else if (name === 'Search') fetchArchive(`Search.arc`).then((rarc) => buildModel(rarc, `bdl/s_search.bdl`));
+        else if (name === 'Ikari') fetchArchive(`Ikari.arc`).then((rarc) => buildModel(rarc, `bdl/s_ikari2.bdl`));
+        else if (name === 'SMtoge') fetchArchive(`Mtoge.arc`).then((rarc) => buildModel(rarc, `bmd/s_mtoge.bmd`));
         // Dragon Roost Island
         else if (name === 'BFlower' || name === 'VbakH') fetchArchive(`VbakH.arc`).then((rarc) => {
             buildModel(rarc, `bdlm/vbakh.bdl`);
@@ -1732,8 +1736,12 @@ class SceneDesc {
         else if (name === 'bridge') return;
         // Logic flags used for gameplay, not spawnable objects.
         else if (name === 'AND_SW0' || name === 'AND_SW1' || name === 'AND_SW2' || name === 'SW_HIT0' || name === 'ALLdie') return;
+        // EVent SWitch
+        else if (name === 'Evsw') return;
         // Tags for fishmen?
         else if (name === 'TagSo' || name === 'TagMSo') return;
+        // Photo tags
+        else if (name === 'TagPo') return;
         // Light tags
         else if (name === 'LTag0' || name === 'LTag1' || name === 'LTagR0') return;
         // Other tags?
@@ -1742,7 +1750,35 @@ class SceneDesc {
             console.warn(`Unknown object: ${name} ${hexzero(parameters, 8)}`);
     }
 
-    private spawnObjectsFromDZRLayer(device: GfxDevice, abortSignal: AbortSignal, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, buffer: ArrayBufferSlice, actrHeader: DZSChunkHeader | undefined, modelMatrix: mat4): void {
+    private spawnObjectsFromTGOBLayer(device: GfxDevice, abortSignal: AbortSignal, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, buffer: ArrayBufferSlice, tgobHeader: DZSChunkHeader | undefined, modelMatrix: mat4): void {
+        if (tgobHeader === undefined)
+            return;
+
+        const view = buffer.createDataView();
+
+        let actrTableIdx = tgobHeader.offs;
+        for (let i = 0; i < tgobHeader.count; i++) {
+            const name = readString(buffer, actrTableIdx + 0x00, 0x08, true);
+            const parameters = view.getUint32(actrTableIdx + 0x08, false);
+            const posX = view.getFloat32(actrTableIdx + 0x0C);
+            const posY = view.getFloat32(actrTableIdx + 0x10);
+            const posZ = view.getFloat32(actrTableIdx + 0x14);
+            const rotY = view.getInt16(actrTableIdx + 0x1A) / 0x7FFF * Math.PI;
+
+            const m = mat4.create();
+            mat4.rotateY(m, m, rotY);
+            m[12] += posX;
+            m[13] += posY;
+            m[14] += posZ;
+            mat4.mul(m, modelMatrix, m);
+
+            this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, name, parameters, m);
+
+            actrTableIdx += 0x20;
+        }
+    }
+
+    private spawnObjectsFromACTRLayer(device: GfxDevice, abortSignal: AbortSignal, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, buffer: ArrayBufferSlice, actrHeader: DZSChunkHeader | undefined, modelMatrix: mat4): void {
         if (actrHeader === undefined)
             return;
 
@@ -1776,19 +1812,21 @@ class SceneDesc {
     private spawnObjectsFromDZR(device: GfxDevice, abortSignal: AbortSignal, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, buffer: ArrayBufferSlice, modelMatrix: mat4): void {
         const chunkHeaders = parseDZSHeaders(buffer);
 
-        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACTR'), modelMatrix);
-        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT0'), modelMatrix);
-        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT1'), modelMatrix);
-        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT2'), modelMatrix);
-        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT3'), modelMatrix);
-        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT4'), modelMatrix);
-        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT5'), modelMatrix);
-        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT6'), modelMatrix);
-        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT7'), modelMatrix);
-        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT8'), modelMatrix);
-        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT9'), modelMatrix);
-        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACTA'), modelMatrix);
-        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACTB'), modelMatrix);
+        this.spawnObjectsFromACTRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACTR'), modelMatrix);
+        this.spawnObjectsFromACTRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT0'), modelMatrix);
+        this.spawnObjectsFromACTRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT1'), modelMatrix);
+        this.spawnObjectsFromACTRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT2'), modelMatrix);
+        this.spawnObjectsFromACTRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT3'), modelMatrix);
+        this.spawnObjectsFromACTRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT4'), modelMatrix);
+        this.spawnObjectsFromACTRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT5'), modelMatrix);
+        this.spawnObjectsFromACTRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT6'), modelMatrix);
+        this.spawnObjectsFromACTRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT7'), modelMatrix);
+        this.spawnObjectsFromACTRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT8'), modelMatrix);
+        this.spawnObjectsFromACTRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT9'), modelMatrix);
+        this.spawnObjectsFromACTRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACTA'), modelMatrix);
+        this.spawnObjectsFromACTRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACTB'), modelMatrix);
+
+        this.spawnObjectsFromTGOBLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('TGOB'), modelMatrix);
     }
 }
 
