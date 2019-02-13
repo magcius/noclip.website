@@ -1336,6 +1336,8 @@ class SceneDesc {
         else if (name === 'Mn') fetchArchive(`Mn.arc`).then((rarc) => buildModel(rarc, `bdlm/mn.bdl`).bindANK1(parseBCK(rarc, `bcks/mn_wait01.bck`)));
         // Carlov
         else if (name === 'Mt') fetchArchive(`Niten.arc`).then((rarc) => buildModel(rarc, `bdlm/mt.bdl`).bindANK1(parseBCK(rarc, `bcks/mt_wait01.bck`)));
+        // Great Fairy
+        else if (name === 'BigElf') fetchArchive(`bigelf.arc`).then((rarc) => buildModel(rarc, `bdlm/dy.bdl`).bindANK1(parseBCK(rarc, `bcks/wait01.bck`)));
         // Small decoration (Always)
         else if (name === 'kotubo') fetchArchive(`Always.arc`).then((rarc) => buildModel(rarc, `bdl/obm_kotubo1.bdl`));
         else if (name === 'ootubo1') fetchArchive(`Always.arc`).then((rarc) => buildModel(rarc, `bdl/obm_ootubo1.bdl`));
@@ -1370,13 +1372,12 @@ class SceneDesc {
         // Holes you can fall into
         else if (name === 'Pitfall') fetchArchive(`Aana.arc`).then((rarc) => buildModel(rarc, `bdl/aana.bdl`));
         // Warp Pot
-        else if (name === 'Warpt') fetchArchive(`ltubw.arc`).then((rarc) => buildModel(rarc, `bdl/itubw.bdl`));
-        else if (name === 'Warpts1') fetchArchive(`ltubw.arc`).then((rarc) => buildModel(rarc, `bdl/itubw.bdl`));
-        else if (name === 'Warpts2') fetchArchive(`ltubw.arc`).then((rarc) => buildModel(rarc, `bdl/itubw.bdl`));
-        else if (name === 'Warpts3') fetchArchive(`ltubw.arc`).then((rarc) => buildModel(rarc, `bdl/itubw.bdl`));
+        else if (name === 'Warpt' || name === 'Warpnt' || name === 'Warpts1' || name === 'Warpts2' || name === 'Warpts3') fetchArchive(`ltubw.arc`).then((rarc) => buildModel(rarc, `bdl/itubw.bdl`));
         // Hookshot Target (wtf Nintendo)
         else if (name === 'Hfuck1') fetchArchive(`Hfuck1.arc`).then((rarc) => buildModel(rarc, `bdl/hfuck1.bdl`));
         // Ladders
+        else if (name === 'Mhsg4h') fetchArchive(`Mhsg.arc`).then((rarc) => buildModel(rarc, `bdl/mhsg4h.bdl`));
+        else if (name === 'Mhsg9') fetchArchive(`Mhsg.arc`).then((rarc) => buildModel(rarc, `bdl/mhsg9.bdl`));
         else if (name === 'Mhsg15') fetchArchive(`Mhsg.arc`).then((rarc) => buildModel(rarc, `bdl/mhsg15.bdl`));
         // Bombable rock
         else if (name === 'Ebrock') fetchArchive(`Ebrock.arc`).then((rarc) => buildModel(rarc, `bdl/ebrock.bdl`));
@@ -1394,7 +1395,8 @@ class SceneDesc {
         // Grapple Point
         else if (name === 'Kui') fetchArchive(`Kui.arc`).then((rarc) => buildModel(rarc, `bdl/obi_ropetag.bdl`));
         // Animals
-        else if (name === 'Kamome') fetchArchive(`Kamome.arc`).then((rarc) => buildModel(rarc, `bdl/ka.bdl`));
+        else if (name === 'DmKmm') fetchArchive(`Demo_Kmm.arc`).then((rarc) => buildModel(rarc, `bmd/ka.bmd`).bindANK1(parseBCK(rarc, `bcks/ka_wait1.bck`)));
+        else if (name === 'Kamome') fetchArchive(`Kamome.arc`).then((rarc) => buildModel(rarc, `bdl/ka.bdl`).bindANK1(parseBCK(rarc, `bck/ka_wait2.bck`)));
         else if (name === 'kani') fetchArchive(`Kn.arc`).then((rarc) => buildModel(rarc, `bdl/kn.bdl`));
         else if (name === 'Pig') fetchArchive(`Kb.arc`).then((rarc) => buildModel(rarc, `bdlm/pg.bdl`));
         else if (name === 'kani') fetchArchive(`Kn.arc`).then((rarc) => buildModel(rarc, `bdl/kn.bdl`).bindANK1(parseBCK(rarc, `bck/wait01.bck`)));
@@ -1404,6 +1406,7 @@ class SceneDesc {
         else if (name === 'Fkeeth') fetchArchive(`Ki.arc`).then((rarc) => buildModel(rarc, `bdlm/fk.bdl`).bindANK1(parseBCK(rarc, `bck/wait1.bck`)));
         else if (name === 'Puti') fetchArchive(`Pt.arc`).then((rarc) => buildModel(rarc, `bdlm/pt.bdl`).bindANK1(parseBCK(rarc, `bck/wait.bck`)));
         else if (name === 'Rdead1') fetchArchive(`Rd.arc`).then((rarc) => buildModel(rarc, `bdlm/rd.bdl`).bindANK1(parseBCK(rarc, `bcks/walk.bck`)));
+        else if (name === 'Rdead2') fetchArchive(`Rd.arc`).then((rarc) => buildModel(rarc, `bdlm/rd.bdl`).bindANK1(parseBCK(rarc, `bcks/walk.bck`)));
         else if (name === 'wiz_r') fetchArchive(`Wz.arc`).then((rarc) => buildModel(rarc, `bdlm/wz.bdl`).bindANK1(parseBCK(rarc, `bck/s_demo_wait1.bck`)));
         else if (name === 'gmos') fetchArchive(`Gm.arc`).then((rarc) => buildModel(rarc, `bdlm/gm.bdl`).bindANK1(parseBCK(rarc, `bck/fly.bck`)));
         else if (name === 'mo2') fetchArchive(`Mo2.arc`).then((rarc) => buildModel(rarc, `bdlm/mo.bdl`).bindANK1(parseBCK(rarc, `bck/wait.bck`)));
@@ -1418,6 +1421,7 @@ class SceneDesc {
         else if (name === 'moZOU') fetchArchive(`Mozo.arc`).then((rarc) => buildModel(rarc, `bdlm/moz.bdl`));
         else if (name === 'MtoriSU') fetchArchive(`MtoriSU.arc`).then((rarc) => buildModel(rarc, `bdl/mtorisu.bdl`));
         else if (name === 'Tn') fetchArchive(`Tn.arc`).then((rarc) => buildModel(rarc, `bmdm/tn_main.bmd`).bindANK1(parseBCK(rarc, `bck/await1.bck`)));
+        else if (name === 'Stal') fetchArchive(`St.arc`).then((rarc) => buildModel(rarc, `bdlm/headb.bdl`));
         else if (name === 'p_hat') fetchArchive(`Ph.arc`).then((rarc) => {
             buildModel(rarc, `bdlm/phb.bdl`).bindANK1(parseBCK(rarc, 'bck/bfly.bck'));
             buildModel(rarc, `bdlm/php.bdl`).bindANK1(parseBCK(rarc, 'bck/pfly.bck'));
@@ -1426,7 +1430,7 @@ class SceneDesc {
             const m = buildModel(rarc, `bdlm/bo_sita1.bdl`);
             // TODO(jstpierre): animation?
         });
-        else if (name === 'c_green') fetchArchive(`Cc.arc`).then((rarc) => {
+        else if (name === 'c_green' || name === 'c_red') fetchArchive(`Cc.arc`).then((rarc) => {
             // TODO(jstpierre): Colors?
             const cc = buildModel(rarc, `bmdm/cc.bmd`);
             cc.bindANK1(parseBCK(rarc, `bck/tachi_walk.bck`));
@@ -1530,6 +1534,7 @@ class SceneDesc {
         else if (name === 'Vpbot') fetchArchive(`Vpbot_00.arc`).then((rarc) => buildModel(rarc, `bdl/vpbot_00.bdl`));
         else if (name === 'Vochi') fetchArchive(`Vochi.arc`).then((rarc) => buildModel(rarc, `bdl/vochi.bdl`));
         else if (name === 'Kanat') fetchArchive(`Kanat.arc`).then((rarc) => buildModel(rarc, `bdl/kanat.bdl`));
+        else if (name === 'Kryu00') fetchArchive(`Kryu.arc`).then((rarc) => buildModel(rarc, `bdl/ryu_00.bdl`));
         // Tower of the Gods
         else if (name === 'Wall') fetchArchive(`Hbw1.arc`).then((rarc) => buildModel(rarc, `bdl/hbw1.bdl`));
         else if (name === 'Hmon1d') fetchArchive(`Hseki.arc`).then((rarc) => buildModel(rarc, `bdlm/hmon1.bdl`).bindTRK1(parseBRK(rarc, `brk/hmon1.brk`)));
@@ -1577,7 +1582,13 @@ class SceneDesc {
         else if (name === 'Hyuf1') fetchArchive(`Hyuf1.arc`).then((rarc) => buildModel(rarc, `bdlm/hyuf1.bdl`));
         else if (name === 'Hyuf2') fetchArchive(`Hyuf2.arc`).then((rarc) => buildModel(rarc, `bdlm/hyuf2.bdl`));
         else if (name === 'Blift') fetchArchive(`Hten1.arc`).then((rarc) => buildModel(rarc, `bdl/hten1.bdl`));
-        else if (name === 'Hcbh') fetchArchive(`Hcbh.arc`).then((rarc) => buildModel(rarc, `bdl/hcbh2.bdl`));
+        else if (name === 'Hcbh') fetchArchive(`Hcbh.arc`).then((rarc) => {
+            buildModel(rarc, `bdl/hcbh1a.bdl`);
+            buildModel(rarc, `bdl/hcbh1b.bdl`);
+            buildModel(rarc, `bdl/hcbh1c.bdl`);
+            buildModel(rarc, `bdl/hcbh1d.bdl`);
+            buildModel(rarc, `bdl/hcbh2.bdl`);
+        });
         else if (name === 'Hfbot1B') fetchArchive(`Hfbot.arc`).then((rarc) => buildModel(rarc, `bdlm/hfbot1.bdl`).bindTRK1(parseBRK(rarc, `brk/hfbot1.brk`)));
         else if (name === 'Hfbot1C') fetchArchive(`Hfbot.arc`).then((rarc) => buildModel(rarc, `bdlm/hfbot1.bdl`).bindTRK1(parseBRK(rarc, `brk/hfbot1.brk`)));
         else if (name === 'Hys') fetchArchive(`Hys.arc`).then((rarc) => buildModel(rarc, `bdlm/hys.bdl`));
@@ -1594,6 +1605,8 @@ class SceneDesc {
         else if (name === 'VmsDZ') fetchArchive(`VmsDZ.arc`).then((rarc) => buildModel(rarc, `bdl/vmsdz.bdl`));
         else if (name === 'VmsMS') fetchArchive(`VmsMS.arc`).then((rarc) => buildModel(rarc, `bdl/vmsms.bdl`));
         else if (name === 'Yswdr00') fetchArchive(`Yswdr00.arc`).then((rarc) => buildModel(rarc, `bdlm/yswdr00.bdl`).bindTTK1(parseBTK(rarc, `btk/yswdr00.btk`)));
+        // Earth Temple.
+        else if (name === 'MhmrSW0') fetchArchive(`MhmrSW.arc`).then((rarc) => buildModel(rarc, `bdl/mhmrsw.bdl`));
         // Nintendo Gallery
         else if (name === 'Figure') {
             fetchArchive(`Figure.arc`).then((rarc) => buildModel(rarc, `bdlm/vf_bs.bdl`))
@@ -1658,6 +1671,8 @@ class SceneDesc {
         else if (name === 'AND_SW0' || name === 'AND_SW1' || name === 'AND_SW2' || name === 'SW_HIT0' || name === 'ALLdie') return;
         // Tags for fishmen?
         else if (name === 'TagSo' || name === 'TagMSo') return;
+        // Light tags
+        else if (name === 'LTag0' || name === 'LTag1' || name === 'LTagR0') return;
         // Other tags?
         else if (name === 'ky_tag2') return;
         else
@@ -1734,7 +1749,7 @@ const sceneDescs = [
     new SceneDesc("Ocean", "Boating Course"),
     new SceneDesc("ShipD", "Islet of Steel"),
     new SceneDesc("PShip", "Ghost Ship"),
-    new SceneDesc("Obshop", "Beetle's Shop", [1]),
+    new SceneDesc("Obshop", "Beedle's Shop", [1]),
 
     "Outset Island",
     new SceneDesc("sea", "Outset Island", [44]),
@@ -1861,6 +1876,7 @@ const sceneDescs = [
     new SceneDesc("Fairy06", "South Fairy Fountain"),
 
     "Nintendo Gallery",
+    new SceneDesc("Pfigure", "Main Room"),
     new SceneDesc("figureA", "Great Sea"),
     new SceneDesc("figureB", "Windfall Island"),
     new SceneDesc("figureC", "Outset Island"),
@@ -1868,7 +1884,6 @@ const sceneDescs = [
     new SceneDesc("figureE", "Secret Cavern"),
     new SceneDesc("figureF", "Dragon Roost Island"),
     new SceneDesc("figureG", "Forest Haven"),
-    new SceneDesc("Pfigure", "Main Room"),
 
     "Unused Test Maps",
     new SceneDesc("Cave08", "Early Wind Temple", [1, 2, 3]),
