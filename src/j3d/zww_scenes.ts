@@ -1,5 +1,5 @@
 
-import { mat4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import Progressable from '../Progressable';
@@ -12,7 +12,7 @@ import * as UI from '../ui';
 
 import * as GX_Material from '../gx/gx_material';
 
-import { BMD, BTK, BRK, BCK, BTI } from './j3d';
+import { BMD, BTK, BRK, BCK, BTI, ANK1, TTK1, TRK1 } from './j3d';
 import * as RARC from './rarc';
 import { J3DTextureHolder, BMDModelInstance, BMDModel } from './render';
 import { Camera, computeViewMatrix } from '../Camera';
@@ -177,6 +177,67 @@ function createScene(device: GfxDevice, renderHelper: GXRenderHelperGfx, texture
     return scene;
 }
 
+const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
+class ObjectRenderer {
+    private childObjects: ObjectRenderer[] = [];
+    public modelMatrix: mat4 = mat4.create();
+    private parentJointMatrix: mat4 | null = null;
+
+    constructor(public modelInstance: BMDModelInstance) {
+    }
+
+    public bindANK1(ank1: ANK1, animationController?: AnimationController): void {
+        this.modelInstance.bindANK1(ank1, animationController);
+    }
+
+    public bindTTK1(ttk1: TTK1, animationController?: AnimationController): void {
+        this.modelInstance.bindTTK1(ttk1, animationController);
+    }
+
+    public bindTRK1(trk1: TRK1, animationController?: AnimationController): void {
+        this.modelInstance.bindTRK1(trk1, animationController);
+    }
+
+    public setParentJoint(o: ObjectRenderer, jointName: string): void {
+        this.parentJointMatrix = o.modelInstance.getJointMatrixReference(jointName);
+        o.childObjects.push(this);
+    }
+
+    public setMaterialColorWriteEnabled(materialName: string, v: boolean): void {
+        this.modelInstance.setMaterialColorWriteEnabled(materialName, v);
+    }
+
+    public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput, visible: boolean): void {
+        this.modelInstance.visible = visible;
+
+        if (this.modelInstance.visible) {
+            if (this.parentJointMatrix !== null)
+                mat4.mul(this.modelInstance.modelMatrix, this.parentJointMatrix, this.modelMatrix);
+            else
+                mat4.copy(this.modelInstance.modelMatrix, this.modelMatrix);
+            mat4.getTranslation(scratchVec3a, this.modelInstance.modelMatrix);
+            mat4.getTranslation(scratchVec3b, viewerInput.camera.worldMatrix);
+            // If we're too far, just kill us entirely.
+            const distSq = vec3.squaredDistance(scratchVec3a, scratchVec3b);
+            const maxDist = 100000;
+            const maxDistSq = maxDist*maxDist;
+            if (distSq >= maxDistSq)
+                this.modelInstance.visible = false;
+        }
+
+        this.modelInstance.prepareToRender(renderHelper, viewerInput);
+        for (let i = 0; i < this.childObjects.length; i++)
+            this.childObjects[i].prepareToRender(renderHelper, viewerInput, visible);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.modelInstance.destroy(device);
+        for (let i = 0; i < this.childObjects.length; i++)
+            this.childObjects[i].destroy(device);
+    }
+}
+
 class WindWakerRoomRenderer {
     public model: BMDModelInstance;
     public model1: BMDModelInstance;
@@ -184,6 +245,7 @@ class WindWakerRoomRenderer {
     public model3: BMDModelInstance;
     public name: string;
     public visible: boolean = true;
+    public objectRenderers: ObjectRenderer[] = [];
 
     constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, textureHolder: J3DTextureHolder, public roomIdx: number, public roomRarc: RARC.RARC) {
         this.name = `Room ${roomIdx}`;
@@ -209,6 +271,8 @@ class WindWakerRoomRenderer {
             this.model2.prepareToRender(renderHelper, viewerInput);
         if (this.model3)
             this.model3.prepareToRender(renderHelper, viewerInput);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].prepareToRender(renderHelper, viewerInput, this.visible);
     }
 
     public setModelMatrix(modelMatrix: mat4): void {
@@ -295,6 +359,8 @@ class WindWakerRoomRenderer {
             this.model2.destroy(device);
         if (this.model3)
             this.model3.destroy(device);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].destroy(device);
     }
 }
 
@@ -338,7 +404,7 @@ class SeaPlane {
 
     constructor(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer) {
         this.createBuffers(device);
-        mat4.fromScaling(this.modelMatrix, [200000, 1, 200000]);
+        mat4.fromScaling(this.modelMatrix, [2000000, 1, 2000000]);
         mat4.translate(this.modelMatrix, this.modelMatrix, [0, -100, 0]);
 
         this.gfxProgram = device.createProgram(new PlaneColorProgram());
@@ -434,7 +500,6 @@ class WindWakerRenderer implements Viewer.SceneGfx {
     private vr_kasumi_mae: BMDModelInstance;
     private vr_back_cloud: BMDModelInstance;
     public roomRenderers: WindWakerRoomRenderer[] = [];
-    public objectRenderers: BMDModelInstance[] = [];
 
     private currentTimeOfDay: number;
     private timeOfDaySelector: UI.SingleSelect;
@@ -562,8 +627,6 @@ class WindWakerRenderer implements Viewer.SceneGfx {
             this.vr_back_cloud.prepareToRender(this.renderHelper, viewerInput);
         for (let i = 0; i < this.roomRenderers.length; i++)
             this.roomRenderers[i].prepareToRender(this.renderHelper, viewerInput);
-        for (let i = 0; i < this.objectRenderers.length; i++)
-            this.objectRenderers[i].prepareToRender(this.renderHelper, viewerInput);
         this.renderHelper.prepareToRender(hostAccessPass);
     }
 
@@ -622,8 +685,6 @@ class WindWakerRenderer implements Viewer.SceneGfx {
             this.seaPlane.destroy(device);
         for (let i = 0; i < this.roomRenderers.length; i++)
             this.roomRenderers[i].destroy(device);
-        for (let i = 0; i < this.objectRenderers.length; i++)
-            this.objectRenderers[i].destroy(device);
         this.modelCache.destroy(device);
     }
 }
@@ -737,7 +798,7 @@ class SceneDesc {
                 roomRenderer.visible = visible;
                 renderer.roomRenderers.push(roomRenderer);
 
-                // HACK: for single-purpose sea levels, translate the model instead of the objects.
+                // HACK: for single-purpose sea levels, translate the objects instead of the model.
                 if (this.stageDir === 'sea' && this.rooms.length === 1) {
                     mat4.invert(modelMatrix, modelMatrix);
                 } else {
@@ -747,7 +808,7 @@ class SceneDesc {
 
                 // Now spawn any objects that might show up in it.
                 const dzr = roomRarc.findFileData('dzr/room.dzr');
-                this.spawnObjectsFromDZR(device, abortSignal, renderer, dzr, modelMatrix);
+                this.spawnObjectsFromDZR(device, abortSignal, renderer, roomRenderer, dzr, modelMatrix);
             }
 
             return modelCache.waitForLoad().then(() => {
@@ -778,26 +839,26 @@ class SceneDesc {
         }
     }
 
-    private spawnObjectsForActor(device: GfxDevice, abortSignal: AbortSignal, renderer: WindWakerRenderer, name: string, parameters: number, modelMatrix: mat4): void {
+    private spawnObjectsForActor(device: GfxDevice, abortSignal: AbortSignal, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, name: string, parameters: number, modelMatrix: mat4): void {
         const modelCache = renderer.modelCache;
 
         function fetchArchive(objArcName: string): Progressable<RARC.RARC> {
             return renderer.modelCache.fetchArchive(`${pathBase}/Object/${objArcName}`, abortSignal);
         }
 
-        function buildChildModel(rarc: RARC.RARC, modelPath: string): BMDModelInstance {
+        function buildChildModel(rarc: RARC.RARC, modelPath: string): ObjectRenderer {
             const model = modelCache.getModel(device, renderer, rarc, modelPath);
             const modelInstance = new BMDModelInstance(device, renderer.renderHelper, renderer.textureHolder, model);
             modelInstance.name = name;
             modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 1);
-            return modelInstance;
+            return new ObjectRenderer(modelInstance);
         }
 
-        function buildModel(rarc: RARC.RARC, modelPath: string): BMDModelInstance {
-            const modelInstance = buildChildModel(rarc, modelPath);
-            mat4.copy(modelInstance.modelMatrix, modelMatrix);
-            renderer.objectRenderers.push(modelInstance);
-            return modelInstance;
+        function buildModel(rarc: RARC.RARC, modelPath: string) {
+            const objectRenderer = buildChildModel(rarc, modelPath);
+            mat4.copy(objectRenderer.modelMatrix, modelMatrix);
+            roomRenderer.objectRenderers.push(objectRenderer);
+            return objectRenderer;
         }
 
         function parseBCK(rarc: RARC.RARC, path: string) { return BCK.parse(rarc.findFileData(path)).ank1; }
@@ -1435,8 +1496,10 @@ class SceneDesc {
             const cc = buildModel(rarc, `bmdm/cc.bmd`);
             cc.bindANK1(parseBCK(rarc, `bck/tachi_walk.bck`));
         });
-        // Beedle
+        // Beedle's Shop Ship (in Tip Top Shape)
         else if (name === 'ikada_h') fetchArchive(`IkadaH.arc`).then((rarc) => buildModel(rarc, `bdl/vtsp.bdl`));
+        // The Great Sea
+        else if (name === 'Ocanon') fetchArchive(`WallBom.arc`).then((rarc) => buildModel(rarc, `bdl/wallbom.bdl`));
         // Outset Island
         else if (name === 'Lamp') fetchArchive(`Lamp.arc`).then((rarc) => {
             const m = buildModel(rarc, `bmd/lamp_00.bmd`);
@@ -1679,7 +1742,7 @@ class SceneDesc {
             console.warn(`Unknown object: ${name} ${hexzero(parameters, 8)}`);
     }
 
-    private spawnObjectsFromDZRLayer(device: GfxDevice, abortSignal: AbortSignal, renderer: WindWakerRenderer, buffer: ArrayBufferSlice, actrHeader: DZSChunkHeader | undefined, modelMatrix: mat4): void {
+    private spawnObjectsFromDZRLayer(device: GfxDevice, abortSignal: AbortSignal, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, buffer: ArrayBufferSlice, actrHeader: DZSChunkHeader | undefined, modelMatrix: mat4): void {
         if (actrHeader === undefined)
             return;
 
@@ -1704,28 +1767,28 @@ class SceneDesc {
             m[14] += posZ;
             mat4.mul(m, modelMatrix, m);
 
-            this.spawnObjectsForActor(device, abortSignal, renderer, name, parameters, m);
+            this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, name, parameters, m);
 
             actrTableIdx += 0x20;
         }
     }
 
-    private spawnObjectsFromDZR(device: GfxDevice, abortSignal: AbortSignal, renderer: WindWakerRenderer, buffer: ArrayBufferSlice, modelMatrix: mat4): void {
+    private spawnObjectsFromDZR(device: GfxDevice, abortSignal: AbortSignal, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, buffer: ArrayBufferSlice, modelMatrix: mat4): void {
         const chunkHeaders = parseDZSHeaders(buffer);
 
-        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, buffer, chunkHeaders.get('ACTR'), modelMatrix);
-        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, buffer, chunkHeaders.get('ACT0'), modelMatrix);
-        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, buffer, chunkHeaders.get('ACT1'), modelMatrix);
-        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, buffer, chunkHeaders.get('ACT2'), modelMatrix);
-        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, buffer, chunkHeaders.get('ACT3'), modelMatrix);
-        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, buffer, chunkHeaders.get('ACT4'), modelMatrix);
-        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, buffer, chunkHeaders.get('ACT5'), modelMatrix);
-        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, buffer, chunkHeaders.get('ACT6'), modelMatrix);
-        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, buffer, chunkHeaders.get('ACT7'), modelMatrix);
-        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, buffer, chunkHeaders.get('ACT8'), modelMatrix);
-        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, buffer, chunkHeaders.get('ACT9'), modelMatrix);
-        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, buffer, chunkHeaders.get('ACTA'), modelMatrix);
-        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, buffer, chunkHeaders.get('ACTB'), modelMatrix);
+        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACTR'), modelMatrix);
+        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT0'), modelMatrix);
+        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT1'), modelMatrix);
+        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT2'), modelMatrix);
+        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT3'), modelMatrix);
+        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT4'), modelMatrix);
+        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT5'), modelMatrix);
+        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT6'), modelMatrix);
+        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT7'), modelMatrix);
+        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT8'), modelMatrix);
+        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT9'), modelMatrix);
+        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACTA'), modelMatrix);
+        this.spawnObjectsFromDZRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACTB'), modelMatrix);
     }
 }
 

@@ -16,7 +16,6 @@ import { GfxDevice, GfxSampler } from '../gfx/platform/GfxPlatform';
 import { GfxBufferCoalescer, GfxCoalescedBuffers } from '../gfx/helpers/BufferHelpers';
 import { ViewerRenderInput } from '../viewer';
 import { GfxRenderInst, GfxRenderInstBuilder, setSortKeyDepth, GfxRendererLayer, makeSortKey, setSortKeyBias } from '../gfx/render/GfxRenderer';
-import { getDebugOverlayCanvas2D, drawWorldSpaceAABB } from '../DebugJunk';
 
 export class J3DTextureHolder extends GXTextureHolder<TEX1_TextureData> {
     public addJ3DTextures(device: GfxDevice, bmd: BMD, bmt: BMT | null = null) {
@@ -465,7 +464,6 @@ export class BMDModelInstance {
     public isSkybox: boolean = false;
     public passMask: number = 0x01;
     public fps: number = 30;
-    public childInstances: BMDModelInstance[] = [];
 
     public modelMatrix: mat4;
 
@@ -477,7 +475,6 @@ export class BMDModelInstance {
     public ank1Animator: ANK1Animator | null = null;
 
     // Temporary state when calculating bone matrices.
-    private parentJointMatrix: mat4 | null = null;
     private jointMatrices: mat4[];
     private jointVisibility: boolean[];
 
@@ -619,12 +616,11 @@ export class BMDModelInstance {
         this.ank1Animator = bindANK1Animator(animationController, ank1);
     }
 
-    public setParentJoint(parent: BMDModelInstance, jointName: string): void {
-        parent.childInstances.push(this);
+    public getJointMatrixReference(jointName: string): mat4 {
         // Find the matrix that corresponds to the bone.
-        const parentJointIndex = parent.bmdModel.bmd.jnt1.joints.findIndex((j) => j.name === jointName);
+        const parentJointIndex = this.bmdModel.bmd.jnt1.joints.findIndex((j) => j.name === jointName);
         assert(parentJointIndex >= 0);
-        this.parentJointMatrix = parent.jointMatrices[parentJointIndex];
+        return this.jointMatrices[parentJointIndex];
     }
 
     public getTimeInFrames(milliseconds: number) {
@@ -650,8 +646,6 @@ export class BMDModelInstance {
             // Compute our root joint.
             const rootJointMatrix = matrixScratch;
             mat4.copy(rootJointMatrix, this.modelMatrix);
-            if (this.parentJointMatrix !== null)
-                mat4.mul(rootJointMatrix, this.parentJointMatrix, rootJointMatrix);
 
             // Billboards shouldn't have their root joint modified, given that we have to compute a new model
             // matrix that faces the camera view.
@@ -696,10 +690,6 @@ export class BMDModelInstance {
 
         for (let i = 0; i < this.shapeInstances.length; i++)
             this.shapeInstances[i].prepareToRender(renderHelper, depth, viewerInput, this.shapeInstanceState);
-
-        // Update any children.
-        for (let i = 0; i < this.childInstances.length; i++)
-            this.childInstances[i].prepareToRender(renderHelper, viewerInput, modelVisible);
     }
 
     private updateJointMatrixHierarchy(camera: Camera, node: HierarchyNode, parentJointMatrix: mat4, disableCulling: boolean): void {
