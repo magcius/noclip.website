@@ -2,9 +2,9 @@
 // Parse uniform buffer definitions, and provide helpers for filling them...
 
 import { Color } from "../../Color";
-import { mat4, mat2d } from "gl-matrix";
+import { mat4, mat2d, vec3 } from "gl-matrix";
 import { GfxBuffer, GfxHostAccessPass, GfxBufferBinding } from "../platform/GfxPlatform";
-import { assert } from "../../util";
+import { assert, assertExists } from "../../util";
 import { GfxRenderBuffer } from "../render/GfxRenderBuffer";
 
 function findall(haystack: string, needle: RegExp): RegExpExecArray[] {
@@ -18,55 +18,51 @@ function findall(haystack: string, needle: RegExp): RegExpExecArray[] {
     return results;
 }
 
-export const enum BufferTypeClass {
-    float  = 'float',
-    vec4   = 'vec4',
-    mat4x2 = 'mat4x2',
-    mat4x3 = 'mat4x3',
-    mat4   = 'mat4',
-}
-
-export interface BufferField {
+export interface StructField {
     name: string;
-    type: BufferTypeClass;
+    type: string;
     arraySize: number;
     wordSize: number;
 }
 
-export interface BufferLayout {
+export interface StructLayout {
     blockName: string;
-    fields: BufferField[];
+    fields: StructField[];
     totalWordSize: number;
 }
 
-function getBufferTypeClassWordSize(bufferTypeClass: BufferTypeClass): number {
-    switch (bufferTypeClass) {
-    case BufferTypeClass.float:
-        return 1;
-    case BufferTypeClass.vec4:
-        return 4;
-    case BufferTypeClass.mat4x2:
-        return 4*2;
-    case BufferTypeClass.mat4x3:
-        return 4*3;
-    case BufferTypeClass.mat4:
-        return 4*4;
-    default:
-        throw "whoops";
+const builtinTypeWordSizes = new Map<string, number>();
+builtinTypeWordSizes.set('float',  1);
+builtinTypeWordSizes.set('vec4',   4);
+builtinTypeWordSizes.set('mat4x2', 4*2);
+builtinTypeWordSizes.set('mat4x3', 4*3);
+builtinTypeWordSizes.set('mat4',   4*4);
+
+class ShaderLayoutMap {
+    constructor() {
+    }
+
+    public parseShaderSource(shaderSource: string, uniformBufferLayouts: StructLayout[]): void {
     }
 }
 
-export function parseBufferLayout(blockName: string, contents: string): BufferLayout {
+function getTypeSize(layouts: Map<string, StructLayout>, type: string): number {
+    if (layouts.has(type))
+        return layouts.get(type).totalWordSize;
+    else
+        return builtinTypeWordSizes.get(type);
+}
+
+function parseDefinition(layouts: Map<string, StructLayout>, blockName: string, contents: string): StructLayout {
     const uniformBufferVariables = findall(contents, /^\s*(\w+) (\w+)(?:\[(\d+)\])?;$/mg);
-    const fields: BufferField[] = [];
+    const fields: StructField[] = [];
     let totalWordSize = 0;
     for (let i = 0; i < uniformBufferVariables.length; i++) {
-        const [m, typeStr, name, arraySizeStr] = uniformBufferVariables[i];
-        const type: BufferTypeClass = typeStr as BufferTypeClass;
+        const [m, type, name, arraySizeStr] = uniformBufferVariables[i];
         let arraySize: number = 1;
         if (arraySizeStr !== undefined)
             arraySize = parseInt(arraySizeStr);
-        const rawWordSize = getBufferTypeClassWordSize(type) * arraySize;
+        const rawWordSize = assertExists(getTypeSize(layouts, type)) * arraySize;
         // Round up to the nearest 4, per std140 alignment rules.
         const wordSize = (rawWordSize + 3) & ~3;
         totalWordSize += wordSize;
@@ -75,11 +71,28 @@ export function parseBufferLayout(blockName: string, contents: string): BufferLa
     return { blockName, fields, totalWordSize };
 }
 
+export function parseShaderSource(uniformBufferLayouts: StructLayout[], shaderSource: string): void {
+    const layouts = new Map<string, StructLayout>();
+
+    const structBlocks = findall(shaderSource, /struct (\w+) {([^]*?)}/g);
+    for (let i = 0; i < structBlocks.length; i++) {
+        const [m, blockName, contents] = structBlocks[i];
+        const structLayout = parseDefinition(layouts, blockName, contents);
+        layouts.set(blockName, structLayout);
+    }
+
+    const uniformBlocks = findall(shaderSource, /uniform (\w+) {([^]*?)}/g);
+    for (let i = 0; i < uniformBlocks.length; i++) {
+        const [m, blockName, contents] = uniformBlocks[i];
+        uniformBufferLayouts.push(parseDefinition(layouts, blockName, contents));
+    }
+}
+
 // TODO(jstpierre): I'm not sure I like this class.
 export class BufferFillerHelper {
     private offs: number;
 
-    constructor(public bufferLayout: BufferLayout, public d: Float32Array = null, public startOffs: number = 0) {
+    constructor(public bufferLayout: StructLayout, public d: Float32Array = null, public startOffs: number = 0) {
         if (this.d === null) {
             this.d = new Float32Array(bufferLayout.totalWordSize);
         }
@@ -113,6 +126,14 @@ export class BufferFillerHelper {
     public fillMatrix4x3(m: mat4): void {
         this.offs += fillMatrix4x3(this.d, this.offs, m);
     }
+}
+
+export function fillVec3(d: Float32Array, offs: number, v: vec3, v3: number = 0): number {
+    d[offs + 0] = v[0];
+    d[offs + 1] = v[1];
+    d[offs + 2] = v[2];
+    d[offs + 3] = v3;
+    return 4;
 }
 
 export function fillVec4(d: Float32Array, offs: number, v0: number, v1: number = 0, v2: number = 0, v3: number = 0): number {

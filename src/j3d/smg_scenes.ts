@@ -28,7 +28,7 @@ import { getPointBezier } from '../Spline';
 import { RENDER_HACKS_ICON } from '../bk/scenes';
 
 const materialHacks: GXMaterialHacks = {
-    alphaLightingFudge: (p) => p.matSource,
+    lightingFudge: (p) => p.matSource,
 };
 
 // Should I try to do this with GX? lol.

@@ -19,8 +19,7 @@ import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 
 const materialHacks: GXMaterialHacks = {
-    colorLightingFudge: (p) => `${p.matSource}`,
-    alphaLightingFudge: (p) => '1.0',
+    lightingFudge: (p) => `vec4(${p.matSource}.rgb, 1.0)`,
 };
 
 export class BasicRRESRenderer implements Viewer.SceneGfx {

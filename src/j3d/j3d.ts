@@ -605,6 +605,8 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
     const colorRegisterTableOffs = view.getUint32(0x50);
     const colorConstantTableOffs = view.getUint32(0x54);
     const tevStageTableOffs = view.getUint32(0x5C);
+    const tevSwapModeInfoOffs = view.getUint32(0x60);
+    const tevSwapModeTableInfoOffset = view.getUint32(0x64);
     const alphaTestTableOffs = view.getUint32(0x6C);
     const blendModeTableOffs = view.getUint32(0x70);
     const depthModeTableOffs = view.getUint32(0x74);
@@ -808,6 +810,21 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             const konstColorSel: GX.KonstColorSel = view.getUint8(materialEntryIdx + 0x9C + j);
             const konstAlphaSel: GX.KonstAlphaSel = view.getUint8(materialEntryIdx + 0xAC + j);
 
+            // SetTevSwapMode
+            const tevSwapModeIndex = view.getUint16(materialEntryIdx + 0x0E4 + j * 0x02);
+            const tevSwapModeRasSel = view.getUint8(tevSwapModeInfoOffs + tevSwapModeIndex * 0x04 + 0x00);
+            const tevSwapModeTexSel = view.getUint8(tevSwapModeInfoOffs + tevSwapModeIndex * 0x04 + 0x01);
+            const rasSwapTable: GX.TevColorChan[] = [GX.TevColorChan.R, GX.TevColorChan.G, GX.TevColorChan.B, GX.TevColorChan.A];
+            rasSwapTable[0] = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeRasSel * 0x04 + 0x00);
+            rasSwapTable[1] = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeRasSel * 0x04 + 0x01);
+            rasSwapTable[2] = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeRasSel * 0x04 + 0x02);
+            rasSwapTable[3] = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeRasSel * 0x04 + 0x03);
+            const texSwapTable: GX.TevColorChan[] = [GX.TevColorChan.R, GX.TevColorChan.G, GX.TevColorChan.B, GX.TevColorChan.A];
+            texSwapTable[0] = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTexSel * 0x04 + 0x00);
+            texSwapTable[1] = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTexSel * 0x04 + 0x01);
+            texSwapTable[2] = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTexSel * 0x04 + 0x02);
+            texSwapTable[3] = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTexSel * 0x04 + 0x03);
+
             // SetTevIndirect
             const indTexStageOffs = indirectEntryOffs + 0x04 + (0x04 * 4) + (0x1C * 3) + (0x04 * 4) + j * 0x0C;
             const indTexStage: GX.IndTexStageID = view.getUint8(indTexStageOffs + 0x00);
@@ -827,6 +844,8 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
                 alphaInA, alphaInB, alphaInC, alphaInD, alphaOp, alphaBias, alphaScale, alphaClamp, alphaRegId,
                 texCoordId, texMap, channelId,
                 konstColorSel, konstAlphaSel,
+                rasSwapTable,
+                texSwapTable,
                 indTexStage,
                 indTexFormat,
                 indTexBiasSel,
@@ -899,11 +918,11 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         assert(view.getUint8(colorChanOffs + 0x00) < 2);
         const matColorSource: GX.ColorSrc = view.getUint8(colorChanOffs + 0x01);
         const litMask = view.getUint8(colorChanOffs + 0x02);
-        const diffuseFunction = view.getUint8(colorChanOffs + 0x03);
-        const attenuationFunction = view.getUint8(colorChanOffs + 0x04);
+        const diffuseFunction: GX.DiffuseFunction = view.getUint8(colorChanOffs + 0x03);
+        const attenuationFunction: GX.AttenuationFunction = view.getUint8(colorChanOffs + 0x04);
         const ambColorSource: GX.ColorSrc = view.getUint8(colorChanOffs + 0x05);
 
-        const colorChan: GX_Material.ColorChannelControl = { lightingEnabled, matColorSource, ambColorSource };
+        const colorChan: GX_Material.ColorChannelControl = { lightingEnabled, matColorSource, ambColorSource, litMask, diffuseFunction, attenuationFunction };
         return colorChan;
     }
 

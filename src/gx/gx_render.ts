@@ -14,7 +14,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { TextureMapping, TextureHolder, LoadedTexture } from '../TextureHolder';
 
 import { GfxBufferCoalescer, GfxCoalescedBuffers, makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { fillColor, fillMatrix4x3, fillMatrix3x2, fillVec4, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
+import { fillColor, fillMatrix4x3, fillMatrix3x2, fillVec4, fillMatrix4x4, fillVec3 } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxFormat, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxDevice, GfxInputState, GfxVertexAttributeDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxProgram, GfxBindingLayoutDescriptor, GfxProgramReflection, GfxHostAccessPass, GfxRenderPass, GfxBufferBinding, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxVertexAttributeFrequency, GfxTextureDimension } from '../gfx/platform/GfxPlatform';
 import { getFormatTypeFlags, FormatTypeFlags } from '../gfx/platform/GfxPlatformFormat';
 import { Camera } from '../Camera';
@@ -41,6 +41,7 @@ export class MaterialParams {
     public u_TexMtx: mat4[] = nArray(10, () => mat4.create());     // mat4x3
     public u_PostTexMtx: mat4[] = nArray(20, () => mat4.create()); // mat4x3
     public u_IndTexMtx: mat2d[] = nArray(3, () => mat2d.create()); // mat4x2
+    public u_Lights: GX_Material.Light[] = nArray(8, () => new GX_Material.Light());
 }
 
 export class PacketParams {
@@ -57,7 +58,7 @@ export const ub_MaterialParams = 1;
 export const ub_PacketParams = 2;
 
 export const u_SceneParamsBufferSize = 4*4 + 4;
-export const u_MaterialParamsBufferSize = 4*2 + 4*2 + 4*4 + 4*4 + 4*3*10 + 4*3*20 + 4*2*3 + 4*8;
+export const u_MaterialParamsBufferSize = 4*2 + 4*2 + 4*4 + 4*4 + 4*3*10 + 4*3*20 + 4*2*3 + 4*8 + 4*5*8;
 export const u_PacketParamsBufferSize = 4*3*10;
 
 export function fillSceneParamsData(d: Float32Array, sceneParams: SceneParams, bOffs: number = 0): void {
@@ -86,6 +87,14 @@ export function fillMaterialParamsData(d: Float32Array, materialParams: Material
         offs += fillMatrix3x2(d, offs, materialParams.u_IndTexMtx[i]);
     for (let i = 0; i < 8; i++)
         offs += fillVec4(d, offs, materialParams.m_TextureMapping[i].width, materialParams.m_TextureMapping[i].height, 0, materialParams.m_TextureMapping[i].lodBias);
+    for (let i = 0; i < 8; i++) {
+        const light = materialParams.u_Lights[i];
+        offs += fillColor(d, offs, light.Color);
+        offs += fillVec3(d, offs, light.Position);
+        offs += fillVec3(d, offs, light.Direction);
+        offs += fillVec3(d, offs, light.CosAtten);
+        offs += fillVec3(d, offs, light.DistAtten);
+    }
 
     assert(offs === bOffs + u_MaterialParamsBufferSize);
     assert(d.length >= offs);

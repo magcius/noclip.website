@@ -606,3 +606,15 @@ export const enum CPRegister {
     VAT_B_ID      = 0x80,
     VAT_C_ID      = 0x90,
 }
+
+export const enum DiffuseFunction {
+    NONE = 0x00,
+    SIGN = 0x01,
+    CLAMP = 0x02,
+}
+
+export const enum AttenuationFunction {
+    SPEC = 0x00, // Specular attenuation
+    SPOT = 0x01, // Distance/spotlight attenuation
+    NONE,
+}

@@ -1,5 +1,5 @@
 
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4, vec3, vec4 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import Progressable from '../Progressable';
@@ -12,7 +12,7 @@ import * as UI from '../ui';
 
 import * as GX_Material from '../gx/gx_material';
 
-import { BMD, BTK, BRK, BCK, BTI, ANK1, TTK1, TRK1 } from './j3d';
+import { BMD, BTK, BRK, BCK, BTI, ANK1, TTK1, TRK1, LoopMode } from './j3d';
 import * as RARC from './rarc';
 import { J3DTextureHolder, BMDModelInstance, BMDModel } from './render';
 import { Camera, computeViewMatrix } from '../Camera';
@@ -33,6 +33,8 @@ import { prepareFrameDebugOverlayCanvas2D } from '../DebugJunk';
 const TIME_OF_DAY_ICON = `<svg viewBox="0 0 100 100" height="20" fill="white"><path d="M50,93.4C74,93.4,93.4,74,93.4,50C93.4,26,74,6.6,50,6.6C26,6.6,6.6,26,6.6,50C6.6,74,26,93.4,50,93.4z M37.6,22.8  c-0.6,2.4-0.9,5-0.9,7.6c0,18.2,14.7,32.9,32.9,32.9c2.6,0,5.1-0.3,7.6-0.9c-4.7,10.3-15.1,17.4-27.1,17.4  c-16.5,0-29.9-13.4-29.9-29.9C20.3,37.9,27.4,27.5,37.6,22.8z"/></svg>`;
 
 interface Colors {
+    actorShadow: GX_Material.Color;
+    actorAmbient: GX_Material.Color;
     amb: GX_Material.Color;
     light: GX_Material.Color;
     ocean: GX_Material.Color;
@@ -83,6 +85,16 @@ function getColorsFromDZS(buffer: ArrayBufferSlice, roomIdx: number, timeOfDay: 
     const paleOffs = chunkHeaders.get('Pale').offs + (paleIdx * 0x2C);
     const virtIdx = view.getUint8(paleOffs + 0x21);
     const virtOffs = chunkHeaders.get('Virt').offs + (virtIdx * 0x24);
+
+    const actorShadowR = view.getUint8(paleOffs + 0x00) / 0xFF;
+    const actorShadowG = view.getUint8(paleOffs + 0x01) / 0xFF;
+    const actorShadowB = view.getUint8(paleOffs + 0x02) / 0xFF;
+    const actorShadow = new GX_Material.Color(actorShadowR, actorShadowG, actorShadowB, 1);
+
+    const actorAmbientR = view.getUint8(paleOffs + 0x03) / 0xFF;
+    const actorAmbientG = view.getUint8(paleOffs + 0x04) / 0xFF;
+    const actorAmbientB = view.getUint8(paleOffs + 0x05) / 0xFF;
+    const actorAmbient = new GX_Material.Color(actorAmbientR, actorAmbientG, actorAmbientB, 1);
 
     const ambR = view.getUint8(paleOffs + 0x06) / 0xFF;
     const ambG = view.getUint8(paleOffs + 0x07) / 0xFF;
@@ -140,7 +152,7 @@ function getColorsFromDZS(buffer: ArrayBufferSlice, roomIdx: number, timeOfDay: 
     const vr_kasumi_maeB = view.getUint8(virtOffs + 0x20) / 0xFF;
     const vr_kasumi_mae = new GX_Material.Color(vr_kasumi_maeR, vr_kasumi_maeG, vr_kasumi_maeB, 1);
 
-    return { amb, light, wave, ocean, splash, splash2, doors, vr_back_cloud, vr_sky, vr_uso_umi, vr_kasumi_mae };
+    return { actorShadow, actorAmbient, amb, light, wave, ocean, splash, splash2, doors, vr_back_cloud, vr_sky, vr_uso_umi, vr_kasumi_mae };
 }
 
 function createScene(device: GfxDevice, renderHelper: GXRenderHelperGfx, textureHolder: J3DTextureHolder, rarc: RARC.RARC, name: string, isSkybox: boolean = false): BMDModelInstance {
@@ -179,9 +191,12 @@ function createScene(device: GfxDevice, renderHelper: GXRenderHelperGfx, texture
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
+const scratchLight = new GX_Material.Light();
 class ObjectRenderer {
-    private childObjects: ObjectRenderer[] = [];
+    public visible = true;
     public modelMatrix: mat4 = mat4.create();
+
+    private childObjects: ObjectRenderer[] = [];
     private parentJointMatrix: mat4 | null = null;
 
     constructor(public modelInstance: BMDModelInstance) {
@@ -208,8 +223,16 @@ class ObjectRenderer {
         this.modelInstance.setMaterialColorWriteEnabled(materialName, v);
     }
 
+    public setColors(colors: Colors): void {
+        this.modelInstance.setColorOverride(ColorKind.C0, colors.actorShadow);
+        this.modelInstance.setColorOverride(ColorKind.K0, colors.actorAmbient);
+
+        for (let i = 0; i < this.childObjects.length; i++)
+            this.childObjects[i].setColors(colors);
+    }
+
     public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput, visible: boolean): void {
-        this.modelInstance.visible = visible;
+        this.modelInstance.visible = visible && this.visible;
 
         if (this.modelInstance.visible) {
             if (this.parentJointMatrix !== null)
@@ -226,9 +249,17 @@ class ObjectRenderer {
                 this.modelInstance.visible = false;
         }
 
+        GX_Material.lightSetWorldPosition(scratchLight, viewerInput.camera, 250, 250, 250);
+        GX_Material.lightSetWorldDirection(scratchLight, viewerInput.camera, -250, -250, -250);
+        // Toon lighting works by setting the color to red.
+        scratchLight.Color.set(1, 0, 0, 0);
+        vec3.set(scratchLight.CosAtten, 1.075, 0, 0);
+        vec3.set(scratchLight.DistAtten, 1.075, 0, 0);
+        this.modelInstance.setGXLight(0, scratchLight);
+
         this.modelInstance.prepareToRender(renderHelper, viewerInput);
         for (let i = 0; i < this.childObjects.length; i++)
-            this.childObjects[i].prepareToRender(renderHelper, viewerInput, visible);
+            this.childObjects[i].prepareToRender(renderHelper, viewerInput, this.modelInstance.visible);
     }
 
     public destroy(device: GfxDevice): void {
@@ -299,6 +330,9 @@ class WindWakerRoomRenderer {
             }
             if (this.model3)
                 this.model3.setColorOverride(ColorKind.C0, colors.doors);
+
+            for (let i = 0; i < this.objectRenderers.length; i++)
+                this.objectRenderers[i].setColors(colors);
         } else {
             if (this.model) {
                 this.model.setColorOverride(ColorKind.K0, undefined);
@@ -861,7 +895,7 @@ class SceneDesc {
             return objectRenderer;
         }
 
-        function parseBCK(rarc: RARC.RARC, path: string) { return BCK.parse(rarc.findFileData(path)).ank1; }
+        function parseBCK(rarc: RARC.RARC, path: string) { const g = BCK.parse(rarc.findFileData(path)).ank1; g.loopMode = LoopMode.REPEAT; return g; }
         function parseBRK(rarc: RARC.RARC, path: string) { return BRK.parse(rarc.findFileData(path)).trk1; }
         function parseBTK(rarc: RARC.RARC, path: string) { return BTK.parse(rarc.findFileData(path)).ttk1; }
         function animFrame(frame: number): AnimationController { const a = new AnimationController(); a.setTimeInFrames(frame); return a; }

@@ -821,15 +821,29 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
         const chanCtrlC = view.getUint32(lightChannelTableIdx + 0x0C);
         const chanCtrlA = view.getUint32(lightChannelTableIdx + 0x10);
 
-        const chanCtrlCMatSrc: GX.ColorSrc = (chanCtrlC >>> 0) & 0x01;
-        const chanCtrlCEnable: boolean =  !!((chanCtrlC >>> 1) & 0x01);
-        const chanCtrlCAmbSrc: GX.ColorSrc = (chanCtrlC >>> 6) & 0x01;
-        const colorChannel: GX_Material.ColorChannelControl = { lightingEnabled: chanCtrlCEnable, matColorSource: chanCtrlCMatSrc, ambColorSource: chanCtrlCAmbSrc };
+        const chanCtrlCMatSrc: GX.ColorSrc =             (chanCtrlC >>>  0) & 0x01;
+        const chanCtrlCEnable: boolean =              !!((chanCtrlC >>>  1) & 0x01);
+        const chanCtrlCLitMaskL: number =                (chanCtrlC >>>  2) & 0x0F;
+        const chanCtrlCAmbSrc: GX.ColorSrc =             (chanCtrlC >>>  6) & 0x01;
+        const chanCtrlCDiffuseFn: GX.DiffuseFunction =   (chanCtrlC >>>  7) & 0x03;
+        const chanCtrlCAttnEn: boolean =              !!((chanCtrlC >>>  9) & 0x01);
+        const chanCtrlCAttnSelect: boolean =          !!((chanCtrlC >>> 10) & 0x01);
+        const chanCtrlCLitMaskH: number =                (chanCtrlC >>> 11) & 0x0F;
+        const chanCtrlCLitMask: number = (chanCtrlCLitMaskH << 4) | chanCtrlCLitMaskL;
+        const chanCtrlCAttnFn = chanCtrlCAttnEn ? (chanCtrlCAttnSelect ? GX.AttenuationFunction.SPOT : GX.AttenuationFunction.SPEC) : GX.AttenuationFunction.NONE;
+        const colorChannel: GX_Material.ColorChannelControl = { lightingEnabled: chanCtrlCEnable, matColorSource: chanCtrlCMatSrc, ambColorSource: chanCtrlCAmbSrc, litMask: chanCtrlCLitMask, diffuseFunction: chanCtrlCDiffuseFn, attenuationFunction: chanCtrlCAttnFn };
 
-        const chanCtrlAMatSrc: GX.ColorSrc = (chanCtrlA >>> 0) & 0x01;
-        const chanCtrlAEnable: boolean =  !!((chanCtrlA >>> 1) & 0x01);
-        const chanCtrlAAmbSrc: GX.ColorSrc = (chanCtrlA >>> 6) & 0x01;
-        const alphaChannel: GX_Material.ColorChannelControl = { lightingEnabled: chanCtrlAEnable, matColorSource: chanCtrlAMatSrc, ambColorSource: chanCtrlAAmbSrc };
+        const chanCtrlAMatSrc: GX.ColorSrc =             (chanCtrlA >>>  0) & 0x01;
+        const chanCtrlAEnable: boolean =              !!((chanCtrlA >>>  1) & 0x01);
+        const chanCtrlALitMaskL: number =                (chanCtrlA >>>  2) & 0x0F;
+        const chanCtrlAAmbSrc: GX.ColorSrc =             (chanCtrlA >>>  6) & 0x01;
+        const chanCtrlADiffuseFn: GX.DiffuseFunction =   (chanCtrlA >>>  7) & 0x03;
+        const chanCtrlAAttnEn: boolean =              !!((chanCtrlA >>>  9) & 0x01);
+        const chanCtrlAAttnSelect: boolean =          !!((chanCtrlA >>> 10) & 0x01);
+        const chanCtrlALitMaskH: number =                (chanCtrlA >>> 11) & 0x0F;
+        const chanCtrlALitMask: number = (chanCtrlALitMaskH << 4) | chanCtrlALitMaskL;
+        const chanCtrlAAttnFn = chanCtrlAAttnEn ? (chanCtrlAAttnSelect ? GX.AttenuationFunction.SPOT : GX.AttenuationFunction.SPEC) : GX.AttenuationFunction.NONE;
+        const alphaChannel: GX_Material.ColorChannelControl = { lightingEnabled: chanCtrlAEnable, matColorSource: chanCtrlAMatSrc, ambColorSource: chanCtrlAAmbSrc, litMask: chanCtrlALitMask, diffuseFunction: chanCtrlADiffuseFn, attenuationFunction: chanCtrlAAttnFn };
 
         colorMatRegs.push(new GX_Material.Color(matColorR, matColorG, matColorB, matColorA));
         colorAmbRegs.push(new GX_Material.Color(ambColorR, ambColorG, ambColorB, ambColorA));

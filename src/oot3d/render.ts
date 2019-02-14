@@ -17,7 +17,6 @@ import { nArray, wordCountFromByteCount, assert } from '../util';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
 import { GfxRenderInstBuilder, GfxRenderInst, GfxRenderInstViewRenderer, GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderer';
 import { makeFormat, FormatFlags, FormatTypeFlags, FormatCompFlags } from '../gfx/platform/GfxPlatformFormat';
-import { ub_MaterialParams } from '../gx/gx_render';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { Camera } from '../Camera';
 
@@ -160,7 +159,7 @@ class MaterialInstance {
         this.templateRenderInst.visible = visible && this.visible;
 
         if (visible) {
-            let offs = this.templateRenderInst.getUniformBufferOffset(ub_MaterialParams);
+            let offs = this.templateRenderInst.getUniformBufferOffset(OoT3D_Program.ub_MaterialParams);
             const mapped = materialParamsBuffer.mapBufferF32(offs, 20);
             if (this.colorAnimators[0]) {
                 this.colorAnimators[0].calcMaterialColor(scratchColor);

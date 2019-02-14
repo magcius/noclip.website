@@ -93,7 +93,7 @@ class Command_MaterialGroup {
     public gfxSampler: GfxSampler;
 
     constructor(device: GfxDevice, public renderHelper: GXRenderHelperGfx, public material: Material) {
-        this.materialHelper = new GXMaterialHelperGfx(device, renderHelper, this.material.gxMaterial, { colorLightingFudge: (p) => '0' });
+        this.materialHelper = new GXMaterialHelperGfx(device, renderHelper, this.material.gxMaterial, { lightingFudge: (p) => 'vec4(0, 0, 0, 1)' });
         const layer = this.material.isTransparent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.materialHelper.templateRenderInst.sortKey = makeSortKey(layer, this.materialHelper.programKey);
 

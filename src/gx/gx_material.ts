@@ -7,6 +7,8 @@ import { DeviceProgram, DeviceProgramReflection } from '../Program';
 import { colorCopy, colorFromRGBA8, colorToRGBA8 } from '../Color';
 import { GfxFormat } from '../gfx/platform/GfxPlatformFormat';
 import { GfxCompareMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
+import { vec3, vec4, mat4 } from 'gl-matrix';
+import { Camera } from '../Camera';
 
 // TODO(jstpierre): Move somewhere better...
 export const EFB_WIDTH = 640;
@@ -64,10 +66,45 @@ export class Color {
     }
 }
 
+export class Light {
+    public Position = vec3.create();
+    public Direction = vec3.create();
+    public DistAtten = vec3.create();
+    public CosAtten = vec3.create();
+    public Color = new Color();
+
+    public copy(o: Light): void {
+        vec3.copy(this.Position, o.Position);
+        vec3.copy(this.Direction, o.Direction);
+        vec3.copy(this.DistAtten, o.DistAtten);
+        vec3.copy(this.CosAtten, o.CosAtten);
+        colorCopy(this.Color, o.Color);
+    }
+}
+
+const scratchVec4 = vec4.create();
+export function lightSetWorldPosition(light: Light, camera: Camera, x: number, y: number, z: number, v: vec4 = scratchVec4): void {
+    vec4.set(v, x, y, z, 1.0);
+    vec4.transformMat4(v, v, camera.viewMatrix);
+    vec3.set(light.Position, v[0], v[1], v[2]);
+}
+
+export function lightSetWorldDirection(light: Light, camera: Camera, x: number, y: number, z: number, v: vec4 = scratchVec4): void {
+    vec4.set(v, x, y, z, 0.0);
+    // TODO(jstpierre): In theory, we should multiply by the inverse-transpose of the view matrix.
+    // However, I don't want to calculate that right now, and it shouldn't matter too much...
+    vec4.transformMat4(v, v, camera.viewMatrix);
+    vec4.normalize(v, v);
+    vec3.set(light.Direction, v[0], v[1], v[2]);
+}
+
 export interface ColorChannelControl {
     lightingEnabled: boolean;
     matColorSource: GX.ColorSrc;
     ambColorSource: GX.ColorSrc;
+    litMask: number;
+    diffuseFunction: GX.DiffuseFunction;
+    attenuationFunction: GX.AttenuationFunction;
 }
 
 export interface LightChannelControl {
@@ -213,10 +250,19 @@ export interface LightingFudgeParams {
 type LightingFudgeGenerator = (p: LightingFudgeParams) => string;
 
 export interface GXMaterialHacks {
-    colorLightingFudge?: LightingFudgeGenerator;
-    alphaLightingFudge?: LightingFudgeGenerator;
+    lightingFudge?: LightingFudgeGenerator;
     disableTextures?: boolean;
     disableVertexColors?: boolean;
+}
+
+function colorChannelsEqual(a: ColorChannelControl, b: ColorChannelControl): boolean {
+    if (a.lightingEnabled !== b.lightingEnabled) return false;
+    if (a.litMask !== b.litMask) return false;
+    if (a.ambColorSource !== b.ambColorSource) return false;
+    if (a.matColorSource !== b.matColorSource) return false;
+    if (a.attenuationFunction !== b.attenuationFunction) return false;
+    if (a.diffuseFunction !== b.diffuseFunction) return false;
+    return true;
 }
 
 export class GX_Program extends DeviceProgram {
@@ -252,45 +298,84 @@ export class GX_Program extends DeviceProgram {
         }
     }
 
-    private generateColorChannel(chan: ColorChannelControl, i: number, isAlpha: boolean) {
-        // TODO(jstpierre): amb & lighting
-        // haha this will never get done lmao
-        const matSource = this.generateMaterialSource(chan, i);
+    private generateLightDiffFn(chan: ColorChannelControl, lightName: string) {
+        const NdotL = `dot(t_Normal, normalize(t_LightDelta))`;
 
-        if (chan.lightingEnabled) {
-            const ambSource = this.generateAmbientSource(chan, i);
-
-            // HACK.
-            if (this.hacks) {
-                const fudger = isAlpha ? this.hacks.alphaLightingFudge : this.hacks.colorLightingFudge;
-                if (fudger) {
-                    const vtx = `a_Color${i}`;
-                    const amb = `u_ColorAmbReg[${i}]`;
-                    const mat = `u_ColorMatReg[${i}]`;
-                    const fudged = fudger({ vtx, amb, mat, ambSource, matSource });
-                    return `vec4(${fudged})`;
-                }
-            }
-
-            // XXX(jstpierre): This is awful but seems to work.
-            return `(0.5 * (${ambSource} + 0.6) * ${matSource})`;
-        } else {
-            // If lighting is off, it's the material color.
-            return matSource;
+        switch (chan.diffuseFunction) {
+        case GX.DiffuseFunction.NONE: return `1.0`;
+        case GX.DiffuseFunction.SIGN: return `${NdotL}`;
+        case GX.DiffuseFunction.CLAMP: return `max(${NdotL}, 0.0)`;
         }
     }
 
-    private generateLightChannel(lightChannel: LightChannelControl, i: number) {
+    private generateLightAttnFn(chan: ColorChannelControl, lightName: string) {
+        const cosAttn = `ApplyCubic(${lightName}.CosAtten.xyz, dot(t_LightDelta, ${lightName}.Direction.xyz))`;
+
+        switch (chan.attenuationFunction) {
+        case GX.AttenuationFunction.NONE: return `1.0`;
+        case GX.AttenuationFunction.SPOT: return `max(${cosAttn} / dot(${lightName}.DistAtten.xyz, vec3(1.0, Dist(t_LightDelta), DistSq(t_LightDelta))), 0.0)`;
+        case GX.AttenuationFunction.SPEC: return `1.0`; // TODO(jtspierre): Specular
+        }
+    }
+
+    private generateColorChannel(chan: ColorChannelControl, outputName: string, i: number) {
+        const matSource = this.generateMaterialSource(chan, i);
+        const ambSource = this.generateAmbientSource(chan, i);
+
+        // HACK.
+        if (chan.lightingEnabled && this.hacks && this.hacks.lightingFudge) {
+            const vtx = `a_Color${i}`;
+            const amb = `u_ColorAmbReg[${i}]`;
+            const mat = `u_ColorMatReg[${i}]`;
+            const fudged = this.hacks.lightingFudge({ vtx, amb, mat, ambSource, matSource });
+            return `    ${outputName} = vec4(${fudged});`;
+        }
+
+        let generateLightAccum = ``;
+        if (chan.lightingEnabled) {
+            generateLightAccum = `
+    t_LightAccum = ${ambSource};`;
+
+            for (let j = 0; j < 8; j++) {
+                if (!(chan.litMask & (1 << j)))
+                    continue;
+
+                const lightName = `u_LightParams[${j}]`;
+                generateLightAccum += `
+    t_LightDelta = ${lightName}.Position.xyz - v_Position.xyz;
+    t_LightAccum += ${this.generateLightDiffFn(chan, lightName)} * ${this.generateLightAttnFn(chan, lightName)} * ${lightName}.Color;`;
+            }
+        } else {
+            // Without lighting, everything is full-bright.
+            generateLightAccum += `
+    t_LightAccum = vec4(1.0);`;
+        }
+
+        return `${generateLightAccum}
+    ${outputName} = ${matSource} * clamp(t_LightAccum, 0.0, 1.0);`.trim();
+    }
+
+    private generateLightChannel(lightChannel: LightChannelControl, outputName: string, i: number) {
         // If we have disabled vertex colors, then they are pure white.
         if (this.hacks !== null && this.hacks.disableVertexColors)
-            return `vec4(1.0, 1.0, 1.0, 1.0)`;
+            return `    ${outputName} = vec4(1.0, 1.0, 1.0, 1.0);`;
 
-        return `vec4(${this.generateColorChannel(lightChannel.colorChannel, i, false)}.rgb, ${this.generateColorChannel(lightChannel.alphaChannel, i, true)}.a)`;
+        if (colorChannelsEqual(lightChannel.colorChannel, lightChannel.alphaChannel)) {
+            return `
+    ${this.generateColorChannel(lightChannel.colorChannel, outputName, i)}`;
+        } else {
+            return `
+    ${this.generateColorChannel(lightChannel.colorChannel, `t_ColorChanTemp`, i)}
+    ${outputName}.rgb = t_ColorChanTemp.rgb;
+
+    ${this.generateColorChannel(lightChannel.alphaChannel, `t_ColorChanTemp`, i)}
+    ${outputName}.a = t_ColorChanTemp.a;`;
+        }
     }
 
     private generateLightChannels(): string {
         return this.material.lightChannels.map((lightChannel, i) => {
-            return `    v_Color${i} = ${this.generateLightChannel(lightChannel, i)};`;
+            return this.generateLightChannel(lightChannel, `v_Color${i}`, i);
         }).join('\n');
     }
 
@@ -299,8 +384,8 @@ export class GX_Program extends DeviceProgram {
         switch (src) {
         case GX.TexGenSrc.POS:       return `vec4(a_Position, 1.0)`;
         case GX.TexGenSrc.NRM:       return `vec4(a_Normal, 1.0)`;
-        case GX.TexGenSrc.COLOR0:    return `a_Color0`;
-        case GX.TexGenSrc.COLOR1:    return `a_Color1`;
+        case GX.TexGenSrc.COLOR0:    return `v_Color0`;
+        case GX.TexGenSrc.COLOR1:    return `v_Color1`;
         case GX.TexGenSrc.TEX0:      return `vec4(a_Tex0, 1.0, 1.0)`;
         case GX.TexGenSrc.TEX1:      return `vec4(a_Tex1, 1.0, 1.0)`;
         case GX.TexGenSrc.TEX2:      return `vec4(a_Tex2, 1.0, 1.0)`;
@@ -342,7 +427,7 @@ export class GX_Program extends DeviceProgram {
         switch (texCoordGen.type) {
         case GX.TexGenType.SRTG:
             // Expected to be used with colors, I suspect...
-            return `${src}.xyz`;
+            return `vec3(${src}.xy, 1.0)`;
         case GX.TexGenType.MTX2x4:
             if (texCoordGen.matrix === GX.TexGenMatrix.IDENTITY)
                 return `${src}.xyz`;
@@ -832,6 +917,14 @@ layout(row_major, std140) uniform ub_SceneParams {
 
 #define u_SceneTextureLODBias u_Misc0[0]
 
+struct Light {
+    vec4 Color;
+    vec4 Position;
+    vec4 Direction;
+    vec4 DistAtten;
+    vec4 CosAtten;
+};
+
 // Expected to change with each material.
 layout(row_major, std140) uniform ub_MaterialParams {
     vec4 u_ColorMatReg[2];
@@ -843,6 +936,7 @@ layout(row_major, std140) uniform ub_MaterialParams {
     mat4x2 u_IndTexMtx[3];
     // SizeX, SizeY, 0, Bias
     vec4 u_TextureParams[8];
+    Light u_LightParams[8];
 };
 
 // Expected to change with each shape packet.
@@ -862,7 +956,6 @@ precision mediump float;
 ${GX_Program.BindingsDefinition}
 
 varying vec3 v_Position;
-varying vec3 v_Normal;
 varying vec4 v_Color0;
 varying vec4 v_Color1;
 varying vec3 v_TexCoord0;
@@ -878,21 +971,33 @@ varying vec3 v_TexCoord7;
         this.vert = `
 ${this.generateVertAttributeDefs()}
 
-mat4 GetPosTexMatrix(uint mtxid) {
-    if (mtxid == ${GX.TexGenMatrix.IDENTITY}u)
+mat4 GetPosTexMatrix(uint t_MtxIdx) {
+    if (t_MtxIdx == ${GX.TexGenMatrix.IDENTITY}u)
         return mat4(1.0);
-    else if (mtxid >= ${GX.TexGenMatrix.TEXMTX0}u)
-        return mat4(u_TexMtx[(mtxid - 30u) / 3u]);
+    else if (t_MtxIdx >= ${GX.TexGenMatrix.TEXMTX0}u)
+        return mat4(u_TexMtx[(t_MtxIdx - ${GX.TexGenMatrix.TEXMTX0}u) / 3u]);
     else
-        return mat4(u_PosMtx[mtxid / 3u]);
+        return mat4(u_PosMtx[t_MtxIdx / 3u]);
 }
+
+float ApplyCubic(vec3 t_Coeff, float t_Value) {
+    return dot(t_Coeff, vec3(1.0, t_Value, t_Value*t_Value));
+}
+
+float DistSq(vec3 v) { return dot(v, v); }
+float Dist(vec3 v) { return sqrt(DistSq(v)); }
 
 void main() {
     mat4 t_PosMtx = GetPosTexMatrix(a_PosMtxIdx);
-    mat4 t_PosModelView = t_PosMtx;
-    vec4 t_Position = t_PosModelView * vec4(a_Position, 1.0);
+    vec4 t_Position = t_PosMtx * vec4(a_Position, 1.0);
     v_Position = t_Position.xyz;
-    v_Normal = a_Normal;
+    // TODO(jstpierre): Move this calculation to the CPU? Is it worth it?
+    mat3 t_NrmMtx = inverse(transpose(mat3(t_PosMtx)));
+    vec3 t_Normal = t_NrmMtx * a_Normal;
+
+    vec4 t_LightAccum;
+    vec3 t_LightDelta;
+    vec4 t_ColorChanTemp;
 ${this.generateLightChannels()}
 ${this.generateTexGens(this.material.texGens)}
     gl_Position = u_Projection * t_Position;

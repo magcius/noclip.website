@@ -1,5 +1,5 @@
 
-import { mat4, mat2d } from 'gl-matrix';
+import { mat4, mat2d, vec4, vec3 } from 'gl-matrix';
 
 import { BMD, BMT, HierarchyNode, HierarchyType, MaterialEntry, Shape, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData, DRW1MatrixKind, TTK1Animator, ANK1Animator, bindANK1Animator, BTI } from './j3d';
 import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } from './j3d';
@@ -16,6 +16,7 @@ import { GfxDevice, GfxSampler } from '../gfx/platform/GfxPlatform';
 import { GfxBufferCoalescer, GfxCoalescedBuffers } from '../gfx/helpers/BufferHelpers';
 import { ViewerRenderInput } from '../viewer';
 import { GfxRenderInst, GfxRenderInstBuilder, setSortKeyDepth, GfxRendererLayer, makeSortKey, setSortKeyBias } from '../gfx/render/GfxRenderer';
+import { colorFromRGBA } from '../Color';
 
 export class J3DTextureHolder extends GXTextureHolder<TEX1_TextureData> {
     public addJ3DTextures(device: GfxDevice, bmd: BMD, bmt: BMT | null = null) {
@@ -145,6 +146,11 @@ export class ShapeInstance {
     }
 }
 
+class MaterialInstanceState {
+    public lights = nArray(8, () => new GX_Material.Light());
+}
+
+const scratchVec4 = vec4.create();
 const matrixScratch = mat4.create(), matrixScratch2 = mat4.create();
 const materialParams = new MaterialParams();
 export class MaterialInstance {
@@ -234,7 +240,7 @@ export class MaterialInstance {
         dst.copy(color, alpha);
     }
 
-    public fillMaterialParams(materialParams: MaterialParams, camera: Camera, bmdModel: BMDModel, textureHolder: GXTextureHolder): void {
+    public fillMaterialParams(materialParams: MaterialParams, camera: Camera, materialInstanceState: MaterialInstanceState, bmdModel: BMDModel, textureHolder: GXTextureHolder): void {
         const material = this.material;
 
         this.copyColor(ColorKind.MAT0, material.colorMatRegs[0]);
@@ -371,10 +377,13 @@ export class MaterialInstance {
             const b = indTexMtx[3], d = indTexMtx[4], ty = indTexMtx[5];
             mat2d.set(materialParams.u_IndTexMtx[i], a, b, c, d, tx, ty);
         }
+
+        for (let i = 0; i < materialInstanceState.lights.length; i++)
+            materialParams.u_Lights[i].copy(materialInstanceState.lights[i]);
     }
 
-    public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput, bmdModel: BMDModel, textureHolder: GXTextureHolder): void {
-        this.fillMaterialParams(materialParams, viewerInput.camera, bmdModel, textureHolder);
+    public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput, materialInstanceState: MaterialInstanceState, bmdModel: BMDModel, textureHolder: GXTextureHolder): void {
+        this.fillMaterialParams(materialParams, viewerInput.camera, materialInstanceState, bmdModel, textureHolder);
         renderHelper.fillMaterialParams(materialParams, this.materialParamsBufferOffset);
     }
 }
@@ -479,9 +488,10 @@ export class BMDModelInstance {
     private jointVisibility: boolean[];
 
     private templateRenderInst: GfxRenderInst;
-    private shapeInstances: ShapeInstance[] = [];
+    private materialInstanceState = new MaterialInstanceState();
     private materialInstances: MaterialInstance[] = [];
-    private shapeInstanceState: ShapeInstanceState = new ShapeInstanceState();
+    private shapeInstances: ShapeInstance[] = [];
+    private shapeInstanceState = new ShapeInstanceState();
     private materialHacks: GX_Material.GXMaterialHacks = {};
 
     constructor(
@@ -590,6 +600,10 @@ export class BMDModelInstance {
             this.materialInstances[i].setTexturesEnabled(v);
     }
 
+    public setGXLight(i: number, light: GX_Material.Light): void {
+        this.materialInstanceState.lights[i].copy(light);
+    }
+
     /**
      * Binds {@param ttk1} (texture animations) to this model renderer.
      * TTK1 objects can be parsed from {@link BTK} files. See {@link BTK.parse}.
@@ -680,7 +694,7 @@ export class BMDModelInstance {
         let depth = -1;
         if (modelVisible) {
             for (let i = 0; i < this.materialInstances.length; i++)
-                this.materialInstances[i].prepareToRender(renderHelper, viewerInput, this.bmdModel, this.textureHolder);
+                this.materialInstances[i].prepareToRender(renderHelper, viewerInput, this.materialInstanceState, this.bmdModel, this.textureHolder);
 
             // Use the root joint to calculate depth.
             const rootJoint = this.bmdModel.bmd.jnt1.joints[0];
