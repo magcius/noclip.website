@@ -61,6 +61,7 @@ class SceneDesc implements Viewer.SceneDesc {
                     }
 
                     const cmbRenderer = new CmbRenderer(device, textureHolder, cmb, cmb.name);
+                    cmbRenderer.whichTexture = 1;
 
                     const cmbBasename = firstCMB.name.split('.')[0];
                     const cmabFile = roomGar.files.find((file) => file.name === `${cmbBasename}.cmab`);

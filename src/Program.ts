@@ -182,7 +182,7 @@ ${rest}
         // XXX(jstpierre): Should we have refcounting in the program cache?
     }
 
-    private _editShader(n: 'vert' | 'frag') {
+    private _editShader(n: 'vert' | 'frag' | 'both') {
         const win = assertExists(window.open('about:blank', undefined, `location=off, resizable, alwaysRaised, left=20, top=20, width=1200, height=900`));
         const init = () => {
             const editor = new CodeEditor(win.document);
@@ -216,6 +216,10 @@ ${rest}
             init();
         else
             win.onload = init;
+    }
+
+    public editb() {
+        this._editShader('both');
     }
 
     public editv() {

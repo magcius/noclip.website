@@ -11,7 +11,9 @@ export interface VatrChunk {
     positionByteOffset: number;
     colorByteOffset: number;
     normalByteOffset: number;
-    textureCoordByteOffset: number;
+    texCoord0ByteOffset: number;
+    texCoord1ByteOffset: number;
+    texCoord2ByteOffset: number;
 }
 
 export const enum Version {
@@ -188,13 +190,6 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
             matricesOffs += 0x18;
         }
 
-        // Hack for Luigi's Mansion: use second texture binding
-        // TODO(jstpierre): Figure out how to blend these
-        if (cmb.version === Version.LuigisMansion) {
-            textureBindings[0] = textureBindings[1];
-            textureMatrices[0] = textureMatrices[1];
-        }
-
         const alphaTestEnable = !!view.getUint8(offs + 0x130);
         const alphaTestReference = alphaTestEnable ? (view.getUint8(offs + 0x131) / 0xFF) : -1;
 
@@ -289,7 +284,11 @@ function readVatrChunk(cmb: CMB, buffer: ArrayBufferSlice): void {
         const size = view.getUint32(idx + 0x00, true);
         const offs = view.getUint32(idx + 0x04, true);
         idx += 0x08;
-        return offs - baseOffs;
+
+        if (size === 0)
+            return -1;
+        else
+            return offs - baseOffs;
     }
 
     const baseOffs = readSlice();
@@ -298,13 +297,17 @@ function readVatrChunk(cmb: CMB, buffer: ArrayBufferSlice): void {
     const positionByteOffset = 0;
     const normalByteOffset = readSlice(baseOffs);
 
+    let tangentByteOffset = 0;
     if (cmb.version === Version.Majora || cmb.version === Version.LuigisMansion)
-        readSlice();
+        tangentByteOffset = readSlice(baseOffs);
 
     const colorByteOffset = readSlice(baseOffs);
-    const textureCoordByteOffset = readSlice(baseOffs);
+    const texCoord0ByteOffset = readSlice(baseOffs);
+    // TODO(jstpierre): Figure out how tex coords work, 'cuz this ain't it chief.
+    const texCoord1ByteOffset = -1; // readSlice(baseOffs);
+    const texCoord2ByteOffset = -1; // readSlice(baseOffs);
 
-    cmb.vatrChunk = { dataBuffer, positionByteOffset, normalByteOffset, colorByteOffset, textureCoordByteOffset };
+    cmb.vatrChunk = { dataBuffer, positionByteOffset, normalByteOffset, colorByteOffset, texCoord0ByteOffset, texCoord1ByteOffset, texCoord2ByteOffset };
 }
 
 export class Mesh {
@@ -369,6 +372,7 @@ export const enum SkinningMode {
     PER_VERTEX_NO_TRANS = 0x02,
 }
 
+// "Primitive Set"
 export interface Prms {
     prm: Prm;
     skinningMode: SkinningMode;
@@ -387,6 +391,8 @@ function readPrmsChunk(cmb: CMB, buffer: ArrayBufferSlice): Prms {
     const boneTableCount = view.getUint16(0x0E, true);
     const boneTable = new Uint16Array(boneTableCount);
 
+    // This is likely an array of primitives in the set, but 3DS models are probably
+    // rarely enough to over the bone table limit...
     const prmOffs = view.getUint32(0x14, true);
 
     const prm = readPrmChunk(cmb, buffer.slice(prmOffs));
@@ -416,17 +422,18 @@ export interface SepdVertexAttrib {
 export class Sepd {
     public prms: Prms[] = [];
 
-    public position: SepdVertexAttrib;
-    public normal: SepdVertexAttrib;
-    public color: SepdVertexAttrib;
-    public textureCoord: SepdVertexAttrib;
-    public unk0: SepdVertexAttrib;
-    public unk1: SepdVertexAttrib;
-    public unk2: SepdVertexAttrib;
-    public unk3: SepdVertexAttrib;
-    public unk4: SepdVertexAttrib;
+    public position!: SepdVertexAttrib;
+    public normal!: SepdVertexAttrib;
+    public tangent: SepdVertexAttrib | null = null;
+    public color!: SepdVertexAttrib;
+    public texCoord0!: SepdVertexAttrib;
+    public texCoord1!: SepdVertexAttrib;
+    public texCoord2!: SepdVertexAttrib;
+    public boneIndex!: SepdVertexAttrib;
+    public boneWeight!: SepdVertexAttrib;
 }
 
+// "Separate Data Shape"
 function readSepdChunk(cmb: CMB, buffer: ArrayBufferSlice): Sepd {
     const view = buffer.createDataView();
 
@@ -435,6 +442,7 @@ function readSepdChunk(cmb: CMB, buffer: ArrayBufferSlice): Sepd {
 
     const sepd = new Sepd();
 
+    // Probably OBB / position offset before the sepd arrays?
     let sepdArrIdx = cmb.version === Version.LuigisMansion ? 0x3C : 0x24;
 
     function readVertexAttrib(): SepdVertexAttrib {
@@ -455,15 +463,14 @@ function readSepdChunk(cmb: CMB, buffer: ArrayBufferSlice): Sepd {
     sepd.normal = readVertexAttrib();
 
     if (cmb.version === Version.Majora || cmb.version === Version.LuigisMansion)
-        sepd.unk0 = readVertexAttrib();
+        sepd.tangent = readVertexAttrib();
 
     sepd.color = readVertexAttrib();
-    sepd.textureCoord = readVertexAttrib();
-
-    sepd.unk1 = readVertexAttrib();
-    sepd.unk2 = readVertexAttrib();
-    sepd.unk3 = readVertexAttrib();
-    sepd.unk4 = readVertexAttrib();
+    sepd.texCoord0 = readVertexAttrib();
+    sepd.texCoord1 = readVertexAttrib();
+    sepd.texCoord2 = readVertexAttrib();
+    sepd.boneIndex = readVertexAttrib();
+    sepd.boneWeight = readVertexAttrib();
 
     // Two 16-bit values at 0x104.
     sepdArrIdx += 0x04;

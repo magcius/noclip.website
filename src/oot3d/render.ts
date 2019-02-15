@@ -8,7 +8,7 @@ import * as Viewer from '../viewer';
 import { DeviceProgram, DeviceProgramReflection } from '../Program';
 import AnimationController from '../AnimationController';
 import { mat4 } from 'gl-matrix';
-import { GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler, GfxDevice, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxProgram, GfxHostAccessPass, GfxRenderPass, GfxTextureDimension, GfxInputState, GfxInputLayout } from '../gfx/platform/GfxPlatform';
+import { GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler, GfxDevice, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxHostAccessPass, GfxRenderPass, GfxTextureDimension, GfxInputState, GfxInputLayout } from '../gfx/platform/GfxPlatform';
 import { fillMatrix4x4, fillVec4, fillColor, fillMatrix4x3 } from '../gfx/helpers/UniformBufferHelpers';
 import { colorNew, colorFromRGBA } from '../Color';
 import { getTextureFormatName } from './pica_texture';
@@ -23,6 +23,7 @@ import { Camera } from '../Camera';
 // @ts-ignore
 // This feature is provided by Parcel.
 import { readFileSync } from 'fs';
+import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 
 function surfaceToCanvas(textureLevel: CMB.TextureLevel): HTMLCanvasElement {
     const canvas = document.createElement("canvas");
@@ -72,8 +73,10 @@ class OoT3D_Program extends DeviceProgram {
 
     public static a_Position = 0;
     public static a_Normal = 1;
-    public static a_Color = 2;
-    public static a_TexCoord = 3;
+    public static a_Color = 3;
+    public static a_TexCoord0 = 4;
+    public static a_TexCoord1 = 5;
+    public static a_TexCoord2 = 6;
 
     public static program = readFileSync('src/oot3d/program.glsl', { encoding: 'utf8' });
     public static programReflection: DeviceProgramReflection = DeviceProgram.parseReflectionDefinitions(OoT3D_Program.program);
@@ -94,7 +97,7 @@ const scratchMatrix = mat4.create();
 const scratchColor = colorNew(0, 0, 0, 1);
 
 class MaterialInstance {
-    private textureMappings: TextureMapping[] = nArray(1, () => new TextureMapping());
+    private textureMappings: TextureMapping[] = nArray(3, () => new TextureMapping());
     private gfxSamplers: GfxSampler[] = [];
     private colorAnimators: CMAB.ColorAnimator[] = [];
     private srtAnimators: CMAB.TextureAnimator[] = [];
@@ -112,7 +115,6 @@ class MaterialInstance {
         this.templateRenderInst.setMegaStateFlags(this.material.renderFlags);
 
         for (let i = 0; i < this.material.textureBindings.length; i++) {
-            if (i >= 1) break;
             const binding = this.material.textureBindings[i];
             if (binding.textureIdx < 0)
                 continue;
@@ -168,14 +170,16 @@ class MaterialInstance {
             }
             offs += fillColor(mapped, offs, scratchColor);
 
-            if (this.srtAnimators[0]) {
-                this.srtAnimators[0].calcTexMtx(scratchMatrix);
-            } else {
-                mat4.identity(scratchMatrix);
+            for (let i = 0; i < 3; i++) {
+                if (this.srtAnimators[i]) {
+                    this.srtAnimators[i].calcTexMtx(scratchMatrix);
+                    mat4.mul(scratchMatrix, this.material.textureMatrices[i], scratchMatrix);
+                } else {
+                    mat4.copy(scratchMatrix, this.material.textureMatrices[i]);
+                }
+                offs += fillMatrix4x3(mapped, offs, scratchMatrix);
             }
-            mat4.mul(scratchMatrix, this.material.textureMatrices[0], scratchMatrix);
 
-            offs += fillMatrix4x3(mapped, offs, scratchMatrix);
             offs += fillVec4(mapped, offs, this.material.alphaTestReference);
         }
     }
@@ -218,47 +222,54 @@ class ShapeInstance {
     private renderInsts: GfxRenderInst[] = [];
     private inputState: GfxInputState;
     private inputLayout: GfxInputLayout;
-    private zeroBuffer: GfxBuffer | null = null;
+    private perInstanceBuffer: GfxBuffer | null = null;
 
     constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, cmbContext: CmbContext, private sepd: CMB.Sepd, private materialInstance: MaterialInstance) {
-        const hostAccessPass = device.createHostAccessPass();
+        const vatr = cmbContext.vatrChunk;
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
 
-        const perInstanceBufferData = new Float32Array(16);
-        let zeroBufferWordOffset = 0;
-        const bindVertexAttrib = (location: number, size: number, normalized: boolean, vertexAttrib: CMB.SepdVertexAttrib) => {
+        const perInstanceBufferData = new Float32Array(32);
+        let perInstanceBufferWordOffset = 0;
+
+        const bindVertexAttrib = (location: number, size: number, normalized: boolean, bufferOffs: number, vertexAttrib: CMB.SepdVertexAttrib) => {
             const format = this.translateDataType(vertexAttrib.dataType, size, normalized);
-            if (vertexAttrib.mode === CMB.SepdVertexAttribMode.ARRAY) {
+            if (vertexAttrib.mode === CMB.SepdVertexAttribMode.ARRAY && bufferOffs >= 0) {
                 vertexAttributeDescriptors.push({ location, format, bufferIndex: 1 + location, bufferByteOffset: vertexAttrib.start, frequency: GfxVertexAttributeFrequency.PER_VERTEX });
             } else {
-                vertexAttributeDescriptors.push({ location, format, bufferIndex: 0, bufferByteOffset: zeroBufferWordOffset, frequency: GfxVertexAttributeFrequency.PER_INSTANCE });
-                perInstanceBufferData.set(vertexAttrib.constant, zeroBufferWordOffset);
-                zeroBufferWordOffset += 0x04;
+                vertexAttributeDescriptors.push({ location, format, bufferIndex: 0, bufferByteOffset: perInstanceBufferWordOffset * 0x04, frequency: GfxVertexAttributeFrequency.PER_INSTANCE });
+                perInstanceBufferData.set(vertexAttrib.constant, perInstanceBufferWordOffset);
+                perInstanceBufferWordOffset += 0x04;
             }
         };
 
-        bindVertexAttrib(OoT3D_Program.a_Position, 3, false, sepd.position);
-        bindVertexAttrib(OoT3D_Program.a_Normal, 3, true, sepd.normal);
-        bindVertexAttrib(OoT3D_Program.a_Color, 4, true, sepd.color);
-        bindVertexAttrib(OoT3D_Program.a_TexCoord, 2, false, sepd.textureCoord);
+        bindVertexAttrib(OoT3D_Program.a_Position,  3, false, vatr.positionByteOffset,  sepd.position);
+        bindVertexAttrib(OoT3D_Program.a_Normal,    3, true,  vatr.normalByteOffset,    sepd.normal);
+        // tangent
+        bindVertexAttrib(OoT3D_Program.a_Color,     4, true,  vatr.colorByteOffset,     sepd.color);
+        bindVertexAttrib(OoT3D_Program.a_TexCoord0, 2, false, vatr.texCoord0ByteOffset, sepd.texCoord0);
+        bindVertexAttrib(OoT3D_Program.a_TexCoord1, 2, false, vatr.texCoord1ByteOffset, sepd.texCoord1);
+        bindVertexAttrib(OoT3D_Program.a_TexCoord2, 2, false, vatr.texCoord2ByteOffset, sepd.texCoord2);
 
-        let zeroBufferBinding: GfxVertexBufferDescriptor | null = null;
-        if (zeroBufferWordOffset !== 0) {
-            this.zeroBuffer = device.createBuffer(zeroBufferWordOffset, GfxBufferUsage.VERTEX, GfxBufferFrequencyHint.STATIC);
-            zeroBufferBinding = { buffer: this.zeroBuffer, byteOffset: 0, byteStride: 0 };
-            hostAccessPass.uploadBufferData(this.zeroBuffer, 0, new Uint8Array(perInstanceBufferData.buffer));
+        let perInstanceBinding: GfxVertexBufferDescriptor | null = null;
+        if (perInstanceBufferWordOffset !== 0) {
+            this.perInstanceBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, new Uint8Array(perInstanceBufferData.buffer));
+            perInstanceBinding = { buffer: this.perInstanceBuffer, byteOffset: 0, byteStride: 0 };
         }
 
         const indexType = sepd.prms[0].prm.indexType;
         const indexBufferFormat = this.translateDataType(indexType, 1, false);
         this.inputLayout = device.createInputLayout({ vertexAttributeDescriptors, indexBufferFormat });
+
         this.inputState = device.createInputState(this.inputLayout, [
-            zeroBufferBinding,
-            { buffer: cmbContext.vertexBuffer, byteOffset: cmbContext.vatrChunk.positionByteOffset, byteStride: 0 },
-            { buffer: cmbContext.vertexBuffer, byteOffset: cmbContext.vatrChunk.normalByteOffset, byteStride: 0 },
-            { buffer: cmbContext.vertexBuffer, byteOffset: cmbContext.vatrChunk.colorByteOffset, byteStride: 0 },
-            { buffer: cmbContext.vertexBuffer, byteOffset: cmbContext.vatrChunk.textureCoordByteOffset, byteStride: 0 },
+            perInstanceBinding,
+            { buffer: cmbContext.vertexBuffer, byteOffset: vatr.positionByteOffset, byteStride: 0 },
+            { buffer: cmbContext.vertexBuffer, byteOffset: vatr.normalByteOffset, byteStride: 0 },
+            null, // tangent
+            { buffer: cmbContext.vertexBuffer, byteOffset: vatr.colorByteOffset, byteStride: 0 },
+            { buffer: cmbContext.vertexBuffer, byteOffset: vatr.texCoord0ByteOffset, byteStride: 0 },
+            { buffer: cmbContext.vertexBuffer, byteOffset: vatr.texCoord1ByteOffset, byteStride: 0 },
+            { buffer: cmbContext.vertexBuffer, byteOffset: vatr.texCoord2ByteOffset, byteStride: 0 },
         ], { buffer: cmbContext.indexBuffer, byteOffset: 0, byteStride: 0 });
 
         // Create our template render inst.
@@ -327,7 +338,7 @@ class ShapeInstance {
                 let offs = renderInst.getUniformBufferOffset(OoT3D_Program.ub_PrmParams);
                 const prmParamsMapped = prmParamsBuffer.mapBufferF32(offs, 16);
                 offs += fillMatrix4x3(prmParamsMapped, offs, scratchMatrix);
-                offs += fillVec4(prmParamsMapped, offs, this.sepd.position.scale, this.sepd.textureCoord.scale);
+                offs += fillVec4(prmParamsMapped, offs, this.sepd.position.scale, this.sepd.texCoord0.scale, this.sepd.texCoord1.scale, this.sepd.texCoord2.scale);
             }
         }
     }
@@ -335,8 +346,8 @@ class ShapeInstance {
     public destroy(device: GfxDevice): void {
         device.destroyInputLayout(this.inputLayout);
         device.destroyInputState(this.inputState);
-        if (this.zeroBuffer !== null)
-            device.destroyBuffer(this.zeroBuffer);
+        if (this.perInstanceBuffer !== null)
+            device.destroyBuffer(this.perInstanceBuffer);
     }
 }
 
@@ -346,6 +357,7 @@ export class CmbRenderer {
     public boneMatrices: mat4[] = [];
     public materialInstances: MaterialInstance[] = [];
     public shapeInstances: ShapeInstance[] = [];
+    public whichTexture: number = 0;
 
     private sceneParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_SceneParams`);
     private materialParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_MaterialParams`);
@@ -369,7 +381,7 @@ export class CmbRenderer {
     private createProgram(): void {
         const program = new OoT3D_Program();
         if (this.texturesEnabled)
-            program.defines.set('USE_TEXTURE', '1');
+            program.defines.set(`USE_TEXTURE_${this.whichTexture}`, '1');
         if (this.vertexColorsEnabled)
             program.defines.set('USE_VERTEX_COLOR', '1');
         this.templateRenderInst.setDeviceProgram(program);
@@ -379,7 +391,7 @@ export class CmbRenderer {
         // Standard GX binding model of three bind groups.
         const bindingLayouts: GfxBindingLayoutDescriptor[] = [
             { numUniformBuffers: 1, numSamplers: 0, }, // Scene
-            { numUniformBuffers: 1, numSamplers: 1, }, // Material
+            { numUniformBuffers: 1, numSamplers: 3, }, // Material
             { numUniformBuffers: 1, numSamplers: 0, }, // Packet
         ];
 
