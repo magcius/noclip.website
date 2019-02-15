@@ -75,7 +75,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
         const zar = zarBuffer.byteLength ? ZAR.parse(zarBuffer) : null;
 
-        const zsi = ZSI.parse(zsiBuffer);
+        const zsi = ZSI.parseScene(zsiBuffer);
         assert(zsi.rooms !== null);
         const roomFilenames = zsi.rooms.map((romPath) => {
             const filename = romPath.split('/').pop();
@@ -84,9 +84,11 @@ class SceneDesc implements Viewer.SceneDesc {
 
         return Progressable.all(roomFilenames.map((filename, i) => {
             return fetchData(filename, abortSignal).then((roomResult) => {
-                const zsi = ZSI.parse(roomResult);
-                assert(zsi.mesh !== null);
-                const roomRenderer = new RoomRenderer(device, textureHolder, zsi, filename, null);
+                const roomSetups = ZSI.parseRooms(roomResult);
+                // Pull out the first mesh we can find.
+                const mesh = roomSetups.find((roomSetup) => roomSetup.mesh !== null).mesh;
+                assert(mesh !== null);
+                const roomRenderer = new RoomRenderer(device, textureHolder, mesh, filename, null);
                 if (zar !== null) {
                     const cmabFile = zar.files.find((file) => file.name.startsWith(`ROOM${i}`) && file.name.endsWith('.cmab'));
                     if (cmabFile) {

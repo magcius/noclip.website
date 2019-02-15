@@ -524,9 +524,7 @@ export class RoomRenderer {
     public transparentMesh: CmbRenderer | null = null;
     public wMesh: CmbRenderer | null = null;
 
-    constructor(device: GfxDevice, public textureHolder: CtrTextureHolder, public zsi: ZSI.ZSI, public name: string, public wCmb: CMB.CMB) {
-        const mesh = zsi.mesh;
-
+    constructor(device: GfxDevice, public textureHolder: CtrTextureHolder, public mesh: ZSI.Mesh, public name: string, public wCmb: CMB.CMB) {
         if (mesh.opaque !== null)
             this.opaqueMesh = new CmbRenderer(device, textureHolder, mesh.opaque, `${name} Opaque`);
         if (mesh.transparent !== null)

@@ -1,21 +1,26 @@
 
 import * as CMB from './cmb';
 
-import { assert, readString } from '../util';
+import { assert, readString, hexdump } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
+import { vec3, mat4, quat } from 'gl-matrix';
 
 const enum Version {
     Ocarina, Majora
 }
 
-export class ZSI {
-    mesh: Mesh = null;
-    rooms: string[] = [];
-    collision: Collision;
+export class ZSIScene {
+    public rooms: string[] = [];
+}
+
+export class ZSIRoomSetup {
+    public actors: Actor[] = [];
+    public mesh: Mesh;
 }
 
 // Subset of Z64 command types.
 const enum HeaderCommands {
+    Actor = 0x01,
     Collision = 0x03,
     Rooms = 0x04,
     Mesh = 0x0A,
@@ -28,8 +33,38 @@ export interface Mesh {
     transparent: CMB.CMB | null;
 }
 
+export interface Actor {
+    actorId: number;
+    modelMatrix: mat4;
+    variable: number;
+}
+
+function readActors(version: Version, buffer: ArrayBufferSlice, nActors: number, offs: number): Actor[] {
+    const view = buffer.createDataView();
+    const actors: Actor[] = [];
+    let actorTableIdx = offs;
+
+    const q = quat.create();
+    for (let i = 0; i < nActors; i++) {
+        const actorId = view.getUint16(actorTableIdx + 0x00, true);
+        const positionX = view.getInt16(actorTableIdx + 0x02, true);
+        const positionY = view.getInt16(actorTableIdx + 0x04, true);
+        const positionZ = view.getInt16(actorTableIdx + 0x06, true);
+        const rotationX = view.getInt16(actorTableIdx + 0x08, true) / 0x7FFF;
+        const rotationY = view.getInt16(actorTableIdx + 0x0A, true) / 0x7FFF;
+        const rotationZ = view.getInt16(actorTableIdx + 0x0E, true) / 0x7FFF;
+        const variable = view.getUint16(actorTableIdx + 0x0C, true);
+        const modelMatrix = mat4.create();
+        quat.fromEuler(q, rotationX * 180, rotationY * 180, rotationZ * 180);
+        mat4.fromRotationTranslation(modelMatrix, q, [positionX, positionY, positionZ]);
+        actors.push({ actorId, modelMatrix, variable });
+        actorTableIdx += 0x10;
+    }
+    return actors;
+}
+
 function readRooms(version: Version, buffer: ArrayBufferSlice, nRooms: number, offs: number): string[] {
-    const rooms = [];
+    const rooms: string[] = [];
     const roomSize = version === Version.Ocarina ? 0x44 : 0x34;
     for (let i = 0; i < nRooms; i++) {
         rooms.push(readString(buffer, offs, roomSize));
@@ -61,82 +96,25 @@ function readMesh(buffer: ArrayBufferSlice, offs: number): Mesh {
     return { opaque, transparent };
 }
 
-interface Collision {
-    waterboxes: Uint16Array;
-}
-
-function readCollision(buffer: ArrayBufferSlice, offs: number): Collision {
-    const view = buffer.createDataView();
-    const waterboxTableCount = view.getUint16(offs + 0x14, true);
-    const waterboxTableOffs = view.getUint32(offs + 0x28, true);
-    const waterboxes = new Uint16Array(waterboxTableCount * 3 * 4);
-    let waterboxTableIdx = waterboxTableOffs;
-    for (let i = 0; i < waterboxTableCount; i++) {
-        const x = view.getInt16(waterboxTableIdx + 0x00, true);
-        const y = view.getInt16(waterboxTableIdx + 0x02, true);
-        const z = view.getInt16(waterboxTableIdx + 0x04, true);
-        const sx = view.getInt16(waterboxTableIdx + 0x06, true);
-        const sz = view.getInt16(waterboxTableIdx + 0x08, true);
-        waterboxes[i*3*4+0] = x;
-        waterboxes[i*3*4+1] = y;
-        waterboxes[i*3*4+2] = z;
-        waterboxes[i*3*4+3] = x + sx;
-        waterboxes[i*3*4+4] = y;
-        waterboxes[i*3*4+5] = z;
-        waterboxes[i*3*4+6] = x;
-        waterboxes[i*3*4+7] = y;
-        waterboxes[i*3*4+8] = z + sz;
-        waterboxes[i*3*4+9] = x + sx;
-        waterboxes[i*3*4+10] = y;
-        waterboxes[i*3*4+11] = z + sz;
-        waterboxTableIdx += 0x10;
-    }
-
-    return { waterboxes };
-}
-
 // ZSI headers are a slight modification of the original Z64 headers.
-function readHeaders(version: Version, buffer: ArrayBufferSlice, offs: number = 0): ZSI {
+function readSceneHeaders(version: Version, buffer: ArrayBufferSlice, offs: number = 0): ZSIScene {
     const view = buffer.createDataView();
-
-    const zsi = new ZSI();
+    const zsi = new ZSIScene();
 
     while (true) {
-        const cmd1 = view.getUint32(offs, false);
-        const cmd2 = view.getUint32(offs + 4, true);
-        offs += 8;
+        const cmd1 = view.getUint32(offs + 0x00, false);
+        const cmd2 = view.getUint32(offs + 0x04, true);
+        offs += 0x08;
 
-        const cmdType = cmd1 >> 24;
+        const cmdType = cmd1 >>> 24;
 
         if (cmdType == HeaderCommands.End)
             break;
 
         switch (cmdType) {
-        case HeaderCommands.MultiSetup: {
-            const nSetups = (cmd1 >> 16) & 0xFF;
-            let setupIdx = cmd2;
-            // Pick the first usable setup.
-            for (let i = 0; i < nSetups; i++) {
-                const setupOffs = view.getUint32(setupIdx, true);
-                setupIdx += 0x04;
-                if (setupOffs === 0)
-                    continue;
-                const setupZsi = readHeaders(version, buffer, setupOffs);
-                if (setupZsi.rooms.length || setupZsi.mesh !== null)
-                    return setupZsi;
-            }
-            // Still setups to try after this command.
-            break;
-        }
         case HeaderCommands.Rooms:
-            const nRooms = (cmd1 >> 16) & 0xFF;
+            const nRooms = (cmd1 >>> 16) & 0xFF;
             zsi.rooms = readRooms(version, buffer, nRooms, cmd2);
-            break;
-        case HeaderCommands.Mesh:
-            zsi.mesh = readMesh(buffer, cmd2);
-            break;
-        case HeaderCommands.Collision:
-            zsi.collision = readCollision(buffer, cmd2);
             break;
         }
     }
@@ -144,7 +122,7 @@ function readHeaders(version: Version, buffer: ArrayBufferSlice, offs: number = 
     return zsi;
 }
 
-export function parse(buffer: ArrayBufferSlice): ZSI {
+export function parseScene(buffer: ArrayBufferSlice): ZSIScene {
     const magic = readString(buffer, 0x00, 0x04);
     assert(['ZSI\x01', 'ZSI\x09'].includes(magic));
     const version = magic === 'ZSI\x01' ? Version.Ocarina : Version.Majora;
@@ -152,5 +130,64 @@ export function parse(buffer: ArrayBufferSlice): ZSI {
 
     // ZSI header is done. It's that simple! Now for the actual data.
     const headersBuf = buffer.slice(0x10);
-    return readHeaders(version, headersBuf);
+    return readSceneHeaders(version, headersBuf);
+}
+
+// ZSI headers are a slight modification of the original Z64 headers.
+function readRoomHeaders(version: Version, buffer: ArrayBufferSlice, offs: number = 0): ZSIRoomSetup[] {
+    const view = buffer.createDataView();
+    const roomSetups: ZSIRoomSetup[] = [];
+
+    const mainSetup = new ZSIRoomSetup();
+    roomSetups.push(mainSetup);
+
+    while (true) {
+        const cmd1 = view.getUint32(offs + 0x00, false);
+        const cmd2 = view.getUint32(offs + 0x04, true);
+        offs += 0x08;
+
+        const cmdType = cmd1 >>> 24;
+
+        if (cmdType == HeaderCommands.End)
+            break;
+
+        switch (cmdType) {
+        case HeaderCommands.MultiSetup: {
+            const nSetups = (cmd1 >>> 16) & 0xFF;
+            let setupIdx = cmd2;
+            // Pick the first usable setup.
+            for (let i = 0; i < nSetups; i++) {
+                const setupOffs = view.getUint32(setupIdx, true);
+                setupIdx += 0x04;
+                if (setupOffs === 0)
+                    continue;
+                const subsetups = readRoomHeaders(version, buffer, setupOffs);
+                assert(subsetups.length === 1);
+                roomSetups.push(subsetups[0]);
+            }
+            // Still setups to try after this command.
+            break;
+        }
+        case HeaderCommands.Actor:
+            const nActors = (cmd1 >>> 16) & 0xFF;
+            mainSetup.actors = readActors(version, buffer, nActors, cmd2);
+            break;
+        case HeaderCommands.Mesh:
+            mainSetup.mesh = readMesh(buffer, cmd2);
+            break;
+        }
+    }
+
+    return roomSetups;
+}
+
+export function parseRooms(buffer: ArrayBufferSlice): ZSIRoomSetup[] {
+    const magic = readString(buffer, 0x00, 0x04);
+    assert(['ZSI\x01', 'ZSI\x09'].includes(magic));
+    const version = magic === 'ZSI\x01' ? Version.Ocarina : Version.Majora;
+    const name = readString(buffer, 0x04, 0x0C);
+
+    // ZSI header is done. It's that simple! Now for the actual data.
+    const headersBuf = buffer.slice(0x10);
+    return readRoomHeaders(version, headersBuf);
 }
