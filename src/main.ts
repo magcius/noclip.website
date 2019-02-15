@@ -61,6 +61,8 @@ import { vec3, mat4 } from 'gl-matrix';
 import { GlobalSaveManager, SaveStateLocation } from './SaveManager';
 import { RenderStatistics } from './RenderStatistics';
 import { gfxDeviceGetImpl, createSwapChainForWebGL2 } from './gfx/platform/GfxPlatformWebGL2';
+import { Color } from './Color';
+import { standardFullClearRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
 
 const sceneGroups = [
     "Wii",
@@ -729,6 +731,11 @@ ${message}
                 downloadBuffer(filename, new ArrayBufferSlice(zipBuffer), 'application/zip');
             });
         }
+    }
+
+    // Hooks for people who want to mess with stuff.
+    public getStandardClearColor(): Color {
+        return standardFullClearRenderPassDescriptor.colorClearColor;
     }
 }
 
