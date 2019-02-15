@@ -833,19 +833,21 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             const konstAlphaSel: GX.KonstAlphaSel = view.getUint8(materialEntryIdx + 0xAC + j);
 
             // SetTevSwapMode
-            const tevSwapModeIndex = view.getUint16(materialEntryIdx + 0x0E4 + j * 0x02);
+            const tevSwapModeIndex = view.getUint16(materialEntryIdx + 0x104 + j * 0x02);
             const tevSwapModeRasSel = view.getUint8(tevSwapModeInfoOffs + tevSwapModeIndex * 0x04 + 0x00);
             const tevSwapModeTexSel = view.getUint8(tevSwapModeInfoOffs + tevSwapModeIndex * 0x04 + 0x01);
+            const tevSwapModeTableRasIndex = view.getUint16(materialEntryIdx + 0x124 + tevSwapModeRasSel * 0x02);
+            const tevSwapModeTableTexIndex = view.getUint16(materialEntryIdx + 0x124 + tevSwapModeTexSel * 0x02);
             const rasSwapTable: GX.TevColorChan[] = [GX.TevColorChan.R, GX.TevColorChan.G, GX.TevColorChan.B, GX.TevColorChan.A];
-            rasSwapTable[0] = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeRasSel * 0x04 + 0x00);
-            rasSwapTable[1] = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeRasSel * 0x04 + 0x01);
-            rasSwapTable[2] = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeRasSel * 0x04 + 0x02);
-            rasSwapTable[3] = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeRasSel * 0x04 + 0x03);
+            rasSwapTable[0] = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTableRasIndex * 0x04 + 0x00);
+            rasSwapTable[1] = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTableRasIndex * 0x04 + 0x01);
+            rasSwapTable[2] = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTableRasIndex * 0x04 + 0x02);
+            rasSwapTable[3] = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTableRasIndex * 0x04 + 0x03);
             const texSwapTable: GX.TevColorChan[] = [GX.TevColorChan.R, GX.TevColorChan.G, GX.TevColorChan.B, GX.TevColorChan.A];
-            texSwapTable[0] = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTexSel * 0x04 + 0x00);
-            texSwapTable[1] = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTexSel * 0x04 + 0x01);
-            texSwapTable[2] = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTexSel * 0x04 + 0x02);
-            texSwapTable[3] = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTexSel * 0x04 + 0x03);
+            texSwapTable[0] = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTableTexIndex * 0x04 + 0x00);
+            texSwapTable[1] = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTableTexIndex * 0x04 + 0x01);
+            texSwapTable[2] = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTableTexIndex * 0x04 + 0x02);
+            texSwapTable[3] = view.getUint8(tevSwapModeTableInfoOffset + tevSwapModeTableTexIndex * 0x04 + 0x03);
 
             // SetTevIndirect
             const indTexStageOffs = indirectEntryOffs + 0x04 + (0x04 * 4) + (0x1C * 3) + (0x04 * 4) + j * 0x0C;
