@@ -113,9 +113,16 @@ export class AABB {
     }
 
     public extents(v: vec3): void {
-        v[0] = (this.maxX - this.minX);
-        v[1] = (this.maxY - this.minY);
-        v[2] = (this.maxZ - this.minZ);
+        v[0] = (this.maxX - this.minX) / 2;
+        v[1] = (this.maxY - this.minY) / 2;
+        v[2] = (this.maxZ - this.minZ) / 2;
+    }
+
+    public boundingSphereRadius(): number {
+        const extX = (this.maxX - this.minX) / 2;
+        const extY = (this.maxY - this.minY) / 2;
+        const extZ = (this.maxZ - this.minZ) / 2;
+        return Math.max(extX, extY, extZ);
     }
 
     public isEmpty(): boolean {

@@ -328,13 +328,34 @@ export interface JNT1 {
     joints: Joint[];
 }
 
-const quatScratch = quat.create();
-const vec3Scratch1 = vec3.create();
-const vec3Scratch2 = vec3.create();
-function createJointMatrix(m: mat4, sx: number, sy: number, sz: number, rx: number, ry: number, rz: number, tx: number, ty: number, tz: number): void {
-    quat.fromEuler(quatScratch, rx, ry, rz);
-    const _t1 = vec3Scratch1, _t2 = vec3Scratch2;
-    mat4.fromRotationTranslationScale(m, quatScratch, vec3.set(_t1, tx, ty, tz), vec3.set(_t2, sx, sy, sz));
+function calcModelMtx(dst: mat4, scaleX: number, scaleY: number, scaleZ: number, rotationX: number, rotationY: number, rotationZ: number, translationX: number, translationY: number, translationZ: number): void {
+    const rX = Math.PI / 180 * rotationX;
+    const rY = Math.PI / 180 * rotationY;
+    const rZ = Math.PI / 180 * rotationZ;
+
+    const sinX = Math.sin(rX), cosX = Math.cos(rX);
+    const sinY = Math.sin(rY), cosY = Math.cos(rY);
+    const sinZ = Math.sin(rZ), cosZ = Math.cos(rZ);
+
+    dst[0] =  scaleX * (cosY * cosZ);
+    dst[1] =  scaleX * (sinZ * cosY);
+    dst[2] =  scaleX * (-sinY);
+    dst[3] =  0.0;
+
+    dst[4] =  scaleY * (sinX * cosZ * sinY - cosX * sinZ);
+    dst[5] =  scaleY * (sinX * sinZ * sinY + cosX * cosZ);
+    dst[6] =  scaleY * (sinX * cosY);
+    dst[7] =  0.0;
+
+    dst[8] =  scaleZ * (cosX * cosZ * sinY + sinX * sinZ);
+    dst[9] =  scaleZ * (cosX * sinZ * sinY - sinX * cosZ);
+    dst[10] = scaleZ * (cosY * cosX);
+    dst[11] = 0.0;
+
+    dst[12] = translationX;
+    dst[13] = translationY;
+    dst[14] = translationZ;
+    dst[15] = 1.0;
 }
 
 function readJNT1Chunk(buffer: ArrayBufferSlice): JNT1 {
@@ -375,7 +396,7 @@ function readJNT1Chunk(buffer: ArrayBufferSlice): JNT1 {
         const bboxMaxZ = view.getFloat32(jointDataTableIdx + 0x3C);
         const bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
         const matrix = mat4.create();
-        createJointMatrix(matrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+        calcModelMtx(matrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
         joints.push({ name, matrix, scaleX, scaleY, scaleZ, boundingSphereRadius, bbox });
     }
 
@@ -404,6 +425,7 @@ export interface Shape {
     loadedVertexLayout: LoadedVertexLayout;
     packets: Packet[];
     bbox: AABB;
+    boundingSphereRadius: number;
 }
 
 export interface SHP1 {
@@ -507,7 +529,7 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
         const bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
 
         // Now we should have a complete shape. Onto the next!
-        shapes.push({ displayFlags, loadedVertexLayout, packets, bbox });
+        shapes.push({ displayFlags, loadedVertexLayout, packets, bbox, boundingSphereRadius });
 
         shapeIdx += 0x28;
     }
@@ -1719,7 +1741,7 @@ export class ANK1Animator {
         const translationX = sampleAnimationData(entry.translationX, animFrame);
         const translationY = sampleAnimationData(entry.translationY, animFrame);
         const translationZ = sampleAnimationData(entry.translationZ, animFrame);
-        createJointMatrix(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+        calcModelMtx(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
         return true;
     }
 }

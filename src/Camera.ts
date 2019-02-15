@@ -176,24 +176,17 @@ export class ScreenSpaceProjection {
 
 /**
  * Computes the area, in screen space (normalized screen space from 0 to 1), that
- * world-space AABB @param aabb will take up when viewed by @param camera.
+ * a sphere in world-space coordinates with parameters @param center and @param radius
+ * will take up when viewed by @param camera.
  */
-export function computeScreenSpaceProjectionFromWorldSpaceAABB(screenSpaceProjection: ScreenSpaceProjection, camera: Camera, aabb: AABB, v: vec3 = scratchVec3, v4: vec4 = scratchVec4): void {
+export function computeScreenSpaceProjectionFromWorldSpaceSphere(screenSpaceProjection: ScreenSpaceProjection, camera: Camera, center: vec3, radius: number, v: vec3 = scratchVec3, v4: vec4 = scratchVec4): void {
     screenSpaceProjection.reset();
 
-    // Compute the largest bounds (what radius a bounding sphere would have).
-    const extX = aabb.maxX - aabb.minX;
-    const extY = aabb.maxY - aabb.minY;
-    const extZ = aabb.maxZ - aabb.minZ;
-    const radius = Math.max(extX, extY, extZ);
-
-    // Compute view-space center.
-    aabb.centerPoint(v);
-    vec3.transformMat4(v, v, camera.viewMatrix);
+    vec3.transformMat4(v, center, camera.viewMatrix);
 
     v[2] = -Math.max(Math.abs(v[2] - radius), camera.frustum.near);
 
-    const [viewCenterX, viewCenterY, viewCenterZ] = v;
+    const viewCenterX = v[0], viewCenterY = v[1], viewCenterZ = v[2];
 
     // Compute the corners of screen-space square that encloses the sphere.
     for (let xs = -1; xs <= 1; xs += 2) {
@@ -204,6 +197,19 @@ export function computeScreenSpaceProjectionFromWorldSpaceAABB(screenSpaceProjec
             screenSpaceProjection.union(v4[0], v4[1]);
         }
     }
+}
+
+/**
+ * Computes the area, in screen space (normalized screen space from 0 to 1), that
+ * world-space AABB @param aabb will take up when viewed by @param camera.
+ */
+export function computeScreenSpaceProjectionFromWorldSpaceAABB(screenSpaceProjection: ScreenSpaceProjection, camera: Camera, aabb: AABB, v: vec3 = scratchVec3, v4: vec4 = scratchVec4): void {
+    const radius = aabb.boundingSphereRadius();
+
+    // Compute view-space center.
+    aabb.centerPoint(v);
+
+    return computeScreenSpaceProjectionFromWorldSpaceSphere(screenSpaceProjection, camera, v, radius, v, v4);
 }
 
 export interface CameraController {

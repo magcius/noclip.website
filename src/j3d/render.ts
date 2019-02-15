@@ -399,6 +399,8 @@ export class BMDModel {
     public shapeData: ShapeData[] = [];
     public hasBillboard: boolean;
 
+    public bbox = new AABB();
+
     constructor(
         device: GfxDevice,
         renderHelper: GXRenderHelperGfx,
@@ -416,14 +418,18 @@ export class BMDModel {
             for (const packet of shape.packets)
                 loadedVertexDatas.push(packet.loadedVertexData);
         this.bufferCoalescer = loadedDataCoalescerGfx(device, loadedVertexDatas);
-        this.shapeData = bmd.shp1.shapes.map((shape, i) => {
-            return new ShapeData(device, renderHelper, shape, this.bufferCoalescer.coalescedBuffers);
-        });
 
-        // Look for billboards.
-        for (const shape of bmd.shp1.shapes) {
-            if (shape.displayFlags === ShapeDisplayFlags.BILLBOARD || shape.displayFlags === ShapeDisplayFlags.Y_BILLBOARD)
+        for (let i = 0; i < bmd.shp1.shapes.length; i++) {
+            const shp1 = bmd.shp1.shapes[i];
+
+            // Compute overall bbox.
+            this.bbox.union(this.bbox, shp1.bbox);
+
+            // Look for billboards.
+            if (shp1.displayFlags === ShapeDisplayFlags.BILLBOARD || shp1.displayFlags === ShapeDisplayFlags.Y_BILLBOARD)
                 this.hasBillboard = true;
+
+            this.shapeData.push(new ShapeData(device, renderHelper, shp1, this.bufferCoalescer.coalescedBuffers));
         }
 
         // Load scene graph.
@@ -733,13 +739,6 @@ export class BMDModelInstance {
                 // You *cannot* use PARTIAL_INTERSECTION to optimize frustum culling.
                 bboxScratch.transform(jnt1.joints[jointIndex].bbox, dstJointMatrix);
                 this.jointVisibility[jointIndex] = camera.frustum.contains(bboxScratch);
-
-                if (this.jointVisibility[jointIndex]) {
-                    // Compute screen-space projection and cull based on that.
-                    computeScreenSpaceProjectionFromWorldSpaceAABB(screenProjectionScratch, camera, bboxScratch);
-                    // TODO(jstpierre): make configurable?
-                    this.jointVisibility[jointIndex] = screenProjectionScratch.getScreenArea() >= 0.0003;
-                }
             }
 
             for (let i = 0; i < node.children.length; i++)
