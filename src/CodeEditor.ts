@@ -108,7 +108,6 @@ class NumberDragger {
 
     private _toplevel: HTMLElement;
     private _segments: NumberDraggerSeg[];
-    private _incr: HTMLElement;
     private _anchorMouseX: number;
     private _anchorValue: number;
     private _value: number;
@@ -314,7 +313,6 @@ export default class CodeEditor {
     private _syntaxRuns: SyntaxRun[];
     private _textareaStyle: CSSStyleDeclaration;
     private _draggableNumbers: Range[];
-    private _value: string;
     private _valueChanged: boolean;
     private _redraw_cursorPosition: number;
     private _redraw_cursorBlinkStart: number;
@@ -324,8 +322,6 @@ export default class CodeEditor {
     private _dragging: string;
     private _dragStartIdx: number;
     private _draggingNumber: { start: number; end: number; value: number; };
-    private _dragStartY: number;
-    private _dragStartX: number;
 
     constructor(private _document: HTMLDocument) {
         this.onvaluechanged = null;
@@ -616,9 +612,6 @@ export default class CodeEditor {
         } else {
             const { idx } = this._rowColToLineIdx(row, col, true);
             this._textarea.focus();
-
-            this._dragStartX = e.clientX;
-            this._dragStartY = e.clientY;
 
             const { idx: exactIdx } = this._rowColToLineIdx(row, col, false);
             const draggableNumber = this._findDraggableNumber(exactIdx);
