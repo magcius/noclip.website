@@ -128,10 +128,9 @@ export function computeViewSpaceDepthFromWorldSpacePoint(camera: Camera, v: vec3
 }
 
 export function divideByW(dst: vec4, src: vec4): void {
-    const [x, y, z, w] = src;
-    dst[0] = x / w;
-    dst[1] = y / w;
-    dst[2] = z / w;
+    dst[0] = src[0] / src[3];
+    dst[1] = src[1] / src[3];
+    dst[2] = src[2] / src[3];
     dst[3] = 1.0;
 }
 
