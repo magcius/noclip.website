@@ -57,14 +57,16 @@ export class MultiRoomScene extends BasicRendererHelper implements Viewer.SceneG
     }
 }
 
+const pathBase = `oot3d`;
+
 class SceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
 
     public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         // Fetch the ZAR & info ZSI.
-        const path_zar = `oot3d/${this.id}.zar`;
-        const path_info_zsi = `oot3d/${this.id}_info.zsi`;
+        const path_zar = `${pathBase}/scene/${this.id}.zar`;
+        const path_info_zsi = `${pathBase}/scene/${this.id}_info.zsi`;
         return Progressable.all([fetchData(path_zar, abortSignal), fetchData(path_info_zsi, abortSignal)]).then(([zar, zsi]) => {
             return this._createSceneFromData(device, abortSignal, zar, zsi);
         });
@@ -79,7 +81,7 @@ class SceneDesc implements Viewer.SceneDesc {
         assert(zsi.rooms !== null);
         const roomFilenames = zsi.rooms.map((romPath) => {
             const filename = romPath.split('/').pop();
-            return `oot3d/${filename}`;
+            return `${pathBase}/scene/${filename}`;
         });
 
         return Progressable.all(roomFilenames.map((filename, i) => {
@@ -97,7 +99,7 @@ class SceneDesc implements Viewer.SceneDesc {
                         roomRenderer.bindCMAB(cmab);
                     }
                 }
-                return new Progressable(Promise.resolve(roomRenderer));
+                return roomRenderer;
             });
         })).then((scenes: RoomRenderer[]) => {
             return new MultiRoomScene(device, scenes, textureHolder);
@@ -223,7 +225,6 @@ const sceneDescs = [
     new SceneDesc("ganon_boss", "Second-To-Last Boss Ganondorf"),
     new SceneDesc("ganon_demo", "Final Battle Against Ganon"),
     new SceneDesc("ganon_final", "Ganondorf's Death"),
-
 ];
 
 export const sceneGroup: SceneGroup = { id, name, sceneDescs };
