@@ -417,6 +417,8 @@ export class CmbData {
     }
 
     public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.sepdData.length; i++)
+            this.sepdData[i].destroy(device);
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.indexBuffer);
     }
