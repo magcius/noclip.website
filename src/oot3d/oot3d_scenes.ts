@@ -92,7 +92,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 assert(mesh !== null);
                 const roomRenderer = new RoomRenderer(device, textureHolder, mesh, filename);
                 if (zar !== null) {
-                    const cmabFile = zar.files.find((file) => file.name.startsWith(`ROOM${i}`) && file.name.endsWith('.cmab'));
+                    const cmabFile = zar.files.find((file) => file.name.startsWith(`ROOM${i}`) && file.name.endsWith('.cmab') && !file.name.endsWith('_t.cmab'));
                     if (cmabFile) {
                         const cmab = CMAB.parse(CMB.Version.Ocarina, cmabFile.buffer);
                         textureHolder.addTextures(device, cmab.textures);
