@@ -1,7 +1,7 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { Version, calcModelMtx, Bone } from "./cmb";
-import { assert, readString, align } from "../util";
+import { assert, readString, align, assertExists } from "../util";
 import AnimationController from "../AnimationController";
 import { mat4 } from "gl-matrix";
 import { getPointHermite } from "../Spline";
@@ -285,7 +285,7 @@ function sampleAnimationTrack(track: AnimationTrack, frame: number): number {
         throw "whoops";
 }
 
-export function calcBoneMatrix(dst: mat4, animationController: AnimationController, csab: CSAB | null, bone: Bone): void {
+export function calcBoneMatrix(dst: mat4, animationController: AnimationController | null, csab: CSAB | null, bone: Bone): void {
     let node: AnimationNode | null = null;
     if (csab !== null) {
         const animIndex = csab.boneToAnimationTable[bone.boneId];
@@ -304,7 +304,7 @@ export function calcBoneMatrix(dst: mat4, animationController: AnimationControll
     let translationZ = bone.translationZ;
 
     if (node !== null) {
-        const frame = animationController.getTimeInFrames();
+        const frame = assertExists(animationController).getTimeInFrames();
         const animFrame = getAnimFrame(csab, frame);
 
         if (node.scaleX !== null) scaleX = sampleAnimationTrack(node.scaleX, animFrame);

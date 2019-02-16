@@ -63,7 +63,7 @@ class SceneDesc implements Viewer.SceneDesc {
                     // wCmb = CMB.parse(wCmbFile.buffer);
                 }
 
-                const roomRenderer = new RoomRenderer(device, textureHolder, mesh, filename, wCmb);
+                const roomRenderer = new RoomRenderer(device, textureHolder, mesh, filename);
 
                 const cmabFile = ZAR.findFile(zar, `${roomNameBase}.cmab`);
                 if (cmabFile !== null) {

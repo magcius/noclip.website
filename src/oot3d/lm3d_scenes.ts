@@ -10,7 +10,7 @@ import * as CTXB from './ctxb';
 import * as Viewer from '../viewer';
 
 import Progressable from '../Progressable';
-import { CmbRenderer } from './render';
+import { CmbRenderer, CmbData } from './render';
 import { SceneGroup } from '../viewer';
 import { fetchData } from '../fetch';
 import { leftPad } from '../util';
@@ -39,6 +39,7 @@ class SceneDesc implements Viewer.SceneDesc {
             const roomInfoFile = jmpGar.files.find((file) => file.name === 'RoomInfo.gseb');
             const roomInfo = BCSV.parse(roomInfoFile.buffer, true);
 
+            const renderer = new MultiCmbScene(device, textureHolder);
             const progressables: Progressable<CmbRenderer>[] = [];
             for (let i = 0; i < roomInfo.records.length; i++) {
                 progressables.push(fetchData(`${models_path}/room_${leftPad(''+i, 2, '0')}.gar`, abortSignal).then((outerRoomGarBuf) => {
@@ -60,8 +61,14 @@ class SceneDesc implements Viewer.SceneDesc {
                         textureHolder.addCTXB(device, ctxb);
                     }
 
-                    const cmbRenderer = new CmbRenderer(device, textureHolder, cmb, cmb.name);
+                    const cmbData = new CmbData(device, cmb);
+                    textureHolder.addTextures(device, cmb.textures);
+                    renderer.cmbData.push(cmbData);
+
+                    const cmbRenderer = new CmbRenderer(device, textureHolder, cmbData, cmb.name);
                     cmbRenderer.whichTexture = 1;
+                    cmbRenderer.addToViewRenderer(device, renderer.viewRenderer);
+                    renderer.cmbRenderers.push(cmbRenderer);
 
                     const cmbBasename = firstCMB.name.split('.')[0];
                     const cmabFile = roomGar.files.find((file) => file.name === `${cmbBasename}.cmab`);
@@ -70,14 +77,11 @@ class SceneDesc implements Viewer.SceneDesc {
                         textureHolder.addTextures(device, cmab.textures);
                         cmbRenderer.bindCMAB(cmab, 1);
                     }
-
-                    return cmbRenderer;
                 }));
             }
 
-            return Progressable.all(progressables).then((scenes) => {
-                scenes = scenes.filter(s => !!s);
-                return new MultiCmbScene(device, scenes, textureHolder);
+            return Progressable.all(progressables).then(() => {
+                return renderer;
             });
         });
     }

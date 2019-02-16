@@ -14,7 +14,7 @@ import { fillMatrix4x4, fillVec4, fillColor, fillMatrix4x3 } from '../gfx/helper
 import { colorNew, colorFromRGBA } from '../Color';
 import { getTextureFormatName } from './pica_texture';
 import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
-import { nArray, wordCountFromByteCount, assert } from '../util';
+import { nArray, assert } from '../util';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
 import { GfxRenderInstBuilder, GfxRenderInst, GfxRenderInstViewRenderer, GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderer';
 import { makeFormat, FormatFlags, FormatTypeFlags, FormatCompFlags } from '../gfx/platform/GfxPlatformFormat';
@@ -24,7 +24,7 @@ import { Camera } from '../Camera';
 // @ts-ignore
 // This feature is provided by Parcel.
 import { readFileSync } from 'fs';
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
+import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from '../gfx/helpers/BufferHelpers';
 import { getDebugOverlayCanvas2D, prepareFrameDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
 
 function surfaceToCanvas(textureLevel: CMB.TextureLevel): HTMLCanvasElement {
@@ -222,13 +222,31 @@ class MaterialInstance {
     }
 }
 
-class ShapeInstance {
-    private renderInsts: GfxRenderInst[] = [];
-    private inputState: GfxInputState;
-    private inputLayout: GfxInputLayout;
-    private perInstanceBuffer: GfxBuffer | null = null;
+function translateDataType(dataType: CMB.DataType, size: number, normalized: boolean): GfxFormat {
+    function translateDataTypeFlags(dataType: CMB.DataType) {
+        switch (dataType) {
+        case CMB.DataType.UByte: return FormatTypeFlags.U8;
+        case CMB.DataType.UShort: return FormatTypeFlags.U16;
+        case CMB.DataType.UInt: return FormatTypeFlags.U32;
+        case CMB.DataType.Byte: return FormatTypeFlags.S8;
+        case CMB.DataType.Short: return FormatTypeFlags.S16;
+        case CMB.DataType.Int: return FormatTypeFlags.S32;
+        case CMB.DataType.Float: return FormatTypeFlags.F32;
+        }
+    }
 
-    constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, cmbContext: CmbContext, private sepd: CMB.Sepd, private materialInstance: MaterialInstance) {
+    const formatTypeFlags = translateDataTypeFlags(dataType);
+    const formatCompFlags = size as FormatCompFlags;
+    const formatFlags = normalized ? FormatFlags.NORMALIZED : FormatFlags.NONE;
+    return makeFormat(formatTypeFlags, formatCompFlags, formatFlags);
+}
+
+class SepdData {
+    private perInstanceBuffer: GfxBuffer | null = null;
+    public inputState: GfxInputState;
+    public inputLayout: GfxInputLayout;
+
+    constructor(device: GfxDevice, cmbContext: CmbContext, public sepd: CMB.Sepd) {
         const vatr = cmbContext.vatrChunk;
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
@@ -237,7 +255,7 @@ class ShapeInstance {
         let perInstanceBufferWordOffset = 0;
 
         const bindVertexAttrib = (location: number, size: number, normalized: boolean, bufferOffs: number, vertexAttrib: CMB.SepdVertexAttrib) => {
-            const format = this.translateDataType(vertexAttrib.dataType, size, normalized);
+            const format = translateDataType(vertexAttrib.dataType, size, normalized);
             if (vertexAttrib.mode === CMB.SepdVertexAttribMode.ARRAY && bufferOffs >= 0) {
                 vertexAttributeDescriptors.push({ location, format, bufferIndex: 1 + location, bufferByteOffset: vertexAttrib.start, frequency: GfxVertexAttributeFrequency.PER_VERTEX });
             } else {
@@ -266,8 +284,11 @@ class ShapeInstance {
             perInstanceBinding = { buffer: this.perInstanceBuffer, byteOffset: 0, byteStride: 0 };
         }
 
+        for (let i = 1; i < sepd.prms.length; i++)
+            assert(sepd.prms[i].prm.indexType === sepd.prms[0].prm.indexType);
+
         const indexType = sepd.prms[0].prm.indexType;
-        const indexBufferFormat = this.translateDataType(indexType, 1, false);
+        const indexBufferFormat = translateDataType(indexType, 1, false);
         this.inputLayout = device.createInputLayout({ vertexAttributeDescriptors, indexBufferFormat });
 
         this.inputState = device.createInputState(this.inputLayout, [
@@ -282,10 +303,23 @@ class ShapeInstance {
             { buffer: cmbContext.vertexBuffer, byteOffset: vatr.boneIndicesByteOffset, byteStride: 0 },
             { buffer: cmbContext.vertexBuffer, byteOffset: vatr.boneWeightsByteOffset, byteStride: 0 },
         ], { buffer: cmbContext.indexBuffer, byteOffset: 0, byteStride: 0 });
+    }
 
+    public destroy(device: GfxDevice): void {
+        device.destroyInputLayout(this.inputLayout);
+        device.destroyInputState(this.inputState);
+        if (this.perInstanceBuffer !== null)
+            device.destroyBuffer(this.perInstanceBuffer);
+    }
+}
+
+class ShapeInstance {
+    private renderInsts: GfxRenderInst[] = [];
+
+    constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, private sepdData: SepdData, private materialInstance: MaterialInstance) {
         // Create our template render inst.
         const templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
-        templateRenderInst.inputState = this.inputState;
+        templateRenderInst.inputState = sepdData.inputState;
         templateRenderInst.setSamplerBindingsInherit();
 
         function getFirstIndex(prm: CMB.Prm): number {
@@ -301,9 +335,8 @@ class ShapeInstance {
             throw new Error();
         }
 
-        for (let i = 0; i < sepd.prms.length; i++) {
-            const prms = sepd.prms[i];
-            assert(prms.prm.indexType === indexType);
+        for (let i = 0; i < this.sepdData.sepd.prms.length; i++) {
+            const prms = this.sepdData.sepd.prms[i];
             const renderInst = renderInstBuilder.pushRenderInst();
             renderInstBuilder.newUniformBufferInstance(renderInst, OoT3D_Program.ub_PrmParams);
             const firstIndex = getFirstIndex(prms.prm);
@@ -315,32 +348,15 @@ class ShapeInstance {
         renderInstBuilder.popTemplateRenderInst();
     }
 
-    private translateDataType(dataType: CMB.DataType, size: number, normalized: boolean): GfxFormat {
-        function translateDataTypeFlags(dataType: CMB.DataType) {
-            switch (dataType) {
-            case CMB.DataType.UByte: return FormatTypeFlags.U8;
-            case CMB.DataType.UShort: return FormatTypeFlags.U16;
-            case CMB.DataType.UInt: return FormatTypeFlags.U32;
-            case CMB.DataType.Byte: return FormatTypeFlags.S8;
-            case CMB.DataType.Short: return FormatTypeFlags.S16;
-            case CMB.DataType.Int: return FormatTypeFlags.S32;
-            case CMB.DataType.Float: return FormatTypeFlags.F32;
-            }
-        }
-
-        const formatTypeFlags = translateDataTypeFlags(dataType);
-        const formatCompFlags = size as FormatCompFlags;
-        const formatFlags = normalized ? FormatFlags.NORMALIZED : FormatFlags.NONE;
-        return makeFormat(formatTypeFlags, formatCompFlags, formatFlags);
-    }
-
     public prepareToRender(prmParamsBuffer: GfxRenderBuffer, viewerInput: Viewer.ViewerRenderInput, boneMatrices: mat4[], inverseBindPoseMatrices: mat4[]): void {
+        const sepd = this.sepdData.sepd;
+
         for (let i = 0; i < this.renderInsts.length; i++) {
             const renderInst = this.renderInsts[i];
             renderInst.visible = this.materialInstance.templateRenderInst.visible;
 
             if (renderInst.visible) {
-                const prms = this.sepd.prms[i];
+                const prms = sepd.prms[i];
 
                 let offs = renderInst.getUniformBufferOffset(OoT3D_Program.ub_PrmParams);
                 const prmParamsMapped = prmParamsBuffer.mapBufferF32(offs, 16);
@@ -361,17 +377,48 @@ class ShapeInstance {
                     offs += fillMatrix4x3(prmParamsMapped, offs, scratchMatrix);
                 }
 
-                offs += fillVec4(prmParamsMapped, offs, this.sepd.position.scale, this.sepd.texCoord0.scale, this.sepd.texCoord1.scale, this.sepd.texCoord2.scale);
-                offs += fillVec4(prmParamsMapped, offs, this.sepd.boneWeights.scale);
+                offs += fillVec4(prmParamsMapped, offs, sepd.position.scale, sepd.texCoord0.scale, sepd.texCoord1.scale, sepd.texCoord2.scale);
+                offs += fillVec4(prmParamsMapped, offs, sepd.boneWeights.scale);
             }
         }
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyInputLayout(this.inputLayout);
-        device.destroyInputState(this.inputState);
-        if (this.perInstanceBuffer !== null)
-            device.destroyBuffer(this.perInstanceBuffer);
+        //
+    }
+}
+
+export class CmbData {
+    public sepdData: SepdData[] = [];
+    public inverseBindPoseMatrices: mat4[] = [];
+
+    private vertexBuffer: GfxBuffer;
+    private indexBuffer: GfxBuffer;
+
+    constructor(device: GfxDevice, public cmb: CMB.CMB) {
+        this.vertexBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.VERTEX, cmb.vatrChunk.dataBuffer);
+        this.indexBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.INDEX, cmb.indexBuffer);
+
+        const vatrChunk = cmb.vatrChunk;
+        const cmbContext: CmbContext = {
+            vertexBuffer: this.vertexBuffer,
+            indexBuffer: this.indexBuffer,
+            vatrChunk,
+        };
+
+        for (let i = 0; i < this.cmb.sepds.length; i++)
+            this.sepdData[i] = new SepdData(device, cmbContext, this.cmb.sepds[i]);
+
+        this.inverseBindPoseMatrices = nArray(cmb.bones.length, () => mat4.create());
+        for (let i = 0; i < cmb.bones.length; i++) {
+            CSAB.calcBoneMatrix(this.inverseBindPoseMatrices[i], null, null, cmb.bones[i]);
+            mat4.invert(this.inverseBindPoseMatrices[i], this.inverseBindPoseMatrices[i]);
+        }
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyBuffer(this.vertexBuffer);
+        device.destroyBuffer(this.indexBuffer);
     }
 }
 
@@ -388,25 +435,36 @@ export class CmbRenderer {
     public csab: CSAB.CSAB | null = null;
     public debugBones: boolean = false;
     public boneMatrices: mat4[] = [];
-    public inverseBindPoseMatrices: mat4[] = [];
 
     private sceneParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_SceneParams`);
     private materialParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_MaterialParams`);
     private prmParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_PrmParams`);
-
-    private vertexBuffer: GfxBuffer;
-    private indexBuffer: GfxBuffer;
 
     private templateRenderInst: GfxRenderInst;
 
     private texturesEnabled: boolean = true;
     private vertexColorsEnabled: boolean = true;
 
-    constructor(device: GfxDevice, public textureHolder: CtrTextureHolder, public cmb: CMB.CMB, public name: string = '') {
-        this.textureHolder.addTextures(device, cmb.textures.filter((texture) => texture.levels.length > 0));
+    constructor(device: GfxDevice, public textureHolder: CtrTextureHolder, public cmbData: CmbData, public name: string = '') {
+        for (let i = 0; i < this.cmbData.cmb.materials.length; i++)
+            this.materialInstances.push(new MaterialInstance(this.cmbData.cmb, this.cmbData.cmb.materials[i]));
+    }
 
-        for (let i = 0; i < cmb.materials.length; i++)
-            this.materialInstances.push(new MaterialInstance(this.cmb, cmb.materials[i]));
+    private translateCmb(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder): void {
+        const cmb = this.cmbData.cmb;
+
+        this.boneMatrices = nArray(cmb.bones.length, () => mat4.create());
+
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].buildTemplateRenderInst(device, renderInstBuilder, this.textureHolder);
+
+        for (let i = 0; i < cmb.meshs.length; i++) {
+            const mesh = cmb.meshs[i];
+            const materialInstance = this.materialInstances[mesh.matsIdx];
+            renderInstBuilder.pushTemplateRenderInst(materialInstance.templateRenderInst);
+            this.shapeInstances.push(new ShapeInstance(device, renderInstBuilder, this.cmbData.sepdData[mesh.sepdIdx], materialInstance));
+            renderInstBuilder.popTemplateRenderInst();
+        }
     }
 
     private createProgram(): void {
@@ -430,7 +488,7 @@ export class CmbRenderer {
         this.templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
         this.createProgram();
         renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, OoT3D_Program.ub_SceneParams);
-        this.translateCmb(device, renderInstBuilder, this.cmb);
+        this.translateCmb(device, renderInstBuilder);
         renderInstBuilder.popTemplateRenderInst();
         renderInstBuilder.finish(device, viewRenderer);
     }
@@ -446,8 +504,8 @@ export class CmbRenderer {
     }
 
     private updateBoneMatrices(): void {
-        for (let i = 0; i < this.cmb.bones.length; i++) {
-            const bone = this.cmb.bones[i];
+        for (let i = 0; i < this.cmbData.cmb.bones.length; i++) {
+            const bone = this.cmbData.cmb.bones[i];
 
             CSAB.calcBoneMatrix(matrixScratch, this.animationController, this.csab, bone);
 
@@ -464,8 +522,8 @@ export class CmbRenderer {
         if (this.debugBones) {
             prepareFrameDebugOverlayCanvas2D();
             const ctx = getDebugOverlayCanvas2D();
-            for (let i = 0; i < this.cmb.bones.length; i++) {
-                const bone = this.cmb.bones[i];
+            for (let i = 0; i < this.cmbData.cmb.bones.length; i++) {
+                const bone = this.cmbData.cmb.bones[i];
                 if (bone.parentBoneId < 0) continue;
 
                 vec3.set(scratchVec3a, 0, 0, 0);
@@ -486,7 +544,7 @@ export class CmbRenderer {
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].prepareToRender(this.materialParamsBuffer, viewerInput, this.visible);
         for (let i = 0; i < this.shapeInstances.length; i++)
-            this.shapeInstances[i].prepareToRender(this.prmParamsBuffer, viewerInput, this.boneMatrices, this.inverseBindPoseMatrices);
+            this.shapeInstances[i].prepareToRender(this.prmParamsBuffer, viewerInput, this.boneMatrices, this.cmbData.inverseBindPoseMatrices);
 
         this.sceneParamsBuffer.prepareToRender(hostAccessPass);
         this.materialParamsBuffer.prepareToRender(hostAccessPass);
@@ -501,8 +559,6 @@ export class CmbRenderer {
         this.sceneParamsBuffer.destroy(device);
         this.materialParamsBuffer.destroy(device);
         this.prmParamsBuffer.destroy(device);
-        device.destroyBuffer(this.vertexBuffer);
-        device.destroyBuffer(this.indexBuffer);
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].destroy(device);
         for (let i = 0; i < this.shapeInstances.length; i++)
@@ -516,41 +572,6 @@ export class CmbRenderer {
     public bindCMAB(cmab: CMAB.CMAB, channelIndex: number = 0): void {
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].bindCMAB(cmab, this.animationController, channelIndex);
-    }
-
-    private translateCmb(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, cmb: CMB.CMB): void {
-        const hostAccessPass = device.createHostAccessPass();
-
-        this.vertexBuffer = device.createBuffer(wordCountFromByteCount(cmb.vatrChunk.dataBuffer.byteLength), GfxBufferUsage.VERTEX, GfxBufferFrequencyHint.STATIC);
-        hostAccessPass.uploadBufferData(this.vertexBuffer, 0, cmb.vatrChunk.dataBuffer.createTypedArray(Uint8Array));
-        this.indexBuffer = device.createBuffer(wordCountFromByteCount(cmb.indexBuffer.byteLength), GfxBufferUsage.INDEX, GfxBufferFrequencyHint.STATIC);
-        hostAccessPass.uploadBufferData(this.indexBuffer, 0, cmb.indexBuffer.createTypedArray(Uint8Array));
-
-        device.submitPass(hostAccessPass);
-
-        this.boneMatrices = nArray(this.cmb.bones.length, () => mat4.create());
-        this.inverseBindPoseMatrices = nArray(this.cmb.bones.length, () => mat4.create());
-        this.updateBoneMatrices();
-        for (let i = 0; i < this.boneMatrices.length; i++)
-            mat4.invert(this.inverseBindPoseMatrices[i], this.boneMatrices[i]);
-
-        for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].buildTemplateRenderInst(device, renderInstBuilder, this.textureHolder);
-
-        const vatrChunk = cmb.vatrChunk;
-        const cmbContext: CmbContext = {
-            vertexBuffer: this.vertexBuffer,
-            indexBuffer: this.indexBuffer,
-            vatrChunk,
-        };
-    
-        for (let i = 0; i < cmb.meshs.length; i++) {
-            const mesh = cmb.meshs[i];
-            const materialInstance = this.materialInstances[mesh.matsIdx];
-            renderInstBuilder.pushTemplateRenderInst(materialInstance.templateRenderInst);
-            this.shapeInstances.push(new ShapeInstance(device, renderInstBuilder, cmbContext, cmb.sepds[mesh.sepdIdx], materialInstance));
-            renderInstBuilder.popTemplateRenderInst();
-        }
     }
 }
 
@@ -582,17 +603,25 @@ export abstract class BasicRendererHelper {
 
 export class RoomRenderer {
     public visible: boolean = true;
+    public opaqueData: CmbData | null = null;
     public opaqueMesh: CmbRenderer | null = null;
+    public transparentData: CmbData | null = null;
     public transparentMesh: CmbRenderer | null = null;
     public wMesh: CmbRenderer | null = null;
+    public objectRenderers: CmbRenderer[] = [];
 
-    constructor(device: GfxDevice, public textureHolder: CtrTextureHolder, public mesh: ZSI.Mesh, public name: string, public wCmb: CMB.CMB) {
-        if (mesh.opaque !== null)
-            this.opaqueMesh = new CmbRenderer(device, textureHolder, mesh.opaque, `${name} Opaque`);
-        if (mesh.transparent !== null)
-            this.transparentMesh = new CmbRenderer(device, textureHolder, mesh.transparent, `${name} Transparent`);
-        if (wCmb !== null)
-            this.wMesh = new CmbRenderer(device, textureHolder, wCmb, `${name} W`);
+    constructor(device: GfxDevice, public textureHolder: CtrTextureHolder, public mesh: ZSI.Mesh, public name: string) {
+        if (mesh.opaque !== null) {
+            textureHolder.addTextures(device, mesh.opaque.textures);
+            this.opaqueData = new CmbData(device, mesh.opaque);
+            this.opaqueMesh = new CmbRenderer(device, textureHolder, this.opaqueData, `${name} Opaque`);
+        }
+
+        if (mesh.transparent !== null) {
+            textureHolder.addTextures(device, mesh.transparent.textures);
+            this.transparentData = new CmbData(device, mesh.transparent);
+            this.transparentMesh = new CmbRenderer(device, textureHolder, this.transparentData, `${name} Transparent`);
+        }
     }
 
     public addToViewRenderer(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer): void {
@@ -600,8 +629,8 @@ export class RoomRenderer {
             this.opaqueMesh.addToViewRenderer(device, viewRenderer);
         if (this.transparentMesh !== null)
             this.transparentMesh.addToViewRenderer(device, viewRenderer);
-        if (this.wCmb !== null)
-            this.wMesh.addToViewRenderer(device, viewRenderer);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].addToViewRenderer(device, viewRenderer);
     }
 
     public bindCMAB(cmab: CMAB.CMAB): void {
@@ -623,6 +652,8 @@ export class RoomRenderer {
             this.transparentMesh.setVisible(visible);
         if (this.wMesh !== null)
             this.wMesh.setVisible(visible);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].setVisible(visible);
     }
 
     public setVertexColorsEnabled(v: boolean): void {
@@ -650,14 +681,22 @@ export class RoomRenderer {
             this.transparentMesh.prepareToRender(hostAccessPass, viewerInput);
         if (this.wMesh !== null)
             this.wMesh.prepareToRender(hostAccessPass, viewerInput);
+        for (let i = 0; i < this.objectRenderers.length;i++)
+            this.objectRenderers[i].prepareToRender(hostAccessPass, viewerInput);
     }
 
     public destroy(device: GfxDevice) {
+        if (this.opaqueData !== null)
+            this.opaqueData.destroy(device);
+        if (this.transparentData !== null)
+            this.transparentData.destroy(device);
         if (this.opaqueMesh !== null)
             this.opaqueMesh.destroy(device);
         if (this.transparentMesh !== null)
             this.transparentMesh.destroy(device);
         if (this.wMesh !== null)
             this.wMesh.destroy(device);
+        for (let i = 0; i < this.objectRenderers.length;i++)
+            this.objectRenderers[i].destroy(device);
     }
 }

@@ -9,7 +9,7 @@ import * as UI from '../ui';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import Progressable from '../Progressable';
-import { RoomRenderer, CtrTextureHolder, BasicRendererHelper } from './render';
+import { RoomRenderer, CtrTextureHolder, BasicRendererHelper, CmbRenderer } from './render';
 import { SceneGroup } from '../viewer';
 import { assert } from '../util';
 import { fetchData } from '../fetch';
@@ -90,7 +90,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 // Pull out the first mesh we can find.
                 const mesh = roomSetups.find((roomSetup) => roomSetup.mesh !== null).mesh;
                 assert(mesh !== null);
-                const roomRenderer = new RoomRenderer(device, textureHolder, mesh, filename, null);
+                const roomRenderer = new RoomRenderer(device, textureHolder, mesh, filename);
                 if (zar !== null) {
                     const cmabFile = zar.files.find((file) => file.name.startsWith(`ROOM${i}`) && file.name.endsWith('.cmab'));
                     if (cmabFile) {
