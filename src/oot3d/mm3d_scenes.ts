@@ -6,15 +6,14 @@ import * as ZSI from './zsi';
 import * as LzS from '../compression/LzS';
 
 import * as Viewer from '../viewer';
-import * as UI from '../ui';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import Progressable from '../Progressable';
-import { RoomRenderer, CtrTextureHolder, BasicRendererHelper } from './render';
+import { RoomRenderer, CtrTextureHolder } from './render';
 import { SceneGroup } from '../viewer';
 import { assert, readString, leftPad } from '../util';
 import { fetchData, NamedArrayBufferSlice } from '../fetch';
-import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { MultiRoomScene } from './oot3d_scenes';
 
 function maybeDecompress(buffer: ArrayBufferSlice): ArrayBufferSlice {

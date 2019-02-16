@@ -14,6 +14,8 @@ export interface VatrChunk {
     texCoord0ByteOffset: number;
     texCoord1ByteOffset: number;
     texCoord2ByteOffset: number;
+    boneIndicesByteOffset: number;
+    boneWeightsByteOffset: number;
 }
 
 export const enum Version {
@@ -33,13 +35,21 @@ export class CMB {
     public indexBuffer: ArrayBufferSlice;
 }
 
-interface Bone {
+export interface Bone {
     boneId: number;
     parentBoneId: number;
-    modelMatrix: mat4;
+    scaleX: number;
+    scaleY: number;
+    scaleZ: number;
+    rotationX: number;
+    rotationY: number;
+    rotationZ: number;
+    translationX: number;
+    translationY: number;
+    translationZ: number;
 }
 
-function calcModelMtx(dst: mat4, scaleX: number, scaleY: number, scaleZ: number, rotationX: number, rotationY: number, rotationZ: number, translationX: number, translationY: number, translationZ: number): void {
+export function calcModelMtx(dst: mat4, scaleX: number, scaleY: number, scaleZ: number, rotationX: number, rotationY: number, rotationZ: number, translationX: number, translationY: number, translationZ: number): void {
     const sinX = Math.sin(rotationX), cosX = Math.cos(rotationX);
     const sinY = Math.sin(rotationY), cosY = Math.cos(rotationY);
     const sinZ = Math.sin(rotationZ), cosZ = Math.cos(rotationZ);
@@ -88,10 +98,7 @@ function readSklChunk(cmb: CMB, buffer: ArrayBufferSlice): void {
         const translationY = view.getFloat32(boneTableIdx + 0x20, true);
         const translationZ = view.getFloat32(boneTableIdx + 0x24, true);
 
-        const modelMatrix = mat4.create();
-        calcModelMtx(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
-
-        const bone: Bone = { boneId, parentBoneId, modelMatrix };
+        const bone: Bone = { boneId, parentBoneId, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ };
         bones.push(bone);
 
         boneTableIdx += 0x28;
@@ -304,10 +311,23 @@ function readVatrChunk(cmb: CMB, buffer: ArrayBufferSlice): void {
     const colorByteOffset = readSlice(baseOffs);
     const texCoord0ByteOffset = readSlice(baseOffs);
     // TODO(jstpierre): Figure out how tex coords work, 'cuz this ain't it chief.
-    const texCoord1ByteOffset = -1; // readSlice(baseOffs);
-    const texCoord2ByteOffset = -1; // readSlice(baseOffs);
+    const texCoord1ByteOffset = -1; readSlice(baseOffs);
+    const texCoord2ByteOffset = -1; readSlice(baseOffs);
 
-    cmb.vatrChunk = { dataBuffer, positionByteOffset, normalByteOffset, colorByteOffset, texCoord0ByteOffset, texCoord1ByteOffset, texCoord2ByteOffset };
+    const boneIndicesByteOffset = readSlice(baseOffs);
+    const boneWeightsByteOffset = readSlice(baseOffs);
+
+    cmb.vatrChunk = {
+        dataBuffer,
+        positionByteOffset,
+        normalByteOffset,
+        colorByteOffset,
+        texCoord0ByteOffset,
+        texCoord1ByteOffset,
+        texCoord2ByteOffset,
+        boneIndicesByteOffset,
+        boneWeightsByteOffset,
+    };
 }
 
 export class Mesh {
@@ -368,8 +388,8 @@ function readPrmChunk(cmb: CMB, buffer: ArrayBufferSlice): Prm {
 
 export const enum SkinningMode {
     SINGLE_BONE = 0x00,
-    PER_VERTEX = 0x01,
-    PER_VERTEX_NO_TRANS = 0x02,
+    RIGID_SKINNING = 0x01,
+    SMOOTH_SKINNING = 0x02,
 }
 
 // "Primitive Set"
@@ -384,11 +404,13 @@ function readPrmsChunk(cmb: CMB, buffer: ArrayBufferSlice): Prms {
 
     assert(readString(buffer, 0x00, 0x04) === 'prms');
 
+    const prmCount = view.getUint32(0x08, true);
+    assert(prmCount === 1);
+
     const skinningMode: SkinningMode = view.getUint16(0x0C, true);
-    if (skinningMode !== SkinningMode.SINGLE_BONE)
-        console.warn("Found complex skinning case");
 
     const boneTableCount = view.getUint16(0x0E, true);
+    assert(boneTableCount < 0x10);
     const boneTable = new Uint16Array(boneTableCount);
 
     // This is likely an array of primitives in the set, but 3DS models are probably
@@ -429,8 +451,10 @@ export class Sepd {
     public texCoord0!: SepdVertexAttrib;
     public texCoord1!: SepdVertexAttrib;
     public texCoord2!: SepdVertexAttrib;
-    public boneIndex!: SepdVertexAttrib;
-    public boneWeight!: SepdVertexAttrib;
+    public boneIndices!: SepdVertexAttrib;
+    public boneWeights!: SepdVertexAttrib;
+
+    public boneDimension: number;
 }
 
 // "Separate Data Shape"
@@ -469,16 +493,20 @@ function readSepdChunk(cmb: CMB, buffer: ArrayBufferSlice): Sepd {
     sepd.texCoord0 = readVertexAttrib();
     sepd.texCoord1 = readVertexAttrib();
     sepd.texCoord2 = readVertexAttrib();
-    sepd.boneIndex = readVertexAttrib();
-    sepd.boneWeight = readVertexAttrib();
+    sepd.boneIndices = readVertexAttrib();
+    sepd.boneWeights = readVertexAttrib();
 
-    // Two 16-bit values at 0x104.
+    // take you to the next dimension, the
+    sepd.boneDimension = view.getUint16(sepdArrIdx + 0x00, true);
+
     sepdArrIdx += 0x04;
 
     for (let i = 0; i < count; i++) {
         const prmsOffs = view.getUint16(sepdArrIdx + 0x00, true);
         sepd.prms.push(readPrmsChunk(cmb, buffer.slice(prmsOffs)));
         sepdArrIdx += 0x02;
+        // sanity check.
+        assert(sepd.prms[i].skinningMode === sepd.prms[0].skinningMode);
     }
 
     return sepd;

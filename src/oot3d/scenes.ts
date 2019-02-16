@@ -1,5 +1,6 @@
 
 import * as CMAB from './cmab';
+import * as CSAB from './csab';
 import * as CTXB from './ctxb';
 import * as CMB from './cmb';
 import * as ZAR from './zar';
@@ -35,7 +36,7 @@ export class GrezzoTextureHolder extends CtrTextureHolder {
 }
 
 export class MultiCmbScene extends BasicRendererHelper implements Viewer.SceneGfx {
-    constructor(device: GfxDevice, public scenes: CmbRenderer[], public textureHolder: CtrTextureHolder) {
+    constructor(device: GfxDevice, public scenes: CmbRenderer[], public textureHolder: CtrTextureHolder, public cmab: CMAB.CMAB[] = [], public csabs: CSAB.CSAB[] = []) {
         super();
         for (let i = 0; i < this.scenes.length; i++)
             this.scenes[i].addToViewRenderer(device, this.viewRenderer);
@@ -78,6 +79,8 @@ export class MultiCmbScene extends BasicRendererHelper implements Viewer.SceneGf
 export function createSceneFromZARBuffer(device: GfxDevice, buffer: ArrayBufferSlice): Viewer.SceneGfx {
     const textureHolder = new GrezzoTextureHolder();
     const scenes: CmbRenderer[] = [];
+    const cmabs: CMAB.CMAB[] = [];
+    const csabs: CSAB.CSAB[] = [];
 
     function addZARBuffer(buffer: ArrayBufferSlice): void {
         const zar = ZAR.parse(buffer);
@@ -94,10 +97,15 @@ export function createSceneFromZARBuffer(device: GfxDevice, buffer: ArrayBufferS
             } else if (file.name.endsWith('.cmab')) {
                 const cmab = CMAB.parse(zar.version, file.buffer);
                 textureHolder.addTextures(device, cmab.textures);
+                cmabs.push(cmab);
+            } else if (file.name.endsWith('.csab')) {
+                const csab = CSAB.parse(zar.version, file.buffer);
+                (csab as any).name = file.name;
+                csabs.push(csab);
             }
         }
     }
     addZARBuffer(buffer);
 
-    return new MultiCmbScene(device, scenes, textureHolder);
+    return new MultiCmbScene(device, scenes, textureHolder, cmabs, csabs);
 }

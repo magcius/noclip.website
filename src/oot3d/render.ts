@@ -1,13 +1,14 @@
 
 import * as CMB from './cmb';
 import * as CMAB from './cmab';
+import * as CSAB from './csab';
 import * as ZSI from './zsi';
 
 import * as Viewer from '../viewer';
 
 import { DeviceProgram, DeviceProgramReflection } from '../Program';
 import AnimationController from '../AnimationController';
-import { mat4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 import { GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler, GfxDevice, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxHostAccessPass, GfxRenderPass, GfxTextureDimension, GfxInputState, GfxInputLayout } from '../gfx/platform/GfxPlatform';
 import { fillMatrix4x4, fillVec4, fillColor, fillMatrix4x3 } from '../gfx/helpers/UniformBufferHelpers';
 import { colorNew, colorFromRGBA } from '../Color';
@@ -24,6 +25,7 @@ import { Camera } from '../Camera';
 // This feature is provided by Parcel.
 import { readFileSync } from 'fs';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
+import { getDebugOverlayCanvas2D, prepareFrameDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
 
 function surfaceToCanvas(textureLevel: CMB.TextureLevel): HTMLCanvasElement {
     const canvas = document.createElement("canvas");
@@ -77,6 +79,8 @@ class OoT3D_Program extends DeviceProgram {
     public static a_TexCoord0 = 4;
     public static a_TexCoord1 = 5;
     public static a_TexCoord2 = 6;
+    public static a_BoneIndices = 7;
+    public static a_BoneWeights = 8;
 
     public static program = readFileSync('src/oot3d/program.glsl', { encoding: 'utf8' });
     public static programReflection: DeviceProgramReflection = DeviceProgram.parseReflectionDefinitions(OoT3D_Program.program);
@@ -243,13 +247,18 @@ class ShapeInstance {
             }
         };
 
-        bindVertexAttrib(OoT3D_Program.a_Position,  3, false, vatr.positionByteOffset,  sepd.position);
-        bindVertexAttrib(OoT3D_Program.a_Normal,    3, true,  vatr.normalByteOffset,    sepd.normal);
+        bindVertexAttrib(OoT3D_Program.a_Position,    3, false, vatr.positionByteOffset,  sepd.position);
+        bindVertexAttrib(OoT3D_Program.a_Normal,      3, true,  vatr.normalByteOffset,    sepd.normal);
         // tangent
-        bindVertexAttrib(OoT3D_Program.a_Color,     4, true,  vatr.colorByteOffset,     sepd.color);
-        bindVertexAttrib(OoT3D_Program.a_TexCoord0, 2, false, vatr.texCoord0ByteOffset, sepd.texCoord0);
-        bindVertexAttrib(OoT3D_Program.a_TexCoord1, 2, false, vatr.texCoord1ByteOffset, sepd.texCoord1);
-        bindVertexAttrib(OoT3D_Program.a_TexCoord2, 2, false, vatr.texCoord2ByteOffset, sepd.texCoord2);
+        bindVertexAttrib(OoT3D_Program.a_Color,       4, true,  vatr.colorByteOffset,     sepd.color);
+        bindVertexAttrib(OoT3D_Program.a_TexCoord0,   2, false, vatr.texCoord0ByteOffset, sepd.texCoord0);
+        bindVertexAttrib(OoT3D_Program.a_TexCoord1,   2, false, vatr.texCoord1ByteOffset, sepd.texCoord1);
+        bindVertexAttrib(OoT3D_Program.a_TexCoord2,   2, false, vatr.texCoord2ByteOffset, sepd.texCoord2);
+
+        const hasBoneIndices = sepd.prms[0].skinningMode !== CMB.SkinningMode.SINGLE_BONE;
+        bindVertexAttrib(OoT3D_Program.a_BoneIndices, sepd.boneDimension, false, hasBoneIndices ? vatr.boneIndicesByteOffset : -1, sepd.boneIndices);
+        const hasBoneWeights = sepd.prms[0].skinningMode === CMB.SkinningMode.SMOOTH_SKINNING;
+        bindVertexAttrib(OoT3D_Program.a_BoneWeights, sepd.boneDimension, false, hasBoneWeights ? vatr.boneWeightsByteOffset : -1, sepd.boneWeights);
 
         let perInstanceBinding: GfxVertexBufferDescriptor | null = null;
         if (perInstanceBufferWordOffset !== 0) {
@@ -270,6 +279,8 @@ class ShapeInstance {
             { buffer: cmbContext.vertexBuffer, byteOffset: vatr.texCoord0ByteOffset, byteStride: 0 },
             { buffer: cmbContext.vertexBuffer, byteOffset: vatr.texCoord1ByteOffset, byteStride: 0 },
             { buffer: cmbContext.vertexBuffer, byteOffset: vatr.texCoord2ByteOffset, byteStride: 0 },
+            { buffer: cmbContext.vertexBuffer, byteOffset: vatr.boneIndicesByteOffset, byteStride: 0 },
+            { buffer: cmbContext.vertexBuffer, byteOffset: vatr.boneWeightsByteOffset, byteStride: 0 },
         ], { buffer: cmbContext.indexBuffer, byteOffset: 0, byteStride: 0 });
 
         // Create our template render inst.
@@ -323,7 +334,7 @@ class ShapeInstance {
         return makeFormat(formatTypeFlags, formatCompFlags, formatFlags);
     }
 
-    public prepareToRender(prmParamsBuffer: GfxRenderBuffer, viewerInput: Viewer.ViewerRenderInput, boneMatrices: mat4[]): void {
+    public prepareToRender(prmParamsBuffer: GfxRenderBuffer, viewerInput: Viewer.ViewerRenderInput, boneMatrices: mat4[], inverseBindPoseMatrices: mat4[]): void {
         for (let i = 0; i < this.renderInsts.length; i++) {
             const renderInst = this.renderInsts[i];
             renderInst.visible = this.materialInstance.templateRenderInst.visible;
@@ -331,14 +342,27 @@ class ShapeInstance {
             if (renderInst.visible) {
                 const prms = this.sepd.prms[i];
 
-                const localMatrixId = prms.boneTable[0];
-                const boneMatrix = boneMatrices[localMatrixId];
-                mat4.mul(scratchMatrix, viewerInput.camera.viewMatrix, boneMatrix);
-
                 let offs = renderInst.getUniformBufferOffset(OoT3D_Program.ub_PrmParams);
                 const prmParamsMapped = prmParamsBuffer.mapBufferF32(offs, 16);
-                offs += fillMatrix4x3(prmParamsMapped, offs, scratchMatrix);
+
+                for (let i = 0; i < 16; i++) {
+                    if (i < prms.boneTable.length) {
+                        const boneId = prms.boneTable[i];
+                        if (prms.skinningMode === CMB.SkinningMode.SMOOTH_SKINNING) {
+                            mat4.mul(scratchMatrix, boneMatrices[boneId], inverseBindPoseMatrices[boneId]);
+                            mat4.mul(scratchMatrix, viewerInput.camera.viewMatrix, scratchMatrix);
+                        } else {
+                            mat4.mul(scratchMatrix, viewerInput.camera.viewMatrix, boneMatrices[boneId]);
+                        }
+                    } else {
+                        mat4.identity(scratchMatrix);
+                    }
+
+                    offs += fillMatrix4x3(prmParamsMapped, offs, scratchMatrix);
+                }
+
                 offs += fillVec4(prmParamsMapped, offs, this.sepd.position.scale, this.sepd.texCoord0.scale, this.sepd.texCoord1.scale, this.sepd.texCoord2.scale);
+                offs += fillVec4(prmParamsMapped, offs, this.sepd.boneWeights.scale);
             }
         }
     }
@@ -351,13 +375,20 @@ class ShapeInstance {
     }
 }
 
+const matrixScratch = mat4.create();
+const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
 export class CmbRenderer {
     public animationController = new AnimationController();
     public visible: boolean = true;
-    public boneMatrices: mat4[] = [];
     public materialInstances: MaterialInstance[] = [];
     public shapeInstances: ShapeInstance[] = [];
     public whichTexture: number = 0;
+
+    public csab: CSAB.CSAB | null = null;
+    public debugBones: boolean = false;
+    public boneMatrices: mat4[] = [];
+    public inverseBindPoseMatrices: mat4[] = [];
 
     private sceneParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_SceneParams`);
     private materialParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_MaterialParams`);
@@ -414,17 +445,48 @@ export class CmbRenderer {
         this.createProgram();
     }
 
+    private updateBoneMatrices(): void {
+        for (let i = 0; i < this.cmb.bones.length; i++) {
+            const bone = this.cmb.bones[i];
+
+            CSAB.calcBoneMatrix(matrixScratch, this.animationController, this.csab, bone);
+
+            if (bone.parentBoneId >= 0)
+                mat4.mul(this.boneMatrices[bone.boneId], this.boneMatrices[bone.parentBoneId], matrixScratch);
+            else
+                mat4.copy(this.boneMatrices[bone.boneId], matrixScratch);
+        }
+    }
+
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        this.updateBoneMatrices();
+
+        if (this.debugBones) {
+            prepareFrameDebugOverlayCanvas2D();
+            const ctx = getDebugOverlayCanvas2D();
+            for (let i = 0; i < this.cmb.bones.length; i++) {
+                const bone = this.cmb.bones[i];
+                if (bone.parentBoneId < 0) continue;
+
+                vec3.set(scratchVec3a, 0, 0, 0);
+                vec3.transformMat4(scratchVec3a, scratchVec3a, this.boneMatrices[bone.parentBoneId]);
+                vec3.set(scratchVec3b, 0, 0, 0);
+                vec3.transformMat4(scratchVec3b, scratchVec3b, this.boneMatrices[bone.boneId]);
+
+                drawWorldSpaceLine(ctx, viewerInput.camera, scratchVec3a, scratchVec3b);
+            }
+        }
+
         this.animationController.setTimeInMilliseconds(viewerInput.time);
 
         let offs = this.templateRenderInst.getUniformBufferOffset(OoT3D_Program.ub_SceneParams);
         const sceneParamsMapped = this.sceneParamsBuffer.mapBufferF32(offs, 16);
-        fillSceneParamsData(sceneParamsMapped, viewerInput.camera, );
+        fillSceneParamsData(sceneParamsMapped, viewerInput.camera);
 
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].prepareToRender(this.materialParamsBuffer, viewerInput, this.visible);
         for (let i = 0; i < this.shapeInstances.length; i++)
-            this.shapeInstances[i].prepareToRender(this.prmParamsBuffer, viewerInput, this.boneMatrices);
+            this.shapeInstances[i].prepareToRender(this.prmParamsBuffer, viewerInput, this.boneMatrices, this.inverseBindPoseMatrices);
 
         this.sceneParamsBuffer.prepareToRender(hostAccessPass);
         this.materialParamsBuffer.prepareToRender(hostAccessPass);
@@ -447,6 +509,10 @@ export class CmbRenderer {
             this.shapeInstances[i].destroy(device);
     }
 
+    public bindCSAB(csab: CSAB.CSAB | null): void {
+        this.csab = csab;
+    }
+
     public bindCMAB(cmab: CMAB.CMAB, channelIndex: number = 0): void {
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].bindCMAB(cmab, this.animationController, channelIndex);
@@ -462,15 +528,11 @@ export class CmbRenderer {
 
         device.submitPass(hostAccessPass);
 
-        for (let i = 0; i < cmb.bones.length; i++) {
-            const bone = cmb.bones[i];
-            this.boneMatrices[bone.boneId] = mat4.create();
-            if (bone.parentBoneId >= 0) {
-                mat4.mul(this.boneMatrices[bone.boneId], this.boneMatrices[bone.parentBoneId], bone.modelMatrix);
-            } else {
-                mat4.copy(this.boneMatrices[bone.boneId], bone.modelMatrix);
-            }
-        }
+        this.boneMatrices = nArray(this.cmb.bones.length, () => mat4.create());
+        this.inverseBindPoseMatrices = nArray(this.cmb.bones.length, () => mat4.create());
+        this.updateBoneMatrices();
+        for (let i = 0; i < this.boneMatrices.length; i++)
+            mat4.invert(this.inverseBindPoseMatrices[i], this.boneMatrices[i]);
 
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].buildTemplateRenderInst(device, renderInstBuilder, this.textureHolder);
@@ -486,7 +548,7 @@ export class CmbRenderer {
             const mesh = cmb.meshs[i];
             const materialInstance = this.materialInstances[mesh.matsIdx];
             renderInstBuilder.pushTemplateRenderInst(materialInstance.templateRenderInst);
-            this.shapeInstances.push(new ShapeInstance(device, renderInstBuilder, cmbContext, cmb.sepds[mesh.sepdIdx], materialInstance))
+            this.shapeInstances.push(new ShapeInstance(device, renderInstBuilder, cmbContext, cmb.sepds[mesh.sepdIdx], materialInstance));
             renderInstBuilder.popTemplateRenderInst();
         }
     }

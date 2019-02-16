@@ -16,8 +16,8 @@ layout(row_major, std140) uniform ub_MaterialParams {
 #define u_AlphaReference (u_MaterialMisc[0][0])
 
 layout(row_major, std140) uniform ub_PrmParams {
-    mat4x3 u_BoneMatrix[1];
-    vec4 u_PrmMisc[1];
+    mat4x3 u_BoneMatrix[16];
+    vec4 u_PrmMisc[2];
 };
 
 uniform sampler2D u_Texture[3];
@@ -26,6 +26,7 @@ uniform sampler2D u_Texture[3];
 #define u_TexCoord0Scale (u_PrmMisc[0].y)
 #define u_TexCoord1Scale (u_PrmMisc[0].z)
 #define u_TexCoord2Scale (u_PrmMisc[0].w)
+#define u_BoneWeightScale (u_PrmMisc[1].x)
 
 varying vec4 v_Color;
 varying vec2 v_TexCoord0;
@@ -40,10 +41,30 @@ layout(location = 3) in vec4 a_Color;
 layout(location = 4) in vec2 a_TexCoord0;
 layout(location = 5) in vec2 a_TexCoord1;
 layout(location = 6) in vec2 a_TexCoord2;
+layout(location = 7) in vec4 a_BoneIndices;
+layout(location = 8) in vec4 a_BoneWeights;
 
 void main() {
+    // Compute our matrix.
+    mat4x3 t_BoneMatrix;
+
+    vec4 t_BoneWeights = a_BoneWeights * u_BoneWeightScale;
+    if (t_BoneWeights.x > 0.0) {
+        t_BoneMatrix = mat4x3(0.0);
+        t_BoneMatrix += u_BoneMatrix[int(a_BoneIndices.x)] * t_BoneWeights.x;
+        if (t_BoneWeights.y > 0.0) {
+            t_BoneMatrix += u_BoneMatrix[int(a_BoneIndices.y)] * t_BoneWeights.y;
+            if (t_BoneWeights.z > 0.0) {
+                t_BoneMatrix += u_BoneMatrix[int(a_BoneIndices.z)] * t_BoneWeights.z;
+            }
+        }
+    } else {
+        // If we have no bone weights, then we're in rigid skinning, so take the first bone index.
+        t_BoneMatrix = u_BoneMatrix[int(a_BoneIndices.x)];
+    }
+
     vec4 t_Position = vec4(a_Position * u_PosScale, 1.0);
-    gl_Position = u_Projection * mat4(u_BoneMatrix[0]) * t_Position;
+    gl_Position = u_Projection * mat4(t_BoneMatrix) * t_Position;
 
     v_Color = a_Color;
 

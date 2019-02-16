@@ -1,7 +1,7 @@
 import { AABB } from "./Geometry";
 import { Color, Magenta, colorToCSS } from "./Color";
 import { Camera, divideByW } from "./Camera";
-import { vec4, mat4 } from "gl-matrix";
+import { vec4, mat4, vec3 } from "gl-matrix";
 import { nArray } from "./util";
 
 export function stepF(f: (t: number) => number, maxt: number, step: number, callback: (t: number, v: number) => void) {
@@ -100,8 +100,41 @@ export function prepareFrameDebugOverlayCanvas2D(): void {
 
 const p = nArray(8, () => vec4.create());
 const vp = mat4.create();
+
+function transformToClipSpace(ctx: CanvasRenderingContext2D, camera: Camera, nPoints: number): void {
+    mat4.mul(vp, camera.projectionMatrix, camera.viewMatrix);
+    for (let i = 0; i < nPoints; i++) {
+        vec4.transformMat4(p[i], p[i], vp);
+        divideByW(p[i], p[i]);
+    }
+}
+
+function shouldCull(p: vec4): boolean {
+    return p[0] < -1 || p[0] > 1 || p[1] < -1 || p[1] > 1 || p[2] < -1 || p[2] > 1;
+}
+
+function drawLine(ctx: CanvasRenderingContext2D, p0: vec4, p1: vec4): void {
+    if (shouldCull(p0) || shouldCull(p1)) return;
+    const cw = ctx.canvas.width;
+    const ch = ctx.canvas.height;
+    ctx.moveTo((p0[0] + 1) * cw / 2, ((-p0[1] + 1) * ch / 2));
+    ctx.lineTo((p1[0] + 1) * cw / 2, ((-p1[1] + 1) * ch / 2));
+}
+
+export function drawWorldSpaceLine(ctx: CanvasRenderingContext2D, camera: Camera, v0: vec3, v1: vec3, color: Color = Magenta): void {
+    vec4.set(p[0], v0[0], v0[1], v0[2], 1.0);
+    vec4.set(p[1], v1[0], v1[1], v1[2], 1.0);
+    transformToClipSpace(ctx, camera, 2);
+
+    ctx.beginPath();
+    drawLine(ctx, p[0], p[1]);
+    ctx.closePath();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = colorToCSS(color);
+    ctx.stroke();
+}
+
 export function drawWorldSpaceAABB(ctx: CanvasRenderingContext2D, camera: Camera, aabb: AABB, color: Color = Magenta): void {
-    // Compute the eight points of the AABB.
     vec4.set(p[0], aabb.minX, aabb.minY, aabb.minZ, 1.0);
     vec4.set(p[1], aabb.maxX, aabb.minY, aabb.minZ, 1.0);
     vec4.set(p[2], aabb.minX, aabb.maxY, aabb.minZ, 1.0);
@@ -110,41 +143,21 @@ export function drawWorldSpaceAABB(ctx: CanvasRenderingContext2D, camera: Camera
     vec4.set(p[5], aabb.maxX, aabb.minY, aabb.maxZ, 1.0);
     vec4.set(p[6], aabb.minX, aabb.maxY, aabb.maxZ, 1.0);
     vec4.set(p[7], aabb.maxX, aabb.maxY, aabb.maxZ, 1.0);
-
-    mat4.mul(vp, camera.projectionMatrix, camera.viewMatrix);
-    for (let i = 0; i < p.length; i++) {
-        vec4.transformMat4(p[i], p[i], vp);
-        divideByW(p[i], p[i]);
-    }
-
-    const cw = ctx.canvas.width;
-    const ch = ctx.canvas.height;
-
-    // Now draw the lines.
-    function shouldCull(p: vec4): boolean {
-        return p[0] < -1 || p[0] > 1 || p[1] < -1 || p[1] > 1 || p[2] < -1 || p[2] > 1;
-    }
-
-    function drawLine(p0: vec4, p1: vec4): void {
-        if (shouldCull(p0) || shouldCull(p1)) return;
-
-        ctx.moveTo((p0[0] + 1) * cw / 2, ((-p0[1] + 1) * ch / 2));
-        ctx.lineTo((p1[0] + 1) * cw / 2, ((-p1[1] + 1) * ch / 2));
-    }
+    transformToClipSpace(ctx, camera, 8);
 
     ctx.beginPath();
-    drawLine(p[0], p[1]);
-    drawLine(p[1], p[3]);
-    drawLine(p[3], p[2]);
-    drawLine(p[2], p[0]);
-    drawLine(p[4], p[5]);
-    drawLine(p[5], p[7]);
-    drawLine(p[7], p[6]);
-    drawLine(p[6], p[4]);
-    drawLine(p[0], p[4]);
-    drawLine(p[1], p[5]);
-    drawLine(p[2], p[6]);
-    drawLine(p[3], p[7]);
+    drawLine(ctx, p[0], p[1]);
+    drawLine(ctx, p[1], p[3]);
+    drawLine(ctx, p[3], p[2]);
+    drawLine(ctx, p[2], p[0]);
+    drawLine(ctx, p[4], p[5]);
+    drawLine(ctx, p[5], p[7]);
+    drawLine(ctx, p[7], p[6]);
+    drawLine(ctx, p[6], p[4]);
+    drawLine(ctx, p[0], p[4]);
+    drawLine(ctx, p[1], p[5]);
+    drawLine(ctx, p[2], p[6]);
+    drawLine(ctx, p[3], p[7]);
     ctx.closePath();
     ctx.lineWidth = 2;
     ctx.strokeStyle = colorToCSS(color);
