@@ -1,5 +1,5 @@
 
-import { mat4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import Progressable from '../Progressable';
@@ -30,6 +30,8 @@ import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHel
 import { RENDER_HACKS_ICON } from '../bk/scenes';
 import AnimationController from '../AnimationController';
 import { prepareFrameDebugOverlayCanvas2D } from '../DebugJunk';
+
+import * as DZB from './zww_dzb';
 import { ObjectRenderer, BMDObjectRenderer, SymbolMap, WhiteFlowerData, FlowerObjectRenderer, PinkFlowerData, BessouFlowerData, FlowerData } from './zww_actors';
 
 const TIME_OF_DAY_ICON = `<svg viewBox="0 0 100 100" height="20" fill="white"><path d="M50,93.4C74,93.4,93.4,74,93.4,50C93.4,26,74,6.6,50,6.6C26,6.6,6.6,26,6.6,50C6.6,74,26,93.4,50,93.4z M37.6,22.8  c-0.6,2.4-0.9,5-0.9,7.6c0,18.2,14.7,32.9,32.9,32.9c2.6,0,5.1-0.3,7.6-0.9c-4.7,10.3-15.1,17.4-27.1,17.4  c-16.5,0-29.9-13.4-29.9-29.9C20.3,37.9,27.4,27.5,37.6,22.8z"/></svg>`;
@@ -200,9 +202,12 @@ class WindWakerRoomRenderer {
     public name: string;
     public visible: boolean = true;
     public objectRenderers: ObjectRenderer[] = [];
+    public dzb: DZB.DZB;
 
     constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, textureHolder: J3DTextureHolder, public roomIdx: number, public roomRarc: RARC.RARC) {
         this.name = `Room ${roomIdx}`;
+
+        this.dzb = DZB.parse(assertExists(roomRarc.findFileData(`dzb/room.dzb`)));
 
         this.model = createScene(device, renderHelper, textureHolder, roomRarc, `model`);
 
@@ -573,7 +578,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         if (this.isFullSea)
             viewerInput.camera.setClipPlanes(20, 5000000);
         else
-            viewerInput.camera.setClipPlanes(20, 50000);
+            viewerInput.camera.setClipPlanes(20, 5000000);
         this.renderHelper.fillSceneParams(viewerInput);
         if (this.seaPlane)
             this.seaPlane.prepareToRender(hostAccessPass, viewerInput);
@@ -738,6 +743,8 @@ class ModelCache {
 
 const pathBase = `j3d/ww`;
 
+const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
 class SceneDesc {
     public id: string;
 
@@ -794,7 +801,7 @@ class SceneDesc {
                 renderer.roomRenderers.push(roomRenderer);
 
                 // HACK: for single-purpose sea levels, translate the objects instead of the model.
-                if (isSea && !isFullSea) {
+                if (false && isSea && !isFullSea) {
                     mat4.invert(modelMatrix, modelMatrix);
                 } else {
                     roomRenderer.setModelMatrix(modelMatrix);
@@ -888,6 +895,14 @@ class SceneDesc {
             return objectRenderer;
         }
 
+        function setToNearestFloor(m: mat4) {
+            mat4.getTranslation(scratchVec3a, m);
+            vec3.set(scratchVec3b, 0, -1, 0);
+            const found = DZB.raycast(scratchVec3b, roomRenderer.dzb, scratchVec3a, scratchVec3b);
+            if (found)
+                m[13] = scratchVec3b[1];
+        }
+
         function buildPinkFlowerModel(symbolMap: SymbolMap): ObjectRenderer {
             // This is a thing that the game *actually* checks, believe it or not, in dFlower_packet_c::setData.
             let flowerData: FlowerData;
@@ -907,6 +922,7 @@ class SceneDesc {
 
             const objectRenderer = new FlowerObjectRenderer(device, renderer.renderHelper, flowerData);
             mat4.copy(objectRenderer.modelMatrix, modelMatrix);
+            setToNearestFloor(objectRenderer.modelMatrix);
             roomRenderer.objectRenderers.push(objectRenderer);
             return objectRenderer;
         }
@@ -920,6 +936,7 @@ class SceneDesc {
 
             const objectRenderer = new FlowerObjectRenderer(device, renderer.renderHelper, flowerData);
             mat4.copy(objectRenderer.modelMatrix, modelMatrix);
+            setToNearestFloor(objectRenderer.modelMatrix);
             roomRenderer.objectRenderers.push(objectRenderer);
             return objectRenderer;
         }

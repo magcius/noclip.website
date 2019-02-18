@@ -1,0 +1,162 @@
+
+// "DolZel Background"
+
+// Collision data for objects and rooms.
+
+import ArrayBufferSlice from "../ArrayBufferSlice";
+import { assert, hexdump } from "../util";
+import { vec3 } from "gl-matrix";
+import { Endianness } from "../endian";
+
+const enum OctreeNodeType {
+    BRANCH = 0x00,
+    LEAF = 0x01,
+}
+
+interface OctreeBranchNode {
+    nodeType: OctreeNodeType.BRANCH;
+    children: OctreeNode[];
+}
+
+interface OctreeLeafNode {
+    nodeType: OctreeNodeType.LEAF;
+    faceStart: number;
+    faceCount: number;
+}
+
+type OctreeNode = OctreeBranchNode | OctreeLeafNode;
+
+export interface DZB {
+    octreeRoot: OctreeNode;
+    vertexData: Float32Array;
+    faceData: Uint16Array;
+    faceCount: number;
+}
+
+export function parse(buffer: ArrayBufferSlice): DZB {
+    const view = buffer.createDataView();
+
+    const vertexCount = view.getUint32(0x00);
+    const vertexOffs = view.getUint32(0x04);
+    const faceCount = view.getUint32(0x08);
+    const faceOffs = view.getUint32(0x0C);
+    const octreeFaceMapCount = view.getUint32(0x10);
+    const octreeFaceMapOffs = view.getUint32(0x14);
+    const octreeNodeCount = view.getUint32(0x18);
+    const octreeNodeOffs = view.getUint32(0x1C);
+    const groupCount = view.getUint32(0x20);
+    const groupOffs = view.getUint32(0x24);
+    const propertyCount = view.getUint32(0x28);
+    const propertyOffs = view.getUint32(0x2C);
+
+    function parseOctreeNodeMaybe(index: number): OctreeNode | null {
+        if (index >= 0)
+            return parseOctreeNode(index);
+        else
+            return null;
+    }
+
+    function parseOctreeNode(index: number): OctreeNode {
+        assert(index < octreeNodeCount);
+        const offs = octreeNodeOffs + (index * 0x14);
+        assert(view.getUint8(offs + 0x00) === 0x01);
+
+        const nodeType: OctreeNodeType = view.getUint8(offs + 0x01);
+        const parentNodeIndex: number = view.getInt16(offs + 0x02);
+
+        if (nodeType === OctreeNodeType.BRANCH) {
+            const children: OctreeNode[] = [];
+            children.push(parseOctreeNodeMaybe(view.getInt16(offs + 0x04)));
+            children.push(parseOctreeNodeMaybe(view.getInt16(offs + 0x06)));
+            children.push(parseOctreeNodeMaybe(view.getInt16(offs + 0x08)));
+            children.push(parseOctreeNodeMaybe(view.getInt16(offs + 0x0A)));
+            children.push(parseOctreeNodeMaybe(view.getInt16(offs + 0x0C)));
+            children.push(parseOctreeNodeMaybe(view.getInt16(offs + 0x0E)));
+            children.push(parseOctreeNodeMaybe(view.getInt16(offs + 0x10)));
+            children.push(parseOctreeNodeMaybe(view.getInt16(offs + 0x12)));
+            return { nodeType, children };
+        } else if (nodeType === OctreeNodeType.LEAF) {
+            const faceMapIndex = view.getUint16(offs + 0x04);
+            assert(faceMapIndex < octreeFaceMapCount);
+            const faceStart = view.getUint16(octreeFaceMapOffs + faceMapIndex * 0x02);
+            assert(faceStart < faceCount);
+            const faceEnd = (faceMapIndex + 1) < octreeFaceMapCount ? view.getUint16(octreeFaceMapOffs + (faceMapIndex + 1) * 0x02) : faceCount;
+            const faceCount_ = faceEnd - faceStart;
+            assert(faceCount_ > 0);
+            return { nodeType, faceStart, faceCount: faceCount_ };
+        } else {
+            throw "whoops";
+        }
+    }
+
+    const vertexData = buffer.createTypedArray(Float32Array, vertexOffs, vertexCount * 3, Endianness.BIG_ENDIAN);
+    const faceData = buffer.createTypedArray(Uint16Array, faceOffs, faceCount * 5, Endianness.BIG_ENDIAN);
+    const octreeRoot = parseOctreeNode(0);
+
+    return { octreeRoot, vertexData, faceData, faceCount };
+}
+
+const scratchVec3 = vec3.create();
+function scalarTriple(a: vec3, b: vec3, c: vec3): number {
+    return vec3.dot(a, vec3.cross(scratchVec3, b, c));
+}
+
+function intersectTriangle(bary: vec3, dir: vec3, t0: vec3, t1: vec3, t2: vec3): boolean {
+    let u = scalarTriple(dir, t2, t1);
+    if (u < 0) return false;
+    let v = scalarTriple(dir, t0, t2);
+    if (v < 0) return false;
+    let w = scalarTriple(dir, t1, t0);
+    if (w < 0) return false;
+
+    const denom = 1 / (u+v+w);
+    u *= denom;
+    v *= denom;
+    w *= denom;
+    vec3.set(bary, u, v, w);
+    return true;
+}
+
+const pdir = vec3.create();
+const pt0 = vec3.create();
+const pt1 = vec3.create();
+const pt2 = vec3.create();
+const bary = vec3.create();
+export function raycast(closestHit: vec3, dzb: DZB, origin: vec3, direction: vec3): boolean {
+    vec3.copy(pdir, direction);
+
+    let closestDist = Infinity;
+    for (let i = 0; i < dzb.faceCount; i++) {
+        const i0 = dzb.faceData[i*5 + 0];
+        const i1 = dzb.faceData[i*5 + 1];
+        const i2 = dzb.faceData[i*5 + 2];
+
+        vec3.set(pt0, dzb.vertexData[i0*3+0], dzb.vertexData[i0*3+1], dzb.vertexData[i0*3+2]);
+        vec3.sub(pt0, pt0, origin);
+        vec3.set(pt1, dzb.vertexData[i1*3+0], dzb.vertexData[i1*3+1], dzb.vertexData[i1*3+2]);
+        vec3.sub(pt1, pt1, origin);
+        vec3.set(pt2, dzb.vertexData[i2*3+0], dzb.vertexData[i2*3+1], dzb.vertexData[i2*3+2]);
+        vec3.sub(pt2, pt2, origin);
+
+        if (!intersectTriangle(bary, pdir, pt0, pt1, pt2))
+            continue;
+
+        const rx = pt0[0]*bary[0] + pt1[0]*bary[1] + pt2[0]*bary[2];
+        const ry = pt0[1]*bary[0] + pt1[1]*bary[1] + pt2[1]*bary[2];
+        const rz = pt0[2]*bary[0] + pt1[2]*bary[1] + pt2[2]*bary[2];
+
+        const sqdist = rx*rx + ry*ry + rz*rz;
+        if (sqdist >= closestDist)
+            continue;
+
+        vec3.set(closestHit, rx, ry, rz);
+        closestDist = sqdist;
+    }
+
+    if (closestDist < Infinity) {
+        vec3.add(closestHit, closestHit, origin);
+        return true;
+    } else {
+        return false;
+    }
+}
