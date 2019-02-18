@@ -74,7 +74,12 @@ export function downloadBlob(filename: string, blob: Blob): void {
     window.URL.revokeObjectURL(url);
 }
 
-export function downloadBuffer(filename: string, buffer: ArrayBufferSlice, type: string = 'application/octet-stream'): void {
+export function downloadBufferSlice(filename: string, buffer: ArrayBufferSlice, type: string = 'application/octet-stream'): void {
     const blob = new Blob([buffer.castToBuffer()], { type });
+    downloadBlob(filename, blob);
+}
+
+export function downloadBuffer(filename: string, buffer: ArrayBuffer, type: string = 'application/octet-stream'): void {
+    const blob = new Blob([buffer], { type });
     downloadBlob(filename, blob);
 }

@@ -52,7 +52,7 @@ import * as J3D from './j3d/scenes';
 import { UI, createDOMFromString, SaveStatesAction } from './ui';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera';
 import { hexdump } from './util';
-import { downloadBlob, downloadBuffer } from './fetch';
+import { downloadBlob, downloadBufferSlice, downloadBuffer } from './fetch';
 import { GfxDevice } from './gfx/platform/GfxPlatform';
 import { ZipFileEntry, makeZipFile } from './ZipFile';
 import { TextureHolder } from './TextureHolder';
@@ -728,7 +728,7 @@ ${message}
             this._makeZipFileFromTextureHolder(textureHolder).then((zipFileEntries) => {
                 const zipBuffer = makeZipFile(zipFileEntries);
                 const filename = `${this._getSceneDownloadPrefix()}_Textures.zip`;
-                downloadBuffer(filename, new ArrayBufferSlice(zipBuffer), 'application/zip');
+                downloadBufferSlice(filename, new ArrayBufferSlice(zipBuffer), 'application/zip');
             });
         }
     }
@@ -755,7 +755,9 @@ window.main = new Main();
 declare global {
     interface Window {
         hexdump: any;
+        downloadBuffer: any;
         debug: any;
     }
 }
 window.hexdump = hexdump;
+window.downloadBuffer = downloadBuffer;
