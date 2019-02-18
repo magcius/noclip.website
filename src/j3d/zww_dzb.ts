@@ -131,6 +131,9 @@ export function raycast(closestHit: vec3, dzb: DZB, origin: vec3, direction: vec
         const i1 = dzb.faceData[i*5 + 1];
         const i2 = dzb.faceData[i*5 + 2];
 
+        // Degenerate triangle.
+        if (i0 === i1 || i1 === i2 || i0 === i2) continue;
+
         vec3.set(pt0, dzb.vertexData[i0*3+0], dzb.vertexData[i0*3+1], dzb.vertexData[i0*3+2]);
         vec3.sub(pt0, pt0, origin);
         vec3.set(pt1, dzb.vertexData[i1*3+0], dzb.vertexData[i1*3+1], dzb.vertexData[i1*3+2]);

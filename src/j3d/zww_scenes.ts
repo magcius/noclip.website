@@ -801,7 +801,7 @@ class SceneDesc {
                 renderer.roomRenderers.push(roomRenderer);
 
                 // HACK: for single-purpose sea levels, translate the objects instead of the model.
-                if (false && isSea && !isFullSea) {
+                if (isSea && !isFullSea) {
                     mat4.invert(modelMatrix, modelMatrix);
                 } else {
                     roomRenderer.setModelMatrix(modelMatrix);
@@ -841,7 +841,7 @@ class SceneDesc {
         }
     }
 
-    private spawnObjectsForActor(device: GfxDevice, abortSignal: AbortSignal, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, name: string, parameters: number, modelMatrix: mat4): void {
+    private spawnObjectsForActor(device: GfxDevice, abortSignal: AbortSignal, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, name: string, parameters: number, localModelMatrix: mat4, worldModelMatrix: mat4): void {
         const modelCache = renderer.modelCache;
         const stageName = this.id;
         const roomIdx = roomRenderer.roomIdx;
@@ -869,9 +869,13 @@ class SceneDesc {
             return new BMDObjectRenderer(modelInstance);
         }
 
+        function setModelMatrix(m: mat4): void {
+            mat4.mul(m, worldModelMatrix, localModelMatrix);
+        }
+
         function buildModel(rarc: RARC.RARC, modelPath: string): BMDObjectRenderer {
             const objectRenderer = buildChildModel(rarc, modelPath);
-            mat4.copy(objectRenderer.modelMatrix, modelMatrix);
+            setModelMatrix(objectRenderer.modelMatrix);
             roomRenderer.objectRenderers.push(objectRenderer);
             return objectRenderer;
         }
@@ -890,17 +894,17 @@ class SceneDesc {
 
         function buildModelBMT(rarc: RARC.RARC, modelPath: string, bmtPath: string): BMDObjectRenderer {
             const objectRenderer = buildChildModelBMT(rarc, modelPath, bmtPath);
-            mat4.copy(objectRenderer.modelMatrix, modelMatrix);
+            setModelMatrix(objectRenderer.modelMatrix);
             roomRenderer.objectRenderers.push(objectRenderer);
             return objectRenderer;
         }
 
-        function setToNearestFloor(m: mat4) {
-            mat4.getTranslation(scratchVec3a, m);
+        function setToNearestFloor(dstMatrix: mat4, localModelMatrix: mat4) {
+            mat4.getTranslation(scratchVec3a, localModelMatrix);
             vec3.set(scratchVec3b, 0, -1, 0);
             const found = DZB.raycast(scratchVec3b, roomRenderer.dzb, scratchVec3a, scratchVec3b);
             if (found)
-                m[13] = scratchVec3b[1];
+                dstMatrix[13] = scratchVec3b[1];
         }
 
         function buildPinkFlowerModel(symbolMap: SymbolMap): ObjectRenderer {
@@ -921,8 +925,8 @@ class SceneDesc {
             }
 
             const objectRenderer = new FlowerObjectRenderer(device, renderer.renderHelper, flowerData);
-            mat4.copy(objectRenderer.modelMatrix, modelMatrix);
-            setToNearestFloor(objectRenderer.modelMatrix);
+            setModelMatrix(objectRenderer.modelMatrix);
+            setToNearestFloor(objectRenderer.modelMatrix, localModelMatrix);
             roomRenderer.objectRenderers.push(objectRenderer);
             return objectRenderer;
         }
@@ -935,8 +939,8 @@ class SceneDesc {
             }
 
             const objectRenderer = new FlowerObjectRenderer(device, renderer.renderHelper, flowerData);
-            mat4.copy(objectRenderer.modelMatrix, modelMatrix);
-            setToNearestFloor(objectRenderer.modelMatrix);
+            setModelMatrix(objectRenderer.modelMatrix);
+            setToNearestFloor(objectRenderer.modelMatrix, localModelMatrix);
             roomRenderer.objectRenderers.push(objectRenderer);
             return objectRenderer;
         }
@@ -1947,7 +1951,7 @@ class SceneDesc {
             console.warn(`Unknown object: ${name} ${hexzero(parameters, 8)}`);
     }
 
-    private spawnObjectsFromTGOBLayer(device: GfxDevice, abortSignal: AbortSignal, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, buffer: ArrayBufferSlice, tgobHeader: DZSChunkHeader | undefined, modelMatrix: mat4): void {
+    private spawnObjectsFromTGOBLayer(device: GfxDevice, abortSignal: AbortSignal, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, buffer: ArrayBufferSlice, tgobHeader: DZSChunkHeader | undefined, worldModelMatrix: mat4): void {
         if (tgobHeader === undefined)
             return;
 
@@ -1962,20 +1966,19 @@ class SceneDesc {
             const posZ = view.getFloat32(actrTableIdx + 0x14);
             const rotY = view.getInt16(actrTableIdx + 0x1A) / 0x7FFF * Math.PI;
 
-            const m = mat4.create();
-            mat4.rotateY(m, m, rotY);
-            m[12] += posX;
-            m[13] += posY;
-            m[14] += posZ;
-            mat4.mul(m, modelMatrix, m);
+            const localModelMatrix = mat4.create();
+            mat4.rotateY(localModelMatrix, localModelMatrix, rotY);
+            localModelMatrix[12] += posX;
+            localModelMatrix[13] += posY;
+            localModelMatrix[14] += posZ;
 
-            this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, name, parameters, m);
+            this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, name, parameters, localModelMatrix, worldModelMatrix);
 
             actrTableIdx += 0x20;
         }
     }
 
-    private spawnObjectsFromACTRLayer(device: GfxDevice, abortSignal: AbortSignal, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, buffer: ArrayBufferSlice, actrHeader: DZSChunkHeader | undefined, modelMatrix: mat4): void {
+    private spawnObjectsFromACTRLayer(device: GfxDevice, abortSignal: AbortSignal, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, buffer: ArrayBufferSlice, actrHeader: DZSChunkHeader | undefined, worldModelMatrix: mat4): void {
         if (actrHeader === undefined)
             return;
 
@@ -1993,14 +1996,13 @@ class SceneDesc {
             const flag = view.getUint16(actrTableIdx + 0x1C);
             const enemyNum = view.getUint16(actrTableIdx + 0x1E);
 
-            const m = mat4.create();
-            mat4.rotateY(m, m, rotY);
-            m[12] += posX;
-            m[13] += posY;
-            m[14] += posZ;
-            mat4.mul(m, modelMatrix, m);
+            const localModelMatrix = mat4.create();
+            mat4.rotateY(localModelMatrix, localModelMatrix, rotY);
+            localModelMatrix[12] += posX;
+            localModelMatrix[13] += posY;
+            localModelMatrix[14] += posZ;
 
-            this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, name, parameters, m);
+            this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, name, parameters, localModelMatrix, worldModelMatrix);
 
             actrTableIdx += 0x20;
         }
