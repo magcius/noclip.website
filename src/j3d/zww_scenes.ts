@@ -12,7 +12,7 @@ import * as UI from '../ui';
 
 import * as GX_Material from '../gx/gx_material';
 
-import { BMD, BTK, BRK, BCK, BTI, ANK1, TTK1, TRK1, LoopMode } from './j3d';
+import { BMD, BTK, BRK, BCK, BTI, ANK1, TTK1, TRK1, LoopMode, BMT } from './j3d';
 import * as RARC from './rarc';
 import { J3DTextureHolder, BMDModelInstance, BMDModel } from './render';
 import { Camera, computeViewMatrix, ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB } from '../Camera';
@@ -733,6 +733,7 @@ class ModelCache {
     private archiveProgressableCache = new Map<string, Progressable<RARC.RARC>>();
     private archiveCache = new Map<string, RARC.RARC>();
     private modelCache = new Map<string, BMDModel>();
+    public extraModels: BMDModel[] = [];
 
     public waitForLoad(): Progressable<any> {
         return Progressable.all([... this.archiveProgressableCache.values()]);
@@ -779,6 +780,8 @@ class ModelCache {
     public destroy(device: GfxDevice): void {
         for (const model of this.modelCache.values())
             model.destroy(device);
+        for (let i = 0; i < this.extraModels.length; i++)
+            this.extraModels[i].destroy(device);
     }
 }
 
@@ -895,8 +898,27 @@ class SceneDesc {
             return new ObjectRenderer(modelInstance);
         }
 
-        function buildModel(rarc: RARC.RARC, modelPath: string) {
+        function buildModel(rarc: RARC.RARC, modelPath: string): ObjectRenderer {
             const objectRenderer = buildChildModel(rarc, modelPath);
+            mat4.copy(objectRenderer.modelMatrix, modelMatrix);
+            roomRenderer.objectRenderers.push(objectRenderer);
+            return objectRenderer;
+        }
+
+        function buildChildModelBMT(rarc: RARC.RARC, modelPath: string, bmtPath: string): ObjectRenderer {
+            const bmd = BMD.parse(rarc.findFileData(modelPath));
+            const bmt = BMT.parse(rarc.findFileData(bmtPath));
+            renderer.textureHolder.addJ3DTextures(device, bmd, bmt);
+            const model = new BMDModel(device, renderer.renderHelper, bmd, bmt);
+            modelCache.extraModels.push(model);
+            const modelInstance = new BMDModelInstance(device, renderer.renderHelper, renderer.textureHolder, model);
+            modelInstance.name = name;
+            modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 1);
+            return new ObjectRenderer(modelInstance);
+        }
+
+        function buildModelBMT(rarc: RARC.RARC, modelPath: string, bmtPath: string): ObjectRenderer {
+            const objectRenderer = buildChildModelBMT(rarc, modelPath, bmtPath);
             mat4.copy(objectRenderer.modelMatrix, modelMatrix);
             roomRenderer.objectRenderers.push(objectRenderer);
             return objectRenderer;
@@ -1642,7 +1664,13 @@ class SceneDesc {
         else if (name === 'Sarace') fetchArchive(`Sarace.arc`).then((rarc) => buildModel(rarc, `bdl/sa.bdl`));
         else if (name === 'Ocloud') fetchArchive(`BVkumo.arc`).then((rarc) => buildModel(rarc, `bdlm/bvkumo.bdl`).bindTTK1(parseBTK(rarc, `btk/bvkumo.btk`)));
         // Triangle Island Statue: TODO(jstpierre): finish the submodels
-        else if (name === 'Doguu') fetchArchive(`Doguu.arc`).then((rarc) => buildModel(rarc, `bdlm/vgsma.bdl`));
+        else if (name === 'Doguu') fetchArchive(`Doguu.arc`).then((rarc) => {
+            const which = parameters & 0xFF;
+            const bmtPaths = ['bmt/vgsmd.bmt', 'bmt/vgsmf.bmt', 'bmt/vgsmn.bmt'];
+            const brkPaths = ['brk/vgsmd.brk', 'brk/vgsmf.brk', 'brk/vgsmn.brk'];
+            const m = buildModelBMT(rarc, `bdlm/vgsma.bdl`, bmtPaths[which]);
+            m.bindTRK1(parseBRK(rarc, brkPaths[which]));
+        });
         // Outset Island
         else if (name === 'Lamp') fetchArchive(`Lamp.arc`).then((rarc) => {
             const m = buildModel(rarc, `bmd/lamp_00.bmd`);
