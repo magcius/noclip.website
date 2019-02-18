@@ -1,25 +1,26 @@
 
-import { mat4, vec3, vec4 } from 'gl-matrix';
+import { mat4 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import Progressable from '../Progressable';
-import { readString, assertExists, hexzero, leftPad } from '../util';
+import { readString, assertExists, hexzero, leftPad, assert } from '../util';
 import { fetchData } from '../fetch';
 
 import * as Viewer from '../viewer';
+import * as BYML from '../byml';
 import * as Yaz0 from '../compression/Yaz0';
 import * as UI from '../ui';
 
 import * as GX_Material from '../gx/gx_material';
 
-import { BMD, BTK, BRK, BCK, BTI, ANK1, TTK1, TRK1, LoopMode, BMT } from './j3d';
+import { BMD, BTK, BRK, BCK, BTI, LoopMode, BMT } from './j3d';
 import * as RARC from './rarc';
 import { J3DTextureHolder, BMDModelInstance, BMDModel } from './render';
-import { Camera, computeViewMatrix, ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB } from '../Camera';
+import { Camera, computeViewMatrix } from '../Camera';
 import { DeviceProgram } from '../Program';
 import { colorToCSS, Color } from '../Color';
 import { ColorKind, GXRenderHelperGfx } from '../gx/gx_render';
-import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBufferUsage, GfxFormat, GfxVertexAttributeFrequency, GfxInputLayout, GfxInputState, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor, GfxPrimitiveTopology, GfxCompareMode, GfxBufferFrequencyHint, GfxVertexAttributeDescriptor } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBufferUsage, GfxFormat, GfxVertexAttributeFrequency, GfxInputLayout, GfxInputState, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor, GfxCompareMode, GfxBufferFrequencyHint, GfxVertexAttributeDescriptor } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstViewRenderer, GfxRenderInstBuilder, GfxRenderInst, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
@@ -29,11 +30,11 @@ import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHel
 import { RENDER_HACKS_ICON } from '../bk/scenes';
 import AnimationController from '../AnimationController';
 import { prepareFrameDebugOverlayCanvas2D } from '../DebugJunk';
-import { AABB } from '../Geometry';
+import { ObjectRenderer, BMDObjectRenderer, SymbolMap, WhiteFlowerData, WhiteFlowerObjectRenderer } from './zww_actors';
 
 const TIME_OF_DAY_ICON = `<svg viewBox="0 0 100 100" height="20" fill="white"><path d="M50,93.4C74,93.4,93.4,74,93.4,50C93.4,26,74,6.6,50,6.6C26,6.6,6.6,26,6.6,50C6.6,74,26,93.4,50,93.4z M37.6,22.8  c-0.6,2.4-0.9,5-0.9,7.6c0,18.2,14.7,32.9,32.9,32.9c2.6,0,5.1-0.3,7.6-0.9c-4.7,10.3-15.1,17.4-27.1,17.4  c-16.5,0-29.9-13.4-29.9-29.9C20.3,37.9,27.4,27.5,37.6,22.8z"/></svg>`;
 
-interface Colors {
+export interface Colors {
     actorShadow: GX_Material.Color;
     actorAmbient: GX_Material.Color;
     amb: GX_Material.Color;
@@ -190,87 +191,6 @@ function createScene(device: GfxDevice, renderHelper: GXRenderHelperGfx, texture
     return scene;
 }
 
-const scratchVec3a = vec3.create();
-const scratchVec3b = vec3.create();
-const scratchLight = new GX_Material.Light();
-const bboxScratch = new AABB();
-const screenProjection = new ScreenSpaceProjection();
-class ObjectRenderer {
-    public visible = true;
-    public modelMatrix: mat4 = mat4.create();
-
-    private childObjects: ObjectRenderer[] = [];
-    private parentJointMatrix: mat4 | null = null;
-
-    constructor(public modelInstance: BMDModelInstance) {
-    }
-
-    public bindANK1(ank1: ANK1, animationController?: AnimationController): void {
-        this.modelInstance.bindANK1(ank1, animationController);
-    }
-
-    public bindTTK1(ttk1: TTK1, animationController?: AnimationController): void {
-        this.modelInstance.bindTTK1(ttk1, animationController);
-    }
-
-    public bindTRK1(trk1: TRK1, animationController?: AnimationController): void {
-        this.modelInstance.bindTRK1(trk1, animationController);
-    }
-
-    public setParentJoint(o: ObjectRenderer, jointName: string): void {
-        this.parentJointMatrix = o.modelInstance.getJointMatrixReference(jointName);
-        o.childObjects.push(this);
-    }
-
-    public setMaterialColorWriteEnabled(materialName: string, v: boolean): void {
-        this.modelInstance.setMaterialColorWriteEnabled(materialName, v);
-    }
-
-    public setColors(colors: Colors): void {
-        this.modelInstance.setColorOverride(ColorKind.C0, colors.actorShadow);
-        this.modelInstance.setColorOverride(ColorKind.K0, colors.actorAmbient);
-
-        for (let i = 0; i < this.childObjects.length; i++)
-            this.childObjects[i].setColors(colors);
-    }
-
-    public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput, visible: boolean): void {
-        this.modelInstance.visible = visible && this.visible;
-
-        if (this.modelInstance.visible) {
-            if (this.parentJointMatrix !== null) {
-                mat4.mul(this.modelInstance.modelMatrix, this.parentJointMatrix, this.modelMatrix);
-            } else {
-                mat4.copy(this.modelInstance.modelMatrix, this.modelMatrix);
-
-                // Don't compute screen area culling on child meshes (don't want heads to disappear before bodies.)
-                bboxScratch.transform(this.modelInstance.bmdModel.bbox, this.modelInstance.modelMatrix);
-                computeScreenSpaceProjectionFromWorldSpaceAABB(screenProjection, viewerInput.camera, bboxScratch);
-
-                if (screenProjection.getScreenArea() <= 0.0002)
-                    this.modelInstance.visible = false;
-            }
-        }
-
-        GX_Material.lightSetWorldPosition(scratchLight, viewerInput.camera, 250, 250, 250);
-        GX_Material.lightSetWorldDirection(scratchLight, viewerInput.camera, -250, -250, -250);
-        // Toon lighting works by setting the color to red.
-        scratchLight.Color.set(1, 0, 0, 0);
-        vec3.set(scratchLight.CosAtten, 1.075, 0, 0);
-        vec3.set(scratchLight.DistAtten, 1.075, 0, 0);
-        this.modelInstance.setGXLight(0, scratchLight);
-
-        this.modelInstance.prepareToRender(renderHelper, viewerInput);
-        for (let i = 0; i < this.childObjects.length; i++)
-            this.childObjects[i].prepareToRender(renderHelper, viewerInput, this.modelInstance.visible);
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.modelInstance.destroy(device);
-        for (let i = 0; i < this.childObjects.length; i++)
-            this.childObjects[i].destroy(device);
-    }
-}
 
 class WindWakerRoomRenderer {
     public model: BMDModelInstance;
@@ -526,7 +446,7 @@ const enum WindWakerPass {
     SKYBOX = 0x02,
 }
 
-class WindWakerRenderer implements Viewer.SceneGfx {
+export class WindWakerRenderer implements Viewer.SceneGfx {
     private viewRenderer = new GfxRenderInstViewRenderer();
     private renderTarget = new BasicRenderTarget();
     public renderHelper: GXRenderHelperGfx;
@@ -653,7 +573,7 @@ class WindWakerRenderer implements Viewer.SceneGfx {
         if (this.isFullSea)
             viewerInput.camera.setClipPlanes(20, 5000000);
         else
-            viewerInput.camera.setClipPlanes(2, 50000);
+            viewerInput.camera.setClipPlanes(20, 50000);
         this.renderHelper.fillSceneParams(viewerInput);
         if (this.seaPlane)
             this.seaPlane.prepareToRender(hostAccessPass, viewerInput);
@@ -730,6 +650,8 @@ class WindWakerRenderer implements Viewer.SceneGfx {
 }
 
 class ModelCache {
+    private fileProgressableCache = new Map<string, Progressable<ArrayBufferSlice>>();
+    private fileDataCache = new Map<string, ArrayBufferSlice>();
     private archiveProgressableCache = new Map<string, Progressable<RARC.RARC>>();
     private archiveCache = new Map<string, RARC.RARC>();
     private modelCache = new Map<string, BMDModel>();
@@ -739,15 +661,37 @@ class ModelCache {
         return Progressable.all([... this.archiveProgressableCache.values()]);
     }
 
+    private fetchFile(path: string, abortSignal: AbortSignal): Progressable<ArrayBufferSlice> {
+        assert(!this.fileProgressableCache.has(path));
+        const p = fetchData(path, abortSignal);
+        this.fileProgressableCache.set(path, p);
+        return p;
+    }
+
+    public fetchFileData(path: string, abortSignal: AbortSignal): Progressable<ArrayBufferSlice> {
+        const p = this.fileProgressableCache.get(path);
+        if (p !== undefined) {
+            return p.then(() => this.getFileData(path));
+        } else {
+            return this.fetchFile(path, abortSignal).then((data) => {
+                this.fileDataCache.set(path, data);
+                return data;
+            });
+        }
+    }
+
+    public getFileData(path: string): ArrayBufferSlice {
+        return assertExists(this.fileDataCache.get(path));
+    }
+
     public getArchive(archivePath: string): RARC.RARC {
         return assertExists(this.archiveCache.get(archivePath));
     }
 
     public fetchArchive(archivePath: string, abortSignal: AbortSignal): Progressable<RARC.RARC> {
         let p = this.archiveProgressableCache.get(archivePath);
-
         if (p === undefined) {
-            p = fetchData(archivePath, abortSignal).then((data) => {
+            p = this.fetchFile(archivePath, abortSignal).then((data) => {
                 if (readString(data, 0, 0x04) === 'Yaz0')
                     return Yaz0.decompress(data);
                 else
@@ -890,22 +834,33 @@ class SceneDesc {
             return renderer.modelCache.fetchArchive(`${pathBase}/Object/${objArcName}`, abortSignal);
         }
 
-        function buildChildModel(rarc: RARC.RARC, modelPath: string): ObjectRenderer {
+        let _extraSymbols: Progressable<SymbolMap> | null = null;
+        function fetchExtraSymbols(): Progressable<SymbolMap> {
+            if (_extraSymbols === null) {
+                _extraSymbols = renderer.modelCache.fetchFileData(`${pathBase}/extra.crg1_arc`, abortSignal).then((data) => {
+                    return BYML.parse<SymbolMap>(data, BYML.FileType.CRG1);
+                });
+            }
+
+            return _extraSymbols;
+        }
+
+        function buildChildModel(rarc: RARC.RARC, modelPath: string): BMDObjectRenderer {
             const model = modelCache.getModel(device, renderer, rarc, modelPath);
             const modelInstance = new BMDModelInstance(device, renderer.renderHelper, renderer.textureHolder, model);
             modelInstance.name = name;
             modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 1);
-            return new ObjectRenderer(modelInstance);
+            return new BMDObjectRenderer(modelInstance);
         }
 
-        function buildModel(rarc: RARC.RARC, modelPath: string): ObjectRenderer {
+        function buildModel(rarc: RARC.RARC, modelPath: string): BMDObjectRenderer {
             const objectRenderer = buildChildModel(rarc, modelPath);
             mat4.copy(objectRenderer.modelMatrix, modelMatrix);
             roomRenderer.objectRenderers.push(objectRenderer);
             return objectRenderer;
         }
 
-        function buildChildModelBMT(rarc: RARC.RARC, modelPath: string, bmtPath: string): ObjectRenderer {
+        function buildChildModelBMT(rarc: RARC.RARC, modelPath: string, bmtPath: string): BMDObjectRenderer {
             const bmd = BMD.parse(rarc.findFileData(modelPath));
             const bmt = BMT.parse(rarc.findFileData(bmtPath));
             renderer.textureHolder.addJ3DTextures(device, bmd, bmt);
@@ -914,11 +869,20 @@ class SceneDesc {
             const modelInstance = new BMDModelInstance(device, renderer.renderHelper, renderer.textureHolder, model);
             modelInstance.name = name;
             modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 1);
-            return new ObjectRenderer(modelInstance);
+            return new BMDObjectRenderer(modelInstance);
         }
 
-        function buildModelBMT(rarc: RARC.RARC, modelPath: string, bmtPath: string): ObjectRenderer {
+        function buildModelBMT(rarc: RARC.RARC, modelPath: string, bmtPath: string): BMDObjectRenderer {
             const objectRenderer = buildChildModelBMT(rarc, modelPath, bmtPath);
+            mat4.copy(objectRenderer.modelMatrix, modelMatrix);
+            roomRenderer.objectRenderers.push(objectRenderer);
+            return objectRenderer;
+        }
+
+        function buildWhiteFlowerModel(symbolMap: SymbolMap): ObjectRenderer {
+            // TODO(jstpierre): Cache flowerData
+            const flowerData = new WhiteFlowerData(device, symbolMap, renderer.renderHelper, renderer.textureHolder);
+            const objectRenderer = new WhiteFlowerObjectRenderer(device, renderer.renderHelper, flowerData);
             mat4.copy(objectRenderer.modelMatrix, modelMatrix);
             roomRenderer.objectRenderers.push(objectRenderer);
             return objectRenderer;
@@ -1051,7 +1015,7 @@ class SceneDesc {
         });
         // Abe
         else if (name === 'Ym2') fetchArchive(`Ym.arc`).then((rarc) => {
-            const m = buildModel(rarc, `bdlm/ym.bdl`);
+            const m = buildModelBMT(rarc, `bdlm/ym.bdl`, `bmt/ym2.bmt`);
             buildChildModel(rarc, `bdlm/ymhead02.bdl`).setParentJoint(m, `head`);
             m.bindANK1(parseBCK(rarc, `bcks/wait01.bck`));
         });
@@ -1176,7 +1140,7 @@ class SceneDesc {
         });
         // Joel
         else if (name === 'Ko2') fetchArchive(`Ko.arc`).then((rarc) => {
-            const m = buildModel(rarc, `bdlm/ko.bdl`);
+            const m = buildModelBMT(rarc, `bdlm/ko.bdl`, `bmt/ko02.bmt`);
             buildChildModel(rarc, `bdlm/kohead02.bdl`).setParentJoint(m, `head`);
             m.bindANK1(parseBCK(rarc, `bcks/ko_wait01.bck`));
         });
@@ -1207,13 +1171,13 @@ class SceneDesc {
         });
         // Senza
         else if (name === 'P1b') fetchArchive(`P1.arc`).then((rarc) => {
-            const m = buildModel(rarc, `bdl/p1.bdl`);
+            const m = buildModelBMT(rarc, `bdl/p1.bdl`, `bmt/p1b.bmt`);
             buildChildModel(rarc, `bdlm/p1b_head.bdl`).setParentJoint(m, `head`);
             m.bindANK1(parseBCK(rarc, `bcks/wait.bck`));
         });
         // Nudge
         else if (name === 'P1c') fetchArchive(`P1.arc`).then((rarc) => {
-            const m = buildModel(rarc, `bdl/p1.bdl`);
+            const m = buildModelBMT(rarc, `bdl/p1.bdl`, `bmt/p1c.bmt`);
             buildChildModel(rarc, `bdlm/p1c_head.bdl`).setParentJoint(m, `head`);
             m.bindANK1(parseBCK(rarc, `bcks/wait.bck`));
         });
@@ -1225,13 +1189,13 @@ class SceneDesc {
         });
         // Niko
         else if (name === 'P2b') fetchArchive(`P2.arc`).then((rarc) => {
-            const m = buildModel(rarc, `bdl/p2.bdl`);
+            const m = buildModelBMT(rarc, `bdl/p2.bdl`, `bmt/p2b.bmt`);
             buildChildModel(rarc, `bdlm/p2head02.bdl`).setParentJoint(m, `head`);
             m.bindANK1(parseBCK(rarc, `bcks/p2_wait01.bck`));
         });
         // Mako
         else if (name === 'P2c') fetchArchive(`P2.arc`).then((rarc) => {
-            const m = buildModel(rarc, `bdl/p2.bdl`);
+            const m = buildModelBMT(rarc, `bdl/p2.bdl`, `bmt/p2c.bmt`);
             buildChildModel(rarc, `bdlm/p2head03.bdl`).setParentJoint(m, `head`);
             m.bindANK1(parseBCK(rarc, `bcks/p2_wait01.bck`));
         });
@@ -1258,25 +1222,25 @@ class SceneDesc {
         });
         // Gummy
         else if (name === 'Sa2') fetchArchive(`Sa.arc`).then((rarc) => {
-            const m = buildModel(rarc, `bdl/sa.bdl`);
+            const m = buildModelBMT(rarc, `bdl/sa.bdl`, `bmt/sa02.bmt`);
             buildChildModel(rarc, `bdlm/sa02_head.bdl`).setParentJoint(m, `head`);
             m.bindANK1(parseBCK(rarc, `bcks/sa_wait01.bck`));
         });
         // Kane
         else if (name === 'Sa3') fetchArchive(`Sa.arc`).then((rarc) => {
-            const m = buildModel(rarc, `bdl/sa.bdl`);
+            const m = buildModelBMT(rarc, `bdl/sa.bdl`, `bmt/sa03.bmt`);
             buildChildModel(rarc, `bdlm/sa03_head.bdl`).setParentJoint(m, `head`);
             m.bindANK1(parseBCK(rarc, `bcks/sa_wait01.bck`));
         });
         // Candy
         else if (name === 'Sa4') fetchArchive(`Sa.arc`).then((rarc) => {
-            const m = buildModel(rarc, `bdl/sa.bdl`);
+            const m = buildModelBMT(rarc, `bdl/sa.bdl`, `bmt/sa04.bmt`);
             buildChildModel(rarc, `bdlm/sa04_head.bdl`).setParentJoint(m, `head`);
             m.bindANK1(parseBCK(rarc, `bcks/sa_wait01.bck`));
         });
         // Dampa
         else if (name === 'Sa5') fetchArchive(`Sa.arc`).then((rarc) => {
-            const m = buildModel(rarc, `bdl/sa.bdl`);
+            const m = buildModelBMT(rarc, `bdl/sa.bdl`, `bmt/sa05.bmt`);
             buildChildModel(rarc, `bdlm/sa05_head.bdl`).setParentJoint(m, `head`);
             m.bindANK1(parseBCK(rarc, `bcks/sa_wait01.bck`));
         });
@@ -1288,7 +1252,7 @@ class SceneDesc {
         });
         // Joanna
         else if (name === 'Ug2') fetchArchive(`Ug.arc`).then((rarc) => {
-            const m = buildModel(rarc, `bdl/ug.bdl`);
+            const m = buildModelBMT(rarc, `bdl/ug.bdl`, `bmt/ug02.bmt`);
             buildChildModel(rarc, `bdlm/ug02_head.bdl`).setParentJoint(m, `head`);
             m.bindANK1(parseBCK(rarc, `bcks/ug_wait01.bck`));
         });
@@ -1300,13 +1264,13 @@ class SceneDesc {
         });
         // Jan
         else if (name === 'UkC') fetchArchive(`Uk.arc`).then((rarc) => {
-            const m = buildModel(rarc, `bdlm/uk.bdl`);
+            const m = buildModelBMT(rarc, `bdlm/uk.bdl`, `bmt/uk_c.bmt`);
             buildChildModel(rarc, `bdlm/ukhead_c.bdl`).setParentJoint(m, `head`);
             m.bindANK1(parseBCK(rarc, `bcks/uk_wait.bck`));
         });
         // Jun-Roberto
         else if (name === 'UkD') fetchArchive(`Uk.arc`).then((rarc) => {
-            const m = buildModel(rarc, `bdlm/uk.bdl`);
+            const m = buildModelBMT(rarc, `bdlm/uk.bdl`, `bmt/uk_d.bmt`);
             buildChildModel(rarc, `bdl/ukhead_d.bdl`).setParentJoint(m, `head`);
             m.bindANK1(parseBCK(rarc, `bcks/uk_wait.bck`));
         });
@@ -1318,7 +1282,7 @@ class SceneDesc {
         });
         // Linda
         else if (name === 'Uw2') fetchArchive(`Uw.arc`).then((rarc) => {
-            const m = buildModel(rarc, `bdl/uw.bdl`);
+            const m = buildModelBMT(rarc, `bdl/uw.bdl`, `bmt/uw02.bmt`);
             buildChildModel(rarc, `bdlm/uw02_head.bdl`).setParentJoint(m, `head`);
             m.bindANK1(parseBCK(rarc, `bcks/uw_wait01.bck`));
         });
@@ -1330,13 +1294,13 @@ class SceneDesc {
         });
         // Anton
         else if (name === 'Um2') fetchArchive(`Um.arc`).then((rarc) => {
-            const m = buildModel(rarc, `bdl/um.bdl`);
+            const m = buildModelBMT(rarc, `bdl/um.bdl`, `bmt/um02.bmt`);
             buildChildModel(rarc, `bdlm/um02_head.bdl`).setParentJoint(m, `head`);
             m.bindANK1(parseBCK(rarc, `bcks/um_wait01.bck`));
         });
         // Kamo
         else if (name === 'Um3') fetchArchive(`Um.arc`).then((rarc) => {
-            const m = buildModel(rarc, `bdl/um.bdl`);
+            const m = buildModelBMT(rarc, `bdl/um.bdl`, `bmt/um03.bmt`);
             buildChildModel(rarc, `bdlm/um03_head.bdl`).setParentJoint(m, `head`);
             m.bindANK1(parseBCK(rarc, `bcks/um_wait01.bck`));
         });
@@ -1348,13 +1312,13 @@ class SceneDesc {
         });
         // Gossack
         else if (name === 'Uo2') fetchArchive(`Uo.arc`).then((rarc) => {
-            const m = buildModel(rarc, `bdl/uo.bdl`);
+            const m = buildModelBMT(rarc, `bdl/uo.bdl`, `bmt/uo02.bmt`);
             buildChildModel(rarc, `bdlm/uo02_head.bdl`).setParentJoint(m, `head`);
             m.bindANK1(parseBCK(rarc, `bcks/uo_wait01.bck`));
         });
         // Garrickson
         else if (name === 'Uo3') fetchArchive(`Uo.arc`).then((rarc) => {
-            const m = buildModel(rarc, `bdl/uo.bdl`);
+            const m = buildModelBMT(rarc, `bdl/uo.bdl`, `bmt/uo03.bmt`);
             buildChildModel(rarc, `bdlm/uo03_head.bdl`).setParentJoint(m, `head`);
             m.bindANK1(parseBCK(rarc, `bcks/uo_wait01.bck`));
         });
@@ -1366,19 +1330,19 @@ class SceneDesc {
         });
         // Pompie
         else if (name === 'Ub2') fetchArchive(`Ub.arc`).then((rarc) => {
-            const m = buildModel(rarc, `bdl/ub.bdl`);
+            const m = buildModelBMT(rarc, `bdl/ub.bdl`, `bmt/ub02.bmt`);
             buildChildModel(rarc, `bdlm/ub02_head.bdl`).setParentJoint(m, `head`);
             m.bindANK1(parseBCK(rarc, `bcks/ub_wait01.bck`));
         });
         // Missy
         else if (name === 'Ub3') fetchArchive(`Ub.arc`).then((rarc) => {
-            const m = buildModel(rarc, `bdl/ub.bdl`);
+            const m = buildModelBMT(rarc, `bdl/ub.bdl`, `bmt/ub03.bmt`);
             buildChildModel(rarc, `bdlm/ub03_head.bdl`).setParentJoint(m, `head`);
             m.bindANK1(parseBCK(rarc, `bcks/ub_wait01.bck`));
         });
         // Mineco
         else if (name === 'Ub4') fetchArchive(`Ub.arc`).then((rarc) => {
-            const m = buildModel(rarc, `bdl/ub.bdl`);
+            const m = buildModelBMT(rarc, `bdl/ub.bdl`, `bmt/ub04.bmt`);
             buildChildModel(rarc, `bdlm/ub04_head.bdl`).setParentJoint(m, `head`);
             m.bindANK1(parseBCK(rarc, `bcks/ub_wait01.bck`));
         });
@@ -1899,7 +1863,8 @@ class SceneDesc {
         // Grass. Procedurally generated by the engine.
         else if (name === 'kusax1' || name === 'kusax7' || name === 'kusax21') return;
         // Flowers. Procedurally generated by the engine.
-        else if (name === 'flower' || name === 'flwr7' || name === 'flwr17' || name === 'pflwrx7' || name === 'pflower') return
+        else if (name === 'flower') fetchExtraSymbols().then((symbolMap) => buildWhiteFlowerModel(symbolMap));
+        else if (name === 'flwr7' || name === 'flwr17' || name === 'pflwrx7' || name === 'pflower') return;
         // Bushes. Procedurally generated by the engine.
         else if (name === 'woodb' || name === 'woodbx') return;
         // Small trees. Procedurally generated by the engine.

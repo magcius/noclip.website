@@ -1,13 +1,13 @@
 
-import { mat4, mat2d, vec4, vec3 } from 'gl-matrix';
+import { mat4, mat2d, vec4 } from 'gl-matrix';
 
 import { BMD, BMT, HierarchyNode, HierarchyType, MaterialEntry, Shape, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData, DRW1MatrixKind, TTK1Animator, ANK1Animator, bindANK1Animator, BTI } from './j3d';
 import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } from './j3d';
 
 import * as GX_Material from '../gx/gx_material';
-import { MaterialParams, PacketParams, GXTextureHolder, ColorKind, translateTexFilterGfx, translateWrapModeGfx, loadedDataCoalescerGfx, GXShapeHelperGfx, GXRenderHelperGfx, ub_MaterialParams, GXMaterialHelperGfx } from '../gx/gx_render';
+import { MaterialParams, PacketParams, GXTextureHolder, ColorKind, translateTexFilterGfx, translateWrapModeGfx, loadedDataCoalescerGfx, GXShapeHelperGfx, GXRenderHelperGfx, ub_MaterialParams } from '../gx/gx_render';
 
-import { computeViewMatrix, computeModelMatrixBillboard, computeModelMatrixYBillboard, computeViewMatrixSkybox, texEnvMtx, Camera, texProjPerspMtx, computeViewSpaceDepthFromWorldSpaceAABB, ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB } from '../Camera';
+import { computeViewMatrix, computeModelMatrixBillboard, computeModelMatrixYBillboard, computeViewMatrixSkybox, texEnvMtx, Camera, texProjPerspMtx, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
 import AnimationController from '../AnimationController';
 import { nArray, assertExists, assert } from '../util';
@@ -16,7 +16,6 @@ import { GfxDevice, GfxSampler } from '../gfx/platform/GfxPlatform';
 import { GfxBufferCoalescer, GfxCoalescedBuffers } from '../gfx/helpers/BufferHelpers';
 import { ViewerRenderInput } from '../viewer';
 import { GfxRenderInst, GfxRenderInstBuilder, setSortKeyDepth, GfxRendererLayer, makeSortKey, setSortKeyBias } from '../gfx/render/GfxRenderer';
-import { colorFromRGBA } from '../Color';
 
 export class J3DTextureHolder extends GXTextureHolder<TEX1_TextureData> {
     public addJ3DTextures(device: GfxDevice, bmd: BMD, bmt: BMT | null = null) {
@@ -468,7 +467,6 @@ export class BMDModel {
 
         return gfxSampler;
     }
-
 }
 
 const bboxScratch = new AABB();
@@ -516,7 +514,6 @@ export class BMDModelInstance {
         });
 
         this.templateRenderInst = renderHelper.renderInstBuilder.pushTemplateRenderInst();
-
         const mat3 = (this.bmdModel.bmt !== null && this.bmdModel.bmt.mat3 !== null) ? this.bmdModel.bmt.mat3 : this.bmdModel.bmd.mat3;
         this.materialInstances = mat3.materialEntries.map((materialEntry) => {
             return new MaterialInstance(device, renderHelper, this, materialEntry, this.materialHacks);

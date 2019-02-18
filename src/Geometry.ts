@@ -119,10 +119,11 @@ export class AABB {
     }
 
     public boundingSphereRadius(): number {
-        const extX = (this.maxX - this.minX) / 2;
-        const extY = (this.maxY - this.minY) / 2;
-        const extZ = (this.maxZ - this.minZ) / 2;
-        return Math.max(extX, extY, extZ);
+        const extX = (this.maxX - this.minX);
+        const extY = (this.maxY - this.minY);
+        const extZ = (this.maxZ - this.minZ);
+        const chord = Math.sqrt(extX*extX + extY*extY + extZ*extZ);
+        return chord / 2;
     }
 
     public isEmpty(): boolean {

@@ -1,6 +1,6 @@
 import { AABB } from "./Geometry";
 import { Color, Magenta, colorToCSS } from "./Color";
-import { Camera, divideByW } from "./Camera";
+import { Camera, divideByW, ScreenSpaceProjection } from "./Camera";
 import { vec4, mat4, vec3 } from "gl-matrix";
 import { nArray } from "./util";
 
@@ -158,6 +158,23 @@ export function drawWorldSpaceAABB(ctx: CanvasRenderingContext2D, camera: Camera
     drawLine(ctx, p[1], p[5]);
     drawLine(ctx, p[2], p[6]);
     drawLine(ctx, p[3], p[7]);
+    ctx.closePath();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = colorToCSS(color);
+    ctx.stroke();
+}
+
+export function drawScreenSpaceProjection(ctx: CanvasRenderingContext2D, proj: ScreenSpaceProjection, color: Color = Magenta): void {
+    const cw = ctx.canvas.width;
+    const ch = ctx.canvas.height;
+
+    const x1 = (proj.projectedMinX + 1) * cw / 2;
+    const x2 = (proj.projectedMaxX + 1) * cw / 2;
+    const y1 = (-proj.projectedMinY + 1) * ch / 2;
+    const y2 = (-proj.projectedMaxY + 1) * ch / 2;
+
+    ctx.beginPath();
+    ctx.rect(x1, y1, x2 - x1, y2 - y1);
     ctx.closePath();
     ctx.lineWidth = 2;
     ctx.strokeStyle = colorToCSS(color);

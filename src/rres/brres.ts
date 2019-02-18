@@ -195,7 +195,7 @@ function parseTEX0(buffer: ArrayBufferSlice): TEX0 {
 //#endregion
 
 //#region MDL0
-class DisplayListRegisters {
+export class DisplayListRegisters {
     public bp: Uint32Array = new Uint32Array(0x100);
     public cp: Uint32Array = new Uint32Array(0x100);
 
@@ -243,7 +243,7 @@ class DisplayListRegisters {
     }
 }
 
-function runDisplayListRegisters(r: DisplayListRegisters, buffer: ArrayBufferSlice): void {
+export function runDisplayListRegisters(r: DisplayListRegisters, buffer: ArrayBufferSlice): void {
     const view = buffer.createDataView();
 
     for (let i = 0; i < buffer.byteLength;) {
@@ -366,61 +366,7 @@ export interface MDL0_MaterialEntry {
     colorConstants: GX_Material.Color[];
 }
 
-function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL0_MaterialEntry {
-    const view = buffer.createDataView();
-
-    const size = view.getUint32(0x00);
-
-    const nameOffs = view.getUint32(0x08);
-    const name = readString(buffer, nameOffs);
-    const index = view.getUint32(0x0C);
-    const flags = view.getUint32(0x10);
-    const translucent = !!(flags & 0x80000000);
-
-    // genMode
-    const numTexGens = view.getUint8(0x14);
-    const numChans = view.getUint8(0x15);
-    const numTevs = view.getUint8(0x16);
-    const numInds = view.getUint8(0x17);
-    const cullMode: GX.CullMode = view.getUint32(0x18);
-    // matMisc
-    const zCompLoc = !!view.getUint8(0x1C);
-    const lightset = view.getInt8(0x1D);
-    const fogset = view.getInt8(0x1E);
-    // pad
-    const indMethod0 = view.getUint8(0x20);
-    const indMethod1 = view.getUint8(0x21);
-    const indMethod2 = view.getUint8(0x22);
-    const indMethod3 = view.getUint8(0x23);
-    const nrmRefLight0 = view.getUint8(0x24);
-    const nrmRefLight1 = view.getUint8(0x25);
-    const nrmRefLight2 = view.getUint8(0x26);
-    const nrmRefLight3 = view.getUint8(0x27);
-
-    const tevOffs = view.getUint32(0x28);
-    assert(numTevs <= 16);
-
-    const numTexPltt = view.getUint32(0x2C);
-    const texPlttOffs = view.getUint32(0x30);
-
-    let endOfHeaderOffs = 0x34;
-    if (version >= 0x0A) {
-        endOfHeaderOffs += 0x04; // Fur
-    }
-    endOfHeaderOffs += 0x04; // user data
-
-    // Run the mat DLs.
-    const r = new DisplayListRegisters();
-
-    const matDLOffs = view.getUint32(endOfHeaderOffs);
-    const matDLSize = 32 + 128 + 64 + 160;
-    runDisplayListRegisters(r, buffer.subarray(matDLOffs, matDLSize));
-
-    // Run the TEV registers as well.
-    parseMDL0_TevEntry(buffer.subarray(tevOffs), r, numTevs);
-
-    // Now combine the whole thing.
-
+export function parseMaterialEntry(r: DisplayListRegisters, index: number, name: string, numTexGens: number, numTevs: number, numInds: number): GX_Material.GXMaterial {
     // TexGens.
     const texGens: GX_Material.TexGen[] = [];
 
@@ -618,24 +564,6 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
         tevStages.push(tevStage);
     }
 
-    // Colors.
-    const colorRegisters: GX_Material.Color[] = [];
-    const colorConstants: GX_Material.Color[] = [];
-    for (let i = 0; i < 8; i++) {
-        const vl = r.kc[i * 2 + 0];
-        const vh = r.kc[i * 2 + 1];
-
-        const cr = ((vl >>>  0) & 0x7FF) / 0xFF;
-        const ca = ((vl >>> 12) & 0x7FF) / 0xFF;
-        const cb = ((vh >>>  0) & 0x7FF) / 0xFF;
-        const cg = ((vh >>> 12) & 0x7FF) / 0xFF;
-        const c = new GX_Material.Color(cr, cg, cb, ca);
-        if (i < 4)
-            colorRegisters[i] = c;
-        else
-            colorConstants[i - 4] = c;
-    }
-
     // Alpha test.
     const ap = r.bp[GX.BPRegister.TEV_ALPHAFUNC_ID];
     const alphaTest: GX_Material.AlphaTest = {
@@ -682,6 +610,75 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
         indTexStages.push({ index, scaleS, scaleT, texCoordId, texture });
     }
 
+    const lightChannels: GX_Material.LightChannelControl[] = [];
+
+    const gxMaterial: GX_Material.GXMaterial = {
+        index, name,
+        lightChannels, cullMode: GX.CullMode.NONE,
+        tevStages, texGens,
+        indTexStages, alphaTest, ropInfo,
+    };
+
+    return gxMaterial;
+}
+
+function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL0_MaterialEntry {
+    const view = buffer.createDataView();
+
+    const size = view.getUint32(0x00);
+
+    const nameOffs = view.getUint32(0x08);
+    const name = readString(buffer, nameOffs);
+    const index = view.getUint32(0x0C);
+    const flags = view.getUint32(0x10);
+    const translucent = !!(flags & 0x80000000);
+
+    // genMode
+    const numTexGens = view.getUint8(0x14);
+    const numChans = view.getUint8(0x15);
+    const numTevs = view.getUint8(0x16);
+    const numInds = view.getUint8(0x17);
+    const cullMode: GX.CullMode = view.getUint32(0x18);
+    // matMisc
+    const zCompLoc = !!view.getUint8(0x1C);
+    const lightset = view.getInt8(0x1D);
+    const fogset = view.getInt8(0x1E);
+    // pad
+    const indMethod0 = view.getUint8(0x20);
+    const indMethod1 = view.getUint8(0x21);
+    const indMethod2 = view.getUint8(0x22);
+    const indMethod3 = view.getUint8(0x23);
+    const nrmRefLight0 = view.getUint8(0x24);
+    const nrmRefLight1 = view.getUint8(0x25);
+    const nrmRefLight2 = view.getUint8(0x26);
+    const nrmRefLight3 = view.getUint8(0x27);
+
+    const tevOffs = view.getUint32(0x28);
+    assert(numTevs <= 16);
+
+    const numTexPltt = view.getUint32(0x2C);
+    const texPlttOffs = view.getUint32(0x30);
+
+    let endOfHeaderOffs = 0x34;
+    if (version >= 0x0A) {
+        endOfHeaderOffs += 0x04; // Fur
+    }
+    endOfHeaderOffs += 0x04; // user data
+
+    // Run the mat DLs.
+    const r = new DisplayListRegisters();
+
+    const matDLOffs = view.getUint32(endOfHeaderOffs);
+    const matDLSize = 32 + 128 + 64 + 160;
+    runDisplayListRegisters(r, buffer.subarray(matDLOffs, matDLSize));
+
+    // Run the TEV registers as well.
+    parseMDL0_TevEntry(buffer.subarray(tevOffs), r, numTevs);
+
+    // Now combine the whole thing.
+    const gxMaterial = parseMaterialEntry(r, index, name, numTexGens, numTevs, numInds);
+    gxMaterial.cullMode = cullMode;
+
     const indTexMatrices: mat2d[] = [];
     for (let i = 0; i < 3; i++) {
         const indTexScaleBase = 10;
@@ -709,6 +706,79 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
             ma, mb, mc, md, mx, my
         );
         indTexMatrices.push(mat);
+    }
+
+    // Colors.
+    const colorRegisters: GX_Material.Color[] = [];
+    const colorConstants: GX_Material.Color[] = [];
+    for (let i = 0; i < 8; i++) {
+        const vl = r.kc[i * 2 + 0];
+        const vh = r.kc[i * 2 + 1];
+
+        const cr = ((vl >>>  0) & 0x7FF) / 0xFF;
+        const ca = ((vl >>> 12) & 0x7FF) / 0xFF;
+        const cb = ((vh >>>  0) & 0x7FF) / 0xFF;
+        const cg = ((vh >>> 12) & 0x7FF) / 0xFF;
+        const c = new GX_Material.Color(cr, cg, cb, ca);
+        if (i < 4)
+            colorRegisters[i] = c;
+        else
+            colorConstants[i - 4] = c;
+    }
+
+    const colorMatRegs: GX_Material.Color[] = [];
+    const colorAmbRegs: GX_Material.Color[] = [];
+    let lightChannelTableIdx = endOfHeaderOffs + 0x3B4;
+    for (let i = 0; i < 2; i++) {
+        const enum ChanFlags {
+            MATCOLOR_COLOR = (1 << 0),
+            MATCOLOR_ALPHA = (1 << 1),
+            AMBCOLOR_COLOR = (1 << 2),
+            AMBCOLOR_ALPHA = (1 << 3),
+            CHANCTRL_COLOR = (1 << 4),
+            CHANCTRL_ALPHA = (1 << 5),
+        }
+
+        const flags: ChanFlags = view.getUint32(lightChannelTableIdx + 0x00);
+        const matColorR = view.getUint8(lightChannelTableIdx + 0x04) / 0xFF;
+        const matColorG = view.getUint8(lightChannelTableIdx + 0x05) / 0xFF;
+        const matColorB = view.getUint8(lightChannelTableIdx + 0x06) / 0xFF;
+        const matColorA = view.getUint8(lightChannelTableIdx + 0x07) / 0xFF;
+        const ambColorR = view.getUint8(lightChannelTableIdx + 0x08) / 0xFF;
+        const ambColorG = view.getUint8(lightChannelTableIdx + 0x09) / 0xFF;
+        const ambColorB = view.getUint8(lightChannelTableIdx + 0x0A) / 0xFF;
+        const ambColorA = view.getUint8(lightChannelTableIdx + 0x0B) / 0xFF;
+        const chanCtrlC = view.getUint32(lightChannelTableIdx + 0x0C);
+        const chanCtrlA = view.getUint32(lightChannelTableIdx + 0x10);
+
+        const chanCtrlCMatSrc: GX.ColorSrc =             (chanCtrlC >>>  0) & 0x01;
+        const chanCtrlCEnable: boolean =              !!((chanCtrlC >>>  1) & 0x01);
+        const chanCtrlCLitMaskL: number =                (chanCtrlC >>>  2) & 0x0F;
+        const chanCtrlCAmbSrc: GX.ColorSrc =             (chanCtrlC >>>  6) & 0x01;
+        const chanCtrlCDiffuseFn: GX.DiffuseFunction =   (chanCtrlC >>>  7) & 0x03;
+        const chanCtrlCAttnEn: boolean =              !!((chanCtrlC >>>  9) & 0x01);
+        const chanCtrlCAttnSelect: boolean =          !!((chanCtrlC >>> 10) & 0x01);
+        const chanCtrlCLitMaskH: number =                (chanCtrlC >>> 11) & 0x0F;
+        const chanCtrlCLitMask: number = (chanCtrlCLitMaskH << 4) | chanCtrlCLitMaskL;
+        const chanCtrlCAttnFn = chanCtrlCAttnEn ? (chanCtrlCAttnSelect ? GX.AttenuationFunction.SPOT : GX.AttenuationFunction.SPEC) : GX.AttenuationFunction.NONE;
+        const colorChannel: GX_Material.ColorChannelControl = { lightingEnabled: chanCtrlCEnable, matColorSource: chanCtrlCMatSrc, ambColorSource: chanCtrlCAmbSrc, litMask: chanCtrlCLitMask, diffuseFunction: chanCtrlCDiffuseFn, attenuationFunction: chanCtrlCAttnFn };
+
+        const chanCtrlAMatSrc: GX.ColorSrc =             (chanCtrlA >>>  0) & 0x01;
+        const chanCtrlAEnable: boolean =              !!((chanCtrlA >>>  1) & 0x01);
+        const chanCtrlALitMaskL: number =                (chanCtrlA >>>  2) & 0x0F;
+        const chanCtrlAAmbSrc: GX.ColorSrc =             (chanCtrlA >>>  6) & 0x01;
+        const chanCtrlADiffuseFn: GX.DiffuseFunction =   (chanCtrlA >>>  7) & 0x03;
+        const chanCtrlAAttnEn: boolean =              !!((chanCtrlA >>>  9) & 0x01);
+        const chanCtrlAAttnSelect: boolean =          !!((chanCtrlA >>> 10) & 0x01);
+        const chanCtrlALitMaskH: number =                (chanCtrlA >>> 11) & 0x0F;
+        const chanCtrlALitMask: number = (chanCtrlALitMaskH << 4) | chanCtrlALitMaskL;
+        const chanCtrlAAttnFn = chanCtrlAAttnEn ? (chanCtrlAAttnSelect ? GX.AttenuationFunction.SPOT : GX.AttenuationFunction.SPEC) : GX.AttenuationFunction.NONE;
+        const alphaChannel: GX_Material.ColorChannelControl = { lightingEnabled: chanCtrlAEnable, matColorSource: chanCtrlAMatSrc, ambColorSource: chanCtrlAAmbSrc, litMask: chanCtrlALitMask, diffuseFunction: chanCtrlADiffuseFn, attenuationFunction: chanCtrlAAttnFn };
+
+        colorMatRegs.push(new GX_Material.Color(matColorR, matColorG, matColorB, matColorA));
+        colorAmbRegs.push(new GX_Material.Color(ambColorR, ambColorG, ambColorB, ambColorA));
+        gxMaterial.lightChannels.push({ colorChannel, alphaChannel });
+        lightChannelTableIdx += 0x14;
     }
 
     // Samplers
@@ -782,7 +852,7 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
         case MapMode.ENV_LIGHT:
             // Use the PNMTX0 matrix for projection and environment.
             // TODO(jstpierre): normal matrix for env camera / light.
-            texGens[i].matrix = GX.TexGenMatrix.PNMTX0;
+            gxMaterial.texGens[i].matrix = GX.TexGenMatrix.PNMTX0;
             break;
         }
 
@@ -793,69 +863,6 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
 
         texSrtTableIdx += 0x14;
         texMtxTableIdx += 0x34;
-    }
-
-    const lightChannels: GX_Material.LightChannelControl[] = [];
-    const colorMatRegs: GX_Material.Color[] = [];
-    const colorAmbRegs: GX_Material.Color[] = [];
-    let lightChannelTableIdx = endOfHeaderOffs + 0x3B4;
-    for (let i = 0; i < 2; i++) {
-        const enum ChanFlags {
-            MATCOLOR_COLOR = (1 << 0),
-            MATCOLOR_ALPHA = (1 << 1),
-            AMBCOLOR_COLOR = (1 << 2),
-            AMBCOLOR_ALPHA = (1 << 3),
-            CHANCTRL_COLOR = (1 << 4),
-            CHANCTRL_ALPHA = (1 << 5),
-        }
-
-        const flags: ChanFlags = view.getUint32(lightChannelTableIdx + 0x00);
-        const matColorR = view.getUint8(lightChannelTableIdx + 0x04) / 0xFF;
-        const matColorG = view.getUint8(lightChannelTableIdx + 0x05) / 0xFF;
-        const matColorB = view.getUint8(lightChannelTableIdx + 0x06) / 0xFF;
-        const matColorA = view.getUint8(lightChannelTableIdx + 0x07) / 0xFF;
-        const ambColorR = view.getUint8(lightChannelTableIdx + 0x08) / 0xFF;
-        const ambColorG = view.getUint8(lightChannelTableIdx + 0x09) / 0xFF;
-        const ambColorB = view.getUint8(lightChannelTableIdx + 0x0A) / 0xFF;
-        const ambColorA = view.getUint8(lightChannelTableIdx + 0x0B) / 0xFF;
-        const chanCtrlC = view.getUint32(lightChannelTableIdx + 0x0C);
-        const chanCtrlA = view.getUint32(lightChannelTableIdx + 0x10);
-
-        const chanCtrlCMatSrc: GX.ColorSrc =             (chanCtrlC >>>  0) & 0x01;
-        const chanCtrlCEnable: boolean =              !!((chanCtrlC >>>  1) & 0x01);
-        const chanCtrlCLitMaskL: number =                (chanCtrlC >>>  2) & 0x0F;
-        const chanCtrlCAmbSrc: GX.ColorSrc =             (chanCtrlC >>>  6) & 0x01;
-        const chanCtrlCDiffuseFn: GX.DiffuseFunction =   (chanCtrlC >>>  7) & 0x03;
-        const chanCtrlCAttnEn: boolean =              !!((chanCtrlC >>>  9) & 0x01);
-        const chanCtrlCAttnSelect: boolean =          !!((chanCtrlC >>> 10) & 0x01);
-        const chanCtrlCLitMaskH: number =                (chanCtrlC >>> 11) & 0x0F;
-        const chanCtrlCLitMask: number = (chanCtrlCLitMaskH << 4) | chanCtrlCLitMaskL;
-        const chanCtrlCAttnFn = chanCtrlCAttnEn ? (chanCtrlCAttnSelect ? GX.AttenuationFunction.SPOT : GX.AttenuationFunction.SPEC) : GX.AttenuationFunction.NONE;
-        const colorChannel: GX_Material.ColorChannelControl = { lightingEnabled: chanCtrlCEnable, matColorSource: chanCtrlCMatSrc, ambColorSource: chanCtrlCAmbSrc, litMask: chanCtrlCLitMask, diffuseFunction: chanCtrlCDiffuseFn, attenuationFunction: chanCtrlCAttnFn };
-
-        const chanCtrlAMatSrc: GX.ColorSrc =             (chanCtrlA >>>  0) & 0x01;
-        const chanCtrlAEnable: boolean =              !!((chanCtrlA >>>  1) & 0x01);
-        const chanCtrlALitMaskL: number =                (chanCtrlA >>>  2) & 0x0F;
-        const chanCtrlAAmbSrc: GX.ColorSrc =             (chanCtrlA >>>  6) & 0x01;
-        const chanCtrlADiffuseFn: GX.DiffuseFunction =   (chanCtrlA >>>  7) & 0x03;
-        const chanCtrlAAttnEn: boolean =              !!((chanCtrlA >>>  9) & 0x01);
-        const chanCtrlAAttnSelect: boolean =          !!((chanCtrlA >>> 10) & 0x01);
-        const chanCtrlALitMaskH: number =                (chanCtrlA >>> 11) & 0x0F;
-        const chanCtrlALitMask: number = (chanCtrlALitMaskH << 4) | chanCtrlALitMaskL;
-        const chanCtrlAAttnFn = chanCtrlAAttnEn ? (chanCtrlAAttnSelect ? GX.AttenuationFunction.SPOT : GX.AttenuationFunction.SPEC) : GX.AttenuationFunction.NONE;
-        const alphaChannel: GX_Material.ColorChannelControl = { lightingEnabled: chanCtrlAEnable, matColorSource: chanCtrlAMatSrc, ambColorSource: chanCtrlAAmbSrc, litMask: chanCtrlALitMask, diffuseFunction: chanCtrlADiffuseFn, attenuationFunction: chanCtrlAAttnFn };
-
-        colorMatRegs.push(new GX_Material.Color(matColorR, matColorG, matColorB, matColorA));
-        colorAmbRegs.push(new GX_Material.Color(ambColorR, ambColorG, ambColorB, ambColorA));
-        lightChannels.push({ colorChannel, alphaChannel });
-        lightChannelTableIdx += 0x14;
-    }
-
-    const gxMaterial: GX_Material.GXMaterial = {
-        index, name,
-        lightChannels, cullMode,
-        tevStages, texGens,
-        indTexStages, alphaTest, ropInfo,
     }
 
     return { index, name, translucent, gxMaterial, samplers, texSrts, indTexMatrices, colorMatRegs, colorAmbRegs, colorRegisters, colorConstants };

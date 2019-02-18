@@ -573,6 +573,20 @@ export const enum BPRegister {
     // SetBlendMode
     PE_CMODE0_ID       = 0x41,
 
+    // TX (Texture Unit)
+    TX_SETMODE0_I0_ID  = 0x80,
+    TX_SETMODE0_I4_ID  = 0xA0,
+    TX_SETMODE1_I0_ID  = 0x84,
+    TX_SETMODE1_I4_ID  = 0xA4,
+    TX_SETIMAGE0_I0_ID = 0x88,
+    TX_SETIMAGE0_I4_ID = 0xA4,
+    TX_SETIMAGE1_I0_ID = 0x8C,
+    TX_SETIMAGE1_I4_ID = 0xAC,
+    TX_SETIMAGE2_I0_ID = 0x90,
+    TX_SETIMAGE2_I4_ID = 0xB0,
+    TX_SETIMAGE3_I0_ID = 0x98,
+    TX_SETIMAGE3_I4_ID = 0xB8,
+
     // TEV (Texture EnVironments)
     // SetTev
     TEV_COLOR_ENV_0_ID = 0xC0,
