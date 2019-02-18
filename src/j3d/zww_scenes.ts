@@ -30,7 +30,7 @@ import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHel
 import { RENDER_HACKS_ICON } from '../bk/scenes';
 import AnimationController from '../AnimationController';
 import { prepareFrameDebugOverlayCanvas2D } from '../DebugJunk';
-import { ObjectRenderer, BMDObjectRenderer, SymbolMap, WhiteFlowerData, WhiteFlowerObjectRenderer } from './zww_actors';
+import { ObjectRenderer, BMDObjectRenderer, SymbolMap, WhiteFlowerData, FlowerObjectRenderer, PinkFlowerData, BessouFlowerData, FlowerData } from './zww_actors';
 
 const TIME_OF_DAY_ICON = `<svg viewBox="0 0 100 100" height="20" fill="white"><path d="M50,93.4C74,93.4,93.4,74,93.4,50C93.4,26,74,6.6,50,6.6C26,6.6,6.6,26,6.6,50C6.6,74,26,93.4,50,93.4z M37.6,22.8  c-0.6,2.4-0.9,5-0.9,7.6c0,18.2,14.7,32.9,32.9,32.9c2.6,0,5.1-0.3,7.6-0.9c-4.7,10.3-15.1,17.4-27.1,17.4  c-16.5,0-29.9-13.4-29.9-29.9C20.3,37.9,27.4,27.5,37.6,22.8z"/></svg>`;
 
@@ -649,12 +649,17 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     }
 }
 
+interface Destroyable {
+    destroy(device: GfxDevice): void;
+}
+
 class ModelCache {
     private fileProgressableCache = new Map<string, Progressable<ArrayBufferSlice>>();
     private fileDataCache = new Map<string, ArrayBufferSlice>();
     private archiveProgressableCache = new Map<string, Progressable<RARC.RARC>>();
     private archiveCache = new Map<string, RARC.RARC>();
     private modelCache = new Map<string, BMDModel>();
+    public extraCache = new Map<string, Destroyable>();
     public extraModels: BMDModel[] = [];
 
     public waitForLoad(): Progressable<any> {
@@ -726,6 +731,8 @@ class ModelCache {
             model.destroy(device);
         for (let i = 0; i < this.extraModels.length; i++)
             this.extraModels[i].destroy(device);
+        for (const x of this.extraCache.values())
+            x.destroy(device);
     }
 }
 
@@ -829,6 +836,8 @@ class SceneDesc {
 
     private spawnObjectsForActor(device: GfxDevice, abortSignal: AbortSignal, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, name: string, parameters: number, modelMatrix: mat4): void {
         const modelCache = renderer.modelCache;
+        const stageName = this.id;
+        const roomIdx = roomRenderer.roomIdx;
 
         function fetchArchive(objArcName: string): Progressable<RARC.RARC> {
             return renderer.modelCache.fetchArchive(`${pathBase}/Object/${objArcName}`, abortSignal);
@@ -879,10 +888,37 @@ class SceneDesc {
             return objectRenderer;
         }
 
+        function buildPinkFlowerModel(symbolMap: SymbolMap): ObjectRenderer {
+            // This is a thing that the game *actually* checks, believe it or not, in dFlower_packet_c::setData.
+            let flowerData: FlowerData;
+            if (stageName === 'sea' && roomIdx === 33) {
+                flowerData = modelCache.extraCache.get('Obessou') as FlowerData;
+                if (flowerData === undefined) {
+                    flowerData = new BessouFlowerData(device, symbolMap, renderer.renderHelper, renderer.textureHolder);
+                    modelCache.extraCache.set('Obessou', flowerData);
+                }
+            } else {
+                flowerData = modelCache.extraCache.get('Ohana_high') as FlowerData;
+                if (flowerData === undefined) {
+                    flowerData = new PinkFlowerData(device, symbolMap, renderer.renderHelper, renderer.textureHolder);
+                    modelCache.extraCache.set('Ohana_high', flowerData);
+                }
+            }
+
+            const objectRenderer = new FlowerObjectRenderer(device, renderer.renderHelper, flowerData);
+            mat4.copy(objectRenderer.modelMatrix, modelMatrix);
+            roomRenderer.objectRenderers.push(objectRenderer);
+            return objectRenderer;
+        }
+
         function buildWhiteFlowerModel(symbolMap: SymbolMap): ObjectRenderer {
-            // TODO(jstpierre): Cache flowerData
-            const flowerData = new WhiteFlowerData(device, symbolMap, renderer.renderHelper, renderer.textureHolder);
-            const objectRenderer = new WhiteFlowerObjectRenderer(device, renderer.renderHelper, flowerData);
+            let flowerData: FlowerData = modelCache.extraCache.get('Ohana') as FlowerData;
+            if (flowerData === undefined) {
+                flowerData = new WhiteFlowerData(device, symbolMap, renderer.renderHelper, renderer.textureHolder);
+                modelCache.extraCache.set('Ohana', flowerData);
+            }
+
+            const objectRenderer = new FlowerObjectRenderer(device, renderer.renderHelper, flowerData);
             mat4.copy(objectRenderer.modelMatrix, modelMatrix);
             roomRenderer.objectRenderers.push(objectRenderer);
             return objectRenderer;
@@ -1472,6 +1508,9 @@ class SceneDesc {
         else if (name === 'kotubo') fetchArchive(`Always.arc`).then((rarc) => buildModel(rarc, `bdl/obm_kotubo1.bdl`));
         else if (name === 'ootubo1') fetchArchive(`Always.arc`).then((rarc) => buildModel(rarc, `bdl/obm_ootubo1.bdl`));
         else if (name === 'koisi1') fetchArchive(`Always.arc`).then((rarc) => buildModel(rarc, `bdl/obm_ootubo1.bdl`));
+        // Flowers. Procedurally generated by the engine.
+        else if (name === 'flower') fetchExtraSymbols().then((symbolMap) => buildWhiteFlowerModel(symbolMap));
+        else if (name === 'pflower') fetchExtraSymbols().then((symbolMap) => buildPinkFlowerModel(symbolMap));
         // Bigger trees
         else if (name === 'lwood') fetchArchive(`Lwood.arc`).then((rarc) => buildModel(rarc, `bdl/alwd.bdl`));
         else if (name === 'Oyashi') fetchArchive(`Oyashi.arc`).then((rarc) => buildModel(rarc, `bdl/oyashi.bdl`));
@@ -1862,9 +1901,9 @@ class SceneDesc {
         }
         // Grass. Procedurally generated by the engine.
         else if (name === 'kusax1' || name === 'kusax7' || name === 'kusax21') return;
-        // Flowers. Procedurally generated by the engine.
-        else if (name === 'flower') fetchExtraSymbols().then((symbolMap) => buildWhiteFlowerModel(symbolMap));
-        else if (name === 'flwr7' || name === 'flwr17' || name === 'pflwrx7' || name === 'pflower') return;
+        // TODO(jstpierre): Figure out flower spawn patterns.
+        else if (name === 'flwr7' || name === 'flwr17') return;
+        else if (name === 'pflwrx7') return;
         // Bushes. Procedurally generated by the engine.
         else if (name === 'woodb' || name === 'woodbx') return;
         // Small trees. Procedurally generated by the engine.

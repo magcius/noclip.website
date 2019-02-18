@@ -147,7 +147,7 @@ const enum GfxRenderInstFlags {
     VISIBLE                  = 1 << 1,
     DRAW_INDEXED             = 1 << 2,
     SAMPLER_BINDINGS_INHERIT = 1 << 3,
-    BINDINGS_DIRTY           = 1 << 4,
+    BINDINGS_DIRTY           = 1 << 5,
     BINDINGS_CREATED         = 1 << 6,
     PIPELINE_DIRTY           = 1 << 7,
     PIPELINE_DIRECT          = 1 << 8,
@@ -242,10 +242,6 @@ export class GfxRenderInst {
 
     public setSamplerBindingsInherit(v: boolean = true): void {
         this._setFlag(GfxRenderInstFlags.SAMPLER_BINDINGS_INHERIT, v);
-        if (v) {
-            const parentDirty = !!(this.parentRenderInst._flags & GfxRenderInstFlags.BINDINGS_DIRTY);
-            this._setFlag(GfxRenderInstFlags.BINDINGS_DIRTY, parentDirty);
-        }
     }
 
     public setSamplerBindings(m: GfxSamplerBinding[], firstSampler: number = 0): void {
@@ -345,7 +341,8 @@ export class GfxRenderInst {
     }
 
     private _inheritSamplerBindings(): void {
-        this.setSamplerBindings(this.parentRenderInst._samplerBindings);
+        if ((this.parentRenderInst._flags & GfxRenderInstFlags.BINDINGS_DIRTY))
+            this.setSamplerBindings(this.parentRenderInst._samplerBindings);
     }
 
     private _tryInheritSamplerBindings(): void {

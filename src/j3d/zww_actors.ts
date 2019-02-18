@@ -7,16 +7,16 @@ import { mat4, vec3 } from "gl-matrix";
 import { BMDModelInstance } from "./render";
 import { ANK1, TTK1, TRK1, TEX1_TextureData } from "./j3d";
 import AnimationController from "../AnimationController";
-import { Colors, WindWakerRenderer } from "./zww_scenes";
-import { ColorKind, GXRenderHelperGfx, GXTextureHolder, GXShapeHelperGfx, loadedDataCoalescerGfx, ub_PacketParams, PacketParams, MaterialParams, ub_MaterialParams, GXMaterialHelperGfx, translateWrapModeGfx, translateTexFilterGfx } from "../gx/gx_render";
+import { Colors } from "./zww_scenes";
+import { ColorKind, GXRenderHelperGfx, GXTextureHolder, GXShapeHelperGfx, loadedDataCoalescerGfx, ub_PacketParams, PacketParams, MaterialParams, GXMaterialHelperGfx, translateWrapModeGfx } from "../gx/gx_render";
 import { AABB } from '../Geometry';
-import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB, Camera, computeViewMatrix } from '../Camera';
-import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxTexture, GfxSampler, GfxTexFilterMode, GfxMipFilterMode } from '../gfx/platform/GfxPlatform';
+import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB, computeViewMatrix } from '../Camera';
+import { GfxDevice, GfxSampler, GfxTexFilterMode, GfxMipFilterMode } from '../gfx/platform/GfxPlatform';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { assertExists, nArray, hexzero } from '../util';
+import { assertExists } from '../util';
 import { DisplayListRegisters, runDisplayListRegisters, parseMaterialEntry } from '../rres/brres';
-import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader, LoadedVertexData, LoadedVertexLayout } from '../gx/gx_displaylist';
-import { makeStaticDataBuffer, coalesceBuffer, GfxBufferCoalescer } from '../gfx/helpers/BufferHelpers';
+import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader } from '../gx/gx_displaylist';
+import { GfxBufferCoalescer } from '../gfx/helpers/BufferHelpers';
 import { TextureMapping } from '../TextureHolder';
 import { GfxRenderInst } from '../gfx/render/GfxRenderer';
 
@@ -116,11 +116,19 @@ function findSymbol(symbolMap: SymbolMap, filename: string, symbolName: string):
     return entry.Data;
 }
 
+export interface FlowerData {
+    textureMapping: TextureMapping;
+    gfxSampler: GfxSampler;
+    shapeHelperMain: GXShapeHelperGfx;
+    gxMaterial: GX_Material.GXMaterial;
+    bufferCoalescer: GfxBufferCoalescer;
+    destroy(device: GfxDevice): void;
+}
+
 export class WhiteFlowerData {
     public textureMapping = new TextureMapping();
     public gfxSampler: GfxSampler;
     public shapeHelperMain: GXShapeHelperGfx;
-    public shapeHelperGut: GXShapeHelperGfx;
     public gxMaterial: GX_Material.GXMaterial;
     public bufferCoalescer: GfxBufferCoalescer;
 
@@ -130,7 +138,6 @@ export class WhiteFlowerData {
         const l_pos = findSymbol(symbolMap, `d_flower.o`, `l_pos`);
         const l_texCoord = findSymbol(symbolMap, `d_flower.o`, `l_texCoord`);
         const l_OhanaDL = findSymbol(symbolMap, `d_flower.o`, `l_OhanaDL`);
-        const l_Ohana_gutDL = findSymbol(symbolMap, `d_flower.o`, `l_Ohana_gutDL`);
         const l_color2 = findSymbol(symbolMap, `d_flower.o`, `l_color2`);
 
         const matRegisters = new DisplayListRegisters();
@@ -143,6 +150,9 @@ export class WhiteFlowerData {
 
         const hw2cm: GX.CullMode[] = [ GX.CullMode.NONE, GX.CullMode.BACK, GX.CullMode.FRONT, GX.CullMode.ALL ];
         const cullMode = hw2cm[((genMode >>> 14)) & 0x03];
+
+        this.gxMaterial = parseMaterialEntry(matRegisters, 0, 'l_matDL', numTexGens, numTevs, numInds);
+        this.gxMaterial.cullMode = cullMode;
 
         const image0 = matRegisters.bp[GX.BPRegister.TX_SETIMAGE0_I0_ID];
         const width  = ((image0 >>>  0) & 0x3FF) + 1;
@@ -188,10 +198,6 @@ export class WhiteFlowerData {
         const vtxLoader = compileVtxLoader(vatFormat, vcd);
 
         const vtx_l_OhanaDL = vtxLoader.runVertices(vtxArrays, l_OhanaDL);
-        const vtx_l_Ohana_gutDL = vtxLoader.runVertices(vtxArrays, l_Ohana_gutDL);
-
-        this.gxMaterial = parseMaterialEntry(matRegisters, 0, 'l_matDL', numTexGens, numTevs, numInds);
-        this.gxMaterial.cullMode = cullMode;
 
         // TODO(jstpierre): light channels
         this.gxMaterial.lightChannels.push({
@@ -199,68 +205,246 @@ export class WhiteFlowerData {
             alphaChannel: { lightingEnabled: false, matColorSource: GX.ColorSrc.VTX, ambColorSource: GX.ColorSrc.REG, litMask: 0, attenuationFunction: GX.AttenuationFunction.NONE, diffuseFunction: GX.DiffuseFunction.NONE },
         });
 
-        this.bufferCoalescer = loadedDataCoalescerGfx(device, [ vtx_l_OhanaDL, vtx_l_Ohana_gutDL ]);
+        this.bufferCoalescer = loadedDataCoalescerGfx(device, [ vtx_l_OhanaDL ]);
         this.shapeHelperMain = new GXShapeHelperGfx(device, renderHelper, this.bufferCoalescer.coalescedBuffers[0], vtxLoader.loadedVertexLayout, vtx_l_OhanaDL);
-        this.shapeHelperGut = new GXShapeHelperGfx(device, renderHelper, this.bufferCoalescer.coalescedBuffers[1], vtxLoader.loadedVertexLayout, vtx_l_OhanaDL);
     }
 
     public destroy(device: GfxDevice): void {
         this.bufferCoalescer.destroy(device);
         this.shapeHelperMain.destroy(device);
-        this.shapeHelperGut.destroy(device);
+        device.destroySampler(this.gfxSampler);
+    }
+}
+
+export class PinkFlowerData {
+    public textureMapping = new TextureMapping();
+    public gfxSampler: GfxSampler;
+    public shapeHelperMain: GXShapeHelperGfx;
+    public gxMaterial: GX_Material.GXMaterial;
+    public bufferCoalescer: GfxBufferCoalescer;
+
+    constructor(device: GfxDevice, symbolMap: SymbolMap, renderHelper: GXRenderHelperGfx, textureHolder: GXTextureHolder) {
+        const l_matDL2 = findSymbol(symbolMap, `d_flower.o`, `l_matDL2`);
+        const l_Txo_ob_flower_pink_64x64TEX = findSymbol(symbolMap, `d_flower.o`, `l_Txo_ob_flower_pink_64x64TEX`);
+        const l_pos2 = findSymbol(symbolMap, `d_flower.o`, `l_pos2`);
+        const l_texCoord2 = findSymbol(symbolMap, `d_flower.o`, `l_texCoord2`);
+        const l_Ohana_highDL = findSymbol(symbolMap, `d_flower.o`, `l_Ohana_highDL`);
+        const l_color2 = findSymbol(symbolMap, `d_flower.o`, `l_color2`);
+
+        const matRegisters = new DisplayListRegisters();
+        runDisplayListRegisters(matRegisters, l_matDL2);
+
+        const genMode = matRegisters.bp[GX.BPRegister.GEN_MODE_ID];
+        const numTexGens = (genMode >>> 0) & 0x0F;
+        const numTevs = ((genMode >>> 10) & 0x0F) + 1;
+        const numInds = ((genMode >>> 16) & 0x07);
+
+        const hw2cm: GX.CullMode[] = [ GX.CullMode.NONE, GX.CullMode.BACK, GX.CullMode.FRONT, GX.CullMode.ALL ];
+        const cullMode = hw2cm[((genMode >>> 14)) & 0x03];
+
+        this.gxMaterial = parseMaterialEntry(matRegisters, 0, 'l_matDL', numTexGens, numTevs, numInds);
+        this.gxMaterial.cullMode = cullMode;
+
+        const image0 = matRegisters.bp[GX.BPRegister.TX_SETIMAGE0_I0_ID];
+        const width  = ((image0 >>>  0) & 0x3FF) + 1;
+        const height = ((image0 >>> 10) & 0x3FF) + 1;
+        const format: GX.TexFormat = (image0 >>> 20) & 0x0F;
+
+        const texture: TEX1_TextureData = {
+            name: 'l_Txo_ob_flower_pink_64x64TEX',
+            width, height, format,
+            data: l_Txo_ob_flower_pink_64x64TEX,
+            // TODO(jstpierre): do we have mips?
+            mipCount: 1,
+            paletteFormat: GX.TexPalette.RGB565,
+            paletteData: null,
+        };
+        textureHolder.addTextures(device, [texture]);
+        textureHolder.fillTextureMapping(this.textureMapping, texture.name);
+
+        const mode0 = matRegisters.bp[GX.BPRegister.TX_SETMODE0_I0_ID];
+        const wrapS: GX.WrapMode = (mode0 >>> 0) & 0x03;
+        const wrapT: GX.WrapMode = (mode0 >>> 2) & 0x03;
+
+        this.gfxSampler = device.createSampler({
+            wrapS: translateWrapModeGfx(wrapS),
+            wrapT: translateWrapModeGfx(wrapT),
+            minFilter: GfxTexFilterMode.BILINEAR, magFilter: GfxTexFilterMode.BILINEAR, mipFilter: GfxMipFilterMode.NO_MIP,
+            minLOD: 1, maxLOD: 1,
+        });
+        this.textureMapping.gfxSampler = this.gfxSampler;
+
+        const vtxArrays: GX_Array[] = [];
+        vtxArrays[GX.VertexAttribute.POS] = { buffer: l_pos2, offs: 0 };
+        vtxArrays[GX.VertexAttribute.CLR0] = { buffer: l_color2, offs: 0 };
+        vtxArrays[GX.VertexAttribute.TEX0] = { buffer: l_texCoord2, offs: 0 };
+        const vatFormat: GX_VtxAttrFmt[] = [];
+        vatFormat[GX.VertexAttribute.POS] = { compCnt: GX.CompCnt.POS_XYZ, compShift: 0, compType: GX.CompType.F32 };
+        vatFormat[GX.VertexAttribute.TEX0] = { compCnt: GX.CompCnt.TEX_ST, compShift: 0, compType: GX.CompType.F32 };
+        vatFormat[GX.VertexAttribute.CLR0] = { compCnt: GX.CompCnt.CLR_RGBA, compShift: 0, compType: GX.CompType.RGBA8 };
+        const vcd: GX_VtxDesc[] = [];
+        vcd[GX.VertexAttribute.POS] = { type: GX.AttrType.INDEX8 };
+        vcd[GX.VertexAttribute.CLR0] = { type: GX.AttrType.INDEX8 };
+        vcd[GX.VertexAttribute.TEX0] = { type: GX.AttrType.INDEX8 };
+        const vtxLoader = compileVtxLoader(vatFormat, vcd);
+
+        const vtx_l_OhanaDL = vtxLoader.runVertices(vtxArrays, l_Ohana_highDL);
+
+        // TODO(jstpierre): light channels
+        this.gxMaterial.lightChannels.push({
+            colorChannel: { lightingEnabled: false, matColorSource: GX.ColorSrc.VTX, ambColorSource: GX.ColorSrc.REG, litMask: 0, attenuationFunction: GX.AttenuationFunction.NONE, diffuseFunction: GX.DiffuseFunction.NONE },
+            alphaChannel: { lightingEnabled: false, matColorSource: GX.ColorSrc.VTX, ambColorSource: GX.ColorSrc.REG, litMask: 0, attenuationFunction: GX.AttenuationFunction.NONE, diffuseFunction: GX.DiffuseFunction.NONE },
+        });
+
+        this.bufferCoalescer = loadedDataCoalescerGfx(device, [ vtx_l_OhanaDL ]);
+        this.shapeHelperMain = new GXShapeHelperGfx(device, renderHelper, this.bufferCoalescer.coalescedBuffers[0], vtxLoader.loadedVertexLayout, vtx_l_OhanaDL);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.bufferCoalescer.destroy(device);
+        this.shapeHelperMain.destroy(device);
+        device.destroySampler(this.gfxSampler);
+    }
+}
+
+export class BessouFlowerData {
+    public textureMapping = new TextureMapping();
+    public gfxSampler: GfxSampler;
+    public shapeHelperMain: GXShapeHelperGfx;
+    public gxMaterial: GX_Material.GXMaterial;
+    public bufferCoalescer: GfxBufferCoalescer;
+
+    constructor(device: GfxDevice, symbolMap: SymbolMap, renderHelper: GXRenderHelperGfx, textureHolder: GXTextureHolder) {
+        const l_matDL3 = findSymbol(symbolMap, `d_flower.o`, `l_matDL3`);
+        const l_Txq_bessou_hanaTEX = findSymbol(symbolMap, `d_flower.o`, `l_Txq_bessou_hanaTEX`);
+        const l_pos3 = findSymbol(symbolMap, `d_flower.o`, `l_pos3`);
+        const l_texCoord3 = findSymbol(symbolMap, `d_flower.o`, `l_texCoord3`);
+        const l_QbsfwDL = findSymbol(symbolMap, `d_flower.o`, `l_QbsfwDL`);
+        const l_color2 = findSymbol(symbolMap, `d_flower.o`, `l_color2`);
+
+        const matRegisters = new DisplayListRegisters();
+        runDisplayListRegisters(matRegisters, l_matDL3);
+
+        const genMode = matRegisters.bp[GX.BPRegister.GEN_MODE_ID];
+        const numTexGens = (genMode >>> 0) & 0x0F;
+        const numTevs = ((genMode >>> 10) & 0x0F) + 1;
+        const numInds = ((genMode >>> 16) & 0x07);
+
+        const hw2cm: GX.CullMode[] = [ GX.CullMode.NONE, GX.CullMode.BACK, GX.CullMode.FRONT, GX.CullMode.ALL ];
+        const cullMode = hw2cm[((genMode >>> 14)) & 0x03];
+
+        this.gxMaterial = parseMaterialEntry(matRegisters, 0, 'l_matDL', numTexGens, numTevs, numInds);
+        this.gxMaterial.cullMode = cullMode;
+
+        const image0 = matRegisters.bp[GX.BPRegister.TX_SETIMAGE0_I0_ID];
+        const width  = ((image0 >>>  0) & 0x3FF) + 1;
+        const height = ((image0 >>> 10) & 0x3FF) + 1;
+        const format: GX.TexFormat = (image0 >>> 20) & 0x0F;
+
+        const texture: TEX1_TextureData = {
+            name: 'l_Txq_bessou_hanaTEX',
+            width, height, format,
+            data: l_Txq_bessou_hanaTEX,
+            // TODO(jstpierre): do we have mips?
+            mipCount: 1,
+            paletteFormat: GX.TexPalette.RGB565,
+            paletteData: null,
+        };
+        textureHolder.addTextures(device, [texture]);
+        textureHolder.fillTextureMapping(this.textureMapping, texture.name);
+
+        const mode0 = matRegisters.bp[GX.BPRegister.TX_SETMODE0_I0_ID];
+        const wrapS: GX.WrapMode = (mode0 >>> 0) & 0x03;
+        const wrapT: GX.WrapMode = (mode0 >>> 2) & 0x03;
+
+        this.gfxSampler = device.createSampler({
+            wrapS: translateWrapModeGfx(wrapS),
+            wrapT: translateWrapModeGfx(wrapT),
+            minFilter: GfxTexFilterMode.BILINEAR, magFilter: GfxTexFilterMode.BILINEAR, mipFilter: GfxMipFilterMode.NO_MIP,
+            minLOD: 1, maxLOD: 1,
+        });
+        this.textureMapping.gfxSampler = this.gfxSampler;
+
+        const vtxArrays: GX_Array[] = [];
+        vtxArrays[GX.VertexAttribute.POS] = { buffer: l_pos3, offs: 0 };
+        vtxArrays[GX.VertexAttribute.CLR0] = { buffer: l_color2, offs: 0 };
+        vtxArrays[GX.VertexAttribute.TEX0] = { buffer: l_texCoord3, offs: 0 };
+        const vatFormat: GX_VtxAttrFmt[] = [];
+        vatFormat[GX.VertexAttribute.POS] = { compCnt: GX.CompCnt.POS_XYZ, compShift: 0, compType: GX.CompType.F32 };
+        vatFormat[GX.VertexAttribute.TEX0] = { compCnt: GX.CompCnt.TEX_ST, compShift: 0, compType: GX.CompType.F32 };
+        vatFormat[GX.VertexAttribute.CLR0] = { compCnt: GX.CompCnt.CLR_RGBA, compShift: 0, compType: GX.CompType.RGBA8 };
+        const vcd: GX_VtxDesc[] = [];
+        vcd[GX.VertexAttribute.POS] = { type: GX.AttrType.INDEX8 };
+        vcd[GX.VertexAttribute.CLR0] = { type: GX.AttrType.INDEX8 };
+        vcd[GX.VertexAttribute.TEX0] = { type: GX.AttrType.INDEX8 };
+        const vtxLoader = compileVtxLoader(vatFormat, vcd);
+
+        const vtx_l_OhanaDL = vtxLoader.runVertices(vtxArrays, l_QbsfwDL);
+
+        // TODO(jstpierre): light channels
+        this.gxMaterial.lightChannels.push({
+            colorChannel: { lightingEnabled: false, matColorSource: GX.ColorSrc.VTX, ambColorSource: GX.ColorSrc.REG, litMask: 0, attenuationFunction: GX.AttenuationFunction.NONE, diffuseFunction: GX.DiffuseFunction.NONE },
+            alphaChannel: { lightingEnabled: false, matColorSource: GX.ColorSrc.VTX, ambColorSource: GX.ColorSrc.REG, litMask: 0, attenuationFunction: GX.AttenuationFunction.NONE, diffuseFunction: GX.DiffuseFunction.NONE },
+        });
+
+        this.bufferCoalescer = loadedDataCoalescerGfx(device, [ vtx_l_OhanaDL ]);
+        this.shapeHelperMain = new GXShapeHelperGfx(device, renderHelper, this.bufferCoalescer.coalescedBuffers[0], vtxLoader.loadedVertexLayout, vtx_l_OhanaDL);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.bufferCoalescer.destroy(device);
+        this.shapeHelperMain.destroy(device);
         device.destroySampler(this.gfxSampler);
     }
 }
 
 const packetParams = new PacketParams();
-class ShapeInstance {
-    public renderInst: GfxRenderInst;
-
-    constructor(renderHelper: GXRenderHelperGfx, shapeHelper: GXShapeHelperGfx) {
-        this.renderInst = shapeHelper.pushRenderInst(renderHelper.renderInstBuilder);
-    }
-
-    public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, visible: boolean): void {
-        this.renderInst.visible = visible;
-
-        if (this.renderInst.visible) {
-            const m = packetParams.u_PosMtx[0];
-            computeViewMatrix(m, viewerInput.camera);
-            mat4.mul(m, m, modelMatrix);
-            renderHelper.fillPacketParams(packetParams, this.renderInst.getUniformBufferOffset(ub_PacketParams));
-        }
-    }
-}
-
 const materialParams = new MaterialParams();
-export class WhiteFlowerObjectRenderer implements ObjectRenderer {
+const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
+export class FlowerObjectRenderer implements ObjectRenderer {
     public modelMatrix = mat4.create();
 
     private materialHelper: GXMaterialHelperGfx;
+    private renderInst: GfxRenderInst;
 
-    private shapeInstanceMain: ShapeInstance;
-    private shapeInstanceGut: ShapeInstance;
-
-    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, private flowerData: WhiteFlowerData) {
+    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, private flowerData: FlowerData) {
         const renderInstBuilder = renderHelper.renderInstBuilder;
 
         this.materialHelper = new GXMaterialHelperGfx(device, renderHelper, this.flowerData.gxMaterial);
 
         renderInstBuilder.pushTemplateRenderInst(this.materialHelper.templateRenderInst);
-        this.shapeInstanceMain = new ShapeInstance(renderHelper, flowerData.shapeHelperMain);
-        this.shapeInstanceGut = new ShapeInstance(renderHelper, flowerData.shapeHelperGut);
+        this.renderInst = flowerData.shapeHelperMain.pushRenderInst(renderInstBuilder);
         renderInstBuilder.popTemplateRenderInst();
     }
 
     public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput, visible: boolean): void {
-        materialParams.m_TextureMapping[0].copy(this.flowerData.textureMapping);
-        materialParams.u_Color[ColorKind.C0].set(1.0, 1.0, 1.0, 1.0);
-        materialParams.u_Color[ColorKind.C1].set(1.0, 1.0, 1.0, 1.0);
-        const S = 0.5;
-        mat4.fromScaling(materialParams.u_PostTexMtx[0], [S, S, S]);
-        this.materialHelper.fillMaterialParams(materialParams, renderHelper);
-        this.shapeInstanceMain.prepareToRender(renderHelper, viewerInput, this.modelMatrix, visible);
-        this.shapeInstanceGut.prepareToRender(renderHelper, viewerInput, this.modelMatrix, visible);
+        this.renderInst.visible = visible;
+
+        // Do some basic distance culling.
+        mat4.getTranslation(scratchVec3a, viewerInput.camera.worldMatrix);
+        mat4.getTranslation(scratchVec3b, this.modelMatrix);
+
+        // If we're too far, just kill us entirely.
+        const distSq = vec3.squaredDistance(scratchVec3a, scratchVec3b);
+        const maxDist = 5000;
+        const maxDistSq = maxDist*maxDist;
+        if (distSq >= maxDistSq)
+            this.renderInst.visible = false;
+
+        if (this.renderInst.visible) {
+            materialParams.m_TextureMapping[0].copy(this.flowerData.textureMapping);
+            materialParams.u_Color[ColorKind.C0].set(1.0, 1.0, 1.0, 1.0);
+            materialParams.u_Color[ColorKind.C1].set(1.0, 1.0, 1.0, 1.0);
+            const S = 0.5;
+            mat4.fromScaling(materialParams.u_PostTexMtx[0], [S, S, S]);
+            this.materialHelper.fillMaterialParams(materialParams, renderHelper);
+
+            const m = packetParams.u_PosMtx[0];
+            computeViewMatrix(m, viewerInput.camera);
+            mat4.mul(m, m, this.modelMatrix);
+            renderHelper.fillPacketParams(packetParams, this.renderInst.getUniformBufferOffset(ub_PacketParams));
+        }
     }
 
     public setColors(colors: Colors): void {
