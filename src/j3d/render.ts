@@ -472,7 +472,6 @@ export class BMDModel {
 }
 
 const bboxScratch = new AABB();
-const screenProjectionScratch = new ScreenSpaceProjection();
 export class BMDModelInstance {
     public name: string = '';
     public visible: boolean = true;
