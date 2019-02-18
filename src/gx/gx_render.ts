@@ -177,15 +177,14 @@ export class GXShapeHelperGfx {
 
             const attribGenDef = GX_Material.getVertexAttribGenDef(vtxAttrib);
             const attrib = this.loadedVertexLayout.dstVertexAttributeLayouts.find((attrib) => attrib.vtxAttrib === vtxAttrib);
-            const format = attribGenDef.format;
             const usesIntInShader = getFormatTypeFlags(attribGenDef.format) !== FormatTypeFlags.F32;
 
             if (attrib !== undefined) {
                 const bufferByteOffset = attrib.offset;
-                vertexAttributeDescriptors.push({ location: attribLocation, format, bufferIndex: 0, bufferByteOffset, frequency: GfxVertexAttributeFrequency.PER_VERTEX, usesIntInShader });
+                vertexAttributeDescriptors.push({ location: attribLocation, format: attrib.format, bufferIndex: 0, bufferByteOffset, frequency: GfxVertexAttributeFrequency.PER_VERTEX, usesIntInShader });
             } else {
                 usesZeroBuffer = true;
-                vertexAttributeDescriptors.push({ location: attribLocation, format, bufferIndex: 1, bufferByteOffset: 0, frequency: GfxVertexAttributeFrequency.PER_INSTANCE, usesIntInShader });
+                vertexAttributeDescriptors.push({ location: attribLocation, format: attribGenDef.format, bufferIndex: 1, bufferByteOffset: 0, frequency: GfxVertexAttributeFrequency.PER_INSTANCE, usesIntInShader });
             }
         }
 

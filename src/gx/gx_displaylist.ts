@@ -39,7 +39,7 @@ import { align, assert } from '../util';
 
 import * as GX from './gx_enum';
 import { Endianness, getSystemEndianness } from '../endian';
-import { GfxFormat, FormatCompFlags, FormatTypeFlags, getFormatCompByteSize, getFormatTypeFlagsByteSize, makeFormat, FormatFlags, getFormatCompFlagsComponentCount, getFormatTypeFlags, getFormatCompFlags, getFormatComponentCount } from '../gfx/platform/GfxPlatformFormat';
+import { GfxFormat, FormatCompFlags, FormatTypeFlags, getFormatCompByteSize, getFormatTypeFlagsByteSize, makeFormat, FormatFlags, getFormatCompFlagsComponentCount, getFormatTypeFlags, getFormatCompFlags, getFormatComponentCount, getFormatFlags } from '../gfx/platform/GfxPlatformFormat';
 
 // GX_SetVtxAttrFmt
 export interface GX_VtxAttrFmt {
@@ -225,11 +225,15 @@ function getAttrName(vtxAttrib: GX.VertexAttribute): string {
     }
 }
 
-function getAttributeFormatTypeFlags(vtxAttrib: GX.VertexAttribute): FormatTypeFlags {
+function getAttributeBaseFormat(vtxAttrib: GX.VertexAttribute): GfxFormat {
     if (isVtxAttribMtxIdx(vtxAttrib))
-        return FormatTypeFlags.U8;
+        return GfxFormat.U8_R;
 
-    return FormatTypeFlags.F32;
+    // To save on space, we put color data in U8.
+    if (vtxAttrib === GX.VertexAttribute.CLR0 || vtxAttrib === GX.VertexAttribute.CLR1)
+        return GfxFormat.U8_R_NORM;
+
+    return GfxFormat.F32_R;
 }
 
 export interface VertexAttributeLayout {
@@ -315,7 +319,8 @@ function translateVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): Verte
         if (!enableOutput)
             continue;
 
-        const formatTypeFlags = getAttributeFormatTypeFlags(vtxAttrib);
+        const baseFormat = getAttributeBaseFormat(vtxAttrib);
+        const formatTypeFlags = getFormatTypeFlags(baseFormat);
         const formatComponentSize = getFormatTypeFlagsByteSize(formatTypeFlags);
 
         dstVertexSize = align(dstVertexSize, formatComponentSize);
@@ -329,7 +334,7 @@ function translateVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): Verte
 
         dstVertexSize += formatComponentSize * getFormatCompFlagsComponentCount(formatCompFlags);
 
-        const format = makeFormat(formatTypeFlags, formatCompFlags, FormatFlags.NONE);
+        const format = makeFormat(formatTypeFlags, formatCompFlags, getFormatFlags(baseFormat));
         dstVertexAttributeLayouts.push({ vtxAttrib, offset, format });
     }
 
@@ -443,8 +448,7 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VtxLoader
             case GX.CompType.F32:
                 return `${viewName}.getFloat32(${attrOffset})`;
             case GX.CompType.RGBA8:
-                // This gets four components.
-                return `(${viewName}.getUint8(${attrOffset}) / 0xFF)`;
+                return `${viewName}.getUint8(${attrOffset})`;
             case GX.CompType.U8:
                 return compileShift(`${viewName}.getUint8(${attrOffset})`);
             case GX.CompType.U16:

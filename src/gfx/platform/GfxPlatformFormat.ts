@@ -34,7 +34,7 @@ export const enum FormatFlags {
     SRGB       = 0x02,
 }
 
-export function makeFormat(type: FormatTypeFlags, comp: FormatCompFlags, flags: FormatFlags): number {
+export function makeFormat(type: FormatTypeFlags, comp: FormatCompFlags, flags: FormatFlags): GfxFormat {
     return (type << 16) | (comp << 8) | flags;
 }
 
