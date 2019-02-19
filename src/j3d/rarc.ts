@@ -29,12 +29,13 @@ export function findFileDataInDir(dir: RARCDir, filename: string): ArrayBufferSl
 
 export class RARC {
     // All the files in a flat list.
-    public files: RARCFile[];
+    public files: RARCFile[] = [];
     // Root directory.
-    public root: RARCDir;
+    public root: RARCDir | undefined = undefined;
 
     public findDirParts(parts: string[]): RARCDir | null {
         let dir = this.root;
+        if (dir === undefined) return null;
         for (const part of parts) {
             dir = dir.subdirs.find((subdir) => subdir.name.toLowerCase() === part);
             if (dir === undefined)

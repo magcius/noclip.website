@@ -195,10 +195,10 @@ function createScene(device: GfxDevice, renderHelper: GXRenderHelperGfx, texture
 
 
 class WindWakerRoomRenderer {
-    public model: BMDModelInstance;
-    public model1: BMDModelInstance;
-    public model2: BMDModelInstance;
-    public model3: BMDModelInstance;
+    public model: BMDModelInstance | null;
+    public model1: BMDModelInstance | null;
+    public model2: BMDModelInstance | null;
+    public model3: BMDModelInstance | null;
     public name: string;
     public visible: boolean = true;
     public objectRenderers: ObjectRenderer[] = [];
@@ -207,7 +207,7 @@ class WindWakerRoomRenderer {
     constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, textureHolder: J3DTextureHolder, public roomIdx: number, public roomRarc: RARC.RARC) {
         this.name = `Room ${roomIdx}`;
 
-        this.dzb = DZB.parse(assertExists(roomRarc.findFileData(`dzb/room.dzb`)));
+        // this.dzb = DZB.parse(assertExists(roomRarc.findFileData(`dzb/room.dzb`)));
 
         this.model = createScene(device, renderHelper, textureHolder, roomRarc, `model`);
 
@@ -222,104 +222,106 @@ class WindWakerRoomRenderer {
     }
 
     public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
-        if (this.model)
+        if (this.model !== null)
             this.model.prepareToRender(renderHelper, viewerInput);
-        if (this.model1)
+        if (this.model1 !== null)
             this.model1.prepareToRender(renderHelper, viewerInput);
-        if (this.model2)
+        if (this.model2 !== null)
             this.model2.prepareToRender(renderHelper, viewerInput);
-        if (this.model3)
+        if (this.model3 !== null)
             this.model3.prepareToRender(renderHelper, viewerInput);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].prepareToRender(renderHelper, viewerInput, this.visible);
     }
 
     public setModelMatrix(modelMatrix: mat4): void {
-        if (this.model)
+        if (this.model !== null)
             mat4.copy(this.model.modelMatrix, modelMatrix);
-        if (this.model1)
+        if (this.model1 !== null)
             mat4.copy(this.model1.modelMatrix, modelMatrix);
-        if (this.model3)
+        if (this.model3 !== null)
             mat4.copy(this.model3.modelMatrix, modelMatrix);
     }
 
     public setColors(colors?: Colors): void {
         if (colors !== undefined) {
-            if (this.model) {
+            if (this.model !== null) {
                 this.model.setColorOverride(ColorKind.K0, colors.light);
                 this.model.setColorOverride(ColorKind.C0, colors.amb);
             }
 
-            if (this.model1) {
+            if (this.model1 !== null) {
                 this.model1.setColorOverride(ColorKind.K0, colors.ocean);
                 this.model1.setColorOverride(ColorKind.C0, colors.wave);
                 this.model1.setColorOverride(ColorKind.C1, colors.splash);
                 this.model1.setColorOverride(ColorKind.K1, colors.splash2);
             }
-            if (this.model3)
+
+            if (this.model3 !== null)
                 this.model3.setColorOverride(ColorKind.C0, colors.doors);
 
             for (let i = 0; i < this.objectRenderers.length; i++)
                 this.objectRenderers[i].setColors(colors);
         } else {
-            if (this.model) {
+            if (this.model !== null) {
                 this.model.setColorOverride(ColorKind.K0, undefined);
                 this.model.setColorOverride(ColorKind.C0, undefined);
             }
 
-            if (this.model1) {
+            if (this.model1 !== null) {
                 this.model1.setColorOverride(ColorKind.K0, undefined);
                 this.model1.setColorOverride(ColorKind.C0, undefined);
                 this.model1.setColorOverride(ColorKind.C1, undefined);
                 this.model1.setColorOverride(ColorKind.K1, undefined);
             }
-            if (this.model3)
+
+            if (this.model3 !== null)
                 this.model3.setColorOverride(ColorKind.C0, undefined);
         }
     }
 
     public setVisible(v: boolean): void {
         this.visible = v;
-        if (this.model)
+        if (this.model !== null)
             this.model.visible = v;
-        if (this.model1)
+        if (this.model1 !== null)
             this.model1.visible = v;
-        if (this.model2)
+        if (this.model2 !== null)
             this.model2.visible = v;
-        if (this.model3)
+        if (this.model3 !== null)
             this.model3.visible = v;
     }
 
     public setVertexColorsEnabled(v: boolean): void {
-        if (this.model)
+        if (this.model !== null)
             this.model.setVertexColorsEnabled(v);
-        if (this.model1)
+        if (this.model1 !== null)
             this.model1.setVertexColorsEnabled(v);
-        if (this.model2)
+        if (this.model2 !== null)
             this.model2.setVertexColorsEnabled(v);
-        if (this.model3)
+        if (this.model3 !== null)
             this.model3.setVertexColorsEnabled(v);
     }
 
     public setTexturesEnabled(v: boolean): void {
-        if (this.model)
+        if (this.model !== null)
             this.model.setTexturesEnabled(v);
-        if (this.model1)
+        if (this.model1 !== null)
             this.model1.setTexturesEnabled(v);
-        if (this.model2)
+        if (this.model2 !== null)
             this.model2.setTexturesEnabled(v);
-        if (this.model3)
+        if (this.model3 !== null)
             this.model3.setTexturesEnabled(v);
     }
 
     public destroy(device: GfxDevice): void {
-        if (this.model)
+        if (this.model !== null)
             this.model.destroy(device);
-        if (this.model1)
+        if (this.model1 !== null)
             this.model1.destroy(device);
-        if (this.model2)
+        if (this.model2 !== null)
             this.model2.destroy(device);
-        if (this.model3)
+        if (this.model3 !== null)
             this.model3.destroy(device);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].destroy(device);
@@ -468,10 +470,10 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
     public onstatechanged!: () => void;
 
-    constructor(device: GfxDevice, public modelCache: ModelCache, public textureHolder: J3DTextureHolder, wantsSeaPlane: boolean, private isFullSea: boolean, private stageRarc: RARC.RARC) {
+    constructor(device: GfxDevice, public modelCache: ModelCache, public textureHolder: J3DTextureHolder, public isSea: boolean, public isFullSea: boolean, private stageRarc: RARC.RARC) {
         this.renderHelper = new GXRenderHelperGfx(device);
 
-        if (wantsSeaPlane)
+        if (this.isSea)
             this.seaPlane = new SeaPlane(device, this.viewRenderer);
 
         this.vr_sky = createScene(device, this.renderHelper, this.textureHolder, stageRarc, `vr_sky`, true);
@@ -777,41 +779,11 @@ class SceneDesc {
 
             const stageRarc = modelCache.getArchive(`${pathBase}/Stage/${this.stageDir}/Stage.arc`);
             const stageDzs = stageRarc.findFileData(`dzs/stage.dzs`);
-            const stageDzsHeaders = parseDZSHeaders(stageDzs);
-            const mult = stageDzsHeaders.get('MULT');
 
             const isSea = this.stageDir === 'sea';
             const isFullSea = isSea && this.rooms.length > 1;
             const renderer = new WindWakerRenderer(device, modelCache, textureHolder, isSea, isFullSea, stageRarc);
-            for (let i = 0; i < this.rooms.length; i++) {
-                const roomIdx = Math.abs(this.rooms[i]);
-                const roomRarc = modelCache.getArchive(`${pathBase}/Stage/${this.stageDir}/Room${roomIdx}.arc`);
-                if (roomRarc.files.length === 0)
-                    continue;
-
-                const visible = this.rooms[i] >= 0;
-
-                const modelMatrix = mat4.create();
-                if (mult !== undefined)
-                    this.getRoomMult(modelMatrix, stageDzs, mult, roomIdx);
-
-                // Spawn the room.
-                const roomRenderer = new WindWakerRoomRenderer(device, renderer.renderHelper, renderer.textureHolder, roomIdx, roomRarc);
-                roomRenderer.visible = visible;
-                renderer.roomRenderers.push(roomRenderer);
-
-                // HACK: for single-purpose sea levels, translate the objects instead of the model.
-                if (isSea && !isFullSea) {
-                    mat4.invert(modelMatrix, modelMatrix);
-                } else {
-                    roomRenderer.setModelMatrix(modelMatrix);
-                    mat4.identity(modelMatrix);
-                }
-
-                // Now spawn any objects that might show up in it.
-                const dzr = roomRarc.findFileData('dzr/room.dzr');
-                this.spawnObjectsFromDZR(device, abortSignal, renderer, roomRenderer, dzr, modelMatrix);
-            }
+            this.spawnRooms(device, abortSignal, renderer, stageDzs);
 
             return modelCache.waitForLoad().then(() => {
                 renderer.finish(device);
@@ -841,7 +813,42 @@ class SceneDesc {
         }
     }
 
-    private spawnObjectsForActor(device: GfxDevice, abortSignal: AbortSignal, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, name: string, parameters: number, localModelMatrix: mat4, worldModelMatrix: mat4): void {
+    protected spawnRooms(device: GfxDevice, abortSignal: AbortSignal, renderer: WindWakerRenderer, stageDzs: ArrayBufferSlice): void {
+        const stageDzsHeaders = parseDZSHeaders(stageDzs);
+        const mult = stageDzsHeaders.get('MULT');
+
+        for (let i = 0; i < this.rooms.length; i++) {
+            const roomIdx = Math.abs(this.rooms[i]);
+            const roomRarc = renderer.modelCache.getArchive(`${pathBase}/Stage/${this.stageDir}/Room${roomIdx}.arc`);
+            if (roomRarc.files.length === 0)
+                continue;
+
+            const visible = this.rooms[i] >= 0;
+
+            const modelMatrix = mat4.create();
+            if (mult !== undefined)
+                this.getRoomMult(modelMatrix, stageDzs, mult, roomIdx);
+
+            // Spawn the room.
+            const roomRenderer = new WindWakerRoomRenderer(device, renderer.renderHelper, renderer.textureHolder, roomIdx, roomRarc);
+            roomRenderer.visible = visible;
+            renderer.roomRenderers.push(roomRenderer);
+
+            // HACK: for single-purpose sea levels, translate the objects instead of the model.
+            if (renderer.isSea && !renderer.isFullSea) {
+                mat4.invert(modelMatrix, modelMatrix);
+            } else {
+                roomRenderer.setModelMatrix(modelMatrix);
+                mat4.identity(modelMatrix);
+            }
+
+            // Now spawn any objects that might show up in it.
+            const dzr = roomRarc.findFileData('dzr/room.dzr');
+            this.spawnObjectsFromDZR(device, abortSignal, renderer, roomRenderer, dzr, modelMatrix);
+        }
+    }
+
+    protected spawnObjectsForActor(device: GfxDevice, abortSignal: AbortSignal, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, name: string, parameters: number, localModelMatrix: mat4, worldModelMatrix: mat4): void {
         const modelCache = renderer.modelCache;
         const stageName = this.id;
         const roomIdx = roomRenderer.roomIdx;
@@ -2034,6 +2041,58 @@ class SceneDesc {
         this.spawnObjectsFromACTRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACTB'), modelMatrix);
 
         this.spawnObjectsFromTGOBLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('TGOB'), modelMatrix);
+    }
+}
+
+class NPCDemoRoomRenderer extends WindWakerRoomRenderer {
+    public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
+        const sec = viewerInput.time / 1000;
+        const bpm = 128;
+        const spb = 60 / bpm;
+        const beat = (sec / spb);
+        const idx = (beat | 0) % this.objectRenderers.length;
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            (this.objectRenderers[i] as BMDObjectRenderer).visible = (idx === i);
+        super.prepareToRender(renderHelper, viewerInput);
+    }
+}
+
+class NPCDemoSceneDesc extends SceneDesc {
+    protected spawnRooms(device: GfxDevice, abortSignal: AbortSignal, renderer: WindWakerRenderer, stageDzs: ArrayBufferSlice): void {
+        const roomRenderer = new NPCDemoRoomRenderer(device, renderer.renderHelper, renderer.textureHolder, -1, new RARC.RARC());
+        const m = mat4.create();
+        // this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, `Ym1`, 0, m, m);
+        // this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, `Ym2`, 0, m, m);
+        // this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, `Ug1`, 0, m, m);
+        // this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, `Ug2`, 0, m, m);
+        // this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, `UkB`, 0, m, m);
+        // this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, `UkC`, 0, m, m);
+        // this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, `UkD`, 0, m, m);
+        this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, `Ub1`, 0, m, m);
+        // this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, `Ub2`, 0, m, m);
+        // this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, `Ub3`, 0, m, m);
+        // this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, `Ub4`, 0, m, m);
+        // this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, `Ub5`, 0, m, m);
+        // this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, `Uo1`, 0, m, m);
+        // this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, `Uo2`, 0, m, m);
+        // this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, `Uo3`, 0, m, m);
+        // this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, `Um1`, 0, m, m);
+        // this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, `Um2`, 0, m, m);
+        // this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, `Um3`, 0, m, m);
+        // this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, `Uw1`, 0, m, m);
+        // this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, `Uw2`, 0, m, m);
+        // this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, `Sa1`, 0, m, m);
+        // this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, `Sa2`, 0, m, m);
+        // this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, `Sa3`, 0, m, m);
+        // this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, `Sa4`, 0, m, m);
+        // this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, `Sa5`, 0, m, m);
+        // this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, `P1a`, 0, m, m);
+        // this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, `P1b`, 0, m, m);
+        // this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, `P1c`, 0, m, m);
+        // this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, `P2a`, 0, m, m);
+        // this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, `P2b`, 0, m, m);
+        // this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, `P2c`, 0, m, m);
+        renderer.roomRenderers.push(roomRenderer);
     }
 }
 
