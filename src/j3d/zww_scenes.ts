@@ -1381,6 +1381,14 @@ class SceneDesc {
         });
         // Vera
         else if (name === 'Ub1') fetchArchive(`Ub.arc`).then((rarc) => {
+            // XXX(jstpierre): Stupid hack. ub01_head uses *uo01* instead of ub01, which will
+            // clash in the texture holder. I need to get rid of this stupid texture holder garbage,
+            // it's not helping anybody.
+            const model = modelCache.getModel(device, renderer, rarc, `bdlm/ub01_head.bdl`);
+            model.bmd.tex1.textureDatas[3].name = `ub01_face`;
+            model.tex1Samplers[3].name = `ub01_face`;
+            model.tex1Samplers[4].name = `ub01_face`;
+
             const m = buildModel(rarc, `bdl/ub.bdl`);
             buildChildModel(rarc, `bdlm/ub01_head.bdl`).setParentJoint(m, `head`);
             m.bindANK1(parseBCK(rarc, `bcks/ub_wait01.bck`));
