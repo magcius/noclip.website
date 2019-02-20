@@ -413,10 +413,10 @@ export class GX_Program extends DeviceProgram {
             return `${src}.xyz`;
         } else if (matrix >= GX.TexGenMatrix.TEXMTX0) {
             const texMtxIdx = (matrix - GX.TexGenMatrix.TEXMTX0) / 3;
-            return `(u_TexMtx[${texMtxIdx}] * ${src})`;
+            return `Mul(u_TexMtx[${texMtxIdx}], ${src})`;
         } else if (matrix >= GX.TexGenMatrix.PNMTX0) {
             const pnMtxIdx = (matrix - GX.TexGenMatrix.PNMTX0) / 3;
-            return `(u_PosMtx[${pnMtxIdx}] * ${src})`;
+            return `Mul(u_PosMtx[${pnMtxIdx}], ${src})`;
         } else {
             throw "whoops";
         }
@@ -453,7 +453,7 @@ export class GX_Program extends DeviceProgram {
             return tex;
         } else {
             const matrixIdx = (texCoordGen.postMatrix - GX.PostTexGenMatrix.PTTEXMTX0) / 3;
-            return `u_PostTexMtx[${matrixIdx}] * vec4(${tex}, 1.0)`;
+            return `Mul(u_PostTexMtx[${matrixIdx}], vec4(${tex}, 1.0))`;
         }
     }
 
@@ -792,9 +792,9 @@ export class GX_Program extends DeviceProgram {
         const indTevCoord = `(${this.generateTevTexCoordIndTexCoord(stage)}${this.generateTevTexCoordIndTexCoordBias(stage)})`;
 
         switch (stage.indTexMatrix) {
-        case GX.IndTexMtxID._0:  return `(u_IndTexMtx[0] * vec4(${indTevCoord}, 0.0))`;
-        case GX.IndTexMtxID._1:  return `(u_IndTexMtx[1] * vec4(${indTevCoord}, 0.0))`;
-        case GX.IndTexMtxID._2:  return `(u_IndTexMtx[2] * vec4(${indTevCoord}, 0.0))`;
+        case GX.IndTexMtxID._0:  return `Mul(u_IndTexMtx[0], vec4(${indTevCoord}, 0.0))`;
+        case GX.IndTexMtxID._1:  return `Mul(u_IndTexMtx[1], vec4(${indTevCoord}, 0.0))`;
+        case GX.IndTexMtxID._2:  return `Mul(u_IndTexMtx[2], vec4(${indTevCoord}, 0.0))`;
         default:
         case GX.IndTexMtxID.OFF: throw new Error("whoops");
         }
@@ -911,7 +911,7 @@ export class GX_Program extends DeviceProgram {
     public static BindingsDefinition = `
 // Expected to be constant across the entire scene.
 layout(row_major, std140) uniform ub_SceneParams {
-    mat4 u_Projection;
+    Mat4x4 u_Projection;
     vec4 u_Misc0;
 };
 
@@ -931,9 +931,9 @@ layout(row_major, std140) uniform ub_MaterialParams {
     vec4 u_ColorAmbReg[2];
     vec4 u_KonstColor[4];
     vec4 u_Color[4];
-    mat4x3 u_TexMtx[10];
-    mat4x3 u_PostTexMtx[20];
-    mat4x2 u_IndTexMtx[3];
+    Mat4x3 u_TexMtx[10];
+    Mat4x3 u_PostTexMtx[20];
+    Mat4x2 u_IndTexMtx[3];
     // SizeX, SizeY, 0, Bias
     vec4 u_TextureParams[8];
     Light u_LightParams[8];
@@ -941,7 +941,7 @@ layout(row_major, std140) uniform ub_MaterialParams {
 
 // Expected to change with each shape packet.
 layout(row_major, std140) uniform ub_PacketParams {
-    mat4x3 u_PosMtx[10];
+    Mat4x3 u_PosMtx[10];
 };
 
 uniform sampler2D u_Texture[8];
@@ -971,13 +971,13 @@ varying vec3 v_TexCoord7;
         this.vert = `
 ${this.generateVertAttributeDefs()}
 
-mat4 GetPosTexMatrix(uint t_MtxIdx) {
+Mat4x4 GetPosTexMatrix(uint t_MtxIdx) {
     if (t_MtxIdx == ${GX.TexGenMatrix.IDENTITY}u)
-        return mat4(1.0);
+        return _Mat4x4(1.0);
     else if (t_MtxIdx >= ${GX.TexGenMatrix.TEXMTX0}u)
-        return mat4(u_TexMtx[(t_MtxIdx - ${GX.TexGenMatrix.TEXMTX0}u) / 3u]);
+        return _Mat4x4(u_TexMtx[(t_MtxIdx - ${GX.TexGenMatrix.TEXMTX0}u) / 3u]);
     else
-        return mat4(u_PosMtx[t_MtxIdx / 3u]);
+        return _Mat4x4(u_PosMtx[t_MtxIdx / 3u]);
 }
 
 float ApplyCubic(vec3 t_Coeff, float t_Value) {
@@ -988,19 +988,19 @@ float DistSq(vec3 v) { return dot(v, v); }
 float Dist(vec3 v) { return sqrt(DistSq(v)); }
 
 void main() {
-    mat4 t_PosMtx = GetPosTexMatrix(a_PosMtxIdx);
-    vec4 t_Position = t_PosMtx * vec4(a_Position, 1.0);
+    Mat4x4 t_PosMtx = GetPosTexMatrix(a_PosMtxIdx);
+    vec4 t_Position = Mul(t_PosMtx, vec4(a_Position, 1.0));
     v_Position = t_Position.xyz;
     // TODO(jstpierre): Move this calculation to the CPU? Is it worth it?
-    mat3 t_NrmMtx = inverse(transpose(mat3(t_PosMtx)));
-    vec3 t_Normal = t_NrmMtx * a_Normal;
+    Mat4x3 t_NrmMtx = _Mat4x3(t_PosMtx);
+    vec3 t_Normal = Mul(t_NrmMtx, vec4(a_Normal, 0.0));
 
     vec4 t_LightAccum;
     vec3 t_LightDelta;
     vec4 t_ColorChanTemp;
 ${this.generateLightChannels()}
 ${this.generateTexGens(this.material.texGens)}
-    gl_Position = u_Projection * t_Position;
+    gl_Position = Mul(u_Projection, t_Position);
 }
 `;
 

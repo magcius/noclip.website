@@ -7,6 +7,7 @@ import { DeviceProgram, ProgramCache, FullscreenProgram } from '../../Program';
 import { assert } from '../../util';
 import { copyMegaState, defaultMegaState, fullscreenMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
 import { IS_DEVELOPMENT } from '../../BuildVersion';
+import { AudioDriverImplBufferSource } from '../../audio/AudioDriver';
 
 export class FullscreenCopyProgram extends FullscreenProgram {
     public frag: string = `
@@ -477,6 +478,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _renderPassPool: GfxRenderPassP_GL[] = [];
     private _resourceCreationTracker = new ResourceCreationTracker();
 
+    public programBugDefines: string = '';
+
     constructor(public gl: WebGL2RenderingContext, programCache: ProgramCache | null = null) {
         this._WEBGL_compressed_texture_s3tc = gl.getExtension('WEBGL_compressed_texture_s3tc');
         this._WEBGL_compressed_texture_s3tc_srgb = gl.getExtension('WEBGL_compressed_texture_s3tc_srgb');
@@ -498,6 +501,17 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
 
         this._currentMegaState.depthCompare = GfxCompareMode.ALWAYS;
+
+        // Set up bug defines.
+        this.programBugDefines = '';
+
+        const debugRendererInfo = gl.getExtension('WEBGL_debug_renderer_info');
+        if (debugRendererInfo !== null) {
+            const renderer = gl.getParameter(debugRendererInfo.UNMASKED_RENDERER_WEBGL);
+            // https://bugs.chromium.org/p/angleproject/issues/detail?id=2273
+            if (renderer.includes('AMD') && renderer.includes('OpenGL Engine'))
+                this.programBugDefines += '#define __BUG_AMD_ROW_MAJOR';
+        }
     }
 
     //#region GfxSwapChain
@@ -758,8 +772,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     private _programCache: ProgramCache;
     private _createProgram(deviceProgram: DeviceProgram): GfxProgram {
-        const gl = this.gl;
-        deviceProgram.compile(gl, this._programCache);
+        deviceProgram.compile(this, this._programCache);
         const gl_program = deviceProgram.glProgram;
         const program: GfxProgramP_GL = { _T: _T.Program, gl_program, deviceProgram };
         return program;
@@ -1232,7 +1245,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
         // Hotpatch support.
         if (this._currentPipeline.program.deviceProgram.compileDirty) {
-            this._currentPipeline.program.deviceProgram.compile(gl, this._programCache);
+            this._currentPipeline.program.deviceProgram.compile(this, this._programCache);
             this._currentPipeline.program.gl_program = this._currentPipeline.program.deviceProgram.glProgram;
         }
 

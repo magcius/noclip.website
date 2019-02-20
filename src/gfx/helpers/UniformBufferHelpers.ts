@@ -37,14 +37,10 @@ builtinTypeWordSizes.set('vec4',   4);
 builtinTypeWordSizes.set('mat4x2', 4*2);
 builtinTypeWordSizes.set('mat4x3', 4*3);
 builtinTypeWordSizes.set('mat4',   4*4);
-
-class ShaderLayoutMap {
-    constructor() {
-    }
-
-    public parseShaderSource(shaderSource: string, uniformBufferLayouts: StructLayout[]): void {
-    }
-}
+// Aliases.
+builtinTypeWordSizes.set('Mat4x2', 4*2);
+builtinTypeWordSizes.set('Mat4x3', 4*3);
+builtinTypeWordSizes.set('Mat4x4', 4*4);
 
 function getTypeSize(layouts: Map<string, StructLayout>, type: string): number {
     if (layouts.has(type))
@@ -54,7 +50,7 @@ function getTypeSize(layouts: Map<string, StructLayout>, type: string): number {
 }
 
 function parseDefinition(layouts: Map<string, StructLayout>, blockName: string, contents: string): StructLayout {
-    const uniformBufferVariables = findall(contents, /^\s*(\w+) (\w+)(?:\[(\d+)\])?;$/mg);
+    const uniformBufferVariables = findall(contents, /^\s*(\w+) (\w+)(?:\[(\d+)\])?;\s*$/mg);
     const fields: StructField[] = [];
     let totalWordSize = 0;
     for (let i = 0; i < uniformBufferVariables.length; i++) {

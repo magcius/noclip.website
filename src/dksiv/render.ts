@@ -25,22 +25,12 @@ class IVProgram extends DeviceProgram {
     public both = `
 precision mediump float;
 
-struct Mat4 {
-    vec4 _m[4];
+layout(row_major, std140) uniform ub_SceneParams {
+    Mat4x4 u_Projection;
+    Mat4x4 u_ModelView;
 };
 
-struct Mat4x3 {
-    vec4 _m[3];
-};
-
-vec4 Mul(Mat4 m, vec4 v) { return vec4(dot(m._m[0], v), dot(m._m[1], v), dot(m._m[2], v), dot(m._m[3], v)); }
-
-layout(std140) uniform ub_SceneParams {
-    Mat4 u_Projection;
-    Mat4 u_ModelView;
-};
-
-layout(std140) uniform ub_ObjectParams {
+layout(row_major, std140) uniform ub_ObjectParams {
     vec4 u_Color;
 };
 

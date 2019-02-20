@@ -94,26 +94,22 @@ export class DeviceProgram {
         return a.preprocessedVert === b.preprocessedVert && a.preprocessedFrag === b.preprocessedFrag;
     }
 
-    private _ensurePreprocessedGL(gl: WebGL2RenderingContext): void {
+    private _ensurePreprocessed(device: GfxDevice): void {
         if (this.preprocessedVert === '') {
-            this.preprocessedVert = this.preprocessShader(gl, this.both + this.vert, 'vert');
-            this.preprocessedFrag = this.preprocessShader(gl, this.both + this.frag, 'frag');
+            this.preprocessedVert = this.preprocessShader(device, this.both + this.vert, 'vert');
+            this.preprocessedFrag = this.preprocessShader(device, this.both + this.frag, 'frag');
             // TODO(jstpierre): Would love a better place to do this.
             DeviceProgram.parseReflectionDefinitionsInto(this, this.preprocessedVert);
         }
     }
 
-    private _ensurePreprocessed(device: GfxDevice): void {
-        return this._ensurePreprocessedGL(gfxDeviceGetImpl(device).gl);
-    }
-
-    public compile(gl: WebGL2RenderingContext, programCache: ProgramCache): void {
+    public compile(device: GfxDevice, programCache: ProgramCache): void {
         if (this.compileDirty) {
-            this._ensurePreprocessedGL(gl);
+            this._ensurePreprocessed(device);
             const newProg = programCache.compileProgram(this.preprocessedVert, this.preprocessedFrag);
             if (newProg !== null && newProg !== this.glProgram) {
                 this.glProgram = newProg;
-                this.bind(gl, this.glProgram);
+                this.bind(device, this.glProgram);
             }
 
             this.compileDirty = false;
@@ -123,10 +119,15 @@ export class DeviceProgram {
             throw new Error();
     }
 
-    protected preprocessShader(gl: WebGL2RenderingContext, source: string, type: "vert" | "frag") {
+    protected preprocessShader(device: GfxDevice, source: string, type: "vert" | "frag"): string {
+        const deviceImpl = gfxDeviceGetImpl(device);
+        const gl = deviceImpl.gl;
+
         const extensionDefines = assertExists(gl.getSupportedExtensions()).map((s) => {
             return `#define HAS_${s}`;
         }).join('\n');
+
+        const bugDefines = deviceImpl.programBugDefines;
 
         // Garbage WebGL2 shader compiler until I get something better down the line...
         const lines = source.split('\n').map((n) => {
@@ -145,6 +146,7 @@ export class DeviceProgram {
         return `
 #version 300 es
 ${extensionDefines}
+${bugDefines}
 ${precision}
 #define ${type.toUpperCase()}
 #define attribute in
@@ -152,13 +154,34 @@ ${precision}
 #define main${type === 'vert' ? 'VS' : 'PS'} main
 #define gl_FragColor o_color
 #define texture2D texture
+
+#ifdef __BUG_AMD_ROW_MAJOR
+struct Mat4x4 { vec4 _m[4]; };
+struct Mat4x3 { vec4 _m[3]; };
+struct Mat4x2 { vec4 _m[2]; };
+vec4 Mul(Mat4x4 m, vec4 v) { return vec4(dot(m._m[0], v), dot(m._m[1], v), dot(m._m[2], v), dot(m._m[3], v)); }
+vec3 Mul(Mat4x3 m, vec4 v) { return vec3(dot(m._m[0], v), dot(m._m[1], v), dot(m._m[2], v)); }
+vec2 Mul(Mat4x2 m, vec4 v) { return vec2(dot(m._m[0], v), dot(m._m[1], v)); }
+Mat4x4 _Mat4x4(Mat4x3 m) { Mat4x4 o; o._m[0] = m._m[0]; o._m[1] = m._m[1]; o._m[2] = m._m[2]; o._m[3] = vec4(0, 0, 0, 1); return o; }
+Mat4x4 _Mat4x4(float n) { Mat4x4 o; o._m[0].x = n; o._m[1].y = n; o._m[2].z = n; o._m[3].w = n; return o; }
+Mat4x3 _Mat4x3(Mat4x4 m) { Mat4x3 o; o._m[0] = m._m[0]; o._m[1] = m._m[1]; o._m[2] = m._m[2]; return o; }
+#else
+#define Mat4x4 mat4x4
+#define Mat4x3 mat4x3
+#define Mat4x2 mat4x2
+#define _Mat4x4 mat4x4
+#define _Mat4x3 mat4x3
+#define Mul(A, B) (A * B)
+#endif
+
 ${defines}
 out vec4 o_color;
 ${rest}
 `.trim();
     }
 
-    public bind(gl: WebGL2RenderingContext, prog: ProgramWithKey): void {
+    public bind(device: GfxDevice, prog: ProgramWithKey): void {
+        const gl = gfxDeviceGetImpl(device).gl;
         this.uniqueKey = prog.uniqueKey;
 
         for (let i = 0; i < this.uniformBufferLayouts.length; i++) {
