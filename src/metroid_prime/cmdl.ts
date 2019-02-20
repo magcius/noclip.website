@@ -65,7 +65,7 @@ export function parse(resourceSystem: ResourceSystem, assetID: string, buffer: A
 
     const hasUVShort = !!(flags & Flags.UV_SHORT);
     let geometry;
-    [geometry, dataSectionIndex] = parseGeometry(buffer, materialSets[0], dataSectionOffsTable, hasUVShort, dataSectionIndex++);
+    [geometry, dataSectionIndex] = parseGeometry(buffer, materialSets[0], dataSectionOffsTable, hasUVShort, dataSectionIndex++, -1);
 
     return { bbox, materialSets, geometry };
 }
