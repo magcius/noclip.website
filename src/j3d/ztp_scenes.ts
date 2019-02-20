@@ -298,7 +298,7 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
 const id = "ztp";
 const name = "The Legend of Zelda: Twilight Princess";
 
-// Special thanks to Jawchewa for helping me with naming the maps.
+// Special thanks to Jawchewa and SkrillerArt for helping me with naming the maps.
 const sceneDescs = [
     "Overworld Maps",
     new TwilightPrincessSceneDesc("Hyrule Field Map 1", "F_SP102"),
@@ -383,16 +383,16 @@ const sceneDescs = [
     "Houses / Indoors",
     new TwilightPrincessSceneDesc("Ordon Village Houses", "R_SP01"),
     new TwilightPrincessSceneDesc("Hyrule Castle Wolf Escape", "R_SP107"),
-    new TwilightPrincessSceneDesc("Unknown (R_SP108)", "R_SP108"),
+    new TwilightPrincessSceneDesc("Caro's House", "R_SP108"),
     new TwilightPrincessSceneDesc("Kakariko Village Houses", "R_SP109"),
     new TwilightPrincessSceneDesc("Goron Mines Entrance", "R_SP110"),
     new TwilightPrincessSceneDesc("Telma's Bar + Castle Town Sewers", "R_SP116"),
     new TwilightPrincessSceneDesc("Fishing Hole Interior", "R_SP127"),
-    new TwilightPrincessSceneDesc("Unknown (R_SP128)", "R_SP128"),
+    new TwilightPrincessSceneDesc("Impaz's House", "R_SP128"),
     new TwilightPrincessSceneDesc("Castle Town Houses", "R_SP160"),
     new TwilightPrincessSceneDesc("Star Tent", "R_SP161"),
     new TwilightPrincessSceneDesc("Kakariko Sanctuary", "R_SP209"),
-    new TwilightPrincessSceneDesc("Unknown (R_SP300): Gold Water?", "R_SP300"),
+    new TwilightPrincessSceneDesc("Cutscene: Light Arrow Area", "R_SP300"),
     new TwilightPrincessSceneDesc("Cutscene: Hyrule Castle Throne Room", "R_SP301"),    
 ];
 
