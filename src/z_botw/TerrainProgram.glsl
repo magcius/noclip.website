@@ -3,7 +3,7 @@ precision mediump float;
 
 // Expected to be constant across the entire scene.
 layout(row_major, std140) uniform ub_SceneParams {
-    mat4 u_ViewProjection;
+    Mat4x4 u_ViewProjection;
     vec4 u_Misc0;
 };
 
@@ -31,7 +31,7 @@ vec2 ComputeTerrainPosition() {
 void main() {
     vec4 t_Position = vec4(a_Position, 1.0);
     t_Position.y *= u_Misc0.x;
-    gl_Position = u_ViewProjection * t_Position;
+    gl_Position = Mul(u_ViewProjection, t_Position);
 
     v_TerrainPosition = ComputeTerrainPosition();
     v_AreaLocalPosition = a_AreaLocalPosition;

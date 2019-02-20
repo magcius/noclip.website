@@ -34,10 +34,6 @@ export interface StructLayout {
 const builtinTypeWordSizes = new Map<string, number>();
 builtinTypeWordSizes.set('float',  1);
 builtinTypeWordSizes.set('vec4',   4);
-builtinTypeWordSizes.set('mat4x2', 4*2);
-builtinTypeWordSizes.set('mat4x3', 4*3);
-builtinTypeWordSizes.set('mat4',   4*4);
-// Aliases.
 builtinTypeWordSizes.set('Mat4x2', 4*2);
 builtinTypeWordSizes.set('Mat4x3', 4*3);
 builtinTypeWordSizes.set('Mat4x4', 4*4);

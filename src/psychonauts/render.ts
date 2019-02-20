@@ -248,7 +248,7 @@ class MeshFragInstance {
             program.defines.set('USE_VERTEX_COLOR', '1');
         }
 
-        this.renderInst.gfxProgram = device.createProgram(program);
+        this.renderInst.setDeviceProgram(program);
 
         this.renderInst.setSamplerBindingsFromTextureMappings([textureMapping]);
     }

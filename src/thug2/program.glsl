@@ -3,7 +3,7 @@ precision mediump float;
 
 // Expected to be constant across the entire scene.
 layout(row_major, std140) uniform ub_SceneParams {
-    mat4 u_Projection;
+    Mat4x4 u_Projection;
 };
 
 layout(row_major, std140) uniform ub_MaterialParams {
@@ -12,7 +12,7 @@ layout(row_major, std140) uniform ub_MaterialParams {
 #define u_AlphaRef (u_Misc0[0])
 
 layout(row_major, std140) uniform ub_MeshParams {
-    mat4x3 u_BoneMatrix[1];
+    Mat4x3 u_BoneMatrix[1];
 };
 
 uniform sampler2D u_Texture[4];
@@ -26,7 +26,7 @@ layout(location = 1) in vec4 a_Color;
 layout(location = 2) in vec4 a_TexCoord;
 
 void main() {
-    gl_Position = u_Projection * mat4(u_BoneMatrix[0]) * vec4(a_Position, 1.0);
+    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix[0]), vec4(a_Position, 1.0)));
     v_Color = a_Color;
     v_TexCoord[0] = (a_TexCoord.xy);
     v_TexCoord[1] = (a_TexCoord.zw);

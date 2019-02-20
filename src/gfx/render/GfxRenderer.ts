@@ -235,6 +235,12 @@ export class GfxRenderInst {
         this.rebuildPipeline();
     }
 
+    public setGfxProgram(gfxProgram: GfxProgram): void {
+        this.gfxProgram = gfxProgram;
+        this._deviceProgram = null;
+        this.rebuildPipeline();
+    }
+
     public setPipelineDirect(pipeline: GfxRenderPipeline): void {
         this._pipeline = pipeline;
         this._setFlag(GfxRenderInstFlags.PIPELINE_DIRECT, true);

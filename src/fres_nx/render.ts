@@ -147,7 +147,7 @@ class AglProgram extends DeviceProgram {
 precision mediump float;
 
 layout(row_major, std140) uniform ub_SceneParams {
-    mat4 u_Projection;
+    Mat4x4 u_Projection;
 };
 
 layout(row_major, std140) uniform ub_MaterialParams {
@@ -155,7 +155,7 @@ layout(row_major, std140) uniform ub_MaterialParams {
 };
 
 layout(row_major, std140) uniform ub_ShapeParams {
-    mat4x3 u_ModelView;
+    Mat4x3 u_ModelView;
 };
 
 uniform sampler2D u_Samplers[8];
@@ -293,7 +293,7 @@ out vec4 v_NormalWorld;
 out vec4 v_TangentWorld;
 
 void main() {
-    gl_Position = u_Projection * mat4(u_ModelView) * vec4(_p0, 1.0);
+    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_ModelView), vec4(_p0, 1.0)));
     v_PositionWorld = _p0.xyz;
     v_TexCoord0 = _u0;
     v_VtxColor = _c0;
@@ -440,7 +440,7 @@ class FMATInstance {
         renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, AglProgram.ub_MaterialParams);
 
         const program = new AglProgram(fmat);
-        this.templateRenderInst.gfxProgram = device.createProgram(program);
+        this.templateRenderInst.setDeviceProgram(program);
 
         // Fill in our texture mappings.
         assert(fmat.samplerInfo.length === fmat.textureName.length);

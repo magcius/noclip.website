@@ -200,7 +200,7 @@ export class TerrainRenderer {
         textureHolder.fillTextureMapping(textureMappings[1], 'MaterialCmb');
         this.templateRenderInst.setSamplerBindingsFromTextureMappings(textureMappings);
 
-        this.templateRenderInst.gfxProgram = this.gfxProgram;
+        this.templateRenderInst.setGfxProgram(this.gfxProgram);
         this.templateRenderInst.setMegaStateFlags({ depthCompare: GfxCompareMode.LESS, depthWrite: true });
         this.renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, TerrainProgram.ub_SceneParams);
         this.renderInstBuilder.finish(device, this.viewRenderer);

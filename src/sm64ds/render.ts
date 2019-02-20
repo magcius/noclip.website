@@ -41,18 +41,18 @@ precision mediump float;
 
 // Expected to be constant across the entire scene.
 layout(row_major, std140) uniform ub_SceneParams {
-    mat4 u_Projection;
+    Mat4x4 u_Projection;
 };
 
 // Expected to change with each material.
 layout(row_major, std140) uniform ub_MaterialParams {
-    mat4x2 u_TexMtx[1];
+    Mat4x2 u_TexMtx[1];
     vec4 u_Misc0;
 };
 #define u_TexCoordMode (u_Misc0.x)
 
 layout(row_major, std140) uniform ub_PacketParams {
-    mat4x3 u_ModelView;
+    Mat4x3 u_ModelView;
 };
 
 uniform sampler2D u_Texture;
@@ -69,14 +69,14 @@ out vec4 v_Color;
 out vec2 v_TexCoord;
 
 void main() {
-    gl_Position = u_Projection * mat4(u_ModelView) * vec4(a_Position, 1.0);
+    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_ModelView), vec4(a_Position, 1.0)));
     v_Color = a_Color;
 
     vec2 t_TexSpaceCoord;
     if (u_TexCoordMode == 2.0) { // TexCoordMode.NORMAL
-        v_TexCoord = (u_TexMtx[0] * vec4(a_Normal, 1.0)).st;
+        v_TexCoord = Mul(u_TexMtx[0], vec4(a_Normal, 1.0)).st;
     } else {
-        v_TexCoord = (u_TexMtx[0] * vec4(a_UV, 1.0, 1.0)).st;
+        v_TexCoord = Mul(u_TexMtx[0], vec4(a_UV, 1.0, 1.0)).st;
     }
 }
 `;

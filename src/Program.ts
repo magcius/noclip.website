@@ -161,6 +161,12 @@ struct Mat4x3 { vec4 _m[3]; };
 struct Mat4x2 { vec4 _m[2]; };
 vec4 Mul(Mat4x4 m, vec4 v) { return vec4(dot(m._m[0], v), dot(m._m[1], v), dot(m._m[2], v), dot(m._m[3], v)); }
 vec3 Mul(Mat4x3 m, vec4 v) { return vec3(dot(m._m[0], v), dot(m._m[1], v), dot(m._m[2], v)); }
+vec4 Mul(vec3 v, Mat4x3 m) { return vec4(
+    dot(vec3(m._m[0].x, m._m[1].x, m._m[2].x), v),
+    dot(vec3(m._m[0].y, m._m[1].y, m._m[2].y), v),
+    dot(vec3(m._m[0].z, m._m[1].z, m._m[2].z), v),
+    dot(vec3(m._m[0].w, m._m[1].w, m._m[2].w), v)
+); }
 vec2 Mul(Mat4x2 m, vec4 v) { return vec2(dot(m._m[0], v), dot(m._m[1], v)); }
 void Fma(Mat4x3 d, Mat4x3 m, float s) { d._m[0] += m._m[0] * s; d._m[1] += m._m[1] * s; d._m[2] += m._m[2] * s; }
 Mat4x4 _Mat4x4(Mat4x3 m) { Mat4x4 o; o._m[0] = m._m[0]; o._m[1] = m._m[1]; o._m[2] = m._m[2]; o._m[3] = vec4(0, 0, 0, 1); return o; }

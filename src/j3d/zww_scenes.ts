@@ -332,14 +332,14 @@ class PlaneColorProgram extends DeviceProgram {
     public both = `
 precision mediump float;
 layout(row_major, std140) uniform ub_Params {
-    mat4 u_Projection;
-    mat4x3 u_ModelView;
+    Mat4x4 u_Projection;
+    Mat4x3 u_ModelView;
     vec4 u_PlaneColor;
 };
 #ifdef VERT
 layout(location = ${PlaneColorProgram.a_Position}) in vec3 a_Position;
 void main() {
-    gl_Position = u_Projection * mat4(u_ModelView) * vec4(a_Position, 1.0);
+    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_ModelView), vec4(a_Position, 1.0)));
 }
 #endif
 #ifdef FRAG
@@ -380,7 +380,7 @@ class SeaPlane {
         const renderInstBuilder = new GfxRenderInstBuilder(device, programReflection, bindingLayouts, [ this.paramsBuffer ]);
         this.renderInst = renderInstBuilder.pushRenderInst();
         this.renderInst.name = 'SeaPlane';
-        this.renderInst.gfxProgram = this.gfxProgram;
+        this.renderInst.setGfxProgram(this.gfxProgram);
         this.renderInst.inputState = this.inputState;
         this.renderInst.setMegaStateFlags({
             depthWrite: true,

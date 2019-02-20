@@ -24,8 +24,8 @@ class FancyGrid_Program extends DeviceProgram {
 precision mediump float;
 
 layout(row_major, std140) uniform ub_SceneParams {
-    mat4 u_Projection;
-    mat4x3 u_ModelView;
+    Mat4x4 u_Projection;
+    Mat4x3 u_ModelView;
 };
 
 layout(location = ${FancyGrid_Program.a_Position}) attribute vec3 a_Position;
@@ -36,9 +36,9 @@ void main() {
     v_SurfCoord = a_Position.xz;
 
     float t_Scale = 200.0;
-    gl_Position = u_Projection * mat4(u_ModelView) * vec4(a_Position * t_Scale, 1.0);
+    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_ModelView), vec4(a_Position * t_Scale, 1.0)));
 
-    vec3 V = (vec3(0.0, 0.0, 1.0) * u_ModelView).xyz;
+    vec3 V = Mul(vec3(0.0, 0.0, 1.0), u_ModelView).xyz;
     vec3 N = vec3(0.0, 1.0, 0.0);
     v_EyeFade = dot(V, N);
 }
@@ -131,7 +131,7 @@ class FancyGrid {
         this.inputState = device.createInputState(this.inputLayout, vertexBuffers, { buffer: this.idxBuffer, byteOffset: 0, byteStride: 1 });
         this.renderInst = renderInstBuilder.pushRenderInst();
         renderInstBuilder.newUniformBufferInstance(this.renderInst, 0);
-        this.renderInst.gfxProgram = this.gfxProgram;
+        this.renderInst.setGfxProgram(this.gfxProgram);
         this.renderInst.inputState = this.inputState;
         this.renderInst.setMegaStateFlags({
             blendMode: GfxBlendMode.ADD,
@@ -172,8 +172,8 @@ class MDL0_Program extends DeviceProgram {
 precision mediump float;
 
 layout(row_major, std140) uniform ub_SceneParams {
-    mat4 u_Projection;
-    mat4x3 u_ModelView;
+    Mat4x4 u_Projection;
+    Mat4x3 u_ModelView;
 };
 
 layout(location = ${MDL0_Program.a_Position}) attribute vec3 a_Position;
@@ -182,7 +182,7 @@ varying vec4 v_Color;
 
 void main() {
     v_Color = a_Color.bgra;
-    gl_Position = u_Projection * mat4(u_ModelView) * vec4(a_Position, 1.0);
+    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_ModelView), vec4(a_Position, 1.0)));
 }
 `;
 
@@ -233,7 +233,7 @@ class MDL0Renderer {
         });
 
         this.templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
-        this.templateRenderInst.gfxProgram = this.gfxProgram;
+        this.templateRenderInst.setGfxProgram(this.gfxProgram);
         renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, MDL0_Program.ub_SceneParams);
 
         const idxCount = this.mdl0.idxData.byteLength / 2;

@@ -216,7 +216,7 @@ export class FLVERInstance {
                 program.defines.set('USE_ALPHATEST', '1');
             }
 
-            batchTemplateRenderInst.gfxProgram = device.createProgram(program);
+            batchTemplateRenderInst.setGfxProgram(device.createProgram(program));
             batchTemplateRenderInst.setSamplerBindingsFromTextureMappings(textureMapping);
 
             const isTranslucent = hasAlphaBlend;

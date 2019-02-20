@@ -362,11 +362,11 @@ function makeFullscreenPassRenderInstBuilder(device: GfxDevice) {
     return new GfxRenderInstBuilder(device, FullscreenBaseProgram.programReflection, bindingLayouts, []);
 }
 
-function makeFullscreenPassRenderInst(renderInstBuilder: GfxRenderInstBuilder, name: string, program: GfxProgram): GfxRenderInst {
+function makeFullscreenPassRenderInst(renderInstBuilder: GfxRenderInstBuilder, name: string, program: DeviceProgram): GfxRenderInst {
     const renderInst = renderInstBuilder.pushRenderInst();
     renderInst.drawTriangles(3);
     renderInst.name = name;
-    renderInst.gfxProgram = program;
+    renderInst.setDeviceProgram(program);
     renderInst.inputState = null;
     renderInst.setMegaStateFlags(fullscreenMegaState);
     return renderInst;
@@ -471,16 +471,16 @@ class SMGRenderer implements Viewer.SceneGfx {
 
         const renderInstBuilder = makeFullscreenPassRenderInstBuilder(device);
         this.bloomSceneColorTarget = new WeirdFancyRenderTarget(this.mainRenderTarget.depthStencilAttachment);
-        this.bloomRenderInstDownsample = makeFullscreenPassRenderInst(renderInstBuilder, 'bloom downsample', device.createProgram(new FullscreenCopyProgram()));
+        this.bloomRenderInstDownsample = makeFullscreenPassRenderInst(renderInstBuilder, 'bloom downsample', new FullscreenCopyProgram());
         this.bloomRenderInstDownsample.passMask = SMGPass.BLOOM_DOWNSAMPLE;
 
-        this.bloomRenderInstBlur = makeFullscreenPassRenderInst(renderInstBuilder, 'bloom blur', device.createProgram(new BloomPassBlurProgram()));
+        this.bloomRenderInstBlur = makeFullscreenPassRenderInst(renderInstBuilder, 'bloom blur', new BloomPassBlurProgram());
         this.bloomRenderInstBlur.passMask = SMGPass.BLOOM_BLUR;
 
-        this.bloomRenderInstBokeh = makeFullscreenPassRenderInst(renderInstBuilder, 'bloom bokeh', device.createProgram(new BloomPassBokehProgram()));
+        this.bloomRenderInstBokeh = makeFullscreenPassRenderInst(renderInstBuilder, 'bloom bokeh', new BloomPassBokehProgram());
         this.bloomRenderInstBokeh.passMask = SMGPass.BLOOM_BOKEH;
 
-        this.bloomRenderInstCombine = makeFullscreenPassRenderInst(renderInstBuilder, 'bloom combine', device.createProgram(new FullscreenCopyProgram()));
+        this.bloomRenderInstCombine = makeFullscreenPassRenderInst(renderInstBuilder, 'bloom combine', new FullscreenCopyProgram());
         this.bloomRenderInstCombine.passMask = SMGPass.BLOOM_COMBINE;
         this.bloomRenderInstCombine.setMegaStateFlags({
             blendMode: GfxBlendMode.ADD,

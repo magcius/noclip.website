@@ -252,7 +252,7 @@ export class MDL0Renderer {
 
         this.renderInstBuilder = new GfxRenderInstBuilder(device, programReflection, bindingLayouts, [this.sceneParamsBuffer, this.materialParamsBuffer, this.packetParamsBuffer]);
         this.templateRenderInst = this.renderInstBuilder.pushTemplateRenderInst();
-        this.templateRenderInst.gfxProgram = this.gfxProgram;
+        this.templateRenderInst.setGfxProgram(this.gfxProgram);
         this.renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, NITRO_Program.ub_SceneParams);
 
         const hostAccessPass = device.createHostAccessPass();

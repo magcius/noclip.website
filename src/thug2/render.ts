@@ -141,7 +141,7 @@ class MaterialInstance {
             program.defines.set('USE_ALPHATEST', '1');
 
         this.templateRenderInst = renderInstBuilder.newRenderInst();
-        this.templateRenderInst.gfxProgram = device.createProgram(program);
+        this.templateRenderInst.setDeviceProgram(program);
         renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, THUG2Program.ub_MaterialParams);
 
         textureMapping[0].reset();

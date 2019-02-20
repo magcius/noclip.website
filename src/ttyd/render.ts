@@ -84,7 +84,7 @@ class BackgroundBillboardRenderer {
         this.renderInst.sortKey = makeSortKeyOpaque(GfxRendererLayer.BACKGROUND, programReflection.uniqueKey);
         // No input state, we don't use any vertex buffers for full-screen passes.
         this.renderInst.inputState = null;
-        this.renderInst.gfxProgram = gfxProgram;
+        this.renderInst.setGfxProgram(gfxProgram);
         this.renderInst.setMegaStateFlags(fullscreenMegaState);
         this.paramsBufferOffset = renderInstBuilder.newUniformBufferInstance(this.renderInst, 0);
         renderInstBuilder.finish(device, viewRenderer);

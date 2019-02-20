@@ -43,7 +43,7 @@ class AglProgram extends DeviceProgram {
 precision mediump float;
 
 layout(row_major, std140) uniform ub_SceneParams {
-    mat4 u_Projection;
+    Mat4x4 u_Projection;
 };
 
 layout(row_major, std140) uniform ub_MaterialParams {
@@ -51,8 +51,8 @@ layout(row_major, std140) uniform ub_MaterialParams {
 };
 
 layout(row_major, std140) uniform ub_ShapeParams {
-    mat4x3 u_View;
-    mat4x3 u_ModelView;
+    Mat4x3 u_View;
+    Mat4x3 u_ModelView;
 };
 
 uniform sampler2D s_a0;
@@ -81,13 +81,14 @@ out vec4 v_TangentWorld;
 out vec3 v_CameraWorld;
 
 void main() {
-    gl_Position = u_Projection * mat4(u_ModelView) * vec4(a_p0, 1.0);
+    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_ModelView), vec4(a_p0, 1.0)));
     v_PositionWorld = a_p0.xyz;
     v_TexCoord0 = a_u0;
     v_TexCoord1 = a_u1;
     v_NormalWorld = a_n0;
     v_TangentWorld = a_t0;
     // TODO(jstpierre): Don't be dumb.
+    // TODO(jstpierre): What to do on Mac?
     v_CameraWorld = inverse(mat4(u_View))[3].xyz;
 }
 `;
@@ -661,7 +662,7 @@ class FMATInstance {
         renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, AglProgram.ub_MaterialParams);
 
         const program = new AglProgram();
-        this.templateRenderInst.gfxProgram = device.createProgram(program);
+        this.templateRenderInst.setDeviceProgram(program);
 
         // Fill in our texture mappings.
         this.textureMapping = nArray(8, () => new TextureMapping());
