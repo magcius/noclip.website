@@ -3,20 +3,20 @@ precision mediump float;
 
 // Expected to be constant across the entire scene.
 layout(row_major, std140) uniform ub_SceneParams {
-    mat4 u_Projection;
+    Mat4x4 u_Projection;
 };
 
 // Expected to change with each material.
 layout(row_major, std140) uniform ub_MaterialParams {
     vec4 u_MaterialColor;
-    mat4x3 u_TexMtx[3];
+    Mat4x3 u_TexMtx[3];
     vec4 u_MaterialMisc[1];
 };
 
 #define u_AlphaReference (u_MaterialMisc[0][0])
 
 layout(row_major, std140) uniform ub_PrmParams {
-    mat4x3 u_BoneMatrix[16];
+    Mat4x3 u_BoneMatrix[16];
     vec4 u_PrmMisc[2];
 };
 
@@ -46,16 +46,16 @@ layout(location = 8) in vec4 a_BoneWeights;
 
 void main() {
     // Compute our matrix.
-    mat4x3 t_BoneMatrix;
+    Mat4x3 t_BoneMatrix;
 
     vec4 t_BoneWeights = a_BoneWeights * u_BoneWeightScale;
     if (t_BoneWeights.x > 0.0) {
-        t_BoneMatrix = mat4x3(0.0);
-        t_BoneMatrix += u_BoneMatrix[int(a_BoneIndices.x)] * t_BoneWeights.x;
+        t_BoneMatrix = _Mat4x3(0.0);
+        Fma(t_BoneMatrix, u_BoneMatrix[int(a_BoneIndices.x)], t_BoneWeights.x);
         if (t_BoneWeights.y > 0.0) {
-            t_BoneMatrix += u_BoneMatrix[int(a_BoneIndices.y)] * t_BoneWeights.y;
+            Fma(t_BoneMatrix, u_BoneMatrix[int(a_BoneIndices.y)], t_BoneWeights.y);
             if (t_BoneWeights.z > 0.0) {
-                t_BoneMatrix += u_BoneMatrix[int(a_BoneIndices.z)] * t_BoneWeights.z;
+                Fma(t_BoneMatrix, u_BoneMatrix[int(a_BoneIndices.z)], t_BoneWeights.z);
             }
         }
     } else {
@@ -64,20 +64,20 @@ void main() {
     }
 
     vec4 t_Position = vec4(a_Position * u_PosScale, 1.0);
-    gl_Position = u_Projection * mat4(t_BoneMatrix) * t_Position;
+    gl_Position = Mul(u_Projection, Mul(_Mat4x4(t_BoneMatrix), t_Position));
 
     v_Color = a_Color;
 
     vec2 t_TexCoord0 = a_TexCoord0 * u_TexCoord0Scale;
-    v_TexCoord0 = (u_TexMtx[0] * vec4(t_TexCoord0, 0.0, 1.0)).st;
+    v_TexCoord0 = Mul(u_TexMtx[0], vec4(t_TexCoord0, 0.0, 1.0)).st;
     v_TexCoord0.t = 1.0 - v_TexCoord0.t;
 
     vec2 t_TexCoord1 = a_TexCoord1 * u_TexCoord1Scale;
-    v_TexCoord1 = (u_TexMtx[1] * vec4(t_TexCoord1, 0.0, 1.0)).st;
+    v_TexCoord1 = Mul(u_TexMtx[1], vec4(t_TexCoord1, 0.0, 1.0)).st;
     v_TexCoord1.t = 1.0 - v_TexCoord1.t;
 
     vec2 t_TexCoord2 = a_TexCoord2 * u_TexCoord2Scale;
-    v_TexCoord2 = (u_TexMtx[2] * vec4(t_TexCoord2, 0.0, 1.0)).st;
+    v_TexCoord2 = Mul(u_TexMtx[2], vec4(t_TexCoord2, 0.0, 1.0)).st;
     v_TexCoord2.t = 1.0 - v_TexCoord2.t;
 
     vec3 t_LightDirection = normalize(vec3(.2, -1, .5));

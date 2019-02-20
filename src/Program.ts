@@ -155,16 +155,18 @@ ${precision}
 #define gl_FragColor o_color
 #define texture2D texture
 
-#ifdef __BUG_AMD_ROW_MAJOR
+#ifdef _BUG_AMD_ROW_MAJOR
 struct Mat4x4 { vec4 _m[4]; };
 struct Mat4x3 { vec4 _m[3]; };
 struct Mat4x2 { vec4 _m[2]; };
 vec4 Mul(Mat4x4 m, vec4 v) { return vec4(dot(m._m[0], v), dot(m._m[1], v), dot(m._m[2], v), dot(m._m[3], v)); }
 vec3 Mul(Mat4x3 m, vec4 v) { return vec3(dot(m._m[0], v), dot(m._m[1], v), dot(m._m[2], v)); }
 vec2 Mul(Mat4x2 m, vec4 v) { return vec2(dot(m._m[0], v), dot(m._m[1], v)); }
+void Fma(Mat4x3 d, Mat4x3 m, float s) { d._m[0] += m._m[0] * s; d._m[1] += m._m[1] * s; d._m[2] += m._m[2] * s; }
 Mat4x4 _Mat4x4(Mat4x3 m) { Mat4x4 o; o._m[0] = m._m[0]; o._m[1] = m._m[1]; o._m[2] = m._m[2]; o._m[3] = vec4(0, 0, 0, 1); return o; }
 Mat4x4 _Mat4x4(float n) { Mat4x4 o; o._m[0].x = n; o._m[1].y = n; o._m[2].z = n; o._m[3].w = n; return o; }
 Mat4x3 _Mat4x3(Mat4x4 m) { Mat4x3 o; o._m[0] = m._m[0]; o._m[1] = m._m[1]; o._m[2] = m._m[2]; return o; }
+Mat4x3 _Mat4x3(float n) { Mat4x3 o; o._m[0].x = n; o._m[1].y = n; o._m[2].z = n; return o; }
 #else
 #define Mat4x4 mat4x4
 #define Mat4x3 mat4x3
@@ -172,6 +174,7 @@ Mat4x3 _Mat4x3(Mat4x4 m) { Mat4x3 o; o._m[0] = m._m[0]; o._m[1] = m._m[1]; o._m[
 #define _Mat4x4 mat4x4
 #define _Mat4x3 mat4x3
 #define Mul(A, B) (A * B)
+#define Fma(D, M, S) (D += (M) * (S))
 #endif
 
 ${defines}
