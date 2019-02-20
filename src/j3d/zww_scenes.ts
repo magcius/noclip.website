@@ -717,12 +717,14 @@ class ModelCache {
         return p;
     }
 
-    public getModel(device: GfxDevice, renderer: WindWakerRenderer, rarc: RARC.RARC, modelPath: string): BMDModel {
+    public getModel(device: GfxDevice, renderer: WindWakerRenderer, rarc: RARC.RARC, modelPath: string, hacks?: (bmd: BMD) => void): BMDModel {
         let p = this.modelCache.get(modelPath);
 
         if (p === undefined) {
             const bmdData = rarc.findFileData(modelPath);
             const bmd = BMD.parse(bmdData);
+            if (hacks !== undefined)
+                hacks(bmd);
             renderer.textureHolder.addJ3DTextures(device, bmd);
             p = new BMDModel(device, renderer.renderHelper, bmd);
             this.modelCache.set(modelPath, p);
@@ -1384,8 +1386,9 @@ class SceneDesc {
             // XXX(jstpierre): Stupid hack. ub01_head uses *uo01* instead of ub01, which will
             // clash in the texture holder. I need to get rid of this stupid texture holder garbage,
             // it's not helping anybody.
-            const model = modelCache.getModel(device, renderer, rarc, `bdlm/ub01_head.bdl`);
-            model.bmd.tex1.textureDatas[3].name = `ub01_face`;
+            const model = modelCache.getModel(device, renderer, rarc, `bdlm/ub01_head.bdl`, (bmd) => {
+                bmd.tex1.textureDatas[3].name = `ub01_face`;
+            });
             model.tex1Samplers[3].name = `ub01_face`;
             model.tex1Samplers[4].name = `ub01_face`;
 
