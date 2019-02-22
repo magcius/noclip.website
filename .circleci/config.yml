@@ -23,6 +23,7 @@ jobs:
       - save_cache:
           paths:
             - node_modules
+            - .cache
           key: v1-dependencies-{{ checksum "package.json" }}
 
       - run: ./node_modules/.bin/parcel build --public-url=./ src/index.html src/embed.html
