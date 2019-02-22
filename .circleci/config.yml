@@ -23,7 +23,7 @@ jobs:
             - node_modules
           key: v1-dependencies-{{ checksum "package.json" }}
 
-      - run: parcel build --public-url=./ src/index.html src/embed.html
+      - run: ./node_modules/.bin/parcel build --public-url=./ src/index.html src/embed.html
 
       - add_ssh_keys:
           fingerprints:
