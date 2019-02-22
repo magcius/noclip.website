@@ -72,20 +72,24 @@ class FsButton {
 }
 
 class Main {
+    public viewer: Viewer.Viewer;
     private canvas: HTMLCanvasElement;
-    private viewer: Viewer.Viewer;
     private fsButton: FsButton;
 
     constructor() {
         this.canvas = document.createElement('canvas');
+
+        const initErrorCode = Viewer.initializeViewer(this, this.canvas);
+        if (initErrorCode !== Viewer.InitErrorCode.SUCCESS) {
+            document.body.appendChild(Viewer.makeErrorUI(initErrorCode));
+            return;
+        }
 
         document.body.appendChild(this.canvas);
         window.onresize = this.onResize.bind(this);
 
         this.fsButton = new FsButton();
         document.body.appendChild(this.fsButton.elem);
-
-        this.viewer = Viewer.Viewer.make(this.canvas);
 
         // Dispatch to the main embed.
         const hash = window.location.hash.slice(1);
