@@ -19,7 +19,7 @@ import { GXRenderHelperGfx, ub_PacketParams, PacketParams } from '../gx/gx_rende
 import AnimationController from '../AnimationController';
 import { GfxDevice, GfxHostAccessPass, GfxBuffer, GfxInputState, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexAttributeFrequency, GfxVertexBufferDescriptor } from '../gfx/platform/GfxPlatform';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { GfxRenderInst } from '../gfx/render/GfxRenderer';
+import { GfxRenderInst, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { computeViewMatrix } from '../Camera';
 
@@ -85,6 +85,8 @@ class PlaneShape {
 
         this.renderInst = renderInstBuilder.pushRenderInst();
         this.renderInst.setSamplerBindingsInherit();
+        // Force this so it renders after the skybox.
+        this.renderInst.sortKey = makeSortKey((GfxRendererLayer.TRANSLUCENT | GfxRendererLayer.OPAQUE) + 10);
         this.renderInst.inputState = this.inputState;
         renderInstBuilder.newUniformBufferInstance(this.renderInst, ub_PacketParams);
         this.renderInst.drawIndexes(6);
@@ -153,6 +155,7 @@ class SeaPlaneScene {
             gxMaterial.tevStages[1].alphaInD = GX.CombineAlphaInput.KONST;
             gxMaterial.ropInfo.blendMode.srcFactor = GX.BlendFactor.ONE;
             gxMaterial.ropInfo.blendMode.dstFactor = GX.BlendFactor.ZERO;
+            material.translucent = false;
         }
 
         if (configName.includes('opaque')) {
