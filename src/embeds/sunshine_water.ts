@@ -12,7 +12,7 @@ import * as GX_Material from '../gx/gx_material';
 
 import { BMD, BTK, MaterialEntry } from '../j3d/j3d';
 import * as RARC from '../j3d/rarc';
-import { MaterialData, J3DTextureHolder, BMDModel, MaterialInstance } from '../j3d/render';
+import { J3DTextureHolder, BMDModel, MaterialInstance, MaterialInstanceState } from '../j3d/render';
 import { SunshineRenderer, SunshineSceneDesc, SMSPass } from '../j3d/sms_scenes';
 import * as Yaz0 from '../compression/Yaz0';
 import { GXRenderHelperGfx, ub_PacketParams, PacketParams } from '../gx/gx_render';
@@ -106,8 +106,8 @@ class PlaneShape {
 }
 
 class SeaPlaneScene {
-    private seaMaterial: MaterialData;
     private seaMaterialInstance: MaterialInstance;
+    private materialInstanceState = new MaterialInstanceState();
     private plane: PlaneShape;
     private bmdModel: BMDModel;
     private animationController: AnimationController;
@@ -129,8 +129,8 @@ class SeaPlaneScene {
         textureHolder.addJ3DTextures(device, bmd);
 
         const seaMaterial = bmd.mat3.materialEntries.find((m) => m.name === '_umi');
-        this.seaMaterial = this.makeMaterialData(device, seaMaterial, configName);
-        this.seaMaterialInstance = new MaterialInstance(device, renderHelper, null, this.seaMaterial);
+        this.mangleMaterial(seaMaterial, configName);
+        this.seaMaterialInstance = new MaterialInstance(device, renderHelper, null, seaMaterial, {});
         this.seaMaterialInstance.bindTTK1(this.animationController, btk.ttk1);
         const renderInstBuilder = renderHelper.renderInstBuilder;
         renderInstBuilder.pushTemplateRenderInst(this.seaMaterialInstance.templateRenderInst);
@@ -138,7 +138,7 @@ class SeaPlaneScene {
         renderInstBuilder.popTemplateRenderInst();
     }
 
-    public makeMaterialData(device: GfxDevice, material: MaterialEntry, configName: string) {
+    public mangleMaterial(material: MaterialEntry, configName: string): void {
         const gxMaterial = material.gxMaterial;
 
         if (configName.includes('noalpha')) {
@@ -175,19 +175,16 @@ class SeaPlaneScene {
                 gxMaterial.tevStages.length = 1;
             }
         }
-
-        return new MaterialData(device, material);
     }
 
     public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput): void {
         this.plane.prepareToRender(renderHelper, viewerInput);
         this.animationController.setTimeInMilliseconds(viewerInput.time);
-        this.seaMaterialInstance.prepareToRender(renderHelper, viewerInput, this.bmdModel, this.textureHolder);
+        this.seaMaterialInstance.prepareToRender(renderHelper, viewerInput, this.materialInstanceState, this.bmdModel, this.textureHolder);
     }
 
     public destroy(device: GfxDevice) {
         this.plane.destroy(device);
-        this.seaMaterial.destroy(device);
         this.bmdModel.destroy(device);
     }
 }

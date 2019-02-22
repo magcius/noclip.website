@@ -1,0 +1,35 @@
+
+version: 2
+jobs:
+  build:
+    docker:
+      - image: circleci/node:7.10
+
+    working_directory: ~/repo
+
+    steps:
+      - checkout
+
+      - restore_cache:
+          keys:
+            - v1-dependencies-{{ checksum "package.json" }}
+            # fallback to using the latest cache if no exact match is found
+            - v1-dependencies-
+
+      - run: yarn install
+
+      - save_cache:
+          paths:
+            - node_modules
+          key: v1-dependencies-{{ checksum "package.json" }}
+
+      - run: parcel build --public-url=./ src/index.html src/embed.html
+
+      - add_ssh_keys:
+          fingerprints:
+            - "4f:78:69:e1:6b:2d:bf:39:96:c5:4a:1c:d1:90:40:6e"
+
+      - deploy:
+          name: deploy
+          command: |
+            rsync -e "ssh -i deploy/deploy_rsa" -ar --quiet --delete-after --exclude=data/ dist/ gznoclip@foxcraft.dreamhost.com:noclip.website/

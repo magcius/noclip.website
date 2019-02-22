@@ -145,11 +145,10 @@ export class ShapeInstance {
     }
 }
 
-class MaterialInstanceState {
+export class MaterialInstanceState {
     public lights = nArray(8, () => new GX_Material.Light());
 }
 
-const scratchVec4 = vec4.create();
 const matrixScratch = mat4.create(), matrixScratch2 = mat4.create();
 const materialParams = new MaterialParams();
 export class MaterialInstance {
