@@ -8,6 +8,8 @@ jobs:
     working_directory: ~/repo
 
     steps:
+      - run: sudo apt-get update && sudo apt-get install rsync
+
       - checkout
 
       - restore_cache:
