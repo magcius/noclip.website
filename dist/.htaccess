@@ -1,0 +1,4 @@
+RewriteEngine On
+RewriteCond %{HTTPS} !=on
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+Header set Strict-Transport-Security "max-age=31415926; includeSubDomains; preload" env=HTTPS
