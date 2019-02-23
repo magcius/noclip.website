@@ -297,9 +297,9 @@ export class FPSCameraController implements CameraController {
             if (Math.abs(keyMovement[0]) < keyMoveLowSpeedCap) keyMovement[0] = 0.0;
         }
 
-        if (inputManager.isKeyDown('KeyQ')) {
+        if (inputManager.isKeyDown('KeyQ') || (inputManager.isKeyDown('ControlLeft') && inputManager.isKeyDown('Space'))) {
             keyMovement[1] = clampRange(keyMovement[1] - keyMoveVelocity, keyMoveSpeedCap);
-        } else if (inputManager.isKeyDown('KeyE')) {
+        } else if (inputManager.isKeyDown('KeyE') || inputManager.isKeyDown('Space')) {
             keyMovement[1] = clampRange(keyMovement[1] + keyMoveVelocity, keyMoveSpeedCap);
         } else {
             keyMovement[1] *= this.keyMoveDrag;
