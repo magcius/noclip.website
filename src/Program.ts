@@ -155,7 +155,7 @@ ${precision}
 #define gl_FragColor o_color
 #define texture2D texture
 
-#ifdef _BUG_AMD_ROW_MAJOR
+#ifdef _BUG_APPLE_ROW_MAJOR
 struct Mat4x4 { vec4 _m[4]; };
 struct Mat4x3 { vec4 _m[3]; };
 struct Mat4x2 { vec4 _m[2]; };
