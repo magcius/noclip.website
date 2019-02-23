@@ -45,7 +45,7 @@ function getTypeSize(layouts: Map<string, StructLayout>, type: string): number {
         return builtinTypeWordSizes.get(type);
 }
 
-function parseDefinition(layouts: Map<string, StructLayout>, blockName: string, contents: string): StructLayout {
+function parseDefinition(layouts: Map<string, StructLayout>, blockName: string, contents: string): StructLayout | null {
     const uniformBufferVariables = findall(contents, /^\s*(\w+) (\w+)(?:\[(\d+)\])?;\s*$/mg);
     const fields: StructField[] = [];
     let totalWordSize = 0;
@@ -54,6 +54,9 @@ function parseDefinition(layouts: Map<string, StructLayout>, blockName: string, 
         let arraySize: number = 1;
         if (arraySizeStr !== undefined)
             arraySize = parseInt(arraySizeStr);
+        const typeSize = getTypeSize(layouts, type);
+        if (typeSize === undefined)
+            return null;
         const rawWordSize = assertExists(getTypeSize(layouts, type)) * arraySize;
         // Round up to the nearest 4, per std140 alignment rules.
         const wordSize = (rawWordSize + 3) & ~3;
@@ -70,6 +73,8 @@ export function parseShaderSource(uniformBufferLayouts: StructLayout[], shaderSo
     for (let i = 0; i < structBlocks.length; i++) {
         const [m, blockName, contents] = structBlocks[i];
         const structLayout = parseDefinition(layouts, blockName, contents);
+        if (structLayout === null)
+            continue;
         layouts.set(blockName, structLayout);
     }
 

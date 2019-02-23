@@ -152,6 +152,8 @@ export class TerrainAreaRenderer {
 
         for (let i = 0; i < 4; i++) {
             this.renderInsts[i] = renderInstBuilder.pushRenderInst();
+            this.renderInsts[i].setSamplerBindingsInherit();
+            this.renderInsts[i].rebuildPipeline();
             staticData.drawRenderInst(this.renderInsts[i], i);
         }
 
