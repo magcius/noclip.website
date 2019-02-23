@@ -218,7 +218,8 @@ export function initializeViewer(out: ViewerOut, canvas: HTMLCanvasElement): Ini
     }
 
     // Test for no MS depthbuffer support (as seen in SwiftShader).
-    if (gl.getInternalformatParameter(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, gl.SAMPLES).length === 0) {
+    const samplesArray = gl.getInternalformatParameter(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, gl.SAMPLES);
+    if (samplesArray === null || samplesArray.length === 0) {
         const ext = gl.getExtension('WEBGL_debug_renderer_info');
         if (ext && gl.getParameter(ext.UNMASKED_RENDERER_WEBGL).includes('SwiftShader'))
             return InitErrorCode.GARBAGE_WEBGL2_SWIFTSHADER;
