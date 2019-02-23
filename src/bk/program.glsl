@@ -82,6 +82,11 @@ void main() {
     t_Color.rgba *= v_Color.rgba;
 #endif
 
+#ifdef USE_ALPHA_VISUALIZER
+    t_Color.rgb = vec3(v_Color.a);
+    t_Color.a = 1.0;
+#endif
+
 #ifdef USE_ALPHA_MASK
     if (t_Color.a < 0.0125)
         discard;

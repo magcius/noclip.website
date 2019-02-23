@@ -173,8 +173,9 @@ class DrawCallInstance {
     private renderInst: GfxRenderInst;
     private textureEntry: Texture[] = [];
     private vertexColorsEnabled = true;
-    private monochromeVertexColorsEnabled = false;
     private texturesEnabled = true;
+    private monochromeVertexColorsEnabled = false;
+    private alphaVisualizerEnabled = false;
 
     constructor(device: GfxDevice, n64Data: N64Data, renderInstBuilder: GfxRenderInstBuilder, private drawCall: DrawCall, private drawIndex: number) {
         this.renderInst = renderInstBuilder.pushRenderInst();
@@ -214,6 +215,9 @@ class DrawCallInstance {
         if (this.monochromeVertexColorsEnabled)
             program.defines.set('USE_MONOCHROME_VERTEX_COLOR', '1');
 
+        if (this.alphaVisualizerEnabled)
+            program.defines.set('USE_ALPHA_VISUALIZER', '1');
+
         const textFilt = (this.drawCall.DP_OtherModeH >>> 12) & 0x03;
         if (textFilt === TextFilt.G_TF_POINT)
             program.defines.set(`USE_TEXTFILT_POINT`, '1');
@@ -242,6 +246,11 @@ class DrawCallInstance {
 
     public setMonochromeVertexColorsEnabled(v: boolean): void {
         this.monochromeVertexColorsEnabled = v;
+        this.createProgram();
+    }
+
+    public setAlphaVisualizerEnabled(v: boolean): void {
+        this.alphaVisualizerEnabled = v;
         this.createProgram();
     }
 
@@ -345,6 +354,11 @@ export class N64Renderer {
     public setMonochromeVertexColorsEnabled(v: boolean): void {
         for (let i = 0; i < this.drawCallInstances.length; i++)
             this.drawCallInstances[i].setMonochromeVertexColorsEnabled(v);
+    }
+
+    public setAlphaVisualizerEnabled(v: boolean): void {
+        for (let i = 0; i < this.drawCallInstances.length; i++)
+            this.drawCallInstances[i].setAlphaVisualizerEnabled(v);
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
