@@ -146,14 +146,14 @@ export interface GfxInputLayoutDescriptor {
 }
 
 export enum GfxStencilOp {
-    KEEP            = WebGL2RenderingContext.KEEP,
-    ZERO            = WebGL2RenderingContext.ZERO,
-    REPLACE         = WebGL2RenderingContext.REPLACE,
-    INVERT          = WebGL2RenderingContext.INVERT,
-    INCREMENT_CLAMP = WebGL2RenderingContext.INCR,
-    DECREMENT_CLAMP = WebGL2RenderingContext.DECR,
-    INCREMENT_WRAP  = WebGL2RenderingContext.INCR_WRAP,
-    DECREMENT_WRAP  = WebGL2RenderingContext.DECR_WRAP,
+    KEEP            = WebGLRenderingContext.KEEP,
+    ZERO            = WebGLRenderingContext.ZERO,
+    REPLACE         = WebGLRenderingContext.REPLACE,
+    INVERT          = WebGLRenderingContext.INVERT,
+    INCREMENT_CLAMP = WebGLRenderingContext.INCR,
+    DECREMENT_CLAMP = WebGLRenderingContext.DECR,
+    INCREMENT_WRAP  = WebGLRenderingContext.INCR_WRAP,
+    DECREMENT_WRAP  = WebGLRenderingContext.DECR_WRAP,
 }
 
 export interface GfxMegaStateDescriptor {
