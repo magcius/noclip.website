@@ -505,11 +505,13 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         // Set up bug defines.
         this.programBugDefines = '';
 
-        // https://bugs.chromium.org/p/angleproject/issues/detail?id=2273
-        // According to a user on reddit, this apparently also happens on Intel devices as well.
-        // So now I'm just turning this on on all Macs.
-        if (navigator.vendor.includes('Apple'))
-            this.programBugDefines += '#define _BUG_APPLE_ROW_MAJOR';
+        const debugRendererInfo = gl.getExtension('WEBGL_debug_renderer_info');
+        if (debugRendererInfo !== null) {
+            const renderer = gl.getParameter(debugRendererInfo.UNMASKED_RENDERER_WEBGL);
+            // https://bugs.chromium.org/p/angleproject/issues/detail?id=2273
+            if (((renderer.includes('AMD') || renderer.includes('ATI')) && renderer.includes('OpenGL Engine')))
+                this.programBugDefines += '#define _BUG_AMD_ROW_MAJOR';
+        }
     }
 
     //#region GfxSwapChain
