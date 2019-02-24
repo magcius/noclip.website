@@ -972,12 +972,23 @@ varying vec3 v_TexCoord7;
 ${this.generateVertAttributeDefs()}
 
 Mat4x4 GetPosTexMatrix(uint t_MtxIdx) {
-    if (t_MtxIdx == ${GX.TexGenMatrix.IDENTITY}u)
+    switch (t_MtxIdx) {
+    case ${GX.TexGenMatrix.IDENTITY}u:
         return _Mat4x4(1.0);
-    else if (t_MtxIdx >= ${GX.TexGenMatrix.TEXMTX0}u)
+    case ${GX.TexGenMatrix.TEXMTX0}u:
+    case ${GX.TexGenMatrix.TEXMTX1}u:
+    case ${GX.TexGenMatrix.TEXMTX2}u:
+    case ${GX.TexGenMatrix.TEXMTX3}u:
+    case ${GX.TexGenMatrix.TEXMTX4}u:
+    case ${GX.TexGenMatrix.TEXMTX5}u:
+    case ${GX.TexGenMatrix.TEXMTX6}u:
+    case ${GX.TexGenMatrix.TEXMTX7}u:
+    case ${GX.TexGenMatrix.TEXMTX8}u:
+    case ${GX.TexGenMatrix.TEXMTX9}u:
         return _Mat4x4(u_TexMtx[(t_MtxIdx - ${GX.TexGenMatrix.TEXMTX0}u) / 3u]);
-    else
+    default:
         return _Mat4x4(u_PosMtx[t_MtxIdx / 3u]);
+    }
 }
 
 float ApplyCubic(vec3 t_Coeff, float t_Value) {
