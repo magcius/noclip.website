@@ -499,11 +499,15 @@ export class GX_Program extends DeviceProgram {
             return `${baseCoord} * vec2(${this.generateIndTexStageScaleN(stage.scaleS)}, ${this.generateIndTexStageScaleN(stage.scaleT)})`;
     }
 
+    private generateTextureSample(index: number, coord: string): string {
+        return `texture(u_Texture[${index}], ${coord}, TextureLODBias(${index}))`;
+    }
+
     private generateIndTexStage(stage: IndTexStage): string {
         const i = stage.index;
         return `
     // Indirect ${i}
-    vec3 t_IndTexCoord${i} = TextureSample(${stage.texture}, ${this.generateIndTexStageScale(stage)}).abg;`;
+    vec3 t_IndTexCoord${i} = ${this.generateTextureSample(stage.texture, this.generateIndTexStageScale(stage))}.abg;`;
     }
 
     private generateIndTexStages(stages: IndTexStage[]): string {
@@ -597,7 +601,7 @@ export class GX_Program extends DeviceProgram {
         if (this.hacks !== null && this.hacks.disableTextures)
             return 'vec4(1.0, 1.0, 1.0, 1.0)';
 
-        return `TextureSample(${stage.texMap}, t_TexCoord)`;
+        return this.generateTextureSample(stage.texMap, `t_TexCoord`);
     }
 
     private generateComponentSwizzle(swapTable: GX.TevColorChan[] | undefined, channel: GX.TevColorChan): string {
@@ -1024,7 +1028,6 @@ ${this.generateTexCoordGetters()}
 
 float TextureLODBias(int index) { return u_SceneTextureLODBias + u_TextureParams[index].w; }
 vec2 TextureSize(int index) { return u_TextureParams[index].xy; }
-vec4 TextureSample(int index, vec2 coord) { return texture(u_Texture[index], coord, TextureLODBias(index)); }
 
 vec3 TevBias(vec3 a, float b) { return a + vec3(b); }
 float TevBias(float a, float b) { return a + b; }
