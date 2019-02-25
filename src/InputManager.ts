@@ -39,6 +39,7 @@ export default class InputManager {
     public onisdraggingchanged: () => void | null = null;
     public invertY: boolean = false;
     private listeners: Listener[] = [];
+    private usePointerLock: boolean = true;
 
     constructor(toplevel: HTMLElement) {
         document.body.tabIndex = -1;
@@ -188,7 +189,7 @@ export default class InputManager {
         // https://bugs.chromium.org/p/chromium/issues/detail?id=676644
         this.toplevel.focus();
         e.preventDefault();
-        if (this.toplevel.requestPointerLock !== undefined)
+        if (this.usePointerLock && this.toplevel.requestPointerLock !== undefined)
             this.toplevel.requestPointerLock();
     };
 }
