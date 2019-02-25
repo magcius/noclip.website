@@ -508,7 +508,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         if (debugRendererInfo !== null) {
             const renderer = gl.getParameter(debugRendererInfo.UNMASKED_RENDERER_WEBGL);
             // https://bugs.chromium.org/p/angleproject/issues/detail?id=2273
-            if (((renderer.includes('AMD') || renderer.includes('ATI')) && renderer.includes('OpenGL Engine')))
+            if (navigator.platform === 'MacIntel' && !renderer.includes('NVIDIA'))
                 this.programBugDefines += '#define _BUG_AMD_ROW_MAJOR';
         }
     }
