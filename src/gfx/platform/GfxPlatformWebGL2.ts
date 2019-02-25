@@ -7,7 +7,6 @@ import { DeviceProgram, ProgramCache, FullscreenProgram } from '../../Program';
 import { assert } from '../../util';
 import { copyMegaState, defaultMegaState, fullscreenMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
 import { IS_DEVELOPMENT } from '../../BuildVersion';
-import { AudioDriverImplBufferSource } from '../../audio/AudioDriver';
 
 export class FullscreenCopyProgram extends FullscreenProgram {
     public frag: string = `
