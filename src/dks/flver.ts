@@ -3,6 +3,8 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { readString, assert, hexdump } from "../util";
 import { vec3 } from "gl-matrix";
 import { AABB } from "../Geometry";
+import FakeTextDecoder from '../FakeTextDecoder';
+const TextDecoder: any = window.TextDecoder || FakeTextDecoder;
 
 const utf16Decoder = new TextDecoder('utf-16le');
 

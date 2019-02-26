@@ -21,6 +21,8 @@ import { BasicRenderTarget, ColorTexture, makeClearRenderPassDescriptor, depthCl
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { colorNew } from '../Color';
 import { RENDER_HACKS_ICON } from '../bk/scenes';
+import FakeTextDecoder from '../FakeTextDecoder';
+const TextDecoder: any = window.TextDecoder || FakeTextDecoder;
 
 const sjisDecoder = new TextDecoder('sjis');
 

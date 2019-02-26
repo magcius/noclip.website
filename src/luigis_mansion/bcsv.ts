@@ -1,6 +1,8 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { readString } from "../util";
+import FakeTextDecoder from '../FakeTextDecoder';
+const TextDecoder: any = window.TextDecoder || FakeTextDecoder;
 
 const sjisDecoder = new TextDecoder('sjis');
 function readStringSJIS(buffer: ArrayBufferSlice, offs: number): string {

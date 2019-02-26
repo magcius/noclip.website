@@ -4,6 +4,8 @@
 import { ResourceSystem } from "./resource";
 import { assert, readString } from "../util";
 import ArrayBufferSlice from "../ArrayBufferSlice";
+import FakeTextDecoder from '../FakeTextDecoder';
+const TextDecoder: any = window.TextDecoder || FakeTextDecoder;
 
 export interface STRG {
     strings: string[];

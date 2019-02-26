@@ -2,6 +2,8 @@
 import ArrayBufferSlice, { ArrayBuffer_slice } from "./ArrayBufferSlice";
 import { assert, readString, align } from "./util";
 import { Endianness } from "./endian";
+import FakeTextDecoder from './FakeTextDecoder';
+const TextDecoder: any = window.TextDecoder || FakeTextDecoder;
 
 export const enum FileType {
     BYML,
