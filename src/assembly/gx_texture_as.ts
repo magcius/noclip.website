@@ -37,10 +37,13 @@ function get16be(offs: u32): u16 {
 export function decode_I4(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32): void {
     let srcOffs: u32 = 0;
     for (let yy: u32 = 0; yy < h; yy += 8) {
+        let stride0 = w * yy;
         for (let xx: u32 = 0; xx < w; xx += 8) {
+            let stride1 = stride0 + xx;
             for (let y = 0; y < 8; y++) {
+                let stride2 = w * y + stride1;
                 for (let x = 0; x < 8; x++) {
-                    let dstPixel = w * (yy + y) + xx + x;
+                    let dstPixel = stride2 + x;
                     let dstOffs = pDst + dstPixel * 4;
                     let ii: u8 = get(pSrc + (srcOffs >>> 1));
                     let i4: u8 = ii >>> ((srcOffs & 1) ? 0 : 4) & 0x0F;
@@ -59,10 +62,13 @@ export function decode_I4(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32): 
 export function decode_I8(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32): void {
     let srcOffs: u32 = 0;
     for (let yy: u32 = 0; yy < h; yy += 4) {
+        let stride0 = w * yy;
         for (let xx: u32 = 0; xx < w; xx += 8) {
+            let stride1 = stride0 + xx;
             for (let y = 0; y < 4; y++) {
+                let stride2 = w * y + stride1;
                 for (let x = 0; x < 8; x++) {
-                    let dstPixel = w * (yy + y) + xx + x;
+                    let dstPixel = stride2 + x;
                     let dstOffs = pDst + dstPixel * 4;
                     let i = get(pSrc + srcOffs);
                     set(dstOffs + 0, i);
@@ -79,10 +85,13 @@ export function decode_I8(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32): 
 export function decode_IA4(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32): void {
     let srcOffs: u32 = 0;
     for (let yy: u32 = 0; yy < h; yy += 4) {
+        let stride0 = w * yy;
         for (let xx: u32 = 0; xx < w; xx += 8) {
+            let stride1 = stride0 + xx;
             for (let y = 0; y < 4; y++) {
+                let stride2 = w * y + stride1;
                 for (let x = 0; x < 8; x++) {
-                    let dstPixel = w * (yy + y) + xx + x;
+                    let dstPixel = stride2 + x;
                     let dstOffs = pDst + dstPixel * 4;
                     let ia: u8 = get(pSrc + srcOffs);
                     let a: u8 = expand4to8(ia >>> 4);
@@ -101,10 +110,13 @@ export function decode_IA4(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32):
 export function decode_IA8(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32): void {
     let srcOffs: u32 = 0;
     for (let yy: u32 = 0; yy < h; yy += 4) {
+        let stride0 = w * yy;
         for (let xx: u32 = 0; xx < w; xx += 4) {
+            let stride1 = stride0 + xx;
             for (let y = 0; y < 4; y++) {
+                let stride2 = w * y + stride1;
                 for (let x = 0; x < 4; x++) {
-                    let dstPixel = w * (yy + y) + xx + x;
+                    let dstPixel = stride2 + x;
                     let dstOffs = pDst + dstPixel * 4;
                     let a: u8 = get(pSrc + srcOffs + 0);
                     let i: u8 = get(pSrc + srcOffs + 1);
@@ -122,10 +134,13 @@ export function decode_IA8(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32):
 export function decode_RGB565(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32): void {
     let srcOffs: u32 = 0;
     for (let yy: u32 = 0; yy < h; yy += 4) {
+        let stride0 = w * yy;
         for (let xx: u32 = 0; xx < w; xx += 4) {
+            let stride1 = stride0 + xx;
             for (let y = 0; y < 4; y++) {
+                let stride2 = w * y + stride1;
                 for (let x = 0; x < 4; x++) {
-                    let dstPixel = w * (yy + y) + xx + x;
+                    let dstPixel = stride2 + x;
                     let dstOffs = pDst + dstPixel * 4;
                     let p: u16 = get16be(pSrc + srcOffs);
                     set(dstOffs + 0, expand5to8(<u8>(p >>> 11) & 0x1F));
@@ -142,10 +157,13 @@ export function decode_RGB565(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u3
 export function decode_RGB5A3(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32): void {
     let srcOffs: u32 = 0;
     for (let yy: u32 = 0; yy < h; yy += 4) {
+        let stride0 = w * yy;
         for (let xx: u32 = 0; xx < w; xx += 4) {
+            let stride1 = stride0 + xx;
             for (let y = 0; y < 4; y++) {
+                let stride2 = w * y + stride1;
                 for (let x = 0; x < 4; x++) {
-                    let dstPixel = (w * (yy + y)) + xx + x;
+                    let dstPixel = stride2 + x;
                     let dstOffs = pDst + dstPixel * 4;
                     let p: u16 = get16be(pSrc + srcOffs);
                     if (p & 0x8000) {
@@ -171,10 +189,13 @@ export function decode_RGB5A3(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u3
 export function decode_RGBA8(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32): void {
     let srcOffs: u32 = 0;
     for (let yy: u32 = 0; yy < h; yy += 4) {
+        let stride0 = w * yy;
         for (let xx: u32 = 0; xx < w; xx += 4) {
+            let stride1 = stride0 + xx;
             for (let y: u32 = 0; y < 4; y++) {
+                let stride2 = w * y + stride1;
                 for (let x: u32 = 0; x < 4; x++) {
-                    let dstPixel = w * (yy + y) + xx + x;
+                    let dstPixel = stride2 + x;
                     let dstOffs = pDst + dstPixel * 4;
                     set(dstOffs + 3, get(pSrc + srcOffs + 0));
                     set(dstOffs + 0, get(pSrc + srcOffs + 1));
@@ -182,8 +203,9 @@ export function decode_RGBA8(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32
                 }
             }
             for (let y: u32 = 0; y < 4; y++) {
+                let stride2 = w * y + stride1;
                 for (let x: u32 = 0; x < 4; x++) {
-                    let dstPixel = w * (yy + y) + xx + x;
+                    let dstPixel = stride2 + x;
                     let dstOffs = pDst + dstPixel * 4;
                     set(dstOffs + 1, get(pSrc + srcOffs + 0));
                     set(dstOffs + 2, get(pSrc + srcOffs + 1));
