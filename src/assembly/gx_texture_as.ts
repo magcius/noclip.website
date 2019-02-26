@@ -236,8 +236,11 @@ export function decode_CMPR(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32)
 
     let srcOffs = pSrc;
     for (let yy: u32 = 0; yy < h; yy += 8) {
+        let stride = yy * w;
         for (let xx: u32 = 0; xx < w; xx += 8) {
+            let stride0 = stride + xx;
             for (let yb: u32 = 0; yb < 8; yb += 4) {
+                let stride1 = stride0 + yb * w;
                 for (let xb: u32 = 0; xb < 8; xb += 4) {
                     if (xx + xb >= w || yy + yb > h) {
                         srcOffs += 8;
@@ -283,10 +286,12 @@ export function decode_CMPR(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32)
                         set(colorTable + 15, 0x00);
                     }
 
+                    let stride2 = stride1 + xb;
                     for (let y = 0; y < 4; y++) {
                         let bits = get(srcOffs + 0x04 + y);
+                        let stride3 = stride2 + y * w;
                         for (let x = 0; x < 4; x++) {
-                            let dstPx = (yy + yb + y) * w + xx + xb + x;
+                            let dstPx = stride3 + x;
                             let dstOffs = pDst + dstPx * 4;
                             let colorIdx = (bits >>> 6) & 0x03;
                             set(dstOffs + 0, get(colorTable + colorIdx * 4 + 0));
