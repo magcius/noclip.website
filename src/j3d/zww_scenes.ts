@@ -1042,7 +1042,19 @@ class SceneDesc {
         // The King of Hyrule
         else if (name === 'Hi1') fetchArchive(`Hi.arc`).then((rarc) => buildModel(rarc, `bdlm/hi.bdl`).bindANK1(parseBCK(rarc, `bcks/hi_wait01.bck`)));
         // Princess Zelda
-        else if (name === 'p_zelda') fetchArchive(`Pz.arc`).then((rarc) => buildModel(rarc, `bdlm/pz.bdl`).bindANK1(parseBCK(rarc, `bcks/wait01.bck`)));
+        else if (name === 'p_zelda') fetchArchive(`Pz.arc`).then((rarc) => 
+        {
+            const m = buildModel(rarc, `bdlm/pz.bdl`);            
+            m.setMaterialColorWriteEnabled("m_pz_eyeLdamA", false);
+            m.setMaterialColorWriteEnabled("m_pz_eyeLdamB", false);
+            m.setMaterialColorWriteEnabled("m_pz_mayuLdamA", false);
+            m.setMaterialColorWriteEnabled("m_pz_mayuLdamB", false);
+            m.setMaterialColorWriteEnabled("m_pz_eyeRdamA", false);
+            m.setMaterialColorWriteEnabled("m_pz_eyeRdamB", false);
+            m.setMaterialColorWriteEnabled("m_pz_mayuRdamA", false);
+            m.setMaterialColorWriteEnabled("m_pz_mayuRdamB", false);
+            m.bindANK1(parseBCK(rarc, `bcks/wait01.bck`));
+        });
         // The Great Deku Tree
         else if (name === 'De1') fetchArchive(`De.arc`).then((rarc) => buildModel(rarc, `bdl/de.bdl`).bindANK1(parseBCK(rarc, `bcks/wait01.bck`)));
         // Prince Komali (Small Childe)
