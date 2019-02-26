@@ -44,6 +44,11 @@ layout(location = 6) in vec2 a_TexCoord2;
 layout(location = 7) in vec4 a_BoneIndices;
 layout(location = 8) in vec4 a_BoneWeights;
 
+vec3 Monochrome(vec3 t_Color) {
+    // NTSC primaries.
+    return vec3(dot(t_Color.rgb, vec3(0.299, 0.587, 0.114)));
+}
+
 void main() {
     // Compute our matrix.
     Mat4x3 t_BoneMatrix;
@@ -67,6 +72,10 @@ void main() {
     gl_Position = Mul(u_Projection, Mul(_Mat4x4(t_BoneMatrix), t_Position));
 
     v_Color = a_Color;
+
+#ifdef USE_MONOCHROME_VERTEX_COLOR
+    v_Color.rgb = Monochrome(v_Color.rgb);
+#endif
 
     vec2 t_TexCoord0 = a_TexCoord0 * u_TexCoord0Scale;
     v_TexCoord0 = Mul(u_TexMtx[0], vec4(t_TexCoord0, 0.0, 1.0)).st;

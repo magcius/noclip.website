@@ -446,6 +446,7 @@ export class CmbRenderer {
 
     private texturesEnabled: boolean = true;
     private vertexColorsEnabled: boolean = true;
+    private monochromeVertexColorsEnabled: boolean = false;
 
     constructor(device: GfxDevice, public textureHolder: CtrTextureHolder, public cmbData: CmbData, public name: string = '') {
         for (let i = 0; i < this.cmbData.cmb.materials.length; i++)
@@ -475,6 +476,8 @@ export class CmbRenderer {
             program.defines.set(`USE_TEXTURE_${this.whichTexture}`, '1');
         if (this.vertexColorsEnabled)
             program.defines.set('USE_VERTEX_COLOR', '1');
+        if (this.monochromeVertexColorsEnabled)
+            program.defines.set('USE_MONOCHROME_VERTEX_COLOR', '1');
         this.templateRenderInst.setDeviceProgram(program);
     }
 
@@ -502,6 +505,11 @@ export class CmbRenderer {
 
     public setTexturesEnabled(v: boolean): void {
         this.texturesEnabled = v;
+        this.createProgram();
+    }
+
+    public setMonochromeVertexColorsEnabled(v: boolean): void {
+        this.monochromeVertexColorsEnabled = v;
         this.createProgram();
     }
 
@@ -674,6 +682,15 @@ export class RoomRenderer {
             this.transparentMesh.setTexturesEnabled(v);
         if (this.wMesh !== null)
             this.wMesh.setTexturesEnabled(v);
+    }
+
+    public setMonochromeVertexColorsEnabled(v: boolean): void {
+        if (this.opaqueMesh !== null)
+            this.opaqueMesh.setMonochromeVertexColorsEnabled(v);
+        if (this.transparentMesh !== null)
+            this.transparentMesh.setMonochromeVertexColorsEnabled(v);
+        if (this.wMesh !== null)
+            this.wMesh.setMonochromeVertexColorsEnabled(v);
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {

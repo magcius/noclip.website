@@ -50,7 +50,12 @@ export class MultiRoomScene extends BasicRendererHelper implements Viewer.SceneG
             for (let i = 0; i < this.scenes.length; i++)
                 this.scenes[i].setTexturesEnabled(enableTextures.checked);
         };
-        renderHacksPanel.contents.appendChild(enableTextures.elem);
+        const enableMonochromeVertexColors = new UI.Checkbox('Grayscale Vertex Colors', false);
+        enableMonochromeVertexColors.onchanged = () => {
+            for (let i = 0; i < this.scenes.length; i++)
+                this.scenes[i].setMonochromeVertexColorsEnabled(enableMonochromeVertexColors.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableMonochromeVertexColors.elem);
 
         const layersPanel = new UI.LayerPanel(this.scenes);
         return [renderHacksPanel, layersPanel];
