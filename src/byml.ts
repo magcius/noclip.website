@@ -1,6 +1,6 @@
 
 import ArrayBufferSlice, { ArrayBuffer_slice } from "./ArrayBufferSlice";
-import { assert, readString, align } from "./util";
+import { assert, readString, align, makeTextDecoder } from "./util";
 import { Endianness } from "./endian";
 
 export const enum FileType {
@@ -43,7 +43,7 @@ const fileDescriptions: { [key: number]: FileDescription } = {
 
 function decodeUTF8(buffer: Uint8Array): string {
     if (typeof TextDecoder !== 'undefined') {
-        return new TextDecoder('utf8').decode(buffer);
+        return makeTextDecoder('utf8').decode(buffer);
     // @ts-ignore
     } else if (typeof require !== 'undefined') {
         // @ts-ignore

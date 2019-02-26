@@ -5,6 +5,13 @@ export function assert(b: boolean, message: string = ""): void {
     if (!b) { console.error(new Error().stack); throw new Error(`Assert fail: ${message}`); }
 }
 
+export function makeTextDecoder(encoding: string): TextDecoder | null {
+    if ((window as any).TextDecoder)
+        return new TextDecoder(encoding);
+    else
+        return null;
+}
+
 export function assertExists<T>(v: T | null | undefined): T {
     if (v !== undefined && v !== null)
         return v;

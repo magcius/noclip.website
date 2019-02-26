@@ -1,8 +1,8 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString } from "../util";
+import { readString, makeTextDecoder } from "../util";
 
-const sjisDecoder = new TextDecoder('sjis');
+const sjisDecoder = makeTextDecoder('sjis');
 function readStringSJIS(buffer: ArrayBufferSlice, offs: number): string {
     const arr = buffer.createTypedArray(Uint8Array, offs);
     const raw = sjisDecoder.decode(arr);
