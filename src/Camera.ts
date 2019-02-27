@@ -254,6 +254,10 @@ export class FPSCameraController implements CameraController {
         vec3.set(this.keyMovement, 0, 0, 0);
     }
 
+    public setKeyMoveSpeed(speed: number): void {
+        this.keyMoveSpeed = speed;
+    }
+
     public update(inputManager: InputManager, dt: number): boolean {
         const camera = this.camera;
         let updated = false;
@@ -264,7 +268,6 @@ export class FPSCameraController implements CameraController {
             updated = true;
         }
 
-        this.keyMoveSpeed += inputManager.dz;
         this.keyMoveSpeed = Math.max(this.keyMoveSpeed, 1);
 
         let keyMoveMult = 1;
