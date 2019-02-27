@@ -299,10 +299,11 @@ export function decode_CMPR(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32)
                             let dstPx = stride3 + x;
                             let dstOffs = pDst + dstPx * 4;
                             let colorIdx = (bits >>> 6) & 0x03;
-                            set(dstOffs + 0, get(colorTable + colorIdx * 4 + 0));
-                            set(dstOffs + 1, get(colorTable + colorIdx * 4 + 1));
-                            set(dstOffs + 2, get(colorTable + colorIdx * 4 + 2));
-                            set(dstOffs + 3, get(colorTable + colorIdx * 4 + 3));
+                            let colorOffset = colorTable + colorIdx * 4;
+                            set(dstOffs + 0, get(colorOffset + 0));
+                            set(dstOffs + 1, get(colorOffset + 1));
+                            set(dstOffs + 2, get(colorOffset + 2));
+                            set(dstOffs + 3, get(colorOffset + 3));
                             bits <<= 2;
                         }
                     }
