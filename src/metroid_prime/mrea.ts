@@ -144,6 +144,11 @@ function parseMaterialSet_UVAnimations(buffer: ArrayBufferSlice, count: number):
             offs += 0x08;
             break;
         }
+        case 0x08: {
+            // Unknown (DKCR)
+            offs += 0x24;
+            break;
+        }
         }
     }
 
@@ -795,7 +800,8 @@ function parseMaterialSet_MP3(resourceSystem: ResourceSystem, buffer: ArrayBuffe
                     const unk1 = view.getUint16(materialTableIdx + 0x00);
                     const unk2 = view.getUint16(materialTableIdx + 0x02);
                     const uvAnimations: UVAnimation[] = parseMaterialSet_UVAnimations(buffer.subarray(materialTableIdx + 0x04, uvAnimationSize - 0x04), 1);
-                    uvAnimation = uvAnimations[0];
+                    if (uvAnimations.length !== 0)
+                        uvAnimation = uvAnimations[0];
                     materialTableIdx += uvAnimationSize;
                 }
                 assert(materialTableIdx === passOffs + 0x04 + passSize);

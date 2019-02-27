@@ -328,7 +328,7 @@ export class GX_Program extends DeviceProgram {
             const amb = `u_ColorAmbReg[${i}]`;
             const mat = `u_ColorMatReg[${i}]`;
             const fudged = this.hacks.lightingFudge({ vtx, amb, mat, ambSource, matSource });
-            return `    ${outputName} = vec4(${fudged});`;
+            return `${outputName} = vec4(${fudged});`;
         }
 
         let generateLightAccum = ``;

@@ -16,6 +16,7 @@ import { GfxCoalescedBuffers, GfxBufferCoalescer } from '../gfx/helpers/BufferHe
 import { GfxRenderInst, GfxRenderInstViewRenderer, makeSortKey, GfxRendererLayer, setSortKeyDepthKey } from '../gfx/render/GfxRenderer';
 import { computeViewMatrixSkybox, computeViewMatrix, texEnvMtx } from '../Camera';
 import { LoadedVertexData } from '../gx/gx_displaylist';
+import { GXMaterialHacks } from '../gx/gx_material';
 
 const fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = mat4.fromValues(
     1, 0,  0, 0,
@@ -63,6 +64,9 @@ class SurfaceInstance {
             visible = viewerInput.camera.frustum.contains(bboxScratch);
         }
 
+        if ((this.surface as any).visible === false)
+            visible = false;
+
         if (visible) {
             const viewMatrix = matrixScratch;
 
@@ -92,8 +96,8 @@ class Command_MaterialGroup {
     public hasPreparedToRender: boolean = false;
     public gfxSampler: GfxSampler;
 
-    constructor(device: GfxDevice, public renderHelper: GXRenderHelperGfx, public material: Material) {
-        this.materialHelper = new GXMaterialHelperGfx(device, renderHelper, this.material.gxMaterial, { lightingFudge: (p) => 'vec4(0, 0, 0, 1)' });
+    constructor(device: GfxDevice, public renderHelper: GXRenderHelperGfx, public material: Material, materialHacks?: GXMaterialHacks) {
+        this.materialHelper = new GXMaterialHelperGfx(device, renderHelper, this.material.gxMaterial, materialHacks);
         const layer = this.material.isTransparent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.materialHelper.templateRenderInst.sortKey = makeSortKey(layer, this.materialHelper.programKey);
 
@@ -322,7 +326,7 @@ export class MREARenderer {
         for (let i = 0; i < materialSet.materials.length; i++) {
             const material = materialSet.materials[i];
             if (this.materialGroupCommands[material.groupIndex] === undefined)
-                this.materialGroupCommands[material.groupIndex] = new Command_MaterialGroup(device, this.renderHelper, material);
+                this.materialGroupCommands[material.groupIndex] = new Command_MaterialGroup(device, this.renderHelper, material, { lightingFudge: (p) => 'vec4(0, 0, 0, 1)' });
         }
 
         // Now create the material commands.
@@ -441,7 +445,6 @@ export class CMDLRenderer {
     private materialCommands: Command_Material[] = [];
     private surfaceCommands: SurfaceInstance[] = [];
     private renderHelper: GXRenderHelperGfx;
-    private bboxScratch: AABB = new AABB();
     public visible: boolean = true;
     public isSkybox: boolean = false;
 
@@ -460,7 +463,7 @@ export class CMDLRenderer {
         for (let i = 0; i < materialSet.materials.length; i++) {
             const material = materialSet.materials[i];
             if (this.materialGroupCommands[material.groupIndex] === undefined)
-                this.materialGroupCommands[material.groupIndex] = new Command_MaterialGroup(device, this.renderHelper, material);
+                this.materialGroupCommands[material.groupIndex] = new Command_MaterialGroup(device, this.renderHelper, material, { lightingFudge: (p) => 'vec4(1, 1, 1, 1)' });
         }
 
         // Now create the material commands.
