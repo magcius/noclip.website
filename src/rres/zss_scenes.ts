@@ -597,7 +597,6 @@ class SkywardSwordScene implements Viewer.SceneGfx {
 
         const layouts = [];
         layouts.push(parseLayout(0));
-
         return { layouts };
     }
 
@@ -625,11 +624,28 @@ class SkywardSwordSceneDesc implements Viewer.SceneDesc {
 
 const id = "zss";
 const name = "The Legend of Zelda: Skyward Sword";
-// Courses organized by Starschulz
+// Courses organized by Starschulz (@Starschulz) and James Knight (@JKZMSF)
 const sceneDescs = [
     "Skyloft",
     new SkywardSwordSceneDesc("F000", "Skyloft"),
     new SkywardSwordSceneDesc("F001r", "Knight's Academy"),
+	new SkywardSwordSceneDesc("F002r", "Beedle's Airshop"),
+	new SkywardSwordSceneDesc("F004r", "Bazaar"),
+	new SkywardSwordSceneDesc("F005r", "Orielle & Parrow’s House"),
+	new SkywardSwordSceneDesc("F006r", "Kukiel’s House"),
+	new SkywardSwordSceneDesc("F007r", "Piper’s House"),
+	new SkywardSwordSceneDesc("F008r", "Inside the Statue of the Goddess"),
+	new SkywardSwordSceneDesc("F009r", "Sparring Hall"),
+	new SkywardSwordSceneDesc("F010r", "Isle of Songs Tower"),
+	new SkywardSwordSceneDesc("F011r", "The Lumpy Pumpkin"),
+	new SkywardSwordSceneDesc("F012r", "Batreaux’s House"),
+	new SkywardSwordSceneDesc("F013r", "Fortune-teller Sparrot’s House"),
+	new SkywardSwordSceneDesc("F014r", "Potion Shop Owner Bertie’s House"),
+	new SkywardSwordSceneDesc("F015r", "Scrap Shop Owner Gondo’s House"),
+	new SkywardSwordSceneDesc("F016r", "Pipet’s House"),
+	new SkywardSwordSceneDesc("F017r", "Gear Peddler Rupin’s House"),
+	new SkywardSwordSceneDesc("F018r", "Item Check Girl Peatrice’s House"),
+	new SkywardSwordSceneDesc("F019r", "Bamboo Island"),
 	new SkywardSwordSceneDesc("D000", "Waterfall Cave"),
 
     "Faron Woods",
@@ -675,25 +691,6 @@ const sceneDescs = [
 	new SkywardSwordSceneDesc("F301_7", "Shipyard Construction Bay"),
 	new SkywardSwordSceneDesc("F302", "Lanayru Gorge"),
 	new SkywardSwordSceneDesc("F303", "Lanayru Caves"),
-	
-    "Untagged - Skyloft",
-    new SkywardSwordSceneDesc("F002r", "F002r"),
-    new SkywardSwordSceneDesc("F004r", "F004r"),
-    new SkywardSwordSceneDesc("F005r", "F005r"),
-    new SkywardSwordSceneDesc("F006r", "F006r"),
-    new SkywardSwordSceneDesc("F007r", "F007r"),
-    new SkywardSwordSceneDesc("F008r", "F008r"),
-    new SkywardSwordSceneDesc("F009r", "F009r"),
-    new SkywardSwordSceneDesc("F010r", "F010r"),
-    new SkywardSwordSceneDesc("F011r", "F011r"),
-    new SkywardSwordSceneDesc("F012r", "F012r"),
-    new SkywardSwordSceneDesc("F013r", "F013r"),
-    new SkywardSwordSceneDesc("F014r", "F014r"),
-    new SkywardSwordSceneDesc("F015r", "F015r"),
-    new SkywardSwordSceneDesc("F016r", "F016r"),
-    new SkywardSwordSceneDesc("F017r", "F017r"),
-    new SkywardSwordSceneDesc("F018r", "F018r"),
-    new SkywardSwordSceneDesc("F019r", "F019r"),
 
 	"Untagged - Sacred Grounds",
 	new SkywardSwordSceneDesc("F400", "F400"),
