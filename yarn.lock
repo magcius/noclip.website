@@ -698,10 +698,15 @@
   resolved "https://registry.yarnpkg.com/@types/gl-matrix/-/gl-matrix-2.4.4.tgz#e9d06dc5552102eb6ced7beb78ceb3290b229959"
   integrity sha512-HyI/bS+CxFiewhtpuwUP9VftvPyImQulBuI9+VEUa5NnGILsuokliq2fFp9DqZsJHbGWxk/VOLwHaXb4vIkKBw==
 
-"@types/node@^10.11.7", "@types/node@^10.12.18":
+"@types/node@^10.11.7":
   version "10.12.18"
   resolved "https://registry.yarnpkg.com/@types/node/-/node-10.12.18.tgz#1d3ca764718915584fcd9f6344621b7672665c67"
   integrity sha512-fh+pAqt4xRzPfqA6eh3Z2y6fyZavRIumvjhaCL753+TVkGKGhpPeyrJG2JftD0T9q4GF00KjefsQ+PQNDdWQaQ==
+
+"@types/node@^11.9.5":
+  version "11.9.5"
+  resolved "https://registry.yarnpkg.com/@types/node/-/node-11.9.5.tgz#011eece9d3f839a806b63973e228f85967b79ed3"
+  integrity sha512-vVjM0SVzgaOUpflq4GYBvCpozes8OgIIS5gVXVka+OfK3hvnkC1i93U8WiY2OtNE4XUWyyy/86Kf6e0IHTQw1Q==
 
 "@types/pako@^1.0.0":
   version "1.0.0"
@@ -723,10 +728,10 @@
   resolved "https://registry.yarnpkg.com/@types/systemjs/-/systemjs-0.20.6.tgz#79838d2b4bce9c014330efa0b4c7b9345e830a72"
   integrity sha512-p3yv9sBBJXi3noUG216BpUI7VtVBUAvBIfZNTiDROUY31YBfsFHM4DreS7XMekN8IjtX0ysvCnm6r3WnirnNeA==
 
-"@types/webassembly-js-api@0.0.1":
-  version "0.0.1"
-  resolved "https://registry.yarnpkg.com/@types/webassembly-js-api/-/webassembly-js-api-0.0.1.tgz#62d50b201077d7d4cc109bb1cada22fdfd4523fb"
-  integrity sha1-YtULIBB319TMEJuxytoi/f1FI/s=
+"@types/webassembly-js-api@0.0.2":
+  version "0.0.2"
+  resolved "https://registry.yarnpkg.com/@types/webassembly-js-api/-/webassembly-js-api-0.0.2.tgz#43a04bd75fa20332133c6c3986156bfeb4a3ced7"
+  integrity sha512-htlxJRag6RUiMYUkS8Fjup+TMHO0VarpiF9MrqYaGJ0wXtIraQFz40rfA8VIeCiWy8sgpv3RLmigpgicG8fqGA==
 
 "@types/webgl2@0.0.2":
   version "0.0.2"
@@ -4847,10 +4852,10 @@ typedarray@^0.0.6:
   resolved "https://registry.yarnpkg.com/typedarray/-/typedarray-0.0.6.tgz#867ac74e3864187b1d3d47d996a78ec5c8830777"
   integrity sha1-hnrHTjhkGHsdPUfZlqeOxciDB3c=
 
-typescript@^2.9.2:
-  version "2.9.2"
-  resolved "https://registry.yarnpkg.com/typescript/-/typescript-2.9.2.tgz#1cbf61d05d6b96269244eb6a3bce4bd914e0f00c"
-  integrity sha512-Gr4p6nFNaoufRIY4NMdpQRNmgxVIGMs4Fcu/ujdYk3nAZqk7supzBE9idmvfZIlH/Cuj//dvi+019qEue9lV0w==
+typescript@^3.3.3333:
+  version "3.3.3333"
+  resolved "https://registry.yarnpkg.com/typescript/-/typescript-3.3.3333.tgz#171b2c5af66c59e9431199117a3bcadc66fdcfd6"
+  integrity sha512-JjSKsAfuHBE/fB2oZ8NxtRTk5iGcg6hkYXMnZ3Wc+b2RSqejEqTaem11mHASMnFilHrax3sLK0GDzcJrekZYLw==
 
 unicode-canonical-property-names-ecmascript@^1.0.4:
   version "1.0.4"
@@ -4988,10 +4993,10 @@ vm-browserify@0.0.4:
   dependencies:
     indexof "0.0.1"
 
-wabt@^1.0.6:
-  version "1.0.6"
-  resolved "https://registry.yarnpkg.com/wabt/-/wabt-1.0.6.tgz#f8f3e29b472885923f23aa14e371f6ad5b9dc569"
-  integrity sha512-gEoATqWyT9HJgq9BZmQ9daDhACfGY0VU4er3cac6ObEaZysRe6L45GUvyVJfQ1s27Z7OOzFsaQBJkuDeXTdhhw==
+wabt@^1.0.8:
+  version "1.0.8"
+  resolved "https://registry.yarnpkg.com/wabt/-/wabt-1.0.8.tgz#15d556dc07dd0ccd27b771b7d0919c90b3afa07b"
+  integrity sha512-5owCZxFWqhH2fyDtt/Ajcwt9+9guAJxF3Gtzvl1f/D0DlZJnSu90y023Eozj0Yj0cvk3BIErE/zNsQH1dWwhTw==
 
 wcwidth@^1.0.1:
   version "1.0.1"
