@@ -232,7 +232,7 @@ export function initializeViewer(out: ViewerOut, canvas: HTMLCanvasElement): Ini
     return InitErrorCode.SUCCESS;
 }
 
-function makeErrorMessageUI(message: string): DocumentFragment {
+export function makeErrorMessageUI(message: string): DocumentFragment {
     const errorMessage = UI.createDOMFromString(`
 <div style="display: flex; background-color: #220000; flex-direction: column; position: absolute; top: 0; bottom: 0; left: 0; right: 0; justify-content: center;">
 <div style="display: flex; background-color: #aa2233; justify-content: center; box-shadow: 0 0 32px black;">

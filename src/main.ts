@@ -11,7 +11,7 @@ if (module.hot) {
     });
 }
 
-import { SceneDesc, SceneGroup, Viewer, SceneGfx, getSceneDescs, InitErrorCode, initializeViewer, makeErrorUI } from './viewer';
+import { SceneDesc, SceneGroup, Viewer, SceneGfx, getSceneDescs, InitErrorCode, initializeViewer, makeErrorUI, makeErrorMessageUI } from './viewer';
 
 import ArrayBufferSlice from './ArrayBufferSlice';
 import Progressable from './Progressable';
@@ -241,6 +241,13 @@ class Main {
 
         this.uiContainers = document.createElement('div');
         this.toplevel.appendChild(this.uiContainers);
+
+        this.uiContainers.appendChild(makeErrorMessageUI(`
+        <p>noclip is moving to a new host and will be back as soon as possible.</p>
+        <p>Please sit tight while we move everything over!</p>
+        <p style="text-align: right">Thanks, Jasper.</p>
+        `));
+        return;
 
         const errorCode = initializeViewer(this, this.canvas);
         if (errorCode !== InitErrorCode.SUCCESS) {
