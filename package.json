@@ -5,11 +5,10 @@
   "devDependencies": {
     "assemblyscript": "github:AssemblyScript/assemblyscript",
     "crc-32": "^1.2.0",
-    "gl-matrix": "^2.8.1",
+    "gl-matrix": "^3.0.0",
     "pako": "^1.0.7",
     "parcel-bundler": "^1.11.0",
-    "typescript": "^3.3.3333",
-    "wabt": "^1.0.8"
+    "typescript": "^3.3.3333"
   },
   "dependencies": {
     "@types/gl-matrix": "^2.4.4",
@@ -17,7 +16,7 @@
     "@types/pako": "^1.0.0",
     "@types/systemjs": "^0.20.6",
     "@types/webassembly-js-api": "0.0.2",
-    "@types/webgl2": "0.0.2"
+    "@types/webgl2": "0.0.4"
   },
   "scripts": {
     "start": "parcel src/index.html",
