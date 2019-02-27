@@ -15,7 +15,6 @@ function set(offs: u32, b: u8): void {
 
 @inline
 function get16be(offs: u32): u16 {
-    // return (load<u8>(offs) << 8) | load<u8>(offs + 1);
     return bswap(load<u16>(offs));
 }
 

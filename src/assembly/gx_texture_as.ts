@@ -1,3 +1,8 @@
+@inline
+function bswap(value: u16): u16 {
+  return (value << 8) | (value >> 8);
+}
+
 // http://www.mindcontrol.org/~hplus/graphics/expand-bits.html
 @inline
 function expand3to8(n: u8): u8 {
@@ -31,7 +36,7 @@ function set(offs: u32, b: u8): void {
 
 @inline
 function get16be(offs: u32): u16 {
-    return (load<u8>(offs) << 8) | load<u8>(offs + 1);
+    return bswap(load<u16>(offs));
 }
 
 export function decode_I4(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32): void {
