@@ -215,6 +215,7 @@ export function computeScreenSpaceProjectionFromWorldSpaceAABB(screenSpaceProjec
 export interface CameraController {
     camera: Camera;
     forceUpdate: boolean;
+    setKeyMoveSpeed(speed: number): void;
     cameraUpdateForced(): void;
     update(inputManager: InputManager, dt: number): boolean;
 }
@@ -379,6 +380,9 @@ export class OrbitCameraController implements CameraController {
     }
 
     public deserialize(state: string): void {
+    }
+
+    public setKeyMoveSpeed(speed: number): void {
     }
 
     public update(inputManager: InputManager, dt: number): boolean {

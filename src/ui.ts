@@ -1473,7 +1473,7 @@ class ViewerSettings extends Panel {
         this.camSpeedSlider = this.contents.querySelector('.CamSpeedSlider');
         this.camSpeedSlider.oninput = this.onCamSliderChange.bind(this);
         this.camSpeedSlider.value = '6'
-        addEventListener('wheel', this._onWheel.bind(this), { passive: false });
+        window.addEventListener('wheel', this._onWheel.bind(this), { passive: false });
 
         this.cameraControllerWASD = this.contents.querySelector('.CameraControllerWASD');
         this.cameraControllerWASD.onclick = () => {
@@ -1503,7 +1503,6 @@ class ViewerSettings extends Panel {
 
     private onCamSliderChange(e: UIEvent): void {
         const slider = (<HTMLInputElement> e.target);
-        const value = this._getSliderT(slider);
         this.updateCameraSpeed();
     }
 
@@ -1520,10 +1519,7 @@ class ViewerSettings extends Panel {
     }
 
     private updateCameraSpeed(): void {
-        const controller: FPSCameraController = (this.viewer.cameraController as FPSCameraController);
-        if(controller && controller.setKeyMoveSpeed) {
-            controller.setKeyMoveSpeed(Number(this.camSpeedSlider.value) * 10);
-        }
+        this.viewer.cameraController.setKeyMoveSpeed(Number(this.camSpeedSlider.value) * 10);
     }
 
     public cameraControllerSelected(cameraControllerClass: CameraControllerClass) {
