@@ -65,13 +65,13 @@
       i32.store8
      else      
       local.get $3
-      i32.const 1
-      i32.add
-      i32.load8_u
-      local.get $3
-      i32.load8_u
+      i32.load16_u
+      local.tee $1
       i32.const 8
       i32.shl
+      local.get $1
+      i32.const 8
+      i32.shr_u
       i32.or
       local.set $0
       local.get $3

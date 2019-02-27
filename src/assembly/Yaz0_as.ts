@@ -1,4 +1,9 @@
 @inline
+function bswap(value: u16): u16 {
+  return (value << 8) | (value >> 8);
+}
+
+@inline
 function get(offs: u32): u8 {
     return load<u8>(offs);
 }
@@ -10,7 +15,8 @@ function set(offs: u32, b: u8): void {
 
 @inline
 function get16be(offs: u32): u16 {
-    return (load<u8>(offs) << 8) | load<u8>(offs + 1);
+    // return (load<u8>(offs) << 8) | load<u8>(offs + 1);
+    return bswap(load<u16>(offs));
 }
 
 export function decompress(pDst: u32, pSrc: u32, dstSize: i32): void {
