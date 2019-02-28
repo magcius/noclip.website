@@ -1655,8 +1655,8 @@ class About extends Panel {
 <h2> <img src="${logoURL}"> <span> noclip.website </span> </h2>
 
 <p> <strong>CLICK AND DRAG</strong> to look around and use <strong>WASD</strong> to move the camera </p>
-<p> Hold <strong>SHIFT</strong> to go faster, and use <strong>MOUSE WHEEL</strong> to go faster than that.
-<strong>B</strong> resets the camera, and <strong>Z</strong> toggles the UI. </p>
+<p> Hold <strong>SHIFT</strong> to go faster, and use <strong>MOUSE WHEEL</strong> to fine tune the speed
+<strong>Z</strong> toggles the UI. </p>
 
 <p><strong>CODE PRIMARILY WRITTEN</strong> by <a href="https://twitter.com/JasperRLZ">Jasper</a></p>
 
