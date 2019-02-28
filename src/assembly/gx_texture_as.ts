@@ -63,10 +63,6 @@ export function decode_I4(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32): 
                     let ii: u8 = get(pSrc + (srcOffs >>> 1));
                     let i4: u8 = ii >>> ((srcOffs & 1) ? 0 : 4) & 0x0F;
                     let i: u8 = expand4to8(i4);
-                    /*set(dstOffs + 0, i);
-                    set(dstOffs + 1, i);
-                    set(dstOffs + 2, i);
-                    set(dstOffs + 3, i);*/
                     set32(dstOffs, <u32>i * 0x01010101);
                     srcOffs++;
                 }
@@ -87,10 +83,6 @@ export function decode_I8(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32): 
                     let dstPixel = stride2 + x;
                     let dstOffs = pDst + dstPixel * 4;
                     let i = get(pSrc + srcOffs);
-                    /*set(dstOffs + 0, i);
-                    set(dstOffs + 1, i);
-                    set(dstOffs + 2, i);
-                    set(dstOffs + 3, i);*/
                     set32(dstOffs, <u32>i * 0x01010101);
                     srcOffs++;
                 }
@@ -113,10 +105,6 @@ export function decode_IA4(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32):
                     let ia: u8 = get(pSrc + srcOffs);
                     let a: u8 = expand4to8(ia >>> 4);
                     let i: u8 = expand4to8(ia & 0x0F);
-                    /*set(dstOffs + 0, i);
-                    set(dstOffs + 1, i);
-                    set(dstOffs + 2, i);
-                    set(dstOffs + 3, a);*/
                     set32(dstOffs, (<u32>i * 0x00010101) | (<u32>a << 24));
                     srcOffs++;
                 }
@@ -138,10 +126,6 @@ export function decode_IA8(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32):
                     let dstOffs = pDst + dstPixel * 4;
                     let a: u8 = get(pSrc + srcOffs + 0);
                     let i: u8 = get(pSrc + srcOffs + 1);
-                    /*set(dstOffs + 0, i);
-                    set(dstOffs + 1, i);
-                    set(dstOffs + 2, i);
-                    set(dstOffs + 3, a);*/
                     set32(dstOffs, (<u32>i * 0x00010101) | (<u32>a << 24));
                     srcOffs += 2;
                 }
@@ -316,10 +300,6 @@ export function decode_CMPR(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32)
                             let dstOffs = pDst + dstPx * 4;
                             let colorIdx = (bits >>> 6) & 0x03;
                             let colorOffset = colorTable + colorIdx * 4;
-                            /*set(dstOffs + 0, get(colorOffset + 0));
-                            set(dstOffs + 1, get(colorOffset + 1));
-                            set(dstOffs + 2, get(colorOffset + 2));
-                            set(dstOffs + 3, get(colorOffset + 3));*/
                             set32(dstOffs, get32(colorOffset));
                             bits <<= 2;
                         }
