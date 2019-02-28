@@ -201,6 +201,7 @@ class WindWakerRoomRenderer {
     public model3: BMDModelInstance;
     public name: string;
     public visible: boolean = true;
+    public objectsVisible = true;
     public objectRenderers: ObjectRenderer[] = [];
     public dzb: DZB.DZB;
 
@@ -231,7 +232,7 @@ class WindWakerRoomRenderer {
         if (this.model3)
             this.model3.prepareToRender(renderHelper, viewerInput);
         for (let i = 0; i < this.objectRenderers.length; i++)
-            this.objectRenderers[i].prepareToRender(renderHelper, viewerInput, this.visible);
+            this.objectRenderers[i].prepareToRender(renderHelper, viewerInput, this.visible && this.objectsVisible);
     }
 
     public setModelMatrix(modelMatrix: mat4): void {
@@ -299,6 +300,8 @@ class WindWakerRoomRenderer {
             this.model2.setVertexColorsEnabled(v);
         if (this.model3)
             this.model3.setVertexColorsEnabled(v);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].setVertexColorsEnabled(v);
     }
 
     public setTexturesEnabled(v: boolean): void {
@@ -310,6 +313,8 @@ class WindWakerRoomRenderer {
             this.model2.setTexturesEnabled(v);
         if (this.model3)
             this.model3.setTexturesEnabled(v);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].setTexturesEnabled(v);
     }
 
     public destroy(device: GfxDevice): void {
@@ -570,6 +575,13 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
                 this.roomRenderers[i].setTexturesEnabled(enableTextures.checked);
         };
         renderHacksPanel.contents.appendChild(enableTextures.elem);
+
+        const enableObjects = new UI.Checkbox('Enable Objects', true);
+        enableObjects.onchanged = () => {
+            for (let i = 0; i < this.roomRenderers.length; i++)
+                this.roomRenderers[i].objectsVisible = enableObjects.checked;
+        };
+        renderHacksPanel.contents.appendChild(enableObjects.elem);
 
         return [timeOfDayPanel, layersPanel, renderHacksPanel];
     }
