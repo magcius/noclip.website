@@ -1471,9 +1471,9 @@ class ViewerSettings extends Panel {
         this.fovSlider.value = '25';
 
         this.camSpeedSlider = this.contents.querySelector('.CamSpeedSlider');
-        this.camSpeedSlider.oninput = this.onCamSliderChange.bind(this);
+        this.camSpeedSlider.oninput = this.updateCameraSpeed.bind(this);
         this.camSpeedSlider.value = '6'
-        window.addEventListener('wheel', this._onWheel.bind(this), { passive: false });
+        this.viewer.inputManager.addScrollListener(this.onScrollWheel.bind(this));
 
         this.cameraControllerWASD = this.contents.querySelector('.CameraControllerWASD');
         this.cameraControllerWASD.onclick = () => {
@@ -1501,14 +1501,8 @@ class ViewerSettings extends Panel {
         this.viewer.fovY = value * (Math.PI * 0.995);
     }
 
-    private onCamSliderChange(e: UIEvent): void {
-        const slider = (<HTMLInputElement> e.target);
-        this.updateCameraSpeed();
-    }
-
-    private _onWheel = (e: WheelEvent) => {
-        e.preventDefault();
-        this.camSpeedSlider.value = "" + ( Number(this.camSpeedSlider.value) - Math.sign(e.deltaY));
+    private onScrollWheel = () => {
+        this.camSpeedSlider.value = "" + ( Number(this.camSpeedSlider.value) - Math.sign(this.viewer.inputManager.dz/-4));
         this.updateCameraSpeed();
     };
 
