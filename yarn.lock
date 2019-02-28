@@ -694,14 +694,19 @@
   integrity sha1-p3c2C1s5oaLlEG+OhY8v0tBgxXA=
 
 "@types/gl-matrix@^2.4.4":
-  version "2.4.4"
-  resolved "https://registry.yarnpkg.com/@types/gl-matrix/-/gl-matrix-2.4.4.tgz#e9d06dc5552102eb6ced7beb78ceb3290b229959"
-  integrity sha512-HyI/bS+CxFiewhtpuwUP9VftvPyImQulBuI9+VEUa5NnGILsuokliq2fFp9DqZsJHbGWxk/VOLwHaXb4vIkKBw==
+  version "2.4.5"
+  resolved "https://registry.yarnpkg.com/@types/gl-matrix/-/gl-matrix-2.4.5.tgz#80630d88fb74ff8897a2a2855a8a700e6ee19d3e"
+  integrity sha512-0L8Mq1+oaIW0oVzGUDbSW+HnTjCNb4CmoIQE5BkoHt/A7x20z0MJ1PnwfH3atty/vbWLGgvJwVu2Mz3SKFiEFw==
 
-"@types/node@^10.11.7", "@types/node@^10.12.18":
+"@types/node@^10.11.7":
   version "10.12.18"
   resolved "https://registry.yarnpkg.com/@types/node/-/node-10.12.18.tgz#1d3ca764718915584fcd9f6344621b7672665c67"
   integrity sha512-fh+pAqt4xRzPfqA6eh3Z2y6fyZavRIumvjhaCL753+TVkGKGhpPeyrJG2JftD0T9q4GF00KjefsQ+PQNDdWQaQ==
+
+"@types/node@^11.9.5":
+  version "11.9.5"
+  resolved "https://registry.yarnpkg.com/@types/node/-/node-11.9.5.tgz#011eece9d3f839a806b63973e228f85967b79ed3"
+  integrity sha512-vVjM0SVzgaOUpflq4GYBvCpozes8OgIIS5gVXVka+OfK3hvnkC1i93U8WiY2OtNE4XUWyyy/86Kf6e0IHTQw1Q==
 
 "@types/pako@^1.0.0":
   version "1.0.0"
@@ -723,15 +728,15 @@
   resolved "https://registry.yarnpkg.com/@types/systemjs/-/systemjs-0.20.6.tgz#79838d2b4bce9c014330efa0b4c7b9345e830a72"
   integrity sha512-p3yv9sBBJXi3noUG216BpUI7VtVBUAvBIfZNTiDROUY31YBfsFHM4DreS7XMekN8IjtX0ysvCnm6r3WnirnNeA==
 
-"@types/webassembly-js-api@0.0.1":
-  version "0.0.1"
-  resolved "https://registry.yarnpkg.com/@types/webassembly-js-api/-/webassembly-js-api-0.0.1.tgz#62d50b201077d7d4cc109bb1cada22fdfd4523fb"
-  integrity sha1-YtULIBB319TMEJuxytoi/f1FI/s=
-
-"@types/webgl2@0.0.2":
+"@types/webassembly-js-api@0.0.2":
   version "0.0.2"
-  resolved "https://registry.yarnpkg.com/@types/webgl2/-/webgl2-0.0.2.tgz#0ea93b1976c7d57ee19abcda3d04ba9aa1787d11"
-  integrity sha512-Pazi0yyPGUHAKT470xLGQFCzFEU6PsGTFzOVA9FPeE1jEnDih7eI87Zer56Vh7Rw+4Y3V6iT9AFdAsmkBm3BrQ==
+  resolved "https://registry.yarnpkg.com/@types/webassembly-js-api/-/webassembly-js-api-0.0.2.tgz#43a04bd75fa20332133c6c3986156bfeb4a3ced7"
+  integrity sha512-htlxJRag6RUiMYUkS8Fjup+TMHO0VarpiF9MrqYaGJ0wXtIraQFz40rfA8VIeCiWy8sgpv3RLmigpgicG8fqGA==
+
+"@types/webgl2@0.0.4":
+  version "0.0.4"
+  resolved "https://registry.yarnpkg.com/@types/webgl2/-/webgl2-0.0.4.tgz#c3b0f9d6b465c66138e84e64cb3bdf8373c2c279"
+  integrity sha512-PACt1xdErJbMUOUweSrbVM7gSIYm1vTncW2hF6Os/EeWi6TXYAYMPp+8v6rzHmypE5gHrxaxZNXgMkJVIdZpHw==
 
 abbrev@1:
   version "1.1.1"
@@ -835,11 +840,11 @@ asn1.js@^4.0.0:
     minimalistic-assert "^1.0.0"
 
 "assemblyscript@github:AssemblyScript/assemblyscript":
-  version "0.5.0"
-  resolved "https://codeload.github.com/AssemblyScript/assemblyscript/tar.gz/d5f72e32d7e99cec3f8c37e6bb2916864706f4f0"
+  version "0.6.0"
+  resolved "https://codeload.github.com/AssemblyScript/assemblyscript/tar.gz/ed97672a8cbd4ce8694bf1411ca7bd7a8734eb77"
   dependencies:
     "@protobufjs/utf8" "^1.1.0"
-    binaryen "55.0.0-nightly.20181130"
+    binaryen "68.0.0-nightly.20190220"
     glob "^7.1.3"
     long "^4.0.0"
 
@@ -942,10 +947,10 @@ binary-extensions@^1.0.0:
   resolved "https://registry.yarnpkg.com/binary-extensions/-/binary-extensions-1.12.0.tgz#c2d780f53d45bba8317a8902d4ceeaf3a6385b14"
   integrity sha512-DYWGk01lDcxeS/K9IHPGWfT8PsJmbXRtRd2Sx72Tnb8pcYZQFF1oSDb8hJtS1vhp212q1Rzi5dUf9+nq0o9UIg==
 
-binaryen@55.0.0-nightly.20181130:
-  version "55.0.0-nightly.20181130"
-  resolved "https://registry.yarnpkg.com/binaryen/-/binaryen-55.0.0-nightly.20181130.tgz#67159e12073d8195813057714754727320521b3d"
-  integrity sha512-RfMiI0vavw7Sy7KX8h1xOs4D3zp9nehmtE87DSfY6nXyd2EAdMwJ97tWdepuhOc6JWZsntOfzUA2fqu/sYTTLg==
+binaryen@68.0.0-nightly.20190220:
+  version "68.0.0-nightly.20190220"
+  resolved "https://registry.yarnpkg.com/binaryen/-/binaryen-68.0.0-nightly.20190220.tgz#a4861dad276a2dd825015f7c8a39a4fd06492ce7"
+  integrity sha512-NsxXRfk+DsNju2+6OfD+UAkkahesa+Wd09bYlS+6WjxqvYokygSonjaZsvD7YQoIRfz4YLsHXx6SfoDu8uxYPA==
 
 bindings@~1.2.1:
   version "1.2.1"
@@ -2209,10 +2214,10 @@ get-value@^2.0.3, get-value@^2.0.6:
   resolved "https://registry.yarnpkg.com/get-value/-/get-value-2.0.6.tgz#dc15ca1c672387ca76bd37ac0a395ba2042a2c28"
   integrity sha1-3BXKHGcjh8p2vTesCjlbogQqLCg=
 
-gl-matrix@^2.8.1:
-  version "2.8.1"
-  resolved "https://registry.yarnpkg.com/gl-matrix/-/gl-matrix-2.8.1.tgz#1c7873448eac61d2cd25803a074e837bd42581a3"
-  integrity sha512-0YCjVpE3pS5XWlN3J4X7AiAx65+nqAI54LndtVFnQZB6G/FVLkZH8y8V6R3cIoOQR4pUdfwQGd1iwyoXHJ4Qfw==
+gl-matrix@^3.0.0:
+  version "3.0.0"
+  resolved "https://registry.yarnpkg.com/gl-matrix/-/gl-matrix-3.0.0.tgz#888301ac7650e148c3865370e13ec66d08a8381f"
+  integrity sha512-PD4mVH/C/Zs64kOozeFnKY8ybhgwxXXQYGWdB4h68krAHknWJgk9uKOn6z8YElh5//vs++90pb6csrTIDWnexA==
 
 glob-parent@^3.1.0:
   version "3.1.0"
@@ -4847,10 +4852,10 @@ typedarray@^0.0.6:
   resolved "https://registry.yarnpkg.com/typedarray/-/typedarray-0.0.6.tgz#867ac74e3864187b1d3d47d996a78ec5c8830777"
   integrity sha1-hnrHTjhkGHsdPUfZlqeOxciDB3c=
 
-typescript@^2.9.2:
-  version "2.9.2"
-  resolved "https://registry.yarnpkg.com/typescript/-/typescript-2.9.2.tgz#1cbf61d05d6b96269244eb6a3bce4bd914e0f00c"
-  integrity sha512-Gr4p6nFNaoufRIY4NMdpQRNmgxVIGMs4Fcu/ujdYk3nAZqk7supzBE9idmvfZIlH/Cuj//dvi+019qEue9lV0w==
+typescript@^3.3.3333:
+  version "3.3.3333"
+  resolved "https://registry.yarnpkg.com/typescript/-/typescript-3.3.3333.tgz#171b2c5af66c59e9431199117a3bcadc66fdcfd6"
+  integrity sha512-JjSKsAfuHBE/fB2oZ8NxtRTk5iGcg6hkYXMnZ3Wc+b2RSqejEqTaem11mHASMnFilHrax3sLK0GDzcJrekZYLw==
 
 unicode-canonical-property-names-ecmascript@^1.0.4:
   version "1.0.4"
@@ -4987,11 +4992,6 @@ vm-browserify@0.0.4:
   integrity sha1-XX6kW7755Kb/ZflUOOCofDV9WnM=
   dependencies:
     indexof "0.0.1"
-
-wabt@^1.0.6:
-  version "1.0.6"
-  resolved "https://registry.yarnpkg.com/wabt/-/wabt-1.0.6.tgz#f8f3e29b472885923f23aa14e371f6ad5b9dc569"
-  integrity sha512-gEoATqWyT9HJgq9BZmQ9daDhACfGY0VU4er3cac6ObEaZysRe6L45GUvyVJfQ1s27Z7OOzFsaQBJkuDeXTdhhw==
 
 wcwidth@^1.0.1:
   version "1.0.1"

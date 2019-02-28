@@ -2,13 +2,10 @@
 // Build our WAT WebAssembly modules.
 
 const path = require('path');
-const wabt = require('wabt');
 const fs = require('fs');
-const { spawnSync } = require('child_process');
 
 function buildBinaryArray(binary) {
-    const binData = new Uint8Array(binary.buffer);
-    const binStr = binData.join(',');
+    const binStr = binary.join(',');
     const src = `new Uint8Array([${binStr}])`;
     return src;
 }
@@ -22,6 +19,8 @@ function buildModuleExportsInterface(exportName, wasmModule) {
             return `number`;
         case 'memory':
             return `WebAssembly.Memory`;
+        case 'table':
+            return `WebAssembly.Table`;
         default:
             throw "whoops";
         }
@@ -40,31 +39,15 @@ function buildModuleExportsInterface(exportName, wasmModule) {
     return lines.join('\n');
 }
 
-function compileAssemblyScript(filename) {
-    const outFilename = filename.replace('.ts', '.wat');
-    // TODO(jstpierre): noRuntime flag is gone, noLib seems to cause an assert fail in the compiler somewhere... ugh.
-    const res = spawnSync('node', [path.join(__dirname, '../node_modules/assemblyscript/bin/asc'), '--baseDir', __dirname, filename, '--noLib', '-O', '-c', '-o', outFilename]);
-
-    if (res.status !== 0) {
-        console.error(res.stderr.toString('utf8'));
-        throw new Error("Could not compile");
-    }
-
-    return outFilename;
-}
-
 function buildModuleCode(mod) {
     const exportName = mod.exportName;
     const filename = mod.filename;
-
-    const watFilename = compileAssemblyScript(filename);
-    const wat = fs.readFileSync(path.join(__dirname, watFilename));
-    const wabtModule = wabt.parseWat(watFilename, wat);
-    wabtModule.resolveNames();
-    wabtModule.validate();
-    const binary = wabtModule.toBinary({});
-
-    const wasmModule = new WebAssembly.Module(binary.buffer);
+    const wasmFilename = filename.replace('.ts', '.wasm');
+    const binary = fs.readFileSync(path.join(__dirname, wasmFilename));
+    if (!WebAssembly.validate(binary)) {
+      throw new Error(`invalid wasm module "${ wasmFilename }"`);
+    }
+    const wasmModule = new WebAssembly.Module(binary);
     buildModuleExportsInterface(exportName, wasmModule);
 
     const binArrayStr = buildBinaryArray(binary);
