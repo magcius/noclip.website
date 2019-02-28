@@ -215,6 +215,7 @@ export function computeScreenSpaceProjectionFromWorldSpaceAABB(screenSpaceProjec
 export interface CameraController {
     camera: Camera;
     forceUpdate: boolean;
+    setKeyMoveSpeed(speed: number): void;
     cameraUpdateForced(): void;
     update(inputManager: InputManager, dt: number): boolean;
 }
@@ -254,6 +255,10 @@ export class FPSCameraController implements CameraController {
         vec3.set(this.keyMovement, 0, 0, 0);
     }
 
+    public setKeyMoveSpeed(speed: number): void {
+        this.keyMoveSpeed = speed;
+    }
+
     public update(inputManager: InputManager, dt: number): boolean {
         const camera = this.camera;
         let updated = false;
@@ -264,7 +269,6 @@ export class FPSCameraController implements CameraController {
             updated = true;
         }
 
-        this.keyMoveSpeed += inputManager.dz;
         this.keyMoveSpeed = Math.max(this.keyMoveSpeed, 1);
 
         let keyMoveMult = 1;
@@ -376,6 +380,9 @@ export class OrbitCameraController implements CameraController {
     }
 
     public deserialize(state: string): void {
+    }
+
+    public setKeyMoveSpeed(speed: number): void {
     }
 
     public update(inputManager: InputManager, dt: number): boolean {

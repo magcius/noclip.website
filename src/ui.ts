@@ -1391,6 +1391,7 @@ const FRUSTUM_ICON = `<svg viewBox="0 0 100 100" height="20" fill="white"><polyg
 
 class ViewerSettings extends Panel {
     private fovSlider: HTMLInputElement;
+    private camSpeedSlider: HTMLInputElement;
     private cameraControllerWASD: HTMLElement;
     private cameraControllerOrbit: HTMLElement;
     private invertCheckbox: Checkbox;
@@ -1453,6 +1454,11 @@ class ViewerSettings extends Panel {
 <input class="Slider FoVSlider" type="range" min="1" max="100">
 </div>
 
+<div style="display: grid; grid-template-columns: 1fr 1fr; align-items: center;">
+<div class="SettingsHeader">Camera Speed</div>
+<input class="Slider CamSpeedSlider" type="range" min="0" max="100">
+</div>
+
 <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center;">
 <div class="SettingsHeader">Camera Controller</div>
 <div class="SettingsButton CameraControllerWASD">WASD</div><div class="SettingsButton CameraControllerOrbit">Orbit</div>
@@ -1463,6 +1469,11 @@ class ViewerSettings extends Panel {
         this.fovSlider = this.contents.querySelector('.FoVSlider');
         this.fovSlider.oninput = this.onFovSliderChange.bind(this);
         this.fovSlider.value = '25';
+
+        this.camSpeedSlider = this.contents.querySelector('.CamSpeedSlider');
+        this.camSpeedSlider.oninput = this.onCamSliderChange.bind(this);
+        this.camSpeedSlider.value = '6'
+        window.addEventListener('wheel', this._onWheel.bind(this), { passive: false });
 
         this.cameraControllerWASD = this.contents.querySelector('.CameraControllerWASD');
         this.cameraControllerWASD.onclick = () => {
@@ -1490,9 +1501,25 @@ class ViewerSettings extends Panel {
         this.viewer.fovY = value * (Math.PI * 0.995);
     }
 
+    private onCamSliderChange(e: UIEvent): void {
+        const slider = (<HTMLInputElement> e.target);
+        this.updateCameraSpeed();
+    }
+
+    private _onWheel = (e: WheelEvent) => {
+        e.preventDefault();
+        this.camSpeedSlider.value = "" + ( Number(this.camSpeedSlider.value) - Math.sign(e.deltaY));
+        this.updateCameraSpeed();
+    };
+
     private setCameraControllerClass(cameraControllerClass: CameraControllerClass) {
         this.viewer.setCameraController(new cameraControllerClass());
         this.cameraControllerSelected(cameraControllerClass);
+        this.updateCameraSpeed();
+    }
+
+    private updateCameraSpeed(): void {
+        this.viewer.cameraController.setKeyMoveSpeed(Number(this.camSpeedSlider.value) * 10);
     }
 
     public cameraControllerSelected(cameraControllerClass: CameraControllerClass) {

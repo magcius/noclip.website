@@ -1,5 +1,7 @@
-
-import "builtins";
+@inline
+function bswap(value: u16): u16 {
+  return (value << 8) | (value >> 8);
+}
 
 // http://www.mindcontrol.org/~hplus/graphics/expand-bits.html
 @inline
@@ -33,28 +35,35 @@ function set(offs: u32, b: u8): void {
 }
 
 @inline
+function get32(offs: u32): u32 {
+    return load<u32>(offs);
+}
+
+@inline
+function set32(offs: u32, u: u32): void {
+    store<u32>(offs, u);
+}
+
+@inline
 function get16be(offs: u32): u16 {
-    return (load<u8>(offs) << 8) | load<u8>(offs + 1);
+    return bswap(load<u16>(offs));
 }
 
 export function decode_I4(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32): void {
-    const bw: u8 = 8;
-    const bh: u8 = 8;
-
     let srcOffs: u32 = 0;
-    for (let yy: u32 = 0; yy < h; yy += bh) {
-        for (let xx: u32 = 0; xx < w; xx += bw) {
-            for (let y: u8 = 0; y < bh; y++) {
-                for (let x: u8 = 0; x < bw; x++) {
-                    let dstPixel: u32 = (w * (yy + y)) + xx + x;
-                    let dstOffs: u32 = pDst + dstPixel * 4;
+    for (let yy: u32 = 0; yy < h; yy += 8) {
+        let stride0 = w * yy;
+        for (let xx: u32 = 0; xx < w; xx += 8) {
+            let stride1 = stride0 + xx;
+            for (let y = 0; y < 8; y++) {
+                let stride2 = w * y + stride1;
+                for (let x = 0; x < 8; x++) {
+                    let dstPixel = stride2 + x;
+                    let dstOffs = pDst + dstPixel * 4;
                     let ii: u8 = get(pSrc + (srcOffs >>> 1));
                     let i4: u8 = ii >>> ((srcOffs & 1) ? 0 : 4) & 0x0F;
                     let i: u8 = expand4to8(i4);
-                    set(dstOffs + 0, i);
-                    set(dstOffs + 1, i);
-                    set(dstOffs + 2, i);
-                    set(dstOffs + 3, i);
+                    set32(dstOffs, <u32>i * 0x01010101);
                     srcOffs++;
                 }
             }
@@ -63,21 +72,18 @@ export function decode_I4(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32): 
 }
 
 export function decode_I8(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32): void {
-    const bw: u8 = 8;
-    const bh: u8 = 4;
-
     let srcOffs: u32 = 0;
-    for (let yy: u32 = 0; yy < h; yy += bh) {
-        for (let xx: u32 = 0; xx < w; xx += bw) {
-            for (let y: u8 = 0; y < bh; y++) {
-                for (let x: u8 = 0; x < bw; x++) {
-                    let dstPixel: u32 = (w * (yy + y)) + xx + x;
-                    let dstOffs: u32 = pDst + dstPixel * 4;
+    for (let yy: u32 = 0; yy < h; yy += 4) {
+        let stride0 = w * yy;
+        for (let xx: u32 = 0; xx < w; xx += 8) {
+            let stride1 = stride0 + xx;
+            for (let y = 0; y < 4; y++) {
+                let stride2 = w * y + stride1;
+                for (let x = 0; x < 8; x++) {
+                    let dstPixel = stride2 + x;
+                    let dstOffs = pDst + dstPixel * 4;
                     let i = get(pSrc + srcOffs);
-                    set(dstOffs + 0, i);
-                    set(dstOffs + 1, i);
-                    set(dstOffs + 2, i);
-                    set(dstOffs + 3, i);
+                    set32(dstOffs, <u32>i * 0x01010101);
                     srcOffs++;
                 }
             }
@@ -86,23 +92,20 @@ export function decode_I8(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32): 
 }
 
 export function decode_IA4(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32): void {
-    const bw: u8 = 8;
-    const bh: u8 = 4;
-
     let srcOffs: u32 = 0;
-    for (let yy: u32 = 0; yy < h; yy += bh) {
-        for (let xx: u32 = 0; xx < w; xx += bw) {
-            for (let y: u8 = 0; y < bh; y++) {
-                for (let x: u8 = 0; x < bw; x++) {
-                    let dstPixel: u32 = (w * (yy + y)) + xx + x;
-                    let dstOffs: u32 = pDst + dstPixel * 4;
+    for (let yy: u32 = 0; yy < h; yy += 4) {
+        let stride0 = w * yy;
+        for (let xx: u32 = 0; xx < w; xx += 8) {
+            let stride1 = stride0 + xx;
+            for (let y = 0; y < 4; y++) {
+                let stride2 = w * y + stride1;
+                for (let x = 0; x < 8; x++) {
+                    let dstPixel = stride2 + x;
+                    let dstOffs = pDst + dstPixel * 4;
                     let ia: u8 = get(pSrc + srcOffs);
                     let a: u8 = expand4to8(ia >>> 4);
                     let i: u8 = expand4to8(ia & 0x0F);
-                    set(dstOffs + 0, i);
-                    set(dstOffs + 1, i);
-                    set(dstOffs + 2, i);
-                    set(dstOffs + 3, a);
+                    set32(dstOffs, (<u32>i * 0x00010101) | (<u32>a << 24));
                     srcOffs++;
                 }
             }
@@ -111,22 +114,19 @@ export function decode_IA4(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32):
 }
 
 export function decode_IA8(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32): void {
-    const bw: u8 = 4;
-    const bh: u8 = 4;
-
     let srcOffs: u32 = 0;
-    for (let yy: u32 = 0; yy < h; yy += bh) {
-        for (let xx: u32 = 0; xx < w; xx += bw) {
-            for (let y: u8 = 0; y < bh; y++) {
-                for (let x: u8 = 0; x < bw; x++) {
-                    let dstPixel: u32 = (w * (yy + y)) + xx + x;
-                    let dstOffs: u32 = pDst + dstPixel * 4;
+    for (let yy: u32 = 0; yy < h; yy += 4) {
+        let stride0 = w * yy;
+        for (let xx: u32 = 0; xx < w; xx += 4) {
+            let stride1 = stride0 + xx;
+            for (let y = 0; y < 4; y++) {
+                let stride2 = w * y + stride1;
+                for (let x = 0; x < 4; x++) {
+                    let dstPixel = stride2 + x;
+                    let dstOffs = pDst + dstPixel * 4;
                     let a: u8 = get(pSrc + srcOffs + 0);
                     let i: u8 = get(pSrc + srcOffs + 1);
-                    set(dstOffs + 0, i);
-                    set(dstOffs + 1, i);
-                    set(dstOffs + 2, i);
-                    set(dstOffs + 3, a);
+                    set32(dstOffs, (<u32>i * 0x00010101) | (<u32>a << 24));
                     srcOffs += 2;
                 }
             }
@@ -135,20 +135,20 @@ export function decode_IA8(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32):
 }
 
 export function decode_RGB565(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32): void {
-    const bw: u8 = 4;
-    const bh: u8 = 4;
-
     let srcOffs: u32 = 0;
-    for (let yy: u32 = 0; yy < h; yy += bh) {
-        for (let xx: u32 = 0; xx < w; xx += bw) {
-            for (let y: u8 = 0; y < bh; y++) {
-                for (let x: u8 = 0; x < bw; x++) {
-                    let dstPixel: u32 = (w * (yy + y)) + xx + x;
-                    let dstOffs: u32 = pDst + dstPixel * 4;
+    for (let yy: u32 = 0; yy < h; yy += 4) {
+        let stride0 = w * yy;
+        for (let xx: u32 = 0; xx < w; xx += 4) {
+            let stride1 = stride0 + xx;
+            for (let y = 0; y < 4; y++) {
+                let stride2 = w * y + stride1;
+                for (let x = 0; x < 4; x++) {
+                    let dstPixel = stride2 + x;
+                    let dstOffs = pDst + dstPixel * 4;
                     let p: u16 = get16be(pSrc + srcOffs);
-                    set(dstOffs + 0, expand5to8(<u8> (p >>> 11) & 0x1F));
-                    set(dstOffs + 1, expand6to8(<u8> (p >>> 5) & 0x3F));
-                    set(dstOffs + 2, expand5to8(<u8> (p & 0x1F)));
+                    set(dstOffs + 0, expand5to8(<u8>(p >>> 11) & 0x1F));
+                    set(dstOffs + 1, expand6to8(<u8>(p >>> 5) & 0x3F));
+                    set(dstOffs + 2, expand5to8(<u8>(p & 0x1F)));
                     set(dstOffs + 3, 0xFF);
                     srcOffs += 2;
                 }
@@ -158,29 +158,29 @@ export function decode_RGB565(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u3
 }
 
 export function decode_RGB5A3(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32): void {
-    const bw: u8 = 4;
-    const bh: u8 = 4;
-
     let srcOffs: u32 = 0;
-    for (let yy: u32 = 0; yy < h; yy += bh) {
-        for (let xx: u32 = 0; xx < w; xx += bw) {
-            for (let y: u8 = 0; y < bh; y++) {
-                for (let x: u8 = 0; x < bw; x++) {
-                    let dstPixel: u32 = (w * (yy + y)) + xx + x;
-                    let dstOffs: u32 = pDst + dstPixel * 4;
+    for (let yy: u32 = 0; yy < h; yy += 4) {
+        let stride0 = w * yy;
+        for (let xx: u32 = 0; xx < w; xx += 4) {
+            let stride1 = stride0 + xx;
+            for (let y = 0; y < 4; y++) {
+                let stride2 = w * y + stride1;
+                for (let x = 0; x < 4; x++) {
+                    let dstPixel = stride2 + x;
+                    let dstOffs = pDst + dstPixel * 4;
                     let p: u16 = get16be(pSrc + srcOffs);
                     if (p & 0x8000) {
                         // RGB5
-                        set(dstOffs + 0, expand5to8(<u8> (p >>> 10) & 0x1F));
-                        set(dstOffs + 1, expand5to8(<u8> (p >>> 5) & 0x1F));
-                        set(dstOffs + 2, expand5to8(<u8> (p & 0x1F)));
+                        set(dstOffs + 0, expand5to8(<u8>(p >>> 10) & 0x1F));
+                        set(dstOffs + 1, expand5to8(<u8>(p >>> 5) & 0x1F));
+                        set(dstOffs + 2, expand5to8(<u8>(p & 0x1F)));
                         set(dstOffs + 3, 0xFF);
                     } else {
                         // A3RGB4
-                        set(dstOffs + 0, expand4to8(<u8> (p >>> 8) & 0x0F));
-                        set(dstOffs + 1, expand4to8(<u8> (p >>> 4) & 0x0F));
-                        set(dstOffs + 2, expand4to8(<u8> (p & 0x0F)));
-                        set(dstOffs + 3, expand3to8(<u8> (p >>> 12)));
+                        set(dstOffs + 0, expand4to8(<u8>(p >>> 8) & 0x0F));
+                        set(dstOffs + 1, expand4to8(<u8>(p >>> 4) & 0x0F));
+                        set(dstOffs + 2, expand4to8(<u8>(p & 0x0F)));
+                        set(dstOffs + 3, expand3to8(<u8>(p >>> 12)));
                     }
                     srcOffs += 2;
                 }
@@ -190,27 +190,30 @@ export function decode_RGB5A3(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u3
 }
 
 export function decode_RGBA8(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32): void {
-    const bw: u8 = 4;
-    const bh: u8 = 4;
-
     let srcOffs: u32 = 0;
-    for (let yy: u32 = 0; yy < h; yy += bh) {
-        for (let xx: u32 = 0; xx < w; xx += bw) {
-            for (let y: u32 = 0; y < bh; y++) {
-                for (let x: u32 = 0; x < bw; x++) {
-                    let dstPixel: u32 = (w * (yy + y)) + xx + x;
-                    let dstOffs: u32 = pDst + dstPixel * 4;
-                    set(dstOffs + 3, get(pSrc + srcOffs + 0));
-                    set(dstOffs + 0, get(pSrc + srcOffs + 1));
+    for (let yy: u32 = 0; yy < h; yy += 4) {
+        let stride0 = w * yy;
+        for (let xx: u32 = 0; xx < w; xx += 4) {
+            let stride1 = stride0 + xx;
+            for (let y: u32 = 0; y < 4; y++) {
+                let stride2 = w * y + stride1;
+                for (let x: u32 = 0; x < 4; x++) {
+                    let dstPixel = stride2 + x;
+                    let dstOffs = pDst + dstPixel * 4;
+                    let inOffs = pSrc + srcOffs;
+                    set(dstOffs + 3, get(inOffs + 0));
+                    set(dstOffs + 0, get(inOffs + 1));
                     srcOffs += 2;
                 }
             }
-            for (let y: u32 = 0; y < bh; y++) {
-                for (let x: u32 = 0; x < bw; x++) {
-                    let dstPixel: u32 = (w * (yy + y)) + xx + x;
-                    let dstOffs: u32 = pDst + dstPixel * 4;
-                    set(dstOffs + 1, get(pSrc + srcOffs + 0));
-                    set(dstOffs + 2, get(pSrc + srcOffs + 1));
+            for (let y: u32 = 0; y < 4; y++) {
+                let stride2 = w * y + stride1;
+                for (let x: u32 = 0; x < 4; x++) {
+                    let dstPixel = stride2 + x;
+                    let dstOffs = pDst + dstPixel * 4;
+                    let inOffs = pSrc + srcOffs;
+                    set(dstOffs + 1, get(inOffs + 0));
+                    set(dstOffs + 2, get(inOffs + 1));
                     srcOffs += 2;
                 }
             }
@@ -222,24 +225,27 @@ export function decode_RGBA8(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32
 @inline
 function s3tcblend(a: u32, b: u32): u8 {
     // return (a*3 + b*5) / 8;
-    let tmp: u32 = (((a << 1) + a) + ((b << 2) + b)) >>> 3;
-    return <u8> tmp;
+    let tmp = (((a << 1) + a) + ((b << 2) + b)) >>> 3;
+    return <u8>tmp;
 }
 
 @inline
 function halfblend(a: u32, b: u32): u8 {
-    let tmp: u32 = (a + b) >>> 1;
-    return <u8> tmp;
+    let tmp = (a + b) >>> 1;
+    return <u8>tmp;
 }
 
 export function decode_CMPR(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32): void {
     // CMPR swizzles macroblocks to be in a 2x2 grid of UL, UR, BL, BR.
-    let colorTable: u32 = pScratch;
+    let colorTable = pScratch;
 
-    let srcOffs: u32 = pSrc;
+    let srcOffs = pSrc;
     for (let yy: u32 = 0; yy < h; yy += 8) {
+        let stride = yy * w;
         for (let xx: u32 = 0; xx < w; xx += 8) {
+            let stride0 = stride + xx;
             for (let yb: u32 = 0; yb < 8; yb += 4) {
+                let stride1 = stride0 + yb * w;
                 for (let xb: u32 = 0; xb < 8; xb += 4) {
                     if (xx + xb >= w || yy + yb > h) {
                         srcOffs += 8;
@@ -247,8 +253,8 @@ export function decode_CMPR(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32)
                     }
 
                     // CMPR difference: Big-endian color1/2
-                    let color1: u16 = get16be(srcOffs + 0x00);
-                    let color2: u16 = get16be(srcOffs + 0x02);
+                    let color1 = get16be(srcOffs + 0x00);
+                    let color2 = get16be(srcOffs + 0x02);
 
                     // Fill in first two colors in color table.
                     set(colorTable + 0, expand5to8(<u8> ((color1 >>> 11) & 0x1F)));
@@ -285,16 +291,16 @@ export function decode_CMPR(pScratch: u32, pDst: u32, pSrc: u32, w: u32, h: u32)
                         set(colorTable + 15, 0x00);
                     }
 
+                    let stride2 = stride1 + xb;
                     for (let y = 0; y < 4; y++) {
                         let bits = get(srcOffs + 0x04 + y);
+                        let stride3 = stride2 + y * w;
                         for (let x = 0; x < 4; x++) {
-                            let dstPx = (yy + yb + y) * w + xx + xb + x;
+                            let dstPx = stride3 + x;
                             let dstOffs = pDst + dstPx * 4;
                             let colorIdx = (bits >>> 6) & 0x03;
-                            set(dstOffs + 0, get(colorTable + colorIdx * 4 + 0));
-                            set(dstOffs + 1, get(colorTable + colorIdx * 4 + 1));
-                            set(dstOffs + 2, get(colorTable + colorIdx * 4 + 2));
-                            set(dstOffs + 3, get(colorTable + colorIdx * 4 + 3));
+                            let colorOffset = colorTable + colorIdx * 4;
+                            set32(dstOffs, get32(colorOffset));
                             bits <<= 2;
                         }
                     }
