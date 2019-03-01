@@ -285,6 +285,7 @@ export class MaterialInstance {
             switch (texMtx.type) {
             case 0x00:
             case 0x01: // Delfino Plaza
+            case 0x02: // pinnaParco7.szs
             case 0x08: // Peach Beach.
             case 0x0A: // Wind Waker pedestal?
             case 0x0B: // Luigi Circuit
@@ -312,6 +313,7 @@ export class MaterialInstance {
             switch(texMtx.type) {
             case 0x00:
             case 0x01:
+            case 0x02:
             case 0x0A:
             case 0x0B:
                 break;
