@@ -409,11 +409,17 @@ export class CmbData {
         for (let i = 0; i < this.cmb.sepds.length; i++)
             this.sepdData[i] = new SepdData(device, cmbContext, this.cmb.sepds[i]);
 
-        this.inverseBindPoseMatrices = nArray(cmb.bones.length, () => mat4.create());
+        const tempBones = nArray(cmb.bones.length, () => mat4.create());
         for (let i = 0; i < cmb.bones.length; i++) {
-            CSAB.calcBoneMatrix(this.inverseBindPoseMatrices[i], null, null, cmb.bones[i]);
-            mat4.invert(this.inverseBindPoseMatrices[i], this.inverseBindPoseMatrices[i]);
+            const bone = cmb.bones[i];
+            CSAB.calcBoneMatrix(tempBones[i], null, null, bone);
+            if (bone.parentBoneId >= 0)
+                mat4.mul(tempBones[i], tempBones[bone.parentBoneId], tempBones[i]);
         }
+
+        this.inverseBindPoseMatrices = nArray(cmb.bones.length, () => mat4.create());
+        for (let i = 0; i < cmb.bones.length; i++)
+            mat4.invert(this.inverseBindPoseMatrices[i], tempBones[i]);
     }
 
     public destroy(device: GfxDevice): void {
