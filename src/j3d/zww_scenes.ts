@@ -680,7 +680,8 @@ class ModelCache {
     public extraModels: BMDModel[] = [];
 
     public waitForLoad(): Progressable<any> {
-        return Progressable.all([... this.archiveProgressableCache.values()]);
+        const v: Progressable<any>[] = [... this.fileProgressableCache.values(), ... this.archiveProgressableCache.values()];
+        return Progressable.all(v);
     }
 
     private fetchFile(path: string, abortSignal: AbortSignal): Progressable<ArrayBufferSlice> {

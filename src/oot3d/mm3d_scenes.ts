@@ -6,15 +6,62 @@ import * as ZSI from './zsi';
 import * as LzS from '../compression/LzS';
 
 import * as Viewer from '../viewer';
+import * as UI from '../ui';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import Progressable from '../Progressable';
-import { RoomRenderer, CtrTextureHolder } from './render';
+import { RoomRenderer, CtrTextureHolder, BasicRendererHelper } from './render';
 import { SceneGroup } from '../viewer';
 import { assert, readString, leftPad } from '../util';
 import { fetchData, NamedArrayBufferSlice } from '../fetch';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { MultiRoomScene } from './oot3d_scenes';
+import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
+import { RENDER_HACKS_ICON } from '../bk/scenes';
+
+class MultiRoomScene extends BasicRendererHelper implements Viewer.SceneGfx {
+    constructor(device: GfxDevice, public roomRenderers: RoomRenderer[], public textureHolder: CtrTextureHolder) {
+        super();
+        for (let i = 0; i < this.roomRenderers.length; i++)
+            this.roomRenderers[i].addToViewRenderer(device, this.viewRenderer);
+    }
+
+    protected prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        for (let i = 0; i < this.roomRenderers.length; i++)
+            this.roomRenderers[i].prepareToRender(hostAccessPass, viewerInput);
+    }
+
+    public destroy(device: GfxDevice): void {
+        super.destroy(device);
+        this.textureHolder.destroy(device);
+        for (let i = 0; i < this.roomRenderers.length; i++)
+            this.roomRenderers[i].destroy(device);
+    }
+
+    public createPanels(): UI.Panel[] {
+        const renderHacksPanel = new UI.Panel();
+        renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        renderHacksPanel.setTitle(RENDER_HACKS_ICON, 'Render Hacks');
+        const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
+        enableVertexColorsCheckbox.onchanged = () => {
+            for (let i = 0; i < this.roomRenderers.length; i++)
+                this.roomRenderers[i].setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
+        const enableTextures = new UI.Checkbox('Enable Textures', true);
+        enableTextures.onchanged = () => {
+            for (let i = 0; i < this.roomRenderers.length; i++)
+                this.roomRenderers[i].setTexturesEnabled(enableTextures.checked);
+        };
+        const enableMonochromeVertexColors = new UI.Checkbox('Grayscale Vertex Colors', false);
+        enableMonochromeVertexColors.onchanged = () => {
+            for (let i = 0; i < this.roomRenderers.length; i++)
+                this.roomRenderers[i].setMonochromeVertexColorsEnabled(enableMonochromeVertexColors.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableMonochromeVertexColors.elem);
+
+        const layersPanel = new UI.LayerPanel(this.roomRenderers);
+        return [renderHacksPanel, layersPanel];
+    }
+}
 
 function maybeDecompress(buffer: ArrayBufferSlice): ArrayBufferSlice {
     if (readString(buffer, 0x00, 0x04) === 'LzS\x01')
