@@ -11,7 +11,7 @@ if (module.hot) {
     });
 }
 
-import { SceneDesc, SceneGroup, Viewer, SceneGfx, getSceneDescs, InitErrorCode, initializeViewer, makeErrorUI } from './viewer';
+import { SceneDesc, SceneGroup, Viewer, SceneGfx, getSceneDescs, InitErrorCode, initializeViewer, makeErrorUI, makeErrorMessageUI } from './viewer';
 
 import ArrayBufferSlice from './ArrayBufferSlice';
 import Progressable from './Progressable';
@@ -49,7 +49,7 @@ import * as PSY from './psychonauts/scenes';
 import * as DKS from './dks/scenes';
 
 import * as J3D from './j3d/scenes';
-import { UI, createDOMFromString, SaveStatesAction } from './ui';
+import { UI, SaveStatesAction } from './ui';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera';
 import { hexdump } from './util';
 import { downloadBlob, downloadBufferSlice, downloadBuffer } from './fetch';
@@ -60,7 +60,7 @@ import { atob, btoa } from './Ascii85';
 import { vec3, mat4 } from 'gl-matrix';
 import { GlobalSaveManager, SaveStateLocation } from './SaveManager';
 import { RenderStatistics } from './RenderStatistics';
-import { gfxDeviceGetImpl, createSwapChainForWebGL2 } from './gfx/platform/GfxPlatformWebGL2';
+import { gfxDeviceGetImpl } from './gfx/platform/GfxPlatformWebGL2';
 import { Color } from './Color';
 import { standardFullClearRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
 

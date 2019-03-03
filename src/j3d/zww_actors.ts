@@ -26,6 +26,8 @@ export interface ObjectRenderer {
     prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput, visible: boolean): void;
     setColors(colors: Colors): void;
     destroy(device: GfxDevice): void;
+    setVertexColorsEnabled(v: boolean): void;
+    setTexturesEnabled(v: boolean): void
 }
 
 const scratchLight = new GX_Material.Light();
@@ -60,6 +62,16 @@ export class BMDObjectRenderer implements ObjectRenderer {
 
     public setMaterialColorWriteEnabled(materialName: string, v: boolean): void {
         this.modelInstance.setMaterialColorWriteEnabled(materialName, v);
+    }
+    
+    public setVertexColorsEnabled(v: boolean): void {
+        this.modelInstance.setVertexColorsEnabled(v);
+        this.childObjects.forEach((child)=> child.setVertexColorsEnabled(v));
+    }
+
+    public setTexturesEnabled(v: boolean): void {
+        this.modelInstance.setTexturesEnabled(v);
+        this.childObjects.forEach((child)=> child.setTexturesEnabled(v));
     }
 
     public setColors(colors: Colors): void {
@@ -416,6 +428,12 @@ export class FlowerObjectRenderer implements ObjectRenderer {
         renderInstBuilder.pushTemplateRenderInst(this.materialHelper.templateRenderInst);
         this.renderInst = flowerData.shapeHelperMain.pushRenderInst(renderInstBuilder);
         renderInstBuilder.popTemplateRenderInst();
+    }
+
+    public setVertexColorsEnabled(v: boolean): void {
+    }
+
+    public setTexturesEnabled(v: boolean): void {
     }
 
     public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput, visible: boolean): void {

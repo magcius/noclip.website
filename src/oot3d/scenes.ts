@@ -73,6 +73,12 @@ export class MultiCmbScene extends BasicRendererHelper implements Viewer.SceneGf
                 this.cmbRenderers[i].setTexturesEnabled(enableTextures.checked);
         };
         renderHacksPanel.contents.appendChild(enableTextures.elem);
+        const enableMonochromeVertexColors = new UI.Checkbox('Grayscale Vertex Colors', false);
+        enableMonochromeVertexColors.onchanged = () => {
+            for (let i = 0; i < this.cmbRenderers.length; i++)
+                this.cmbRenderers[i].setMonochromeVertexColorsEnabled(enableMonochromeVertexColors.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableMonochromeVertexColors.elem);
 
         const layersPanel = new UI.LayerPanel(this.cmbRenderers);
         return [renderHacksPanel, layersPanel];
@@ -92,6 +98,7 @@ export function createSceneFromZARBuffer(device: GfxDevice, buffer: ArrayBufferS
             } else if (file.name.endsWith('.cmb')) {
                 const cmb = CMB.parse(file.buffer);
                 const cmbData = new CmbData(device, cmb);
+                textureHolder.addTextures(device, cmb.textures);
                 renderer.cmbData.push(cmbData);
                 const cmbRenderer = new CmbRenderer(device, textureHolder, cmbData, cmb.name);
                 cmbRenderer.addToViewRenderer(device, renderer.viewRenderer);

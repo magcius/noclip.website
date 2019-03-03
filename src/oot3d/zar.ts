@@ -29,6 +29,14 @@ export function findFile(zar: ZAR, filePath: string): ZARFile | null {
         return null;
 }
 
+export function findFileData(zar: ZAR, filePath: string): ArrayBufferSlice | null {
+    const file = findFile(zar, filePath);
+    if (file !== null)
+        return file.buffer;
+    else
+        return null;
+}
+
 function parseZelda(buffer: ArrayBufferSlice): ZAR {
     const view = buffer.createDataView();
 

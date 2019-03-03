@@ -149,7 +149,7 @@ export class SaveManager {
     }
 
     public export(): string {
-        return JSON.stringify(Object.assign({}, window.localStorage));
+        return JSON.stringify(Object.assign({}, window.localStorage), null, 4);
     }
 }
 

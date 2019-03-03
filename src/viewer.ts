@@ -232,7 +232,7 @@ export function initializeViewer(out: ViewerOut, canvas: HTMLCanvasElement): Ini
     return InitErrorCode.SUCCESS;
 }
 
-function makeErrorMessageUI(message: string): DocumentFragment {
+export function makeErrorMessageUI(message: string): DocumentFragment {
     const errorMessage = UI.createDOMFromString(`
 <div style="display: flex; background-color: #220000; flex-direction: column; position: absolute; top: 0; bottom: 0; left: 0; right: 0; justify-content: center;">
 <div style="display: flex; background-color: #aa2233; justify-content: center; box-shadow: 0 0 32px black;">
@@ -255,20 +255,20 @@ export function makeErrorUI(errorCode: InitErrorCode): DocumentFragment {
     else if (errorCode === InitErrorCode.NO_WEBGL2_GENERIC)
         return makeErrorMessageUI(`
 <p>Your browser does not appear to have WebGL 2 support.
-<p>If <a href="http://webglreport.com/?v=2">WebGL Report</a> says your browser supports WebGL 2, please open a <a href="https://github.com/magcius/noclip.website/issues/new">GitHub issue</a> with as much as information as possible.
+<p>If <a href="http://webglreport.com/?v=2">WebGL Report</a> says your browser supports WebGL 2, please open a <a href="https://github.com/magcius/noclip.website/issues/new?template=tech_support.md">GitHub issue</a> with as much as information as possible.
 <p style="text-align: right">Thanks, Jasper.
 `);
     else if (errorCode === InitErrorCode.GARBAGE_WEBGL2_SWIFTSHADER)
         return makeErrorMessageUI(`
 <p>This application requires hardware acceleration to be enabled.
 <p>Please enable hardware acceleration in your's browser settings.
-<p>If you have enabled hardware acceleration and are still getting this error message, please open a <a href="https://github.com/magcius/noclip.website/issues/new">GitHub issue</a> with as much as information as possible.
+<p>If you have enabled hardware acceleration and are still getting this error message, please open a <a href="https://github.com/magcius/noclip.website/issues/new?template=tech_support.md">GitHub issue</a> with as much as information as possible.
 <p style="text-align: right">Thanks, Jasper.
 `);
     else if (errorCode === InitErrorCode.GARBAGE_WEBGL2_GENERIC)
         return makeErrorMessageUI(`
 <p>This browser has a non-functioning version of WebGL 2 that I have not seen before.
-<p>If <a href="http://webglreport.com/?v=2">WebGL Report</a> says your browser supports WebGL 2, please open a <a href="https://github.com/magcius/noclip.website/issues/new">GitHub issue</a> with as much as information as possible.
+<p>If <a href="http://webglreport.com/?v=2">WebGL Report</a> says your browser supports WebGL 2, please open a <a href="https://github.com/magcius/noclip.website/issues/new?template=tech_support.md">GitHub issue</a> with as much as information as possible.
 <p style="text-align: right">Thanks, Jasper.
 `);
     else

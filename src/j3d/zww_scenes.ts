@@ -201,6 +201,7 @@ class WindWakerRoomRenderer {
     public model3: BMDModelInstance;
     public name: string;
     public visible: boolean = true;
+    public objectsVisible = true;
     public objectRenderers: ObjectRenderer[] = [];
     public dzb: DZB.DZB;
 
@@ -231,7 +232,7 @@ class WindWakerRoomRenderer {
         if (this.model3)
             this.model3.prepareToRender(renderHelper, viewerInput);
         for (let i = 0; i < this.objectRenderers.length; i++)
-            this.objectRenderers[i].prepareToRender(renderHelper, viewerInput, this.visible);
+            this.objectRenderers[i].prepareToRender(renderHelper, viewerInput, this.visible && this.objectsVisible);
     }
 
     public setModelMatrix(modelMatrix: mat4): void {
@@ -299,6 +300,8 @@ class WindWakerRoomRenderer {
             this.model2.setVertexColorsEnabled(v);
         if (this.model3)
             this.model3.setVertexColorsEnabled(v);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].setVertexColorsEnabled(v);
     }
 
     public setTexturesEnabled(v: boolean): void {
@@ -310,6 +313,8 @@ class WindWakerRoomRenderer {
             this.model2.setTexturesEnabled(v);
         if (this.model3)
             this.model3.setTexturesEnabled(v);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].setTexturesEnabled(v);
     }
 
     public destroy(device: GfxDevice): void {
@@ -571,6 +576,13 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         };
         renderHacksPanel.contents.appendChild(enableTextures.elem);
 
+        const enableObjects = new UI.Checkbox('Enable Objects', true);
+        enableObjects.onchanged = () => {
+            for (let i = 0; i < this.roomRenderers.length; i++)
+                this.roomRenderers[i].objectsVisible = enableObjects.checked;
+        };
+        renderHacksPanel.contents.appendChild(enableObjects.elem);
+
         return [timeOfDayPanel, layersPanel, renderHacksPanel];
     }
 
@@ -668,7 +680,8 @@ class ModelCache {
     public extraModels: BMDModel[] = [];
 
     public waitForLoad(): Progressable<any> {
-        return Progressable.all([... this.archiveProgressableCache.values()]);
+        const v: Progressable<any>[] = [... this.fileProgressableCache.values(), ... this.archiveProgressableCache.values()];
+        return Progressable.all(v);
     }
 
     private fetchFile(path: string, abortSignal: AbortSignal): Progressable<ArrayBufferSlice> {
@@ -1042,7 +1055,19 @@ class SceneDesc {
         // The King of Hyrule
         else if (name === 'Hi1') fetchArchive(`Hi.arc`).then((rarc) => buildModel(rarc, `bdlm/hi.bdl`).bindANK1(parseBCK(rarc, `bcks/hi_wait01.bck`)));
         // Princess Zelda
-        else if (name === 'p_zelda') fetchArchive(`Pz.arc`).then((rarc) => buildModel(rarc, `bdlm/pz.bdl`).bindANK1(parseBCK(rarc, `bcks/wait01.bck`)));
+        else if (name === 'p_zelda') fetchArchive(`Pz.arc`).then((rarc) => 
+        {
+            const m = buildModel(rarc, `bdlm/pz.bdl`);            
+            m.setMaterialColorWriteEnabled("m_pz_eyeLdamA", false);
+            m.setMaterialColorWriteEnabled("m_pz_eyeLdamB", false);
+            m.setMaterialColorWriteEnabled("m_pz_mayuLdamA", false);
+            m.setMaterialColorWriteEnabled("m_pz_mayuLdamB", false);
+            m.setMaterialColorWriteEnabled("m_pz_eyeRdamA", false);
+            m.setMaterialColorWriteEnabled("m_pz_eyeRdamB", false);
+            m.setMaterialColorWriteEnabled("m_pz_mayuRdamA", false);
+            m.setMaterialColorWriteEnabled("m_pz_mayuRdamB", false);
+            m.bindANK1(parseBCK(rarc, `bcks/wait01.bck`));
+        });
         // The Great Deku Tree
         else if (name === 'De1') fetchArchive(`De.arc`).then((rarc) => buildModel(rarc, `bdl/de.bdl`).bindANK1(parseBCK(rarc, `bcks/wait01.bck`)));
         // Prince Komali (Small Childe)

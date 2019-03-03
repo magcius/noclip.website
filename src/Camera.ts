@@ -215,6 +215,7 @@ export function computeScreenSpaceProjectionFromWorldSpaceAABB(screenSpaceProjec
 export interface CameraController {
     camera: Camera;
     forceUpdate: boolean;
+    setKeyMoveSpeed(speed: number): void;
     cameraUpdateForced(): void;
     update(inputManager: InputManager, dt: number): boolean;
 }
@@ -254,6 +255,10 @@ export class FPSCameraController implements CameraController {
         vec3.set(this.keyMovement, 0, 0, 0);
     }
 
+    public setKeyMoveSpeed(speed: number): void {
+        this.keyMoveSpeed = speed;
+    }
+
     public update(inputManager: InputManager, dt: number): boolean {
         const camera = this.camera;
         let updated = false;
@@ -264,7 +269,6 @@ export class FPSCameraController implements CameraController {
             updated = true;
         }
 
-        this.keyMoveSpeed += inputManager.dz;
         this.keyMoveSpeed = Math.max(this.keyMoveSpeed, 1);
 
         let keyMoveMult = 1;
@@ -279,27 +283,27 @@ export class FPSCameraController implements CameraController {
 
         const keyMoveLowSpeedCap = 0.01;
 
-        if (inputManager.isKeyDown('KeyW')) {
+        if (inputManager.isKeyDown('KeyW') || inputManager.isKeyDown('ArrowUp')) {
             keyMovement[2] = clampRange(keyMovement[2] - keyMoveVelocity, keyMoveSpeedCap);
-        } else if (inputManager.isKeyDown('KeyS')) {
+        } else if (inputManager.isKeyDown('KeyS') || inputManager.isKeyDown('ArrowDown')) {
             keyMovement[2] = clampRange(keyMovement[2] + keyMoveVelocity, keyMoveSpeedCap);
         } else {
             keyMovement[2] *= this.keyMoveDrag;
             if (Math.abs(keyMovement[2]) < keyMoveLowSpeedCap) keyMovement[2] = 0.0;
         }
 
-        if (inputManager.isKeyDown('KeyA')) {
+        if (inputManager.isKeyDown('KeyA') || inputManager.isKeyDown('ArrowLeft')) {
             keyMovement[0] = clampRange(keyMovement[0] - keyMoveVelocity, keyMoveSpeedCap);
-        } else if (inputManager.isKeyDown('KeyD')) {
+        } else if (inputManager.isKeyDown('KeyD') || inputManager.isKeyDown('ArrowRight')) {
             keyMovement[0] = clampRange(keyMovement[0] + keyMoveVelocity, keyMoveSpeedCap);
         } else {
             keyMovement[0] *= this.keyMoveDrag;
             if (Math.abs(keyMovement[0]) < keyMoveLowSpeedCap) keyMovement[0] = 0.0;
         }
 
-        if (inputManager.isKeyDown('KeyQ') || (inputManager.isKeyDown('ControlLeft') && inputManager.isKeyDown('Space'))) {
+        if (inputManager.isKeyDown('KeyQ') || inputManager.isKeyDown('PageDown') || (inputManager.isKeyDown('ControlLeft') && inputManager.isKeyDown('Space'))) {
             keyMovement[1] = clampRange(keyMovement[1] - keyMoveVelocity, keyMoveSpeedCap);
-        } else if (inputManager.isKeyDown('KeyE') || inputManager.isKeyDown('Space')) {
+        } else if (inputManager.isKeyDown('KeyE') || inputManager.isKeyDown('PageUp') || inputManager.isKeyDown('Space')) {
             keyMovement[1] = clampRange(keyMovement[1] + keyMoveVelocity, keyMoveSpeedCap);
         } else {
             keyMovement[1] *= this.keyMoveDrag;
@@ -376,6 +380,9 @@ export class OrbitCameraController implements CameraController {
     }
 
     public deserialize(state: string): void {
+    }
+
+    public setKeyMoveSpeed(speed: number): void {
     }
 
     public update(inputManager: InputManager, dt: number): boolean {

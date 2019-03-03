@@ -54,7 +54,6 @@ parcel/
 .cache/
 
 dist/*
-!dist/data
 !dist/.htaccess
 post*.html
 

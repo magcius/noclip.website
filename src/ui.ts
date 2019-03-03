@@ -1391,6 +1391,7 @@ const FRUSTUM_ICON = `<svg viewBox="0 0 100 100" height="20" fill="white"><polyg
 
 class ViewerSettings extends Panel {
     private fovSlider: HTMLInputElement;
+    private camSpeedSlider: HTMLInputElement;
     private cameraControllerWASD: HTMLElement;
     private cameraControllerOrbit: HTMLElement;
     private invertCheckbox: Checkbox;
@@ -1453,6 +1454,11 @@ class ViewerSettings extends Panel {
 <input class="Slider FoVSlider" type="range" min="1" max="100">
 </div>
 
+<div style="display: grid; grid-template-columns: 1fr 1fr; align-items: center;">
+<div class="SettingsHeader">Camera Speed</div>
+<input class="Slider CamSpeedSlider" type="range" min="0" max="100">
+</div>
+
 <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center;">
 <div class="SettingsHeader">Camera Controller</div>
 <div class="SettingsButton CameraControllerWASD">WASD</div><div class="SettingsButton CameraControllerOrbit">Orbit</div>
@@ -1463,6 +1469,11 @@ class ViewerSettings extends Panel {
         this.fovSlider = this.contents.querySelector('.FoVSlider');
         this.fovSlider.oninput = this.onFovSliderChange.bind(this);
         this.fovSlider.value = '25';
+
+        this.camSpeedSlider = this.contents.querySelector('.CamSpeedSlider');
+        this.camSpeedSlider.oninput = this.updateCameraSpeed.bind(this);
+        this.camSpeedSlider.value = '6'
+        this.viewer.inputManager.addScrollListener(this.onScrollWheel.bind(this));
 
         this.cameraControllerWASD = this.contents.querySelector('.CameraControllerWASD');
         this.cameraControllerWASD.onclick = () => {
@@ -1490,9 +1501,19 @@ class ViewerSettings extends Panel {
         this.viewer.fovY = value * (Math.PI * 0.995);
     }
 
+    private onScrollWheel = () => {
+        this.camSpeedSlider.value = "" + ( Number(this.camSpeedSlider.value) - Math.sign(this.viewer.inputManager.dz/-4));
+        this.updateCameraSpeed();
+    };
+
     private setCameraControllerClass(cameraControllerClass: CameraControllerClass) {
         this.viewer.setCameraController(new cameraControllerClass());
         this.cameraControllerSelected(cameraControllerClass);
+        this.updateCameraSpeed();
+    }
+
+    private updateCameraSpeed(): void {
+        this.viewer.cameraController.setKeyMoveSpeed(Number(this.camSpeedSlider.value) * 10);
     }
 
     public cameraControllerSelected(cameraControllerClass: CameraControllerClass) {
@@ -1655,8 +1676,10 @@ class About extends Panel {
 <h2> <img src="${logoURL}"> <span> noclip.website </span> </h2>
 
 <p> <strong>CLICK AND DRAG</strong> to look around and use <strong>WASD</strong> to move the camera </p>
-<p> Hold <strong>SHIFT</strong> to go faster, and use <strong>MOUSE WHEEL</strong> to go faster than that.
-<strong>B</strong> resets the camera, and <strong>Z</strong> toggles the UI. </p>
+<p> Hold <strong>SHIFT</strong> to go faster, and use <strong>MOUSE WHEEL</strong> to fine tune the speed
+<strong>Z</strong> toggles the UI. </p>
+
+<p><a href="https://discord.gg/RtmxjB"><strong>JOIN THE DISCORD</strong> by clicking here</a></p>
 
 <p><strong>CODE PRIMARILY WRITTEN</strong> by <a href="https://twitter.com/JasperRLZ">Jasper</a></p>
 
@@ -1669,8 +1692,8 @@ class About extends Panel {
 <a href="https://twitter.com/beholdnec">N.E.C.</a>,
 <a href="https://twitter.com/JuPaHe64">JuPaHe64</a>,
 <a href="https://twitter.com/Jawchewa">Jawchewa</a>,
-<a href="https://twitter.com/PistonMiner">PistonMiner</a>,
 <a href="https://twitter.com/Starschulz">Starschulz</a>,
+<a href="https://twitter.com/PistonMiner">PistonMiner</a>,
 <a href="https://twitter.com/LordNed">LordNed</a>,
 <a href="https://twitter.com/SageOfMirrors">SageOfMirrors</a>,
 <a href="https://github.com/blank63">blank63</a>,

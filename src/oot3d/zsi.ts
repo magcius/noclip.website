@@ -3,7 +3,7 @@ import * as CMB from './cmb';
 
 import { assert, readString, hexdump } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { vec3, mat4, quat } from 'gl-matrix';
+import { vec3, mat4, quat, mat3 } from 'gl-matrix';
 
 const enum Version {
     Ocarina, Majora
@@ -52,8 +52,8 @@ function readActors(version: Version, buffer: ArrayBufferSlice, nActors: number,
         const positionZ = view.getInt16(actorTableIdx + 0x06, true);
         const rotationX = view.getInt16(actorTableIdx + 0x08, true) / 0x7FFF;
         const rotationY = view.getInt16(actorTableIdx + 0x0A, true) / 0x7FFF;
-        const rotationZ = view.getInt16(actorTableIdx + 0x0E, true) / 0x7FFF;
-        const variable = view.getUint16(actorTableIdx + 0x0C, true);
+        const rotationZ = view.getInt16(actorTableIdx + 0x0C, true) / 0x7FFF;
+        const variable = view.getUint16(actorTableIdx + 0x0E, true);
         const modelMatrix = mat4.create();
         quat.fromEuler(q, rotationX * 180, rotationY * 180, rotationZ * 180);
         mat4.fromRotationTranslation(modelMatrix, q, [positionX, positionY, positionZ]);

@@ -211,7 +211,7 @@ export class TerrainRenderer {
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         let offs: number;
 
-        viewerInput.camera.setClipPlanes(20, 500000);
+        viewerInput.camera.setClipPlanes(20, 5000000);
 
         // Compute view projection.
         mat4.mul(scratch, viewerInput.camera.projectionMatrix, viewerInput.camera.viewMatrix);
