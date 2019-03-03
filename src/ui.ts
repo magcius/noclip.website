@@ -1679,6 +1679,8 @@ class About extends Panel {
 <p> Hold <strong>SHIFT</strong> to go faster, and use <strong>MOUSE WHEEL</strong> to fine tune the speed
 <strong>Z</strong> toggles the UI. </p>
 
+<p><a href="https://discord.gg/RtmxjB"><strong>JOIN THE DISCORD</strong> by clicking here</a></p>
+
 <p><strong>CODE PRIMARILY WRITTEN</strong> by <a href="https://twitter.com/JasperRLZ">Jasper</a></p>
 
 <p><strong>OPEN SOURCE</strong> at <a href="${GITHUB_URL}">GitHub</a></p>
@@ -1689,8 +1691,9 @@ class About extends Panel {
 <strong>BASED ON WORK</strong> by
 <a href="https://twitter.com/beholdnec">N.E.C.</a>,
 <a href="https://twitter.com/JuPaHe64">JuPaHe64</a>,
-<a href="https://twitter.com/PistonMiner">PistonMiner</a>,
+<a href="https://twitter.com/JawchewaS">Jawchewa</a>,
 <a href="https://twitter.com/Starschulz">Starschulz</a>,
+<a href="https://twitter.com/PistonMiner">PistonMiner</a>,
 <a href="https://twitter.com/LordNed">LordNed</a>,
 <a href="https://twitter.com/SageOfMirrors">SageOfMirrors</a>,
 <a href="https://github.com/blank63">blank63</a>,
