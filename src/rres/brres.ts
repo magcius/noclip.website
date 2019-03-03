@@ -1289,7 +1289,7 @@ function parseMDL0(buffer: ArrayBufferSlice): MDL0 {
 
     assert(readString(buffer, 0x00, 0x04) === 'MDL0');
     const version = view.getUint32(0x08);
-    const supportedVersions = [ 0x08, 0x0B ];
+    const supportedVersions = [ 0x08, 0x09, 0x0B ];
     assert(supportedVersions.includes(version));
 
     let offs = 0x10;
@@ -1508,6 +1508,25 @@ function makeConstantAnimationTrack(value: number): FloatAnimationTrack {
 function parseAnimationTrackC32(buffer: ArrayBufferSlice, numKeyframes: number): FloatAnimationTrack {
     const frames: Float32Array = buffer.createTypedArray(Float32Array, 0x00, numKeyframes + 1, Endianness.BIG_ENDIAN);
     return { type: AnimationTrackType.LINEAR, frames };
+}
+
+function parseAnimationTrackF32(buffer: ArrayBufferSlice): FloatAnimationTrack {
+    const view = buffer.createDataView();
+    const numKeyframes = view.getUint16(0x00);
+    const invKeyframeRange = view.getFloat32(0x04);
+    const scale = view.getFloat32(0x08);
+    const offset = view.getFloat32(0x0C);
+    let keyframeTableIdx = 0x10;
+    const frames: FloatAnimationKeyframeHermite[] = [];
+    for (let i = 0; i < numKeyframes; i++) {
+        const frame = view.getUint8(keyframeTableIdx + 0x00);
+        const value = (view.getUint16(keyframeTableIdx + 0x01) >>> 4) * scale + offset;
+        const tangent = (view.getInt16(keyframeTableIdx + 0x02) & 0x0FFF) / 0x20; // S6.5
+        const keyframe = { frame, value, tangent };
+        frames.push(keyframe);
+        keyframeTableIdx += 0x04;
+    }
+    return { type: AnimationTrackType.HERMITE, frames };
 }
 
 function parseAnimationTrackF48(buffer: ArrayBufferSlice): FloatAnimationTrack {
@@ -2187,8 +2206,11 @@ function parseCHR0_NodeData(buffer: ArrayBufferSlice, numKeyframes: number): CHR
         if (isConstant || trackFormat === TrackFormat.CONSTANT) {
             const value = view.getFloat32(animationTableIdx);
             animationTrack = makeConstantAnimationTrack(value);
-        } else if (trackFormat === TrackFormat._96) {
+        } else if (trackFormat === TrackFormat._32) {
             // Relative to the beginning of the node.
+            const animationTrackOffs = view.getUint32(animationTableIdx);
+            animationTrack = parseAnimationTrackF32(buffer.slice(animationTrackOffs));
+        } else if (trackFormat === TrackFormat._96) {
             const animationTrackOffs = view.getUint32(animationTableIdx);
             animationTrack = parseAnimationTrackF96(buffer.slice(animationTrackOffs));
         } else if (trackFormat === TrackFormat._48) {
@@ -2252,7 +2274,7 @@ function parseCHR0(buffer: ArrayBufferSlice): CHR0 {
 
     assert(readString(buffer, 0x00, 0x04) === 'CHR0');
     const version = view.getUint32(0x08);
-    const supportedVersions = [0x03, 0x05];
+    const supportedVersions = [0x03, 0x04, 0x05];
     assert(supportedVersions.includes(version));
 
     const chrNodeDataResDicOffs = view.getUint32(0x10);

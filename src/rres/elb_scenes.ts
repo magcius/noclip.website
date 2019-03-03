@@ -5,8 +5,9 @@ import * as Viewer from '../viewer';
 import * as UI from '../ui';
 import * as BRRES from './brres';
 import * as U8 from './u8';
+import * as Yaz0 from '../compression/Yaz0';
 
-import { assert, leftPad } from '../util';
+import { assert, leftPad, readString } from '../util';
 import { fetchData } from '../fetch';
 import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
@@ -41,6 +42,7 @@ export class BasicRRESRenderer implements Viewer.SceneGfx {
         for (let i = 0; i < stageRRESes.length; i++) {
             const stageRRES = stageRRESes[i];
             this.textureHolder.addRRESTextures(device, stageRRES);
+            console.log(stageRRES);
             assert(stageRRES.mdl0.length >= 1);
 
             const model = new MDL0Model(device, this.renderHelper, stageRRES.mdl0[0], materialHacks);
@@ -126,20 +128,27 @@ export function createBasicRRESRendererFromBRRES(device: GfxDevice, buffer: Arra
 }
 
 export function createBasicRRESRendererFromU8Archive(device: GfxDevice, buffer: ArrayBufferSlice) {
-    const u8 = U8.parse(buffer);
+    return Promise.resolve(buffer).then((buffer: ArrayBufferSlice) => {
+        if (readString(buffer, 0, 4) === 'Yaz0')
+            return Yaz0.decompress(buffer);
+        else
+            return buffer;
+    }).then((buffer: ArrayBufferSlice) => {
+        const u8 = U8.parse(buffer);
 
-    function findRRES(rres: BRRES.RRES[], dir: U8.U8Dir) {
-        for (let i = 0; i < dir.files.length; i++)
-            if (dir.files[i].name.endsWith('.brres'))
-                rres.push(BRRES.parse(dir.files[i].buffer));
-        for (let i = 0; i < dir.subdirs.length; i++)
-            findRRES(rres, dir.subdirs[i]);
-    }
+        function findRRES(rres: BRRES.RRES[], dir: U8.U8Dir) {
+            for (let i = 0; i < dir.files.length; i++)
+                if (dir.files[i].name.endsWith('.brres'))
+                    rres.push(BRRES.parse(dir.files[i].buffer));
+            for (let i = 0; i < dir.subdirs.length; i++)
+                findRRES(rres, dir.subdirs[i]);
+        }
 
-    const rres: BRRES.RRES[] = [];
-    findRRES(rres, u8.root);
+        const rres: BRRES.RRES[] = [];
+        findRRES(rres, u8.root);
 
-    return new BasicRRESRenderer(device, rres);
+        return new BasicRRESRenderer(device, rres);
+    });
 }
 
 function range(start: number, count: number): number[] {
