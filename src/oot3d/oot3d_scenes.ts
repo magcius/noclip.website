@@ -1,6 +1,7 @@
 
 import * as CMB from './cmb';
 import * as CMAB from './cmab';
+import * as CSAB from './csab';
 import * as ZAR from './zar';
 import * as ZSI from './zsi';
 
@@ -147,6 +148,7 @@ const enum ActorId {
     En_Item00     = 0x0015,
     En_Kusa       = 0x0125,
     En_Kanban     = 0x0141,
+    En_Ko         = 0x0163,
     En_Gs         = 0x01B9,
 }
 
@@ -172,27 +174,68 @@ class SceneDesc implements Viewer.SceneDesc {
             const cmbData = renderer.modelCache.getModel(device, renderer, zar, modelPath);
             const cmbRenderer = new CmbRenderer(device, renderer.textureHolder, cmbData);
             mat4.scale(cmbRenderer.modelMatrix, actor.modelMatrix, [scale, scale, scale]);
-            cmbRenderer.updateBoneMatrices();
             cmbRenderer.addToViewRenderer(device, renderer.viewRenderer);
             roomRenderer.objectRenderers.push(cmbRenderer);
             return cmbRenderer;
         }
 
+        function parseCSAB(zar: ZAR.ZAR, filename: string): CSAB.CSAB {
+            return CSAB.parse(CMB.Version.Ocarina, ZAR.findFileData(zar, filename));
+        }
+
         // Actor list based on https://wiki.cloudmodding.com/oot/Actor_List/NTSC_1.0
+        // and https://wiki.cloudmodding.com/oot/Actor_List_(Variables)
         if (actor.actorId === ActorId.En_Item00) fetchArchive(`zelda_keep.zar`).then((zar) => {
             // https://wiki.cloudmodding.com/oot/En_Item00
-            if (actor.variable === 0x00 || actor.variable === 0x01 || actor.variable === 0x02) { // Rupees
+            const itemId = (actor.variable & 0xFF);
+            if (itemId === 0x00 || itemId === 0x01 || itemId === 0x02) { // Rupees
                 const b = buildModel(zar, `item00/model/drop_gi_rupy.cmb`, 0.015);
                 b.modelMatrix[13] += 10;
-                b.updateBoneMatrices();
-                const boneToShow = actor.variable + 1;
-                for (let i = 1; i < b.boneMatrices.length; i++)
-                    if (i !== boneToShow)
-                        mat4.multiplyScalar(b.boneMatrices[i], b.boneMatrices[i], 0);
-            } else console.warn(`Unknown Item00 drop: ${hexzero(actor.variable, 2)}`);
+                for (let i = 0; i < b.shapeInstances.length; i++)
+                    b.shapeInstances[i].visible = false;
+                const whichShape = itemId;
+                b.shapeInstances[whichShape].visible = true;
+            } else if (itemId === 0x03) { // Recovery Heart
+                buildModel(zar, `item00/model/drop_gi_heart.cmb`, 0.02);
+            } else console.warn(`Unknown Item00 drop: ${hexzero(actor.variable, 4)}`);
         });
         else if (actor.actorId === ActorId.En_Kusa) fetchArchive(`zelda_kusa.zar`).then((zar) => buildModel(zar, `model/obj_kusa01_model.cmb`, 0.5));
-        else if (actor.actorId === ActorId.En_Kanban) fetchArchive(`zelda_keep.zar`).then((zar) => buildModel(zar, `objects/model/kanban1_model.cmb`, 0.015));
+        else if (actor.actorId === ActorId.En_Kanban) fetchArchive(`zelda_keep.zar`).then((zar) => buildModel(zar, `objects/model/kanban1_model.cmb`, 0.01));
+        else if (actor.actorId === ActorId.En_Ko) fetchArchive(`zelda_kw1.zar`).then((zar) => {
+            const b = buildModel(zar, `model/kokiripeople.cmb`, 0.015);
+            b.bindCSAB(parseCSAB(zar, `anim/fad_n_wait.csab`));
+
+            const enum Gender { BOY, GIRL };
+            function setGender(gender: Gender) {
+                b.shapeInstances[2].visible = gender === Gender.GIRL;
+                b.shapeInstances[3].visible = gender === Gender.GIRL;
+                b.shapeInstances[4].visible = gender === Gender.GIRL;
+                b.shapeInstances[5].visible = gender === Gender.BOY;
+                b.shapeInstances[6].visible = gender === Gender.BOY;
+            }
+
+            const whichNPC = actor.variable & 0xFF;
+
+            if (whichNPC === 0x00) { // Standing boy.
+                setGender(Gender.BOY);
+            } else if (whichNPC === 0x01) { // Standing girl.
+                setGender(Gender.GIRL);
+            } else if (whichNPC === 0x02) { // Boxing boy.
+                setGender(Gender.BOY);
+            } else if (whichNPC === 0x03) { // Blocking boy.
+                setGender(Gender.BOY);
+            } else if (whichNPC === 0x04) { // Backflipping boy.
+                setGender(Gender.BOY);
+            } else if (whichNPC === 0x05) { // Sitting girl.
+                setGender(Gender.GIRL);
+            } else if (whichNPC === 0x06) { // Standing girl.
+                setGender(Gender.GIRL);
+            } else if (whichNPC === 0x0C) { // Blonde girl.
+                setGender(Gender.GIRL);
+            } else {
+                throw "whoops";
+            }
+        });
         else if (actor.actorId === ActorId.En_Gs) fetchArchive(`zelda_gs.zar`).then((zar) => buildModel(zar, `model/gossip_stone2_model.cmb`, 0.1));
         else console.warn(`Unknown actor ${hexzero(actor.actorId, 4)}`);
     }

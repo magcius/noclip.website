@@ -316,6 +316,8 @@ class SepdData {
 class ShapeInstance {
     private renderInsts: GfxRenderInst[] = [];
 
+    public visible: boolean = true;
+
     constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, private sepdData: SepdData, private materialInstance: MaterialInstance) {
         // Create our template render inst.
         const templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
@@ -353,7 +355,7 @@ class ShapeInstance {
 
         for (let i = 0; i < this.renderInsts.length; i++) {
             const renderInst = this.renderInsts[i];
-            renderInst.visible = this.materialInstance.templateRenderInst.visible;
+            renderInst.visible = this.visible && this.materialInstance.templateRenderInst.visible;
 
             if (renderInst.visible) {
                 const prms = sepd.prms[i];
@@ -378,7 +380,7 @@ class ShapeInstance {
                 }
 
                 offs += fillVec4(prmParamsMapped, offs, sepd.position.scale, sepd.texCoord0.scale, sepd.texCoord1.scale, sepd.texCoord2.scale);
-                offs += fillVec4(prmParamsMapped, offs, sepd.boneWeights.scale);
+                offs += fillVec4(prmParamsMapped, offs, sepd.boneWeights.scale, sepd.boneDimension);
             }
         }
     }
@@ -520,7 +522,7 @@ export class CmbRenderer {
         this.createProgram();
     }
 
-    public updateBoneMatrices(): void {
+    private updateBoneMatrices(): void {
         for (let i = 0; i < this.cmbData.cmb.bones.length; i++) {
             const bone = this.cmbData.cmb.bones[i];
 
@@ -531,8 +533,7 @@ export class CmbRenderer {
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        if (this.csab !== null)
-            this.updateBoneMatrices();
+        this.updateBoneMatrices();
 
         if (this.debugBones) {
             prepareFrameDebugOverlayCanvas2D();

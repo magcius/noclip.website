@@ -50,13 +50,13 @@ function readActors(version: Version, buffer: ArrayBufferSlice, nActors: number,
         const positionX = view.getInt16(actorTableIdx + 0x02, true);
         const positionY = view.getInt16(actorTableIdx + 0x04, true);
         const positionZ = view.getInt16(actorTableIdx + 0x06, true);
-        const rotationX = view.getInt16(actorTableIdx + 0x08, true);
+        const rotationX = view.getInt16(actorTableIdx + 0x08, true) / 0x7FFF;
         const rotationY = view.getInt16(actorTableIdx + 0x0A, true) / 0x7FFF;
-        const rotationZ = view.getInt16(actorTableIdx + 0x0E, true);
-        const variable = view.getUint16(actorTableIdx + 0x0C, true);
+        const rotationZ = view.getInt16(actorTableIdx + 0x0C, true) / 0x7FFF;
+        const variable = view.getUint16(actorTableIdx + 0x0E, true);
         const modelMatrix = mat4.create();
-        mat4.translate(modelMatrix, modelMatrix, [positionX, positionY, positionZ]);
-        mat4.rotateY(modelMatrix, modelMatrix, rotationY * Math.PI);
+        quat.fromEuler(q, rotationX * 180, rotationY * 180, rotationZ * 180);
+        mat4.fromRotationTranslation(modelMatrix, q, [positionX, positionY, positionZ]);
         actors.push({ actorId, modelMatrix, variable });
         actorTableIdx += 0x10;
     }
