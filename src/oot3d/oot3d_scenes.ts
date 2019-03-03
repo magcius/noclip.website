@@ -17,6 +17,7 @@ import { fetchData } from '../fetch';
 import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
 import { RENDER_HACKS_ICON } from '../bk/scenes';
 import { mat4 } from 'gl-matrix';
+import { MaterialAnimator } from '../ttyd/world';
 
 class OoT3DRenderer extends BasicRendererHelper implements Viewer.SceneGfx {
     public roomRenderers: RoomRenderer[] = [];
@@ -145,11 +146,16 @@ class ModelCache {
 }
 
 const enum ActorId {
-    En_Item00     = 0x0015,
-    En_Kusa       = 0x0125,
-    En_Kanban     = 0x0141,
-    En_Ko         = 0x0163,
-    En_Gs         = 0x01B9,
+    En_Item00       = 0x0015,
+    En_Kusa         = 0x0125,
+    En_Kanban       = 0x0141,
+    En_Ko           = 0x0163,
+    En_Gs           = 0x01B9,
+    En_Cow          = 0x01C6,
+    En_In           = 0x00CB,
+    En_Ma2          = 0x00D9,
+    En_Horse_Normal = 0x003C,
+    En_Ta           = 0x0084,
 }
 
 class SceneDesc implements Viewer.SceneDesc {
@@ -170,7 +176,7 @@ class SceneDesc implements Viewer.SceneDesc {
             return renderer.modelCache.fetchArchive(`${pathBase}/actor/${archivePath}`, abortSignal);
         }
 
-        function buildModel(zar: ZAR.ZAR, modelPath: string, scale: number = 1): CmbRenderer {
+        function buildModel(zar: ZAR.ZAR, modelPath: string, scale: number = 0.01): CmbRenderer {
             const cmbData = renderer.modelCache.getModel(device, renderer, zar, modelPath);
             const cmbRenderer = new CmbRenderer(device, renderer.textureHolder, cmbData);
             mat4.scale(cmbRenderer.modelMatrix, actor.modelMatrix, [scale, scale, scale]);
@@ -237,6 +243,28 @@ class SceneDesc implements Viewer.SceneDesc {
             }
         });
         else if (actor.actorId === ActorId.En_Gs) fetchArchive(`zelda_gs.zar`).then((zar) => buildModel(zar, `model/gossip_stone2_model.cmb`, 0.1));
+        else if (actor.actorId === ActorId.En_Cow) fetchArchive('zelda_cow.zar').then((zar) => {
+            const b = buildModel(zar, `model/cow.cmb`,);
+            b.bindCSAB(parseCSAB(zar, `anim/usi_mogmog.csab`));
+        });
+        else if (actor.actorId === ActorId.En_In) fetchArchive('zelda_in.zar').then((zar) => {
+            // TODO(starschulz): Investigate broken face
+            const b = buildModel(zar, `model/ingo.cmb`);
+            b.bindCSAB(parseCSAB(zar, `anim/in_shigoto.csab`));
+        });
+        else if (actor.actorId === ActorId.En_Ma2) fetchArchive(`zelda_ma2.zar`).then((zar) => {
+            const b = buildModel(zar, `model/malon.cmb`);
+            b.bindCSAB(parseCSAB(zar, `anim/ma2_shigoto.csab`));
+        });
+        else if (actor.actorId === ActorId.En_Horse_Normal) fetchArchive(`zelda_horse_normal.zar`).then((zar) => {
+            const b = buildModel(zar, `model/normalhorse.cmb`);
+            b.bindCSAB(parseCSAB(zar, `anim/hn_anim_wait.csab`));
+        });
+        else if (actor.actorId === ActorId.En_Ta) fetchArchive(`zelda_ta.zar`).then((zar) => {
+            // TODO(starschulz): Investigate broken face
+            const b = buildModel(zar, `model/talon.cmb`);
+            b.bindCSAB(parseCSAB(zar, `anim/ta_matsu.csab`));
+        });
         else console.warn(`Unknown actor ${hexzero(actor.actorId, 4)}`);
     }
 
