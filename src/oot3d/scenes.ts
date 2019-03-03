@@ -98,6 +98,7 @@ export function createSceneFromZARBuffer(device: GfxDevice, buffer: ArrayBufferS
             } else if (file.name.endsWith('.cmb')) {
                 const cmb = CMB.parse(file.buffer);
                 const cmbData = new CmbData(device, cmb);
+                textureHolder.addTextures(device, cmb.textures);
                 renderer.cmbData.push(cmbData);
                 const cmbRenderer = new CmbRenderer(device, textureHolder, cmbData, cmb.name);
                 cmbRenderer.addToViewRenderer(device, renderer.viewRenderer);

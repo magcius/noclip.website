@@ -32,7 +32,7 @@ export function fetchData(path: string, abortSignal: AbortSignal | null = null):
         });
     }
     const p = new Promise<NamedArrayBufferSlice>((resolve, reject) => {
-        request.onload = () => {
+        function done() {
             pr.setProgress(1);
             let slice: NamedArrayBufferSlice;
             if (request.status !== 200) {
@@ -43,12 +43,12 @@ export function fetchData(path: string, abortSignal: AbortSignal | null = null):
             }
             slice.name = url;
             resolve(slice);
-        };
+        }
+
+        request.onload = done;
+        request.onerror = done;
         request.onabort = () => {
             reject(400);
-        };
-        request.onerror = () => {
-            reject();
         };
         request.onprogress = (e) => {
             if (e.lengthComputable)

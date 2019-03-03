@@ -39,6 +39,7 @@ export default class InputManager {
     public onisdraggingchanged: () => void | null = null;
     public invertY: boolean = false;
     private listeners: Listener[] = [];
+    private scrollListeners: Listener[] = [];
     private usePointerLock: boolean = true;
 
     constructor(toplevel: HTMLElement) {
@@ -63,6 +64,10 @@ export default class InputManager {
 
     public addListener(listener: Listener): void {
         this.listeners.push(listener);
+    }
+
+    public addScrollListener(listener: Listener): void {
+        this.scrollListeners.push(listener);
     }
 
     public getMouseDeltaX(obeyInvert: boolean = true): number {
@@ -110,6 +115,11 @@ export default class InputManager {
             this.listeners[i](this);
     }
 
+    private callScrollListeners(): void {
+        for (let i = 0; i < this.scrollListeners.length; i++)
+            this.scrollListeners[i](this);
+    }
+
     private _onKeyDown = (e: KeyboardEvent) => {
         if (isModifier(e.code)) {
             e.preventDefault();
@@ -134,6 +144,7 @@ export default class InputManager {
     private _onWheel = (e: WheelEvent) => {
         e.preventDefault();
         this.dz += Math.sign(e.deltaY) * -4;
+        this.callScrollListeners();
     };
 
     private _setGrabbing(v: boolean) {

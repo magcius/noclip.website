@@ -316,6 +316,8 @@ class SepdData {
 class ShapeInstance {
     private renderInsts: GfxRenderInst[] = [];
 
+    public visible: boolean = true;
+
     constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, private sepdData: SepdData, private materialInstance: MaterialInstance) {
         // Create our template render inst.
         const templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
@@ -353,7 +355,7 @@ class ShapeInstance {
 
         for (let i = 0; i < this.renderInsts.length; i++) {
             const renderInst = this.renderInsts[i];
-            renderInst.visible = this.materialInstance.templateRenderInst.visible;
+            renderInst.visible = this.visible && this.materialInstance.templateRenderInst.visible;
 
             if (renderInst.visible) {
                 const prms = sepd.prms[i];
@@ -378,7 +380,7 @@ class ShapeInstance {
                 }
 
                 offs += fillVec4(prmParamsMapped, offs, sepd.position.scale, sepd.texCoord0.scale, sepd.texCoord1.scale, sepd.texCoord2.scale);
-                offs += fillVec4(prmParamsMapped, offs, sepd.boneWeights.scale);
+                offs += fillVec4(prmParamsMapped, offs, sepd.boneWeights.scale, sepd.boneDimension);
             }
         }
     }
@@ -409,11 +411,17 @@ export class CmbData {
         for (let i = 0; i < this.cmb.sepds.length; i++)
             this.sepdData[i] = new SepdData(device, cmbContext, this.cmb.sepds[i]);
 
-        this.inverseBindPoseMatrices = nArray(cmb.bones.length, () => mat4.create());
+        const tempBones = nArray(cmb.bones.length, () => mat4.create());
         for (let i = 0; i < cmb.bones.length; i++) {
-            CSAB.calcBoneMatrix(this.inverseBindPoseMatrices[i], null, null, cmb.bones[i]);
-            mat4.invert(this.inverseBindPoseMatrices[i], this.inverseBindPoseMatrices[i]);
+            const bone = cmb.bones[i];
+            CSAB.calcBoneMatrix(tempBones[i], null, null, bone);
+            if (bone.parentBoneId >= 0)
+                mat4.mul(tempBones[i], tempBones[bone.parentBoneId], tempBones[i]);
         }
+
+        this.inverseBindPoseMatrices = nArray(cmb.bones.length, () => mat4.create());
+        for (let i = 0; i < cmb.bones.length; i++)
+            mat4.invert(this.inverseBindPoseMatrices[i], tempBones[i]);
     }
 
     public destroy(device: GfxDevice): void {
@@ -424,7 +432,6 @@ export class CmbData {
     }
 }
 
-const matrixScratch = mat4.create();
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 export class CmbRenderer {
@@ -437,6 +444,7 @@ export class CmbRenderer {
     public csab: CSAB.CSAB | null = null;
     public debugBones: boolean = false;
     public boneMatrices: mat4[] = [];
+    public modelMatrix = mat4.create();
 
     private sceneParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_SceneParams`);
     private materialParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_MaterialParams`);
@@ -451,12 +459,13 @@ export class CmbRenderer {
     constructor(device: GfxDevice, public textureHolder: CtrTextureHolder, public cmbData: CmbData, public name: string = '') {
         for (let i = 0; i < this.cmbData.cmb.materials.length; i++)
             this.materialInstances.push(new MaterialInstance(this.cmbData.cmb, this.cmbData.cmb.materials[i]));
+
+        this.boneMatrices = nArray(this.cmbData.cmb.bones.length, () => mat4.create());
+        this.updateBoneMatrices();
     }
 
     private translateCmb(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder): void {
         const cmb = this.cmbData.cmb;
-
-        this.boneMatrices = nArray(cmb.bones.length, () => mat4.create());
 
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].buildTemplateRenderInst(device, renderInstBuilder, this.textureHolder);
@@ -517,12 +526,9 @@ export class CmbRenderer {
         for (let i = 0; i < this.cmbData.cmb.bones.length; i++) {
             const bone = this.cmbData.cmb.bones[i];
 
-            CSAB.calcBoneMatrix(matrixScratch, this.animationController, this.csab, bone);
-
-            if (bone.parentBoneId >= 0)
-                mat4.mul(this.boneMatrices[bone.boneId], this.boneMatrices[bone.parentBoneId], matrixScratch);
-            else
-                mat4.copy(this.boneMatrices[bone.boneId], matrixScratch);
+            CSAB.calcBoneMatrix(this.boneMatrices[bone.boneId], this.animationController, this.csab, bone);
+            const parentBoneMatrix = bone.parentBoneId >= 0 ? this.boneMatrices[bone.parentBoneId] : this.modelMatrix;
+            mat4.mul(this.boneMatrices[bone.boneId], parentBoneMatrix, this.boneMatrices[bone.boneId]);
         }
     }
 
@@ -673,6 +679,8 @@ export class RoomRenderer {
             this.transparentMesh.setVertexColorsEnabled(v);
         if (this.wMesh !== null)
             this.wMesh.setVertexColorsEnabled(v);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].setVertexColorsEnabled(v);
     }
 
     public setTexturesEnabled(v: boolean): void {
@@ -682,6 +690,8 @@ export class RoomRenderer {
             this.transparentMesh.setTexturesEnabled(v);
         if (this.wMesh !== null)
             this.wMesh.setTexturesEnabled(v);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].setTexturesEnabled(v);
     }
 
     public setMonochromeVertexColorsEnabled(v: boolean): void {
@@ -691,6 +701,8 @@ export class RoomRenderer {
             this.transparentMesh.setMonochromeVertexColorsEnabled(v);
         if (this.wMesh !== null)
             this.wMesh.setMonochromeVertexColorsEnabled(v);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].setMonochromeVertexColorsEnabled(v);
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
@@ -700,7 +712,7 @@ export class RoomRenderer {
             this.transparentMesh.prepareToRender(hostAccessPass, viewerInput);
         if (this.wMesh !== null)
             this.wMesh.prepareToRender(hostAccessPass, viewerInput);
-        for (let i = 0; i < this.objectRenderers.length;i++)
+        for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].prepareToRender(hostAccessPass, viewerInput);
     }
 
@@ -715,7 +727,7 @@ export class RoomRenderer {
             this.transparentMesh.destroy(device);
         if (this.wMesh !== null)
             this.wMesh.destroy(device);
-        for (let i = 0; i < this.objectRenderers.length;i++)
+        for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].destroy(device);
     }
 }

@@ -11,7 +11,7 @@ export const enum TexFormat {
     RGBA8 = 0x6,
     C4 = 0x8,
     C8 = 0x9,
-    C14X2 = 0xa,
+    C14X2 = 0xA,
     CMPR = 0xE, /*!< Compressed */
 }
 

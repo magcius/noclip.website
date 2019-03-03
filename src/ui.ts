@@ -1471,9 +1471,9 @@ class ViewerSettings extends Panel {
         this.fovSlider.value = '25';
 
         this.camSpeedSlider = this.contents.querySelector('.CamSpeedSlider');
-        this.camSpeedSlider.oninput = this.onCamSliderChange.bind(this);
+        this.camSpeedSlider.oninput = this.updateCameraSpeed.bind(this);
         this.camSpeedSlider.value = '6'
-        window.addEventListener('wheel', this._onWheel.bind(this), { passive: false });
+        this.viewer.inputManager.addScrollListener(this.onScrollWheel.bind(this));
 
         this.cameraControllerWASD = this.contents.querySelector('.CameraControllerWASD');
         this.cameraControllerWASD.onclick = () => {
@@ -1501,14 +1501,8 @@ class ViewerSettings extends Panel {
         this.viewer.fovY = value * (Math.PI * 0.995);
     }
 
-    private onCamSliderChange(e: UIEvent): void {
-        const slider = (<HTMLInputElement> e.target);
-        this.updateCameraSpeed();
-    }
-
-    private _onWheel = (e: WheelEvent) => {
-        e.preventDefault();
-        this.camSpeedSlider.value = "" + ( Number(this.camSpeedSlider.value) - Math.sign(e.deltaY));
+    private onScrollWheel = () => {
+        this.camSpeedSlider.value = "" + ( Number(this.camSpeedSlider.value) - Math.sign(this.viewer.inputManager.dz/-4));
         this.updateCameraSpeed();
     };
 
@@ -1685,6 +1679,8 @@ class About extends Panel {
 <p> Hold <strong>SHIFT</strong> to go faster, and use <strong>MOUSE WHEEL</strong> to fine tune the speed
 <strong>Z</strong> toggles the UI. </p>
 
+<p><a href="https://discord.gg/RtmxjB"><strong>JOIN THE DISCORD</strong> by clicking here</a></p>
+
 <p><strong>CODE PRIMARILY WRITTEN</strong> by <a href="https://twitter.com/JasperRLZ">Jasper</a></p>
 
 <p><strong>OPEN SOURCE</strong> at <a href="${GITHUB_URL}">GitHub</a></p>
@@ -1695,8 +1691,9 @@ class About extends Panel {
 <strong>BASED ON WORK</strong> by
 <a href="https://twitter.com/beholdnec">N.E.C.</a>,
 <a href="https://twitter.com/JuPaHe64">JuPaHe64</a>,
-<a href="https://twitter.com/PistonMiner">PistonMiner</a>,
+<a href="https://twitter.com/JawchewaS">Jawchewa</a>,
 <a href="https://twitter.com/Starschulz">Starschulz</a>,
+<a href="https://twitter.com/PistonMiner">PistonMiner</a>,
 <a href="https://twitter.com/LordNed">LordNed</a>,
 <a href="https://twitter.com/SageOfMirrors">SageOfMirrors</a>,
 <a href="https://github.com/blank63">blank63</a>,

@@ -20,13 +20,14 @@ layout(row_major, std140) uniform ub_PrmParams {
     vec4 u_PrmMisc[2];
 };
 
-uniform sampler2D u_Texture[3];
-
 #define u_PosScale (u_PrmMisc[0].x)
 #define u_TexCoord0Scale (u_PrmMisc[0].y)
 #define u_TexCoord1Scale (u_PrmMisc[0].z)
 #define u_TexCoord2Scale (u_PrmMisc[0].w)
 #define u_BoneWeightScale (u_PrmMisc[1].x)
+#define u_BoneDimension   (u_PrmMisc[1].y)
+
+uniform sampler2D u_Texture[3];
 
 varying vec4 v_Color;
 varying vec2 v_TexCoord0;
@@ -54,17 +55,25 @@ void main() {
     Mat4x3 t_BoneMatrix;
 
     vec4 t_BoneWeights = a_BoneWeights * u_BoneWeightScale;
-    if (t_BoneWeights.x > 0.0) {
+
+    // Mask off bone dimension.
+    if (u_BoneDimension == 0.0)
+        t_BoneWeights.xyzw = vec4(0.0);
+    else if (u_BoneDimension == 1.0)
+        t_BoneWeights.yzw  = vec3(0.0);
+    else if (u_BoneDimension == 2.0)
+        t_BoneWeights.zw   = vec2(0.0);
+
+    if ((t_BoneWeights.x + t_BoneWeights.y + t_BoneWeights.z + t_BoneWeights.w) > 0.0) {
         t_BoneMatrix = _Mat4x3(0.0);
+
         Fma(t_BoneMatrix, u_BoneMatrix[int(a_BoneIndices.x)], t_BoneWeights.x);
-        if (t_BoneWeights.y > 0.0) {
-            Fma(t_BoneMatrix, u_BoneMatrix[int(a_BoneIndices.y)], t_BoneWeights.y);
-            if (t_BoneWeights.z > 0.0) {
-                Fma(t_BoneMatrix, u_BoneMatrix[int(a_BoneIndices.z)], t_BoneWeights.z);
-            }
-        }
+        Fma(t_BoneMatrix, u_BoneMatrix[int(a_BoneIndices.y)], t_BoneWeights.y);
+        Fma(t_BoneMatrix, u_BoneMatrix[int(a_BoneIndices.z)], t_BoneWeights.z);
+        Fma(t_BoneMatrix, u_BoneMatrix[int(a_BoneIndices.w)], t_BoneWeights.w);
     } else {
         // If we have no bone weights, then we're in rigid skinning, so take the first bone index.
+        // If we're single-bone, then our bone indices will be 0, so this also works for that.
         t_BoneMatrix = u_BoneMatrix[int(a_BoneIndices.x)];
     }
 

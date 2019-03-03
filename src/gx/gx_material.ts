@@ -216,8 +216,8 @@ interface VertexAttributeGenDef {
 }
 
 const vtxAttributeGenDefs: VertexAttributeGenDef[] = [
-    { attrib: GX.VertexAttribute.PNMTXIDX,   name: "PosMtxIdx",  format: GfxFormat.U8_R },
     { attrib: GX.VertexAttribute.POS,        name: "Position",   format: GfxFormat.F32_RGB },
+    { attrib: GX.VertexAttribute.PNMTXIDX,   name: "PosMtxIdx",  format: GfxFormat.U8_R },
     { attrib: GX.VertexAttribute.NRM,        name: "Normal",     format: GfxFormat.F32_RGB },
     { attrib: GX.VertexAttribute.CLR0,       name: "Color0",     format: GfxFormat.F32_RGBA },
     { attrib: GX.VertexAttribute.CLR1,       name: "Color1",     format: GfxFormat.F32_RGBA },
@@ -712,9 +712,12 @@ export class GX_Program extends DeviceProgram {
         case GX.TevOp.COMP_R8_EQ:     return `((t_TevA.r == t_TevB.r) ? ${c} : ${zero}) + ${d}`;
         case GX.TevOp.COMP_GR16_GT:   return `((TevPack16(t_TevA.rg) >  TevPack16(t_TevB.rg)) ? ${c} : ${zero}) + ${d}`;
         case GX.TevOp.COMP_GR16_EQ:   return `((TevPack16(t_TevA.rg) == TevPack16(t_TevB.rg)) ? ${c} : ${zero}) + ${d}`;
+        case GX.TevOp.COMP_BGR24_GT:  return `((TevPack24(t_TevA.rgb) >  TevPack24(t_TevB.rgb)) ? ${c} : ${zero}) + ${d}`;
+        case GX.TevOp.COMP_BGR24_EQ:  return `((TevPack24(t_TevA.rgb) == TevPack24(t_TevB.rgb)) ? ${c} : ${zero}) + ${d}`;
         case GX.TevOp.COMP_RGB8_GT:   return `(TevPerCompGT(${a}, ${b}) * ${c}) + ${d}`;
         case GX.TevOp.COMP_RGB8_EQ:   return `(TevPerCompEQ(${a}, ${b}) * ${c}) + ${d}`;
         default:
+            debugger;
             throw new Error("whoops");
         }
     }

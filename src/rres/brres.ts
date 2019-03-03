@@ -2462,7 +2462,10 @@ export function parse(buffer: ArrayBufferSlice): RRES {
     if (animTexPatsEntry) {
         const animTexPatResDic = parseResDic(buffer, animTexPatsEntry.offs);
         for (const pat0Entry of animTexPatResDic) {
-            const pat0_ = parsePAT0(buffer.subarray(pat0Entry.offs));
+            let pat0_: PAT0;
+            try {
+                pat0_ = parsePAT0(buffer.subarray(pat0Entry.offs));
+            } catch(e) { continue; }
             assert(pat0_.name === pat0Entry.name);
             pat0.push(pat0_);
         }
