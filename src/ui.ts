@@ -1668,6 +1668,7 @@ class About extends Panel {
 <strong>BASED ON WORK</strong> by
 <a href="https://twitter.com/beholdnec">N.E.C.</a>,
 <a href="https://twitter.com/JuPaHe64">JuPaHe64</a>,
+<a href="https://twitter.com/Jawchewa">Jawchewa</a>,
 <a href="https://twitter.com/PistonMiner">PistonMiner</a>,
 <a href="https://twitter.com/Starschulz">Starschulz</a>,
 <a href="https://twitter.com/LordNed">LordNed</a>,
