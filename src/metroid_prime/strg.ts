@@ -2,7 +2,7 @@
 // Implements Retro's STRG (string table resource group) format as seen in Metroid Prime 1.
 
 import { ResourceSystem } from "./resource";
-import { assert, readString } from "../util";
+import { assert, readString, makeTextDecoder } from "../util";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 
 export interface STRG {
@@ -10,7 +10,7 @@ export interface STRG {
     nameTable: Map<string, number> | null;
 }
 
-const utf16Decoder = new TextDecoder('utf-16be');
+const utf16Decoder = makeTextDecoder('utf-16be');
 
 function readUTF16String(buffer: ArrayBufferSlice, offs: number): string {
     const arr = buffer.createTypedArray(Uint8Array, offs, 0xFF);
@@ -89,7 +89,7 @@ function parse_MP1(buffer: ArrayBufferSlice): STRG {
     return { strings, nameTable };
 }
 
-const utf8Decoder = new TextDecoder('utf8');
+const utf8Decoder = makeTextDecoder('utf8');
 
 function parse_DKCR(buffer: ArrayBufferSlice): STRG {
     const view = buffer.createDataView();

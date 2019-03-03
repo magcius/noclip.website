@@ -145,7 +145,7 @@ class DroppedFileSceneDesc implements SceneDesc {
         if (file.name.endsWith('.zar') || file.name.endsWith('.gar'))
             return loadFileAsPromise(file).then((buffer) => Grezzo3DS.createSceneFromZARBuffer(device, buffer));
 
-        if (file.name.endsWith('.arc'))
+        if (file.name.endsWith('.arc') || file.name.endsWith('.carc'))
             return loadFileAsPromise(file).then((buffer) => ELB.createBasicRRESRendererFromU8Archive(device, buffer));
 
         if (file.name.endsWith('.brres'))
