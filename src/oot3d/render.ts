@@ -8,7 +8,7 @@ import * as Viewer from '../viewer';
 
 import { DeviceProgram, DeviceProgramReflection } from '../Program';
 import AnimationController from '../AnimationController';
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4, vec3, vec4 } from 'gl-matrix';
 import { GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler, GfxDevice, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxHostAccessPass, GfxRenderPass, GfxTextureDimension, GfxInputState, GfxInputLayout } from '../gfx/platform/GfxPlatform';
 import { fillMatrix4x4, fillVec4, fillColor, fillMatrix4x3 } from '../gfx/helpers/UniformBufferHelpers';
 import { colorNew, colorFromRGBA } from '../Color';
@@ -268,6 +268,12 @@ class SepdData {
         bindVertexAttrib(OoT3D_Program.a_Position,    3, false, vatr.positionByteOffset,  sepd.position);
         bindVertexAttrib(OoT3D_Program.a_Normal,      3, true,  vatr.normalByteOffset,    sepd.normal);
         // tangent
+
+        // If we don't have any color, use opaque white. The constant in the sepd is not guaranteed to be correct.
+        // XXX(jstpierre): Don't modify the input data if we can help it.
+        if (vatr.colorByteOffset < 0)
+            vec4.set(sepd.color.constant, 1, 1, 1, 1);
+
         bindVertexAttrib(OoT3D_Program.a_Color,       4, true,  vatr.colorByteOffset,     sepd.color);
         bindVertexAttrib(OoT3D_Program.a_TexCoord0,   2, false, vatr.texCoord0ByteOffset, sepd.texCoord0);
         bindVertexAttrib(OoT3D_Program.a_TexCoord1,   2, false, vatr.texCoord1ByteOffset, sepd.texCoord1);
