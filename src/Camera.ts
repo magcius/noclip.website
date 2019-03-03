@@ -244,6 +244,7 @@ export class FPSCameraController implements CameraController {
 
     private keyMoveSpeed = 60;
     private keyMoveShiftMult = 5;
+    private keyMoveControlMult = 1/5;
     private keyMoveVelocityMult = 1/5;
     private keyMoveDrag = 0.8;
 
@@ -274,6 +275,8 @@ export class FPSCameraController implements CameraController {
         let keyMoveMult = 1;
         if (inputManager.isKeyDown('ShiftLeft') || inputManager.isKeyDown('ShiftRight'))
             keyMoveMult = this.keyMoveShiftMult;
+        if (inputManager.isKeyDown('ControlLeft') || inputManager.isKeyDown('ControlRight'))
+            keyMoveMult = this.keyMoveControlMult;
 
         let keyMoveSpeedCap = this.keyMoveSpeed * keyMoveMult;
         const keyMoveVelocity = keyMoveSpeedCap * this.keyMoveVelocityMult;
