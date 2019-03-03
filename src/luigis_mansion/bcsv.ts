@@ -204,11 +204,17 @@ export function getFieldIndexFromName(bcsv: Bcsv, name: string): number {
 
 export function getEntriesWithField<T extends BcsvValue>(bcsv: Bcsv, name: string, value: T): Bcsv {
     const fields: BcsvField[] = bcsv.fields;
-    const records = bcsv.records.filter((record)=> getField<T>(bcsv, record, name) == value);
+    const records: BcsvRecord[] = [];
+    for (const record of bcsv.records) {
+        if(getField<T>(bcsv, record, name) == value){
+            records.push(record);
+        }
+    }
+    
     return { fields, records };
 }
 
-export function getField<T extends BcsvValue>(bcsv: Bcsv, record: BcsvRecord, name: string): T | null {
+export function getField<T extends BcsvValue>(bcsv: Bcsv, record: BcsvRecord, name: string, fallback: T | null = null): T {
     const index = getFieldIndexFromName(bcsv, name);
     if (index === -1)
         return null;
