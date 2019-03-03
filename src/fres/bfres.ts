@@ -6,8 +6,6 @@ import { assert, readString, makeTextDecoder } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { TextureBase } from '../TextureHolder';
 import { AABB } from '../Geometry';
-import FakeTextDecoder from '../FakeTextDecoder';
-const TextDecoder: any = window.TextDecoder || FakeTextDecoder;
 
 function readBinPtrT(view: DataView, offs: number, littleEndian: boolean) {
     const offs2 = view.getInt32(offs, littleEndian);
