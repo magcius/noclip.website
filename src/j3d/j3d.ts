@@ -752,40 +752,44 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             textureIndexTableIdx += 0x02;
         }
 
-        const indirectEntryOffs = indirectTableOffset + i * 0x138;
-        const indirectStageCount = view.getUint8(indirectEntryOffs + 0x00);
-        assert(indirectStageCount <= 4);
-
         const indTexStages: GX_Material.IndTexStage[] = [];
-        for (let j = 0; j < indirectStageCount; j++) {
-            const index = j;
-            // SetIndTexOrder
-            const indTexOrderOffs = indirectEntryOffs + 0x04 + j * 0x04;
-            const texCoordId: GX.TexCoordID = view.getUint8(indTexOrderOffs + 0x00);
-            const texture: GX.TexMapID = view.getUint8(indTexOrderOffs + 0x01);
-            // SetIndTexCoordScale
-            const indTexScaleOffs = indirectEntryOffs + 0x04 + (0x04 * 4) + (0x1C * 3) + j * 0x04;
-            const scaleS: GX.IndTexScale = view.getUint8(indTexScaleOffs + 0x00);
-            const scaleT: GX.IndTexScale = view.getUint8(indTexScaleOffs + 0x01);
-            indTexStages.push({ index, texCoordId, texture, scaleS, scaleT });
-        }
-
-        // SetIndTexMatrix
         const indTexMatrices: Float32Array[] = [];
-        for (let j = 0; j < 3; j++) {
-            const indTexMatrixOffs = indirectEntryOffs + 0x04 + (0x04 * 4) + j * 0x1C;
-            const p00 = view.getFloat32(indTexMatrixOffs + 0x00);
-            const p01 = view.getFloat32(indTexMatrixOffs + 0x04);
-            const p02 = view.getFloat32(indTexMatrixOffs + 0x08);
-            const p10 = view.getFloat32(indTexMatrixOffs + 0x0C);
-            const p11 = view.getFloat32(indTexMatrixOffs + 0x10);
-            const p12 = view.getFloat32(indTexMatrixOffs + 0x14);
-            const scale = Math.pow(2, view.getInt8(indTexMatrixOffs + 0x18));
-            const m = new Float32Array([
-                p00*scale, p01*scale, p02*scale,
-                p10*scale, p11*scale, p12*scale,
-            ]);
-            indTexMatrices.push(m);
+
+        const indirectEntryOffs = indirectTableOffset + i * 0x138;
+        const hasIndirect = indirectTableOffset !== nameTableOffs;
+        if (hasIndirect) {
+            const indirectStageCount = view.getUint8(indirectEntryOffs + 0x00);
+            assert(indirectStageCount <= 4);
+
+            for (let j = 0; j < indirectStageCount; j++) {
+                const index = j;
+                // SetIndTexOrder
+                const indTexOrderOffs = indirectEntryOffs + 0x04 + j * 0x04;
+                const texCoordId: GX.TexCoordID = view.getUint8(indTexOrderOffs + 0x00);
+                const texture: GX.TexMapID = view.getUint8(indTexOrderOffs + 0x01);
+                // SetIndTexCoordScale
+                const indTexScaleOffs = indirectEntryOffs + 0x04 + (0x04 * 4) + (0x1C * 3) + j * 0x04;
+                const scaleS: GX.IndTexScale = view.getUint8(indTexScaleOffs + 0x00);
+                const scaleT: GX.IndTexScale = view.getUint8(indTexScaleOffs + 0x01);
+                indTexStages.push({ index, texCoordId, texture, scaleS, scaleT });
+            }
+
+            // SetIndTexMatrix
+            for (let j = 0; j < 3; j++) {
+                const indTexMatrixOffs = indirectEntryOffs + 0x04 + (0x04 * 4) + j * 0x1C;
+                const p00 = view.getFloat32(indTexMatrixOffs + 0x00);
+                const p01 = view.getFloat32(indTexMatrixOffs + 0x04);
+                const p02 = view.getFloat32(indTexMatrixOffs + 0x08);
+                const p10 = view.getFloat32(indTexMatrixOffs + 0x0C);
+                const p11 = view.getFloat32(indTexMatrixOffs + 0x10);
+                const p12 = view.getFloat32(indTexMatrixOffs + 0x14);
+                const scale = Math.pow(2, view.getInt8(indTexMatrixOffs + 0x18));
+                const m = new Float32Array([
+                    p00*scale, p01*scale, p02*scale,
+                    p10*scale, p11*scale, p12*scale,
+                ]);
+                indTexMatrices.push(m);
+            }
         }
 
         const tevStages: GX_Material.TevStage[] = [];
@@ -851,16 +855,27 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
 
             // SetTevIndirect
             const indTexStageOffs = indirectEntryOffs + 0x04 + (0x04 * 4) + (0x1C * 3) + (0x04 * 4) + j * 0x0C;
-            const indTexStage: GX.IndTexStageID = view.getUint8(indTexStageOffs + 0x00);
-            const indTexFormat: GX.IndTexFormat = view.getUint8(indTexStageOffs + 0x01);
-            const indTexBiasSel: GX.IndTexBiasSel = view.getUint8(indTexStageOffs + 0x02);
-            const indTexMatrix: GX.IndTexMtxID = view.getUint8(indTexStageOffs + 0x03);
-            assert(indTexMatrix <= GX.IndTexMtxID.T2);
-            const indTexWrapS: GX.IndTexWrap = view.getUint8(indTexStageOffs + 0x04);
-            const indTexWrapT: GX.IndTexWrap = view.getUint8(indTexStageOffs + 0x05);
-            const indTexAddPrev: boolean = !!view.getUint8(indTexStageOffs + 0x06);
-            const indTexUseOrigLOD: boolean = !!view.getUint8(indTexStageOffs + 0x07);
-            // bumpAlpha
+            let indTexStage: GX.IndTexStageID = GX.IndTexStageID.STAGE0;
+            let indTexFormat: GX.IndTexFormat = GX.IndTexFormat._8;
+            let indTexBiasSel: GX.IndTexBiasSel = GX.IndTexBiasSel.NONE;
+            let indTexMatrix: GX.IndTexMtxID = GX.IndTexMtxID.OFF;
+            let indTexWrapS: GX.IndTexWrap = GX.IndTexWrap.OFF;
+            let indTexWrapT: GX.IndTexWrap = GX.IndTexWrap.OFF;
+            let indTexAddPrev: boolean = false;
+            let indTexUseOrigLOD: boolean = false;
+
+            if (hasIndirect) {
+                indTexStage = view.getUint8(indTexStageOffs + 0x00);
+                indTexFormat = view.getUint8(indTexStageOffs + 0x01);
+                indTexBiasSel = view.getUint8(indTexStageOffs + 0x02);
+                indTexMatrix = view.getUint8(indTexStageOffs + 0x03);
+                assert(indTexMatrix <= GX.IndTexMtxID.T2);
+                indTexWrapS = view.getUint8(indTexStageOffs + 0x04);
+                indTexWrapT = view.getUint8(indTexStageOffs + 0x05);
+                indTexAddPrev = !!view.getUint8(indTexStageOffs + 0x06);
+                indTexUseOrigLOD = !!view.getUint8(indTexStageOffs + 0x07);
+                // bumpAlpha
+            }
 
             const tevStage: GX_Material.TevStage = {
                 index,
