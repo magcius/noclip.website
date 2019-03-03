@@ -16,6 +16,7 @@ import { fetchData } from '../fetch';
 import { leftPad } from '../util';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { GrezzoTextureHolder, MultiCmbScene } from './scenes';
+import { mat4, vec3 } from 'gl-matrix';
 
 class SceneDesc implements Viewer.SceneDesc {
     public id: string;
@@ -38,6 +39,9 @@ class SceneDesc implements Viewer.SceneDesc {
             const jmpGar = ZAR.parse(jmpGarFile.buffer);
             const roomInfoFile = jmpGar.files.find((file) => file.name === 'RoomInfo.gseb');
             const roomInfo = BCSV.parse(roomInfoFile.buffer, true);
+            
+            const furnitureInfoFile = jmpGar.files.find((file) => file.name === 'FurnitureInfo.gseb');
+            const furnitureInfo = BCSV.parse(furnitureInfoFile.buffer, true);
 
             const renderer = new MultiCmbScene(device, textureHolder);
             const progressables: Progressable<CmbRenderer>[] = [];
@@ -49,6 +53,35 @@ class SceneDesc implements Viewer.SceneDesc {
                         return null;
 
                     const roomGar = ZAR.parse(roomGarFile.buffer);
+                    const roomFurnitureEntries: BCSV.Bcsv = BCSV.getEntriesWithField(furnitureInfo, "room_no", i);
+                    for(const record of roomFurnitureEntries.records){
+                        const cmbFile = outerRoomGar.files.find((file)=> file.name == `${record[6] as string}.cmb`);
+                        
+                        if(cmbFile != undefined){
+                            const cmb = CMB.parse(cmbFile.buffer);
+
+                            const cmbData = new CmbData(device, cmb);
+                            textureHolder.addTextures(device, cmb.textures);
+                            renderer.cmbData.push(cmbData);
+        
+                            const cmbRenderer = new CmbRenderer(device, textureHolder, cmbData, cmb.name);
+                            cmbRenderer.whichTexture = 1;
+                            cmbRenderer.addToViewRenderer(device, renderer.viewRenderer);
+                            //SpaceCats: Theres something wrong with rotation for some reason
+                            CMB.calcModelMtx(cmbRenderer.modelMatrix,
+                                1, 1, 1,
+                                BCSV.getField(roomFurnitureEntries, record, "dir_x") as number,
+                                BCSV.getField(roomFurnitureEntries, record, "dir_y") as number,
+                                BCSV.getField(roomFurnitureEntries, record, "dir_z") as number,
+                                BCSV.getField(roomFurnitureEntries, record, "pos_x") as number,
+                                BCSV.getField(roomFurnitureEntries, record, "pos_y") as number,
+                                BCSV.getField(roomFurnitureEntries, record, "pos_z") as number
+                            );
+
+                            renderer.cmbRenderers.push(cmbRenderer);
+                        }
+
+                    }
 
                     // TODO(jstpierre): How does the engine know which CMB file to spawn?
                     const firstCMB = roomGar.files.find((file) => file.name.endsWith('.cmb'));
