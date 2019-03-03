@@ -49,6 +49,8 @@ export function calcPaletteSize(format: GX.TexFormat, palette: GX.TexPalette) {
         paletteSize = 256;
         break;
     case GX.TexFormat.C14X2:
+        paletteSize = 16384;
+        break;
     default:
         throw new Error("whoops");
     }
@@ -72,6 +74,8 @@ export function calcTextureSize(format: GX.TexFormat, width: number, height: num
         return numPixels / 2;
     case GX.TexFormat.C8:
         return numPixels;
+    case GX.TexFormat.C14X2:
+        return numPixels * 2;
     case GX.TexFormat.RGB565:
         return numPixels * 2;
     case GX.TexFormat.RGB5A3:
