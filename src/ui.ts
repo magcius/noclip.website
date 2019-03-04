@@ -1693,6 +1693,7 @@ class About extends Panel {
 <a href="https://twitter.com/JuPaHe64">JuPaHe64</a>,
 <a href="https://twitter.com/Jawchewa">Jawchewa</a>,
 <a href="https://twitter.com/Starschulz">Starschulz</a>,
+<a href="https://twitter.com/kittensandals">SpaceCats</a>,
 <a href="https://twitter.com/PistonMiner">PistonMiner</a>,
 <a href="https://twitter.com/LordNed">LordNed</a>,
 <a href="https://twitter.com/SageOfMirrors">SageOfMirrors</a>,
