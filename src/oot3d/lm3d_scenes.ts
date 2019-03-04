@@ -55,7 +55,9 @@ class SceneDesc implements Viewer.SceneDesc {
                     const roomGar = ZAR.parse(roomGarFile.buffer);
                     const roomFurnitureEntries: BCSV.Bcsv = BCSV.getEntriesWithField(furnitureInfo, "room_no", i);
                     for(const record of roomFurnitureEntries.records){
-                        const cmbFile = outerRoomGar.files.find((file)=> file.name == `${record[6] as string}.cmb`);
+                        // TODO(SpaceCats): Using getField(dmd_name) doesn't work... need to figure out why
+                        const cmbFilename: string = record[6];
+                        const cmbFile = outerRoomGar.files.find((file)=> file.name == `${cmbFilename}.cmb`);
                         
                         if(cmbFile != undefined){
                             const cmb = CMB.parse(cmbFile.buffer);
@@ -67,15 +69,15 @@ class SceneDesc implements Viewer.SceneDesc {
                             const cmbRenderer = new CmbRenderer(device, textureHolder, cmbData, cmb.name);
                             cmbRenderer.whichTexture = 1;
                             cmbRenderer.addToViewRenderer(device, renderer.viewRenderer);
-                            //SpaceCats: Theres something wrong with rotation for some reason
+                            console.log(`${cmbFilename} index is ${renderer.cmbRenderers.length}`);
                             CMB.calcModelMtx(cmbRenderer.modelMatrix,
                                 1, 1, 1,
-                                BCSV.getField(roomFurnitureEntries, record, "dir_x") as number,
-                                BCSV.getField(roomFurnitureEntries, record, "dir_y") as number,
-                                BCSV.getField(roomFurnitureEntries, record, "dir_z") as number,
-                                BCSV.getField(roomFurnitureEntries, record, "pos_x") as number,
-                                BCSV.getField(roomFurnitureEntries, record, "pos_y") as number,
-                                BCSV.getField(roomFurnitureEntries, record, "pos_z") as number
+                                BCSV.getField(roomFurnitureEntries, record, "dir_x") / 180 * Math.PI,
+                                BCSV.getField(roomFurnitureEntries, record, "dir_y") / 180 * Math.PI,
+                                BCSV.getField(roomFurnitureEntries, record, "dir_z") / 180 * Math.PI,
+                                BCSV.getField(roomFurnitureEntries, record, "pos_x"),
+                                BCSV.getField(roomFurnitureEntries, record, "pos_y"),
+                                BCSV.getField(roomFurnitureEntries, record, "pos_z")
                             );
 
                             renderer.cmbRenderers.push(cmbRenderer);
