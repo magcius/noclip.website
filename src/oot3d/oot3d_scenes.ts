@@ -145,16 +145,25 @@ class ModelCache {
 }
 
 const enum ActorId {
-    En_Item00       = 0x0015,
-    En_Kusa         = 0x0125,
-    En_Kanban       = 0x0141,
-    En_Ko           = 0x0163,
-    En_Gs           = 0x01B9,
-    En_Cow          = 0x01C6,
-    En_In           = 0x00CB,
-    En_Ma2          = 0x00D9,
-    En_Horse_Normal = 0x003C,
-    En_Ta           = 0x0084,
+    En_Item00           = 0x0015,
+    En_Kusa             = 0x0125,
+    En_Kanban           = 0x0141,
+    En_Ko               = 0x0163,
+    En_Gs               = 0x01B9,
+    En_Cow              = 0x01C6,
+    En_In               = 0x00CB,
+    En_Ma2              = 0x00D9,
+    En_Horse_Normal     = 0x003C,
+    En_Ta               = 0x0084,
+    En_Ds               = 0x0149,
+    En_Niw_Lady         = 0x013C,
+    En_Daiku_Kakariko   = 0x01BC,
+    Obj_Tsubo           = 0x0111,
+    Obj_Kibako2         = 0x01A0,
+    En_St               = 0x0037,
+    En_Box              = 0x000A,
+    Bg_Ydan_Hasi        = 0x0050,
+    En_Goma             = 0x0028,
 }
 
 class SceneDesc implements Viewer.SceneDesc {
@@ -242,14 +251,17 @@ class SceneDesc implements Viewer.SceneDesc {
             }
         });
         else if (actor.actorId === ActorId.En_Gs) fetchArchive(`zelda_gs.zar`).then((zar) => buildModel(zar, `model/gossip_stone2_model.cmb`, 0.1));
+        else if (actor.actorId === ActorId.Obj_Tsubo) fetchArchive(`zelda_tsubo.zar`).then((zar) => buildModel(zar, `model/tubo2_model.cmb`, 0.15));
+        else if (actor.actorId === ActorId.Obj_Kibako2) fetchArchive(`zelda_kibako2.zar`).then((zar) => buildModel(zar, `model/CIkibako_model.cmb`, 0.1));
+        else if (actor.actorId === ActorId.En_Box) fetchArchive(`zelda_box.zar`).then((zar) => buildModel(zar, `model/tr_box.cmb`, 0.008));
+        // wrong chest model, but closest match atm
         else if (actor.actorId === ActorId.En_Cow) fetchArchive('zelda_cow.zar').then((zar) => {
             const b = buildModel(zar, `model/cow.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/usi_mogmog.csab`));
         });
-        else if (actor.actorId === ActorId.En_In) fetchArchive('zelda_in.zar').then((zar) => {
-            // TODO(starschulz): Investigate broken face
+       else if (actor.actorId === ActorId.En_In) fetchArchive('zelda_in.zar').then((zar) => {
             const b = buildModel(zar, `model/ingo.cmb`);
-            b.bindCSAB(parseCSAB(zar, `anim/in_shigoto.csab`));
+            b.bindCSAB(parseCSAB(zar, `anim/in_shigoto.csab`)); 
         });
         else if (actor.actorId === ActorId.En_Ma2) fetchArchive(`zelda_ma2.zar`).then((zar) => {
             const b = buildModel(zar, `model/malon.cmb`);
@@ -260,9 +272,28 @@ class SceneDesc implements Viewer.SceneDesc {
             b.bindCSAB(parseCSAB(zar, `anim/hn_anim_wait.csab`));
         });
         else if (actor.actorId === ActorId.En_Ta) fetchArchive(`zelda_ta.zar`).then((zar) => {
-            // TODO(starschulz): Investigate broken face
             const b = buildModel(zar, `model/talon.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/ta_matsu.csab`));
+        });
+        else if (actor.actorId === ActorId.En_Ds) fetchArchive(`zelda_ds.zar`).then((zar) => {
+            const b = buildModel(zar, `model/magicmaster.cmb`, 0.013);
+            b.bindCSAB(parseCSAB(zar, `anim/ds_matsu.csab`));
+        });
+        else if (actor.actorId === ActorId.En_Niw_Lady) fetchArchive(`zelda_ane.zar`).then((zar) => {
+            const b = buildModel(zar, `model/chickenlady.cmb`);
+            b.bindCSAB(parseCSAB(zar, `anim/Ane_matsu.csab`));
+        });
+        else if (actor.actorId === ActorId.En_Daiku_Kakariko) fetchArchive('zelda_daiku.zar').then((zar) => {
+            const b = buildModel(zar, `model/disciple.cmb`);
+            b.bindCSAB(parseCSAB(zar, `anim/dk2_matsu.csab`)); 
+        });
+        else if (actor.actorId === ActorId.En_St) fetchArchive('zelda_st.zar').then((zar) => {
+            const b = buildModel(zar, `model/staltula.cmb`, 0.05);
+            b.bindCSAB(parseCSAB(zar, `anim/st_matsu.csab`)); 
+        });
+        else if (actor.actorId === ActorId.En_Goma) fetchArchive('zelda_goma.zar').then((zar) => {
+            const b = buildModel(zar, `model/goma.cmb`, 0.01);
+            b.bindCSAB(parseCSAB(zar, `anim/go_startdemo02.csab`)); 
         });
         else console.warn(`Unknown actor ${hexzero(actor.actorId, 4)}`);
     }
