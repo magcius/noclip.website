@@ -1679,7 +1679,7 @@ class About extends Panel {
 <p> Hold <strong>SHIFT</strong> to go faster, and use <strong>MOUSE WHEEL</strong> to fine tune the speed
 <strong>Z</strong> toggles the UI. </p>
 
-<p><a href="https://discord.gg/RtmxjB"><strong>JOIN THE DISCORD</strong> by clicking here</a></p>
+<p><a href="https://discord.gg/bkJmKKv"><strong>JOIN THE DISCORD</strong> by clicking here</a></p>
 
 <p><strong>CODE PRIMARILY WRITTEN</strong> by <a href="https://twitter.com/JasperRLZ">Jasper</a></p>
 
