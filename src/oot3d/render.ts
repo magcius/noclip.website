@@ -279,7 +279,7 @@ class SepdData {
         bindVertexAttrib(OoT3D_Program.a_TexCoord1,   2, false, vatr.texCoord1ByteOffset, sepd.texCoord1);
         bindVertexAttrib(OoT3D_Program.a_TexCoord2,   2, false, vatr.texCoord2ByteOffset, sepd.texCoord2);
 
-        const hasBoneIndices = sepd.prms[0].skinningMode !== CMB.SkinningMode.SINGLE_BONE;
+        const hasBoneIndices = sepd.prms[0].skinningMode !== CMB.SkinningMode.SINGLE_BONE && sepd.boneIndices.dataType === CMB.DataType.UByte;
         bindVertexAttrib(OoT3D_Program.a_BoneIndices, sepd.boneDimension, false, hasBoneIndices ? vatr.boneIndicesByteOffset : -1, sepd.boneIndices);
         const hasBoneWeights = sepd.prms[0].skinningMode === CMB.SkinningMode.SMOOTH_SKINNING;
         bindVertexAttrib(OoT3D_Program.a_BoneWeights, sepd.boneDimension, false, hasBoneWeights ? vatr.boneWeightsByteOffset : -1, sepd.boneWeights);
