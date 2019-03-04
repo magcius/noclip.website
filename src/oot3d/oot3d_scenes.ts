@@ -164,6 +164,15 @@ const enum ActorId {
     En_Box              = 0x000A,
     Bg_Ydan_Hasi        = 0x0050,
     En_Goma             = 0x0028,
+    Obj_Bombiwa         = 0x0127,
+    Bg_Breakwall        = 0x0059,
+    Obj_Timeblock       = 0x01D1,
+    Obj_Hsblock         = 0x012D,
+    En_Du               = 0x0098,
+    Bg_Spot18_Basket    = 0x015C,
+    Obj_Syokudai        = 0x005E,
+    Bg_Spot18_Shutter   = 0x01C4,
+    En_Bombf            = 0x004C,
 }
 
 class SceneDesc implements Viewer.SceneDesc {
@@ -254,7 +263,16 @@ class SceneDesc implements Viewer.SceneDesc {
         else if (actor.actorId === ActorId.Obj_Tsubo) fetchArchive(`zelda_tsubo.zar`).then((zar) => buildModel(zar, `model/tubo2_model.cmb`, 0.15));
         else if (actor.actorId === ActorId.Obj_Kibako2) fetchArchive(`zelda_kibako2.zar`).then((zar) => buildModel(zar, `model/CIkibako_model.cmb`, 0.1));
         else if (actor.actorId === ActorId.En_Box) fetchArchive(`zelda_box.zar`).then((zar) => buildModel(zar, `model/tr_box.cmb`, 0.008));
-        // wrong chest model, but closest match atm
+        // wrong chest model, dont know how to specify which mesh
+        else if (actor.actorId === ActorId.Obj_Bombiwa) fetchArchive(`zelda_bombiwa.zar`).then((zar) => buildModel(zar, `model/obj_18b_stone_model.cmb`, 0.1));
+        else if (actor.actorId === ActorId.Bg_Breakwall) fetchArchive(`zelda_bwall.zar`).then((zar) => buildModel(zar, `model/a_bomt_model.cmb`, 0.1));
+        else if (actor.actorId === ActorId.Obj_Timeblock) fetchArchive(`zelda_timeblock.zar`).then((zar) => buildModel(zar, `model/brick_toki_model.cmb`, 1));
+        else if (actor.actorId === ActorId.Obj_Hsblock) fetchArchive(`zelda_d_hsblock.zar`).then((zar) => buildModel(zar, `model/field_fshot_model.cmb`, 0.05));
+        else if (actor.actorId === ActorId.Bg_Spot18_Basket) fetchArchive(`zelda_spot18_obj.zar`).then((zar) => buildModel(zar, `model/obj_s18tubo_model.cmb`, 0.1));
+        else if (actor.actorId === ActorId.Obj_Syokudai) fetchArchive(`zelda_syokudai.zar`).then((zar) => buildModel(zar, `model/syokudai_isi_model.cmb`, 1));
+        else if (actor.actorId === ActorId.Bg_Spot18_Shutter) fetchArchive(`zelda_spot18_obj.zar`).then((zar) => buildModel(zar, `model/obj_186_model.cmb`, 0.1));
+        else if (actor.actorId === ActorId.En_Bombf) fetchArchive(`zelda_bombf.zar`).then((zar) => buildModel(zar, `model/bm_leaf_model.cmb`, 0.01));
+
         else if (actor.actorId === ActorId.En_Cow) fetchArchive('zelda_cow.zar').then((zar) => {
             const b = buildModel(zar, `model/cow.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/usi_mogmog.csab`));
@@ -294,6 +312,10 @@ class SceneDesc implements Viewer.SceneDesc {
         else if (actor.actorId === ActorId.En_Goma) fetchArchive('zelda_goma.zar').then((zar) => {
             const b = buildModel(zar, `model/goma.cmb`, 0.01);
             b.bindCSAB(parseCSAB(zar, `anim/go_startdemo02.csab`)); 
+        });
+        else if (actor.actorId === ActorId.En_Du) fetchArchive('zelda_du.zar').then((zar) => {
+            const b = buildModel(zar, `model/darunia.cmb`, 0.01);
+            b.bindCSAB(parseCSAB(zar, `anim/du_matsu.csab`)); 
         });
         else console.warn(`Unknown actor ${hexzero(actor.actorId, 4)}`);
     }
