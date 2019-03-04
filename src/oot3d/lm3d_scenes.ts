@@ -39,7 +39,6 @@ class SceneDesc implements Viewer.SceneDesc {
             const jmpGar = ZAR.parse(jmpGarFile.buffer);
             const roomInfoFile = jmpGar.files.find((file) => file.name === 'RoomInfo.gseb');
             const roomInfo = BCSV.parse(roomInfoFile.buffer, true);
-            
             const furnitureInfoFile = jmpGar.files.find((file) => file.name === 'FurnitureInfo.gseb');
             const furnitureInfo = BCSV.parse(furnitureInfoFile.buffer, true);
 
@@ -53,41 +52,9 @@ class SceneDesc implements Viewer.SceneDesc {
                         return null;
 
                     const roomGar = ZAR.parse(roomGarFile.buffer);
-                    const roomFurnitureEntries: BCSV.Bcsv = BCSV.getEntriesWithField(furnitureInfo, "room_no", i);
-                    for(const record of roomFurnitureEntries.records){
-                        // TODO(SpaceCats): Using getField(dmd_name) doesn't work... need to figure out why
-                        const cmbFilename: string = record[6];
-                        const cmbFile = outerRoomGar.files.find((file)=> file.name == `${cmbFilename}.cmb`);
-                        
-                        if(cmbFile != undefined){
-                            const cmb = CMB.parse(cmbFile.buffer);
-
-                            const cmbData = new CmbData(device, cmb);
-                            textureHolder.addTextures(device, cmb.textures);
-                            renderer.cmbData.push(cmbData);
-        
-                            const cmbRenderer = new CmbRenderer(device, textureHolder, cmbData, cmb.name);
-                            cmbRenderer.whichTexture = 1;
-                            cmbRenderer.addToViewRenderer(device, renderer.viewRenderer);
-                            console.log(`${cmbFilename} index is ${renderer.cmbRenderers.length}`);
-                            CMB.calcModelMtx(cmbRenderer.modelMatrix,
-                                1, 1, 1,
-                                BCSV.getField(roomFurnitureEntries, record, "dir_x") / 180 * Math.PI,
-                                BCSV.getField(roomFurnitureEntries, record, "dir_y") / 180 * Math.PI,
-                                BCSV.getField(roomFurnitureEntries, record, "dir_z") / 180 * Math.PI,
-                                BCSV.getField(roomFurnitureEntries, record, "pos_x"),
-                                BCSV.getField(roomFurnitureEntries, record, "pos_y"),
-                                BCSV.getField(roomFurnitureEntries, record, "pos_z")
-                            );
-
-                            renderer.cmbRenderers.push(cmbRenderer);
-                        }
-
-                    }
 
                     // TODO(jstpierre): How does the engine know which CMB file to spawn?
                     const firstCMB = roomGar.files.find((file) => file.name.endsWith('.cmb'));
-
                     const cmb = CMB.parse(firstCMB.buffer);
                     const ctxbFiles = roomGar.files.filter((file) => file.name.endsWith('.ctxb'));
 
@@ -111,6 +78,36 @@ class SceneDesc implements Viewer.SceneDesc {
                         const cmab = CMAB.parse(CMB.Version.LuigisMansion, cmabFile.buffer);
                         textureHolder.addTextures(device, cmab.textures);
                         cmbRenderer.bindCMAB(cmab, 1);
+                    }
+
+                    const roomFurnitureEntries: BCSV.Bcsv = BCSV.getEntriesWithField(furnitureInfo, "room_no", i);
+                    for (let j = 0; j < roomFurnitureEntries.records.length; j++) {
+                        const record = roomFurnitureEntries.records[j];
+
+                        // TODO(SpaceCats): Using getField(dmd_name) doesn't work... need to figure out why
+                        const cmbFilename = record[6] as string;
+                        const cmbFile = outerRoomGar.files.find((file)=> file.name == `${cmbFilename}.cmb`);
+
+                        if (cmbFile != undefined) {
+                            const cmb = CMB.parse(cmbFile.buffer);
+                            const cmbData = new CmbData(device, cmb);
+                            textureHolder.addTextures(device, cmb.textures);
+                            renderer.cmbData.push(cmbData);
+
+                            const cmbRenderer = new CmbRenderer(device, textureHolder, cmbData, cmb.name);
+                            cmbRenderer.whichTexture = 1;
+                            cmbRenderer.addToViewRenderer(device, renderer.viewRenderer);
+
+                            const rotationX = BCSV.getField<number>(roomFurnitureEntries, record, "dir_x") / 180 * Math.PI;
+                            const rotationY = BCSV.getField<number>(roomFurnitureEntries, record, "dir_y") / 180 * Math.PI;
+                            const rotationZ = BCSV.getField<number>(roomFurnitureEntries, record, "dir_z") / 180 * Math.PI;
+                            const translationX = BCSV.getField<number>(roomFurnitureEntries, record, "pos_x");
+                            const translationY = BCSV.getField<number>(roomFurnitureEntries, record, "pos_y");
+                            const translationZ = BCSV.getField<number>(roomFurnitureEntries, record, "pos_z");
+                            CMB.calcModelMtx(cmbRenderer.modelMatrix, 1, 1, 1, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+
+                            renderer.cmbRenderers.push(cmbRenderer);
+                        }
                     }
                 }));
             }
