@@ -1042,6 +1042,13 @@ class SMGSpawner {
             break;
 
         // SMG2
+        case 'Moc':
+            spawnGraph(`Moc`, SceneGraphTag.Normal, { bck: 'turn.bck' }).then(([node, rarc]) => {
+                node.modelInstance.setShapeVisible(1, false);
+                node.modelInstance.setShapeVisible(2, false);
+                node.modelInstance.setShapeVisible(3, false);
+            });
+            break;
         case 'PlantC':
             spawnGraph(`PlantC00`);
             break;
@@ -1052,7 +1059,7 @@ class SMGSpawner {
             spawnGraph(`CaretakerHunter`);
             break;
         case 'WorldMapSyncSky':
-            // Presumably this uses the "current world map". I chose 04, because I like it.
+            // Presumably this uses the "current world map". I chose 03, because I like it.
             spawnGraph(`WorldMap03Sky`, SceneGraphTag.Skybox);
             break;
 

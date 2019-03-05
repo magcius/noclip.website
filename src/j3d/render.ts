@@ -1,5 +1,5 @@
 
-import { mat4, mat2d, vec4 } from 'gl-matrix';
+import { mat4, mat2d } from 'gl-matrix';
 
 import { BMD, BMT, HierarchyNode, HierarchyType, MaterialEntry, Shape, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData, DRW1MatrixKind, TTK1Animator, ANK1Animator, bindANK1Animator, BTI } from './j3d';
 import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } from './j3d';
@@ -33,6 +33,7 @@ class ShapeInstanceState {
     public modelMatrix: mat4 = mat4.create();
     public matrixArray: mat4[] = [];
     public matrixVisibility: boolean[] = [];
+    public shapeVisibility: boolean[] = [];
     public isSkybox: boolean = false;
 }
 
@@ -532,6 +533,8 @@ export class BMDModelInstance {
         const numMatrices = bmd.drw1.matrixDefinitions.length;
         this.shapeInstanceState.matrixArray = nArray(numMatrices, () => mat4.create());
         this.shapeInstanceState.matrixVisibility = nArray(numMatrices, () => true);
+        const numShapes = bmd.shp1.shapes.length;
+        this.shapeInstanceState.shapeVisibility = nArray(numShapes, () => true);
     }
 
     private translateSceneGraph(root: HierarchyNode, renderHelper: GXRenderHelperGfx): void {
@@ -605,6 +608,11 @@ export class BMDModelInstance {
 
     public setGXLight(i: number, light: GX_Material.Light): void {
         this.materialInstanceState.lights[i].copy(light);
+    }
+
+    // TODO(jstpierre): Implement BVA visibility animation
+    public setShapeVisible(i: number, visible: boolean): void {
+        this.shapeInstanceState.shapeVisibility[i] = visible;
     }
 
     /**
@@ -705,8 +713,11 @@ export class BMDModelInstance {
             depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, bboxScratch);
         }
 
-        for (let i = 0; i < this.shapeInstances.length; i++)
-            this.shapeInstances[i].prepareToRender(renderHelper, depth, viewerInput, this.shapeInstanceState);
+        for (let i = 0; i < this.shapeInstances.length; i++) {
+            const shapeVisiblity = this.shapeInstanceState.shapeVisibility[i];
+            const shapeDepth = shapeVisiblity ? depth : -1;
+            this.shapeInstances[i].prepareToRender(renderHelper, shapeDepth, viewerInput, this.shapeInstanceState);
+        }
     }
 
     private updateJointMatrixHierarchy(camera: Camera, node: HierarchyNode, parentJointMatrix: mat4, disableCulling: boolean): void {
