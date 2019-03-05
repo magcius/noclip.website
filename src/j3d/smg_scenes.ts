@@ -588,6 +588,9 @@ class SMGRenderer implements Viewer.SceneGfx {
         }
 
         if (this.viewRenderer.hasAnyVisible(SMGPass.BLOOM)) {
+            lastPassRenderer.endPass(null);
+            device.submitPass(lastPassRenderer);
+
             const bloomColorTargetScene = this.bloomSceneColorTarget;
             const bloomColorTextureScene = this.bloomSceneColorTexture;
             bloomColorTargetScene.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
@@ -639,10 +642,12 @@ class SMGRenderer implements Viewer.SceneGfx {
             device.submitPass(bloomBokehPassRenderer);
 
             // Combine.
+            const bloomCombinePassRenderer = this.mainRenderTarget.createRenderPass(device, noClearRenderPassDescriptor);
             this.bloomTextureMapping[0].gfxTexture = bloomColorTextureBokeh.gfxTexture;
             this.bloomRenderInstCombine.setSamplerBindingsFromTextureMappings(this.bloomTextureMapping);
             this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
-            this.viewRenderer.executeOnPass(device, lastPassRenderer, SMGPass.BLOOM_COMBINE);
+            this.viewRenderer.executeOnPass(device, bloomCombinePassRenderer, SMGPass.BLOOM_COMBINE);
+            lastPassRenderer = bloomCombinePassRenderer;
         }
 
         return lastPassRenderer;
