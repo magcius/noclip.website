@@ -10,4 +10,4 @@ Contributions are very welcome! New games, new features, and bug fixes are all v
 
 My internal Trello task list is available here: https://trello.com/b/Z8I6IqC5/noclipwebsite
 
-There is also a Discord server where you can talk to me and the community: https://discord.gg/RtmxjB
+There is also a Discord server where you can talk to me and the community: https://discord.gg/bkJmKKv
