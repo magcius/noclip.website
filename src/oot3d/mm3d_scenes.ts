@@ -51,6 +51,7 @@ class MultiRoomScene extends BasicRendererHelper implements Viewer.SceneGfx {
             for (let i = 0; i < this.roomRenderers.length; i++)
                 this.roomRenderers[i].setTexturesEnabled(enableTextures.checked);
         };
+        renderHacksPanel.contents.appendChild(enableTextures.elem);
         const enableMonochromeVertexColors = new UI.Checkbox('Grayscale Vertex Colors', false);
         enableMonochromeVertexColors.onchanged = () => {
             for (let i = 0; i < this.roomRenderers.length; i++)
