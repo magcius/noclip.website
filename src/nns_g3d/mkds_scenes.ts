@@ -14,15 +14,19 @@ import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { MDL0Renderer, G3DPass } from './render';
-import { assert } from '../util';
+import { assert, readString, assertExists } from '../util';
 import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { FakeTextureHolder } from '../TextureHolder';
+import { mat4 } from 'gl-matrix';
+import { calcModelMtx } from '../oot3d/cmb';
+import AnimationController from '../AnimationController';
 
-export class CourseRenderer implements Viewer.SceneGfx {
+export class MKDSRenderer implements Viewer.SceneGfx {
     public viewRenderer = new GfxRenderInstViewRenderer();
     public renderTarget = new BasicRenderTarget();
     public textureHolder: FakeTextureHolder;
+    public objectRenderers: MDL0Renderer[] = [];
 
     constructor(device: GfxDevice, public courseRenderer: MDL0Renderer, public skyboxRenderer: MDL0Renderer | null) {
         this.textureHolder = new FakeTextureHolder(this.courseRenderer.viewerTextures);
@@ -35,6 +39,8 @@ export class CourseRenderer implements Viewer.SceneGfx {
         this.courseRenderer.prepareToRender(hostAccessPass, viewerInput);
         if (this.skyboxRenderer !== null)
             this.skyboxRenderer.prepareToRender(hostAccessPass, viewerInput);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].prepareToRender(hostAccessPass, viewerInput);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
@@ -65,9 +71,79 @@ export class CourseRenderer implements Viewer.SceneGfx {
         this.courseRenderer.destroy(device);
         if (this.skyboxRenderer !== null)
             this.skyboxRenderer.destroy(device);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].destroy(device);
     }
 }
 
+interface OBJI {
+    objectId: number;
+    routeId: number;
+    objectArg0: number;
+    objectArg1: number;
+    objectArg2: number;
+    objectArg3: number;
+    showInTimeTrials: number;
+    translationX: number;
+    translationY: number;
+    translationZ: number;
+    rotationX: number;
+    rotationY: number;
+    rotationZ: number;
+    scaleX: number;
+    scaleY: number;
+    scaleZ: number;
+}
+
+interface NKM {
+    obji: OBJI[];
+}
+
+function parseNKM(buffer: ArrayBufferSlice): NKM {
+    const view = buffer.createDataView();
+
+    assert(readString(buffer, 0x00, 0x04) === 'NKMD');
+    const version = view.getUint16(0x04, true);
+    const headerSize = view.getUint16(0x06, true);
+    const objiOffs_ = view.getUint32(0x08, true);
+    assert(objiOffs_ === 0x00);
+
+    const objiOffs = headerSize + objiOffs_;
+    assert(readString(buffer, objiOffs + 0x00, 0x04) === 'OBJI');
+    const objiTableCount = view.getUint32(objiOffs + 0x04, true);
+    let objiTableIdx = objiOffs + 0x08;
+
+    const obji: OBJI[] = [];
+    for (let i = 0; i < objiTableCount; i++) {
+        const translationX = NSBMD.fx32(view.getInt32(objiTableIdx + 0x00, true)) / 16;
+        const translationY = NSBMD.fx32(view.getInt32(objiTableIdx + 0x04, true)) / 16;
+        const translationZ = NSBMD.fx32(view.getInt32(objiTableIdx + 0x08, true)) / 16;
+        const rotationX = NSBMD.fx32(view.getInt32(objiTableIdx + 0x0C, true)) * Math.PI / 180;
+        const rotationY = NSBMD.fx32(view.getInt32(objiTableIdx + 0x10, true)) * Math.PI / 180;
+        const rotationZ = NSBMD.fx32(view.getInt32(objiTableIdx + 0x14, true)) * Math.PI / 180;
+        const scaleX = NSBMD.fx32(view.getInt32(objiTableIdx + 0x18, true));
+        const scaleY = NSBMD.fx32(view.getInt32(objiTableIdx + 0x1C, true));
+        const scaleZ = NSBMD.fx32(view.getInt32(objiTableIdx + 0x20, true));
+
+        const objectId = view.getUint16(objiTableIdx + 0x24, true);
+        const routeId = view.getUint16(objiTableIdx + 0x26, true);
+        const objectArg0 = view.getUint32(objiTableIdx + 0x28, true);
+        const objectArg1 = view.getUint32(objiTableIdx + 0x2C, true);
+        const objectArg2 = view.getUint32(objiTableIdx + 0x30, true);
+        const objectArg3 = view.getUint32(objiTableIdx + 0x34, true);
+        const showInTimeTrials = view.getUint32(objiTableIdx + 0x38, true);
+        obji.push({
+            objectId, routeId, objectArg0, objectArg1, objectArg2, objectArg3, showInTimeTrials,
+            translationX, translationY, translationZ, rotationX, rotationY, rotationZ, scaleX, scaleY, scaleZ,
+        });
+
+        objiTableIdx += 0x3C;
+    }
+
+    return { obji };
+}
+
+const scratchMatrix = mat4.create();
 class MarioKartDSSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
 
@@ -75,6 +151,162 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
         return fetchData(path, abortSignal).then((buffer: ArrayBufferSlice) => {
             return NARC.parse(CX.decompress(buffer));
         });
+    }
+
+    private spawnObjectFromNKM(device: GfxDevice, courseNARC: NARC.NitroFS, renderer: MKDSRenderer, obji: OBJI): void {
+        function getFileBuffer(filePath: string): ArrayBufferSlice {
+            return assertExists(courseNARC.files.find((file) => file.path === filePath)).buffer;
+        }
+
+        function setModelMtx(mdl0Renderer: MDL0Renderer, bby: boolean = false): void {
+            const rotationY = bby ? 0 : obji.rotationY;
+            calcModelMtx(scratchMatrix, obji.scaleX, obji.scaleY, obji.scaleZ, obji.rotationX, rotationY, obji.rotationZ, obji.translationX, obji.translationY, obji.translationZ);
+            const posScale = 50;
+            mat4.fromScaling(mdl0Renderer.modelMatrix, [posScale, posScale, posScale]);
+            mat4.mul(mdl0Renderer.modelMatrix, mdl0Renderer.modelMatrix, scratchMatrix);
+        }
+
+        function spawnModel(filePath: string): MDL0Renderer {
+            const bmd = NSBMD.parse(getFileBuffer(filePath));
+            assert(bmd.models.length === 1);
+            const mdl0Renderer = new MDL0Renderer(device, bmd.models[0], bmd.tex0);
+            setModelMtx(mdl0Renderer);
+            mdl0Renderer.addToViewRenderer(device, renderer.viewRenderer);
+            renderer.objectRenderers.push(mdl0Renderer);
+            return mdl0Renderer;
+        }
+
+        function parseBTA(filePath: string): NSBTA.SRT0 {
+            const bta = NSBTA.parse(getFileBuffer(filePath));
+            return bta.srt0;
+        }
+
+        function parseBTP(filePath: string): NSBTP.PAT0 {
+            const btp = NSBTP.parse(getFileBuffer(filePath));
+            assert(btp.pat0.length === 1);
+            return btp.pat0[0];
+        }
+
+        function animFrame(frame: number): AnimationController {
+            const a = new AnimationController();
+            a.setTimeInFrames(frame);
+            return a;
+        }
+
+        // Based on ObjiDatabase.xml from Mario Kart Toolbox by Gericom, Ermelber and the MKDS modding community.
+        if (obji.objectId === 0x0001) { // beach_water
+            const waterC = spawnModel(`/MapObj/beach_waterC.nsbmd`);
+            waterC.modelMatrix[13] += 30;
+        } else if (obji.objectId === 0x0003) { // town_water
+            spawnModel(`/MapObj/town_waterC.nsbmd`);
+        } else if (obji.objectId === 0x0006) { // yoshi_water
+            spawnModel(`/MapObj/yoshi_waterC.nsbmd`);
+        } else if (obji.objectId === 0x0009) { // hyudoro_water
+            spawnModel(`/MapObj/hyudoro_waterC.nsbmd`);
+        } else if (obji.objectId === 0x000C) { // mini_stage3_water
+            const b = spawnModel(`/MapObj/mini_stage3_waterC.nsbmd`);
+            b.modelMatrix[13] += 150;
+        } else if (obji.objectId === 0x000D) { // puddle
+            spawnModel(`/MapObj/puddle.nsbmd`);
+        } else if (obji.objectId === 0x0067) { // woodbox
+            const b = spawnModel(`/MapObj/woodbox1.nsbmd`);
+            b.modelMatrix[13] += 32;
+        } else if (obji.objectId === 0x00CA) { // koopa_block
+            spawnModel(`/MapObj/koopa_block.nsbmd`);
+        } else if (obji.objectId === 0x00CB) { // gear
+            spawnModel(`/MapObj/gear_black.nsbmd`);
+        } else if (obji.objectId === 0x00CC) { // bridge
+            spawnModel(`/MapObj/bridge.nsbmd`);
+        } else if (obji.objectId === 0x00CD) { // second_hand
+            spawnModel(`/MapObj/second_hand.nsbmd`);
+        } else if (obji.objectId === 0x00CE) { // test_cylinder
+            spawnModel(`/MapObj/test_cylinder.nsbmd`);
+        } else if (obji.objectId === 0x00CF) { // pendulum
+            spawnModel(`/MapObj/pendulum.nsbmd`);
+        } else if (obji.objectId === 0x00D0) { // rotary_room
+            spawnModel(`/MapObj/rotary_room.nsbmd`);
+        } else if (obji.objectId === 0x00D1) { // rotary_bridge
+            spawnModel(`/MapObj/rotary_bridge.nsbmd`);
+        } else if (obji.objectId === 0x012E) { // BeachTree1
+            spawnModel(`/MapObj/BeachTree1.nsbmd`);
+        } else if (obji.objectId === 0x012F) { // earthen_pipe
+            const b = spawnModel(`/MapObj/earthen_pipe1.nsbmd`);
+            setModelMtx(b, true);
+            b.modelMatrix[13] += 40;
+        } else if (obji.objectId === 0x0130) { // opa_tree1
+            spawnModel(`/MapObj/opa_tree1.nsbmd`);
+        } else if (obji.objectId === 0x0131) { // OlgPipe1
+            const b = spawnModel(`/MapObj/OlgPipe1.nsbmd`);
+            setModelMtx(b, true);
+        } else if (obji.objectId === 0x0132) { // OlgMush1
+            const b = spawnModel(`/MapObj/OlgMush1.nsbmd`);
+            setModelMtx(b, true);
+        } else if (obji.objectId === 0x0133) { // of6yoshi1
+            spawnModel(`/MapObj/of6yoshi1.nsbmd`);
+        } else if (obji.objectId === 0x0134) { // cow
+            spawnModel(`/MapObj/cow.nsbmd`).bindPAT0(device, parseBTP(`/MapObj/cow.nsbtp`));
+        } else if (obji.objectId === 0x0136) { // mini_dokan
+            const b = spawnModel(`/MapObj/mini_dokan.nsbmd`);
+            setModelMtx(b, true);
+        } else if (obji.objectId === 0x0138) { // GardenTree1
+            spawnModel(`/MapObj/GardenTree1.nsbmd`);
+        } else if (obji.objectId === 0x013A) { // CrossTree1
+            const b = spawnModel(`/MapObj/CrossTree1.nsbmd`);
+            setModelMtx(b, true);
+        } else if (obji.objectId === 0x013E) { // Bank_Tree1
+            spawnModel(`/MapObj/Bank_Tree1.nsbmd`);
+        } else if (obji.objectId === 0x013F) { // GardenTree1
+            spawnModel(`/MapObj/GardenTree1.nsbmd`);
+        } else if (obji.objectId === 0x0142) { // MarioTree3
+            spawnModel(`/MapObj/MarioTree3.nsbmd`);
+        } else if (obji.objectId === 0x0145) { // TownTree1
+            spawnModel(`/MapObj/TownTree1.nsbmd`);
+        } else if (obji.objectId === 0x0146) { // Snow_Tree1
+            spawnModel(`/MapObj/Snow_Tree1.nsbmd`);
+        } else if (obji.objectId === 0x0148) { // DeTree1
+            const b = spawnModel(`/MapObj/DeTree1.nsbmd`);
+            setModelMtx(b, true);
+        } else if (obji.objectId === 0x0149) { // BankEgg1
+            const b = spawnModel(`/MapObj/BankEgg1.nsbmd`);
+            setModelMtx(b, true);
+        } else if (obji.objectId === 0x014B) { // KinoHouse1
+            spawnModel(`/MapObj/KinoHouse1.nsbmd`);
+        } else if (obji.objectId === 0x014C) { // KinoHouse2
+            spawnModel(`/MapObj/KinoHouse2.nsbmd`);
+        } else if (obji.objectId === 0x014D) { // KinoMount1
+            spawnModel(`/MapObj/KinoMount1.nsbmd`);
+        } else if (obji.objectId === 0x014E) { // KinoMount2
+            spawnModel(`/MapObj/KinoMount2.nsbmd`);
+        } else if (obji.objectId === 0x014F) { // olaTree1c
+            spawnModel(`/MapObj/olaTree1c.nsbmd`);
+        } else if (obji.objectId === 0x0150) { // osaTree1c
+            spawnModel(`/MapObj/osaTree1c.nsbmd`);
+        } else if (obji.objectId === 0x0153) { // om6Tree1
+            const b = spawnModel(`/MapObj/om6Tree1.nsbmd`);
+            setModelMtx(b, true);
+        } else if (obji.objectId === 0x0154) { // RainStar
+            spawnModel(`/MapObj/RainStar.nsbmd`).bindSRT0(parseBTA(`/MapObj/RainStar.nsbta`));
+        } else if (obji.objectId === 0x0156) { // Of6Tree1
+            spawnModel(`/MapObj/Of6Tree1.nsbmd`);
+        } else if (obji.objectId === 0x0157) { // TownMonte
+            const whichFrame = obji.objectArg0;
+            spawnModel(`/MapObj/TownMonte.nsbmd`).bindPAT0(device, parseBTP(`/MapObj/TownMonte.nsbtp`), animFrame(whichFrame));
+        } else if (obji.objectId === 0x01A6) { // ob_pakkun_sf
+            const b = spawnModel(`/MapObj/ob_pakkun_sf.nsbmd`);
+            b.modelMatrix[13] += 30;
+        } else if (obji.objectId === 0x01A8) { // bound
+            spawnModel(`/MapObj/bound.nsbmd`).bindPAT0(device, parseBTP(`/MapObj/bound.nsbtp`));
+        } else if (obji.objectId === 0x01A9) { // flipper
+            const b = spawnModel(`/MapObj/flipper.nsbmd`);
+            b.bindPAT0(device, parseBTP(`/MapObj/flipper.nsbtp`));
+            b.bindSRT0(parseBTA(`/MapObj/flipper.nsbta`));
+            if (obji.objectArg0 === 0x01)
+                mat4.rotateY(b.modelMatrix, b.modelMatrix, Math.PI * 9/8);
+        } else if (obji.objectId === 0x01B4) { // cream
+            spawnModel(`/MapObj/cream.nsbmd`);
+        } else if (obji.objectId === 0x01B5) { // berry
+            spawnModel(`/MapObj/berry.nsbmd`);
+        }
     }
 
     public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
@@ -101,7 +333,7 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
                 skyboxRenderer.isSkybox = true;
             }
 
-            const c = new CourseRenderer(device, courseRenderer, skyboxRenderer);
+            const renderer = new MKDSRenderer(device, courseRenderer, skyboxRenderer);
 
             const courseBtaFile = courseNARC.files.find((file) => file.path === '/course_model.nsbta');
             const courseBta = courseBtaFile !== undefined ? NSBTA.parse(courseBtaFile.buffer) : null;
@@ -121,7 +353,17 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
                 if (skyboxBta !== null)
                     skyboxRenderer.bindSRT0(skyboxBta.srt0);
             }
-            return c;
+
+            // Now spawn objects
+            const courseNKM = courseNARC.files.find((file) => file.path === '/course_map.nkm');
+            if (courseNKM !== undefined) {
+                const nkm = parseNKM(courseNKM.buffer);
+                (renderer as any).nkm = nkm;
+                for (let i = 0; i < nkm.obji.length; i++)
+                    this.spawnObjectFromNKM(device, courseNARC, renderer, nkm.obji[i]);
+            }
+
+            return renderer;
         });
     }
 }
@@ -163,17 +405,20 @@ const sceneDescs = [
     new MarioKartDSSceneDesc("old_noko_sfc", "SNES Koopa Beach 2"),
     new MarioKartDSSceneDesc("old_choco_64", "N64 Choco Mountain"),
     new MarioKartDSSceneDesc("old_luigi_agb", "GBA Luigi Circuit"),
-    new MarioKartDSSceneDesc("old_mario_gc", "GCN Mushroom Bridge"),
+    new MarioKartDSSceneDesc("old_kinoko_gc", "GCN Mushroom Bridge"),
     "Lightning Cup",
     new MarioKartDSSceneDesc("old_choco_sfc", "SNES Choco Island 2"),
     new MarioKartDSSceneDesc("old_hyudoro_64", "N64 Banshee Boardwalk"),
     new MarioKartDSSceneDesc("old_sky_agb", "GBA Sky Garden"),
     new MarioKartDSSceneDesc("old_yoshi_gc", "GCN Yoshi Circuit"),
+    "Battle Stages",
+    new MarioKartDSSceneDesc("mini_stage1", "Nintedo DS"),
+    new MarioKartDSSceneDesc("mini_stage2", "Twilight House"),
+    new MarioKartDSSceneDesc("mini_stage3", "Palm Shore"),
+    new MarioKartDSSceneDesc("mini_stage4", "Tart Top"),
+    new MarioKartDSSceneDesc("mini_block_64", "Block Fort"),
+    new MarioKartDSSceneDesc("mini_dokan_gc", "Pipe Plaza"),
     "Mission Stages",
-    new MarioKartDSSceneDesc("mini_stage1", "mini_stage1"),
-    new MarioKartDSSceneDesc("mini_stage2", "mini_stage2"),
-    new MarioKartDSSceneDesc("mini_stage3", "mini_stage3"),
-    new MarioKartDSSceneDesc("mini_stage4", "mini_stage4"),
     new MarioKartDSSceneDesc("MR_stage1", "MR_stage1"),
     new MarioKartDSSceneDesc("MR_stage2", "MR_stage2"),
     new MarioKartDSSceneDesc("MR_stage3", "MR_stage3"),
@@ -186,9 +431,8 @@ const sceneDescs = [
     new MarioKartDSSceneDesc("test1_course", "test1_course"),
     new MarioKartDSSceneDesc("test_circle", "test_circle"),
     new MarioKartDSSceneDesc("mini_block_course", "mini_block_course"),
-    new MarioKartDSSceneDesc("mini_block_64", "mini_block_64"),
-    new MarioKartDSSceneDesc("mini_dokan_gc", "mini_dokan_gc"),
     new MarioKartDSSceneDesc("nokonoko_course", "nokonoko_course"),
+    new MarioKartDSSceneDesc("old_mario_gc", "old_mario_gc"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };

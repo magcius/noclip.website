@@ -53,7 +53,9 @@ layout(row_major, std140) uniform ub_MaterialParams {
 
 layout(row_major, std140) uniform ub_PacketParams {
     Mat4x3 u_ModelView;
+    vec4 u_Misc1;
 };
+#define u_PosScale (u_Misc1.x)
 
 uniform sampler2D u_Texture;
 `;
@@ -69,7 +71,7 @@ out vec4 v_Color;
 out vec2 v_TexCoord;
 
 void main() {
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_ModelView), vec4(a_Position, 1.0)));
+    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_ModelView), vec4(a_Position * u_PosScale, 1.0)));
     v_Color = a_Color;
 
     vec2 t_TexSpaceCoord;
@@ -259,7 +261,7 @@ const scratchMat4 = mat4.create();
 class BMDRenderer {
     public name: string = '';
     public isSkybox: boolean = false;
-    public localMatrix = mat4.create();
+    public modelMatrix = mat4.create();
     public normalMatrix = mat4.create();
     public extraTexCoordMat: mat2d | null = null;
     public animation: Animation | null = null;
@@ -279,9 +281,6 @@ class BMDRenderer {
     constructor(device: GfxDevice, public textureHolder: NITROTextureHolder, public bmdData: BMDData, public crg1Level: CRG1Level | null = null) {
         const bmd = this.bmdData.bmd;
         this.textureHolder.addTextures(device, bmd.textures);
-
-        const scaleFactor = bmd.scaleFactor;
-        mat4.fromScaling(this.localMatrix, [scaleFactor, scaleFactor, scaleFactor]);
     }
 
     private createProgram(): void {
@@ -432,9 +431,9 @@ class BMDRenderer {
         if (isBillboard) {
             // Apply billboard model if necessary.
             computeModelMatrixYBillboard(modelMatrix, viewerInput.camera);
-            mat4.mul(modelMatrix, this.localMatrix, modelMatrix);
+            mat4.mul(modelMatrix, this.modelMatrix, modelMatrix);
         } else {
-            mat4.copy(modelMatrix, this.localMatrix);
+            mat4.copy(modelMatrix, this.modelMatrix);
         }
 
         if (this.animation !== null)
@@ -476,10 +475,11 @@ class BMDRenderer {
                     materialPrepareToRenderFunc(hostAccessPass, viewerInput);
 
                     let offs = vertexDataCommand.templateRenderInst.getUniformBufferOffset(NITRO_Program.ub_PacketParams);
-                    const packetParamsMapped = this.packetParamsBuffer.mapBufferF32(offs, 12);
+                    const packetParamsMapped = this.packetParamsBuffer.mapBufferF32(offs, 16);
 
                     this.computeModelView(scratchMat4, viewerInput, model.billboard);
                     offs += fillMatrix4x3(packetParamsMapped, offs, scratchMat4);
+                    offs += fillVec4(packetParamsMapped, offs, this.bmdData.bmd.scaleFactor);
                 };
 
                 this.prepareToRenderFuncs.push(prepareToRenderFunc);
@@ -650,7 +650,7 @@ export class SceneDesc implements Viewer.SceneDesc {
     private _createBMDRenderer(device: GfxDevice, modelCache: ModelCache, textureHolder: NITROTextureHolder, filename: string, scale: number, level: CRG1Level, isSkybox: boolean): PromiseLike<BMDRenderer> {
         return modelCache.fetchModel(device, `sm64ds/${filename}`).then((bmdData: BMDData) => {
             const renderer = new BMDRenderer(device, textureHolder, bmdData, level);
-            mat4.scale(renderer.localMatrix, renderer.localMatrix, [scale, scale, scale]);
+            mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [scale, scale, scale]);
             renderer.isSkybox = isSkybox;
             return renderer;
         });
@@ -661,14 +661,14 @@ export class SceneDesc implements Viewer.SceneDesc {
             const renderer = new BMDRenderer(device, textureHolder, bmdData);
             renderer.name = filename;
 
-            vec3.scale(translation, translation, GLOBAL_SCALE / bmdData.bmd.scaleFactor);
-            mat4.translate(renderer.localMatrix, renderer.localMatrix, translation);
+            vec3.scale(translation, translation, GLOBAL_SCALE);
+            mat4.translate(renderer.modelMatrix, renderer.modelMatrix, translation);
 
-            mat4.rotateY(renderer.localMatrix, renderer.localMatrix, rotationY);
+            mat4.rotateY(renderer.modelMatrix, renderer.modelMatrix, rotationY);
 
             // Don't ask, ugh.
             scale = scale * (GLOBAL_SCALE / 100);
-            mat4.scale(renderer.localMatrix, renderer.localMatrix, [scale, scale, scale]);
+            mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [scale, scale, scale]);
 
             mat4.rotateY(renderer.normalMatrix, renderer.normalMatrix, rotationY);
 
@@ -728,9 +728,9 @@ export class SceneDesc implements Viewer.SceneDesc {
             const rotationX = object.Parameters[1] / 0x7FFF * (Math.PI);
             const isMirrored = ((object.Parameters[0] >> 13) & 0x03) === 3;
             return this._createBMDObjRenderer(device, modelCache, textureHolder, filename, translation, rotationY, 0.8).then((renderer) => {
-                mat4.rotateX(renderer.localMatrix, renderer.localMatrix, rotationX);
-                mat4.scale(renderer.localMatrix, renderer.localMatrix, [scaleX, scaleY, 1]);
-                mat4.translate(renderer.localMatrix, renderer.localMatrix, [0, 100/16, 0]);
+                mat4.rotateX(renderer.modelMatrix, renderer.modelMatrix, rotationX);
+                mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [scaleX, scaleY, 1]);
+                mat4.translate(renderer.modelMatrix, renderer.modelMatrix, [0, 100/16, 0]);
                 if (isMirrored) {
                     renderer.extraTexCoordMat = mat2d.create();
                     renderer.extraTexCoordMat[0] *= -1;

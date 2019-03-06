@@ -13,7 +13,7 @@ import { GfxRenderBuffer } from "../gfx/render/GfxRenderBuffer";
 import { TEX0, TEX0Texture } from "./nsbtx";
 import { TextureMapping } from "../TextureHolder";
 import { fillMatrix4x3, fillMatrix4x4, fillMatrix3x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
-import { computeViewMatrix, computeViewMatrixSkybox } from "../Camera";
+import { computeViewMatrix, computeViewMatrixSkybox, computeModelMatrixYBillboard } from "../Camera";
 import AnimationController from "../AnimationController";
 import { nArray } from "../util";
 
@@ -170,12 +170,20 @@ class Command_Material {
 
 class Command_Node {
     public modelMatrix = mat4.create();
+    public billboardY: boolean = false;
 
     constructor(public node: NSBMD.MDL0Node) {
     }
 
     public prepareToRender(baseModelMatrix: mat4, viewerInput: Viewer.ViewerRenderInput): void {
-        mat4.mul(this.modelMatrix, baseModelMatrix, this.node.jointMatrix);
+        if (this.billboardY) {
+            computeModelMatrixYBillboard(this.modelMatrix, viewerInput.camera);
+            mat4.mul(this.modelMatrix, this.node.jointMatrix, this.modelMatrix);
+        } else {
+            mat4.copy(this.modelMatrix, this.node.jointMatrix);
+        }
+
+        mat4.mul(this.modelMatrix, baseModelMatrix, this.modelMatrix);
     }
 }
 
@@ -201,12 +209,13 @@ class Command_Shape {
         mat4.mul(dst, dst, this.nodeCommand.modelMatrix);
     }
 
-    public prepareToRender(packetParamsBuffer: GfxRenderBuffer, isSkybox: boolean, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(packetParamsBuffer: GfxRenderBuffer, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean, posScale: number): void {
         let offs = this.vertexDataCommand.templateRenderInst.getUniformBufferOffset(NITRO_Program.ub_PacketParams);
-        const packetParamsMapped = packetParamsBuffer.mapBufferF32(offs, 12);
+        const packetParamsMapped = packetParamsBuffer.mapBufferF32(offs, 16);
 
         this.computeModelView(scratchMat4, viewerInput, isSkybox);
         offs += fillMatrix4x3(packetParamsMapped, offs, scratchMat4);
+        offs += fillVec4(packetParamsMapped, offs, posScale);
     }
 
     public destroy(device: GfxDevice): void {
@@ -241,7 +250,7 @@ export class MDL0Renderer {
         program.defines.set('USE_VERTEX_COLOR', '1');
         program.defines.set('USE_TEXTURE', '1');
         this.gfxProgram = device.createProgram(program);
-        const posScale = model.posScale * 50;
+        const posScale = 50;
         mat4.fromScaling(this.modelMatrix, [posScale, posScale, posScale]);
 
         const programReflection = device.queryProgram(this.gfxProgram);
@@ -274,15 +283,15 @@ export class MDL0Renderer {
         this.renderInstBuilder.finish(device, viewRenderer);
     }
 
-    public bindSRT0(srt0: NSBTA.SRT0): void {
+    public bindSRT0(srt0: NSBTA.SRT0, animationController: AnimationController = this.animationController): void {
         for (let i = 0; i < this.materialCommands.length; i++)
-            this.materialCommands[i].bindSRT0(this.animationController, srt0);
+            this.materialCommands[i].bindSRT0(animationController, srt0);
     }
 
-    public bindPAT0(device: GfxDevice, pat0: NSBTP.PAT0): void {
+    public bindPAT0(device: GfxDevice, pat0: NSBTP.PAT0, animationController: AnimationController = this.animationController): void {
         const hostAccessPass = device.createHostAccessPass();
         for (let i = 0; i < this.materialCommands.length; i++) {
-            if (this.materialCommands[i].bindPAT0(this.animationController, pat0))
+            if (this.materialCommands[i].bindPAT0(animationController, pat0))
                 this.materialCommands[i].translatePAT0Textures(device, hostAccessPass, this.tex0);
         }
         device.submitPass(hostAccessPass);
@@ -339,12 +348,15 @@ export class MDL0Renderer {
                 if (opt & 0x02)
                     srcIdx = view.getUint8(idx++);
             } else if (cmd === Op.BBY) {
-                const nodeId = view.getUint8(idx++);
+                const nodeIdx = view.getUint8(idx++);
                 let destIdx = -1, srcIdx = -1;
                 if (opt & 0x01)
                     destIdx = view.getUint8(idx++);
                 if (opt & 0x02)
                     srcIdx = view.getUint8(idx++);
+
+                if (opt === 0)
+                    this.nodeCommands[nodeIdx].billboardY = true;
             } else if (cmd === Op.POSSCALE) {
                 //
             } else {
@@ -367,7 +379,7 @@ export class MDL0Renderer {
         for (let i = 0; i < this.materialCommands.length; i++)
             this.materialCommands[i].prepareToRender(this.materialParamsBuffer, viewerInput);
         for (let i = 0; i < this.shapeCommands.length; i++)
-            this.shapeCommands[i].prepareToRender(this.packetParamsBuffer, this.isSkybox, viewerInput);
+            this.shapeCommands[i].prepareToRender(this.packetParamsBuffer, viewerInput, this.isSkybox, this.model.posScale);
 
         this.sceneParamsBuffer.prepareToRender(hostAccessPass);
         this.materialParamsBuffer.prepareToRender(hostAccessPass);
