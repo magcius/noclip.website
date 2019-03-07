@@ -162,7 +162,7 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
 
 // Courses named and organized by Starschulz
 const sceneDescs = [
-    "Luigi Circuit",
+    "Mushroom Cup",
     new MKDDSceneDesc(`Luigi Circuit`, 'Luigi.arc'),
     new MKDDSceneDesc(`Peach Beach`, 'Peach.arc'),
     new MKDDSceneDesc(`Baby Park`, 'BabyLuigi.arc'),

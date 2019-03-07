@@ -43,12 +43,13 @@ import * as TTYD from './ttyd/scenes';
 import * as SPM from './ttyd/spm_scenes';
 import * as MKDS from './nns_g3d/mkds_scenes';
 import * as NSMBDS from './nns_g3d/nsmbds_scenes';
+import * as NNS_G3D from './nns_g3d/scenes';
 import * as Z_BOTW from './z_botw/scenes';
 import * as SMO from './fres_nx/smo_scenes';
 import * as PSY from './psychonauts/scenes';
 import * as DKS from './dks/scenes';
-
 import * as J3D from './j3d/scenes';
+
 import { UI, SaveStatesAction } from './ui';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera';
 import { hexdump } from './util';
@@ -156,6 +157,9 @@ class DroppedFileSceneDesc implements SceneDesc {
 
         if (file.name.endsWith('.szs') || file.name.endsWith('.rarc') || file.name.endsWith('.bmd') || file.name.endsWith('.bdl'))
             return loadFileAsPromise(file).then((buffer) => J3D.createMultiSceneFromBuffer(device, buffer));
+
+        if (file.name.endsWith('.nsbmd'))
+            return loadFileAsPromise(file).then((buffer) => NNS_G3D.createBasicNSBMDRendererFromNSBMD(device, buffer));
 
         return null;
     }

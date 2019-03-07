@@ -59,7 +59,7 @@ function readTexture_Palette4(width: number, height: number, texData: ArrayBuffe
     const palView = palData.createDataView();
     let srcOffs = 0;
     for (let y = 0; y < height; y++) {
-        for (let xx = 0; xx < width; xx += 4) {
+        for (let xx = 0; xx < width; xx += 8) {
             let texBlock = texView.getUint16(srcOffs, true);
             srcOffs += 2;
             for (let x = 0; x < 8; x++) {

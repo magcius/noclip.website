@@ -258,9 +258,9 @@ class RailAnimationTico {
 const scratchVec3 = vec3.create();
 class Node {
     public name: string = '';
+    public modelMatrix = mat4.create();
 
     private modelMatrixAnimator: ModelMatrixAnimator | null = null;
-    private modelMatrix = mat4.create();
     private rotateSpeed = 0;
     private rotatePhase = 0;
 
@@ -588,6 +588,9 @@ class SMGRenderer implements Viewer.SceneGfx {
         }
 
         if (this.viewRenderer.hasAnyVisible(SMGPass.BLOOM)) {
+            lastPassRenderer.endPass(null);
+            device.submitPass(lastPassRenderer);
+
             const bloomColorTargetScene = this.bloomSceneColorTarget;
             const bloomColorTextureScene = this.bloomSceneColorTexture;
             bloomColorTargetScene.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
@@ -639,10 +642,12 @@ class SMGRenderer implements Viewer.SceneGfx {
             device.submitPass(bloomBokehPassRenderer);
 
             // Combine.
+            const bloomCombinePassRenderer = this.mainRenderTarget.createRenderPass(device, noClearRenderPassDescriptor);
             this.bloomTextureMapping[0].gfxTexture = bloomColorTextureBokeh.gfxTexture;
             this.bloomRenderInstCombine.setSamplerBindingsFromTextureMappings(this.bloomTextureMapping);
             this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
-            this.viewRenderer.executeOnPass(device, lastPassRenderer, SMGPass.BLOOM_COMBINE);
+            this.viewRenderer.executeOnPass(device, bloomCombinePassRenderer, SMGPass.BLOOM_COMBINE);
+            lastPassRenderer = bloomCombinePassRenderer;
         }
 
         return lastPassRenderer;
@@ -1033,10 +1038,22 @@ class SMGSpawner {
         case 'RockPlanetOrbitSky':
         case 'SummerSky':
         case 'VROrbit':
-            spawnGraph(name, SceneGraphTag.Skybox);
+            spawnGraph(name, SceneGraphTag.Skybox).then(([node, rarc]) => {
+                // Kill translation on the model matrix. Need to figure out how the game does skyboxen.
+                node.modelMatrix[12] = 0;
+                node.modelMatrix[13] = 0;
+                node.modelMatrix[14] = 0;
+            });
             break;
 
         // SMG2
+        case 'Moc':
+            spawnGraph(`Moc`, SceneGraphTag.Normal, { bck: 'turn.bck' }).then(([node, rarc]) => {
+                node.modelInstance.setShapeVisible(1, false);
+                node.modelInstance.setShapeVisible(2, false);
+                node.modelInstance.setShapeVisible(3, false);
+            });
+            break;
         case 'PlantC':
             spawnGraph(`PlantC00`);
             break;
@@ -1047,7 +1064,7 @@ class SMGSpawner {
             spawnGraph(`CaretakerHunter`);
             break;
         case 'WorldMapSyncSky':
-            // Presumably this uses the "current world map". I chose 04, because I like it.
+            // Presumably this uses the "current world map". I chose 03, because I like it.
             spawnGraph(`WorldMap03Sky`, SceneGraphTag.Skybox);
             break;
 
