@@ -22,6 +22,7 @@ import * as ZTP from './j3d/ztp_scenes';
 import * as MKDD from './j3d/mkdd_scenes';
 import * as ZWW from './j3d/zww_scenes';
 import * as SMS from './j3d/sms_scenes';
+import * as PIK2 from './j3d/pik2_scenes';
 import * as SMG1 from './j3d/smg1_scenes';
 import * as SMG2 from './j3d/smg2_scenes';
 import * as SM64DS from './sm64ds/scenes';
@@ -78,6 +79,7 @@ const sceneGroups = [
     MKDD.sceneGroup,
     MP1.sceneGroup,
     TTYD.sceneGroup,
+    PIK2.sceneGroup,
     SMS.sceneGroup,
     ZTP.sceneGroup,
     ZWW.sceneGroup,
