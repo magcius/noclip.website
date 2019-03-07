@@ -259,6 +259,7 @@ const scratchVec3 = vec3.create();
 class Node {
     public name: string = '';
     public modelMatrix = mat4.create();
+    public layer: number = -1;
 
     private modelMatrixAnimator: ModelMatrixAnimator | null = null;
     private rotateSpeed = 0;
@@ -374,10 +375,6 @@ function makeFullscreenPassRenderInst(renderInstBuilder: GfxRenderInstBuilder, n
 
 const TIME_OF_DAY_ICON = `<svg viewBox="0 0 100 100" height="20" fill="white"><path d="M50,93.4C74,93.4,93.4,74,93.4,50C93.4,26,74,6.6,50,6.6C26,6.6,6.6,26,6.6,50C6.6,74,26,93.4,50,93.4z M37.6,22.8  c-0.6,2.4-0.9,5-0.9,7.6c0,18.2,14.7,32.9,32.9,32.9c2.6,0,5.1-0.3,7.6-0.9c-4.7,10.3-15.1,17.4-27.1,17.4  c-16.5,0-29.9-13.4-29.9-29.9C20.3,37.9,27.4,27.5,37.6,22.8z"/></svg>`;
 
-function getZoneLayerFilterTag(zoneName: string, layerIndex: number): string {
-    return `${zoneName}_${getLayerName(layerIndex)}`;
-}
-
 const enum SMGPass {
     SKYBOX = 1 << 0,
     OPAQUE = 1 << 1,
@@ -491,21 +488,15 @@ class SMGRenderer implements Viewer.SceneGfx {
         renderInstBuilder.finish(device, this.viewRenderer);
     }
 
-    private setZoneLayersVisible(zoneName: string, layerMask: number): void {
-        for (let i = 0; i < 26; i++) {
-            const visible = !!(layerMask & (1 << i));
-            this.sceneGraph.forTag(getZoneLayerFilterTag(zoneName, i), (node) => {
-                node.modelInstance.setVisible(visible);
-            });
-        }
-    }
-
     private applyCurrentScenario(): void {
         const scenarioRecord = this.scenarioData.records[this.currentScenarioIndex];
-        for (const zoneName of this.zoneNames) {
-            const layerMask = BCSV.getField<number>(this.scenarioData, scenarioRecord, zoneName, 0);
-            this.setZoneLayersVisible(zoneName, layerMask);
+
+        for (let i = 0; i < this.spawner.zones.length; i++) {
+            const zoneNode = this.spawner.zones[i];
+            zoneNode.layerMask = BCSV.getField<number>(this.scenarioData, scenarioRecord, zoneNode.zone.name, 0);
         }
+
+        this.spawner.zones[0].computeObjectVisibility();
     }
 
     public setCurrentScenario(index: number): void {
@@ -823,9 +814,40 @@ class ModelCache {
     }
 }
 
+function layerVisible(layer: number, layerMask: number): boolean {
+    if (layer >= 0)
+        return !!(layerMask & (1 << layer));
+    else
+        return true;
+}
+
+class ZoneNode {
+    public objects: Node[] = [];
+
+    // The current layer mask for objects and sub-zones in this zone.
+    public layerMask: number = 0xFFFFFFFF;
+    // Whether the layer of our parent zone is visible.
+    public visible: boolean = true;
+    public subzones: ZoneNode[] = [];
+
+    constructor(public zone: Zone, private layer: number = -1) {
+    }
+
+    public computeObjectVisibility(): void {
+        for (let i = 0; i < this.objects.length; i++)
+            this.objects[i].modelInstance.setVisible(this.visible && layerVisible(this.objects[i].layer, this.layerMask));
+
+        for (let i = 0; i < this.subzones.length; i++) {
+            this.subzones[i].visible = this.visible && layerVisible(this.subzones[i].layer, this.layerMask);
+            this.subzones[i].computeObjectVisibility();
+        }
+    }
+}
+
 class SMGSpawner {
     public textureHolder = new J3DTextureHolder();
     public sceneGraph = new SceneGraph();
+    public zones: ZoneNode[] = [];
     private modelCache = new ModelCache();
 
     constructor(private pathBase: string, private renderHelper: GXRenderHelperGfx, private viewRenderer: GfxRenderInstViewRenderer, private planetTable: BCSV.Bcsv) {
@@ -904,7 +926,7 @@ class SMGSpawner {
         }
     }
 
-    public spawnObject(device: GfxDevice, zoneLayerFilterTag: string, objinfo: ObjInfo, modelMatrixBase: mat4): void {
+    public spawnObject(device: GfxDevice, zone: ZoneNode, layer: number, objinfo: ObjInfo, modelMatrixBase: mat4): void {
         const spawnGraph = (arcName: string, tag: SceneGraphTag = SceneGraphTag.Normal, animOptions: AnimOptions | null | undefined = undefined) => {
             const arcPath = `${this.pathBase}/ObjectData/${arcName}.arc`;
             const modelFilename = `${arcName}.bdl`;
@@ -919,9 +941,14 @@ class SMGSpawner {
                 modelInstance.name = `${objinfo.objName} ${objinfo.objId}`;
 
                 if (tag === SceneGraphTag.Skybox) {
-                    // If we have a skybox, then shrink it down a bit.
+                    // Kill translation and shrink a bit. Need to figure out how the game does skyboxen.
                     const skyboxScale = 0.5;
                     mat4.scale(objinfo.modelMatrix, objinfo.modelMatrix, [skyboxScale, skyboxScale, skyboxScale]);
+
+                    objinfo.modelMatrix[12] = 0;
+                    objinfo.modelMatrix[13] = 0;
+                    objinfo.modelMatrix[14] = 0;
+
                     modelInstance.setIsSkybox(true);
                     modelInstance.passMask = SMGPass.SKYBOX;
                 } else if (tag === SceneGraphTag.Indirect) {
@@ -933,9 +960,12 @@ class SMGSpawner {
                 }
 
                 const node = new Node(objinfo, modelInstance, modelMatrixBase, modelInstance.animationController);
+                node.layer = layer;
+                zone.objects.push(node);
+
                 this.applyAnimations(node, rarc, animOptions);
 
-                this.sceneGraph.addNode(node, [tag, zoneLayerFilterTag]);
+                this.sceneGraph.addNode(node, [tag]);
 
                 this.renderHelper.renderInstBuilder.constructRenderInsts(device, this.viewRenderer);
                 return [node, rarc];
@@ -1037,13 +1067,9 @@ class SMGSpawner {
         case 'GalaxySky':
         case 'RockPlanetOrbitSky':
         case 'SummerSky':
+        case 'MilkyWaySky':
         case 'VROrbit':
-            spawnGraph(name, SceneGraphTag.Skybox).then(([node, rarc]) => {
-                // Kill translation on the model matrix. Need to figure out how the game does skyboxen.
-                node.modelMatrix[12] = 0;
-                node.modelMatrix[13] = 0;
-                node.modelMatrix[14] = 0;
-            });
+            spawnGraph(name, SceneGraphTag.Skybox);
             break;
 
         // SMG2
@@ -1089,25 +1115,28 @@ class SMGSpawner {
         }
     }
 
-    public spawnZone(device: GfxDevice, zone: Zone, zones: Zone[], modelMatrixBase: mat4): void {
+    public spawnZone(device: GfxDevice, zone: Zone, zones: Zone[], modelMatrixBase: mat4, parentLayer: number = -1): ZoneNode {
         // Spawn all layers. We'll hide them later when masking out the others.
+        const zoneNode = new ZoneNode(zone, parentLayer);
+        this.zones.push(zoneNode);
 
         for (const layer of zone.layers) {
-            const zoneLayerFilterTag = getZoneLayerFilterTag(zone.name, layer.index);
-
             for (const objinfo of layer.objinfo)
-                this.spawnObject(device, zoneLayerFilterTag, objinfo, modelMatrixBase);
+                this.spawnObject(device, zoneNode, layer.index, objinfo, modelMatrixBase);
 
             for (const objinfo of layer.mappartsinfo)
-                this.spawnObject(device, zoneLayerFilterTag, objinfo, modelMatrixBase);
+                this.spawnObject(device, zoneNode, layer.index, objinfo, modelMatrixBase);
 
             for (const zoneinfo of layer.stageobjinfo) {
                 const subzone = zones.find((zone) => zone.name === zoneinfo.objName);
                 const subzoneModelMatrix = mat4.create();
                 mat4.mul(subzoneModelMatrix, modelMatrixBase, zoneinfo.modelMatrix);
-                this.spawnZone(device, subzone, zones, subzoneModelMatrix);
+                const subzoneNode = this.spawnZone(device, subzone, zones, subzoneModelMatrix, layer.index);
+                zoneNode.subzones.push(subzoneNode);
             }
         }
+
+        return zoneNode;
     }
 
     public destroy(device: GfxDevice): void {
