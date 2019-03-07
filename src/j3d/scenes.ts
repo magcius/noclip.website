@@ -14,6 +14,7 @@ import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { RENDER_HACKS_ICON } from '../bk/scenes';
+import { GXMaterialHacks } from '../gx/gx_material';
 
 export class BasicRenderer implements Viewer.SceneGfx {
     private viewRenderer = new GfxRenderInstViewRenderer();
@@ -86,12 +87,17 @@ export class BasicRenderer implements Viewer.SceneGfx {
             this.modelInstances[i].destroy(device);
     }
 }
+
+const materialHacks: GXMaterialHacks = {
+    lightingFudge: (p) => `(0.5 * (${p.ambSource} + 0.6) * ${p.matSource})`,
+};
+
 export function createModelInstance(device: GfxDevice, renderHelper: GXRenderHelperGfx, textureHolder: J3DTextureHolder, bmdFile: RARC.RARCFile, btkFile: RARC.RARCFile | null, brkFile: RARC.RARCFile | null, bckFile: RARC.RARCFile | null, bmtFile: RARC.RARCFile | null) {
     const bmd = BMD.parse(bmdFile.buffer);
     const bmt = bmtFile ? BMT.parse(bmtFile.buffer) : null;
     textureHolder.addJ3DTextures(device, bmd, bmt);
     const bmdModel = new BMDModel(device, renderHelper, bmd, bmt);
-    const scene = new BMDModelInstance(device, renderHelper, textureHolder, bmdModel);
+    const scene = new BMDModelInstance(device, renderHelper, textureHolder, bmdModel, materialHacks);
 
     if (btkFile !== null) {
         const btk = BTK.parse(btkFile.buffer);

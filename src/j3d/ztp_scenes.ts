@@ -9,7 +9,7 @@ import * as UI from '../ui';
 import { BMD, BMT, BTK, BTI, TEX1_TextureData, BRK, BCK } from './j3d';
 import * as RARC from './rarc';
 import { BMDModel, BMDModelInstance, J3DTextureHolder } from './render';
-import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
+import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks } from '../gx/gx_material';
 import { TextureOverride } from '../TextureHolder';
 import { readString, leftPad } from '../util';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
@@ -39,12 +39,16 @@ class ZTPTextureHolder extends J3DTextureHolder {
     }
 }
 
+const materialHacks: GXMaterialHacks = {
+    lightingFudge: (p) => `(0.5 * (${p.ambSource} + 0.6) * ${p.matSource})`,
+};
+
 function createScene(device: GfxDevice, renderHelper: GXRenderHelperGfx, textureHolder: J3DTextureHolder, bmdFile: RARC.RARCFile, btkFile: RARC.RARCFile, brkFile: RARC.RARCFile, bckFile: RARC.RARCFile, bmtFile: RARC.RARCFile) {
     const bmd = BMD.parse(bmdFile.buffer);
     const bmt = bmtFile ? BMT.parse(bmtFile.buffer) : null;
     textureHolder.addJ3DTextures(device, bmd, bmt);
     const bmdModel = new BMDModel(device, renderHelper, bmd, bmt);
-    const scene = new BMDModelInstance(device, renderHelper, textureHolder, bmdModel);
+    const scene = new BMDModelInstance(device, renderHelper, textureHolder, bmdModel, materialHacks);
 
     if (btkFile !== null) {
         const btk = BTK.parse(btkFile.buffer);
