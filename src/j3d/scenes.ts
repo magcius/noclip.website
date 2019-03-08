@@ -21,6 +21,7 @@ export class BasicRenderer implements Viewer.SceneGfx {
     private renderTarget = new BasicRenderTarget();
     public renderHelper: GXRenderHelperGfx;
     public modelInstances: BMDModelInstance[] = [];
+    public rarc: RARC.RARC[] = [];
 
     constructor(device: GfxDevice, public textureHolder: J3DTextureHolder) {
         this.renderHelper = new GXRenderHelperGfx(device);
@@ -117,16 +118,7 @@ export function createModelInstance(device: GfxDevice, renderHelper: GXRenderHel
     return scene;
 }
 
-function boolSort(a: boolean, b: boolean): number {
-    if (a && !b)
-        return -1;
-    else if (b && !a)
-        return 1;
-    else
-        return 0;
-}
-
-export function createScenesFromBuffer(device: GfxDevice, renderHelper: GXRenderHelperGfx, textureHolder: J3DTextureHolder, buffer: ArrayBufferSlice): Promise<BMDModelInstance[]> {
+function createScenesFromBuffer(device: GfxDevice, renderer: BasicRenderer, buffer: ArrayBufferSlice): Promise<BMDModelInstance[]> {
     return Promise.resolve(buffer).then((buffer: ArrayBufferSlice) => {
         if (readString(buffer, 0, 4) === 'Yaz0')
             return Yaz0.decompress(buffer);
@@ -135,6 +127,7 @@ export function createScenesFromBuffer(device: GfxDevice, renderHelper: GXRender
     }).then((buffer: ArrayBufferSlice) => {
         if (readString(buffer, 0, 4) === 'RARC') {
             const rarc = RARC.parse(buffer);
+            renderer.rarc.push(rarc);
             const bmdFiles = rarc.files.filter((f) => f.name.endsWith('.bmd') || f.name.endsWith('.bdl'));
             let scenes = bmdFiles.map((bmdFile) => {
                 // Find the corresponding btk.
@@ -145,7 +138,7 @@ export function createScenesFromBuffer(device: GfxDevice, renderHelper: GXRender
                 const bmtFile = rarc.files.find((f) => f.name === `${basename}.bmt`) || null;
                 let scene;
                 try {
-                    scene = createModelInstance(device, renderHelper, textureHolder, bmdFile, btkFile, brkFile, bckFile, bmtFile);
+                    scene = createModelInstance(device, renderer.renderHelper, renderer.textureHolder, bmdFile, btkFile, brkFile, bckFile, bmtFile);
                 } catch(e) {
                     console.warn(`File ${basename} failed to parse:`, e);
                     return null;
@@ -155,23 +148,17 @@ export function createScenesFromBuffer(device: GfxDevice, renderHelper: GXRender
                     scene.setIsSkybox(true);
                 return scene;
             });
-
             scenes = scenes.filter((scene) => !!scene);
-
-            // Sort skyboxen before non-skyboxen.
-            scenes = scenes.sort((a, b) => {
-                return boolSort(a.isSkybox, b.isSkybox);
-            });
 
             return scenes;
         }
 
         if (['J3D2bmd3', 'J3D2bdl4'].includes(readString(buffer, 0, 8))) {
             const bmd = BMD.parse(buffer);
-            textureHolder.addJ3DTextures(device, bmd);
-            const bmdModel = new BMDModel(device, renderHelper, bmd);
-            const scene = new BMDModelInstance(device, renderHelper, textureHolder, bmdModel);
-            return [scene];
+            renderer.textureHolder.addJ3DTextures(device, bmd);
+            const bmdModel = new BMDModel(device, renderer.renderHelper, bmd);
+            const modelInstance = new BMDModelInstance(device, renderer.renderHelper, renderer.textureHolder, bmdModel);
+            return [modelInstance];
         }
 
         return null;
@@ -180,7 +167,7 @@ export function createScenesFromBuffer(device: GfxDevice, renderHelper: GXRender
 
 export function createMultiSceneFromBuffer(device: GfxDevice, buffer: ArrayBufferSlice): Promise<BasicRenderer> {
     const renderer = new BasicRenderer(device, new J3DTextureHolder());
-    return createScenesFromBuffer(device, renderer.renderHelper, renderer.textureHolder, buffer).then((scenes) => {
+    return createScenesFromBuffer(device, renderer, buffer).then((scenes) => {
         for (let i = 0; i < scenes.length; i++)
             renderer.addModelInstance(scenes[i]);
         renderer.finish(device);

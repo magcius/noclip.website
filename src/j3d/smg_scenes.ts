@@ -972,8 +972,39 @@ class SMGSpawner {
             });
         };
 
+        const spawnDefault = (name: string): void => {
+            spawnGraph(name, SceneGraphTag.Normal);
+            // Spawn planets.
+            const planetRecord = this.planetTable.records.find((record) => BCSV.getField(this.planetTable, record, 'PlanetName') === name);
+            if (planetRecord) {
+                const bloomFlag = BCSV.getField(this.planetTable, planetRecord, 'BloomFlag');
+                const waterFlag = BCSV.getField(this.planetTable, planetRecord, 'WaterFlag');
+                const indirectFlag = BCSV.getField(this.planetTable, planetRecord, 'IndirectFlag');
+                if (bloomFlag)
+                    spawnGraph(`${name}Bloom`, SceneGraphTag.Bloom);
+                if (waterFlag)
+                    spawnGraph(`${name}Water`, SceneGraphTag.Water);
+                if (indirectFlag)
+                    spawnGraph(`${name}Indirect`, SceneGraphTag.Indirect);
+            }
+        };
+
         const name = objinfo.objName;
         switch (objinfo.objName) {
+
+        // Skyboxen.
+        case 'BeyondSummerSky':
+        case 'CloudSky':
+        case 'HalfGalaxySky':
+        case 'GalaxySky':
+        case 'RockPlanetOrbitSky':
+        case 'SummerSky':
+        case 'MilkyWaySky':
+        case 'VROrbit':
+        case 'DesertSky':
+            spawnGraph(name, SceneGraphTag.Skybox);
+            break;
+
         case 'FlagPeachCastleA':
         case 'FlagPeachCastleB':
         case 'FlagPeachCastleC':
@@ -1047,7 +1078,7 @@ class SMGSpawner {
                 this.bindChangeAnimation(node, rarc, objinfo.objArg0);
             });
             break;
-    
+
         case 'SweetsDecoratePartsFork':
         case 'SweetsDecoratePartsSpoon':
             spawnGraph(name, SceneGraphTag.Normal, null).then(([node, rarc]) => {
@@ -1058,18 +1089,6 @@ class SMGSpawner {
             spawnGraph(name, SceneGraphTag.Normal, null).then(([node, rarc]) => {
                 this.bindChangeAnimation(node, rarc, objinfo.objArg0);
             });
-            break;
-
-        // Skyboxen.
-        case 'BeyondSummerSky':
-        case 'CloudSky':
-        case 'HalfGalaxySky':
-        case 'GalaxySky':
-        case 'RockPlanetOrbitSky':
-        case 'SummerSky':
-        case 'MilkyWaySky':
-        case 'VROrbit':
-            spawnGraph(name, SceneGraphTag.Skybox);
             break;
 
         // SMG2
@@ -1094,24 +1113,9 @@ class SMGSpawner {
             spawnGraph(`WorldMap03Sky`, SceneGraphTag.Skybox);
             break;
 
-        default: {
-            const name = objinfo.objName;
-            spawnGraph(name, SceneGraphTag.Normal);
-            // Spawn planets.
-            const planetRecord = this.planetTable.records.find((record) => BCSV.getField(this.planetTable, record, 'PlanetName') === name);
-            if (planetRecord) {
-                const bloomFlag = BCSV.getField(this.planetTable, planetRecord, 'BloomFlag');
-                const waterFlag = BCSV.getField(this.planetTable, planetRecord, 'WaterFlag');
-                const indirectFlag = BCSV.getField(this.planetTable, planetRecord, 'IndirectFlag');
-                if (bloomFlag)
-                    spawnGraph(`${name}Bloom`, SceneGraphTag.Bloom);
-                if (waterFlag)
-                    spawnGraph(`${name}Water`, SceneGraphTag.Water);
-                if (indirectFlag)
-                    spawnGraph(`${name}Indirect`, SceneGraphTag.Indirect);
-            }
+        default:
+            spawnDefault(name);
             break;
-        }
         }
     }
 
