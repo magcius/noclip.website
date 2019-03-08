@@ -61,14 +61,33 @@ class Pik2SceneDesc implements Viewer.SceneDesc {
 
 const sceneDescs = [
     "Areas",
+    new Pik2SceneDesc(`Valley of Repose`, 'user/Kando/map/tutorial/arc.szs'),
+    new Pik2SceneDesc(`Awakening Wood`, 'user/Kando/map/forest/arc.szs'),
+    new Pik2SceneDesc(`Perplexing Pool`, 'user/Kando/map/yakushima/arc.szs'),
+    new Pik2SceneDesc(`Wistful Wild`, 'user/Kando/map/last/arc.szs'),
 
     "Piklopedia / Treasure Hoard",
+    new Pik2SceneDesc(`Piklopedia - Spring`, 'user/Kando/map/zukan/forest/arc.szs'),
+    new Pik2SceneDesc(`Piklopedia - Summer`, 'user/Kando/map/zukan/yakushima/arc.szs'),
+    new Pik2SceneDesc(`Piklopedia - Autumn`, 'user/Kando/map/zukan/last/arc.szs'),
+    new Pik2SceneDesc(`Piklopedia - Winter`, 'user/Kando/map/zukan/tutorial/arc.szs'),
 
     "Title Screen Backgrounds",
+    new Pik2SceneDesc(`Title Screen - Spring`, 'user/Ebisawa/title/bg_spring.szs'),
+    new Pik2SceneDesc(`Title Screen - Summer`, 'user/Ebisawa/title/bg_summer.szs'),
+    new Pik2SceneDesc(`Title Screen - Autumn`, 'user/Ebisawa/title/bg_autumn.szs'),
+    new Pik2SceneDesc(`Title Screen - Winter`, 'user/Ebisawa/title/bg_winter.szs'),
 
     "Cave Skyboxes",
+    new Pik2SceneDesc(`build`, 'user/Kando/map/vrbox/build.szs'),
+    new Pik2SceneDesc(`flooring`, 'user/Kando/map/vrbox/flooring.szs'),
+    new Pik2SceneDesc(`hiroba`, 'user/Kando/map/vrbox/hiroba.szs'),
+    new Pik2SceneDesc(`ice`, 'user/Kando/map/vrbox/ice.szs'),
+    new Pik2SceneDesc(`tatami`, 'user/Kando/map/vrbox/tatami.szs'),
+    new Pik2SceneDesc(`test`, 'user/Kando/map/vrbox/test.szs'),
 
     "Unused Test Maps",
+    new Pik2SceneDesc(`TestMap`, 'user/Kando/map/newtest/arc.szs'),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
