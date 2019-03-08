@@ -39,7 +39,7 @@ import { align, assert } from '../util';
 
 import * as GX from './gx_enum';
 import { Endianness, getSystemEndianness } from '../endian';
-import { GfxFormat, FormatCompFlags, FormatTypeFlags, getFormatCompByteSize, getFormatTypeFlagsByteSize, makeFormat, getFormatCompFlagsComponentCount, getFormatTypeFlags, getFormatComponentCount, getFormatFlags } from '../gfx/platform/GfxPlatformFormat';
+import { GfxFormat, FormatCompFlags, FormatTypeFlags, getFormatCompByteSize, getFormatTypeFlagsByteSize, makeFormat, getFormatCompFlagsComponentCount, getFormatTypeFlags, getFormatComponentCount, getFormatFlags, FormatFlags } from '../gfx/platform/GfxPlatformFormat';
 
 // GX_SetVtxAttrFmt
 export interface GX_VtxAttrFmt {
@@ -498,16 +498,23 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VtxLoader
             return `dstVertexDataView.setFloat32(${dstOffs}, ${value}, ${littleEndian})`;
         }
 
-        function compileWriteOneComponentU8(dstOffs: string, value: string): string {
+        function compileWriteOneComponentU8Norm(dstOffs: string, value: string): string {
             return `dstVertexDataView.setUint8(${dstOffs}, ${value} * 0xFF)`;
+        }
+
+        function compileWriteOneComponentU8(dstOffs: string, value: string): string {
+            return `dstVertexDataView.setUint8(${dstOffs}, ${value})`;
         }
 
         function compileWriteOneComponent(offs: number, value: string): string {
             const dstOffs = `dstVertexDataOffs + ${offs}`;
 
             const typeFlags = getFormatTypeFlags(dstAttribLayout.format);
+            const isNorm = getFormatFlags(dstAttribLayout.format) & FormatFlags.NORMALIZED;
             if (typeFlags === FormatTypeFlags.F32)
                 return compileWriteOneComponentF32(dstOffs, value);
+            else if (typeFlags === FormatTypeFlags.U8 && isNorm)
+                return compileWriteOneComponentU8Norm(dstOffs, value);
             else if (typeFlags === FormatTypeFlags.U8)
                 return compileWriteOneComponentU8(dstOffs, value);
             else
@@ -565,9 +572,9 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VtxLoader
                 case GX.CompType.RGB8:
                 case GX.CompType.RGBX8:
                     S += `
-        ${compileWriteOneComponent(dstOffs + 0, `${viewName}.getUint8(${attrOffs} + 0)`)};
-        ${compileWriteOneComponent(dstOffs + 1, `${viewName}.getUint8(${attrOffs} + 1)`)};
-        ${compileWriteOneComponent(dstOffs + 2, `${viewName}.getUint8(${attrOffs} + 2)`)};
+        ${compileWriteOneComponent(dstOffs + 0, `${viewName}.getUint8(${attrOffs} + 0) / 0xFF`)};
+        ${compileWriteOneComponent(dstOffs + 1, `${viewName}.getUint8(${attrOffs} + 1) / 0xFF`)};
+        ${compileWriteOneComponent(dstOffs + 2, `${viewName}.getUint8(${attrOffs} + 2) / 0xFF`)};
         ${compileWriteOneComponent(dstOffs + 3, `1.0`)};
 `;
                     break;
@@ -582,10 +589,10 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VtxLoader
                     break;
                 case GX.CompType.RGBA8:
                     S += `
-        ${compileWriteOneComponent(dstOffs + 0, `${viewName}.getUint8(${attrOffs} + 0)`)};
-        ${compileWriteOneComponent(dstOffs + 1, `${viewName}.getUint8(${attrOffs} + 1)`)};
-        ${compileWriteOneComponent(dstOffs + 2, `${viewName}.getUint8(${attrOffs} + 2)`)};
-        ${compileWriteOneComponent(dstOffs + 3, `${viewName}.getUint8(${attrOffs} + 3)`)};
+        ${compileWriteOneComponent(dstOffs + 0, `${viewName}.getUint8(${attrOffs} + 0) / 0xFF`)};
+        ${compileWriteOneComponent(dstOffs + 1, `${viewName}.getUint8(${attrOffs} + 1) / 0xFF`)};
+        ${compileWriteOneComponent(dstOffs + 2, `${viewName}.getUint8(${attrOffs} + 2) / 0xFF`)};
+        ${compileWriteOneComponent(dstOffs + 3, `${viewName}.getUint8(${attrOffs} + 3) / 0xFF`)};
 `;
                     break;
                 }
@@ -836,6 +843,7 @@ return { indexFormat: ${GfxFormat.U16_R}, indexData: dstIndexData.buffer, packed
 
 };
 `;
+
     const runVerticesGenerator = new Function(source);
     const runVertices: VtxLoaderFunc = runVerticesGenerator();
     return { loadedVertexLayout, runVertices };
