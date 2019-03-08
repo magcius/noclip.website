@@ -7,7 +7,7 @@ import * as GX from '../gx/gx_enum';
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString } from "../util";
 import * as GX_Material from '../gx/gx_material';
-import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, compileVtxLoader, LoadedVertexLayout, getComponentSizeRaw, getAttributeFormatCompFlagsRaw, getAttributeComponentCount } from '../gx/gx_displaylist';
+import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, compileVtxLoader, LoadedVertexLayout, getAttributeComponentByteSizeRaw, getAttributeFormatCompFlagsRaw } from '../gx/gx_displaylist';
 import { mat4, mat2d } from 'gl-matrix';
 import { Endianness } from '../endian';
 import { AABB } from '../Geometry';
@@ -900,7 +900,7 @@ function parseMDL0_VtxData(buffer: ArrayBufferSlice, vtxAttrib: GX.VertexAttribu
     }
 
     const numComponents = getFormatCompFlagsComponentCount(getAttributeFormatCompFlagsRaw(vtxAttrib, compCnt));
-    const compSize = getComponentSizeRaw(compType);
+    const compSize = getAttributeComponentByteSizeRaw(compType);
     const compByteSize = numComponents * compSize;
     const dataByteSize = compByteSize * count;
 

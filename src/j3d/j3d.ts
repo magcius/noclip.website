@@ -1495,10 +1495,6 @@ export class TTK1Animator {
         const translationS = sampleAnimationData(this.animationEntry.translationS, animFrame);
         const translationT = sampleAnimationData(this.animationEntry.translationT, animFrame);
 
-        if (frame === 3) {
-            console.log(this.ttk1, this.animationEntry.translationT, translationT, animFrame);
-        }
-
         calcTexMtx(dst, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
     }
 }

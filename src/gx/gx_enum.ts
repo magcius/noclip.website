@@ -103,6 +103,12 @@ export const enum CompType {
     U16 = 2,
     S16 = 3,
     F32 = 4,
+
+    RGB565 = 0,
+    RGB8 = 1,
+    RGBX8 = 2,
+    RGBA4 = 3,
+    RGBA6 = 4,
     RGBA8 = 5,
 }
 
