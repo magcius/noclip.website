@@ -37,7 +37,7 @@ class Pik2SceneDesc implements Viewer.SceneDesc {
     }
 
     public createScene(device: GfxDevice): Progressable<Viewer.SceneGfx> {
-        const path = `j3d/pik2/Areas/${this.path}`;
+        const path = `j3d/pik2/${this.path}`;
         return fetchData(path).then((result: ArrayBufferSlice) => {
             return Yaz0.decompress(result);
         }).then((buffer: ArrayBufferSlice) => {
@@ -47,8 +47,12 @@ class Pik2SceneDesc implements Viewer.SceneDesc {
 
             const renderer = new BasicRenderer(device, new J3DTextureHolder());
 
-            renderer.addModelInstance(this.spawnBMD(device, renderer, rarc, `model`));
-
+            if(rarc.findFile(`model.bmd`)) {
+                renderer.addModelInstance(this.spawnBMD(device, renderer, rarc, `model`));
+            }
+            if(rarc.findFile(`opening.bmd`)) {
+                renderer.addModelInstance(this.spawnBMD(device, renderer, rarc, `opening`));
+            }
             renderer.finish(device);
             return renderer;
         });
@@ -57,12 +61,14 @@ class Pik2SceneDesc implements Viewer.SceneDesc {
 
 const sceneDescs = [
     "Areas",
-    new Pik2SceneDesc(`Valley of Repose`, 'valley_of_repose.szs'),
-    new Pik2SceneDesc(`Awakening Wood`, 'awakening_wood.szs'),
-    new Pik2SceneDesc(`Perplexing Pool`, 'perplexing_pool.szs'),
-    new Pik2SceneDesc(`Wistful Wild`, 'wistful_wild.szs'),
+
+    "Piklopedia / Treasure Hoard",
+
+    "Title Screen Backgrounds",
+
+    "Cave Skyboxes",
+
     "Unused Test Maps",
-    new Pik2SceneDesc(`TestMap`, 'newtest.szs'),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
