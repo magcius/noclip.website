@@ -270,9 +270,10 @@ export class FPSCameraController implements CameraController {
         }
 
         this.keyMoveSpeed = Math.max(this.keyMoveSpeed, 1);
+        const isShiftPressed = inputManager.isKeyDown('ShiftLeft') || inputManager.isKeyDown('ShiftRight');
 
         let keyMoveMult = 1;
-        if (inputManager.isKeyDown('ShiftLeft') || inputManager.isKeyDown('ShiftRight'))
+        if (isShiftPressed)
             keyMoveMult = this.keyMoveShiftMult;
 
         let keyMoveSpeedCap = this.keyMoveSpeed * keyMoveMult;
@@ -326,8 +327,19 @@ export class FPSCameraController implements CameraController {
         const dx = inputManager.getMouseDeltaX() * (-1 / this.mouseLookSpeed);
         const dy = inputManager.getMouseDeltaY() * (-1 / this.mouseLookSpeed);
 
-        this.mouseMovement[0] += dx;
-        this.mouseMovement[1] += dy;
+        const mouseMovement = this.mouseMovement;
+        mouseMovement[0] += dx;
+        mouseMovement[1] += dy;
+
+        const keyAngleChangeVel = isShiftPressed ? 0.1 : 0.04;
+        if (inputManager.isKeyDown('KeyJ'))
+            mouseMovement[0] += keyAngleChangeVel;
+        else if (inputManager.isKeyDown('KeyL'))
+            mouseMovement[0] -= keyAngleChangeVel;
+        if (inputManager.isKeyDown('KeyI'))
+            mouseMovement[1] += keyAngleChangeVel;
+        else if (inputManager.isKeyDown('KeyK'))
+            mouseMovement[1] -= keyAngleChangeVel;
 
         if (!vec3.exactEquals(this.mouseMovement, vec3Zero)) {
             camera.getWorldUp(tmp);
