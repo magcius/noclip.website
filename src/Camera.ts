@@ -324,8 +324,9 @@ export class FPSCameraController implements CameraController {
 
         const mouseMoveLowSpeedCap = 0.0001;
 
+        const invertYMult = inputManager.invertY ? -1 : 1;
         const dx = inputManager.getMouseDeltaX() * (-1 / this.mouseLookSpeed);
-        const dy = inputManager.getMouseDeltaY() * (-1 / this.mouseLookSpeed);
+        const dy = inputManager.getMouseDeltaY() * (-1 / this.mouseLookSpeed) * invertYMult;
 
         const mouseMovement = this.mouseMovement;
         mouseMovement[0] += dx;
@@ -337,9 +338,9 @@ export class FPSCameraController implements CameraController {
         else if (inputManager.isKeyDown('KeyL'))
             mouseMovement[0] -= keyAngleChangeVel;
         if (inputManager.isKeyDown('KeyI'))
-            mouseMovement[1] += keyAngleChangeVel;
+            mouseMovement[1] += keyAngleChangeVel * invertYMult;
         else if (inputManager.isKeyDown('KeyK'))
-            mouseMovement[1] -= keyAngleChangeVel;
+            mouseMovement[1] -= keyAngleChangeVel * invertYMult;
 
         if (!vec3.exactEquals(this.mouseMovement, vec3Zero)) {
             camera.getWorldUp(tmp);

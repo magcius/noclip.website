@@ -49,8 +49,9 @@ export default class InputManager {
         this.toplevel.tabIndex = -1;
 
         this.keysDown = new Map<string, boolean>();
-        window.addEventListener('keydown', this._onKeyDown);
-        window.addEventListener('keyup', this._onKeyUp);
+        // https://discussion.evernote.com/topic/114013-web-clipper-chrome-extension-steals-javascript-keyup-events/
+        document.addEventListener('keydown', this._onKeyDown, { capture: true });
+        document.addEventListener('keyup', this._onKeyUp, { capture: true });
         window.addEventListener('blur', this._onBlur);
         this.toplevel.addEventListener('wheel', this._onWheel, { passive: false });
         this.toplevel.addEventListener('mousedown', this._onMouseDown);
@@ -70,13 +71,12 @@ export default class InputManager {
         this.scrollListeners.push(listener);
     }
 
-    public getMouseDeltaX(obeyInvert: boolean = true): number {
+    public getMouseDeltaX(): number {
         return this.dx;
     }
 
-    public getMouseDeltaY(obeyInvert: boolean = true): number {
-        const mult = (obeyInvert && this.invertY) ? -1 : 1;
-        return this.dy * mult;
+    public getMouseDeltaY(): number {
+        return this.dy;
     }
 
     public isKeyDownEventTriggered(key: string): boolean {
