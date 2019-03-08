@@ -12,6 +12,7 @@ import { mat4, } from 'gl-matrix';
 import * as RARC from './rarc';
 import { J3DTextureHolder, BMDModelInstance } from './render';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
+import { BTK } from './j3d';
 
 const id = "pik2";
 const name = "Pikmin 2";
@@ -42,17 +43,21 @@ class Pik2SceneDesc implements Viewer.SceneDesc {
             return Yaz0.decompress(result);
         }).then((buffer: ArrayBufferSlice) => {
             const rarc = RARC.parse(buffer);
-            debugger;
             console.log(rarc);
 
             const renderer = new BasicRenderer(device, new J3DTextureHolder());
 
-            if(rarc.findFile(`model.bmd`)) {
-                renderer.addModelInstance(this.spawnBMD(device, renderer, rarc, `model`));
+            if (rarc.findFile(`model.bmd`)) {
+                const m = this.spawnBMD(device, renderer, rarc, `model`);
+                const btk = rarc.findFileData(`texanm_1.btk`);
+                if (btk !== null)
+                    m.bindTTK1(BTK.parse(btk).ttk1);
+                renderer.addModelInstance(m);
             }
-            if(rarc.findFile(`opening.bmd`)) {
+
+            if (rarc.findFile(`opening.bmd`))
                 renderer.addModelInstance(this.spawnBMD(device, renderer, rarc, `opening`));
-            }
+
             renderer.finish(device);
             return renderer;
         });
