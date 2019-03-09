@@ -124,7 +124,8 @@ export enum TextureWrapMode {
     MIRRORED_REPEAT = 0x8370,
 }
 
-interface TextureBinding {
+export interface TextureBinding {
+    index: number;
     textureIdx: number;
     minFilter: TextureFilter;
     magFilter: TextureFilter;
@@ -178,7 +179,7 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
             const magFilter = view.getUint16(bindingOffs + 0x06, true);
             const wrapS = view.getUint16(bindingOffs + 0x08, true);
             const wrapT = view.getUint16(bindingOffs + 0x0A, true);
-            textureBindings.push({ textureIdx, minFilter, magFilter, wrapS, wrapT });
+            textureBindings.push({ index: j, textureIdx, minFilter, magFilter, wrapS, wrapT });
             bindingOffs += 0x18;
         }
 

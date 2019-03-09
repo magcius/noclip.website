@@ -104,7 +104,8 @@ class MaterialInstance {
     private textureMappings: TextureMapping[] = nArray(3, () => new TextureMapping());
     private gfxSamplers: GfxSampler[] = [];
     private colorAnimators: CMAB.ColorAnimator[] = [];
-    private srtAnimators: CMAB.TextureAnimator[] = [];
+    private srtAnimators: CMAB.TextureSRTAnimator[] = [];
+    private texturePaletteAnimators: CMAB.TexturePaletteAnimator[] = [];
     public templateRenderInst: GfxRenderInst;
     public visible: boolean = true;
 
@@ -154,14 +155,16 @@ class MaterialInstance {
                 continue;
 
             if (animEntry.animationType === CMAB.AnimationType.TRANSLATION || animEntry.animationType === CMAB.AnimationType.ROTATION) {
-                this.srtAnimators[animEntry.channelIndex] = new CMAB.TextureAnimator(animationController, cmab, animEntry);
+                this.srtAnimators[animEntry.channelIndex] = new CMAB.TextureSRTAnimator(animationController, cmab, animEntry);
             } else if (animEntry.animationType === CMAB.AnimationType.COLOR) {
                 this.colorAnimators[animEntry.channelIndex] = new CMAB.ColorAnimator(animationController, cmab, animEntry);
+            } else if (animEntry.animationType === CMAB.AnimationType.TEXTURE_PALETTE) {
+                this.texturePaletteAnimators[animEntry.channelIndex] = new CMAB.TexturePaletteAnimator(animationController, cmab, animEntry);
             }
         }
     }
 
-    public prepareToRender(materialParamsBuffer: GfxRenderBuffer, viewerInput: Viewer.ViewerRenderInput, visible: boolean): void {
+    public prepareToRender(materialParamsBuffer: GfxRenderBuffer, viewerInput: Viewer.ViewerRenderInput, visible: boolean, textureHolder: CtrTextureHolder): void {
         this.templateRenderInst.visible = visible && this.visible;
 
         if (visible) {
@@ -174,7 +177,13 @@ class MaterialInstance {
             }
             offs += fillColor(mapped, offs, scratchColor);
 
+            let rebindSamplers = false;
             for (let i = 0; i < 3; i++) {
+                if (this.texturePaletteAnimators[i]) {
+                    this.texturePaletteAnimators[i].fillTextureMapping(textureHolder, this.textureMappings[i]);
+                    rebindSamplers = true;
+                }
+
                 if (this.srtAnimators[i]) {
                     this.srtAnimators[i].calcTexMtx(scratchMatrix);
                     mat4.mul(scratchMatrix, this.material.textureMatrices[i], scratchMatrix);
@@ -185,6 +194,9 @@ class MaterialInstance {
             }
 
             offs += fillVec4(mapped, offs, this.material.alphaTestReference);
+
+            if (rebindSamplers)
+                this.templateRenderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
         }
     }
 
@@ -564,7 +576,7 @@ export class CmbRenderer {
         fillSceneParamsData(sceneParamsMapped, viewerInput.camera);
 
         for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].prepareToRender(this.materialParamsBuffer, viewerInput, this.visible);
+            this.materialInstances[i].prepareToRender(this.materialParamsBuffer, viewerInput, this.visible, this.textureHolder);
         for (let i = 0; i < this.shapeInstances.length; i++)
             this.shapeInstances[i].prepareToRender(this.prmParamsBuffer, viewerInput, this.boneMatrices, this.cmbData.inverseBindPoseMatrices);
 
@@ -591,9 +603,9 @@ export class CmbRenderer {
         this.csab = csab;
     }
 
-    public bindCMAB(cmab: CMAB.CMAB, channelIndex: number = 0): void {
+    public bindCMAB(cmab: CMAB.CMAB, channelIndex: number = 0, animationController = this.animationController): void {
         for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].bindCMAB(cmab, this.animationController, channelIndex);
+            this.materialInstances[i].bindCMAB(cmab, animationController, channelIndex);
     }
 }
 

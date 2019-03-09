@@ -1,16 +1,17 @@
 
 import * as CMB from './cmb';
 
-import { assert, readString, hexdump } from '../util';
+import { assert, readString } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { vec3, mat4, quat, mat3 } from 'gl-matrix';
+import { mat4, quat } from 'gl-matrix';
 
 const enum Version {
     Ocarina, Majora
 }
 
-export class ZSIScene {
-    public rooms: string[] = [];
+export interface ZSIScene {
+    name: string;
+    rooms: string[];
 }
 
 export class ZSIRoomSetup {
@@ -97,9 +98,9 @@ function readMesh(buffer: ArrayBufferSlice, offs: number): Mesh {
 }
 
 // ZSI headers are a slight modification of the original Z64 headers.
-function readSceneHeaders(version: Version, buffer: ArrayBufferSlice, offs: number = 0): ZSIScene {
+function readSceneHeaders(version: Version, name: string, buffer: ArrayBufferSlice, offs: number = 0): ZSIScene {
     const view = buffer.createDataView();
-    const zsi = new ZSIScene();
+    let rooms: string[] = [];
 
     while (true) {
         const cmd1 = view.getUint32(offs + 0x00, false);
@@ -114,12 +115,12 @@ function readSceneHeaders(version: Version, buffer: ArrayBufferSlice, offs: numb
         switch (cmdType) {
         case HeaderCommands.Rooms:
             const nRooms = (cmd1 >>> 16) & 0xFF;
-            zsi.rooms = readRooms(version, buffer, nRooms, cmd2);
+            rooms = readRooms(version, buffer, nRooms, cmd2);
             break;
         }
     }
 
-    return zsi;
+    return { name, rooms };
 }
 
 export function parseScene(buffer: ArrayBufferSlice): ZSIScene {
@@ -130,7 +131,7 @@ export function parseScene(buffer: ArrayBufferSlice): ZSIScene {
 
     // ZSI header is done. It's that simple! Now for the actual data.
     const headersBuf = buffer.slice(0x10);
-    return readSceneHeaders(version, headersBuf);
+    return readSceneHeaders(version, name, headersBuf);
 }
 
 // ZSI headers are a slight modification of the original Z64 headers.
