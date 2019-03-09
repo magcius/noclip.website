@@ -273,76 +273,68 @@ class SceneDesc implements Viewer.SceneDesc {
         else if (actor.actorId === ActorId.En_Box) fetchArchive(`zelda_box.zar`).then((zar) => {
             const b = buildModel(zar, `model/tr_box.cmb`, 0.005); // default scale for small chests
 
-            const enum Chest { BOSS, NORMAL };
+            const enum Chest { BOSS, SMALL_WOODEN, LARGE_WOODEN };
             function setChest(chest: Chest) {
                 b.shapeInstances[0].visible = chest === Chest.BOSS;
-                b.shapeInstances[1].visible = chest === Chest.NORMAL;
+                b.shapeInstances[1].visible = chest === Chest.SMALL_WOODEN || chest === Chest.LARGE_WOODEN;
                 b.shapeInstances[2].visible = chest === Chest.BOSS;
-                b.shapeInstances[3].visible = chest === Chest.NORMAL;
-                
-            }
-            const whichBox = ((actor.variable) >>> 12) & 0x0F;
+                b.shapeInstances[3].visible = chest === Chest.SMALL_WOODEN || chest === Chest.LARGE_WOODEN;
 
-            if (whichBox === 0x00) {        // large
-                setChest(Chest.NORMAL);
-                mat4.scale(b.modelMatrix, b.modelMatrix, [2, 2, 2])
-            } else if (whichBox === 0x01) { // large
-                setChest(Chest.NORMAL);
-                mat4.scale(b.modelMatrix, b.modelMatrix, [2, 2, 2])
-            } else if (whichBox === 0x02) { // boss chest
+                if (chest === Chest.BOSS || chest === Chest.LARGE_WOODEN)
+                    mat4.scale(b.modelMatrix, b.modelMatrix, [2, 2, 2]);
+            }
+
+            const whichBox = ((actor.variable) >>> 12) & 0x0F;
+            if (whichBox === 0x00) {        // Large
+                setChest(Chest.LARGE_WOODEN);
+            } else if (whichBox === 0x01) { // Large, Appears, Clear Flag
+                setChest(Chest.LARGE_WOODEN);
+            } else if (whichBox === 0x02) { // Boss Key's Chest
                 setChest(Chest.BOSS);
-                mat4.scale(b.modelMatrix, b.modelMatrix, [2, 2, 2])
-            } else if (whichBox === 0x03) { // large
-                setChest(Chest.NORMAL);
-                mat4.scale(b.modelMatrix, b.modelMatrix, [2, 2, 2])
-            } else if (whichBox === 0x04) { // large
-                setChest(Chest.NORMAL);  
-                mat4.scale(b.modelMatrix, b.modelMatrix, [2, 2, 2])
-            } else if (whichBox === 0x05) { // small
-                setChest(Chest.NORMAL);
-            } else if (whichBox === 0x06) { // small
-                setChest(Chest.NORMAL);  
-            } else if (whichBox === 0x07) { // small
-                setChest(Chest.NORMAL);    
-            } else if (whichBox === 0x08) { // small
-                setChest(Chest.NORMAL);       
-            } else if (whichBox === 0x09) { // large
-                mat4.scale(b.modelMatrix, b.modelMatrix, [2, 2, 2])
-                setChest(Chest.NORMAL); 
-            } else if (whichBox === 0x0A) { // large
-                mat4.scale(b.modelMatrix, b.modelMatrix, [2, 2, 2])
-                setChest(Chest.NORMAL); 
-            } else if (whichBox === 0x0B) { // large
-                mat4.scale(b.modelMatrix, b.modelMatrix, [2, 2, 2])
-                setChest(Chest.NORMAL); 
-            } else if (whichBox === 0x0C) { // large
-                mat4.scale(b.modelMatrix, b.modelMatrix, [2, 2, 2])
-                setChest(Chest.NORMAL); 
+            } else if (whichBox === 0x03) { // Large, Falling, Switch Flag
+                setChest(Chest.LARGE_WOODEN);
+            } else if (whichBox === 0x04) { // Large, Invisible
+                setChest(Chest.LARGE_WOODEN);  
+            } else if (whichBox === 0x05) { // Small
+                setChest(Chest.SMALL_WOODEN);
+            } else if (whichBox === 0x06) { // Small, Invisible
+                setChest(Chest.SMALL_WOODEN);  
+            } else if (whichBox === 0x07) { // Small, Appears, Clear Flag
+                setChest(Chest.SMALL_WOODEN);    
+            } else if (whichBox === 0x08) { // Small, Falls, Switch Flag
+                setChest(Chest.SMALL_WOODEN);       
+            } else if (whichBox === 0x09) { // Large, Appears, Zelda's Lullabye
+                setChest(Chest.LARGE_WOODEN);
+            } else if (whichBox === 0x0A) { // Large, Appears, Sun's Song
+                setChest(Chest.LARGE_WOODEN);
+            } else if (whichBox === 0x0B) { // Large, Appears, Switch Flag
+                setChest(Chest.LARGE_WOODEN);
+            } else if (whichBox === 0x0C) { // Large
+                setChest(Chest.LARGE_WOODEN);
             } else {
                 throw "Starschulz";
             }
-
         });
         else if (actor.actorId === ActorId.Obj_Syokudai) fetchArchive(`zelda_syokudai.zar`).then((zar) => {
-            const Modelid = (actor.variable >>> 12 ) & 0x0F;
-            if (Modelid === 0x00) {
+            const whichTorch = (actor.variable >>> 12) & 0x03;
+            if (whichTorch === 0x00) {
                 buildModel(zar, `model/syokudai_model.cmb`, 1);     // Golden Torch
-            } else if (Modelid === 0x01) {
+            } else if (whichTorch === 0x01) {
                 buildModel(zar, `model/syokudai_ki_model.cmb`, 1);  // Timed Torch 
-            } else if (Modelid === 0x02) {
+            } else if (whichTorch === 0x02) {
                 buildModel(zar, `model/syokudai_isi_model.cmb`, 1); // Wooden Torch
             } else {
                 throw "Starschulz";
             }
         });   
         else if (actor.actorId === ActorId.Obj_Hsblock) fetchArchive(`zelda_d_hsblock.zar`).then((zar) => {
-            const Modelid = actor.variable & 0x0F;
-            if (Modelid === 0x00) {
-                buildModel(zar, 'model/field_fshot_model.cmb', 0.1);   // Tower hookshot tartet
-            } else if (Modelid === 0x01) {
-                buildModel(zar, 'model/field_fshot_model.cmb', 0.1);   // same but underground?
-            } else if (Modelid === 0x02) {
-                buildModel(zar, 'model/field_fshot2_model.cmb', 0.1);  // square wall target
+            const whichTarget = actor.variable & 0x0F;
+            if (whichTarget === 0x00) {
+                buildModel(zar, 'model/field_fshot_model.cmb', 0.1);  // Tower Hookshot Target
+            } else if (whichTarget === 0x01) {
+                buildModel(zar, 'model/field_fshot_model.cmb', 0.1);  // Tower Hookshot Target (Starts underground)
+            } else if (whichTarget === 0x02) {
+                buildModel(zar, 'model/field_fshot2_model.cmb', 0.1); // Square Wall Target
             } else {
                 throw "starschulz";
             }
