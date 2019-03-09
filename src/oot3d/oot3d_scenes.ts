@@ -174,6 +174,10 @@ const enum ActorId {
     Obj_Syokudai        = 0x005E,
     Bg_Spot18_Shutter   = 0x01C4,
     En_Bombf            = 0x004C,
+    En_Blkobj           = 0x0136,
+    En_Goroiwa          = 0x0130,
+    En_Siofuki          = 0x015F,
+    Bg_Mizu_Movebg      = 0x0064,
 }
 
 class SceneDesc implements Viewer.SceneDesc {
@@ -221,8 +225,11 @@ class SceneDesc implements Viewer.SceneDesc {
                 b.shapeInstances[whichShape].visible = true;
             } else if (itemId === 0x03) { // Recovery Heart
                 buildModel(zar, `item00/model/drop_gi_heart.cmb`, 0.02);
+            } else if (itemId === 0x06) { // Heart Piece ( stuck in the ground a bit ? )
+                buildModel(zar, `item00/model/drop_gi_hearts_1.cmb`, 0.05);
             } else console.warn(`Unknown Item00 drop: ${hexzero(actor.variable, 4)}`);
         });
+
         else if (actor.actorId === ActorId.En_Kusa) fetchArchive(`zelda_kusa.zar`).then((zar) => buildModel(zar, `model/obj_kusa01_model.cmb`, 0.5));
         else if (actor.actorId === ActorId.En_Kanban) fetchArchive(`zelda_keep.zar`).then((zar) => buildModel(zar, `objects/model/kanban1_model.cmb`, 0.01));
         else if (actor.actorId === ActorId.En_Ko) fetchArchive(`zelda_kw1.zar`).then((zar) => {
@@ -263,17 +270,93 @@ class SceneDesc implements Viewer.SceneDesc {
         else if (actor.actorId === ActorId.En_Gs) fetchArchive(`zelda_gs.zar`).then((zar) => buildModel(zar, `model/gossip_stone2_model.cmb`, 0.1));
         else if (actor.actorId === ActorId.Obj_Tsubo) fetchArchive(`zelda_tsubo.zar`).then((zar) => buildModel(zar, `model/tubo2_model.cmb`, 0.15));
         else if (actor.actorId === ActorId.Obj_Kibako2) fetchArchive(`zelda_kibako2.zar`).then((zar) => buildModel(zar, `model/CIkibako_model.cmb`, 0.1));
-        else if (actor.actorId === ActorId.En_Box) fetchArchive(`zelda_box.zar`).then((zar) => buildModel(zar, `model/tr_box.cmb`, 0.008));
-        // wrong chest model, dont know how to specify which mesh
+        else if (actor.actorId === ActorId.En_Box) fetchArchive(`zelda_box.zar`).then((zar) => {
+            const b = buildModel(zar, `model/tr_box.cmb`, 0.005); // default scale for small chests
+
+            const enum Chest { BOSS, NORMAL };
+            function setChest(chest: Chest) {
+                b.shapeInstances[0].visible = chest === Chest.BOSS;
+                b.shapeInstances[1].visible = chest === Chest.NORMAL;
+                b.shapeInstances[2].visible = chest === Chest.BOSS;
+                b.shapeInstances[3].visible = chest === Chest.NORMAL;
+                
+            }
+            const whichBox = ((actor.variable) >>> 12) & 0x0F;
+
+            if (whichBox === 0x00) {        // large
+                setChest(Chest.NORMAL);
+                mat4.scale(b.modelMatrix, b.modelMatrix, [2, 2, 2])
+            } else if (whichBox === 0x01) { // large
+                setChest(Chest.NORMAL);
+                mat4.scale(b.modelMatrix, b.modelMatrix, [2, 2, 2])
+            } else if (whichBox === 0x02) { // boss chest
+                setChest(Chest.BOSS);
+                mat4.scale(b.modelMatrix, b.modelMatrix, [2, 2, 2])
+            } else if (whichBox === 0x03) { // large
+                setChest(Chest.NORMAL);
+                mat4.scale(b.modelMatrix, b.modelMatrix, [2, 2, 2])
+            } else if (whichBox === 0x04) { // large
+                setChest(Chest.NORMAL);  
+                mat4.scale(b.modelMatrix, b.modelMatrix, [2, 2, 2])
+            } else if (whichBox === 0x05) { // small
+                setChest(Chest.NORMAL);
+            } else if (whichBox === 0x06) { // small
+                setChest(Chest.NORMAL);  
+            } else if (whichBox === 0x07) { // small
+                setChest(Chest.NORMAL);    
+            } else if (whichBox === 0x08) { // small
+                setChest(Chest.NORMAL);       
+            } else if (whichBox === 0x09) { // large
+                mat4.scale(b.modelMatrix, b.modelMatrix, [2, 2, 2])
+                setChest(Chest.NORMAL); 
+            } else if (whichBox === 0x0A) { // large
+                mat4.scale(b.modelMatrix, b.modelMatrix, [2, 2, 2])
+                setChest(Chest.NORMAL); 
+            } else if (whichBox === 0x0B) { // large
+                mat4.scale(b.modelMatrix, b.modelMatrix, [2, 2, 2])
+                setChest(Chest.NORMAL); 
+            } else if (whichBox === 0x0C) { // large
+                mat4.scale(b.modelMatrix, b.modelMatrix, [2, 2, 2])
+                setChest(Chest.NORMAL); 
+            } else {
+                throw "Starschulz";
+            }
+
+        });
+        else if (actor.actorId === ActorId.Obj_Syokudai) fetchArchive(`zelda_syokudai.zar`).then((zar) => {
+            const Modelid = (actor.variable >>> 12 ) & 0x0F;
+            if (Modelid === 0x00) {
+                buildModel(zar, `model/syokudai_model.cmb`, 1);     // Golden Torch
+            } else if (Modelid === 0x01) {
+                buildModel(zar, `model/syokudai_ki_model.cmb`, 1);  // Timed Torch 
+            } else if (Modelid === 0x02) {
+                buildModel(zar, `model/syokudai_isi_model.cmb`, 1); // Wooden Torch
+            } else {
+                throw "Starschulz";
+            }
+        });   
+        else if (actor.actorId === ActorId.Obj_Hsblock) fetchArchive(`zelda_d_hsblock.zar`).then((zar) => {
+            const Modelid = actor.variable & 0x0F;
+            if (Modelid === 0x00) {
+                buildModel(zar, 'model/field_fshot_model.cmb', 0.1);   // Tower hookshot tartet
+            } else if (Modelid === 0x01) {
+                buildModel(zar, 'model/field_fshot_model.cmb', 0.1);   // same but underground?
+            } else if (Modelid === 0x02) {
+                buildModel(zar, 'model/field_fshot2_model.cmb', 0.1);  // square wall target
+            } else {
+                throw "starschulz";
+            }
+        });
         else if (actor.actorId === ActorId.Obj_Bombiwa) fetchArchive(`zelda_bombiwa.zar`).then((zar) => buildModel(zar, `model/obj_18b_stone_model.cmb`, 0.1));
         else if (actor.actorId === ActorId.Bg_Breakwall) fetchArchive(`zelda_bwall.zar`).then((zar) => buildModel(zar, `model/a_bomt_model.cmb`, 0.1));
         else if (actor.actorId === ActorId.Obj_Timeblock) fetchArchive(`zelda_timeblock.zar`).then((zar) => buildModel(zar, `model/brick_toki_model.cmb`, 1));
-        else if (actor.actorId === ActorId.Obj_Hsblock) fetchArchive(`zelda_d_hsblock.zar`).then((zar) => buildModel(zar, `model/field_fshot_model.cmb`, 0.05));
         else if (actor.actorId === ActorId.Bg_Spot18_Basket) fetchArchive(`zelda_spot18_obj.zar`).then((zar) => buildModel(zar, `model/obj_s18tubo_model.cmb`, 0.1));
-        else if (actor.actorId === ActorId.Obj_Syokudai) fetchArchive(`zelda_syokudai.zar`).then((zar) => buildModel(zar, `model/syokudai_isi_model.cmb`, 1));
         else if (actor.actorId === ActorId.Bg_Spot18_Shutter) fetchArchive(`zelda_spot18_obj.zar`).then((zar) => buildModel(zar, `model/obj_186_model.cmb`, 0.1));
         else if (actor.actorId === ActorId.En_Bombf) fetchArchive(`zelda_bombf.zar`).then((zar) => buildModel(zar, `model/bm_leaf_model.cmb`, 0.01));
-
+        else if (actor.actorId === ActorId.En_Blkobj) fetchArchive(`zelda_blkobj.zar`).then((zar) => buildModel(zar, `model/m_WhontR_0d_model.cmb`, 1));
+        else if (actor.actorId === ActorId.En_Goroiwa) fetchArchive(`zelda_goroiwa.zar`).then((zar) => buildModel(zar, `model/l_j_goroiwa_model.cmb`, 0.1));
+        else if (actor.actorId === ActorId.En_Siofuki) fetchArchive(`zelda_siofuki.zar`).then((zar) => buildModel(zar, `model/efc_tw_whirlpool_modelT.cmb`, 0.1));
+        else if (actor.actorId === ActorId.Bg_Mizu_Movebg) fetchArchive(`zelda_mizu_objects.zar`).then((zar) => buildModel(zar, `model/m_WPathFloat_model.cmb`, 0.1));
         else if (actor.actorId === ActorId.En_Cow) fetchArchive('zelda_cow.zar').then((zar) => {
             const b = buildModel(zar, `model/cow.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/usi_mogmog.csab`));
