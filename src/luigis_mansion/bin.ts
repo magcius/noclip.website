@@ -125,7 +125,7 @@ export function parse(buffer: ArrayBufferSlice, name: string): BIN {
 
         // Set up our input vertex description.
         const vcd: GX_VtxDesc[] = [];
-        for (let i = 0; i < GX.VertexAttribute.MAX; i++) {
+        for (let i = 0; i <= GX.VertexAttribute.MAX; i++) {
             if ((attributes & (1 << i)) !== 0) {
                 // Only care about TEX0 and POS for now...
                 const enableOutput = (i === GX.VertexAttribute.POS || i === GX.VertexAttribute.TEX0);

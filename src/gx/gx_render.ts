@@ -168,7 +168,7 @@ export class GXShapeHelperGfx {
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
 
         let usesZeroBuffer = false;
-        for (let vtxAttrib: GX.VertexAttribute = 0; vtxAttrib < GX.VertexAttribute.MAX; vtxAttrib++) {
+        for (let vtxAttrib: GX.VertexAttribute = 0; vtxAttrib <= GX.VertexAttribute.MAX; vtxAttrib++) {
             const attribLocation = GX_Material.getVertexAttribLocation(vtxAttrib);
 
             // TODO(jstpierre): Handle TEXMTXIDX attributes.

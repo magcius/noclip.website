@@ -54,7 +54,6 @@ interface GfxSamplerP_GL extends GfxSampler {
 }
 
 interface GfxProgramP_GL extends GfxProgram {
-    gl_program: WebGLProgram;
     deviceProgram: DeviceProgram;
 }
 
@@ -558,7 +557,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         gl.bindTexture(gl.TEXTURE_2D, getPlatformTexture(texture));
         gl.bindSampler(0, null);
         this._currentTextures[0] = null;
-        this._useProgram(this._fullscreenCopyProgram.gl_program);
+        this._useProgram(this._fullscreenCopyProgram.deviceProgram.glProgram);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
     //#endregion
@@ -772,8 +771,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _programCache: ProgramCache;
     private _createProgram(deviceProgram: DeviceProgram): GfxProgram {
         deviceProgram.compile(this, this._programCache);
-        const gl_program = deviceProgram.glProgram;
-        const program: GfxProgramP_GL = { _T: _T.Program, gl_program, deviceProgram };
+        const program: GfxProgramP_GL = { _T: _T.Program, deviceProgram };
         return program;
     }
 
@@ -1238,17 +1236,14 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     }
 
     private setPipeline(pipeline: GfxRenderPipeline): void {
-        const gl = this.gl;
         this._currentPipeline = pipeline as GfxRenderPipelineP_GL;
         this._setMegaState(this._currentPipeline.megaState);
 
         // Hotpatch support.
-        if (this._currentPipeline.program.deviceProgram.compileDirty) {
+        if (this._currentPipeline.program.deviceProgram.compileDirty)
             this._currentPipeline.program.deviceProgram.compile(this, this._programCache);
-            this._currentPipeline.program.gl_program = this._currentPipeline.program.deviceProgram.glProgram;
-        }
 
-        this._useProgram(this._currentPipeline.program.gl_program);
+        this._useProgram(this._currentPipeline.program.deviceProgram.glProgram);
     }
 
     private setInputState(inputState_: GfxInputState | null): void {

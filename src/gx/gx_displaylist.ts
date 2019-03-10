@@ -39,7 +39,7 @@ import { align, assert } from '../util';
 
 import * as GX from './gx_enum';
 import { Endianness, getSystemEndianness } from '../endian';
-import { GfxFormat, FormatCompFlags, FormatTypeFlags, getFormatCompByteSize, getFormatTypeFlagsByteSize, makeFormat, FormatFlags, getFormatCompFlagsComponentCount, getFormatTypeFlags, getFormatCompFlags, getFormatComponentCount, getFormatFlags } from '../gfx/platform/GfxPlatformFormat';
+import { GfxFormat, FormatCompFlags, FormatTypeFlags, getFormatCompByteSize, getFormatTypeFlagsByteSize, makeFormat, getFormatCompFlagsComponentCount, getFormatTypeFlags, getFormatComponentCount, getFormatFlags, FormatFlags } from '../gfx/platform/GfxPlatformFormat';
 
 // GX_SetVtxAttrFmt
 export interface GX_VtxAttrFmt {
@@ -63,7 +63,7 @@ export interface GX_Array {
 
 type CompSize = 1 | 2 | 4;
 
-export function getComponentSizeRaw(compType: GX.CompType): CompSize {
+export function getAttributeComponentByteSizeRaw(compType: GX.CompType): CompSize {
     switch (compType) {
     case GX.CompType.U8:
     case GX.CompType.S8:
@@ -95,12 +95,50 @@ function isVtxAttribMtxIdx(vtxAttrib: GX.VertexAttribute): boolean {
     }
 }
 
-function getComponentSize(vtxAttrib: GX.VertexAttribute, vatFormat: GX_VtxAttrFmt): CompSize {
+function isVtxAttribColor(vtxAttrib: GX.VertexAttribute): boolean {
+    switch (vtxAttrib) {
+    case GX.VertexAttribute.CLR0:
+    case GX.VertexAttribute.CLR1:
+        return true;
+    default:
+        return false;
+    }
+}
+
+function getAttributeComponentByteSize(vtxAttrib: GX.VertexAttribute, vatFormat: GX_VtxAttrFmt): CompSize {
     // MTXIDX fields don't have VAT entries.
     if (isVtxAttribMtxIdx(vtxAttrib))
         return 1;
 
-    return getComponentSizeRaw(vatFormat.compType);
+    return getAttributeComponentByteSizeRaw(vatFormat.compType);
+}
+
+function getAttributeByteSize(vtxAttrib: GX.VertexAttribute, vatFormat: GX_VtxAttrFmt): number {
+    // MTXIDX fields don't have VAT entries.
+    if (isVtxAttribMtxIdx(vtxAttrib))
+        return 1;
+
+    // Color works differently.
+    if (isVtxAttribColor(vtxAttrib)) {
+        switch (vatFormat.compType) {
+        case GX.CompType.RGB565:
+            return 2;
+        case GX.CompType.RGB8:
+            return 3;
+        case GX.CompType.RGBX8:
+            return 4;
+        case GX.CompType.RGBA4:
+            return 2;
+        case GX.CompType.RGBA6:
+            return 3;
+        case GX.CompType.RGBA8:
+            return 4;
+        }
+    }
+
+    const compSize = getAttributeComponentByteSize(vtxAttrib, vatFormat);
+    const compCount = getAttributeComponentCount(vtxAttrib, vatFormat);
+    return compSize * compCount;
 }
 
 export function getAttributeFormatCompFlagsRaw(vtxAttrib: GX.VertexAttribute, compCnt: GX.CompCnt): number {
@@ -284,13 +322,9 @@ function translateVatLayout(vatFormat: GX_VtxAttrFmt[], vcd: GX_VtxDesc[]): VatL
             assert(vtxAttrDesc.type === GX.AttrType.DIRECT);
 
         switch (vtxAttrDesc.type) {
-        case GX.AttrType.DIRECT: {
-            const srcAttrCompSize = getComponentSize(vtxAttrib, vtxAttrFmt);
-            const srcAttrCompCount = getAttributeComponentCount(vtxAttrib, vtxAttrFmt);
-            const srcAttrByteSize = srcAttrCompSize * srcAttrCompCount;
-            srcVertexSize += srcAttrByteSize;
+        case GX.AttrType.DIRECT:
+            srcVertexSize += getAttributeByteSize(vtxAttrib, vtxAttrFmt);
             break;
-        }
         case GX.AttrType.INDEX8:
             srcVertexSize += 1 * srcIndexComponentCount;
             break;
@@ -331,6 +365,10 @@ function translateVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): Verte
         vatLayouts.forEach((vatLayout) => {
             formatCompFlags = Math.max(formatCompFlags, getAttributeFormatCompFlags(vtxAttrib, vatLayout.vatFormat[vtxAttrib]));
         });
+
+        // For color attributes, we always output all 4 components.
+        if (isVtxAttribColor(vtxAttrib))
+            formatCompFlags = FormatCompFlags.COMP_RGBA;
 
         dstVertexSize += formatComponentSize * getFormatCompFlagsComponentCount(formatCompFlags);
 
@@ -393,7 +431,7 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VtxLoader
 
     function compileVtxArrayViews(): string {
         const sources = [];
-        for (let vtxAttrib: GX.VertexAttribute = 0; vtxAttrib < GX.VertexAttribute.MAX; vtxAttrib++) {
+        for (let vtxAttrib: GX.VertexAttribute = 0; vtxAttrib <= GX.VertexAttribute.MAX; vtxAttrib++) {
             const dstAttribLayout = loadedVertexLayout.dstVertexAttributeLayouts.find((layout) => layout.vtxAttrib === vtxAttrib);
 
             const outputEnabled = !!dstAttribLayout;
@@ -421,16 +459,11 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VtxLoader
         // If we don't have a destination for the data, then don't bother outputting.
         const outputEnabled = !!dstAttribLayout;
 
-        let srcAttrCompSize: number;
-        let srcAttrCompCount: number;
         let srcAttrByteSize: number;
 
         // We only need vtxAttrFmt if we're going to read the data.
-        if (vtxAttrDesc.type === GX.AttrType.DIRECT || outputEnabled) {
-            srcAttrCompSize = getComponentSize(vtxAttrib, vtxAttrFmt);
-            srcAttrCompCount = getAttributeComponentCount(vtxAttrib, vtxAttrFmt);
-            srcAttrByteSize = srcAttrCompSize * srcAttrCompCount;
-        }
+        if (vtxAttrDesc.type === GX.AttrType.DIRECT || outputEnabled)
+            srcAttrByteSize = getAttributeByteSize(vtxAttrib, vtxAttrFmt);
 
         function compileShift(n: string): string {
             // Instead of just doing `${n} >> srcAttrCompShift`, we use division
@@ -447,8 +480,6 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VtxLoader
             switch (getComponentType(vtxAttrib, vtxAttrFmt)) {
             case GX.CompType.F32:
                 return `${viewName}.getFloat32(${attrOffset})`;
-            case GX.CompType.RGBA8:
-                return `${viewName}.getUint8(${attrOffset})`;
             case GX.CompType.U8:
                 return compileShift(`${viewName}.getUint8(${attrOffset})`);
             case GX.CompType.U16:
@@ -467,6 +498,10 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VtxLoader
             return `dstVertexDataView.setFloat32(${dstOffs}, ${value}, ${littleEndian})`;
         }
 
+        function compileWriteOneComponentU8Norm(dstOffs: string, value: string): string {
+            return `dstVertexDataView.setUint8(${dstOffs}, ${value} * 0xFF)`;
+        }
+
         function compileWriteOneComponentU8(dstOffs: string, value: string): string {
             return `dstVertexDataView.setUint8(${dstOffs}, ${value})`;
         }
@@ -475,23 +510,30 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VtxLoader
             const dstOffs = `dstVertexDataOffs + ${offs}`;
 
             const typeFlags = getFormatTypeFlags(dstAttribLayout.format);
+            const isNorm = getFormatFlags(dstAttribLayout.format) & FormatFlags.NORMALIZED;
             if (typeFlags === FormatTypeFlags.F32)
                 return compileWriteOneComponentF32(dstOffs, value);
+            else if (typeFlags === FormatTypeFlags.U8 && isNorm)
+                return compileWriteOneComponentU8Norm(dstOffs, value);
             else if (typeFlags === FormatTypeFlags.U8)
                 return compileWriteOneComponentU8(dstOffs, value);
             else
                 throw "whoops";
         }
 
-        function compileOneAttrib(viewName: string, attrOffsetBase: string, drawCallIdxIncr: number): string {
+        function compileOneAttribOther(viewName: string, attrOffs: string): string {
             let S = ``;
 
             if (outputEnabled) {
+                const srcAttrCompSize = getAttributeComponentByteSize(vtxAttrib, vtxAttrFmt);
+                const srcAttrCompCount = getAttributeComponentCount(vtxAttrib, vtxAttrFmt);
+
                 const dstComponentSize = getFormatCompByteSize(dstAttribLayout.format);
-                const componentCount = getFormatComponentCount(dstAttribLayout.format);
-                for (let i = 0; i < componentCount; i++) {
+                const dstComponentCount = getFormatComponentCount(dstAttribLayout.format);
+
+                for (let i = 0; i < dstComponentCount; i++) {
                     const dstOffs: number = dstAttribLayout.offset + (i * dstComponentSize);
-                    const srcOffs: string = `${attrOffsetBase} + ${i * srcAttrCompSize}`;
+                    const srcOffs: string = `${attrOffs} + ${i * srcAttrCompSize}`;
 
                     // Fill in components not in the source with zero.
                     let value: string;
@@ -505,17 +547,78 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VtxLoader
                 }
             }
 
+            return S;
+        }
+
+        function compileOneAttribColor(viewName: string, attrOffs: string): string {
+            let S = ``;
+
+            if (outputEnabled) {
+                const dstComponentCount = getFormatComponentCount(dstAttribLayout.format);
+                const dstOffs: number = dstAttribLayout.offset;
+                assert(dstComponentCount === 4);
+
+                const temp = `_T${vtxAttrib}`;
+                switch (getComponentType(vtxAttrib, vtxAttrFmt)) {
+                case GX.CompType.RGB565:
+                    S += `
+        var ${temp} = ${viewName}.getUint16(${attrOffs});
+        ${compileWriteOneComponent(dstOffs + 0, `(((${temp} >>> 11) & 0x1F) / 0x1F)`)};
+        ${compileWriteOneComponent(dstOffs + 1, `(((${temp} >>>  5) & 0x3F) / 0x3F)`)};
+        ${compileWriteOneComponent(dstOffs + 2, `(((${temp} >>>  0) & 0x1F) / 0x1F)`)};
+        ${compileWriteOneComponent(dstOffs + 3, `1.0`)};
+`;
+                    break;
+                case GX.CompType.RGB8:
+                case GX.CompType.RGBX8:
+                    S += `
+        ${compileWriteOneComponent(dstOffs + 0, `${viewName}.getUint8(${attrOffs} + 0) / 0xFF`)};
+        ${compileWriteOneComponent(dstOffs + 1, `${viewName}.getUint8(${attrOffs} + 1) / 0xFF`)};
+        ${compileWriteOneComponent(dstOffs + 2, `${viewName}.getUint8(${attrOffs} + 2) / 0xFF`)};
+        ${compileWriteOneComponent(dstOffs + 3, `1.0`)};
+`;
+                    break;
+                case GX.CompType.RGBA6:
+                    S += `
+        var ${temp} = (${viewName}.getUint8(${attrOffs} + 0) << 16) | (${viewName}.getUint8(${attrOffs} + 1) << 8) | (${viewName}.getUint8(${attrOffs} + 2));
+        ${compileWriteOneComponent(dstOffs + 0, `(((${temp} >>> 18) & 0x3F) / 0x3F)`)};
+        ${compileWriteOneComponent(dstOffs + 1, `(((${temp} >>> 12) & 0x3F) / 0x3F)`)};
+        ${compileWriteOneComponent(dstOffs + 2, `(((${temp} >>>  6) & 0x3F) / 0x3F)`)};
+        ${compileWriteOneComponent(dstOffs + 3, `(((${temp} >>>  0) & 0x3F) / 0x3F)`)};
+`;
+                    break;
+                case GX.CompType.RGBA8:
+                    S += `
+        ${compileWriteOneComponent(dstOffs + 0, `${viewName}.getUint8(${attrOffs} + 0) / 0xFF`)};
+        ${compileWriteOneComponent(dstOffs + 1, `${viewName}.getUint8(${attrOffs} + 1) / 0xFF`)};
+        ${compileWriteOneComponent(dstOffs + 2, `${viewName}.getUint8(${attrOffs} + 2) / 0xFF`)};
+        ${compileWriteOneComponent(dstOffs + 3, `${viewName}.getUint8(${attrOffs} + 3) / 0xFF`)};
+`;
+                    break;
+                }
+            }
+
+            return S;
+        }
+
+        function compileOneAttrib(viewName: string, attrOffsetBase: string, drawCallIdxIncr: number): string {
+            let S = ``;
+
+            if (isVtxAttribColor(vtxAttrib))
+                S += compileOneAttribColor(viewName, attrOffsetBase);
+            else
+                S += compileOneAttribOther(viewName, attrOffsetBase);
+
             S += `
         drawCallIdx += ${drawCallIdxIncr};
-`;
-
+    `;
+    
             return S;
         }
 
         function compileOneIndex(viewName: string, readIndex: string, drawCallIdxIncr: number, uniqueSuffix: string = ''): string {
             const attrOffsetBase = `(${readIndex}) * ${srcAttrByteSize}`;
             const arrayOffsetVarName = `arrayOffset${vtxAttrib}${uniqueSuffix}`;
-            let S = '';
             if (outputEnabled) {
                 return `const ${arrayOffsetVarName} = ${attrOffsetBase};${compileOneAttrib(viewName, arrayOffsetVarName, drawCallIdxIncr)}`;
             } else {
@@ -554,7 +657,7 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VtxLoader
 
     function compileVatFormats(): string {
         const vatLayoutSources = new Map<GX.VtxFmt, string>();
-        for (let i = 0; i < GX.VtxFmt.VTXFMT7; i++) {
+        for (let i = 0; i <= GX.VtxFmt.VTXFMT7; i++) {
             const vatLayout = loadedVertexLayout.vatLayouts[i];
             if (!vatLayout)
                 continue;
@@ -562,9 +665,8 @@ function _compileVtxLoader(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VtxLoader
             assert(vatLayout.vcd === vcd);
 
             let S = '';
-            for (let vtxAttrib = 0; vtxAttrib < GX.VertexAttribute.MAX; vtxAttrib++) {
+            for (let vtxAttrib = 0; vtxAttrib <= GX.VertexAttribute.MAX; vtxAttrib++)
                 S += compileVatLayoutAttribute(vatLayout, vtxAttrib);
-            }
             vatLayoutSources.set(i, S);
         }
 
@@ -741,6 +843,7 @@ return { indexFormat: ${GfxFormat.U16_R}, indexData: dstIndexData.buffer, packed
 
 };
 `;
+
     const runVerticesGenerator = new Function(source);
     const runVertices: VtxLoaderFunc = runVerticesGenerator();
     return { loadedVertexLayout, runVertices };

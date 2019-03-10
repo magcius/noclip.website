@@ -412,7 +412,7 @@ const sceneDescs = [
     new MarioKartDSSceneDesc("old_sky_agb", "GBA Sky Garden"),
     new MarioKartDSSceneDesc("old_yoshi_gc", "GCN Yoshi Circuit"),
     "Battle Stages",
-    new MarioKartDSSceneDesc("mini_stage1", "Nintedo DS"),
+    new MarioKartDSSceneDesc("mini_stage1", "Nintendo DS"),
     new MarioKartDSSceneDesc("mini_stage2", "Twilight House"),
     new MarioKartDSSceneDesc("mini_stage3", "Palm Shore"),
     new MarioKartDSSceneDesc("mini_stage4", "Tart Top"),
