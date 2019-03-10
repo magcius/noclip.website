@@ -1,7 +1,7 @@
 import { assert } from "../../util";
 
 export const enum GfxTopology {
-    TRIANGLES, TRISTRIP, QUADS, QUADSTRIP,
+    TRIANGLES, TRISTRIP, TRIFAN, QUADS, QUADSTRIP,
 };
 
 export function convertToTriangleIndexBuffer(topology: GfxTopology, indexBuffer: Uint16Array): Uint16Array {
@@ -33,6 +33,16 @@ export function convertToTriangleIndexBuffer(topology: GfxTopology, indexBuffer:
                 newBuffer[dst++] = indexBuffer[i + 0];
                 newBuffer[dst++] = indexBuffer[i + 2];
             }
+        }
+    } else if (topology === GfxTopology.TRIFAN) {
+        let dst = 0;
+        newBuffer[dst++] = indexBuffer[0];
+        newBuffer[dst++] = indexBuffer[1];
+
+        for (let i = 2; i < indexBuffer.length; i++) {
+            newBuffer[dst++] = indexBuffer[0];
+            newBuffer[dst++] = indexBuffer[dst - 2];
+            newBuffer[dst++] = indexBuffer[i];
         }
     } else if (topology === GfxTopology.QUADSTRIP) {
         let dst = 0;
@@ -66,6 +76,7 @@ export function getTriangleCountForTopologyIndexCount(topology: GfxTopology, ind
         // One triangle per every three indexes.
         return indexCount / 3;
     case GfxTopology.TRISTRIP:
+    case GfxTopology.TRIFAN:
         // One triangle per index, minus the first two.
         return (indexCount - 2);
     case GfxTopology.QUADS:
