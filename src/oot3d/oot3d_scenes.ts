@@ -222,6 +222,15 @@ const enum ActorId {
     Bg_Spot18_Shutter      = 0x01C4,
     En_Cow                 = 0x01C6,
     Obj_Timeblock          = 0x01D1,
+    Bg_Ddan_Jd             = 0x0058,
+    En_Vm                  = 0x008A,
+    Bg_Dodoago             = 0x003F,
+    En_Dodojr              = 0x002F,
+    En_Am                  = 0x0054,
+    Bg_Ddan_kd             = 0x005C,
+    En_Zf                  = 0x0025,
+    En_Trap                = 0x0080,
+    En_Dodongo             = 0x0012,
 };
 
 // Some objects do special magic based on which scene they are loaded into.
@@ -444,6 +453,34 @@ class SceneDesc implements Viewer.SceneDesc {
             } else {
                 throw "Starschulz";
             }
+        });
+        else if (actor.actorId === ActorId.En_Bombf) fetchArchive(`zelda_bombf.zar`).then((zar) => {
+            const b = buildModel(zar, `model/bm_flower_model.cmb`, 0.01);
+            b.modelMatrix[13] += 10;
+            buildModel(zar, `model/bm_leaf_model.cmb`, 0.01);
+            buildModel(zar, `model/bm_leaf2_model.cmb`, 0.01);
+        });
+        
+        else if (actor.actorId === ActorId.En_Zf) fetchArchive(`zelda_zf.zar`).then((zar) => {
+            const whichEnemy = actor.variable & 0xFF
+            if (whichEnemy === 0x00) {
+                const b = buildModel(zar, `model/rezsulfos.cmb`, 0.02);  // Lizalfos Miniboss
+                b.bindCSAB(parseCSAB(zar, `anim/zf_matsu.csab`));
+            } else if (whichEnemy === 0x01) {
+                const b = buildModel(zar, `model/rezsulfos.cmb`, 0.02);  // Lizalfos Miniboss 2 
+                b.bindCSAB(parseCSAB(zar, `anim/zf_matsu.csab`));
+            } else if (whichEnemy === 0x80) {
+                const b = buildModel(zar, `model/rezsulfos.cmb`, 0.02);  // Lizalfos
+                b.bindCSAB(parseCSAB(zar, `anim/zf_matsu.csab`));
+            } else if (whichEnemy === 0xFE) {
+                const b = buildModel(zar, `model/dynafos.cmb`, 0.02);    // Dinolfos
+                b.bindCSAB(parseCSAB(zar, `anim/zf_matsu.csab`));
+            } else if (whichEnemy === 0xFF) {
+                const b = buildModel(zar, `model/rezsulfos.cmb`, 0.02);  // Lizalfos drops from ceiling
+                b.bindCSAB(parseCSAB(zar, `anim/zf_matsu.csab`));
+            } else {
+                throw "Starschulz";
+            }
         });   
         else if (actor.actorId === ActorId.Bg_Po_Syokudai) fetchArchive(`zelda_syokudai.zar`).then((zar) => buildModel(zar, `model/syokudai_model.cmb`, 1));
         else if (actor.actorId === ActorId.Obj_Hsblock) fetchArchive(`zelda_d_hsblock.zar`).then((zar) => {
@@ -463,7 +500,6 @@ class SceneDesc implements Viewer.SceneDesc {
         else if (actor.actorId === ActorId.Obj_Timeblock) fetchArchive(`zelda_timeblock.zar`).then((zar) => buildModel(zar, `model/brick_toki_model.cmb`, 1));
         else if (actor.actorId === ActorId.Bg_Spot18_Basket) fetchArchive(`zelda_spot18_obj.zar`).then((zar) => buildModel(zar, `model/obj_s18tubo_model.cmb`, 0.1));
         else if (actor.actorId === ActorId.Bg_Spot18_Shutter) fetchArchive(`zelda_spot18_obj.zar`).then((zar) => buildModel(zar, `model/obj_186_model.cmb`, 0.1));
-        else if (actor.actorId === ActorId.En_Bombf) fetchArchive(`zelda_bombf.zar`).then((zar) => buildModel(zar, `model/bm_leaf_model.cmb`));
         else if (actor.actorId === ActorId.En_Blkobj) fetchArchive(`zelda_blkobj.zar`).then((zar) => {
             const b = buildModel(zar, `model/m_WhontR_0d_model.cmb`, 1);
             b.bindCMAB(parseCMAB(zar, `misc/m_WusoR_0d_model.cmab`));
@@ -471,11 +507,17 @@ class SceneDesc implements Viewer.SceneDesc {
         else if (actor.actorId === ActorId.En_Goroiwa) fetchArchive(`zelda_goroiwa.zar`).then((zar) => buildModel(zar, `model/l_j_goroiwa_model.cmb`, 0.1));
         else if (actor.actorId === ActorId.En_Siofuki) fetchArchive(`zelda_siofuki.zar`).then((zar) => buildModel(zar, `model/efc_tw_whirlpool_modelT.cmb`, 0.1));
         else if (actor.actorId === ActorId.Bg_Mizu_Movebg) fetchArchive(`zelda_mizu_objects.zar`).then((zar) => buildModel(zar, `model/m_WPathFloat_model.cmb`, 0.1));
+        else if (actor.actorId === ActorId.Bg_Ddan_Jd) fetchArchive(`zelda_ddan_objects.zar`).then((zar) => buildModel(zar, `model/ddanh_jd_model.cmb`, 0.1));
+        else if (actor.actorId === ActorId.Bg_Dodoago) fetchArchive(`zelda_ddan_objects.zar`).then((zar) => buildModel(zar, `model/ddanh_ago_model.cmb`, 0.1));
+        else if (actor.actorId === ActorId.En_Am) fetchArchive('zelda_am.zar').then((zar) => buildModel(zar, `model/amos.cmb`, 0.015));
+        else if (actor.actorId === ActorId.Bg_Ddan_kd) fetchArchive(`zelda_ddan_objects.zar`).then((zar) => buildModel(zar, `model/ddanh_kaidan_model.cmb`, 0.1));
+        else if (actor.actorId === ActorId.En_Trap) fetchArchive(`dk_trap.zar`).then((zar) => buildModel(zar, `model/trap_model.cmb`, 0.1));
+        else if (actor.actorId === ActorId.En_Vm) fetchArchive('zelda_vm.zar').then((zar) => buildModel(zar, `model/beamos.cmb`));
         else if (actor.actorId === ActorId.En_Cow) fetchArchive('zelda_cow.zar').then((zar) => {
             const b = buildModel(zar, `model/cow.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/usi_mogmog.csab`));
         });
-       else if (actor.actorId === ActorId.En_In) fetchArchive('zelda_in.zar').then((zar) => {
+        else if (actor.actorId === ActorId.En_In) fetchArchive('zelda_in.zar').then((zar) => {
             const b = buildModel(zar, `model/ingo.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/in_shigoto.csab`)); 
         });
@@ -501,11 +543,19 @@ class SceneDesc implements Viewer.SceneDesc {
         });
         else if (actor.actorId === ActorId.En_Daiku_Kakariko) fetchArchive('zelda_daiku.zar').then((zar) => {
             const b = buildModel(zar, `model/disciple.cmb`);
-            b.bindCSAB(parseCSAB(zar, `anim/dk2_matsu.csab`));
+            b.bindCSAB(parseCSAB(zar, `anim/dk2_hanasi.csab`));
         });
         else if (actor.actorId === ActorId.En_St) fetchArchive('zelda_st.zar').then((zar) => {
             const b = buildModel(zar, `model/staltula.cmb`, 0.02);
             b.bindCSAB(parseCSAB(zar, `anim/st_matsu.csab`));
+        });
+        else if (actor.actorId === ActorId.En_Dodojr) fetchArchive('zelda_dodojr.zar').then((zar) => {
+            const b = buildModel(zar, `model/babydodongo.cmb`, 0.02);
+            b.bindCSAB(parseCSAB(zar, `anim/dd_wait.csab`));
+        });
+        else if (actor.actorId === ActorId.En_Dodongo) fetchArchive('zelda_dodongo.zar').then((zar) => {
+            const b = buildModel(zar, `model/dodongo.cmb`, 0.02);
+            b.bindCSAB(parseCSAB(zar, `anim/da_wait.csab`));
         });
         else if (actor.actorId === ActorId.En_Sw) fetchArchive('zelda_st.zar').then((zar) => {
             const whichSkulltula = (actor.variable >>> 12) & 0x07;
