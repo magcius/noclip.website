@@ -231,6 +231,9 @@ const enum ActorId {
     En_Zf                  = 0x0025,
     En_Trap                = 0x0080,
     En_Dodongo             = 0x0012,
+    Bg_Bdan_Objects        = 0x00C8,
+    Bg_Bdan_Switch         = 0x00E6,
+    En_Brob                = 0x00B6,
 };
 
 // Some objects do special magic based on which scene they are loaded into.
@@ -443,13 +446,43 @@ class SceneDesc implements Viewer.SceneDesc {
             }
         });
         else if (actor.actorId === ActorId.Obj_Syokudai) fetchArchive(`zelda_syokudai.zar`).then((zar) => {
-            const whichTorch = (actor.variable >>> 12) & 0x03;
-            if (whichTorch === 0x00) {
+            const whichModel = (actor.variable >>> 12) & 0x03;
+            if (whichModel === 0x00) {
                 buildModel(zar, `model/syokudai_model.cmb`, 1);     // Golden Torch
-            } else if (whichTorch === 0x01) {
+            } else if (whichModel === 0x01) {
                 buildModel(zar, `model/syokudai_ki_model.cmb`, 1);  // Timed Torch 
-            } else if (whichTorch === 0x02) {
+            } else if (whichModel === 0x02) {
                 buildModel(zar, `model/syokudai_isi_model.cmb`, 1); // Wooden Torch
+            } else {
+                throw "Starschulz";
+            }
+        });
+        else if (actor.actorId === ActorId.Bg_Bdan_Objects) fetchArchive(`zelda_bdan_objects.zar`).then((zar) => {
+            const whichModel = actor.variable & 0x0F
+            if (whichModel === 0x00) {
+                buildModel(zar, `model/bdan_toge_model.cmb`, 0.1);      // Giant Squid Platform
+            } else if (whichModel === 0x01) {
+                buildModel(zar, `model/bdan_ere_model.cmb`, 0.1);       // Elevator Platform
+            } else if (whichModel === 0x02) {
+                buildModel(zar, `model/bdan_bmizu_modelT.cmb`, 0.1);    // Water Square
+            } else if (whichModel === 0x03) {
+                buildModel(zar, `model/bdan_fdai_model.cmb`, 0.1);      // Lowering Platform
+            } else {
+                throw "Starschulz";
+            }
+        });
+        else if (actor.actorId === ActorId.Bg_Bdan_Switch) fetchArchive(`zelda_bdan_objects.zar`).then((zar) => {
+            const whichModel = actor.variable & 0x0F
+            if (whichModel === 0x00) {
+                buildModel(zar, `model/bdan_switch_b_model.cmb`, 0.1);
+            } else if (whichModel === 0x01) {
+                buildModel(zar, `model/bdan_switch_y_model.cmb`, 0.1);
+            } else if (whichModel === 0x02) {
+                buildModel(zar, `model/bdan_switch_y_model.cmb`, 0.1);
+            } else if (whichModel === 0x03) {
+                buildModel(zar, `model/bdan_switch_y_model.cmb`, 0.1);
+            } else if (whichModel === 0x04) {
+                buildModel(zar, `model/bdan_switch_y_model.cmb`, 0.1);
             } else {
                 throw "Starschulz";
             }
@@ -460,7 +493,6 @@ class SceneDesc implements Viewer.SceneDesc {
             buildModel(zar, `model/bm_leaf_model.cmb`, 0.01);
             buildModel(zar, `model/bm_leaf2_model.cmb`, 0.01);
         });
-        
         else if (actor.actorId === ActorId.En_Zf) fetchArchive(`zelda_zf.zar`).then((zar) => {
             const whichEnemy = actor.variable & 0xFF
             if (whichEnemy === 0x00) {
@@ -484,12 +516,12 @@ class SceneDesc implements Viewer.SceneDesc {
         });   
         else if (actor.actorId === ActorId.Bg_Po_Syokudai) fetchArchive(`zelda_syokudai.zar`).then((zar) => buildModel(zar, `model/syokudai_model.cmb`, 1));
         else if (actor.actorId === ActorId.Obj_Hsblock) fetchArchive(`zelda_d_hsblock.zar`).then((zar) => {
-            const whichTarget = actor.variable & 0x0F;
-            if (whichTarget === 0x00) {
+            const whichModel = actor.variable & 0x0F;
+            if (whichModel === 0x00) {
                 buildModel(zar, 'model/field_fshot_model.cmb', 0.1);  // Tower Hookshot Target
-            } else if (whichTarget === 0x01) {
+            } else if (whichModel === 0x01) {
                 buildModel(zar, 'model/field_fshot_model.cmb', 0.1);  // Tower Hookshot Target (Starts underground)
-            } else if (whichTarget === 0x02) {
+            } else if (whichModel === 0x02) {
                 buildModel(zar, 'model/field_fshot2_model.cmb', 0.1); // Square Wall Target
             } else {
                 throw "starschulz";
@@ -513,6 +545,7 @@ class SceneDesc implements Viewer.SceneDesc {
         else if (actor.actorId === ActorId.Bg_Ddan_kd) fetchArchive(`zelda_ddan_objects.zar`).then((zar) => buildModel(zar, `model/ddanh_kaidan_model.cmb`, 0.1));
         else if (actor.actorId === ActorId.En_Trap) fetchArchive(`dk_trap.zar`).then((zar) => buildModel(zar, `model/trap_model.cmb`, 0.1));
         else if (actor.actorId === ActorId.En_Vm) fetchArchive('zelda_vm.zar').then((zar) => buildModel(zar, `model/beamos.cmb`));
+        else if (actor.actorId === ActorId.En_Brob) fetchArchive('zelda_brob.zar').then((zar) => buildModel(zar, `model/brob.cmb`, 0.01));
         else if (actor.actorId === ActorId.En_Cow) fetchArchive('zelda_cow.zar').then((zar) => {
             const b = buildModel(zar, `model/cow.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/usi_mogmog.csab`));
