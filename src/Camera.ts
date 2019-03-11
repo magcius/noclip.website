@@ -270,7 +270,7 @@ export class FPSCameraController implements CameraController {
         }
 
         this.keyMoveSpeed = Math.max(this.keyMoveSpeed, 1);
-        const isShiftPressed = inputManager.isKeyDown('ShiftLeft') || inputManager.isKeyDown('ShiftRight');
+        const isShiftPressed = inputManager.isKeyDown('ShiftLeft') || inputManager.isKeyDown('ShiftRight') || inputManager.getGamepadButton(6) || inputManager.getGamepadButton(7);
 
         let keyMoveMult = 1;
         if (isShiftPressed)
@@ -288,6 +288,8 @@ export class FPSCameraController implements CameraController {
             keyMovement[2] = clampRange(keyMovement[2] - keyMoveVelocity, keyMoveSpeedCap);
         } else if (inputManager.isKeyDown('KeyS') || inputManager.isKeyDown('ArrowDown')) {
             keyMovement[2] = clampRange(keyMovement[2] + keyMoveVelocity, keyMoveSpeedCap);
+        } else if (Math.abs(inputManager.getGamepadAxis(1)) > 0.5) {
+            keyMovement[2] = clampRange(keyMovement[2] + keyMoveVelocity * inputManager.getGamepadAxis(1), keyMoveSpeedCap);
         } else {
             keyMovement[2] *= this.keyMoveDrag;
             if (Math.abs(keyMovement[2]) < keyMoveLowSpeedCap) keyMovement[2] = 0.0;
@@ -297,14 +299,15 @@ export class FPSCameraController implements CameraController {
             keyMovement[0] = clampRange(keyMovement[0] - keyMoveVelocity, keyMoveSpeedCap);
         } else if (inputManager.isKeyDown('KeyD') || inputManager.isKeyDown('ArrowRight')) {
             keyMovement[0] = clampRange(keyMovement[0] + keyMoveVelocity, keyMoveSpeedCap);
+            keyMovement[0] = clampRange(keyMovement[0] + keyMoveVelocity * inputManager.getGamepadAxis(0), keyMoveSpeedCap);
         } else {
             keyMovement[0] *= this.keyMoveDrag;
             if (Math.abs(keyMovement[0]) < keyMoveLowSpeedCap) keyMovement[0] = 0.0;
         }
 
-        if (inputManager.isKeyDown('KeyQ') || inputManager.isKeyDown('PageDown') || (inputManager.isKeyDown('ControlLeft') && inputManager.isKeyDown('Space'))) {
+        if (inputManager.isKeyDown('KeyQ') || inputManager.isKeyDown('PageDown') || (inputManager.isKeyDown('ControlLeft') && inputManager.isKeyDown('Space')) || inputManager.getGamepadButton(0)) {
             keyMovement[1] = clampRange(keyMovement[1] - keyMoveVelocity, keyMoveSpeedCap);
-        } else if (inputManager.isKeyDown('KeyE') || inputManager.isKeyDown('PageUp') || inputManager.isKeyDown('Space')) {
+        } else if (inputManager.isKeyDown('KeyE') || inputManager.isKeyDown('PageUp') || inputManager.isKeyDown('Space') || inputManager.getGamepadButton(1)) {
             keyMovement[1] = clampRange(keyMovement[1] + keyMoveVelocity, keyMoveSpeedCap);
         } else {
             keyMovement[1] *= this.keyMoveDrag;
@@ -325,8 +328,10 @@ export class FPSCameraController implements CameraController {
         const mouseMoveLowSpeedCap = 0.0001;
 
         const invertYMult = inputManager.invertY ? -1 : 1;
-        const dx = inputManager.getMouseDeltaX() * (-1 / this.mouseLookSpeed);
-        const dy = inputManager.getMouseDeltaY() * (-1 / this.mouseLookSpeed) * invertYMult;
+        const dx = (inputManager.getMouseDeltaX() || (Math.abs(inputManager.getGamepadAxis(2)) > 0.2 && inputManager.getGamepadAxis(2) * 50)) * (-1 / this.mouseLookSpeed);
+        const dy = (inputManager.getMouseDeltaY() || (Math.abs(inputManager.getGamepadAxis(3)) > 0.2 && inputManager.getGamepadAxis(3) * 50)) * (-1 / this.mouseLookSpeed) * invertYMult;
+
+        
 
         const mouseMovement = this.mouseMovement;
         mouseMovement[0] += dx;

@@ -345,7 +345,7 @@ class Main {
         }
         if (inputManager.isKeyDownEventTriggered('Numpad3'))
             this._exportSaveData();
-        if (inputManager.isKeyDownEventTriggered('Period'))
+        if (inputManager.isKeyDownEventTriggered('Period') || inputManager.isButtonDownEventTriggered(9))
             this.viewer.isSceneTimeRunning = !this.viewer.isSceneTimeRunning;
     }
 

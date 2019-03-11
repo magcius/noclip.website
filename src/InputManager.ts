@@ -29,6 +29,7 @@ export default class InputManager {
     public toplevel: HTMLElement;
     // tristate. non-existent = not pressed, false = pressed but not this frame, true = pressed this frame.
     public keysDown: Map<string, boolean>;
+    public buttonsDown: Map<number, boolean>;
     public dx: number;
     public dy: number;
     public dz: number;
@@ -41,6 +42,7 @@ export default class InputManager {
     private listeners: Listener[] = [];
     private scrollListeners: Listener[] = [];
     private usePointerLock: boolean = true;
+    private gamepads: Gamepad[] = [];
 
     constructor(toplevel: HTMLElement) {
         document.body.tabIndex = -1;
@@ -49,6 +51,7 @@ export default class InputManager {
         this.toplevel.tabIndex = -1;
 
         this.keysDown = new Map<string, boolean>();
+        this.buttonsDown = new Map<number, boolean>();
         // https://discussion.evernote.com/topic/114013-web-clipper-chrome-extension-steals-javascript-keyup-events/
         document.addEventListener('keydown', this._onKeyDown, { capture: true });
         document.addEventListener('keyup', this._onKeyUp, { capture: true });
@@ -61,6 +64,8 @@ export default class InputManager {
         GlobalSaveManager.addSettingListener('InvertY', (saveManager: SaveManager, key: string) => {
             this.invertY = saveManager.loadSetting<boolean>(key, false);
         });
+        window.addEventListener("gamepadconnected", this.connecthandler.bind(this));
+        window.addEventListener("gamepaddisconnected", this.disconnecthandler.bind(this));
     }
 
     public addListener(listener: Listener): void {
@@ -83,6 +88,10 @@ export default class InputManager {
         return !!this.keysDown.get(key);
     }
 
+    public isButtonDownEventTriggered(key: number): boolean {
+        return !!this.buttonsDown.get(key);
+    }
+
     public isKeyDown(key: string): boolean {
         return this.keysDown.has(key);
     }
@@ -99,6 +108,24 @@ export default class InputManager {
         // Go through and mark all keys as non-event-triggered.
         this.keysDown.forEach((v, k) => {
             this.keysDown.set(k, false);
+        });
+
+        this.gamepads.forEach(gamepad => {
+            if(gamepad.connected){
+                gamepad.buttons.forEach((button, index) => {
+                    if(!button.pressed && this.buttonsDown.has(index)) {
+                        this.buttonsDown.delete(index);
+                    }
+                    else if(this.buttonsDown.has(index) && button.pressed)
+                    {
+                        this.buttonsDown.set(index, false);
+                    }
+                    else if(!this.buttonsDown.has(index) && button.pressed)
+                    {
+                        this.buttonsDown.set(index, true);
+                    }
+                });
+            }
         });
     }
 
@@ -203,4 +230,33 @@ export default class InputManager {
         if (this.usePointerLock && this.toplevel.requestPointerLock !== undefined)
             this.toplevel.requestPointerLock();
     };
+
+    private connecthandler(e: GamepadEventInit): void {
+        this.gamepads[e.gamepad.index] = e.gamepad;
+    }
+
+    private disconnecthandler(e: GamepadEventInit): void {
+        delete this.gamepads[e.gamepad.index];
+    }
+
+    public getGamepadAxis(axis: number): number {
+        let value = 0;
+        this.gamepads.forEach(gamepad => {
+            if(gamepad.connected){
+                if(gamepad.mapping != 'standard' && axis >= 3) axis += 2;
+                 value = gamepad.axes[axis];
+            }
+        });
+        return value;
+    }
+
+    public getGamepadButton(button: number): boolean {
+        let value = false;
+        this.gamepads.forEach(gamepad => {
+            if(gamepad.connected){
+                value = gamepad.buttons[button].pressed;
+            }
+        });
+        return value;
+    }
 }
