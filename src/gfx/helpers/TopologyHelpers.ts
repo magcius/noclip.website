@@ -6,7 +6,7 @@ export const enum GfxTopology {
 
 export function convertToTriangles(dstBuffer: Uint16Array, dstOffs: number, topology: GfxTopology, indexBuffer: Uint16Array): void {
     assert(topology !== GfxTopology.TRIANGLES);
-    assert(dstOffs + getTriangleIndexCountForTopologyIndexCount(topology, indexBuffer.length) < dstBuffer.length);
+    assert(dstOffs + getTriangleIndexCountForTopologyIndexCount(topology, indexBuffer.length) <= dstBuffer.length);
 
     let dst = dstOffs;
     if (topology === GfxTopology.QUADS) {
