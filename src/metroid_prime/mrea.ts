@@ -564,6 +564,127 @@ export function parseGeometry(buffer: ArrayBufferSlice, materialSet: MaterialSet
     return [geometry, sectionIndex];
 }
 
+export const enum LightType {
+    LocalAmbient = 0,
+    Directional = 1,
+    Custom = 2,
+    Spot = 3
+}
+
+export interface Light {
+    type: LightType;
+    radius: number;
+    gxLight: GX_Material.Light;
+}
+export interface LightLayer {
+    lights: Light[];
+    ambientColor: GX_Material.Color;
+}
+
+export function parseLightLayer(buffer: ArrayBufferSlice, offs: number): [LightLayer, number] {
+    let ambientColor: GX_Material.Color;
+    const view = buffer.createDataView();
+    const epsilon = 1.192092896e-07;
+    const originalOffs = offs;
+
+    const lights: Light[] = [];
+    const lightCount = view.getUint32(offs);
+    offs += 4;
+
+    for (let i=0; i<lightCount; i++) {
+        const lightType = view.getUint32(offs);
+        const lightColorR = view.getFloat32(offs+4);
+        const lightColorG = view.getFloat32(offs+8);
+        const lightColorB = view.getFloat32(offs+12);
+        const posX = view.getFloat32(offs+16);
+        const posY = view.getFloat32(offs+20);
+        const posZ = view.getFloat32(offs+24);
+        const dirX = view.getFloat32(offs+28);
+        const dirY = view.getFloat32(offs+32);
+        const dirZ = view.getFloat32(offs+36);
+        const multiplier = view.getFloat32(offs+40);
+        const spotCutoff = view.getFloat32(offs+44);
+        const falloffType = view.getFloat32(offs+53);
+
+        if (lightType == LightType.LocalAmbient) {
+            ambientColor.r = Math.round( Math.min(lightColorR * multiplier, 1) * 255);
+            ambientColor.g = Math.round( Math.min(lightColorG * multiplier, 1) * 255);
+            ambientColor.b = Math.round( Math.min(lightColorB * multiplier, 1) * 255);
+            ambientColor.a = 255;
+        }
+        else {
+            let light: Light;
+            light.type = lightType;
+            light.gxLight.Color.r = Math.round(lightColorR * 255);
+            light.gxLight.Color.g = Math.round(lightColorG * 255);
+            light.gxLight.Color.b = Math.round(lightColorB * 255);
+            light.gxLight.Color.a = 255;
+            vec3.set(light.gxLight.Position, posX, posY, posZ);
+            vec3.set(light.gxLight.Direction, dirX, dirY, dirZ);
+
+            if (lightType == LightType.Directional) {
+                vec3.set(light.gxLight.DistAtten, 0, 1, 0);
+                vec3.set(light.gxLight.CosAtten, 0, 1, 0);
+            }
+            else {
+                const distAttenA = (falloffType == 0) ? (2.0 / multiplier) : 0;
+                const distAttenB = (falloffType == 1) ? (250.0 / multiplier) : 0;
+                const distAttenC = (falloffType == 2) ? (25000.0 / multiplier) : 0;
+                vec3.set(light.gxLight.DistAtten, distAttenA, distAttenB, distAttenC);
+
+                if (lightType == LightType.Spot) {
+                    vec3.negate(light.gxLight.Direction, vec3.normalize(vec3.create(), light.gxLight.Direction));
+
+                    // Calculate angle atten
+                    if (spotCutoff < 0 || spotCutoff > 90) {
+                        vec3.set(light.gxLight.CosAtten, 1, 0, 0);
+                    }
+                    else {
+                        const radCutoff = spotCutoff * Math.PI / 180;
+                        const cosCutoff = Math.cos(radCutoff);
+                        const invCosCutoff = 1 - cosCutoff;
+                        vec3.set(light.gxLight.CosAtten, 0, -cosCutoff / invCosCutoff, 1.0 / invCosCutoff);
+                    }
+                }
+                // All other values default to Custom (which are standard point lights)
+                else {
+                    vec3.set(light.gxLight.CosAtten, 1, 0, 0);
+                }
+            }
+                    
+            // Calculate radius
+            if (light.gxLight.DistAtten[1] >= epsilon || light.gxLight.DistAtten[2] >= epsilon) {
+                const intensity = Math.max(lightColorR, lightColorG, lightColorB);
+                
+                if (light.gxLight.DistAtten[2] > epsilon) {
+                    if (intensity <= epsilon) {
+                        light.radius = 0;
+                    }
+                    else {
+                        light.radius = Math.sqrt(intensity / (intensity * 5 / 255 * light.gxLight.DistAtten[2]));
+                    }
+                }
+                else {
+                    if (light.gxLight.DistAtten[1] <= epsilon) {
+                        light.radius = 0;
+                    }
+                    else {
+                        light.radius = intensity / Math.max(intensity * 5 / 255, 0.2) * light.gxLight.DistAtten[1];
+                    }
+                }
+            }
+            else {
+                light.radius = 3000000000000000000000000000000000000.0;
+            }
+
+            lights.push(light);
+        }
+        offs += 65;
+    }
+
+    return [ { lights, ambientColor }, offs - originalOffs ]
+}
+
 function parse_MP1(resourceSystem: ResourceSystem, assetID: string, buffer: ArrayBufferSlice): MREA {
     const view = buffer.createDataView();
 
