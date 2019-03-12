@@ -49,7 +49,7 @@ class SurfaceInstance {
     private materialTextureKey: number;
     public packetParams = new PacketParams();
 
-    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, public surface: Surface, materialCommand: Command_Material, coalescedBuffers: GfxCoalescedBuffers, public bbox: AABB) {
+    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, public surface: Surface, materialCommand: Command_Material, coalescedBuffers: GfxCoalescedBuffers, public modelMatrix: mat4, public bbox: AABB) {
         this.shapeHelper = new GXShapeHelperGfx(device, renderHelper, coalescedBuffers, surface.loadedVertexLayout, surface.loadedVertexData);
 
         this.renderInst = this.shapeHelper.pushRenderInst(renderHelper.renderInstBuilder, materialCommand.templateRenderInst);
@@ -57,7 +57,7 @@ class SurfaceInstance {
     }
 
     public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean, visible: boolean): boolean {
-        const modelMatrix = posMtx;
+        const modelMatrix = mat4.mul(mat4.create(), posMtx, this.modelMatrix);
 
         if (!isSkybox && visible) {
             bboxScratch.transform(this.bbox, modelMatrix);
@@ -309,11 +309,13 @@ export class MREARenderer {
     private materialCommands: Command_Material[] = [];
     private surfaceInstances: SurfaceInstance[] = [];
     private renderHelper: GXRenderHelperGfx;
+    private actors: CMDLRenderer[] = [];
     public visible: boolean = true;
 
     constructor(device: GfxDevice, public textureHolder: RetroTextureHolder, public name: string, public mrea: MREA) {
         this.renderHelper = new GXRenderHelperGfx(device);
         this.translateModel(device);
+        this.translateActors(device);
     }
 
     private translateModel(device: GfxDevice): void {
@@ -391,17 +393,38 @@ export class MREARenderer {
                     bbox.union(bbox, this.mrea.worldModels[mergedSurface.origSurfaces[j].worldModelIndex].bbox);
             }
 
-            const instance = new SurfaceInstance(device, this.renderHelper, mergedSurfaces[i], this.materialCommands[mergedSurfaces[i].materialIndex], this.bufferCoalescer.coalescedBuffers[i], bbox);
+            const instance = new SurfaceInstance(device, this.renderHelper, mergedSurfaces[i], this.materialCommands[mergedSurfaces[i].materialIndex], this.bufferCoalescer.coalescedBuffers[i], mat4.create(), bbox);
             this.surfaceInstances.push(instance);
         }
     }
 
+    private translateActors(device: GfxDevice): void {
+        for (let i = 0; i < this.mrea.scriptLayers.length; i++) {
+            const scriptLayer = this.mrea.scriptLayers[i];
+
+            for (let j = 0; j < scriptLayer.entities.length; j++) {
+                const ent = scriptLayer.entities[j];
+                
+                if (ent.active && ent.model) {
+                    this.actors.push( new CMDLRenderer(device, this.textureHolder, ent.name, ent.modelMatrix, ent.model) );
+                }
+            }
+        }
+    }
+
     public addToViewRenderer(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer): void {
+        for (let i = 0; i < this.actors.length; i++) {
+            this.actors[i].addToViewRenderer(device, viewRenderer);
+        }
         this.renderHelper.finishBuilder(device, viewRenderer);
     }
 
     public setVisible(visible: boolean): void {
         this.visible = visible;
+
+        for (let i = 0; i < this.actors.length; i++) {
+            this.actors[i].setVisible(visible);
+        }
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
@@ -421,6 +444,11 @@ export class MREARenderer {
                 const materialGroupCommand = this.materialGroupCommands[this.materialCommands[surfaceCommand.surface.materialIndex].material.groupIndex];
                 materialGroupCommand.prepareToRender(viewerInput, null, false);
             }
+        }
+
+        // Update our actors
+        for (let i = 0; i < this.actors.length; i++) {
+           this.actors[i].prepareToRender(hostAccessPass, viewerInput);
         }
 
         // If nothing is visible, then don't even bother updating our UBOs.
@@ -448,7 +476,7 @@ export class CMDLRenderer {
     public visible: boolean = true;
     public isSkybox: boolean = false;
 
-    constructor(device: GfxDevice, public textureHolder: RetroTextureHolder, public name: string, public cmdl: CMDL) {
+    constructor(device: GfxDevice, public textureHolder: RetroTextureHolder, public name: string, public modelMatrix: mat4, public cmdl: CMDL) {
         this.renderHelper = new GXRenderHelperGfx(device);
         this.translateModel(device);
     }
@@ -492,7 +520,7 @@ export class CMDLRenderer {
             if (materialCommand.material.isOccluder)
                 return;
 
-            this.surfaceCommands.push(new SurfaceInstance(device, this.renderHelper, surface, materialCommand, coalescedBuffers, this.cmdl.bbox));
+            this.surfaceCommands.push(new SurfaceInstance(device, this.renderHelper, surface, materialCommand, coalescedBuffers, this.modelMatrix, this.cmdl.bbox));
         });
     }
 

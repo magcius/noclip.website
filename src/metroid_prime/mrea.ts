@@ -4,19 +4,21 @@
 import * as GX_Material from '../gx/gx_material';
 import * as GX from '../gx/gx_enum';
 
+import * as Script from './script';
 import { TXTR } from './txtr';
 
 import { ResourceSystem } from "./resource";
 import { assert, readString, align } from "../util";
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { compileVtxLoaderMultiVat, GX_VtxDesc, GX_VtxAttrFmt, GX_Array, LoadedVertexData, LoadedVertexLayout, VtxLoader, compileVtxLoader } from '../gx/gx_displaylist';
-import { mat4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 import * as Pako from 'pako';
 import { AABB } from '../Geometry';
 
 export interface MREA {
     materialSet: MaterialSet;
     worldModels: WorldModel[];
+    scriptLayers: Script.ScriptLayer[];
 }
 
 export const enum UVAnimationType {
@@ -574,6 +576,7 @@ function parse_MP1(resourceSystem: ResourceSystem, assetID: string, buffer: Arra
     const worldModelCount = view.getUint32(0x38);
     const dataSectionCount = view.getUint32(0x3C);
     const worldGeometrySectionIndex = view.getUint32(0x40);
+    const scriptLayersSectionIndex = view.getUint32(0x44);
 
     const dataSectionSizeTable: number[] = [];
     let dataSectionSizeTableIdx = 0x60;
@@ -641,7 +644,33 @@ function parse_MP1(resourceSystem: ResourceSystem, assetID: string, buffer: Arra
         worldModels.push({ geometry, modelMatrix, bbox });
     }
 
-    return { materialSet, worldModels };
+    // Parse out script layers.
+    const scriptLayers: Script.ScriptLayer[] = [];
+    let scriptLayerOffs = dataSectionOffsTable[scriptLayersSectionIndex];
+    
+    const sclyMagic = readString(buffer, scriptLayerOffs, 4, false);
+    const sclyVersion = view.getUint32(scriptLayerOffs+4);
+    assert(sclyMagic == 'SCLY');
+    assert(sclyVersion == 1);
+
+    const numLayers = view.getUint32(scriptLayerOffs+8);
+    const scriptLayerSizes: number[] = [];
+    scriptLayerOffs += 12;
+
+    for (let i = 0; i < numLayers; i++)
+    {
+        scriptLayerSizes.push( view.getUint32(scriptLayerOffs) );
+        scriptLayerOffs += 4;
+    }
+
+    for (let i = 0; i < numLayers; i++)
+    {
+        const layer = Script.parseScriptLayer(buffer, scriptLayerOffs, resourceSystem);
+        scriptLayers.push(layer);
+        scriptLayerOffs += scriptLayerSizes[i];
+    }
+
+    return { materialSet, worldModels, scriptLayers };
 }
 
 function combineBuffers(totalSize: number, buffers: Uint8Array[]): Uint8Array {
@@ -1132,7 +1161,8 @@ function parse_DKCR(resourceSystem: ResourceSystem, assetID: string, buffer: Arr
         worldModels.push({ geometry, bbox, modelMatrix });
     }
 
-    return { materialSet, worldModels };
+    const scriptLayers: Script.ScriptLayer[] = [];
+    return { materialSet, worldModels, scriptLayers };
 }
 
 export function parse(resourceSystem: ResourceSystem, assetID: string, buffer: ArrayBufferSlice): MREA {

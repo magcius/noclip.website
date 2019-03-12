@@ -15,6 +15,7 @@ import * as BYML from '../byml';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { mat4, vec3 } from 'gl-matrix';
 
 export class RetroSceneRenderer implements Viewer.SceneGfx {
     public viewRenderer = new GfxRenderInstViewRenderer();
@@ -96,7 +97,7 @@ class MP1SceneDesc implements Viewer.SceneDesc {
                 const skyboxCMDL = resourceSystem.loadAssetByID(mlvl.defaultSkyboxID, 'CMDL');
                 if (skyboxCMDL) {
                     const skyboxName = resourceSystem.findResourceNameByID(mlvl.defaultSkyboxID);
-                    skyboxRenderer = new CMDLRenderer(device, textureHolder, skyboxName, skyboxCMDL);
+                    skyboxRenderer = new CMDLRenderer(device, textureHolder, skyboxName, mat4.create(), skyboxCMDL);
                     skyboxRenderer.isSkybox = true;
                 }
                 const areaRenderers = areas.map((mreaEntry) => {
@@ -106,7 +107,7 @@ class MP1SceneDesc implements Viewer.SceneDesc {
 
                 // By default, set only the first 10 area renderers to visible, so as to not "crash my browser please".
                 areaRenderers.slice(10).forEach((areaRenderer) => {
-                    areaRenderer.visible = false;
+                    areaRenderer.setVisible(false);
                 });
 
                 return new RetroSceneRenderer(device, mlvl, textureHolder, skyboxRenderer, areaRenderers);
