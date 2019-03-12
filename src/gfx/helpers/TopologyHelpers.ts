@@ -4,54 +4,57 @@ export const enum GfxTopology {
     TRIANGLES, TRISTRIP, TRIFAN, QUADS, QUADSTRIP,
 };
 
+export function convertToTriangles(dstBuffer: Uint16Array, dstOffs: number, topology: GfxTopology, indexBuffer: Uint16Array): void {
+    assert(topology !== GfxTopology.TRIANGLES);
+    assert(dstOffs + getTriangleIndexCountForTopologyIndexCount(topology, indexBuffer.length) < dstBuffer.length);
+
+    let dst = dstOffs;
+    if (topology === GfxTopology.QUADS) {
+        for (let i = 0; i < indexBuffer.length; i += 4) {
+            dstBuffer[dst++] = indexBuffer[i + 0];
+            dstBuffer[dst++] = indexBuffer[i + 1];
+            dstBuffer[dst++] = indexBuffer[i + 2];
+            dstBuffer[dst++] = indexBuffer[i + 2];
+            dstBuffer[dst++] = indexBuffer[i + 3];
+            dstBuffer[dst++] = indexBuffer[i + 0];
+        }
+    } else if (topology === GfxTopology.TRISTRIP) {
+        for (let i = 0; i < indexBuffer.length - 2; i++) {
+            if (i % 2 === 0) {
+                dstBuffer[dst++] = indexBuffer[i + 0];
+                dstBuffer[dst++] = indexBuffer[i + 1];
+                dstBuffer[dst++] = indexBuffer[i + 2];
+            } else {
+                dstBuffer[dst++] = indexBuffer[i + 1];
+                dstBuffer[dst++] = indexBuffer[i + 0];
+                dstBuffer[dst++] = indexBuffer[i + 2];
+            }
+        }
+    } else if (topology === GfxTopology.TRIFAN) {
+        for (let i = 0; i < indexBuffer.length - 2; i++) {
+            dstBuffer[dst++] = indexBuffer[0];
+            dstBuffer[dst++] = indexBuffer[i + 1];
+            dstBuffer[dst++] = indexBuffer[i + 2];
+        }
+    } else if (topology === GfxTopology.QUADSTRIP) {
+        for (let i = 0; i < indexBuffer.length - 2; i += 2) {
+            dstBuffer[dst++] = indexBuffer[i + 0];
+            dstBuffer[dst++] = indexBuffer[i + 1];
+            dstBuffer[dst++] = indexBuffer[i + 2];
+            dstBuffer[dst++] = indexBuffer[i + 2];
+            dstBuffer[dst++] = indexBuffer[i + 1];
+            dstBuffer[dst++] = indexBuffer[i + 3];
+        }
+    }
+}
+
 export function convertToTriangleIndexBuffer(topology: GfxTopology, indexBuffer: Uint16Array): Uint16Array {
     if (topology === GfxTopology.TRIANGLES)
         return indexBuffer;
 
     const newSize = getTriangleIndexCountForTopologyIndexCount(topology, indexBuffer.length);
     const newBuffer = new Uint16Array(newSize);
-
-    if (topology === GfxTopology.QUADS) {
-        let dst = 0;
-        for (let i = 0; i < indexBuffer.length; i += 4) {
-            newBuffer[dst++] = indexBuffer[i + 0];
-            newBuffer[dst++] = indexBuffer[i + 1];
-            newBuffer[dst++] = indexBuffer[i + 2];
-            newBuffer[dst++] = indexBuffer[i + 2];
-            newBuffer[dst++] = indexBuffer[i + 3];
-            newBuffer[dst++] = indexBuffer[i + 0];
-        }
-    } else if (topology === GfxTopology.TRISTRIP) {
-        let dst = 0;
-        for (let i = 0; i < indexBuffer.length - 2; i++) {
-            if (i % 2 === 0) {
-                newBuffer[dst++] = indexBuffer[i + 0];
-                newBuffer[dst++] = indexBuffer[i + 1];
-                newBuffer[dst++] = indexBuffer[i + 2];
-            } else {
-                newBuffer[dst++] = indexBuffer[i + 1];
-                newBuffer[dst++] = indexBuffer[i + 0];
-                newBuffer[dst++] = indexBuffer[i + 2];
-            }
-        }
-    } else if (topology === GfxTopology.TRIFAN) {
-        let dst = 0;
-        for (let i = 0; i < indexBuffer.length - 2; i++) {
-            newBuffer[dst++] = indexBuffer[0];
-            newBuffer[dst++] = indexBuffer[i + 1];
-            newBuffer[dst++] = indexBuffer[i + 2];
-        }
-    } else if (topology === GfxTopology.QUADSTRIP) {
-        let dst = 0;
-        for (let i = 0; i < indexBuffer.length - 2; i += 2) {
-            newBuffer[dst++] = indexBuffer[i + 0];
-            newBuffer[dst++] = indexBuffer[i + 1];
-            newBuffer[dst++] = indexBuffer[i + 2];
-            newBuffer[dst++] = indexBuffer[i + 2];
-            newBuffer[dst++] = indexBuffer[i + 1];
-            newBuffer[dst++] = indexBuffer[i + 3];
-        }
-    }
+    convertToTriangles(newBuffer, 0, topology, indexBuffer);
 
     return newBuffer;
 }
@@ -61,6 +64,10 @@ function range(start: number, length: number): Uint16Array {
     for (let i = 0; i < length; i++)
         r[i] = start + i;
     return r;
+}
+
+export function convertTopologyRangeToTriangles(dstBuffer: Uint16Array, dstOffs: number, topology: GfxTopology, baseVertex: number, numVertices: number): void {
+    return convertToTriangles(dstBuffer, dstOffs, topology, range(baseVertex, numVertices));
 }
 
 export function makeTriangleIndexBuffer(topology: GfxTopology, baseVertex: number, numVertices: number): Uint16Array {
