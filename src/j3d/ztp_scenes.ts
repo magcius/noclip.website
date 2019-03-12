@@ -203,8 +203,11 @@ function bmdModelUsesTexture(model: BMDModel, textureName: string): boolean {
 class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
     public id: string;
 
-    constructor(public name: string, public folder: string) {
-        this.id = this.folder;
+    constructor(public name: string, public stageId: string, public roomNames: string[] | null = null) {
+        if (roomNames !== null)
+            this.id = `${this.stageId}/${this.roomNames[0]}`;
+        else
+            this.id = this.stageId;
     }
 
     private createRoomScenes(device: GfxDevice, renderer: TwilightPrincessRenderer, rarc: RARC.RARC, rarcBasename: string): void {
@@ -243,7 +246,7 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
     }
 
     public createScene(device: GfxDevice): Progressable<Viewer.SceneGfx> {
-        const basePath = `j3d/ztp/${this.folder}`;
+        const basePath = `j3d/ztp/${this.stageId}`;
         const textureHolder = new ZTPTextureHolder();
 
         return this.fetchRarc(`${basePath}/STG_00.arc`).then((stageRarc: RARC.RARC) => {
@@ -275,9 +278,15 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
             // Pull out the dzs, get the scene definition.
             const dzsBuffer = stageRarc.findFile(`dzs/stage.dzs`).buffer;
 
-            // TODO(jstpierre): This room list isn't quite right. How does the original game work?
-            const roomList = getRoomListFromDZS(dzsBuffer);
-            const roomNames = roomList.map((i) => `R${leftPad(''+i, 2)}_00`);
+            let roomNames: string[];
+
+            if (this.roomNames !== null) {
+                roomNames = this.roomNames;
+            } else {
+                // TODO(jstpierre): This room list isn't quite right. How does the original game work?
+                const roomList = getRoomListFromDZS(dzsBuffer);
+                roomNames = roomList.map((i) => `R${leftPad(''+i, 2)}_00`);
+            }
 
             return Progressable.all(roomNames.map((roomName) => this.fetchRarc(`${basePath}/${roomName}.arc`))).then((roomRarcs: (RARC.RARC | null)[]) => {
                 roomRarcs.forEach((rarc: RARC.RARC | null, i) => {
@@ -384,8 +393,14 @@ const sceneDescs = [
     new TwilightPrincessSceneDesc("Snow Cave 2", "D_SB08"),
     new TwilightPrincessSceneDesc("Water Cave", "D_SB09"),
 
+    "Ordon Village",
+    new TwilightPrincessSceneDesc("Mayor's House", "R_SP01", ["R00_00"]),
+    new TwilightPrincessSceneDesc("Sera's Sundries", "R_SP01", ["R01_00"]),
+    new TwilightPrincessSceneDesc("Talo and Malo's House", "R_SP01", ["R02_00"]),
+    new TwilightPrincessSceneDesc("Link's House", "R_SP01", ["R04_00", "R07_00"]),
+    new TwilightPrincessSceneDesc("Rusl's House", "R_SP01", ["R05_00"]),
+
     "Houses / Indoors",
-    new TwilightPrincessSceneDesc("Ordon Village Houses", "R_SP01"),
     new TwilightPrincessSceneDesc("Hyrule Castle Wolf Escape", "R_SP107"),
     new TwilightPrincessSceneDesc("Caro's House", "R_SP108"),
     new TwilightPrincessSceneDesc("Kakariko Village Houses", "R_SP109"),
