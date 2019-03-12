@@ -36,13 +36,10 @@ export function convertToTriangleIndexBuffer(topology: GfxTopology, indexBuffer:
         }
     } else if (topology === GfxTopology.TRIFAN) {
         let dst = 0;
-        newBuffer[dst++] = indexBuffer[0];
-        newBuffer[dst++] = indexBuffer[1];
-
-        for (let i = 2; i < indexBuffer.length; i++) {
+        for (let i = 0; i < indexBuffer.length - 2; i++) {
             newBuffer[dst++] = indexBuffer[0];
-            newBuffer[dst++] = indexBuffer[dst - 2];
-            newBuffer[dst++] = indexBuffer[i];
+            newBuffer[dst++] = indexBuffer[i + 1];
+            newBuffer[dst++] = indexBuffer[i + 2];
         }
     } else if (topology === GfxTopology.QUADSTRIP) {
         let dst = 0;
