@@ -1002,6 +1002,7 @@ class SMGSpawner {
         case 'MilkyWaySky':
         case 'VROrbit':
         case 'DesertSky':
+        case 'GoodWeatherSky':
             spawnGraph(name, SceneGraphTag.Skybox);
             break;
 
