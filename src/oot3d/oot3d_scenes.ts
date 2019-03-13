@@ -493,12 +493,14 @@ class SceneDesc implements Viewer.SceneDesc {
         });
         else if (actor.actorId === ActorId.Obj_Syokudai) fetchArchive(`zelda_syokudai.zar`).then((zar) => {
             const whichModel = (actor.variable >>> 12) & 0x03;
-            if (whichModel === 0x00) {
-                buildModel(zar, `model/syokudai_model.cmb`, 1);     // Golden Torch
-            } else if (whichModel === 0x01) {
-                buildModel(zar, `model/syokudai_ki_model.cmb`, 1);  // Timed Torch 
-            } else if (whichModel === 0x02) {
-                buildModel(zar, `model/syokudai_isi_model.cmb`, 1); // Wooden Torch
+            if (whichModel === 0x00) {        // Golden Torch
+                buildModel(zar, `model/syokudai_model.cmb`, 1);
+            } else if (whichModel === 0x01) { // Timed Torch
+                buildModel(zar, `model/syokudai_ki_model.cmb`, 1);
+            } else if (whichModel === 0x02) { // Wooden Torch
+                buildModel(zar, `model/syokudai_isi_model.cmb`, 1);
+            } else if (whichModel === 0x03) { // Unknown (Seen in Ganon's Castle)
+                // TODO(jstpierre)
             } else {
                 throw "Starschulz";
             }
