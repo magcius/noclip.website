@@ -148,22 +148,31 @@ class ModelCache {
 
 const enum ActorId {
     En_Test                = 0x0002,
-    En_Crow                = 0x0008,
     En_Box                 = 0x000A,
     En_Okuta               = 0x000E,
     Bg_Ydan_Sp             = 0x000F,
     En_Wallmas             = 0x0011,
+    En_Dodongo             = 0x0012,
     En_Item00              = 0x0015,
     En_Niw                 = 0x0019,
     Boss_Goma              = 0x0028,
+    En_Zf                  = 0x0025,
+    En_Hata                = 0x0026,
+    Boss_Dodongo           = 0x0027,
+    En_Dodojr              = 0x002F,
     En_St                  = 0x0037,
     En_River_Sound         = 0x003B,
     En_Horse_Normal        = 0x003C,
+    En_Ossan               = 0x003D,
+    Bg_Dodoago             = 0x003F,
     En_Bombf               = 0x004C,
     Bg_Ydan_Hasi           = 0x0050,
     Bg_Ydan_Maruta         = 0x0051,
+    En_Am                  = 0x0054,
     En_Dekubaba            = 0x0055,
+    Bg_Ddan_Jd             = 0x0058,
     Bg_Breakwall           = 0x0059,
+    Bg_Ddan_kd             = 0x005C,
     Obj_Syokudai           = 0x005E,
     En_Dekunuts            = 0x0060,
     Bg_Mizu_Movebg         = 0x0064,
@@ -171,19 +180,28 @@ const enum ActorId {
     En_Bb                  = 0x0069,
     Bg_Mjin                = 0x006E,
     En_Wood02              = 0x0077,
+    En_Trap                = 0x0080,
     En_Ta                  = 0x0084,
     Bg_Mori_Bigst          = 0x0086,
     Bg_Mori_Elevator       = 0x0087,
     Bg_Mori_Kaitenkabe     = 0x0088,
     Bg_Mori_Rakkatenjo     = 0x0089,
+    En_Vm                  = 0x008A,
     En_Floormas            = 0x008E,
+    En_Heishi1             = 0x008F,
     En_Sw                  = 0x0095,
     En_Du                  = 0x0098,
     Door_Ana               = 0x009B,
+    Demo_Im                = 0x00A9,
+    En_Heishi2             = 0x00B3,
+    En_Brob                = 0x00B6,
+    En_Tana                = 0x00C2,
+    Bg_Bdan_Objects        = 0x00C8,
     En_In                  = 0x00CB,
     En_Ma2                 = 0x00D9,
     Bg_Mori_Hashira4       = 0x00E3,
     Bg_Mori_Idomizu        = 0x00E4,
+    Bg_Bdan_Switch         = 0x00E6,
     Obj_Oshihiki           = 0x00FF,
     Bg_Spot01_Fusya        = 0x0102,
     Bg_Spot01_Idohashira   = 0x0103,
@@ -202,6 +220,7 @@ const enum ActorId {
     En_Blkobj              = 0x0136,
     En_Niw_Lady            = 0x013C,
     En_Kanban              = 0x0141,
+    En_Heishi3             = 0x0142,
     En_Sa                  = 0x0146,
     En_Wonder_Talk         = 0x0147,
     En_Ds                  = 0x0149,
@@ -211,6 +230,7 @@ const enum ActorId {
     En_Ko                  = 0x0163,
     En_Ani                 = 0x0167,
     Elf_Msg2               = 0x0173,
+    En_Heishi4             = 0x0178,
     Bg_Spot05_Soko         = 0x018D,
     En_Hintnuts            = 0x0192,
     En_Shopnuts            = 0x0195,
@@ -219,31 +239,11 @@ const enum ActorId {
     En_Wf                  = 0x01AF,
     En_Gs                  = 0x01B9,
     En_Daiku_Kakariko      = 0x01BC,
+    En_Crow                = 0x01C0,
     Bg_Spot18_Shutter      = 0x01C4,
     En_Cow                 = 0x01C6,
-    Obj_Timeblock          = 0x01D1,
-    Bg_Ddan_Jd             = 0x0058,
-    En_Vm                  = 0x008A,
-    Bg_Dodoago             = 0x003F,
-    En_Dodojr              = 0x002F,
-    En_Am                  = 0x0054,
-    Bg_Ddan_kd             = 0x005C,
-    En_Zf                  = 0x0025,
-    En_Trap                = 0x0080,
-    En_Dodongo             = 0x0012,
-    Bg_Bdan_Objects        = 0x00C8,
-    Bg_Bdan_Switch         = 0x00E6,
-    En_Brob                = 0x00B6,
-    En_Tana                = 0x00C2,
     En_Zo                  = 0x01CE,
-    En_Ossan               = 0x003D,
-    Boss_Dodongo           = 0x0027,
-    En_Heishi4             = 0x0178,
-    En_Heishi3             = 0x0142,
-    En_Heishi2             = 0x00B3,
-    En_Heishi1             = 0x008F,
-    En_Hata                = 0x0026,
-    Demo_Im                = 0x00A9,
+    Obj_Timeblock          = 0x01D1,
     En_Zl4                 = 0x01D3,
 };
 
@@ -409,33 +409,36 @@ class SceneDesc implements Viewer.SceneDesc {
             }
         });
         else if (actor.actorId === ActorId.En_Ossan) {
-            const Shopkeeper = actor.variable & 0x0F;
-            if (Shopkeeper === 0x00) {
+            const whichShopkeeper = actor.variable & 0x0F;
+            if (whichShopkeeper === 0x00) {        // Kokiri Shopkeeper
                 fetchArchive(`zelda_km1.zar`).then((zar) => {               // need to also specify meshes, to turn off his hair
                     const b = buildModel(zar, `model/kokirimaster.cmb`);
                     b.bindCSAB(parseCSAB(zar, `anim/km1_omise.csab`));
                 });
-            } else if (Shopkeeper === 0x02) {
+            } else if (whichShopkeeper === 0x01) { // Kakariko Potion Shopkeeper
+                // TODO(jstpierre)
+            } else if (whichShopkeeper === 0x03) { // Market Potion Shopkeeper
+                // TODO(jstpierre)
+            } else if (whichShopkeeper === 0x02) { // Bombchu Shopkeeper
                 fetchArchive(`zelda_rs.zar`).then((zar) => {
                     const b = buildModel(zar, `model/bomchumaster.cmb`);
                     b.bindCSAB(parseCSAB(zar, `anim/rs_matsu.csab`));
                 });
-            } else if (Shopkeeper === 0x07) {
+            } else if (whichShopkeeper === 0x07) { // Zora Shopkeeper
                 fetchArchive(`zelda_masterzoora.zar`).then((zar) => {
                     const b = buildModel(zar, `model/zorapeople.cmb`);
                     b.bindCSAB(parseCSAB(zar, `anim/zo_omise.csab`));
                 });
-            } else if (Shopkeeper === 0x08) {
+            } else if (whichShopkeeper === 0x08) { // Goron Shopkeeper
                 fetchArchive(`zelda_mastergolon.zar`).then((zar) => {
                     const b = buildModel(zar, `model/goronpeople.cmb`);
                     b.bindCSAB(parseCSAB(zar, `anim/oF1d_omise.csab`));
                 });
-            } else if (Shopkeeper === 0x0A) {
+            } else if (whichShopkeeper === 0x0A) { // Happy Mask Shopkeeper
                 fetchArchive(`zelda_os.zar`).then((zar) => {
                     const b = buildModel(zar, `model/maskmaster.cmb`);
                     b.bindCSAB(parseCSAB(zar, `anim/os_matsu.csab`));
                 });
-
             } else {
                 throw "Starschulz";
             }
