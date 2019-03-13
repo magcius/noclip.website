@@ -994,6 +994,7 @@ class SMGSpawner {
 
         // Skyboxen.
         case 'BeyondSummerSky':
+        case 'BeyondGalaxySky':
         case 'CloudSky':
         case 'HalfGalaxySky':
         case 'GalaxySky':
