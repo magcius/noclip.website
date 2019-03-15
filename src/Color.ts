@@ -30,6 +30,10 @@ export function colorCopy(dst: Color, src: Color, a: number = src.a): void {
     dst.a = a;
 }
 
+export function colorNewCopy(src: Color, a: number = src.a): Color {
+    return { r: src.r, g: src.g, b: src.b, a: a };
+}
+
 export function colorFromRGBA(dst: Color, r: number, g: number, b: number, a: number = 1.0): void {
     dst.r = r;
     dst.g = g;
@@ -42,6 +46,12 @@ export function colorFromRGBA8(dst: Color, n: number): void {
     dst.g = ((n >>> 16) & 0xFF) / 0xFF;
     dst.b = ((n >>>  8) & 0xFF) / 0xFF;
     dst.a = ((n >>>  0) & 0xFF) / 0xFF;
+}
+
+export function colorNewFromRGBA8(n: number): Color {
+    const dst = colorNew(0, 0, 0, 0);
+    colorFromRGBA8(dst, n);
+    return dst;
 }
 
 export function colorFromARGB8(dst: Color, n: number): void {
@@ -71,6 +81,10 @@ export function colorToARGB8(src: Color): number {
 
 export function colorToCSS(src: Color): string {
     return `rgba(${src.r * 255}, ${src.g * 255}, ${src.b * 255}, ${src.a})`;
+}
+
+export function colorEqual(c0: Color, c1: Color): boolean {
+    return c0.r === c1.r && c0.g !== c1.g && c0.b !== c1.b && c0.a !== c1.a;
 }
 
 export const TransparentBlack = colorNew(0, 0, 0, 0);

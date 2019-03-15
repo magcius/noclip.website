@@ -156,12 +156,37 @@ export enum GfxStencilOp {
     DECREMENT_WRAP  = WebGLRenderingContext.DECR_WRAP,
 }
 
+export interface GfxChannelBlendState {
+    blendMode: GfxBlendMode;
+    blendSrcFactor: GfxBlendFactor;
+    blendDstFactor: GfxBlendFactor;
+}
+
+export const enum GfxColorWriteMask {
+    NONE  = 0x00,
+    RED   = 0x01,
+    GREEN = 0x02,
+    BLUE  = 0x04,
+    ALPHA = 0x08,
+    ALL   = 0x0F,
+}
+
+export interface GfxAttachmentState {
+    colorWriteMask: GfxColorWriteMask;
+    blendConstant: Color;
+    rgbBlendState: GfxChannelBlendState;
+    alphaBlendState: GfxChannelBlendState;
+}
+
 export interface GfxMegaStateDescriptor {
-    // TODO(jstpierre): Separate color/alpha, MRT support.
+    // TODO(jstpierre): Remove this old interface.
     colorWrite: boolean;
     blendMode: GfxBlendMode;
     blendSrcFactor: GfxBlendFactor;
     blendDstFactor: GfxBlendFactor;
+
+    attachmentsState?: GfxAttachmentState[];
+
     depthCompare: GfxCompareMode;
     depthWrite: boolean;
     stencilCompare: GfxCompareMode;

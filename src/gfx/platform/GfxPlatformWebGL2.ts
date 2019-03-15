@@ -1,5 +1,5 @@
 
-import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxProgramReflection, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderTargetDescriptor, GfxLoadDisposition, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxFrontFaceMode, GfxInputStateReflection, GfxVertexAttributeFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor } from './GfxPlatform';
+import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxProgramReflection, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderTargetDescriptor, GfxLoadDisposition, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxFrontFaceMode, GfxInputStateReflection, GfxVertexAttributeFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor, GfxAttachmentState as GfxAttachmentStateDescriptor, GfxColorWriteMask } from './GfxPlatform';
 import { _T, GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource } from "./GfxPlatformImpl";
 import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags } from "./GfxPlatformFormat";
 
@@ -7,6 +7,7 @@ import { DeviceProgram, ProgramCache, FullscreenProgram } from '../../Program';
 import { assert } from '../../util';
 import { copyMegaState, defaultMegaState, fullscreenMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
 import { IS_DEVELOPMENT } from '../../BuildVersion';
+import { White, colorEqual, colorCopy } from '../../Color';
 
 export class FullscreenCopyProgram extends FullscreenProgram {
     public frag: string = `
@@ -341,28 +342,91 @@ class GfxHostAccessPassP_GL implements GfxHostAccessPass {
     }
 }
 
-export function applyMegaState(gl: WebGL2RenderingContext, currentMegaState: GfxMegaStateDescriptor, newMegaState: GfxMegaStateDescriptor): void {
-    if (currentMegaState.colorWrite !== newMegaState.colorWrite) {
-        gl.colorMask(newMegaState.colorWrite, newMegaState.colorWrite, newMegaState.colorWrite, newMegaState.colorWrite);
-        currentMegaState.colorWrite = newMegaState.colorWrite;
+function applyAttachmentState(gl: WebGL2RenderingContext, i: number, currentAttachmentState: GfxAttachmentStateDescriptor, newAttachmentState: GfxAttachmentStateDescriptor): void {
+    assert(i === 0);
+
+    if (currentAttachmentState.colorWriteMask !== newAttachmentState.colorWriteMask) {
+        gl.colorMask(
+            !!(newAttachmentState.colorWriteMask & GfxColorWriteMask.RED),
+            !!(newAttachmentState.colorWriteMask & GfxColorWriteMask.GREEN),
+            !!(newAttachmentState.colorWriteMask & GfxColorWriteMask.BLUE),
+            !!(newAttachmentState.colorWriteMask & GfxColorWriteMask.ALPHA),
+        );
+        currentAttachmentState.colorWriteMask = newAttachmentState.colorWriteMask;
     }
 
-    if (currentMegaState.blendMode !== newMegaState.blendMode) {
-        if (currentMegaState.blendMode === GfxBlendMode.NONE)
+    if (currentAttachmentState.rgbBlendState.blendMode !== newAttachmentState.rgbBlendState.blendMode ||
+        currentAttachmentState.alphaBlendState.blendMode !== newAttachmentState.alphaBlendState.blendMode) {
+        if (currentAttachmentState.rgbBlendState.blendMode === GfxBlendMode.NONE &&
+            currentAttachmentState.alphaBlendState.blendMode === GfxBlendMode.NONE)
             gl.enable(gl.BLEND);
-        else if (newMegaState.blendMode === GfxBlendMode.NONE)
+        else if (newAttachmentState.rgbBlendState.blendMode !== GfxBlendMode.NONE ||
+                 newAttachmentState.alphaBlendState.blendMode !== GfxBlendMode.NONE)
             gl.disable(gl.BLEND);
 
-        if (newMegaState.blendMode !== GfxBlendMode.NONE)
-            gl.blendEquation(newMegaState.blendMode);
-        currentMegaState.blendMode = newMegaState.blendMode;
+        gl.blendEquationSeparate(newAttachmentState.rgbBlendState.blendMode, newAttachmentState.alphaBlendState.blendMode);
+
+        currentAttachmentState.rgbBlendState.blendMode = newAttachmentState.rgbBlendState.blendMode;
+        currentAttachmentState.alphaBlendState.blendMode = newAttachmentState.alphaBlendState.blendMode;
     }
 
-    if (currentMegaState.blendSrcFactor !== newMegaState.blendSrcFactor ||
-        currentMegaState.blendDstFactor !== newMegaState.blendDstFactor) {
-        gl.blendFunc(newMegaState.blendSrcFactor, newMegaState.blendDstFactor);
-        currentMegaState.blendSrcFactor = newMegaState.blendSrcFactor;
-        currentMegaState.blendDstFactor = newMegaState.blendDstFactor;
+    if (currentAttachmentState.rgbBlendState.blendSrcFactor !== newAttachmentState.rgbBlendState.blendSrcFactor ||
+        currentAttachmentState.alphaBlendState.blendSrcFactor !== newAttachmentState.alphaBlendState.blendSrcFactor ||
+        currentAttachmentState.rgbBlendState.blendDstFactor !== newAttachmentState.rgbBlendState.blendDstFactor ||
+        currentAttachmentState.alphaBlendState.blendDstFactor !== newAttachmentState.alphaBlendState.blendDstFactor) {
+        gl.blendFuncSeparate(
+            newAttachmentState.rgbBlendState.blendSrcFactor, newAttachmentState.rgbBlendState.blendDstFactor,
+            newAttachmentState.alphaBlendState.blendSrcFactor, newAttachmentState.alphaBlendState.blendDstFactor
+        );
+        currentAttachmentState.rgbBlendState.blendSrcFactor = newAttachmentState.rgbBlendState.blendSrcFactor;
+        currentAttachmentState.alphaBlendState.blendSrcFactor = newAttachmentState.alphaBlendState.blendSrcFactor;
+        currentAttachmentState.rgbBlendState.blendDstFactor = newAttachmentState.rgbBlendState.blendDstFactor;
+        currentAttachmentState.alphaBlendState.blendDstFactor = newAttachmentState.alphaBlendState.blendDstFactor;
+    }
+
+    if (!colorEqual(currentAttachmentState.blendConstant, newAttachmentState.blendConstant)) {
+        gl.blendColor(newAttachmentState.blendConstant.r, newAttachmentState.blendConstant.g, newAttachmentState.blendConstant.b, newAttachmentState.blendConstant.a);
+        colorCopy(currentAttachmentState.blendConstant, newAttachmentState.blendConstant);
+    }
+}
+
+function applyMegaState(gl: WebGL2RenderingContext, currentMegaState: GfxMegaStateDescriptor, newMegaState: GfxMegaStateDescriptor): void {
+    const currentAttachmentState = currentMegaState.attachmentsState![0];
+
+    if (newMegaState.attachmentsState && newMegaState.attachmentsState.length > 0) {
+        assert(newMegaState.attachmentsState.length === 1);
+        applyAttachmentState(gl, 0, currentAttachmentState, newMegaState.attachmentsState[0]);
+    } else {
+        const newWriteMask = (newMegaState.colorWrite ? GfxColorWriteMask.ALL : GfxColorWriteMask.NONE);
+        if (currentAttachmentState.colorWriteMask !== newWriteMask) {
+            gl.colorMask(newMegaState.colorWrite, newMegaState.colorWrite, newMegaState.colorWrite, newMegaState.colorWrite);
+            currentAttachmentState.colorWriteMask = newWriteMask;
+        }
+
+        if (currentAttachmentState.rgbBlendState.blendMode !== newMegaState.blendMode ||
+            currentAttachmentState.alphaBlendState.blendMode !== newMegaState.blendMode) {
+            if (currentMegaState.blendMode === GfxBlendMode.NONE)
+                gl.enable(gl.BLEND);
+            else if (newMegaState.blendMode === GfxBlendMode.NONE)
+                gl.disable(gl.BLEND);
+
+            if (newMegaState.blendMode !== GfxBlendMode.NONE)
+                gl.blendEquation(newMegaState.blendMode);
+
+            currentAttachmentState.rgbBlendState.blendMode = newMegaState.blendMode;
+            currentAttachmentState.alphaBlendState.blendMode = newMegaState.blendMode;
+        }
+
+        if (currentAttachmentState.rgbBlendState.blendSrcFactor !== newMegaState.blendSrcFactor ||
+            currentAttachmentState.alphaBlendState.blendSrcFactor !== newMegaState.blendSrcFactor ||
+            currentAttachmentState.rgbBlendState.blendDstFactor !== newMegaState.blendDstFactor ||
+            currentAttachmentState.alphaBlendState.blendDstFactor !== newMegaState.blendDstFactor) {
+            gl.blendFunc(newMegaState.blendSrcFactor, newMegaState.blendDstFactor);
+            currentAttachmentState.rgbBlendState.blendSrcFactor = newMegaState.blendSrcFactor;
+            currentAttachmentState.alphaBlendState.blendSrcFactor = newMegaState.blendSrcFactor;
+            currentAttachmentState.rgbBlendState.blendDstFactor = newMegaState.blendDstFactor;
+            currentAttachmentState.alphaBlendState.blendDstFactor = newMegaState.blendDstFactor;
+        }
     }
 
     if (currentMegaState.depthCompare !== newMegaState.depthCompare) {
@@ -499,6 +563,14 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
 
         this._currentMegaState.depthCompare = GfxCompareMode.ALWAYS;
+        this._currentMegaState.attachmentsState = [
+            {
+                colorWriteMask: GfxColorWriteMask.ALL,
+                blendConstant: White,
+                rgbBlendState: { blendMode: GfxBlendMode.NONE, blendSrcFactor: GfxBlendFactor.ONE, blendDstFactor: GfxBlendFactor.ZERO },
+                alphaBlendState: { blendMode: GfxBlendMode.NONE, blendSrcFactor: GfxBlendFactor.ONE, blendDstFactor: GfxBlendFactor.ZERO },
+            },
+        ];
 
         // Set up bug defines.
         this.programBugDefines = '';
