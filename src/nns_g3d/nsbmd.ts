@@ -37,6 +37,7 @@ export interface MDL0Model {
     shapes: MDL0Shape[];
     sbcBuffer: ArrayBufferSlice;
     posScale: number;
+    texMtxMode: TexMtxMode;
 }
 
 export interface BMD0 {
@@ -162,16 +163,43 @@ function translateCullMode(renderWhichFaces: number): GfxCullMode {
     }
 }
 
-export function calcTexMtx_Maya(dst: mat2d, texScaleS: number, texScaleT: number, scaleS: number, scaleT: number, sinR: number, cosR: number, translationS: number, translationT: number): void {
-    dst[0] = texScaleS * (scaleS *  cosR);
-    dst[1] = texScaleT * (scaleT * -sinR * (texScaleS / texScaleT));
-    dst[2] = texScaleS * (scaleS *  sinR * (texScaleT / texScaleS));
-    dst[3] = texScaleT * (scaleT *  cosR);
+function calcTexMtx_Maya(dst: mat2d, texScaleS: number, texScaleT: number, scaleS: number, scaleT: number, sinR: number, cosR: number, translationS: number, translationT: number): void {
+    dst[0] = texScaleS * scaleS *  cosR;
+    dst[1] = texScaleT * scaleT * -sinR * (texScaleS / texScaleT);
+    dst[2] = texScaleS * scaleS *  sinR * (texScaleT / texScaleS);
+    dst[3] = texScaleT * scaleT *  cosR;
     dst[4] = scaleS * ((-0.5 * cosR) - (0.5 * sinR - 0.5) - translationS);
     dst[5] = scaleT * ((-0.5 * cosR) + (0.5 * sinR - 0.5) + translationT) + 1;
 }
 
-function parseMaterial(buffer: ArrayBufferSlice, name: string): MDL0Material {
+function calcTexMtx_Max(dst: mat2d, texScaleS: number, texScaleT: number, scaleS: number, scaleT: number, sinR: number, cosR: number, translationS: number, translationT: number): void {
+    dst[0] = texScaleS * scaleS *  cosR;
+    dst[1] = texScaleT * scaleT * -sinR * (texScaleS / texScaleT);
+    dst[2] = texScaleS * scaleS *  sinR * (texScaleT / texScaleS);
+    dst[3] = texScaleT * scaleT *  cosR;
+    dst[4] = (scaleS * -cosR * (translationS + 0.5)) + (scaleS * sinR * (translationT - 0.5)) + 0.5;
+    dst[5] = (scaleT *  sinR * (translationS + 0.5)) + (scaleT * cosR * (translationT - 0.5)) + 0.5;
+}
+
+export const enum TexMtxMode {
+    MAYA = 0x00, // Maya
+    SI3D = 0x01, // Softimage|3D
+    MAX  = 0x02, // 3D Studio Max
+    XSI  = 0x03, // Softimage|XSI
+}
+
+export function calcTexMtx(dst: mat2d, texMtxMode: TexMtxMode, texScaleS: number, texScaleT: number, scaleS: number, scaleT: number, sinR: number, cosR: number, translationS: number, translationT: number): void {
+    switch (texMtxMode) {
+    case TexMtxMode.MAYA:
+        return calcTexMtx_Maya(dst, texScaleS, texScaleT, scaleS, scaleT, sinR, cosR, translationS, translationT);
+    case TexMtxMode.MAX:
+        return calcTexMtx_Max(dst, texScaleS, texScaleT, scaleS, scaleT, sinR, cosR, translationS, translationT);
+    default:
+        throw "whoops";
+    }
+}
+
+function parseMaterial(buffer: ArrayBufferSlice, name: string, texMtxMode: TexMtxMode): MDL0Material {
     const view = buffer.createDataView();
 
     const itemTag = view.getUint16(0x00, true);
@@ -263,7 +291,6 @@ function parseModel(buffer: ArrayBufferSlice, name: string): MDL0Model {
     const sbcType = view.getUint8(0x14);
     const scalingRule = view.getUint8(0x15);
     const texMtxMode = view.getUint8(0x16);
-    assert(texMtxMode === 0);
     const nodeTableCount = view.getUint8(0x17);
     const materialTableCount = view.getUint8(0x18);
     const shapeTableCount = view.getUint8(0x19);
@@ -308,7 +335,7 @@ function parseModel(buffer: ArrayBufferSlice, name: string): MDL0Model {
     assert(materialTableDict.length === materialTableCount);
     const materials: MDL0Material[] = [];
     for (let i = 0; i < materialTableDict.length; i++)
-        materials.push(parseMaterial(buffer.slice(materialSectionOffs + materialTableDict[i].value), materialTableDict[i].name));
+        materials.push(parseMaterial(buffer.slice(materialSectionOffs + materialTableDict[i].value), materialTableDict[i].name, texMtxMode));
 
     function getMaterialsFromIndexDictEntry(v: ReturnType<typeof parseMaterialDictEntry>): MDL0Material[] {
         const localMaterials: MDL0Material[] = [];
@@ -336,7 +363,7 @@ function parseModel(buffer: ArrayBufferSlice, name: string): MDL0Model {
     // SBC
     const sbcBuffer = buffer.slice(sbcOffs, materialSectionOffs);
 
-    return { name, nodes, materials, shapes, sbcBuffer, posScale };
+    return { name, nodes, materials, shapes, sbcBuffer, posScale, texMtxMode };
 }
 
 export function parse(buffer: ArrayBufferSlice): BMD0 {

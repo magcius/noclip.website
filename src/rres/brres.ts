@@ -67,11 +67,10 @@ function calcTexMtx_Max(dst: mat4, scaleS: number, scaleT: number, rotation: num
     mat4.identity(dst);
 
     dst[0]  = scaleS *  cosR;
-    dst[4]  = scaleS *  sinR;
-    dst[12] = (scaleS * -cosR * (translationS + 0.5)) + (scaleS * sinR * (translationT - 0.5)) + 0.5;
-
     dst[1]  = scaleT * -sinR;
+    dst[4]  = scaleS *  sinR;
     dst[5]  = scaleT *  cosR;
+    dst[12] = (scaleS * -cosR * (translationS + 0.5)) + (scaleS * sinR * (translationT - 0.5)) + 0.5;
     dst[13] = (scaleT *  sinR * (translationS + 0.5)) + (scaleT * cosR * (translationT - 0.5)) + 0.5;
 }
 
