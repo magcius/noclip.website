@@ -50,6 +50,7 @@ import * as SMO from './fres_nx/smo_scenes';
 import * as PSY from './psychonauts/scenes';
 import * as DKS from './dks/scenes';
 import * as J3D from './j3d/scenes';
+import * as RTDL from './rres/rtdl_scenes';
 
 import { UI, SaveStatesAction } from './ui';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera';
@@ -74,6 +75,7 @@ const sceneGroups = [
     SPM.sceneGroup,
     ZSS.sceneGroup,
     ELB.sceneGroup,
+    RTDL.sceneGroup,
     "GameCube",
     LM.sceneGroup,
     MKDD.sceneGroup,

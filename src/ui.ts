@@ -1694,6 +1694,7 @@ class About extends Panel {
 <a href="https://twitter.com/Jawchewa">Jawchewa</a>,
 <a href="https://twitter.com/Starschulz">Starschulz</a>,
 <a href="https://twitter.com/kittensandals">SpaceCats</a>,
+<a href="https://twitter.com/TanukiMatthew">TanukiMatthew</a>,
 <a href="https://twitter.com/PistonMiner">PistonMiner</a>,
 <a href="https://twitter.com/LordNed">LordNed</a>,
 <a href="https://twitter.com/SageOfMirrors">SageOfMirrors</a>,
@@ -1706,9 +1707,11 @@ class About extends Panel {
 <a href="https://twitter.com/pupperuki">Aruki</a>
 </p>
 
-<p><strong>MODELS</strong> © Nintendo, SEGA, Retro Studios, FROM Software, Konami, Neversoft, Double Fine Productions</p>
+<p><strong>MODELS</strong> © Nintendo, SEGA, Retro Studios, FROM Software,
+Konami, Neversoft, Double Fine Productions, HAL Laboratories</p>
 
-<p><strong>ICONS</strong> from <a href="https://thenounproject.com/">The Noun Project</a>, used under Creative Commons CC-BY:</p>
+<p><strong>ICONS</strong> from <a href="https://thenounproject.com/">The Noun Project</a>,
+used under Creative Commons CC-BY:</p>
 <ul>
 <li> Truncated Pyramid <span>by</span> Bohdan Burmich
 <li> Images <span>by</span> Creative Stall
