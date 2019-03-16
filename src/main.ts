@@ -136,10 +136,8 @@ function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
 class DroppedFileSceneDesc implements SceneDesc {
     public id: string;
     public name: string;
-    public file: File;
 
-    constructor(file: File) {
-        this.file = file;
+    constructor(public file: File, public files: File[]) {
         this.id = file.name;
         this.name = file.name;
     }
@@ -153,8 +151,11 @@ class DroppedFileSceneDesc implements SceneDesc {
         if (file.name.endsWith('.arc') || file.name.endsWith('.carc'))
             return loadFileAsPromise(file).then((buffer) => ELB.createBasicRRESRendererFromU8Archive(device, buffer));
 
-        if (file.name.endsWith('.brres'))
-            return loadFileAsPromise(file).then((buffer) => ELB.createBasicRRESRendererFromBRRES(device, buffer));
+        if (file.name.endsWith('.brres')) {
+            return Progressable.all([...this.files].map((f) => loadFileAsPromise(f))).then((buffers) => {
+                return ELB.createBasicRRESRendererFromBRRES(device, buffers);
+            });
+        }
 
         if (file.name.endsWith('.bfres'))
             return loadFileAsPromise(file).then((buffer) => FRES.createSceneFromFRESBuffer(device, buffer));
@@ -372,7 +373,10 @@ class Main {
         if (transfer.files.length === 0)
             return;
         const file = transfer.files[0];
-        const sceneDesc = new DroppedFileSceneDesc(file);
+        const files: File[] = [];
+        for (let i = 0; i < transfer.files.length; i++)
+            files.push(transfer.files[i]);
+        const sceneDesc = new DroppedFileSceneDesc(file, files);
         this.droppedFileGroup.sceneDescs.push(sceneDesc);
         this._loadSceneGroups();
         this._loadSceneDesc(this.droppedFileGroup, sceneDesc);

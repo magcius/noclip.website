@@ -20,7 +20,7 @@ import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 
 const materialHacks: GXMaterialHacks = {
-    lightingFudge: (p) => `vec4(${p.matSource}.rgb, 1.0)`,
+    lightingFudge: (p) => `(0.5 * (${p.ambSource} + 0.2) * ${p.matSource})`,
 };
 
 export class BasicRRESRenderer implements Viewer.SceneGfx {
@@ -29,21 +29,20 @@ export class BasicRRESRenderer implements Viewer.SceneGfx {
     private modelInstances: MDL0ModelInstance[] = [];
     private models: MDL0Model[] = [];
 
-    public textureHolder: RRESTextureHolder = new RRESTextureHolder();
     public renderHelper: GXRenderHelperGfx;
     private animationController: AnimationController;
 
-    constructor(device: GfxDevice, public stageRRESes: BRRES.RRES[]) {
+    constructor(device: GfxDevice, public stageRRESes: BRRES.RRES[], public textureHolder = new RRESTextureHolder()) {
         this.renderHelper = new GXRenderHelperGfx(device);
 
-        this.textureHolder = new RRESTextureHolder();
         this.animationController = new AnimationController();
 
         for (let i = 0; i < stageRRESes.length; i++) {
             const stageRRES = stageRRESes[i];
             this.textureHolder.addRRESTextures(device, stageRRES);
             console.log(stageRRES);
-            assert(stageRRES.mdl0.length >= 1);
+            if (stageRRES.mdl0.length < 1)
+                continue;
 
             const model = new MDL0Model(device, this.renderHelper, stageRRES.mdl0[0], materialHacks);
             this.models.push(model);
@@ -122,9 +121,9 @@ class ElebitsSceneDesc implements Viewer.SceneDesc {
     }
 }
 
-export function createBasicRRESRendererFromBRRES(device: GfxDevice, buffer: ArrayBufferSlice) {
-    const stageRRES = BRRES.parse(buffer);
-    return new BasicRRESRenderer(device, [stageRRES]);
+export function createBasicRRESRendererFromBRRES(device: GfxDevice, buffer: ArrayBufferSlice[]) {
+    const rres = buffer.map((b) => BRRES.parse(b));
+    return new BasicRRESRenderer(device, rres);
 }
 
 export function createBasicRRESRendererFromU8Archive(device: GfxDevice, buffer: ArrayBufferSlice) {
