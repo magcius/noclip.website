@@ -274,13 +274,37 @@ in vec2 v_TexCoord0;
 in vec2 v_TexCoord1;
 in vec2 v_TexCoord2;
 
+in vec3 v_Lighting;
+in vec3 v_FogColor;
+in vec3 v_Normal;
+in float v_Depth;
+in float v_DrawDistance;
+in float v_FogStart;
+
 void main() {
     ${this.generateTextureEnvironment(this.material.textureEnvironment)}
 
     if (!(${this.generateAlphaTestCompare(this.material.alphaTestFunction, this.material.alphaTestReference)}))
         discard;
 
-    gl_FragColor = t_CmbOut;
+    vec4 ResultColor = t_CmbOut;
+
+    #ifdef USE_VERTEX_NORMAL
+        ResultColor.rgb = normalize(v_Normal) * 0.5 + 0.5; 
+    #endif
+
+    #ifdef USE_UV
+        ResultColor.r = v_TexCoord0.x;
+        ResultColor.g = v_TexCoord0.y;
+        ResultColor.b = 0.0;
+    #endif
+
+    #ifdef USE_LIGHTING
+        float FogFactor = clamp((v_DrawDistance - v_Depth) / (v_DrawDistance - v_FogStart), 0.0, 1.0);
+        ResultColor.rgb = mix(v_FogColor, ResultColor.rgb * v_Lighting, FogFactor);
+    #endif
+
+    gl_FragColor = ResultColor;
 }
 `;
     }
@@ -301,10 +325,11 @@ class OoT3DProgram extends DMPProgram {
         return `Mul(u_TexMtx[${mtxIndex}], vec4(a_TexCoord${attribIndex} * u_TexCoord${attribIndex}Scale, 0.0, 1.0)).st`;
     }
 
-    public generateVertexShader(): void {
+    public generateVertexShader(additionalProperties: string): void {
         this.vert = `
 precision mediump float;
 ${DMPProgram.BindingsDefinition}
+${additionalProperties}
 
 layout(location = ${DMPProgram.a_Position}) in vec3 a_Position;
 layout(location = ${DMPProgram.a_Normal}) in vec3 a_Normal;
@@ -319,6 +344,13 @@ out vec4 v_Color;
 out vec2 v_TexCoord0;
 out vec2 v_TexCoord1;
 out vec2 v_TexCoord2;
+
+out vec3 v_Lighting;
+out vec3 v_FogColor;
+out vec3 v_Normal;
+out float v_Depth;
+out float v_DrawDistance;
+out float v_FogStart;
 
 vec3 Monochrome(vec3 t_Color) {
     // NTSC primaries.
@@ -356,6 +388,15 @@ void main() {
     gl_Position = Mul(u_Projection, Mul(_Mat4x4(t_BoneMatrix), t_Position));
 
     v_Color = a_Color;
+
+    v_Normal = a_Normal;
+    v_Depth = gl_Position.w;
+    v_FogColor = FOG_COLOR;
+    v_DrawDistance = DRAW_DISTANCE;
+    v_FogStart = FOG_START;
+    v_Lighting = AMBIENT_LIGHT_COLOR;
+    v_Lighting += clamp(dot(a_Normal, -PRIMARY_LIGHT_DIRECTION), 0.0, 1.0) * PRIMARY_LIGHT_COLOR;
+    v_Lighting += clamp(dot(a_Normal, -SECONDARY_LIGHT_DIRECTION), 0.0, 1.0) * SECONDARY_LIGHT_COLOR;
 
 #ifdef USE_MONOCHROME_VERTEX_COLOR
     v_Color.rgb = Monochrome(v_Color.rgb);
@@ -500,10 +541,30 @@ class MaterialInstance {
         program.setTexCoordGen(0, 0, 0);
         program.setTexCoordGen(1, 0, 0);
         program.setTexCoordGen(2, 0, 0);
-        program.generateVertexShader();
+
+        let additionalParameters = "";
+
+        additionalParameters += `vec3 AMBIENT_LIGHT_COLOR = vec3(${this.ambientLightCol ? this.ambientLightCol : "0, 0, 0"});\n`;
+        additionalParameters += `vec3 PRIMARY_LIGHT_COLOR = vec3(${this.primaryLightCol ? this.primaryLightCol : "0, 0, 0"});\n`;
+        additionalParameters += `vec3 PRIMARY_LIGHT_DIRECTION = vec3(${this.primaryLightDir ? this.primaryLightDir : "0, 0, 0"});\n`;
+        additionalParameters += `vec3 SECONDARY_LIGHT_COLOR = vec3(${this.secondaryLightCol ? this.secondaryLightCol : "0, 0, 0"});\n`;
+        additionalParameters += `vec3 SECONDARY_LIGHT_DIRECTION = vec3(${this.secondaryLightDir ? this.secondaryLightDir : "0, 0, 0"});\n`;
+        additionalParameters += `vec3 FOG_COLOR = vec3(${this.fogCol ? this.fogCol : "0, 0, 0"});\n`;
+        additionalParameters += `float FOG_START = ${this.fogStart ? this.fogStart + ".0" : "0.0"};\n`;
+        additionalParameters += `float DRAW_DISTANCE = ${this.drawDistance ? this.drawDistance + ".0" : "0.0"};\n`;
+
+        program.generateVertexShader(additionalParameters);
+
         if (this.monochromeVertexColorsEnabled)
             program.defines.set('USE_MONOCHROME_VERTEX_COLOR', '1');
-        this.templateRenderInst.setDeviceProgram(program);
+        if (this.vertexNormalsEnabled)
+            program.defines.set('USE_VERTEX_NORMAL', '1');
+        if (this.lightingEnabled)
+            program.defines.set('USE_LIGHTING', '1');
+        if (this.uvEnabled)
+            program.defines.set('USE_UV', '1');
+
+        if (this.templateRenderInst) this.templateRenderInst.setDeviceProgram(program);
     }
 
     public buildTemplateRenderInst(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, textureHolder: CtrTextureHolder): void {

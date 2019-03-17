@@ -194,8 +194,6 @@ function readSceneHeaders(version: Version, name: string, buffer: ArrayBufferSli
     let rooms: string[] = [];
     let environmentSettings: ZSIEnvironmentSettings[] = [];
 
-    console.log("read scene headers");
-
     while (true) {
         const cmd1 = view.getUint32(offs + 0x00, false);
         const cmd2 = view.getUint32(offs + 0x04, true);
@@ -203,7 +201,6 @@ function readSceneHeaders(version: Version, name: string, buffer: ArrayBufferSli
         offs += 0x08;
 
         const cmdType = cmd1 >>> 24;
-        //console.log(cmdType);
 
         if (cmdType == HeaderCommands.End)
             break;
@@ -225,11 +222,9 @@ function readSceneHeaders(version: Version, name: string, buffer: ArrayBufferSli
 
 export function parseScene(buffer: ArrayBufferSlice): ZSIScene {
     const magic = readString(buffer, 0x00, 0x04);
-    console.log(magic);
     assert(['ZSI\x01', 'ZSI\x09'].includes(magic));
     const version = magic === 'ZSI\x01' ? Version.Ocarina : Version.Majora;
     const name = readString(buffer, 0x04, 0x0C);
-    console.log(name);
 
     // ZSI header is done. It's that simple! Now for the actual data.
     const headersBuf = buffer.slice(0x10);
