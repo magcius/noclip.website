@@ -296,7 +296,7 @@ void main() {
     #ifdef USE_UV
         t_ResultColor.r = v_TexCoord0.x;
         t_ResultColor.g = v_TexCoord0.y;
-        t_ResultColor.b = 0.0;
+        t_ResultColor.b = 1.0;
     #endif
 
     #ifdef USE_LIGHTING
