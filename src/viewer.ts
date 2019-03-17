@@ -42,6 +42,8 @@ export const enum InitErrorCode {
     GARBAGE_WEBGL2_SWIFTSHADER,
 }
 
+export type Listener = (viewer: Viewer) => void;
+
 export class Viewer {
     public inputManager: InputManager;
     public cameraController: CameraController | null = null;
@@ -62,6 +64,7 @@ export class Viewer {
 
     public oncamerachanged: () => void = (() => {});
     public onstatistics: (statistics: RenderStatistics) => void = (() => {});
+    private keyMoveSpeedListeners: Listener[] = [];
 
     constructor(private gfxSwapChain: GfxSwapChain, public canvas: HTMLCanvasElement) {
         this.inputManager = new InputManager(this.canvas);
@@ -74,6 +77,24 @@ export class Viewer {
             viewportWidth: 0,
             viewportHeight: 0,
         };
+    }
+
+    private onKeyMoveSpeed(): void {
+        for (let i = 0; i < this.keyMoveSpeedListeners.length; i++)
+            this.keyMoveSpeedListeners[i](this);
+    }
+
+    public setKeyMoveSpeed(n: number): void {
+        this.cameraController.setKeyMoveSpeed(n);
+        this.onKeyMoveSpeed();
+    }
+
+    public getKeyMoveSpeed(): number {
+        return this.cameraController.getKeyMoveSpeed();
+    }
+
+    public addKeyMoveSpeedListener(listener: Listener): void {
+        this.keyMoveSpeedListeners.push(listener);
     }
 
     private renderGfxPlatform(): void {

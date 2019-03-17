@@ -1456,7 +1456,7 @@ class ViewerSettings extends Panel {
 
 <div style="display: grid; grid-template-columns: 1fr 1fr; align-items: center;">
 <div class="SettingsHeader">Camera Speed</div>
-<input class="Slider CamSpeedSlider" type="range" min="0" max="100">
+<input class="Slider CamSpeedSlider" type="range" min="0" max="200">
 </div>
 
 <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center;">
@@ -1472,7 +1472,7 @@ class ViewerSettings extends Panel {
 
         this.camSpeedSlider = this.contents.querySelector('.CamSpeedSlider');
         this.camSpeedSlider.oninput = this.updateCameraSpeed.bind(this);
-        this.camSpeedSlider.value = '6'
+        this.viewer.addKeyMoveSpeedListener(this.onCameraController.bind(this));
         this.viewer.inputManager.addScrollListener(this.onScrollWheel.bind(this));
 
         this.cameraControllerWASD = this.contents.querySelector('.CameraControllerWASD');
@@ -1501,10 +1501,14 @@ class ViewerSettings extends Panel {
         this.viewer.fovY = value * (Math.PI * 0.995);
     }
 
-    private onScrollWheel = () => {
-        this.camSpeedSlider.value = "" + ( Number(this.camSpeedSlider.value) - Math.sign(this.viewer.inputManager.dz/-4));
+    private onCameraController(): void {
+        this.camSpeedSlider.value = "" + this.viewer.cameraController.getKeyMoveSpeed();
+    }
+
+    private onScrollWheel(): void {
+        this.camSpeedSlider.value = "" + (Number(this.camSpeedSlider.value) + Math.sign(this.viewer.inputManager.dz/4));
         this.updateCameraSpeed();
-    };
+    }
 
     private setCameraControllerClass(cameraControllerClass: CameraControllerClass) {
         this.viewer.setCameraController(new cameraControllerClass());
@@ -1513,7 +1517,7 @@ class ViewerSettings extends Panel {
     }
 
     private updateCameraSpeed(): void {
-        this.viewer.cameraController.setKeyMoveSpeed(Number(this.camSpeedSlider.value) * 10);
+        this.viewer.cameraController.setKeyMoveSpeed(Number(this.camSpeedSlider.value));
     }
 
     public cameraControllerSelected(cameraControllerClass: CameraControllerClass) {
