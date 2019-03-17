@@ -16,7 +16,7 @@ import { assert, assertExists, hexzero } from '../util';
 import { fetchData } from '../fetch';
 import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
 import { RENDER_HACKS_ICON } from '../bk/scenes';
-import { mat4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 
 class OoT3DRenderer extends BasicRendererHelper implements Viewer.SceneGfx {
     public roomRenderers: RoomRenderer[] = [];
@@ -44,24 +44,48 @@ class OoT3DRenderer extends BasicRendererHelper implements Viewer.SceneGfx {
         const renderHacksPanel = new UI.Panel();
         renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         renderHacksPanel.setTitle(RENDER_HACKS_ICON, 'Render Hacks');
+        
         const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
         enableVertexColorsCheckbox.onchanged = () => {
             for (let i = 0; i < this.roomRenderers.length; i++)
                 this.roomRenderers[i].setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
         };
         renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
+        
         const enableTextures = new UI.Checkbox('Enable Textures', true);
         enableTextures.onchanged = () => {
             for (let i = 0; i < this.roomRenderers.length; i++)
                 this.roomRenderers[i].setTexturesEnabled(enableTextures.checked);
         };
         renderHacksPanel.contents.appendChild(enableTextures.elem);
+        
         const enableMonochromeVertexColors = new UI.Checkbox('Grayscale Vertex Colors', false);
         enableMonochromeVertexColors.onchanged = () => {
             for (let i = 0; i < this.roomRenderers.length; i++)
                 this.roomRenderers[i].setMonochromeVertexColorsEnabled(enableMonochromeVertexColors.checked);
         };
         renderHacksPanel.contents.appendChild(enableMonochromeVertexColors.elem);
+
+        const enableVertexNormals = new UI.Checkbox('Enable Vertex Normals', false);
+        enableVertexNormals.onchanged = () => {
+            for (let i = 0; i < this.roomRenderers.length; i++)
+                this.roomRenderers[i].setVertexNormalsEnabled(enableVertexNormals.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableVertexNormals.elem);
+
+        const enableLighting = new UI.Checkbox('Enable Lighting', false);
+        enableLighting.onchanged = () => {
+            for (let i = 0; i < this.roomRenderers.length; i++)
+                this.roomRenderers[i].setLightingEnabled(enableLighting.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableLighting.elem);
+
+        const enableUV = new UI.Checkbox('Enable UV', false);
+        enableUV.onchanged = () => {
+            for (let i = 0; i < this.roomRenderers.length; i++)
+                this.roomRenderers[i].setUVEnabled(enableUV.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableUV.elem);
 
         const layersPanel = new UI.LayerPanel(this.roomRenderers);
         return [renderHacksPanel, layersPanel];
@@ -357,6 +381,19 @@ class SceneDesc implements Viewer.SceneDesc {
                     }
                 }
                 roomRenderer.addToViewRenderer(device, renderer.viewRenderer);
+
+                //roomRenderer.opaqueMesh.ambientLightCol = zsi.environmentSettings[0].ambientLightCol;
+                //roomRenderer.opaqueMesh.ambientLightCol = vec3.fromValues(1, 0, 1);
+                let index = 0;
+                roomRenderer.setAmbientColor(zsi.environmentSettings[index].ambientLightCol);
+                roomRenderer.setPrimaryLightColor(zsi.environmentSettings[index].primaryLightCol);
+                roomRenderer.setPrimaryLightDirection(zsi.environmentSettings[index].primaryLightDir);
+                roomRenderer.setSecondaryLightColor(zsi.environmentSettings[index].secondaryLightCol);
+                roomRenderer.setSecondaryLightDirection(zsi.environmentSettings[index].secondaryLightDir);
+                roomRenderer.setFogColor(zsi.environmentSettings[index].fogCol);
+                roomRenderer.setFogStart(zsi.environmentSettings[index].fogStart);
+                roomRenderer.setDrawDistance(zsi.environmentSettings[index].drawDistance);
+
                 renderer.roomRenderers.push(roomRenderer);
 
                 for (let i = 0; i < roomSetup.actors.length; i++)

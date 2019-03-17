@@ -176,6 +176,8 @@ class DrawCallInstance {
     private texturesEnabled = true;
     private monochromeVertexColorsEnabled = false;
     private alphaVisualizerEnabled = false;
+    private vertexNormalsEnabled = false;
+    private lightingEnabled = false;
 
     constructor(device: GfxDevice, n64Data: N64Data, renderInstBuilder: GfxRenderInstBuilder, private drawCall: DrawCall, private drawIndex: number) {
         this.renderInst = renderInstBuilder.pushRenderInst();
@@ -251,6 +253,16 @@ class DrawCallInstance {
 
     public setAlphaVisualizerEnabled(v: boolean): void {
         this.alphaVisualizerEnabled = v;
+        this.createProgram();
+    }
+
+    public setVertexNormalsEnabled(v: boolean): void {
+        this.vertexNormalsEnabled = v;
+        this.createProgram();
+    }
+
+    public setLightingEnabled(v: boolean): void {
+        this.lightingEnabled = v;
         this.createProgram();
     }
 
@@ -359,6 +371,16 @@ export class N64Renderer {
     public setAlphaVisualizerEnabled(v: boolean): void {
         for (let i = 0; i < this.drawCallInstances.length; i++)
             this.drawCallInstances[i].setAlphaVisualizerEnabled(v);
+    }
+
+    public setVertexNormalsEnabled(v: boolean): void {
+        for (let i = 0; i < this.drawCallInstances.length; i++)
+            this.drawCallInstances[i].setVertexNormalsEnabled(v);
+    }
+
+    public setLightingEnabled(v: boolean): void {
+        for (let i = 0; i < this.drawCallInstances.length; i++)
+            this.drawCallInstances[i].setLightingEnabled(v);
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {

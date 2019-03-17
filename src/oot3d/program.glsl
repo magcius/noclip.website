@@ -30,6 +30,8 @@ layout(row_major, std140) uniform ub_PrmParams {
 uniform sampler2D u_Texture[3];
 
 varying vec4 v_Color;
+varying vec4 v_Position;
+varying vec3 v_Normal;
 varying vec2 v_TexCoord0;
 varying vec2 v_TexCoord1;
 varying vec2 v_TexCoord2;
@@ -80,6 +82,8 @@ void main() {
     vec4 t_Position = vec4(a_Position * u_PosScale, 1.0);
     gl_Position = Mul(u_Projection, Mul(_Mat4x4(t_BoneMatrix), t_Position));
 
+    v_Position = gl_Position;
+
     v_Color = a_Color;
 
 #ifdef USE_MONOCHROME_VERTEX_COLOR
@@ -103,39 +107,14 @@ void main() {
     v_LightIntensity = 1.0;
     // v_LightIntensity = dot(-a_Normal, t_LightDirection);
 
+    v_Normal = a_Normal;
+
     // Hacky Ambient.
-    v_Color.rgb = clamp(v_Color.rgb + 0.3, vec3(0), vec3(1));
-    v_LightIntensity = clamp(v_LightIntensity + 0.6, 0.0, 1.0);
+    //v_Color.rgb = clamp(v_Color.rgb + 0.3, vec3(0), vec3(1));
+    //v_LightIntensity = clamp(v_LightIntensity + 0.6, 0.0, 1.0);
 }
 #endif
 
 #ifdef FRAG
-void main() {
-    vec4 t_Color = vec4(1.0, 1.0, 1.0, 1.0);
 
-    // TODO(jstpierre): Figure out the different textures in use.
-#ifdef USE_TEXTURE_0
-    t_Color *= texture2D(u_Texture[0], v_TexCoord0);
-#endif
-
-#ifdef USE_TEXTURE_1
-    t_Color *= texture2D(u_Texture[1], v_TexCoord0);
-#endif
-
-#ifdef USE_TEXTURE_2
-    t_Color *= texture2D(u_Texture[2], v_TexCoord0);
-#endif
-
-#ifdef USE_VERTEX_COLOR
-    t_Color *= v_Color;
-#endif
-
-    t_Color.rgb *= v_LightIntensity;
-    t_Color *= u_MaterialColor;
-
-    if (t_Color.a <= u_AlphaReference)
-        discard;
-
-    gl_FragColor = t_Color;
-}
 #endif

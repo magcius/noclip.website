@@ -18,7 +18,7 @@ import { nArray, assert } from '../util';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
 import { GfxRenderInstBuilder, GfxRenderInst, GfxRenderInstViewRenderer, GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderer';
 import { makeFormat, FormatFlags, FormatTypeFlags, FormatCompFlags } from '../gfx/platform/GfxPlatformFormat';
-import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { BasicRenderTarget, makeClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { Camera } from '../Camera';
 
 // @ts-ignore
@@ -461,6 +461,18 @@ export class CmbRenderer {
     private texturesEnabled: boolean = true;
     private vertexColorsEnabled: boolean = true;
     private monochromeVertexColorsEnabled: boolean = false;
+    private vertexNormalsEnabled: boolean = false;
+    private lightingEnabled: boolean = false;
+    private uvEnabled: boolean = false;
+
+    public ambientLightCol: vec3;
+    public primaryLightCol: vec3;
+    public primaryLightDir: vec3;
+    public secondaryLightCol: vec3;
+    public secondaryLightDir: vec3;
+    public fogCol: vec3;
+    public fogStart: number;
+    public drawDistance: number;
 
     constructor(device: GfxDevice, public textureHolder: CtrTextureHolder, public cmbData: CmbData, public name: string = '') {
         for (let i = 0; i < this.cmbData.cmb.materials.length; i++)
@@ -493,7 +505,112 @@ export class CmbRenderer {
             program.defines.set('USE_VERTEX_COLOR', '1');
         if (this.monochromeVertexColorsEnabled)
             program.defines.set('USE_MONOCHROME_VERTEX_COLOR', '1');
-        this.templateRenderInst.setDeviceProgram(program);
+        if (this.vertexNormalsEnabled)
+            program.defines.set('USE_VERTEX_NORMAL', '1');
+        if (this.lightingEnabled)
+            program.defines.set('USE_LIGHTING', '1');
+        if (this.uvEnabled)
+            program.defines.set('USE_UV', '1');
+
+        let ambientLightCol = vec3.fromValues(0, 0, 0);
+        let primaryLightCol = vec3.fromValues(0, 0, 0);
+        let primaryLightDir = vec3.fromValues(0, 0, 0);
+        let secondaryLightCol = vec3.fromValues(0, 0, 0);
+        let secondaryLightDir = vec3.fromValues(0, 0, 0);
+        let fogCol = vec3.fromValues(0, 0, 0);
+        let fogStart = 0.0;
+        let drawDistance = 0.0;
+        if (this.ambientLightCol != null) ambientLightCol = this.ambientLightCol;
+        if (this.primaryLightCol != null) primaryLightCol = this.primaryLightCol;
+        if (this.primaryLightDir != null) primaryLightDir = this.primaryLightDir;
+        if (this.secondaryLightCol != null) secondaryLightCol = this.secondaryLightCol;
+        if (this.secondaryLightDir != null) secondaryLightDir = this.secondaryLightDir;
+        if (this.fogCol != null) fogCol = this.fogCol;
+        if (this.fogStart != null) fogStart = this.fogStart;
+        if (this.drawDistance != null) drawDistance = this.drawDistance;
+
+        program.frag = `
+        
+        float map(float value, float low1, float high1, float low2, float high2)
+        {
+            return low2 + (value - low1) * (high2 - low2) / (high1 - low1);
+        }
+
+        void main() {
+            vec3 t_AmbientColor = vec3(${ambientLightCol[0]}, ${ambientLightCol[1]}, ${ambientLightCol[2]});
+            vec3 t_PrimaryLightColor = vec3(${primaryLightCol[0]}, ${primaryLightCol[1]}, ${primaryLightCol[2]});
+            vec3 t_PrimaryLightDirection = vec3(${primaryLightDir[0]}, ${primaryLightDir[1]}, ${primaryLightDir[2]});
+            vec3 t_SecondaryLightColor = vec3(${secondaryLightCol[0]}, ${secondaryLightCol[1]}, ${secondaryLightCol[2]});
+            vec3 t_SecondaryLightDirection = vec3(${secondaryLightDir[0]}, ${secondaryLightDir[1]}, ${secondaryLightDir[2]});
+            vec3 t_FogColor = vec3(${fogCol[0]}, ${fogCol[1]}, ${fogCol[2]});
+            vec4 t_Color = vec4(1.0, 1.0, 1.0, 1.0);
+            float t_FogStart = ${fogStart}.0;
+            float t_DrawDistance = ${drawDistance}.0;
+        
+            // TODO(jstpierre): Figure out the different textures in use.
+            #ifdef USE_TEXTURE_0
+                t_Color *= texture2D(u_Texture[0], v_TexCoord0);
+            #endif
+            
+            #ifdef USE_TEXTURE_1
+                t_Color *= texture2D(u_Texture[1], v_TexCoord0);
+            #endif
+            
+            #ifdef USE_TEXTURE_2
+                t_Color *= texture2D(u_Texture[2], v_TexCoord0);
+            #endif
+            
+            #ifdef USE_VERTEX_COLOR
+                t_Color *= v_Color;
+            #endif
+            
+                t_Color *= u_MaterialColor;
+            
+                if (t_Color.a <= u_AlphaReference)
+                    discard;
+
+            vec3 t_NormalizedNormal = normalize(v_Normal);
+
+            float depth = 0.0;
+            
+            #ifdef USE_LIGHTING
+                vec3 t_PrimaryLightDirectionNormalized = normalize(t_PrimaryLightDirection);
+                float t_PrimaryLightIntensity = clamp(dot(-t_NormalizedNormal, t_PrimaryLightDirectionNormalized), 0.0, 1.0);
+                vec3 t_PrimaryDiffuse = t_PrimaryLightColor * t_PrimaryLightIntensity;
+                
+                vec3 t_SecondaryLightDirectionNormalized = normalize(t_SecondaryLightDirection);
+                float t_SecondaryLightIntensity = clamp(dot(-t_NormalizedNormal, t_SecondaryLightDirectionNormalized), 0.0, 1.0);
+                vec3 t_SecondaryDiffuse = t_SecondaryLightColor * t_SecondaryLightIntensity;
+
+                vec3 CombinedDiffuse = vec3(0, 0, 0); 
+                CombinedDiffuse += t_AmbientColor * 4.0;
+                CombinedDiffuse += t_PrimaryDiffuse + t_SecondaryDiffuse;
+                t_Color.rgb *= CombinedDiffuse;
+
+                depth = clamp(v_Position.w, 0.0, t_DrawDistance);
+
+                //float FogFactor = exp(-0.25 * depth);
+                float FogFactor = clamp((t_DrawDistance - depth) / (t_DrawDistance - t_FogStart), 0.5, 1.0);
+
+                t_Color.rgb = mix(t_FogColor, t_Color.rgb, FogFactor);
+            #endif
+            
+            #ifdef USE_VERTEX_NORMAL
+                t_Color.rgb = t_NormalizedNormal * 0.5 + 0.5;
+            #endif
+
+            #ifdef USE_UV
+                t_Color.r = v_TexCoord0.x;
+                t_Color.g = v_TexCoord0.y;
+                t_Color.b = 0.0;
+            #endif
+
+                //t_Color.rgb = vec3(1.0, 1.0, 1.0) * 1.0 - depth;
+            
+                gl_FragColor = t_Color;
+            }`;
+
+        if (this.templateRenderInst != null) this.templateRenderInst.setDeviceProgram(program);
     }
 
     public addToViewRenderer(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer): void {
@@ -525,6 +642,61 @@ export class CmbRenderer {
 
     public setMonochromeVertexColorsEnabled(v: boolean): void {
         this.monochromeVertexColorsEnabled = v;
+        this.createProgram();
+    }
+
+    public setVertexNormalsEnabled(v: boolean): void {
+        this.vertexNormalsEnabled = v;
+        this.createProgram();
+    }
+
+    public setUVEnabled(v: boolean): void {
+        this.uvEnabled = v;
+        this.createProgram();
+    }
+
+    public setLightingEnabled(v: boolean): void {
+        this.lightingEnabled = v;
+        this.createProgram();
+    }
+
+    public setAmbientColor(color: vec3): void {
+        this.ambientLightCol = color;
+        this.createProgram();
+    }
+
+    public setPrimaryLightColor(color: vec3): void {
+        this.primaryLightCol = color;
+        this.createProgram();
+    }
+
+    public setPrimaryLightDirection(direction: vec3): void {
+        this.primaryLightDir = direction;
+        this.createProgram();
+    }
+
+    public setSecondaryLightColor(color: vec3): void {
+        this.secondaryLightCol = color;
+        this.createProgram();
+    }
+
+    public setSecondaryLightDirection(direction: vec3): void {
+        this.secondaryLightDir = direction;
+        this.createProgram();
+    }
+
+    public setFogColor(color: vec3): void {
+        this.fogCol = color;
+        this.createProgram();
+    }
+
+    public setFogStart(distance: number): void {
+        this.fogStart = distance;
+        this.createProgram();
+    }
+
+    public setDrawDistance(distance: number): void {
+        this.drawDistance = distance;
         this.createProgram();
     }
 
@@ -611,7 +783,7 @@ export abstract class BasicRendererHelper {
         this.viewRenderer.prepareToRender(device);
 
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        const finalPassRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
+        const finalPassRenderer = this.renderTarget.createRenderPass(device, makeClearRenderPassDescriptor(true, colorNew(0, 0, 0, 1)));
         this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
         this.viewRenderer.executeOnPass(device, finalPassRenderer);
         return finalPassRenderer;
@@ -709,6 +881,127 @@ export class RoomRenderer {
             this.wMesh.setMonochromeVertexColorsEnabled(v);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].setMonochromeVertexColorsEnabled(v);
+    }
+
+    public setVertexNormalsEnabled(v: boolean): void {
+        if (this.opaqueMesh !== null)
+            this.opaqueMesh.setVertexNormalsEnabled(v);
+        if (this.transparentMesh !== null)
+            this.transparentMesh.setVertexNormalsEnabled(v);
+        if (this.wMesh !== null)
+            this.wMesh.setVertexNormalsEnabled(v);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].setVertexNormalsEnabled(v);
+    }
+
+    public setLightingEnabled(v: boolean): void {
+        if (this.opaqueMesh !== null)
+            this.opaqueMesh.setLightingEnabled(v);
+        if (this.transparentMesh !== null)
+            this.transparentMesh.setLightingEnabled(v);
+        if (this.wMesh !== null)
+            this.wMesh.setLightingEnabled(v);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].setLightingEnabled(v);
+    }
+
+    public setUVEnabled(v: boolean): void {
+        if (this.opaqueMesh !== null)
+            this.opaqueMesh.setUVEnabled(v);
+        if (this.transparentMesh !== null)
+            this.transparentMesh.setUVEnabled(v);
+        if (this.wMesh !== null)
+            this.wMesh.setUVEnabled(v);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].setUVEnabled(v);
+    }
+
+    public setAmbientColor(color: vec3): void {
+        if (this.opaqueMesh !== null)
+            this.opaqueMesh.setAmbientColor(color);
+        if (this.transparentMesh !== null)
+            this.transparentMesh.setAmbientColor(color);
+        if (this.wMesh !== null)
+            this.wMesh.setAmbientColor(color);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].setAmbientColor(color);
+    }
+
+    public setPrimaryLightColor(color: vec3): void {
+        if (this.opaqueMesh !== null)
+            this.opaqueMesh.setPrimaryLightColor(color);
+        if (this.transparentMesh !== null)
+            this.transparentMesh.setPrimaryLightColor(color);
+        if (this.wMesh !== null)
+            this.wMesh.setPrimaryLightColor(color);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].setPrimaryLightColor(color);
+    }
+
+    public setPrimaryLightDirection(color: vec3): void {
+        if (this.opaqueMesh !== null)
+            this.opaqueMesh.setPrimaryLightDirection(color);
+        if (this.transparentMesh !== null)
+            this.transparentMesh.setPrimaryLightDirection(color);
+        if (this.wMesh !== null)
+            this.wMesh.setPrimaryLightDirection(color);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].setPrimaryLightDirection(color);
+    }
+
+    public setSecondaryLightColor(color: vec3): void {
+        if (this.opaqueMesh !== null)
+            this.opaqueMesh.setSecondaryLightColor(color);
+        if (this.transparentMesh !== null)
+            this.transparentMesh.setSecondaryLightColor(color);
+        if (this.wMesh !== null)
+            this.wMesh.setSecondaryLightColor(color);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].setSecondaryLightColor(color);
+    }
+
+    public setSecondaryLightDirection(color: vec3): void {
+        if (this.opaqueMesh !== null)
+            this.opaqueMesh.setSecondaryLightDirection(color);
+        if (this.transparentMesh !== null)
+            this.transparentMesh.setSecondaryLightDirection(color);
+        if (this.wMesh !== null)
+            this.wMesh.setSecondaryLightDirection(color);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].setSecondaryLightDirection(color);
+    }
+
+    public setFogColor(color: vec3): void {
+        if (this.opaqueMesh !== null)
+            this.opaqueMesh.setFogColor(color);
+        if (this.transparentMesh !== null)
+            this.transparentMesh.setFogColor(color);
+        if (this.wMesh !== null)
+            this.wMesh.setFogColor(color);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].setFogColor(color);
+    }
+
+    public setFogStart(distance: number): void {
+        if (this.opaqueMesh !== null)
+            this.opaqueMesh.setFogStart(distance);
+        if (this.transparentMesh !== null)
+            this.transparentMesh.setFogStart(distance);
+        if (this.wMesh !== null)
+            this.wMesh.setFogStart(distance);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].setFogStart(distance);
+    }
+
+    public setDrawDistance(distance: number): void {
+        if (this.opaqueMesh !== null)
+            this.opaqueMesh.setDrawDistance(distance);
+        if (this.transparentMesh !== null)
+            this.transparentMesh.setDrawDistance(distance);
+        if (this.wMesh !== null)
+            this.wMesh.setDrawDistance(distance);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].setDrawDistance(distance);
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {

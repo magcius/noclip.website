@@ -59,6 +59,27 @@ class MultiRoomScene extends BasicRendererHelper implements Viewer.SceneGfx {
         };
         renderHacksPanel.contents.appendChild(enableMonochromeVertexColors.elem);
 
+        const enableVertexNormals = new UI.Checkbox('Enable Vertex Normals', false);
+        enableVertexNormals.onchanged = () => {
+            for (let i = 0; i < this.roomRenderers.length; i++)
+                this.roomRenderers[i].setVertexNormalsEnabled(enableVertexNormals.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableVertexNormals.elem);
+
+        const enableLighting = new UI.Checkbox('Enable Lighting', false);
+        enableLighting.onchanged = () => {
+            for (let i = 0; i < this.roomRenderers.length; i++)
+                this.roomRenderers[i].setLightingEnabled(enableLighting.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableLighting.elem);
+
+        const enableUV = new UI.Checkbox('Enable UV', false);
+        enableUV.onchanged = () => {
+            for (let i = 0; i < this.roomRenderers.length; i++)
+                this.roomRenderers[i].setUVEnabled(enableUV.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableUV.elem);
+
         const layersPanel = new UI.LayerPanel(this.roomRenderers);
         return [renderHacksPanel, layersPanel];
     }
@@ -129,6 +150,16 @@ class SceneDesc implements Viewer.SceneDesc {
 
                 if (this.disabledRooms.includes(i))
                     roomRenderer.setVisible(false);
+
+                let index = 0;
+                roomRenderer.setAmbientColor(zsi.environmentSettings[index].ambientLightCol);
+                roomRenderer.setPrimaryLightColor(zsi.environmentSettings[index].primaryLightCol);
+                roomRenderer.setPrimaryLightDirection(zsi.environmentSettings[index].primaryLightDir);
+                roomRenderer.setSecondaryLightColor(zsi.environmentSettings[index].secondaryLightCol);
+                roomRenderer.setSecondaryLightDirection(zsi.environmentSettings[index].secondaryLightDir);
+                roomRenderer.setFogColor(zsi.environmentSettings[index].fogCol);
+                roomRenderer.setFogStart(zsi.environmentSettings[index].fogStart);
+                roomRenderer.setDrawDistance(zsi.environmentSettings[index].drawDistance);
 
                 return roomRenderer;
             });
