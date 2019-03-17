@@ -287,24 +287,24 @@ void main() {
     if (!(${this.generateAlphaTestCompare(this.material.alphaTestFunction, this.material.alphaTestReference)}))
         discard;
 
-    vec4 ResultColor = t_CmbOut;
+    vec4 t_ResultColor = t_CmbOut;
 
     #ifdef USE_VERTEX_NORMAL
-        ResultColor.rgb = normalize(v_Normal) * 0.5 + 0.5; 
+        t_ResultColor.rgb = normalize(v_Normal) * 0.5 + 0.5; 
     #endif
 
     #ifdef USE_UV
-        ResultColor.r = v_TexCoord0.x;
-        ResultColor.g = v_TexCoord0.y;
-        ResultColor.b = 0.0;
+        t_ResultColor.r = v_TexCoord0.x;
+        t_ResultColor.g = v_TexCoord0.y;
+        t_ResultColor.b = 0.0;
     #endif
 
     #ifdef USE_LIGHTING
-        float FogFactor = clamp((v_DrawDistance - v_Depth) / (v_DrawDistance - v_FogStart), 0.0, 1.0);
-        ResultColor.rgb = mix(v_FogColor, t_CmbOut.rgb * v_Lighting, FogFactor);
+        float t_FogFactor = clamp((v_DrawDistance - v_Depth) / (v_DrawDistance - v_FogStart), 0.0, 1.0);
+        t_ResultColor.rgb = mix(v_FogColor, t_CmbOut.rgb * v_Lighting, t_FogFactor);
     #endif
 
-    gl_FragColor = ResultColor;
+    gl_FragColor = t_ResultColor;
 }
 `;
     }
