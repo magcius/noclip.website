@@ -394,9 +394,9 @@ void main() {
     v_FogColor = FOG_COLOR;
     v_DrawDistance = DRAW_DISTANCE;
     v_FogStart = FOG_START;
-    v_Lighting = AMBIENT_LIGHT_COLOR;
-    v_Lighting += clamp(dot(a_Normal, -PRIMARY_LIGHT_DIRECTION), 0.0, 1.0) * PRIMARY_LIGHT_COLOR;
-    v_Lighting += clamp(dot(a_Normal, -SECONDARY_LIGHT_DIRECTION), 0.0, 1.0) * SECONDARY_LIGHT_COLOR;
+    v_Lighting = AMBIENT_LIGHT_COLOR * 2.0;
+    v_Lighting += clamp(dot(-a_Normal, PRIMARY_LIGHT_DIRECTION), 0.0, 1.0) * PRIMARY_LIGHT_COLOR;
+    v_Lighting += clamp(dot(-a_Normal, SECONDARY_LIGHT_DIRECTION), 0.0, 1.0) * SECONDARY_LIGHT_COLOR;
 
 #ifdef USE_MONOCHROME_VERTEX_COLOR
     v_Color.rgb = Monochrome(v_Color.rgb);
