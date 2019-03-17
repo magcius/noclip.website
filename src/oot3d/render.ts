@@ -11,7 +11,7 @@ import AnimationController from '../AnimationController';
 import { mat4, vec3, vec4 } from 'gl-matrix';
 import { GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler, GfxDevice, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxHostAccessPass, GfxRenderPass, GfxTextureDimension, GfxInputState, GfxInputLayout, GfxCompareMode } from '../gfx/platform/GfxPlatform';
 import { fillMatrix4x4, fillVec4, fillColor, fillMatrix4x3 } from '../gfx/helpers/UniformBufferHelpers';
-import { colorNew, colorFromRGBA, Color, colorNewCopy, colorCopy } from '../Color';
+import { colorNew, colorFromRGBA, Color, colorNewCopy, colorCopy, TransparentBlack } from '../Color';
 import { getTextureFormatName } from './pica_texture';
 import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
 import { nArray, assert } from '../util';
@@ -965,12 +965,14 @@ export class RoomRenderer {
             textureHolder.addTextures(device, mesh.opaque.textures);
             this.opaqueData = new CmbData(device, mesh.opaque);
             this.opaqueMesh = new CmbRenderer(device, textureHolder, this.opaqueData, `${name} Opaque`);
+            this.opaqueMesh.setConstantColor(1, TransparentBlack);
         }
 
         if (mesh.transparent !== null) {
             textureHolder.addTextures(device, mesh.transparent.textures);
             this.transparentData = new CmbData(device, mesh.transparent);
             this.transparentMesh = new CmbRenderer(device, textureHolder, this.transparentData, `${name} Transparent`);
+            this.transparentMesh.setConstantColor(1, TransparentBlack);
         }
     }
 
