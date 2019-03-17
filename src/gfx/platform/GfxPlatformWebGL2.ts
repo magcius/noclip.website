@@ -357,11 +357,14 @@ function applyAttachmentState(gl: WebGL2RenderingContext, i: number, currentAtta
 
     if (currentAttachmentState.rgbBlendState.blendMode !== newAttachmentState.rgbBlendState.blendMode ||
         currentAttachmentState.alphaBlendState.blendMode !== newAttachmentState.alphaBlendState.blendMode) {
+
+        console.log(currentAttachmentState.rgbBlendState.blendMode, newAttachmentState.rgbBlendState.blendMode);
+
         if (currentAttachmentState.rgbBlendState.blendMode === GfxBlendMode.NONE &&
             currentAttachmentState.alphaBlendState.blendMode === GfxBlendMode.NONE)
             gl.enable(gl.BLEND);
-        else if (newAttachmentState.rgbBlendState.blendMode !== GfxBlendMode.NONE ||
-                 newAttachmentState.alphaBlendState.blendMode !== GfxBlendMode.NONE)
+        else if (newAttachmentState.rgbBlendState.blendMode === GfxBlendMode.NONE &&
+                 newAttachmentState.alphaBlendState.blendMode === GfxBlendMode.NONE)
             gl.disable(gl.BLEND);
 
         gl.blendEquationSeparate(newAttachmentState.rgbBlendState.blendMode, newAttachmentState.alphaBlendState.blendMode);
@@ -405,7 +408,8 @@ function applyMegaState(gl: WebGL2RenderingContext, currentMegaState: GfxMegaSta
 
         if (currentAttachmentState.rgbBlendState.blendMode !== newMegaState.blendMode ||
             currentAttachmentState.alphaBlendState.blendMode !== newMegaState.blendMode) {
-            if (currentMegaState.blendMode === GfxBlendMode.NONE)
+            if (currentAttachmentState.rgbBlendState.blendMode === GfxBlendMode.NONE &&
+                currentAttachmentState.alphaBlendState.blendMode === GfxBlendMode.NONE)
                 gl.enable(gl.BLEND);
             else if (newMegaState.blendMode === GfxBlendMode.NONE)
                 gl.disable(gl.BLEND);
@@ -1309,6 +1313,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     private setPipeline(pipeline: GfxRenderPipeline): void {
         this._currentPipeline = pipeline as GfxRenderPipelineP_GL;
+        if ((this._currentPipeline as any).debug)
+            debugger;
+
         this._setMegaState(this._currentPipeline.megaState);
 
         // Hotpatch support.

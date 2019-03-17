@@ -18,6 +18,7 @@ import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
 import { RENDER_HACKS_ICON } from '../bk/scenes';
 import { mat4 } from 'gl-matrix';
 import AnimationController from '../AnimationController';
+import { TransparentBlack } from '../Color';
 
 class OoT3DRenderer extends BasicRendererHelper implements Viewer.SceneGfx {
     public roomRenderers: RoomRenderer[] = [];
@@ -335,6 +336,7 @@ class SceneDesc implements Viewer.SceneDesc {
         function buildModel(zar: ZAR.ZAR, modelPath: string, scale: number = 0.01): CmbRenderer {
             const cmbData = renderer.modelCache.getModel(device, renderer, zar, modelPath);
             const cmbRenderer = new CmbRenderer(device, renderer.textureHolder, cmbData);
+            cmbRenderer.name = `${hexzero(actor.actorId, 4)} / ${modelPath}`;
             mat4.scale(cmbRenderer.modelMatrix, actor.modelMatrix, [scale, scale, scale]);
             cmbRenderer.addToViewRenderer(device, renderer.viewRenderer);
             roomRenderer.objectRenderers.push(cmbRenderer);
@@ -448,6 +450,7 @@ class SceneDesc implements Viewer.SceneDesc {
         else if (actor.actorId === ActorId.Obj_Kibako2) fetchArchive(`zelda_kibako2.zar`).then((zar) => buildModel(zar, `model/CIkibako_model.cmb`, 0.1));
         else if (actor.actorId === ActorId.En_Box) fetchArchive(`zelda_box.zar`).then((zar) => {
             const b = buildModel(zar, `model/tr_box.cmb`, 0.005); // default scale for small chests
+            b.setConstantColor(1, TransparentBlack);
 
             const enum Chest { BOSS, SMALL_WOODEN, LARGE_WOODEN };
             function setChest(chest: Chest) {
@@ -494,11 +497,14 @@ class SceneDesc implements Viewer.SceneDesc {
         else if (actor.actorId === ActorId.Obj_Syokudai) fetchArchive(`zelda_syokudai.zar`).then((zar) => {
             const whichModel = (actor.variable >>> 12) & 0x03;
             if (whichModel === 0x00) {        // Golden Torch
-                buildModel(zar, `model/syokudai_model.cmb`, 1);
+                const b = buildModel(zar, `model/syokudai_model.cmb`, 1);
+                b.setConstantColor(1, TransparentBlack);
             } else if (whichModel === 0x01) { // Timed Torch
-                buildModel(zar, `model/syokudai_ki_model.cmb`, 1);
+                const b = buildModel(zar, `model/syokudai_ki_model.cmb`, 1);
+                b.setConstantColor(1, TransparentBlack);
             } else if (whichModel === 0x02) { // Wooden Torch
-                buildModel(zar, `model/syokudai_isi_model.cmb`, 1);
+                const b = buildModel(zar, `model/syokudai_isi_model.cmb`, 1);
+                b.setConstantColor(1, TransparentBlack);
             } else if (whichModel === 0x03) { // Unknown (Seen in Ganon's Castle)
                 // TODO(jstpierre)
             } else {
@@ -789,7 +795,7 @@ class SceneDesc implements Viewer.SceneDesc {
             const b = buildModel(zar, `model/mjin_flash_model.cmb`, 1);
             const cmab = parseCMAB(zar, `misc/mjin_flash_model.cmab`);
             renderer.textureHolder.addTextures(device, cmab.textures);
-            b.bindCMAB(cmab, 0, animFrame(whichPalFrame));
+            b.bindCMAB(cmab, animFrame(whichPalFrame));
         });
         else if (actor.actorId === ActorId.En_Skj) fetchArchive(`zelda_skj.zar`).then((zar) => {
             const b = buildModel(zar, `model/stalkid.cmb`);

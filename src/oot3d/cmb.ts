@@ -134,34 +134,13 @@ export interface TextureBinding {
     wrapT: TextureWrapMode;
 }
 
-export interface Material {
-    index: number;
-    textureBindings: TextureBinding[];
-    textureMatrices: mat4[];
-    alphaTestFunction: GfxCompareMode;
-    alphaTestReference: number;
-    renderFlags: GfxMegaStateDescriptor;
-    isTransparent: boolean;
-}
-
-export function calcTexMtx(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
-    const sinR = Math.sin(rotation);
-    const cosR = Math.cos(rotation);
-
-    mat4.identity(dst);
-
-    dst[0]  = scaleS *  cosR;
-    dst[4]  = scaleT * -sinR;
-    dst[12] = translationS;
-
-    dst[1]  = scaleS *  sinR;
-    dst[5]  = scaleT *  cosR;
-    dst[13] = translationT;
-}
-
 export const enum CombineResultOpDMP {
+    REPLACE                  = 0x1E01,
     MODULATE                 = 0x2100,
     ADD                      = 0x0104,
+    ADD_SIGNED               = 0x8574,
+    INTERPOLATE              = 0x8575,
+    SUBTRACT                 = 0x84E7,
     DOT3_RGB                 = 0x86AE,
     DOT3_RGBA                = 0x86AF,
     MULT_ADD                 = 0x6401,
@@ -224,7 +203,39 @@ export interface TextureCombiner {
     op0Alpha: CombineOpDMP;
     op1Alpha: CombineOpDMP;
     op2Alpha: CombineOpDMP;
-    constantColor: Color;
+    constantIndex: number;
+}
+
+export interface TextureEnvironment {
+    textureCombiners: TextureCombiner[];
+    combinerBufferColor: Color;
+}
+
+export interface Material {
+    index: number;
+    textureBindings: TextureBinding[];
+    textureMatrices: mat4[];
+    constantColors: Color[];
+    textureEnvironment: TextureEnvironment;
+    alphaTestFunction: GfxCompareMode;
+    alphaTestReference: number;
+    renderFlags: GfxMegaStateDescriptor;
+    isTransparent: boolean;
+}
+
+export function calcTexMtx(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
+    const sinR = Math.sin(rotation);
+    const cosR = Math.cos(rotation);
+
+    mat4.identity(dst);
+
+    dst[0]  = scaleS *  cosR;
+    dst[4]  = scaleT * -sinR;
+    dst[12] = translationS;
+
+    dst[1]  = scaleS *  sinR;
+    dst[5]  = scaleT *  cosR;
+    dst[13] = translationT;
 }
 
 function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
@@ -284,12 +295,12 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
         const unkColor0 = view.getUint32(offs + 0xB0, true);
 
         const constantColors: Color[] = [];
-        constantColors[0] = colorNewFromRGBA8(view.getUint32(offs + 0xB4, true));
-        constantColors[1] = colorNewFromRGBA8(view.getUint32(offs + 0xB8, true));
-        constantColors[2] = colorNewFromRGBA8(view.getUint32(offs + 0xBC, true));
-        constantColors[3] = colorNewFromRGBA8(view.getUint32(offs + 0xC0, true));
-        constantColors[4] = colorNewFromRGBA8(view.getUint32(offs + 0xC4, true));
-        constantColors[5] = colorNewFromRGBA8(view.getUint32(offs + 0xC8, true));
+        constantColors[0] = colorNewFromRGBA8(view.getUint32(offs + 0xB4, false));
+        constantColors[1] = colorNewFromRGBA8(view.getUint32(offs + 0xB8, false));
+        constantColors[2] = colorNewFromRGBA8(view.getUint32(offs + 0xBC, false));
+        constantColors[3] = colorNewFromRGBA8(view.getUint32(offs + 0xC0, false));
+        constantColors[4] = colorNewFromRGBA8(view.getUint32(offs + 0xC4, false));
+        constantColors[5] = colorNewFromRGBA8(view.getUint32(offs + 0xC8, false));
 
         const bufferColorR = view.getFloat32(offs + 0xCC, true);
         const bufferColorG = view.getFloat32(offs + 0xD0, true);
@@ -301,32 +312,32 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
 
         // Fragment lighting table.
         const reflectanceRSamplerIsAbs = !!view.getUint8(offs + 0xF0);
-        assert(view.getUint8(offs + 0xF1) === 0xFF); // Padding?
+        // assert(view.getUint8(offs + 0xF1) === 0xFF); // Padding?
         const reflectanceRSamplerInput = view.getUint16(offs + 0xF2, true);
         const reflectanceRSamplerScale = view.getUint32(offs + 0xF4, true);
 
         const reflectanceGSamplerIsAbs = !!view.getUint8(offs + 0xF8);
-        assert(view.getUint8(offs + 0xF9) === 0xFF); // Padding?
+        // assert(view.getUint8(offs + 0xF9) === 0xFF); // Padding?
         const reflectanceGSamplerInput = view.getUint16(offs + 0xFA, true);
         const reflectanceGSamplerScale = view.getUint32(offs + 0xFC, true);
 
         const reflectanceBSamplerIsAbs = !!view.getUint8(offs + 0x100);
-        assert(view.getUint8(offs + 0x101) === 0xFF); // Padding?
+        // assert(view.getUint8(offs + 0x101) === 0xFF); // Padding?
         const reflectanceBSamplerInput = view.getUint16(offs + 0x102, true);
         const reflectanceBSamplerScale = view.getUint32(offs + 0x104, true);
 
         const distibution0SamplerIsAbs = !!view.getUint8(offs + 0x108);
-        assert(view.getUint8(offs + 0x109) === 0xFF); // Padding?
+        // assert(view.getUint8(offs + 0x109) === 0xFF); // Padding?
         const distibution0SamplerInput = view.getUint16(offs + 0x10A, true);
         const distibution0SamplerScale = view.getUint32(offs + 0x10C, true);
 
         const distibution1SamplerIsAbs = !!view.getUint8(offs + 0x110);
-        assert(view.getUint8(offs + 0x111) === 0xFF); // Padding?
+        // assert(view.getUint8(offs + 0x111) === 0xFF); // Padding?
         const distibution1SamplerInput = view.getUint16(offs + 0x112, true);
         const distibution1SamplerScale = view.getUint32(offs + 0x114, true);
 
         const fresnelSamplerIsAbs = !!view.getUint8(offs + 0x118);
-        assert(view.getUint8(offs + 0x119) === 0xFF); // Padding?
+        // assert(view.getUint8(offs + 0x119) === 0xFF); // Padding?
         const fresnelSamplerInput = view.getUint16(offs + 0x11A, true);
         const fresnelSamplerScale = view.getUint32(offs + 0x11C, true);
 
@@ -355,15 +366,14 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
             const op0Alpha: CombineOpDMP                  = view.getUint16(cmbOffs + 0x1E, true);
             const op1Alpha: CombineOpDMP                  = view.getUint16(cmbOffs + 0x20, true);
             const op2Alpha: CombineOpDMP                  = view.getUint16(cmbOffs + 0x22, true);
-            const whichConstant                           = view.getUint32(cmbOffs + 0x24, true);
-            assert(whichConstant < 6);
+            const constantIndex                           = view.getUint32(cmbOffs + 0x24, true);
+            assert(constantIndex < 6);
 
-            const constantColor = constantColors[whichConstant];
             textureCombiners.push({
                 combineRGB, combineAlpha, scaleRGB, scaleAlpha, bufferInputRGB, bufferInputAlpha,
                 source0RGB, source1RGB, source2RGB, op0RGB, op1RGB, op2RGB,
                 source0Alpha, source1Alpha, source2Alpha, op0Alpha, op1Alpha, op2Alpha,
-                constantColor,
+                constantIndex,
             });
 
             textureCombinerTableIdx += 0x02;
@@ -421,7 +431,10 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
             depthWrite: depthWriteEnabled,
             cullMode: GfxCullMode.BACK,
         });
-        cmb.materials.push({ index: i, textureBindings, textureMatrices, alphaTestFunction, alphaTestReference, renderFlags, isTransparent });
+
+        const combinerBufferColor = colorNew(bufferColorR, bufferColorG, bufferColorB, bufferColorA);
+        const textureEnvironment = { textureCombiners, combinerBufferColor };
+        cmb.materials.push({ index: i, textureBindings, textureMatrices, constantColors, textureEnvironment, alphaTestFunction, alphaTestReference, renderFlags, isTransparent });
 
         offs += 0x15C;
 
