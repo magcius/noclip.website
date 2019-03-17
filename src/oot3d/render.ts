@@ -122,7 +122,7 @@ uniform sampler2D u_Texture[3];
         this.generateFragmentShader();
     }
 
-    private generateFloat(v: number): string {
+    public generateFloat(v: number): string {
         let s = v.toString();
         if (!s.includes('.'))
             s += '.0';
@@ -274,13 +274,37 @@ in vec2 v_TexCoord0;
 in vec2 v_TexCoord1;
 in vec2 v_TexCoord2;
 
+in vec3 v_Lighting;
+in vec3 v_FogColor;
+in vec3 v_Normal;
+in float v_Depth;
+in float v_DrawDistance;
+in float v_FogStart;
+
 void main() {
     ${this.generateTextureEnvironment(this.material.textureEnvironment)}
 
     if (!(${this.generateAlphaTestCompare(this.material.alphaTestFunction, this.material.alphaTestReference)}))
         discard;
 
-    gl_FragColor = t_CmbOut;
+    vec4 t_ResultColor = t_CmbOut;
+
+    #ifdef USE_LIGHTING
+        float t_FogFactor = clamp((v_DrawDistance - v_Depth) / (v_DrawDistance - v_FogStart), 0.0, 1.0);
+        t_ResultColor.rgb = mix(v_FogColor, t_ResultColor.rgb * v_Lighting, t_FogFactor);
+    #endif
+
+    #ifdef USE_VERTEX_NORMAL
+        t_ResultColor.rgb = normalize(v_Normal) * 0.5 + 0.5; 
+    #endif
+
+    #ifdef USE_UV
+        t_ResultColor.r = v_TexCoord0.x;
+        t_ResultColor.g = v_TexCoord0.y;
+        t_ResultColor.b = 1.0;
+    #endif
+
+    gl_FragColor = t_ResultColor;
 }
 `;
     }
@@ -301,10 +325,11 @@ class OoT3DProgram extends DMPProgram {
         return `Mul(u_TexMtx[${mtxIndex}], vec4(a_TexCoord${attribIndex} * u_TexCoord${attribIndex}Scale, 0.0, 1.0)).st`;
     }
 
-    public generateVertexShader(): void {
+    public generateVertexShader(additionalProperties: string): void {
         this.vert = `
 precision mediump float;
 ${DMPProgram.BindingsDefinition}
+${additionalProperties}
 
 layout(location = ${DMPProgram.a_Position}) in vec3 a_Position;
 layout(location = ${DMPProgram.a_Normal}) in vec3 a_Normal;
@@ -319,6 +344,13 @@ out vec4 v_Color;
 out vec2 v_TexCoord0;
 out vec2 v_TexCoord1;
 out vec2 v_TexCoord2;
+
+out vec3 v_Lighting;
+out vec3 v_FogColor;
+out vec3 v_Normal;
+out float v_Depth;
+out float v_DrawDistance;
+out float v_FogStart;
 
 vec3 Monochrome(vec3 t_Color) {
     // NTSC primaries.
@@ -356,6 +388,15 @@ void main() {
     gl_Position = Mul(u_Projection, Mul(_Mat4x4(t_BoneMatrix), t_Position));
 
     v_Color = a_Color;
+
+    v_Normal = a_Normal;
+    v_Depth = gl_Position.w;
+    v_FogColor = FOG_COLOR;
+    v_DrawDistance = DRAW_DISTANCE;
+    v_FogStart = FOG_START;
+    v_Lighting = AMBIENT_LIGHT_COLOR * 2.0;
+    v_Lighting += clamp(dot(-a_Normal, PRIMARY_LIGHT_DIRECTION), 0.0, 1.0) * PRIMARY_LIGHT_COLOR;
+    v_Lighting += clamp(dot(-a_Normal, SECONDARY_LIGHT_DIRECTION), 0.0, 1.0) * SECONDARY_LIGHT_COLOR;
 
 #ifdef USE_MONOCHROME_VERTEX_COLOR
     v_Color.rgb = Monochrome(v_Color.rgb);
@@ -407,6 +448,12 @@ class MaterialInstance {
     public vertexColorsEnabled: boolean = true;
     public monochromeVertexColorsEnabled: boolean = false;
 
+    private vertexNormalsEnabled: boolean = false;
+    private lightingEnabled: boolean = false;
+    private uvEnabled: boolean = false;
+
+    public environmentSettings: ZSI.ZSIEnvironmentSettings;
+
     constructor(public cmb: CMB.CMB, public material: CMB.Material) {
         for (let i = 0; i < this.material.constantColors.length; i++)
             this.constantColors[i] = colorNewCopy(this.material.constantColors[i]);
@@ -427,15 +474,59 @@ class MaterialInstance {
         this.createProgram();
     }
 
+    public setVertexNormalsEnabled(v: boolean): void {
+        this.vertexNormalsEnabled = v;
+        this.createProgram();
+    }
+
+    public setUVEnabled(v: boolean): void {
+        this.uvEnabled = v;
+        this.createProgram();
+    }
+
+    public setLightingEnabled(v: boolean): void {
+        this.lightingEnabled = v;
+        this.createProgram();
+    }
+
+    public setEnvironmentSettings(environmentSettings: ZSI.ZSIEnvironmentSettings): void {
+        this.environmentSettings = environmentSettings;
+        this.createProgram();
+    }
+
     private createProgram(): void {
         const program = new OoT3DProgram(this.material, this);
         program.setTexCoordGen(0, 0, 0);
         program.setTexCoordGen(1, 0, 0);
         program.setTexCoordGen(2, 0, 0);
-        program.generateVertexShader();
+
+        let additionalParameters = "";
+
+        let tempEnvironmentSettings = new ZSI.ZSIEnvironmentSettings();
+
+        if (this.environmentSettings) tempEnvironmentSettings = this.environmentSettings;
+
+        additionalParameters += `vec3 AMBIENT_LIGHT_COLOR = vec3(${tempEnvironmentSettings.ambientLightCol});\n`;
+        additionalParameters += `vec3 PRIMARY_LIGHT_COLOR = vec3(${tempEnvironmentSettings.primaryLightCol});\n`;
+        additionalParameters += `vec3 PRIMARY_LIGHT_DIRECTION = vec3(${tempEnvironmentSettings.primaryLightDir});\n`;
+        additionalParameters += `vec3 SECONDARY_LIGHT_COLOR = vec3(${tempEnvironmentSettings.secondaryLightCol});\n`;
+        additionalParameters += `vec3 SECONDARY_LIGHT_DIRECTION = vec3(${tempEnvironmentSettings.secondaryLightDir});\n`;
+        additionalParameters += `vec3 FOG_COLOR = vec3(${tempEnvironmentSettings.fogCol});\n`;
+        additionalParameters += `float FOG_START = ${program.generateFloat(tempEnvironmentSettings.fogStart)};\n`;
+        additionalParameters += `float DRAW_DISTANCE = ${program.generateFloat(tempEnvironmentSettings.drawDistance)};\n`;
+
+        program.generateVertexShader(additionalParameters);
+
         if (this.monochromeVertexColorsEnabled)
             program.defines.set('USE_MONOCHROME_VERTEX_COLOR', '1');
-        this.templateRenderInst.setDeviceProgram(program);
+        if (this.vertexNormalsEnabled)
+            program.defines.set('USE_VERTEX_NORMAL', '1');
+        if (this.lightingEnabled)
+            program.defines.set('USE_LIGHTING', '1');
+        if (this.uvEnabled)
+            program.defines.set('USE_UV', '1');
+
+        if (this.templateRenderInst) this.templateRenderInst.setDeviceProgram(program);
     }
 
     public buildTemplateRenderInst(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, textureHolder: CtrTextureHolder): void {
@@ -797,6 +888,23 @@ export class CmbRenderer {
 
     private templateRenderInst: GfxRenderInst;
 
+    private texturesEnabled: boolean = true;
+    private vertexColorsEnabled: boolean = true;
+    private monochromeVertexColorsEnabled: boolean = false;
+
+    private vertexNormalsEnabled: boolean = false;
+    private lightingEnabled: boolean = false;
+    private uvEnabled: boolean = false;
+
+    public ambientLightCol: vec3;
+    public primaryLightCol: vec3;
+    public primaryLightDir: vec3;
+    public secondaryLightCol: vec3;
+    public secondaryLightDir: vec3;
+    public fogCol: vec3;
+    public fogStart: number;
+    public drawDistance: number;
+
     constructor(device: GfxDevice, public textureHolder: CtrTextureHolder, public cmbData: CmbData, public name: string = '') {
         for (let i = 0; i < this.cmbData.cmb.materials.length; i++)
             this.materialInstances.push(new MaterialInstance(this.cmbData.cmb, this.cmbData.cmb.materials[i]));
@@ -854,6 +962,26 @@ export class CmbRenderer {
     public setMonochromeVertexColorsEnabled(v: boolean): void {
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].setMonochromeVertexColorsEnabled(v);
+    }
+
+    public setVertexNormalsEnabled(v: boolean): void {
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].setVertexNormalsEnabled(v);
+    }
+
+    public setUVEnabled(v: boolean): void {
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].setUVEnabled(v);
+    }
+
+    public setLightingEnabled(v: boolean): void {
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].setLightingEnabled(v);
+    }
+
+    public setEnvironmentSettings(environmentSettings: ZSI.ZSIEnvironmentSettings): void {
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].setEnvironmentSettings(environmentSettings);
     }
 
     private updateBoneMatrices(): void {
@@ -1039,6 +1167,50 @@ export class RoomRenderer {
             this.wMesh.setMonochromeVertexColorsEnabled(v);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].setMonochromeVertexColorsEnabled(v);
+    }
+
+    public setVertexNormalsEnabled(v: boolean): void {
+        if (this.opaqueMesh !== null)
+            this.opaqueMesh.setVertexNormalsEnabled(v);
+        if (this.transparentMesh !== null)
+            this.transparentMesh.setVertexNormalsEnabled(v);
+        if (this.wMesh !== null)
+            this.wMesh.setVertexNormalsEnabled(v);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].setVertexNormalsEnabled(v);
+    }
+
+    public setLightingEnabled(v: boolean): void {
+        if (this.opaqueMesh !== null)
+            this.opaqueMesh.setLightingEnabled(v);
+        if (this.transparentMesh !== null)
+            this.transparentMesh.setLightingEnabled(v);
+        if (this.wMesh !== null)
+            this.wMesh.setLightingEnabled(v);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].setLightingEnabled(v);
+    }
+
+    public setUVEnabled(v: boolean): void {
+        if (this.opaqueMesh !== null)
+            this.opaqueMesh.setUVEnabled(v);
+        if (this.transparentMesh !== null)
+            this.transparentMesh.setUVEnabled(v);
+        if (this.wMesh !== null)
+            this.wMesh.setUVEnabled(v);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].setUVEnabled(v);
+    }
+
+    public setEnvironmentSettings(environmentSettings: ZSI.ZSIEnvironmentSettings): void {
+        if (this.opaqueMesh !== null)
+            this.opaqueMesh.setEnvironmentSettings(environmentSettings);
+        if (this.transparentMesh !== null)
+            this.transparentMesh.setEnvironmentSettings(environmentSettings);
+        if (this.wMesh !== null)
+            this.wMesh.setEnvironmentSettings(environmentSettings);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].setEnvironmentSettings(environmentSettings);
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {

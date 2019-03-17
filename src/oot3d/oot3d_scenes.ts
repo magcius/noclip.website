@@ -46,24 +46,48 @@ class OoT3DRenderer extends BasicRendererHelper implements Viewer.SceneGfx {
         const renderHacksPanel = new UI.Panel();
         renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         renderHacksPanel.setTitle(RENDER_HACKS_ICON, 'Render Hacks');
+        
         const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
         enableVertexColorsCheckbox.onchanged = () => {
             for (let i = 0; i < this.roomRenderers.length; i++)
                 this.roomRenderers[i].setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
         };
         renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
+        
         const enableTextures = new UI.Checkbox('Enable Textures', true);
         enableTextures.onchanged = () => {
             for (let i = 0; i < this.roomRenderers.length; i++)
                 this.roomRenderers[i].setTexturesEnabled(enableTextures.checked);
         };
         renderHacksPanel.contents.appendChild(enableTextures.elem);
+        
         const enableMonochromeVertexColors = new UI.Checkbox('Grayscale Vertex Colors', false);
         enableMonochromeVertexColors.onchanged = () => {
             for (let i = 0; i < this.roomRenderers.length; i++)
                 this.roomRenderers[i].setMonochromeVertexColorsEnabled(enableMonochromeVertexColors.checked);
         };
         renderHacksPanel.contents.appendChild(enableMonochromeVertexColors.elem);
+
+        const enableVertexNormals = new UI.Checkbox('Enable Vertex Normals', false);
+        enableVertexNormals.onchanged = () => {
+            for (let i = 0; i < this.roomRenderers.length; i++)
+                this.roomRenderers[i].setVertexNormalsEnabled(enableVertexNormals.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableVertexNormals.elem);
+
+        const enableLighting = new UI.Checkbox('Enable Lighting', false);
+        enableLighting.onchanged = () => {
+            for (let i = 0; i < this.roomRenderers.length; i++)
+                this.roomRenderers[i].setLightingEnabled(enableLighting.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableLighting.elem);
+
+        const enableUV = new UI.Checkbox('Enable UV', false);
+        enableUV.onchanged = () => {
+            for (let i = 0; i < this.roomRenderers.length; i++)
+                this.roomRenderers[i].setUVEnabled(enableUV.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableUV.elem);
 
         const layersPanel = new UI.LayerPanel(this.roomRenderers);
         return [renderHacksPanel, layersPanel];
@@ -328,7 +352,7 @@ class SceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private spawnActorForRoom(device: GfxDevice, abortSignal: AbortSignal, scene: Scene, renderer: OoT3DRenderer, roomRenderer: RoomRenderer, actor: ZSI.Actor): void {
+    private spawnActorForRoom(device: GfxDevice, abortSignal: AbortSignal, scene: Scene, renderer: OoT3DRenderer, roomRenderer: RoomRenderer, actor: ZSI.Actor, environmentSettings: ZSI.ZSIEnvironmentSettings): void {
         function fetchArchive(archivePath: string): Progressable<ZAR.ZAR> { 
             return renderer.modelCache.fetchArchive(`${pathBase}/actor/${archivePath}`, abortSignal);
         }
@@ -340,6 +364,7 @@ class SceneDesc implements Viewer.SceneDesc {
             cmbRenderer.name = `${hexzero(actor.actorId, 4)} / ${modelPath}`;
             mat4.scale(cmbRenderer.modelMatrix, actor.modelMatrix, [scale, scale, scale]);
             cmbRenderer.addToViewRenderer(device, renderer.viewRenderer);
+            cmbRenderer.setEnvironmentSettings(environmentSettings);
             roomRenderer.objectRenderers.push(cmbRenderer);
             return cmbRenderer;
         }
@@ -973,10 +998,14 @@ class SceneDesc implements Viewer.SceneDesc {
                     }
                 }
                 roomRenderer.addToViewRenderer(device, renderer.viewRenderer);
+
+                let index = 0;
+                roomRenderer.setEnvironmentSettings(zsi.environmentSettings[index]);
+
                 renderer.roomRenderers.push(roomRenderer);
 
                 for (let i = 0; i < roomSetup.actors.length; i++)
-                    this.spawnActorForRoom(device, abortSignal, scene, renderer, roomRenderer, roomSetup.actors[i]);
+                    this.spawnActorForRoom(device, abortSignal, scene, renderer, roomRenderer, roomSetup.actors[i], zsi.environmentSettings[index]);
             }
 
             return modelCache.waitForLoad().then(() => {
