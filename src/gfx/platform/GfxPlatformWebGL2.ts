@@ -357,9 +357,6 @@ function applyAttachmentState(gl: WebGL2RenderingContext, i: number, currentAtta
 
     if (currentAttachmentState.rgbBlendState.blendMode !== newAttachmentState.rgbBlendState.blendMode ||
         currentAttachmentState.alphaBlendState.blendMode !== newAttachmentState.alphaBlendState.blendMode) {
-
-        console.log(currentAttachmentState.rgbBlendState.blendMode, newAttachmentState.rgbBlendState.blendMode);
-
         if (currentAttachmentState.rgbBlendState.blendMode === GfxBlendMode.NONE &&
             currentAttachmentState.alphaBlendState.blendMode === GfxBlendMode.NONE)
             gl.enable(gl.BLEND);

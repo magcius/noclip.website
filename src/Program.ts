@@ -5,12 +5,13 @@ import { assertExists, leftPad } from "./util";
 import { StructLayout, parseShaderSource } from "./gfx/helpers/UniformBufferHelpers";
 import { GfxDevice } from "./gfx/platform/GfxPlatform";
 import { gfxDeviceGetImpl } from "./gfx/platform/GfxPlatformWebGL2";
+import { IS_DEVELOPMENT } from "./BuildVersion";
 
 interface ProgramWithKey extends WebGLProgram {
     uniqueKey: number;
 }
 
-const DEBUG = true;
+const DEBUG = IS_DEVELOPMENT;
 
 function prependLineNo(str: string, lineStart: number = 1) {
     const lines = str.split('\n');
