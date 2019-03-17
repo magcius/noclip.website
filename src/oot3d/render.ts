@@ -301,7 +301,7 @@ void main() {
 
     #ifdef USE_LIGHTING
         float FogFactor = clamp((v_DrawDistance - v_Depth) / (v_DrawDistance - v_FogStart), 0.0, 1.0);
-        ResultColor.rgb = mix(v_FogColor, ResultColor.rgb * v_Lighting, FogFactor);
+        ResultColor.rgb = mix(v_FogColor, t_CmbOut.rgb * v_Lighting, FogFactor);
     #endif
 
     gl_FragColor = ResultColor;
