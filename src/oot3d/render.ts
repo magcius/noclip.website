@@ -18,7 +18,7 @@ import { nArray, assert } from '../util';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
 import { GfxRenderInstBuilder, GfxRenderInst, GfxRenderInstViewRenderer, GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderer';
 import { makeFormat, FormatFlags, FormatTypeFlags, FormatCompFlags } from '../gfx/platform/GfxPlatformFormat';
-import { BasicRenderTarget, makeClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { Camera } from '../Camera';
 
 // @ts-ignore
@@ -1067,7 +1067,7 @@ export abstract class BasicRendererHelper {
         this.viewRenderer.prepareToRender(device);
 
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        const finalPassRenderer = this.renderTarget.createRenderPass(device, makeClearRenderPassDescriptor(true, colorNew(0, 0, 0, 1)));
+        const finalPassRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
         this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
         this.viewRenderer.executeOnPass(device, finalPassRenderer);
         return finalPassRenderer;
