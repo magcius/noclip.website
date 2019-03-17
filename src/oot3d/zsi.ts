@@ -88,16 +88,6 @@ function readRooms(version: Version, buffer: ArrayBufferSlice, nRooms: number, o
     return rooms;
 }
 
-function decimalToHexString(number: number)
-{
-  if (number < 0)
-  {
-    number = 0xFFFFFFFF + number + 1;
-  }
-
-  return number.toString(16).toUpperCase();
-}
-
 function readEnvironmentSettings(version: Version, buffer: ArrayBufferSlice, nEnvironmentSettings: number, offs: number)
 {
     const view = buffer.createDataView();
