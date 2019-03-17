@@ -18,6 +18,8 @@ const sceneDescs: Viewer.SceneDesc[] = [
     new SMG2SceneDesc("Fluffy Bluff Galaxy", "MokumokuValleyGalaxy"),
     new SMG2SceneDesc("Tall Trunk Galaxy", "BigTree2Galaxy"),
     new SMG2SceneDesc("Wild Glide Galaxy", "JungleGliderGalaxy"),
+    new SMG2SceneDesc("Cloudy Court Galaxy", "CloudGardenGalaxy"),
+    new SMG2SceneDesc("Fleet Glide Galaxy", "ChallengeGliderGalaxy"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };

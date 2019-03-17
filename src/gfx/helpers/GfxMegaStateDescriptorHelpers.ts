@@ -1,11 +1,41 @@
 
-import { GfxMegaStateDescriptor, GfxFrontFaceMode, GfxCullMode, GfxStencilOp, GfxCompareMode, GfxBlendFactor, GfxBlendMode } from "../platform/GfxPlatform";
+import { GfxMegaStateDescriptor, GfxFrontFaceMode, GfxCullMode, GfxStencilOp, GfxCompareMode, GfxBlendFactor, GfxBlendMode, GfxAttachmentState } from "../platform/GfxPlatform";
+import { colorCopy, colorNewCopy } from "../../Color";
 
 function resolveField<T>(v: T | undefined, parentV: T): T {
     return v !== undefined ? v : parentV;
 }
 
+function copyAttachmentState(dst: GfxAttachmentState | undefined, src: GfxAttachmentState): GfxAttachmentState {
+    if (dst === undefined) {
+        return {
+            rgbBlendState: Object.assign({}, src.rgbBlendState),
+            alphaBlendState: Object.assign({}, src.alphaBlendState),
+            blendConstant: colorNewCopy(src.blendConstant),
+            colorWriteMask: src.colorWriteMask,
+        };
+    } else {
+        Object.assign(dst.rgbBlendState, src.rgbBlendState);
+        Object.assign(dst.alphaBlendState, src.alphaBlendState);
+        colorCopy(dst.blendConstant, src.blendConstant);
+        dst.colorWriteMask = src.colorWriteMask;
+        return dst;
+    }
+}
+
+function copyAttachmentsState(dst: GfxAttachmentState[], src: GfxAttachmentState[]): void {
+    for (let i = 0; i < src.length; i++)
+        dst[i] = copyAttachmentState(dst[i], src[i]);
+}
+
 export function setMegaStateFlags(dst: GfxMegaStateDescriptor, other: Partial<GfxMegaStateDescriptor>): void {
+    // attachmentsState replaces wholesale; it does not merge.
+    if (other.attachmentsState !== undefined) {
+        if (dst.attachmentsState === undefined)
+            dst.attachmentsState = [];
+        copyAttachmentsState(dst.attachmentsState, other.attachmentsState);
+    }
+
     dst.colorWrite = resolveField(other.colorWrite, dst.colorWrite);
     dst.blendMode = resolveField(other.blendMode, dst.blendMode);
     dst.blendSrcFactor = resolveField(other.blendSrcFactor, dst.blendSrcFactor);

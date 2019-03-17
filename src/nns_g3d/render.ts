@@ -46,7 +46,7 @@ class Command_Material {
     public srt0Animator: NSBTA.SRT0TexMtxAnimator | null = null;
     public pat0Animator: NSBTP.PAT0TexAnimator | null = null;
 
-    constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, hostAccessPass: GfxHostAccessPass, tex0: TEX0, public material: NSBMD.MDL0Material) {
+    constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, hostAccessPass: GfxHostAccessPass, tex0: TEX0, private model: NSBMD.MDL0Model, public material: NSBMD.MDL0Material) {
         this.texture = tex0.textures.find((t) => t.name === this.material.textureName);
         this.translateTexture(device, hostAccessPass, tex0, this.material.textureName, this.material.paletteName);
         this.translateRenderInst(device, renderInstBuilder);
@@ -100,7 +100,7 @@ class Command_Material {
 
     public prepareToRender(materialParamsBuffer: GfxRenderBuffer, viewerInput: Viewer.ViewerRenderInput): void {
         if (this.srt0Animator !== null) {
-            this.srt0Animator.calcTexMtx(scratchTexMatrix, this.material.texScaleS, this.material.texScaleT);
+            this.srt0Animator.calcTexMtx(scratchTexMatrix, this.model.texMtxMode, this.material.texScaleS, this.material.texScaleT);
         } else {
             mat2d.copy(scratchTexMatrix, this.material.texMatrix);
         }
@@ -266,7 +266,7 @@ export class MDL0Renderer {
 
         const hostAccessPass = device.createHostAccessPass();
         for (let i = 0; i < this.model.materials.length; i++)
-            this.materialCommands.push(new Command_Material(device, this.renderInstBuilder, hostAccessPass, this.tex0, this.model.materials[i]));
+            this.materialCommands.push(new Command_Material(device, this.renderInstBuilder, hostAccessPass, this.tex0, this.model, this.model.materials[i]));
         device.submitPass(hostAccessPass);
     }
 

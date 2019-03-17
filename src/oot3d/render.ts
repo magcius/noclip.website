@@ -9,9 +9,9 @@ import * as Viewer from '../viewer';
 import { DeviceProgram, DeviceProgramReflection } from '../Program';
 import AnimationController from '../AnimationController';
 import { mat4, vec3, vec4 } from 'gl-matrix';
-import { GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler, GfxDevice, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxHostAccessPass, GfxRenderPass, GfxTextureDimension, GfxInputState, GfxInputLayout } from '../gfx/platform/GfxPlatform';
+import { GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler, GfxDevice, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxHostAccessPass, GfxRenderPass, GfxTextureDimension, GfxInputState, GfxInputLayout, GfxCompareMode } from '../gfx/platform/GfxPlatform';
 import { fillMatrix4x4, fillVec4, fillColor, fillMatrix4x3 } from '../gfx/helpers/UniformBufferHelpers';
-import { colorNew, colorFromRGBA } from '../Color';
+import { colorNew, colorFromRGBA, Color, colorNewCopy, colorCopy } from '../Color';
 import { getTextureFormatName } from './pica_texture';
 import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
 import { nArray, assert } from '../util';
@@ -68,7 +68,12 @@ export class CtrTextureHolder extends TextureHolder<CMB.Texture> {
     }
 }
 
-class OoT3D_Program extends DeviceProgram {
+interface DMPMaterialHacks {
+    texturesEnabled: boolean;
+    vertexColorsEnabled: boolean;
+}
+
+abstract class DMPProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
     public static ub_MaterialParams = 1;
     public static ub_PrmParams = 2;
@@ -82,9 +87,297 @@ class OoT3D_Program extends DeviceProgram {
     public static a_BoneIndices = 7;
     public static a_BoneWeights = 8;
 
-    public static program = readFileSync('src/oot3d/program.glsl', { encoding: 'utf8' });
-    public static programReflection: DeviceProgramReflection = DeviceProgram.parseReflectionDefinitions(OoT3D_Program.program);
-    public both = OoT3D_Program.program;
+    public static BindingsDefinition = `
+// Expected to be constant across the entire scene.
+layout(row_major, std140) uniform ub_SceneParams {
+    Mat4x4 u_Projection;
+};
+
+// Expected to change with each material.
+layout(row_major, std140) uniform ub_MaterialParams {
+    vec4 u_MaterialColor;
+    vec4 u_ConstantColor[6];
+    Mat4x3 u_TexMtx[3];
+};
+
+layout(row_major, std140) uniform ub_PrmParams {
+    Mat4x3 u_BoneMatrix[16];
+    vec4 u_PrmMisc[2];
+};
+
+#define u_PosScale (u_PrmMisc[0].x)
+#define u_TexCoord0Scale (u_PrmMisc[0].y)
+#define u_TexCoord1Scale (u_PrmMisc[0].z)
+#define u_TexCoord2Scale (u_PrmMisc[0].w)
+#define u_BoneWeightScale (u_PrmMisc[1].x)
+#define u_BoneDimension   (u_PrmMisc[1].y)
+
+uniform sampler2D u_Texture[3];
+`;
+
+    public static programReflection: DeviceProgramReflection = DeviceProgram.parseReflectionDefinitions(DMPProgram.BindingsDefinition);
+
+    constructor(public material: CMB.Material, private materialHacks: DMPMaterialHacks) {
+        super();
+        this.generateFragmentShader();
+    }
+
+    private generateFloat(v: number): string {
+        let s = v.toString();
+        if (!s.includes('.'))
+            s += '.0';
+        return s;
+    }
+
+    private generateColor(v: Color): string {
+        return `vec4(${this.generateFloat(v.r)}, ${this.generateFloat(v.g)}, ${this.generateFloat(v.b)}, ${this.generateFloat(v.a)})`;
+    }
+
+    private generateAlphaTestCompare(compare: GfxCompareMode, reference: number): string {
+        const ref = this.generateFloat(reference);
+        switch (compare) {
+        case GfxCompareMode.NEVER:   return `false`;
+        case GfxCompareMode.LESS:    return `t_CmbOut.a <  ${ref}`;
+        case GfxCompareMode.LEQUAL:  return `t_CmbOut.a <= ${ref}`;
+        case GfxCompareMode.EQUAL:   return `t_CmbOut.a == ${ref}`;
+        case GfxCompareMode.NEQUAL:  return `t_CmbOut.a != ${ref}`;
+        case GfxCompareMode.GREATER: return `t_CmbOut.a >  ${ref}`;
+        case GfxCompareMode.GEQUAL:  return `t_CmbOut.a >= ${ref}`;
+        case GfxCompareMode.ALWAYS:  return `true`;
+        default: throw "whoops";
+        }
+    }
+
+    private generateTexAccess(which: 0 | 1 | 2 | 3): string {
+        if (!this.materialHacks.texturesEnabled)
+            return `vec4(0.5, 0.5, 0.5, 1.0)`;
+
+        switch (which) {
+        case 0: // Texture 0 has TexCoord 0
+            return `texture(u_Texture[0], v_TexCoord0)`;
+        case 1: // Texture 1 has TexCoord 1
+            return `texture(u_Texture[1], v_TexCoord1)`;
+        case 2: // Texture 2 has either TexCoord 1 or 2 as input. TODO(jstpierre): Add a material setting for this.
+            return `texture(u_Texture[2], v_TexCoord2)`;
+        case 3: // Texture 3 is the procedural texture unit. We don't support this yet; return white.
+            return `vec4(1.0)`;
+        }
+    }
+
+    private generateVertexColorAccess(): string {
+        if (!this.materialHacks.vertexColorsEnabled)
+            return `vec4(0.5, 0.5, 0.5, 1.0)`;
+
+        return `v_Color`;
+    }
+
+    private generateTexCombinerSrc(src: CMB.CombineSourceDMP): string {
+        switch (src) {
+            // TODO(jstpierre): Move this to a uniform buffer?
+        case CMB.CombineSourceDMP.CONSTANT: return `t_CmbConstant`;
+        case CMB.CombineSourceDMP.TEXTURE0: return this.generateTexAccess(0);
+        case CMB.CombineSourceDMP.TEXTURE1: return this.generateTexAccess(1);
+        case CMB.CombineSourceDMP.TEXTURE2: return this.generateTexAccess(2);
+        case CMB.CombineSourceDMP.TEXTURE3: return this.generateTexAccess(3);
+        case CMB.CombineSourceDMP.PREVIOUS: return `t_CmbOut`;
+        case CMB.CombineSourceDMP.PREVIOUS_BUFFER: return `t_CmbOutBuffer`;
+        case CMB.CombineSourceDMP.PRIMARY_COLOR:
+            return this.generateVertexColorAccess();
+        case CMB.CombineSourceDMP.FRAGMENT_PRIMARY_COLOR:
+        case CMB.CombineSourceDMP.FRAGMENT_SECONDARY_COLOR:
+            // TODO(jstpierre): Fragment lighting
+            return this.generateVertexColorAccess();
+        }
+    }
+
+    private generateTexCombinerOp(src: CMB.CombineSourceDMP, op: CMB.CombineOpDMP): string {
+        const s = this.generateTexCombinerSrc(src);
+        switch (op) {
+        case CMB.CombineOpDMP.SRC_COLOR:           return `${s}`;
+        case CMB.CombineOpDMP.SRC_R:               return `${s}.rrrr`;
+        case CMB.CombineOpDMP.SRC_G:               return `${s}.gggg`;
+        case CMB.CombineOpDMP.SRC_B:               return `${s}.bbbb`;
+        case CMB.CombineOpDMP.SRC_ALPHA:           return `${s}.aaaa`;
+        case CMB.CombineOpDMP.ONE_MINUS_SRC_COLOR: return `(1.0 - ${s}.rgba)`;
+        case CMB.CombineOpDMP.ONE_MINUS_SRC_R:     return `(1.0 - ${s}.rrrr)`;
+        case CMB.CombineOpDMP.ONE_MINUS_SRC_G:     return `(1.0 - ${s}.gggg)`;
+        case CMB.CombineOpDMP.ONE_MINUS_SRC_B:     return `(1.0 - ${s}.bbbb)`;
+        case CMB.CombineOpDMP.ONE_MINUS_SRC_ALPHA: return `(1.0 - ${s}.aaaa)`;
+        }
+    }
+
+    private generateTexCombinerCombine(combine: CMB.CombineResultOpDMP): string {
+        switch (combine) {
+        case CMB.CombineResultOpDMP.REPLACE:     return `(t_CmbIn0)`;
+        case CMB.CombineResultOpDMP.MODULATE:    return `(t_CmbIn0 * t_CmbIn1)`;
+        case CMB.CombineResultOpDMP.ADD:         return `(t_CmbIn0 + t_CmbIn1)`;
+        case CMB.CombineResultOpDMP.ADD_SIGNED:  return `(t_CmbIn0 + t_CmbIn1 - 0.5)`;
+        case CMB.CombineResultOpDMP.INTERPOLATE: return `(mix(t_CmbIn0, t_CmbIn1, t_CmbIn2))`;
+        case CMB.CombineResultOpDMP.SUBTRACT:    return `(t_CmbIn0 - t_CmbIn1)`;
+        case CMB.CombineResultOpDMP.DOT3_RGB:    return `vec4(vec3(4.0 * (dot(t_CmbIn0 - 0.5, t_CmbIn1 - 0.5))), 1.0)`;
+        case CMB.CombineResultOpDMP.DOT3_RGBA:   return `vec4(4.0 * (dot(t_CmbIn0 - 0.5, t_CmbIn1 - 0.5))))`;
+        case CMB.CombineResultOpDMP.MULT_ADD:    return `((t_CmbIn0 * t_CmbIn1) + t_CmbIn2)`;
+        case CMB.CombineResultOpDMP.ADD_MULT:    return `((t_CmbIn0 + t_CmbIn1) * t_CmbIn2)`;
+        }
+    }
+
+    private generateTexCombinerScale(combine: CMB.CombineResultOpDMP, scale: CMB.CombineScaleDMP): string {
+        const s = this.generateTexCombinerCombine(combine);
+        switch (scale) {
+        case CMB.CombineScaleDMP._1: return `${s}`;
+        case CMB.CombineScaleDMP._2: return `(${s} * 2.0)`;
+        case CMB.CombineScaleDMP._4: return `(${s} * 4.0)`;
+        }
+    }
+
+    private generateTexCombinerBuffer(buffer: CMB.CombineBufferInputDMP): string {
+        switch (buffer) {
+        case CMB.CombineBufferInputDMP.PREVIOUS:        return `t_CmbOut`;
+        case CMB.CombineBufferInputDMP.PREVIOUS_BUFFER: return `t_CmbOutBuffer`;
+        }
+    }
+
+    private generateTexCombiner(c: CMB.TextureCombiner, i: number): string {
+        // Generate the combiner itself.
+        return `
+    // Texture Combiner Stage ${i}
+    // Constant index ${c.constantIndex}
+    t_CmbConstant = u_ConstantColor[${c.constantIndex}];
+    t_CmbIn0 = vec4(${this.generateTexCombinerOp(c.source0RGB, c.op0RGB)}.rgb, ${this.generateTexCombinerOp(c.source0Alpha, c.op0Alpha)}.a);
+    t_CmbIn1 = vec4(${this.generateTexCombinerOp(c.source1RGB, c.op1RGB)}.rgb, ${this.generateTexCombinerOp(c.source1Alpha, c.op1Alpha)}.a);
+    t_CmbIn2 = vec4(${this.generateTexCombinerOp(c.source2RGB, c.op2RGB)}.rgb, ${this.generateTexCombinerOp(c.source2Alpha, c.op2Alpha)}.a);
+    t_CmbOut = vec4(${this.generateTexCombinerScale(c.combineRGB, c.scaleRGB)}.rgb, ${this.generateTexCombinerScale(c.combineAlpha, c.scaleAlpha)}.a);
+    t_CmbOutBuffer = vec4(${this.generateTexCombinerBuffer(c.bufferInputRGB)}.rgb, ${this.generateTexCombinerBuffer(c.bufferInputRGB)}.a);
+`;
+    }
+
+    private generateTextureEnvironment(texEnv: CMB.TextureEnvironment): string {
+        let S = `
+    vec4 t_CmbConstant;
+    vec4 t_CmbIn0, t_CmbIn1, t_CmbIn2;
+    vec4 t_CmbOut, t_CmbOutBuffer;
+
+    t_CmbOutBuffer = ${this.generateColor(texEnv.combinerBufferColor)};
+    `;
+        for (let i = 0; i < texEnv.textureCombiners.length; i++)
+            S += this.generateTexCombiner(texEnv.textureCombiners[i], i);
+        return S;
+    }
+
+    private generateFragmentShader(): void {
+        this.frag = `
+precision mediump float;
+${DMPProgram.BindingsDefinition}
+
+in vec4 v_Color;
+in vec2 v_TexCoord0;
+in vec2 v_TexCoord1;
+in vec2 v_TexCoord2;
+
+void main() {
+    ${this.generateTextureEnvironment(this.material.textureEnvironment)}
+
+    if (!(${this.generateAlphaTestCompare(this.material.alphaTestFunction, this.material.alphaTestReference)}))
+        discard;
+
+    gl_FragColor = t_CmbOut;
+}
+`;
+    }
+}
+
+class OoT3DProgram extends DMPProgram {
+    private texMtx = [0, 1, 2];
+    private texAttrib = [0, 1, 2];
+
+    public setTexCoordGen(dstChannel: number, srcMtx: number, srcAttrib: number): void {
+        this.texMtx[dstChannel] = srcMtx;
+        this.texAttrib[dstChannel] = srcAttrib;
+    }
+
+    private generateVertexCoord(channel: number): string {
+        const mtxIndex = this.texMtx[channel];
+        const attribIndex = this.texAttrib[channel];
+        return `Mul(u_TexMtx[${mtxIndex}], vec4(a_TexCoord${attribIndex} * u_TexCoord${attribIndex}Scale, 0.0, 1.0)).st`;
+    }
+
+    public generateVertexShader(): void {
+        this.vert = `
+precision mediump float;
+${DMPProgram.BindingsDefinition}
+
+layout(location = ${DMPProgram.a_Position}) in vec3 a_Position;
+layout(location = ${DMPProgram.a_Normal}) in vec3 a_Normal;
+layout(location = ${DMPProgram.a_Color}) in vec4 a_Color;
+layout(location = ${DMPProgram.a_TexCoord0}) in vec2 a_TexCoord0;
+layout(location = ${DMPProgram.a_TexCoord1}) in vec2 a_TexCoord1;
+layout(location = ${DMPProgram.a_TexCoord2}) in vec2 a_TexCoord2;
+layout(location = ${DMPProgram.a_BoneIndices}) in vec4 a_BoneIndices;
+layout(location = ${DMPProgram.a_BoneWeights}) in vec4 a_BoneWeights;
+
+out vec4 v_Color;
+out vec2 v_TexCoord0;
+out vec2 v_TexCoord1;
+out vec2 v_TexCoord2;
+
+vec3 Monochrome(vec3 t_Color) {
+    // NTSC primaries.
+    return vec3(dot(t_Color.rgb, vec3(0.299, 0.587, 0.114)));
+}
+
+void main() {
+    // Compute our matrix.
+    Mat4x3 t_BoneMatrix;
+
+    vec4 t_BoneWeights = a_BoneWeights * u_BoneWeightScale;
+
+    // Mask off bone dimension.
+    if (u_BoneDimension == 0.0)
+        t_BoneWeights.xyzw = vec4(0.0);
+    else if (u_BoneDimension == 1.0)
+        t_BoneWeights.yzw  = vec3(0.0);
+    else if (u_BoneDimension == 2.0)
+        t_BoneWeights.zw   = vec2(0.0);
+
+    if ((t_BoneWeights.x + t_BoneWeights.y + t_BoneWeights.z + t_BoneWeights.w) > 0.0) {
+        t_BoneMatrix = _Mat4x3(0.0);
+
+        Fma(t_BoneMatrix, u_BoneMatrix[int(a_BoneIndices.x)], t_BoneWeights.x);
+        Fma(t_BoneMatrix, u_BoneMatrix[int(a_BoneIndices.y)], t_BoneWeights.y);
+        Fma(t_BoneMatrix, u_BoneMatrix[int(a_BoneIndices.z)], t_BoneWeights.z);
+        Fma(t_BoneMatrix, u_BoneMatrix[int(a_BoneIndices.w)], t_BoneWeights.w);
+    } else {
+        // If we have no bone weights, then we're in rigid skinning, so take the first bone index.
+        // If we're single-bone, then our bone indices will be 0, so this also works for that.
+        t_BoneMatrix = u_BoneMatrix[int(a_BoneIndices.x)];
+    }
+
+    vec4 t_Position = vec4(a_Position * u_PosScale, 1.0);
+    gl_Position = Mul(u_Projection, Mul(_Mat4x4(t_BoneMatrix), t_Position));
+
+    v_Color = a_Color;
+
+#ifdef USE_MONOCHROME_VERTEX_COLOR
+    v_Color.rgb = Monochrome(v_Color.rgb);
+#endif
+
+    v_Color *= u_MaterialColor;
+
+    v_TexCoord0 = ${this.generateVertexCoord(0)};
+    v_TexCoord0.t = 1.0 - v_TexCoord0.t;
+
+    v_TexCoord1 = ${this.generateVertexCoord(1)};
+    v_TexCoord1.t = 1.0 - v_TexCoord1.t;
+
+    v_TexCoord2 = ${this.generateVertexCoord(2)};
+    v_TexCoord2.t = 1.0 - v_TexCoord2.t;
+
+    vec3 t_LightDirection = normalize(vec3(.2, -1, .5));
+    // Disable normals for now until I can solve them.
+    // v_LightIntensity = 1.0;
+}
+`;
+    }
 }
 
 function fillSceneParamsData(d: Float32Array, camera: Camera, offs: number = 0): void {
@@ -104,16 +397,120 @@ class MaterialInstance {
     private textureMappings: TextureMapping[] = nArray(3, () => new TextureMapping());
     private gfxSamplers: GfxSampler[] = [];
     private colorAnimators: CMAB.ColorAnimator[] = [];
-    private srtAnimators: CMAB.TextureAnimator[] = [];
+    private srtAnimators: CMAB.TextureSRTAnimator[] = [];
+    private texturePaletteAnimators: CMAB.TexturePaletteAnimator[] = [];
+    public constantColors: Color[] = [];
     public templateRenderInst: GfxRenderInst;
     public visible: boolean = true;
 
+    public texturesEnabled: boolean = true;
+    public vertexColorsEnabled: boolean = true;
+    public monochromeVertexColorsEnabled: boolean = false;
+
+    private vertexNormalsEnabled: boolean = false;
+    private lightingEnabled: boolean = false;
+    private uvEnabled: boolean = false;
+
+    public ambientLightCol: vec3;
+    public primaryLightCol: vec3;
+    public primaryLightDir: vec3;
+    public secondaryLightCol: vec3;
+    public secondaryLightDir: vec3;
+    public fogCol: vec3;
+    public fogStart: number;
+    public drawDistance: number;
+
     constructor(public cmb: CMB.CMB, public material: CMB.Material) {
+        for (let i = 0; i < this.material.constantColors.length; i++)
+            this.constantColors[i] = colorNewCopy(this.material.constantColors[i]);
+    }
+
+    public setVertexColorsEnabled(v: boolean): void {
+        this.vertexColorsEnabled = v;
+        this.createProgram();
+    }
+
+    public setTexturesEnabled(v: boolean): void {
+        this.texturesEnabled = v;
+        this.createProgram();
+    }
+
+    public setMonochromeVertexColorsEnabled(v: boolean): void {
+        this.monochromeVertexColorsEnabled = v;
+        this.createProgram();
+    }
+
+    public setVertexNormalsEnabled(v: boolean): void {
+        this.vertexNormalsEnabled = v;
+        this.createProgram();
+    }
+
+    public setUVEnabled(v: boolean): void {
+        this.uvEnabled = v;
+        this.createProgram();
+    }
+
+    public setLightingEnabled(v: boolean): void {
+        this.lightingEnabled = v;
+        this.createProgram();
+    }
+
+    public setAmbientColor(color: vec3): void {
+        this.ambientLightCol = color;
+        this.createProgram();
+    }
+
+    public setPrimaryLightColor(color: vec3): void {
+        this.primaryLightCol = color;
+        this.createProgram();
+    }
+
+    public setPrimaryLightDirection(direction: vec3): void {
+        this.primaryLightDir = direction;
+        this.createProgram();
+    }
+
+    public setSecondaryLightColor(color: vec3): void {
+        this.secondaryLightCol = color;
+        this.createProgram();
+    }
+
+    public setSecondaryLightDirection(direction: vec3): void {
+        this.secondaryLightDir = direction;
+        this.createProgram();
+    }
+
+    public setFogColor(color: vec3): void {
+        this.fogCol = color;
+        this.createProgram();
+    }
+
+    public setFogStart(distance: number): void {
+        this.fogStart = distance;
+        this.createProgram();
+    }
+
+    public setDrawDistance(distance: number): void {
+        this.drawDistance = distance;
+        this.createProgram();
+    }
+
+    private createProgram(): void {
+        const program = new OoT3DProgram(this.material, this);
+        program.setTexCoordGen(0, 0, 0);
+        program.setTexCoordGen(1, 0, 0);
+        program.setTexCoordGen(2, 0, 0);
+        program.generateVertexShader();
+        if (this.monochromeVertexColorsEnabled)
+            program.defines.set('USE_MONOCHROME_VERTEX_COLOR', '1');
+        this.templateRenderInst.setDeviceProgram(program);
     }
 
     public buildTemplateRenderInst(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, textureHolder: CtrTextureHolder): void {
         this.templateRenderInst = renderInstBuilder.newRenderInst();
-        renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, OoT3D_Program.ub_MaterialParams);
+        if (this.material.textureBindings[0].textureIdx >= 0)
+            this.templateRenderInst.name = this.cmb.textures[this.material.textureBindings[0].textureIdx].name;
+        renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, DMPProgram.ub_MaterialParams);
         const layer = this.material.isTransparent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.templateRenderInst.sortKey = makeSortKey(layer);
         this.templateRenderInst.setMegaStateFlags(this.material.renderFlags);
@@ -143,30 +540,31 @@ class MaterialInstance {
         }
 
         this.templateRenderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
+        this.createProgram();
     }
 
-    public bindCMAB(cmab: CMAB.CMAB, animationController: AnimationController, channelIndex: number): void {
+    public bindCMAB(cmab: CMAB.CMAB, animationController: AnimationController): void {
         for (let i = 0; i < cmab.animEntries.length; i++) {
             const animEntry = cmab.animEntries[i];
             if (animEntry.materialIndex !== this.material.index)
                 continue;
-            if (animEntry.channelIndex !== channelIndex)
-                continue;
 
             if (animEntry.animationType === CMAB.AnimationType.TRANSLATION || animEntry.animationType === CMAB.AnimationType.ROTATION) {
-                this.srtAnimators[animEntry.channelIndex] = new CMAB.TextureAnimator(animationController, cmab, animEntry);
+                this.srtAnimators[animEntry.channelIndex] = new CMAB.TextureSRTAnimator(animationController, cmab, animEntry);
             } else if (animEntry.animationType === CMAB.AnimationType.COLOR) {
                 this.colorAnimators[animEntry.channelIndex] = new CMAB.ColorAnimator(animationController, cmab, animEntry);
+            } else if (animEntry.animationType === CMAB.AnimationType.TEXTURE_PALETTE) {
+                this.texturePaletteAnimators[animEntry.channelIndex] = new CMAB.TexturePaletteAnimator(animationController, cmab, animEntry);
             }
         }
     }
 
-    public prepareToRender(materialParamsBuffer: GfxRenderBuffer, viewerInput: Viewer.ViewerRenderInput, visible: boolean): void {
+    public prepareToRender(materialParamsBuffer: GfxRenderBuffer, viewerInput: Viewer.ViewerRenderInput, visible: boolean, textureHolder: CtrTextureHolder): void {
         this.templateRenderInst.visible = visible && this.visible;
 
         if (visible) {
-            let offs = this.templateRenderInst.getUniformBufferOffset(OoT3D_Program.ub_MaterialParams);
-            const mapped = materialParamsBuffer.mapBufferF32(offs, 20);
+            let offs = this.templateRenderInst.getUniformBufferOffset(DMPProgram.ub_MaterialParams);
+            const mapped = materialParamsBuffer.mapBufferF32(offs, 4+4*6+4*3*3);
             if (this.colorAnimators[0]) {
                 this.colorAnimators[0].calcMaterialColor(scratchColor);
             } else {
@@ -174,7 +572,16 @@ class MaterialInstance {
             }
             offs += fillColor(mapped, offs, scratchColor);
 
+            for (let i = 0; i < 6; i++)
+                offs += fillColor(mapped, offs, this.constantColors[i]);
+
+            let rebindSamplers = false;
             for (let i = 0; i < 3; i++) {
+                if (this.texturePaletteAnimators[i]) {
+                    this.texturePaletteAnimators[i].fillTextureMapping(textureHolder, this.textureMappings[i]);
+                    rebindSamplers = true;
+                }
+
                 if (this.srtAnimators[i]) {
                     this.srtAnimators[i].calcTexMtx(scratchMatrix);
                     mat4.mul(scratchMatrix, this.material.textureMatrices[i], scratchMatrix);
@@ -184,7 +591,8 @@ class MaterialInstance {
                 offs += fillMatrix4x3(mapped, offs, scratchMatrix);
             }
 
-            offs += fillVec4(mapped, offs, this.material.alphaTestReference);
+            if (rebindSamplers)
+                this.templateRenderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
         }
     }
 
@@ -265,8 +673,8 @@ class SepdData {
             }
         };
 
-        bindVertexAttrib(OoT3D_Program.a_Position,    3, false, vatr.positionByteOffset,  sepd.position);
-        bindVertexAttrib(OoT3D_Program.a_Normal,      3, true,  vatr.normalByteOffset,    sepd.normal);
+        bindVertexAttrib(DMPProgram.a_Position,    3, false, vatr.positionByteOffset,  sepd.position);
+        bindVertexAttrib(DMPProgram.a_Normal,      3, true,  vatr.normalByteOffset,    sepd.normal);
         // tangent
 
         // If we don't have any color, use opaque white. The constant in the sepd is not guaranteed to be correct.
@@ -274,15 +682,15 @@ class SepdData {
         if (vatr.colorByteOffset < 0)
             vec4.set(sepd.color.constant, 1, 1, 1, 1);
 
-        bindVertexAttrib(OoT3D_Program.a_Color,       4, true,  vatr.colorByteOffset,     sepd.color);
-        bindVertexAttrib(OoT3D_Program.a_TexCoord0,   2, false, vatr.texCoord0ByteOffset, sepd.texCoord0);
-        bindVertexAttrib(OoT3D_Program.a_TexCoord1,   2, false, vatr.texCoord1ByteOffset, sepd.texCoord1);
-        bindVertexAttrib(OoT3D_Program.a_TexCoord2,   2, false, vatr.texCoord2ByteOffset, sepd.texCoord2);
+        bindVertexAttrib(DMPProgram.a_Color,       4, true,  vatr.colorByteOffset,     sepd.color);
+        bindVertexAttrib(DMPProgram.a_TexCoord0,   2, false, vatr.texCoord0ByteOffset, sepd.texCoord0);
+        bindVertexAttrib(DMPProgram.a_TexCoord1,   2, false, vatr.texCoord1ByteOffset, sepd.texCoord1);
+        bindVertexAttrib(DMPProgram.a_TexCoord2,   2, false, vatr.texCoord2ByteOffset, sepd.texCoord2);
 
         const hasBoneIndices = sepd.prms[0].skinningMode !== CMB.SkinningMode.SINGLE_BONE && sepd.boneIndices.dataType === CMB.DataType.UByte;
-        bindVertexAttrib(OoT3D_Program.a_BoneIndices, sepd.boneDimension, false, hasBoneIndices ? vatr.boneIndicesByteOffset : -1, sepd.boneIndices);
+        bindVertexAttrib(DMPProgram.a_BoneIndices, sepd.boneDimension, false, hasBoneIndices ? vatr.boneIndicesByteOffset : -1, sepd.boneIndices);
         const hasBoneWeights = sepd.prms[0].skinningMode === CMB.SkinningMode.SMOOTH_SKINNING;
-        bindVertexAttrib(OoT3D_Program.a_BoneWeights, sepd.boneDimension, false, hasBoneWeights ? vatr.boneWeightsByteOffset : -1, sepd.boneWeights);
+        bindVertexAttrib(DMPProgram.a_BoneWeights, sepd.boneDimension, false, hasBoneWeights ? vatr.boneWeightsByteOffset : -1, sepd.boneWeights);
 
         let perInstanceBinding: GfxVertexBufferDescriptor | null = null;
         if (perInstanceBufferWordOffset !== 0) {
@@ -346,7 +754,7 @@ class ShapeInstance {
         for (let i = 0; i < this.sepdData.sepd.prms.length; i++) {
             const prms = this.sepdData.sepd.prms[i];
             const renderInst = renderInstBuilder.pushRenderInst();
-            renderInstBuilder.newUniformBufferInstance(renderInst, OoT3D_Program.ub_PrmParams);
+            renderInstBuilder.newUniformBufferInstance(renderInst, DMPProgram.ub_PrmParams);
             const firstIndex = getFirstIndex(prms.prm);
             renderInst.drawIndexes(prms.prm.count, firstIndex);
             renderInst.setSamplerBindingsInherit();
@@ -366,7 +774,7 @@ class ShapeInstance {
             if (renderInst.visible) {
                 const prms = sepd.prms[i];
 
-                let offs = renderInst.getUniformBufferOffset(OoT3D_Program.ub_PrmParams);
+                let offs = renderInst.getUniformBufferOffset(DMPProgram.ub_PrmParams);
                 const prmParamsMapped = prmParamsBuffer.mapBufferF32(offs, 16);
 
                 for (let i = 0; i < 16; i++) {
@@ -445,7 +853,6 @@ export class CmbRenderer {
     public visible: boolean = true;
     public materialInstances: MaterialInstance[] = [];
     public shapeInstances: ShapeInstance[] = [];
-    public whichTexture: number = 0;
 
     public csab: CSAB.CSAB | null = null;
     public debugBones: boolean = false;
@@ -461,6 +868,7 @@ export class CmbRenderer {
     private texturesEnabled: boolean = true;
     private vertexColorsEnabled: boolean = true;
     private monochromeVertexColorsEnabled: boolean = false;
+
     private vertexNormalsEnabled: boolean = false;
     private lightingEnabled: boolean = false;
     private uvEnabled: boolean = false;
@@ -497,122 +905,6 @@ export class CmbRenderer {
         }
     }
 
-    private createProgram(): void {
-        const program = new OoT3D_Program();
-        if (this.texturesEnabled)
-            program.defines.set(`USE_TEXTURE_${this.whichTexture}`, '1');
-        if (this.vertexColorsEnabled)
-            program.defines.set('USE_VERTEX_COLOR', '1');
-        if (this.monochromeVertexColorsEnabled)
-            program.defines.set('USE_MONOCHROME_VERTEX_COLOR', '1');
-        if (this.vertexNormalsEnabled)
-            program.defines.set('USE_VERTEX_NORMAL', '1');
-        if (this.lightingEnabled)
-            program.defines.set('USE_LIGHTING', '1');
-        if (this.uvEnabled)
-            program.defines.set('USE_UV', '1');
-
-        let ambientLightCol = vec3.fromValues(0, 0, 0);
-        let primaryLightCol = vec3.fromValues(0, 0, 0);
-        let primaryLightDir = vec3.fromValues(0, 0, 0);
-        let secondaryLightCol = vec3.fromValues(0, 0, 0);
-        let secondaryLightDir = vec3.fromValues(0, 0, 0);
-        let fogCol = vec3.fromValues(0, 0, 0);
-        let fogStart = 0.0;
-        let drawDistance = 0.0;
-        if (this.ambientLightCol != null) ambientLightCol = this.ambientLightCol;
-        if (this.primaryLightCol != null) primaryLightCol = this.primaryLightCol;
-        if (this.primaryLightDir != null) primaryLightDir = this.primaryLightDir;
-        if (this.secondaryLightCol != null) secondaryLightCol = this.secondaryLightCol;
-        if (this.secondaryLightDir != null) secondaryLightDir = this.secondaryLightDir;
-        if (this.fogCol != null) fogCol = this.fogCol;
-        if (this.fogStart != null) fogStart = this.fogStart;
-        if (this.drawDistance != null) drawDistance = this.drawDistance;
-
-        program.frag = `
-        
-        float map(float value, float low1, float high1, float low2, float high2)
-        {
-            return low2 + (value - low1) * (high2 - low2) / (high1 - low1);
-        }
-
-        void main() {
-            vec3 t_AmbientColor = vec3(${ambientLightCol[0]}, ${ambientLightCol[1]}, ${ambientLightCol[2]});
-            vec3 t_PrimaryLightColor = vec3(${primaryLightCol[0]}, ${primaryLightCol[1]}, ${primaryLightCol[2]});
-            vec3 t_PrimaryLightDirection = vec3(${primaryLightDir[0]}, ${primaryLightDir[1]}, ${primaryLightDir[2]});
-            vec3 t_SecondaryLightColor = vec3(${secondaryLightCol[0]}, ${secondaryLightCol[1]}, ${secondaryLightCol[2]});
-            vec3 t_SecondaryLightDirection = vec3(${secondaryLightDir[0]}, ${secondaryLightDir[1]}, ${secondaryLightDir[2]});
-            vec3 t_FogColor = vec3(${fogCol[0]}, ${fogCol[1]}, ${fogCol[2]});
-            vec4 t_Color = vec4(1.0, 1.0, 1.0, 1.0);
-            float t_FogStart = ${fogStart}.0;
-            float t_DrawDistance = ${drawDistance}.0;
-        
-            // TODO(jstpierre): Figure out the different textures in use.
-            #ifdef USE_TEXTURE_0
-                t_Color *= texture2D(u_Texture[0], v_TexCoord0);
-            #endif
-            
-            #ifdef USE_TEXTURE_1
-                t_Color *= texture2D(u_Texture[1], v_TexCoord0);
-            #endif
-            
-            #ifdef USE_TEXTURE_2
-                t_Color *= texture2D(u_Texture[2], v_TexCoord0);
-            #endif
-            
-            #ifdef USE_VERTEX_COLOR
-                t_Color *= v_Color;
-            #endif
-            
-                t_Color *= u_MaterialColor;
-            
-                if (t_Color.a <= u_AlphaReference)
-                    discard;
-
-            vec3 t_NormalizedNormal = normalize(v_Normal);
-
-            float depth = 0.0;
-            
-            #ifdef USE_LIGHTING
-                vec3 t_PrimaryLightDirectionNormalized = normalize(t_PrimaryLightDirection);
-                float t_PrimaryLightIntensity = clamp(dot(-t_NormalizedNormal, t_PrimaryLightDirectionNormalized), 0.0, 1.0);
-                vec3 t_PrimaryDiffuse = t_PrimaryLightColor * t_PrimaryLightIntensity;
-                
-                vec3 t_SecondaryLightDirectionNormalized = normalize(t_SecondaryLightDirection);
-                float t_SecondaryLightIntensity = clamp(dot(-t_NormalizedNormal, t_SecondaryLightDirectionNormalized), 0.0, 1.0);
-                vec3 t_SecondaryDiffuse = t_SecondaryLightColor * t_SecondaryLightIntensity;
-
-                vec3 CombinedDiffuse = vec3(0, 0, 0); 
-                CombinedDiffuse += t_AmbientColor * 4.0;
-                CombinedDiffuse += t_PrimaryDiffuse + t_SecondaryDiffuse;
-                t_Color.rgb *= CombinedDiffuse;
-
-                depth = clamp(v_Position.w, 0.0, t_DrawDistance);
-
-                //float FogFactor = exp(-0.25 * depth);
-                float FogFactor = clamp((t_DrawDistance - depth) / (t_DrawDistance - t_FogStart), 0.5, 1.0);
-
-                t_Color.rgb = mix(t_FogColor, t_Color.rgb, FogFactor);
-            #endif
-            
-            #ifdef USE_VERTEX_NORMAL
-                t_Color.rgb = t_NormalizedNormal * 0.5 + 0.5;
-            #endif
-
-            #ifdef USE_UV
-                t_Color.r = v_TexCoord0.x;
-                t_Color.g = v_TexCoord0.y;
-                t_Color.b = 0.0;
-            #endif
-
-                //t_Color.rgb = vec3(1.0, 1.0, 1.0) * 1.0 - depth;
-            
-                gl_FragColor = t_Color;
-            }`;
-
-        if (this.templateRenderInst != null) this.templateRenderInst.setDeviceProgram(program);
-    }
-
     public addToViewRenderer(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer): void {
         // Standard GX binding model of three bind groups.
         const bindingLayouts: GfxBindingLayoutDescriptor[] = [
@@ -621,83 +913,87 @@ export class CmbRenderer {
             { numUniformBuffers: 1, numSamplers: 0, }, // Packet
         ];
 
-        const renderInstBuilder = new GfxRenderInstBuilder(device, OoT3D_Program.programReflection, bindingLayouts, [ this.sceneParamsBuffer, this.materialParamsBuffer, this.prmParamsBuffer ]);
+        const renderInstBuilder = new GfxRenderInstBuilder(device, DMPProgram.programReflection, bindingLayouts, [ this.sceneParamsBuffer, this.materialParamsBuffer, this.prmParamsBuffer ]);
         this.templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
-        this.createProgram();
-        renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, OoT3D_Program.ub_SceneParams);
+        renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, DMPProgram.ub_SceneParams);
         this.translateCmb(device, renderInstBuilder);
         renderInstBuilder.popTemplateRenderInst();
         renderInstBuilder.finish(device, viewRenderer);
     }
 
+    public setConstantColor(index: number, color: Color): void {
+        for (let i = 0; i < this.materialInstances.length; i++)
+            colorCopy(this.materialInstances[i].constantColors[index], color);
+    }
+
     public setVertexColorsEnabled(v: boolean): void {
-        this.vertexColorsEnabled = v;
-        this.createProgram();
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].setVertexColorsEnabled(v);
     }
 
     public setTexturesEnabled(v: boolean): void {
-        this.texturesEnabled = v;
-        this.createProgram();
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].setTexturesEnabled(v);
     }
 
     public setMonochromeVertexColorsEnabled(v: boolean): void {
-        this.monochromeVertexColorsEnabled = v;
-        this.createProgram();
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].setMonochromeVertexColorsEnabled(v);
     }
 
     public setVertexNormalsEnabled(v: boolean): void {
-        this.vertexNormalsEnabled = v;
-        this.createProgram();
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].setVertexNormalsEnabled(v);
     }
 
     public setUVEnabled(v: boolean): void {
-        this.uvEnabled = v;
-        this.createProgram();
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].setUVEnabled(v);
     }
 
     public setLightingEnabled(v: boolean): void {
-        this.lightingEnabled = v;
-        this.createProgram();
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].setLightingEnabled(v);
     }
 
     public setAmbientColor(color: vec3): void {
-        this.ambientLightCol = color;
-        this.createProgram();
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].setAmbientColor(color);
     }
 
     public setPrimaryLightColor(color: vec3): void {
-        this.primaryLightCol = color;
-        this.createProgram();
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].setPrimaryLightColor(color);
     }
 
     public setPrimaryLightDirection(direction: vec3): void {
-        this.primaryLightDir = direction;
-        this.createProgram();
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].setPrimaryLightDirection(direction);
     }
 
     public setSecondaryLightColor(color: vec3): void {
-        this.secondaryLightCol = color;
-        this.createProgram();
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].setSecondaryLightColor(color);
     }
 
     public setSecondaryLightDirection(direction: vec3): void {
-        this.secondaryLightDir = direction;
-        this.createProgram();
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].setSecondaryLightDirection(direction);
     }
 
     public setFogColor(color: vec3): void {
-        this.fogCol = color;
-        this.createProgram();
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].setFogColor(color);
     }
 
     public setFogStart(distance: number): void {
-        this.fogStart = distance;
-        this.createProgram();
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].setFogStart(distance);
     }
 
     public setDrawDistance(distance: number): void {
-        this.drawDistance = distance;
-        this.createProgram();
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].setDrawDistance(distance);
     }
 
     private updateBoneMatrices(): void {
@@ -731,12 +1027,12 @@ export class CmbRenderer {
 
         this.animationController.setTimeInMilliseconds(viewerInput.time);
 
-        let offs = this.templateRenderInst.getUniformBufferOffset(OoT3D_Program.ub_SceneParams);
+        let offs = this.templateRenderInst.getUniformBufferOffset(DMPProgram.ub_SceneParams);
         const sceneParamsMapped = this.sceneParamsBuffer.mapBufferF32(offs, 16);
         fillSceneParamsData(sceneParamsMapped, viewerInput.camera);
 
         for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].prepareToRender(this.materialParamsBuffer, viewerInput, this.visible);
+            this.materialInstances[i].prepareToRender(this.materialParamsBuffer, viewerInput, this.visible, this.textureHolder);
         for (let i = 0; i < this.shapeInstances.length; i++)
             this.shapeInstances[i].prepareToRender(this.prmParamsBuffer, viewerInput, this.boneMatrices, this.cmbData.inverseBindPoseMatrices);
 
@@ -763,9 +1059,9 @@ export class CmbRenderer {
         this.csab = csab;
     }
 
-    public bindCMAB(cmab: CMAB.CMAB, channelIndex: number = 0): void {
+    public bindCMAB(cmab: CMAB.CMAB, animationController = this.animationController): void {
         for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].bindCMAB(cmab, this.animationController, channelIndex);
+            this.materialInstances[i].bindCMAB(cmab, animationController);
     }
 }
 

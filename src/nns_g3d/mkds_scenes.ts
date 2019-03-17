@@ -227,6 +227,8 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
             spawnModel(`/MapObj/rotary_room.nsbmd`);
         } else if (obji.objectId === 0x00D1) { // rotary_bridge
             spawnModel(`/MapObj/rotary_bridge.nsbmd`);
+        } else if (obji.objectId === 0x00D2) { // dram
+            spawnModel(`/MapObj/dram.nsbmd`);
         } else if (obji.objectId === 0x012E) { // BeachTree1
             spawnModel(`/MapObj/BeachTree1.nsbmd`);
         } else if (obji.objectId === 0x012F) { // earthen_pipe

@@ -1,17 +1,18 @@
 
 import * as CMB from './cmb';
 
-import { assert, readString, hexdump } from '../util';
+import { assert, readString } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { vec3, mat4, quat, mat3 } from 'gl-matrix';
+import { mat4, quat, vec3 } from 'gl-matrix';
 
 const enum Version {
     Ocarina, Majora
 }
 
-export class ZSIScene {
-    public environmentSettings: ZSIEnvironmentSettings[] = [];
-    public rooms: string[] = [];
+export interface ZSIScene {
+    name: string;
+    rooms: string[];
+    environmentSettings: ZSIEnvironmentSettings[];
 }
 
 export class ZSIRoomSetup {
@@ -79,11 +80,8 @@ function readActors(version: Version, buffer: ArrayBufferSlice, nActors: number,
 function readRooms(version: Version, buffer: ArrayBufferSlice, nRooms: number, offs: number): string[] {
     const rooms: string[] = [];
     const roomSize = version === Version.Ocarina ? 0x44 : 0x34;
-    //console.log(`looping through ${nRooms} room entries`);
-    console.log(decimalToHexString(offs));
 
     for (let i = 0; i < nRooms; i++) {
-        console.log(readString(buffer, offs, roomSize));
         rooms.push(readString(buffer, offs, roomSize));
         offs += roomSize;
     }
@@ -100,26 +98,10 @@ function decimalToHexString(number: number)
   return number.toString(16).toUpperCase();
 }
 
-function decimalToHexString8B(number: number)
-{
-  if (number < 0)
-  {
-    number = 0xFFFFFFFF + number + 1;
-  }
-
-  let hexString = number.toString(16).toUpperCase();
-
-  while (hexString.length < 8) hexString = "0" + hexString;
-
-  return hexString;
-}
-
 function readEnvironmentSettings(version: Version, buffer: ArrayBufferSlice, nEnvironmentSettings: number, offs: number)
 {
     const view = buffer.createDataView();
     const environmentSettings: ZSIEnvironmentSettings[] = [];
-    console.log(`looping through ${nEnvironmentSettings} environment settings`);
-    console.log(decimalToHexString(offs));
 
     offs += 0x0A;
 
@@ -130,93 +112,52 @@ function readEnvironmentSettings(version: Version, buffer: ArrayBufferSlice, nEn
         const dirSize = 0x03;
         const fogSize = 0x02;
         const distanceSize = 0x02;
-
-        //console.log(view.getUint32(offs + 0x00, true));
         
         const ambientColR = view.getUint8(offs + 0x00) / 255.0;
         const ambientColG = view.getUint8(offs + 0x01) / 255.0;
         const ambientColB = view.getUint8(offs + 0x02) / 255.0;
         setting.ambientLightCol = vec3.fromValues(ambientColR, ambientColG, ambientColB);
-        //console.log(decimalToHexString8B(view.getUint32(offs + 0x00)));
-        console.log(decimalToHexString(view.getUint8(offs + 0x00)));
-        console.log(decimalToHexString(view.getUint8(offs + 0x01)));
-        console.log(decimalToHexString(view.getUint8(offs + 0x02)));
-        console.log(`ambient light col (${setting.ambientLightCol})`);
         offs += colSize;
         
         const firstDiffuseLightDirX = view.getUint8(offs + 0x00) / 255.0;
         const firstDiffuseLightDirY = view.getUint8(offs + 0x01) / 255.0;
         const firstDiffuseLightDirZ = view.getUint8(offs + 0x02) / 255.0;
         setting.primaryLightDir = vec3.fromValues(firstDiffuseLightDirX, firstDiffuseLightDirY, firstDiffuseLightDirZ);
-        //console.log(decimalToHexString8B(view.getUint32(offs + 0x00)));
-        //console.log(decimalToHexString(view.getInt32(offs + 0x00, true)));
-        console.log(decimalToHexString(view.getUint8(offs + 0x00)));
-        console.log(decimalToHexString(view.getUint8(offs + 0x01)));
-        console.log(decimalToHexString(view.getUint8(offs + 0x02)));
-        console.log(`first diffuse light dir (${setting.primaryLightDir})`);
         offs += dirSize;
         
         const firstDiffuseLightColR = view.getUint8(offs + 0x00) / 255.0;
         const firstDiffuseLightColG = view.getUint8(offs + 0x01) / 255.0;
         const firstDiffuseLightColB = view.getUint8(offs + 0x02) / 255.0;
         setting.primaryLightCol = vec3.fromValues(firstDiffuseLightColR, firstDiffuseLightColG, firstDiffuseLightColB);
-        //console.log(decimalToHexString8B(view.getUint32(offs + 0x00)));
-        //console.log(decimalToHexString(view.getInt32(offs + 0x00, true)));
-        console.log(decimalToHexString(view.getUint8(offs + 0x00)));
-        console.log(decimalToHexString(view.getUint8(offs + 0x01)));
-        console.log(decimalToHexString(view.getUint8(offs + 0x02)));
-        console.log(`first diffuse light col (${setting.primaryLightCol})`);
         offs += colSize;
         
         const secondDiffuseLightDirX = view.getUint8(offs + 0x00) / 255.0;
         const secondDiffuseLightDirY = view.getUint8(offs + 0x01) / 255.0;
         const secondDiffuseLightDirZ = view.getUint8(offs + 0x02) / 255.0;
         setting.secondaryLightDir = vec3.fromValues(secondDiffuseLightDirX, secondDiffuseLightDirY, secondDiffuseLightDirZ);
-        //console.log(decimalToHexString8B(view.getUint32(offs + 0x00)));
-        //console.log(decimalToHexString(view.getInt32(offs + 0x00, true)));
-        console.log(decimalToHexString(view.getUint8(offs + 0x00)));
-        console.log(decimalToHexString(view.getUint8(offs + 0x01)));
-        console.log(decimalToHexString(view.getUint8(offs + 0x02)));
-        console.log(`second diffuse light dir (${setting.secondaryLightDir})`);
         offs += dirSize;
 
         const secondDiffuseLightColR = view.getUint8(offs + 0x00) / 255.0;
         const secondDiffuseLightColG = view.getUint8(offs + 0x01) / 255.0;
         const secondDiffuseLightColB = view.getUint8(offs + 0x02) / 255.0;
         setting.secondaryLightCol = vec3.fromValues(secondDiffuseLightColR, secondDiffuseLightColG, secondDiffuseLightColB);
-        //console.log(decimalToHexString8B(view.getUint32(offs + 0x00)));
-        //console.log(decimalToHexString(view.getInt32(offs + 0x00, true)));
-        console.log(decimalToHexString(view.getUint8(offs + 0x00)));
-        console.log(decimalToHexString(view.getUint8(offs + 0x01)));
-        console.log(decimalToHexString(view.getUint8(offs + 0x02)));
-        console.log(`second diffuse light col (${setting.secondaryLightCol})`);
         offs += colSize;
 
         const fogColR = view.getUint8(offs + 0x00) / 255.0;
         const fogColG = view.getUint8(offs + 0x01) / 255.0;
         const fogColB = view.getUint8(offs + 0x02) / 255.0;
         setting.fogCol = vec3.fromValues(fogColR, fogColG, fogColB);
-        //console.log(decimalToHexString8B(view.getUint32(offs + 0x00)));
-        //console.log(decimalToHexString(view.getInt32(offs + 0x00, true)));
-        console.log(decimalToHexString(view.getUint8(offs + 0x00)));
-        console.log(decimalToHexString(view.getUint8(offs + 0x01)));
-        console.log(decimalToHexString(view.getUint8(offs + 0x02)));
-        console.log(`fog col (${setting.fogCol})`);
         offs += colSize;
 
         const fogStart = view.getUint16(offs + 0x00) & 0x3FF;
         setting.fogStart = fogStart;
-        console.log(`fog start (${setting.fogStart})`);
         offs += fogSize;
 
         const drawDistance = view.getUint16(offs + 0x00);
         setting.drawDistance = drawDistance;
-        console.log(`draw distance (${setting.drawDistance})`);
         offs += distanceSize;
 
         offs += 0x5A;
-
-        //console.log("");
 
         environmentSettings.push(setting);
     }
@@ -248,21 +189,16 @@ function readMesh(buffer: ArrayBufferSlice, offs: number): Mesh {
 }
 
 // ZSI headers are a slight modification of the original Z64 headers.
-function readSceneHeaders(version: Version, buffer: ArrayBufferSlice, offs: number = 0): ZSIScene {
+function readSceneHeaders(version: Version, name: string, buffer: ArrayBufferSlice, offs: number = 0): ZSIScene {
     const view = buffer.createDataView();
-    const zsi = new ZSIScene();
+    let rooms: string[] = [];
+    let environmentSettings: ZSIEnvironmentSettings[] = [];
 
     console.log("read scene headers");
 
     while (true) {
         const cmd1 = view.getUint32(offs + 0x00, false);
         const cmd2 = view.getUint32(offs + 0x04, true);
-
-        let addressString = decimalToHexString(offs + 0x10);
-        let cmd1String = decimalToHexString8B(cmd1);
-        let cmd2String = decimalToHexString8B(view.getUint32(offs + 0x04, false));
-
-        console.log(addressString + " " + cmd1String + " " + cmd2String);
 
         offs += 0x08;
 
@@ -274,27 +210,17 @@ function readSceneHeaders(version: Version, buffer: ArrayBufferSlice, offs: numb
 
         switch (cmdType) {
         case HeaderCommands.EnvironmentSettings:
-            //console.log(decimalToHexString(cmd1));
-            //console.log(decimalToHexString(cmd2));
-            console.log("environment command info");
-            console.log(decimalToHexString(cmd1));
-            console.log(decimalToHexString(cmd2));
             const nEnvironmentSettings = (cmd1 >>> 16) & 0xFF;
-            zsi.environmentSettings = readEnvironmentSettings(version, buffer, nEnvironmentSettings, cmd2);
+            environmentSettings = readEnvironmentSettings(version, buffer, nEnvironmentSettings, cmd2);
             break;
         case HeaderCommands.Rooms:
-            //console.log(decimalToHexString(cmd1));
-            //console.log(decimalToHexString(cmd2));
-            console.log("room command info");
-            console.log(decimalToHexString(cmd1));
-            console.log(decimalToHexString(cmd2));
             const nRooms = (cmd1 >>> 16) & 0xFF;
-            zsi.rooms = readRooms(version, buffer, nRooms, cmd2);
+            rooms = readRooms(version, buffer, nRooms, cmd2);
             break;
         }
     }
 
-    return zsi;
+    return { name, rooms, environmentSettings };
 }
 
 export function parseScene(buffer: ArrayBufferSlice): ZSIScene {
@@ -307,7 +233,7 @@ export function parseScene(buffer: ArrayBufferSlice): ZSIScene {
 
     // ZSI header is done. It's that simple! Now for the actual data.
     const headersBuf = buffer.slice(0x10);
-    return readSceneHeaders(version, headersBuf);
+    return readSceneHeaders(version, name, headersBuf);
 }
 
 // ZSI headers are a slight modification of the original Z64 headers.
@@ -317,18 +243,10 @@ function readRoomHeaders(version: Version, buffer: ArrayBufferSlice, offs: numbe
 
     const mainSetup = new ZSIRoomSetup();
     roomSetups.push(mainSetup);
-
-    //console.log("read room headers");
     
     while (true) {
         const cmd1 = view.getUint32(offs + 0x00, false);
         const cmd2 = view.getUint32(offs + 0x04, true);
-        
-        let addressString = decimalToHexString(offs + 0x10);
-        let cmd1String = decimalToHexString8B(cmd1);
-        let cmd2String = decimalToHexString8B(view.getUint32(offs + 0x04, false));
-
-        //console.log(addressString + " " + cmd1String + " " + cmd2String);
 
         offs += 0x08;
 

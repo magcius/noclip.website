@@ -69,7 +69,6 @@ class SceneDesc implements Viewer.SceneDesc {
                     renderer.cmbData.push(cmbData);
 
                     const cmbRenderer = new CmbRenderer(device, textureHolder, cmbData, cmb.name);
-                    cmbRenderer.whichTexture = 1;
                     cmbRenderer.addToViewRenderer(device, renderer.viewRenderer);
                     renderer.cmbRenderers.push(cmbRenderer);
 
@@ -78,7 +77,7 @@ class SceneDesc implements Viewer.SceneDesc {
                     if (cmabFile) {
                         const cmab = CMAB.parse(CMB.Version.LuigisMansion, cmabFile.buffer);
                         textureHolder.addTextures(device, cmab.textures);
-                        cmbRenderer.bindCMAB(cmab, 1);
+                        cmbRenderer.bindCMAB(cmab);
                     }
 
                     const roomFurnitureEntries: BCSV.Bcsv = BCSV.getEntriesWithField(furnitureInfo, "room_no", i);
@@ -103,7 +102,6 @@ class SceneDesc implements Viewer.SceneDesc {
                         }
 
                         const cmbRenderer = new CmbRenderer(device, textureHolder, cmbData, cmb.name);
-                        cmbRenderer.whichTexture = 1;
                         cmbRenderer.addToViewRenderer(device, renderer.viewRenderer);
 
                         const rotationX = BCSV.getField<number>(roomFurnitureEntries, record, "dir_x") / 180 * Math.PI;

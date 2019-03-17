@@ -994,6 +994,7 @@ class SMGSpawner {
 
         // Skyboxen.
         case 'BeyondSummerSky':
+        case 'BeyondGalaxySky':
         case 'CloudSky':
         case 'HalfGalaxySky':
         case 'GalaxySky':
@@ -1002,6 +1003,7 @@ class SMGSpawner {
         case 'MilkyWaySky':
         case 'VROrbit':
         case 'DesertSky':
+        case 'GoodWeatherSky':
             spawnGraph(name, SceneGraphTag.Skybox);
             break;
 

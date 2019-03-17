@@ -4,9 +4,11 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { readString, assert } from "../util";
 import { mat4 } from "gl-matrix";
 import { Color, colorFromRGBA } from "../Color";
-import { Texture, TextureLevel, Version, calcTexMtx } from "./cmb";
+import { Texture, TextureLevel, Version, calcTexMtx, Material, CMB } from "./cmb";
 import { decodeTexture, computeTextureByteSize } from "./pica_texture";
 import { getPointHermite } from "../Spline";
+import { TextureMapping } from "../TextureHolder";
+import { CtrTextureHolder } from "./render";
 
 // CMAB (CTR Material Animation Binary)
 // Seems to be inspired by the .cmata file format. Perhaps an earlier version of NW4C used it?
@@ -136,7 +138,7 @@ function parseTrack(version: Version, buffer: ArrayBufferSlice): AnimationTrack 
     }
 }
 
-function parseTxpt(buffer: ArrayBufferSlice, texData: ArrayBufferSlice | null, stringTable: string[]): Texture[] {
+function parseTxpt(buffer: ArrayBufferSlice, texData: ArrayBufferSlice | null, stringTable: string[], prefix: string = ''): Texture[] {
     const view = buffer.createDataView();
     assert(readString(buffer, 0x00, 0x04) === 'txpt');
 
@@ -152,7 +154,8 @@ function parseTxpt(buffer: ArrayBufferSlice, texData: ArrayBufferSlice | null, s
         const format = view.getUint32(txptTableIdx + 0x0C, true);
         let dataOffs = view.getUint32(txptTableIdx + 0x10, true);
         const nameStringIndex = view.getUint32(txptTableIdx + 0x14, true);
-        const name = stringTable[nameStringIndex];
+        const rawName = stringTable[nameStringIndex];
+        const name = `${prefix}${rawName}`;
         const dataEnd = dataOffs + size;
 
         const levels: TextureLevel[] = [];
@@ -198,6 +201,16 @@ function parseMmad(version: Version, buffer: ArrayBufferSlice): AnimationEntry {
 
             tracks[i] = parseTrack(version, buffer.slice(trackOffs));
         }
+    } else if (animationType === AnimationType.TEXTURE_PALETTE) {
+        for (let i = 0; i < 1; i++) {
+            const trackOffs = view.getUint16(trackOffsTableIdx, true);
+            trackOffsTableIdx += 0x02;
+
+            if (trackOffs === 0x00)
+                continue;
+
+            tracks[i] = parseTrack(version, buffer.slice(trackOffs));
+        }
     } else if (animationType === AnimationType.COLOR) {
         for (let i = 0; i < 4; i++) {
             const trackOffs = view.getUint16(trackOffsTableIdx, true);
@@ -223,7 +236,7 @@ function parseMmad(version: Version, buffer: ArrayBufferSlice): AnimationEntry {
     return { animationType, materialIndex, channelIndex, tracks };
 }
 
-export function parse(version: Version, buffer: ArrayBufferSlice): CMAB {
+export function parse(version: Version, buffer: ArrayBufferSlice, textureNamePrefix: string = ''): CMAB {
     const view = buffer.createDataView();
 
     assert(readString(buffer, 0x00, 0x04, false) === 'cmab');
@@ -277,7 +290,7 @@ export function parse(version: Version, buffer: ArrayBufferSlice): CMAB {
     if (txptChunkOffs !== 0) {
         const texData = texDataChunkOffs !== 0 ? buffer.slice(texDataChunkOffs) : null;
         const txptChunk = buffer.slice(0x20 + txptChunkOffs);
-        textures = parseTxpt(txptChunk, texData, stringTable);
+        textures = parseTxpt(txptChunk, texData, stringTable, textureNamePrefix);
     }
 
     return { duration, loopMode, animEntries, textures };
@@ -339,11 +352,28 @@ function sampleAnimationTrackHermite(track: AnimationTrackHermite, frame: number
     return hermiteInterpolate(k0, k1, t);
 }
 
+function sampleAnimationTrackInteger(track: AnimationTrackInteger, frame: number): number {
+    const frames = track.frames;
+
+    // Find the first frame.
+    const idx1 = frames.findIndex((key) => (frame < key.time));
+    if (idx1 === 0)
+        return frames[0].value;
+    if (idx1 < 0)
+        return frames[frames.length - 1].value;
+    const idx0 = idx1 - 1;
+
+    const k0 = frames[idx0];
+    return k0.value;
+}
+
 function sampleAnimationTrack(track: AnimationTrack, frame: number): number {
     if (track.type === AnimationTrackType.LINEAR)
         return sampleAnimationTrackLinear(track, frame);
     else if (track.type === AnimationTrackType.HERMITE)
         return sampleAnimationTrackHermite(track, frame);
+    else if (track.type === AnimationTrackType.INTEGER)
+        return sampleAnimationTrackInteger(track, frame);
     else
         throw "whoops";
 }
@@ -364,7 +394,7 @@ function getAnimFrame(anim: AnimationBase, frame: number): number {
     }
 }
 
-export class TextureAnimator {
+export class TextureSRTAnimator {
     constructor(public animationController: AnimationController, public cmab: CMAB, public animEntry: AnimationEntry) {
         assert(animEntry.animationType === AnimationType.TRANSLATION || animEntry.animationType === AnimationType.ROTATION);
     }
@@ -398,5 +428,24 @@ export class ColorAnimator {
         const b = this.animEntry.tracks[2] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[2], animFrame) : 1;
         const a = this.animEntry.tracks[3] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[3], animFrame) : 1;
         colorFromRGBA(dst, r, g, b, a);
+    }
+}
+
+export function getTextureName(animationController: AnimationController, cmb: CMB, cmab: CMAB | null, material: Material, bindingIndex: number): string {
+    if (cmab !== null) {
+    }
+
+    return cmb.textures[material.textureBindings[bindingIndex].textureIdx].name;
+}
+
+export class TexturePaletteAnimator {
+    constructor(public animationController: AnimationController, public cmab: CMAB, public animEntry: AnimationEntry) {
+        assert(animEntry.animationType === AnimationType.TEXTURE_PALETTE);
+    }
+
+    public fillTextureMapping(textureHolder: CtrTextureHolder, textureMapping: TextureMapping): void {
+        const animFrame = getAnimFrame(this.cmab, this.animationController.getTimeInFrames());
+        const textureIndex = sampleAnimationTrack(this.animEntry.tracks[0], animFrame);
+        textureHolder.fillTextureMapping(textureMapping, this.cmab.textures[textureIndex].name);
     }
 }
