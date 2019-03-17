@@ -139,13 +139,23 @@ function readEnvironmentSettings(version: Version, buffer: ArrayBufferSlice, nEn
         setting.fogCol = vec3.fromValues(fogColR, fogColG, fogColB);
         offs += colSize;
 
-        const fogStart = view.getUint16(offs + 0x00) & 0x3FF;
-        setting.fogStart = fogStart;
-        offs += fogSize;
-
-        const drawDistance = view.getUint16(offs + 0x00);
-        setting.drawDistance = drawDistance;
-        offs += distanceSize;
+        if (view.byteLength > offs)
+        {
+            const fogStart = view.getUint16(offs + 0x00) & 0x3FF;
+            setting.fogStart = fogStart;
+            offs += fogSize;
+    
+            const drawDistance = view.getUint16(offs + 0x00);
+            setting.drawDistance = drawDistance;
+            offs += distanceSize;
+        }
+        else
+        {
+            // HACK(quade): in some scenes, our offset goes out of bounds when reading these
+            // for now, this prevents the exception
+            setting.fogStart = 0.0;
+            setting.drawDistance = 4000.0;
+        }
 
         offs += 0x5A;
 
