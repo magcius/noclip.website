@@ -122,7 +122,7 @@ uniform sampler2D u_Texture[3];
         this.generateFragmentShader();
     }
 
-    private generateFloat(v: number): string {
+    public generateFloat(v: number): string {
         let s = v.toString();
         if (!s.includes('.'))
             s += '.0';
@@ -512,8 +512,8 @@ class MaterialInstance {
         additionalParameters += `vec3 SECONDARY_LIGHT_COLOR = vec3(${tempEnvironmentSettings.secondaryLightCol});\n`;
         additionalParameters += `vec3 SECONDARY_LIGHT_DIRECTION = vec3(${tempEnvironmentSettings.secondaryLightDir});\n`;
         additionalParameters += `vec3 FOG_COLOR = vec3(${tempEnvironmentSettings.fogCol});\n`;
-        additionalParameters += `float FOG_START = ${tempEnvironmentSettings.fogStart + ".0"};\n`;
-        additionalParameters += `float DRAW_DISTANCE = ${tempEnvironmentSettings.drawDistance + ".0"};\n`;
+        additionalParameters += `float FOG_START = ${program.generateFloat(tempEnvironmentSettings.fogStart)};\n`;
+        additionalParameters += `float DRAW_DISTANCE = ${program.generateFloat(tempEnvironmentSettings.drawDistance)};\n`;
 
         program.generateVertexShader(additionalParameters);
 
