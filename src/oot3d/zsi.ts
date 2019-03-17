@@ -21,14 +21,14 @@ export class ZSIRoomSetup {
 }
 
 export class ZSIEnvironmentSettings {
-    public ambientLightCol: vec3;
-    public primaryLightDir: vec3;
-    public primaryLightCol: vec3;
-    public secondaryLightDir: vec3;
-    public secondaryLightCol: vec3;
-    public fogCol: vec3;
-    public fogStart: number;
-    public drawDistance: number;
+    public ambientLightCol: vec3 = vec3.create();
+    public primaryLightDir: vec3 = vec3.create();
+    public primaryLightCol: vec3 = vec3.create();
+    public secondaryLightDir: vec3 = vec3.create();
+    public secondaryLightCol: vec3 = vec3.create();
+    public fogCol: vec3 = vec3.create();
+    public fogStart: number = 0.0;
+    public drawDistance: number = 0.0;
 }
 
 // Subset of Z64 command types.

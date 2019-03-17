@@ -452,14 +452,7 @@ class MaterialInstance {
     private lightingEnabled: boolean = false;
     private uvEnabled: boolean = false;
 
-    public ambientLightCol: vec3;
-    public primaryLightCol: vec3;
-    public primaryLightDir: vec3;
-    public secondaryLightCol: vec3;
-    public secondaryLightDir: vec3;
-    public fogCol: vec3;
-    public fogStart: number;
-    public drawDistance: number;
+    public environmentSettings: ZSI.ZSIEnvironmentSettings;
 
     constructor(public cmb: CMB.CMB, public material: CMB.Material) {
         for (let i = 0; i < this.material.constantColors.length; i++)
@@ -496,43 +489,8 @@ class MaterialInstance {
         this.createProgram();
     }
 
-    public setAmbientColor(color: vec3): void {
-        this.ambientLightCol = color;
-        this.createProgram();
-    }
-
-    public setPrimaryLightColor(color: vec3): void {
-        this.primaryLightCol = color;
-        this.createProgram();
-    }
-
-    public setPrimaryLightDirection(direction: vec3): void {
-        this.primaryLightDir = direction;
-        this.createProgram();
-    }
-
-    public setSecondaryLightColor(color: vec3): void {
-        this.secondaryLightCol = color;
-        this.createProgram();
-    }
-
-    public setSecondaryLightDirection(direction: vec3): void {
-        this.secondaryLightDir = direction;
-        this.createProgram();
-    }
-
-    public setFogColor(color: vec3): void {
-        this.fogCol = color;
-        this.createProgram();
-    }
-
-    public setFogStart(distance: number): void {
-        this.fogStart = distance;
-        this.createProgram();
-    }
-
-    public setDrawDistance(distance: number): void {
-        this.drawDistance = distance;
+    public setEnvironmentSettings(environmentSettings: ZSI.ZSIEnvironmentSettings): void {
+        this.environmentSettings = environmentSettings;
         this.createProgram();
     }
 
@@ -544,14 +502,30 @@ class MaterialInstance {
 
         let additionalParameters = "";
 
-        additionalParameters += `vec3 AMBIENT_LIGHT_COLOR = vec3(${this.ambientLightCol ? this.ambientLightCol : "0, 0, 0"});\n`;
-        additionalParameters += `vec3 PRIMARY_LIGHT_COLOR = vec3(${this.primaryLightCol ? this.primaryLightCol : "0, 0, 0"});\n`;
-        additionalParameters += `vec3 PRIMARY_LIGHT_DIRECTION = vec3(${this.primaryLightDir ? this.primaryLightDir : "0, 0, 0"});\n`;
-        additionalParameters += `vec3 SECONDARY_LIGHT_COLOR = vec3(${this.secondaryLightCol ? this.secondaryLightCol : "0, 0, 0"});\n`;
-        additionalParameters += `vec3 SECONDARY_LIGHT_DIRECTION = vec3(${this.secondaryLightDir ? this.secondaryLightDir : "0, 0, 0"});\n`;
-        additionalParameters += `vec3 FOG_COLOR = vec3(${this.fogCol ? this.fogCol : "0, 0, 0"});\n`;
-        additionalParameters += `float FOG_START = ${this.fogStart ? this.fogStart + ".0" : "0.0"};\n`;
-        additionalParameters += `float DRAW_DISTANCE = ${this.drawDistance ? this.drawDistance + ".0" : "0.0"};\n`;
+        let tempEnvironmentSettings = new ZSI.ZSIEnvironmentSettings();
+
+        if (this.environmentSettings) tempEnvironmentSettings = this.environmentSettings;
+        // NOTE(quade): would it be preferable to define defaults here instead of in the class itself?
+        //else
+        //{
+        //    tempEnvironmentSettings.ambientLightCol = vec3.create();
+        //    tempEnvironmentSettings.primaryLightCol = vec3.create();
+        //    tempEnvironmentSettings.primaryLightDir = vec3.create();
+        //    tempEnvironmentSettings.secondaryLightCol = vec3.create();
+        //    tempEnvironmentSettings.secondaryLightDir = vec3.create();
+        //    tempEnvironmentSettings.fogCol = vec3.create();
+        //    tempEnvironmentSettings.fogStart = 0.0;
+        //    tempEnvironmentSettings.drawDistance = 0.0;
+        //}
+
+        additionalParameters += `vec3 AMBIENT_LIGHT_COLOR = vec3(${tempEnvironmentSettings.ambientLightCol});\n`;
+        additionalParameters += `vec3 PRIMARY_LIGHT_COLOR = vec3(${tempEnvironmentSettings.primaryLightCol});\n`;
+        additionalParameters += `vec3 PRIMARY_LIGHT_DIRECTION = vec3(${tempEnvironmentSettings.primaryLightDir});\n`;
+        additionalParameters += `vec3 SECONDARY_LIGHT_COLOR = vec3(${tempEnvironmentSettings.secondaryLightCol});\n`;
+        additionalParameters += `vec3 SECONDARY_LIGHT_DIRECTION = vec3(${tempEnvironmentSettings.secondaryLightDir});\n`;
+        additionalParameters += `vec3 FOG_COLOR = vec3(${tempEnvironmentSettings.fogCol});\n`;
+        additionalParameters += `float FOG_START = ${tempEnvironmentSettings.fogStart + ".0"};\n`;
+        additionalParameters += `float DRAW_DISTANCE = ${tempEnvironmentSettings.drawDistance + ".0"};\n`;
 
         program.generateVertexShader(additionalParameters);
 
@@ -1017,44 +991,9 @@ export class CmbRenderer {
             this.materialInstances[i].setLightingEnabled(v);
     }
 
-    public setAmbientColor(color: vec3): void {
+    public setEnvironmentSettings(environmentSettings: ZSI.ZSIEnvironmentSettings): void {
         for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].setAmbientColor(color);
-    }
-
-    public setPrimaryLightColor(color: vec3): void {
-        for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].setPrimaryLightColor(color);
-    }
-
-    public setPrimaryLightDirection(direction: vec3): void {
-        for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].setPrimaryLightDirection(direction);
-    }
-
-    public setSecondaryLightColor(color: vec3): void {
-        for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].setSecondaryLightColor(color);
-    }
-
-    public setSecondaryLightDirection(direction: vec3): void {
-        for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].setSecondaryLightDirection(direction);
-    }
-
-    public setFogColor(color: vec3): void {
-        for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].setFogColor(color);
-    }
-
-    public setFogStart(distance: number): void {
-        for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].setFogStart(distance);
-    }
-
-    public setDrawDistance(distance: number): void {
-        for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].setDrawDistance(distance);
+            this.materialInstances[i].setEnvironmentSettings(environmentSettings);
     }
 
     private updateBoneMatrices(): void {
@@ -1273,92 +1212,15 @@ export class RoomRenderer {
             this.objectRenderers[i].setUVEnabled(v);
     }
 
-    public setAmbientColor(color: vec3): void {
+    public setEnvironmentSettings(environmentSettings: ZSI.ZSIEnvironmentSettings): void {
         if (this.opaqueMesh !== null)
-            this.opaqueMesh.setAmbientColor(color);
+            this.opaqueMesh.setEnvironmentSettings(environmentSettings);
         if (this.transparentMesh !== null)
-            this.transparentMesh.setAmbientColor(color);
+            this.transparentMesh.setEnvironmentSettings(environmentSettings);
         if (this.wMesh !== null)
-            this.wMesh.setAmbientColor(color);
+            this.wMesh.setEnvironmentSettings(environmentSettings);
         for (let i = 0; i < this.objectRenderers.length; i++)
-            this.objectRenderers[i].setAmbientColor(color);
-    }
-
-    public setPrimaryLightColor(color: vec3): void {
-        if (this.opaqueMesh !== null)
-            this.opaqueMesh.setPrimaryLightColor(color);
-        if (this.transparentMesh !== null)
-            this.transparentMesh.setPrimaryLightColor(color);
-        if (this.wMesh !== null)
-            this.wMesh.setPrimaryLightColor(color);
-        for (let i = 0; i < this.objectRenderers.length; i++)
-            this.objectRenderers[i].setPrimaryLightColor(color);
-    }
-
-    public setPrimaryLightDirection(color: vec3): void {
-        if (this.opaqueMesh !== null)
-            this.opaqueMesh.setPrimaryLightDirection(color);
-        if (this.transparentMesh !== null)
-            this.transparentMesh.setPrimaryLightDirection(color);
-        if (this.wMesh !== null)
-            this.wMesh.setPrimaryLightDirection(color);
-        for (let i = 0; i < this.objectRenderers.length; i++)
-            this.objectRenderers[i].setPrimaryLightDirection(color);
-    }
-
-    public setSecondaryLightColor(color: vec3): void {
-        if (this.opaqueMesh !== null)
-            this.opaqueMesh.setSecondaryLightColor(color);
-        if (this.transparentMesh !== null)
-            this.transparentMesh.setSecondaryLightColor(color);
-        if (this.wMesh !== null)
-            this.wMesh.setSecondaryLightColor(color);
-        for (let i = 0; i < this.objectRenderers.length; i++)
-            this.objectRenderers[i].setSecondaryLightColor(color);
-    }
-
-    public setSecondaryLightDirection(color: vec3): void {
-        if (this.opaqueMesh !== null)
-            this.opaqueMesh.setSecondaryLightDirection(color);
-        if (this.transparentMesh !== null)
-            this.transparentMesh.setSecondaryLightDirection(color);
-        if (this.wMesh !== null)
-            this.wMesh.setSecondaryLightDirection(color);
-        for (let i = 0; i < this.objectRenderers.length; i++)
-            this.objectRenderers[i].setSecondaryLightDirection(color);
-    }
-
-    public setFogColor(color: vec3): void {
-        if (this.opaqueMesh !== null)
-            this.opaqueMesh.setFogColor(color);
-        if (this.transparentMesh !== null)
-            this.transparentMesh.setFogColor(color);
-        if (this.wMesh !== null)
-            this.wMesh.setFogColor(color);
-        for (let i = 0; i < this.objectRenderers.length; i++)
-            this.objectRenderers[i].setFogColor(color);
-    }
-
-    public setFogStart(distance: number): void {
-        if (this.opaqueMesh !== null)
-            this.opaqueMesh.setFogStart(distance);
-        if (this.transparentMesh !== null)
-            this.transparentMesh.setFogStart(distance);
-        if (this.wMesh !== null)
-            this.wMesh.setFogStart(distance);
-        for (let i = 0; i < this.objectRenderers.length; i++)
-            this.objectRenderers[i].setFogStart(distance);
-    }
-
-    public setDrawDistance(distance: number): void {
-        if (this.opaqueMesh !== null)
-            this.opaqueMesh.setDrawDistance(distance);
-        if (this.transparentMesh !== null)
-            this.transparentMesh.setDrawDistance(distance);
-        if (this.wMesh !== null)
-            this.wMesh.setDrawDistance(distance);
-        for (let i = 0; i < this.objectRenderers.length; i++)
-            this.objectRenderers[i].setDrawDistance(distance);
+            this.objectRenderers[i].setEnvironmentSettings(environmentSettings);
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {

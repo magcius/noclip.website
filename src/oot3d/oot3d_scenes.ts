@@ -1001,17 +1001,8 @@ class SceneDesc implements Viewer.SceneDesc {
                 }
                 roomRenderer.addToViewRenderer(device, renderer.viewRenderer);
 
-                //roomRenderer.opaqueMesh.ambientLightCol = zsi.environmentSettings[0].ambientLightCol;
-                //roomRenderer.opaqueMesh.ambientLightCol = vec3.fromValues(1, 0, 1);
                 let index = 0;
-                roomRenderer.setAmbientColor(zsi.environmentSettings[index].ambientLightCol);
-                roomRenderer.setPrimaryLightColor(zsi.environmentSettings[index].primaryLightCol);
-                roomRenderer.setPrimaryLightDirection(zsi.environmentSettings[index].primaryLightDir);
-                roomRenderer.setSecondaryLightColor(zsi.environmentSettings[index].secondaryLightCol);
-                roomRenderer.setSecondaryLightDirection(zsi.environmentSettings[index].secondaryLightDir);
-                roomRenderer.setFogColor(zsi.environmentSettings[index].fogCol);
-                roomRenderer.setFogStart(zsi.environmentSettings[index].fogStart);
-                roomRenderer.setDrawDistance(zsi.environmentSettings[index].drawDistance);
+                roomRenderer.setEnvironmentSettings(zsi.environmentSettings[index]);
 
                 renderer.roomRenderers.push(roomRenderer);
 
