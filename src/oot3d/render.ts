@@ -289,6 +289,11 @@ void main() {
 
     vec4 t_ResultColor = t_CmbOut;
 
+    #ifdef USE_LIGHTING
+        float t_FogFactor = clamp((v_DrawDistance - v_Depth) / (v_DrawDistance - v_FogStart), 0.0, 1.0);
+        t_ResultColor.rgb = mix(v_FogColor, t_ResultColor.rgb * v_Lighting, t_FogFactor);
+    #endif
+
     #ifdef USE_VERTEX_NORMAL
         t_ResultColor.rgb = normalize(v_Normal) * 0.5 + 0.5; 
     #endif
@@ -297,11 +302,6 @@ void main() {
         t_ResultColor.r = v_TexCoord0.x;
         t_ResultColor.g = v_TexCoord0.y;
         t_ResultColor.b = 1.0;
-    #endif
-
-    #ifdef USE_LIGHTING
-        float t_FogFactor = clamp((v_DrawDistance - v_Depth) / (v_DrawDistance - v_FogStart), 0.0, 1.0);
-        t_ResultColor.rgb = mix(v_FogColor, t_CmbOut.rgb * v_Lighting, t_FogFactor);
     #endif
 
     gl_FragColor = t_ResultColor;
