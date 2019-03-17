@@ -505,18 +505,6 @@ class MaterialInstance {
         let tempEnvironmentSettings = new ZSI.ZSIEnvironmentSettings();
 
         if (this.environmentSettings) tempEnvironmentSettings = this.environmentSettings;
-        // NOTE(quade): would it be preferable to define defaults here instead of in the class itself?
-        //else
-        //{
-        //    tempEnvironmentSettings.ambientLightCol = vec3.create();
-        //    tempEnvironmentSettings.primaryLightCol = vec3.create();
-        //    tempEnvironmentSettings.primaryLightDir = vec3.create();
-        //    tempEnvironmentSettings.secondaryLightCol = vec3.create();
-        //    tempEnvironmentSettings.secondaryLightDir = vec3.create();
-        //    tempEnvironmentSettings.fogCol = vec3.create();
-        //    tempEnvironmentSettings.fogStart = 0.0;
-        //    tempEnvironmentSettings.drawDistance = 0.0;
-        //}
 
         additionalParameters += `vec3 AMBIENT_LIGHT_COLOR = vec3(${tempEnvironmentSettings.ambientLightCol});\n`;
         additionalParameters += `vec3 PRIMARY_LIGHT_COLOR = vec3(${tempEnvironmentSettings.primaryLightCol});\n`;
