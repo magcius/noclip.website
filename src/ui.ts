@@ -1506,7 +1506,7 @@ class ViewerSettings extends Panel {
     }
 
     private onScrollWheel(): void {
-        this.camSpeedSlider.value = "" + (Number(this.camSpeedSlider.value) + Math.sign(this.viewer.inputManager.dz/4));
+        this.camSpeedSlider.value = "" + (Number(this.camSpeedSlider.value) + Math.sign(this.viewer.inputManager.dz)*4);
         this.updateCameraSpeed();
     }
 
