@@ -95,7 +95,6 @@ layout(row_major, std140) uniform ub_SceneParams {
 
 // Expected to change with each material.
 layout(row_major, std140) uniform ub_MaterialParams {
-    vec4 u_MaterialColor;
     vec4 u_ConstantColor[6];
     Mat4x3 u_TexMtx[3];
 };
@@ -402,8 +401,6 @@ void main() {
     v_Color.rgb = Monochrome(v_Color.rgb);
 #endif
 
-    v_Color *= u_MaterialColor;
-
     v_TexCoord0 = ${this.generateVertexCoord(0)};
     v_TexCoord0.t = 1.0 - v_TexCoord0.t;
 
@@ -588,15 +585,16 @@ class MaterialInstance {
         if (visible) {
             let offs = this.templateRenderInst.getUniformBufferOffset(DMPProgram.ub_MaterialParams);
             const mapped = materialParamsBuffer.mapBufferF32(offs, 4+4*6+4*3*3);
-            if (this.colorAnimators[0]) {
-                this.colorAnimators[0].calcMaterialColor(scratchColor);
-            } else {
-                colorFromRGBA(scratchColor, 1, 1, 1, 1);
-            }
-            offs += fillColor(mapped, offs, scratchColor);
 
-            for (let i = 0; i < 6; i++)
-                offs += fillColor(mapped, offs, this.constantColors[i]);
+            for (let i = 0; i < 6; i++) {
+                if (this.colorAnimators[i]) {
+                    this.colorAnimators[i].calcColor(scratchColor);
+                } else {
+                    colorCopy(scratchColor, this.constantColors[i]);
+                }
+
+                offs += fillColor(mapped, offs, scratchColor);
+            }
 
             let rebindSamplers = false;
             for (let i = 0; i < 3; i++) {

@@ -421,7 +421,7 @@ export class ColorAnimator {
         assert(animEntry.animationType === AnimationType.COLOR);
     }
 
-    public calcMaterialColor(dst: Color): void {
+    public calcColor(dst: Color): void {
         const animFrame = getAnimFrame(this.cmab, this.animationController.getTimeInFrames());
         const r = this.animEntry.tracks[0] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[0], animFrame) : 1;
         const g = this.animEntry.tracks[1] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[1], animFrame) : 1;
@@ -429,13 +429,6 @@ export class ColorAnimator {
         const a = this.animEntry.tracks[3] !== undefined ? sampleAnimationTrack(this.animEntry.tracks[3], animFrame) : 1;
         colorFromRGBA(dst, r, g, b, a);
     }
-}
-
-export function getTextureName(animationController: AnimationController, cmb: CMB, cmab: CMAB | null, material: Material, bindingIndex: number): string {
-    if (cmab !== null) {
-    }
-
-    return cmb.textures[material.textureBindings[bindingIndex].textureIdx].name;
 }
 
 export class TexturePaletteAnimator {
