@@ -1313,9 +1313,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     private setPipeline(pipeline: GfxRenderPipeline): void {
         this._currentPipeline = pipeline as GfxRenderPipelineP_GL;
-        if ((this._currentPipeline as any).debug)
-            debugger;
-
         this._setMegaState(this._currentPipeline.megaState);
 
         // Hotpatch support.

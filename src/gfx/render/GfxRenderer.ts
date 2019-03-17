@@ -470,9 +470,6 @@ export class GfxRenderInstViewRenderer {
             if ((renderInst.getPassMask() & passMask) === 0)
                 continue;
 
-            if (renderInst.parentRenderInst.parentRenderInst.name === 'dg_deku_00/12/dg01_tuta_01_k')
-                (renderInst._pipeline as any).debug = true;
-
             if (currentPipeline !== renderInst._pipeline) {
                 passRenderer.setPipeline(renderInst._pipeline);
                 currentPipeline = renderInst._pipeline;
