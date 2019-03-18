@@ -11,7 +11,7 @@ import AnimationController from '../AnimationController';
 import { mat4, vec3, vec4 } from 'gl-matrix';
 import { GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler, GfxDevice, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxHostAccessPass, GfxRenderPass, GfxTextureDimension, GfxInputState, GfxInputLayout, GfxCompareMode } from '../gfx/platform/GfxPlatform';
 import { fillMatrix4x4, fillVec4, fillColor, fillMatrix4x3 } from '../gfx/helpers/UniformBufferHelpers';
-import { colorNew, colorFromRGBA, Color, colorNewCopy, colorCopy, TransparentBlack } from '../Color';
+import { colorNew, Color, colorNewCopy, colorCopy, TransparentBlack } from '../Color';
 import { getTextureFormatName } from './pica_texture';
 import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
 import { nArray, assert } from '../util';
@@ -256,7 +256,7 @@ uniform sampler2D u_Texture[3];
     vec4 t_CmbIn0, t_CmbIn1, t_CmbIn2;
     vec4 t_CmbOut, t_CmbOutBuffer;
 
-    t_CmbOutBuffer = ${this.generateColor(texEnv.combinerBufferColor)};
+    t_CmbOutBuffer = clamp(${this.generateColor(texEnv.combinerBufferColor)}, vec4(0.0), vec4(1.0));
     `;
         for (let i = 0; i < texEnv.textureCombiners.length; i++)
             S += this.generateTexCombiner(texEnv.textureCombiners[i], i);
@@ -290,7 +290,7 @@ void main() {
 
     #ifdef USE_LIGHTING
         float t_FogFactor = clamp((v_DrawDistance - v_Depth) / (v_DrawDistance - v_FogStart), 0.0, 1.0);
-        t_ResultColor.rgb = mix(v_FogColor, t_ResultColor.rgb * v_Lighting, t_FogFactor);
+        t_ResultColor.rgb = mix(v_FogColor, t_ResultColor.rgb, t_FogFactor);
     #endif
 
     #ifdef USE_VERTEX_NORMAL
@@ -344,7 +344,6 @@ out vec2 v_TexCoord0;
 out vec2 v_TexCoord1;
 out vec2 v_TexCoord2;
 
-out vec3 v_Lighting;
 out vec3 v_FogColor;
 out vec3 v_Normal;
 out float v_Depth;
@@ -393,12 +392,17 @@ void main() {
     v_FogColor = FOG_COLOR;
     v_DrawDistance = DRAW_DISTANCE;
     v_FogStart = FOG_START;
-    v_Lighting = AMBIENT_LIGHT_COLOR * 2.0;
-    v_Lighting += clamp(dot(-a_Normal, PRIMARY_LIGHT_DIRECTION), 0.0, 1.0) * PRIMARY_LIGHT_COLOR;
-    v_Lighting += clamp(dot(-a_Normal, SECONDARY_LIGHT_DIRECTION), 0.0, 1.0) * SECONDARY_LIGHT_COLOR;
 
 #ifdef USE_MONOCHROME_VERTEX_COLOR
     v_Color.rgb = Monochrome(v_Color.rgb);
+#endif
+
+    vec3 t_Lighting = AMBIENT_LIGHT_COLOR * 2.0;
+    t_Lighting += clamp(dot(-a_Normal, PRIMARY_LIGHT_DIRECTION), 0.0, 1.0) * PRIMARY_LIGHT_COLOR;
+    t_Lighting += clamp(dot(-a_Normal, SECONDARY_LIGHT_DIRECTION), 0.0, 1.0) * SECONDARY_LIGHT_COLOR;
+
+#ifdef USE_LIGHTING
+    v_Color *= t_Lighting;
 #endif
 
     v_TexCoord0 = ${this.generateVertexCoord(0)};
@@ -494,8 +498,8 @@ class MaterialInstance {
     private createProgram(): void {
         const program = new OoT3DProgram(this.material, this);
         program.setTexCoordGen(0, 0, 0);
-        program.setTexCoordGen(1, 0, 0);
-        program.setTexCoordGen(2, 0, 0);
+        program.setTexCoordGen(1, 1, 0);
+        program.setTexCoordGen(2, 2, 0);
 
         let additionalParameters = "";
 

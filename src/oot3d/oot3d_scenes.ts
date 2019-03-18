@@ -197,7 +197,8 @@ const enum ActorId {
     En_Dekubaba            = 0x0055,
     Bg_Ddan_Jd             = 0x0058,
     Bg_Breakwall           = 0x0059,
-    Bg_Ddan_kd             = 0x005C,
+    Bg_Ddan_Kd             = 0x005C,
+    Door_Warp1             = 0x005D,
     Obj_Syokudai           = 0x005E,
     En_Dekunuts            = 0x0060,
     Bg_Mizu_Movebg         = 0x0064,
@@ -217,16 +218,23 @@ const enum ActorId {
     En_Sw                  = 0x0095,
     En_Du                  = 0x0098,
     Door_Ana               = 0x009B,
+    Demo_Du                = 0x00A8,
     Demo_Im                = 0x00A9,
     En_Heishi2             = 0x00B3,
     En_Brob                = 0x00B6,
     En_Tana                = 0x00C2,
+    En_Nb                  = 0x00C3,
     Bg_Bdan_Objects        = 0x00C8,
+    Demo_Sa                = 0x00C9,
     En_In                  = 0x00CB,
+    En_Ru2                 = 0x00D2,
     En_Ma2                 = 0x00D9,
     Bg_Mori_Hashira4       = 0x00E3,
     Bg_Mori_Idomizu        = 0x00E4,
+    Bg_Spot16_Doughnut     = 0x00E5,
     Bg_Bdan_Switch         = 0x00E6,
+    En_Ma1                 = 0x00E7,
+    Fishing                = 0x00FE,
     Obj_Oshihiki           = 0x00FF,
     Bg_Spot01_Fusya        = 0x0102,
     Bg_Spot01_Idohashira   = 0x0103,
@@ -249,6 +257,7 @@ const enum ActorId {
     En_Sa                  = 0x0146,
     En_Wonder_Talk         = 0x0147,
     En_Ds                  = 0x0149,
+    En_Mk                  = 0x014A,
     En_Owl                 = 0x014D,
     Bg_Spot18_Basket       = 0x015C,
     En_Siofuki             = 0x015F,
@@ -256,6 +265,7 @@ const enum ActorId {
     En_Ani                 = 0x0167,
     Elf_Msg2               = 0x0173,
     En_Heishi4             = 0x0178,
+    En_Wonder_Talk2        = 0x0185,
     Bg_Spot05_Soko         = 0x018D,
     En_Hintnuts            = 0x0192,
     En_Shopnuts            = 0x0195,
@@ -340,7 +350,7 @@ function isAdultDungeon(scene: Scene) {
 }
 
 class SceneDesc implements Viewer.SceneDesc {
-    constructor(public id: string, public name: string) {
+    constructor(public id: string, public name: string, public setupIndex: number = -1) {
     }
 
     public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
@@ -352,7 +362,7 @@ class SceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private spawnActorForRoom(device: GfxDevice, abortSignal: AbortSignal, scene: Scene, renderer: OoT3DRenderer, roomRenderer: RoomRenderer, actor: ZSI.Actor, environmentSettings: ZSI.ZSIEnvironmentSettings): void {
+    private spawnActorForRoom(device: GfxDevice, abortSignal: AbortSignal, scene: Scene, renderer: OoT3DRenderer, roomRenderer: RoomRenderer, environmentSettings: ZSI.ZSIEnvironmentSettings, actor: ZSI.Actor): void {
         function fetchArchive(archivePath: string): Progressable<ZAR.ZAR> { 
             return renderer.modelCache.fetchArchive(`${pathBase}/actor/${archivePath}`, abortSignal);
         }
@@ -445,13 +455,15 @@ class SceneDesc implements Viewer.SceneDesc {
                 });
             } else if (whichShopkeeper === 0x01) { // Kakariko Potion Shopkeeper
                 // TODO(jstpierre)
-            } else if (whichShopkeeper === 0x03) { // Market Potion Shopkeeper
-                // TODO(jstpierre)
             } else if (whichShopkeeper === 0x02) { // Bombchu Shopkeeper
                 fetchArchive(`zelda_rs.zar`).then((zar) => {
                     const b = buildModel(zar, `model/bomchumaster.cmb`);
                     b.bindCSAB(parseCSAB(zar, `anim/rs_matsu.csab`));
                 });
+            } else if (whichShopkeeper === 0x03) { // Market Potion Shopkeeper
+                // TODO(jstpierre)
+            } else if (whichShopkeeper === 0x04) { // Bazaar Shopkeeper
+                // TODO(jstpierre)
             } else if (whichShopkeeper === 0x07) { // Zora Shopkeeper
                 fetchArchive(`zelda_masterzoora.zar`).then((zar) => {
                     const b = buildModel(zar, `model/zorapeople.cmb`);
@@ -468,6 +480,7 @@ class SceneDesc implements Viewer.SceneDesc {
                     b.bindCSAB(parseCSAB(zar, `anim/os_matsu.csab`));
                 });
             } else {
+                console.log(whichShopkeeper);
                 throw "Starschulz";
             }
         }    
@@ -625,12 +638,12 @@ class SceneDesc implements Viewer.SceneDesc {
             b.bindCMAB(parseCMAB(zar, `misc/m_WusoR_0d_model.cmab`));
         });
         else if (actor.actorId === ActorId.En_Goroiwa) fetchArchive(`zelda_goroiwa.zar`).then((zar) => buildModel(zar, `model/l_j_goroiwa_model.cmb`, 0.1));
-        else if (actor.actorId === ActorId.En_Siofuki) fetchArchive(`zelda_siofuki.zar`).then((zar) => buildModel(zar, `model/efc_tw_whirlpool_modelT.cmb`, 0.1));
+        else if (actor.actorId === ActorId.En_Siofuki) fetchArchive(`zelda_siofuki.zar`).then((zar) => buildModel(zar, `model/efc_tw_whirlpool_modelT.cmb`, 0.1).bindCMAB(parseCMAB(zar, `misc/efc_tw_whirlpool_modelT.cmab`)));
         else if (actor.actorId === ActorId.Bg_Mizu_Movebg) fetchArchive(`zelda_mizu_objects.zar`).then((zar) => buildModel(zar, `model/m_WPathFloat_model.cmb`, 0.1));
         else if (actor.actorId === ActorId.Bg_Ddan_Jd) fetchArchive(`zelda_ddan_objects.zar`).then((zar) => buildModel(zar, `model/ddanh_jd_model.cmb`, 0.1));
         else if (actor.actorId === ActorId.Bg_Dodoago) fetchArchive(`zelda_ddan_objects.zar`).then((zar) => buildModel(zar, `model/ddanh_ago_model.cmb`, 0.1));
         else if (actor.actorId === ActorId.En_Am) fetchArchive('zelda_am.zar').then((zar) => buildModel(zar, `model/amos.cmb`, 0.015));
-        else if (actor.actorId === ActorId.Bg_Ddan_kd) fetchArchive(`zelda_ddan_objects.zar`).then((zar) => buildModel(zar, `model/ddanh_kaidan_model.cmb`, 0.1));
+        else if (actor.actorId === ActorId.Bg_Ddan_Kd) fetchArchive(`zelda_ddan_objects.zar`).then((zar) => buildModel(zar, `model/ddanh_kaidan_model.cmb`, 0.1));
         else if (actor.actorId === ActorId.En_Trap) fetchArchive(`dk_trap.zar`).then((zar) => buildModel(zar, `model/trap_model.cmb`, 0.1));
         else if (actor.actorId === ActorId.En_Vm) fetchArchive('zelda_vm.zar').then((zar) => buildModel(zar, `model/beamos.cmb`));
         else if (actor.actorId === ActorId.En_Brob) fetchArchive('zelda_brob.zar').then((zar) => buildModel(zar, `model/brob.cmb`, 0.01));
@@ -648,6 +661,10 @@ class SceneDesc implements Viewer.SceneDesc {
             const b = buildModel(zar, `model/ingo.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/in_shigoto.csab`)); 
         });
+        else if (actor.actorId === ActorId.En_Ma1) fetchArchive(`zelda_ma1.zar`).then((zar) => {
+            const b = buildModel(zar, `model/childmalon.cmb`);
+            b.bindCSAB(parseCSAB(zar, `anim/ma1_matsu.csab`));
+        });
         else if (actor.actorId === ActorId.En_Ma2) fetchArchive(`zelda_ma2.zar`).then((zar) => {
             const b = buildModel(zar, `model/malon.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/ma2_shigoto.csab`));
@@ -663,6 +680,10 @@ class SceneDesc implements Viewer.SceneDesc {
         else if (actor.actorId === ActorId.En_Ds) fetchArchive(`zelda_ds.zar`).then((zar) => {
             const b = buildModel(zar, `model/magicmaster.cmb`, 0.013);
             b.bindCSAB(parseCSAB(zar, `anim/ds_matsu.csab`));
+        });
+        else if (actor.actorId === ActorId.En_Mk) fetchArchive(`zelda_mk.zar`).then((zar) => {
+            const b = buildModel(zar, `model/lakedoctor.cmb`);
+            b.bindCSAB(parseCSAB(zar, `anim/mk_matsu.csab`));
         });
         else if (actor.actorId === ActorId.En_Niw_Lady) fetchArchive(`zelda_ane.zar`).then((zar) => {
             const b = buildModel(zar, `model/chickenlady.cmb`);
@@ -743,32 +764,55 @@ class SceneDesc implements Viewer.SceneDesc {
             b.bindCSAB(parseCSAB(zar, `anim/dnu_wait.csab`));
         });
         else if (actor.actorId === ActorId.Obj_Oshihiki) fetchArchive(`zelda_dangeon_keep.zar`).then((zar) => {
-            // TODO(jstpierre): dod_Sa vs. dod_Sb? frs_Ma vs. frs_Mb? wat_Ma vs. wat_Mb?
-            if (scene === Scene.DekuTree)
-                buildModel(zar, `model/brick_15_deku_Sa_model.cmb`, 0.1);
-            else if (scene === Scene.DodongosCavern)
-                buildModel(zar, `model/brick_15_dod_Sa_model.cmb`, 0.1);
-            else if (scene === Scene.ForestTemple)
-                buildModel(zar, `model/brick_15_frs_Ma_model.cmb`, 0.1);
-            else if (scene === Scene.FireTemple)
-                buildModel(zar, `model/brick_15_fire_Sa_model.cmb`, 0.1);
-            else if (scene === Scene.WaterTemple)
-                buildModel(zar, `model/brick_15_wat_Ma_model.cmb`, 0.1);
-            else if (scene === Scene.SpiritTemple)
-                buildModel(zar, `model/brick_15_soul_Sa_model.cmb`, 0.1);
-            else if (scene === Scene.ShadowTemple)
-                buildModel(zar, `model/brick_15_dark_Ma_model.cmb`, 0.1);
-            else if (scene === Scene.GanonsTower) // TODO(jstpierre): What does Ganon's Tower use?
-                buildModel(zar, `model/brick_15_dark_Ma_model.cmb`, 0.1);
-            else if (scene === Scene.GerudoTrainingGround)
-                buildModel(zar, `model/brick_15_gerd_La_model.cmb`, 0.1);
-            else
+            let scale = 0.1;
+            const whichScale = actor.variable & 0x03;
+
+            if (whichScale === 0x00)
+                scale = 60/600;
+            else if (whichScale === 0x01)
+                scale = 100/600;
+            else if (whichScale === 0x02)
+                scale = 120/600;
+            else if (whichScale === 0x03)
+                scale = 200/600;
+
+            const whichColor = (actor.variable >>> 6) & 0x03;
+
+            if (scene === Scene.DekuTree) {
+                buildModel(zar, `model/brick_15_deku_Sa_model.cmb`, scale);
+            } else if (scene === Scene.DodongosCavern) {
+                if (whichColor === 0x00)
+                    buildModel(zar, `model/brick_15_dod_Sa_model.cmb`, scale);
+                else if (whichColor === 0x01)
+                    buildModel(zar, `model/brick_15_dod_Sb_model.cmb`, scale);
+            } else if (scene === Scene.ForestTemple) {
+                if (whichColor === 0x00)
+                    buildModel(zar, `model/brick_15_frs_Ma_model.cmb`, scale);
+                else if (whichColor === 0x01)
+                    buildModel(zar, `model/brick_15_frs_Mb_model.cmb`, scale);
+            } else if (scene === Scene.FireTemple) {
+                buildModel(zar, `model/brick_15_fire_Sa_model.cmb`, scale);
+            } else if (scene === Scene.WaterTemple) {
+                buildModel(zar, `model/brick_15_wat_Ma_model.cmb`, scale);
+            } else if (scene === Scene.SpiritTemple) {
+                if (whichScale === 0x00)
+                    buildModel(zar, `model/brick_15_soul_Sa_model.cmb`, scale);
+                else if (whichScale === 0x03)
+                    buildModel(zar, `model/brick_15_soul_La_model.cmb`, scale);
+            } else if (scene === Scene.ShadowTemple) {
+                buildModel(zar, `model/brick_15_dark_Ma_model.cmb`, scale);
+            } else if (scene === Scene.GanonsTower) {
+                // TODO(jstpierre): What does Ganon's Tower use?
+                buildModel(zar, `model/brick_15_dark_Ma_model.cmb`, scale);
+            } else if (scene === Scene.GerudoTrainingGround) {
+                buildModel(zar, `model/brick_15_gerd_La_model.cmb`, scale);
+            } else
                 throw "whoops";
         });
         else if (actor.actorId === ActorId.Obj_Switch) fetchArchive(`zelda_dangeon_keep.zar`).then((zar) => {
             // TODO(jstpierre): What determines the diff. between the yellow and silver eye switches?
             // Probably just child vs. adult scene?
-            const whichSwitch = actor.variable & 0x0F;
+            const whichSwitch = actor.variable & 0x07;
             if (whichSwitch === 0x00) // Floor Switch
                 buildModel(zar, `model/switch_1_model.cmb`, 0.1);
             else if (whichSwitch === 0x01) // Rusted Floor Switch
@@ -914,7 +958,11 @@ class SceneDesc implements Viewer.SceneDesc {
         });
         else if (actor.actorId === ActorId.Demo_Im) fetchArchive(`zelda_im.zar`).then((zar) => {
             const b = buildModel(zar, `model/impa.cmb`, 0.01);
-            b.bindCSAB(parseCSAB(zar, `anim/impa_matsu.csab`)); 
+            b.bindCSAB(parseCSAB(zar, `anim/impa_matsu.csab`));
+        });
+        else if (actor.actorId === ActorId.Demo_Du) fetchArchive(`zelda_du.zar`).then((zar) => {
+            const b = buildModel(zar, `model/darunia.cmb`, 0.01);
+            b.bindCSAB(parseCSAB(zar, `anim/du_matsu.csab`));
         });
         else if (actor.actorId === ActorId.En_Zl4) fetchArchive(`zelda_zl4.zar`).then((zar) => {
             const b = buildModel(zar, `model/childzelda.cmb`, 0.01);
@@ -948,15 +996,45 @@ class SceneDesc implements Viewer.SceneDesc {
             const b = buildModel(zar, `model/bosshead.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/dk1_matsu.csab`));
         });
+        else if (actor.actorId === ActorId.En_Ru2) fetchArchive(`zelda_ru2.zar`).then((zar) => {
+            const b = buildModel(zar, `model/ruto.cmb`);
+            b.bindCSAB(parseCSAB(zar, `anim/ru2_matsu.csab`));
+        });
+        else if (actor.actorId === ActorId.Door_Warp1) fetchArchive(`zelda_warp1.zar`).then((zar) => {
+            const b = buildModel(zar, `model/warp_2_modelT.cmb`, 1);
+            b.bindCMAB(parseCMAB(zar, `misc/warp_2_modelT_open.cmab`));
+        });
+        else if (actor.actorId === ActorId.En_Nb) fetchArchive(`zelda_nb.zar`).then((zar) => {
+            const b = buildModel(zar, `model/nabooru.cmb`);
+            b.bindCSAB(parseCSAB(zar, `anim/nb_matsu.csab`));
+        });
+        else if (actor.actorId === ActorId.Demo_Sa) fetchArchive(`zelda_sa.zar`).then((zar) => {
+            const b = buildModel(zar, `model/saria.cmb`);
+            b.bindCSAB(parseCSAB(zar, `anim/sa_matsu.csab`));
+        });
+        else if (actor.actorId === ActorId.Bg_Spot16_Doughnut) fetchArchive(`zelda_efc_doughnut.zar`).then((zar) => {
+            const b = buildModel(zar, `model/doughnut_aya_modelT.cmb`, 0.1);
+            b.bindCMAB(parseCMAB(zar, `misc/doughnut_aya_modelT.cmab`));
+        });
+        else if (actor.actorId === ActorId.Fishing) fetchArchive(`zelda_fishing.zar`).then((zar) => {
+            const whichModel = actor.variable;
+            if (whichModel === 0x0000) {
+                const b = buildModel(zar, `model/fishmaster.cmb`);
+                b.bindCSAB(parseCSAB(zar, `anim/fs_matsu.csab`));
+            } else {
+                console.log(`Unknown fishing model ${whichModel}`);
+            }
+        });
         // Navi message, doesn't have a visible actor.
         else if (actor.actorId === ActorId.Elf_Msg) return;
         else if (actor.actorId === ActorId.Elf_Msg2) return;
         else if (actor.actorId === ActorId.En_Wonder_Talk) return;
+        else if (actor.actorId === ActorId.En_Wonder_Talk2) return;
         // Ambient sound effects
         else if (actor.actorId === ActorId.En_River_Sound) return;
         // Invisible item spawn
         else if (actor.actorId === ActorId.En_Wonder_Item) return;
-        else console.warn(`Unknown actor ${hexzero(actor.actorId, 4)}`);
+        else console.warn(`Unknown actor ${hexzero(actor.actorId, 4)} / ${hexzero(actor.variable, 4)}`);
     }
 
     private createSceneFromData(device: GfxDevice, abortSignal: AbortSignal, zarBuffer: ArrayBufferSlice, zsiBuffer: ArrayBufferSlice): Progressable<Viewer.SceneGfx> {
@@ -968,6 +1046,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
         const zsi = ZSI.parseScene(zsiBuffer);
         assert(zsi.rooms !== null);
+        (renderer as any).zsi = zsi;
 
         // TODO(jstpierre): Fix this.
         const scene = chooseSceneFromId(this.id);
@@ -983,8 +1062,13 @@ class SceneDesc implements Viewer.SceneDesc {
         return modelCache.waitForLoad().then(() => {
             for (let i = 0; i < roomZSINames.length; i++) {
                 const roomSetups = ZSI.parseRooms(modelCache.getFileData(roomZSINames[i]));
-                // Pull out the first mesh we can find.
-                const roomSetup = roomSetups.find((roomSetup) => roomSetup.mesh !== null);
+
+                let roomSetup: ZSI.ZSIRoomSetup;
+                if (this.setupIndex === -1)
+                    roomSetup = roomSetups.find((setup) => setup.mesh !== null);
+                else
+                    roomSetup = roomSetups[this.setupIndex];
+
                 assert(roomSetup.mesh !== null);
                 const filename = roomZSINames[i].split('/').pop();
                 const roomRenderer = new RoomRenderer(device, textureHolder, roomSetup.mesh, filename);
@@ -999,13 +1083,13 @@ class SceneDesc implements Viewer.SceneDesc {
                 }
                 roomRenderer.addToViewRenderer(device, renderer.viewRenderer);
 
-                let index = 0;
-                roomRenderer.setEnvironmentSettings(zsi.environmentSettings[index]);
+                const envIndex = 0;
+                roomRenderer.setEnvironmentSettings(zsi.environmentSettings[envIndex]);
 
                 renderer.roomRenderers.push(roomRenderer);
 
-                for (let i = 0; i < roomSetup.actors.length; i++)
-                    this.spawnActorForRoom(device, abortSignal, scene, renderer, roomRenderer, roomSetup.actors[i], zsi.environmentSettings[index]);
+                for (let j = 0; j < roomSetup.actors.length; j++)
+                    this.spawnActorForRoom(device, abortSignal, scene, renderer, roomRenderer, zsi.environmentSettings[envIndex], roomSetup.actors[j]);
             }
 
             return modelCache.waitForLoad().then(() => {

@@ -253,8 +253,9 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
     const textureCombinerSettingsTableOffs = offs + (materialCount * materialDataSize);
 
     for (let i = 0; i < materialCount; i++) {
-        const numTextureBindings = view.getUint16(offs + 0x0C, true);
-        const numTextureMatrices = view.getUint16(offs + 0x0E, true);
+        const cullModeFlags = view.getUint8(offs + 0x02);
+        assert(cullModeFlags === 0x00 || cullModeFlags === 0x01);
+        const cullMode = cullModeFlags === 0x01 ? GfxCullMode.BACK : GfxCullMode.NONE;
 
         let bindingOffs = offs + 0x10;
         const textureBindings: TextureBinding[] = [];
@@ -429,7 +430,7 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
             ],
             depthCompare: depthTestFunction,
             depthWrite: depthWriteEnabled,
-            cullMode: GfxCullMode.BACK,
+            cullMode,
         });
 
         const combinerBufferColor = colorNew(bufferColorR, bufferColorG, bufferColorB, bufferColorA);
@@ -568,7 +569,7 @@ function readMshsChunk(cmb: CMB, buffer: ArrayBufferSlice): void {
     let idx = 0x10;
     for (let i = 0; i < count; i++) {
         const mesh = new Mesh();
-        mesh.sepdIdx = view.getUint16(idx, true);
+        mesh.sepdIdx = view.getUint16(idx + 0x00, true);
         mesh.matsIdx = view.getUint8(idx + 0x02);
         cmb.meshs.push(mesh);
 
@@ -638,17 +639,17 @@ function readPrmsChunk(cmb: CMB, buffer: ArrayBufferSlice): Prms {
     assert(boneTableCount < 0x10);
     const boneTable = new Uint16Array(boneTableCount);
 
-    // This is likely an array of primitives in the set, but 3DS models are probably
-    // rarely enough to over the bone table limit...
-    const prmOffs = view.getUint32(0x14, true);
-
-    const prm = readPrmChunk(cmb, buffer.slice(prmOffs));
-
     let boneTableIdx = view.getUint32(0x10, true);
     for (let i = 0; i < boneTableCount; i++) {
         boneTable[i] = view.getUint16(boneTableIdx, true);
         boneTableIdx += 0x02;
     }
+
+    // This is likely an array of primitives in the set, but 3DS models are probably
+    // rarely enough to over the bone table limit...
+    const prmOffs = view.getUint32(0x14, true);
+
+    const prm = readPrmChunk(cmb, buffer.slice(prmOffs));
 
     return { prm, skinningMode, boneTable };
 }
@@ -723,7 +724,6 @@ function readSepdChunk(cmb: CMB, buffer: ArrayBufferSlice): Sepd {
 
     // take you to the next dimension, the
     sepd.boneDimension = view.getUint16(sepdArrIdx + 0x00, true);
-
     sepdArrIdx += 0x04;
 
     for (let i = 0; i < count; i++) {
