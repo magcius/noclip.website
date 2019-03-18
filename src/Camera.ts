@@ -215,9 +215,10 @@ export function computeScreenSpaceProjectionFromWorldSpaceAABB(screenSpaceProjec
 export interface CameraController {
     camera: Camera;
     forceUpdate: boolean;
-    setKeyMoveSpeed(speed: number): void;
     cameraUpdateForced(): void;
     update(inputManager: InputManager, dt: number): boolean;
+    getKeyMoveSpeed(): number;
+    setKeyMoveSpeed(speed: number): void;
 }
 
 export interface CameraControllerClass {
@@ -236,6 +237,7 @@ const vec3Zero = [0, 0, 0];
 export class FPSCameraController implements CameraController {
     public camera: Camera;
     public forceUpdate: boolean = false;
+    public onkeymovespeed: () => void = () => {};
 
     private keyMovement = vec3.create();
     private mouseMovement = vec3.create();
@@ -257,6 +259,10 @@ export class FPSCameraController implements CameraController {
 
     public setKeyMoveSpeed(speed: number): void {
         this.keyMoveSpeed = speed;
+    }
+
+    public getKeyMoveSpeed(): number {
+        return this.keyMoveSpeed;
     }
 
     public update(inputManager: InputManager, dt: number): boolean {
@@ -372,6 +378,7 @@ export class FPSCameraController implements CameraController {
 export class OrbitCameraController implements CameraController {
     public camera: Camera;
     public forceUpdate: boolean = false;
+    public onkeymovespeed: () => void = () => {};
 
     public x: number = 0.15;
     public y: number = 0.35;
@@ -396,6 +403,10 @@ export class OrbitCameraController implements CameraController {
     }
 
     public setKeyMoveSpeed(speed: number): void {
+    }
+
+    public getKeyMoveSpeed(): number {
+        return 1;
     }
 
     public update(inputManager: InputManager, dt: number): boolean {

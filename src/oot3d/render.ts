@@ -11,7 +11,7 @@ import AnimationController from '../AnimationController';
 import { mat4, vec3, vec4 } from 'gl-matrix';
 import { GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler, GfxDevice, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxHostAccessPass, GfxRenderPass, GfxTextureDimension, GfxInputState, GfxInputLayout, GfxCompareMode } from '../gfx/platform/GfxPlatform';
 import { fillMatrix4x4, fillVec4, fillColor, fillMatrix4x3 } from '../gfx/helpers/UniformBufferHelpers';
-import { colorNew, colorFromRGBA, Color, colorNewCopy, colorCopy } from '../Color';
+import { colorNew, Color, colorNewCopy, colorCopy, TransparentBlack } from '../Color';
 import { getTextureFormatName } from './pica_texture';
 import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
 import { nArray, assert } from '../util';
@@ -95,7 +95,6 @@ layout(row_major, std140) uniform ub_SceneParams {
 
 // Expected to change with each material.
 layout(row_major, std140) uniform ub_MaterialParams {
-    vec4 u_MaterialColor;
     vec4 u_ConstantColor[6];
     Mat4x3 u_TexMtx[3];
 };
@@ -257,7 +256,7 @@ uniform sampler2D u_Texture[3];
     vec4 t_CmbIn0, t_CmbIn1, t_CmbIn2;
     vec4 t_CmbOut, t_CmbOutBuffer;
 
-    t_CmbOutBuffer = ${this.generateColor(texEnv.combinerBufferColor)};
+    t_CmbOutBuffer = clamp(${this.generateColor(texEnv.combinerBufferColor)}, vec4(0.0), vec4(1.0));
     `;
         for (let i = 0; i < texEnv.textureCombiners.length; i++)
             S += this.generateTexCombiner(texEnv.textureCombiners[i], i);
@@ -291,7 +290,7 @@ void main() {
 
     #ifdef USE_LIGHTING
         float t_FogFactor = clamp((v_DrawDistance - v_Depth) / (v_DrawDistance - v_FogStart), 0.0, 1.0);
-        t_ResultColor.rgb = mix(v_FogColor, t_ResultColor.rgb * v_Lighting, t_FogFactor);
+        t_ResultColor.rgb = mix(v_FogColor, t_ResultColor.rgb, t_FogFactor);
     #endif
 
     #ifdef USE_VERTEX_NORMAL
@@ -345,7 +344,6 @@ out vec2 v_TexCoord0;
 out vec2 v_TexCoord1;
 out vec2 v_TexCoord2;
 
-out vec3 v_Lighting;
 out vec3 v_FogColor;
 out vec3 v_Normal;
 out float v_Depth;
@@ -394,15 +392,18 @@ void main() {
     v_FogColor = FOG_COLOR;
     v_DrawDistance = DRAW_DISTANCE;
     v_FogStart = FOG_START;
-    v_Lighting = AMBIENT_LIGHT_COLOR * 2.0;
-    v_Lighting += clamp(dot(-a_Normal, PRIMARY_LIGHT_DIRECTION), 0.0, 1.0) * PRIMARY_LIGHT_COLOR;
-    v_Lighting += clamp(dot(-a_Normal, SECONDARY_LIGHT_DIRECTION), 0.0, 1.0) * SECONDARY_LIGHT_COLOR;
 
 #ifdef USE_MONOCHROME_VERTEX_COLOR
     v_Color.rgb = Monochrome(v_Color.rgb);
 #endif
 
-    v_Color *= u_MaterialColor;
+#ifdef USE_LIGHTING
+    vec3 t_Lighting = AMBIENT_LIGHT_COLOR * 2.0;
+    t_Lighting += clamp(dot(-a_Normal, PRIMARY_LIGHT_DIRECTION), 0.0, 1.0) * PRIMARY_LIGHT_COLOR;
+    t_Lighting += clamp(dot(-a_Normal, SECONDARY_LIGHT_DIRECTION), 0.0, 1.0) * SECONDARY_LIGHT_COLOR;
+
+    v_Color.rgb *= t_Lighting;
+#endif
 
     v_TexCoord0 = ${this.generateVertexCoord(0)};
     v_TexCoord0.t = 1.0 - v_TexCoord0.t;
@@ -497,8 +498,8 @@ class MaterialInstance {
     private createProgram(): void {
         const program = new OoT3DProgram(this.material, this);
         program.setTexCoordGen(0, 0, 0);
-        program.setTexCoordGen(1, 0, 0);
-        program.setTexCoordGen(2, 0, 0);
+        program.setTexCoordGen(1, 1, 0);
+        program.setTexCoordGen(2, 2, 0);
 
         let additionalParameters = "";
 
@@ -588,15 +589,16 @@ class MaterialInstance {
         if (visible) {
             let offs = this.templateRenderInst.getUniformBufferOffset(DMPProgram.ub_MaterialParams);
             const mapped = materialParamsBuffer.mapBufferF32(offs, 4+4*6+4*3*3);
-            if (this.colorAnimators[0]) {
-                this.colorAnimators[0].calcMaterialColor(scratchColor);
-            } else {
-                colorFromRGBA(scratchColor, 1, 1, 1, 1);
-            }
-            offs += fillColor(mapped, offs, scratchColor);
 
-            for (let i = 0; i < 6; i++)
-                offs += fillColor(mapped, offs, this.constantColors[i]);
+            for (let i = 0; i < 6; i++) {
+                if (this.colorAnimators[i]) {
+                    this.colorAnimators[i].calcColor(scratchColor);
+                } else {
+                    colorCopy(scratchColor, this.constantColors[i]);
+                }
+
+                offs += fillColor(mapped, offs, scratchColor);
+            }
 
             let rebindSamplers = false;
             for (let i = 0; i < 3; i++) {
@@ -1093,12 +1095,14 @@ export class RoomRenderer {
             textureHolder.addTextures(device, mesh.opaque.textures);
             this.opaqueData = new CmbData(device, mesh.opaque);
             this.opaqueMesh = new CmbRenderer(device, textureHolder, this.opaqueData, `${name} Opaque`);
+            this.opaqueMesh.setConstantColor(1, TransparentBlack);
         }
 
         if (mesh.transparent !== null) {
             textureHolder.addTextures(device, mesh.transparent.textures);
             this.transparentData = new CmbData(device, mesh.transparent);
             this.transparentMesh = new CmbRenderer(device, textureHolder, this.transparentData, `${name} Transparent`);
+            this.transparentMesh.setConstantColor(1, TransparentBlack);
         }
     }
 

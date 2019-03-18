@@ -29,6 +29,8 @@ export class ZSIEnvironmentSettings {
     public fogCol: vec3 = vec3.create();
     public fogStart: number = 0.0;
     public drawDistance: number = 0.0;
+    public fogMin: number = 0.0;
+    public fogMax: number = 0.0;
 }
 
 // Subset of Z64 command types.
@@ -93,15 +95,39 @@ function readEnvironmentSettings(version: Version, buffer: ArrayBufferSlice, nEn
     const view = buffer.createDataView();
     const environmentSettings: ZSIEnvironmentSettings[] = [];
 
-    offs += 0x0A;
-
-    for (let i = 0; i < 1; i++) {
+    for (let i = 0; i < nEnvironmentSettings; i++) {
         let setting = new ZSIEnvironmentSettings;
 
         const colSize = 0x03;
         const dirSize = 0x03;
-        const fogSize = 0x02;
-        const distanceSize = 0x02;
+        const fogSize = 0x04;
+        const distanceSize = 0x04;
+
+        console.log(offs.toString(16));
+
+        const drawDistance = view.getFloat32(offs + 0x00, true);
+        setting.drawDistance = drawDistance;
+        console.log("drawDistance " + drawDistance);
+        offs += distanceSize;
+
+        const fogStart = view.getFloat32(offs + 0x00, true);
+        setting.fogStart = fogStart;
+        console.log("fogStart " + fogStart);
+        offs += fogSize;
+
+        const mysteryValue = view.getUint16(offs);
+        console.log("mystery value " + mysteryValue.toString(16));
+        console.log("mystery as int " + mysteryValue);
+        const mysteryA = view.getUint8(offs + 0x00);
+        setting.fogMin = mysteryA / 255.0;
+        const mysteryB = view.getUint8(offs + 0x01);
+        setting.fogMax = mysteryB / 255.0;
+        console.log("mystery value A " + mysteryA.toString(16));
+        console.log("mystery value B " + mysteryB.toString(16));
+        console.log("fogMin " + setting.fogMin);
+        console.log("fogMax " + setting.fogMax);
+
+        offs += 0x02;
         
         const ambientColR = view.getUint8(offs + 0x00) / 255.0;
         const ambientColG = view.getUint8(offs + 0x01) / 255.0;
@@ -138,26 +164,6 @@ function readEnvironmentSettings(version: Version, buffer: ArrayBufferSlice, nEn
         const fogColB = view.getUint8(offs + 0x02) / 255.0;
         setting.fogCol = vec3.fromValues(fogColR, fogColG, fogColB);
         offs += colSize;
-
-        if (view.byteLength > offs)
-        {
-            const fogStart = view.getUint16(offs + 0x00) & 0x3FF;
-            setting.fogStart = fogStart;
-            offs += fogSize;
-    
-            const drawDistance = view.getUint16(offs + 0x00);
-            setting.drawDistance = drawDistance;
-            offs += distanceSize;
-        }
-        else
-        {
-            // HACK(quade): in some scenes, our offset goes out of bounds when reading these
-            // for now, this prevents the exception
-            setting.fogStart = 0.0;
-            setting.drawDistance = 4000.0;
-        }
-
-        offs += 0x5A;
 
         environmentSettings.push(setting);
     }
