@@ -383,8 +383,8 @@ export abstract class ScrollSelect implements Widget {
         for (let i = 0; i < this.getNumItems(); i++) {
             const outer = this.getOuterForIndex(i);
 
-            const selector = outer.querySelector('.selector') as HTMLElement;
-            if (!selector)
+            const selector = outer.firstElementChild as HTMLElement;
+            if (!selector.classList.contains('selector'))
                 continue;
 
             const flair = flairs.find((flair) => flair.index === i);

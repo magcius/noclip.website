@@ -4,7 +4,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { readString, assert } from "../util";
 import { mat4 } from "gl-matrix";
 import { Color, colorFromRGBA } from "../Color";
-import { Texture, TextureLevel, Version, calcTexMtx, Material, CMB } from "./cmb";
+import { Texture, TextureLevel, Version, calcTexMtx } from "./cmb";
 import { decodeTexture, computeTextureByteSize } from "./pica_texture";
 import { getPointHermite } from "../Spline";
 import { TextureMapping } from "../TextureHolder";

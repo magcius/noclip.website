@@ -1,8 +1,10 @@
+// Misc utilities to help me debug various issues. Mostly garbage.
+
 import { AABB } from "./Geometry";
 import { Color, Magenta, colorToCSS } from "./Color";
 import { Camera, divideByW, ScreenSpaceProjection } from "./Camera";
 import { vec4, mat4, vec3 } from "gl-matrix";
-import { nArray } from "./util";
+import { nArray, assert } from "./util";
 
 export function stepF(f: (t: number) => number, maxt: number, step: number, callback: (t: number, v: number) => void) {
     for (let t = 0; t < maxt; t += step) {
@@ -16,14 +18,56 @@ export class Graph {
     public minv: number = undefined;
     public maxv: number = undefined;
     public ctx: CanvasRenderingContext2D;
+    public mx = 0;
+    public my = 0;
 
     constructor(ctx: CanvasRenderingContext2D) {
         this.ctx = ctx;
+        this.ctx.canvas.onmousemove = (e) => {
+            this.mx = e.offsetX;
+            this.my = e.offsetY;
+        };
     }
 
-    public graphF(color: string, f: F, range: number): void {
-        const step = 1;
+    public clear(): void {
+        const ctx = this.ctx;
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);    
 
+        ctx.strokeStyle = '#aaaaaa';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, this.my + 0.5);
+        ctx.lineTo(ctx.canvas.width, this.my + 0.5);
+        ctx.stroke();
+    }
+
+    public dot(color: string, t: number, v: number, radius: number = 5): void {
+        assert(t >= 0 && t <= 1);
+        const ctx = this.ctx;
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        const ya = (v - this.minv) / (this.maxv - this.minv);
+        const x = t * ctx.canvas.width;
+        const y = (1-ya) * ctx.canvas.height;
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    public marker(color: string, t: number): void {
+        assert(t >= 0 && t <= 1);
+        const ctx = this.ctx;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        const x = t * ctx.canvas.width;
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, ctx.canvas.height);
+        ctx.stroke();
+    }
+
+    public graphF(color: string, f: F, range: number, step = 1): void {
         stepF(f, range, step, (t, v) => {
             if (this.minv === undefined)
                 this.minv = v;
@@ -33,20 +77,15 @@ export class Graph {
             this.maxv = Math.max(this.maxv, v);
         });
 
-        // pad
-        const displayMinV = this.minv;
-        const displayMaxV = this.maxv;
         const ctx = this.ctx;
-        const width = ctx.canvas.width;
-        const height = ctx.canvas.height;
         ctx.strokeStyle = color;
         ctx.lineWidth = 2;
         ctx.beginPath();
         stepF(f, range, step, (t, v) => {
-            const xa = (t / range) * 1/step;
-            const ya = (v - displayMinV) / (displayMaxV - displayMinV);
-            const x = xa * width;
-            const y = (1-ya) * height;
+            const xa = (t / range);
+            const ya = (v - this.minv) / (this.maxv - this.minv);
+            const x = xa * ctx.canvas.width;
+            const y = (1-ya) * ctx.canvas.height;
             ctx.lineTo(x, y);
         });
         ctx.stroke();

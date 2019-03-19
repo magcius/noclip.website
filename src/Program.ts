@@ -140,7 +140,7 @@ export class DeviceProgram {
             return !isEmpty;
         });
 
-        const defines = [... this.defines.entries()].map((k, v) => `#define ${k} ${v}`).join('\n');
+        const defines = [... this.defines.entries()].map(([k, v]) => `#define ${k} ${v}`).join('\n');
         const precision = lines.find((line) => line.startsWith('precision')) || 'precision mediump float;';
         const rest = lines.filter((line) => !line.startsWith('precision')).join('\n');
 
