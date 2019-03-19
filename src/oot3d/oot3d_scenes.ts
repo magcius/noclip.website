@@ -1525,7 +1525,6 @@ class SceneDesc implements Viewer.SceneDesc {
             modelCache.fetchFileData(roomZSIName, abortSignal);
         }
         
-        fetchArchive(`${pathBase}/kankyo/BlueSky.zar`, abortSignal);
 
         return modelCache.waitForLoad().then(() => {
             const environmentSettings = zsi.environmentSettings[0];
