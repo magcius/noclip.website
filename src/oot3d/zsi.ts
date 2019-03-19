@@ -102,68 +102,72 @@ function readEnvironmentSettings(version: Version, buffer: ArrayBufferSlice, nEn
         const dirSize = 0x03;
         const fogSize = 0x04;
         const distanceSize = 0x04;
+        const mysterySize = 0x02;
 
-        console.log(offs.toString(16));
+        console.log("environment " + i + " address " + offs.toString(16));
 
         const drawDistance = view.getFloat32(offs + 0x00, true);
-        setting.drawDistance = drawDistance;
-        console.log("drawDistance " + drawDistance);
         offs += distanceSize;
-
+        
         const fogStart = view.getFloat32(offs + 0x00, true);
-        setting.fogStart = fogStart;
-        console.log("fogStart " + fogStart);
         offs += fogSize;
-
+        
         const mysteryValue = view.getUint16(offs);
-        console.log("mystery value " + mysteryValue.toString(16));
-        console.log("mystery as int " + mysteryValue);
         const mysteryA = view.getUint8(offs + 0x00);
-        setting.fogMin = mysteryA / 255.0;
         const mysteryB = view.getUint8(offs + 0x01);
-        setting.fogMax = mysteryB / 255.0;
-        console.log("mystery value A " + mysteryA.toString(16));
-        console.log("mystery value B " + mysteryB.toString(16));
-        console.log("fogMin " + setting.fogMin);
-        console.log("fogMax " + setting.fogMax);
-
-        offs += 0x02;
+        offs += mysterySize;
         
         const ambientColR = view.getUint8(offs + 0x00) / 255.0;
         const ambientColG = view.getUint8(offs + 0x01) / 255.0;
         const ambientColB = view.getUint8(offs + 0x02) / 255.0;
-        setting.ambientLightCol = vec3.fromValues(ambientColR, ambientColG, ambientColB);
         offs += colSize;
         
         const firstDiffuseLightDirX = view.getUint8(offs + 0x00) / 255.0;
         const firstDiffuseLightDirY = view.getUint8(offs + 0x01) / 255.0;
         const firstDiffuseLightDirZ = view.getUint8(offs + 0x02) / 255.0;
-        setting.primaryLightDir = vec3.fromValues(firstDiffuseLightDirX, firstDiffuseLightDirY, firstDiffuseLightDirZ);
         offs += dirSize;
         
         const firstDiffuseLightColR = view.getUint8(offs + 0x00) / 255.0;
         const firstDiffuseLightColG = view.getUint8(offs + 0x01) / 255.0;
         const firstDiffuseLightColB = view.getUint8(offs + 0x02) / 255.0;
-        setting.primaryLightCol = vec3.fromValues(firstDiffuseLightColR, firstDiffuseLightColG, firstDiffuseLightColB);
         offs += colSize;
         
         const secondDiffuseLightDirX = view.getUint8(offs + 0x00) / 255.0;
         const secondDiffuseLightDirY = view.getUint8(offs + 0x01) / 255.0;
         const secondDiffuseLightDirZ = view.getUint8(offs + 0x02) / 255.0;
-        setting.secondaryLightDir = vec3.fromValues(secondDiffuseLightDirX, secondDiffuseLightDirY, secondDiffuseLightDirZ);
         offs += dirSize;
-
+        
         const secondDiffuseLightColR = view.getUint8(offs + 0x00) / 255.0;
         const secondDiffuseLightColG = view.getUint8(offs + 0x01) / 255.0;
         const secondDiffuseLightColB = view.getUint8(offs + 0x02) / 255.0;
-        setting.secondaryLightCol = vec3.fromValues(secondDiffuseLightColR, secondDiffuseLightColG, secondDiffuseLightColB);
         offs += colSize;
-
+        
         const fogColR = view.getUint8(offs + 0x00) / 255.0;
         const fogColG = view.getUint8(offs + 0x01) / 255.0;
         const fogColB = view.getUint8(offs + 0x02) / 255.0;
-        setting.fogCol = vec3.fromValues(fogColR, fogColG, fogColB);
         offs += colSize;
+
+        setting.drawDistance = drawDistance;
+        console.log("drawDistance " + drawDistance);
+        setting.fogStart = drawDistance - fogStart;
+        console.log("fogStart " + fogStart);
+        console.log("drawDistance - fogStart " + (drawDistance - fogStart));
+        console.log("mystery value " + mysteryValue.toString(16));
+        console.log("mystery as int " + mysteryValue);
+        setting.fogMin = mysteryA / 255.0;
+        setting.fogMax = mysteryB / 255.0;
+        console.log("mystery value A " + mysteryA.toString(16));
+        console.log("mystery value B " + mysteryB.toString(16));
+        console.log("fogMin " + setting.fogMin);
+        console.log("fogMax " + setting.fogMax);
+        setting.ambientLightCol = vec3.fromValues(ambientColR, ambientColG, ambientColB);
+        setting.primaryLightDir = vec3.fromValues(firstDiffuseLightDirX, firstDiffuseLightDirY, firstDiffuseLightDirZ);
+        setting.primaryLightCol = vec3.fromValues(firstDiffuseLightColR, firstDiffuseLightColG, firstDiffuseLightColB);
+        setting.secondaryLightDir = vec3.fromValues(secondDiffuseLightDirX, secondDiffuseLightDirY, secondDiffuseLightDirZ);
+        setting.secondaryLightCol = vec3.fromValues(secondDiffuseLightColR, secondDiffuseLightColG, secondDiffuseLightColB);
+        setting.fogCol = vec3.fromValues(fogColR, fogColG, fogColB);
+
+        console.log("\n");
 
         environmentSettings.push(setting);
     }

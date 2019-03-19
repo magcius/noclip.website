@@ -82,6 +82,23 @@ class OoT3DRenderer extends BasicRendererHelper implements Viewer.SceneGfx {
         };
         renderHacksPanel.contents.appendChild(enableLighting.elem);
 
+        let environmentSettingPresets = [ 
+            `index0`,
+            `index1`,
+            `index2`,
+            `index3`,
+            `index4`,
+            `index5`,
+        ];
+
+        const lightingIndex = new UI.SingleSelect();
+        lightingIndex.setStrings(environmentSettingPresets);
+        lightingIndex.onselectionchange = (index: number) => {
+            for (let i = 0; i < this.roomRenderers.length; i++)
+                this.roomRenderers[i].setEnvironmentIndex(index);
+        };
+        renderHacksPanel.contents.appendChild(lightingIndex.elem);
+
         const enableUV = new UI.Checkbox('Enable UV', false);
         enableUV.onchanged = () => {
             for (let i = 0; i < this.roomRenderers.length; i++)
@@ -1083,13 +1100,12 @@ class SceneDesc implements Viewer.SceneDesc {
                 }
                 roomRenderer.addToViewRenderer(device, renderer.viewRenderer);
 
-                const envIndex = 0;
-                roomRenderer.setEnvironmentSettings(zsi.environmentSettings[envIndex]);
+                roomRenderer.setEnvironmentSettings(zsi.environmentSettings);
 
                 renderer.roomRenderers.push(roomRenderer);
 
                 for (let j = 0; j < roomSetup.actors.length; j++)
-                    this.spawnActorForRoom(device, abortSignal, scene, renderer, roomRenderer, zsi.environmentSettings[envIndex], roomSetup.actors[j]);
+                    this.spawnActorForRoom(device, abortSignal, scene, renderer, roomRenderer, zsi.environmentSettings, roomSetup.actors[j]);
             }
 
             return modelCache.waitForLoad().then(() => {
