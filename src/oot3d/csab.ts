@@ -265,13 +265,6 @@ function sampleAnimationTrackHermite(track: AnimationTrackHermite, frame: number
     const k0 = frames[idx0];
     const k1 = frames[idx1];
 
-    // HACK(jstpierre): Nintendo sometimes uses weird "reset" tangents
-    // which aren't supposed to be visible. They are visible for us because
-    // "frame" can have a non-zero fractional component. In this case, pick
-    // a value completely.
-    if ((k1.time - k0.time) === 1)
-        return k0.value;
-
     const t = (frame - k0.time) / (k1.time - k0.time);
     return hermiteInterpolate(k0, k1, t);
 }

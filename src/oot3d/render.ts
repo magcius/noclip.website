@@ -405,6 +405,8 @@ void main() {
     v_Color.rgb *= t_Lighting;
 #endif
 
+    v_Color.rgb *= VERTEX_COLOR_SCALE;
+
     v_TexCoord0 = ${this.generateVertexCoord(0)};
     v_TexCoord0.t = 1.0 - v_TexCoord0.t;
 
@@ -452,6 +454,7 @@ class MaterialInstance {
     private vertexNormalsEnabled: boolean = false;
     private lightingEnabled: boolean = false;
     private uvEnabled: boolean = false;
+    private vertexColorScale = 1;
 
     public environmentSettings: ZSI.ZSIEnvironmentSettings;
 
@@ -495,6 +498,11 @@ class MaterialInstance {
         this.createProgram();
     }
 
+    public setVertexColorScale(n: number): void {
+        this.vertexColorScale = n;
+        this.createProgram();
+    }
+
     private createProgram(): void {
         const program = new OoT3DProgram(this.material, this);
         program.setTexCoordGen(0, 0, 0);
@@ -503,9 +511,12 @@ class MaterialInstance {
 
         let additionalParameters = "";
 
-        let tempEnvironmentSettings = new ZSI.ZSIEnvironmentSettings();
+        let tempEnvironmentSettings;
 
-        if (this.environmentSettings) tempEnvironmentSettings = this.environmentSettings;
+        if (this.environmentSettings)
+            tempEnvironmentSettings = this.environmentSettings;
+        else
+            tempEnvironmentSettings = new ZSI.ZSIEnvironmentSettings();
 
         additionalParameters += `vec3 AMBIENT_LIGHT_COLOR = vec3(${tempEnvironmentSettings.ambientLightCol});\n`;
         additionalParameters += `vec3 PRIMARY_LIGHT_COLOR = vec3(${tempEnvironmentSettings.primaryLightCol});\n`;
@@ -526,6 +537,8 @@ class MaterialInstance {
             program.defines.set('USE_LIGHTING', '1');
         if (this.uvEnabled)
             program.defines.set('USE_UV', '1');
+
+        program.defines.set('VERTEX_COLOR_SCALE', program.generateFloat(this.vertexColorScale));
 
         if (this.templateRenderInst) this.templateRenderInst.setDeviceProgram(program);
     }
@@ -984,6 +997,11 @@ export class CmbRenderer {
     public setEnvironmentSettings(environmentSettings: ZSI.ZSIEnvironmentSettings): void {
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].setEnvironmentSettings(environmentSettings);
+    }
+
+    public setVertexColorScale(n: number): void {
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].setVertexColorScale(n);
     }
 
     private updateBoneMatrices(): void {
