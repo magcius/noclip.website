@@ -20,10 +20,6 @@ import { GfxRenderInstBuilder, GfxRenderInst, GfxRenderInstViewRenderer, GfxRend
 import { makeFormat, FormatFlags, FormatTypeFlags, FormatCompFlags } from '../gfx/platform/GfxPlatformFormat';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { Camera } from '../Camera';
-
-// @ts-ignore
-// This feature is provided by Parcel.
-import { readFileSync } from 'fs';
 import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from '../gfx/helpers/BufferHelpers';
 import { getDebugOverlayCanvas2D, prepareFrameDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
 
@@ -903,14 +899,6 @@ export class CmbRenderer {
 
     private templateRenderInst: GfxRenderInst;
 
-    private texturesEnabled: boolean = true;
-    private vertexColorsEnabled: boolean = true;
-    private monochromeVertexColorsEnabled: boolean = false;
-
-    private vertexNormalsEnabled: boolean = false;
-    private lightingEnabled: boolean = false;
-    private uvEnabled: boolean = false;
-
     public ambientLightCol: vec3;
     public primaryLightCol: vec3;
     public primaryLightDir: vec3;
@@ -1009,44 +997,47 @@ export class CmbRenderer {
             const bone = this.cmbData.cmb.bones[i];
 
             CSAB.calcBoneMatrix(this.boneMatrices[bone.boneId], this.animationController, this.csab, bone);
+
             const parentBoneMatrix = bone.parentBoneId >= 0 ? this.boneMatrices[bone.parentBoneId] : this.modelMatrix;
             mat4.mul(this.boneMatrices[bone.boneId], parentBoneMatrix, this.boneMatrices[bone.boneId]);
         }
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        this.updateBoneMatrices();
-
-        if (this.debugBones) {
-            prepareFrameDebugOverlayCanvas2D();
-            const ctx = getDebugOverlayCanvas2D();
-            for (let i = 0; i < this.cmbData.cmb.bones.length; i++) {
-                const bone = this.cmbData.cmb.bones[i];
-                if (bone.parentBoneId < 0) continue;
-
-                vec3.set(scratchVec3a, 0, 0, 0);
-                vec3.transformMat4(scratchVec3a, scratchVec3a, this.boneMatrices[bone.parentBoneId]);
-                vec3.set(scratchVec3b, 0, 0, 0);
-                vec3.transformMat4(scratchVec3b, scratchVec3b, this.boneMatrices[bone.boneId]);
-
-                drawWorldSpaceLine(ctx, viewerInput.camera, scratchVec3a, scratchVec3b);
-            }
-        }
-
-        this.animationController.setTimeInMilliseconds(viewerInput.time);
-
-        let offs = this.templateRenderInst.getUniformBufferOffset(DMPProgram.ub_SceneParams);
-        const sceneParamsMapped = this.sceneParamsBuffer.mapBufferF32(offs, 16);
-        fillSceneParamsData(sceneParamsMapped, viewerInput.camera);
-
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].prepareToRender(this.materialParamsBuffer, viewerInput, this.visible, this.textureHolder);
         for (let i = 0; i < this.shapeInstances.length; i++)
             this.shapeInstances[i].prepareToRender(this.prmParamsBuffer, viewerInput, this.boneMatrices, this.cmbData.inverseBindPoseMatrices);
 
-        this.sceneParamsBuffer.prepareToRender(hostAccessPass);
-        this.materialParamsBuffer.prepareToRender(hostAccessPass);
-        this.prmParamsBuffer.prepareToRender(hostAccessPass);
+        this.animationController.setTimeInMilliseconds(viewerInput.time);
+
+        if (this.visible) {
+            this.updateBoneMatrices();
+
+            if (this.debugBones) {
+                prepareFrameDebugOverlayCanvas2D();
+                const ctx = getDebugOverlayCanvas2D();
+                for (let i = 0; i < this.cmbData.cmb.bones.length; i++) {
+                    const bone = this.cmbData.cmb.bones[i];
+                    if (bone.parentBoneId < 0) continue;
+
+                    vec3.set(scratchVec3a, 0, 0, 0);
+                    vec3.transformMat4(scratchVec3a, scratchVec3a, this.boneMatrices[bone.parentBoneId]);
+                    vec3.set(scratchVec3b, 0, 0, 0);
+                    vec3.transformMat4(scratchVec3b, scratchVec3b, this.boneMatrices[bone.boneId]);
+
+                    drawWorldSpaceLine(ctx, viewerInput.camera, scratchVec3a, scratchVec3b);
+                }
+            }
+
+            let offs = this.templateRenderInst.getUniformBufferOffset(DMPProgram.ub_SceneParams);
+            const sceneParamsMapped = this.sceneParamsBuffer.mapBufferF32(offs, 16);
+            fillSceneParamsData(sceneParamsMapped, viewerInput.camera);
+
+            this.sceneParamsBuffer.prepareToRender(hostAccessPass);
+            this.materialParamsBuffer.prepareToRender(hostAccessPass);
+            this.prmParamsBuffer.prepareToRender(hostAccessPass);
+        }
     }
 
     public setVisible(visible: boolean): void {
@@ -1105,7 +1096,6 @@ export class RoomRenderer {
     public opaqueMesh: CmbRenderer | null = null;
     public transparentData: CmbData | null = null;
     public transparentMesh: CmbRenderer | null = null;
-    public wMesh: CmbRenderer | null = null;
     public objectRenderers: CmbRenderer[] = [];
 
     constructor(device: GfxDevice, public textureHolder: CtrTextureHolder, public mesh: ZSI.Mesh, public name: string) {
@@ -1113,6 +1103,7 @@ export class RoomRenderer {
             textureHolder.addTextures(device, mesh.opaque.textures);
             this.opaqueData = new CmbData(device, mesh.opaque);
             this.opaqueMesh = new CmbRenderer(device, textureHolder, this.opaqueData, `${name} Opaque`);
+            this.opaqueMesh.animationController.fps = 15;
             this.opaqueMesh.setConstantColor(1, TransparentBlack);
         }
 
@@ -1120,6 +1111,7 @@ export class RoomRenderer {
             textureHolder.addTextures(device, mesh.transparent.textures);
             this.transparentData = new CmbData(device, mesh.transparent);
             this.transparentMesh = new CmbRenderer(device, textureHolder, this.transparentData, `${name} Transparent`);
+            this.transparentMesh.animationController.fps = 15;
             this.transparentMesh.setConstantColor(1, TransparentBlack);
         }
     }
@@ -1140,18 +1132,11 @@ export class RoomRenderer {
             this.transparentMesh.bindCMAB(cmab);
     }
 
-    public bindWCMAB(cmab: CMAB.CMAB): void {
-        if (this.wMesh !== null)
-            this.wMesh.bindCMAB(cmab);
-    }
-
     public setVisible(visible: boolean): void {
         if (this.opaqueMesh !== null)
             this.opaqueMesh.setVisible(visible);
         if (this.transparentMesh !== null)
             this.transparentMesh.setVisible(visible);
-        if (this.wMesh !== null)
-            this.wMesh.setVisible(visible);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].setVisible(visible);
     }
@@ -1161,8 +1146,6 @@ export class RoomRenderer {
             this.opaqueMesh.setVertexColorsEnabled(v);
         if (this.transparentMesh !== null)
             this.transparentMesh.setVertexColorsEnabled(v);
-        if (this.wMesh !== null)
-            this.wMesh.setVertexColorsEnabled(v);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].setVertexColorsEnabled(v);
     }
@@ -1172,8 +1155,6 @@ export class RoomRenderer {
             this.opaqueMesh.setTexturesEnabled(v);
         if (this.transparentMesh !== null)
             this.transparentMesh.setTexturesEnabled(v);
-        if (this.wMesh !== null)
-            this.wMesh.setTexturesEnabled(v);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].setTexturesEnabled(v);
     }
@@ -1183,8 +1164,6 @@ export class RoomRenderer {
             this.opaqueMesh.setMonochromeVertexColorsEnabled(v);
         if (this.transparentMesh !== null)
             this.transparentMesh.setMonochromeVertexColorsEnabled(v);
-        if (this.wMesh !== null)
-            this.wMesh.setMonochromeVertexColorsEnabled(v);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].setMonochromeVertexColorsEnabled(v);
     }
@@ -1194,8 +1173,6 @@ export class RoomRenderer {
             this.opaqueMesh.setVertexNormalsEnabled(v);
         if (this.transparentMesh !== null)
             this.transparentMesh.setVertexNormalsEnabled(v);
-        if (this.wMesh !== null)
-            this.wMesh.setVertexNormalsEnabled(v);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].setVertexNormalsEnabled(v);
     }
@@ -1205,8 +1182,6 @@ export class RoomRenderer {
             this.opaqueMesh.setLightingEnabled(v);
         if (this.transparentMesh !== null)
             this.transparentMesh.setLightingEnabled(v);
-        if (this.wMesh !== null)
-            this.wMesh.setLightingEnabled(v);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].setLightingEnabled(v);
     }
@@ -1216,8 +1191,6 @@ export class RoomRenderer {
             this.opaqueMesh.setUVEnabled(v);
         if (this.transparentMesh !== null)
             this.transparentMesh.setUVEnabled(v);
-        if (this.wMesh !== null)
-            this.wMesh.setUVEnabled(v);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].setUVEnabled(v);
     }
@@ -1227,8 +1200,6 @@ export class RoomRenderer {
             this.opaqueMesh.setEnvironmentSettings(environmentSettings);
         if (this.transparentMesh !== null)
             this.transparentMesh.setEnvironmentSettings(environmentSettings);
-        if (this.wMesh !== null)
-            this.wMesh.setEnvironmentSettings(environmentSettings);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].setEnvironmentSettings(environmentSettings);
     }
@@ -1238,8 +1209,6 @@ export class RoomRenderer {
             this.opaqueMesh.prepareToRender(hostAccessPass, viewerInput);
         if (this.transparentMesh !== null)
             this.transparentMesh.prepareToRender(hostAccessPass, viewerInput);
-        if (this.wMesh !== null)
-            this.wMesh.prepareToRender(hostAccessPass, viewerInput);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].prepareToRender(hostAccessPass, viewerInput);
     }
@@ -1253,8 +1222,6 @@ export class RoomRenderer {
             this.opaqueMesh.destroy(device);
         if (this.transparentMesh !== null)
             this.transparentMesh.destroy(device);
-        if (this.wMesh !== null)
-            this.wMesh.destroy(device);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].destroy(device);
     }

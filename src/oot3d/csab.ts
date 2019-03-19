@@ -11,7 +11,6 @@ import { getPointHermite } from "../Spline";
 const enum AnimationTrackType {
     LINEAR = 0x01,
     HERMITE = 0x02,
-    INTEGER = 0x03,
 };
 
 interface AnimationKeyframeLinear {
@@ -33,15 +32,11 @@ interface AnimationTrackLinear {
 
 interface AnimationTrackHermite {
     type: AnimationTrackType.HERMITE;
+    timeEnd: number;
     frames: AnimationKeyframeHermite[];
 }
 
-interface AnimationTrackInteger {
-    type: AnimationTrackType.INTEGER;
-    frames: AnimationKeyframeLinear[];
-}
-
-type AnimationTrack = AnimationTrackLinear | AnimationTrackHermite | AnimationTrackInteger;
+type AnimationTrack = AnimationTrackLinear | AnimationTrackHermite;
 
 const enum LoopMode {
     ONCE, REPEAT,
@@ -84,7 +79,7 @@ function parseTrack(version: Version, buffer: ArrayBufferSlice): AnimationTrack 
         type = view.getUint32(0x00, true);
         numKeyframes = view.getUint32(0x04, true);
         unk1 = view.getUint32(0x08, true);
-        timeEnd = view.getUint32(0x0C, true);
+        timeEnd = view.getUint32(0x0C, true) + 1;
     } else if (version === Version.Majora || version === Version.LuigisMansion) {
         throw "xxx";
     }
@@ -110,16 +105,7 @@ function parseTrack(version: Version, buffer: ArrayBufferSlice): AnimationTrack 
             keyframeTableIdx += 0x10;
             frames.push({ time, value, tangentIn, tangentOut });
         }
-        return { type, frames };
-    } else if (type === AnimationTrackType.INTEGER) {
-        const frames: AnimationKeyframeLinear[] = [];
-        for (let i = 0; i < numKeyframes; i++) {
-            const time = view.getUint32(keyframeTableIdx + 0x00, true);
-            const value = view.getFloat32(keyframeTableIdx + 0x04, true);
-            keyframeTableIdx += 0x08;
-            frames.push({ time, value });
-        }
-        return { type, frames };
+        return { type, frames, timeEnd };
     } else {
         throw "whoops";
     }
@@ -174,7 +160,7 @@ export function parse(version: Version, buffer: ArrayBufferSlice): CSAB {
     assert(view.getUint32(0x20, true) === 0x00);
     assert(view.getUint32(0x24, true) === 0x00);
 
-    const duration = view.getUint32(0x28, true);
+    const duration = view.getUint32(0x28, true) + 1;
     // loop mode?
     // assert(view.getUint32(0x2C, true) === 0x00);
 
@@ -242,8 +228,7 @@ function sampleAnimationTrackLinear(track: AnimationTrackLinear, frame: number):
     return lerp(k0, k1, t);
 }
 
-function hermiteInterpolate(k0: AnimationKeyframeHermite, k1: AnimationKeyframeHermite, t: number): number {
-    const length = k1.time - k0.time;
+function hermiteInterpolate(k0: AnimationKeyframeHermite, k1: AnimationKeyframeHermite, t: number, length: number): number {
     const p0 = k0.value;
     const p1 = k1.value;
     const s0 = k0.tangentOut * length;
@@ -251,22 +236,30 @@ function hermiteInterpolate(k0: AnimationKeyframeHermite, k1: AnimationKeyframeH
     return getPointHermite(p0, p1, s0, s1, t);
 }
 
+function mod(a: number, b: number): number {
+    return (a + b) % b;
+}
+
 function sampleAnimationTrackHermite(track: AnimationTrackHermite, frame: number) {
     const frames = track.frames;
 
-    // Find the first frame.
+    // Find the right-hand frame.
     const idx1 = frames.findIndex((key) => (frame < key.time));
-    if (idx1 === 0)
-        return frames[0].value;
-    if (idx1 < 0)
-        return frames[frames.length - 1].value;
-    const idx0 = idx1 - 1;
 
-    const k0 = frames[idx0];
-    const k1 = frames[idx1];
+    let k0: AnimationKeyframeHermite;
+    let k1: AnimationKeyframeHermite;
+    if (idx1 <= 0) {
+        k0 = frames[frames.length - 1];
+        k1 = frames[0];
+    } else {
+        const idx0 = idx1 - 1;
+        k0 = frames[idx0];
+        k1 = frames[idx1];
+    }
 
-    const t = (frame - k0.time) / (k1.time - k0.time);
-    return hermiteInterpolate(k0, k1, t);
+    const length = mod(k1.time - k0.time, track.timeEnd);
+    const t = (frame - k0.time) / length;
+    return hermiteInterpolate(k0, k1, t, length);
 }
 
 function sampleAnimationTrack(track: AnimationTrack, frame: number): number {
