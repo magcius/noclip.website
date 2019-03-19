@@ -284,10 +284,10 @@ void main() {
 
     vec4 t_ResultColor = t_CmbOut;
 
-    //#ifdef USE_LIGHTING
+    #ifdef USE_LIGHTING
         float t_FogFactor = clamp((v_DrawDistance - v_Depth) / (v_DrawDistance - v_FogStart), 0.15, 1.0);
         t_ResultColor.rgb = mix(v_FogColor, t_ResultColor.rgb, t_FogFactor);
-    //#endif
+    #endif
 
     #ifdef USE_VERTEX_NORMAL
         t_ResultColor.rgb = normalize(v_Normal) * 0.5 + 0.5; 
