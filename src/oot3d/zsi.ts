@@ -149,7 +149,13 @@ function readEnvironmentSettings(version: Version, buffer: ArrayBufferSlice, nEn
 
         setting.drawDistance = drawDistance;
         console.log("drawDistance " + drawDistance);
-        setting.fogStart = drawDistance - fogStart;
+
+        // TODO(quade): actually figure out what we're supposed to do with these values
+        if (fogStart > drawDistance)
+            setting.fogStart = drawDistance - fogStart;
+        else
+            setting.fogStart = fogStart;
+
         console.log("fogStart " + fogStart);
         console.log("drawDistance - fogStart " + (drawDistance - fogStart));
         console.log("mystery value " + mysteryValue.toString(16));

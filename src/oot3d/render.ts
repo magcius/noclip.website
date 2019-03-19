@@ -386,20 +386,20 @@ void main() {
     v_Normal = a_Normal;
     v_Depth = gl_Position.w;
     v_FogColor = FOG_COLOR;
-    v_DrawDistance = DRAW_DISTANCE / 5.0;
-    v_FogStart = FOG_START / 5.0;
+    v_DrawDistance = DRAW_DISTANCE / 4.0;
+    v_FogStart = FOG_START / 4.0;
 
 #ifdef USE_MONOCHROME_VERTEX_COLOR
     v_Color.rgb = Monochrome(v_Color.rgb);
 #endif
 
-//#ifdef USE_LIGHTING
+#ifdef USE_LIGHTING
     vec3 t_Lighting = AMBIENT_LIGHT_COLOR * 2.0;
-    //t_Lighting += clamp(dot(-a_Normal, PRIMARY_LIGHT_DIRECTION), 0.0, 1.0) * PRIMARY_LIGHT_COLOR;
-    //t_Lighting += clamp(dot(-a_Normal, SECONDARY_LIGHT_DIRECTION), 0.0, 1.0) * SECONDARY_LIGHT_COLOR;
+    t_Lighting += clamp(dot(-a_Normal, PRIMARY_LIGHT_DIRECTION), 0.0, 1.0) * PRIMARY_LIGHT_COLOR;
+    t_Lighting += clamp(dot(-a_Normal, SECONDARY_LIGHT_DIRECTION), 0.0, 1.0) * SECONDARY_LIGHT_COLOR;
 
     v_Color.rgb *= t_Lighting;
-//#endif
+#endif
 
     v_Color.rgb *= VERTEX_COLOR_SCALE;
 
