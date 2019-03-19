@@ -178,8 +178,10 @@ const enum ActorId {
     Bg_Ydan_Sp             = 0x000F,
     En_Wallmas             = 0x0011,
     En_Dodongo             = 0x0012,
+    En_Firefly             = 0x0013,
     En_Item00              = 0x0015,
     En_Niw                 = 0x0019,
+    En_Tite                = 0x001B,
     Boss_Goma              = 0x0028,
     En_Zf                  = 0x0025,
     En_Hata                = 0x0026,
@@ -204,6 +206,7 @@ const enum ActorId {
     Bg_Mizu_Movebg         = 0x0064,
     Bg_Mori_Hineri         = 0x0068,
     En_Bb                  = 0x0069,
+    Bg_Toki_Hikari         = 0x006A,
     Bg_Mjin                = 0x006E,
     En_Wood02              = 0x0077,
     En_Trap                = 0x0080,
@@ -213,11 +216,15 @@ const enum ActorId {
     Bg_Mori_Kaitenkabe     = 0x0088,
     Bg_Mori_Rakkatenjo     = 0x0089,
     En_Vm                  = 0x008A,
+    Demo_Effect            = 0x008B,
     En_Floormas            = 0x008E,
     En_Heishi1             = 0x008F,
+    En_Rd                  = 0x0090,
     En_Sw                  = 0x0095,
     En_Du                  = 0x0098,
     Door_Ana               = 0x009B,
+    Bg_Spot02_Objects      = 0x009D,
+    Bg_Haka                = 0x009D,
     Demo_Du                = 0x00A8,
     Demo_Im                = 0x00A9,
     En_Heishi2             = 0x00B3,
@@ -240,14 +247,17 @@ const enum ActorId {
     Bg_Spot01_Idohashira   = 0x0103,
     Bg_Spot01_Idomizu      = 0x0104,
     Bg_Po_Syokudai         = 0x0105,
+    Bg_Spot15_Rrbox        = 0x0107,
     Obj_Tsubo              = 0x0111,
     En_Wonder_Item         = 0x0112,
     En_Skj                 = 0x0115,
     Elf_Msg                = 0x011B,
+    Bg_Spot03_Taki         = 0x011F,
     En_Kusa                = 0x0125,
     Obj_Bombiwa            = 0x0127,
     Obj_Switch             = 0x012A,
     Obj_Hsblock            = 0x012D,
+    En_Okarina_Tag         = 0x012E,
     En_Goroiwa             = 0x0130,
     En_Toryo               = 0x0132,
     En_Blkobj              = 0x0136,
@@ -258,7 +268,9 @@ const enum ActorId {
     En_Wonder_Talk         = 0x0147,
     En_Ds                  = 0x0149,
     En_Mk                  = 0x014A,
+    En_Bom_Bowl_Man        = 0x014B,
     En_Owl                 = 0x014D,
+    En_Ishi                = 0x014E,
     Bg_Spot18_Basket       = 0x015C,
     En_Siofuki             = 0x015F,
     En_Ko                  = 0x0163,
@@ -266,6 +278,7 @@ const enum ActorId {
     En_Hy                  = 0x016E,
     Elf_Msg2               = 0x0173,
     En_Heishi4             = 0x0178,
+    En_Takara_Man          = 0x017C,
     En_Wonder_Talk2        = 0x0185,
     Bg_Spot05_Soko         = 0x018D,
     En_Hintnuts            = 0x0192,
@@ -767,6 +780,36 @@ class SceneDesc implements Viewer.SceneDesc {
                 console.log(`Unknown Wood02 model ${whichModel}`);
             }
         });
+        else if (actor.actorId === ActorId.Bg_Toki_Hikari) fetchArchive(`zelda_toki_objects.zar`).then((zar) => {
+            const whichModel = actor.variable & 0x000F;
+            if (whichModel === 0x00) {
+                const b = buildModel(zar, `model/tokinoma_hikari_modelT.cmb`, 1);
+                b.bindCMAB(parseCMAB(zar, `misc/tokinoma_hikari_modelT.cmab`));
+            } else if (whichModel === 0x01) {
+                // TODO(jstpierre): How is this positioned?
+                // const b = buildModel(zar, `model/tokinoma_hikari3_modelT.cmb`, 1);
+                // b.bindCMAB(parseCMAB(zar, `misc/tokinoma_hikari3_modelT.cmab`));
+            } else {
+                throw "whoops";
+            }
+        });
+        else if (actor.actorId === ActorId.Bg_Haka) fetchArchive(`zelda_haka.zar`).then((zar) => {
+            buildModel(zar, `model/obj_haka_model.cmb`, 0.1);
+        });
+        else if (actor.actorId === ActorId.Bg_Spot15_Rrbox) fetchArchive(`zelda_spot15_obj.zar`).then((zar) => {
+            buildModel(zar, `model/spot15_box_model.cmb`, 0.1);
+        });
+        else if (actor.actorId === ActorId.En_Ishi) fetchArchive(`zelda_field_keep.zar`).then((zar) => {
+            const b = buildModel(zar, `model/obj_isi01_model.cmb`, 0.1);
+            b.setVertexColorScale(characterLightScale);
+        });
+        else if (actor.actorId === ActorId.Bg_Spot03_Taki) fetchArchive(`zelda_spot03_object.zar`).then((zar) => {
+            const b = buildModel(zar, `model/c_s03bigtaki_modelT.cmb`, 0.1);
+            b.bindCMAB(parseCMAB(zar, `misc/c_s03bigtaki_modelT.cmab`));
+
+            const b2 = buildModel(zar, `model/c_s03shibuki_modelT.cmb`, 0.1);
+            b2.bindCMAB(parseCMAB(zar, `misc/c_s03shibuki_modelT.cmab`));
+        });
         // NPCs.
         else if (actor.actorId === ActorId.En_Ko) fetchArchive(`zelda_kw1.zar`).then((zar) => {
             const b = buildModel(zar, `model/kokiripeople.cmb`);
@@ -830,9 +873,19 @@ class SceneDesc implements Viewer.SceneDesc {
                     b.setVertexColorScale(characterLightScale);
                 });
             } else if (whichShopkeeper === 0x03) { // Market Potion Shopkeeper
-                // TODO(jstpierre)
+                fetchArchive(`zelda_ds2.zar`).then((zar) => {
+                    const b = buildModel(zar, `model/drugmaster.cmb`);
+                    b.bindCSAB(parseCSAB(zar, `anim/ds2_matsu.csab`));
+                    b.setVertexColorScale(characterLightScale);
+                });
             } else if (whichShopkeeper === 0x04) { // Bazaar Shopkeeper
-                // TODO(jstpierre)
+                fetchArchive(`zelda_sh.zar`).then((zar) => {
+                    const b = buildModel(zar, `model/shotmaster.cmb`);
+                    b.bindCSAB(parseCSAB(zar, `anim/sh_matsu.csab`));
+                    b.setVertexColorScale(characterLightScale);
+                    b.shapeInstances[1].visible = false;
+                    b.shapeInstances[2].visible = false;
+                });
             } else if (whichShopkeeper === 0x07) { // Zora Shopkeeper
                 fetchArchive(`zelda_masterzoora.zar`).then((zar) => {
                     const b = buildModel(zar, `model/zorapeople.cmb`);
@@ -984,6 +1037,7 @@ class SceneDesc implements Viewer.SceneDesc {
         else if (actor.actorId === ActorId.Demo_Im) fetchArchive(`zelda_im.zar`).then((zar) => {
             const b = buildModel(zar, `model/impa.cmb`, 0.01);
             b.bindCSAB(parseCSAB(zar, `anim/impa_matsu.csab`));
+            b.setVertexColorScale(characterLightScale);
         });
         else if (actor.actorId === ActorId.Demo_Du) fetchArchive(`zelda_du.zar`).then((zar) => {
             const b = buildModel(zar, `model/darunia.cmb`, 0.01);
@@ -1111,6 +1165,7 @@ class SceneDesc implements Viewer.SceneDesc {
                     b.setConstantColor(3, White);
                     b.setConstantColor(4, colorNew(0, 0.1968, 0.62745));
                     b.setVertexColorScale(characterLightScale);
+                    b.shapeInstances[5].visible = false;
                 });
             } else if (whichNPC === 0x08) { // "Thin woman in lilac"
                 fetchArchive(`zelda_cne.zar`).then((zar) => {
@@ -1163,6 +1218,59 @@ class SceneDesc implements Viewer.SceneDesc {
                         b.shapeInstances[i].visible = false;
                     b.shapeInstances[8].visible = true;
                 });
+            } else if (whichNPC === 0x0D) { // "Red haired man in green & lilac"
+                fetchArchive(`zelda_ahg.zar`).then((zar) => {
+                    const b = buildModel(zar, `model/hyliaman2.cmb`);
+                    b.bindCSAB(parseCSAB(zar, `anim/ahg2_18.csab`));
+                    b.setConstantColor(3, colorNew(0.78431, 0.70588, 1));
+                    b.setConstantColor(4, colorNew(0.78431, 0.70588, 1));
+                    b.setVertexColorScale(characterLightScale);
+                    for (let i = 3; i < 8; i++)
+                        b.shapeInstances[i].visible = false;
+                    b.shapeInstances[6].visible = true;
+                });
+            } else if (whichNPC === 0x0E) { // "Bearded, red haired man in green & white"
+                fetchArchive(`zelda_boj.zar`).then((zar) => {
+                    const b = buildModel(zar, `model/hyliaman1.cmb`);
+                    b.bindCSAB(parseCSAB(zar, `anim/boj2_19.csab`));
+                    b.setConstantColor(3, White);
+                    b.setConstantColor(4, colorNew(0.54901, 1, 0.43137));
+                    b.setVertexColorScale(characterLightScale);
+                    for (let i = 3; i < 12; i++)
+                        b.shapeInstances[i].visible = false;
+                    b.shapeInstances[9].visible = true;
+                });
+            } else if (whichNPC === 0x0F) { // "Bald man in brown"
+                fetchArchive(`zelda_bji.zar`).then((zar) => {
+                    const b = buildModel(zar, `model/hyliaoldman.cmb`);
+                    b.bindCSAB(parseCSAB(zar, `anim/bji2_20.csab`));
+                    b.setConstantColor(3, colorNew(0.50980, 0.70577, 1));
+                    b.setConstantColor(4, colorNew(0.50980, 0.27450, 0.07843));
+                    b.setVertexColorScale(characterLightScale);
+                    b.shapeInstances[3].visible = false;
+                    b.shapeInstances[4].visible = false;
+                });
+            } else if (whichNPC === 0x13) { // Old man inside Market Potion Shop
+                fetchArchive(`zelda_bji.zar`).then((zar) => {
+                    const b = buildModel(zar, `model/hyliaoldman.cmb`);
+                    b.bindCSAB(parseCSAB(zar, `anim/bji2_20.csab`));
+                    b.setConstantColor(3, colorNew(0.27450, 0.50980, 0.82352));
+                    b.setConstantColor(4, colorNew(0.62754, 0, 0.39215));
+                    b.setVertexColorScale(characterLightScale);
+                    b.shapeInstances[3].visible = false;
+                    b.shapeInstances[4].visible = false;
+                });
+            } else if (whichNPC === 0x14) { // Man inside Market Bazaar
+                fetchArchive(`zelda_ahg.zar`).then((zar) => {
+                    const b = buildModel(zar, `model/hyliaman2.cmb`);
+                    b.bindCSAB(parseCSAB(zar, `anim/ahg2_18.csab`));
+                    b.setConstantColor(3, colorNew(0, 0.58823, 0.43137));
+                    b.setConstantColor(4, colorNew(0.62745, 0.90196, 0));
+                    b.setVertexColorScale(characterLightScale);
+                    for (let i = 3; i < 8; i++)
+                        b.shapeInstances[i].visible = false;
+                    b.shapeInstances[6].visible = true;
+                });
             } else {
                 console.warn(`Unknown Hyrule Market NPC ${j} / ${hexzero(whichNPC, 2)}`);
             }
@@ -1176,6 +1284,18 @@ class SceneDesc implements Viewer.SceneDesc {
             } else {
                 console.log(`Unknown fishing model ${whichModel}`);
             }
+        });
+        else if (actor.actorId === ActorId.En_Bom_Bowl_Man) fetchArchive(`zelda_bg.zar`).then((zar) => {
+            const b = buildModel(zar, `model/boringmaster.cmb`);
+            b.bindCSAB(parseCSAB(zar, `anim/bg_wait.csab`));
+            b.setVertexColorScale(characterLightScale);
+            b.modelMatrix[13] += 10;
+        });
+        else if (actor.actorId === ActorId.En_Takara_Man) fetchArchive(`zelda_ts.zar`).then((zar) => {
+            const b = buildModel(zar, `model/lottomaster.cmb`);
+            b.bindCSAB(parseCSAB(zar, `anim/ts_matsu.csab`));
+            b.setVertexColorScale(characterLightScale);
+            b.modelMatrix[13] += 10;
         });
         // Enemies
         else if (actor.actorId === ActorId.En_Hintnuts) fetchArchive(`zelda_hintnuts.zar`).then((zar) => {
@@ -1246,6 +1366,11 @@ class SceneDesc implements Viewer.SceneDesc {
             b.bindCSAB(parseCSAB(zar, `anim/da_wait.csab`));
             b.setVertexColorScale(characterLightScale);
         });
+        else if (actor.actorId === ActorId.En_Firefly) fetchArchive('zelda_ff.zar').then((zar) => {
+            const b = buildModel(zar, `model/keith.cmb`);
+            b.bindCSAB(parseCSAB(zar, `anim/firefly_foot_at.csab`));
+            b.setVertexColorScale(characterLightScale);
+        });
         else if (actor.actorId === ActorId.En_Sw) fetchArchive('zelda_st.zar').then((zar) => {
             const whichSkulltula = (actor.variable >>> 12) & 0x07;
             if (whichSkulltula === 0x00)  { // Skullwalltula
@@ -1265,6 +1390,21 @@ class SceneDesc implements Viewer.SceneDesc {
         else if (actor.actorId === ActorId.En_Dekubaba) fetchArchive(`zelda_dekubaba.zar`).then((zar) => {
             // The Deku Baba lies in hiding...
             buildModel(zar, `model/db_ha_model.cmb`);
+        });
+        else if (actor.actorId === ActorId.En_Tite) fetchArchive(`zelda_tt.zar`).then((zar) => {
+            const b = buildModel(zar, `model/tectite.cmb`);
+            b.bindCSAB(parseCSAB(zar, `anim/tt_wait.csab`));
+            b.setVertexColorScale(characterLightScale);
+        });
+        else if (actor.actorId === ActorId.En_Rd) fetchArchive(`zelda_rd.zar`).then((zar) => {
+            const whichEnemy = (actor.variable >>> 7) & 0x01;
+            if (whichEnemy === 0x00) { // Redead
+                const b = buildModel(zar, `model/redead.cmb`);
+                b.bindCSAB(parseCSAB(zar, `anim/re_dead_wait_20f.csab`));
+            } else if (whichEnemy === 0x01) { // Gibdo
+                const b = buildModel(zar, `model/gibud.cmb`);
+                b.bindCSAB(parseCSAB(zar, `anim/re_dead_wait_20f.csab`));
+            }
         });
         // Bosses
         else if (actor.actorId === ActorId.Boss_Goma) fetchArchive('zelda_goma.zar').then((zar) => {
@@ -1286,6 +1426,8 @@ class SceneDesc implements Viewer.SceneDesc {
         else if (actor.actorId === ActorId.En_River_Sound) return;
         // Invisible item spawn
         else if (actor.actorId === ActorId.En_Wonder_Item) return;
+        // Ocarina Trigger
+        else if (actor.actorId === ActorId.En_Okarina_Tag) return;
         else console.warn(`Unknown actor ${j} / ${hexzero(actor.actorId, 4)} / ${hexzero(actor.variable, 4)}`);
     }
 
