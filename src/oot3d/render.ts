@@ -1103,7 +1103,7 @@ export class RoomRenderer {
             textureHolder.addTextures(device, mesh.opaque.textures);
             this.opaqueData = new CmbData(device, mesh.opaque);
             this.opaqueMesh = new CmbRenderer(device, textureHolder, this.opaqueData, `${name} Opaque`);
-            this.opaqueMesh.animationController.fps = 15;
+            this.opaqueMesh.animationController.fps = 20;
             this.opaqueMesh.setConstantColor(1, TransparentBlack);
         }
 
@@ -1111,7 +1111,7 @@ export class RoomRenderer {
             textureHolder.addTextures(device, mesh.transparent.textures);
             this.transparentData = new CmbData(device, mesh.transparent);
             this.transparentMesh = new CmbRenderer(device, textureHolder, this.transparentData, `${name} Transparent`);
-            this.transparentMesh.animationController.fps = 15;
+            this.transparentMesh.animationController.fps = 20;
             this.transparentMesh.setConstantColor(1, TransparentBlack);
         }
     }

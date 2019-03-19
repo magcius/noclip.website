@@ -18,7 +18,7 @@ import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
 import { RENDER_HACKS_ICON } from '../bk/scenes';
 import { mat4 } from 'gl-matrix';
 import AnimationController from '../AnimationController';
-import { TransparentBlack, Magenta, colorNew, White } from '../Color';
+import { TransparentBlack, colorNew, White } from '../Color';
 
 class OoT3DRenderer extends BasicRendererHelper implements Viewer.SceneGfx {
     public roomRenderers: RoomRenderer[] = [];
@@ -270,6 +270,7 @@ const enum ActorId {
     Bg_Spot05_Soko         = 0x018D,
     En_Hintnuts            = 0x0192,
     En_Shopnuts            = 0x0195,
+    En_Niw_Girl            = 0x019A,
     En_Dog                 = 0x019B,
     Bg_Spot01_Objects2     = 0x019D,
     Obj_Kibako2            = 0x01A0,
@@ -374,7 +375,7 @@ class SceneDesc implements Viewer.SceneDesc {
         function buildModel(zar: ZAR.ZAR, modelPath: string, scale: number = 0.01): CmbRenderer {
             const cmbData = renderer.modelCache.getModel(device, renderer, zar, modelPath);
             const cmbRenderer = new CmbRenderer(device, renderer.textureHolder, cmbData);
-            cmbRenderer.animationController.fps = 15;
+            cmbRenderer.animationController.fps = 20;
             cmbRenderer.setConstantColor(1, TransparentBlack);
             cmbRenderer.name = `${hexzero(actor.actorId, 4)} / ${hexzero(actor.variable, 4)} / ${modelPath}`;
             mat4.scale(cmbRenderer.modelMatrix, actor.modelMatrix, [scale, scale, scale]);
@@ -408,7 +409,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 buildModel(zar, `item00/model/drop_gi_hearts_1.cmb`, 0.05);
             } else console.warn(`Unknown Item00 drop: ${hexzero(actor.variable, 4)}`);
         });
-        else if (actor.actorId === ActorId.En_Kusa) fetchArchive(`zelda_kusa.zar`).then((zar) => buildModel(zar, `model/obj_kusa01_model.cmb`, 0.5));
+        else if (actor.actorId === ActorId.En_Kusa) fetchArchive(`zelda_field_keep.zar`).then((zar) => buildModel(zar, `model/grass05_model.cmb`, 0.4));
         else if (actor.actorId === ActorId.En_Kanban) fetchArchive(`zelda_keep.zar`).then((zar) => {
             const b = buildModel(zar, `objects/model/kanban1_model.cmb`);
             b.modelMatrix[13] -= 16;
@@ -914,6 +915,11 @@ class SceneDesc implements Viewer.SceneDesc {
             b.bindCSAB(parseCSAB(zar, `anim/Ane_matsu.csab`));
             b.setVertexColorScale(characterLightScale);
         });
+        else if (actor.actorId === ActorId.En_Niw_Girl) fetchArchive(`zelda_gr.zar`).then((zar) => {
+            const b = buildModel(zar, `model/chickengirl.cmb`);
+            b.bindCSAB(parseCSAB(zar, `anim/gr_wait.csab`));
+            b.setVertexColorScale(characterLightScale);
+        });
         else if (actor.actorId === ActorId.En_Daiku_Kakariko) fetchArchive('zelda_daiku.zar').then((zar) => {
             const b = buildModel(zar, `model/disciple.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/dk2_hanasi.csab`));
@@ -1048,10 +1054,34 @@ class SceneDesc implements Viewer.SceneDesc {
                     b.bindCSAB(parseCSAB(zar, `anim/cob_matsu.csab`));
                     b.setVertexColorScale(characterLightScale);
                 });
+            } else if (whichNPC === 0x02) { // "Bearded man in white & green"
+                fetchArchive(`zelda_ahg.zar`).then((zar) => {
+                    const b = buildModel(zar, `model/hyliaman2.cmb`);
+                    b.bindCSAB(parseCSAB(zar, `anim/ahg_matsu.csab`));
+                    b.setVertexColorScale(characterLightScale);
+                    b.setConstantColor(3, White);
+                    b.setConstantColor(4, White);
+                    for (let i = 5; i < 8; i++)
+                        b.shapeInstances[i].visible = false;
+                });
+            } else if (whichNPC === 0x03) { // "Jogging man (Sakon)"
+                fetchArchive(`zelda_boj.zar`).then((zar) => {
+                    // TODO(jstpierre): Animate on path
+                    const b = buildModel(zar, `model/hyliaman1.cmb`);
+                    b.setConstantColor(3, colorNew(0.21568, 0.21568, 1));
+                    b.setConstantColor(4, White);
+                    b.bindCSAB(parseCSAB(zar, `anim/boj2_5.csab`));
+                    b.setVertexColorScale(characterLightScale);
+                    for (let i = 3; i < 12; i++)
+                        b.shapeInstances[i].visible = false;
+                    b.shapeInstances[6].visible = true;
+                    b.shapeInstances[11].visible = true;
+                });
             } else if (whichNPC === 0x04) { // "Staunch man in black & green"
                 fetchArchive(`zelda_ahg.zar`).then((zar) => {
                     const b = buildModel(zar, `model/hyliaman2.cmb`);
                     b.bindCSAB(parseCSAB(zar, `anim/ahg2_18.csab`));
+                    b.setConstantColor(3, colorNew(1, 0, 0));
                     b.setVertexColorScale(characterLightScale);
                     for (let i = 3; i < 8; i++)
                         b.shapeInstances[i].visible = false;
