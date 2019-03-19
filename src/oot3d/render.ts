@@ -19,7 +19,7 @@ import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
 import { GfxRenderInstBuilder, GfxRenderInst, GfxRenderInstViewRenderer, GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderer';
 import { makeFormat, FormatFlags, FormatTypeFlags, FormatCompFlags } from '../gfx/platform/GfxPlatformFormat';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
-import { Camera } from '../Camera';
+import { Camera, computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
 import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from '../gfx/helpers/BufferHelpers';
 import { getDebugOverlayCanvas2D, prepareFrameDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
 
@@ -430,9 +430,8 @@ interface CmbContext {
     vatrChunk: CMB.VatrChunk;
 }
 
-const scratchMatrix = mat4.create();
+const scratchTexMatrix = mat4.create();
 const scratchColor = colorNew(0, 0, 0, 1);
-
 class MaterialInstance {
     private textureMappings: TextureMapping[] = nArray(3, () => new TextureMapping());
     private gfxSamplers: GfxSampler[] = [];
@@ -617,12 +616,12 @@ class MaterialInstance {
                 }
 
                 if (this.srtAnimators[i]) {
-                    this.srtAnimators[i].calcTexMtx(scratchMatrix);
-                    mat4.mul(scratchMatrix, this.material.textureMatrices[i], scratchMatrix);
+                    this.srtAnimators[i].calcTexMtx(scratchTexMatrix);
+                    mat4.mul(scratchTexMatrix, this.material.textureMatrices[i], scratchTexMatrix);
                 } else {
-                    mat4.copy(scratchMatrix, this.material.textureMatrices[i]);
+                    mat4.copy(scratchTexMatrix, this.material.textureMatrices[i]);
                 }
-                offs += fillMatrix4x3(mapped, offs, scratchMatrix);
+                offs += fillMatrix4x3(mapped, offs, scratchTexMatrix);
             }
 
             if (rebindSamplers)
@@ -798,7 +797,7 @@ class ShapeInstance {
         renderInstBuilder.popTemplateRenderInst();
     }
 
-    public prepareToRender(prmParamsBuffer: GfxRenderBuffer, viewerInput: Viewer.ViewerRenderInput, boneMatrices: mat4[], inverseBindPoseMatrices: mat4[]): void {
+    public prepareToRender(prmParamsBuffer: GfxRenderBuffer, viewerInput: Viewer.ViewerRenderInput, boneMatrices: mat4[], viewMatrix: mat4, inverseBindPoseMatrices: mat4[]): void {
         const sepd = this.sepdData.sepd;
 
         for (let i = 0; i < this.renderInsts.length; i++) {
@@ -815,16 +814,16 @@ class ShapeInstance {
                     if (i < prms.boneTable.length) {
                         const boneId = prms.boneTable[i];
                         if (prms.skinningMode === CMB.SkinningMode.SMOOTH_SKINNING) {
-                            mat4.mul(scratchMatrix, boneMatrices[boneId], inverseBindPoseMatrices[boneId]);
-                            mat4.mul(scratchMatrix, viewerInput.camera.viewMatrix, scratchMatrix);
+                            mat4.mul(scratchTexMatrix, boneMatrices[boneId], inverseBindPoseMatrices[boneId]);
+                            mat4.mul(scratchTexMatrix, viewMatrix, scratchTexMatrix);
                         } else {
-                            mat4.mul(scratchMatrix, viewerInput.camera.viewMatrix, boneMatrices[boneId]);
+                            mat4.mul(scratchTexMatrix, viewMatrix, boneMatrices[boneId]);
                         }
                     } else {
-                        mat4.identity(scratchMatrix);
+                        mat4.identity(scratchTexMatrix);
                     }
 
-                    offs += fillMatrix4x3(prmParamsMapped, offs, scratchMatrix);
+                    offs += fillMatrix4x3(prmParamsMapped, offs, scratchTexMatrix);
                 }
 
                 offs += fillVec4(prmParamsMapped, offs, sepd.position.scale, sepd.texCoord0.scale, sepd.texCoord1.scale, sepd.texCoord2.scale);
@@ -882,6 +881,7 @@ export class CmbData {
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
+const scratchViewMatrix = mat4.create();
 export class CmbRenderer {
     public animationController = new AnimationController();
     public visible: boolean = true;
@@ -892,21 +892,13 @@ export class CmbRenderer {
     public debugBones: boolean = false;
     public boneMatrices: mat4[] = [];
     public modelMatrix = mat4.create();
+    public isSkybox = false;
 
     private sceneParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_SceneParams`);
     private materialParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_MaterialParams`);
     private prmParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_PrmParams`);
 
     private templateRenderInst: GfxRenderInst;
-
-    public ambientLightCol: vec3;
-    public primaryLightCol: vec3;
-    public primaryLightDir: vec3;
-    public secondaryLightCol: vec3;
-    public secondaryLightDir: vec3;
-    public fogCol: vec3;
-    public fogStart: number;
-    public drawDistance: number;
 
     constructor(device: GfxDevice, public textureHolder: CtrTextureHolder, public cmbData: CmbData, public name: string = '') {
         for (let i = 0; i < this.cmbData.cmb.materials.length; i++)
@@ -992,6 +984,10 @@ export class CmbRenderer {
             this.materialInstances[i].setVertexColorScale(n);
     }
 
+    public setPassMask(n: number): void {
+        this.templateRenderInst.passMask = n;
+    }
+
     private updateBoneMatrices(): void {
         for (let i = 0; i < this.cmbData.cmb.bones.length; i++) {
             const bone = this.cmbData.cmb.bones[i];
@@ -1003,11 +999,20 @@ export class CmbRenderer {
         }
     }
 
+    private computeViewMatrix(dst: mat4, viewerInput: Viewer.ViewerRenderInput): void {
+        if (this.isSkybox)
+            computeViewMatrixSkybox(dst, viewerInput.camera);
+        else
+            computeViewMatrix(dst, viewerInput.camera);
+    }
+
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        this.computeViewMatrix(scratchViewMatrix, viewerInput);
+
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].prepareToRender(this.materialParamsBuffer, viewerInput, this.visible, this.textureHolder);
         for (let i = 0; i < this.shapeInstances.length; i++)
-            this.shapeInstances[i].prepareToRender(this.prmParamsBuffer, viewerInput, this.boneMatrices, this.cmbData.inverseBindPoseMatrices);
+            this.shapeInstances[i].prepareToRender(this.prmParamsBuffer, viewerInput, this.boneMatrices, scratchViewMatrix, this.cmbData.inverseBindPoseMatrices);
 
         this.animationController.setTimeInMilliseconds(viewerInput.time);
 
@@ -1097,6 +1102,7 @@ export class RoomRenderer {
     public transparentData: CmbData | null = null;
     public transparentMesh: CmbRenderer | null = null;
     public objectRenderers: CmbRenderer[] = [];
+    public roomSetups: ZSI.ZSIRoomSetup[] = [];
 
     constructor(device: GfxDevice, public textureHolder: CtrTextureHolder, public mesh: ZSI.Mesh, public name: string) {
         if (mesh.opaque !== null) {

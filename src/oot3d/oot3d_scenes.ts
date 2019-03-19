@@ -10,21 +10,25 @@ import * as UI from '../ui';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import Progressable from '../Progressable';
-import { RoomRenderer, CtrTextureHolder, BasicRendererHelper, CmbRenderer, CmbData } from './render';
+import { RoomRenderer, CtrTextureHolder, CmbRenderer, CmbData } from './render';
 import { SceneGroup } from '../viewer';
 import { assert, assertExists, hexzero } from '../util';
 import { fetchData } from '../fetch';
-import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { RENDER_HACKS_ICON } from '../bk/scenes';
 import { mat4 } from 'gl-matrix';
 import AnimationController from '../AnimationController';
 import { TransparentBlack, colorNew, White } from '../Color';
+import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 
-class OoT3DRenderer extends BasicRendererHelper implements Viewer.SceneGfx {
+const enum OoT3DPass { MAIN = 0x01, SKYBOX = 0x02 };
+class OoT3DRenderer implements Viewer.SceneGfx {
+    public viewRenderer = new GfxRenderInstViewRenderer();
+    public renderTarget = new BasicRenderTarget();
     public roomRenderers: RoomRenderer[] = [];
 
     constructor(device: GfxDevice, public textureHolder: CtrTextureHolder, public modelCache: ModelCache) {
-        super();
         for (let i = 0; i < this.roomRenderers.length; i++)
             this.roomRenderers[i].addToViewRenderer(device, this.viewRenderer);
     }
@@ -34,8 +38,31 @@ class OoT3DRenderer extends BasicRendererHelper implements Viewer.SceneGfx {
             this.roomRenderers[i].prepareToRender(hostAccessPass, viewerInput);
     }
 
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        const hostAccessPass = device.createHostAccessPass();
+        this.prepareToRender(hostAccessPass, viewerInput);
+        device.submitPass(hostAccessPass);
+
+        this.viewRenderer.prepareToRender(device);
+
+        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+
+        // First, render the skybox.
+        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
+        this.viewRenderer.executeOnPass(device, skyboxPassRenderer, OoT3DPass.SKYBOX);
+        skyboxPassRenderer.endPass(null);
+        device.submitPass(skyboxPassRenderer);
+        // Now do main pass.
+        const mainPassRenderer = this.renderTarget.createRenderPass(device, depthClearRenderPassDescriptor);
+        this.viewRenderer.executeOnPass(device, mainPassRenderer, OoT3DPass.MAIN);
+        return mainPassRenderer;
+    }
+
     public destroy(device: GfxDevice): void {
-        super.destroy(device);
+        this.viewRenderer.destroy(device);
+        this.renderTarget.destroy(device);
+
         this.textureHolder.destroy(device);
         this.modelCache.destroy(device);
         for (let i = 0; i < this.roomRenderers.length; i++)
@@ -173,6 +200,7 @@ class ModelCache {
 
 const enum ActorId {
     En_Test                = 0x0002,
+    En_Door                = 0x0009,
     En_Box                 = 0x000A,
     En_Okuta               = 0x000E,
     Bg_Ydan_Sp             = 0x000F,
@@ -475,6 +503,10 @@ class SceneDesc implements Viewer.SceneDesc {
                 throw "Starschulz";
             }
         });
+        else if (actor.actorId === ActorId.En_Door) fetchArchive(`zelda_keep.zar`).then((zar) => {
+            // TODO(jstpierre): Figure out how doors are decided. I'm guessing the current scene?
+            buildModel(zar, `door/model/obj_door_omote_model.cmb`);
+        });
         else if (actor.actorId === ActorId.Obj_Syokudai) fetchArchive(`zelda_syokudai.zar`).then((zar) => {
             const whichModel = (actor.variable >>> 12) & 0x03;
             if (whichModel === 0x00) {        // Golden Torch
@@ -766,15 +798,23 @@ class SceneDesc implements Viewer.SceneDesc {
                 throw "whoops";
         });
         else if (actor.actorId === ActorId.En_Hata) fetchArchive(`zelda_hata.zar`).then((zar) => {
-            // the flag model only shows two red flags, but in noclip it is two red and a blue that comes from nowhere?
-            // its not in the model and not in the actor list
-            const b = buildModel(zar, `model/ht_hata.cmb`); // hyrule castle flag
+            const whichModel = (actor.variable >>> 8) & 0x00FF;
+
+            const b = buildModel(zar, `model/ht_hata.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/ht_hata.csab`));
+
+            if (whichModel === 0x00) { // Hyrule Flag
+                b.shapeInstances[2].visible = false;
+            } else if (whichModel === 0xFF) { // Desert Flag
+                b.shapeInstances[3].visible = false;
+            }
         });
         else if (actor.actorId === ActorId.En_Wood02) fetchArchive(`zelda_wood02.zar`).then((zar) => {
             const whichModel = actor.variable & 0x00FF;
             // TODO(jstpierre): Why don't these tree models display correctly?
-            if (whichModel === 0x02) { // "Small Tree"
+            if (whichModel === 0x00) { // "Large Tree"
+                buildModel(zar, `model/tree01_model.cmb`, 1.5);
+            } else if (whichModel === 0x02) { // "Small Tree"
                 buildModel(zar, `model/tree03_model.cmb`, 0.5);
             } else {
                 console.log(`Unknown Wood02 model ${whichModel}`);
@@ -801,6 +841,7 @@ class SceneDesc implements Viewer.SceneDesc {
         });
         else if (actor.actorId === ActorId.En_Ishi) fetchArchive(`zelda_field_keep.zar`).then((zar) => {
             const b = buildModel(zar, `model/obj_isi01_model.cmb`, 0.1);
+            b.modelMatrix[13] += 10;
             b.setVertexColorScale(characterLightScale);
         });
         else if (actor.actorId === ActorId.Bg_Spot03_Taki) fetchArchive(`zelda_spot03_object.zar`).then((zar) => {
@@ -1431,6 +1472,37 @@ class SceneDesc implements Viewer.SceneDesc {
         else console.warn(`Unknown actor ${j} / ${hexzero(actor.actorId, 4)} / ${hexzero(actor.variable, 4)}`);
     }
 
+    private spawnSkybox(device: GfxDevice, renderer: OoT3DRenderer, zar: ZAR.ZAR, skyboxSettings: number): void {
+        // Attach the skybox to the first roomRenderer.
+        const roomRenderer = renderer.roomRenderers[0];
+
+        function buildModel(zar: ZAR.ZAR, modelPath: string): CmbRenderer {
+            const cmbData = renderer.modelCache.getModel(device, renderer, zar, modelPath);
+            const cmbRenderer = new CmbRenderer(device, renderer.textureHolder, cmbData);
+            cmbRenderer.isSkybox = true;
+            cmbRenderer.animationController.fps = 20;
+            cmbRenderer.addToViewRenderer(device, renderer.viewRenderer);
+            cmbRenderer.setPassMask(OoT3DPass.SKYBOX);
+            roomRenderer.objectRenderers.push(cmbRenderer);
+            return cmbRenderer;
+        }
+        function parseCMAB(zar: ZAR.ZAR, filename: string) { return CMAB.parse(CMB.Version.Ocarina, assertExists(ZAR.findFileData(zar, filename))); }
+
+        const whichSkybox = (skyboxSettings) & 0xFF;
+        if (whichSkybox === 0x01) {
+            const tenyku = buildModel(zar, `model/fine_tenkyu_1.cmb`);
+
+            const a = buildModel(zar, `model/fine_kumo_a1.cmb`);
+            a.bindCMAB(parseCMAB(zar, `misc/fine_kumo_a.cmab`));
+
+            const b = buildModel(zar, `model/fine_kumo_b1.cmb`);
+            b.bindCMAB(parseCMAB(zar, `misc/fine_kumo_b.cmab`));
+        } else if (whichSkybox === 0x1D) {
+            // Environment color, used in a lot of scenes.
+            // TODO(jstpierre): Implement. Where does it get the color from?
+        }
+    }
+
     private createSceneFromData(device: GfxDevice, abortSignal: AbortSignal, zarBuffer: ArrayBufferSlice, zsiBuffer: ArrayBufferSlice): Progressable<Viewer.SceneGfx> {
         const textureHolder = new CtrTextureHolder();
         const modelCache = new ModelCache();
@@ -1453,7 +1525,11 @@ class SceneDesc implements Viewer.SceneDesc {
             modelCache.fetchFileData(roomZSIName, abortSignal);
         }
 
+        modelCache.fetchArchive(`${pathBase}/kankyo/BlueSky.zar`, abortSignal);
+
         return modelCache.waitForLoad().then(() => {
+            const environmentSettings = zsi.environmentSettings[0];
+
             for (let i = 0; i < roomZSINames.length; i++) {
                 const roomSetups = ZSI.parseRooms(modelCache.getFileData(roomZSINames[i]));
 
@@ -1466,7 +1542,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 assert(roomSetup.mesh !== null);
                 const filename = roomZSINames[i].split('/').pop();
                 const roomRenderer = new RoomRenderer(device, textureHolder, roomSetup.mesh, filename);
-                (roomRenderer as any).roomSetups = roomSetups;
+                roomRenderer.roomSetups = roomSetups;
                 if (zar !== null) {
                     const cmabFile = zar.files.find((file) => file.name.startsWith(`ROOM${i}`) && file.name.endsWith('.cmab') && !file.name.endsWith('_t.cmab'));
                     if (cmabFile) {
@@ -1475,16 +1551,21 @@ class SceneDesc implements Viewer.SceneDesc {
                         roomRenderer.bindCMAB(cmab);
                     }
                 }
+                roomRenderer.setEnvironmentSettings(environmentSettings);
+
                 roomRenderer.addToViewRenderer(device, renderer.viewRenderer);
-
-                const envIndex = 0;
-                roomRenderer.setEnvironmentSettings(zsi.environmentSettings[envIndex]);
-
                 renderer.roomRenderers.push(roomRenderer);
 
                 for (let j = 0; j < roomSetup.actors.length; j++)
-                    this.spawnActorForRoom(device, abortSignal, scene, renderer, roomRenderer, zsi.environmentSettings[envIndex], roomSetup.actors[j], j);
+                    this.spawnActorForRoom(device, abortSignal, scene, renderer, roomRenderer, environmentSettings, roomSetup.actors[j], j);
             }
+
+            // XXX(jstpierre): We stick doors into the first roomRenderer to keep things simple.
+            for (let j = 0; j < zsi.doorActors.length; j++)
+                this.spawnActorForRoom(device, abortSignal, scene, renderer, renderer.roomRenderers[0], environmentSettings, zsi.doorActors[j], j);
+
+            const skyboxZAR = modelCache.getArchive(`${pathBase}/kankyo/BlueSky.zar`);
+            this.spawnSkybox(device, renderer, skyboxZAR, zsi.skyboxSettings);
 
             return modelCache.waitForLoad().then(() => {
                 return renderer;

@@ -12,7 +12,9 @@ const enum Version {
 export interface ZSIScene {
     name: string;
     rooms: string[];
+    doorActors: Actor[];
     environmentSettings: ZSIEnvironmentSettings[];
+    skyboxSettings: number;
 }
 
 export class ZSIRoomSetup {
@@ -37,6 +39,8 @@ const enum HeaderCommands {
     Collision = 0x03,
     Rooms = 0x04,
     Mesh = 0x0A,
+    DoorActor = 0x0E,
+    SkyboxSettings = 0x11,
     End = 0x14,
     MultiSetup = 0x18,
     EnvironmentSettings = 0x0F,
@@ -77,6 +81,32 @@ function readActors(version: Version, buffer: ArrayBufferSlice, nActors: number,
     return actors;
 }
 
+function readDoorActors(version: Version, buffer: ArrayBufferSlice, nActors: number, offs: number): Actor[] {
+    const view = buffer.createDataView();
+    const actors: Actor[] = [];
+    let actorTableIdx = offs;
+
+    const q = quat.create();
+    for (let i = 0; i < nActors; i++) {
+        const roomFront = view.getUint8(actorTableIdx + 0x00);
+        const transitionEffectFront = view.getUint8(actorTableIdx + 0x01);
+        const roomBack = view.getUint8(actorTableIdx + 0x02);
+        const transitionEffectBack = view.getUint8(actorTableIdx + 0x03);
+        const actorId = view.getUint16(actorTableIdx + 0x04, true);
+        const positionX = view.getInt16(actorTableIdx + 0x06, true);
+        const positionY = view.getInt16(actorTableIdx + 0x08, true);
+        const positionZ = view.getInt16(actorTableIdx + 0x0A, true);
+        const rotationY = view.getInt16(actorTableIdx + 0x0C, true) / 0x7FFF;
+        const variable = view.getUint16(actorTableIdx + 0x0E, true);
+        const modelMatrix = mat4.create();
+        quat.fromEuler(q, 0, rotationY * 180, 0);
+        mat4.fromRotationTranslation(modelMatrix, q, [positionX, positionY, positionZ]);
+        actors.push({ actorId, modelMatrix, variable });
+        actorTableIdx += 0x10;
+    }
+    return actors;
+}
+
 function readRooms(version: Version, buffer: ArrayBufferSlice, nRooms: number, offs: number): string[] {
     const rooms: string[] = [];
     const roomSize = version === Version.Ocarina ? 0x44 : 0x34;
@@ -85,6 +115,7 @@ function readRooms(version: Version, buffer: ArrayBufferSlice, nRooms: number, o
         rooms.push(readString(buffer, offs, roomSize));
         offs += roomSize;
     }
+
     return rooms;
 }
 
@@ -192,6 +223,8 @@ function readSceneHeaders(version: Version, name: string, buffer: ArrayBufferSli
     const view = buffer.createDataView();
     let rooms: string[] = [];
     let environmentSettings: ZSIEnvironmentSettings[] = [];
+    let doorActors: Actor[] = [];
+    let skyboxSettings = 0;
 
     while (true) {
         const cmd1 = view.getUint32(offs + 0x00, false);
@@ -209,14 +242,21 @@ function readSceneHeaders(version: Version, name: string, buffer: ArrayBufferSli
             const nEnvironmentSettings = (cmd1 >>> 16) & 0xFF;
             environmentSettings = readEnvironmentSettings(version, buffer, nEnvironmentSettings, cmd2);
             break;
+        case HeaderCommands.DoorActor:
+            const nActors = (cmd1 >>> 16) & 0xFF;
+            doorActors = readDoorActors(version, buffer, nActors, cmd2);
+            break;
         case HeaderCommands.Rooms:
             const nRooms = (cmd1 >>> 16) & 0xFF;
             rooms = readRooms(version, buffer, nRooms, cmd2);
             break;
+        case HeaderCommands.SkyboxSettings:
+            skyboxSettings = cmd2;
+            break;
         }
     }
 
-    return { name, rooms, environmentSettings };
+    return { name, rooms, doorActors, environmentSettings, skyboxSettings };
 }
 
 export function parseScene(buffer: ArrayBufferSlice): ZSIScene {
@@ -266,10 +306,11 @@ function readRoomHeaders(version: Version, buffer: ArrayBufferSlice, offs: numbe
             // Still setups to try after this command.
             break;
         }
-        case HeaderCommands.Actor:
+        case HeaderCommands.Actor: {
             const nActors = (cmd1 >>> 16) & 0xFF;
             mainSetup.actors = readActors(version, buffer, nActors, cmd2);
             break;
+        }
         case HeaderCommands.Mesh:
             mainSetup.mesh = readMesh(buffer, cmd2);
             break;
