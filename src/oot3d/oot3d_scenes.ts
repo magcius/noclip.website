@@ -1120,7 +1120,7 @@ class SceneDesc implements Viewer.SceneDesc {
                     b.setConstantColor(2, colorNew(0.62734, 0.70588, 1));
                     b.setConstantColor(3, colorNew(0.62734, 0.70588, 1));
                     b.setConstantColor(4, colorNew(0.62734, 0.70588, 1));
-                    b.shapeInstances[4].visible = false;
+                    b.shapeInstances[5].visible = false;
                 });
             } else if (whichNPC === 0x09) { // "Laughing man in red & white"
                 fetchArchive(`zelda_boj.zar`).then((zar) => {
