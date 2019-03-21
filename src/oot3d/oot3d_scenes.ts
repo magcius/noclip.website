@@ -1524,7 +1524,8 @@ class SceneDesc implements Viewer.SceneDesc {
             roomZSINames.push(roomZSIName);
             modelCache.fetchFileData(roomZSIName, abortSignal);
         }
-        
+
+        modelCache.fetchArchive(`${pathBase}/kankyo/BlueSky.zar`, abortSignal);
 
         return modelCache.waitForLoad().then(() => {
             const environmentSettings = zsi.environmentSettings[0];
@@ -1563,7 +1564,8 @@ class SceneDesc implements Viewer.SceneDesc {
             for (let j = 0; j < zsi.doorActors.length; j++)
                 this.spawnActorForRoom(device, abortSignal, scene, renderer, renderer.roomRenderers[0], environmentSettings, zsi.doorActors[j], j);
 
-
+            const skyboxZAR = modelCache.getArchive(`${pathBase}/kankyo/BlueSky.zar`);
+            this.spawnSkybox(device, renderer, skyboxZAR, zsi.skyboxSettings);
 
             return modelCache.waitForLoad().then(() => {
                 return renderer;
