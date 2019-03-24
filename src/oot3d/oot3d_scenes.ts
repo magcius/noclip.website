@@ -1079,6 +1079,8 @@ class SceneDesc implements Viewer.SceneDesc {
             const b = buildModel(zar, `model/impa.cmb`, 0.01);
             b.bindCSAB(parseCSAB(zar, `anim/impa_matsu.csab`));
             b.setVertexColorScale(characterLightScale);
+            // Hide her veil; it's only used in the opening cutscenes.
+            b.shapeInstances[9].visible = false;
         });
         else if (actor.actorId === ActorId.Demo_Du) fetchArchive(`zelda_du.zar`).then((zar) => {
             const b = buildModel(zar, `model/darunia.cmb`, 0.01);
