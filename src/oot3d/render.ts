@@ -100,12 +100,13 @@ layout(row_major, std140) uniform ub_PrmParams {
     vec4 u_PrmMisc[2];
 };
 
-#define u_PosScale (u_PrmMisc[0].x)
-#define u_TexCoord0Scale (u_PrmMisc[0].y)
-#define u_TexCoord1Scale (u_PrmMisc[0].z)
-#define u_TexCoord2Scale (u_PrmMisc[0].w)
+#define u_PosScale        (u_PrmMisc[0].x)
+#define u_TexCoord0Scale  (u_PrmMisc[0].y)
+#define u_TexCoord1Scale  (u_PrmMisc[0].z)
+#define u_TexCoord2Scale  (u_PrmMisc[0].w)
 #define u_BoneWeightScale (u_PrmMisc[1].x)
 #define u_BoneDimension   (u_PrmMisc[1].y)
+#define u_UseVertexColor  (u_PrmMisc[1].z)
 
 uniform sampler2D u_Texture[3];
 `;
@@ -381,7 +382,10 @@ void main() {
     vec4 t_Position = vec4(a_Position * u_PosScale, 1.0);
     gl_Position = Mul(u_Projection, Mul(_Mat4x4(t_BoneMatrix), t_Position));
 
-    v_Color = a_Color;
+    if (u_UseVertexColor > 0.0)
+        v_Color = a_Color;
+    else
+        v_Color = vec4(1);
 
     v_Normal = a_Normal;
     v_Depth = gl_Position.w;
@@ -686,6 +690,7 @@ class SepdData {
     private perInstanceBuffer: GfxBuffer | null = null;
     public inputState: GfxInputState;
     public inputLayout: GfxInputLayout;
+    public useVertexColor: boolean = false;
 
     constructor(device: GfxDevice, cmbContext: CmbContext, public sepd: CMB.Sepd) {
         const vatr = cmbContext.vatrChunk;
@@ -710,11 +715,7 @@ class SepdData {
         bindVertexAttrib(DMPProgram.a_Normal,      3, true,  vatr.normalByteOffset,    sepd.normal);
         // tangent
 
-        // If we don't have any color, use opaque white. The constant in the sepd is not guaranteed to be correct.
-        // XXX(jstpierre): Don't modify the input data if we can help it.
-        if (vatr.colorByteOffset < 0)
-            vec4.set(sepd.color.constant, 1, 1, 1, 1);
-
+        this.useVertexColor = vatr.colorByteOffset >= 0;
         bindVertexAttrib(DMPProgram.a_Color,       4, true,  vatr.colorByteOffset,     sepd.color);
         bindVertexAttrib(DMPProgram.a_TexCoord0,   2, false, vatr.texCoord0ByteOffset, sepd.texCoord0);
         bindVertexAttrib(DMPProgram.a_TexCoord1,   2, false, vatr.texCoord1ByteOffset, sepd.texCoord1);
@@ -827,7 +828,7 @@ class ShapeInstance {
                 }
 
                 offs += fillVec4(prmParamsMapped, offs, sepd.position.scale, sepd.texCoord0.scale, sepd.texCoord1.scale, sepd.texCoord2.scale);
-                offs += fillVec4(prmParamsMapped, offs, sepd.boneWeights.scale, sepd.boneDimension);
+                offs += fillVec4(prmParamsMapped, offs, sepd.boneWeights.scale, sepd.boneDimension, this.sepdData.useVertexColor ? 1 : 0);
             }
         }
     }
