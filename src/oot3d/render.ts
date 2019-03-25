@@ -289,6 +289,8 @@ void main() {
     vec4 t_ResultColor = t_CmbOut;
 
     #ifdef USE_LIGHTING
+        // NOTE(quade): 0.15 is a magic number
+        // fog in these games never seems to be totally opaque
         float t_FogFactor = clamp((v_DrawDistance - v_Depth) / (v_DrawDistance - v_FogStart), 0.15, 1.0);
         t_ResultColor.rgb = mix(v_FogColor, t_ResultColor.rgb, t_FogFactor);
     #endif
@@ -398,6 +400,9 @@ void main() {
     v_Normal = a_Normal;
     v_Depth = gl_Position.w;
     v_FogColor = FOG_COLOR;
+
+    // NOTE(quade): 4.0 is a magic number
+    // haven't fully figured out these values yet
     v_DrawDistance = DRAW_DISTANCE / 4.0;
     v_FogStart = FOG_START / 4.0;
 
@@ -406,6 +411,8 @@ void main() {
 #endif
 
 #ifdef USE_LIGHTING
+    // NOTE(quade): 2.0 is a magic number
+    // ambient colour appears to have a higher intensity 
     vec3 t_Lighting = AMBIENT_LIGHT_COLOR * 2.0;
     t_Lighting += clamp(dot(-a_Normal, PRIMARY_LIGHT_DIRECTION), 0.0, 1.0) * PRIMARY_LIGHT_COLOR;
     t_Lighting += clamp(dot(-a_Normal, SECONDARY_LIGHT_DIRECTION), 0.0, 1.0) * SECONDARY_LIGHT_COLOR;
