@@ -109,22 +109,23 @@ class OoT3DRenderer implements Viewer.SceneGfx {
         };
         renderHacksPanel.contents.appendChild(enableLighting.elem);
 
-        let environmentSettingPresets = [ 
-            `index0`,
-            `index1`,
-            `index2`,
-            `index3`,
-            `index4`,
-            `index5`,
-        ];
-
-        const lightingIndex = new UI.SingleSelect();
-        lightingIndex.setStrings(environmentSettingPresets);
-        lightingIndex.onselectionchange = (index: number) => {
-            for (let i = 0; i < this.roomRenderers.length; i++)
-                this.roomRenderers[i].setEnvironmentIndex(index);
-        };
-        renderHacksPanel.contents.appendChild(lightingIndex.elem);
+        // NOTE(quade): hacky and currently unused environment settings menu 
+        //let environmentSettingPresets = [ 
+        //    `index0`,
+        //    `index1`,
+        //    `index2`,
+        //    `index3`,
+        //    `index4`,
+        //    `index5`,
+        //];
+        //
+        //const lightingIndex = new UI.SingleSelect();
+        //lightingIndex.setStrings(environmentSettingPresets);
+        //lightingIndex.onselectionchange = (index: number) => {
+        //    for (let i = 0; i < this.roomRenderers.length; i++)
+        //        this.roomRenderers[i].setEnvironmentIndex(index);
+        //};
+        //renderHacksPanel.contents.appendChild(lightingIndex.elem);
 
         const enableUV = new UI.Checkbox('Enable UV', false);
         enableUV.onchanged = () => {

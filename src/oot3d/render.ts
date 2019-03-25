@@ -465,7 +465,7 @@ class MaterialInstance {
 
     public environmentSettings: ZSI.ZSIEnvironmentSettings[];
 
-    public environmentIndex: number = 3;
+    public environmentIndex: number = 1;
 
     constructor(public cmb: CMB.CMB, public material: CMB.Material) {
         for (let i = 0; i < this.material.constantColors.length; i++)
