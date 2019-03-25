@@ -6,8 +6,6 @@ The reverse engineering of model formats was done by many people. See the applic
 
 # Contributing
 
-Contributions are very welcome! New games, new features, and bug fixes are all very appreciated. Even small contributions like proper map names, grouping maps and new default savestates are extremely helpful. Getting set up with the application might be difficult until I can put up a proper guide, so if you would like to help out please DM either [@JasperRLZ](https://twitter.com/JasperRLZ/) on Twitter, or Jasper#0197 on Discord, or open a GitHub issue here. Please don't be shy!
+Contributions are very welcome! New games, new features, and bug fixes are all very appreciated. Even small contributions like proper map names, grouping maps and new default savestates are extremely helpful.
 
-My internal Trello task list is available here: https://trello.com/b/Z8I6IqC5/noclipwebsite
-
-There is also a Discord server where you can talk to me and the community: https://discord.gg/bkJmKKv
+If you would like contribute, there is a Getting Started guide in the [Official noclip.website Discord Server](https://discord.gg/bkJmKKv). A number of developers from the community are present there and can help answer questions if you run into any additional issues getting set up.
