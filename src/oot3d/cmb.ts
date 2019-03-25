@@ -221,6 +221,7 @@ export interface Material {
     alphaTestReference: number;
     renderFlags: GfxMegaStateDescriptor;
     isTransparent: boolean;
+    polygonOffset: number;
 }
 
 export function calcTexMtx(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
@@ -238,6 +239,21 @@ export function calcTexMtx(dst: mat4, scaleS: number, scaleT: number, rotation: 
     dst[13] = translationT;
 }
 
+function translateCullModeFlags(cullModeFlags: number): GfxCullMode {
+    switch (cullModeFlags) {
+    case 0x00:
+        return GfxCullMode.FRONT_AND_BACK;
+    case 0x01:
+        return GfxCullMode.BACK;
+    case 0x02:
+        return GfxCullMode.FRONT;
+    case 0x03:
+        return GfxCullMode.NONE;
+    default:
+        throw "whoops";
+    }
+}
+
 function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
     const view = buffer.createDataView();
 
@@ -253,9 +269,13 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
     const textureCombinerSettingsTableOffs = offs + (materialCount * materialDataSize);
 
     for (let i = 0; i < materialCount; i++) {
-        const cullModeFlags = view.getUint8(offs + 0x02);
-        assert(cullModeFlags === 0x00 || cullModeFlags === 0x01);
-        const cullMode = cullModeFlags === 0x01 ? GfxCullMode.BACK : GfxCullMode.NONE;
+        const cullModeFlags = view.getUint8(offs + 0x04);
+        assert(cullModeFlags >= 0x00 && cullModeFlags <= 0x03);
+        const cullMode = translateCullModeFlags(cullModeFlags);
+
+        const isPolygonOffsetEnabled = view.getUint8(offs + 0x05);
+        const polygonOffsetUnit = view.getInt8(offs + 0x07);
+        const polygonOffset = isPolygonOffsetEnabled ? polygonOffsetUnit / 0x10000 : 0;
 
         let bindingOffs = offs + 0x10;
         const textureBindings: TextureBinding[] = [];
@@ -435,7 +455,7 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
 
         const combinerBufferColor = colorNew(bufferColorR, bufferColorG, bufferColorB, bufferColorA);
         const textureEnvironment = { textureCombiners, combinerBufferColor };
-        cmb.materials.push({ index: i, textureBindings, textureMatrices, constantColors, textureEnvironment, alphaTestFunction, alphaTestReference, renderFlags, isTransparent });
+        cmb.materials.push({ index: i, textureBindings, textureMatrices, constantColors, textureEnvironment, alphaTestFunction, alphaTestReference, renderFlags, isTransparent, polygonOffset });
 
         offs += 0x15C;
 

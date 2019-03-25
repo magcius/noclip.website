@@ -93,7 +93,10 @@ layout(row_major, std140) uniform ub_SceneParams {
 layout(row_major, std140) uniform ub_MaterialParams {
     vec4 u_ConstantColor[6];
     Mat4x3 u_TexMtx[3];
+    vec4 u_MatMisc[1];
 };
+
+#define u_DepthOffset    (u_MatMisc[0].x)
 
 layout(row_major, std140) uniform ub_PrmParams {
     Mat4x3 u_BoneMatrix[16];
@@ -301,6 +304,11 @@ void main() {
     #endif
 
     gl_FragColor = t_ResultColor;
+
+    float t_BasicDepth = 2.0 * gl_FragCoord.z - 1.0;
+    float t_DepthScale = 1.0;
+    float t_DepthOffset = u_DepthOffset;
+    gl_FragDepth = t_BasicDepth * t_DepthScale + t_DepthOffset;
 }
 `;
     }
@@ -627,6 +635,8 @@ class MaterialInstance {
                 }
                 offs += fillMatrix4x3(mapped, offs, scratchTexMatrix);
             }
+
+            offs += fillVec4(mapped, offs, this.material.polygonOffset);
 
             if (rebindSamplers)
                 this.templateRenderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
