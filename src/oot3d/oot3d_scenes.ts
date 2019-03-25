@@ -10,21 +10,25 @@ import * as UI from '../ui';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import Progressable from '../Progressable';
-import { RoomRenderer, CtrTextureHolder, BasicRendererHelper, CmbRenderer, CmbData } from './render';
+import { RoomRenderer, CtrTextureHolder, CmbRenderer, CmbData } from './render';
 import { SceneGroup } from '../viewer';
 import { assert, assertExists, hexzero } from '../util';
 import { fetchData } from '../fetch';
-import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { RENDER_HACKS_ICON } from '../bk/scenes';
 import { mat4 } from 'gl-matrix';
 import AnimationController from '../AnimationController';
 import { TransparentBlack, colorNew, White } from '../Color';
+import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 
-class OoT3DRenderer extends BasicRendererHelper implements Viewer.SceneGfx {
+const enum OoT3DPass { MAIN = 0x01, SKYBOX = 0x02 };
+class OoT3DRenderer implements Viewer.SceneGfx {
+    public viewRenderer = new GfxRenderInstViewRenderer();
+    public renderTarget = new BasicRenderTarget();
     public roomRenderers: RoomRenderer[] = [];
 
     constructor(device: GfxDevice, public textureHolder: CtrTextureHolder, public modelCache: ModelCache) {
-        super();
         for (let i = 0; i < this.roomRenderers.length; i++)
             this.roomRenderers[i].addToViewRenderer(device, this.viewRenderer);
     }
@@ -34,8 +38,31 @@ class OoT3DRenderer extends BasicRendererHelper implements Viewer.SceneGfx {
             this.roomRenderers[i].prepareToRender(hostAccessPass, viewerInput);
     }
 
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        const hostAccessPass = device.createHostAccessPass();
+        this.prepareToRender(hostAccessPass, viewerInput);
+        device.submitPass(hostAccessPass);
+
+        this.viewRenderer.prepareToRender(device);
+
+        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+
+        // First, render the skybox.
+        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
+        this.viewRenderer.executeOnPass(device, skyboxPassRenderer, OoT3DPass.SKYBOX);
+        skyboxPassRenderer.endPass(null);
+        device.submitPass(skyboxPassRenderer);
+        // Now do main pass.
+        const mainPassRenderer = this.renderTarget.createRenderPass(device, depthClearRenderPassDescriptor);
+        this.viewRenderer.executeOnPass(device, mainPassRenderer, OoT3DPass.MAIN);
+        return mainPassRenderer;
+    }
+
     public destroy(device: GfxDevice): void {
-        super.destroy(device);
+        this.viewRenderer.destroy(device);
+        this.renderTarget.destroy(device);
+
         this.textureHolder.destroy(device);
         this.modelCache.destroy(device);
         for (let i = 0; i < this.roomRenderers.length; i++)
@@ -190,13 +217,16 @@ class ModelCache {
 
 const enum ActorId {
     En_Test                = 0x0002,
+    En_Door                = 0x0009,
     En_Box                 = 0x000A,
     En_Okuta               = 0x000E,
     Bg_Ydan_Sp             = 0x000F,
     En_Wallmas             = 0x0011,
     En_Dodongo             = 0x0012,
+    En_Firefly             = 0x0013,
     En_Item00              = 0x0015,
     En_Niw                 = 0x0019,
+    En_Tite                = 0x001B,
     Boss_Goma              = 0x0028,
     En_Zf                  = 0x0025,
     En_Hata                = 0x0026,
@@ -221,6 +251,7 @@ const enum ActorId {
     Bg_Mizu_Movebg         = 0x0064,
     Bg_Mori_Hineri         = 0x0068,
     En_Bb                  = 0x0069,
+    Bg_Toki_Hikari         = 0x006A,
     Bg_Mjin                = 0x006E,
     En_Wood02              = 0x0077,
     En_Trap                = 0x0080,
@@ -230,11 +261,15 @@ const enum ActorId {
     Bg_Mori_Kaitenkabe     = 0x0088,
     Bg_Mori_Rakkatenjo     = 0x0089,
     En_Vm                  = 0x008A,
+    Demo_Effect            = 0x008B,
     En_Floormas            = 0x008E,
     En_Heishi1             = 0x008F,
+    En_Rd                  = 0x0090,
     En_Sw                  = 0x0095,
     En_Du                  = 0x0098,
     Door_Ana               = 0x009B,
+    Bg_Spot02_Objects      = 0x009D,
+    Bg_Haka                = 0x009D,
     Demo_Du                = 0x00A8,
     Demo_Im                = 0x00A9,
     En_Heishi2             = 0x00B3,
@@ -257,14 +292,17 @@ const enum ActorId {
     Bg_Spot01_Idohashira   = 0x0103,
     Bg_Spot01_Idomizu      = 0x0104,
     Bg_Po_Syokudai         = 0x0105,
+    Bg_Spot15_Rrbox        = 0x0107,
     Obj_Tsubo              = 0x0111,
     En_Wonder_Item         = 0x0112,
     En_Skj                 = 0x0115,
     Elf_Msg                = 0x011B,
+    Bg_Spot03_Taki         = 0x011F,
     En_Kusa                = 0x0125,
     Obj_Bombiwa            = 0x0127,
     Obj_Switch             = 0x012A,
     Obj_Hsblock            = 0x012D,
+    En_Okarina_Tag         = 0x012E,
     En_Goroiwa             = 0x0130,
     En_Toryo               = 0x0132,
     En_Blkobj              = 0x0136,
@@ -275,7 +313,9 @@ const enum ActorId {
     En_Wonder_Talk         = 0x0147,
     En_Ds                  = 0x0149,
     En_Mk                  = 0x014A,
+    En_Bom_Bowl_Man        = 0x014B,
     En_Owl                 = 0x014D,
+    En_Ishi                = 0x014E,
     Bg_Spot18_Basket       = 0x015C,
     En_Siofuki             = 0x015F,
     En_Ko                  = 0x0163,
@@ -283,6 +323,7 @@ const enum ActorId {
     En_Hy                  = 0x016E,
     Elf_Msg2               = 0x0173,
     En_Heishi4             = 0x0178,
+    En_Takara_Man          = 0x017C,
     En_Wonder_Talk2        = 0x0185,
     Bg_Spot05_Soko         = 0x018D,
     En_Hintnuts            = 0x0192,
@@ -478,6 +519,10 @@ class SceneDesc implements Viewer.SceneDesc {
             } else {
                 throw "Starschulz";
             }
+        });
+        else if (actor.actorId === ActorId.En_Door) fetchArchive(`zelda_keep.zar`).then((zar) => {
+            // TODO(jstpierre): Figure out how doors are decided. I'm guessing the current scene?
+            buildModel(zar, `door/model/obj_door_omote_model.cmb`);
         });
         else if (actor.actorId === ActorId.Obj_Syokudai) fetchArchive(`zelda_syokudai.zar`).then((zar) => {
             const whichModel = (actor.variable >>> 12) & 0x03;
@@ -770,19 +815,58 @@ class SceneDesc implements Viewer.SceneDesc {
                 throw "whoops";
         });
         else if (actor.actorId === ActorId.En_Hata) fetchArchive(`zelda_hata.zar`).then((zar) => {
-            // the flag model only shows two red flags, but in noclip it is two red and a blue that comes from nowhere?
-            // its not in the model and not in the actor list
-            const b = buildModel(zar, `model/ht_hata.cmb`); // hyrule castle flag
+            const whichModel = (actor.variable >>> 8) & 0x00FF;
+
+            const b = buildModel(zar, `model/ht_hata.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/ht_hata.csab`));
+
+            if (whichModel === 0x00) { // Hyrule Flag
+                b.shapeInstances[2].visible = false;
+            } else if (whichModel === 0xFF) { // Desert Flag
+                b.shapeInstances[3].visible = false;
+            }
         });
         else if (actor.actorId === ActorId.En_Wood02) fetchArchive(`zelda_wood02.zar`).then((zar) => {
             const whichModel = actor.variable & 0x00FF;
             // TODO(jstpierre): Why don't these tree models display correctly?
-            if (whichModel === 0x02) { // "Small Tree"
+            if (whichModel === 0x00) { // "Large Tree"
+                buildModel(zar, `model/tree01_model.cmb`, 1.5);
+            } else if (whichModel === 0x02) { // "Small Tree"
                 buildModel(zar, `model/tree03_model.cmb`, 0.5);
             } else {
                 console.log(`Unknown Wood02 model ${whichModel}`);
             }
+        });
+        else if (actor.actorId === ActorId.Bg_Toki_Hikari) fetchArchive(`zelda_toki_objects.zar`).then((zar) => {
+            const whichModel = actor.variable & 0x000F;
+            if (whichModel === 0x00) {
+                const b = buildModel(zar, `model/tokinoma_hikari_modelT.cmb`, 1);
+                b.bindCMAB(parseCMAB(zar, `misc/tokinoma_hikari_modelT.cmab`));
+            } else if (whichModel === 0x01) {
+                // TODO(jstpierre): How is this positioned?
+                // const b = buildModel(zar, `model/tokinoma_hikari3_modelT.cmb`, 1);
+                // b.bindCMAB(parseCMAB(zar, `misc/tokinoma_hikari3_modelT.cmab`));
+            } else {
+                throw "whoops";
+            }
+        });
+        else if (actor.actorId === ActorId.Bg_Haka) fetchArchive(`zelda_haka.zar`).then((zar) => {
+            buildModel(zar, `model/obj_haka_model.cmb`, 0.1);
+        });
+        else if (actor.actorId === ActorId.Bg_Spot15_Rrbox) fetchArchive(`zelda_spot15_obj.zar`).then((zar) => {
+            buildModel(zar, `model/spot15_box_model.cmb`, 0.1);
+        });
+        else if (actor.actorId === ActorId.En_Ishi) fetchArchive(`zelda_field_keep.zar`).then((zar) => {
+            const b = buildModel(zar, `model/obj_isi01_model.cmb`, 0.1);
+            b.modelMatrix[13] += 10;
+            b.setVertexColorScale(characterLightScale);
+        });
+        else if (actor.actorId === ActorId.Bg_Spot03_Taki) fetchArchive(`zelda_spot03_object.zar`).then((zar) => {
+            const b = buildModel(zar, `model/c_s03bigtaki_modelT.cmb`, 0.1);
+            b.bindCMAB(parseCMAB(zar, `misc/c_s03bigtaki_modelT.cmab`));
+
+            const b2 = buildModel(zar, `model/c_s03shibuki_modelT.cmb`, 0.1);
+            b2.bindCMAB(parseCMAB(zar, `misc/c_s03shibuki_modelT.cmab`));
         });
         // NPCs.
         else if (actor.actorId === ActorId.En_Ko) fetchArchive(`zelda_kw1.zar`).then((zar) => {
@@ -847,9 +931,19 @@ class SceneDesc implements Viewer.SceneDesc {
                     b.setVertexColorScale(characterLightScale);
                 });
             } else if (whichShopkeeper === 0x03) { // Market Potion Shopkeeper
-                // TODO(jstpierre)
+                fetchArchive(`zelda_ds2.zar`).then((zar) => {
+                    const b = buildModel(zar, `model/drugmaster.cmb`);
+                    b.bindCSAB(parseCSAB(zar, `anim/ds2_matsu.csab`));
+                    b.setVertexColorScale(characterLightScale);
+                });
             } else if (whichShopkeeper === 0x04) { // Bazaar Shopkeeper
-                // TODO(jstpierre)
+                fetchArchive(`zelda_sh.zar`).then((zar) => {
+                    const b = buildModel(zar, `model/shotmaster.cmb`);
+                    b.bindCSAB(parseCSAB(zar, `anim/sh_matsu.csab`));
+                    b.setVertexColorScale(characterLightScale);
+                    b.shapeInstances[1].visible = false;
+                    b.shapeInstances[2].visible = false;
+                });
             } else if (whichShopkeeper === 0x07) { // Zora Shopkeeper
                 fetchArchive(`zelda_masterzoora.zar`).then((zar) => {
                     const b = buildModel(zar, `model/zorapeople.cmb`);
@@ -1001,6 +1095,9 @@ class SceneDesc implements Viewer.SceneDesc {
         else if (actor.actorId === ActorId.Demo_Im) fetchArchive(`zelda_im.zar`).then((zar) => {
             const b = buildModel(zar, `model/impa.cmb`, 0.01);
             b.bindCSAB(parseCSAB(zar, `anim/impa_matsu.csab`));
+            b.setVertexColorScale(characterLightScale);
+            // Hide her veil; it's only used in the opening cutscenes.
+            b.shapeInstances[9].visible = false;
         });
         else if (actor.actorId === ActorId.Demo_Du) fetchArchive(`zelda_du.zar`).then((zar) => {
             const b = buildModel(zar, `model/darunia.cmb`, 0.01);
@@ -1128,6 +1225,7 @@ class SceneDesc implements Viewer.SceneDesc {
                     b.setConstantColor(3, White);
                     b.setConstantColor(4, colorNew(0, 0.1968, 0.62745));
                     b.setVertexColorScale(characterLightScale);
+                    b.shapeInstances[5].visible = false;
                 });
             } else if (whichNPC === 0x08) { // "Thin woman in lilac"
                 fetchArchive(`zelda_cne.zar`).then((zar) => {
@@ -1137,7 +1235,7 @@ class SceneDesc implements Viewer.SceneDesc {
                     b.setConstantColor(2, colorNew(0.62734, 0.70588, 1));
                     b.setConstantColor(3, colorNew(0.62734, 0.70588, 1));
                     b.setConstantColor(4, colorNew(0.62734, 0.70588, 1));
-                    b.shapeInstances[4].visible = false;
+                    b.shapeInstances[5].visible = false;
                 });
             } else if (whichNPC === 0x09) { // "Laughing man in red & white"
                 fetchArchive(`zelda_boj.zar`).then((zar) => {
@@ -1180,6 +1278,59 @@ class SceneDesc implements Viewer.SceneDesc {
                         b.shapeInstances[i].visible = false;
                     b.shapeInstances[8].visible = true;
                 });
+            } else if (whichNPC === 0x0D) { // "Red haired man in green & lilac"
+                fetchArchive(`zelda_ahg.zar`).then((zar) => {
+                    const b = buildModel(zar, `model/hyliaman2.cmb`);
+                    b.bindCSAB(parseCSAB(zar, `anim/ahg2_18.csab`));
+                    b.setConstantColor(3, colorNew(0.78431, 0.70588, 1));
+                    b.setConstantColor(4, colorNew(0.78431, 0.70588, 1));
+                    b.setVertexColorScale(characterLightScale);
+                    for (let i = 3; i < 8; i++)
+                        b.shapeInstances[i].visible = false;
+                    b.shapeInstances[6].visible = true;
+                });
+            } else if (whichNPC === 0x0E) { // "Bearded, red haired man in green & white"
+                fetchArchive(`zelda_boj.zar`).then((zar) => {
+                    const b = buildModel(zar, `model/hyliaman1.cmb`);
+                    b.bindCSAB(parseCSAB(zar, `anim/boj2_19.csab`));
+                    b.setConstantColor(3, White);
+                    b.setConstantColor(4, colorNew(0.54901, 1, 0.43137));
+                    b.setVertexColorScale(characterLightScale);
+                    for (let i = 3; i < 12; i++)
+                        b.shapeInstances[i].visible = false;
+                    b.shapeInstances[9].visible = true;
+                });
+            } else if (whichNPC === 0x0F) { // "Bald man in brown"
+                fetchArchive(`zelda_bji.zar`).then((zar) => {
+                    const b = buildModel(zar, `model/hyliaoldman.cmb`);
+                    b.bindCSAB(parseCSAB(zar, `anim/bji2_20.csab`));
+                    b.setConstantColor(3, colorNew(0.50980, 0.70577, 1));
+                    b.setConstantColor(4, colorNew(0.50980, 0.27450, 0.07843));
+                    b.setVertexColorScale(characterLightScale);
+                    b.shapeInstances[3].visible = false;
+                    b.shapeInstances[4].visible = false;
+                });
+            } else if (whichNPC === 0x13) { // Old man inside Market Potion Shop
+                fetchArchive(`zelda_bji.zar`).then((zar) => {
+                    const b = buildModel(zar, `model/hyliaoldman.cmb`);
+                    b.bindCSAB(parseCSAB(zar, `anim/bji2_20.csab`));
+                    b.setConstantColor(3, colorNew(0.27450, 0.50980, 0.82352));
+                    b.setConstantColor(4, colorNew(0.62754, 0, 0.39215));
+                    b.setVertexColorScale(characterLightScale);
+                    b.shapeInstances[3].visible = false;
+                    b.shapeInstances[4].visible = false;
+                });
+            } else if (whichNPC === 0x14) { // Man inside Market Bazaar
+                fetchArchive(`zelda_ahg.zar`).then((zar) => {
+                    const b = buildModel(zar, `model/hyliaman2.cmb`);
+                    b.bindCSAB(parseCSAB(zar, `anim/ahg2_18.csab`));
+                    b.setConstantColor(3, colorNew(0, 0.58823, 0.43137));
+                    b.setConstantColor(4, colorNew(0.62745, 0.90196, 0));
+                    b.setVertexColorScale(characterLightScale);
+                    for (let i = 3; i < 8; i++)
+                        b.shapeInstances[i].visible = false;
+                    b.shapeInstances[6].visible = true;
+                });
             } else {
                 console.warn(`Unknown Hyrule Market NPC ${j} / ${hexzero(whichNPC, 2)}`);
             }
@@ -1193,6 +1344,18 @@ class SceneDesc implements Viewer.SceneDesc {
             } else {
                 console.log(`Unknown fishing model ${whichModel}`);
             }
+        });
+        else if (actor.actorId === ActorId.En_Bom_Bowl_Man) fetchArchive(`zelda_bg.zar`).then((zar) => {
+            const b = buildModel(zar, `model/boringmaster.cmb`);
+            b.bindCSAB(parseCSAB(zar, `anim/bg_wait.csab`));
+            b.setVertexColorScale(characterLightScale);
+            b.modelMatrix[13] += 10;
+        });
+        else if (actor.actorId === ActorId.En_Takara_Man) fetchArchive(`zelda_ts.zar`).then((zar) => {
+            const b = buildModel(zar, `model/lottomaster.cmb`);
+            b.bindCSAB(parseCSAB(zar, `anim/ts_matsu.csab`));
+            b.setVertexColorScale(characterLightScale);
+            b.modelMatrix[13] += 10;
         });
         // Enemies
         else if (actor.actorId === ActorId.En_Hintnuts) fetchArchive(`zelda_hintnuts.zar`).then((zar) => {
@@ -1263,6 +1426,11 @@ class SceneDesc implements Viewer.SceneDesc {
             b.bindCSAB(parseCSAB(zar, `anim/da_wait.csab`));
             b.setVertexColorScale(characterLightScale);
         });
+        else if (actor.actorId === ActorId.En_Firefly) fetchArchive('zelda_ff.zar').then((zar) => {
+            const b = buildModel(zar, `model/keith.cmb`);
+            b.bindCSAB(parseCSAB(zar, `anim/firefly_foot_at.csab`));
+            b.setVertexColorScale(characterLightScale);
+        });
         else if (actor.actorId === ActorId.En_Sw) fetchArchive('zelda_st.zar').then((zar) => {
             const whichSkulltula = (actor.variable >>> 12) & 0x07;
             if (whichSkulltula === 0x00)  { // Skullwalltula
@@ -1282,6 +1450,21 @@ class SceneDesc implements Viewer.SceneDesc {
         else if (actor.actorId === ActorId.En_Dekubaba) fetchArchive(`zelda_dekubaba.zar`).then((zar) => {
             // The Deku Baba lies in hiding...
             buildModel(zar, `model/db_ha_model.cmb`);
+        });
+        else if (actor.actorId === ActorId.En_Tite) fetchArchive(`zelda_tt.zar`).then((zar) => {
+            const b = buildModel(zar, `model/tectite.cmb`);
+            b.bindCSAB(parseCSAB(zar, `anim/tt_wait.csab`));
+            b.setVertexColorScale(characterLightScale);
+        });
+        else if (actor.actorId === ActorId.En_Rd) fetchArchive(`zelda_rd.zar`).then((zar) => {
+            const whichEnemy = (actor.variable >>> 7) & 0x01;
+            if (whichEnemy === 0x00) { // Redead
+                const b = buildModel(zar, `model/redead.cmb`);
+                b.bindCSAB(parseCSAB(zar, `anim/re_dead_wait_20f.csab`));
+            } else if (whichEnemy === 0x01) { // Gibdo
+                const b = buildModel(zar, `model/gibud.cmb`);
+                b.bindCSAB(parseCSAB(zar, `anim/re_dead_wait_20f.csab`));
+            }
         });
         // Bosses
         else if (actor.actorId === ActorId.Boss_Goma) fetchArchive('zelda_goma.zar').then((zar) => {
@@ -1303,7 +1486,40 @@ class SceneDesc implements Viewer.SceneDesc {
         else if (actor.actorId === ActorId.En_River_Sound) return;
         // Invisible item spawn
         else if (actor.actorId === ActorId.En_Wonder_Item) return;
+        // Ocarina Trigger
+        else if (actor.actorId === ActorId.En_Okarina_Tag) return;
         else console.warn(`Unknown actor ${j} / ${hexzero(actor.actorId, 4)} / ${hexzero(actor.variable, 4)}`);
+    }
+
+    private spawnSkybox(device: GfxDevice, renderer: OoT3DRenderer, zar: ZAR.ZAR, skyboxSettings: number): void {
+        // Attach the skybox to the first roomRenderer.
+        const roomRenderer = renderer.roomRenderers[0];
+
+        function buildModel(zar: ZAR.ZAR, modelPath: string): CmbRenderer {
+            const cmbData = renderer.modelCache.getModel(device, renderer, zar, modelPath);
+            const cmbRenderer = new CmbRenderer(device, renderer.textureHolder, cmbData);
+            cmbRenderer.isSkybox = true;
+            cmbRenderer.animationController.fps = 20;
+            cmbRenderer.addToViewRenderer(device, renderer.viewRenderer);
+            cmbRenderer.setPassMask(OoT3DPass.SKYBOX);
+            roomRenderer.objectRenderers.push(cmbRenderer);
+            return cmbRenderer;
+        }
+        function parseCMAB(zar: ZAR.ZAR, filename: string) { return CMAB.parse(CMB.Version.Ocarina, assertExists(ZAR.findFileData(zar, filename))); }
+
+        const whichSkybox = (skyboxSettings) & 0xFF;
+        if (whichSkybox === 0x01) {
+            const tenyku = buildModel(zar, `model/fine_tenkyu_1.cmb`);
+
+            const a = buildModel(zar, `model/fine_kumo_a1.cmb`);
+            a.bindCMAB(parseCMAB(zar, `misc/fine_kumo_a.cmab`));
+
+            const b = buildModel(zar, `model/fine_kumo_b1.cmb`);
+            b.bindCMAB(parseCMAB(zar, `misc/fine_kumo_b.cmab`));
+        } else if (whichSkybox === 0x1D) {
+            // Environment color, used in a lot of scenes.
+            // TODO(jstpierre): Implement. Where does it get the color from?
+        }
     }
 
     private createSceneFromData(device: GfxDevice, abortSignal: AbortSignal, zarBuffer: ArrayBufferSlice, zsiBuffer: ArrayBufferSlice): Progressable<Viewer.SceneGfx> {
@@ -1328,7 +1544,11 @@ class SceneDesc implements Viewer.SceneDesc {
             modelCache.fetchFileData(roomZSIName, abortSignal);
         }
 
+        modelCache.fetchArchive(`${pathBase}/kankyo/BlueSky.zar`, abortSignal);
+
         return modelCache.waitForLoad().then(() => {
+            const environmentSettings = zsi.environmentSettings;
+
             for (let i = 0; i < roomZSINames.length; i++) {
                 const roomSetups = ZSI.parseRooms(modelCache.getFileData(roomZSINames[i]));
 
@@ -1341,7 +1561,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 assert(roomSetup.mesh !== null);
                 const filename = roomZSINames[i].split('/').pop();
                 const roomRenderer = new RoomRenderer(device, textureHolder, roomSetup.mesh, filename);
-                (roomRenderer as any).roomSetups = roomSetups;
+                roomRenderer.roomSetups = roomSetups;
                 if (zar !== null) {
                     const cmabFile = zar.files.find((file) => file.name.startsWith(`ROOM${i}`) && file.name.endsWith('.cmab') && !file.name.endsWith('_t.cmab'));
                     if (cmabFile) {
@@ -1350,15 +1570,21 @@ class SceneDesc implements Viewer.SceneDesc {
                         roomRenderer.bindCMAB(cmab);
                     }
                 }
+                roomRenderer.setEnvironmentSettings(environmentSettings);
+
                 roomRenderer.addToViewRenderer(device, renderer.viewRenderer);
-
-                roomRenderer.setEnvironmentSettings(zsi.environmentSettings);
-
                 renderer.roomRenderers.push(roomRenderer);
 
                 for (let j = 0; j < roomSetup.actors.length; j++)
-                    this.spawnActorForRoom(device, abortSignal, scene, renderer, roomRenderer, zsi.environmentSettings, roomSetup.actors[j], j);
+                    this.spawnActorForRoom(device, abortSignal, scene, renderer, roomRenderer, environmentSettings, roomSetup.actors[j], j);
             }
+
+            // XXX(jstpierre): We stick doors into the first roomRenderer to keep things simple.
+            for (let j = 0; j < zsi.doorActors.length; j++)
+                this.spawnActorForRoom(device, abortSignal, scene, renderer, renderer.roomRenderers[0], environmentSettings, zsi.doorActors[j], j);
+
+            const skyboxZAR = modelCache.getArchive(`${pathBase}/kankyo/BlueSky.zar`);
+            this.spawnSkybox(device, renderer, skyboxZAR, zsi.skyboxSettings);
 
             return modelCache.waitForLoad().then(() => {
                 return renderer;

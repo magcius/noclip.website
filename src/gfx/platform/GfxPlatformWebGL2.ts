@@ -364,7 +364,8 @@ function applyAttachmentState(gl: WebGL2RenderingContext, i: number, currentAtta
                  newAttachmentState.alphaBlendState.blendMode === GfxBlendMode.NONE)
             gl.disable(gl.BLEND);
 
-        gl.blendEquationSeparate(newAttachmentState.rgbBlendState.blendMode, newAttachmentState.alphaBlendState.blendMode);
+        if (newAttachmentState.rgbBlendState.blendMode !== GfxBlendMode.NONE && newAttachmentState.alphaBlendState.blendMode !== GfxBlendMode.NONE)
+            gl.blendEquationSeparate(newAttachmentState.rgbBlendState.blendMode, newAttachmentState.alphaBlendState.blendMode);
 
         currentAttachmentState.rgbBlendState.blendMode = newAttachmentState.rgbBlendState.blendMode;
         currentAttachmentState.alphaBlendState.blendMode = newAttachmentState.alphaBlendState.blendMode;

@@ -336,8 +336,8 @@ function decodeTexture_LA8(width: number, height: number, texData: ArrayBufferSl
     const src = texData.createDataView();
     let srcOffs = 0;
     return decodeTexture_Tiled(width, height, (pixels, dstOffs) => {
-        const L = src.getUint8(srcOffs++);
         const A = src.getUint8(srcOffs++);
+        const L = src.getUint8(srcOffs++);
         pixels[dstOffs + 0] = L;
         pixels[dstOffs + 1] = L;
         pixels[dstOffs + 2] = L;
