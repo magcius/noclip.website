@@ -651,11 +651,11 @@ const sceneDescs = [
     "Faron Woods",
 	new SkywardSwordSceneDesc("F100", "Faron Woods"),
 	new SkywardSwordSceneDesc("F100_1", "Inside the Great Tree"),
-	new SkywardSwordSceneDesc("F102_1", "Outside Skyview Temple"),
     new SkywardSwordSceneDesc("D100", "Skyview Temple"),
 	new SkywardSwordSceneDesc("F102_2", "Faron's Lair"),
 	new SkywardSwordSceneDesc("F101", "Deep Woods"),
 	new SkywardSwordSceneDesc("F102", "Lake Floria"),
+	new SkywardSwordSceneDesc("F102_1", "Outside Ancient Cistern"),
 	new SkywardSwordSceneDesc("D101", "Ancient Cistern"),
 	new SkywardSwordSceneDesc("F103", "Faron Woods (Flooded)"),
 	
