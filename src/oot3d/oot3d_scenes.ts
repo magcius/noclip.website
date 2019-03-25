@@ -216,6 +216,7 @@ const enum ActorId {
     Boss_Dodongo           = 0x0027,
     En_Dodojr              = 0x002F,
     En_St                  = 0x0037,
+    En_A_Obj               = 0x0039,
     En_River_Sound         = 0x003B,
     En_Horse_Normal        = 0x003C,
     En_Ossan               = 0x003D,
@@ -251,7 +252,7 @@ const enum ActorId {
     En_Sw                  = 0x0095,
     En_Du                  = 0x0098,
     Door_Ana               = 0x009B,
-    Bg_Spot02_Objects      = 0x009D,
+    Bg_Spot02_Objects      = 0x009C,
     Bg_Haka                = 0x009D,
     Demo_Du                = 0x00A8,
     Demo_Im                = 0x00A9,
@@ -299,6 +300,7 @@ const enum ActorId {
     En_Bom_Bowl_Man        = 0x014B,
     En_Owl                 = 0x014D,
     En_Ishi                = 0x014E,
+    Obj_Hana               = 0x014F,
     Bg_Spot18_Basket       = 0x015C,
     En_Siofuki             = 0x015F,
     En_Ko                  = 0x0163,
@@ -326,6 +328,9 @@ const enum ActorId {
     En_Zo                  = 0x01CE,
     Obj_Timeblock          = 0x01D1,
     En_Zl4                 = 0x01D3,
+
+    //
+    Grezzo_Hintstone       = 0x01D9,
 };
 
 // Some objects do special magic based on which scene they are loaded into.
@@ -426,9 +431,21 @@ class SceneDesc implements Viewer.SceneDesc {
             return cmbRenderer;
         }
 
-        function parseCSAB(zar: ZAR.ZAR, filename: string) { return CSAB.parse(CMB.Version.Ocarina, assertExists(ZAR.findFileData(zar, filename))); }
-        function parseCMAB(zar: ZAR.ZAR, filename: string) { return CMAB.parse(CMB.Version.Ocarina, assertExists(ZAR.findFileData(zar, filename))); }
-        function animFrame(frame: number): AnimationController { const a = new AnimationController(); a.setTimeInFrames(frame); return a; }
+        function parseCSAB(zar: ZAR.ZAR, filename: string) {
+            return CSAB.parse(CMB.Version.Ocarina, assertExists(ZAR.findFileData(zar, filename)));
+        }
+
+        function parseCMAB(zar: ZAR.ZAR, filename: string) {
+            const cmab = CMAB.parse(CMB.Version.Ocarina, assertExists(ZAR.findFileData(zar, filename)));
+            renderer.textureHolder.addTextures(device, cmab.textures);
+            return cmab;
+        }
+
+        function animFrame(frame: number): AnimationController {
+            const a = new AnimationController(); 
+            a.setTimeInFrames(frame);
+            return a;
+        }
 
         const characterLightScale = 0.5;
 
@@ -505,6 +522,7 @@ class SceneDesc implements Viewer.SceneDesc {
         });
         else if (actor.actorId === ActorId.En_Door) fetchArchive(`zelda_keep.zar`).then((zar) => {
             // TODO(jstpierre): Figure out how doors are decided. I'm guessing the current scene?
+            console.log("En_Door", hexzero(actor.variable, 4));
             buildModel(zar, `door/model/obj_door_omote_model.cmb`);
         });
         else if (actor.actorId === ActorId.Obj_Syokudai) fetchArchive(`zelda_syokudai.zar`).then((zar) => {
@@ -817,7 +835,7 @@ class SceneDesc implements Viewer.SceneDesc {
             } else if (whichModel === 0x02) { // "Small Tree"
                 buildModel(zar, `model/tree03_model.cmb`, 0.5);
             } else {
-                console.log(`Unknown Wood02 model ${whichModel}`);
+                console.warn(`Unknown En_Wood02 model ${whichModel}`);
             }
         });
         else if (actor.actorId === ActorId.Bg_Toki_Hikari) fetchArchive(`zelda_toki_objects.zar`).then((zar) => {
@@ -844,6 +862,19 @@ class SceneDesc implements Viewer.SceneDesc {
             b.modelMatrix[13] += 10;
             b.setVertexColorScale(characterLightScale);
         });
+        else if (actor.actorId === ActorId.Obj_Hana) fetchArchive(`zelda_field_keep.zar`).then((zar) => {
+            const whichModel = actor.variable & 0x03;
+            if (whichModel === 0x00) {
+                buildModel(zar, `model/flower1_model.cmb`, 0.1);
+            } else if (whichModel === 0x01) {
+                const b = buildModel(zar, `model/obj_isi01_model.cmb`, 0.1);
+                b.setVertexColorScale(characterLightScale);
+            } else if (whichModel === 0x02) {
+                buildModel(zar, `model/grass05_model.cmb`, 0.4);
+            } else {
+                throw "whoops";
+            }
+        });
         else if (actor.actorId === ActorId.Bg_Spot03_Taki) fetchArchive(`zelda_spot03_object.zar`).then((zar) => {
             const b = buildModel(zar, `model/c_s03bigtaki_modelT.cmb`, 0.1);
             b.bindCMAB(parseCMAB(zar, `misc/c_s03bigtaki_modelT.cmab`));
@@ -851,57 +882,81 @@ class SceneDesc implements Viewer.SceneDesc {
             const b2 = buildModel(zar, `model/c_s03shibuki_modelT.cmb`, 0.1);
             b2.bindCMAB(parseCMAB(zar, `misc/c_s03shibuki_modelT.cmab`));
         });
+        else if (actor.actorId === ActorId.En_A_Obj) {
+            const whichObject = actor.variable & 0xFF;
+            if (whichObject === 0x0A) fetchArchive(`zelda_keep.zar`).then((zar) => {
+                buildModel(zar, `objects/model/kanban2_model.cmb`);
+            });
+            else
+                console.warn(`Unknown En_A_Obj model ${whichObject}`);
+        }
         // NPCs.
-        else if (actor.actorId === ActorId.En_Ko) fetchArchive(`zelda_kw1.zar`).then((zar) => {
-            const b = buildModel(zar, `model/kokiripeople.cmb`);
-            b.bindCSAB(parseCSAB(zar, `anim/fad_n_wait.csab`));
-            b.setVertexColorScale(characterLightScale);
-
-            const enum Gender { BOY, GIRL };
-            function setGender(gender: Gender) {
-                b.shapeInstances[2].visible = gender === Gender.GIRL;
-                b.shapeInstances[3].visible = gender === Gender.GIRL;
-                b.shapeInstances[4].visible = gender === Gender.GIRL;
-                b.shapeInstances[5].visible = gender === Gender.BOY;
-                b.shapeInstances[6].visible = gender === Gender.BOY;
-            }
-
+        else if (actor.actorId === ActorId.En_Ko) {
             const whichNPC = actor.variable & 0xFF;
 
             if (whichNPC === 0x00) { // Standing boy.
-                setGender(Gender.BOY);
+                fetchArchive(`zelda_km1.zar`).then((zar) => {
+                    const b = buildModel(zar, `model/kokirimaster.cmb`);
+                    b.shapeInstances[2].visible = false;
+                    b.setVertexColorScale(characterLightScale);
+                    b.bindCSAB(parseCSAB(zar, `anim/km1_ishi_wait.csab`));
+                });
             } else if (whichNPC === 0x01) { // Standing girl.
-                setGender(Gender.GIRL);
             } else if (whichNPC === 0x02) { // Boxing boy.
-                setGender(Gender.BOY);
+                fetchArchive(`zelda_km1.zar`).then((zar) => {
+                    const b = buildModel(zar, `model/kokirimaster.cmb`);
+                    b.shapeInstances[2].visible = false;
+                    b.setVertexColorScale(characterLightScale);
+                    b.bindCSAB(parseCSAB(zar, `anim/km1_osiete_wait.csab`));
+                });
             } else if (whichNPC === 0x03) { // Blocking boy.
-                setGender(Gender.BOY);
             } else if (whichNPC === 0x04) { // Backflipping boy.
-                setGender(Gender.BOY);
+                fetchArchive(`zelda_km1.zar`).then((zar) => {
+                    const b = buildModel(zar, `model/kokirimaster.cmb`);
+                    b.shapeInstances[2].visible = false;
+                    b.setVertexColorScale(characterLightScale);
+                    b.bindCSAB(parseCSAB(zar, `anim/km1_backcyu.csab`));
+                });
             } else if (whichNPC === 0x05) { // Sitting girl.
-                setGender(Gender.GIRL);
+                fetchArchive(`zelda_kw1.zar`).then((zar) => {
+                    const b = buildModel(zar, `model/kokiripeople.cmb`);
+                    b.setVertexColorScale(characterLightScale);
+                    b.shapeInstances[2].visible = false;
+                    b.shapeInstances[3].visible = false;
+                    b.shapeInstances[4].visible = false;
+                    b.bindCSAB(parseCSAB(zar, `anim/km1_utsumuki_pose.csab`));
+                });
             } else if (whichNPC === 0x06) { // Standing girl.
-                setGender(Gender.GIRL);
+                fetchArchive(`zelda_kw1.zar`).then((zar) => {
+                    const b = buildModel(zar, `model/kokiripeople.cmb`);
+                    b.setVertexColorScale(characterLightScale);
+                    b.shapeInstances[2].visible = false;
+                    b.shapeInstances[3].visible = false;
+                    b.shapeInstances[4].visible = false;
+                    b.bindCSAB(parseCSAB(zar, `anim/km1_shinpai_pose.csab`));
+                });
             } else if (whichNPC === 0x07) { // Unknown -- in Know-it-All Brother's House.
-                setGender(Gender.BOY);
             } else if (whichNPC === 0x08) { // Unknown -- in Know-it-All Brother's House.
-                setGender(Gender.BOY);
             } else if (whichNPC === 0x0A) { // Unknown -- in Kokiri Shop.
-                setGender(Gender.GIRL);
             } else if (whichNPC === 0x0B) { // Unknown -- in Know-it-All Brother's House.
-                setGender(Gender.GIRL);
             } else if (whichNPC === 0x0C) { // Blonde girl.
-                setGender(Gender.GIRL);
+                fetchArchive(`zelda_kw1.zar`).then((zar) => {
+                    const b = buildModel(zar, `model/kokiripeople.cmb`);
+                    b.setVertexColorScale(characterLightScale);
+                    b.shapeInstances[5].visible = false;
+                    b.shapeInstances[6].visible = false;
+                    b.bindCSAB(parseCSAB(zar, `anim/fad_n_wait.csab`));
+                });
             } else {
                 throw "whoops";
             }
-        });
+        }
         else if (actor.actorId === ActorId.En_Ossan) {
             const whichShopkeeper = actor.variable & 0x0F;
             if (whichShopkeeper === 0x00) {        // Kokiri Shopkeeper
                 fetchArchive(`zelda_km1.zar`).then((zar) => {
-                    // need to also specify meshes, to turn off his hair
                     const b = buildModel(zar, `model/kokirimaster.cmb`);
+                    b.shapeInstances[4].visible = false;
                     b.bindCSAB(parseCSAB(zar, `anim/km1_omise.csab`));
                     b.setVertexColorScale(characterLightScale);
                 });
@@ -1339,6 +1394,10 @@ class SceneDesc implements Viewer.SceneDesc {
             b.bindCSAB(parseCSAB(zar, `anim/ts_matsu.csab`));
             b.setVertexColorScale(characterLightScale);
             b.modelMatrix[13] += 10;
+        });
+        else if (actor.actorId === ActorId.Grezzo_Hintstone) fetchArchive(`zelda_hintstone.zar`).then((zar) => {
+            const b = buildModel(zar, `model/hintstone.cmb`);
+            b.bindCSAB(parseCSAB(zar, `anim/newstock.csab`));
         });
         // Enemies
         else if (actor.actorId === ActorId.En_Hintnuts) fetchArchive(`zelda_hintnuts.zar`).then((zar) => {
