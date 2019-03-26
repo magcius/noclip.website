@@ -75,8 +75,6 @@ export function fillSceneParamsData(d: Float32Array, sceneParams: SceneParams, b
 export function fillMaterialParamsData(d: Float32Array, materialParams: MaterialParams, bOffs: number = 0): void {
     let offs = bOffs;
 
-    // Texture mapping requires special effort.
-
     for (let i = 0; i < 12; i++)
         offs += fillColor(d, offs, materialParams.u_Color[i]);
     for (let i = 0; i < 10; i++)
@@ -258,6 +256,11 @@ export class GXRenderHelperGfx {
             { numUniformBuffers: 1, numSamplers: 8, }, // Material
             { numUniformBuffers: 1, numSamplers: 0, }, // Packet
         ]
+
+        assert(GX_Material.GX_Program.programReflection.uniformBufferLayouts[0].totalWordSize === u_SceneParamsBufferSize);
+        assert(GX_Material.GX_Program.programReflection.uniformBufferLayouts[1].totalWordSize === u_MaterialParamsBufferSize);
+        assert(GX_Material.GX_Program.programReflection.uniformBufferLayouts[2].totalWordSize === u_PacketParamsBufferSize);
+
         this.renderInstBuilder = new GfxRenderInstBuilder(device, GX_Material.GX_Program.programReflection, bindingLayouts, [ this.sceneParamsBuffer, this.materialParamsBuffer, this.packetParamsBuffer ]);
         // Create our scene buffer slot.
         this.templateRenderInst = this.renderInstBuilder.pushTemplateRenderInst();

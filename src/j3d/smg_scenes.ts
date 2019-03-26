@@ -941,10 +941,7 @@ class SMGSpawner {
                 modelInstance.name = `${objinfo.objName} ${objinfo.objId}`;
 
                 if (tag === SceneGraphTag.Skybox) {
-                    // Kill translation and shrink a bit. Need to figure out how the game does skyboxen.
-                    const skyboxScale = 0.5;
-                    mat4.scale(objinfo.modelMatrix, objinfo.modelMatrix, [skyboxScale, skyboxScale, skyboxScale]);
-
+                    // Kill translation. Need to figure out how the game does skyboxen.
                     objinfo.modelMatrix[12] = 0;
                     objinfo.modelMatrix[13] = 0;
                     objinfo.modelMatrix[14] = 0;
