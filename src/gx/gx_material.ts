@@ -309,7 +309,7 @@ export class GX_Program extends DeviceProgram {
     }
 
     private generateLightAttnFn(chan: ColorChannelControl, lightName: string) {
-        const cosAttn = `ApplyCubic(${lightName}.CosAtten.xyz, dot(t_LightDelta, ${lightName}.Direction.xyz))`;
+        const cosAttn = `max(ApplyCubic(${lightName}.CosAtten.xyz, dot(t_LightDelta, ${lightName}.Direction.xyz)), 0.0)`;
 
         switch (chan.attenuationFunction) {
         case GX.AttenuationFunction.NONE: return `1.0`;

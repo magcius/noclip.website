@@ -23,6 +23,13 @@ export function colorLerp(dst: Color, k0: Color, k1: Color, t: number): void {
     dst.a = lerp(k0.a, k1.a, t);
 }
 
+export function colorMult(dst: Color, k0: Color, k1: Color): void {
+    dst.g = k0.g * k1.g;
+    dst.r = k0.r * k1.r;
+    dst.b = k0.b * k1.b;
+    dst.a = k0.a * k1.a;
+}
+
 export function colorCopy(dst: Color, src: Color, a: number = src.a): void {
     dst.r = src.r;
     dst.g = src.g;

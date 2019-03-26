@@ -106,6 +106,28 @@ export class AABB {
             a.minZ > b.maxZ || b.minZ > a.maxZ);
     }
 
+    public static squaredDistanceFromSphere(aabb: AABB, sphereOrigin: vec3, sphereRadius: number): number {
+        function square(V: number): number {
+            return V * V;
+        }
+
+        const min = scratchVec3a, max = scratchVec3b;
+        vec3.set(min, aabb.minX, aabb.minY, aabb.minZ);
+        vec3.set(max, aabb.maxX, aabb.maxY, aabb.maxZ);
+
+        let dist = 0;
+
+        for (let i = 0; i < 3; i++) {
+            if (sphereOrigin[i] < min[i]) {
+                dist += square(sphereOrigin[i] - min[i]);
+            } else if (sphereOrigin[i] > max[i]) {
+                dist += square(sphereOrigin[i] - max[i]);
+            }
+        }
+
+        return dist;
+    }
+
     public centerPoint(v: vec3): void {
         v[0] = (this.minX + this.maxX) / 2;
         v[1] = (this.minY + this.maxY) / 2;

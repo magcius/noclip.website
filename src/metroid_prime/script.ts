@@ -1,9 +1,10 @@
 // Implements support for Retro Studios actor data
 import { ResourceSystem } from "./resource";
-import { assert, readString, align, assertExists } from "../util";
+import { readString } from "../util";
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { mat4, vec3 } from 'gl-matrix';
 import { CMDL } from './cmdl';
+import { Color } from "../gx/gx_material";
 
 export const enum MP1EntityType {
     Actor                   = 0x00,
@@ -67,12 +68,27 @@ export class AnimationParameters {
     animId: number;
 }
 
+export const enum WorldLightingOptions {
+    Zero = 0,
+    NormalWorld = 1,
+    NoShadowCast = 2,
+    DisableWorld = 3
+}
+
+export class LightParameters {
+    ambient: Color = new Color(1, 1, 1, 1);
+    options: WorldLightingOptions = WorldLightingOptions.NormalWorld;
+    layerIdx: number = 0;
+    maxAreaLights: Number = 4;
+}
+
 export class Entity {
     active: boolean;
     name: string;
     modelMatrix: mat4;
     model: CMDL;
     animParams: AnimationParameters;
+    lightParams: LightParameters = new LightParameters;
 }
 
 export interface ScriptLayer {
@@ -161,6 +177,25 @@ function readAnimationParameters(buffer: ArrayBufferSlice, offs: number, ent: En
     ent.animParams.charId = view.getUint32(offs+4);
     ent.animParams.animId = view.getUint32(offs+8);
     return 12;
+}
+
+function readLightParameters(buffer: ArrayBufferSlice, offs: number, ent: Entity): number {
+    const view = buffer.createDataView();
+    const ambR = view.getFloat32(offs+17);
+    const ambG = view.getFloat32(offs+21);
+    const ambB = view.getFloat32(offs+25);
+    const ambA = view.getFloat32(offs+29);
+    const options = view.getInt32(offs+34);
+    const maxAreaLights = view.getInt32(offs+54);
+    const layerIndex = view.getInt32(offs+59);
+
+    // ent.lightParams is allocated by default
+    ent.lightParams.ambient.set(ambR * 255, ambG * 255, ambB * 255, ambA * 255);
+    ent.lightParams.options = options;
+    ent.lightParams.maxAreaLights = maxAreaLights;
+    ent.lightParams.layerIdx = layerIndex;
+    
+    return 63;
 }
 
 export function parseScriptLayer(buffer: ArrayBufferSlice, layerOffset: number, resourceSystem: ResourceSystem): ScriptLayer {
