@@ -45,11 +45,35 @@ export const enum RetroPass {
     SKYBOX = 0x02,
 }
 
+const scratchVec3a: vec3 = vec3.create();
+const scratchVec3b: vec3 = vec3.create();
+function squaredDistanceFromPointToAABB(pointOrigin: vec3, aabb: AABB): number {
+    function square(V: number): number {
+        return V * V;
+    }
+
+    const min = scratchVec3a, max = scratchVec3b;
+    vec3.set(min, aabb.minX, aabb.minY, aabb.minZ);
+    vec3.set(max, aabb.maxX, aabb.maxY, aabb.maxZ);
+
+    let dist = 0;
+
+    for (let i = 0; i < 3; i++) {
+        if (pointOrigin[i] < min[i]) {
+            dist += square(pointOrigin[i] - min[i]);
+        } else if (pointOrigin[i] > max[i]) {
+            dist += square(pointOrigin[i] - max[i]);
+        }
+    }
+
+    return dist;
+}
+
 export class ActorLights {
     public ambient: Color = new Color;
     public lights: AreaLight[] = [];
 
-    constructor(bounds: AABB, lightParams: LightParameters, mrea: MREA) {
+    constructor(actorBounds: AABB, lightParams: LightParameters, mrea: MREA) {
         // DisableWorld indicates the actor doesn't use any area lights (including ambient ones)
         if (lightParams.options === WorldLightingOptions.DisableWorld) {
             this.ambient.set(0, 0, 0, 1);
@@ -67,7 +91,7 @@ export class ActorLights {
 
             for (let i = 0; i < layer.lights.length; i++) {
                 const light = layer.lights[i];
-                const sqDist = AABB.squaredDistanceFromPoint(bounds, light.gxLight.Position);
+                const sqDist = squaredDistanceFromPointToAABB(light.gxLight.Position, actorBounds);
 
                 if (sqDist < (light.radius * light.radius)) {
                     actorLights.push( { sqDist, light } );
@@ -121,7 +145,7 @@ class SurfaceInstance {
                 visible = viewerInput.camera.frustum.contains(bboxScratch);
             }
         }
-        
+
         if ((this.surface as any).visible === false)
             visible = false;
 
@@ -151,8 +175,8 @@ class SurfaceInstance {
                 for (let i = 0; i < 8; i++) {
                     if (this.actorLights && i < this.actorLights.lights.length) {
                         const light = this.actorLights.lights[i].gxLight;
-                        lightSetWorldPosition(this.materialParams.u_Lights[i], viewerInput.camera, light.Position[0], light.Position[1], light.Position[2]);
-                        lightSetWorldDirection(this.materialParams.u_Lights[i], viewerInput.camera, light.Direction[0], light.Direction[1], light.Direction[2]);
+                        lightSetWorldPosition(this.materialParams.u_Lights[i], viewerInput.camera, light.Position[0]*10, light.Position[2]*10, -light.Position[1]*10);
+                        lightSetWorldDirection(this.materialParams.u_Lights[i], viewerInput.camera, light.Direction[0], light.Direction[2], -light.Direction[1]);
                         vec3.copy(this.materialParams.u_Lights[i].DistAtten, light.DistAtten);
                         vec3.copy(this.materialParams.u_Lights[i].CosAtten, light.CosAtten);
                         this.materialParams.u_Lights[i].Color.copy(light.Color);
