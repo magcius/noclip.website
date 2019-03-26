@@ -926,6 +926,14 @@ class SMGSpawner {
         }
     }
 
+    private hasIndirectTexture(bmdModel: BMDModel): boolean {
+        const tex1Samplers = bmdModel.bmd.tex1.samplers;
+        for (let i = 0; i < tex1Samplers.length; i++)
+            if (tex1Samplers[i].name === 'IndDummy')
+                return true;
+        return false;
+    }
+
     public spawnObject(device: GfxDevice, zone: ZoneNode, layer: number, objinfo: ObjInfo, modelMatrixBase: mat4): void {
         const spawnGraph = (arcName: string, tag: SceneGraphTag = SceneGraphTag.Normal, animOptions: AnimOptions | null | undefined = undefined) => {
             const arcPath = `${this.pathBase}/ObjectData/${arcName}.arc`;
@@ -934,6 +942,9 @@ class SMGSpawner {
                 if (bmdModel === null)
                     return null;
 
+                if (this.hasIndirectTexture(bmdModel))
+                    tag = SceneGraphTag.Indirect;
+
                 // Trickery.
                 const rarc = this.modelCache.archiveCache.get(arcPath);
 
@@ -941,6 +952,8 @@ class SMGSpawner {
                 modelInstance.name = `${objinfo.objName} ${objinfo.objId}`;
 
                 if (tag === SceneGraphTag.Skybox) {
+                    mat4.scale(objinfo.modelMatrix, objinfo.modelMatrix, [.5, .5, .5]);
+
                     // Kill translation. Need to figure out how the game does skyboxen.
                     objinfo.modelMatrix[12] = 0;
                     objinfo.modelMatrix[13] = 0;
@@ -1002,6 +1015,7 @@ class SMGSpawner {
         case 'VROrbit':
         case 'DesertSky':
         case 'GoodWeatherSky':
+        case 'PhantomSky':
             spawnGraph(name, SceneGraphTag.Skybox);
             break;
 
