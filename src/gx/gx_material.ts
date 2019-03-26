@@ -328,7 +328,7 @@ export class GX_Program extends DeviceProgram {
             const amb = `u_ColorAmbReg[${i}]`;
             const mat = `u_ColorMatReg[${i}]`;
             const fudged = this.hacks.lightingFudge({ vtx, amb, mat, ambSource, matSource });
-            return `${outputName} = vec4(${fudged});`;
+            return `${outputName} = vec4(${fudged}); // Fudge!`;
         }
 
         let generateLightAccum = ``;
@@ -1025,7 +1025,7 @@ vec3 TevBias(vec3 a, float b) { return a + vec3(b); }
 float TevBias(float a, float b) { return a + b; }
 vec3 TevSaturate(vec3 a) { return clamp(a, vec3(0), vec3(1)); }
 float TevSaturate(float a) { return clamp(a, 0.0, 1.0); }
-float TevOverflow(float a) { return float(int(a * 255.0) % 256) / 255.0; }
+float TevOverflow(float a) { return fract((a*255.0)/256.0)*256.0/255.0; }
 vec4 TevOverflow(vec4 a) { return vec4(TevOverflow(a.r), TevOverflow(a.g), TevOverflow(a.b), TevOverflow(a.a)); }
 float TevPack16(vec2 a) { return dot(a, vec2(1.0, 256.0)); }
 float TevPack24(vec3 a) { return dot(a, vec3(1.0, 256.0, 256.0 * 256.0)); }
