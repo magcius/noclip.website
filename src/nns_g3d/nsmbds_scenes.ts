@@ -137,9 +137,9 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
     private createRendererFromData(device: GfxDevice, objectData: ObjectData, position: number[] | null = null): MDL0Renderer {
         const scaleFactor = 1/16;
         const renderer = new MDL0Renderer(device, objectData.bmd.models[0], objectData.btx !== null ? objectData.btx.tex0 : objectData.bmd.tex0);
-        mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [scaleFactor, scaleFactor, scaleFactor]);
         if (position !== null)
             mat4.translate(renderer.modelMatrix, renderer.modelMatrix, position);
+        mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [scaleFactor, scaleFactor, scaleFactor]);
         if (objectData.bta !== null)
             renderer.bindSRT0(objectData.bta.srt0);
         if (objectData.btp !== null)
@@ -159,16 +159,16 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
             this.fetchObjectData(`${basePath}/map/map_point`, abortSignal),
         ]).then(([mainObjData, treeObjData, castleObjData, bigCastleObjData, towerObjData, mapPointObjData]) => {
             // Adjust the nodes/bones to emulate the flag animations.
-            mat4.fromTranslation(castleObjData.bmd.models[0].nodes[3].jointMatrix, [0, 5.5, 0]);
-            mat4.fromTranslation(castleObjData.bmd.models[0].nodes[4].jointMatrix, [0.75, 5.5, 0]);
-            mat4.fromTranslation(bigCastleObjData.bmd.models[0].nodes[5].jointMatrix, [-1.25, 0, -0.75]);
-            mat4.fromTranslation(bigCastleObjData.bmd.models[0].nodes[6].jointMatrix, [-1.25, 2.75, -0.75]);
-            mat4.fromTranslation(bigCastleObjData.bmd.models[0].nodes[7].jointMatrix, [-0.875, 2.75, -0.75]);
-            mat4.fromTranslation(bigCastleObjData.bmd.models[0].nodes[8].jointMatrix, [1.25, 0, -0.75]);
-            mat4.fromTranslation(bigCastleObjData.bmd.models[0].nodes[9].jointMatrix, [1.25, 2.75, -0.75]);
-            mat4.fromTranslation(bigCastleObjData.bmd.models[0].nodes[10].jointMatrix, [1.625, 2.75, -0.75]);
-            mat4.fromTranslation(towerObjData.bmd.models[0].nodes[2].jointMatrix, [0, 5.5, 0]);
-            mat4.fromTranslation(towerObjData.bmd.models[0].nodes[3].jointMatrix, [0.75, 5.5, 0]);
+            mat4.fromTranslation(castleObjData.bmd.models[0].nodes[3].jointMatrix, [0, 88, 0]);
+            mat4.fromTranslation(castleObjData.bmd.models[0].nodes[4].jointMatrix, [12, 88, 0]);
+            mat4.fromTranslation(bigCastleObjData.bmd.models[0].nodes[5].jointMatrix, [-20, 0, -12]);
+            mat4.fromTranslation(bigCastleObjData.bmd.models[0].nodes[6].jointMatrix, [-20, 44, -12]);
+            mat4.fromTranslation(bigCastleObjData.bmd.models[0].nodes[7].jointMatrix, [-14, 44, -12]);
+            mat4.fromTranslation(bigCastleObjData.bmd.models[0].nodes[8].jointMatrix, [20, 0, -12]);
+            mat4.fromTranslation(bigCastleObjData.bmd.models[0].nodes[9].jointMatrix, [20, 44, -12]);
+            mat4.fromTranslation(bigCastleObjData.bmd.models[0].nodes[10].jointMatrix, [26, 44, -12]);
+            mat4.fromTranslation(towerObjData.bmd.models[0].nodes[2].jointMatrix, [0, 88, 0]);
+            mat4.fromTranslation(towerObjData.bmd.models[0].nodes[3].jointMatrix, [12, 88, 0]);
 
             const objects = worldMapDescs[this.worldNumber - 1];
 
