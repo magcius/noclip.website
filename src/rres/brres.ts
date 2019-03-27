@@ -1103,11 +1103,12 @@ function parseMDL0_ShapeEntry(buffer: ArrayBufferSlice, inputBuffers: InputVerte
 }
 
 const enum NodeFlags {
-    SRT_IDENTITY = 0x01,
-    TRANS_ZERO   = 0x02,
-    ROT_ZERO     = 0x04,
-    SCALE_ONE    = 0x08,
-    SCALE_HOMO   = 0x10,
+    SRT_IDENTITY = 0x00000001,
+    TRANS_ZERO   = 0x00000002,
+    ROT_ZERO     = 0x00000004,
+    SCALE_ONE    = 0x00000008,
+    SCALE_HOMO   = 0x00000010,
+    VISIBLE      = 0x00000100,
 }
 
 export const enum BillboardMode {
@@ -1128,6 +1129,7 @@ export interface MDL0_NodeEntry {
     billboardMode: BillboardMode;
     modelMatrix: mat4;
     bbox: AABB;
+    visible: boolean;
 }
 
 function parseMDL0_NodeEntry(buffer: ArrayBufferSlice): MDL0_NodeEntry {
@@ -1163,7 +1165,9 @@ function parseMDL0_NodeEntry(buffer: ArrayBufferSlice): MDL0_NodeEntry {
     const modelMatrix = mat4.create();
     calcModelMtx(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
 
-    return { name, id, mtxId, flags, billboardMode, modelMatrix, bbox };
+    const visible = !!(flags & NodeFlags.VISIBLE);
+
+    return { name, id, mtxId, flags, billboardMode, modelMatrix, bbox, visible };
 }
 
 export const enum ByteCodeOp {

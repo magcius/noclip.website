@@ -51,6 +51,7 @@ import * as PSY from './psychonauts/scenes';
 import * as DKS from './dks/scenes';
 import * as J3D from './j3d/scenes';
 import * as RTDL from './rres/rtdl_scenes';
+import * as SONIC_COLORS from './rres/sonic_colors_scenes';
 
 import { UI, SaveStatesAction } from './ui';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera';
@@ -105,6 +106,7 @@ const sceneGroups = [
     Z_BOTW.sceneGroup,
     DKS.sceneGroup,
     THUG2.sceneGroup,
+    SONIC_COLORS.sceneGroup,
 ];
 
 function loadFileAsPromise(file: File): Progressable<ArrayBufferSlice> {

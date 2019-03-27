@@ -72,8 +72,12 @@ class ShapeInstance {
     }
 
     public prepareToRender(renderHelper: GXRenderHelperGfx, renderLayerBias: number, matrixArray: mat4[], matrixVisibility: IntersectionState[], viewerInput: ViewerRenderInput, isSkybox: boolean): void {
-        const visibility = matrixVisibility[this.node.mtxId];
-        this.renderInst.visible = visibility !== IntersectionState.FULLY_OUTSIDE;
+        this.renderInst.visible = this.node.visible;
+
+        if (this.renderInst.visible) {
+            const visibility = matrixVisibility[this.node.mtxId];
+            this.renderInst.visible = visibility !== IntersectionState.FULLY_OUTSIDE;
+        }
 
         if (this.renderInst.visible) {
             const camera = viewerInput.camera;

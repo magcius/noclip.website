@@ -1153,7 +1153,9 @@ export function translateGfxMegaState(megaState: GfxMegaStateDescriptor, materia
         megaState.blendSrcFactor = GfxBlendFactor.ONE;
         megaState.blendDstFactor = GfxBlendFactor.ONE;
     } else if (material.ropInfo.blendMode.type === GX.BlendMode.LOGIC) {
-        throw new Error("whoops");
+        // Sonic Colors uses this? WTF?
+        megaState.blendMode = GfxBlendMode.NONE;
+        console.warn(`Unimplemented LOGIC blend mode`);
     }
 }
 // #endregion
