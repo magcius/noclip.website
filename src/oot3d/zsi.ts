@@ -31,6 +31,8 @@ export class ZSIEnvironmentSettings {
     public fogCol: vec3 = vec3.create();
     public fogStart: number = 0.0;
     public drawDistance: number = 0.0;
+    public fogMin: number = 0.0;
+    public fogMax: number = 0.0;
 }
 
 // Subset of Z64 command types.
@@ -119,75 +121,87 @@ function readRooms(version: Version, buffer: ArrayBufferSlice, nRooms: number, o
     return rooms;
 }
 
-function readEnvironmentSettings(version: Version, buffer: ArrayBufferSlice, nEnvironmentSettings: number, offs: number): ZSIEnvironmentSettings[] {
+function readEnvironmentSettings(version: Version, buffer: ArrayBufferSlice, nEnvironmentSettings: number, offs: number)
+{
     const view = buffer.createDataView();
     const environmentSettings: ZSIEnvironmentSettings[] = [];
 
-    offs += 0x0A;
-
-    for (let i = 0; i < 1; i++) {
+    for (let i = 0; i < nEnvironmentSettings; i++) {
         let setting = new ZSIEnvironmentSettings;
 
         const colSize = 0x03;
         const dirSize = 0x03;
-        const fogSize = 0x02;
-        const distanceSize = 0x02;
+        const fogSize = 0x04;
+        const distanceSize = 0x04;
+        const mysterySize = 0x02;
+
+        console.log("environment " + i + " address " + offs.toString(16));
+
+        const drawDistance = view.getFloat32(offs + 0x00, true);
+        offs += distanceSize;
+        
+        const fogStart = view.getFloat32(offs + 0x00, true);
+        offs += fogSize;
+        
+        const mysteryValue = view.getUint16(offs);
+        const mysteryA = view.getUint8(offs + 0x00);
+        const mysteryB = view.getUint8(offs + 0x01);
+        offs += mysterySize;
         
         const ambientColR = view.getUint8(offs + 0x00) / 255.0;
         const ambientColG = view.getUint8(offs + 0x01) / 255.0;
         const ambientColB = view.getUint8(offs + 0x02) / 255.0;
-        setting.ambientLightCol = vec3.fromValues(ambientColR, ambientColG, ambientColB);
         offs += colSize;
-
+        
         const firstDiffuseLightDirX = view.getUint8(offs + 0x00) / 255.0;
         const firstDiffuseLightDirY = view.getUint8(offs + 0x01) / 255.0;
         const firstDiffuseLightDirZ = view.getUint8(offs + 0x02) / 255.0;
-        setting.primaryLightDir = vec3.fromValues(firstDiffuseLightDirX, firstDiffuseLightDirY, firstDiffuseLightDirZ);
         offs += dirSize;
-
+        
         const firstDiffuseLightColR = view.getUint8(offs + 0x00) / 255.0;
         const firstDiffuseLightColG = view.getUint8(offs + 0x01) / 255.0;
         const firstDiffuseLightColB = view.getUint8(offs + 0x02) / 255.0;
-        setting.primaryLightCol = vec3.fromValues(firstDiffuseLightColR, firstDiffuseLightColG, firstDiffuseLightColB);
         offs += colSize;
-
+        
         const secondDiffuseLightDirX = view.getUint8(offs + 0x00) / 255.0;
         const secondDiffuseLightDirY = view.getUint8(offs + 0x01) / 255.0;
         const secondDiffuseLightDirZ = view.getUint8(offs + 0x02) / 255.0;
-        setting.secondaryLightDir = vec3.fromValues(secondDiffuseLightDirX, secondDiffuseLightDirY, secondDiffuseLightDirZ);
         offs += dirSize;
-
+        
         const secondDiffuseLightColR = view.getUint8(offs + 0x00) / 255.0;
         const secondDiffuseLightColG = view.getUint8(offs + 0x01) / 255.0;
         const secondDiffuseLightColB = view.getUint8(offs + 0x02) / 255.0;
-        setting.secondaryLightCol = vec3.fromValues(secondDiffuseLightColR, secondDiffuseLightColG, secondDiffuseLightColB);
         offs += colSize;
-
+        
         const fogColR = view.getUint8(offs + 0x00) / 255.0;
         const fogColG = view.getUint8(offs + 0x01) / 255.0;
         const fogColB = view.getUint8(offs + 0x02) / 255.0;
-        setting.fogCol = vec3.fromValues(fogColR, fogColG, fogColB);
         offs += colSize;
 
-        if (view.byteLength > offs)
-        {
-            const fogStart = view.getUint16(offs + 0x00) & 0x3FF;
-            setting.fogStart = fogStart;
-            offs += fogSize;
+        setting.drawDistance = drawDistance;
+        console.log("drawDistance " + drawDistance);
 
-            const drawDistance = view.getUint16(offs + 0x00);
-            setting.drawDistance = drawDistance;
-            offs += distanceSize;
-        }
-        else
-        {
-            // HACK(quade): in some scenes, our offset goes out of bounds when reading these
-            // for now, this prevents the exception
-            setting.fogStart = 0.0;
-            setting.drawDistance = 4000.0;
-        }
+        // TODO(quade): actually figure out what we're supposed to do with these values
+        setting.fogStart = fogStart >= drawDistance ? drawDistance - fogStart : fogStart;
 
-        offs += 0x5A;
+        console.log("fogStart " + fogStart);
+        console.log("drawDistance - fogStart " + (drawDistance - fogStart));
+        console.log("mystery value " + mysteryValue.toString(16));
+        console.log("mystery as int " + mysteryValue);
+        setting.fogMin = mysteryA / 255.0;
+        setting.fogMax = mysteryB / 255.0;
+        console.log("mystery value A " + mysteryA.toString(16));
+        console.log("mystery value B " + mysteryB.toString(16));
+        console.log("fogMin " + setting.fogMin);
+        console.log("fogMax " + setting.fogMax);
+        setting.ambientLightCol = vec3.fromValues(ambientColR, ambientColG, ambientColB);
+        setting.primaryLightDir = vec3.fromValues(firstDiffuseLightDirX, firstDiffuseLightDirY, firstDiffuseLightDirZ);
+        setting.primaryLightCol = vec3.fromValues(firstDiffuseLightColR, firstDiffuseLightColG, firstDiffuseLightColB);
+        setting.secondaryLightDir = vec3.fromValues(secondDiffuseLightDirX, secondDiffuseLightDirY, secondDiffuseLightDirZ);
+        setting.secondaryLightCol = vec3.fromValues(secondDiffuseLightColR, secondDiffuseLightColG, secondDiffuseLightColB);
+        setting.fogCol = vec3.fromValues(fogColR, fogColG, fogColB);
+
+        console.log("\n");
 
         environmentSettings.push(setting);
     }

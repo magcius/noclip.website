@@ -109,6 +109,24 @@ class OoT3DRenderer implements Viewer.SceneGfx {
         };
         renderHacksPanel.contents.appendChild(enableLighting.elem);
 
+        // NOTE(quade): hacky and currently unused environment settings menu 
+        //let environmentSettingPresets = [ 
+        //    `index0`,
+        //    `index1`,
+        //    `index2`,
+        //    `index3`,
+        //    `index4`,
+        //    `index5`,
+        //];
+        //
+        //const lightingIndex = new UI.SingleSelect();
+        //lightingIndex.setStrings(environmentSettingPresets);
+        //lightingIndex.onselectionchange = (index: number) => {
+        //    for (let i = 0; i < this.roomRenderers.length; i++)
+        //        this.roomRenderers[i].setEnvironmentIndex(index);
+        //};
+        //renderHacksPanel.contents.appendChild(lightingIndex.elem);
+
         const enableUV = new UI.Checkbox('Enable UV', false);
         enableUV.onchanged = () => {
             for (let i = 0; i < this.roomRenderers.length; i++)
@@ -413,7 +431,7 @@ class SceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private spawnActorForRoom(device: GfxDevice, abortSignal: AbortSignal, scene: Scene, renderer: OoT3DRenderer, roomRenderer: RoomRenderer, environmentSettings: ZSI.ZSIEnvironmentSettings, actor: ZSI.Actor, j: number): void {
+    private spawnActorForRoom(device: GfxDevice, abortSignal: AbortSignal, scene: Scene, renderer: OoT3DRenderer, roomRenderer: RoomRenderer, environmentSettings: ZSI.ZSIEnvironmentSettings[], actor: ZSI.Actor, j: number): void {
         function fetchArchive(archivePath: string): Progressable<ZAR.ZAR> { 
             return renderer.modelCache.fetchArchive(`${pathBase}/actor/${archivePath}`, abortSignal);
         }
@@ -1589,7 +1607,7 @@ class SceneDesc implements Viewer.SceneDesc {
         modelCache.fetchArchive(`${pathBase}/kankyo/BlueSky.zar`, abortSignal);
 
         return modelCache.waitForLoad().then(() => {
-            const environmentSettings = zsi.environmentSettings[0];
+            const environmentSettings = zsi.environmentSettings;
 
             for (let i = 0; i < roomZSINames.length; i++) {
                 const roomSetups = ZSI.parseRooms(modelCache.getFileData(roomZSINames[i]));

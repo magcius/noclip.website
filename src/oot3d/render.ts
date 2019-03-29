@@ -289,7 +289,9 @@ void main() {
     vec4 t_ResultColor = t_CmbOut;
 
     #ifdef USE_LIGHTING
-        float t_FogFactor = clamp((v_DrawDistance - v_Depth) / (v_DrawDistance - v_FogStart), 0.0, 1.0);
+        // NOTE(quade): 0.15 is a magic number
+        // fog in these games never seems to be totally opaque
+        float t_FogFactor = clamp((v_DrawDistance - v_Depth) / (v_DrawDistance - v_FogStart), 0.15, 1.0);
         t_ResultColor.rgb = mix(v_FogColor, t_ResultColor.rgb, t_FogFactor);
     #endif
 
@@ -398,14 +400,19 @@ void main() {
     v_Normal = a_Normal;
     v_Depth = gl_Position.w;
     v_FogColor = FOG_COLOR;
-    v_DrawDistance = DRAW_DISTANCE;
-    v_FogStart = FOG_START;
+
+    // NOTE(quade): 4.0 is a magic number
+    // haven't fully figured out these values yet
+    v_DrawDistance = DRAW_DISTANCE / 4.0;
+    v_FogStart = FOG_START / 4.0;
 
 #ifdef USE_MONOCHROME_VERTEX_COLOR
     v_Color.rgb = Monochrome(v_Color.rgb);
 #endif
 
 #ifdef USE_LIGHTING
+    // NOTE(quade): 2.0 is a magic number
+    // ambient colour appears to have a higher intensity 
     vec3 t_Lighting = AMBIENT_LIGHT_COLOR * 2.0;
     t_Lighting += clamp(dot(-a_Normal, PRIMARY_LIGHT_DIRECTION), 0.0, 1.0) * PRIMARY_LIGHT_COLOR;
     t_Lighting += clamp(dot(-a_Normal, SECONDARY_LIGHT_DIRECTION), 0.0, 1.0) * SECONDARY_LIGHT_COLOR;
@@ -463,7 +470,9 @@ class MaterialInstance {
     private uvEnabled: boolean = false;
     private vertexColorScale = 1;
 
-    public environmentSettings: ZSI.ZSIEnvironmentSettings;
+    public environmentSettings: ZSI.ZSIEnvironmentSettings[];
+
+    public environmentIndex: number = 1;
 
     constructor(public cmb: CMB.CMB, public material: CMB.Material) {
         for (let i = 0; i < this.material.constantColors.length; i++)
@@ -500,8 +509,13 @@ class MaterialInstance {
         this.createProgram();
     }
 
-    public setEnvironmentSettings(environmentSettings: ZSI.ZSIEnvironmentSettings): void {
+    public setEnvironmentSettings(environmentSettings: ZSI.ZSIEnvironmentSettings[]): void {
         this.environmentSettings = environmentSettings;
+        this.createProgram();
+    }
+
+    public setEnvironmentIndex(index: number): void {
+        this.environmentIndex = index;
         this.createProgram();
     }
 
@@ -520,8 +534,8 @@ class MaterialInstance {
 
         let tempEnvironmentSettings;
 
-        if (this.environmentSettings)
-            tempEnvironmentSettings = this.environmentSettings;
+        if (this.environmentSettings && this.environmentSettings[this.environmentIndex]) 
+            tempEnvironmentSettings = this.environmentSettings[this.environmentIndex];
         else
             tempEnvironmentSettings = new ZSI.ZSIEnvironmentSettings();
 
@@ -533,6 +547,8 @@ class MaterialInstance {
         additionalParameters += `vec3 FOG_COLOR = vec3(${tempEnvironmentSettings.fogCol});\n`;
         additionalParameters += `float FOG_START = ${program.generateFloat(tempEnvironmentSettings.fogStart)};\n`;
         additionalParameters += `float DRAW_DISTANCE = ${program.generateFloat(tempEnvironmentSettings.drawDistance)};\n`;
+        additionalParameters += `float FOG_MIN = ${program.generateFloat(tempEnvironmentSettings.fogMin)};\n`;
+        additionalParameters += `float FOG_MAX = ${program.generateFloat(tempEnvironmentSettings.fogMax)};\n`;
 
         program.generateVertexShader(additionalParameters);
 
@@ -985,11 +1001,16 @@ export class CmbRenderer {
             this.materialInstances[i].setLightingEnabled(v);
     }
 
-    public setEnvironmentSettings(environmentSettings: ZSI.ZSIEnvironmentSettings): void {
+    public setEnvironmentSettings(environmentSettings: ZSI.ZSIEnvironmentSettings[]): void {
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].setEnvironmentSettings(environmentSettings);
     }
 
+    public setEnvironmentIndex(index: number): void {
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].setEnvironmentIndex(index);
+    }
+    
     public setVertexColorScale(n: number): void {
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].setVertexColorScale(n);
@@ -1212,13 +1233,22 @@ export class RoomRenderer {
             this.objectRenderers[i].setUVEnabled(v);
     }
 
-    public setEnvironmentSettings(environmentSettings: ZSI.ZSIEnvironmentSettings): void {
+    public setEnvironmentSettings(environmentSettings: ZSI.ZSIEnvironmentSettings[]): void {
         if (this.opaqueMesh !== null)
             this.opaqueMesh.setEnvironmentSettings(environmentSettings);
         if (this.transparentMesh !== null)
             this.transparentMesh.setEnvironmentSettings(environmentSettings);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].setEnvironmentSettings(environmentSettings);
+    }
+
+    public setEnvironmentIndex(index: number): void {
+        if (this.opaqueMesh !== null)
+            this.opaqueMesh.setEnvironmentIndex(index);
+        if (this.transparentMesh !== null)
+            this.transparentMesh.setEnvironmentIndex(index);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].setEnvironmentIndex(index);
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
