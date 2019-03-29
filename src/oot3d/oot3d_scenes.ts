@@ -28,7 +28,7 @@ class OoT3DRenderer implements Viewer.SceneGfx {
     public renderTarget = new BasicRenderTarget();
     public roomRenderers: RoomRenderer[] = [];
 
-    constructor(device: GfxDevice, public textureHolder: CtrTextureHolder, public modelCache: ModelCache) {
+    constructor(device: GfxDevice, public textureHolder: CtrTextureHolder, public zsi: ZSI.ZSIScene, public modelCache: ModelCache) {
         for (let i = 0; i < this.roomRenderers.length; i++)
             this.roomRenderers[i].addToViewRenderer(device, this.viewRenderer);
     }
@@ -136,6 +136,11 @@ class OoT3DRenderer implements Viewer.SceneGfx {
 
         const layersPanel = new UI.LayerPanel(this.roomRenderers);
         return [renderHacksPanel, layersPanel];
+    }
+
+    public setEnvironmentSettingsIndex(n: number): void {
+        for (let i = 0; i < this.roomRenderers.length; i++)
+            this.roomRenderers[i].setEnvironmentSettings(this.zsi.environmentSettings[n]);
     }
 }
 
@@ -431,7 +436,7 @@ class SceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private spawnActorForRoom(device: GfxDevice, abortSignal: AbortSignal, scene: Scene, renderer: OoT3DRenderer, roomRenderer: RoomRenderer, environmentSettings: ZSI.ZSIEnvironmentSettings[], actor: ZSI.Actor, j: number): void {
+    private spawnActorForRoom(device: GfxDevice, abortSignal: AbortSignal, scene: Scene, renderer: OoT3DRenderer, roomRenderer: RoomRenderer, actor: ZSI.Actor, j: number): void {
         function fetchArchive(archivePath: string): Progressable<ZAR.ZAR> { 
             return renderer.modelCache.fetchArchive(`${pathBase}/actor/${archivePath}`, abortSignal);
         }
@@ -444,7 +449,6 @@ class SceneDesc implements Viewer.SceneDesc {
             cmbRenderer.name = `${hexzero(actor.actorId, 4)} / ${hexzero(actor.variable, 4)} / ${modelPath}`;
             mat4.scale(cmbRenderer.modelMatrix, actor.modelMatrix, [scale, scale, scale]);
             cmbRenderer.addToViewRenderer(device, renderer.viewRenderer);
-            cmbRenderer.setEnvironmentSettings(environmentSettings);
             roomRenderer.objectRenderers.push(cmbRenderer);
             return cmbRenderer;
         }
@@ -1585,13 +1589,13 @@ class SceneDesc implements Viewer.SceneDesc {
     private createSceneFromData(device: GfxDevice, abortSignal: AbortSignal, zarBuffer: ArrayBufferSlice, zsiBuffer: ArrayBufferSlice): Progressable<Viewer.SceneGfx> {
         const textureHolder = new CtrTextureHolder();
         const modelCache = new ModelCache();
-        const renderer = new OoT3DRenderer(device, textureHolder, modelCache);
 
         const zar = zarBuffer.byteLength ? ZAR.parse(zarBuffer) : null;
 
         const zsi = ZSI.parseScene(zsiBuffer);
         assert(zsi.rooms !== null);
-        (renderer as any).zsi = zsi;
+
+        const renderer = new OoT3DRenderer(device, textureHolder, zsi, modelCache);
 
         // TODO(jstpierre): Fix this.
         const scene = chooseSceneFromId(this.id);
@@ -1607,8 +1611,6 @@ class SceneDesc implements Viewer.SceneDesc {
         modelCache.fetchArchive(`${pathBase}/kankyo/BlueSky.zar`, abortSignal);
 
         return modelCache.waitForLoad().then(() => {
-            const environmentSettings = zsi.environmentSettings;
-
             for (let i = 0; i < roomZSINames.length; i++) {
                 const roomSetups = ZSI.parseRooms(modelCache.getFileData(roomZSINames[i]));
 
@@ -1630,23 +1632,23 @@ class SceneDesc implements Viewer.SceneDesc {
                         roomRenderer.bindCMAB(cmab);
                     }
                 }
-                roomRenderer.setEnvironmentSettings(environmentSettings);
 
                 roomRenderer.addToViewRenderer(device, renderer.viewRenderer);
                 renderer.roomRenderers.push(roomRenderer);
 
                 for (let j = 0; j < roomSetup.actors.length; j++)
-                    this.spawnActorForRoom(device, abortSignal, scene, renderer, roomRenderer, environmentSettings, roomSetup.actors[j], j);
+                    this.spawnActorForRoom(device, abortSignal, scene, renderer, roomRenderer, roomSetup.actors[j], j);
             }
 
             // XXX(jstpierre): We stick doors into the first roomRenderer to keep things simple.
             for (let j = 0; j < zsi.doorActors.length; j++)
-                this.spawnActorForRoom(device, abortSignal, scene, renderer, renderer.roomRenderers[0], environmentSettings, zsi.doorActors[j], j);
+                this.spawnActorForRoom(device, abortSignal, scene, renderer, renderer.roomRenderers[0], zsi.doorActors[j], j);
 
             const skyboxZAR = modelCache.getArchive(`${pathBase}/kankyo/BlueSky.zar`);
             this.spawnSkybox(device, renderer, skyboxZAR, zsi.skyboxSettings);
 
             return modelCache.waitForLoad().then(() => {
+                renderer.setEnvironmentSettingsIndex(1);
                 return renderer;
             });
         });
