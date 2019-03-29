@@ -313,6 +313,12 @@ export class MaterialInstance {
             case 0x02:
             case 0x0A:
             case 0x0B:
+                // In the case of flipY, invert the Y coordinates. This is not a J3D thing, this is
+                // compensating for OpenGL being bad in other cases.
+                if (flipY) {
+                    texEnvMtx(scratch, 1, 1, 0, 1);
+                    mat4.mul(dst, scratch, dst);
+                }
                 break;
             case 0x06: // Rainbow Road
                 // Environment mapping
