@@ -92,7 +92,7 @@ export class GfxRenderCache {
         let bindings = this.gfxBindingsCache.get(descriptor);
         if (bindings === null) {
             bindings = device.createBindings(descriptor);
-            this.gfxBindingsCache.insert(descriptor, bindings);
+            this.gfxBindingsCache.add(descriptor, bindings);
         }
         return bindings;
     }
@@ -103,7 +103,7 @@ export class GfxRenderCache {
         let renderPipeline = this.gfxRenderPipelinesCache.get(descriptor);
         if (renderPipeline === null) {
             renderPipeline = device.createRenderPipeline(descriptor);
-            this.gfxRenderPipelinesCache.insert(descriptor, renderPipeline);
+            this.gfxRenderPipelinesCache.add(descriptor, renderPipeline);
         }
         return renderPipeline;
     }
@@ -112,7 +112,7 @@ export class GfxRenderCache {
         let inputLayout = this.gfxInputLayoutsCache.get(descriptor);
         if (inputLayout === null) {
             inputLayout = device.createInputLayout(descriptor);
-            this.gfxInputLayoutsCache.insert(descriptor, inputLayout);
+            this.gfxInputLayoutsCache.add(descriptor, inputLayout);
         }
         return inputLayout;
     }
@@ -123,7 +123,7 @@ export class GfxRenderCache {
         let program = this.gfxProgramCache.get(deviceProgram);
         if (program === null) {
             program = device.createProgram(deviceProgram);
-            this.gfxProgramCache.insert(deviceProgram, program);
+            this.gfxProgramCache.add(deviceProgram, program);
         }
         return program;
     }

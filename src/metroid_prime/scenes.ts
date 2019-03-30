@@ -15,24 +15,30 @@ import * as BYML from '../byml';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4 } from 'gl-matrix';
+import { GXRenderHelperGfx } from '../gx/gx_render';
 
 export class RetroSceneRenderer implements Viewer.SceneGfx {
     public viewRenderer = new GfxRenderInstViewRenderer();
     public renderTarget = new BasicRenderTarget();
+    public renderHelper: GXRenderHelperGfx;
+    public areaRenderers: MREARenderer[] = [];
+    public cmdlRenderers: CMDLRenderer[] = [];
 
-    constructor(device: GfxDevice, public mlvl: MLVL.MLVL, public textureHolder: RetroTextureHolder, public skyboxRenderer: CMDLRenderer | null, public areaRenderers: MREARenderer[]) {
-        if (this.skyboxRenderer !== null)
-            this.skyboxRenderer.addToViewRenderer(device, this.viewRenderer);
-        for (let i = 0; i < this.areaRenderers.length; i++)
-            this.areaRenderers[i].addToViewRenderer(device, this.viewRenderer);
+    constructor(device: GfxDevice, public mlvl: MLVL.MLVL, public textureHolder = new RetroTextureHolder()) {
+        this.renderHelper = new GXRenderHelperGfx(device);
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        if (this.skyboxRenderer !== null)
-            this.skyboxRenderer.prepareToRender(hostAccessPass, viewerInput);
+        viewerInput.camera.setClipPlanes(2, 75000);
+        this.renderHelper.fillSceneParams(viewerInput);
+
         for (let i = 0; i < this.areaRenderers.length; i++)
-            this.areaRenderers[i].prepareToRender(hostAccessPass, viewerInput);
+            this.areaRenderers[i].prepareToRender(viewerInput);
+        for (let i = 0; i < this.cmdlRenderers.length; i++)
+            this.cmdlRenderers[i].prepareToRender(viewerInput);
+
+        this.renderHelper.prepareToRender(hostAccessPass);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
@@ -59,10 +65,11 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
         this.textureHolder.destroy(device);
         this.viewRenderer.destroy(device);
         this.renderTarget.destroy(device);
+        this.renderHelper.destroy(device);
         for (let i = 0; i < this.areaRenderers.length; i++)
             this.areaRenderers[i].destroy(device);
-        if (this.skyboxRenderer !== null)
-            this.skyboxRenderer.destroy(device);
+        for (let i = 0; i < this.cmdlRenderers.length; i++)
+            this.cmdlRenderers[i].destroy(device);
     }
 
     public createPanels(): UI.Panel[] {
@@ -91,26 +98,31 @@ class MP1SceneDesc implements Viewer.SceneDesc {
             for (const mlvlEntry of levelPak.namedResourceTable.values()) {
                 assert(mlvlEntry.fourCC === 'MLVL');
                 const mlvl: MLVL.MLVL = resourceSystem.loadAssetByID(mlvlEntry.fileID, mlvlEntry.fourCC);
+
+                const renderer = new RetroSceneRenderer(device, mlvl);
+
                 const areas = mlvl.areaTable;
-                const textureHolder = new RetroTextureHolder();
                 let skyboxRenderer: CMDLRenderer = null;
                 const skyboxCMDL = resourceSystem.loadAssetByID(mlvl.defaultSkyboxID, 'CMDL');
                 if (skyboxCMDL) {
                     const skyboxName = resourceSystem.findResourceNameByID(mlvl.defaultSkyboxID);
-                    skyboxRenderer = new CMDLRenderer(device, textureHolder, null, skyboxName, mat4.create(), skyboxCMDL);
+                    skyboxRenderer = new CMDLRenderer(device, renderer.renderHelper, renderer.textureHolder, null, skyboxName, mat4.create(), skyboxCMDL);
                     skyboxRenderer.isSkybox = true;
+                    renderer.cmdlRenderers.push(skyboxRenderer);
                 }
-                const areaRenderers = areas.map((mreaEntry) => {
+
+                for (let i = 0; i < areas.length; i++) {
+                    const mreaEntry = areas[i];
                     const mrea: MREA.MREA = resourceSystem.loadAssetByID(mreaEntry.areaMREAID, 'MREA');
-                    return new MREARenderer(device, textureHolder, mreaEntry.areaName, mrea);
-                });
+                    const areaRenderer = new MREARenderer(device, renderer.renderHelper, renderer.textureHolder, mreaEntry.areaName, mrea);
+                    renderer.areaRenderers.push(areaRenderer);
 
-                // By default, set only the first 10 area renderers to visible, so as to not "crash my browser please".
-                areaRenderers.slice(10).forEach((areaRenderer) => {
-                    areaRenderer.setVisible(false);
-                });
+                    // By default, set only the first 10 area renderers to visible, so as to not "crash my browser please".
+                    areaRenderer.visible = (i < 1);
+                }
 
-                return new RetroSceneRenderer(device, mlvl, textureHolder, skyboxRenderer, areaRenderers);
+                renderer.renderHelper.finishBuilder(device, renderer.viewRenderer);
+                return renderer;
             }
 
             return null;

@@ -2,7 +2,7 @@
 import { GX2Surface, parseGX2Surface } from './gx2_surface';
 import { GX2PrimitiveType, GX2IndexFormat, GX2AttribFormat, GX2TexClamp, GX2TexXYFilterType, GX2TexMipFilterType, GX2CompareFunction, GX2FrontFaceMode, GX2SurfaceFormat, GX2BlendFunction, GX2BlendCombine } from './gx2_enum';
 
-import { assert, readString, makeTextDecoder } from '../util';
+import { assert, readString, getTextDecoder } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { TextureBase } from '../TextureHolder';
 import { AABB } from '../Geometry';
@@ -66,8 +66,8 @@ export interface ResUserData {
     entries: ResUserDataEntry[];
 }
 
-const utf8Decoder = makeTextDecoder('utf8');
-const ucs2Decoder = makeTextDecoder('utf-16be');
+const utf8Decoder = getTextDecoder('utf8');
+const ucs2Decoder = getTextDecoder('utf-16be');
 
 function readStringDecode(buffer: ArrayBufferSlice, offs: number, decoder: TextDecoder, byteLength: number = 0xFF): string {
     const arr = buffer.createTypedArray(Uint8Array, offs, byteLength);

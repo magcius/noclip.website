@@ -66,7 +66,16 @@ export class HashMap<K, V> {
         return bucket.values[bi];
     }
 
-    public insert(k: K, v: V) {
+    public add(k: K, v: V, bi = -1): void {
+        const bw = this.keyHashFunc(k) % NUM_BUCKETS;
+        if (this.buckets[bw] === null) this.buckets[bw] = new HashBucket<K, V>();
+        const bucket = this.buckets[bw];
+        if (bi === -1) bi = bucket.keys.length;
+        bucket.keys[bi] = k;
+        bucket.values[bi] = v;
+    }
+
+    public insert(k: K, v: V): void {
         const bw = this.keyHashFunc(k) % NUM_BUCKETS;
         if (this.buckets[bw] === null) this.buckets[bw] = new HashBucket<K, V>();
         const bucket = this.buckets[bw];

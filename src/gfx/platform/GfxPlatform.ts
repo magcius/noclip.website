@@ -227,6 +227,8 @@ export interface GfxDeviceLimits {
 }
 
 export interface GfxProgramReflection extends DeviceProgramReflection {
+    name: string;
+    uniqueKey: number;
 }
 
 export interface GfxInputStateReflection {

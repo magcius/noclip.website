@@ -497,21 +497,22 @@ function applyMegaState(gl: WebGL2RenderingContext, currentMegaState: GfxMegaSta
     }
 }
 
+const TRACK_RESOURCES = false && IS_DEVELOPMENT;
 class ResourceCreationTracker {
     public creationStacks = new Map<GfxResource, string>();
 
     public trackResourceCreated(o: GfxResource): void {
-        if (!IS_DEVELOPMENT) return;
+        if (!TRACK_RESOURCES) return;
         this.creationStacks.set(o, new Error().stack);
     }
 
     public trackResourceDestroyed(o: GfxResource): void {
-        if (!IS_DEVELOPMENT) return;
+        if (!TRACK_RESOURCES) return;
         this.creationStacks.delete(o);
     }
 
     public checkForLeaks(): void {
-        if (!IS_DEVELOPMENT) return;
+        if (!TRACK_RESOURCES) return;
         for (const [object, stack] of this.creationStacks.entries())
             console.warn("Object leaked:", object, "Creation stack:", stack);
     }

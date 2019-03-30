@@ -11,12 +11,12 @@ import { AABB } from '../Geometry';
 import { TXTR } from './txtr';
 import { CMDL } from './cmdl';
 import { TextureMapping } from '../TextureHolder';
-import { GfxDevice, GfxHostAccessPass, GfxFormat, GfxSampler, GfxMipFilterMode, GfxTextureDimension, GfxTexFilterMode, GfxWrapMode } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxHostAccessPass, GfxFormat, GfxSampler, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from '../gfx/platform/GfxPlatform';
 import { GfxCoalescedBuffers, GfxBufferCoalescer } from '../gfx/helpers/BufferHelpers';
 import { GfxRenderInst, GfxRenderInstViewRenderer, makeSortKey, GfxRendererLayer, setSortKeyDepthKey } from '../gfx/render/GfxRenderer';
 import { computeViewMatrixSkybox, computeViewMatrix, texEnvMtx } from '../Camera';
 import { LoadedVertexData } from '../gx/gx_displaylist';
-import { GXMaterialHacks, Color, lightSetWorldPosition, lightSetWorldDirection } from '../gx/gx_material';
+import { GXMaterialHacks, Color, lightSetWorldPositionViewMatrix, lightSetWorldDirectionNormalMatrix } from '../gx/gx_material';
 import { LightParameters, WorldLightingOptions } from './script';
 import { colorMult } from '../Color';
 
@@ -32,7 +32,7 @@ const posScale = 10;
 const posMtx = mat4.create();
 mat4.mul(posMtx, fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong, mat4.fromScaling(mat4.create(), [posScale, posScale, posScale]));
 
-const posMtxSkybox = mat4.copy(mat4.create(), fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong);
+const posMtxSkybox = mat4.clone(fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong);
 
 export class RetroTextureHolder extends GXTextureHolder<TXTR> {
     public addMaterialSetTextures(device: GfxDevice, materialSet: MaterialSet): void {
@@ -77,8 +77,7 @@ export class ActorLights {
         // DisableWorld indicates the actor doesn't use any area lights (including ambient ones)
         if (lightParams.options === WorldLightingOptions.DisableWorld) {
             this.ambient.set(0, 0, 0, 1);
-        }
-        else {
+        } else {
             const layerIdx = lightParams.layerIdx;
             const layer = mrea.lightLayers[layerIdx];
             colorMult(this.ambient, layer.ambientColor, lightParams.ambient);
@@ -93,16 +92,14 @@ export class ActorLights {
                 const light = layer.lights[i];
                 const sqDist = squaredDistanceFromPointToAABB(light.gxLight.Position, actorBounds);
 
-                if (sqDist < (light.radius * light.radius)) {
-                    actorLights.push( { sqDist, light } );
-                }
+                if (sqDist < (light.radius * light.radius))
+                    actorLights.push({ sqDist, light });
             }
 
-            actorLights.sort( (a: ActorLight, b: ActorLight) => a.sqDist - b.sqDist );
+            actorLights.sort((a, b) => a.sqDist - b.sqDist);
 
-            for (let i = 0; i < actorLights.length && i < lightParams.maxAreaLights && i < 8; i++) {
+            for (let i = 0; i < actorLights.length && i < lightParams.maxAreaLights && i < 8; i++)
                 this.lights.push(actorLights[i].light);
-            }
         }
     }
 }
@@ -116,7 +113,6 @@ class SurfaceInstance {
     private renderInst: GfxRenderInst;
     private materialTextureKey: number;
     public packetParams = new PacketParams();
-    public materialParams = new MaterialParams();
 
     constructor(device: GfxDevice,
         public renderHelper: GXRenderHelperGfx,
@@ -126,7 +122,7 @@ class SurfaceInstance {
         public coalescedBuffers: GfxCoalescedBuffers,
         public modelMatrix: mat4,
         public bbox: AABB,
-        public actorLights: ActorLights)
+        public actorLights: ActorLights | null)
     {
         this.shapeHelper = new GXShapeHelperGfx(device, renderHelper, coalescedBuffers, surface.loadedVertexLayout, surface.loadedVertexData);
 
@@ -135,11 +131,14 @@ class SurfaceInstance {
     }
 
     public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean, visible: boolean): boolean {
-        if (isSkybox) {
-            mat4.mul(modelMatrixScratch, posMtxSkybox, this.modelMatrix);
-        } else {
-            mat4.mul(modelMatrixScratch, posMtx, this.modelMatrix);
+        let posModelMtx;
 
+        if (isSkybox) {
+            posModelMtx = posMtxSkybox;
+            mat4.mul(modelMatrixScratch, posModelMtx, this.modelMatrix);
+        } else {
+            posModelMtx = posMtx;
+            mat4.mul(modelMatrixScratch, posModelMtx, this.modelMatrix);
             if (visible) {
                 bboxScratch.transform(this.bbox, modelMatrixScratch);
                 visible = viewerInput.camera.frustum.contains(bboxScratch);
@@ -160,38 +159,6 @@ class SurfaceInstance {
             mat4.mul(this.packetParams.u_PosMtx[0], viewMatrix, modelMatrixScratch);
             this.shapeHelper.fillPacketParams(this.packetParams, this.renderInst, renderHelper);
             this.renderInst.sortKey = setSortKeyDepthKey(this.renderInst.sortKey, this.materialTextureKey);
-
-            // set up material params
-            this.materialGroupCommand.fillMaterialParamsData(this.materialParams, viewerInput, modelMatrixScratch);
-
-            if (isSkybox) {
-                this.materialParams.u_Color[ColorKind.AMB0].set(1, 1, 1, 1);
-            }
-            else {
-                if (this.actorLights) {
-                    this.materialParams.u_Color[ColorKind.AMB0].copy( this.actorLights.ambient );
-                }
-
-                for (let i = 0; i < 8; i++) {
-                    if (this.actorLights && i < this.actorLights.lights.length) {
-                        const light = this.actorLights.lights[i].gxLight;
-                        lightSetWorldPosition(this.materialParams.u_Lights[i], viewerInput.camera, light.Position[0]*10, light.Position[2]*10, -light.Position[1]*10);
-                        lightSetWorldDirection(this.materialParams.u_Lights[i], viewerInput.camera, light.Direction[0], light.Direction[2], -light.Direction[1]);
-                        vec3.copy(this.materialParams.u_Lights[i].DistAtten, light.DistAtten);
-                        vec3.copy(this.materialParams.u_Lights[i].CosAtten, light.CosAtten);
-                        this.materialParams.u_Lights[i].Color.copy(light.Color);
-                    }
-                    else {
-                        this.materialParams.u_Lights[i].Color.set(0, 0, 0, 1);
-                        vec3.set(this.materialParams.u_Lights[i].Position, 0, 0, 0);
-                        vec3.set(this.materialParams.u_Lights[i].Direction, 0, 0, -1);
-                        vec3.set(this.materialParams.u_Lights[i].DistAtten, 0, 0, 0);
-                        vec3.set(this.materialParams.u_Lights[i].CosAtten, 0, 0, 0);
-                    }
-                }
-            }
-
-            this.renderHelper.fillMaterialParams(this.materialParams, this.renderInst.getUniformBufferOffset(ub_MaterialParams));
         }
 
         this.renderInst.visible = visible;
@@ -204,6 +171,7 @@ class SurfaceInstance {
 }
 
 const matrixScratch2 = mat4.create();
+const materialParams = new MaterialParams();
 class Command_MaterialGroup {
     public materialHelper: GXMaterialHelperGfx;
     public hasPreparedToRender: boolean = false;
@@ -222,7 +190,7 @@ class Command_MaterialGroup {
             maxLOD: 100,
             wrapS: GfxWrapMode.REPEAT,
             wrapT: GfxWrapMode.REPEAT,
-        })
+        });
     }
 
     public destroy(device: GfxDevice) {
@@ -230,9 +198,39 @@ class Command_MaterialGroup {
         device.destroySampler(this.gfxSampler);
     }
 
-    public fillMaterialParamsData(materialParams: MaterialParams, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4 | null): void {
+    public prepareToRender(viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4 | null, isSkybox: boolean, actorLights: ActorLights | null): void {
+        if (this.hasPreparedToRender)
+            return;
+
+        this.fillMaterialParamsData(materialParams, viewerInput, modelMatrix, isSkybox, actorLights);
+        this.materialHelper.fillMaterialParams(materialParams, this.renderHelper);
+        this.hasPreparedToRender = true;
+    }
+
+    public fillMaterialParamsData(materialParams: MaterialParams, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4 | null, isSkybox: boolean, actorLights: ActorLights | null): void {
         materialParams.u_Color[ColorKind.MAT0].set(1, 1, 1, 1);
-        materialParams.u_Color[ColorKind.AMB0].set(0, 0, 0, 1);
+
+        if (isSkybox) {
+            materialParams.u_Color[ColorKind.AMB0].set(1, 1, 1, 1);
+        } else {
+            if (actorLights !== null)
+                materialParams.u_Color[ColorKind.AMB0].copy(actorLights.ambient);
+
+            const viewMatrix = matrixScratch2;
+            mat4.mul(viewMatrix, viewMatrix, posMtx);
+
+            for (let i = 0; i < 8; i++) {
+                if (actorLights !== null && i < actorLights.lights.length) {
+                    const light = actorLights.lights[i].gxLight;
+                    lightSetWorldPositionViewMatrix(materialParams.u_Lights[i], viewMatrix, light.Position[0], light.Position[1], light.Position[2]);
+                    lightSetWorldDirectionNormalMatrix(materialParams.u_Lights[i], viewMatrix, light.Direction[0], light.Direction[1], light.Direction[2]);
+                    vec3.copy(materialParams.u_Lights[i].DistAtten, light.DistAtten);
+                    vec3.copy(materialParams.u_Lights[i].CosAtten, light.CosAtten);
+                } else {
+                    materialParams.u_Lights[i].reset();
+                }
+            }
+        }
 
         for (let i = 0; i < 4; i++)
             materialParams.u_Color[ColorKind.CPREV + i].copy(this.material.colorRegisters[i]);
@@ -240,13 +238,16 @@ class Command_MaterialGroup {
             materialParams.u_Color[ColorKind.K0 + i].copy(this.material.colorConstants[i]);
 
         const animTime = ((viewerInput.time / 1000) % 900);
-        for (let i = 0; i < this.material.uvAnimations.length; i++) {
+        for (let i = 0; i < 8; i++) {
+            const texMtx = materialParams.u_TexMtx[i];
+            const postMtx = materialParams.u_PostTexMtx[i];
+            mat4.identity(texMtx);
+            mat4.identity(postMtx);
+
             const uvAnimation = this.material.uvAnimations[i];
             if (!uvAnimation)
                 continue;
 
-            const texMtx = materialParams.u_TexMtx[i];
-            const postMtx = materialParams.u_PostTexMtx[i];
             switch (uvAnimation.type) {
             case UVAnimationType.UV_SCROLL: {
                 const transS = animTime * uvAnimation.scaleS + uvAnimation.offsetS;
@@ -409,12 +410,10 @@ export class MREARenderer {
     private materialGroupCommands: Command_MaterialGroup[] = [];
     private materialCommands: Command_Material[] = [];
     private surfaceInstances: SurfaceInstance[] = [];
-    private renderHelper: GXRenderHelperGfx;
     private actors: CMDLRenderer[] = [];
     public visible: boolean = true;
 
-    constructor(device: GfxDevice, public textureHolder: RetroTextureHolder, public name: string, public mrea: MREA) {
-        this.renderHelper = new GXRenderHelperGfx(device);
+    constructor(device: GfxDevice, private renderHelper: GXRenderHelperGfx, public textureHolder: RetroTextureHolder, public name: string, public mrea: MREA) {
         this.translateModel(device);
         this.translateActors(device);
     }
@@ -507,56 +506,41 @@ export class MREARenderer {
 
             for (let j = 0; j < scriptLayer.entities.length; j++) {
                 const ent = scriptLayer.entities[j];
-                
+
                 if (ent.active && ent.model) {
-                    const aabb = new AABB;
+                    const aabb = new AABB();
                     aabb.transform(ent.model.bbox, ent.modelMatrix);
 
                     const actorLights = new ActorLights(aabb, ent.lightParams, this.mrea);
-                    this.actors.push( new CMDLRenderer(device, this.textureHolder, actorLights, ent.name, ent.modelMatrix, ent.model) );
+                    this.actors.push(new CMDLRenderer(device, this.renderHelper, this.textureHolder, actorLights, ent.name, ent.modelMatrix, ent.model));
                 }
             }
         }
     }
 
-    public addToViewRenderer(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer): void {
-        for (let i = 0; i < this.actors.length; i++) {
-            this.actors[i].addToViewRenderer(device, viewRenderer);
-        }
-        this.renderHelper.finishBuilder(device, viewRenderer);
-    }
-
     public setVisible(visible: boolean): void {
         this.visible = visible;
-
-        for (let i = 0; i < this.actors.length; i++) {
-            this.actors[i].setVisible(visible);
-        }
     }
 
-    public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        viewerInput.camera.setClipPlanes(2, 75000);
-        this.renderHelper.fillSceneParams(viewerInput);
-
+    public prepareToRender(viewerInput: Viewer.ViewerRenderInput): void {
         // First, prep our material groups to be updated.
         for (let i = 0; i < this.materialGroupCommands.length; i++)
             this.materialGroupCommands[i].hasPreparedToRender = false;
 
         // Update our surfaces.
         for (let i = 0; i < this.surfaceInstances.length; i++) {
-            this.surfaceInstances[i].prepareToRender(this.renderHelper, viewerInput, false, this.visible);
+            const surfaceCommand = this.surfaceInstances[i];
+            const surfaceVisible = surfaceCommand.prepareToRender(this.renderHelper, viewerInput, false, this.visible);
+
+            if (surfaceVisible) {
+                const materialGroupCommand = this.materialGroupCommands[this.materialCommands[surfaceCommand.surface.materialIndex].material.groupIndex];
+                materialGroupCommand.prepareToRender(viewerInput, null, false, null);
+            }
         }
 
         // Update our actors
-        for (let i = 0; i < this.actors.length; i++) {
-           this.actors[i].prepareToRender(hostAccessPass, viewerInput);
-        }
-
-        // If nothing is visible, then don't even bother updating our UBOs.
-        if (!this.visible)
-            return;
-
-        this.renderHelper.prepareToRender(hostAccessPass);
+        for (let i = 0; i < this.actors.length; i++)
+           this.actors[i].prepareToRender(viewerInput, this.visible);
     }
 
     public destroy(device: GfxDevice): void {
@@ -564,6 +548,8 @@ export class MREARenderer {
         this.surfaceInstances.forEach((cmd) => cmd.destroy(device));
         this.renderHelper.destroy(device);
         this.bufferCoalescer.destroy(device);
+        for (let i = 0; i < this.actors.length; i++)
+            this.actors[i].destroy(device);
     }
 }
 
@@ -573,17 +559,18 @@ export class CMDLRenderer {
     private materialGroupCommands: Command_MaterialGroup[] = [];
     private materialCommands: Command_Material[] = [];
     private surfaceCommands: SurfaceInstance[] = [];
-    private renderHelper: GXRenderHelperGfx;
+    private templateRenderInst: GfxRenderInst;
     public visible: boolean = true;
     public isSkybox: boolean = false;
 
-    constructor(device: GfxDevice, public textureHolder: RetroTextureHolder, public actorLights: ActorLights, public name: string, public modelMatrix: mat4, public cmdl: CMDL) {
-        this.renderHelper = new GXRenderHelperGfx(device);
+    constructor(device: GfxDevice, private renderHelper: GXRenderHelperGfx, public textureHolder: RetroTextureHolder, public actorLights: ActorLights, public name: string, public modelMatrix: mat4, public cmdl: CMDL) {
         this.translateModel(device);
     }
 
     private translateModel(device: GfxDevice): void {
         const materialSet = this.cmdl.materialSets[0];
+
+        this.templateRenderInst = this.renderHelper.renderInstBuilder.pushTemplateRenderInst();
 
         this.textureHolder.addMaterialSetTextures(device, materialSet);
 
@@ -624,38 +611,39 @@ export class CMDLRenderer {
 
             this.surfaceCommands.push(new SurfaceInstance(device, this.renderHelper, surface, materialCommand, materialGroupCommand, coalescedBuffers, this.modelMatrix, this.cmdl.bbox, this.actorLights));
         });
-    }
 
-    public addToViewRenderer(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer): void {
-        this.renderHelper.finishBuilder(device, viewRenderer);
+        this.renderHelper.renderInstBuilder.popTemplateRenderInst();
     }
 
     public setVisible(visible: boolean): void {
         this.visible = visible;
     }
 
-    public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        viewerInput.camera.setClipPlanes(2, 75000);
-        this.renderHelper.fillSceneParams(viewerInput);
+    public prepareToRender(viewerInput: Viewer.ViewerRenderInput, visible: boolean = true): void {
+        if (visible)
+            visible = this.visible;
 
-        this.renderHelper.templateRenderInst.passMask = this.isSkybox ? RetroPass.SKYBOX : RetroPass.MAIN;
+        this.templateRenderInst.passMask = this.isSkybox ? RetroPass.SKYBOX : RetroPass.MAIN;
+
+        // First, prep our material groups to be updated.
+        for (let i = 0; i < this.materialGroupCommands.length; i++)
+            this.materialGroupCommands[i].hasPreparedToRender = false;
 
         // Update our surfaces.
         for (let i = 0; i < this.surfaceCommands.length; i++) {
-            this.surfaceCommands[i].prepareToRender(this.renderHelper, viewerInput, this.isSkybox, this.visible);
+            const surfaceCommand = this.surfaceCommands[i];
+            const surfaceVisible = surfaceCommand.prepareToRender(this.renderHelper, viewerInput, this.isSkybox, visible);
+
+            if (surfaceVisible) {
+                const materialGroupCommand = this.materialGroupCommands[this.materialCommands[surfaceCommand.surface.materialIndex].material.groupIndex];
+                materialGroupCommand.prepareToRender(viewerInput, this.modelMatrix, this.isSkybox, this.actorLights);
+            }
         }
-
-        // If nothing is visible, then don't even bother updating our UBOs.
-        if (!this.visible)
-            return;
-
-        this.renderHelper.prepareToRender(hostAccessPass);
     }
 
     public destroy(device: GfxDevice): void {
         this.materialGroupCommands.forEach((cmd) => cmd.destroy(device));
         this.surfaceCommands.forEach((cmd) => cmd.destroy(device));
-        this.renderHelper.destroy(device);
         this.bufferCoalescer.destroy(device);
     }
 }

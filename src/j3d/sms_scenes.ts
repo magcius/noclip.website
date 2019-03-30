@@ -6,7 +6,7 @@ import * as RARC from './rarc';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import Progressable from '../Progressable';
-import { readString, assert, makeTextDecoder } from '../util';
+import { readString, assert, getTextDecoder } from '../util';
 import { fetchData } from '../fetch';
 
 import { J3DTextureHolder, BMDModelInstance, BMDModel } from './render';
@@ -22,7 +22,7 @@ import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/Gfx
 import { colorNew } from '../Color';
 import { RENDER_HACKS_ICON } from '../bk/scenes';
 
-const sjisDecoder = makeTextDecoder('sjis');
+const sjisDecoder = getTextDecoder('sjis');
 
 function unpack(buffer: ArrayBufferSlice, sig: string): any[] {
     const view = buffer.createDataView();

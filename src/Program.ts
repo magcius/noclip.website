@@ -55,12 +55,14 @@ function range(start: number, num: number): number[] {
     return L;
 }
 
+interface DeviceProgramConstructor {
+    programReflection?: DeviceProgramReflection;
+}
+
 export interface DeviceProgramReflection {
-    name: string;
     uniformBufferLayouts: StructLayout[];
     samplerBindings: SamplerBindingReflection[];
     totalSamplerBindingsCount: number;
-    uniqueKey: number;
 }
 
 export interface SamplerBindingReflection {
@@ -99,6 +101,7 @@ export class DeviceProgram {
         if (this.preprocessedVert === '') {
             this.preprocessedVert = this.preprocessShader(device, this.both + this.vert, 'vert');
             this.preprocessedFrag = this.preprocessShader(device, this.both + this.frag, 'frag');
+
             // TODO(jstpierre): Would love a better place to do this.
             DeviceProgram.parseReflectionDefinitionsInto(this, this.preprocessedVert);
         }
