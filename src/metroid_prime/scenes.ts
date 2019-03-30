@@ -3,7 +3,7 @@ import * as PAK from './pak';
 import * as MLVL from './mlvl';
 import * as MREA from './mrea';
 import { ResourceSystem, NameData } from './resource';
-import { MREARenderer, RetroTextureHolder, CMDLRenderer, RetroPass } from './render';
+import { MREARenderer, RetroTextureHolder, CMDLRenderer, RetroPass, CMDLData } from './render';
 
 import * as Viewer from '../viewer';
 import * as UI from '../ui';
@@ -34,9 +34,9 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
         this.renderHelper.fillSceneParams(viewerInput);
 
         for (let i = 0; i < this.areaRenderers.length; i++)
-            this.areaRenderers[i].prepareToRender(viewerInput);
+            this.areaRenderers[i].prepareToRender(this.renderHelper, viewerInput);
         for (let i = 0; i < this.cmdlRenderers.length; i++)
-            this.cmdlRenderers[i].prepareToRender(viewerInput);
+            this.cmdlRenderers[i].prepareToRender(this.renderHelper, viewerInput);
 
         this.renderHelper.prepareToRender(hostAccessPass);
     }
@@ -106,7 +106,8 @@ class MP1SceneDesc implements Viewer.SceneDesc {
                 const skyboxCMDL = resourceSystem.loadAssetByID(mlvl.defaultSkyboxID, 'CMDL');
                 if (skyboxCMDL) {
                     const skyboxName = resourceSystem.findResourceNameByID(mlvl.defaultSkyboxID);
-                    skyboxRenderer = new CMDLRenderer(device, renderer.renderHelper, renderer.textureHolder, null, skyboxName, mat4.create(), skyboxCMDL);
+                    const skyboxCMDLData = new CMDLData(device, renderer.renderHelper, skyboxCMDL);
+                    skyboxRenderer = new CMDLRenderer(device, renderer.renderHelper, renderer.textureHolder, null, skyboxName, mat4.create(), skyboxCMDLData);
                     skyboxRenderer.isSkybox = true;
                     renderer.cmdlRenderers.push(skyboxRenderer);
                 }

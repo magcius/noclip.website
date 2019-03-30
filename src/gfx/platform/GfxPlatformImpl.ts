@@ -4,7 +4,7 @@
 // Hack to get nominal typing.
 export enum _T { Buffer, Texture, ColorAttachment, DepthStencilAttachment, Sampler, Program, Bindings, InputLayout, InputState, RenderPipeline };
 
-interface GfxResourceBase { ResourceName?: string };
+interface GfxResourceBase { ResourceName?: string, ResourceUniqueId: number };
 export interface GfxBuffer extends GfxResourceBase { _T: _T.Buffer };
 export interface GfxTexture extends GfxResourceBase { _T: _T.Texture };
 export interface GfxColorAttachment extends GfxResourceBase { _T: _T.ColorAttachment };

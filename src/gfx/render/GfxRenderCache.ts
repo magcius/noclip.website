@@ -1,6 +1,6 @@
 
 import { GfxBindingsDescriptor, GfxBindings, GfxDevice, GfxBufferBinding, GfxSamplerBinding, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxMegaStateDescriptor, GfxBindingLayoutDescriptor, GfxProgram, GfxInputLayoutDescriptor, GfxVertexAttributeDescriptor, GfxInputLayout } from "../platform/GfxPlatform";
-import { HashMap, EqualFunc, nullHashFunc } from "../../HashMap";
+import { HashMap, EqualFunc, nullHashFunc, hashCodeNumbers } from "../../HashMap";
 import { DeviceProgram } from "../../Program";
 
 function arrayEqual<T>(a: T[], b: T[], e: EqualFunc<T>): boolean {
@@ -28,6 +28,17 @@ function gfxBindingsDescriptorEquals(a: GfxBindingsDescriptor, b: GfxBindingsDes
     return true;
 }
 
+const scratch: number[] = Array(16);
+function gfxBindingsDescriptorHash(a: GfxBindingsDescriptor): number {
+    scratch.fill(0);
+    // Hash on textures bindings.
+    for (let i = 0; i < a.samplerBindings.length; i++) {
+        if (a.samplerBindings[i].texture !== null)
+            scratch[i] = a.samplerBindings[i].texture.ResourceUniqueId;
+    }
+    return hashCodeNumbers(scratch);
+}
+
 function gfxMegaStateDescriptorEquals(a: GfxMegaStateDescriptor, b: GfxMegaStateDescriptor): boolean {
     return (
         a.blendDstFactor === b.blendDstFactor &&
@@ -45,11 +56,8 @@ function gfxBindingLayoutEquals(a: GfxBindingLayoutDescriptor, b: GfxBindingLayo
     return a.numSamplers === b.numSamplers && a.numUniformBuffers === b.numUniformBuffers;
 }
 
-// XXX(jstpierre): giant hack!!!
-// We need to cache programs at a higher level so we won't have to query program keys here.
-let _device: GfxDevice;
 function gfxProgramEquals(a: GfxProgram, b: GfxProgram): boolean {
-    return _device.queryProgram(a).uniqueKey === _device.queryProgram(b).uniqueKey;
+    return a.ResourceUniqueId === b.ResourceUniqueId;
 }
 
 function gfxRenderPipelineDescriptorEquals(a: GfxRenderPipelineDescriptor, b: GfxRenderPipelineDescriptor): boolean {
@@ -78,12 +86,15 @@ function gfxInputLayoutDescriptorEquals(a: GfxInputLayoutDescriptor, b: GfxInput
     return true;
 }
 
+// XXX(jstpierre): giant hack!!!
+// We need to cache programs at a higher level so we won't have to query program keys here.
+let _device: GfxDevice;
 function deviceProgramEquals(a: DeviceProgram, b: DeviceProgram): boolean {
     return DeviceProgram.equals(_device, a, b);
 }
 
 export class GfxRenderCache {
-    private gfxBindingsCache = new HashMap<GfxBindingsDescriptor, GfxBindings>(gfxBindingsDescriptorEquals, nullHashFunc);
+    private gfxBindingsCache = new HashMap<GfxBindingsDescriptor, GfxBindings>(gfxBindingsDescriptorEquals, gfxBindingsDescriptorHash);
     private gfxRenderPipelinesCache = new HashMap<GfxRenderPipelineDescriptor, GfxRenderPipeline>(gfxRenderPipelineDescriptorEquals, nullHashFunc);
     private gfxInputLayoutsCache = new HashMap<GfxInputLayoutDescriptor, GfxInputLayout>(gfxInputLayoutDescriptorEquals, nullHashFunc);
     private gfxProgramCache = new HashMap<DeviceProgram, GfxProgram>(deviceProgramEquals, nullHashFunc);

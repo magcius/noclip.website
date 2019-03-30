@@ -17,15 +17,7 @@ export function hashCodeNumbers(key: number[]): number {
     hash += hash << 3;
     hash ^= hash >>> 11;
     hash += hash << 15;
-    return hash;
-}
-
-export function hashCodeString(key: string): number {
-    const n = key.length;
-    const numbers = Array(n);
-    for (let i = 0; i < n; i++)
-        numbers[i] = key.charCodeAt(i);
-    return hashCodeNumbers(numbers);
+    return hash >>> 0;
 }
 
 // Pass this as a hash function to use a one-bucket HashMap (equivalent to linear search in an array),
@@ -55,7 +47,8 @@ export class HashMap<K, V> {
     }
 
     private findBucket(k: K): HashBucket<K, V> {
-        return this.buckets[this.keyHashFunc(k) % NUM_BUCKETS];
+        const bw = this.keyHashFunc(k) % NUM_BUCKETS;
+        return this.buckets[bw];
     }
 
     public get(k: K): V | null {
