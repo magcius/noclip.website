@@ -55,7 +55,7 @@ function range(start: number, num: number): number[] {
     return L;
 }
 
-interface DeviceProgramConstructor {
+interface DeviceProgramConstructor extends Function {
     programReflection?: DeviceProgramReflection;
 }
 
@@ -70,6 +70,19 @@ export interface SamplerBindingReflection {
     arraySize: number;
 }
 
+// XXX(jstpierre): This is absolutely terrible. The whole DeviceProgram interface is just an ugly duckling.
+function findProgramReflection(program: DeviceProgram): DeviceProgramReflection | null {
+    while (true) {
+        const constructor = program.constructor as DeviceProgramConstructor;
+        if (constructor.programReflection !== undefined)
+            return constructor.programReflection;
+        if (constructor === DeviceProgram)
+            break;
+        program = Object.getPrototypeOf(program);
+    }
+    return null;
+}
+
 export class DeviceProgram {
     public name: string = '(unnamed)';
 
@@ -82,6 +95,7 @@ export class DeviceProgram {
     // Compiled program.
     public glProgram: ProgramWithKey;
     public compileDirty: boolean = true;
+    private bindDirty: boolean = true;
     private preprocessedVert: string = '';
     private preprocessedFrag: string = '';
 
@@ -103,7 +117,14 @@ export class DeviceProgram {
             this.preprocessedFrag = this.preprocessShader(device, this.both + this.frag, 'frag');
 
             // TODO(jstpierre): Would love a better place to do this.
-            DeviceProgram.parseReflectionDefinitionsInto(this, this.preprocessedVert);
+            const programReflection = findProgramReflection(this);
+            if (programReflection !== null) {
+                this.uniformBufferLayouts = programReflection.uniformBufferLayouts;
+                this.samplerBindings = programReflection.samplerBindings;
+                this.totalSamplerBindingsCount = programReflection.totalSamplerBindingsCount;
+            } else {
+                DeviceProgram.parseReflectionDefinitionsInto(this, this.preprocessedVert);
+            }
         }
     }
 
@@ -113,7 +134,8 @@ export class DeviceProgram {
             const newProg = programCache.compileProgram(this.preprocessedVert, this.preprocessedFrag);
             if (newProg !== null && newProg !== this.glProgram) {
                 this.glProgram = newProg;
-                this.bind(device, this.glProgram);
+                this.uniqueKey = newProg.uniqueKey;
+                this.bindDirty = true;
             }
 
             this.compileDirty = false;
@@ -125,11 +147,6 @@ export class DeviceProgram {
 
     protected preprocessShader(device: GfxDevice, source: string, type: "vert" | "frag"): string {
         const deviceImpl = gfxDeviceGetImpl(device);
-        const gl = deviceImpl.gl;
-
-        const extensionDefines = assertExists(gl.getSupportedExtensions()).map((s) => {
-            return `#define HAS_${s}`;
-        }).join('\n');
 
         const bugDefines = deviceImpl.programBugDefines;
 
@@ -149,7 +166,6 @@ export class DeviceProgram {
 
         return `
 #version 300 es
-${extensionDefines}
 ${bugDefines}
 ${precision}
 #define ${type.toUpperCase()}
@@ -193,9 +209,12 @@ ${rest}
 `.trim();
     }
 
-    public bind(device: GfxDevice, prog: ProgramWithKey): void {
+    public bind(device: GfxDevice): void {
+        if (!this.bindDirty)
+            return;
+
         const gl = gfxDeviceGetImpl(device).gl;
-        this.uniqueKey = prog.uniqueKey;
+        const prog = this.glProgram;
 
         for (let i = 0; i < this.uniformBufferLayouts.length; i++) {
             const uniformBufferLayout = this.uniformBufferLayouts[i];
@@ -205,13 +224,12 @@ ${rest}
         let samplerIndex = 0;
         for (let i = 0; i < this.samplerBindings.length; i++) {
             // Assign identities in order.
-            // XXX(jstpierre): This will cause a warning in Chrome, but I don't care rn.
-            // It's more expensive to bind this every frame than respect Chrome's validation wishes...
             const samplerUniformLocation = gl.getUniformLocation(prog, this.samplerBindings[i].name);
-            gl.useProgram(prog);
             gl.uniform1iv(samplerUniformLocation, range(samplerIndex, this.samplerBindings[i].arraySize));
             samplerIndex += this.samplerBindings[i].arraySize;
         }
+
+        this.bindDirty = false;
     }
 
     public destroy(gl: WebGL2RenderingContext) {

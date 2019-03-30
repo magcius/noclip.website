@@ -497,7 +497,7 @@ function applyMegaState(gl: WebGL2RenderingContext, currentMegaState: GfxMegaSta
     }
 }
 
-const TRACK_RESOURCES = false && IS_DEVELOPMENT;
+const TRACK_RESOURCES = IS_DEVELOPMENT;
 class ResourceCreationTracker {
     public creationStacks = new Map<GfxResource, string>();
 
@@ -632,7 +632,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         gl.bindTexture(gl.TEXTURE_2D, getPlatformTexture(texture));
         gl.bindSampler(0, null);
         this._currentTextures[0] = null;
-        this._useProgram(this._fullscreenCopyProgram.deviceProgram.glProgram);
+        this._useDeviceProgram(this._fullscreenCopyProgram.deviceProgram);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
     //#endregion
@@ -732,10 +732,11 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     }
 
     private _currentProgram: WebGLProgram | null = null;
-    private _useProgram(program: WebGLProgram): void {
-        if (this._currentProgram !== program) {
-            this.gl.useProgram(program);
-            this._currentProgram = program;
+    private _useDeviceProgram(program: DeviceProgram): void {
+        if (this._currentProgram !== program.glProgram) {
+            this.gl.useProgram(program.glProgram);
+            program.bind(this);
+            this._currentProgram = program.glProgram;
         }
     }
 
@@ -1318,7 +1319,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         if (this._currentPipeline.program.deviceProgram.compileDirty)
             this._currentPipeline.program.deviceProgram.compile(this, this._programCache);
 
-        this._useProgram(this._currentPipeline.program.deviceProgram.glProgram);
+        this._useDeviceProgram(this._currentPipeline.program.deviceProgram);
     }
 
     private setInputState(inputState_: GfxInputState | null): void {
