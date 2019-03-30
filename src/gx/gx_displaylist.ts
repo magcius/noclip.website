@@ -34,12 +34,12 @@
 // standard formats.
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import MemoizeCache from '../MemoizeCache';
 import { align, assert } from '../util';
 
 import * as GX from './gx_enum';
 import { Endianness, getSystemEndianness } from '../endian';
 import { GfxFormat, FormatCompFlags, FormatTypeFlags, getFormatCompByteSize, getFormatTypeFlagsByteSize, makeFormat, getFormatCompFlagsComponentCount, getFormatTypeFlags, getFormatComponentCount, getFormatFlags, FormatFlags } from '../gfx/platform/GfxPlatformFormat';
+import { EqualFunc, HashMap, nullHashFunc } from '../HashMap';
 
 // GX_SetVtxAttrFmt
 export interface GX_VtxAttrFmt {
@@ -401,7 +401,10 @@ export interface VtxLoader {
     runVertices: VtxLoaderFunc;
 }
 
-function _compileVtxLoader(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VtxLoader {
+function _compileVtxLoader(desc: VtxLoaderDesc): VtxLoader {
+    const vat = desc.vat;
+    const vcd = desc.vcd;
+
     const loadedVertexLayout: VertexLayout = translateVertexLayout(vat, vcd);
 
     function makeLoaderName(): string {
@@ -854,28 +857,54 @@ interface VtxLoaderDesc {
     vcd: GX_VtxDesc[];
 }
 
-class VtxLoaderCache extends MemoizeCache<VtxLoaderDesc, VtxLoader> {
-    protected make(key: VtxLoaderDesc): VtxLoader {
-        return _compileVtxLoader(key.vat, key.vcd);
-    }
-
-    protected makeKey(key: VtxLoaderDesc): string {
-        return JSON.stringify(key);
-    }
-
-    public compileVtxLoader = (vatFormat: GX_VtxAttrFmt[], vcd: GX_VtxDesc[]): VtxLoader => {
-        const vat = [vatFormat];
-        return this.get({ vat, vcd });
-    }
-
-    public compileVtxLoaderMultiVat = (vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VtxLoader => {
-        return this.get({ vat, vcd });
-    }
+function arrayEqual<T>(a: T[], b: T[], e: EqualFunc<T>): boolean {
+    if (a.length !== b.length) return false;
+    for (let i = a.length - 1; i >= 0; i--)
+        if (!e(a[i], b[i]))
+            return false;
+    return true;
 }
 
-const cache = new VtxLoaderCache();
-export const compileVtxLoader = cache.compileVtxLoader;
-export const compileVtxLoaderMultiVat = cache.compileVtxLoaderMultiVat;
+function vtxAttrFmtEqual(a: GX_VtxAttrFmt | undefined, b: GX_VtxAttrFmt | undefined): boolean {
+    if (a === undefined || b === undefined) return a === b;
+    return a.compCnt === b.compCnt && a.compShift === b.compShift && a.compType === b.compType;
+}
+
+function vatEqual(a: GX_VtxAttrFmt[], b: GX_VtxAttrFmt[]): boolean {
+    return arrayEqual(a, b, vtxAttrFmtEqual);
+}
+
+function vcdEqual(a: GX_VtxDesc | undefined, b: GX_VtxDesc | undefined): boolean {
+    if (a === undefined || b === undefined) return a === b;
+    return a.enableOutput === b.enableOutput && a.type === b.type;
+}
+
+function vtxLoaderDescEqual(a: VtxLoaderDesc, b: VtxLoaderDesc): boolean {
+    if (!arrayEqual(a.vat, b.vat, vatEqual)) return false;
+    if (!arrayEqual(a.vcd, b.vcd, vcdEqual)) return false;
+    return true;
+}
+
+const cache = new HashMap<VtxLoaderDesc, VtxLoader>(vtxLoaderDescEqual, nullHashFunc);
+function compileVtxLoaderDesc(desc: VtxLoaderDesc): VtxLoader {
+    let loader = cache.get(desc);
+    if (loader === null) {
+        loader = _compileVtxLoader(desc);
+        cache.add(desc, loader);
+    }
+    return loader;
+}
+
+export function compileVtxLoaderMultiVat(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VtxLoader {
+    const desc = { vat, vcd };
+    return compileVtxLoaderDesc(desc);
+}
+
+export function compileVtxLoader(vatFormat: GX_VtxAttrFmt[], vcd: GX_VtxDesc[]): VtxLoader {
+    const vat = [vatFormat];
+    const desc = { vat, vcd };
+    return compileVtxLoaderDesc(desc);
+}
 
 export function coalesceLoadedDatas(loadedDatas: LoadedVertexData[]): LoadedVertexData {
     let totalTriangleCount = 0;
