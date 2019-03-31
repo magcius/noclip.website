@@ -28,7 +28,7 @@ const fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = ma
 );
 
 // Cheap way to scale up.
-const posScale = 10;
+const posScale = 1;
 const posMtx = mat4.create();
 mat4.mul(posMtx, fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong, mat4.fromScaling(mat4.create(), [posScale, posScale, posScale]));
 
@@ -221,15 +221,14 @@ class MaterialGroupInstance {
                 materialParams.u_Color[ColorKind.AMB0].copy(actorLights.ambient);
 
             const viewMatrix = matrixScratch2;
-            mat4.mul(viewMatrix, viewMatrix, posMtx);
+            mat4.mul(viewMatrix, viewerInput.camera.viewMatrix, posMtx);
 
             for (let i = 0; i < 8; i++) {
                 if (actorLights !== null && i < actorLights.lights.length) {
                     const light = actorLights.lights[i].gxLight;
+                    materialParams.u_Lights[i].copy(light);
                     lightSetWorldPositionViewMatrix(materialParams.u_Lights[i], viewMatrix, light.Position[0], light.Position[1], light.Position[2]);
                     lightSetWorldDirectionNormalMatrix(materialParams.u_Lights[i], viewMatrix, light.Direction[0], light.Direction[1], light.Direction[2]);
-                    vec3.copy(materialParams.u_Lights[i].DistAtten, light.DistAtten);
-                    vec3.copy(materialParams.u_Lights[i].CosAtten, light.CosAtten);
                 } else {
                     materialParams.u_Lights[i].reset();
                 }

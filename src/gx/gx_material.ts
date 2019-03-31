@@ -315,7 +315,7 @@ export class GX_Program extends DeviceProgram {
     }
 
     private generateLightDiffFn(chan: ColorChannelControl, lightName: string) {
-        const NdotL = `dot(t_Normal, normalize(t_LightDelta))`;
+        const NdotL = `dot(t_Normal, t_LightDeltaDir)`;
 
         switch (chan.diffuseFunction) {
         case GX.DiffuseFunction.NONE: return `1.0`;
@@ -325,11 +325,11 @@ export class GX_Program extends DeviceProgram {
     }
 
     private generateLightAttnFn(chan: ColorChannelControl, lightName: string) {
-        const cosAttn = `max(ApplyCubic(${lightName}.CosAtten.xyz, dot(t_LightDelta, ${lightName}.Direction.xyz)), 0.0)`;
+        const cosAttn = `ApplyCubic(${lightName}.CosAtten.xyz, dot(t_LightDeltaDir, ${lightName}.Direction.xyz))`;
 
         switch (chan.attenuationFunction) {
         case GX.AttenuationFunction.NONE: return `1.0`;
-        case GX.AttenuationFunction.SPOT: return `max(${cosAttn} / dot(${lightName}.DistAtten.xyz, vec3(1.0, Dist(t_LightDelta), DistSq(t_LightDelta))), 0.0)`;
+        case GX.AttenuationFunction.SPOT: return `max(${cosAttn} / max(dot(${lightName}.DistAtten.xyz, vec3(1.0, t_LightDeltaDist2, t_LightDeltaDist)), 0.0), 0.0)`;
         case GX.AttenuationFunction.SPEC: return `1.0`; // TODO(jtspierre): Specular
         }
     }
@@ -359,7 +359,11 @@ export class GX_Program extends DeviceProgram {
                 const lightName = `u_LightParams[${j}]`;
                 generateLightAccum += `
     t_LightDelta = ${lightName}.Position.xyz - v_Position.xyz;
-    t_LightAccum += ${this.generateLightDiffFn(chan, lightName)} * ${this.generateLightAttnFn(chan, lightName)} * ${lightName}.Color;`;
+    t_LightDeltaDist2 = dot(t_LightDelta, t_LightDelta);
+    t_LightDeltaDist = sqrt(t_LightDeltaDist2);
+    t_LightDeltaDir = t_LightDelta / t_LightDeltaDist;
+    t_LightAccum += ${this.generateLightDiffFn(chan, lightName)} * ${this.generateLightAttnFn(chan, lightName)} * ${lightName}.Color;
+`;
             }
         } else {
             // Without lighting, everything is full-bright.
@@ -1004,11 +1008,8 @@ Mat4x4 GetPosTexMatrix(uint t_MtxIdx) {
 }
 
 float ApplyCubic(vec3 t_Coeff, float t_Value) {
-    return dot(t_Coeff, vec3(1.0, t_Value, t_Value*t_Value));
+    return max(dot(t_Coeff, vec3(1.0, t_Value, t_Value*t_Value)), 0.0);
 }
-
-float DistSq(vec3 v) { return dot(v, v); }
-float Dist(vec3 v) { return sqrt(DistSq(v)); }
 
 void main() {
     Mat4x4 t_PosMtx = GetPosTexMatrix(a_PosMtxIdx);
@@ -1019,7 +1020,8 @@ void main() {
     vec3 t_Normal = Mul(t_NrmMtx, vec4(a_Normal, 0.0));
 
     vec4 t_LightAccum;
-    vec3 t_LightDelta;
+    vec3 t_LightDelta, t_LightDeltaDir;
+    float t_LightDeltaDist2, t_LightDeltaDist;
     vec4 t_ColorChanTemp;
 ${this.generateLightChannels()}
 ${this.generateTexGens(this.material.texGens)}

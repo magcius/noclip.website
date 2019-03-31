@@ -90,8 +90,8 @@ export function fillMaterialParamsData(d: Float32Array, materialParams: Material
         offs += fillColor(d, offs, light.Color);
         offs += fillVec3(d, offs, light.Position);
         offs += fillVec3(d, offs, light.Direction);
-        offs += fillVec3(d, offs, light.CosAtten);
         offs += fillVec3(d, offs, light.DistAtten);
+        offs += fillVec3(d, offs, light.CosAtten);
     }
 
     assert(offs === bOffs + u_MaterialParamsBufferSize);
