@@ -45,6 +45,7 @@ import * as SPM from './ttyd/spm_scenes';
 import * as MKDS from './nns_g3d/mkds_scenes';
 import * as NSMBDS from './nns_g3d/nsmbds_scenes';
 import * as NNS_G3D from './nns_g3d/scenes';
+import * as KH from './kh/scenes';
 import * as Z_BOTW from './z_botw/scenes';
 import * as SMO from './fres_nx/smo_scenes';
 import * as PSY from './psychonauts/scenes';
@@ -98,6 +99,7 @@ const sceneGroups = [
     DKSIV.sceneGroup,
     MDL0.sceneGroup,
     BK.sceneGroup,
+    KH.sceneGroup,
     "Experimental",
     PSY.sceneGroup,
     DKCR.sceneGroup,
