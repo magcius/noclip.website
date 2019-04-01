@@ -640,7 +640,7 @@ class ModelCache {
 
 function fetchPNG(path: string): Progressable<ImageData> {
     const img = document.createElement('img');
-    img.src = `data/${path}`;
+    img.src = getDataURLForPath(path);
     const p = img.decode().then(() => {
         const canvas = document.createElement('canvas');
         canvas.width = img.width;
@@ -653,7 +653,7 @@ function fetchPNG(path: string): Progressable<ImageData> {
 }
 
 function installAft(device: GfxDevice, textureHolder: NITROTextureHolder): Progressable<void> {
-    const aftBase = getDataURLForPath(`sm64ds/aft`);
+    const aftBase = `sm64ds/aft`;
 
     interface TexDef { k: string, v: string, scaleS: number, scaleT: number, transS: number, transT: number };
     function texDef(k: string, v: string, scaleS: number = 1, scaleT: number = 1): TexDef {
