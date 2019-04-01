@@ -25,6 +25,7 @@ export default class Progressable<T> {
             if (result instanceof Progressable) {
                 // If a callback returns a Progressable, then bubble that progress up to us.
                 result.chainProgressable = this;
+                this.setProgress(result.progress);
                 return result.promise;
             } else {
                 return result;
@@ -51,6 +52,7 @@ export default class Progressable<T> {
             p.onProgress = calcProgress;
         });
         const pr = new Progressable<T[]>(p);
+        calcProgress();
         return pr;
     }
 }

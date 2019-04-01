@@ -13,6 +13,8 @@ import InputManager from './InputManager';
 
 // @ts-ignore
 import logoURL from './logo.png';
+// @ts-ignore
+import newGifURL from './new.gif';
 
 export const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
 export const COOL_BLUE_COLOR = 'rgb(20, 105, 215)';
@@ -198,7 +200,8 @@ interface ScrollSelectItemHeader {
 interface ScrollSelectItemSelectable {
     type: ScrollSelectItemType.Selectable;
     visible?: boolean;
-    name: string;
+    name?: string;
+    html?: string;
 }
 
 export type ScrollSelectItem = ScrollSelectItemHeader | ScrollSelectItemSelectable;
@@ -269,7 +272,10 @@ export abstract class ScrollSelect implements Widget {
                 outer.appendChild(selector);
                 const textSpan = document.createElement('span');
                 textSpan.classList.add('text');
-                textSpan.textContent = item.name;
+                if (item.html)
+                    textSpan.innerHTML = item.html;
+                else
+                    textSpan.textContent = item.name;
                 selector.appendChild(textSpan);
 
                 const index = i;
@@ -978,11 +984,12 @@ class SceneSelect extends Panel {
     public setSceneGroups(sceneGroups: (string | Viewer.SceneGroup)[]) {
         this.sceneGroups = sceneGroups;
         this.sceneGroupList.setItems(sceneGroups.map((g): ScrollSelectItem => {
-            if (typeof g === 'string') {
+            if (typeof g === 'string')
                 return { type: ScrollSelectItemType.Header, html: g };
-            } else {
+            else if (g.id === 'sm64')
+                return { type: ScrollSelectItemType.Selectable, html: `${g.name} <img src="${newGifURL}">` };
+            else
                 return { type: ScrollSelectItemType.Selectable, name: g.name };
-            }
         }));
         this.syncSceneDescs();
     }
