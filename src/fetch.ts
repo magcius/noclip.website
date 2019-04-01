@@ -15,7 +15,7 @@ function getDataStorageBaseURL(): string {
         return `https://noclip.beyond3d.com`;
 }
 
-function getDataURLForPath(url: string): string {
+export function getDataURLForPath(url: string): string {
     assert(!url.startsWith(`data/`));
     return `${getDataStorageBaseURL()}/${url}`;
 }

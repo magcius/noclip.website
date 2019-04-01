@@ -11,7 +11,7 @@ import * as UI from '../ui';
 
 import { DeviceProgram } from '../Program';
 import Progressable from '../Progressable';
-import { fetchData } from '../fetch';
+import { fetchData, getDataURLForPath } from '../fetch';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { computeModelMatrixYBillboard, computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
@@ -653,7 +653,7 @@ function fetchPNG(path: string): Progressable<ImageData> {
 }
 
 function installAft(device: GfxDevice, textureHolder: NITROTextureHolder): Progressable<void> {
-    const aftBase = `sm64ds/aft`;
+    const aftBase = getDataURLForPath(`sm64ds/aft`);
 
     interface TexDef { k: string, v: string, scaleS: number, scaleT: number, transS: number, transT: number };
     function texDef(k: string, v: string, scaleS: number = 1, scaleT: number = 1): TexDef {
