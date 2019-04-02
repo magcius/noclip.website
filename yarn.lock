@@ -841,12 +841,14 @@ asn1.js@^4.0.0:
 
 "assemblyscript@github:AssemblyScript/assemblyscript":
   version "0.6.0"
-  resolved "https://codeload.github.com/AssemblyScript/assemblyscript/tar.gz/ed97672a8cbd4ce8694bf1411ca7bd7a8734eb77"
+  resolved "https://codeload.github.com/AssemblyScript/assemblyscript/tar.gz/b2adf8b1e26312926273d0d9b0dbe1993702b1cb"
   dependencies:
     "@protobufjs/utf8" "^1.1.0"
-    binaryen "68.0.0-nightly.20190220"
+    binaryen "73.0.0-nightly.20190327"
     glob "^7.1.3"
     long "^4.0.0"
+    opencollective-postinstall "^2.0.0"
+    source-map-support "^0.5.11"
 
 assert@^1.1.1:
   version "1.4.1"
@@ -947,10 +949,10 @@ binary-extensions@^1.0.0:
   resolved "https://registry.yarnpkg.com/binary-extensions/-/binary-extensions-1.12.0.tgz#c2d780f53d45bba8317a8902d4ceeaf3a6385b14"
   integrity sha512-DYWGk01lDcxeS/K9IHPGWfT8PsJmbXRtRd2Sx72Tnb8pcYZQFF1oSDb8hJtS1vhp212q1Rzi5dUf9+nq0o9UIg==
 
-binaryen@68.0.0-nightly.20190220:
-  version "68.0.0-nightly.20190220"
-  resolved "https://registry.yarnpkg.com/binaryen/-/binaryen-68.0.0-nightly.20190220.tgz#a4861dad276a2dd825015f7c8a39a4fd06492ce7"
-  integrity sha512-NsxXRfk+DsNju2+6OfD+UAkkahesa+Wd09bYlS+6WjxqvYokygSonjaZsvD7YQoIRfz4YLsHXx6SfoDu8uxYPA==
+binaryen@73.0.0-nightly.20190327:
+  version "73.0.0-nightly.20190327"
+  resolved "https://registry.yarnpkg.com/binaryen/-/binaryen-73.0.0-nightly.20190327.tgz#131f58e7a4ce2296f4e35d1b3cc8c955f251c17e"
+  integrity sha512-FMHRsdX5pkPX3qO3Ez6CFMk1gCigk5tBkyGXDYlWATslR8l5rPB4UGGq/DYfB3yE1riEHzV9VFUlz/WXG0W3vA==
 
 bindings@~1.2.1:
   version "1.2.1"
@@ -3279,6 +3281,11 @@ onetime@^2.0.0:
   dependencies:
     mimic-fn "^1.0.0"
 
+opencollective-postinstall@^2.0.0:
+  version "2.0.2"
+  resolved "https://registry.yarnpkg.com/opencollective-postinstall/-/opencollective-postinstall-2.0.2.tgz#5657f1bede69b6e33a45939b061eb53d3c6c3a89"
+  integrity sha512-pVOEP16TrAO2/fjej1IdOyupJY8KDUM1CvsaScRbw6oddvpQoOfGk4ywha0HKKVAD6RkW4x6Q+tNBwhf3Bgpuw==
+
 opn@^5.1.0:
   version "5.4.0"
   resolved "https://registry.yarnpkg.com/opn/-/opn-5.4.0.tgz#cb545e7aab78562beb11aa3bfabc7042e1761035"
@@ -4522,6 +4529,14 @@ source-map-resolve@^0.5.0:
     resolve-url "^0.2.1"
     source-map-url "^0.4.0"
     urix "^0.1.0"
+
+source-map-support@^0.5.11:
+  version "0.5.11"
+  resolved "https://registry.yarnpkg.com/source-map-support/-/source-map-support-0.5.11.tgz#efac2ce0800355d026326a0ca23e162aeac9a4e2"
+  integrity sha512-//sajEx/fGL3iw6fltKMdPvy8kL3kJ2O3iuYlRoT3k9Kb4BjOoZ+BZzaNHeuaruSt+Kf3Zk9tnfAQg9/AJqUVQ==
+  dependencies:
+    buffer-from "^1.0.0"
+    source-map "^0.6.0"
 
 source-map-support@~0.5.6:
   version "0.5.9"
