@@ -70,8 +70,6 @@ import { Color } from './Color';
 import { standardFullClearRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
 
 const sceneGroups = [
-    "Nintendo 64",
-    SM64DS.sceneGroupAft,
     "Wii",
     MKWII.sceneGroup,
     SMG1.sceneGroup,

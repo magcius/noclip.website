@@ -13,8 +13,6 @@ import InputManager from './InputManager';
 
 // @ts-ignore
 import logoURL from './logo.png';
-// @ts-ignore
-import newGifURL from './new.gif';
 
 export const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
 export const COOL_BLUE_COLOR = 'rgb(20, 105, 215)';
@@ -986,8 +984,6 @@ class SceneSelect extends Panel {
         this.sceneGroupList.setItems(sceneGroups.map((g): ScrollSelectItem => {
             if (typeof g === 'string')
                 return { type: ScrollSelectItemType.Header, html: g };
-            else if (g.id === 'sm64')
-                return { type: ScrollSelectItemType.Selectable, html: `${g.name} <img src="${newGifURL}">` };
             else
                 return { type: ScrollSelectItemType.Selectable, name: g.name };
         }));

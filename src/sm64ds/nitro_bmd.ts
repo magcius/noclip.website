@@ -201,8 +201,6 @@ export class Texture {
     public paletteName: string;
     public pixels: Uint8Array;
     public isTranslucent: boolean;
-    
-    public extraMat = mat2d.create();
 }
 
 function parseTexture(bmd: BMD, buffer: ArrayBufferSlice, key: TextureKey): Texture {

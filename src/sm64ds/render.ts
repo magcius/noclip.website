@@ -11,7 +11,7 @@ import * as UI from '../ui';
 
 import { DeviceProgram } from '../Program';
 import Progressable from '../Progressable';
-import { fetchData, getDataURLForPath } from '../fetch';
+import { fetchData } from '../fetch';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { computeModelMatrixYBillboard, computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
@@ -379,7 +379,6 @@ class BMDRenderer {
             if (texture !== null) {
                 this.textureHolder.fillTextureMapping(textureMapping, texture.name);
                 templateRenderInst.setSamplerBindingsFromTextureMappings([textureMapping]);
-                const aftTexture: NITRO_BMD.Texture = this.textureHolder.findTexture(texture.name);
 
                 if (texCoordMode === NITRO_BMD.TexCoordMode.NORMAL) {
                     // TODO(jstpierre): Verify that we want this in all cases. Is there some flag
@@ -410,8 +409,6 @@ class BMDRenderer {
 
                     if (this.extraTexCoordMat !== null)
                         mat2d.mul(scratchMat2d, scratchMat2d, this.extraTexCoordMat);
-
-                    mat2d.mul(scratchMat2d, scratchMat2d, aftTexture.extraMat);
 
                     mat4_from_mat2d(texCoordMat, scratchMat2d);
                 }
@@ -638,139 +635,11 @@ class ModelCache {
     }
 }
 
-function fetchPNG(path: string): Progressable<ImageData> {
-    const img = document.createElement('img');
-    img.crossOrigin = 'anonymous';
-    img.src = path;
-    const p = new Promise<ImageData>((resolve) => {
-        img.onload = () => {
-            const canvas = document.createElement('canvas');
-            canvas.width = img.width;
-            canvas.height = img.height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0);
-            resolve(ctx.getImageData(0, 0, img.width, img.height));
-        };
-    });
-    return new Progressable(p, 1);
-}
-
-function installAft(device: GfxDevice, textureHolder: NITROTextureHolder): Progressable<void> {
-    const aftBase = `https://z.noclip.website/sm64ds/aft`;
-
-    interface TexDef { k: string, v: string, scaleS: number, scaleT: number, transS: number, transT: number };
-    function texDef(k: string, v: string, scaleS: number = 1, scaleT: number = 1): TexDef {
-        return { k, v, scaleS, scaleT, transS: 0, transT: 0 };
-    }
-
-    function hootie(t: TexDef, n: number) {
-        t.transS = n;
-        return t;
-    }
-
-    const aftTextures = [
-        texDef('mc_road', `SUPER MARIO 64#E361666A#0#2_all.png`),
-        hootie(texDef('way', `SUPER MARIO 64#AEC008C0#0#2_rgb.png`, 0.5), 16),
-        texDef('slope', `SUPER MARIO 64#73505869#0#2_all.png`),
-        texDef('slope_grass', `SUPER MARIO 64#73505869#0#2_all.png`),
-        texDef('slope_soil', `SUPER MARIO 64#73505869#0#2_all.png`),
-        texDef('rock_cannon', `SUPER MARIO 64#B1F1CC42#0#2_all.png`, 2, 4),
-        texDef('mc_grass', `SUPER MARIO 64#8296D820#0#2_rgb.png`),
-        texDef('tonnel_grass', `SUPER MARIO 64#215CE254#0#2_rgb.png`),
-        texDef('tonnel', `SUPER MARIO 64#215CE254#0#2_rgb.png`),
-        texDef('soil', `SUPER MARIO 64#215CE254#0#2_rgb.png`),
-        texDef('wall_grass_a', `SUPER MARIO 64#215CE254#0#2_rgb.png`),
-        texDef('wall_grass_b', `SUPER MARIO 64#215CE254#0#2_rgb.png`),
-        texDef('grass', `SUPER MARIO 64#8296D820#0#2_rgb.png`),
-        texDef('fence_thorn', `SUPER MARIO 64#CBE026C4#0#2_all.png`),
-        texDef('castle_tree_cmp4', `castle_tree_cmp4.png`),
-        texDef('main_tree_cmp4', `castle_tree_cmp4.png`),
-        texDef('flower_leaf', `SUPER MARIO 64#245EA00F#0#2_rgb.png`),
-        texDef('water_cmp4', `SUPER MARIO 64#5095921B#0#2_rgb.png`),
-        texDef('water', `SUPER MARIO 64#5095921B#0#2_rgb.png`),
-        texDef('mc_fence', `SUPER MARIO 64#146F813F#0#2_all.png`),
-        texDef('yuki_tree', `SUPER MARIO 64#3FB69C59#0#2_all.png`),
-        hootie(texDef('wood', `SUPER MARIO 64#061A6C74#0#2_rgb.png`, 0.55, 1), 16),
-        texDef('wood_paper', `SUPER MARIO 64#125E068D#0#2_rgb.png`),
-        texDef('mc_window', `SUPER MARIO 64#C55C829F#0#2_all.png`),
-        texDef('mc_tritile', `SUPER MARIO 64#370FC06B#0#2_rgb.png`),
-        texDef('mc_til00', `SUPER MARIO 64#F8303731#0#2_rgb.png`),
-        texDef('mc_til_str', `SUPER MARIO 64#D7D14C92#0#2_rgb.png`),
-        texDef('mc_roof', `SUPER MARIO 64#D5BD2CF3#0#2_rgb.png`),
-        texDef('peach', `peach.png`),
-        texDef('mc_gake', `SUPER MARIO 64#4166F73D#0#2_rgb.png`),
-        texDef('mc_yama', `SUPER MARIO 64#8296D820#0#2_rgb.png`),
-        texDef('carpet_red', `SUPER MARIO 64#A6463A8D#0#2_rgb.png`),
-        texDef('mc_sand', `SUPER MARIO 64#5F328955#0#2_rgb.png`),
-        texDef('mc_bridge', `SUPER MARIO 64#968FA8CE#0#2_rgb.png`),
-        texDef('hatena_box_16', `aftblk.png`),
-        texDef('carpet', `SUPER MARIO 64#A6463A8D#0#2_rgb.png`),
-        texDef('mokume', `SUPER MARIO 64#9BE30B6E#0#2_all.png`, 0.5, 0.5),
-        texDef('renga', `SUPER MARIO 64#9BE30B6E#0#2_all.png`, 0.5, 0.5),
-        texDef('yuka', `SUPER MARIO 64#6AA1BE26#0#2_rgb.png`),
-        texDef('yuka_sun', `SUPER MARIO 64#54F2C81A#0#2_all.png`),
-        texDef('re_kumo', `SUPER MARIO 64#1E520811#0#2_rgb.png`, 0.5),
-        texDef('re_kusa', `SUPER MARIO 64#0303136F#0#2_rgb.png`, 0.5),
-        texDef('tesuri', `SUPER MARIO 64#D10D7B85#0#2_all.png`, 0.5),
-        texDef('for_bh', `aftfor_bh.png`),
-        texDef('kanban', `SUPER MARIO 64#8EE5398C#0#2_all.png`),
-        texDef('kabe', `SUPER MARIO 64#0D487556#0#2_rgb.png`, 0.5, 0.5),
-        texDef('pole', `SUPER MARIO 64#6DA0B1B9#0#2_rgb.png`),
-        texDef('rock_b', `SUPER MARIO 64#B7B83492#0#2_rgb.png`),
-        texDef('start', `SUPER MARIO 64#602EF33F#0#2_all.png`),
-        texDef('start_grass', `SUPER MARIO 64#602EF33F#0#2_all.png`, 1, 0.5),
-        texDef('rock_a', `SUPER MARIO 64#602EF33F#0#2_all.png`),
-        texDef('rock_a_grass', `SUPER MARIO 64#602EF33F#0#2_all.png`, 1, 0.5),
-        texDef('fence', `SUPER MARIO 64#9026CBA3#0#2_all.png`, 0.5),
-        texDef('bridge', `SUPER MARIO 64#6543184D#0#2_all.png`),
-        texDef('brocken', `SUPER MARIO 64#6543184D#0#2_all.png`),
-        texDef('woodwall', `SUPER MARIO 64#130CA9A8#0#2_rgb.png`),
-        texDef('tesuri_koware', `SUPER MARIO 64#8DB2E5CA#0#2_all.png`),
-        texDef('saku', `SUPER MARIO 64#8DB2E5CA#0#2_all.png`),
-        texDef('snow', `SUPER MARIO 64#E1CA8B50#0#2_rgb.png`, 0.5),
-        texDef('th_mado', `SUPER MARIO 64#B8F6006F#0#2_all.png`),
-        texDef('th_huti00', `SUPER MARIO 64#4A4683BC#0#2_rgb.png`),
-        texDef('th_tesuri00', `SUPER MARIO 64#C9E2883E#0#2_all.png`),
-        texDef('th_kabe01', `SUPER MARIO 64#8899587D#0#2_rgb.png`),
-        texDef('th_hasira', `SUPER MARIO 64#042DEE1B#0#2_rgb.png`),
-        texDef('th_kiyuka', `SUPER MARIO 64#C99707D9#0#2_rgb.png`),
-        texDef('th_pic_b', `SUPER MARIO 64#24767D89#0#2_all.png`),
-        texDef('th_yuka01', `SUPER MARIO 64#0AD7A8F7#0#2_all.png`, 0.15, 0.15),
-        texDef('th_hon00', `SUPER MARIO 64#15D30589#0#2_all.png`),
-    ];
-
-    const p = aftTextures.filter((texdef) => {
-        return textureHolder.findTexture(texdef.k) !== null;
-    }).map((texdef) => {
-        return fetchPNG(`${aftBase}/${encodeURIComponent(texdef.v)}`).then((imgData) => {
-            const extraMat = mat2d.create();
-            mat2d.translate(extraMat, extraMat, [texdef.transS, texdef.transT]);
-            mat2d.scale(extraMat, extraMat, [texdef.scaleS, texdef.scaleT]);
-
-            const texture: NITRO_BMD.Texture = {
-                name: texdef.k,
-                format: Format.Tex_Direct,
-                width: imgData.width,
-                height: imgData.height,
-                id: 0,
-                isTranslucent: false,
-                paletteName: '',
-                pixels: new Uint8Array(imgData.data.buffer),
-                params: 0,
-                extraMat,
-            };
-            textureHolder.addTextures(device, [texture], true);
-        });
-    });
-
-    return Progressable.all(p).then(() => null);
-}
-
 const GLOBAL_SCALE = 1500;
 export class SceneDesc implements Viewer.SceneDesc {
     public id: string;
 
-    constructor(public levelId: number, public name: string, private aft: boolean = false) {
+    constructor(public levelId: number, public name: string) {
         this.id = '' + this.levelId;
     }
 
@@ -778,12 +647,7 @@ export class SceneDesc implements Viewer.SceneDesc {
         return fetchData('sm64ds/sm64ds.crg1').then((result: ArrayBufferSlice) => {
             const crg1 = BYML.parse<Sm64DSCRG1>(result, BYML.FileType.CRG1);
             const textureHolder = new NITROTextureHolder();
-            return this._createSceneFromCRG1(device, textureHolder, crg1).then((scene) => {
-                if (this.aft)
-                    return installAft(device, textureHolder).then(() => scene);
-                else
-                    return scene;
-            });
+            return this._createSceneFromCRG1(device, textureHolder, crg1);
         });
     }
 
