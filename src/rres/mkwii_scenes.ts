@@ -7,7 +7,7 @@ import * as BRRES from './brres';
 import * as U8 from './u8';
 import * as Yaz0 from '../compression/Yaz0';
 
-import { assert, readString } from '../util';
+import { assert, readString, hexzero } from '../util';
 import { fetchData } from '../fetch';
 import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
@@ -19,8 +19,32 @@ import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/Gfx
 import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, depthClearRenderPassDescriptor, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { RENDER_HACKS_ICON } from '../bk/scenes';
+import { calcModelMtx } from '../oot3d/cmb';
 
 const enum MKWiiPass { MAIN = 0x01, SKYBOX = 0x02 }
+
+class ModelCache {
+    public rresCache = new Map<string, BRRES.RRES>();
+    public modelCache = new Map<string, MDL0Model>();
+
+    public destroy(device: GfxDevice): void {
+        for (const v of this.modelCache.values())
+            v.destroy(device);
+    }
+
+    public ensureModel(device: GfxDevice, arc: U8.U8Archive, renderer: MarioKartWiiRenderer, path: string): void {
+        if (!this.rresCache.has(path)) {
+            const rres = BRRES.parse(arc.findFileData(path));
+            renderer.textureHolder.addRRESTextures(device, rres);
+            this.rresCache.set(path, rres);
+
+            for (let i = 0; i < rres.mdl0.length; i++) {
+                const mdl0Model = new MDL0Model(device, renderer.renderHelper, rres.mdl0[i]);
+                this.modelCache.set(rres.mdl0[i].name, mdl0Model);
+            }
+        }
+    }
+}
 
 class MarioKartWiiRenderer implements Viewer.SceneGfx {
     public viewRenderer = new GfxRenderInstViewRenderer();
@@ -28,40 +52,13 @@ class MarioKartWiiRenderer implements Viewer.SceneGfx {
 
     public renderHelper: GXRenderHelperGfx;
     public textureHolder = new RRESTextureHolder();
-    private animationController = new AnimationController();
+    public animationController = new AnimationController();
 
-    private skyboxRenderer: MDL0ModelInstance;
-    private skyboxModel: MDL0Model;
-    private courseRenderer: MDL0ModelInstance;
-    private courseModel: MDL0Model;
+    public modelInstances: MDL0ModelInstance[] = [];
+    public modelCache = new ModelCache();
 
-    constructor(device: GfxDevice, public courseRRES: BRRES.RRES, public skyboxRRES: BRRES.RRES) {
+    constructor(device: GfxDevice) {
         this.renderHelper = new GXRenderHelperGfx(device);
-
-        this.textureHolder.addRRESTextures(device, skyboxRRES);
-        this.textureHolder.addRRESTextures(device, courseRRES);
-
-        assert(skyboxRRES.mdl0.length === 1);
-        this.skyboxModel = new MDL0Model(device, this.renderHelper, skyboxRRES.mdl0[0]);
-        this.skyboxRenderer = new MDL0ModelInstance(device, this.renderHelper, this.textureHolder, this.skyboxModel, 'vrbox');
-        this.skyboxRenderer.isSkybox = true;
-        this.skyboxRenderer.passMask = MKWiiPass.SKYBOX;
-
-        assert(courseRRES.mdl0.length === 1);
-        this.courseModel = new MDL0Model(device, this.renderHelper, courseRRES.mdl0[0]);
-        this.courseRenderer = new MDL0ModelInstance(device, this.renderHelper, this.textureHolder, this.courseModel, 'course');
-        this.courseRenderer.passMask = MKWiiPass.MAIN;
-
-        // Mario Kart Wii courses appear to be very, very big. Scale them down a bit.
-        const scaleFactor = 0.1;
-        mat4.fromScaling(this.courseRenderer.modelMatrix, [scaleFactor, scaleFactor, scaleFactor]);
-        mat4.fromScaling(this.skyboxRenderer.modelMatrix, [scaleFactor, scaleFactor, scaleFactor]);
-
-        // Bind animations.
-        this.skyboxRenderer.bindRRESAnimations(this.animationController, skyboxRRES);
-        this.courseRenderer.bindRRESAnimations(this.animationController, courseRRES);
-
-        this.renderHelper.finishBuilder(device, this.viewRenderer);
     }
 
     public createPanels(): UI.Panel[] {
@@ -71,15 +68,15 @@ class MarioKartWiiRenderer implements Viewer.SceneGfx {
         const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
         enableVertexColorsCheckbox.onchanged = () => {
             const v = enableVertexColorsCheckbox.checked;
-            this.courseRenderer.setVertexColorsEnabled(v);
-            this.skyboxRenderer.setVertexColorsEnabled(v);
+            for (let i = 0; i < this.modelInstances.length; i++)
+                this.modelInstances[i].setVertexColorsEnabled(v);
         };
         renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
         const enableTextures = new UI.Checkbox('Enable Textures', true);
         enableTextures.onchanged = () => {
             const v = enableTextures.checked;
-            this.courseRenderer.setTexturesEnabled(v);
-            this.skyboxRenderer.setTexturesEnabled(v);
+            for (let i = 0; i < this.modelInstances.length; i++)
+                this.modelInstances[i].setTexturesEnabled(v);
         };
         renderHacksPanel.contents.appendChild(enableTextures.elem);
 
@@ -88,8 +85,8 @@ class MarioKartWiiRenderer implements Viewer.SceneGfx {
 
     protected prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         this.renderHelper.fillSceneParams(viewerInput);
-        this.skyboxRenderer.prepareToRender(this.renderHelper, viewerInput);
-        this.courseRenderer.prepareToRender(this.renderHelper, viewerInput);
+        for (let i = 0; i < this.modelInstances.length; i++)
+            this.modelInstances[i].prepareToRender(this.renderHelper, viewerInput);
         this.renderHelper.prepareToRender(hostAccessPass);
     }
 
@@ -121,11 +118,10 @@ class MarioKartWiiRenderer implements Viewer.SceneGfx {
         this.renderTarget.destroy(device);
         this.renderHelper.destroy(device);
 
-        this.courseRenderer.destroy(device);
-        this.skyboxRenderer.destroy(device);
+        for (let i = 0; i < this.modelInstances.length; i++)
+            this.modelInstances[i].destroy(device);
 
-        this.courseModel.destroy(device);
-        this.skyboxModel.destroy(device);
+        this.modelCache.destroy(device);
     }
 }
 
@@ -160,37 +156,37 @@ function parseKMP(buffer: ArrayBufferSlice): KMP {
     const view = buffer.createDataView();
 
     assert(readString(buffer, 0x00, 0x04) === 'RKMD');
-    const headerSize = view.getUint16(0x0A, true);
-    const gobjOffs_ = view.getUint32(0x2C, true);
+    const headerSize = view.getUint16(0x0A);
+    const gobjOffs_ = view.getUint32(0x2C);
 
     const gobjOffs = headerSize + gobjOffs_;
     assert(readString(buffer, gobjOffs + 0x00, 0x04) === 'GOBJ');
-    const gobjTableCount = view.getUint32(gobjOffs + 0x04, true);
+    const gobjTableCount = view.getUint16(gobjOffs + 0x04);
     let gobjTableIdx = gobjOffs + 0x08;
 
     const gobj: GOBJ[] = [];
     for (let i = 0; i < gobjTableCount; i++) {
-        const objectId = view.getUint16(gobjTableIdx + 0x00, true);
-        const translationX = view.getFloat32(gobjTableIdx + 0x04, true);
-        const translationY = view.getFloat32(gobjTableIdx + 0x08, true);
-        const translationZ = view.getFloat32(gobjTableIdx + 0x0C, true);
-        const rotationX = view.getFloat32(gobjTableIdx + 0x10, true) * Math.PI / 180;
-        const rotationY = view.getFloat32(gobjTableIdx + 0x14, true) * Math.PI / 180;
-        const rotationZ = view.getFloat32(gobjTableIdx + 0x18, true) * Math.PI / 180;
-        const scaleX = view.getFloat32(gobjTableIdx + 0x1C, true);
-        const scaleY = view.getFloat32(gobjTableIdx + 0x20, true);
-        const scaleZ = view.getFloat32(gobjTableIdx + 0x24, true);
-        const routeId = view.getUint16(gobjTableIdx + 0x28, true);
-        const objectArg0 = view.getUint16(gobjTableIdx + 0x2A, true);
-        const objectArg1 = view.getUint32(gobjTableIdx + 0x2C, true);
-        const objectArg2 = view.getUint32(gobjTableIdx + 0x3E, true);
-        const objectArg3 = view.getUint32(gobjTableIdx + 0x30, true);
-        const objectArg4 = view.getUint16(gobjTableIdx + 0x32, true);
-        const objectArg5 = view.getUint32(gobjTableIdx + 0x34, true);
-        const objectArg6 = view.getUint32(gobjTableIdx + 0x36, true);
-        const objectArg7 = view.getUint32(gobjTableIdx + 0x38, true);
+        const objectId = view.getUint16(gobjTableIdx + 0x00);
+        const translationX = view.getFloat32(gobjTableIdx + 0x04);
+        const translationY = view.getFloat32(gobjTableIdx + 0x08);
+        const translationZ = view.getFloat32(gobjTableIdx + 0x0C);
+        const rotationX = view.getFloat32(gobjTableIdx + 0x10) * Math.PI / 180;
+        const rotationY = view.getFloat32(gobjTableIdx + 0x14) * Math.PI / 180;
+        const rotationZ = view.getFloat32(gobjTableIdx + 0x18) * Math.PI / 180;
+        const scaleX = view.getFloat32(gobjTableIdx + 0x1C);
+        const scaleY = view.getFloat32(gobjTableIdx + 0x20);
+        const scaleZ = view.getFloat32(gobjTableIdx + 0x24);
+        const routeId = view.getUint16(gobjTableIdx + 0x28);
+        const objectArg0 = view.getUint16(gobjTableIdx + 0x2A);
+        const objectArg1 = view.getUint32(gobjTableIdx + 0x2C);
+        const objectArg2 = view.getUint32(gobjTableIdx + 0x3E);
+        const objectArg3 = view.getUint32(gobjTableIdx + 0x30);
+        const objectArg4 = view.getUint16(gobjTableIdx + 0x32);
+        const objectArg5 = view.getUint32(gobjTableIdx + 0x34);
+        const objectArg6 = view.getUint32(gobjTableIdx + 0x36);
+        const objectArg7 = view.getUint32(gobjTableIdx + 0x38);
 
-        const presenceFlags = view.getUint32(gobjTableIdx + 0x3A, true);
+        const presenceFlags = view.getUint32(gobjTableIdx + 0x3A);
         gobj.push({
             objectId, routeId, objectArg0, objectArg1, objectArg2, objectArg3, objectArg4, objectArg5, objectArg6, objectArg7, presenceFlags,
             translationX, translationY, translationZ, rotationX, rotationY, rotationZ, scaleX, scaleY, scaleZ,
@@ -202,18 +198,90 @@ function parseKMP(buffer: ArrayBufferSlice): KMP {
     return { gobj };
 }
 
+const scaleFactor = 0.1;
+const posMtx = mat4.fromScaling(mat4.create(), [scaleFactor, scaleFactor, scaleFactor]);
+
 class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
+
+    private spawnObjectFromRRESPath(device: GfxDevice, renderer: MarioKartWiiRenderer, arc: U8.U8Archive, arcPath: string, objectName: string): MDL0ModelInstance {
+        const modelCache = renderer.modelCache;
+        modelCache.ensureModel(device, arc, renderer, arcPath);
+        const rres = modelCache.rresCache.get(arcPath);
+        const mdl0Model = modelCache.modelCache.get(objectName);
+        const mdl0Instance = new MDL0ModelInstance(device, renderer.renderHelper, renderer.textureHolder, mdl0Model);
+        mdl0Instance.bindRRESAnimations(renderer.animationController, rres);
+        renderer.modelInstances.push(mdl0Instance);
+        mdl0Instance.passMask = MKWiiPass.MAIN;
+        return mdl0Instance;
+    }
+
+    private spawnObjectFromKMP(device: GfxDevice, renderer: MarioKartWiiRenderer, arc: U8.U8Archive, gobj: GOBJ): void {
+        const spawnObject = (objectName: string): MDL0ModelInstance => {
+            const arcPath = `./${objectName}.brres`;
+            const b = this.spawnObjectFromRRESPath(device, renderer, arc, arcPath, objectName);
+            calcModelMtx(b.modelMatrix, gobj.scaleX, gobj.scaleY, gobj.scaleZ, gobj.rotationX, gobj.rotationY, gobj.rotationZ, gobj.translationX, gobj.translationY, gobj.translationZ);
+            mat4.mul(b.modelMatrix, posMtx, b.modelMatrix);
+            return b;
+        };
+
+        // Object IDs taken from http://wiki.tockdom.com/wiki/Object
+
+        if (gobj.objectId === 0x0003) { // lensFX
+            // Lens flare effect -- runtime determined, not a BRRES.
+        } else if (gobj.objectId === 0x0015) { // sound_Mii
+            // sound generator
+        } else if (gobj.objectId === 0x00D2) { // skyship
+            spawnObject(`skyship`);
+        } else if (gobj.objectId === 0x0065) { // itembox
+            const b = spawnObject(`itembox`);
+            b.modelMatrix[13] += 20;
+        } else if (gobj.objectId === 0x006F) { // sun
+            // TODO(jstpierre): Sun doesn't show up? Need to figure out what this is...
+            spawnObject(`sun`);
+        } else if (gobj.objectId === 0x012E) { // dokan_sfc
+            spawnObject(`dokan_sfc`);
+        } else if (gobj.objectId === 0x014D) { // MiiObj01
+            spawnObject(`MiiObj01`);
+        } else if (gobj.objectId === 0x014E) { // MiiObj02
+            spawnObject(`MiiObj02`);
+        } else if (gobj.objectId === 0x014F) { // MiiObj03
+            spawnObject(`MiiObj03`);
+        } else if (gobj.objectId === 0x0155) { // FlagB2
+            spawnObject(`FlagB2`);
+        } else if (gobj.objectId === 0x018E) { // MiiKanban
+            spawnObject(`MiiKanban`);
+        } else if (gobj.objectId === 0x02D0) { // Flash_L
+            // particle effect; unsupported
+        } else if (gobj.objectId === 0x02E1) { // MiiStatueL3
+            spawnObject(`MiiStatueL3`);
+        } else {
+            console.warn(`Unimplemented object ${hexzero(gobj.objectId, 4)}`);
+        }
+    }
 
     public createScene(device: GfxDevice): Progressable<Viewer.SceneGfx> {
         return fetchData(`mkwii/${this.id}.szs`).then((buffer: ArrayBufferSlice) => {
             return Yaz0.decompress(buffer);
         }).then((buffer: ArrayBufferSlice): Viewer.SceneGfx => {
-            const arch = U8.parse(buffer);
-            console.log(arch);
-            const courseRRES = BRRES.parse(arch.findFile('./course_model.brres').buffer);
-            const skyboxRRES = BRRES.parse(arch.findFile('./vrcorn_model.brres').buffer);
-            return new MarioKartWiiRenderer(device, courseRRES, skyboxRRES);
+            const arc = U8.parse(buffer);
+            const kmp = parseKMP(arc.findFileData(`./course.kmp`));
+            console.log(arc, kmp);
+            const renderer = new MarioKartWiiRenderer(device);
+
+            const courseInstance = this.spawnObjectFromRRESPath(device, renderer, arc, `./course_model.brres`, 'course');
+            mat4.copy(courseInstance.modelMatrix, posMtx);
+
+            const skyboxInstance = this.spawnObjectFromRRESPath(device, renderer, arc, `./vrcorn_model.brres`, 'vrcorn');
+            mat4.copy(skyboxInstance.modelMatrix, posMtx);
+            skyboxInstance.passMask = MKWiiPass.SKYBOX;
+
+            for (let i = 0; i < kmp.gobj.length; i++)
+                this.spawnObjectFromKMP(device, renderer, arc, kmp.gobj[i]);
+
+            renderer.renderHelper.finishBuilder(device, renderer.viewRenderer);
+
+            return renderer;
         });
     }
 }
