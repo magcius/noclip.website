@@ -7,7 +7,7 @@ import * as BRRES from './brres';
 import * as U8 from './u8';
 import * as Yaz0 from '../compression/Yaz0';
 
-import { assert } from '../util';
+import { assert, readString } from '../util';
 import { fetchData } from '../fetch';
 import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
@@ -129,6 +129,79 @@ class MarioKartWiiRenderer implements Viewer.SceneGfx {
     }
 }
 
+interface GOBJ {
+    objectId: number;
+    routeId: number;
+    objectArg0: number;
+    objectArg1: number;
+    objectArg2: number;
+    objectArg3: number;
+    objectArg4: number;
+    objectArg5: number;
+    objectArg6: number;
+    objectArg7: number;
+    presenceFlags: number;
+    translationX: number;
+    translationY: number;
+    translationZ: number;
+    rotationX: number;
+    rotationY: number;
+    rotationZ: number;
+    scaleX: number;
+    scaleY: number;
+    scaleZ: number;
+}
+
+interface KMP {
+    gobj: GOBJ[];
+}
+
+function parseKMP(buffer: ArrayBufferSlice): KMP {
+    const view = buffer.createDataView();
+
+    assert(readString(buffer, 0x00, 0x04) === 'RKMD');
+    const headerSize = view.getUint16(0x0A, true);
+    const gobjOffs_ = view.getUint32(0x2C, true);
+
+    const gobjOffs = headerSize + gobjOffs_;
+    assert(readString(buffer, gobjOffs + 0x00, 0x04) === 'GOBJ');
+    const gobjTableCount = view.getUint32(gobjOffs + 0x04, true);
+    let gobjTableIdx = gobjOffs + 0x08;
+
+    const gobj: GOBJ[] = [];
+    for (let i = 0; i < gobjTableCount; i++) {
+        const objectId = view.getUint16(gobjTableIdx + 0x00, true);
+        const translationX = view.getFloat32(gobjTableIdx + 0x04, true);
+        const translationY = view.getFloat32(gobjTableIdx + 0x08, true);
+        const translationZ = view.getFloat32(gobjTableIdx + 0x0C, true);
+        const rotationX = view.getFloat32(gobjTableIdx + 0x10, true) * Math.PI / 180;
+        const rotationY = view.getFloat32(gobjTableIdx + 0x14, true) * Math.PI / 180;
+        const rotationZ = view.getFloat32(gobjTableIdx + 0x18, true) * Math.PI / 180;
+        const scaleX = view.getFloat32(gobjTableIdx + 0x1C, true);
+        const scaleY = view.getFloat32(gobjTableIdx + 0x20, true);
+        const scaleZ = view.getFloat32(gobjTableIdx + 0x24, true);
+        const routeId = view.getUint16(gobjTableIdx + 0x28, true);
+        const objectArg0 = view.getUint16(gobjTableIdx + 0x2A, true);
+        const objectArg1 = view.getUint32(gobjTableIdx + 0x2C, true);
+        const objectArg2 = view.getUint32(gobjTableIdx + 0x3E, true);
+        const objectArg3 = view.getUint32(gobjTableIdx + 0x30, true);
+        const objectArg4 = view.getUint16(gobjTableIdx + 0x32, true);
+        const objectArg5 = view.getUint32(gobjTableIdx + 0x34, true);
+        const objectArg6 = view.getUint32(gobjTableIdx + 0x36, true);
+        const objectArg7 = view.getUint32(gobjTableIdx + 0x38, true);
+
+        const presenceFlags = view.getUint32(gobjTableIdx + 0x3A, true);
+        gobj.push({
+            objectId, routeId, objectArg0, objectArg1, objectArg2, objectArg3, objectArg4, objectArg5, objectArg6, objectArg7, presenceFlags,
+            translationX, translationY, translationZ, rotationX, rotationY, rotationZ, scaleX, scaleY, scaleZ,
+        });
+
+        gobjTableIdx += 0x3C;
+    }
+
+    return { gobj };
+}
+
 class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
 
@@ -137,6 +210,7 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
             return Yaz0.decompress(buffer);
         }).then((buffer: ArrayBufferSlice): Viewer.SceneGfx => {
             const arch = U8.parse(buffer);
+            console.log(arch);
             const courseRRES = BRRES.parse(arch.findFile('./course_model.brres').buffer);
             const skyboxRRES = BRRES.parse(arch.findFile('./vrcorn_model.brres').buffer);
             return new MarioKartWiiRenderer(device, courseRRES, skyboxRRES);

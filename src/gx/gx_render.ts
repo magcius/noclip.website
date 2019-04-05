@@ -9,7 +9,7 @@ import * as GX_Texture from './gx_texture';
 import * as Viewer from '../viewer';
 
 import { assert, nArray } from '../util';
-import { LoadedVertexData, LoadedVertexLayout } from './gx_displaylist';
+import { LoadedVertexData, LoadedVertexLayout, LoadedVertexPacket } from './gx_displaylist';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { TextureMapping, TextureHolder, LoadedTexture } from '../TextureHolder';
 
@@ -211,17 +211,20 @@ export class GXShapeHelperGfx {
         this.inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
     }
 
-    public buildRenderInst(renderInstBuilder: GfxRenderInstBuilder, baseRenderInst: GfxRenderInst = null): GfxRenderInst {
+    public buildRenderInstPacket(renderInstBuilder: GfxRenderInstBuilder, packet: LoadedVertexPacket | null = null, baseRenderInst: GfxRenderInst | null = null): GfxRenderInst {
         const renderInst = renderInstBuilder.newRenderInst(baseRenderInst);
         renderInstBuilder.newUniformBufferInstance(renderInst, ub_PacketParams);
-        renderInst.drawIndexes(this.loadedVertexData.totalTriangleCount * 3);
+        if (packet !== null)
+            renderInst.drawIndexes(packet.indexCount, packet.indexOffset);
+        else
+            renderInst.drawIndexes(this.loadedVertexData.totalIndexCount);
         renderInst.inputState = this.inputState;
         renderInst.setSamplerBindingsInherit();
         return renderInst;
     }
 
-    public pushRenderInst(renderInstBuilder: GfxRenderInstBuilder, baseRenderInst: GfxRenderInst = null): GfxRenderInst {
-        return renderInstBuilder.pushRenderInst(this.buildRenderInst(renderInstBuilder, baseRenderInst));
+    public buildRenderInst(renderInstBuilder: GfxRenderInstBuilder, baseRenderInst: GfxRenderInst = null): GfxRenderInst {
+        return this.buildRenderInstPacket(renderInstBuilder, null, baseRenderInst);
     }
 
     public fillPacketParams(packetParams: PacketParams, renderInst: GfxRenderInst, renderHelper: GXRenderHelperGfx): void {

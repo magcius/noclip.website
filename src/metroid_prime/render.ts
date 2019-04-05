@@ -361,20 +361,20 @@ interface MergedSurface extends Surface {
 
 function mergeSurfaces(surfaces: Surface[]): MergedSurface {
     // Assume that all surfaces have the same vertex layout and material...
-    let totalTriangleCount = 0;
+    let totalIndexCount = 0;
     let totalVertexCount = 0;
     let packedVertexDataSize = 0;
     for (let i = 0; i < surfaces.length; i++) {
         const surface = surfaces[i];
         assert(surface.loadedVertexData.indexFormat === GfxFormat.U16_R);
-        assert(surface.loadedVertexData.indexData.byteLength === surface.loadedVertexData.totalTriangleCount * 3 * 0x02);
-        totalTriangleCount += surface.loadedVertexData.totalTriangleCount;
+        assert(surface.loadedVertexData.indexData.byteLength === surface.loadedVertexData.totalIndexCount * 0x02);
+        totalIndexCount += surface.loadedVertexData.totalIndexCount;
         totalVertexCount += surface.loadedVertexData.totalVertexCount;
         packedVertexDataSize += surface.loadedVertexData.packedVertexData.byteLength;
     }
 
     const packedVertexData = new Uint8Array(packedVertexDataSize);
-    const indexData = new Uint16Array(totalTriangleCount * 3);
+    const indexData = new Uint16Array(totalIndexCount);
     let indexDataOffs = 0;
     let packedVertexDataOffs = 0;
     let vertexOffset = 0;
@@ -394,7 +394,7 @@ function mergeSurfaces(surfaces: Surface[]): MergedSurface {
         indexFormat: GfxFormat.U16_R,
         indexData: indexData.buffer,
         packedVertexData: packedVertexData.buffer,
-        totalTriangleCount,
+        totalIndexCount,
         totalVertexCount,
         vertexId: 0,
     };

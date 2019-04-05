@@ -408,8 +408,8 @@ function readJNT1Chunk(buffer: ArrayBufferSlice): JNT1 {
 // A packet is a series of draw calls that use the same matrix table.
 interface Packet {
     matrixTable: Uint16Array;
-    firstTriangle: number;
-    numTriangles: number;
+    indexOffset: number;
+    indexCount: number;
     loadedVertexData: LoadedVertexData;
 }
 
@@ -494,7 +494,7 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
         let packetIdx = packetTableOffs + (firstPacket * 0x08);
         const packets: Packet[] = [];
 
-        let totalTriangleCount = 0;
+        let totalIndexCount = 0;
         for (let j = 0; j < packetCount; j++) {
             const packetSize = view.getUint32(packetIdx + 0x00);
             const packetStart = primDataOffs + view.getUint32(packetIdx + 0x04);
@@ -511,11 +511,11 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
             const subBuffer = buffer.subarray(srcOffs, packetSize);
             const loadedVertexData = vtxLoader.runVertices(vtxArrays, subBuffer);
 
-            const firstTriangle = totalTriangleCount;
-            const numTriangles = loadedVertexData.totalTriangleCount;
-            totalTriangleCount += numTriangles;
+            const indexOffset = totalIndexCount;
+            const indexCount = loadedVertexData.totalIndexCount;
+            totalIndexCount += indexCount;
 
-            packets.push({ matrixTable, firstTriangle, numTriangles, loadedVertexData });
+            packets.push({ matrixTable, indexOffset, indexCount, loadedVertexData });
             packetIdx += 0x08;
         }
 

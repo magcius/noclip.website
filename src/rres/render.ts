@@ -12,7 +12,7 @@ import { GfxDevice, GfxSampler } from "../gfx/platform/GfxPlatform";
 import { ViewerRenderInput } from "../viewer";
 import { GfxRenderInst, GfxRenderInstBuilder, GfxRendererLayer, makeSortKey, setSortKeyDepth, setSortKeyLayer, getSortKeyLayer } from "../gfx/render/GfxRenderer";
 import { GfxBufferCoalescer } from '../gfx/helpers/BufferHelpers';
-import { assert } from '../util';
+import { assert, nArray } from '../util';
 
 export class RRESTextureHolder extends GXTextureHolder<BRRES.TEX0> {
     public addRRESTextures(device: GfxDevice, rres: BRRES.RRES): void {
@@ -49,16 +49,21 @@ export class MDL0Model {
 }
 
 const bboxScratch = new AABB();
+const packetParams = new PacketParams();
 class ShapeInstance {
-    public renderInst: GfxRenderInst;
-    private packetParams = new PacketParams();
+    public renderInsts: GfxRenderInst[] = [];
 
     constructor(public shape: BRRES.MDL0_ShapeEntry, public shapeData: GXShapeHelperGfx, public node: BRRES.MDL0_NodeEntry) {
     }
 
     public buildRenderInst(renderInstBuilder: GfxRenderInstBuilder, namePrefix: string): void {
-        this.renderInst = this.shapeData.pushRenderInst(renderInstBuilder);
-        this.renderInst.name = `${namePrefix}/${this.shape.name}`;
+        for (let i = 0; i < this.shape.loadedVertexData.packets.length; i++) {
+            const packet = this.shape.loadedVertexData.packets[i];
+            const renderInst = this.shapeData.buildRenderInstPacket(renderInstBuilder, packet);
+            renderInst.name = `${namePrefix}/${this.shape.name}/${i}`;
+            renderInstBuilder.pushRenderInst(renderInst);
+            this.renderInsts.push(renderInst);
+        }
     }
 
     private computeModelView(dst: mat4, modelMatrix: mat4, camera: Camera, isSkybox: boolean): void {
@@ -72,29 +77,46 @@ class ShapeInstance {
     }
 
     public prepareToRender(renderHelper: GXRenderHelperGfx, renderLayerBias: number, matrixArray: mat4[], matrixVisibility: IntersectionState[], viewerInput: ViewerRenderInput, isSkybox: boolean): void {
-        this.renderInst.visible = this.node.visible;
+        let visible = this.node.visible;
 
-        if (this.renderInst.visible) {
-            const visibility = matrixVisibility[this.node.mtxId];
-            this.renderInst.visible = visibility !== IntersectionState.FULLY_OUTSIDE;
-        }
+        if (visible)
+            visible = (matrixVisibility[this.node.mtxId] !== IntersectionState.FULLY_OUTSIDE);
 
-        if (this.renderInst.visible) {
+        for (let i = 0; i < this.renderInsts.length; i++)
+            this.renderInsts[i].visible = visible;
+
+        if (visible) {
             const camera = viewerInput.camera;
 
             const modelMatrix = matrixArray[this.node.mtxId];
-            this.computeModelView(this.packetParams.u_PosMtx[0], modelMatrix, camera, isSkybox);
 
-            bboxScratch.transform(this.node.bbox, modelMatrix);            
-            const depth = computeViewSpaceDepthFromWorldSpaceAABB(camera, bboxScratch);
-            this.renderInst.sortKey = setSortKeyDepth(this.renderInst.sortKey, depth);
+            packetParams.clear();
+            for (let i = 0; i < this.shape.loadedVertexData.packets.length; i++) {
+                const packet = this.shape.loadedVertexData.packets[i];
+                const renderInst = this.renderInsts[i];
 
-            if (renderLayerBias !== 0) {
-                const baseLayer = getSortKeyLayer(this.renderInst.parentRenderInst.sortKey);
-                this.renderInst.sortKey = setSortKeyLayer(this.renderInst.sortKey, baseLayer + renderLayerBias);
+                if (this.shape.mtxIdx < 0) {
+                    for (let j = 0; j < packet.posNrmMatrixTable.length; j++) {
+                        const mtxIdx = packet.posNrmMatrixTable[j];
+                        if (mtxIdx === 0xFFFF)
+                            continue;
+                        this.computeModelView(packetParams.u_PosMtx[j], matrixArray[mtxIdx], camera, isSkybox);
+                    }
+                } else {
+                    this.computeModelView(packetParams.u_PosMtx[0], modelMatrix, camera, isSkybox);
+                }
+
+                bboxScratch.transform(this.node.bbox, modelMatrix);            
+                const depth = computeViewSpaceDepthFromWorldSpaceAABB(camera, bboxScratch);
+                renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
+
+                if (renderLayerBias !== 0) {
+                    const baseLayer = getSortKeyLayer(renderInst.parentRenderInst.sortKey);
+                    renderInst.sortKey = setSortKeyLayer(renderInst.sortKey, baseLayer + renderLayerBias);
+                }
+
+                this.shapeData.fillPacketParams(packetParams, renderInst, renderHelper);
             }
-
-            this.shapeData.fillPacketParams(this.packetParams, this.renderInst, renderHelper);
         }
     }
 }
@@ -286,6 +308,7 @@ class MaterialInstance {
     }
 }
 
+const matrixScratchArray = nArray(128, () => mat4.create());
 export class MDL0ModelInstance {
     private shapeInstances: ShapeInstance[] = [];
     private materialInstances: MaterialInstance[] = [];
@@ -308,7 +331,7 @@ export class MDL0ModelInstance {
     constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, public textureHolder: GXTextureHolder, public mdl0Model: MDL0Model, public namePrefix: string = '') {
         this.name = `${namePrefix}/${mdl0Model.mdl0.name}`;
 
-        this.growMatrixArray(this.mdl0Model.mdl0.sceneGraph.nodeTreeOps);
+        this.matrixArray = nArray(mdl0Model.mdl0.numWorldMtx, () => mat4.create());
 
         this.templateRenderInst = renderHelper.renderInstBuilder.pushTemplateRenderInst();
         this.templateRenderInst.name = this.name;
@@ -379,6 +402,7 @@ export class MDL0ModelInstance {
         }
 
         this.execNodeTreeOpList(mdl0.sceneGraph.nodeTreeOps, viewerInput, visible);
+        this.execNodeMixOpList(mdl0.sceneGraph.nodeMixOps);
 
         for (let i = 0; i < this.shapeInstances.length; i++)
             this.shapeInstances[i].prepareToRender(renderHelper, this.renderLayerBias, this.matrixArray, this.matrixVisibility, viewerInput, this.isSkybox);
@@ -422,27 +446,6 @@ export class MDL0ModelInstance {
         }
     }
 
-    private growMatrixArray(opList: BRRES.NodeTreeOp[]): void {
-        const mdl0 = this.mdl0Model.mdl0;
-        for (let i = 0; i < opList.length; i++) {
-            const op = opList[i];
-
-            let dstMtxId;
-            if (op.op === BRRES.ByteCodeOp.NODEDESC) {
-                const node = mdl0.nodes[op.nodeId];
-                dstMtxId = node.mtxId;
-            } else if (op.op === BRRES.ByteCodeOp.MTXDUP) {
-                dstMtxId = op.toMtxId;
-            } else {
-                throw "whoops";
-            }
-
-            const newSize = dstMtxId + 1;
-            while (this.matrixArray.length < newSize)
-                this.matrixArray.push(mat4.create());
-        }
-    }
-
     private execNodeTreeOpList(opList: BRRES.NodeTreeOp[], viewerInput: ViewerRenderInput, visible: boolean): void {
         const mdl0 = this.mdl0Model.mdl0;
 
@@ -480,6 +483,23 @@ export class MDL0ModelInstance {
                 const dstMtxId = op.toMtxId;
                 mat4.copy(this.matrixArray[dstMtxId], this.matrixArray[srcMtxId]);
                 this.matrixVisibility[dstMtxId] = this.matrixVisibility[srcMtxId];
+            }
+        }
+    }
+
+    private execNodeMixOpList(opList: BRRES.NodeMixOp[]): void {
+        for (let i = 0; i < opList.length; i++) {
+            const op = opList[i];
+
+            if (op.op === BRRES.ByteCodeOp.NODEMIX) {
+                const dst = this.matrixArray[op.dstMtxId];
+                dst.fill(0);
+
+                for (let j = 0; j < op.blendMtxIds.length; j++)
+                    mat4.multiplyScalarAndAdd(dst, dst, matrixScratchArray[op.blendMtxIds[j]], op.weights[j]);
+            } else if (op.op === BRRES.ByteCodeOp.EVPMTX) {
+                const node = this.mdl0Model.mdl0.nodes[op.nodeId];
+                mat4.mul(matrixScratchArray[op.mtxId], this.matrixArray[op.mtxId], node.inverseBindPose);
             }
         }
     }

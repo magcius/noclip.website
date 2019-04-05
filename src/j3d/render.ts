@@ -66,8 +66,11 @@ export class ShapeInstance {
     }
 
     public pushRenderInsts(renderInstBuilder: GfxRenderInstBuilder): void {
-        for (let i = 0; i < this.shapeData.shapeHelpers.length; i++)
-            this.renderInsts.push(this.shapeData.shapeHelpers[i].pushRenderInst(renderInstBuilder));
+        for (let i = 0; i < this.shapeData.shapeHelpers.length; i++) {
+            const renderInst = this.shapeData.shapeHelpers[i].buildRenderInst(renderInstBuilder);
+            renderInstBuilder.pushRenderInst(renderInst);
+            this.renderInsts.push(renderInst);
+        }
     }
 
     public prepareToRender(renderHelper: GXRenderHelperGfx, depth: number, viewerInput: ViewerRenderInput, shapeInstanceState: ShapeInstanceState): void {
