@@ -544,7 +544,6 @@ class SceneDesc implements Viewer.SceneDesc {
         });
         else if (actor.actorId === ActorId.En_Door) fetchArchive(`zelda_keep.zar`).then((zar) => {
             // TODO(jstpierre): Figure out how doors are decided. I'm guessing the current scene?
-            console.log("En_Door", hexzero(actor.variable, 4));
             buildModel(zar, `door/model/obj_door_omote_model.cmb`);
         });
         else if (actor.actorId === ActorId.Obj_Syokudai) fetchArchive(`zelda_syokudai.zar`).then((zar) => {
@@ -1648,7 +1647,7 @@ class SceneDesc implements Viewer.SceneDesc {
             this.spawnSkybox(device, renderer, skyboxZAR, zsi.skyboxSettings);
 
             return modelCache.waitForLoad().then(() => {
-                renderer.setEnvironmentSettingsIndex(1);
+                renderer.setEnvironmentSettingsIndex(0);
                 return renderer;
             });
         });
