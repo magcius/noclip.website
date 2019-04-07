@@ -76,7 +76,13 @@ class KlonoaSceneDesc implements Viewer.SceneDesc {
 
     public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         const stageBinName = `${this.id}.bin`;
-        const texBinName = `tex${this.id.slice(1, 3)}.bin`;
+
+        let texBinName = `tex${this.id.slice(1, 3)}.bin`;
+
+        // "s330.bin" does not have a matching tex bin. Presumably, they ran out of "32"
+        // numbers and that my heuristics for detecting the texture pack are not what the
+        // game does.
+        if (texBinName === 'tex33.bin') texBinName = 'tex32.bin';
 
         function fetchLandscapeBin(filename: string) {
             return fetchData(`${pathBase}/us/landscape/${filename}`, abortSignal).then((data) => {
