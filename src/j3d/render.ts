@@ -1,7 +1,7 @@
 
 import { mat4, mat2d } from 'gl-matrix';
 
-import { BMD, BMT, HierarchyNode, HierarchyType, MaterialEntry, Shape, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData, DRW1MatrixKind, TTK1Animator, ANK1Animator, bindANK1Animator, BTI } from './j3d';
+import { BMD, BMT, HierarchyNode, HierarchyType, MaterialEntry, Shape, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData, DRW1MatrixKind, TTK1Animator, ANK1Animator, bindANK1Animator, BTI, bindVAF1Animator, VAF1, VAF1Animator } from './j3d';
 import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } from './j3d';
 
 import * as GX_Material from '../gx/gx_material';
@@ -492,6 +492,7 @@ export class BMDModelInstance {
     // Animations.
     public animationController = new AnimationController();
     public ank1Animator: ANK1Animator | null = null;
+    public vaf1Animator: VAF1Animator | null = null;
 
     // Temporary state when calculating bone matrices.
     private jointMatrices: mat4[];
@@ -615,14 +616,12 @@ export class BMDModelInstance {
         this.materialInstanceState.lights[i].copy(light);
     }
 
-    // TODO(jstpierre): Implement BVA visibility animation
-    public setShapeVisible(i: number, visible: boolean): void {
-        this.shapeInstanceState.shapeVisibility[i] = visible;
-    }
-
     /**
      * Binds {@param ttk1} (texture animations) to this model renderer.
      * TTK1 objects can be parsed from {@link BTK} files. See {@link BTK.parse}.
+     *
+     * @param animationController An {@link AnimationController} to control the progress of this animation to.
+     * By default, this will default to this instance's own {@member animationController}.
      */
     public bindTTK1(ttk1: TTK1, animationController: AnimationController = this.animationController): void {
         for (let i = 0; i < this.materialInstances.length; i++)
@@ -632,6 +631,9 @@ export class BMDModelInstance {
     /**
      * Binds {@param trk1} (color register animations) to this model renderer.
      * TRK1 objects can be parsed from {@link BRK} files. See {@link BRK.parse}.
+     *
+     * @param animationController An {@link AnimationController} to control the progress of this animation to.
+     * By default, this will default to this instance's own {@member animationController}.
      */
     public bindTRK1(trk1: TRK1, animationController: AnimationController = this.animationController): void {
         for (let i = 0; i < this.materialInstances.length; i++)
@@ -641,9 +643,24 @@ export class BMDModelInstance {
     /**
      * Binds {@param ank1} (joint animations) to this model renderer.
      * ANK1 objects can be parsed from {@link BCK} files. See {@link BCK.parse}.
+     *
+     * @param animationController An {@link AnimationController} to control the progress of this animation to.
+     * By default, this will default to this instance's own {@member animationController}.
      */
     public bindANK1(ank1: ANK1, animationController: AnimationController = this.animationController): void {
         this.ank1Animator = bindANK1Animator(animationController, ank1);
+    }
+
+    /**
+     * Binds {@param vaf1} (shape visibility animations) to this model renderer.
+     * VAF1 objects can be parsed from {@link BVA} files. See {@link BVA.parse}.
+     *
+     * @param animationController An {@link AnimationController} to control the progress of this animation to.
+     * By default, this will default to this instance's own {@member animationController}.
+     */
+    public bindVAF1(vaf1: VAF1, animationController: AnimationController = this.animationController): void {\
+        assert(vaf1.visibilityAnimationTracks.length === this.shapeInstances.length);
+        this.vaf1Animator = bindVAF1Animator(animationController, vaf1);
     }
 
     public getJointMatrixReference(jointName: string): mat4 {
@@ -719,8 +736,8 @@ export class BMDModelInstance {
         }
 
         for (let i = 0; i < this.shapeInstances.length; i++) {
-            const shapeVisiblity = this.shapeInstanceState.shapeVisibility[i];
-            const shapeDepth = shapeVisiblity ? depth : -1;
+            const shapeVisibility = this.vaf1Animator !== null ? this.vaf1Animator.calcVisibility(i) : true;
+            const shapeDepth = shapeVisibility ? depth : -1;
             this.shapeInstances[i].prepareToRender(renderHelper, shapeDepth, viewerInput, this.shapeInstanceState);
         }
     }

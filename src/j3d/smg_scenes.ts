@@ -16,7 +16,7 @@ import * as Yaz0 from '../compression/Yaz0';
 import * as BCSV from '../luigis_mansion/bcsv';
 import * as UI from '../ui';
 import { mat4, quat, vec3 } from 'gl-matrix';
-import { BMD, BRK, BTK, BCK, LoopMode } from './j3d';
+import { BMD, BRK, BTK, BCK, LoopMode, BVA } from './j3d';
 import { GfxBlendMode, GfxBlendFactor, GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxProgram, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxRenderPassDescriptor, GfxLoadDisposition } from '../gfx/platform/GfxPlatform';
 import AnimationController from '../AnimationController';
 import { fullscreenMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
@@ -1108,9 +1108,8 @@ class SMGSpawner {
         // SMG2
         case 'Moc':
             spawnGraph(`Moc`, SceneGraphTag.Normal, { bck: 'turn.bck' }).then(([node, rarc]) => {
-                node.modelInstance.setShapeVisible(1, false);
-                node.modelInstance.setShapeVisible(2, false);
-                node.modelInstance.setShapeVisible(3, false);
+                const bva = BVA.parse(rarc.findFileData(`FaceA.bva`));
+                node.modelInstance.bindVAF1(bva.vaf1);
             });
             break;
         case 'PlantC':
