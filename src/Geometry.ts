@@ -312,3 +312,26 @@ export class Frustum {
             this.visualizer.newFrame();
     }
 }
+
+/**
+ * Computes the squared distance from a point {@param v} to the AABB {@param aabb}.
+ * Will be 0 if the point is inside the AABB. Note that this is *not* the distance
+ * to the the AABB's center point.
+ */
+export function squaredDistanceFromPointToAABB(v: vec3, aabb: AABB): number {
+    function square(V: number): number {
+        return V * V;
+    }
+
+    const pX = v[0], pY = v[1], pZ = v[2];
+    let sqDist = 0;
+
+    if (pX < aabb.minX) sqDist += square(aabb.minX - pX);
+    else if (pX > aabb.maxX) sqDist += square(pX - aabb.maxX);
+    if (pY < aabb.minY) sqDist += square(aabb.minY - pY);
+    else if (pY > aabb.maxY) sqDist += square(pY - aabb.maxY);
+    if (pZ < aabb.minZ) sqDist += square(aabb.minZ - pZ);
+    else if (pZ > aabb.maxZ) sqDist += square(pZ - aabb.maxZ);
+
+    return sqDist;
+}

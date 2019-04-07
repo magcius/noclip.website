@@ -54,7 +54,8 @@ class Command_Batch {
 
     constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, private sceneGraphNode: SceneGraphNode, batch: Batch, coalescedBuffers: GfxCoalescedBuffers) {
         this.shapeHelper = new GXShapeHelperGfx(device, renderHelper, coalescedBuffers, batch.loadedVertexLayout, batch.loadedVertexData);
-        this.renderInst = this.shapeHelper.pushRenderInst(renderHelper.renderInstBuilder);
+        this.renderInst = this.shapeHelper.buildRenderInst(renderHelper.renderInstBuilder);
+        renderHelper.renderInstBuilder.pushRenderInst(this.renderInst);
     }
 
     private computeModelView(dst: mat4, camera: Camera): void {

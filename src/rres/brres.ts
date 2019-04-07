@@ -1612,6 +1612,38 @@ function makeConstantAnimationTrack(value: number): FloatAnimationTrack {
     return { type: AnimationTrackType.LINEAR, frames: Float32Array.of(value) };
 }
 
+function parseAnimationTrackC8(buffer: ArrayBufferSlice, numKeyframes: number): FloatAnimationTrack {
+    const frames = new Float32Array(numKeyframes + 1);
+    const view = buffer.createDataView();
+
+    const scale = view.getFloat32(0x00);
+    const bias = view.getFloat32(0x04);
+
+    let tableIdx = 0x08;
+    for (let i = 0; i < numKeyframes + 1; i++) {
+        frames[i] = (view.getUint8(tableIdx + 0x00) * scale) + bias;
+        tableIdx += 0x01;
+    }
+
+    return { type: AnimationTrackType.LINEAR, frames };
+}
+
+function parseAnimationTrackC16(buffer: ArrayBufferSlice, numKeyframes: number): FloatAnimationTrack {
+    const frames = new Float32Array(numKeyframes + 1);
+    const view = buffer.createDataView();
+
+    const scale = view.getFloat32(0x00);
+    const bias = view.getFloat32(0x04);
+
+    let tableIdx = 0x08;
+    for (let i = 0; i < numKeyframes + 1; i++) {
+        frames[i] = (view.getUint16(tableIdx + 0x00) * scale) + bias;
+        tableIdx += 0x02;
+    }
+
+    return { type: AnimationTrackType.LINEAR, frames };
+}
+
 function parseAnimationTrackC32(buffer: ArrayBufferSlice, numKeyframes: number): FloatAnimationTrack {
     const frames: Float32Array = buffer.createTypedArray(Float32Array, 0x00, numKeyframes + 1, Endianness.BIG_ENDIAN);
     return { type: AnimationTrackType.LINEAR, frames };
@@ -2323,6 +2355,12 @@ function parseCHR0_NodeData(buffer: ArrayBufferSlice, numKeyframes: number): CHR
         } else if (trackFormat === TrackFormat._48) {
             const animationTrackOffs = view.getUint32(animationTableIdx);
             animationTrack = parseAnimationTrackF48(buffer.slice(animationTrackOffs));
+        } else if (trackFormat === TrackFormat.FRM_8) {
+            const animationTrackOffs = view.getUint32(animationTableIdx);
+            animationTrack = parseAnimationTrackC8(buffer.slice(animationTrackOffs), numKeyframes);
+        } else if (trackFormat === TrackFormat.FRM_16) {
+            const animationTrackOffs = view.getUint32(animationTableIdx);
+            animationTrack = parseAnimationTrackC16(buffer.slice(animationTrackOffs), numKeyframes);
         } else if (trackFormat === TrackFormat.FRM_32) {
             const animationTrackOffs = view.getUint32(animationTableIdx);
             animationTrack = parseAnimationTrackC32(buffer.slice(animationTrackOffs), numKeyframes);

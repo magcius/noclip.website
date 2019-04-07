@@ -56,7 +56,6 @@ class ShapeData {
 
 const scratchModelMatrix = mat4.create();
 const scratchViewMatrix = mat4.create();
-const posMtxVisibility: boolean[] = nArray(10, () => true);
 const packetParams = new PacketParams();
 export class ShapeInstance {
     private renderInsts: GfxRenderInst[] = [];
@@ -84,9 +83,8 @@ export class ShapeInstance {
             const packet = shape.packets[p];
             const renderInst = this.renderInsts[p];
 
-            renderInst.visible = false;
+            let instVisible = false;
             if (visible) {
-                // Update our matrix table.
                 for (let i = 0; i < packet.matrixTable.length; i++) {
                     const matrixIndex = packet.matrixTable[i];
 
@@ -94,21 +92,15 @@ export class ShapeInstance {
                     if (matrixIndex === 0xFFFF)
                         continue;
 
-                    const posMtx = shapeInstanceState.matrixArray[matrixIndex];
-                    posMtxVisibility[i] = shapeInstanceState.matrixVisibility[matrixIndex];
-                    mat4.mul(packetParams.u_PosMtx[i], modelView, posMtx);
-                }
+                    mat4.mul(packetParams.u_PosMtx[i], modelView, shapeInstanceState.matrixArray[matrixIndex]);
 
-                // If all matrices are invisible, we can cull.
-                for (let i = 0; i < posMtxVisibility.length; i++) {
-                    if (posMtxVisibility[i]) {
-                        renderInst.visible = true;
-                        break;
-                    }
+                    if (shapeInstanceState.matrixVisibility[matrixIndex])
+                        instVisible = true;
                 }
             }
 
-            if (renderInst.visible) {
+            renderInst.visible = instVisible;
+            if (instVisible) {
                 renderInst.sortKey = setSortKeyDepth(renderInst.parentRenderInst.sortKey, depth);
                 renderInst.sortKey = setSortKeyBias(renderInst.sortKey, this.sortKeyBias);
                 this.shapeData.shapeHelpers[p].fillPacketParams(packetParams, renderInst, renderHelper);
@@ -170,7 +162,7 @@ export class MaterialInstance {
         this.templateRenderInst.name = this.name;
         this.createProgram();
         GX_Material.translateGfxMegaState(this.templateRenderInst.setMegaStateFlags(), material.gxMaterial);
-        let layer = !material.gxMaterial.ropInfo.depthTest ? GfxRendererLayer.BACKGROUND : GfxRendererLayer.OPAQUE;
+        let layer = !material.gxMaterial.ropInfo.depthTest ? GfxRendererLayer.BACKGROUND : material.translucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.setSortKeyLayer(layer);
         // Allocate our material buffer slot.
         this.materialParamsBufferOffset = renderHelper.renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, ub_MaterialParams);
@@ -751,7 +743,7 @@ export class BMDModelInstance {
             // Use the root joint to calculate depth.
             const rootJoint = this.bmdModel.bmd.jnt1.joints[0];
             bboxScratch.transform(rootJoint.bbox, this.modelMatrix);
-            depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, bboxScratch);
+            depth = Math.max(computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, bboxScratch), 0);
         }
 
         for (let i = 0; i < this.shapeInstances.length; i++) {

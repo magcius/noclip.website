@@ -4,8 +4,7 @@ import { GfxSampler, GfxTexture, GfxDevice } from './gfx/platform/GfxPlatform';
 
 // Used mostly by indirect texture FB installations...
 export interface TextureOverride {
-    glTexture?: WebGLTexture;
-    gfxTexture?: GfxTexture;
+    gfxTexture: GfxTexture;
     width: number;
     height: number;
     flipY: boolean;

@@ -10,19 +10,29 @@ import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/Gfx
 import { fetchData } from '../fetch';
 import { RRESTextureHolder, MDL0ModelInstance, MDL0Model } from './render';
 import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
-import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { BasicRenderTarget, standardFullClearRenderPassDescriptor, ColorTexture, noClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import AnimationController from '../AnimationController';
-import { assert, assertExists } from '../util';
+import { assert } from '../util';
+import { TextureOverride } from '../TextureHolder';
+import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 
 const id = 'klonoa';
 const name = "Klonoa";
 
 const pathBase = `klonoa`;
 
-class BasicRRESRenderer implements Viewer.SceneGfx {
+const enum KlonoaPass {
+    SKYBOX = 0x01,
+    MAIN = 0x02,
+    INDIRECT = 0x04,
+}
+
+class KlonoaRenderer implements Viewer.SceneGfx {
     public viewRenderer = new GfxRenderInstViewRenderer();
     public renderTarget = new BasicRenderTarget();
+    public mainRenderTarget = new BasicRenderTarget();
+    public opaqueSceneTexture = new ColorTexture();
     public modelInstances: MDL0ModelInstance[] = [];
     public modelData: MDL0Model[] = [];
 
@@ -62,11 +72,34 @@ class BasicRRESRenderer implements Viewer.SceneGfx {
 
         this.viewRenderer.prepareToRender(device);
 
-        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.mainRenderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.opaqueSceneTexture.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
         this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
-        const mainPassRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
-        this.viewRenderer.executeOnPass(device, mainPassRenderer);
-        return mainPassRenderer;
+
+        const skyboxPassRenderer = this.mainRenderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
+        this.viewRenderer.executeOnPass(device, skyboxPassRenderer, KlonoaPass.SKYBOX);
+        skyboxPassRenderer.endPass(null);
+        device.submitPass(skyboxPassRenderer);
+
+        const opaquePassRenderer = this.mainRenderTarget.createRenderPass(device, depthClearRenderPassDescriptor);
+        this.viewRenderer.executeOnPass(device, opaquePassRenderer, KlonoaPass.MAIN);
+
+        let lastPassRenderer: GfxRenderPass;
+        if (this.viewRenderer.hasAnyVisible(KlonoaPass.INDIRECT)) {
+            opaquePassRenderer.endPass(this.opaqueSceneTexture.gfxTexture);
+            device.submitPass(opaquePassRenderer);
+
+            const textureOverride: TextureOverride = { gfxTexture: this.opaqueSceneTexture.gfxTexture, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
+            this.textureHolder.setTextureOverride("ph_dummy128", textureOverride);
+
+            const indTexPassRenderer = this.mainRenderTarget.createRenderPass(device, noClearRenderPassDescriptor);
+            this.viewRenderer.executeOnPass(device, indTexPassRenderer, KlonoaPass.INDIRECT);
+            lastPassRenderer = indTexPassRenderer;
+        } else {
+            lastPassRenderer = opaquePassRenderer;
+        }
+
+        return lastPassRenderer;
     }
 }
 
@@ -94,7 +127,7 @@ class KlonoaSceneDesc implements Viewer.SceneDesc {
         }
 
         return Progressable.all([fetchLandscapeBin(stageBinName), fetchLandscapeBin(texBinName)]).then(([stageBinData, texBinData]) => {
-            const renderer = new BasicRRESRenderer(device);
+            const renderer = new KlonoaRenderer(device);
 
             if (texBinData.byteLength !== 0) {
                 const texBinRRES = BRRES.parse(texBinData);
@@ -109,7 +142,7 @@ class KlonoaSceneDesc implements Viewer.SceneDesc {
                 renderer.textureHolder.addRRESTextures(device, texRRES);
             }
 
-            for (let i = 0; i < 10; i++) {
+            for (let i = 0; i < 4; i++) {
                 const mdl0RRESData = arc.findFileData(`arc/mdl_${i}.bin`);
                 if(mdl0RRESData === null)
                     continue;
@@ -120,6 +153,12 @@ class KlonoaSceneDesc implements Viewer.SceneDesc {
 
                 const modelInstance = new MDL0ModelInstance(device, renderer.renderHelper, renderer.textureHolder, mdl0Data);
                 renderer.modelInstances.push(modelInstance);
+
+                if (i === 2)
+                    modelInstance.passMask = KlonoaPass.INDIRECT;
+                // TODO(jstpierre): What's different these other guys?
+                else
+                    modelInstance.passMask = KlonoaPass.MAIN;
             }
 
             const anmRRESData = arc.findFileData(`arc/anm.bin`);

@@ -121,7 +121,6 @@ export class GXMaterialHelperGfx {
         this.templateRenderInst.name = material.name;
         this.createProgram();
         GX_Material.translateGfxMegaState(this.templateRenderInst.setMegaStateFlags(), material);
-        this.programKey = 0;
         renderHelper.renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, ub_MaterialParams);
     }
 

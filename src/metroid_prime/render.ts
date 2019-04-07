@@ -7,7 +7,7 @@ import { MaterialParams, PacketParams, GXTextureHolder, GXShapeHelperGfx, GXRend
 
 import { MREA, Material, Surface, UVAnimationType, MaterialSet, AreaLight } from './mrea';
 import * as Viewer from '../viewer';
-import { AABB } from '../Geometry';
+import { AABB, squaredDistanceFromPointToAABB } from '../Geometry';
 import { TXTR } from './txtr';
 import { CMDL } from './cmdl';
 import { TextureMapping } from '../TextureHolder';
@@ -15,7 +15,7 @@ import { GfxDevice, GfxFormat, GfxSampler, GfxMipFilterMode, GfxTexFilterMode, G
 import { GfxCoalescedBuffers, GfxBufferCoalescer } from '../gfx/helpers/BufferHelpers';
 import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyDepthKey } from '../gfx/render/GfxRenderer';
 import { computeViewMatrixSkybox, computeViewMatrix, texEnvMtx } from '../Camera';
-import { LoadedVertexData } from '../gx/gx_displaylist';
+import { LoadedVertexData, LoadedVertexPacket } from '../gx/gx_displaylist';
 import { GXMaterialHacks, Color, lightSetWorldPositionViewMatrix, lightSetWorldDirectionNormalMatrix } from '../gx/gx_material';
 import { LightParameters, WorldLightingOptions } from './script';
 import { colorMult } from '../Color';
@@ -43,30 +43,6 @@ export class RetroTextureHolder extends GXTextureHolder<TXTR> {
 export const enum RetroPass {
     MAIN = 0x01,
     SKYBOX = 0x02,
-}
-
-const scratchVec3a: vec3 = vec3.create();
-const scratchVec3b: vec3 = vec3.create();
-function squaredDistanceFromPointToAABB(pointOrigin: vec3, aabb: AABB): number {
-    function square(V: number): number {
-        return V * V;
-    }
-
-    const min = scratchVec3a, max = scratchVec3b;
-    vec3.set(min, aabb.minX, aabb.minY, aabb.minZ);
-    vec3.set(max, aabb.maxX, aabb.maxY, aabb.maxZ);
-
-    let dist = 0;
-
-    for (let i = 0; i < 3; i++) {
-        if (pointOrigin[i] < min[i]) {
-            dist += square(pointOrigin[i] - min[i]);
-        } else if (pointOrigin[i] > max[i]) {
-            dist += square(pointOrigin[i] - max[i]);
-        }
-    }
-
-    return dist;
 }
 
 export class ActorLights {
@@ -133,7 +109,8 @@ class SurfaceInstance {
         public modelMatrix: mat4,
         public actorLights: ActorLights | null)
     {
-        this.renderInst = this.surfaceData.shapeHelper.pushRenderInst(renderHelper.renderInstBuilder, materialInstance.templateRenderInst);
+        this.renderInst = this.surfaceData.shapeHelper.buildRenderInst(renderHelper.renderInstBuilder, materialInstance.templateRenderInst);
+        renderHelper.renderInstBuilder.pushRenderInst(this.renderInst);
         this.materialTextureKey = materialInstance.textureKey;
     }
 
@@ -364,6 +341,7 @@ function mergeSurfaces(surfaces: Surface[]): MergedSurface {
     let totalIndexCount = 0;
     let totalVertexCount = 0;
     let packedVertexDataSize = 0;
+    const packets: LoadedVertexPacket[] = [];
     for (let i = 0; i < surfaces.length; i++) {
         const surface = surfaces[i];
         assert(surface.loadedVertexData.indexFormat === GfxFormat.U16_R);
@@ -371,6 +349,14 @@ function mergeSurfaces(surfaces: Surface[]): MergedSurface {
         totalIndexCount += surface.loadedVertexData.totalIndexCount;
         totalVertexCount += surface.loadedVertexData.totalVertexCount;
         packedVertexDataSize += surface.loadedVertexData.packedVertexData.byteLength;
+
+        for (let j = 0; j < surface.loadedVertexData.packets.length; j++) {
+            const packet = surface.loadedVertexData.packets[j];
+            const indexOffset = totalIndexCount + packet.indexOffset;
+            const indexCount = packet.indexCount;
+            const posNrmMatrixTable = packet.posNrmMatrixTable;
+            packets.push({ indexOffset, indexCount, posNrmMatrixTable });
+        }
     }
 
     const packedVertexData = new Uint8Array(packedVertexDataSize);
@@ -396,6 +382,7 @@ function mergeSurfaces(surfaces: Surface[]): MergedSurface {
         packedVertexData: packedVertexData.buffer,
         totalIndexCount,
         totalVertexCount,
+        packets,
         vertexId: 0,
     };
 
