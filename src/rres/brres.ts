@@ -1628,7 +1628,7 @@ function parseAnimationTrackF32(buffer: ArrayBufferSlice): FloatAnimationTrack {
     for (let i = 0; i < numKeyframes; i++) {
         const frame = view.getUint8(keyframeTableIdx + 0x00);
         const value = (view.getUint16(keyframeTableIdx + 0x01) >>> 4) * scale + offset;
-        const tangent = (view.getInt16(keyframeTableIdx + 0x02) & 0x0FFF) / 0x20; // S6.5
+        const tangent = (view.getInt16(keyframeTableIdx + 0x02) << 20 >> 20) / 0x20; // S6.5
         const keyframe = { frame, value, tangent };
         frames.push(keyframe);
         keyframeTableIdx += 0x04;

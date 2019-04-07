@@ -7,7 +7,7 @@ import * as BRRES from './brres';
 import * as U8 from './u8';
 import * as Yaz0 from '../compression/Yaz0';
 
-import { assert, readString, hexzero } from '../util';
+import { assert, readString, hexzero, assertExists } from '../util';
 import { fetchData } from '../fetch';
 import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
@@ -217,6 +217,12 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
     }
 
     private spawnObjectFromKMP(device: GfxDevice, renderer: MarioKartWiiRenderer, arc: U8.U8Archive, gobj: GOBJ): void {
+        const getRRES = (objectName: string): BRRES.RRES => {
+            const arcPath = `./${objectName}.brres`;
+            // Should have already been loaded by now.
+            return assertExists(renderer.modelCache.rresCache.get(arcPath));
+        };
+
         const spawnObject = (objectName: string): MDL0ModelInstance => {
             const arcPath = `./${objectName}.brres`;
             const b = this.spawnObjectFromRRESPath(device, renderer, arc, arcPath, objectName);
@@ -251,6 +257,10 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
             spawnObject(`FlagB2`);
         } else if (gobj.objectId === 0x018E) { // MiiKanban
             spawnObject(`MiiKanban`);
+        } else if (gobj.objectId === 0x0191) { // kuribo
+            const b = spawnObject(`kuribo`);
+            const rres = getRRES(`kuribo`);
+            b.bindCHR0(renderer.animationController, rres.chr0.find((chr0) => chr0.name === 'walk_l'));
         } else if (gobj.objectId === 0x02D0) { // Flash_L
             // particle effect; unsupported
         } else if (gobj.objectId === 0x02E1) { // MiiStatueL3

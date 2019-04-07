@@ -2,7 +2,7 @@
 import * as BRRES from './brres';
 
 import * as GX_Material from '../gx/gx_material';
-import { mat4, mat2d } from "gl-matrix";
+import { mat4, mat2d, vec3 } from "gl-matrix";
 import { MaterialParams, GXTextureHolder, ColorKind, translateTexFilterGfx, translateWrapModeGfx, loadedDataCoalescerGfx, GXRenderHelperGfx, GXShapeHelperGfx, GXMaterialHelperGfx, PacketParams } from "../gx/gx_render";
 import { texProjPerspMtx, texEnvMtx, computeViewMatrix, computeViewMatrixSkybox, Camera, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
 import AnimationController from "../AnimationController";
@@ -13,6 +13,7 @@ import { ViewerRenderInput } from "../viewer";
 import { GfxRenderInst, GfxRenderInstBuilder, GfxRendererLayer, makeSortKey, setSortKeyDepth, setSortKeyLayer, getSortKeyLayer } from "../gfx/render/GfxRenderer";
 import { GfxBufferCoalescer } from '../gfx/helpers/BufferHelpers';
 import { assert, nArray } from '../util';
+import { prepareFrameDebugOverlayCanvas2D, getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
 
 export class RRESTextureHolder extends GXTextureHolder<BRRES.TEX0> {
     public addRRESTextures(device: GfxDevice, rres: BRRES.RRES): void {
@@ -309,6 +310,8 @@ class MaterialInstance {
 }
 
 const matrixScratchArray = nArray(128, () => mat4.create());
+const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
 export class MDL0ModelInstance {
     private shapeInstances: ShapeInstance[] = [];
     private materialInstances: MaterialInstance[] = [];
@@ -317,6 +320,7 @@ export class MDL0ModelInstance {
     private matrixVisibility: IntersectionState[] = [];
     private matrixArray: mat4[] = [];
     private matrixScratch: mat4 = mat4.create();
+    private debugBones = false;
 
     public colorOverrides: GX_Material.Color[] = [];
 
@@ -422,9 +426,12 @@ export class MDL0ModelInstance {
                 visible = false;
         }
 
+        if (this.debugBones)
+            prepareFrameDebugOverlayCanvas2D();
+
         this.execNodeTreeOpList(mdl0.sceneGraph.nodeTreeOps, viewerInput, visible);
         this.execNodeMixOpList(mdl0.sceneGraph.nodeMixOps);
-
+        
         for (let i = 0; i < this.shapeInstances.length; i++)
             this.shapeInstances[i].prepareToRender(renderHelper, this.renderLayerBias, this.matrixArray, this.matrixVisibility, viewerInput, this.isSkybox);
 
@@ -480,7 +487,7 @@ export class MDL0ModelInstance {
                 const node = mdl0.nodes[op.nodeId];
                 const parentMtxId = op.parentMtxId;
                 const dstMtxId = node.mtxId;
-
+    
                 let modelMatrix;
                 if (this.chr0NodeAnimator && this.chr0NodeAnimator.calcModelMtx(this.matrixScratch, op.nodeId)) {
                     modelMatrix = this.matrixScratch;
@@ -498,6 +505,17 @@ export class MDL0ModelInstance {
                     }
                 } else {
                     this.matrixVisibility[dstMtxId] = IntersectionState.FULLY_OUTSIDE;
+                }
+
+                if (this.debugBones) {
+                    const ctx = getDebugOverlayCanvas2D();
+    
+                    vec3.set(scratchVec3a, 0, 0, 0);
+                    vec3.transformMat4(scratchVec3a, scratchVec3a, this.matrixArray[parentMtxId]);
+                    vec3.set(scratchVec3b, 0, 0, 0);
+                    vec3.transformMat4(scratchVec3b, scratchVec3b, this.matrixArray[dstMtxId]);
+    
+                    drawWorldSpaceLine(ctx, viewerInput.camera, scratchVec3a, scratchVec3b);
                 }
             } else if (op.op === BRRES.ByteCodeOp.MTXDUP) {
                 const srcMtxId = op.fromMtxId;
