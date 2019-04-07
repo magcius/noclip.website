@@ -356,6 +356,12 @@ export class MDL0ModelInstance {
         this.chr0NodeAnimator = BRRES.bindCHR0Animator(animationController, chr0, this.mdl0Model.mdl0.nodes);
     }
 
+    /**
+     * Binds {@param srt0} (texture animations) to this model instance.
+     *
+     * @param animationController An {@link AnimationController} to control the progress of this animation to.
+     * By default, this will default to this instance's own {@member animationController}.
+     */
     public bindSRT0(animationController: AnimationController, srt0: BRRES.SRT0): void {
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].bindSRT0(animationController, srt0);
@@ -371,15 +377,30 @@ export class MDL0ModelInstance {
             this.materialInstances[i].bindCLR0(animationController, clr0);
     }
 
-    public bindRRESAnimations(animationController: AnimationController, rres: BRRES.RRES): void {
+    /**
+     * Binds all animations in {@param rres} that are named {@param name} to this model instance.
+     *
+     * @param animationController An {@link AnimationController} to control the progress of this animation to.
+     * @param rres An {@param RRES} archive with animations to search through.
+     * @param name The name of animations to search for. By default, this uses the name of the {@member mdl0Model}
+     * used to construct this model instance, as Nintendo appears to use this convention a lot in their games.
+     */
+    public bindRRESAnimations(animationController: AnimationController, rres: BRRES.RRES, name = this.mdl0Model.mdl0.name): void {
         for (let i = 0; i < rres.chr0.length; i++)
-            this.bindCHR0(animationController, rres.chr0[i]);
+            if (rres.chr0[i].name === name)
+                this.bindCHR0(animationController, rres.chr0[i]);
+
         for (let i = 0; i < rres.srt0.length; i++)
-            this.bindSRT0(animationController, rres.srt0[i]);
-        for (let i = 0; i < rres.pat0.length; i++)
-            this.bindPAT0(animationController, rres.pat0[i]);
+            if (rres.srt0[i].name === name)
+                this.bindSRT0(animationController, rres.srt0[i]);
+
         for (let i = 0; i < rres.clr0.length; i++)
-            this.bindCLR0(animationController, rres.clr0[i]);
+            if (rres.clr0[i].name === name)
+                this.bindCLR0(animationController, rres.clr0[i]);
+    
+        for (let i = 0; i < rres.pat0.length; i++)
+            if (rres.pat0[i].name === name)
+                this.bindPAT0(animationController, rres.pat0[i]);
     }
 
     public setColorOverride(i: ColorKind, color: GX_Material.Color): void {

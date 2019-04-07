@@ -377,7 +377,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
         const bmtFile = rarc.findFile(`${basename}.bmt`);
         const modelInstance = createModelInstance(device, renderHelper, textureHolder, bmdFile, btkFile, brkFile, bckFile, bmtFile);
         modelInstance.name = basename;
-        modelInstance.setIsSkybox(isSkybox);
+        modelInstance.isSkybox = isSkybox;
         modelInstance.passMask = passMask;
         return modelInstance;
     }

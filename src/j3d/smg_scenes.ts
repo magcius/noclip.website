@@ -959,7 +959,7 @@ class SMGSpawner {
                     objinfo.modelMatrix[13] = 0;
                     objinfo.modelMatrix[14] = 0;
 
-                    modelInstance.setIsSkybox(true);
+                    modelInstance.isSkybox = true;
                     modelInstance.passMask = SMGPass.SKYBOX;
                 } else if (tag === SceneGraphTag.Indirect) {
                     modelInstance.passMask = SMGPass.INDIRECT;

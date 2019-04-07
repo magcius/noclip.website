@@ -145,7 +145,7 @@ function createScenesFromBuffer(device: GfxDevice, renderer: BasicRenderer, buff
                 }
                 scene.name = basename;
                 if (basename.includes('_sky'))
-                    scene.setIsSkybox(true);
+                    scene.isSkybox = true;
                 return scene;
             });
             scenes = scenes.filter((scene) => !!scene);

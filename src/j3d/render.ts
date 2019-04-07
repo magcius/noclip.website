@@ -482,9 +482,8 @@ export class BMDModelInstance {
     public visible: boolean = true;
     public isSkybox: boolean = false;
     public passMask: number = 0x01;
-    public fps: number = 30;
 
-    public modelMatrix: mat4;
+    public modelMatrix = mat4.create();
 
     public colorOverrides: GX_Material.Color[] = [];
     public alphaOverrides: boolean[] = [];
@@ -514,8 +513,6 @@ export class BMDModelInstance {
     ) {
         if (materialHacks)
             Object.assign(this.materialHacks, materialHacks);
-
-        this.modelMatrix = mat4.create();
 
         this.shapeInstances = this.bmdModel.shapeData.map((shapeData) => {
             return new ShapeInstance(shapeData);
@@ -576,40 +573,66 @@ export class BMDModelInstance {
         this.bmdModel.destroy(device);
     }
 
-    public setSortKeyLayer(layer: GfxRendererLayer): void {
-        for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].setSortKeyLayer(layer);
-    }
-
-    public setMaterialColorWriteEnabled(materialName: string, colorWrite: boolean): void {
-        this.materialInstances.find((m) => m.name === materialName).setColorWriteEnabled(colorWrite);
-    }
-
-    public setColorOverride(i: ColorKind, color: GX_Material.Color, useAlpha: boolean = false): void {
-        this.colorOverrides[i] = color;
-        this.alphaOverrides[i] = useAlpha;
-    }
-
-    public setIsSkybox(v: boolean): void {
-        this.isSkybox = v;
-    }
-
-    public setFPS(v: number): void {
-        this.fps = v;
-    }
-
     public setVisible(v: boolean): void {
         this.visible = v;
     }
 
+    /**
+     * Render Hack. Sets whether vertex colors are enabled. If vertex colors are disabled,
+     * then opaque white is substituted for them in the shader generated for every material.
+     *
+     * By default, vertex colors are enabled.
+     */
     public setVertexColorsEnabled(v: boolean): void {
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].setVertexColorsEnabled(v);
     }
 
+    /**
+     * Render Hack. Sets whether texture samples are enabled. If texture samples are disabled,
+     * then opaque white is substituted for them in the shader generated for every material.
+     *
+     * By default, textures are enabled.
+     */
     public setTexturesEnabled(v: boolean): void {
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].setTexturesEnabled(v);
+    }
+
+    public setSortKeyLayer(layer: GfxRendererLayer): void {
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].setSortKeyLayer(layer);
+    }
+
+    /**
+     * Sets whether color write is enabled. This is equivalent to the native GX function
+     * GXSetColorUpdate. There is no MAT3 material flag for this, so some games have special
+     * engine hooks to enable and disable color write at runtime.
+     * 
+     * Specifically, Wind Waker turns off color write when drawing a specific part of character's
+     * eyes so it can draw them on top of the hair.
+     */
+    public setMaterialColorWriteEnabled(materialName: string, colorWrite: boolean): void {
+        this.materialInstances.find((m) => m.name === materialName).setColorWriteEnabled(colorWrite);
+    }
+
+    /**
+     * Sets a color override for a specific color. The MAT3 has defaults for every color,
+     * but engines can override colors on a model with their own colors if wanted. Color
+     * overrides also take precedence over any bound color animations.
+     * 
+     * Choose which color "slot" to override with {@param colorKind}.
+     * 
+     * It is currently not possible to specify a color override per-material.
+     *
+     * By default, the alpha value in {@param color} is not used. Set {@param useAlpha}
+     * to true to obey the alpha color override.
+     *
+     * To unset a color override, pass {@constant undefined} as for {@param color}.
+     */
+    public setColorOverride(colorKind: ColorKind, color: GX_Material.Color | undefined, useAlpha: boolean = false): void {
+        this.colorOverrides[colorKind] = color;
+        this.alphaOverrides[colorKind] = useAlpha;
     }
 
     public setGXLight(i: number, light: GX_Material.Light): void {
@@ -617,7 +640,7 @@ export class BMDModelInstance {
     }
 
     /**
-     * Binds {@param ttk1} (texture animations) to this model renderer.
+     * Binds {@param ttk1} (texture animations) to this model instance.
      * TTK1 objects can be parsed from {@link BTK} files. See {@link BTK.parse}.
      *
      * @param animationController An {@link AnimationController} to control the progress of this animation to.
@@ -629,7 +652,7 @@ export class BMDModelInstance {
     }
 
     /**
-     * Binds {@param trk1} (color register animations) to this model renderer.
+     * Binds {@param trk1} (color register animations) to this model instance.
      * TRK1 objects can be parsed from {@link BRK} files. See {@link BRK.parse}.
      *
      * @param animationController An {@link AnimationController} to control the progress of this animation to.
@@ -641,7 +664,7 @@ export class BMDModelInstance {
     }
 
     /**
-     * Binds {@param ank1} (joint animations) to this model renderer.
+     * Binds {@param ank1} (joint animations) to this model instance.
      * ANK1 objects can be parsed from {@link BCK} files. See {@link BCK.parse}.
      *
      * @param animationController An {@link AnimationController} to control the progress of this animation to.
@@ -652,13 +675,13 @@ export class BMDModelInstance {
     }
 
     /**
-     * Binds {@param vaf1} (shape visibility animations) to this model renderer.
+     * Binds {@param vaf1} (shape visibility animations) to this model instance.
      * VAF1 objects can be parsed from {@link BVA} files. See {@link BVA.parse}.
      *
      * @param animationController An {@link AnimationController} to control the progress of this animation to.
      * By default, this will default to this instance's own {@member animationController}.
      */
-    public bindVAF1(vaf1: VAF1, animationController: AnimationController = this.animationController): void {\
+    public bindVAF1(vaf1: VAF1, animationController: AnimationController = this.animationController): void {
         assert(vaf1.visibilityAnimationTracks.length === this.shapeInstances.length);
         this.vaf1Animator = bindVAF1Animator(animationController, vaf1);
     }
@@ -668,10 +691,6 @@ export class BMDModelInstance {
         const parentJointIndex = this.bmdModel.bmd.jnt1.joints.findIndex((j) => j.name === jointName);
         assert(parentJointIndex >= 0);
         return this.jointMatrices[parentJointIndex];
-    }
-
-    public getTimeInFrames(milliseconds: number) {
-        return (milliseconds / 1000) * this.fps;
     }
 
     private isAnyShapeVisible(): boolean {
