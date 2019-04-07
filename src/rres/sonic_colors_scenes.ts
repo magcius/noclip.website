@@ -4,7 +4,7 @@ import * as U8 from './u8';
 import * as BRRES from './brres';
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { vec3, mat4 } from "gl-matrix";
+import { vec3 } from "gl-matrix";
 import { readString, assert, assertExists } from "../util";
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import Progressable from '../Progressable';
