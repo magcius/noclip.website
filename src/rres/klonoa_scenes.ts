@@ -173,13 +173,13 @@ class KlonoaSceneDesc implements Viewer.SceneDesc {
 
 // Named organized by SleepySpaceKoopa on Discord.
 const sceneDescs = [
-    "Breezegale, the Wind Village: \"The Beginnings of Gale\"",
+    "The Beginnings of Gale ~Breezegale, the Wind Village~",
     new KlonoaSceneDesc("s110", "Vision 1-1, Area 1"),
     new KlonoaSceneDesc("s111", "Vision 1-1, Area 2"),
     new KlonoaSceneDesc("s112", "Vision 1-1, Area 3"),
     new KlonoaSceneDesc("s113", "Vision 1-1, Area 4"),
 
-    "Guston Mine: \"The Diva and the Dark Spirit\"",
+    "The Diva and the Dark Spirit ~Guston Mine~",
     new KlonoaSceneDesc("s120", "Vision 1-2, Area 1"),
     new KlonoaSceneDesc("s121", "Vision 1-2, Area 2"),
     new KlonoaSceneDesc("s122", "Vision 1-2, Area 3"),
@@ -189,13 +189,13 @@ const sceneDescs = [
     new KlonoaSceneDesc("s126", "Vision 1-2, Area 7"),
     new KlonoaSceneDesc("s127", "Vision 1-2, Area 8"),
 
-    "Forlock, the Tree Village: \"Deep in the Dying Forest\"",
+    "Deep in the Dying Forest ~Forlock, the Tree Village~",
     new KlonoaSceneDesc("s210", "Vision 2-1, Area 1"),
     new KlonoaSceneDesc("s211", "Vision 2-1, Area 2"),
     new KlonoaSceneDesc("s212", "Vision 2-1, Area 3"),
     new KlonoaSceneDesc("s213", "Vision 2-1, Area 4"),
 
-    "The Kingdom of Jugpot: \"Beyond the Backwards Waterfall\"",
+    "Beyond the Backwards Waterfall ~The Kingdom of Jugpot~",
     new KlonoaSceneDesc("s220", "Vision 2-2, Area 1"),
     new KlonoaSceneDesc("s221", "Vision 2-2, Area 2"),
     new KlonoaSceneDesc("s222", "Vision 2-2, Area 3"),
@@ -204,7 +204,7 @@ const sceneDescs = [
     new KlonoaSceneDesc("s225", "Vision 2-2, Area 6"),
     new KlonoaSceneDesc("s226", "Vision 2-2, Area 7"),
 
-    "Forlock, the Tree Village: \"Rebirth of the Forest\"",
+    "Rebirth of the Forest ~Forlock, the Tree Village~",
     new KlonoaSceneDesc("s310", "Vision 3-1, Area 1"),
     new KlonoaSceneDesc("s311", "Vision 3-1, Area 2"),
     new KlonoaSceneDesc("s312", "Vision 3-1, Area 3"),
@@ -212,7 +212,7 @@ const sceneDescs = [
     new KlonoaSceneDesc("s314", "Vision 3-1, Area 5"),
     new KlonoaSceneDesc("s315", "Vision 3-1, Area 6"),
 
-    "The Tree Mansion of Machinery: \"The Stopped Gear\"",
+    "The Stopped Gear ~The Tree Mansion of Machinery~",
     new KlonoaSceneDesc("s320", "Vision 3-2, Area 1"),
     new KlonoaSceneDesc("s321", "Vision 3-2, Area 2"),
     new KlonoaSceneDesc("s322", "Vision 3-2, Area 3"),
@@ -225,12 +225,12 @@ const sceneDescs = [
     new KlonoaSceneDesc("s329", "Vision 3-2, Area 10"),
     new KlonoaSceneDesc("s330", "Vision 3-2, Area 11", "tex32.bin"),
 
-    "A Village in Danger",
+    "A Village in Danger ~Breezegale, The Wind Village~",
     new KlonoaSceneDesc("s410", "Vision 4-1, Area 1"),
     new KlonoaSceneDesc("s412", "Vision 4-1, Area 2"),
     new KlonoaSceneDesc("s413", "Vision 4-1, Area 3"),
 
-    "A Lull in the Wind: \"The Leviathan's Ice Cavern\"",
+    "A Lull in the Wind ~The Leviathan's Ice Cavern~",
     new KlonoaSceneDesc("s420", "Vision 4-2, Area 1"),
     new KlonoaSceneDesc("s421", "Vision 4-2, Area 2"),
     new KlonoaSceneDesc("s422", "Vision 4-2, Area 3"),
@@ -243,7 +243,7 @@ const sceneDescs = [
     new KlonoaSceneDesc("s430", "Vision 4-2, Area 10", "tex42.bin"),
     new KlonoaSceneDesc("s431", "Vision 4-2, Area 11", "tex42.bin"),
 
-    "The Four Orbs: \"Coronia, Temple of the Sun\"",
+    "The Four Orbs ~Coronia, Temple of the Sun~",
     new KlonoaSceneDesc("s510", "Vision 5-1, Area 1"),
     new KlonoaSceneDesc("s511", "Vision 5-1, Area 2"),
     new KlonoaSceneDesc("s512", "Vision 5-1, Area 3"),
@@ -252,7 +252,7 @@ const sceneDescs = [
     new KlonoaSceneDesc("s515", "Vision 5-1, Area 6"),
     new KlonoaSceneDesc("s516", "Vision 5-1, Area 7"),
 
-    "Between Light and Darkness: \"High Above Coronia\"",
+    "Between Light and Darkness ~High Above Coronia~",
     new KlonoaSceneDesc("s520", "Vision 5-2, Area 1"),
     new KlonoaSceneDesc("s521", "Vision 5-2, Area 2"),
     new KlonoaSceneDesc("s522", "Vision 5-2, Area 3"),
@@ -264,7 +264,7 @@ const sceneDescs = [
     new KlonoaSceneDesc("s528", "Vision 5-2, Area 9"),
     new KlonoaSceneDesc("s530", "Vision 5-2, Area 10", "tex52.bin"),
 
-    "The Legendary Kingdom: \"Cress, the Moon Kingdom\"",
+    "The Legendary Kingdom ~Cress, the Moon Kingdom~",
     new KlonoaSceneDesc("s610", "Vision 6-1, Area 1"),
     new KlonoaSceneDesc("s611", "Vision 6-1, Area 2"),
     new KlonoaSceneDesc("s612", "Vision 6-1, Area 3"),
@@ -274,7 +274,7 @@ const sceneDescs = [
     new KlonoaSceneDesc("s616", "Vision 6-1, Area 7"),
     new KlonoaSceneDesc("s617", "Vision 6-1, Area 8"),
 
-    "The Time of Restoration: \"The Prism Corridor\"",
+    "The Time of Restoration ~The Prism Corridor~",
     new KlonoaSceneDesc("s620", "Vision 6-2 Area 1"),
     new KlonoaSceneDesc("s621", "Vision 6-2 Area 2"),
     new KlonoaSceneDesc("s622", "Vision 6-2 Area 3"),
@@ -296,7 +296,7 @@ const sceneDescs = [
     new KlonoaSceneDesc("s731", "Final Vision, Area 2"),
     new KlonoaSceneDesc("s732", "Final Vision, Area 3"),
 
-    "Tower of Balue: \"Bonus Vision\"",
+    "Klonoa's Grand Gale Strategy ~Balue's Tower~",
     new KlonoaSceneDesc("s810", "Bonus Vision, Area 1"),
     new KlonoaSceneDesc("s811", "Bonus Vision, Area 2"),
     new KlonoaSceneDesc("s812", "Bonus Vision, Area 3"),
