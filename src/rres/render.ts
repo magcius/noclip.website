@@ -341,6 +341,8 @@ export class MDL0ModelInstance {
         this.name = `${namePrefix}/${mdl0Model.mdl0.name}`;
 
         this.matrixArray = nArray(mdl0Model.mdl0.numWorldMtx, () => mat4.create());
+        while (matrixScratchArray.length < this.matrixArray.length)
+            matrixScratchArray.push(mat4.create());
 
         this.templateRenderInst = renderHelper.renderInstBuilder.pushTemplateRenderInst();
         this.templateRenderInst.name = this.name;
