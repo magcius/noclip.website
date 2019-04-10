@@ -160,10 +160,7 @@ class KlonoaSceneDesc implements Viewer.SceneDesc {
 
                 for (let i = 0; i < renderer.modelInstances.length; i++) {
                     const modelInstance = renderer.modelInstances[i];
-                    modelInstance.bindRRESAnimations(renderer.animationController, anmRRES);
-
-                    // Also look for "_t" suffix versions. Appears to exist in some maps.
-                    modelInstance.bindRRESAnimations(renderer.animationController, anmRRES, `${modelInstance.mdl0Model.mdl0.name}_t`);
+                    modelInstance.bindRRESAnimations(renderer.animationController, anmRRES, null);
                 }
             }
 

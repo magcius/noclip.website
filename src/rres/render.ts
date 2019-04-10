@@ -398,22 +398,23 @@ export class MDL0ModelInstance {
      * @param rres An {@param RRES} archive with animations to search through.
      * @param name The name of animations to search for. By default, this uses the name of the {@member mdl0Model}
      * used to construct this model instance, as Nintendo appears to use this convention a lot in their games.
+     * You can also pass {@constant null} in order to match all animations in the archive.
      */
-    public bindRRESAnimations(animationController: AnimationController, rres: BRRES.RRES, name = this.mdl0Model.mdl0.name): void {
+    public bindRRESAnimations(animationController: AnimationController, rres: BRRES.RRES, name: string | null = this.mdl0Model.mdl0.name): void {
         for (let i = 0; i < rres.chr0.length; i++)
-            if (rres.chr0[i].name === name)
+            if (rres.chr0[i].name === name || name === null)
                 this.bindCHR0(animationController, rres.chr0[i]);
 
         for (let i = 0; i < rres.srt0.length; i++)
-            if (rres.srt0[i].name === name)
+            if (rres.srt0[i].name === name || name === null)
                 this.bindSRT0(animationController, rres.srt0[i]);
 
         for (let i = 0; i < rres.clr0.length; i++)
-            if (rres.clr0[i].name === name)
+            if (rres.clr0[i].name === name || name === null)
                 this.bindCLR0(animationController, rres.clr0[i]);
 
         for (let i = 0; i < rres.pat0.length; i++)
-            if (rres.pat0[i].name === name)
+            if (rres.pat0[i].name === name || name === null)
                 this.bindPAT0(animationController, rres.pat0[i]);
     }
 
