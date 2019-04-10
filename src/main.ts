@@ -73,12 +73,13 @@ import { standardFullClearRenderPassDescriptor } from './gfx/helpers/RenderTarge
 const sceneGroups = [
     "Wii",
     MKWII.sceneGroup,
+    RTDL.sceneGroup,
+    KLONOA.sceneGroup,
     SMG1.sceneGroup,
     SMG2.sceneGroup,
     SPM.sceneGroup,
     ZSS.sceneGroup,
     ELB.sceneGroup,
-    RTDL.sceneGroup,
     "GameCube",
     LM.sceneGroup,
     MKDD.sceneGroup,
@@ -110,7 +111,6 @@ const sceneGroups = [
     DKS.sceneGroup,
     THUG2.sceneGroup,
     SONIC_COLORS.sceneGroup,
-    KLONOA.sceneGroup,
 ];
 
 function loadFileAsPromise(file: File): Progressable<ArrayBufferSlice> {

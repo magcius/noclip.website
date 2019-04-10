@@ -411,7 +411,7 @@ export class MDL0ModelInstance {
         for (let i = 0; i < rres.clr0.length; i++)
             if (rres.clr0[i].name === name)
                 this.bindCLR0(animationController, rres.clr0[i]);
-    
+
         for (let i = 0; i < rres.pat0.length; i++)
             if (rres.pat0[i].name === name)
                 this.bindPAT0(animationController, rres.pat0[i]);

@@ -30,7 +30,6 @@ const enum KlonoaPass {
 
 class KlonoaRenderer implements Viewer.SceneGfx {
     public viewRenderer = new GfxRenderInstViewRenderer();
-    public renderTarget = new BasicRenderTarget();
     public mainRenderTarget = new BasicRenderTarget();
     public opaqueSceneTexture = new ColorTexture();
     public modelInstances: MDL0ModelInstance[] = [];
@@ -54,8 +53,9 @@ class KlonoaRenderer implements Viewer.SceneGfx {
     public destroy(device: GfxDevice): void {
         this.textureHolder.destroy(device);
         this.viewRenderer.destroy(device);
-        this.renderTarget.destroy(device);
         this.renderHelper.destroy(device);
+        this.mainRenderTarget.destroy(device);
+        this.opaqueSceneTexture.destroy(device);
 
         for (let i = 0; i < this.modelData.length; i++)
             this.modelData[i].destroy(device);
@@ -104,18 +104,11 @@ class KlonoaRenderer implements Viewer.SceneGfx {
 }
 
 class KlonoaSceneDesc implements Viewer.SceneDesc {
-    constructor(public id: string, public name: string) {
+    constructor(public id: string, public name: string, public texBinName = `tex${id.slice(1, 3)}.bin`) {
     }
 
     public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         const stageBinName = `${this.id}.bin`;
-
-        let texBinName = `tex${this.id.slice(1, 3)}.bin`;
-
-        // "s330.bin" does not have a matching tex bin. Presumably, they ran out of "32"
-        // numbers and that my heuristics for detecting the texture pack are not what the
-        // game does.
-        if (texBinName === 'tex33.bin') texBinName = 'tex32.bin';
 
         function fetchLandscapeBin(filename: string) {
             return fetchData(`${pathBase}/us/landscape/${filename}`, abortSignal).then((data) => {
@@ -126,7 +119,7 @@ class KlonoaSceneDesc implements Viewer.SceneDesc {
             });
         }
 
-        return Progressable.all([fetchLandscapeBin(stageBinName), fetchLandscapeBin(texBinName)]).then(([stageBinData, texBinData]) => {
+        return Progressable.all([fetchLandscapeBin(stageBinName), fetchLandscapeBin(this.texBinName)]).then(([stageBinData, texBinData]) => {
             const renderer = new KlonoaRenderer(device);
 
             if (texBinData.byteLength !== 0) {
@@ -163,9 +156,15 @@ class KlonoaSceneDesc implements Viewer.SceneDesc {
 
             const anmRRESData = arc.findFileData(`arc/anm.bin`);
             if (anmRRESData !== null) {
-                const anmRRES = BRRES.parse(arc.findFileData(`arc/anm.bin`));
-                for (let i = 0; i < renderer.modelInstances.length; i++)
-                    renderer.modelInstances[i].bindRRESAnimations(renderer.animationController, anmRRES);
+                const anmRRES = BRRES.parse(anmRRESData);
+
+                for (let i = 0; i < renderer.modelInstances.length; i++) {
+                    const modelInstance = renderer.modelInstances[i];
+                    modelInstance.bindRRESAnimations(renderer.animationController, anmRRES);
+
+                    // Also look for "_t" suffix versions. Appears to exist in some maps.
+                    modelInstance.bindRRESAnimations(renderer.animationController, anmRRES, `${modelInstance.mdl0Model.mdl0.name}_t`);
+                }
             }
 
             renderer.renderHelper.finishBuilder(device, renderer.viewRenderer);
@@ -175,7 +174,146 @@ class KlonoaSceneDesc implements Viewer.SceneDesc {
     }
 }
 
+// Named organized by SleepySpaceKoopa on Discord.
 const sceneDescs = [
+    "Breezegale, the Wind Village: \"The Beginnings of Gale\"",
+    new KlonoaSceneDesc("s110", "Vision 1-1, Area 1"),
+    new KlonoaSceneDesc("s111", "Vision 1-1, Area 2"),
+    new KlonoaSceneDesc("s112", "Vision 1-1, Area 3"),
+    new KlonoaSceneDesc("s113", "Vision 1-1, Area 4"),
+
+    "Guston Mine: \"The Diva and the Dark Spirit\"",
+    new KlonoaSceneDesc("s120", "Vision 1-2, Area 1"),
+    new KlonoaSceneDesc("s121", "Vision 1-2, Area 2"),
+    new KlonoaSceneDesc("s122", "Vision 1-2, Area 3"),
+    new KlonoaSceneDesc("s123", "Vision 1-2, Area 4"),
+    new KlonoaSceneDesc("s124", "Vision 1-2, Area 5"),
+    new KlonoaSceneDesc("s125", "Vision 1-2, Area 6"),
+    new KlonoaSceneDesc("s126", "Vision 1-2, Area 7"),
+    new KlonoaSceneDesc("s127", "Vision 1-2, Area 8"),
+
+    "Forlock, the Tree Village: \"Deep in the Dying Forest\"",
+    new KlonoaSceneDesc("s210", "Vision 2-1, Area 1"),
+    new KlonoaSceneDesc("s211", "Vision 2-1, Area 2"),
+    new KlonoaSceneDesc("s212", "Vision 2-1, Area 3"),
+    new KlonoaSceneDesc("s213", "Vision 2-1, Area 4"),
+
+    "The Kingdom of Jugpot: \"Beyond the Backwards Waterfall\"",
+    new KlonoaSceneDesc("s220", "Vision 2-2, Area 1"),
+    new KlonoaSceneDesc("s221", "Vision 2-2, Area 2"),
+    new KlonoaSceneDesc("s222", "Vision 2-2, Area 3"),
+    new KlonoaSceneDesc("s223", "Vision 2-2, Area 4"),
+    new KlonoaSceneDesc("s224", "Vision 2-2, Area 5"),
+    new KlonoaSceneDesc("s225", "Vision 2-2, Area 6"),
+    new KlonoaSceneDesc("s226", "Vision 2-2, Area 7"),
+
+    "Forlock, the Tree Village: \"Rebirth of the Forest\"",
+    new KlonoaSceneDesc("s310", "Vision 3-1, Area 1"),
+    new KlonoaSceneDesc("s311", "Vision 3-1, Area 2"),
+    new KlonoaSceneDesc("s312", "Vision 3-1, Area 3"),
+    new KlonoaSceneDesc("s313", "Vision 3-1, Area 4"),
+    new KlonoaSceneDesc("s314", "Vision 3-1, Area 5"),
+    new KlonoaSceneDesc("s315", "Vision 3-1, Area 6"),
+
+    "The Tree Mansion of Machinery: \"The Stopped Gear\"",
+    new KlonoaSceneDesc("s320", "Vision 3-2, Area 1"),
+    new KlonoaSceneDesc("s321", "Vision 3-2, Area 2"),
+    new KlonoaSceneDesc("s322", "Vision 3-2, Area 3"),
+    new KlonoaSceneDesc("s323", "Vision 3-2, Area 4"),
+    new KlonoaSceneDesc("s324", "Vision 3-2, Area 5"),
+    new KlonoaSceneDesc("s325", "Vision 3-2, Area 6"),
+    new KlonoaSceneDesc("s326", "Vision 3-2, Area 7"),
+    new KlonoaSceneDesc("s327", "Vision 3-2, Area 8"),
+    new KlonoaSceneDesc("s328", "Vision 3-2, Area 9"),
+    new KlonoaSceneDesc("s329", "Vision 3-2, Area 10"),
+    new KlonoaSceneDesc("s330", "Vision 3-2, Area 11", "tex32.bin"),
+
+    "A Village in Danger",
+    new KlonoaSceneDesc("s410", "Vision 4-1, Area 1"),
+    new KlonoaSceneDesc("s412", "Vision 4-1, Area 2"),
+    new KlonoaSceneDesc("s413", "Vision 4-1, Area 3"),
+
+    "A Lull in the Wind: \"The Leviathan's Ice Cavern\"",
+    new KlonoaSceneDesc("s420", "Vision 4-2, Area 1"),
+    new KlonoaSceneDesc("s421", "Vision 4-2, Area 2"),
+    new KlonoaSceneDesc("s422", "Vision 4-2, Area 3"),
+    new KlonoaSceneDesc("s423", "Vision 4-2, Area 4"),
+    new KlonoaSceneDesc("s424", "Vision 4-2, Area 5"),
+    new KlonoaSceneDesc("s425", "Vision 4-2, Area 6"),
+    new KlonoaSceneDesc("s426", "Vision 4-2, Area 7"),
+    new KlonoaSceneDesc("s427", "Vision 4-2, Area 8"),
+    new KlonoaSceneDesc("s428", "Vision 4-2, Area 9"),
+    new KlonoaSceneDesc("s430", "Vision 4-2, Area 10", "tex42.bin"),
+    new KlonoaSceneDesc("s431", "Vision 4-2, Area 11", "tex42.bin"),
+
+    "The Four Orbs: \"Coronia, Temple of the Sun\"",
+    new KlonoaSceneDesc("s510", "Vision 5-1, Area 1"),
+    new KlonoaSceneDesc("s511", "Vision 5-1, Area 2"),
+    new KlonoaSceneDesc("s512", "Vision 5-1, Area 3"),
+    new KlonoaSceneDesc("s513", "Vision 5-1, Area 4"),
+    new KlonoaSceneDesc("s514", "Vision 5-1, Area 5"),
+    new KlonoaSceneDesc("s515", "Vision 5-1, Area 6"),
+    new KlonoaSceneDesc("s516", "Vision 5-1, Area 7"),
+
+    "Between Light and Darkness: \"High Above Coronia\"",
+    new KlonoaSceneDesc("s520", "Vision 5-2, Area 1"),
+    new KlonoaSceneDesc("s521", "Vision 5-2, Area 2"),
+    new KlonoaSceneDesc("s522", "Vision 5-2, Area 3"),
+    new KlonoaSceneDesc("s523", "Vision 5-2, Area 4"),
+    new KlonoaSceneDesc("s524", "Vision 5-2, Area 5"),
+    new KlonoaSceneDesc("s525", "Vision 5-2, Area 6"),
+    new KlonoaSceneDesc("s526", "Vision 5-2, Area 7"),
+    new KlonoaSceneDesc("s527", "Vision 5-2, Area 8"),
+    new KlonoaSceneDesc("s528", "Vision 5-2, Area 9"),
+    new KlonoaSceneDesc("s530", "Vision 5-2, Area 10", "tex52.bin"),
+
+    "The Legendary Kingdom: \"Cress, the Moon Kingdom\"",
+    new KlonoaSceneDesc("s610", "Vision 6-1, Area 1"),
+    new KlonoaSceneDesc("s611", "Vision 6-1, Area 2"),
+    new KlonoaSceneDesc("s612", "Vision 6-1, Area 3"),
+    new KlonoaSceneDesc("s613", "Vision 6-1, Area 4"),
+    new KlonoaSceneDesc("s614", "Vision 6-1, Area 5"),
+    new KlonoaSceneDesc("s615", "Vision 6-1, Area 6"),
+    new KlonoaSceneDesc("s616", "Vision 6-1, Area 7"),
+    new KlonoaSceneDesc("s617", "Vision 6-1, Area 8"),
+
+    "The Time of Restoration: \"The Prism Corridor\"",
+    new KlonoaSceneDesc("s620", "Vision 6-2 Area 1"),
+    new KlonoaSceneDesc("s621", "Vision 6-2 Area 2"),
+    new KlonoaSceneDesc("s622", "Vision 6-2 Area 3"),
+    new KlonoaSceneDesc("s623", "Vision 6-2 Area 4"),
+    new KlonoaSceneDesc("s624", "Vision 6-2 Area 5"),
+    new KlonoaSceneDesc("s625", "Vision 6-2 Area 6"),
+    new KlonoaSceneDesc("s626", "Vision 6-2 Area 7"),
+    new KlonoaSceneDesc("s627", "Vision 6-2 Area 8"),
+    new KlonoaSceneDesc("s630", "Vision 6-2 Area 9", "tex62.bin"),
+    new KlonoaSceneDesc("s631", "Vision 6-2 Area 10", "tex62.bin"),
+    new KlonoaSceneDesc("s632", "Vision 6-2 Area 11", "tex62.bin"),
+    new KlonoaSceneDesc("s633", "Vision 6-2 Area 12", "tex62.bin"),
+    new KlonoaSceneDesc("s634", "Vision 6-2 Area 13", "tex62.bin"),
+    new KlonoaSceneDesc("s635", "Vision 6-2 Area 14", "tex62.bin"),
+    new KlonoaSceneDesc("s636", "Vision 6-2 Area 15", "tex62.bin"),
+
+    "Ending",
+    new KlonoaSceneDesc("s730", "Final Vision, Area 1"),
+    new KlonoaSceneDesc("s731", "Final Vision, Area 2"),
+    new KlonoaSceneDesc("s732", "Final Vision, Area 3"),
+
+    "Tower of Balue: \"Bonus Vision\"",
+    new KlonoaSceneDesc("s810", "Bonus Vision, Area 1"),
+    new KlonoaSceneDesc("s811", "Bonus Vision, Area 2"),
+    new KlonoaSceneDesc("s812", "Bonus Vision, Area 3"),
+    new KlonoaSceneDesc("s813", "Bonus Vision, Area 4"),
+    new KlonoaSceneDesc("s814", "Bonus Vision, Area 5"),
+    new KlonoaSceneDesc("s815", "Bonus Vision, Area 6"),
+    new KlonoaSceneDesc("s816", "Bonus Vision, Area 7"),
+    new KlonoaSceneDesc("s817", "Bonus Vision, Area 8"),
+    new KlonoaSceneDesc("s818", "Bonus Vision, Area 9"),
+    new KlonoaSceneDesc("s820", "Bonus Vision, Area 10", "tex82.bin"),
+    new KlonoaSceneDesc("s821", "Bonus Vision, Area 11", "tex82.bin"),
+    new KlonoaSceneDesc("s822", "Bonus Vision, Area 12", "tex82.bin"),
+
+    "Misc. Cutscene & Boss Areas",
     new KlonoaSceneDesc("s000", "s000"),
     new KlonoaSceneDesc("s001", "s001"),
     new KlonoaSceneDesc("s010", "s010"),
@@ -184,115 +322,7 @@ const sceneDescs = [
     new KlonoaSceneDesc("s040", "s040"),
     new KlonoaSceneDesc("s043", "s043"),
     new KlonoaSceneDesc("s050", "s050"),
-    new KlonoaSceneDesc("s110", "s110"),
-    new KlonoaSceneDesc("s111", "s111"),
-    new KlonoaSceneDesc("s112", "s112"),
-    new KlonoaSceneDesc("s113", "s113"),
-    new KlonoaSceneDesc("s120", "s120"),
-    new KlonoaSceneDesc("s121", "s121"),
-    new KlonoaSceneDesc("s122", "s122"),
-    new KlonoaSceneDesc("s123", "s123"),
-    new KlonoaSceneDesc("s124", "s124"),
-    new KlonoaSceneDesc("s125", "s125"),
-    new KlonoaSceneDesc("s126", "s126"),
-    new KlonoaSceneDesc("s127", "s127"),
-    new KlonoaSceneDesc("s210", "s210"),
-    new KlonoaSceneDesc("s211", "s211"),
-    new KlonoaSceneDesc("s212", "s212"),
-    new KlonoaSceneDesc("s213", "s213"),
-    new KlonoaSceneDesc("s220", "s220"),
-    new KlonoaSceneDesc("s221", "s221"),
-    new KlonoaSceneDesc("s222", "s222"),
-    new KlonoaSceneDesc("s223", "s223"),
-    new KlonoaSceneDesc("s224", "s224"),
-    new KlonoaSceneDesc("s225", "s225"),
-    new KlonoaSceneDesc("s226", "s226"),
-    new KlonoaSceneDesc("s310", "s310"),
-    new KlonoaSceneDesc("s311", "s311"),
-    new KlonoaSceneDesc("s312", "s312"),
-    new KlonoaSceneDesc("s313", "s313"),
-    new KlonoaSceneDesc("s314", "s314"),
-    new KlonoaSceneDesc("s315", "s315"),
-    new KlonoaSceneDesc("s320", "s320"),
-    new KlonoaSceneDesc("s321", "s321"),
-    new KlonoaSceneDesc("s322", "s322"),
-    new KlonoaSceneDesc("s323", "s323"),
-    new KlonoaSceneDesc("s324", "s324"),
-    new KlonoaSceneDesc("s325", "s325"),
-    new KlonoaSceneDesc("s326", "s326"),
-    new KlonoaSceneDesc("s327", "s327"),
-    new KlonoaSceneDesc("s328", "s328"),
-    new KlonoaSceneDesc("s329", "s329"),
-    new KlonoaSceneDesc("s330", "s330"),
-    new KlonoaSceneDesc("s410", "s410"),
-    new KlonoaSceneDesc("s412", "s412"),
-    new KlonoaSceneDesc("s413", "s413"),
-    new KlonoaSceneDesc("s420", "s420"),
-    new KlonoaSceneDesc("s421", "s421"),
-    new KlonoaSceneDesc("s422", "s422"),
-    new KlonoaSceneDesc("s423", "s423"),
-    new KlonoaSceneDesc("s424", "s424"),
-    new KlonoaSceneDesc("s425", "s425"),
-    new KlonoaSceneDesc("s426", "s426"),
-    new KlonoaSceneDesc("s427", "s427"),
-    new KlonoaSceneDesc("s428", "s428"),
-    new KlonoaSceneDesc("s430", "s430"),
-    new KlonoaSceneDesc("s431", "s431"),
-    new KlonoaSceneDesc("s510", "s510"),
-    new KlonoaSceneDesc("s511", "s511"),
-    new KlonoaSceneDesc("s512", "s512"),
-    new KlonoaSceneDesc("s513", "s513"),
-    new KlonoaSceneDesc("s514", "s514"),
-    new KlonoaSceneDesc("s515", "s515"),
-    new KlonoaSceneDesc("s516", "s516"),
-    new KlonoaSceneDesc("s520", "s520"),
-    new KlonoaSceneDesc("s521", "s521"),
-    new KlonoaSceneDesc("s522", "s522"),
-    new KlonoaSceneDesc("s523", "s523"),
-    new KlonoaSceneDesc("s524", "s524"),
-    new KlonoaSceneDesc("s525", "s525"),
-    new KlonoaSceneDesc("s526", "s526"),
-    new KlonoaSceneDesc("s527", "s527"),
-    new KlonoaSceneDesc("s528", "s528"),
-    new KlonoaSceneDesc("s530", "s530"),
-    new KlonoaSceneDesc("s610", "s610"),
-    new KlonoaSceneDesc("s611", "s611"),
-    new KlonoaSceneDesc("s612", "s612"),
-    new KlonoaSceneDesc("s613", "s613"),
-    new KlonoaSceneDesc("s614", "s614"),
-    new KlonoaSceneDesc("s615", "s615"),
-    new KlonoaSceneDesc("s616", "s616"),
-    new KlonoaSceneDesc("s617", "s617"),
-    new KlonoaSceneDesc("s620", "s620"),
-    new KlonoaSceneDesc("s621", "s621"),
-    new KlonoaSceneDesc("s622", "s622"),
-    new KlonoaSceneDesc("s623", "s623"),
-    new KlonoaSceneDesc("s624", "s624"),
-    new KlonoaSceneDesc("s625", "s625"),
-    new KlonoaSceneDesc("s626", "s626"),
-    new KlonoaSceneDesc("s627", "s627"),
-    new KlonoaSceneDesc("s630", "s630"),
-    new KlonoaSceneDesc("s631", "s631"),
-    new KlonoaSceneDesc("s632", "s632"),
-    new KlonoaSceneDesc("s633", "s633"),
-    new KlonoaSceneDesc("s634", "s634"),
-    new KlonoaSceneDesc("s635", "s635"),
-    new KlonoaSceneDesc("s636", "s636"),
-    new KlonoaSceneDesc("s730", "s730"),
-    new KlonoaSceneDesc("s731", "s731"),
-    new KlonoaSceneDesc("s732", "s732"),
-    new KlonoaSceneDesc("s810", "s810"),
-    new KlonoaSceneDesc("s811", "s811"),
-    new KlonoaSceneDesc("s812", "s812"),
-    new KlonoaSceneDesc("s813", "s813"),
-    new KlonoaSceneDesc("s814", "s814"),
-    new KlonoaSceneDesc("s815", "s815"),
-    new KlonoaSceneDesc("s816", "s816"),
-    new KlonoaSceneDesc("s817", "s817"),
-    new KlonoaSceneDesc("s818", "s818"),
-    new KlonoaSceneDesc("s820", "s820"),
-    new KlonoaSceneDesc("s821", "s821"),
-    new KlonoaSceneDesc("s822", "s822"),
+
     new KlonoaSceneDesc("s900", "s900"),
     new KlonoaSceneDesc("s901", "s901"),
     new KlonoaSceneDesc("s902", "s902"),
