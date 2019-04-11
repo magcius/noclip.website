@@ -295,3 +295,4 @@ export function makeErrorUI(errorCode: InitErrorCode): DocumentFragment {
     else
         throw "whoops";
 }
+
