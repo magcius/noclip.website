@@ -96,9 +96,10 @@ interface GfxRenderPipelineP_GL extends GfxRenderPipeline {
     drawMode: GLenum;
     megaState: GfxMegaStateDescriptor;
     inputLayout: GfxInputLayoutP_GL | null;
+    ready: boolean;
 }
 
-export function translateVertexFormat(fmt: GfxFormat): { size: number, type: GLenum, normalized: boolean } {
+function translateVertexFormat(fmt: GfxFormat): { size: number, type: GLenum, normalized: boolean } {
     function translateType(flags: FormatTypeFlags): GLenum {
         switch (flags) {
         case FormatTypeFlags.U8:
@@ -518,12 +519,17 @@ class ResourceCreationTracker {
     }
 }
 
+interface KHR_parallel_shader_compile {
+    COMPLETION_STATUS_KHR: number;
+}
+
 class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _fullscreenCopyMegaState = fullscreenMegaState;
     private _fullscreenCopyProgram: GfxProgramP_GL;
 
     private _WEBGL_compressed_texture_s3tc: WEBGL_compressed_texture_s3tc | null;
     private _WEBGL_compressed_texture_s3tc_srgb: WEBGL_compressed_texture_s3tc_srgb | null;
+    private _KHR_parallel_shader_compile: KHR_parallel_shader_compile | null;
 
     private _currentColorAttachments: GfxColorAttachmentP_GL[] = [];
     private _currentDepthStencilAttachment: GfxDepthStencilAttachmentP_GL | null;
@@ -549,6 +555,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     constructor(public gl: WebGL2RenderingContext, programCache: ProgramCache | null = null) {
         this._WEBGL_compressed_texture_s3tc = gl.getExtension('WEBGL_compressed_texture_s3tc');
         this._WEBGL_compressed_texture_s3tc_srgb = gl.getExtension('WEBGL_compressed_texture_s3tc_srgb');
+        this._KHR_parallel_shader_compile = gl.getExtension('KHR_parallel_shader_compile');
 
         if (programCache !== null) {
             this._programCache = programCache;
@@ -938,7 +945,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         assert(program.deviceProgram.uniformBufferLayouts.length === bindingLayouts.numUniformBuffers);
         const megaState = descriptor.megaStateDescriptor;
         const inputLayout = descriptor.inputLayout as GfxInputLayoutP_GL | null;
-        const pipeline: GfxRenderPipelineP_GL = { _T: _T.RenderPipeline, ResourceUniqueId: this.getNextUniqueId(), bindingLayouts, drawMode, program, megaState, inputLayout };
+        const pipeline: GfxRenderPipelineP_GL = { _T: _T.RenderPipeline, ResourceUniqueId: this.getNextUniqueId(), bindingLayouts, drawMode, program, megaState, inputLayout, ready: false };
         this._resourceCreationTracker.trackResourceCreated(pipeline);
         return pipeline;
     }
@@ -1060,6 +1067,22 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             return this._WEBGL_compressed_texture_s3tc !== null;
         default:
             return true;
+        }
+    }
+
+    public queryPipelineReady(o: GfxRenderPipeline): boolean {
+        const pipeline = o as GfxRenderPipelineP_GL;
+        if (pipeline.ready) {
+            return true;
+        } else {
+            if (this._KHR_parallel_shader_compile !== null) {
+                const glProgram = pipeline.program.deviceProgram.glProgram;
+                pipeline.ready = this.gl.getProgramParameter(glProgram, this._KHR_parallel_shader_compile.COMPLETION_STATUS_KHR);
+            } else {
+                pipeline.ready = true;
+            }
+
+            return pipeline.ready;
         }
     }
 
