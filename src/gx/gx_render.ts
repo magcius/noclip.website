@@ -9,7 +9,7 @@ import * as GX_Texture from './gx_texture';
 import * as Viewer from '../viewer';
 
 import { assert, nArray } from '../util';
-import { LoadedVertexData, LoadedVertexLayout } from './gx_displaylist';
+import { LoadedVertexData, LoadedVertexLayout, LoadedVertexPacket } from './gx_displaylist';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { TextureMapping, TextureHolder, LoadedTexture } from '../TextureHolder';
 
@@ -75,8 +75,6 @@ export function fillSceneParamsData(d: Float32Array, sceneParams: SceneParams, b
 export function fillMaterialParamsData(d: Float32Array, materialParams: MaterialParams, bOffs: number = 0): void {
     let offs = bOffs;
 
-    // Texture mapping requires special effort.
-
     for (let i = 0; i < 12; i++)
         offs += fillColor(d, offs, materialParams.u_Color[i]);
     for (let i = 0; i < 10; i++)
@@ -92,8 +90,8 @@ export function fillMaterialParamsData(d: Float32Array, materialParams: Material
         offs += fillColor(d, offs, light.Color);
         offs += fillVec3(d, offs, light.Position);
         offs += fillVec3(d, offs, light.Direction);
-        offs += fillVec3(d, offs, light.CosAtten);
         offs += fillVec3(d, offs, light.DistAtten);
+        offs += fillVec3(d, offs, light.CosAtten);
     }
 
     assert(offs === bOffs + u_MaterialParamsBufferSize);
@@ -123,7 +121,6 @@ export class GXMaterialHelperGfx {
         this.templateRenderInst.name = material.name;
         this.createProgram();
         GX_Material.translateGfxMegaState(this.templateRenderInst.setMegaStateFlags(), material);
-        this.programKey = 0;
         renderHelper.renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, ub_MaterialParams);
     }
 
@@ -213,17 +210,20 @@ export class GXShapeHelperGfx {
         this.inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
     }
 
-    public buildRenderInst(renderInstBuilder: GfxRenderInstBuilder, baseRenderInst: GfxRenderInst = null): GfxRenderInst {
+    public buildRenderInstPacket(renderInstBuilder: GfxRenderInstBuilder, packet: LoadedVertexPacket | null = null, baseRenderInst: GfxRenderInst | null = null): GfxRenderInst {
         const renderInst = renderInstBuilder.newRenderInst(baseRenderInst);
         renderInstBuilder.newUniformBufferInstance(renderInst, ub_PacketParams);
-        renderInst.drawIndexes(this.loadedVertexData.totalTriangleCount * 3);
+        if (packet !== null)
+            renderInst.drawIndexes(packet.indexCount, packet.indexOffset);
+        else
+            renderInst.drawIndexes(this.loadedVertexData.totalIndexCount);
         renderInst.inputState = this.inputState;
         renderInst.setSamplerBindingsInherit();
         return renderInst;
     }
 
-    public pushRenderInst(renderInstBuilder: GfxRenderInstBuilder, baseRenderInst: GfxRenderInst = null): GfxRenderInst {
-        return renderInstBuilder.pushRenderInst(this.buildRenderInst(renderInstBuilder, baseRenderInst));
+    public buildRenderInst(renderInstBuilder: GfxRenderInstBuilder, baseRenderInst: GfxRenderInst = null): GfxRenderInst {
+        return this.buildRenderInstPacket(renderInstBuilder, null, baseRenderInst);
     }
 
     public fillPacketParams(packetParams: PacketParams, renderInst: GfxRenderInst, renderHelper: GXRenderHelperGfx): void {
@@ -258,6 +258,11 @@ export class GXRenderHelperGfx {
             { numUniformBuffers: 1, numSamplers: 8, }, // Material
             { numUniformBuffers: 1, numSamplers: 0, }, // Packet
         ]
+
+        assert(GX_Material.GX_Program.programReflection.uniformBufferLayouts[0].totalWordSize === u_SceneParamsBufferSize);
+        assert(GX_Material.GX_Program.programReflection.uniformBufferLayouts[1].totalWordSize === u_MaterialParamsBufferSize);
+        assert(GX_Material.GX_Program.programReflection.uniformBufferLayouts[2].totalWordSize === u_PacketParamsBufferSize);
+
         this.renderInstBuilder = new GfxRenderInstBuilder(device, GX_Material.GX_Program.programReflection, bindingLayouts, [ this.sceneParamsBuffer, this.materialParamsBuffer, this.packetParamsBuffer ]);
         // Create our scene buffer slot.
         this.templateRenderInst = this.renderInstBuilder.pushTemplateRenderInst();

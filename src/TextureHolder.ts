@@ -4,8 +4,7 @@ import { GfxSampler, GfxTexture, GfxDevice } from './gfx/platform/GfxPlatform';
 
 // Used mostly by indirect texture FB installations...
 export interface TextureOverride {
-    glTexture?: WebGLTexture;
-    gfxTexture?: GfxTexture;
+    gfxTexture: GfxTexture;
     width: number;
     height: number;
     flipY: boolean;
@@ -108,9 +107,8 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
 
     public findTexture(name: string): TextureType | null {
         const textureEntryIndex = this.findTextureEntryIndex(name);
-        if (textureEntryIndex >= 0) {
+        if (textureEntryIndex >= 0)
             return this.textureEntries[textureEntryIndex];
-        }
         return null;
     }
 
@@ -123,22 +121,25 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
 
     protected abstract loadTexture(device: GfxDevice, textureEntry: TextureType): LoadedTexture | null;
 
-    public addTextures(device: GfxDevice, textureEntries: TextureType[]): void {
+    public addTextures(device: GfxDevice, textureEntries: TextureType[], overwrite: boolean = false): void {
         for (let i = 0; i < textureEntries.length; i++) {
             const texture = textureEntries[i];
 
+            let index = this.textureEntries.findIndex((entry) => entry.name === texture.name);
             // Don't add dupes for the same name.
-            if (this.textureEntries.find((entry) => entry.name === texture.name) !== undefined)
+            if (index >= 0 && !overwrite)
                 continue;
+            if (index < 0)
+                index = this.textureEntries.length;
 
             const loadedTexture = this.loadTexture(device, texture);
             if (loadedTexture === null)
                 continue;
 
             const { gfxTexture, viewerTexture } = loadedTexture;
-            this.textureEntries.push(texture);
-            this.gfxTextures.push(gfxTexture);
-            this.viewerTextures.push(viewerTexture);
+            this.textureEntries[index] = texture;
+            this.gfxTextures[index] = gfxTexture;
+            this.viewerTextures[index] = viewerTexture;
         }
 
         if (this.onnewtextures !== null)

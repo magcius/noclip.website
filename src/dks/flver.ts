@@ -1,10 +1,10 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString, assert, hexdump, makeTextDecoder } from "../util";
+import { readString, assert, hexdump, getTextDecoder } from "../util";
 import { vec3 } from "gl-matrix";
 import { AABB } from "../Geometry";
 
-const utf16Decoder = makeTextDecoder('utf-16le');
+const utf16Decoder = getTextDecoder('utf-16le');
 
 function readStringUTF16(buffer: ArrayBufferSlice, offs: number): string {
     const arr = buffer.createTypedArray(Uint8Array, offs, Math.min(buffer.byteLength - offs, 0x100));

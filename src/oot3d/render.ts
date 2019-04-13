@@ -93,19 +93,23 @@ layout(row_major, std140) uniform ub_SceneParams {
 layout(row_major, std140) uniform ub_MaterialParams {
     vec4 u_ConstantColor[6];
     Mat4x3 u_TexMtx[3];
+    vec4 u_MatMisc[1];
 };
+
+#define u_DepthOffset    (u_MatMisc[0].x)
 
 layout(row_major, std140) uniform ub_PrmParams {
     Mat4x3 u_BoneMatrix[16];
     vec4 u_PrmMisc[2];
 };
 
-#define u_PosScale (u_PrmMisc[0].x)
-#define u_TexCoord0Scale (u_PrmMisc[0].y)
-#define u_TexCoord1Scale (u_PrmMisc[0].z)
-#define u_TexCoord2Scale (u_PrmMisc[0].w)
+#define u_PosScale        (u_PrmMisc[0].x)
+#define u_TexCoord0Scale  (u_PrmMisc[0].y)
+#define u_TexCoord1Scale  (u_PrmMisc[0].z)
+#define u_TexCoord2Scale  (u_PrmMisc[0].w)
 #define u_BoneWeightScale (u_PrmMisc[1].x)
 #define u_BoneDimension   (u_PrmMisc[1].y)
+#define u_UseVertexColor  (u_PrmMisc[1].z)
 
 uniform sampler2D u_Texture[3];
 `;
@@ -285,7 +289,9 @@ void main() {
     vec4 t_ResultColor = t_CmbOut;
 
     #ifdef USE_LIGHTING
-        float t_FogFactor = clamp((v_DrawDistance - v_Depth) / (v_DrawDistance - v_FogStart), 0.0, 1.0);
+        // NOTE(quade): 0.15 is a magic number
+        // fog in these games never seems to be totally opaque
+        float t_FogFactor = clamp((v_DrawDistance - v_Depth) / (v_DrawDistance - v_FogStart), 0.15, 1.0);
         t_ResultColor.rgb = mix(v_FogColor, t_ResultColor.rgb, t_FogFactor);
     #endif
 
@@ -300,6 +306,11 @@ void main() {
     #endif
 
     gl_FragColor = t_ResultColor;
+
+    float t_BasicDepth = 2.0 * gl_FragCoord.z - 1.0;
+    float t_DepthScale = 1.0;
+    float t_DepthOffset = u_DepthOffset;
+    gl_FragDepth = t_BasicDepth * t_DepthScale + t_DepthOffset;
 }
 `;
     }
@@ -381,19 +392,27 @@ void main() {
     vec4 t_Position = vec4(a_Position * u_PosScale, 1.0);
     gl_Position = Mul(u_Projection, Mul(_Mat4x4(t_BoneMatrix), t_Position));
 
-    v_Color = a_Color;
+    if (u_UseVertexColor > 0.0)
+        v_Color = a_Color;
+    else
+        v_Color = vec4(1);
 
     v_Normal = a_Normal;
     v_Depth = gl_Position.w;
     v_FogColor = FOG_COLOR;
-    v_DrawDistance = DRAW_DISTANCE;
-    v_FogStart = FOG_START;
+
+    // NOTE(quade): 4.0 is a magic number
+    // haven't fully figured out these values yet
+    v_DrawDistance = DRAW_DISTANCE / 4.0;
+    v_FogStart = FOG_START / 4.0;
 
 #ifdef USE_MONOCHROME_VERTEX_COLOR
     v_Color.rgb = Monochrome(v_Color.rgb);
 #endif
 
 #ifdef USE_LIGHTING
+    // NOTE(quade): 2.0 is a magic number
+    // ambient colour appears to have a higher intensity 
     vec3 t_Lighting = AMBIENT_LIGHT_COLOR * 2.0;
     t_Lighting += clamp(dot(-a_Normal, PRIMARY_LIGHT_DIRECTION), 0.0, 1.0) * PRIMARY_LIGHT_COLOR;
     t_Lighting += clamp(dot(-a_Normal, SECONDARY_LIGHT_DIRECTION), 0.0, 1.0) * SECONDARY_LIGHT_COLOR;
@@ -451,7 +470,7 @@ class MaterialInstance {
     private uvEnabled: boolean = false;
     private vertexColorScale = 1;
 
-    public environmentSettings: ZSI.ZSIEnvironmentSettings;
+    public environmentSettings = new ZSI.ZSIEnvironmentSettings;
 
     constructor(public cmb: CMB.CMB, public material: CMB.Material) {
         for (let i = 0; i < this.material.constantColors.length; i++)
@@ -489,7 +508,7 @@ class MaterialInstance {
     }
 
     public setEnvironmentSettings(environmentSettings: ZSI.ZSIEnvironmentSettings): void {
-        this.environmentSettings = environmentSettings;
+        this.environmentSettings.copy(environmentSettings);
         this.createProgram();
     }
 
@@ -506,21 +525,14 @@ class MaterialInstance {
 
         let additionalParameters = "";
 
-        let tempEnvironmentSettings;
-
-        if (this.environmentSettings)
-            tempEnvironmentSettings = this.environmentSettings;
-        else
-            tempEnvironmentSettings = new ZSI.ZSIEnvironmentSettings();
-
-        additionalParameters += `vec3 AMBIENT_LIGHT_COLOR = vec3(${tempEnvironmentSettings.ambientLightCol});\n`;
-        additionalParameters += `vec3 PRIMARY_LIGHT_COLOR = vec3(${tempEnvironmentSettings.primaryLightCol});\n`;
-        additionalParameters += `vec3 PRIMARY_LIGHT_DIRECTION = vec3(${tempEnvironmentSettings.primaryLightDir});\n`;
-        additionalParameters += `vec3 SECONDARY_LIGHT_COLOR = vec3(${tempEnvironmentSettings.secondaryLightCol});\n`;
-        additionalParameters += `vec3 SECONDARY_LIGHT_DIRECTION = vec3(${tempEnvironmentSettings.secondaryLightDir});\n`;
-        additionalParameters += `vec3 FOG_COLOR = vec3(${tempEnvironmentSettings.fogCol});\n`;
-        additionalParameters += `float FOG_START = ${program.generateFloat(tempEnvironmentSettings.fogStart)};\n`;
-        additionalParameters += `float DRAW_DISTANCE = ${program.generateFloat(tempEnvironmentSettings.drawDistance)};\n`;
+        additionalParameters += `vec3 AMBIENT_LIGHT_COLOR = vec3(${this.environmentSettings.ambientLightColor});\n`;
+        additionalParameters += `vec3 PRIMARY_LIGHT_COLOR = vec3(${this.environmentSettings.primaryLightColor});\n`;
+        additionalParameters += `vec3 PRIMARY_LIGHT_DIRECTION = vec3(${this.environmentSettings.primaryLightDir});\n`;
+        additionalParameters += `vec3 SECONDARY_LIGHT_COLOR = vec3(${this.environmentSettings.secondaryLightColor});\n`;
+        additionalParameters += `vec3 SECONDARY_LIGHT_DIRECTION = vec3(${this.environmentSettings.secondaryLightDir});\n`;
+        additionalParameters += `vec3 FOG_COLOR = vec3(${this.environmentSettings.fogColor});\n`;
+        additionalParameters += `float FOG_START = ${program.generateFloat(this.environmentSettings.fogStart)};\n`;
+        additionalParameters += `float DRAW_DISTANCE = ${program.generateFloat(this.environmentSettings.drawDistance)};\n`;
 
         program.generateVertexShader(additionalParameters);
 
@@ -624,6 +636,8 @@ class MaterialInstance {
                 offs += fillMatrix4x3(mapped, offs, scratchTexMatrix);
             }
 
+            offs += fillVec4(mapped, offs, this.material.polygonOffset);
+
             if (rebindSamplers)
                 this.templateRenderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
         }
@@ -686,6 +700,7 @@ class SepdData {
     private perInstanceBuffer: GfxBuffer | null = null;
     public inputState: GfxInputState;
     public inputLayout: GfxInputLayout;
+    public useVertexColor: boolean = false;
 
     constructor(device: GfxDevice, cmbContext: CmbContext, public sepd: CMB.Sepd) {
         const vatr = cmbContext.vatrChunk;
@@ -710,11 +725,7 @@ class SepdData {
         bindVertexAttrib(DMPProgram.a_Normal,      3, true,  vatr.normalByteOffset,    sepd.normal);
         // tangent
 
-        // If we don't have any color, use opaque white. The constant in the sepd is not guaranteed to be correct.
-        // XXX(jstpierre): Don't modify the input data if we can help it.
-        if (vatr.colorByteOffset < 0)
-            vec4.set(sepd.color.constant, 1, 1, 1, 1);
-
+        this.useVertexColor = vatr.colorByteOffset >= 0;
         bindVertexAttrib(DMPProgram.a_Color,       4, true,  vatr.colorByteOffset,     sepd.color);
         bindVertexAttrib(DMPProgram.a_TexCoord0,   2, false, vatr.texCoord0ByteOffset, sepd.texCoord0);
         bindVertexAttrib(DMPProgram.a_TexCoord1,   2, false, vatr.texCoord1ByteOffset, sepd.texCoord1);
@@ -827,7 +838,7 @@ class ShapeInstance {
                 }
 
                 offs += fillVec4(prmParamsMapped, offs, sepd.position.scale, sepd.texCoord0.scale, sepd.texCoord1.scale, sepd.texCoord2.scale);
-                offs += fillVec4(prmParamsMapped, offs, sepd.boneWeights.scale, sepd.boneDimension);
+                offs += fillVec4(prmParamsMapped, offs, sepd.boneWeights.scale, sepd.boneDimension, this.sepdData.useVertexColor ? 1 : 0);
             }
         }
     }

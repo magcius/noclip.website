@@ -467,6 +467,10 @@ export class GfxRenderInstViewRenderer {
             if (renderInst._pipeline === null || !(renderInst._flags & GfxRenderInstFlags.BINDINGS_CREATED))
                 continue;
 
+            // If our program is not ready yet, do not render it.
+            if (!device.queryPipelineReady(renderInst._pipeline))
+                continue;
+
             if ((renderInst.getPassMask() & passMask) === 0)
                 continue;
 

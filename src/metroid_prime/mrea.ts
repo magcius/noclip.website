@@ -4,19 +4,22 @@
 import * as GX_Material from '../gx/gx_material';
 import * as GX from '../gx/gx_enum';
 
+import * as Script from './script';
 import { TXTR } from './txtr';
 
 import { ResourceSystem } from "./resource";
 import { assert, readString, align } from "../util";
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { compileVtxLoaderMultiVat, GX_VtxDesc, GX_VtxAttrFmt, GX_Array, LoadedVertexData, LoadedVertexLayout, VtxLoader, compileVtxLoader } from '../gx/gx_displaylist';
-import { mat4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 import * as Pako from 'pako';
 import { AABB } from '../Geometry';
 
 export interface MREA {
     materialSet: MaterialSet;
     worldModels: WorldModel[];
+    scriptLayers: Script.ScriptLayer[];
+    lightLayers: AreaLightLayer[];
 }
 
 export const enum UVAnimationType {
@@ -246,8 +249,10 @@ export function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBu
             const lightingEnabled = !!(colorChannelFlags & 0x01);
             const ambColorSource: GX.ColorSrc = (colorChannelFlags >>> 1) & 0x01;
             const matColorSource: GX.ColorSrc = (colorChannelFlags >>> 2) & 0x01;
+            const diffuseFunction: GX.DiffuseFunction = (colorChannelFlags >>> 11) & 0x03;
+            const attenuationFunction: GX.AttenuationFunction = (colorChannelFlags >>> 13) & 0x03;
 
-            const colorChannel = { lightingEnabled, ambColorSource, matColorSource, litMask: 0, diffuseFunction: GX.DiffuseFunction.NONE, attenuationFunction: GX.AttenuationFunction.NONE };
+            const colorChannel = { lightingEnabled, ambColorSource, matColorSource, litMask: 0xFF, diffuseFunction, attenuationFunction };
             // XXX(jstpierre): What's with COLOR0A0?
             const alphaChannel = { lightingEnabled: false, ambColorSource: GX.ColorSrc.REG, matColorSource: GX.ColorSrc.REG, litMask: 0, diffuseFunction: GX.DiffuseFunction.NONE, attenuationFunction: GX.AttenuationFunction.NONE };
             lightChannels.push({ colorChannel, alphaChannel });
@@ -469,7 +474,7 @@ export function parseGeometry(buffer: ArrayBufferSlice, materialSet: MaterialSet
     function fillVatFormat(nrmType: GX.CompType, tex0Type: GX.CompType, compShift: number): GX_VtxAttrFmt[] {
         const vatFormat: GX_VtxAttrFmt[] = [];
         vatFormat[GX.VertexAttribute.POS] = { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.F32, compShift };
-        vatFormat[GX.VertexAttribute.NRM] = { compCnt: GX.CompCnt.NRM_XYZ, compType: nrmType, compShift };
+        vatFormat[GX.VertexAttribute.NRM] = { compCnt: GX.CompCnt.NRM_XYZ, compType: nrmType, compShift: 14 };
         vatFormat[GX.VertexAttribute.CLR0] = { compCnt: GX.CompCnt.CLR_RGBA, compType: GX.CompType.RGBA8, compShift };
         vatFormat[GX.VertexAttribute.CLR1] = { compCnt: GX.CompCnt.CLR_RGBA, compType: GX.CompType.RGBA8, compShift };
         vatFormat[GX.VertexAttribute.TEX0] = { compCnt: GX.CompCnt.TEX_ST, compType: tex0Type, compShift };
@@ -562,6 +567,131 @@ export function parseGeometry(buffer: ArrayBufferSlice, materialSet: MaterialSet
     return [geometry, sectionIndex];
 }
 
+export const enum AreaLightType {
+    LocalAmbient = 0,
+    Directional = 1,
+    Custom = 2,
+    Spot = 3
+}
+
+export class AreaLight {
+    type: AreaLightType = AreaLightType.Custom;
+    radius: number = 0;
+    gxLight: GX_Material.Light = new GX_Material.Light;
+}
+export interface AreaLightLayer {
+    lights: AreaLight[];
+    ambientColor: GX_Material.Color;
+}
+export interface EntityLights {
+    lights: AreaLight[];
+    ambientColor: GX_Material.Color;
+}
+
+export function parseLightLayer(buffer: ArrayBufferSlice, offs: number): [AreaLightLayer, number] {
+    let ambientColor: GX_Material.Color = new GX_Material.Color;
+    const view = buffer.createDataView();
+    const epsilon = 1.192092896e-07;
+    const originalOffs = offs;
+
+    const lights: AreaLight[] = [];
+    const lightCount = view.getUint32(offs);
+    offs += 4;
+
+    for (let i=0; i<lightCount; i++) {
+        const lightType = view.getUint32(offs);
+        const lightColorR = view.getFloat32(offs+4);
+        const lightColorG = view.getFloat32(offs+8);
+        const lightColorB = view.getFloat32(offs+12);
+        const posX = view.getFloat32(offs+16);
+        const posY = view.getFloat32(offs+20);
+        const posZ = view.getFloat32(offs+24);
+        const dirX = view.getFloat32(offs+28);
+        const dirY = view.getFloat32(offs+32);
+        const dirZ = view.getFloat32(offs+36);
+        const brightness = view.getFloat32(offs+40);
+        const spotCutoff = view.getFloat32(offs+44) / 2;
+        const falloffType = view.getUint32(offs+57);
+
+        if (lightType == AreaLightType.LocalAmbient) {
+            ambientColor.r = Math.min(lightColorR * brightness, 1);
+            ambientColor.g = Math.min(lightColorG * brightness, 1);
+            ambientColor.b = Math.min(lightColorB * brightness, 1);
+            ambientColor.a = 1;
+        }
+        else {
+            let light: AreaLight = new AreaLight();
+            light.type = lightType;
+            light.gxLight.Color.r = lightColorR;
+            light.gxLight.Color.g = lightColorG;
+            light.gxLight.Color.b = lightColorB;
+            light.gxLight.Color.a = 1;
+            vec3.set(light.gxLight.Position, posX, posY, posZ);
+            vec3.set(light.gxLight.Direction, dirX, dirY, dirZ);
+
+            if (lightType == AreaLightType.Directional) {
+                vec3.set(light.gxLight.DistAtten, 0, 1, 0);
+                vec3.set(light.gxLight.CosAtten, 0, 1, 0);
+            }
+            else {
+                const distAttenA = (falloffType == 0) ? (2.0 / brightness) : 0;
+                const distAttenB = (falloffType == 1) ? (250.0 / brightness) : 0;
+                const distAttenC = (falloffType == 2) ? (25000.0 / brightness) : 0;
+                vec3.set(light.gxLight.DistAtten, distAttenA, distAttenB, distAttenC);
+
+                if (lightType == AreaLightType.Spot) {
+                    vec3.negate(light.gxLight.Direction, vec3.normalize(light.gxLight.Direction, light.gxLight.Direction));
+
+                    // Calculate angle atten
+                    if (spotCutoff < 0 || spotCutoff > 90) {
+                        vec3.set(light.gxLight.CosAtten, 1, 0, 0);
+                    }
+                    else {
+                        const radCutoff = spotCutoff * Math.PI / 180;
+                        const cosCutoff = Math.cos(radCutoff);
+                        const invCosCutoff = 1 - cosCutoff;
+                        vec3.set(light.gxLight.CosAtten, 0, -cosCutoff / invCosCutoff, 1.0 / invCosCutoff);
+                    }
+                }
+                // All other values default to Custom (which are standard point lights)
+                else {
+                    vec3.set(light.gxLight.CosAtten, 1, 0, 0);
+                }
+            }
+                    
+            // Calculate radius
+            if (light.gxLight.DistAtten[1] >= epsilon || light.gxLight.DistAtten[2] >= epsilon) {
+                const intensity = Math.max(lightColorR, lightColorG, lightColorB);
+                
+                if (light.gxLight.DistAtten[2] > epsilon) {
+                    if (intensity <= epsilon) {
+                        light.radius = 0;
+                    }
+                    else {
+                        light.radius = Math.sqrt(intensity / (intensity * 5 / 255 * light.gxLight.DistAtten[2]));
+                    }
+                }
+                else {
+                    if (light.gxLight.DistAtten[1] <= epsilon) {
+                        light.radius = 0;
+                    }
+                    else {
+                        light.radius = intensity / (Math.max(intensity * 5 / 255, 0.2) * light.gxLight.DistAtten[1]);
+                    }
+                }
+            }
+            else {
+                light.radius = 3000000000000000000000000000000000000.0;
+            }
+
+            lights.push(light);
+        }
+        offs += 65;
+    }
+
+    return [ { lights, ambientColor }, offs - originalOffs ]
+}
+
 function parse_MP1(resourceSystem: ResourceSystem, assetID: string, buffer: ArrayBufferSlice): MREA {
     const view = buffer.createDataView();
 
@@ -574,6 +704,8 @@ function parse_MP1(resourceSystem: ResourceSystem, assetID: string, buffer: Arra
     const worldModelCount = view.getUint32(0x38);
     const dataSectionCount = view.getUint32(0x3C);
     const worldGeometrySectionIndex = view.getUint32(0x40);
+    const scriptLayersSectionIndex = view.getUint32(0x44);
+    const lightsSectionIndex = view.getUint32(0x50);
 
     const dataSectionSizeTable: number[] = [];
     let dataSectionSizeTableIdx = 0x60;
@@ -641,7 +773,49 @@ function parse_MP1(resourceSystem: ResourceSystem, assetID: string, buffer: Arra
         worldModels.push({ geometry, modelMatrix, bbox });
     }
 
-    return { materialSet, worldModels };
+    // Parse out script layers.
+    const scriptLayers: Script.ScriptLayer[] = [];
+    let scriptLayerOffs = dataSectionOffsTable[scriptLayersSectionIndex];
+    
+    const sclyMagic = readString(buffer, scriptLayerOffs, 4, false);
+    const sclyVersion = view.getUint32(scriptLayerOffs+4);
+    assert(sclyMagic == 'SCLY');
+    assert(sclyVersion == 1);
+
+    const numLayers = view.getUint32(scriptLayerOffs+8);
+    const scriptLayerSizes: number[] = [];
+    scriptLayerOffs += 12;
+
+    for (let i = 0; i < numLayers; i++)
+    {
+        scriptLayerSizes.push( view.getUint32(scriptLayerOffs) );
+        scriptLayerOffs += 4;
+    }
+
+    for (let i = 0; i < numLayers; i++)
+    {
+        const layer = Script.parseScriptLayer(buffer, scriptLayerOffs, resourceSystem);
+        scriptLayers.push(layer);
+        scriptLayerOffs += scriptLayerSizes[i];
+    }
+
+    // Parse out lights.
+    let lightOffs = dataSectionOffsTable[lightsSectionIndex];
+    const lightLayers: AreaLightLayer[] = [];
+    const lightsMagic = view.getUint32(lightOffs);
+    assert(lightsMagic == 0xbabedead);
+
+    const numLightLayers = 2; // number of layers is set per-game
+    lightOffs += 4;
+
+    for (let i = 0; i < numLightLayers; i++) {
+        let lightLayer: AreaLightLayer;
+        let size = 0;
+        [lightLayer, size] = parseLightLayer(buffer, lightOffs);
+        lightLayers.push(lightLayer);
+        lightOffs += size;
+    }
+    return { materialSet, worldModels, scriptLayers, lightLayers };
 }
 
 function combineBuffers(totalSize: number, buffers: Uint8Array[]): Uint8Array {
@@ -1132,7 +1306,9 @@ function parse_DKCR(resourceSystem: ResourceSystem, assetID: string, buffer: Arr
         worldModels.push({ geometry, bbox, modelMatrix });
     }
 
-    return { materialSet, worldModels };
+    const scriptLayers: Script.ScriptLayer[] = [];
+    const lightLayers: AreaLightLayer[] = [];
+    return { materialSet, worldModels, scriptLayers, lightLayers };
 }
 
 export function parse(resourceSystem: ResourceSystem, assetID: string, buffer: ArrayBufferSlice): MREA {

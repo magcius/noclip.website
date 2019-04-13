@@ -426,7 +426,8 @@ export class FlowerObjectRenderer implements ObjectRenderer {
         this.materialHelper = new GXMaterialHelperGfx(device, renderHelper, this.flowerData.gxMaterial);
 
         renderInstBuilder.pushTemplateRenderInst(this.materialHelper.templateRenderInst);
-        this.renderInst = flowerData.shapeHelperMain.pushRenderInst(renderInstBuilder);
+        this.renderInst = flowerData.shapeHelperMain.buildRenderInst(renderInstBuilder);
+        renderInstBuilder.pushRenderInst(this.renderInst);
         renderInstBuilder.popTemplateRenderInst();
     }
 

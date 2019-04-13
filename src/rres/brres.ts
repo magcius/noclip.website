@@ -935,6 +935,7 @@ function parseInputVertexBuffers(buffer: ArrayBufferSlice, vtxPosResDic: ResDicE
 
 export interface MDL0_ShapeEntry {
     name: string;
+    mtxIdx: number;
     loadedVertexLayout: LoadedVertexLayout;
     loadedVertexData: LoadedVertexData;
 };
@@ -1099,15 +1100,16 @@ function parseMDL0_ShapeEntry(buffer: ArrayBufferSlice, inputBuffers: InputVerte
     const loadedVertexData = vtxLoader.runVertices(vtxArrays, buffer.subarray(primDLOffs, primDLSize));
     assert(loadedVertexData.totalVertexCount === numVertices);
 
-    return { name, loadedVertexLayout, loadedVertexData };
+    return { name, mtxIdx, loadedVertexLayout, loadedVertexData };
 }
 
 const enum NodeFlags {
-    SRT_IDENTITY = 0x01,
-    TRANS_ZERO   = 0x02,
-    ROT_ZERO     = 0x04,
-    SCALE_ONE    = 0x08,
-    SCALE_HOMO   = 0x10,
+    SRT_IDENTITY = 0x00000001,
+    TRANS_ZERO   = 0x00000002,
+    ROT_ZERO     = 0x00000004,
+    SCALE_ONE    = 0x00000008,
+    SCALE_HOMO   = 0x00000010,
+    VISIBLE      = 0x00000100,
 }
 
 export const enum BillboardMode {
@@ -1128,6 +1130,9 @@ export interface MDL0_NodeEntry {
     billboardMode: BillboardMode;
     modelMatrix: mat4;
     bbox: AABB;
+    visible: boolean;
+    forwardBindPose: mat4;
+    inverseBindPose: mat4;
 }
 
 function parseMDL0_NodeEntry(buffer: ArrayBufferSlice): MDL0_NodeEntry {
@@ -1163,7 +1168,47 @@ function parseMDL0_NodeEntry(buffer: ArrayBufferSlice): MDL0_NodeEntry {
     const modelMatrix = mat4.create();
     calcModelMtx(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
 
-    return { name, id, mtxId, flags, billboardMode, modelMatrix, bbox };
+    const forwardBindPose00 = view.getFloat32(0x70);
+    const forwardBindPose01 = view.getFloat32(0x74);
+    const forwardBindPose02 = view.getFloat32(0x78);
+    const forwardBindPose03 = view.getFloat32(0x7C);
+    const forwardBindPose10 = view.getFloat32(0x80);
+    const forwardBindPose11 = view.getFloat32(0x84);
+    const forwardBindPose12 = view.getFloat32(0x88);
+    const forwardBindPose13 = view.getFloat32(0x8C);
+    const forwardBindPose20 = view.getFloat32(0x90);
+    const forwardBindPose21 = view.getFloat32(0x94);
+    const forwardBindPose22 = view.getFloat32(0x98);
+    const forwardBindPose23 = view.getFloat32(0x9C);
+    const forwardBindPose = mat4.fromValues(
+        forwardBindPose00, forwardBindPose10, forwardBindPose20, 0,
+        forwardBindPose01, forwardBindPose11, forwardBindPose21, 0,
+        forwardBindPose02, forwardBindPose12, forwardBindPose22, 0,
+        forwardBindPose03, forwardBindPose13, forwardBindPose23, 1,
+    );
+
+    const inverseBindPose00 = view.getFloat32(0xA0);
+    const inverseBindPose01 = view.getFloat32(0xA4);
+    const inverseBindPose02 = view.getFloat32(0xA8);
+    const inverseBindPose03 = view.getFloat32(0xAC);
+    const inverseBindPose10 = view.getFloat32(0xB0);
+    const inverseBindPose11 = view.getFloat32(0xB4);
+    const inverseBindPose12 = view.getFloat32(0xB8);
+    const inverseBindPose13 = view.getFloat32(0xBC);
+    const inverseBindPose20 = view.getFloat32(0xC0);
+    const inverseBindPose21 = view.getFloat32(0xC4);
+    const inverseBindPose22 = view.getFloat32(0xC8);
+    const inverseBindPose23 = view.getFloat32(0xCC);
+    const inverseBindPose = mat4.fromValues(
+        inverseBindPose00, inverseBindPose10, inverseBindPose20, 0,
+        inverseBindPose01, inverseBindPose11, inverseBindPose21, 0,
+        inverseBindPose02, inverseBindPose12, inverseBindPose22, 0,
+        inverseBindPose03, inverseBindPose13, inverseBindPose23, 1,
+    );
+
+    const visible = !!(flags & NodeFlags.VISIBLE);
+
+    return { name, id, mtxId, flags, billboardMode, modelMatrix, bbox, visible, forwardBindPose, inverseBindPose };
 }
 
 export const enum ByteCodeOp {
@@ -1200,20 +1245,68 @@ function parseMDL0_NodeTreeBytecode(buffer: ArrayBufferSlice): NodeTreeOp[] {
         if (op === ByteCodeOp.RET) {
             break;
         } else if (op === ByteCodeOp.NODEDESC) {
-            const nodeId = view.getUint16(i + 1);
-            const parentMtxId = view.getUint16(i + 3);
-            i += 5;
+            const nodeId = view.getUint16(i + 0x01);
+            const parentMtxId = view.getUint16(i + 0x03);
+            i += 0x05;
             nodeTreeOps.push({ op, nodeId, parentMtxId });
         } else if (op === ByteCodeOp.MTXDUP) {
-            const toMtxId = view.getUint16(i + 1);
-            const fromMtxId = view.getUint16(i + 3);
-            i += 5;
+            const toMtxId = view.getUint16(i + 0x01);
+            const fromMtxId = view.getUint16(i + 0x03);
+            i += 0x05;
             nodeTreeOps.push({ op, toMtxId, fromMtxId });
         } else {
             throw "whoops";
         }
     }
     return nodeTreeOps;
+}
+
+export interface NodeMixOp_ {
+    op: ByteCodeOp.NODEMIX;
+    dstMtxId: number;
+    blendMtxIds: number[];
+    weights: number[];
+}
+
+export interface EvpMtxOp {
+    op: ByteCodeOp.EVPMTX;
+    mtxId: number;
+    nodeId: number;
+}
+
+export type NodeMixOp = NodeMixOp_ | EvpMtxOp;
+
+function parseMDL0_NodeMixBytecode(buffer: ArrayBufferSlice): NodeMixOp[] {
+    const view = buffer.createDataView();
+
+    const nodeMixOps: NodeMixOp[] = [];
+    let i = 0;
+    while (true) {
+        const op: ByteCodeOp = view.getUint8(i);
+        if (op === ByteCodeOp.RET) {
+            break;
+        } else if (op === ByteCodeOp.NODEMIX) {
+            const dstMtxId = view.getUint16(i + 0x01);
+            const numBlendMtx = view.getUint8(i + 0x03);
+            i += 0x04;
+            const blendMtxIds: number[] = [];
+            const weights: number[] = [];
+            for (let j = 0; j < numBlendMtx; j++) {
+                blendMtxIds.push(view.getUint16(i + 0x00));
+                weights.push(view.getFloat32(i + 0x02));
+                i += 0x06;
+            }
+            nodeMixOps.push({ op, dstMtxId, blendMtxIds, weights });
+        } else if (op === ByteCodeOp.EVPMTX) {
+            const mtxId = view.getUint16(i + 0x01);
+            const nodeId = view.getUint16(i + 0x03);
+            i += 0x05;
+            nodeMixOps.push({ op, mtxId, nodeId });
+        } else {
+            throw "whoops";
+        }
+    }
+    return nodeMixOps;
 }
 
 export interface DrawOp {
@@ -1232,10 +1325,10 @@ function parseMDL0_DrawBytecode(buffer: ArrayBufferSlice): DrawOp[] {
         if (op === ByteCodeOp.RET) {
             break;
         } else if (op === ByteCodeOp.DRAW) {
-            const matId = view.getUint16(i + 1);
-            const shpId = view.getUint16(i + 3);
-            const nodeId = view.getUint16(i + 5);
-            i += 8;
+            const matId = view.getUint16(i + 0x01);
+            const shpId = view.getUint16(i + 0x03);
+            const nodeId = view.getUint16(i + 0x05);
+            i += 0x08;
             drawOps.push({ matId, shpId, nodeId });
         } else {
             throw "whoops";
@@ -1246,6 +1339,7 @@ function parseMDL0_DrawBytecode(buffer: ArrayBufferSlice): DrawOp[] {
 
 interface MDL0_SceneGraph {
     nodeTreeOps: NodeTreeOp[];
+    nodeMixOps: NodeMixOp[];
     drawOpaOps: DrawOp[];
     drawXluOps: DrawOp[];
 }
@@ -1255,6 +1349,13 @@ function parseMDL0_SceneGraph(buffer: ArrayBufferSlice, byteCodeResDic: ResDicEn
     assert(nodeTreeResDicEntry !== null);
     const nodeTreeBuffer = buffer.subarray(nodeTreeResDicEntry.offs);
     const nodeTreeOps = parseMDL0_NodeTreeBytecode(nodeTreeBuffer);
+
+    let nodeMixOps: NodeMixOp[] = [];
+    const nodeMixResDicEntry = byteCodeResDic.find((entry => entry.name === "NodeMix"));
+    if (nodeMixResDicEntry) {
+        const nodeMixBuffer = buffer.subarray(nodeMixResDicEntry.offs);
+        nodeMixOps = parseMDL0_NodeMixBytecode(nodeMixBuffer);
+    }
 
     let drawOpaOps: DrawOp[] = [];
     const drawOpaResDicEntry = byteCodeResDic.find((entry => entry.name === "DrawOpa"));
@@ -1270,7 +1371,7 @@ function parseMDL0_SceneGraph(buffer: ArrayBufferSlice, byteCodeResDic: ResDicEn
         drawXluOps = parseMDL0_DrawBytecode(drawXluBuffer);
     }
 
-    return { nodeTreeOps, drawOpaOps, drawXluOps };
+    return { nodeTreeOps, nodeMixOps, drawOpaOps, drawXluOps };
 }
 
 export interface MDL0 {
@@ -1280,6 +1381,8 @@ export interface MDL0 {
     shapes: MDL0_ShapeEntry[];
     nodes: MDL0_NodeEntry[];
     sceneGraph: MDL0_SceneGraph;
+    numWorldMtx: number;
+    numViewMtx: number;
 }
 
 function parseMDL0(buffer: ArrayBufferSlice): MDL0 {
@@ -1327,7 +1430,13 @@ function parseMDL0(buffer: ArrayBufferSlice): MDL0 {
     const numVerts = view.getUint32(infoOffs + 0x10);
     const numPolygons = view.getUint32(infoOffs + 0x14);
 
-    const isValidBBox = view.getUint8(infoOffs + 0x26);
+    const numViewMtx = view.getUint32(infoOffs + 0x1C);
+
+    const isValidBBox = view.getUint8(infoOffs + 0x22);
+
+    const mtxIdToNodeIdOffs = infoOffs + view.getUint32(infoOffs + 0x24);
+    const numWorldMtx = view.getUint32(mtxIdToNodeIdOffs + 0x00);
+
     // TODO(jstpierre): Skyward Sword doesn't use this.
     let bbox: AABB | null = null;
     if (isValidBBox) {
@@ -1366,7 +1475,7 @@ function parseMDL0(buffer: ArrayBufferSlice): MDL0 {
 
     const sceneGraph = parseMDL0_SceneGraph(buffer, byteCodeResDic);
 
-    return { name, bbox, materials, shapes, nodes, sceneGraph };
+    return { name, bbox, materials, shapes, nodes, sceneGraph, numWorldMtx, numViewMtx };
 }
 //#endregion
 
@@ -1503,6 +1612,38 @@ function makeConstantAnimationTrack(value: number): FloatAnimationTrack {
     return { type: AnimationTrackType.LINEAR, frames: Float32Array.of(value) };
 }
 
+function parseAnimationTrackC8(buffer: ArrayBufferSlice, numKeyframes: number): FloatAnimationTrack {
+    const frames = new Float32Array(numKeyframes + 1);
+    const view = buffer.createDataView();
+
+    const scale = view.getFloat32(0x00);
+    const bias = view.getFloat32(0x04);
+
+    let tableIdx = 0x08;
+    for (let i = 0; i < numKeyframes + 1; i++) {
+        frames[i] = (view.getUint8(tableIdx + 0x00) * scale) + bias;
+        tableIdx += 0x01;
+    }
+
+    return { type: AnimationTrackType.LINEAR, frames };
+}
+
+function parseAnimationTrackC16(buffer: ArrayBufferSlice, numKeyframes: number): FloatAnimationTrack {
+    const frames = new Float32Array(numKeyframes + 1);
+    const view = buffer.createDataView();
+
+    const scale = view.getFloat32(0x00);
+    const bias = view.getFloat32(0x04);
+
+    let tableIdx = 0x08;
+    for (let i = 0; i < numKeyframes + 1; i++) {
+        frames[i] = (view.getUint16(tableIdx + 0x00) * scale) + bias;
+        tableIdx += 0x02;
+    }
+
+    return { type: AnimationTrackType.LINEAR, frames };
+}
+
 function parseAnimationTrackC32(buffer: ArrayBufferSlice, numKeyframes: number): FloatAnimationTrack {
     const frames: Float32Array = buffer.createTypedArray(Float32Array, 0x00, numKeyframes + 1, Endianness.BIG_ENDIAN);
     return { type: AnimationTrackType.LINEAR, frames };
@@ -1519,7 +1660,7 @@ function parseAnimationTrackF32(buffer: ArrayBufferSlice): FloatAnimationTrack {
     for (let i = 0; i < numKeyframes; i++) {
         const frame = view.getUint8(keyframeTableIdx + 0x00);
         const value = (view.getUint16(keyframeTableIdx + 0x01) >>> 4) * scale + offset;
-        const tangent = (view.getInt16(keyframeTableIdx + 0x02) & 0x0FFF) / 0x20; // S6.5
+        const tangent = (view.getInt16(keyframeTableIdx + 0x02) << 20 >> 20) / 0x20; // S6.5
         const keyframe = { frame, value, tangent };
         frames.push(keyframe);
         keyframeTableIdx += 0x04;
@@ -2214,6 +2355,12 @@ function parseCHR0_NodeData(buffer: ArrayBufferSlice, numKeyframes: number): CHR
         } else if (trackFormat === TrackFormat._48) {
             const animationTrackOffs = view.getUint32(animationTableIdx);
             animationTrack = parseAnimationTrackF48(buffer.slice(animationTrackOffs));
+        } else if (trackFormat === TrackFormat.FRM_8) {
+            const animationTrackOffs = view.getUint32(animationTableIdx);
+            animationTrack = parseAnimationTrackC8(buffer.slice(animationTrackOffs), numKeyframes);
+        } else if (trackFormat === TrackFormat.FRM_16) {
+            const animationTrackOffs = view.getUint32(animationTableIdx);
+            animationTrack = parseAnimationTrackC16(buffer.slice(animationTrackOffs), numKeyframes);
         } else if (trackFormat === TrackFormat.FRM_32) {
             const animationTrackOffs = view.getUint32(animationTableIdx);
             animationTrack = parseAnimationTrackC32(buffer.slice(animationTrackOffs), numKeyframes);

@@ -16,7 +16,7 @@ import * as Yaz0 from '../compression/Yaz0';
 import * as BCSV from '../luigis_mansion/bcsv';
 import * as UI from '../ui';
 import { mat4, quat, vec3 } from 'gl-matrix';
-import { BMD, BRK, BTK, BCK, LoopMode } from './j3d';
+import { BMD, BRK, BTK, BCK, LoopMode, BVA } from './j3d';
 import { GfxBlendMode, GfxBlendFactor, GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxProgram, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxRenderPassDescriptor, GfxLoadDisposition } from '../gfx/platform/GfxPlatform';
 import AnimationController from '../AnimationController';
 import { fullscreenMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
@@ -926,6 +926,14 @@ class SMGSpawner {
         }
     }
 
+    private hasIndirectTexture(bmdModel: BMDModel): boolean {
+        const tex1Samplers = bmdModel.bmd.tex1.samplers;
+        for (let i = 0; i < tex1Samplers.length; i++)
+            if (tex1Samplers[i].name === 'IndDummy')
+                return true;
+        return false;
+    }
+
     public spawnObject(device: GfxDevice, zone: ZoneNode, layer: number, objinfo: ObjInfo, modelMatrixBase: mat4): void {
         const spawnGraph = (arcName: string, tag: SceneGraphTag = SceneGraphTag.Normal, animOptions: AnimOptions | null | undefined = undefined) => {
             const arcPath = `${this.pathBase}/ObjectData/${arcName}.arc`;
@@ -934,6 +942,9 @@ class SMGSpawner {
                 if (bmdModel === null)
                     return null;
 
+                if (this.hasIndirectTexture(bmdModel))
+                    tag = SceneGraphTag.Indirect;
+
                 // Trickery.
                 const rarc = this.modelCache.archiveCache.get(arcPath);
 
@@ -941,15 +952,14 @@ class SMGSpawner {
                 modelInstance.name = `${objinfo.objName} ${objinfo.objId}`;
 
                 if (tag === SceneGraphTag.Skybox) {
-                    // Kill translation and shrink a bit. Need to figure out how the game does skyboxen.
-                    const skyboxScale = 0.5;
-                    mat4.scale(objinfo.modelMatrix, objinfo.modelMatrix, [skyboxScale, skyboxScale, skyboxScale]);
+                    mat4.scale(objinfo.modelMatrix, objinfo.modelMatrix, [.5, .5, .5]);
 
+                    // Kill translation. Need to figure out how the game does skyboxen.
                     objinfo.modelMatrix[12] = 0;
                     objinfo.modelMatrix[13] = 0;
                     objinfo.modelMatrix[14] = 0;
 
-                    modelInstance.setIsSkybox(true);
+                    modelInstance.isSkybox = true;
                     modelInstance.passMask = SMGPass.SKYBOX;
                 } else if (tag === SceneGraphTag.Indirect) {
                     modelInstance.passMask = SMGPass.INDIRECT;
@@ -994,6 +1004,7 @@ class SMGSpawner {
 
         // Skyboxen.
         case 'BeyondSummerSky':
+        case 'BeyondHorizonSky':
         case 'BeyondGalaxySky':
         case 'CloudSky':
         case 'HalfGalaxySky':
@@ -1004,6 +1015,7 @@ class SMGSpawner {
         case 'VROrbit':
         case 'DesertSky':
         case 'GoodWeatherSky':
+        case 'PhantomSky':
             spawnGraph(name, SceneGraphTag.Skybox);
             break;
 
@@ -1096,9 +1108,8 @@ class SMGSpawner {
         // SMG2
         case 'Moc':
             spawnGraph(`Moc`, SceneGraphTag.Normal, { bck: 'turn.bck' }).then(([node, rarc]) => {
-                node.modelInstance.setShapeVisible(1, false);
-                node.modelInstance.setShapeVisible(2, false);
-                node.modelInstance.setShapeVisible(3, false);
+                const bva = BVA.parse(rarc.findFileData(`FaceA.bva`));
+                node.modelInstance.bindVAF1(bva.vaf1);
             });
             break;
         case 'PlantC':

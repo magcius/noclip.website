@@ -226,6 +226,10 @@ class DrawCallInstance {
         else if (textFilt === TextFilt.G_TF_BILERP)
             program.defines.set(`USE_TEXTFILT_BILERP`, '1')
 
+        const alphaCompare = (this.drawCall.DP_OtherModeL >>> 0) & 0x03;
+        if (alphaCompare !== 0x00)
+            program.defines.set(`USE_ALPHA_MASK`, '1');
+
         this.renderInst.setDeviceProgram(program);
     }
 

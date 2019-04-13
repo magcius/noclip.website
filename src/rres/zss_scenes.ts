@@ -7,7 +7,7 @@ import * as CX from '../compression/CX';
 import * as BRRES from './brres';
 import * as U8 from './u8';
 
-import { assert, readString, assertExists } from '../util';
+import { assert, readString, assertExists, hexzero } from '../util';
 import { fetchData } from '../fetch';
 import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
@@ -17,8 +17,8 @@ import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks, Color } from '../gx/gx_material
 import { mat4, quat } from 'gl-matrix';
 import AnimationController from '../AnimationController';
 import { ColorKind, GXRenderHelperGfx } from '../gx/gx_render';
-import { GfxDevice, GfxRenderPass, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
-import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
+import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxTexture, GfxTextureDimension, GfxFormat } from '../gfx/platform/GfxPlatform';
+import { GfxRenderInstViewRenderer, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { RENDER_HACKS_ICON } from '../bk/scenes';
 
@@ -27,6 +27,15 @@ const SAND_CLOCK_ICON = '<svg viewBox="0 0 100 100" height="20" fill="white"><g>
 const materialHacks: GXMaterialHacks = {
     lightingFudge: (p) => `vec4((0.5 * ${p.matSource}).rgb, 1.0)`,
 };
+
+interface BaseObj {
+    name: string;
+    unk1: number;
+    unk2: number;
+    unk4: number;
+    unk5: number;
+    unk6: number;
+}
 
 interface Obj {
     unk1: number; // 0x00. Appears to be object-specific parameters.
@@ -68,32 +77,32 @@ interface BZS {
     layouts: RoomLayout[];
 }
 
-class ModelArchiveCollection {
-    private search: U8.U8Archive[] = [];
-    private loaded = new Map<string, BRRES.RRES>();
+class ResourceSystem {
+    private mounts: U8.U8Archive[] = [];
+    private brresCache = new Map<string, BRRES.RRES>();
 
-    public addSearchPath(archive: U8.U8Archive): void {
-        this.search.push(archive);
+    public mountArchive(archive: U8.U8Archive): void {
+        this.mounts.push(archive);
     }
 
     private findFile(path: string): U8.U8File | null {
-        for (const archive of this.search) {
-            const file = archive.findFile(path);
-            if (file)
+        for (let i = 0; i < this.mounts.length; i++) {
+            const file = this.mounts[i].findFile(path);
+            if (file !== null)
                 return file;
         }
         return null;
     }
 
-    public loadRRESFromArc(device: GfxDevice, textureHolder: RRESTextureHolder, path: string): BRRES.RRES {
-        if (this.loaded.has(path))
-            return this.loaded.get(path);
+    public getRRES(device: GfxDevice, textureHolder: RRESTextureHolder, path: string): BRRES.RRES {
+        if (this.brresCache.has(path))
+            return this.brresCache.get(path);
 
         const file = assertExists(this.findFile(path));
         const arch = U8.parse(file.buffer);
         const rres = BRRES.parse(arch.findFile('g3d/model.brres').buffer);
         textureHolder.addRRESTextures(device, rres);
-        this.loaded.set(path, rres);
+        this.brresCache.set(path, rres);
         return rres;
     }
 }
@@ -137,7 +146,7 @@ class ZSSTextureHolder extends RRESTextureHolder {
     }
 }
 
-class SkywardSwordScene implements Viewer.SceneGfx {
+class SkywardSwordRenderer implements Viewer.SceneGfx {
     public viewRenderer = new GfxRenderInstViewRenderer();
     public mainRenderTarget = new BasicRenderTarget();
     public opaqueSceneTexture = new ColorTexture();
@@ -147,27 +156,38 @@ class SkywardSwordScene implements Viewer.SceneGfx {
     private stageBZS: BZS = null;
     private roomBZSes: BZS[] = [];
     private commonRRES: BRRES.RRES;
-    private oarcCollection = new ModelArchiveCollection();
+    private resourceSystem = new ResourceSystem();
     private modelCache = new ModelCache();
     private renderHelper: GXRenderHelperGfx;
+    private blackTexture: GfxTexture;
 
-    private mdl0Instances: MDL0ModelInstance[] = [];
+    public modelInstances: MDL0ModelInstance[] = [];
 
     constructor(device: GfxDevice, public stageId: string, public systemArchive: U8.U8Archive, public objPackArchive: U8.U8Archive, public stageArchive: U8.U8Archive) {
         this.renderHelper = new GXRenderHelperGfx(device);
         this.textureHolder = new ZSSTextureHolder();
         this.animationController = new AnimationController();
 
-        this.oarcCollection.addSearchPath(this.stageArchive);
-        this.oarcCollection.addSearchPath(this.objPackArchive);
+        this.resourceSystem.mountArchive(this.stageArchive);
+        this.resourceSystem.mountArchive(this.objPackArchive);
 
         const systemRRES = BRRES.parse(systemArchive.findFile('g3d/model.brres').buffer);
         this.textureHolder.addRRESTextures(device, systemRRES);
 
-        this.oarcCollection.loadRRESFromArc(device, this.textureHolder, 'oarc/SkyCmn.arc');
+        // Override the "Add" textures with a black texture to prevent things from being overly bright.
+        this.blackTexture = device.createTexture({
+            dimension: GfxTextureDimension.n2D, pixelFormat: GfxFormat.U8_RGBA,
+            width: 1, height: 1, depth: 1, numLevels: 1,
+        });
+        const hostAccessPass = device.createHostAccessPass();
+        hostAccessPass.uploadTextureData(this.blackTexture, 0, [new Uint8Array([0, 0, 0, 0])]);
+        this.textureHolder.setTextureOverride('LmChaAdd', { gfxTexture: this.blackTexture, width: 1, height: 1, flipY: false });
+        this.textureHolder.setTextureOverride('LmBGAdd', { gfxTexture: this.blackTexture, width: 1, height: 1, flipY: false });
+
+        this.resourceSystem.getRRES(device, this.textureHolder, 'oarc/SkyCmn.arc');
 
         // Water animations appear in Common.arc.
-        this.commonRRES = this.oarcCollection.loadRRESFromArc(device, this.textureHolder, 'oarc/Common.arc');
+        this.commonRRES = this.resourceSystem.getRRES(device, this.textureHolder, 'oarc/Common.arc');
 
         // Load stage.
         this.stageRRES = BRRES.parse(stageArchive.findFile('g3d/stage.brres').buffer);
@@ -189,10 +209,15 @@ class SkywardSwordScene implements Viewer.SceneGfx {
 
                 for (let i = 0; i < roomRRES.mdl0.length; i++) {
                     const mdl0 = roomRRES.mdl0[i];
-                    const renderer = this.spawnModel(device, this.renderHelper, mdl0, roomRRES, roomArchiveFile.name);
+
+                    const model = this.modelCache.getModel(device, this.renderHelper, mdl0, materialHacks);
+                    const modelInstance = new MDL0ModelInstance(device, this.renderHelper, this.textureHolder, model);
+                    modelInstance.passMask = ZSSPass.OPAQUE;
+                    this.modelInstances.push(modelInstance);
+
                     // Detail / transparent meshes end with '_s'. Typical depth sorting won't work, we have to explicitly bias.
                     if (mdl0.name.endsWith('_s'))
-                        renderer.renderLayerBias = 1;
+                        modelInstance.setSortKeyLayer(GfxRendererLayer.TRANSLUCENT + 1);
                 }
 
                 const roomBZS = this.parseBZS(roomArchive.findFile('dat/room.bzs').buffer);
@@ -204,11 +229,11 @@ class SkywardSwordScene implements Viewer.SceneGfx {
 
         outer:
         // Find any indirect scenes.
-        for (const modelRenderer of this.mdl0Instances) {
-            for (const material of modelRenderer.mdl0Model.mdl0.materials) {
+        for (const modelInstance of this.modelInstances) {
+            for (const material of modelInstance.mdl0Model.mdl0.materials) {
                 for (const sampler of material.samplers) {
                     if (sampler.name === 'DummyWater') {
-                        modelRenderer.passMask = ZSSPass.INDIRECT;
+                        modelInstance.passMask = ZSSPass.INDIRECT;
                         continue outer;
                     }
                 }
@@ -222,13 +247,13 @@ class SkywardSwordScene implements Viewer.SceneGfx {
         const panels: UI.Panel[] = [];
 
         const layersPanel = new UI.LayerPanel();
-        layersPanel.setLayers(this.mdl0Instances);
+        layersPanel.setLayers(this.modelInstances);
         panels.push(layersPanel);
 
         // Construct a list of past/future models.
         const futureModels: MDL0ModelInstance[] = [];
         const pastModels: MDL0ModelInstance[] = [];
-        for (const modelRenderer of this.mdl0Instances) {
+        for (const modelRenderer of this.modelInstances) {
             if (modelRenderer.mdl0Model.mdl0.name.startsWith('model_obj'))
                 futureModels.push(modelRenderer);
 
@@ -263,14 +288,14 @@ class SkywardSwordScene implements Viewer.SceneGfx {
         renderHacksPanel.setTitle(RENDER_HACKS_ICON, 'Render Hacks');
         const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
         enableVertexColorsCheckbox.onchanged = () => {
-            for (let i = 0; i < this.mdl0Instances.length; i++)
-                this.mdl0Instances[i].setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
+            for (let i = 0; i < this.modelInstances.length; i++)
+                this.modelInstances[i].setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
         };
         renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
         const enableTextures = new UI.Checkbox('Enable Textures', true);
         enableTextures.onchanged = () => {
-            for (let i = 0; i < this.mdl0Instances.length; i++)
-                this.mdl0Instances[i].setTexturesEnabled(enableTextures.checked);
+            for (let i = 0; i < this.modelInstances.length; i++)
+                this.modelInstances[i].setTexturesEnabled(enableTextures.checked);
         };
         renderHacksPanel.contents.appendChild(enableTextures.elem);
         panels.push(renderHacksPanel);
@@ -285,15 +310,16 @@ class SkywardSwordScene implements Viewer.SceneGfx {
         this.viewRenderer.destroy(device);
         this.mainRenderTarget.destroy(device);
         this.opaqueSceneTexture.destroy(device);
-        for (let i = 0; i < this.mdl0Instances.length; i++)
-            this.mdl0Instances[i].destroy(device);
+        for (let i = 0; i < this.modelInstances.length; i++)
+            this.modelInstances[i].destroy(device);
+        device.destroyTexture(this.blackTexture);
     }
 
     private prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         viewerInput.camera.setClipPlanes(10, 500000);
         this.renderHelper.fillSceneParams(viewerInput);
-        for (let i = 0; i < this.mdl0Instances.length; i++)
-            this.mdl0Instances[i].prepareToRender(this.renderHelper, viewerInput);
+        for (let i = 0; i < this.modelInstances.length; i++)
+            this.modelInstances[i].prepareToRender(this.renderHelper, viewerInput);
         this.renderHelper.prepareToRender(hostAccessPass);
     }
 
@@ -334,167 +360,161 @@ class SkywardSwordScene implements Viewer.SceneGfx {
         }
     }
 
-    private spawnModel(device: GfxDevice, renderHelper: GXRenderHelperGfx, mdl0: BRRES.MDL0, rres: BRRES.RRES, namePrefix: string): MDL0ModelInstance {
-        const model = this.modelCache.getModel(device, renderHelper, mdl0, materialHacks);
-        const modelRenderer = new MDL0ModelInstance(device, renderHelper, this.textureHolder, model, namePrefix);
-        modelRenderer.passMask = ZSSPass.OPAQUE;
-        this.mdl0Instances.push(modelRenderer);
-
-        // Bind animations.
-        for (const srt0 of rres.srt0) {
-            modelRenderer.bindSRT0(this.animationController, srt0);
-        }
-
-        // Water animations are in the common archive.
-        for (const srt0 of this.commonRRES.srt0) {
-            modelRenderer.bindSRT0(this.animationController, srt0);
-        }
-
-        return modelRenderer;
-    }
-
-    private spawnModelName(device: GfxDevice, renderHelper: GXRenderHelperGfx, rres: BRRES.RRES, modelName: string, namePrefix: string): MDL0ModelInstance {
-        const mdl0 = rres.mdl0.find((model) => model.name === modelName);
-        return this.spawnModel(device, renderHelper, mdl0, rres, namePrefix);
-    }
-
-    private spawnObj(device: GfxDevice, renderHelper: GXRenderHelperGfx, name: string, unk1: number, unk2: number): MDL0ModelInstance[] {
+    private spawnObj(device: GfxDevice, obj: BaseObj, modelMatrix: mat4): void {
         // In the actual engine, each obj is handled by a separate .rel (runtime module)
         // which knows the actual layout. The mapping of obj name to .rel is stored in main.dol.
         // We emulate that here.
 
-        const models: MDL0ModelInstance[] = [];
+        const name = obj.name, unk1 = obj.unk1, unk2 = obj.unk2;
+
+        const renderHelper = this.renderHelper;
+        const spawnModel = (rres: BRRES.RRES, modelName: string) => {
+            const mdl0 = rres.mdl0.find((model) => model.name === modelName);
+
+            const model = this.modelCache.getModel(device, renderHelper, mdl0, materialHacks);
+            const modelRenderer = new MDL0ModelInstance(device, renderHelper, this.textureHolder, model, obj.name);
+            modelRenderer.passMask = ZSSPass.OPAQUE;
+            mat4.copy(modelRenderer.modelMatrix, modelMatrix);
+            this.modelInstances.push(modelRenderer);
+
+            modelRenderer.bindRRESAnimations(this.animationController, rres);
+
+            // TODO(jstpierre): Figure out how these MA animations work.
+            modelRenderer.bindRRESAnimations(this.animationController, this.commonRRES, `MA01`);
+            modelRenderer.bindRRESAnimations(this.animationController, this.commonRRES, `MA02`);
+            modelRenderer.bindRRESAnimations(this.animationController, this.commonRRES, `MA04`);
+
+            return modelRenderer;
+        };
+
+        const getOArcRRES = (name: string) => {
+            return this.resourceSystem.getRRES(device, this.textureHolder, `oarc/${name}.arc`);
+        };
+
+        const spawnOArcModel = (name: string) => {
+            const rres = this.resourceSystem.getRRES(device, this.textureHolder, `oarc/${name}.arc`);
+            return spawnModel(rres, name);
+        };
+
+        const findCHR0 = (rres: BRRES.RRES, name: string) => {
+            return rres.chr0.find((chr0) => chr0.name === name);
+        };
+
+        const stageRRES = this.stageRRES;
 
         if (name === 'CityWtr') {
             // For City Water, we spawn three objects, the second one being an indirect object.
-            models.push(this.spawnModelName(device, renderHelper, this.stageRRES, 'StageF000Water0', name));
-            models.push(this.spawnModelName(device, renderHelper, this.stageRRES, 'StageF000Water1', name));
-            models.push(this.spawnModelName(device, renderHelper, this.stageRRES, 'StageF000Water2', name));
+            spawnModel(stageRRES, 'StageF000Water0');
+            spawnModel(stageRRES, 'StageF000Water1');
+            spawnModel(stageRRES, 'StageF000Water2');
         } else if (name === 'Grave') {
-            models.push(this.spawnModelName(device, renderHelper, this.stageRRES, 'StageF000Grave', name));
+            spawnModel(stageRRES, 'StageF000Grave');
         } else if (name === 'Shed') {
             // Door to Batreaux's lair
-            models.push(this.spawnModelName(device, renderHelper, this.stageRRES, 'StageF000Shed', name));
+            spawnModel(stageRRES, 'StageF000Shed');
         } else if (name === 'Windmil') {
-            const model = this.spawnModelName(device, renderHelper, this.stageRRES, 'StageF000Windmill', name);
-            const StageF000WindmillCHR0 = this.stageRRES.chr0.find((c) => c.name === 'StageF000Windmill');
-            model.bindCHR0(this.animationController, StageF000WindmillCHR0);
-            models.push(model);
+            spawnModel(stageRRES, 'StageF000Windmill');
         } else if (name === 'Blade') {
             // Skyloft decorations... flags, pinwheels, etc.
-            const model = this.spawnModelName(device, renderHelper, this.stageRRES, 'StageF000Blade', name);
-            const StageF000BladeCHR0 = this.stageRRES.chr0.find((c) => c.name === 'StageF000Blade');
-            model.bindCHR0(this.animationController, StageF000BladeCHR0);
-            models.push(model);
+            spawnModel(stageRRES, 'StageF000Blade');
         } else if (name === 'LHHarp') {
             // "Lighthouse Harp"
-            models.push(this.spawnModelName(device, renderHelper, this.stageRRES, 'StageF000Harp', name));
+            spawnModel(stageRRES, 'StageF000Harp');
         } else if (name === 'LHLight') {
             // "Lighthouse Light"
-            models.push(this.spawnModelName(device, renderHelper, this.stageRRES, 'StageF000Light', name));
+            spawnModel(stageRRES, 'StageF000Light');
         } else if (name === 'Heartf') {
-            const FlowerHeartRRES = this.oarcCollection.loadRRESFromArc(device, this.textureHolder, 'oarc/FlowerHeart.arc');
-            models.push(this.spawnModelName(device, renderHelper, FlowerHeartRRES, 'FlowerHeart', name));
+            spawnOArcModel('FlowerHeart');
         } else if (name === 'Pumpkin') {
-            const PumpkinRRES = this.oarcCollection.loadRRESFromArc(device, this.textureHolder, 'oarc/Pumpkin.arc');
-            models.push(this.spawnModelName(device, renderHelper, PumpkinRRES, 'Pumpkin', name));
+            spawnOArcModel('Pumpkin');
+            const PumpkinRRES = this.resourceSystem.getRRES(device, this.textureHolder, 'oarc/Pumpkin.arc');
+            spawnModel(PumpkinRRES, `Pumpkin`);
         } else if (name === 'DmtGate') {
             // "Dormitory Gate"
             // Seems it can also use StageF400Gate, probably when Skyloft crashes to the ground (spoilers).
             // Seems to make two of them... skip for now, not that important...
+            console.log('DmtGate', hexzero(unk1, 8), hexzero(unk2, 8));
         } else if (name === 'IslLOD') {
             // First parameter appears to contain the island LOD to load...
             const islId = unk1 & 0x0F;
             const islName = [ 'IslLODA', 'IslLODB', 'IslLODC', 'IslLODD', 'IslLODE' ][islId];
-            const IslLODRRES = this.oarcCollection.loadRRESFromArc(device, this.textureHolder, `oarc/${islName}.arc`);
-            const model = this.spawnModelName(device, renderHelper, IslLODRRES, islName, name);
-            models.push(model);
+            spawnOArcModel(islName);
         } else if (name === 'ClawSTg') {
             // Clawshot Target
-            const ShotMarkRRES = this.oarcCollection.loadRRESFromArc(device, this.textureHolder, `oarc/ShotMark.arc`);
-            models.push(this.spawnModelName(device, renderHelper, ShotMarkRRES, 'ShotMark', name));
+            spawnOArcModel(`ShotMark`);
         } else if (name === 'Vrbox') {
             // First parameter appears to contain the Vrbox to load.
             const boxId = unk1 & 0x0F;
             const boxName = [ 'Vrbox00', 'Vrbox01', 'Vrbox02', 'Vrbox03' ][boxId];
-            const VrboxRRES = this.oarcCollection.loadRRESFromArc(device, this.textureHolder, `oarc/${boxName}.arc`);
-            const model = this.spawnModelName(device, renderHelper, VrboxRRES, boxName, name);
-            model.passMask = ZSSPass.SKYBOX;
-            model.isSkybox = true;
+            const modelInstance = spawnOArcModel(boxName);
+            modelInstance.passMask = ZSSPass.SKYBOX;
+            modelInstance.isSkybox = true;
             // This color is probably set by the day/night system...
-            model.setColorOverride(ColorKind.C2, new Color(1, 1, 1, 1));
-            model.setColorOverride(ColorKind.K3, new Color(1, 1, 1, 1));
-            models.push(model);
+            modelInstance.setColorOverride(ColorKind.C2, new Color(1, 1, 1, 1));
+            modelInstance.setColorOverride(ColorKind.K3, new Color(1, 1, 1, 1));
         } else if (name === 'CmCloud') {
             // Cumulus Cloud
-            const F020CloudRRES = this.oarcCollection.loadRRESFromArc(device, this.textureHolder, `oarc/F020Cloud.arc`);
-            const model = this.spawnModelName(device, renderHelper, F020CloudRRES, 'F020Cloud', name);
-            models.push(model);
+            spawnOArcModel(`F020Cloud`);
         } else if (name === 'UdCloud') {
             // Under Clouds
-            const F020UnderCloudRRES = this.oarcCollection.loadRRESFromArc(device, this.textureHolder, `oarc/F020UnderCloud.arc`);
-            const model = this.spawnModelName(device, renderHelper, F020UnderCloudRRES, 'F020UnderCloud', name);
-            models.push(model);
+            spawnOArcModel(`F020UnderCloud`);
         } else if (name === 'ObjBld') {
             // Object Building. Appears to only be used for the dowsing station? Why?
-            const DowsingZoneE300RRES = this.oarcCollection.loadRRESFromArc(device, this.textureHolder, `oarc/DowsingZoneE300.arc`);
-            models.push(this.spawnModelName(device, renderHelper, DowsingZoneE300RRES, 'DowsingZoneE300', name));
+            spawnOArcModel(`DowsingZoneE300`);
         } else if (name === 'WtrF100') {
-            const WaterF100RRES = this.oarcCollection.loadRRESFromArc(device, this.textureHolder, `oarc/WaterF100.arc`);
-            models.push(this.spawnModelName(device, renderHelper, WaterF100RRES, 'model0', name));
-            models.push(this.spawnModelName(device, renderHelper, WaterF100RRES, 'model1', name));
-            models.push(this.spawnModelName(device, renderHelper, WaterF100RRES, 'model2', name));
-            models.push(this.spawnModelName(device, renderHelper, WaterF100RRES, 'model3', name));
+            const WaterF100RRES = getOArcRRES(`WaterF100`);
+            spawnModel(WaterF100RRES, 'model0');
+            spawnModel(WaterF100RRES, 'model1');
+            spawnModel(WaterF100RRES, 'model2');
+            spawnModel(WaterF100RRES, 'model3');
         } else if (name === 'GodCube') {
-            const GoddessCubeRRES = this.oarcCollection.loadRRESFromArc(device, this.textureHolder, `oarc/GoddessCube.arc`);
-            models.push(this.spawnModelName(device, renderHelper, GoddessCubeRRES, 'GoddessCube', name));
+            spawnOArcModel(`GoddessCube`);
         } else if (name === 'LavF200') {
-            const LavaF200RRES = this.oarcCollection.loadRRESFromArc(device, this.textureHolder, `oarc/LavaF200.arc`);
-            models.push(this.spawnModelName(device, renderHelper, LavaF200RRES, 'LavaF200', name));
+            spawnOArcModel(`LavaF200`);
         } else if (name === 'UDLava') {
-            const UpdwnLavaRRES = this.oarcCollection.loadRRESFromArc(device, this.textureHolder, `oarc/UpdwnLava.arc`);
-            models.push(this.spawnModelName(device, renderHelper, UpdwnLavaRRES, 'UpdwnLavaA', name));
-            models.push(this.spawnModelName(device, renderHelper, UpdwnLavaRRES, 'UpdwnLavaB', name));
-            models.push(this.spawnModelName(device, renderHelper, UpdwnLavaRRES, 'UpdwnLavaC', name));
+            const UpdwnLavaRRES = getOArcRRES(`UpdwnLava`);
+            spawnModel(UpdwnLavaRRES, `UpdwnLavaA`);
+            spawnModel(UpdwnLavaRRES, `UpdwnLavaB`);
+            spawnModel(UpdwnLavaRRES, `UpdwnLavaC`);
+        } else if (name === 'NpcKnld') {
+            // "Knight Leader"
+            const LordRRES = getOArcRRES('Lord');
+            const b = spawnModel(LordRRES, `Lord`);
+            b.bindCHR0(this.animationController, findCHR0(LordRRES, 'Lord_wait'));
         } else {
             console.log("Unknown object", name);
         }
-
-        return models;
     }
 
     private spawnLayout(device: GfxDevice, renderHelper: GXRenderHelperGfx, layout: RoomLayout): void {
         const q = quat.create();
 
-        for (const obj of layout.obj) {
-            const models = this.spawnObj(device, renderHelper, obj.name, obj.unk1, obj.unk2);
+        const modelMatrix = mat4.create();
+
+        for (let i = 0; i < layout.obj.length; i++) {
+            const obj = layout.obj[i];
 
             // Set model matrix.
             const rotationX = 180 * (obj.rotX / 0x7FFF);
             const rotationY = 180 * (obj.rotY / 0x7FFF);
             quat.fromEuler(q, rotationX, rotationY, 0);
+            mat4.fromRotationTranslation(modelMatrix, q, [obj.tx, obj.ty, obj.tz]);
 
-            for (const modelRenderer of models) {
-                mat4.fromRotationTranslation(modelRenderer.modelMatrix, q, [obj.tx, obj.ty, obj.tz]);
-            }
+            this.spawnObj(device, obj, modelMatrix);
         }
 
-        // Now do scalable objects...
-        for (const obj of layout.sobj) {
-            const models = this.spawnObj(device, renderHelper, obj.name, obj.unk1, obj.unk2);
+        // Scalable objects...
+        for (let i = 0; i < layout.sobj.length; i++) {
+            const obj = layout.sobj[i];
 
-            // Set model matrix.
+            mat4.fromRotationTranslationScale(modelMatrix, q, [obj.tx, obj.ty, obj.tz], [obj.sx, obj.sy, obj.sz]);
+
             const rotation = 180 * (obj.rotY / 0x7FFF);
             quat.fromEuler(q, 0, rotation, 0);
 
-            for (const modelRenderer of models) {
-                mat4.fromRotationTranslationScale(modelRenderer.modelMatrix, q, [obj.tx, obj.ty, obj.tz], [obj.sx, obj.sy, obj.sz]);
+            mat4.fromRotationTranslationScale(modelMatrix, q, [obj.tx, obj.ty, obj.tz], [obj.sx, obj.sy, obj.sz]);
 
-                if (modelRenderer.isSkybox) {
-                    const scale = 0.001;
-                    mat4.scale(modelRenderer.modelMatrix, modelRenderer.modelMatrix, [scale, scale, scale]);
-                }
-            }
+            this.spawnObj(device, obj, modelMatrix);
         }
     }
 
@@ -617,7 +637,7 @@ class SkywardSwordSceneDesc implements Viewer.SceneDesc {
             const objPackArchive = U8.parse(CX.decompress(objPackBuffer));
             const stageArchive = U8.parse(CX.decompress(stageBuffer));
 
-            return new SkywardSwordScene(device, this.id, systemArchive, objPackArchive, stageArchive);
+            return new SkywardSwordRenderer(device, this.id, systemArchive, objPackArchive, stageArchive);
         });
     }
 }
@@ -651,11 +671,11 @@ const sceneDescs = [
     "Faron Woods",
 	new SkywardSwordSceneDesc("F100", "Faron Woods"),
 	new SkywardSwordSceneDesc("F100_1", "Inside the Great Tree"),
-	new SkywardSwordSceneDesc("F102_1", "Outside Skyview Temple"),
     new SkywardSwordSceneDesc("D100", "Skyview Temple"),
 	new SkywardSwordSceneDesc("F102_2", "Faron's Lair"),
 	new SkywardSwordSceneDesc("F101", "Deep Woods"),
 	new SkywardSwordSceneDesc("F102", "Lake Floria"),
+	new SkywardSwordSceneDesc("F102_1", "Outside Ancient Cistern"),
 	new SkywardSwordSceneDesc("D101", "Ancient Cistern"),
 	new SkywardSwordSceneDesc("F103", "Faron Woods (Flooded)"),
 	

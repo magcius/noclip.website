@@ -4,7 +4,7 @@
 import * as GX from './gx_enum';
 
 import { DeviceProgram, DeviceProgramReflection } from '../Program';
-import { colorCopy, colorFromRGBA8, colorToRGBA8 } from '../Color';
+import { colorCopy, colorFromRGBA8, colorToRGBA8, colorFromRGBA } from '../Color';
 import { GfxFormat } from '../gfx/platform/GfxPlatformFormat';
 import { GfxCompareMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
 import { vec3, vec4, mat4 } from 'gl-matrix';
@@ -68,10 +68,18 @@ export class Color {
 
 export class Light {
     public Position = vec3.create();
-    public Direction = vec3.create();
+    public Direction = vec3.fromValues(0, 0, -1);
     public DistAtten = vec3.create();
     public CosAtten = vec3.create();
     public Color = new Color();
+
+    public reset(): void {
+        colorFromRGBA(this.Color, 0, 0, 0, 1);
+        vec3.set(this.Position, 0, 0, 0);
+        vec3.set(this.Direction, 0, 0, -1);
+        vec3.set(this.DistAtten, 0, 0, 0);
+        vec3.set(this.CosAtten, 0, 0, 0);
+    }
 
     public copy(o: Light): void {
         vec3.copy(this.Position, o.Position);
@@ -83,19 +91,27 @@ export class Light {
 }
 
 const scratchVec4 = vec4.create();
-export function lightSetWorldPosition(light: Light, camera: Camera, x: number, y: number, z: number, v: vec4 = scratchVec4): void {
+export function lightSetWorldPositionViewMatrix(light: Light, viewMatrix: mat4, x: number, y: number, z: number, v: vec4 = scratchVec4): void {
     vec4.set(v, x, y, z, 1.0);
-    vec4.transformMat4(v, v, camera.viewMatrix);
+    vec4.transformMat4(v, v, viewMatrix);
     vec3.set(light.Position, v[0], v[1], v[2]);
 }
 
-export function lightSetWorldDirection(light: Light, camera: Camera, x: number, y: number, z: number, v: vec4 = scratchVec4): void {
+export function lightSetWorldPosition(light: Light, camera: Camera, x: number, y: number, z: number, v: vec4 = scratchVec4): void {
+    return lightSetWorldPositionViewMatrix(light, camera.viewMatrix, x, y, z, v);
+}
+
+export function lightSetWorldDirectionNormalMatrix(light: Light, normalMatrix: mat4, x: number, y: number, z: number, v: vec4 = scratchVec4): void {
     vec4.set(v, x, y, z, 0.0);
-    // TODO(jstpierre): In theory, we should multiply by the inverse-transpose of the view matrix.
-    // However, I don't want to calculate that right now, and it shouldn't matter too much...
-    vec4.transformMat4(v, v, camera.viewMatrix);
+    vec4.transformMat4(v, v, normalMatrix);
     vec4.normalize(v, v);
     vec3.set(light.Direction, v[0], v[1], v[2]);
+}
+
+export function lightSetWorldDirection(light: Light, camera: Camera, x: number, y: number, z: number, v: vec4 = scratchVec4): void {
+    // TODO(jstpierre): In theory, we should multiply by the inverse-transpose of the view matrix.
+    // However, I don't want to calculate that right now, and it shouldn't matter too much...
+    return lightSetWorldDirectionNormalMatrix(light, camera.viewMatrix, x, y, z, v);
 }
 
 export interface ColorChannelControl {
@@ -299,7 +315,7 @@ export class GX_Program extends DeviceProgram {
     }
 
     private generateLightDiffFn(chan: ColorChannelControl, lightName: string) {
-        const NdotL = `dot(t_Normal, normalize(t_LightDelta))`;
+        const NdotL = `dot(t_Normal, t_LightDeltaDir)`;
 
         switch (chan.diffuseFunction) {
         case GX.DiffuseFunction.NONE: return `1.0`;
@@ -309,11 +325,11 @@ export class GX_Program extends DeviceProgram {
     }
 
     private generateLightAttnFn(chan: ColorChannelControl, lightName: string) {
-        const cosAttn = `ApplyCubic(${lightName}.CosAtten.xyz, dot(t_LightDelta, ${lightName}.Direction.xyz))`;
+        const cosAttn = `ApplyCubic(${lightName}.CosAtten.xyz, dot(t_LightDeltaDir, ${lightName}.Direction.xyz))`;
 
         switch (chan.attenuationFunction) {
         case GX.AttenuationFunction.NONE: return `1.0`;
-        case GX.AttenuationFunction.SPOT: return `max(${cosAttn} / dot(${lightName}.DistAtten.xyz, vec3(1.0, Dist(t_LightDelta), DistSq(t_LightDelta))), 0.0)`;
+        case GX.AttenuationFunction.SPOT: return `max(${cosAttn} / max(dot(${lightName}.DistAtten.xyz, vec3(1.0, t_LightDeltaDist2, t_LightDeltaDist)), 0.0), 0.0)`;
         case GX.AttenuationFunction.SPEC: return `1.0`; // TODO(jtspierre): Specular
         }
     }
@@ -328,7 +344,7 @@ export class GX_Program extends DeviceProgram {
             const amb = `u_ColorAmbReg[${i}]`;
             const mat = `u_ColorMatReg[${i}]`;
             const fudged = this.hacks.lightingFudge({ vtx, amb, mat, ambSource, matSource });
-            return `${outputName} = vec4(${fudged});`;
+            return `${outputName} = vec4(${fudged}); // Fudge!`;
         }
 
         let generateLightAccum = ``;
@@ -343,7 +359,11 @@ export class GX_Program extends DeviceProgram {
                 const lightName = `u_LightParams[${j}]`;
                 generateLightAccum += `
     t_LightDelta = ${lightName}.Position.xyz - v_Position.xyz;
-    t_LightAccum += ${this.generateLightDiffFn(chan, lightName)} * ${this.generateLightAttnFn(chan, lightName)} * ${lightName}.Color;`;
+    t_LightDeltaDist2 = dot(t_LightDelta, t_LightDelta);
+    t_LightDeltaDist = sqrt(t_LightDeltaDist2);
+    t_LightDeltaDir = t_LightDelta / t_LightDeltaDist;
+    t_LightAccum += ${this.generateLightDiffFn(chan, lightName)} * ${this.generateLightAttnFn(chan, lightName)} * ${lightName}.Color;
+`;
             }
         } else {
             // Without lighting, everything is full-bright.
@@ -988,11 +1008,8 @@ Mat4x4 GetPosTexMatrix(uint t_MtxIdx) {
 }
 
 float ApplyCubic(vec3 t_Coeff, float t_Value) {
-    return dot(t_Coeff, vec3(1.0, t_Value, t_Value*t_Value));
+    return max(dot(t_Coeff, vec3(1.0, t_Value, t_Value*t_Value)), 0.0);
 }
-
-float DistSq(vec3 v) { return dot(v, v); }
-float Dist(vec3 v) { return sqrt(DistSq(v)); }
 
 void main() {
     Mat4x4 t_PosMtx = GetPosTexMatrix(a_PosMtxIdx);
@@ -1003,7 +1020,8 @@ void main() {
     vec3 t_Normal = Mul(t_NrmMtx, vec4(a_Normal, 0.0));
 
     vec4 t_LightAccum;
-    vec3 t_LightDelta;
+    vec3 t_LightDelta, t_LightDeltaDir;
+    float t_LightDeltaDist2, t_LightDeltaDist;
     vec4 t_ColorChanTemp;
 ${this.generateLightChannels()}
 ${this.generateTexGens(this.material.texGens)}
@@ -1025,7 +1043,7 @@ vec3 TevBias(vec3 a, float b) { return a + vec3(b); }
 float TevBias(float a, float b) { return a + b; }
 vec3 TevSaturate(vec3 a) { return clamp(a, vec3(0), vec3(1)); }
 float TevSaturate(float a) { return clamp(a, 0.0, 1.0); }
-float TevOverflow(float a) { return float(int(a * 255.0) % 256) / 255.0; }
+float TevOverflow(float a) { return fract((a*255.0)/256.0)*256.0/255.0; }
 vec4 TevOverflow(vec4 a) { return vec4(TevOverflow(a.r), TevOverflow(a.g), TevOverflow(a.b), TevOverflow(a.a)); }
 float TevPack16(vec2 a) { return dot(a, vec2(1.0, 256.0)); }
 float TevPack24(vec3 a) { return dot(a, vec3(1.0, 256.0, 256.0 * 256.0)); }
@@ -1153,7 +1171,9 @@ export function translateGfxMegaState(megaState: GfxMegaStateDescriptor, materia
         megaState.blendSrcFactor = GfxBlendFactor.ONE;
         megaState.blendDstFactor = GfxBlendFactor.ONE;
     } else if (material.ropInfo.blendMode.type === GX.BlendMode.LOGIC) {
-        throw new Error("whoops");
+        // Sonic Colors uses this? WTF?
+        megaState.blendMode = GfxBlendMode.NONE;
+        console.warn(`Unimplemented LOGIC blend mode`);
     }
 }
 // #endregion

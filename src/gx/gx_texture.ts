@@ -105,10 +105,7 @@ export function calcMipChain(texture: Texture, mipCount: number = 0xFF): MipChai
     let width = texture.width;
     let height = texture.height;
 
-    // It seems like anything below 4x4 has junk data, at least from evidence from
-    // Super Paper Mario. Not sure if this data is even read by GC.
-    const sizeLimit = 2;
-    while (width > sizeLimit && height > sizeLimit && mipLevel < mipCount) {
+    while (mipLevel < mipCount) {
         const data = texture.data !== null ? texture.data.subarray(mipOffs) : null;
         const paletteFormat = texture.paletteFormat;
         const paletteData = texture.paletteData;
@@ -119,6 +116,12 @@ export function calcMipChain(texture: Texture, mipCount: number = 0xFF): MipChai
         mipOffs += Math.max(mipSize, 32);
         width /= 2;
         height /= 2;
+
+        // It seems like anything below 4x4 has junk data, at least from evidence from
+        // Super Paper Mario. Not sure if this data is even read by GC.
+        const sizeLimit = 2;
+        if (width <= sizeLimit || height <= sizeLimit)
+            break;
     }
 
     return { name, mipLevels, fullTextureSize: mipOffs };

@@ -198,7 +198,8 @@ interface ScrollSelectItemHeader {
 interface ScrollSelectItemSelectable {
     type: ScrollSelectItemType.Selectable;
     visible?: boolean;
-    name: string;
+    name?: string;
+    html?: string;
 }
 
 export type ScrollSelectItem = ScrollSelectItemHeader | ScrollSelectItemSelectable;
@@ -269,7 +270,10 @@ export abstract class ScrollSelect implements Widget {
                 outer.appendChild(selector);
                 const textSpan = document.createElement('span');
                 textSpan.classList.add('text');
-                textSpan.textContent = item.name;
+                if (item.html)
+                    textSpan.innerHTML = item.html;
+                else
+                    textSpan.textContent = item.name;
                 selector.appendChild(textSpan);
 
                 const index = i;
@@ -978,11 +982,10 @@ class SceneSelect extends Panel {
     public setSceneGroups(sceneGroups: (string | Viewer.SceneGroup)[]) {
         this.sceneGroups = sceneGroups;
         this.sceneGroupList.setItems(sceneGroups.map((g): ScrollSelectItem => {
-            if (typeof g === 'string') {
+            if (typeof g === 'string')
                 return { type: ScrollSelectItemType.Header, html: g };
-            } else {
+            else
                 return { type: ScrollSelectItemType.Selectable, name: g.name };
-            }
         }));
         this.syncSceneDescs();
     }
@@ -1700,6 +1703,7 @@ class About extends Panel {
 <a href="https://twitter.com/kittensandals">SpaceCats</a>,
 <a href="https://twitter.com/TanukiMatthew">TanukiMatthew</a>,
 <a href="https://twitter.com/QuadeZaban">Quade Zaban</a>,
+<a href="https://twitter.com/Murugalstudio">Murugo</a>,
 <a href="https://twitter.com/PistonMiner">PistonMiner</a>,
 <a href="https://twitter.com/LordNed">LordNed</a>,
 <a href="https://twitter.com/SageOfMirrors">SageOfMirrors</a>,

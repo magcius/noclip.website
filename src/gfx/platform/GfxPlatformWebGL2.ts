@@ -96,9 +96,10 @@ interface GfxRenderPipelineP_GL extends GfxRenderPipeline {
     drawMode: GLenum;
     megaState: GfxMegaStateDescriptor;
     inputLayout: GfxInputLayoutP_GL | null;
+    ready: boolean;
 }
 
-export function translateVertexFormat(fmt: GfxFormat): { size: number, type: GLenum, normalized: boolean } {
+function translateVertexFormat(fmt: GfxFormat): { size: number, type: GLenum, normalized: boolean } {
     function translateType(flags: FormatTypeFlags): GLenum {
         switch (flags) {
         case FormatTypeFlags.U8:
@@ -497,24 +498,29 @@ function applyMegaState(gl: WebGL2RenderingContext, currentMegaState: GfxMegaSta
     }
 }
 
+const TRACK_RESOURCES = IS_DEVELOPMENT;
 class ResourceCreationTracker {
     public creationStacks = new Map<GfxResource, string>();
 
     public trackResourceCreated(o: GfxResource): void {
-        if (!IS_DEVELOPMENT) return;
+        if (!TRACK_RESOURCES) return;
         this.creationStacks.set(o, new Error().stack);
     }
 
     public trackResourceDestroyed(o: GfxResource): void {
-        if (!IS_DEVELOPMENT) return;
+        if (!TRACK_RESOURCES) return;
         this.creationStacks.delete(o);
     }
 
     public checkForLeaks(): void {
-        if (!IS_DEVELOPMENT) return;
+        if (!TRACK_RESOURCES) return;
         for (const [object, stack] of this.creationStacks.entries())
             console.warn("Object leaked:", object, "Creation stack:", stack);
     }
+}
+
+interface KHR_parallel_shader_compile {
+    COMPLETION_STATUS_KHR: number;
 }
 
 class GfxImplP_GL implements GfxSwapChain, GfxDevice {
@@ -523,6 +529,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     private _WEBGL_compressed_texture_s3tc: WEBGL_compressed_texture_s3tc | null;
     private _WEBGL_compressed_texture_s3tc_srgb: WEBGL_compressed_texture_s3tc_srgb | null;
+    private _KHR_parallel_shader_compile: KHR_parallel_shader_compile | null;
 
     private _currentColorAttachments: GfxColorAttachmentP_GL[] = [];
     private _currentDepthStencilAttachment: GfxDepthStencilAttachmentP_GL | null;
@@ -541,12 +548,14 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _hostAccessPassPool: GfxHostAccessPassP_GL[] = [];
     private _renderPassPool: GfxRenderPassP_GL[] = [];
     private _resourceCreationTracker = new ResourceCreationTracker();
+    private _resourceUniqueId = 0;
 
     public programBugDefines: string = '';
 
     constructor(public gl: WebGL2RenderingContext, programCache: ProgramCache | null = null) {
         this._WEBGL_compressed_texture_s3tc = gl.getExtension('WEBGL_compressed_texture_s3tc');
         this._WEBGL_compressed_texture_s3tc_srgb = gl.getExtension('WEBGL_compressed_texture_s3tc_srgb');
+        this._KHR_parallel_shader_compile = gl.getExtension('KHR_parallel_shader_compile');
 
         if (programCache !== null) {
             this._programCache = programCache;
@@ -631,7 +640,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         gl.bindTexture(gl.TEXTURE_2D, getPlatformTexture(texture));
         gl.bindSampler(0, null);
         this._currentTextures[0] = null;
-        this._useProgram(this._fullscreenCopyProgram.deviceProgram.glProgram);
+        this._useDeviceProgram(this._fullscreenCopyProgram.deviceProgram);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
     //#endregion
@@ -731,10 +740,11 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     }
 
     private _currentProgram: WebGLProgram | null = null;
-    private _useProgram(program: WebGLProgram): void {
-        if (this._currentProgram !== program) {
-            this.gl.useProgram(program);
-            this._currentProgram = program;
+    private _useDeviceProgram(program: DeviceProgram): void {
+        if (this._currentProgram !== program.glProgram) {
+            this.gl.useProgram(program.glProgram);
+            program.bind(this);
+            this._currentProgram = program.glProgram;
         }
     }
 
@@ -746,6 +756,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._bindBuffer(gl_target, gl_buffer);
         gl.bufferData(gl_target, byteSize, gl_hint);
         return gl_buffer;
+    }
+
+    private getNextUniqueId(): number {
+        return ++this._resourceUniqueId;
     }
 
     public createBuffer(wordCount: number, usage: GfxBufferUsage, hint: GfxBufferFrequencyHint): GfxBuffer {
@@ -771,7 +785,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
 
         const gl_target = translateBufferUsageToTarget(usage);
-        const buffer: GfxBufferP_GL = { _T: _T.Buffer, gl_buffer_pages, gl_target, usage, byteSize, pageByteSize };
+        const buffer: GfxBufferP_GL = { _T: _T.Buffer, ResourceUniqueId: this.getNextUniqueId(), gl_buffer_pages, gl_target, usage, byteSize, pageByteSize };
         this._resourceCreationTracker.trackResourceCreated(buffer);
         return buffer;
     }
@@ -793,7 +807,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             gl.bindTexture(gl_target, gl_texture);
             gl.texStorage3D(gl_target, descriptor.numLevels, internalformat, descriptor.width, descriptor.height, descriptor.depth);
         }
-        const texture: GfxTextureP_GL = { _T: _T.Texture, gl_texture, gl_target,
+        const texture: GfxTextureP_GL = { _T: _T.Texture, ResourceUniqueId: this.getNextUniqueId(),
+            gl_texture, gl_target,
             pixelFormat: descriptor.pixelFormat,
             width: descriptor.width,
             height: descriptor.height,
@@ -817,7 +832,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         gl.samplerParameteri(gl_sampler, gl.TEXTURE_MAG_FILTER, translateFilterMode(descriptor.magFilter, GfxMipFilterMode.NO_MIP));
         gl.samplerParameterf(gl_sampler, gl.TEXTURE_MIN_LOD, descriptor.minLOD);
         gl.samplerParameterf(gl_sampler, gl.TEXTURE_MAX_LOD, descriptor.maxLOD);
-        const sampler: GfxSamplerP_GL = { _T: _T.Sampler, gl_sampler };
+        const sampler: GfxSamplerP_GL = { _T: _T.Sampler, ResourceUniqueId: this.getNextUniqueId(), gl_sampler };
         this._resourceCreationTracker.trackResourceCreated(sampler);
         return sampler;
     }
@@ -827,7 +842,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const gl_renderbuffer = gl.createRenderbuffer();
         gl.bindRenderbuffer(gl.RENDERBUFFER, gl_renderbuffer);
         gl.renderbufferStorageMultisample(gl.RENDERBUFFER, numSamples, gl.RGBA8, width, height);
-        const colorAttachment: GfxColorAttachmentP_GL = { _T: _T.ColorAttachment, gl_renderbuffer, width, height };
+        const colorAttachment: GfxColorAttachmentP_GL = { _T: _T.ColorAttachment, ResourceUniqueId: this.getNextUniqueId(), gl_renderbuffer, width, height };
         this._resourceCreationTracker.trackResourceCreated(colorAttachment);
         return colorAttachment;
     }
@@ -837,7 +852,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const gl_renderbuffer = gl.createRenderbuffer();
         gl.bindRenderbuffer(gl.RENDERBUFFER, gl_renderbuffer);
         gl.renderbufferStorageMultisample(gl.RENDERBUFFER, numSamples, gl.DEPTH32F_STENCIL8, width, height);
-        const depthStencilAttachment: GfxDepthStencilAttachmentP_GL = { _T: _T.DepthStencilAttachment, gl_renderbuffer, width, height };
+        const depthStencilAttachment: GfxDepthStencilAttachmentP_GL = { _T: _T.DepthStencilAttachment, ResourceUniqueId: this.getNextUniqueId(), gl_renderbuffer, width, height };
         this._resourceCreationTracker.trackResourceCreated(depthStencilAttachment);
         return depthStencilAttachment;
     }
@@ -845,7 +860,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _programCache: ProgramCache;
     private _createProgram(deviceProgram: DeviceProgram): GfxProgram {
         deviceProgram.compile(this, this._programCache);
-        const program: GfxProgramP_GL = { _T: _T.Program, deviceProgram };
+        const program: GfxProgramP_GL = { _T: _T.Program, ResourceUniqueId: this.getNextUniqueId(), deviceProgram };
         return program;
     }
 
@@ -859,14 +874,14 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const { bindingLayout, uniformBufferBindings, samplerBindings } = descriptor;
         assert(bindingLayout.numUniformBuffers === uniformBufferBindings.length);
         assert(bindingLayout.numSamplers === samplerBindings.length);
-        const bindings: GfxBindingsP_GL = { _T: _T.Bindings, uniformBufferBindings, samplerBindings };
+        const bindings: GfxBindingsP_GL = { _T: _T.Bindings, ResourceUniqueId: this.getNextUniqueId(), uniformBufferBindings, samplerBindings };
         this._resourceCreationTracker.trackResourceCreated(bindings);
         return bindings;
     }
 
     public createInputLayout(inputLayoutDescriptor: GfxInputLayoutDescriptor): GfxInputLayout {
         const { vertexAttributeDescriptors, indexBufferFormat } = inputLayoutDescriptor;
-        const inputLayout: GfxInputLayoutP_GL = { _T: _T.InputLayout, vertexAttributeDescriptors, indexBufferFormat };
+        const inputLayout: GfxInputLayoutP_GL = { _T: _T.InputLayout, ResourceUniqueId: this.getNextUniqueId(), vertexAttributeDescriptors, indexBufferFormat };
         this._resourceCreationTracker.trackResourceCreated(inputLayout);
         return inputLayout;
     }
@@ -918,7 +933,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
         gl.bindVertexArray(null);
 
-        const inputState: GfxInputStateP_GL = { _T: _T.InputState, vao, indexBufferByteOffset, indexBufferType, indexBufferCompByteSize, inputLayout, vertexBuffers };
+        const inputState: GfxInputStateP_GL = { _T: _T.InputState, ResourceUniqueId: this.getNextUniqueId(), vao, indexBufferByteOffset, indexBufferType, indexBufferCompByteSize, inputLayout, vertexBuffers };
         this._resourceCreationTracker.trackResourceCreated(inputState);
         return inputState;
     }
@@ -930,7 +945,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         assert(program.deviceProgram.uniformBufferLayouts.length === bindingLayouts.numUniformBuffers);
         const megaState = descriptor.megaStateDescriptor;
         const inputLayout = descriptor.inputLayout as GfxInputLayoutP_GL | null;
-        const pipeline: GfxRenderPipelineP_GL = { _T: _T.RenderPipeline, bindingLayouts, drawMode, program, megaState, inputLayout };
+        const pipeline: GfxRenderPipelineP_GL = { _T: _T.RenderPipeline, ResourceUniqueId: this.getNextUniqueId(), bindingLayouts, drawMode, program, megaState, inputLayout, ready: false };
         this._resourceCreationTracker.trackResourceCreated(pipeline);
         return pipeline;
     }
@@ -1052,6 +1067,22 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             return this._WEBGL_compressed_texture_s3tc !== null;
         default:
             return true;
+        }
+    }
+
+    public queryPipelineReady(o: GfxRenderPipeline): boolean {
+        const pipeline = o as GfxRenderPipelineP_GL;
+        if (pipeline.ready) {
+            return true;
+        } else {
+            if (this._KHR_parallel_shader_compile !== null) {
+                const glProgram = pipeline.program.deviceProgram.glProgram;
+                pipeline.ready = this.gl.getProgramParameter(glProgram, this._KHR_parallel_shader_compile.COMPLETION_STATUS_KHR);
+            } else {
+                pipeline.ready = true;
+            }
+
+            return pipeline.ready;
         }
     }
 
@@ -1317,7 +1348,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         if (this._currentPipeline.program.deviceProgram.compileDirty)
             this._currentPipeline.program.deviceProgram.compile(this, this._programCache);
 
-        this._useProgram(this._currentPipeline.program.deviceProgram.glProgram);
+        this._useDeviceProgram(this._currentPipeline.program.deviceProgram);
     }
 
     private setInputState(inputState_: GfxInputState | null): void {

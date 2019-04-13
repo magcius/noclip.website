@@ -1,7 +1,7 @@
 
 import { mat4, mat2d } from 'gl-matrix';
 
-import { BMD, BMT, HierarchyNode, HierarchyType, MaterialEntry, Shape, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData, DRW1MatrixKind, TTK1Animator, ANK1Animator, bindANK1Animator, BTI } from './j3d';
+import { BMD, BMT, HierarchyNode, HierarchyType, MaterialEntry, Shape, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData, DRW1MatrixKind, TTK1Animator, ANK1Animator, bindANK1Animator, BTI, bindVAF1Animator, VAF1, VAF1Animator } from './j3d';
 import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } from './j3d';
 
 import * as GX_Material from '../gx/gx_material';
@@ -56,7 +56,6 @@ class ShapeData {
 
 const scratchModelMatrix = mat4.create();
 const scratchViewMatrix = mat4.create();
-const posMtxVisibility: boolean[] = nArray(10, () => true);
 const packetParams = new PacketParams();
 export class ShapeInstance {
     private renderInsts: GfxRenderInst[] = [];
@@ -66,8 +65,11 @@ export class ShapeInstance {
     }
 
     public pushRenderInsts(renderInstBuilder: GfxRenderInstBuilder): void {
-        for (let i = 0; i < this.shapeData.shapeHelpers.length; i++)
-            this.renderInsts.push(this.shapeData.shapeHelpers[i].pushRenderInst(renderInstBuilder));
+        for (let i = 0; i < this.shapeData.shapeHelpers.length; i++) {
+            const renderInst = this.shapeData.shapeHelpers[i].buildRenderInst(renderInstBuilder);
+            renderInstBuilder.pushRenderInst(renderInst);
+            this.renderInsts.push(renderInst);
+        }
     }
 
     public prepareToRender(renderHelper: GXRenderHelperGfx, depth: number, viewerInput: ViewerRenderInput, shapeInstanceState: ShapeInstanceState): void {
@@ -81,9 +83,8 @@ export class ShapeInstance {
             const packet = shape.packets[p];
             const renderInst = this.renderInsts[p];
 
-            renderInst.visible = false;
+            let instVisible = false;
             if (visible) {
-                // Update our matrix table.
                 for (let i = 0; i < packet.matrixTable.length; i++) {
                     const matrixIndex = packet.matrixTable[i];
 
@@ -91,21 +92,15 @@ export class ShapeInstance {
                     if (matrixIndex === 0xFFFF)
                         continue;
 
-                    const posMtx = shapeInstanceState.matrixArray[matrixIndex];
-                    posMtxVisibility[i] = shapeInstanceState.matrixVisibility[matrixIndex];
-                    mat4.mul(packetParams.u_PosMtx[i], modelView, posMtx);
-                }
+                    mat4.mul(packetParams.u_PosMtx[i], modelView, shapeInstanceState.matrixArray[matrixIndex]);
 
-                // If all matrices are invisible, we can cull.
-                for (let i = 0; i < posMtxVisibility.length; i++) {
-                    if (posMtxVisibility[i]) {
-                        renderInst.visible = true;
-                        break;
-                    }
+                    if (shapeInstanceState.matrixVisibility[matrixIndex])
+                        instVisible = true;
                 }
             }
 
-            if (renderInst.visible) {
+            renderInst.visible = instVisible;
+            if (instVisible) {
                 renderInst.sortKey = setSortKeyDepth(renderInst.parentRenderInst.sortKey, depth);
                 renderInst.sortKey = setSortKeyBias(renderInst.sortKey, this.sortKeyBias);
                 this.shapeData.shapeHelpers[p].fillPacketParams(packetParams, renderInst, renderHelper);
@@ -167,7 +162,7 @@ export class MaterialInstance {
         this.templateRenderInst.name = this.name;
         this.createProgram();
         GX_Material.translateGfxMegaState(this.templateRenderInst.setMegaStateFlags(), material.gxMaterial);
-        let layer = !material.gxMaterial.ropInfo.depthTest ? GfxRendererLayer.BACKGROUND : GfxRendererLayer.OPAQUE;
+        let layer = !material.gxMaterial.ropInfo.depthTest ? GfxRendererLayer.BACKGROUND : material.translucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.setSortKeyLayer(layer);
         // Allocate our material buffer slot.
         this.materialParamsBufferOffset = renderHelper.renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, ub_MaterialParams);
@@ -214,9 +209,7 @@ export class MaterialInstance {
         }
     }
 
-    private copyColor(i: ColorKind, fallbackColor: GX_Material.Color) {
-        const dst = materialParams.u_Color[i];
-
+    private copyColor(dst: GX_Material.Color, i: ColorKind, fallbackColor: GX_Material.Color) {
         if (this.trk1Animators[i] !== undefined) {
             this.trk1Animators[i].calcColor(dst);
             return;
@@ -242,20 +235,18 @@ export class MaterialInstance {
     public fillMaterialParams(materialParams: MaterialParams, camera: Camera, materialInstanceState: MaterialInstanceState, bmdModel: BMDModel, textureHolder: GXTextureHolder): void {
         const material = this.material;
 
-        this.copyColor(ColorKind.MAT0, material.colorMatRegs[0]);
-        this.copyColor(ColorKind.MAT1, material.colorMatRegs[1]);
-        this.copyColor(ColorKind.AMB0, material.colorAmbRegs[0]);
-        this.copyColor(ColorKind.AMB1, material.colorAmbRegs[1]);
-
-        this.copyColor(ColorKind.K0, material.colorConstants[0]);
-        this.copyColor(ColorKind.K1, material.colorConstants[1]);
-        this.copyColor(ColorKind.K2, material.colorConstants[2]);
-        this.copyColor(ColorKind.K3, material.colorConstants[3]);
-
-        this.copyColor(ColorKind.CPREV, material.colorRegisters[3]);
-        this.copyColor(ColorKind.C0, material.colorRegisters[0]);
-        this.copyColor(ColorKind.C1, material.colorRegisters[1]);
-        this.copyColor(ColorKind.C2, material.colorRegisters[2]);
+        this.copyColor(materialParams.u_Color[ColorKind.MAT0], ColorKind.MAT0, material.colorMatRegs[0]);
+        this.copyColor(materialParams.u_Color[ColorKind.MAT1], ColorKind.MAT1, material.colorMatRegs[1]);
+        this.copyColor(materialParams.u_Color[ColorKind.AMB0], ColorKind.AMB0, material.colorAmbRegs[0]);
+        this.copyColor(materialParams.u_Color[ColorKind.AMB1], ColorKind.AMB1, material.colorAmbRegs[1]);
+        this.copyColor(materialParams.u_Color[ColorKind.K0], ColorKind.K0, material.colorConstants[0]);
+        this.copyColor(materialParams.u_Color[ColorKind.K1], ColorKind.K1, material.colorConstants[1]);
+        this.copyColor(materialParams.u_Color[ColorKind.K2], ColorKind.K2, material.colorConstants[2]);
+        this.copyColor(materialParams.u_Color[ColorKind.K3], ColorKind.K3, material.colorConstants[3]);
+        this.copyColor(materialParams.u_Color[ColorKind.CPREV], ColorKind.CPREV, material.colorRegisters[3]);
+        this.copyColor(materialParams.u_Color[ColorKind.C0], ColorKind.C0, material.colorRegisters[0]);
+        this.copyColor(materialParams.u_Color[ColorKind.C1], ColorKind.C1, material.colorRegisters[1]);
+        this.copyColor(materialParams.u_Color[ColorKind.C2], ColorKind.C2, material.colorRegisters[2]);
 
         // Bind textures.
         for (let i = 0; i < material.textureIndexes.length; i++) {
@@ -317,6 +308,12 @@ export class MaterialInstance {
             case 0x02:
             case 0x0A:
             case 0x0B:
+                // In the case of flipY, invert the Y coordinates. This is not a J3D thing, this is
+                // compensating for OpenGL being bad in other cases.
+                if (flipY) {
+                    texEnvMtx(scratch, 1, 1, 0, 1);
+                    mat4.mul(dst, scratch, dst);
+                }
                 break;
             case 0x06: // Rainbow Road
                 // Environment mapping
@@ -477,9 +474,8 @@ export class BMDModelInstance {
     public visible: boolean = true;
     public isSkybox: boolean = false;
     public passMask: number = 0x01;
-    public fps: number = 30;
 
-    public modelMatrix: mat4;
+    public modelMatrix = mat4.create();
 
     public colorOverrides: GX_Material.Color[] = [];
     public alphaOverrides: boolean[] = [];
@@ -487,6 +483,7 @@ export class BMDModelInstance {
     // Animations.
     public animationController = new AnimationController();
     public ank1Animator: ANK1Animator | null = null;
+    public vaf1Animator: VAF1Animator | null = null;
 
     // Temporary state when calculating bone matrices.
     private jointMatrices: mat4[];
@@ -508,8 +505,6 @@ export class BMDModelInstance {
     ) {
         if (materialHacks)
             Object.assign(this.materialHacks, materialHacks);
-
-        this.modelMatrix = mat4.create();
 
         this.shapeInstances = this.bmdModel.shapeData.map((shapeData) => {
             return new ShapeInstance(shapeData);
@@ -570,54 +565,78 @@ export class BMDModelInstance {
         this.bmdModel.destroy(device);
     }
 
-    public setSortKeyLayer(layer: GfxRendererLayer): void {
-        for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].setSortKeyLayer(layer);
-    }
-
-    public setMaterialColorWriteEnabled(materialName: string, colorWrite: boolean): void {
-        this.materialInstances.find((m) => m.name === materialName).setColorWriteEnabled(colorWrite);
-    }
-
-    public setColorOverride(i: ColorKind, color: GX_Material.Color, useAlpha: boolean = false): void {
-        this.colorOverrides[i] = color;
-        this.alphaOverrides[i] = useAlpha;
-    }
-
-    public setIsSkybox(v: boolean): void {
-        this.isSkybox = v;
-    }
-
-    public setFPS(v: number): void {
-        this.fps = v;
-    }
-
     public setVisible(v: boolean): void {
         this.visible = v;
     }
 
+    /**
+     * Render Hack. Sets whether vertex colors are enabled. If vertex colors are disabled,
+     * then opaque white is substituted for them in the shader generated for every material.
+     *
+     * By default, vertex colors are enabled.
+     */
     public setVertexColorsEnabled(v: boolean): void {
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].setVertexColorsEnabled(v);
     }
 
+    /**
+     * Render Hack. Sets whether texture samples are enabled. If texture samples are disabled,
+     * then opaque white is substituted for them in the shader generated for every material.
+     *
+     * By default, textures are enabled.
+     */
     public setTexturesEnabled(v: boolean): void {
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].setTexturesEnabled(v);
+    }
+
+    public setSortKeyLayer(layer: GfxRendererLayer): void {
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].setSortKeyLayer(layer);
+    }
+
+    /**
+     * Sets whether color write is enabled. This is equivalent to the native GX function
+     * GXSetColorUpdate. There is no MAT3 material flag for this, so some games have special
+     * engine hooks to enable and disable color write at runtime.
+     * 
+     * Specifically, Wind Waker turns off color write when drawing a specific part of character's
+     * eyes so it can draw them on top of the hair.
+     */
+    public setMaterialColorWriteEnabled(materialName: string, colorWrite: boolean): void {
+        this.materialInstances.find((m) => m.name === materialName).setColorWriteEnabled(colorWrite);
+    }
+
+    /**
+     * Sets a color override for a specific color. The MAT3 has defaults for every color,
+     * but engines can override colors on a model with their own colors if wanted. Color
+     * overrides also take precedence over any bound color animations.
+     * 
+     * Choose which color "slot" to override with {@param colorKind}.
+     * 
+     * It is currently not possible to specify a color override per-material.
+     *
+     * By default, the alpha value in {@param color} is not used. Set {@param useAlpha}
+     * to true to obey the alpha color override.
+     *
+     * To unset a color override, pass {@constant undefined} as for {@param color}.
+     */
+    public setColorOverride(colorKind: ColorKind, color: GX_Material.Color | undefined, useAlpha: boolean = false): void {
+        this.colorOverrides[colorKind] = color;
+        this.alphaOverrides[colorKind] = useAlpha;
     }
 
     public setGXLight(i: number, light: GX_Material.Light): void {
         this.materialInstanceState.lights[i].copy(light);
     }
 
-    // TODO(jstpierre): Implement BVA visibility animation
-    public setShapeVisible(i: number, visible: boolean): void {
-        this.shapeInstanceState.shapeVisibility[i] = visible;
-    }
-
     /**
-     * Binds {@param ttk1} (texture animations) to this model renderer.
+     * Binds {@param ttk1} (texture animations) to this model instance.
      * TTK1 objects can be parsed from {@link BTK} files. See {@link BTK.parse}.
+     *
+     * @param animationController An {@link AnimationController} to control the progress of this animation to.
+     * By default, this will default to this instance's own {@member animationController}.
      */
     public bindTTK1(ttk1: TTK1, animationController: AnimationController = this.animationController): void {
         for (let i = 0; i < this.materialInstances.length; i++)
@@ -625,8 +644,11 @@ export class BMDModelInstance {
     }
 
     /**
-     * Binds {@param trk1} (color register animations) to this model renderer.
+     * Binds {@param trk1} (color register animations) to this model instance.
      * TRK1 objects can be parsed from {@link BRK} files. See {@link BRK.parse}.
+     *
+     * @param animationController An {@link AnimationController} to control the progress of this animation to.
+     * By default, this will default to this instance's own {@member animationController}.
      */
     public bindTRK1(trk1: TRK1, animationController: AnimationController = this.animationController): void {
         for (let i = 0; i < this.materialInstances.length; i++)
@@ -634,11 +656,26 @@ export class BMDModelInstance {
     }
 
     /**
-     * Binds {@param ank1} (joint animations) to this model renderer.
+     * Binds {@param ank1} (joint animations) to this model instance.
      * ANK1 objects can be parsed from {@link BCK} files. See {@link BCK.parse}.
+     *
+     * @param animationController An {@link AnimationController} to control the progress of this animation to.
+     * By default, this will default to this instance's own {@member animationController}.
      */
     public bindANK1(ank1: ANK1, animationController: AnimationController = this.animationController): void {
         this.ank1Animator = bindANK1Animator(animationController, ank1);
+    }
+
+    /**
+     * Binds {@param vaf1} (shape visibility animations) to this model instance.
+     * VAF1 objects can be parsed from {@link BVA} files. See {@link BVA.parse}.
+     *
+     * @param animationController An {@link AnimationController} to control the progress of this animation to.
+     * By default, this will default to this instance's own {@member animationController}.
+     */
+    public bindVAF1(vaf1: VAF1, animationController: AnimationController = this.animationController): void {
+        assert(vaf1.visibilityAnimationTracks.length === this.shapeInstances.length);
+        this.vaf1Animator = bindVAF1Animator(animationController, vaf1);
     }
 
     public getJointMatrixReference(jointName: string): mat4 {
@@ -646,10 +683,6 @@ export class BMDModelInstance {
         const parentJointIndex = this.bmdModel.bmd.jnt1.joints.findIndex((j) => j.name === jointName);
         assert(parentJointIndex >= 0);
         return this.jointMatrices[parentJointIndex];
-    }
-
-    public getTimeInFrames(milliseconds: number) {
-        return (milliseconds / 1000) * this.fps;
     }
 
     private isAnyShapeVisible(): boolean {
@@ -710,12 +743,12 @@ export class BMDModelInstance {
             // Use the root joint to calculate depth.
             const rootJoint = this.bmdModel.bmd.jnt1.joints[0];
             bboxScratch.transform(rootJoint.bbox, this.modelMatrix);
-            depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, bboxScratch);
+            depth = Math.max(computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, bboxScratch), 0);
         }
 
         for (let i = 0; i < this.shapeInstances.length; i++) {
-            const shapeVisiblity = this.shapeInstanceState.shapeVisibility[i];
-            const shapeDepth = shapeVisiblity ? depth : -1;
+            const shapeVisibility = this.vaf1Animator !== null ? this.vaf1Animator.calcVisibility(i) : true;
+            const shapeDepth = shapeVisibility ? depth : -1;
             this.shapeInstances[i].prepareToRender(renderHelper, shapeDepth, viewerInput, this.shapeInstanceState);
         }
     }

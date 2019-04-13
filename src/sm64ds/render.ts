@@ -13,16 +13,16 @@ import { DeviceProgram } from '../Program';
 import Progressable from '../Progressable';
 import { fetchData } from '../fetch';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { computeModelMatrixYBillboard, computeViewMatrix, computeViewMatrixSkybox, Camera } from '../Camera';
+import { computeModelMatrixYBillboard, computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
-import { GfxFormat, GfxBufferUsage, GfxBufferFrequencyHint, GfxBlendMode, GfxBlendFactor, GfxDevice, GfxHostAccessPass, GfxProgram, GfxBindingLayoutDescriptor, GfxBuffer, GfxVertexAttributeFrequency, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxRenderPass, GfxInputState, GfxInputLayout, GfxVertexAttributeDescriptor, GfxTextureDimension } from '../gfx/platform/GfxPlatform';
+import { GfxFormat, GfxBufferUsage, GfxBufferFrequencyHint, GfxBlendMode, GfxBlendFactor, GfxDevice, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxBuffer, GfxVertexAttributeFrequency, GfxTexFilterMode, GfxMipFilterMode, GfxRenderPass, GfxInputState, GfxInputLayout, GfxVertexAttributeDescriptor, GfxTextureDimension } from '../gfx/platform/GfxPlatform';
 import { fillMatrix4x3, fillMatrix4x4, fillVec4, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxRenderInstViewRenderer, GfxRenderInstBuilder, GfxRenderInst, makeSortKeyOpaque, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstViewRenderer, GfxRenderInstBuilder, GfxRenderInst, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { BasicRenderTarget, depthClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import GfxArena from '../gfx/helpers/GfxArena';
-import { getFormatName, parseTexImageParamWrapModeS, parseTexImageParamWrapModeT } from './nitro_tex';
+import { getFormatName, parseTexImageParamWrapModeS, parseTexImageParamWrapModeT, Format } from './nitro_tex';
 import { assert } from '../util';
 import { RENDER_HACKS_ICON } from '../bk/scenes';
 
@@ -335,6 +335,7 @@ class BMDRenderer {
         const texture = material.texture;
         const templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
         const textureMapping = new TextureMapping();
+
         if (texture !== null) {
             this.textureHolder.fillTextureMapping(textureMapping, texture.name);
             textureMapping.gfxSampler = this.arena.trackSampler(device.createSampler({
@@ -376,6 +377,9 @@ class BMDRenderer {
             }
 
             if (texture !== null) {
+                this.textureHolder.fillTextureMapping(textureMapping, texture.name);
+                templateRenderInst.setSamplerBindingsFromTextureMappings([textureMapping]);
+
                 if (texCoordMode === NITRO_BMD.TexCoordMode.NORMAL) {
                     // TODO(jstpierre): Verify that we want this in all cases. Is there some flag
                     // in the engine that turns on the spherical reflection mapping?
@@ -647,7 +651,7 @@ export class SceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private _createBMDRenderer(device: GfxDevice, modelCache: ModelCache, textureHolder: NITROTextureHolder, filename: string, scale: number, level: CRG1Level, isSkybox: boolean): PromiseLike<BMDRenderer> {
+    private _createBMDRenderer(device: GfxDevice, modelCache: ModelCache, textureHolder: NITROTextureHolder, filename: string, scale: number, level: CRG1Level, isSkybox: boolean): Progressable<BMDRenderer> {
         return modelCache.fetchModel(device, `sm64ds/${filename}`).then((bmdData: BMDData) => {
             const renderer = new BMDRenderer(device, textureHolder, bmdData, level);
             mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [scale, scale, scale]);
@@ -656,7 +660,7 @@ export class SceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private _createBMDObjRenderer(device: GfxDevice, modelCache: ModelCache, textureHolder: NITROTextureHolder, filename: string, translation: vec3, rotationY: number, scale: number = 1, spinSpeed: number = 0): PromiseLike<BMDRenderer> {
+    private _createBMDObjRenderer(device: GfxDevice, modelCache: ModelCache, textureHolder: NITROTextureHolder, filename: string, translation: vec3, rotationY: number, scale: number = 1, spinSpeed: number = 0): Progressable<BMDRenderer> {
         return modelCache.fetchModel(device, `sm64ds/${filename}`).then((bmdData: BMDData) => {
             const renderer = new BMDRenderer(device, textureHolder, bmdData);
             renderer.name = filename;
@@ -679,7 +683,7 @@ export class SceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private _createBMDRendererForObject(device: GfxDevice, modelCache: ModelCache, textureHolder: NITROTextureHolder, object: CRG1Object): PromiseLike<BMDRenderer> {
+    private _createBMDRendererForObject(device: GfxDevice, modelCache: ModelCache, textureHolder: NITROTextureHolder, object: CRG1Object): Progressable<BMDRenderer> {
         const translation = vec3.fromValues(object.Position.X, object.Position.Y, object.Position.Z);
         const rotationY = object.Rotation.Y / 180 * Math.PI;
 
@@ -851,20 +855,20 @@ export class SceneDesc implements Viewer.SceneDesc {
         }
     }
 
-    private _createSceneFromCRG1(device: GfxDevice, textureHolder: NITROTextureHolder, crg1: Sm64DSCRG1): PromiseLike<Viewer.SceneGfx> {
+    private _createSceneFromCRG1(device: GfxDevice, textureHolder: NITROTextureHolder, crg1: Sm64DSCRG1): Progressable<Viewer.SceneGfx> {
         const level = crg1.Levels[this.levelId];
         const modelCache = new ModelCache();
         const renderers = [this._createBMDRenderer(device, modelCache, textureHolder, level.MapBmdFile, GLOBAL_SCALE, level, false)];
         if (level.VrboxBmdFile)
             renderers.push(this._createBMDRenderer(device, modelCache, textureHolder, level.VrboxBmdFile, 0.8, level, true));
         else
-            renderers.push(Promise.resolve(null));
+            renderers.push(Progressable.resolve(null));
         for (const object of level.Objects) {
             const objRenderer = this._createBMDRendererForObject(device, modelCache, textureHolder, object);
             if (objRenderer)
             renderers.push(objRenderer);
         }
-        return Promise.all(renderers).then(([mainBMD, skyboxBMD, ...extraBMDs]) => {
+        return Progressable.all(renderers).then(([mainBMD, skyboxBMD, ...extraBMDs]) => {
             return new SM64DSRenderer(device, modelCache, textureHolder, mainBMD, skyboxBMD, extraBMDs);
         });
     }

@@ -189,10 +189,9 @@ function createScene(device: GfxDevice, renderHelper: GXRenderHelperGfx, texture
         scene.bindANK1(bck.ank1);
     }
 
-    scene.setIsSkybox(isSkybox);
+    scene.isSkybox = isSkybox;
     return scene;
 }
-
 
 class WindWakerRoomRenderer {
     public model: BMDModelInstance;

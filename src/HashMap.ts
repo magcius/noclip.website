@@ -17,15 +17,7 @@ export function hashCodeNumbers(key: number[]): number {
     hash += hash << 3;
     hash ^= hash >>> 11;
     hash += hash << 15;
-    return hash;
-}
-
-export function hashCodeString(key: string): number {
-    const n = key.length;
-    const numbers = Array(n);
-    for (let i = 0; i < n; i++)
-        numbers[i] = key.charCodeAt(i);
-    return hashCodeNumbers(numbers);
+    return hash >>> 0;
 }
 
 // Pass this as a hash function to use a one-bucket HashMap (equivalent to linear search in an array),
@@ -55,7 +47,8 @@ export class HashMap<K, V> {
     }
 
     private findBucket(k: K): HashBucket<K, V> {
-        return this.buckets[this.keyHashFunc(k) % NUM_BUCKETS];
+        const bw = this.keyHashFunc(k) % NUM_BUCKETS;
+        return this.buckets[bw];
     }
 
     public get(k: K): V | null {
@@ -66,7 +59,16 @@ export class HashMap<K, V> {
         return bucket.values[bi];
     }
 
-    public insert(k: K, v: V) {
+    public add(k: K, v: V, bi = -1): void {
+        const bw = this.keyHashFunc(k) % NUM_BUCKETS;
+        if (this.buckets[bw] === null) this.buckets[bw] = new HashBucket<K, V>();
+        const bucket = this.buckets[bw];
+        if (bi === -1) bi = bucket.keys.length;
+        bucket.keys[bi] = k;
+        bucket.values[bi] = v;
+    }
+
+    public insert(k: K, v: V): void {
         const bw = this.keyHashFunc(k) % NUM_BUCKETS;
         if (this.buckets[bw] === null) this.buckets[bw] = new HashBucket<K, V>();
         const bucket = this.buckets[bw];
