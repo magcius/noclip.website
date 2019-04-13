@@ -326,6 +326,7 @@ const enum ActorId {
     En_Zo                  = 0x01CE,
     Obj_Timeblock          = 0x01D1,
     En_Zl4                 = 0x01D3,
+    Bg_Bowl_Wall           = 0x01BD,
 };
 
 // Some objects do special magic based on which scene they are loaded into.
@@ -517,6 +518,19 @@ class SceneDesc implements Viewer.SceneDesc {
                 buildModel(zar, `model/syokudai_isi_model.cmb`, 1);
             } else if (whichModel === 0x03) { // Unknown (Seen in Ganon's Castle)
                 // TODO(jstpierre)
+            } else {
+                throw "Starschulz";
+            }
+        });
+        else if (actor.actorId === ActorId.Bg_Bowl_Wall) fetchArchive(`zelda_bowl.zar`).then((zar) => {
+            const whichModel = actor.variable & 0x0F;
+            if (whichModel === 0x00) {
+                const b = buildModel(zar, `model/bowling_p1_model.cmb`, 1);
+                b.bindCMAB(parseCMAB(zar, `misc/bowling_p1_model.cmab`));
+            } else if (whichModel === 0x01) {
+                const b = buildModel(zar, `model/bowling_p2_model.cmb`, 1);
+                b.bindCMAB(parseCMAB(zar, `misc/bowling_p2_model.cmab`));
+
             } else {
                 throw "Starschulz";
             }
