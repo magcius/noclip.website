@@ -345,6 +345,7 @@ const enum ActorId {
     En_Wf                  = 0x01AF,
     En_Gs                  = 0x01B9,
     En_Daiku_Kakariko      = 0x01BC,
+    Bg_Bowl_Wall           = 0x01BD,
     En_Crow                = 0x01C0,
     Bg_Spot18_Shutter      = 0x01C4,
     En_Cow                 = 0x01C6,
@@ -556,6 +557,19 @@ class SceneDesc implements Viewer.SceneDesc {
                 buildModel(zar, `model/syokudai_isi_model.cmb`, 1);
             } else if (whichModel === 0x03) { // Unknown (Seen in Ganon's Castle)
                 // TODO(jstpierre)
+            } else {
+                throw "Starschulz";
+            }
+        });
+        else if (actor.actorId === ActorId.Bg_Bowl_Wall) fetchArchive(`zelda_bowl.zar`).then((zar) => {
+            const whichModel = actor.variable & 0x0F;
+            if (whichModel === 0x00) {
+                const b = buildModel(zar, `model/bowling_p1_model.cmb`, 1);
+                b.bindCMAB(parseCMAB(zar, `misc/bowling_p1_model.cmab`));
+            } else if (whichModel === 0x01) {
+                const b = buildModel(zar, `model/bowling_p2_model.cmb`, 1);
+                b.bindCMAB(parseCMAB(zar, `misc/bowling_p2_model.cmab`));
+
             } else {
                 throw "Starschulz";
             }
