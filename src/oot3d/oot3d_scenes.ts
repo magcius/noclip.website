@@ -352,13 +352,9 @@ const enum ActorId {
     En_Zo                  = 0x01CE,
     Obj_Timeblock          = 0x01D1,
     En_Zl4                 = 0x01D3,
-<<<<<<< HEAD
 
     //
     Grezzo_Hintstone       = 0x01D9,
-=======
-    Bg_Bowl_Wall           = 0x01BD,
->>>>>>> Bombchu Bowling Alley Walls
 };
 
 // Some objects do special magic based on which scene they are loaded into.
