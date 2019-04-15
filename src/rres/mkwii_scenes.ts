@@ -279,8 +279,74 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
             spawnObject(`HeyhoShipGBA`);
         //} else if (gobj.objectId === 0x00d0) { // kart_truck
         //    spawnObject(`K_truck`);
+        //} else if (gobj.objectId === 0x00d1) { // car_body
+        //    spawnObject(`K_car_body`);
+        } else if (gobj.objectId === 0x00d2) { // skyship
+            spawnObject(`skyship`);
+        } else if (gobj.objectId === 0x00d7) { // penguin_s
+            spawnObject(`penguin_s`);
+            // wiki says they should be creating a mirrored one below it, for the fake reflection but it isnt
+        } else if (gobj.objectId === 0x00d8) { // penguin_m
+            spawnObject(`penguin_m`);
+        } else if (gobj.objectId === 0x00d9) { // penguin_l
+            spawnObject(`penguin_l`);
+            // penguins are missing eyes, the horror!
+        } else if (gobj.objectId === 0x00da) { // castleballoon1
+            spawnObject(`castleballoon1`);
+        } else if (gobj.objectId === 0x00db) { // dossunc
+            spawnObject(`dossun`);
+        } else if (gobj.objectId === 0x00dd) { // boble
+            spawnObject(`boble`);
+        } else if (gobj.objectId === 0x00de) { // K_bomb_car
+            spawnObject(`K_bomb_car`);
+        //} else if (gobj.objectId === 0x00e2) { // hanachan
+        //    spawnObject(`hanachan`);
+            // only shows up as his head
+        } else if (gobj.objectId === 0x00e3) { // seagull
+            spawnObject(`seagull`);
+        } else if (gobj.objectId === 0x00e4) { // moray
+            spawnObject(`moray`);
+        } else if (gobj.objectId === 0x00e5) { // crab
+            spawnObject(`crab`);
+        } else if (gobj.objectId === 0x00e7) { // CarA2
+            spawnObject(`CarA2`);
+        } else if (gobj.objectId === 0x00e8) { // CarA3
+            spawnObject(`CarA3`);
+        //} else if (gobj.objectId === 0x00e9) { // Hwanwan
+        //    spawnObject(`wanwan`);
+            // smaller than it should be and half clipped into the floor
+        } else if (gobj.objectId === 0x00eb) { // Twanwan
+            const b = spawnObject(`Twanwan`);
+            b.modelMatrix[13] += 150;
+            // offset a bit so he fits into the pipe nicer.
+        } else if (gobj.objectId === 0x00ec) { // cruiserR
+            spawnObject(`cruiser`);
+        } else if (gobj.objectId === 0x00ed) { // bird
+            spawnObject(`bird`);
         } else if (gobj.objectId === 0x012E) { // dokan_sfc
             spawnObject(`dokan_sfc`);
+        } else if (gobj.objectId === 0x012f) { // castletree1
+            spawnObject(`castletree1`);
+        } else if (gobj.objectId === 0x0130) { // castletree1c
+            spawnObject(`castletree1`);
+        } else if (gobj.objectId === 0x0131) { // castletree2
+            spawnObject(`castletree2`);
+        } else if (gobj.objectId === 0x0132) { // castleflower1
+            spawnObject(`castleflower1`);
+        } else if (gobj.objectId === 0x0133) { // mariotreeGC
+            spawnObject(`mariotreeGC`);
+        } else if (gobj.objectId === 0x0134) { // mariotreeGCc
+            spawnObject(`mariotreeGC`);
+        } else if (gobj.objectId === 0x0135) { // donkytree1GC
+            spawnObject(`donkytree1GC`);
+        } else if (gobj.objectId === 0x0136) { // donkytree2GC
+            spawnObject(`donkytree2GC`);
+        } else if (gobj.objectId === 0x0137) { // peachtreeGC
+            spawnObject(`peachtreeGC`);
+        } else if (gobj.objectId === 0x0138) { // peachtreeGCc
+            spawnObject(`peachtreeGC`);
+        } else if (gobj.objectId === 0x013c) { // obakeblockSFCc
+            spawnObject(`obakeblockSFC`);
         } else if (gobj.objectId === 0x014D) { // MiiObj01
             spawnObject(`MiiObj01`);
         } else if (gobj.objectId === 0x014E) { // MiiObj02
