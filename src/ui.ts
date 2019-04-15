@@ -1397,7 +1397,8 @@ class ViewerSettings extends Panel {
     private camSpeedSlider: HTMLInputElement;
     private cameraControllerWASD: HTMLElement;
     private cameraControllerOrbit: HTMLElement;
-    private invertCheckbox: Checkbox;
+    private invertYCheckbox: Checkbox;
+    private invertXCheckbox: Checkbox;
 
     constructor(private viewer: Viewer.Viewer) {
         super();
@@ -1488,10 +1489,15 @@ class ViewerSettings extends Panel {
             this.setCameraControllerClass(OrbitCameraController);
         };
 
-        this.invertCheckbox = new Checkbox('Invert Y Axis?');
-        this.invertCheckbox.onchanged = () => { this.setInvertY(this.invertCheckbox.checked); };
-        this.contents.appendChild(this.invertCheckbox.elem);
+        this.invertYCheckbox = new Checkbox('Invert Y Axis?');
+        this.invertYCheckbox.onchanged = () => { GlobalSaveManager.saveSetting(`InvertY`, this.invertYCheckbox.checked); };
+        this.contents.appendChild(this.invertYCheckbox.elem);
         GlobalSaveManager.addSettingListener('InvertY', this.invertYChanged.bind(this));
+
+        this.invertXCheckbox = new Checkbox('Invert X Axis?');
+        this.invertXCheckbox.onchanged = () => { GlobalSaveManager.saveSetting(`InvertX`, this.invertXCheckbox.checked); };
+        this.contents.appendChild(this.invertXCheckbox.elem);
+        GlobalSaveManager.addSettingListener('InvertX', this.invertXChanged.bind(this));
     }
 
     private _getSliderT(slider: HTMLInputElement) {
@@ -1528,13 +1534,14 @@ class ViewerSettings extends Panel {
         setElementHighlighted(this.cameraControllerOrbit, cameraControllerClass === OrbitCameraController);
     }
 
-    public setInvertY(v: boolean): void {
-        GlobalSaveManager.saveSetting(`InvertY`, v);
-    }
-
     private invertYChanged(saveManager: SaveManager, key: string): void {
         const invertY = saveManager.loadSetting<boolean>(key, false);
-        this.invertCheckbox.setChecked(invertY);
+        this.invertYCheckbox.setChecked(invertY);
+    }
+
+    private invertXChanged(saveManager: SaveManager, key: string): void {
+        const invertX = saveManager.loadSetting<boolean>(key, false);
+        this.invertXCheckbox.setChecked(invertX);
     }
 }
 

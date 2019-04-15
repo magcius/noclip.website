@@ -26,6 +26,9 @@ function isModifier(key: string) {
 export type Listener = (inputManager: InputManager) => void;
 
 export default class InputManager {
+    public invertY = false;
+    public invertX = false;
+
     public toplevel: HTMLElement;
     // tristate. non-existent = not pressed, false = pressed but not this frame, true = pressed this frame.
     public keysDown: Map<string, boolean>;
@@ -37,7 +40,6 @@ export default class InputManager {
     private lastY: number;
     public grabbing: boolean = false;
     public onisdraggingchanged: () => void | null = null;
-    public invertY: boolean = false;
     private listeners: Listener[] = [];
     private scrollListeners: Listener[] = [];
     private usePointerLock: boolean = true;
@@ -60,6 +62,10 @@ export default class InputManager {
 
         GlobalSaveManager.addSettingListener('InvertY', (saveManager: SaveManager, key: string) => {
             this.invertY = saveManager.loadSetting<boolean>(key, false);
+        });
+
+        GlobalSaveManager.addSettingListener('InvertX', (saveManager: SaveManager, key: string) => {
+            this.invertX = saveManager.loadSetting<boolean>(key, false);
         });
     }
 
