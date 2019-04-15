@@ -32,7 +32,7 @@ class ModelCache {
             v.destroy(device);
     }
 
-    public ensureModel(device: GfxDevice, arc: U8.U8Archive, renderer: MarioKartWiiRenderer, path: string): void {
+    public ensureRRES(device: GfxDevice, renderer: MarioKartWiiRenderer, arc: U8.U8Archive, path: string): BRRES.RRES {
         if (!this.rresCache.has(path)) {
             const rres = BRRES.parse(arc.findFileData(path));
             renderer.textureHolder.addRRESTextures(device, rres);
@@ -43,6 +43,8 @@ class ModelCache {
                 this.modelCache.set(rres.mdl0[i].name, mdl0Model);
             }
         }
+
+        return this.rresCache.get(path);
     }
 }
 
@@ -204,10 +206,8 @@ const posMtx = mat4.fromScaling(mat4.create(), [scaleFactor, scaleFactor, scaleF
 class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
 
-    private spawnObjectFromRRESPath(device: GfxDevice, renderer: MarioKartWiiRenderer, arc: U8.U8Archive, arcPath: string, objectName: string): MDL0ModelInstance {
+    private spawnObjectFromRRES(device: GfxDevice, renderer: MarioKartWiiRenderer, rres: BRRES.RRES, objectName: string): MDL0ModelInstance {
         const modelCache = renderer.modelCache;
-        modelCache.ensureModel(device, arc, renderer, arcPath);
-        const rres = modelCache.rresCache.get(arcPath);
         const mdl0Model = modelCache.modelCache.get(objectName);
         const mdl0Instance = new MDL0ModelInstance(device, renderer.renderHelper, renderer.textureHolder, mdl0Model);
         mdl0Instance.bindRRESAnimations(renderer.animationController, rres);
@@ -219,13 +219,13 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
     private spawnObjectFromKMP(device: GfxDevice, renderer: MarioKartWiiRenderer, arc: U8.U8Archive, gobj: GOBJ): void {
         const getRRES = (objectName: string): BRRES.RRES => {
             const arcPath = `./${objectName}.brres`;
-            // Should have already been loaded by now.
+            renderer.modelCache.ensureRRES(device, renderer, arc, arcPath);
             return assertExists(renderer.modelCache.rresCache.get(arcPath));
         };
 
         const spawnObject = (objectName: string): MDL0ModelInstance => {
-            const arcPath = `./${objectName}.brres`;
-            const b = this.spawnObjectFromRRESPath(device, renderer, arc, arcPath, objectName);
+            const rres = getRRES(objectName);
+            const b = this.spawnObjectFromRRES(device, renderer, rres, objectName);
             calcModelMtx(b.modelMatrix, gobj.scaleX, gobj.scaleY, gobj.scaleZ, gobj.rotationX, gobj.rotationY, gobj.rotationZ, gobj.translationX, gobj.translationY, gobj.translationZ);
             mat4.mul(b.modelMatrix, posMtx, b.modelMatrix);
             return b;
@@ -233,7 +233,22 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
 
         // Object IDs taken from http://wiki.tockdom.com/wiki/Object
 
-        if (gobj.objectId === 0x0003) { // lensFX
+        if (gobj.objectId === 0x0002) { // Psea
+            const rres = getRRES(`Psea`);
+            const b1 = this.spawnObjectFromRRES(device, renderer, rres, `Psea1sand`);
+            const b2 = this.spawnObjectFromRRES(device, renderer, rres, `Psea2dark`);
+            const b3 = this.spawnObjectFromRRES(device, renderer, rres, `Psea3nami`);
+            const b4 = this.spawnObjectFromRRES(device, renderer, rres, `Psea4tex`);
+            const b5 = this.spawnObjectFromRRES(device, renderer, rres, `Psea5spc`);
+
+            // Value established by trial and error. Needs more research. See
+            // http://wiki.tockdom.com/wiki/Object/Psea
+            b1.modelMatrix[13] -= 8550;
+            b2.modelMatrix[13] -= 8550;
+            b3.modelMatrix[13] -= 8550;
+            b4.modelMatrix[13] -= 8550;
+            b5.modelMatrix[13] -= 8550;
+        } else if (gobj.objectId === 0x0003) { // lensFX
             // Lens flare effect -- runtime determined, not a BRRES.
         } else if (gobj.objectId === 0x0015) { // sound_Mii
             // sound generator
@@ -279,11 +294,16 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
             console.log(arc, kmp);
             const renderer = new MarioKartWiiRenderer(device);
 
-            const courseInstance = this.spawnObjectFromRRESPath(device, renderer, arc, `./course_model.brres`, 'course');
+            const modelCache = renderer.modelCache;
+
+            const courseRRES = modelCache.ensureRRES(device, renderer, arc, `./course_model.brres`);;
+            const courseInstance = this.spawnObjectFromRRES(device, renderer, courseRRES, 'course');
             mat4.copy(courseInstance.modelMatrix, posMtx);
 
-            const skyboxInstance = this.spawnObjectFromRRESPath(device, renderer, arc, `./vrcorn_model.brres`, 'vrcorn');
+            const skyboxRRES = modelCache.ensureRRES(device, renderer, arc, `./vrcorn_model.brres`);
+            const skyboxInstance = this.spawnObjectFromRRES(device, renderer, skyboxRRES, 'vrcorn');
             mat4.copy(skyboxInstance.modelMatrix, posMtx);
+            skyboxInstance.isSkybox = true;
             skyboxInstance.passMask = MKWiiPass.SKYBOX;
 
             for (let i = 0; i < kmp.gobj.length; i++)
