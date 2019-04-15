@@ -410,7 +410,6 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
             const skyboxRRES = modelCache.ensureRRES(device, renderer, arc, `./vrcorn_model.brres`);
             const skyboxInstance = this.spawnObjectFromRRES(device, renderer, skyboxRRES, 'vrcorn');
             mat4.copy(skyboxInstance.modelMatrix, posMtx);
-            skyboxInstance.isSkybox = true;
             skyboxInstance.passMask = MKWiiPass.SKYBOX;
 
             for (let i = 0; i < kmp.gobj.length; i++)
