@@ -260,6 +260,25 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
         } else if (gobj.objectId === 0x006F) { // sun
             // TODO(jstpierre): Sun doesn't show up? Need to figure out what this is...
             spawnObject(`sun`);
+        } else if (gobj.objectId === 0x0071) { // KmoonZ
+            spawnObject(`KmoonZ`);
+        } else if (gobj.objectId === 0x0072) { // sunDS
+            spawnObject(`sunDS`);
+        } else if (gobj.objectId === 0x0073) { // coin
+            spawnObject(`coin`);  
+            // Kinda partially clipped into the floor, and doesn't spin
+        } else if (gobj.objectId === 0x00ca) { // MashBalloonGC
+            spawnObject(`MashBalloonGC`);
+        } else if (gobj.objectId === 0x00cb) { // WLwallGC
+            spawnObject(`WLwallGC`);
+        } else if (gobj.objectId === 0x00cc) { // CarA1
+            spawnObject(`CarA1`);
+        } else if (gobj.objectId === 0x00cd) { // basabasa
+            spawnObject(`basabasa`);
+        } else if (gobj.objectId === 0x00ce) { // HeyhoShipGBA
+            spawnObject(`HeyhoShipGBA`);
+        //} else if (gobj.objectId === 0x00d0) { // kart_truck
+        //    spawnObject(`K_truck`);
         } else if (gobj.objectId === 0x012E) { // dokan_sfc
             spawnObject(`dokan_sfc`);
         } else if (gobj.objectId === 0x014D) { // MiiObj01
@@ -268,8 +287,30 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
             spawnObject(`MiiObj02`);
         } else if (gobj.objectId === 0x014F) { // MiiObj03
             spawnObject(`MiiObj03`);
+        } else if (gobj.objectId === 0x0150) { // gardentreeDS
+            spawnObject(`gardentreeDS`);
+        } else if (gobj.objectId === 0x0151) { // gardentreeDSc
+            spawnObject(`gardentreeDS`);
+        } else if (gobj.objectId === 0x0152) { // FlagA1
+            spawnObject(`FlagA1`);
+        } else if (gobj.objectId === 0x0153) { // FlagA2
+            spawnObject(`FlagA2`);
+        } else if (gobj.objectId === 0x0154) { // FlagB1
+            spawnObject(`FlagB1`);
         } else if (gobj.objectId === 0x0155) { // FlagB2
             spawnObject(`FlagB2`);
+        } else if (gobj.objectId === 0x0156) { // FlagA3
+            spawnObject(`FlagA3`);
+        } else if (gobj.objectId === 0x0157) { // DKtreeA64
+            spawnObject(`DKtreeA64`);
+        } else if (gobj.objectId === 0x0158) { // DKtreeA64c
+            spawnObject(`DKtreeA64`);
+        } else if (gobj.objectId === 0x0159) { // DKtreeB64
+            spawnObject(`DKtreeB64`);
+        } else if (gobj.objectId === 0x015a) { // DKtreeB64c
+            spawnObject(`DKtreeB64`);
+        } else if (gobj.objectId === 0x015b) { // TownTreeDSc
+            spawnObject(`TownTreeDS`);
         } else if (gobj.objectId === 0x018E) { // MiiKanban
             spawnObject(`MiiKanban`);
         } else if (gobj.objectId === 0x0191) { // kuribo
