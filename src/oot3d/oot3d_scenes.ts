@@ -293,6 +293,7 @@ const enum ActorId {
     Bg_Spot16_Doughnut     = 0x00E5,
     Bg_Bdan_Switch         = 0x00E6,
     En_Ma1                 = 0x00E7,
+    Boss_Sst               = 0x00E9,
     Fishing                = 0x00FE,
     Obj_Oshihiki           = 0x00FF,
     Bg_Spot01_Fusya        = 0x0102,
@@ -305,6 +306,7 @@ const enum ActorId {
     En_Skj                 = 0x0115,
     Elf_Msg                = 0x011B,
     Bg_Spot03_Taki         = 0x011F,
+    Bg_Relay_Objects       = 0x0123,
     En_Kusa                = 0x0125,
     Obj_Bombiwa            = 0x0127,
     Obj_Switch             = 0x012A,
@@ -328,11 +330,13 @@ const enum ActorId {
     En_Siofuki             = 0x015F,
     En_Ko                  = 0x0163,
     En_Ani                 = 0x0167,
+    En_Cs                  = 0x016C,
     En_Hy                  = 0x016E,
     Elf_Msg2               = 0x0173,
     En_Heishi4             = 0x0178,
     En_Takara_Man          = 0x017C,
     En_Wonder_Talk2        = 0x0185,
+    En_Ssh                 = 0x0188,
     Bg_Spot05_Soko         = 0x018D,
     En_Hintnuts            = 0x0192,
     En_Shopnuts            = 0x0195,
@@ -342,6 +346,7 @@ const enum ActorId {
     Obj_Kibako2            = 0x01A0,
     En_Tg                  = 0x01AC,
     En_Mu                  = 0x01AD,
+    En_Go2                 = 0x01AE,
     En_Wf                  = 0x01AF,
     En_Gs                  = 0x01B9,
     En_Daiku_Kakariko      = 0x01BC,
@@ -656,6 +661,32 @@ class SceneDesc implements Viewer.SceneDesc {
                 throw "starschulz";
             }
         });
+        else if (actor.actorId === ActorId.Bg_Relay_Objects) fetchArchive(`zelda_relay_objects.zar`).then((zar) => {
+            const whichModel = ((actor.variable) >>> 8) & 0x0F;
+            if (whichModel === 0x00) {
+                buildModel(zar, 'model/relay_usu_model.cmb', 0.1);  // Rotating Center platform
+            } else if (whichModel === 0x01) {
+                buildModel(zar, 'model/l_doorpou_model.cmb', 0.1);  // Stone door
+            } else {
+                throw "starschulz";
+            }
+        });
+        else if (actor.actorId === ActorId.Bg_Spot02_Objects) fetchArchive(`zelda_Spot02_Objects.zar`).then((zar) => {
+            const whichModel = actor.variable & 0x0F;
+            if (whichModel === 0x00) {
+                buildModel(zar, 'model/obj_s02gate_model.cmb', 0.1);  // Eye of Truth door
+            } else if (whichModel === 0x01) {
+                buildModel(zar, 'model/obj_s02futa_model.cmb', 0.1);  // Small patch of ground covering Danpe's Grave
+            } else if (whichModel === 0x02) {
+                buildModel(zar, 'model/obj_s02kinghaka_model.cmb', 0.1); // Royal tomb grave
+            } else if (whichModel === 0x03) {
+            } else if (whichModel === 0x04) {
+               // buildModel(zar, 'model/haka_l_ring_modelT.cmb', 0.1); // Light Aura for when grave explodes
+            } else if (whichModel === 0x05) {
+            } else {
+                throw "starschulz";
+            }
+        });
         else if (actor.actorId === ActorId.Bg_Spot16_Doughnut) fetchArchive(`zelda_efc_doughnut.zar`).then((zar) => {
             const b = buildModel(zar, `model/doughnut_aya_modelT.cmb`, 0.1);
             b.bindCMAB(parseCMAB(zar, `misc/doughnut_aya_modelT.cmab`));
@@ -900,7 +931,7 @@ class SceneDesc implements Viewer.SceneDesc {
         else if (actor.actorId === ActorId.Obj_Hana) fetchArchive(`zelda_field_keep.zar`).then((zar) => {
             const whichModel = actor.variable & 0x03;
             if (whichModel === 0x00) {
-                buildModel(zar, `model/flower1_model.cmb`, 0.1);
+                buildModel(zar, `model/flower1_model.cmb`, 0.01);
             } else if (whichModel === 0x01) {
                 const b = buildModel(zar, `model/obj_isi01_model.cmb`, 0.1);
                 b.setVertexColorScale(characterLightScale);
@@ -1047,6 +1078,29 @@ class SceneDesc implements Viewer.SceneDesc {
         else if (actor.actorId === ActorId.En_Heishi2) fetchArchive(`zelda_sd.zar`).then((zar) => {
             // Purple Royal Guards. They are without an animation as it causes them to spaghettify...
             const b = buildModel(zar, `model/soldier2.cmb`);
+            b.setVertexColorScale(characterLightScale);
+        });
+        else if (actor.actorId === ActorId.En_Ssh) fetchArchive(`zelda_ssh.zar`).then((zar) => {
+            const b = buildModel(zar, `model/spiderman.cmb`, 0.03 );
+            b.bindCSAB(parseCSAB(zar, `anim/st_matsu.csab`));
+            b.setVertexColorScale(characterLightScale);
+        });
+        else if (actor.actorId === ActorId.Boss_Sst) fetchArchive(`zelda_sst.zar`).then((zar) => {
+            const b = buildModel(zar, `model/bongobongo.cmb`, 0.015 );
+            b.modelMatrix[14] += -500; // looks nicer offset a bit
+            b.bindCSAB(parseCSAB(zar, `anim/ss_wait_open.csab`));
+            b.setVertexColorScale(characterLightScale);
+            // this is the actor spot for one of his hands, but since there's only one spot in the scene i put 
+            // the boss in there instead.
+        });
+        else if (actor.actorId === ActorId.En_Go2) fetchArchive(`zelda_oF1d.zar`).then((zar) => {
+            const b = buildModel(zar, `model/goronpeople.cmb` );
+            b.bindCSAB(parseCSAB(zar, `anim/oF1d_dai_goron_kaii.csab`));
+            b.setVertexColorScale(characterLightScale);
+        });
+        else if (actor.actorId === ActorId.En_Cs) fetchArchive(`zelda_cs.zar`).then((zar) => {
+            const b = buildModel(zar, `model/childstalker.cmb`, 0.01 );
+            b.bindCSAB(parseCSAB(zar, `anim/cs_matsu03.csab`));
             b.setVertexColorScale(characterLightScale);
         });
         else if (actor.actorId === ActorId.En_Cow) fetchArchive('zelda_cow.zar').then((zar) => {
