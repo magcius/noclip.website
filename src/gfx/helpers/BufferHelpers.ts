@@ -18,8 +18,8 @@ export interface GfxCoalescedBuffers {
 
 export function coalesceBuffer(device: GfxDevice, usage: GfxBufferUsage, datas: ArrayBufferSlice[]): GfxCoalescedBuffer[] {
     let dataLength = 0;
-    for (const data of datas) {
-        dataLength += data.byteLength;
+    for (let i = 0; i < datas.length; i++) {
+        dataLength += datas[i].byteLength;
         dataLength = align(dataLength, 4);
     }
 

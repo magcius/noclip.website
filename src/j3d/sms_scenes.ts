@@ -425,8 +425,8 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
     private createSceneBinObjects(device: GfxDevice, renderHelper: GXRenderHelperGfx, textureHolder: J3DTextureHolder, rarc: RARC.RARC, obj: SceneBinObj): BMDModelInstance[] {
         function flatten<T>(L: T[][]): T[] {
             const R: T[] = [];
-            for (const Ts of L)
-                R.push.apply(R, Ts);
+            for (let i = 0; i < L.length; i++)
+                R.push.apply(R, L[i]);
             return R;
         }
 

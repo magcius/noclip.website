@@ -412,9 +412,9 @@ export class BMDModel {
 
         // Load shape data.
         const loadedVertexDatas = [];
-        for (const shape of bmd.shp1.shapes)
-            for (const packet of shape.packets)
-                loadedVertexDatas.push(packet.loadedVertexData);
+        for (let i = 0; i < bmd.shp1.shapes.length; i++)
+            for (let j = 0; j < bmd.shp1.shapes[i].packets.length; j++)
+                loadedVertexDatas.push(bmd.shp1.shapes[i].packets[j].loadedVertexData);
         this.bufferCoalescer = loadedDataCoalescerGfx(device, loadedVertexDatas);
 
         for (let i = 0; i < bmd.shp1.shapes.length; i++) {

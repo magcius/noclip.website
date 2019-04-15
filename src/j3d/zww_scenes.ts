@@ -777,8 +777,8 @@ class SceneDesc {
         modelCache.fetchArchive(`${pathBase}/Object/System.arc`, abortSignal);
         modelCache.fetchArchive(`${pathBase}/Stage/${this.stageDir}/Stage.arc`, abortSignal);
 
-        for (const r of this.rooms) {
-            const roomIdx = Math.abs(r);
+        for (let i = 0; i < this.rooms.length; i++) {
+            const roomIdx = Math.abs(this.rooms[i]);
             modelCache.fetchArchive(`${pathBase}/Stage/${this.stageDir}/Room${roomIdx}.arc`, abortSignal);
         }
 

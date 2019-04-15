@@ -863,8 +863,8 @@ export class SceneDesc implements Viewer.SceneDesc {
             renderers.push(this._createBMDRenderer(device, modelCache, textureHolder, level.VrboxBmdFile, 0.8, level, true));
         else
             renderers.push(Progressable.resolve(null));
-        for (const object of level.Objects) {
-            const objRenderer = this._createBMDRendererForObject(device, modelCache, textureHolder, object);
+        for (let i = 0; i < level.Objects.length; i++) {
+            const objRenderer = this._createBMDRendererForObject(device, modelCache, textureHolder, level.Objects[i]);
             if (objRenderer)
             renderers.push(objRenderer);
         }

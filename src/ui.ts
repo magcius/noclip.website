@@ -1330,9 +1330,9 @@ export class TextureViewer extends Panel {
     private showInFullSurfaceView(surfaces: HTMLCanvasElement[]) {
         this.fullSurfaceView.innerHTML = '';
 
-        for (const surface of surfaces) {
+        for (let i = 0; i < surfaces.length; i++) {
             const newCanvas = document.createElement('canvas');
-            cloneCanvas(newCanvas, surface);
+            cloneCanvas(newCanvas, surfaces[i]);
             newCanvas.style.display = 'block';
             newCanvas.style.backgroundColor = 'white';
             newCanvas.style.backgroundImage = CHECKERBOARD_IMAGE;
