@@ -200,6 +200,8 @@ function bmdModelUsesTexture(model: BMDModel, textureName: string): boolean {
     return model.tex1Samplers.some((tex1Sampler) => tex1Sampler.name === textureName);
 }
 
+const pathBase = `j3d/ztp`;
+
 class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
     public id: string;
 
@@ -246,10 +248,10 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
     }
 
     public createScene(device: GfxDevice): Progressable<Viewer.SceneGfx> {
-        const basePath = `j3d/ztp/${this.stageId}`;
+        const stagePath = `${pathBase}/res/Stage/${this.stageId}`;
         const textureHolder = new ZTPTextureHolder();
 
-        return this.fetchRarc(`${basePath}/STG_00.arc`).then((stageRarc: RARC.RARC) => {
+        return this.fetchRarc(`${stagePath}/STG_00.arc`).then((stageRarc: RARC.RARC) => {
             // Load stage shared textures.
             const texcFolder = stageRarc.findDir(`texc`);
             const extraTextureFiles = texcFolder !== null ? texcFolder.files : [];
@@ -288,7 +290,7 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
                 roomNames = roomList.map((i) => `R${leftPad(''+i, 2)}_00`);
             }
 
-            return Progressable.all(roomNames.map((roomName) => this.fetchRarc(`${basePath}/${roomName}.arc`))).then((roomRarcs: (RARC.RARC | null)[]) => {
+            return Progressable.all(roomNames.map((roomName) => this.fetchRarc(`${stagePath}/${roomName}.arc`))).then((roomRarcs: (RARC.RARC | null)[]) => {
                 roomRarcs.forEach((rarc: RARC.RARC | null, i) => {
                     if (rarc === null) return;
                     this.createRoomScenes(device, renderer, rarc, roomNames[i]);
