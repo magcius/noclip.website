@@ -795,7 +795,7 @@ class ModelCache {
             if (this.destroyed)
                 return null;
             const rarc = RARC.parse(buffer);
-            const bmd = rarc.findFileData(modelFilename) !== null ? BMD.parse(rarc.findFileData(modelFilename)) : null;
+            const bmd = BMD.parse(assertExists(rarc.findFileData(modelFilename)));
             const bmdModel = new BMDModel(device, renderHelper, bmd, null);
             textureHolder.addJ3DTextures(device, bmd);
             this.archiveCache.set(archivePath, rarc);
@@ -1002,7 +1002,7 @@ class SMGSpawner {
         const name = objinfo.objName;
         switch (objinfo.objName) {
 
-        // Skyboxen.
+            // Skyboxen.
         case 'BeyondSummerSky':
         case 'BeyondHorizonSky':
         case 'BeyondGalaxySky':
@@ -1016,27 +1016,57 @@ class SMGSpawner {
         case 'DesertSky':
         case 'GoodWeatherSky':
         case 'PhantomSky':
+        case 'VRSandwichSun':
             spawnGraph(name, SceneGraphTag.Skybox);
             break;
 
-        case 'FlagPeachCastleA':
-        case 'FlagPeachCastleB':
-        case 'FlagPeachCastleC':
-            // Archives just contain the textures. Mesh geometry appears to be generated at runtime by the game.
-            return;
-        case 'ElectricRail':
-            // Covers the path with the rail -- will require special spawn logic.
-            return;
         case 'PeachCastleTownBeforeAttack':
             spawnGraph('PeachCastleTownBeforeAttack', SceneGraphTag.Normal);
             spawnGraph('PeachCastleTownBeforeAttackBloom', SceneGraphTag.Bloom);
             break;
+
+        case 'PeachCastleTownAfterAttack':
+            // Don't show. We want the pristine town state.
+            return;
+
+        case 'ElectricRail':
+            // Covers the path with the rail -- will require special spawn logic.
+            return;
+
         case 'FlowerGroup':
         case 'FlowerBlueGroup':
         case 'ShootingStar':
         case 'MeteorCannon':
-            // Archives missing. Again, runtime mesh?
+        case 'Plant':
+        case 'WaterPlant':
+        case 'SwingRope':
+        case 'Creeper':
+        case 'TrampleStar':
+        case 'FlagPeachCastleA':
+        case 'FlagPeachCastleB':
+        case 'FlagPeachCastleC':
+        case 'FlagKoopaA':
+        case 'FlagKoopaB':
+        case 'FlagKoopaC':
+        case 'FlagRaceA':
+        case 'FlagRaceB':
+        case 'FlagRaceC':
+        case 'FlagTamakoro':
+            // Archives just contain the textures. Mesh geometry appears to be generated at runtime by the game.
             return;
+
+        case 'InvisibleWall10x10':
+        case 'InvisibleWall10x20':
+        case 'InvisibleWallGCapture10x20':
+        case 'InvisibleWaterfallTwinFallLake':
+            // Invisible.
+            return;
+
+        case 'LavaMiniSunPlanet':
+            // XXX(jstpierre): This has a texture named LavaSun which will corrupt the texture holder, so just
+            // prevent it spawning for now.
+            return;
+
         case 'TimerSwitch':
         case 'SwitchSynchronizerReverse':
         case 'PrologueDirector':
@@ -1045,6 +1075,7 @@ class SMGSpawner {
         case 'LuigiEvent':
             // Logic objects.
             return;
+
         case 'AstroCore':
             spawnGraph(name, SceneGraphTag.Normal, { bck: 'revival4.bck', brk: 'revival4.brk', btk: 'astrocore.btk' });
             break;
@@ -1125,6 +1156,10 @@ class SMGSpawner {
             // Presumably this uses the "current world map". I chose 03, because I like it.
             spawnGraph(`WorldMap03Sky`, SceneGraphTag.Skybox);
             break;
+
+        case 'MarioFacePlanetPrevious':
+            // The "old" face planet that Lubba discovers. We don't want it in sight, just looks ugly.
+            return;
 
         default:
             spawnDefault(name);
