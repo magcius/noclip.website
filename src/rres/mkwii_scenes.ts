@@ -210,7 +210,7 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
         const modelCache = renderer.modelCache;
         const mdl0Model = modelCache.modelCache.get(objectName);
         const mdl0Instance = new MDL0ModelInstance(device, renderer.renderHelper, renderer.textureHolder, mdl0Model);
-        mdl0Instance.bindRRESAnimations(renderer.animationController, rres);
+        mdl0Instance.bindRRESAnimations(renderer.animationController, rres, null);
         renderer.modelInstances.push(mdl0Instance);
         mdl0Instance.passMask = MKWiiPass.MAIN;
         return mdl0Instance;
