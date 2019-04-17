@@ -35,7 +35,8 @@ export class RARC {
 
     public findDirParts(parts: string[]): RARCDir | null {
         let dir = this.root;
-        for (const part of parts) {
+        for (let i = 0; i < parts.length; i++) {
+            const part = parts[i];
             dir = dir.subdirs.find((subdir) => subdir.name.toLowerCase() === part);
             if (dir === undefined)
                 return null;

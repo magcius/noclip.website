@@ -468,8 +468,12 @@ export class MDL0ModelInstance {
                 this.materialInstances[i].prepareToRender(renderHelper, this.textureHolder, viewerInput);
 
             const rootJoint = mdl0.nodes[0];
-            bboxScratch.transform(rootJoint.bbox, this.modelMatrix);
-            depth = Math.max(computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, bboxScratch), 0);
+            if (rootJoint.bbox != null) {
+                bboxScratch.transform(rootJoint.bbox, this.modelMatrix);
+                depth = Math.max(computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, bboxScratch), 0);
+            } else {
+                depth = 0;
+            }
         }
 
         for (let i = 0; i < this.shapeInstances.length; i++)
@@ -500,7 +504,7 @@ export class MDL0ModelInstance {
                 shapeInstance.sortKeyBias = i;
 
             const materialInstance = this.materialInstances[op.matId];
-            assert(materialInstance.materialData.material.translucent === translucent);
+            // assert(materialInstance.materialData.material.translucent === translucent);
             renderInstBuilder.pushTemplateRenderInst(materialInstance.templateRenderInst);
             shapeInstance.buildRenderInst(renderInstBuilder, this.mdl0Model.mdl0.name);
             renderInstBuilder.popTemplateRenderInst();
@@ -532,7 +536,7 @@ export class MDL0ModelInstance {
                 mat4.mul(this.matrixArray[dstMtxId], this.matrixArray[parentMtxId], modelMatrix);
 
                 if (visible) {
-                    if (this.isSkybox) {
+                    if (this.isSkybox || node.bbox === null) {
                         this.matrixVisibility[dstMtxId] = IntersectionState.FULLY_INSIDE;
                     } else {
                         bboxScratch.transform(node.bbox, this.matrixArray[dstMtxId]);

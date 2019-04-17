@@ -125,13 +125,6 @@ class SceneDesc implements Viewer.SceneDesc {
 
                 const roomNameBase = `ROOM${i}/${this.id}_${leftPad(`${i}`, 2, '0')}`;
 
-                const wCmbFile = ZAR.findFile(zar, `${roomNameBase}_w.cmb`);
-                let wCmb: CMB.CMB | null = null;
-                if (wCmbFile !== null) {
-                    // TODO(jstpierre): Add these once we figure out where to place them.
-                    // wCmb = CMB.parse(wCmbFile.buffer);
-                }
-
                 const roomRenderer = new RoomRenderer(device, textureHolder, mesh, filename);
 
                 const cmabFile = ZAR.findFile(zar, `${roomNameBase}.cmab`);
@@ -139,13 +132,6 @@ class SceneDesc implements Viewer.SceneDesc {
                     const cmab = CMAB.parse(CMB.Version.Majora, cmabFile.buffer);
                     textureHolder.addTextures(device, cmab.textures);
                     roomRenderer.bindCMAB(cmab);
-                }
-
-                const wcmabFile = ZAR.findFile(zar, `${roomNameBase}_w.cmab`);
-                if (wcmabFile !== null) {
-                    const wcmab = CMAB.parse(CMB.Version.Majora, wcmabFile.buffer);
-                    textureHolder.addTextures(device, wcmab.textures);
-                    roomRenderer.bindWCMAB(wcmab);
                 }
 
                 if (this.disabledRooms.includes(i))

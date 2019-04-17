@@ -128,7 +128,8 @@ export function parse(buffer: ArrayBufferSlice, littleEndian: boolean = false): 
     for (let i = 0; i < recordCount; i++) {
         const record: BcsvRecord = [];
 
-        for (const field of fields) {
+        for (let j = 0; j < fields.length; j++) {
+            const field = fields[j];
             const fieldOffs = recordTableIdx + field.recordOffset;
             let value;
             switch (field.type) {

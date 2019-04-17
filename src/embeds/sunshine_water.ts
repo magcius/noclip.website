@@ -120,7 +120,8 @@ class SeaPlaneScene {
         this.animationController.fps = 30 * 5;
 
         if (configName.includes('nomip')) {
-            for (const sampler of bmd.tex1.samplers) {
+            for (let i = 0; i < bmd.tex1.samplers.length; i++) {
+                const sampler = bmd.tex1.samplers[i];
                 sampler.minLOD = 1;
                 sampler.maxLOD = 1;
             }

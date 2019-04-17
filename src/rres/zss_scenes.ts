@@ -211,7 +211,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
                     const mdl0 = roomRRES.mdl0[i];
 
                     const model = this.modelCache.getModel(device, this.renderHelper, mdl0, materialHacks);
-                    const modelInstance = new MDL0ModelInstance(device, this.renderHelper, this.textureHolder, model);
+                    const modelInstance = new MDL0ModelInstance(device, this.renderHelper, this.textureHolder, model, roomArchiveFile.name);
                     modelInstance.passMask = ZSSPass.OPAQUE;
                     this.modelInstances.push(modelInstance);
 
@@ -228,11 +228,13 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         }
 
         outer:
-        // Find any indirect scenes.
-        for (const modelInstance of this.modelInstances) {
-            for (const material of modelInstance.mdl0Model.mdl0.materials) {
-                for (const sampler of material.samplers) {
-                    if (sampler.name === 'DummyWater') {
+        // Mark any indirect models. I think this is traditionally done at the actor level.
+        for (let i = 0; i < this.modelInstances.length; i++) {
+            const modelInstance = this.modelInstances[i];
+            for (let j = 0; j < modelInstance.mdl0Model.mdl0.materials.length; j++) {
+                const material = modelInstance.mdl0Model.mdl0.materials[j];
+                for (let k = 0; k < material.samplers.length; k++) {
+                    if (material.samplers[k].name === 'DummyWater') {
                         modelInstance.passMask = ZSSPass.INDIRECT;
                         continue outer;
                     }
@@ -250,37 +252,38 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         layersPanel.setLayers(this.modelInstances);
         panels.push(layersPanel);
 
-        // Construct a list of past/future models.
-        const futureModels: MDL0ModelInstance[] = [];
+        // Construct a list of past/present models.
+        const presentModels: MDL0ModelInstance[] = [];
         const pastModels: MDL0ModelInstance[] = [];
-        for (const modelRenderer of this.modelInstances) {
-            if (modelRenderer.mdl0Model.mdl0.name.startsWith('model_obj'))
-                futureModels.push(modelRenderer);
+        for (let i = 0; i < this.modelInstances.length; i++) {
+            const modelInstance = this.modelInstances[i];
+            if (modelInstance.mdl0Model.mdl0.name.startsWith('model_obj'))
+                presentModels.push(modelInstance);
 
-            // Lanayru Sand Sea has a "past" decal on top of a future zone.
-            if (this.stageId === 'F301_1' && modelRenderer.mdl0Model.mdl0.name === 'model1_s')
-                pastModels.push(modelRenderer);
+            // Lanayru Sand Sea has a "past" decal on top of a present zone.
+            if (this.stageId === 'F301_1' && modelInstance.mdl0Model.mdl0.name === 'model1_s')
+                pastModels.push(modelInstance);
         }
 
-        if (futureModels.length || pastModels.length) {
-            const futurePanel = new UI.Panel();
-            futurePanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
-            futurePanel.setTitle(SAND_CLOCK_ICON, "Time Stones");
+        if (presentModels.length || pastModels.length) {
+            const presentPanel = new UI.Panel();
+            presentPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+            presentPanel.setTitle(SAND_CLOCK_ICON, "Time Stones");
 
             const selector = new UI.SingleSelect();
-            selector.setStrings([ 'Past', 'Future' ]);
+            selector.setStrings([ 'Past', 'Present' ]);
             selector.onselectionchange = (index: number) => {
-                const isFuture = (index === 1);
-                for (const modelRenderer of futureModels)
-                    modelRenderer.setVisible(isFuture);
-                for (const modelRenderer of pastModels)
-                    modelRenderer.setVisible(!isFuture);
+                const isPresent = (index === 1);
+                for (let i = 0; i < presentModels.length; i++)
+                    presentModels[i].setVisible(isPresent);
+                for (let i = 0; i < pastModels.length; i++)
+                    pastModels[i].setVisible(!isPresent);
                 layersPanel.syncLayerVisibility();
             };
             selector.selectItem(0); // Past
-            futurePanel.contents.appendChild(selector.elem);
+            presentPanel.contents.appendChild(selector.elem);
 
-            panels.push(futurePanel);
+            panels.push(presentPanel);
         }
 
         const renderHacksPanel = new UI.Panel();
@@ -452,6 +455,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             // This color is probably set by the day/night system...
             modelInstance.setColorOverride(ColorKind.C2, new Color(1, 1, 1, 1));
             modelInstance.setColorOverride(ColorKind.K3, new Color(1, 1, 1, 1));
+            mat4.scale(modelInstance.modelMatrix, modelInstance.modelMatrix, [0.001, 0.001, 0.001]);
         } else if (name === 'CmCloud') {
             // Cumulus Cloud
             spawnOArcModel(`F020Cloud`);

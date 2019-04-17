@@ -1038,7 +1038,8 @@ function parseMDL0_ShapeEntry(buffer: ArrayBufferSlice, inputBuffers: InputVerte
     for (let attr: GX.VertexAttribute = 0; attr <= GX.VertexAttribute.TEX7; attr++) {
         const vcdFlagsEnabled = !!(vcdFlags & (1 << attr));
         const vcdEnabled = !!(vcd[attr].type !== GX.AttrType.NONE);
-        assert(vcdFlagsEnabled === vcdEnabled);
+        // Some community tooling doesn't export correct vcdFlags. Ignore it and use VCD regs as source of truth.
+        // assert(vcdFlagsEnabled === vcdEnabled);
     }
 
     // VAT. Describes attribute formats.
@@ -1163,7 +1164,10 @@ function parseMDL0_NodeEntry(buffer: ArrayBufferSlice): MDL0_NodeEntry {
     const bboxMaxX = view.getFloat32(0x50);
     const bboxMaxY = view.getFloat32(0x54);
     const bboxMaxZ = view.getFloat32(0x58);
-    const bbox: AABB = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
+    let bbox: AABB | null = null;
+
+    if ((bboxMaxX - bboxMinX) > 0)
+        bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
 
     const modelMatrix = mat4.create();
     calcModelMtx(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
