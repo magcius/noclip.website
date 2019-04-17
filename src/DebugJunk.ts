@@ -42,6 +42,18 @@ export class Graph {
         ctx.stroke();
     }
 
+    public hline(color: string, v: number): void {
+        const ctx = this.ctx;
+        const ya = (v - this.minv) / (this.maxv - this.minv);
+        const y = (1-ya) * ctx.canvas.height;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(ctx.canvas.width, y);
+        ctx.stroke();
+    }
+
     public dot(color: string, t: number, v: number, radius: number = 5): void {
         assert(t >= 0 && t <= 1);
         const ctx = this.ctx;

@@ -209,9 +209,19 @@ export class MaterialInstance {
         }
     }
 
-    private copyColor(dst: GX_Material.Color, i: ColorKind, fallbackColor: GX_Material.Color) {
+    private clampTo8Bit(color: GX_Material.Color): void {
+        // TODO(jstpierre): Actually clamp. For now, just make sure it doesn't go negative.
+        color.r = Math.max(color.r, 0);
+        color.g = Math.max(color.g, 0);
+        color.b = Math.max(color.b, 0);
+        color.a = Math.max(color.a, 0);
+    }
+
+    private calcColor(dst: GX_Material.Color, i: ColorKind, fallbackColor: GX_Material.Color, clampTo8Bit: boolean) {
         if (this.trk1Animators[i] !== undefined) {
             this.trk1Animators[i].calcColor(dst);
+            if (clampTo8Bit)
+                this.clampTo8Bit(dst);
             return;
         }
 
@@ -230,23 +240,25 @@ export class MaterialInstance {
         }
 
         dst.copy(color, alpha);
+        if (clampTo8Bit)
+            this.clampTo8Bit(dst);
     }
 
     public fillMaterialParams(materialParams: MaterialParams, camera: Camera, materialInstanceState: MaterialInstanceState, bmdModel: BMDModel, textureHolder: GXTextureHolder): void {
         const material = this.material;
 
-        this.copyColor(materialParams.u_Color[ColorKind.MAT0], ColorKind.MAT0, material.colorMatRegs[0]);
-        this.copyColor(materialParams.u_Color[ColorKind.MAT1], ColorKind.MAT1, material.colorMatRegs[1]);
-        this.copyColor(materialParams.u_Color[ColorKind.AMB0], ColorKind.AMB0, material.colorAmbRegs[0]);
-        this.copyColor(materialParams.u_Color[ColorKind.AMB1], ColorKind.AMB1, material.colorAmbRegs[1]);
-        this.copyColor(materialParams.u_Color[ColorKind.K0], ColorKind.K0, material.colorConstants[0]);
-        this.copyColor(materialParams.u_Color[ColorKind.K1], ColorKind.K1, material.colorConstants[1]);
-        this.copyColor(materialParams.u_Color[ColorKind.K2], ColorKind.K2, material.colorConstants[2]);
-        this.copyColor(materialParams.u_Color[ColorKind.K3], ColorKind.K3, material.colorConstants[3]);
-        this.copyColor(materialParams.u_Color[ColorKind.CPREV], ColorKind.CPREV, material.colorRegisters[3]);
-        this.copyColor(materialParams.u_Color[ColorKind.C0], ColorKind.C0, material.colorRegisters[0]);
-        this.copyColor(materialParams.u_Color[ColorKind.C1], ColorKind.C1, material.colorRegisters[1]);
-        this.copyColor(materialParams.u_Color[ColorKind.C2], ColorKind.C2, material.colorRegisters[2]);
+        this.calcColor(materialParams.u_Color[ColorKind.MAT0],  ColorKind.MAT0,  material.colorMatRegs[0],   false);
+        this.calcColor(materialParams.u_Color[ColorKind.MAT1],  ColorKind.MAT1,  material.colorMatRegs[1],   false);
+        this.calcColor(materialParams.u_Color[ColorKind.AMB0],  ColorKind.AMB0,  material.colorAmbRegs[0],   false);
+        this.calcColor(materialParams.u_Color[ColorKind.AMB1],  ColorKind.AMB1,  material.colorAmbRegs[1],   false);
+        this.calcColor(materialParams.u_Color[ColorKind.K0],    ColorKind.K0,    material.colorConstants[0], true);
+        this.calcColor(materialParams.u_Color[ColorKind.K1],    ColorKind.K1,    material.colorConstants[1], true);
+        this.calcColor(materialParams.u_Color[ColorKind.K2],    ColorKind.K2,    material.colorConstants[2], true);
+        this.calcColor(materialParams.u_Color[ColorKind.K3],    ColorKind.K3,    material.colorConstants[3], true);
+        this.calcColor(materialParams.u_Color[ColorKind.CPREV], ColorKind.CPREV, material.colorRegisters[3], false);
+        this.calcColor(materialParams.u_Color[ColorKind.C0],    ColorKind.C0,    material.colorRegisters[0], false);
+        this.calcColor(materialParams.u_Color[ColorKind.C1],    ColorKind.C1,    material.colorRegisters[1], false);
+        this.calcColor(materialParams.u_Color[ColorKind.C2],    ColorKind.C2,    material.colorRegisters[2], false);
 
         // Bind textures.
         for (let i = 0; i < material.textureIndexes.length; i++) {

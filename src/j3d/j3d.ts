@@ -14,6 +14,7 @@ import AnimationController from '../AnimationController';
 import { ColorKind } from '../gx/gx_render';
 import { AABB } from '../Geometry';
 import { getPointHermite } from '../Spline';
+import { Graph, cv } from '../DebugJunk';
 
 function readStringTable(buffer: ArrayBufferSlice, offs: number): string[] {
     const view = buffer.createDataView(offs);
@@ -1392,7 +1393,7 @@ function translateAnimationTrack(data: Float32Array | Int16Array, scale: number,
 //#endregion
 
 //#region TTK1
-interface UVAnimationEntry {
+interface TTK1AnimationEntry {
     materialName: string;
     remapIndex: number;
     texGenIndex: number;
@@ -1411,7 +1412,7 @@ interface UVAnimationEntry {
 }
 
 export interface TTK1 extends AnimationBase {
-    uvAnimationEntries: UVAnimationEntry[];
+    uvAnimationEntries: TTK1AnimationEntry[];
 }
 
 function readTTK1Chunk(buffer: ArrayBufferSlice): TTK1 {
@@ -1450,7 +1451,7 @@ function readTTK1Chunk(buffer: ArrayBufferSlice): TTK1 {
         return translateAnimationTrack(data, scale, count, index, tangent);
     }
 
-    const uvAnimationEntries: UVAnimationEntry[] = [];
+    const uvAnimationEntries: TTK1AnimationEntry[] = [];
     for (let i = 0; i < animationCount; i++) {
         const materialName = materialNameTable[i];
         const remapIndex = view.getUint16(remapTableOffs + i * 0x02);
@@ -1480,7 +1481,7 @@ function readTTK1Chunk(buffer: ArrayBufferSlice): TTK1 {
 }
 
 export class TTK1Animator {
-    constructor(public animationController: AnimationController, private ttk1: TTK1, private animationEntry: UVAnimationEntry) {}
+    constructor(public animationController: AnimationController, private ttk1: TTK1, private animationEntry: TTK1AnimationEntry) {}
 
     public calcTexMtx(dst: mat4): void {
         const frame = this.animationController.getTimeInFrames();
@@ -1527,7 +1528,7 @@ export class BTK {
 //#endregion
 
 //#region TRK1
-interface PaletteAnimationEntry {
+interface TRK1AnimationEntry {
     materialName: string;
     remapIndex: number;
     colorKind: ColorKind;
@@ -1538,7 +1539,7 @@ interface PaletteAnimationEntry {
 }
 
 export interface TRK1 extends AnimationBase {
-    animationEntries: PaletteAnimationEntry[];
+    animationEntries: TRK1AnimationEntry[];
 }
 
 function readTRK1Chunk(buffer: ArrayBufferSlice): TRK1 {
@@ -1582,7 +1583,7 @@ function readTRK1Chunk(buffer: ArrayBufferSlice): TRK1 {
         return translateAnimationTrack(data, 1 / 0xFF, count, index, tangent);
     }
 
-    const animationEntries: PaletteAnimationEntry[] = [];
+    const animationEntries: TRK1AnimationEntry[] = [];
 
     const registerRTable = buffer.createTypedArray(Int16Array, registerROffs, registerRCount, Endianness.BIG_ENDIAN);
     const registerGTable = buffer.createTypedArray(Int16Array, registerGOffs, registerGCount, Endianness.BIG_ENDIAN);
@@ -1626,7 +1627,9 @@ function readTRK1Chunk(buffer: ArrayBufferSlice): TRK1 {
 }
 
 export class TRK1Animator {
-    constructor(public animationController: AnimationController, private trk1: TRK1, private animationEntry: PaletteAnimationEntry) {}
+    private graph: Graph | null = null;
+
+    constructor(public animationController: AnimationController, private trk1: TRK1, private animationEntry: TRK1AnimationEntry) {}
 
     public calcColor(dst: GX_Material.Color): void {
         const frame = this.animationController.getTimeInFrames();
@@ -1636,6 +1639,17 @@ export class TRK1Animator {
         dst.g = sampleAnimationData(this.animationEntry.g, animFrame);
         dst.b = sampleAnimationData(this.animationEntry.b, animFrame);
         dst.a = sampleAnimationData(this.animationEntry.a, animFrame);
+
+        if (this.graph !== null) {
+            this.graph.clear();
+            this.graph.graphF('black', (t) => sampleAnimationData(this.animationEntry.a, t), this.trk1.duration);
+            this.graph.marker('red', animFrame / this.trk1.duration);
+            this.graph.hline('green', 0);
+        }
+    }
+
+    public viz(): void {
+        this.graph = new Graph(cv());
     }
 }
 
