@@ -16,6 +16,7 @@ import { GfxDevice, GfxSampler } from '../gfx/platform/GfxPlatform';
 import { GfxBufferCoalescer, GfxCoalescedBuffers } from '../gfx/helpers/BufferHelpers';
 import { ViewerRenderInput } from '../viewer';
 import { GfxRenderInst, GfxRenderInstBuilder, setSortKeyDepth, GfxRendererLayer, makeSortKey, setSortKeyBias } from '../gfx/render/GfxRenderer';
+import { colorCopy } from '../Color';
 
 export class J3DTextureHolder extends GXTextureHolder<TEX1_TextureData> {
     public addJ3DTextures(device: GfxDevice, bmd: BMD, bmt: BMT | null = null) {
@@ -239,7 +240,7 @@ export class MaterialInstance {
             alpha = fallbackColor.a;
         }
 
-        dst.copy(color, alpha);
+        colorCopy(dst, color, alpha);
         if (clampTo8Bit)
             this.clampTo8Bit(dst);
     }

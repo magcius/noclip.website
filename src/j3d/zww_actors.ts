@@ -19,6 +19,7 @@ import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader } from '../gx/gx_
 import { GfxBufferCoalescer } from '../gfx/helpers/BufferHelpers';
 import { TextureMapping } from '../TextureHolder';
 import { GfxRenderInst } from '../gfx/render/GfxRenderer';
+import { colorFromRGBA } from '../Color';
 
 // Special-case actors
 
@@ -103,7 +104,7 @@ export class BMDObjectRenderer implements ObjectRenderer {
         GX_Material.lightSetWorldPosition(scratchLight, viewerInput.camera, 250, 250, 250);
         GX_Material.lightSetWorldDirection(scratchLight, viewerInput.camera, -250, -250, -250);
         // Toon lighting works by setting the color to red.
-        scratchLight.Color.set(1, 0, 0, 0);
+        colorFromRGBA(scratchLight.Color, 1, 0, 0, 0);
         vec3.set(scratchLight.CosAtten, 1.075, 0, 0);
         vec3.set(scratchLight.DistAtten, 1.075, 0, 0);
         this.modelInstance.setGXLight(0, scratchLight);
@@ -453,8 +454,8 @@ export class FlowerObjectRenderer implements ObjectRenderer {
 
         if (this.renderInst.visible) {
             materialParams.m_TextureMapping[0].copy(this.flowerData.textureMapping);
-            materialParams.u_Color[ColorKind.C0].set(1.0, 1.0, 1.0, 1.0);
-            materialParams.u_Color[ColorKind.C1].set(1.0, 1.0, 1.0, 1.0);
+            colorFromRGBA(materialParams.u_Color[ColorKind.C0], 1.0, 1.0, 1.0, 1.0);
+            colorFromRGBA(materialParams.u_Color[ColorKind.C1], 1.0, 1.0, 1.0, 1.0);
             const S = 0.5;
             mat4.fromScaling(materialParams.u_PostTexMtx[0], [S, S, S]);
             this.materialHelper.fillMaterialParams(materialParams, renderHelper);

@@ -14,6 +14,7 @@ import { GfxRenderInst, GfxRenderInstBuilder, GfxRendererLayer, makeSortKey, set
 import { GfxBufferCoalescer } from '../gfx/helpers/BufferHelpers';
 import { assert, nArray } from '../util';
 import { prepareFrameDebugOverlayCanvas2D, getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
+import { colorCopy } from '../Color';
 
 export class RRESTextureHolder extends GXTextureHolder<BRRES.TEX0> {
     public addRRESTextures(device: GfxDevice, rres: BRRES.RRES): void {
@@ -272,7 +273,7 @@ class MaterialInstance {
             if (this.clr0Animators[a]) {
                 this.clr0Animators[a].calcColor(dst, color);
             } else {
-                dst.copy(color);
+                colorCopy(dst, color);
             }
         };
 

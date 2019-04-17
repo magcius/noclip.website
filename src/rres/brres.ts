@@ -17,6 +17,7 @@ import { cv, Graph } from '../DebugJunk';
 import { GXTextureHolder } from '../gx/gx_render';
 import { getFormatCompFlagsComponentCount } from '../gfx/platform/GfxPlatformFormat';
 import { getPointHermite } from '../Spline';
+import { colorToRGBA8, colorFromRGBA8 } from '../Color';
 
 //#region Utility
 function calc2dMtx(dst: mat2d, src: mat4): void {
@@ -2268,8 +2269,8 @@ export class CLR0ColorAnimator {
         const animFrame = getAnimFrame(this.clr0, frame);
 
         const animColor: number = sampleColorData(clrData.frames, animFrame);
-        const c = (orig.get32() & clrData.mask) | animColor;
-        dst.copy32(c);
+        const c = (colorToRGBA8(orig) & clrData.mask) | animColor;
+        colorFromRGBA8(dst, c);
     }
 }
 

@@ -19,6 +19,7 @@ import { Camera, computeViewMatrix, computeViewSpaceDepthFromWorldSpaceAABB } fr
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { fullscreenMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { AABB } from '../Geometry';
+import { colorCopy } from '../Color';
 
 export class TPLTextureHolder extends GXTextureHolder<TPL.TPLTexture> {
     public addTPLTextures(device: GfxDevice, tpl: TPL.TPL): void {
@@ -177,7 +178,7 @@ class Command_Material {
             }
         }
 
-        materialParams.u_Color[ColorKind.MAT0].copy(this.material.matColorReg);
+        colorCopy(materialParams.u_Color[ColorKind.MAT0], this.material.matColorReg);
     }
 
     public stopAnimation(): void {

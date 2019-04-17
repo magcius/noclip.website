@@ -38,31 +38,7 @@ export interface GXMaterial {
 }
 
 export class Color {
-    constructor(
-        public r: number = 0,
-        public g: number = 0,
-        public b: number = 0,
-        public a: number = 0,
-    )
-    {}
-
-    public set(r: number, g: number, b: number, a: number): void {
-        this.r = r;
-        this.g = g;
-        this.b = b;
-        this.a = a;
-    }
-
-    public copy(c: Color, a: number = c.a): void {
-        return colorCopy(this, c, a);
-    }
-
-    public copy32(c: number): void {
-        return colorFromRGBA8(this, c);
-    }
-
-    public get32(): number {
-        return colorToRGBA8(this);
+    constructor(public r: number = 0, public g: number = 0, public b: number = 0, public a: number = 0) {
     }
 }
 

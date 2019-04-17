@@ -14,6 +14,7 @@ import { compileVtxLoaderMultiVat, GX_VtxDesc, GX_VtxAttrFmt, GX_Array, LoadedVe
 import { mat4, vec3 } from 'gl-matrix';
 import * as Pako from 'pako';
 import { AABB } from '../Geometry';
+import { colorFromRGBA8 } from '../Color';
 
 export interface MREA {
     materialSet: MaterialSet;
@@ -1008,7 +1009,7 @@ function parseMaterialSet_MP3(resourceSystem: ResourceSystem, buffer: ArrayBuffe
                 materialTableIdx += 0x08;
                 if (subtype === 'DIFB') {
                     // Lightmap Diffuse Multiplier
-                    colorConstants[0].copy32(value);
+                    colorFromRGBA8(colorConstants[0], value);
                 }
             } else if (nodeType === 'INT ') {
                 // Intensity

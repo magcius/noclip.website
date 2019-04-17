@@ -5,6 +5,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { mat4, vec3 } from 'gl-matrix';
 import { CMDL } from './cmdl';
 import { Color } from "../gx/gx_material";
+import { colorFromRGBA } from "../Color";
 
 export const enum MP1EntityType {
     Actor                   = 0x00,
@@ -190,7 +191,8 @@ function readLightParameters(buffer: ArrayBufferSlice, offs: number, ent: Entity
     const layerIndex = view.getInt32(offs+59);
 
     // ent.lightParams is allocated by default
-    ent.lightParams.ambient.set(ambR * 255, ambG * 255, ambB * 255, ambA * 255);
+    // TODO(jstpierre): Is the * 255 right here? This function seems unused though.
+    colorFromRGBA(ent.lightParams.ambient, ambR * 255, ambG * 255, ambB * 255, ambA * 255);
     ent.lightParams.options = options;
     ent.lightParams.maxAreaLights = maxAreaLights;
     ent.lightParams.layerIdx = layerIndex;

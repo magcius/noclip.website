@@ -18,7 +18,7 @@ import { computeViewMatrixSkybox, computeViewMatrix, texEnvMtx } from '../Camera
 import { LoadedVertexData, LoadedVertexPacket } from '../gx/gx_displaylist';
 import { GXMaterialHacks, Color, lightSetWorldPositionViewMatrix, lightSetWorldDirectionNormalMatrix } from '../gx/gx_material';
 import { LightParameters, WorldLightingOptions } from './script';
-import { colorMult } from '../Color';
+import { colorMult, colorCopy, colorFromRGBA } from '../Color';
 
 const fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = mat4.fromValues(
     1, 0,  0, 0,
@@ -52,7 +52,7 @@ export class ActorLights {
     constructor(actorBounds: AABB, lightParams: LightParameters, mrea: MREA) {
         // DisableWorld indicates the actor doesn't use any area lights (including ambient ones)
         if (lightParams.options === WorldLightingOptions.DisableWorld) {
-            this.ambient.set(0, 0, 0, 1);
+            colorFromRGBA(this.ambient, 0, 0, 0, 1);
         } else {
             const layerIdx = lightParams.layerIdx;
             const layer = mrea.lightLayers[layerIdx];
@@ -189,13 +189,13 @@ class MaterialGroupInstance {
     }
 
     public fillMaterialParamsData(materialParams: MaterialParams, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4 | null, isSkybox: boolean, actorLights: ActorLights | null): void {
-        materialParams.u_Color[ColorKind.MAT0].set(1, 1, 1, 1);
+        colorFromRGBA(materialParams.u_Color[ColorKind.MAT0], 1, 1, 1, 1);
 
         if (isSkybox) {
-            materialParams.u_Color[ColorKind.AMB0].set(1, 1, 1, 1);
+            colorFromRGBA(materialParams.u_Color[ColorKind.AMB0], 1, 1, 1, 1);
         } else {
             if (actorLights !== null)
-                materialParams.u_Color[ColorKind.AMB0].copy(actorLights.ambient);
+                colorCopy(materialParams.u_Color[ColorKind.AMB0], actorLights.ambient);
 
             const viewMatrix = matrixScratch2;
             mat4.mul(viewMatrix, viewerInput.camera.viewMatrix, posMtx);
@@ -213,9 +213,9 @@ class MaterialGroupInstance {
         }
 
         for (let i = 0; i < 4; i++)
-            materialParams.u_Color[ColorKind.CPREV + i].copy(this.material.colorRegisters[i]);
+            colorCopy(materialParams.u_Color[ColorKind.CPREV + i], this.material.colorRegisters[i]);
         for (let i = 0; i < 4; i++)
-            materialParams.u_Color[ColorKind.K0 + i].copy(this.material.colorConstants[i]);
+            colorCopy(materialParams.u_Color[ColorKind.K0 + i], this.material.colorConstants[i]);
 
         const animTime = ((viewerInput.time / 1000) % 900);
         for (let i = 0; i < 8; i++) {
