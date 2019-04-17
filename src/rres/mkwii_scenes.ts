@@ -17,11 +17,11 @@ import AnimationController from '../AnimationController';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
-import { BasicRenderTarget, depthClearRenderPassDescriptor, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { BasicRenderTarget, standardFullClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { RENDER_HACKS_ICON } from '../bk/scenes';
 import { calcModelMtx } from '../oot3d/cmb';
 
-const enum MKWiiPass { MAIN = 0x01, SKYBOX = 0x02 }
+const enum MKWiiPass { MAIN = 0x01 }
 
 class ModelCache {
     public rresCache = new Map<string, BRRES.RRES>();
@@ -103,13 +103,7 @@ class MarioKartWiiRenderer implements Viewer.SceneGfx {
 
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
         this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
-        // First, render the skybox.
-        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
-        this.viewRenderer.executeOnPass(device, skyboxPassRenderer, MKWiiPass.SKYBOX);
-        skyboxPassRenderer.endPass(null);
-        device.submitPass(skyboxPassRenderer);
-        // Now do main pass.
-        const mainPassRenderer = this.renderTarget.createRenderPass(device, depthClearRenderPassDescriptor);
+        const mainPassRenderer = this.renderTarget.createRenderPass(device, transparentBlackFullClearRenderPassDescriptor);
         this.viewRenderer.executeOnPass(device, mainPassRenderer, MKWiiPass.MAIN);
         return mainPassRenderer;
     }
@@ -206,17 +200,16 @@ const posMtx = mat4.fromScaling(mat4.create(), [scaleFactor, scaleFactor, scaleF
 class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
 
-    private spawnObjectFromRRES(device: GfxDevice, renderer: MarioKartWiiRenderer, rres: BRRES.RRES, objectName: string): MDL0ModelInstance {
+    private static spawnObjectFromRRES(device: GfxDevice, renderer: MarioKartWiiRenderer, rres: BRRES.RRES, objectName: string): MDL0ModelInstance {
         const modelCache = renderer.modelCache;
         const mdl0Model = modelCache.modelCache.get(objectName);
         const mdl0Instance = new MDL0ModelInstance(device, renderer.renderHelper, renderer.textureHolder, mdl0Model);
         mdl0Instance.bindRRESAnimations(renderer.animationController, rres, null);
         renderer.modelInstances.push(mdl0Instance);
-        mdl0Instance.passMask = MKWiiPass.MAIN;
         return mdl0Instance;
     }
 
-    private spawnObjectFromKMP(device: GfxDevice, renderer: MarioKartWiiRenderer, arc: U8.U8Archive, gobj: GOBJ): void {
+    private static spawnObjectFromKMP(device: GfxDevice, renderer: MarioKartWiiRenderer, arc: U8.U8Archive, gobj: GOBJ): void {
         const getRRES = (objectName: string): BRRES.RRES => {
             const arcPath = `./${objectName}.brres`;
             renderer.modelCache.ensureRRES(device, renderer, arc, arcPath);
@@ -392,34 +385,41 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
         }
     }
 
+    public static createSceneFromU8Archive(device: GfxDevice, arc: U8.U8Archive): MarioKartWiiRenderer {
+        const kmp = parseKMP(arc.findFileData(`./course.kmp`));
+        console.log(arc, kmp);
+        const renderer = new MarioKartWiiRenderer(device);
+
+        const modelCache = renderer.modelCache;
+
+        const courseRRES = modelCache.ensureRRES(device, renderer, arc, `./course_model.brres`);
+        const courseInstance = this.spawnObjectFromRRES(device, renderer, courseRRES, 'course');
+        mat4.copy(courseInstance.modelMatrix, posMtx);
+
+        const skyboxRRES = modelCache.ensureRRES(device, renderer, arc, `./vrcorn_model.brres`);
+        const skyboxInstance = this.spawnObjectFromRRES(device, renderer, skyboxRRES, 'vrcorn');
+        mat4.copy(skyboxInstance.modelMatrix, posMtx);
+
+        for (let i = 0; i < kmp.gobj.length; i++)
+            this.spawnObjectFromKMP(device, renderer, arc, kmp.gobj[i]);
+
+        renderer.renderHelper.finishBuilder(device, renderer.viewRenderer);
+
+        return renderer;
+}
+
     public createScene(device: GfxDevice): Progressable<Viewer.SceneGfx> {
         return fetchData(`mkwii/${this.id}.szs`).then((buffer: ArrayBufferSlice) => {
             return Yaz0.decompress(buffer);
-        }).then((buffer: ArrayBufferSlice): Viewer.SceneGfx => {
+        }).then((buffer: ArrayBufferSlice) => {
             const arc = U8.parse(buffer);
-            const kmp = parseKMP(arc.findFileData(`./course.kmp`));
-            console.log(arc, kmp);
-            const renderer = new MarioKartWiiRenderer(device);
-
-            const modelCache = renderer.modelCache;
-
-            const courseRRES = modelCache.ensureRRES(device, renderer, arc, `./course_model.brres`);;
-            const courseInstance = this.spawnObjectFromRRES(device, renderer, courseRRES, 'course');
-            mat4.copy(courseInstance.modelMatrix, posMtx);
-
-            const skyboxRRES = modelCache.ensureRRES(device, renderer, arc, `./vrcorn_model.brres`);
-            const skyboxInstance = this.spawnObjectFromRRES(device, renderer, skyboxRRES, 'vrcorn');
-            mat4.copy(skyboxInstance.modelMatrix, posMtx);
-            skyboxInstance.passMask = MKWiiPass.SKYBOX;
-
-            for (let i = 0; i < kmp.gobj.length; i++)
-                this.spawnObjectFromKMP(device, renderer, arc, kmp.gobj[i]);
-
-            renderer.renderHelper.finishBuilder(device, renderer.viewRenderer);
-
-            return renderer;
+            return MarioKartWiiSceneDesc.createSceneFromU8Archive(device, arc);
         });
     }
+}
+
+export function createMarioKartWiiSceneFromU8Archive(device: GfxDevice, arc: U8.U8Archive) {
+    return MarioKartWiiSceneDesc.createSceneFromU8Archive(device, arc);
 }
 
 const id = 'mkwii';
