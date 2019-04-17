@@ -340,6 +340,34 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
             spawnObject(`peachtreeGC`);
         } else if (gobj.objectId === 0x013c) { // obakeblockSFCc
             spawnObject(`obakeblockSFC`);
+        } else if (gobj.objectId === 0x013d) { // WLarrowGC
+            spawnObject(`WLarrowGC`);
+        } else if (gobj.objectId === 0x013e) { // WLscreenGC
+            spawnObject(`WLscreenGC`);
+        } else if (gobj.objectId === 0x013f) { // WLdokanGC
+            spawnObject(`WLdokanGC`);
+        } else if (gobj.objectId === 0x0140) { // MarioGo64c
+            spawnObject(`MarioGo64`);
+        } else if (gobj.objectId === 0x0141) { // PeachHunsuiGC
+            spawnObject(`PeachHunsuiGC`);
+        } else if (gobj.objectId === 0x0142) { // kinokoT1
+            spawnObject(`kinokoT1`);
+        } else if (gobj.objectId === 0x0144) { // pylon01
+            spawnObject(`pylon01`);
+        } else if (gobj.objectId === 0x0145) { // PalmTree
+            spawnObject(`PalmTree`);
+        } else if (gobj.objectId === 0x0146) { // parasol
+            spawnObject(`parasol`);
+        } else if (gobj.objectId === 0x0147) { // cruiser
+            spawnObject(`cruiser`);
+        } else if (gobj.objectId === 0x0148) { // K_sticklift00
+            spawnObject(`K_sticklift00`);
+        } else if (gobj.objectId === 0x0149) { // heyho2
+            spawnObject(`heyho2`);
+        } else if (gobj.objectId === 0x014a) { // HeyhoTreeGBAc
+            spawnObject(`HeyhoTreeGBA`);
+        } else if (gobj.objectId === 0x014c) { // truckChimSmk
+            spawnObject(`truckChimSmk`);
         } else if (gobj.objectId === 0x014D) { // MiiObj01
             spawnObject(`MiiObj01`);
         } else if (gobj.objectId === 0x014E) { // MiiObj02
@@ -370,16 +398,270 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
             spawnObject(`DKtreeB64`);
         } else if (gobj.objectId === 0x015b) { // TownTreeDSc
             spawnObject(`TownTreeDS`);
+        } else if (gobj.objectId === 0x015c) { // Piston
+            spawnObject(`Piston`);
+        } else if (gobj.objectId === 0x015d) { // oilSFC
+            spawnObject(`oilSFC`);
+        } else if (gobj.objectId === 0x0160) { // mii_balloon
+            spawnObject(`mii_balloon`);
+        } else if (gobj.objectId === 0x0161) { // windmill
+            spawnObject(`windmill`);
+        } else if (gobj.objectId === 0x0162) { // dossun
+            spawnObject(`dossun`);
+        } else if (gobj.objectId === 0x0163) { // TownTreeDS
+            spawnObject(`TownTreeDS`);
+        } else if (gobj.objectId === 0x0164) { // Ksticketc
+            spawnObject(`Ksticketc`);
+        } else if (gobj.objectId === 0x0165) { // monte_a
+            spawnObject(`monte_a`);
+        } else if (gobj.objectId === 0x0166) { // MiiStatueM1
+            spawnObject(`MiiStatueM1`);
+        } else if (gobj.objectId === 0x0167) { // ShMiiObj01
+            spawnObject(`ShMiiObj01`);
+        } else if (gobj.objectId === 0x0168) { // ShMiiObj02
+            spawnObject(`ShMiiObj02`);
+        } else if (gobj.objectId === 0x0169) { // ShMiiObj03
+            spawnObject(`ShMiiObj03`);
+        } else if (gobj.objectId === 0x016b) { // miiposter
+            spawnObject(`miiposter`);
+        } else if (gobj.objectId === 0x016c) { // dk_miiobj00
+            spawnObject(`dk_miiobj00`);
+        } else if (gobj.objectId === 0x016d) { // light_house
+            spawnObject(`light_house`);
+        } else if (gobj.objectId === 0x016e) { // r_parasol
+            spawnObject(`r_parasol`);
+        } else if (gobj.objectId === 0x016f) { // obakeblock2SFCc
+            spawnObject(`obakeblockSFC`);
+        } else if (gobj.objectId === 0x0170) { // obakeblock3SFCc
+            spawnObject(`obakeblockSFC`);
+        } else if (gobj.objectId === 0x0171) { // koopaFigure
+            spawnObject(`koopaFigure`);
+        } else if (gobj.objectId === 0x0172) { // pukupuku
+            spawnObject(`pukupuku`);
+        } else if (gobj.objectId === 0x0176) { // karehayama
+            spawnObject(`karehayama`);
+        } else if (gobj.objectId === 0x0177) { // EarthRing
+            spawnObject(`EarthRing`);
+        } else if (gobj.objectId === 0x0178) { // SpaceSun
+            spawnObject(`SpaceSun`);
+        } else if (gobj.objectId === 0x017a) { // StarRing
+            spawnObject(`StarRing`);
+        } else if (gobj.objectId === 0x017b) { // M_obj_kanban
+            spawnObject(`M_obj_kanban`);
+        } else if (gobj.objectId === 0x017c) { // MiiStatueL1
+            spawnObject(`MiiStatueL1`);
+        } else if (gobj.objectId === 0x017d) { // MiiStatueD1
+            spawnObject(`MiiStatueD1`);
+        } else if (gobj.objectId === 0x017e) { // MiiSphinxY1
+            spawnObject(`MiiSphinxY1`);
+        } else if (gobj.objectId === 0x017f) { // MiiSphinxY2
+            spawnObject(`MiiSphinxY2`);
+        } else if (gobj.objectId === 0x0180) { // FlagA5
+            spawnObject(`FlagA5`);
+        } else if (gobj.objectId === 0x0181) { // CarB
+            spawnObject(`CarB`);
+        } else if (gobj.objectId === 0x0185) { // group_monte_a
+            spawnObject(`group_monte_a`);
+        } else if (gobj.objectId === 0x0186) { // MiiStatueL2
+            spawnObject(`MiiStatueL2`);
+        } else if (gobj.objectId === 0x0187) { // MiiStatueD2
+            spawnObject(`MiiStatueD2`);
+        } else if (gobj.objectId === 0x0188) { // MiiStatueP1
+            spawnObject(`MiiStatueP1`);
+        } else if (gobj.objectId === 0x0189) { // SentakuDS
+            spawnObject(`SentakuDS`);
+        } else if (gobj.objectId === 0x018a) { // fks_screen_wii
+            spawnObject(`fks_screen_wii`);
+        } else if (gobj.objectId === 0x018b) { // KoopaFigure64
+            spawnObject(`KoopaFigure64`);
+        } else if (gobj.objectId === 0x018c) { // b_teresa
+            spawnObject(`b_teresa`);
         } else if (gobj.objectId === 0x018E) { // MiiKanban
             spawnObject(`MiiKanban`);
+        } else if (gobj.objectId === 0x018f) { // BGteresaSFC
+            spawnObject(`BGteresaSFC`);
         } else if (gobj.objectId === 0x0191) { // kuribo
             const b = spawnObject(`kuribo`);
             const rres = getRRES(`kuribo`);
             b.bindCHR0(renderer.animationController, rres.chr0.find((chr0) => chr0.name === 'walk_l'));
+        } else if (gobj.objectId === 0x0192) { // choropu
+            spawnObject(`choropu`);
+        } else if (gobj.objectId === 0x0193) { // cow
+            spawnObject(`cow`);
+        } else if (gobj.objectId === 0x0194) { // pakkun_f
+            spawnObject(`pakkun_f`);
+        } else if (gobj.objectId === 0x0195) { // WLfirebarGC
+            spawnObject(`WLfirebarGC`);
+        } else if (gobj.objectId === 0x0196) { // wanwan
+            spawnObject(`wanwan`);
+        } else if (gobj.objectId === 0x0197) { // poihana
+            spawnObject(`poihana`);
+        } else if (gobj.objectId === 0x0198) { // DKrockGC
+            spawnObject(`DKrockGC`);
+        } else if (gobj.objectId === 0x0199) { // sanbo
+            spawnObject(`sanbo`);
+        } else if (gobj.objectId === 0x019a) { // choropu2
+            spawnObject(`choropu`);
+        } else if (gobj.objectId === 0x019b) { // TruckWagon
+            spawnObject(`TruckWagon`);
+        } else if (gobj.objectId === 0x019c) { // heyho
+            spawnObject(`heyho`);
+        } else if (gobj.objectId === 0x019d) { // Press
+            spawnObject(`Press`);
+        } else if (gobj.objectId === 0x01a1) { // WLfireringGC
+            spawnObject(`WLfirebarGC`);
+        } else if (gobj.objectId === 0x01a2) { // pakkun_dokan
+            spawnObject(`pakkun_dokan`);
+        //} else if (gobj.objectId === 0x01a3) { // begoman_spike
+        //    spawnObject(`begoman_spike`);
+        } else if (gobj.objectId === 0x01a4) { // FireSnake
+            spawnObject(`FireSnake`);
+        } else if (gobj.objectId === 0x01a5) { // koopaFirebar
+            spawnObject(`koopaFirebar`);
+        } else if (gobj.objectId === 0x01a6) { // Epropeller
+            spawnObject(`Epropeller`);
+        } else if (gobj.objectId === 0x01a8) { // FireSnake_v
+            spawnObject(`FireSnake`);
+        } else if (gobj.objectId === 0x01aa) { // puchi_pakkun
+            spawnObject(`puchi_pakkun`);
+        //} else if (gobj.objectId === 0x01f5) { // kinoko_ud
+        //    spawnObject(`kinoko`);
+        //} else if (gobj.objectId === 0x01f6) { // kinoko_bend
+        //    spawnObject(`kinoko`);
+        } else if (gobj.objectId === 0x01f7) { // VolcanoRock1
+            spawnObject(`VolcanoRock1`);
+        } else if (gobj.objectId === 0x01f8) { // bulldozer_left
+            spawnObject(`bulldozer_left`);
+        } else if (gobj.objectId === 0x01f9) { // bulldozer_right
+            spawnObject(`bulldozer_right`);
+        //} else if (gobj.objectId === 0x01fa) { // kinoko_nm
+        //    spawnObject(`kinoko`);
+        } else if (gobj.objectId === 0x01fb) { // Crane
+            spawnObject(`Crane`);
+        } else if (gobj.objectId === 0x01fc) { // VolcanoPiece
+            spawnObject(`VolcanoPiece1`);
+        } else if (gobj.objectId === 0x01fd) { // FlamePole
+            spawnObject(`FlamePole`);
+        } else if (gobj.objectId === 0x01fe) { // TwistedWay
+            spawnObject(`TwistedWay`);
+        } else if (gobj.objectId === 0x01ff) { // TownBridgeDSc
+            spawnObject(`TownBridgeDS`);
+        } else if (gobj.objectId === 0x0200) { // DKship64
+            spawnObject(`DKship64`);
+        } else if (gobj.objectId === 0x0202) { // DKturibashiGCc
+            spawnObject(`DKturibashiGC`);
+        } else if (gobj.objectId === 0x0204) { // aurora
+            spawnObject(`aurora`);
+        } else if (gobj.objectId === 0x0205) { // venice_saku
+            spawnObject(`venice_saku`);
+        } else if (gobj.objectId === 0x0206) { // casino_roulette
+            spawnObject(`casino_roulette`);
+        } else if (gobj.objectId === 0x0209) { // dc_sandcone
+            spawnObject(`dc_sandcone`);
+        } else if (gobj.objectId === 0x020a) { // venice_hasi 
+            spawnObject(`venice_hasi`);
+        } else if (gobj.objectId === 0x020b) { // bblock
+            spawnObject(`bblock1`);
+        } else if (gobj.objectId === 0x020e) { // ami
+            spawnObject(`ami`);
+        //} else if (gobj.objectId === 0x0212) { // FlamePole_v
+        //    spawnObject(`FlamePole_v`);
+        } else if (gobj.objectId === 0x0214) { // InsekiA
+            spawnObject(`InsekiA`);
+        } else if (gobj.objectId === 0x0215) { // InsekiB
+            spawnObject(`InsekiB`);
+        //} else if (gobj.objectId === 0x0216) { // FlamePole_v_big
+        //    spawnObject(`FlamePole_v_big`);
+        } else if (gobj.objectId === 0x0217) { // Mdush
+            spawnObject(`Mdush`);
+        } else if (gobj.objectId === 0x0259) { // DonkyCannonGC
+            spawnObject(`DonkyCannonGC`);
+        } else if (gobj.objectId === 0x025a) { // BeltEasy
+            spawnObject(`BeltEasy`);
+        } else if (gobj.objectId === 0x025b) { // BeltCrossing
+            spawnObject(`BeltCrossing`);
+        } else if (gobj.objectId === 0x025c) { // BeltCurveA
+            spawnObject(`BeltCurveA`);
+        } else if (gobj.objectId === 0x025e) { // escalator
+            spawnObject(`escalator`);
+        } else if (gobj.objectId === 0x025f) { // DonkyCannon_wii
+            spawnObject(`DonkyCannon_wii`);
+        } else if (gobj.objectId === 0x0260) { // escalator_group
+            spawnObject(`escalator`);
+        } else if (gobj.objectId === 0x0261) { // tree_cannon
+            spawnObject(`tree_cannon`);
+        } else if (gobj.objectId === 0x02bd) { // group_enemy_b
+            spawnObject(`group_enemy_b`);
+        } else if (gobj.objectId === 0x02be) { // group_enemy_c
+            spawnObject(`group_enemy_c`);
+        //} else if (gobj.objectId === 0x02bf) { // taimatsu
+        //    spawnObject(`taimatsu`);
+        } else if (gobj.objectId === 0x02c0) { // truckChimSmkW
+            spawnObject(`truckChimSmkW`);
+        } else if (gobj.objectId === 0x02c2) { // dkmonitor
+            spawnObject(`dkmonitor`);
+        } else if (gobj.objectId === 0x02c3) { // group_enemy_a
+            spawnObject(`group_enemy_a`);
+        } else if (gobj.objectId === 0x02c4) { // FlagB3
+            spawnObject(`FlagB3`);
+        } else if (gobj.objectId === 0x02c5) { // spot
+            spawnObject(`spot`);
+        } else if (gobj.objectId === 0x02c7) { // FlagB4
+            spawnObject(`FlagB4`);
+        } else if (gobj.objectId === 0x02c8) { // group_enemy_e
+            spawnObject(`group_enemy_e`);
+        } else if (gobj.objectId === 0x02c9) { // group_monte_L
+            spawnObject(`group_monte_a`);
+        } else if (gobj.objectId === 0x02ca) { // group_enemy_f
+            spawnObject(`group_enemy_f`);
+        //} else if (gobj.objectId === 0x02cc) { // FallBsB
+        //    spawnObject(`FallBsB`);
+        //} else if (gobj.objectId === 0x02ce) { // volsmk
+        //    spawnObject(`volsmk`);
+        } else if (gobj.objectId === 0x02cf) { // ridgemii00
+            spawnObject(`ridgemii00`);
         } else if (gobj.objectId === 0x02D0) { // Flash_L
             // particle effect; unsupported
+        } else if (gobj.objectId === 0x02d5) { // MiiSignNoko
+            spawnObject(`MiiSignNoko`);
+        } else if (gobj.objectId === 0x02d6) { // UtsuboDokan
+            spawnObject(`UtsuboDokan`);
+        } else if (gobj.objectId === 0x02d7) { // Spot64
+            spawnObject(`Spot64`);
+        //} else if (gobj.objectId === 0x02d9) { // Fall_MH
+        //    spawnObject(`Fall_MH`);
+        //} else if (gobj.objectId === 0x02da) { // Fall_Y
+        //    spawnObject(`Fall_Y`);
+        } else if (gobj.objectId === 0x02df) { // MiiStatueM2
+            spawnObject(`MiiStatueM2`);
+        } else if (gobj.objectId === 0x02e0) { // RhMiiKanban
+            spawnObject(`RhMiiKanban`);
         } else if (gobj.objectId === 0x02E1) { // MiiStatueL3
             spawnObject(`MiiStatueL3`);
+        } else if (gobj.objectId === 0x02e2) { // MiiSignWario
+            spawnObject(`MiiSignWario`);
+        } else if (gobj.objectId === 0x02e3) { // MiiStatueBL1
+            spawnObject(`MiiStatueBL1`);
+        } else if (gobj.objectId === 0x02e4) { // MiiStatueBD1
+            spawnObject(`MiiStatueBD1`);
+        } else if (gobj.objectId === 0x02e5) { // Kamifubuki
+            spawnObject(`Kamifubuki`);
+        } else if (gobj.objectId === 0x02e6) { // Crescent64
+            spawnObject(`Crescent64`);
+        } else if (gobj.objectId === 0x02e7) { // MiiSighKino
+            spawnObject(`MiiSighKino`);
+        } else if (gobj.objectId === 0x02e8) { // MiiObjD01
+            spawnObject(`MiiObjD01`);
+        } else if (gobj.objectId === 0x02e9) { // MiiObjD02
+            spawnObject(`MiiObjD02`);
+        } else if (gobj.objectId === 0x02ea) { // MiiObjD03
+            spawnObject(`MiiObjD03`);
+        } else if (gobj.objectId === 0x02eb) { // mare_a
+            spawnObject(`mare_a`);
+        } else if (gobj.objectId === 0x02ec) { // mare_b
+            spawnObject(`mare_b`);
+        //} else if (gobj.objectId === 0x02f3) { // DKfalls
+        //    spawnObject(`DKfalls`);
         } else {
             console.warn(`Unimplemented object ${hexzero(gobj.objectId, 4)}`);
         }
