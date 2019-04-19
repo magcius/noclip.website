@@ -83,6 +83,9 @@ export function getFormatBytesPerPixel(channelFormat: ChannelFormat): number {
     case ChannelFormat.Bc3:
     case ChannelFormat.Bc5:
         return 16;
+    case ChannelFormat.R8_G8_B8_A8:
+    case ChannelFormat.B8_G8_R8_A8:
+        return 4;
     default:
         throw "whoops";
     }
@@ -172,6 +175,9 @@ export function decompress(textureEntry: BRTI, pixels: Uint8Array): DecodedSurfa
     case ChannelFormat.Bc5:
         assert(typeFormat === TypeFormat.Unorm || typeFormat === TypeFormat.Snorm);
         return decompressBC({ ...textureEntry, type: 'BC5', flag: typeFormat === TypeFormat.Unorm ? 'UNORM' : 'SNORM', pixels } as DecodedSurfaceBC);
+    case ChannelFormat.R8_G8_B8_A8:
+        assert(typeFormat === TypeFormat.Unorm || typeFormat === TypeFormat.UnormSrgb);
+        return { ... textureEntry, type: 'RGBA', flag: typeFormat === TypeFormat.Unorm ? 'UNORM' : 'SRGB', pixels };
     default:
         console.error(channelFormat.toString(16));
         throw "whoops";
@@ -188,6 +194,8 @@ function getChannelFormatString(channelFormat: ChannelFormat): string {
         return 'BC4';
     case ChannelFormat.Bc5:
         return 'BC5';
+    case ChannelFormat.R8_G8_B8_A8:
+        return 'R8_G8_B8_A8';
     default:
         throw "whoops";
     }

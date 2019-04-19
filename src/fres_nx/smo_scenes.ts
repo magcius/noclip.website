@@ -22,6 +22,9 @@ class ResourceSystem {
     public bfresCache = new Map<string, BFRES.FRES | null>();
     public fmdlDataCache = new Map<string, FMDLData | null>();
 
+    public fetchSARC(device: GfxDevice, mountName: string, abortSignal: AbortSignal): void {
+    }
+
     public loadResource(device: GfxDevice, mountName: string, sarc: SARC.SARC): void {
         assert(!this.mounts.has(mountName));
         this.mounts.set(mountName, sarc);
@@ -141,39 +144,54 @@ class OdysseySceneDesc implements Viewer.SceneDesc {
         const resourceSystem = new ResourceSystem();
 
         return this._fetchSARC(`SystemData/WorldList.szs`, abortSignal).then((worldListSARC) => {
+            type WorldListFromDb = { Name: string, StageList: [{ category: string, name: string }], WorldName: string, ScenarioNum: number, ClearMainScenario: number, AfterEndingScenario: number, MoonRockScenario: number };
+            const worldList: WorldListFromDb[] = BYML.parse(worldListSARC.files.find((f) => f.name === 'WorldListFromDb.byml').buffer);
+
+            // Find the right world from the stage given.
+            function findWorldFromStage(worldList: WorldListFromDb[], stageName: string) {
+                for (let i = 0; i < worldList.length; i++)
+                    for (let j = 0; j < worldList[i].StageList.length; j++)
+                        if (worldList[i].StageList[j].name === stageName)
+                            return worldList[i];
+                return null;
+            }
+            const world = assertExists(findWorldFromStage(worldList, this.id));
+
             type WorldResource = { WorldName: string, WorldResource: { Ext: string, Name: string }[] };
             const worldResource: WorldResource[] = BYML.parse(worldListSARC.files.find((f) => f.name === 'WorldResource.byml').buffer);
 
-            let resources = worldResource.find((r) => r.WorldName === this.id).WorldResource;
+            let resources = assertExists(worldResource.find((r) => r.WorldName === world.WorldName)).WorldResource;
             resources = resources.filter((r) => this._shouldFetchWorldResource(r.Name));
 
-            return Progressable.all(resources.map((r) => {
+            const resourceLoad = Progressable.all(resources.map((r) => {
                 return this._fetchSARC(`${r.Name}.${r.Ext}`, abortSignal).then((sarc: SARC.SARC | null) => {
                     if (sarc === null) return;
                     resourceSystem.loadResource(device, r.Name, sarc);
                 });
             }));
-        }).then(() => {
-            // I believe this name is normally pulled from StageList.byml
-            const worldHomeStageMapName = `${this.id}WorldHomeStageMap`;
 
-            const worldHomeStageMap: StageMap = BYML.parse(resourceSystem.findBuffer(`StageData/${worldHomeStageMapName}`, `${worldHomeStageMapName}.byml`));
-            console.log(worldHomeStageMap);
+            return resourceLoad.then(() => {
+                const stageName = this.id;
 
-            // Construct entry 1. My guess is that this is a sort of scenario list,
-            // but how it interacts with the layer system, I don't know.
-            const entry = worldHomeStageMap[1];
+                const worldHomeStageMap: StageMap = BYML.parse(resourceSystem.findBuffer(`StageData/${stageName}Map`, `${stageName}Map.byml`));
+                console.log(worldHomeStageMap);
 
-            const sceneRenderer = new OdysseyRenderer(resourceSystem);
-            for (let i = 0; i < entry.ObjectList.length; i++) {
-                const stageObject = entry.ObjectList[i];
-                const fmdlData = resourceSystem.getFMDLData(device, `ObjectData/${stageObject.UnitConfigName}`);
-                if (fmdlData === null) continue;
-                const renderer = new FMDLRenderer(device, resourceSystem.textureHolder, fmdlData);
-                calcModelMtxFromTRSVectors(renderer.modelMatrix, stageObject.Translate, stageObject.Rotate, stageObject.Scale);
-                sceneRenderer.addFMDLRenderer(device, renderer);
-            }
-            return sceneRenderer;
+                const scenarioNum = world.AfterEndingScenario;
+                // It seems like the scenarios are 1-indexed, and 0 means "default" (which appears to be 1).
+                const scenarioIndex = scenarioNum > 0 ? scenarioNum - 1 : 0;
+                const entry = worldHomeStageMap[scenarioIndex];
+
+                const sceneRenderer = new OdysseyRenderer(resourceSystem);
+                for (let i = 0; i < entry.ObjectList.length; i++) {
+                    const stageObject = entry.ObjectList[i];
+                    const fmdlData = resourceSystem.getFMDLData(device, `ObjectData/${stageObject.UnitConfigName}`);
+                    if (fmdlData === null) continue;
+                    const renderer = new FMDLRenderer(device, resourceSystem.textureHolder, fmdlData);
+                    calcModelMtxFromTRSVectors(renderer.modelMatrix, stageObject.Translate, stageObject.Rotate, stageObject.Scale);
+                    sceneRenderer.addFMDLRenderer(device, renderer);
+                }
+                return sceneRenderer;
+            });
         });
     }
 }
@@ -182,9 +200,9 @@ class OdysseySceneDesc implements Viewer.SceneDesc {
 const name = "Super Mario Odyssey";
 const id = "smo";
 const sceneDescs: OdysseySceneDesc[] = [
-    new OdysseySceneDesc('Cap'),
-    new OdysseySceneDesc('Waterfall'),
-    new OdysseySceneDesc('City'),
+    new OdysseySceneDesc('CapWorldHomeStage', "Cap"),
+    new OdysseySceneDesc('WaterfallWorldHomeStage', "Waterfall"),
+    new OdysseySceneDesc('CityWorldHomeStage', "City"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
