@@ -13,7 +13,7 @@ const id = "smg2";
 const name = "Super Mario Galaxy 2";
 
 const sceneDescs: Viewer.SceneDesc[] = [
-    "Other",
+    "Other Maps",
     new SMG2SceneDesc("Mushroom Kingdom", "PeachCastleGalaxy")
     new SMG2SceneDesc("Mario's Faceship", "MarioFaceShipGalaxy"),
     new SMG2SceneDesc("Credits", "StaffRollGalaxy")
