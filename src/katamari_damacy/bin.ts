@@ -50,19 +50,20 @@ function getVifUnpackFormatByteSize(format: number): number {
     }
 }
 
-export interface TextureSettings {
-    psm: number;
+export interface BINTexture {
+    tex0_data0: number;
+    tex0_data1: number;
+    name: string;
     width: number;
     height: number;
-    wrapModeS: GfxWrapMode;
-    wrapModeT: GfxWrapMode;
-    name: string;
+    pixels: Uint8Array;
 }
 
 export interface BINModelPart {
     diffuseColor: Color;
     indexOffset: number;
     indexCount: number;
+    textureName: string;
 }
 
 export interface BINModel {
@@ -70,22 +71,17 @@ export interface BINModel {
     vertexData: Float32Array;
     indexData: Uint16Array;
     modelParts: BINModelPart[];
-    textureSettings: TextureSettings;
-}
-
-export interface BINTexture {
-    name: string;
-    width: number;
-    height: number;
-    pixels: Uint8Array;
 }
 
 export interface BIN {
     models: BINModel[];
-    textureData: BINTexture | null;
+    textures: BINTexture[];
 }
 
-function combineSlices(buffers: ArrayBufferSlice[]): ArrayBuffer {
+function combineSlices(buffers: ArrayBufferSlice[]): ArrayBufferSlice {
+    if (buffers.length === 1)
+        return buffers[0];
+
     let totalSize = 0;
     for (let i = 0; i < buffers.length; i++)
         totalSize += buffers[i].byteLength;
@@ -97,40 +93,7 @@ function combineSlices(buffers: ArrayBufferSlice[]): ArrayBuffer {
         offset += buffers[i].byteLength;
     }
 
-    return dstBuffer.buffer;
-}
-
-function parseImageData(buffer: ArrayBufferSlice, texDataOffs: number): ArrayBuffer {
-    const view = buffer.createDataView();
-
-    const tag = view.getUint8(texDataOffs + 0x03);
-    assert(tag === 0x60); // DIRECT
-    const texDataSize = view.getUint16(texDataOffs + 0x00) * 0x10;
-    const texDataEnd = texDataOffs + texDataSize;
-    let texDataIdx = texDataOffs + 0x10;
-
-    const imageDatas: ArrayBufferSlice[] = [];
-    while (texDataIdx < texDataEnd) {
-        // These should all be GIFtags here.
-        const w0 = view.getUint32(texDataIdx + 0x00, true);
-        const w1 = view.getUint32(texDataIdx + 0x04, true);
-        const w2 = view.getUint32(texDataIdx + 0x08, true);
-        const w3 = view.getUint32(texDataIdx + 0x0C, true);
-        texDataIdx += 0x10;
-
-        // NLOOP is the repeat count.
-        const nloop = w0 & 0x7FFF;
-
-        // FLG determines the format for the upcoming data. We only support IMAGE data.
-        const flg = (w1 >>> 26) & 0x03;
-        if (flg === 0x02)
-            imageDatas.push(buffer.subarray(texDataIdx, nloop * 0x10));
-
-        texDataIdx += nloop * 0x10;
-    }
-
-    // Combine all the slices into one.
-    return combineSlices(imageDatas);
+    return new ArrayBufferSlice(dstBuffer.buffer);
 }
 
 const PAGE_WIDTH = 0x80;
@@ -207,10 +170,215 @@ function translateWrapMode(wm: TEX1_WM): GfxWrapMode {
     }
 }
 
-export function parse(buffer: ArrayBufferSlice): BIN {
+interface GSMemoryMapSlice {
+    byteOffset: number;
+    buffer: ArrayBufferSlice;
+}
+
+interface GSMemoryMap {
+    slices: GSMemoryMapSlice[];
+}
+
+function gsMemoryMapCreateSlice(map: GSMemoryMap, requestWordStart: number, requestByteSize: number): ArrayBufferSlice {
+    // Note: This will do buffer copies if we cross slice boundaries.
+
+    const requestByteStart = requestWordStart * 0x10;
+    const requestByteEnd = requestByteStart + requestByteSize;
+
+    // We shouldn't be before the first uploaded slice.
+    assert(requestByteStart >= map.slices[0].byteOffset);
+
+    const rawSlices: ArrayBufferSlice[] = [];
+    for (let i = 0; i < map.slices.length; i++) {
+        const slice = map.slices[i];
+        const sliceByteStart = slice.byteOffset;
+        const sliceByteEnd = sliceByteStart + slice.buffer.byteLength;
+        const sliceBuffer = map.slices[i].buffer;
+
+        // TODO(jstpierre): Check for holes.
+
+        if (requestByteEnd >= sliceByteStart && sliceByteEnd >= requestByteStart)
+            rawSlices.push(sliceBuffer.slice(requestByteStart - sliceByteStart, Math.min(requestByteEnd, sliceByteEnd) - sliceByteStart));
+    }
+
+    assert(rawSlices.length > 0);
+    return combineSlices(rawSlices);
+}
+
+function gsMemoryMapUploadSlice(map: GSMemoryMap, wordOffset: number, buffer: ArrayBufferSlice): void {
+    // Require that all slices are in sorted order.
+    const byteOffset = wordOffset * 0x10;
+    if (map.slices.length > 0) {
+        const lastSlice = map.slices[map.slices.length - 1];
+        const lastSliceByteEnd = lastSlice.byteOffset + lastSlice.buffer.byteLength;
+        assert(byteOffset >= lastSliceByteEnd);
+    }
+
+    map.slices.push({ byteOffset, buffer });
+}
+
+function parseDIRECT(map: GSMemoryMap, buffer: ArrayBufferSlice): void {
+    const view = buffer.createDataView();
+
+    const texDataOffs = 0;
+
+    const tag = view.getUint8(texDataOffs + 0x03);
+    assert(tag === 0x60); // FLUSH
+    const tag2 = view.getUint8(texDataOffs + 0x0F);
+    assert(tag2 === 0x50); // DIRECT
+    const texDataSize = view.getUint16(texDataOffs + 0x0C, true) * 0x10;
+    const texDataEnd = texDataOffs + texDataSize;
+    let texDataIdx = texDataOffs + 0x10;
+
+    let destinationAddress = -1;
+
+    while (texDataIdx < texDataEnd) {
+        // These should all be GIFtags here.
+        const w0 = view.getUint32(texDataIdx + 0x00, true);
+        const w1 = view.getUint32(texDataIdx + 0x04, true);
+        const w2 = view.getUint32(texDataIdx + 0x08, true);
+        const w3 = view.getUint32(texDataIdx + 0x0C, true);
+        texDataIdx += 0x10;
+
+        // NLOOP is the repeat count.
+        const nloop = w0 & 0x7FFF;
+
+        // FLG determines the format for the upcoming data.
+        const flg = (w1 >>> 26) & 0x03;
+        if (flg === 0x00) {
+            // DIRECT. We should have one A+D register set.
+
+            const nreg = (w1 >>> 28) & 0x07;
+            assert(nreg === 0x01);
+            const reg = (w2 & 0x000F);
+            assert(reg === 0x0E);
+
+            for (let j = 0; j < nloop; j++) {
+                const data0 = view.getUint32(texDataIdx + 0x00, true);
+                const data1 = view.getUint32(texDataIdx + 0x04, true);
+                const addr = view.getUint8(texDataIdx + 0x08) & 0x7F;
+
+                // addr contains the register to set. Unpack these registers.
+                if (addr === 0x50) {
+                    // BITBLTBUF. Contains the destination address.
+                    const dbp = (data1 >>> 0) & 0x3FFF;
+                    const dbw = (data1 >>> 14) & 0x3F;
+                    const dpsm = (data1 >>> 20) & 0x3F;
+                    // TODO(jstpierre): Support upload modes other than PSCMT32
+                    assert(dpsm === GSPixelStorageFormat.PSMCT32);
+                    destinationAddress = dbp * 0x40;
+                }
+
+                texDataIdx += 0x10;
+            }
+        } else if (flg === 0x02) {
+            // IMAGE. Followed by data to upload.
+            assert(destinationAddress >= 0);
+            console.log('IMAGE', hexzero(destinationAddress * 0x400, 4), hexzero(nloop * 0x10, 4));
+            gsMemoryMapUploadSlice(map, destinationAddress, buffer.subarray(texDataIdx, nloop * 0x10));
+            texDataIdx += nloop * 0x10;
+        }
+    }
+}
+
+const enum GSPixelStorageFormat {
+    PSMCT32  = 0x00,
+    PSMCT24  = 0x01,
+    PSMCT16  = 0x02,
+    PSMCT16S = 0x0A,
+    PSMT8    = 0x13,
+    PSMT4    = 0x14,
+    PSMT8H   = 0x1B,
+    PSMT4HL  = 0x24,
+    PSMT4HH  = 0x2C,
+    PSMZ32   = 0x30,
+    PSMZ24   = 0x31,
+    PSMZ16   = 0x32,
+    PSMZ16S  = 0x3A,
+}
+
+const enum GSCLUTStorageFormat {
+    PSMCT32  = 0x00,
+    PSMCT16  = 0x02,
+    PSMCT16S = 0x0A,
+}
+
+const enum GSTextureColorComponent {
+    RGB  = 0x00,
+    RGBA = 0x01,
+}
+
+const enum GSTextureFunction {
+    MODULATE   = 0x00,
+    DECAL      = 0x01,
+    HIGHLIGHT  = 0x02,
+    HIGHLIGHT2 = 0x03,
+}
+
+// TODO(jstpierre): Do we need a texture cache?
+function decodeTexture(gsMemoryMap: GSMemoryMap, tex0_data0: number, tex0_data1: number, namePrefix: string = ''): BINTexture {
+    // Unpack TEX0 register.
+    const tbp0 = (tex0_data0 >>> 0) & 0x3FFF;
+    const tbw = (tex0_data0 >>> 14) & 0x3F;
+    const psm = (tex0_data0 >>> 20) & 0x3F;
+    const tw = (tex0_data0 >>> 26) & 0x0F;
+    const th = ((tex0_data0 >>> 30) & 0x03) | (((tex0_data1 >>> 0) & 0x03) << 2);
+    const tcc = (tex0_data1 >>> 2) & 0x03;
+    const tfx = (tex0_data1 >>> 3) & 0x03;
+    const cbp = (tex0_data1 >>> 5) & 0x3FFF;
+    const cpsm = (tex0_data1 >>> 19) & 0x0F;
+    const csm = (tex0_data1 >>> 23) & 0x1;
+    const csa = (tex0_data1 >>> 24) & 0x1F;
+    const cld = (tex0_data1 >>> 29) & 0x03;
+
+    // TODO(jstpierre): Handle other formats
+    assert(psm === GSPixelStorageFormat.PSMT4);
+    assert(tcc === GSTextureColorComponent.RGBA);
+    assert(cpsm === GSCLUTStorageFormat.PSMCT32);
+
+    const width = 1 << tw;
+    const height = 1 << th;
+
+    // 4bpp; half a byte per pixel.
+    const textureSize = (width * height) >>> 1;
+
+    const texSlice = gsMemoryMapCreateSlice(gsMemoryMap, tbp0 * 0x40, textureSize);
+    const deswizzled = deswizzleIndexed4(texSlice.createDataView(), 0, width, height);
+    const clutData = gsMemoryMapCreateSlice(gsMemoryMap, cbp * 0x40, 0x40);
+    const pixels = decodeIndexed4(new DataView(deswizzled.buffer), clutData.createDataView(), width, height);
+    const name = `${namePrefix}/${hexzero(tbp0, 4)}/${hexzero(cbp, 4)}`;
+    return { name, width, height, pixels, tex0_data0, tex0_data1 };
+}
+
+export function parse(buffer: ArrayBufferSlice, namePrefix: string = ''): BIN {
     const view = buffer.createDataView();
 
     const numSectors = view.getUint32(0x00, true);
+
+    const gsMemoryMap: GSMemoryMap = { slices: [] };
+    if (numSectors >= 7) {
+        // Upload in-binary texture data.
+        const texDataOffs = view.getUint32(0x10, true);
+        parseDIRECT(gsMemoryMap, buffer.slice(texDataOffs));
+
+        const clutDataOffsA = view.getUint32(0x1C, true);
+        const clutDataOffsB = view.getUint32(0x18, true);
+        // TODO(jstpierre): Which CLUT do I want?
+        const clutDataOffs = clutDataOffsA;
+        parseDIRECT(gsMemoryMap, buffer.slice(clutDataOffs));
+    }
+
+    const textures: BINTexture[] = [];
+    function findOrDecodeTexture(tex0_data0: number, tex0_data1: number): string {
+        let texture = textures.find((texture) => {
+            return texture.tex0_data0 === tex0_data0 && texture.tex0_data1 === tex0_data1;
+        });
+        if (texture === undefined) {
+            texture = decodeTexture(gsMemoryMap, tex0_data0, tex0_data1, namePrefix);
+            textures.push(texture);
+        }
+        return texture.name;
+    }
 
     // For now, always use LOD 0.
     let lodOffs = view.getUint32(0x04, true);
@@ -261,7 +429,7 @@ export function parse(buffer: ArrayBufferSlice): BIN {
         let vertexRunCount = 0;
         let vertexRunData: Float32Array | null = null;
         let vertexRunColor = colorNew(1, 1, 1, 1);
-        let modelTextureSettings: TextureSettings | null = null;
+        let currentTextureName: string | null = null;
 
         const newVertexRun = () => {
             // Parse out the header.
@@ -376,7 +544,7 @@ export function parse(buffer: ArrayBufferSlice): BIN {
                 }
             } else if ((cmd & 0x7F) === 0x50) { // DIRECT
                 // This transfers a GIFtag through GIF.
-                assert(modelTextureSettings === null);
+                assert(currentTextureName === null);
 
                 // Pull out the TEX0 register, which provides format, width and height.
                 // GIFtag is 128 bits long, so pull out our four words.
@@ -410,31 +578,26 @@ export function parse(buffer: ArrayBufferSlice): BIN {
                     const data1 = view.getUint32(packetsIdx + 0x04, true);
                     const addr = view.getUint8(packetsIdx + 0x08) & 0x7F;
 
-                    // addr contains the register to set. Unpack these registers.
+                    // addr contains the register to set.
                     if (addr === GSRegister.TEX0_1) {
-                        const psm = (data0 >>> 20) & 0x3F;
-                        const tw = (data0 >>> 26) & 0x0F;
-                        const th = ((data0 >>> 30) & 0x03) | (((data1 >>> 0) & 0x03) << 2);
-                        const width = 1 << tw;
-                        const height = 1 << th;
-                        modelTextureSettings = { psm, width, height, name: '', wrapModeS: 0, wrapModeT: 0 };
+                        // TEX0_1 contains the texture configuration.
+                        currentTextureName = findOrDecodeTexture(data0, data1);
                     } else if (addr === GSRegister.CLAMP_1) {
                         const wms = (data0 >>> 0) & 0x03;
                         const wmt = (data0 >>> 2) & 0x03;
-                        modelTextureSettings.wrapModeS = translateWrapMode(wms);
-                        modelTextureSettings.wrapModeT = translateWrapMode(wmt);
+                        // TODO(jstpierre): Bring these back.
+                        // vertexRunTextureSettings.wrapModeS = translateWrapMode(wms);
+                        // vertexRunTextureSettings.wrapModeT = translateWrapMode(wmt);
                     }
                     // TODO(jstpierre): Other register settings.
-                    // Have to split the draw call at material setting changes...
 
                     packetsIdx += 0x10;
                 }
 
                 // Make sure that we actually created something here.
-                assertExists(modelTextureSettings);
+                assertExists(currentTextureName !== null);
             } else if (cmd === 0x17) { // MSCNT
                 // Run an HLE form of the VU1 program.
-
                 assert(vertexRunData !== null);
 
                 const isStrip = (vertexRunFlags1 & 0x000000F0) === 0;
@@ -473,6 +636,7 @@ export function parse(buffer: ArrayBufferSlice): BIN {
                 vertexRunFlags2 = 0;
                 vertexRunCount = 0;
                 vertexRunData = null;
+                // Texture does not get reset; it carries over between runs.
             } else if (cmd === 0x00) { // NOP
                 // Don't need to do anything.
             } else if (cmd === 0x10) { // FLUSHE
@@ -516,7 +680,7 @@ export function parse(buffer: ArrayBufferSlice): BIN {
             if (!modelPartsCompatible) {
                 if (currentModelPart)
                     console.log('incompatible', currentModelPart, colorEqual(vertexRun.vertexRunColor, currentModelPart.diffuseColor));
-                currentModelPart = { diffuseColor: vertexRun.vertexRunColor, indexOffset: indexDst, indexCount: 0 };
+                currentModelPart = { diffuseColor: vertexRun.vertexRunColor, indexOffset: indexDst, indexCount: 0, textureName: currentTextureName };
                 modelParts.push(currentModelPart);
             }
 
@@ -544,46 +708,10 @@ export function parse(buffer: ArrayBufferSlice): BIN {
             indexOffset += vertexRun.vertexRunCount;
         }
 
-        const textureSettings = assertExists(modelTextureSettings);
-        models.push({ bbox, vertexData, indexData, textureSettings, modelParts });
+        models.push({ bbox, vertexData, indexData, modelParts });
 
         modelObjTableIdx += 0x04;
     }
 
-    // TODO(jstpierre): Are there multiple textures, one per LOD?
-    let textureData: BINTexture | null = null;
-    if (numSectors >= 7) {
-        const lodModel = assertExists(models[0]);
-        const textureSettings = lodModel.textureSettings;
-
-        assert(textureSettings.width > 0 && textureSettings.height > 0);
-        assert(textureSettings.width <= 0x400 && textureSettings.height <= 0x400);
-
-        // PSMT4
-        if (textureSettings.psm === 0x14) {
-            const texDataOffs = view.getUint32(0x10, true);
-            const texData = parseImageData(buffer, texDataOffs);
-            assert(texData.byteLength > 0);
-            const texDataView = new DataView(texData);
-            const deswizzled = deswizzleIndexed4(texDataView, 0, textureSettings.width, textureSettings.height);
-
-            const clutDataOffsA = view.getUint32(0x1C, true);
-            const clutDataOffsB = view.getUint32(0x18, true);
-            // TODO(jstpierre): Which CLUT do I want?
-            const clutDataOffs = clutDataOffsA;
-            const clutData = parseImageData(buffer, clutDataOffs);
-            const clutDataView = new DataView(clutData);
-            const deswizzledView = new DataView(deswizzled.buffer);
-            const pixels = decodeIndexed4(deswizzledView, clutDataView, textureSettings.width, textureSettings.height);
-            const name = `${hexzero(texDataOffs, 4)}/${hexzero(clutDataOffs, 4)}`;
-
-            textureData = { name, width: textureSettings.width, height: textureSettings.height, pixels };
-
-            // Fill in the texture name.
-            for (let i = 0; i < models.length; i++)
-                models[i].textureSettings.name = name;
-        }
-    }
-
-    return { models, textureData };
+    return { models, textures };
 }

@@ -14,7 +14,7 @@ class KatamariSceneDesc implements Viewer.SceneDesc {
 
     public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         return fetchData(`${pathBase}/180e50/${this.id}.bin`, abortSignal).then((buffer) => {
-            const bin = BIN.parse(buffer);
+            const bin = BIN.parse(buffer, this.id);
             const renderer = new KatamariDamacyRenderer(device);
             const binModelData = new BINModelData(device, bin.models[0]);
             renderer.modelData.push(binModelData);

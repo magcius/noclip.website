@@ -73,6 +73,10 @@ export class BINModelPartInstance {
 
         renderInstBuilder.newUniformBufferInstance(this.renderInst, KatamariDamacyProgram.ub_ModelParams);
 
+        const textureMapping = nArray(1, () => new TextureMapping());
+        textureHolder.fillTextureMapping(textureMapping[0], this.binModelPart.textureName);
+        this.renderInst.setSamplerBindingsFromTextureMappings(textureMapping);
+
         // TODO(jstpierre): Read this from TEX_1 / CLAMP_1.
         this.gfxSampler = device.createSampler({
             minFilter: GfxTexFilterMode.BILINEAR,
@@ -114,10 +118,6 @@ export class BINModelInstance {
 
         const program = new KatamariDamacyProgram();
         this.templateRenderInst.setDeviceProgram(program);
-
-        const textureMapping = nArray(1, () => new TextureMapping());
-        textureHolder.fillTextureMapping(textureMapping[0], this.binModelData.binModel.textureSettings.name);
-        this.templateRenderInst.setSamplerBindingsFromTextureMappings(textureMapping);
 
         for (let i = 0; i < this.binModelData.binModel.modelParts.length; i++)
             this.modelParts.push(new BINModelPartInstance(device, renderInstBuilder, textureHolder, this.binModelData.binModel.modelParts[i]));
@@ -162,7 +162,7 @@ function textureToCanvas(texture: BINTexture): Viewer.Texture {
 
 class KatamariDamacyTextureHolder extends TextureHolder<BINTexture> {
     public addBINTexture(device: GfxDevice, bin: BIN) {
-        this.addTextures(device, [bin.textureData]);
+        this.addTextures(device, bin.textures);
     }
 
     public loadTexture(device: GfxDevice, texture: BINTexture): LoadedTexture {
