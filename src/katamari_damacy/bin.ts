@@ -175,8 +175,12 @@ interface GSMemoryMapSlice {
     buffer: ArrayBufferSlice;
 }
 
-interface GSMemoryMap {
+export interface GSMemoryMap {
     slices: GSMemoryMapSlice[];
+}
+
+export function gsMemoryMapNew(): GSMemoryMap {
+    return { slices: [] };
 }
 
 function gsMemoryMapCreateSlice(map: GSMemoryMap, requestWordStart: number, requestByteSize: number): ArrayBufferSlice {
@@ -217,13 +221,14 @@ function gsMemoryMapUploadSlice(map: GSMemoryMap, wordOffset: number, buffer: Ar
     map.slices.push({ byteOffset, buffer });
 }
 
-function parseDIRECT(map: GSMemoryMap, buffer: ArrayBufferSlice): void {
+function parseDIRECT(map: GSMemoryMap, buffer: ArrayBufferSlice): number {
     const view = buffer.createDataView();
 
     const texDataOffs = 0;
 
-    const tag = view.getUint8(texDataOffs + 0x03);
-    assert(tag === 0x60); // FLUSH
+    // Not sure what the first three words are. Sometimes they're FLUSH (level textures),
+    // sometimes it appears like a dummy UNPACK (0x60, seen in model object binaries) ?
+
     const tag2 = view.getUint8(texDataOffs + 0x0F);
     assert(tag2 === 0x50); // DIRECT
     const texDataSize = view.getUint16(texDataOffs + 0x0C, true) * 0x10;
@@ -274,11 +279,13 @@ function parseDIRECT(map: GSMemoryMap, buffer: ArrayBufferSlice): void {
         } else if (flg === 0x02) {
             // IMAGE. Followed by data to upload.
             assert(destinationAddress >= 0);
-            console.log('IMAGE', hexzero(destinationAddress * 0x400, 4), hexzero(nloop * 0x10, 4));
+            // console.log('IMAGE', hexzero(destinationAddress, 4), hexzero(nloop, 4));
             gsMemoryMapUploadSlice(map, destinationAddress, buffer.subarray(texDataIdx, nloop * 0x10));
             texDataIdx += nloop * 0x10;
         }
     }
+
+    return texDataIdx;
 }
 
 const enum GSPixelStorageFormat {
@@ -350,13 +357,25 @@ function decodeTexture(gsMemoryMap: GSMemoryMap, tex0_data0: number, tex0_data1:
     return { name, width, height, pixels, tex0_data0, tex0_data1 };
 }
 
-export function parse(buffer: ArrayBufferSlice, namePrefix: string = ''): BIN {
+export function parseLevelTextureBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, namePrefix: string = ''): void {
+    const view = buffer.createDataView();
+
+    const numSectors = view.getUint32(0x00, true);
+    assert(numSectors === 0x01);
+
+    const firstSectorOffs = view.getUint32(0x04, true);
+    let offs = firstSectorOffs;
+    while (offs < buffer.byteLength)
+        offs += parseDIRECT(gsMemoryMap, buffer.slice(offs));
+    assert(offs === buffer.byteLength);
+}
+
+export function parseModelBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, namePrefix: string = ''): BIN {
     const view = buffer.createDataView();
 
     const numSectors = view.getUint32(0x00, true);
 
-    const gsMemoryMap: GSMemoryMap = { slices: [] };
-    if (numSectors >= 7) {
+    if (numSectors == 0x0B) {
         // Upload in-binary texture data.
         const texDataOffs = view.getUint32(0x10, true);
         parseDIRECT(gsMemoryMap, buffer.slice(texDataOffs));

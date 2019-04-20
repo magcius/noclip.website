@@ -12,7 +12,7 @@ class SMG1SceneDesc extends SMGSceneDescBase {
 const id = "smg";
 const name = "Super Mario Galaxy";
 
-const sceneDescs: Viewer.SceneDesc[] = [
+const sceneDescs = [
     "Observatory",
     new SMG1SceneDesc("Comet Observatory", "AstroGalaxy"),
     new SMG1SceneDesc("Peach's Castle Garden", "PeachCastleGardenGalaxy"),
