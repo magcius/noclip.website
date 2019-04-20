@@ -463,8 +463,8 @@ export function parse(buffer: ArrayBufferSlice): BIN {
             const vertexRunColor = vertexRun.vertexRunColor;
             for (let k = 0; k < vertexRunData.length; k += WORKING_VERTEX_STRIDE) {
                 // Position.
-                vertexData[vertexDataDst++] = vertexRunData[k + 0] * -1;
-                vertexData[vertexDataDst++] = vertexRunData[k + 1] * -1;
+                vertexData[vertexDataDst++] = vertexRunData[k + 0];
+                vertexData[vertexDataDst++] = vertexRunData[k + 1];
                 vertexData[vertexDataDst++] = vertexRunData[k + 2];
                 // Skip W, it was for internal use only.
                 // Normal.
@@ -474,7 +474,6 @@ export function parse(buffer: ArrayBufferSlice): BIN {
                 // Texture coord.
                 vertexData[vertexDataDst++] = vertexRunData[k + 7];
                 vertexData[vertexDataDst++] = vertexRunData[k + 8];
-                console.log(k / WORKING_VERTEX_STRIDE, vertexRunData[k + 0], vertexRunData[k + 1], vertexRunData[k + 2], vertexRunData[k + 7], vertexRunData[k + 8]);
                 // Color.
                 vertexData[vertexDataDst++] = vertexRunColor.r;
                 vertexData[vertexDataDst++] = vertexRunColor.g;
@@ -515,7 +514,7 @@ export function parse(buffer: ArrayBufferSlice): BIN {
             const clutDataOffsA = view.getUint32(0x1C, true);
             const clutDataOffsB = view.getUint32(0x18, true);
             // TODO(jstpierre): Which CLUT do I want?
-            const clutDataOffs = clutDataOffsB;
+            const clutDataOffs = clutDataOffsA;
             const clutData = parseImageData(buffer, clutDataOffs);
             const clutDataView = new DataView(clutData);
             const deswizzledView = new DataView(deswizzled.buffer);

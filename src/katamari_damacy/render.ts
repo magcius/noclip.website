@@ -82,6 +82,8 @@ export class BINModelInstance {
         const indexCount = this.binModelData.binModel.indexData.length;
         this.renderInst.drawIndexes(indexCount, 0);
 
+        mat4.rotateX(this.modelMatrix, this.modelMatrix, Math.PI);
+
         const program = new KatamariDamacyProgram();
         program.defines.set('USE_VERTEX_COLOR', '1');
         this.renderInst.setDeviceProgram(program);
@@ -111,6 +113,10 @@ export class BINModelInstance {
         let offs = this.renderInst.getUniformBufferOffset(KatamariDamacyProgram.ub_ModelParams);
         const mapped = modelParamsBuffer.mapBufferF32(offs, 12);
         fillMatrix4x3(mapped, offs, this.computeModelMatrix(viewRenderer.camera, this.modelMatrix));
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroySampler(this.gfxSampler);
     }
 }
 
@@ -160,6 +166,7 @@ export class KatamariDamacyRenderer extends BasicRendererHelper {
     private modelParamsBuffer: GfxRenderBuffer;
     private templateRenderInst: GfxRenderInst;
     public renderInstBuilder: GfxRenderInstBuilder;
+    public modelData: BINModelData[] = [];
     public modelInstances: BINModelInstance[] = [];
     public textureHolder = new KatamariDamacyTextureHolder();
 
@@ -198,7 +205,14 @@ export class KatamariDamacyRenderer extends BasicRendererHelper {
     }
 
     public destroy(device: GfxDevice): void {
+        super.destroy(device);
+        this.textureHolder.destroy(device);
         this.sceneParamsBuffer.destroy(device);
         this.modelParamsBuffer.destroy(device);
+
+        for (let i = 0; i < this.modelData.length; i++)
+            this.modelData[i].destroy(device);
+        for (let i = 0; i < this.modelInstances.length; i++)
+            this.modelInstances[i].destroy(device);
     }
 }
