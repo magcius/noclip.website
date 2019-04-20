@@ -50,12 +50,12 @@ import * as DKS from './dks/scenes';
 import * as RTDL from './rres/rtdl_scenes';
 import * as SONIC_COLORS from './rres/sonic_colors_scenes';
 import * as KLONOA from './rres/klonoa_scenes';
+import * as KATAMARI_DAMACY from './katamari_damacy/scenes';
 
 import { UI, SaveStatesAction } from './ui';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera';
-import { hexdump, readString } from './util';
+import { hexdump } from './util';
 import { downloadBlob, downloadBufferSlice, downloadBuffer } from './fetch';
-import { GfxDevice } from './gfx/platform/GfxPlatform';
 import { ZipFileEntry, makeZipFile } from './ZipFile';
 import { TextureHolder } from './TextureHolder';
 import { atob, btoa } from './Ascii85';
@@ -108,6 +108,7 @@ const sceneGroups = [
     DKS.sceneGroup,
     THUG2.sceneGroup,
     SONIC_COLORS.sceneGroup,
+    KATAMARI_DAMACY.sceneGroup,
 ];
 
 function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
