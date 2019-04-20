@@ -1,5 +1,5 @@
 
-import { GfxDevice, GfxBuffer, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxBuffer, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode } from "../gfx/platform/GfxPlatform";
 import { BINModel, BINTexture, BIN } from "./bin";
 import { DeviceProgram, DeviceProgramReflection } from "../Program";
 import * as Viewer from "../viewer";
@@ -75,6 +75,9 @@ export class BINModelInstance {
         this.renderInst = renderInstBuilder.pushRenderInst();
         this.renderInst.inputState = this.binModelData.inputState;
         // TODO(jstpierre): Which render flags to use?
+        this.renderInst.setMegaStateFlags({
+            cullMode: GfxCullMode.BACK,
+        });
         renderInstBuilder.newUniformBufferInstance(this.renderInst, KatamariDamacyProgram.ub_ModelParams);
         const indexCount = this.binModelData.binModel.indexData.length;
         this.renderInst.drawIndexes(indexCount, 0);

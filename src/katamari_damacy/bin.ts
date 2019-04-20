@@ -305,7 +305,7 @@ export function parse(buffer: ArrayBufferSlice): BIN {
 
                     for (let j = 0; j < qwd; j++) {
                         vertexRunData[j * WORKING_VERTEX_STRIDE + 7] = view.getFloat32(packetsIdx + 0x00, true);
-                        vertexRunData[j * WORKING_VERTEX_STRIDE + 8] = -view.getFloat32(packetsIdx + 0x04, true);
+                        vertexRunData[j * WORKING_VERTEX_STRIDE + 8] = view.getFloat32(packetsIdx + 0x04, true);
                         packetsIdx += 0x08;
                     }
                 } else if (format === 0x08) { // V3-32
@@ -406,22 +406,19 @@ export function parse(buffer: ArrayBufferSlice): BIN {
                 for (let j = 0; j < vertexRunCount; j++) {
                     const w = vertexRunData[j * WORKING_VERTEX_STRIDE + 3];
 
-                    if ((w & 0xFFFF0000) === 0xFFFF0000)
-                        continue;
-
                     if (isStrip) {
                         if (j < 2)
                             continue;
-                        if ((w & 0xC00) === 0x000) {
-                            if ((j % 2) === 0) {
-                                indexData[indexDataIdx++] = j - 2;
-                                indexData[indexDataIdx++] = j - 1;
-                                indexData[indexDataIdx++] = j;
-                            } else {
-                                indexData[indexDataIdx++] = j;
-                                indexData[indexDataIdx++] = j - 1;
-                                indexData[indexDataIdx++] = j - 2;
-                            }
+                        if ((w & 0xC000) !== 0x0000)
+                            continue;
+                        if ((j % 2) === 0) {
+                            indexData[indexDataIdx++] = j - 2;
+                            indexData[indexDataIdx++] = j - 1;
+                            indexData[indexDataIdx++] = j;
+                        } else {
+                            indexData[indexDataIdx++] = j - 1;
+                            indexData[indexDataIdx++] = j - 2;
+                            indexData[indexDataIdx++] = j;
                         }
                     } else {
                         indexData[indexDataIdx++] = j;
@@ -466,7 +463,7 @@ export function parse(buffer: ArrayBufferSlice): BIN {
             const vertexRunColor = vertexRun.vertexRunColor;
             for (let k = 0; k < vertexRunData.length; k += WORKING_VERTEX_STRIDE) {
                 // Position.
-                vertexData[vertexDataDst++] = vertexRunData[k + 0];
+                vertexData[vertexDataDst++] = vertexRunData[k + 0] * -1;
                 vertexData[vertexDataDst++] = vertexRunData[k + 1] * -1;
                 vertexData[vertexDataDst++] = vertexRunData[k + 2];
                 // Skip W, it was for internal use only.
@@ -477,6 +474,7 @@ export function parse(buffer: ArrayBufferSlice): BIN {
                 // Texture coord.
                 vertexData[vertexDataDst++] = vertexRunData[k + 7];
                 vertexData[vertexDataDst++] = vertexRunData[k + 8];
+                console.log(k / WORKING_VERTEX_STRIDE, vertexRunData[k + 0], vertexRunData[k + 1], vertexRunData[k + 2], vertexRunData[k + 7], vertexRunData[k + 8]);
                 // Color.
                 vertexData[vertexDataDst++] = vertexRunColor.r;
                 vertexData[vertexDataDst++] = vertexRunColor.g;
