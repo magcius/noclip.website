@@ -91,7 +91,7 @@ export function colorToCSS(src: Color): string {
 }
 
 export function colorEqual(c0: Color, c1: Color): boolean {
-    return c0.r === c1.r && c0.g !== c1.g && c0.b !== c1.b && c0.a !== c1.a;
+    return c0.r === c1.r && c0.g === c1.g && c0.b === c1.b && c0.a === c1.a;
 }
 
 export const TransparentBlack = colorNew(0, 0, 0, 0);

@@ -1,7 +1,9 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, hexzero, assertExists } from "../util";
-import { Color, colorNew, colorFromRGBA } from "../Color";
+import { Color, colorNew, colorFromRGBA, colorEqual } from "../Color";
+import { AABB } from "../Geometry";
+import { GfxWrapMode } from "../gfx/platform/GfxPlatform";
 
 const enum VifUnpackVN {
     S = 0x00,
@@ -52,12 +54,22 @@ export interface TextureSettings {
     psm: number;
     width: number;
     height: number;
+    wrapModeS: GfxWrapMode;
+    wrapModeT: GfxWrapMode;
     name: string;
 }
 
+export interface BINModelPart {
+    diffuseColor: Color;
+    indexOffset: number;
+    indexCount: number;
+}
+
 export interface BINModel {
+    bbox: AABB;
     vertexData: Float32Array;
     indexData: Uint16Array;
+    modelParts: BINModelPart[];
     textureSettings: TextureSettings;
 }
 
@@ -182,6 +194,19 @@ function decodeIndexed4(texDataView: DataView, texClutView: DataView, width: num
     return pixels;
 }
 
+enum TEX1_WM {
+    REPEAT, CLAMP, REGION_CLAMP, REGION_REPEAT,
+}
+
+function translateWrapMode(wm: TEX1_WM): GfxWrapMode {
+    switch (wm) {
+    case TEX1_WM.REPEAT: return GfxWrapMode.REPEAT;
+    case TEX1_WM.CLAMP: return GfxWrapMode.CLAMP;
+    // TODO(jstpierre): Support REGION_* clamp modes.
+    default: throw "whoops";
+    }
+}
+
 export function parse(buffer: ArrayBufferSlice): BIN {
     const view = buffer.createDataView();
 
@@ -196,27 +221,36 @@ export function parse(buffer: ArrayBufferSlice): BIN {
 
     // 4 positions, 3 normals, 2 UV coordinates.
     const WORKING_VERTEX_STRIDE = 4+3+2;
-    // 3 positions, 3 normals, 2 UV coordinates, 4 color (RGBA).
-    // TODO(jstpierre): Put the color into U8 instead of F32.
-    const VERTEX_STRIDE = 3+3+2+4;
+    // 3 positions, 3 normals, 2 UV coordinates.
+    const VERTEX_STRIDE = 3+3+2;
 
     let modelObjTableIdx = lodOffs + 0x04;
     const models: BINModel[] = [];
     for (let i = 0; i < modelObjCount; i++) {
         const objOffs = lodOffs + view.getUint32(modelObjTableIdx + 0x00, true);
 
+        const minX = view.getFloat32(objOffs + 0x00, true);
+        const minY = view.getFloat32(objOffs + 0x04, true);
+        const minZ = view.getFloat32(objOffs + 0x08, true);
+        // Not sure what 0x0C is.
+        const maxX = view.getFloat32(objOffs + 0x10, true);
+        const maxY = view.getFloat32(objOffs + 0x14, true);
+        const maxZ = view.getFloat32(objOffs + 0x18, true);
+        assert(view.getUint32(objOffs + 0x1C, true) === 0x00);
+        const bbox = new AABB(minX, minY, minZ, maxX, maxY, maxZ);
+
         const packetsBegin = objOffs + 0x20;
         const packetsSize = view.getUint16(objOffs + 0x0C, true) * 0x10;
         const packetsEnd = packetsBegin + packetsSize;
 
-        interface BINModelPart {
+        interface BINModelRun {
             vertexRunData: Float32Array;
             vertexRunCount: number;
             indexRunData: Uint16Array;
             vertexRunColor: Color;
         }
-        const modelVertexRuns: BINModelPart[] = [];
-        
+        const modelVertexRuns: BINModelRun[] = [];
+
         // Parse VIF packets.
         let packetsIdx = packetsBegin;
 
@@ -241,7 +275,7 @@ export function parse(buffer: ArrayBufferSlice): BIN {
         while (packetsIdx < packetsEnd) {
             const imm = view.getUint16(packetsIdx + 0x00, true);
             const qwd = view.getUint8(packetsIdx + 0x02);
-            const cmd = view.getUint8(packetsIdx + 0x03);
+            const cmd = view.getUint8(packetsIdx + 0x03) & 0x7F;
             packetsIdx += 0x04;
 
             // To be clear how things *should* work, these VIF commands are commands to
@@ -383,16 +417,22 @@ export function parse(buffer: ArrayBufferSlice): BIN {
                         const th = ((data0 >>> 30) & 0x03) | (((data1 >>> 0) & 0x03) << 2);
                         const width = 1 << tw;
                         const height = 1 << th;
-                        modelTextureSettings = { psm, width, height, name: '' };
+                        modelTextureSettings = { psm, width, height, name: '', wrapModeS: 0, wrapModeT: 0 };
+                    } else if (addr === GSRegister.CLAMP_1) {
+                        const wms = (data0 >>> 0) & 0x03;
+                        const wmt = (data0 >>> 2) & 0x03;
+                        modelTextureSettings.wrapModeS = translateWrapMode(wms);
+                        modelTextureSettings.wrapModeT = translateWrapMode(wmt);
                     }
                     // TODO(jstpierre): Other register settings.
+                    // Have to split the draw call at material setting changes...
 
                     packetsIdx += 0x10;
                 }
 
                 // Make sure that we actually created something here.
                 assertExists(modelTextureSettings);
-            } else if ((cmd & 0x7F) === 0x17) { // MSCNT
+            } else if (cmd === 0x17) { // MSCNT
                 // Run an HLE form of the VU1 program.
 
                 assert(vertexRunData !== null);
@@ -433,9 +473,11 @@ export function parse(buffer: ArrayBufferSlice): BIN {
                 vertexRunFlags2 = 0;
                 vertexRunCount = 0;
                 vertexRunData = null;
-            } else if ((cmd & 0x7F) === 0x00) { // NOP
+            } else if (cmd === 0x00) { // NOP
                 // Don't need to do anything.
-            } else if ((cmd & 0x7F) === 0x11) { // FLUSH
+            } else if (cmd === 0x10) { // FLUSHE
+                // Don't need to do anything.
+            } else if (cmd === 0x11) { // FLUSH
                 // Don't need to do anything.
             } else {
                 console.error(`Unknown VIF command ${hexzero(cmd, 2)}`);
@@ -452,15 +494,32 @@ export function parse(buffer: ArrayBufferSlice): BIN {
         }
         assert(totalVertexCount < 0xFFFF);
 
+        const modelParts: BINModelPart[] = [];
+
         let vertexDataDst = 0;
         let indexOffset = 0;
         let indexDst = 0;
         const vertexData = new Float32Array(totalVertexCount * VERTEX_STRIDE);
         const indexData = new Uint16Array(totalIndexCount);
+        let currentModelPart: BINModelPart | null = null;
+
         for (let j = 0; j < modelVertexRuns.length; j++) {
             const vertexRun = modelVertexRuns[j];
             const vertexRunData = vertexRun.vertexRunData;
-            const vertexRunColor = vertexRun.vertexRunColor;
+
+            // Check if we can coalesce this into the existing model part.
+            let modelPartsCompatible = currentModelPart !== null;
+            if (modelPartsCompatible && !colorEqual(vertexRun.vertexRunColor, currentModelPart.diffuseColor))
+                modelPartsCompatible = false;
+
+            // TODO(jstpierre): Texture settings
+            if (!modelPartsCompatible) {
+                if (currentModelPart)
+                    console.log('incompatible', currentModelPart, colorEqual(vertexRun.vertexRunColor, currentModelPart.diffuseColor));
+                currentModelPart = { diffuseColor: vertexRun.vertexRunColor, indexOffset: indexDst, indexCount: 0 };
+                modelParts.push(currentModelPart);
+            }
+
             for (let k = 0; k < vertexRunData.length; k += WORKING_VERTEX_STRIDE) {
                 // Position.
                 vertexData[vertexDataDst++] = vertexRunData[k + 0];
@@ -474,22 +533,19 @@ export function parse(buffer: ArrayBufferSlice): BIN {
                 // Texture coord.
                 vertexData[vertexDataDst++] = vertexRunData[k + 7];
                 vertexData[vertexDataDst++] = vertexRunData[k + 8];
-                // Color.
-                vertexData[vertexDataDst++] = vertexRunColor.r;
-                vertexData[vertexDataDst++] = vertexRunColor.g;
-                vertexData[vertexDataDst++] = vertexRunColor.b;
-                vertexData[vertexDataDst++] = vertexRunColor.a;
             }
 
             const indexRunData = vertexRun.indexRunData;
-            for (let k = 0; k < indexRunData.length; k++)
+            for (let k = 0; k < indexRunData.length; k++) {
                 indexData[indexDst++] = indexOffset + indexRunData[k];
+                currentModelPart.indexCount++;
+            }
 
             indexOffset += vertexRun.vertexRunCount;
         }
 
         const textureSettings = assertExists(modelTextureSettings);
-        models.push({ vertexData, indexData, textureSettings });
+        models.push({ bbox, vertexData, indexData, textureSettings, modelParts });
 
         modelObjTableIdx += 0x04;
     }

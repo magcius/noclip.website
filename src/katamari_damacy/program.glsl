@@ -8,25 +8,23 @@ layout(row_major, std140) uniform ub_SceneParams {
 
 layout(row_major, std140) uniform ub_ModelParams {
     Mat4x3 u_BoneMatrix[1];
+    vec4 u_Color;
 };
 
 uniform sampler2D u_Texture[1];
 
 varying vec3 v_Normal;
 varying vec2 v_TexCoord;
-varying vec4 v_Color;
 
 #ifdef VERT
 layout(location = 0) in vec3 a_Position;
 layout(location = 1) in vec3 a_Normal;
 layout(location = 2) in vec2 a_TexCoord;
-layout(location = 3) in vec4 a_Color;
 
 void main() {
     gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix[0]), vec4(a_Position, 1.0)));
     v_Normal = Mul(_Mat4x4(u_BoneMatrix[0]), vec4(a_Normal, 0.0)).xyz;
     v_TexCoord = a_TexCoord;
-    v_Color = a_Color;
 }
 #endif
 
@@ -40,9 +38,7 @@ void main() {
     float t_LightIntensity = mix(0.5, 0.9, dot(t_LightDirection, v_Normal));
     t_Color.rgb *= t_LightIntensity;
 
-#ifdef USE_VERTEX_COLOR
-    t_Color.rgba *= v_Color.rgba;
-#endif
+    t_Color.rgba *= u_Color.rgba;
 
     // TODO(jstpierre): Configurable alpha ref?
     // if (t_Color.a < 0.5)
