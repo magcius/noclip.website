@@ -9,7 +9,10 @@ export interface NamedArrayBufferSlice extends ArrayBufferSlice {
 }
 
 function getDataStorageBaseURL(): string {
-    return `https://noclip.beyond3d.com`;
+    if (IS_DEVELOPMENT)
+        return `/data`;
+    else
+        return `https://noclip.beyond3d.com`;
 }
 
 export function getDataURLForPath(url: string): string {

@@ -19,6 +19,22 @@ const enum VifUnpackVL {
     VL_5 = 0x03,
 }
 
+const enum VifUnpackFormat {
+    S_32  = (VifUnpackVN.S  << 2 | VifUnpackVL.VL_32),
+    S_16  = (VifUnpackVN.S  << 2 | VifUnpackVL.VL_16),
+    S_8   = (VifUnpackVN.S  << 2 | VifUnpackVL.VL_8),
+    V2_32 = (VifUnpackVN.V2 << 2 | VifUnpackVL.VL_32),
+    V2_16 = (VifUnpackVN.V2 << 2 | VifUnpackVL.VL_16),
+    V2_8  = (VifUnpackVN.V2 << 2 | VifUnpackVL.VL_8),
+    V3_32 = (VifUnpackVN.V3 << 2 | VifUnpackVL.VL_32),
+    V3_16 = (VifUnpackVN.V3 << 2 | VifUnpackVL.VL_16),
+    V3_8  = (VifUnpackVN.V3 << 2 | VifUnpackVL.VL_8),
+    V4_32 = (VifUnpackVN.V4 << 2 | VifUnpackVL.VL_32),
+    V4_16 = (VifUnpackVN.V4 << 2 | VifUnpackVL.VL_16),
+    V4_8  = (VifUnpackVN.V4 << 2 | VifUnpackVL.VL_8),
+    V4_5  = (VifUnpackVN.V4 << 2 | VifUnpackVL.VL_5),
+}
+
 function getVifUnpackVNComponentCount(vn: VifUnpackVN): number {
     return vn + 1;
 }
@@ -48,6 +64,40 @@ function getVifUnpackFormatByteSize(format: number): number {
     } else {
         throw "whoops";
     }
+}
+
+const enum GSPixelStorageFormat {
+    PSMCT32  = 0x00,
+    PSMCT24  = 0x01,
+    PSMCT16  = 0x02,
+    PSMCT16S = 0x0A,
+    PSMT8    = 0x13,
+    PSMT4    = 0x14,
+    PSMT8H   = 0x1B,
+    PSMT4HL  = 0x24,
+    PSMT4HH  = 0x2C,
+    PSMZ32   = 0x30,
+    PSMZ24   = 0x31,
+    PSMZ16   = 0x32,
+    PSMZ16S  = 0x3A,
+}
+
+const enum GSCLUTStorageFormat {
+    PSMCT32  = 0x00,
+    PSMCT16  = 0x02,
+    PSMCT16S = 0x0A,
+}
+
+const enum GSTextureColorComponent {
+    RGB  = 0x00,
+    RGBA = 0x01,
+}
+
+const enum GSTextureFunction {
+    MODULATE   = 0x00,
+    DECAL      = 0x01,
+    HIGHLIGHT  = 0x02,
+    HIGHLIGHT2 = 0x03,
 }
 
 export interface BINTexture {
@@ -170,13 +220,14 @@ function translateWrapMode(wm: TEX1_WM): GfxWrapMode {
     }
 }
 
+/*
+export interface GSMemoryMap {
+    slices: GSMemoryMapSlice[];
+}
+
 interface GSMemoryMapSlice {
     byteOffset: number;
     buffer: ArrayBufferSlice;
-}
-
-export interface GSMemoryMap {
-    slices: GSMemoryMapSlice[];
 }
 
 export function gsMemoryMapNew(): GSMemoryMap {
@@ -186,7 +237,7 @@ export function gsMemoryMapNew(): GSMemoryMap {
 function gsMemoryMapCreateSlice(map: GSMemoryMap, requestWordStart: number, requestByteSize: number): ArrayBufferSlice {
     // Note: This will do buffer copies if we cross slice boundaries.
 
-    const requestByteStart = requestWordStart * 0x10;
+    const requestByteStart = requestWordStart * 0x04;
     const requestByteEnd = requestByteStart + requestByteSize;
 
     // We shouldn't be before the first uploaded slice.
@@ -211,7 +262,7 @@ function gsMemoryMapCreateSlice(map: GSMemoryMap, requestWordStart: number, requ
 
 function gsMemoryMapUploadSlice(map: GSMemoryMap, wordOffset: number, buffer: ArrayBufferSlice): void {
     // Require that all slices are in sorted order.
-    const byteOffset = wordOffset * 0x10;
+    const byteOffset = wordOffset * 0x04;
     if (map.slices.length > 0) {
         const lastSlice = map.slices[map.slices.length - 1];
         const lastSliceByteEnd = lastSlice.byteOffset + lastSlice.buffer.byteLength;
@@ -219,6 +270,27 @@ function gsMemoryMapUploadSlice(map: GSMemoryMap, wordOffset: number, buffer: Ar
     }
 
     map.slices.push({ byteOffset, buffer });
+}
+*/
+
+export interface GSMemoryMap {
+    data: Uint8Array;
+}
+
+export function gsMemoryMapNew(): GSMemoryMap {
+    return { data: new Uint8Array(4 * 1024 * 1024) };
+}
+
+function gsMemoryMapCreateSlice(map: GSMemoryMap, requestWordStart: number, requestByteSize: number): ArrayBufferSlice {
+    const requestByteStart = requestWordStart * 0x04;
+    return new ArrayBufferSlice(map.data.buffer, requestByteStart, requestByteSize);
+}
+
+function gsMemoryMapUploadSlice(map: GSMemoryMap, wordOffset: number, buffer: ArrayBufferSlice): void {
+    // Require that all slices are in sorted order.
+    const byteOffset = wordOffset * 0x04;
+    console.log('UPLOAD', hexzero(byteOffset, 8), hexzero(buffer.byteLength, 8));
+    map.data.set(buffer.createTypedArray(Uint8Array), byteOffset);
 }
 
 function parseDIRECT(map: GSMemoryMap, buffer: ArrayBufferSlice): number {
@@ -279,47 +351,12 @@ function parseDIRECT(map: GSMemoryMap, buffer: ArrayBufferSlice): number {
         } else if (flg === 0x02) {
             // IMAGE. Followed by data to upload.
             assert(destinationAddress >= 0);
-            // console.log('IMAGE', hexzero(destinationAddress, 4), hexzero(nloop, 4));
             gsMemoryMapUploadSlice(map, destinationAddress, buffer.subarray(texDataIdx, nloop * 0x10));
             texDataIdx += nloop * 0x10;
         }
     }
 
     return texDataIdx;
-}
-
-const enum GSPixelStorageFormat {
-    PSMCT32  = 0x00,
-    PSMCT24  = 0x01,
-    PSMCT16  = 0x02,
-    PSMCT16S = 0x0A,
-    PSMT8    = 0x13,
-    PSMT4    = 0x14,
-    PSMT8H   = 0x1B,
-    PSMT4HL  = 0x24,
-    PSMT4HH  = 0x2C,
-    PSMZ32   = 0x30,
-    PSMZ24   = 0x31,
-    PSMZ16   = 0x32,
-    PSMZ16S  = 0x3A,
-}
-
-const enum GSCLUTStorageFormat {
-    PSMCT32  = 0x00,
-    PSMCT16  = 0x02,
-    PSMCT16S = 0x0A,
-}
-
-const enum GSTextureColorComponent {
-    RGB  = 0x00,
-    RGBA = 0x01,
-}
-
-const enum GSTextureFunction {
-    MODULATE   = 0x00,
-    DECAL      = 0x01,
-    HIGHLIGHT  = 0x02,
-    HIGHLIGHT2 = 0x03,
 }
 
 // TODO(jstpierre): Do we need a texture cache?
@@ -352,6 +389,9 @@ function decodeTexture(gsMemoryMap: GSMemoryMap, tex0_data0: number, tex0_data1:
     const texSlice = gsMemoryMapCreateSlice(gsMemoryMap, tbp0 * 0x40, textureSize);
     const deswizzled = deswizzleIndexed4(texSlice.createDataView(), 0, width, height);
     const clutData = gsMemoryMapCreateSlice(gsMemoryMap, cbp * 0x40, 0x40);
+    console.log('DECODE');
+    console.log('TEX', hexzero(tbp0 * 0x100, 8), texSlice.createTypedArray(Uint8Array))
+    console.log('CLUT', hexzero(cbp * 0x100, 8), clutData.createTypedArray(Uint8Array));
     const pixels = decodeIndexed4(new DataView(deswizzled.buffer), clutData.createDataView(), width, height);
     const name = `${namePrefix}/${hexzero(tbp0, 4)}/${hexzero(cbp, 4)}`;
     return { name, width, height, pixels, tex0_data0, tex0_data1 };
@@ -435,6 +475,7 @@ export function parseModelBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap
             vertexRunCount: number;
             indexRunData: Uint16Array;
             vertexRunColor: Color;
+            textureName: string;
         }
         const modelVertexRuns: BINModelRun[] = [];
 
@@ -490,8 +531,8 @@ export function parseModelBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap
                     continue;
                 }
 
-                if (format === 0x0C) { // V4-32
-                    // V4-32 is either positions... or some sort of color?
+                if (format === VifUnpackFormat.V4_32) {
+                    // V4-32 is either positions or diffuse color.
                     if (isPositions) {
                         assert(vertexRunData === null);
 
@@ -507,7 +548,7 @@ export function parseModelBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap
                             packetsIdx += 0x10;
                         }
                     } else {
-                        // It should be some sort of diffuse color.
+                        // It should be diffuse color.
                         const expectedOffs = 0x8000 + 1 + vertexRunCount * 3;
                         assert(imm === expectedOffs);
                         assert(qwd === 0x01);
@@ -519,7 +560,7 @@ export function parseModelBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap
                         colorFromRGBA(vertexRunColor, diffuseColorR, diffuseColorG, diffuseColorB, diffuseColorA);
                         packetsIdx += 0x10;
                     }
-                } else if (format === 0x04) { // V2-32
+                } else if (format === VifUnpackFormat.V2_32) { // V2-32
                     // It should be texture coordinates.
                     const expectedOffs = 0x8000 + 1 + vertexRunCount * 1;
                     assert(imm === expectedOffs);
@@ -529,7 +570,7 @@ export function parseModelBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap
                         vertexRunData[j * WORKING_VERTEX_STRIDE + 8] = view.getFloat32(packetsIdx + 0x04, true);
                         packetsIdx += 0x08;
                     }
-                } else if (format === 0x08) { // V3-32
+                } else if (format === VifUnpackFormat.V3_32) { // V3-32
                     // It might be either positions or vertex normals.
                     if (isPositions) {
                         assert(vertexRunData === null);
@@ -557,13 +598,33 @@ export function parseModelBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap
                             packetsIdx += 0x0C;
                         }
                     }
+                } else if (format === VifUnpackFormat.V4_8) {
+                    // TODO(jstpierre): An unknown color?
+                    assert(qwd === 0x01);
+                    packetsIdx += 0x04;
+                    continue;
+
+                    /*
+                    const expectedOffs = 0x8000 + 1 + vertexRunCount * 3;
+                    assert(imm === expectedOffs);
+                    assert(qwd === 0x01);
+
+                    const diffuseColorR = view.getUint8(packetsIdx + 0x00) / 0x80;
+                    const diffuseColorG = view.getUint8(packetsIdx + 0x01) / 0x80;
+                    const diffuseColorB = view.getUint8(packetsIdx + 0x02) / 0x80;
+                    const diffuseColorA = view.getUint8(packetsIdx + 0x03) / 0x80;
+                    colorFromRGBA(vertexRunColor, diffuseColorR, diffuseColorG, diffuseColorB, diffuseColorA);
+                    packetsIdx += 0x04;
+                    */
                 } else {
                     console.error(`Unsupported format ${hexzero(format, 2)}`);
                     throw "whoops";
                 }
             } else if ((cmd & 0x7F) === 0x50) { // DIRECT
+                // We need to be at the start of a vertex run.
+                assert(vertexRunData === null);
+
                 // This transfers a GIFtag through GIF.
-                assert(currentTextureName === null);
 
                 // Pull out the TEX0 register, which provides format, width and height.
                 // GIFtag is 128 bits long, so pull out our four words.
@@ -648,7 +709,8 @@ export function parseModelBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap
                 }
 
                 const indexRunData = indexData.slice(0, indexDataIdx);
-                modelVertexRuns.push({ vertexRunData, vertexRunCount, indexRunData, vertexRunColor });
+                const textureName = currentTextureName;
+                modelVertexRuns.push({ vertexRunData, vertexRunCount, indexRunData, vertexRunColor, textureName });
 
                 vertexRunFlags0 = 0;
                 vertexRunFlags1 = 0;
@@ -694,12 +756,12 @@ export function parseModelBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap
             let modelPartsCompatible = currentModelPart !== null;
             if (modelPartsCompatible && !colorEqual(vertexRun.vertexRunColor, currentModelPart.diffuseColor))
                 modelPartsCompatible = false;
+            if (modelPartsCompatible && vertexRun.textureName !== currentModelPart.textureName)
+                modelPartsCompatible = false;
 
             // TODO(jstpierre): Texture settings
             if (!modelPartsCompatible) {
-                if (currentModelPart)
-                    console.log('incompatible', currentModelPart, colorEqual(vertexRun.vertexRunColor, currentModelPart.diffuseColor));
-                currentModelPart = { diffuseColor: vertexRun.vertexRunColor, indexOffset: indexDst, indexCount: 0, textureName: currentTextureName };
+                currentModelPart = { diffuseColor: vertexRun.vertexRunColor, indexOffset: indexDst, indexCount: 0, textureName: vertexRun.textureName };
                 modelParts.push(currentModelPart);
             }
 
