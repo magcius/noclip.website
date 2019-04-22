@@ -11,7 +11,7 @@ if (module.hot) {
     });
 }
 
-import { SceneDesc, SceneGroup, Viewer, SceneGfx, getSceneDescs, InitErrorCode, initializeViewer, makeErrorUI, makeErrorMessageUI } from './viewer';
+import { SceneDesc, SceneGroup, Viewer, SceneGfx, getSceneDescs, InitErrorCode, initializeViewer, makeErrorUI } from './viewer';
 
 import ArrayBufferSlice from './ArrayBufferSlice';
 import Progressable from './Progressable';

@@ -32,11 +32,11 @@ void main() {
 void main() {
     vec4 t_Color = vec4(1.0);
 
+#ifdef USE_TEXTURE
     t_Color = texture(u_Texture[0], v_TexCoord);
-
-    vec3 t_LightDirection = normalize(vec3(.2, -1, .5));
-    float t_LightIntensity = mix(0.5, 0.9, dot(t_LightDirection, v_Normal));
-    t_Color.rgb *= t_LightIntensity;
+#else
+    t_Color.rg = v_TexCoord / 4.0;
+#endif
 
     t_Color.rgba *= u_Color.rgba;
 

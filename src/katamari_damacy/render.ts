@@ -1,6 +1,6 @@
 
 import { GfxDevice, GfxBuffer, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode } from "../gfx/platform/GfxPlatform";
-import { BINModel, BINTexture, BIN, BINModelPart } from "./bin";
+import { BINModel, BINTexture, ModelSector, BINModelPart } from "./bin";
 import { DeviceProgram, DeviceProgramReflection } from "../Program";
 import * as Viewer from "../viewer";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
@@ -114,15 +114,20 @@ export class BINModelInstance {
             cullMode: GfxCullMode.BACK,
         });
 
-        mat4.rotateX(this.modelMatrix, this.modelMatrix, Math.PI);
+        this.setUseTexture(true);
 
-        const program = new KatamariDamacyProgram();
-        this.templateRenderInst.setDeviceProgram(program);
+        mat4.rotateX(this.modelMatrix, this.modelMatrix, Math.PI);
 
         for (let i = 0; i < this.binModelData.binModel.modelParts.length; i++)
             this.modelParts.push(new BINModelPartInstance(device, renderInstBuilder, textureHolder, this.binModelData.binModel.modelParts[i]));
 
         renderInstBuilder.popTemplateRenderInst();
+    }
+
+    public setUseTexture(useTextures: boolean): void {
+        const program = new KatamariDamacyProgram();
+        program.defines.set('USE_TEXTURE', useTextures ? '1' : '0');
+        this.templateRenderInst.setDeviceProgram(program);
     }
 
     public prepareToRender(modelParamsBuffer: GfxRenderBuffer, viewRenderer: Viewer.ViewerRenderInput) {
@@ -161,7 +166,7 @@ function textureToCanvas(texture: BINTexture): Viewer.Texture {
 }
 
 class KatamariDamacyTextureHolder extends TextureHolder<BINTexture> {
-    public addBINTexture(device: GfxDevice, bin: BIN) {
+    public addBINTexture(device: GfxDevice, bin: ModelSector) {
         this.addTextures(device, bin.textures);
     }
 

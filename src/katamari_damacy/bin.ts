@@ -4,6 +4,7 @@ import { assert, hexzero, assertExists } from "../util";
 import { Color, colorNew, colorFromRGBA, colorEqual } from "../Color";
 import { AABB } from "../Geometry";
 import { GfxWrapMode } from "../gfx/platform/GfxPlatform";
+import { mat4, quat } from "gl-matrix";
 
 const enum VifUnpackVN {
     S = 0x00,
@@ -123,9 +124,13 @@ export interface BINModel {
     modelParts: BINModelPart[];
 }
 
-export interface BIN {
+export interface ModelSector {
     models: BINModel[];
     textures: BINTexture[];
+}
+
+export interface LevelModelBIN {
+    sectors: ModelSector[];
 }
 
 function combineSlices(buffers: ArrayBufferSlice[]): ArrayBufferSlice {
@@ -289,7 +294,7 @@ function gsMemoryMapCreateSlice(map: GSMemoryMap, requestWordStart: number, requ
 function gsMemoryMapUploadSlice(map: GSMemoryMap, wordOffset: number, buffer: ArrayBufferSlice): void {
     // Require that all slices are in sorted order.
     const byteOffset = wordOffset * 0x04;
-    console.log('UPLOAD', hexzero(byteOffset, 8), hexzero(buffer.byteLength, 8));
+    // console.log('UPLOAD', hexzero(byteOffset, 8), hexzero(buffer.byteLength, 8));
     map.data.set(buffer.createTypedArray(Uint8Array), byteOffset);
 }
 
@@ -319,6 +324,8 @@ function parseDIRECT(map: GSMemoryMap, buffer: ArrayBufferSlice): number {
 
         // NLOOP is the repeat count.
         const nloop = w0 & 0x7FFF;
+        if (nloop === 0)
+            continue;
 
         // FLG determines the format for the upcoming data.
         const flg = (w1 >>> 26) & 0x03;
@@ -376,9 +383,9 @@ function decodeTexture(gsMemoryMap: GSMemoryMap, tex0_data0: number, tex0_data1:
     const cld = (tex0_data1 >>> 29) & 0x03;
 
     // TODO(jstpierre): Handle other formats
-    assert(psm === GSPixelStorageFormat.PSMT4);
-    assert(tcc === GSTextureColorComponent.RGBA);
-    assert(cpsm === GSCLUTStorageFormat.PSMCT32);
+    // assert(psm === GSPixelStorageFormat.PSMT4, `Unknown PSM ${psm}`);
+    // assert(tcc === GSTextureColorComponent.RGBA, `Unknown TCC ${tcc}`);
+    assert(cpsm === GSCLUTStorageFormat.PSMCT32, `Unknown CPSM ${cpsm}`);
 
     const width = 1 << tw;
     const height = 1 << th;
@@ -389,15 +396,15 @@ function decodeTexture(gsMemoryMap: GSMemoryMap, tex0_data0: number, tex0_data1:
     const texSlice = gsMemoryMapCreateSlice(gsMemoryMap, tbp0 * 0x40, textureSize);
     const deswizzled = deswizzleIndexed4(texSlice.createDataView(), 0, width, height);
     const clutData = gsMemoryMapCreateSlice(gsMemoryMap, cbp * 0x40, 0x40);
-    console.log('DECODE');
-    console.log('TEX', hexzero(tbp0 * 0x100, 8), texSlice.createTypedArray(Uint8Array))
-    console.log('CLUT', hexzero(cbp * 0x100, 8), clutData.createTypedArray(Uint8Array));
+    // console.log('DECODE');
+    // console.log('TEX', hexzero(tbp0 * 0x100, 8), texSlice.createTypedArray(Uint8Array))
+    // console.log('CLUT', hexzero(cbp * 0x100, 8), clutData.createTypedArray(Uint8Array));
     const pixels = decodeIndexed4(new DataView(deswizzled.buffer), clutData.createDataView(), width, height);
     const name = `${namePrefix}/${hexzero(tbp0, 4)}/${hexzero(cbp, 4)}`;
     return { name, width, height, pixels, tex0_data0, tex0_data1 };
 }
 
-export function parseLevelTextureBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, namePrefix: string = ''): void {
+export function parseLevelTextureBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap): void {
     const view = buffer.createDataView();
 
     const numSectors = view.getUint32(0x00, true);
@@ -410,22 +417,8 @@ export function parseLevelTextureBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMe
     assert(offs === buffer.byteLength);
 }
 
-export function parseModelBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, namePrefix: string = ''): BIN {
+function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, namePrefix: string, sectorOffs: number): ModelSector {
     const view = buffer.createDataView();
-
-    const numSectors = view.getUint32(0x00, true);
-
-    if (numSectors == 0x0B) {
-        // Upload in-binary texture data.
-        const texDataOffs = view.getUint32(0x10, true);
-        parseDIRECT(gsMemoryMap, buffer.slice(texDataOffs));
-
-        const clutDataOffsA = view.getUint32(0x1C, true);
-        const clutDataOffsB = view.getUint32(0x18, true);
-        // TODO(jstpierre): Which CLUT do I want?
-        const clutDataOffs = clutDataOffsA;
-        parseDIRECT(gsMemoryMap, buffer.slice(clutDataOffs));
-    }
 
     const textures: BINTexture[] = [];
     function findOrDecodeTexture(tex0_data0: number, tex0_data1: number): string {
@@ -439,11 +432,8 @@ export function parseModelBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap
         return texture.name;
     }
 
-    // For now, always use LOD 0.
-    let lodOffs = view.getUint32(0x04, true);
-
-    const modelObjCount = view.getUint16(lodOffs + 0x00, true);
-    const modelObjType = view.getUint16(lodOffs + 0x02, true);
+    const modelObjCount = view.getUint16(sectorOffs + 0x00, true);
+    const modelObjType = view.getUint16(sectorOffs + 0x02, true);
     assert(modelObjType === 0x05);
 
     // 4 positions, 3 normals, 2 UV coordinates.
@@ -451,10 +441,10 @@ export function parseModelBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap
     // 3 positions, 3 normals, 2 UV coordinates.
     const VERTEX_STRIDE = 3+3+2;
 
-    let modelObjTableIdx = lodOffs + 0x04;
+    let modelObjTableIdx = sectorOffs + 0x04;
     const models: BINModel[] = [];
     for (let i = 0; i < modelObjCount; i++) {
-        const objOffs = lodOffs + view.getUint32(modelObjTableIdx + 0x00, true);
+        const objOffs = sectorOffs + view.getUint32(modelObjTableIdx + 0x00, true);
 
         const minX = view.getFloat32(objOffs + 0x00, true);
         const minY = view.getFloat32(objOffs + 0x04, true);
@@ -795,4 +785,140 @@ export function parseModelBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap
     }
 
     return { models, textures };
+}
+
+export function parseLevelModelBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, namePrefix: string = ''): LevelModelBIN {
+    const view = buffer.createDataView();
+
+    const numSectors = view.getUint32(0x00, true);
+
+    const sectors: ModelSector[] = [];
+
+    let sectorTableIdx = 0x04;
+    for (let i = 0; i < numSectors; i++) {
+        const sectorOffs = view.getUint32(sectorTableIdx + 0x00, true);
+        sectors.push(parseModelSector(buffer, gsMemoryMap, namePrefix, sectorOffs));
+    }
+
+    return { sectors };
+}
+
+export interface LevelSetupObjectSpawn {
+    // The original in-game object ID.
+    objectId: number;
+
+    // The index in our collapsed objectModels list.
+    modelIndex: number;
+
+    // Object transformation.
+    modelMatrix: mat4;
+}
+
+export interface LevelSetupBIN {
+    objectModels: ModelSector[];
+    objectSpawns: LevelSetupObjectSpawn[];
+}
+
+export function parseLevelSetupBIN(buffers: ArrayBufferSlice[]): LevelSetupBIN {
+    // Contains object data inside it.
+    const buffer = combineSlices(buffers);
+    const view = buffer.createDataView();
+    const numSectors = view.getUint32(0x00, true);
+
+    const gsMemoryMap = gsMemoryMapNew();
+
+    function parseObject(objectId: number): ModelSector {
+        const firstSectorIndex = 0x09 + objectId * 0x0B;
+        assert(firstSectorIndex + 0x0B <= numSectors);
+
+        const firstSectorOffs = 0x04 + firstSectorIndex * 0x04;
+        const lod0Offs = view.getUint32(firstSectorOffs + 0x00, true);
+        const lod1Offs = view.getUint32(firstSectorOffs + 0x04, true);
+        const lod2Offs = view.getUint32(firstSectorOffs + 0x08, true);
+        const texDataOffs = view.getUint32(firstSectorOffs + 0x0C, true);
+        const unk10Offs = view.getUint32(firstSectorOffs + 0x10, true);
+        const clutAOffs = view.getUint32(firstSectorOffs + 0x14, true);
+        const clutBOffs = view.getUint32(firstSectorOffs + 0x18, true);
+        const unk1COffs = view.getUint32(firstSectorOffs + 0x1C, true);
+        const unk20Offs = view.getUint32(firstSectorOffs + 0x20, true);
+        const descriptionOffs = view.getUint32(firstSectorOffs + 0x24, true);
+        const audioOffs = view.getUint32(firstSectorOffs + 0x28, true);
+
+        // Parse texture data.
+        parseDIRECT(gsMemoryMap, buffer.slice(texDataOffs));
+        // TODO(jstpierre): Which CLUT do I want?
+        parseDIRECT(gsMemoryMap, buffer.slice(clutAOffs));
+
+        // Load in LOD 0.
+        return parseModelSector(buffer, gsMemoryMap, hexzero(objectId, 4), lod0Offs);
+    }
+
+    const objectModels: ModelSector[] = [];
+    const objectSpawns: LevelSetupObjectSpawn[] = [];
+
+    function findOrParseObject(objectId: number): number {
+        const existingSpawn = objectSpawns.find((spawn) => spawn.objectId === objectId);
+        if (existingSpawn !== undefined) {
+            return existingSpawn.modelIndex;
+        } else {
+            objectModels.push(parseObject(objectId));
+            return objectModels.length - 1;
+        }
+    }
+
+    const q = quat.create();
+    let setupSpawnsIdx = view.getUint32(0x14, true);
+    while (true) {
+        const objectId = view.getUint16(setupSpawnsIdx + 0x00, true);
+        const flags = view.getUint16(setupSpawnsIdx + 0x02, true);
+
+        let shouldSkip = false;
+
+        // We're done.
+        if (objectId === 0xFFFF)
+            break;
+
+        // TODO(jstpierre): Figure out what this mess means.
+        if (flags !== 0xFF00)
+            shouldSkip = true;
+
+        // Skip "weird" objects (missing models, descriptions)
+        switch (objectId) {
+        case 0x0089:
+        case 0x0122:
+        case 0x017D:
+        case 0x01F3:
+        case 0x026B:
+        case 0x0277:
+        case 0x0364:
+        case 0x059E:
+        case 0x05A8:
+        case 0x05A9:
+            shouldSkip = true;
+            break;
+        }
+
+        if (shouldSkip) {
+            setupSpawnsIdx += 0x40;
+            continue;
+        }
+
+        const translationX = view.getFloat32(setupSpawnsIdx + 0x10, true);
+        const translationY = view.getFloat32(setupSpawnsIdx + 0x14, true);
+        const translationZ = view.getFloat32(setupSpawnsIdx + 0x18, true);
+        const rotationX = view.getFloat32(setupSpawnsIdx + 0x20, true);
+        const rotationY = view.getFloat32(setupSpawnsIdx + 0x24, true);
+        const rotationZ = view.getFloat32(setupSpawnsIdx + 0x28, true);
+
+        const modelMatrix = mat4.create();
+        quat.fromEuler(q, rotationX * 180, rotationY * 180, rotationZ * 180);
+        mat4.fromRotationTranslation(modelMatrix, q, [translationX, translationY, translationZ]);
+
+        const modelIndex = findOrParseObject(objectId);
+        const objectSpawn: LevelSetupObjectSpawn = { objectId, modelIndex, modelMatrix };
+        objectSpawns.push(objectSpawn);
+        setupSpawnsIdx += 0x40;
+    }
+
+    return { objectModels, objectSpawns };
 }

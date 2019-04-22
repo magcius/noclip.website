@@ -111,7 +111,6 @@ export class Viewer {
         this.viewerRenderInput.viewportHeight = this.canvas.height;
         this.gfxSwapChain.configureSwapChain(this.canvas.width, this.canvas.height);
 
-        // TODO(jstpierre): Move RenderStatisticsTracker outside of RenderSTate
         this.renderStatisticsTracker.beginFrame();
 
         // TODO(jstpierre): Allocations.
