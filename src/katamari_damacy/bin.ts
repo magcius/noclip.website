@@ -225,65 +225,13 @@ function translateWrapMode(wm: TEX1_WM): GfxWrapMode {
     }
 }
 
-/*
 export interface GSMemoryMap {
-    slices: GSMemoryMapSlice[];
-}
-
-interface GSMemoryMapSlice {
-    byteOffset: number;
-    buffer: ArrayBufferSlice;
+    data: Uint32Array;
 }
 
 export function gsMemoryMapNew(): GSMemoryMap {
-    return { slices: [] };
-}
-
-function gsMemoryMapCreateSlice(map: GSMemoryMap, requestWordStart: number, requestByteSize: number): ArrayBufferSlice {
-    // Note: This will do buffer copies if we cross slice boundaries.
-
-    const requestByteStart = requestWordStart * 0x04;
-    const requestByteEnd = requestByteStart + requestByteSize;
-
-    // We shouldn't be before the first uploaded slice.
-    assert(requestByteStart >= map.slices[0].byteOffset);
-
-    const rawSlices: ArrayBufferSlice[] = [];
-    for (let i = 0; i < map.slices.length; i++) {
-        const slice = map.slices[i];
-        const sliceByteStart = slice.byteOffset;
-        const sliceByteEnd = sliceByteStart + slice.buffer.byteLength;
-        const sliceBuffer = map.slices[i].buffer;
-
-        // TODO(jstpierre): Check for holes.
-
-        if (requestByteEnd >= sliceByteStart && sliceByteEnd >= requestByteStart)
-            rawSlices.push(sliceBuffer.slice(requestByteStart - sliceByteStart, Math.min(requestByteEnd, sliceByteEnd) - sliceByteStart));
-    }
-
-    assert(rawSlices.length > 0);
-    return combineSlices(rawSlices);
-}
-
-function gsMemoryMapUploadSlice(map: GSMemoryMap, wordOffset: number, buffer: ArrayBufferSlice): void {
-    // Require that all slices are in sorted order.
-    const byteOffset = wordOffset * 0x04;
-    if (map.slices.length > 0) {
-        const lastSlice = map.slices[map.slices.length - 1];
-        const lastSliceByteEnd = lastSlice.byteOffset + lastSlice.buffer.byteLength;
-        assert(byteOffset >= lastSliceByteEnd);
-    }
-
-    map.slices.push({ byteOffset, buffer });
-}
-*/
-
-export interface GSMemoryMap {
-    data: Uint8Array;
-}
-
-export function gsMemoryMapNew(): GSMemoryMap {
-    return { data: new Uint8Array(4 * 1024 * 1024) };
+    // GS Memory is 4MB.
+    return { data: new Uint32Array(1024 * 1024) };
 }
 
 function gsMemoryMapCreateSlice(map: GSMemoryMap, requestWordStart: number, requestByteSize: number): ArrayBufferSlice {
@@ -291,11 +239,106 @@ function gsMemoryMapCreateSlice(map: GSMemoryMap, requestWordStart: number, requ
     return new ArrayBufferSlice(map.data.buffer, requestByteStart, requestByteSize);
 }
 
-function gsMemoryMapUploadSlice(map: GSMemoryMap, wordOffset: number, buffer: ArrayBufferSlice): void {
-    // Require that all slices are in sorted order.
-    const byteOffset = wordOffset * 0x04;
-    // console.log('UPLOAD', hexzero(byteOffset, 8), hexzero(buffer.byteLength, 8));
-    map.data.set(buffer.createTypedArray(Uint8Array), byteOffset);
+const blockTablePSMCT32 = [
+    0,  1,  4,  5,  16, 17, 20, 21,
+    2,  3,  6,  7,  18, 19, 22, 23,
+    8,  9,  12, 13, 24, 25, 28, 29,
+    10, 11, 14, 15, 26, 27, 30, 31,
+];
+const columnWordTablePSMCT32 = [
+    0,  1,  4,  5,   8,  9, 12, 13,
+    2,  3,  6,  7,  10, 11, 14, 15,
+];
+
+/*
+function getPixelAddressPSMCT32(dbp: number, dbw: number, x: number, y: number): number {
+    const startBlock = dbp << 6;
+    const pageX = x >>> 6;
+    const pageY = y >>> 5;
+    const page = pageY * dbw + pageX;
+    const px = x - (pageX << 6);
+    const py = y - (pageY << 5);
+    const blockX = px >>> 3;
+    const blockY = py >>> 3;
+    const block = blockTablePSMCT32[blockY << 3 + blockX];
+    const bx = px - (blockX << 3);
+    const by = py - (blockY << 3);
+    const column = by >>> 1;
+    const cx = bx;
+    const cy = by - column << 1;
+    const cw = columnWordTablePSMCT32[cy << 3 + cx];
+    return startBlock + (page << 11) + (block << 6) + (column << 4) + cw;
+}
+*/
+
+function getBlockIdPSMCT32(block: number, x: number, y: number): number {
+    const blockY = (y >>> 3) & 0x03;
+    const blockX = (x >>> 3) & 0x07;
+    return block + ((x >>> 1) & ~0x1F) + blockTablePSMCT32[blockY << 3 + blockX];
+}
+
+function getPixelAddressPSMCT32(block: number, width: number, x: number, y: number): number {
+    const page = ((block >> 5) + (y >> 5) * width + (x >> 6));
+    const columnY = y & 0x07;
+    const columnX = x & 0x07;
+    const column = columnWordTablePSMCT32[columnY << 3 + columnX];
+    const addr = (page << 11) + (getBlockIdPSMCT32(block & 0x1F, x & 0x3F, y & 0x1F) << 6) + column;
+    return (addr << 2) & 0x003FFFFC;
+}
+
+function gsMemoryMapUploadImagePSMCT32(map: GSMemoryMap, dbp: number, dbw: number, dsax: number, dsay: number, rrw: number, rrh: number, buffer: ArrayBufferSlice): void {
+    const view = buffer.createDataView();
+
+    let srcIdx = 0;
+    for (let y = dsay; y < dsay + rrh; y++) {
+        for (let x = dsax; x < dsax + rrw; x++) {
+            map.data[getPixelAddressPSMCT32(dbp, dbw, x, y)] = view.getUint32(srcIdx, true);
+            srcIdx += 0x04;
+        }
+    }
+}
+
+function gsMemoryMapUploadImage(map: GSMemoryMap, dpsm: GSPixelStorageFormat, dbp: number, dbw: number, dsax: number, dsay: number, rrw: number, rrh: number, buffer: ArrayBufferSlice): void {
+    if (dpsm === GSPixelStorageFormat.PSMCT32)
+        gsMemoryMapUploadImagePSMCT32(map, dbp, dbw, dsax, dsay, rrw, rrh, buffer);
+    else
+        throw "whoops";
+}
+
+function gsMemoryMapReadImagePSMCT32(map: GSMemoryMap, dbp: number, dbw: number, dsax: number, dsay: number, rrw: number, rrh: number): Uint8Array {
+    const pixels = new Uint8Array(rrw * rrh * 4);
+    let dstIdx = 0;
+    for (let y = dsay; y < dsay + rrh; y++) {
+        for (let x = dsax; x < dsax + rrw; x++) {
+            const p = map.data[getPixelAddressPSMCT32(dbp, dbw, x, y)];
+            pixels[dstIdx + 0] = (p >>> 24) & 0xFF;
+            pixels[dstIdx + 1] = (p >>> 16) & 0xFF;
+            pixels[dstIdx + 2] = (p >>>  8) & 0xFF;
+            pixels[dstIdx + 3] = (p >>>  0) & 0xFF;
+            dstIdx += 0x04;
+        }
+    }
+    return pixels;
+}
+
+function gsMemoryMapReadImagePSMT4(map: GSMemoryMap, dbp: number, dbw: number, dsax: number, dsay: number, rrw: number, rrh: number, cbp: number, cpsm: number): Uint8Array {
+    // Read CLUT data. 4-bit indexes means we have a total of 16 values that we can read from.
+    const clutData = new Uint8Array(16 * 4);
+    gsMemoryMapReadImagePSMCT32
+
+    const pixels = new Uint8Array(rrw * rrh * 4);
+    let dstIdx = 0;
+    for (let y = dsay; y < dsay + rrh; y++) {
+        for (let x = dsax; x < dsax + rrw; x++) {
+            const p = map.data[getPixelAddressPSMCT32(dbp, dbw, x, y)];
+            pixels[dstIdx + 0] = (p >>> 24) & 0xFF;
+            pixels[dstIdx + 1] = (p >>> 16) & 0xFF;
+            pixels[dstIdx + 2] = (p >>>  8) & 0xFF;
+            pixels[dstIdx + 3] = (p >>>  0) & 0xFF;
+            dstIdx += 0x04;
+        }
+    }
+    return pixels;
 }
 
 function parseDIRECT(map: GSMemoryMap, buffer: ArrayBufferSlice): number {
@@ -312,7 +355,13 @@ function parseDIRECT(map: GSMemoryMap, buffer: ArrayBufferSlice): number {
     const texDataEnd = texDataOffs + texDataSize;
     let texDataIdx = texDataOffs + 0x10;
 
-    let destinationAddress = -1;
+    let dpsm = -1;
+    let dbw = -1;
+    let dbp = -1;
+    let rrw = -1;
+    let rrh = -1;
+    let dsax = -1;
+    let dsay = -1;
 
     while (texDataIdx < texDataEnd) {
         // These should all be GIFtags here.
@@ -344,21 +393,27 @@ function parseDIRECT(map: GSMemoryMap, buffer: ArrayBufferSlice): number {
 
                 // addr contains the register to set. Unpack these registers.
                 if (addr === 0x50) {
-                    // BITBLTBUF. Contains the destination address.
-                    const dbp = (data1 >>> 0) & 0x3FFF;
-                    const dbw = (data1 >>> 14) & 0x3F;
-                    const dpsm = (data1 >>> 20) & 0x3F;
+                    // BITBLTBUF
+                    dbp = (data1 >>> 0) & 0x3FFF;
+                    dbw = (data1 >>> 14) & 0x3F;
+                    dpsm = (data1 >>> 20) & 0x3F;
                     // TODO(jstpierre): Support upload modes other than PSCMT32
                     assert(dpsm === GSPixelStorageFormat.PSMCT32);
-                    destinationAddress = dbp * 0x40;
+                } else if (addr === 0x51) {
+                    // TRXPOS
+                    dsax = (data1 >>> 0) & 0x7FF;
+                    dsay = (data1 >>> 16) & 0x7FF;
+                } else if (addr === 0x52) {
+                    // TRXREG
+                    rrw = (data0 >>> 0) & 0xFFF;
+                    rrh = (data1 >>> 0) & 0xFFF;
                 }
 
                 texDataIdx += 0x10;
             }
         } else if (flg === 0x02) {
             // IMAGE. Followed by data to upload.
-            assert(destinationAddress >= 0);
-            gsMemoryMapUploadSlice(map, destinationAddress, buffer.subarray(texDataIdx, nloop * 0x10));
+            gsMemoryMapUploadImage(map, dpsm, dbp, dbw, dsax, dsay, rrw, rrh, buffer.subarray(texDataIdx, nloop * 0x10));
             texDataIdx += nloop * 0x10;
         }
     }
@@ -371,7 +426,7 @@ function decodeTexture(gsMemoryMap: GSMemoryMap, tex0_data0: number, tex0_data1:
     // Unpack TEX0 register.
     const tbp0 = (tex0_data0 >>> 0) & 0x3FFF;
     const tbw = (tex0_data0 >>> 14) & 0x3F;
-    const psm = (tex0_data0 >>> 20) & 0x3F;
+    const psm: GSPixelStorageFormat = (tex0_data0 >>> 20) & 0x3F;
     const tw = (tex0_data0 >>> 26) & 0x0F;
     const th = ((tex0_data0 >>> 30) & 0x03) | (((tex0_data1 >>> 0) & 0x03) << 2);
     const tcc = (tex0_data1 >>> 2) & 0x03;
@@ -382,13 +437,13 @@ function decodeTexture(gsMemoryMap: GSMemoryMap, tex0_data0: number, tex0_data1:
     const csa = (tex0_data1 >>> 24) & 0x1F;
     const cld = (tex0_data1 >>> 29) & 0x03;
 
+    const width = 1 << tw;
+    const height = 1 << th;
+
     // TODO(jstpierre): Handle other formats
     // assert(psm === GSPixelStorageFormat.PSMT4, `Unknown PSM ${psm}`);
     // assert(tcc === GSTextureColorComponent.RGBA, `Unknown TCC ${tcc}`);
     assert(cpsm === GSCLUTStorageFormat.PSMCT32, `Unknown CPSM ${cpsm}`);
-
-    const width = 1 << tw;
-    const height = 1 << th;
 
     // 4bpp; half a byte per pixel.
     const textureSize = (width * height) >>> 1;
