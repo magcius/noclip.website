@@ -957,10 +957,16 @@ export function parseLevelSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: GSM
         const translationX = view.getFloat32(setupSpawnsIdx + 0x10, true);
         const translationY = view.getFloat32(setupSpawnsIdx + 0x14, true);
         const translationZ = view.getFloat32(setupSpawnsIdx + 0x18, true);
+        assert(view.getFloat32(setupSpawnsIdx + 0x1C, true) === 1);
         const rotationX = view.getFloat32(setupSpawnsIdx + 0x20, true);
         const rotationY = view.getFloat32(setupSpawnsIdx + 0x24, true);
         const rotationZ = view.getFloat32(setupSpawnsIdx + 0x28, true);
         const angle = -view.getFloat32(setupSpawnsIdx + 0x2C, true);
+        // These scales are unused according to Murugo?
+        const scaleX = view.getFloat32(setupSpawnsIdx + 0x30, true);
+        const scaleY = view.getFloat32(setupSpawnsIdx + 0x34, true);
+        const scaleZ = view.getFloat32(setupSpawnsIdx + 0x38, true);
+        assert(view.getUint32(setupSpawnsIdx + 0x3C, true) === 0);
         const sinHalfAngle = Math.sin(angle / 2);
 
         const modelMatrix = mat4.create();
