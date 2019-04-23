@@ -94,11 +94,13 @@ const sceneGroups = [
     LM3D.sceneGroup,
     MM3D.sceneGroup,
     OOT3D.sceneGroup,
+    "PlayStation 2",
+    KATAMARI_DAMACY.sceneGroup,
+    KH.sceneGroup,
     "Other",
     DKSIV.sceneGroup,
-    MDL0.sceneGroup,
     BK.sceneGroup,
-    KH.sceneGroup,
+    MDL0.sceneGroup,
     "Experimental",
     PSY.sceneGroup,
     DKCR.sceneGroup,
@@ -108,7 +110,6 @@ const sceneGroups = [
     DKS.sceneGroup,
     THUG2.sceneGroup,
     SONIC_COLORS.sceneGroup,
-    KATAMARI_DAMACY.sceneGroup,
 ];
 
 function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
