@@ -1,6 +1,6 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, hexzero, assertExists } from "../util";
+import { assert, hexzero, assertExists, readString, nArray } from "../util";
 import { Color, colorNew, colorFromRGBA, colorEqual } from "../Color";
 import { AABB } from "../Geometry";
 import { GfxWrapMode } from "../gfx/platform/GfxPlatform";
@@ -114,7 +114,7 @@ export interface BINModelPart {
     diffuseColor: Color;
     indexOffset: number;
     indexCount: number;
-    textureName: string;
+    textureName: string | null;
 }
 
 export interface BINModel {
@@ -164,6 +164,46 @@ const blockTablePSMCT32 = [
 const columnTablePSMCT32 = [
      0,  1,  4,  5,  8, 9,  12, 13,
      2,  3,  6,  7, 10, 11, 14, 15,
+];
+const blockTablePSMT8 = [
+     0,  1,  4,  5, 16, 17, 20, 21,
+     2,  3,  6,  7, 18, 19, 22, 23,
+     8,  9, 12, 13, 24, 25, 28, 29,
+    10, 11, 14, 15, 26, 27, 30, 31,
+];
+const columnTablePSMT8 = [
+      0,   4,  16,  20,  32,  36,  48,  52,	// Column 0
+      2,   6,  18,  22,  34,  38,  50,  54,
+      8,  12,  24,  28,  40,  44,  56,  60,
+     10,  14,  26,  30,  42,  46,  58,  62,
+     33,  37,  49,  53,   1,   5,  17,  21,
+     35,  39,  51,  55,   3,   7,  19,  23,
+     41,  45,  57,  61,   9,  13,  25,  29,
+     43,  47,  59,  63,  11,  15,  27,  31,
+     96, 100, 112, 116,  64,  68,  80,  84, // Column 1
+     98, 102, 114, 118,  66,  70,  82,  86,
+    104, 108, 120, 124,  72,  76,  88,  92,
+    106, 110, 122, 126,  74,  78,  90,  94,
+     65,  69,  81,  85,  97, 101, 113, 117,
+     67,  71,  83,  87,  99, 103, 115, 119,
+     73,  77,  89,  93, 105, 109, 121, 125,
+     75,  79,  91,  95, 107, 111, 123, 127,
+    128, 132, 144, 148, 160, 164, 176, 180,	// Column 2
+    130, 134, 146, 150, 162, 166, 178, 182,
+    136, 140, 152, 156, 168, 172, 184, 188,
+    138, 142, 154, 158, 170, 174, 186, 190,
+    161, 165, 177, 181, 129, 133, 145, 149,
+    163, 167, 179, 183, 131, 135, 147, 151,
+    169, 173, 185, 189, 137, 141, 153, 157,
+    171, 175, 187, 191, 139, 143, 155, 159,
+    224, 228, 240, 244, 192, 196, 208, 212,	// Column 3
+    226, 230, 242, 246, 194, 198, 210, 214,
+    232, 236, 248, 252, 200, 204, 216, 220,
+    234, 238, 250, 254, 202, 206, 218, 222,
+    193, 197, 209, 213, 225, 229, 241, 245,
+    195, 199, 211, 215, 227, 231, 243, 247,
+    201, 205, 217, 221, 233, 237, 249, 253,
+    203, 207, 219, 223, 235, 239, 251, 255,
 ];
 const blockTablePSMT4 = [
      0,  2,  8, 10,
@@ -254,6 +294,21 @@ function getPixelAddressPSMCT32(block: number, width: number, x: number, y: numb
     return (addr << 2) & 0x003FFFFC;
 }
 
+function getBlockIdPSMT8(block: number, x: number, y: number): number {
+    const blockY = (y >>> 4) & 0x03;
+    const blockX = (x >>> 4) & 0x07;
+    return block + ((x >>> 2) & ~0x1F) + blockTablePSMT8[(blockY << 3) | blockX];
+}
+
+function getPixelAddressPSMT8(block: number, width: number, x: number, y: number): number {
+    const page = ((block >>> 5) + (y >>> 6) * (width >>> 1) + (x >>> 7));
+    const columnY = y & 0x0F;
+    const columnX = x & 0x0F;
+    const column = columnTablePSMT8[(columnY << 4) | columnX];
+    const addr = (page << 13) + (getBlockIdPSMT8(block & 0x1F, x & 0x7F, y & 0x3F) << 8) + column;
+    return addr;
+}
+
 function getBlockIdPSMT4(block: number, x: number, y: number): number {
     const blockBase = ((y >>> 6) & 0x01) << 4;
     const blockY = (y >>> 4) & 0x03;
@@ -293,11 +348,10 @@ function gsMemoryMapUploadImage(map: GSMemoryMap, dpsm: GSPixelStorageFormat, db
         throw "whoops";
 }
 
-function gsMemoryMapReadImagePSMT4_PSMCT32(map: GSMemoryMap, dbp: number, dbw: number, dsax: number, dsay: number, rrw: number, rrh: number, cbp: number, alphaReg: number): Uint8Array {
-    const pixels = new Uint8Array(rrw * rrh * 4);
+function gsMemoryMapReadImagePSMT4_PSMCT32(pixels: Uint8Array, map: GSMemoryMap, dbp: number, dbw: number, rrw: number, rrh: number, cbp: number, alphaReg: number) {
     let dstIdx = 0;
-    for (let y = dsay; y < dsay + rrh; y++) {
-        for (let x = dsax; x < dsax + rrw; x++) {
+    for (let y = 0; y < rrh; y++) {
+        for (let x = 0; x < rrw; x++) {
             const addr = getPixelAddressPSMT4(dbp, dbw, x, y);
             const clutIndex = (map.data[addr >>> 1] >> ((addr & 0x01) << 2)) & 0x0F;
 
@@ -313,7 +367,32 @@ function gsMemoryMapReadImagePSMT4_PSMCT32(map: GSMemoryMap, dbp: number, dbw: n
             dstIdx += 0x04;
         }
     }
-    return pixels;
+}
+
+function gsMemoryMapReadImagePSMT8_PSMCT32(pixels: Uint8Array, map: GSMemoryMap, dbp: number, dbw: number, rrw: number, rrh: number, cbp: number, alphaReg: number) {
+    let dstIdx = 0;
+    for (let y = 0; y < rrh; y++) {
+        for (let x = 0; x < rrw; x++) {
+            const addr = getPixelAddressPSMT8(dbp, dbw, x, y);
+            const clutIndex = map.data[addr];
+
+            let cy = (clutIndex & 0xE0) >>> 4;
+            if (clutIndex & 0x08)
+                cy++;
+            let cx = clutIndex & 0x07;
+            if (clutIndex & 0x10)
+                cx += 0x08;
+
+            const p = getPixelAddressPSMCT32(cbp, 1, cx, cy);
+            pixels[dstIdx + 0] = map.data[p + 0x00];
+            pixels[dstIdx + 1] = map.data[p + 0x01];
+            pixels[dstIdx + 2] = map.data[p + 0x02];
+            const rawAlpha = alphaReg == -1 ? map.data[p + 0x03] : alphaReg;
+            pixels[dstIdx + 3] = Math.min(0xFF, rawAlpha * 2);
+
+            dstIdx += 0x04;
+        }
+    }
 }
 
 function parseDIRECT(map: GSMemoryMap, buffer: ArrayBufferSlice): number {
@@ -432,10 +511,13 @@ function decodeTexture(gsMemoryMap: GSMemoryMap, tex0_data0: number, tex0_data1:
     // TODO(jstpierre): Read the TEXALPHA register.
     const alphaReg = tcc === GSTextureColorComponent.RGBA ? -1 : 0x80;
 
-    if (psm !== GSPixelStorageFormat.PSMT4)
+    let pixels: Uint8Array = new Uint8Array(width * height * 4);
+    if (psm === GSPixelStorageFormat.PSMT4)
+        gsMemoryMapReadImagePSMT4_PSMCT32(pixels, gsMemoryMap, tbp0, tbw, width, height, cbp, alphaReg);
+    else if (psm === GSPixelStorageFormat.PSMT8)
+        gsMemoryMapReadImagePSMT8_PSMCT32(pixels, gsMemoryMap, tbp0, tbw, width, height, cbp, alphaReg);
+    else
         console.warn(`Unsupported PSM ${psmToString(psm)} in texture ${name}`);
-
-    const pixels = gsMemoryMapReadImagePSMT4_PSMCT32(gsMemoryMap, tbp0, tbw, 0, 0, width, height, cbp, alphaReg);
 
     return { name, width, height, pixels, tex0_data0, tex0_data1 };
 }
@@ -444,7 +526,8 @@ export function parseLevelTextureBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMe
     const view = buffer.createDataView();
 
     const numSectors = view.getUint32(0x00, true);
-    assert(numSectors === 0x01);
+    // Number of sectors seems to be inconsistent. Make a Star 1 (135049) has one sector defined
+    // but two uploads, but Make a Star 3 (135231) has two... Just run until the end of the file...
 
     const firstSectorOffs = view.getUint32(0x04, true);
     let offs = firstSectorOffs;
@@ -517,6 +600,12 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
         let vertexRunColor = colorNew(1, 1, 1, 1);
         let currentTextureName: string | null = null;
 
+        const expectedPositionsOffs = 0x8000;
+        let expectedTexCoordOffs = -1;
+        let expectedNormalsOffs = -1;
+        let expectedDiffuseColorOffs = -1;
+        let skipVertices = false;
+
         const newVertexRun = () => {
             // Parse out the header.
             vertexRunFlags0 = view.getUint32(packetsIdx + 0x00, true);
@@ -524,6 +613,24 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
             vertexRunFlags2 = view.getUint32(packetsIdx + 0x08, true);
             vertexRunCount = vertexRunFlags0 & 0x000000FF;
             vertexRunData = new Float32Array(vertexRunCount * WORKING_VERTEX_STRIDE);
+            skipVertices = false;
+
+            // Seems to be some sort of format code.
+            if (vertexRunFlags2 === 0x0412) {
+                expectedTexCoordOffs = expectedPositionsOffs + 1 + vertexRunCount * 1;
+                expectedNormalsOffs = expectedPositionsOffs + 1 + vertexRunCount * 2;
+                expectedDiffuseColorOffs = expectedPositionsOffs + 1 + vertexRunCount * 3;
+            } else if (vertexRunFlags2 === 0x0041) {
+                // TODO(jstpierre): Mousetrap uses this to define a large... trigger box? Not sure why.
+                // Killing it for now.
+                expectedTexCoordOffs = -1;
+                expectedNormalsOffs = expectedPositionsOffs + 1 + vertexRunCount * 1;
+                expectedDiffuseColorOffs = expectedPositionsOffs + 1 + vertexRunCount * 2;
+                skipVertices = true;
+            } else {
+                console.warn(`Unknown vertex run flags format code ${vertexRunFlags2}`);
+                throw "whoops";
+            }
         };
 
         while (packetsIdx < packetsEnd) {
@@ -547,8 +654,8 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
             if ((cmd & 0x60) === 0x60) { // UNPACK
                 const format = (cmd & 0x0F);
 
-                const isVertexData = (imm >= 0x8000);
-                const isPositions = (imm === 0x8000);
+                const isVertexData = (imm >= expectedPositionsOffs);
+                const isPositions = (imm === expectedPositionsOffs);
 
                 // If this is not vertex data (not writing to address 0x8000 or higher), then we skip
                 // for now. Perhaps we'll have a use for this in the future.
@@ -564,7 +671,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
 
                         newVertexRun();
                         packetsIdx += 0x10;
-
+        
                         for (let j = 0; j < qwd - 1; j++) {
                             vertexRunData[j * WORKING_VERTEX_STRIDE + 0] = view.getFloat32(packetsIdx + 0x00, true);
                             vertexRunData[j * WORKING_VERTEX_STRIDE + 1] = view.getFloat32(packetsIdx + 0x04, true);
@@ -575,8 +682,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
                         }
                     } else {
                         // It should be diffuse color.
-                        const expectedOffs = 0x8000 + 1 + vertexRunCount * 3;
-                        assert(imm === expectedOffs);
+                        assert(imm === expectedDiffuseColorOffs);
                         assert(qwd === 0x01);
 
                         const diffuseColorR = view.getFloat32(packetsIdx + 0x00, true) / 128;
@@ -588,8 +694,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
                     }
                 } else if (format === VifUnpackFormat.V2_32) { // V2-32
                     // It should be texture coordinates.
-                    const expectedOffs = 0x8000 + 1 + vertexRunCount * 1;
-                    assert(imm === expectedOffs);
+                    assert(imm === expectedTexCoordOffs);
 
                     for (let j = 0; j < qwd; j++) {
                         vertexRunData[j * WORKING_VERTEX_STRIDE + 7] = view.getFloat32(packetsIdx + 0x00, true);
@@ -608,14 +713,12 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
                             vertexRunData[j * WORKING_VERTEX_STRIDE + 0] = view.getFloat32(packetsIdx + 0x00, true);
                             vertexRunData[j * WORKING_VERTEX_STRIDE + 1] = view.getFloat32(packetsIdx + 0x04, true);
                             vertexRunData[j * WORKING_VERTEX_STRIDE + 2] = view.getFloat32(packetsIdx + 0x08, true);
-                            // W is special. It's a bunch of flag bits for misc. use by the VU1 program.
                             vertexRunData[j * WORKING_VERTEX_STRIDE + 3] = 0;
                             packetsIdx += 0x0C;
                         }
                     } else {
                         // If it's not positions, it should be vertex normals.
-                        const expectedOffs = 0x8000 + 1 + vertexRunCount * 2;
-                        assert(imm === expectedOffs);
+                        assert(imm === expectedNormalsOffs);
 
                         for (let j = 0; j < qwd; j++) {
                             vertexRunData[j * WORKING_VERTEX_STRIDE + 4] = view.getFloat32(packetsIdx + 0x00, true);
@@ -705,37 +808,39 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
                 // Run an HLE form of the VU1 program.
                 assert(vertexRunData !== null);
 
-                const isStrip = (vertexRunFlags1 & 0x000000F0) === 0;
+                if (!skipVertices) {
+                    const isStrip = (vertexRunFlags1 & 0x000000F0) === 0;
 
-                // Go through and build an index buffer for it.
-                const indexData = new Uint16Array(isStrip ? vertexRunCount * 3 - 2 : vertexRunCount);
-                let indexDataIdx = 0;
+                    // Go through and build an index buffer for it.
+                    const indexData = new Uint16Array(isStrip ? vertexRunCount * 3 - 2 : vertexRunCount);
+                    let indexDataIdx = 0;
 
-                for (let j = 0; j < vertexRunCount; j++) {
-                    const w = vertexRunData[j * WORKING_VERTEX_STRIDE + 3];
+                    for (let j = 0; j < vertexRunCount; j++) {
+                        const w = vertexRunData[j * WORKING_VERTEX_STRIDE + 3];
 
-                    if (isStrip) {
-                        if (j < 2)
-                            continue;
-                        if ((w & 0xC000) !== 0x0000)
-                            continue;
-                        if ((j % 2) === 0) {
-                            indexData[indexDataIdx++] = j - 2;
-                            indexData[indexDataIdx++] = j - 1;
-                            indexData[indexDataIdx++] = j;
+                        if (isStrip) {
+                            if (j < 2)
+                                continue;
+                            if ((w & 0xC000) !== 0x0000)
+                                continue;
+                            if ((j % 2) === 0) {
+                                indexData[indexDataIdx++] = j - 2;
+                                indexData[indexDataIdx++] = j - 1;
+                                indexData[indexDataIdx++] = j;
+                            } else {
+                                indexData[indexDataIdx++] = j - 1;
+                                indexData[indexDataIdx++] = j - 2;
+                                indexData[indexDataIdx++] = j;
+                            }
                         } else {
-                            indexData[indexDataIdx++] = j - 1;
-                            indexData[indexDataIdx++] = j - 2;
                             indexData[indexDataIdx++] = j;
                         }
-                    } else {
-                        indexData[indexDataIdx++] = j;
                     }
-                }
 
-                const indexRunData = indexData.slice(0, indexDataIdx);
-                const textureName = currentTextureName;
-                modelVertexRuns.push({ vertexRunData, vertexRunCount, indexRunData, vertexRunColor, textureName });
+                    const indexRunData = indexData.slice(0, indexDataIdx);
+                    const textureName = currentTextureName;
+                    modelVertexRuns.push({ vertexRunData, vertexRunCount, indexRunData, vertexRunColor, textureName });
+                }
 
                 vertexRunFlags0 = 0;
                 vertexRunFlags1 = 0;
@@ -895,10 +1000,12 @@ export function parseLevelSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: GSM
         const descriptionOffs = view.getUint32(firstSectorOffs + 0x24, true);
         const audioOffs = view.getUint32(firstSectorOffs + 0x28, true);
 
-        // Parse texture data.
-        parseDIRECT(gsMemoryMap, buffer.slice(texDataOffs));
-        // TODO(jstpierre): Which CLUT do I want?
-        parseDIRECT(gsMemoryMap, buffer.slice(clutAOffs));
+        if (readString(buffer, texDataOffs, 0x04) !== 'NIL ') {
+            // Parse texture data.
+            parseDIRECT(gsMemoryMap, buffer.slice(texDataOffs));
+            // TODO(jstpierre): Which CLUT do I want?
+            parseDIRECT(gsMemoryMap, buffer.slice(clutAOffs));
+        }
 
         // Load in LOD 0.
         return parseModelSector(buffer, gsMemoryMap, hexzero(objectId, 4), lod0Offs);

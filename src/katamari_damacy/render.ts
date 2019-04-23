@@ -74,7 +74,8 @@ export class BINModelPartInstance {
         renderInstBuilder.newUniformBufferInstance(this.renderInst, KatamariDamacyProgram.ub_ModelParams);
 
         const textureMapping = nArray(1, () => new TextureMapping());
-        textureHolder.fillTextureMapping(textureMapping[0], this.binModelPart.textureName);
+        if (this.binModelPart.textureName !== null)
+            textureHolder.fillTextureMapping(textureMapping[0], this.binModelPart.textureName);
         this.renderInst.setSamplerBindingsFromTextureMappings(textureMapping);
 
         // TODO(jstpierre): Read this from TEX_1 / CLAMP_1.
@@ -88,12 +89,16 @@ export class BINModelPartInstance {
         });
     }
 
-    public prepareToRender(modelParamsBuffer: GfxRenderBuffer, modelViewMatrix: mat4, modelMatrix: mat4): void {
-        let offs = this.renderInst.getUniformBufferOffset(KatamariDamacyProgram.ub_ModelParams);
-        const mapped = modelParamsBuffer.mapBufferF32(offs, 16);
-        offs += fillMatrix4x3(mapped, offs, modelViewMatrix);
-        offs += fillMatrix4x3(mapped, offs, modelMatrix);
-        offs += fillColor(mapped, offs, this.binModelPart.diffuseColor);
+    public prepareToRender(modelParamsBuffer: GfxRenderBuffer, modelViewMatrix: mat4, modelMatrix: mat4, visible: boolean): void {
+        this.renderInst.visible = visible;
+
+        if (visible) {
+            let offs = this.renderInst.getUniformBufferOffset(KatamariDamacyProgram.ub_ModelParams);
+            const mapped = modelParamsBuffer.mapBufferF32(offs, 16);
+            offs += fillMatrix4x3(mapped, offs, modelViewMatrix);
+            offs += fillMatrix4x3(mapped, offs, modelMatrix);
+            offs += fillColor(mapped, offs, this.binModelPart.diffuseColor);
+        }
     }
 
     public destroy(device: GfxDevice): void {
@@ -107,6 +112,7 @@ export class BINModelInstance {
     public templateRenderInst: GfxRenderInst;
     public modelMatrix: mat4 = mat4.create();
     public modelParts: BINModelPartInstance[] = [];
+    public visible = true;
 
     constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, textureHolder: KatamariDamacyTextureHolder, public binModelData: BINModelData) {
         this.templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
@@ -116,7 +122,8 @@ export class BINModelInstance {
             cullMode: GfxCullMode.BACK,
         });
 
-        this.setUseTexture(true);
+        const program = new KatamariDamacyProgram();
+        this.templateRenderInst.setDeviceProgram(program);
 
         mat4.rotateX(this.modelMatrix, this.modelMatrix, Math.PI);
 
@@ -126,20 +133,13 @@ export class BINModelInstance {
         renderInstBuilder.popTemplateRenderInst();
     }
 
-    public setUseTexture(useTextures: boolean): void {
-        const program = new KatamariDamacyProgram();
-        if (useTextures)
-            program.defines.set('USE_TEXTURE', '1');
-        this.templateRenderInst.setDeviceProgram(program);
-    }
-
     public prepareToRender(modelParamsBuffer: GfxRenderBuffer, viewRenderer: Viewer.ViewerRenderInput) {
         computeViewMatrix(scratchMat4, viewRenderer.camera);
         mat4.mul(scratchMat4, scratchMat4, posScaleMatrix);
         mat4.mul(scratchMat4, scratchMat4, this.modelMatrix);
 
         for (let i = 0; i < this.modelParts.length; i++)
-            this.modelParts[i].prepareToRender(modelParamsBuffer, scratchMat4, this.modelMatrix);
+            this.modelParts[i].prepareToRender(modelParamsBuffer, scratchMat4, this.modelMatrix, this.visible);
     }
 
     public destroy(device: GfxDevice): void {
@@ -226,6 +226,7 @@ export class KatamariDamacyRenderer extends BasicRendererHelper {
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        viewerInput.camera.setClipPlanes(20, 600000);
         let offs = this.templateRenderInst.getUniformBufferOffset(KatamariDamacyProgram.ub_SceneParams);
         const sceneParamsMapped = this.sceneParamsBuffer.mapBufferF32(offs, 16);
         fillSceneParamsData(sceneParamsMapped, viewerInput.camera, offs);

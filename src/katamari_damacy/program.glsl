@@ -33,12 +33,7 @@ void main() {
 void main() {
     vec4 t_Color = vec4(1.0);
 
-#ifdef USE_TEXTURE
     t_Color = texture(u_Texture[0], v_TexCoord);
-#else
-    t_Color.rg = v_TexCoord / 4.0;
-#endif
-
     t_Color.rgba *= u_Color.rgba;
 
     // TODO(jstpierre): Configurable alpha ref?
@@ -46,7 +41,7 @@ void main() {
     //     discard;
 
     // Basic fake directional.
-    vec3 t_LightDirection = normalize(vec3(1, 1, 1));
+    vec3 t_LightDirection = normalize(vec3(1, -1, 1));
     float t_LightIntensity = max(dot(-v_Normal, t_LightDirection), 0.0);
     t_Color.rgb *= mix(0.7, 1.0, t_LightIntensity);
 
