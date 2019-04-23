@@ -1,6 +1,6 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, hexzero, assertExists } from "../util";
+import { assert, hexzero, assertExists, nArray } from "../util";
 import { Color, colorNew, colorFromRGBA, colorEqual } from "../Color";
 import { AABB } from "../Geometry";
 import { GfxWrapMode } from "../gfx/platform/GfxPlatform";
@@ -67,7 +67,7 @@ function getVifUnpackFormatByteSize(format: number): number {
     }
 }
 
-const enum GSPixelStorageFormat {
+export const enum GSPixelStorageFormat {
     PSMCT32  = 0x00,
     PSMCT24  = 0x01,
     PSMCT16  = 0x02,
@@ -133,85 +133,6 @@ export interface LevelModelBIN {
     sectors: ModelSector[];
 }
 
-function combineSlices(buffers: ArrayBufferSlice[]): ArrayBufferSlice {
-    if (buffers.length === 1)
-        return buffers[0];
-
-    let totalSize = 0;
-    for (let i = 0; i < buffers.length; i++)
-        totalSize += buffers[i].byteLength;
-
-    const dstBuffer = new Uint8Array(totalSize);
-    let offset = 0;
-    for (let i = 0; i < buffers.length; i++) {
-        dstBuffer.set(buffers[i].createTypedArray(Uint8Array), offset);
-        offset += buffers[i].byteLength;
-    }
-
-    return new ArrayBufferSlice(dstBuffer.buffer);
-}
-
-const PAGE_WIDTH = 0x80;
-const PAGE_HEIGHT = 0x80;
-const BLOCK_WIDTH = 0x20;
-const BLOCK_HEIGHT = 0x10;
-const NUM_COLUMNS = 0x04;
-function deswizzleIndexed4(texView: DataView, offs: number, width: number, height: number): Uint8Array {
-    const byteLength = width * height / 2;
-    const dst = new Uint8Array(byteLength);
-
-    const numPagesX = ((width + PAGE_WIDTH - 1) / PAGE_WIDTH) | 0;
-    const numPagesY = ((height + PAGE_HEIGHT - 1) / PAGE_HEIGHT) | 0;
-    const numBlocksX = Math.min(((width + BLOCK_WIDTH - 1) / BLOCK_WIDTH) | 0, 4);
-    const numBlocksY = Math.min(((height + BLOCK_HEIGHT - 1) / BLOCK_HEIGHT) | 0, 8);
-
-    for (let i = 0; i < byteLength * 2; i++) {
-        const src_ = texView.getUint8(offs + (i >>> 1));
-        const src = ((i & 1) ? (src_ >>> 4) : src_) & 0x0F;
-
-        const blockY = ((i / 0x40) | 0) % numBlocksY;
-        const pageX = ((i / (0x40 * numBlocksY)) | 0) % numPagesX;
-        const rowIndex = ((i % 2) * 2 + (i / (0x40 * numBlocksY * numPagesX) % 2) | 0);
-        const column = ((i / (0x80 * numBlocksY * numPagesX)) | 0) % NUM_COLUMNS;
-        const blockX = ((i / (0x200 * numBlocksY * numPagesX)) | 0) % numBlocksX;
-        const pageY = ((i / (0x200 * numBlocksY * numPagesX * numBlocksX)) | 0) % numPagesY;
-        const tile = (((i >>> 1) * 2) % 8) + (((column % 2) ^ ((i / 0x20) | 0) % 2) ? (1 - (i % 2)) : (i % 2));
-        const j = ((i / 0x08) | 0) % 4;
-        const index = j + (tile * 4) + (pageY * width * PAGE_HEIGHT) + pageX * PAGE_WIDTH + blockY * width * BLOCK_HEIGHT + blockX * BLOCK_WIDTH + column * width * 4 + rowIndex * width;
-
-        dst[index >>> 1] |= ((index % 2) === 0) ? src : src << 4;
-    }
-
-    return dst;
-}
-
-function decodeIndexed4(texDataView: DataView, texClutView: DataView, width: number, height: number): Uint8Array {
-    const pixels = new Uint8Array(width * height * 4);
-
-    let srcOffs = 0;
-    for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x += 2) {
-            let p = texDataView.getUint8(srcOffs++);
-
-            const p0 = (p >>> 0) & 0x0F;
-            const p1 = (p >>> 4) & 0x0F;
-            const dstOffs = (y*width + x) * 4;
-
-            pixels[dstOffs + 0] = texClutView.getUint8(p0 * 4 + 0);
-            pixels[dstOffs + 1] = texClutView.getUint8(p0 * 4 + 1);
-            pixels[dstOffs + 2] = texClutView.getUint8(p0 * 4 + 2);
-            pixels[dstOffs + 3] = Math.min(0xFF, texClutView.getUint8(p0 * 4 + 3) * 2);
-
-            pixels[dstOffs + 4] = texClutView.getUint8(p1 * 4 + 0);
-            pixels[dstOffs + 5] = texClutView.getUint8(p1 * 4 + 1);
-            pixels[dstOffs + 6] = texClutView.getUint8(p1 * 4 + 2);
-            pixels[dstOffs + 7] = Math.min(0xFF, texClutView.getUint8(p1 * 4 + 3) * 2);
-        }
-    }
-
-    return pixels;
-}
-
 enum TEX1_WM {
     REPEAT, CLAMP, REGION_CLAMP, REGION_REPEAT,
 }
@@ -226,12 +147,12 @@ function translateWrapMode(wm: TEX1_WM): GfxWrapMode {
 }
 
 export interface GSMemoryMap {
-    data: Uint32Array;
+    data: Uint8Array;
 }
 
 export function gsMemoryMapNew(): GSMemoryMap {
     // GS Memory is 4MB.
-    return { data: new Uint32Array(1024 * 1024) };
+    return { data: new Uint8Array(4 * 1024 * 1024) };
 }
 
 function gsMemoryMapCreateSlice(map: GSMemoryMap, requestWordStart: number, requestByteSize: number): ArrayBufferSlice {
@@ -240,50 +161,118 @@ function gsMemoryMapCreateSlice(map: GSMemoryMap, requestWordStart: number, requ
 }
 
 const blockTablePSMCT32 = [
-    0,  1,  4,  5,  16, 17, 20, 21,
-    2,  3,  6,  7,  18, 19, 22, 23,
-    8,  9,  12, 13, 24, 25, 28, 29,
+     0,  1,  4,  5, 16, 17, 20, 21,
+     2,  3,  6,  7, 18, 19, 22, 23,
+     8,  9, 12, 13, 24, 25, 28, 29,
     10, 11, 14, 15, 26, 27, 30, 31,
 ];
-const columnWordTablePSMCT32 = [
-    0,  1,  4,  5,   8,  9, 12, 13,
-    2,  3,  6,  7,  10, 11, 14, 15,
+const columnTablePSMCT32 = [
+     0,  1,  4,  5,  8, 9,  12, 13,
+     2,  3,  6,  7, 10, 11, 14, 15,
 ];
-
-/*
-function getPixelAddressPSMCT32(dbp: number, dbw: number, x: number, y: number): number {
-    const startBlock = dbp << 6;
-    const pageX = x >>> 6;
-    const pageY = y >>> 5;
-    const page = pageY * dbw + pageX;
-    const px = x - (pageX << 6);
-    const py = y - (pageY << 5);
-    const blockX = px >>> 3;
-    const blockY = py >>> 3;
-    const block = blockTablePSMCT32[blockY << 3 + blockX];
-    const bx = px - (blockX << 3);
-    const by = py - (blockY << 3);
-    const column = by >>> 1;
-    const cx = bx;
-    const cy = by - column << 1;
-    const cw = columnWordTablePSMCT32[cy << 3 + cx];
-    return startBlock + (page << 11) + (block << 6) + (column << 4) + cw;
-}
-*/
+const blockTablePSMT4 = [
+     0,  2,  8, 10,
+     1,  3,  9, 11,
+     4,  6, 12, 14,
+     5,  7, 13, 15,
+];
+const columnTablePSMT4 = [
+      0,   8,  32,  40,  64,  72,  96, 104, // Column 0
+      2,  10,  34,  42,  66,  74,  98, 106,
+      4,  12,  36,  44,  68,  76, 100, 108,
+      6,  14,  38,  46,  70,  78, 102, 110,
+     16,  24,  48,  56,  80,  88, 112, 120,
+     18,  26,  50,  58,  82,  90, 114, 122,
+     20,  28,  52,  60,  84,  92, 116, 124,
+     22,  30,  54,  62,  86,  94, 118, 126,
+     65,  73,  97, 105,   1,   9,  33,  41,
+     67,  75,  99, 107,   3,  11,  35,  43,
+     69,  77, 101, 109,   5,  13,  37,  45,
+     71,  79, 103, 111,   7,  15,  39,  47,
+     81,  89, 113, 121,  17,  25,  49,  57,
+     83,  91, 115, 123,  19,  27,  51,  59,
+     85,  93, 117, 125,  21,  29,  53,  61,
+     87,  95, 119, 127,  23,  31,  55,  63,
+    192, 200, 224, 232, 128, 136, 160, 168, // Column 1
+    194, 202, 226, 234, 130, 138, 162, 170,
+    196, 204, 228, 236, 132, 140, 164, 172,
+    198, 206, 230, 238, 134, 142, 166, 174,
+    208, 216, 240, 248, 144, 152, 176, 184,
+    210, 218, 242, 250, 146, 154, 178, 186,
+    212, 220, 244, 252, 148, 156, 180, 188,
+    214, 222, 246, 254, 150, 158, 182, 190,
+    129, 137, 161, 169, 193, 201, 225, 233,
+    131, 139, 163, 171, 195, 203, 227, 235,
+    133, 141, 165, 173, 197, 205, 229, 237,
+    135, 143, 167, 175, 199, 207, 231, 239,
+    145, 153, 177, 185, 209, 217, 241, 249,
+    147, 155, 179, 187, 211, 219, 243, 251,
+    149, 157, 181, 189, 213, 221, 245, 253,
+    151, 159, 183, 191, 215, 223, 247, 255,
+    256, 264, 288, 296, 320, 328, 352, 360, // Column 2
+    258, 266, 290, 298, 322, 330, 354, 362,
+    260, 268, 292, 300, 324, 332, 356, 364,
+    262, 270, 294, 302, 326, 334, 358, 366,
+    272, 280, 304, 312, 336, 344, 368, 376,
+    274, 282, 306, 314, 338, 346, 370, 378,
+    276, 284, 308, 316, 340, 348, 372, 380,
+    278, 286, 310, 318, 342, 350, 374, 382,
+    321, 329, 353, 361, 257, 265, 289, 297,
+    323, 331, 355, 363, 259, 267, 291, 299,
+    325, 333, 357, 365, 261, 269, 293, 301,
+    327, 335, 359, 367, 263, 271, 295, 303,
+    337, 345, 369, 377, 273, 281, 305, 313,
+    339, 347, 371, 379, 275, 283, 307, 315,
+    341, 349, 373, 381, 277, 285, 309, 317,
+    343, 351, 375, 383, 279, 287, 311, 319,
+    448, 456, 480, 488, 384, 392, 416, 424, // Column 3
+    450, 458, 482, 490, 386, 394, 418, 426,
+    452, 460, 484, 492, 388, 396, 420, 428,
+    454, 462, 486, 494, 390, 398, 422, 430,
+    464, 472, 496, 504, 400, 408, 432, 440,
+    466, 474, 498, 506, 402, 410, 434, 442,
+    468, 476, 500, 508, 404, 412, 436, 444,
+    470, 478, 502, 510, 406, 414, 438, 446,
+    385, 393, 417, 425, 449, 457, 481, 489,
+    387, 395, 419, 427, 451, 459, 483, 491,
+    389, 397, 421, 429, 453, 461, 485, 493,
+    391, 399, 423, 431, 455, 463, 487, 495,
+    401, 409, 433, 441, 465, 473, 497, 505,
+    403, 411, 435, 443, 467, 475, 499, 507,
+    405, 413, 437, 445, 469, 477, 501, 509,
+    407, 415, 439, 447, 471, 479, 503, 511,
+];
 
 function getBlockIdPSMCT32(block: number, x: number, y: number): number {
     const blockY = (y >>> 3) & 0x03;
     const blockX = (x >>> 3) & 0x07;
-    return block + ((x >>> 1) & ~0x1F) + blockTablePSMCT32[blockY << 3 + blockX];
+    return block + ((x >>> 1) & ~0x1F) + blockTablePSMCT32[(blockY << 3) | blockX];
 }
 
 function getPixelAddressPSMCT32(block: number, width: number, x: number, y: number): number {
-    const page = ((block >> 5) + (y >> 5) * width + (x >> 6));
-    const columnY = y & 0x07;
+    const page = ((block >>> 5) + (y >>> 5) * width + (x >>> 6));
+    const columnBase = ((y >>> 1) & 0x03) << 4;
+    const columnY = y & 0x01;
     const columnX = x & 0x07;
-    const column = columnWordTablePSMCT32[columnY << 3 + columnX];
-    const addr = (page << 11) + (getBlockIdPSMCT32(block & 0x1F, x & 0x3F, y & 0x1F) << 6) + column;
+    const column = columnBase + columnTablePSMCT32[(columnY << 3) | columnX];
+    const addr = ((page << 11) + (getBlockIdPSMCT32(block & 0x1F, x & 0x3F, y & 0x1F) << 6) + column);
     return (addr << 2) & 0x003FFFFC;
+}
+
+function getBlockIdPSMT4(block: number, x: number, y: number): number {
+    const blockBase = ((y >>> 6) & 0x01) << 4;
+    const blockY = (y >>> 4) & 0x03;
+    const blockX = (x >>> 5) & 0x03;
+    return block + ((x >>> 2) & ~0x1F) + blockBase + blockTablePSMT4[(blockY << 2) | blockX];
+}
+
+function getPixelAddressPSMT4(block: number, width: number, x: number, y: number): number {
+    const page = ((block >>> 5) + (y >>> 7) * (width >>> 1) + (x >>> 7));
+    const columnY = y & 0x0F;
+    const columnX = x & 0x1F;
+    const column = columnTablePSMT4[(columnY << 5) | columnX];
+    const addr = (page << 14) + (getBlockIdPSMT4(block & 0x1F, x & 0x7F, y & 0x7F) << 9) + column;
+    return addr;
 }
 
 function gsMemoryMapUploadImagePSMCT32(map: GSMemoryMap, dbp: number, dbw: number, dsax: number, dsay: number, rrw: number, rrh: number, buffer: ArrayBufferSlice): void {
@@ -292,7 +281,11 @@ function gsMemoryMapUploadImagePSMCT32(map: GSMemoryMap, dbp: number, dbw: numbe
     let srcIdx = 0;
     for (let y = dsay; y < dsay + rrh; y++) {
         for (let x = dsax; x < dsax + rrw; x++) {
-            map.data[getPixelAddressPSMCT32(dbp, dbw, x, y)] = view.getUint32(srcIdx, true);
+            const p = getPixelAddressPSMCT32(dbp, dbw, x, y);
+            map.data[p + 0x00] = view.getUint8(srcIdx + 0x00);
+            map.data[p + 0x01] = view.getUint8(srcIdx + 0x01);
+            map.data[p + 0x02] = view.getUint8(srcIdx + 0x02);
+            map.data[p + 0x03] = view.getUint8(srcIdx + 0x03);
             srcIdx += 0x04;
         }
     }
@@ -305,36 +298,58 @@ function gsMemoryMapUploadImage(map: GSMemoryMap, dpsm: GSPixelStorageFormat, db
         throw "whoops";
 }
 
-function gsMemoryMapReadImagePSMCT32(map: GSMemoryMap, dbp: number, dbw: number, dsax: number, dsay: number, rrw: number, rrh: number): Uint8Array {
-    const pixels = new Uint8Array(rrw * rrh * 4);
-    let dstIdx = 0;
-    for (let y = dsay; y < dsay + rrh; y++) {
-        for (let x = dsax; x < dsax + rrw; x++) {
-            const p = map.data[getPixelAddressPSMCT32(dbp, dbw, x, y)];
-            pixels[dstIdx + 0] = (p >>> 24) & 0xFF;
-            pixels[dstIdx + 1] = (p >>> 16) & 0xFF;
-            pixels[dstIdx + 2] = (p >>>  8) & 0xFF;
-            pixels[dstIdx + 3] = (p >>>  0) & 0xFF;
-            dstIdx += 0x04;
-        }
+const debugCLUT = [
+    0x80, 0x80, 0x80, 0xFF,
+    0xFF, 0x00, 0x00, 0xFF,
+    0xFF, 0xFF, 0x00, 0xFF,
+    0x00, 0xFF, 0x00, 0xFF,
+    0x00, 0xFF, 0xFF, 0xFF,
+    0x00, 0x00, 0xFF, 0xFF,
+    0xFF, 0x00, 0xFF, 0xFF,
+    0xFF, 0x80, 0x00, 0xFF,
+    0x80, 0x00, 0x00, 0xFF,
+    0x80, 0x80, 0x00, 0xFF,
+    0x00, 0x80, 0x00, 0xFF,
+    0x00, 0x80, 0x80, 0xFF,
+    0x00, 0x00, 0x80, 0xFF,
+    0x80, 0x00, 0x80, 0xFF,
+    0x80, 0xFF, 0x80, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF,
+]
+
+function gsMemoryMapReadImagePSMT4_PCSM32(map: GSMemoryMap, dbp: number, dbw: number, dsax: number, dsay: number, rrw: number, rrh: number, cbp: number): Uint8Array {
+    const clut = new Uint8Array(16 * 4);
+    for (let i = 0; i < 16; i++) {
+        const cy = i >>> 3;
+        const cx = i & 0x07;
+        const p = getPixelAddressPSMCT32(cbp, 1, cy, cx);
+        clut[i*4 + 0] = map.data[p + 0x00];
+        clut[i*4 + 1] = map.data[p + 0x01];
+        clut[i*4 + 2] = map.data[p + 0x02];
+        clut[i*4 + 3] = map.data[p + 0x03];
+        // console.log(cy, cx, p, clut[i*4+0], clut[i*4+1], clut[i*4+2], clut[i*4+3]);
     }
-    return pixels;
-}
-
-function gsMemoryMapReadImagePSMT4(map: GSMemoryMap, dbp: number, dbw: number, dsax: number, dsay: number, rrw: number, rrh: number, cbp: number, cpsm: number): Uint8Array {
-    // Read CLUT data. 4-bit indexes means we have a total of 16 values that we can read from.
-    const clutData = new Uint8Array(16 * 4);
-    gsMemoryMapReadImagePSMCT32
 
     const pixels = new Uint8Array(rrw * rrh * 4);
     let dstIdx = 0;
     for (let y = dsay; y < dsay + rrh; y++) {
         for (let x = dsax; x < dsax + rrw; x++) {
-            const p = map.data[getPixelAddressPSMCT32(dbp, dbw, x, y)];
-            pixels[dstIdx + 0] = (p >>> 24) & 0xFF;
-            pixels[dstIdx + 1] = (p >>> 16) & 0xFF;
-            pixels[dstIdx + 2] = (p >>>  8) & 0xFF;
-            pixels[dstIdx + 3] = (p >>>  0) & 0xFF;
+            const addr = getPixelAddressPSMT4(dbp, dbw, x, y);
+
+            const clutIndex = (map.data[addr >>> 1] >> ((addr & 0x01) << 2)) & 0x0F;
+
+/*
+            pixels[dstIdx + 0x00] = debugCLUT[(clutIndex << 2) + 0x00];
+            pixels[dstIdx + 0x01] = debugCLUT[(clutIndex << 2) + 0x01];
+            pixels[dstIdx + 0x02] = debugCLUT[(clutIndex << 2) + 0x02];
+            pixels[dstIdx + 0x03] = debugCLUT[(clutIndex << 2) + 0x03];
+*/
+
+            pixels[dstIdx + 0x00] = clut[clutIndex * 4 + 0x00];
+            pixels[dstIdx + 0x01] = clut[clutIndex * 4 + 0x01];
+            pixels[dstIdx + 0x02] = clut[clutIndex * 4 + 0x02];
+            pixels[dstIdx + 0x03] = Math.min(0xFF, clut[clutIndex * 4 + 0x03] * 2);
+
             dstIdx += 0x04;
         }
     }
@@ -445,16 +460,8 @@ function decodeTexture(gsMemoryMap: GSMemoryMap, tex0_data0: number, tex0_data1:
     // assert(tcc === GSTextureColorComponent.RGBA, `Unknown TCC ${tcc}`);
     assert(cpsm === GSCLUTStorageFormat.PSMCT32, `Unknown CPSM ${cpsm}`);
 
-    // 4bpp; half a byte per pixel.
-    const textureSize = (width * height) >>> 1;
+    const pixels = gsMemoryMapReadImagePSMT4_PCSM32(gsMemoryMap, tbp0, tbw, 0, 0, width, height, cbp);
 
-    const texSlice = gsMemoryMapCreateSlice(gsMemoryMap, tbp0 * 0x40, textureSize);
-    const deswizzled = deswizzleIndexed4(texSlice.createDataView(), 0, width, height);
-    const clutData = gsMemoryMapCreateSlice(gsMemoryMap, cbp * 0x40, 0x40);
-    // console.log('DECODE');
-    // console.log('TEX', hexzero(tbp0 * 0x100, 8), texSlice.createTypedArray(Uint8Array))
-    // console.log('CLUT', hexzero(cbp * 0x100, 8), clutData.createTypedArray(Uint8Array));
-    const pixels = decodeIndexed4(new DataView(deswizzled.buffer), clutData.createDataView(), width, height);
     const name = `${namePrefix}/${hexzero(tbp0, 4)}/${hexzero(cbp, 4)}`;
     return { name, width, height, pixels, tex0_data0, tex0_data1 };
 }
@@ -647,7 +654,6 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
                     // TODO(jstpierre): An unknown color?
                     assert(qwd === 0x01);
                     packetsIdx += 0x04;
-                    continue;
 
                     /*
                     const expectedOffs = 0x8000 + 1 + vertexRunCount * 3;
@@ -874,6 +880,24 @@ export interface LevelSetupBIN {
     objectSpawns: LevelSetupObjectSpawn[];
 }
 
+function combineSlices(buffers: ArrayBufferSlice[]): ArrayBufferSlice {
+    if (buffers.length === 1)
+        return buffers[0];
+
+    let totalSize = 0;
+    for (let i = 0; i < buffers.length; i++)
+        totalSize += buffers[i].byteLength;
+
+    const dstBuffer = new Uint8Array(totalSize);
+    let offset = 0;
+    for (let i = 0; i < buffers.length; i++) {
+        dstBuffer.set(buffers[i].createTypedArray(Uint8Array), offset);
+        offset += buffers[i].byteLength;
+    }
+
+    return new ArrayBufferSlice(dstBuffer.buffer);
+}
+
 export function parseLevelSetupBIN(buffers: ArrayBufferSlice[]): LevelSetupBIN {
     // Contains object data inside it.
     const buffer = combineSlices(buffers);
@@ -964,9 +988,11 @@ export function parseLevelSetupBIN(buffers: ArrayBufferSlice[]): LevelSetupBIN {
         const rotationX = view.getFloat32(setupSpawnsIdx + 0x20, true);
         const rotationY = view.getFloat32(setupSpawnsIdx + 0x24, true);
         const rotationZ = view.getFloat32(setupSpawnsIdx + 0x28, true);
+        const angle = -view.getFloat32(setupSpawnsIdx + 0x2C, true);
+        const sinHalfAngle = Math.sin(angle / 2);
 
         const modelMatrix = mat4.create();
-        quat.fromEuler(q, rotationX * 180, rotationY * 180, rotationZ * 180);
+        quat.set(q, rotationX * sinHalfAngle, rotationY * sinHalfAngle, rotationZ * sinHalfAngle, Math.cos(angle / 2));
         mat4.fromRotationTranslation(modelMatrix, q, [translationX, translationY, translationZ]);
 
         const modelIndex = findOrParseObject(objectId);

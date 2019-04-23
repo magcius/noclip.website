@@ -1,6 +1,6 @@
 
 import { GfxDevice, GfxBuffer, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode } from "../gfx/platform/GfxPlatform";
-import { BINModel, BINTexture, ModelSector, BINModelPart } from "./bin";
+import { BINModel, BINTexture, ModelSector, BINModelPart, GSPixelStorageFormat } from "./bin";
 import { DeviceProgram, DeviceProgramReflection } from "../Program";
 import * as Viewer from "../viewer";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
@@ -126,7 +126,8 @@ export class BINModelInstance {
 
     public setUseTexture(useTextures: boolean): void {
         const program = new KatamariDamacyProgram();
-        program.defines.set('USE_TEXTURE', useTextures ? '1' : '0');
+        if (useTextures)
+            program.defines.set('USE_TEXTURE', '1');
         this.templateRenderInst.setDeviceProgram(program);
     }
 
@@ -148,6 +149,14 @@ function fillSceneParamsData(d: Float32Array, camera: Camera, offs: number = 0):
     offs += fillMatrix4x4(d, offs, camera.projectionMatrix);
 }
 
+function psmToString(psm: GSPixelStorageFormat): string {
+    switch (psm) {
+    case GSPixelStorageFormat.PSMT4: return 'PSMT4';
+    case GSPixelStorageFormat.PSMT8: return 'PSMT8';
+    default: return 'unknown';
+    }
+}
+
 function textureToCanvas(texture: BINTexture): Viewer.Texture {
     const canvas = document.createElement("canvas");
     const width = texture.width;
@@ -162,7 +171,12 @@ function textureToCanvas(texture: BINTexture): Viewer.Texture {
     imgData.data.set(texture.pixels);
     context.putImageData(imgData, 0, 0);
     const surfaces = [canvas];
-    return { name: name, surfaces };
+
+    const extraInfo = new Map<string, string>();
+    const psm: GSPixelStorageFormat = (texture.tex0_data0 >>> 20) & 0x3F;
+    extraInfo.set('Format', psmToString(psm));
+
+    return { name: name, surfaces, extraInfo };
 }
 
 class KatamariDamacyTextureHolder extends TextureHolder<BINTexture> {

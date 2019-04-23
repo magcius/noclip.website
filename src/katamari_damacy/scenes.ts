@@ -36,7 +36,7 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
                     const binModelData = new BINModelData(device, sector.models[j]);
                     renderer.modelData.push(binModelData);
                     const binModelInstance = new BINModelInstance(device, renderer.renderInstBuilder, renderer.textureHolder, binModelData);
-                    binModelInstance.setUseTexture(false);
+                    // binModelInstance.setUseTexture(false);
                     renderer.modelInstances.push(binModelInstance);
                 }
             }
