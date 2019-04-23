@@ -6,6 +6,7 @@ import { fetchData } from "../fetch";
 import * as BIN from "./bin";
 import { BINModelData, BINModelInstance, KatamariDamacyRenderer } from './render';
 import { mat4 } from 'gl-matrix';
+import * as UI from '../ui';
 
 const pathBase = `katamari_damacy`;
 
@@ -121,10 +122,33 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
             for (let i = 0; i < levelSetupBin.objectSpawns.length; i++) {
                 const objectSpawn = levelSetupBin.objectSpawns[i];
                 const binModelData = objectDatas[objectSpawn.modelIndex];
-                const binModelInstance = new BINModelInstance(device, renderer.renderInstBuilder, renderer.textureHolder, binModelData);
+                const binModelInstance = new BINModelInstance(device, renderer.renderInstBuilder, renderer.textureHolder, binModelData, objectSpawn.spawnLayoutIndex);
                 mat4.mul(binModelInstance.modelMatrix, binModelInstance.modelMatrix, objectSpawn.modelMatrix);
                 renderer.modelInstances.push(binModelInstance);
             }
+
+            // TODO(jstpierre): Ugly.
+            renderer.createPanels = () => {
+                const layers: UI.Layer[] = levelSetupBin.spawnLayouts.map((index): UI.Layer => {
+                    let name = `Object Layout ${index}`;
+                    const o = { name, visible: true, setVisible: (visible: boolean) => {
+                        o.visible = visible;
+                        for (let i = 0; i < renderer.modelInstances.length; i++)
+                            if (renderer.modelInstances[i].layer === index)
+                                renderer.modelInstances[i].visible = visible;
+                    } };
+                    return o;
+                });
+
+                if (this.levelModelFile !== '135b75') {
+                    // Hide all other layers by default (causes Z-fighting on non-House levels)
+                    for (let i = 1; i < layers.length; i++)
+                        layers[i].setVisible(false);
+                }
+
+                const layersPanel = new UI.LayerPanel(layers);
+                return [layersPanel];
+            };
 
             renderer.finish(device, renderer.viewRenderer);
             return renderer;
@@ -145,8 +169,6 @@ const sceneDescs = [
     new KatamariLevelSceneDesc('lvl8',  '135ebf', '135231', ['13ff91', '14017a', '1403d3', '140616'], "Make a Star 8 (City)"),
     new KatamariLevelSceneDesc('lvl9',  '1363c5', '1353d1', ['140850', '140a3e', '140cc7', '140f02'], "Make a Star 9 (World)"),
     new KatamariLevelSceneDesc('lvl10', '1363c5', '1353d1', ['141133', '141339', '1415d4', '141829'], "Make a Star 10 (World)"),
-    // new KatamariLevelSceneDesc('lvl2b', '135c43', '1350c3', ['13daff', '13db9c', '13dc59', '13dd08'], "Make a Star 2 (B?)"),
-    // new KatamariTwiceLevelSceneDesc('twice', 'Twice Test'),
 ];
 const sceneIdMap = new Map<string, string>();
 // When I first was testing Katamari, I was testing the Tutorial Level. At some point

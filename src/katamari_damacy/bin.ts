@@ -1,9 +1,8 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, hexzero, assertExists, readString, nArray } from "../util";
+import { assert, hexzero, assertExists, readString } from "../util";
 import { Color, colorNew, colorFromRGBA, colorEqual } from "../Color";
 import { AABB } from "../Geometry";
-import { GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { mat4, quat } from "gl-matrix";
 
 const enum VifUnpackVN {
@@ -41,6 +40,7 @@ function getVifUnpackVNComponentCount(vn: VifUnpackVN): number {
 }
 
 const enum GSRegister {
+    PRIM    = 0x00,
     TEX0_1  = 0x06,
     CLAMP_1 = 0x08,
     TEX1_1  = 0x14,
@@ -83,22 +83,47 @@ export const enum GSPixelStorageFormat {
     PSMZ16S  = 0x3A,
 }
 
-const enum GSCLUTStorageFormat {
+export const enum GSCLUTStorageFormat {
     PSMCT32  = 0x00,
     PSMCT16  = 0x02,
     PSMCT16S = 0x0A,
 }
 
-const enum GSTextureColorComponent {
+export const enum GSTextureColorComponent {
     RGB  = 0x00,
     RGBA = 0x01,
 }
 
-const enum GSTextureFunction {
+export const enum GSTextureFunction {
     MODULATE   = 0x00,
     DECAL      = 0x01,
     HIGHLIGHT  = 0x02,
     HIGHLIGHT2 = 0x03,
+}
+
+export const enum GSAlphaCompareMode {
+    NEVER    = 0x00,
+    ALWAYS   = 0x01,
+    LESS     = 0x02,
+    LEQUAL   = 0x03,
+    EQUAL    = 0x04,
+    GEQUAL   = 0x05,
+    GREATER  = 0x06,
+    NOTEQUAL = 0x07,
+}
+
+export const enum GSAlphaFailMode {
+    KEEP     = 0x00,
+    FB_ONLY  = 0x01,
+    ZB_ONLY  = 0x02,
+    RGB_ONLY = 0x03,
+}
+
+export const enum GSDepthCompareMode {
+    NEVER   = 0x00,
+    ALWAYS  = 0x01,
+    GEQUAL  = 0x02,
+    GREATER = 0x03,
 }
 
 export interface BINTexture {
@@ -115,6 +140,7 @@ export interface BINModelPart {
     indexOffset: number;
     indexCount: number;
     textureName: string | null;
+    gsConfiguration: GSConfiguration | null;
 }
 
 export interface BINModel {
@@ -133,17 +159,26 @@ export interface LevelModelBIN {
     sectors: ModelSector[];
 }
 
-enum TEX1_WM {
-    REPEAT, CLAMP, REGION_CLAMP, REGION_REPEAT,
+export interface GSConfiguration {
+    tex0_1_data0: number;
+    tex0_1_data1: number;
+    tex1_1_data0: number;
+    tex1_1_data1: number;
+    clamp_1_data0: number;
+    clamp_1_data1: number;
+    alpha_1_data0: number;
+    alpha_1_data1: number;
+    test_1_data0: number;
+    test_1_data1: number;
 }
 
-function translateWrapMode(wm: TEX1_WM): GfxWrapMode {
-    switch (wm) {
-    case TEX1_WM.REPEAT: return GfxWrapMode.REPEAT;
-    case TEX1_WM.CLAMP: return GfxWrapMode.CLAMP;
-    // TODO(jstpierre): Support REGION_* clamp modes.
-    default: throw "whoops";
-    }
+function gsConfigurationEqual(a: GSConfiguration, b: GSConfiguration) {
+    if (a.tex0_1_data0 !== b.tex0_1_data0 || a.tex0_1_data1 !== b.tex0_1_data1) return false;
+    if (a.tex1_1_data0 !== b.tex1_1_data0 || a.tex1_1_data1 !== b.tex1_1_data1) return false;
+    if (a.clamp_1_data0 !== b.clamp_1_data0 || a.clamp_1_data1 !== b.clamp_1_data1) return false;
+    if (a.alpha_1_data0 !== b.alpha_1_data0 || a.alpha_1_data1 !== b.alpha_1_data1) return false;
+    if (a.test_1_data0 !== b.test_1_data0 || a.test_1_data1 !== b.test_1_data1) return false;
+    return true;
 }
 
 export interface GSMemoryMap {
@@ -585,6 +620,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
             indexRunData: Uint16Array;
             vertexRunColor: Color;
             textureName: string;
+            gsConfiguration: GSConfiguration;
         }
         const modelVertexRuns: BINModelRun[] = [];
 
@@ -599,6 +635,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
         let vertexRunData: Float32Array | null = null;
         let vertexRunColor = colorNew(1, 1, 1, 1);
         let currentTextureName: string | null = null;
+        let currentGSConfiguration: GSConfiguration | null = null;
 
         const expectedPositionsOffs = 0x8000;
         let expectedTexCoordOffs = -1;
@@ -781,26 +818,53 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
                 const reg = (w2 & 0x000F);
                 assert(reg === 0x0E);
 
+                let tex0_1_data0 = -1, tex0_1_data1 = -1;
+                let tex1_1_data0 = -1, tex1_1_data1 = -1;
+                let clamp_1_data0 = -1, clamp_1_data1 = -1;
+                let alpha_1_data0 = -1, alpha_1_data1 = -1;
+                let test_1_data0 = -1, test_1_data1 = -1;
+
                 for (let j = 0; j < nloop; j++) {
                     const data0 = view.getUint32(packetsIdx + 0x00, true);
                     const data1 = view.getUint32(packetsIdx + 0x04, true);
                     const addr = view.getUint8(packetsIdx + 0x08) & 0x7F;
 
                     // addr contains the register to set.
-                    if (addr === GSRegister.TEX0_1) {
+                    if (addr === GSRegister.PRIM) {
+                        // TODO(jstpierre): PRIM is sometimes set in here. A bug in our parsing logic?
+                    } else if (addr === GSRegister.TEX0_1) {
                         // TEX0_1 contains the texture configuration.
                         currentTextureName = findOrDecodeTexture(data0, data1);
+                        tex0_1_data0 = data0;
+                        tex0_1_data1 = data1;
+                    } else if (addr === GSRegister.TEX1_1) {
+                        tex1_1_data0 = data0;
+                        tex1_1_data1 = data1;
                     } else if (addr === GSRegister.CLAMP_1) {
-                        const wms = (data0 >>> 0) & 0x03;
-                        const wmt = (data0 >>> 2) & 0x03;
-                        // TODO(jstpierre): Bring these back.
-                        // vertexRunTextureSettings.wrapModeS = translateWrapMode(wms);
-                        // vertexRunTextureSettings.wrapModeT = translateWrapMode(wmt);
+                        clamp_1_data0 = data0;
+                        clamp_1_data1 = data1;
+                    } else if (addr === GSRegister.ALPHA_1) {
+                        alpha_1_data0 = data0;
+                        alpha_1_data1 = data1;
+                    } else if (addr === GSRegister.TEST_1) {
+                        test_1_data0 = data0;
+                        test_1_data1 = data1;
+                    } else {
+                        console.warn(`Unknown GS Register ${hexzero(addr, 2)}`);
+                        throw "whoops";
                     }
                     // TODO(jstpierre): Other register settings.
 
                     packetsIdx += 0x10;
                 }
+
+                currentGSConfiguration = {
+                    tex0_1_data0, tex0_1_data1,
+                    tex1_1_data0, tex1_1_data1,
+                    clamp_1_data0, clamp_1_data1,
+                    alpha_1_data0, alpha_1_data1,
+                    test_1_data0, test_1_data1,
+                };
 
                 // Make sure that we actually created something here.
                 assertExists(currentTextureName !== null);
@@ -839,7 +903,8 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
 
                     const indexRunData = indexData.slice(0, indexDataIdx);
                     const textureName = currentTextureName;
-                    modelVertexRuns.push({ vertexRunData, vertexRunCount, indexRunData, vertexRunColor, textureName });
+                    const gsConfiguration = currentGSConfiguration;
+                    modelVertexRuns.push({ vertexRunData, vertexRunCount, indexRunData, vertexRunColor, textureName, gsConfiguration });
                 }
 
                 vertexRunFlags0 = 0;
@@ -888,10 +953,12 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
                 modelPartsCompatible = false;
             if (modelPartsCompatible && vertexRun.textureName !== currentModelPart.textureName)
                 modelPartsCompatible = false;
+            if (modelPartsCompatible && !gsConfigurationEqual(vertexRun.gsConfiguration, currentModelPart.gsConfiguration))
+                modelPartsCompatible = false;
 
             // TODO(jstpierre): Texture settings
             if (!modelPartsCompatible) {
-                currentModelPart = { diffuseColor: vertexRun.vertexRunColor, indexOffset: indexDst, indexCount: 0, textureName: vertexRun.textureName };
+                currentModelPart = { diffuseColor: vertexRun.vertexRunColor, indexOffset: indexDst, indexCount: 0, textureName: vertexRun.textureName, gsConfiguration: currentGSConfiguration };
                 modelParts.push(currentModelPart);
             }
 
@@ -944,6 +1011,9 @@ export function parseLevelModelBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemo
 }
 
 export interface LevelSetupObjectSpawn {
+    // The spawn layout index.
+    spawnLayoutIndex: number;
+
     // The original in-game object ID.
     objectId: number;
 
@@ -957,6 +1027,7 @@ export interface LevelSetupObjectSpawn {
 export interface LevelSetupBIN {
     objectModels: ModelSector[];
     objectSpawns: LevelSetupObjectSpawn[];
+    spawnLayouts: number[];
 }
 
 function combineSlices(buffers: ArrayBufferSlice[]): ArrayBufferSlice {
@@ -1013,6 +1084,7 @@ export function parseLevelSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: GSM
 
     const objectModels: ModelSector[] = [];
     const objectSpawns: LevelSetupObjectSpawn[] = [];
+    const spawnLayouts: number[] = [];
 
     function findOrParseObject(objectId: number): number {
         const existingSpawn = objectSpawns.find((spawn) => spawn.objectId === objectId);
@@ -1025,66 +1097,76 @@ export function parseLevelSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: GSM
     }
 
     const q = quat.create();
-    let setupSpawnsIdx = view.getUint32(0x14, true);
-    while (true) {
-        const objectId = view.getUint16(setupSpawnsIdx + 0x00, true);
-        const flags = view.getUint16(setupSpawnsIdx + 0x02, true);
+    let setupSpawnTableIdx = 0x14;
+    for (let i = 0; i < 5; i++) {
+        let setupSpawnsIdx = view.getUint32(setupSpawnTableIdx, true);
 
-        let shouldSkip = false;
-
-        // We're done.
-        if (objectId === 0xFFFF)
+        if (readString(buffer, setupSpawnsIdx, 0x04) === 'NIL ')
             break;
 
-        // TODO(jstpierre): Figure out what this mess means.
-        if (flags !== 0xFF00)
-            shouldSkip = true;
+        while (true) {
+            const objectId = view.getUint16(setupSpawnsIdx + 0x00, true);
+            const flags = view.getUint16(setupSpawnsIdx + 0x02, true);
 
-        // Skip "weird" objects (missing models, descriptions)
-        switch (objectId) {
-        case 0x0089:
-        case 0x0122:
-        case 0x017D:
-        case 0x01F3:
-        case 0x026B:
-        case 0x0277:
-        case 0x0364:
-        case 0x059E:
-        case 0x05A8:
-        case 0x05A9:
-            shouldSkip = true;
-            break;
-        }
+            let shouldSkip = false;
 
-        if (shouldSkip) {
+            // We're done.
+            if (objectId === 0xFFFF)
+                break;
+
+            // TODO(jstpierre): Figure out what this mess means.
+            if (flags !== 0xFF00)
+                shouldSkip = true;
+        
+            // Skip "weird" objects (missing models, descriptions)
+            switch (objectId) {
+            case 0x0089:
+            case 0x0122:
+            case 0x017D:
+            case 0x01F3:
+            case 0x026B:
+            case 0x0277:
+            case 0x0364:
+            case 0x059E:
+            case 0x05A8:
+            case 0x05A9:
+                shouldSkip = true;
+                break;
+            }
+
+            if (shouldSkip) {
+                setupSpawnsIdx += 0x40;
+                continue;
+            }
+
+            const translationX = view.getFloat32(setupSpawnsIdx + 0x10, true);
+            const translationY = view.getFloat32(setupSpawnsIdx + 0x14, true);
+            const translationZ = view.getFloat32(setupSpawnsIdx + 0x18, true);
+            assert(view.getFloat32(setupSpawnsIdx + 0x1C, true) === 1);
+            const rotationX = view.getFloat32(setupSpawnsIdx + 0x20, true);
+            const rotationY = view.getFloat32(setupSpawnsIdx + 0x24, true);
+            const rotationZ = view.getFloat32(setupSpawnsIdx + 0x28, true);
+            const angle = -view.getFloat32(setupSpawnsIdx + 0x2C, true);
+            // These scales are unused according to Murugo?
+            const scaleX = view.getFloat32(setupSpawnsIdx + 0x30, true);
+            const scaleY = view.getFloat32(setupSpawnsIdx + 0x34, true);
+            const scaleZ = view.getFloat32(setupSpawnsIdx + 0x38, true);
+            assert(view.getUint32(setupSpawnsIdx + 0x3C, true) === 0);
+            const sinHalfAngle = Math.sin(angle / 2);
+
+            const modelMatrix = mat4.create();
+            quat.set(q, rotationX * sinHalfAngle, rotationY * sinHalfAngle, rotationZ * sinHalfAngle, Math.cos(angle / 2));
+            mat4.fromRotationTranslation(modelMatrix, q, [translationX, translationY, translationZ]);
+
+            const modelIndex = findOrParseObject(objectId);
+            const objectSpawn: LevelSetupObjectSpawn = { spawnLayoutIndex: i, objectId, modelIndex, modelMatrix };
+            objectSpawns.push(objectSpawn);
             setupSpawnsIdx += 0x40;
-            continue;
         }
 
-        const translationX = view.getFloat32(setupSpawnsIdx + 0x10, true);
-        const translationY = view.getFloat32(setupSpawnsIdx + 0x14, true);
-        const translationZ = view.getFloat32(setupSpawnsIdx + 0x18, true);
-        assert(view.getFloat32(setupSpawnsIdx + 0x1C, true) === 1);
-        const rotationX = view.getFloat32(setupSpawnsIdx + 0x20, true);
-        const rotationY = view.getFloat32(setupSpawnsIdx + 0x24, true);
-        const rotationZ = view.getFloat32(setupSpawnsIdx + 0x28, true);
-        const angle = -view.getFloat32(setupSpawnsIdx + 0x2C, true);
-        // These scales are unused according to Murugo?
-        const scaleX = view.getFloat32(setupSpawnsIdx + 0x30, true);
-        const scaleY = view.getFloat32(setupSpawnsIdx + 0x34, true);
-        const scaleZ = view.getFloat32(setupSpawnsIdx + 0x38, true);
-        assert(view.getUint32(setupSpawnsIdx + 0x3C, true) === 0);
-        const sinHalfAngle = Math.sin(angle / 2);
-
-        const modelMatrix = mat4.create();
-        quat.set(q, rotationX * sinHalfAngle, rotationY * sinHalfAngle, rotationZ * sinHalfAngle, Math.cos(angle / 2));
-        mat4.fromRotationTranslation(modelMatrix, q, [translationX, translationY, translationZ]);
-
-        const modelIndex = findOrParseObject(objectId);
-        const objectSpawn: LevelSetupObjectSpawn = { objectId, modelIndex, modelMatrix };
-        objectSpawns.push(objectSpawn);
-        setupSpawnsIdx += 0x40;
+        spawnLayouts.push(i);
+        setupSpawnTableIdx += 0x04;
     }
 
-    return { objectModels, objectSpawns };
+    return { objectModels, objectSpawns, spawnLayouts };
 }

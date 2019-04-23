@@ -1,6 +1,6 @@
 
-import { GfxDevice, GfxBuffer, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode } from "../gfx/platform/GfxPlatform";
-import { BINModel, BINTexture, ModelSector, BINModelPart, GSPixelStorageFormat, psmToString } from "./bin";
+import { GfxDevice, GfxBuffer, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxCompareMode } from "../gfx/platform/GfxPlatform";
+import { BINModel, BINTexture, ModelSector, BINModelPart, GSPixelStorageFormat, psmToString, GSConfiguration, GSTextureFunction, GSAlphaCompareMode, GSDepthCompareMode, GSAlphaFailMode } from "./bin";
 import { DeviceProgram, DeviceProgramReflection } from "../Program";
 import * as Viewer from "../viewer";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
@@ -11,10 +11,8 @@ import { mat4 } from "gl-matrix";
 import { fillMatrix4x3, fillMatrix4x4, fillColor } from "../gfx/helpers/UniformBufferHelpers";
 import { BasicRendererHelper } from "../oot3d/render";
 import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
-import { nArray } from "../util";
-
-//@ts-ignore
-import { readFileSync } from 'fs';
+import { nArray, assert } from "../util";
+import * as UI from "../ui";
 
 class KatamariDamacyProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -24,9 +22,105 @@ class KatamariDamacyProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
     public static ub_ModelParams = 1;
 
-    private static program = readFileSync('src/katamari_damacy/program.glsl', { encoding: 'utf8' });
-    public static programReflection: DeviceProgramReflection = DeviceProgram.parseReflectionDefinitions(KatamariDamacyProgram.program);
-    public both = KatamariDamacyProgram.program;
+    private static reflectionDeclarations = `
+precision mediump float;
+
+// Expected to be constant across the entire scene.
+layout(row_major, std140) uniform ub_SceneParams {
+    Mat4x4 u_Projection;
+};
+
+layout(row_major, std140) uniform ub_ModelParams {
+    Mat4x3 u_BoneMatrix[1];
+    Mat4x3 u_NormalMatrix[1];
+    vec4 u_Color;
+};
+
+uniform sampler2D u_Texture[1];
+
+varying vec3 v_Normal;
+varying vec2 v_TexCoord;
+`;
+    public static programReflection: DeviceProgramReflection = DeviceProgram.parseReflectionDefinitions(KatamariDamacyProgram.reflectionDeclarations);
+
+    public vert = `
+${KatamariDamacyProgram.reflectionDeclarations}
+layout(location = 0) in vec3 a_Position;
+layout(location = 1) in vec3 a_Normal;
+layout(location = 2) in vec2 a_TexCoord;
+
+void main() {
+    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix[0]), vec4(a_Position, 1.0)));
+    v_Normal = normalize(Mul(_Mat4x4(u_NormalMatrix[0]), vec4(a_Normal, 0.0)).xyz);
+    v_TexCoord = a_TexCoord;
+}
+`;
+
+    constructor(gsConfiguration: GSConfiguration) {
+        super();
+        this.frag = this.generateFrag(gsConfiguration);
+    }
+
+    private generateAlphaCompareOp(atst: GSAlphaCompareMode, lhs: string, rhs: string): string {
+        switch (atst) {
+        case GSAlphaCompareMode.ALWAYS: return `true`;
+        case GSAlphaCompareMode.NEVER: return `false`;
+        case GSAlphaCompareMode.LESS: return `${lhs} < ${rhs}`;
+        case GSAlphaCompareMode.LEQUAL: return `${lhs} <= ${rhs}`;
+        case GSAlphaCompareMode.EQUAL: return `${lhs} == ${rhs}`;
+        case GSAlphaCompareMode.GEQUAL: return `${lhs} >= ${rhs}`;
+        case GSAlphaCompareMode.GREATER: return `${lhs} > ${rhs}`;
+        case GSAlphaCompareMode.NOTEQUAL: return `${lhs} != ${rhs}`;
+        }
+    }
+
+    private generateAlphaTest(ate: boolean, atst: GSAlphaCompareMode, aref: number, afail: GSAlphaFailMode): string {
+        // TODO(jstpierre): What to do about afail?
+
+        const floatRef = aref / 0xFF;
+        const cmp = this.generateAlphaCompareOp(atst, `t_Color.a`, floatRef.toFixed(5));
+
+        if (ate && afail === 0x00) {
+            return `
+    if (!(${cmp}))
+        discard;
+`;
+        } else {
+            return '';
+        }
+    }
+
+    private generateFrag(gsConfiguration: GSConfiguration): string {
+        const tfx: GSTextureFunction = (gsConfiguration.tex0_1_data1 >>> 3) & 0x03;
+        assert(tfx === GSTextureFunction.MODULATE);
+
+        // Contains depth & alpha test settings.
+        const ate = !!((gsConfiguration.test_1_data0 >>> 0) & 0x01);
+        const atst = (gsConfiguration.test_1_data0 >>> 1) & 0x07;
+        const aref = (gsConfiguration.test_1_data0 >>> 4) & 0xFF;
+        const afail = (gsConfiguration.test_1_data0 >>> 12) & 0x03;
+        const date = !!((gsConfiguration.test_1_data0 >>> 14) & 0x01);
+        const datm = !!((gsConfiguration.test_1_data0 >>> 15) & 0x01);
+
+        return `
+${KatamariDamacyProgram.reflectionDeclarations}
+void main() {
+    vec4 t_Color = vec4(1.0);
+
+    t_Color = texture(u_Texture[0], v_TexCoord);
+    t_Color.rgba *= u_Color.rgba;
+
+    // Basic fake directional.
+    vec3 t_LightDirection = normalize(vec3(0.8, -1, 0.5));
+    float t_LightIntensity = max(dot(-v_Normal, t_LightDirection), 0.0);
+    t_Color.rgb *= mix(0.7, 1.0, t_LightIntensity);
+
+${this.generateAlphaTest(ate, atst, aref, afail)}
+
+    gl_FragColor = t_Color;
+}
+`;
+    }
 }
 
 export class BINModelData {
@@ -63,6 +157,30 @@ export class BINModelData {
     }
 }
 
+enum CLAMP1_WM {
+    REPEAT, CLAMP, REGION_CLAMP, REGION_REPEAT,
+}
+
+function translateWrapMode(wm: CLAMP1_WM): GfxWrapMode {
+    switch (wm) {
+    case CLAMP1_WM.REPEAT: return GfxWrapMode.REPEAT;
+    case CLAMP1_WM.CLAMP: return GfxWrapMode.CLAMP;
+    // TODO(jstpierre): Support REGION_* clamp modes.
+    case CLAMP1_WM.REGION_REPEAT: return GfxWrapMode.REPEAT;
+    default: throw "whoops";
+    }
+}
+
+function translateDepthCompareMode(cmp: GSDepthCompareMode): GfxCompareMode {
+    switch (cmp) {
+    case GSDepthCompareMode.NEVER: return GfxCompareMode.NEVER;
+    case GSDepthCompareMode.ALWAYS: return GfxCompareMode.ALWAYS;
+    // We use a LESS-style depth buffer.
+    case GSDepthCompareMode.GEQUAL: return GfxCompareMode.LEQUAL;
+    case GSDepthCompareMode.GREATER: return GfxCompareMode.LESS;
+    }
+}
+
 export class BINModelPartInstance {
     public renderInst: GfxRenderInst;
     private gfxSampler: GfxSampler;
@@ -71,6 +189,19 @@ export class BINModelPartInstance {
         this.renderInst = renderInstBuilder.pushRenderInst();
         this.renderInst.drawIndexes(this.binModelPart.indexCount, this.binModelPart.indexOffset);
 
+        const gsConfiguration = this.binModelPart.gsConfiguration;
+
+        const program = new KatamariDamacyProgram(gsConfiguration);
+        this.renderInst.setDeviceProgram(program);
+
+        const zte = !!((gsConfiguration.test_1_data0 >>> 16) & 0x01);
+        assert(zte);
+
+        const ztst: GSDepthCompareMode = (gsConfiguration.test_1_data0 >>> 17) & 0x03;
+        this.renderInst.setMegaStateFlags({
+            depthCompare: translateDepthCompareMode(ztst),
+        });
+
         renderInstBuilder.newUniformBufferInstance(this.renderInst, KatamariDamacyProgram.ub_ModelParams);
 
         const textureMapping = nArray(1, () => new TextureMapping());
@@ -78,13 +209,16 @@ export class BINModelPartInstance {
             textureHolder.fillTextureMapping(textureMapping[0], this.binModelPart.textureName);
         this.renderInst.setSamplerBindingsFromTextureMappings(textureMapping);
 
+        const wms = (gsConfiguration.clamp_1_data0 >>> 0) & 0x03;
+        const wmt = (gsConfiguration.clamp_1_data0 >>> 2) & 0x03;
+
         // TODO(jstpierre): Read this from TEX_1 / CLAMP_1.
         this.gfxSampler = device.createSampler({
             minFilter: GfxTexFilterMode.BILINEAR,
             magFilter: GfxTexFilterMode.BILINEAR,
             mipFilter: GfxMipFilterMode.NO_MIP,
-            wrapS: GfxWrapMode.CLAMP,
-            wrapT: GfxWrapMode.CLAMP,
+            wrapS: translateWrapMode(wms),
+            wrapT: translateWrapMode(wmt),
             minLOD: 1, maxLOD: 1,
         });
     }
@@ -107,23 +241,20 @@ export class BINModelPartInstance {
 }
 
 const scratchMat4 = mat4.create();
-const posScaleMatrix = mat4.fromScaling(mat4.create(), [10, 10, 10]);
+const posScaleMatrix = mat4.fromScaling(mat4.create(), [5, 5, 5]);
 export class BINModelInstance {
     public templateRenderInst: GfxRenderInst;
     public modelMatrix: mat4 = mat4.create();
     public modelParts: BINModelPartInstance[] = [];
     public visible = true;
 
-    constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, textureHolder: KatamariDamacyTextureHolder, public binModelData: BINModelData) {
+    constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, textureHolder: KatamariDamacyTextureHolder, public binModelData: BINModelData, public layer = -1) {
         this.templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
         this.templateRenderInst.inputState = this.binModelData.inputState;
-        // TODO(jstpierre): Which render flags to use?
+
         this.templateRenderInst.setMegaStateFlags({
             cullMode: GfxCullMode.BACK,
         });
-
-        const program = new KatamariDamacyProgram();
-        this.templateRenderInst.setDeviceProgram(program);
 
         mat4.rotateX(this.modelMatrix, this.modelMatrix, Math.PI);
 
@@ -194,7 +325,7 @@ class KatamariDamacyTextureHolder extends TextureHolder<BINTexture> {
     }
 }
 
-export class KatamariDamacyRenderer extends BasicRendererHelper {
+export class KatamariDamacyRenderer extends BasicRendererHelper implements Viewer.SceneGfx {
     private sceneParamsBuffer: GfxRenderBuffer;
     private modelParamsBuffer: GfxRenderBuffer;
     private templateRenderInst: GfxRenderInst;
@@ -236,6 +367,10 @@ export class KatamariDamacyRenderer extends BasicRendererHelper {
 
         this.sceneParamsBuffer.prepareToRender(hostAccessPass);
         this.modelParamsBuffer.prepareToRender(hostAccessPass);
+    }
+
+    public createPanels(): UI.Panel[] {
+        return [];
     }
 
     public destroy(device: GfxDevice): void {
