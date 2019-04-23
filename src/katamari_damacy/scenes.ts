@@ -42,7 +42,7 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
             }
 
             // Now parse through the level setup data.
-            const levelSetupBin = BIN.parseLevelSetupBIN(levelSetupBinDatas);
+            const levelSetupBin = BIN.parseLevelSetupBIN(levelSetupBinDatas, gsMemoryMap);
 
             const objectDatas: BINModelData[] = [];
             for (let i = 0; i < levelSetupBin.objectModels.length; i++) {

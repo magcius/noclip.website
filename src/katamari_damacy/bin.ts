@@ -155,11 +155,6 @@ export function gsMemoryMapNew(): GSMemoryMap {
     return { data: new Uint8Array(4 * 1024 * 1024) };
 }
 
-function gsMemoryMapCreateSlice(map: GSMemoryMap, requestWordStart: number, requestByteSize: number): ArrayBufferSlice {
-    const requestByteStart = requestWordStart * 0x04;
-    return new ArrayBufferSlice(map.data.buffer, requestByteStart, requestByteSize);
-}
-
 const blockTablePSMCT32 = [
      0,  1,  4,  5, 16, 17, 20, 21,
      2,  3,  6,  7, 18, 19, 22, 23,
@@ -298,57 +293,22 @@ function gsMemoryMapUploadImage(map: GSMemoryMap, dpsm: GSPixelStorageFormat, db
         throw "whoops";
 }
 
-const debugCLUT = [
-    0x80, 0x80, 0x80, 0xFF,
-    0xFF, 0x00, 0x00, 0xFF,
-    0xFF, 0xFF, 0x00, 0xFF,
-    0x00, 0xFF, 0x00, 0xFF,
-    0x00, 0xFF, 0xFF, 0xFF,
-    0x00, 0x00, 0xFF, 0xFF,
-    0xFF, 0x00, 0xFF, 0xFF,
-    0xFF, 0x80, 0x00, 0xFF,
-    0x80, 0x00, 0x00, 0xFF,
-    0x80, 0x80, 0x00, 0xFF,
-    0x00, 0x80, 0x00, 0xFF,
-    0x00, 0x80, 0x80, 0xFF,
-    0x00, 0x00, 0x80, 0xFF,
-    0x80, 0x00, 0x80, 0xFF,
-    0x80, 0xFF, 0x80, 0xFF,
-    0xFF, 0xFF, 0xFF, 0xFF,
-]
-
-function gsMemoryMapReadImagePSMT4_PCSM32(map: GSMemoryMap, dbp: number, dbw: number, dsax: number, dsay: number, rrw: number, rrh: number, cbp: number): Uint8Array {
-    const clut = new Uint8Array(16 * 4);
-    for (let i = 0; i < 16; i++) {
-        const cy = i >>> 3;
-        const cx = i & 0x07;
-        const p = getPixelAddressPSMCT32(cbp, 1, cy, cx);
-        clut[i*4 + 0] = map.data[p + 0x00];
-        clut[i*4 + 1] = map.data[p + 0x01];
-        clut[i*4 + 2] = map.data[p + 0x02];
-        clut[i*4 + 3] = map.data[p + 0x03];
-        // console.log(cy, cx, p, clut[i*4+0], clut[i*4+1], clut[i*4+2], clut[i*4+3]);
-    }
-
+function gsMemoryMapReadImagePSMT4_PSMCT32(map: GSMemoryMap, dbp: number, dbw: number, dsax: number, dsay: number, rrw: number, rrh: number, cbp: number, alphaReg: number): Uint8Array {
     const pixels = new Uint8Array(rrw * rrh * 4);
     let dstIdx = 0;
     for (let y = dsay; y < dsay + rrh; y++) {
         for (let x = dsax; x < dsax + rrw; x++) {
             const addr = getPixelAddressPSMT4(dbp, dbw, x, y);
-
             const clutIndex = (map.data[addr >>> 1] >> ((addr & 0x01) << 2)) & 0x0F;
 
-/*
-            pixels[dstIdx + 0x00] = debugCLUT[(clutIndex << 2) + 0x00];
-            pixels[dstIdx + 0x01] = debugCLUT[(clutIndex << 2) + 0x01];
-            pixels[dstIdx + 0x02] = debugCLUT[(clutIndex << 2) + 0x02];
-            pixels[dstIdx + 0x03] = debugCLUT[(clutIndex << 2) + 0x03];
-*/
-
-            pixels[dstIdx + 0x00] = clut[clutIndex * 4 + 0x00];
-            pixels[dstIdx + 0x01] = clut[clutIndex * 4 + 0x01];
-            pixels[dstIdx + 0x02] = clut[clutIndex * 4 + 0x02];
-            pixels[dstIdx + 0x03] = Math.min(0xFF, clut[clutIndex * 4 + 0x03] * 2);
+            const cy = clutIndex >>> 3;
+            const cx = clutIndex & 0x07;
+            const p = getPixelAddressPSMCT32(cbp, 1, cx, cy);
+            pixels[dstIdx + 0] = map.data[p + 0x00];
+            pixels[dstIdx + 1] = map.data[p + 0x01];
+            pixels[dstIdx + 2] = map.data[p + 0x02];
+            const rawAlpha = alphaReg == -1 ? map.data[p + 0x03] : alphaReg;
+            pixels[dstIdx + 3] = Math.min(0xFF, rawAlpha * 2);
 
             dstIdx += 0x04;
         }
@@ -436,6 +396,14 @@ function parseDIRECT(map: GSMemoryMap, buffer: ArrayBufferSlice): number {
     return texDataIdx;
 }
 
+export function psmToString(psm: GSPixelStorageFormat): string {
+    switch (psm) {
+    case GSPixelStorageFormat.PSMT4: return 'PSMT4';
+    case GSPixelStorageFormat.PSMT8: return 'PSMT8';
+    default: return 'unknown';
+    }
+}
+
 // TODO(jstpierre): Do we need a texture cache?
 function decodeTexture(gsMemoryMap: GSMemoryMap, tex0_data0: number, tex0_data1: number, namePrefix: string = ''): BINTexture {
     // Unpack TEX0 register.
@@ -452,17 +420,23 @@ function decodeTexture(gsMemoryMap: GSMemoryMap, tex0_data0: number, tex0_data1:
     const csa = (tex0_data1 >>> 24) & 0x1F;
     const cld = (tex0_data1 >>> 29) & 0x03;
 
+    const name = `${namePrefix}/${hexzero(tbp0, 4)}/${hexzero(cbp, 4)}`;
+
     const width = 1 << tw;
     const height = 1 << th;
 
     // TODO(jstpierre): Handle other formats
     // assert(psm === GSPixelStorageFormat.PSMT4, `Unknown PSM ${psm}`);
-    // assert(tcc === GSTextureColorComponent.RGBA, `Unknown TCC ${tcc}`);
     assert(cpsm === GSCLUTStorageFormat.PSMCT32, `Unknown CPSM ${cpsm}`);
 
-    const pixels = gsMemoryMapReadImagePSMT4_PCSM32(gsMemoryMap, tbp0, tbw, 0, 0, width, height, cbp);
+    // TODO(jstpierre): Read the TEXALPHA register.
+    const alphaReg = tcc === GSTextureColorComponent.RGBA ? -1 : 0x80;
 
-    const name = `${namePrefix}/${hexzero(tbp0, 4)}/${hexzero(cbp, 4)}`;
+    if (psm !== GSPixelStorageFormat.PSMT4)
+        console.warn(`Unsupported PSM ${psmToString(psm)} in texture ${name}`);
+
+    const pixels = gsMemoryMapReadImagePSMT4_PSMCT32(gsMemoryMap, tbp0, tbw, 0, 0, width, height, cbp, alphaReg);
+
     return { name, width, height, pixels, tex0_data0, tex0_data1 };
 }
 
@@ -898,13 +872,11 @@ function combineSlices(buffers: ArrayBufferSlice[]): ArrayBufferSlice {
     return new ArrayBufferSlice(dstBuffer.buffer);
 }
 
-export function parseLevelSetupBIN(buffers: ArrayBufferSlice[]): LevelSetupBIN {
+export function parseLevelSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: GSMemoryMap): LevelSetupBIN {
     // Contains object data inside it.
     const buffer = combineSlices(buffers);
     const view = buffer.createDataView();
     const numSectors = view.getUint32(0x00, true);
-
-    const gsMemoryMap = gsMemoryMapNew();
 
     function parseObject(objectId: number): ModelSector {
         const firstSectorIndex = 0x09 + objectId * 0x0B;

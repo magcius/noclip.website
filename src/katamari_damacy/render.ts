@@ -1,6 +1,6 @@
 
 import { GfxDevice, GfxBuffer, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode } from "../gfx/platform/GfxPlatform";
-import { BINModel, BINTexture, ModelSector, BINModelPart, GSPixelStorageFormat } from "./bin";
+import { BINModel, BINTexture, ModelSector, BINModelPart, GSPixelStorageFormat, psmToString } from "./bin";
 import { DeviceProgram, DeviceProgramReflection } from "../Program";
 import * as Viewer from "../viewer";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
@@ -147,14 +147,6 @@ export class BINModelInstance {
 
 function fillSceneParamsData(d: Float32Array, camera: Camera, offs: number = 0): void {
     offs += fillMatrix4x4(d, offs, camera.projectionMatrix);
-}
-
-function psmToString(psm: GSPixelStorageFormat): string {
-    switch (psm) {
-    case GSPixelStorageFormat.PSMT4: return 'PSMT4';
-    case GSPixelStorageFormat.PSMT8: return 'PSMT8';
-    default: return 'unknown';
-    }
 }
 
 function textureToCanvas(texture: BINTexture): Viewer.Texture {
