@@ -102,6 +102,7 @@ export class BINModelPartInstance {
 }
 
 const scratchMat4 = mat4.create();
+const posScaleMatrix = mat4.fromScaling(mat4.create(), [10, 10, 10]);
 export class BINModelInstance {
     public templateRenderInst: GfxRenderInst;
     public modelMatrix: mat4 = mat4.create();
@@ -134,7 +135,7 @@ export class BINModelInstance {
 
     public prepareToRender(modelParamsBuffer: GfxRenderBuffer, viewRenderer: Viewer.ViewerRenderInput) {
         computeViewMatrix(scratchMat4, viewRenderer.camera);
-        mat4.scale(scratchMat4, scratchMat4, [10, 10, 10]);
+        mat4.scale(scratchMat4, scratchMat4, posScaleMatrix);
         mat4.mul(scratchMat4, scratchMat4, this.modelMatrix);
 
         for (let i = 0; i < this.modelParts.length; i++)
