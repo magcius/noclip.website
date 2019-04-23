@@ -1,6 +1,6 @@
 
 import { GfxDevice, GfxBuffer, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxCompareMode } from "../gfx/platform/GfxPlatform";
-import { BINModel, BINTexture, ModelSector, BINModelPart, GSPixelStorageFormat, psmToString, GSConfiguration, GSTextureFunction, GSAlphaCompareMode, GSDepthCompareMode, GSAlphaFailMode } from "./bin";
+import { BINModel, BINTexture, ModelSector as BINModelSector, BINModelPart, GSPixelStorageFormat, psmToString, GSConfiguration, GSTextureFunction, GSAlphaCompareMode, GSDepthCompareMode, GSAlphaFailMode } from "./bin";
 import { DeviceProgram, DeviceProgramReflection } from "../Program";
 import * as Viewer from "../viewer";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
@@ -279,6 +279,20 @@ export class BINModelInstance {
     }
 }
 
+export class BINModelSectorData {
+    public modelData: BINModelData[] = [];
+
+    constructor(device: GfxDevice, public binModelSector: BINModelSector) {
+        for (let i = 0; i < binModelSector.models.length; i++)
+            this.modelData.push(new BINModelData(device, binModelSector.models[i]));
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.modelData.length; i++)
+            this.modelData[i].destroy(device);
+    }
+}
+
 function fillSceneParamsData(d: Float32Array, camera: Camera, offs: number = 0): void {
     offs += fillMatrix4x4(d, offs, camera.projectionMatrix);
 }
@@ -306,7 +320,7 @@ function textureToCanvas(texture: BINTexture): Viewer.Texture {
 }
 
 class KatamariDamacyTextureHolder extends TextureHolder<BINTexture> {
-    public addBINTexture(device: GfxDevice, bin: ModelSector) {
+    public addBINTexture(device: GfxDevice, bin: BINModelSector) {
         this.addTextures(device, bin.textures);
     }
 
@@ -330,7 +344,7 @@ export class KatamariDamacyRenderer extends BasicRendererHelper implements Viewe
     private modelParamsBuffer: GfxRenderBuffer;
     private templateRenderInst: GfxRenderInst;
     public renderInstBuilder: GfxRenderInstBuilder;
-    public modelData: BINModelData[] = [];
+    public modelSectorData: BINModelSectorData[] = [];
     public modelInstances: BINModelInstance[] = [];
     public textureHolder = new KatamariDamacyTextureHolder();
 
@@ -379,8 +393,8 @@ export class KatamariDamacyRenderer extends BasicRendererHelper implements Viewe
         this.sceneParamsBuffer.destroy(device);
         this.modelParamsBuffer.destroy(device);
 
-        for (let i = 0; i < this.modelData.length; i++)
-            this.modelData[i].destroy(device);
+        for (let i = 0; i < this.modelSectorData.length; i++)
+            this.modelSectorData[i].destroy(device);
         for (let i = 0; i < this.modelInstances.length; i++)
             this.modelInstances[i].destroy(device);
     }

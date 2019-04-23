@@ -1054,7 +1054,7 @@ export function parseLevelSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: GSM
     const view = buffer.createDataView();
     const numSectors = view.getUint32(0x00, true);
 
-    function parseObject(objectId: number): ModelSector {
+    function parseObject(objectId: number): ModelSector | null {
         const firstSectorIndex = 0x09 + objectId * 0x0B;
         assert(firstSectorIndex + 0x0B <= numSectors);
 
@@ -1070,6 +1070,11 @@ export function parseLevelSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: GSM
         const unk20Offs = view.getUint32(firstSectorOffs + 0x20, true);
         const descriptionOffs = view.getUint32(firstSectorOffs + 0x24, true);
         const audioOffs = view.getUint32(firstSectorOffs + 0x28, true);
+
+        if (readString(buffer, lod0Offs, 0x04) === 'NIL ') {
+            // Missing object?
+            return null;
+        }
 
         if (readString(buffer, texDataOffs, 0x04) !== 'NIL ') {
             // Parse texture data.
@@ -1091,7 +1096,10 @@ export function parseLevelSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: GSM
         if (existingSpawn !== undefined) {
             return existingSpawn.modelIndex;
         } else {
-            objectModels.push(parseObject(objectId));
+            const newObject = parseObject(objectId);
+            if (newObject === null)
+                return -1;
+            objectModels.push(newObject);
             return objectModels.length - 1;
         }
     }
@@ -1104,9 +1112,10 @@ export function parseLevelSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: GSM
         if (readString(buffer, setupSpawnsIdx, 0x04) === 'NIL ')
             break;
 
+        let j = 0;
         while (true) {
             const objectId = view.getUint16(setupSpawnsIdx + 0x00, true);
-            const flags = view.getUint16(setupSpawnsIdx + 0x02, true);
+            const locPosType = view.getUint8(setupSpawnsIdx + 0x02);
 
             let shouldSkip = false;
 
@@ -1114,10 +1123,11 @@ export function parseLevelSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: GSM
             if (objectId === 0xFFFF)
                 break;
 
-            // TODO(jstpierre): Figure out what this mess means.
-            if (flags !== 0xFF00)
+            // This flag means that the object spawned is random. The table
+            // of which objects get spawned for which group is stored in the ELF.
+            if (locPosType !== 0)
                 shouldSkip = true;
-        
+
             // Skip "weird" objects (missing models, descriptions)
             switch (objectId) {
             case 0x0089:
@@ -1132,6 +1142,12 @@ export function parseLevelSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: GSM
             case 0x05A9:
                 shouldSkip = true;
                 break;
+            }
+
+            const modelIndex = findOrParseObject(objectId);
+            if (modelIndex === -1) {
+                console.log(`Missing object ${hexzero(objectId, 4)}; layer ${i} object index ${j}`);
+                shouldSkip = true;
             }
 
             if (shouldSkip) {
@@ -1158,10 +1174,10 @@ export function parseLevelSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: GSM
             quat.set(q, rotationX * sinHalfAngle, rotationY * sinHalfAngle, rotationZ * sinHalfAngle, Math.cos(angle / 2));
             mat4.fromRotationTranslation(modelMatrix, q, [translationX, translationY, translationZ]);
 
-            const modelIndex = findOrParseObject(objectId);
             const objectSpawn: LevelSetupObjectSpawn = { spawnLayoutIndex: i, objectId, modelIndex, modelMatrix };
             objectSpawns.push(objectSpawn);
             setupSpawnsIdx += 0x40;
+            j++;
         }
 
         spawnLayouts.push(i);

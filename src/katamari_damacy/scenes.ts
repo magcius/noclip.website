@@ -4,76 +4,11 @@ import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import Progressable from "../Progressable";
 import { fetchData } from "../fetch";
 import * as BIN from "./bin";
-import { BINModelData, BINModelInstance, KatamariDamacyRenderer } from './render';
+import { BINModelInstance, KatamariDamacyRenderer, BINModelSectorData } from './render';
 import { mat4 } from 'gl-matrix';
 import * as UI from '../ui';
 
 const pathBase = `katamari_damacy`;
-
-class KatamariTwiceLevelSceneDesc implements Viewer.SceneDesc {
-    constructor(public id: string, public name: string) {
-    }
-
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
-        return Progressable.all([
-            fetchData(`${pathBase}/1879b0/135b75.bin`, abortSignal),
-            fetchData(`${pathBase}/1879b0/135049.bin`, abortSignal),
-            fetchData(`${pathBase}/1879b0/135c43.bin`, abortSignal),
-            fetchData(`${pathBase}/1879b0/1350c3.bin`, abortSignal),
-        ]).then(([levelModelBinData1, levelTextureBinData1, levelModelBinData2, levelTextureBinData2]) => {
-            const renderer = new KatamariDamacyRenderer(device);
-
-            const instance1: BINModelInstance[] = [];
-            {
-                const gsMemoryMap = BIN.gsMemoryMapNew();
-
-                BIN.parseLevelTextureBIN(levelTextureBinData1, gsMemoryMap);
-                const levelModelBin = BIN.parseLevelModelBIN(levelModelBinData1, gsMemoryMap, `twice0`);
-
-                for (let i = 0; i < levelModelBin.sectors.length; i++) {
-                    const sector = levelModelBin.sectors[i];
-                    renderer.textureHolder.addBINTexture(device, sector);
-
-                    for (let j = 0; j < sector.models.length; j++) {
-                        const binModelData = new BINModelData(device, sector.models[j]);
-                        renderer.modelData.push(binModelData);
-                        const binModelInstance = new BINModelInstance(device, renderer.renderInstBuilder, renderer.textureHolder, binModelData);
-                        instance1.push(binModelInstance);
-                        renderer.modelInstances.push(binModelInstance);
-                    }
-                }
-            }
-
-            const instance2: BINModelInstance[] = [];
-            {
-                const gsMemoryMap = BIN.gsMemoryMapNew();
-
-                BIN.parseLevelTextureBIN(levelTextureBinData2, gsMemoryMap);
-                const levelModelBin = BIN.parseLevelModelBIN(levelModelBinData2, gsMemoryMap, `twice1`);
-
-                for (let i = 0; i < levelModelBin.sectors.length; i++) {
-                    const sector = levelModelBin.sectors[i];
-                    renderer.textureHolder.addBINTexture(device, sector);
-
-                    for (let j = 0; j < sector.models.length; j++) {
-                        const binModelData = new BINModelData(device, sector.models[j]);
-                        renderer.modelData.push(binModelData);
-                        const binModelInstance = new BINModelInstance(device, renderer.renderInstBuilder, renderer.textureHolder, binModelData);
-                        instance2.push(binModelInstance);
-                        renderer.modelInstances.push(binModelInstance);
-                    }
-                }
-            }
-
-            renderer.finish(device, renderer.viewRenderer);
-            (renderer as any).setTwice = (i: number) => {
-                instance1.forEach((m) => m.visible = i === 0);
-                instance2.forEach((m) => m.visible = i === 1);
-            };
-            return renderer;
-        });
-    }
-}
 
 class KatamariLevelSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public levelModelFile: string, public levelTexFile: string, public levelSetupFiles: string[], public name: string) {
@@ -97,34 +32,40 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
                 const sector = levelModelBin.sectors[i];
                 renderer.textureHolder.addBINTexture(device, sector);
 
+                const binModelSectorData = new BINModelSectorData(device, sector);
+                renderer.modelSectorData.push(binModelSectorData);
+
                 for (let j = 0; j < sector.models.length; j++) {
-                    const binModelData = new BINModelData(device, sector.models[j]);
-                    renderer.modelData.push(binModelData);
-                    const binModelInstance = new BINModelInstance(device, renderer.renderInstBuilder, renderer.textureHolder, binModelData);
+                    const binModelInstance = new BINModelInstance(device, renderer.renderInstBuilder, renderer.textureHolder, binModelSectorData.modelData[j]);
                     renderer.modelInstances.push(binModelInstance);
                 }
             }
 
             // Now parse through the level setup data.
             const levelSetupBin = BIN.parseLevelSetupBIN(levelSetupBinDatas, gsMemoryMap);
+            console.log(levelSetupBin);
 
-            const objectDatas: BINModelData[] = [];
+            const objectDatas: BINModelSectorData[] = [];
             for (let i = 0; i < levelSetupBin.objectModels.length; i++) {
                 const objectModel = levelSetupBin.objectModels[i];
                 renderer.textureHolder.addBINTexture(device, objectModel);
 
                 // Just do the first model for now.
-                const binModelData = new BINModelData(device, objectModel.models[0]);
-                objectDatas.push(binModelData);
-                renderer.modelData.push(binModelData);
+                
+                const binModelSectorData = new BINModelSectorData(device, objectModel);
+                objectDatas.push(binModelSectorData);
+                renderer.modelSectorData.push(binModelSectorData);
             }
 
             for (let i = 0; i < levelSetupBin.objectSpawns.length; i++) {
                 const objectSpawn = levelSetupBin.objectSpawns[i];
-                const binModelData = objectDatas[objectSpawn.modelIndex];
-                const binModelInstance = new BINModelInstance(device, renderer.renderInstBuilder, renderer.textureHolder, binModelData, objectSpawn.spawnLayoutIndex);
-                mat4.mul(binModelInstance.modelMatrix, binModelInstance.modelMatrix, objectSpawn.modelMatrix);
-                renderer.modelInstances.push(binModelInstance);
+                const binModelSectorData = objectDatas[objectSpawn.modelIndex];
+
+                for (let j = 0; j < binModelSectorData.modelData.length; j++) {
+                    const binModelInstance = new BINModelInstance(device, renderer.renderInstBuilder, renderer.textureHolder, binModelSectorData.modelData[j], objectSpawn.spawnLayoutIndex);
+                    mat4.mul(binModelInstance.modelMatrix, binModelInstance.modelMatrix, objectSpawn.modelMatrix);
+                    renderer.modelInstances.push(binModelInstance);
+                }
             }
 
             // TODO(jstpierre): Ugly.
@@ -140,8 +81,9 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
                     return o;
                 });
 
-                if (this.levelModelFile !== '135b75') {
-                    // Hide all other layers by default (causes Z-fighting on non-House levels)
+                if (this.levelModelFile === '1363c5') {
+                    // Hide all other layers by default (causes Z-fighting on World levels)
+                    // Do this until we can get the other world models integrated.
                     for (let i = 1; i < layers.length; i++)
                         layers[i].setVisible(false);
                 }
@@ -168,7 +110,7 @@ const sceneDescs = [
     new KatamariLevelSceneDesc('lvl7',  '1363c5', '1353d1', ['13f7c8', '13f97f', '13fbad', '13fda5'], "Make a Star 7 (World)"),
     new KatamariLevelSceneDesc('lvl8',  '135ebf', '135231', ['13ff91', '14017a', '1403d3', '140616'], "Make a Star 8 (City)"),
     new KatamariLevelSceneDesc('lvl9',  '1363c5', '1353d1', ['140850', '140a3e', '140cc7', '140f02'], "Make a Star 9 (World)"),
-    new KatamariLevelSceneDesc('lvl10', '1363c5', '1353d1', ['141133', '141339', '1415d4', '141829'], "Make a Star 10 (World)"),
+    new KatamariLevelSceneDesc('lvl10', '1363c5', '1353d1', ['141133', '141339', '1415d4', '141829'], "Make the Moon (World)"),
 ];
 const sceneIdMap = new Map<string, string>();
 // When I first was testing Katamari, I was testing the Tutorial Level. At some point
