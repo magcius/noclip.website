@@ -8,6 +8,7 @@ layout(row_major, std140) uniform ub_SceneParams {
 
 layout(row_major, std140) uniform ub_ModelParams {
     Mat4x3 u_BoneMatrix[1];
+    Mat4x3 u_NormalMatrix[1];
     vec4 u_Color;
 };
 
@@ -23,7 +24,7 @@ layout(location = 2) in vec2 a_TexCoord;
 
 void main() {
     gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix[0]), vec4(a_Position, 1.0)));
-    v_Normal = Mul(_Mat4x4(u_BoneMatrix[0]), vec4(a_Normal, 0.0)).xyz;
+    v_Normal = Mul(_Mat4x4(u_NormalMatrix[0]), vec4(a_Normal, 0.0)).xyz;
     v_TexCoord = a_TexCoord;
 }
 #endif
@@ -43,6 +44,11 @@ void main() {
     // TODO(jstpierre): Configurable alpha ref?
     // if (t_Color.a < 0.5)
     //     discard;
+
+    // Basic fake directional.
+    vec3 t_LightDirection = normalize(vec3(1, 1, 1));
+    float t_LightIntensity = max(dot(-v_Normal, t_LightDirection), 0.0);
+    t_Color.rgb *= mix(0.7, 1.0, t_LightIntensity);
 
     gl_FragColor = t_Color;
 }

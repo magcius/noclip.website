@@ -1,6 +1,6 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, hexzero, assertExists, nArray } from "../util";
+import { assert, hexzero, assertExists } from "../util";
 import { Color, colorNew, colorFromRGBA, colorEqual } from "../Color";
 import { AABB } from "../Geometry";
 import { GfxWrapMode } from "../gfx/platform/GfxPlatform";
@@ -370,8 +370,8 @@ function parseDIRECT(map: GSMemoryMap, buffer: ArrayBufferSlice): number {
                 if (addr === 0x50) {
                     // BITBLTBUF
                     dbp = (data1 >>> 0) & 0x3FFF;
-                    dbw = (data1 >>> 14) & 0x3F;
-                    dpsm = (data1 >>> 20) & 0x3F;
+                    dbw = (data1 >>> 16) & 0x3F;
+                    dpsm = (data1 >>> 24) & 0x3F;
                     // TODO(jstpierre): Support upload modes other than PSCMT32
                     assert(dpsm === GSPixelStorageFormat.PSMCT32);
                 } else if (addr === 0x51) {
@@ -412,10 +412,10 @@ function decodeTexture(gsMemoryMap: GSMemoryMap, tex0_data0: number, tex0_data1:
     const psm: GSPixelStorageFormat = (tex0_data0 >>> 20) & 0x3F;
     const tw = (tex0_data0 >>> 26) & 0x0F;
     const th = ((tex0_data0 >>> 30) & 0x03) | (((tex0_data1 >>> 0) & 0x03) << 2);
-    const tcc = (tex0_data1 >>> 2) & 0x03;
-    const tfx = (tex0_data1 >>> 3) & 0x03;
+    const tcc: GSTextureColorComponent = (tex0_data1 >>> 2) & 0x03;
+    const tfx: GSTextureFunction = (tex0_data1 >>> 3) & 0x03;
     const cbp = (tex0_data1 >>> 5) & 0x3FFF;
-    const cpsm = (tex0_data1 >>> 19) & 0x0F;
+    const cpsm: GSCLUTStorageFormat = (tex0_data1 >>> 19) & 0x0F;
     const csm = (tex0_data1 >>> 23) & 0x1;
     const csa = (tex0_data1 >>> 24) & 0x1F;
     const cld = (tex0_data1 >>> 29) & 0x03;

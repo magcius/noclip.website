@@ -88,9 +88,10 @@ export class BINModelPartInstance {
         });
     }
 
-    public prepareToRender(modelParamsBuffer: GfxRenderBuffer, modelMatrix: mat4): void {
+    public prepareToRender(modelParamsBuffer: GfxRenderBuffer, modelViewMatrix: mat4, modelMatrix: mat4): void {
         let offs = this.renderInst.getUniformBufferOffset(KatamariDamacyProgram.ub_ModelParams);
         const mapped = modelParamsBuffer.mapBufferF32(offs, 16);
+        offs += fillMatrix4x3(mapped, offs, modelViewMatrix);
         offs += fillMatrix4x3(mapped, offs, modelMatrix);
         offs += fillColor(mapped, offs, this.binModelPart.diffuseColor);
     }
@@ -133,10 +134,11 @@ export class BINModelInstance {
 
     public prepareToRender(modelParamsBuffer: GfxRenderBuffer, viewRenderer: Viewer.ViewerRenderInput) {
         computeViewMatrix(scratchMat4, viewRenderer.camera);
+        mat4.scale(scratchMat4, scratchMat4, [10, 10, 10]);
         mat4.mul(scratchMat4, scratchMat4, this.modelMatrix);
 
         for (let i = 0; i < this.modelParts.length; i++)
-            this.modelParts[i].prepareToRender(modelParamsBuffer, scratchMat4);
+            this.modelParts[i].prepareToRender(modelParamsBuffer, scratchMat4, this.modelMatrix);
     }
 
     public destroy(device: GfxDevice): void {
