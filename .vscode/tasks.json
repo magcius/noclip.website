@@ -15,8 +15,11 @@
         {
             "type": "npm",
             "script": "typecheck",
-            "problemMatcher": [],
-            "group": "build"
+            "presentation": {
+                "reveal": "silent",
+            },
+            "group": "none",
+            "problemMatcher": "$tsc"
         }
     ]
 }

@@ -15,7 +15,7 @@
     "@types/node": "^11.9.5",
     "@types/pako": "^1.0.0",
     "@types/systemjs": "^0.20.6",
-    "@types/webassembly-js-api": "0.0.2",
+    "@types/webassembly-js-api": "0.0.3",
     "@types/webgl2": "0.0.4"
   },
   "scripts": {

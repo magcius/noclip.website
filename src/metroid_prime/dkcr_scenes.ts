@@ -29,8 +29,10 @@ class DKCRSceneDesc implements Viewer.SceneDesc {
                 const area: MLVL.Area = mlvl.areaTable[0];
                 const mrea: MREA.MREA = resourceSystem.loadAssetByID(area.areaMREAID, 'MREA');
                 const textureHolder = new RetroTextureHolder();
-                const mreaRenderer = new MREARenderer(device, textureHolder, this.name, mrea);
-                return new RetroSceneRenderer(device, mlvl, textureHolder, null, [mreaRenderer]);
+                const renderer = new RetroSceneRenderer(device, mlvl, textureHolder);
+                const mreaRenderer = new MREARenderer(device, renderer.renderHelper, textureHolder, this.name, mrea);
+                renderer.areaRenderers.push(mreaRenderer);
+                return renderer;
             }
             return null;
         });

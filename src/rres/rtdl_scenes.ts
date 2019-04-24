@@ -9,7 +9,7 @@ import { fetchData } from '../fetch';
 import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { BasicRRESRenderer } from './elb_scenes';
+import { BasicRRESRenderer } from './scenes';
 
 class RTDLSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}

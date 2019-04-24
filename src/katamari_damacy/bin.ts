@@ -588,7 +588,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
 
     const modelObjCount = view.getUint16(sectorOffs + 0x00, true);
     const modelObjType = view.getUint16(sectorOffs + 0x02, true);
-    assert(modelObjType === 0x05);
+    // assert(modelObjType === 0x05);
 
     // 4 positions, 3 normals, 2 UV coordinates.
     const WORKING_VERTEX_STRIDE = 4+3+2;
@@ -1005,6 +1005,7 @@ export function parseLevelModelBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemo
     for (let i = 0; i < numSectors; i++) {
         const sectorOffs = view.getUint32(sectorTableIdx + 0x00, true);
         sectors.push(parseModelSector(buffer, gsMemoryMap, namePrefix, sectorOffs));
+        sectorTableIdx += 0x04;
     }
 
     return { sectors };
