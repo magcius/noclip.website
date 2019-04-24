@@ -571,8 +571,13 @@ export function parseStageTextureBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMe
     assert(offs === buffer.byteLength);
 }
 
-function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, namePrefix: string, sectorOffs: number): BINModelSector {
+function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, namePrefix: string, sectorOffs: number): BINModelSector | null {
     const view = buffer.createDataView();
+
+    const modelObjCount = view.getUint16(sectorOffs + 0x00, true);
+    const modelObjType = view.getUint16(sectorOffs + 0x02, true);
+    if (modelObjType !== 0x05)
+        return null;
 
     const textures: BINTexture[] = [];
     function findOrDecodeTexture(tex0_data0: number, tex0_data1: number): string {
@@ -585,10 +590,6 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
         }
         return texture.name;
     }
-
-    const modelObjCount = view.getUint16(sectorOffs + 0x00, true);
-    const modelObjType = view.getUint16(sectorOffs + 0x02, true);
-    // assert(modelObjType === 0x05);
 
     // 4 positions, 3 normals, 2 UV coordinates.
     const WORKING_VERTEX_STRIDE = 4+3+2;
@@ -1004,7 +1005,9 @@ export function parseLevelModelBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemo
     let sectorTableIdx = 0x04;
     for (let i = 0; i < numSectors; i++) {
         const sectorOffs = view.getUint32(sectorTableIdx + 0x00, true);
-        sectors.push(parseModelSector(buffer, gsMemoryMap, namePrefix, sectorOffs));
+        const sectorModel = parseModelSector(buffer, gsMemoryMap, namePrefix, sectorOffs);
+        if (sectorModel !== null)
+            sectors.push(sectorModel);
         sectorTableIdx += 0x04;
     }
 
