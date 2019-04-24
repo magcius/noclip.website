@@ -571,7 +571,7 @@ export function parseStageTextureBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMe
     assert(offs === buffer.byteLength);
 }
 
-function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, namePrefix: string, sectorOffs: number): BINModelSector | null {
+function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, namePrefix: string, sectorOffs: number): BINModelSector {
     const view = buffer.createDataView();
 
     const modelObjCount = view.getUint16(sectorOffs + 0x00, true);
@@ -995,20 +995,31 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
     return { models, textures };
 }
 
+function sectorIsNIL(buffer: ArrayBufferSlice, sectorOffs: number): boolean {
+    return readString(buffer, sectorOffs, 0x04) === 'NIL ';
+}
+
 export function parseLevelModelBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, namePrefix: string = ''): LevelModelBIN {
     const view = buffer.createDataView();
 
     const numSectors = view.getUint32(0x00, true);
+    assert(numSectors === 0x08);
 
     const sectors: BINModelSector[] = [];
 
+    // There appear to be up to four graphical sectors.
+    // 1. Main Level Graphics
+    // 2. Skybox (unused in World, built-into Main Level)
+    // 3. Transparent Objects (used only in House for Windows)
+    // 4. Partially-Transparent Objects (used only in House for the blanket when you get near)
     let sectorTableIdx = 0x04;
-    for (let i = 0; i < numSectors; i++) {
+    for (let i = 0; i < 4; i++) {
         const sectorOffs = view.getUint32(sectorTableIdx + 0x00, true);
-        const sectorModel = parseModelSector(buffer, gsMemoryMap, namePrefix, sectorOffs);
-        if (sectorModel !== null)
-            sectors.push(sectorModel);
         sectorTableIdx += 0x04;
+        if (sectorIsNIL(buffer, sectorOffs))
+            continue;
+        const sectorModel = parseModelSector(buffer, gsMemoryMap, namePrefix, sectorOffs);
+        sectors.push(sectorModel);
     }
 
     return { sectors };
@@ -1078,12 +1089,11 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: G
         const descriptionOffs = view.getUint32(firstSectorOffs + 0x24, true);
         const audioOffs = view.getUint32(firstSectorOffs + 0x28, true);
 
-        if (readString(buffer, lod0Offs, 0x04) === 'NIL ') {
-            // Missing object?
+        // Missing object?
+        if (sectorIsNIL(buffer, lod0Offs))
             return null;
-        }
 
-        if (readString(buffer, texDataOffs, 0x04) !== 'NIL ') {
+        if (!sectorIsNIL(buffer, texDataOffs)) {
             // Parse texture data.
             parseDIRECT(gsMemoryMap, buffer.slice(texDataOffs));
             // TODO(jstpierre): Which CLUT do I want?

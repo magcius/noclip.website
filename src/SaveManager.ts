@@ -89,7 +89,6 @@ export class SaveManager {
         // Clean up old stuff.
         window.localStorage.removeItem(key);
         window.sessionStorage.setItem(key, serializedState);
-        this.callSaveStateListeners();
     }
 
     public saveState(key: string, serializedState: string): void {

@@ -25,5 +25,8 @@
     "asbuild:yaz0": "npx asc Yaz0_as.ts --baseDir ./src/assembly -O3 --noLib -b Yaz0_as.wasm -t Yaz0_as.wat",
     "asbuild": "yarn asbuild:gx_tex && yarn asbuild:yaz0 && node src/build_wat.js",
     "typecheck": "tsc -w --noEmit"
-  }
+  },
+  "browserslist": [
+    "last 2 Chrome versions"
+  ]
 }

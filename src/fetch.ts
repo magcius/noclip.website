@@ -31,9 +31,9 @@ export function fetchData(path: string, abortSignal: AbortSignal | null = null):
             request.abort();
         });
     }
-    const p = new Promise<NamedArrayBufferSlice>((resolve, reject) => {
+    const pFetch = new Promise<NamedArrayBufferSlice>((resolve, reject) => {
         function done() {
-            pr.setProgress(1);
+            prFetch.setProgress(1);
             let slice: NamedArrayBufferSlice;
             if (request.status !== 200) {
                 slice = new ArrayBufferSlice(new ArrayBuffer(0)) as NamedArrayBufferSlice;
@@ -42,6 +42,7 @@ export function fetchData(path: string, abortSignal: AbortSignal | null = null):
                 slice = new ArrayBufferSlice(buffer) as NamedArrayBufferSlice;
             }
             slice.name = url;
+            request.abort();
             resolve(slice);
         }
 
@@ -52,11 +53,11 @@ export function fetchData(path: string, abortSignal: AbortSignal | null = null):
         };
         request.onprogress = (e) => {
             if (e.lengthComputable)
-                pr.setProgress(e.loaded / e.total);
+                prFetch.setProgress(e.loaded / e.total);
         };
     });
-    const pr = new Progressable<NamedArrayBufferSlice>(p);
-    return pr;
+    const prFetch = new Progressable<NamedArrayBufferSlice>(pFetch);
+    return prFetch;
 }
 
 function downloadHref(filename: string, href: string): void {

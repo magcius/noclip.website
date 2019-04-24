@@ -1,6 +1,6 @@
 
 export default class Progressable<T> {
-    public promise: PromiseLike<T>;
+    public promise: PromiseLike<T> | null;
     public chainProgressable: Progressable<any> | null = null;
     public onProgress: (() => void) | null = null;
     public progress: number; // Between 0 and 1.
@@ -19,8 +19,11 @@ export default class Progressable<T> {
     }
 
     public then<TResult>(onfulfilled?: ((value: T) => TResult | PromiseLike<TResult> | Progressable<TResult>)): Progressable<TResult> {
-        const pr = new Progressable<TResult>(this.promise.then((b) => {
+        const prThen = new Progressable<TResult>(this.promise.then((b) => {
             const result = onfulfilled(b);
+
+            // Clear our promise out so that objects allocated from the promise callback itself can be collected.
+            this.promise = null;
 
             if (result instanceof Progressable) {
                 // If a callback returns a Progressable, then bubble that progress up to us.
@@ -33,9 +36,9 @@ export default class Progressable<T> {
         }), this.progress);
 
         // Any then-able chain is the same progress as this one (however it can also report progress which will replace this).
-        this.chainProgressable = pr;
+        this.chainProgressable = prThen;
 
-        return pr;
+        return prThen;
     }
 
     public static resolve<T>(value: T): Progressable<T> {
@@ -43,17 +46,17 @@ export default class Progressable<T> {
     }
 
     public static all<T>(progressables: Progressable<T>[]): Progressable<T[]> {
-        const p = Promise.all(progressables.map((p) => p.promise));
+        const pAll = Promise.all(progressables.map((p) => p.promise));
         function calcProgress() {
             const progresses = progressables.map((p) => p.progress);
-            pr.setProgress(avg(progresses));
+            prAll.setProgress(avg(progresses));
         }
         progressables.forEach((p) => {
             p.onProgress = calcProgress;
         });
-        const pr = new Progressable<T[]>(p);
+        const prAll = new Progressable<T[]>(pAll);
         calcProgress();
-        return pr;
+        return prAll;
     }
 }
 
@@ -62,26 +65,4 @@ function avg(L: number[]) {
     L.forEach((i) => s += i);
     s /= L.length;
     return s;
-}
-
-function setTimeoutProgressable(n: number): Progressable<number> {
-    const p = new Promise<number>((resolve, reject) => {
-        setTimeout(() => {
-            resolve(n);
-        }, n);
-    });
-
-    const pr = new Progressable(p);
-
-    const start = +(new Date());
-    function tick() {
-        const ms = +(new Date());
-        const t = (ms - start) / n;
-        pr.setProgress(t);
-        if (t < 1)
-            window.requestAnimationFrame(tick);
-    }
-    tick();
-
-    return pr;
 }

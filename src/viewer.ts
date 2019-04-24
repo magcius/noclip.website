@@ -44,6 +44,13 @@ export const enum InitErrorCode {
 
 export type Listener = (viewer: Viewer) => void;
 
+function resetGfxDebugGroup(group: GfxDebugGroup): void {
+    group.bufferUploadCount = 0;
+    group.drawCallCount = 0;
+    group.textureBindCount = 0;
+    group.triangleCount = 0;
+}
+
 export class Viewer {
     public inputManager: InputManager;
     public cameraController: CameraController | null = null;
@@ -65,6 +72,7 @@ export class Viewer {
     public oncamerachanged: () => void = (() => {});
     public onstatistics: (statistics: RenderStatistics) => void = (() => {});
     private keyMoveSpeedListeners: Listener[] = [];
+    private debugGroup: GfxDebugGroup = { name: 'Scene Rendering', drawCallCount: 0, bufferUploadCount: 0, textureBindCount: 0, triangleCount: 0 };
 
     constructor(private gfxSwapChain: GfxSwapChain, public canvas: HTMLCanvasElement) {
         this.inputManager = new InputManager(this.canvas);
@@ -113,9 +121,8 @@ export class Viewer {
 
         this.renderStatisticsTracker.beginFrame();
 
-        // TODO(jstpierre): Allocations.
-        const debugGroup: GfxDebugGroup = { name: 'Scene Rendering', drawCallCount: 0, bufferUploadCount: 0, textureBindCount: 0, triangleCount: 0 };
-        this.gfxDevice.pushDebugGroup(debugGroup);
+        resetGfxDebugGroup(this.debugGroup);
+        this.gfxDevice.pushDebugGroup(this.debugGroup);
 
         const renderPass = this.scene.render(this.gfxDevice, this.viewerRenderInput);
         const onscreenTexture = this.gfxSwapChain.getOnscreenTexture();
@@ -126,7 +133,7 @@ export class Viewer {
         this.gfxDevice.popDebugGroup();
         this.renderStatisticsTracker.endFrame();
 
-        this.renderStatisticsTracker.applyDebugGroup(debugGroup);
+        this.renderStatisticsTracker.applyDebugGroup(this.debugGroup);
         this.onstatistics(this.renderStatisticsTracker);
     }
 

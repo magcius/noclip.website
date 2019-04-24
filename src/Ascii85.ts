@@ -3,7 +3,7 @@ import { assert } from "./util";
 
 const A85_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+=-_,:;~/?[]@!$&()*{}|^';
 
-export function atob(d: Uint8Array, byteLength: number = d.byteLength, charset: string = A85_CHARS): string {
+export function atob(d: Uint8Array, byteLength: number = d.byteLength, charset: string = A85_CHARS, chunk = ['0', '0', '0', '0', '0']): string {
     assert(charset.length === 85);
     const n = byteLength;
     const padding = (-n) & 0x03;
@@ -19,7 +19,7 @@ export function atob(d: Uint8Array, byteLength: number = d.byteLength, charset: 
         }
         v = v >>> 0;
 
-        let chunk = ['0', '0', '0', '0', '0'];
+        chunk.fill('0');
         for (let j = 4; j >= 0; j--) {
             const c = charset.charAt(v % 85);
             assert(c.length === 1);
