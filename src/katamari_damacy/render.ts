@@ -6,9 +6,9 @@ import * as Viewer from "../viewer";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { GfxRenderInst, GfxRenderInstBuilder } from "../gfx/render/GfxRenderer";
 import { GfxRenderBuffer } from "../gfx/render/GfxRenderBuffer";
-import { Camera, computeViewMatrix } from "../Camera";
+import { computeViewMatrix } from "../Camera";
 import { mat4 } from "gl-matrix";
-import { fillMatrix4x3, fillMatrix4x4, fillColor } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x3, fillColor } from "../gfx/helpers/UniformBufferHelpers";
 import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
 import { nArray, assert } from "../util";
 

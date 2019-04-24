@@ -87,7 +87,12 @@ class ObjectRenderer {
     }
 }
 
+class StageAreaSector {
+    public modelInstance: BINModelInstance[] = [];
+}
+
 class StageAreaRenderer {
+    public stageAreaSector: StageAreaSector[] = [];
     public modelInstance: BINModelInstance[] = [];
 
     public prepareToRender(modelParamsBuffer: GfxRenderBuffer, viewRenderer: Viewer.ViewerRenderInput) {
@@ -237,13 +242,18 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
                     const sector = stageModelBin.sectors[i];
                     renderer.textureHolder.addBINTexture(device, sector);
 
+                    const stageAreaSector = new StageAreaSector();
+
                     const binModelSectorData = new BINModelSectorData(device, sector);
                     renderer.modelSectorData.push(binModelSectorData);
 
                     for (let j = 0; j < sector.models.length; j++) {
                         const binModelInstance = new BINModelInstance(device, renderer.renderInstBuilder, renderer.textureHolder, binModelSectorData.modelData[j]);
                         stageAreaRenderer.modelInstance.push(binModelInstance);
+                        stageAreaSector.modelInstance.push(binModelInstance);
                     }
+
+                    stageAreaRenderer.stageAreaSector.push(stageAreaSector);
                 }
 
                 renderer.stageAreaRenderers.push(stageAreaRenderer);
