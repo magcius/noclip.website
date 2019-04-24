@@ -1,96 +1,277 @@
 
 import * as Viewer from '../viewer';
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxHostAccessPass } from "../gfx/platform/GfxPlatform";
 import Progressable from "../Progressable";
 import { fetchData } from "../fetch";
 import * as BIN from "./bin";
-import { BINModelInstance, KatamariDamacyRenderer, BINModelSectorData } from './render';
+import { BINModelInstance, BINModelSectorData, KatamariDamacyTextureHolder, KatamariDamacyProgram } from './render';
 import { mat4 } from 'gl-matrix';
 import * as UI from '../ui';
+import ArrayBufferSlice from '../ArrayBufferSlice';
+import { assert, assertExists } from '../util';
+import { BasicRendererHelper } from '../oot3d/render';
+import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
+import { GfxRenderInst, GfxRenderInstBuilder, GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
+import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
+import { Camera } from '../Camera';
 
 const pathBase = `katamari_damacy`;
 
+interface StageAreaFileGroup {
+    texFile: string;
+    modelFile: string;
+}
+
+class LevelCache {
+    private fileProgressableCache = new Map<string, Progressable<ArrayBufferSlice>>();
+    private fileDataCache = new Map<string, ArrayBufferSlice>();
+
+    public waitForLoad(): Progressable<any> {
+        const v: Progressable<any>[] = [... this.fileProgressableCache.values()];
+        return Progressable.all(v);
+    }
+
+    private fetchFile(path: string, abortSignal: AbortSignal): Progressable<ArrayBufferSlice> {
+        assert(!this.fileProgressableCache.has(path));
+        const p = fetchData(path, abortSignal);
+        this.fileProgressableCache.set(path, p);
+        return p;
+    }
+
+    public fetchFileData(path: string, abortSignal: AbortSignal): void {
+        const p = this.fileProgressableCache.get(path);
+        if (p === undefined) {
+            this.fetchFile(path, abortSignal).then((data) => {
+                this.fileDataCache.set(path, data);
+            });
+        }
+    }
+
+    public getFileData(path: string): ArrayBufferSlice {
+        return assertExists(this.fileDataCache.get(path));
+    }
+}
+
+function getStageAreaFilePath(filename: string): string {
+    return `${pathBase}/1879b0/${filename}.bin`;
+}
+
+function getMissionSetupFilePath(filename: string): string {
+    return `${pathBase}/17f590/${filename}.bin`;
+}
+
+class ObjectRenderer {
+    public modelInstance: BINModelInstance[] = [];
+
+    constructor(public objectSpawn: BIN.MissionSetupObjectSpawn) {
+    }
+
+    public prepareToRender(modelParamsBuffer: GfxRenderBuffer, viewRenderer: Viewer.ViewerRenderInput) {
+        for (let i = 0; i < this.modelInstance.length; i++)
+            this.modelInstance[i].prepareToRender(modelParamsBuffer, viewRenderer);
+    }
+
+    public setVisible(visible: boolean): void {
+        for (let i = 0; i < this.modelInstance.length; i++)
+            this.modelInstance[i].setVisible(visible);
+    }
+
+    public setActiveAreaNo(areaNo: number): void {
+        const visible = areaNo >= this.objectSpawn.dispOnAreaNo && ((areaNo < this.objectSpawn.dispOffAreaNo) || this.objectSpawn.dispOffAreaNo === -1);
+        this.setVisible(visible);
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.modelInstance.length; i++)
+            this.modelInstance[i].destroy(device);
+    }
+}
+
+class StageAreaRenderer {
+    public modelInstance: BINModelInstance[] = [];
+
+    public prepareToRender(modelParamsBuffer: GfxRenderBuffer, viewRenderer: Viewer.ViewerRenderInput) {
+        for (let i = 0; i < this.modelInstance.length; i++)
+            this.modelInstance[i].prepareToRender(modelParamsBuffer, viewRenderer);
+    }
+
+    public setVisible(visible: boolean): void {
+        for (let i = 0; i < this.modelInstance.length; i++)
+            this.modelInstance[i].setVisible(visible);
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.modelInstance.length; i++)
+            this.modelInstance[i].destroy(device);
+    }
+}
+
+function fillSceneParamsData(d: Float32Array, camera: Camera, offs: number = 0): void {
+    offs += fillMatrix4x4(d, offs, camera.projectionMatrix);
+}
+
+class KatamariDamacyRenderer extends BasicRendererHelper implements Viewer.SceneGfx {
+    private sceneParamsBuffer: GfxRenderBuffer;
+    private modelParamsBuffer: GfxRenderBuffer;
+    private templateRenderInst: GfxRenderInst;
+    public renderInstBuilder: GfxRenderInstBuilder;
+    public modelSectorData: BINModelSectorData[] = [];
+    public textureHolder = new KatamariDamacyTextureHolder();
+
+    public stageAreaRenderers: StageAreaRenderer[] = [];
+    public objectRenderers: ObjectRenderer[] = [];
+
+    constructor(device: GfxDevice) {
+        super();
+        this.sceneParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_SceneParams`);
+        this.modelParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_ModelParams`);
+
+        const bindingLayouts: GfxBindingLayoutDescriptor[] = [
+            { numUniformBuffers: 1, numSamplers: 0 }, // Scene
+            { numUniformBuffers: 1, numSamplers: 1 }, // Shape
+        ];
+        const uniformBuffers = [ this.sceneParamsBuffer, this.modelParamsBuffer ];
+
+        this.renderInstBuilder = new GfxRenderInstBuilder(device, KatamariDamacyProgram.programReflection, bindingLayouts, uniformBuffers);
+
+        this.templateRenderInst = this.renderInstBuilder.pushTemplateRenderInst();
+        this.renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, KatamariDamacyProgram.ub_SceneParams);
+    }
+
+    public finish(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer): void {
+        this.renderInstBuilder.popTemplateRenderInst();
+        this.renderInstBuilder.finish(device, viewRenderer);
+    }
+
+    public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        viewerInput.camera.setClipPlanes(20, 12000000);
+        let offs = this.templateRenderInst.getUniformBufferOffset(KatamariDamacyProgram.ub_SceneParams);
+        const sceneParamsMapped = this.sceneParamsBuffer.mapBufferF32(offs, 16);
+        fillSceneParamsData(sceneParamsMapped, viewerInput.camera, offs);
+
+        for (let i = 0; i < this.stageAreaRenderers.length; i++)
+            this.stageAreaRenderers[i].prepareToRender(this.modelParamsBuffer, viewerInput);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].prepareToRender(this.modelParamsBuffer, viewerInput);
+
+        this.sceneParamsBuffer.prepareToRender(hostAccessPass);
+        this.modelParamsBuffer.prepareToRender(hostAccessPass);
+    }
+
+    private setActiveAreaNo(areaNo: number): void {
+        for (let i = 0; i < this.stageAreaRenderers.length; i++)
+            this.stageAreaRenderers[i].setVisible(i === areaNo);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].setActiveAreaNo(areaNo);
+    }
+
+    public createPanels(): UI.Panel[] {
+        const areasPanel = new UI.Panel();
+        areasPanel.setTitle(UI.LAYER_ICON, 'Areas');
+        areasPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+
+        const areaSelect = new UI.SingleSelect();
+        areaSelect.setStrings(this.stageAreaRenderers.map((renderer, i) => `Area ${i+1}`));
+        areaSelect.onselectionchange = (index: number) => {
+            this.setActiveAreaNo(index);
+        };
+        areaSelect.selectItem(0);
+        areasPanel.contents.appendChild(areaSelect.elem);
+
+        return [areasPanel];
+    }
+
+    public destroy(device: GfxDevice): void {
+        super.destroy(device);
+        this.textureHolder.destroy(device);
+        this.sceneParamsBuffer.destroy(device);
+        this.modelParamsBuffer.destroy(device);
+
+        for (let i = 0; i < this.modelSectorData.length; i++)
+            this.modelSectorData[i].destroy(device);
+        for (let i = 0; i < this.stageAreaRenderers.length; i++)
+            this.stageAreaRenderers[i].destroy(device);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].destroy(device);
+    }
+}
+
 class KatamariLevelSceneDesc implements Viewer.SceneDesc {
-    constructor(public id: string, public levelModelFile: string, public levelTexFile: string, public levelSetupFiles: string[], public name: string) {
+    constructor(public id: string, public name: string, public stageAreaFileGroup: StageAreaFileGroup[], public missionSetupFile: string[]) {
     }
 
     public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
-        return Progressable.all([
-            fetchData(`${pathBase}/1879b0/${this.levelModelFile}.bin`, abortSignal),
-            fetchData(`${pathBase}/1879b0/${this.levelTexFile}.bin`, abortSignal),
-            ... this.levelSetupFiles.map((filename) => {
-                return fetchData(`${pathBase}/17f590/${filename}.bin`);
-            }),
-        ]).then(([levelModelBinData, levelTextureBinData, ...levelSetupBinDatas]) => {
+        const cache = new LevelCache();
+
+        for (let i = 0; i < this.stageAreaFileGroup.length; i++) {
+            cache.fetchFileData(getStageAreaFilePath(this.stageAreaFileGroup[i].texFile), abortSignal);
+            cache.fetchFileData(getStageAreaFilePath(this.stageAreaFileGroup[i].modelFile), abortSignal);
+        }
+
+        for (let i = 0; i < this.missionSetupFile.length; i++) {
+            cache.fetchFileData(getMissionSetupFilePath(this.missionSetupFile[i]), abortSignal);
+        }
+
+        return cache.waitForLoad().then(() => {
             const gsMemoryMap = BIN.gsMemoryMapNew();
-            BIN.parseLevelTextureBIN(levelTextureBinData, gsMemoryMap);
-            const levelModelBin = BIN.parseLevelModelBIN(levelModelBinData, gsMemoryMap, this.id);
 
             const renderer = new KatamariDamacyRenderer(device);
 
-            for (let i = 0; i < levelModelBin.sectors.length; i++) {
-                const sector = levelModelBin.sectors[i];
-                renderer.textureHolder.addBINTexture(device, sector);
+            // Parse through the mission setup data to get our stage spawns.
+            const buffers: ArrayBufferSlice[] = [];
+            for (let i = 0; i < this.missionSetupFile.length; i++)
+                buffers.push(cache.getFileData(getMissionSetupFilePath(this.missionSetupFile[i])));
+            const missionSetupBin = BIN.parseMissionSetupBIN(buffers, gsMemoryMap);
 
-                const binModelSectorData = new BINModelSectorData(device, sector);
-                renderer.modelSectorData.push(binModelSectorData);
+            // Parse our different stages.
+            const maxStageArea = Math.min(missionSetupBin.maxStageArea, this.stageAreaFileGroup.length);
+            for (let i = 0; i <= maxStageArea; i++) {
+                const stageTexBinData = cache.getFileData(getStageAreaFilePath(this.stageAreaFileGroup[i].texFile));
+                const stageModelBinData = cache.getFileData(getStageAreaFilePath(this.stageAreaFileGroup[i].modelFile));
+                BIN.parseStageTextureBIN(stageTexBinData, gsMemoryMap);
+                const stageModelBin = BIN.parseLevelModelBIN(stageModelBinData, gsMemoryMap, this.id);
 
-                for (let j = 0; j < sector.models.length; j++) {
-                    const binModelInstance = new BINModelInstance(device, renderer.renderInstBuilder, renderer.textureHolder, binModelSectorData.modelData[j]);
-                    renderer.modelInstances.push(binModelInstance);
+                const stageAreaRenderer = new StageAreaRenderer();
+
+                for (let i = 0; i < stageModelBin.sectors.length; i++) {
+                    const sector = stageModelBin.sectors[i];
+                    renderer.textureHolder.addBINTexture(device, sector);
+
+                    const binModelSectorData = new BINModelSectorData(device, sector);
+                    renderer.modelSectorData.push(binModelSectorData);
+
+                    for (let j = 0; j < sector.models.length; j++) {
+                        const binModelInstance = new BINModelInstance(device, renderer.renderInstBuilder, renderer.textureHolder, binModelSectorData.modelData[j]);
+                        stageAreaRenderer.modelInstance.push(binModelInstance);
+                    }
                 }
+
+                renderer.stageAreaRenderers.push(stageAreaRenderer);
             }
 
-            // Now parse through the level setup data.
-            const levelSetupBin = BIN.parseLevelSetupBIN(levelSetupBinDatas, gsMemoryMap);
-            console.log(levelSetupBin);
-
             const objectDatas: BINModelSectorData[] = [];
-            for (let i = 0; i < levelSetupBin.objectModels.length; i++) {
-                const objectModel = levelSetupBin.objectModels[i];
+            for (let i = 0; i < missionSetupBin.objectModels.length; i++) {
+                const objectModel = missionSetupBin.objectModels[i];
                 renderer.textureHolder.addBINTexture(device, objectModel);
 
-                // Just do the first model for now.
-                
                 const binModelSectorData = new BINModelSectorData(device, objectModel);
                 objectDatas.push(binModelSectorData);
                 renderer.modelSectorData.push(binModelSectorData);
             }
 
-            for (let i = 0; i < levelSetupBin.objectSpawns.length; i++) {
-                const objectSpawn = levelSetupBin.objectSpawns[i];
+            for (let i = 0; i < missionSetupBin.objectSpawns.length; i++) {
+                const objectSpawn = missionSetupBin.objectSpawns[i];
+                const objectRenderer = new ObjectRenderer(objectSpawn);
+
                 const binModelSectorData = objectDatas[objectSpawn.modelIndex];
-
                 for (let j = 0; j < binModelSectorData.modelData.length; j++) {
-                    const binModelInstance = new BINModelInstance(device, renderer.renderInstBuilder, renderer.textureHolder, binModelSectorData.modelData[j], objectSpawn.spawnLayoutIndex);
+                    const binModelInstance = new BINModelInstance(device, renderer.renderInstBuilder, renderer.textureHolder, binModelSectorData.modelData[j]);
                     mat4.mul(binModelInstance.modelMatrix, binModelInstance.modelMatrix, objectSpawn.modelMatrix);
-                    renderer.modelInstances.push(binModelInstance);
+                    objectRenderer.modelInstance.push(binModelInstance);
                 }
+
+                renderer.objectRenderers.push(objectRenderer);
             }
-
-            // TODO(jstpierre): Ugly.
-            renderer.createPanels = () => {
-                const layers: UI.Layer[] = levelSetupBin.spawnLayouts.map((index): UI.Layer => {
-                    let name = `Object Layout ${index}`;
-                    const o = { name, visible: true, setVisible: (visible: boolean) => {
-                        o.visible = visible;
-                        for (let i = 0; i < renderer.modelInstances.length; i++)
-                            if (renderer.modelInstances[i].layer === index)
-                                renderer.modelInstances[i].visible = visible;
-                    } };
-                    return o;
-                });
-
-                if (this.levelModelFile === '1363c5') {
-                    // Hide all other layers by default (causes Z-fighting on World levels)
-                    // Do this until we can get the other world models integrated.
-                    for (let i = 1; i < layers.length; i++)
-                        layers[i].setVisible(false);
-                }
-
-                const layersPanel = new UI.LayerPanel(layers);
-                return [layersPanel];
-            };
 
             renderer.finish(device, renderer.viewRenderer);
             return renderer;
@@ -100,17 +281,47 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
 
 const id = 'katamari_damacy';
 const name = 'Katamari Damacy';
+
+const houseStageAreaGroup: StageAreaFileGroup[] = [
+    { texFile: '135049', modelFile: '135b75', },
+    // The game loads 1350c3, 13513d, 1351b7 as the texture files, but these files are byte-for-byte
+    // identical to 135049, so we cut down on loading time here.
+    { texFile: '135049', modelFile: '135c43', },
+    { texFile: '135049', modelFile: '135d18', },
+    { texFile: '135049', modelFile: '135ded', },
+];
+
+const cityStageAreaGroup: StageAreaFileGroup[] = [
+    // The game loads 135299, 135301, 135369 as the texture files, but these files are byte-for-byte
+    // identical to 135231, so we cut down on loading time here.
+    { texFile: '135231', modelFile: '135ebf', },
+    { texFile: '135231', modelFile: '135fe0', },
+    { texFile: '135231', modelFile: '13612f', },
+    { texFile: '135231', modelFile: '136282', },
+];
+
+const worldStageAreaGroup: StageAreaFileGroup[] = [
+    // The game loads 135299, 135301, 135369 as the texture files, but these files are byte-for-byte
+    // identical to 135231, so we cut down on loading time here.
+    { texFile: '1353d1', modelFile: '1363c5', },
+    { texFile: '1353d1', modelFile: '1364a3', },
+    { texFile: '1353d1', modelFile: '136599', },
+    // The next two texture files are not identical.
+    { texFile: '135602', modelFile: '1366d7', },
+    { texFile: '135745', modelFile: '136797', },
+];
+
 const sceneDescs = [
-    new KatamariLevelSceneDesc('lvl1',  '135b75', '135049', ['13d9bd', '13da02', '13da55', '13daa6'], "Make a Star 1 (House)"),
-    new KatamariLevelSceneDesc('lvl2',  '135b75', '135049', ['13daff', '13db9c', '13dc59', '13dd08'], "Make a Star 2 (House)"),
-    new KatamariLevelSceneDesc('lvl3',  '135ebf', '135231', ['13e462', '13e553', '13e68e', '13e7b1'], "Make a Star 3 (City)"),
-    new KatamariLevelSceneDesc('lvl4',  '135b75', '135049', ['13ddc6', '13df3f', '13e10e', '13e2b1'], "Make a Star 4 (House)"),
-    new KatamariLevelSceneDesc('lvl5',  '135ebf', '135231', ['13e8d2', '13ea87', '13eca3', '13eeb0'], "Make a Star 5 (City)"),
-    new KatamariLevelSceneDesc('lvl6',  '1363c5', '1353d1', ['13f0b4', '13f244', '13f443', '13f605'], "Make a Star 6 (World)"),
-    new KatamariLevelSceneDesc('lvl7',  '1363c5', '1353d1', ['13f7c8', '13f97f', '13fbad', '13fda5'], "Make a Star 7 (World)"),
-    new KatamariLevelSceneDesc('lvl8',  '135ebf', '135231', ['13ff91', '14017a', '1403d3', '140616'], "Make a Star 8 (City)"),
-    new KatamariLevelSceneDesc('lvl9',  '1363c5', '1353d1', ['140850', '140a3e', '140cc7', '140f02'], "Make a Star 9 (World)"),
-    new KatamariLevelSceneDesc('lvl10', '1363c5', '1353d1', ['141133', '141339', '1415d4', '141829'], "Make the Moon (World)"),
+    new KatamariLevelSceneDesc('lvl1',  "Make a Star 1 (House)", houseStageAreaGroup, ['13d9bd', '13da02', '13da55', '13daa6']),
+    new KatamariLevelSceneDesc('lvl2',  "Make a Star 2 (House)", houseStageAreaGroup, ['13daff', '13db9c', '13dc59', '13dd08']),
+    new KatamariLevelSceneDesc('lvl3',  "Make a Star 3 (City)",  cityStageAreaGroup,  ['13e462', '13e553', '13e68e', '13e7b1']),
+    new KatamariLevelSceneDesc('lvl4',  "Make a Star 4 (House)", houseStageAreaGroup, ['13ddc6', '13df3f', '13e10e', '13e2b1']),
+    new KatamariLevelSceneDesc('lvl5',  "Make a Star 5 (City)",  cityStageAreaGroup,  ['13e8d2', '13ea87', '13eca3', '13eeb0']),
+    new KatamariLevelSceneDesc('lvl6',  "Make a Star 6 (World)", worldStageAreaGroup, ['13f0b4', '13f244', '13f443', '13f605']),
+    new KatamariLevelSceneDesc('lvl7',  "Make a Star 7 (World)", worldStageAreaGroup, ['13f7c8', '13f97f', '13fbad', '13fda5']),
+    new KatamariLevelSceneDesc('lvl8',  "Make a Star 8 (City)",  cityStageAreaGroup,  ['13ff91', '14017a', '1403d3', '140616']),
+    new KatamariLevelSceneDesc('lvl9',  "Make a Star 9 (World)", worldStageAreaGroup, ['140850', '140a3e', '140cc7', '140f02']),
+    new KatamariLevelSceneDesc('lvl10', "Make the Moon (World)", worldStageAreaGroup, ['141133', '141339', '1415d4', '141829']),
 ];
 const sceneIdMap = new Map<string, string>();
 // When I first was testing Katamari, I was testing the Tutorial Level. At some point

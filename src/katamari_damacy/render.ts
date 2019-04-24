@@ -1,20 +1,18 @@
 
 import { GfxDevice, GfxBuffer, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxCompareMode } from "../gfx/platform/GfxPlatform";
-import { BINModel, BINTexture, ModelSector as BINModelSector, BINModelPart, GSPixelStorageFormat, psmToString, GSConfiguration, GSTextureFunction, GSAlphaCompareMode, GSDepthCompareMode, GSAlphaFailMode } from "./bin";
+import { BINModel, BINTexture, BINModelSector, BINModelPart, GSPixelStorageFormat, psmToString, GSConfiguration, GSTextureFunction, GSAlphaCompareMode, GSDepthCompareMode, GSAlphaFailMode } from "./bin";
 import { DeviceProgram, DeviceProgramReflection } from "../Program";
 import * as Viewer from "../viewer";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { GfxRenderInst, GfxRenderInstBuilder, GfxRenderInstViewRenderer } from "../gfx/render/GfxRenderer";
+import { GfxRenderInst, GfxRenderInstBuilder } from "../gfx/render/GfxRenderer";
 import { GfxRenderBuffer } from "../gfx/render/GfxRenderBuffer";
 import { Camera, computeViewMatrix } from "../Camera";
 import { mat4 } from "gl-matrix";
 import { fillMatrix4x3, fillMatrix4x4, fillColor } from "../gfx/helpers/UniformBufferHelpers";
-import { BasicRendererHelper } from "../oot3d/render";
 import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
 import { nArray, assert } from "../util";
-import * as UI from "../ui";
 
-class KatamariDamacyProgram extends DeviceProgram {
+export class KatamariDamacyProgram extends DeviceProgram {
     public static a_Position = 0;
     public static a_Normal = 1;
     public static a_TexCoord = 2;
@@ -241,14 +239,13 @@ export class BINModelPartInstance {
 }
 
 const scratchMat4 = mat4.create();
-const posScaleMatrix = mat4.fromScaling(mat4.create(), [5, 5, 5]);
 export class BINModelInstance {
     public templateRenderInst: GfxRenderInst;
     public modelMatrix: mat4 = mat4.create();
     public modelParts: BINModelPartInstance[] = [];
     public visible = true;
 
-    constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, textureHolder: KatamariDamacyTextureHolder, public binModelData: BINModelData, public layer = -1) {
+    constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, textureHolder: KatamariDamacyTextureHolder, public binModelData: BINModelData) {
         this.templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
         this.templateRenderInst.inputState = this.binModelData.inputState;
 
@@ -264,9 +261,12 @@ export class BINModelInstance {
         renderInstBuilder.popTemplateRenderInst();
     }
 
+    public setVisible(visible: boolean): void {
+        this.visible = visible;
+    }
+
     public prepareToRender(modelParamsBuffer: GfxRenderBuffer, viewRenderer: Viewer.ViewerRenderInput) {
         computeViewMatrix(scratchMat4, viewRenderer.camera);
-        mat4.mul(scratchMat4, scratchMat4, posScaleMatrix);
         mat4.mul(scratchMat4, scratchMat4, this.modelMatrix);
 
         for (let i = 0; i < this.modelParts.length; i++)
@@ -293,10 +293,6 @@ export class BINModelSectorData {
     }
 }
 
-function fillSceneParamsData(d: Float32Array, camera: Camera, offs: number = 0): void {
-    offs += fillMatrix4x4(d, offs, camera.projectionMatrix);
-}
-
 function textureToCanvas(texture: BINTexture): Viewer.Texture {
     const canvas = document.createElement("canvas");
     const width = texture.width;
@@ -319,7 +315,7 @@ function textureToCanvas(texture: BINTexture): Viewer.Texture {
     return { name: name, surfaces, extraInfo };
 }
 
-class KatamariDamacyTextureHolder extends TextureHolder<BINTexture> {
+export class KatamariDamacyTextureHolder extends TextureHolder<BINTexture> {
     public addBINTexture(device: GfxDevice, bin: BINModelSector) {
         this.addTextures(device, bin.textures);
     }
@@ -336,66 +332,5 @@ class KatamariDamacyTextureHolder extends TextureHolder<BINTexture> {
 
         const viewerTexture: Viewer.Texture = textureToCanvas(texture);
         return { gfxTexture, viewerTexture };
-    }
-}
-
-export class KatamariDamacyRenderer extends BasicRendererHelper implements Viewer.SceneGfx {
-    private sceneParamsBuffer: GfxRenderBuffer;
-    private modelParamsBuffer: GfxRenderBuffer;
-    private templateRenderInst: GfxRenderInst;
-    public renderInstBuilder: GfxRenderInstBuilder;
-    public modelSectorData: BINModelSectorData[] = [];
-    public modelInstances: BINModelInstance[] = [];
-    public textureHolder = new KatamariDamacyTextureHolder();
-
-    constructor(device: GfxDevice) {
-        super();
-        this.sceneParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_SceneParams`);
-        this.modelParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_ModelParams`);
-
-        const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-            { numUniformBuffers: 1, numSamplers: 0 }, // Scene
-            { numUniformBuffers: 1, numSamplers: 1 }, // Shape
-        ];
-        const uniformBuffers = [ this.sceneParamsBuffer, this.modelParamsBuffer ];
-
-        this.renderInstBuilder = new GfxRenderInstBuilder(device, KatamariDamacyProgram.programReflection, bindingLayouts, uniformBuffers);
-
-        this.templateRenderInst = this.renderInstBuilder.pushTemplateRenderInst();
-        this.renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, KatamariDamacyProgram.ub_SceneParams);
-    }
-
-    public finish(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer): void {
-        this.renderInstBuilder.popTemplateRenderInst();
-        this.renderInstBuilder.finish(device, viewRenderer);
-    }
-
-    public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        viewerInput.camera.setClipPlanes(20, 600000);
-        let offs = this.templateRenderInst.getUniformBufferOffset(KatamariDamacyProgram.ub_SceneParams);
-        const sceneParamsMapped = this.sceneParamsBuffer.mapBufferF32(offs, 16);
-        fillSceneParamsData(sceneParamsMapped, viewerInput.camera, offs);
-
-        for (let i = 0; i < this.modelInstances.length; i++)
-            this.modelInstances[i].prepareToRender(this.modelParamsBuffer, viewerInput);
-
-        this.sceneParamsBuffer.prepareToRender(hostAccessPass);
-        this.modelParamsBuffer.prepareToRender(hostAccessPass);
-    }
-
-    public createPanels(): UI.Panel[] {
-        return [];
-    }
-
-    public destroy(device: GfxDevice): void {
-        super.destroy(device);
-        this.textureHolder.destroy(device);
-        this.sceneParamsBuffer.destroy(device);
-        this.modelParamsBuffer.destroy(device);
-
-        for (let i = 0; i < this.modelSectorData.length; i++)
-            this.modelSectorData[i].destroy(device);
-        for (let i = 0; i < this.modelInstances.length; i++)
-            this.modelInstances[i].destroy(device);
     }
 }

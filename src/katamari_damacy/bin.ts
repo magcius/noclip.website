@@ -1,6 +1,6 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, hexzero, assertExists, readString } from "../util";
+import { assert, hexzero, assertExists, readString, hexdump } from "../util";
 import { Color, colorNew, colorFromRGBA, colorEqual } from "../Color";
 import { AABB } from "../Geometry";
 import { mat4, quat } from "gl-matrix";
@@ -150,13 +150,13 @@ export interface BINModel {
     modelParts: BINModelPart[];
 }
 
-export interface ModelSector {
+export interface BINModelSector {
     models: BINModel[];
     textures: BINTexture[];
 }
 
 export interface LevelModelBIN {
-    sectors: ModelSector[];
+    sectors: BINModelSector[];
 }
 
 export interface GSConfiguration {
@@ -439,7 +439,7 @@ function parseDIRECT(map: GSMemoryMap, buffer: ArrayBufferSlice): number {
     // sometimes it appears like a dummy UNPACK (0x60, seen in model object binaries) ?
 
     const tag2 = view.getUint8(texDataOffs + 0x0F);
-    assert(tag2 === 0x50); // DIRECT
+    assert(tag2 === 0x50, "TAG"); // DIRECT
     const texDataSize = view.getUint16(texDataOffs + 0x0C, true) * 0x10;
     const texDataEnd = texDataOffs + texDataSize;
     let texDataIdx = texDataOffs + 0x10;
@@ -471,9 +471,9 @@ function parseDIRECT(map: GSMemoryMap, buffer: ArrayBufferSlice): number {
             // DIRECT. We should have one A+D register set.
 
             const nreg = (w1 >>> 28) & 0x07;
-            assert(nreg === 0x01);
+            assert(nreg === 0x01, "nreg");
             const reg = (w2 & 0x000F);
-            assert(reg === 0x0E);
+            assert(reg === 0x0E, "reg");
 
             for (let j = 0; j < nloop; j++) {
                 const data0 = view.getUint32(texDataIdx + 0x00, true);
@@ -487,7 +487,7 @@ function parseDIRECT(map: GSMemoryMap, buffer: ArrayBufferSlice): number {
                     dbw = (data1 >>> 16) & 0x3F;
                     dpsm = (data1 >>> 24) & 0x3F;
                     // TODO(jstpierre): Support upload modes other than PSCMT32
-                    assert(dpsm === GSPixelStorageFormat.PSMCT32);
+                    assert(dpsm === GSPixelStorageFormat.PSMCT32, "dpsm");
                 } else if (addr === 0x51) {
                     // TRXPOS
                     dsax = (data1 >>> 0) & 0x7FF;
@@ -557,7 +557,7 @@ function decodeTexture(gsMemoryMap: GSMemoryMap, tex0_data0: number, tex0_data1:
     return { name, width, height, pixels, tex0_data0, tex0_data1 };
 }
 
-export function parseLevelTextureBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap): void {
+export function parseStageTextureBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap): void {
     const view = buffer.createDataView();
 
     const numSectors = view.getUint32(0x00, true);
@@ -571,7 +571,7 @@ export function parseLevelTextureBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMe
     assert(offs === buffer.byteLength);
 }
 
-function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, namePrefix: string, sectorOffs: number): ModelSector {
+function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, namePrefix: string, sectorOffs: number): BINModelSector {
     const view = buffer.createDataView();
 
     const textures: BINTexture[] = [];
@@ -999,7 +999,7 @@ export function parseLevelModelBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemo
 
     const numSectors = view.getUint32(0x00, true);
 
-    const sectors: ModelSector[] = [];
+    const sectors: BINModelSector[] = [];
 
     let sectorTableIdx = 0x04;
     for (let i = 0; i < numSectors; i++) {
@@ -1010,24 +1010,27 @@ export function parseLevelModelBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemo
     return { sectors };
 }
 
-export interface LevelSetupObjectSpawn {
-    // The spawn layout index.
-    spawnLayoutIndex: number;
-
+export interface MissionSetupObjectSpawn {
     // The original in-game object ID.
     objectId: number;
 
     // The index in our collapsed objectModels list.
     modelIndex: number;
 
+    // The area where this object should appear.
+    dispOnAreaNo: number;
+
+    // The area where this object should disappear. If never, -1.
+    dispOffAreaNo: number;
+
     // Object transformation.
     modelMatrix: mat4;
 }
 
 export interface LevelSetupBIN {
-    objectModels: ModelSector[];
-    objectSpawns: LevelSetupObjectSpawn[];
-    spawnLayouts: number[];
+    objectModels: BINModelSector[];
+    objectSpawns: MissionSetupObjectSpawn[];
+    maxStageArea: number;
 }
 
 function combineSlices(buffers: ArrayBufferSlice[]): ArrayBufferSlice {
@@ -1048,13 +1051,13 @@ function combineSlices(buffers: ArrayBufferSlice[]): ArrayBufferSlice {
     return new ArrayBufferSlice(dstBuffer.buffer);
 }
 
-export function parseLevelSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: GSMemoryMap): LevelSetupBIN {
+export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: GSMemoryMap): LevelSetupBIN {
     // Contains object data inside it.
     const buffer = combineSlices(buffers);
     const view = buffer.createDataView();
     const numSectors = view.getUint32(0x00, true);
 
-    function parseObject(objectId: number): ModelSector | null {
+    function parseObject(objectId: number): BINModelSector | null {
         const firstSectorIndex = 0x09 + objectId * 0x0B;
         assert(firstSectorIndex + 0x0B <= numSectors);
 
@@ -1087,9 +1090,8 @@ export function parseLevelSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: GSM
         return parseModelSector(buffer, gsMemoryMap, hexzero(objectId, 4), lod0Offs);
     }
 
-    const objectModels: ModelSector[] = [];
-    const objectSpawns: LevelSetupObjectSpawn[] = [];
-    const spawnLayouts: number[] = [];
+    const objectModels: BINModelSector[] = [];
+    const objectSpawns: MissionSetupObjectSpawn[] = [];
 
     function findOrParseObject(objectId: number): number {
         const existingSpawn = objectSpawns.find((spawn) => spawn.objectId === objectId);
@@ -1106,16 +1108,19 @@ export function parseLevelSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: GSM
 
     const q = quat.create();
     let setupSpawnTableIdx = 0x14;
+    let maxStageArea = -1;
     for (let i = 0; i < 5; i++) {
         let setupSpawnsIdx = view.getUint32(setupSpawnTableIdx, true);
 
         if (readString(buffer, setupSpawnsIdx, 0x04) === 'NIL ')
             break;
 
+        maxStageArea = i;
         let j = 0;
         while (true) {
             const objectId = view.getUint16(setupSpawnsIdx + 0x00, true);
             const locPosType = view.getUint8(setupSpawnsIdx + 0x02);
+            const dispOffAreaNo = view.getInt8(setupSpawnsIdx + 0x0A);
 
             let shouldSkip = false;
 
@@ -1174,15 +1179,15 @@ export function parseLevelSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: GSM
             quat.set(q, rotationX * sinHalfAngle, rotationY * sinHalfAngle, rotationZ * sinHalfAngle, Math.cos(angle / 2));
             mat4.fromRotationTranslation(modelMatrix, q, [translationX, translationY, translationZ]);
 
-            const objectSpawn: LevelSetupObjectSpawn = { spawnLayoutIndex: i, objectId, modelIndex, modelMatrix };
+            const dispOnAreaNo = i;
+            const objectSpawn: MissionSetupObjectSpawn = { objectId, modelIndex, dispOnAreaNo, dispOffAreaNo, modelMatrix };
             objectSpawns.push(objectSpawn);
             setupSpawnsIdx += 0x40;
             j++;
         }
 
-        spawnLayouts.push(i);
         setupSpawnTableIdx += 0x04;
     }
 
-    return { objectModels, objectSpawns, spawnLayouts };
+    return { objectModels, objectSpawns, maxStageArea };
 }
