@@ -126,6 +126,15 @@ export const enum GSDepthCompareMode {
     GREATER = 0x03,
 }
 
+export const enum GSTextureFilter {
+    NEAREST                = 0x00,
+    LINEAR                 = 0x01,
+    NEAREST_MIPMAP_NEAREST = 0x02,
+    NEAREST_MIPMAP_LINEAR  = 0x03,
+    LINEAR_MIPMAP_NEAREST  = 0x04,
+    LINEAR_MIPMAP_LINEAR   = 0x05,
+}
+
 export interface BINTexture {
     tex0_data0: number;
     tex0_data1: number;
@@ -636,7 +645,13 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
         let vertexRunData: Float32Array | null = null;
         let vertexRunColor = colorNew(1, 1, 1, 1);
         let currentTextureName: string | null = null;
-        let currentGSConfiguration: GSConfiguration | null = null;
+        let currentGSConfiguration: GSConfiguration = {
+            tex0_1_data0: -1, tex0_1_data1: -1,
+            tex1_1_data0: -1, tex1_1_data1: -1,
+            clamp_1_data0: -1, clamp_1_data1: -1,
+            alpha_1_data0: -1, alpha_1_data1: -1,
+            test_1_data0: -1, test_1_data1: -1,
+        };
 
         const expectedPositionsOffs = 0x8000;
         let expectedTexCoordOffs = -1;
@@ -819,12 +834,6 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
                 const reg = (w2 & 0x000F);
                 assert(reg === 0x0E);
 
-                let tex0_1_data0 = -1, tex0_1_data1 = -1;
-                let tex1_1_data0 = -1, tex1_1_data1 = -1;
-                let clamp_1_data0 = -1, clamp_1_data1 = -1;
-                let alpha_1_data0 = -1, alpha_1_data1 = -1;
-                let test_1_data0 = -1, test_1_data1 = -1;
-
                 for (let j = 0; j < nloop; j++) {
                     const data0 = view.getUint32(packetsIdx + 0x00, true);
                     const data1 = view.getUint32(packetsIdx + 0x04, true);
@@ -836,20 +845,20 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
                     } else if (addr === GSRegister.TEX0_1) {
                         // TEX0_1 contains the texture configuration.
                         currentTextureName = findOrDecodeTexture(data0, data1);
-                        tex0_1_data0 = data0;
-                        tex0_1_data1 = data1;
+                        currentGSConfiguration.tex0_1_data0 = data0;
+                        currentGSConfiguration.tex0_1_data1 = data1;
                     } else if (addr === GSRegister.TEX1_1) {
-                        tex1_1_data0 = data0;
-                        tex1_1_data1 = data1;
+                        currentGSConfiguration.tex1_1_data0 = data0;
+                        currentGSConfiguration.tex1_1_data1 = data1;
                     } else if (addr === GSRegister.CLAMP_1) {
-                        clamp_1_data0 = data0;
-                        clamp_1_data1 = data1;
+                        currentGSConfiguration.clamp_1_data0 = data0;
+                        currentGSConfiguration.clamp_1_data1 = data1;
                     } else if (addr === GSRegister.ALPHA_1) {
-                        alpha_1_data0 = data0;
-                        alpha_1_data1 = data1;
+                        currentGSConfiguration.alpha_1_data0 = data0;
+                        currentGSConfiguration.alpha_1_data1 = data1;
                     } else if (addr === GSRegister.TEST_1) {
-                        test_1_data0 = data0;
-                        test_1_data1 = data1;
+                        currentGSConfiguration.test_1_data0 = data0;
+                        currentGSConfiguration.test_1_data1 = data1;
                     } else {
                         console.warn(`Unknown GS Register ${hexzero(addr, 2)}`);
                         throw "whoops";
@@ -858,14 +867,6 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
 
                     packetsIdx += 0x10;
                 }
-
-                currentGSConfiguration = {
-                    tex0_1_data0, tex0_1_data1,
-                    tex1_1_data0, tex1_1_data1,
-                    clamp_1_data0, clamp_1_data1,
-                    alpha_1_data0, alpha_1_data1,
-                    test_1_data0, test_1_data1,
-                };
 
                 // Make sure that we actually created something here.
                 assertExists(currentTextureName !== null);

@@ -1,6 +1,6 @@
 
 import { GfxDevice, GfxBuffer, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxCompareMode } from "../gfx/platform/GfxPlatform";
-import { BINModel, BINTexture, BINModelSector, BINModelPart, GSPixelStorageFormat, psmToString, GSConfiguration, GSTextureFunction, GSAlphaCompareMode, GSDepthCompareMode, GSAlphaFailMode } from "./bin";
+import { BINModel, BINTexture, BINModelSector, BINModelPart, GSPixelStorageFormat, psmToString, GSConfiguration, GSTextureFunction, GSAlphaCompareMode, GSDepthCompareMode, GSAlphaFailMode, GSTextureFilter } from "./bin";
 import { DeviceProgram, DeviceProgramReflection } from "../Program";
 import * as Viewer from "../viewer";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
@@ -180,6 +180,24 @@ function translateDepthCompareMode(cmp: GSDepthCompareMode): GfxCompareMode {
     }
 }
 
+function translateTextureFilter(filter: GSTextureFilter): [GfxTexFilterMode, GfxMipFilterMode] {
+    switch (filter) {
+    case GSTextureFilter.LINEAR:
+        return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NO_MIP];
+    case GSTextureFilter.NEAREST:
+        return [GfxTexFilterMode.POINT,    GfxMipFilterMode.NO_MIP];
+    case GSTextureFilter.LINEAR_MIPMAP_LINEAR:
+        return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.LINEAR];
+    case GSTextureFilter.LINEAR_MIPMAP_NEAREST:
+        return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NEAREST];
+    case GSTextureFilter.NEAREST_MIPMAP_LINEAR:
+        return [GfxTexFilterMode.POINT, GfxMipFilterMode.LINEAR];
+    case GSTextureFilter.NEAREST_MIPMAP_NEAREST:
+        return [GfxTexFilterMode.POINT, GfxMipFilterMode.NEAREST];
+    default: throw new Error();
+    }
+}
+
 const textureMapping = nArray(1, () => new TextureMapping());
 const textureMatrix = mat4.create();
 export class BINModelPartInstance {
@@ -212,16 +230,27 @@ export class BINModelPartInstance {
         }
         this.renderInst.setSamplerBindingsFromTextureMappings(textureMapping);
 
+        // Katamari should not have any mipmaps.
+        const lcm = (gsConfiguration.tex1_1_data0 >>> 0) & 0x01;
+        const mxl = (gsConfiguration.tex1_1_data0 >>> 2) & 0x07;
+        assert(lcm === 0x00);
+        assert(mxl === 0x00);
+
+        const texMagFilter: GSTextureFilter = (gsConfiguration.tex1_1_data0 >>> 5) & 0x01;
+        const texMinFilter: GSTextureFilter = (gsConfiguration.tex1_1_data0 >>> 6) & 0x07;
+        const [magFilter] = translateTextureFilter(texMagFilter);
+        const [minFilter, mipFilter] = translateTextureFilter(texMinFilter);
+
         const wms = (gsConfiguration.clamp_1_data0 >>> 0) & 0x03;
         const wmt = (gsConfiguration.clamp_1_data0 >>> 2) & 0x03;
+        const wrapS = translateWrapMode(wms);
+        const wrapT = translateWrapMode(wmt);
 
         // TODO(jstpierre): Read this from TEX_1 / CLAMP_1.
+        console.log(texMinFilter, texMagFilter, minFilter, magFilter, mipFilter);
         this.gfxSampler = device.createSampler({
-            minFilter: GfxTexFilterMode.BILINEAR,
-            magFilter: GfxTexFilterMode.BILINEAR,
-            mipFilter: GfxMipFilterMode.NO_MIP,
-            wrapS: translateWrapMode(wms),
-            wrapT: translateWrapMode(wmt),
+            minFilter, magFilter, mipFilter,
+            wrapS, wrapT,
             minLOD: 1, maxLOD: 1,
         });
     }

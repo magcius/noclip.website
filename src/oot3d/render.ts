@@ -663,7 +663,7 @@ class MaterialInstance {
             return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.LINEAR];
         case CMB.TextureFilter.LINEAR_MIPMAP_NEAREST:
             return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NEAREST];
-        case CMB.TextureFilter.NEAREST_MIPMIP_LINEAR:
+        case CMB.TextureFilter.NEAREST_MIPMAP_LINEAR:
             return [GfxTexFilterMode.POINT, GfxMipFilterMode.LINEAR];
         case CMB.TextureFilter.NEAREST_MIPMAP_NEAREST:
             return [GfxTexFilterMode.POINT, GfxMipFilterMode.NEAREST];
