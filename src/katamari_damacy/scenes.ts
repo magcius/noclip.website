@@ -9,7 +9,6 @@ import { mat4 } from 'gl-matrix';
 import * as UI from '../ui';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assert, assertExists } from '../util';
-import { BasicRendererHelper } from '../oot3d/render';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
 import { GfxRenderInst, GfxRenderInstBuilder, GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
@@ -128,6 +127,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
     public renderInstBuilder: GfxRenderInstBuilder;
     public modelSectorData: BINModelSectorData[] = [];
     public textureHolder = new KatamariDamacyTextureHolder();
+    public isWorld = false;
 
     public stageAreaRenderers: StageAreaRenderer[] = [];
     public objectRenderers: ObjectRenderer[] = [];
@@ -195,7 +195,12 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        viewerInput.camera.setClipPlanes(20, 12000000);
+        // If the stage is the world, use a large near plane so we can see everything.
+        // Otherwise, use a small near plane so we can get super up close.
+        if (this.isWorld)
+            viewerInput.camera.setClipPlanes(20, 12000000);
+        else
+            viewerInput.camera.setClipPlanes(2,  1200000);
         let offs = this.templateRenderInst.getUniformBufferOffset(KatamariDamacyProgram.ub_SceneParams);
         const sceneParamsMapped = this.sceneParamsBuffer.mapBufferF32(offs, 16);
         fillSceneParamsData(sceneParamsMapped, viewerInput.camera, offs);
@@ -270,6 +275,7 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
             const gsMemoryMap = BIN.gsMemoryMapNew();
 
             const renderer = new KatamariDamacyRenderer(device);
+            renderer.isWorld = this.stageAreaFileGroup === worldStageAreaGroup;
 
             // Parse through the mission setup data to get our stage spawns.
             const buffers: ArrayBufferSlice[] = [];
