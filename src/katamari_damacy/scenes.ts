@@ -1,6 +1,6 @@
 
 import * as Viewer from '../viewer';
-import { GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxHostAccessPass } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxRenderPass } from "../gfx/platform/GfxPlatform";
 import Progressable from "../Progressable";
 import { fetchData } from "../fetch";
 import * as BIN from "./bin";
@@ -14,6 +14,8 @@ import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
 import { GfxRenderInst, GfxRenderInstBuilder, GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { Camera } from '../Camera';
+import { ColorTexture, BasicRenderTarget, standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { TextureOverride } from '../TextureHolder';
 
 const pathBase = `katamari_damacy`;
 
@@ -66,9 +68,9 @@ class ObjectRenderer {
     constructor(public objectSpawn: BIN.MissionSetupObjectSpawn) {
     }
 
-    public prepareToRender(modelParamsBuffer: GfxRenderBuffer, viewRenderer: Viewer.ViewerRenderInput) {
+    public prepareToRender(modelParamsBuffer: GfxRenderBuffer, textureHolder: KatamariDamacyTextureHolder, viewRenderer: Viewer.ViewerRenderInput) {
         for (let i = 0; i < this.modelInstance.length; i++)
-            this.modelInstance[i].prepareToRender(modelParamsBuffer, viewRenderer);
+            this.modelInstance[i].prepareToRender(modelParamsBuffer, textureHolder, viewRenderer);
     }
 
     public setVisible(visible: boolean): void {
@@ -95,9 +97,9 @@ class StageAreaRenderer {
     public stageAreaSector: StageAreaSector[] = [];
     public modelInstance: BINModelInstance[] = [];
 
-    public prepareToRender(modelParamsBuffer: GfxRenderBuffer, viewRenderer: Viewer.ViewerRenderInput) {
+    public prepareToRender(modelParamsBuffer: GfxRenderBuffer, textureHolder: KatamariDamacyTextureHolder, viewRenderer: Viewer.ViewerRenderInput) {
         for (let i = 0; i < this.modelInstance.length; i++)
-            this.modelInstance[i].prepareToRender(modelParamsBuffer, viewRenderer);
+            this.modelInstance[i].prepareToRender(modelParamsBuffer, textureHolder, viewRenderer);
     }
 
     public setVisible(visible: boolean): void {
@@ -115,10 +117,14 @@ function fillSceneParamsData(d: Float32Array, camera: Camera, offs: number = 0):
     offs += fillMatrix4x4(d, offs, camera.projectionMatrix);
 }
 
-class KatamariDamacyRenderer extends BasicRendererHelper implements Viewer.SceneGfx {
+class KatamariDamacyRenderer implements Viewer.SceneGfx {
     private sceneParamsBuffer: GfxRenderBuffer;
     private modelParamsBuffer: GfxRenderBuffer;
     private templateRenderInst: GfxRenderInst;
+    private currentAreaNo: number;
+    private sceneTexture = new ColorTexture();
+    public viewRenderer = new GfxRenderInstViewRenderer();
+    public renderTarget = new BasicRenderTarget();
     public renderInstBuilder: GfxRenderInstBuilder;
     public modelSectorData: BINModelSectorData[] = [];
     public textureHolder = new KatamariDamacyTextureHolder();
@@ -127,7 +133,6 @@ class KatamariDamacyRenderer extends BasicRendererHelper implements Viewer.Scene
     public objectRenderers: ObjectRenderer[] = [];
 
     constructor(device: GfxDevice) {
-        super();
         this.sceneParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_SceneParams`);
         this.modelParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_ModelParams`);
 
@@ -143,6 +148,47 @@ class KatamariDamacyRenderer extends BasicRendererHelper implements Viewer.Scene
         this.renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, KatamariDamacyProgram.ub_SceneParams);
     }
 
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        const hostAccessPass = device.createHostAccessPass();
+        this.prepareToRender(hostAccessPass, viewerInput);
+        device.submitPass(hostAccessPass);
+
+        this.sceneTexture.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        const tvTextureOverride: TextureOverride = { gfxTexture: this.sceneTexture.gfxTexture, width: viewerInput.viewportWidth, height: viewerInput.viewportHeight, flipY: true };
+        if (this.textureHolder.hasTexture('0290/0000/0000'))
+            this.textureHolder.setTextureOverride('0290/0000/0000', tvTextureOverride);
+        if (this.textureHolder.hasTexture('01c6/0000/0000'))
+            this.textureHolder.setTextureOverride('01c6/0000/0000', tvTextureOverride);
+
+        this.viewRenderer.prepareToRender(device);
+
+        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+
+        const passRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
+        this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.viewRenderer.executeOnPass(device, passRenderer);
+
+        // Copy to the scene texture for next time.
+        passRenderer.endPass(this.sceneTexture.gfxTexture);
+        device.submitPass(passRenderer);
+
+        const passRenderer2 = this.renderTarget.createRenderPass(device, noClearRenderPassDescriptor);
+        return passRenderer2;
+    }
+
+    public serializeSaveState(dst: ArrayBuffer, offs: number): number {
+        const view = new DataView(dst);
+        view.setUint8(offs++, this.currentAreaNo);
+        return offs;
+    }
+
+    public deserializeSaveState(dst: ArrayBuffer, offs: number, byteLength: number): number {
+        const view = new DataView(dst);
+        if (offs < byteLength)
+            this.setCurrentAreaNo(view.getUint8(offs++));
+        return offs;
+    }
+
     public finish(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer): void {
         this.renderInstBuilder.popTemplateRenderInst();
         this.renderInstBuilder.finish(device, viewRenderer);
@@ -155,15 +201,16 @@ class KatamariDamacyRenderer extends BasicRendererHelper implements Viewer.Scene
         fillSceneParamsData(sceneParamsMapped, viewerInput.camera, offs);
 
         for (let i = 0; i < this.stageAreaRenderers.length; i++)
-            this.stageAreaRenderers[i].prepareToRender(this.modelParamsBuffer, viewerInput);
+            this.stageAreaRenderers[i].prepareToRender(this.modelParamsBuffer, this.textureHolder, viewerInput);
         for (let i = 0; i < this.objectRenderers.length; i++)
-            this.objectRenderers[i].prepareToRender(this.modelParamsBuffer, viewerInput);
+            this.objectRenderers[i].prepareToRender(this.modelParamsBuffer, this.textureHolder, viewerInput);
 
         this.sceneParamsBuffer.prepareToRender(hostAccessPass);
         this.modelParamsBuffer.prepareToRender(hostAccessPass);
     }
 
-    private setActiveAreaNo(areaNo: number): void {
+    private setCurrentAreaNo(areaNo: number): void {
+        this.currentAreaNo = areaNo;
         for (let i = 0; i < this.stageAreaRenderers.length; i++)
             this.stageAreaRenderers[i].setVisible(i === areaNo);
         for (let i = 0; i < this.objectRenderers.length; i++)
@@ -178,7 +225,7 @@ class KatamariDamacyRenderer extends BasicRendererHelper implements Viewer.Scene
         const areaSelect = new UI.SingleSelect();
         areaSelect.setStrings(this.stageAreaRenderers.map((renderer, i) => `Area ${i+1}`));
         areaSelect.onselectionchange = (index: number) => {
-            this.setActiveAreaNo(index);
+            this.setCurrentAreaNo(index);
         };
         areaSelect.selectItem(0);
         areasPanel.contents.appendChild(areaSelect.elem);
@@ -187,7 +234,9 @@ class KatamariDamacyRenderer extends BasicRendererHelper implements Viewer.Scene
     }
 
     public destroy(device: GfxDevice): void {
-        super.destroy(device);
+        this.sceneTexture.destroy(device);
+        this.viewRenderer.destroy(device);
+        this.renderTarget.destroy(device);
         this.textureHolder.destroy(device);
         this.sceneParamsBuffer.destroy(device);
         this.modelParamsBuffer.destroy(device);

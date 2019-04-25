@@ -8,7 +8,7 @@ import { GfxRenderInst, GfxRenderInstBuilder } from "../gfx/render/GfxRenderer";
 import { GfxRenderBuffer } from "../gfx/render/GfxRenderBuffer";
 import { computeViewMatrix } from "../Camera";
 import { mat4 } from "gl-matrix";
-import { fillMatrix4x3, fillColor } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x3, fillColor, fillMatrix4x2 } from "../gfx/helpers/UniformBufferHelpers";
 import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
 import { nArray, assert } from "../util";
 
@@ -31,6 +31,7 @@ layout(row_major, std140) uniform ub_SceneParams {
 layout(row_major, std140) uniform ub_ModelParams {
     Mat4x3 u_BoneMatrix[1];
     Mat4x3 u_NormalMatrix[1];
+    Mat4x2 u_TextureMatrix[1];
     vec4 u_Color;
 };
 
@@ -50,7 +51,7 @@ layout(location = 2) in vec2 a_TexCoord;
 void main() {
     gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix[0]), vec4(a_Position, 1.0)));
     v_Normal = normalize(Mul(_Mat4x4(u_NormalMatrix[0]), vec4(a_Normal, 0.0)).xyz);
-    v_TexCoord = a_TexCoord;
+    v_TexCoord = (u_TextureMatrix[0] * vec4(a_TexCoord, 0.0, 1.0));
 }
 `;
 
@@ -179,9 +180,12 @@ function translateDepthCompareMode(cmp: GSDepthCompareMode): GfxCompareMode {
     }
 }
 
+const textureMapping = nArray(1, () => new TextureMapping());
+const textureMatrix = mat4.create();
 export class BINModelPartInstance {
     public renderInst: GfxRenderInst;
     private gfxSampler: GfxSampler;
+    private hasDynamicTexture: boolean = false;
 
     constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, textureHolder: KatamariDamacyTextureHolder, public binModelPart: BINModelPart) {
         this.renderInst = renderInstBuilder.pushRenderInst();
@@ -202,9 +206,10 @@ export class BINModelPartInstance {
 
         renderInstBuilder.newUniformBufferInstance(this.renderInst, KatamariDamacyProgram.ub_ModelParams);
 
-        const textureMapping = nArray(1, () => new TextureMapping());
-        if (this.binModelPart.textureName !== null)
+        if (this.binModelPart.textureName !== null) {
+            this.hasDynamicTexture = this.binModelPart.textureName.endsWith('/0000/0000');
             textureHolder.fillTextureMapping(textureMapping[0], this.binModelPart.textureName);
+        }
         this.renderInst.setSamplerBindingsFromTextureMappings(textureMapping);
 
         const wms = (gsConfiguration.clamp_1_data0 >>> 0) & 0x03;
@@ -221,14 +226,27 @@ export class BINModelPartInstance {
         });
     }
 
-    public prepareToRender(modelParamsBuffer: GfxRenderBuffer, modelViewMatrix: mat4, modelMatrix: mat4, visible: boolean): void {
+    public prepareToRender(modelParamsBuffer: GfxRenderBuffer, textureHolder: KatamariDamacyTextureHolder, modelViewMatrix: mat4, modelMatrix: mat4, visible: boolean): void {
         this.renderInst.visible = visible;
 
         if (visible) {
+            if (this.hasDynamicTexture) {
+                textureHolder.fillTextureMapping(textureMapping[0], this.binModelPart.textureName);
+                this.renderInst.setSamplerBindingsFromTextureMappings(textureMapping);
+
+                if (textureMapping[0].flipY) {
+                    textureMatrix[5] = -1;
+                    textureMatrix[13] = 1;
+                }
+            } else {
+                mat4.identity(textureMatrix);
+            }
+
             let offs = this.renderInst.getUniformBufferOffset(KatamariDamacyProgram.ub_ModelParams);
             const mapped = modelParamsBuffer.mapBufferF32(offs, 16);
             offs += fillMatrix4x3(mapped, offs, modelViewMatrix);
             offs += fillMatrix4x3(mapped, offs, modelMatrix);
+            offs += fillMatrix4x2(mapped, offs, textureMatrix);
             offs += fillColor(mapped, offs, this.binModelPart.diffuseColor);
         }
     }
@@ -265,12 +283,12 @@ export class BINModelInstance {
         this.visible = visible;
     }
 
-    public prepareToRender(modelParamsBuffer: GfxRenderBuffer, viewRenderer: Viewer.ViewerRenderInput) {
+    public prepareToRender(modelParamsBuffer: GfxRenderBuffer, textureHolder: KatamariDamacyTextureHolder, viewRenderer: Viewer.ViewerRenderInput) {
         computeViewMatrix(scratchMat4, viewRenderer.camera);
         mat4.mul(scratchMat4, scratchMat4, this.modelMatrix);
 
         for (let i = 0; i < this.modelParts.length; i++)
-            this.modelParts[i].prepareToRender(modelParamsBuffer, scratchMat4, this.modelMatrix, this.visible);
+            this.modelParts[i].prepareToRender(modelParamsBuffer, textureHolder, scratchMat4, this.modelMatrix, this.visible);
     }
 
     public destroy(device: GfxDevice): void {
