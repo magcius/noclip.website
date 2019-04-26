@@ -66,6 +66,7 @@ export interface Actor {
     actorId: number;
     modelMatrix: mat4;
     variable: number;
+    timeSpawnFlags: number;
 }
 
 function readActors(version: Version, buffer: ArrayBufferSlice, nActors: number, offs: number): Actor[] {
@@ -75,18 +76,36 @@ function readActors(version: Version, buffer: ArrayBufferSlice, nActors: number,
 
     const q = quat.create();
     for (let i = 0; i < nActors; i++) {
-        const actorId = view.getUint16(actorTableIdx + 0x00, true);
+        const actorIdFlags = view.getUint16(actorTableIdx + 0x00, true);
+        const actorId = actorIdFlags & 0x0FFF;
         const positionX = view.getInt16(actorTableIdx + 0x02, true);
         const positionY = view.getInt16(actorTableIdx + 0x04, true);
         const positionZ = view.getInt16(actorTableIdx + 0x06, true);
-        const rotationX = view.getInt16(actorTableIdx + 0x08, true) / 0x7FFF;
-        const rotationY = view.getInt16(actorTableIdx + 0x0A, true) / 0x7FFF;
-        const rotationZ = view.getInt16(actorTableIdx + 0x0C, true) / 0x7FFF;
+        const rotationX = view.getInt16(actorTableIdx + 0x08, true);
+        const rotationY = view.getInt16(actorTableIdx + 0x0A, true);
+        const rotationZ = view.getInt16(actorTableIdx + 0x0C, true);
         const variable = view.getUint16(actorTableIdx + 0x0E, true);
+
+        let timeSpawnFlags = 0xFF;
+
         const modelMatrix = mat4.create();
-        quat.fromEuler(q, rotationX * 180, rotationY * 180, rotationZ * 180);
-        mat4.fromRotationTranslation(modelMatrix, q, [positionX, positionY, positionZ]);
-        actors.push({ actorId, modelMatrix, variable });
+
+        if (version === Version.Ocarina) {
+            const rotScale = 180 / 0x7FFF;
+            quat.fromEuler(q, rotationX * rotScale, rotationY * rotScale, rotationZ * rotScale);
+            mat4.fromRotationTranslation(modelMatrix, q, [positionX, positionY, positionZ]);
+        } else if (version === Version.Majora) {
+            // Interpreting these variables is a bit complex in Majora's Mask.
+            const rotX = rotationX >> 7;
+            const rotY = rotationY >> 7;
+            const rotZ = rotationZ >> 7;
+            // TODO(jstpierre): Figure out the proper rotation. Seems like it's in degrees already?
+            quat.fromEuler(q, rotX, rotY, rotZ);
+            mat4.fromRotationTranslation(modelMatrix, q, [positionX, positionY, positionZ]);
+            timeSpawnFlags = ((rotationX & 0x07) << 7) | (rotationY & 0x7F);
+        }
+
+        actors.push({ actorId, modelMatrix, variable, timeSpawnFlags });
         actorTableIdx += 0x10;
     }
     return actors;
@@ -112,7 +131,7 @@ function readDoorActors(version: Version, buffer: ArrayBufferSlice, nActors: num
         const modelMatrix = mat4.create();
         quat.fromEuler(q, 0, rotationY * 180, 0);
         mat4.fromRotationTranslation(modelMatrix, q, [positionX, positionY, positionZ]);
-        actors.push({ actorId, modelMatrix, variable });
+        actors.push({ actorId, modelMatrix, variable, timeSpawnFlags: 0xFF });
         actorTableIdx += 0x10;
     }
     return actors;

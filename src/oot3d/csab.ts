@@ -149,7 +149,7 @@ export function parse(version: Version, buffer: ArrayBufferSlice): CSAB {
     const size = view.getUint32(0x04, true);
 
     const subversion = view.getUint32(0x08, true);
-    assert(subversion === 0x03);
+    assert(subversion === (version === Version.Majora ? 0x05 : 0x03));
     assert(view.getUint32(0x0C, true) === 0x00);
 
     assert(view.getUint32(0x10, true) === 0x01); // num animations?

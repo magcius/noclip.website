@@ -4,6 +4,7 @@ import * as CMAB from './cmab';
 import * as CSAB from './csab';
 import * as ZAR from './zar';
 import * as ZSI from './zsi';
+import * as LzS from '../compression/LzS';
 
 import * as Viewer from '../viewer';
 import * as UI from '../ui';
@@ -12,7 +13,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import Progressable from '../Progressable';
 import { RoomRenderer, CtrTextureHolder, CmbRenderer, CmbData } from './render';
 import { SceneGroup } from '../viewer';
-import { assert, assertExists, hexzero } from '../util';
+import { assert, assertExists, hexzero, readString } from '../util';
 import { fetchData } from '../fetch';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { RENDER_HACKS_ICON } from '../bk/scenes';
@@ -23,7 +24,7 @@ import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRen
 import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 
 const enum OoT3DPass { MAIN = 0x01, SKYBOX = 0x02 };
-class OoT3DRenderer implements Viewer.SceneGfx {
+export class OoT3DRenderer implements Viewer.SceneGfx {
     public viewRenderer = new GfxRenderInstViewRenderer();
     public renderTarget = new BasicRenderTarget();
     public roomRenderers: RoomRenderer[] = [];
@@ -144,9 +145,14 @@ class OoT3DRenderer implements Viewer.SceneGfx {
     }
 }
 
-const pathBase = `oot3d`;
+export function maybeDecompress(buffer: ArrayBufferSlice): ArrayBufferSlice {
+    if (readString(buffer, 0x00, 0x04) === 'LzS\x01')
+        return LzS.decompress(buffer.createDataView());
+    else
+        return buffer;
+}
 
-class ModelCache {
+export class ModelCache {
     private fileProgressableCache = new Map<string, Progressable<ArrayBufferSlice>>();
     private fileDataCache = new Map<string, ArrayBufferSlice>();
     private archiveProgressableCache = new Map<string, Progressable<ZAR.ZAR>>();
@@ -191,7 +197,7 @@ class ModelCache {
             p = this.fetchFileData(archivePath, abortSignal).then((data) => {
                 return data;
             }).then((data) => {
-                const arc = ZAR.parse(data);
+                const arc = ZAR.parse(maybeDecompress(data));
                 this.archiveCache.set(archivePath, arc);
                 return arc;
             });
@@ -429,6 +435,8 @@ function isAdultDungeon(scene: Scene) {
     }
 }
 
+const pathBase = `oot3d`;
+
 class SceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string, public setupIndex: number = -1) {
     }
@@ -470,7 +478,7 @@ class SceneDesc implements Viewer.SceneDesc {
         }
 
         function animFrame(frame: number): AnimationController {
-            const a = new AnimationController(); 
+            const a = new AnimationController();
             a.setTimeInFrames(frame);
             return a;
         }
