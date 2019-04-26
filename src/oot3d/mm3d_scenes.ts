@@ -643,8 +643,8 @@ class SceneDesc implements Viewer.SceneDesc {
 
         if (actor.actorId === ActorId.En_Dno) fetchArchive(`zelda2_dnj.gar.lzs`).then((gar) => {
             const b = buildModel(gar, `model/deknuts_butler.cmb`);
-            // TODO(jstpierre): Figure out MM3D CSAB.
-            // b.bindCSAB(parseCSAB(gar, `anim/dnj_wait.csab`));
+            console.log(parseCSAB(gar, `anim/dnj_wait.csab`));
+            b.bindCSAB(parseCSAB(gar, `anim/dnj_wait.csab`));
         });
         else console.warn(`Unknown actor ${j} / ${stringifyActorId(actor.actorId)} / ${hexzero(actor.variable, 4)}`);
     }
