@@ -246,8 +246,6 @@ export class BINModelPartInstance {
         const wrapS = translateWrapMode(wms);
         const wrapT = translateWrapMode(wmt);
 
-        // TODO(jstpierre): Read this from TEX_1 / CLAMP_1.
-        console.log(texMinFilter, texMagFilter, minFilter, magFilter, mipFilter);
         this.gfxSampler = device.createSampler({
             minFilter, magFilter, mipFilter,
             wrapS, wrapT,
