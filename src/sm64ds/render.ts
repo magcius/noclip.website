@@ -15,7 +15,7 @@ import { fetchData } from '../fetch';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { computeModelMatrixYBillboard, computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
-import { GfxFormat, GfxBufferUsage, GfxBufferFrequencyHint, GfxBlendMode, GfxBlendFactor, GfxDevice, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxBuffer, GfxVertexAttributeFrequency, GfxTexFilterMode, GfxMipFilterMode, GfxRenderPass, GfxInputState, GfxInputLayout, GfxVertexAttributeDescriptor, GfxTextureDimension } from '../gfx/platform/GfxPlatform';
+import { GfxFormat, GfxBufferUsage, GfxBufferFrequencyHint, GfxBlendMode, GfxBlendFactor, GfxDevice, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxBuffer, GfxVertexAttributeFrequency, GfxTexFilterMode, GfxMipFilterMode, GfxRenderPass, GfxInputState, GfxInputLayout, GfxVertexAttributeDescriptor, GfxTextureDimension, GfxSampler } from '../gfx/platform/GfxPlatform';
 import { fillMatrix4x3, fillMatrix4x4, fillVec4, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxRenderInstViewRenderer, GfxRenderInstBuilder, GfxRenderInst, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
@@ -23,7 +23,7 @@ import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { BasicRenderTarget, depthClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import GfxArena from '../gfx/helpers/GfxArena';
 import { getFormatName, parseTexImageParamWrapModeS, parseTexImageParamWrapModeT, Format } from './nitro_tex';
-import { assert } from '../util';
+import { assert, nArray } from '../util';
 import { RENDER_HACKS_ICON } from '../bk/scenes';
 
 export class NITRO_Program extends DeviceProgram {
@@ -256,36 +256,67 @@ class BMDData {
     }
 }
 
-const scratchModelMatrix = mat4.create();
+const textureMapping = nArray(1, () => new TextureMapping());
+const scratchMat2d = mat2d.create();
 const scratchMat4 = mat4.create();
-class BMDRenderer {
-    public name: string = '';
-    public isSkybox: boolean = false;
-    public modelMatrix = mat4.create();
-    public normalMatrix = mat4.create();
-    public extraTexCoordMat: mat2d | null = null;
-    public animation: Animation | null = null;
 
+class MaterialInstance {
     private templateRenderInst: GfxRenderInst;
-    private vertexDataCommands: Command_VertexData[] = [];
-    private prepareToRenderFuncs: ((hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput) => void)[] = [];
-    private arena = new GfxArena();
-
-    private sceneParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_SceneParams`);
-    private materialParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_MaterialParams`);
-    private packetParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_PacketParams`);
+    private gfxSampler: GfxSampler | null = null;
+    private crg1TextureAnimation: CRG1TextureAnimation | null = null;
+    private texCoordMode: NITRO_BMD.TexCoordMode;
 
     private texturesEnabled: boolean = true;
     private vertexColorsEnabled: boolean = true;
 
-    constructor(device: GfxDevice, public textureHolder: NITROTextureHolder, public bmdData: BMDData, public crg1Level: CRG1Level | null = null) {
-        const bmd = this.bmdData.bmd;
-        this.textureHolder.addTextures(device, bmd.textures);
+    constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, textureHolder: NITROTextureHolder, crg1Level: CRG1Level | null, public material: NITRO_BMD.Material) {
+        this.templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
+
+        if (this.material.texture !== null) {
+            textureMapping[0].reset();
+            textureHolder.fillTextureMapping(textureMapping[0], this.material.texture.name);
+            this.gfxSampler = device.createSampler({
+                minFilter: GfxTexFilterMode.POINT,
+                magFilter: GfxTexFilterMode.POINT,
+                mipFilter: GfxMipFilterMode.NO_MIP,
+                wrapS: parseTexImageParamWrapModeS(this.material.texParams),
+                wrapT: parseTexImageParamWrapModeT(this.material.texParams),
+                minLOD: 0,
+                maxLOD: 100,
+            });
+            textureMapping[0].gfxSampler = this.gfxSampler;
+        }
+
+        this.templateRenderInst.setSamplerBindingsFromTextureMappings(textureMapping);
+
+        // Find any possible material animations.
+        if (crg1Level !== null) {
+            const textureAnimation = crg1Level.TextureAnimations.find((c) => c.MaterialName === material.name);
+            if (textureAnimation !== undefined)
+                this.crg1TextureAnimation = textureAnimation;
+        }
+
+        this.templateRenderInst.setMegaStateFlags({
+            blendMode: GfxBlendMode.ADD,
+            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
+            depthWrite: material.depthWrite,
+            cullMode: material.cullMode,
+        });
+
+        renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, NITRO_Program.ub_MaterialParams);
+
+        const layer = material.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
+        this.templateRenderInst.sortKey = makeSortKey(layer);
+
+        this.createProgram();
+
+        this.texCoordMode = (material.texParams >>> 30);
     }
 
     private createProgram(): void {
         const program = new NITRO_Program();
-        if (this.texturesEnabled)
+        if (this.texturesEnabled && this.material.texture !== null)
             program.defines.set('USE_TEXTURE', '1');
         if (this.vertexColorsEnabled)
             program.defines.set('USE_VERTEX_COLOR', '1');
@@ -302,6 +333,90 @@ class BMDRenderer {
         this.createProgram();
     }
 
+    public prepareToRender(materialParamsBuffer: GfxRenderBuffer, textureHolder: NITROTextureHolder, viewerInput: Viewer.ViewerRenderInput, normalMatrix: mat4, extraTexCoordMat: mat2d | null): void {
+        function selectArray(arr: Float32Array, time: number): number {
+            return arr[(time | 0) % arr.length];
+        }
+
+        if (this.material.texture !== null) {
+            if (this.texCoordMode === NITRO_BMD.TexCoordMode.NORMAL) {
+                mat4.copy(scratchMat4, normalMatrix);
+
+                // Game seems to use this to offset the center of the reflection.
+                scratchMat4[12] += this.material.texCoordMat[4];
+                scratchMat4[13] += -this.material.texCoordMat[5];
+
+                // We shouldn't have any texture animations on normal-mapped textures.
+                assert(this.crg1TextureAnimation === null);
+            } else {
+                if (this.crg1TextureAnimation !== null) {
+                    const time = viewerInput.time / 30;
+                    const scale = selectArray(this.crg1TextureAnimation.Scale, time);
+                    const rotation = selectArray(this.crg1TextureAnimation.Rotation, time);
+                    const x = selectArray(this.crg1TextureAnimation.X, time);
+                    const y = selectArray(this.crg1TextureAnimation.Y, time);
+                    mat2d.identity(scratchMat2d);
+                    mat2d.scale(scratchMat2d, scratchMat2d, [scale, scale, scale]);
+                    mat2d.rotate(scratchMat2d, scratchMat2d, rotation / 180 * Math.PI);
+                    mat2d.translate(scratchMat2d, scratchMat2d, [-x, y, 0]);
+                    mat2d.mul(scratchMat2d, scratchMat2d, this.material.texCoordMat);
+                } else {
+                    mat2d.copy(scratchMat2d, this.material.texCoordMat);
+                }
+
+                if (extraTexCoordMat !== null)
+                    mat2d.mul(scratchMat2d, scratchMat2d, extraTexCoordMat);
+
+                mat4_from_mat2d(scratchMat4, scratchMat2d);
+            }
+
+            let offs = this.templateRenderInst.getUniformBufferOffset(NITRO_Program.ub_MaterialParams);
+            const materialParamsMapped = materialParamsBuffer.mapBufferF32(offs, 12);
+            offs += fillMatrix4x2(materialParamsMapped, offs, scratchMat4);
+            offs += fillVec4(materialParamsMapped, offs, this.texCoordMode);
+        }
+    }
+
+    public destroy(device: GfxDevice): void {
+        if (this.gfxSampler !== null)
+            device.destroySampler(this.gfxSampler);
+    }
+}
+
+const scratchModelMatrix = mat4.create();
+const scratchNormalMatrix = mat4.create();
+class BMDRenderer {
+    public name: string = '';
+    public isSkybox: boolean = false;
+    public modelMatrix = mat4.create();
+    public normalMatrix = mat4.create();
+    public extraTexCoordMat: mat2d | null = null;
+    public animation: Animation | null = null;
+
+    private templateRenderInst: GfxRenderInst;
+    private materialInstances: MaterialInstance[] = [];
+    private vertexDataCommands: Command_VertexData[] = [];
+    private prepareToRenderFuncs: ((hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput) => void)[] = [];
+
+    private sceneParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_SceneParams`);
+    private materialParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_MaterialParams`);
+    private packetParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_PacketParams`);
+
+    constructor(device: GfxDevice, public textureHolder: NITROTextureHolder, public bmdData: BMDData, public crg1Level: CRG1Level | null = null) {
+        const bmd = this.bmdData.bmd;
+        this.textureHolder.addTextures(device, bmd.textures);
+    }
+
+    public setVertexColorsEnabled(v: boolean): void {
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].setVertexColorsEnabled(v);
+    }
+
+    public setTexturesEnabled(v: boolean): void {
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].setTexturesEnabled(v);
+    }
+
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         let offs = this.templateRenderInst.getUniformBufferOffset(NITRO_Program.ub_SceneParams);
         const sceneParamsMapped = this.sceneParamsBuffer.mapBufferF32(offs, 16);
@@ -309,6 +424,10 @@ class BMDRenderer {
 
         this.templateRenderInst.passMask = this.isSkybox ? SM64DSPass.SKYBOX : SM64DSPass.MAIN;
 
+        this.computeNormalMatrix(scratchNormalMatrix, viewerInput);
+
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].prepareToRender(this.materialParamsBuffer, this.textureHolder, viewerInput, scratchNormalMatrix, this.extraTexCoordMat);
         for (let i = 0; i < this.prepareToRenderFuncs.length; i++)
             this.prepareToRenderFuncs[i](hostAccessPass, viewerInput);
 
@@ -324,101 +443,10 @@ class BMDRenderer {
         bindingLayouts[NITRO_Program.ub_PacketParams]   = { numUniformBuffers: 1, numSamplers: 0 };
         const renderInstBuilder = new GfxRenderInstBuilder(device, NITRO_Program.programReflection, bindingLayouts, [this.sceneParamsBuffer, this.materialParamsBuffer, this.packetParamsBuffer]);
         this.templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
-        this.createProgram();
         renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, NITRO_Program.ub_SceneParams);
         this.translateBMD(device, renderInstBuilder);
         renderInstBuilder.popTemplateRenderInst();
         renderInstBuilder.finish(device, viewRenderer);
-    }
-
-    private translateMaterial(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, material: NITRO_BMD.Material) {
-        const texture = material.texture;
-        const templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
-        const textureMapping = new TextureMapping();
-
-        if (texture !== null) {
-            this.textureHolder.fillTextureMapping(textureMapping, texture.name);
-            textureMapping.gfxSampler = this.arena.trackSampler(device.createSampler({
-                minFilter: GfxTexFilterMode.POINT,
-                magFilter: GfxTexFilterMode.POINT,
-                mipFilter: GfxMipFilterMode.NO_MIP,
-                wrapS: parseTexImageParamWrapModeS(material.texParams),
-                wrapT: parseTexImageParamWrapModeT(material.texParams),
-                minLOD: 0,
-                maxLOD: 100,
-            }));
-        }
-
-        templateRenderInst.setSamplerBindingsFromTextureMappings([textureMapping]);
-
-        // Find any possible material animations.
-        const crg1mat = this.crg1Level ? this.crg1Level.TextureAnimations.find((c) => c.MaterialName === material.name) : undefined;
-        const texCoordMat = mat4.create();
-
-        templateRenderInst.setMegaStateFlags({
-            blendMode: GfxBlendMode.ADD,
-            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
-            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-            depthWrite: material.depthWrite,
-            cullMode: material.cullMode,
-        });
-
-        renderInstBuilder.newUniformBufferInstance(templateRenderInst, NITRO_Program.ub_MaterialParams);
-
-        const layer = material.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
-        templateRenderInst.sortKey = makeSortKey(layer);
-
-        const texCoordMode: NITRO_BMD.TexCoordMode = material.texParams >>> 30;
-
-        const scratchMat2d = mat2d.create();
-        return (hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput) => {
-            function selectArray(arr: Float32Array, time: number): number {
-                return arr[(time | 0) % arr.length];
-            }
-
-            if (texture !== null) {
-                this.textureHolder.fillTextureMapping(textureMapping, texture.name);
-                templateRenderInst.setSamplerBindingsFromTextureMappings([textureMapping]);
-
-                if (texCoordMode === NITRO_BMD.TexCoordMode.NORMAL) {
-                    // TODO(jstpierre): Verify that we want this in all cases. Is there some flag
-                    // in the engine that turns on the spherical reflection mapping?
-                    this.computeNormalMatrix(texCoordMat, viewerInput);
-    
-                    // Game seems to use this to offset the center of the reflection.
-                    texCoordMat[12] += material.texCoordMat[4];
-                    texCoordMat[13] += -material.texCoordMat[5];
-    
-                    // We shouldn't have any texture animations on normal-mapped textures.
-                    assert(crg1mat === undefined);
-                } else {
-                    if (crg1mat !== undefined) {
-                        const time = viewerInput.time / 30;
-                        const scale = selectArray(crg1mat.Scale, time);
-                        const rotation = selectArray(crg1mat.Rotation, time);
-                        const x = selectArray(crg1mat.X, time);
-                        const y = selectArray(crg1mat.Y, time);
-                        mat2d.identity(scratchMat2d);
-                        mat2d.scale(scratchMat2d, scratchMat2d, [scale, scale, scale]);
-                        mat2d.rotate(scratchMat2d, scratchMat2d, rotation / 180 * Math.PI);
-                        mat2d.translate(scratchMat2d, scratchMat2d, [-x, y, 0]);
-                        mat2d.mul(scratchMat2d, scratchMat2d, material.texCoordMat);
-                    } else {
-                        mat2d.copy(scratchMat2d, material.texCoordMat);
-                    }
-
-                    if (this.extraTexCoordMat !== null)
-                        mat2d.mul(scratchMat2d, scratchMat2d, this.extraTexCoordMat);
-
-                    mat4_from_mat2d(texCoordMat, scratchMat2d);
-                }
-
-                let offs = templateRenderInst.getUniformBufferOffset(NITRO_Program.ub_MaterialParams);
-                const materialParamsMapped = this.materialParamsBuffer.mapBufferF32(offs, 12);
-                offs += fillMatrix4x2(materialParamsMapped, offs, texCoordMat);
-                offs += fillVec4(materialParamsMapped, offs, texCoordMode);
-            }
-        };
     }
 
     public computeViewMatrix(dst: mat4, viewerInput: Viewer.ViewerRenderInput): void {
@@ -469,15 +497,14 @@ class BMDRenderer {
             const model = bmd.models[i];
             for (let j = 0; j < model.batches.length; j++) {
                 const batch = model.batches[j];
-                const materialPrepareToRenderFunc = this.translateMaterial(device, renderInstBuilder, batch.material);
+                const materialInstance = new MaterialInstance(device, renderInstBuilder, this.textureHolder, this.crg1Level, batch.material);
+                this.materialInstances.push(materialInstance);
                 const vertexData = this.bmdData.vertexData[vertexDataIndex++];
                 const vertexDataCommand = new Command_VertexData(renderInstBuilder, vertexData, model.name);
                 this.vertexDataCommands.push(vertexDataCommand);
                 renderInstBuilder.popTemplateRenderInst();
 
                 const prepareToRenderFunc = (hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput) => {
-                    materialPrepareToRenderFunc(hostAccessPass, viewerInput);
-
                     let offs = vertexDataCommand.templateRenderInst.getUniformBufferOffset(NITRO_Program.ub_PacketParams);
                     const packetParamsMapped = this.packetParamsBuffer.mapBufferF32(offs, 16);
 
@@ -495,7 +522,8 @@ class BMDRenderer {
         this.sceneParamsBuffer.destroy(device);
         this.materialParamsBuffer.destroy(device);
         this.packetParamsBuffer.destroy(device);
-        this.arena.destroy(device);
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].destroy(device);
     }
 }
 
