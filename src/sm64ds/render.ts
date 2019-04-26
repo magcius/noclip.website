@@ -188,11 +188,11 @@ export class VertexData {
     }
 }
 
-export class Command_VertexData {
+class ShapeInstance {
     public templateRenderInst: GfxRenderInst;
     public renderInsts: GfxRenderInst[] = [];
 
-    constructor(renderInstBuilder: GfxRenderInstBuilder, public vertexData: VertexData, name: string) {
+    constructor(renderInstBuilder: GfxRenderInstBuilder, public vertexData: VertexData, public model: NITRO_BMD.Model) {
         this.templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
         this.templateRenderInst.setSamplerBindingsInherit();
         this.templateRenderInst.inputState = this.vertexData.inputState;
@@ -209,6 +209,15 @@ export class Command_VertexData {
         }
 
         renderInstBuilder.popTemplateRenderInst();
+    }
+
+    public prepareToRender(packetParamsBuffer: GfxRenderBuffer, viewerInput: Viewer.ViewerRenderInput, modelInstance: BMDModelInstance, scaleFactor: number): void {
+        let offs = this.templateRenderInst.getUniformBufferOffset(NITRO_Program.ub_PacketParams);
+        const packetParamsMapped = packetParamsBuffer.mapBufferF32(offs, 16);
+
+        modelInstance.computeModelView(scratchMat4, viewerInput, this.model.billboard);
+        offs += fillMatrix4x3(packetParamsMapped, offs, scratchMat4);
+        offs += fillVec4(packetParamsMapped, offs, scaleFactor);
     }
 }
 
@@ -259,7 +268,6 @@ class BMDData {
 const textureMapping = nArray(1, () => new TextureMapping());
 const scratchMat2d = mat2d.create();
 const scratchMat4 = mat4.create();
-
 class MaterialInstance {
     private templateRenderInst: GfxRenderInst;
     private gfxSampler: GfxSampler | null = null;
@@ -385,7 +393,7 @@ class MaterialInstance {
 
 const scratchModelMatrix = mat4.create();
 const scratchNormalMatrix = mat4.create();
-class BMDRenderer {
+class BMDModelInstance {
     public name: string = '';
     public isSkybox: boolean = false;
     public modelMatrix = mat4.create();
@@ -395,8 +403,7 @@ class BMDRenderer {
 
     private templateRenderInst: GfxRenderInst;
     private materialInstances: MaterialInstance[] = [];
-    private vertexDataCommands: Command_VertexData[] = [];
-    private prepareToRenderFuncs: ((hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput) => void)[] = [];
+    private shapeInstances: ShapeInstance[] = [];
 
     private sceneParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_SceneParams`);
     private materialParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_MaterialParams`);
@@ -428,8 +435,8 @@ class BMDRenderer {
 
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].prepareToRender(this.materialParamsBuffer, this.textureHolder, viewerInput, scratchNormalMatrix, this.extraTexCoordMat);
-        for (let i = 0; i < this.prepareToRenderFuncs.length; i++)
-            this.prepareToRenderFuncs[i](hostAccessPass, viewerInput);
+        for (let i = 0; i < this.shapeInstances.length; i++)
+            this.shapeInstances[i].prepareToRender(this.packetParamsBuffer, viewerInput, this, this.bmdData.bmd.scaleFactor);
 
         this.sceneParamsBuffer.prepareToRender(hostAccessPass);
         this.materialParamsBuffer.prepareToRender(hostAccessPass);
@@ -500,20 +507,9 @@ class BMDRenderer {
                 const materialInstance = new MaterialInstance(device, renderInstBuilder, this.textureHolder, this.crg1Level, batch.material);
                 this.materialInstances.push(materialInstance);
                 const vertexData = this.bmdData.vertexData[vertexDataIndex++];
-                const vertexDataCommand = new Command_VertexData(renderInstBuilder, vertexData, model.name);
-                this.vertexDataCommands.push(vertexDataCommand);
+                const shapeInstance = new ShapeInstance(renderInstBuilder, vertexData, model);
+                this.shapeInstances.push(shapeInstance);
                 renderInstBuilder.popTemplateRenderInst();
-
-                const prepareToRenderFunc = (hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput) => {
-                    let offs = vertexDataCommand.templateRenderInst.getUniformBufferOffset(NITRO_Program.ub_PacketParams);
-                    const packetParamsMapped = this.packetParamsBuffer.mapBufferF32(offs, 16);
-
-                    this.computeModelView(scratchMat4, viewerInput, model.billboard);
-                    offs += fillMatrix4x3(packetParamsMapped, offs, scratchMat4);
-                    offs += fillVec4(packetParamsMapped, offs, this.bmdData.bmd.scaleFactor);
-                };
-
-                this.prepareToRenderFuncs.push(prepareToRenderFunc);
             }
         }
     }
@@ -530,7 +526,7 @@ class BMDRenderer {
 class SM64DSRenderer implements Viewer.SceneGfx {
     public viewRenderer = new GfxRenderInstViewRenderer();
     public renderTarget = new BasicRenderTarget();
-    public bmdRenderers: BMDRenderer[] = [];
+    public bmdRenderers: BMDModelInstance[] = [];
 
     constructor(public modelCache: ModelCache, public textureHolder: NITROTextureHolder) {
     }
@@ -668,10 +664,10 @@ export class SceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private _createBMDRenderer(device: GfxDevice, renderer: SM64DSRenderer, filename: string, scale: number, level: CRG1Level, isSkybox: boolean): Progressable<BMDRenderer> {
+    private _createBMDRenderer(device: GfxDevice, renderer: SM64DSRenderer, filename: string, scale: number, level: CRG1Level, isSkybox: boolean): Progressable<BMDModelInstance> {
         const modelCache = renderer.modelCache;
         return modelCache.fetchModel(device, `sm64ds/${filename}`).then((bmdData: BMDData) => {
-            const bmdRenderer = new BMDRenderer(device, renderer.textureHolder, bmdData, level);
+            const bmdRenderer = new BMDModelInstance(device, renderer.textureHolder, bmdData, level);
             mat4.scale(bmdRenderer.modelMatrix, bmdRenderer.modelMatrix, [scale, scale, scale]);
             bmdRenderer.isSkybox = isSkybox;
             bmdRenderer.addToViewRenderer(device, renderer.viewRenderer);
@@ -680,10 +676,10 @@ export class SceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private _createBMDObjRenderer(device: GfxDevice, renderer: SM64DSRenderer, filename: string, translation: vec3, rotationY: number, scale: number = 1, spinSpeed: number = 0): Progressable<BMDRenderer> {
+    private _createBMDObjRenderer(device: GfxDevice, renderer: SM64DSRenderer, filename: string, translation: vec3, rotationY: number, scale: number = 1, spinSpeed: number = 0): Progressable<BMDModelInstance> {
         const modelCache = renderer.modelCache;
         return modelCache.fetchModel(device, `sm64ds/${filename}`).then((bmdData: BMDData) => {
-            const bmdRenderer = new BMDRenderer(device, renderer.textureHolder, bmdData);
+            const bmdRenderer = new BMDModelInstance(device, renderer.textureHolder, bmdData);
             bmdRenderer.name = filename;
 
             vec3.scale(translation, translation, GLOBAL_SCALE);
@@ -706,7 +702,7 @@ export class SceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private _createBMDRendererForObject(device: GfxDevice, renderer: SM64DSRenderer, object: CRG1Object): Progressable<BMDRenderer> {
+    private _createBMDRendererForObject(device: GfxDevice, renderer: SM64DSRenderer, object: CRG1Object): Progressable<BMDModelInstance> {
         const translation = vec3.fromValues(object.Position.X, object.Position.Y, object.Position.Z);
         const rotationY = object.Rotation.Y / 180 * Math.PI;
 

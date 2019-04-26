@@ -15,11 +15,9 @@
         {
             "type": "npm",
             "script": "typecheck",
-            "presentation": {
-                "reveal": "silent",
-            },
-            "group": "none",
-            "problemMatcher": "$tsc"
+            "group": "build",
+            "isBackground": true,
+            "problemMatcher": [ "$tsc-watch" ]
         }
     ]
 }

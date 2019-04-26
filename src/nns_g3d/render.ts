@@ -7,7 +7,7 @@ import * as NSBTA from "./nsbta";
 import * as NSBTP from "./nsbtp";
 import * as NITRO_GX from '../sm64ds/nitro_gx';
 import { readTexture, getFormatName, Texture, parseTexImageParamWrapModeS, parseTexImageParamWrapModeT, textureFormatIsTranslucent } from "../sm64ds/nitro_tex";
-import { NITRO_Program, Command_VertexData, VertexData } from '../sm64ds/render';
+import { NITRO_Program, VertexData } from '../sm64ds/render';
 import { GfxRenderInstViewRenderer, GfxRenderInstBuilder, GfxRenderInst, GfxRendererLayer, makeSortKeyOpaque } from "../gfx/render/GfxRenderer";
 import { GfxRenderBuffer } from "../gfx/render/GfxRenderBuffer";
 import { TEX0, TEX0Texture } from "./nsbtx";
@@ -188,15 +188,33 @@ class Command_Node {
 }
 
 const scratchMat4 = mat4.create();
-class Command_Shape {
+class ShapeInstance {
     private vertexData: VertexData;
-    public vertexDataCommand: Command_VertexData;
+
+    public templateRenderInst: GfxRenderInst;
+    public renderInsts: GfxRenderInst[] = [];
 
     constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, private materialCommand: Command_Material, public nodeCommand: Command_Node, public shape: NSBMD.MDL0Shape) {
-        const baseCtx = materialCommand.baseCtx;
+        const baseCtx = this.materialCommand.baseCtx;
         const nitroVertexData = NITRO_GX.readCmds(shape.dlBuffer, baseCtx);
         this.vertexData = new VertexData(device, nitroVertexData);
-        this.vertexDataCommand = new Command_VertexData(renderInstBuilder, this.vertexData, shape.name);
+
+        this.templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
+        this.templateRenderInst.setSamplerBindingsInherit();
+        this.templateRenderInst.inputState = this.vertexData.inputState;
+        this.templateRenderInst.name = name;
+
+        renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, NITRO_Program.ub_PacketParams);
+
+        const nitroData = this.vertexData.nitroVertexData;
+        for (let i = 0; i < nitroData.drawCalls.length; i++) {
+            const renderInst = renderInstBuilder.pushRenderInst();
+            renderInst.setSamplerBindingsInherit();
+            renderInst.drawIndexes(nitroData.drawCalls[i].numIndices, nitroData.drawCalls[i].startIndex);
+            this.renderInsts.push(renderInst);
+        }
+
+        renderInstBuilder.popTemplateRenderInst();
     }
 
     private computeModelView(dst: mat4, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean): void {
@@ -210,7 +228,7 @@ class Command_Shape {
     }
 
     public prepareToRender(packetParamsBuffer: GfxRenderBuffer, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean, posScale: number): void {
-        let offs = this.vertexDataCommand.templateRenderInst.getUniformBufferOffset(NITRO_Program.ub_PacketParams);
+        let offs = this.templateRenderInst.getUniformBufferOffset(NITRO_Program.ub_PacketParams);
         const packetParamsMapped = packetParamsBuffer.mapBufferF32(offs, 16);
 
         this.computeModelView(scratchMat4, viewerInput, isSkybox);
@@ -236,7 +254,7 @@ export class MDL0Renderer {
     private gfxProgram: GfxProgram;
     private templateRenderInst: GfxRenderInst;
     private materialCommands: Command_Material[] = [];
-    private shapeCommands: Command_Shape[] = [];
+    private shapeInstances: ShapeInstance[] = [];
     private nodeCommands: Command_Node[] = [];
     public viewerTextures: Viewer.Texture[] = [];
     private renderInstBuilder: GfxRenderInstBuilder;
@@ -329,7 +347,7 @@ export class MDL0Renderer {
                 const shpIdx = view.getUint8(idx++);
                 const shape = model.shapes[shpIdx];
                 renderInstBuilder.pushTemplateRenderInst(currentMaterial.templateRenderInst);
-                this.shapeCommands.push(new Command_Shape(device, renderInstBuilder, currentMaterial, currentNode, shape));
+                this.shapeInstances.push(new ShapeInstance(device, renderInstBuilder, currentMaterial, currentNode, shape));
                 renderInstBuilder.popTemplateRenderInst();
             } else if (cmd === Op.NODEDESC) {
                 const idxNode = view.getUint8(idx++);
@@ -378,8 +396,8 @@ export class MDL0Renderer {
             this.nodeCommands[i].prepareToRender(this.modelMatrix, viewerInput);
         for (let i = 0; i < this.materialCommands.length; i++)
             this.materialCommands[i].prepareToRender(this.materialParamsBuffer, viewerInput);
-        for (let i = 0; i < this.shapeCommands.length; i++)
-            this.shapeCommands[i].prepareToRender(this.packetParamsBuffer, viewerInput, this.isSkybox, this.model.posScale);
+        for (let i = 0; i < this.shapeInstances.length; i++)
+            this.shapeInstances[i].prepareToRender(this.packetParamsBuffer, viewerInput, this.isSkybox, this.model.posScale);
 
         this.sceneParamsBuffer.prepareToRender(hostAccessPass);
         this.materialParamsBuffer.prepareToRender(hostAccessPass);
@@ -393,7 +411,7 @@ export class MDL0Renderer {
         this.packetParamsBuffer.destroy(device);
         for (let i = 0; i < this.materialCommands.length; i++)
             this.materialCommands[i].destroy(device);
-        for (let i = 0; i < this.shapeCommands.length; i++)
-            this.shapeCommands[i].destroy(device);
+        for (let i = 0; i < this.shapeInstances.length; i++)
+            this.shapeInstances[i].destroy(device);
     }
 }
