@@ -268,7 +268,19 @@ class Main {
 
         this._updateLoop(0);
 
-        Sentry.init({ dsn: 'https://a3b5f6c50bc04555835f9a83d6e76b23@sentry.io/1448331' });
+        Sentry.init({
+            dsn: 'https://a3b5f6c50bc04555835f9a83d6e76b23@sentry.io/1448331',
+            beforeSend: (event) => {
+                // Filter out aborted XHRs.
+                if (event.exception.values.length) {
+                    const exc = event.exception.values[0];
+                    if (exc.type === 'UnhandledRejection' && exc.value === '400')
+                        return null;
+                }
+
+                return event;
+            },
+        });
     }
 
     private _exportSaveData() {

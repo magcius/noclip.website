@@ -119,7 +119,7 @@ const materialHacks: GXMaterialHacks = {
     lightingFudge: (p) => `${p.ambSource} + 0.6`,
 };
 
-const pathBase = `sonic_colors/`;
+const pathBase = `sonic_colors`;
 class SonicColorsSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }

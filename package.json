@@ -3,21 +3,21 @@
   "private": true,
   "license": "MIT",
   "devDependencies": {
-    "@sentry/browser": "5.1.1",
-    "assemblyscript": "github:AssemblyScript/assemblyscript",
-    "crc-32": "^1.2.0",
-    "gl-matrix": "^3.0.0",
-    "pako": "^1.0.7",
-    "parcel-bundler": "^1.11.0",
-    "typescript": "^3.3.3333"
-  },
-  "dependencies": {
     "@types/gl-matrix": "^2.4.4",
     "@types/node": "^11.9.5",
     "@types/pako": "^1.0.0",
     "@types/systemjs": "^0.20.6",
     "@types/webassembly-js-api": "0.0.3",
-    "@types/webgl2": "0.0.4"
+    "@types/webgl2": "0.0.4",
+    "assemblyscript": "github:AssemblyScript/assemblyscript",
+    "parcel-bundler": "^1.11.0",
+    "typescript": "^3.3.3333"
+  },
+  "dependencies": {
+    "@sentry/browser": "5.1.1",
+    "crc-32": "^1.2.0",
+    "gl-matrix": "^3.0.0",
+    "pako": "^1.0.7"
   },
   "scripts": {
     "start": "parcel src/index.html",
