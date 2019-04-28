@@ -540,6 +540,11 @@ class Main {
                 'event_label': `${groupId}/${sceneId}`,
             });
         }
+
+        Sentry.addBreadcrumb({
+            category: 'loadScene',
+            message: `${groupId}/${sceneId}`,
+        });
     }
 
     private _loadSceneDesc(sceneGroup: SceneGroup, sceneDesc: SceneDesc, sceneStateStr: string | null = null): Progressable<SceneGfx> {
