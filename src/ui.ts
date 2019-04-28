@@ -1526,7 +1526,8 @@ class ViewerSettings extends Panel {
     }
 
     private updateCameraSpeed(): void {
-        this.viewer.cameraController.setKeyMoveSpeed(Number(this.camSpeedSlider.value));
+        if (this.viewer.cameraController !== null)
+            this.viewer.cameraController.setKeyMoveSpeed(Number(this.camSpeedSlider.value));
     }
 
     public cameraControllerSelected(cameraControllerClass: CameraControllerClass) {

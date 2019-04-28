@@ -68,6 +68,7 @@ import { standardFullClearRenderPassDescriptor } from './gfx/helpers/RenderTarge
 import { DroppedFileSceneDesc } from './FileDrops';
 
 import * as Sentry from '@sentry/browser';
+import { GIT_REVISION } from './BuildVersion';
 
 const sceneGroups = [
     "Wii",
@@ -280,6 +281,10 @@ class Main {
 
                 return event;
             },
+        });
+
+        Sentry.configureScope((scope) => {
+            scope.setExtra('git-revision', GIT_REVISION);
         });
     }
 
