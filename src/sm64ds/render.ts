@@ -21,7 +21,6 @@ import { GfxRenderInstViewRenderer, GfxRenderInstBuilder, GfxRenderInst, makeSor
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { BasicRenderTarget, depthClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
-import GfxArena from '../gfx/helpers/GfxArena';
 import { getFormatName, parseTexImageParamWrapModeS, parseTexImageParamWrapModeT, Format } from './nitro_tex';
 import { assert, nArray } from '../util';
 import { RENDER_HACKS_ICON } from '../bk/scenes';
