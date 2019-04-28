@@ -430,9 +430,13 @@ const sceneDescs = [
     "Unused Test Courses",
     new MarioKartDSSceneDesc("dokan_course", "dokan_course"),
     new MarioKartDSSceneDesc("wario_course", "wario_course"),
-    new MarioKartDSSceneDesc("donkey_course", "donkey_course"),
-    new MarioKartDSSceneDesc("luigi_course", "luigi_course"),
-    new MarioKartDSSceneDesc("test1_course", "test1_course"),
+
+    // These try to reference items that aren't in the archive, so we crash.
+    // TODO(jstpierre): Put these back and don't crash on the missing items.
+    // new MarioKartDSSceneDesc("donkey_course", "donkey_course"),
+    // new MarioKartDSSceneDesc("luigi_course", "luigi_course"),
+    // new MarioKartDSSceneDesc("test1_course", "test1_course"),
+
     new MarioKartDSSceneDesc("test_circle", "test_circle"),
     new MarioKartDSSceneDesc("mini_block_course", "mini_block_course"),
     new MarioKartDSSceneDesc("nokonoko_course", "nokonoko_course"),
