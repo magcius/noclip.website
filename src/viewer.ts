@@ -34,14 +34,6 @@ export interface SceneGfx {
     destroy(device: GfxDevice): void;
 }
 
-export const enum InitErrorCode {
-    SUCCESS,
-    NO_WEBGL2_GENERIC,
-    NO_WEBGL2_SAFARI,
-    GARBAGE_WEBGL2_GENERIC,
-    GARBAGE_WEBGL2_SWIFTSHADER,
-}
-
 export type Listener = (viewer: Viewer) => void;
 
 function resetGfxDebugGroup(group: GfxDebugGroup): void {
@@ -235,7 +227,19 @@ interface ViewerOut {
     viewer: Viewer;
 }
 
+export const enum InitErrorCode {
+    SUCCESS,
+    NO_WEBGL2_GENERIC,
+    NO_WEBGL2_SAFARI,
+    GARBAGE_WEBGL2_GENERIC,
+    GARBAGE_WEBGL2_SWIFTSHADER,
+    MISSING_MISC_WEB_APIS,
+}
+
 export function initializeViewer(out: ViewerOut, canvas: HTMLCanvasElement): InitErrorCode {
+    if (typeof AbortController === "undefined")
+        return InitErrorCode.MISSING_MISC_WEB_APIS;
+
     const gl = canvas.getContext("webgl2", { alpha: false, antialias: false });
     if (!gl) {
         if (navigator.vendor.includes('Apple'))
@@ -297,6 +301,11 @@ export function makeErrorUI(errorCode: InitErrorCode): DocumentFragment {
 <p>This browser has a non-functioning version of WebGL 2 that I have not seen before.
 <p>If <a href="http://webglreport.com/?v=2">WebGL Report</a> says your browser supports WebGL 2, please open a <a href="https://github.com/magcius/noclip.website/issues/new?template=tech_support.md">GitHub issue</a> with as much as information as possible.
 <p style="text-align: right">Thanks, Jasper.
+`);
+    else if (errorCode === InitErrorCode.MISSING_MISC_WEB_APIS)
+        return makeErrorMessageUI(`
+<p>Your browser is too old and is missing support for web APIs that I rely on.
+<p>Please try to update your browser to a more recent version.
 `);
     else
         throw "whoops";
