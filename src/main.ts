@@ -536,19 +536,18 @@ class Main {
     }
 
     private _sendAnalytics(): void {
-        const groupId = this.currentSceneGroup.id;
-        const sceneId = this.currentSceneDesc.id;
+        const sceneDescId = this._getCurrentSceneDescId();
 
         if (typeof gtag !== 'undefined') {
             gtag("event", "loadScene", {
                 'event_category': "Scenes",
-                'event_label': `${groupId}/${sceneId}`,
+                'event_label': sceneDescId,
             });
         }
 
         Sentry.addBreadcrumb({
             category: 'loadScene',
-            message: `${groupId}/${sceneId}`,
+            message: sceneDescId,
         });
     }
 

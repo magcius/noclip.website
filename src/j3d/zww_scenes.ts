@@ -1254,13 +1254,13 @@ class SceneDesc {
         });
         // Senza
         else if (name === 'P1b') fetchArchive(`P1.arc`).then((rarc) => {
-            const m = buildModelBMT(rarc, `bdl/p1.bdl`, `bmt/p1b.bmt`);
+            const m = buildModelBMT(rarc, `bdl/p1.bdl`, `bmt/p1b_body.bmt`);
             buildChildModel(rarc, `bdlm/p1b_head.bdl`).setParentJoint(m, `head`);
             m.bindANK1(parseBCK(rarc, `bcks/wait.bck`));
         });
         // Nudge
         else if (name === 'P1c') fetchArchive(`P1.arc`).then((rarc) => {
-            const m = buildModelBMT(rarc, `bdl/p1.bdl`, `bmt/p1c.bmt`);
+            const m = buildModelBMT(rarc, `bdl/p1.bdl`, `bmt/p1c_body.bmt`);
             buildChildModel(rarc, `bdlm/p1c_head.bdl`).setParentJoint(m, `head`);
             m.bindANK1(parseBCK(rarc, `bcks/wait.bck`));
         });
