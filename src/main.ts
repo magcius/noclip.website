@@ -67,6 +67,8 @@ import { Color } from './Color';
 import { standardFullClearRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
 import { DroppedFileSceneDesc } from './FileDrops';
 
+import * as Sentry from '@sentry/browser';
+
 const sceneGroups = [
     "Wii",
     MKWII.sceneGroup,
@@ -265,6 +267,8 @@ class Main {
         }
 
         this._updateLoop(0);
+
+        Sentry.init({ dsn: 'https://a3b5f6c50bc04555835f9a83d6e76b23@sentry.io/1448331' });
     }
 
     private _exportSaveData() {

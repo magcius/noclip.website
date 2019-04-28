@@ -3,6 +3,7 @@
   "private": true,
   "license": "MIT",
   "devDependencies": {
+    "@sentry/browser": "5.1.1",
     "assemblyscript": "github:AssemblyScript/assemblyscript",
     "crc-32": "^1.2.0",
     "gl-matrix": "^3.0.0",
