@@ -75,17 +75,27 @@ void main() {
     vec4 t_Color = vec4(1.0);
 
 #ifdef USE_TEXTURE
-    t_Color *= Texture2D_N64(u_Texture[0], v_TexCoord.xy);
+
+    vec4 t_Texel0 = Texture2D_N64(u_Texture[0], v_TexCoord.xy);
+
+#ifdef USE_2CYCLE_MODE
+
+    vec4 t_Texel1 = Texture2D_N64(u_Texture[1], v_TexCoord.zw);
+#if defined(USE_COMBINE_MODULATE)
+    t_Color = t_Texel0 * t_Texel1 * v_Color;
+#elif defined(USE_COMBINE_DIFFERENCE)
+    t_Color.rgb = v_Color.rgb;
+    t_Color.a = (t_Texel0.a - t_Texel1.a) * v_Color.a;
+#elif defined(USE_COMBINE_INTERP)
+    t_Color.rgb = mix(t_Texel0.rgb, t_Texel1.rgb, v_Color.a);
+    t_Color.a = t_Texel0.a;
 #endif
 
-#ifdef USE_VERTEX_COLOR
-    t_Color.rgba *= v_Color.rgba;
-#endif
+#else
+    t_Color = t_Texel0 * v_Color;
+#endif /* USE_2CYCLE_MODE */
 
-#ifdef USE_ALPHA_VISUALIZER
-    t_Color.rgb = vec3(v_Color.a);
-    t_Color.a = 1.0;
-#endif
+#endif /* USE_TEXTURE */
 
 #ifdef USE_ALPHA_MASK
     if (t_Color.a < 0.0125)

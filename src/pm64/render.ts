@@ -6,7 +6,7 @@ import { mat4 } from "gl-matrix";
 import { GfxRenderInst, GfxRenderInstBuilder, GfxRenderInstViewRenderer } from "../gfx/render/GfxRenderer";
 import { DeviceProgram, DeviceProgramReflection } from "../Program";
 import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2 } from "../gfx/helpers/UniformBufferHelpers";
-import { ModelTreeNode, ModelTreeLeaf, ModelTreeGroup } from "./map_shape";
+import { ModelTreeNode, ModelTreeLeaf, ModelTreeGroup, PropertyType } from "./map_shape";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { RSPOutput, Vertex } from "./f3dex2";
 import { assert, nArray, assertExists } from "../util";
@@ -133,6 +133,12 @@ function translateCM(cm: Tex.TexCM): GfxWrapMode {
     }
 }
 
+const enum RenderMode {
+    OPAQUE       = 0x01,
+    ALPHA_MASK   = 0x0D,
+    ALPHA_MASK_2 = 0x13,
+}
+
 const modelViewScratch = mat4.create();
 const texMatrixScratch = mat4.create();
 const textureMapping = nArray(2, () => new TextureMapping());
@@ -142,14 +148,34 @@ class ModelTreeLeafInstance {
     private templateRenderInst: GfxRenderInst;
     private renderInsts: GfxRenderInst[] = [];
     private textureEnvironment: Tex.TextureEnvironment | null = null;
+    private renderMode: number;
     private visible = true;
 
     constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, textureArchive: Tex.TextureArchive, textureHolder: PaperMario64TextureHolder, private modelTreeLeaf: ModelTreeLeaf) {
         this.n64Data = new N64Data(device, modelTreeLeaf.rspOutput);
 
+        const renderModeProp = assertExists(this.modelTreeLeaf.properties.find((prop) => prop.id === 0x5C));
+        assertExists(renderModeProp.type === PropertyType.INT);
+        if (renderModeProp.type === PropertyType.INT)
+            this.renderMode = renderModeProp.value;
+
         this.templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
         this.templateRenderInst.inputState = this.n64Data.inputState;
         renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, PaperMario64Program.ub_DrawParams);
+
+        if (this.renderMode === RenderMode.OPAQUE) {
+            // Default flags are OK.
+        } else if (this.renderMode === RenderMode.ALPHA_MASK || this.renderMode === RenderMode.ALPHA_MASK_2) {
+            // Default flags are OK.
+        } else {
+            // Misc transparent.
+            this.templateRenderInst.setMegaStateFlags({
+                blendMode: GfxBlendMode.ADD,
+                blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
+                blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+                depthWrite: false,
+            });
+        }
 
         // Find the texture environment settings.
         textureMapping[0].reset();
@@ -221,7 +247,6 @@ class ModelTreeLeafInstance {
     private createProgram(): PaperMario64Program {
         const program = new PaperMario64Program();
 
-        program.defines.set('USE_VERTEX_COLOR', '1');
         if (this.textureEnvironment !== null) {
             program.defines.set('USE_TEXTURE', '1');
 
@@ -232,9 +257,24 @@ class ModelTreeLeafInstance {
                 program.defines.set(`USE_TEXTFILT_AVERAGE`, '1');
             else if (textFilt === Tex.TextFilt.G_TF_BILERP)
                 program.defines.set(`USE_TEXTFILT_BILERP`, '1');
+
+            if (this.textureEnvironment.hasSecondImage) {
+                program.defines.set(`USE_2CYCLE_MODE`, '1');
+                const combineMode = this.textureEnvironment.combineMode;
+                if (combineMode === 0x00 || combineMode === 0x08) {
+                    program.defines.set(`USE_COMBINE_MODULATE`, '1');
+                } else if (combineMode === 0x0D) {
+                    program.defines.set(`USE_COMBINE_DIFFERENCE`, '1');
+                } else if (combineMode === 0x10) {
+                    program.defines.set(`USE_COMBINE_INTERP`, '1');
+                }
+            }
         } else {
             program.defines.set(`USE_TEXTFILT_POINT`, '1');
         }
+
+        if (this.renderMode === RenderMode.ALPHA_MASK)
+            program.defines.set(`USE_ALPHA_MASK`, '1');
 
         return program;
     }
@@ -287,12 +327,6 @@ export class PaperMario64ModelTreeRenderer {
         this.renderInstBuilder = new GfxRenderInstBuilder(device, PaperMario64Program.programReflection, bindingLayouts, uniformBuffers);
         this.templateRenderInst = this.renderInstBuilder.pushTemplateRenderInst();
         this.renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, PaperMario64Program.ub_SceneParams);
-
-        this.templateRenderInst.setMegaStateFlags({
-            blendMode: GfxBlendMode.ADD,
-            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
-        });
 
         this.modelTreeRootInstance = this.translateModelTreeNode(device, modelTreeRoot);
     }

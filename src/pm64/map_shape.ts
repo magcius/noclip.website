@@ -35,7 +35,7 @@ export interface ModelTreeLeaf extends ModelTreeNodeBase {
 
 export type ModelTreeNode = ModelTreeGroup | ModelTreeLeaf;
 
-const enum PropertyType { INT, FLOAT, STRING }
+export const enum PropertyType { INT, FLOAT, STRING }
 
 interface PropertyNumber {
     id: number;

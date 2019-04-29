@@ -75,6 +75,10 @@ function getTLUTSize(siz: ImageSize) {
     }
 }
 
+function expand3to8(n: number): number {
+    return (n << (8 - 3)) | (n << (8 - 6)) | (n >>> (9 - 8));
+}
+
 function expand4to8(n: number): number {
     return (n << (8 - 4)) | (n >>> (8 - 8));
 }
@@ -109,6 +113,21 @@ function decodeTex_RGBA16(dst: Uint8Array, view: DataView, srcIdx: number, tileW
     }
 }
 
+function decodeTex_RGBA32(dst: Uint8Array, view: DataView, srcIdx: number, tileW: number, tileH: number): void {
+    let dstIdx = 0;
+    for (let y = 0; y < tileH; y++) {
+        for (let x = 0; x < tileW; x ++) {
+            const p = view.getUint32(srcIdx);
+            dst[dstIdx + 0] = (p >>> 24) & 0xFF;
+            dst[dstIdx + 1] = (p >>> 16) & 0xFF;
+            dst[dstIdx + 2] = (p >>>  8) & 0xFF;
+            dst[dstIdx + 3] = (p >>>  0) & 0xFF;
+            srcIdx += 0x04;
+            dstIdx += 0x04;
+        }
+    }
+}
+
 function decodeTex_CI4(dst: Uint8Array, view: DataView, srcIdx: number, tileW: number, tileH: number, tlutColorTable: Uint8Array): void {
     let dstIdx = 0;
     for (let y = 0; y < tileH; y++) {
@@ -130,6 +149,29 @@ function decodeTex_CI8(dst: Uint8Array, view: DataView, srcIdx: number, tileW: n
             copyTLUTColor(dst, dstIdx + 4, tlutColorTable, b);
             srcIdx += 0x01;
             dstIdx += 0x04;
+        }
+    }
+}
+
+function decodeTex_IA4(dst: Uint8Array, view: DataView, srcIdx: number, tileW: number, tileH: number): void {
+    let dstIdx = 0;
+    for (let y = 0; y < tileH; y++) {
+        for (let x = 0; x < tileW; x += 2) {
+            const b = view.getUint8(srcIdx);
+            const i0 = expand3to8((b >>> 5) & 0x07);
+            const a0 = ((b >>> 4) & 0x01) ? 0xFF : 0x00;
+            dst[dstIdx + 0] = i0;
+            dst[dstIdx + 1] = i0;
+            dst[dstIdx + 2] = i0;
+            dst[dstIdx + 3] = a0;
+            const i1 = expand3to8((b >>> 1) & 0x07);
+            const a1 = ((b >>> 0) & 0x01) ? 0xFF : 0x00;
+            dst[dstIdx + 4] = i1;
+            dst[dstIdx + 5] = i1;
+            dst[dstIdx + 6] = i1;
+            dst[dstIdx + 7] = a1;
+            srcIdx += 0x01;
+            dstIdx += 0x08;
         }
     }
 }
@@ -250,8 +292,10 @@ export function parse(buffer: ArrayBufferSlice): TextureArchive {
         image.levels.push(dst);
 
         if (format === ImageFormat.G_IM_FMT_RGBA && siz === ImageSize.G_IM_SIZ_16b) return decodeTex_RGBA16(dst, view, dataOffs, width, height);
+        if (format === ImageFormat.G_IM_FMT_RGBA && siz === ImageSize.G_IM_SIZ_32b) return decodeTex_RGBA32(dst, view, dataOffs, width, height);
         if (format === ImageFormat.G_IM_FMT_CI   && siz === ImageSize.G_IM_SIZ_4b)  return decodeTex_CI4(dst, view, dataOffs, width, height, tlut);
         if (format === ImageFormat.G_IM_FMT_CI   && siz === ImageSize.G_IM_SIZ_8b)  return decodeTex_CI8(dst, view, dataOffs, width, height, tlut);
+        if (format === ImageFormat.G_IM_FMT_IA   && siz === ImageSize.G_IM_SIZ_4b)  return decodeTex_IA4(dst, view, dataOffs, width, height);
         if (format === ImageFormat.G_IM_FMT_IA   && siz === ImageSize.G_IM_SIZ_8b)  return decodeTex_IA8(dst, view, dataOffs, width, height);
         if (format === ImageFormat.G_IM_FMT_IA   && siz === ImageSize.G_IM_SIZ_16b) return decodeTex_IA16(dst, view, dataOffs, width, height);
         if (format === ImageFormat.G_IM_FMT_I    && siz === ImageSize.G_IM_SIZ_4b)  return decodeTex_I4(dst, view, dataOffs, width, height);
