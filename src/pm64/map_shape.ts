@@ -196,8 +196,6 @@ export function parse(buffer: ArrayBufferSlice): MapShapeBinary {
                 modelMatrix[13] = ((view.getInt16(modelMatrixOffs + 0x1A) << 16) | (view.getInt16(modelMatrixOffs + 0x3A))) / 0x10000;
                 modelMatrix[14] = ((view.getInt16(modelMatrixOffs + 0x1C) << 16) | (view.getInt16(modelMatrixOffs + 0x3C))) / 0x10000;
                 modelMatrix[15] = ((view.getInt16(modelMatrixOffs + 0x1E) << 16) | (view.getInt16(modelMatrixOffs + 0x3E))) / 0x10000;
-
-                console.log("model matrix found", hexzero(modelMatrixOffs, 4), modelMatrix);
             }
 
             let childrenTableIdx = childrenTableOffs;

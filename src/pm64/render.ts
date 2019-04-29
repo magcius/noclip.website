@@ -189,8 +189,8 @@ class ModelTreeLeafInstance {
     }
 
     private computeTextureMatrix(dst: mat4, image: Tex.Image): void {
-        const ss = 1 / (image.width);
-        const st = 1 / (image.height);
+        const ss = 2 / (image.width);
+        const st = 2 / (image.height);
         dst[0] = ss;
         dst[5] = st;
 
@@ -241,6 +241,8 @@ class ModelTreeLeafInstance {
 
     public destroy(device: GfxDevice): void {
         this.n64Data.destroy(device);
+        for (let i = 0; i < this.gfxSampler.length; i++)
+            device.destroySampler(this.gfxSampler[i]);
     }
 }
 
