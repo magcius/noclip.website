@@ -133,7 +133,6 @@ export class RSPState {
         this.output.pushVertex(this.vertexCache[i1]);
         this.output.pushVertex(this.vertexCache[i2]);
     }
-
 }
 
 const enum F3DEX2_GBI {
@@ -192,7 +191,7 @@ export function runDL_F3DEX2(state: RSPState, addr: number): void {
         const w1 = view.getUint32(i + 0x04);
 
         const cmd: F3DEX2_GBI = w0 >>> 24;
-        // console.log(hexzero(w0, 8), hexzero(w1, 8));
+        console.log(hexzero(w0, 8), hexzero(w1, 8));
 
         switch (cmd) {
         case F3DEX2_GBI.G_ENDDL:
@@ -211,9 +210,9 @@ export function runDL_F3DEX2(state: RSPState, addr: number): void {
         } break;
 
         case F3DEX2_GBI.G_TRI1: {
-            const i0 = ((w1 >>> 16) & 0xFF) / 2;
-            const i1 = ((w1 >>>  8) & 0xFF) / 2;
-            const i2 = ((w1 >>>  0) & 0xFF) / 2;
+            const i0 = ((w0 >>> 16) & 0xFF) / 2;
+            const i1 = ((w0 >>>  8) & 0xFF) / 2;
+            const i2 = ((w0 >>>  0) & 0xFF) / 2;
             state.gSPTri(i0, i1, i2);
         } break;
 
