@@ -51,6 +51,7 @@ import * as RTDL from './rres/rtdl_scenes';
 import * as SONIC_COLORS from './rres/sonic_colors_scenes';
 import * as KLONOA from './rres/klonoa_scenes';
 import * as KATAMARI_DAMACY from './katamari_damacy/scenes';
+import * as PM64 from './pm64/scenes';
 
 import { UI, SaveStatesAction } from './ui';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera';
@@ -113,6 +114,7 @@ const sceneGroups = [
     DKS.sceneGroup,
     THUG2.sceneGroup,
     SONIC_COLORS.sceneGroup,
+    PM64.sceneGroup,
 ];
 
 function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
@@ -535,22 +537,6 @@ class Main {
         }
     }
 
-    private _sendAnalytics(): void {
-        const sceneDescId = this._getCurrentSceneDescId();
-
-        if (typeof gtag !== 'undefined') {
-            gtag("event", "loadScene", {
-                'event_category': "Scenes",
-                'event_label': sceneDescId,
-            });
-        }
-
-        Sentry.addBreadcrumb({
-            category: 'loadScene',
-            message: sceneDescId,
-        });
-    }
-
     private _loadSceneDesc(sceneGroup: SceneGroup, sceneDesc: SceneDesc, sceneStateStr: string | null = null): Progressable<SceneGfx> {
         if (this.currentSceneDesc === sceneDesc)
             return Progressable.resolve(null);
@@ -571,7 +557,24 @@ class Main {
         // Set window title.
         document.title = `${sceneDesc.name} - ${sceneGroup.name} - noclip`;
 
-        this._sendAnalytics();
+        const sceneDescId = this._getCurrentSceneDescId();
+
+        if (typeof gtag !== 'undefined') {
+            gtag("event", "loadScene", {
+                'event_category': "Scenes",
+                'event_label': sceneDescId,
+            });
+        }
+
+        Sentry.addBreadcrumb({
+            category: 'loadScene',
+            message: sceneDescId,
+        });
+        
+        Sentry.configureScope((scope) => {
+            scope.setExtra('sceneDescId', sceneDescId);
+        });
+
         return progressable;
     }
 
