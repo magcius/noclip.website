@@ -749,7 +749,7 @@ export function runDL_F3DEX(state: RSPState, addr: number): void {
 
         switch (cmd) {
         case F3DEX_GBI.G_ENDDL:
-            // This doesn't end the DL (at least in B-K).
+            // TODO(jstpierre): Properly support the B-K model tree. This is a hack.
             break;
 
         case F3DEX_GBI.G_CLEARGEOMETRYMODE:
