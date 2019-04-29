@@ -14,8 +14,15 @@ export interface MapShapeBinary {
 
 const ramAddrBase = 0x80210000;
 
+const enum InternalType {
+    LEAF = 0x02,
+    GROUP = 0x05,
+    ROOT = 0x07,
+    SPECIAL = 0x10,
+}
+
 interface ModelTreeNodeBase {
-    internalType: number;
+    internalType: InternalType;
     name: string;
     bbox: AABB;
 }
@@ -40,7 +47,8 @@ export const enum PropertyType { INT, FLOAT, STRING }
 interface PropertyNumber {
     id: number;
     type: PropertyType.INT | PropertyType.FLOAT;
-    value: number;
+    value0: number;
+    value1: number;
 }
 
 interface PropertyString {
@@ -62,21 +70,29 @@ export function parse(buffer: ArrayBufferSlice): MapShapeBinary {
 
     let modelNameTableIdx = modelNameTableOffs;
     function readNextModelName(): string {
-        const addr = view.getUint32(modelNameTableIdx + 0x04);
+        const addr = view.getUint32(modelNameTableIdx + 0x00);
+        const name = readString(buffer, addr - ramAddrBase, 0x30, true);
         modelNameTableIdx += 0x04;
-        return readString(buffer, addr - ramAddrBase, 0x30, true);
+        return name;
     }
 
     function parseProperty(propertyOffs: number): Property {
         const id = view.getUint32(propertyOffs + 0x00);
-        const type = view.getUint32(propertyOffs + 0x04);
+        const value0 = view.getUint32(propertyOffs + 0x04);
+        const type = value0 & 0xFF;
+
+        // XXX(jstpierre): Special case this hack for now.
+        if (id === 0x5F) {
+            const value1 = view.getUint32(propertyOffs + 0x08);
+            return { id, type: PropertyType.INT, value0, value1 };
+        }
 
         if (type === PropertyType.INT) {
-            const value = view.getUint32(propertyOffs + 0x08);
-            return { id, type, value };
+            const value1 = view.getUint32(propertyOffs + 0x08);
+            return { id, type, value0, value1 };
         } else if (type === PropertyType.FLOAT) {
-            const value = view.getFloat32(propertyOffs + 0x08);
-            return { id, type, value };
+            const value1 = view.getFloat32(propertyOffs + 0x08);
+            return { id, type, value0, value1 };
         } else if (type === PropertyType.STRING) {
             const stringAddr = view.getUint32(propertyOffs + 0x08);
             if (stringAddr !== 0) {
@@ -93,13 +109,11 @@ export function parse(buffer: ArrayBufferSlice): MapShapeBinary {
 
     // Go through and decode the model tree.
     function parseModelTreeNode(nodeOffs: number): ModelTreeNode {
-        const internalType = view.getUint32(nodeOffs + 0x00);
+        const internalType: InternalType = view.getUint32(nodeOffs + 0x00);
         const displayDataOffs = view.getUint32(nodeOffs + 0x04) - ramAddrBase;
         const numProperties = view.getUint32(nodeOffs + 0x08);
         const propertyTableOffs = view.getUint32(nodeOffs + 0x0C) - ramAddrBase;
         const groupDataAddr = view.getUint32(nodeOffs + 0x10);
-
-        const name = readNextModelName();
 
         // Parse through properties.
 
@@ -117,13 +131,19 @@ export function parse(buffer: ArrayBufferSlice): MapShapeBinary {
         function expectPropertyFloat(id: number) {
             const p = readNextProperty();
             assert(p.id === id && p.type === PropertyType.FLOAT);
-            return p.value as number;
+            if (p.type === PropertyType.FLOAT)
+                return p.value1 as number;
+            else
+                throw "whoops";
         }
 
         function expectPropertyString(id: number) {
             const p = readNextProperty();
             assert(p.id === id && p.type === PropertyType.STRING);
-            return p.value as (string | null);
+            if (p.type === PropertyType.STRING)
+                return p.value as (string | null);
+            else
+                throw "whoops";
         }
 
         const minX = expectPropertyFloat(0x61);
@@ -135,11 +155,10 @@ export function parse(buffer: ArrayBufferSlice): MapShapeBinary {
 
         const bbox = new AABB(minX, minY, minZ, maxX, maxY, maxZ);
 
-        if (internalType === 0x02) {
-            // Leaf.
+        if (internalType === InternalType.LEAF) {
             assert(groupDataAddr === 0x00);
 
-            const textureName = expectPropertyString(0x5E);
+            const texEnvName = expectPropertyString(0x5E);
 
             // Everything else is misc. properties.
             const properties: Property[] = [];
@@ -156,12 +175,14 @@ export function parse(buffer: ArrayBufferSlice): MapShapeBinary {
             rspState.finish();
             const rspOutput = rspState.finish();
 
+            const name = readNextModelName();
+
             return {
                 type: 'leaf',
                 internalType,
                 name,
                 bbox,
-                texEnvName: textureName,
+                texEnvName,
                 properties,
                 rspOutput,
             };
@@ -175,35 +196,37 @@ export function parse(buffer: ArrayBufferSlice): MapShapeBinary {
             const numChildren = view.getUint32(groupDataOffs + 0x0C);
             const childrenTableOffs = view.getUint32(groupDataOffs + 0x10) - ramAddrBase;
 
-            const modelMatrix = mat4.create();
-            if (modelMatrixAddr !== 0) {
-                const modelMatrixOffs = modelMatrixAddr - ramAddrBase;
-
-                // The RDP matrix format is a bit bizarre. High values are separate from low ones.
-                modelMatrix[0]  = ((view.getInt16(modelMatrixOffs + 0x00) << 16) | (view.getInt16(modelMatrixOffs + 0x20))) / 0x10000;
-                modelMatrix[1]  = ((view.getInt16(modelMatrixOffs + 0x02) << 16) | (view.getInt16(modelMatrixOffs + 0x22))) / 0x10000;
-                modelMatrix[2]  = ((view.getInt16(modelMatrixOffs + 0x04) << 16) | (view.getInt16(modelMatrixOffs + 0x24))) / 0x10000;
-                modelMatrix[3]  = ((view.getInt16(modelMatrixOffs + 0x06) << 16) | (view.getInt16(modelMatrixOffs + 0x26))) / 0x10000;
-                modelMatrix[4]  = ((view.getInt16(modelMatrixOffs + 0x08) << 16) | (view.getInt16(modelMatrixOffs + 0x28))) / 0x10000;
-                modelMatrix[5]  = ((view.getInt16(modelMatrixOffs + 0x0A) << 16) | (view.getInt16(modelMatrixOffs + 0x2A))) / 0x10000;
-                modelMatrix[6]  = ((view.getInt16(modelMatrixOffs + 0x0C) << 16) | (view.getInt16(modelMatrixOffs + 0x2C))) / 0x10000;
-                modelMatrix[7]  = ((view.getInt16(modelMatrixOffs + 0x0E) << 16) | (view.getInt16(modelMatrixOffs + 0x2E))) / 0x10000;
-                modelMatrix[8]  = ((view.getInt16(modelMatrixOffs + 0x10) << 16) | (view.getInt16(modelMatrixOffs + 0x30))) / 0x10000;
-                modelMatrix[9]  = ((view.getInt16(modelMatrixOffs + 0x12) << 16) | (view.getInt16(modelMatrixOffs + 0x32))) / 0x10000;
-                modelMatrix[10] = ((view.getInt16(modelMatrixOffs + 0x14) << 16) | (view.getInt16(modelMatrixOffs + 0x34))) / 0x10000;
-                modelMatrix[11] = ((view.getInt16(modelMatrixOffs + 0x16) << 16) | (view.getInt16(modelMatrixOffs + 0x36))) / 0x10000;
-                modelMatrix[12] = ((view.getInt16(modelMatrixOffs + 0x18) << 16) | (view.getInt16(modelMatrixOffs + 0x38))) / 0x10000;
-                modelMatrix[13] = ((view.getInt16(modelMatrixOffs + 0x1A) << 16) | (view.getInt16(modelMatrixOffs + 0x3A))) / 0x10000;
-                modelMatrix[14] = ((view.getInt16(modelMatrixOffs + 0x1C) << 16) | (view.getInt16(modelMatrixOffs + 0x3C))) / 0x10000;
-                modelMatrix[15] = ((view.getInt16(modelMatrixOffs + 0x1E) << 16) | (view.getInt16(modelMatrixOffs + 0x3E))) / 0x10000;
-            }
-
             let childrenTableIdx = childrenTableOffs;
             const children: ModelTreeNode[] = [];
             for (let i = 0; i < numChildren; i++) {
                 const childNodeOffs = view.getUint32(childrenTableIdx + 0x00) - ramAddrBase;
                 children.push(parseModelTreeNode(childNodeOffs));
                 childrenTableIdx += 0x04;
+            }
+
+            const name = internalType === InternalType.ROOT ? "root" : readNextModelName();
+
+            const modelMatrix = mat4.create();
+            if (modelMatrixAddr !== 0) {
+                const modelMatrixOffs = modelMatrixAddr - ramAddrBase;
+
+                // The RDP matrix format is a bit bizarre. High values are separate from low ones.
+                modelMatrix[0]  = ((view.getInt16(modelMatrixOffs + 0x00) << 16) | (view.getUint16(modelMatrixOffs + 0x20))) / 0x10000;
+                modelMatrix[1]  = ((view.getInt16(modelMatrixOffs + 0x02) << 16) | (view.getUint16(modelMatrixOffs + 0x22))) / 0x10000;
+                modelMatrix[2]  = ((view.getInt16(modelMatrixOffs + 0x04) << 16) | (view.getUint16(modelMatrixOffs + 0x24))) / 0x10000;
+                modelMatrix[3]  = ((view.getInt16(modelMatrixOffs + 0x06) << 16) | (view.getUint16(modelMatrixOffs + 0x26))) / 0x10000;
+                modelMatrix[4]  = ((view.getInt16(modelMatrixOffs + 0x08) << 16) | (view.getUint16(modelMatrixOffs + 0x28))) / 0x10000;
+                modelMatrix[5]  = ((view.getInt16(modelMatrixOffs + 0x0A) << 16) | (view.getUint16(modelMatrixOffs + 0x2A))) / 0x10000;
+                modelMatrix[6]  = ((view.getInt16(modelMatrixOffs + 0x0C) << 16) | (view.getUint16(modelMatrixOffs + 0x2C))) / 0x10000;
+                modelMatrix[7]  = ((view.getInt16(modelMatrixOffs + 0x0E) << 16) | (view.getUint16(modelMatrixOffs + 0x2E))) / 0x10000;
+                modelMatrix[8]  = ((view.getInt16(modelMatrixOffs + 0x10) << 16) | (view.getUint16(modelMatrixOffs + 0x30))) / 0x10000;
+                modelMatrix[9]  = ((view.getInt16(modelMatrixOffs + 0x12) << 16) | (view.getUint16(modelMatrixOffs + 0x32))) / 0x10000;
+                modelMatrix[10] = ((view.getInt16(modelMatrixOffs + 0x14) << 16) | (view.getUint16(modelMatrixOffs + 0x34))) / 0x10000;
+                modelMatrix[11] = ((view.getInt16(modelMatrixOffs + 0x16) << 16) | (view.getUint16(modelMatrixOffs + 0x36))) / 0x10000;
+                modelMatrix[12] = ((view.getInt16(modelMatrixOffs + 0x18) << 16) | (view.getUint16(modelMatrixOffs + 0x38))) / 0x10000;
+                modelMatrix[13] = ((view.getInt16(modelMatrixOffs + 0x1A) << 16) | (view.getUint16(modelMatrixOffs + 0x3A))) / 0x10000;
+                modelMatrix[14] = ((view.getInt16(modelMatrixOffs + 0x1C) << 16) | (view.getUint16(modelMatrixOffs + 0x3C))) / 0x10000;
+                modelMatrix[15] = ((view.getInt16(modelMatrixOffs + 0x1E) << 16) | (view.getUint16(modelMatrixOffs + 0x3E))) / 0x10000;
             }
 
             return {

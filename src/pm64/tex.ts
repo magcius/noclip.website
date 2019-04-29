@@ -245,7 +245,19 @@ function decodeTex_I8(dst: Uint8Array, view: DataView, srcIdx: number, tileW: nu
     }
 }
 
-export function parse(buffer: ArrayBufferSlice): TextureArchive {
+function parseTLUT(view: DataView, idx: number, siz: ImageSize): Uint8Array {
+    // Read the palette.
+    const tlutSize = getTLUTSize(siz);
+    const tlut = new Uint8Array(tlutSize * 4);
+    for (let i = 0; i < tlutSize; i++) {
+        const p = view.getUint16(idx);
+        r5g5b5a1(tlut, i * 4, p);
+        idx += 0x02;
+    }
+    return tlut;
+}
+
+export function parseTextureArchive(buffer: ArrayBufferSlice): TextureArchive {
     const view = buffer.createDataView();
 
     function readImageBase(name: string, attr0: number, attr1: number, attr2: number, attr3: number, advanceIdx: boolean = true, heightShift: number = 0): Image {
@@ -392,4 +404,23 @@ export function parse(buffer: ArrayBufferSlice): TextureArchive {
     }
 
     return { textureEnvironments };
+}
+
+const ramAddrBase = 0x80200000;
+export function parseBackground(buffer: ArrayBufferSlice, name: string, offs: number = 0x00): Image {
+    const view = buffer.createDataView();
+    const imageOffs = view.getUint32(0x00) - ramAddrBase;
+    const paletteOffs = view.getUint32(0x04) - ramAddrBase;
+    const width = view.getUint16(0x0C);
+    const height = view.getUint16(0x0E);
+
+    const format = ImageFormat.G_IM_FMT_CI;
+    const siz = ImageSize.G_IM_SIZ_8b;
+    const tlut = parseTLUT(view, paletteOffs, siz);
+
+    const dst = new Uint8Array(width * height * 4);
+    const levels: Uint8Array[] = [dst];
+    decodeTex_CI8(dst, view, imageOffs, width, height, tlut);
+
+    return { name, format, siz, width, height, levels, dataOffs: 0, cms: 0, cmt: 0 };
 }

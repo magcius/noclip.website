@@ -3,9 +3,9 @@ import { GfxHostAccessPass, GfxBufferUsage, GfxBufferFrequencyHint, GfxDevice, G
 import * as Viewer from '../viewer';
 import { GfxRenderBuffer } from "../gfx/render/GfxRenderBuffer";
 import { mat4 } from "gl-matrix";
-import { GfxRenderInst, GfxRenderInstBuilder, GfxRenderInstViewRenderer } from "../gfx/render/GfxRenderer";
+import { GfxRenderInst, GfxRenderInstBuilder, GfxRenderInstViewRenderer, makeSortKeyOpaque, GfxRendererLayer } from "../gfx/render/GfxRenderer";
 import { DeviceProgram, DeviceProgramReflection } from "../Program";
-import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2 } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, BufferFillerHelper } from "../gfx/helpers/UniformBufferHelpers";
 import { ModelTreeNode, ModelTreeLeaf, ModelTreeGroup, PropertyType } from "./map_shape";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { RSPOutput, Vertex } from "./f3dex2";
@@ -14,6 +14,7 @@ import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
 import * as Tex from './tex';
 //@ts-ignore
 import { readFileSync } from 'fs';
+import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 
 class PaperMario64Program extends DeviceProgram {
     public static a_Position = 0;
@@ -133,6 +134,91 @@ function translateCM(cm: Tex.TexCM): GfxWrapMode {
     }
 }
 
+class BackgroundBillboardProgram extends DeviceProgram {
+    public static ub_Params = 0;
+
+    public both: string = `
+layout(row_major, std140) uniform ub_Params {
+    vec4 u_ScaleOffset;
+};
+
+uniform sampler2D u_Texture;
+`;
+
+    public vert: string = `
+out vec2 v_TexCoord;
+
+void main() {
+    vec2 p;
+    p.x = (gl_VertexID == 1) ? 2.0 : 0.0;
+    p.y = (gl_VertexID == 2) ? 2.0 : 0.0;
+    gl_Position.xy = p * vec2(2) - vec2(1);
+    gl_Position.zw = vec2(1);
+    v_TexCoord = p * u_ScaleOffset.xy + u_ScaleOffset.zw;
+}
+`;
+
+    public frag: string = `
+in vec2 v_TexCoord;
+
+void main() {
+    vec4 color = texture(u_Texture, v_TexCoord);
+    gl_FragColor = vec4(color.rgb, 1.0);
+}
+`;
+}
+
+export class BackgroundBillboardRenderer {
+    private program = new BackgroundBillboardProgram();
+    private bufferFiller: BufferFillerHelper;
+    private paramsBuffer: GfxRenderBuffer;
+    private paramsBufferOffset: number;
+    private renderInst: GfxRenderInst;
+    private textureMappings = nArray(1, () => new TextureMapping());
+
+    constructor(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer, textureHolder: PaperMario64TextureHolder, public textureName: string) {
+        const gfxProgram = device.createProgram(this.program);
+        const programReflection = device.queryProgram(gfxProgram);
+        const paramsLayout = programReflection.uniformBufferLayouts[0];
+        this.bufferFiller = new BufferFillerHelper(paramsLayout);
+        this.paramsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);
+
+        const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 1 }];
+
+        const renderInstBuilder = new GfxRenderInstBuilder(device, programReflection, bindingLayouts, [ this.paramsBuffer ]);
+        this.renderInst = renderInstBuilder.pushRenderInst();
+        this.renderInst.name = 'BackgroundBillboardRenderer';
+        this.renderInst.drawTriangles(3);
+        this.renderInst.sortKey = makeSortKeyOpaque(GfxRendererLayer.BACKGROUND, programReflection.uniqueKey);
+        // No input state, we don't use any vertex buffers for full-screen passes.
+        this.renderInst.inputState = null;
+        this.renderInst.setGfxProgram(gfxProgram);
+        this.renderInst.setMegaStateFlags(fullscreenMegaState);
+        this.paramsBufferOffset = renderInstBuilder.newUniformBufferInstance(this.renderInst, 0);
+        renderInstBuilder.finish(device, viewRenderer);
+
+        // Set our texture bindings.
+        textureHolder.fillTextureMapping(this.textureMappings[0], this.textureName);
+        this.renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
+    }
+
+    public prepareToRender(hostAccessPass: GfxHostAccessPass, renderInput: Viewer.ViewerRenderInput): void {
+        // Extract yaw
+        const view = renderInput.camera.viewMatrix;
+        const o = Math.atan2(-view[2], view[0]) / (Math.PI * 2) * 4;
+        this.bufferFiller.reset();
+        const aspect = renderInput.viewportWidth / renderInput.viewportHeight;
+        this.bufferFiller.fillVec4(aspect, -1, o, 0);
+        this.bufferFiller.endAndUpload(hostAccessPass, this.paramsBuffer, this.paramsBufferOffset);
+        this.paramsBuffer.prepareToRender(hostAccessPass);
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyProgram(this.renderInst.gfxProgram);
+        this.paramsBuffer.destroy(device);
+    }
+}
+
 const enum RenderMode {
     OPAQUE       = 0x01,
     ALPHA_MASK   = 0x0D,
@@ -157,10 +243,11 @@ class ModelTreeLeafInstance {
         const renderModeProp = assertExists(this.modelTreeLeaf.properties.find((prop) => prop.id === 0x5C));
         assertExists(renderModeProp.type === PropertyType.INT);
         if (renderModeProp.type === PropertyType.INT)
-            this.renderMode = renderModeProp.value;
+            this.renderMode = renderModeProp.value1;
 
         this.templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
         this.templateRenderInst.inputState = this.n64Data.inputState;
+        this.templateRenderInst.sortKey = makeSortKeyOpaque(GfxRendererLayer.OPAQUE, 0);
         renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, PaperMario64Program.ub_DrawParams);
 
         if (this.renderMode === RenderMode.OPAQUE) {
@@ -244,6 +331,10 @@ class ModelTreeLeafInstance {
         }
     }
 
+    public setVisible(v: boolean): void {
+        this.visible = v;
+    }
+
     private createProgram(): PaperMario64Program {
         const program = new PaperMario64Program();
 
@@ -290,6 +381,11 @@ class ModelTreeGroupInstance {
     private modelMatrixScratch = mat4.create();
 
     constructor(private group: ModelTreeGroup, private children: ModelTreeNodeInstance[]) {
+    }
+
+    public setVisible(v: boolean): void {
+        for (let i = 0; i < this.children.length; i++)
+            this.children[i].setVisible(v);
     }
 
     public prepareToRender(drawParamsBuffer: GfxRenderBuffer, modelMatrix: mat4, viewerInput: Viewer.ViewerRenderInput): void {
