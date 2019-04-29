@@ -263,7 +263,6 @@ export function parse(buffer: ArrayBufferSlice): TextureArchive {
     const textureEnvironments: TextureEnvironment[] = [];
     while (idx < buffer.byteLength) {
         const name = readString(buffer, idx + 0x00, 0x20, true);
-        assert(name.startsWith('mac_'));
         const attr0 = view.getUint32(idx + 0x20);
         const attr1 = view.getUint32(idx + 0x24);
         const attr2 = view.getUint32(idx + 0x28);
