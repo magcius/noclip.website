@@ -24,7 +24,7 @@ class PaperMario64Program extends DeviceProgram {
     public static ub_SceneParams = 0;
     public static ub_DrawParams = 1;
 
-    private static program = readFileSync('src/bk/program.glsl', { encoding: 'utf8' });
+    private static program = readFileSync('src/pm64/program.glsl', { encoding: 'utf8' });
     public static programReflection: DeviceProgramReflection = DeviceProgram.parseReflectionDefinitions(PaperMario64Program.program);
     public both = PaperMario64Program.program;
 }
