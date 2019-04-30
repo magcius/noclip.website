@@ -9,7 +9,7 @@ import { mat4 } from "gl-matrix";
 
 import * as ARC from './arc';
 import * as BRRES from '../rres/brres';
-import { assert, readString, hexdump } from "../util";
+import { assert, readString, hexdump, hexzero } from "../util";
 import { calcModelMtx } from "../oot3d/cmb";
 import { BasicRendererHelper } from "../oot3d/render";
 import { GXRenderHelperGfx } from "../gx/gx_render";
@@ -51,9 +51,9 @@ function parseSCR(buffer: ArrayBufferSlice): SCR {
         const scaleX = view.getInt16(instanceOffs + 0x1E) / 0x1000;
         const scaleY = view.getInt16(instanceOffs + 0x20) / 0x1000;
         const scaleZ = view.getInt16(instanceOffs + 0x22) / 0x1000;
-        const rotationX = view.getInt16(instanceOffs + 0x24) / 0x80 * -Math.PI;
-        const rotationY = view.getInt16(instanceOffs + 0x26) / 0x80 * -Math.PI;
-        const rotationZ = view.getInt16(instanceOffs + 0x28) / 0x80 * -Math.PI;
+        const rotationX = view.getInt16(instanceOffs + 0x24) / 0x800 * Math.PI;
+        const rotationY = view.getInt16(instanceOffs + 0x26) / 0x800 * Math.PI;
+        const rotationZ = view.getInt16(instanceOffs + 0x28) / 0x800 * Math.PI;
         const translationX = view.getInt16(instanceOffs + 0x2A);
         const translationY = view.getInt16(instanceOffs + 0x2C);
         const translationZ = view.getInt16(instanceOffs + 0x2E);
