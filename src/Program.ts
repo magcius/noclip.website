@@ -248,6 +248,14 @@ ${rest}
             editor.setValue(shader);
             editor.setFontSize('16px');
             let timeout: number = 0;
+
+            const tryCompile = () => {
+                timeout = 0;
+                this[n] = editor.getValue();
+                this.compileDirty = true;
+                this.preprocessedVert = '';
+            };
+
             editor.onvaluechanged = function() {
                 if (timeout > 0)
                     clearTimeout(timeout);
@@ -257,12 +265,6 @@ ${rest}
                 editor.setSize(document.body.offsetWidth, window.innerHeight);
             };
             onresize();
-            const tryCompile = () => {
-                timeout = 0;
-                this[n] = editor.getValue();
-                this.compileDirty = true;
-                this.preprocessedVert = '';
-            };
             (win as any).editor = editor;
             win.document.body.appendChild(editor.elem);
         };

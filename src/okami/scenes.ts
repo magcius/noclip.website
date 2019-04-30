@@ -3,7 +3,7 @@ import { GfxDevice, GfxHostAccessPass } from "../gfx/platform/GfxPlatform";
 import * as Viewer from '../viewer';
 import Progressable from "../Progressable";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { fetchData, downloadBufferSlice } from "../fetch";
+import { fetchData } from "../fetch";
 import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from "../rres/render";
 import { mat4 } from "gl-matrix";
 
@@ -14,6 +14,7 @@ import { calcModelMtx } from "../oot3d/cmb";
 import { BasicRendererHelper } from "../oot3d/render";
 import { GXRenderHelperGfx } from "../gx/gx_render";
 import AnimationController from "../AnimationController";
+import { GXMaterialHacks } from "../gx/gx_material";
 
 const pathBase = `okami`;
 
@@ -43,11 +44,12 @@ function parseSCR(buffer: ArrayBufferSlice): SCR {
         const instanceOffs = view.getUint32(instancesTableIdx + 0x00);
 
         const mdbRelOffs = view.getInt32(instanceOffs + 0x00);
-        const index = view.getUint32(instanceOffs + 0x04);
+        let index: number;
         let materialFlags: number;
 
         const modelMatrix = mat4.create();
         if (storageMode === 0x01) {
+            index = view.getUint32(instanceOffs + 0x04);
             materialFlags = view.getUint16(instanceOffs + 0x08);
 
             const scaleX = view.getInt16(instanceOffs + 0x1E) / 0x1000;
@@ -61,6 +63,7 @@ function parseSCR(buffer: ArrayBufferSlice): SCR {
             const translationZ = view.getInt16(instanceOffs + 0x2E);
             calcModelMtx(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
         } else if (storageMode === 0x00) {
+            index = i;
             materialFlags = 0x00;
 
             const scaleX = view.getFloat32(instanceOffs + 0x08);
@@ -115,6 +118,10 @@ export class OkamiRenderer extends BasicRendererHelper {
     }
 }
 
+const materialHacks: GXMaterialHacks = {
+    lightingFudge: (p) => `vec4((0.5 * ${p.matSource}).rgb, 1.0)`,
+};
+
 class OkamiSCPArchiveData {
     private scrModels: MDL0Model[][] = [];
     public scr: SCR[] = [];
@@ -147,7 +154,14 @@ class OkamiSCPArchiveData {
 
             const mdl0Models: MDL0Model[] = [];
             for (let j = 0; j < brs.mdl0.length; j++) {
-                const mdl0Model = new MDL0Model(device, renderer.renderHelper, brs.mdl0[j]);
+                const mdl0 = brs.mdl0[j];
+                // XXX(jstpierre): Dumb hacks.
+                for (let k = 0; k < mdl0.materials.length; k++) {
+                    assert(mdl0.materials[k].gxMaterial.tevStages.length === 1);
+                    mdl0.materials[k].gxMaterial.tevStages[0].texMap = 0;
+                }
+
+                const mdl0Model = new MDL0Model(device, renderer.renderHelper, brs.mdl0[j], materialHacks);
                 renderer.models.push(mdl0Model);
                 mdl0Models.push(mdl0Model);
             }
@@ -211,15 +225,15 @@ class ModelCache {
     }
 }
 
-const objectTypePrefixes: (string | undefined)[] = [
-    undefined,
+const objectTypePrefixes: (string | null)[] = [
+    null,
     'pl',
     'em',
     'et',
     'hm',
     'an',
     'wp',
-    undefined,
+    null,
     'ut',
     'gt',
     'it',
@@ -227,10 +241,13 @@ const objectTypePrefixes: (string | undefined)[] = [
     'dr',
     'md',
     'es',
+    null,
 ];
 
-function getObjectFilename(objectTypeId: number, objectId: number): string {
-    const prefix = assertExists(objectTypePrefixes[objectTypeId]);
+function getObjectFilename(objectTypeId: number, objectId: number): string | null {
+    const prefix = objectTypePrefixes[objectTypeId];
+    if (prefix === null)
+        return null;
     return `${prefix}${hexzero(objectId, 2).toLowerCase()}.dat`;
 }
 
@@ -246,9 +263,9 @@ class OkamiSceneDesc implements Viewer.SceneDesc {
             const objectTypeId = view.getUint8(tableIdx + 0x00);
             const objectId = view.getUint8(tableIdx + 0x01);
 
-            const scaleX = view.getUint8(tableIdx + 0x04) / 0x20;
-            const scaleY = view.getUint8(tableIdx + 0x05) / 0x20;
-            const scaleZ = view.getUint8(tableIdx + 0x06) / 0x20;
+            const scaleX = view.getUint8(tableIdx + 0x04) / 0x10;
+            const scaleY = view.getUint8(tableIdx + 0x05) / 0x10;
+            const scaleZ = view.getUint8(tableIdx + 0x06) / 0x10;
             const rotationX = view.getInt8(tableIdx + 0x07) / 0x80 * Math.PI;
             const rotationY = view.getInt8(tableIdx + 0x08) / 0x80 * Math.PI;
             const rotationZ = view.getInt8(tableIdx + 0x09) / 0x80 * Math.PI;
@@ -257,15 +274,18 @@ class OkamiSceneDesc implements Viewer.SceneDesc {
             const translationZ = view.getInt16(tableIdx + 0x0E);
             // TODO(jstpierre): The rest of the spawn table.
 
+            tableIdx += 0x20;
+
             const modelMatrix = mat4.create();
             calcModelMtx(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
 
             const filename = getObjectFilename(objectTypeId, objectId);
+            if (filename === null)
+                continue;
+
             modelCache.fetchSCPArchive(device, renderer, `${pathBase}/${filename}`, abortSignal, true).then((scpArcData) => {
                 scpArcData.createInstances(device, renderer, modelMatrix);
             });
-
-            tableIdx += 0x20;
         }
     }
 
