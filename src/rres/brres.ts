@@ -5,7 +5,7 @@
 import * as GX from '../gx/gx_enum';
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString } from "../util";
+import { assert, readString, assertExists } from "../util";
 import * as GX_Material from '../gx/gx_material';
 import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, compileVtxLoader, LoadedVertexLayout, getAttributeComponentByteSizeRaw, getAttributeFormatCompFlagsRaw } from '../gx/gx_displaylist';
 import { mat4, mat2d } from 'gl-matrix';
@@ -60,6 +60,21 @@ function calcTexMtx_Maya(dst: mat4, scaleS: number, scaleT: number, rotation: nu
     dst[13] = scaleT * ((-0.5 * cosR) + (0.5 * sinR - 0.5) + translationT) + 1;
 }
 
+function calcTexMtx_XSI(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
+    const theta = Math.PI / 180 * rotation;
+    const sinR = Math.sin(theta);
+    const cosR = Math.cos(theta);
+
+    mat4.identity(dst);
+
+    dst[0]  = scaleS *  cosR;
+    dst[1]  = scaleT *  sinR;
+    dst[4]  = scaleS * -sinR;
+    dst[5]  = scaleT *  cosR;
+    dst[12] = (scaleS *  sinR) - (scaleS * cosR * translationS) - (scaleS * sinR * translationT);
+    dst[12] = (scaleT * -cosR) - (scaleS * sinR * translationS) + (scaleS * cosR * translationT) + 1;
+}
+
 function calcTexMtx_Max(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
     const theta = Math.PI / 180 * rotation;
     const sinR = Math.sin(theta);
@@ -78,6 +93,7 @@ function calcTexMtx_Max(dst: mat4, scaleS: number, scaleT: number, rotation: num
 const enum TexMatrixMode {
     BASIC = -1,
     MAYA = 0,
+    XSI = 1,
     MAX = 2,
 };
 
@@ -87,6 +103,8 @@ function calcTexMtx(dst: mat4, texMtxMode: TexMatrixMode, scaleS: number, scaleT
         return calcTexMtx_Basic(dst, scaleS, scaleT, rotation, translationS, translationT);
     case TexMatrixMode.MAYA:
         return calcTexMtx_Maya(dst, scaleS, scaleT, rotation, translationS, translationT);
+    case TexMatrixMode.XSI:
+        return calcTexMtx_XSI(dst, scaleS, scaleT, rotation, translationS, translationT);
     case TexMatrixMode.MAX:
         return calcTexMtx_Max(dst, scaleS, scaleT, rotation, translationS, translationT);
     default:
@@ -156,6 +174,33 @@ function parseResDic(buffer: ArrayBufferSlice, tableOffs: number): ResDicEntry[]
 }
 //#endregion
 
+//#region PLT0
+export interface PLT0 {
+    name: string;
+    format: GX.TexPalette;
+    data: ArrayBufferSlice | null;
+}
+
+function parsePLT0(buffer: ArrayBufferSlice): PLT0 {
+    const view = buffer.createDataView();
+
+    assert(readString(buffer, 0x00, 0x04) === 'PLT0');
+    const version = view.getUint32(0x08);
+    const supportedVersions = [0x01];
+    assert(supportedVersions.includes(version));
+
+    const dataOffs = view.getUint32(0x10);
+    const nameOffs = view.getUint32(0x14);
+    const name = readString(buffer, nameOffs);
+
+    const format: GX.TexPalette = view.getUint32(0x18);
+    const numEntries = view.getUint16(0x1C);
+
+    const data = buffer.subarray(dataOffs, numEntries * 0x02);
+    return { name, format, data };
+}
+//#endregion
+
 //#region TEX0
 export interface TEX0 {
     name: string;
@@ -166,6 +211,9 @@ export interface TEX0 {
     minLOD: number;
     maxLOD: number;
     data: ArrayBufferSlice;
+
+    paletteFormat: GX.TexPalette | null;
+    paletteData: ArrayBufferSlice | null;
 }
 
 function parseTEX0(buffer: ArrayBufferSlice): TEX0 {
@@ -189,7 +237,12 @@ function parseTEX0(buffer: ArrayBufferSlice): TEX0 {
     const maxLOD = view.getFloat32(0x2C) * 1/8;
 
     const data = buffer.subarray(dataOffs);
-    return { name, width, height, format, mipCount, minLOD, maxLOD, data };
+
+    // To be filled in later.
+    const paletteFormat: GX.TexPalette | null = null;
+    const paletteData: ArrayBufferSlice | null = null;
+
+    return { name, width, height, format, mipCount, minLOD, maxLOD, data, paletteFormat, paletteData };
 }
 //#endregion
 
@@ -1395,7 +1448,7 @@ function parseMDL0(buffer: ArrayBufferSlice): MDL0 {
 
     assert(readString(buffer, 0x00, 0x04) === 'MDL0');
     const version = view.getUint32(0x08);
-    const supportedVersions = [ 0x08, 0x09, 0x0B ];
+    const supportedVersions = [ 0x08, 0x09, 0x0A, 0x0B ];
     assert(supportedVersions.includes(version));
 
     let offs = 0x10;
@@ -1422,7 +1475,7 @@ function parseMDL0(buffer: ArrayBufferSlice): MDL0 {
     offs += 0x04; // Texture information
     offs += 0x04; // Palette information
 
-    if (version >= 0x0A) {
+    if (version >= 0x0B) {
         offs += 0x04; // User data
     }
 
@@ -2557,8 +2610,9 @@ export function bindCHR0Animator(animationController: AnimationController, chr0:
 
 //#region RRES
 export interface RRES {
-    mdl0: MDL0[];
+    plt0: PLT0[];
     tex0: TEX0[];
+    mdl0: MDL0[];
     srt0: SRT0[];
     pat0: PAT0[];
     clr0: CLR0[];
@@ -2592,15 +2646,15 @@ export function parse(buffer: ArrayBufferSlice): RRES {
     assert(readString(buffer, rootSectionOffs + 0x00, 0x04) === 'root');
     const rootResDic = parseResDic(buffer, rootSectionOffs + 0x08);
 
-    // Models
-    const mdl0: MDL0[] = [];
-    const modelsEntry = rootResDic.find((entry) => entry.name === '3DModels(NW4R)');
-    if (modelsEntry) {
-        const modelsResDic = parseResDic(buffer, modelsEntry.offs);
-        for (let i = 0; i < modelsResDic.length; i++) {
-            const mdl0_ = parseMDL0(buffer.subarray(modelsResDic[i].offs));
-            assert(mdl0_.name === modelsResDic[i].name);
-            mdl0.push(mdl0_);
+    // Palettes
+    const plt0: PLT0[] = [];
+    const palettesEntry = rootResDic.find((entry) => entry.name === 'Palettes(NW4R)');
+    if (palettesEntry) {
+        const palettesResDic = parseResDic(buffer, palettesEntry.offs);
+        for (const plt0Entry of palettesResDic) {
+            const plt0_ = parsePLT0(buffer.subarray(plt0Entry.offs));
+            assert(plt0_.name === plt0Entry.name);
+            plt0.push(plt0_);
         }
     }
 
@@ -2613,6 +2667,25 @@ export function parse(buffer: ArrayBufferSlice): RRES {
             const tex0_ = parseTEX0(buffer.subarray(tex0Entry.offs));
             assert(tex0_.name === tex0Entry.name);
             tex0.push(tex0_);
+
+            // Pair up textures with palettes.
+            if (tex0_.format === GX.TexFormat.C4 || tex0_.format === GX.TexFormat.C8 || tex0_.format === GX.TexFormat.C14X2) {
+                const plt0_ = assertExists(plt0.find((entry) => entry.name === tex0_.name));
+                tex0_.paletteFormat = plt0_.format;
+                tex0_.paletteData = plt0_.data;
+            }
+        }
+    }
+
+    // Models
+    const mdl0: MDL0[] = [];
+    const modelsEntry = rootResDic.find((entry) => entry.name === '3DModels(NW4R)');
+    if (modelsEntry) {
+        const modelsResDic = parseResDic(buffer, modelsEntry.offs);
+        for (let i = 0; i < modelsResDic.length; i++) {
+            const mdl0_ = parseMDL0(buffer.subarray(modelsResDic[i].offs));
+            assert(mdl0_.name === modelsResDic[i].name);
+            mdl0.push(mdl0_);
         }
     }
 
@@ -2667,6 +2740,6 @@ export function parse(buffer: ArrayBufferSlice): RRES {
         }
     }
 
-    return { mdl0, tex0, srt0, pat0, clr0, chr0 };
+    return { plt0, tex0, mdl0, srt0, pat0, clr0, chr0 };
 }
 //#endregion

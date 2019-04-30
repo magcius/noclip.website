@@ -4,7 +4,7 @@
 import ArrayBufferSlice from '../ArrayBufferSlice';
 
 import * as GX from './gx_enum';
-import { align, assert } from '../util';
+import { align, assert, assertExists } from '../util';
 import { gx_texture_asInstance, gx_texture_asExports } from '../wat_modules';
 import WasmMemoryManager from '../WasmMemoryManager';
 
@@ -29,7 +29,7 @@ export interface Texture {
     width: number;
     height: number;
     data: ArrayBufferSlice;
-    mipCount?: number;
+    mipCount: number;
     paletteFormat?: GX.TexPalette;
     paletteData?: ArrayBufferSlice;
 }
@@ -109,7 +109,7 @@ export function calcMipChain(texture: Texture, mipCount: number = 0xFF): MipChai
         const data = texture.data !== null ? texture.data.subarray(mipOffs) : null;
         const paletteFormat = texture.paletteFormat;
         const paletteData = texture.paletteData;
-        mipLevels.push({ name: `${texture.name} mip level ${mipLevel}`, format, width, height, data, paletteFormat, paletteData });
+        mipLevels.push({ name: `${texture.name} mip level ${mipLevel}`, format, width, height, data, paletteFormat, paletteData, mipCount: 1 });
         mipLevel++;
         const mipSize = calcTextureSize(format, width, height);
         // Mipmap levels are aligned to 32B.
@@ -302,8 +302,8 @@ function decode_C14X2(texture: Texture): DecodedTexture {
     });
 }
 
-function getPaletteFormatName(paletteFormat: GX.TexPalette): string {
-    switch (paletteFormat) {
+function getPaletteFormatName(paletteFormat?: GX.TexPalette): string {
+    switch (assertExists(paletteFormat)) {
     case GX.TexPalette.IA8:
         return "IA8";
     case GX.TexPalette.RGB565:
@@ -315,7 +315,7 @@ function getPaletteFormatName(paletteFormat: GX.TexPalette): string {
     }
 }
 
-export function getFormatName(format: GX.TexFormat, paletteFormat: GX.TexPalette): string {
+export function getFormatName(format: GX.TexFormat, paletteFormat?: GX.TexPalette): string {
     switch (format) {
     case GX.TexFormat.I4:
         return "I4";
