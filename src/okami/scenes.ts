@@ -9,7 +9,7 @@ import { mat4 } from "gl-matrix";
 
 import * as ARC from './arc';
 import * as BRRES from '../rres/brres';
-import { assert, readString, assertExists, hexzero } from "../util";
+import { assert, readString, hexzero } from "../util";
 import { calcModelMtx } from "../oot3d/cmb";
 import { BasicRendererHelper } from "../oot3d/render";
 import { GXRenderHelperGfx } from "../gx/gx_render";
@@ -119,7 +119,7 @@ export class OkamiRenderer extends BasicRendererHelper {
 }
 
 const materialHacks: GXMaterialHacks = {
-    lightingFudge: (p) => `vec4((0.5 * ${p.matSource}).rgb, 1.0)`,
+    lightingFudge: (p) => `vec4((0.5 * ${p.matSource}).rgb, ${p.matSource}.a)`,
 };
 
 class OkamiSCPArchiveData {
@@ -130,11 +130,13 @@ class OkamiSCPArchiveData {
     constructor(device: GfxDevice, renderer: OkamiRenderer, scpArcBuffer: ArrayBufferSlice, isObject: boolean = false) {
         this.scpArc = ARC.parse(scpArcBuffer);
 
-        if (this.scpArc.files.length === 0)
-            return;
-
         // Load the textures.
         const brtFile = this.scpArc.files.find((file) => file.type === 'BRT');
+
+        // Several loaded archives appear to be useless. Not sure what to do with them.
+        if (brtFile === undefined)
+            return;
+
         const textureRRES = BRRES.parse(brtFile.buffer);
         renderer.textureHolder.addRRESTextures(device, textureRRES);
 
@@ -149,12 +151,14 @@ class OkamiSCPArchiveData {
             const brsFile = brsFiles[i];
             assert(scrFile.filename === brsFile.filename);
 
-            this.scr.push(parseSCR(scrFile.buffer));
+            const scr = parseSCR(scrFile.buffer);
+            this.scr.push(scr);
             const brs = BRRES.parse(brsFile.buffer);
 
             const mdl0Models: MDL0Model[] = [];
             for (let j = 0; j < brs.mdl0.length; j++) {
                 const mdl0 = brs.mdl0[j];
+
                 // XXX(jstpierre): Dumb hacks.
                 for (let k = 0; k < mdl0.materials.length; k++) {
                     assert(mdl0.materials[k].gxMaterial.tevStages.length === 1);
