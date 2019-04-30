@@ -9,12 +9,11 @@ import { mat4 } from "gl-matrix";
 
 import * as ARC from './arc';
 import * as BRRES from '../rres/brres';
-import { assert, readString, hexdump, hexzero } from "../util";
+import { assert, readString, assertExists, hexzero } from "../util";
 import { calcModelMtx } from "../oot3d/cmb";
 import { BasicRendererHelper } from "../oot3d/render";
 import { GXRenderHelperGfx } from "../gx/gx_render";
 import AnimationController from "../AnimationController";
-import { GfxRendererLayer } from "../gfx/render/GfxRenderer";
 
 const pathBase = `okami`;
 
@@ -34,7 +33,7 @@ function parseSCR(buffer: ArrayBufferSlice): SCR {
     assert(readString(buffer, 0x00, 0x04, false) === 'scr\0');
     // TODO(jstpierre): Figure out what this flag means. From casual looking
     // it seems to affect whether the fields are stored as int64 or float.
-    assert(view.getUint32(0x04) === 0x01);
+    const storageMode = view.getUint32(0x04);
 
     const numInstances = view.getUint16(0x08);
     const instances: SCREntry[] = [];
@@ -45,19 +44,36 @@ function parseSCR(buffer: ArrayBufferSlice): SCR {
 
         const mdbRelOffs = view.getInt32(instanceOffs + 0x00);
         const index = view.getUint32(instanceOffs + 0x04);
-        const materialFlags = view.getUint16(instanceOffs + 0x08);
+        let materialFlags: number;
 
         const modelMatrix = mat4.create();
-        const scaleX = view.getInt16(instanceOffs + 0x1E) / 0x1000;
-        const scaleY = view.getInt16(instanceOffs + 0x20) / 0x1000;
-        const scaleZ = view.getInt16(instanceOffs + 0x22) / 0x1000;
-        const rotationX = view.getInt16(instanceOffs + 0x24) / 0x800 * Math.PI;
-        const rotationY = view.getInt16(instanceOffs + 0x26) / 0x800 * Math.PI;
-        const rotationZ = view.getInt16(instanceOffs + 0x28) / 0x800 * Math.PI;
-        const translationX = view.getInt16(instanceOffs + 0x2A);
-        const translationY = view.getInt16(instanceOffs + 0x2C);
-        const translationZ = view.getInt16(instanceOffs + 0x2E);
-        calcModelMtx(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+        if (storageMode === 0x01) {
+            materialFlags = view.getUint16(instanceOffs + 0x08);
+
+            const scaleX = view.getInt16(instanceOffs + 0x1E) / 0x1000;
+            const scaleY = view.getInt16(instanceOffs + 0x20) / 0x1000;
+            const scaleZ = view.getInt16(instanceOffs + 0x22) / 0x1000;
+            const rotationX = view.getInt16(instanceOffs + 0x24) / 0x800 * Math.PI;
+            const rotationY = view.getInt16(instanceOffs + 0x26) / 0x800 * Math.PI;
+            const rotationZ = view.getInt16(instanceOffs + 0x28) / 0x800 * Math.PI;
+            const translationX = view.getInt16(instanceOffs + 0x2A);
+            const translationY = view.getInt16(instanceOffs + 0x2C);
+            const translationZ = view.getInt16(instanceOffs + 0x2E);
+            calcModelMtx(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+        } else if (storageMode === 0x00) {
+            materialFlags = 0x00;
+
+            const scaleX = view.getFloat32(instanceOffs + 0x08);
+            const scaleY = view.getFloat32(instanceOffs + 0x0C);
+            const scaleZ = view.getFloat32(instanceOffs + 0x10);
+            const rotationX = view.getFloat32(instanceOffs + 0x14);
+            const rotationY = view.getFloat32(instanceOffs + 0x18);
+            const rotationZ = view.getFloat32(instanceOffs + 0x1C);
+            const translationX = view.getFloat32(instanceOffs + 0x20);
+            const translationY = view.getFloat32(instanceOffs + 0x24);
+            const translationZ = view.getFloat32(instanceOffs + 0x28);
+            calcModelMtx(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+        }
 
         instances.push({ index, materialFlags, modelMatrix });
         instancesTableIdx += 0x04;
@@ -99,59 +115,188 @@ export class OkamiRenderer extends BasicRendererHelper {
     }
 }
 
+class OkamiSCPArchiveData {
+    private scrModels: MDL0Model[][] = [];
+    public scr: SCR[] = [];
+    public scpArc: ARC.Archive;
+
+    constructor(device: GfxDevice, renderer: OkamiRenderer, scpArcBuffer: ArrayBufferSlice, isObject: boolean = false) {
+        this.scpArc = ARC.parse(scpArcBuffer);
+
+        if (this.scpArc.files.length === 0)
+            return;
+
+        // Load the textures.
+        const brtFile = this.scpArc.files.find((file) => file.type === 'BRT');
+        const textureRRES = BRRES.parse(brtFile.buffer);
+        renderer.textureHolder.addRRESTextures(device, textureRRES);
+
+        // Now load the models. For each model, we have an SCR file that tells
+        // us how many instances to place.
+        const scrFiles = this.scpArc.files.filter((file) => file.type === (isObject ? 'MD' : 'SCR'));
+        const brsFiles = this.scpArc.files.filter((file) => file.type === 'BRS');
+        assert(scrFiles.length === brsFiles.length);
+
+        for (let i = 0; i < scrFiles.length; i++) {
+            const scrFile = scrFiles[i];
+            const brsFile = brsFiles[i];
+            assert(scrFile.filename === brsFile.filename);
+
+            this.scr.push(parseSCR(scrFile.buffer));
+            const brs = BRRES.parse(brsFile.buffer);
+
+            const mdl0Models: MDL0Model[] = [];
+            for (let j = 0; j < brs.mdl0.length; j++) {
+                const mdl0Model = new MDL0Model(device, renderer.renderHelper, brs.mdl0[j]);
+                renderer.models.push(mdl0Model);
+                mdl0Models.push(mdl0Model);
+            }
+            this.scrModels.push(mdl0Models);
+        }
+    }
+
+    public createInstances(device: GfxDevice, renderer: OkamiRenderer, modelMatrix: mat4): void {
+        for (let i = 0; i < this.scr.length; i++) {
+            const scr = this.scr[i];
+            const mdl0Models = this.scrModels[i];
+
+            for (let j = 0; j < scr.instances.length; j++) {
+                const instance = scr.instances[j];
+                const mdl0Model = mdl0Models[instance.index];
+                const modelInstance = new MDL0ModelInstance(device, renderer.renderHelper, renderer.textureHolder, mdl0Model);
+                // TODO(jstpierre): Sort properly
+                modelInstance.setSortKeyLayer(this.scr.length - i);
+                mat4.mul(modelInstance.modelMatrix, modelMatrix, instance.modelMatrix);
+                renderer.modelInstances.push(modelInstance);
+            }
+        }
+    }
+}
+
+class ModelCache {
+    private fileProgressableCache = new Map<string, Progressable<ArrayBufferSlice>>();
+    private scpArchiveProgressableCache = new Map<string, Progressable<OkamiSCPArchiveData>>();
+    private scpArchiveCache = new Map<string, OkamiSCPArchiveData>();
+
+    public waitForLoad(): Progressable<any> {
+        const v: Progressable<any>[] = [... this.fileProgressableCache.values()];
+        return Progressable.all(v).then(() => {
+            // XXX(jstpierre): Don't ask.
+            return null;
+        });
+    }
+
+    private fetchFile(path: string, abortSignal: AbortSignal): Progressable<ArrayBufferSlice> {
+        assert(!this.fileProgressableCache.has(path));
+        const p = fetchData(path, abortSignal);
+        this.fileProgressableCache.set(path, p);
+        return p;
+    }
+
+    public fetchSCPArchive(device: GfxDevice, renderer: OkamiRenderer, archivePath: string, abortSignal: AbortSignal, isObject: boolean): Progressable<OkamiSCPArchiveData> {
+        let p = this.scpArchiveProgressableCache.get(archivePath);
+
+        if (p === undefined) {
+            p = this.fetchFile(archivePath, abortSignal).then((data) => {
+                return data;
+            }).then((data) => {
+                const scpArchiveData = new OkamiSCPArchiveData(device, renderer, data, isObject);
+                this.scpArchiveCache.set(archivePath, scpArchiveData);
+                return scpArchiveData;
+            });
+            this.scpArchiveProgressableCache.set(archivePath, p);
+        }
+
+        return p;
+    }
+}
+
+const objectTypePrefixes: (string | undefined)[] = [
+    undefined,
+    'pl',
+    'em',
+    'et',
+    'hm',
+    'an',
+    'wp',
+    undefined,
+    'ut',
+    'gt',
+    'it',
+    'vt',
+    'dr',
+    'md',
+    'es',
+];
+
+function getObjectFilename(objectTypeId: number, objectId: number): string {
+    const prefix = assertExists(objectTypePrefixes[objectTypeId]);
+    return `${prefix}${hexzero(objectId, 2).toLowerCase()}.dat`;
+}
+
 class OkamiSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
 
-    public createScene(device: GfxDevice): Progressable<Viewer.SceneGfx> {
-        return fetchData(`${pathBase}/${this.id}.dat`).then((buffer: ArrayBufferSlice) => {
-            const datArc = ARC.parse(buffer);
+    private spawnObjectTable(device: GfxDevice, renderer: OkamiRenderer, modelCache: ModelCache, objTableFile: ArrayBufferSlice, abortSignal: AbortSignal): void {
+        const view = objTableFile.createDataView();
 
+        const tableCount = view.getUint16(0x00);
+        let tableIdx = 0x04;
+        for (let i = 0; i < tableCount; i++) {
+            const objectTypeId = view.getUint8(tableIdx + 0x00);
+            const objectId = view.getUint8(tableIdx + 0x01);
+
+            const scaleX = view.getUint8(tableIdx + 0x04) / 0x20;
+            const scaleY = view.getUint8(tableIdx + 0x05) / 0x20;
+            const scaleZ = view.getUint8(tableIdx + 0x06) / 0x20;
+            const rotationX = view.getInt8(tableIdx + 0x07) / 0x80 * Math.PI;
+            const rotationY = view.getInt8(tableIdx + 0x08) / 0x80 * Math.PI;
+            const rotationZ = view.getInt8(tableIdx + 0x09) / 0x80 * Math.PI;
+            const translationX = view.getInt16(tableIdx + 0x0A);
+            const translationY = view.getInt16(tableIdx + 0x0C);
+            const translationZ = view.getInt16(tableIdx + 0x0E);
+            // TODO(jstpierre): The rest of the spawn table.
+
+            const modelMatrix = mat4.create();
+            calcModelMtx(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+
+            const filename = getObjectFilename(objectTypeId, objectId);
+            modelCache.fetchSCPArchive(device, renderer, `${pathBase}/${filename}`, abortSignal, true).then((scpArcData) => {
+                scpArcData.createInstances(device, renderer, modelMatrix);
+            });
+
+            tableIdx += 0x20;
+        }
+    }
+
+    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+        return fetchData(`${pathBase}/${this.id}.dat`, abortSignal).then((datArcBuffer: ArrayBufferSlice) => {
             const renderer = new OkamiRenderer(device);
 
-            // Look for the SCP file -- contains the stage models.
+            const datArc = ARC.parse(datArcBuffer);
+
+            // Look for the SCP file.
             const scpFile = datArc.files.find((file) => file.type === 'SCP');
-            const scpArc = ARC.parse(scpFile.buffer);
+            const scpData = new OkamiSCPArchiveData(device, renderer, scpFile.buffer);
+    
+            // Create the main instances.
+            const rootModelMatrix = mat4.create();
+            scpData.createInstances(device, renderer, rootModelMatrix);
 
-            // Load the textures.
-            const brtFile = scpArc.files.find((file) => file.type === 'BRT');
-            const textureRRES = BRRES.parse(brtFile.buffer);
-            renderer.textureHolder.addRRESTextures(device, textureRRES);
+            const modelCache = new ModelCache();
 
-            // Now load the models. For each model, we have an SCR file that tells
-            // us how many instances to place.
-            const scrFiles = scpArc.files.filter((file) => file.type === 'SCR');
-            const brsFiles = scpArc.files.filter((file) => file.type === 'BRS');
-            assert(scrFiles.length === brsFiles.length);
+            // Spawn the object tables.
+            const tscTableFile = datArc.files.find((file) => file.type === 'TSC');
+            this.spawnObjectTable(device, renderer, modelCache, tscTableFile.buffer, abortSignal);
 
-            for (let i = 0; i < scrFiles.length; i++) {
-                const scrFile = scrFiles[i];
-                const brsFile = brsFiles[i];
-                assert(scrFile.filename === brsFile.filename);
+            // TODO(jstpierre): Don't spawn trees until we figure out how the depth buffer write thing works.
+            // const treTableFile = datArc.files.find((file) => file.type === 'TRE');
+            // this.spawnObjectTable(device, renderer, modelCache, treTableFile.buffer, abortSignal);
 
-                const scr = parseSCR(scrFile.buffer);
-                const brs = BRRES.parse(brsFile.buffer);
-
-                const mdl0Models: MDL0Model[] = [];
-                for (let j = 0; j < brs.mdl0.length; j++) {
-                    const mdl0Model = new MDL0Model(device, renderer.renderHelper, brs.mdl0[j]);
-                    renderer.models.push(mdl0Model);
-                    mdl0Models.push(mdl0Model);
-                }
-
-                for (let j = 0; j < scr.instances.length; j++) {
-                    const instance = scr.instances[j];
-
-                    const mdl0Model = mdl0Models[instance.index];
-                    const modelInstance = new MDL0ModelInstance(device, renderer.renderHelper, renderer.textureHolder, mdl0Model);
-                    modelInstance.setSortKeyLayer(scrFiles.length - i);
-                    mat4.copy(modelInstance.modelMatrix, instance.modelMatrix);
-                    renderer.modelInstances.push(modelInstance);
-                }
-            }
-
-            renderer.renderHelper.finishBuilder(device, renderer.viewRenderer);
-
-            return renderer;
+            return modelCache.waitForLoad().then(() => {
+                renderer.renderHelper.finishBuilder(device, renderer.viewRenderer);
+                return renderer;
+            });
         });
     }
 }

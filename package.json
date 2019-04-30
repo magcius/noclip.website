@@ -14,7 +14,7 @@
     "typescript": "^3.3.3333"
   },
   "dependencies": {
-    "@sentry/browser": "5.1.1",
+    "@sentry/browser": "^5.1.1",
     "crc-32": "^1.2.0",
     "gl-matrix": "^3.0.0",
     "pako": "^1.0.7"
