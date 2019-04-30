@@ -48,12 +48,12 @@ function parseSCR(buffer: ArrayBufferSlice): SCR {
         const materialFlags = view.getUint16(instanceOffs + 0x08);
 
         const modelMatrix = mat4.create();
-        const scaleX = 1; // view.getInt16(instanceOffs + 0x1E);
-        const scaleY = 1; // view.getInt16(instanceOffs + 0x20);
-        const scaleZ = 1; // view.getInt16(instanceOffs + 0x22);
-        const rotationX = view.getInt16(instanceOffs + 0x24) / 0x80 * Math.PI;
-        const rotationY = view.getInt16(instanceOffs + 0x26) / 0x80 * Math.PI;
-        const rotationZ = view.getInt16(instanceOffs + 0x28) / 0x80 * Math.PI;
+        const scaleX = view.getInt16(instanceOffs + 0x1E) / 0x1000;
+        const scaleY = view.getInt16(instanceOffs + 0x20) / 0x1000;
+        const scaleZ = view.getInt16(instanceOffs + 0x22) / 0x1000;
+        const rotationX = view.getInt16(instanceOffs + 0x24) / 0x80 * -Math.PI;
+        const rotationY = view.getInt16(instanceOffs + 0x26) / 0x80 * -Math.PI;
+        const rotationZ = view.getInt16(instanceOffs + 0x28) / 0x80 * -Math.PI;
         const translationX = view.getInt16(instanceOffs + 0x2A);
         const translationY = view.getInt16(instanceOffs + 0x2C);
         const translationZ = view.getInt16(instanceOffs + 0x2E);
