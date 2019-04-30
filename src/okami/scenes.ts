@@ -266,9 +266,9 @@ class OkamiSceneDesc implements Viewer.SceneDesc {
             const scaleX = view.getUint8(tableIdx + 0x04) / 0x10;
             const scaleY = view.getUint8(tableIdx + 0x05) / 0x10;
             const scaleZ = view.getUint8(tableIdx + 0x06) / 0x10;
-            const rotationX = view.getInt8(tableIdx + 0x07) / 0x80 * Math.PI;
-            const rotationY = view.getInt8(tableIdx + 0x08) / 0x80 * Math.PI;
-            const rotationZ = view.getInt8(tableIdx + 0x09) / 0x80 * Math.PI;
+            const rotationX = view.getInt8(tableIdx + 0x07) / 90 * Math.PI;
+            const rotationY = view.getInt8(tableIdx + 0x08) / 90 * Math.PI;
+            const rotationZ = view.getInt8(tableIdx + 0x09) / 90 * Math.PI;
             const translationX = view.getInt16(tableIdx + 0x0A);
             const translationY = view.getInt16(tableIdx + 0x0C);
             const translationZ = view.getInt16(tableIdx + 0x0E);
