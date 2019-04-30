@@ -90,6 +90,7 @@ export class OkamiRenderer extends BasicRendererHelper {
     public destroy(device: GfxDevice): void {
         super.destroy(device);
 
+        this.textureHolder.destroy(device);
         this.renderHelper.destroy(device);
         for (let i = 0; i < this.models.length; i++)
             this.models[i].destroy(device);
@@ -129,14 +130,18 @@ class OkamiSceneDesc implements Viewer.SceneDesc {
 
                 const scr = parseSCR(scrFile.buffer);
                 const brs = BRRES.parse(brsFile.buffer);
-                assert(brs.mdl0.length === scr.instances.length);
+
+                const mdl0Models: MDL0Model[] = [];
+                for (let j = 0; j < brs.mdl0.length; j++) {
+                    const mdl0Model = new MDL0Model(device, renderer.renderHelper, brs.mdl0[j]);
+                    renderer.models.push(mdl0Model);
+                    mdl0Models.push(mdl0Model);
+                }
 
                 for (let j = 0; j < scr.instances.length; j++) {
                     const instance = scr.instances[j];
 
-                    const mdl0Model = new MDL0Model(device, renderer.renderHelper, brs.mdl0[j]);
-                    renderer.models.push(mdl0Model);
-
+                    const mdl0Model = mdl0Models[instance.index];
                     const modelInstance = new MDL0ModelInstance(device, renderer.renderHelper, renderer.textureHolder, mdl0Model);
                     modelInstance.setSortKeyLayer(scrFiles.length - i);
                     mat4.copy(modelInstance.modelMatrix, instance.modelMatrix);
@@ -157,6 +162,91 @@ const sceneDescs = [
     new OkamiSceneDesc('r100', 'r100'),
     new OkamiSceneDesc('r101', 'r101'),
     new OkamiSceneDesc('r102', 'r102'),
+    new OkamiSceneDesc('r103', 'r103'),
+    new OkamiSceneDesc('r104', 'r104'),
+    new OkamiSceneDesc('r105', 'r105'),
+    new OkamiSceneDesc('r106', 'r106'),
+    new OkamiSceneDesc('r107', 'r107'),
+    new OkamiSceneDesc('r108', 'r108'),
+    new OkamiSceneDesc('r109', 'r109'),
+    new OkamiSceneDesc('r10a', 'r10a'),
+    new OkamiSceneDesc('r10b', 'r10b'),
+    new OkamiSceneDesc('r10c', 'r10c'),
+    new OkamiSceneDesc('r10d', 'r10d'),
+    new OkamiSceneDesc('r10e', 'r10e'),
+    new OkamiSceneDesc('r110', 'r110'),
+    new OkamiSceneDesc('r111', 'r111'),
+    new OkamiSceneDesc('r112', 'r112'),
+    new OkamiSceneDesc('r113', 'r113'),
+    new OkamiSceneDesc('r114', 'r114'),
+    new OkamiSceneDesc('r115', 'r115'),
+    new OkamiSceneDesc('r116', 'r116'),
+    new OkamiSceneDesc('r117', 'r117'),
+    new OkamiSceneDesc('r118', 'r118'),
+    new OkamiSceneDesc('r119', 'r119'),
+    new OkamiSceneDesc('r11a', 'r11a'),
+    new OkamiSceneDesc('r11b', 'r11b'),
+    new OkamiSceneDesc('r11c', 'r11c'),
+    new OkamiSceneDesc('r11d', 'r11d'),
+    new OkamiSceneDesc('r120', 'r120'),
+    new OkamiSceneDesc('r122', 'r122'),
+    new OkamiSceneDesc('r200', 'r200'),
+    new OkamiSceneDesc('r201', 'r201'),
+    new OkamiSceneDesc('r202', 'r202'),
+    new OkamiSceneDesc('r203', 'r203'),
+    new OkamiSceneDesc('r204', 'r204'),
+    new OkamiSceneDesc('r205', 'r205'),
+    new OkamiSceneDesc('r206', 'r206'),
+    new OkamiSceneDesc('r207', 'r207'),
+    new OkamiSceneDesc('r208', 'r208'),
+    new OkamiSceneDesc('r209', 'r209'),
+    new OkamiSceneDesc('r20a', 'r20a'),
+    new OkamiSceneDesc('r20b', 'r20b'),
+    new OkamiSceneDesc('r20c', 'r20c'),
+    new OkamiSceneDesc('r20d', 'r20d'),
+    new OkamiSceneDesc('r20e', 'r20e'),
+    new OkamiSceneDesc('r20f', 'r20f'),
+    new OkamiSceneDesc('r301', 'r301'),
+    new OkamiSceneDesc('r302', 'r302'),
+    new OkamiSceneDesc('r303', 'r303'),
+    new OkamiSceneDesc('r304', 'r304'),
+    new OkamiSceneDesc('r305', 'r305'),
+    new OkamiSceneDesc('r306', 'r306'),
+    new OkamiSceneDesc('r307', 'r307'),
+    new OkamiSceneDesc('r308', 'r308'),
+    new OkamiSceneDesc('r309', 'r309'),
+    new OkamiSceneDesc('r30a', 'r30a'),
+    new OkamiSceneDesc('r30b', 'r30b'),
+    new OkamiSceneDesc('r30c', 'r30c'),
+    new OkamiSceneDesc('r30d', 'r30d'),
+    new OkamiSceneDesc('r310', 'r310'),
+    new OkamiSceneDesc('r311', 'r311'),
+    new OkamiSceneDesc('r312', 'r312'),
+    new OkamiSceneDesc('r313', 'r313'),
+    new OkamiSceneDesc('r314', 'r314'),
+    new OkamiSceneDesc('rc00', 'rc00'),
+    new OkamiSceneDesc('rc02', 'rc02'),
+    new OkamiSceneDesc('re00', 're00'),
+    new OkamiSceneDesc('re01', 're01'),
+    new OkamiSceneDesc('re02', 're02'),
+    new OkamiSceneDesc('re03', 're03'),
+    new OkamiSceneDesc('re04', 're04'),
+    new OkamiSceneDesc('rf01', 'rf01'),
+    new OkamiSceneDesc('rf02', 'rf02'),
+    new OkamiSceneDesc('rf03', 'rf03'),
+    new OkamiSceneDesc('rf04', 'rf04'),
+    new OkamiSceneDesc('rf06', 'rf06'),
+    new OkamiSceneDesc('rf07', 'rf07'),
+    new OkamiSceneDesc('rf08', 'rf08'),
+    new OkamiSceneDesc('rf09', 'rf09'),
+    new OkamiSceneDesc('rf0a', 'rf0a'),
+    new OkamiSceneDesc('rf0c', 'rf0c'),
+    new OkamiSceneDesc('rf10', 'rf10'),
+    new OkamiSceneDesc('rf11', 'rf11'),
+    new OkamiSceneDesc('rf12', 'rf12'),
+    new OkamiSceneDesc('rf13', 'rf13'),
+    new OkamiSceneDesc('rf20', 'rf20'),
+    new OkamiSceneDesc('rf21', 'rf21'),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
