@@ -679,7 +679,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 throw "starschulz";
             }
         });
-        else if (actor.actorId === ActorId.Bg_Spot02_Objects) fetchArchive(`zelda_Spot02_Objects.zar`).then((zar) => {
+        else if (actor.actorId === ActorId.Bg_Spot02_Objects) fetchArchive(`zelda_spot02_objects.zar`).then((zar) => {
             const whichModel = actor.variable & 0x0F;
             if (whichModel === 0x00) {
                 buildModel(zar, 'model/obj_s02gate_model.cmb', 0.1);  // Eye of Truth door
