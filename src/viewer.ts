@@ -241,6 +241,8 @@ export function initializeViewer(out: ViewerOut, canvas: HTMLCanvasElement): Ini
         return InitErrorCode.MISSING_MISC_WEB_APIS;
 
     const gl = canvas.getContext("webgl2", { alpha: false, antialias: false });
+    // For debugging purposes, add a hook for this.
+    window.gl = gl;
     if (!gl) {
         if (navigator.vendor.includes('Apple'))
             return InitErrorCode.NO_WEBGL2_SAFARI;

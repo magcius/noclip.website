@@ -674,6 +674,7 @@ declare global {
         hexdump: any;
         downloadBuffer: any;
         debug: any;
+        gl: any;
     }
 }
 window.hexdump = hexdump;
