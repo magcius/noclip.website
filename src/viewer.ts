@@ -252,6 +252,7 @@ export function initializeViewer(out: ViewerOut, canvas: HTMLCanvasElement): Ini
     const samplesArray = gl.getInternalformatParameter(gl.RENDERBUFFER, gl.DEPTH32F_STENCIL8, gl.SAMPLES);
     if (samplesArray === null || samplesArray.length === 0) {
         const ext = gl.getExtension('WEBGL_debug_renderer_info');
+        console.warn(`samplesArray = ${samplesArray}`);
         if (ext && gl.getParameter(ext.UNMASKED_RENDERER_WEBGL).includes('SwiftShader'))
             return InitErrorCode.GARBAGE_WEBGL2_SWIFTSHADER;
         else
