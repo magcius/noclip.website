@@ -264,6 +264,7 @@ class Node {
     private modelMatrixAnimator: ModelMatrixAnimator | null = null;
     private rotateSpeed = 0;
     private rotatePhase = 0;
+    private rotateAxis = 0;
 
     constructor(public objinfo: ObjInfo, public modelInstance: BMDModelInstance, parentModelMatrix: mat4, public animationController: AnimationController) {
         this.name = modelInstance.name;
@@ -282,15 +283,17 @@ class Node {
 
     public setupAnimations(): void {
         this.rotateSpeed = this.objinfo.rotateSpeed;
+        this.rotateAxis = this.objinfo.rotateAxis;
 
         const objName = this.objinfo.objName;
-        if (objName.startsWith('HoleBeltConveyerParts') && this.objinfo.path)
+        if (objName.startsWith('HoleBeltConveyerParts') && this.objinfo.path) {
             this.modelMatrixAnimator = new RailAnimationPlatform(this.objinfo.path, this.modelMatrix);
-        else if (objName === 'TicoRail')
+        } else if (objName === 'TicoRail') {
             this.modelMatrixAnimator = new RailAnimationTico(this.objinfo.path);
-        else if (objName.endsWith('Coin')) {
+        } else if (objName.endsWith('Coin')) {
             this.rotateSpeed = 140;
             this.rotatePhase = (this.objinfo.modelMatrix[12] + this.objinfo.modelMatrix[13] + this.objinfo.modelMatrix[14]);
+            this.rotateAxis = 1;
         }
     }
 
@@ -299,7 +302,12 @@ class Node {
             // RotateSpeed appears to be deg/sec?
             const rotateSpeed = this.rotateSpeed / (this.objinfo.rotateAccelType > 0 ? this.objinfo.rotateAccelType : 1);
             const speed = rotateSpeed * Math.PI / 180;
-            mat4.rotateY(dst, dst, (time + this.rotatePhase) * speed);
+            if (this.rotateAxis === 0)
+                mat4.rotateX(dst, dst, (time + this.rotatePhase) * speed);
+            else if (this.rotateAxis === 1)
+                mat4.rotateY(dst, dst, (time + this.rotatePhase) * speed);
+            else if (this.rotateAxis === 2)
+                mat4.rotateZ(dst, dst, (time + this.rotatePhase) * speed);
         }
     }
 
@@ -708,6 +716,7 @@ interface ObjInfo {
     objArg0: number;
     objArg1: number;
     rotateSpeed: number;
+    rotateAxis: number;
     rotateAccelType: number;
     modelMatrix: mat4;
     path: Path;
@@ -1003,20 +1012,38 @@ class SMGSpawner {
         switch (objinfo.objName) {
 
             // Skyboxen.
-        case 'BeyondSummerSky':
-        case 'BeyondHorizonSky':
         case 'BeyondGalaxySky':
+        case 'BeyondHellValleySky':
+        case 'BeyondHorizonSky':
+        case 'BeyondOrbitSky':
+        case 'BeyondPhantomSky':
+        case 'BeyondSandSky':
+        case 'BeyondSandNightSky':
+        case 'BeyondSummerSky':
+        case 'BeyondTitleSky':
+        case 'BigFallSky':
+        case 'Blue2DSky':
+        case 'BrightGalaxySky':
         case 'CloudSky':
-        case 'HalfGalaxySky':
+        case 'DarkSpaceStormSky':
+        case 'DesertSky':
+        case 'DotPatternSky':
         case 'GalaxySky':
+        case 'GoodWeatherSky':
+        case 'HalfGalaxySky':
+        case 'HolePlanetInsideSky':
+        case 'KoopaVS1Sky':
+        case 'KoopaJrLv3Sky':
+        case 'MagmaMonsterSky':
+        case 'MemoryRoadSky':
+        case 'MilkyWaySky':
+        case 'OmoteuLandSky':
+        case 'PhantomSky':
         case 'RockPlanetOrbitSky':
         case 'SummerSky':
-        case 'MilkyWaySky':
         case 'VROrbit':
-        case 'DesertSky':
-        case 'GoodWeatherSky':
-        case 'PhantomSky':
         case 'VRSandwichSun':
+        case 'VsKoopaLv3Sky':
             spawnGraph(name, SceneGraphTag.Skybox);
             break;
 
@@ -1052,6 +1079,9 @@ class SMGSpawner {
         case 'FlagRaceB':
         case 'FlagRaceC':
         case 'FlagTamakoro':
+        case 'WoodLogBridge':
+        case 'SandBird':
+        case 'RingBeamerAreaObj':
             // Archives just contain the textures. Mesh geometry appears to be generated at runtime by the game.
             return;
 
@@ -1068,12 +1098,107 @@ class SMGSpawner {
             return;
 
         case 'TimerSwitch':
+        case 'ClipFieldSwitch':
+        case 'SoundSyncSwitch':
+        case 'ExterminationSwitch':
         case 'SwitchSynchronizerReverse':
         case 'PrologueDirector':
         case 'MovieStarter':
         case 'ScenarioStarter':
         case 'LuigiEvent':
+        case 'MameMuimuiScorerLv2':
+        case 'ScoreAttackCounter':
+        case 'RepeartTimerSwitch':
+        case 'FlipPanelObserver':
             // Logic objects.
+            return;
+
+        case 'OpeningDemoObj':
+        case 'NormalEndingDemoObj':
+        case 'MeetKoopaDemoObj':
+            // Cutscenes.
+            return;
+
+        case 'StarPieceFollowGroup':
+        case 'StarPieceGroup':
+        case 'StarPieceSpot':
+        case 'StarPieceFlow':
+        case 'WingBlockStarPiece':
+        case 'YellowChipGroup':
+        case 'RailCoin':
+        case 'PurpleRailCoin':
+        case 'CircleCoinGroup':
+        case 'CirclePurpleCoinGroup':
+        case 'PurpleCoinCompleteWatcher':
+        case 'ShellfishCoin':
+        case 'CoinAppearSpot':
+        case 'FishGroupA':
+        case 'FishGroupB':
+        case 'FishGroupC':
+        case 'SeaGullGroup':
+        case 'BenefitItemOneUp':
+        case 'BenefitItemLifeUp':
+        case 'BenefitItemInvincible':
+        case 'MorphItemNeoHopper':
+        case 'MorphItemNeoBee':
+        case 'MorphItemNeoFire':
+        case 'MorphItemNeoTeresa':
+        case 'SpinCloudItem':
+        case 'TreasureBoxKinokoOneUp':
+        case 'GroupSwitchWatcher':
+        case 'ExterminationPowerStar':
+        case 'LuigiIntrusively':
+        case 'GreenStar':
+        case 'MameMuimuiAttackMan':
+        case 'CutBushGroup':
+        case 'Patakuri':
+        case 'SuperDreamer':
+        case 'PetitPorterWarpPoint':
+        case 'SimpleDemoExecutor':
+        case 'TimerCoinBlock':
+        case 'CoinLinkGroup':
+        case 'CollectTico':
+        case 'BrightSun':
+        case 'YoshiCapture':
+        case 'PukupukuWaterSurface':
+        case 'SplashPieceBlock':
+        case 'LavaSparksS':
+        case 'InstantInferno':
+        case 'BlackHoleCube':
+        case 'FireRing':
+        case 'FireBar':
+        case 'JumpBeamer':
+        case 'TogeBegomanLauncher':
+        case 'BegomanBabyLauncher':
+        case 'WaterFortressRain':
+        case 'BringEnemy':
+        case 'IceLayerBreak':
+        case 'HeadLight':
+        case 'TereboGroup':
+        case 'NoteFairy':
+        case 'Tongari2D':
+        case 'Grapyon':
+        case 'Karikari':
+        case 'ExterminationCheckerWoodBox':
+        case 'GliderShooter':
+        case 'CaveInCube':
+        case 'RaceRail':
+        case 'GliBirdNpc':
+        case 'SecretGateCounter':
+        case 'SuperSpinDriverPink':
+        case 'PhantomTorch':
+        case 'HammerHeadPackun':
+        case 'Hanachan':
+        case 'MarinePlant':
+        case 'JetTurtle':
+        case 'TreasureBoxEmpty':
+        case 'ForestWaterfallS':
+        case 'Nyoropon':
+        case 'WaterStream':
+        case 'BallRail':
+        case 'SphereRailDash':
+        case 'HammerHeadPackunSpike':
+            // No archives. Needs R&D for what to display.
             return;
 
         case 'AstroCore':
@@ -1142,6 +1267,12 @@ class SMGSpawner {
                 const bva = BVA.parse(rarc.findFileData(`FaceA.bva`));
                 node.modelInstance.bindVAF1(bva.vaf1);
             });
+            break;
+        case 'PlantA':
+            spawnGraph(`PlantA00`);
+            break;
+        case 'PlantB':
+            spawnGraph(`PlantB00`);
             break;
         case 'PlantC':
             spawnGraph(`PlantC00`);
@@ -1216,11 +1347,12 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
             const objArg1 = BCSV.getField<number>(bcsv, record, 'Obj_arg1', -1);
             const rotateSpeed = BCSV.getField<number>(bcsv, record, 'RotateSpeed', 0);
             const rotateAccelType = BCSV.getField<number>(bcsv, record, 'RotateAccelType', 0);
+            const rotateAxis = BCSV.getField<number>(bcsv, record, 'RotateAxis', 0);
             const pathId: number = BCSV.getField<number>(bcsv, record, 'CommonPath_ID', -1);
             const path = paths.find((path) => path.l_id === pathId) || null;
             const modelMatrix = mat4.create();
             computeModelMatrixFromRecord(modelMatrix, bcsv, record);
-            return { objId, objName, objArg0, objArg1, rotateSpeed, rotateAccelType, modelMatrix, path };
+            return { objId, objName, objArg0, objArg1, rotateSpeed, rotateAccelType, rotateAxis, modelMatrix, path };
         });
     }
     

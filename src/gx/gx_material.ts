@@ -7,7 +7,7 @@ import { DeviceProgram, DeviceProgramReflection } from '../Program';
 import { colorCopy, colorFromRGBA } from '../Color';
 import { GfxFormat } from '../gfx/platform/GfxPlatformFormat';
 import { GfxCompareMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
-import { vec3, vec4, mat4 } from 'gl-matrix';
+import { vec3, vec4, mat4, vec2 } from 'gl-matrix';
 import { Camera } from '../Camera';
 
 // TODO(jstpierre): Move somewhere better...
@@ -798,8 +798,10 @@ export class GX_Program extends DeviceProgram {
         case GX.IndTexMtxID._0:  return `Mul(u_IndTexMtx[0], vec4(${indTevCoord}, 0.0))`;
         case GX.IndTexMtxID._1:  return `Mul(u_IndTexMtx[1], vec4(${indTevCoord}, 0.0))`;
         case GX.IndTexMtxID._2:  return `Mul(u_IndTexMtx[2], vec4(${indTevCoord}, 0.0))`;
+        // TODO(jstpierre): These other options. BossBakkunPlanet.arc uses them.
         default:
-        case GX.IndTexMtxID.OFF: throw new Error("whoops");
+            console.warn(`Unimplemented indTexMatrix mode: ${stage.indTexMatrix}`);
+            return `${indTevCoord}.xy`;
         }
     }
 
