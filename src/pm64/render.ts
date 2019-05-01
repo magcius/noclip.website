@@ -234,15 +234,14 @@ class ModelTreeLeafInstance {
     private templateRenderInst: GfxRenderInst;
     private renderInsts: GfxRenderInst[] = [];
     private textureEnvironment: Tex.TextureEnvironment | null = null;
-    private renderMode: number;
+    private renderMode: number = RenderMode.OPAQUE;
     private visible = true;
 
     constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, textureArchive: Tex.TextureArchive, textureHolder: PaperMario64TextureHolder, private modelTreeLeaf: ModelTreeLeaf) {
         this.n64Data = new N64Data(device, modelTreeLeaf.rspOutput);
 
-        const renderModeProp = assertExists(this.modelTreeLeaf.properties.find((prop) => prop.id === 0x5C));
-        assertExists(renderModeProp.type === PropertyType.INT);
-        if (renderModeProp.type === PropertyType.INT)
+        const renderModeProp = this.modelTreeLeaf.properties.find((prop) => prop.id === 0x5C);
+        if (renderModeProp !== undefined && renderModeProp.type === PropertyType.INT)
             this.renderMode = renderModeProp.value1;
 
         this.templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
