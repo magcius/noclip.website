@@ -41,7 +41,7 @@ export class BasicRRESRenderer implements Viewer.SceneGfx {
             if (stageRRES.mdl0.length < 1)
                 continue;
 
-            const model = new MDL0Model(device, this.renderHelper, stageRRES.mdl0[1], materialHacks);
+            const model = new MDL0Model(device, this.renderHelper, stageRRES.mdl0[0], materialHacks);
             this.models.push(model);
             const modelRenderer = new MDL0ModelInstance(device, this.renderHelper, this.textureHolder, model);
             this.modelInstances.push(modelRenderer);
