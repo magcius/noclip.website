@@ -64,6 +64,7 @@ export class BasicRRESRenderer extends BasicRendererHelper {
     }
 
     protected prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        this.animationController.setTimeInMilliseconds(viewerInput.time);
         this.renderHelper.fillSceneParams(viewerInput);
         for (let i = 0; i < this.modelInstances.length; i++)
             this.modelInstances[i].prepareToRender(this.renderHelper, viewerInput);
