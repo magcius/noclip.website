@@ -1011,6 +1011,12 @@ class SMGSpawner {
             }
         };
 
+        function animFrame(frame: number) {
+            const animationController = new AnimationController();
+            animationController.setTimeInFrames(frame);
+            return animationController;
+        }
+
         const name = objinfo.objName;
         switch (objinfo.objName) {
 
@@ -1137,28 +1143,13 @@ class SMGSpawner {
         case 'CircleCoinGroup':
         case 'CirclePurpleCoinGroup':
         case 'PurpleCoinCompleteWatcher':
-        case 'ShellfishCoin':
         case 'CoinAppearSpot':
-        case 'FishGroupA':
-        case 'FishGroupB':
-        case 'FishGroupC':
-        case 'SeaGullGroup':
-        case 'BenefitItemOneUp':
-        case 'BenefitItemLifeUp':
-        case 'BenefitItemInvincible':
-        case 'MorphItemNeoHopper':
-        case 'MorphItemNeoBee':
-        case 'MorphItemNeoFire':
-        case 'MorphItemNeoTeresa':
-        case 'SpinCloudItem':
-        case 'TreasureBoxKinokoOneUp':
         case 'GroupSwitchWatcher':
         case 'ExterminationPowerStar':
         case 'LuigiIntrusively':
         case 'GreenStar':
         case 'MameMuimuiAttackMan':
         case 'CutBushGroup':
-        case 'Patakuri':
         case 'SuperDreamer':
         case 'PetitPorterWarpPoint':
         case 'SimpleDemoExecutor':
@@ -1166,8 +1157,6 @@ class SMGSpawner {
         case 'CoinLinkGroup':
         case 'CollectTico':
         case 'BrightSun':
-        case 'YoshiCapture':
-        case 'PukupukuWaterSurface':
         case 'SplashPieceBlock':
         case 'LavaSparksS':
         case 'InstantInferno':
@@ -1175,8 +1164,6 @@ class SMGSpawner {
         case 'FireRing':
         case 'FireBar':
         case 'JumpBeamer':
-        case 'TogeBegomanLauncher':
-        case 'BegomanBabyLauncher':
         case 'WaterFortressRain':
         case 'BringEnemy':
         case 'IceLayerBreak':
@@ -1185,20 +1172,16 @@ class SMGSpawner {
         case 'NoteFairy':
         case 'Tongari2D':
         case 'Grapyon':
-        case 'Karikari':
         case 'ExterminationCheckerWoodBox':
         case 'GliderShooter':
         case 'CaveInCube':
         case 'RaceRail':
         case 'GliBirdNpc':
         case 'SecretGateCounter':
-        case 'SuperSpinDriverPink':
         case 'PhantomTorch':
         case 'HammerHeadPackun':
         case 'Hanachan':
         case 'MarinePlant':
-        case 'JetTurtle':
-        case 'TreasureBoxEmpty':
         case 'ForestWaterfallS':
         case 'Nyoropon':
         case 'WaterStream':
@@ -1261,6 +1244,13 @@ class SMGSpawner {
                 this.bindChangeAnimation(node, rarc, objinfo.objArg0);
             });
             break;
+        case 'TicoShop':
+            spawnGraph(`TicoShop`).then(([node, rarc]) => {
+                // TODO(jstpierre): Figure out what the deal is with the BVA not quite working...
+                const bva = BVA.parse(rarc.findFileData(`Big1.bva`));
+                node.modelInstance.bindVAF1(bva.vaf1, animFrame(0));
+            });
+            break;
 
         case 'SweetsDecoratePartsFork':
         case 'SweetsDecoratePartsSpoon':
@@ -1292,6 +1282,61 @@ class SMGSpawner {
         case 'PlantD':
             spawnGraph(`PlantD01`);
             break;
+        case 'BenefitItemOneUp':
+            spawnGraph(`KinokoOneUp`);
+            break;
+        case 'BenefitItemLifeUp':
+            spawnGraph(`KinokoLifeUp`);
+            break;
+        case 'BenefitItemInvincible':
+            spawnGraph(`PowerUpInvincible`);
+            break;
+        case 'MorphItemNeoHopper':
+            spawnGraph(`PowerUpHopper`);
+            break;
+        case 'MorphItemNeoBee':
+            spawnGraph(`PowerUpBee`);
+            break;
+        case 'MorphItemNeoFire':
+            spawnGraph(`PowerUpFire`);
+            break;
+        case 'MorphItemNeoIce':
+            spawnGraph(`PowerUpIce`);
+            break;
+        case 'MorphItemNeoTeresa':
+            spawnGraph(`PowerUpTeresa`);
+            break;
+        case 'SpinCloudItem':
+            spawnGraph(`PowerUpCloud`);
+            break;
+        case 'PukupukuWaterSurface':
+            spawnGraph(`Pukupuku`);
+            break;
+        case 'TreasureBoxEmpty':
+        case 'TreasureBoxKinokoOneUp':
+            spawnGraph(`TreasureBox`);
+            break;
+        case 'SuperSpinDriverPink':
+            // TODO(jstpierre): Adjust color override.
+            spawnGraph(`SuperSpinDriver`);
+            break;
+        case 'JetTurtle':
+            spawnGraph(`Koura`);
+            break;
+    
+        // TODO(jstpierre): Group spawn logic?
+        case 'FishGroupA':
+            spawnGraph(`FishA`);
+            break;
+        case 'FishGroupB':
+            spawnGraph(`FishB`);
+            break;
+        case 'FishGroupC':
+            spawnGraph(`FishC`);
+            break;
+        case 'SeaGullGroup':
+            spawnGraph(`SeaGull`);
+            break;
 
         // SMG2
         case 'Moc':
@@ -1315,6 +1360,24 @@ class SMGSpawner {
 
         case 'Dodoryu':
             spawnGraph(name, SceneGraphTag.Normal, { bck: 'swoon.bck' });
+            break;
+        case 'Karikari':
+            spawnGraph('Karipon');
+            break;
+        case 'YoshiCapture':
+            spawnGraph(`YCaptureTarget`);
+            break;
+        case 'Patakuri':
+            // TODO(jstpierre): Parent the wing to the kurib.
+            spawnGraph(`Kuribo`, SceneGraphTag.Normal, { bck: 'patakuriwait.bck' });
+            spawnGraph(`PatakuriWing`);
+            break;
+        case 'ShellfishCoin':
+            spawnGraph(`Shellfish`);
+            break;
+        case 'TogeBegomanLauncher':
+        case 'BegomanBabyLauncher':
+            spawnGraph(`BegomanLauncher`);
             break;
 
         case 'MarioFacePlanetPrevious':
