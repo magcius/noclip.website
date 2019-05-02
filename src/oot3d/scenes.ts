@@ -26,6 +26,10 @@ export class GrezzoTextureHolder extends CtrTextureHolder {
         return i;
     }
 
+    public addCMB(device: GfxDevice, cmb: CMB.CMB): void {
+        this.addTextures(device, cmb.textures.filter((tex) => tex.levels.length > 0));
+    }
+
     public addCTXB(device: GfxDevice, ctxb: CTXB.CTXB): void {
         this.addTextures(device, ctxb.textures.map((texture) => {
             const basename = texture.name.split('/')[2];

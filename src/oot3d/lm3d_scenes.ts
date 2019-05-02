@@ -65,7 +65,7 @@ class SceneDesc implements Viewer.SceneDesc {
                     }
 
                     const cmbData = new CmbData(device, cmb);
-                    textureHolder.addTextures(device, cmb.textures);
+                    textureHolder.addCMB(device, cmb);
                     renderer.cmbData.push(cmbData);
 
                     const cmbRenderer = new CmbRenderer(device, textureHolder, cmbData, cmb.name);

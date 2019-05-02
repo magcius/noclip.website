@@ -2,18 +2,90 @@
 // Elebits
 
 import * as Viewer from '../viewer';
+import * as UI from '../ui';
 import * as BRRES from './brres';
 
 import { leftPad } from '../util';
 import { fetchData } from '../fetch';
 import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { BasicRRESRenderer } from './scenes';
+import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
+import { MDL0ModelInstance, MDL0Model, RRESTextureHolder } from './render';
+import { GXRenderHelperGfx } from '../gx/gx_render';
+import { BasicRendererHelper } from '../oot3d/render';
+import AnimationController from '../AnimationController';
+import { GXMaterialHacks } from '../gx/gx_material';
 
 function makeElbPath(stg: string, room: number): string {
     let z = leftPad(''+room, 2);
     return `elb/${stg}_${z}_disp01.brres`;
+}
+
+const materialHacks: GXMaterialHacks = {
+    lightingFudge: (p) => `${p.matSource} + 0.2`,
+};
+
+export class ElebitsRenderer extends BasicRendererHelper {
+    private modelInstances: MDL0ModelInstance[] = [];
+    private models: MDL0Model[] = [];
+
+    public renderHelper: GXRenderHelperGfx;
+    private animationController: AnimationController;
+
+    constructor(device: GfxDevice, public stageRRESes: BRRES.RRES[], public textureHolder = new RRESTextureHolder()) {
+        super();
+
+        this.renderHelper = new GXRenderHelperGfx(device);
+
+        this.animationController = new AnimationController();
+
+        for (let i = 0; i < stageRRESes.length; i++) {
+            const stageRRES = stageRRESes[i];
+            this.textureHolder.addRRESTextures(device, stageRRES);
+            if (stageRRES.mdl0.length < 1)
+                continue;
+
+            const model = new MDL0Model(device, this.renderHelper, stageRRES.mdl0[0], materialHacks);
+            this.models.push(model);
+            const modelRenderer = new MDL0ModelInstance(device, this.renderHelper, this.textureHolder, model);
+            this.modelInstances.push(modelRenderer);
+
+            modelRenderer.bindRRESAnimations(this.animationController, stageRRES);
+        }
+
+        this.renderHelper.finishBuilder(device, this.viewRenderer);
+    }
+
+    public createPanels(): UI.Panel[] {
+        const panels: UI.Panel[] = [];
+
+        if (this.modelInstances.length > 1) {
+            const layersPanel = new UI.LayerPanel();
+            layersPanel.setLayers(this.modelInstances);
+            panels.push(layersPanel);
+        }
+
+        return panels;
+    }
+
+    protected prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        this.renderHelper.fillSceneParams(viewerInput);
+        for (let i = 0; i < this.modelInstances.length; i++)
+            this.modelInstances[i].prepareToRender(this.renderHelper, viewerInput);
+        this.renderHelper.prepareToRender(hostAccessPass);
+    }
+
+    public destroy(device: GfxDevice): void {
+        super.destroy(device);
+
+        this.textureHolder.destroy(device);
+        this.renderHelper.destroy(device);
+
+        for (let i = 0; i < this.models.length; i++)
+            this.models[i].destroy(device);
+        for (let i = 0; i < this.modelInstances.length; i++)
+            this.modelInstances[i].destroy(device);
+    }
 }
 
 class ElebitsSceneDesc implements Viewer.SceneDesc {
@@ -24,7 +96,7 @@ class ElebitsSceneDesc implements Viewer.SceneDesc {
         const progressables: Progressable<ArrayBufferSlice>[] = paths.map((path) => fetchData(path));
         return Progressable.all(progressables).then((buffers: ArrayBufferSlice[]) => {
             const stageRRESes = buffers.map((buffer) => BRRES.parse(buffer));
-            return new BasicRRESRenderer(device, stageRRESes);
+            return new ElebitsRenderer(device, stageRRESes);
         });
     }
 }

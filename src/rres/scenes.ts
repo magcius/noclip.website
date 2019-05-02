@@ -12,18 +12,15 @@ import { readString } from "../util";
 import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render';
 import { GXMaterialHacks } from '../gx/gx_material';
 import AnimationController from '../AnimationController';
-import { GfxDevice, GfxRenderPass, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
 import { GXRenderHelperGfx } from '../gx/gx_render';
-import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
-import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { BasicRendererHelper } from '../oot3d/render';
 
 const materialHacks: GXMaterialHacks = {
     lightingFudge: (p) => `(0.5 * (${p.ambSource} + 0.2) * ${p.matSource})`,
 };
 
-export class BasicRRESRenderer implements Viewer.SceneGfx {
-    public viewRenderer = new GfxRenderInstViewRenderer();
-    public renderTarget = new BasicRenderTarget();
+export class BasicRRESRenderer extends BasicRendererHelper {
     private modelInstances: MDL0ModelInstance[] = [];
     private models: MDL0Model[] = [];
 
@@ -31,6 +28,8 @@ export class BasicRRESRenderer implements Viewer.SceneGfx {
     private animationController: AnimationController;
 
     constructor(device: GfxDevice, public stageRRESes: BRRES.RRES[], public textureHolder = new RRESTextureHolder()) {
+        super();
+
         this.renderHelper = new GXRenderHelperGfx(device);
 
         this.animationController = new AnimationController();
@@ -72,31 +71,15 @@ export class BasicRRESRenderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
+        super.destroy(device);
+
         this.textureHolder.destroy(device);
-        this.viewRenderer.destroy(device);
-        this.renderTarget.destroy(device);
         this.renderHelper.destroy(device);
 
         for (let i = 0; i < this.models.length; i++)
             this.models[i].destroy(device);
         for (let i = 0; i < this.modelInstances.length; i++)
             this.modelInstances[i].destroy(device);
-    }
-
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
-        this.animationController.setTimeInMilliseconds(viewerInput.time);
-
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
-
-        this.viewRenderer.prepareToRender(device);
-
-        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
-        const mainPassRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
-        this.viewRenderer.executeOnPass(device, mainPassRenderer);
-        return mainPassRenderer;
     }
 }
 
