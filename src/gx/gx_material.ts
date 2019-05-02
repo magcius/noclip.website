@@ -638,8 +638,8 @@ export class GX_Program extends DeviceProgram {
         case GX.CombineColorInput.A2:    return `t_Color2.aaa`;
         case GX.CombineColorInput.TEXC:  return `${this.generateTexAccess(stage)}.${this.generateColorSwizzle(stage.texSwapTable, colorIn)}`;
         case GX.CombineColorInput.TEXA:  return `${this.generateTexAccess(stage)}.${this.generateColorSwizzle(stage.texSwapTable, colorIn)}`;
-        case GX.CombineColorInput.RASC:  return `${this.generateRas(stage)}.${this.generateColorSwizzle(stage.rasSwapTable, colorIn)}`;
-        case GX.CombineColorInput.RASA:  return `${this.generateRas(stage)}.${this.generateColorSwizzle(stage.rasSwapTable, colorIn)}`;
+        case GX.CombineColorInput.RASC:  return `TevSaturate(${this.generateRas(stage)}.${this.generateColorSwizzle(stage.rasSwapTable, colorIn)})`;
+        case GX.CombineColorInput.RASA:  return `TevSaturate(${this.generateRas(stage)}.${this.generateColorSwizzle(stage.rasSwapTable, colorIn)})`;
         case GX.CombineColorInput.ONE:   return `vec3(1)`;
         case GX.CombineColorInput.HALF:  return `vec3(1.0/2.0)`;
         case GX.CombineColorInput.KONST: return `${this.generateKonstColorSel(stage.konstColorSel)}`;
