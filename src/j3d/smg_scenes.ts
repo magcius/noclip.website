@@ -17,7 +17,7 @@ import * as BCSV from '../luigis_mansion/bcsv';
 import * as UI from '../ui';
 import { mat4, quat, vec3 } from 'gl-matrix';
 import { BMD, BRK, BTK, BCK, LoopMode, BVA } from './j3d';
-import { GfxBlendMode, GfxBlendFactor, GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxProgram, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxRenderPassDescriptor, GfxLoadDisposition } from '../gfx/platform/GfxPlatform';
+import { GfxBlendMode, GfxBlendFactor, GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxRenderPassDescriptor, GfxLoadDisposition } from '../gfx/platform/GfxPlatform';
 import AnimationController from '../AnimationController';
 import { fullscreenMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { GXRenderHelperGfx } from '../gx/gx_render';
@@ -282,8 +282,10 @@ class Node {
     }
 
     public setupAnimations(): void {
-        this.rotateSpeed = this.objinfo.rotateSpeed;
-        this.rotateAxis = this.objinfo.rotateAxis;
+        if (this.objinfo.moveConditionType === 0) {
+            this.rotateSpeed = this.objinfo.rotateSpeed;
+            this.rotateAxis = this.objinfo.rotateAxis;
+        }
 
         const objName = this.objinfo.objName;
         if (objName.startsWith('HoleBeltConveyerParts') && this.objinfo.path) {
@@ -715,6 +717,7 @@ interface ObjInfo {
     objName: string;
     objArg0: number;
     objArg1: number;
+    moveConditionType: number;
     rotateSpeed: number;
     rotateAxis: number;
     rotateAccelType: number;
@@ -963,7 +966,7 @@ class SMGSpawner {
                 if (tag === SceneGraphTag.Skybox) {
                     mat4.scale(objinfo.modelMatrix, objinfo.modelMatrix, [.5, .5, .5]);
 
-                    // Kill translation. Need to figure out how the game does skyboxen.
+                    // Kill translation. Need to figure out how the game does skyboxes.
                     objinfo.modelMatrix[12] = 0;
                     objinfo.modelMatrix[13] = 0;
                     objinfo.modelMatrix[14] = 0;
@@ -1012,6 +1015,7 @@ class SMGSpawner {
         switch (objinfo.objName) {
 
             // Skyboxen.
+        case 'AuroraSky':
         case 'BeyondGalaxySky':
         case 'BeyondHellValleySky':
         case 'BeyondHorizonSky':
@@ -1024,12 +1028,14 @@ class SMGSpawner {
         case 'BigFallSky':
         case 'Blue2DSky':
         case 'BrightGalaxySky':
+        case 'ChildRoomSky':
         case 'CloudSky':
         case 'DarkSpaceStormSky':
         case 'DesertSky':
         case 'DotPatternSky':
         case 'GalaxySky':
         case 'GoodWeatherSky':
+        case 'GreenPlanetOrbitSky':
         case 'HalfGalaxySky':
         case 'HolePlanetInsideSky':
         case 'KoopaVS1Sky':
@@ -1041,15 +1047,11 @@ class SMGSpawner {
         case 'PhantomSky':
         case 'RockPlanetOrbitSky':
         case 'SummerSky':
+        case 'VRDarkSpace':
         case 'VROrbit':
         case 'VRSandwichSun':
         case 'VsKoopaLv3Sky':
             spawnGraph(name, SceneGraphTag.Skybox);
-            break;
-
-        case 'PeachCastleTownBeforeAttack':
-            spawnGraph('PeachCastleTownBeforeAttack', SceneGraphTag.Normal);
-            spawnGraph('PeachCastleTownBeforeAttackBloom', SceneGraphTag.Bloom);
             break;
 
         case 'PeachCastleTownAfterAttack':
@@ -1069,19 +1071,23 @@ class SMGSpawner {
         case 'SwingRope':
         case 'Creeper':
         case 'TrampleStar':
+        case 'Flag':
         case 'FlagPeachCastleA':
         case 'FlagPeachCastleB':
         case 'FlagPeachCastleC':
         case 'FlagKoopaA':
         case 'FlagKoopaB':
         case 'FlagKoopaC':
+        case 'FlagKoopaCastle':
         case 'FlagRaceA':
         case 'FlagRaceB':
         case 'FlagRaceC':
         case 'FlagTamakoro':
+        case 'OceanRing':
         case 'WoodLogBridge':
         case 'SandBird':
         case 'RingBeamerAreaObj':
+        case 'StatusFloor':
             // Archives just contain the textures. Mesh geometry appears to be generated at runtime by the game.
             return;
 
@@ -1089,7 +1095,8 @@ class SMGSpawner {
         case 'InvisibleWall10x20':
         case 'InvisibleWallGCapture10x20':
         case 'InvisibleWaterfallTwinFallLake':
-            // Invisible.
+        case 'GhostShipCavePipeCollision':
+            // Invisible / Collision only.
             return;
 
         case 'LavaMiniSunPlanet':
@@ -1201,6 +1208,12 @@ class SMGSpawner {
             // No archives. Needs R&D for what to display.
             return;
 
+        // SMG1
+        case 'PeachCastleTownBeforeAttack':
+            spawnGraph('PeachCastleTownBeforeAttack', SceneGraphTag.Normal);
+            spawnGraph('PeachCastleTownBeforeAttackBloom', SceneGraphTag.Bloom);
+            break;
+
         case 'AstroCore':
             spawnGraph(name, SceneGraphTag.Normal, { bck: 'revival4.bck', brk: 'revival4.brk', btk: 'astrocore.btk' });
             break;
@@ -1255,17 +1268,16 @@ class SMGSpawner {
                 this.bindChangeAnimation(node, rarc, objinfo.objArg1);
             });
             break;
+    
+        case 'OtaKing':
+            spawnGraph('OtaKing');
+            spawnGraph('OtaKingMagma');
+            spawnGraph('OtaKingMagmaBloom', SceneGraphTag.Bloom);
+            break;
+
         case 'UFOKinoko':
             spawnGraph(name, SceneGraphTag.Normal, null).then(([node, rarc]) => {
                 this.bindChangeAnimation(node, rarc, objinfo.objArg0);
-            });
-            break;
-
-        // SMG2
-        case 'Moc':
-            spawnGraph(`Moc`, SceneGraphTag.Normal, { bck: 'turn.bck' }).then(([node, rarc]) => {
-                const bva = BVA.parse(rarc.findFileData(`FaceA.bva`));
-                node.modelInstance.bindVAF1(bva.vaf1);
             });
             break;
         case 'PlantA':
@@ -1280,12 +1292,29 @@ class SMGSpawner {
         case 'PlantD':
             spawnGraph(`PlantD01`);
             break;
+
+        // SMG2
+        case 'Moc':
+            spawnGraph(`Moc`, SceneGraphTag.Normal, { bck: 'turn.bck' }).then(([node, rarc]) => {
+                const bva = BVA.parse(rarc.findFileData(`FaceA.bva`));
+                node.modelInstance.bindVAF1(bva.vaf1);
+            });
+            break;
         case 'CareTakerHunter':
             spawnGraph(`CaretakerHunter`);
             break;
         case 'WorldMapSyncSky':
             // Presumably this uses the "current world map". I chose 03, because I like it.
             spawnGraph(`WorldMap03Sky`, SceneGraphTag.Skybox);
+            break;
+
+        case 'DinoPackunVs1':
+        case 'DinoPackunVs2':
+            spawnGraph(`DinoPackun`);
+            break;
+
+        case 'Dodoryu':
+            spawnGraph(name, SceneGraphTag.Normal, { bck: 'swoon.bck' });
             break;
 
         case 'MarioFacePlanetPrevious':
@@ -1345,6 +1374,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
             const objName = BCSV.getField<string>(bcsv, record, 'name', 'Unknown');
             const objArg0 = BCSV.getField<number>(bcsv, record, 'Obj_arg0', -1);
             const objArg1 = BCSV.getField<number>(bcsv, record, 'Obj_arg1', -1);
+            const moveConditionType = BCSV.getField<number>(bcsv, record, 'MoveConditionType', 0);
             const rotateSpeed = BCSV.getField<number>(bcsv, record, 'RotateSpeed', 0);
             const rotateAccelType = BCSV.getField<number>(bcsv, record, 'RotateAccelType', 0);
             const rotateAxis = BCSV.getField<number>(bcsv, record, 'RotateAxis', 0);
@@ -1352,7 +1382,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
             const path = paths.find((path) => path.l_id === pathId) || null;
             const modelMatrix = mat4.create();
             computeModelMatrixFromRecord(modelMatrix, bcsv, record);
-            return { objId, objName, objArg0, objArg1, rotateSpeed, rotateAccelType, rotateAxis, modelMatrix, path };
+            return { objId, objName, objArg0, objArg1, moveConditionType, rotateSpeed, rotateAccelType, rotateAxis, modelMatrix, path };
         });
     }
     

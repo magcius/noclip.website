@@ -294,6 +294,7 @@ export class MaterialInstance {
             case 0x08: // Peach Beach.
             case 0x0A: // Wind Waker pedestal?
             case 0x0B: // Luigi Circuit
+            case 0x80:
                 // No mapping.
                 mat4.identity(dst);
                 break;
@@ -321,6 +322,7 @@ export class MaterialInstance {
             case 0x02:
             case 0x0A:
             case 0x0B:
+            case 0x80:
                 // In the case of flipY, invert the Y coordinates. This is not a J3D thing, this is
                 // compensating for OpenGL being bad in other cases.
                 if (flipY) {

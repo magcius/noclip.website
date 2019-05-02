@@ -70,7 +70,7 @@ import { standardFullClearRenderPassDescriptor } from './gfx/helpers/RenderTarge
 import { DroppedFileSceneDesc } from './FileDrops';
 
 import * as Sentry from '@sentry/browser';
-import { GIT_REVISION } from './BuildVersion';
+import { GIT_REVISION, IS_DEVELOPMENT } from './BuildVersion';
 
 const sceneGroups = [
     "Wii",
@@ -274,23 +274,25 @@ class Main {
 
         this._updateLoop(0);
 
-        Sentry.init({
-            dsn: 'https://a3b5f6c50bc04555835f9a83d6e76b23@sentry.io/1448331',
-            beforeSend: (event) => {
-                // Filter out aborted XHRs.
-                if (event.exception.values.length) {
-                    const exc = event.exception.values[0];
-                    if (exc.type === 'UnhandledRejection' && exc.value === '400')
-                        return null;
-                }
+        if (!IS_DEVELOPMENT) {
+            Sentry.init({
+                dsn: 'https://a3b5f6c50bc04555835f9a83d6e76b23@sentry.io/1448331',
+                beforeSend: (event) => {
+                    // Filter out aborted XHRs.
+                    if (event.exception.values.length) {
+                        const exc = event.exception.values[0];
+                        if (exc.type === 'UnhandledRejection' && exc.value === '400')
+                            return null;
+                    }
 
-                return event;
-            },
-        });
+                    return event;
+                },
+            });
 
-        Sentry.configureScope((scope) => {
-            scope.setExtra('git-revision', GIT_REVISION);
-        });
+            Sentry.configureScope((scope) => {
+                scope.setExtra('git-revision', GIT_REVISION);
+            });
+        }
     }
 
     private _exportSaveData() {

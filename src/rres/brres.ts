@@ -186,7 +186,7 @@ function parsePLT0(buffer: ArrayBufferSlice): PLT0 {
 
     assert(readString(buffer, 0x00, 0x04) === 'PLT0');
     const version = view.getUint32(0x08);
-    const supportedVersions = [0x01];
+    const supportedVersions = [0x01, 0x03];
     assert(supportedVersions.includes(version));
 
     const dataOffs = view.getUint32(0x10);

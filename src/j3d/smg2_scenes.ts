@@ -78,6 +78,7 @@ const sceneDescs = [
     new SMG2SceneDesc("Rolling Coaster Galaxy", "TamakoroSliderGalaxy"),
     new SMG2SceneDesc("Twisty Trials Galaxy", "SecretAthleticGalaxy"),
     new SMG2SceneDesc("Stone Cyclone Galaxy", "MadnessOnimasuGalaxy"),
+    new SMG2SceneDesc("Boss Blitz Galaxy", "KingOfKingsGalaxy"),
     new SMG2SceneDesc("Flip-Out Galaxy", "SwitchMoveBlockGalaxy"),
     new SMG2SceneDesc("Grandmaster Galaxy", "DimensionBigCastleGalaxy"),
 ];
