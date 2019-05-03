@@ -141,7 +141,10 @@ class SonicColorsSceneDesc implements Viewer.SceneDesc {
                 return fetchData(path, abortSignal);
             })).then((entryArcDatas) => {
                 const skyboxRRES = BRRES.parse(assertExists(commonArc.findFile(`arc/${this.id}_sky.brres`)).buffer);
-                const motRRES = BRRES.parse(assertExists(commonArc.findFile(`arc/${this.id}_mot.brres`)).buffer);
+                let motRRES: BRRES.RRES | null = null;
+                const motData = commonArc.findFileData(`arc/${this.id}_mot.brres`);
+                if (motData !== null)
+                    motRRES = BRRES.parse(motData);
 
                 const skyboxModel = new MDL0Model(device, renderer.renderHelper, skyboxRRES.mdl0[0], materialHacks);
                 const skyboxModelInstance = new MDL0ModelInstance(device, renderer.renderHelper, renderer.textureHolder, skyboxModel);
@@ -161,7 +164,8 @@ class SonicColorsSceneDesc implements Viewer.SceneDesc {
                         const modelData = new MDL0Model(device, renderer.renderHelper, rres.mdl0[0], materialHacks);
                         const modelInstance = new MDL0ModelInstance(device, renderer.renderHelper, renderer.textureHolder, modelData);
                         modelInstance.passMask = SonicColorsPass.MAIN;
-                        modelInstance.bindRRESAnimations(renderer.animationController, motRRES);
+                        if (motRRES)
+                            modelInstance.bindRRESAnimations(renderer.animationController, motRRES);
                         // mat4.translate(modelInstance.modelMatrix, modelInstance.modelMatrix, entry.translation);
                         renderer.modelData.push(modelData);
                         renderer.modelInstances.push(modelInstance);

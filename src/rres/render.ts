@@ -445,32 +445,36 @@ export class MDL0ModelInstance {
     }
 
     public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput): void {
-        let modelVisible = this.visible;
+        let modelVisibility = this.visible ? IntersectionState.PARTIAL_INTERSECT : IntersectionState.FULLY_OUTSIDE;
         const mdl0 = this.mdl0Model.mdl0;
 
-        if (modelVisible) {
-            this.templateRenderInst.name = this.name;
-            this.templateRenderInst.passMask = this.passMask;
-
-            if (mdl0.bbox !== null) {
+        if (modelVisibility !== IntersectionState.FULLY_OUTSIDE) {
+            if (this.isSkybox) {
+                modelVisibility = IntersectionState.FULLY_INSIDE;
+            } else if (mdl0.bbox !== null) {
                 // Frustum cull.
                 bboxScratch.transform(mdl0.bbox, this.modelMatrix);
                 if (!viewerInput.camera.frustum.contains(bboxScratch))
-                    modelVisible = false;
+                    modelVisibility = IntersectionState.FULLY_OUTSIDE;
             }
+        }
+
+        if (modelVisibility !== IntersectionState.FULLY_OUTSIDE) {
+            this.templateRenderInst.name = this.name;
+            this.templateRenderInst.passMask = this.passMask;
 
             if (this.debugBones)
                 prepareFrameDebugOverlayCanvas2D();
 
-            this.execNodeTreeOpList(mdl0.sceneGraph.nodeTreeOps, viewerInput, modelVisible);
+            this.execNodeTreeOpList(mdl0.sceneGraph.nodeTreeOps, viewerInput, modelVisibility);
             this.execNodeMixOpList(mdl0.sceneGraph.nodeMixOps);
 
             if (!this.isAnyShapeVisible())
-                modelVisible = false;
+                modelVisibility = IntersectionState.FULLY_OUTSIDE;
         }
 
         let depth = -1;
-        if (modelVisible) {
+        if (modelVisibility !== IntersectionState.FULLY_OUTSIDE) {
             this.templateRenderInst.passMask = this.passMask;
 
             for (let i = 0; i < this.materialInstances.length; i++)
@@ -522,11 +526,11 @@ export class MDL0ModelInstance {
         }
     }
 
-    private execNodeTreeOpList(opList: BRRES.NodeTreeOp[], viewerInput: ViewerRenderInput, visible: boolean): void {
+    private execNodeTreeOpList(opList: BRRES.NodeTreeOp[], viewerInput: ViewerRenderInput, rootVisibility: IntersectionState): void {
         const mdl0 = this.mdl0Model.mdl0;
 
         mat4.copy(this.matrixArray[0], this.modelMatrix);
-        this.matrixVisibility[0] = visible ? (this.isSkybox ? IntersectionState.FULLY_INSIDE : IntersectionState.PARTIAL_INTERSECT) : IntersectionState.FULLY_OUTSIDE;
+        this.matrixVisibility[0] = rootVisibility;
 
         for (let i = 0; i < opList.length; i++) {
             const op = opList[i];
@@ -544,8 +548,8 @@ export class MDL0ModelInstance {
                 }
                 mat4.mul(this.matrixArray[dstMtxId], this.matrixArray[parentMtxId], modelMatrix);
 
-                if (visible) {
-                    if (this.isSkybox || node.bbox === null) {
+                if (rootVisibility !== IntersectionState.FULLY_OUTSIDE) {
+                    if (rootVisibility === IntersectionState.FULLY_INSIDE || node.bbox === null) {
                         this.matrixVisibility[dstMtxId] = IntersectionState.FULLY_INSIDE;
                     } else {
                         bboxScratch.transform(node.bbox, this.matrixArray[dstMtxId]);

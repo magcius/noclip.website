@@ -906,6 +906,7 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
         case MapMode.ENV_CAMERA:
         case MapMode.ENV_LIGHT:
             gxMaterial.texGens[i].matrix = GX.TexGenMatrix.TEXMTX0 + i*3;
+            break;
         }
 
         const srtMtx = mat4.create();

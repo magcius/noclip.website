@@ -203,7 +203,7 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
     private static spawnObjectFromRRES(device: GfxDevice, renderer: MarioKartWiiRenderer, rres: BRRES.RRES, objectName: string): MDL0ModelInstance {
         const modelCache = renderer.modelCache;
         const mdl0Model = modelCache.modelCache.get(objectName);
-        const mdl0Instance = new MDL0ModelInstance(device, renderer.renderHelper, renderer.textureHolder, mdl0Model);
+        const mdl0Instance = new MDL0ModelInstance(device, renderer.renderHelper, renderer.textureHolder, mdl0Model, objectName);
         mdl0Instance.bindRRESAnimations(renderer.animationController, rres, null);
         renderer.modelInstances.push(mdl0Instance);
         return mdl0Instance;
