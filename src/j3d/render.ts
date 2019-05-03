@@ -17,6 +17,7 @@ import { GfxBufferCoalescer, GfxCoalescedBuffers } from '../gfx/helpers/BufferHe
 import { ViewerRenderInput } from '../viewer';
 import { GfxRenderInst, GfxRenderInstBuilder, setSortKeyDepth, GfxRendererLayer, makeSortKey, setSortKeyBias } from '../gfx/render/GfxRenderer';
 import { colorCopy } from '../Color';
+import { computeNormalMatrix, matrixHasUniformScale } from '../MatrixHelpers';
 
 export class J3DTextureHolder extends GXTextureHolder<TEX1_TextureData> {
     public addJ3DTextures(device: GfxDevice, bmd: BMD, bmt: BMT | null = null) {
@@ -146,17 +147,18 @@ export class MaterialInstanceState {
     public lights = nArray(8, () => new GX_Material.Light());
 }
 
-function matrixSwapCol34(d: mat4): void {
-    // Swap columns 3 and 4 of this 3x4 matrix.
-    const tx = d[12];
-    d[12] = d[8];
-    d[8] = tx;
-    const ty = d[13];
-    d[13] = d[9];
-    d[9] = ty;
-    const tz = d[14];
-    d[14] = d[10];
-    d[10] = tz;
+function mat4SwapTranslationColumns(m: mat4): void {
+    const tx = m[12];
+    m[12] = m[8];
+    m[8] = tx;
+    const ty = m[13];
+    m[13] = m[9];
+    m[9] = ty;
+}
+
+function j3dMtxProjConcat(dst: mat4, a: mat4, b: mat4): void {
+    // TODO(jstpierre): RE.
+    mat4.mul(dst, a, b);
 }
 
 const matrixScratch = mat4.create(), matrixScratch2 = mat4.create();
@@ -287,7 +289,8 @@ export class MaterialInstance {
         this.templateRenderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
         // Bind our texture matrices.
-        const scratch = matrixScratch;
+        const matrixSRT = matrixScratch;
+        const matrixProj = matrixScratch2;
         for (let i = 0; i < material.texMatrices.length; i++) {
             const texMtx = material.texMatrices[i];
             const dst = materialParams.u_TexMtx[i];
@@ -299,83 +302,180 @@ export class MaterialInstance {
             const flipY = materialParams.m_TextureMapping[i].flipY;
             const flipYScale = flipY ? -1.0 : 1.0;
 
+            const matrixMode = texMtx.type & 0x7F;
+
             // First, compute input matrix.
-            switch (texMtx.type) {
+
+            // TODO(jstpierre): Make this work with skinning.
+            const modelMatrix = shapeInstanceState.matrixArray[0];
+
+            switch (matrixMode) {
             case 0x00:
-            case 0x01: // Delfino Plaza
-            case 0x02: // pinnaParco7.szs
-            case 0x08: // Peach Beach.
-            case 0x0A: // Wind Waker pedestal?
-            case 0x0B: // Luigi Circuit
-            case 0x80:
+            case 0x03:
+            case 0x04:
                 // No mapping.
                 mat4.identity(dst);
                 break;
+
+            case 0x01: // Delfino Plaza
             case 0x06: // Rainbow Road
             case 0x07: // Rainbow Road
                 // Environment mapping. Uses the normal matrix.
-                // Normal matrix. Emulated here by the view matrix with the translation lopped off...
-                mat4.mul(dst, camera.viewMatrix, shapeInstanceState.matrixArray[0]);
-                // Kill translation.
-                dst[12] = 0;
-                dst[13] = 0;
-                dst[14] = 0;
+                mat4.mul(dst, camera.viewMatrix, modelMatrix);
+                computeNormalMatrix(dst, dst, true);
                 break;
+    
+            case 0x02: // pinnaParco7.szs
+            case 0x08: // Peach Beach.
+                // Copy over model matrix.
+                // mat4.copy(dst, modelMatrix);
+                mat4.identity(dst);
+                break;
+
             case 0x09:
                 // Projection. Used for indtexwater, mostly.
-                // TODO(jstpierre): Make this work with skinning.
-                mat4.mul(dst, camera.viewMatrix, shapeInstanceState.matrixArray[0]);
+                mat4.mul(dst, camera.viewMatrix, modelMatrix);
                 break;
+
+            case 0x05:
+            case 0x0A:
+            case 0x0B:
+                // Environment mapping, but only using the model matrix.
+                mat4.copy(dst, modelMatrix);
+                computeNormalMatrix(dst, dst, true);
+                break;
+
             default:
                 throw "whoops";
             }
 
             // Now apply effects.
-            switch(texMtx.type) {
-            case 0x00:
-            case 0x01:
-            case 0x02:
-            case 0x0A:
+
+            // Calculate SRT matrix.
+            // TODO(jstpierre): Respect the Maya flag
+            const maya = !!((texMtx.type) & 0x80);
+            if (this.ttk1Animators[i] !== undefined) {
+                this.ttk1Animators[i].calcTexMtx(matrixSRT);
+            } else {
+                mat4.copy(matrixSRT, material.texMatrices[i].matrix);
+            }
+
+            // J3DGetTextureMtxOld puts the translation into the fourth column.
+            // J3DGetTextureMtx puts the translation into the third column.
+            // Our calcTexMtx uses fourth column, so we need to swap for non-Old.
+
+            // _B8 and _E8 are constant 4x3 matrices
+            // _B8 is equivalent to texEnvMtx, and _E8 is the same but column-swapped.
+            // _48 and _88 are scratch space, _24 is effectMatrix,
+            // _94 is input matrix calculated above, _64 is output.
+            switch (matrixMode) {
+            case 0x08:
+            case 0x09:
             case 0x0B:
-            case 0x80:
-                // In the case of flipY, invert the Y coordinates. This is not a J3D thing, this is
-                // compensating for OpenGL being bad in other cases.
-                if (flipY) {
-                    texEnvMtx(scratch, 1, 1, 0, 1);
-                    mat4.mul(dst, scratch, dst);
+                {
+                    // J3DGetTextureMtx(_88)
+                    // PSMTXConcat(_88, _B8, _88)
+                    // J3DMtxProjConcat(_88, this->_24, _48)
+                    // PSMtxConcat(_48, this->_94, this->_64)
+
+                    mat4SwapTranslationColumns(matrixSRT); // non-Old, needs swap
+                    // The effect matrix here is typically a GameCube projection matrix.
+                    // Swap it out with our own.
+                    if (matrixMode === 0x09) {
+                        texProjPerspMtx(matrixProj, camera.fovY, camera.aspect, 0.5, -0.5 * flipYScale, 0.5, 0.5);
+                    } else {
+                        // TODO(jstpierre): This makes things too big in Comet Observatory.
+                        // texEnvMtx(matrixProj, -0.5, -0.5 * flipYScale, 0.5, 0.5);
+                        mat4.identity(matrixProj);
+                        j3dMtxProjConcat(matrixProj, texMtx.effectMatrix, matrixProj);
+                    }
+
+                    mat4.mul(matrixProj, matrixSRT, matrixProj);
+                    mat4.mul(dst, matrixProj, dst);
                 }
                 break;
-            case 0x06: // Rainbow Road
-                // Environment mapping
-                texEnvMtx(scratch, -0.5, -0.5 * flipYScale, 0.5, 0.5);
-                mat4.mul(dst, scratch, dst);
-                mat4.mul(dst, texMtx.effectMatrix, dst);
+
+            case 0x07:
+                {
+                    // J3DGetTextureMtx(_48)
+                    // PSMTXConcat(_48, _B8, _48)
+                    // PSMtxConcat(_48, this->_94, this->_64)
+                    mat4SwapTranslationColumns(matrixSRT); // non-Old, needs swap
+                    texEnvMtx(matrixProj, -0.5, -0.5 * flipYScale, 0.5, 0.5);
+                    mat4.mul(matrixProj, matrixProj, matrixSRT);
+                    mat4.mul(dst, matrixProj, dst);
+                }
                 break;
-            case 0x07: // Rainbow Road
-            case 0x08: // Peach Beach
-                mat4.mul(dst, texMtx.effectMatrix, dst);
-                texProjPerspMtx(scratch, camera.fovY, camera.aspect, 0.5, -0.5 * flipYScale, 0.5, 0.5);
-                mat4.mul(dst, scratch, dst);
+
+            case 0x0A:
+                {
+                    // J3DGetTextureMtxOld(_88)
+                    // PSMTXConcat(_88, _E8, _88)
+                    // J3DMtxProjConcat(_88, this->_24, _48)
+                    // PSMTXConcat(_48, this->_94, this->_64)
+                    // Old, no swap
+                    texEnvMtx(matrixProj, -0.5, -0.5 * flipYScale, 0.5, 0.5);
+                    mat4SwapTranslationColumns(matrixProj);
+                    mat4.mul(matrixProj, matrixProj, matrixSRT);
+                    j3dMtxProjConcat(matrixProj, matrixProj, texMtx.effectMatrix);
+                    mat4.mul(dst, matrixProj, dst);
+                }
                 break;
-            case 0x09: // Peach's Castle Garden.
-                // mat4.mul(dst, texMtx.effectMatrix, dst);
-                // texEnvMtx(scratch, 0.5, -0.5 * flipYScale, 0.5, 0.5);
-                texProjPerspMtx(scratch, camera.fovY, camera.aspect, 0.5, -0.5 * flipYScale, 0.5, 0.5);
-                mat4.mul(dst, scratch, dst);
+
+            case 0x06:
+                {
+                    // J3DGetTextureMtxOld(_48)
+                    // PSMTXConcat(_48, _E8, _48)
+                    // PSMTXConcat(_48, this->_94, this->_64)
+                    // Old, no swap
+                    texEnvMtx(matrixProj, -0.5, -0.5 * flipYScale, 0.5, 0.5);
+                    mat4SwapTranslationColumns(matrixProj);
+                    mat4.mul(matrixProj, matrixProj, matrixSRT);
+                    mat4.mul(dst, matrixProj, dst);
+                }
                 break;
+
+            case 0x01:
+                {
+                    // J3DGetTextureMtxOld(_48)
+                    // PSMTXConcat(_48, this->_94, this->_64)
+                    // Old, no swap
+                    mat4.mul(dst, matrixProj, dst);
+                }
+                break;
+
+            case 0x02:
+            case 0x03:
+                {
+                    // J3DGetTextureMtxOld(_88)
+                    // J3DMtxProjConcat(_88, this->_24, _48)
+                    // PSMTXConcat(_48, this->_94, this->_64)
+                    // Old, no swap
+                    j3dMtxProjConcat(matrixProj, matrixSRT, texMtx.effectMatrix);
+                    mat4.mul(dst, matrixProj, dst);
+                }
+                break;
+
+            case 0x04:
+                {
+                    // J3DGetTextureMtxOld(_88)
+                    // J3DMtxProjConcat(_88, this->_24, this->_64)
+                    j3dMtxProjConcat(dst, texMtx.effectMatrix, matrixSRT);
+                }
+                break;
+
+            case 0x00:
+                {
+                    // J3DGetTextureMtxOld(_64)
+                    mat4.copy(dst, matrixSRT);
+                }
+                break;
+
             default:
-                throw "whoops";
+                {
+                    throw "whoops";
+                }
             }
-
-            // Apply SRT.
-            if (this.ttk1Animators[i] !== undefined) {
-                this.ttk1Animators[i].calcTexMtx(scratch);
-                matrixSwapCol34(scratch);
-            } else {
-                mat4.copy(scratch, material.texMatrices[i].matrix);
-            }
-
-            mat4.mul(dst, scratch, dst);
         }
 
         for (let i = 0; i < material.postTexMatrices.length; i++) {

@@ -15,6 +15,7 @@ import { GfxBufferCoalescer } from '../gfx/helpers/BufferHelpers';
 import { nArray } from '../util';
 import { prepareFrameDebugOverlayCanvas2D, getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
 import { colorCopy } from '../Color';
+import { computeNormalMatrix } from '../MatrixHelpers';
 
 export class RRESTextureHolder extends GXTextureHolder<BRRES.TEX0> {
     public addRRESTextures(device: GfxDevice, rres: BRRES.RRES): void {
@@ -222,11 +223,8 @@ class MaterialInstance {
             texEnvMtx(dstPost, 0.5, -0.5 * flipYScale, 0.5, 0.5);
 
             // Fill in the dstPre with our normal matrix.
-            // TODO(jstpierre): Calculate a proper normal matrix.
             mat4.mul(dstPre, viewerInput.camera.viewMatrix, modelMatrix);
-            dstPre[12] = 0;
-            dstPre[13] = 0;
-            dstPre[14] = 0;
+            computeNormalMatrix(dstPre, dstPre);
         } else {
             mat4.identity(dstPost);
         }
@@ -326,7 +324,7 @@ class MaterialInstance {
     }
 }
 
-const matrixScratchArray = nArray(128, () => mat4.create());
+const matrixScratchArray = nArray(1, () => mat4.create());
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 export class MDL0ModelInstance {

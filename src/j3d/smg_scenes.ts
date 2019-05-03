@@ -20,10 +20,10 @@ import { BMD, BRK, BTK, BCK, LoopMode, BVA } from './j3d';
 import { GfxBlendMode, GfxBlendFactor, GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxRenderPassDescriptor, GfxLoadDisposition } from '../gfx/platform/GfxPlatform';
 import AnimationController from '../AnimationController';
 import { fullscreenMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-import { GXRenderHelperGfx } from '../gx/gx_render';
+import { GXRenderHelperGfx, ColorKind } from '../gx/gx_render';
 import { GfxRenderInstViewRenderer, GfxRenderInst, GfxRenderInstBuilder } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor, PostFXRenderTarget, ColorAttachment, DepthStencilAttachment, DEFAULT_NUM_SAMPLES, makeEmptyRenderPassDescriptor, copyRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
-import { TransparentBlack } from '../Color';
+import { TransparentBlack, colorNew } from '../Color';
 import { getPointBezier } from '../Spline';
 import { RENDER_HACKS_ICON } from '../bk/scenes';
 
@@ -1192,6 +1192,12 @@ class SMGSpawner {
         case 'SphereRailDash':
         case 'HammerHeadPackunSpike':
             // No archives. Needs R&D for what to display.
+            return;
+
+        case 'StarPiece':
+            spawnGraph(name).then(([node, rarc]) => {
+                node.modelInstance.setColorOverride(ColorKind.MAT0, colorNew(0.745, 0.25, 0.043, 1.0));
+            });
             return;
 
         // SMG1
