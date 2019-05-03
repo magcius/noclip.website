@@ -16,7 +16,7 @@ import * as Yaz0 from '../compression/Yaz0';
 import * as BCSV from '../luigis_mansion/bcsv';
 import * as UI from '../ui';
 import { mat4, quat, vec3 } from 'gl-matrix';
-import { BMD, BRK, BTK, BCK, LoopMode, BVA } from './j3d';
+import { BMD, BRK, BTK, BCK, LoopMode, BVA, BPK } from './j3d';
 import { GfxBlendMode, GfxBlendFactor, GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxRenderPassDescriptor, GfxLoadDisposition } from '../gfx/platform/GfxPlatform';
 import AnimationController from '../AnimationController';
 import { fullscreenMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
@@ -717,6 +717,8 @@ interface ObjInfo {
     objName: string;
     objArg0: number;
     objArg1: number;
+    objArg2: number;
+    objArg3: number;
     moveConditionType: number;
     rotateSpeed: number;
     rotateAxis: number;
@@ -1196,8 +1198,17 @@ class SMGSpawner {
 
         case 'StarPiece':
             spawnGraph(name, SceneGraphTag.Normal, { btk: 'normal.btk', bck: 'land.bck' }).then(([node, rarc]) => {
-                // TODO(jstpierre): Implement support for PAK1.
-                node.modelInstance.setColorOverride(ColorKind.MAT0, colorNew(0.745, 0.25, 0.043, 1.0));
+                const animationController = new AnimationController();
+                animationController.setTimeInFrames(objinfo.objArg3);
+
+                const bpk = BPK.parse(assertExists(rarc.findFileData(`starpiececc.bpk`)));
+                node.modelInstance.bindTRK1(bpk.pak1, animationController);
+            });
+            return;
+
+        case 'SurfingRaceSubGate':
+            spawnGraph(name).then(([node, rarc]) => {
+                this.bindChangeAnimation(node, rarc, objinfo.objArg1);
             });
             return;
 
@@ -1447,6 +1458,8 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
             const objName = BCSV.getField<string>(bcsv, record, 'name', 'Unknown');
             const objArg0 = BCSV.getField<number>(bcsv, record, 'Obj_arg0', -1);
             const objArg1 = BCSV.getField<number>(bcsv, record, 'Obj_arg1', -1);
+            const objArg2 = BCSV.getField<number>(bcsv, record, 'Obj_arg2', -1);
+            const objArg3 = BCSV.getField<number>(bcsv, record, 'Obj_arg3', -1);
             const moveConditionType = BCSV.getField<number>(bcsv, record, 'MoveConditionType', 0);
             const rotateSpeed = BCSV.getField<number>(bcsv, record, 'RotateSpeed', 0);
             const rotateAccelType = BCSV.getField<number>(bcsv, record, 'RotateAccelType', 0);
@@ -1455,7 +1468,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
             const path = paths.find((path) => path.l_id === pathId) || null;
             const modelMatrix = mat4.create();
             computeModelMatrixFromRecord(modelMatrix, bcsv, record);
-            return { objId, objName, objArg0, objArg1, moveConditionType, rotateSpeed, rotateAccelType, rotateAxis, modelMatrix, path };
+            return { objId, objName, objArg0, objArg1, objArg2, objArg3, moveConditionType, rotateSpeed, rotateAccelType, rotateAxis, modelMatrix, path };
         });
     }
     

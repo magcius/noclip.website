@@ -596,9 +596,14 @@ export class MaterialInstance {
             if (indTexMtx === null)
                 continue;
 
-            const a = indTexMtx[0], c = indTexMtx[1], tx = indTexMtx[2];
-            const b = indTexMtx[3], d = indTexMtx[4], ty = indTexMtx[5];
-            mat2d.set(materialParams.u_IndTexMtx[i], a, b, c, d, tx, ty);
+            const a = indTexMtx[0], c = indTexMtx[1], tx = indTexMtx[2], scale = indTexMtx[3];
+            const b = indTexMtx[4], d = indTexMtx[5], ty = indTexMtx[6];
+            mat4.set(materialParams.u_IndTexMtx[i],
+                a,     b,  0, 0,
+                c,     d,  0, 0,
+                tx,    ty, 0, 0,
+                scale, 0,  0, 0,
+            );
         }
 
         for (let i = 0; i < materialInstanceState.lights.length; i++)

@@ -5,7 +5,7 @@ import { mat4, quat, vec3 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { Endianness } from '../endian';
-import { assert, readString, assertExists } from '../util';
+import { assert, readString, assertExists, hexdump } from '../util';
 
 import { compileVtxLoader, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexLayout } from '../gx/gx_displaylist';
 import * as GX from '../gx/gx_enum';
@@ -801,8 +801,8 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
                 const p12 = view.getFloat32(indTexMatrixOffs + 0x14);
                 const scale = Math.pow(2, view.getInt8(indTexMatrixOffs + 0x18));
                 const m = new Float32Array([
-                    p00*scale, p01*scale, p02*scale,
-                    p10*scale, p11*scale, p12*scale,
+                    p00*scale, p01*scale, p02*scale, scale,
+                    p10*scale, p11*scale, p12*scale, 0.0,
                 ]);
                 indTexMatrices.push(m);
             }
@@ -1699,6 +1699,79 @@ export class BRK {
     }
 
     public trk1: TRK1;
+}
+//#endregion
+
+//#region PAK1
+export interface TRK1 extends AnimationBase {
+    animationEntries: TRK1AnimationEntry[];
+}
+
+function readPAK1Chunk(buffer: ArrayBufferSlice): TRK1 {
+    const view = buffer.createDataView();
+    const loopMode: LoopMode = view.getUint8(0x08);
+    const duration = view.getUint16(0x0C);
+    const colorAnimationTableCount = view.getUint16(0x0E);
+    const rCount = view.getUint16(0x10);
+    const gCount = view.getUint16(0x12);
+    const bCount = view.getUint16(0x14);
+    const aCount = view.getUint16(0x16);
+    const colorAnimationTableOffs = view.getUint32(0x18);
+    const remapTableOffs = view.getUint32(0x1C);
+    const nameTableOffs = view.getUint32(0x20);
+    const rOffs = view.getUint32(0x24);
+    const gOffs = view.getUint32(0x28);
+    const bOffs = view.getUint32(0x2C);
+    const aOffs = view.getUint32(0x30);
+    const nameTable = readStringTable(buffer, nameTableOffs);
+
+    let animationTableIdx: number;
+
+    function readAnimationTrack(data: Int16Array) {
+        const count = view.getUint16(animationTableIdx + 0x00);
+        const index = view.getUint16(animationTableIdx + 0x02);
+        const tangent: TangentType = view.getUint16(animationTableIdx + 0x04);
+        animationTableIdx += 0x06;
+        return translateAnimationTrack(data, 1 / 0xFF, count, index, tangent);
+    }
+
+    const animationEntries: TRK1AnimationEntry[] = [];
+
+    const registerRTable = buffer.createTypedArray(Int16Array, rOffs, rCount, Endianness.BIG_ENDIAN);
+    const registerGTable = buffer.createTypedArray(Int16Array, gOffs, gCount, Endianness.BIG_ENDIAN);
+    const registerBTable = buffer.createTypedArray(Int16Array, bOffs, bCount, Endianness.BIG_ENDIAN);
+    const registerATable = buffer.createTypedArray(Int16Array, aOffs, aCount, Endianness.BIG_ENDIAN);
+
+    animationTableIdx = colorAnimationTableOffs;
+    for (let i = 0; i < colorAnimationTableCount; i++) {
+        const materialName = nameTable[i];
+        const remapIndex = view.getUint16(remapTableOffs + i * 0x02);
+        const r = readAnimationTrack(registerRTable);
+        const g = readAnimationTrack(registerGTable);
+        const b = readAnimationTrack(registerBTable);
+        const a = readAnimationTrack(registerATable);
+        const colorKind = ColorKind.MAT0;
+        animationEntries.push({ materialName, remapIndex, colorKind, r, g, b, a });
+    }
+
+    return { duration, loopMode, animationEntries };
+}
+//#endregion
+
+//#region BPK
+export class BPK {
+    public static parse(buffer: ArrayBufferSlice): BPK {
+        const bpk = new BPK();
+
+        const j3d = new J3DFileReaderHelper(buffer);
+        assert(j3d.magic === 'J3D1bpk1');
+
+        bpk.pak1 = readPAK1Chunk(j3d.nextChunk('PAK1'));
+
+        return bpk;
+    }
+
+    public pak1: TRK1;
 }
 //#endregion
 

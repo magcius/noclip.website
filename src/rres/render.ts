@@ -180,13 +180,23 @@ class MaterialInstance {
         }
     }
 
-    public calcIndTexMatrix(dst: mat2d, indIdx: number): void {
+    public calcIndTexMatrix(dst: mat4, indIdx: number): void {
         const material = this.materialData.material;
         const texMtxIdx: BRRES.TexMtxIndex = BRRES.TexMtxIndex.IND0 + indIdx;
         if (this.srt0Animators[texMtxIdx]) {
             this.srt0Animators[texMtxIdx].calcIndTexMtx(dst);
+            // TODO(jstpierre): What scale is used here?
+            dst[12] = 1.0;
         } else {
-            mat2d.copy(dst, material.indTexMatrices[indIdx]);
+            const indTexMtx = material.indTexMatrices[indIdx];
+            const a = indTexMtx[0], c = indTexMtx[1], tx = indTexMtx[2], scale = indTexMtx[3];
+            const b = indTexMtx[4], d = indTexMtx[5], ty = indTexMtx[6];
+            mat4.set(dst,
+                a,     b,  0, 0,
+                c,     d,  0, 0,
+                tx,    ty, 0, 0,
+                scale, 0,  0, 0,
+            );
         }
     }
 

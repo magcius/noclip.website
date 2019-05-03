@@ -411,7 +411,7 @@ export interface MDL0_MaterialEntry {
     gxMaterial: GX_Material.GXMaterial;
     samplers: MDL0_MaterialSamplerEntry[];
     texSrts: MDL0_TexSrtEntry[];
-    indTexMatrices: mat2d[];
+    indTexMatrices: Float32Array[];
     colorAmbRegs: GX_Material.Color[];
     colorMatRegs: GX_Material.Color[];
     colorRegisters: GX_Material.Color[];
@@ -731,7 +731,7 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
     const gxMaterial = parseMaterialEntry(r, index, name, numTexGens, numTevs, numInds);
     gxMaterial.cullMode = cullMode;
 
-    const indTexMatrices: mat2d[] = [];
+    const indTexMatrices: Float32Array[] = [];
     for (let i = 0; i < 3; i++) {
         const indTexScaleBase = 10;
         const indTexScaleBias = 0x11;
@@ -747,17 +747,18 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
         const scaleExp = (scaleBitsC << 4) | (scaleBitsB << 2) | scaleBitsA;
         const scale = Math.pow(2, scaleExp - indTexScaleBias - indTexScaleBase);
 
-        const ma = ((((mtxA >>>  0) & 0x07FF) << 21) >> 21) * scale;
-        const mc = ((((mtxA >>> 11) & 0x07FF) << 21) >> 21) * scale;
-        const mx = ((((mtxB >>>  0) & 0x07FF) << 21) >> 21) * scale;
-        const mb = ((((mtxB >>> 11) & 0x07FF) << 21) >> 21) * scale;
-        const md = ((((mtxC >>>  0) & 0x07FF) << 21) >> 21) * scale;
-        const my = ((((mtxC >>> 11) & 0x07FF) << 21) >> 21) * scale;
+        const p00 = ((((mtxA >>>  0) & 0x07FF) << 21) >> 21);
+        const p01 = ((((mtxA >>> 11) & 0x07FF) << 21) >> 21);
+        const p02 = ((((mtxB >>>  0) & 0x07FF) << 21) >> 21);
+        const p10 = ((((mtxB >>> 11) & 0x07FF) << 21) >> 21);
+        const p11 = ((((mtxC >>>  0) & 0x07FF) << 21) >> 21);
+        const p12 = ((((mtxC >>> 11) & 0x07FF) << 21) >> 21);
 
-        const mat = mat2d.fromValues(
-            ma, mb, mc, md, mx, my
-        );
-        indTexMatrices.push(mat);
+        const m = new Float32Array([
+            p00*scale, p01*scale, p02*scale, scale,
+            p10*scale, p11*scale, p12*scale, 0.0,
+        ]);
+        indTexMatrices.push(m);
     }
 
     // Colors.
@@ -1929,9 +1930,8 @@ export class SRT0TexMtxAnimator {
         calcTexMtx(dst, texMtxMode, scaleS, scaleT, rotation, translationS, translationT);
     }
 
-    public calcIndTexMtx(dst: mat2d): void {
+    public calcIndTexMtx(dst: mat4): void {
         this._calcTexMtx(this.scratch, TexMatrixMode.BASIC);
-        calc2dMtx(dst, this.scratch);
     }
 
     public calcTexMtx(dst: mat4): void {

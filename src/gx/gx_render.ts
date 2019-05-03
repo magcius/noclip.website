@@ -14,7 +14,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { TextureMapping, TextureHolder, LoadedTexture } from '../TextureHolder';
 
 import { GfxBufferCoalescer, GfxCoalescedBuffers, makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { fillColor, fillMatrix4x3, fillMatrix3x2, fillVec4, fillMatrix4x4, fillVec3 } from '../gfx/helpers/UniformBufferHelpers';
+import { fillColor, fillMatrix4x3, fillVec4, fillMatrix4x4, fillVec3, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxFormat, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxDevice, GfxInputState, GfxVertexAttributeDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxProgram, GfxBindingLayoutDescriptor, GfxProgramReflection, GfxHostAccessPass, GfxRenderPass, GfxBufferBinding, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxVertexAttributeFrequency, GfxTextureDimension } from '../gfx/platform/GfxPlatform';
 import { getFormatTypeFlags, FormatTypeFlags } from '../gfx/platform/GfxPlatformFormat';
 import { Camera } from '../Camera';
@@ -40,7 +40,7 @@ export class MaterialParams {
     public u_Color: GX_Material.Color[] = nArray(ColorKind.COUNT, () => new GX_Material.Color());
     public u_TexMtx: mat4[] = nArray(10, () => mat4.create());     // mat4x3
     public u_PostTexMtx: mat4[] = nArray(20, () => mat4.create()); // mat4x3
-    public u_IndTexMtx: mat2d[] = nArray(3, () => mat2d.create()); // mat4x2
+    public u_IndTexMtx: mat4[] = nArray(3, () => mat4.create()); // mat4x2
     public u_Lights: GX_Material.Light[] = nArray(8, () => new GX_Material.Light());
 }
 
@@ -82,7 +82,7 @@ export function fillMaterialParamsData(d: Float32Array, materialParams: Material
     for (let i = 0; i < 20; i++)
         offs += fillMatrix4x3(d, offs, materialParams.u_PostTexMtx[i]);
     for (let i = 0; i < 3; i++)
-        offs += fillMatrix3x2(d, offs, materialParams.u_IndTexMtx[i]);
+        offs += fillMatrix4x2(d, offs, materialParams.u_IndTexMtx[i]);
     for (let i = 0; i < 8; i++)
         offs += fillVec4(d, offs, materialParams.m_TextureMapping[i].width, materialParams.m_TextureMapping[i].height, 0, materialParams.m_TextureMapping[i].lodBias);
     for (let i = 0; i < 8; i++) {
