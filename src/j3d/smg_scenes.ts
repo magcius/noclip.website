@@ -1039,12 +1039,14 @@ class SMGSpawner {
         case 'DarkSpaceStormSky':
         case 'DesertSky':
         case 'DotPatternSky':
+        case 'FamicomMarioSky':
         case 'GalaxySky':
         case 'GoodWeatherSky':
         case 'GreenPlanetOrbitSky':
         case 'HalfGalaxySky':
         case 'HolePlanetInsideSky':
         case 'KoopaVS1Sky':
+        case 'KoopaVS2Sky':
         case 'KoopaJrLv3Sky':
         case 'MagmaMonsterSky':
         case 'MemoryRoadSky':
@@ -1099,6 +1101,7 @@ class SMGSpawner {
 
         case 'InvisibleWall10x10':
         case 'InvisibleWall10x20':
+        case 'InvisibleWallJump10x20':
         case 'InvisibleWallGCapture10x20':
         case 'InvisibleWaterfallTwinFallLake':
         case 'GhostShipCavePipeCollision':
