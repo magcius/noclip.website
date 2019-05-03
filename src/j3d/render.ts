@@ -156,9 +156,85 @@ function mat4SwapTranslationColumns(m: mat4): void {
     m[9] = ty;
 }
 
+function mat44Concat(dst: mat4, a: mat4, b: mat4): void {
+    const b00 = b[0] , b10 = b[1] , b20 = b[2] , b30 = b[3],
+          b01 = b[4] , b11 = b[5] , b21 = b[6] , b31 = b[7],
+          b02 = b[8] , b12 = b[9] , b22 = b[10], b32 = b[11],
+          b03 = b[12], b13 = b[13], b23 = b[14], b33 = b[15];
+
+    const a00 = a[0], a01 = a[4], a02 = a[8], a03 = a[12];
+    dst[0]  = a00*b00 + a01*b10 + a02*b20 + a03*b30;
+    dst[4]  = a00*b01 + a01*b11 + a02*b21 + a03*b31;
+    dst[8]  = a00*b02 + a01*b12 + a02*b22 + a03*b32;
+    dst[12] = a00*b03 + a01*b13 + a02*b23 + a03*b33;
+
+    const a10 = a[1], a11 = a[5], a12 = a[9], a13 = a[13];
+    dst[1]  = a10*b00 + a11*b10 + a12*b20 + a13*b30;
+    dst[5]  = a10*b01 + a11*b11 + a12*b21 + a13*b31;
+    dst[9]  = a10*b02 + a11*b12 + a12*b22 + a13*b32;
+    dst[13] = a10*b03 + a11*b13 + a12*b23 + a13*b33;
+
+    const a20 = a[2], a21 = a[6], a22 = a[10], a23 = a[14];
+    dst[2]  = a20*b00 + a21*b10 + a22*b20 + a23*b30;
+    dst[6]  = a20*b01 + a21*b11 + a22*b21 + a23*b31;
+    dst[10] = a20*b02 + a21*b12 + a22*b22 + a23*b32;
+    dst[14] = a20*b03 + a21*b13 + a22*b23 + a23*b33;
+
+    const a30 = a[3], a31 = a[7], a32 = a[11], a33 = a[15];
+    dst[3]  = a30*b00 + a31*b10 + a32*b20 + a33*b30;
+    dst[7]  = a30*b01 + a31*b11 + a32*b21 + a33*b31;
+    dst[11] = a30*b02 + a31*b12 + a32*b22 + a33*b32;
+    dst[15] = a30*b03 + a31*b13 + a32*b23 + a33*b33;
+}
+
 function j3dMtxProjConcat(dst: mat4, a: mat4, b: mat4): void {
-    // TODO(jstpierre): RE.
-    mat4.mul(dst, a, b);
+    const b00 = b[0] , b10 = b[1] , b20 = b[2] , b30 = b[3],
+          b01 = b[4] , b11 = b[5] , b21 = b[6] , b31 = b[7],
+          b02 = b[8] , b12 = b[9] , b22 = b[10], b32 = b[11],
+          b03 = b[12], b13 = b[13], b23 = b[14], b33 = b[15];
+
+    const a00 = a[0], a01 = a[4], a02 = a[8], a03 = a[12];
+    dst[0]  = a00*b00 + a01*b10 + a02*b20 + a03*b30;
+    dst[4]  = a00*b01 + a01*b11 + a02*b21 + a03*b31;
+    dst[8]  = a00*b02 + a01*b12 + a02*b22 + a03*b32;
+    dst[12] = a00*b03 + a01*b13 + a02*b23 + a03*b33;
+
+    const a10 = a[1], a11 = a[5], a12 = a[9], a13 = a[13];
+    dst[1]  = a10*b00 + a11*b10 + a12*b20 + a13*b30;
+    dst[5]  = a10*b01 + a11*b11 + a12*b21 + a13*b31;
+    dst[9]  = a10*b02 + a11*b12 + a12*b22 + a13*b32;
+    dst[13] = a10*b03 + a11*b13 + a12*b23 + a13*b33;
+
+    const a20 = a[2], a21 = a[6], a22 = a[10], a23 = a[14];
+    dst[2]  = a20*b00 + a21*b10 + a22*b20 + a23*b30;
+    dst[6]  = a20*b01 + a21*b11 + a22*b21 + a23*b31;
+    dst[10] = a20*b02 + a21*b12 + a22*b22 + a23*b32;
+    dst[14] = a20*b03 + a21*b13 + a22*b23 + a23*b33;
+}
+
+function mat43Concat(dst: mat4, a: mat4, b: mat4): void {
+    const b00 = b[0] , b10 = b[1] , b20 = b[2],
+          b01 = b[4] , b11 = b[5] , b21 = b[6],
+          b02 = b[8] , b12 = b[9] , b22 = b[10],
+          b03 = b[12], b13 = b[13], b23 = b[14];
+
+    const a00 = a[0], a01 = a[4], a02 = a[8], a03 = a[12];
+    dst[0]  = a00*b00 + a01*b10 + a02*b20;
+    dst[4]  = a00*b01 + a01*b11 + a02*b21;
+    dst[8]  = a00*b02 + a01*b12 + a02*b22;
+    dst[12] = a00*b03 + a01*b13 + a02*b23 + a03;
+
+    const a10 = a[1], a11 = a[5], a12 = a[9], a13 = a[13];
+    dst[1]  = a10*b00 + a11*b10 + a12*b20;
+    dst[5]  = a10*b01 + a11*b11 + a12*b21;
+    dst[9]  = a10*b02 + a11*b12 + a12*b22;
+    dst[13] = a10*b03 + a11*b13 + a12*b23 + a13;
+
+    const a20 = a[2], a21 = a[6], a22 = a[10], a23 = a[14];
+    dst[2]  = a20*b00 + a21*b10 + a22*b20;
+    dst[6]  = a20*b01 + a21*b11 + a22*b21;
+    dst[10] = a20*b02 + a21*b12 + a22*b22;
+    dst[14] = a20*b03 + a21*b13 + a22*b23 + a23;
 }
 
 const matrixScratch = mat4.create(), matrixScratch2 = mat4.create();
@@ -364,7 +440,8 @@ export class MaterialInstance {
             // Our calcTexMtx uses fourth column, so we need to swap for non-Old.
 
             // _B8 and _E8 are constant 4x3 matrices
-            // _B8 is equivalent to texEnvMtx, and _E8 is the same but column-swapped.
+            // _B8 has the translation mapping in the third column, _E8 has the translation mapping in the fourth column.
+            // _E8 is equivalent to texEnvMtx, and _B8 is the same but column-swapped.
             // _48 and _88 are scratch space, _24 is effectMatrix,
             // _94 is input matrix calculated above, _64 is output.
             switch (matrixMode) {
@@ -377,22 +454,27 @@ export class MaterialInstance {
                     // J3DMtxProjConcat(_88, this->_24, _48)
                     // PSMtxConcat(_48, this->_94, this->_64)
 
+                    // J3DGetTextureMtx(_88)
                     mat4SwapTranslationColumns(matrixSRT); // non-Old, needs swap
+
+                    // PSMTXConcat(_88, _B8, _88)
+                    // J3DMtxProjConcat(_88, this->_24, _48)
+
                     // The effect matrix here is typically a GameCube projection matrix.
                     // Swap it out with our own.
                     if (matrixMode === 0x09) {
                         texProjPerspMtx(matrixProj, camera.fovY, camera.aspect, 0.5, -0.5 * flipYScale, 0.5, 0.5);
+                        j3dMtxProjConcat(matrixProj, matrixSRT, matrixProj);
                     } else {
-                        // TODO(jstpierre): This makes things too big in Comet Observatory.
-                        // texEnvMtx(matrixProj, -0.5, -0.5 * flipYScale, 0.5, 0.5);
-                        mat4.identity(matrixProj);
-                        j3dMtxProjConcat(matrixProj, texMtx.effectMatrix, matrixProj);
+                        // TODO(jstpierre): This makes Comet Observatory go bonkers.
+                        // texEnvMtx(matrixProj, 0.5, -0.5 * flipYScale, 0.5, 0.5);
+                        // mat4SwapTranslationColumns(matrixSRT);
+                        // mat43Concat(matrixSRT, matrixSRT, matrixProj);
+                        j3dMtxProjConcat(matrixProj, matrixSRT, texMtx.effectMatrix);
                     }
 
-                    // TODO(jstpierre): This multiply seems the wrong way around, but
-                    // it works correctly for Comet Observatory.
-                    mat4.mul(matrixProj, matrixSRT, matrixProj);
-                    mat4.mul(dst, matrixProj, dst);
+                    // PSMtxConcat(_48, this->_94, this->_64)
+                    mat43Concat(dst, matrixProj, dst);
                 }
                 break;
 
@@ -402,9 +484,10 @@ export class MaterialInstance {
                     // PSMTXConcat(_48, _B8, _48)
                     // PSMtxConcat(_48, this->_94, this->_64)
                     mat4SwapTranslationColumns(matrixSRT); // non-Old, needs swap
-                    texEnvMtx(matrixProj, -0.5, -0.5 * flipYScale, 0.5, 0.5);
-                    mat4.mul(matrixProj, matrixProj, matrixSRT);
-                    mat4.mul(dst, matrixProj, dst);
+                    texEnvMtx(matrixProj, 0.5, -0.5 * flipYScale, 0.5, 0.5);
+                    mat4SwapTranslationColumns(matrixProj);
+                    mat43Concat(matrixSRT, matrixProj, matrixSRT);
+                    mat43Concat(dst, matrixSRT, dst);
                 }
                 break;
 
@@ -415,8 +498,7 @@ export class MaterialInstance {
                     // J3DMtxProjConcat(_88, this->_24, _48)
                     // PSMTXConcat(_48, this->_94, this->_64)
                     // Old, no swap
-                    texEnvMtx(matrixProj, -0.5, -0.5 * flipYScale, 0.5, 0.5);
-                    mat4SwapTranslationColumns(matrixProj);
+                    texEnvMtx(matrixProj, 0.5, -0.5 * flipYScale, 0.5, 0.5);
                     mat4.mul(matrixProj, matrixProj, matrixSRT);
                     j3dMtxProjConcat(matrixProj, matrixProj, texMtx.effectMatrix);
                     mat4.mul(dst, matrixProj, dst);
@@ -428,14 +510,15 @@ export class MaterialInstance {
                     // J3DGetTextureMtxOld(_48)
                     // PSMTXConcat(_48, _E8, _48)
                     // PSMTXConcat(_48, this->_94, this->_64)
+
                     // Old, no swap
-                    if (window.debug)
-                        debugger;
-                    mat4SwapTranslationColumns(matrixSRT);
-                    texEnvMtx(matrixProj, -0.5, -0.5 * flipYScale, 0.5, 0.5);
-                    // mat4SwapTranslationColumns(matrixProj);
-                    mat4.mul(matrixProj, matrixSRT, matrixProj);
-                    mat4.mul(dst, matrixProj, dst);
+
+                    texEnvMtx(matrixProj, 0.5, -0.5 * flipYScale, 0.5, 0.5);
+
+                    // PSMTXConcat(_48, _E8, _48)
+                    mat43Concat(matrixSRT, matrixProj, matrixSRT);
+                    // PSMTXConcat(_48, this->_94, this->_64)
+                    mat43Concat(dst, matrixSRT, dst);
                 }
                 break;
 
@@ -444,7 +527,7 @@ export class MaterialInstance {
                     // J3DGetTextureMtxOld(_48)
                     // PSMTXConcat(_48, this->_94, this->_64)
                     // Old, no swap
-                    mat4.mul(dst, matrixProj, dst);
+                    mat43Concat(dst, matrixSRT, dst);
                 }
                 break;
 
@@ -456,7 +539,7 @@ export class MaterialInstance {
                     // PSMTXConcat(_48, this->_94, this->_64)
                     // Old, no swap
                     j3dMtxProjConcat(matrixProj, texMtx.effectMatrix, matrixSRT);
-                    mat4.mul(dst, matrixProj, dst);
+                    mat43Concat(dst, matrixProj, dst);
                 }
                 break;
 
@@ -862,7 +945,7 @@ export class BMDModelInstance {
         // Now update our materials and shapes.
         let depth = -1;
         if (modelVisible) {
-            // window.debug = this.name.startsWith('StarPiece');
+            window.debug = this.name.startsWith('StarPiece');
             for (let i = 0; i < this.materialInstances.length; i++)
                 this.materialInstances[i].prepareToRender(renderHelper, viewerInput, this.materialInstanceState, this.shapeInstanceState, this.bmdModel, this.textureHolder);
 

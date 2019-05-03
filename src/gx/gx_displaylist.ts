@@ -267,6 +267,17 @@ function getComponentShift(vtxAttrib: GX.VertexAttribute, vatFormat: GX_VtxAttrF
     if (isVtxAttribMtxIdx(vtxAttrib))
         return 0;
 
+    // Normals *always* use either 6 or 14 for their shift values.
+    // The value in the VAT is ignored.
+    if (vtxAttrib === GX.VertexAttribute.NRM || vtxAttrib === GX.VertexAttribute.NBT) {
+        if (vatFormat.compType === GX.CompType.U8 || vatFormat.compType === GX.CompType.S8)
+            return 6;
+        else if (vatFormat.compType === GX.CompType.U16 || vatFormat.compType === GX.CompType.S16)
+            return 14;
+        else
+            throw "whoops";
+    }
+
     return getComponentShiftRaw(vatFormat.compType, vatFormat.compShift);
 }
 

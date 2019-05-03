@@ -1195,7 +1195,8 @@ class SMGSpawner {
             return;
 
         case 'StarPiece':
-            spawnGraph(name).then(([node, rarc]) => {
+            spawnGraph(name, SceneGraphTag.Normal, { btk: 'normal.btk', bck: 'land.bck' }).then(([node, rarc]) => {
+                // TODO(jstpierre): Implement support for PAK1.
                 node.modelInstance.setColorOverride(ColorKind.MAT0, colorNew(0.745, 0.25, 0.043, 1.0));
             });
             return;
