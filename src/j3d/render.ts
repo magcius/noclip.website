@@ -355,7 +355,7 @@ export class MaterialInstance {
             // TODO(jstpierre): Respect the Maya flag
             const maya = !!((texMtx.type) & 0x80);
             if (this.ttk1Animators[i] !== undefined) {
-                this.ttk1Animators[i].calcTexMtx(matrixSRT);
+                this.ttk1Animators[i].calcTexMtx(matrixSRT, maya);
             } else {
                 mat4.copy(matrixSRT, material.texMatrices[i].matrix);
             }
@@ -402,7 +402,7 @@ export class MaterialInstance {
                     // PSMtxConcat(_48, this->_94, this->_64)
                     mat4SwapTranslationColumns(matrixSRT); // non-Old, needs swap
                     texEnvMtx(matrixProj, -0.5, -0.5 * flipYScale, 0.5, 0.5);
-                    mat4.mul(matrixProj, matrixProj, matrixSRT);
+                    mat4.mul(matrixProj, matrixSRT, matrixProj);
                     mat4.mul(dst, matrixProj, dst);
                 }
                 break;
@@ -416,7 +416,7 @@ export class MaterialInstance {
                     // Old, no swap
                     texEnvMtx(matrixProj, -0.5, -0.5 * flipYScale, 0.5, 0.5);
                     mat4SwapTranslationColumns(matrixProj);
-                    mat4.mul(matrixProj, matrixProj, matrixSRT);
+                    mat4.mul(matrixProj, matrixSRT, matrixProj);
                     j3dMtxProjConcat(matrixProj, matrixProj, texMtx.effectMatrix);
                     mat4.mul(dst, matrixProj, dst);
                 }
@@ -430,7 +430,7 @@ export class MaterialInstance {
                     // Old, no swap
                     texEnvMtx(matrixProj, -0.5, -0.5 * flipYScale, 0.5, 0.5);
                     mat4SwapTranslationColumns(matrixProj);
-                    mat4.mul(matrixProj, matrixProj, matrixSRT);
+                    mat4.mul(matrixProj, matrixSRT, matrixProj);
                     mat4.mul(dst, matrixProj, dst);
                 }
                 break;

@@ -585,6 +585,21 @@ function calcTexMtx(m: mat4, scaleS: number, scaleT: number, rotation: number, t
     return m;
 }
 
+function calcTexMtx_Maya(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
+    const theta = rotation * rotation;
+    const sinR = Math.sin(theta);
+    const cosR = Math.cos(theta);
+
+    mat4.identity(dst);
+
+    dst[0]  = scaleS *  cosR;
+    dst[1]  = scaleT * -sinR;
+    dst[4]  = scaleS *  sinR;
+    dst[5]  = scaleT *  cosR;
+    dst[12] = scaleS * ((-0.5 * cosR) - (0.5 * sinR - 0.5) - translationS);
+    dst[13] = scaleT * ((-0.5 * cosR) + (0.5 * sinR - 0.5) + translationT) + 1;
+}
+
 function readColor32(view: DataView, srcOffs: number): GX_Material.Color {
     const r = view.getUint8(srcOffs + 0x00) / 255;
     const g = view.getUint8(srcOffs + 0x01) / 255;
@@ -983,7 +998,6 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         const translationS = view.getFloat32(texMtxOffs + 0x1C);
         const translationT = view.getFloat32(texMtxOffs + 0x20);
 
-        // A second matrix?
         const p00 = view.getFloat32(texMtxOffs + 0x24);
         const p01 = view.getFloat32(texMtxOffs + 0x28);
         const p02 = view.getFloat32(texMtxOffs + 0x2C);
@@ -1008,8 +1022,13 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             p03, p13, p23, p33,
         );
 
+        const maya = !!((type) & 0x80);
         const matrix = mat4.create();
-        calcTexMtx(matrix, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
+        if (maya) {
+            calcTexMtx_Maya(matrix, scaleS, scaleT, rotation, translationS, translationT);
+        } else {
+            calcTexMtx(matrix, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
+        }
 
         const texMtx: TexMtx = { type, projection, effectMatrix, matrix };
         return texMtx;
@@ -1483,20 +1502,24 @@ function readTTK1Chunk(buffer: ArrayBufferSlice): TTK1 {
 export class TTK1Animator {
     constructor(public animationController: AnimationController, private ttk1: TTK1, private animationEntry: TTK1AnimationEntry) {}
 
-    public calcTexMtx(dst: mat4): void {
+    public calcTexMtx(dst: mat4, maya: boolean): void {
         const frame = this.animationController.getTimeInFrames();
         const animFrame = getAnimFrame(this.ttk1, frame);
 
-        const centerS = this.animationEntry.centerS;
-        const centerT = this.animationEntry.centerT;
-        const centerQ = this.animationEntry.centerQ;
         const scaleS = sampleAnimationData(this.animationEntry.scaleS, animFrame);
         const scaleT = sampleAnimationData(this.animationEntry.scaleT, animFrame);
         const rotation = sampleAnimationData(this.animationEntry.rotationQ, animFrame);
         const translationS = sampleAnimationData(this.animationEntry.translationS, animFrame);
         const translationT = sampleAnimationData(this.animationEntry.translationT, animFrame);
 
-        calcTexMtx(dst, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
+        if (maya) {
+            calcTexMtx_Maya(dst, scaleS, scaleT, rotation, translationS, translationT);
+        } else {
+            const centerS = this.animationEntry.centerS;
+            const centerT = this.animationEntry.centerT;
+            const centerQ = this.animationEntry.centerQ;
+            calcTexMtx(dst, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
+        }
     }
 }
 
