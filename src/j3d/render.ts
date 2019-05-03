@@ -352,7 +352,6 @@ export class MaterialInstance {
             // Now apply effects.
 
             // Calculate SRT matrix.
-            // TODO(jstpierre): Respect the Maya flag
             const maya = !!((texMtx.type) & 0x80);
             if (this.ttk1Animators[i] !== undefined) {
                 this.ttk1Animators[i].calcTexMtx(matrixSRT, maya);
@@ -390,6 +389,8 @@ export class MaterialInstance {
                         j3dMtxProjConcat(matrixProj, texMtx.effectMatrix, matrixProj);
                     }
 
+                    // TODO(jstpierre): This multiply seems the wrong way around, but
+                    // it works correctly for Comet Observatory.
                     mat4.mul(matrixProj, matrixSRT, matrixProj);
                     mat4.mul(dst, matrixProj, dst);
                 }
@@ -402,7 +403,7 @@ export class MaterialInstance {
                     // PSMtxConcat(_48, this->_94, this->_64)
                     mat4SwapTranslationColumns(matrixSRT); // non-Old, needs swap
                     texEnvMtx(matrixProj, -0.5, -0.5 * flipYScale, 0.5, 0.5);
-                    mat4.mul(matrixProj, matrixSRT, matrixProj);
+                    mat4.mul(matrixProj, matrixProj, matrixSRT);
                     mat4.mul(dst, matrixProj, dst);
                 }
                 break;
@@ -416,7 +417,7 @@ export class MaterialInstance {
                     // Old, no swap
                     texEnvMtx(matrixProj, -0.5, -0.5 * flipYScale, 0.5, 0.5);
                     mat4SwapTranslationColumns(matrixProj);
-                    mat4.mul(matrixProj, matrixSRT, matrixProj);
+                    mat4.mul(matrixProj, matrixProj, matrixSRT);
                     j3dMtxProjConcat(matrixProj, matrixProj, texMtx.effectMatrix);
                     mat4.mul(dst, matrixProj, dst);
                 }
@@ -428,8 +429,11 @@ export class MaterialInstance {
                     // PSMTXConcat(_48, _E8, _48)
                     // PSMTXConcat(_48, this->_94, this->_64)
                     // Old, no swap
+                    if (window.debug)
+                        debugger;
+                    mat4SwapTranslationColumns(matrixSRT);
                     texEnvMtx(matrixProj, -0.5, -0.5 * flipYScale, 0.5, 0.5);
-                    mat4SwapTranslationColumns(matrixProj);
+                    // mat4SwapTranslationColumns(matrixProj);
                     mat4.mul(matrixProj, matrixSRT, matrixProj);
                     mat4.mul(dst, matrixProj, dst);
                 }
@@ -451,7 +455,7 @@ export class MaterialInstance {
                     // J3DMtxProjConcat(_88, this->_24, _48)
                     // PSMTXConcat(_48, this->_94, this->_64)
                     // Old, no swap
-                    j3dMtxProjConcat(matrixProj, matrixSRT, texMtx.effectMatrix);
+                    j3dMtxProjConcat(matrixProj, texMtx.effectMatrix, matrixSRT);
                     mat4.mul(dst, matrixProj, dst);
                 }
                 break;
@@ -858,6 +862,7 @@ export class BMDModelInstance {
         // Now update our materials and shapes.
         let depth = -1;
         if (modelVisible) {
+            // window.debug = this.name.startsWith('StarPiece');
             for (let i = 0; i < this.materialInstances.length; i++)
                 this.materialInstances[i].prepareToRender(renderHelper, viewerInput, this.materialInstanceState, this.shapeInstanceState, this.bmdModel, this.textureHolder);
 
