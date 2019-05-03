@@ -146,6 +146,19 @@ export class MaterialInstanceState {
     public lights = nArray(8, () => new GX_Material.Light());
 }
 
+function matrixSwapCol34(d: mat4): void {
+    // Swap columns 3 and 4 of this 3x4 matrix.
+    const tx = d[12];
+    d[12] = d[8];
+    d[8] = tx;
+    const ty = d[13];
+    d[13] = d[9];
+    d[9] = ty;
+    const tz = d[14];
+    d[14] = d[10];
+    d[10] = tz;
+}
+
 const matrixScratch = mat4.create(), matrixScratch2 = mat4.create();
 const materialParams = new MaterialParams();
 export class MaterialInstance {
@@ -245,7 +258,7 @@ export class MaterialInstance {
             this.clampTo8Bit(dst);
     }
 
-    public fillMaterialParams(materialParams: MaterialParams, camera: Camera, materialInstanceState: MaterialInstanceState, bmdModel: BMDModel, textureHolder: GXTextureHolder): void {
+    public fillMaterialParams(materialParams: MaterialParams, camera: Camera, materialInstanceState: MaterialInstanceState, shapeInstanceState: ShapeInstanceState, bmdModel: BMDModel, textureHolder: GXTextureHolder): void {
         const material = this.material;
 
         this.calcColor(materialParams.u_Color[ColorKind.MAT0],  ColorKind.MAT0,  material.colorMatRegs[0],   false);
@@ -302,14 +315,16 @@ export class MaterialInstance {
             case 0x07: // Rainbow Road
                 // Environment mapping. Uses the normal matrix.
                 // Normal matrix. Emulated here by the view matrix with the translation lopped off...
-                mat4.copy(dst, camera.viewMatrix);
+                mat4.mul(dst, camera.viewMatrix, shapeInstanceState.matrixArray[0]);
+                // Kill translation.
                 dst[12] = 0;
                 dst[13] = 0;
                 dst[14] = 0;
                 break;
             case 0x09:
                 // Projection. Used for indtexwater, mostly.
-                mat4.copy(dst, camera.viewMatrix);
+                // TODO(jstpierre): Make this work with skinning.
+                mat4.mul(dst, camera.viewMatrix, shapeInstanceState.matrixArray[0]);
                 break;
             default:
                 throw "whoops";
@@ -343,9 +358,8 @@ export class MaterialInstance {
                 mat4.mul(dst, scratch, dst);
                 break;
             case 0x09: // Peach's Castle Garden.
-                // Don't apply effectMatrix to perspective. It appears to be
-                // a projection matrix preconfigured for GC.
                 // mat4.mul(dst, texMtx.effectMatrix, dst);
+                // texEnvMtx(scratch, 0.5, -0.5 * flipYScale, 0.5, 0.5);
                 texProjPerspMtx(scratch, camera.fovY, camera.aspect, 0.5, -0.5 * flipYScale, 0.5, 0.5);
                 mat4.mul(dst, scratch, dst);
                 break;
@@ -356,18 +370,10 @@ export class MaterialInstance {
             // Apply SRT.
             if (this.ttk1Animators[i] !== undefined) {
                 this.ttk1Animators[i].calcTexMtx(scratch);
+                matrixSwapCol34(scratch);
             } else {
                 mat4.copy(scratch, material.texMatrices[i].matrix);
             }
-
-            // SRT matrices have translation in fourth component, but we want our matrix to have translation
-            // in third component. Swap.
-            const tx = scratch[12];
-            scratch[12] = scratch[8];
-            scratch[8] = tx;
-            const ty = scratch[13];
-            scratch[13] = scratch[9];
-            scratch[9] = ty;
 
             mat4.mul(dst, scratch, dst);
         }
@@ -395,8 +401,8 @@ export class MaterialInstance {
             materialParams.u_Lights[i].copy(materialInstanceState.lights[i]);
     }
 
-    public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput, materialInstanceState: MaterialInstanceState, bmdModel: BMDModel, textureHolder: GXTextureHolder): void {
-        this.fillMaterialParams(materialParams, viewerInput.camera, materialInstanceState, bmdModel, textureHolder);
+    public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput, materialInstanceState: MaterialInstanceState, shapeInstanceState: ShapeInstanceState, bmdModel: BMDModel, textureHolder: GXTextureHolder): void {
+        this.fillMaterialParams(materialParams, viewerInput.camera, materialInstanceState, shapeInstanceState, bmdModel, textureHolder);
         renderHelper.fillMaterialParams(materialParams, this.materialParamsBufferOffset);
     }
 }
@@ -753,7 +759,7 @@ export class BMDModelInstance {
         let depth = -1;
         if (modelVisible) {
             for (let i = 0; i < this.materialInstances.length; i++)
-                this.materialInstances[i].prepareToRender(renderHelper, viewerInput, this.materialInstanceState, this.bmdModel, this.textureHolder);
+                this.materialInstances[i].prepareToRender(renderHelper, viewerInput, this.materialInstanceState, this.shapeInstanceState, this.bmdModel, this.textureHolder);
 
             // Use the root joint to calculate depth.
             const rootJoint = this.bmdModel.bmd.jnt1.joints[0];

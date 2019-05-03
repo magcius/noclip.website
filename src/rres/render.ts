@@ -189,7 +189,7 @@ class MaterialInstance {
         }
     }
 
-    public calcTexMatrix(dst: mat4, texIdx: number): void {
+    public calcTexAnimMatrix(dst: mat4, texIdx: number): void {
         const material = this.materialData.material;
         const texMtxIdx: BRRES.TexMtxIndex = BRRES.TexMtxIndex.TEX0 + texIdx;
         if (this.srt0Animators[texMtxIdx]) {
@@ -199,33 +199,43 @@ class MaterialInstance {
         }
     }
 
-    private calcPostTexMatrix(dst: mat4, texIdx: number, viewerInput: ViewerRenderInput, flipY: boolean): void {
+    private calcTexMatrix(materialParams: MaterialParams, texIdx: number, modelMatrix: mat4, viewerInput: ViewerRenderInput): void {
         const material = this.materialData.material;
         const texSrt = material.texSrts[texIdx];
+        const flipY = materialParams.m_TextureMapping[texIdx].flipY;
         const flipYScale = flipY ? -1.0 : 1.0;
+        const dstPre = materialParams.u_TexMtx[texIdx];
+        const dstPost = materialParams.u_PostTexMtx[texIdx];
 
         if (texSrt.mapMode === BRRES.MapMode.PROJECTION) {
             const camera = viewerInput.camera;
-            texProjPerspMtx(dst, camera.fovY, camera.aspect, 0.5, -0.5 * flipYScale, 0.5, 0.5);
+            texProjPerspMtx(dstPost, camera.fovY, camera.aspect, 0.5, -0.5 * flipYScale, 0.5, 0.5);
 
             // XXX(jstpierre): ZSS hack. Reference camera 31 is set up by the game to be an overhead
             // camera for clouds. Kill it until we can emulate the camera system in this game...
             // XXX(jstpierre): Klonoa uses camera 1 for clouds.
             if (texSrt.refCamera === 31 || texSrt.refCamera === 1) {
-                dst[0] = 0;
-                dst[5] = 0;
+                dstPost[0] = 0;
+                dstPost[5] = 0;
             }
         } else if (texSrt.mapMode === BRRES.MapMode.ENV_CAMERA) {
-            texEnvMtx(dst, 0.5, -0.5 * flipYScale, 0.5, 0.5);
+            texEnvMtx(dstPost, 0.5, -0.5 * flipYScale, 0.5, 0.5);
+
+            // Fill in the dstPre with our normal matrix.
+            // TODO(jstpierre): Calculate a proper normal matrix.
+            mat4.mul(dstPre, viewerInput.camera.viewMatrix, modelMatrix);
+            dstPre[12] = 0;
+            dstPre[13] = 0;
+            dstPre[14] = 0;
         } else {
-            mat4.identity(dst);
+            mat4.identity(dstPost);
         }
 
         // Apply effect matrix.
-        mat4.mul(dst, texSrt.effectMtx, dst);
+        mat4.mul(dstPost, texSrt.effectMtx, dstPost);
 
         // Calculate SRT.
-        this.calcTexMatrix(matrixScratch, texIdx);
+        this.calcTexAnimMatrix(matrixScratch, texIdx);
 
         // SRT matrices have translation in fourth component, but we want our matrix to have translation
         // in third component. Swap.
@@ -236,10 +246,10 @@ class MaterialInstance {
         matrixScratch[13] = matrixScratch[9];
         matrixScratch[9] = ty;
 
-        mat4.mul(dst, matrixScratch, dst);
+        mat4.mul(dstPost, matrixScratch, dstPost);
     }
 
-    public fillMaterialParams(materialParams: MaterialParams, textureHolder: GXTextureHolder, viewerInput: ViewerRenderInput): void {
+    public fillMaterialParams(materialParams: MaterialParams, textureHolder: GXTextureHolder, modelMatrix: mat4, viewerInput: ViewerRenderInput): void {
         const material = this.materialData.material;
 
         for (let i = 0; i < 8; i++) {
@@ -257,7 +267,7 @@ class MaterialInstance {
         }
 
         for (let i = 0; i < 8; i++)
-            this.calcPostTexMatrix(materialParams.u_PostTexMtx[i], i, viewerInput, materialParams.m_TextureMapping[i].flipY);
+            this.calcTexMatrix(materialParams, i, modelMatrix, viewerInput);
         for (let i = 0; i < 3; i++)
             this.calcIndTexMatrix(materialParams.u_IndTexMtx[i], i);
 
@@ -305,8 +315,8 @@ class MaterialInstance {
         dst.gfxSampler = this.materialData.gfxSamplers[i];
     }
 
-    public prepareToRender(renderHelper: GXRenderHelperGfx, textureHolder: GXTextureHolder, viewerInput: ViewerRenderInput): void {
-        this.fillMaterialParams(this.materialParams, textureHolder, viewerInput);
+    public prepareToRender(renderHelper: GXRenderHelperGfx, textureHolder: GXTextureHolder, modelMatrix: mat4, viewerInput: ViewerRenderInput): void {
+        this.fillMaterialParams(this.materialParams, textureHolder, modelMatrix, viewerInput);
         this.templateRenderInst.setSamplerBindingsFromTextureMappings(this.materialParams.m_TextureMapping);
         this.materialHelper.fillMaterialParams(this.materialParams, renderHelper);
     }
@@ -466,7 +476,7 @@ export class MDL0ModelInstance {
             this.templateRenderInst.passMask = this.passMask;
 
             for (let i = 0; i < this.materialInstances.length; i++)
-                this.materialInstances[i].prepareToRender(renderHelper, this.textureHolder, viewerInput);
+                this.materialInstances[i].prepareToRender(renderHelper, this.textureHolder, this.modelMatrix, viewerInput);
 
             const rootJoint = mdl0.nodes[0];
             if (rootJoint.bbox != null) {

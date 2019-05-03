@@ -7,7 +7,7 @@ import { DeviceProgram, DeviceProgramReflection } from '../Program';
 import { colorCopy, colorFromRGBA } from '../Color';
 import { GfxFormat } from '../gfx/platform/GfxPlatformFormat';
 import { GfxCompareMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
-import { vec3, vec4, mat4, vec2 } from 'gl-matrix';
+import { vec3, vec4, mat4 } from 'gl-matrix';
 import { Camera } from '../Camera';
 
 // TODO(jstpierre): Move somewhere better...

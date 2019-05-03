@@ -900,12 +900,12 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
             // No matrix needed.
             break;
         case MapMode.PROJECTION:
-        case MapMode.ENV_CAMERA:
-        case MapMode.ENV_LIGHT:
             // Use the PNMTX0 matrix for projection and environment.
-            // TODO(jstpierre): normal matrix for env camera / light.
             gxMaterial.texGens[i].matrix = GX.TexGenMatrix.PNMTX0;
             break;
+        case MapMode.ENV_CAMERA:
+        case MapMode.ENV_LIGHT:
+            gxMaterial.texGens[i].matrix = GX.TexGenMatrix.TEXMTX0 + i*3;
         }
 
         const srtMtx = mat4.create();
