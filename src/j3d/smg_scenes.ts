@@ -882,24 +882,47 @@ class ZoneNode {
     }
 }
 
+function lightSetFromLightDataRecord(light: Light, bcsv: BCSV.Bcsv, record: BCSV.BcsvRecord, prefix: string): void {
+    const colorR = BCSV.getField(bcsv, record, `${prefix}ColorR`, 0) / 0xFF;
+    const colorG = BCSV.getField(bcsv, record, `${prefix}ColorG`, 0) / 0xFF;
+    const colorB = BCSV.getField(bcsv, record, `${prefix}ColorB`, 0) / 0xFF;
+    const colorA = BCSV.getField(bcsv, record, `${prefix}ColorA`, 0) / 0xFF;
+    colorFromRGBA(light.Color, colorR, colorG, colorB, colorA);
+
+    const posX = BCSV.getField(bcsv, record, `${prefix}PosX`, 0);
+    const posY = BCSV.getField(bcsv, record, `${prefix}PosY`, 0);
+    const posZ = BCSV.getField(bcsv, record, `${prefix}PosZ`, 0);
+    vec3.set(light.Position, posX, posY, posZ);
+
+    vec3.set(light.Direction, 1, 0, 0);
+    vec3.set(light.CosAtten, 1, 0, 0);
+    vec3.set(light.DistAtten, 1, 0, 0);
+}
+
 class SMGSpawner {
     public textureHolder = new J3DTextureHolder();
     public sceneGraph = new SceneGraph();
     public zones: ZoneNode[] = [];
     private modelCache = new ModelCache();
-    private light2 = new Light();
+    private lights = nArray(3, () => new Light());
     private isSMG1 = false;
     private isSMG2 = false;
 
-    constructor(private pathBase: string, private renderHelper: GXRenderHelperGfx, private viewRenderer: GfxRenderInstViewRenderer, private planetTable: BCSV.Bcsv) {
+    constructor(private pathBase: string, private renderHelper: GXRenderHelperGfx, private viewRenderer: GfxRenderInstViewRenderer, private planetTable: BCSV.Bcsv, private lightData: BCSV.Bcsv) {
         this.isSMG1 = this.pathBase === 'j3d/smg';
         this.isSMG2 = this.pathBase === 'j3d/smg2';
 
-        colorFromRGBA(this.light2.Color, 0, 0, 0, 0.5);
-        vec3.set(this.light2.CosAtten, 1, 0, 0);
-        vec3.set(this.light2.DistAtten, 1, 0, 0);
-        vec3.set(this.light2.Position, 0, 0, 0);
-        vec3.set(this.light2.Direction, 0, -1, 0);
+        // TODO(jstpierre): Parse areas, gather proper lights through that system.
+        // Use "noon" lighting by default.
+        const noonLight = this.lightData.records.find((record) => BCSV.getField<string>(this.lightData, record, 'AreaLightName', '') === '[共通]昼（どら焼き）');
+        lightSetFromLightDataRecord(this.lights[0], this.lightData, noonLight, `StrongLight0`);
+
+        // "Rim" backlight settings.
+        colorFromRGBA(this.lights[2].Color, 0, 0, 0, 0.5);
+        vec3.set(this.lights[2].CosAtten, 1, 0, 0);
+        vec3.set(this.lights[2].DistAtten, 1, 0, 0);
+        vec3.set(this.lights[2].Position, 0, 0, 0);
+        vec3.set(this.lights[2].Direction, 0, -1, 0);
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
@@ -998,7 +1021,9 @@ class SMGSpawner {
                 const rarc = this.modelCache.archiveCache.get(arcPath);
 
                 const modelInstance = new BMDModelInstance(device, this.renderHelper, this.textureHolder, bmdModel);
-                modelInstance.setGXLight(2, this.light2);
+                modelInstance.setGXLight(0, this.lights[0]);
+                modelInstance.setGXLight(1, this.lights[1]);
+                modelInstance.setGXLight(2, this.lights[2]);
                 modelInstance.name = `${objinfo.objName} ${objinfo.objId}`;
 
                 if (tag === SceneGraphTag.Skybox) {
@@ -1319,6 +1344,14 @@ class SMGSpawner {
                 node.modelInstance.bindVAF1(bva.vaf1, animFrame(0));
             });
             break;
+        case 'BlackHole':
+        case 'BlackHoleCube':
+            spawnGraph(`BlackHole`);
+            spawnGraph(`BlackHoleRange`).then(([node, rarc]) => {
+                const scale = node.objinfo.objArg0 / 1000;
+                mat4.scale(node.modelMatrix, node.modelMatrix, [scale, scale, scale]);
+            });
+            break;
 
         case 'SweetsDecoratePartsFork':
         case 'SweetsDecoratePartsSpoon':
@@ -1367,6 +1400,9 @@ class SMGSpawner {
             break;
         case 'MorphItemNeoFire':
             spawnGraph(`PowerUpFire`);
+            break;
+        case 'MorphItemNeoFoo':
+            spawnGraph(`PowerUpFoo`);
             break;
         case 'MorphItemNeoIce':
             spawnGraph(`PowerUpIce`);
@@ -1531,6 +1567,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
     }
 
     protected abstract getZoneMapFilename(zoneName: string): string;
+    protected abstract getLightDataFilename(): string;
 
     public parsePlacement(bcsv: BCSV.Bcsv, paths: Path[]): ObjInfo[] {
         return bcsv.records.map((record): ObjInfo => {
@@ -1607,19 +1644,24 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
     public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         const galaxyName = this.galaxyName;
         return Progressable.all([
+            fetchData(this.getLightDataFilename(), abortSignal),
             fetchData(`${this.pathBase}/ObjectData/PlanetMapDataTable.arc`, abortSignal),
             fetchData(`${this.pathBase}/StageData/${galaxyName}/${galaxyName}Scenario.arc`, abortSignal),
         ]).then((buffers: ArrayBufferSlice[]) => {
             return Promise.all(buffers.map((buffer) => Yaz0.decompress(buffer)));
         }).then((buffers: ArrayBufferSlice[]) => {
-            const [planetTableBuffer, buffer] = buffers;
+            const [lightDataBuffer, planetTableBuffer, scenarioBuffer] = buffers;
+
+            // Load light data.
+            const lightDataRarc = RARC.parse(lightDataBuffer);
+            const lightData = BCSV.parse(lightDataRarc.findFileData('lightdata.bcsv'));
 
             // Load planet table.
             const planetTableRarc = RARC.parse(planetTableBuffer);
             const planetTable = BCSV.parse(planetTableRarc.findFileData('planetmapdatatable.bcsv'));
 
             // Load all the subzones.
-            const scenarioRarc = RARC.parse(buffer);
+            const scenarioRarc = RARC.parse(scenarioBuffer);
             const zonelist = BCSV.parse(scenarioRarc.findFileData('zonelist.bcsv'));
             const scenariodata = BCSV.parse(scenarioRarc.findFileData('scenariodata.bcsv'));
 
@@ -1642,7 +1684,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
                 return Promise.all(buffers.map((buffer) => Yaz0.decompress(buffer)));
             }).then((zoneBuffers: ArrayBufferSlice[]): Viewer.SceneGfx => {
                 const zones = zoneBuffers.map((zoneBuffer, i) => this.parseZone(zoneNames[i], zoneBuffer));
-                const spawner = new SMGSpawner(this.pathBase, renderHelper, viewRenderer, planetTable);
+                const spawner = new SMGSpawner(this.pathBase, renderHelper, viewRenderer, lightData, planetTable);
                 const modelMatrixBase = mat4.create();
                 spawner.spawnZone(device, zones[0], zones, modelMatrixBase);
                 return new SMGRenderer(device, spawner, viewRenderer, scenariodata, zoneNames);

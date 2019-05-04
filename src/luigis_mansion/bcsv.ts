@@ -48,6 +48,7 @@ const nameTable = [
     'arg0', 'arg1', 'arg2', 'arg3', 'arg4', 'arg5', 'arg6', 'arg7', 'arg8',
     'room_no',
 
+    // Super Mario Galaxy
     'GalaxyName',
     'ZoneName',
     'ScenarioNo', 'ScenarioName', 'PowerStarId', 'AppearPowerStarObj', 'Comet', 'LuigiModeTimer', 'IsHidden', 'Hidden',
@@ -59,6 +60,20 @@ const nameTable = [
     'RotateSpeed', 'RotateAngle', 'RotateAxis', 'RotateAccelType', 'RotateStopTime', 'RotateType',
     'type', 'no', 'l_id', 'closed', 'path_arg0', 'parg_arg1',
     'id', 'pnt0_x', 'pnt0_y', 'pnt0_z', 'pnt1_x', 'pnt1_y', 'pnt1_z', 'pnt2_x', 'pnt2_y', 'pnt2_z',
+
+    'LightID', 'AreaLightName', 'Interpolate', 'Fix',
+    'PlayerLight0PosX', 'PlayerLight0PosY', 'PlayerLight0PosZ', 'PlayerLight0ColorR', 'PlayerLight0ColorG', 'PlayerLight0ColorB', 'PlayerLight0ColorA', 'PlayerLight0FollowCamera',
+    'PlayerLight1PosX', 'PlayerLight1PosY', 'PlayerLight1PosZ', 'PlayerLight1ColorR', 'PlayerLight1ColorG', 'PlayerLight1ColorB', 'PlayerLight1ColorA', 'PlayerLight1FollowCamera',
+    'PlayerAmbientR', 'PlayerAmbientG', 'PlayerAmbientB', 'PlayerAmbientA', 'PlayerAlpha2',
+    'StrongLight0PosX', 'StrongLight0PosY', 'StrongLight0PosZ', 'StrongLight0ColorR', 'StrongLight0ColorG', 'StrongLight0ColorB', 'StrongLight0ColorA', 'StrongLight0FollowCamera',
+    'StrongLight1PosX', 'StrongLight1PosY', 'StrongLight1PosZ', 'StrongLight1ColorR', 'StrongLight1ColorG', 'StrongLight1ColorB', 'StrongLight1ColorA', 'StrongLight1FollowCamera',
+    'StrongAmbientR', 'StrongAmbientG', 'StrongAmbientB', 'StrongAmbientA', 'StrongAlpha2',
+    'WeakLight0PosX', 'WeakLight0PosY', 'WeakLight0PosZ', 'WeakLight0ColorR', 'WeakLight0ColorG', 'WeakLight0ColorB', 'WeakLight0ColorA', 'WeakLight0FollowCamera',
+    'WeakLight1PosX', 'WeakLight1PosY', 'WeakLight1PosZ', 'WeakLight1ColorR', 'WeakLight1ColorG', 'WeakLight1ColorB', 'WeakLight1ColorA', 'WeakLight1FollowCamera',
+    'WeakAmbientR', 'WeakAmbientG', 'WeakAmbientB', 'WeakAmbientA', 'WeakAlpha2',
+    'PlanetLight0PosX', 'PlanetLight0PosY', 'PlanetLight0PosZ', 'PlanetLight0ColorR', 'PlanetLight0ColorG', 'PlanetLight0ColorB', 'PlanetLight0ColorA', 'PlanetLight0FollowCamera',
+    'PlanetLight1PosX', 'PlanetLight1PosY', 'PlanetLight1PosZ', 'PlanetLight1ColorR', 'PlanetLight1ColorG', 'PlanetLight1ColorB', 'PlanetLight1ColorA', 'PlanetLight1FollowCamera',
+    'PlanetAmbientR', 'PlanetAmbientG', 'PlanetAmbientB', 'PlanetAmbientA', 'PlanetAlpha2',
 ];
 
 const hashLookup = new Map<number, string>();
@@ -147,6 +162,7 @@ export function parse(buffer: ArrayBufferSlice, littleEndian: boolean = false): 
                 break;
             case BcsvFieldType.Byte:
                 value = (view.getUint8(fieldOffs) >> field.shift) & field.bitmask;
+                break;
             case BcsvFieldType.SJIS: {
                 const strOffs = strTableOffs + view.getUint32(fieldOffs, littleEndian);
                 value = readStringSJIS(buffer, strOffs);
