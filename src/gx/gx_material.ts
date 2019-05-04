@@ -655,7 +655,7 @@ export class GX_Program extends DeviceProgram {
         case GX.CombineAlphaInput.A1:    return `t_Color1.a`;
         case GX.CombineAlphaInput.A2:    return `t_Color2.a`;
         case GX.CombineAlphaInput.TEXA:  return `${this.generateTexAccess(stage)}.${this.generateComponentSwizzle(stage.texSwapTable, GX.TevColorChan.A)}`;
-        case GX.CombineAlphaInput.RASA:  return `${this.generateRas(stage)}.${this.generateComponentSwizzle(stage.rasSwapTable, GX.TevColorChan.A)}`;
+        case GX.CombineAlphaInput.RASA:  return `TevSaturate(${this.generateRas(stage)}.${this.generateComponentSwizzle(stage.rasSwapTable, GX.TevColorChan.A)})`;
         case GX.CombineAlphaInput.KONST: return `${this.generateKonstAlphaSel(stage.konstAlphaSel)}`;
         case GX.CombineAlphaInput.ZERO:  return `0.0`;
         }
@@ -995,7 +995,7 @@ void main() {
     v_Position = t_Position.xyz;
     // TODO(jstpierre): Move this calculation to the CPU? Is it worth it?
     Mat4x3 t_NrmMtx = _Mat4x3(t_PosMtx);
-    vec3 t_Normal = Mul(t_NrmMtx, vec4(a_Normal, 0.0));
+    vec3 t_Normal = normalize(Mul(t_NrmMtx, vec4(a_Normal, 0.0)));
 
     vec4 t_LightAccum;
     vec3 t_LightDelta, t_LightDeltaDir;

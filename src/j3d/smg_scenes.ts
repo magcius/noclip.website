@@ -8,7 +8,7 @@ import { DeviceProgram } from '../Program';
 import * as Viewer from '../viewer';
 
 import { BMDModel, BMDModelInstance, J3DTextureHolder } from './render';
-import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks } from '../gx/gx_material';
+import { EFB_WIDTH, EFB_HEIGHT, Light } from '../gx/gx_material';
 import { TextureOverride, TextureMapping } from '../TextureHolder';
 
 import * as RARC from './rarc';
@@ -20,16 +20,12 @@ import { BMD, BRK, BTK, BCK, LoopMode, BVA, BPK } from './j3d';
 import { GfxBlendMode, GfxBlendFactor, GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxRenderPassDescriptor, GfxLoadDisposition } from '../gfx/platform/GfxPlatform';
 import AnimationController from '../AnimationController';
 import { fullscreenMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-import { GXRenderHelperGfx, ColorKind } from '../gx/gx_render';
+import { GXRenderHelperGfx } from '../gx/gx_render';
 import { GfxRenderInstViewRenderer, GfxRenderInst, GfxRenderInstBuilder } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor, PostFXRenderTarget, ColorAttachment, DepthStencilAttachment, DEFAULT_NUM_SAMPLES, makeEmptyRenderPassDescriptor, copyRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
-import { TransparentBlack, colorNew } from '../Color';
+import { TransparentBlack, colorFromRGBA } from '../Color';
 import { getPointBezier } from '../Spline';
 import { RENDER_HACKS_ICON } from '../bk/scenes';
-
-const materialHacks: GXMaterialHacks = {
-    lightingFudge: (p) => p.matSource,
-};
 
 // Should I try to do this with GX? lol.
 class FullscreenBaseProgram extends DeviceProgram {
@@ -863,8 +859,14 @@ class SMGSpawner {
     public sceneGraph = new SceneGraph();
     public zones: ZoneNode[] = [];
     private modelCache = new ModelCache();
+    private light2 = new Light();
 
     constructor(private pathBase: string, private renderHelper: GXRenderHelperGfx, private viewRenderer: GfxRenderInstViewRenderer, private planetTable: BCSV.Bcsv) {
+        colorFromRGBA(this.light2.Color, 0, 0, 0, 0.5);
+        vec3.set(this.light2.CosAtten, 1, 0, 0);
+        vec3.set(this.light2.DistAtten, 1, 0, 0);
+        vec3.set(this.light2.Position, 0, 0, 0);
+        vec3.set(this.light2.Direction, 0, -1, 0);
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
@@ -962,7 +964,8 @@ class SMGSpawner {
                 // Trickery.
                 const rarc = this.modelCache.archiveCache.get(arcPath);
 
-                const modelInstance = new BMDModelInstance(device, this.renderHelper, this.textureHolder, bmdModel, materialHacks);
+                const modelInstance = new BMDModelInstance(device, this.renderHelper, this.textureHolder, bmdModel);
+                modelInstance.setGXLight(2, this.light2);
                 modelInstance.name = `${objinfo.objName} ${objinfo.objId}`;
 
                 if (tag === SceneGraphTag.Skybox) {
@@ -1358,6 +1361,12 @@ class SMGSpawner {
         case 'SeaGullGroup':
             spawnGraph(`SeaGull`);
             break;
+
+        case 'HeavensDoorAppearStepA':
+            // This is the transition effect version of the steps that appear after you chase the bunnies in Gateway Galaxy.
+            // "HeavensDoorAppearStepAAfter" is the non-transition version of the same, and it's also spawned, so don't
+            // bother spawning this one.
+            return;
 
         // SMG2
         case 'Moc':
