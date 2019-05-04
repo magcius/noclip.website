@@ -1703,10 +1703,6 @@ export class BRK {
 //#endregion
 
 //#region PAK1
-export interface TRK1 extends AnimationBase {
-    animationEntries: TRK1AnimationEntry[];
-}
-
 function readPAK1Chunk(buffer: ArrayBufferSlice): TRK1 {
     const view = buffer.createDataView();
     const loopMode: LoopMode = view.getUint8(0x08);
@@ -1888,6 +1884,98 @@ export class BCK {
     }
 
     public ank1: ANK1;
+}
+//#endregion
+
+//#region TPT1
+interface TPT1AnimationEntry {
+    materialName: string;
+    remapIndex: number;
+    textureIndices: number[];
+}
+
+export interface TPT1 extends AnimationBase {
+    animationEntries: TPT1AnimationEntry[];
+}
+
+function readTPT1Chunk(buffer: ArrayBufferSlice): TPT1 {
+    const view = buffer.createDataView();
+    const loopMode: LoopMode = view.getUint8(0x08);
+    const duration = view.getUint16(0x0A);
+    const materialAnimationTableCount = view.getUint16(0x0C);
+    const textureIndexTableCount = view.getUint16(0x0E);
+    const materialAnimationTableOffs = view.getUint32(0x10);
+    const textureIndexTableOffs = view.getUint32(0x14);
+    const remapTableOffs = view.getUint32(0x18);
+    const nameTableOffs = view.getUint32(0x1C);
+    const nameTable = readStringTable(buffer, nameTableOffs);
+
+    let animationTableIdx: number;
+
+    const animationEntries: TPT1AnimationEntry[] = [];
+
+    animationTableIdx = materialAnimationTableOffs;
+    for (let i = 0; i < materialAnimationTableCount; i++) {
+        const materialName = nameTable[i];
+        const remapIndex = view.getUint16(remapTableOffs + i * 0x02);
+
+        const textureCount = view.getUint16(animationTableIdx + 0x00);
+        const textureFirstIndex = view.getUint16(animationTableIdx + 0x02);
+
+        const textureIndices: number[] = [];
+        for (let j = 0; j < textureCount; j++) {
+            const textureIndex = view.getUint16(textureIndexTableOffs + (textureFirstIndex + j) * 0x02);
+            textureIndices.push(textureIndex);
+        }
+
+        animationEntries.push({ materialName, remapIndex, textureIndices });
+        animationTableIdx += 0x08;
+    }
+
+    return { duration, loopMode, animationEntries };
+}
+
+export class TPT1Animator { 
+    constructor(public animationController: AnimationController, private tpt1: TPT1, private animationEntry: TPT1AnimationEntry) {}
+
+    public calcTextureIndex(): number {
+        const frame = this.animationController.getTimeInFrames();
+        const animFrame = getAnimFrame(this.tpt1, frame);
+
+        // animFrame can return a partial keyframe, but visibility information is frame-specific.
+        // Resolve this by treating this as a stepped track, floored. e.g. 15.9 is keyframe 15.
+
+        return this.animationEntry.textureIndices[(animFrame | 0)];
+    }
+}
+
+export function bindTPT1Animator(animationController: AnimationController, tpt1: TPT1, materialName: string, texMap: GX.TexMapID): TPT1Animator {
+    // TODO(jstpierre): How does TPT1 determine the TexMap used?
+    if (texMap !== 0)
+        return null;
+
+    const animationEntry = tpt1.animationEntries.find((entry) => entry.materialName === materialName);
+    if (animationEntry === undefined)
+        return null;
+
+    return new TPT1Animator(animationController, tpt1, animationEntry);
+}
+//#endregion
+
+//#region BTP
+export class BTP {
+    public static parse(buffer: ArrayBufferSlice): BTP {
+        const btp = new BTP();
+
+        const j3d = new J3DFileReaderHelper(buffer);
+        assert(j3d.magic === 'J3D1btp1');
+
+        btp.tpt1 = readTPT1Chunk(j3d.nextChunk('TPT1'));
+
+        return btp;
+    }
+
+    public tpt1: TPT1;
 }
 //#endregion
 

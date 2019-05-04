@@ -16,7 +16,7 @@ import * as Yaz0 from '../compression/Yaz0';
 import * as BCSV from '../luigis_mansion/bcsv';
 import * as UI from '../ui';
 import { mat4, quat, vec3 } from 'gl-matrix';
-import { BMD, BRK, BTK, BCK, LoopMode, BVA, BPK } from './j3d';
+import { BMD, BRK, BTK, BCK, LoopMode, BVA, BPK, BTP } from './j3d';
 import { GfxBlendMode, GfxBlendFactor, GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxRenderPassDescriptor, GfxLoadDisposition, GfxBufferUsage, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform';
 import AnimationController from '../AnimationController';
 import { fullscreenMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
@@ -888,8 +888,13 @@ class SMGSpawner {
     public zones: ZoneNode[] = [];
     private modelCache = new ModelCache();
     private light2 = new Light();
+    private isSMG1 = false;
+    private isSMG2 = false;
 
     constructor(private pathBase: string, private renderHelper: GXRenderHelperGfx, private viewRenderer: GfxRenderInstViewRenderer, private planetTable: BCSV.Bcsv) {
+        this.isSMG1 = this.pathBase === 'j3d/smg';
+        this.isSMG2 = this.pathBase === 'j3d/smg2';
+
         colorFromRGBA(this.light2.Color, 0, 0, 0, 0.5);
         vec3.set(this.light2.CosAtten, 1, 0, 0);
         vec3.set(this.light2.DistAtten, 1, 0, 0);
@@ -1183,7 +1188,6 @@ class SMGSpawner {
         case 'GroupSwitchWatcher':
         case 'ExterminationPowerStar':
         case 'LuigiIntrusively':
-        case 'GreenStar':
         case 'MameMuimuiAttackMan':
         case 'CutBushGroup':
         case 'SuperDreamer':
@@ -1408,9 +1412,36 @@ class SMGSpawner {
             // bother spawning this one.
             return;
 
+        case 'GreenStar':
+        case 'PowerStar':
+            spawnGraph(`PowerStar`).then(([node, rarc]) => {
+                if (this.isSMG1) {
+                    // This appears to be hardcoded in the DOL itself, inside "GameEventFlagTable".
+                    const isRedStar = node.objinfo.objArg0 === 2;
+                    // This is also hardcoded, but the designers left us a clue.
+                    const isGreenStar = name === 'GreenStar';
+                    const frame = isRedStar ? 5 : isGreenStar ? 2 : 0;
+
+                    const animationController = new AnimationController();
+                    animationController.setTimeInFrames(frame);
+
+                    const btp = BTP.parse(rarc.findFileData(`powerstar.btp`));
+                    node.modelInstance.bindTPT1(btp.tpt1, animationController);
+                }
+
+                node.modelInstance.setMaterialVisible('Empty', false);
+            });
+            return;
+
+        case 'GrandStar':
+            spawnGraph(name).then(([node, rarc]) => {
+                node.modelInstance.setMaterialVisible('GrandStarEmpty', false);
+            });
+            return;
+
         // SMG2
         case 'Moc':
-            spawnGraph(`Moc`, SceneGraphTag.Normal, { bck: 'turn.bck' }).then(([node, rarc]) => {
+            spawnGraph(name, SceneGraphTag.Normal, { bck: 'turn.bck' }).then(([node, rarc]) => {
                 const bva = BVA.parse(rarc.findFileData(`FaceA.bva`));
                 node.modelInstance.bindVAF1(bva.vaf1);
             });

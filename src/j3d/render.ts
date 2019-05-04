@@ -1,7 +1,7 @@
 
 import { mat4, mat2d } from 'gl-matrix';
 
-import { BMD, BMT, HierarchyNode, HierarchyType, MaterialEntry, Shape, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData, DRW1MatrixKind, TTK1Animator, ANK1Animator, bindANK1Animator, BTI, bindVAF1Animator, VAF1, VAF1Animator } from './j3d';
+import { BMD, BMT, HierarchyNode, HierarchyType, MaterialEntry, Shape, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData, DRW1MatrixKind, TTK1Animator, ANK1Animator, bindANK1Animator, BTI, bindVAF1Animator, VAF1, VAF1Animator, TPT1, bindTPT1Animator, TPT1Animator } from './j3d';
 import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } from './j3d';
 
 import * as GX_Material from '../gx/gx_material';
@@ -101,7 +101,7 @@ export class ShapeInstance {
                 }
             }
 
-            renderInst.visible = instVisible;
+            renderInst.visible = renderInst.parentRenderInst.visible && instVisible;
             if (instVisible) {
                 renderInst.sortKey = setSortKeyDepth(renderInst.parentRenderInst.sortKey, depth);
                 renderInst.sortKey = setSortKeyBias(renderInst.sortKey, this.sortKeyBias);
@@ -241,6 +241,7 @@ const matrixScratch = mat4.create(), matrixScratch2 = mat4.create();
 const materialParams = new MaterialParams();
 export class MaterialInstance {
     public ttk1Animators: TTK1Animator[] = [];
+    public tpt1Animators: TPT1Animator[] = [];
     public trk1Animators: TRK1Animator[] = [];
     public name: string;
 
@@ -285,6 +286,14 @@ export class MaterialInstance {
         this.createProgram();
     }
 
+    public bindTRK1(animationController: AnimationController, trk1: TRK1): void {
+        for (let i: ColorKind = 0; i < ColorKind.COUNT; i++) {
+            const trk1Animator = bindTRK1Animator(animationController, trk1, this.name, i);
+            if (trk1Animator)
+                this.trk1Animators[i] = trk1Animator;
+        }
+    }
+
     public bindTTK1(animationController: AnimationController, ttk1: TTK1): void {
         for (let i = 0; i < 8; i++) {
             const ttk1Animator = bindTTK1Animator(animationController, ttk1, this.name, i);
@@ -293,11 +302,11 @@ export class MaterialInstance {
         }
     }
 
-    public bindTRK1(animationController: AnimationController, trk1: TRK1): void {
-        for (let i: ColorKind = 0; i < ColorKind.COUNT; i++) {
-            const trk1Animator = bindTRK1Animator(animationController, trk1, this.name, i);
-            if (trk1Animator)
-                this.trk1Animators[i] = trk1Animator;
+    public bindTPT1(animationController: AnimationController, tpt1: TPT1): void {
+        for (let i = 0; i < 8; i++) {
+            const tpt1Animator = bindTPT1Animator(animationController, tpt1, this.name, i);
+            if (tpt1Animator)
+                this.tpt1Animators[i] = tpt1Animator;
         }
     }
 
@@ -354,9 +363,14 @@ export class MaterialInstance {
 
         // Bind textures.
         for (let i = 0; i < material.textureIndexes.length; i++) {
-            const texIndex = material.textureIndexes[i];
             const m = materialParams.m_TextureMapping[i];
             m.reset();
+
+            let texIndex: number;
+            if (this.tpt1Animators[i] !== undefined)
+                texIndex = this.tpt1Animators[i].calcTextureIndex();
+            else
+                texIndex = material.textureIndexes[i];
 
             if (texIndex >= 0)
                 bmdModel.fillTextureMapping(materialParams.m_TextureMapping[i], textureHolder, texIndex);
@@ -602,7 +616,7 @@ export class MaterialInstance {
                 a,     b,  0, 0,
                 c,     d,  0, 0,
                 tx,    ty, 0, 0,
-                scale, 0,  0, 0,
+                scale, 0,  0, 0
             );
         }
 
@@ -827,6 +841,16 @@ export class BMDModelInstance {
     }
 
     /**
+     * Sets whether a certain material with name {@param name} should be shown ({@param v} is
+     * {@constant true}), or hidden ({@param v} is {@constant false}). All materials are shown
+     * by default.
+     */    
+    public setMaterialVisible(name: string, v: boolean): void {
+        const materialInstance = this.materialInstances.find((matInst) => matInst.name === name);
+        materialInstance.templateRenderInst.visible = v;
+    }
+
+    /**
      * Sets whether color write is enabled. This is equivalent to the native GX function
      * GXSetColorUpdate. There is no MAT3 material flag for this, so some games have special
      * engine hooks to enable and disable color write at runtime.
@@ -883,6 +907,18 @@ export class BMDModelInstance {
     public bindTRK1(trk1: TRK1, animationController: AnimationController = this.animationController): void {
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].bindTRK1(animationController, trk1);
+    }
+
+    /**
+     * Binds {@param tpt1} (texture palette animations) to this model instance.
+     * TPT1 objects can be parsed from {@link BTP} files. See {@link BTP.parse}.
+     *
+     * @param animationController An {@link AnimationController} to control the progress of this animation to.
+     * By default, this will default to this instance's own {@member animationController}.
+     */
+    public bindTPT1(tpt1: TPT1, animationController: AnimationController = this.animationController): void {
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].bindTPT1(animationController, tpt1);
     }
 
     /**

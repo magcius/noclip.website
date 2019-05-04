@@ -1,5 +1,5 @@
 
-import { vec3, mat4, vec4 } from "gl-matrix";
+import { vec3, mat4 } from "gl-matrix";
 import { nArray } from "./util";
 
 class Plane {
