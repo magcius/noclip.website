@@ -241,6 +241,7 @@ const vec3Zero = [0, 0, 0];
 export class FPSCameraController implements CameraController {
     public camera: Camera;
     public forceUpdate: boolean = false;
+    public useWorldUp: boolean = true;
     public onkeymovespeed: () => void = () => {};
 
     private keyMovement = vec3.create();
@@ -290,7 +291,12 @@ export class FPSCameraController implements CameraController {
         const keyMoveVelocity = keyMoveSpeedCap * this.keyMoveVelocityMult;
     
         const keyMovement = this.keyMovement;
-        const tmp = this.tmp2;
+        const worldUp = this.tmp2;
+        // Instead of getting the camera up, instead use world up. Feels more natural.
+        if (this.useWorldUp)
+            camera.getWorldUp(worldUp);
+        else
+            vec3.set(worldUp, 0, 1, 0);
 
         const keyMoveLowSpeedCap = 0.01;
 
@@ -324,10 +330,7 @@ export class FPSCameraController implements CameraController {
         if (!vec3.exactEquals(keyMovement, vec3Zero)) {
             const finalMovement = this.tmp1;
             vec3.set(finalMovement, keyMovement[0], 0, keyMovement[2]);
-
-            // Instead of getting the camera up, instead use world up. Feels more natural.
-            camera.getWorldUp(tmp);
-            vec3.scaleAndAdd(finalMovement, finalMovement, tmp, keyMovement[1]);
+            vec3.scaleAndAdd(finalMovement, finalMovement, worldUp, keyMovement[1]);
             mat4.translate(camera.worldMatrix, camera.worldMatrix, finalMovement);
             updated = true;
         }
@@ -354,9 +357,7 @@ export class FPSCameraController implements CameraController {
             mouseMovement[1] -= keyAngleChangeVel * invertYMult;
 
         if (!vec3.exactEquals(this.mouseMovement, vec3Zero)) {
-            camera.getWorldUp(tmp);
-            vec3.normalize(tmp, tmp);
-            mat4.rotate(camera.worldMatrix, camera.worldMatrix, this.mouseMovement[0], tmp);
+            mat4.rotate(camera.worldMatrix, camera.worldMatrix, this.mouseMovement[0], worldUp);
             mat4.rotate(camera.worldMatrix, camera.worldMatrix, this.mouseMovement[1], [1, 0, 0]);
             updated = true;
         }

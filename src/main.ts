@@ -324,6 +324,8 @@ class Main {
             this._exportSaveData();
         if (inputManager.isKeyDownEventTriggered('Period'))
             this.viewer.isSceneTimeRunning = !this.viewer.isSceneTimeRunning;
+        if (inputManager.isKeyDownEventTriggered('Comma'))
+            this.viewer.sceneTime = 0;
     }
 
     private _updateLoop = (time: number) => {
