@@ -253,6 +253,8 @@ export class FPSCameraController implements CameraController {
     private keyMoveShiftMult = 5;
     private keyMoveVelocityMult = 1/5;
     private keyMoveDrag = 0.8;
+    private keyAngleChangeVelFast = 0.1;
+    private keyAngleChangeVelSlow = 0.04;
 
     private mouseLookSpeed = 500;
     private mouseLookDragFast = 0;
@@ -346,7 +348,7 @@ export class FPSCameraController implements CameraController {
         mouseMovement[0] += dx;
         mouseMovement[1] += dy;
 
-        const keyAngleChangeVel = isShiftPressed ? 0.1 : 0.04;
+        const keyAngleChangeVel = isShiftPressed ? this.keyAngleChangeVelFast : this.keyAngleChangeVelSlow;
         if (inputManager.isKeyDown('KeyJ'))
             mouseMovement[0] += keyAngleChangeVel * invertXMult;
         else if (inputManager.isKeyDown('KeyL'))
@@ -355,10 +357,15 @@ export class FPSCameraController implements CameraController {
             mouseMovement[1] += keyAngleChangeVel * invertYMult;
         else if (inputManager.isKeyDown('KeyK'))
             mouseMovement[1] -= keyAngleChangeVel * invertYMult;
+        else if (inputManager.isKeyDown('KeyU'))
+            mouseMovement[2] -= keyAngleChangeVel;
+        else if (inputManager.isKeyDown('KeyO'))
+            mouseMovement[2] += keyAngleChangeVel;
 
         if (!vec3.exactEquals(this.mouseMovement, vec3Zero)) {
             mat4.rotate(camera.worldMatrix, camera.worldMatrix, this.mouseMovement[0], worldUp);
             mat4.rotate(camera.worldMatrix, camera.worldMatrix, this.mouseMovement[1], [1, 0, 0]);
+            mat4.rotate(camera.worldMatrix, camera.worldMatrix, this.mouseMovement[2], [0, 0, 1]);
             updated = true;
         }
 
