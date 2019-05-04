@@ -1,5 +1,5 @@
 
-import * as Viewer from '../viewer';
+import * as Viewer from '../../viewer';
 import { SMGSceneDescBase } from "./smg_scenes";
 
 class SMG1SceneDesc extends SMGSceneDescBase {

@@ -31,7 +31,7 @@ export class J3DTextureHolder extends GXTextureHolder<TEX1_TextureData> {
     }
 }
 
-class ShapeInstanceState {
+export class ShapeInstanceState {
     public modelMatrix: mat4 = mat4.create();
     public matrixArray: mat4[] = [];
     public matrixVisibility: boolean[] = [];

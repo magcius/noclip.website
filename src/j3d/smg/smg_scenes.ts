@@ -1,33 +1,30 @@
 
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import Progressable from '../Progressable';
-import { assert, nArray, assertExists } from '../util';
-import { fetchData } from '../fetch';
-
-import { DeviceProgram } from '../Program';
-import * as Viewer from '../viewer';
-
-import { BMDModel, BMDModelInstance, J3DTextureHolder } from './render';
-import { EFB_WIDTH, EFB_HEIGHT, Light } from '../gx/gx_material';
-import { TextureOverride, TextureMapping } from '../TextureHolder';
-
-import * as RARC from './rarc';
-import * as Yaz0 from '../compression/Yaz0';
-import * as BCSV from '../luigis_mansion/bcsv';
-import * as UI from '../ui';
+import ArrayBufferSlice from 'ArrayBufferSlice';
+import Progressable from 'Progressable';
+import { assert, nArray, assertExists } from 'util';
+import { fetchData } from 'fetch';
+import { DeviceProgram } from 'Program';
+import * as Viewer from 'viewer';
+import { GfxBlendMode, GfxBlendFactor, GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxRenderPassDescriptor, GfxLoadDisposition, GfxBufferUsage, GfxBufferFrequencyHint } from 'gfx/platform/GfxPlatform';
+import { fullscreenMegaState } from 'gfx/helpers/GfxMegaStateDescriptorHelpers';
+import { GfxRenderInstViewRenderer, GfxRenderInst, GfxRenderInstBuilder } from 'gfx/render/GfxRenderer';
+import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor, PostFXRenderTarget, ColorAttachment, DepthStencilAttachment, DEFAULT_NUM_SAMPLES, makeEmptyRenderPassDescriptor, copyRenderPassDescriptor } from 'gfx/helpers/RenderTargetHelpers';
+import { GfxRenderBuffer } from 'gfx/render/GfxRenderBuffer';
+import { fillVec4 } from 'gfx/helpers/UniformBufferHelpers';
+import { BMD, BRK, BTK, BCK, LoopMode, BVA, BPK, BTP } from 'j3d/j3d';
+import { BMDModel, BMDModelInstance, J3DTextureHolder } from 'j3d/render';
 import { mat4, quat, vec3 } from 'gl-matrix';
-import { BMD, BRK, BTK, BCK, LoopMode, BVA, BPK, BTP } from './j3d';
-import { GfxBlendMode, GfxBlendFactor, GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxRenderPassDescriptor, GfxLoadDisposition, GfxBufferUsage, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform';
-import AnimationController from '../AnimationController';
-import { fullscreenMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-import { GXRenderHelperGfx } from '../gx/gx_render';
-import { GfxRenderInstViewRenderer, GfxRenderInst, GfxRenderInstBuilder } from '../gfx/render/GfxRenderer';
-import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor, PostFXRenderTarget, ColorAttachment, DepthStencilAttachment, DEFAULT_NUM_SAMPLES, makeEmptyRenderPassDescriptor, copyRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
-import { TransparentBlack, colorFromRGBA } from '../Color';
-import { getPointBezier } from '../Spline';
-import { RENDER_HACKS_ICON } from '../bk/scenes';
-import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
-import { fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
+import * as RARC from 'j3d/rarc';
+import { EFB_WIDTH, EFB_HEIGHT, Light } from 'gx/gx_material';
+import { GXRenderHelperGfx } from 'gx/gx_render';
+import { TextureOverride, TextureMapping } from 'TextureHolder';
+import { getPointBezier } from 'Spline';
+import AnimationController from 'AnimationController';
+import { RENDER_HACKS_ICON } from 'bk/scenes';
+import * as Yaz0 from 'compression/Yaz0';
+import * as BCSV from 'luigis_mansion/bcsv';
+import * as UI from 'ui';
+import { TransparentBlack, colorFromRGBA } from 'Color';
 
 // Should I try to do this with GX? lol.
 class BloomPassBaseProgram extends DeviceProgram {

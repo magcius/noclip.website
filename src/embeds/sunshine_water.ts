@@ -12,7 +12,7 @@ import * as GX_Material from '../gx/gx_material';
 
 import { BMD, BTK, MaterialEntry } from '../j3d/j3d';
 import * as RARC from '../j3d/rarc';
-import { J3DTextureHolder, BMDModel, MaterialInstance, MaterialInstanceState } from '../j3d/render';
+import { J3DTextureHolder, BMDModel, MaterialInstance, MaterialInstanceState, ShapeInstanceState } from '../j3d/render';
 import { SunshineRenderer, SunshineSceneDesc, SMSPass } from '../j3d/sms_scenes';
 import * as Yaz0 from '../compression/Yaz0';
 import { GXRenderHelperGfx, ub_PacketParams, PacketParams } from '../gx/gx_render';
@@ -109,6 +109,7 @@ class PlaneShape {
 
 class SeaPlaneScene {
     private seaMaterialInstance: MaterialInstance;
+    private shapeInstanceState = new ShapeInstanceState();
     private materialInstanceState = new MaterialInstanceState();
     private plane: PlaneShape;
     private bmdModel: BMDModel;
@@ -184,7 +185,7 @@ class SeaPlaneScene {
     public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput): void {
         this.plane.prepareToRender(renderHelper, viewerInput);
         this.animationController.setTimeInMilliseconds(viewerInput.time);
-        this.seaMaterialInstance.prepareToRender(renderHelper, viewerInput, this.materialInstanceState, this.bmdModel, this.textureHolder);
+        this.seaMaterialInstance.prepareToRender(renderHelper, viewerInput, this.materialInstanceState, this.shapeInstanceState, this.bmdModel, this.textureHolder);
     }
 
     public destroy(device: GfxDevice) {
