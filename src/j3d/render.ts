@@ -1013,7 +1013,7 @@ export class BMDModelInstance {
         }
 
         for (let i = 0; i < this.shapeInstances.length; i++) {
-            const shapeVisibility = this.vaf1Animator !== null ? this.vaf1Animator.calcVisibility(i) : true;
+            const shapeVisibility = this.shapeInstanceState.shapeVisibility[i] && (this.vaf1Animator !== null ? this.vaf1Animator.calcVisibility(i) : true);
             const shapeDepth = shapeVisibility ? depth : -1;
             this.shapeInstances[i].prepareToRender(renderHelper, shapeDepth, viewerInput, this.shapeInstanceState);
         }

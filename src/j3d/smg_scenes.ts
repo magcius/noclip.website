@@ -341,30 +341,12 @@ class Node {
 
 class SceneGraph {
     public nodes: Node[] = [];
-    public nodeTags: string[][] = [];
     public onnodeadded: () => void | null = null;
 
-    public hasTag(tag: string): boolean {
-        return this.nodeTags.some((tags) => tags.includes(tag));
-    }
-
-    public nodeHasTag(i: number, tag: string): boolean {
-        return this.nodeTags[i].includes(tag);
-    }
-
-    public forTag(tag: string, cb: (node: Node, i: number) => void): void {
-        for (let i = 0; i < this.nodes.length; i++) {
-            const nodeTags = this.nodeTags[i];
-            if (nodeTags.includes(tag))
-                cb(this.nodes[i], i);
-        }
-    }
-
-    public addNode(node: Node | null, tags: string[]): void {
+    public addNode(node: Node | null): void {
         if (node === null)
             return;
         this.nodes.push(node);
-        this.nodeTags.push(tags);
         const i = this.nodes.length - 1;
         if (this.onnodeadded !== null)
             this.onnodeadded();
@@ -697,6 +679,7 @@ class SMGRenderer implements Viewer.SceneGfx {
         this.mainRenderTarget.destroy(device);
         this.opaqueSceneTexture.destroy(device);
 
+        this.bloomParamsBuffer.destroy(device);
         device.destroyProgram(this.bloomRenderInstBlur.gfxProgram);
         device.destroyProgram(this.bloomRenderInstBokeh.gfxProgram);
         device.destroyProgram(this.bloomRenderInstCombine.gfxProgram);
@@ -904,7 +887,8 @@ class SMGSpawner {
     public sceneGraph = new SceneGraph();
     public zones: ZoneNode[] = [];
     private modelCache = new ModelCache();
-    private lights = nArray(3, () => new Light());
+    // Player0, Player1, Strong0, Strong1, Weak0, Weak1, Planet0, Planet1, BackLight
+    private lights = nArray(9, () => new Light());
     private isSMG1 = false;
     private isSMG2 = false;
 
@@ -915,14 +899,21 @@ class SMGSpawner {
         // TODO(jstpierre): Parse areas, gather proper lights through that system.
         // Use "noon" lighting by default.
         const noonLight = this.lightData.records.find((record) => BCSV.getField<string>(this.lightData, record, 'AreaLightName', '') === '[共通]昼（どら焼き）');
-        lightSetFromLightDataRecord(this.lights[0], this.lightData, noonLight, `StrongLight0`);
+        lightSetFromLightDataRecord(this.lights[0], this.lightData, noonLight, `PlayerLight0`);
+        lightSetFromLightDataRecord(this.lights[1], this.lightData, noonLight, `PlayerLight1`);
+        lightSetFromLightDataRecord(this.lights[2], this.lightData, noonLight, `StrongLight0`);
+        lightSetFromLightDataRecord(this.lights[3], this.lightData, noonLight, `StrongLight1`);
+        lightSetFromLightDataRecord(this.lights[4], this.lightData, noonLight, `WeakLight0`);
+        lightSetFromLightDataRecord(this.lights[5], this.lightData, noonLight, `WeakLight1`);
+        lightSetFromLightDataRecord(this.lights[6], this.lightData, noonLight, `PlanetLight0`);
+        lightSetFromLightDataRecord(this.lights[7], this.lightData, noonLight, `PlanetLight1`);
 
         // "Rim" backlight settings.
-        colorFromRGBA(this.lights[2].Color, 0, 0, 0, 0.5);
-        vec3.set(this.lights[2].CosAtten, 1, 0, 0);
-        vec3.set(this.lights[2].DistAtten, 1, 0, 0);
-        vec3.set(this.lights[2].Position, 0, 0, 0);
-        vec3.set(this.lights[2].Direction, 0, -1, 0);
+        colorFromRGBA(this.lights[8].Color, 0, 0, 0, 0.5);
+        vec3.set(this.lights[8].CosAtten, 1, 0, 0);
+        vec3.set(this.lights[8].DistAtten, 1, 0, 0);
+        vec3.set(this.lights[8].Position, 0, 0, 0);
+        vec3.set(this.lights[8].Direction, 0, -1, 0);
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
@@ -1021,9 +1012,13 @@ class SMGSpawner {
                 const rarc = this.modelCache.archiveCache.get(arcPath);
 
                 const modelInstance = new BMDModelInstance(device, this.renderHelper, this.textureHolder, bmdModel);
-                modelInstance.setGXLight(0, this.lights[0]);
-                modelInstance.setGXLight(1, this.lights[1]);
-                modelInstance.setGXLight(2, this.lights[2]);
+
+                // Strong0, Strong1
+                // TODO(jstpierre): Set the Planet lights on Planet instances.
+                modelInstance.setGXLight(0, this.lights[2]);
+                modelInstance.setGXLight(1, this.lights[3]);
+
+                modelInstance.setGXLight(2, this.lights[8]);
                 modelInstance.name = `${objinfo.objName} ${objinfo.objId}`;
 
                 if (tag === SceneGraphTag.Skybox) {
@@ -1050,7 +1045,7 @@ class SMGSpawner {
 
                 this.applyAnimations(node, rarc, animOptions);
 
-                this.sceneGraph.addNode(node, [tag]);
+                this.sceneGraph.addNode(node);
 
                 this.renderHelper.renderInstBuilder.constructRenderInsts(device, this.viewRenderer);
                 return [node, rarc];
@@ -1185,6 +1180,7 @@ class SMGSpawner {
         case 'MovieStarter':
         case 'ScenarioStarter':
         case 'LuigiEvent':
+        case 'MameMuimuiScorer':
         case 'MameMuimuiScorerLv2':
         case 'ScoreAttackCounter':
         case 'RepeartTimerSwitch':
@@ -1644,21 +1640,21 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
     public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         const galaxyName = this.galaxyName;
         return Progressable.all([
-            fetchData(this.getLightDataFilename(), abortSignal),
             fetchData(`${this.pathBase}/ObjectData/PlanetMapDataTable.arc`, abortSignal),
+            fetchData(this.getLightDataFilename(), abortSignal),
             fetchData(`${this.pathBase}/StageData/${galaxyName}/${galaxyName}Scenario.arc`, abortSignal),
         ]).then((buffers: ArrayBufferSlice[]) => {
             return Promise.all(buffers.map((buffer) => Yaz0.decompress(buffer)));
         }).then((buffers: ArrayBufferSlice[]) => {
-            const [lightDataBuffer, planetTableBuffer, scenarioBuffer] = buffers;
-
-            // Load light data.
-            const lightDataRarc = RARC.parse(lightDataBuffer);
-            const lightData = BCSV.parse(lightDataRarc.findFileData('lightdata.bcsv'));
+            const [planetTableBuffer, lightDataBuffer, scenarioBuffer] = buffers;
 
             // Load planet table.
             const planetTableRarc = RARC.parse(planetTableBuffer);
             const planetTable = BCSV.parse(planetTableRarc.findFileData('planetmapdatatable.bcsv'));
+
+            // Load light data.
+            const lightDataRarc = RARC.parse(lightDataBuffer);
+            const lightData = BCSV.parse(lightDataRarc.findFileData('lightdata.bcsv'));
 
             // Load all the subzones.
             const scenarioRarc = RARC.parse(scenarioBuffer);
@@ -1684,7 +1680,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
                 return Promise.all(buffers.map((buffer) => Yaz0.decompress(buffer)));
             }).then((zoneBuffers: ArrayBufferSlice[]): Viewer.SceneGfx => {
                 const zones = zoneBuffers.map((zoneBuffer, i) => this.parseZone(zoneNames[i], zoneBuffer));
-                const spawner = new SMGSpawner(this.pathBase, renderHelper, viewRenderer, lightData, planetTable);
+                const spawner = new SMGSpawner(this.pathBase, renderHelper, viewRenderer, planetTable, lightData);
                 const modelMatrixBase = mat4.create();
                 spawner.spawnZone(device, zones[0], zones, modelMatrixBase);
                 return new SMGRenderer(device, spawner, viewRenderer, scenariodata, zoneNames);
