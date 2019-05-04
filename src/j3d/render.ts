@@ -881,6 +881,10 @@ export class BMDModelInstance {
         this.alphaOverrides[colorKind] = useAlpha;
     }
 
+    public getGXLightReference(i: number): GX_Material.Light {
+        return this.materialInstanceState.lights[i];
+    }
+
     public setGXLight(i: number, light: GX_Material.Light): void {
         this.materialInstanceState.lights[i].copy(light);
     }

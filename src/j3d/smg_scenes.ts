@@ -268,6 +268,7 @@ class Node {
     public name: string = '';
     public modelMatrix = mat4.create();
     public layer: number = -1;
+    public planetRecord: BCSV.BcsvRecord | null = null;
 
     private modelMatrixAnimator: ModelMatrixAnimator | null = null;
     private rotateSpeed = 0;
@@ -887,8 +888,8 @@ class SMGSpawner {
     public sceneGraph = new SceneGraph();
     public zones: ZoneNode[] = [];
     private modelCache = new ModelCache();
-    // Player0, Player1, Strong0, Strong1, Weak0, Weak1, Planet0, Planet1, BackLight
-    private lights = nArray(9, () => new Light());
+    // BackLight
+    private backlight = new Light();
     private isSMG1 = false;
     private isSMG2 = false;
 
@@ -896,24 +897,12 @@ class SMGSpawner {
         this.isSMG1 = this.pathBase === 'j3d/smg';
         this.isSMG2 = this.pathBase === 'j3d/smg2';
 
-        // TODO(jstpierre): Parse areas, gather proper lights through that system.
-        // Use "noon" lighting by default.
-        const noonLight = this.lightData.records.find((record) => BCSV.getField<string>(this.lightData, record, 'AreaLightName', '') === '[共通]昼（どら焼き）');
-        lightSetFromLightDataRecord(this.lights[0], this.lightData, noonLight, `PlayerLight0`);
-        lightSetFromLightDataRecord(this.lights[1], this.lightData, noonLight, `PlayerLight1`);
-        lightSetFromLightDataRecord(this.lights[2], this.lightData, noonLight, `StrongLight0`);
-        lightSetFromLightDataRecord(this.lights[3], this.lightData, noonLight, `StrongLight1`);
-        lightSetFromLightDataRecord(this.lights[4], this.lightData, noonLight, `WeakLight0`);
-        lightSetFromLightDataRecord(this.lights[5], this.lightData, noonLight, `WeakLight1`);
-        lightSetFromLightDataRecord(this.lights[6], this.lightData, noonLight, `PlanetLight0`);
-        lightSetFromLightDataRecord(this.lights[7], this.lightData, noonLight, `PlanetLight1`);
-
         // "Rim" backlight settings.
-        colorFromRGBA(this.lights[8].Color, 0, 0, 0, 0.5);
-        vec3.set(this.lights[8].CosAtten, 1, 0, 0);
-        vec3.set(this.lights[8].DistAtten, 1, 0, 0);
-        vec3.set(this.lights[8].Position, 0, 0, 0);
-        vec3.set(this.lights[8].Direction, 0, -1, 0);
+        colorFromRGBA(this.backlight.Color, 0, 0, 0, 0.5);
+        vec3.set(this.backlight.CosAtten, 1, 0, 0);
+        vec3.set(this.backlight.DistAtten, 1, 0, 0);
+        vec3.set(this.backlight.Position, 0, 0, 0);
+        vec3.set(this.backlight.Direction, 0, -1, 0);
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
@@ -997,8 +986,23 @@ class SMGSpawner {
         return false;
     }
 
+    private nodeSetLightName(node: Node, lightName: string): void {
+        // TODO(jstpierre): Parse areas, gather proper lights through that system.
+        const light = this.lightData.records.find((record) => BCSV.getField<string>(this.lightData, record, 'AreaLightName', '') === lightName);
+
+        const light0 = node.modelInstance.getGXLightReference(0);
+        const light1 = node.modelInstance.getGXLightReference(1);
+        if (node.planetRecord !== null) {
+            lightSetFromLightDataRecord(light0, this.lightData, light, `PlanetLight0`);
+            lightSetFromLightDataRecord(light1, this.lightData, light, `PlanetLight1`);
+        } else {
+            lightSetFromLightDataRecord(light0, this.lightData, light, `StrongLight0`);
+            lightSetFromLightDataRecord(light1, this.lightData, light, `StrongLight1`);
+        }
+    }
+
     public spawnObject(device: GfxDevice, zone: ZoneNode, layer: number, objinfo: ObjInfo, modelMatrixBase: mat4): void {
-        const spawnGraph = (arcName: string, tag: SceneGraphTag = SceneGraphTag.Normal, animOptions: AnimOptions | null | undefined = undefined) => {
+        const spawnGraph = (arcName: string, tag: SceneGraphTag = SceneGraphTag.Normal, animOptions: AnimOptions | null | undefined = undefined, planetRecord: BCSV.BcsvRecord | null = null) => {
             const arcPath = `${this.pathBase}/ObjectData/${arcName}.arc`;
             const modelFilename = `${arcName}.bdl`;
             return this.modelCache.getModel(device, this.renderHelper, this.textureHolder, arcPath, modelFilename).then((bmdModel): [Node, RARC.RARC] | null => {
@@ -1012,13 +1016,6 @@ class SMGSpawner {
                 const rarc = this.modelCache.archiveCache.get(arcPath);
 
                 const modelInstance = new BMDModelInstance(device, this.renderHelper, this.textureHolder, bmdModel);
-
-                // Strong0, Strong1
-                // TODO(jstpierre): Set the Planet lights on Planet instances.
-                modelInstance.setGXLight(0, this.lights[2]);
-                modelInstance.setGXLight(1, this.lights[3]);
-
-                modelInstance.setGXLight(2, this.lights[8]);
                 modelInstance.name = `${objinfo.objName} ${objinfo.objId}`;
 
                 if (tag === SceneGraphTag.Skybox) {
@@ -1043,6 +1040,11 @@ class SMGSpawner {
                 node.layer = layer;
                 zone.objects.push(node);
 
+                // TODO(jstpierre):
+                const lightName = '[共通]昼（どら焼き）';
+                this.nodeSetLightName(node, lightName);
+                modelInstance.setGXLight(2, this.backlight);
+
                 this.applyAnimations(node, rarc, animOptions);
 
                 this.sceneGraph.addNode(node);
@@ -1053,19 +1055,22 @@ class SMGSpawner {
         };
 
         const spawnDefault = (name: string): void => {
-            spawnGraph(name, SceneGraphTag.Normal);
             // Spawn planets.
             const planetRecord = this.planetTable.records.find((record) => BCSV.getField(this.planetTable, record, 'PlanetName') === name);
             if (planetRecord) {
+                spawnGraph(name, SceneGraphTag.Normal, undefined, planetRecord);
+
                 const bloomFlag = BCSV.getField(this.planetTable, planetRecord, 'BloomFlag');
                 const waterFlag = BCSV.getField(this.planetTable, planetRecord, 'WaterFlag');
                 const indirectFlag = BCSV.getField(this.planetTable, planetRecord, 'IndirectFlag');
                 if (bloomFlag)
-                    spawnGraph(`${name}Bloom`, SceneGraphTag.Bloom);
+                    spawnGraph(`${name}Bloom`, SceneGraphTag.Bloom, undefined, planetRecord);
                 if (waterFlag)
-                    spawnGraph(`${name}Water`, SceneGraphTag.Water);
+                    spawnGraph(`${name}Water`, SceneGraphTag.Water, undefined, planetRecord);
                 if (indirectFlag)
-                    spawnGraph(`${name}Indirect`, SceneGraphTag.Indirect);
+                    spawnGraph(`${name}Indirect`, SceneGraphTag.Indirect, undefined, planetRecord);
+            } else {
+                spawnGraph(name, SceneGraphTag.Normal);
             }
         };
 
@@ -1324,7 +1329,10 @@ class SMGSpawner {
             spawnGraph('Kinopio', SceneGraphTag.Normal, { bck: 'wait.bck' });
             break;
         case 'Rosetta':
-            spawnGraph(name, SceneGraphTag.Normal, { bck: 'waita.bck' });
+            spawnGraph(name, SceneGraphTag.Normal, { bck: 'waita.bck' }).then(([node, rarc]) => {
+                // "Rosetta Encounter"
+                this.nodeSetLightName(node, `ロゼッタ出会い`);
+            });
             break;
         case 'Tico':
         case 'TicoAstro':
