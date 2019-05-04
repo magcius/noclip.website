@@ -17,7 +17,7 @@ import * as BCSV from '../luigis_mansion/bcsv';
 import * as UI from '../ui';
 import { mat4, quat, vec3 } from 'gl-matrix';
 import { BMD, BRK, BTK, BCK, LoopMode, BVA, BPK } from './j3d';
-import { GfxBlendMode, GfxBlendFactor, GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxRenderPassDescriptor, GfxLoadDisposition } from '../gfx/platform/GfxPlatform';
+import { GfxBlendMode, GfxBlendFactor, GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxRenderPassDescriptor, GfxLoadDisposition, GfxBufferUsage, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform';
 import AnimationController from '../AnimationController';
 import { fullscreenMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { GXRenderHelperGfx } from '../gx/gx_render';
@@ -26,18 +26,29 @@ import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor,
 import { TransparentBlack, colorFromRGBA } from '../Color';
 import { getPointBezier } from '../Spline';
 import { RENDER_HACKS_ICON } from '../bk/scenes';
+import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
+import { fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
 
 // Should I try to do this with GX? lol.
-class FullscreenBaseProgram extends DeviceProgram {
+class BloomPassBaseProgram extends DeviceProgram {
     public static BindingsDefinition = `
-out vec2 v_TexCoord;
 uniform sampler2D u_Texture;
+
+layout(std140) uniform ub_Params {
+    vec4 u_Misc0;
+};
+#define u_BlurStrength         (u_Misc0.x)
+#define u_BokehStrength        (u_Misc0.y)
+#define u_BokehCombineStrength (u_Misc0.z)
 `;
 
-    public static programReflection = DeviceProgram.parseReflectionDefinitions(FullscreenBaseProgram.BindingsDefinition); 
+    public static programReflection = DeviceProgram.parseReflectionDefinitions(BloomPassBaseProgram.BindingsDefinition); 
 
     public vert: string = `
-${FullscreenBaseProgram.BindingsDefinition}
+${BloomPassBaseProgram.BindingsDefinition}
+
+out vec2 v_TexCoord;
+
 void main() {
     vec2 p;
     p.x = (gl_VertexID == 1) ? 2.0 : 0.0;
@@ -49,11 +60,11 @@ void main() {
 `;
 }
 
-class FullscreenCopyProgram extends FullscreenBaseProgram {
+class BloomPassFullscreenCopyProgram extends BloomPassBaseProgram {
     public frag: string = `
+${BloomPassBaseProgram.BindingsDefinition}
+    
 in vec2 v_TexCoord;
-
-uniform sampler2D u_Texture;
 
 void main() {
     gl_FragColor = texture(u_Texture, v_TexCoord);
@@ -61,38 +72,39 @@ void main() {
 `;
 }
 
-class BloomPassBlurProgram extends FullscreenBaseProgram {
+class BloomPassBlurProgram extends BloomPassBaseProgram {
     public frag: string = `
-in vec2 v_TexCoord;
+${BloomPassBaseProgram.BindingsDefinition}
 
-uniform sampler2D u_Texture;
+in vec2 v_TexCoord;
 
 vec3 TevOverflow(vec3 a) { return fract(a*(255.0/256.0))*(256.0/255.0); }
 void main() {
     // Nintendo does this in two separate draws. We combine into one here...
     vec3 c = vec3(0.0);
     // Pass 1.
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.00562, -1.0 *  0.00000)).rgb * 0.15686);
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.00281, -1.0 * -0.00866)).rgb * 0.15686);
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.00281, -1.0 * -0.00866)).rgb * 0.15686);
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.00562, -1.0 *  0.00000)).rgb * 0.15686);
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.00281, -1.0 *  0.00866)).rgb * 0.15686);
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.00281, -1.0 *  0.00866)).rgb * 0.15686);
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.00562, -1.0 *  0.00000)).rgb * u_BlurStrength);
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.00281, -1.0 * -0.00866)).rgb * u_BlurStrength);
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.00281, -1.0 * -0.00866)).rgb * u_BlurStrength);
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.00562, -1.0 *  0.00000)).rgb * u_BlurStrength);
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.00281, -1.0 *  0.00866)).rgb * u_BlurStrength);
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.00281, -1.0 *  0.00866)).rgb * u_BlurStrength);
     // Pass 2.
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.00977, -1.0 * -0.00993)).rgb * 0.15686);
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.00004, -1.0 * -0.02000)).rgb * 0.15686);
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.00972, -1.0 * -0.01006)).rgb * 0.15686);
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.00976, -1.0 *  0.00993)).rgb * 0.15686);
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.00004, -1.0 *  0.02000)).rgb * 0.15686);
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.00972, -1.0 *  0.01006)).rgb * 0.15686);
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.00977, -1.0 * -0.00993)).rgb * u_BlurStrength);
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.00004, -1.0 * -0.02000)).rgb * u_BlurStrength);
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.00972, -1.0 * -0.01006)).rgb * u_BlurStrength);
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.00976, -1.0 *  0.00993)).rgb * u_BlurStrength);
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.00004, -1.0 *  0.02000)).rgb * u_BlurStrength);
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.00972, -1.0 *  0.01006)).rgb * u_BlurStrength);
     gl_FragColor = vec4(c.rgb, 1.0);
 }
 `;
 }
 
-class BloomPassBokehProgram extends FullscreenBaseProgram {
+class BloomPassBokehProgram extends BloomPassBaseProgram {
     public frag: string = `
-uniform sampler2D u_Texture;
+${BloomPassBaseProgram.BindingsDefinition}
+
 in vec2 v_TexCoord;
 
 vec3 TevOverflow(vec3 a) { return fract(a*(255.0/256.0))*(256.0/255.0); }
@@ -104,61 +116,61 @@ void main() {
 
     // Pass 1.
     c = vec3(0.0);
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.02250, -1.0 *  0.00000)).rgb) * 0.23529;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.01949, -1.0 * -0.02000)).rgb) * 0.23529;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.01125, -1.0 * -0.03464)).rgb) * 0.23529;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.00000, -1.0 * -0.04000)).rgb) * 0.23529;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.01125, -1.0 * -0.03464)).rgb) * 0.23529;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.01948, -1.0 * -0.02001)).rgb) * 0.23529;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.02250, -1.0 *  0.00000)).rgb) * 0.23529;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.01949, -1.0 *  0.02000)).rgb) * 0.23529;
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.02250, -1.0 *  0.00000)).rgb) * u_BokehStrength;
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.01949, -1.0 * -0.02000)).rgb) * u_BokehStrength;
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.01125, -1.0 * -0.03464)).rgb) * u_BokehStrength;
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.00000, -1.0 * -0.04000)).rgb) * u_BokehStrength;
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.01125, -1.0 * -0.03464)).rgb) * u_BokehStrength;
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.01948, -1.0 * -0.02001)).rgb) * u_BokehStrength;
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.02250, -1.0 *  0.00000)).rgb) * u_BokehStrength;
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.01949, -1.0 *  0.02000)).rgb) * u_BokehStrength;
     f += TevOverflow(c);
     // Pass 2.
     c = vec3(0.0);
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.01125, -1.0 *  0.03464)).rgb) * 0.23529;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.00000, -1.0 *  0.04000)).rgb) * 0.23529;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.01125, -1.0 *  0.03464)).rgb) * 0.23529;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.01948, -1.0 *  0.02001)).rgb) * 0.23529;
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.01125, -1.0 *  0.03464)).rgb) * u_BokehStrength;
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.00000, -1.0 *  0.04000)).rgb) * u_BokehStrength;
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.01125, -1.0 *  0.03464)).rgb) * u_BokehStrength;
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.01948, -1.0 *  0.02001)).rgb) * u_BokehStrength;
     f += TevOverflow(c);
     // Pass 3.
     c = vec3(0.0);
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.03937, -1.0 *  0.00000)).rgb) * 0.23529;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.03410, -1.0 * -0.03499)).rgb) * 0.23529;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.01970, -1.0 * -0.06061)).rgb) * 0.23529;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.00000, -1.0 * -0.07000)).rgb) * 0.23529;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.01968, -1.0 * -0.06063)).rgb) * 0.23529;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.03409, -1.0 * -0.03502)).rgb) * 0.23529;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.03937, -1.0 *  0.00000)).rgb) * 0.23529;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.03410, -1.0 *  0.03499)).rgb) * 0.23529;
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.03937, -1.0 *  0.00000)).rgb) * u_BokehStrength;
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.03410, -1.0 * -0.03499)).rgb) * u_BokehStrength;
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.01970, -1.0 * -0.06061)).rgb) * u_BokehStrength;
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.00000, -1.0 * -0.07000)).rgb) * u_BokehStrength;
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.01968, -1.0 * -0.06063)).rgb) * u_BokehStrength;
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.03409, -1.0 * -0.03502)).rgb) * u_BokehStrength;
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.03937, -1.0 *  0.00000)).rgb) * u_BokehStrength;
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.03410, -1.0 *  0.03499)).rgb) * u_BokehStrength;
     f += TevOverflow(c);
     // Pass 4.
     c = vec3(0.0);
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.01970, -1.0 *  0.06061)).rgb) * 0.23529;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.00000, -1.0 *  0.07000)).rgb) * 0.23529;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.01968, -1.0 *  0.06063)).rgb) * 0.23529;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.03409, -1.0 *  0.03502)).rgb) * 0.23529;
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.01970, -1.0 *  0.06061)).rgb) * u_BokehStrength;
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.00000, -1.0 *  0.07000)).rgb) * u_BokehStrength;
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.01968, -1.0 *  0.06063)).rgb) * u_BokehStrength;
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.03409, -1.0 *  0.03502)).rgb) * u_BokehStrength;
     f += TevOverflow(c);
     // Pass 5.
     c = vec3(0.0);
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.05063, -1.0 *  0.00000)).rgb) * 0.23529;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.04385, -1.0 * -0.04499)).rgb) * 0.23529;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.02532, -1.0 * -0.07793)).rgb) * 0.23529;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.00000, -1.0 * -0.09000)).rgb) * 0.23529;
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.05063, -1.0 *  0.00000)).rgb) * u_BokehStrength;
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.04385, -1.0 * -0.04499)).rgb) * u_BokehStrength;
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.02532, -1.0 * -0.07793)).rgb) * u_BokehStrength;
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.00000, -1.0 * -0.09000)).rgb) * u_BokehStrength;
     f += TevOverflow(c);
     // Pass 6.
     c = vec3(0.0);
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.02532, -1.0 *  0.07793)).rgb) * 0.23529;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.00000, -1.0 *  0.09000)).rgb) * 0.23529;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.02531, -1.0 *  0.07795)).rgb) * 0.23529;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.04384, -1.0 *  0.04502)).rgb) * 0.23529;
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.02532, -1.0 *  0.07793)).rgb) * u_BokehStrength;
+    c += (texture(u_Texture, v_TexCoord + vec2( 0.00000, -1.0 *  0.09000)).rgb) * u_BokehStrength;
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.02531, -1.0 *  0.07795)).rgb) * u_BokehStrength;
+    c += (texture(u_Texture, v_TexCoord + vec2(-0.04384, -1.0 *  0.04502)).rgb) * u_BokehStrength;
     f += TevOverflow(c);
 
     f = clamp(f, 0.0, 1.0);
 
     // Combine pass.
     vec3 g;
-    g = (texture(u_Texture, v_TexCoord).rgb * 0.43137);
-    g += f * 0.43137;
+    g = (texture(u_Texture, v_TexCoord).rgb * u_BokehCombineStrength);
+    g += f * u_BokehCombineStrength;
 
     gl_FragColor = vec4(g, 1.0);
 }
@@ -364,11 +376,6 @@ class SceneGraph {
     }
 }
 
-function makeFullscreenPassRenderInstBuilder(device: GfxDevice) {
-    const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 0, numSamplers: 1 }];
-    return new GfxRenderInstBuilder(device, FullscreenBaseProgram.programReflection, bindingLayouts, []);
-}
-
 function makeFullscreenPassRenderInst(renderInstBuilder: GfxRenderInstBuilder, name: string, program: DeviceProgram): GfxRenderInst {
     const renderInst = renderInstBuilder.pushRenderInst();
     renderInst.drawTriangles(3);
@@ -432,11 +439,12 @@ class SMGRenderer implements Viewer.SceneGfx {
     public textureHolder: J3DTextureHolder;
 
     // Bloom stuff.
+    private bloomTemplateRenderInst: GfxRenderInst;
+    private bloomParamsBuffer: GfxRenderBuffer;
     private bloomRenderInstDownsample: GfxRenderInst;
     private bloomRenderInstBlur: GfxRenderInst;
     private bloomRenderInstBokeh: GfxRenderInst;
     private bloomRenderInstCombine: GfxRenderInst;
-
     private bloomSampler: GfxSampler;
     private bloomTextureMapping: TextureMapping[] = nArray(1, () => new TextureMapping());
     private bloomSceneColorTarget: WeirdFancyRenderTarget;
@@ -472,9 +480,14 @@ class SMGRenderer implements Viewer.SceneGfx {
         });
         this.bloomTextureMapping[0].gfxSampler = this.bloomSampler;
 
-        const renderInstBuilder = makeFullscreenPassRenderInstBuilder(device);
+        const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 1 }];
+        this.bloomParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_Params`);
+        const renderInstBuilder = new GfxRenderInstBuilder(device, BloomPassBaseProgram.programReflection, bindingLayouts, [this.bloomParamsBuffer]);
+
+        this.bloomTemplateRenderInst = renderInstBuilder.pushTemplateRenderInst();
+        renderInstBuilder.newUniformBufferInstance(this.bloomTemplateRenderInst, 0);
         this.bloomSceneColorTarget = new WeirdFancyRenderTarget(this.mainRenderTarget.depthStencilAttachment);
-        this.bloomRenderInstDownsample = makeFullscreenPassRenderInst(renderInstBuilder, 'bloom downsample', new FullscreenCopyProgram());
+        this.bloomRenderInstDownsample = makeFullscreenPassRenderInst(renderInstBuilder, 'bloom downsample', new BloomPassFullscreenCopyProgram());
         this.bloomRenderInstDownsample.passMask = SMGPass.BLOOM_DOWNSAMPLE;
 
         this.bloomRenderInstBlur = makeFullscreenPassRenderInst(renderInstBuilder, 'bloom blur', new BloomPassBlurProgram());
@@ -483,7 +496,7 @@ class SMGRenderer implements Viewer.SceneGfx {
         this.bloomRenderInstBokeh = makeFullscreenPassRenderInst(renderInstBuilder, 'bloom bokeh', new BloomPassBokehProgram());
         this.bloomRenderInstBokeh.passMask = SMGPass.BLOOM_BOKEH;
 
-        this.bloomRenderInstCombine = makeFullscreenPassRenderInst(renderInstBuilder, 'bloom combine', new FullscreenCopyProgram());
+        this.bloomRenderInstCombine = makeFullscreenPassRenderInst(renderInstBuilder, 'bloom combine', new BloomPassFullscreenCopyProgram());
         this.bloomRenderInstCombine.passMask = SMGPass.BLOOM_COMBINE;
         this.bloomRenderInstCombine.setMegaStateFlags({
             blendMode: GfxBlendMode.ADD,
@@ -491,6 +504,7 @@ class SMGRenderer implements Viewer.SceneGfx {
             blendDstFactor: GfxBlendFactor.ONE,
         });
 
+        renderInstBuilder.popTemplateRenderInst();
         renderInstBuilder.finish(device, this.viewRenderer);
     }
 
@@ -551,8 +565,22 @@ class SMGRenderer implements Viewer.SceneGfx {
         return [scenarioPanel, renderHacksPanel];
     }
 
+    private prepareToRenderBloom(hostAccessPass: GfxHostAccessPass): void {
+        let offs = this.bloomTemplateRenderInst.getUniformBufferOffset(0);
+        const d = this.bloomParamsBuffer.mapBufferF32(offs, 4);
+        // TODO(jstpierre): Dynamically adjust based on Area.
+        if (this.spawner.zones[0].zone.name === 'PeachCastleGardenGalaxy')
+            fillVec4(d, offs, 40/256, 60/256, 110/256);
+        else
+            fillVec4(d, offs, 25/256, 25/256, 50/256);
+        this.bloomParamsBuffer.prepareToRender(hostAccessPass);
+    }
+
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
         const hostAccessPass = device.createHostAccessPass();
+
+        this.prepareToRenderBloom(hostAccessPass);
+
         this.spawner.prepareToRender(hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
         this.mainRenderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
@@ -1215,12 +1243,24 @@ class SMGSpawner {
             });
             return;
 
-        // SMG1
+        // Bloomables.
+        // The actual engine will search for a file suffixed "Bloom" and spawn it if so.
+        // Here, we don't want to trigger that many HTTP requests, so we just list all
+        // models with bloom variants explicitly.
+        case 'AssemblyBlockPartsTimerA':
+        case 'AstroDomeComet':
+        case 'FlipPanel':
+        case 'FlipPanelReverse':
+        case 'HeavensDoorInsidePlanetPartsA':
+        case 'LavaProminence':
+        case 'LavaProminenceEnvironment':
+        case 'LavaProminenceTriple':
         case 'PeachCastleTownBeforeAttack':
-            spawnGraph('PeachCastleTownBeforeAttack', SceneGraphTag.Normal);
-            spawnGraph('PeachCastleTownBeforeAttackBloom', SceneGraphTag.Bloom);
+            spawnGraph(name, SceneGraphTag.Normal);
+            spawnGraph(`${name}Bloom`, SceneGraphTag.Bloom);
             break;
 
+        // SMG1.
         case 'AstroCore':
             spawnGraph(name, SceneGraphTag.Normal, { bck: 'revival4.bck', brk: 'revival4.brk', btk: 'astrocore.btk' });
             break;
