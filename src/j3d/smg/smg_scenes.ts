@@ -1,5 +1,5 @@
 
-import { mat4, quat, vec3, vec4 } from 'gl-matrix';
+import { mat4, quat, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
 import Progressable from '../../Progressable';
 import { assert, assertExists } from '../../util';
@@ -12,14 +12,14 @@ import { BMD, BRK, BTK, BCK, LoopMode, BVA, BPK, BTP } from '../../j3d/j3d';
 import { BMDModel, BMDModelInstance, J3DTextureHolder } from '../../j3d/render';
 import * as RARC from '../../j3d/rarc';
 import { EFB_WIDTH, EFB_HEIGHT, Light, lightSetWorldPosition, lightSetWorldDirection } from '../../gx/gx_material';
-import { GXRenderHelperGfx, ColorKind } from '../../gx/gx_render';
+import { GXRenderHelperGfx } from '../../gx/gx_render';
 import { TextureOverride } from '../../TextureHolder';
 import { getPointBezier } from '../../Spline';
 import AnimationController from '../../AnimationController';
 import * as Yaz0 from '../../compression/Yaz0';
 import * as BCSV from '../../luigis_mansion/bcsv';
 import * as UI from '../../ui';
-import { colorFromRGBA, Color, colorNew, colorNewCopy, TransparentBlack, colorCopy } from '../../Color';
+import { colorFromRGBA, Color, colorNew, colorCopy } from '../../Color';
 import { BloomPostFXParameters, BloomPostFXRenderer } from './Bloom';
 import { Camera } from '../../Camera';
 
@@ -76,7 +76,7 @@ class RailAnimationTico {
         const path = this.path;
 
         // TODO(jstpierre): calculate speed. probably on the objinfo.
-        const tS = time / 70;
+        const tS = time / 35;
         const t = (tS + this.railPhase) % 1.0;
 
         // Which point are we in?
@@ -94,6 +94,7 @@ class RailAnimationTico {
 
         const c = scratchVec3;
         interpPathPoints(c, pt0, pt1, sT);
+        // mat4.identity(dst);
         dst[12] = c[0];
         dst[13] = c[1];
         dst[14] = c[2];
@@ -103,6 +104,14 @@ class RailAnimationTico {
         c[0] -= dst[12];
         c[1] -= dst[13];
         c[2] -= dst[14];
+
+        /*
+        const cx = c[0], cy = c[1], cz = c[2];
+        const yaw = Math.atan2(cz, -cx) - Math.PI / 2;
+        const pitch = Math.atan2(cy, Math.sqrt(cx*cx+cz*cz));
+        mat4.rotateZ(dst, dst, pitch);
+        mat4.rotateY(dst, dst, yaw);
+        */
 
         const ny = Math.atan2(c[2], -c[0]);
         mat4.rotateY(dst, dst, ny);
@@ -195,7 +204,7 @@ class Node {
     public areaLightInfo: AreaLightInfo;
     public areaLightConfiguration: AreaLightConfiguration;
 
-    constructor(public objinfo: ObjInfo, public modelInstance: BMDModelInstance, parentModelMatrix: mat4, public animationController: AnimationController) {
+    constructor(public objinfo: ObjInfo, private parentZone: ZoneNode, public modelInstance: BMDModelInstance, parentModelMatrix: mat4, public animationController: AnimationController) {
         this.name = modelInstance.name;
         // BlackHole is special and doesn't inherit SR from parent.
         if (objinfo.objName === 'BlackHole') {
@@ -234,8 +243,7 @@ class Node {
 
     public updateMapPartsRotation(dst: mat4, time: number): void {
         if (this.rotateSpeed !== 0) {
-            const rotateSpeed = this.rotateSpeed / (this.objinfo.rotateAccelType > 0 ? this.objinfo.rotateAccelType : 1);
-            const speed = rotateSpeed * Math.PI / 100;
+            const speed = this.rotateSpeed * Math.PI / 100;
             if (this.rotateAxis === RotateAxis.X)
                 mat4.rotateX(dst, dst, (time + this.rotatePhase) * speed);
             else if (this.rotateAxis === RotateAxis.Y)
@@ -249,8 +257,11 @@ class Node {
         const time = this.animationController.getTimeInSeconds();
         mat4.copy(this.modelInstance.modelMatrix, this.modelMatrix);
         this.updateMapPartsRotation(this.modelInstance.modelMatrix, time);
-        if (this.modelMatrixAnimator !== null)
+        if (this.modelMatrixAnimator !== null) {
             this.modelMatrixAnimator.updateRailAnimation(this.modelInstance.modelMatrix, time);
+            // Apply zone transform to path results.
+            mat4.mul(this.modelInstance.modelMatrix, this.parentZone.modelMatrixBase, this.modelInstance.modelMatrix);
+        }
     }
 
     public setAreaLightInfo(areaLightInfo: AreaLightInfo): void {
@@ -467,6 +478,7 @@ class SMGRenderer implements Viewer.SceneGfx {
 
         this.mainRenderTarget.destroy(device);
         this.opaqueSceneTexture.destroy(device);
+        this.bloomRenderer.destroy(device);
     }
 }
 
@@ -627,7 +639,7 @@ class ZoneNode {
     public visible: boolean = true;
     public subzones: ZoneNode[] = [];
 
-    constructor(public zone: Zone, private layer: number = -1) {
+    constructor(public zone: Zone, private layer: number = -1, public modelMatrixBase: mat4) {
     }
 
     public computeObjectVisibility(): void {
@@ -647,19 +659,6 @@ function colorSetFromCsvDataRecord(color: Color, bcsv: BCSV.Bcsv, record: BCSV.B
     const colorB = BCSV.getField(bcsv, record, `${prefix}B`, 0) / 0xFF;
     const colorA = BCSV.getField(bcsv, record, `${prefix}A`, 0) / 0xFF;
     colorFromRGBA(color, colorR, colorG, colorB, colorA);
-}
-
-function lightSetFromLightDataRecord(light: Light, bcsv: BCSV.Bcsv, record: BCSV.BcsvRecord, prefix: string): void {
-    colorSetFromCsvDataRecord(light.Color, bcsv, record, `${prefix}Color`);
-
-    const posX = BCSV.getField(bcsv, record, `${prefix}PosX`, 0);
-    const posY = BCSV.getField(bcsv, record, `${prefix}PosY`, 0);
-    const posZ = BCSV.getField(bcsv, record, `${prefix}PosZ`, 0);
-    vec3.set(light.Position, posX, posY, posZ);
-
-    vec3.set(light.Direction, 1, 0, 0);
-    vec3.set(light.CosAtten, 1, 0, 0);
-    vec3.set(light.DistAtten, 1, 0, 0);
 }
 
 class SMGSpawner {
@@ -812,13 +811,13 @@ class SMGSpawner {
                     modelInstance.passMask = SMGPass.OPAQUE;
                 }
 
-                const node = new Node(objinfo, modelInstance, modelMatrixBase, modelInstance.animationController);
+                const node = new Node(objinfo, zone, modelInstance, modelMatrixBase, modelInstance.animationController);
                 node.planetRecord = planetRecord;
                 node.layer = layer;
                 zone.objects.push(node);
 
                 // TODO(jstpierre): Parse out the proper area info.
-                const lightName = '[デフォルト]ウィンドガーデン';
+                const lightName = '[共通]昼（どら焼き）';
                 this.nodeSetLightName(node, lightName);
                 modelInstance.getGXLightReference(2).copy(this.backlight);
 
@@ -910,8 +909,6 @@ class SMGSpawner {
             // Covers the path with the rail -- will require special spawn logic.
             return;
 
-        case 'FlowerGroup':
-        case 'FlowerBlueGroup':
         case 'ShootingStar':
         case 'MeteorCannon':
         case 'Plant':
@@ -1208,8 +1205,14 @@ class SMGSpawner {
         case 'JetTurtle':
             spawnGraph(`Koura`);
             break;
-    
+
         // TODO(jstpierre): Group spawn logic?
+        case 'FlowerGroup':
+            spawnGraph(`Flower`);
+            return;
+        case 'FlowerBlueGroup':
+            spawnGraph(`FlowerBlue`);
+            return;
         case 'FishGroupA':
             spawnGraph(`FishA`);
             break;
@@ -1279,6 +1282,10 @@ class SMGSpawner {
             spawnGraph(`DinoPackun`);
             break;
 
+        case 'Mogucchi':
+            spawnGraph(name, SceneGraphTag.Normal, { bck: 'walk.bck' });
+            return;
+
         case 'Dodoryu':
             spawnGraph(name, SceneGraphTag.Normal, { bck: 'swoon.bck' });
             break;
@@ -1313,7 +1320,7 @@ class SMGSpawner {
 
     public spawnZone(device: GfxDevice, zone: Zone, zones: Zone[], modelMatrixBase: mat4, parentLayer: number = -1): ZoneNode {
         // Spawn all layers. We'll hide them later when masking out the others.
-        const zoneNode = new ZoneNode(zone, parentLayer);
+        const zoneNode = new ZoneNode(zone, parentLayer, modelMatrixBase);
         this.zones.push(zoneNode);
 
         for (const layer of zone.layers) {
