@@ -1,5 +1,5 @@
 
-import { mat4, quat, vec3 } from 'gl-matrix';
+import { mat4, quat, vec3, vec4 } from 'gl-matrix';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
 import Progressable from '../../Progressable';
 import { assert, assertExists } from '../../util';
@@ -11,7 +11,7 @@ import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor,
 import { BMD, BRK, BTK, BCK, LoopMode, BVA, BPK, BTP } from '../../j3d/j3d';
 import { BMDModel, BMDModelInstance, J3DTextureHolder } from '../../j3d/render';
 import * as RARC from '../../j3d/rarc';
-import { EFB_WIDTH, EFB_HEIGHT, Light } from '../../gx/gx_material';
+import { EFB_WIDTH, EFB_HEIGHT, Light, lightSetWorldPosition, lightSetWorldDirection } from '../../gx/gx_material';
 import { GXRenderHelperGfx, ColorKind } from '../../gx/gx_render';
 import { TextureOverride } from '../../TextureHolder';
 import { getPointBezier } from '../../Spline';
@@ -19,8 +19,9 @@ import AnimationController from '../../AnimationController';
 import * as Yaz0 from '../../compression/Yaz0';
 import * as BCSV from '../../luigis_mansion/bcsv';
 import * as UI from '../../ui';
-import { colorFromRGBA, Color, colorNew, colorNewCopy, TransparentBlack } from '../../Color';
+import { colorFromRGBA, Color, colorNew, colorNewCopy, TransparentBlack, colorCopy } from '../../Color';
 import { BloomPostFXParameters, BloomPostFXRenderer } from './Bloom';
+import { Camera } from '../../Camera';
 
 const enum SceneGraphTag {
     Skybox = 'Skybox',
@@ -108,6 +109,76 @@ class RailAnimationTico {
     }
 }
 
+class AreaLight {
+    public Position = vec3.create();
+    public Color = colorNew(1, 1, 1, 1);
+    public FollowCamera: boolean;
+
+    public setFromLightDataRecord(bcsv: BCSV.Bcsv, record: BCSV.BcsvRecord, prefix: string): void {
+        colorSetFromCsvDataRecord(this.Color, bcsv, record, `${prefix}Color`);
+
+        const posX = BCSV.getField(bcsv, record, `${prefix}PosX`, 0);
+        const posY = BCSV.getField(bcsv, record, `${prefix}PosY`, 0);
+        const posZ = BCSV.getField(bcsv, record, `${prefix}PosZ`, 0);
+        vec3.set(this.Position, posX, posY, posZ);
+
+        this.FollowCamera = BCSV.getField(bcsv, record, `${prefix}FollowCamera`) !== 0;
+    }
+
+    public setLight(dst: Light, camera: Camera): void {
+        if (this.FollowCamera) {
+            vec3.copy(dst.Position, this.Position);
+            vec3.set(dst.Direction, 1, 0, 0);
+        } else {
+            lightSetWorldPosition(dst, camera, this.Position[0], this.Position[1], this.Position[2]);
+            lightSetWorldDirection(dst, camera, 1, 0, 0);
+        }
+
+        colorCopy(dst.Color, this.Color);
+        vec3.set(dst.CosAtten, 1, 0, 0);
+        vec3.set(dst.DistAtten, 1, 0, 0);
+    }
+}
+
+class AreaLightConfiguration {
+    public AreaLightName: string;
+    public Light0 = new AreaLight();
+    public Light1 = new AreaLight();
+    public Ambient = colorNew(1, 1, 1, 1);
+
+    public setFromLightDataRecord(bcsv: BCSV.Bcsv, record: BCSV.BcsvRecord, prefix: string): void {
+        this.Light0.setFromLightDataRecord(bcsv, record, `${prefix}Light0`);
+        this.Light1.setFromLightDataRecord(bcsv, record, `${prefix}Light1`);
+        colorSetFromCsvDataRecord(this.Ambient, bcsv, record, `${prefix}Ambient`);
+    }
+
+    public setOnModelInstance(modelInstance: BMDModelInstance, camera: Camera): void {
+        this.Light0.setLight(modelInstance.getGXLightReference(0), camera);
+        this.Light1.setLight(modelInstance.getGXLightReference(1), camera);
+        // TODO(jstpierre): This doesn't look quite right for planets.
+        // Needs investigation.
+        // modelInstance.setColorOverride(ColorKind.AMB0, this.Ambient, true);
+    }
+}
+
+class AreaLightInfo {
+    public AreaLightName: string;
+    public Interpolate: number;
+    public Player = new AreaLightConfiguration();
+    public Strong = new AreaLightConfiguration();
+    public Weak = new AreaLightConfiguration();
+    public Planet = new AreaLightConfiguration();
+
+    public setFromLightDataRecord(bcsv: BCSV.Bcsv, record: BCSV.BcsvRecord): void {
+        this.AreaLightName = BCSV.getField<string>(bcsv, record, 'AreaLightName');
+        this.Interpolate = BCSV.getField<number>(bcsv, record, 'Interpolate');
+        this.Player.setFromLightDataRecord(bcsv, record, 'Player');
+        this.Strong.setFromLightDataRecord(bcsv, record, 'Strong');
+        this.Weak.setFromLightDataRecord(bcsv, record, 'Weak');
+        this.Planet.setFromLightDataRecord(bcsv, record, 'Planet');
+    }
+}
+
 const enum RotateAxis { X, Y, Z };
 
 const scratchVec3 = vec3.create();
@@ -121,6 +192,8 @@ class Node {
     private rotateSpeed = 0;
     private rotatePhase = 0;
     private rotateAxis: RotateAxis = RotateAxis.Y;
+    public areaLightInfo: AreaLightInfo;
+    public areaLightConfiguration: AreaLightConfiguration;
 
     constructor(public objinfo: ObjInfo, public modelInstance: BMDModelInstance, parentModelMatrix: mat4, public animationController: AnimationController) {
         this.name = modelInstance.name;
@@ -180,7 +253,19 @@ class Node {
             this.modelMatrixAnimator.updateRailAnimation(this.modelInstance.modelMatrix, time);
     }
 
+    public setAreaLightInfo(areaLightInfo: AreaLightInfo): void {
+        this.areaLightInfo = areaLightInfo;
+
+        // Which light configuration to use?
+        if (this.planetRecord !== null) {
+            this.areaLightConfiguration = this.areaLightInfo.Planet;
+        } else {
+            this.areaLightConfiguration = this.areaLightInfo.Strong;            
+        }
+    }
+
     public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
+        this.areaLightConfiguration.setOnModelInstance(this.modelInstance, viewerInput.camera);
         this.updateSpecialAnimations();
         this.modelInstance.prepareToRender(renderHelper, viewerInput);
     }
@@ -586,6 +671,7 @@ class SMGSpawner {
     private backlight = new Light();
     private isSMG1 = false;
     private isSMG2 = false;
+    private areaLightInfos: AreaLightInfo[] = [];
 
     constructor(private pathBase: string, private renderHelper: GXRenderHelperGfx, private viewRenderer: GfxRenderInstViewRenderer, private planetTable: BCSV.Bcsv, private lightData: BCSV.Bcsv) {
         this.isSMG1 = this.pathBase === 'j3d/smg';
@@ -597,6 +683,12 @@ class SMGSpawner {
         vec3.set(this.backlight.DistAtten, 1, 0, 0);
         vec3.set(this.backlight.Position, 0, 0, 0);
         vec3.set(this.backlight.Direction, 0, -1, 0);
+
+        for (let i = 0; i < lightData.records.length; i++) {
+            const areaLightInfo = new AreaLightInfo();
+            areaLightInfo.setFromLightDataRecord(lightData, lightData.records[i]);
+            this.areaLightInfos.push(areaLightInfo);
+        }
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
@@ -681,24 +773,8 @@ class SMGSpawner {
     }
 
     private nodeSetLightName(node: Node, lightName: string): void {
-        // TODO(jstpierre): Parse areas, gather proper lights through that system.
-        const lightRecord = this.lightData.records.find((record) => BCSV.getField<string>(this.lightData, record, 'AreaLightName', '') === lightName);
-
-        const modelInstance = node.modelInstance;
-
-        const light0 = modelInstance.getGXLightReference(0);
-        const light1 = modelInstance.getGXLightReference(1);
-        const color = colorNew(1, 1, 1, 1);
-        if (node.planetRecord !== null) {
-            lightSetFromLightDataRecord(light0, this.lightData, lightRecord, `PlanetLight0`);
-            lightSetFromLightDataRecord(light1, this.lightData, lightRecord, `PlanetLight1`);
-            colorSetFromCsvDataRecord(color, this.lightData, lightRecord, `PlanetAmbient`);
-        } else {
-            lightSetFromLightDataRecord(light0, this.lightData, lightRecord, `StrongLight0`);
-            lightSetFromLightDataRecord(light1, this.lightData, lightRecord, `StrongLight1`);
-            colorSetFromCsvDataRecord(color, this.lightData, lightRecord, `StrongAmbient`);
-        }
-        modelInstance.setColorOverride(ColorKind.AMB0, color, true);
+        const areaLightInfo = this.areaLightInfos.find((areaLightInfo) => areaLightInfo.AreaLightName === lightName);
+        node.setAreaLightInfo(areaLightInfo);
     }
 
     public spawnObject(device: GfxDevice, zone: ZoneNode, layer: number, objinfo: ObjInfo, modelMatrixBase: mat4): void {
@@ -742,7 +818,7 @@ class SMGSpawner {
                 zone.objects.push(node);
 
                 // TODO(jstpierre): Parse out the proper area info.
-                const lightName = '[共通]昼（どら焼き）';
+                const lightName = '[デフォルト]ウィンドガーデン';
                 this.nodeSetLightName(node, lightName);
                 modelInstance.getGXLightReference(2).copy(this.backlight);
 
