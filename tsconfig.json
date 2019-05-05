@@ -2,7 +2,6 @@
     "compilerOptions": {
         "target": "es6",
         "alwaysStrict": true,
-        "baseUrl": "./src/",
         "downlevelIteration": true,
         "noImplicitReturns": true,
         "noImplicitThis": true,

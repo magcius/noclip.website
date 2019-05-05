@@ -1,178 +1,27 @@
 
-import ArrayBufferSlice from 'ArrayBufferSlice';
-import Progressable from 'Progressable';
-import { assert, nArray, assertExists } from 'util';
-import { fetchData } from 'fetch';
-import { DeviceProgram } from 'Program';
-import * as Viewer from 'viewer';
-import { GfxBlendMode, GfxBlendFactor, GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxRenderPassDescriptor, GfxLoadDisposition, GfxBufferUsage, GfxBufferFrequencyHint } from 'gfx/platform/GfxPlatform';
-import { fullscreenMegaState } from 'gfx/helpers/GfxMegaStateDescriptorHelpers';
-import { GfxRenderInstViewRenderer, GfxRenderInst, GfxRenderInstBuilder } from 'gfx/render/GfxRenderer';
-import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor, PostFXRenderTarget, ColorAttachment, DepthStencilAttachment, DEFAULT_NUM_SAMPLES, makeEmptyRenderPassDescriptor, copyRenderPassDescriptor } from 'gfx/helpers/RenderTargetHelpers';
-import { GfxRenderBuffer } from 'gfx/render/GfxRenderBuffer';
-import { fillVec4 } from 'gfx/helpers/UniformBufferHelpers';
-import { BMD, BRK, BTK, BCK, LoopMode, BVA, BPK, BTP } from 'j3d/j3d';
-import { BMDModel, BMDModelInstance, J3DTextureHolder } from 'j3d/render';
 import { mat4, quat, vec3 } from 'gl-matrix';
-import * as RARC from 'j3d/rarc';
-import { EFB_WIDTH, EFB_HEIGHT, Light } from 'gx/gx_material';
-import { GXRenderHelperGfx } from 'gx/gx_render';
-import { TextureOverride, TextureMapping } from 'TextureHolder';
-import { getPointBezier } from 'Spline';
-import AnimationController from 'AnimationController';
-import { RENDER_HACKS_ICON } from 'bk/scenes';
-import * as Yaz0 from 'compression/Yaz0';
-import * as BCSV from 'luigis_mansion/bcsv';
-import * as UI from 'ui';
-import { TransparentBlack, colorFromRGBA } from 'Color';
-
-// Should I try to do this with GX? lol.
-class BloomPassBaseProgram extends DeviceProgram {
-    public static BindingsDefinition = `
-uniform sampler2D u_Texture;
-
-layout(std140) uniform ub_Params {
-    vec4 u_Misc0;
-};
-#define u_BlurStrength         (u_Misc0.x)
-#define u_BokehStrength        (u_Misc0.y)
-#define u_BokehCombineStrength (u_Misc0.z)
-`;
-
-    public static programReflection = DeviceProgram.parseReflectionDefinitions(BloomPassBaseProgram.BindingsDefinition); 
-
-    public vert: string = `
-${BloomPassBaseProgram.BindingsDefinition}
-
-out vec2 v_TexCoord;
-
-void main() {
-    vec2 p;
-    p.x = (gl_VertexID == 1) ? 2.0 : 0.0;
-    p.y = (gl_VertexID == 2) ? 2.0 : 0.0;
-    gl_Position.xy = p * vec2(2) - vec2(1);
-    gl_Position.zw = vec2(1);
-    v_TexCoord = p;
-}
-`;
-}
-
-class BloomPassFullscreenCopyProgram extends BloomPassBaseProgram {
-    public frag: string = `
-${BloomPassBaseProgram.BindingsDefinition}
-    
-in vec2 v_TexCoord;
-
-void main() {
-    gl_FragColor = texture(u_Texture, v_TexCoord);
-}
-`;
-}
-
-class BloomPassBlurProgram extends BloomPassBaseProgram {
-    public frag: string = `
-${BloomPassBaseProgram.BindingsDefinition}
-
-in vec2 v_TexCoord;
-
-vec3 TevOverflow(vec3 a) { return fract(a*(255.0/256.0))*(256.0/255.0); }
-void main() {
-    // Nintendo does this in two separate draws. We combine into one here...
-    vec3 c = vec3(0.0);
-    // Pass 1.
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.00562, -1.0 *  0.00000)).rgb * u_BlurStrength);
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.00281, -1.0 * -0.00866)).rgb * u_BlurStrength);
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.00281, -1.0 * -0.00866)).rgb * u_BlurStrength);
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.00562, -1.0 *  0.00000)).rgb * u_BlurStrength);
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.00281, -1.0 *  0.00866)).rgb * u_BlurStrength);
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.00281, -1.0 *  0.00866)).rgb * u_BlurStrength);
-    // Pass 2.
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.00977, -1.0 * -0.00993)).rgb * u_BlurStrength);
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.00004, -1.0 * -0.02000)).rgb * u_BlurStrength);
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.00972, -1.0 * -0.01006)).rgb * u_BlurStrength);
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.00976, -1.0 *  0.00993)).rgb * u_BlurStrength);
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.00004, -1.0 *  0.02000)).rgb * u_BlurStrength);
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.00972, -1.0 *  0.01006)).rgb * u_BlurStrength);
-    gl_FragColor = vec4(c.rgb, 1.0);
-}
-`;
-}
-
-class BloomPassBokehProgram extends BloomPassBaseProgram {
-    public frag: string = `
-${BloomPassBaseProgram.BindingsDefinition}
-
-in vec2 v_TexCoord;
-
-vec3 TevOverflow(vec3 a) { return fract(a*(255.0/256.0))*(256.0/255.0); }
-void main() {
-    vec3 f = vec3(0.0);
-    vec3 c;
-
-    // TODO(jstpierre): Double-check these passes. It seems weighted towards the top left. IS IT THE BLUR???
-
-    // Pass 1.
-    c = vec3(0.0);
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.02250, -1.0 *  0.00000)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.01949, -1.0 * -0.02000)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.01125, -1.0 * -0.03464)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.00000, -1.0 * -0.04000)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.01125, -1.0 * -0.03464)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.01948, -1.0 * -0.02001)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.02250, -1.0 *  0.00000)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.01949, -1.0 *  0.02000)).rgb) * u_BokehStrength;
-    f += TevOverflow(c);
-    // Pass 2.
-    c = vec3(0.0);
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.01125, -1.0 *  0.03464)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.00000, -1.0 *  0.04000)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.01125, -1.0 *  0.03464)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.01948, -1.0 *  0.02001)).rgb) * u_BokehStrength;
-    f += TevOverflow(c);
-    // Pass 3.
-    c = vec3(0.0);
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.03937, -1.0 *  0.00000)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.03410, -1.0 * -0.03499)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.01970, -1.0 * -0.06061)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.00000, -1.0 * -0.07000)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.01968, -1.0 * -0.06063)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.03409, -1.0 * -0.03502)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.03937, -1.0 *  0.00000)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.03410, -1.0 *  0.03499)).rgb) * u_BokehStrength;
-    f += TevOverflow(c);
-    // Pass 4.
-    c = vec3(0.0);
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.01970, -1.0 *  0.06061)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.00000, -1.0 *  0.07000)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.01968, -1.0 *  0.06063)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.03409, -1.0 *  0.03502)).rgb) * u_BokehStrength;
-    f += TevOverflow(c);
-    // Pass 5.
-    c = vec3(0.0);
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.05063, -1.0 *  0.00000)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.04385, -1.0 * -0.04499)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.02532, -1.0 * -0.07793)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.00000, -1.0 * -0.09000)).rgb) * u_BokehStrength;
-    f += TevOverflow(c);
-    // Pass 6.
-    c = vec3(0.0);
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.02532, -1.0 *  0.07793)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2( 0.00000, -1.0 *  0.09000)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.02531, -1.0 *  0.07795)).rgb) * u_BokehStrength;
-    c += (texture(u_Texture, v_TexCoord + vec2(-0.04384, -1.0 *  0.04502)).rgb) * u_BokehStrength;
-    f += TevOverflow(c);
-
-    f = clamp(f, 0.0, 1.0);
-
-    // Combine pass.
-    vec3 g;
-    g = (texture(u_Texture, v_TexCoord).rgb * u_BokehCombineStrength);
-    g += f * u_BokehCombineStrength;
-
-    gl_FragColor = vec4(g, 1.0);
-}
-`;
-}
+import ArrayBufferSlice from '../../ArrayBufferSlice';
+import Progressable from '../../Progressable';
+import { assert, assertExists } from '../../util';
+import { fetchData } from '../../fetch';
+import * as Viewer from '../../viewer';
+import { GfxDevice, GfxRenderPass, GfxHostAccessPass } from '../../gfx/platform/GfxPlatform';
+import { GfxRenderInstViewRenderer } from '../../gfx/render/GfxRenderer';
+import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../../gfx/helpers/RenderTargetHelpers';
+import { BMD, BRK, BTK, BCK, LoopMode, BVA, BPK, BTP } from '../../j3d/j3d';
+import { BMDModel, BMDModelInstance, J3DTextureHolder } from '../../j3d/render';
+import * as RARC from '../../j3d/rarc';
+import { EFB_WIDTH, EFB_HEIGHT, Light } from '../../gx/gx_material';
+import { GXRenderHelperGfx } from '../../gx/gx_render';
+import { TextureOverride } from '../../TextureHolder';
+import { getPointBezier } from '../../Spline';
+import AnimationController from '../../AnimationController';
+import { RENDER_HACKS_ICON } from '../../bk/scenes';
+import * as Yaz0 from '../../compression/Yaz0';
+import * as BCSV from '../../luigis_mansion/bcsv';
+import * as UI from '../../ui';
+import { colorFromRGBA } from '../../Color';
+import { BloomPostFXParameters, BloomPostFXRenderer } from './Bloom';
 
 const enum SceneGraphTag {
     Skybox = 'Skybox',
@@ -186,7 +35,7 @@ interface ModelMatrixAnimator {
     updateRailAnimation(dst: mat4, time: number): void;
 }
 
-class RailAnimationPlatform {
+class RailAnimationMapPart {
     private railPhase: number = 0;
 
     constructor(public path: Path, modelMatrix: mat4) {
@@ -260,6 +109,8 @@ class RailAnimationTico {
     }
 }
 
+const enum RotateAxis { X, Y, Z };
+
 const scratchVec3 = vec3.create();
 class Node {
     public name: string = '';
@@ -270,7 +121,7 @@ class Node {
     private modelMatrixAnimator: ModelMatrixAnimator | null = null;
     private rotateSpeed = 0;
     private rotatePhase = 0;
-    private rotateAxis = 0;
+    private rotateAxis: RotateAxis = RotateAxis.Y;
 
     constructor(public objinfo: ObjInfo, public modelInstance: BMDModelInstance, parentModelMatrix: mat4, public animationController: AnimationController) {
         this.name = modelInstance.name;
@@ -294,27 +145,30 @@ class Node {
         }
 
         const objName = this.objinfo.objName;
-        if (objName.startsWith('HoleBeltConveyerParts') && this.objinfo.path) {
-            this.modelMatrixAnimator = new RailAnimationPlatform(this.objinfo.path, this.modelMatrix);
+        if (this.objinfo.isMapPart && this.objinfo.path) {
+            this.modelMatrixAnimator = new RailAnimationMapPart(this.objinfo.path, this.modelMatrix);
         } else if (objName === 'TicoRail') {
             this.modelMatrixAnimator = new RailAnimationTico(this.objinfo.path);
         } else if (objName.endsWith('Coin')) {
-            this.rotateSpeed = 140;
-            this.rotatePhase = (this.objinfo.modelMatrix[12] + this.objinfo.modelMatrix[13] + this.objinfo.modelMatrix[14]);
-            this.rotateAxis = 1;
+            this.setRotateSpeed(140);
         }
+    }
+
+    public setRotateSpeed(speed: number, axis = RotateAxis.Y): void {
+        this.rotatePhase = (this.objinfo.modelMatrix[12] + this.objinfo.modelMatrix[13] + this.objinfo.modelMatrix[14]);
+        this.rotateSpeed = speed;
+        this.rotateAxis = axis;
     }
 
     public updateMapPartsRotation(dst: mat4, time: number): void {
         if (this.rotateSpeed !== 0) {
-            // RotateSpeed appears to be deg/sec?
             const rotateSpeed = this.rotateSpeed / (this.objinfo.rotateAccelType > 0 ? this.objinfo.rotateAccelType : 1);
-            const speed = rotateSpeed * Math.PI / 180;
-            if (this.rotateAxis === 0)
+            const speed = rotateSpeed * Math.PI / 100;
+            if (this.rotateAxis === RotateAxis.X)
                 mat4.rotateX(dst, dst, (time + this.rotatePhase) * speed);
-            else if (this.rotateAxis === 1)
+            else if (this.rotateAxis === RotateAxis.Y)
                 mat4.rotateY(dst, dst, (time + this.rotatePhase) * speed);
-            else if (this.rotateAxis === 2)
+            else if (this.rotateAxis === RotateAxis.Z)
                 mat4.rotateZ(dst, dst, (time + this.rotatePhase) * speed);
         }
     }
@@ -356,16 +210,6 @@ class SceneGraph {
     }
 }
 
-function makeFullscreenPassRenderInst(renderInstBuilder: GfxRenderInstBuilder, name: string, program: DeviceProgram): GfxRenderInst {
-    const renderInst = renderInstBuilder.pushRenderInst();
-    renderInst.drawTriangles(3);
-    renderInst.name = name;
-    renderInst.setDeviceProgram(program);
-    renderInst.inputState = null;
-    renderInst.setMegaStateFlags(fullscreenMegaState);
-    return renderInst;
-}
-
 const TIME_OF_DAY_ICON = `<svg viewBox="0 0 100 100" height="20" fill="white"><path d="M50,93.4C74,93.4,93.4,74,93.4,50C93.4,26,74,6.6,50,6.6C26,6.6,6.6,26,6.6,50C6.6,74,26,93.4,50,93.4z M37.6,22.8  c-0.6,2.4-0.9,5-0.9,7.6c0,18.2,14.7,32.9,32.9,32.9c2.6,0,5.1-0.3,7.6-0.9c-4.7,10.3-15.1,17.4-27.1,17.4  c-16.5,0-29.9-13.4-29.9-29.9C20.3,37.9,27.4,27.5,37.6,22.8z"/></svg>`;
 
 const enum SMGPass {
@@ -380,59 +224,12 @@ const enum SMGPass {
     BLOOM_COMBINE = 1 << 7,
 }
 
-export class WeirdFancyRenderTarget {
-    public colorAttachment = new ColorAttachment();
-    private renderPassDescriptor = makeEmptyRenderPassDescriptor();
-
-    constructor(public depthStencilAttachment: DepthStencilAttachment) {
-    }
-
-    public setParameters(device: GfxDevice, width: number, height: number, numSamples: number = DEFAULT_NUM_SAMPLES): void {
-        this.colorAttachment.setParameters(device, width, height, numSamples);
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.colorAttachment.destroy(device);
-    }
-
-    public createRenderPass(device: GfxDevice, renderPassDescriptor: GfxRenderPassDescriptor): GfxRenderPass {
-        copyRenderPassDescriptor(this.renderPassDescriptor, renderPassDescriptor);
-        this.renderPassDescriptor.colorAttachment = this.colorAttachment.gfxColorAttachment;
-        this.renderPassDescriptor.depthStencilAttachment = this.depthStencilAttachment.gfxDepthStencilAttachment;
-        return device.createRenderPass(this.renderPassDescriptor);
-    }
-}
-
-const bloomClearRenderPassDescriptor: GfxRenderPassDescriptor = {
-    colorAttachment: null,
-    depthStencilAttachment: null,
-    colorClearColor: TransparentBlack,
-    colorLoadDisposition: GfxLoadDisposition.CLEAR,
-    depthClearValue: 1.0,
-    depthLoadDisposition: GfxLoadDisposition.LOAD,
-    stencilClearValue: 0.0,
-    stencilLoadDisposition: GfxLoadDisposition.LOAD,
-};
-
 class SMGRenderer implements Viewer.SceneGfx {
     private sceneGraph: SceneGraph;
     public textureHolder: J3DTextureHolder;
 
-    // Bloom stuff.
-    private bloomTemplateRenderInst: GfxRenderInst;
-    private bloomParamsBuffer: GfxRenderBuffer;
-    private bloomRenderInstDownsample: GfxRenderInst;
-    private bloomRenderInstBlur: GfxRenderInst;
-    private bloomRenderInstBokeh: GfxRenderInst;
-    private bloomRenderInstCombine: GfxRenderInst;
-    private bloomSampler: GfxSampler;
-    private bloomTextureMapping: TextureMapping[] = nArray(1, () => new TextureMapping());
-    private bloomSceneColorTarget: WeirdFancyRenderTarget;
-    private bloomSceneColorTexture = new ColorTexture();
-    private bloomScratch1ColorTarget = new PostFXRenderTarget();
-    private bloomScratch1ColorTexture = new ColorTexture();
-    private bloomScratch2ColorTarget = new PostFXRenderTarget();
-    private bloomScratch2ColorTexture = new ColorTexture();
+    private bloomRenderer: BloomPostFXRenderer;
+    private bloomParameters = new BloomPostFXParameters();
 
     private mainRenderTarget = new BasicRenderTarget();
     private opaqueSceneTexture = new ColorTexture();
@@ -449,43 +246,7 @@ class SMGRenderer implements Viewer.SceneGfx {
             this.applyCurrentScenario();
         };
 
-        this.bloomSampler = device.createSampler({
-            wrapS: GfxWrapMode.CLAMP,
-            wrapT: GfxWrapMode.CLAMP,
-            minFilter: GfxTexFilterMode.BILINEAR,
-            magFilter: GfxTexFilterMode.BILINEAR,
-            mipFilter: GfxMipFilterMode.NO_MIP,
-            minLOD: 0,
-            maxLOD: 100,
-        });
-        this.bloomTextureMapping[0].gfxSampler = this.bloomSampler;
-
-        const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 1 }];
-        this.bloomParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_Params`);
-        const renderInstBuilder = new GfxRenderInstBuilder(device, BloomPassBaseProgram.programReflection, bindingLayouts, [this.bloomParamsBuffer]);
-
-        this.bloomTemplateRenderInst = renderInstBuilder.pushTemplateRenderInst();
-        renderInstBuilder.newUniformBufferInstance(this.bloomTemplateRenderInst, 0);
-        this.bloomSceneColorTarget = new WeirdFancyRenderTarget(this.mainRenderTarget.depthStencilAttachment);
-        this.bloomRenderInstDownsample = makeFullscreenPassRenderInst(renderInstBuilder, 'bloom downsample', new BloomPassFullscreenCopyProgram());
-        this.bloomRenderInstDownsample.passMask = SMGPass.BLOOM_DOWNSAMPLE;
-
-        this.bloomRenderInstBlur = makeFullscreenPassRenderInst(renderInstBuilder, 'bloom blur', new BloomPassBlurProgram());
-        this.bloomRenderInstBlur.passMask = SMGPass.BLOOM_BLUR;
-
-        this.bloomRenderInstBokeh = makeFullscreenPassRenderInst(renderInstBuilder, 'bloom bokeh', new BloomPassBokehProgram());
-        this.bloomRenderInstBokeh.passMask = SMGPass.BLOOM_BOKEH;
-
-        this.bloomRenderInstCombine = makeFullscreenPassRenderInst(renderInstBuilder, 'bloom combine', new BloomPassFullscreenCopyProgram());
-        this.bloomRenderInstCombine.passMask = SMGPass.BLOOM_COMBINE;
-        this.bloomRenderInstCombine.setMegaStateFlags({
-            blendMode: GfxBlendMode.ADD,
-            blendSrcFactor: GfxBlendFactor.ONE,
-            blendDstFactor: GfxBlendFactor.ONE,
-        });
-
-        renderInstBuilder.popTemplateRenderInst();
-        renderInstBuilder.finish(device, this.viewRenderer);
+        this.bloomRenderer = new BloomPostFXRenderer(device, this.mainRenderTarget, this.viewRenderer);
     }
 
     private applyCurrentScenario(): void {
@@ -546,14 +307,18 @@ class SMGRenderer implements Viewer.SceneGfx {
     }
 
     private prepareToRenderBloom(hostAccessPass: GfxHostAccessPass): void {
-        let offs = this.bloomTemplateRenderInst.getUniformBufferOffset(0);
-        const d = this.bloomParamsBuffer.mapBufferF32(offs, 4);
         // TODO(jstpierre): Dynamically adjust based on Area.
-        if (this.spawner.zones[0].zone.name === 'PeachCastleGardenGalaxy')
-            fillVec4(d, offs, 40/256, 60/256, 110/256);
-        else
-            fillVec4(d, offs, 25/256, 25/256, 50/256);
-        this.bloomParamsBuffer.prepareToRender(hostAccessPass);
+        if (this.spawner.zones[0].zone.name === 'PeachCastleGardenGalaxy') {
+            this.bloomParameters.blurStrength = 40/256;
+            this.bloomParameters.bokehStrength = 60/256;
+            this.bloomParameters.bokehCombineStrength = 110/256;
+        } else {
+            this.bloomParameters.blurStrength = 25/256;
+            this.bloomParameters.bokehStrength = 25/256;
+            this.bloomParameters.bokehCombineStrength = 50/256;
+        }
+
+        this.bloomRenderer.prepareToRender(hostAccessPass, this.bloomParameters);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
@@ -596,63 +361,7 @@ class SMGRenderer implements Viewer.SceneGfx {
             lastPassRenderer.endPass(null);
             device.submitPass(lastPassRenderer);
 
-            const bloomColorTargetScene = this.bloomSceneColorTarget;
-            const bloomColorTextureScene = this.bloomSceneColorTexture;
-            bloomColorTargetScene.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-            bloomColorTextureScene.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-            const bloomPassRenderer = bloomColorTargetScene.createRenderPass(device, bloomClearRenderPassDescriptor);
-            this.viewRenderer.executeOnPass(device, bloomPassRenderer, SMGPass.BLOOM);
-            bloomPassRenderer.endPass(bloomColorTextureScene.gfxTexture);
-            device.submitPass(bloomPassRenderer);
-
-            // Downsample.
-            const bloomWidth = viewerInput.viewportWidth >> 2;
-            const bloomHeight = viewerInput.viewportHeight >> 2;
-            this.viewRenderer.setViewport(bloomWidth, bloomHeight);
-
-            const bloomColorTargetDownsample = this.bloomScratch1ColorTarget;
-            const bloomColorTextureDownsample = this.bloomScratch1ColorTexture;
-            bloomColorTargetDownsample.setParameters(device, bloomWidth, bloomHeight, 1);
-            bloomColorTextureDownsample.setParameters(device, bloomWidth, bloomHeight);
-            this.bloomTextureMapping[0].gfxTexture = bloomColorTextureScene.gfxTexture;
-            this.bloomRenderInstDownsample.setSamplerBindingsFromTextureMappings(this.bloomTextureMapping);
-            const bloomDownsamplePassRenderer = bloomColorTargetDownsample.createRenderPass(device, noClearRenderPassDescriptor);
-            this.viewRenderer.executeOnPass(device, bloomDownsamplePassRenderer, SMGPass.BLOOM_DOWNSAMPLE);
-            bloomDownsamplePassRenderer.endPass(bloomColorTextureDownsample.gfxTexture);
-            device.submitPass(bloomDownsamplePassRenderer);
-
-            // Blur.
-            const bloomColorTargetBlur = this.bloomScratch2ColorTarget;
-            const bloomColorTextureBlur = this.bloomScratch2ColorTexture;
-            bloomColorTargetBlur.setParameters(device, bloomWidth, bloomHeight, 1);
-            bloomColorTextureBlur.setParameters(device, bloomWidth, bloomHeight);
-            this.bloomTextureMapping[0].gfxTexture = bloomColorTextureDownsample.gfxTexture;
-            this.bloomRenderInstBlur.setSamplerBindingsFromTextureMappings(this.bloomTextureMapping);
-            const bloomBlurPassRenderer = bloomColorTargetBlur.createRenderPass(device, noClearRenderPassDescriptor);
-            this.viewRenderer.executeOnPass(device, bloomBlurPassRenderer, SMGPass.BLOOM_BLUR);
-            bloomBlurPassRenderer.endPass(bloomColorTextureBlur.gfxTexture);
-            device.submitPass(bloomBlurPassRenderer);
-
-            // TODO(jstpierre): Downsample blur / bokeh as well.
-
-            // Bokeh-ify.
-            // We can ditch the second render target now, so just reuse it.
-            const bloomColorTargetBokeh = this.bloomScratch1ColorTarget;
-            const bloomColorTextureBokeh = this.bloomScratch1ColorTexture;
-            const bloomBokehPassRenderer = bloomColorTargetBokeh.createRenderPass(device, noClearRenderPassDescriptor);
-            this.bloomTextureMapping[0].gfxTexture = bloomColorTextureBlur.gfxTexture;
-            this.bloomRenderInstBokeh.setSamplerBindingsFromTextureMappings(this.bloomTextureMapping);
-            this.viewRenderer.executeOnPass(device, bloomBokehPassRenderer, SMGPass.BLOOM_BOKEH);
-            bloomBokehPassRenderer.endPass(bloomColorTextureBokeh.gfxTexture);
-            device.submitPass(bloomBokehPassRenderer);
-
-            // Combine.
-            const bloomCombinePassRenderer = this.mainRenderTarget.createRenderPass(device, noClearRenderPassDescriptor);
-            this.bloomTextureMapping[0].gfxTexture = bloomColorTextureBokeh.gfxTexture;
-            this.bloomRenderInstCombine.setSamplerBindingsFromTextureMappings(this.bloomTextureMapping);
-            this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
-            this.viewRenderer.executeOnPass(device, bloomCombinePassRenderer, SMGPass.BLOOM_COMBINE);
-            lastPassRenderer = bloomCombinePassRenderer;
+            lastPassRenderer = this.bloomRenderer.render(device, this.viewRenderer, this.mainRenderTarget, viewerInput);
         }
 
         return lastPassRenderer;
@@ -676,20 +385,6 @@ class SMGRenderer implements Viewer.SceneGfx {
 
         this.mainRenderTarget.destroy(device);
         this.opaqueSceneTexture.destroy(device);
-
-        this.bloomParamsBuffer.destroy(device);
-        device.destroyProgram(this.bloomRenderInstBlur.gfxProgram);
-        device.destroyProgram(this.bloomRenderInstBokeh.gfxProgram);
-        device.destroyProgram(this.bloomRenderInstCombine.gfxProgram);
-        device.destroyProgram(this.bloomRenderInstDownsample.gfxProgram);
-
-        device.destroySampler(this.bloomSampler);
-        this.bloomSceneColorTarget.destroy(device);
-        this.bloomSceneColorTexture.destroy(device);
-        this.bloomScratch1ColorTarget.destroy(device);
-        this.bloomScratch1ColorTexture.destroy(device);
-        this.bloomScratch2ColorTarget.destroy(device);
-        this.bloomScratch2ColorTexture.destroy(device);
     }
 }
 
@@ -720,6 +415,7 @@ interface Path {
 interface ObjInfo {
     objId: number;
     objName: string;
+    isMapPart: boolean;
     objArg0: number;
     objArg1: number;
     objArg2: number;
@@ -1472,7 +1168,10 @@ class SMGSpawner {
 
         case 'GrandStar':
             spawnGraph(name).then(([node, rarc]) => {
+                // Stars in cages are rotated by BreakableCage at a hardcoded '3.0'.
+                // See BreakableCage::exeWait.
                 node.modelInstance.setMaterialVisible('GrandStarEmpty', false);
+                node.setRotateSpeed(3);
             });
             return;
 
@@ -1570,7 +1269,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
     protected abstract getZoneMapFilename(zoneName: string): string;
     protected abstract getLightDataFilename(): string;
 
-    public parsePlacement(bcsv: BCSV.Bcsv, paths: Path[]): ObjInfo[] {
+    public parsePlacement(bcsv: BCSV.Bcsv, paths: Path[], isMapPart: boolean): ObjInfo[] {
         return bcsv.records.map((record): ObjInfo => {
             const objId = BCSV.getField<number>(bcsv, record, 'l_id', -1);
             const objName = BCSV.getField<string>(bcsv, record, 'name', 'Unknown');
@@ -1586,7 +1285,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
             const path = paths.find((path) => path.l_id === pathId) || null;
             const modelMatrix = mat4.create();
             computeModelMatrixFromRecord(modelMatrix, bcsv, record);
-            return { objId, objName, objArg0, objArg1, objArg2, objArg3, moveConditionType, rotateSpeed, rotateAccelType, rotateAxis, modelMatrix, path };
+            return { objId, objName, isMapPart, objArg0, objArg1, objArg2, objArg3, moveConditionType, rotateSpeed, rotateAccelType, rotateAxis, modelMatrix, path };
         });
     }
     
@@ -1634,9 +1333,9 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
             if (!rarc.findDir(placementDir))
                 continue;
             const paths = this.parsePaths(rarc.findDir(pathDir));
-            const objinfo = this.parsePlacement(BCSV.parse(rarc.findFileData(`${placementDir}/objinfo`)), paths);
-            const mappartsinfo = this.parsePlacement(BCSV.parse(rarc.findFileData(`${mappartsDir}/mappartsinfo`)), paths);
-            const stageobjinfo = this.parsePlacement(BCSV.parse(rarc.findFileData(`${placementDir}/stageobjinfo`)), paths);
+            const objinfo = this.parsePlacement(BCSV.parse(rarc.findFileData(`${placementDir}/objinfo`)), paths, false);
+            const mappartsinfo = this.parsePlacement(BCSV.parse(rarc.findFileData(`${mappartsDir}/mappartsinfo`)), paths, true);
+            const stageobjinfo = this.parsePlacement(BCSV.parse(rarc.findFileData(`${placementDir}/stageobjinfo`)), paths, false);
             layers.push({ index: i, objinfo, mappartsinfo, stageobjinfo });
         }
         return { name, layers };
