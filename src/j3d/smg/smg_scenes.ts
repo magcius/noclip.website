@@ -16,7 +16,6 @@ import { GXRenderHelperGfx } from '../../gx/gx_render';
 import { TextureOverride } from '../../TextureHolder';
 import { getPointBezier } from '../../Spline';
 import AnimationController from '../../AnimationController';
-import { RENDER_HACKS_ICON } from '../../bk/scenes';
 import * as Yaz0 from '../../compression/Yaz0';
 import * as BCSV from '../../luigis_mansion/bcsv';
 import * as UI from '../../ui';
@@ -210,8 +209,6 @@ class SceneGraph {
     }
 }
 
-const TIME_OF_DAY_ICON = `<svg viewBox="0 0 100 100" height="20" fill="white"><path d="M50,93.4C74,93.4,93.4,74,93.4,50C93.4,26,74,6.6,50,6.6C26,6.6,6.6,26,6.6,50C6.6,74,26,93.4,50,93.4z M37.6,22.8  c-0.6,2.4-0.9,5-0.9,7.6c0,18.2,14.7,32.9,32.9,32.9c2.6,0,5.1-0.3,7.6-0.9c-4.7,10.3-15.1,17.4-27.1,17.4  c-16.5,0-29.9-13.4-29.9-29.9C20.3,37.9,27.4,27.5,37.6,22.8z"/></svg>`;
-
 const enum SMGPass {
     SKYBOX = 1 << 0,
     OPAQUE = 1 << 1,
@@ -273,7 +270,7 @@ class SMGRenderer implements Viewer.SceneGfx {
     public createPanels(): UI.Panel[] {
         const scenarioPanel = new UI.Panel();
         scenarioPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
-        scenarioPanel.setTitle(TIME_OF_DAY_ICON, 'Scenario');
+        scenarioPanel.setTitle(UI.TIME_OF_DAY_ICON, 'Scenario');
 
         const scenarioNames = this.scenarioData.records.map((record) => {
             return BCSV.getField<string>(this.scenarioData, record, 'ScenarioName');
@@ -289,7 +286,7 @@ class SMGRenderer implements Viewer.SceneGfx {
 
         const renderHacksPanel = new UI.Panel();
         renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
-        renderHacksPanel.setTitle(RENDER_HACKS_ICON, 'Render Hacks');
+        renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
         const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
         enableVertexColorsCheckbox.onchanged = () => {
             for (let i = 0; i < this.sceneGraph.nodes.length; i++)

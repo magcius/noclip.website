@@ -18,7 +18,6 @@ import { GXRenderHelperGfx } from '../gx/gx_render';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
-import { RENDER_HACKS_ICON } from '../bk/scenes';
 import { calcModelMtx } from '../oot3d/cmb';
 
 const enum MKWiiPass { MAIN = 0x01 }
@@ -66,7 +65,7 @@ class MarioKartWiiRenderer implements Viewer.SceneGfx {
     public createPanels(): UI.Panel[] {
         const renderHacksPanel = new UI.Panel();
         renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
-        renderHacksPanel.setTitle(RENDER_HACKS_ICON, 'Render Hacks');
+        renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
         const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
         enableVertexColorsCheckbox.onchanged = () => {
             const v = enableVertexColorsCheckbox.checked;

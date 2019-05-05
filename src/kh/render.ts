@@ -13,7 +13,6 @@ import { GfxRenderInst, GfxRenderInstBuilder, GfxRenderInstViewRenderer } from '
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { mat4, vec2, vec4 } from 'gl-matrix';
-import { RENDER_HACKS_ICON } from '../bk/scenes';
 import { TextureHolder, TextureMapping } from '../TextureHolder';
 
 export function textureToCanvas(texture: BinTex.Texture): Viewer.Texture {
@@ -574,7 +573,7 @@ export class KingdomHeartsRenderer implements Viewer.SceneGfx {
     public createPanels(): UI.Panel[] {
         const renderHacksPanel = new UI.Panel();
         renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
-        renderHacksPanel.setTitle(RENDER_HACKS_ICON, 'Render Hacks');
+        renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
         const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
         enableVertexColorsCheckbox.onchanged = () => {
             this.sceneRenderers.forEach((sceneRenderer: SceneRenderer) => {

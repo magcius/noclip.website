@@ -15,8 +15,6 @@ import { transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDesc
 
 const pathBase = `bk`;
 
-export const RENDER_HACKS_ICON = `<svg viewBox="0 0 110 105" height="20" fill="white"><path d="M95,5v60H65c0-16.6-13.4-30-30-30V5H95z"/><path d="M65,65c0,16.6-13.4,30-30,30C18.4,95,5,81.6,5,65c0-16.6,13.4-30,30-30v30H65z"/></svg>`;
-
 class BKRenderer extends BasicRendererHelper implements Viewer.SceneGfx {
     private sceneRenderers: N64Renderer[] = [];
     public n64Datas: N64Data[] = [];
@@ -29,7 +27,7 @@ class BKRenderer extends BasicRendererHelper implements Viewer.SceneGfx {
         const renderHacksPanel = new UI.Panel();
 
         renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
-        renderHacksPanel.setTitle(RENDER_HACKS_ICON, 'Render Hacks');
+        renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
         const enableCullingCheckbox = new UI.Checkbox('Enable Culling', true);
         enableCullingCheckbox.onchanged = () => {
             for (let i = 0; i < this.sceneRenderers.length; i++)

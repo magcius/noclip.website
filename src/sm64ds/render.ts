@@ -21,9 +21,8 @@ import { GfxRenderInstViewRenderer, GfxRenderInstBuilder, GfxRenderInst, makeSor
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { BasicRenderTarget, depthClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
-import { getFormatName, parseTexImageParamWrapModeS, parseTexImageParamWrapModeT, Format } from './nitro_tex';
+import { getFormatName, parseTexImageParamWrapModeS, parseTexImageParamWrapModeT } from './nitro_tex';
 import { assert, nArray } from '../util';
-import { RENDER_HACKS_ICON } from '../bk/scenes';
 
 export class NITRO_Program extends DeviceProgram {
     public static a_Position = 0;
@@ -533,7 +532,7 @@ class SM64DSRenderer implements Viewer.SceneGfx {
     public createPanels(): UI.Panel[] {
         const renderHacksPanel = new UI.Panel();
         renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
-        renderHacksPanel.setTitle(RENDER_HACKS_ICON, 'Render Hacks');
+        renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
         const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
         enableVertexColorsCheckbox.onchanged = () => {
             const v = enableVertexColorsCheckbox.checked;

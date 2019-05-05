@@ -27,7 +27,6 @@ import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
 import { BufferFillerHelper } from '../gfx/helpers/UniformBufferHelpers';
 import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
-import { RENDER_HACKS_ICON } from '../bk/scenes';
 import AnimationController from '../AnimationController';
 import { prepareFrameDebugOverlayCanvas2D } from '../DebugJunk';
 
@@ -561,7 +560,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
         const renderHacksPanel = new UI.Panel();
         renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
-        renderHacksPanel.setTitle(RENDER_HACKS_ICON, 'Render Hacks');
+        renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
         const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
         enableVertexColorsCheckbox.onchanged = () => {
             for (let i = 0; i < this.roomRenderers.length; i++)

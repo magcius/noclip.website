@@ -16,7 +16,6 @@ import { SceneGroup } from '../viewer';
 import { assert, assertExists, hexzero, readString } from '../util';
 import { fetchData } from '../fetch';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
-import { RENDER_HACKS_ICON } from '../bk/scenes';
 import { mat4 } from 'gl-matrix';
 import AnimationController from '../AnimationController';
 import { TransparentBlack, colorNew, White } from '../Color';
@@ -73,7 +72,7 @@ export class OoT3DRenderer implements Viewer.SceneGfx {
     public createPanels(): UI.Panel[] {
         const renderHacksPanel = new UI.Panel();
         renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
-        renderHacksPanel.setTitle(RENDER_HACKS_ICON, 'Render Hacks');
+        renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
         
         const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
         enableVertexColorsCheckbox.onchanged = () => {
