@@ -12,14 +12,14 @@ import { BMD, BRK, BTK, BCK, LoopMode, BVA, BPK, BTP } from '../../j3d/j3d';
 import { BMDModel, BMDModelInstance, J3DTextureHolder } from '../../j3d/render';
 import * as RARC from '../../j3d/rarc';
 import { EFB_WIDTH, EFB_HEIGHT, Light } from '../../gx/gx_material';
-import { GXRenderHelperGfx } from '../../gx/gx_render';
+import { GXRenderHelperGfx, ColorKind } from '../../gx/gx_render';
 import { TextureOverride } from '../../TextureHolder';
 import { getPointBezier } from '../../Spline';
 import AnimationController from '../../AnimationController';
 import * as Yaz0 from '../../compression/Yaz0';
 import * as BCSV from '../../luigis_mansion/bcsv';
 import * as UI from '../../ui';
-import { colorFromRGBA } from '../../Color';
+import { colorFromRGBA, Color, colorNew, colorNewCopy, TransparentBlack } from '../../Color';
 import { BloomPostFXParameters, BloomPostFXRenderer } from './Bloom';
 
 const enum SceneGraphTag {
@@ -144,7 +144,7 @@ class Node {
         }
 
         const objName = this.objinfo.objName;
-        if (this.objinfo.isMapPart && this.objinfo.path) {
+        if (objName.startsWith('HoleBeltConveyerParts') && this.objinfo.path) {
             this.modelMatrixAnimator = new RailAnimationMapPart(this.objinfo.path, this.modelMatrix);
         } else if (objName === 'TicoRail') {
             this.modelMatrixAnimator = new RailAnimationTico(this.objinfo.path);
@@ -556,12 +556,16 @@ class ZoneNode {
     }
 }
 
+function colorSetFromCsvDataRecord(color: Color, bcsv: BCSV.Bcsv, record: BCSV.BcsvRecord, prefix: string): void {
+    const colorR = BCSV.getField(bcsv, record, `${prefix}R`, 0) / 0xFF;
+    const colorG = BCSV.getField(bcsv, record, `${prefix}G`, 0) / 0xFF;
+    const colorB = BCSV.getField(bcsv, record, `${prefix}B`, 0) / 0xFF;
+    const colorA = BCSV.getField(bcsv, record, `${prefix}A`, 0) / 0xFF;
+    colorFromRGBA(color, colorR, colorG, colorB, colorA);
+}
+
 function lightSetFromLightDataRecord(light: Light, bcsv: BCSV.Bcsv, record: BCSV.BcsvRecord, prefix: string): void {
-    const colorR = BCSV.getField(bcsv, record, `${prefix}ColorR`, 0) / 0xFF;
-    const colorG = BCSV.getField(bcsv, record, `${prefix}ColorG`, 0) / 0xFF;
-    const colorB = BCSV.getField(bcsv, record, `${prefix}ColorB`, 0) / 0xFF;
-    const colorA = BCSV.getField(bcsv, record, `${prefix}ColorA`, 0) / 0xFF;
-    colorFromRGBA(light.Color, colorR, colorG, colorB, colorA);
+    colorSetFromCsvDataRecord(light.Color, bcsv, record, `${prefix}Color`);
 
     const posX = BCSV.getField(bcsv, record, `${prefix}PosX`, 0);
     const posY = BCSV.getField(bcsv, record, `${prefix}PosY`, 0);
@@ -678,17 +682,23 @@ class SMGSpawner {
 
     private nodeSetLightName(node: Node, lightName: string): void {
         // TODO(jstpierre): Parse areas, gather proper lights through that system.
-        const light = this.lightData.records.find((record) => BCSV.getField<string>(this.lightData, record, 'AreaLightName', '') === lightName);
+        const lightRecord = this.lightData.records.find((record) => BCSV.getField<string>(this.lightData, record, 'AreaLightName', '') === lightName);
 
-        const light0 = node.modelInstance.getGXLightReference(0);
-        const light1 = node.modelInstance.getGXLightReference(1);
+        const modelInstance = node.modelInstance;
+
+        const light0 = modelInstance.getGXLightReference(0);
+        const light1 = modelInstance.getGXLightReference(1);
+        const color = colorNew(1, 1, 1, 1);
         if (node.planetRecord !== null) {
-            lightSetFromLightDataRecord(light0, this.lightData, light, `PlanetLight0`);
-            lightSetFromLightDataRecord(light1, this.lightData, light, `PlanetLight1`);
+            lightSetFromLightDataRecord(light0, this.lightData, lightRecord, `PlanetLight0`);
+            lightSetFromLightDataRecord(light1, this.lightData, lightRecord, `PlanetLight1`);
+            colorSetFromCsvDataRecord(color, this.lightData, lightRecord, `PlanetAmbient`);
         } else {
-            lightSetFromLightDataRecord(light0, this.lightData, light, `StrongLight0`);
-            lightSetFromLightDataRecord(light1, this.lightData, light, `StrongLight1`);
+            lightSetFromLightDataRecord(light0, this.lightData, lightRecord, `StrongLight0`);
+            lightSetFromLightDataRecord(light1, this.lightData, lightRecord, `StrongLight1`);
+            colorSetFromCsvDataRecord(color, this.lightData, lightRecord, `StrongAmbient`);
         }
+        modelInstance.setColorOverride(ColorKind.AMB0, color, true);
     }
 
     public spawnObject(device: GfxDevice, zone: ZoneNode, layer: number, objinfo: ObjInfo, modelMatrixBase: mat4): void {
@@ -727,13 +737,14 @@ class SMGSpawner {
                 }
 
                 const node = new Node(objinfo, modelInstance, modelMatrixBase, modelInstance.animationController);
+                node.planetRecord = planetRecord;
                 node.layer = layer;
                 zone.objects.push(node);
 
-                // TODO(jstpierre):
+                // TODO(jstpierre): Parse out the proper area info.
                 const lightName = '[共通]昼（どら焼き）';
                 this.nodeSetLightName(node, lightName);
-                modelInstance.setGXLight(2, this.backlight);
+                modelInstance.getGXLightReference(2).copy(this.backlight);
 
                 this.applyAnimations(node, rarc, animOptions);
 

@@ -31,7 +31,6 @@ export interface ObjectRenderer {
     setTexturesEnabled(v: boolean): void
 }
 
-const scratchLight = new GX_Material.Light();
 const bboxScratch = new AABB();
 const screenProjection = new ScreenSpaceProjection();
 export class BMDObjectRenderer implements ObjectRenderer {
@@ -101,13 +100,13 @@ export class BMDObjectRenderer implements ObjectRenderer {
             }
         }
 
-        GX_Material.lightSetWorldPosition(scratchLight, viewerInput.camera, 250, 250, 250);
-        GX_Material.lightSetWorldDirection(scratchLight, viewerInput.camera, -250, -250, -250);
+        const light = this.modelInstance.getGXLightReference(0);
+        GX_Material.lightSetWorldPosition(light, viewerInput.camera, 250, 250, 250);
+        GX_Material.lightSetWorldDirection(light, viewerInput.camera, -250, -250, -250);
         // Toon lighting works by setting the color to red.
-        colorFromRGBA(scratchLight.Color, 1, 0, 0, 0);
-        vec3.set(scratchLight.CosAtten, 1.075, 0, 0);
-        vec3.set(scratchLight.DistAtten, 1.075, 0, 0);
-        this.modelInstance.setGXLight(0, scratchLight);
+        colorFromRGBA(light.Color, 1, 0, 0, 0);
+        vec3.set(light.CosAtten, 1.075, 0, 0);
+        vec3.set(light.DistAtten, 1.075, 0, 0);
 
         this.modelInstance.prepareToRender(renderHelper, viewerInput);
         for (let i = 0; i < this.childObjects.length; i++)

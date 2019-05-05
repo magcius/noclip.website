@@ -1,5 +1,5 @@
 
-import { mat4, mat2d } from 'gl-matrix';
+import { mat4 } from 'gl-matrix';
 
 import { BMD, BMT, HierarchyNode, HierarchyType, MaterialEntry, Shape, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData, DRW1MatrixKind, TTK1Animator, ANK1Animator, bindANK1Animator, BTI, bindVAF1Animator, VAF1, VAF1Animator, TPT1, bindTPT1Animator, TPT1Animator } from './j3d';
 import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } from './j3d';
@@ -17,7 +17,7 @@ import { GfxBufferCoalescer, GfxCoalescedBuffers } from '../gfx/helpers/BufferHe
 import { ViewerRenderInput } from '../viewer';
 import { GfxRenderInst, GfxRenderInstBuilder, setSortKeyDepth, GfxRendererLayer, makeSortKey, setSortKeyBias } from '../gfx/render/GfxRenderer';
 import { colorCopy } from '../Color';
-import { computeNormalMatrix, matrixHasUniformScale } from '../MatrixHelpers';
+import { computeNormalMatrix } from '../MatrixHelpers';
 
 export class J3DTextureHolder extends GXTextureHolder<TEX1_TextureData> {
     public addJ3DTextures(device: GfxDevice, bmd: BMD, bmt: BMT | null = null) {
@@ -881,12 +881,14 @@ export class BMDModelInstance {
         this.alphaOverrides[colorKind] = useAlpha;
     }
 
+    /**
+     * Returns the {@link GX_Material.Light} at index {@param i} as used by this model instance.
+     *
+     * This object is not a copy; setting parameters on this object will directly affect
+     * the render for the next frame.
+     */
     public getGXLightReference(i: number): GX_Material.Light {
         return this.materialInstanceState.lights[i];
-    }
-
-    public setGXLight(i: number, light: GX_Material.Light): void {
-        this.materialInstanceState.lights[i].copy(light);
     }
 
     /**
@@ -948,6 +950,12 @@ export class BMDModelInstance {
         this.vaf1Animator = bindVAF1Animator(animationController, vaf1);
     }
 
+    /**
+     * Returns the matrix for the joint with name {@param jointName}.
+     *
+     * This object is not a copy; if an animation updates the joint, the values in this object will be
+     * updated as well. You can use this as a way to parent an object to this one.
+     */
     public getJointMatrixReference(jointName: string): mat4 {
         // Find the matrix that corresponds to the bone.
         const parentJointIndex = this.bmdModel.bmd.jnt1.joints.findIndex((j) => j.name === jointName);

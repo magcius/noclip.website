@@ -1,11 +1,11 @@
 
 // Implements Nintendo's J3D formats (BMD, BDL, BTK, etc.)
 
-import { mat4, quat, vec3 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { Endianness } from '../endian';
-import { assert, readString, assertExists, hexdump } from '../util';
+import { assert, readString, assertExists } from '../util';
 
 import { compileVtxLoader, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexLayout } from '../gx/gx_displaylist';
 import * as GX from '../gx/gx_enum';
@@ -32,6 +32,7 @@ function readStringTable(buffer: ArrayBufferSlice, offs: number): string[] {
     return strings;
 }
 
+//#region J3DModel
 //#region INF1
 export enum HierarchyType {
     End = 0x00,
@@ -1255,7 +1256,7 @@ export class BMD {
     public tex1: TEX1;
 }
 //#endregion
-
+//#endregion J3DModel
 //#region BMT
 export class BMT {
     public static parse(buffer: ArrayBufferSlice): BMT {
@@ -1278,7 +1279,6 @@ export class BMT {
     public tex1: TEX1;
 }
 //#endregion
-
 //#region BTI
 export class BTI {
     texture: BTI_Texture;
@@ -1410,7 +1410,7 @@ function translateAnimationTrack(data: Float32Array | Int16Array, scale: number,
     }
 }
 //#endregion
-
+//#region J3DAnmTextureSRTKey
 //#region TTK1
 interface TTK1AnimationEntry {
     materialName: string;
@@ -1531,7 +1531,6 @@ export function bindTTK1Animator(animationController: AnimationController, ttk1:
     return new TTK1Animator(animationController, ttk1, animationEntry);
 }
 //#endregion
-
 //#region BTK
 export class BTK {
     public static parse(buffer: ArrayBufferSlice): BTK {
@@ -1549,7 +1548,8 @@ export class BTK {
     public ttk1: TTK1;
 }
 //#endregion
-
+//#endregion
+//#region J3DAnmTevRegKey
 //#region TRK1
 interface TRK1AnimationEntry {
     materialName: string;
@@ -1684,7 +1684,6 @@ export function bindTRK1Animator(animationController: AnimationController, trk1:
     return new TRK1Animator(animationController, trk1, animationEntry);
 }
 //#endregion
-
 //#region BRK
 export class BRK {
     public static parse(buffer: ArrayBufferSlice): BRK {
@@ -1701,7 +1700,8 @@ export class BRK {
     public trk1: TRK1;
 }
 //#endregion
-
+//#endregion
+//#region J3DAnmColorKey
 //#region PAK1
 function readPAK1Chunk(buffer: ArrayBufferSlice): TRK1 {
     const view = buffer.createDataView();
@@ -1753,7 +1753,6 @@ function readPAK1Chunk(buffer: ArrayBufferSlice): TRK1 {
     return { duration, loopMode, animationEntries };
 }
 //#endregion
-
 //#region BPK
 export class BPK {
     public static parse(buffer: ArrayBufferSlice): BPK {
@@ -1770,7 +1769,8 @@ export class BPK {
     public pak1: TRK1;
 }
 //#endregion
-
+//#endregion
+//#region J3DAnmTransformKey
 //#region ANK1
 interface JointAnimationEntry {
     index: number;
@@ -1869,7 +1869,6 @@ export function bindANK1Animator(animationController: AnimationController, ank1:
     return new ANK1Animator(animationController, ank1);
 }
 //#endregion
-
 //#region BCK
 export class BCK {
     public static parse(buffer: ArrayBufferSlice): BCK {
@@ -1886,7 +1885,8 @@ export class BCK {
     public ank1: ANK1;
 }
 //#endregion
-
+//#endregion
+//#region J3DAnmTexPattern
 //#region TPT1
 interface TPT1AnimationEntry {
     materialName: string;
@@ -1961,7 +1961,6 @@ export function bindTPT1Animator(animationController: AnimationController, tpt1:
     return new TPT1Animator(animationController, tpt1, animationEntry);
 }
 //#endregion
-
 //#region BTP
 export class BTP {
     public static parse(buffer: ArrayBufferSlice): BTP {
@@ -1978,7 +1977,8 @@ export class BTP {
     public tpt1: TPT1;
 }
 //#endregion
-
+//#endregion
+//#region J3DAnmVisibilityFull
 //#region VAF1
 
 // TODO(jstpierre): Add a more memory efficient version than this?
@@ -2043,7 +2043,6 @@ export function bindVAF1Animator(animationController: AnimationController, vaf1:
     return new VAF1Animator(animationController, vaf1);
 }
 //#endregion
-
 //#region BVA
 export class BVA {
     public static parse(buffer: ArrayBufferSlice): BVA {
@@ -2059,4 +2058,5 @@ export class BVA {
 
     public vaf1: VAF1;
 }
+//#endregion
 //#endregion
