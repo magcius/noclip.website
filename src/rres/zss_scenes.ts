@@ -209,6 +209,10 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
 
                     const model = this.modelCache.getModel(device, this.renderHelper, mdl0, materialHacks);
                     const modelInstance = new MDL0ModelInstance(device, this.renderHelper, this.textureHolder, model, roomArchiveFile.name);
+                    modelInstance.bindRRESAnimations(this.animationController, roomRRES, null);
+                    modelInstance.bindRRESAnimations(this.animationController, this.commonRRES, `MA01`);
+                    modelInstance.bindRRESAnimations(this.animationController, this.commonRRES, `MA02`);
+                    modelInstance.bindRRESAnimations(this.animationController, this.commonRRES, `MA04`);
                     modelInstance.passMask = ZSSPass.OPAQUE;
                     this.modelInstances.push(modelInstance);
 
