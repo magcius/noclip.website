@@ -20,6 +20,7 @@ import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx
 import { fullscreenMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { AABB } from '../Geometry';
 import { colorCopy } from '../Color';
+import * as UI from '../ui';
 
 export class TPLTextureHolder extends GXTextureHolder<TPL.TPLTexture> {
     public addTPLTextures(device: GfxDevice, tpl: TPL.TPL): void {
@@ -134,6 +135,14 @@ class Command_Material {
         this.templateRenderInst.sortKey = makeSortKey(layer, this.materialHelper.programKey);
         this.isTranslucent = material.materialLayer === MaterialLayer.BLEND;
         this.templateRenderInst.setMegaStateFlags({ polygonOffset: material.materialLayer === MaterialLayer.ALPHA_TEST });
+    }
+
+    public setVertexColorsEnabled(v: boolean): void {
+        this.materialHelper.setVertexColorsEnabled(v);
+    }
+
+    public setTexturesEnabled(v: boolean): void {
+        this.materialHelper.setTexturesEnabled(v);
     }
 
     private getRendererLayer(materialLayer: MaterialLayer): GfxRendererLayer {
@@ -404,6 +413,24 @@ export class WorldRenderer implements Viewer.SceneGfx {
         this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
         this.viewRenderer.executeOnPass(device, passRenderer);
         return passRenderer;
+    }
+
+    public createPanels(): UI.Panel[] {
+        const renderHacksPanel = new UI.Panel();
+        renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
+        const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
+        enableVertexColorsCheckbox.onchanged = () => {
+            for (let i = 0; i < this.materialCommands.length; i++)
+                this.materialCommands[i].setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
+        const enableTextures = new UI.Checkbox('Enable Textures', true);
+        enableTextures.onchanged = () => {
+            for (let i = 0; i < this.materialCommands.length; i++)
+                this.materialCommands[i].setTexturesEnabled(enableTextures.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableTextures.elem);
+        return [renderHacksPanel];
     }
 
     public destroy(device: GfxDevice): void {
