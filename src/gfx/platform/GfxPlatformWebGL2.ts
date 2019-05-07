@@ -8,6 +8,7 @@ import { assert, assertExists } from '../../util';
 import { copyMegaState, defaultMegaState, fullscreenMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
 import { IS_DEVELOPMENT } from '../../BuildVersion';
 import { White, colorEqual, colorCopy } from '../../Color';
+import * as Sentry from '@sentry/browser';
 
 export class FullscreenCopyProgram extends FullscreenProgram {
     public frag: string = `
@@ -593,6 +594,15 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             if (navigator.platform === 'MacIntel' && !renderer.includes('NVIDIA'))
                 this.programBugDefines += '#define _BUG_AMD_ROW_MAJOR';
         }
+
+        // Record context losses with Sentry.
+        gl.canvas.addEventListener('webglcontextlost', (e_) => {
+            // Work-around for TypeScript not having bindings for webglcontextlost.
+            const e = e_ as WebGLContextEvent;
+            Sentry.addBreadcrumb({
+                message: `WebGL Context Loss: ${e.statusMessage}`,
+            });
+        });
     }
 
     //#region GfxSwapChain
@@ -1101,6 +1111,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
             return pipeline.ready;
         }
+    }
+
+    public queryPlatformAvailable(): boolean {
+        return this.gl.isContextLost();
     }
 
     public setResourceName(o: GfxResource, name: string): void {

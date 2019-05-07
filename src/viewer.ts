@@ -209,7 +209,7 @@ export class Viewer {
 export interface SceneDesc {
     id: string;
     name: string;
-    createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<SceneGfx> | null;
+    createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<SceneGfx>;
 }
 
 export interface SceneGroup {
@@ -313,4 +313,3 @@ export function makeErrorUI(errorCode: InitErrorCode): DocumentFragment {
     else
         throw "whoops";
 }
-

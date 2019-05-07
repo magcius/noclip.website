@@ -308,6 +308,7 @@ export interface GfxDevice {
     queryInputState(o: GfxInputState): GfxInputStateReflection;
     queryTextureFormatSupported(format: GfxFormat): boolean;
     queryPipelineReady(o: GfxRenderPipeline): boolean;
+    queryPlatformAvailable(): boolean;
 
     // Debugging and high-level queries.
     setResourceName(o: GfxResource, s: string): void;
