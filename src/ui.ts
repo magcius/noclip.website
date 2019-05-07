@@ -67,7 +67,7 @@ function setElementHighlighted(elem: HTMLElement, highlighted: boolean, normalTe
         elem.style.backgroundColor = HIGHLIGHT_COLOR;
         elem.style.color = 'black';
     } else {
-        elem.style.backgroundColor = '';
+        elem.style.backgroundColor = '#411';
         elem.style.color = normalTextColor;
     }
 }
@@ -703,7 +703,6 @@ export class Panel implements Widget {
         this.header.style.lineHeight = '28px';
         this.header.style.width = '400px';
         this.header.style.margin = '0';
-        this.header.style.color = HIGHLIGHT_COLOR;
         this.header.style.fontSize = '100%';
         this.header.style.textAlign = 'center';
         this.header.style.cursor = 'pointer';
@@ -1832,7 +1831,7 @@ export class UI {
         this.statisticsPanel = new StatisticsPanel(viewer);
         this.about = new About();
 
-        this.setScenePanels([]);
+        this.setScene(null);
 
         this.elem = this.toplevel;
     }
@@ -1856,8 +1855,15 @@ export class UI {
         setChildren(this.panelContainer, panels.map((panel) => panel.elem));
     }
 
-    public setScenePanels(panels: Panel[]): void {
-        this.setPanels([this.sceneSelect, ...panels, this.textureViewer, this.saveStatesPanel, this.viewerSettings, this.statisticsPanel, this.about]);
+    public setScene(scene: Viewer.SceneGfx | null): void {
+        if (scene !== null) {
+            let panels: Panel[] = [];
+            if (scene.createPanels !== undefined)
+                panels = scene.createPanels();
+            this.setPanels([this.sceneSelect, ...panels, this.textureViewer, this.saveStatesPanel, this.viewerSettings, this.statisticsPanel, this.about]);
+        } else {
+            this.setPanels([this.sceneSelect, this.about]);
+        }
     }
 
     public setPanelsAutoClosed(v: boolean): void {

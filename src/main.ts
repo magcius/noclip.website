@@ -495,10 +495,7 @@ class Main {
             this._saveState();
         };
 
-        if (scene.createPanels !== undefined)
-            this.ui.setScenePanels(scene.createPanels());
-        else
-            this.ui.setScenePanels([]);
+        this.ui.setScene(scene);
 
         const sceneDescId = this._getCurrentSceneDescId();
         this.saveManager.setCurrentSceneDescId(sceneDescId);
