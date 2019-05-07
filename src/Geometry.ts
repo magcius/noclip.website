@@ -122,7 +122,7 @@ export class AABB {
         const extX = (this.maxX - this.minX);
         const extY = (this.maxY - this.minY);
         const extZ = (this.maxZ - this.minZ);
-        const chord = Math.sqrt(extX*extX + extY*extY + extZ*extZ);
+        const chord = Math.hypot(extX, extY, extZ);
         return chord / 2;
     }
 

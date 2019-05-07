@@ -1,10 +1,11 @@
 
-import { mat4 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
 
 // Misc bits of 3D math.
 
 export const enum MathConstants {
     RAD_TO_DEG = 0.01745, // Math.PI / 180,
+    EPSILON = 0.000001,
 }
 
 /**
@@ -54,7 +55,10 @@ export function computeModelMatrixSRT(dst: mat4, scaleX: number, scaleY: number,
  * To determine whether the model matrix is uniformly scaled, the helper function
  * {@function matrixHasUniformScale} is provided.
  */
-export function computeNormalMatrix(dst: mat4, m: mat4, isUniformScale: boolean = false): void {
+export function computeNormalMatrix(dst: mat4, m: mat4, isUniformScale?: boolean): void {
+    if (isUniformScale === undefined)
+        isUniformScale = matrixHasUniformScale(m);
+
     if (dst !== m)
         mat4.copy(dst, m);
     dst[12] = 0;
@@ -67,9 +71,20 @@ export function computeNormalMatrix(dst: mat4, m: mat4, isUniformScale: boolean 
     }
 }
 
+const scratchVec3 = vec3.create();
+
 /**
  * Returns whether matrix {@param m} has a uniform scale.
  */
-export function matrixHasUniformScale(m: mat4): boolean {
-    return m[0] === m[5] && m[0] === m[10];
+export function matrixHasUniformScale(m: mat4, v: vec3 = scratchVec3): boolean {
+    mat4.getScaling(v, m);
+
+    // Within reason.
+    return (Math.abs(v[0] - v[1]) <= MathConstants.EPSILON*Math.max(1, Math.abs(v[0]), Math.abs(v[1])) &&
+            Math.abs(v[0] - v[2]) <= MathConstants.EPSILON*Math.max(1, Math.abs(v[0]), Math.abs(v[1])));
+}
+
+// For reference. Please inline where used.
+function compareEpsilon(a: number, b: number) {
+    return Math.abs(a-b) <= MathConstants.EPSILON*Math.max(1, Math.abs(a), Math.abs(b));
 }

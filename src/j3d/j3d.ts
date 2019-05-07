@@ -15,7 +15,7 @@ import { ColorKind } from '../gx/gx_render';
 import { AABB } from '../Geometry';
 import { getPointHermite } from '../Spline';
 import { Graph, cv } from '../DebugJunk';
-import { computeModelMatrixSRT } from '../MathHelpers';
+import { computeModelMatrixSRT, MathConstants } from '../MathHelpers';
 
 function readStringTable(buffer: ArrayBufferSlice, offs: number): string[] {
     const view = buffer.createDataView(offs);
@@ -1825,9 +1825,9 @@ export class ANK1Animator {
         const scaleX = sampleAnimationData(entry.scaleX, animFrame);
         const scaleY = sampleAnimationData(entry.scaleY, animFrame);
         const scaleZ = sampleAnimationData(entry.scaleZ, animFrame);
-        const rotationX = sampleAnimationData(entry.rotationX, animFrame) * 180;
-        const rotationY = sampleAnimationData(entry.rotationY, animFrame) * 180;
-        const rotationZ = sampleAnimationData(entry.rotationZ, animFrame) * 180;
+        const rotationX = sampleAnimationData(entry.rotationX, animFrame) * Math.PI;
+        const rotationY = sampleAnimationData(entry.rotationY, animFrame) * Math.PI;
+        const rotationZ = sampleAnimationData(entry.rotationZ, animFrame) * Math.PI;
         const translationX = sampleAnimationData(entry.translationX, animFrame);
         const translationY = sampleAnimationData(entry.translationY, animFrame);
         const translationZ = sampleAnimationData(entry.translationZ, animFrame);
