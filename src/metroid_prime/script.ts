@@ -6,6 +6,7 @@ import { mat4, vec3 } from 'gl-matrix';
 import { CMDL } from './cmdl';
 import { Color } from "../gx/gx_material";
 import { colorFromRGBA } from "../Color";
+import { computeModelMatrixSRT } from "../MathHelpers";
 
 export const enum MP1EntityType {
     Actor                   = 0x00,
@@ -96,36 +97,6 @@ export interface ScriptLayer {
     entities: Entity[];
 }
 
-function calcModelMtx(dst: mat4, scaleX: number, scaleY: number, scaleZ: number, rotationX: number, rotationY: number, rotationZ: number, translationX: number, translationY: number, translationZ: number): void {
-    const rX = Math.PI / 180 * rotationX;
-    const rY = Math.PI / 180 * rotationY;
-    const rZ = Math.PI / 180 * rotationZ;
-
-    const sinX = Math.sin(rX), cosX = Math.cos(rX);
-    const sinY = Math.sin(rY), cosY = Math.cos(rY);
-    const sinZ = Math.sin(rZ), cosZ = Math.cos(rZ);
-
-    dst[0] =  scaleX * (cosY * cosZ);
-    dst[1] =  scaleX * (sinZ * cosY);
-    dst[2] =  scaleX * (-sinY);
-    dst[3] =  0.0;
-
-    dst[4] =  scaleY * (sinX * cosZ * sinY - cosX * sinZ);
-    dst[5] =  scaleY * (sinX * sinZ * sinY + cosX * cosZ);
-    dst[6] =  scaleY * (sinX * cosY);
-    dst[7] =  0.0;
-
-    dst[8] =  scaleZ * (cosX * cosZ * sinY + sinX * sinZ);
-    dst[9] =  scaleZ * (cosX * sinZ * sinY - sinX * cosZ);
-    dst[10] = scaleZ * (cosY * cosX);
-    dst[11] = 0.0;
-
-    dst[12] = translationX;
-    dst[13] = translationY;
-    dst[14] = translationZ;
-    dst[15] = 1.0;
-}
-
 function readName(buffer: ArrayBufferSlice, offs: number, ent: Entity) : number {
     ent.name = readString(buffer, offs);
     return ent.name.length + 1;
@@ -162,7 +133,7 @@ function readTransform(buffer: ArrayBufferSlice, offs: number, ent: Entity, hasP
     }
 
     ent.modelMatrix = mat4.create();
-    calcModelMtx(ent.modelMatrix, scale[0], scale[1], scale[2], rotation[0], rotation[1], rotation[2], position[0], position[1], position[2]);
+    computeModelMatrixSRT(ent.modelMatrix, scale[0], scale[1], scale[2], rotation[0], rotation[1], rotation[2], position[0], position[1], position[2]);
     return offs - originalOffs;
 }
 

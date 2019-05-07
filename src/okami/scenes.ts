@@ -10,11 +10,11 @@ import { mat4 } from "gl-matrix";
 import * as ARC from './arc';
 import * as BRRES from '../rres/brres';
 import { assert, readString, hexzero } from "../util";
-import { calcModelMtx } from "../oot3d/cmb";
 import { BasicRendererHelper } from "../oot3d/render";
 import { GXRenderHelperGfx } from "../gx/gx_render";
 import AnimationController from "../AnimationController";
 import { GXMaterialHacks } from "../gx/gx_material";
+import { computeModelMatrixSRT } from "../MathHelpers";
 
 const pathBase = `okami`;
 
@@ -61,7 +61,7 @@ function parseSCR(buffer: ArrayBufferSlice): SCR {
             const translationX = view.getInt16(instanceOffs + 0x2A);
             const translationY = view.getInt16(instanceOffs + 0x2C);
             const translationZ = view.getInt16(instanceOffs + 0x2E);
-            calcModelMtx(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+            computeModelMatrixSRT(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
         } else if (storageMode === 0x00) {
             index = i;
             materialFlags = 0x00;
@@ -75,7 +75,7 @@ function parseSCR(buffer: ArrayBufferSlice): SCR {
             const translationX = view.getFloat32(instanceOffs + 0x20);
             const translationY = view.getFloat32(instanceOffs + 0x24);
             const translationZ = view.getFloat32(instanceOffs + 0x28);
-            calcModelMtx(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+            computeModelMatrixSRT(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
         }
 
         instances.push({ index, materialFlags, modelMatrix });
@@ -281,7 +281,7 @@ class OkamiSceneDesc implements Viewer.SceneDesc {
             tableIdx += 0x20;
 
             const modelMatrix = mat4.create();
-            calcModelMtx(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+            computeModelMatrixSRT(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
 
             const filename = getObjectFilename(objectTypeId, objectId);
             if (filename === null)

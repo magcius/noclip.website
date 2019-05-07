@@ -15,6 +15,7 @@ import { ColorKind } from '../gx/gx_render';
 import { AABB } from '../Geometry';
 import { getPointHermite } from '../Spline';
 import { Graph, cv } from '../DebugJunk';
+import { computeModelMatrixSRT } from '../MathHelpers';
 
 function readStringTable(buffer: ArrayBufferSlice, offs: number): string[] {
     const view = buffer.createDataView(offs);
@@ -330,36 +331,6 @@ export interface JNT1 {
     joints: Joint[];
 }
 
-function calcModelMtx(dst: mat4, scaleX: number, scaleY: number, scaleZ: number, rotationX: number, rotationY: number, rotationZ: number, translationX: number, translationY: number, translationZ: number): void {
-    const rX = Math.PI / 180 * rotationX;
-    const rY = Math.PI / 180 * rotationY;
-    const rZ = Math.PI / 180 * rotationZ;
-
-    const sinX = Math.sin(rX), cosX = Math.cos(rX);
-    const sinY = Math.sin(rY), cosY = Math.cos(rY);
-    const sinZ = Math.sin(rZ), cosZ = Math.cos(rZ);
-
-    dst[0] =  scaleX * (cosY * cosZ);
-    dst[1] =  scaleX * (sinZ * cosY);
-    dst[2] =  scaleX * (-sinY);
-    dst[3] =  0.0;
-
-    dst[4] =  scaleY * (sinX * cosZ * sinY - cosX * sinZ);
-    dst[5] =  scaleY * (sinX * sinZ * sinY + cosX * cosZ);
-    dst[6] =  scaleY * (sinX * cosY);
-    dst[7] =  0.0;
-
-    dst[8] =  scaleZ * (cosX * cosZ * sinY + sinX * sinZ);
-    dst[9] =  scaleZ * (cosX * sinZ * sinY - sinX * cosZ);
-    dst[10] = scaleZ * (cosY * cosX);
-    dst[11] = 0.0;
-
-    dst[12] = translationX;
-    dst[13] = translationY;
-    dst[14] = translationZ;
-    dst[15] = 1.0;
-}
-
 function readJNT1Chunk(buffer: ArrayBufferSlice): JNT1 {
     const view = buffer.createDataView();
 
@@ -383,9 +354,9 @@ function readJNT1Chunk(buffer: ArrayBufferSlice): JNT1 {
         const scaleX = view.getFloat32(jointDataTableIdx + 0x04);
         const scaleY = view.getFloat32(jointDataTableIdx + 0x08);
         const scaleZ = view.getFloat32(jointDataTableIdx + 0x0C);
-        const rotationX = view.getInt16(jointDataTableIdx + 0x10) / 0x7FFF * 180;
-        const rotationY = view.getInt16(jointDataTableIdx + 0x12) / 0x7FFF * 180;
-        const rotationZ = view.getInt16(jointDataTableIdx + 0x14) / 0x7FFF * 180;
+        const rotationX = view.getInt16(jointDataTableIdx + 0x10) / 0x7FFF * Math.PI;
+        const rotationY = view.getInt16(jointDataTableIdx + 0x12) / 0x7FFF * Math.PI;
+        const rotationZ = view.getInt16(jointDataTableIdx + 0x14) / 0x7FFF * Math.PI;
         const translationX = view.getFloat32(jointDataTableIdx + 0x18);
         const translationY = view.getFloat32(jointDataTableIdx + 0x1C);
         const translationZ = view.getFloat32(jointDataTableIdx + 0x20);
@@ -398,7 +369,7 @@ function readJNT1Chunk(buffer: ArrayBufferSlice): JNT1 {
         const bboxMaxZ = view.getFloat32(jointDataTableIdx + 0x3C);
         const bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
         const matrix = mat4.create();
-        calcModelMtx(matrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+        computeModelMatrixSRT(matrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
         joints.push({ name, matrix, scaleX, scaleY, scaleZ, boundingSphereRadius, bbox });
     }
 
@@ -1860,7 +1831,7 @@ export class ANK1Animator {
         const translationX = sampleAnimationData(entry.translationX, animFrame);
         const translationY = sampleAnimationData(entry.translationY, animFrame);
         const translationZ = sampleAnimationData(entry.translationZ, animFrame);
-        calcModelMtx(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+        computeModelMatrixSRT(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
         return true;
     }
 }

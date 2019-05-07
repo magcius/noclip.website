@@ -13,6 +13,8 @@ import { AABB } from '../Geometry';
 import AnimationController from '../AnimationController';
 import { GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
 import { colorFromRGBA8 } from '../Color';
+import { computeModelMatrixSRT, MathConstants } from '../MathHelpers';
+import { getPointHermite } from '../Spline';
 
 export interface TTYDWorld {
     information: Information;
@@ -142,43 +144,13 @@ interface MaterialAnimationTrackKeyframe {
     rotation: AnimationTrackComponent;
 }
 
-function calcModelMtx(dst: mat4, scaleX: number, scaleY: number, scaleZ: number, rotationX: number, rotationY: number, rotationZ: number, translationX: number, translationY: number, translationZ: number): void {
-    const rX = Math.PI / 180 * rotationX;
-    const rY = Math.PI / 180 * rotationY;
-    const rZ = Math.PI / 180 * rotationZ;
-
-    const sinX = Math.sin(rX), cosX = Math.cos(rX);
-    const sinY = Math.sin(rY), cosY = Math.cos(rY);
-    const sinZ = Math.sin(rZ), cosZ = Math.cos(rZ);
-
-    dst[0] =  scaleX * (cosY * cosZ);
-    dst[1] =  scaleX * (sinZ * cosY);
-    dst[2] =  scaleX * (-sinY);
-    dst[3] =  0.0;
-
-    dst[4] =  scaleY * (sinX * cosZ * sinY - cosX * sinZ);
-    dst[5] =  scaleY * (sinX * sinZ * sinY + cosX * cosZ);
-    dst[6] =  scaleY * (sinX * cosY);
-    dst[7] =  0.0;
-
-    dst[8] =  scaleZ * (cosX * cosZ * sinY + sinX * sinZ);
-    dst[9] =  scaleZ * (cosX * sinZ * sinY - sinX * cosZ);
-    dst[10] = scaleZ * (cosY * cosX);
-    dst[11] = 0.0;
-
-    dst[12] = translationX;
-    dst[13] = translationY;
-    dst[14] = translationZ;
-    dst[15] = 1.0;
-}
-
 const trans1 = mat4.create(), trans2 = mat4.create(), rot = mat4.create(), scale = mat4.create();
 
 const _t: number[] = [0, 0, 0];
 function calcTexMtx(dst: mat4, translationS: number, translationT: number, scaleS: number, scaleT: number, rotation: number, skewS: number, skewT: number): void {
     function t(x: number, y: number, z: number = 0): number[] { _t[0] = x; _t[1] = y; _t[2] = z; return _t; }
     mat4.fromTranslation(dst, t(0.5 * skewS * scaleS, (0.5 * skewT - 1.0) * scaleT, 0.0));
-    mat4.fromZRotation(rot, (Math.PI / 180) * -rotation);
+    mat4.fromZRotation(rot, MathConstants.RAD_TO_DEG * -rotation);
     mat4.fromTranslation(trans1, t(-0.5 * skewS * scaleS, -(0.5 * skewT - 1.0) * scaleT, 0.0));
     mat4.mul(rot, rot, dst);
     mat4.mul(rot, trans1, rot);
@@ -1051,9 +1023,9 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         const scaleX = view.getFloat32(offs + 0x18);
         const scaleY = view.getFloat32(offs + 0x1C);
         const scaleZ = view.getFloat32(offs + 0x20);
-        const rotationX = view.getFloat32(offs + 0x24);
-        const rotationY = view.getFloat32(offs + 0x28);
-        const rotationZ = view.getFloat32(offs + 0x2C);
+        const rotationX = view.getFloat32(offs + 0x24) * MathConstants.RAD_TO_DEG;
+        const rotationY = view.getFloat32(offs + 0x28) * MathConstants.RAD_TO_DEG;
+        const rotationZ = view.getFloat32(offs + 0x2C) * MathConstants.RAD_TO_DEG;
         const translationX = view.getFloat32(offs + 0x30);
         const translationY = view.getFloat32(offs + 0x34);
         const translationZ = view.getFloat32(offs + 0x38);
@@ -1066,7 +1038,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
 
         const bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
         const modelMatrix = mat4.create();
-        calcModelMtx(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+        computeModelMatrixSRT(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
 
         const renderModeStructOffs = mainDataOffs + view.getUint32(offs + 0x58);
         const cullModes: GX.CullMode[] = [GX.CullMode.FRONT, GX.CullMode.BACK, GX.CullMode.ALL, GX.CullMode.NONE];
@@ -1235,10 +1207,6 @@ function getAnimFrame(anim: AnimationEntry, frame: number): number {
     return animFrame;
 }
 
-function cubicEval(cf0: number, cf1: number, cf2: number, cf3: number, t: number): number {
-    return (((cf0 * t + cf1) * t + cf2) * t + cf3);
-}
-
 function interpKeyframes(k0: AnimationTrackComponent, k1: AnimationTrackComponent, t: number, d: number): number {
     if (k0.step)
         return k0.value;
@@ -1247,11 +1215,7 @@ function interpKeyframes(k0: AnimationTrackComponent, k1: AnimationTrackComponen
     const p1 = k1.value;
     const s0 = k0.tangentOut * d;
     const s1 = k1.tangentIn * d;
-    const cf0 = (p0 *  2) + (p1 * -2) + (s0 *  1) +  (s1 *  1);
-    const cf1 = (p0 * -3) + (p1 *  3) + (s0 * -2) +  (s1 * -1);
-    const cf2 = (p0 *  0) + (p1 *  0) + (s0 *  1) +  (s1 *  0);
-    const cf3 = (p0 *  1) + (p1 *  0) + (s0 *  0) +  (s1 *  0);
-    return cubicEval(cf0, cf1, cf2, cf3, t);
+    return getPointHermite(p0, p1, s0, s1, t);
 }
 
 export class MeshAnimator {
@@ -1283,13 +1247,13 @@ export class MeshAnimator {
         const translationX = interpKeyframes(k0.translationX, k1.translationX, t, d) - this.track.translationOffsetX;
         const translationY = interpKeyframes(k0.translationY, k1.translationY, t, d) - this.track.translationOffsetY;
         const translationZ = interpKeyframes(k0.translationZ, k1.translationZ, t, d) - this.track.translationOffsetZ;
-        const rotationX = interpKeyframes(k0.rotationX, k1.rotationX, t, d) - this.track.rotationOffsetX;
-        const rotationY = interpKeyframes(k0.rotationY, k1.rotationY, t, d) - this.track.rotationOffsetY;
-        const rotationZ = interpKeyframes(k0.rotationZ, k1.rotationZ, t, d) - this.track.rotationOffsetZ;
+        const rotationX = (interpKeyframes(k0.rotationX, k1.rotationX, t, d) - this.track.rotationOffsetX) * MathConstants.RAD_TO_DEG;
+        const rotationY = (interpKeyframes(k0.rotationY, k1.rotationY, t, d) - this.track.rotationOffsetY) * MathConstants.RAD_TO_DEG;
+        const rotationZ = (interpKeyframes(k0.rotationZ, k1.rotationZ, t, d) - this.track.rotationOffsetZ) * MathConstants.RAD_TO_DEG;
         const scaleX = interpKeyframes(k0.scaleX, k1.scaleX, t, d) / this.track.scaleDividerX;
         const scaleY = interpKeyframes(k0.scaleY, k1.scaleY, t, d) / this.track.scaleDividerY;
         const scaleZ = interpKeyframes(k0.scaleZ, k1.scaleZ, t, d) / this.track.scaleDividerZ;
-        calcModelMtx(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+        computeModelMatrixSRT(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
     }
 }
 

@@ -19,8 +19,8 @@ import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { FakeTextureHolder } from '../TextureHolder';
 import { mat4 } from 'gl-matrix';
-import { calcModelMtx } from '../oot3d/cmb';
 import AnimationController from '../AnimationController';
+import { computeModelMatrixSRT, MathConstants } from '../MathHelpers';
 
 export class MKDSRenderer implements Viewer.SceneGfx {
     public viewRenderer = new GfxRenderInstViewRenderer();
@@ -118,9 +118,9 @@ function parseNKM(buffer: ArrayBufferSlice): NKM {
         const translationX = NSBMD.fx32(view.getInt32(objiTableIdx + 0x00, true)) / 16;
         const translationY = NSBMD.fx32(view.getInt32(objiTableIdx + 0x04, true)) / 16;
         const translationZ = NSBMD.fx32(view.getInt32(objiTableIdx + 0x08, true)) / 16;
-        const rotationX = NSBMD.fx32(view.getInt32(objiTableIdx + 0x0C, true)) * Math.PI / 180;
-        const rotationY = NSBMD.fx32(view.getInt32(objiTableIdx + 0x10, true)) * Math.PI / 180;
-        const rotationZ = NSBMD.fx32(view.getInt32(objiTableIdx + 0x14, true)) * Math.PI / 180;
+        const rotationX = NSBMD.fx32(view.getInt32(objiTableIdx + 0x0C, true)) * MathConstants.RAD_TO_DEG;
+        const rotationY = NSBMD.fx32(view.getInt32(objiTableIdx + 0x10, true)) * MathConstants.RAD_TO_DEG;
+        const rotationZ = NSBMD.fx32(view.getInt32(objiTableIdx + 0x14, true)) * MathConstants.RAD_TO_DEG;
         const scaleX = NSBMD.fx32(view.getInt32(objiTableIdx + 0x18, true));
         const scaleY = NSBMD.fx32(view.getInt32(objiTableIdx + 0x1C, true));
         const scaleZ = NSBMD.fx32(view.getInt32(objiTableIdx + 0x20, true));
@@ -160,7 +160,7 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
 
         function setModelMtx(mdl0Renderer: MDL0Renderer, bby: boolean = false): void {
             const rotationY = bby ? 0 : obji.rotationY;
-            calcModelMtx(scratchMatrix, obji.scaleX, obji.scaleY, obji.scaleZ, obji.rotationX, rotationY, obji.rotationZ, obji.translationX, obji.translationY, obji.translationZ);
+            computeModelMatrixSRT(scratchMatrix, obji.scaleX, obji.scaleY, obji.scaleZ, obji.rotationX, rotationY, obji.rotationZ, obji.translationX, obji.translationY, obji.translationZ);
             const posScale = 50;
             mat4.fromScaling(mdl0Renderer.modelMatrix, [posScale, posScale, posScale]);
             mat4.mul(mdl0Renderer.modelMatrix, mdl0Renderer.modelMatrix, scratchMatrix);

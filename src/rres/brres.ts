@@ -18,6 +18,7 @@ import { GXTextureHolder } from '../gx/gx_render';
 import { getFormatCompFlagsComponentCount } from '../gfx/platform/GfxPlatformFormat';
 import { getPointHermite } from '../Spline';
 import { colorToRGBA8, colorFromRGBA8 } from '../Color';
+import { computeModelMatrixSRT, MathConstants } from '../MathHelpers';
 
 //#region Utility
 function calc2dMtx(dst: mat2d, src: mat4): void {
@@ -30,7 +31,7 @@ function calc2dMtx(dst: mat2d, src: mat4): void {
 }
 
 function calcTexMtx_Basic(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
-    const theta = Math.PI / 180 * rotation;
+    const theta = rotation * MathConstants.RAD_TO_DEG;
     const sinR = Math.sin(theta);
     const cosR = Math.cos(theta);
 
@@ -46,7 +47,7 @@ function calcTexMtx_Basic(dst: mat4, scaleS: number, scaleT: number, rotation: n
 }
 
 function calcTexMtx_Maya(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
-    const theta = Math.PI / 180 * rotation;
+    const theta = rotation * MathConstants.RAD_TO_DEG;
     const sinR = Math.sin(theta);
     const cosR = Math.cos(theta);
 
@@ -61,7 +62,7 @@ function calcTexMtx_Maya(dst: mat4, scaleS: number, scaleT: number, rotation: nu
 }
 
 function calcTexMtx_XSI(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
-    const theta = Math.PI / 180 * rotation;
+    const theta = rotation * MathConstants.RAD_TO_DEG;
     const sinR = Math.sin(theta);
     const cosR = Math.cos(theta);
 
@@ -76,7 +77,7 @@ function calcTexMtx_XSI(dst: mat4, scaleS: number, scaleT: number, rotation: num
 }
 
 function calcTexMtx_Max(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
-    const theta = Math.PI / 180 * rotation;
+    const theta = rotation * MathConstants.RAD_TO_DEG;
     const sinR = Math.sin(theta);
     const cosR = Math.cos(theta);
 
@@ -110,36 +111,6 @@ function calcTexMtx(dst: mat4, texMtxMode: TexMatrixMode, scaleS: number, scaleT
     default:
         throw "whoops";
     }
-}
-
-function calcModelMtx(dst: mat4, scaleX: number, scaleY: number, scaleZ: number, rotationX: number, rotationY: number, rotationZ: number, translationX: number, translationY: number, translationZ: number): void {
-    const rX = Math.PI / 180 * rotationX;
-    const rY = Math.PI / 180 * rotationY;
-    const rZ = Math.PI / 180 * rotationZ;
-
-    const sinX = Math.sin(rX), cosX = Math.cos(rX);
-    const sinY = Math.sin(rY), cosY = Math.cos(rY);
-    const sinZ = Math.sin(rZ), cosZ = Math.cos(rZ);
-
-    dst[0] =  scaleX * (cosY * cosZ);
-    dst[1] =  scaleX * (sinZ * cosY);
-    dst[2] =  scaleX * (-sinY);
-    dst[3] =  0.0;
-
-    dst[4] =  scaleY * (sinX * cosZ * sinY - cosX * sinZ);
-    dst[5] =  scaleY * (sinX * sinZ * sinY + cosX * cosZ);
-    dst[6] =  scaleY * (sinX * cosY);
-    dst[7] =  0.0;
-
-    dst[8] =  scaleZ * (cosX * cosZ * sinY + sinX * sinZ);
-    dst[9] =  scaleZ * (cosX * sinZ * sinY - sinX * cosZ);
-    dst[10] = scaleZ * (cosY * cosX);
-    dst[11] = 0.0;
-
-    dst[12] = translationX;
-    dst[13] = translationY;
-    dst[14] = translationZ;
-    dst[15] = 1.0;
 }
 //#endregion
 
@@ -1206,9 +1177,9 @@ function parseMDL0_NodeEntry(buffer: ArrayBufferSlice): MDL0_NodeEntry {
     const scaleX = view.getFloat32(0x20);
     const scaleY = view.getFloat32(0x24);
     const scaleZ = view.getFloat32(0x28);
-    const rotationX = view.getFloat32(0x2C);
-    const rotationY = view.getFloat32(0x30);
-    const rotationZ = view.getFloat32(0x34);
+    const rotationX = view.getFloat32(0x2C) * MathConstants.RAD_TO_DEG;
+    const rotationY = view.getFloat32(0x30) * MathConstants.RAD_TO_DEG;
+    const rotationZ = view.getFloat32(0x34) * MathConstants.RAD_TO_DEG;
     const translationX = view.getFloat32(0x38);
     const translationY = view.getFloat32(0x3C);
     const translationZ = view.getFloat32(0x40);
@@ -1226,7 +1197,7 @@ function parseMDL0_NodeEntry(buffer: ArrayBufferSlice): MDL0_NodeEntry {
         bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
 
     const modelMatrix = mat4.create();
-    calcModelMtx(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+    computeModelMatrixSRT(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
 
     const forwardBindPose00 = view.getFloat32(0x70);
     const forwardBindPose01 = view.getFloat32(0x74);
@@ -2579,15 +2550,15 @@ export class CHR0NodesAnimator {
         const scaleY = nodeData.scaleY ? sampleFloatAnimationTrack(nodeData.scaleY, animFrame) : 1;
         const scaleZ = nodeData.scaleZ ? sampleFloatAnimationTrack(nodeData.scaleZ, animFrame) : 1;
 
-        const rotationX = nodeData.rotationX ? sampleFloatAnimationTrack(nodeData.rotationX, animFrame) : 0;
-        const rotationY = nodeData.rotationY ? sampleFloatAnimationTrack(nodeData.rotationY, animFrame) : 0;
-        const rotationZ = nodeData.rotationZ ? sampleFloatAnimationTrack(nodeData.rotationZ, animFrame) : 0;
+        const rotationX = nodeData.rotationX ? sampleFloatAnimationTrack(nodeData.rotationX, animFrame) * MathConstants.RAD_TO_DEG : 0;
+        const rotationY = nodeData.rotationY ? sampleFloatAnimationTrack(nodeData.rotationY, animFrame) * MathConstants.RAD_TO_DEG : 0;
+        const rotationZ = nodeData.rotationZ ? sampleFloatAnimationTrack(nodeData.rotationZ, animFrame) * MathConstants.RAD_TO_DEG : 0;
 
         const translationX = nodeData.translationX ? sampleFloatAnimationTrack(nodeData.translationX, animFrame) : 0;
         const translationY = nodeData.translationY ? sampleFloatAnimationTrack(nodeData.translationY, animFrame) : 0;
         const translationZ = nodeData.translationZ ? sampleFloatAnimationTrack(nodeData.translationZ, animFrame) : 0;
 
-        calcModelMtx(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+        computeModelMatrixSRT(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
         return true;
     }
 }

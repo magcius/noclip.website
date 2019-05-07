@@ -15,6 +15,7 @@ import { mat4, vec3 } from 'gl-matrix';
 import * as Pako from 'pako';
 import { AABB } from '../Geometry';
 import { colorFromRGBA8 } from '../Color';
+import { MathConstants } from '../MathHelpers';
 
 export interface MREA {
     materialSet: MaterialSet;
@@ -648,7 +649,7 @@ export function parseLightLayer(buffer: ArrayBufferSlice, offs: number): [AreaLi
                         vec3.set(light.gxLight.CosAtten, 1, 0, 0);
                     }
                     else {
-                        const radCutoff = spotCutoff * Math.PI / 180;
+                        const radCutoff = spotCutoff * MathConstants.RAD_TO_DEG;
                         const cosCutoff = Math.cos(radCutoff);
                         const invCosCutoff = 1 - cosCutoff;
                         vec3.set(light.gxLight.CosAtten, 0, -cosCutoff / invCosCutoff, 1.0 / invCosCutoff);

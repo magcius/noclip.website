@@ -1,10 +1,11 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { Version, calcModelMtx, Bone } from "./cmb";
+import { Version, Bone } from "./cmb";
 import { assert, readString, align, assertExists } from "../util";
 import AnimationController from "../AnimationController";
 import { mat4 } from "gl-matrix";
 import { getPointHermite } from "../Spline";
+import { computeModelMatrixSRT } from "../MathHelpers";
 
 // CSAB (CTR Skeletal Animation Binary)
 
@@ -423,5 +424,5 @@ export function calcBoneMatrix(dst: mat4, animationController: AnimationControll
         if (node.translationZ !== null) translationZ = sampleAnimationTrack(node.translationZ, animFrame);
     }
 
-    calcModelMtx(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+    computeModelMatrixSRT(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
 }

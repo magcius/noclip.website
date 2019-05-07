@@ -16,6 +16,7 @@ import { fetchData } from '../fetch';
 import { leftPad } from '../util';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { GrezzoTextureHolder, MultiCmbScene } from './scenes';
+import { computeModelMatrixSRT } from '../MathHelpers';
 
 class SceneDesc implements Viewer.SceneDesc {
     public id: string;
@@ -110,7 +111,7 @@ class SceneDesc implements Viewer.SceneDesc {
                         const translationX = BCSV.getField<number>(roomFurnitureEntries, record, "pos_x");
                         const translationY = BCSV.getField<number>(roomFurnitureEntries, record, "pos_y");
                         const translationZ = BCSV.getField<number>(roomFurnitureEntries, record, "pos_z");
-                        CMB.calcModelMtx(cmbRenderer.modelMatrix, 1, 1, 1, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+                        computeModelMatrixSRT(cmbRenderer.modelMatrix, 1, 1, 1, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
 
                         renderer.cmbRenderers.push(cmbRenderer);
                     }

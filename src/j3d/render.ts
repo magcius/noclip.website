@@ -17,7 +17,7 @@ import { GfxBufferCoalescer, GfxCoalescedBuffers } from '../gfx/helpers/BufferHe
 import { ViewerRenderInput } from '../viewer';
 import { GfxRenderInst, GfxRenderInstBuilder, setSortKeyDepth, GfxRendererLayer, makeSortKey, setSortKeyBias } from '../gfx/render/GfxRenderer';
 import { colorCopy } from '../Color';
-import { computeNormalMatrix } from '../MatrixHelpers';
+import { computeNormalMatrix } from '../MathHelpers';
 
 export class J3DTextureHolder extends GXTextureHolder<TEX1_TextureData> {
     public addJ3DTextures(device: GfxDevice, bmd: BMD, bmt: BMT | null = null) {

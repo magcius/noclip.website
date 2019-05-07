@@ -18,7 +18,7 @@ import { GXRenderHelperGfx } from '../gx/gx_render';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
-import { calcModelMtx } from '../oot3d/cmb';
+import { computeModelMatrixSRT, MathConstants } from '../MathHelpers';
 
 const enum MKWiiPass { MAIN = 0x01 }
 
@@ -165,9 +165,9 @@ function parseKMP(buffer: ArrayBufferSlice): KMP {
         const translationX = view.getFloat32(gobjTableIdx + 0x04);
         const translationY = view.getFloat32(gobjTableIdx + 0x08);
         const translationZ = view.getFloat32(gobjTableIdx + 0x0C);
-        const rotationX = view.getFloat32(gobjTableIdx + 0x10) * Math.PI / 180;
-        const rotationY = view.getFloat32(gobjTableIdx + 0x14) * Math.PI / 180;
-        const rotationZ = view.getFloat32(gobjTableIdx + 0x18) * Math.PI / 180;
+        const rotationX = view.getFloat32(gobjTableIdx + 0x10) * MathConstants.RAD_TO_DEG;
+        const rotationY = view.getFloat32(gobjTableIdx + 0x14) * MathConstants.RAD_TO_DEG;
+        const rotationZ = view.getFloat32(gobjTableIdx + 0x18) * MathConstants.RAD_TO_DEG;
         const scaleX = view.getFloat32(gobjTableIdx + 0x1C);
         const scaleY = view.getFloat32(gobjTableIdx + 0x20);
         const scaleZ = view.getFloat32(gobjTableIdx + 0x24);
@@ -218,7 +218,7 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
         const spawnObject = (objectName: string): MDL0ModelInstance => {
             const rres = getRRES(objectName);
             const b = this.spawnObjectFromRRES(device, renderer, rres, objectName);
-            calcModelMtx(b.modelMatrix, gobj.scaleX, gobj.scaleY, gobj.scaleZ, gobj.rotationX, gobj.rotationY, gobj.rotationZ, gobj.translationX, gobj.translationY, gobj.translationZ);
+            computeModelMatrixSRT(b.modelMatrix, gobj.scaleX, gobj.scaleY, gobj.scaleZ, gobj.rotationX, gobj.rotationY, gobj.rotationZ, gobj.translationX, gobj.translationY, gobj.translationZ);
             mat4.mul(b.modelMatrix, posMtx, b.modelMatrix);
             return b;
         };

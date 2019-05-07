@@ -190,7 +190,7 @@ class ShapeInstance {
     public templateRenderInst: GfxRenderInst;
     public renderInsts: GfxRenderInst[] = [];
 
-    constructor(renderInstBuilder: GfxRenderInstBuilder, public vertexData: VertexData, public model: NITRO_BMD.Model) {
+    constructor(renderInstBuilder: GfxRenderInstBuilder, public vertexData: VertexData, public model: NITRO_BMD.Bone) {
         this.templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
         this.templateRenderInst.setSamplerBindingsInherit();
         this.templateRenderInst.inputState = this.vertexData.inputState;
@@ -250,8 +250,8 @@ class BMDData {
     public vertexData: VertexData[] = [];
 
     constructor(device: GfxDevice, public bmd: NITRO_BMD.BMD) {
-        for (let i = 0; i < this.bmd.models.length; i++) {
-            const model = this.bmd.models[i];
+        for (let i = 0; i < this.bmd.bones.length; i++) {
+            const model = this.bmd.bones[i];
             for (let j = 0; j < model.batches.length; j++)
                 this.vertexData.push(new VertexData(device, model.batches[j].vertexData));
         }
@@ -498,8 +498,8 @@ class BMDModelInstance {
     private translateBMD(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder) {
         let vertexDataIndex = 0;
         const bmd = this.bmdData.bmd;
-        for (let i = 0; i < bmd.models.length; i++) {
-            const model = bmd.models[i];
+        for (let i = 0; i < bmd.bones.length; i++) {
+            const model = bmd.bones[i];
             for (let j = 0; j < model.batches.length; j++) {
                 const batch = model.batches[j];
                 const materialInstance = new MaterialInstance(device, renderInstBuilder, this.textureHolder, this.crg1Level, batch.material);

@@ -18,6 +18,7 @@ import { BasicRendererHelper } from "../oot3d/render";
 import { FLVERData, SceneRenderer, FLVERInstance } from "./render";
 import { mat4 } from "gl-matrix";
 import { Panel, LayerPanel } from "../ui";
+import { MathConstants } from "../MathHelpers";
 
 interface CRG1Arc {
     Files: { [filename: string]: ArrayBufferSlice };
@@ -126,9 +127,9 @@ export class DKSSceneDesc implements Viewer.SceneDesc {
         mat4.scale(m, m, [-modelScale, modelScale, modelScale]);
 
         mat4.translate(m, m, part.translation);
-        mat4.rotateX(m, m, part.rotation[0] * Math.PI / 180);
-        mat4.rotateY(m, m, part.rotation[1] * Math.PI / 180);
-        mat4.rotateZ(m, m, part.rotation[2] * Math.PI / 180);
+        mat4.rotateX(m, m, part.rotation[0] * MathConstants.RAD_TO_DEG);
+        mat4.rotateY(m, m, part.rotation[1] * MathConstants.RAD_TO_DEG);
+        mat4.rotateZ(m, m, part.rotation[2] * MathConstants.RAD_TO_DEG);
         mat4.scale(m, m, part.scale);
     }
 
