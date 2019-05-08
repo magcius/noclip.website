@@ -159,8 +159,6 @@ export class GXShapeHelperGfx {
     private zeroBuffer: GfxBuffer | null = null;
 
     constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, public coalescedBuffers: GfxCoalescedBuffers, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData) {
-        assert(this.loadedVertexData.indexFormat === GfxFormat.U16_R);
-
         // First, build the inputLayout
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
 

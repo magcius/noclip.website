@@ -344,8 +344,6 @@ function mergeSurfaces(surfaces: Surface[]): MergedSurface {
     const packets: LoadedVertexPacket[] = [];
     for (let i = 0; i < surfaces.length; i++) {
         const surface = surfaces[i];
-        assert(surface.loadedVertexData.indexFormat === GfxFormat.U16_R);
-        assert(surface.loadedVertexData.indexData.byteLength === surface.loadedVertexData.totalIndexCount * 0x02);
         totalIndexCount += surface.loadedVertexData.totalIndexCount;
         totalVertexCount += surface.loadedVertexData.totalVertexCount;
         packedVertexDataSize += surface.loadedVertexData.packedVertexData.byteLength;
@@ -360,24 +358,26 @@ function mergeSurfaces(surfaces: Surface[]): MergedSurface {
     }
 
     const packedVertexData = new Uint8Array(packedVertexDataSize);
-    const indexData = new Uint16Array(totalIndexCount);
+    const indexData = new Uint32Array(totalIndexCount);
     let indexDataOffs = 0;
     let packedVertexDataOffs = 0;
     let vertexOffset = 0;
     for (let i = 0; i < surfaces.length; i++) {
         const surface = surfaces[i];
+        assert(surface.loadedVertexData.indexFormat === GfxFormat.U16_R);
+        assert(surface.loadedVertexData.indexData.byteLength === surface.loadedVertexData.totalIndexCount * 0x02);
         const surfaceIndexBuffer = new Uint16Array(surface.loadedVertexData.indexData);
         for (let j = 0; j < surfaceIndexBuffer.length; j++)
             indexData[indexDataOffs++] = vertexOffset + surfaceIndexBuffer[j];
         vertexOffset += surface.loadedVertexData.totalVertexCount;
-        assert(vertexOffset <= 0xFFFF);
+        assert(vertexOffset <= 0xFFFFFFFF);
 
         packedVertexData.set(new Uint8Array(surface.loadedVertexData.packedVertexData), packedVertexDataOffs);
         packedVertexDataOffs += surface.loadedVertexData.packedVertexData.byteLength;
     }
 
     const newLoadedVertexData: LoadedVertexData = {
-        indexFormat: GfxFormat.U16_R,
+        indexFormat: GfxFormat.U32_R,
         indexData: indexData.buffer,
         packedVertexData: packedVertexData.buffer,
         totalIndexCount,
