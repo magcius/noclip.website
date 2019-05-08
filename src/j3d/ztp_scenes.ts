@@ -48,7 +48,7 @@ function createModelInstance(device: GfxDevice, renderHelper: GXRenderHelperGfx,
     const bmd = BMD.parse(bmdFile.buffer);
     const bmt = bmtFile ? BMT.parse(bmtFile.buffer) : null;
     const bmdModel = new BMDModel(device, renderHelper, bmd, bmt);
-    const modelInstance = new BMDModelInstance(device, renderHelper, bmdModel, materialHacks);
+    const modelInstance = new BMDModelInstance(renderHelper, bmdModel, materialHacks);
 
     for (let i = 0; i < bmdModel.tex1Data.tex1.samplers.length; i++) {
         // Look for any unbound textures and set them.

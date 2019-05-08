@@ -474,7 +474,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
             const bmdFile = rarc.findFile(bmd);
             const bmtFile = rarc.findFile(bmt);
             const bmdModel = lookupModel(bmdFile, bmtFile);
-            const modelInstance = new BMDModelInstance(device, renderHelper, bmdModel);
+            const modelInstance = new BMDModelInstance(renderHelper, bmdModel);
             modelInstance.passMask = SMSPass.OPAQUE;
             return modelInstance;
         }
@@ -482,7 +482,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
         function bckm(bmdFilename: string, bckFilename: string, loopMode: LoopMode = LoopMode.REPEAT): BMDModelInstance {
             const bmdFile = rarc.findFile(bmdFilename);
             const bmdModel = lookupModel(bmdFile, null);
-            const modelInstance = new BMDModelInstance(device, renderHelper, bmdModel);
+            const modelInstance = new BMDModelInstance(renderHelper, bmdModel);
             modelInstance.passMask = SMSPass.OPAQUE;
             const bckFile = rarc.findFile(bckFilename);
             const bck = BCK.parse(bckFile.buffer);
@@ -501,7 +501,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
             const bmtFile = rarc.findFile(`${basename}.bmt`);
 
             const bmdModel = lookupModel(bmdFile, bmtFile);
-            const modelInstance = new BMDModelInstance(device, renderHelper, bmdModel);
+            const modelInstance = new BMDModelInstance(renderHelper, bmdModel);
             modelInstance.passMask = SMSPass.OPAQUE;
 
             if (btkFile !== null) {

@@ -95,7 +95,7 @@ export function createModelInstance(device: GfxDevice, renderHelper: GXRenderHel
     const bmd = BMD.parse(bmdFile.buffer);
     const bmt = bmtFile ? BMT.parse(bmtFile.buffer) : null;
     const bmdModel = new BMDModel(device, renderHelper, bmd, bmt);
-    const scene = new BMDModelInstance(device, renderHelper, bmdModel, materialHacks);
+    const scene = new BMDModelInstance(renderHelper, bmdModel, materialHacks);
 
     if (btkFile !== null) {
         const btk = BTK.parse(btkFile.buffer);
@@ -153,7 +153,7 @@ function createScenesFromBuffer(device: GfxDevice, renderer: BasicRenderer, buff
         if (['J3D2bmd3', 'J3D2bdl4'].includes(readString(buffer, 0, 8))) {
             const bmd = BMD.parse(buffer);
             const bmdModel = new BMDModel(device, renderer.renderHelper, bmd);
-            const modelInstance = new BMDModelInstance(device, renderer.renderHelper, bmdModel);
+            const modelInstance = new BMDModelInstance(renderer.renderHelper, bmdModel);
             return [modelInstance];
         }
 

@@ -13,7 +13,7 @@ import * as UI from '../ui';
 
 import * as GX_Material from '../gx/gx_material';
 
-import { BMD, BTK, BRK, BCK, BTI, LoopMode, BMT, TEX1_Sampler } from './j3d';
+import { BMD, BTK, BRK, BCK, BTI, LoopMode, BMT } from './j3d';
 import * as RARC from './rarc';
 import { BMDModelInstance, BMDModel, BTIData } from './render';
 import { Camera, computeViewMatrix } from '../Camera';
@@ -32,8 +32,6 @@ import { prepareFrameDebugOverlayCanvas2D } from '../DebugJunk';
 
 import * as DZB from './zww_dzb';
 import { ObjectRenderer, BMDObjectRenderer, SymbolMap, WhiteFlowerData, FlowerObjectRenderer, PinkFlowerData, BessouFlowerData, FlowerData } from './zww_actors';
-
-const TIME_OF_DAY_ICON = `<svg viewBox="0 0 100 100" height="20" fill="white"><path d="M50,93.4C74,93.4,93.4,74,93.4,50C93.4,26,74,6.6,50,6.6C26,6.6,6.6,26,6.6,50C6.6,74,26,93.4,50,93.4z M37.6,22.8  c-0.6,2.4-0.9,5-0.9,7.6c0,18.2,14.7,32.9,32.9,32.9c2.6,0,5.1-0.3,7.6-0.9c-4.7,10.3-15.1,17.4-27.1,17.4  c-16.5,0-29.9-13.4-29.9-29.9C20.3,37.9,27.4,27.5,37.6,22.8z"/></svg>`;
 
 class ZWWExtraTextures {
     constructor(public ZAtoon: BTIData, public ZBtoonEX: BTIData) {
@@ -189,7 +187,7 @@ function createScene(device: GfxDevice, renderHelper: GXRenderHelperGfx, extraTe
     const bckFile = rarc.findFile(`bck/${name}.bck`);
     const bdl = BMD.parse(bdlFile.buffer);
     const bmdModel = new BMDModel(device, renderHelper, bdl, null);
-    const modelInstance = new BMDModelInstance(device, renderHelper, bmdModel);
+    const modelInstance = new BMDModelInstance(renderHelper, bmdModel);
     extraTextures.fillExtraTextures(modelInstance);
     modelInstance.passMask = isSkybox ? WindWakerPass.SKYBOX : WindWakerPass.MAIN;
 
@@ -549,7 +547,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     public createPanels(): UI.Panel[] {
         const timeOfDayPanel = new UI.Panel();
         timeOfDayPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
-        timeOfDayPanel.setTitle(TIME_OF_DAY_ICON, "Time of Day");
+        timeOfDayPanel.setTitle(UI.TIME_OF_DAY_ICON, "Time of Day");
 
         const colorPresets = [ '(no palette)', 'Dusk', 'Morning', 'Day', 'Afternoon', 'Evening', 'Night' ];
 
@@ -894,7 +892,7 @@ class SceneDesc {
 
         function buildChildModel(rarc: RARC.RARC, modelPath: string): BMDObjectRenderer {
             const model = modelCache.getModel(device, renderer, rarc, modelPath);
-            const modelInstance = new BMDModelInstance(device, renderer.renderHelper, model);
+            const modelInstance = new BMDModelInstance(renderer.renderHelper, model);
             renderer.extraTextures.fillExtraTextures(modelInstance);
             modelInstance.name = name;
             modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 1);
@@ -917,7 +915,7 @@ class SceneDesc {
             const bmt = BMT.parse(rarc.findFileData(bmtPath));
             const model = new BMDModel(device, renderer.renderHelper, bmd, bmt);
             modelCache.extraModels.push(model);
-            const modelInstance = new BMDModelInstance(device, renderer.renderHelper, model);
+            const modelInstance = new BMDModelInstance(renderer.renderHelper, model);
             renderer.extraTextures.fillExtraTextures(modelInstance);
             modelInstance.name = name;
             modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 1);

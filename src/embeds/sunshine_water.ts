@@ -134,7 +134,7 @@ class SeaPlaneScene {
 
         const seaMaterial = bmd.mat3.materialEntries.find((m) => m.name === '_umi');
         this.mangleMaterial(seaMaterial, configName);
-        this.seaMaterialInstance = new MaterialInstance(device, renderHelper, null, seaMaterial, {});
+        this.seaMaterialInstance = new MaterialInstance(renderHelper, null, seaMaterial, {});
         this.seaMaterialInstance.bindTTK1(this.animationController, btk.ttk1);
         const renderInstBuilder = renderHelper.renderInstBuilder;
         renderInstBuilder.pushTemplateRenderInst(this.seaMaterialInstance.templateRenderInst);

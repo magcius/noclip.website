@@ -214,7 +214,7 @@ export class MaterialInstance {
     public templateRenderInst: GfxRenderInst;
     private materialParamsBufferOffset: number;
 
-    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, private modelInstance: BMDModelInstance | null, public material: MaterialEntry, private materialHacks: GX_Material.GXMaterialHacks) {
+    constructor(renderHelper: GXRenderHelperGfx, private modelInstance: BMDModelInstance | null, public material: MaterialEntry, private materialHacks: GX_Material.GXMaterialHacks) {
         this.name = material.name;
 
         this.templateRenderInst = renderHelper.renderInstBuilder.newRenderInst();
@@ -794,7 +794,6 @@ export class BMDModelInstance {
     private materialHacks: GX_Material.GXMaterialHacks = {};
 
     constructor(
-        device: GfxDevice,
         renderHelper: GXRenderHelperGfx,
         public bmdModel: BMDModel,
         materialHacks?: GX_Material.GXMaterialHacks
@@ -809,7 +808,7 @@ export class BMDModelInstance {
         this.templateRenderInst = renderHelper.renderInstBuilder.pushTemplateRenderInst();
         const mat3 = (this.bmdModel.bmt !== null && this.bmdModel.bmt.mat3 !== null) ? this.bmdModel.bmt.mat3 : this.bmdModel.bmd.mat3;
         this.materialInstances = mat3.materialEntries.map((materialEntry) => {
-            return new MaterialInstance(device, renderHelper, this, materialEntry, this.materialHacks);
+            return new MaterialInstance(renderHelper, this, materialEntry, this.materialHacks);
         });
         renderHelper.renderInstBuilder.popTemplateRenderInst();
 

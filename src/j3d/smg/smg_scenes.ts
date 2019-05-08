@@ -796,7 +796,7 @@ class SMGSpawner {
                 // Trickery.
                 const rarc = this.modelCache.archiveCache.get(arcPath);
 
-                const modelInstance = new BMDModelInstance(device, this.renderHelper, bmdModel);
+                const modelInstance = new BMDModelInstance(this.renderHelper, bmdModel);
                 modelInstance.name = `${objinfo.objName} ${objinfo.objId}`;
 
                 if (tag === SceneGraphTag.Skybox) {

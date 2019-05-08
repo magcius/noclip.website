@@ -70,7 +70,7 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
         assertExists(bmdFileData);
         const bmdModel = new BMDModel(device, renderer.renderHelper, BMD.parse(bmdFileData));
 
-        const modelInstance = new BMDModelInstance(device, renderer.renderHelper, bmdModel);
+        const modelInstance = new BMDModelInstance(renderer.renderHelper, bmdModel);
 
         const btkFileData = rarc.findFileData(`${basename}.btk`);
         if (btkFileData !== null)
