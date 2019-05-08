@@ -485,6 +485,7 @@ export class MREARenderer {
             }
 
             const surfaceData = new SurfaceData(device, renderHelper, surface, this.bufferCoalescer.coalescedBuffers[i], bbox);
+            this.surfaceData.push(surfaceData);
             const materialCommand = this.materialInstances[mergedSurfaces[i].materialIndex];
             const materialGroupCommand = this.materialGroupInstances[materialCommand.material.groupIndex];
             const instance = new SurfaceInstance(device, renderHelper, surfaceData, materialCommand, materialGroupCommand, mat4.create(), null);
