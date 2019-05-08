@@ -800,7 +800,7 @@ export class BMDModelInstance {
 
     public colorOverrides: GX_Material.Color[] = [];
     public alphaOverrides: boolean[] = [];
-    private textureMappings: TextureMapping[];
+    public textureMappings: TextureMapping[];
 
     // Animations.
     public animationController = new AnimationController();
