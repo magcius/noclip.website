@@ -36,6 +36,7 @@ export function fetchData(path: string, abortSignal: AbortSignal | null = null):
             prFetch.setProgress(1);
             let slice: NamedArrayBufferSlice;
             if (request.status !== 200) {
+                console.error(`fetchData: Received non-success status code ${request.status} when fetching file ${path}`);
                 slice = new ArrayBufferSlice(new ArrayBuffer(0)) as NamedArrayBufferSlice;
             } else {
                 const buffer: ArrayBuffer = request.response;
