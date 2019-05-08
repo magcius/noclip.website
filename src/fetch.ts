@@ -35,15 +35,19 @@ export function fetchData(path: string, abortSignal: AbortSignal | null = null):
         function done() {
             prFetch.setProgress(1);
             let slice: NamedArrayBufferSlice;
+
+            // If we aborted the request, then don't call our callback.
+            if (request.status === 0 && abortSignal.aborted)
+                return;
+
             if (request.status !== 200) {
-                console.error(`fetchData: Received non-success status code ${request.status} when fetching file ${path}`);
+                console.error(`fetchData: Received non-success status code ${request.status} when fetching file ${path}. Status: ${request.status}, aborted: ${abortSignal.aborted}`);
                 slice = new ArrayBufferSlice(new ArrayBuffer(0)) as NamedArrayBufferSlice;
             } else {
                 const buffer: ArrayBuffer = request.response;
                 slice = new ArrayBufferSlice(buffer) as NamedArrayBufferSlice;
             }
             slice.name = url;
-            request.abort();
             resolve(slice);
         }
 
@@ -77,7 +81,7 @@ export function downloadBlob(filename: string, blob: Blob): void {
 }
 
 export function downloadBufferSlice(filename: string, buffer: ArrayBufferSlice, type: string = 'application/octet-stream'): void {
-    const blob = new Blob([buffer.castToBuffer()], { type });
+    const blob = new Blob([buffer.createTypedArray(Uint8Array)], { type });
     downloadBlob(filename, blob);
 }
 
