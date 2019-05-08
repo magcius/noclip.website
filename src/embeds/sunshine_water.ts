@@ -115,7 +115,6 @@ class SeaPlaneScene {
     private plane: PlaneShape;
     private bmdModel: BMDModel;
     private animationController: AnimationController;
-    private textureMappings: TextureMapping[];
 
     constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, bmd: BMD, btk: BTK, configName: string) {
         this.animationController = new AnimationController();
@@ -131,7 +130,7 @@ class SeaPlaneScene {
         }
 
         this.bmdModel = new BMDModel(device, renderHelper, bmd);
-        this.textureMappings = this.bmdModel.createDefaultTextureMappings();
+        this.materialInstanceState.textureMappings = this.bmdModel.createDefaultTextureMappings();
 
         const seaMaterial = bmd.mat3.materialEntries.find((m) => m.name === '_umi');
         this.mangleMaterial(seaMaterial, configName);
@@ -186,7 +185,7 @@ class SeaPlaneScene {
     public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput): void {
         this.plane.prepareToRender(renderHelper, viewerInput);
         this.animationController.setTimeInMilliseconds(viewerInput.time);
-        this.seaMaterialInstance.prepareToRender(renderHelper, viewerInput, this.materialInstanceState, this.shapeInstanceState, this.textureMappings);
+        this.seaMaterialInstance.prepareToRender(renderHelper, viewerInput, this.materialInstanceState, this.shapeInstanceState);
     }
 
     public destroy(device: GfxDevice) {

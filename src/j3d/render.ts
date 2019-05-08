@@ -135,6 +135,7 @@ export class ShapeInstance {
 
 export class MaterialInstanceState {
     public lights = nArray(8, () => new GX_Material.Light());
+    public textureMappings: TextureMapping[];
 }
 
 function mat4SwapTranslationColumns(m: mat4): void {
@@ -146,38 +147,10 @@ function mat4SwapTranslationColumns(m: mat4): void {
     m[9] = ty;
 }
 
-function mat44Concat(dst: mat4, a: mat4, b: mat4): void {
-    const b00 = b[0] , b10 = b[1] , b20 = b[2] , b30 = b[3],
-          b01 = b[4] , b11 = b[5] , b21 = b[6] , b31 = b[7],
-          b02 = b[8] , b12 = b[9] , b22 = b[10], b32 = b[11],
-          b03 = b[12], b13 = b[13], b23 = b[14], b33 = b[15];
-
-    const a00 = a[0], a01 = a[4], a02 = a[8], a03 = a[12];
-    dst[0]  = a00*b00 + a01*b10 + a02*b20 + a03*b30;
-    dst[4]  = a00*b01 + a01*b11 + a02*b21 + a03*b31;
-    dst[8]  = a00*b02 + a01*b12 + a02*b22 + a03*b32;
-    dst[12] = a00*b03 + a01*b13 + a02*b23 + a03*b33;
-
-    const a10 = a[1], a11 = a[5], a12 = a[9], a13 = a[13];
-    dst[1]  = a10*b00 + a11*b10 + a12*b20 + a13*b30;
-    dst[5]  = a10*b01 + a11*b11 + a12*b21 + a13*b31;
-    dst[9]  = a10*b02 + a11*b12 + a12*b22 + a13*b32;
-    dst[13] = a10*b03 + a11*b13 + a12*b23 + a13*b33;
-
-    const a20 = a[2], a21 = a[6], a22 = a[10], a23 = a[14];
-    dst[2]  = a20*b00 + a21*b10 + a22*b20 + a23*b30;
-    dst[6]  = a20*b01 + a21*b11 + a22*b21 + a23*b31;
-    dst[10] = a20*b02 + a21*b12 + a22*b22 + a23*b32;
-    dst[14] = a20*b03 + a21*b13 + a22*b23 + a23*b33;
-
-    const a30 = a[3], a31 = a[7], a32 = a[11], a33 = a[15];
-    dst[3]  = a30*b00 + a31*b10 + a32*b20 + a33*b30;
-    dst[7]  = a30*b01 + a31*b11 + a32*b21 + a33*b31;
-    dst[11] = a30*b02 + a31*b12 + a32*b22 + a33*b32;
-    dst[15] = a30*b03 + a31*b13 + a32*b23 + a33*b33;
-}
-
 function j3dMtxProjConcat(dst: mat4, a: mat4, b: mat4): void {
+    // This is almost mat4.mul except it only outputs three rows of output.
+    // Slightly more efficient.
+
     const b00 = b[0] , b10 = b[1] , b20 = b[2] , b30 = b[3],
           b01 = b[4] , b11 = b[5] , b21 = b[6] , b31 = b[7],
           b02 = b[8] , b12 = b[9] , b22 = b[10], b32 = b[11],
@@ -203,6 +176,9 @@ function j3dMtxProjConcat(dst: mat4, a: mat4, b: mat4): void {
 }
 
 function mat43Concat(dst: mat4, a: mat4, b: mat4): void {
+    // This is almost mat4.mul except the inputs/outputs are mat4x3s.
+    // Slightly more efficient.
+
     const b00 = b[0] , b10 = b[1] , b20 = b[2],
           b01 = b[4] , b11 = b[5] , b21 = b[6],
           b02 = b[8] , b12 = b[9] , b22 = b[10],
@@ -335,7 +311,7 @@ export class MaterialInstance {
             this.clampTo8Bit(dst);
     }
 
-    public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput, materialInstanceState: MaterialInstanceState, shapeInstanceState: ShapeInstanceState, textureMappings: TextureMapping[]): void {
+    public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput, materialInstanceState: MaterialInstanceState, shapeInstanceState: ShapeInstanceState): void {
         const camera = viewerInput.camera;
 
         const material = this.material;
@@ -365,7 +341,7 @@ export class MaterialInstance {
                 samplerIndex = material.textureIndexes[i];
 
             if (samplerIndex >= 0)
-                m.copy(textureMappings[samplerIndex]);
+                m.copy(materialInstanceState.textureMappings[samplerIndex]);
         }
 
         this.templateRenderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
@@ -800,7 +776,6 @@ export class BMDModelInstance {
 
     public colorOverrides: GX_Material.Color[] = [];
     public alphaOverrides: boolean[] = [];
-    public textureMappings: TextureMapping[];
 
     // Animations.
     public animationController = new AnimationController();
@@ -812,7 +787,7 @@ export class BMDModelInstance {
     private jointVisibility: boolean[];
 
     private templateRenderInst: GfxRenderInst;
-    private materialInstanceState = new MaterialInstanceState();
+    public materialInstanceState = new MaterialInstanceState();
     private materialInstances: MaterialInstance[] = [];
     private shapeInstances: ShapeInstance[] = [];
     private shapeInstanceState = new ShapeInstanceState();
@@ -838,7 +813,7 @@ export class BMDModelInstance {
         });
         renderHelper.renderInstBuilder.popTemplateRenderInst();
 
-        this.textureMappings = this.bmdModel.createDefaultTextureMappings();
+        this.materialInstanceState.textureMappings = this.bmdModel.createDefaultTextureMappings();
 
         const bmd = this.bmdModel.bmd;
 
@@ -938,7 +913,7 @@ export class BMDModelInstance {
         const samplerIndex = samplers.findIndex((sampler) => sampler.name === samplerName);
         if (samplerIndex < 0)
             return null;
-        return this.textureMappings[samplerIndex];
+        return this.materialInstanceState.textureMappings[samplerIndex];
     }
 
     /**
@@ -1130,7 +1105,7 @@ export class BMDModelInstance {
         let depth = -1;
         if (modelVisible) {
             for (let i = 0; i < this.materialInstances.length; i++)
-                this.materialInstances[i].prepareToRender(renderHelper, viewerInput, this.materialInstanceState, this.shapeInstanceState, this.textureMappings);
+                this.materialInstances[i].prepareToRender(renderHelper, viewerInput, this.materialInstanceState, this.shapeInstanceState);
 
             // Use the root joint to calculate depth.
             const rootJoint = this.bmdModel.bmd.jnt1.joints[0];

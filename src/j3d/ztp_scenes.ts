@@ -53,7 +53,7 @@ function createModelInstance(device: GfxDevice, renderHelper: GXRenderHelperGfx,
     for (let i = 0; i < bmdModel.tex1Data.tex1.samplers.length; i++) {
         // Look for any unbound textures and set them.
         const sampler = bmdModel.tex1Data.tex1.samplers[i];
-        const m = modelInstance.textureMappings[i];
+        const m = modelInstance.materialInstanceState.textureMappings[i];
         if (m.gfxTexture === null)
             extraTextures.fillTextureMapping(m, sampler.name);
     }
