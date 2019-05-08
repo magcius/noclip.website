@@ -75,21 +75,21 @@ class SplatoonSceneDesc implements Viewer.SceneDesc {
         this.id = this.path;
     }
 
-    public createScene(device: GfxDevice): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         const renderer = new SplatoonRenderer();
 
         return Progressable.all([
-            this._createRenderersFromPath(device, renderer, `spl/${this.path}`, false),
-            this._createRenderersFromPath(device, renderer, 'spl/VR_SkyDayCumulonimbus.szs', true),
+            this._createRenderersFromPath(device, renderer, `spl/${this.path}`, false, abortSignal),
+            this._createRenderersFromPath(device, renderer, 'spl/VR_SkyDayCumulonimbus.szs', true, abortSignal),
         ]).then(() => {
             return renderer;
         });
     }
 
-    private _createRenderersFromPath(device: GfxDevice, renderer: SplatoonRenderer, path: string, isSkybox: boolean): Progressable<void> {
+    private _createRenderersFromPath(device: GfxDevice, renderer: SplatoonRenderer, path: string, isSkybox: boolean, abortSignal: AbortSignal): Progressable<void> {
         const textureHolder = renderer.textureHolder;
 
-        return fetchData(path).then((result: ArrayBufferSlice) => {
+        return fetchData(path, abortSignal).then((result: ArrayBufferSlice) => {
             return Yaz0.decompress(result);
         }).then((result: ArrayBufferSlice) => {
             const sarc = SARC.parse(result);

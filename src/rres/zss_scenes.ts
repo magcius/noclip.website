@@ -630,12 +630,12 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
 class SkywardSwordSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
 
-    public createScene(device: GfxDevice): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         const basePath = `zss`;
         const systemPath = `${basePath}/Object/System.arc`;
         const objPackPath = `${basePath}/Object/ObjectPack.arc.LZ`;
         const stagePath = `${basePath}/Stage/${this.id}/${this.id}_stg_l0.arc.LZ`;
-        return Progressable.all([fetchData(systemPath), fetchData(objPackPath), fetchData(stagePath)]).then((buffers: ArrayBufferSlice[]) => {
+        return Progressable.all([fetchData(systemPath, abortSignal), fetchData(objPackPath, abortSignal), fetchData(stagePath, abortSignal)]).then((buffers: ArrayBufferSlice[]) => {
             const [systemBuffer, objPackBuffer, stageBuffer] = buffers;
 
             const systemArchive = U8.parse(systemBuffer);

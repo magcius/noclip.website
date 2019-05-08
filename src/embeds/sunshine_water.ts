@@ -204,7 +204,7 @@ class SeaRenderer extends SunshineRenderer {
 }
 
 export function createScene(device: GfxDevice, name: string): Progressable<SceneGfx> {
-    return fetchData("j3d/sms/dolpic0.szs").then((buffer: ArrayBufferSlice) => {
+    return fetchData("j3d/sms/dolpic0.szs", null).then((buffer: ArrayBufferSlice) => {
         return Yaz0.decompress(buffer);
     }).then((buffer: ArrayBufferSlice) => {
         const rarc = RARC.parse(buffer);

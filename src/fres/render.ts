@@ -386,7 +386,7 @@ class FVTXData {
             // In this case, we can't simply endian-swap, since we don't know the rest of the buffer layout.
             // Will need to convert it to something we can control.
             const newVertexBufferData = convertVertexBufferCopy(vertexBuffer, vertexAttribute, fmt, vtxCount);
-            return { format: fmt, data: newVertexBufferData.castToBuffer(), stride: byteStride };
+            return { format: fmt, data: newVertexBufferData.arrayBuffer, stride: byteStride };
         }
 
         return null;

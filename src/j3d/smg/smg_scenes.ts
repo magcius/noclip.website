@@ -596,11 +596,11 @@ class ModelCache {
     private models: BMDModel[] = [];
     private destroyed: boolean = false;
 
-    public getModel(device: GfxDevice, renderHelper: GXRenderHelperGfx, archivePath: string, modelFilename: string): Progressable<BMDModel> {
+    public getModel(device: GfxDevice, abortSignal: AbortSignal, renderHelper: GXRenderHelperGfx, archivePath: string, modelFilename: string): Progressable<BMDModel | null> {
         if (this.promiseCache.has(archivePath))
             return this.promiseCache.get(archivePath);
 
-        const p = fetchData(archivePath).then((buffer: ArrayBufferSlice) => {
+        const p = fetchData(archivePath, abortSignal).then((buffer: ArrayBufferSlice) => {
             if (buffer.byteLength === 0) {
                 console.warn(`Could not fetch archive ${archivePath}`);
                 return null;
@@ -782,11 +782,12 @@ class SMGSpawner {
         node.setAreaLightInfo(areaLightInfo);
     }
 
-    public spawnObject(device: GfxDevice, zone: ZoneNode, layer: number, objinfo: ObjInfo, modelMatrixBase: mat4): void {
+    public spawnObject(device: GfxDevice, abortSignal: AbortSignal, zone: ZoneNode, layer: number, objinfo: ObjInfo, modelMatrixBase: mat4): void {
         const spawnGraph = (arcName: string, tag: SceneGraphTag = SceneGraphTag.Normal, animOptions: AnimOptions | null | undefined = undefined, planetRecord: BCSV.BcsvRecord | null = null) => {
             const arcPath = `${this.pathBase}/ObjectData/${arcName}.arc`;
             const modelFilename = `${arcName}.bdl`;
-            return this.modelCache.getModel(device, this.renderHelper, arcPath, modelFilename).then((bmdModel): [Node, RARC.RARC] | null => {
+            return this.modelCache.getModel(device, abortSignal, this.renderHelper, arcPath, modelFilename).then((bmdModel): [Node, RARC.RARC] => {
+                // TODO(jstpierre): Do better than this.
                 if (bmdModel === null)
                     return null;
 
@@ -1319,23 +1320,23 @@ class SMGSpawner {
         }
     }
 
-    public spawnZone(device: GfxDevice, zone: Zone, zones: Zone[], modelMatrixBase: mat4, parentLayer: number = -1): ZoneNode {
+    public spawnZone(device: GfxDevice, abortSignal: AbortSignal, zone: Zone, zones: Zone[], modelMatrixBase: mat4, parentLayer: number = -1): ZoneNode {
         // Spawn all layers. We'll hide them later when masking out the others.
         const zoneNode = new ZoneNode(zone, parentLayer, modelMatrixBase);
         this.zones.push(zoneNode);
 
         for (const layer of zone.layers) {
             for (const objinfo of layer.objinfo)
-                this.spawnObject(device, zoneNode, layer.index, objinfo, modelMatrixBase);
+                this.spawnObject(device, abortSignal, zoneNode, layer.index, objinfo, modelMatrixBase);
 
             for (const objinfo of layer.mappartsinfo)
-                this.spawnObject(device, zoneNode, layer.index, objinfo, modelMatrixBase);
+                this.spawnObject(device, abortSignal, zoneNode, layer.index, objinfo, modelMatrixBase);
 
             for (const zoneinfo of layer.stageobjinfo) {
                 const subzone = zones.find((zone) => zone.name === zoneinfo.objName);
                 const subzoneModelMatrix = mat4.create();
                 mat4.mul(subzoneModelMatrix, modelMatrixBase, zoneinfo.modelMatrix);
-                const subzoneNode = this.spawnZone(device, subzone, zones, subzoneModelMatrix, layer.index);
+                const subzoneNode = this.spawnZone(device, abortSignal, subzone, zones, subzoneModelMatrix, layer.index);
                 zoneNode.subzones.push(subzoneNode);
             }
         }
@@ -1471,13 +1472,13 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
             // Construct initial state.
             renderHelper.renderInstBuilder.constructRenderInsts(device, viewRenderer);
 
-            return Progressable.all(zoneNames.map((zoneName) => fetchData(this.getZoneMapFilename(zoneName)))).then((buffers: ArrayBufferSlice[]) => {
+            return Progressable.all(zoneNames.map((zoneName) => fetchData(this.getZoneMapFilename(zoneName), abortSignal))).then((buffers: ArrayBufferSlice[]) => {
                 return Promise.all(buffers.map((buffer) => Yaz0.decompress(buffer)));
             }).then((zoneBuffers: ArrayBufferSlice[]): Viewer.SceneGfx => {
                 const zones = zoneBuffers.map((zoneBuffer, i) => this.parseZone(zoneNames[i], zoneBuffer));
                 const spawner = new SMGSpawner(this.pathBase, renderHelper, viewRenderer, planetTable, lightData);
                 const modelMatrixBase = mat4.create();
-                spawner.spawnZone(device, zones[0], zones, modelMatrixBase);
+                spawner.spawnZone(device, abortSignal, zones[0], zones, modelMatrixBase);
                 return new SMGRenderer(device, spawner, viewRenderer, scenariodata, zoneNames);
             });
         });

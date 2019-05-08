@@ -29,7 +29,7 @@ function isAligned(n: number, m: number) {
 
 export default class ArrayBufferSlice {
     constructor(
-        // The name arrayBuffer is chosen so that someone can't easily mistake an ArrayBufferSlice
+        // The field arrayBuffer is chosen so that someone can't easily mistake an ArrayBufferSlice
         // for an ArrayBuffer or ArrayBufferView, which is important for native APIs like OpenGL that
         // will silently choke on something like this. TypeScript has no way to explicitly mark our
         // class as incompatible with the ArrayBuffer interface.
@@ -40,12 +40,34 @@ export default class ArrayBufferSlice {
         assert(byteOffset >= 0 && byteLength >= 0 && (byteOffset + byteLength) <= this.arrayBuffer.byteLength);
     }
 
+    /**
+     * Return a sub-section of the buffer starting at byte offset {@param begin} and ending at byte
+     * offset {@param end}. If no value is provided for end, or it is {@constant 0}, then the end is
+     * the same as this {@see ArrayBufferSlice}.
+     *
+     * If you want a sub-section from a begin and *length* pair, see {@see subarray}.
+     *
+     * Note that this sub-section is not a copy like {@see ArrayBuffer.prototype.slice}, it is a new
+     * {@see ArrayBufferSlice} object with the same underlying {@see ArrayBuffer}.
+     */
     public slice(begin: number, end: number = 0): ArrayBufferSlice {
         const absBegin = this.byteOffset + begin;
         const absEnd = this.byteOffset + (end !== 0 ? end : this.byteLength);
+        const byteLength = absEnd - absBegin;
+        assert(byteLength >= 0 && byteLength <= this.byteLength);
         return new ArrayBufferSlice(this.arrayBuffer, absBegin, absEnd - absBegin);
     }
 
+    /**
+     * Return a sub-section of the buffer starting at byte offset {@param begin} and ending at byte
+     * offset {@param end}. If no value is provided for end, or it is {@constant 0}, then the end is
+     * the same as this {@see ArrayBufferSlice}.
+     *
+     * If you want a sub-section from a begin and *end* byte offset pair, see {@see slice}.
+     *
+     * Note that this sub-section is not a copy like {@see ArrayBuffer.prototype.slice}, it is a new
+     * {@see ArrayBufferSlice} object with the same underlying {@see ArrayBuffer}.
+     */
     public subarray(begin: number, byteLength?: number): ArrayBufferSlice {
         const absBegin = this.byteOffset + begin;
         if (byteLength === undefined)
@@ -54,22 +76,21 @@ export default class ArrayBufferSlice {
         return new ArrayBufferSlice(this.arrayBuffer, absBegin, byteLength);
     }
 
-    public copyToBuffer(offs: number = 0, length?: number): ArrayBuffer {
-        const start = this.byteOffset + offs;
-        const end = length !== undefined ? start + length : this.byteOffset + this.byteLength;
+    /**
+     * Return a copy of the sub-section of the array starting at byte offset {@param begin} and with
+     * length {@param byteLength}. If no value is provided for {@param begin}, then the sub-section
+     * will start where this {@see ArrayBufferSlice} does. If no value is provided for
+     * {@param byteLength}, then this sub-section will end where this {@see ArrayBufferSlice} does.
+     *
+     * Note that this will make a copy of the underlying ArrayBuffer. This should be used sparingly.
+     *
+     * A good use case for this is if you wish to save off a smaller portion of a larger buffer while
+     * letting the larger buffer be garbage collected.
+     */
+    public copyToBuffer(begin: number = 0, byteLength: number = 0): ArrayBuffer {
+        const start = this.byteOffset + begin;
+        const end = byteLength !== 0 ? start + byteLength : this.byteOffset + this.byteLength;
         return ArrayBuffer_slice.call(this.arrayBuffer, start, end);
-    }
-
-    public copyToSlice(offs: number = 0, length?: number): ArrayBufferSlice {
-        return new ArrayBufferSlice(this.copyToBuffer(offs, length));
-    }
-
-    public castToBuffer(): ArrayBuffer {
-        if (this.byteOffset === 0 && this.byteLength === this.arrayBuffer.byteLength) {
-            return this.arrayBuffer;
-        } else {
-            return this.copyToBuffer();
-        }
     }
 
     public createDataView(offs: number = 0, length?: number): DataView {

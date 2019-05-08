@@ -15,12 +15,19 @@ function getDataStorageBaseURL(): string {
         return `https://noclip.beyond3d.com`;
 }
 
+export class AbortedError extends Error {
+    constructor(...args: any[]) {
+        super(...args);
+        this.name = 'AbortedError';
+    }
+}
+
 export function getDataURLForPath(url: string): string {
     assert(!url.startsWith(`data/`));
     return `${getDataStorageBaseURL()}/${url}`;
 }
 
-export function fetchData(path: string, abortSignal: AbortSignal | null = null): Progressable<NamedArrayBufferSlice> {
+export function fetchData(path: string, abortSignal: AbortSignal | null): Progressable<NamedArrayBufferSlice> {
     const request = new XMLHttpRequest();
     const url = getDataURLForPath(path);
     request.open("GET", url, true);
@@ -37,8 +44,8 @@ export function fetchData(path: string, abortSignal: AbortSignal | null = null):
             let slice: NamedArrayBufferSlice;
 
             // If we aborted the request, then don't call our callback.
-            if (request.status === 0 && abortSignal.aborted)
-                return;
+            if (request.status === 0 && (abortSignal !== null && abortSignal.aborted))
+                reject(new AbortedError());
 
             if (request.status !== 200) {
                 console.error(`fetchData: Received non-success status code ${request.status} when fetching file ${path}. Status: ${request.status}, aborted: ${abortSignal.aborted}`);
@@ -54,7 +61,7 @@ export function fetchData(path: string, abortSignal: AbortSignal | null = null):
         request.onload = done;
         request.onerror = done;
         request.onabort = () => {
-            reject(400);
+            reject(new AbortedError());
         };
         request.onprogress = (e) => {
             if (e.lengthComputable)

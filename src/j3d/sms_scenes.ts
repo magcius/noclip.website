@@ -138,7 +138,7 @@ function readSceneBin(buffer: ArrayBufferSlice): SceneBinObj {
     const nameHash = view.getUint16(offs + 0x00);
     const nameSize = view.getUint16(offs + 0x02);
     offs += 0x04;
-    const name = sjisDecoder.decode(buffer.copyToBuffer(offs, nameSize));
+    const name = sjisDecoder.decode(buffer.createTypedArray(Uint8Array, offs, nameSize));
     offs += nameSize;
 
     function readChildren(numChildren: number): SceneBinObj[] {
@@ -391,10 +391,10 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
 
-    public createScene(device: GfxDevice): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         const pathBase = `j3d/sms`;
         const path = `${pathBase}/${this.id}.szs`;
-        return fetchData(path).then((result: ArrayBufferSlice) => {
+        return fetchData(path, abortSignal).then((result: ArrayBufferSlice) => {
             return Yaz0.decompress(result);
         }).then((buffer: ArrayBufferSlice) => {
             const rarc = RARC.parse(buffer);

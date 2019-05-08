@@ -5,7 +5,7 @@ import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexAttributeDesc
 import * as Viewer from "../viewer";
 import { decompressBC, DecodedSurfaceSW, surfaceToCanvas } from "../fres/bc_texture";
 import { EMeshFrag, EMesh, EScene, EDomain } from "./plb";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
+import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from "../gfx/helpers/BufferHelpers";
 import { DeviceProgram, DeviceProgramReflection } from "../Program";
 import { convertToTriangleIndexBuffer, filterDegenerateTriangleIndexBuffer } from "../gfx/helpers/TopologyHelpers";
 import { GfxRenderInstBuilder, GfxRenderInst, GfxRenderInstViewRenderer } from "../gfx/render/GfxRenderer";
@@ -49,7 +49,7 @@ export class PsychonautsTextureHolder extends TextureHolder<PPAK_Texture> {
 
         let mipWidth = texture.width, mipHeight = texture.height;
         for (let i = 0; i < texture.mipData.length; i++) {
-            const pixels = texture.mipData[i].copyToSlice().createTypedArray(Uint8Array);
+            const pixels = texture.mipData[i].createTypedArray(Uint8Array);
             const decodedSurface = decodeTextureData(texture.format, mipWidth, mipHeight, pixels);
             levelDatas.push(decodedSurface.pixels as Uint8Array);
 
@@ -121,8 +121,8 @@ class MeshFragData {
     public indexCount: number;
 
     constructor(device: GfxDevice, public meshFrag: EMeshFrag) {
-        this.posNrmBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, meshFrag.streamPosNrm.castToBuffer());
-        this.colorBuffer = meshFrag.streamColor ? makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, meshFrag.streamColor.castToBuffer()) : null;
+        this.posNrmBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.VERTEX, meshFrag.streamPosNrm);
+        this.colorBuffer = meshFrag.streamColor ? makeStaticDataBufferFromSlice(device, GfxBufferUsage.VERTEX, meshFrag.streamColor) : null;
 
         if (meshFrag.streamUVCount > 0) {
             const uvData = decodeStreamUV(meshFrag.streamUV, meshFrag.iVertCount, meshFrag.streamUVCount, meshFrag.uvCoordScale);

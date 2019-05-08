@@ -91,9 +91,9 @@ export class ElebitsRenderer extends BasicRendererHelper {
 class ElebitsSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string, public rooms: number[]) {}
 
-    public createScene(device: GfxDevice): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         const paths = this.rooms.map((room) => makeElbPath(this.id, room));
-        const progressables: Progressable<ArrayBufferSlice>[] = paths.map((path) => fetchData(path));
+        const progressables: Progressable<ArrayBufferSlice>[] = paths.map((path) => fetchData(path, abortSignal));
         return Progressable.all(progressables).then((buffers: ArrayBufferSlice[]) => {
             const stageRRESes = buffers.map((buffer) => BRRES.parse(buffer));
             return new ElebitsRenderer(device, stageRRESes);

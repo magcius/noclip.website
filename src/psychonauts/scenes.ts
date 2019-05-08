@@ -10,15 +10,15 @@ class PsychonautsSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
 
-    private fetchPPF(id: string, hasScene: boolean): Progressable<PPF.PPAK> {
-        return fetchData(`psychonauts/${id}.ppf`).then((buffer) => {
+    private fetchPPF(id: string, abortSignal: AbortSignal, hasScene: boolean): Progressable<PPF.PPAK> {
+        return fetchData(`psychonauts/${id}.ppf`, abortSignal).then((buffer) => {
             const ppf = PPF.parse(buffer, hasScene);
             return ppf;
         })
     }
 
-    public createScene(device: GfxDevice): Progressable<Viewer.SceneGfx> {
-        return Progressable.all([this.fetchPPF('common', false), this.fetchPPF(this.id, true)]).then(([commonPPF, scenePPF]) => {
+    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+        return Progressable.all([this.fetchPPF('common', abortSignal, false), this.fetchPPF(this.id, abortSignal, true)]).then(([commonPPF, scenePPF]) => {
             const renderer = new PsychonautsRenderer();
             // TODO(jstpierre): Only translate the textures that are actually used.
             renderer.textureHolder.addTextures(device, commonPPF.textures);

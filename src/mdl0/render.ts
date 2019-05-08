@@ -315,8 +315,8 @@ export class SceneDesc implements Viewer.SceneDesc {
         this.id = this.path;
     }
 
-    public createScene(device: GfxDevice): Progressable<SceneRenderer> {
-        return fetchData(this.path).then((result: ArrayBufferSlice) => {
+    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<SceneRenderer> {
+        return fetchData(this.path, abortSignal).then((result: ArrayBufferSlice) => {
             const mdl0 = MDL0.parse(result);
             return new SceneRenderer(device, mdl0);
         });

@@ -263,11 +263,11 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    public createScene(device: GfxDevice): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         const stagePath = `${pathBase}/res/Stage/${this.stageId}`;
         const extraTextures = new ZTPExtraTextures();
 
-        return this.fetchRarc(`${stagePath}/STG_00.arc`).then((stageRarc: RARC.RARC) => {
+        return this.fetchRarc(`${stagePath}/STG_00.arc`, abortSignal).then((stageRarc: RARC.RARC) => {
             // Load stage shared textures.
             const texcFolder = stageRarc.findDir(`texc`);
             const extraTextureFiles = texcFolder !== null ? texcFolder.files : [];
@@ -307,7 +307,7 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
                 roomNames = roomList.map((i) => `R${leftPad(''+i, 2)}_00`);
             }
 
-            return Progressable.all(roomNames.map((roomName) => this.fetchRarc(`${stagePath}/${roomName}.arc`))).then((roomRarcs: (RARC.RARC | null)[]) => {
+            return Progressable.all(roomNames.map((roomName) => this.fetchRarc(`${stagePath}/${roomName}.arc`, abortSignal))).then((roomRarcs: (RARC.RARC | null)[]) => {
                 roomRarcs.forEach((rarc: RARC.RARC | null, i) => {
                     if (rarc === null) return;
                     this.createRoomScenes(device, renderer, rarc, roomNames[i]);
@@ -319,8 +319,8 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private fetchRarc(path: string): Progressable<RARC.RARC | null> {
-        return fetchData(path).then((buffer: ArrayBufferSlice) => {
+    private fetchRarc(path: string, abortSignal: AbortSignal): Progressable<RARC.RARC | null> {
+        return fetchData(path, abortSignal).then((buffer: ArrayBufferSlice) => {
             if (buffer.byteLength === 0) return null;
             return Yaz0.decompress(buffer).then((buffer: ArrayBufferSlice) => RARC.parse(buffer));
         });

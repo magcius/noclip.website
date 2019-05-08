@@ -626,9 +626,9 @@ class ModelCache {
         return Progressable.all(p);
     }
 
-    public fetchModel(device: GfxDevice, filename: string): Progressable<BMDData> {
+    public fetchModel(device: GfxDevice, filename: string, abortSignal: AbortSignal): Progressable<BMDData> {
         if (!this.map.has(filename)) {
-            const p = fetchData(filename).then((buffer) => {
+            const p = fetchData(filename, abortSignal).then((buffer) => {
                 const result = LZ77.maybeDecompress(buffer);
                 const bmd = NITRO_BMD.parse(result);
                 const bmdData = new BMDData(device, bmd);
@@ -654,17 +654,17 @@ export class SceneDesc implements Viewer.SceneDesc {
         this.id = '' + this.levelId;
     }
 
-    public createScene(device: GfxDevice): Progressable<Viewer.SceneGfx> {
-        return fetchData('sm64ds/sm64ds.crg1').then((result: ArrayBufferSlice) => {
+    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+        return fetchData('sm64ds/sm64ds.crg1', abortSignal).then((result: ArrayBufferSlice) => {
             const crg1 = BYML.parse<Sm64DSCRG1>(result, BYML.FileType.CRG1);
             const textureHolder = new NITROTextureHolder();
-            return this._createSceneFromCRG1(device, textureHolder, crg1);
+            return this._createSceneFromCRG1(device, textureHolder, crg1, abortSignal);
         });
     }
 
-    private _createBMDRenderer(device: GfxDevice, renderer: SM64DSRenderer, filename: string, scale: number, level: CRG1Level, isSkybox: boolean): Progressable<BMDModelInstance> {
+    private _createBMDRenderer(device: GfxDevice, renderer: SM64DSRenderer, abortSignal: AbortSignal, filename: string, scale: number, level: CRG1Level, isSkybox: boolean): Progressable<BMDModelInstance> {
         const modelCache = renderer.modelCache;
-        return modelCache.fetchModel(device, `sm64ds/${filename}`).then((bmdData: BMDData) => {
+        return modelCache.fetchModel(device, `sm64ds/${filename}`, abortSignal).then((bmdData: BMDData) => {
             const bmdRenderer = new BMDModelInstance(device, renderer.textureHolder, bmdData, level);
             mat4.scale(bmdRenderer.modelMatrix, bmdRenderer.modelMatrix, [scale, scale, scale]);
             bmdRenderer.isSkybox = isSkybox;
@@ -674,9 +674,9 @@ export class SceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private _createBMDObjRenderer(device: GfxDevice, renderer: SM64DSRenderer, filename: string, translation: vec3, rotationY: number, scale: number = 1, spinSpeed: number = 0): Progressable<BMDModelInstance> {
+    private _createBMDObjRenderer(device: GfxDevice, renderer: SM64DSRenderer, abortSignal: AbortSignal, filename: string, translation: vec3, rotationY: number, scale: number = 1, spinSpeed: number = 0): Progressable<BMDModelInstance> {
         const modelCache = renderer.modelCache;
-        return modelCache.fetchModel(device, `sm64ds/${filename}`).then((bmdData: BMDData) => {
+        return modelCache.fetchModel(device, `sm64ds/${filename}`, abortSignal).then((bmdData: BMDData) => {
             const bmdRenderer = new BMDModelInstance(device, renderer.textureHolder, bmdData);
             bmdRenderer.name = filename;
 
@@ -700,7 +700,7 @@ export class SceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private _createBMDRendererForObject(device: GfxDevice, renderer: SM64DSRenderer, object: CRG1Object): Progressable<BMDModelInstance> {
+    private _createBMDRendererForObject(device: GfxDevice, renderer: SM64DSRenderer, abortSignal: AbortSignal, object: CRG1Object): Progressable<BMDModelInstance> {
         const translation = vec3.fromValues(object.Position.X, object.Position.Y, object.Position.Z);
         const rotationY = object.Rotation.Y / 180 * Math.PI;
 
@@ -715,27 +715,27 @@ export class SceneDesc implements Viewer.SceneDesc {
         case 21: // Koopa
             return null;
         case 23: // Brick Block
-            return this._createBMDObjRenderer(device, renderer, `normal_obj/obj_block/broken_block_l.bmd`, translation, rotationY, 0.8);
+            return this._createBMDObjRenderer(device, renderer, abortSignal, `normal_obj/obj_block/broken_block_l.bmd`, translation, rotationY, 0.8);
         case 24: // Brick Block Larger
-            return this._createBMDObjRenderer(device, renderer, `normal_obj/obj_block/broken_block_l.bmd`, translation, rotationY, 1.2);
+            return this._createBMDObjRenderer(device, renderer, abortSignal, `normal_obj/obj_block/broken_block_l.bmd`, translation, rotationY, 1.2);
         case 26: // Powerup inside block?
         case 29: // Cannon hatch
             return null;
         case 30: // Item Block
-            return this._createBMDObjRenderer(device, renderer, `normal_obj/obj_hatena_box/hatena_box.bmd`, translation, rotationY, 0.8);
+            return this._createBMDObjRenderer(device, renderer, abortSignal, `normal_obj/obj_hatena_box/hatena_box.bmd`, translation, rotationY, 0.8);
         case 36: // Pole
-            return this._createBMDObjRenderer(device, renderer, `normal_obj/obj_pile/pile.bmd`, translation, rotationY, 0.8);
+            return this._createBMDObjRenderer(device, renderer, abortSignal, `normal_obj/obj_pile/pile.bmd`, translation, rotationY, 0.8);
         case 37: // Coin
-            return this._createBMDObjRenderer(device, renderer, `normal_obj/coin/coin_poly32.bmd`, translation, rotationY, 0.7, 0.1);
+            return this._createBMDObjRenderer(device, renderer, abortSignal, `normal_obj/coin/coin_poly32.bmd`, translation, rotationY, 0.7, 0.1);
         case 38: // Red Coin
-            return this._createBMDObjRenderer(device, renderer, `normal_obj/coin/coin_red_poly32.bmd`, translation, rotationY, 0.7, 0.1);
+            return this._createBMDObjRenderer(device, renderer, abortSignal, `normal_obj/coin/coin_red_poly32.bmd`, translation, rotationY, 0.7, 0.1);
         case 39: // Blue Coin
-            return this._createBMDObjRenderer(device, renderer, `normal_obj/coin/coin_blue_poly32.bmd`, translation, rotationY, 0.7, 0.1);
+            return this._createBMDObjRenderer(device, renderer, abortSignal, `normal_obj/coin/coin_blue_poly32.bmd`, translation, rotationY, 0.7, 0.1);
         case 41: { // Tree
             const treeType = (object.Parameters[0] >>> 4) & 0x07;
             const treeFilenames = ['bomb', 'toge', 'yuki', 'yashi', 'castle', 'castle', 'castle', 'castle'];
             const filename = `normal_obj/tree/${treeFilenames[treeType]}_tree.bmd`;
-            return this._createBMDObjRenderer(device, renderer, filename, translation, rotationY);
+            return this._createBMDObjRenderer(device, renderer, abortSignal, filename, translation, rotationY);
         }
         case 42: { // Castle Painting
             const painting = (object.Parameters[0] >>> 8) & 0x1F;
@@ -748,7 +748,7 @@ export class SceneDesc implements Viewer.SceneDesc {
             const scaleY = ((object.Parameters[0] >> 4) & 0x0F) + 1;
             const rotationX = object.Parameters[1] / 0x7FFF * (Math.PI);
             const isMirrored = ((object.Parameters[0] >> 13) & 0x03) === 3;
-            return this._createBMDObjRenderer(device, renderer, filename, translation, rotationY, 0.8).then((renderer) => {
+            return this._createBMDObjRenderer(device, renderer, abortSignal, filename, translation, rotationY, 0.8).then((renderer) => {
                 mat4.rotateX(renderer.modelMatrix, renderer.modelMatrix, rotationX);
                 mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [scaleX, scaleY, 1]);
                 mat4.translate(renderer.modelMatrix, renderer.modelMatrix, [0, 100/16, 0]);
@@ -776,7 +776,7 @@ export class SceneDesc implements Viewer.SceneDesc {
         case 61: // Star Target
             return null;
         case 62: // Silver Star
-            return this._createBMDObjRenderer(device, renderer, `normal_obj/star/obj_star_silver.bmd`, translation, rotationY, 0.8, 0.08);
+            return this._createBMDObjRenderer(device, renderer, abortSignal, `normal_obj/star/obj_star_silver.bmd`, translation, rotationY, 0.8, 0.08);
         case 63: // Star
             let filename = `normal_obj/star/obj_star.bmd`;
             let startype = (object.Parameters[0] >>> 4) & 0x0F;
@@ -793,7 +793,7 @@ export class SceneDesc implements Viewer.SceneDesc {
                     rotateSpeed = 0;
                     break;
             }
-            return this._createBMDObjRenderer(device, renderer, filename, translation, rotationY, 0.8, rotateSpeed);
+            return this._createBMDObjRenderer(device, renderer, abortSignal, filename, translation, rotationY, 0.8, rotateSpeed);
         case 64: // Whomp
         case 65: // Big Whomp
         case 66: // Thwomp
@@ -801,9 +801,9 @@ export class SceneDesc implements Viewer.SceneDesc {
         case 74: // Minigame Cabinet Trigger (Invisible)
             return null;
         case 75: // Wall sign
-            return this._createBMDObjRenderer(device, renderer, `normal_obj/obj_kanban/obj_kanban.bmd`, translation, rotationY, 0.8);
+            return this._createBMDObjRenderer(device, renderer, abortSignal, `normal_obj/obj_kanban/obj_kanban.bmd`, translation, rotationY, 0.8);
         case 76: // Signpost
-            return this._createBMDObjRenderer(device, renderer, `normal_obj/obj_tatefuda/obj_tatefuda.bmd`, translation, rotationY, 0.8);
+            return this._createBMDObjRenderer(device, renderer, abortSignal, `normal_obj/obj_tatefuda/obj_tatefuda.bmd`, translation, rotationY, 0.8);
         case 79: // Heart
         case 80: // Toad
         case 167: // Peach's Castle Tippy TTC Hour Hand
@@ -811,9 +811,9 @@ export class SceneDesc implements Viewer.SceneDesc {
         case 169: // Peach's Castle Tippy TTC Pendulum
             return null;
         case 187: // Left Arrow Sign
-            return this._createBMDObjRenderer(device, renderer, `normal_obj/obj_yajirusi_l/yajirusi_l.bmd`, translation, rotationY, 0.8);
+            return this._createBMDObjRenderer(device, renderer, abortSignal, `normal_obj/obj_yajirusi_l/yajirusi_l.bmd`, translation, rotationY, 0.8);
         case 188: // Right Arrow Sign
-            return this._createBMDObjRenderer(device, renderer, `normal_obj/obj_yajirusi_r/yajirusi_r.bmd`, translation, rotationY, 0.8);
+            return this._createBMDObjRenderer(device, renderer, abortSignal, `normal_obj/obj_yajirusi_r/yajirusi_r.bmd`, translation, rotationY, 0.8);
         case 196: // WF
         case 197: // WF
         case 198: // WF
@@ -824,7 +824,7 @@ export class SceneDesc implements Viewer.SceneDesc {
         case 203: // WF Tower
             return null;
         case 204: // WF Spinning Island
-            return this._createBMDObjRenderer(device, renderer, `special_obj/bk_ukisima/bk_ukisima.bmd`, translation, rotationY, 1, 0.05);
+            return this._createBMDObjRenderer(device, renderer, abortSignal, `special_obj/bk_ukisima/bk_ukisima.bmd`, translation, rotationY, 1, 0.05);
         case 205: // WF
         case 206: // WF
         case 207: // WF
@@ -847,18 +847,18 @@ export class SceneDesc implements Viewer.SceneDesc {
         case 282: // Koopa the Quick Finish Flag
             return null;
         case 284: // Wario Block
-            return this._createBMDObjRenderer(device, renderer, `normal_obj/obj_block/broken_block_ll.bmd`, translation, rotationY);
+            return this._createBMDObjRenderer(device, renderer, abortSignal, `normal_obj/obj_block/broken_block_ll.bmd`, translation, rotationY);
         case 293: // Water
-            return this._createBMDObjRenderer(device, renderer, `special_obj/mc_water/mc_water.bmd`, translation, rotationY, 0.8);
+            return this._createBMDObjRenderer(device, renderer, abortSignal, `special_obj/mc_water/mc_water.bmd`, translation, rotationY, 0.8);
         case 295: // Metal net
-            return this._createBMDObjRenderer(device, renderer, `special_obj/mc_metalnet/mc_metalnet.bmd`, translation, rotationY, 0.8);
+            return this._createBMDObjRenderer(device, renderer, abortSignal, `special_obj/mc_metalnet/mc_metalnet.bmd`, translation, rotationY, 0.8);
         case 298: // Flag
-            return this._createBMDObjRenderer(device, renderer, `special_obj/mc_flag/mc_flag.bmd`, translation, rotationY, 0.8);
+            return this._createBMDObjRenderer(device, renderer, abortSignal, `special_obj/mc_flag/mc_flag.bmd`, translation, rotationY, 0.8);
         case 303: // Castle Basement Water
         case 304: // Secret number thingy
             return null;
         case 305: // Blue Coin Switch
-            return this._createBMDObjRenderer(device, renderer, `normal_obj/b_coin_switch/b_coin_switch.bmd`, translation, rotationY, 0.8);
+            return this._createBMDObjRenderer(device, renderer, abortSignal, `normal_obj/b_coin_switch/b_coin_switch.bmd`, translation, rotationY, 0.8);
         case 314: // Hidden Pirahna Plant
         case 315: // Enemy spawner trigger
         case 316: // Enemy spawner
@@ -872,19 +872,19 @@ export class SceneDesc implements Viewer.SceneDesc {
         }
     }
 
-    private _createSceneFromCRG1(device: GfxDevice, textureHolder: NITROTextureHolder, crg1: Sm64DSCRG1): Progressable<Viewer.SceneGfx> {
+    private _createSceneFromCRG1(device: GfxDevice, textureHolder: NITROTextureHolder, crg1: Sm64DSCRG1, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         const level = crg1.Levels[this.levelId];
         const modelCache = new ModelCache();
 
         const renderer = new SM64DSRenderer(modelCache, textureHolder);
 
-        this._createBMDRenderer(device, renderer, level.MapBmdFile, GLOBAL_SCALE, level, false);
+        this._createBMDRenderer(device, renderer, abortSignal, level.MapBmdFile, GLOBAL_SCALE, level, false);
 
         if (level.VrboxBmdFile)
-            this._createBMDRenderer(device, renderer, level.VrboxBmdFile, 0.8, level, true);
+            this._createBMDRenderer(device, renderer, abortSignal, level.VrboxBmdFile, 0.8, level, true);
 
         for (let i = 0; i < level.Objects.length; i++)
-            this._createBMDRendererForObject(device, renderer, level.Objects[i]);
+            this._createBMDRendererForObject(device, renderer, abortSignal, level.Objects[i]);
 
         return modelCache.waitForLoad().then(() => {
             return renderer;

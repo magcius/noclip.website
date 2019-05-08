@@ -22,7 +22,7 @@ export class TerrainSceneDesc implements Viewer.SceneDesc {
 
     public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         const teraPath = `${pathBase}/Terrain/A/${this.id}`;
-        return Progressable.all([fetchData(`${pathBase}/Model/Terrain.Tex1.sbfres`, abortSignal), fetchData(`${pathBase}/Model/Terrain.Tex2.sbfres`), fetchData(`${teraPath}.tscb`, abortSignal)]).then(([terrainTex1Buffer, terrainTex2Buffer, tscbBuffer]) => {
+        return Progressable.all([fetchData(`${pathBase}/Model/Terrain.Tex1.sbfres`, abortSignal), fetchData(`${pathBase}/Model/Terrain.Tex2.sbfres`, abortSignal), fetchData(`${teraPath}.tscb`, abortSignal)]).then(([terrainTex1Buffer, terrainTex2Buffer, tscbBuffer]) => {
             const tscb = TSCB.parse(tscbBuffer);
 
             return Progressable.all([decodeFRES(terrainTex1Buffer), decodeFRES(terrainTex2Buffer)]).then(([tex1, tex2]) => {

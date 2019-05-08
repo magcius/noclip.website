@@ -689,8 +689,8 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
         return renderer;
 }
 
-    public createScene(device: GfxDevice): Progressable<Viewer.SceneGfx> {
-        return fetchData(`mkwii/${this.id}.szs`).then((buffer: ArrayBufferSlice) => {
+    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+        return fetchData(`mkwii/${this.id}.szs`, abortSignal).then((buffer: ArrayBufferSlice) => {
             return Yaz0.decompress(buffer);
         }).then((buffer: ArrayBufferSlice) => {
             const arc = U8.parse(buffer);

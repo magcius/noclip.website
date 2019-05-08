@@ -29,7 +29,8 @@ class Deswizzler {
 export const deswizzler: Deswizzler = new Deswizzler();
 
 export function deswizzleSurface(surface: GX2Surface, texData: ArrayBufferSlice, mipLevel: number): Promise<DeswizzledSurface> {
-    return deswizzler.deswizzle(surface, texData.castToBuffer(), mipLevel);
+    // Copy the buffer since we might transfer the ArrayBuffer.
+    return deswizzler.deswizzle(surface, texData.copyToBuffer(), mipLevel);
 }
 
 export function decodeSurface(surface: GX2Surface, texData: ArrayBufferSlice, mipData: ArrayBufferSlice, mipLevel: number): Promise<DecodedSurface> {

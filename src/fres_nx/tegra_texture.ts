@@ -130,11 +130,11 @@ export function deswizzle(swizzledSurface: SwizzledSurface): Uint8Array {
     const widthInGobs = Math.ceil(widthInBlocks * bpp / 64);
     const gobStride = 512 * blockHeight * widthInGobs;
 
-    function memcpy(dst: Uint8Array, dstOffs: number, src: ArrayBuffer, srcOffs: number, length: number) {
-        dst.set(new Uint8Array(src, srcOffs, length), dstOffs);
+    function memcpy(dst: Uint8Array, dstOffs: number, src: ArrayBufferSlice, srcOffs: number, length: number) {
+        dst.set(src.createTypedArray(Uint8Array, srcOffs, length), dstOffs);
     }
 
-    const src = swizzledSurface.buffer.castToBuffer();
+    const src = swizzledSurface.buffer;
     const dst = new Uint8Array(widthInBlocks * heightInBlocks * bpp);
     for (let y = 0; y < heightInBlocks; y++) {
         for (let x = 0; x < widthInBlocks; x++) {
