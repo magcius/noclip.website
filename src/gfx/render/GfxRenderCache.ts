@@ -86,11 +86,8 @@ function gfxInputLayoutDescriptorEquals(a: GfxInputLayoutDescriptor, b: GfxInput
     return true;
 }
 
-// XXX(jstpierre): giant hack!!!
-// We need to cache programs at a higher level so we won't have to query program keys here.
-let _device: GfxDevice;
 function deviceProgramEquals(a: DeviceProgram, b: DeviceProgram): boolean {
-    return DeviceProgram.equals(_device, a, b);
+    return DeviceProgram.equals(a, b);
 }
 
 export class GfxRenderCache {
@@ -109,8 +106,6 @@ export class GfxRenderCache {
     }
 
     public createRenderPipeline(device: GfxDevice, descriptor: GfxRenderPipelineDescriptor): GfxRenderPipeline {
-        _device = device;
-
         let renderPipeline = this.gfxRenderPipelinesCache.get(descriptor);
         if (renderPipeline === null) {
             renderPipeline = device.createRenderPipeline(descriptor);
@@ -129,8 +124,6 @@ export class GfxRenderCache {
     }
 
     public createProgram(device: GfxDevice, deviceProgram: DeviceProgram): GfxProgram {
-        _device = device;
-
         let program = this.gfxProgramCache.get(deviceProgram);
         if (program === null) {
             program = device.createProgram(deviceProgram);

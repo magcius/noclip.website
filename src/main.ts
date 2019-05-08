@@ -147,6 +147,7 @@ class SceneLoader {
                 progressable.then((scene: SceneGfx) => {
                     if (this.loadingSceneDesc === sceneDesc) {
                         this.loadingSceneDesc = null;
+                        this.abortController = null;
                         this.viewer.setScene(scene);
                     }
                 });

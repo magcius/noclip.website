@@ -1,7 +1,6 @@
 
-// @ts-ignore
-import { readFileSync } from 'fs';
-const defaultSaveStateData = JSON.parse(readFileSync('src/DefaultSaveStates.nclsp', { encoding: 'utf8' }));
+//@ts-ignore
+import * as defaultSaveStateData from './DefaultSaveStates.json';
 
 export type SettingCallback = (saveManager: SaveManager, key: string) => void;
 export type SaveStateCallback = (saveManager: SaveManager) => void;

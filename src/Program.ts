@@ -83,6 +83,17 @@ function findProgramReflection(program: DeviceProgram): DeviceProgramReflection 
     return null;
 }
 
+function definesEqual(a: DeviceProgram, b: DeviceProgram): boolean {
+    if (a.defines.size !== b.defines.size)
+        return false;
+
+    for (const [k, v] of a.defines.entries())
+        if (b.defines.get(k) !== v)
+            return false;
+
+    return true;
+}
+
 export class DeviceProgram {
     public name: string = '(unnamed)';
 
@@ -105,10 +116,16 @@ export class DeviceProgram {
     public frag: string = '';
     public defines = new Map<string, string>();
 
-    public static equals(device: GfxDevice, a: DeviceProgram, b: DeviceProgram): boolean {
-        a._ensurePreprocessed(device);
-        b._ensurePreprocessed(device);
-        return a.preprocessedVert === b.preprocessedVert && a.preprocessedFrag === b.preprocessedFrag;
+    public static equals(a: DeviceProgram, b: DeviceProgram): boolean {
+        if (a.both !== b.both)
+            return false;
+        if (a.vert !== b.vert)
+            return false;
+        if (a.frag !== b.frag)
+            return false;
+        if (!definesEqual(a, b))
+            return false;
+        return true;
     }
 
     private _ensurePreprocessed(device: GfxDevice): void {
