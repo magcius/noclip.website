@@ -12,7 +12,7 @@ import * as GX_Material from '../gx/gx_material';
 
 import { BMD, BTK, MaterialEntry } from '../j3d/j3d';
 import * as RARC from '../j3d/rarc';
-import { BMDModel, MaterialInstance, MaterialInstanceState, ShapeInstanceState, defaultFillTextureMappingCallback } from '../j3d/render';
+import { BMDModel, MaterialInstance, MaterialInstanceState, ShapeInstanceState } from '../j3d/render';
 import { SunshineRenderer, SunshineSceneDesc, SMSPass } from '../j3d/sms_scenes';
 import * as Yaz0 from '../compression/Yaz0';
 import { GXRenderHelperGfx, ub_PacketParams, PacketParams } from '../gx/gx_render';
@@ -22,6 +22,7 @@ import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { GfxRenderInst, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { computeViewMatrix } from '../Camera';
+import { TextureMapping } from '../TextureHolder';
 
 const scale = 200;
 const posMtx = mat4.create();
@@ -114,6 +115,7 @@ class SeaPlaneScene {
     private plane: PlaneShape;
     private bmdModel: BMDModel;
     private animationController: AnimationController;
+    private textureMappings: TextureMapping[];
 
     constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, bmd: BMD, btk: BTK, configName: string) {
         this.animationController = new AnimationController();
@@ -129,6 +131,7 @@ class SeaPlaneScene {
         }
 
         this.bmdModel = new BMDModel(device, renderHelper, bmd);
+        this.textureMappings = this.bmdModel.createDefaultTextureMappings();
 
         const seaMaterial = bmd.mat3.materialEntries.find((m) => m.name === '_umi');
         this.mangleMaterial(seaMaterial, configName);
@@ -183,7 +186,7 @@ class SeaPlaneScene {
     public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput): void {
         this.plane.prepareToRender(renderHelper, viewerInput);
         this.animationController.setTimeInMilliseconds(viewerInput.time);
-        this.seaMaterialInstance.prepareToRender(renderHelper, viewerInput, this.materialInstanceState, this.shapeInstanceState, defaultFillTextureMappingCallback, this.bmdModel, []);
+        this.seaMaterialInstance.prepareToRender(renderHelper, viewerInput, this.materialInstanceState, this.shapeInstanceState, this.textureMappings);
     }
 
     public destroy(device: GfxDevice) {

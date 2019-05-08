@@ -1,12 +1,12 @@
 
 import { mat4 } from 'gl-matrix';
 
-import { BMD, BMT, HierarchyNode, HierarchyType, MaterialEntry, Shape, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData, DRW1MatrixKind, TTK1Animator, ANK1Animator, bindANK1Animator, BTI, bindVAF1Animator, VAF1, VAF1Animator, TPT1, bindTPT1Animator, TPT1Animator, TEX1, BTI_Texture } from './j3d';
+import { BMD, BMT, HierarchyNode, HierarchyType, MaterialEntry, Shape, ShapeDisplayFlags, TEX1_Sampler, DRW1MatrixKind, TTK1Animator, ANK1Animator, bindANK1Animator, BTI, bindVAF1Animator, VAF1, VAF1Animator, TPT1, bindTPT1Animator, TPT1Animator, TEX1, BTI_Texture } from './j3d';
 import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } from './j3d';
 
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
-import { MaterialParams, PacketParams, GXTextureHolder, ColorKind, translateTexFilterGfx, translateWrapModeGfx, loadedDataCoalescerGfx, GXShapeHelperGfx, GXRenderHelperGfx, ub_MaterialParams, loadTextureFromMipChain } from '../gx/gx_render';
+import { MaterialParams, PacketParams, ColorKind, translateTexFilterGfx, translateWrapModeGfx, loadedDataCoalescerGfx, GXShapeHelperGfx, GXRenderHelperGfx, ub_MaterialParams, loadTextureFromMipChain } from '../gx/gx_render';
 
 import { computeViewMatrix, computeModelMatrixBillboard, computeModelMatrixYBillboard, computeViewMatrixSkybox, texEnvMtx, Camera, texProjPerspMtx, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
 import { TextureMapping, TextureOverride } from '../TextureHolder';
@@ -20,18 +20,6 @@ import { GfxRenderInst, GfxRenderInstBuilder, setSortKeyDepth, GfxRendererLayer,
 import { colorCopy } from '../Color';
 import { computeNormalMatrix } from '../MathHelpers';
 import { calcMipChain } from '../gx/gx_texture';
-
-export class J3DTextureHolder extends GXTextureHolder<TEX1_TextureData> {
-    public addJ3DTextures(device: GfxDevice, bmd: BMD, bmt: BMT | null = null) {
-        this.addTextures(device, bmd.tex1.textureDatas);
-        if (bmt)
-            this.addTextures(device, bmt.tex1.textureDatas);
-    }
-
-    public addBTITexture(device: GfxDevice, bti: BTI): void {
-        this.addTextures(device, [bti.texture]);
-    }
-}
 
 export class ShapeInstanceState {
     public modelMatrix: mat4 = mat4.create();
@@ -347,7 +335,7 @@ export class MaterialInstance {
             this.clampTo8Bit(dst);
     }
 
-    public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput, materialInstanceState: MaterialInstanceState, shapeInstanceState: ShapeInstanceState, fillTextureMapping: FillTextureMappingCallback, bmdModel: BMDModel, textureOverrides: TextureOverride[]): void {
+    public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput, materialInstanceState: MaterialInstanceState, shapeInstanceState: ShapeInstanceState, textureMappings: TextureMapping[]): void {
         const camera = viewerInput.camera;
 
         const material = this.material;
@@ -376,15 +364,8 @@ export class MaterialInstance {
             else
                 samplerIndex = material.textureIndexes[i];
 
-            if (samplerIndex >= 0) {
-                if (textureOverrides[samplerIndex]) {
-                    m.fillFromTextureOverride(textureOverrides[samplerIndex]);
-                } else {
-                    const samplerEntry = bmdModel.tex1Data.tex1.samplers[samplerIndex];
-                    if (!fillTextureMapping(m, bmdModel, samplerEntry))
-                        throw new Error(`Could not bind texture`);
-                }
-            }
+            if (samplerIndex >= 0)
+                m.copy(textureMappings[samplerIndex]);
         }
 
         this.templateRenderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
@@ -717,19 +698,18 @@ export class TEX1Data {
         }
     }
 
-    public fillTextureMapping(m: TextureMapping, sampler: TEX1_Sampler): boolean {
-        // Assert that it is this originally from this TEX1Data.
-        assert(this.tex1.samplers[sampler.index] === sampler);
+    public fillTextureMappingFromIndex(m: TextureMapping, samplerIndex: number): boolean {
+        const sampler = this.tex1.samplers[samplerIndex];
 
         if (this.gfxTextures[sampler.textureDataIndex] === null) {
             // No texture data here...
             return false;
         }
 
-        const textureData = this.tex1.textureDatas[sampler.textureDataIndex];
         m.gfxTexture = this.gfxTextures[sampler.textureDataIndex];
         m.gfxSampler = this.gfxSamplers[sampler.index];
         m.lodBias = sampler.lodBias;
+        const textureData = this.tex1.textureDatas[sampler.textureDataIndex];
         m.width = textureData.width;
         m.height = textureData.height;
 
@@ -743,10 +723,6 @@ export class TEX1Data {
             if (this.gfxTextures[i] !== null)
                 device.destroyTexture(this.gfxTextures[i]);
     }
-}
-
-export function defaultFillTextureMappingCallback(m: TextureMapping, bmdModel: BMDModel, samplerEntry: TEX1_Sampler): boolean {
-    return bmdModel.tex1Data.fillTextureMapping(m, samplerEntry);
 }
 
 export class BMDModel {
@@ -793,6 +769,14 @@ export class BMDModel {
         this.realized = true;
     }
 
+    public createDefaultTextureMappings(): TextureMapping[] {
+        const tex1Data = this.tex1Data;
+        const textureMappings = nArray(tex1Data.tex1.samplers.length, () => new TextureMapping());
+        for (let i = 0; i < tex1Data.tex1.samplers.length; i++)
+            tex1Data.fillTextureMappingFromIndex(textureMappings[i], i);
+        return textureMappings;
+    }
+
     public destroy(device: GfxDevice): void {
         if (!this.realized)
             return;
@@ -805,8 +789,6 @@ export class BMDModel {
     }
 }
 
-type FillTextureMappingCallback = (textureMapping: TextureMapping, bmdModel: BMDModel, samplerEntry: TEX1_Sampler) => boolean;
-
 const bboxScratch = new AABB();
 export class BMDModelInstance {
     public name: string = '';
@@ -818,7 +800,7 @@ export class BMDModelInstance {
 
     public colorOverrides: GX_Material.Color[] = [];
     public alphaOverrides: boolean[] = [];
-    public textureOverrides: TextureOverride[] = [];
+    private textureMappings: TextureMapping[];
 
     // Animations.
     public animationController = new AnimationController();
@@ -835,7 +817,6 @@ export class BMDModelInstance {
     private shapeInstances: ShapeInstance[] = [];
     private shapeInstanceState = new ShapeInstanceState();
     private materialHacks: GX_Material.GXMaterialHacks = {};
-    private fillTextureMappingCallback: FillTextureMappingCallback = defaultFillTextureMappingCallback;
 
     constructor(
         device: GfxDevice,
@@ -856,6 +837,8 @@ export class BMDModelInstance {
             return new MaterialInstance(device, renderHelper, this, materialEntry, this.materialHacks);
         });
         renderHelper.renderInstBuilder.popTemplateRenderInst();
+
+        this.textureMappings = this.bmdModel.createDefaultTextureMappings();
 
         const bmd = this.bmdModel.bmd;
 
@@ -937,39 +920,38 @@ export class BMDModelInstance {
     }
 
     /**
-     * Sets a texture override for the texture referenced through {@param name}.
+     * Returns the {@link TextureMapping} for the given sampler referenced by the name
+     * {@param samplerName}. Manipulating this mapping will affect the texture's usage
+     * across all materials. You can use this to bind missing or extra "system" textures,
+     * to set up texture overrides for framebuffer-referencing effects, and more.
      *
-     * This can be used both to fill in missing textures which are stored outside the BMDModel,
-     * to replace framebuffer textures, and so on. If you wish to remove an override, pass
-     * {@constant null} to as the {@param textureOverride} parameter.
+     * To reset the texture mapping back to the default, you can use
+     * {@method fillDefaultTextureMapping} to fill a texture mapping back to its default
+     * state.
      *
-     * If this model does not reference this texture name, this function will return
-     * {@constant false}.
-     *
-     * To identify all of the textures used by this model, you can reference the underlying
-     * {@see BMDModel} data which will have the texture names stored inside.
+     * This object is not a copy; setting parameters on this object will directly affect
+     * the render for the next frame.
      */
-    public setTextureOverride(name: string, textureOverride: TextureOverride | null): boolean {
+    public getTextureMappingReference(samplerName: string): TextureMapping | null {
         // Find the correct slot for the texture name.
         const samplers = this.bmdModel.tex1Data.tex1.samplers;
-        const samplerIndex = samplers.findIndex((sampler) => sampler.name === name);
+        const samplerIndex = samplers.findIndex((sampler) => sampler.name === samplerName);
         if (samplerIndex < 0)
-            return false;
-
-        if (textureOverride !== null)
-            this.textureOverrides[samplerIndex] = textureOverride;
-        else
-            delete this.textureOverrides[samplerIndex];
-
-        return true;
+            return null;
+        return this.textureMappings[samplerIndex];
     }
 
     /**
-     * Sets the bind texture callback. This is used whenever this BMDModelInstance wants to
-     * find the texture mapping, given a sampler index.
+     * Fills the {@link TextureMapping} {@param m} with the default values for the given
+     * sampler referenced by the name {@param samplerName}.
      */
-    public setFillTextureMappingCallback(fillTextureMappingCallback: FillTextureMappingCallback): void {
-        this.fillTextureMappingCallback = fillTextureMappingCallback;
+    public fillDefaultTextureMapping(m: TextureMapping, samplerName: string): void {
+        // Find the correct slot for the texture name.
+        const samplers = this.bmdModel.tex1Data.tex1.samplers;
+        const samplerIndex = samplers.findIndex((sampler) => sampler.name === samplerName);
+        if (samplerIndex < 0)
+            throw new Error(`Cannot find texture by name ${samplerName}`);
+        this.bmdModel.tex1Data.fillTextureMappingFromIndex(m, samplerIndex);
     }
 
     /**
@@ -1148,7 +1130,7 @@ export class BMDModelInstance {
         let depth = -1;
         if (modelVisible) {
             for (let i = 0; i < this.materialInstances.length; i++)
-                this.materialInstances[i].prepareToRender(renderHelper, viewerInput, this.materialInstanceState, this.shapeInstanceState, this.fillTextureMappingCallback, this.bmdModel, this.textureOverrides);
+                this.materialInstances[i].prepareToRender(renderHelper, viewerInput, this.materialInstanceState, this.shapeInstanceState, this.textureMappings);
 
             // Use the root joint to calculate depth.
             const rootJoint = this.bmdModel.bmd.jnt1.joints[0];

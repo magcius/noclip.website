@@ -6,9 +6,9 @@ import * as Viewer from '../viewer';
 import * as Yaz0 from '../compression/Yaz0';
 import * as UI from '../ui';
 
-import { BMD, BMT, BTK, BTI, BRK, BCK, BTI_Texture, TEX1_Sampler } from './j3d';
+import { BMD, BMT, BTK, BTI, BRK, BCK, BTI_Texture } from './j3d';
 import * as RARC from './rarc';
-import { BMDModel, BMDModelInstance, BTIData, defaultFillTextureMappingCallback } from './render';
+import { BMDModel, BMDModelInstance, BTIData } from './render';
 import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks } from '../gx/gx_material';
 import { TextureOverride, TextureMapping } from '../TextureHolder';
 import { readString, leftPad } from '../util';
@@ -19,7 +19,6 @@ import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor,
 
 class ZTPTextureFinder {
     public extraTextures: BTIData[] = [];
-    public fbtex_dummy: TextureOverride | null = null;
 
     public addBTI(device: GfxDevice, btiTexture: BTI_Texture): void {
         this.extraTextures.push(new BTIData(device, btiTexture));
@@ -30,19 +29,9 @@ class ZTPTextureFinder {
             this.extraTextures[i].destroy(device);
     }
 
-    public fillTextureMapping = (m: TextureMapping, bmdModel: BMDModel, samplerEntry: TEX1_Sampler): boolean => {
-        const name = samplerEntry.name;
-
-        // First, look for fbtex_dummy.
-        if (name === 'fbtex_dummy' && this.fbtex_dummy !== null)
-            return m.fillFromTextureOverride(this.fbtex_dummy);
-
-        // Now try to fill it with model textures.
-        if (defaultFillTextureMappingCallback(m, bmdModel, samplerEntry))
-            return true;
-
+    public fillTextureMapping = (m: TextureMapping, samplerName: string): boolean => {
         // Look through for extra textures.
-        const searchName = name.toLowerCase().replace('.tga', '');
+        const searchName = samplerName.toLowerCase().replace('.tga', '');
         const extraTexture = this.extraTextures.find((extraTex) => extraTex.btiTexture.name === searchName);
         if (extraTexture !== undefined)
             return extraTexture.fillTextureMapping(m);
@@ -60,7 +49,14 @@ function createModelInstance(device: GfxDevice, renderHelper: GXRenderHelperGfx,
     const bmt = bmtFile ? BMT.parse(bmtFile.buffer) : null;
     const bmdModel = new BMDModel(device, renderHelper, bmd, bmt);
     const modelInstance = new BMDModelInstance(device, renderHelper, bmdModel, materialHacks);
-    modelInstance.setFillTextureMappingCallback(textureFinder.fillTextureMapping);
+
+    for (let i = 0; i < bmdModel.tex1Data.tex1.samplers.length; i++) {
+        // Look for any unbound textures and set them.
+        const sampler = bmdModel.tex1Data.tex1.samplers[i];
+        const m = modelInstance.getTextureMappingReference(sampler.name);
+        if (m.gfxTexture === null)
+            textureFinder.fillTextureMapping(m, sampler.name);
+    }
 
     if (btkFile !== null) {
         const btk = BTK.parse(btkFile.buffer);
@@ -133,6 +129,15 @@ class TwilightPrincessRenderer implements Viewer.SceneGfx {
         this.renderHelper.prepareToRender(hostAccessPass);
     }
 
+    private setIndirectTextureOverride(): void {
+        const textureOverride: TextureOverride = { gfxTexture: this.opaqueSceneTexture.gfxTexture, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
+        for (let i = 0; i < this.modelInstances.length; i++) {
+            const fbtex_dummy = this.modelInstances[i].getTextureMappingReference('fbtex_dummy');
+            if (fbtex_dummy !== null)
+                fbtex_dummy.fillFromTextureOverride(textureOverride);
+        }
+    }
+
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
         const hostAccessPass = device.createHostAccessPass();
         this.prepareToRender(hostAccessPass, viewerInput);
@@ -157,7 +162,7 @@ class TwilightPrincessRenderer implements Viewer.SceneGfx {
             opaquePassRenderer.endPass(this.opaqueSceneTexture.gfxTexture);
             device.submitPass(opaquePassRenderer);
 
-            this.textureFinder.fbtex_dummy = { gfxTexture: this.opaqueSceneTexture.gfxTexture, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
+            this.setIndirectTextureOverride();
 
             const indTexPassRenderer = this.mainRenderTarget.createRenderPass(device, noClearRenderPassDescriptor);
             this.viewRenderer.executeOnPass(device, indTexPassRenderer, ZTPPass.INDIRECT);

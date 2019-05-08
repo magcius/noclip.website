@@ -414,8 +414,11 @@ class SMGRenderer implements Viewer.SceneGfx {
 
     private setIndirectTextureOverride(): void {
         const textureOverride: TextureOverride = { gfxTexture: this.opaqueSceneTexture.gfxTexture, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
-        for (let i = 0; i < this.spawner.sceneGraph.nodes.length; i++)
-            this.spawner.sceneGraph.nodes[i].modelInstance.setTextureOverride("IndDummy", textureOverride);
+        for (let i = 0; i < this.spawner.sceneGraph.nodes.length; i++) {
+            const m = this.spawner.sceneGraph.nodes[i].modelInstance.getTextureMappingReference("IndDummy");
+            if (m !== null)
+                m.fillFromTextureOverride(textureOverride);
+        }
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {

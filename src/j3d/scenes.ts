@@ -8,7 +8,7 @@ import * as Viewer from '../viewer';
 import { BMD, BMT, BTK, BRK, BCK } from './j3d';
 import * as Yaz0 from '../compression/Yaz0';
 import * as RARC from './rarc';
-import { BMDModelInstance, J3DTextureHolder, BMDModel } from './render';
+import { BMDModelInstance, BMDModel } from './render';
 import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GXRenderHelperGfx } from '../gx/gx_render';

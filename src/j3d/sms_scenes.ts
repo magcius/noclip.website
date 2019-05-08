@@ -317,8 +317,11 @@ export class SunshineRenderer implements Viewer.SceneGfx {
 
     private setIndirectTextureOverride(): void {
         const textureOverride: TextureOverride = { gfxTexture: this.opaqueSceneTexture.gfxTexture, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
-        for (let i = 0; i < this.modelInstances.length; i++)
-            this.modelInstances[i].setTextureOverride('indirectdummy', textureOverride);
+        for (let i = 0; i < this.modelInstances.length; i++) {
+            const m = this.modelInstances[i].getTextureMappingReference('indirectdummy');
+            if (m !== null)
+                m.fillFromTextureOverride(textureOverride);
+        }
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {

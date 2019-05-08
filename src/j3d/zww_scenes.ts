@@ -15,7 +15,7 @@ import * as GX_Material from '../gx/gx_material';
 
 import { BMD, BTK, BRK, BCK, BTI, LoopMode, BMT, TEX1_Sampler } from './j3d';
 import * as RARC from './rarc';
-import { BMDModelInstance, BMDModel, BTIData, defaultFillTextureMappingCallback } from './render';
+import { BMDModelInstance, BMDModel, BTIData } from './render';
 import { Camera, computeViewMatrix } from '../Camera';
 import { DeviceProgram } from '../Program';
 import { colorToCSS, Color } from '../Color';
@@ -32,29 +32,22 @@ import { prepareFrameDebugOverlayCanvas2D } from '../DebugJunk';
 
 import * as DZB from './zww_dzb';
 import { ObjectRenderer, BMDObjectRenderer, SymbolMap, WhiteFlowerData, FlowerObjectRenderer, PinkFlowerData, BessouFlowerData, FlowerData } from './zww_actors';
-import { TextureMapping } from '../TextureHolder';
 
 const TIME_OF_DAY_ICON = `<svg viewBox="0 0 100 100" height="20" fill="white"><path d="M50,93.4C74,93.4,93.4,74,93.4,50C93.4,26,74,6.6,50,6.6C26,6.6,6.6,26,6.6,50C6.6,74,26,93.4,50,93.4z M37.6,22.8  c-0.6,2.4-0.9,5-0.9,7.6c0,18.2,14.7,32.9,32.9,32.9c2.6,0,5.1-0.3,7.6-0.9c-4.7,10.3-15.1,17.4-27.1,17.4  c-16.5,0-29.9-13.4-29.9-29.9C20.3,37.9,27.4,27.5,37.6,22.8z"/></svg>`;
 
-class ZWWTextureFinder {
+class ZWWExtraTextures {
     constructor(public ZAtoon: BTIData, public ZBtoonEX: BTIData) {
     }
 
-    public fillTextureMapping = (m: TextureMapping, bmdModel: BMDModel, samplerEntry: TEX1_Sampler): boolean => {
-        const name = samplerEntry.name;
+    public fillExtraTextures(modelInstance: BMDModelInstance): void {
+        const ZAtoon_map = modelInstance.getTextureMappingReference('ZAtoon');
+        if (ZAtoon_map !== null)
+            this.ZAtoon.fillTextureMapping(ZAtoon_map);
 
-        if (name === 'ZAtoon')
-            return this.ZAtoon.fillTextureMapping(m);
-
-        if (name === 'ZBtoonEX')
-            return this.ZBtoonEX.fillTextureMapping(m);
-
-        // Now try to fill it with model textures.
-        if (defaultFillTextureMappingCallback(m, bmdModel, samplerEntry))
-            return true;
-
-        return false;
-    };
+        const ZBtoonEX_map = modelInstance.getTextureMappingReference('ZBtoonEX');
+        if (ZBtoonEX_map !== null)
+            this.ZBtoonEX.fillTextureMapping(ZBtoonEX_map);
+    }
 
     public destroy(device: GfxDevice): void {
         this.ZAtoon.destroy(device);
@@ -185,7 +178,7 @@ function getColorsFromDZS(buffer: ArrayBufferSlice, roomIdx: number, timeOfDay: 
     return { actorShadow, actorAmbient, amb, light, wave, ocean, splash, splash2, doors, vr_back_cloud, vr_sky, vr_uso_umi, vr_kasumi_mae };
 }
 
-function createScene(device: GfxDevice, renderHelper: GXRenderHelperGfx, textureFinder: ZWWTextureFinder, rarc: RARC.RARC, name: string, isSkybox: boolean = false): BMDModelInstance {
+function createScene(device: GfxDevice, renderHelper: GXRenderHelperGfx, extraTextures: ZWWExtraTextures, rarc: RARC.RARC, name: string, isSkybox: boolean = false): BMDModelInstance {
     let bdlFile = rarc.findFile(`bdl/${name}.bdl`);
     if (!bdlFile)
         bdlFile = rarc.findFile(`bmd/${name}.bmd`);
@@ -197,7 +190,7 @@ function createScene(device: GfxDevice, renderHelper: GXRenderHelperGfx, texture
     const bdl = BMD.parse(bdlFile.buffer);
     const bmdModel = new BMDModel(device, renderHelper, bdl, null);
     const modelInstance = new BMDModelInstance(device, renderHelper, bmdModel);
-    modelInstance.setFillTextureMappingCallback(textureFinder.fillTextureMapping);
+    extraTextures.fillExtraTextures(modelInstance);
     modelInstance.passMask = isSkybox ? WindWakerPass.SKYBOX : WindWakerPass.MAIN;
 
     if (btkFile !== null) {
@@ -230,21 +223,21 @@ class WindWakerRoomRenderer {
     public objectRenderers: ObjectRenderer[] = [];
     public dzb: DZB.DZB;
 
-    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, textureFinder: ZWWTextureFinder, public roomIdx: number, public roomRarc: RARC.RARC) {
+    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, extraTextures: ZWWExtraTextures, public roomIdx: number, public roomRarc: RARC.RARC) {
         this.name = `Room ${roomIdx}`;
 
         this.dzb = DZB.parse(assertExists(roomRarc.findFileData(`dzb/room.dzb`)));
 
-        this.model = createScene(device, renderHelper, textureFinder, roomRarc, `model`);
+        this.model = createScene(device, renderHelper, extraTextures, roomRarc, `model`);
 
         // Ocean.
-        this.model1 = createScene(device, renderHelper, textureFinder, roomRarc, `model1`);
+        this.model1 = createScene(device, renderHelper, extraTextures, roomRarc, `model1`);
 
         // Special effects / Skybox as seen in Hyrule.
-        this.model2 = createScene(device, renderHelper, textureFinder, roomRarc, `model2`);
+        this.model2 = createScene(device, renderHelper, extraTextures, roomRarc, `model2`);
 
         // Windows / doors.
-        this.model3 = createScene(device, renderHelper, textureFinder, roomRarc, `model3`);
+        this.model3 = createScene(device, renderHelper, extraTextures, roomRarc, `model3`);
     }
 
     public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
@@ -498,16 +491,16 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
     public onstatechanged!: () => void;
 
-    constructor(device: GfxDevice, public modelCache: ModelCache, public textureFinder: ZWWTextureFinder, wantsSeaPlane: boolean, private isFullSea: boolean, private stageRarc: RARC.RARC) {
+    constructor(device: GfxDevice, public modelCache: ModelCache, public extraTextures: ZWWExtraTextures, wantsSeaPlane: boolean, private isFullSea: boolean, private stageRarc: RARC.RARC) {
         this.renderHelper = new GXRenderHelperGfx(device);
 
         if (wantsSeaPlane)
             this.seaPlane = new SeaPlane(device, this.viewRenderer);
 
-        this.vr_sky = createScene(device, this.renderHelper, this.textureFinder, stageRarc, `vr_sky`, true);
-        this.vr_uso_umi = createScene(device, this.renderHelper, this.textureFinder, stageRarc, `vr_uso_umi`, true);
-        this.vr_kasumi_mae = createScene(device, this.renderHelper, this.textureFinder, stageRarc, `vr_kasumi_mae`, true);
-        this.vr_back_cloud = createScene(device, this.renderHelper, this.textureFinder, stageRarc, `vr_back_cloud`, true);
+        this.vr_sky = createScene(device, this.renderHelper, this.extraTextures, stageRarc, `vr_sky`, true);
+        this.vr_uso_umi = createScene(device, this.renderHelper, this.extraTextures, stageRarc, `vr_uso_umi`, true);
+        this.vr_kasumi_mae = createScene(device, this.renderHelper, this.extraTextures, stageRarc, `vr_kasumi_mae`, true);
+        this.vr_back_cloud = createScene(device, this.renderHelper, this.extraTextures, stageRarc, `vr_back_cloud`, true);
     }
 
     private setTimeOfDay(timeOfDay: number): void {
@@ -672,7 +665,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
     public destroy(device: GfxDevice) {
         this.renderHelper.destroy(device);
-        this.textureFinder.destroy(device);
+        this.extraTextures.destroy(device);
         this.viewRenderer.destroy(device);
         this.renderTarget.destroy(device);
         if (this.vr_sky)
@@ -811,7 +804,7 @@ class SceneDesc {
             const systemArc = modelCache.getArchive(`${pathBase}/Object/System.arc`);
             const ZAtoon = new BTIData(device, BTI.parse(systemArc.findFileData(`dat/toon.bti`), `ZAtoon`).texture);
             const ZBtoonEX = new BTIData(device, BTI.parse(systemArc.findFileData(`dat/toonex.bti`), `ZBtoonEX`).texture);
-            const textureFinder = new ZWWTextureFinder(ZAtoon, ZBtoonEX);
+            const extraTextures = new ZWWExtraTextures(ZAtoon, ZBtoonEX);
 
             const stageRarc = modelCache.getArchive(`${pathBase}/Stage/${this.stageDir}/Stage.arc`);
             const stageDzs = stageRarc.findFileData(`dzs/stage.dzs`);
@@ -820,7 +813,7 @@ class SceneDesc {
 
             const isSea = this.stageDir === 'sea';
             const isFullSea = isSea && this.rooms.length > 1;
-            const renderer = new WindWakerRenderer(device, modelCache, textureFinder, isSea, isFullSea, stageRarc);
+            const renderer = new WindWakerRenderer(device, modelCache, extraTextures, isSea, isFullSea, stageRarc);
             for (let i = 0; i < this.rooms.length; i++) {
                 const roomIdx = Math.abs(this.rooms[i]);
                 const roomRarc = modelCache.getArchive(`${pathBase}/Stage/${this.stageDir}/Room${roomIdx}.arc`);
@@ -834,7 +827,7 @@ class SceneDesc {
                     this.getRoomMult(modelMatrix, stageDzs, mult, roomIdx);
 
                 // Spawn the room.
-                const roomRenderer = new WindWakerRoomRenderer(device, renderer.renderHelper, renderer.textureFinder, roomIdx, roomRarc);
+                const roomRenderer = new WindWakerRoomRenderer(device, renderer.renderHelper, renderer.extraTextures, roomIdx, roomRarc);
                 roomRenderer.visible = visible;
                 renderer.roomRenderers.push(roomRenderer);
 
@@ -902,6 +895,7 @@ class SceneDesc {
         function buildChildModel(rarc: RARC.RARC, modelPath: string): BMDObjectRenderer {
             const model = modelCache.getModel(device, renderer, rarc, modelPath);
             const modelInstance = new BMDModelInstance(device, renderer.renderHelper, model);
+            renderer.extraTextures.fillExtraTextures(modelInstance);
             modelInstance.name = name;
             modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 1);
             return new BMDObjectRenderer(modelInstance);
@@ -924,6 +918,7 @@ class SceneDesc {
             const model = new BMDModel(device, renderer.renderHelper, bmd, bmt);
             modelCache.extraModels.push(model);
             const modelInstance = new BMDModelInstance(device, renderer.renderHelper, model);
+            renderer.extraTextures.fillExtraTextures(modelInstance);
             modelInstance.name = name;
             modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 1);
             return new BMDObjectRenderer(modelInstance);
