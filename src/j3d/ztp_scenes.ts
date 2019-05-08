@@ -6,65 +6,78 @@ import * as Viewer from '../viewer';
 import * as Yaz0 from '../compression/Yaz0';
 import * as UI from '../ui';
 
-import { BMD, BMT, BTK, BTI, TEX1_TextureData, BRK, BCK } from './j3d';
+import { BMD, BMT, BTK, BTI, BRK, BCK, BTI_Texture, TEX1_Sampler } from './j3d';
 import * as RARC from './rarc';
-import { BMDModel, BMDModelInstance, J3DTextureHolder } from './render';
+import { BMDModel, BMDModelInstance, BTIData, defaultFillTextureMappingCallback } from './render';
 import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks } from '../gx/gx_material';
-import { TextureOverride } from '../TextureHolder';
+import { TextureOverride, TextureMapping } from '../TextureHolder';
 import { readString, leftPad } from '../util';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 
-class ZTPTextureHolder extends J3DTextureHolder {
-    public findTextureEntryIndex(name: string): number {
-        let i: number = -1;
+class ZTPTextureFinder {
+    public extraTextures: BTIData[] = [];
+    public fbtex_dummy: TextureOverride | null = null;
 
-        i = this.searchTextureEntryIndex(name);
-        if (i >= 0) return i;
-
-        i = this.searchTextureEntryIndex(`ExtraTex/${name.toLowerCase().replace('.tga', '')}`);
-        if (i >= 0) return i;
-
-        return -1;
+    public addBTI(device: GfxDevice, btiTexture: BTI_Texture): void {
+        this.extraTextures.push(new BTIData(device, btiTexture));
     }
 
-    public addExtraTextures(device: GfxDevice, extraTextures: TEX1_TextureData[]): void {
-        this.addTextures(device, extraTextures.map((texture) => {
-            const name = `ExtraTex/${texture.name.toLowerCase()}`;
-            return { ...texture, name };
-        }));
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.extraTextures.length; i++)
+            this.extraTextures[i].destroy(device);
     }
+
+    public fillTextureMapping = (m: TextureMapping, bmdModel: BMDModel, samplerEntry: TEX1_Sampler): boolean => {
+        const name = samplerEntry.name;
+
+        // First, look for fbtex_dummy.
+        if (name === 'fbtex_dummy' && this.fbtex_dummy !== null)
+            return m.fillFromTextureOverride(this.fbtex_dummy);
+
+        // Now try to fill it with model textures.
+        if (defaultFillTextureMappingCallback(m, bmdModel, samplerEntry))
+            return true;
+
+        // Look through for extra textures.
+        const searchName = name.toLowerCase().replace('.tga', '');
+        const extraTexture = this.extraTextures.find((extraTex) => extraTex.btiTexture.name === searchName);
+        if (extraTexture !== undefined)
+            return extraTexture.fillTextureMapping(m);
+
+        return false;
+    };
 }
 
 const materialHacks: GXMaterialHacks = {
     lightingFudge: (p) => `(0.5 * (${p.ambSource} + 0.6) * ${p.matSource})`,
 };
 
-function createScene(device: GfxDevice, renderHelper: GXRenderHelperGfx, textureHolder: J3DTextureHolder, bmdFile: RARC.RARCFile, btkFile: RARC.RARCFile, brkFile: RARC.RARCFile, bckFile: RARC.RARCFile, bmtFile: RARC.RARCFile) {
+function createModelInstance(device: GfxDevice, renderHelper: GXRenderHelperGfx, textureFinder: ZTPTextureFinder, bmdFile: RARC.RARCFile, btkFile: RARC.RARCFile, brkFile: RARC.RARCFile, bckFile: RARC.RARCFile, bmtFile: RARC.RARCFile) {
     const bmd = BMD.parse(bmdFile.buffer);
     const bmt = bmtFile ? BMT.parse(bmtFile.buffer) : null;
-    textureHolder.addJ3DTextures(device, bmd, bmt);
     const bmdModel = new BMDModel(device, renderHelper, bmd, bmt);
-    const scene = new BMDModelInstance(device, renderHelper, textureHolder, bmdModel, materialHacks);
+    const modelInstance = new BMDModelInstance(device, renderHelper, bmdModel, materialHacks);
+    modelInstance.setFillTextureMappingCallback(textureFinder.fillTextureMapping);
 
     if (btkFile !== null) {
         const btk = BTK.parse(btkFile.buffer);
-        scene.bindTTK1(btk.ttk1);
+        modelInstance.bindTTK1(btk.ttk1);
     }
 
     if (brkFile !== null) {
         const brk = BRK.parse(brkFile.buffer);
-        scene.bindTRK1(brk.trk1);
+        modelInstance.bindTRK1(brk.trk1);
     }
 
     if (bckFile !== null) {
         const bck = BCK.parse(bckFile.buffer);
-        scene.bindANK1(bck.ank1);
+        modelInstance.bindANK1(bck.ank1);
     }
 
-    return scene;
+    return modelInstance;
 }
 
 const enum ZTPPass {
@@ -81,7 +94,7 @@ class TwilightPrincessRenderer implements Viewer.SceneGfx {
     public opaqueSceneTexture = new ColorTexture();
     public modelInstances: BMDModelInstance[] = [];
 
-    constructor(device: GfxDevice, public textureHolder: J3DTextureHolder, public stageRarc: RARC.RARC) {
+    constructor(device: GfxDevice, public textureFinder: ZTPTextureFinder, public stageRarc: RARC.RARC) {
         this.renderHelper = new GXRenderHelperGfx(device);
     }
 
@@ -144,8 +157,7 @@ class TwilightPrincessRenderer implements Viewer.SceneGfx {
             opaquePassRenderer.endPass(this.opaqueSceneTexture.gfxTexture);
             device.submitPass(opaquePassRenderer);
 
-            const textureOverride: TextureOverride = { gfxTexture: this.opaqueSceneTexture.gfxTexture, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
-            this.textureHolder.setTextureOverride("fbtex_dummy", textureOverride);
+            this.textureFinder.fbtex_dummy = { gfxTexture: this.opaqueSceneTexture.gfxTexture, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
 
             const indTexPassRenderer = this.mainRenderTarget.createRenderPass(device, noClearRenderPassDescriptor);
             this.viewRenderer.executeOnPass(device, indTexPassRenderer, ZTPPass.INDIRECT);
@@ -161,7 +173,7 @@ class TwilightPrincessRenderer implements Viewer.SceneGfx {
     public destroy(device: GfxDevice) {
         this.renderHelper.destroy(device);
         this.viewRenderer.destroy(device);
-        this.textureHolder.destroy(device);
+        this.textureFinder.destroy(device);
         this.mainRenderTarget.destroy(device);
         this.opaqueSceneTexture.destroy(device);
         this.modelInstances.forEach((instance) => instance.destroy(device));
@@ -196,7 +208,7 @@ function getRoomListFromDZS(buffer: ArrayBufferSlice): number[] {
 }
 
 function bmdModelUsesTexture(model: BMDModel, textureName: string): boolean {
-    return model.tex1Samplers.some((tex1Sampler) => tex1Sampler.name === textureName);
+    return model.bmd.tex1.samplers.some((sampler) => sampler.name === textureName);
 }
 
 const pathBase = `j3d/ztp`;
@@ -220,7 +232,7 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
             const bckFile = rarc.files.find((f) => f.name === `${basename}.bck`) || null;
             const bmtFile = rarc.files.find((f) => f.name === `${basename}.bmt`) || null;
 
-            const modelInstance = createScene(device, renderer.renderHelper, renderer.textureHolder, bmdFile, btkFile, brkFile, bckFile, bmtFile);
+            const modelInstance = createModelInstance(device, renderer.renderHelper, renderer.textureFinder, bmdFile, btkFile, brkFile, bckFile, bmtFile);
             modelInstance.name = `${rarcBasename}/${basename}`;
 
             let passMask: ZTPPass = 0;
@@ -248,20 +260,21 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
 
     public createScene(device: GfxDevice): Progressable<Viewer.SceneGfx> {
         const stagePath = `${pathBase}/res/Stage/${this.stageId}`;
-        const textureHolder = new ZTPTextureHolder();
+        const textureFinder = new ZTPTextureFinder();
 
         return this.fetchRarc(`${stagePath}/STG_00.arc`).then((stageRarc: RARC.RARC) => {
             // Load stage shared textures.
             const texcFolder = stageRarc.findDir(`texc`);
             const extraTextureFiles = texcFolder !== null ? texcFolder.files : [];
-            const extraTextures = extraTextureFiles.map((file) => {
+
+            for (let i = 0; i < extraTextureFiles.length; i++) {
+                const file = extraTextureFiles[i];
                 const name = file.name.split('.')[0];
-                return BTI.parse(file.buffer, name).texture;
-            });
+                const bti = BTI.parse(file.buffer, name).texture;
+                textureFinder.addBTI(device, bti);
+            }
 
-            textureHolder.addExtraTextures(device, extraTextures);
-
-            const renderer = new TwilightPrincessRenderer(device, textureHolder, stageRarc);
+            const renderer = new TwilightPrincessRenderer(device, textureFinder, stageRarc);
 
             [`vrbox_sora`, `vrbox_kasumim`].forEach((basename) => {
                 const bmdFile = stageRarc.findFile(`bmdp/${basename}.bmd`);
@@ -270,7 +283,7 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
                 const btkFile = stageRarc.findFile(`btk/${basename}.btk`);
                 const brkFile = stageRarc.findFile(`brk/${basename}.brk`);
                 const bckFile = stageRarc.findFile(`bck/${basename}.bck`);
-                const scene = createScene(device, renderer.renderHelper, textureHolder, bmdFile, btkFile, brkFile, bckFile, null);
+                const scene = createModelInstance(device, renderer.renderHelper, textureFinder, bmdFile, btkFile, brkFile, bckFile, null);
                 scene.name = `stage/${basename}`;
                 scene.isSkybox = true;
                 renderer.modelInstances.push(scene);

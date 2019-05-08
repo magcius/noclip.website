@@ -1,23 +1,25 @@
 
 import { mat4 } from 'gl-matrix';
 
-import { BMD, BMT, HierarchyNode, HierarchyType, MaterialEntry, Shape, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData, DRW1MatrixKind, TTK1Animator, ANK1Animator, bindANK1Animator, BTI, bindVAF1Animator, VAF1, VAF1Animator, TPT1, bindTPT1Animator, TPT1Animator } from './j3d';
+import { BMD, BMT, HierarchyNode, HierarchyType, MaterialEntry, Shape, ShapeDisplayFlags, TEX1_Sampler, TEX1_TextureData, DRW1MatrixKind, TTK1Animator, ANK1Animator, bindANK1Animator, BTI, bindVAF1Animator, VAF1, VAF1Animator, TPT1, bindTPT1Animator, TPT1Animator, TEX1, BTI_Texture } from './j3d';
 import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } from './j3d';
 
+import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
-import { MaterialParams, PacketParams, GXTextureHolder, ColorKind, translateTexFilterGfx, translateWrapModeGfx, loadedDataCoalescerGfx, GXShapeHelperGfx, GXRenderHelperGfx, ub_MaterialParams } from '../gx/gx_render';
+import { MaterialParams, PacketParams, GXTextureHolder, ColorKind, translateTexFilterGfx, translateWrapModeGfx, loadedDataCoalescerGfx, GXShapeHelperGfx, GXRenderHelperGfx, ub_MaterialParams, loadTextureFromMipChain } from '../gx/gx_render';
 
 import { computeViewMatrix, computeModelMatrixBillboard, computeModelMatrixYBillboard, computeViewMatrixSkybox, texEnvMtx, Camera, texProjPerspMtx, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
-import { TextureMapping } from '../TextureHolder';
+import { TextureMapping, TextureOverride } from '../TextureHolder';
 import AnimationController from '../AnimationController';
 import { nArray, assertExists, assert } from '../util';
 import { AABB } from '../Geometry';
-import { GfxDevice, GfxSampler } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSampler, GfxTexture } from '../gfx/platform/GfxPlatform';
 import { GfxBufferCoalescer, GfxCoalescedBuffers } from '../gfx/helpers/BufferHelpers';
-import { ViewerRenderInput } from '../viewer';
+import { ViewerRenderInput, Texture } from '../viewer';
 import { GfxRenderInst, GfxRenderInstBuilder, setSortKeyDepth, GfxRendererLayer, makeSortKey, setSortKeyBias } from '../gfx/render/GfxRenderer';
 import { colorCopy } from '../Color';
 import { computeNormalMatrix } from '../MathHelpers';
+import { calcMipChain } from '../gx/gx_texture';
 
 export class J3DTextureHolder extends GXTextureHolder<TEX1_TextureData> {
     public addJ3DTextures(device: GfxDevice, bmd: BMD, bmt: BMT | null = null) {
@@ -345,7 +347,9 @@ export class MaterialInstance {
             this.clampTo8Bit(dst);
     }
 
-    public fillMaterialParams(materialParams: MaterialParams, camera: Camera, materialInstanceState: MaterialInstanceState, shapeInstanceState: ShapeInstanceState, bmdModel: BMDModel, textureHolder: GXTextureHolder): void {
+    public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput, materialInstanceState: MaterialInstanceState, shapeInstanceState: ShapeInstanceState, fillTextureMapping: FillTextureMappingCallback, bmdModel: BMDModel, textureOverrides: TextureOverride[]): void {
+        const camera = viewerInput.camera;
+
         const material = this.material;
 
         this.calcColor(materialParams.u_Color[ColorKind.MAT0],  ColorKind.MAT0,  material.colorMatRegs[0],   false);
@@ -366,14 +370,21 @@ export class MaterialInstance {
             const m = materialParams.m_TextureMapping[i];
             m.reset();
 
-            let texIndex: number;
+            let samplerIndex: number;
             if (this.tpt1Animators[i] !== undefined)
-                texIndex = this.tpt1Animators[i].calcTextureIndex();
+                samplerIndex = this.tpt1Animators[i].calcTextureIndex();
             else
-                texIndex = material.textureIndexes[i];
+                samplerIndex = material.textureIndexes[i];
 
-            if (texIndex >= 0)
-                bmdModel.fillTextureMapping(materialParams.m_TextureMapping[i], textureHolder, texIndex);
+            if (samplerIndex >= 0) {
+                if (textureOverrides[samplerIndex]) {
+                    m.fillFromTextureOverride(textureOverrides[samplerIndex]);
+                } else {
+                    const samplerEntry = bmdModel.tex1Data.tex1.samplers[samplerIndex];
+                    if (!fillTextureMapping(m, bmdModel, samplerEntry))
+                        throw new Error(`Could not bind texture`);
+                }
+            }
         }
 
         this.templateRenderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
@@ -622,19 +633,125 @@ export class MaterialInstance {
 
         for (let i = 0; i < materialInstanceState.lights.length; i++)
             materialParams.u_Lights[i].copy(materialInstanceState.lights[i]);
-    }
 
-    public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput, materialInstanceState: MaterialInstanceState, shapeInstanceState: ShapeInstanceState, bmdModel: BMDModel, textureHolder: GXTextureHolder): void {
-        this.fillMaterialParams(materialParams, viewerInput.camera, materialInstanceState, shapeInstanceState, bmdModel, textureHolder);
         renderHelper.fillMaterialParams(materialParams, this.materialParamsBufferOffset);
     }
 }
 
+interface TEX1_SamplerSub {
+    minFilter: GX.TexFilter;
+    magFilter: GX.TexFilter;
+    wrapS: GX.WrapMode;
+    wrapT: GX.WrapMode;
+    minLOD: number;
+    maxLOD: number;
+}
+
+function translateSampler(device: GfxDevice, sampler: TEX1_SamplerSub): GfxSampler {
+    const [minFilter, mipFilter] = translateTexFilterGfx(sampler.minFilter);
+    const [magFilter]            = translateTexFilterGfx(sampler.magFilter);
+
+    const gfxSampler = device.createSampler({
+        wrapS: translateWrapModeGfx(sampler.wrapS),
+        wrapT: translateWrapModeGfx(sampler.wrapT),
+        minFilter, mipFilter, magFilter,
+        minLOD: sampler.minLOD,
+        maxLOD: sampler.maxLOD,
+    });
+
+    return gfxSampler;
+}
+
+// TODO(jstpierre): Unify with TEX1Data? Build a unified cache that can deduplicate
+// based on hashing texture data?
+export class BTIData {
+    private gfxSampler: GfxSampler;
+    private gfxTexture: GfxTexture;
+    public viewerTexture: Texture;
+
+    constructor(device: GfxDevice, public btiTexture: BTI_Texture) {
+        this.gfxSampler = translateSampler(device, btiTexture);
+        const mipChain = calcMipChain(this.btiTexture, this.btiTexture.mipCount);
+        const { viewerTexture, gfxTexture } = loadTextureFromMipChain(device, mipChain);
+        this.gfxTexture = gfxTexture;
+        this.viewerTexture = viewerTexture;
+    }
+
+    public fillTextureMapping(m: TextureMapping): boolean {
+        m.gfxTexture = this.gfxTexture;
+        m.gfxSampler = this.gfxSampler;
+        m.lodBias = this.btiTexture.lodBias;
+        m.width = this.btiTexture.width;
+        m.height = this.btiTexture.height;
+        return true;
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroySampler(this.gfxSampler);
+        device.destroyTexture(this.gfxTexture);
+    }
+}
+
+export class TEX1Data {
+    private gfxSamplers: GfxSampler[] = [];
+    private gfxTextures: (GfxTexture | null)[] = [];
+    public viewerTextures: (Texture | null)[] = [];
+
+    constructor(device: GfxDevice, public tex1: TEX1) {
+        for (let i = 0; i < this.tex1.samplers.length; i++) {
+            const tex1Sampler = this.tex1.samplers[i];
+            this.gfxSamplers.push(translateSampler(device, tex1Sampler));
+        }
+
+        for (let i = 0; i < this.tex1.textureDatas.length; i++) {
+            const textureData = this.tex1.textureDatas[i];
+            if (textureData.data === null) {
+                this.gfxTextures.push(null);
+                this.viewerTextures.push(null);
+            } else {
+                const mipChain = calcMipChain(textureData, textureData.mipCount);
+                const { viewerTexture, gfxTexture } = loadTextureFromMipChain(device, mipChain);
+                this.gfxTextures.push(gfxTexture);
+                this.viewerTextures.push(viewerTexture);
+            }
+        }
+    }
+
+    public fillTextureMapping(m: TextureMapping, sampler: TEX1_Sampler): boolean {
+        // Assert that it is this originally from this TEX1Data.
+        assert(this.tex1.samplers[sampler.index] === sampler);
+
+        if (this.gfxTextures[sampler.textureDataIndex] === null) {
+            // No texture data here...
+            return false;
+        }
+
+        const textureData = this.tex1.textureDatas[sampler.textureDataIndex];
+        m.gfxTexture = this.gfxTextures[sampler.textureDataIndex];
+        m.gfxSampler = this.gfxSamplers[sampler.index];
+        m.lodBias = sampler.lodBias;
+        m.width = textureData.width;
+        m.height = textureData.height;
+
+        return true;
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.gfxSamplers.length; i++)
+            device.destroySampler(this.gfxSamplers[i]);
+        for (let i = 0; i < this.gfxTextures.length; i++)
+            if (this.gfxTextures[i] !== null)
+                device.destroyTexture(this.gfxTextures[i]);
+    }
+}
+
+export function defaultFillTextureMappingCallback(m: TextureMapping, bmdModel: BMDModel, samplerEntry: TEX1_Sampler): boolean {
+    return bmdModel.tex1Data.fillTextureMapping(m, samplerEntry);
+}
+
 export class BMDModel {
     private realized: boolean = false;
-
-    private gfxSamplers!: GfxSampler[];
-    public tex1Samplers!: TEX1_Sampler[];
+    public tex1Data: TEX1Data;
 
     private bufferCoalescer: GfxBufferCoalescer;
 
@@ -650,9 +767,7 @@ export class BMDModel {
         public bmt: BMT | null = null,
     ) {
         const tex1 = (bmt !== null && bmt.tex1 !== null) ? bmt.tex1 : bmd.tex1;
-
-        this.tex1Samplers = tex1.samplers;
-        this.gfxSamplers = this.tex1Samplers.map((sampler) => BMDModel.translateSampler(device, sampler));
+        this.tex1Data = new TEX1Data(device, tex1);
 
         // Load shape data.
         const loadedVertexDatas = [];
@@ -683,34 +798,14 @@ export class BMDModel {
             return;
 
         this.bufferCoalescer.destroy(device);
-        this.shapeData.forEach((command) => command.destroy(device));
-
-        this.gfxSamplers.forEach((sampler) => device.destroySampler(sampler));
+        for (let i = 0; i < this.shapeData.length; i++)
+            this.shapeData[i].destroy(device);
+        this.tex1Data.destroy(device);
         this.realized = false;
     }
-
-    public fillTextureMapping(m: TextureMapping, textureHolder: GXTextureHolder, texIndex: number): void {
-        const tex1Sampler = this.tex1Samplers[texIndex];
-        textureHolder.fillTextureMapping(m, tex1Sampler.name);
-        m.gfxSampler = this.gfxSamplers[tex1Sampler.index];
-        m.lodBias = tex1Sampler.lodBias;
-    }
-
-    private static translateSampler(device: GfxDevice, sampler: TEX1_Sampler): GfxSampler {
-        const [minFilter, mipFilter] = translateTexFilterGfx(sampler.minFilter);
-        const [magFilter]            = translateTexFilterGfx(sampler.magFilter);
-
-        const gfxSampler = device.createSampler({
-            wrapS: translateWrapModeGfx(sampler.wrapS),
-            wrapT: translateWrapModeGfx(sampler.wrapT),
-            minFilter, mipFilter, magFilter,
-            minLOD: sampler.minLOD,
-            maxLOD: sampler.maxLOD,
-        });
-
-        return gfxSampler;
-    }
 }
+
+type FillTextureMappingCallback = (textureMapping: TextureMapping, bmdModel: BMDModel, samplerEntry: TEX1_Sampler) => boolean;
 
 const bboxScratch = new AABB();
 export class BMDModelInstance {
@@ -723,6 +818,7 @@ export class BMDModelInstance {
 
     public colorOverrides: GX_Material.Color[] = [];
     public alphaOverrides: boolean[] = [];
+    public textureOverrides: TextureOverride[] = [];
 
     // Animations.
     public animationController = new AnimationController();
@@ -739,11 +835,11 @@ export class BMDModelInstance {
     private shapeInstances: ShapeInstance[] = [];
     private shapeInstanceState = new ShapeInstanceState();
     private materialHacks: GX_Material.GXMaterialHacks = {};
+    private fillTextureMappingCallback: FillTextureMappingCallback = defaultFillTextureMappingCallback;
 
     constructor(
         device: GfxDevice,
         renderHelper: GXRenderHelperGfx,
-        private textureHolder: J3DTextureHolder,
         public bmdModel: BMDModel,
         materialHacks?: GX_Material.GXMaterialHacks
     ) {
@@ -813,6 +909,11 @@ export class BMDModelInstance {
         this.visible = v;
     }
 
+    public setSortKeyLayer(layer: GfxRendererLayer): void {
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].setSortKeyLayer(layer);
+    }
+
     /**
      * Render Hack. Sets whether vertex colors are enabled. If vertex colors are disabled,
      * then opaque white is substituted for them in the shader generated for every material.
@@ -835,9 +936,40 @@ export class BMDModelInstance {
             this.materialInstances[i].setTexturesEnabled(v);
     }
 
-    public setSortKeyLayer(layer: GfxRendererLayer): void {
-        for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].setSortKeyLayer(layer);
+    /**
+     * Sets a texture override for the texture referenced through {@param name}.
+     *
+     * This can be used both to fill in missing textures which are stored outside the BMDModel,
+     * to replace framebuffer textures, and so on. If you wish to remove an override, pass
+     * {@constant null} to as the {@param textureOverride} parameter.
+     *
+     * If this model does not reference this texture name, this function will return
+     * {@constant false}.
+     *
+     * To identify all of the textures used by this model, you can reference the underlying
+     * {@see BMDModel} data which will have the texture names stored inside.
+     */
+    public setTextureOverride(name: string, textureOverride: TextureOverride | null): boolean {
+        // Find the correct slot for the texture name.
+        const samplers = this.bmdModel.tex1Data.tex1.samplers;
+        const samplerIndex = samplers.findIndex((sampler) => sampler.name === name);
+        if (samplerIndex < 0)
+            return false;
+
+        if (textureOverride !== null)
+            this.textureOverrides[samplerIndex] = textureOverride;
+        else
+            delete this.textureOverrides[samplerIndex];
+
+        return true;
+    }
+
+    /**
+     * Sets the bind texture callback. This is used whenever this BMDModelInstance wants to
+     * find the texture mapping, given a sampler index.
+     */
+    public setFillTextureMappingCallback(fillTextureMappingCallback: FillTextureMappingCallback): void {
+        this.fillTextureMappingCallback = fillTextureMappingCallback;
     }
 
     /**
@@ -1016,7 +1148,7 @@ export class BMDModelInstance {
         let depth = -1;
         if (modelVisible) {
             for (let i = 0; i < this.materialInstances.length; i++)
-                this.materialInstances[i].prepareToRender(renderHelper, viewerInput, this.materialInstanceState, this.shapeInstanceState, this.bmdModel, this.textureHolder);
+                this.materialInstances[i].prepareToRender(renderHelper, viewerInput, this.materialInstanceState, this.shapeInstanceState, this.fillTextureMappingCallback, this.bmdModel, this.textureOverrides);
 
             // Use the root joint to calculate depth.
             const rootJoint = this.bmdModel.bmd.jnt1.joints[0];

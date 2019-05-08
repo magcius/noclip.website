@@ -13,9 +13,9 @@ import * as UI from '../ui';
 
 import * as GX_Material from '../gx/gx_material';
 
-import { BMD, BTK, BRK, BCK, BTI, LoopMode, BMT } from './j3d';
+import { BMD, BTK, BRK, BCK, BTI, LoopMode, BMT, TEX1_Sampler } from './j3d';
 import * as RARC from './rarc';
-import { J3DTextureHolder, BMDModelInstance, BMDModel } from './render';
+import { BMDModelInstance, BMDModel, BTIData, defaultFillTextureMappingCallback } from './render';
 import { Camera, computeViewMatrix } from '../Camera';
 import { DeviceProgram } from '../Program';
 import { colorToCSS, Color } from '../Color';
@@ -32,8 +32,35 @@ import { prepareFrameDebugOverlayCanvas2D } from '../DebugJunk';
 
 import * as DZB from './zww_dzb';
 import { ObjectRenderer, BMDObjectRenderer, SymbolMap, WhiteFlowerData, FlowerObjectRenderer, PinkFlowerData, BessouFlowerData, FlowerData } from './zww_actors';
+import { TextureMapping } from '../TextureHolder';
 
 const TIME_OF_DAY_ICON = `<svg viewBox="0 0 100 100" height="20" fill="white"><path d="M50,93.4C74,93.4,93.4,74,93.4,50C93.4,26,74,6.6,50,6.6C26,6.6,6.6,26,6.6,50C6.6,74,26,93.4,50,93.4z M37.6,22.8  c-0.6,2.4-0.9,5-0.9,7.6c0,18.2,14.7,32.9,32.9,32.9c2.6,0,5.1-0.3,7.6-0.9c-4.7,10.3-15.1,17.4-27.1,17.4  c-16.5,0-29.9-13.4-29.9-29.9C20.3,37.9,27.4,27.5,37.6,22.8z"/></svg>`;
+
+class ZWWTextureFinder {
+    constructor(public ZAtoon: BTIData, public ZBtoonEX: BTIData) {
+    }
+
+    public fillTextureMapping = (m: TextureMapping, bmdModel: BMDModel, samplerEntry: TEX1_Sampler): boolean => {
+        const name = samplerEntry.name;
+
+        if (name === 'ZAtoon')
+            return this.ZAtoon.fillTextureMapping(m);
+
+        if (name === 'ZBtoonEX')
+            return this.ZBtoonEX.fillTextureMapping(m);
+
+        // Now try to fill it with model textures.
+        if (defaultFillTextureMappingCallback(m, bmdModel, samplerEntry))
+            return true;
+
+        return false;
+    };
+
+    public destroy(device: GfxDevice): void {
+        this.ZAtoon.destroy(device);
+        this.ZBtoonEX.destroy(device);
+    }
+}
 
 export interface Colors {
     actorShadow: GX_Material.Color;
@@ -158,7 +185,7 @@ function getColorsFromDZS(buffer: ArrayBufferSlice, roomIdx: number, timeOfDay: 
     return { actorShadow, actorAmbient, amb, light, wave, ocean, splash, splash2, doors, vr_back_cloud, vr_sky, vr_uso_umi, vr_kasumi_mae };
 }
 
-function createScene(device: GfxDevice, renderHelper: GXRenderHelperGfx, textureHolder: J3DTextureHolder, rarc: RARC.RARC, name: string, isSkybox: boolean = false): BMDModelInstance {
+function createScene(device: GfxDevice, renderHelper: GXRenderHelperGfx, textureFinder: ZWWTextureFinder, rarc: RARC.RARC, name: string, isSkybox: boolean = false): BMDModelInstance {
     let bdlFile = rarc.findFile(`bdl/${name}.bdl`);
     if (!bdlFile)
         bdlFile = rarc.findFile(`bmd/${name}.bmd`);
@@ -168,28 +195,28 @@ function createScene(device: GfxDevice, renderHelper: GXRenderHelperGfx, texture
     const brkFile = rarc.findFile(`brk/${name}.brk`);
     const bckFile = rarc.findFile(`bck/${name}.bck`);
     const bdl = BMD.parse(bdlFile.buffer);
-    textureHolder.addJ3DTextures(device, bdl);
     const bmdModel = new BMDModel(device, renderHelper, bdl, null);
-    const scene = new BMDModelInstance(device, renderHelper, textureHolder, bmdModel);
-    scene.passMask = isSkybox ? WindWakerPass.SKYBOX : WindWakerPass.MAIN;
+    const modelInstance = new BMDModelInstance(device, renderHelper, bmdModel);
+    modelInstance.setFillTextureMappingCallback(textureFinder.fillTextureMapping);
+    modelInstance.passMask = isSkybox ? WindWakerPass.SKYBOX : WindWakerPass.MAIN;
 
     if (btkFile !== null) {
         const btk = BTK.parse(btkFile.buffer);
-        scene.bindTTK1(btk.ttk1);
+        modelInstance.bindTTK1(btk.ttk1);
     }
 
     if (brkFile !== null) {
         const brk = BRK.parse(brkFile.buffer);
-        scene.bindTRK1(brk.trk1);
+        modelInstance.bindTRK1(brk.trk1);
     }
 
     if (bckFile !== null) {
         const bck = BCK.parse(bckFile.buffer);
-        scene.bindANK1(bck.ank1);
+        modelInstance.bindANK1(bck.ank1);
     }
 
-    scene.isSkybox = isSkybox;
-    return scene;
+    modelInstance.isSkybox = isSkybox;
+    return modelInstance;
 }
 
 class WindWakerRoomRenderer {
@@ -203,21 +230,21 @@ class WindWakerRoomRenderer {
     public objectRenderers: ObjectRenderer[] = [];
     public dzb: DZB.DZB;
 
-    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, textureHolder: J3DTextureHolder, public roomIdx: number, public roomRarc: RARC.RARC) {
+    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, textureFinder: ZWWTextureFinder, public roomIdx: number, public roomRarc: RARC.RARC) {
         this.name = `Room ${roomIdx}`;
 
         this.dzb = DZB.parse(assertExists(roomRarc.findFileData(`dzb/room.dzb`)));
 
-        this.model = createScene(device, renderHelper, textureHolder, roomRarc, `model`);
+        this.model = createScene(device, renderHelper, textureFinder, roomRarc, `model`);
 
         // Ocean.
-        this.model1 = createScene(device, renderHelper, textureHolder, roomRarc, `model1`);
+        this.model1 = createScene(device, renderHelper, textureFinder, roomRarc, `model1`);
 
         // Special effects / Skybox as seen in Hyrule.
-        this.model2 = createScene(device, renderHelper, textureHolder, roomRarc, `model2`);
+        this.model2 = createScene(device, renderHelper, textureFinder, roomRarc, `model2`);
 
         // Windows / doors.
-        this.model3 = createScene(device, renderHelper, textureHolder, roomRarc, `model3`);
+        this.model3 = createScene(device, renderHelper, textureFinder, roomRarc, `model3`);
     }
 
     public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
@@ -471,16 +498,16 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
     public onstatechanged!: () => void;
 
-    constructor(device: GfxDevice, public modelCache: ModelCache, public textureHolder: J3DTextureHolder, wantsSeaPlane: boolean, private isFullSea: boolean, private stageRarc: RARC.RARC) {
+    constructor(device: GfxDevice, public modelCache: ModelCache, public textureFinder: ZWWTextureFinder, wantsSeaPlane: boolean, private isFullSea: boolean, private stageRarc: RARC.RARC) {
         this.renderHelper = new GXRenderHelperGfx(device);
 
         if (wantsSeaPlane)
             this.seaPlane = new SeaPlane(device, this.viewRenderer);
 
-        this.vr_sky = createScene(device, this.renderHelper, this.textureHolder, stageRarc, `vr_sky`, true);
-        this.vr_uso_umi = createScene(device, this.renderHelper, this.textureHolder, stageRarc, `vr_uso_umi`, true);
-        this.vr_kasumi_mae = createScene(device, this.renderHelper, this.textureHolder, stageRarc, `vr_kasumi_mae`, true);
-        this.vr_back_cloud = createScene(device, this.renderHelper, this.textureHolder, stageRarc, `vr_back_cloud`, true);
+        this.vr_sky = createScene(device, this.renderHelper, this.textureFinder, stageRarc, `vr_sky`, true);
+        this.vr_uso_umi = createScene(device, this.renderHelper, this.textureFinder, stageRarc, `vr_uso_umi`, true);
+        this.vr_kasumi_mae = createScene(device, this.renderHelper, this.textureFinder, stageRarc, `vr_kasumi_mae`, true);
+        this.vr_back_cloud = createScene(device, this.renderHelper, this.textureFinder, stageRarc, `vr_back_cloud`, true);
     }
 
     private setTimeOfDay(timeOfDay: number): void {
@@ -645,7 +672,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
     public destroy(device: GfxDevice) {
         this.renderHelper.destroy(device);
-        this.textureHolder.destroy(device);
+        this.textureFinder.destroy(device);
         this.viewRenderer.destroy(device);
         this.renderTarget.destroy(device);
         if (this.vr_sky)
@@ -736,7 +763,6 @@ class ModelCache {
             const bmd = BMD.parse(bmdData);
             if (hacks !== undefined)
                 hacks(bmd);
-            renderer.textureHolder.addJ3DTextures(device, bmd);
             p = new BMDModel(device, renderer.renderHelper, bmd);
             this.modelCache.set(modelPath, p);
         }
@@ -782,11 +808,10 @@ class SceneDesc {
         }
 
         return modelCache.waitForLoad().then(() => {
-            const textureHolder = new J3DTextureHolder();
-
             const systemArc = modelCache.getArchive(`${pathBase}/Object/System.arc`);
-            textureHolder.addBTITexture(device, BTI.parse(systemArc.findFileData(`dat/toon.bti`), `ZAtoon`));
-            textureHolder.addBTITexture(device, BTI.parse(systemArc.findFileData(`dat/toonex.bti`), `ZBtoonEX`));
+            const ZAtoon = new BTIData(device, BTI.parse(systemArc.findFileData(`dat/toon.bti`), `ZAtoon`).texture);
+            const ZBtoonEX = new BTIData(device, BTI.parse(systemArc.findFileData(`dat/toonex.bti`), `ZBtoonEX`).texture);
+            const textureFinder = new ZWWTextureFinder(ZAtoon, ZBtoonEX);
 
             const stageRarc = modelCache.getArchive(`${pathBase}/Stage/${this.stageDir}/Stage.arc`);
             const stageDzs = stageRarc.findFileData(`dzs/stage.dzs`);
@@ -795,7 +820,7 @@ class SceneDesc {
 
             const isSea = this.stageDir === 'sea';
             const isFullSea = isSea && this.rooms.length > 1;
-            const renderer = new WindWakerRenderer(device, modelCache, textureHolder, isSea, isFullSea, stageRarc);
+            const renderer = new WindWakerRenderer(device, modelCache, textureFinder, isSea, isFullSea, stageRarc);
             for (let i = 0; i < this.rooms.length; i++) {
                 const roomIdx = Math.abs(this.rooms[i]);
                 const roomRarc = modelCache.getArchive(`${pathBase}/Stage/${this.stageDir}/Room${roomIdx}.arc`);
@@ -809,7 +834,7 @@ class SceneDesc {
                     this.getRoomMult(modelMatrix, stageDzs, mult, roomIdx);
 
                 // Spawn the room.
-                const roomRenderer = new WindWakerRoomRenderer(device, renderer.renderHelper, renderer.textureHolder, roomIdx, roomRarc);
+                const roomRenderer = new WindWakerRoomRenderer(device, renderer.renderHelper, renderer.textureFinder, roomIdx, roomRarc);
                 roomRenderer.visible = visible;
                 renderer.roomRenderers.push(roomRenderer);
 
@@ -876,7 +901,7 @@ class SceneDesc {
 
         function buildChildModel(rarc: RARC.RARC, modelPath: string): BMDObjectRenderer {
             const model = modelCache.getModel(device, renderer, rarc, modelPath);
-            const modelInstance = new BMDModelInstance(device, renderer.renderHelper, renderer.textureHolder, model);
+            const modelInstance = new BMDModelInstance(device, renderer.renderHelper, model);
             modelInstance.name = name;
             modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 1);
             return new BMDObjectRenderer(modelInstance);
@@ -896,10 +921,9 @@ class SceneDesc {
         function buildChildModelBMT(rarc: RARC.RARC, modelPath: string, bmtPath: string): BMDObjectRenderer {
             const bmd = BMD.parse(rarc.findFileData(modelPath));
             const bmt = BMT.parse(rarc.findFileData(bmtPath));
-            renderer.textureHolder.addJ3DTextures(device, bmd, bmt);
             const model = new BMDModel(device, renderer.renderHelper, bmd, bmt);
             modelCache.extraModels.push(model);
-            const modelInstance = new BMDModelInstance(device, renderer.renderHelper, renderer.textureHolder, model);
+            const modelInstance = new BMDModelInstance(device, renderer.renderHelper, model);
             modelInstance.name = name;
             modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 1);
             return new BMDObjectRenderer(modelInstance);
@@ -926,13 +950,13 @@ class SceneDesc {
             if (stageName === 'sea' && roomIdx === 33) {
                 flowerData = modelCache.extraCache.get('Obessou') as FlowerData;
                 if (flowerData === undefined) {
-                    flowerData = new BessouFlowerData(device, symbolMap, renderer.renderHelper, renderer.textureHolder);
+                    flowerData = new BessouFlowerData(device, symbolMap, renderer.renderHelper);
                     modelCache.extraCache.set('Obessou', flowerData);
                 }
             } else {
                 flowerData = modelCache.extraCache.get('Ohana_high') as FlowerData;
                 if (flowerData === undefined) {
-                    flowerData = new PinkFlowerData(device, symbolMap, renderer.renderHelper, renderer.textureHolder);
+                    flowerData = new PinkFlowerData(device, symbolMap, renderer.renderHelper);
                     modelCache.extraCache.set('Ohana_high', flowerData);
                 }
             }
@@ -947,7 +971,7 @@ class SceneDesc {
         function buildWhiteFlowerModel(symbolMap: SymbolMap): ObjectRenderer {
             let flowerData: FlowerData = modelCache.extraCache.get('Ohana') as FlowerData;
             if (flowerData === undefined) {
-                flowerData = new WhiteFlowerData(device, symbolMap, renderer.renderHelper, renderer.textureHolder);
+                flowerData = new WhiteFlowerData(device, symbolMap, renderer.renderHelper);
                 modelCache.extraCache.set('Ohana', flowerData);
             }
 
@@ -1406,15 +1430,6 @@ class SceneDesc {
         });
         // Vera
         else if (name === 'Ub1') fetchArchive(`Ub.arc`).then((rarc) => {
-            // XXX(jstpierre): Stupid hack. ub01_head uses *uo01* instead of ub01, which will
-            // clash in the texture holder. I need to get rid of this stupid texture holder garbage,
-            // it's not helping anybody.
-            const model = modelCache.getModel(device, renderer, rarc, `bdlm/ub01_head.bdl`, (bmd) => {
-                bmd.tex1.textureDatas[3].name = `ub01_face`;
-            });
-            model.tex1Samplers[3].name = `ub01_face`;
-            model.tex1Samplers[4].name = `ub01_face`;
-
             const m = buildModel(rarc, `bdl/ub.bdl`);
             buildChildModel(rarc, `bdlm/ub01_head.bdl`).setParentJoint(m, `head`);
             m.bindANK1(parseBCK(rarc, `bcks/ub_wait01.bck`));

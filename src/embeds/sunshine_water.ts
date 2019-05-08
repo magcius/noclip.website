@@ -12,7 +12,7 @@ import * as GX_Material from '../gx/gx_material';
 
 import { BMD, BTK, MaterialEntry } from '../j3d/j3d';
 import * as RARC from '../j3d/rarc';
-import { J3DTextureHolder, BMDModel, MaterialInstance, MaterialInstanceState, ShapeInstanceState } from '../j3d/render';
+import { BMDModel, MaterialInstance, MaterialInstanceState, ShapeInstanceState, defaultFillTextureMappingCallback } from '../j3d/render';
 import { SunshineRenderer, SunshineSceneDesc, SMSPass } from '../j3d/sms_scenes';
 import * as Yaz0 from '../compression/Yaz0';
 import { GXRenderHelperGfx, ub_PacketParams, PacketParams } from '../gx/gx_render';
@@ -115,7 +115,7 @@ class SeaPlaneScene {
     private bmdModel: BMDModel;
     private animationController: AnimationController;
 
-    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, private textureHolder: J3DTextureHolder, bmd: BMD, btk: BTK, configName: string) {
+    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, bmd: BMD, btk: BTK, configName: string) {
         this.animationController = new AnimationController();
         // Make it go fast.
         this.animationController.fps = 30 * 5;
@@ -129,8 +129,6 @@ class SeaPlaneScene {
         }
 
         this.bmdModel = new BMDModel(device, renderHelper, bmd);
-
-        textureHolder.addJ3DTextures(device, bmd);
 
         const seaMaterial = bmd.mat3.materialEntries.find((m) => m.name === '_umi');
         this.mangleMaterial(seaMaterial, configName);
@@ -185,7 +183,7 @@ class SeaPlaneScene {
     public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput): void {
         this.plane.prepareToRender(renderHelper, viewerInput);
         this.animationController.setTimeInMilliseconds(viewerInput.time);
-        this.seaMaterialInstance.prepareToRender(renderHelper, viewerInput, this.materialInstanceState, this.shapeInstanceState, this.bmdModel, this.textureHolder);
+        this.seaMaterialInstance.prepareToRender(renderHelper, viewerInput, this.materialInstanceState, this.shapeInstanceState, defaultFillTextureMappingCallback, this.bmdModel, []);
     }
 
     public destroy(device: GfxDevice) {
@@ -209,9 +207,8 @@ export function createScene(device: GfxDevice, name: string): Progressable<Scene
     }).then((buffer: ArrayBufferSlice) => {
         const rarc = RARC.parse(buffer);
 
-        const textureHolder = new J3DTextureHolder();
-        const renderer = new SeaRenderer(device, textureHolder, rarc);
-        const skyScene = SunshineSceneDesc.createSunshineSceneForBasename(device, renderer.renderHelper, textureHolder, SMSPass.SKYBOX, rarc, 'map/map/sky', true);
+        const renderer = new SeaRenderer(device, rarc);
+        const skyScene = SunshineSceneDesc.createSunshineSceneForBasename(device, renderer.renderHelper, SMSPass.SKYBOX, rarc, 'map/map/sky', true);
         renderer.modelInstances.push(skyScene);
 
         const bmdFile = rarc.findFile('map/map/sea.bmd');
@@ -219,7 +216,7 @@ export function createScene(device: GfxDevice, name: string): Progressable<Scene
         const bmd = BMD.parse(bmdFile.buffer);
         const btk = BTK.parse(btkFile.buffer);
 
-        const seaScene = new SeaPlaneScene(device, renderer.renderHelper, textureHolder, bmd, btk, name);
+        const seaScene = new SeaPlaneScene(device, renderer.renderHelper, bmd, btk, name);
         renderer.seaPlaneScene = seaScene;
         renderer.finish(device);
         return renderer;

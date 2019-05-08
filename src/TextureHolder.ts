@@ -5,6 +5,7 @@ import { GfxSampler, GfxTexture, GfxDevice } from './gfx/platform/GfxPlatform';
 // Used mostly by indirect texture FB installations...
 export interface TextureOverride {
     gfxTexture: GfxTexture;
+    gfxSampler?: GfxSampler;
     width: number;
     height: number;
     flipY: boolean;
@@ -33,6 +34,16 @@ export class TextureMapping {
         this.height = 0;
         this.lodBias = 0;
         this.flipY = false;
+    }
+
+    public fillFromTextureOverride(textureOverride: TextureOverride): boolean {
+        this.gfxTexture = textureOverride.gfxTexture;
+        if (textureOverride.gfxSampler)
+            this.gfxSampler = textureOverride.gfxSampler;
+        this.width = textureOverride.width;
+        this.height = textureOverride.height;
+        this.flipY = textureOverride.flipY;
+        return true;
     }
 
     public copy(other: TextureMapping): void {
@@ -89,10 +100,7 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
     public fillTextureMapping(textureMapping: TextureMapping, name: string): boolean {
         const textureOverride = this.textureOverrides.get(name);
         if (textureOverride) {
-            textureMapping.gfxTexture = textureOverride.gfxTexture;
-            textureMapping.width = textureOverride.width;
-            textureMapping.height = textureOverride.height;
-            textureMapping.flipY = textureOverride.flipY;
+            textureMapping.fillFromTextureOverride(textureOverride);
             return true;
         }
 

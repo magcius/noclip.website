@@ -95,7 +95,7 @@ export interface MipChain {
     fullTextureSize: number;
 }
 
-export function calcMipChain(texture: Texture, mipCount: number = 0xFF): MipChain {
+export function calcMipChain(texture: Texture, mipCount: number): MipChain {
     const mipLevels: Texture[] = [];
     const name = texture.name;
 

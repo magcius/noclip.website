@@ -1,7 +1,7 @@
 
 import * as Viewer from '../viewer';
 
-import { createModelInstance, BasicRenderer } from './scenes';
+import { BasicRenderer } from './scenes';
 
 import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
@@ -9,8 +9,8 @@ import { readString, assert, assertExists } from '../util';
 import { fetchData } from '../fetch';
 import { mat4, quat } from 'gl-matrix';
 import * as RARC from './rarc';
-import { J3DTextureHolder, BMDModelInstance } from './render';
-import { BCK } from './j3d';
+import { BMDModelInstance, BMDModel } from './render';
+import { BCK, BMD, BTK, BRK, BTP } from './j3d';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 
 const id = "mkdd";
@@ -66,16 +66,29 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
     }
 
     private spawnBMD(device: GfxDevice, renderer: BasicRenderer, rarc: RARC.RARC, basename: string, modelMatrix: mat4 = null): BMDModelInstance {
-        const bmdFile = rarc.findFile(`${basename}.bmd`);
-        assertExists(bmdFile);
-        const btkFile = rarc.findFile(`${basename}.btk`);
-        const brkFile = rarc.findFile(`${basename}.brk`);
-        const bmtFile = rarc.findFile(`${basename}.bmt`);
-        const scene = createModelInstance(device, renderer.renderHelper, renderer.textureHolder, bmdFile, btkFile, brkFile, null, bmtFile);
-        scene.name = basename;
+        const bmdFileData = rarc.findFileData(`${basename}.bmd`);
+        assertExists(bmdFileData);
+        const bmdModel = new BMDModel(device, renderer.renderHelper, BMD.parse(bmdFileData));
+
+        const modelInstance = new BMDModelInstance(device, renderer.renderHelper, bmdModel);
+
+        const btkFileData = rarc.findFileData(`${basename}.btk`);
+        if (btkFileData !== null)
+            modelInstance.bindTTK1(BTK.parse(btkFileData).ttk1);
+
+        const brkFileData = rarc.findFileData(`${basename}.brk`);
+        if (brkFileData !== null)
+            modelInstance.bindTRK1(BRK.parse(brkFileData).trk1);
+
+        const btpFileData = rarc.findFileData(`${basename}.btp`);
+        if (btpFileData !== null)
+            modelInstance.bindTPT1(BTP.parse(btpFileData).tpt1);
+
+        modelInstance.name = basename;
         if (modelMatrix !== null)
-            mat4.copy(scene.modelMatrix, modelMatrix);
-        return scene;
+            mat4.copy(modelInstance.modelMatrix, modelMatrix);
+
+        return modelInstance;
     }
 
     public createScene(device: GfxDevice): Progressable<Viewer.SceneGfx> {
@@ -86,7 +99,7 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
             const bolFile = rarc.files.find((f) => f.name.endsWith('_course.bol'));
             const courseName = bolFile.name.replace('_course.bol', '');
 
-            const renderer = new BasicRenderer(device, new J3DTextureHolder());
+            const renderer = new BasicRenderer(device);
 
             if (rarc.findFile(`${courseName}_sky.bmd`))
                 renderer.addModelInstance(this.spawnBMD(device, renderer, rarc, `${courseName}_sky`));

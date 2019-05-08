@@ -9,7 +9,7 @@ import { GfxDevice, GfxRenderPass, GfxHostAccessPass } from '../../gfx/platform/
 import { GfxRenderInstViewRenderer } from '../../gfx/render/GfxRenderer';
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../../gfx/helpers/RenderTargetHelpers';
 import { BMD, BRK, BTK, BCK, LoopMode, BVA, BPK, BTP } from '../../j3d/j3d';
-import { BMDModel, BMDModelInstance, J3DTextureHolder } from '../../j3d/render';
+import { BMDModel, BMDModelInstance } from '../../j3d/render';
 import * as RARC from '../../j3d/rarc';
 import { EFB_WIDTH, EFB_HEIGHT, Light, lightSetWorldPosition, lightSetWorldDirection } from '../../gx/gx_material';
 import { GXRenderHelperGfx } from '../../gx/gx_render';
@@ -319,7 +319,6 @@ const enum SMGPass {
 
 class SMGRenderer implements Viewer.SceneGfx {
     private sceneGraph: SceneGraph;
-    public textureHolder: J3DTextureHolder;
 
     private bloomRenderer: BloomPostFXRenderer;
     private bloomParameters = new BloomPostFXParameters();
@@ -333,7 +332,6 @@ class SMGRenderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice, private spawner: SMGSpawner, private viewRenderer: GfxRenderInstViewRenderer, private scenarioData: BCSV.Bcsv, private zoneNames: string[]) {
         this.sceneGraph = spawner.sceneGraph;
-        this.textureHolder = spawner.textureHolder;
 
         this.sceneGraph.onnodeadded = () => {
             this.applyCurrentScenario();
@@ -414,6 +412,12 @@ class SMGRenderer implements Viewer.SceneGfx {
         this.bloomRenderer.prepareToRender(hostAccessPass, this.bloomParameters);
     }
 
+    private setIndirectTextureOverride(): void {
+        const textureOverride: TextureOverride = { gfxTexture: this.opaqueSceneTexture.gfxTexture, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
+        for (let i = 0; i < this.spawner.sceneGraph.nodes.length; i++)
+            this.spawner.sceneGraph.nodes[i].modelInstance.setTextureOverride("IndDummy", textureOverride);
+    }
+
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
         const hostAccessPass = device.createHostAccessPass();
 
@@ -440,8 +444,9 @@ class SMGRenderer implements Viewer.SceneGfx {
             opaquePassRenderer.endPass(this.opaqueSceneTexture.gfxTexture);
             device.submitPass(opaquePassRenderer);
 
-            const textureOverride: TextureOverride = { gfxTexture: this.opaqueSceneTexture.gfxTexture, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
-            this.textureHolder.setTextureOverride("IndDummy", textureOverride);
+            // TODO(jstpierre): The game seems to have two different versions of IndDummy. One which uses last-frame's scene
+            // and one which uses the scene drawn so far. This appears to be done on a per-object basis.
+            this.setIndirectTextureOverride();
 
             const indTexPassRenderer = this.mainRenderTarget.createRenderPass(device, noClearRenderPassDescriptor);
             this.viewRenderer.executeOnPass(device, indTexPassRenderer, SMGPass.INDIRECT);
@@ -588,7 +593,7 @@ class ModelCache {
     private models: BMDModel[] = [];
     private destroyed: boolean = false;
 
-    public getModel(device: GfxDevice, renderHelper: GXRenderHelperGfx, textureHolder: J3DTextureHolder, archivePath: string, modelFilename: string): Progressable<BMDModel> {
+    public getModel(device: GfxDevice, renderHelper: GXRenderHelperGfx, archivePath: string, modelFilename: string): Progressable<BMDModel> {
         if (this.promiseCache.has(archivePath))
             return this.promiseCache.get(archivePath);
 
@@ -606,7 +611,6 @@ class ModelCache {
             const rarc = RARC.parse(buffer);
             const bmd = BMD.parse(assertExists(rarc.findFileData(modelFilename)));
             const bmdModel = new BMDModel(device, renderHelper, bmd, null);
-            textureHolder.addJ3DTextures(device, bmd);
             this.archiveCache.set(archivePath, rarc);
             this.models.push(bmdModel);
             return bmdModel;
@@ -644,7 +648,7 @@ class ZoneNode {
 
     public computeObjectVisibility(): void {
         for (let i = 0; i < this.objects.length; i++)
-            this.objects[i].modelInstance.setVisible(this.visible && layerVisible(this.objects[i].layer, this.layerMask));
+            this.objects[i].modelInstance.visible = this.visible && layerVisible(this.objects[i].layer, this.layerMask);
 
         for (let i = 0; i < this.subzones.length; i++) {
             this.subzones[i].visible = this.visible && layerVisible(this.subzones[i].layer, this.layerMask);
@@ -662,7 +666,6 @@ function colorSetFromCsvDataRecord(color: Color, bcsv: BCSV.Bcsv, record: BCSV.B
 }
 
 class SMGSpawner {
-    public textureHolder = new J3DTextureHolder();
     public sceneGraph = new SceneGraph();
     public zones: ZoneNode[] = [];
     private modelCache = new ModelCache();
@@ -780,7 +783,7 @@ class SMGSpawner {
         const spawnGraph = (arcName: string, tag: SceneGraphTag = SceneGraphTag.Normal, animOptions: AnimOptions | null | undefined = undefined, planetRecord: BCSV.BcsvRecord | null = null) => {
             const arcPath = `${this.pathBase}/ObjectData/${arcName}.arc`;
             const modelFilename = `${arcName}.bdl`;
-            return this.modelCache.getModel(device, this.renderHelper, this.textureHolder, arcPath, modelFilename).then((bmdModel): [Node, RARC.RARC] | null => {
+            return this.modelCache.getModel(device, this.renderHelper, arcPath, modelFilename).then((bmdModel): [Node, RARC.RARC] | null => {
                 if (bmdModel === null)
                     return null;
 
@@ -790,7 +793,7 @@ class SMGSpawner {
                 // Trickery.
                 const rarc = this.modelCache.archiveCache.get(arcPath);
 
-                const modelInstance = new BMDModelInstance(device, this.renderHelper, this.textureHolder, bmdModel);
+                const modelInstance = new BMDModelInstance(device, this.renderHelper, bmdModel);
                 modelInstance.name = `${objinfo.objName} ${objinfo.objId}`;
 
                 if (tag === SceneGraphTag.Skybox) {
@@ -943,11 +946,6 @@ class SMGSpawner {
         case 'InvisibleWaterfallTwinFallLake':
         case 'GhostShipCavePipeCollision':
             // Invisible / Collision only.
-            return;
-
-        case 'LavaMiniSunPlanet':
-            // XXX(jstpierre): This has a texture named LavaSun which will corrupt the texture holder, so just
-            // prevent it spawning for now.
             return;
 
         case 'TimerSwitch':
@@ -1345,7 +1343,6 @@ class SMGSpawner {
     public destroy(device: GfxDevice): void {
         this.modelCache.destroy(device);
         this.sceneGraph.destroy(device);
-        this.textureHolder.destroy(device);
         this.viewRenderer.destroy(device);
         this.renderHelper.destroy(device);
     }

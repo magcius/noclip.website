@@ -22,7 +22,7 @@ export class BasicRenderer implements Viewer.SceneGfx {
     public modelInstances: BMDModelInstance[] = [];
     public rarc: RARC.RARC[] = [];
 
-    constructor(device: GfxDevice, public textureHolder: J3DTextureHolder) {
+    constructor(device: GfxDevice) {
         this.renderHelper = new GXRenderHelperGfx(device);
     }
 
@@ -79,7 +79,6 @@ export class BasicRenderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        this.textureHolder.destroy(device);
         this.renderHelper.destroy(device);
         this.viewRenderer.destroy(device);
         this.renderTarget.destroy(device);
@@ -92,12 +91,11 @@ const materialHacks: GXMaterialHacks = {
     lightingFudge: (p) => `(0.5 * (${p.ambSource} + 0.6) * ${p.matSource})`,
 };
 
-export function createModelInstance(device: GfxDevice, renderHelper: GXRenderHelperGfx, textureHolder: J3DTextureHolder, bmdFile: RARC.RARCFile, btkFile: RARC.RARCFile | null, brkFile: RARC.RARCFile | null, bckFile: RARC.RARCFile | null, bmtFile: RARC.RARCFile | null) {
+export function createModelInstance(device: GfxDevice, renderHelper: GXRenderHelperGfx, bmdFile: RARC.RARCFile, btkFile: RARC.RARCFile | null, brkFile: RARC.RARCFile | null, bckFile: RARC.RARCFile | null, bmtFile: RARC.RARCFile | null) {
     const bmd = BMD.parse(bmdFile.buffer);
     const bmt = bmtFile ? BMT.parse(bmtFile.buffer) : null;
-    textureHolder.addJ3DTextures(device, bmd, bmt);
     const bmdModel = new BMDModel(device, renderHelper, bmd, bmt);
-    const scene = new BMDModelInstance(device, renderHelper, textureHolder, bmdModel, materialHacks);
+    const scene = new BMDModelInstance(device, renderHelper, bmdModel, materialHacks);
 
     if (btkFile !== null) {
         const btk = BTK.parse(btkFile.buffer);
@@ -137,7 +135,7 @@ function createScenesFromBuffer(device: GfxDevice, renderer: BasicRenderer, buff
                 const bmtFile = rarc.files.find((f) => f.name === `${basename}.bmt`) || null;
                 let scene;
                 try {
-                    scene = createModelInstance(device, renderer.renderHelper, renderer.textureHolder, bmdFile, btkFile, brkFile, bckFile, bmtFile);
+                    scene = createModelInstance(device, renderer.renderHelper, bmdFile, btkFile, brkFile, bckFile, bmtFile);
                 } catch(e) {
                     console.warn(`File ${basename} failed to parse:`, e);
                     return null;
@@ -154,9 +152,8 @@ function createScenesFromBuffer(device: GfxDevice, renderer: BasicRenderer, buff
 
         if (['J3D2bmd3', 'J3D2bdl4'].includes(readString(buffer, 0, 8))) {
             const bmd = BMD.parse(buffer);
-            renderer.textureHolder.addJ3DTextures(device, bmd);
             const bmdModel = new BMDModel(device, renderer.renderHelper, bmd);
-            const modelInstance = new BMDModelInstance(device, renderer.renderHelper, renderer.textureHolder, bmdModel);
+            const modelInstance = new BMDModelInstance(device, renderer.renderHelper, bmdModel);
             return [modelInstance];
         }
 
@@ -165,7 +162,7 @@ function createScenesFromBuffer(device: GfxDevice, renderer: BasicRenderer, buff
 }
 
 export function createMultiSceneFromBuffer(device: GfxDevice, buffer: ArrayBufferSlice): Promise<BasicRenderer> {
-    const renderer = new BasicRenderer(device, new J3DTextureHolder());
+    const renderer = new BasicRenderer(device);
     return createScenesFromBuffer(device, renderer, buffer).then((scenes) => {
         for (let i = 0; i < scenes.length; i++)
             renderer.addModelInstance(scenes[i]);

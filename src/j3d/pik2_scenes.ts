@@ -10,13 +10,12 @@ import { assertExists } from '../util';
 import { fetchData } from '../fetch';
 import { mat4, } from 'gl-matrix';
 import * as RARC from './rarc';
-import { J3DTextureHolder, BMDModelInstance } from './render';
+import { BMDModelInstance } from './render';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { BTK } from './j3d';
 
 const id = "pik2";
 const name = "Pikmin 2";
-
 
 class Pik2SceneDesc implements Viewer.SceneDesc {
     public id: string;
@@ -30,7 +29,7 @@ class Pik2SceneDesc implements Viewer.SceneDesc {
         const btkFile = rarc.findFile(`${basename}.btk`);
         const brkFile = rarc.findFile(`${basename}.brk`);
         const bmtFile = rarc.findFile(`${basename}.bmt`);
-        const scene = createModelInstance(device, renderer.renderHelper, renderer.textureHolder, bmdFile, btkFile, brkFile, null, bmtFile);
+        const scene = createModelInstance(device, renderer.renderHelper, bmdFile, btkFile, brkFile, null, bmtFile);
         scene.name = basename;
         if (modelMatrix !== null)
             mat4.copy(scene.modelMatrix, modelMatrix);
@@ -45,7 +44,7 @@ class Pik2SceneDesc implements Viewer.SceneDesc {
             const rarc = RARC.parse(buffer);
             console.log(rarc);
 
-            const renderer = new BasicRenderer(device, new J3DTextureHolder());
+            const renderer = new BasicRenderer(device);
 
             if (rarc.findFile(`model.bmd`)) {
                 const m = this.spawnBMD(device, renderer, rarc, `model`);

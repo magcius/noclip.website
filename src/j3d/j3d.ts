@@ -15,8 +15,9 @@ import { ColorKind } from '../gx/gx_render';
 import { AABB } from '../Geometry';
 import { getPointHermite } from '../Spline';
 import { Graph, cv } from '../DebugJunk';
-import { computeModelMatrixSRT, MathConstants } from '../MathHelpers';
+import { computeModelMatrixSRT } from '../MathHelpers';
 
+//#region Helpers
 function readStringTable(buffer: ArrayBufferSlice, offs: number): string[] {
     const view = buffer.createDataView(offs);
     const stringCount = view.getUint16(0x00);
@@ -33,6 +34,107 @@ function readStringTable(buffer: ArrayBufferSlice, offs: number): string[] {
     return strings;
 }
 
+class J3DFileReaderHelper {
+    public view: DataView;
+    public magic: string;
+    public size: number;
+    public numChunks: number;
+    public offs: number = 0x20;
+
+    constructor(public buffer: ArrayBufferSlice) {
+        this.view = this.buffer.createDataView();
+        this.magic = readString(this.buffer, 0, 8);
+        this.size = this.view.getUint32(0x08);
+        this.numChunks = this.view.getUint32(0x0C);
+        this.offs = 0x20;
+    }
+
+    public maybeNextChunk(maybeChunkId: string, sizeBias: number = 0): ArrayBufferSlice {
+        const chunkStart = this.offs;
+        const chunkId = readString(this.buffer, chunkStart + 0x00, 4);
+        const chunkSize = this.view.getUint32(chunkStart + 0x04) + sizeBias;
+        if (chunkId === maybeChunkId) {
+            this.offs += chunkSize;
+            return this.buffer.subarray(chunkStart, chunkSize);
+        } else {
+            return null;
+        }
+    }
+
+    public nextChunk(expectedChunkId: string, sizeBias: number = 0): ArrayBufferSlice {
+        const chunkStart = this.offs;
+        const chunkId = readString(this.buffer, chunkStart + 0x00, 4);
+        const chunkSize = this.view.getUint32(chunkStart + 0x04) + sizeBias;
+        assert(chunkId === expectedChunkId);
+        this.offs += chunkSize;
+        return this.buffer.subarray(chunkStart, chunkSize);
+    }
+}
+//#endregion
+//#region BTI_Texture
+export interface BTI_Texture {
+    name: string;
+    format: GX.TexFormat;
+    width: number;
+    height: number;
+    wrapS: GX.WrapMode;
+    wrapT: GX.WrapMode;
+    minFilter: GX.TexFilter;
+    magFilter: GX.TexFilter;
+    minLOD: number;
+    maxLOD: number;
+    lodBias: number;
+    mipCount: number;
+    data: ArrayBufferSlice | null;
+
+    // Palette data
+    paletteFormat: GX.TexPalette;
+    paletteData: ArrayBufferSlice | null;
+}
+
+function readBTI_Texture(buffer: ArrayBufferSlice, name: string): BTI_Texture {
+    const view = buffer.createDataView();
+
+    const format: GX.TexFormat = view.getUint8(0x00);
+    const width = view.getUint16(0x02);
+    const height = view.getUint16(0x04);
+    const wrapS = view.getUint8(0x06);
+    const wrapT = view.getUint8(0x07);
+    const paletteFormat = view.getUint8(0x09);
+    const paletteCount = view.getUint16(0x0A);
+    const paletteOffs = view.getUint32(0x0C);
+    const minFilter = view.getUint8(0x14);
+    const magFilter = view.getUint8(0x15);
+    const minLOD = view.getInt8(0x16) * 1/8;
+    const maxLOD = view.getInt8(0x17) * 1/8;
+    const mipCount = view.getUint8(0x18);
+    const lodBias = view.getInt16(0x1A) * 1/100;
+    const dataOffs = view.getUint32(0x1C);
+
+    assert(minLOD === 0);
+
+    let data: ArrayBufferSlice | null = null;
+    if (dataOffs !== 0)
+        data = buffer.slice(dataOffs);
+
+    let paletteData: ArrayBufferSlice | null = null;
+    if (paletteOffs !== 0)
+        paletteData = buffer.subarray(paletteOffs, paletteCount * 2);
+
+    return { name, format, width, height, wrapS, wrapT, minFilter, magFilter, minLOD, maxLOD, mipCount, lodBias, data, paletteFormat, paletteData };
+}
+//#endregion
+//#region BTI
+export class BTI {
+    texture: BTI_Texture;
+
+    public static parse(buffer: ArrayBufferSlice, name: string = null): BTI {
+        const bti = new BTI();
+        bti.texture = readBTI_Texture(buffer, name);
+        return bti;
+    }
+}
+//#endregion
 //#region J3DModel
 //#region INF1
 export enum HierarchyType {
@@ -115,7 +217,6 @@ function readINF1Chunk(buffer: ArrayBufferSlice): INF1 {
     return { sceneGraph: parentStack.pop() };
 }
 //#endregion
-
 //#region VTX1
 export interface VertexArray {
     vtxAttrib: GX.VertexAttribute;
@@ -201,7 +302,6 @@ function readVTX1Chunk(buffer: ArrayBufferSlice): VTX1 {
     return { vertexArrays };
 }
 //#endregion
-
 //#region EVP1
 interface WeightedBone {
     weight: number;
@@ -272,7 +372,6 @@ function readEVP1Chunk(buffer: ArrayBufferSlice): EVP1 {
     return { envelopes, inverseBinds };
 }
 //#endregion
-
 //#region DRW1
 export enum DRW1MatrixKind {
     Joint = 0x00,
@@ -315,7 +414,6 @@ function readDRW1Chunk(buffer: ArrayBufferSlice): DRW1 {
     return { matrixDefinitions };
 }
 //#endregion
-
 //#region JNT1
 export interface Joint {
     name: string;
@@ -376,7 +474,6 @@ function readJNT1Chunk(buffer: ArrayBufferSlice): JNT1 {
     return { joints };
 }
 //#endregion
-
 //#region SHP1
 // A packet is a series of draw calls that use the same matrix table.
 interface Packet {
@@ -510,7 +607,6 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
     return { vat, shapes };
 }
 //#endregion
-
 //#region MAT3
 export const enum TexMtxProjection {
     ST = 0,
@@ -1009,61 +1105,6 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
     return { materialEntries };
 }
 //#endregion
-
-//#region BTI_Texture
-export interface BTI_Texture {
-    name: string;
-    format: GX.TexFormat;
-    width: number;
-    height: number;
-    wrapS: GX.WrapMode;
-    wrapT: GX.WrapMode;
-    minFilter: GX.TexFilter;
-    magFilter: GX.TexFilter;
-    minLOD: number;
-    maxLOD: number;
-    lodBias: number;
-    mipCount: number;
-    data: ArrayBufferSlice | null;
-
-    // Palette data
-    paletteFormat: GX.TexPalette;
-    paletteData: ArrayBufferSlice | null;
-}
-
-function readBTI_Texture(buffer: ArrayBufferSlice, name: string): BTI_Texture {
-    const view = buffer.createDataView();
-
-    const format: GX.TexFormat = view.getUint8(0x00);
-    const width = view.getUint16(0x02);
-    const height = view.getUint16(0x04);
-    const wrapS = view.getUint8(0x06);
-    const wrapT = view.getUint8(0x07);
-    const paletteFormat = view.getUint8(0x09);
-    const paletteCount = view.getUint16(0x0A);
-    const paletteOffs = view.getUint32(0x0C);
-    const minFilter = view.getUint8(0x14);
-    const magFilter = view.getUint8(0x15);
-    const minLOD = view.getInt8(0x16) * 1/8;
-    const maxLOD = view.getInt8(0x17) * 1/8;
-    const mipCount = view.getUint8(0x18);
-    const lodBias = view.getInt16(0x1A) * 1/100;
-    const dataOffs = view.getUint32(0x1C);
-
-    assert(minLOD === 0);
-
-    let data: ArrayBufferSlice | null = null;
-    if (dataOffs !== 0)
-        data = buffer.slice(dataOffs);
-
-    let paletteData: ArrayBufferSlice | null = null;
-    if (paletteOffs !== 0)
-        paletteData = buffer.subarray(paletteOffs, paletteCount * 2);
-
-    return { name, format, width, height, wrapS, wrapT, minFilter, magFilter, minLOD, maxLOD, mipCount, lodBias, data, paletteFormat, paletteData };
-}
-//#endregion
-
 //#region TEX1
 // The way this works is a bit complicated. Basically, textures can have different
 // LOD or wrap modes but share the same literal texture data. As such, we do a bit
@@ -1071,7 +1112,6 @@ function readBTI_Texture(buffer: ArrayBufferSlice, name: string): BTI_Texture {
 // TEX1_Sampler contains the "sampling" parameters like LOD or wrap mode, along with
 // its associated texture data. Each texture in the TEX1 chunk is turned into a
 // TEX1_Surface.
-
 export interface TEX1_TextureData {
     // The name can be used for external lookups and is required.
     name: string;
@@ -1157,45 +1197,7 @@ function readTEX1Chunk(buffer: ArrayBufferSlice): TEX1 {
 
     return { textureDatas, samplers };
 }
-
-class J3DFileReaderHelper {
-    public view: DataView;
-    public magic: string;
-    public size: number;
-    public numChunks: number;
-    public offs: number = 0x20;
-
-    constructor(public buffer: ArrayBufferSlice) {
-        this.view = this.buffer.createDataView();
-        this.magic = readString(this.buffer, 0, 8);
-        this.size = this.view.getUint32(0x08);
-        this.numChunks = this.view.getUint32(0x0C);
-        this.offs = 0x20;
-    }
-
-    public maybeNextChunk(maybeChunkId: string, sizeBias: number = 0): ArrayBufferSlice {
-        const chunkStart = this.offs;
-        const chunkId = readString(this.buffer, chunkStart + 0x00, 4);
-        const chunkSize = this.view.getUint32(chunkStart + 0x04) + sizeBias;
-        if (chunkId === maybeChunkId) {
-            this.offs += chunkSize;
-            return this.buffer.subarray(chunkStart, chunkSize);
-        } else {
-            return null;
-        }
-    }
-
-    public nextChunk(expectedChunkId: string, sizeBias: number = 0): ArrayBufferSlice {
-        const chunkStart = this.offs;
-        const chunkId = readString(this.buffer, chunkStart + 0x00, 4);
-        const chunkSize = this.view.getUint32(chunkStart + 0x04) + sizeBias;
-        assert(chunkId === expectedChunkId);
-        this.offs += chunkSize;
-        return this.buffer.subarray(chunkStart, chunkSize);
-    }
-}
 //#endregion
-
 //#region BMD
 export class BMD {
     public static parse(buffer: ArrayBufferSlice): BMD {
@@ -1227,7 +1229,7 @@ export class BMD {
     public tex1: TEX1;
 }
 //#endregion
-//#endregion J3DModel
+//#endregion
 //#region BMT
 export class BMT {
     public static parse(buffer: ArrayBufferSlice): BMT {
@@ -1250,18 +1252,6 @@ export class BMT {
     public tex1: TEX1;
 }
 //#endregion
-//#region BTI
-export class BTI {
-    texture: BTI_Texture;
-
-    public static parse(buffer: ArrayBufferSlice, name: string = null): BTI {
-        const bti = new BTI();
-        bti.texture = readBTI_Texture(buffer, name);
-        return bti;
-    }
-}
-//#endregion
-
 //#region Animation Core
 export const enum LoopMode {
     ONCE = 0,

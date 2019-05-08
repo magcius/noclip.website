@@ -4,8 +4,8 @@ import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
 
 import { mat4, vec3 } from "gl-matrix";
-import { BMDModelInstance } from "./render";
-import { ANK1, TTK1, TRK1, TEX1_TextureData } from "./j3d";
+import { BMDModelInstance, BTIData } from "./render";
+import { ANK1, TTK1, TRK1, TEX1_TextureData, BTI_Texture } from "./j3d";
 import AnimationController from "../AnimationController";
 import { Colors } from "./zww_scenes";
 import { ColorKind, GXRenderHelperGfx, GXTextureHolder, GXShapeHelperGfx, loadedDataCoalescerGfx, ub_PacketParams, PacketParams, MaterialParams, GXMaterialHelperGfx, translateWrapModeGfx } from "../gx/gx_render";
@@ -130,7 +130,6 @@ function findSymbol(symbolMap: SymbolMap, filename: string, symbolName: string):
 
 export interface FlowerData {
     textureMapping: TextureMapping;
-    gfxSampler: GfxSampler;
     shapeHelperMain: GXShapeHelperGfx;
     gxMaterial: GX_Material.GXMaterial;
     bufferCoalescer: GfxBufferCoalescer;
@@ -139,12 +138,12 @@ export interface FlowerData {
 
 export class WhiteFlowerData {
     public textureMapping = new TextureMapping();
-    public gfxSampler: GfxSampler;
+    public textureData: BTIData;
     public shapeHelperMain: GXShapeHelperGfx;
     public gxMaterial: GX_Material.GXMaterial;
     public bufferCoalescer: GfxBufferCoalescer;
 
-    constructor(device: GfxDevice, symbolMap: SymbolMap, renderHelper: GXRenderHelperGfx, textureHolder: GXTextureHolder) {
+    constructor(device: GfxDevice, symbolMap: SymbolMap, renderHelper: GXRenderHelperGfx) {
         const l_matDL = findSymbol(symbolMap, `d_flower.o`, `l_matDL`);
         const l_Txo_ob_flower_white_64x64TEX = findSymbol(symbolMap, `d_flower.o`, `l_Txo_ob_flower_white_64x64TEX`);
         const l_pos = findSymbol(symbolMap, `d_flower.o`, `l_pos`);
@@ -170,8 +169,11 @@ export class WhiteFlowerData {
         const width  = ((image0 >>>  0) & 0x3FF) + 1;
         const height = ((image0 >>> 10) & 0x3FF) + 1;
         const format: GX.TexFormat = (image0 >>> 20) & 0x0F;
+        const mode0 = matRegisters.bp[GX.BPRegister.TX_SETMODE0_I0_ID];
+        const wrapS: GX.WrapMode = (mode0 >>> 0) & 0x03;
+        const wrapT: GX.WrapMode = (mode0 >>> 2) & 0x03;
 
-        const texture: TEX1_TextureData = {
+        const texture: BTI_Texture = {
             name: 'l_Txo_ob_flower_white_64x64TEX',
             width, height, format,
             data: l_Txo_ob_flower_white_64x64TEX,
@@ -179,21 +181,12 @@ export class WhiteFlowerData {
             mipCount: 1,
             paletteFormat: GX.TexPalette.RGB565,
             paletteData: null,
+            wrapS, wrapT,
+            minFilter: GX.TexFilter.LINEAR, magFilter: GX.TexFilter.LINEAR,
+            minLOD: 1, maxLOD: 1, lodBias: 0,
         };
-        textureHolder.addTextures(device, [texture]);
-        textureHolder.fillTextureMapping(this.textureMapping, texture.name);
-
-        const mode0 = matRegisters.bp[GX.BPRegister.TX_SETMODE0_I0_ID];
-        const wrapS: GX.WrapMode = (mode0 >>> 0) & 0x03;
-        const wrapT: GX.WrapMode = (mode0 >>> 2) & 0x03;
-
-        this.gfxSampler = device.createSampler({
-            wrapS: translateWrapModeGfx(wrapS),
-            wrapT: translateWrapModeGfx(wrapT),
-            minFilter: GfxTexFilterMode.BILINEAR, magFilter: GfxTexFilterMode.BILINEAR, mipFilter: GfxMipFilterMode.NO_MIP,
-            minLOD: 1, maxLOD: 1,
-        });
-        this.textureMapping.gfxSampler = this.gfxSampler;
+        this.textureData = new BTIData(device, texture);
+        this.textureData.fillTextureMapping(this.textureMapping);
 
         const vtxArrays: GX_Array[] = [];
         vtxArrays[GX.VertexAttribute.POS] = { buffer: l_pos, offs: 0 };
@@ -224,18 +217,18 @@ export class WhiteFlowerData {
     public destroy(device: GfxDevice): void {
         this.bufferCoalescer.destroy(device);
         this.shapeHelperMain.destroy(device);
-        device.destroySampler(this.gfxSampler);
+        this.textureData.destroy(device);
     }
 }
 
 export class PinkFlowerData {
     public textureMapping = new TextureMapping();
-    public gfxSampler: GfxSampler;
+    public textureData: BTIData;
     public shapeHelperMain: GXShapeHelperGfx;
     public gxMaterial: GX_Material.GXMaterial;
     public bufferCoalescer: GfxBufferCoalescer;
 
-    constructor(device: GfxDevice, symbolMap: SymbolMap, renderHelper: GXRenderHelperGfx, textureHolder: GXTextureHolder) {
+    constructor(device: GfxDevice, symbolMap: SymbolMap, renderHelper: GXRenderHelperGfx) {
         const l_matDL2 = findSymbol(symbolMap, `d_flower.o`, `l_matDL2`);
         const l_Txo_ob_flower_pink_64x64TEX = findSymbol(symbolMap, `d_flower.o`, `l_Txo_ob_flower_pink_64x64TEX`);
         const l_pos2 = findSymbol(symbolMap, `d_flower.o`, `l_pos2`);
@@ -261,8 +254,11 @@ export class PinkFlowerData {
         const width  = ((image0 >>>  0) & 0x3FF) + 1;
         const height = ((image0 >>> 10) & 0x3FF) + 1;
         const format: GX.TexFormat = (image0 >>> 20) & 0x0F;
+        const mode0 = matRegisters.bp[GX.BPRegister.TX_SETMODE0_I0_ID];
+        const wrapS: GX.WrapMode = (mode0 >>> 0) & 0x03;
+        const wrapT: GX.WrapMode = (mode0 >>> 2) & 0x03;
 
-        const texture: TEX1_TextureData = {
+        const texture: BTI_Texture = {
             name: 'l_Txo_ob_flower_pink_64x64TEX',
             width, height, format,
             data: l_Txo_ob_flower_pink_64x64TEX,
@@ -270,21 +266,12 @@ export class PinkFlowerData {
             mipCount: 1,
             paletteFormat: GX.TexPalette.RGB565,
             paletteData: null,
+            wrapS, wrapT,
+            minFilter: GX.TexFilter.LINEAR, magFilter: GX.TexFilter.LINEAR,
+            minLOD: 1, maxLOD: 1, lodBias: 0,
         };
-        textureHolder.addTextures(device, [texture]);
-        textureHolder.fillTextureMapping(this.textureMapping, texture.name);
-
-        const mode0 = matRegisters.bp[GX.BPRegister.TX_SETMODE0_I0_ID];
-        const wrapS: GX.WrapMode = (mode0 >>> 0) & 0x03;
-        const wrapT: GX.WrapMode = (mode0 >>> 2) & 0x03;
-
-        this.gfxSampler = device.createSampler({
-            wrapS: translateWrapModeGfx(wrapS),
-            wrapT: translateWrapModeGfx(wrapT),
-            minFilter: GfxTexFilterMode.BILINEAR, magFilter: GfxTexFilterMode.BILINEAR, mipFilter: GfxMipFilterMode.NO_MIP,
-            minLOD: 1, maxLOD: 1,
-        });
-        this.textureMapping.gfxSampler = this.gfxSampler;
+        this.textureData = new BTIData(device, texture);
+        this.textureData.fillTextureMapping(this.textureMapping);
 
         const vtxArrays: GX_Array[] = [];
         vtxArrays[GX.VertexAttribute.POS] = { buffer: l_pos2, offs: 0 };
@@ -315,18 +302,18 @@ export class PinkFlowerData {
     public destroy(device: GfxDevice): void {
         this.bufferCoalescer.destroy(device);
         this.shapeHelperMain.destroy(device);
-        device.destroySampler(this.gfxSampler);
+        this.textureData.destroy(device);
     }
 }
 
 export class BessouFlowerData {
     public textureMapping = new TextureMapping();
-    public gfxSampler: GfxSampler;
+    public textureData: BTIData;
     public shapeHelperMain: GXShapeHelperGfx;
     public gxMaterial: GX_Material.GXMaterial;
     public bufferCoalescer: GfxBufferCoalescer;
 
-    constructor(device: GfxDevice, symbolMap: SymbolMap, renderHelper: GXRenderHelperGfx, textureHolder: GXTextureHolder) {
+    constructor(device: GfxDevice, symbolMap: SymbolMap, renderHelper: GXRenderHelperGfx) {
         const l_matDL3 = findSymbol(symbolMap, `d_flower.o`, `l_matDL3`);
         const l_Txq_bessou_hanaTEX = findSymbol(symbolMap, `d_flower.o`, `l_Txq_bessou_hanaTEX`);
         const l_pos3 = findSymbol(symbolMap, `d_flower.o`, `l_pos3`);
@@ -352,8 +339,11 @@ export class BessouFlowerData {
         const width  = ((image0 >>>  0) & 0x3FF) + 1;
         const height = ((image0 >>> 10) & 0x3FF) + 1;
         const format: GX.TexFormat = (image0 >>> 20) & 0x0F;
+        const mode0 = matRegisters.bp[GX.BPRegister.TX_SETMODE0_I0_ID];
+        const wrapS: GX.WrapMode = (mode0 >>> 0) & 0x03;
+        const wrapT: GX.WrapMode = (mode0 >>> 2) & 0x03;
 
-        const texture: TEX1_TextureData = {
+        const texture: BTI_Texture = {
             name: 'l_Txq_bessou_hanaTEX',
             width, height, format,
             data: l_Txq_bessou_hanaTEX,
@@ -361,21 +351,12 @@ export class BessouFlowerData {
             mipCount: 1,
             paletteFormat: GX.TexPalette.RGB565,
             paletteData: null,
+            wrapS, wrapT,
+            minFilter: GX.TexFilter.LINEAR, magFilter: GX.TexFilter.LINEAR,
+            minLOD: 1, maxLOD: 1, lodBias: 0,
         };
-        textureHolder.addTextures(device, [texture]);
-        textureHolder.fillTextureMapping(this.textureMapping, texture.name);
-
-        const mode0 = matRegisters.bp[GX.BPRegister.TX_SETMODE0_I0_ID];
-        const wrapS: GX.WrapMode = (mode0 >>> 0) & 0x03;
-        const wrapT: GX.WrapMode = (mode0 >>> 2) & 0x03;
-
-        this.gfxSampler = device.createSampler({
-            wrapS: translateWrapModeGfx(wrapS),
-            wrapT: translateWrapModeGfx(wrapT),
-            minFilter: GfxTexFilterMode.BILINEAR, magFilter: GfxTexFilterMode.BILINEAR, mipFilter: GfxMipFilterMode.NO_MIP,
-            minLOD: 1, maxLOD: 1,
-        });
-        this.textureMapping.gfxSampler = this.gfxSampler;
+        this.textureData = new BTIData(device, texture);
+        this.textureData.fillTextureMapping(this.textureMapping);
 
         const vtxArrays: GX_Array[] = [];
         vtxArrays[GX.VertexAttribute.POS] = { buffer: l_pos3, offs: 0 };
@@ -406,7 +387,7 @@ export class BessouFlowerData {
     public destroy(device: GfxDevice): void {
         this.bufferCoalescer.destroy(device);
         this.shapeHelperMain.destroy(device);
-        device.destroySampler(this.gfxSampler);
+        this.textureData.destroy(device);
     }
 }
 
