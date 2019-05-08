@@ -274,7 +274,7 @@ class Main {
 
         this._updateLoop(0);
 
-        if (true || !IS_DEVELOPMENT) {
+        if (!IS_DEVELOPMENT) {
             Sentry.init({
                 dsn: 'https://a3b5f6c50bc04555835f9a83d6e76b23@sentry.io/1448331',
                 beforeSend: (event) => {

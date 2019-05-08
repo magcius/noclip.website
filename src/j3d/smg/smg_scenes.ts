@@ -3,7 +3,7 @@ import { mat4, quat, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
 import Progressable from '../../Progressable';
 import { assert, assertExists } from '../../util';
-import { fetchData } from '../../fetch';
+import { fetchData, AbortedError } from '../../fetch';
 import * as Viewer from '../../viewer';
 import { GfxDevice, GfxRenderPass, GfxHostAccessPass } from '../../gfx/platform/GfxPlatform';
 import { GfxRenderInstViewRenderer } from '../../gfx/render/GfxRenderer';
@@ -610,7 +610,7 @@ class ModelCache {
             if (buffer === null)
                 return null;
             if (this.destroyed)
-                return null;
+                throw new AbortedError();
             const rarc = RARC.parse(buffer);
             const bmd = BMD.parse(assertExists(rarc.findFileData(modelFilename)));
             const bmdModel = new BMDModel(device, renderHelper, bmd, null);
@@ -787,7 +787,7 @@ class SMGSpawner {
             const arcPath = `${this.pathBase}/ObjectData/${arcName}.arc`;
             const modelFilename = `${arcName}.bdl`;
             return this.modelCache.getModel(device, abortSignal, this.renderHelper, arcPath, modelFilename).then((bmdModel): [Node, RARC.RARC] => {
-                // TODO(jstpierre): Do better than this.
+                // If this is a 404, then return null.
                 if (bmdModel === null)
                     return null;
 
