@@ -1,21 +1,7 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString, assert } from "../util";
-
-export const enum ImageFormat {
-    G_IM_FMT_RGBA = 0x00,
-    G_IM_FMT_YUV  = 0x01,
-    G_IM_FMT_CI   = 0x02,
-    G_IM_FMT_IA   = 0x03,
-    G_IM_FMT_I    = 0x04,
-}
-
-export const enum ImageSize {
-    G_IM_SIZ_4b   = 0x00,
-    G_IM_SIZ_8b   = 0x01,
-    G_IM_SIZ_16b  = 0x02,
-    G_IM_SIZ_32b  = 0x03,
-}
+import { readString } from "../util";
+import { ImageSize, ImageFormat } from "../bk/f3dex";
 
 export const enum TextureLUT {
     G_TT_NONE     = 0x00,
@@ -104,7 +90,7 @@ function copyTLUTColor(dst: Uint8Array, dstOffs: number, colorTable: Uint8Array,
 function decodeTex_RGBA16(dst: Uint8Array, view: DataView, srcIdx: number, tileW: number, tileH: number): void {
     let dstIdx = 0;
     for (let y = 0; y < tileH; y++) {
-        for (let x = 0; x < tileW; x ++) {
+        for (let x = 0; x < tileW; x++) {
             const p = view.getUint16(srcIdx);
             r5g5b5a1(dst, dstIdx + 0, p);
             srcIdx += 0x02;
@@ -116,7 +102,7 @@ function decodeTex_RGBA16(dst: Uint8Array, view: DataView, srcIdx: number, tileW
 function decodeTex_RGBA32(dst: Uint8Array, view: DataView, srcIdx: number, tileW: number, tileH: number): void {
     let dstIdx = 0;
     for (let y = 0; y < tileH; y++) {
-        for (let x = 0; x < tileW; x ++) {
+        for (let x = 0; x < tileW; x++) {
             const p = view.getUint32(srcIdx);
             dst[dstIdx + 0] = (p >>> 24) & 0xFF;
             dst[dstIdx + 1] = (p >>> 16) & 0xFF;
@@ -144,7 +130,7 @@ function decodeTex_CI4(dst: Uint8Array, view: DataView, srcIdx: number, tileW: n
 function decodeTex_CI8(dst: Uint8Array, view: DataView, srcIdx: number, tileW: number, tileH: number, tlutColorTable: Uint8Array): void {
     let dstIdx = 0;
     for (let y = 0; y < tileH; y++) {
-        for (let x = 0; x < tileW; x ++) {
+        for (let x = 0; x < tileW; x++) {
             const b = view.getUint8(srcIdx);
             copyTLUTColor(dst, dstIdx + 4, tlutColorTable, b);
             srcIdx += 0x01;
@@ -179,7 +165,7 @@ function decodeTex_IA4(dst: Uint8Array, view: DataView, srcIdx: number, tileW: n
 function decodeTex_IA8(dst: Uint8Array, view: DataView, srcIdx: number, tileW: number, tileH: number): void {
     let dstIdx = 0;
     for (let y = 0; y < tileH; y++) {
-        for (let x = 0; x < tileW; x += 2) {
+        for (let x = 0; x < tileW; x++) {
             const b = view.getUint8(srcIdx);
             const i = expand4to8((b >>> 4) & 0x0F);
             const a = expand4to8((b >>> 0) & 0x0F);
@@ -196,7 +182,7 @@ function decodeTex_IA8(dst: Uint8Array, view: DataView, srcIdx: number, tileW: n
 function decodeTex_IA16(dst: Uint8Array, view: DataView, srcIdx: number, tileW: number, tileH: number): void {
     let dstIdx = 0;
     for (let y = 0; y < tileH; y++) {
-        for (let x = 0; x < tileW; x += 2) {
+        for (let x = 0; x < tileW; x++) {
             const i = view.getUint8(srcIdx + 0x00);
             const a = view.getUint8(srcIdx + 0x01);
             dst[dstIdx + 0] = i;
@@ -233,7 +219,7 @@ function decodeTex_I4(dst: Uint8Array, view: DataView, srcIdx: number, tileW: nu
 function decodeTex_I8(dst: Uint8Array, view: DataView, srcIdx: number, tileW: number, tileH: number): void {
     let dstIdx = 0;
     for (let y = 0; y < tileH; y++) {
-        for (let x = 0; x < tileW; x += 2) {
+        for (let x = 0; x < tileW; x++) {
             const i = view.getUint8(srcIdx);
             dst[dstIdx + 0] = i;
             dst[dstIdx + 1] = i;

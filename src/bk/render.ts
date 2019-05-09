@@ -26,7 +26,7 @@ export function textureToCanvas(texture: Texture): Viewer.Texture {
     ctx.putImageData(imgData, 0, 0);
     const surfaces = [ canvas ];
     const extraInfo = new Map<string, string>();
-    extraInfo.set('Format', getFormatString(texture));
+    extraInfo.set('Format', getFormatString(texture.tile.fmt, texture.tile.siz));
     return { name: texture.name, surfaces, extraInfo };
 }
 

@@ -1,4 +1,5 @@
-import { nArray, assert, hexzero } from "../util";
+
+import { nArray, assert } from "../util";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 
 export class Vertex {

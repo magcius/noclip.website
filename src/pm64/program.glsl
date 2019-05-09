@@ -91,10 +91,12 @@ void main() {
     t_Color.a = t_Texel0.a;
 #endif
 
-#else
+#else /* USE_2CYCLE_MODE */
     t_Color = t_Texel0 * v_Color;
 #endif /* USE_2CYCLE_MODE */
 
+#else /* USE_TEXTURE */
+    t_Color = v_Color;
 #endif /* USE_TEXTURE */
 
 #ifdef USE_ALPHA_MASK

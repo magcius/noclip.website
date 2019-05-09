@@ -130,8 +130,8 @@ function getSizeName(siz: ImageSize): string {
     return '' + getSizBitsPerPixel(siz);
 }
 
-export function getFormatString(texture: Texture): string {
-    return `${getFormatName(texture.tile.fmt)}${getSizeName(texture.tile.siz)}`;
+export function getFormatString(fmt: ImageFormat, siz: ImageSize): string {
+    return `${getFormatName(fmt)}${getSizeName(siz)}`;
 }
 
 export class DrawCall {
@@ -184,7 +184,7 @@ const enum OtherModeH_CycleType {
     G_CYC_FILL   = 0x03,
 }
 
-const enum ImageFormat {
+export const enum ImageFormat {
     G_IM_FMT_RGBA = 0x00,
     G_IM_FMT_YUV  = 0x01,
     G_IM_FMT_CI   = 0x02,
@@ -192,7 +192,7 @@ const enum ImageFormat {
     G_IM_FMT_I    = 0x04,
 }
 
-const enum ImageSize {
+export const enum ImageSize {
     G_IM_SIZ_4b   = 0x00,
     G_IM_SIZ_8b   = 0x01,
     G_IM_SIZ_16b  = 0x02,

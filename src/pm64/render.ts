@@ -3,7 +3,7 @@ import { GfxHostAccessPass, GfxBufferUsage, GfxBufferFrequencyHint, GfxDevice, G
 import * as Viewer from '../viewer';
 import { GfxRenderBuffer } from "../gfx/render/GfxRenderBuffer";
 import { mat4 } from "gl-matrix";
-import { GfxRenderInst, GfxRenderInstBuilder, GfxRenderInstViewRenderer, makeSortKeyOpaque, GfxRendererLayer } from "../gfx/render/GfxRenderer";
+import { GfxRenderInst, GfxRenderInstBuilder, GfxRenderInstViewRenderer, makeSortKeyOpaque, GfxRendererLayer, setSortKeyDepth } from "../gfx/render/GfxRenderer";
 import { DeviceProgram, DeviceProgramReflection } from "../Program";
 import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, BufferFillerHelper } from "../gfx/helpers/UniformBufferHelpers";
 import { ModelTreeNode, ModelTreeLeaf, ModelTreeGroup, PropertyType } from "./map_shape";
@@ -12,9 +12,13 @@ import { RSPOutput, Vertex } from "./f3dex2";
 import { assert, nArray, assertExists } from "../util";
 import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
 import * as Tex from './tex';
+import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
+import { computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
+import { AABB } from "../Geometry";
+import { getFormatString } from "../bk/f3dex";
+
 //@ts-ignore
 import { readFileSync } from 'fs';
-import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 
 class PaperMario64Program extends DeviceProgram {
     public static a_Position = 0;
@@ -102,7 +106,10 @@ function textureToCanvas(texture: Tex.Image): Viewer.Texture {
         surfaces.push(canvas);
     }
 
-    return { name: texture.name, surfaces };
+    const extraInfo = new Map<string, string>();
+    extraInfo.set('Format', getFormatString(texture.format, texture.siz));
+
+    return { name: texture.name, extraInfo, surfaces };
 }
 
 export class PaperMario64TextureHolder extends TextureHolder<Tex.Image> {
@@ -219,22 +226,22 @@ export class BackgroundBillboardRenderer {
     }
 }
 
-const enum RenderMode {
-    OPAQUE       = 0x01,
-    ALPHA_MASK   = 0x0D,
-    ALPHA_MASK_2 = 0x13,
+enum RenderMode {
+    OPA, XLU, DEC
 }
 
 const modelViewScratch = mat4.create();
 const texMatrixScratch = mat4.create();
 const textureMapping = nArray(2, () => new TextureMapping());
+const bboxScratch = new AABB();
 class ModelTreeLeafInstance {
     private n64Data: N64Data;
     private gfxSampler: GfxSampler[] = [];
     private templateRenderInst: GfxRenderInst;
     private renderInsts: GfxRenderInst[] = [];
     private textureEnvironment: Tex.TextureEnvironment | null = null;
-    private renderMode: number = RenderMode.OPAQUE;
+    private renderModeProperty: number;
+    private renderMode: RenderMode;
     private visible = true;
 
     constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, textureArchive: Tex.TextureArchive, textureHolder: PaperMario64TextureHolder, private modelTreeLeaf: ModelTreeLeaf) {
@@ -242,19 +249,24 @@ class ModelTreeLeafInstance {
 
         const renderModeProp = this.modelTreeLeaf.properties.find((prop) => prop.id === 0x5C);
         if (renderModeProp !== undefined && renderModeProp.type === PropertyType.INT)
-            this.renderMode = renderModeProp.value1;
+            this.renderModeProperty = renderModeProp.value1;
 
         this.templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
         this.templateRenderInst.inputState = this.n64Data.inputState;
-        this.templateRenderInst.sortKey = makeSortKeyOpaque(GfxRendererLayer.OPAQUE, 0);
         renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, PaperMario64Program.ub_DrawParams);
 
-        if (this.renderMode === RenderMode.OPAQUE) {
-            // Default flags are OK.
-        } else if (this.renderMode === RenderMode.ALPHA_MASK || this.renderMode === RenderMode.ALPHA_MASK_2) {
-            // Default flags are OK.
+        if (this.renderModeProperty === 0x01 || this.renderModeProperty === 0x04) {
+            this.renderMode = RenderMode.OPA;
+        } else if (this.renderModeProperty === 0x0D || this.renderModeProperty === 0x10 || this.renderModeProperty === 0x13) {
+            this.renderMode = RenderMode.DEC;
         } else {
-            // Misc transparent.
+            this.renderMode = RenderMode.XLU;
+        }
+
+        if (this.renderMode === RenderMode.OPA || this.renderMode === RenderMode.DEC) {
+            this.templateRenderInst.sortKey = makeSortKeyOpaque(GfxRendererLayer.OPAQUE, 0);
+        } else if (this.renderMode === RenderMode.XLU) {
+            this.templateRenderInst.sortKey = makeSortKeyOpaque(GfxRendererLayer.TRANSLUCENT, 0);
             this.templateRenderInst.setMegaStateFlags({
                 blendMode: GfxBlendMode.ADD,
                 blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
@@ -310,8 +322,17 @@ class ModelTreeLeafInstance {
     }
 
     public prepareToRender(drawParamsBuffer: GfxRenderBuffer, modelMatrix: mat4, viewerInput: Viewer.ViewerRenderInput): void {
-        for (let i = 0; i < this.renderInsts.length; i++)
-            this.renderInsts[i].visible = this.visible;
+        let depth = -1;
+        if (this.visible) {
+            bboxScratch.transform(this.modelTreeLeaf.bbox, modelMatrix);
+            if (viewerInput.camera.frustum.contains(bboxScratch))
+                depth = Math.max(0, computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, bboxScratch));
+        }
+
+        for (let i = 0; i < this.renderInsts.length; i++) {
+            this.renderInsts[i].visible = depth >= 0;
+            this.renderInsts[i].sortKey = setSortKeyDepth(this.renderInsts[i].sortKey, depth);
+        }
 
         let offs = this.templateRenderInst.getUniformBufferOffset(PaperMario64Program.ub_DrawParams);
         const mappedF32 = drawParamsBuffer.mapBufferF32(offs, 12 + 8*2);
@@ -363,7 +384,7 @@ class ModelTreeLeafInstance {
             program.defines.set(`USE_TEXTFILT_POINT`, '1');
         }
 
-        if (this.renderMode === RenderMode.ALPHA_MASK)
+        if (this.renderMode === RenderMode.DEC)
             program.defines.set(`USE_ALPHA_MASK`, '1');
 
         return program;

@@ -1083,6 +1083,7 @@ export class CmbRenderer {
 export abstract class BasicRendererHelper {
     public viewRenderer = new GfxRenderInstViewRenderer();
     public renderTarget = new BasicRenderTarget();
+    public clearRenderPassDescriptor = standardFullClearRenderPassDescriptor;
 
     protected abstract prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void;
 
@@ -1094,7 +1095,7 @@ export abstract class BasicRendererHelper {
         this.viewRenderer.prepareToRender(device);
 
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        const finalPassRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
+        const finalPassRenderer = this.renderTarget.createRenderPass(device, this.clearRenderPassDescriptor);
         this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
         this.viewRenderer.executeOnPass(device, finalPassRenderer);
         return finalPassRenderer;
