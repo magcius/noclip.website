@@ -550,6 +550,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _renderPassPool: GfxRenderPassP_GL[] = [];
     private _resourceCreationTracker = new ResourceCreationTracker();
     private _resourceUniqueId = 0;
+    private _dummyCompilerVAO: WebGLVertexArrayObject;
 
     public programBugDefines: string = '';
 
@@ -565,6 +566,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
 
         this._fullscreenCopyProgram = this._createProgram(new FullscreenCopyProgram()) as GfxProgramP_GL;
+        this._fullscreenCopyProgram.deviceProgram.compile(this, this._programCache);
 
         this._resolveReadFramebuffer = this.ensureResourceExists(gl.createFramebuffer());
         this._resolveDrawFramebuffer = this.ensureResourceExists(gl.createFramebuffer());
@@ -573,6 +575,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._blackTexture = this.ensureResourceExists(gl.createTexture());
         gl.bindTexture(gl.TEXTURE_2D, this._blackTexture);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+
+        this._dummyCompilerVAO = gl.createVertexArray();
 
         this._currentMegaState.depthCompare = GfxCompareMode.ALWAYS;
         this._currentMegaState.attachmentsState = [
@@ -882,7 +886,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     private _programCache: ProgramCache;
     private _createProgram(deviceProgram: DeviceProgram): GfxProgram {
-        deviceProgram.compile(this, this._programCache);
         const program: GfxProgramP_GL = { _T: _T.Program, ResourceUniqueId: this.getNextUniqueId(), deviceProgram };
         return program;
     }
@@ -965,11 +968,49 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const bindingLayouts = createBindingLayouts(descriptor.bindingLayouts);
         const drawMode = translatePrimitiveTopology(descriptor.topology);
         const program = descriptor.program as GfxProgramP_GL;
-        assert(program.deviceProgram.uniformBufferLayouts.length === bindingLayouts.numUniformBuffers);
         const megaState = descriptor.megaStateDescriptor;
         const inputLayout = descriptor.inputLayout as GfxInputLayoutP_GL | null;
         const pipeline: GfxRenderPipelineP_GL = { _T: _T.RenderPipeline, ResourceUniqueId: this.getNextUniqueId(), bindingLayouts, drawMode, program, megaState, inputLayout, ready: false };
         this._resourceCreationTracker.trackResourceCreated(pipeline);
+
+        // Start compiling the compiler. ANGLE compiles a separate underlying program for each InputLayout
+        // it is used in. For that reason, when we call compileShader, we set up a dummy VAO with the right
+        // formats and attributes so that it does not need to dynamically recompile shaders at useProgram time.
+        const gl = this.gl;
+        if (inputLayout !== null) {
+            gl.bindVertexArray(this._dummyCompilerVAO);
+
+            for (let i = 0; i < inputLayout.vertexAttributeDescriptors.length; i++) {
+                const attr = inputLayout.vertexAttributeDescriptors[i];
+                const { size, type, normalized } = translateVertexFormat(attr.format);
+
+                gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+                if (attr.usesIntInShader) {
+                    gl.vertexAttribIPointer(attr.location, size, type, 0, 0);
+                } else {
+                    gl.vertexAttribPointer(attr.location, size, type, normalized, 0, 0);
+                }
+
+                if (attr.frequency === GfxVertexAttributeFrequency.PER_INSTANCE) {
+                    gl.vertexAttribDivisor(attr.location, 1);
+                }
+
+                gl.enableVertexAttribArray(attr.location);
+            }
+        }
+
+        program.deviceProgram.compile(this, this._programCache);
+
+        if (inputLayout !== null) {
+            for (let i = 0; i < inputLayout.vertexAttributeDescriptors.length; i++) {
+                const attr = inputLayout.vertexAttributeDescriptors[i];
+                gl.disableVertexAttribArray(attr.location);
+            }
+            gl.bindVertexArray(this._currentBoundVAO);
+        }
+
+        assert(program.deviceProgram.uniformBufferLayouts.length === bindingLayouts.numUniformBuffers);
         return pipeline;
     }
 
