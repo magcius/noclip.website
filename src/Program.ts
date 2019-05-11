@@ -128,7 +128,7 @@ export class DeviceProgram {
         return true;
     }
 
-    private _ensurePreprocessed(device: GfxDevice): void {
+    public ensurePreprocessed(device: GfxDevice): void {
         if (this.preprocessedVert === '') {
             this.preprocessedVert = this.preprocessShader(device, this.both + this.vert, 'vert');
             this.preprocessedFrag = this.preprocessShader(device, this.both + this.frag, 'frag');
@@ -147,7 +147,7 @@ export class DeviceProgram {
 
     public compile(device: GfxDevice, programCache: ProgramCache): void {
         if (this.compileDirty) {
-            this._ensurePreprocessed(device);
+            this.ensurePreprocessed(device);
             const newProg = programCache.compileProgram(this.preprocessedVert, this.preprocessedFrag);
             if (newProg !== null && newProg !== this.glProgram) {
                 this.glProgram = newProg;

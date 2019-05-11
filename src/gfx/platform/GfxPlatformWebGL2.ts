@@ -886,6 +886,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     private _programCache: ProgramCache;
     private _createProgram(deviceProgram: DeviceProgram): GfxProgram {
+        deviceProgram.ensurePreprocessed(this);
         const program: GfxProgramP_GL = { _T: _T.Program, ResourceUniqueId: this.getNextUniqueId(), deviceProgram };
         return program;
     }
