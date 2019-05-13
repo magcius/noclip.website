@@ -778,7 +778,7 @@ class SMGSpawner {
     }
 
     private nodeSetLightName(node: Node, lightName: string): void {
-        const areaLightInfo = this.areaLightInfos.find((areaLightInfo) => areaLightInfo.AreaLightName === lightName);
+        const areaLightInfo = this.areaLightInfos.find((areaLightInfo) => areaLightInfo.AreaLightName === lightName)!;
         node.setAreaLightInfo(areaLightInfo);
     }
 

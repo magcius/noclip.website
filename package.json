@@ -10,6 +10,7 @@
     "@types/webassembly-js-api": "0.0.3",
     "@types/webgl2": "0.0.4",
     "assemblyscript": "github:AssemblyScript/assemblyscript",
+    "iconv-lite": "^0.4.24",
     "parcel-bundler": "^1.11.0",
     "typescript": "^3.3.3333"
   },
