@@ -288,7 +288,7 @@ class Node {
 
 class SceneGraph {
     public nodes: Node[] = [];
-    public onnodeadded: () => void | null = null;
+    public onnodeadded: (() => void) | null = null;
 
     public addNode(node: Node | null): void {
         if (node === null)

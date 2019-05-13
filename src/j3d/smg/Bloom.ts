@@ -305,7 +305,7 @@ export class BloomPostFXRenderer {
         const bloomColorTextureDownsample = this.bloomScratch1ColorTexture;
         bloomColorTargetDownsample.setParameters(device, bloomWidth, bloomHeight, 1);
         bloomColorTextureDownsample.setParameters(device, bloomWidth, bloomHeight);
-        this.bloomTextureMapping[0].gfxTexture = bloomColorTextureScene.gfxTexture;
+        this.bloomTextureMapping[0].gfxTexture = bloomColorTextureScene.gfxTexture!;
         this.bloomRenderInstDownsample.setSamplerBindingsFromTextureMappings(this.bloomTextureMapping);
         const bloomDownsamplePassRenderer = bloomColorTargetDownsample.createRenderPass(device, noClearRenderPassDescriptor);
         viewRenderer.executeOnPass(device, bloomDownsamplePassRenderer, SMGPass.BLOOM_DOWNSAMPLE);
@@ -317,7 +317,7 @@ export class BloomPostFXRenderer {
         const bloomColorTextureBlur = this.bloomScratch2ColorTexture;
         bloomColorTargetBlur.setParameters(device, bloomWidth, bloomHeight, 1);
         bloomColorTextureBlur.setParameters(device, bloomWidth, bloomHeight);
-        this.bloomTextureMapping[0].gfxTexture = bloomColorTextureDownsample.gfxTexture;
+        this.bloomTextureMapping[0].gfxTexture = bloomColorTextureDownsample.gfxTexture!;
         this.bloomRenderInstBlur.setSamplerBindingsFromTextureMappings(this.bloomTextureMapping);
         const bloomBlurPassRenderer = bloomColorTargetBlur.createRenderPass(device, noClearRenderPassDescriptor);
         viewRenderer.executeOnPass(device, bloomBlurPassRenderer, SMGPass.BLOOM_BLUR);
@@ -331,7 +331,7 @@ export class BloomPostFXRenderer {
         const bloomColorTargetBokeh = this.bloomScratch1ColorTarget;
         const bloomColorTextureBokeh = this.bloomScratch1ColorTexture;
         const bloomBokehPassRenderer = bloomColorTargetBokeh.createRenderPass(device, noClearRenderPassDescriptor);
-        this.bloomTextureMapping[0].gfxTexture = bloomColorTextureBlur.gfxTexture;
+        this.bloomTextureMapping[0].gfxTexture = bloomColorTextureBlur.gfxTexture!;
         this.bloomRenderInstBokeh.setSamplerBindingsFromTextureMappings(this.bloomTextureMapping);
         viewRenderer.executeOnPass(device, bloomBokehPassRenderer, SMGPass.BLOOM_BOKEH);
         bloomBokehPassRenderer.endPass(bloomColorTextureBokeh.gfxTexture);
@@ -339,7 +339,7 @@ export class BloomPostFXRenderer {
 
         // Combine.
         const bloomCombinePassRenderer = mainRenderTarget.createRenderPass(device, noClearRenderPassDescriptor);
-        this.bloomTextureMapping[0].gfxTexture = bloomColorTextureBokeh.gfxTexture;
+        this.bloomTextureMapping[0].gfxTexture = bloomColorTextureBokeh.gfxTexture!;
         this.bloomRenderInstCombine.setSamplerBindingsFromTextureMappings(this.bloomTextureMapping);
         viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
         viewRenderer.executeOnPass(device, bloomCombinePassRenderer, SMGPass.BLOOM_COMBINE);
@@ -348,10 +348,10 @@ export class BloomPostFXRenderer {
 
     public destroy(device: GfxDevice): void {
         this.bloomParamsBuffer.destroy(device);
-        device.destroyProgram(this.bloomRenderInstBlur.gfxProgram);
-        device.destroyProgram(this.bloomRenderInstBokeh.gfxProgram);
-        device.destroyProgram(this.bloomRenderInstCombine.gfxProgram);
-        device.destroyProgram(this.bloomRenderInstDownsample.gfxProgram);
+        device.destroyProgram(this.bloomRenderInstBlur.gfxProgram!);
+        device.destroyProgram(this.bloomRenderInstBokeh.gfxProgram!);
+        device.destroyProgram(this.bloomRenderInstCombine.gfxProgram!);
+        device.destroyProgram(this.bloomRenderInstDownsample.gfxProgram!);
 
         device.destroySampler(this.bloomSampler);
         this.bloomSceneColorTarget.destroy(device);

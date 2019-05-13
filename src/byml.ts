@@ -43,7 +43,7 @@ const fileDescriptions: { [key: number]: FileDescription } = {
 
 function decodeUTF8(buffer: Uint8Array): string {
     if (typeof TextDecoder !== 'undefined') {
-        return getTextDecoder('utf8').decode(buffer);
+        return getTextDecoder('utf8')!.decode(buffer);
     // @ts-ignore
     } else if (typeof require !== 'undefined') {
         // @ts-ignore
@@ -76,8 +76,8 @@ export interface NodeArray extends Array<Node> {}
 class ParseContext {
     constructor(public fileType: FileType, public endianness: Endianness) {}
     public get littleEndian() { return this.endianness === Endianness.LITTLE_ENDIAN; }
-    public strKeyTable: StringTable = null;
-    public strValueTable: StringTable = null;
+    public strKeyTable: StringTable | null = null;
+    public strValueTable: StringTable | null = null;
 }
 
 function getUint24(view: DataView, offs: number, littleEndian: boolean) {
@@ -116,7 +116,7 @@ function parseDict(context: ParseContext, buffer: ArrayBufferSlice, offs: number
     let dictIdx = offs + 0x04;
     for (let i = 0; i < numValues; i++) {
         const entryStrKeyIdx = getUint24(view, dictIdx + 0x00, context.littleEndian);
-        const entryKey = context.strKeyTable[entryStrKeyIdx];
+        const entryKey = context.strKeyTable![entryStrKeyIdx];
         const entryNodeType: NodeType = view.getUint8(dictIdx + 0x03);
         const entryValue = parseNode(context, buffer, entryNodeType, dictIdx + 0x04);
         result[entryKey] = entryValue;
@@ -189,7 +189,7 @@ function parseNode(context: ParseContext, buffer: ArrayBufferSlice, nodeType: No
     }
     case NodeType.STRING: {
         const idx = view.getUint32(offs, context.littleEndian);
-        return context.strValueTable[idx];
+        return context.strValueTable![idx];
     }
     case NodeType.BOOL: {
         const value = view.getUint32(offs, context.littleEndian);
@@ -265,7 +265,8 @@ class GrowableBuffer {
 
     public finalize(): ArrayBuffer {
         const buffer = this.buffer;
-        this.buffer = null;
+        // Clear out to avoid GC.
+        (this as any).buffer = null;
         return ArrayBuffer_slice.call(buffer, 0x00, this.userSize);
     }
 }

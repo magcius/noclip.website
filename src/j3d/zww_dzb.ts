@@ -15,7 +15,7 @@ const enum OctreeNodeType {
 
 interface OctreeBranchNode {
     nodeType: OctreeNodeType.BRANCH;
-    children: OctreeNode[];
+    children: (OctreeNode | null)[];
 }
 
 interface OctreeLeafNode {
@@ -65,7 +65,7 @@ export function parse(buffer: ArrayBufferSlice): DZB {
         const parentNodeIndex: number = view.getInt16(offs + 0x02);
 
         if (nodeType === OctreeNodeType.BRANCH) {
-            const children: OctreeNode[] = [];
+            const children: (OctreeNode | null)[] = [];
             children.push(parseOctreeNodeMaybe(view.getInt16(offs + 0x04)));
             children.push(parseOctreeNodeMaybe(view.getInt16(offs + 0x06)));
             children.push(parseOctreeNodeMaybe(view.getInt16(offs + 0x08)));

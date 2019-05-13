@@ -726,11 +726,11 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
                         packetsIdx += 0x10;
         
                         for (let j = 0; j < qwd - 1; j++) {
-                            vertexRunData[j * WORKING_VERTEX_STRIDE + 0] = view.getFloat32(packetsIdx + 0x00, true);
-                            vertexRunData[j * WORKING_VERTEX_STRIDE + 1] = view.getFloat32(packetsIdx + 0x04, true);
-                            vertexRunData[j * WORKING_VERTEX_STRIDE + 2] = view.getFloat32(packetsIdx + 0x08, true);
+                            vertexRunData![j * WORKING_VERTEX_STRIDE + 0] = view.getFloat32(packetsIdx + 0x00, true);
+                            vertexRunData![j * WORKING_VERTEX_STRIDE + 1] = view.getFloat32(packetsIdx + 0x04, true);
+                            vertexRunData![j * WORKING_VERTEX_STRIDE + 2] = view.getFloat32(packetsIdx + 0x08, true);
                             // W is special. It's a bunch of flag bits for misc. use by the VU1 program.
-                            vertexRunData[j * WORKING_VERTEX_STRIDE + 3] = view.getUint32(packetsIdx + 0x0C, true);
+                            vertexRunData![j * WORKING_VERTEX_STRIDE + 3] = view.getUint32(packetsIdx + 0x0C, true);
                             packetsIdx += 0x10;
                         }
                     } else {
@@ -750,8 +750,8 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
                     assert(imm === expectedTexCoordOffs);
 
                     for (let j = 0; j < qwd; j++) {
-                        vertexRunData[j * WORKING_VERTEX_STRIDE + 7] = view.getFloat32(packetsIdx + 0x00, true);
-                        vertexRunData[j * WORKING_VERTEX_STRIDE + 8] = view.getFloat32(packetsIdx + 0x04, true);
+                        vertexRunData![j * WORKING_VERTEX_STRIDE + 8] = view.getFloat32(packetsIdx + 0x04, true);
+                        vertexRunData![j * WORKING_VERTEX_STRIDE + 7] = view.getFloat32(packetsIdx + 0x00, true);
                         packetsIdx += 0x08;
                     }
                 } else if (format === VifUnpackFormat.V3_32) { // V3-32
@@ -763,10 +763,10 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
                         packetsIdx += 0x0C;
 
                         for (let j = 0; j < qwd - 1; j++) {
-                            vertexRunData[j * WORKING_VERTEX_STRIDE + 0] = view.getFloat32(packetsIdx + 0x00, true);
-                            vertexRunData[j * WORKING_VERTEX_STRIDE + 1] = view.getFloat32(packetsIdx + 0x04, true);
-                            vertexRunData[j * WORKING_VERTEX_STRIDE + 2] = view.getFloat32(packetsIdx + 0x08, true);
-                            vertexRunData[j * WORKING_VERTEX_STRIDE + 3] = 0;
+                            vertexRunData![j * WORKING_VERTEX_STRIDE + 0] = view.getFloat32(packetsIdx + 0x00, true);
+                            vertexRunData![j * WORKING_VERTEX_STRIDE + 1] = view.getFloat32(packetsIdx + 0x04, true);
+                            vertexRunData![j * WORKING_VERTEX_STRIDE + 2] = view.getFloat32(packetsIdx + 0x08, true);
+                            vertexRunData![j * WORKING_VERTEX_STRIDE + 3] = 0;
                             packetsIdx += 0x0C;
                         }
                     } else {
@@ -774,9 +774,9 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
                         assert(imm === expectedNormalsOffs);
 
                         for (let j = 0; j < qwd; j++) {
-                            vertexRunData[j * WORKING_VERTEX_STRIDE + 4] = view.getFloat32(packetsIdx + 0x00, true);
-                            vertexRunData[j * WORKING_VERTEX_STRIDE + 5] = view.getFloat32(packetsIdx + 0x04, true);
-                            vertexRunData[j * WORKING_VERTEX_STRIDE + 6] = view.getFloat32(packetsIdx + 0x04, true);
+                            vertexRunData![j * WORKING_VERTEX_STRIDE + 4] = view.getFloat32(packetsIdx + 0x00, true);
+                            vertexRunData![j * WORKING_VERTEX_STRIDE + 5] = view.getFloat32(packetsIdx + 0x04, true);
+                            vertexRunData![j * WORKING_VERTEX_STRIDE + 6] = view.getFloat32(packetsIdx + 0x04, true);
                             packetsIdx += 0x0C;
                         }
                     }

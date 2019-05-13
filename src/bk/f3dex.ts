@@ -404,9 +404,7 @@ function translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAddr: numb
     case (ImageFormat.G_IM_FMT_RGBA << 4 | ImageSize.G_IM_SIZ_16b): return translateTile_RGBA16(segmentBuffers, dramAddr, tile);
     case (ImageFormat.G_IM_FMT_RGBA << 4 | ImageSize.G_IM_SIZ_32b): return translateTile_RGBA32(segmentBuffers, dramAddr, tile);
     default:
-        console.error(`Unknown image format ${tile.fmt} / ${tile.siz}`, tile);
-        debugger;
-        return null;
+        throw new Error(`Unknown image format ${tile.fmt} / ${tile.siz}`);
     }
 }
 

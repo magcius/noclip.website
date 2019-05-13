@@ -33,8 +33,9 @@ function gfxBindingsDescriptorHash(a: GfxBindingsDescriptor): number {
     scratch.fill(0);
     // Hash on textures bindings.
     for (let i = 0; i < a.samplerBindings.length; i++) {
-        if (a.samplerBindings[i].texture !== null)
-            scratch[i] = a.samplerBindings[i].texture.ResourceUniqueId;
+        const binding = a.samplerBindings[i];
+        if (binding !== null && binding.texture !== null)
+            scratch[i] = binding.texture.ResourceUniqueId;
     }
     return hashCodeNumbers(scratch);
 }

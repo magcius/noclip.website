@@ -257,7 +257,7 @@ function decode_Tiled(texture: Texture, bw: number, bh: number, decoder: (pixels
 }
 
 function decode_C4(texture: Texture): DecodedTexture {
-    if (!texture.paletteData) return decode_Dummy(texture);
+    if (!texture.paletteData || texture.paletteFormat === undefined) return decode_Dummy(texture);
     const view = texture.data.createDataView();
     const paletteData: Uint8Array = decodePalette(texture.paletteFormat, texture.paletteData);
     let srcOffs = 0;

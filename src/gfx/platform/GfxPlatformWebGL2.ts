@@ -576,7 +576,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         gl.bindTexture(gl.TEXTURE_2D, this._blackTexture);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
 
-        this._dummyCompilerVAO = gl.createVertexArray();
+        this._dummyCompilerVAO = gl.createVertexArray()!;
 
         this._currentMegaState.depthCompare = GfxCompareMode.ALWAYS;
         this._currentMegaState.attachmentsState = [

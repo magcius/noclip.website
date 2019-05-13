@@ -2,7 +2,7 @@
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { readString, getTextDecoder } from "../util";
 
-const sjisDecoder = getTextDecoder('sjis');
+const sjisDecoder = getTextDecoder('sjis')!;
 function readStringSJIS(buffer: ArrayBufferSlice, offs: number): string {
     const arr = buffer.createTypedArray(Uint8Array, offs);
     const raw = sjisDecoder.decode(arr);
@@ -206,7 +206,7 @@ export function getEntriesWithField<T extends BcsvValue>(bcsv: Bcsv, name: strin
     return { fields, records };
 }
 
-export function getField<T extends BcsvValue>(bcsv: Bcsv, record: BcsvRecord, name: string, fallback: T | null = null): T {
+export function getField<T extends BcsvValue>(bcsv: Bcsv, record: BcsvRecord, name: string, fallback: T | null = null): T | null {
     const index = getFieldIndexFromName(bcsv, name);
     if (index === -1)
         return fallback;

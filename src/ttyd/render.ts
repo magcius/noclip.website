@@ -110,7 +110,7 @@ class BackgroundBillboardRenderer {
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyProgram(this.renderInst.gfxProgram);
+        device.destroyProgram(this.renderInst.gfxProgram!);
         this.paramsBuffer.destroy(device);
     }
 }
@@ -192,7 +192,7 @@ class Command_Material {
 
     public stopAnimation(): void {
         for (let i = 0; i < this.material.samplers.length; i++)
-            this.materialAnimators[i] = null;
+            delete this.materialAnimators[i];
     }
 
     public playAnimation(animationController: AnimationController, animation: AnimationEntry): boolean {

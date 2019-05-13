@@ -145,9 +145,8 @@ function createScenesFromBuffer(device: GfxDevice, renderer: BasicRenderer, buff
                     scene.isSkybox = true;
                 return scene;
             });
-            scenes = scenes.filter((scene) => !!scene);
 
-            return scenes;
+            return scenes.filter((scene) => scene !== null) as BMDModelInstance[];
         }
 
         if (['J3D2bmd3', 'J3D2bdl4'].includes(readString(buffer, 0, 8))) {
@@ -157,7 +156,7 @@ function createScenesFromBuffer(device: GfxDevice, renderer: BasicRenderer, buff
             return [modelInstance];
         }
 
-        return null;
+        throw new Error();
     });
 }
 

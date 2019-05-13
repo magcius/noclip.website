@@ -36,7 +36,7 @@ class ShapeData {
         for (let i = 0; i < this.shape.packets.length; i++) {
             const packet = this.shape.packets[i];
             // TODO(jstpierre): Use only one ShapeHelper.
-            const shapeHelper = new GXShapeHelperGfx(device, renderHelper, coalescedBuffers.shift(), this.shape.loadedVertexLayout, packet.loadedVertexData);
+            const shapeHelper = new GXShapeHelperGfx(device, renderHelper, coalescedBuffers.shift()!, this.shape.loadedVertexLayout, packet.loadedVertexData);
             this.shapeHelpers.push(shapeHelper);
         }
     }
@@ -91,9 +91,9 @@ export class ShapeInstance {
                 }
             }
 
-            renderInst.visible = renderInst.parentRenderInst.visible && instVisible;
+            renderInst.visible = renderInst.parentRenderInst!.visible && instVisible;
             if (instVisible) {
-                renderInst.sortKey = setSortKeyDepth(renderInst.parentRenderInst.sortKey, depth);
+                renderInst.sortKey = setSortKeyDepth(renderInst.parentRenderInst!.sortKey, depth);
                 renderInst.sortKey = setSortKeyBias(renderInst.sortKey, this.sortKeyBias);
                 this.shapeData.shapeHelpers[p].fillPacketParams(packetParams, renderInst, renderHelper);
             }

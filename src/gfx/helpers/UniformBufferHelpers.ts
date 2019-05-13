@@ -40,9 +40,9 @@ builtinTypeWordSizes.set('Mat4x4', 4*4);
 
 function getTypeSize(layouts: Map<string, StructLayout>, type: string): number {
     if (layouts.has(type))
-        return layouts.get(type).totalWordSize;
+        return assertExists(layouts.get(type)).totalWordSize;
     else
-        return builtinTypeWordSizes.get(type);
+        return assertExists(builtinTypeWordSizes.get(type));
 }
 
 function parseDefinition(layouts: Map<string, StructLayout>, blockName: string, contents: string): StructLayout | null {
@@ -81,18 +81,20 @@ export function parseShaderSource(uniformBufferLayouts: StructLayout[], shaderSo
     const uniformBlocks = findall(shaderSource, /uniform (\w+) {([^]*?)}/g);
     for (let i = 0; i < uniformBlocks.length; i++) {
         const [m, blockName, contents] = uniformBlocks[i];
-        uniformBufferLayouts.push(parseDefinition(layouts, blockName, contents));
+        uniformBufferLayouts.push(assertExists(parseDefinition(layouts, blockName, contents)));
     }
 }
 
 // TODO(jstpierre): I'm not sure I like this class.
 export class BufferFillerHelper {
     private offs: number;
+    public d: Float32Array;
 
-    constructor(public bufferLayout: StructLayout, public d: Float32Array = null, public startOffs: number = 0) {
-        if (this.d === null) {
+    constructor(public bufferLayout: StructLayout, d: Float32Array | null = null, public startOffs: number = 0) {
+        if (d !== null)
+            this.d = d;
+        else
             this.d = new Float32Array(bufferLayout.totalWordSize);
-        }
     }
 
     public reset(): void {

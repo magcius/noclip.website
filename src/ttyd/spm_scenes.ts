@@ -20,11 +20,11 @@ class SPMSceneDesc implements Viewer.SceneDesc {
         return fetchData(`spm/${this.id}.bin`, abortSignal).then((buffer: ArrayBufferSlice) => {
             const decompressed = CX.decompress(buffer);
             const arc = U8.parse(decompressed);
-            const dFile = arc.findFile(`./dvd/map/*/map.dat`);
+            const dFile = arc.findFile(`./dvd/map/*/map.dat`)!;
             const d = World.parse(dFile.buffer);
 
             const textureHolder = new TPLTextureHolder();
-            const tFile = arc.findFile(`./dvd/map/*/texture.tpl`);
+            const tFile = arc.findFile(`./dvd/map/*/texture.tpl`)!;
             const tpl = TPL.parse(tFile.buffer, d.textureNameTable);
             textureHolder.addTPLTextures(device, tpl);
 

@@ -149,7 +149,7 @@ export class GXMaterialHelperGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyProgram(this.templateRenderInst.gfxProgram);
+        device.destroyProgram(this.templateRenderInst.gfxProgram!);
     }
 }
 
@@ -220,7 +220,7 @@ export class GXShapeHelperGfx {
         return renderInst;
     }
 
-    public buildRenderInst(renderInstBuilder: GfxRenderInstBuilder, baseRenderInst: GfxRenderInst = null): GfxRenderInst {
+    public buildRenderInst(renderInstBuilder: GfxRenderInstBuilder, baseRenderInst: GfxRenderInst | null = null): GfxRenderInst {
         return this.buildRenderInstPacket(renderInstBuilder, null, baseRenderInst);
     }
 
@@ -231,7 +231,8 @@ export class GXShapeHelperGfx {
     public destroy(device: GfxDevice): void {
         device.destroyInputLayout(this.inputLayout);
         device.destroyInputState(this.inputState);
-        device.destroyBuffer(this.zeroBuffer);
+        if (this.zeroBuffer !== null)
+            device.destroyBuffer(this.zeroBuffer);
     }
 }
 
@@ -339,7 +340,7 @@ export function loadTextureFromMipChain(device: GfxDevice, mipChain: GX_Texture.
 
         promises.push(GX_Texture.decodeTexture(mipLevel).then((rgbaTexture) => {
             hostAccessPass.uploadTextureData(gfxTexture, level, [rgbaTexture.pixels]);
-            const ctx = canvas.getContext('2d');
+            const ctx = canvas.getContext('2d')!;
             const imgData = new ImageData(mipLevel.width, mipLevel.height);
             imgData.data.set(new Uint8Array(rgbaTexture.pixels.buffer));
             ctx.putImageData(imgData, 0, 0);

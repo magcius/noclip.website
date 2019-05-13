@@ -4,7 +4,7 @@ import { AABB } from "./Geometry";
 import { Color, Magenta, colorToCSS } from "./Color";
 import { Camera, divideByW, ScreenSpaceProjection } from "./Camera";
 import { vec4, mat4, vec3 } from "gl-matrix";
-import { nArray, assert } from "./util";
+import { nArray, assert, assertExists } from "./util";
 
 export function stepF(f: (t: number) => number, maxt: number, step: number, callback: (t: number, v: number) => void) {
     for (let t = 0; t < maxt; t += step) {
@@ -15,8 +15,8 @@ export function stepF(f: (t: number) => number, maxt: number, step: number, call
 export type F = (t: number) => number;
 
 export class Graph {
-    public minv: number = undefined;
-    public maxv: number = undefined;
+    public minv: number | undefined = undefined;
+    public maxv: number | undefined = undefined;
     public ctx: CanvasRenderingContext2D;
     public mx = 0;
     public my = 0;
@@ -44,7 +44,7 @@ export class Graph {
 
     public hline(color: string, v: number): void {
         const ctx = this.ctx;
-        const ya = (v - this.minv) / (this.maxv - this.minv);
+        const ya = (v - this.minv!) / (this.maxv! - this.minv!);
         const y = (1-ya) * ctx.canvas.height;
         ctx.strokeStyle = color;
         ctx.lineWidth = 2;
@@ -59,7 +59,7 @@ export class Graph {
         const ctx = this.ctx;
         ctx.fillStyle = color;
         ctx.beginPath();
-        const ya = (v - this.minv) / (this.maxv - this.minv);
+        const ya = (v - this.minv!) / (this.maxv! - this.minv!);
         const x = t * ctx.canvas.width;
         const y = (1-ya) * ctx.canvas.height;
         ctx.arc(x, y, radius, 0, Math.PI * 2);
@@ -95,7 +95,7 @@ export class Graph {
         ctx.beginPath();
         stepF(f, range, step, (t, v) => {
             const xa = (t / range);
-            const ya = (v - this.minv) / (this.maxv - this.minv);
+            const ya = (v - this.minv!) / (this.maxv! - this.minv!);
             const x = xa * ctx.canvas.width;
             const y = (1-ya) * ctx.canvas.height;
             ctx.lineTo(x, y);
@@ -108,7 +108,7 @@ export function cv(): CanvasRenderingContext2D {
     const canvas = document.createElement('canvas');
     canvas.width = 800;
     canvas.height = 400;
-    const ctx = canvas.getContext('2d');
+    const ctx = assertExists(canvas.getContext('2d'));
 
     ctx.fillStyle = 'white';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -128,7 +128,7 @@ let _debugOverlayCanvas: CanvasRenderingContext2D | null = null;
 export function getDebugOverlayCanvas2D(): CanvasRenderingContext2D {
     if (!_debugOverlayCanvas) {
         const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
+        const ctx = assertExists(canvas.getContext('2d'));
 
         canvas.style.position = 'absolute';
         canvas.style.top = '0';
@@ -139,7 +139,7 @@ export function getDebugOverlayCanvas2D(): CanvasRenderingContext2D {
         _debugOverlayCanvas = ctx;
     }
 
-    return _debugOverlayCanvas;
+    return _debugOverlayCanvas!;
 }
 
 export function prepareFrameDebugOverlayCanvas2D(): void {

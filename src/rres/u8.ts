@@ -26,10 +26,10 @@ export class U8Archive {
     public root: U8Dir;
 
     public findDirParts(parts: string[]): U8Dir | null {
-        let dir = this.root;
+        let dir: U8Dir | undefined = this.root;
         for (let i = 0; i < parts.length; i++) {
             const part = parts[i];
-            dir = dir.subdirs.find((subdir) => subdir.name === part || (part === '*' && dir.subdirs.length === 1));
+            dir = dir.subdirs.find((subdir) => subdir.name === part || (part === '*' && dir!.subdirs.length === 1));
             if (dir === undefined)
                 return null;
         }

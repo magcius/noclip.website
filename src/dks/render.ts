@@ -157,7 +157,7 @@ function lookupTextureParameter(material: Material, paramName: string): string |
     if (param == null)
         return null;
 
-    return param.value.split('\\').pop().replace(/\.tga|\.psd/, '');
+    return param.value.split('\\').pop()!.replace(/\.tga|\.psd/, '');
 }
 
 const matrixScratch = mat4.create();
@@ -271,7 +271,7 @@ export class FLVERInstance {
 
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.batchTemplateRenderInsts.length; i++)
-            device.destroyProgram(this.batchTemplateRenderInsts[i].gfxProgram);
+            device.destroyProgram(this.batchTemplateRenderInsts[i].gfxProgram!);
     }
 }
 

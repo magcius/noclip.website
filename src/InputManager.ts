@@ -39,7 +39,7 @@ export default class InputManager {
     private lastX: number;
     private lastY: number;
     public grabbing: boolean = false;
-    public onisdraggingchanged: () => void | null = null;
+    public onisdraggingchanged: (() => void) | null = null;
     private listeners: Listener[] = [];
     private scrollListeners: Listener[] = [];
     private usePointerLock: boolean = true;

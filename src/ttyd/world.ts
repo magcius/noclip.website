@@ -957,6 +957,8 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                 depthTest: true,
                 depthWrite: false,
             };
+        } else {
+            throw 'whoops';
         }
 
         const gxMaterial: GX_Material.GXMaterial = {
@@ -1151,7 +1153,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
 
         const children: SceneGraphNode[] = [];
         if (firstChildOffs !== 0) {
-            let child = readSceneGraph(mainDataOffs + firstChildOffs);
+            let child: SceneGraphNodeInternal | null = readSceneGraph(mainDataOffs + firstChildOffs);
             while (child !== null) {
                 children.unshift(child);
                 child = child.nextSibling;
@@ -1172,7 +1174,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
     // The root node contains (at least) two nodes, the "A" node and the "S" node (possibly "animated" and "static").
     // The "S" nodes appear to be the visual models we want, while "A" appear to mostly be collision meshes. Any
     // other nodes at the root appear to be unused (!). We only want the visual stuff, so we only take "S".
-    const sNode = rootNode.children.find((child) => child.nameStr === sNodeStr);
+    const sNode = rootNode.children.find((child) => child.nameStr === sNodeStr)!;
 
     const information = { versionStr, aNodeStr, sNodeStr, dateStr };
     //#endregion

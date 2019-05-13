@@ -30,7 +30,7 @@ export class SaveManager {
         window.localStorage.removeItem('CameraStates');
         window.localStorage.removeItem('SaveStates');
         for (let i = window.localStorage.length - 1; i >= 0; i--) {
-            const key = window.localStorage.key(i);
+            const key = window.localStorage.key(i)!;
             if (key.startsWith('SaveState_') && key.endsWith('/0'))
                 window.localStorage.removeItem(key);
         }

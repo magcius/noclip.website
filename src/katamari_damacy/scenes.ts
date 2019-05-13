@@ -154,7 +154,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
         device.submitPass(hostAccessPass);
 
         this.sceneTexture.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        const tvTextureOverride: TextureOverride = { gfxTexture: this.sceneTexture.gfxTexture, width: viewerInput.viewportWidth, height: viewerInput.viewportHeight, flipY: true };
+        const tvTextureOverride: TextureOverride = { gfxTexture: this.sceneTexture.gfxTexture!, width: viewerInput.viewportWidth, height: viewerInput.viewportHeight, flipY: true };
         if (this.textureHolder.hasTexture('0290/0000/0000'))
             this.textureHolder.setTextureOverride('0290/0000/0000', tvTextureOverride);
         if (this.textureHolder.hasTexture('01c6/0000/0000'))

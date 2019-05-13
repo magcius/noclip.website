@@ -209,7 +209,7 @@ export class BINModelPartInstance {
         this.renderInst = renderInstBuilder.pushRenderInst();
         this.renderInst.drawIndexes(this.binModelPart.indexCount, this.binModelPart.indexOffset);
 
-        const gsConfiguration = this.binModelPart.gsConfiguration;
+        const gsConfiguration = this.binModelPart.gsConfiguration!;
 
         const program = new KatamariDamacyProgram(gsConfiguration);
         this.renderInst.setDeviceProgram(program);
@@ -258,7 +258,7 @@ export class BINModelPartInstance {
 
         if (visible) {
             if (this.hasDynamicTexture) {
-                textureHolder.fillTextureMapping(textureMapping[0], this.binModelPart.textureName);
+                textureHolder.fillTextureMapping(textureMapping[0], this.binModelPart.textureName!);
                 this.renderInst.setSamplerBindingsFromTextureMappings(textureMapping);
 
                 if (textureMapping[0].flipY) {
@@ -347,10 +347,10 @@ function textureToCanvas(texture: BINTexture): Viewer.Texture {
     canvas.height = height;
     canvas.title = name;
 
-    const context = canvas.getContext("2d");
-    const imgData = context.createImageData(canvas.width, canvas.height);
+    const ctx = canvas.getContext("2d")!;
+    const imgData = ctx.createImageData(canvas.width, canvas.height);
     imgData.data.set(texture.pixels);
-    context.putImageData(imgData, 0, 0);
+    ctx.putImageData(imgData, 0, 0);
     const surfaces = [canvas];
 
     const extraInfo = new Map<string, string>();

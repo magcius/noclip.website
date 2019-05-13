@@ -212,10 +212,10 @@ export interface GfxRenderPipelineDescriptor {
 
 // TODO(jstpierre): Support MRT. This might be tricksy.
 export interface GfxRenderPassDescriptor {
-    colorAttachment: GfxColorAttachment;
+    colorAttachment: GfxColorAttachment | null;
     colorLoadDisposition: GfxLoadDisposition;
     colorClearColor: Color;
-    depthStencilAttachment: GfxDepthStencilAttachment;
+    depthStencilAttachment: GfxDepthStencilAttachment | null;
     depthLoadDisposition: GfxLoadDisposition;
     depthClearValue: number;
     stencilLoadDisposition: GfxLoadDisposition;

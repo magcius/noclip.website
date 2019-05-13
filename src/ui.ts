@@ -46,7 +46,7 @@ function setChildren(parent: Element, children: Element[]): void {
 
     // Remove any children that we don't want.
     for (let i = 0; i < parent.childElementCount;) {
-        const child = parent.children.item(i);
+        const child = parent.children.item(i)!;
         if (children.includes(child))
             i++;
         else
@@ -124,7 +124,7 @@ class TextField implements Widget {
 
 export class TextEntry implements Widget {
     public elem: HTMLElement;
-    public ontext: (string: string) => void | null = null;
+    public ontext: ((string: string) => void) | null = null;
 
     protected toplevel: HTMLElement;
     public textfield: TextField;
@@ -284,10 +284,12 @@ export abstract class ScrollSelect implements Widget {
                 outer.appendChild(selector);
                 const textSpan = document.createElement('span');
                 textSpan.classList.add('text');
-                if (item.html)
+                if (item.html !== undefined)
                     textSpan.innerHTML = item.html;
-                else
+                else if (item.name !== undefined)
                     textSpan.textContent = item.name;
+                else
+                    throw "whoops";
                 selector.appendChild(textSpan);
 
                 const index = i;
@@ -296,7 +298,7 @@ export abstract class ScrollSelect implements Widget {
                 };
                 outer.onmousedown = () => {
                     if (document.activeElement === outer)
-                        outer.onfocus(null);
+                        outer.onfocus!(null as unknown as FocusEvent);
                     else
                         outer.focus();
                     this.isDragging = true;
@@ -546,13 +548,13 @@ export class MultiSelect extends ScrollSelect {
 `);
         this.toplevel.insertBefore(allNone, this.toplevel.firstChild);
 
-        const allButton: HTMLElement = this.toplevel.querySelector('.AllButton');
+        const allButton = this.toplevel.querySelector('.AllButton') as HTMLElement;
         allButton.onclick = () => {
             for (let i = 0; i < this.getNumItems(); i++)
                 this.setItemIsOn(i, true);
             this.syncInternalFlairs();
         };
-        const noneButton: HTMLElement = this.toplevel.querySelector('.NoneButton');
+        const noneButton = this.toplevel.querySelector('.NoneButton') as HTMLElement;
         noneButton.onclick = () => {
             for (let i = 0; i < this.getNumItems(); i++)
                 this.setItemIsOn(i, false);
@@ -647,7 +649,8 @@ export class Checkbox implements Widget {
 
     private _toggle(): void {
         this.setChecked(!this.checked);
-        this.onchanged();
+        if (this.onchanged !== null)
+            this.onchanged();
     }
 
     public setLabel(text: string): void {
@@ -761,7 +764,7 @@ export class Panel implements Widget {
     }
 
     public setTitle(icon: string, title: string) {
-        this.svgIcon = createDOMFromString(icon).querySelector('svg');
+        this.svgIcon = createDOMFromString(icon).querySelector('svg')!;
         this.svgIcon.style.gridColumn = '1';
         this.header.textContent = title;
         this.header.appendChild(this.svgIcon);
@@ -777,7 +780,7 @@ export class Panel implements Widget {
             this.header.style.color = 'white';
         } else {
             this.svgIcon.style.fill = this.expanded ? 'black' : '';
-            setElementHighlighted(this.header, this.expanded, HIGHLIGHT_COLOR);
+            setElementHighlighted(this.header, !!this.expanded, HIGHLIGHT_COLOR);
         }
     }
 
@@ -888,11 +891,11 @@ class SceneSelect extends Panel {
 
     protected onKeyDown(e: KeyboardEvent): void {
         if (e.code === 'ArrowUp' || e.code === 'ArrowDown') {
-            this.sceneGroupList.elem.onkeydown(e);
+            this.sceneGroupList.elem.onkeydown!(e);
         } else {
             const textarea = this.searchEntry.textfield.textarea;
             textarea.focus();
-            textarea.onkeydown(e);
+            textarea.onkeydown!(e);
         }
 
         if (e.defaultPrevented)
@@ -1018,7 +1021,7 @@ class SceneSelect extends Panel {
     protected syncHeaderStyle() {
         super.syncHeaderStyle();
 
-        setElementHighlighted(this.header, this.expanded);
+        setElementHighlighted(this.header, !!this.expanded);
 
         if (this.expanded)
             this.header.style.background = HIGHLIGHT_COLOR;
@@ -1272,7 +1275,7 @@ function cloneCanvas(dst: HTMLCanvasElement, src: HTMLCanvasElement): void {
     dst.width = src.width;
     dst.height = src.height;
     dst.title = src.title;
-    const ctx = dst.getContext('2d');
+    const ctx = dst.getContext('2d')!;
     ctx.drawImage(src, 0, 0);
 }
 
@@ -1312,7 +1315,7 @@ export class TextureViewer extends Panel {
             this.surfaceView.style.backgroundColor = 'black';
             this.surfaceView.style.backgroundImage = '';
         };
-        this.surfaceView.onmouseout(null);
+        this.surfaceView.onmouseout(null as unknown as MouseEvent);
 
         this.contents.appendChild(this.surfaceView);
 
@@ -1363,7 +1366,7 @@ export class TextureViewer extends Panel {
 
         this.properties.innerHTML = `<div style="display: grid; grid-template-columns: 1fr 1fr"></div>`;
 
-        const div = this.properties.firstElementChild;
+        const div = this.properties.firstElementChild!;
         properties.forEach((value, name) => {
             const nameSpan = document.createElement('span');
             nameSpan.textContent = name;
@@ -1474,21 +1477,21 @@ class ViewerSettings extends Panel {
 `;
         this.contents.style.lineHeight = '36px';
 
-        this.fovSlider = this.contents.querySelector('.FoVSlider');
+        this.fovSlider = this.contents.querySelector('.FoVSlider') as HTMLInputElement;
         this.fovSlider.oninput = this.onFovSliderChange.bind(this);
         this.fovSlider.value = '25';
 
-        this.camSpeedSlider = this.contents.querySelector('.CamSpeedSlider');
+        this.camSpeedSlider = this.contents.querySelector('.CamSpeedSlider') as HTMLInputElement;
         this.camSpeedSlider.oninput = this.updateCameraSpeed.bind(this);
         this.viewer.addKeyMoveSpeedListener(this.onCameraController.bind(this));
         this.viewer.inputManager.addScrollListener(this.onScrollWheel.bind(this));
 
-        this.cameraControllerWASD = this.contents.querySelector('.CameraControllerWASD');
+        this.cameraControllerWASD = this.contents.querySelector('.CameraControllerWASD') as HTMLInputElement;
         this.cameraControllerWASD.onclick = () => {
             this.setCameraControllerClass(FPSCameraController);
         };
 
-        this.cameraControllerOrbit = this.contents.querySelector('.CameraControllerOrbit');
+        this.cameraControllerOrbit = this.contents.querySelector('.CameraControllerOrbit') as HTMLInputElement;
         this.cameraControllerOrbit.onclick = () => {
             this.setCameraControllerClass(OrbitCameraController);
         };
@@ -1515,7 +1518,7 @@ class ViewerSettings extends Panel {
     }
 
     private onCameraController(): void {
-        this.camSpeedSlider.value = "" + this.viewer.cameraController.getKeyMoveSpeed();
+        this.camSpeedSlider.value = "" + this.viewer.cameraController!.getKeyMoveSpeed();
     }
 
     private onScrollWheel(): void {
@@ -1557,7 +1560,7 @@ class LineGraph {
 
     constructor(public minY: number = 0, public maxY: number = 160) {
         this.canvas = document.createElement('canvas');
-        this.ctx = this.canvas.getContext('2d');
+        this.ctx = this.canvas.getContext('2d')!;
     }
 
     public beginDraw(width: number, height: number): void {
@@ -1756,16 +1759,16 @@ export interface Layer {
 
 export class LayerPanel extends Panel {
     private multiSelect: MultiSelect;
-    private layers: Layer[];
+    private layers: Layer[] = [];
 
-    constructor(layers: Layer[] = null) {
+    constructor(layers: Layer[] | null = null) {
         super();
         this.customHeaderBackgroundColor = COOL_BLUE_COLOR;
         this.setTitle(LAYER_ICON, 'Layers');
         this.multiSelect = new MultiSelect();
         this.multiSelect.onitemchanged = this._onItemChanged.bind(this);
         this.contents.appendChild(this.multiSelect.elem);
-        if (layers)
+        if (layers !== null)
             this.setLayers(layers);
     }
 
@@ -1837,7 +1840,7 @@ export class UI {
     }
 
     public sceneChanged() {
-        const cameraControllerClass = this.viewer.cameraController.constructor as CameraControllerClass;
+        const cameraControllerClass = this.viewer.cameraController!.constructor as CameraControllerClass;
         this.viewerSettings.cameraControllerSelected(cameraControllerClass);
 
         // Textures

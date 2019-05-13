@@ -147,7 +147,7 @@ class FrustumVisualizer {
         this.canvas.style.left = '0';
         this.canvas.style.opacity = '0.5';
         this.canvas.style.pointerEvents = 'none';
-        this.ctx = this.canvas.getContext('2d');
+        this.ctx = this.canvas.getContext('2d')!;
     }
 
     public newFrame(): void {

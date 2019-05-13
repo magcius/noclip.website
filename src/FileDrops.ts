@@ -55,7 +55,7 @@ export class DroppedFileSceneDesc implements SceneDesc {
             return Progressable.resolve(buffer);
     }
 
-    private loadArbitraryFile(device: GfxDevice, buffer: ArrayBufferSlice): Progressable<SceneGfx | null> {
+    private loadArbitraryFile(device: GfxDevice, buffer: ArrayBufferSlice): Progressable<SceneGfx> {
         return this.decompressArbitraryFile(buffer).then((buffer): Progressable<SceneGfx> => {
             const magic = readString(buffer, 0x00, 0x04);
 
@@ -68,7 +68,7 @@ export class DroppedFileSceneDesc implements SceneDesc {
             if (magic === 'bres')
                 return Progressable.resolve(RRES.createBasicRRESRendererFromBRRES(device, [buffer]));
 
-            return null;
+            throw "whoops";
         });
     }
 
@@ -96,7 +96,7 @@ export class DroppedFileSceneDesc implements SceneDesc {
         if (file.name.endsWith('.nsbmd'))
             return loadFileAsPromise(file).then((buffer) => NNS_G3D.createBasicNSBMDRendererFromNSBMD(device, buffer));
 
-        return null;
+        throw "whoops";
     }
 }
 

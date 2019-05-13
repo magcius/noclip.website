@@ -228,7 +228,7 @@ export function getVertexAttribLocation(vtxAttrib: GX.VertexAttribute): number {
 }
 
 export function getVertexAttribGenDef(vtxAttrib: GX.VertexAttribute): VertexAttributeGenDef {
-    return vtxAttributeGenDefs.find((genDef) => genDef.attrib === vtxAttrib);
+    return vtxAttributeGenDefs.find((genDef) => genDef.attrib === vtxAttrib)!;
 }
 
 export interface LightingFudgeParams {
@@ -262,7 +262,7 @@ export class GX_Program extends DeviceProgram {
     public static ub_MaterialParams = 1;
     public static ub_PacketParams = 2;
 
-    constructor(private material: GXMaterial, private hacks: GXMaterialHacks = null) {
+    constructor(private material: GXMaterial, private hacks: GXMaterialHacks | null = null) {
         super();
         this.name = material.name;
         this.generateShaders();

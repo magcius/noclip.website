@@ -85,12 +85,10 @@ export class Viewer {
     }
 
     public setKeyMoveSpeed(n: number): void {
+        if (this.cameraController === null)
+            return;
         this.cameraController.setKeyMoveSpeed(n);
         this.onKeyMoveSpeed();
-    }
-
-    public getKeyMoveSpeed(): number {
-        return this.cameraController.getKeyMoveSpeed();
     }
 
     public addKeyMoveSpeedListener(listener: Listener): void {
@@ -116,7 +114,7 @@ export class Viewer {
         resetGfxDebugGroup(this.debugGroup);
         this.gfxDevice.pushDebugGroup(this.debugGroup);
 
-        const renderPass = this.scene.render(this.gfxDevice, this.viewerRenderInput);
+        const renderPass = this.scene!.render(this.gfxDevice, this.viewerRenderInput);
         const onscreenTexture = this.gfxSwapChain.getOnscreenTexture();
         renderPass.endPass(onscreenTexture);
         this.gfxDevice.submitPass(renderPass);
@@ -200,7 +198,7 @@ export class Viewer {
     }
 
     public getCurrentTextureHolder(): TextureHolder<any> | null {
-        if (this.scene !== null)
+        if (this.scene !== null && this.scene.textureHolder !== undefined)
             return this.scene.textureHolder;
         return null;
     }

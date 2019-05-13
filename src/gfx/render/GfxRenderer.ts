@@ -204,7 +204,7 @@ export class GfxRenderInst {
     public _uniformBufferOffsets: number[] = [];
     public _samplerBindings: GfxSamplerBinding[] = [];
 
-    constructor(public parentRenderInst: GfxRenderInst = null) {
+    constructor(public parentRenderInst: GfxRenderInst | null = null) {
         if (parentRenderInst !== null)
             assignRenderInst(this, parentRenderInst);
     }
@@ -270,7 +270,7 @@ export class GfxRenderInst {
     }
 
     public setMegaStateFlags(r: Partial<GfxMegaStateDescriptor> | null = null): GfxMegaStateDescriptor {
-        if (this._megaState === this.parentRenderInst._megaState)
+        if (this.parentRenderInst !== null && this._megaState === this.parentRenderInst._megaState)
             this._megaState = copyMegaState(this.parentRenderInst._megaState);
         if (r !== null)
             setMegaStateFlags(this._megaState, r);
@@ -292,14 +292,14 @@ export class GfxRenderInst {
 
     public getUniformBufferOffset(i: number): number {
         if (this._uniformBufferOffsets === null)
-            return this.parentRenderInst.getUniformBufferOffset(i);
+            return this.parentRenderInst!.getUniformBufferOffset(i);
         else
             return this._uniformBufferOffsets[i];
     }
 
     public getPassMask(): number {
         if (this.passMask === null)
-            return this.parentRenderInst.getPassMask();
+            return this.parentRenderInst!.getPassMask();
         else
             return this.passMask;
     }
@@ -322,7 +322,7 @@ export class GfxRenderInst {
             return this.gfxProgram;
         }
 
-        return this.parentRenderInst._buildGfxProgram(device, cache);
+        return this.parentRenderInst!._buildGfxProgram(device, cache);
     }
 
     private _buildPipeline(device: GfxDevice, cache: GfxRenderCache): void {
@@ -347,14 +347,14 @@ export class GfxRenderInst {
     }
 
     private _inheritSamplerBindings(): void {
-        if ((this.parentRenderInst._flags & GfxRenderInstFlags.BINDINGS_DIRTY))
-            this.setSamplerBindings(this.parentRenderInst._samplerBindings);
+        if ((this.parentRenderInst!._flags & GfxRenderInstFlags.BINDINGS_DIRTY))
+            this.setSamplerBindings(this.parentRenderInst!._samplerBindings);
     }
 
     private _tryInheritSamplerBindings(): void {
         // The return value here is if we should continue building bindings.
         if ((this._flags & GfxRenderInstFlags.SAMPLER_BINDINGS_INHERIT)) {
-            this.parentRenderInst._tryInheritSamplerBindings();
+            this.parentRenderInst!._tryInheritSamplerBindings();
             this._inheritSamplerBindings();
         }
     }
@@ -542,7 +542,7 @@ export class GfxRenderInstBuilder {
         return offs;
     }
 
-    public pushTemplateRenderInst(o: GfxRenderInst = null): GfxRenderInst {
+    public pushTemplateRenderInst(o: GfxRenderInst | null = null): GfxRenderInst {
         if (o === null)
             o = this.newRenderInst();
         this.templateStack.unshift(o);

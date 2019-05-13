@@ -58,8 +58,8 @@ export function parse(buffer: ArrayBufferSlice, textureNames?: string[]): TPL {
         const mipCount = (maxLOD - minLOD) + 1;
         const data = buffer.subarray(dataOffs);
 
-        let paletteData: ArrayBufferSlice = undefined;
-        let paletteFormat: GX.TexPalette = undefined;
+        let paletteData: ArrayBufferSlice | undefined = undefined;
+        let paletteFormat: GX.TexPalette | undefined = undefined;
         if (paletteOffs !== 0) {
             const nItems = view.getUint16(paletteOffs + 0x00);
             paletteFormat = view.getUint16(paletteOffs + 0x06);

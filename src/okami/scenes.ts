@@ -76,6 +76,8 @@ function parseSCR(buffer: ArrayBufferSlice): SCR {
             const translationY = view.getFloat32(instanceOffs + 0x24);
             const translationZ = view.getFloat32(instanceOffs + 0x28);
             computeModelMatrixSRT(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+        } else {
+            throw "whoops";
         }
 
         instances.push({ index, materialFlags, modelMatrix });
@@ -300,7 +302,7 @@ class OkamiSceneDesc implements Viewer.SceneDesc {
             const datArc = ARC.parse(datArcBuffer);
 
             // Look for the SCP file.
-            const scpFile = datArc.files.find((file) => file.type === 'SCP');
+            const scpFile = datArc.files.find((file) => file.type === 'SCP')!;
             const scpData = new OkamiSCPArchiveData(device, renderer, scpFile.buffer);
     
             // Create the main instances.
@@ -310,7 +312,7 @@ class OkamiSceneDesc implements Viewer.SceneDesc {
             const modelCache = new ModelCache();
 
             // Spawn the object tables.
-            const tscTableFile = datArc.files.find((file) => file.type === 'TSC');
+            const tscTableFile = datArc.files.find((file) => file.type === 'TSC')!;
             this.spawnObjectTable(device, renderer, modelCache, tscTableFile.buffer, abortSignal);
 
             // TODO(jstpierre): Don't spawn trees until we figure out how the depth buffer write thing works.

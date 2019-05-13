@@ -23,9 +23,8 @@ class Pik2SceneDesc implements Viewer.SceneDesc {
         this.id = this.path;
     }
 
-    private spawnBMD(device: GfxDevice, renderer: BasicRenderer, rarc: RARC.RARC, basename: string, modelMatrix: mat4 = null): BMDModelInstance {
-        const bmdFile = rarc.findFile(`${basename}.bmd`);
-        assertExists(bmdFile);
+    private spawnBMD(device: GfxDevice, renderer: BasicRenderer, rarc: RARC.RARC, basename: string, modelMatrix: mat4 | null = null): BMDModelInstance {
+        const bmdFile = assertExists(rarc.findFile(`${basename}.bmd`));
         const btkFile = rarc.findFile(`${basename}.btk`);
         const brkFile = rarc.findFile(`${basename}.brk`);
         const bmtFile = rarc.findFile(`${basename}.bmt`);

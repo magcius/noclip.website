@@ -16,7 +16,7 @@ const textDecoderCache = new Map<string, TextDecoder | null>();
 export function getTextDecoder(encoding: string): TextDecoder | null {
     if (!textDecoderCache.has(encoding))
         textDecoderCache.set(encoding, makeTextDecoder(encoding));
-    return textDecoderCache.get(encoding);
+    return textDecoderCache.get(encoding)!;
 }
 
 export function assertExists<T>(v: T | null | undefined): T {

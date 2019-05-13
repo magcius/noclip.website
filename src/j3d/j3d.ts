@@ -128,7 +128,7 @@ function readBTI_Texture(buffer: ArrayBufferSlice, name: string): BTI_Texture {
 export class BTI {
     texture: BTI_Texture;
 
-    public static parse(buffer: ArrayBufferSlice, name: string = null): BTI {
+    public static parse(buffer: ArrayBufferSlice, name: string): BTI {
         const bti = new BTI();
         bti.texture = readBTI_Texture(buffer, name);
         return bti;
@@ -196,7 +196,7 @@ function readINF1Chunk(buffer: ArrayBufferSlice): INF1 {
             parentStack.unshift(node);
             break;
         case HierarchyType.Close:
-            node = parentStack.shift();
+            node = parentStack.shift()!;
             break;
         case HierarchyType.Joint:
             node = { type, children: [], jointIdx: value };

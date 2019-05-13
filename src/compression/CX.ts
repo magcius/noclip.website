@@ -79,8 +79,8 @@ export function decompressLZ_Extended(srcView: DataView) {
             if (commandByte & (1 << i)) {
                 const indicator = srcView.getUint8(srcOffs) >>> 4;
 
-                let windowOffset;
-                let windowLength;
+                let windowOffset = -1;
+                let windowLength = -1;
                 if (indicator > 1) {
                     // Two bytes. AB CD
                     const tmp = srcView.getUint16(srcOffs, false);

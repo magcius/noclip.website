@@ -30,7 +30,7 @@ export class GfxRenderBuffer {
 
                 // Drop the last page, since it might not have the right amount of data in it.
                 if (this.bufferPages.length)
-                    device.destroyBuffer(this.bufferPages.pop());
+                    device.destroyBuffer(this.bufferPages.pop()!);
 
                 const existingWordCount = this.bufferPages.length * UBO_PAGE_WORD_LIMIT;
                 let remaining = this.wordCount - existingWordCount;
@@ -77,7 +77,7 @@ export class GfxRenderBuffer {
 
     public mapBufferF32(wordOffset: number, wordCount: number): Float32Array {
         this.markDirty(wordOffset, wordCount);
-        return this.shadowBufferF32;
+        return this.shadowBufferF32!;
     }
 
     private findPageIndex(wordOffset: number): number {

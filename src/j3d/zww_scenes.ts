@@ -99,13 +99,13 @@ function getColorsFromDZS(buffer: ArrayBufferSlice, roomIdx: number, timeOfDay: 
     if (!chunkHeaders.has('Virt'))
         return undefined;
 
-    const coloIdx = view.getUint8(chunkHeaders.get('EnvR').offs + (roomIdx * 0x08));
-    const coloOffs = chunkHeaders.get('Colo').offs + (coloIdx * 0x0C);
+    const coloIdx = view.getUint8(chunkHeaders.get('EnvR')!.offs + (roomIdx * 0x08));
+    const coloOffs = chunkHeaders.get('Colo')!.offs + (coloIdx * 0x0C);
     const whichPale = timeOfDay;
     const paleIdx = view.getUint8(coloOffs + whichPale);
-    const paleOffs = chunkHeaders.get('Pale').offs + (paleIdx * 0x2C);
+    const paleOffs = chunkHeaders.get('Pale')!.offs + (paleIdx * 0x2C);
     const virtIdx = view.getUint8(paleOffs + 0x21);
-    const virtOffs = chunkHeaders.get('Virt').offs + (virtIdx * 0x24);
+    const virtOffs = chunkHeaders.get('Virt')!.offs + (virtIdx * 0x24);
 
     const actorShadowR = view.getUint8(paleOffs + 0x00) / 0xFF;
     const actorShadowG = view.getUint8(paleOffs + 0x01) / 0xFF;
@@ -176,7 +176,7 @@ function getColorsFromDZS(buffer: ArrayBufferSlice, roomIdx: number, timeOfDay: 
     return { actorShadow, actorAmbient, amb, light, wave, ocean, splash, splash2, doors, vr_back_cloud, vr_sky, vr_uso_umi, vr_kasumi_mae };
 }
 
-function createScene(device: GfxDevice, renderHelper: GXRenderHelperGfx, extraTextures: ZWWExtraTextures, rarc: RARC.RARC, name: string, isSkybox: boolean = false): BMDModelInstance {
+function createScene(device: GfxDevice, renderHelper: GXRenderHelperGfx, extraTextures: ZWWExtraTextures, rarc: RARC.RARC, name: string, isSkybox: boolean = false): BMDModelInstance | null {
     let bdlFile = rarc.findFile(`bdl/${name}.bdl`);
     if (!bdlFile)
         bdlFile = rarc.findFile(`bmd/${name}.bmd`);
@@ -226,16 +226,16 @@ class WindWakerRoomRenderer {
 
         this.dzb = DZB.parse(assertExists(roomRarc.findFileData(`dzb/room.dzb`)));
 
-        this.model = createScene(device, renderHelper, extraTextures, roomRarc, `model`);
+        this.model = createScene(device, renderHelper, extraTextures, roomRarc, `model`)!;
 
         // Ocean.
-        this.model1 = createScene(device, renderHelper, extraTextures, roomRarc, `model1`);
+        this.model1 = createScene(device, renderHelper, extraTextures, roomRarc, `model1`)!;
 
         // Special effects / Skybox as seen in Hyrule.
-        this.model2 = createScene(device, renderHelper, extraTextures, roomRarc, `model2`);
+        this.model2 = createScene(device, renderHelper, extraTextures, roomRarc, `model2`)!;
 
         // Windows / doors.
-        this.model3 = createScene(device, renderHelper, extraTextures, roomRarc, `model3`);
+        this.model3 = createScene(device, renderHelper, extraTextures, roomRarc, `model3`)!;
     }
 
     public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
@@ -495,10 +495,10 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         if (wantsSeaPlane)
             this.seaPlane = new SeaPlane(device, this.viewRenderer);
 
-        this.vr_sky = createScene(device, this.renderHelper, this.extraTextures, stageRarc, `vr_sky`, true);
-        this.vr_uso_umi = createScene(device, this.renderHelper, this.extraTextures, stageRarc, `vr_uso_umi`, true);
-        this.vr_kasumi_mae = createScene(device, this.renderHelper, this.extraTextures, stageRarc, `vr_kasumi_mae`, true);
-        this.vr_back_cloud = createScene(device, this.renderHelper, this.extraTextures, stageRarc, `vr_back_cloud`, true);
+        this.vr_sky = createScene(device, this.renderHelper, this.extraTextures, stageRarc, `vr_sky`, true)!;
+        this.vr_uso_umi = createScene(device, this.renderHelper, this.extraTextures, stageRarc, `vr_uso_umi`, true)!;
+        this.vr_kasumi_mae = createScene(device, this.renderHelper, this.extraTextures, stageRarc, `vr_kasumi_mae`, true)!;
+        this.vr_back_cloud = createScene(device, this.renderHelper, this.extraTextures, stageRarc, `vr_back_cloud`, true)!;
     }
 
     private setTimeOfDay(timeOfDay: number): void {
@@ -508,7 +508,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.currentTimeOfDay = timeOfDay;
         this.timeOfDaySelector.selectItem(timeOfDay + 1);
         this.onstatechanged();
-        const dzsFile = this.stageRarc.findFile(`dzs/stage.dzs`);
+        const dzsFile = this.stageRarc.findFile(`dzs/stage.dzs`)!;
 
         const colors = timeOfDay === -1 ? undefined : getColorsFromDZS(dzsFile.buffer, 0, timeOfDay);
 
@@ -558,7 +558,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             this.setTimeOfDay(timeOfDay);
         };
 
-        const dzsFile = this.stageRarc.findFile(`dzs/stage.dzs`);
+        const dzsFile = this.stageRarc.findFile(`dzs/stage.dzs`)!;
         const flairs: UI.Flair[] = colorPresets.slice(1).map((presetName, i): UI.Flair | null => {
             const elemIndex = i + 1;
             const timeOfDay = i;
@@ -567,7 +567,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
                 return null;
             else
                 return { index: elemIndex, background: colorToCSS(stageColors.vr_sky) };
-        }).filter((n) => n !== null);
+        }).filter((n) => n !== null) as UI.Flair[];
         this.timeOfDaySelector.setFlairs(flairs);
 
         this.setTimeOfDay(2);
@@ -750,7 +750,7 @@ class ModelCache {
         let p = this.modelCache.get(modelPath);
 
         if (p === undefined) {
-            const bmdData = rarc.findFileData(modelPath);
+            const bmdData = rarc.findFileData(modelPath)!;
             const bmd = BMD.parse(bmdData);
             if (hacks !== undefined)
                 hacks(bmd);
@@ -800,12 +800,12 @@ class SceneDesc {
 
         return modelCache.waitForLoad().then(() => {
             const systemArc = modelCache.getArchive(`${pathBase}/Object/System.arc`);
-            const ZAtoon = new BTIData(device, BTI.parse(systemArc.findFileData(`dat/toon.bti`), `ZAtoon`).texture);
-            const ZBtoonEX = new BTIData(device, BTI.parse(systemArc.findFileData(`dat/toonex.bti`), `ZBtoonEX`).texture);
+            const ZAtoon = new BTIData(device, BTI.parse(systemArc.findFileData(`dat/toon.bti`)!, `ZAtoon`).texture);
+            const ZBtoonEX = new BTIData(device, BTI.parse(systemArc.findFileData(`dat/toonex.bti`)!, `ZBtoonEX`).texture);
             const extraTextures = new ZWWExtraTextures(ZAtoon, ZBtoonEX);
 
             const stageRarc = modelCache.getArchive(`${pathBase}/Stage/${this.stageDir}/Stage.arc`);
-            const stageDzs = stageRarc.findFileData(`dzs/stage.dzs`);
+            const stageDzs = stageRarc.findFileData(`dzs/stage.dzs`)!;
             const stageDzsHeaders = parseDZSHeaders(stageDzs);
             const mult = stageDzsHeaders.get('MULT');
 
@@ -838,7 +838,7 @@ class SceneDesc {
                 }
 
                 // Now spawn any objects that might show up in it.
-                const dzr = roomRarc.findFileData('dzr/room.dzr');
+                const dzr = roomRarc.findFileData('dzr/room.dzr')!;
                 this.spawnObjectsFromDZR(device, abortSignal, renderer, roomRenderer, dzr, modelMatrix);
             }
 
@@ -911,8 +911,8 @@ class SceneDesc {
         }
 
         function buildChildModelBMT(rarc: RARC.RARC, modelPath: string, bmtPath: string): BMDObjectRenderer {
-            const bmd = BMD.parse(rarc.findFileData(modelPath));
-            const bmt = BMT.parse(rarc.findFileData(bmtPath));
+            const bmd = BMD.parse(rarc.findFileData(modelPath)!);
+            const bmt = BMT.parse(rarc.findFileData(bmtPath)!);
             const model = new BMDModel(device, renderer.renderHelper, bmd, bmt);
             modelCache.extraModels.push(model);
             const modelInstance = new BMDModelInstance(renderer.renderHelper, model);
@@ -975,9 +975,9 @@ class SceneDesc {
             return objectRenderer;
         }
 
-        function parseBCK(rarc: RARC.RARC, path: string) { const g = BCK.parse(rarc.findFileData(path)).ank1; g.loopMode = LoopMode.REPEAT; return g; }
-        function parseBRK(rarc: RARC.RARC, path: string) { return BRK.parse(rarc.findFileData(path)).trk1; }
-        function parseBTK(rarc: RARC.RARC, path: string) { return BTK.parse(rarc.findFileData(path)).ttk1; }
+        function parseBCK(rarc: RARC.RARC, path: string) { const g = BCK.parse(rarc.findFileData(path)!).ank1; g.loopMode = LoopMode.REPEAT; return g; }
+        function parseBRK(rarc: RARC.RARC, path: string) { return BRK.parse(rarc.findFileData(path)!).trk1; }
+        function parseBTK(rarc: RARC.RARC, path: string) { return BTK.parse(rarc.findFileData(path)!).ttk1; }
         function animFrame(frame: number): AnimationController { const a = new AnimationController(); a.setTimeInFrames(frame); return a; }
 
         // Tremendous special thanks to LordNed, Sage-of-Mirrors & LugoLunatic for their work on actor mapping

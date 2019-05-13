@@ -110,7 +110,7 @@ function textureToCanvas(bmdTex: NITRO_BMD.Texture): Viewer.Texture {
     canvas.height = bmdTex.height;
     canvas.title = bmdTex.name;
 
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d")!;
     const imgData = ctx.createImageData(canvas.width, canvas.height);
     imgData.data.set(bmdTex.pixels);
     ctx.putImageData(imgData, 0, 0);

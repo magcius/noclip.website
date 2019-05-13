@@ -48,7 +48,7 @@ export function fetchData(path: string, abortSignal: AbortSignal | null): Progre
                 reject(new AbortedError());
 
             if (request.status !== 200) {
-                console.error(`fetchData: Received non-success status code ${request.status} when fetching file ${path}. Status: ${request.status}, aborted: ${abortSignal.aborted}`);
+                console.error(`fetchData: Received non-success status code ${request.status} when fetching file ${path}. Status: ${request.status}, aborted: ${abortSignal ? abortSignal.aborted : 'no signal'}`);
                 slice = new ArrayBufferSlice(new ArrayBuffer(0)) as NamedArrayBufferSlice;
             } else {
                 const buffer: ArrayBuffer = request.response;

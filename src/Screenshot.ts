@@ -7,7 +7,7 @@ function readPixelsCommon(gl: WebGL2RenderingContext, width: number, height: num
 
     canvas.width = gl.drawingBufferWidth;
     canvas.height = gl.drawingBufferHeight;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d')!;
     const img = ctx.createImageData(width, height);
     img.data.set(pixels);
     ctx.putImageData(img, 0, 0);
