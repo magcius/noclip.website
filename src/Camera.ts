@@ -357,7 +357,7 @@ export class FPSCameraController implements CameraController {
             mouseMovement[1] += keyAngleChangeVel * invertYMult;
         else if (inputManager.isKeyDown('KeyK'))
             mouseMovement[1] -= keyAngleChangeVel * invertYMult;
-        else if (inputManager.isKeyDown('KeyU'))
+        if (inputManager.isKeyDown('KeyU'))
             mouseMovement[2] -= keyAngleChangeVel;
         else if (inputManager.isKeyDown('KeyO'))
             mouseMovement[2] += keyAngleChangeVel;

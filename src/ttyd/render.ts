@@ -276,9 +276,7 @@ class Command_Node {
         }
     }
 
-    public prepareToRender(camera: Camera, visible: boolean): void {
-        this.visible = visible;
-
+    public prepareToRender(camera: Camera): void {
         // Compute depth from camera.
         if (this.visible) {
             bboxScratch.transform(this.node.bbox, this.modelMatrix);
@@ -291,6 +289,12 @@ class Command_Node {
 
         for (let i = 0; i < this.children.length; i++)
             this.children[i].stopAnimation();
+    }
+
+    public setVisible(visible: boolean): void {
+        this.visible = visible;
+        for (let i = 0; i < this.children.length; i++)
+            this.children[i].setVisible(visible);
     }
 
     public playAnimation(animationController: AnimationController, animation: AnimationEntry): void {
@@ -382,15 +386,14 @@ export class WorldRenderer implements Viewer.SceneGfx {
             this.materialCommands[i].prepareToRender(this.renderHelper, this.textureHolder);
 
         // Recursively update node model matrices.
-        const updateNode = (nodeCommand: Command_Node, parentMatrix: mat4, parentVisible: boolean | undefined) => {
-            const visible = parentVisible === false ? false : !(nodeCommand.node.visible === false);
+        const updateNode = (nodeCommand: Command_Node, parentMatrix: mat4) => {
             nodeCommand.updateModelMatrix(parentMatrix);
-            nodeCommand.prepareToRender(viewerInput.camera, visible);
+            nodeCommand.prepareToRender(viewerInput.camera);
             for (let i = 0; i < nodeCommand.children.length; i++)
-                updateNode(nodeCommand.children[i], nodeCommand.modelMatrix, visible);
+                updateNode(nodeCommand.children[i], nodeCommand.modelMatrix);
         };
 
-        updateNode(this.rootNode, this.rootMatrix, undefined);
+        updateNode(this.rootNode, this.rootMatrix);
 
         // Update shapes
         for (let i = 0; i < this.batchCommands.length; i++)
@@ -430,6 +433,18 @@ export class WorldRenderer implements Viewer.SceneGfx {
                 this.materialCommands[i].setTexturesEnabled(enableTextures.checked);
         };
         renderHacksPanel.contents.appendChild(enableTextures.elem);
+        const enableANode = new UI.Checkbox('Enable Collision', false);
+        enableANode.onchanged = () => {
+            const aNodeInst = this.rootNode.children.find((nodeInstance) => nodeInstance.node.nameStr === this.d.information.aNodeStr);
+            aNodeInst.setVisible(enableANode.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableANode.elem);
+        const enableSNode = new UI.Checkbox('Enable Render Root', true);
+        enableSNode.onchanged = () => {
+            const sNodeInst = this.rootNode.children.find((nodeInstance) => nodeInstance.node.nameStr === this.d.information.sNodeStr);
+            sNodeInst.setVisible(enableSNode.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableSNode.elem);
         return [renderHacksPanel];
     }
 
@@ -473,7 +488,7 @@ export class WorldRenderer implements Viewer.SceneGfx {
     private translateModel(device: GfxDevice, d: TTYDWorld): void {
         this.materialCommands = d.materials.map((material) => new Command_Material(device, this.renderHelper, material));
 
-        const rootNode = d.sNode;
+        const rootNode = d.rootNode;
 
         this.batches = [];
         this.collectBatches(this.batches, rootNode);
@@ -482,6 +497,13 @@ export class WorldRenderer implements Viewer.SceneGfx {
         this.bufferCoalescer = loadedDataCoalescerGfx(device, this.batches.map((batch) => batch.loadedVertexData));
 
         this.rootNode = this.translateSceneGraph(device, rootNode);
+
+        for (let i = 0; i < this.rootNode.children.length; i++) {
+            const nodeInstance = this.rootNode.children[i];
+            if (nodeInstance.node.nameStr !== d.information.sNodeStr)
+                nodeInstance.setVisible(false);
+        }
+
         this.renderHelper.finishBuilder(device, this.viewRenderer);
     }
 }

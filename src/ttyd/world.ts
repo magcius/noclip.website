@@ -20,7 +20,6 @@ export interface TTYDWorld {
     information: Information;
     textureNameTable: string[];
     rootNode: SceneGraphNode;
-    sNode: SceneGraphNode;
     materials: Material[];
     animations: AnimationEntry[];
 }
@@ -1174,12 +1173,11 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
     // The root node contains (at least) two nodes, the "A" node and the "S" node (possibly "animated" and "static").
     // The "S" nodes appear to be the visual models we want, while "A" appear to mostly be collision meshes. Any
     // other nodes at the root appear to be unused (!). We only want the visual stuff, so we only take "S".
-    const sNode = rootNode.children.find((child) => child.nameStr === sNodeStr)!;
 
     const information = { versionStr, aNodeStr, sNodeStr, dateStr };
     //#endregion
 
-    return { information, textureNameTable, rootNode, sNode, materials, animations };
+    return { information, textureNameTable, rootNode, materials, animations };
 }
 
 export const enum LoopMode {

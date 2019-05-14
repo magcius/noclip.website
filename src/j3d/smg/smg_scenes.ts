@@ -392,12 +392,29 @@ class SMGRenderer implements Viewer.SceneGfx {
         return [scenarioPanel, renderHacksPanel];
     }
 
+    private findBloomArea(): ObjInfo | null {
+        for (let i = 0; i < this.spawner.zones.length; i++) {
+            const zone = this.spawner.zones[i].zone;
+            for (let j = 0; j < zone.layers.length; j++) {
+                for (let k = 0; k < zone.layers[j].areaobjinfo.length; k++) {
+                    const area = zone.layers[j].areaobjinfo[k];
+                    if (area.objName === 'BloomCube' && area.objArg0 != -1)
+                        return area;
+                }
+            }
+        }
+
+        return null;
+    }
+
     private prepareToRenderBloom(hostAccessPass: GfxHostAccessPass): void {
         // TODO(jstpierre): Dynamically adjust based on Area.
-        if (this.spawner.zones[0].zone.name === 'PeachCastleGardenGalaxy') {
-            this.bloomParameters.blurStrength = 40/256;
-            this.bloomParameters.bokehStrength = 60/256;
-            this.bloomParameters.bokehCombineStrength = 110/256;
+        const bloomArea = this.findBloomArea();
+        if (bloomArea !== null) {
+            // TODO(jstpierre): What is arg1
+            this.bloomParameters.blurStrength = bloomArea.objArg2 / 256;
+            this.bloomParameters.bokehStrength = bloomArea.objArg3 / 256;
+            this.bloomParameters.bokehCombineStrength = bloomArea.objArg0 / 256;
         } else {
             this.bloomParameters.blurStrength = 25/256;
             this.bloomParameters.bokehStrength = 25/256;
@@ -530,6 +547,7 @@ interface ZoneLayer {
     objinfo: ObjInfo[];
     mappartsinfo: ObjInfo[];
     stageobjinfo: ObjInfo[];
+    areaobjinfo: ObjInfo[];
 }
 
 interface Zone {
@@ -1423,7 +1441,8 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
             const objinfo = this.parsePlacement(BCSV.parse(rarc.findFileData(`${placementDir}/objinfo`)), paths, false);
             const mappartsinfo = this.parsePlacement(BCSV.parse(rarc.findFileData(`${mappartsDir}/mappartsinfo`)), paths, true);
             const stageobjinfo = this.parsePlacement(BCSV.parse(rarc.findFileData(`${placementDir}/stageobjinfo`)), paths, false);
-            layers.push({ index: i, objinfo, mappartsinfo, stageobjinfo });
+            const areaobjinfo = this.parsePlacement(BCSV.parse(rarc.findFileData(`${placementDir}/areaobjinfo`)), paths, false);
+            layers.push({ index: i, objinfo, mappartsinfo, stageobjinfo, areaobjinfo });
         }
         return { name, layers };
     }
