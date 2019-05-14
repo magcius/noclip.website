@@ -148,16 +148,16 @@ export class N64Data {
 }
 
 function translateCullMode(m: number): GfxCullMode {
-    const cullFront = !!(m & 0x200);
-    const cullBack = !!(m & 0x400);
+    const cullFront = !!(m & 0x1000);
+    const cullBack = !!(m & 0x2000);
     if (cullFront && cullBack)
-        return GfxCullMode.NONE;
-    else if (cullFront)
-        return GfxCullMode.BACK;
-    else if (cullBack)
-        return GfxCullMode.FRONT;
-    else
         return GfxCullMode.FRONT_AND_BACK;
+    else if (cullFront)
+        return GfxCullMode.FRONT;
+    else if (cullBack)
+        return GfxCullMode.BACK;
+    else
+        return GfxCullMode.NONE;
 }
 
 const enum TextFilt {

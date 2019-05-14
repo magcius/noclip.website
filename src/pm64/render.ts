@@ -1,5 +1,5 @@
 
-import { GfxHostAccessPass, GfxBufferUsage, GfxBufferFrequencyHint, GfxDevice, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxFormat, GfxBuffer, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform";
+import { GfxHostAccessPass, GfxBufferUsage, GfxBufferFrequencyHint, GfxDevice, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxFormat, GfxBuffer, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode } from "../gfx/platform/GfxPlatform";
 import * as Viewer from '../viewer';
 import { GfxRenderBuffer } from "../gfx/render/GfxRenderBuffer";
 import { mat4 } from "gl-matrix";
@@ -175,6 +175,19 @@ void main() {
 `;
 }
 
+function translateCullMode(m: number): GfxCullMode {
+    const cullFront = !!(m & 0x200);
+    const cullBack = !!(m & 0x400);
+    if (cullFront && cullBack)
+        return GfxCullMode.NONE;
+    else if (cullFront)
+        return GfxCullMode.FRONT;
+    else if (cullBack)
+        return GfxCullMode.BACK;
+    else
+        return GfxCullMode.FRONT_AND_BACK;
+}
+
 export class BackgroundBillboardRenderer {
     private program = new BackgroundBillboardProgram();
     private bufferFiller: BufferFillerHelper;
@@ -311,8 +324,8 @@ class ModelTreeLeafInstance {
             const drawCall = this.n64Data.rspOutput.drawCalls[i];
             const renderInst = renderInstBuilder.pushRenderInst();
             renderInst.drawIndexes(drawCall.indexCount, drawCall.firstIndex);
+            renderInst.setMegaStateFlags({ cullMode: translateCullMode(drawCall.SP_GeometryMode) });
             this.renderInsts.push(renderInst);
-            // TODO(jstpierre): Translate geometry mode and other things.
         }
 
         renderInstBuilder.popTemplateRenderInst();
