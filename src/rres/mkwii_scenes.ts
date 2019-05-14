@@ -224,6 +224,7 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
         };
 
         // Object IDs taken from http://wiki.tockdom.com/wiki/Object
+        function animFrame(frame: number): AnimationController { const a = new AnimationController(); a.setTimeInFrames(frame); return a; }
 
         if (gobj.objectId === 0x0002) { // Psea
             const rres = getRRES(`Psea`);
@@ -622,7 +623,9 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
         } else if (gobj.objectId === 0x02D0) { // Flash_L
             // particle effect; unsupported
         } else if (gobj.objectId === 0x02d5) { // MiiSignNoko
-            spawnObject(`MiiSignNoko`);
+            const b = spawnObject(`MiiSignNoko`);
+            const rres = getRRES(`MiiSignNoko`);
+            b.bindPAT0(animFrame(0), rres.pat0[0]);
         } else if (gobj.objectId === 0x02d6) { // UtsuboDokan
             spawnObject(`UtsuboDokan`);
         } else if (gobj.objectId === 0x02d7) { // Spot64

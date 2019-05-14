@@ -2090,7 +2090,7 @@ function findFrameData<T extends { frame: number }>(frames: T[], frame: number):
     // Find the left-hand frame.
     let idx0 = frames.length;
     while (idx0-- > 0) {
-        if (frame > frames[idx0].frame)
+        if (frame >= frames[idx0].frame)
             break;
     }
 
