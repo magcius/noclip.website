@@ -204,19 +204,6 @@ function makeFullscreenPassRenderInst(renderInstBuilder: GfxRenderInstBuilder, n
     return renderInst;
 }
 
-// TODO(jstpierre): Rewrite to not 
-const enum SMGPass {
-    SKYBOX = 1 << 0,
-    OPAQUE = 1 << 1,
-    INDIRECT = 1 << 2,
-    BLOOM = 1 << 3,
-
-    BLOOM_DOWNSAMPLE = 1 << 4,
-    BLOOM_BLUR = 1 << 5,
-    BLOOM_BOKEH = 1 << 6,
-    BLOOM_COMBINE = 1 << 7,
-}
-
 export class BloomPostFXParameters {
     public blurStrength: number = 50/256;
     public bokehStrength: number = 25/256;
@@ -259,16 +246,16 @@ export class BloomPostFXRenderer {
         renderInstBuilder.newUniformBufferInstance(this.bloomTemplateRenderInst, 0);
         this.bloomSceneColorTarget = new WeirdFancyRenderTarget(mainRenderTarget.depthStencilAttachment);
         this.bloomRenderInstDownsample = makeFullscreenPassRenderInst(renderInstBuilder, 'bloom downsample', new BloomPassFullscreenCopyProgram());
-        this.bloomRenderInstDownsample.passMask = SMGPass.BLOOM_DOWNSAMPLE;
+        this.bloomRenderInstDownsample.passMask = 0;
 
         this.bloomRenderInstBlur = makeFullscreenPassRenderInst(renderInstBuilder, 'bloom blur', new BloomPassBlurProgram());
-        this.bloomRenderInstBlur.passMask = SMGPass.BLOOM_BLUR;
+        this.bloomRenderInstBlur.passMask = 0;
 
         this.bloomRenderInstBokeh = makeFullscreenPassRenderInst(renderInstBuilder, 'bloom bokeh', new BloomPassBokehProgram());
-        this.bloomRenderInstBokeh.passMask = SMGPass.BLOOM_BOKEH;
+        this.bloomRenderInstBokeh.passMask = 0;
 
         this.bloomRenderInstCombine = makeFullscreenPassRenderInst(renderInstBuilder, 'bloom combine', new BloomPassFullscreenCopyProgram());
-        this.bloomRenderInstCombine.passMask = SMGPass.BLOOM_COMBINE;
+        this.bloomRenderInstCombine.passMask = 0;
         this.bloomRenderInstCombine.setMegaStateFlags({
             blendMode: GfxBlendMode.ADD,
             blendSrcFactor: GfxBlendFactor.ONE,
@@ -286,13 +273,13 @@ export class BloomPostFXRenderer {
         this.bloomParamsBuffer.prepareToRender(hostAccessPass);
     }
 
-    public render(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer, mainRenderTarget: BasicRenderTarget, viewerInput: ViewerRenderInput): GfxRenderPass {
+    public render(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer, mainRenderTarget: BasicRenderTarget, viewerInput: ViewerRenderInput, bloomObjectsPassMask: number): GfxRenderPass {
         const bloomColorTargetScene = this.bloomSceneColorTarget;
         const bloomColorTextureScene = this.bloomSceneColorTexture;
         bloomColorTargetScene.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
         bloomColorTextureScene.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
         const bloomPassRenderer = bloomColorTargetScene.createRenderPass(device, bloomClearRenderPassDescriptor);
-        viewRenderer.executeOnPass(device, bloomPassRenderer, SMGPass.BLOOM);
+        viewRenderer.executeOnPass(device, bloomPassRenderer, bloomObjectsPassMask);
         bloomPassRenderer.endPass(bloomColorTextureScene.gfxTexture);
         device.submitPass(bloomPassRenderer);
 
@@ -308,7 +295,7 @@ export class BloomPostFXRenderer {
         this.bloomTextureMapping[0].gfxTexture = bloomColorTextureScene.gfxTexture!;
         this.bloomRenderInstDownsample.setSamplerBindingsFromTextureMappings(this.bloomTextureMapping);
         const bloomDownsamplePassRenderer = bloomColorTargetDownsample.createRenderPass(device, noClearRenderPassDescriptor);
-        viewRenderer.executeOnPass(device, bloomDownsamplePassRenderer, SMGPass.BLOOM_DOWNSAMPLE);
+        viewRenderer.executeSingleRenderInst(device, bloomDownsamplePassRenderer, this.bloomRenderInstDownsample);
         bloomDownsamplePassRenderer.endPass(bloomColorTextureDownsample.gfxTexture);
         device.submitPass(bloomDownsamplePassRenderer);
 
@@ -320,7 +307,7 @@ export class BloomPostFXRenderer {
         this.bloomTextureMapping[0].gfxTexture = bloomColorTextureDownsample.gfxTexture!;
         this.bloomRenderInstBlur.setSamplerBindingsFromTextureMappings(this.bloomTextureMapping);
         const bloomBlurPassRenderer = bloomColorTargetBlur.createRenderPass(device, noClearRenderPassDescriptor);
-        viewRenderer.executeOnPass(device, bloomBlurPassRenderer, SMGPass.BLOOM_BLUR);
+        viewRenderer.executeSingleRenderInst(device, bloomBlurPassRenderer, this.bloomRenderInstBlur);
         bloomBlurPassRenderer.endPass(bloomColorTextureBlur.gfxTexture);
         device.submitPass(bloomBlurPassRenderer);
 
@@ -333,7 +320,7 @@ export class BloomPostFXRenderer {
         const bloomBokehPassRenderer = bloomColorTargetBokeh.createRenderPass(device, noClearRenderPassDescriptor);
         this.bloomTextureMapping[0].gfxTexture = bloomColorTextureBlur.gfxTexture!;
         this.bloomRenderInstBokeh.setSamplerBindingsFromTextureMappings(this.bloomTextureMapping);
-        viewRenderer.executeOnPass(device, bloomBokehPassRenderer, SMGPass.BLOOM_BOKEH);
+        viewRenderer.executeSingleRenderInst(device, bloomBokehPassRenderer, this.bloomRenderInstBokeh);
         bloomBokehPassRenderer.endPass(bloomColorTextureBokeh.gfxTexture);
         device.submitPass(bloomBokehPassRenderer);
 
@@ -342,7 +329,7 @@ export class BloomPostFXRenderer {
         this.bloomTextureMapping[0].gfxTexture = bloomColorTextureBokeh.gfxTexture!;
         this.bloomRenderInstCombine.setSamplerBindingsFromTextureMappings(this.bloomTextureMapping);
         viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
-        viewRenderer.executeOnPass(device, bloomCombinePassRenderer, SMGPass.BLOOM_COMBINE);
+        viewRenderer.executeSingleRenderInst(device, bloomCombinePassRenderer, this.bloomRenderInstCombine);
         return bloomCombinePassRenderer;
     }
 

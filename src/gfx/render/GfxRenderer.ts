@@ -446,6 +446,31 @@ export class GfxRenderInstViewRenderer {
             this.templateRenderInsts[i]._prepareToRenderTemplate(device, this.gfxRenderCache);
     }
 
+    public executeSingleRenderInst(device: GfxDevice, passRenderer: GfxRenderPass, renderInst: GfxRenderInst): void {
+        if (!renderInst.visible)
+            return;
+
+        // If we have an unfinished render inst (which is possible!), then don't render it.
+        if (renderInst._pipeline === null || !(renderInst._flags & GfxRenderInstFlags.BINDINGS_CREATED))
+            return;
+
+        // If our program is not ready yet, do not render it.
+        if (!device.queryPipelineReady(renderInst._pipeline))
+            return;
+
+        passRenderer.setViewport(this.viewportWidth, this.viewportHeight);
+        passRenderer.setPipeline(renderInst._pipeline);
+        passRenderer.setInputState(renderInst.inputState);
+
+        for (let j = 0; j < renderInst._bindings.length; j++)
+            passRenderer.setBindings(j, renderInst._bindings[j], renderInst._uniformBufferOffsetGroups[j]);
+
+        if ((renderInst._flags & GfxRenderInstFlags.DRAW_INDEXED))
+            passRenderer.drawIndexed(renderInst._drawCount, renderInst._drawStart);
+        else
+            passRenderer.draw(renderInst._drawCount, renderInst._drawStart);
+    }
+
     public executeOnPass(device: GfxDevice, passRenderer: GfxRenderPass, passMask: number = 1): void {
         // Sort our instances.
         this.renderInsts.sort(compareRenderInsts);

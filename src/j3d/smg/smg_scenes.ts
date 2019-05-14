@@ -310,11 +310,6 @@ const enum SMGPass {
     OPAQUE = 1 << 1,
     INDIRECT = 1 << 2,
     BLOOM = 1 << 3,
-
-    BLOOM_DOWNSAMPLE = 1 << 4,
-    BLOOM_BLUR = 1 << 5,
-    BLOOM_BOKEH = 1 << 6,
-    BLOOM_COMBINE = 1 << 7,
 }
 
 class SMGRenderer implements Viewer.SceneGfx {
@@ -462,7 +457,7 @@ class SMGRenderer implements Viewer.SceneGfx {
             lastPassRenderer.endPass(null);
             device.submitPass(lastPassRenderer);
 
-            lastPassRenderer = this.bloomRenderer.render(device, this.viewRenderer, this.mainRenderTarget, viewerInput);
+            lastPassRenderer = this.bloomRenderer.render(device, this.viewRenderer, this.mainRenderTarget, viewerInput, SMGPass.BLOOM);
         }
 
         return lastPassRenderer;
@@ -1380,7 +1375,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
             return { objId, objName, isMapPart, objArg0, objArg1, objArg2, objArg3, moveConditionType, rotateSpeed, rotateAccelType, rotateAxis, modelMatrix, path };
         });
     }
-    
+
     public parsePaths(pathDir: RARC.RARCDir): Path[] {
         const commonPathInfo = BCSV.parse(RARC.findFileDataInDir(pathDir, 'commonpathinfo'));
         return commonPathInfo.records.map((record, i): Path => {
