@@ -9,7 +9,7 @@ import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, BufferFillerHelper } from 
 import { ModelTreeNode, ModelTreeLeaf, ModelTreeGroup, PropertyType } from "./map_shape";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { RSPOutput, Vertex } from "./f3dex2";
-import { assert, nArray, assertExists } from "../util";
+import { assert, nArray, assertExists, hexzero } from "../util";
 import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
 import * as Tex from './tex';
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
@@ -243,6 +243,8 @@ class ModelTreeLeafInstance {
     private renderModeProperty: number;
     private renderMode: RenderMode;
     private visible = true;
+    private texAnimGroup: number = -1;
+    private texAnimEnabled: boolean = false;
 
     constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, textureArchive: Tex.TextureArchive, textureHolder: PaperMario64TextureHolder, private modelTreeLeaf: ModelTreeLeaf) {
         this.n64Data = new N64Data(device, modelTreeLeaf.rspOutput);
@@ -250,6 +252,10 @@ class ModelTreeLeafInstance {
         const renderModeProp = this.modelTreeLeaf.properties.find((prop) => prop.id === 0x5C);
         if (renderModeProp !== undefined && renderModeProp.type === PropertyType.INT)
             this.renderModeProperty = renderModeProp.value1;
+
+        const texSettingsProp = this.modelTreeLeaf.properties.find((prop) => prop.id === 0x5F);
+        if (texSettingsProp !== undefined && texSettingsProp.type === PropertyType.INT)
+            this.texAnimGroup = texSettingsProp.value1 & 0x0F;
 
         this.templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
         this.templateRenderInst.inputState = this.n64Data.inputState;
@@ -312,16 +318,35 @@ class ModelTreeLeafInstance {
         renderInstBuilder.popTemplateRenderInst();
     }
 
-    private computeTextureMatrix(dst: mat4, image: Tex.Image): void {
+    private computeTextureMatrix(dst: mat4, texAnimGroups: TexAnimGroup[], tileId: number): void {
+        const image = this.textureEnvironment.images[tileId];
+
+        mat4.identity(dst);
+
         const ss = 2 / (image.width);
         const st = 2 / (image.height);
         dst[0] = ss;
         dst[5] = st;
 
-        // TODO(jstpierre): aux shift / UV pan
+        if (this.texAnimEnabled && texAnimGroups[this.texAnimGroup] !== undefined)
+            mat4.mul(dst, dst, texAnimGroups[this.texAnimGroup].tileMatrix[tileId]);
     }
 
-    public prepareToRender(drawParamsBuffer: GfxRenderBuffer, modelMatrix: mat4, viewerInput: Viewer.ViewerRenderInput): void {
+    public setTexAnimEnabled(enabled: boolean): void {
+        this.texAnimEnabled = enabled;
+    }
+
+    public setTexAnimGroup(groupId: number): void {
+        this.texAnimGroup = groupId;
+    }
+
+    public findModelInstance(modelId: number): ModelTreeLeafInstance | null {
+        if (this.modelTreeLeaf.id === modelId)
+            return this;
+        return null;
+    }
+
+    public prepareToRender(drawParamsBuffer: GfxRenderBuffer, texAnimGroups: TexAnimGroup[], modelMatrix: mat4, viewerInput: Viewer.ViewerRenderInput): void {
         let depth = -1;
         if (this.visible) {
             bboxScratch.transform(this.modelTreeLeaf.bbox, modelMatrix);
@@ -341,11 +366,11 @@ class ModelTreeLeafInstance {
         offs += fillMatrix4x3(mappedF32, offs, modelViewScratch);
 
         if (this.textureEnvironment !== null) {
-            this.computeTextureMatrix(texMatrixScratch, this.textureEnvironment.images[0]);
+            this.computeTextureMatrix(texMatrixScratch, texAnimGroups, 0);
             offs += fillMatrix4x2(mappedF32, offs, texMatrixScratch);
 
             if (this.textureEnvironment.hasSecondImage) {
-                this.computeTextureMatrix(texMatrixScratch, this.textureEnvironment.images[1]);
+                this.computeTextureMatrix(texMatrixScratch, texAnimGroups, 1);
                 offs += fillMatrix4x2(mappedF32, offs, texMatrixScratch);
             }
         }
@@ -403,15 +428,25 @@ class ModelTreeGroupInstance {
     constructor(private group: ModelTreeGroup, private children: ModelTreeNodeInstance[]) {
     }
 
+    public findModelInstance(modelId: number): ModelTreeLeafInstance | null {
+        for (let i = 0; i < this.children.length; i++) {
+            const m = this.children[i].findModelInstance(modelId);
+            if (m !== null)
+                return m;
+        }
+
+        return null;
+    }
+
     public setVisible(v: boolean): void {
         for (let i = 0; i < this.children.length; i++)
             this.children[i].setVisible(v);
     }
 
-    public prepareToRender(drawParamsBuffer: GfxRenderBuffer, modelMatrix: mat4, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(drawParamsBuffer: GfxRenderBuffer, texAnimGroups: TexAnimGroup[], modelMatrix: mat4, viewerInput: Viewer.ViewerRenderInput): void {
         mat4.mul(this.modelMatrixScratch, modelMatrix, this.group.modelMatrix);
         for (let i = 0; i < this.children.length; i++)
-            this.children[i].prepareToRender(drawParamsBuffer, this.modelMatrixScratch, viewerInput);
+            this.children[i].prepareToRender(drawParamsBuffer, texAnimGroups, this.modelMatrixScratch, viewerInput);
     }
 
     public destroy(device: GfxDevice): void {
@@ -422,6 +457,10 @@ class ModelTreeGroupInstance {
 
 type ModelTreeNodeInstance = ModelTreeGroupInstance | ModelTreeLeafInstance;
 
+class TexAnimGroup {
+    public tileMatrix = nArray(2, () => mat4.create());
+}
+
 export class PaperMario64ModelTreeRenderer {
     private sceneParamsBuffer: GfxRenderBuffer;
     private drawParamsBuffer: GfxRenderBuffer;
@@ -429,6 +468,7 @@ export class PaperMario64ModelTreeRenderer {
     private templateRenderInst: GfxRenderInst;
     private modelTreeRootInstance: ModelTreeNodeInstance;
     public modelMatrix = mat4.create();
+    public texAnimGroup: TexAnimGroup[] = [];
 
     constructor(device: GfxDevice, private textureArchive: Tex.TextureArchive, private textureHolder: PaperMario64TextureHolder, private modelTreeRoot: ModelTreeNode) {
         this.sceneParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_SceneParams`);
@@ -470,10 +510,33 @@ export class PaperMario64ModelTreeRenderer {
         const mappedF32 = this.sceneParamsBuffer.mapBufferF32(offs, 16);
         offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);
 
-        this.modelTreeRootInstance.prepareToRender(this.drawParamsBuffer, this.modelMatrix, viewerInput);
+        this.modelTreeRootInstance.prepareToRender(this.drawParamsBuffer, this.texAnimGroup, this.modelMatrix, viewerInput);
 
         this.sceneParamsBuffer.prepareToRender(hostAccessPass);
         this.drawParamsBuffer.prepareToRender(hostAccessPass);
+    }
+
+    public setModelTexAnimGroupEnabled(modelId: number, enabled: boolean): void {
+        const modelInstance = this.modelTreeRootInstance.findModelInstance(modelId);
+        modelInstance.setTexAnimEnabled(enabled);
+    }
+
+    public setModelTexAnimGroup(modelId: number, groupId: number): void {
+        if (!this.texAnimGroup[groupId])
+            this.texAnimGroup[groupId] = new TexAnimGroup();
+
+        const modelInstance = this.modelTreeRootInstance.findModelInstance(modelId);
+        modelInstance.setTexAnimGroup(groupId);
+        modelInstance.setTexAnimEnabled(true);
+    }
+
+    public setTexAnimGroup(groupId: number, tileId: number, transS: number, transT: number): void {
+        if (!this.texAnimGroup[groupId])
+            this.texAnimGroup[groupId] = new TexAnimGroup();
+
+        const m = this.texAnimGroup[groupId].tileMatrix[tileId];
+        m[12] = transS;
+        m[13] = transT;
     }
 
     public destroy(device: GfxDevice): void {

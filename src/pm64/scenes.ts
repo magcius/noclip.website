@@ -9,8 +9,9 @@ import { BasicRendererHelper } from '../oot3d/render';
 import { PaperMario64TextureHolder, PaperMario64ModelTreeRenderer, BackgroundBillboardRenderer } from './render';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { makeClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
-import { OpaqueBlack } from '../Color';
+import { OpaqueBlack, Color } from '../Color';
 import * as BYML from '../byml';
+import { ScriptExecutor } from './script';
 
 const pathBase = `pm64`;
 
@@ -18,6 +19,7 @@ class PaperMario64Renderer extends BasicRendererHelper {
     public textureHolder = new PaperMario64TextureHolder();
     public modelTreeRenderers: PaperMario64ModelTreeRenderer[] = [];
     public bgTextureRenderer: BackgroundBillboardRenderer | null = null;
+    public scriptExecutor: ScriptExecutor | null = null;
 
     constructor() {
         super();
@@ -25,6 +27,8 @@ class PaperMario64Renderer extends BasicRendererHelper {
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        this.scriptExecutor.stepTime(viewerInput.time);
+
         if (this.bgTextureRenderer !== null)
             this.bgTextureRenderer.prepareToRender(hostAccessPass, viewerInput);
         for (let i = 0; i < this.modelTreeRenderers.length; i++)
@@ -38,6 +42,23 @@ class PaperMario64Renderer extends BasicRendererHelper {
             this.bgTextureRenderer.destroy(device);
         for (let i = 0; i < this.modelTreeRenderers.length; i++)
             this.modelTreeRenderers[i].destroy(device);
+    }
+
+    // ScriptHost
+    public setBGColor(color: Color): void {
+        this.clearRenderPassDescriptor = makeClearRenderPassDescriptor(true, color);
+    }
+
+    public setModelTexAnimGroupEnabled(modelId: number, enabled: boolean): void {
+        this.modelTreeRenderers[0].setModelTexAnimGroupEnabled(modelId, enabled);
+    }
+
+    public setModelTexAnimGroup(modelId: number, groupId: number): void {
+        this.modelTreeRenderers[0].setModelTexAnimGroup(modelId, groupId);
+    }
+
+    public setTexAnimGroup(groupId: number, tileId: number, transS: number, transT: number): void {
+        this.modelTreeRenderers[0].setTexAnimGroup(groupId, tileId, transS, transT);
     }
 }
 
@@ -84,6 +105,10 @@ class PaperMario64SceneDesc implements Viewer.SceneDesc {
             renderer.modelTreeRenderers.push(modelTreeRenderer);
             modelTreeRenderer.addToViewRenderer(device, renderer.viewRenderer);
 
+            const scriptExecutor = new ScriptExecutor(renderer, arc.ROMOverlayData);
+            scriptExecutor.startFromHeader(arc.HeaderAddr);
+            renderer.scriptExecutor = scriptExecutor;
+
             return renderer;
         });
     }
@@ -105,10 +130,6 @@ const sceneDescs = [
     new PaperMario64SceneDesc('kmr_12', 'Goomba Road 4'),
     new PaperMario64SceneDesc('kmr_11', "Goomba King's Fortress"),
     new PaperMario64SceneDesc('kmr_10', 'Toad Town West Gate'),
-    new PaperMario64SceneDesc('kmr_bt04', 'Normal Encounter BG'),
-    new PaperMario64SceneDesc('kmr_bt05', 'Jr. Troopa Battle BG'),
-    new PaperMario64SceneDesc('kmr_bt03', 'Red & Blue Goomba Battle BG'),
-    new PaperMario64SceneDesc('kmr_bt06', 'Goomba King Battle BG'),
 
     "Toad Town",
     new PaperMario64SceneDesc('kmr_20', "Mario's House"),
@@ -124,8 +145,6 @@ const sceneDescs = [
     new PaperMario64SceneDesc('mgm_01', 'Jump Attack Minigame'),
     new PaperMario64SceneDesc('mgm_02', 'Smash Attack Minigame'),
     new PaperMario64SceneDesc('kmr_30', "Credits Scene"),
-    new PaperMario64SceneDesc('mac_bt01', 'Jr. Troopa Battle BG (Chapter 5)'),
-    new PaperMario64SceneDesc('mac_bt02', 'Dojo Battle BG'),
 
     "Toad Town Tunnels",
     new PaperMario64SceneDesc('tik_06', 'Tunnels Entrance'),
@@ -149,11 +168,6 @@ const sceneDescs = [
     new PaperMario64SceneDesc('tik_22', 'Pipe to Frozen Corridor'),
     new PaperMario64SceneDesc('tik_17', 'Pipe to Shiver City'),
     new PaperMario64SceneDesc('tik_19', 'Super Block Room'),
-    new PaperMario64SceneDesc('tik_bt01', 'tik_bt01'),
-    new PaperMario64SceneDesc('tik_bt02', 'tik_bt02'),
-    new PaperMario64SceneDesc('tik_bt03', 'tik_bt03'),
-    new PaperMario64SceneDesc('tik_bt04', 'tik_bt04'),
-    new PaperMario64SceneDesc('tik_bt05', 'tik_bt05'),
 
     "Peach's Castle",
     new PaperMario64SceneDesc('osr_02', "Outside Peach's Castle (Night)"),
@@ -182,8 +196,6 @@ const sceneDescs = [
     new PaperMario64SceneDesc('kkj_21', 'Quiz Show Room (Chapter 8)'),
     new PaperMario64SceneDesc('kkj_28', 'Quiz Show Room (???)'),
     new PaperMario64SceneDesc('osr_03', "Peach's Castle (Bowser Cutscene)"),
-    new PaperMario64SceneDesc('kkj_bt01', 'Bowser Battle BG (Hallway)'),
-    new PaperMario64SceneDesc('kkj_bt02', 'Bowser Battle BG (Roof)'),
 
     "Shooting Star Summit",
     new PaperMario64SceneDesc('hos_00', 'Shooting Star Path'),
@@ -195,8 +207,6 @@ const sceneDescs = [
     new PaperMario64SceneDesc('hos_05', 'Inside Star Sanctuary'),
     new PaperMario64SceneDesc('hos_10', 'Pre-Prologue Cutscene'),
     new PaperMario64SceneDesc('hos_20', 'Star Ship Cutscene'),
-    new PaperMario64SceneDesc('hos_bt01', 'Star Way Encounter BG'),
-    new PaperMario64SceneDesc('hos_bt02', 'Shooting Star Path Battle BG'),
 
     "Koopa Village",
     new PaperMario64SceneDesc('nok_01', 'South Koopa Village'),
@@ -208,10 +218,6 @@ const sceneDescs = [
     new PaperMario64SceneDesc('nok_13', 'Pleasant Path 3'),
     new PaperMario64SceneDesc('nok_14', 'Pleasant Path 4'),
     new PaperMario64SceneDesc('nok_15', 'Pleasant Path 5'),
-    new PaperMario64SceneDesc('nok_bt01', 'nok_bt01'),
-    new PaperMario64SceneDesc('nok_bt02', 'nok_bt02'),
-    new PaperMario64SceneDesc('nok_bt03', 'Bridge Encounter BG'),
-    new PaperMario64SceneDesc('nok_bt04', 'Fuzzy Woods Battle BG'),
 
     "Koopa Bros. Fortress",
     new PaperMario64SceneDesc('trd_00', 'Outside Koopa Bros. Fortress'),
@@ -225,12 +231,6 @@ const sceneDescs = [
     new PaperMario64SceneDesc('trd_08', 'Basement Hallway'),
     new PaperMario64SceneDesc('trd_09', 'Fortress Bridge'),
     new PaperMario64SceneDesc('trd_10', 'Right Spire Top'),
-    new PaperMario64SceneDesc('trd_bt00', 'Koopa Bros. Battle BG'),
-    new PaperMario64SceneDesc('trd_bt01', 'trd_bt01'),
-    new PaperMario64SceneDesc('trd_bt02', 'trd_bt02'),
-    new PaperMario64SceneDesc('trd_bt03', 'trd_bt03'),
-    new PaperMario64SceneDesc('trd_bt04', 'trd_bt04'),
-    new PaperMario64SceneDesc('trd_bt05', 'trd_bt05'),
 
     "Mt. Rugged",
     new PaperMario64SceneDesc('iwa_00', 'Mt. Rugged 1'),
@@ -240,8 +240,6 @@ const sceneDescs = [
     new PaperMario64SceneDesc('iwa_04', 'Mt. Rugged Bridge'),
     new PaperMario64SceneDesc('iwa_10', 'Mt. Rugged Station'),
     new PaperMario64SceneDesc('iwa_11', 'Dry Dry Railroad line'),
-    new PaperMario64SceneDesc('iwa_bt01', 'iwa_bt01'),
-    new PaperMario64SceneDesc('iwa_bt02', 'iwa_bt02'),
 
     "Dry Dry Outpost",
     new PaperMario64SceneDesc('dro_01', 'West Dry Dry Outpost'),
@@ -298,7 +296,6 @@ const sceneDescs = [
     new PaperMario64SceneDesc('sbk_64', 'sbk_64'),
     new PaperMario64SceneDesc('sbk_65', 'sbk_65'),
     new PaperMario64SceneDesc('sbk_66', 'sbk_66'),
-    new PaperMario64SceneDesc('sbk_bt02', 'sbk_bt02'),
 
     "Dry Dry Ruins",
     new PaperMario64SceneDesc('isk_01', 'Ruins Entrance'),
@@ -318,14 +315,6 @@ const sceneDescs = [
     new PaperMario64SceneDesc('isk_16', "Tutankoopa's Chamber"),
     new PaperMario64SceneDesc('isk_18', 'Basement Hallway'),
     new PaperMario64SceneDesc('isk_19', 'Save Point Corridor'),
-    new PaperMario64SceneDesc('isk_bt01', 'isk_bt01'),
-    new PaperMario64SceneDesc('isk_bt02', 'isk_bt02'),
-    new PaperMario64SceneDesc('isk_bt03', 'isk_bt03'),
-    new PaperMario64SceneDesc('isk_bt04', 'isk_bt04'),
-    new PaperMario64SceneDesc('isk_bt05', 'isk_bt05'),
-    new PaperMario64SceneDesc('isk_bt06', 'isk_bt06'),
-    new PaperMario64SceneDesc('isk_bt07', 'isk_bt07'),
-    new PaperMario64SceneDesc('isk_bt08', 'isk_bt08'),
 
     "Forever Forest",
     new PaperMario64SceneDesc('mim_10', 'Forever Forest Entrance'),
@@ -338,7 +327,6 @@ const sceneDescs = [
     new PaperMario64SceneDesc('mim_06', 'Forever Forest 7'),
     new PaperMario64SceneDesc('mim_07', 'Forever Forest 8'),
     new PaperMario64SceneDesc('mim_09', 'Forever Forest 9'),
-    new PaperMario64SceneDesc('mim_bt01', 'mim_bt01'),
 
     "Boo's Mansion",
     new PaperMario64SceneDesc('mim_11', "Outside Boo's Mansion"),
@@ -366,12 +354,6 @@ const sceneDescs = [
     new PaperMario64SceneDesc('arn_12', 'Windy Mill Well 2'),
     new PaperMario64SceneDesc('arn_13', 'Windy Mill Well 3'),
     new PaperMario64SceneDesc('arn_11', 'Windy Mill Well Arena'),
-    new PaperMario64SceneDesc('arn_bt01', 'Gusty Gulch Encounter BG'),
-    new PaperMario64SceneDesc('arn_bt02', 'Outside Windy Mill Encounter BG'),
-    new PaperMario64SceneDesc('arn_bt03', '(unused?) Gusty Gulch Encounter BG'),
-    new PaperMario64SceneDesc('arn_bt04', '(unused?) Windy Mill Well Encounter BG'),
-    new PaperMario64SceneDesc('arn_bt05', 'Windy Mill Well Encounter BG'),
-    new PaperMario64SceneDesc('arn_bt06', "Tubba Blubba's Heart Battle BG"),
 
     "Tubba Blubba's Castle",
     new PaperMario64SceneDesc('dgb_01', 'Main Hall'),
@@ -392,11 +374,6 @@ const sceneDescs = [
     new PaperMario64SceneDesc('dgb_16', 'Nap Room'),
     new PaperMario64SceneDesc('dgb_17', 'Save Point Corridor'),
     new PaperMario64SceneDesc('dgb_18', "Tubba Blubba's Room"),
-    new PaperMario64SceneDesc('dgb_bt01', 'dgb_bt01'),
-    new PaperMario64SceneDesc('dgb_bt02', 'dgb_bt02'),
-    new PaperMario64SceneDesc('dgb_bt03', 'dgb_bt03'),
-    new PaperMario64SceneDesc('dgb_bt04', 'dgb_bt04'),
-    new PaperMario64SceneDesc('dgb_bt05', 'dgb_bt05'),
 
     "Shy Guy's Toybox",
     new PaperMario64SceneDesc('omo_03', 'Blue Station'),
@@ -416,13 +393,6 @@ const sceneDescs = [
     new PaperMario64SceneDesc('omo_14', 'Dark Hallway'),
     new PaperMario64SceneDesc('omo_15', "General Guy's Arena"),
     new PaperMario64SceneDesc('omo_16', 'Train Track Cutscene'),
-    new PaperMario64SceneDesc('omo_bt01', 'omo_bt01'),
-    new PaperMario64SceneDesc('omo_bt02', 'omo_bt02'),
-    new PaperMario64SceneDesc('omo_bt03', 'omo_bt03'),
-    new PaperMario64SceneDesc('omo_bt04', 'omo_bt04'),
-    new PaperMario64SceneDesc('omo_bt05', 'omo_bt05'),
-    new PaperMario64SceneDesc('omo_bt06', 'omo_bt06'),
-    new PaperMario64SceneDesc('omo_bt07', 'omo_bt07'),
 
     "Lavalava Island",
     new PaperMario64SceneDesc('kgr_01', 'Whale Entrance'),
@@ -450,12 +420,6 @@ const sceneDescs = [
     new PaperMario64SceneDesc('jan_19', 'Inside the Tree 2'),
     new PaperMario64SceneDesc('jan_23', "Raphael's Nest"),
     new PaperMario64SceneDesc('jan_22', 'Path to Mt. Lavalava'),
-    new PaperMario64SceneDesc('kgr_bt01', 'Fuzzipede Battle BG'),
-    new PaperMario64SceneDesc('jan_bt00', 'jan_bt00'),
-    new PaperMario64SceneDesc('jan_bt01', 'jan_bt01'),
-    new PaperMario64SceneDesc('jan_bt02', 'jan_bt02'),
-    new PaperMario64SceneDesc('jan_bt03', 'jan_bt03'),
-    new PaperMario64SceneDesc('jan_bt04', 'jan_bt04'),
 
     "Mt. Lavalava",
     new PaperMario64SceneDesc('kzn_01', 'Mt. Lavalava Entrance'),
@@ -475,10 +439,6 @@ const sceneDescs = [
     new PaperMario64SceneDesc('kzn_20', 'Escape Sequence 1'),
     new PaperMario64SceneDesc('kzn_22', 'Escape Sequence 2'),
     new PaperMario64SceneDesc('kzn_23', 'Volcano Shaft'),
-    new PaperMario64SceneDesc('kzn_bt01', 'kzn_bt01'),
-    new PaperMario64SceneDesc('kzn_bt02', 'kzn_bt02'),
-    new PaperMario64SceneDesc('kzn_bt04', 'kzn_bt04'),
-    new PaperMario64SceneDesc('kzn_bt05', 'kzn_bt05'),
 
     "Flower Fields",
     new PaperMario64SceneDesc('flo_00', 'Central Flower Fields'),
@@ -501,12 +461,6 @@ const sceneDescs = [
     new PaperMario64SceneDesc('flo_23', 'Path to Hedge Maze'),
     new PaperMario64SceneDesc('flo_24', 'Bubble Tree Room'),
     new PaperMario64SceneDesc('flo_25', "Path to Posie's Room"),
-    new PaperMario64SceneDesc('flo_bt01', 'flo_bt01'),
-    new PaperMario64SceneDesc('flo_bt02', 'flo_bt02'),
-    new PaperMario64SceneDesc('flo_bt03', 'flo_bt03'),
-    new PaperMario64SceneDesc('flo_bt04', 'flo_bt04'),
-    new PaperMario64SceneDesc('flo_bt05', 'flo_bt05'),
-    new PaperMario64SceneDesc('flo_bt06', 'flo_bt06'),
 
     "Shiver City",
     new PaperMario64SceneDesc('sam_01', 'West Shiver City'),
@@ -521,10 +475,6 @@ const sceneDescs = [
     new PaperMario64SceneDesc('sam_09', 'Shiver Mountain 3'),
     new PaperMario64SceneDesc('sam_10', 'Shiver Mountain 4'),
     new PaperMario64SceneDesc('sam_12', "Madam Merlar's Chamber"),
-    new PaperMario64SceneDesc('sam_bt01', 'sam_bt01'),
-    new PaperMario64SceneDesc('sam_bt02', 'sam_bt02'),
-    new PaperMario64SceneDesc('sam_bt03', 'sam_bt03'),
-    new PaperMario64SceneDesc('sam_bt04', 'sam_bt04'),
 
     "Crystal Palace",
     new PaperMario64SceneDesc('pra_01', 'Crystal Palace Entrance'),
@@ -551,10 +501,6 @@ const sceneDescs = [
     new PaperMario64SceneDesc('pra_31', 'Albino Dino Room'),
     new PaperMario64SceneDesc('pra_40', 'Save Point Corridor'),
     new PaperMario64SceneDesc('pra_32', 'Crystal King Arena'),
-    new PaperMario64SceneDesc('pra_bt01', 'pra_bt01'),
-    new PaperMario64SceneDesc('pra_bt02', 'pra_bt02'),
-    new PaperMario64SceneDesc('pra_bt03', 'pra_bt03'),
-    new PaperMario64SceneDesc('pra_bt04', 'pra_bt04'),
 
     "Bowser's Castle",
     new PaperMario64SceneDesc('kpa_63', "Bowser's Castle Hangar"),
@@ -581,7 +527,7 @@ const sceneDescs = [
     new PaperMario64SceneDesc('kpa_50', 'Castle Hallway'),
     new PaperMario64SceneDesc('kpa_52', 'Room Before Loop Room'),
     new PaperMario64SceneDesc('kpa_61', 'Outside Walkway'),
-    new PaperMario64SceneDesc('kpa_80', 'Bowser Door Room'),
+    // new PaperMario64SceneDesc('kpa_80', 'Bowser Door Room'),
     new PaperMario64SceneDesc('kpa_90', 'Stairs to Toad House (Right)'),
     new PaperMario64SceneDesc('kpa_91', 'Castle Toad House (Right)'),
     new PaperMario64SceneDesc('kpa_94', 'Stairs to Toad House (Left)'),
@@ -600,17 +546,6 @@ const sceneDescs = [
     new PaperMario64SceneDesc('kpa_130', 'B. Bill Blaster Room'),
     new PaperMario64SceneDesc('kpa_133', 'Water Puzzle (Right)'),
     new PaperMario64SceneDesc('kpa_134', 'Water Puzzle (Left)'),
-    new PaperMario64SceneDesc('kpa_bt01', 'kpa_bt01'),
-    new PaperMario64SceneDesc('kpa_bt02', 'kpa_bt02'),
-    new PaperMario64SceneDesc('kpa_bt03', 'kpa_bt03'),
-    new PaperMario64SceneDesc('kpa_bt04', 'kpa_bt04'),
-    new PaperMario64SceneDesc('kpa_bt05', 'kpa_bt05'),
-    new PaperMario64SceneDesc('kpa_bt07', 'kpa_bt07'),
-    new PaperMario64SceneDesc('kpa_bt08', 'kpa_bt08'),
-    new PaperMario64SceneDesc('kpa_bt09', 'kpa_bt09'),
-    new PaperMario64SceneDesc('kpa_bt11', 'kpa_bt11'),
-    new PaperMario64SceneDesc('kpa_bt13', 'kpa_bt13'),
-    new PaperMario64SceneDesc('kpa_bt14', 'kpa_bt14'),
     
     "System & Debug Maps",
     new PaperMario64SceneDesc('machi',  'machi'),

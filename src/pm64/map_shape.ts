@@ -2,7 +2,7 @@
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { AABB } from "../Geometry";
 import { mat4 } from "gl-matrix";
-import { assert, readString, hexzero, hexdump } from "../util";
+import { assert, readString } from "../util";
 import { runDL_F3DEX2, RSPState, RSPOutput } from "./f3dex2";
 
 // Implementation of the PM64 "shape" format.
@@ -24,6 +24,7 @@ const enum InternalType {
 interface ModelTreeNodeBase {
     internalType: InternalType;
     name: string;
+    id: number;
     bbox: AABB;
 }
 
@@ -69,6 +70,7 @@ export function parse(buffer: ArrayBufferSlice): MapShapeBinary {
     const zoneNameTableOffs = view.getUint32(0x10) - ramAddrBase;
 
     let modelNameTableIdx = modelNameTableOffs;
+    let modelId = 0;
     function readNextModelName(): string {
         const addr = view.getUint32(modelNameTableIdx + 0x00);
         const name = readString(buffer, addr - ramAddrBase, 0x30, true);
@@ -181,6 +183,7 @@ export function parse(buffer: ArrayBufferSlice): MapShapeBinary {
                 type: 'leaf',
                 internalType,
                 name,
+                id: modelId++,
                 bbox,
                 texEnvName,
                 properties,
@@ -233,6 +236,7 @@ export function parse(buffer: ArrayBufferSlice): MapShapeBinary {
                 type: 'group',
                 internalType,
                 name,
+                id: modelId++,
                 bbox,
                 children,
                 modelMatrix,
