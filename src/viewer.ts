@@ -53,10 +53,10 @@ export class Viewer {
     public sceneTime: number = 0;
     // requestAnimationFrame time. Used to calculate dt from the new time.
     public rafTime: number = 0;
+    public sceneTimeScale: number = 1;
 
     public gfxDevice: GfxDevice;
     public viewerRenderInput: ViewerRenderInput;
-    public isSceneTimeRunning = true;
     public renderStatisticsTracker = new RenderStatisticsTracker();
 
     public scene: SceneGfx | null = null;
@@ -68,6 +68,7 @@ export class Viewer {
 
     constructor(private gfxSwapChain: GfxSwapChain, public canvas: HTMLCanvasElement) {
         this.inputManager = new InputManager(this.canvas);
+        this.rafTime = window.performance.now();
 
         // GfxDevice.
         this.gfxDevice = this.gfxSwapChain.getDevice();
@@ -162,6 +163,8 @@ export class Viewer {
 
     public update(nt: number): void {
         const dt = nt - this.rafTime;
+        if (dt < 0)
+            return;
         this.rafTime = nt;
 
         if (this.cameraController) {
@@ -173,8 +176,7 @@ export class Viewer {
         // TODO(jstpierre): Move this to main
         this.inputManager.afterFrame();
 
-        if (this.isSceneTimeRunning)
-            this.sceneTime += dt;
+        this.sceneTime += dt * this.sceneTimeScale;
 
         this.render();
     }

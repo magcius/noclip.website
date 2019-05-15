@@ -199,6 +199,8 @@ class Main {
 
     private sceneLoader: SceneLoader;
 
+    private isSceneTimeRunning: boolean = true;
+
     constructor() {
         this.toplevel = document.createElement('div');
         document.body.appendChild(this.toplevel);
@@ -275,7 +277,7 @@ class Main {
             this.ui.sceneSelect.setExpanded(true);
         }
 
-        this._updateLoop(0);
+        this._updateLoop(window.performance.now());
 
         if (!IS_DEVELOPMENT) {
             Sentry.init({
@@ -326,7 +328,7 @@ class Main {
         if (inputManager.isKeyDownEventTriggered('Numpad3'))
             this._exportSaveData();
         if (inputManager.isKeyDownEventTriggered('Period'))
-            this.viewer.isSceneTimeRunning = !this.viewer.isSceneTimeRunning;
+            this.isSceneTimeRunning = !this.isSceneTimeRunning;
         if (inputManager.isKeyDownEventTriggered('Comma'))
             this.viewer.sceneTime = 0;
     }
@@ -337,10 +339,17 @@ class Main {
         // Needs to be called before this.viewer.update
         const shouldTakeScreenshot = this.viewer.inputManager.isKeyDownEventTriggered('Numpad7');
 
+        let sceneTimeScale = this.ui.timePanel.getTimeScale();
+        if (!this.isSceneTimeRunning)
+            sceneTimeScale = 0;
+
+        this.viewer.sceneTimeScale = sceneTimeScale;
         this.viewer.update(time);
 
         if (shouldTakeScreenshot)
             this._takeScreenshot();
+
+        this.ui.timePanel.update(this.viewer.sceneTime, 1.0);
 
         window.requestAnimationFrame(this._updateLoop);
     };
@@ -595,6 +604,9 @@ class Main {
         this.ui.sceneSelect.onscenedescselected = this._onSceneDescSelected.bind(this);
         this.ui.saveStatesPanel.onsavestatesaction = (action: SaveStatesAction, key: string) => {
             this.doSaveStatesAction(action, key);
+        };
+        this.ui.timePanel.ontimescrub = (adj: number) => {
+            this.viewer.sceneTime = Math.max(this.viewer.sceneTime + adj, 0);
         };
 
         this.dragHighlight = document.createElement('div');

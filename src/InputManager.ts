@@ -1,5 +1,6 @@
 
 import { SaveManager, GlobalSaveManager } from "./SaveManager";
+import { GlobalGrabManager } from './GrabManager';
 
 declare global {
     interface HTMLElement {
@@ -36,9 +37,6 @@ export default class InputManager {
     public dy: number;
     public dz: number;
     public button: number;
-    private lastX: number;
-    private lastY: number;
-    public grabbing: boolean = false;
     public onisdraggingchanged: (() => void) | null = null;
     private listeners: Listener[] = [];
     private scrollListeners: Listener[] = [];
@@ -56,7 +54,11 @@ export default class InputManager {
         document.addEventListener('keyup', this._onKeyUp, { capture: true });
         window.addEventListener('blur', this._onBlur);
         this.toplevel.addEventListener('wheel', this._onWheel, { passive: false });
-        this.toplevel.addEventListener('mousedown', this._onMouseDown);
+        this.toplevel.addEventListener('mousedown', (e) => {
+            GlobalGrabManager.takeGrab(this, e, { takePointerLock: this.usePointerLock });
+            if (this.onisdraggingchanged !== null)
+                this.onisdraggingchanged();
+        });
 
         this.afterFrame();
 
@@ -94,7 +96,7 @@ export default class InputManager {
     }
 
     public isDragging(): boolean {
-        return this.grabbing;
+        return GlobalGrabManager.hasGrabListener(this);
     }
 
     public afterFrame() {
@@ -153,60 +155,13 @@ export default class InputManager {
         this.callScrollListeners();
     };
 
-    private _setGrabbing(v: boolean) {
-        if (this.grabbing === v)
-            return;
+    public onMotion = (dx: number, dy: number): void => {
+        this.dx = dx;
+        this.dy = dy;
+    };
 
-        this.grabbing = v;
-        this.toplevel.style.cursor = v ? '-webkit-grabbing' : '-webkit-grab';
-        this.toplevel.style.cursor = v ? 'grabbing' : 'grab';
-
-        if (v) {
-            document.addEventListener('mousemove', this._onMouseMove);
-            document.addEventListener('mouseup', this._onMouseUp);
-        } else {
-            document.removeEventListener('mousemove', this._onMouseMove);
-            document.removeEventListener('mouseup', this._onMouseUp);
-        }
-
-        if (this.onisdraggingchanged)
+    public onGrabReleased = (): void => {
+        if (this.onisdraggingchanged !== null)
             this.onisdraggingchanged();
-    }
-
-    private _onMouseMove = (e: MouseEvent) => {
-        if (!this.grabbing)
-            return;
-        let dx: number, dy: number;
-        if (e.movementX !== undefined) {
-            dx = e.movementX;
-            dy = e.movementY;
-        } else {
-            dx = e.pageX - this.lastX;
-            dy = e.pageY - this.lastY;
-            this.lastX = e.pageX;
-            this.lastY = e.pageY;
-        }
-        this.dx += dx;
-        this.dy += dy;
-    };
-
-    private _onMouseUp = (e: MouseEvent) => {
-        this._setGrabbing(false);
-        this.button = 0;
-        if (document.exitPointerLock !== undefined)
-            document.exitPointerLock();
-    };
-
-    private _onMouseDown = (e: MouseEvent) => {
-        this.button = e.button;
-        this.lastX = e.pageX;
-        this.lastY = e.pageY;
-        this._setGrabbing(true);
-        // Needed to make the cursor update in Chrome. See:
-        // https://bugs.chromium.org/p/chromium/issues/detail?id=676644
-        this.toplevel.focus();
-        e.preventDefault();
-        if (this.usePointerLock && this.toplevel.requestPointerLock !== undefined)
-            this.toplevel.requestPointerLock();
     };
 }

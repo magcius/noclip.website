@@ -10,6 +10,7 @@ import { GITHUB_REVISION_URL, GITHUB_URL, GIT_SHORT_REVISION } from './BuildVers
 import { SaveManager, GlobalSaveManager, SaveStateLocation } from "./SaveManager";
 import { RenderStatistics } from './RenderStatistics';
 import InputManager from './InputManager';
+import { GlobalGrabManager } from './GrabManager';
 
 // @ts-ignore
 import logoURL from './logo.png';
@@ -1789,34 +1790,150 @@ export class LayerPanel extends Panel {
     }
 }
 
-class TimeScrub implements Widget {
+declare global {
+    interface CSSStyleDeclaration {
+        imageRendering: string;
+    }
+}
+
+class TimeScrubber implements Widget {
+    private pixelsPerSecond: number = 16;
     private toplevel: HTMLElement;
+    private track: HTMLCanvasElement;
+    private marker: HTMLElement;
 
     public elem: HTMLElement;
+    public ontimescrub: ((adj: number) => void) | null = null;
 
     constructor() {
         this.toplevel = document.createElement('div');
         this.toplevel.style.display = 'block';
         this.toplevel.style.height = '2em';
         this.toplevel.style.cursor = 'grab';
-        this.toplevel.style.backgroundColor = 'white';
-        this.toplevel.style.backgroundImage = CHECKERBOARD_IMAGE;
+        this.toplevel.style.position = 'relative';
+        this.toplevel.addEventListener('mousedown', (e) => {
+            GlobalGrabManager.takeGrab(this, e, { takePointerLock: false });
+        });
+
+        this.track = document.createElement('canvas');
+        this.track.style.position = 'absolute';
+        this.track.style.left = '0';
+        this.track.style.top = '0';
+        this.track.style.right = '0';
+        this.track.style.bottom = '0';
+        this.track.style.imageRendering = 'crisp-edges';
+        this.toplevel.appendChild(this.track);
+
+        this.marker = document.createElement('div');
+        this.marker.style.position = 'absolute';
+        this.marker.style.left = '50%';
+        this.marker.style.top = '0';
+        this.marker.style.bottom = '0';
+        this.marker.style.marginLeft = '-5px';
+        this.marker.style.backgroundColor = 'rgba(255, 255, 255, 0.6)';
+        this.marker.style.width = '10px';
+        this.marker.style.clipPath = `polygon(0% 0%, 50% 15%, 50% 85%, 0% 100%, 100% 100%, 50% 85%, 50% 15%, 100% 0%)`;
+        this.toplevel.append(this.marker);
 
         this.elem = this.toplevel;
+    }
+
+    public onMotion(dx: number, dy: number): void {
+        const timeAdjustSeconds = -dx / this.pixelsPerSecond;
+        const timeAdjust = timeAdjustSeconds * 1000;
+
+        if (this.ontimescrub !== null)
+            this.ontimescrub(timeAdjust);
+    }
+
+    public onGrabReleased(): void {
+        // No need to do much.
+    }
+
+    public isScrubbing(): boolean {
+        return GlobalGrabManager.hasGrabListener(this);
+    }
+
+    public update(sceneTime: number, timeScale: number): void {
+        this.drawTrack(sceneTime);
+    }
+
+    protected drawTrack(sceneTime: number): void {
+        const w = this.toplevel.offsetWidth;
+        const h = this.toplevel.offsetHeight;
+        this.track.width = w;
+        this.track.height = h;
+
+        const ctx = this.track.getContext('2d');
+
+        // sceneTime is in milliseconds.
+        const sceneTimeSeconds = sceneTime / 1000;
+
+        const rad = (w / this.pixelsPerSecond) / 2;
+        // Iterate over all the seconds in this track.
+        const windowTimeLeft = Math.max(sceneTimeSeconds - rad, 0);
+        const windowTimeRight = sceneTimeSeconds + rad;
+
+        for (let t = (windowTimeLeft | 0); t < ((windowTimeRight + 1) | 0); t++) {
+            // Draw notch at time t.
+            const notchX = w/2 + (t - sceneTimeSeconds) * this.pixelsPerSecond;
+
+            if ((t % 5) === 0) {
+                const notchH = 6;
+                ctx.beginPath();
+                ctx.moveTo(notchX, 0);
+                ctx.lineTo(notchX, notchH);
+                ctx.moveTo(notchX, h-notchH);
+                ctx.lineTo(notchX, h);
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = HIGHLIGHT_COLOR;
+                ctx.stroke();
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                const label = '' + (t % 1000);
+                ctx.font = '10pt monospace';
+                ctx.fillStyle = '#aaa';
+                ctx.fillText(label, notchX, h/2);
+            } else {
+                const notchH = 2;
+                ctx.beginPath();
+                ctx.moveTo(notchX, 0);
+                ctx.lineTo(notchX, notchH);
+                ctx.moveTo(notchX, h-notchH);
+                ctx.lineTo(notchX, h);
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = 'rgb(210, 30, 30, 0.8)';
+                ctx.stroke();
+            }
+        }
     }
 }
 
 export class TimePanel extends Panel {
-    private timeElement = new TimeScrub();
+    private scrubber: TimeScrubber;
+    public ontimescrub: ((adj: number) => void) | null = null;
 
     constructor() {
         super();
-        this.setTitle(TIME_OF_DAY_ICON, 'Time');
+        this.setTitle(SAND_CLOCK_ICON, 'Time');
 
-        this.contents.appendChild(this.timeElement.elem);
+        this.scrubber = new TimeScrubber();
+        this.scrubber.ontimescrub = (adj: number) => {
+            if (this.ontimescrub !== null)
+                this.ontimescrub(adj);
+        };
+        this.contents.appendChild(this.scrubber.elem);
     }
 
-    public setTimeSettings(sceneTime: number, timeScale: number): void {
+    public getTimeScale(): number {
+        if (this.scrubber.isScrubbing())
+            return 0;
+
+        return 1;
+    }
+
+    public update(sceneTime: number, timeScale: number): void {
+        this.scrubber.update(sceneTime, timeScale);
     }
 }
 
@@ -1896,7 +2013,7 @@ export class UI {
             let panels: Panel[] = [];
             if (scene.createPanels !== undefined)
                 panels = scene.createPanels();
-            this.setPanels([this.sceneSelect, ...panels, this.textureViewer, /* this.timePanel, */ this.saveStatesPanel, this.viewerSettings, this.statisticsPanel, this.about]);
+            this.setPanels([this.sceneSelect, ...panels, this.textureViewer, this.timePanel, this.saveStatesPanel, this.viewerSettings, this.statisticsPanel, this.about]);
         } else {
             this.setPanels([this.sceneSelect, this.about]);
         }
