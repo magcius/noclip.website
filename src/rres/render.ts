@@ -82,7 +82,7 @@ class ShapeInstance {
     }
 
     public prepareToRender(renderHelper: GXRenderHelperGfx, depth: number, viewerInput: ViewerRenderInput, matrixArray: mat4[], matrixVisibility: IntersectionState[], isSkybox: boolean): void {
-        const visible = this.visible && this.node.visible && depth >= 0;
+        const visible = this.visible && depth >= 0;
 
         packetParams.clear();
         for (let p = 0; p < this.shape.loadedVertexData.packets.length; p++) {
@@ -340,7 +340,8 @@ const scratchVec3b = vec3.create();
 export class MDL0ModelInstance {
     private shapeInstances: ShapeInstance[] = [];
     private materialInstances: MaterialInstance[] = [];
-    private chr0NodeAnimator: BRRES.CHR0NodesAnimator;
+    private chr0NodeAnimator: BRRES.CHR0NodesAnimator | null = null;
+    private vis0NodeAnimator: BRRES.VIS0NodesAnimator | null = null;
 
     private matrixVisibility: IntersectionState[] = [];
     private matrixArray: mat4[] = [];
@@ -391,6 +392,10 @@ export class MDL0ModelInstance {
         this.chr0NodeAnimator = BRRES.bindCHR0Animator(animationController, chr0, this.mdl0Model.mdl0.nodes);
     }
 
+    public bindVIS0(animationController: AnimationController, vis0: BRRES.VIS0): void {
+        this.vis0NodeAnimator = BRRES.bindVIS0Animator(animationController, vis0, this.mdl0Model.mdl0.nodes);
+    }
+
     /**
      * Binds {@param srt0} (texture animations) to this model instance.
      *
@@ -437,6 +442,10 @@ export class MDL0ModelInstance {
         for (let i = 0; i < rres.pat0.length; i++)
             if (rres.pat0[i].name === name || name === null)
                 this.bindPAT0(animationController, rres.pat0[i]);
+
+        for (let i = 0; i < rres.vis0.length; i++)
+            if (rres.vis0[i].name === name || name === null)
+                this.bindVIS0(animationController, rres.vis0[i]);
     }
 
     public setColorOverride(i: ColorKind, color: GX_Material.Color): void {
@@ -499,8 +508,12 @@ export class MDL0ModelInstance {
             }
         }
 
-        for (let i = 0; i < this.shapeInstances.length; i++)
-            this.shapeInstances[i].prepareToRender(renderHelper, depth, viewerInput, this.matrixArray, this.matrixVisibility, this.isSkybox);
+        for (let i = 0; i < this.shapeInstances.length; i++) {
+            const shapeInstance = this.shapeInstances[i];
+            const shapeVisibility = (this.vis0NodeAnimator !== null ? this.vis0NodeAnimator.calcVisibility(shapeInstance.node.id) : shapeInstance.node.visible);
+            const shapeDepth = shapeVisibility ? depth : -1;
+            shapeInstance.prepareToRender(renderHelper, shapeDepth, viewerInput, this.matrixArray, this.matrixVisibility, this.isSkybox);
+        }
     }
 
     public destroy(device: GfxDevice): void {
@@ -551,7 +564,7 @@ export class MDL0ModelInstance {
                 const dstMtxId = node.mtxId;
     
                 let modelMatrix;
-                if (this.chr0NodeAnimator && this.chr0NodeAnimator.calcModelMtx(this.matrixScratch, op.nodeId)) {
+                if (this.chr0NodeAnimator !== null && this.chr0NodeAnimator.calcModelMtx(this.matrixScratch, op.nodeId)) {
                     modelMatrix = this.matrixScratch;
                 } else {
                     modelMatrix = node.modelMatrix;

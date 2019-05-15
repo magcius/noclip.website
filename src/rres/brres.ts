@@ -2580,6 +2580,129 @@ export function bindCHR0Animator(animationController: AnimationController, chr0:
 }
 //#endregion
 
+//#region VIS0
+export interface VIS0_NodeData {
+    nodeName: string;
+    nodeVisibility: boolean[];
+}
+
+function parseVIS0_NodeData(buffer: ArrayBufferSlice, duration: number): VIS0_NodeData {
+    const enum Flags {
+        CONSTANT_VALUE = 0x01,
+        IS_CONSTANT = 0x02,
+    };
+
+    const view = buffer.createDataView();
+    const nodeNameOffs = view.getUint32(0x00);
+    const nodeName = readString(buffer, nodeNameOffs);
+    const flags: Flags = view.getUint32(0x04);
+
+    if (!!(flags & Flags.IS_CONSTANT)) {
+        const isVisible = !!(flags & Flags.CONSTANT_VALUE);
+        const frames: boolean[] = [isVisible];
+        return { nodeName, nodeVisibility: frames };
+    } else {
+        const frames: boolean[] = [];
+
+        let trackIdx = 0x08;
+        let i = 0;
+        outer:
+        while (true) {
+            let word = view.getUint32(trackIdx);
+
+            for (let j = 0; j < 32; j++) {
+                const visible = !!(word & 0x80000000);
+                frames.push(visible);
+                word <<= 1;
+
+                if (i++ > duration)
+                    break outer;
+            }
+
+            trackIdx += 0x04;
+        }
+
+        return { nodeName, nodeVisibility: frames };
+    }
+}
+
+export interface VIS0 extends AnimationBase {
+    nodeAnimations: VIS0_NodeData[];
+}
+
+function parseVIS0(buffer: ArrayBufferSlice): VIS0 {
+    const view = buffer.createDataView();
+
+    assert(readString(buffer, 0x00, 0x04) === 'VIS0');
+    const version = view.getUint32(0x08);
+    const supportedVersions = [0x03, 0x04];
+    assert(supportedVersions.includes(version));
+
+    const visNodeDataResDicOffs = view.getUint32(0x10);
+    const visNodeDataResDic = parseResDic(buffer, visNodeDataResDicOffs);
+
+    let offs = 0x14;
+    if (version >= 0x04) {
+        // user data
+        offs += 0x04;
+    }
+
+    const nameOffs = view.getUint32(offs + 0x00);
+    const name = readString(buffer, nameOffs);
+    const duration = view.getUint16(offs + 0x08);
+    const numNodes = view.getUint16(offs + 0x0A);
+    const loopMode: LoopMode = view.getUint32(offs + 0x0C);
+
+    const nodeAnimations: VIS0_NodeData[] = [];
+    for (const visNodeEntry of visNodeDataResDic) {
+        const nodeData = parseVIS0_NodeData(buffer.slice(visNodeEntry.offs), duration);
+        nodeAnimations.push(nodeData);
+    }
+    assert(nodeAnimations.length === numNodes);
+
+    return { name, loopMode, duration, nodeAnimations };
+}
+
+export class VIS0NodesAnimator { 
+    constructor(public animationController: AnimationController, public vis0: VIS0, private nodeData: VIS0_NodeData[]) {
+    }
+
+    public calcVisibility(nodeId: number): boolean | null {
+        const nodeData = this.nodeData[nodeId];
+        if (!nodeData)
+            return null;
+
+        // Constant tracks are of length 1.
+        if (nodeData.nodeVisibility.length === 1)
+            return nodeData.nodeVisibility[0];
+
+        const frame = this.animationController.getTimeInFrames();
+        const animFrame = getAnimFrame(this.vis0, frame);
+
+        // animFrame can return a partial keyframe, but visibility information is frame-specific.
+        // Resolve this by treating this as a stepped track, floored. e.g. 15.9 is keyframe 15.
+
+        return nodeData.nodeVisibility[(animFrame | 0)];
+    }
+}
+
+export function bindVIS0Animator(animationController: AnimationController, vis0: VIS0, nodes: MDL0_NodeEntry[]): VIS0NodesAnimator | null {
+    const nodeData: VIS0_NodeData[] = [];
+    for (const nodeAnimation of vis0.nodeAnimations) {
+        const node = nodes.find((node) => node.name === nodeAnimation.nodeName);
+        if (!node)
+            continue;
+        nodeData[node.id] = nodeAnimation;
+    }
+
+    // No nodes found.
+    if (nodeData.length === 0)
+        return null;
+
+    return new VIS0NodesAnimator(animationController, vis0, nodeData);
+}
+//#endregion
+
 //#region RRES
 export interface RRES {
     plt0: PLT0[];
@@ -2589,6 +2712,7 @@ export interface RRES {
     pat0: PAT0[];
     clr0: CLR0[];
     chr0: CHR0[];
+    vis0: VIS0[];
 }
 
 export function parse(buffer: ArrayBufferSlice): RRES {
@@ -2712,6 +2836,18 @@ export function parse(buffer: ArrayBufferSlice): RRES {
         }
     }
 
-    return { plt0, tex0, mdl0, srt0, pat0, clr0, chr0 };
+    // Visibility Animations
+    const vis0: VIS0[] = [];
+    const animVisEntry = rootResDic.find((entry) => entry.name === 'AnmVis(NW4R)');
+    if (animVisEntry) {
+        const animVisResDic = parseResDic(buffer, animVisEntry.offs);
+        for (const vis0Entry of animVisResDic) {
+            const vis0_ = parseVIS0(buffer.subarray(vis0Entry.offs));
+            assert(vis0_.name === vis0Entry.name);
+            vis0.push(vis0_);
+        }
+    }
+
+    return { plt0, tex0, mdl0, srt0, pat0, clr0, chr0, vis0 };
 }
 //#endregion

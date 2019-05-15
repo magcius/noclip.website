@@ -53,6 +53,7 @@ import * as KLONOA from './rres/klonoa_scenes';
 import * as KATAMARI_DAMACY from './katamari_damacy/scenes';
 import * as PM64 from './pm64/scenes';
 import * as OKAMI from './okami/scenes';
+import * as SSBB from './rres/ssbb_scenes';
 
 import { UI, SaveStatesAction } from './ui';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera';
@@ -118,6 +119,7 @@ const sceneGroups = [
     THUG2.sceneGroup,
     SONIC_COLORS.sceneGroup,
     OKAMI.sceneGroup,
+    SSBB.sceneGroup,
 ];
 
 function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
