@@ -1789,6 +1789,37 @@ export class LayerPanel extends Panel {
     }
 }
 
+class TimeScrub implements Widget {
+    private toplevel: HTMLElement;
+
+    public elem: HTMLElement;
+
+    constructor() {
+        this.toplevel = document.createElement('div');
+        this.toplevel.style.display = 'block';
+        this.toplevel.style.height = '2em';
+        this.toplevel.style.cursor = 'grab';
+        this.toplevel.style.backgroundColor = 'white';
+        this.toplevel.style.backgroundImage = CHECKERBOARD_IMAGE;
+
+        this.elem = this.toplevel;
+    }
+}
+
+export class TimePanel extends Panel {
+    private timeElement = new TimeScrub();
+
+    constructor() {
+        super();
+        this.setTitle(TIME_OF_DAY_ICON, 'Time');
+
+        this.contents.appendChild(this.timeElement.elem);
+    }
+
+    public setTimeSettings(sceneTime: number, timeScale: number): void {
+    }
+}
+
 export class UI {
     public elem: HTMLElement;
 
@@ -1800,6 +1831,7 @@ export class UI {
     public textureViewer: TextureViewer;
     public viewerSettings: ViewerSettings;
     public statisticsPanel: StatisticsPanel;
+    public timePanel: TimePanel;
     public panels: Panel[];
     private about: About;
 
@@ -1832,6 +1864,7 @@ export class UI {
         this.textureViewer = new TextureViewer();
         this.viewerSettings = new ViewerSettings(viewer);
         this.statisticsPanel = new StatisticsPanel(viewer);
+        this.timePanel = new TimePanel();
         this.about = new About();
 
         this.setScene(null);
@@ -1863,7 +1896,7 @@ export class UI {
             let panels: Panel[] = [];
             if (scene.createPanels !== undefined)
                 panels = scene.createPanels();
-            this.setPanels([this.sceneSelect, ...panels, this.textureViewer, this.saveStatesPanel, this.viewerSettings, this.statisticsPanel, this.about]);
+            this.setPanels([this.sceneSelect, ...panels, this.textureViewer, /* this.timePanel, */ this.saveStatesPanel, this.viewerSettings, this.statisticsPanel, this.about]);
         } else {
             this.setPanels([this.sceneSelect, this.about]);
         }
