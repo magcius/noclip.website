@@ -71,7 +71,8 @@ class BrawlRenderer extends BasicRendererHelper {
         for (let i = 0; i < stageRRESes.length; i++) {
             const stageRRES = stageRRESes[i];
             textureHolder.addRRESTextures(device, stageRRES);
-            assert(stageRRES.mdl0.length >= 1);
+            if (stageRRES.mdl0.length === 0)
+                continue;
 
             const model = new MDL0Model(device, this.renderHelper, stageRRES.mdl0[0], materialHacks);
             this.models.push(model);
@@ -123,6 +124,8 @@ class BrawlSceneDesc implements Viewer.SceneDesc {
 
     public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         return fetchData(`ssbb/stage/${this.id}`, abortSignal).then((buffer: ArrayBufferSlice) => {
+            const textureHolder = new RRESTextureHolder();
+
             const arc = parseARC(buffer);
             assert(arc.files.length >= 2);
 
@@ -130,15 +133,16 @@ class BrawlSceneDesc implements Viewer.SceneDesc {
             const stageARC = parseARC(CX.decompress(arc.files[1].data));
 
             // Look for the texture archive, and load that.
-            const textureHolder = new RRESTextureHolder();
-            const textureData = stageARC.files.find((arc) => arc.fileType === 0x03).data;
-            const textureRRES = BRRES.parse(textureData);
-            textureHolder.addRRESTextures(device, textureRRES);
+            const textureFile = stageARC.files.find((arc) => arc.fileType === 0x03);
+            if (textureFile !== undefined) {
+                const textureRRES = BRRES.parse(textureFile.data);
+                textureHolder.addRRESTextures(device, textureRRES);
+            }
 
             // Now look for the models.
             const stageRRESes = stageARC.files.filter((file) => file.fileType === 0x02).map((file) => {
                 return BRRES.parse(file.data);
-            })
+            });
             console.log(stageARC, stageRRESes);
 
             return new BrawlRenderer(device, stageRRESes, textureHolder);

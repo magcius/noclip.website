@@ -2039,7 +2039,7 @@ function parsePAT0(buffer: ArrayBufferSlice): PAT0 {
 
     assert(readString(buffer, 0x00, 0x04) === 'PAT0');
     const version = view.getUint32(0x08);
-    const supportedVersions = [0x04];
+    const supportedVersions = [0x03, 0x04];
     assert(supportedVersions.includes(version));
 
     const texPatMatDataResDicOffs = view.getUint32(0x10);
