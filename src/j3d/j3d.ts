@@ -16,6 +16,7 @@ import { AABB } from '../Geometry';
 import { getPointHermite } from '../Spline';
 import { Graph, cv } from '../DebugJunk';
 import { computeModelMatrixSRT } from '../MathHelpers';
+import BitMap from '../BitMap';
 
 //#region Helpers
 function readStringTable(buffer: ArrayBufferSlice, offs: number): string[] {
@@ -1942,9 +1943,8 @@ export class BTP {
 //#region J3DAnmVisibilityFull
 //#region VAF1
 
-// TODO(jstpierre): Add a more memory efficient version than this?
 export interface ShapeVisibilityEntry {
-    shapeVisibility: boolean[];
+    shapeVisibility: BitMap;
 }
 
 export interface VAF1 extends AnimationBase {
@@ -1967,10 +1967,10 @@ function readVAF1Chunk(buffer: ArrayBufferSlice): VAF1 {
         const showFirstIndex = view.getUint16(animationTableIdx + 0x00);
         const showCount = view.getUint16(animationTableIdx + 0x02);
 
-        const shapeVisibility: boolean[] = [];
+        const shapeVisibility = new BitMap(showCount);
         for (let j = 0; j < showCount; j++) {
             const show = !!view.getUint8(showTableOffs + showFirstIndex + j);
-            shapeVisibility.push(show);
+            shapeVisibility.setBit(j, show);
         }
 
         shapeVisibilityEntries.push({ shapeVisibility });
@@ -1987,7 +1987,7 @@ export class VAF1Animator {
         const entry = assertExists(this.vaf1.visibilityAnimationTracks[shapeIndex]);
 
         // Empty tracks are visible by default.
-        if (entry.shapeVisibility.length === 0)
+        if (entry.shapeVisibility.numBits === 0)
             return true;
 
         const frame = this.animationController.getTimeInFrames();
@@ -1996,7 +1996,7 @@ export class VAF1Animator {
         // animFrame can return a partial keyframe, but visibility information is frame-specific.
         // Resolve this by treating this as a stepped track, floored. e.g. 15.9 is keyframe 15.
 
-        return entry.shapeVisibility[(animFrame | 0)];
+        return entry.shapeVisibility.getBit(animFrame | 0);
     }
 }
 

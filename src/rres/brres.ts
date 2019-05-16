@@ -19,6 +19,7 @@ import { getFormatCompFlagsComponentCount } from '../gfx/platform/GfxPlatformFor
 import { getPointHermite } from '../Spline';
 import { colorToRGBA8, colorFromRGBA8 } from '../Color';
 import { computeModelMatrixSRT, MathConstants } from '../MathHelpers';
+import BitMap from '../BitMap';
 
 //#region Utility
 function calc2dMtx(dst: mat2d, src: mat4): void {
@@ -2583,7 +2584,7 @@ export function bindCHR0Animator(animationController: AnimationController, chr0:
 //#region VIS0
 export interface VIS0_NodeData {
     nodeName: string;
-    nodeVisibility: boolean[];
+    nodeVisibility: BitMap;
 }
 
 function parseVIS0_NodeData(buffer: ArrayBufferSlice, duration: number): VIS0_NodeData {
@@ -2599,30 +2600,20 @@ function parseVIS0_NodeData(buffer: ArrayBufferSlice, duration: number): VIS0_No
 
     if (!!(flags & Flags.IS_CONSTANT)) {
         const isVisible = !!(flags & Flags.CONSTANT_VALUE);
-        const frames: boolean[] = [isVisible];
-        return { nodeName, nodeVisibility: frames };
+        const nodeVisibility = new BitMap(1);
+        nodeVisibility.setBit(0, isVisible);
+        return { nodeName, nodeVisibility };
     } else {
-        const frames: boolean[] = [];
+        const nodeVisibility = new BitMap(duration);
 
         let trackIdx = 0x08;
-        let i = 0;
-        outer:
-        while (true) {
-            let word = view.getUint32(trackIdx);
-
-            for (let j = 0; j < 32; j++) {
-                const visible = !!(word & 0x80000000);
-                frames.push(visible);
-                word <<= 1;
-
-                if (i++ > duration)
-                    break outer;
-            }
-
+        for (let i = 0; i < duration; i += 32) {
+            const word = view.getUint32(trackIdx);
+            nodeVisibility.setWord(i >>> 5, word);
             trackIdx += 0x04;
         }
 
-        return { nodeName, nodeVisibility: frames };
+        return { nodeName, nodeVisibility };
     }
 }
 
@@ -2673,8 +2664,8 @@ export class VIS0NodesAnimator {
             return null;
 
         // Constant tracks are of length 1.
-        if (nodeData.nodeVisibility.length === 1)
-            return nodeData.nodeVisibility[0];
+        if (nodeData.nodeVisibility.numBits === 1)
+            return nodeData.nodeVisibility.getBit(0);
 
         const frame = this.animationController.getTimeInFrames();
         const animFrame = getAnimFrame(this.vis0, frame);
@@ -2682,7 +2673,7 @@ export class VIS0NodesAnimator {
         // animFrame can return a partial keyframe, but visibility information is frame-specific.
         // Resolve this by treating this as a stepped track, floored. e.g. 15.9 is keyframe 15.
 
-        return nodeData.nodeVisibility[(animFrame | 0)];
+        return nodeData.nodeVisibility.getBit(animFrame | 0);
     }
 }
 

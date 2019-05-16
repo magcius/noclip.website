@@ -71,7 +71,8 @@ export class GrabManager {
     }
 
     public takeGrab(grabListener: GrabListener, e: MouseEvent, options: GrabOptions): void {
-        assert(this.grabListener === null);
+        if (this.grabListener !== null)
+            return;
 
         this.grabListener = grabListener;
 
