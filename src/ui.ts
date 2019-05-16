@@ -1812,7 +1812,7 @@ class TimeScrubber implements Widget {
         this.toplevel.style.cursor = 'grab';
         this.toplevel.style.position = 'relative';
         this.toplevel.addEventListener('mousedown', (e) => {
-            GlobalGrabManager.takeGrab(this, e, { takePointerLock: false });
+            GlobalGrabManager.takeGrab(this, e, { takePointerLock: true });
         });
 
         this.track = document.createElement('canvas');
@@ -1911,7 +1911,12 @@ class TimeScrubber implements Widget {
 
 export class TimePanel extends Panel {
     private scrubber: TimeScrubber;
+    private rewindButton: HTMLElement;
+    private pausePlayButton: HTMLElement;
+    private isPlaying: boolean = true;
+
     public ontimescrub: ((adj: number) => void) | null = null;
+    public onrewind: (() => void) | null = null;
 
     constructor() {
         super();
@@ -1923,13 +1928,64 @@ export class TimePanel extends Panel {
                 this.ontimescrub(adj);
         };
         this.contents.appendChild(this.scrubber.elem);
+
+        const h = document.createElement('div');
+        h.style.display = 'grid';
+        h.style.gridAutoFlow = 'column';
+        h.style.gridGap = '8px';
+
+        this.rewindButton = document.createElement('div');
+        this.rewindButton.style.textAlign = 'center';
+        this.rewindButton.style.lineHeight = '1.5em';
+        this.rewindButton.style.userSelect = 'none';
+        this.rewindButton.style.cursor = 'pointer';
+        this.rewindButton.style.fontWeight = 'bold';
+        this.rewindButton.style.backgroundColor = COOL_BLUE_COLOR;
+        this.rewindButton.textContent = 'Rewind';
+        this.rewindButton.onclick = () => {
+            if (this.onrewind !== null)
+                this.onrewind();
+        };
+        h.appendChild(this.rewindButton);
+
+        this.pausePlayButton = document.createElement('div');
+        this.pausePlayButton.style.textAlign = 'center';
+        this.pausePlayButton.style.lineHeight = '1.5em';
+        this.pausePlayButton.style.userSelect = 'none';
+        this.pausePlayButton.style.cursor = 'pointer';
+        this.pausePlayButton.style.fontWeight = 'bold';
+        this.pausePlayButton.style.backgroundColor = COOL_BLUE_COLOR;
+        this.pausePlayButton.onclick = () => {
+            this.togglePausePlay();
+        };
+        h.appendChild(this.pausePlayButton);
+
+        this.sync();
+
+        this.contents.appendChild(h);
+    }
+
+    private sync(): void {
+        if (this.isPlaying) {
+            this.pausePlayButton.textContent = 'Pause';
+        } else {
+            this.pausePlayButton.textContent = 'Play';
+        }
     }
 
     public getTimeScale(): number {
         if (this.scrubber.isScrubbing())
             return 0;
 
+        if (!this.isPlaying)
+            return 0;
+
         return 1;
+    }
+
+    public togglePausePlay(): void {
+        this.isPlaying = !this.isPlaying;
+        this.sync();
     }
 
     public update(sceneTime: number, timeScale: number): void {

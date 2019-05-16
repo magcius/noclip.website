@@ -199,8 +199,6 @@ class Main {
 
     private sceneLoader: SceneLoader;
 
-    private isSceneTimeRunning: boolean = true;
-
     constructor() {
         this.toplevel = document.createElement('div');
         document.body.appendChild(this.toplevel);
@@ -328,7 +326,7 @@ class Main {
         if (inputManager.isKeyDownEventTriggered('Numpad3'))
             this._exportSaveData();
         if (inputManager.isKeyDownEventTriggered('Period'))
-            this.isSceneTimeRunning = !this.isSceneTimeRunning;
+            this.ui.timePanel.togglePausePlay();
         if (inputManager.isKeyDownEventTriggered('Comma'))
             this.viewer.sceneTime = 0;
     }
@@ -340,8 +338,6 @@ class Main {
         const shouldTakeScreenshot = this.viewer.inputManager.isKeyDownEventTriggered('Numpad7');
 
         let sceneTimeScale = this.ui.timePanel.getTimeScale();
-        if (!this.isSceneTimeRunning)
-            sceneTimeScale = 0;
 
         this.viewer.sceneTimeScale = sceneTimeScale;
         this.viewer.update(time);
@@ -607,6 +603,9 @@ class Main {
         };
         this.ui.timePanel.ontimescrub = (adj: number) => {
             this.viewer.sceneTime = Math.max(this.viewer.sceneTime + adj, 0);
+        };
+        this.ui.timePanel.onrewind = () => {
+            this.viewer.sceneTime = 0;
         };
 
         this.dragHighlight = document.createElement('div');
