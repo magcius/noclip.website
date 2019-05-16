@@ -156,8 +156,8 @@ export default class InputManager {
     };
 
     public onMotion = (dx: number, dy: number): void => {
-        this.dx = dx;
-        this.dy = dy;
+        this.dx += dx;
+        this.dy += dy;
     };
 
     public onGrabReleased = (): void => {

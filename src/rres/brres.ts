@@ -561,7 +561,7 @@ export function parseMaterialEntry(r: DisplayListRegisters, index: number, name:
         const indCmd = r.bp[GX.BPRegister.IND_CMD0_ID + i];
         const indTexStage: GX.IndTexStageID =   (indCmd >>>  0) & 0x03;
         const indTexFormat: GX.IndTexFormat =   (indCmd >>>  2) & 0x03;
-        const indTexBiasSel: GX.IndTexBiasSel = (indCmd >>>  4) & 0x03;
+        const indTexBiasSel: GX.IndTexBiasSel = (indCmd >>>  4) & 0x07;
         // alpha sel
         const indTexMatrix: GX.IndTexMtxID =    (indCmd >>>  9) & 0x0F;
         const indTexWrapS: GX.IndTexWrap =      (indCmd >>> 13) & 0x07;
@@ -719,10 +719,10 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
         const scale = Math.pow(2, scaleExp - indTexScaleBias - indTexScaleBase);
 
         const p00 = ((((mtxA >>>  0) & 0x07FF) << 21) >> 21);
-        const p01 = ((((mtxA >>> 11) & 0x07FF) << 21) >> 21);
-        const p02 = ((((mtxB >>>  0) & 0x07FF) << 21) >> 21);
-        const p10 = ((((mtxB >>> 11) & 0x07FF) << 21) >> 21);
-        const p11 = ((((mtxC >>>  0) & 0x07FF) << 21) >> 21);
+        const p10 = ((((mtxA >>> 11) & 0x07FF) << 21) >> 21);
+        const p01 = ((((mtxB >>>  0) & 0x07FF) << 21) >> 21);
+        const p11 = ((((mtxB >>> 11) & 0x07FF) << 21) >> 21);
+        const p02 = ((((mtxC >>>  0) & 0x07FF) << 21) >> 21);
         const p12 = ((((mtxC >>> 11) & 0x07FF) << 21) >> 21);
 
         const m = new Float32Array([
