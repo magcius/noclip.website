@@ -606,6 +606,7 @@ class Main {
         };
         this.ui.timePanel.onrewind = () => {
             this.viewer.sceneTime = 0;
+            this._saveState();
         };
 
         this.dragHighlight = document.createElement('div');
