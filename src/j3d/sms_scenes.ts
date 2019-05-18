@@ -401,7 +401,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
 
             const sceneBin = rarc.findFile('map/scene.bin');
             const sceneBinObj = readSceneBin(sceneBin.buffer);
-            console.log(sceneBinObj);
+            console.log(rarc, sceneBinObj);
 
             const renderer = new SunshineRenderer(device, rarc);
 
@@ -529,7 +529,6 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
             { k: 'BiaWatermill', m: 'BiaWatermill', s: () => bmtm('mapobj/biawatermill.bmd', 'mapobj/bianco.bmt') },
             { k: 'BrickBlock', m: 'BrickBlock', p: 'mapobj/brickblock' },
             { k: 'Coin', m: 'coin', p: 'mapobj/coin' },
-            { k: 'Coin', m: 'invisible_coin', p: 'mapobj/coin' },
             { k: 'Coin', m: 'invisible_coin', p: 'mapobj/coin' },
             { k: 'CoinRed', m: 'coin_red', p: 'mapobj/coin_red' },
             { k: 'CoinBlue', m: 'coin_blue', p: 'mapobj/coin_blue' },

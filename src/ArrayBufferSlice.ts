@@ -142,7 +142,7 @@ export default class ArrayBufferSlice {
             return this;
     }
 
-    public createTypedArray<T extends ArrayBufferView>(clazz: _TypedArrayConstructor<T>, offs: number = 0, count?: number, endianness: Endianness = Endianness.LITTLE_ENDIAN, forceCopy: boolean = false): T {
+    public createTypedArray<T extends ArrayBufferView>(clazz: _TypedArrayConstructor<T>, offs: number = 0, count?: number, endianness: Endianness = Endianness.LITTLE_ENDIAN): T {
         const begin = this.byteOffset + offs;
 
         let byteLength;
@@ -162,7 +162,7 @@ export default class ArrayBufferSlice {
             const componentSize_ = componentSize as (2 | 4);
             const copy = this.subarray(offs, byteLength).bswap(componentSize_);
             return copy.createTypedArray(clazz);
-        } else if (!forceCopy && isAligned(begin, componentSize)) {
+        } else if (isAligned(begin, componentSize)) {
             return new clazz(this.arrayBuffer, begin, count);
         } else {
             return new clazz(this.copyToBuffer(offs, byteLength), 0);

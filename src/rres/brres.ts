@@ -114,7 +114,6 @@ function calcTexMtx(dst: mat4, texMtxMode: TexMatrixMode, scaleS: number, scaleT
     }
 }
 //#endregion
-
 //#region ResDic
 interface ResDicEntry {
     name: string;
@@ -145,7 +144,6 @@ function parseResDic(buffer: ArrayBufferSlice, tableOffs: number): ResDicEntry[]
     return entries;
 }
 //#endregion
-
 //#region PLT0
 export interface PLT0 {
     name: string;
@@ -172,7 +170,6 @@ function parsePLT0(buffer: ArrayBufferSlice): PLT0 {
     return { name, format, data };
 }
 //#endregion
-
 //#region TEX0
 export interface TEX0 {
     name: string;
@@ -217,7 +214,6 @@ function parseTEX0(buffer: ArrayBufferSlice): TEX0 {
     return { name, width, height, format, mipCount, minLOD, maxLOD, data, paletteFormat, paletteData };
 }
 //#endregion
-
 //#region MDL0
 export class DisplayListRegisters {
     public bp: Uint32Array = new Uint32Array(0x100);
@@ -1510,7 +1506,6 @@ function parseMDL0(buffer: ArrayBufferSlice): MDL0 {
     return { name, bbox, materials, shapes, nodes, sceneGraph, numWorldMtx, numViewMtx };
 }
 //#endregion
-
 //#region Animation Core
 export const enum LoopMode {
     ONCE = 0x00,
@@ -1736,7 +1731,6 @@ function parseAnimationTrackF96(buffer: ArrayBufferSlice): FloatAnimationTrack {
     return { type: AnimationTrackType.HERMITE, frames };
 }
 //#endregion
-
 //#region SRT0
 export interface SRT0_TexData {
     scaleS: FloatAnimationTrack | null;
@@ -1936,7 +1930,6 @@ export function bindSRT0Animator(animationController: AnimationController, srt0:
     return new SRT0TexMtxAnimator(animationController, srt0, texData);
 }
 //#endregion
-
 //#region PAT0
 interface PAT0_TexFrameData {
     frame: number;
@@ -2124,7 +2117,6 @@ export function bindPAT0Animator(animationController: AnimationController, pat0:
     return new PAT0TexAnimator(animationController, pat0, texData);
 }
 //#endregion
-
 //#region CLR0
 export enum AnimatableColor {
     MAT0,
@@ -2169,7 +2161,6 @@ function findAnimationData_CLR0(clr0: CLR0, materialName: string, color: Animata
 
 function parseColorDataFrames(buffer: ArrayBufferSlice, numKeyframes: number, isConstant: boolean): Uint32Array {
     const view = buffer.createDataView();
-    let frames: Uint32Array;
     if (isConstant) {
         const color = view.getUint32(0x00);
         return Uint32Array.of(color);
@@ -2307,7 +2298,6 @@ export function bindCLR0Animator(animationController: AnimationController, clr0:
     return new CLR0ColorAnimator(animationController, clr0, clrData);
 }
 //#endregion
-
 //#region CHR0
 interface CHR0_NodeData {
     nodeName: string;
@@ -2580,7 +2570,6 @@ export function bindCHR0Animator(animationController: AnimationController, chr0:
     return new CHR0NodesAnimator(animationController, chr0, nodeData);
 }
 //#endregion
-
 //#region VIS0
 export interface VIS0_NodeData {
     nodeName: string;
@@ -2693,7 +2682,6 @@ export function bindVIS0Animator(animationController: AnimationController, vis0:
     return new VIS0NodesAnimator(animationController, vis0, nodeData);
 }
 //#endregion
-
 //#region RRES
 export interface RRES {
     plt0: PLT0[];
