@@ -1249,7 +1249,7 @@ class SMGSpawner {
 
         case 'GreenStar':
         case 'PowerStar':
-            spawnGraph(`PowerStar`).then(([node, rarc]) => {
+            spawnGraph(`PowerStar`, SceneGraphTag.Normal, { bck: null }).then(([node, rarc]) => {
                 if (this.isSMG1) {
                     // This appears to be hardcoded in the DOL itself, inside "GameEventFlagTable".
                     const isRedStar = node.objinfo.objArg0 === 2;
@@ -1273,6 +1273,8 @@ class SMGSpawner {
                 }
 
                 node.modelInstance.setMaterialVisible('Empty', false);
+
+                node.setRotateSpeed(140);
             });
             return;
 
