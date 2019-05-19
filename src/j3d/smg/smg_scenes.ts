@@ -1347,6 +1347,9 @@ class SMGSpawner {
                     node.modelInstance.setMaterialVisible('TicoCoinEmpty_v', false);
                 });
                 break;
+        case 'WanwanRolling':
+                spawnGraph(name, SceneGraphTag.Normal, { bck: null });
+                break;
         default:
             spawnDefault(name);
             break;
