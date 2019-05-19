@@ -161,12 +161,12 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
             // Adjust the nodes/bones to emulate the flag animations.
             mat4.fromTranslation(castleObjData.bmd.models[0].nodes[3].jointMatrix, [0, 88, 0]);
             mat4.fromTranslation(castleObjData.bmd.models[0].nodes[4].jointMatrix, [12, 88, 0]);
-            mat4.fromTranslation(bigCastleObjData.bmd.models[0].nodes[5].jointMatrix, [-20, 0, -12]);
-            mat4.fromTranslation(bigCastleObjData.bmd.models[0].nodes[6].jointMatrix, [-20, 44, -12]);
-            mat4.fromTranslation(bigCastleObjData.bmd.models[0].nodes[7].jointMatrix, [-14, 44, -12]);
-            mat4.fromTranslation(bigCastleObjData.bmd.models[0].nodes[8].jointMatrix, [20, 0, -12]);
-            mat4.fromTranslation(bigCastleObjData.bmd.models[0].nodes[9].jointMatrix, [20, 44, -12]);
-            mat4.fromTranslation(bigCastleObjData.bmd.models[0].nodes[10].jointMatrix, [26, 44, -12]);
+            mat4.fromTranslation(bigCastleObjData.bmd.models[0].nodes[5].jointMatrix, [-40, 0, -19]);
+            mat4.fromTranslation(bigCastleObjData.bmd.models[0].nodes[6].jointMatrix, [-40, 84, -19]);
+            mat4.fromTranslation(bigCastleObjData.bmd.models[0].nodes[7].jointMatrix, [-26, 84, -19]);
+            mat4.fromTranslation(bigCastleObjData.bmd.models[0].nodes[8].jointMatrix, [40, 0, -19]);
+            mat4.fromTranslation(bigCastleObjData.bmd.models[0].nodes[9].jointMatrix, [40, 84, -19]);
+            mat4.fromTranslation(bigCastleObjData.bmd.models[0].nodes[10].jointMatrix, [54, 84, -19]);
             mat4.fromTranslation(towerObjData.bmd.models[0].nodes[2].jointMatrix, [0, 88, 0]);
             mat4.fromTranslation(towerObjData.bmd.models[0].nodes[3].jointMatrix, [12, 88, 0]);
 
@@ -267,7 +267,7 @@ const worldMapDescs: IWorldMapObj[][] = [
         { type: WorldMapObjType.TOWER, position: [-2, 0, -2] },
         { type: WorldMapObjType.CASTLE, position: [14, 0, -3] },
         { type: WorldMapObjType.TOWER, position: [50, 0, -2] },
-        { type: WorldMapObjType.BIG_CASTLE, position: [33, 0, 0] },
+        { type: WorldMapObjType.BIG_CASTLE, position: [66, 0, 0] },
     ],
 ];
 
