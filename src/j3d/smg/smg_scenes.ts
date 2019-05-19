@@ -1262,6 +1262,14 @@ class SMGSpawner {
 
                     const btp = BTP.parse(rarc.findFileData(`powerstar.btp`));
                     node.modelInstance.bindTPT1(btp.tpt1, animationController);
+                }else{
+                    const frame = name === 'GreenStar' ? 2 : 0;
+
+                    const animationController = new AnimationController();
+                    animationController.setTimeInFrames(frame);
+
+                    const btp = BTP.parse(rarc.findFileData(`PowerStarColor.btp`));
+                    node.modelInstance.bindTPT1(btp.tpt1, animationController);
                 }
 
                 node.modelInstance.setMaterialVisible('Empty', false);
