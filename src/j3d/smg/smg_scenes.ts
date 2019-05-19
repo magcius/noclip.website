@@ -1341,6 +1341,12 @@ class SMGSpawner {
                 spawnGraph(`RedBlueTurnBlock`);
                 spawnGraph(`RedBlueTurnBlockBase`);
                 break;
+
+        case 'TicoCoin':
+                spawnGraph(name).then(([node, rarc]) => {
+                    node.modelInstance.setMaterialVisible('TicoCoinEmpty_v', false);
+                });
+                break;
         default:
             spawnDefault(name);
             break;
