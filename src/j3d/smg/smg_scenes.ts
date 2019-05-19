@@ -1335,6 +1335,10 @@ class SMGSpawner {
             // The "old" face planet that Lubba discovers. We don't want it in sight, just looks ugly.
             return;
 
+        case 'RedBlueTurnBlock':
+                spawnGraph(`RedBlueTurnBlock`);
+                spawnGraph(`RedBlueTurnBlockBase`);
+                break;
         default:
             spawnDefault(name);
             break;
