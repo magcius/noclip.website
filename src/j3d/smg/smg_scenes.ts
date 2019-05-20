@@ -1249,7 +1249,7 @@ class SMGSpawner {
 
         case 'GreenStar':
         case 'PowerStar':
-            spawnGraph(`PowerStar`).then(([node, rarc]) => {
+            spawnGraph(`PowerStar`, SceneGraphTag.Normal, { bck: null }).then(([node, rarc]) => {
                 if (this.isSMG1) {
                     // This appears to be hardcoded in the DOL itself, inside "GameEventFlagTable".
                     const isRedStar = node.objinfo.objArg0 === 2;
@@ -1262,9 +1262,19 @@ class SMGSpawner {
 
                     const btp = BTP.parse(rarc.findFileData(`powerstar.btp`));
                     node.modelInstance.bindTPT1(btp.tpt1, animationController);
+                }else{
+                    const frame = name === 'GreenStar' ? 2 : 0;
+
+                    const animationController = new AnimationController();
+                    animationController.setTimeInFrames(frame);
+
+                    const btp = BTP.parse(rarc.findFileData(`PowerStarColor.btp`));
+                    node.modelInstance.bindTPT1(btp.tpt1, animationController);
                 }
 
                 node.modelInstance.setMaterialVisible('Empty', false);
+
+                node.setRotateSpeed(140);
             });
             return;
 
@@ -1327,6 +1337,19 @@ class SMGSpawner {
             // The "old" face planet that Lubba discovers. We don't want it in sight, just looks ugly.
             return;
 
+        case 'RedBlueTurnBlock':
+                spawnGraph(`RedBlueTurnBlock`);
+                spawnGraph(`RedBlueTurnBlockBase`);
+                break;
+
+        case 'TicoCoin':
+                spawnGraph(name).then(([node, rarc]) => {
+                    node.modelInstance.setMaterialVisible('TicoCoinEmpty_v', false);
+                });
+                break;
+        case 'WanwanRolling':
+                spawnGraph(name, SceneGraphTag.Normal, { bck: null });
+                break;
         default:
             spawnDefault(name);
             break;
