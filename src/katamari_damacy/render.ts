@@ -4,7 +4,7 @@ import { BINModel, BINTexture, BINModelSector, BINModelPart, GSPixelStorageForma
 import { DeviceProgram, DeviceProgramReflection } from "../Program";
 import * as Viewer from "../viewer";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { GfxRenderInst, GfxRenderInstBuilder } from "../gfx/render/GfxRenderer";
+import { GfxRenderInst, GfxRenderInstBuilder, GfxRenderInstBuilderDynamic } from "../gfx/render/GfxRenderer";
 import { GfxRenderBuffer } from "../gfx/render/GfxRenderBuffer";
 import { computeViewMatrix } from "../Camera";
 import { mat4 } from "gl-matrix";
@@ -205,7 +205,7 @@ export class BINModelPartInstance {
     private gfxSampler: GfxSampler;
     private hasDynamicTexture: boolean = false;
 
-    constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, textureHolder: KatamariDamacyTextureHolder, public binModelPart: BINModelPart) {
+    constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilderDynamic, textureHolder: KatamariDamacyTextureHolder, public binModelPart: BINModelPart) {
         this.renderInst = renderInstBuilder.pushRenderInst();
         this.renderInst.drawIndexes(this.binModelPart.indexCount, this.binModelPart.indexOffset);
 
@@ -221,8 +221,6 @@ export class BINModelPartInstance {
         this.renderInst.setMegaStateFlags({
             depthCompare: translateDepthCompareMode(ztst),
         });
-
-        renderInstBuilder.newUniformBufferInstance(this.renderInst, KatamariDamacyProgram.ub_ModelParams);
 
         if (this.binModelPart.textureName !== null) {
             this.hasDynamicTexture = this.binModelPart.textureName.endsWith('/0000/0000');
@@ -253,7 +251,7 @@ export class BINModelPartInstance {
         });
     }
 
-    public prepareToRender(modelParamsBuffer: GfxRenderBuffer, textureHolder: KatamariDamacyTextureHolder, modelViewMatrix: mat4, modelMatrix: mat4, visible: boolean): void {
+    public prepareToRender(textureHolder: KatamariDamacyTextureHolder, modelViewMatrix: mat4, modelMatrix: mat4, visible: boolean): void {
         this.renderInst.visible = visible;
 
         if (visible) {
@@ -269,8 +267,8 @@ export class BINModelPartInstance {
                 mat4.identity(textureMatrix);
             }
 
-            let offs = this.renderInst.getUniformBufferOffset(KatamariDamacyProgram.ub_ModelParams);
-            const mapped = modelParamsBuffer.mapBufferF32(offs, 16);
+            let offs = this.renderInst.allocateNewUniformBufferChunk(KatamariDamacyProgram.ub_ModelParams);
+            const mapped = this.renderInst.mapUniformBufferF32(KatamariDamacyProgram.ub_ModelParams);
             offs += fillMatrix4x3(mapped, offs, modelViewMatrix);
             offs += fillMatrix4x3(mapped, offs, modelMatrix);
             offs += fillMatrix4x2(mapped, offs, textureMatrix);
@@ -290,7 +288,7 @@ export class BINModelInstance {
     public modelParts: BINModelPartInstance[] = [];
     public visible = true;
 
-    constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, textureHolder: KatamariDamacyTextureHolder, public binModelData: BINModelData) {
+    constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilderDynamic, textureHolder: KatamariDamacyTextureHolder, public binModelData: BINModelData) {
         this.templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
         this.templateRenderInst.inputState = this.binModelData.inputState;
 
@@ -310,12 +308,12 @@ export class BINModelInstance {
         this.visible = visible;
     }
 
-    public prepareToRender(modelParamsBuffer: GfxRenderBuffer, textureHolder: KatamariDamacyTextureHolder, viewRenderer: Viewer.ViewerRenderInput) {
+    public prepareToRender(textureHolder: KatamariDamacyTextureHolder, viewRenderer: Viewer.ViewerRenderInput) {
         computeViewMatrix(scratchMat4, viewRenderer.camera);
         mat4.mul(scratchMat4, scratchMat4, this.modelMatrix);
 
         for (let i = 0; i < this.modelParts.length; i++)
-            this.modelParts[i].prepareToRender(modelParamsBuffer, textureHolder, scratchMat4, this.modelMatrix, this.visible);
+            this.modelParts[i].prepareToRender(textureHolder, scratchMat4, this.modelMatrix, this.visible);
     }
 
     public destroy(device: GfxDevice): void {

@@ -10,11 +10,12 @@ import * as UI from '../ui';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assert, assertExists } from '../util';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
-import { GfxRenderInst, GfxRenderInstBuilder, GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
+import { GfxRenderInst, GfxRenderInstBuilder, GfxRenderInstViewRenderer, GfxRenderInstBuilderDynamic } from '../gfx/render/GfxRenderer';
 import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { Camera } from '../Camera';
 import { ColorTexture, BasicRenderTarget, standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { TextureOverride } from '../TextureHolder';
+import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 
 const pathBase = `katamari_damacy`;
 
@@ -67,9 +68,9 @@ class ObjectRenderer {
     constructor(public objectSpawn: BIN.MissionSetupObjectSpawn) {
     }
 
-    public prepareToRender(modelParamsBuffer: GfxRenderBuffer, textureHolder: KatamariDamacyTextureHolder, viewRenderer: Viewer.ViewerRenderInput) {
+    public prepareToRender(textureHolder: KatamariDamacyTextureHolder, viewRenderer: Viewer.ViewerRenderInput) {
         for (let i = 0; i < this.modelInstance.length; i++)
-            this.modelInstance[i].prepareToRender(modelParamsBuffer, textureHolder, viewRenderer);
+            this.modelInstance[i].prepareToRender(textureHolder, viewRenderer);
     }
 
     public setVisible(visible: boolean): void {
@@ -96,9 +97,9 @@ class StageAreaRenderer {
     public stageAreaSector: StageAreaSector[] = [];
     public modelInstance: BINModelInstance[] = [];
 
-    public prepareToRender(modelParamsBuffer: GfxRenderBuffer, textureHolder: KatamariDamacyTextureHolder, viewRenderer: Viewer.ViewerRenderInput) {
+    public prepareToRender(textureHolder: KatamariDamacyTextureHolder, viewRenderer: Viewer.ViewerRenderInput) {
         for (let i = 0; i < this.modelInstance.length; i++)
-            this.modelInstance[i].prepareToRender(modelParamsBuffer, textureHolder, viewRenderer);
+            this.modelInstance[i].prepareToRender(textureHolder, viewRenderer);
     }
 
     public setVisible(visible: boolean): void {
@@ -117,14 +118,13 @@ function fillSceneParamsData(d: Float32Array, camera: Camera, offs: number = 0):
 }
 
 class KatamariDamacyRenderer implements Viewer.SceneGfx {
-    private sceneParamsBuffer: GfxRenderBuffer;
-    private modelParamsBuffer: GfxRenderBuffer;
+    private uniformBuffer: GfxRenderDynamicUniformBuffer;
     private templateRenderInst: GfxRenderInst;
     private currentAreaNo: number;
     private sceneTexture = new ColorTexture();
     public viewRenderer = new GfxRenderInstViewRenderer();
     public renderTarget = new BasicRenderTarget();
-    public renderInstBuilder: GfxRenderInstBuilder;
+    public renderInstBuilder: GfxRenderInstBuilderDynamic;
     public modelSectorData: BINModelSectorData[] = [];
     public textureHolder = new KatamariDamacyTextureHolder();
     public isWorld = false;
@@ -133,24 +133,21 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
     public objectRenderers: ObjectRenderer[] = [];
 
     constructor(device: GfxDevice) {
-        this.sceneParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_SceneParams`);
-        this.modelParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_ModelParams`);
+        this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
 
         const bindingLayouts: GfxBindingLayoutDescriptor[] = [
             { numUniformBuffers: 1, numSamplers: 0 }, // Scene
             { numUniformBuffers: 1, numSamplers: 1 }, // Shape
         ];
-        const uniformBuffers = [ this.sceneParamsBuffer, this.modelParamsBuffer ];
 
-        this.renderInstBuilder = new GfxRenderInstBuilder(device, KatamariDamacyProgram.programReflection, bindingLayouts, uniformBuffers);
+        this.renderInstBuilder = new GfxRenderInstBuilderDynamic(KatamariDamacyProgram.programReflection, bindingLayouts, this.uniformBuffer);
 
         this.templateRenderInst = this.renderInstBuilder.pushTemplateRenderInst();
-        this.renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, KatamariDamacyProgram.ub_SceneParams);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
         const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(hostAccessPass, viewerInput);
+        this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
 
         this.sceneTexture.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
@@ -191,27 +188,27 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
 
     public finish(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer): void {
         this.renderInstBuilder.popTemplateRenderInst();
-        this.renderInstBuilder.finish(device, viewRenderer);
+        this.renderInstBuilder.constructRenderInsts(viewRenderer);
     }
 
-    public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         // If the stage is the world, use a large near plane so we can see everything.
         // Otherwise, use a small near plane so we can get super up close.
         if (this.isWorld)
             viewerInput.camera.setClipPlanes(20, 12000000);
         else
             viewerInput.camera.setClipPlanes(2,  1200000);
-        let offs = this.templateRenderInst.getUniformBufferOffset(KatamariDamacyProgram.ub_SceneParams);
-        const sceneParamsMapped = this.sceneParamsBuffer.mapBufferF32(offs, 16);
+
+        const offs = this.templateRenderInst.allocateNewUniformBufferChunk(KatamariDamacyProgram.ub_SceneParams);
+        const sceneParamsMapped = this.templateRenderInst.mapUniformBufferF32(KatamariDamacyProgram.ub_SceneParams);
         fillSceneParamsData(sceneParamsMapped, viewerInput.camera, offs);
 
         for (let i = 0; i < this.stageAreaRenderers.length; i++)
-            this.stageAreaRenderers[i].prepareToRender(this.modelParamsBuffer, this.textureHolder, viewerInput);
+            this.stageAreaRenderers[i].prepareToRender(this.textureHolder, viewerInput);
         for (let i = 0; i < this.objectRenderers.length; i++)
-            this.objectRenderers[i].prepareToRender(this.modelParamsBuffer, this.textureHolder, viewerInput);
+            this.objectRenderers[i].prepareToRender(this.textureHolder, viewerInput);
 
-        this.sceneParamsBuffer.prepareToRender(hostAccessPass);
-        this.modelParamsBuffer.prepareToRender(hostAccessPass);
+        this.uniformBuffer.prepareToRender(device, hostAccessPass);
     }
 
     private setCurrentAreaNo(areaNo: number): void {
@@ -221,7 +218,6 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].setActiveAreaNo(areaNo);
     }
-
     public createPanels(): UI.Panel[] {
         const areasPanel = new UI.Panel();
         areasPanel.setTitle(UI.LAYER_ICON, 'Areas');
@@ -243,8 +239,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
         this.viewRenderer.destroy(device);
         this.renderTarget.destroy(device);
         this.textureHolder.destroy(device);
-        this.sceneParamsBuffer.destroy(device);
-        this.modelParamsBuffer.destroy(device);
+        this.uniformBuffer.destroy(device);
 
         for (let i = 0; i < this.modelSectorData.length; i++)
             this.modelSectorData[i].destroy(device);
