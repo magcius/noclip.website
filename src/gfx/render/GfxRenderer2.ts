@@ -182,7 +182,9 @@ export class GfxRenderInstPool {
         if (this.renderInstFreeCount > 0) {
             this.renderInstFreeCount--;
             // Search for the next free render inst.
-            return this.pool.findIndex((renderInst) => renderInst._flags === 0);
+            for (let i = 0; i < this.renderInstAllocCount; i++)
+                if (this.pool[i]._flags === 0)
+                    return i;
         }
 
         this.renderInstAllocCount++;
