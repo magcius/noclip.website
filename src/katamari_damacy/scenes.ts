@@ -116,6 +116,10 @@ function fillSceneParamsData(d: Float32Array, camera: Camera, offs: number = 0):
     offs += fillMatrix4x4(d, offs, camera.projectionMatrix);
 }
 
+const bindingLayouts: GfxBindingLayoutDescriptor[] = [
+    { numUniformBuffers: 2, numSamplers: 1 }, // Scene
+];
+
 class KatamariDamacyRenderer implements Viewer.SceneGfx {
     private uniformBuffer: GfxRenderDynamicUniformBuffer;
     private currentAreaNo: number;
@@ -131,14 +135,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice) {
         this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
-
-        const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-            { numUniformBuffers: 2, numSamplers: 1 }, // Scene
-        ];
-
         this.renderInstManager = new GfxRenderInstManager();
-        this.renderInstManager.renderInstTemplate = new GfxRenderInst();
-        this.renderInstManager.renderInstTemplate.setBindingBase(bindingLayouts, this.uniformBuffer);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
@@ -188,14 +185,18 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
         else
             viewerInput.camera.setClipPlanes(2,  1200000);
 
-        const offs = this.renderInstManager.renderInstTemplate.allocateUniformBuffer(KatamariDamacyProgram.ub_SceneParams, 16);
-        const sceneParamsMapped = this.renderInstManager.renderInstTemplate.mapUniformBufferF32(KatamariDamacyProgram.ub_SceneParams);
+        const template = this.renderInstManager.pushTemplateRenderInst();
+        template.setBindingBase(bindingLayouts, this.uniformBuffer);
+        const offs = template.allocateUniformBuffer(KatamariDamacyProgram.ub_SceneParams, 16);
+        const sceneParamsMapped = template.mapUniformBufferF32(KatamariDamacyProgram.ub_SceneParams);
         fillSceneParamsData(sceneParamsMapped, viewerInput.camera, offs);
 
         for (let i = 0; i < this.stageAreaRenderers.length; i++)
             this.stageAreaRenderers[i].prepareToRender(device, this.renderInstManager, this.textureHolder, viewerInput);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].prepareToRender(device, this.renderInstManager, this.textureHolder, viewerInput);
+
+        this.renderInstManager.popTemplateRenderInst();
 
         this.uniformBuffer.prepareToRender(device, hostAccessPass);
     }
@@ -287,7 +288,7 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
                     renderer.modelSectorData.push(binModelSectorData);
 
                     for (let j = 0; j < sector.models.length; j++) {
-                        const binModelInstance = new BINModelInstance(device, renderer.textureHolder, binModelSectorData.modelData[j]);
+                        const binModelInstance = new BINModelInstance(device, renderer.renderInstManager.gfxRenderCache, renderer.textureHolder, binModelSectorData.modelData[j]);
                         stageAreaRenderer.modelInstance.push(binModelInstance);
                         stageAreaSector.modelInstance.push(binModelInstance);
                     }
@@ -314,7 +315,7 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
 
                 const binModelSectorData = objectDatas[objectSpawn.modelIndex];
                 for (let j = 0; j < binModelSectorData.modelData.length; j++) {
-                    const binModelInstance = new BINModelInstance(device, renderer.textureHolder, binModelSectorData.modelData[j]);
+                    const binModelInstance = new BINModelInstance(device, renderer.renderInstManager.gfxRenderCache, renderer.textureHolder, binModelSectorData.modelData[j]);
                     mat4.mul(binModelInstance.modelMatrix, binModelInstance.modelMatrix, objectSpawn.modelMatrix);
                     objectRenderer.modelInstance.push(binModelInstance);
                 }

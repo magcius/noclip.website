@@ -1,5 +1,5 @@
 
-import { GfxDevice, GfxBuffer, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxCompareMode, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxBuffer, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxCompareMode, makeTextureDescriptor2D, GfxProgram } from "../gfx/platform/GfxPlatform";
 import { BINModel, BINTexture, BINModelSector, BINModelPart, GSPixelStorageFormat, psmToString, GSConfiguration, GSTextureFunction, GSAlphaCompareMode, GSDepthCompareMode, GSAlphaFailMode, GSTextureFilter } from "./bin";
 import { DeviceProgram, DeviceProgramReflection } from "../Program";
 import * as Viewer from "../viewer";
@@ -201,14 +201,15 @@ function translateTextureFilter(filter: GSTextureFilter): [GfxTexFilterMode, Gfx
 const textureMatrix = mat4.create();
 export class BINModelPartInstance {
     private gfxSampler: GfxSampler;
+    private gfxProgram: GfxProgram;
     private hasDynamicTexture: boolean = false;
-    private program: KatamariDamacyProgram;
     private textureMapping = nArray(1, () => new TextureMapping());
 
-    constructor(device: GfxDevice, textureHolder: KatamariDamacyTextureHolder, public binModelPart: BINModelPart) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: KatamariDamacyTextureHolder, public binModelPart: BINModelPart) {
         const gsConfiguration = this.binModelPart.gsConfiguration!;
 
-        this.program = new KatamariDamacyProgram(gsConfiguration);
+        const program = new KatamariDamacyProgram(gsConfiguration);
+        this.gfxProgram = cache.createProgram(device, program);
 
         const zte = !!((gsConfiguration.test_1_data0 >>> 16) & 0x01);
         assert(zte);
@@ -242,9 +243,9 @@ export class BINModelPartInstance {
         });
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, textureHolder: KatamariDamacyTextureHolder, modelViewMatrix: mat4, modelMatrix: mat4): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, textureHolder: KatamariDamacyTextureHolder, modelViewMatrix: mat4, modelMatrix: mat4): void {
         const renderInst = renderInstManager.pushRenderInst();
-        renderInst.compileDeviceProgram(device, renderInstManager.gfxRenderCache, this.program);
+        renderInst.setGfxProgram(this.gfxProgram);
 
         const ztst: GSDepthCompareMode = (this.binModelPart.gsConfiguration!.test_1_data0 >>> 17) & 0x03;
         renderInst.setMegaStateFlags({
@@ -283,11 +284,11 @@ export class BINModelInstance {
     public modelParts: BINModelPartInstance[] = [];
     public visible = true;
 
-    constructor(device: GfxDevice, textureHolder: KatamariDamacyTextureHolder, public binModelData: BINModelData) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: KatamariDamacyTextureHolder, public binModelData: BINModelData) {
         mat4.rotateX(this.modelMatrix, this.modelMatrix, Math.PI);
 
         for (let i = 0; i < this.binModelData.binModel.modelParts.length; i++)
-            this.modelParts.push(new BINModelPartInstance(device, textureHolder, this.binModelData.binModel.modelParts[i]));
+            this.modelParts.push(new BINModelPartInstance(device, cache, textureHolder, this.binModelData.binModel.modelParts[i]));
     }
 
     public setVisible(visible: boolean): void {
@@ -298,8 +299,9 @@ export class BINModelInstance {
         if (!this.visible)
             return;
 
-        renderInstManager.renderInstTemplate.setInputState(device, this.binModelData.inputState);
-        renderInstManager.renderInstTemplate.setMegaStateFlags({
+        const template = renderInstManager.pushTemplateRenderInst();
+        template.setInputState(device, this.binModelData.inputState);
+        template.setMegaStateFlags({
             cullMode: GfxCullMode.BACK,
         });
 
@@ -307,7 +309,9 @@ export class BINModelInstance {
         mat4.mul(scratchMat4, scratchMat4, this.modelMatrix);
 
         for (let i = 0; i < this.modelParts.length; i++)
-            this.modelParts[i].prepareToRender(device, renderInstManager, textureHolder, scratchMat4, this.modelMatrix);
+            this.modelParts[i].prepareToRender(renderInstManager, textureHolder, scratchMat4, this.modelMatrix);
+
+        renderInstManager.popTemplateRenderInst();
     }
 
     public destroy(device: GfxDevice): void {

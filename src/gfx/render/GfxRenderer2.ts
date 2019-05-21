@@ -1,6 +1,6 @@
 
 import { DeviceProgram } from "../../Program";
-import { GfxMegaStateDescriptor, GfxInputState, GfxDevice, GfxRenderPass, GfxRenderPipelineDescriptor, GfxPrimitiveTopology, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxBindings, GfxSamplerBinding } from "../platform/GfxPlatform";
+import { GfxMegaStateDescriptor, GfxInputState, GfxDevice, GfxRenderPass, GfxRenderPipelineDescriptor, GfxPrimitiveTopology, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxBindings, GfxSamplerBinding, GfxProgram } from "../platform/GfxPlatform";
 import { defaultMegaState, makeMegaState, copyMegaState, setMegaStateFlags } from "../helpers/GfxMegaStateDescriptorHelpers";
 import { GfxRenderCache } from "./GfxRenderCache";
 import { GfxRenderDynamicUniformBuffer } from "./GfxRenderDynamicUniformBuffer";
@@ -15,12 +15,13 @@ import { TextureMapping } from "../../TextureHolder";
 //    templates become a "blueprint" rather than an actual RenderInst.
 
 const enum GfxRenderInstFlags {
-    ALLOCATED = 1 << 0,
+    VISIBLE = 1 << 0,
     DRAW_INDEXED = 1 << 1,
 }
 
 export class GfxRenderInst {
     public sortKey: number = 0;
+    public passMask: number = 0;
 
     // Pipeline building.
     private _renderPipelineDescriptor: GfxRenderPipelineDescriptor;
@@ -31,6 +32,7 @@ export class GfxRenderInst {
     private _dynamicUniformBufferOffsets: number[] = nArray(4, () => 0);
 
     public _flags: number = 0;
+    public _parentTemplateIndex: number = -1;
     private _inputState: GfxInputState;
     private _drawStart: number;
     private _drawCount: number;
@@ -45,9 +47,9 @@ export class GfxRenderInst {
         };
     }
 
-    public allocate(): void {
+    public reset(): void {
         this.sortKey = 0;
-        this._flags = GfxRenderInstFlags.ALLOCATED;
+        this.passMask = 0;
     }
 
     public setFromTemplate(o: GfxRenderInst): void {
@@ -62,9 +64,8 @@ export class GfxRenderInst {
             this._bindingDescriptors[0].uniformBufferBindings[i].wordCount = o._bindingDescriptors[0].uniformBufferBindings[i].wordCount;
     }
 
-    // TODO(jstpierre): Does this belong somewhere else?
-    public compileDeviceProgram(device: GfxDevice, cache: GfxRenderCache, deviceProgram: DeviceProgram): void {
-        this._renderPipelineDescriptor.program = cache.createProgram(device, deviceProgram);
+    public setGfxProgram(program: GfxProgram): void {
+        this._renderPipelineDescriptor.program = program;
     }
 
     public setMegaStateFlags(r: Partial<GfxMegaStateDescriptor>): void {
@@ -194,8 +195,8 @@ export class GfxRenderInstPool {
 
 function compareRenderInsts(a: GfxRenderInst, b: GfxRenderInst): number {
     // Force unallocated items to the end of the list.
-    if (!!(a._flags & GfxRenderInstFlags.ALLOCATED)) return -1;
-    if (!!(b._flags & GfxRenderInstFlags.ALLOCATED)) return 1;
+    if (!!(a._flags & GfxRenderInstFlags.VISIBLE)) return -1;
+    if (!!(b._flags & GfxRenderInstFlags.VISIBLE)) return 1;
     return a.sortKey - b.sortKey;
 }
 
@@ -204,15 +205,33 @@ export class GfxRenderInstManager {
     public gfxRenderCache = new GfxRenderCache();
     public gfxRenderInstPool = new GfxRenderInstPool();
 
-    // TODO(jstpierre): Reconsider the template API?
-    public renderInstTemplate: GfxRenderInst | null = null;
-
     public pushRenderInst(): GfxRenderInst {
         const renderInst = this.gfxRenderInstPool.allocRenderInst();
-        renderInst.allocate();
         if (this.renderInstTemplate !== null)
             renderInst.setFromTemplate(this.renderInstTemplate);
+        else
+            renderInst.reset();
+        renderInst._flags = GfxRenderInstFlags.VISIBLE;
         return renderInst;
+    }
+
+    // TODO(jstpierre): Reconsider the template API?
+    private renderInstTemplate: GfxRenderInst | null = null;
+    public pushTemplateRenderInst(): GfxRenderInst {
+        const newTemplate = this.gfxRenderInstPool.allocRenderInst();
+        if (this.renderInstTemplate !== null) {
+            newTemplate.setFromTemplate(this.renderInstTemplate);
+            newTemplate._parentTemplateIndex = this.gfxRenderInstPool.renderInstPool.indexOf(this.renderInstTemplate);
+        }
+        this.renderInstTemplate = newTemplate;
+        return newTemplate;
+    }
+
+    public popTemplateRenderInst(): void {
+        if (this.renderInstTemplate._parentTemplateIndex === -1)
+            this.renderInstTemplate = null;
+        else
+            this.renderInstTemplate = this.gfxRenderInstPool.renderInstPool[this.renderInstTemplate._parentTemplateIndex];
     }
 
     public executeOnPass(device: GfxDevice, passRenderer: GfxRenderPass): void {
@@ -222,8 +241,13 @@ export class GfxRenderInstManager {
         // Sort the render insts. This is guaranteed to keep unallocated render insts at the end of the list.
         this.gfxRenderInstPool.renderInstPool.sort(compareRenderInsts);
 
-        for (let i = 0; i < this.gfxRenderInstPool.renderInstAllocCount; i++)
+        for (let i = 0; i < this.gfxRenderInstPool.renderInstAllocCount; i++) {
+            // Once we reach the first invisible item, we're done.
+            if (!(this.gfxRenderInstPool.renderInstPool[i]._flags & GfxRenderInstFlags.VISIBLE))
+                break;
+
             this.gfxRenderInstPool.renderInstPool[i].drawOnPass(device, this.gfxRenderCache, passRenderer);
+        }
 
         // Retire the existing render insts.
         this.gfxRenderInstPool.reset();

@@ -4,10 +4,11 @@ import { _T, GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachmen
 import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags } from "./GfxPlatformFormat";
 
 import { DeviceProgram, ProgramCache, FullscreenProgram } from '../../Program';
-import { assert, assertExists, hexzero } from '../../util';
+import { assert, assertExists } from '../../util';
 import { copyMegaState, defaultMegaState, fullscreenMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
 import { IS_DEVELOPMENT } from '../../BuildVersion';
 import { White, colorEqual, colorCopy } from '../../Color';
+import { gfxBufferBindingCopy, arrayCopy, gfxSamplerBindingCopy } from './GfxPlatformUtil';
 import * as Sentry from '@sentry/browser';
 
 export class FullscreenCopyProgram extends FullscreenProgram {
@@ -898,7 +899,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     }
 
     public createBindings(descriptor: GfxBindingsDescriptor): GfxBindings {
-        const { bindingLayout, uniformBufferBindings, samplerBindings } = descriptor;
+        const bindingLayout = descriptor.bindingLayout;
+        const uniformBufferBindings = arrayCopy(descriptor.uniformBufferBindings, gfxBufferBindingCopy);
+        const samplerBindings = arrayCopy(descriptor.samplerBindings, gfxSamplerBindingCopy);
         assert(uniformBufferBindings.length >= bindingLayout.numUniformBuffers);
         assert(samplerBindings.length >= bindingLayout.numSamplers);
         const bindings: GfxBindingsP_GL = { _T: _T.Bindings, ResourceUniqueId: this.getNextUniqueId(), uniformBufferBindings, samplerBindings };
