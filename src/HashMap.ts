@@ -6,14 +6,14 @@
 import { nArray } from "./util";
 
 // Jenkins One-at-a-Time hash from http://www.burtleburtle.net/bob/hash/doobs.html
-export function hashCodeNumbers(key: number[]): number {
-    const n = key.length;
-    let hash: number = 0;
-    for (let i = 0; i < n; i++) {
-        hash += key[i];
-        hash += hash << 10;
-        hash += hash >>> 6;
-    }
+export function hashCodeNumberUpdate(hash: number, v: number): number {
+    hash += v;
+    hash += hash << 10;
+    hash += hash >>> 6;
+    return hash >>> 0;
+}
+
+export function hashCodeNumberFinish(hash: number): number {
     hash += hash << 3;
     hash ^= hash >>> 11;
     hash += hash << 15;

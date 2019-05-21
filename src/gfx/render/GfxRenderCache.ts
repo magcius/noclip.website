@@ -1,6 +1,6 @@
 
 import { GfxBindingsDescriptor, GfxBindings, GfxDevice, GfxBufferBinding, GfxSamplerBinding, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxMegaStateDescriptor, GfxBindingLayoutDescriptor, GfxProgram, GfxInputLayoutDescriptor, GfxVertexAttributeDescriptor, GfxInputLayout } from "../platform/GfxPlatform";
-import { HashMap, EqualFunc, nullHashFunc, hashCodeNumbers } from "../../HashMap";
+import { HashMap, EqualFunc, nullHashFunc, hashCodeNumberFinish, hashCodeNumberUpdate } from "../../HashMap";
 import { DeviceProgram } from "../../Program";
 
 function arrayEqual<T>(a: T[], b: T[], e: EqualFunc<T>): boolean {
@@ -28,16 +28,15 @@ function gfxBindingsDescriptorEquals(a: GfxBindingsDescriptor, b: GfxBindingsDes
     return true;
 }
 
-const scratch: number[] = Array(16);
 function gfxBindingsDescriptorHash(a: GfxBindingsDescriptor): number {
-    scratch.fill(0);
     // Hash on textures bindings.
+    let hash: number = 0;
     for (let i = 0; i < a.samplerBindings.length; i++) {
         const binding = a.samplerBindings[i];
         if (binding !== null && binding.texture !== null)
-            scratch[i] = binding.texture.ResourceUniqueId;
+            hash = hashCodeNumberUpdate(hash, binding.texture.ResourceUniqueId);
     }
-    return hashCodeNumbers(scratch);
+    return hashCodeNumberFinish(hash);
 }
 
 function gfxMegaStateDescriptorEquals(a: GfxMegaStateDescriptor, b: GfxMegaStateDescriptor): boolean {
