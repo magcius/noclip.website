@@ -230,7 +230,8 @@ export class Scene implements Viewer.SceneGfx {
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
         const passRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
         passRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
-        this.renderInstManager.executeOnPass(device, passRenderer);
+        this.renderInstManager.drawOnPassRenderer(device, passRenderer);
+        this.renderInstManager.resetRenderInsts();
         return passRenderer;
     }
 

@@ -15,13 +15,14 @@ import { TextureMapping } from "../../TextureHolder";
 
 const enum GfxRenderInstFlags {
     VISIBLE = 1 << 0,
-    TEMPLATE = 1 << 1,
-    DRAW_INDEXED = 1 << 2,
+    TEMPLATE_RENDER_INST = 1 << 1,
+    DRAW_RENDER_INST = 1 << 2,
+    DRAW_INDEXED = 1 << 3,
 }
 
 export class GfxRenderInst {
     public sortKey: number = 0;
-    public passMask: number = 0;
+    public filterKey: number = 0;
 
     // Pipeline building.
     private _renderPipelineDescriptor: GfxRenderPipelineDescriptor;
@@ -49,7 +50,7 @@ export class GfxRenderInst {
 
     public reset(): void {
         this.sortKey = 0;
-        this.passMask = 0;
+        this.filterKey = 0;
     }
 
     public setFromTemplate(o: GfxRenderInst): void {
@@ -145,6 +146,8 @@ export class GfxRenderInst {
     }
 
     public drawOnPass(device: GfxDevice, cache: GfxRenderCache, passRenderer: GfxRenderPass): void {
+        assert(!!(this._flags & GfxRenderInstFlags.DRAW_RENDER_INST));
+
         const gfxPipeline = cache.createRenderPipeline(device, this._renderPipelineDescriptor);
         if (!device.queryPipelineReady(gfxPipeline))
             return;
@@ -200,11 +203,13 @@ export class GfxRenderInstPool {
             this.pool[i]._flags = 0;
 
         this.renderInstAllocCount = 0;
+        this.renderInstFreeCount = 0;
     }
 
     public destroy(): void {
         this.pool.length = 0;
         this.renderInstAllocCount = 0;
+        this.renderInstFreeCount = 0;
     }
 }
 
@@ -215,10 +220,18 @@ function compareRenderInsts(a: GfxRenderInst, b: GfxRenderInst): number {
     return a.sortKey - b.sortKey;
 }
 
+function setVisible(a: GfxRenderInst, visible: boolean): void {
+    if (visible)
+        a._flags |= GfxRenderInstFlags.VISIBLE;
+    else
+        a._flags &= ~GfxRenderInstFlags.VISIBLE;
+}
+
 export class GfxRenderInstManager {
     // TODO(jstpierre): Share these caches between scenes.
     public gfxRenderCache = new GfxRenderCache();
     public gfxRenderInstPool = new GfxRenderInstPool();
+    private renderInstTemplateIndex: number = -1;
 
     public pushRenderInst(): GfxRenderInst {
         const renderInstIndex = this.gfxRenderInstPool.allocRenderInstIndex();
@@ -227,19 +240,18 @@ export class GfxRenderInstManager {
             renderInst.setFromTemplate(this.gfxRenderInstPool.pool[this.renderInstTemplateIndex]);
         else
             renderInst.reset();
-        renderInst._flags = GfxRenderInstFlags.VISIBLE;
+        // draw render insts are visible by default.
+        renderInst._flags = GfxRenderInstFlags.DRAW_RENDER_INST | GfxRenderInstFlags.VISIBLE;
         return renderInst;
     }
 
-    private renderInstTemplateIndex: number = -1;
     public pushTemplateRenderInst(): GfxRenderInst {
         const newTemplateIndex = this.gfxRenderInstPool.allocRenderInstIndex();
         const newTemplate = this.gfxRenderInstPool.pool[newTemplateIndex];
-        newTemplate._flags = GfxRenderInstFlags.TEMPLATE;
-        if (this.renderInstTemplateIndex >= 0) {
+        newTemplate._parentTemplateIndex = this.renderInstTemplateIndex;
+        if (this.renderInstTemplateIndex >= 0)
             newTemplate.setFromTemplate(this.gfxRenderInstPool.pool[this.renderInstTemplateIndex]);
-            newTemplate._parentTemplateIndex = this.renderInstTemplateIndex;
-        }
+        newTemplate._flags = GfxRenderInstFlags.TEMPLATE_RENDER_INST;
         this.renderInstTemplateIndex = newTemplateIndex;
         return newTemplate;
     }
@@ -250,24 +262,35 @@ export class GfxRenderInstManager {
         this.renderInstTemplateIndex = renderInst._parentTemplateIndex;
     }
 
-    public executeOnPass(device: GfxDevice, passRenderer: GfxRenderPass): void {
+    // TODO(jstpierre): Build a better API for pass management.
+    public setVisibleByFilterKeyExact(filterKey: number): void {
+        for (let i = 0; i < this.gfxRenderInstPool.renderInstAllocCount; i++)
+            if (this.gfxRenderInstPool.pool[i]._flags & GfxRenderInstFlags.DRAW_RENDER_INST)
+                setVisible(this.gfxRenderInstPool.pool[i], this.gfxRenderInstPool.pool[i].filterKey === filterKey);
+    }
+
+    public drawOnPassRenderer(device: GfxDevice, passRenderer: GfxRenderPass): void {
         // We should have zero templates.
         assert(this.renderInstTemplateIndex === -1);
 
         if (this.gfxRenderInstPool.renderInstAllocCount === 0)
             return;
 
-        // Sort the render insts. This is guaranteed to keep unallocated render insts at the end of the list.
+        // Sort the render insts. This is guaranteed to keep invisible render insts at the end of the list.
         this.gfxRenderInstPool.pool.sort(compareRenderInsts);
 
         for (let i = 0; i < this.gfxRenderInstPool.renderInstAllocCount; i++) {
+            const renderInst = this.gfxRenderInstPool.pool[i];
+
             // Once we reach the first invisible item, we're done.
-            if (!(this.gfxRenderInstPool.pool[i]._flags & GfxRenderInstFlags.VISIBLE))
+            if (!(renderInst._flags & GfxRenderInstFlags.VISIBLE))
                 break;
 
             this.gfxRenderInstPool.pool[i].drawOnPass(device, this.gfxRenderCache, passRenderer);
         }
+    }
 
+    public resetRenderInsts(): void {
         // Retire the existing render insts.
         this.gfxRenderInstPool.reset();
     }
