@@ -32,10 +32,13 @@ class HashBucket<K, V> {
     public values: V[] = [];
 }
 
+// TODO(jstpierre): Dynamic load factor.
 export class HashMap<K, V> {
     public buckets: (HashBucket<K, V> | null)[];
 
     constructor(private keyEqualFunc: EqualFunc<K>, private keyHashFunc: HashFunc<K>, numBuckets = 16) {
+        if (keyHashFunc === nullHashFunc)
+            numBuckets = 1;
         this.buckets = nArray(numBuckets, () => null);
     }
 

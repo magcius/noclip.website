@@ -166,38 +166,23 @@ export class GfxRenderInst {
 // Basic linear pool allocator.
 export class GfxRenderInstPool {
     // The pool contains all render insts that we've ever created.
-    public renderInstPool: GfxRenderInst[] = [];
+    public pool: GfxRenderInst[] = [];
     // The number of render insts currently allocated out to the user.
     public renderInstAllocCount: number = 0;
     // The number of render insts that we know are free, somewhere in the allocated portion of the pool.
     public renderInstFreeCount: number = 0;
 
-    public allocRenderInst(): GfxRenderInst {
-        if (this.renderInstFreeCount > 0) {
-            this.renderInstFreeCount--;
-            // Search for the next free render inst.
-            return this.renderInstPool.find((renderInst) => renderInst._flags === 0);
-        }
-
-        this.renderInstAllocCount++;
-
-        if (this.renderInstAllocCount > this.renderInstPool.length)
-            this.renderInstPool.push(new GfxRenderInst());
-
-        return this.renderInstPool[this.renderInstAllocCount - 1];
-    }
-
     public allocRenderInstIndex(): number {
         if (this.renderInstFreeCount > 0) {
             this.renderInstFreeCount--;
             // Search for the next free render inst.
-            return this.renderInstPool.findIndex((renderInst) => renderInst._flags === 0);
+            return this.pool.findIndex((renderInst) => renderInst._flags === 0);
         }
 
         this.renderInstAllocCount++;
 
-        if (this.renderInstAllocCount > this.renderInstPool.length)
-            this.renderInstPool.push(new GfxRenderInst());
+        if (this.renderInstAllocCount > this.pool.length)
+            this.pool.push(new GfxRenderInst());
 
         return this.renderInstAllocCount - 1;
     }
@@ -209,13 +194,13 @@ export class GfxRenderInstPool {
 
     public reset(): void {
         for (let i = 0; i < this.renderInstAllocCount; i++)
-            this.renderInstPool[i]._flags = 0;
+            this.pool[i]._flags = 0;
 
         this.renderInstAllocCount = 0;
     }
 
     public destroy(): void {
-        this.renderInstPool.length = 0;
+        this.pool.length = 0;
         this.renderInstAllocCount = 0;
     }
 }
@@ -233,22 +218,22 @@ export class GfxRenderInstManager {
     public gfxRenderInstPool = new GfxRenderInstPool();
 
     public pushRenderInst(): GfxRenderInst {
-        const renderInst = this.gfxRenderInstPool.allocRenderInst();
+        const renderInstIndex = this.gfxRenderInstPool.allocRenderInstIndex();
+        const renderInst = this.gfxRenderInstPool.pool[renderInstIndex];
         if (this.renderInstTemplateIndex >= 0)
-            renderInst.setFromTemplate(this.gfxRenderInstPool.renderInstPool[this.renderInstTemplateIndex]);
+            renderInst.setFromTemplate(this.gfxRenderInstPool.pool[this.renderInstTemplateIndex]);
         else
             renderInst.reset();
         renderInst._flags = GfxRenderInstFlags.VISIBLE;
         return renderInst;
     }
 
-    // TODO(jstpierre): Reconsider the template API?
     private renderInstTemplateIndex: number = -1;
     public pushTemplateRenderInst(): GfxRenderInst {
         const newTemplateIndex = this.gfxRenderInstPool.allocRenderInstIndex();
-        const newTemplate = this.gfxRenderInstPool.renderInstPool[newTemplateIndex];
+        const newTemplate = this.gfxRenderInstPool.pool[newTemplateIndex];
         if (this.renderInstTemplateIndex >= 0) {
-            newTemplate.setFromTemplate(this.gfxRenderInstPool.renderInstPool[this.renderInstTemplateIndex]);
+            newTemplate.setFromTemplate(this.gfxRenderInstPool.pool[this.renderInstTemplateIndex]);
             newTemplate._parentTemplateIndex = this.renderInstTemplateIndex;
         }
         this.renderInstTemplateIndex = newTemplateIndex;
@@ -256,7 +241,7 @@ export class GfxRenderInstManager {
     }
 
     public popTemplateRenderInst(): void {
-        const renderInst = this.gfxRenderInstPool.renderInstPool[this.renderInstTemplateIndex];
+        const renderInst = this.gfxRenderInstPool.pool[this.renderInstTemplateIndex];
         this.gfxRenderInstPool.returnRenderInst(renderInst);
         this.renderInstTemplateIndex = renderInst._parentTemplateIndex;
     }
@@ -266,14 +251,14 @@ export class GfxRenderInstManager {
             return;
 
         // Sort the render insts. This is guaranteed to keep unallocated render insts at the end of the list.
-        this.gfxRenderInstPool.renderInstPool.sort(compareRenderInsts);
+        this.gfxRenderInstPool.pool.sort(compareRenderInsts);
 
         for (let i = 0; i < this.gfxRenderInstPool.renderInstAllocCount; i++) {
             // Once we reach the first invisible item, we're done.
-            if (!(this.gfxRenderInstPool.renderInstPool[i]._flags & GfxRenderInstFlags.VISIBLE))
+            if (!(this.gfxRenderInstPool.pool[i]._flags & GfxRenderInstFlags.VISIBLE))
                 break;
 
-            this.gfxRenderInstPool.renderInstPool[i].drawOnPass(device, this.gfxRenderCache, passRenderer);
+            this.gfxRenderInstPool.pool[i].drawOnPass(device, this.gfxRenderCache, passRenderer);
         }
 
         // Retire the existing render insts.

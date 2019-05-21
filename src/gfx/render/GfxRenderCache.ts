@@ -24,12 +24,7 @@ function gfxSamplerBindingEquals(a: GfxSamplerBinding | null, b: GfxSamplerBindi
 
 function gfxBindingsDescriptorEquals(a: GfxBindingsDescriptor, b: GfxBindingsDescriptor): boolean {
     if (a.samplerBindings.length !== b.samplerBindings.length) return false;
-    for (let i = 0; i < a.samplerBindings.length; i++) {
-        if (a.samplerBindings[i] === null) return b.samplerBindings[i] === null;
-        else if (b.samplerBindings[i] === null) return false;
-        else if (a.samplerBindings[i].sampler !== b.samplerBindings[i].sampler) return false;
-        else if (a.samplerBindings[i].texture !== b.samplerBindings[i].texture) return false;
-    }
+    if (!arrayEqual(a.samplerBindings, b.samplerBindings, gfxSamplerBindingEquals)) return false;
     if (!arrayEqual(a.uniformBufferBindings, b.uniformBufferBindings, gfxBufferBindingEquals)) return false;
     if (a.bindingLayout !== b.bindingLayout) return false;
     return true;
@@ -76,6 +71,13 @@ function gfxRenderPipelineDescriptorEquals(a: GfxRenderPipelineDescriptor, b: Gf
     return true;
 }
 
+function gfxRenderPipelineDescriptorHash(a: GfxRenderPipelineDescriptor): number {
+    let hash = 0;
+    // Hash on the shader -- should be the thing we change the most.
+    hash = hashCodeNumberUpdate(hash, a.program.ResourceUniqueId);
+    return hash;
+}
+
 function gfxVertexAttributeDesciptorEquals(a: GfxVertexAttributeDescriptor, b: GfxVertexAttributeDescriptor): boolean {
     return (
         a.bufferIndex === b.bufferIndex &&
@@ -98,8 +100,8 @@ function deviceProgramEquals(a: DeviceProgram, b: DeviceProgram): boolean {
 }
 
 export class GfxRenderCache {
-    private gfxBindingsCache = new HashMap<GfxBindingsDescriptor, GfxBindings>(gfxBindingsDescriptorEquals, gfxBindingsDescriptorHash);
-    private gfxRenderPipelinesCache = new HashMap<GfxRenderPipelineDescriptor, GfxRenderPipeline>(gfxRenderPipelineDescriptorEquals, nullHashFunc);
+    private gfxBindingsCache = new HashMap<GfxBindingsDescriptor, GfxBindings>(gfxBindingsDescriptorEquals, gfxBindingsDescriptorHash, 64);
+    private gfxRenderPipelinesCache = new HashMap<GfxRenderPipelineDescriptor, GfxRenderPipeline>(gfxRenderPipelineDescriptorEquals, gfxRenderPipelineDescriptorHash);
     private gfxInputLayoutsCache = new HashMap<GfxInputLayoutDescriptor, GfxInputLayout>(gfxInputLayoutDescriptorEquals, nullHashFunc);
     private gfxProgramCache = new HashMap<DeviceProgram, GfxProgram>(deviceProgramEquals, nullHashFunc);
 
