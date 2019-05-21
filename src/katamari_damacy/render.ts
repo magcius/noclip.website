@@ -4,8 +4,7 @@ import { BINModel, BINTexture, BINModelSector, BINModelPart, GSPixelStorageForma
 import { DeviceProgram, DeviceProgramReflection } from "../Program";
 import * as Viewer from "../viewer";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { GfxRenderInst, GfxRenderInstBuilder, GfxRenderInstBuilderDynamic } from "../gfx/render/GfxRenderer";
-import { GfxRenderBuffer } from "../gfx/render/GfxRenderBuffer";
+import { GfxRenderInst, GfxRenderInstBuilderDynamic } from "../gfx/render/GfxRenderer";
 import { computeViewMatrix } from "../Camera";
 import { mat4 } from "gl-matrix";
 import { fillMatrix4x3, fillColor, fillMatrix4x2 } from "../gfx/helpers/UniformBufferHelpers";

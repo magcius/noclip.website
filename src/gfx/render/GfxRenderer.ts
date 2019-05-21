@@ -300,6 +300,13 @@ export class GfxRenderInst {
         return this._uniformBufferOffsets[i];
     }
 
+    private getUniformBufferOffsetRecurse(i: number): number {
+        if (this._uniformBufferOffsets[i] !== undefined)
+            return this._uniformBufferOffsets[i];
+        else
+            return this.parentRenderInst.getUniformBufferOffsetRecurse(i);
+    }
+
     public allocateNewUniformBufferChunk(i: number): number {
         assert(this._uniformBufferDynamic !== null);
         this._uniformBufferOffsets[i] = this._uniformBufferDynamic.allocateChunk(this._uniformBufferLayouts[i].totalWordSize);
@@ -392,22 +399,31 @@ export class GfxRenderInst {
             }
         }
 
+        // Set up UBO offsets.
+        let firstUniformBufferBinding = 0;
+        for (let i = 0; i < this._bindingLayouts.length; i++) {
+            const bindingLayout = this._bindingLayouts[i];
+            const lastUniformBuffer = firstUniformBufferBinding + bindingLayout.numUniformBuffers;
+
+            if (this._uniformBufferOffsetGroups[i] === undefined)
+                this._uniformBufferOffsetGroups[i] = Array(bindingLayout.numUniformBuffers);
+
+            for (let j = firstUniformBufferBinding; j < lastUniformBuffer; j++) {
+                const j0 = j - firstUniformBufferBinding;
+                this._uniformBufferOffsetGroups[i][j0] = this.getUniformBufferOffsetRecurse(j);
+            }
+
+            firstUniformBufferBinding = lastUniformBuffer;
+        }
+
         if (!uboDirty && !this._hasOrInheritsFlag(GfxRenderInstFlags.BINDINGS_DIRTY))
             return;
 
         // Set up our bindings.
-        let firstUniformBufferBinding = 0;
+        firstUniformBufferBinding = 0;
         let firstSamplerBinding = 0;
         for (let i = 0; i < this._bindingLayouts.length; i++) {
             const bindingLayout = this._bindingLayouts[i];
-
-            const lastUniformBuffer = firstUniformBufferBinding + bindingLayout.numUniformBuffers;
-
-            this._uniformBufferOffsetGroups[i] = Array(bindingLayout.numUniformBuffers);
-            for (let j = firstUniformBufferBinding; j < lastUniformBuffer; j++) {
-                const j0 = j - firstUniformBufferBinding;
-                this._uniformBufferOffsetGroups[i][j0] = this._uniformBufferOffsets[i];
-            }
 
             // TODO(jstpierre): Don't trash GC in the hot loop. Need to figure out how to best navigate this...
             const uniformBufferBindings = this._uniformBufferBindings.slice(firstUniformBufferBinding, firstUniformBufferBinding + bindingLayout.numUniformBuffers);

@@ -9,7 +9,7 @@ import * as GX_Material from '../gx/gx_material';
 import { MaterialParams, PacketParams, ColorKind, translateTexFilterGfx, translateWrapModeGfx, loadedDataCoalescerGfx, GXShapeHelperGfx, GXRenderHelperGfx, ub_MaterialParams, loadTextureFromMipChain } from '../gx/gx_render';
 
 import { computeViewMatrix, computeModelMatrixBillboard, computeModelMatrixYBillboard, computeViewMatrixSkybox, texEnvMtx, Camera, texProjPerspMtx, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
-import { TextureMapping, TextureOverride } from '../TextureHolder';
+import { TextureMapping } from '../TextureHolder';
 import AnimationController from '../AnimationController';
 import { nArray, assertExists, assert } from '../util';
 import { AABB } from '../Geometry';

@@ -1,6 +1,6 @@
 
 import * as Viewer from '../viewer';
-import { GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxRenderPass } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxRenderPass } from "../gfx/platform/GfxPlatform";
 import Progressable from "../Progressable";
 import { fetchData } from "../fetch";
 import * as BIN from "./bin";
@@ -9,8 +9,7 @@ import { mat4 } from 'gl-matrix';
 import * as UI from '../ui';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assert, assertExists } from '../util';
-import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
-import { GfxRenderInst, GfxRenderInstBuilder, GfxRenderInstViewRenderer, GfxRenderInstBuilderDynamic } from '../gfx/render/GfxRenderer';
+import { GfxRenderInst, GfxRenderInstViewRenderer, GfxRenderInstBuilderDynamic } from '../gfx/render/GfxRenderer';
 import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { Camera } from '../Camera';
 import { ColorTexture, BasicRenderTarget, standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
