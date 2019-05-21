@@ -1,7 +1,7 @@
 
 // Common helpers for GX rendering.
 
-import { mat4, mat2d } from 'gl-matrix';
+import { mat4 } from 'gl-matrix';
 
 import * as GX from './gx_enum';
 import * as GX_Material from './gx_material';
