@@ -8,7 +8,6 @@ import { assert, assertExists } from '../../util';
 import { copyMegaState, defaultMegaState, fullscreenMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
 import { IS_DEVELOPMENT } from '../../BuildVersion';
 import { White, colorEqual, colorCopy } from '../../Color';
-import { gfxBufferBindingCopy, arrayCopy, gfxSamplerBindingCopy } from './GfxPlatformUtil';
 import * as Sentry from '@sentry/browser';
 
 export class FullscreenCopyProgram extends FullscreenProgram {
@@ -500,7 +499,7 @@ function applyMegaState(gl: WebGL2RenderingContext, currentMegaState: GfxMegaSta
     }
 }
 
-const TRACK_RESOURCES = IS_DEVELOPMENT;
+const TRACK_RESOURCES = false && IS_DEVELOPMENT;
 class ResourceCreationTracker {
     public creationStacks = new Map<GfxResource, string>();
 
@@ -745,12 +744,29 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
     }
 
-    private _currentBoundBuffers: WebGLBuffer[] = [];
-    private _bindBuffer(gl_target: GLenum, gl_buffer: WebGLBuffer, force: boolean = false): void {
-        if (this._currentBoundBuffers[gl_target] !== gl_buffer || force) {
-            this._bindVAO(null);
-            this.gl.bindBuffer(gl_target, gl_buffer);
-            this._currentBoundBuffers[gl_target] = gl_buffer;
+    private _currentBoundUBO: WebGLBuffer | null = null;
+    private _currentBoundIBO: WebGLBuffer | null = null;
+    private _currentBoundVBO: WebGLBuffer | null = null;
+    private _bindBuffer(gl_target: GLenum, gl_buffer: WebGLBuffer): void {
+        if (gl_target === WebGL2RenderingContext.UNIFORM_BUFFER) {
+            if (this._currentBoundUBO !== gl_buffer) {
+                this.gl.bindBuffer(gl_target, gl_buffer);
+                this._currentBoundUBO = gl_buffer;
+            }
+        } else if (gl_target === WebGL2RenderingContext.ELEMENT_ARRAY_BUFFER) {
+            if (this._currentBoundIBO !== gl_buffer) {
+                this._bindVAO(null);
+                this.gl.bindBuffer(gl_target, gl_buffer);
+                this._currentBoundIBO = gl_buffer;
+            }
+        } else if (gl_target === WebGL2RenderingContext.ARRAY_BUFFER) {
+            if (this._currentBoundVBO !== gl_buffer) {
+                this._bindVAO(null);
+                this.gl.bindBuffer(gl_target, gl_buffer);
+                this._currentBoundVBO = gl_buffer;
+            }
+        } else {
+            throw "whoops";
         }
     }
 
@@ -899,9 +915,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     }
 
     public createBindings(descriptor: GfxBindingsDescriptor): GfxBindings {
-        const bindingLayout = descriptor.bindingLayout;
-        const uniformBufferBindings = arrayCopy(descriptor.uniformBufferBindings, gfxBufferBindingCopy);
-        const samplerBindings = arrayCopy(descriptor.samplerBindings, gfxSamplerBindingCopy);
+        const { bindingLayout, uniformBufferBindings, samplerBindings } = descriptor;
         assert(uniformBufferBindings.length >= bindingLayout.numUniformBuffers);
         assert(samplerBindings.length >= bindingLayout.numSamplers);
         const bindings: GfxBindingsP_GL = { _T: _T.Bindings, ResourceUniqueId: this.getNextUniqueId(), uniformBufferBindings, samplerBindings };
@@ -1377,9 +1391,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                 gl.bindBufferRange(gl.UNIFORM_BUFFER, index, platformBuffer, platformBufferByteOffset, byteSize);
                 this._currentUniformBuffers[index] = buffer;
                 this._currentUniformBufferByteOffsets[index] = byteOffset;
-                this._currentBoundBuffers[gl.UNIFORM_BUFFER] = platformBuffer;
             }
         }
+        this._currentBoundUBO = null;
 
         for (let i = 0; i < samplerBindings.length; i++) {
             const binding = samplerBindings[i];

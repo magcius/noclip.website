@@ -1,6 +1,8 @@
 
-import { GfxSamplerBinding, GfxBufferBinding, GfxBindingsDescriptor } from './GfxPlatform';
-import { CopyFunc } from '../../HashMap';
+import { GfxSamplerBinding, GfxBufferBinding, GfxBindingsDescriptor, GfxRenderPipelineDescriptor } from './GfxPlatform';
+import { copyMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
+
+export type CopyFunc<T> = (a: T) => T;
 
 export function arrayCopy<T>(a: T[], copyFunc: CopyFunc<T>): T[] {
     const b = Array(a.length);
@@ -24,4 +26,10 @@ export function gfxBindingsDescriptorCopy(a: GfxBindingsDescriptor): GfxBindings
     const samplerBindings = arrayCopy(a.samplerBindings, gfxSamplerBindingCopy);
     const uniformBufferBindings = arrayCopy(a.uniformBufferBindings, gfxBufferBindingCopy);
     return { bindingLayout, samplerBindings, uniformBufferBindings };
+}
+
+export function gfxRenderPipelineDescriptorCopy(a: GfxRenderPipelineDescriptor): GfxRenderPipelineDescriptor {
+    const { bindingLayouts, inputLayout, program, topology } = a;
+    const megaStateDescriptor = copyMegaState(a.megaStateDescriptor);
+    return { bindingLayouts, inputLayout, megaStateDescriptor, program, topology };
 }

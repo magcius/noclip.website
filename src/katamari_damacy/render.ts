@@ -1,5 +1,5 @@
 
-import { GfxDevice, GfxBuffer, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxCompareMode, makeTextureDescriptor2D, GfxProgram } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxBuffer, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxCompareMode, makeTextureDescriptor2D, GfxProgram, GfxMegaStateDescriptor } from "../gfx/platform/GfxPlatform";
 import { BINModel, BINTexture, BINModelSector, BINModelPart, GSPixelStorageFormat, psmToString, GSConfiguration, GSTextureFunction, GSAlphaCompareMode, GSDepthCompareMode, GSAlphaFailMode, GSTextureFilter } from "./bin";
 import { DeviceProgram, DeviceProgramReflection } from "../Program";
 import * as Viewer from "../viewer";
@@ -204,6 +204,7 @@ export class BINModelPartInstance {
     private gfxProgram: GfxProgram;
     private hasDynamicTexture: boolean = false;
     private textureMapping = nArray(1, () => new TextureMapping());
+    private megaStateFlags: Partial<GfxMegaStateDescriptor>;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: KatamariDamacyTextureHolder, public binModelPart: BINModelPart) {
         const gsConfiguration = this.binModelPart.gsConfiguration!;
@@ -212,7 +213,12 @@ export class BINModelPartInstance {
         this.gfxProgram = cache.createProgram(device, program);
 
         const zte = !!((gsConfiguration.test_1_data0 >>> 16) & 0x01);
+        const ztst: GSDepthCompareMode = (gsConfiguration!.test_1_data0 >>> 17) & 0x03;
         assert(zte);
+
+        this.megaStateFlags = {
+            depthCompare: translateDepthCompareMode(ztst),
+        };
 
         if (this.binModelPart.textureName !== null) {
             this.hasDynamicTexture = this.binModelPart.textureName.endsWith('/0000/0000');
@@ -246,11 +252,7 @@ export class BINModelPartInstance {
     public prepareToRender(renderInstManager: GfxRenderInstManager, textureHolder: KatamariDamacyTextureHolder, modelViewMatrix: mat4, modelMatrix: mat4): void {
         const renderInst = renderInstManager.pushRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);
-
-        const ztst: GSDepthCompareMode = (this.binModelPart.gsConfiguration!.test_1_data0 >>> 17) & 0x03;
-        renderInst.setMegaStateFlags({
-            depthCompare: translateDepthCompareMode(ztst),
-        });
+        renderInst.setMegaStateFlags(this.megaStateFlags);
 
         if (this.hasDynamicTexture)
             textureHolder.fillTextureMapping(this.textureMapping[0], this.binModelPart.textureName);
@@ -279,6 +281,9 @@ export class BINModelPartInstance {
 }
 
 const scratchMat4 = mat4.create();
+const cullModeFlags = {
+    cullMode: GfxCullMode.BACK,
+};
 export class BINModelInstance {
     public modelMatrix: mat4 = mat4.create();
     public modelParts: BINModelPartInstance[] = [];
@@ -301,9 +306,7 @@ export class BINModelInstance {
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.setInputState(device, this.binModelData.inputState);
-        template.setMegaStateFlags({
-            cullMode: GfxCullMode.BACK,
-        });
+        template.setMegaStateFlags(cullModeFlags);
 
         computeViewMatrix(scratchMat4, viewRenderer.camera);
         mat4.mul(scratchMat4, scratchMat4, this.modelMatrix);

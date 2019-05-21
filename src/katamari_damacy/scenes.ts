@@ -14,7 +14,7 @@ import { Camera } from '../Camera';
 import { ColorTexture, BasicRenderTarget, standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { TextureOverride } from '../TextureHolder';
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
-import { GfxRenderInstManager, GfxRenderInst } from '../gfx/render/GfxRenderer2';
+import { GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
 
 const pathBase = `katamari_damacy`;
 
@@ -226,7 +226,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
 
     public destroy(device: GfxDevice): void {
         this.sceneTexture.destroy(device);
-        // this.renderInstManager.destroy(device);
+        this.renderInstManager.destroy(device);
         this.renderTarget.destroy(device);
         this.textureHolder.destroy(device);
         this.uniformBuffer.destroy(device);

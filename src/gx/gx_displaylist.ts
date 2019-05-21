@@ -39,7 +39,7 @@ import { align, assert } from '../util';
 import * as GX from './gx_enum';
 import { Endianness, getSystemEndianness } from '../endian';
 import { GfxFormat, FormatCompFlags, FormatTypeFlags, getFormatCompByteSize, getFormatTypeFlagsByteSize, makeFormat, getFormatCompFlagsComponentCount, getFormatTypeFlags, getFormatComponentCount, getFormatFlags, FormatFlags } from '../gfx/platform/GfxPlatformFormat';
-import { EqualFunc, HashMap, nullHashFunc, nullCopyFunc } from '../HashMap';
+import { EqualFunc, HashMap, nullHashFunc } from '../HashMap';
 
 // GX_SetVtxAttrFmt
 export interface GX_VtxAttrFmt {
@@ -947,7 +947,7 @@ function vtxLoaderDescEqual(a: VtxLoaderDesc, b: VtxLoaderDesc): boolean {
     return true;
 }
 
-const cache = new HashMap<VtxLoaderDesc, VtxLoader>(vtxLoaderDescEqual, nullHashFunc, nullCopyFunc);
+const cache = new HashMap<VtxLoaderDesc, VtxLoader>(vtxLoaderDescEqual, nullHashFunc);
 function compileVtxLoaderDesc(desc: VtxLoaderDesc): VtxLoader {
     let loader = cache.get(desc);
     if (loader === null) {

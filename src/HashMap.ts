@@ -23,11 +23,9 @@ export function hashCodeNumberFinish(hash: number): number {
 // Pass this as a hash function to use a one-bucket HashMap (equivalent to linear search in an array),
 // which can be efficient for small numbers of items.
 export function nullHashFunc<T>(k: T): number { return 0; }
-export function nullCopyFunc<T>(k: T): T { return k };
 
 export type EqualFunc<K> = (a: K, b: K) => boolean;
 export type HashFunc<K> = (a: K) => number;
-export type CopyFunc<K> = (a: K) => K;
 
 class HashBucket<K, V> {
     public keys: K[] = [];
@@ -37,7 +35,7 @@ class HashBucket<K, V> {
 export class HashMap<K, V> {
     public buckets: (HashBucket<K, V> | null)[];
 
-    constructor(private keyEqualFunc: EqualFunc<K>, private keyHashFunc: HashFunc<K>, private keyCopyFunc: CopyFunc<K>, numBuckets = 16) {
+    constructor(private keyEqualFunc: EqualFunc<K>, private keyHashFunc: HashFunc<K>, numBuckets = 16) {
         this.buckets = nArray(numBuckets, () => null);
     }
 
@@ -66,7 +64,7 @@ export class HashMap<K, V> {
         if (this.buckets[bw] === null) this.buckets[bw] = new HashBucket<K, V>();
         const bucket = this.buckets[bw]!;
         if (bi === -1) bi = bucket.keys.length;
-        bucket.keys[bi] = this.keyCopyFunc(k);
+        bucket.keys[bi] = k;
         bucket.values[bi] = v;
     }
 

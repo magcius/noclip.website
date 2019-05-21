@@ -1,7 +1,6 @@
 
-import { DeviceProgram } from "../../Program";
 import { GfxMegaStateDescriptor, GfxInputState, GfxDevice, GfxRenderPass, GfxRenderPipelineDescriptor, GfxPrimitiveTopology, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxBindings, GfxSamplerBinding, GfxProgram } from "../platform/GfxPlatform";
-import { defaultMegaState, makeMegaState, copyMegaState, setMegaStateFlags } from "../helpers/GfxMegaStateDescriptorHelpers";
+import { defaultMegaState, copyMegaState, setMegaStateFlags } from "../helpers/GfxMegaStateDescriptorHelpers";
 import { GfxRenderCache } from "./GfxRenderCache";
 import { GfxRenderDynamicUniformBuffer } from "./GfxRenderDynamicUniformBuffer";
 import { nArray, assert } from "../../util";
@@ -58,7 +57,8 @@ export class GfxRenderInst {
         this._renderPipelineDescriptor.inputLayout = o._renderPipelineDescriptor.inputLayout;
         this._renderPipelineDescriptor.topology = o._renderPipelineDescriptor.topology;
         this._inputState = o._inputState;
-        this.setBindingBase([o._bindingDescriptors[0].bindingLayout], o._uniformBuffer);
+        this._uniformBuffer = o._uniformBuffer;
+        this._setBindingLayout(o._bindingDescriptors[0].bindingLayout);
         this.setSamplerBindings(o._bindingDescriptors[0].samplerBindings);
         for (let i = 0; i < o._bindingDescriptors[0].bindingLayout.numUniformBuffers; i++)
             this._bindingDescriptors[0].uniformBufferBindings[i].wordCount = o._bindingDescriptors[0].uniformBufferBindings[i].wordCount;
@@ -88,22 +88,21 @@ export class GfxRenderInst {
         this._drawStart = primitiveStart;
     }
 
+    private _setBindingLayout(bindingLayout: GfxBindingLayoutDescriptor): void {
+        assert(bindingLayout.numUniformBuffers < this._dynamicUniformBufferOffsets.length);
+        this._renderPipelineDescriptor.bindingLayouts[0] = bindingLayout;
+        this._bindingDescriptors[0].bindingLayout = bindingLayout;
+
+        for (let i = this._bindingDescriptors[0].uniformBufferBindings.length; i < bindingLayout.numUniformBuffers; i++)
+            this._bindingDescriptors[0].uniformBufferBindings.push({ buffer: null, wordCount: 0, wordOffset: 0 });
+        for (let i = this._bindingDescriptors[0].samplerBindings.length; i < bindingLayout.numSamplers; i++)
+            this._bindingDescriptors[0].samplerBindings.push({ sampler: null, texture: null });
+    }
+
     public setBindingBase(bindingLayouts: GfxBindingLayoutDescriptor[], uniformBuffer: GfxRenderDynamicUniformBuffer): void {
         assert(bindingLayouts.length <= this._bindingDescriptors.length);
-
-        for (let i = 0; i < bindingLayouts.length; i++) {
-            this._renderPipelineDescriptor.bindingLayouts[i] = bindingLayouts[i];
-
-            const desc = this._bindingDescriptors[i];
-            desc.bindingLayout = bindingLayouts[i];
-            while (desc.uniformBufferBindings.length < desc.bindingLayout.numUniformBuffers)
-                desc.uniformBufferBindings.push({ buffer: null, wordCount: 0, wordOffset: 0 });
-            while (desc.samplerBindings.length < desc.bindingLayout.numSamplers)
-                desc.samplerBindings.push({ sampler: null, texture: null });
-        }
-
-        assert(this._bindingDescriptors[0].bindingLayout.numUniformBuffers < this._dynamicUniformBufferOffsets.length);
-
+        assert(bindingLayouts.length === 1);
+        this._setBindingLayout(bindingLayouts[0]);
         this._uniformBuffer = uniformBuffer;
     }
 
@@ -170,14 +169,42 @@ export class GfxRenderInstPool {
     public renderInstPool: GfxRenderInst[] = [];
     // The number of render insts currently allocated out to the user.
     public renderInstAllocCount: number = 0;
+    // The number of render insts that we know are free, somewhere in the allocated portion of the pool.
+    public renderInstFreeCount: number = 0;
 
     public allocRenderInst(): GfxRenderInst {
+        if (this.renderInstFreeCount > 0) {
+            this.renderInstFreeCount--;
+            // Search for the next free render inst.
+            return this.renderInstPool.find((renderInst) => renderInst._flags === 0);
+        }
+
         this.renderInstAllocCount++;
 
         if (this.renderInstAllocCount > this.renderInstPool.length)
             this.renderInstPool.push(new GfxRenderInst());
 
         return this.renderInstPool[this.renderInstAllocCount - 1];
+    }
+
+    public allocRenderInstIndex(): number {
+        if (this.renderInstFreeCount > 0) {
+            this.renderInstFreeCount--;
+            // Search for the next free render inst.
+            return this.renderInstPool.findIndex((renderInst) => renderInst._flags === 0);
+        }
+
+        this.renderInstAllocCount++;
+
+        if (this.renderInstAllocCount > this.renderInstPool.length)
+            this.renderInstPool.push(new GfxRenderInst());
+
+        return this.renderInstAllocCount - 1;
+    }
+
+    public returnRenderInst(renderInst: GfxRenderInst): void {
+        renderInst._flags = 0;
+        this.renderInstFreeCount++;
     }
 
     public reset(): void {
@@ -194,9 +221,9 @@ export class GfxRenderInstPool {
 }
 
 function compareRenderInsts(a: GfxRenderInst, b: GfxRenderInst): number {
-    // Force unallocated items to the end of the list.
-    if (!!(a._flags & GfxRenderInstFlags.VISIBLE)) return -1;
-    if (!!(b._flags & GfxRenderInstFlags.VISIBLE)) return 1;
+    // Force invisible items to the end of the list.
+    if (!(a._flags & GfxRenderInstFlags.VISIBLE)) return 1;
+    if (!(b._flags & GfxRenderInstFlags.VISIBLE)) return -1;
     return a.sortKey - b.sortKey;
 }
 
@@ -207,8 +234,8 @@ export class GfxRenderInstManager {
 
     public pushRenderInst(): GfxRenderInst {
         const renderInst = this.gfxRenderInstPool.allocRenderInst();
-        if (this.renderInstTemplate !== null)
-            renderInst.setFromTemplate(this.renderInstTemplate);
+        if (this.renderInstTemplateIndex >= 0)
+            renderInst.setFromTemplate(this.gfxRenderInstPool.renderInstPool[this.renderInstTemplateIndex]);
         else
             renderInst.reset();
         renderInst._flags = GfxRenderInstFlags.VISIBLE;
@@ -216,22 +243,22 @@ export class GfxRenderInstManager {
     }
 
     // TODO(jstpierre): Reconsider the template API?
-    private renderInstTemplate: GfxRenderInst | null = null;
+    private renderInstTemplateIndex: number = -1;
     public pushTemplateRenderInst(): GfxRenderInst {
-        const newTemplate = this.gfxRenderInstPool.allocRenderInst();
-        if (this.renderInstTemplate !== null) {
-            newTemplate.setFromTemplate(this.renderInstTemplate);
-            newTemplate._parentTemplateIndex = this.gfxRenderInstPool.renderInstPool.indexOf(this.renderInstTemplate);
+        const newTemplateIndex = this.gfxRenderInstPool.allocRenderInstIndex();
+        const newTemplate = this.gfxRenderInstPool.renderInstPool[newTemplateIndex];
+        if (this.renderInstTemplateIndex >= 0) {
+            newTemplate.setFromTemplate(this.gfxRenderInstPool.renderInstPool[this.renderInstTemplateIndex]);
+            newTemplate._parentTemplateIndex = this.renderInstTemplateIndex;
         }
-        this.renderInstTemplate = newTemplate;
+        this.renderInstTemplateIndex = newTemplateIndex;
         return newTemplate;
     }
 
     public popTemplateRenderInst(): void {
-        if (this.renderInstTemplate._parentTemplateIndex === -1)
-            this.renderInstTemplate = null;
-        else
-            this.renderInstTemplate = this.gfxRenderInstPool.renderInstPool[this.renderInstTemplate._parentTemplateIndex];
+        const renderInst = this.gfxRenderInstPool.renderInstPool[this.renderInstTemplateIndex];
+        this.gfxRenderInstPool.returnRenderInst(renderInst);
+        this.renderInstTemplateIndex = renderInst._parentTemplateIndex;
     }
 
     public executeOnPass(device: GfxDevice, passRenderer: GfxRenderPass): void {
@@ -251,5 +278,10 @@ export class GfxRenderInstManager {
 
         // Retire the existing render insts.
         this.gfxRenderInstPool.reset();
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.gfxRenderInstPool.destroy();
+        this.gfxRenderCache.destroy(device);
     }
 }
