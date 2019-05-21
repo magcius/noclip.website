@@ -15,7 +15,8 @@ import { TextureMapping } from "../../TextureHolder";
 
 const enum GfxRenderInstFlags {
     VISIBLE = 1 << 0,
-    DRAW_INDEXED = 1 << 1,
+    TEMPLATE = 1 << 1,
+    DRAW_INDEXED = 1 << 2,
 }
 
 export class GfxRenderInst {
@@ -62,6 +63,8 @@ export class GfxRenderInst {
         this.setSamplerBindings(o._bindingDescriptors[0].samplerBindings);
         for (let i = 0; i < o._bindingDescriptors[0].bindingLayout.numUniformBuffers; i++)
             this._bindingDescriptors[0].uniformBufferBindings[i].wordCount = o._bindingDescriptors[0].uniformBufferBindings[i].wordCount;
+        for (let i = 0; i < o._dynamicUniformBufferOffsets.length; i++)
+            this._dynamicUniformBufferOffsets[i] = o._dynamicUniformBufferOffsets[i];
     }
 
     public setGfxProgram(program: GfxProgram): void {
@@ -232,6 +235,7 @@ export class GfxRenderInstManager {
     public pushTemplateRenderInst(): GfxRenderInst {
         const newTemplateIndex = this.gfxRenderInstPool.allocRenderInstIndex();
         const newTemplate = this.gfxRenderInstPool.pool[newTemplateIndex];
+        newTemplate._flags = GfxRenderInstFlags.TEMPLATE;
         if (this.renderInstTemplateIndex >= 0) {
             newTemplate.setFromTemplate(this.gfxRenderInstPool.pool[this.renderInstTemplateIndex]);
             newTemplate._parentTemplateIndex = this.renderInstTemplateIndex;
@@ -247,6 +251,9 @@ export class GfxRenderInstManager {
     }
 
     public executeOnPass(device: GfxDevice, passRenderer: GfxRenderPass): void {
+        // We should have zero templates.
+        assert(this.renderInstTemplateIndex === -1);
+
         if (this.gfxRenderInstPool.renderInstAllocCount === 0)
             return;
 

@@ -244,11 +244,6 @@ export class GfxRenderInst {
         this.rebuildPipeline();
     }
 
-    public setPipelineDirect(pipeline: GfxRenderPipeline): void {
-        this._pipeline = pipeline;
-        this._setFlag(GfxRenderInstFlags.PIPELINE_DIRECT, true);
-    }
-
     public setSamplerBindingsInherit(v: boolean = true): void {
         this._setFlag(GfxRenderInstFlags.SAMPLER_BINDINGS_INHERIT, v);
     }
