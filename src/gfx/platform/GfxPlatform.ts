@@ -224,6 +224,7 @@ export interface GfxRenderPassDescriptor {
 
 export interface GfxDeviceLimits {
     uniformBufferWordAlignment: number;
+    uniformBufferMaxPageWordSize: number;
 }
 
 export interface GfxProgramReflection extends DeviceProgramReflection {

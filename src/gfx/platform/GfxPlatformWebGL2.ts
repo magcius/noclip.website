@@ -4,7 +4,7 @@ import { _T, GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachmen
 import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags } from "./GfxPlatformFormat";
 
 import { DeviceProgram, ProgramCache, FullscreenProgram } from '../../Program';
-import { assert, assertExists } from '../../util';
+import { assert, assertExists, hexzero } from '../../util';
 import { copyMegaState, defaultMegaState, fullscreenMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
 import { IS_DEVELOPMENT } from '../../BuildVersion';
 import { White, colorEqual, colorCopy } from '../../Color';
@@ -540,7 +540,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _currentSamplers: (WebGLSampler | null)[] = [];
     private _currentTextures: (WebGLTexture | null)[] = [];
     private _currentUniformBuffers: GfxBuffer[] = [];
-    private _currentUniformBufferOffsets: number[] = [];
+    private _currentUniformBufferByteOffsets: number[] = [];
     private _debugGroupStack: GfxDebugGroup[] = [];
     private _resolveReadFramebuffer!: WebGLFramebuffer;
     private _resolveDrawFramebuffer!: WebGLFramebuffer;
@@ -1112,6 +1112,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const gl = this.gl;
         return {
             uniformBufferWordAlignment: gl.getParameter(gl.UNIFORM_BUFFER_OFFSET_ALIGNMENT) / 4,
+            uniformBufferMaxPageWordSize: gl.getParameter(gl.MAX_UNIFORM_BLOCK_SIZE) / 4,
         };
     }
 
@@ -1366,13 +1367,13 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             const wordOffset = (binding.wordOffset + dynamicWordOffsets[dynamicWordOffsetsStart + i]);
             const byteOffset = wordOffset * 4;
             const byteSize = binding.wordCount * 4;
-            if (buffer !== this._currentUniformBuffers[index] || byteOffset !== this._currentUniformBufferOffsets[index]) {
+            if (buffer !== this._currentUniformBuffers[index] || byteOffset !== this._currentUniformBufferByteOffsets[index]) {
                 const platformBufferByteOffset = byteOffset % buffer.pageByteSize;
                 const platformBuffer = buffer.gl_buffer_pages[(byteOffset / buffer.pageByteSize) | 0];
-                assert(byteOffset + byteSize < buffer.pageByteSize);
+                assert(platformBufferByteOffset + byteSize < buffer.pageByteSize);
                 gl.bindBufferRange(gl.UNIFORM_BUFFER, index, platformBuffer, platformBufferByteOffset, byteSize);
                 this._currentUniformBuffers[index] = buffer;
-                this._currentUniformBufferOffsets[index] = byteOffset;
+                this._currentUniformBufferByteOffsets[index] = byteOffset;
                 this._currentBoundBuffers[gl.UNIFORM_BUFFER] = platformBuffer;
             }
         }
