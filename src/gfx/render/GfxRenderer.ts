@@ -142,8 +142,6 @@ function assignRenderInst(dst: GfxRenderInst, src: GfxRenderInst): void {
     dst._bindingLayouts = src._bindingLayouts;
     dst._samplerBindings = src._samplerBindings.slice();
     dst._uniformBufferOffsets = src._uniformBufferOffsets.slice();
-    dst._uniformBufferDynamic = src._uniformBufferDynamic;
-    dst._uniformBufferLayouts = src._uniformBufferLayouts;
 }
 
 const enum GfxRenderInstFlags {
@@ -205,7 +203,6 @@ export class GfxRenderInst {
     public _uniformBufferOffsets: number[] = [];
     public _uniformBufferOffsetGroups: number[][] = [];
     public _uniformBufferBindings: GfxBufferBinding[] = [];
-    public _uniformBufferDynamic: GfxRenderDynamicUniformBuffer | null = null;
     public _uniformBufferLayouts: StructLayout[] | null = null;
     public _bindingLayouts: GfxBindingLayoutDescriptor[];
     public _samplerBindings: GfxSamplerBinding[] = [];
@@ -300,23 +297,6 @@ export class GfxRenderInst {
         return this._uniformBufferOffsets[i];
     }
 
-    private getUniformBufferOffsetRecurse(i: number): number {
-        if (this._uniformBufferOffsets[i] !== undefined)
-            return this._uniformBufferOffsets[i];
-        else
-            return this.parentRenderInst.getUniformBufferOffsetRecurse(i);
-    }
-
-    public allocateNewUniformBufferChunk(i: number): number {
-        assert(this._uniformBufferDynamic !== null);
-        this._uniformBufferOffsets[i] = this._uniformBufferDynamic.allocateChunk(this._uniformBufferLayouts[i].totalWordSize);
-        return this._uniformBufferOffsets[i];
-    }
-
-    public mapUniformBufferF32(i: number): Float32Array {
-        return this._uniformBufferDynamic.mapBufferF32(this._uniformBufferOffsets[i], this._uniformBufferLayouts[i].totalWordSize);
-    }
-
     public getPassMask(): number {
         if (this.passMask === null)
             return this.parentRenderInst!.getPassMask();
@@ -379,68 +359,7 @@ export class GfxRenderInst {
         }
     }
 
-    public _buildDynamicBindings(device: GfxDevice, cache: GfxRenderCache): void {
-        assert(this._uniformBufferDynamic !== null);
-
-        let uboDirty = false;
-        for (let i = 0; i < this._uniformBufferLayouts.length; i++) {
-            if (this._uniformBufferBindings[i] === undefined) {
-                this._uniformBufferBindings[i] = {
-                    buffer: this._uniformBufferDynamic.gfxBuffer,
-                    wordCount: this._uniformBufferLayouts[i].totalWordSize,
-                    wordOffset: 0,
-                };
-                uboDirty = true;
-            } else if (this._uniformBufferBindings[i].buffer !== this._uniformBufferDynamic.gfxBuffer) {
-                this._uniformBufferBindings[i].buffer = this._uniformBufferDynamic.gfxBuffer;
-                this._uniformBufferBindings[i].wordCount = this._uniformBufferLayouts[i].totalWordSize;
-                this._uniformBufferBindings[i].wordOffset = 0;
-                uboDirty = true;
-            }
-        }
-
-        // Set up UBO offsets.
-        let firstUniformBufferBinding = 0;
-        for (let i = 0; i < this._bindingLayouts.length; i++) {
-            const bindingLayout = this._bindingLayouts[i];
-            const lastUniformBuffer = firstUniformBufferBinding + bindingLayout.numUniformBuffers;
-
-            if (this._uniformBufferOffsetGroups[i] === undefined)
-                this._uniformBufferOffsetGroups[i] = Array(bindingLayout.numUniformBuffers);
-
-            for (let j = firstUniformBufferBinding; j < lastUniformBuffer; j++) {
-                const j0 = j - firstUniformBufferBinding;
-                this._uniformBufferOffsetGroups[i][j0] = this.getUniformBufferOffsetRecurse(j);
-            }
-
-            firstUniformBufferBinding = lastUniformBuffer;
-        }
-
-        if (!uboDirty && !this._hasOrInheritsFlag(GfxRenderInstFlags.BINDINGS_DIRTY))
-            return;
-
-        // Set up our bindings.
-        firstUniformBufferBinding = 0;
-        let firstSamplerBinding = 0;
-        for (let i = 0; i < this._bindingLayouts.length; i++) {
-            const bindingLayout = this._bindingLayouts[i];
-
-            // TODO(jstpierre): Don't trash GC in the hot loop. Need to figure out how to best navigate this...
-            const uniformBufferBindings = this._uniformBufferBindings.slice(firstUniformBufferBinding, firstUniformBufferBinding + bindingLayout.numUniformBuffers);
-            const samplerBindings = this._samplerBindings.slice(firstSamplerBinding, firstSamplerBinding + bindingLayout.numSamplers);
-            this._bindings[i] = cache.createBindings(device, { bindingLayout, uniformBufferBindings, samplerBindings });
-            firstUniformBufferBinding += bindingLayout.numUniformBuffers;
-            firstSamplerBinding += bindingLayout.numSamplers;
-        }
-
-        this._setFlag(GfxRenderInstFlags.BINDINGS_DIRTY, false);
-        this._setFlag(GfxRenderInstFlags.BINDINGS_CREATED, true);
-    }
-
     private _buildBindings(device: GfxDevice, cache: GfxRenderCache): void {
-        if (this._uniformBufferDynamic !== null)
-            return;
-
         this._tryInheritSamplerBindings();
 
         if (!this._hasOrInheritsFlag(GfxRenderInstFlags.BINDINGS_DIRTY))
@@ -574,10 +493,7 @@ export class GfxRenderInstViewRenderer {
 
             // Unfinished pipeline.
             if (!renderInst._pipeline === null || !device.queryPipelineReady(renderInst._pipeline))
-                return;
-
-            if (!(renderInst._flags & GfxRenderInstFlags.BINDINGS_CREATED) && renderInst._uniformBufferDynamic !== null)
-                renderInst._buildDynamicBindings(device, this.gfxRenderCache);
+                continue;
 
             if (!(renderInst._flags & GfxRenderInstFlags.BINDINGS_CREATED))
                 continue;
@@ -750,69 +666,5 @@ export class GfxRenderInstBuilder {
     public finish(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer) {
         assert(this.templateStack.length === 1);
         this.constructRenderInsts(device, viewRenderer);
-    }
-}
-
-// XXX(jstpierre): This is a middling kludge API until we can move to dynamic GfxRenderInst creation.
-export class GfxRenderInstBuilderDynamic {
-    private templateStack: GfxRenderInst[] = [];
-    private newRenderInsts: GfxRenderInst[] = [];
-    private newTemplateRenderInsts: GfxRenderInst[] = [];
-
-    constructor(public programReflection: DeviceProgramReflection, public bindingLayouts: GfxBindingLayoutDescriptor[], public uniformBufferDynamic: GfxRenderDynamicUniformBuffer) {
-        let totalSamplerBindings = 0, totalUniformBufferBindings = 0;
-        for (let i = 0; i < this.bindingLayouts.length; i++) {
-            totalSamplerBindings += this.bindingLayouts[i].numSamplers;
-            totalUniformBufferBindings += this.bindingLayouts[i].numUniformBuffers;
-        }
-        assert(this.programReflection.uniformBufferLayouts.length === totalUniformBufferBindings);
-        assert(this.programReflection.totalSamplerBindingsCount === totalSamplerBindings);
-
-        const baseRenderInst = this.pushTemplateRenderInst();
-        baseRenderInst.name = "base render inst";
-        baseRenderInst.passMask = 1;
-        baseRenderInst._megaState = copyMegaState(defaultMegaState);
-        baseRenderInst._bindingLayouts = this.bindingLayouts;
-        baseRenderInst._uniformBufferDynamic = uniformBufferDynamic;
-        baseRenderInst._uniformBufferLayouts = programReflection.uniformBufferLayouts;
-    }
-
-    public pushTemplateRenderInst(o: GfxRenderInst | null = null): GfxRenderInst {
-        if (o === null)
-            o = this.newRenderInst();
-        this.templateStack.unshift(o);
-        return o;
-    }
-
-    public popTemplateRenderInst(): void {
-        this.templateStack.shift();
-    }
-
-    public newRenderInst(baseRenderInst: GfxRenderInst | null = null, isTemplate: boolean = true): GfxRenderInst {
-        if (baseRenderInst === null)
-            baseRenderInst = this.templateStack[0];
-        const o = new GfxRenderInst(baseRenderInst);
-        if (isTemplate)
-            this.newTemplateRenderInsts.push(o);
-        return o;
-    }
-
-    public pushRenderInst(renderInst: GfxRenderInst | null = null): GfxRenderInst {
-        if (renderInst === null)
-            renderInst = this.newRenderInst(null);
-        this.newRenderInsts.push(renderInst);
-        return renderInst;
-    }
-
-    public constructRenderInsts(viewRenderer: GfxRenderInstViewRenderer): void {
-        for (let i = 0; i < this.newRenderInsts.length; i++)
-            viewRenderer.renderInsts.push(this.newRenderInsts[i]);
-
-        for (let i = 0; i < this.newTemplateRenderInsts.length; i++)
-            if (!viewRenderer.templateRenderInsts.includes(this.newTemplateRenderInsts[i]))
-                viewRenderer.templateRenderInsts.push(this.newTemplateRenderInsts[i]);
-
-        this.newRenderInsts.length = 0;
-        this.newTemplateRenderInsts.length = 0;
     }
 }

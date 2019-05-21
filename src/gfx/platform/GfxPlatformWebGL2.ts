@@ -899,8 +899,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     public createBindings(descriptor: GfxBindingsDescriptor): GfxBindings {
         const { bindingLayout, uniformBufferBindings, samplerBindings } = descriptor;
-        assert(bindingLayout.numUniformBuffers === uniformBufferBindings.length);
-        assert(bindingLayout.numSamplers === samplerBindings.length);
+        assert(uniformBufferBindings.length >= bindingLayout.numUniformBuffers);
+        assert(samplerBindings.length >= bindingLayout.numSamplers);
         const bindings: GfxBindingsP_GL = { _T: _T.Bindings, ResourceUniqueId: this.getNextUniqueId(), uniformBufferBindings, samplerBindings };
         this._resourceCreationTracker.trackResourceCreated(bindings);
         return bindings;
@@ -1123,8 +1123,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     public queryInputState(inputState_: GfxInputState): GfxInputStateReflection {
         const inputState = inputState_ as GfxInputStateP_GL;
-        const inputLayout = inputState.inputLayout;
-        return { inputLayout };
+        return inputState;
     }
 
     public queryTextureFormatSupported(format: GfxFormat): boolean {
@@ -1357,8 +1356,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
         const { uniformBufferBindings, samplerBindings } = bindings_ as GfxBindingsP_GL;
         assert(uniformBufferBindings.length === bindingLayoutTable.numUniformBuffers);
-        assert(samplerBindings.length === bindingLayoutTable.numSamplers);
-        assert(dynamicWordOffsetsCount === uniformBufferBindings.length);
+        // Ignore extra bindings or dynamic word offsets.
+        assert(samplerBindings.length >= bindingLayoutTable.numSamplers);
+        assert(dynamicWordOffsetsCount >= uniformBufferBindings.length);
 
         for (let i = 0; i < uniformBufferBindings.length; i++) {
             const binding = uniformBufferBindings[i];

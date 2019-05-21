@@ -1,15 +1,16 @@
 
-import { GfxDevice, GfxBuffer, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxCompareMode } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxBuffer, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxCompareMode, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
 import { BINModel, BINTexture, BINModelSector, BINModelPart, GSPixelStorageFormat, psmToString, GSConfiguration, GSTextureFunction, GSAlphaCompareMode, GSDepthCompareMode, GSAlphaFailMode, GSTextureFilter } from "./bin";
 import { DeviceProgram, DeviceProgramReflection } from "../Program";
 import * as Viewer from "../viewer";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { GfxRenderInst, GfxRenderInstBuilderDynamic } from "../gfx/render/GfxRenderer";
 import { computeViewMatrix } from "../Camera";
 import { mat4 } from "gl-matrix";
 import { fillMatrix4x3, fillColor, fillMatrix4x2 } from "../gfx/helpers/UniformBufferHelpers";
 import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
 import { nArray, assert } from "../util";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderer2";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
 export class KatamariDamacyProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -128,7 +129,7 @@ export class BINModelData {
     public inputLayout: GfxInputLayout;
     public inputState: GfxInputState;
 
-    constructor(device: GfxDevice, public binModel: BINModel) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public binModel: BINModel) {
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, this.binModel.vertexData.buffer);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, this.binModel.indexData.buffer);
 
@@ -139,7 +140,7 @@ export class BINModelData {
         ];
         const indexBufferFormat = GfxFormat.U16_R;
 
-        this.inputLayout = device.createInputLayout({ vertexAttributeDescriptors, indexBufferFormat });
+        this.inputLayout = cache.createInputLayout(device, { vertexAttributeDescriptors, indexBufferFormat });
 
         const VERTEX_STRIDE = 3+3+2;
         this.inputState = device.createInputState(this.inputLayout, [
@@ -197,35 +198,26 @@ function translateTextureFilter(filter: GSTextureFilter): [GfxTexFilterMode, Gfx
     }
 }
 
-const textureMapping = nArray(1, () => new TextureMapping());
 const textureMatrix = mat4.create();
 export class BINModelPartInstance {
-    public renderInst: GfxRenderInst;
     private gfxSampler: GfxSampler;
     private hasDynamicTexture: boolean = false;
+    private program: KatamariDamacyProgram;
+    private textureMapping = nArray(1, () => new TextureMapping());
 
-    constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilderDynamic, textureHolder: KatamariDamacyTextureHolder, public binModelPart: BINModelPart) {
-        this.renderInst = renderInstBuilder.pushRenderInst();
-        this.renderInst.drawIndexes(this.binModelPart.indexCount, this.binModelPart.indexOffset);
-
+    constructor(device: GfxDevice, textureHolder: KatamariDamacyTextureHolder, public binModelPart: BINModelPart) {
         const gsConfiguration = this.binModelPart.gsConfiguration!;
 
-        const program = new KatamariDamacyProgram(gsConfiguration);
-        this.renderInst.setDeviceProgram(program);
+        this.program = new KatamariDamacyProgram(gsConfiguration);
 
         const zte = !!((gsConfiguration.test_1_data0 >>> 16) & 0x01);
         assert(zte);
 
-        const ztst: GSDepthCompareMode = (gsConfiguration.test_1_data0 >>> 17) & 0x03;
-        this.renderInst.setMegaStateFlags({
-            depthCompare: translateDepthCompareMode(ztst),
-        });
-
         if (this.binModelPart.textureName !== null) {
             this.hasDynamicTexture = this.binModelPart.textureName.endsWith('/0000/0000');
-            textureHolder.fillTextureMapping(textureMapping[0], this.binModelPart.textureName);
+            if (!this.hasDynamicTexture)
+                textureHolder.fillTextureMapping(this.textureMapping[0], this.binModelPart.textureName);
         }
-        this.renderInst.setSamplerBindingsFromTextureMappings(textureMapping);
 
         // Katamari should not have any mipmaps.
         const lcm = (gsConfiguration.tex1_1_data0 >>> 0) & 0x01;
@@ -250,29 +242,34 @@ export class BINModelPartInstance {
         });
     }
 
-    public prepareToRender(textureHolder: KatamariDamacyTextureHolder, modelViewMatrix: mat4, modelMatrix: mat4, visible: boolean): void {
-        this.renderInst.visible = visible;
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, textureHolder: KatamariDamacyTextureHolder, modelViewMatrix: mat4, modelMatrix: mat4): void {
+        const renderInst = renderInstManager.pushRenderInst();
+        renderInst.compileDeviceProgram(device, renderInstManager.gfxRenderCache, this.program);
 
-        if (visible) {
-            if (this.hasDynamicTexture) {
-                textureHolder.fillTextureMapping(textureMapping[0], this.binModelPart.textureName!);
-                this.renderInst.setSamplerBindingsFromTextureMappings(textureMapping);
+        const ztst: GSDepthCompareMode = (this.binModelPart.gsConfiguration!.test_1_data0 >>> 17) & 0x03;
+        renderInst.setMegaStateFlags({
+            depthCompare: translateDepthCompareMode(ztst),
+        });
 
-                if (textureMapping[0].flipY) {
-                    textureMatrix[5] = -1;
-                    textureMatrix[13] = 1;
-                }
-            } else {
-                mat4.identity(textureMatrix);
-            }
+        if (this.hasDynamicTexture)
+            textureHolder.fillTextureMapping(this.textureMapping[0], this.binModelPart.textureName);
+        renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
 
-            let offs = this.renderInst.allocateNewUniformBufferChunk(KatamariDamacyProgram.ub_ModelParams);
-            const mapped = this.renderInst.mapUniformBufferF32(KatamariDamacyProgram.ub_ModelParams);
-            offs += fillMatrix4x3(mapped, offs, modelViewMatrix);
-            offs += fillMatrix4x3(mapped, offs, modelMatrix);
-            offs += fillMatrix4x2(mapped, offs, textureMatrix);
-            offs += fillColor(mapped, offs, this.binModelPart.diffuseColor);
+        renderInst.drawIndexes(this.binModelPart.indexCount, this.binModelPart.indexOffset);
+
+        if (this.hasDynamicTexture && this.textureMapping[0].flipY) {
+            textureMatrix[5] = -1;
+            textureMatrix[13] = 1;
+        } else {
+            mat4.identity(textureMatrix);
         }
+
+        let offs = renderInst.allocateUniformBuffer(KatamariDamacyProgram.ub_ModelParams, 12+12+8+4);
+        const mapped = renderInst.mapUniformBufferF32(KatamariDamacyProgram.ub_ModelParams);
+        offs += fillMatrix4x3(mapped, offs, modelViewMatrix);
+        offs += fillMatrix4x3(mapped, offs, modelMatrix);
+        offs += fillMatrix4x2(mapped, offs, textureMatrix);
+        offs += fillColor(mapped, offs, this.binModelPart.diffuseColor);
     }
 
     public destroy(device: GfxDevice): void {
@@ -282,37 +279,35 @@ export class BINModelPartInstance {
 
 const scratchMat4 = mat4.create();
 export class BINModelInstance {
-    public templateRenderInst: GfxRenderInst;
     public modelMatrix: mat4 = mat4.create();
     public modelParts: BINModelPartInstance[] = [];
     public visible = true;
 
-    constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilderDynamic, textureHolder: KatamariDamacyTextureHolder, public binModelData: BINModelData) {
-        this.templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
-        this.templateRenderInst.inputState = this.binModelData.inputState;
-
-        this.templateRenderInst.setMegaStateFlags({
-            cullMode: GfxCullMode.BACK,
-        });
-
+    constructor(device: GfxDevice, textureHolder: KatamariDamacyTextureHolder, public binModelData: BINModelData) {
         mat4.rotateX(this.modelMatrix, this.modelMatrix, Math.PI);
 
         for (let i = 0; i < this.binModelData.binModel.modelParts.length; i++)
-            this.modelParts.push(new BINModelPartInstance(device, renderInstBuilder, textureHolder, this.binModelData.binModel.modelParts[i]));
-
-        renderInstBuilder.popTemplateRenderInst();
+            this.modelParts.push(new BINModelPartInstance(device, textureHolder, this.binModelData.binModel.modelParts[i]));
     }
 
     public setVisible(visible: boolean): void {
         this.visible = visible;
     }
 
-    public prepareToRender(textureHolder: KatamariDamacyTextureHolder, viewRenderer: Viewer.ViewerRenderInput) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, textureHolder: KatamariDamacyTextureHolder, viewRenderer: Viewer.ViewerRenderInput) {
+        if (!this.visible)
+            return;
+
+        renderInstManager.renderInstTemplate.setInputState(device, this.binModelData.inputState);
+        renderInstManager.renderInstTemplate.setMegaStateFlags({
+            cullMode: GfxCullMode.BACK,
+        });
+
         computeViewMatrix(scratchMat4, viewRenderer.camera);
         mat4.mul(scratchMat4, scratchMat4, this.modelMatrix);
 
         for (let i = 0; i < this.modelParts.length; i++)
-            this.modelParts[i].prepareToRender(textureHolder, scratchMat4, this.modelMatrix, this.visible);
+            this.modelParts[i].prepareToRender(device, renderInstManager, textureHolder, scratchMat4, this.modelMatrix);
     }
 
     public destroy(device: GfxDevice): void {
@@ -324,9 +319,9 @@ export class BINModelInstance {
 export class BINModelSectorData {
     public modelData: BINModelData[] = [];
 
-    constructor(device: GfxDevice, public binModelSector: BINModelSector) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public binModelSector: BINModelSector) {
         for (let i = 0; i < binModelSector.models.length; i++)
-            this.modelData.push(new BINModelData(device, binModelSector.models[i]));
+            this.modelData.push(new BINModelData(device, cache, binModelSector.models[i]));
     }
 
     public destroy(device: GfxDevice): void {
@@ -363,10 +358,7 @@ export class KatamariDamacyTextureHolder extends TextureHolder<BINTexture> {
     }
 
     public loadTexture(device: GfxDevice, texture: BINTexture): LoadedTexture {
-        const gfxTexture = device.createTexture({
-            dimension: GfxTextureDimension.n2D, pixelFormat: GfxFormat.U8_RGBA,
-            width: texture.width, height: texture.height, depth: 1, numLevels: 1,
-        });
+        const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA, texture.width, texture.height, 1));
         device.setResourceName(gfxTexture, texture.name);
         const hostAccessPass = device.createHostAccessPass();
         hostAccessPass.uploadTextureData(gfxTexture, 0, [texture.pixels]);

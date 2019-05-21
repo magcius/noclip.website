@@ -123,8 +123,8 @@ export class DeviceProgram {
             return false;
         if (a.frag !== b.frag)
             return false;
-        if (!definesEqual(a, b))
-            return false;
+        // if (!definesEqual(a, b))
+        //     return false;
         return true;
     }
 

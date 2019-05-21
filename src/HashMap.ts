@@ -32,22 +32,22 @@ class HashBucket<K, V> {
     public values: V[] = [];
 }
 
-const NUM_BUCKETS = 16;
 export class HashMap<K, V> {
-    public buckets: (HashBucket<K, V> | null)[] = nArray(NUM_BUCKETS, () => null);
+    public buckets: (HashBucket<K, V> | null)[];
 
-    constructor(private keyEqualFunc: EqualFunc<K>, private keyHashFunc: HashFunc<K>) {
+    constructor(private keyEqualFunc: EqualFunc<K>, private keyHashFunc: HashFunc<K>, numBuckets = 16) {
+        this.buckets = nArray(numBuckets, () => null);
     }
 
     private findBucketIndex(bucket: HashBucket<K, V>, k: K): number {
-        for (let i = bucket.keys.length - 1; i >= 0; i--)
+        for (let i = 0; i < bucket.keys.length; i++)
             if (this.keyEqualFunc(k, bucket.keys[i]))
                 return i;
         return -1;
     }
 
     private findBucket(k: K): HashBucket<K, V> | null {
-        const bw = this.keyHashFunc(k) % NUM_BUCKETS;
+        const bw = this.keyHashFunc(k) % this.buckets.length;
         return this.buckets[bw];
     }
 
@@ -60,7 +60,7 @@ export class HashMap<K, V> {
     }
 
     public add(k: K, v: V, bi = -1): void {
-        const bw = this.keyHashFunc(k) % NUM_BUCKETS;
+        const bw = this.keyHashFunc(k) % this.buckets.length;
         if (this.buckets[bw] === null) this.buckets[bw] = new HashBucket<K, V>();
         const bucket = this.buckets[bw]!;
         if (bi === -1) bi = bucket.keys.length;
@@ -69,7 +69,7 @@ export class HashMap<K, V> {
     }
 
     public insert(k: K, v: V): void {
-        const bw = this.keyHashFunc(k) % NUM_BUCKETS;
+        const bw = this.keyHashFunc(k) % this.buckets.length;
         if (this.buckets[bw] === null) this.buckets[bw] = new HashBucket<K, V>();
         const bucket = this.buckets[bw]!;
         let bi = this.findBucketIndex(bucket, k);

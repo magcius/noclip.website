@@ -5,7 +5,7 @@ import { DeviceProgram } from "../../Program";
 
 function arrayEqual<T>(a: T[], b: T[], e: EqualFunc<T>): boolean {
     if (a.length !== b.length) return false;
-    for (let i = a.length - 1; i >= 0; i--)
+    for (let i = 0; i < a.length; i++)
         if (!e(a[i], b[i]))
             return false;
     return true;
@@ -23,8 +23,11 @@ function gfxSamplerBindingEquals(a: GfxSamplerBinding | null, b: GfxSamplerBindi
 
 function gfxBindingsDescriptorEquals(a: GfxBindingsDescriptor, b: GfxBindingsDescriptor): boolean {
     if (a.bindingLayout !== b.bindingLayout) return false;
+    if (a.samplerBindings.length !== b.samplerBindings.length) return false;
+    for (let i = 0; i < a.samplerBindings.length; i++)
+        if (!gfxSamplerBindingEquals(a.samplerBindings[i], b.samplerBindings[i]))
+            return false;
     if (!arrayEqual(a.uniformBufferBindings, b.uniformBufferBindings, gfxBufferBindingEquals)) return false;
-    if (!arrayEqual(a.samplerBindings, b.samplerBindings, gfxSamplerBindingEquals)) return false;
     return true;
 }
 
@@ -91,7 +94,7 @@ function deviceProgramEquals(a: DeviceProgram, b: DeviceProgram): boolean {
 }
 
 export class GfxRenderCache {
-    private gfxBindingsCache = new HashMap<GfxBindingsDescriptor, GfxBindings>(gfxBindingsDescriptorEquals, gfxBindingsDescriptorHash);
+    private gfxBindingsCache = new HashMap<GfxBindingsDescriptor, GfxBindings>(gfxBindingsDescriptorEquals, gfxBindingsDescriptorHash, 64);
     private gfxRenderPipelinesCache = new HashMap<GfxRenderPipelineDescriptor, GfxRenderPipeline>(gfxRenderPipelineDescriptorEquals, nullHashFunc);
     private gfxInputLayoutsCache = new HashMap<GfxInputLayoutDescriptor, GfxInputLayout>(gfxInputLayoutDescriptorEquals, nullHashFunc);
     private gfxProgramCache = new HashMap<DeviceProgram, GfxProgram>(deviceProgramEquals, nullHashFunc);
