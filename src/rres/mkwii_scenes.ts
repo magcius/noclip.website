@@ -165,9 +165,9 @@ function parseKMP(buffer: ArrayBufferSlice): KMP {
         const translationX = view.getFloat32(gobjTableIdx + 0x04);
         const translationY = view.getFloat32(gobjTableIdx + 0x08);
         const translationZ = view.getFloat32(gobjTableIdx + 0x0C);
-        const rotationX = view.getFloat32(gobjTableIdx + 0x10) * MathConstants.RAD_TO_DEG;
-        const rotationY = view.getFloat32(gobjTableIdx + 0x14) * MathConstants.RAD_TO_DEG;
-        const rotationZ = view.getFloat32(gobjTableIdx + 0x18) * MathConstants.RAD_TO_DEG;
+        const rotationX = view.getFloat32(gobjTableIdx + 0x10) * MathConstants.DEG_TO_RAD;
+        const rotationY = view.getFloat32(gobjTableIdx + 0x14) * MathConstants.DEG_TO_RAD;
+        const rotationZ = view.getFloat32(gobjTableIdx + 0x18) * MathConstants.DEG_TO_RAD;
         const scaleX = view.getFloat32(gobjTableIdx + 0x1C);
         const scaleY = view.getFloat32(gobjTableIdx + 0x20);
         const scaleZ = view.getFloat32(gobjTableIdx + 0x24);

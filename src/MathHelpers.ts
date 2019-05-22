@@ -4,7 +4,7 @@ import { mat4, vec3 } from "gl-matrix";
 // Misc bits of 3D math.
 
 export const enum MathConstants {
-    RAD_TO_DEG = 0.01745, // Math.PI / 180,
+    DEG_TO_RAD = 0.01745, // Math.PI / 180,
     EPSILON = 0.000001,
 }
 

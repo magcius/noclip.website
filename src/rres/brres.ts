@@ -32,7 +32,7 @@ function calc2dMtx(dst: mat2d, src: mat4): void {
 }
 
 function calcTexMtx_Basic(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
-    const theta = rotation * MathConstants.RAD_TO_DEG;
+    const theta = rotation * MathConstants.DEG_TO_RAD;
     const sinR = Math.sin(theta);
     const cosR = Math.cos(theta);
 
@@ -48,7 +48,7 @@ function calcTexMtx_Basic(dst: mat4, scaleS: number, scaleT: number, rotation: n
 }
 
 function calcTexMtx_Maya(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
-    const theta = rotation * MathConstants.RAD_TO_DEG;
+    const theta = rotation * MathConstants.DEG_TO_RAD;
     const sinR = Math.sin(theta);
     const cosR = Math.cos(theta);
 
@@ -63,7 +63,7 @@ function calcTexMtx_Maya(dst: mat4, scaleS: number, scaleT: number, rotation: nu
 }
 
 function calcTexMtx_XSI(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
-    const theta = rotation * MathConstants.RAD_TO_DEG;
+    const theta = rotation * MathConstants.DEG_TO_RAD;
     const sinR = Math.sin(theta);
     const cosR = Math.cos(theta);
 
@@ -78,7 +78,7 @@ function calcTexMtx_XSI(dst: mat4, scaleS: number, scaleT: number, rotation: num
 }
 
 function calcTexMtx_Max(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
-    const theta = rotation * MathConstants.RAD_TO_DEG;
+    const theta = rotation * MathConstants.DEG_TO_RAD;
     const sinR = Math.sin(theta);
     const cosR = Math.cos(theta);
 
@@ -1174,9 +1174,9 @@ function parseMDL0_NodeEntry(buffer: ArrayBufferSlice): MDL0_NodeEntry {
     const scaleX = view.getFloat32(0x20);
     const scaleY = view.getFloat32(0x24);
     const scaleZ = view.getFloat32(0x28);
-    const rotationX = view.getFloat32(0x2C) * MathConstants.RAD_TO_DEG;
-    const rotationY = view.getFloat32(0x30) * MathConstants.RAD_TO_DEG;
-    const rotationZ = view.getFloat32(0x34) * MathConstants.RAD_TO_DEG;
+    const rotationX = view.getFloat32(0x2C) * MathConstants.DEG_TO_RAD;
+    const rotationY = view.getFloat32(0x30) * MathConstants.DEG_TO_RAD;
+    const rotationZ = view.getFloat32(0x34) * MathConstants.DEG_TO_RAD;
     const translationX = view.getFloat32(0x38);
     const translationY = view.getFloat32(0x3C);
     const translationZ = view.getFloat32(0x40);
@@ -2541,9 +2541,9 @@ export class CHR0NodesAnimator {
         const scaleY = nodeData.scaleY ? sampleFloatAnimationTrack(nodeData.scaleY, animFrame) : 1;
         const scaleZ = nodeData.scaleZ ? sampleFloatAnimationTrack(nodeData.scaleZ, animFrame) : 1;
 
-        const rotationX = nodeData.rotationX ? sampleFloatAnimationTrack(nodeData.rotationX, animFrame) * MathConstants.RAD_TO_DEG : 0;
-        const rotationY = nodeData.rotationY ? sampleFloatAnimationTrack(nodeData.rotationY, animFrame) * MathConstants.RAD_TO_DEG : 0;
-        const rotationZ = nodeData.rotationZ ? sampleFloatAnimationTrack(nodeData.rotationZ, animFrame) * MathConstants.RAD_TO_DEG : 0;
+        const rotationX = nodeData.rotationX ? sampleFloatAnimationTrack(nodeData.rotationX, animFrame) * MathConstants.DEG_TO_RAD : 0;
+        const rotationY = nodeData.rotationY ? sampleFloatAnimationTrack(nodeData.rotationY, animFrame) * MathConstants.DEG_TO_RAD : 0;
+        const rotationZ = nodeData.rotationZ ? sampleFloatAnimationTrack(nodeData.rotationZ, animFrame) * MathConstants.DEG_TO_RAD : 0;
 
         const translationX = nodeData.translationX ? sampleFloatAnimationTrack(nodeData.translationX, animFrame) : 0;
         const translationY = nodeData.translationY ? sampleFloatAnimationTrack(nodeData.translationY, animFrame) : 0;
