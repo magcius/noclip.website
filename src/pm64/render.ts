@@ -1,6 +1,8 @@
 
-import { GfxHostAccessPass, GfxBufferUsage, GfxBufferFrequencyHint, GfxDevice, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxFormat, GfxBuffer, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode } from "../gfx/platform/GfxPlatform";
 import * as Viewer from '../viewer';
+import * as Tex from './tex';
+
+import { GfxHostAccessPass, GfxBufferUsage, GfxBufferFrequencyHint, GfxDevice, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxFormat, GfxBuffer, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderBuffer } from "../gfx/render/GfxRenderBuffer";
 import { mat4 } from "gl-matrix";
 import { GfxRenderInst, GfxRenderInstBuilder, GfxRenderInstViewRenderer, makeSortKeyOpaque, GfxRendererLayer, setSortKeyDepth } from "../gfx/render/GfxRenderer";
@@ -9,9 +11,8 @@ import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, BufferFillerHelper } from 
 import { ModelTreeNode, ModelTreeLeaf, ModelTreeGroup, PropertyType } from "./map_shape";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { RSPOutput, Vertex } from "./f3dex2";
-import { assert, nArray, assertExists, hexzero } from "../util";
+import { assert, nArray, assertExists } from "../util";
 import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
-import * as Tex from './tex';
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
 import { AABB } from "../Geometry";
@@ -179,13 +180,13 @@ function translateCullMode(m: number): GfxCullMode {
     const cullFront = !!(m & 0x200);
     const cullBack = !!(m & 0x400);
     if (cullFront && cullBack)
-        return GfxCullMode.NONE;
+        return GfxCullMode.FRONT_AND_BACK;
     else if (cullFront)
         return GfxCullMode.FRONT;
     else if (cullBack)
         return GfxCullMode.BACK;
     else
-        return GfxCullMode.FRONT_AND_BACK;
+        return GfxCullMode.NONE;
 }
 
 export class BackgroundBillboardRenderer {
@@ -257,6 +258,8 @@ class ModelTreeLeafInstance {
     private renderMode: RenderMode;
     private visible = true;
     private texAnimGroup: number = -1;
+    private secondaryTileShiftS: number = 0;
+    private secondaryTileShiftT: number = 0;
     private texAnimEnabled: boolean = false;
 
     constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, textureArchive: Tex.TextureArchive, textureHolder: PaperMario64TextureHolder, private modelTreeLeaf: ModelTreeLeaf) {
@@ -267,8 +270,11 @@ class ModelTreeLeafInstance {
             this.renderModeProperty = renderModeProp.value1;
 
         const texSettingsProp = this.modelTreeLeaf.properties.find((prop) => prop.id === 0x5F);
-        if (texSettingsProp !== undefined && texSettingsProp.type === PropertyType.INT)
-            this.texAnimGroup = texSettingsProp.value1 & 0x0F;
+        if (texSettingsProp !== undefined && texSettingsProp.type === PropertyType.INT) {
+            this.texAnimGroup = (texSettingsProp.value1 >>> 0) & 0x0F;
+            this.secondaryTileShiftT = (texSettingsProp.value1 >>> 12) & 0x0F;
+            this.secondaryTileShiftS = (texSettingsProp.value1 >>> 16) & 0x0F;
+        }
 
         this.templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
         this.templateRenderInst.inputState = this.n64Data.inputState;
@@ -336,8 +342,15 @@ class ModelTreeLeafInstance {
 
         mat4.identity(dst);
 
-        const ss = 2 / (image.width);
-        const st = 2 / (image.height);
+        let shiftS = 2;
+        let shiftT = 2;
+        if (tileId === 1) {
+            shiftS = this.secondaryTileShiftS;
+            shiftT = this.secondaryTileShiftT;
+        }
+
+        const ss = shiftS / (image.width + 1);
+        const st = shiftT / (image.height + 1);
         dst[0] = ss;
         dst[5] = st;
 
