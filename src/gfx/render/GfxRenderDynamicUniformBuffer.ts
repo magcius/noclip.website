@@ -44,7 +44,7 @@ export class GfxRenderDynamicUniformBuffer {
         if (this.shadowBufferF32 === null) {
             this.shadowBufferU8 = new Uint8Array(this.currentWordOffset * 4);
             this.shadowBufferF32 = new Float32Array(this.shadowBufferU8.buffer);
-        } else if (wordOffset >= this.shadowBufferF32.length) {
+        } else if (wordOffset + wordCount >= this.shadowBufferF32.length) {
             assert(wordOffset < this.currentWordOffset && wordOffset + wordCount < this.currentWordOffset);
 
             // Grow logarithmically.

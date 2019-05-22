@@ -1,5 +1,5 @@
 
-import { GfxMegaStateDescriptor, GfxInputState, GfxDevice, GfxRenderPass, GfxRenderPipelineDescriptor, GfxPrimitiveTopology, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxBindings, GfxSamplerBinding, GfxProgram } from "../platform/GfxPlatform";
+import { GfxMegaStateDescriptor, GfxInputState, GfxDevice, GfxRenderPass, GfxRenderPipelineDescriptor, GfxPrimitiveTopology, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxBindings, GfxSamplerBinding, GfxProgram, GfxInputLayout } from "../platform/GfxPlatform";
 import { defaultMegaState, copyMegaState, setMegaStateFlags } from "../helpers/GfxMegaStateDescriptorHelpers";
 import { GfxRenderCache } from "./GfxRenderCache";
 import { GfxRenderDynamicUniformBuffer } from "./GfxRenderDynamicUniformBuffer";
@@ -60,6 +60,8 @@ export class GfxRenderInst {
         this._renderPipelineDescriptor.topology = o._renderPipelineDescriptor.topology;
         this._inputState = o._inputState;
         this._uniformBuffer = o._uniformBuffer;
+        this.sortKey = o.sortKey;
+        this.filterKey = o.filterKey;
         this._setBindingLayout(o._bindingDescriptors[0].bindingLayout);
         this.setSamplerBindings(o._bindingDescriptors[0].samplerBindings);
         for (let i = 0; i < o._bindingDescriptors[0].bindingLayout.numUniformBuffers; i++)
@@ -76,9 +78,18 @@ export class GfxRenderInst {
         setMegaStateFlags(this._renderPipelineDescriptor.megaStateDescriptor, r);
     }
 
+    public getMegaStateFlags(): GfxMegaStateDescriptor {
+        return this._renderPipelineDescriptor.megaStateDescriptor;
+    }
+
     public setInputState(device: GfxDevice, inputState: GfxInputState | null): void {
         this._inputState = inputState;
         this._renderPipelineDescriptor.inputLayout = inputState !== null ? device.queryInputState(inputState).inputLayout : null;
+    }
+
+    public setInputLayoutAndState(inputLayout: GfxInputLayout | null, inputState: GfxInputState | null): void {
+        this._inputState = inputState;
+        this._renderPipelineDescriptor.inputLayout = inputLayout;
     }
 
     public drawIndexes(indexCount: number, indexStart: number = 0): void {
@@ -103,11 +114,14 @@ export class GfxRenderInst {
             this._bindingDescriptors[0].samplerBindings.push({ sampler: null, texture: null });
     }
 
-    public setBindingBase(bindingLayouts: GfxBindingLayoutDescriptor[], uniformBuffer: GfxRenderDynamicUniformBuffer): void {
+    public setUniformBuffer(uniformBuffer: GfxRenderDynamicUniformBuffer): void {
+        this._uniformBuffer = uniformBuffer;
+    }
+
+    public setBindingLayouts(bindingLayouts: GfxBindingLayoutDescriptor[]): void {
         assert(bindingLayouts.length <= this._bindingDescriptors.length);
         assert(bindingLayouts.length === 1);
         this._setBindingLayout(bindingLayouts[0]);
-        this._uniformBuffer = uniformBuffer;
     }
 
     public allocateUniformBuffer(bufferIndex: number, wordCount: number): number {
@@ -120,13 +134,24 @@ export class GfxRenderInst {
         return this._dynamicUniformBufferOffsets[bufferIndex];
     }
 
+    public getUniformBufferOffset(bufferIndex: number) {
+        return this._dynamicUniformBufferOffsets[bufferIndex];
+    }
+
+    public setUniformBufferOffset(bufferIndex: number, offset: number, wordCount: number): void {
+        this._dynamicUniformBufferOffsets[bufferIndex] = offset;
+
+        const dst = this._bindingDescriptors[0].uniformBufferBindings[bufferIndex];
+        dst.wordOffset = 0;
+        dst.wordCount = wordCount;
+    }
+
     public mapUniformBufferF32(bufferIndex: number): Float32Array {
         return this._uniformBuffer.mapBufferF32(this._dynamicUniformBufferOffsets[bufferIndex], this._bindingDescriptors[0].uniformBufferBindings[bufferIndex].wordCount);
     }
 
-    public copyUniformBufferBinding(bufferIndex: number, src: GfxRenderInst): void {
-        assert(this._bindingDescriptors[0].bindingLayout.numUniformBuffers < this._dynamicUniformBufferOffsets.length);
-        this._bindingDescriptors[0].uniformBufferBindings[bufferIndex].wordOffset = src._bindingDescriptors[0].uniformBufferBindings[bufferIndex].wordOffset;
+    public getUniformBuffer(): GfxRenderDynamicUniformBuffer {
+        return this._uniformBuffer;
     }
 
     public setSamplerBindings(m: GfxSamplerBinding[]): void {

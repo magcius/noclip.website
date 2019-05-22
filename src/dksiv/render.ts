@@ -206,7 +206,8 @@ export class Scene implements Viewer.SceneGfx {
 
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         const template = this.renderInstManager.pushTemplateRenderInst();
-        template.setBindingBase(bindingLayouts, this.uniformBuffer);
+        template.setUniformBuffer(this.uniformBuffer);
+        template.setBindingLayouts(bindingLayouts);
         template.setGfxProgram(this.program);
 
         let offs = template.allocateUniformBuffer(IVProgram.ub_SceneParams, 32);

@@ -1372,13 +1372,15 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const bindingLayoutTable = this._currentPipeline.bindingLayouts.bindingLayoutTables[bindingLayoutIndex];
 
         const { uniformBufferBindings, samplerBindings } = bindings_ as GfxBindingsP_GL;
-        assert(uniformBufferBindings.length === bindingLayoutTable.numUniformBuffers);
-        // Ignore extra bindings or dynamic word offsets.
+        // Ignore extra bindings.
+        assert(uniformBufferBindings.length >= bindingLayoutTable.numUniformBuffers);
         assert(samplerBindings.length >= bindingLayoutTable.numSamplers);
         assert(dynamicWordOffsetsCount >= uniformBufferBindings.length);
 
         for (let i = 0; i < uniformBufferBindings.length; i++) {
             const binding = uniformBufferBindings[i];
+            if (binding.wordCount === 0)
+                continue;
             const index = bindingLayoutTable.firstUniformBuffer + i;
             const buffer = binding.buffer as GfxBufferP_GL;
             const wordOffset = (binding.wordOffset + dynamicWordOffsets[dynamicWordOffsetsStart + i]);

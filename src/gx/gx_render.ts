@@ -61,7 +61,7 @@ export const u_SceneParamsBufferSize = 4*4 + 4;
 export const u_MaterialParamsBufferSize = 4*2 + 4*2 + 4*4 + 4*4 + 4*3*10 + 4*3*20 + 4*2*3 + 4*8 + 4*5*8;
 export const u_PacketParamsBufferSize = 4*3*10;
 
-export function fillSceneParamsData(d: Float32Array, sceneParams: SceneParams, bOffs: number = 0): void {
+export function fillSceneParamsData(d: Float32Array, bOffs: number, sceneParams: SceneParams): void {
     let offs = bOffs;
 
     offs += fillMatrix4x4(d, offs, sceneParams.u_Projection);
@@ -72,7 +72,7 @@ export function fillSceneParamsData(d: Float32Array, sceneParams: SceneParams, b
     assert(d.length >= offs);
 }
 
-export function fillMaterialParamsData(d: Float32Array, materialParams: MaterialParams, bOffs: number = 0): void {
+export function fillMaterialParamsData(d: Float32Array, bOffs: number, materialParams: MaterialParams): void {
     let offs = bOffs;
 
     for (let i = 0; i < 12; i++)
@@ -98,7 +98,7 @@ export function fillMaterialParamsData(d: Float32Array, materialParams: Material
     assert(d.length >= offs);
 }
 
-export function fillPacketParamsData(d: Float32Array, packetParams: PacketParams, bOffs: number = 0): void {
+export function fillPacketParamsData(d: Float32Array, bOffs: number, packetParams: PacketParams): void {
     let offs = bOffs;
 
     for (let i = 0; i < 10; i++)
@@ -276,15 +276,15 @@ export class GXRenderHelperGfx {
 
     public fillSceneParams(viewerInput: Viewer.ViewerRenderInput): void {
         fillSceneParams(this.sceneParams, viewerInput.camera, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        fillSceneParamsData(this.sceneParamsBuffer.mapBufferF32(0, u_SceneParamsBufferSize), this.sceneParams);
+        fillSceneParamsData(this.sceneParamsBuffer.mapBufferF32(0, u_SceneParamsBufferSize), 0, this.sceneParams);
     }
 
     public fillMaterialParams(materialParams: MaterialParams, dstWordOffset: number): void {
-        fillMaterialParamsData(this.materialParamsBuffer.mapBufferF32(dstWordOffset, u_MaterialParamsBufferSize), materialParams, dstWordOffset);
+        fillMaterialParamsData(this.materialParamsBuffer.mapBufferF32(dstWordOffset, u_MaterialParamsBufferSize), dstWordOffset, materialParams);
     }
 
     public fillPacketParams(packetParams: PacketParams, dstWordOffset: number): void {
-        fillPacketParamsData(this.packetParamsBuffer.mapBufferF32(dstWordOffset, u_PacketParamsBufferSize), packetParams, dstWordOffset);
+        fillPacketParamsData(this.packetParamsBuffer.mapBufferF32(dstWordOffset, u_PacketParamsBufferSize), dstWordOffset, packetParams);
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass): void {

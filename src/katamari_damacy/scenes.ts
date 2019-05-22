@@ -188,7 +188,8 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
             viewerInput.camera.setClipPlanes(2,  1200000);
 
         const template = this.renderInstManager.pushTemplateRenderInst();
-        template.setBindingBase(bindingLayouts, this.uniformBuffer);
+        template.setUniformBuffer(this.uniformBuffer);
+        template.setBindingLayouts(bindingLayouts);
         const offs = template.allocateUniformBuffer(KatamariDamacyProgram.ub_SceneParams, 16);
         const sceneParamsMapped = template.mapUniformBufferF32(KatamariDamacyProgram.ub_SceneParams);
         fillSceneParamsData(sceneParamsMapped, viewerInput.camera, offs);
