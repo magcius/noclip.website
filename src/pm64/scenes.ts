@@ -105,9 +105,9 @@ class PaperMario64SceneDesc implements Viewer.SceneDesc {
             renderer.modelTreeRenderers.push(modelTreeRenderer);
             modelTreeRenderer.addToViewRenderer(device, renderer.viewRenderer);
 
-            // const scriptExecutor = new ScriptExecutor(renderer, arc.ROMOverlayData);
-            // scriptExecutor.startFromHeader(arc.HeaderAddr);
-            // renderer.scriptExecutor = scriptExecutor;
+            const scriptExecutor = new ScriptExecutor(renderer, arc.ROMOverlayData);
+            scriptExecutor.startFromHeader(arc.HeaderAddr);
+            renderer.scriptExecutor = scriptExecutor;
 
             return renderer;
         });
