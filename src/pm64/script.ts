@@ -210,8 +210,8 @@ export class ScriptExecutor {
             assert(operCount === 4);
             const groupId = this.getValue(thread, view.getInt32(operOffs + 0x00));
             const tileId = this.getValue(thread, view.getInt32(operOffs + 0x04));
-            const transS = this.getValue(thread, view.getInt32(operOffs + 0x08)) / 0x400;
-            const transT = this.getValue(thread, view.getInt32(operOffs + 0x0C)) / -0x400;
+            const transS = this.getValue(thread, view.getInt32(operOffs + 0x08)) / 0x800;
+            const transT = this.getValue(thread, view.getInt32(operOffs + 0x0C)) / -0x800;
             this.scriptHost.setTexAnimGroup(groupId, tileId, transS, transT);
         }
 
