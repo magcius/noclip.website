@@ -1,6 +1,6 @@
 
 import { GfxBuffer, GfxDevice, GfxHostAccessPass, GfxBufferUsage, GfxBufferFrequencyHint } from "../platform/GfxPlatform";
-import { align, assert, hexzero } from "../../util";
+import { align, assert, hexzero, assertExists } from "../../util";
 
 // TODO(jstpierre): Maybe this makes more sense as a native platform object
 
@@ -41,7 +41,7 @@ export class GfxRenderDynamicUniformBuffer {
     }
 
     private ensureShadowBuffer(wordOffset: number, wordCount: number): void {
-        if (this.shadowBufferF32 === null) {
+        if (this.shadowBufferU8 === null || this.shadowBufferF32 === null) {
             this.shadowBufferU8 = new Uint8Array(this.currentWordOffset * 4);
             this.shadowBufferF32 = new Float32Array(this.shadowBufferU8.buffer);
         } else if (wordOffset + wordCount >= this.shadowBufferF32.length) {
@@ -59,12 +59,14 @@ export class GfxRenderDynamicUniformBuffer {
     // TODO(jstpierre): This API is kind of bad for initial performance...
     public mapBufferF32(wordOffset: number, wordCount: number): Float32Array {
         this.ensureShadowBuffer(wordOffset, wordCount);
-        return this.shadowBufferF32;
+        return assertExists(this.shadowBufferF32);
     }
 
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass): void {
-        if (this.shadowBufferF32.length !== this.currentBufferWordSize) {
-            this.currentBufferWordSize = this.shadowBufferF32.length;
+        const shadowBufferF32 = assertExists(this.shadowBufferF32);
+
+        if (shadowBufferF32.length !== this.currentBufferWordSize) {
+            this.currentBufferWordSize = shadowBufferF32.length;
 
             if (this.gfxBuffer !== null)
                 device.destroyBuffer(this.gfxBuffer);
@@ -72,7 +74,8 @@ export class GfxRenderDynamicUniformBuffer {
             this.gfxBuffer = device.createBuffer(this.currentBufferWordSize, GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);
         }
 
-        hostAccessPass.uploadBufferData(this.gfxBuffer, 0, this.shadowBufferU8);
+        const gfxBuffer = assertExists(this.gfxBuffer);
+        hostAccessPass.uploadBufferData(gfxBuffer, 0, this.shadowBufferU8!);
 
         // Reset the offset for next frame.
         // TODO(jstpierre): Should this be a separate step?

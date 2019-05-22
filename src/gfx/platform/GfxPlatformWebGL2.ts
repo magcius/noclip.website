@@ -8,7 +8,6 @@ import { assert, assertExists } from '../../util';
 import { copyMegaState, defaultMegaState, fullscreenMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
 import { IS_DEVELOPMENT } from '../../BuildVersion';
 import { White, colorEqual, colorCopy } from '../../Color';
-import * as Sentry from '@sentry/browser';
 
 export class FullscreenCopyProgram extends FullscreenProgram {
     public frag: string = `
@@ -598,15 +597,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             if (navigator.platform === 'MacIntel' && !renderer.includes('NVIDIA'))
                 this.programBugDefines += '#define _BUG_AMD_ROW_MAJOR';
         }
-
-        // Record context losses with Sentry.
-        gl.canvas.addEventListener('webglcontextlost', (e_) => {
-            // Work-around for TypeScript not having bindings for webglcontextlost.
-            const e = e_ as WebGLContextEvent;
-            Sentry.addBreadcrumb({
-                message: `WebGL Context Loss: ${e.statusMessage}`,
-            });
-        });
     }
 
     //#region GfxSwapChain
@@ -1400,8 +1390,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         for (let i = 0; i < samplerBindings.length; i++) {
             const binding = samplerBindings[i];
             const samplerIndex = bindingLayoutTable.firstSampler + i;
-            const gl_sampler = binding !== null && binding.sampler !== null ? getPlatformSampler(binding.sampler) : null;
-            const gl_texture = binding !== null && binding.texture !== null ? getPlatformTexture(binding.texture) : null;
+            const gl_sampler = binding !== null && binding.gfxSampler !== null ? getPlatformSampler(binding.gfxSampler) : null;
+            const gl_texture = binding !== null && binding.gfxTexture !== null ? getPlatformTexture(binding.gfxTexture) : null;
 
             if (this._currentSamplers[samplerIndex] !== gl_sampler) {
                 gl.bindSampler(samplerIndex, gl_sampler);
@@ -1411,7 +1401,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             if (this._currentTextures[samplerIndex] !== gl_texture) {
                 this._setActiveTexture(gl.TEXTURE0 + samplerIndex);
                 if (gl_texture !== null) {
-                    const { gl_target } = (assertExists(binding).texture as GfxTextureP_GL);
+                    const { gl_target } = (assertExists(binding).gfxTexture as GfxTextureP_GL);
                     gl.bindTexture(gl_target, gl_texture);
                     this._debugGroupStatisticsTextureBind();
                 } else {

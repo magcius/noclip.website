@@ -1,10 +1,9 @@
 
-import { GfxMegaStateDescriptor, GfxInputState, GfxDevice, GfxRenderPass, GfxRenderPipelineDescriptor, GfxPrimitiveTopology, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxBindings, GfxSamplerBinding, GfxProgram, GfxInputLayout } from "../platform/GfxPlatform";
+import { GfxMegaStateDescriptor, GfxInputState, GfxDevice, GfxRenderPass, GfxRenderPipelineDescriptor, GfxPrimitiveTopology, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxBindings, GfxSamplerBinding, GfxProgram, GfxInputLayout, GfxBuffer } from "../platform/GfxPlatform";
 import { defaultMegaState, copyMegaState, setMegaStateFlags } from "../helpers/GfxMegaStateDescriptorHelpers";
 import { GfxRenderCache } from "./GfxRenderCache";
 import { GfxRenderDynamicUniformBuffer } from "./GfxRenderDynamicUniformBuffer";
 import { nArray, assert } from "../../util";
-import { TextureMapping } from "../../TextureHolder";
 
 // Changes to V2:
 //  * RenderInst is now meant to be reconstructed every frame, even more similarly to T3.
@@ -29,12 +28,12 @@ export class GfxRenderInst {
 
     // Bindings building.
     private _uniformBuffer: GfxRenderDynamicUniformBuffer;
-    private _bindingDescriptors: GfxBindingsDescriptor[] = nArray(1, () => ({ samplerBindings: [], uniformBufferBindings: [] } as GfxBindingsDescriptor));
+    private _bindingDescriptors: GfxBindingsDescriptor[] = nArray(1, () => ({ bindingLayout: null!, samplerBindings: [], uniformBufferBindings: [] }));
     private _dynamicUniformBufferOffsets: number[] = nArray(4, () => 0);
 
     public _flags: number = 0;
     public _parentTemplateIndex: number = -1;
-    private _inputState: GfxInputState;
+    private _inputState: GfxInputState | null = null;
     private _drawStart: number;
     private _drawCount: number;
 
@@ -43,7 +42,7 @@ export class GfxRenderInst {
             bindingLayouts: [],
             inputLayout: null,
             megaStateDescriptor: copyMegaState(defaultMegaState),
-            program: null,
+            program: null!, // lol
             topology: GfxPrimitiveTopology.TRIANGLES,
         };
     }
@@ -63,7 +62,7 @@ export class GfxRenderInst {
         this.sortKey = o.sortKey;
         this.filterKey = o.filterKey;
         this._setBindingLayout(o._bindingDescriptors[0].bindingLayout);
-        this.setSamplerBindings(o._bindingDescriptors[0].samplerBindings);
+        this.setSamplerBindingsFromTextureMappings(o._bindingDescriptors[0].samplerBindings);
         for (let i = 0; i < o._bindingDescriptors[0].bindingLayout.numUniformBuffers; i++)
             this._bindingDescriptors[0].uniformBufferBindings[i].wordCount = o._bindingDescriptors[0].uniformBufferBindings[i].wordCount;
         for (let i = 0; i < o._dynamicUniformBufferOffsets.length; i++)
@@ -109,9 +108,9 @@ export class GfxRenderInst {
         this._bindingDescriptors[0].bindingLayout = bindingLayout;
 
         for (let i = this._bindingDescriptors[0].uniformBufferBindings.length; i < bindingLayout.numUniformBuffers; i++)
-            this._bindingDescriptors[0].uniformBufferBindings.push({ buffer: null, wordCount: 0, wordOffset: 0 });
+            this._bindingDescriptors[0].uniformBufferBindings.push({ buffer: null!, wordCount: 0, wordOffset: 0 });
         for (let i = this._bindingDescriptors[0].samplerBindings.length; i < bindingLayout.numSamplers; i++)
-            this._bindingDescriptors[0].samplerBindings.push({ sampler: null, texture: null });
+            this._bindingDescriptors[0].samplerBindings.push({ gfxSampler: null, gfxTexture: null });
     }
 
     public setUniformBuffer(uniformBuffer: GfxRenderDynamicUniformBuffer): void {
@@ -154,19 +153,16 @@ export class GfxRenderInst {
         return this._uniformBuffer;
     }
 
-    public setSamplerBindings(m: GfxSamplerBinding[]): void {
+    public setSamplerBindingsFromTextureMappings(m: (GfxSamplerBinding | null)[]): void {
         for (let i = 0; i < m.length; i++) {
-            const dst = this._bindingDescriptors[0].samplerBindings[i];
-            dst.texture = m[i].texture;
-            dst.sampler = m[i].sampler;
-        }
-    }
-
-    public setSamplerBindingsFromTextureMappings(m: TextureMapping[]): void {
-        for (let i = 0; i < m.length; i++) {
-            const dst = this._bindingDescriptors[0].samplerBindings[i];
-            dst.texture = m[i].gfxTexture;
-            dst.sampler = m[i].gfxSampler;
+            const dst = this._bindingDescriptors[0].samplerBindings[i]!;
+            if (m[i] !== null) {
+                dst.gfxTexture = m[i]!.gfxTexture;
+                dst.gfxSampler = m[i]!.gfxSampler;
+            } else {
+                dst.gfxTexture = null;
+                dst.gfxSampler = null;
+            }
         }
     }
 
@@ -181,7 +177,7 @@ export class GfxRenderInst {
         passRenderer.setInputState(this._inputState);
 
         for (let i = 0; i < this._bindingDescriptors[0].uniformBufferBindings.length; i++)
-            this._bindingDescriptors[0].uniformBufferBindings[i].buffer = this._uniformBuffer.gfxBuffer;
+            this._bindingDescriptors[0].uniformBufferBindings[i].buffer = this._uniformBuffer.gfxBuffer!;
 
         // TODO(jstpierre): Support multiple binding descriptors.
         const gfxBindings = cache.createBindings(device, this._bindingDescriptors[0]);

@@ -19,7 +19,7 @@ function gfxBufferBindingEquals(a: GfxBufferBinding, b: GfxBufferBinding): boole
 function gfxSamplerBindingEquals(a: GfxSamplerBinding | null, b: GfxSamplerBinding | null): boolean {
     if (a === null) return b === null;
     if (b === null) return false;
-    return a.sampler === b.sampler && a.texture === b.texture;
+    return a.gfxSampler === b.gfxSampler && a.gfxTexture === b.gfxTexture;
 }
 
 function gfxBindingsDescriptorEquals(a: GfxBindingsDescriptor, b: GfxBindingsDescriptor): boolean {
@@ -35,8 +35,8 @@ function gfxBindingsDescriptorHash(a: GfxBindingsDescriptor): number {
     let hash: number = 0;
     for (let i = 0; i < a.samplerBindings.length; i++) {
         const binding = a.samplerBindings[i];
-        if (binding !== null && binding.texture !== null)
-            hash = hashCodeNumberUpdate(hash, binding.texture.ResourceUniqueId);
+        if (binding !== null && binding.gfxTexture !== null)
+            hash = hashCodeNumberUpdate(hash, binding.gfxTexture.ResourceUniqueId);
     }
     return hashCodeNumberFinish(hash);
 }

@@ -1,6 +1,4 @@
 
-import { assert } from './util';
-
 interface GrabListener {
     onMotion(dx: number, dy: number): void;
     onGrabReleased(): void;

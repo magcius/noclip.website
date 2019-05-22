@@ -2,11 +2,9 @@
 import { GfxInputState, GfxRenderPass, GfxBindings, GfxRenderPipeline, GfxDevice, GfxSamplerBinding, GfxBindingLayoutDescriptor, GfxBufferBinding, GfxProgram, GfxPrimitiveTopology, GfxSampler, GfxBindingsDescriptor, GfxMegaStateDescriptor, GfxProgramReflection } from "../platform/GfxPlatform";
 import { align, assertExists, assert } from "../../util";
 import { GfxRenderBuffer } from "./GfxRenderBuffer";
-import { TextureMapping } from "../../TextureHolder";
 import { DeviceProgramReflection, DeviceProgram } from "../../Program";
 import { GfxRenderCache } from "./GfxRenderCache";
 import { setMegaStateFlags, copyMegaState, defaultMegaState } from "../helpers/GfxMegaStateDescriptorHelpers";
-import { GfxRenderDynamicUniformBuffer } from "./GfxRenderDynamicUniformBuffer";
 import { StructLayout } from "../helpers/UniformBufferHelpers";
 
 // The "Render" subsystem is a high-level scene graph, built on top of gfx/platform and gfx/helpers.
@@ -251,17 +249,17 @@ export class GfxRenderInst {
     public setSamplerBindings(m: GfxSamplerBinding[], firstSampler: number = 0): void {
         for (let i = 0; i < m.length; i++) {
             const j = firstSampler + i;
-            if (!this._samplerBindings[j] || this._samplerBindings[j].texture !== m[i].texture || this._samplerBindings[j].sampler !== m[i].sampler) {
+            if (!this._samplerBindings[j] || this._samplerBindings[j].gfxTexture !== m[i].gfxTexture || this._samplerBindings[j].gfxSampler !== m[i].gfxSampler) {
                 this._samplerBindings[j] = m[i];
                 this._setFlag(GfxRenderInstFlags.BINDINGS_DIRTY, true);
             }
         }
     }
 
-    public setSamplerBindingsFromTextureMappings(m: TextureMapping[]): void {
+    public setSamplerBindingsFromTextureMappings(m: GfxSamplerBinding[]): void {
         for (let i = 0; i < m.length; i++) {
-            if (!this._samplerBindings[i] || this._samplerBindings[i].texture !== m[i].gfxTexture || this._samplerBindings[i].sampler !== m[i].gfxSampler) {
-                this._samplerBindings[i] = { texture: m[i].gfxTexture, sampler: m[i].gfxSampler };
+            if (!this._samplerBindings[i] || this._samplerBindings[i].gfxTexture !== m[i].gfxTexture || this._samplerBindings[i].gfxSampler !== m[i].gfxSampler) {
+                this._samplerBindings[i] = { gfxTexture: m[i].gfxTexture, gfxSampler: m[i].gfxSampler };
                 this._setFlag(GfxRenderInstFlags.BINDINGS_DIRTY, true);
             }
         }
@@ -487,7 +485,7 @@ export class GfxRenderInstViewRenderer {
                 continue;
 
             // Unfinished pipeline.
-            if (!renderInst._pipeline === null || !device.queryPipelineReady(renderInst._pipeline))
+            if (renderInst._pipeline === null || !device.queryPipelineReady(renderInst._pipeline))
                 continue;
 
             if (!(renderInst._flags & GfxRenderInstFlags.BINDINGS_CREATED))

@@ -350,7 +350,7 @@ export class ProgramCache extends MemoizeCache<ProgramKey, ProgramWithKey> {
         super();
     }
 
-    protected make(key: ProgramKey): ProgramWithKey {
+    protected make(key: ProgramKey): ProgramWithKey | null {
         const gl = this.gl;
         const vertShader = compileShader(gl, key.vert, gl.VERTEX_SHADER);
         const fragShader = compileShader(gl, key.frag, gl.FRAGMENT_SHADER);

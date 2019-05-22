@@ -12,8 +12,8 @@ export function arrayCopy<T>(a: T[], copyFunc: CopyFunc<T>): T[] {
 }
 
 export function gfxSamplerBindingCopy(a: GfxSamplerBinding): GfxSamplerBinding {
-    const { sampler, texture } = a;
-    return { sampler, texture };
+    const { gfxSampler, gfxTexture } = a;
+    return { gfxSampler, gfxTexture };
 }
 
 export function gfxBufferBindingCopy(a: GfxBufferBinding): GfxBufferBinding {
