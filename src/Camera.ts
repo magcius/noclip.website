@@ -70,36 +70,39 @@ export function computeViewMatrixSkybox(out: mat4, camera: Camera): void {
 }
 
 export function computeModelMatrixBillboard(out: mat4, camera: Camera): void {
-    mat4.identity(out);
+    const lengthR = vec3.length(vec3.fromValues(out[0],out[4],out[8]));
+    const lengthU = vec3.length(vec3.fromValues(out[1],out[5],out[9]));
+    const lengthF = vec3.length(vec3.fromValues(out[2],out[6],out[10]));
 
     // Right vector
-    out[0] = camera.worldMatrix[0];
-    out[4] = camera.worldMatrix[4];
-    out[8] = camera.worldMatrix[8];
-
+    out[0] = camera.worldMatrix[0] * lengthR;
+    out[4] = camera.worldMatrix[4] * lengthR;
+    out[8] = camera.worldMatrix[8] * lengthR;
+ 
     // Up vector
-    out[1] = camera.worldMatrix[1];
-    out[5] = camera.worldMatrix[5];
-    out[9] = camera.worldMatrix[9];
+    out[1] = camera.worldMatrix[1] * lengthU;
+    out[5] = camera.worldMatrix[5] * lengthU;
+    out[9] = camera.worldMatrix[9] * lengthU;
 
     // Forward vector
-    out[2] = camera.worldMatrix[2];
-    out[6] = camera.worldMatrix[6];
-    out[8] = camera.worldMatrix[8];
+    out[2] = camera.worldMatrix[2] * lengthF;
+    out[6] = camera.worldMatrix[6] * lengthF;
+    out[8] = camera.worldMatrix[10]* lengthF;
 }
 
 export function computeModelMatrixYBillboard(out: mat4, camera: Camera): void {
-    mat4.identity(out);
+    const lengthR = vec3.length(vec3.fromValues(out[0],out[4],out[8]));
+    const lengthF = vec3.length(vec3.fromValues(out[2],out[6],out[10]));
 
     // Right vector
-    out[0] = camera.worldMatrix[0];
-    out[4] = camera.worldMatrix[4];
-    out[8] = camera.worldMatrix[8];
+    out[0] = camera.worldMatrix[0] * lengthR;
+    out[4] = camera.worldMatrix[4] * lengthR;
+    out[8] = camera.worldMatrix[8] * lengthR;
 
     // Forward vector
-    out[2] = camera.worldMatrix[2];
-    out[6] = camera.worldMatrix[6];
-    out[8] = camera.worldMatrix[8];
+    out[2] = camera.worldMatrix[2] * lengthF;
+    out[6] = camera.worldMatrix[6] * lengthF;
+    out[8] = camera.worldMatrix[10]* lengthF;
 }
 
 const scratchVec3 = vec3.create();

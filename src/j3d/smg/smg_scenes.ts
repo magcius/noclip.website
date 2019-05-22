@@ -1015,7 +1015,6 @@ class SMGSpawner {
         case 'SplashPieceBlock':
         case 'LavaSparksS':
         case 'InstantInferno':
-        case 'BlackHoleCube':
         case 'FireRing':
         case 'FireBar':
         case 'JumpBeamer':
@@ -1139,10 +1138,39 @@ class SMGSpawner {
             break;
         case 'BlackHole':
         case 'BlackHoleCube':
-            spawnGraph(`BlackHole`);
+            spawnGraph(`BlackHole`).then(([node, rarc]) => {
+                if(node.objinfo.objArg0!=-1||name=='BlackHoleCube'){
+                    const scale = node.objinfo.objArg0 / 1000;
+                    node.modelMatrix[0]  = scale*0.5;
+                    node.modelMatrix[1]  = 0;
+                    node.modelMatrix[2]  = 0;
+
+                    node.modelMatrix[4]  = 0;
+                    node.modelMatrix[5]  = scale*0.5;
+                    node.modelMatrix[6]  = 0;
+
+                    node.modelMatrix[8]  = 0;
+                    node.modelMatrix[9]  = 0;
+                    node.modelMatrix[10] = scale*0.5;
+                    node.modelMatrix[15] = 1;
+                }
+            });
             spawnGraph(`BlackHoleRange`).then(([node, rarc]) => {
-                const scale = node.objinfo.objArg0 / 1000;
-                mat4.scale(node.modelMatrix, node.modelMatrix, [scale, scale, scale]);
+                if(node.objinfo.objArg0!=-1||name=='BlackHoleCube'){
+                    const scale = node.objinfo.objArg0 / 1000;
+                    node.modelMatrix[0]  = scale;
+                    node.modelMatrix[1]  = 0;
+                    node.modelMatrix[2]  = 0;
+
+                    node.modelMatrix[4]  = 0;
+                    node.modelMatrix[5]  = scale;
+                    node.modelMatrix[6]  = 0;
+
+                    node.modelMatrix[8]  = 0;
+                    node.modelMatrix[9]  = 0;
+                    node.modelMatrix[10] = scale;
+                    node.modelMatrix[15] = 1;
+                }
             });
             break;
 

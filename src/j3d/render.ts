@@ -111,12 +111,12 @@ export class ShapeInstance {
             break;
 
         case ShapeDisplayFlags.BILLBOARD:
+            mat4.copy(scratchModelMatrix, shapeInstanceState.modelMatrix);
             computeModelMatrixBillboard(scratchModelMatrix, camera);
-            mat4.mul(scratchModelMatrix, shapeInstanceState.modelMatrix, scratchModelMatrix);
             break;
         case ShapeDisplayFlags.Y_BILLBOARD:
+            mat4.copy(scratchModelMatrix, shapeInstanceState.modelMatrix);
             computeModelMatrixYBillboard(scratchModelMatrix, camera);
-            mat4.mul(scratchModelMatrix, shapeInstanceState.modelMatrix, scratchModelMatrix);
             break;
         default:
             throw new Error("whoops");
