@@ -8,7 +8,6 @@ import { assert, assertExists } from '../../util';
 import { copyMegaState, defaultMegaState, fullscreenMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
 import { IS_DEVELOPMENT } from '../../BuildVersion';
 import { White, colorEqual, colorCopy } from '../../Color';
-import * as Sentry from '@sentry/browser';
 
 export class FullscreenCopyProgram extends FullscreenProgram {
     public frag: string = `
@@ -499,7 +498,7 @@ function applyMegaState(gl: WebGL2RenderingContext, currentMegaState: GfxMegaSta
     }
 }
 
-const TRACK_RESOURCES = IS_DEVELOPMENT;
+const TRACK_RESOURCES = false && IS_DEVELOPMENT;
 class ResourceCreationTracker {
     public creationStacks = new Map<GfxResource, string>();
 
@@ -540,7 +539,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _currentSamplers: (WebGLSampler | null)[] = [];
     private _currentTextures: (WebGLTexture | null)[] = [];
     private _currentUniformBuffers: GfxBuffer[] = [];
-    private _currentUniformBufferOffsets: number[] = [];
+    private _currentUniformBufferByteOffsets: number[] = [];
     private _debugGroupStack: GfxDebugGroup[] = [];
     private _resolveReadFramebuffer!: WebGLFramebuffer;
     private _resolveDrawFramebuffer!: WebGLFramebuffer;
@@ -598,15 +597,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             if (navigator.platform === 'MacIntel' && !renderer.includes('NVIDIA'))
                 this.programBugDefines += '#define _BUG_AMD_ROW_MAJOR';
         }
-
-        // Record context losses with Sentry.
-        gl.canvas.addEventListener('webglcontextlost', (e_) => {
-            // Work-around for TypeScript not having bindings for webglcontextlost.
-            const e = e_ as WebGLContextEvent;
-            Sentry.addBreadcrumb({
-                message: `WebGL Context Loss: ${e.statusMessage}`,
-            });
-        });
     }
 
     //#region GfxSwapChain
@@ -744,12 +734,29 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
     }
 
-    private _currentBoundBuffers: WebGLBuffer[] = [];
-    private _bindBuffer(gl_target: GLenum, gl_buffer: WebGLBuffer, force: boolean = false): void {
-        if (this._currentBoundBuffers[gl_target] !== gl_buffer || force) {
-            this._bindVAO(null);
-            this.gl.bindBuffer(gl_target, gl_buffer);
-            this._currentBoundBuffers[gl_target] = gl_buffer;
+    private _currentBoundUBO: WebGLBuffer | null = null;
+    private _currentBoundIBO: WebGLBuffer | null = null;
+    private _currentBoundVBO: WebGLBuffer | null = null;
+    private _bindBuffer(gl_target: GLenum, gl_buffer: WebGLBuffer): void {
+        if (gl_target === WebGL2RenderingContext.UNIFORM_BUFFER) {
+            if (this._currentBoundUBO !== gl_buffer) {
+                this.gl.bindBuffer(gl_target, gl_buffer);
+                this._currentBoundUBO = gl_buffer;
+            }
+        } else if (gl_target === WebGL2RenderingContext.ELEMENT_ARRAY_BUFFER) {
+            if (this._currentBoundIBO !== gl_buffer) {
+                this._bindVAO(null);
+                this.gl.bindBuffer(gl_target, gl_buffer);
+                this._currentBoundIBO = gl_buffer;
+            }
+        } else if (gl_target === WebGL2RenderingContext.ARRAY_BUFFER) {
+            if (this._currentBoundVBO !== gl_buffer) {
+                this._bindVAO(null);
+                this.gl.bindBuffer(gl_target, gl_buffer);
+                this._currentBoundVBO = gl_buffer;
+            }
+        } else {
+            throw "whoops";
         }
     }
 
@@ -899,8 +906,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     public createBindings(descriptor: GfxBindingsDescriptor): GfxBindings {
         const { bindingLayout, uniformBufferBindings, samplerBindings } = descriptor;
-        assert(bindingLayout.numUniformBuffers === uniformBufferBindings.length);
-        assert(bindingLayout.numSamplers === samplerBindings.length);
+        assert(uniformBufferBindings.length >= bindingLayout.numUniformBuffers);
+        assert(samplerBindings.length >= bindingLayout.numSamplers);
         const bindings: GfxBindingsP_GL = { _T: _T.Bindings, ResourceUniqueId: this.getNextUniqueId(), uniformBufferBindings, samplerBindings };
         this._resourceCreationTracker.trackResourceCreated(bindings);
         return bindings;
@@ -1112,6 +1119,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const gl = this.gl;
         return {
             uniformBufferWordAlignment: gl.getParameter(gl.UNIFORM_BUFFER_OFFSET_ALIGNMENT) / 4,
+            uniformBufferMaxPageWordSize: gl.getParameter(gl.MAX_UNIFORM_BLOCK_SIZE) / 4,
         };
     }
 
@@ -1122,8 +1130,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     public queryInputState(inputState_: GfxInputState): GfxInputStateReflection {
         const inputState = inputState_ as GfxInputStateP_GL;
-        const inputLayout = inputState.inputLayout;
-        return { inputLayout };
+        return inputState;
     }
 
     public queryTextureFormatSupported(format: GfxFormat): boolean {
@@ -1355,33 +1362,36 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const bindingLayoutTable = this._currentPipeline.bindingLayouts.bindingLayoutTables[bindingLayoutIndex];
 
         const { uniformBufferBindings, samplerBindings } = bindings_ as GfxBindingsP_GL;
-        assert(uniformBufferBindings.length === bindingLayoutTable.numUniformBuffers);
-        assert(samplerBindings.length === bindingLayoutTable.numSamplers);
-        assert(dynamicWordOffsetsCount === uniformBufferBindings.length);
+        // Ignore extra bindings.
+        assert(uniformBufferBindings.length >= bindingLayoutTable.numUniformBuffers);
+        assert(samplerBindings.length >= bindingLayoutTable.numSamplers);
+        assert(dynamicWordOffsetsCount >= uniformBufferBindings.length);
 
         for (let i = 0; i < uniformBufferBindings.length; i++) {
             const binding = uniformBufferBindings[i];
+            if (binding.wordCount === 0)
+                continue;
             const index = bindingLayoutTable.firstUniformBuffer + i;
             const buffer = binding.buffer as GfxBufferP_GL;
             const wordOffset = (binding.wordOffset + dynamicWordOffsets[dynamicWordOffsetsStart + i]);
             const byteOffset = wordOffset * 4;
             const byteSize = binding.wordCount * 4;
-            if (buffer !== this._currentUniformBuffers[index] || byteOffset !== this._currentUniformBufferOffsets[index]) {
+            if (buffer !== this._currentUniformBuffers[index] || byteOffset !== this._currentUniformBufferByteOffsets[index]) {
                 const platformBufferByteOffset = byteOffset % buffer.pageByteSize;
                 const platformBuffer = buffer.gl_buffer_pages[(byteOffset / buffer.pageByteSize) | 0];
-                assert(byteOffset + byteSize < buffer.pageByteSize);
+                assert(platformBufferByteOffset + byteSize < buffer.pageByteSize);
                 gl.bindBufferRange(gl.UNIFORM_BUFFER, index, platformBuffer, platformBufferByteOffset, byteSize);
                 this._currentUniformBuffers[index] = buffer;
-                this._currentUniformBufferOffsets[index] = byteOffset;
-                this._currentBoundBuffers[gl.UNIFORM_BUFFER] = platformBuffer;
+                this._currentUniformBufferByteOffsets[index] = byteOffset;
             }
         }
+        this._currentBoundUBO = null;
 
         for (let i = 0; i < samplerBindings.length; i++) {
             const binding = samplerBindings[i];
             const samplerIndex = bindingLayoutTable.firstSampler + i;
-            const gl_sampler = binding !== null && binding.sampler !== null ? getPlatformSampler(binding.sampler) : null;
-            const gl_texture = binding !== null && binding.texture !== null ? getPlatformTexture(binding.texture) : null;
+            const gl_sampler = binding !== null && binding.gfxSampler !== null ? getPlatformSampler(binding.gfxSampler) : null;
+            const gl_texture = binding !== null && binding.gfxTexture !== null ? getPlatformTexture(binding.gfxTexture) : null;
 
             if (this._currentSamplers[samplerIndex] !== gl_sampler) {
                 gl.bindSampler(samplerIndex, gl_sampler);
@@ -1391,7 +1401,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             if (this._currentTextures[samplerIndex] !== gl_texture) {
                 this._setActiveTexture(gl.TEXTURE0 + samplerIndex);
                 if (gl_texture !== null) {
-                    const { gl_target } = (assertExists(binding).texture as GfxTextureP_GL);
+                    const { gl_target } = (assertExists(binding).gfxTexture as GfxTextureP_GL);
                     gl.bindTexture(gl_target, gl_texture);
                     this._debugGroupStatisticsTextureBind();
                 } else {

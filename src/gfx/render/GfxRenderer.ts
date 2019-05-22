@@ -1,11 +1,11 @@
 
-import { GfxInputState, GfxRenderPass, GfxBindings, GfxRenderPipeline, GfxDevice, GfxSamplerBinding, GfxBindingLayoutDescriptor, GfxBufferBinding, GfxProgram, GfxPrimitiveTopology, GfxSampler, GfxBindingsDescriptor, GfxMegaStateDescriptor } from "../platform/GfxPlatform";
+import { GfxInputState, GfxRenderPass, GfxBindings, GfxRenderPipeline, GfxDevice, GfxSamplerBinding, GfxBindingLayoutDescriptor, GfxBufferBinding, GfxProgram, GfxPrimitiveTopology, GfxSampler, GfxBindingsDescriptor, GfxMegaStateDescriptor, GfxProgramReflection } from "../platform/GfxPlatform";
 import { align, assertExists, assert } from "../../util";
 import { GfxRenderBuffer } from "./GfxRenderBuffer";
-import { TextureMapping } from "../../TextureHolder";
 import { DeviceProgramReflection, DeviceProgram } from "../../Program";
 import { GfxRenderCache } from "./GfxRenderCache";
 import { setMegaStateFlags, copyMegaState, defaultMegaState } from "../helpers/GfxMegaStateDescriptorHelpers";
+import { StructLayout } from "../helpers/UniformBufferHelpers";
 
 // The "Render" subsystem is a high-level scene graph, built on top of gfx/platform and gfx/helpers.
 // A rough overview of the design:
@@ -198,10 +198,11 @@ export class GfxRenderInst {
 
     // Bindings state.
     public _bindings: GfxBindings[] = [];
+    public _uniformBufferOffsets: number[] = [];
     public _uniformBufferOffsetGroups: number[][] = [];
     public _uniformBufferBindings: GfxBufferBinding[] = [];
+    public _uniformBufferLayouts: StructLayout[] | null = null;
     public _bindingLayouts: GfxBindingLayoutDescriptor[];
-    public _uniformBufferOffsets: number[] = [];
     public _samplerBindings: GfxSamplerBinding[] = [];
 
     constructor(public parentRenderInst: GfxRenderInst | null = null) {
@@ -241,11 +242,6 @@ export class GfxRenderInst {
         this.rebuildPipeline();
     }
 
-    public setPipelineDirect(pipeline: GfxRenderPipeline): void {
-        this._pipeline = pipeline;
-        this._setFlag(GfxRenderInstFlags.PIPELINE_DIRECT, true);
-    }
-
     public setSamplerBindingsInherit(v: boolean = true): void {
         this._setFlag(GfxRenderInstFlags.SAMPLER_BINDINGS_INHERIT, v);
     }
@@ -253,17 +249,17 @@ export class GfxRenderInst {
     public setSamplerBindings(m: GfxSamplerBinding[], firstSampler: number = 0): void {
         for (let i = 0; i < m.length; i++) {
             const j = firstSampler + i;
-            if (!this._samplerBindings[j] || this._samplerBindings[j].texture !== m[i].texture || this._samplerBindings[j].sampler !== m[i].sampler) {
+            if (!this._samplerBindings[j] || this._samplerBindings[j].gfxTexture !== m[i].gfxTexture || this._samplerBindings[j].gfxSampler !== m[i].gfxSampler) {
                 this._samplerBindings[j] = m[i];
                 this._setFlag(GfxRenderInstFlags.BINDINGS_DIRTY, true);
             }
         }
     }
 
-    public setSamplerBindingsFromTextureMappings(m: TextureMapping[]): void {
+    public setSamplerBindingsFromTextureMappings(m: GfxSamplerBinding[]): void {
         for (let i = 0; i < m.length; i++) {
-            if (!this._samplerBindings[i] || this._samplerBindings[i].texture !== m[i].gfxTexture || this._samplerBindings[i].sampler !== m[i].gfxSampler) {
-                this._samplerBindings[i] = { texture: m[i].gfxTexture, sampler: m[i].gfxSampler };
+            if (!this._samplerBindings[i] || this._samplerBindings[i].gfxTexture !== m[i].gfxTexture || this._samplerBindings[i].gfxSampler !== m[i].gfxSampler) {
+                this._samplerBindings[i] = { gfxTexture: m[i].gfxTexture, gfxSampler: m[i].gfxSampler };
                 this._setFlag(GfxRenderInstFlags.BINDINGS_DIRTY, true);
             }
         }
@@ -291,10 +287,7 @@ export class GfxRenderInst {
     }
 
     public getUniformBufferOffset(i: number): number {
-        if (this._uniformBufferOffsets === null)
-            return this.parentRenderInst!.getUniformBufferOffset(i);
-        else
-            return this._uniformBufferOffsets[i];
+        return this._uniformBufferOffsets[i];
     }
 
     public getPassMask(): number {
@@ -488,15 +481,14 @@ export class GfxRenderInstViewRenderer {
             if (!renderInst.visible)
                 break;
 
-            // If we have an unfinished render inst (which is possible!), then don't render it.
-            if (renderInst._pipeline === null || !(renderInst._flags & GfxRenderInstFlags.BINDINGS_CREATED))
-                continue;
-
-            // If our program is not ready yet, do not render it.
-            if (!device.queryPipelineReady(renderInst._pipeline))
-                continue;
-
             if ((renderInst.getPassMask() & passMask) === 0)
+                continue;
+
+            // Unfinished pipeline.
+            if (renderInst._pipeline === null || !device.queryPipelineReady(renderInst._pipeline))
+                continue;
+
+            if (!(renderInst._flags & GfxRenderInstFlags.BINDINGS_CREATED))
                 continue;
 
             if (currentPipeline !== renderInst._pipeline) {
@@ -653,13 +645,12 @@ export class GfxRenderInstBuilder {
             viewRenderer.renderInsts.push(renderInst);
         }
 
+        for (let i = 0; i < this.newTemplateRenderInsts.length; i++)
+            viewRenderer.templateRenderInsts.push(this.newTemplateRenderInsts[i]);
+
         // It's plausible that our uniform buffers might have changed, so rebuild.
         for (let i = 0; i < this.allRenderInsts.length; i++)
             this.buildRenderInstUniformBufferBindings(this.allRenderInsts[i]);
-
-        for (let i = 0; i < this.newTemplateRenderInsts.length; i++)
-            if (!viewRenderer.templateRenderInsts.includes(this.newTemplateRenderInsts[i]))
-                viewRenderer.templateRenderInsts.push(this.newTemplateRenderInsts[i]);
 
         this.newRenderInsts.length = 0;
         this.newTemplateRenderInsts.length = 0;

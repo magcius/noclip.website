@@ -13,7 +13,6 @@ import { BMDModel, BMDModelInstance } from '../../j3d/render';
 import * as RARC from '../../j3d/rarc';
 import { EFB_WIDTH, EFB_HEIGHT, Light, lightSetWorldPosition, lightSetWorldDirection } from '../../gx/gx_material';
 import { GXRenderHelperGfx } from '../../gx/gx_render';
-import { TextureOverride } from '../../TextureHolder';
 import { getPointBezier } from '../../Spline';
 import AnimationController from '../../AnimationController';
 import * as Yaz0 from '../../compression/Yaz0';
@@ -425,11 +424,13 @@ class SMGRenderer implements Viewer.SceneGfx {
     }
 
     private setIndirectTextureOverride(): void {
-        const textureOverride: TextureOverride = { gfxTexture: this.opaqueSceneTexture.gfxTexture, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
         for (let i = 0; i < this.spawner.sceneGraph.nodes.length; i++) {
             const m = this.spawner.sceneGraph.nodes[i].modelInstance.getTextureMappingReference("IndDummy");
-            if (m !== null)
-                m.fillFromTextureOverride(textureOverride);
+            if (m !== null) {
+                m.gfxTexture = this.opaqueSceneTexture.gfxTexture;
+                m.width = EFB_WIDTH;
+                m.height = EFB_HEIGHT;
+            }
         }
     }
 

@@ -1,15 +1,15 @@
 
 import { mat4 } from 'gl-matrix';
 
-import { BMD, BMT, HierarchyNode, HierarchyType, MaterialEntry, Shape, ShapeDisplayFlags, TEX1_Sampler, DRW1MatrixKind, TTK1Animator, ANK1Animator, bindANK1Animator, BTI, bindVAF1Animator, VAF1, VAF1Animator, TPT1, bindTPT1Animator, TPT1Animator, TEX1, BTI_Texture } from './j3d';
+import { BMD, BMT, HierarchyNode, HierarchyType, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, TTK1Animator, ANK1Animator, bindANK1Animator, bindVAF1Animator, VAF1, VAF1Animator, TPT1, bindTPT1Animator, TPT1Animator, TEX1, BTI_Texture } from './j3d';
 import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } from './j3d';
 
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
 import { MaterialParams, PacketParams, ColorKind, translateTexFilterGfx, translateWrapModeGfx, loadedDataCoalescerGfx, GXShapeHelperGfx, GXRenderHelperGfx, ub_MaterialParams, loadTextureFromMipChain } from '../gx/gx_render';
 
-import { computeViewMatrix, computeModelMatrixBillboard, computeModelMatrixYBillboard, computeViewMatrixSkybox, texEnvMtx, Camera, texProjPerspMtx, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
-import { TextureMapping, TextureOverride } from '../TextureHolder';
+import { computeViewMatrix, computeModelMatrixBillboard, computeModelMatrixYBillboard, computeViewMatrixSkybox, Camera, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
+import { TextureMapping } from '../TextureHolder';
 import AnimationController from '../AnimationController';
 import { nArray, assertExists, assert } from '../util';
 import { AABB } from '../Geometry';
@@ -18,7 +18,7 @@ import { GfxBufferCoalescer, GfxCoalescedBuffers } from '../gfx/helpers/BufferHe
 import { ViewerRenderInput, Texture } from '../viewer';
 import { GfxRenderInst, GfxRenderInstBuilder, setSortKeyDepth, GfxRendererLayer, makeSortKey, setSortKeyBias } from '../gfx/render/GfxRenderer';
 import { colorCopy } from '../Color';
-import { computeNormalMatrix } from '../MathHelpers';
+import { computeNormalMatrix, texProjPerspMtx, texEnvMtx } from '../MathHelpers';
 import { calcMipChain } from '../gx/gx_texture';
 
 export class ShapeInstanceState {

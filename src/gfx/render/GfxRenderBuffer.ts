@@ -8,7 +8,6 @@ import { assert, align } from "../../util";
 // and starts copying everywhere if you go over that limit.
 const UBO_PAGE_WORD_LIMIT = 0x4000;
 
-// TODO(jstpierre): Need to make sure we don't split UBOs across multiple pages.
 export class GfxRenderBuffer {
     private usesMultiplePages: boolean;
     private bufferPages: GfxBuffer[] = [];

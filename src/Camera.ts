@@ -506,57 +506,6 @@ export class OrbitCameraController implements CameraController {
     }
 }
 
-// Probably don't belong in here, but are helpful nonetheless.
-export function texProjPerspMtx(dst: mat4, fov: number, aspect: number, scaleS: number, scaleT: number, transS: number, transT: number): void {
-    const cot = 1 / Math.tan(fov / 2);
-
-    dst[0] = (cot / aspect) * scaleS;
-    dst[4] = 0.0;
-    dst[8] = -transS;
-    dst[12] = 0.0;
-
-    dst[1] = 0.0;
-    dst[5] = cot * scaleT;
-    dst[9] = -transT;
-    dst[13] = 0.0;
-
-    dst[2] = 0.0;
-    dst[6] = 0.0;
-    dst[10] = -1.0;
-    dst[14] = 0.0;
-
-    // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
-    // since this is supposed to generate a mat4x3 matrix.
-    dst[3] = 9999.0;
-    dst[7] = 9999.0;
-    dst[11] = 9999.0;
-    dst[15] = 9999.0;
-}
-
-export function texEnvMtx(dst: mat4, scaleS: number, scaleT: number, transS: number, transT: number) {
-    dst[0] = scaleS;
-    dst[4] = 0.0;
-    dst[8] = 0.0;
-    dst[12] = transS;
-
-    dst[1] = 0.0;
-    dst[5] = -scaleT;
-    dst[9] = 0.0;
-    dst[13] = transT;
-
-    dst[2] = 0.0;
-    dst[6] = 0.0;
-    dst[10] = 0.0;
-    dst[14] = 1.0;
-
-    // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
-    // since this is supposed to generate a mat4x3 matrix.
-    dst[3] = 9999.0;
-    dst[7] = 9999.0;
-    dst[11] = 9999.0;
-    dst[15] = 9999.0;
-}
-
 export function serializeMat4(dst: Float32Array, offs: number, m: mat4): number {
     dst[offs++] = m[0];
     dst[offs++] = m[4];

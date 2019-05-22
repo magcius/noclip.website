@@ -4,7 +4,7 @@ import * as BRRES from './brres';
 import * as GX_Material from '../gx/gx_material';
 import { mat4, vec3 } from "gl-matrix";
 import { MaterialParams, GXTextureHolder, ColorKind, translateTexFilterGfx, translateWrapModeGfx, loadedDataCoalescerGfx, GXRenderHelperGfx, GXShapeHelperGfx, GXMaterialHelperGfx, PacketParams } from "../gx/gx_render";
-import { texProjPerspMtx, texEnvMtx, computeViewMatrix, computeViewMatrixSkybox, Camera, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
+import { computeViewMatrix, computeViewMatrixSkybox, Camera, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
 import AnimationController from "../AnimationController";
 import { TextureMapping } from "../TextureHolder";
 import { IntersectionState, AABB } from "../Geometry";
@@ -15,7 +15,7 @@ import { GfxBufferCoalescer } from '../gfx/helpers/BufferHelpers';
 import { nArray } from '../util';
 import { prepareFrameDebugOverlayCanvas2D, getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
 import { colorCopy } from '../Color';
-import { computeNormalMatrix } from '../MathHelpers';
+import { computeNormalMatrix, texProjPerspMtx, texEnvMtx } from '../MathHelpers';
 
 export class RRESTextureHolder extends GXTextureHolder<BRRES.TEX0> {
     public addRRESTextures(device: GfxDevice, rres: BRRES.RRES): void {

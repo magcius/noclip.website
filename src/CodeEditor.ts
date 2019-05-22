@@ -3,7 +3,7 @@
 const MONOSPACE = '"Source Code Pro", "Droid Sans Mono", monospace';
 
 function visibleRAF(elem: HTMLElement, func: (t: number) => void) {
-    const window = elem.ownerDocument.defaultView;
+    const window = elem.ownerDocument!.defaultView;
 
     let isRunning: boolean = false;
     function setRunning(running: boolean) {
@@ -13,14 +13,14 @@ function visibleRAF(elem: HTMLElement, func: (t: number) => void) {
         isRunning = running;
 
         if (isRunning)
-            window.requestAnimationFrame(update);
+            window!.requestAnimationFrame(update);
     }
 
     function update(t: number) {
         func(t);
 
         if (isRunning)
-            window.requestAnimationFrame(update);
+            window!.requestAnimationFrame(update);
     }
 
     function callback(entries: IntersectionObserverEntry[]) {
@@ -103,14 +103,14 @@ interface NumberDraggerSeg extends HTMLDivElement {
 }
 
 class NumberDragger {
-    public onvalue: (newValue: number) => void;
-    public onend: () => void;
+    public onvalue: ((newValue: number) => void) | null = null;
+    public onend: (() => void) | null = null;
 
     private _toplevel: HTMLElement;
     private _segments: NumberDraggerSeg[];
     private _anchorMouseX: number;
-    private _anchorValue: number;
-    private _value: number;
+    private _anchorValue: number | undefined;
+    private _value: number | undefined;
     private _currentIncr: number;
     private _showTimeout: number;
 
@@ -155,10 +155,10 @@ class NumberDragger {
         e.stopPropagation();
         const accel = 15;
         const dx = Math.round((e.clientX - this._anchorMouseX) / accel);
-        const newValue = this._anchorValue + (dx * this._currentIncr);
+        const newValue = this._anchorValue! + (dx * this._currentIncr);
         if (this._value !== newValue) {
             this._value = newValue;
-            this.onvalue(this._value);
+            this.onvalue!(this._value);
         }
 
         const y = e.clientY;
@@ -180,7 +180,7 @@ class NumberDragger {
     private _onMouseUp(e: MouseEvent) {
         this._cursorOverride.setCursor(this, '');
         this._document.documentElement.removeEventListener('mouseup', this._onMouseUp);
-        this.onend();
+        this.onend!();
 
         if (this._showTimeout) {
             clearTimeout(this._showTimeout);
@@ -240,7 +240,7 @@ function expensiveMeasureTextMargin(document: HTMLDocument, width: number, heigh
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d')!;
     ctx.font = font;
     ctx.textBaseline = 'top';
     ctx.fillStyle = 'black';
@@ -280,7 +280,7 @@ interface SyntaxRun {
 };
 
 export default class CodeEditor {
-    public onvaluechanged: () => void;
+    public onvaluechanged: (() => void) | null = null;
     public elem: HTMLElement;
 
     private _toplevel: HTMLElement;
@@ -314,14 +314,14 @@ export default class CodeEditor {
     private _textareaStyle: CSSStyleDeclaration;
     private _draggableNumbers: Range[];
     private _valueChanged: boolean;
-    private _redraw_cursorPosition: number;
-    private _redraw_cursorBlinkStart: number;
-    private _mouseX: number;
-    private _mouseY: number;
-    private _mouseIdx: number;
-    private _dragging: string;
+    private _redraw_cursorPosition: number | undefined;
+    private _redraw_cursorBlinkStart: number | undefined;
+    private _mouseX: number | undefined;
+    private _mouseY: number | undefined;
+    private _mouseIdx: number | undefined;
+    private _dragging: string | undefined;
     private _dragStartIdx: number;
-    private _draggingNumber: { start: number; end: number; value: number; };
+    private _draggingNumber: { start: number; end: number; value: number; } | null;
 
     constructor(private _document: HTMLDocument) {
         this.onvaluechanged = null;
@@ -500,22 +500,22 @@ export default class CodeEditor {
         this._syntaxRuns = syntaxRuns;
         this._draggableNumbers = draggableNumbers;
 
-        const textareaStyle = this._document.defaultView.getComputedStyle(this._textarea);
+        const textareaStyle = this._document.defaultView!.getComputedStyle(this._textarea);
         this._textareaStyle = textareaStyle;
 
-        const ctx = this._canvas.getContext('2d');
+        const ctx = this._canvas.getContext('2d')!;
         ctx.font = `${textareaStyle.fontSize} ${textareaStyle.fontFamily}`;
 
         // We're using a monospace font. It should have identical metrics for all characters,
         // so just measuring one should be fine...
         this._charWidth = ctx.measureText(' ').width;
 
-        const rowHeight = textareaStyle.lineHeight;
+        const rowHeight = textareaStyle.lineHeight!;
         let rowHeightN: number;
         // XXX: This seems to be a Chrome default for the line-height? Not sure how else I can
         // calculate this guy... grr...
         if (rowHeight === 'normal')
-            rowHeightN = 1.3 * parseFloat(textareaStyle.fontSize);
+            rowHeightN = 1.3 * parseFloat(textareaStyle.fontSize!);
         else
             rowHeightN = parseFloat(rowHeight);
         this._rowHeight = Math.ceil(rowHeightN);
@@ -693,22 +693,22 @@ export default class CodeEditor {
     }
     private _onNumberDraggerValue(newValue: number) {
         this._textarea.blur();
-        const { start, end } = this._draggingNumber;
+        const { start, end } = this._draggingNumber!;
         const newValueString = formatDecimal(newValue);
         this.setValue(this._spliceValue(start, end, newValueString));
-        this._draggingNumber.end = this._draggingNumber.start + newValueString.length;
+        this._draggingNumber!.end = start + newValueString.length;
         this._syncNumberDraggerPosition();
     }
     private _onNumberDraggerEnd() {
         this._draggingNumber = null;
     }
     private _syncNumberDraggerPosition() {
-        const { start, end } = this._draggingNumber;
+        const { end } = this._draggingNumber!;
         const endPos = this._getCharPos(this._textareaToIdx(end));
         const { x, y } = this._rowColToXY(endPos.row, endPos.col);
         const bbox = this._toplevel.getBoundingClientRect();
         const absX = bbox.left + x;
-        const absY = bbox.top + y + this._rowHeight / 2 + this._document.defaultView.scrollY;
+        const absY = bbox.top + y + this._rowHeight / 2 + this._document.defaultView!.scrollY;
         this._numberDragger.setPosition(absX, absY);
     }
     private _spliceValue(start: number, end: number, v: string) {
@@ -729,7 +729,7 @@ export default class CodeEditor {
     }
     private _rowColToLineIdx(row: number, col: number, clampIdx: boolean) {
         this._recalculate();
-        let line;
+        let line = this._lineModel[0];
         for (line of this._lineModel)
             if (row >= line.startRow && row < line.startRow + line.rows)
                 break;
@@ -774,7 +774,7 @@ export default class CodeEditor {
     }
     private _getRowLength(row: number) {
         this._recalculate();
-        let line;
+        let line = this._lineModel[0];
         for (line of this._lineModel)
             if (row >= line.startRow && row < line.startRow + line.rows)
                 break;
@@ -790,7 +790,7 @@ export default class CodeEditor {
     }
     private _getCharPos(idx: number) {
         this._recalculate();
-        let line;
+        let line = this._lineModel[0];
         for (line of this._lineModel)
             if (idx >= line.start && idx < line.end)
                 break;
@@ -858,7 +858,8 @@ export default class CodeEditor {
         this._recalculate();
         const canvasRect = this._canvas.getBoundingClientRect();
 
-        const ratio = this._document.defaultView.devicePixelRatio;
+        const defaultView = this._document.defaultView!;
+        const ratio = defaultView.devicePixelRatio;
         const canvasWidth = this._width * ratio;
         const canvasHeight = this._height * ratio;
         let sizeChanged = false;
@@ -872,8 +873,8 @@ export default class CodeEditor {
         // Clip to viewport.
         const scissorX1 = Math.max(0, canvasRect.left);
         const scissorY1 = Math.max(0, canvasRect.top);
-        const viewportWidth = this._document.defaultView.innerWidth;
-        const viewportHeight = this._document.defaultView.innerHeight;
+        const viewportWidth = defaultView.innerWidth;
+        const viewportHeight = defaultView.innerHeight;
         const scissorX2 = Math.min(viewportWidth, canvasRect.right);
         const scissorY2 = Math.min(viewportHeight, canvasRect.bottom);
         // Put in canvas space.
@@ -882,7 +883,7 @@ export default class CodeEditor {
         const clipRectW = scissorX2 - scissorX1;
         const clipRectH = scissorY2 - scissorY1;
 
-        const ctx = this._canvas.getContext('2d');
+        const ctx = this._canvas.getContext('2d')!;
         ctx.save();
         if (!sizeChanged) {
             ctx.rect(clipRectX, clipRectY, clipRectW, clipRectH);
@@ -981,8 +982,8 @@ export default class CodeEditor {
         if (this._draggingNumber) {
             const { start, end } = this._draggingNumber;
             draggableNumber = { start: this._textareaToIdx(start), end: this._textareaToIdx(end) };
-        } else if (!this._dragging && this._mouseIdx > -1) {
-            draggableNumber = this._findDraggableNumber(this._mouseIdx);
+        } else if (!this._dragging && this._mouseIdx! > -1) {
+            draggableNumber = this._findDraggableNumber(this._mouseIdx!);
         }
 
         // Setting the font on a CanvasRenderingContext2D in Firefox is expensive, so try
@@ -1003,11 +1004,11 @@ export default class CodeEditor {
                 const char = chars.charAt(i);
                 const x = col * this._charWidth, y = (this._paddingTop + row) * this._rowHeight;
 
-                if (i === this._textareaToIdx(this._redraw_cursorPosition)) {
+                if (i === this._textareaToIdx(this._redraw_cursorPosition!)) {
                     // Draw cursor.
                     ctx.save();
                     ctx.fillStyle = '#fff';
-                    const blinkAnimationT = (t - this._redraw_cursorBlinkStart) / 1000;
+                    const blinkAnimationT = (t - this._redraw_cursorBlinkStart!) / 1000;
                     const blinkAlpha = (Math.sin(blinkAnimationT * 6) + 1);
                     ctx.globalAlpha = blinkAlpha;
                     ctx.fillRect(Math.floor(x), y, 2, this._rowHeight);

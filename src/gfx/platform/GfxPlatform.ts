@@ -125,8 +125,8 @@ export interface GfxBufferBinding {
 }
 
 export interface GfxSamplerBinding {
-    texture: GfxTexture;
-    sampler: GfxSampler;
+    gfxTexture: GfxTexture | null;
+    gfxSampler: GfxSampler | null;
 }
 
 export interface GfxBindingLayoutDescriptor {
@@ -137,7 +137,7 @@ export interface GfxBindingLayoutDescriptor {
 export interface GfxBindingsDescriptor {
     bindingLayout: GfxBindingLayoutDescriptor;
     uniformBufferBindings: GfxBufferBinding[];
-    samplerBindings: (GfxSamplerBinding | null)[];
+    samplerBindings: GfxSamplerBinding[];
 }
 
 export interface GfxInputLayoutDescriptor {
@@ -224,6 +224,7 @@ export interface GfxRenderPassDescriptor {
 
 export interface GfxDeviceLimits {
     uniformBufferWordAlignment: number;
+    uniformBufferMaxPageWordSize: number;
 }
 
 export interface GfxProgramReflection extends DeviceProgramReflection {
@@ -318,4 +319,3 @@ export interface GfxDevice {
 
 export { GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings };
 export { GfxFormat };
- 

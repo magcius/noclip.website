@@ -19,7 +19,6 @@ import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, ColorTexture, makeClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { colorNew } from '../Color';
-import { TextureOverride } from '../TextureHolder';
 
 const sjisDecoder = getTextDecoder('sjis');
 
@@ -316,11 +315,13 @@ export class SunshineRenderer implements Viewer.SceneGfx {
     }
 
     private setIndirectTextureOverride(): void {
-        const textureOverride: TextureOverride = { gfxTexture: this.opaqueSceneTexture.gfxTexture, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
         for (let i = 0; i < this.modelInstances.length; i++) {
-            const m = this.modelInstances[i].getTextureMappingReference('indirectdummy');
-            if (m !== null)
-                m.fillFromTextureOverride(textureOverride);
+            const m = this.modelInstances[i].getTextureMappingReference("indirectdummy");
+            if (m !== null) {
+                m.gfxTexture = this.opaqueSceneTexture.gfxTexture;
+                m.width = EFB_WIDTH;
+                m.height = EFB_HEIGHT;
+            }
         }
     }
 

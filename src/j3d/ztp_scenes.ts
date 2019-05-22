@@ -10,7 +10,7 @@ import { BMD, BMT, BTK, BTI, BRK, BCK, BTI_Texture } from './j3d';
 import * as RARC from './rarc';
 import { BMDModel, BMDModelInstance, BTIData } from './render';
 import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks } from '../gx/gx_material';
-import { TextureOverride, TextureMapping } from '../TextureHolder';
+import { TextureMapping } from '../TextureHolder';
 import { readString, leftPad } from '../util';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { GXRenderHelperGfx } from '../gx/gx_render';
@@ -130,11 +130,13 @@ class TwilightPrincessRenderer implements Viewer.SceneGfx {
     }
 
     private setIndirectTextureOverride(): void {
-        const textureOverride: TextureOverride = { gfxTexture: this.opaqueSceneTexture.gfxTexture, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
         for (let i = 0; i < this.modelInstances.length; i++) {
-            const fbtex_dummy = this.modelInstances[i].getTextureMappingReference('fbtex_dummy');
-            if (fbtex_dummy !== null)
-                fbtex_dummy.fillFromTextureOverride(textureOverride);
+            const m = this.modelInstances[i].getTextureMappingReference('fbtex_dummy');
+            if (m !== null) {
+                m.gfxTexture = this.opaqueSceneTexture.gfxTexture;
+                m.width = EFB_WIDTH;
+                m.height = EFB_HEIGHT;
+            }
         }
     }
 

@@ -15,9 +15,31 @@
         {
             "type": "npm",
             "script": "typecheck",
-            "group": "build",
             "isBackground": true,
-            "problemMatcher": [ "$tsc-watch" ]
+            "problemMatcher": {
+                "base": "$tsc-watch",
+                "applyTo": "allDocuments",
+                "owner": "typecheck",
+            },
+            "runOptions": {
+                "runOn": "folderOpen"
+            }
+        },
+        {
+            "type": "npm",
+            "script": "strict-null-checks",
+            "isBackground": true,
+            "presentation": {
+                "reveal": "never",
+            },
+            "problemMatcher": {
+                "base": "$tsc-watch",
+                "applyTo": "allDocuments",
+                "owner": "strict-null-checks",
+            },
+            "runOptions": {
+                "runOn": "folderOpen"
+            }
         }
     ]
 }

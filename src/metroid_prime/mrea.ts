@@ -649,7 +649,7 @@ export function parseLightLayer(buffer: ArrayBufferSlice, offs: number): [AreaLi
                         vec3.set(light.gxLight.CosAtten, 1, 0, 0);
                     }
                     else {
-                        const radCutoff = spotCutoff * MathConstants.RAD_TO_DEG;
+                        const radCutoff = spotCutoff * MathConstants.DEG_TO_RAD;
                         const cosCutoff = Math.cos(radCutoff);
                         const invCosCutoff = 1 - cosCutoff;
                         vec3.set(light.gxLight.CosAtten, 0, -cosCutoff / invCosCutoff, 1.0 / invCosCutoff);
