@@ -85,7 +85,7 @@ export function computeModelMatrixBillboard(out: mat4, camera: Camera): void {
     // Forward vector
     out[2] = camera.worldMatrix[2];
     out[6] = camera.worldMatrix[6];
-    out[8] = camera.worldMatrix[8];
+    out[10] = camera.worldMatrix[10];
 }
 
 export function computeModelMatrixYBillboard(out: mat4, camera: Camera): void {
@@ -99,7 +99,7 @@ export function computeModelMatrixYBillboard(out: mat4, camera: Camera): void {
     // Forward vector
     out[2] = camera.worldMatrix[2];
     out[6] = camera.worldMatrix[6];
-    out[8] = camera.worldMatrix[8];
+    out[10] = camera.worldMatrix[10];
 }
 
 const scratchVec3 = vec3.create();
