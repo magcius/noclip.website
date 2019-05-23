@@ -161,9 +161,9 @@ export function computeModelViewBillboard_STD(dst: mat4, modelViewMatrix: mat4, 
     vec3.set(v, modelViewMatrix[1], modelViewMatrix[5], 0);
     vec3.normalize(v, v);
 
-    const [yx, yy] = v;
+    const yx = v[0], yy = v[1];
     mat4.getScaling(v, modelMatrix);
-    const [scaleX, scaleY, scaleZ] = v;
+    const scaleX = v[0], scaleY = v[1], scaleZ = v[2];
 
     computeModelViewMatrixSR(dst, scaleX, scaleY, scaleZ,
          yy, yx, 0,
@@ -178,9 +178,9 @@ export function computeModelViewBillboard_Y(dst: mat4, modelViewMatrix: mat4, mo
     vec3.set(v, modelViewMatrix[1], modelViewMatrix[5], 0);
     vec3.normalize(v, v);
 
-    const [yx, yy] = v;
+    const yx = v[0], yy = v[1];
     mat4.getScaling(v, modelMatrix);
-    const [scaleX, scaleY, scaleZ] = v;
+    const scaleX = v[0], scaleY = v[1], scaleZ = v[2];
 
     computeModelViewMatrixSR(dst, scaleX, scaleY, scaleZ,
          yy, yx, 0,
