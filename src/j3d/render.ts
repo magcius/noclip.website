@@ -8,7 +8,7 @@ import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
 import { MaterialParams, PacketParams, ColorKind, translateTexFilterGfx, translateWrapModeGfx, loadedDataCoalescerGfx, GXShapeHelperGfx, GXRenderHelperGfx, ub_MaterialParams, loadTextureFromMipChain } from '../gx/gx_render';
 
-import { computeViewMatrix, computeModelMatrixBillboard, computeModelMatrixYBillboard, computeViewMatrixSkybox, Camera, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
+import { computeViewMatrix, computeViewMatrixSkybox, Camera, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
 import AnimationController from '../AnimationController';
 import { nArray, assertExists, assert } from '../util';
@@ -18,7 +18,7 @@ import { GfxBufferCoalescer, GfxCoalescedBuffers } from '../gfx/helpers/BufferHe
 import { ViewerRenderInput, Texture } from '../viewer';
 import { GfxRenderInst, GfxRenderInstBuilder, setSortKeyDepth, GfxRendererLayer, makeSortKey, setSortKeyBias } from '../gfx/render/GfxRenderer';
 import { colorCopy } from '../Color';
-import { computeNormalMatrix, texProjPerspMtx, texEnvMtx } from '../MathHelpers';
+import { computeNormalMatrix, texProjPerspMtx, texEnvMtx, computeModelViewBillboard_STD, computeModelViewBillboard_Y } from '../MathHelpers';
 import { calcMipChain } from '../gx/gx_texture';
 
 export class ShapeInstanceState {
@@ -46,7 +46,6 @@ class ShapeData {
     }
 }
 
-const scratchModelMatrix = mat4.create();
 const scratchViewMatrix = mat4.create();
 const packetParams = new PacketParams();
 export class ShapeInstance {
@@ -102,25 +101,6 @@ export class ShapeInstance {
 
     private computeModelView(camera: Camera, shapeInstanceState: ShapeInstanceState): mat4 {
         const shape = this.shapeData.shape;
-        switch (shape.displayFlags) {
-        case ShapeDisplayFlags.USE_PNMTXIDX:
-        case ShapeDisplayFlags.NORMAL:
-            // NORMAL is equivalent to using PNMTX0 on original hardware.
-            // If we don't have a PNMTXIDX buffer, we create a phony one with all zeroes. So we're good.
-            mat4.copy(scratchModelMatrix, shapeInstanceState.modelMatrix);
-            break;
-
-        case ShapeDisplayFlags.BILLBOARD:
-            computeModelMatrixBillboard(scratchModelMatrix, camera);
-            mat4.mul(scratchModelMatrix, shapeInstanceState.modelMatrix, scratchModelMatrix);
-            break;
-        case ShapeDisplayFlags.Y_BILLBOARD:
-            computeModelMatrixYBillboard(scratchModelMatrix, camera);
-            mat4.mul(scratchModelMatrix, shapeInstanceState.modelMatrix, scratchModelMatrix);
-            break;
-        default:
-            throw new Error("whoops");
-        }
 
         if (shapeInstanceState.isSkybox) {
             computeViewMatrixSkybox(scratchViewMatrix, camera);
@@ -128,7 +108,14 @@ export class ShapeInstance {
             computeViewMatrix(scratchViewMatrix, camera);
         }
 
-        mat4.mul(scratchViewMatrix, scratchViewMatrix, scratchModelMatrix);
+        mat4.mul(scratchViewMatrix, scratchViewMatrix, shapeInstanceState.modelMatrix);
+
+        if (shape.displayFlags === ShapeDisplayFlags.BILLBOARD) {
+            computeModelViewBillboard_STD(scratchViewMatrix, scratchViewMatrix, shapeInstanceState.modelMatrix);
+        } else if (shape.displayFlags === ShapeDisplayFlags.Y_BILLBOARD) {
+            computeModelViewBillboard_Y(scratchViewMatrix, scratchViewMatrix, shapeInstanceState.modelMatrix);
+        }
+
         return scratchViewMatrix;
     }
 }

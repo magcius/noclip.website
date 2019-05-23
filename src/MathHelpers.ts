@@ -1,5 +1,5 @@
 
-import { mat4, vec3 } from "gl-matrix";
+import { mat4, vec3, mat3 } from "gl-matrix";
 
 // Misc bits of 3D math.
 
@@ -137,4 +137,53 @@ export function texEnvMtx(dst: mat4, scaleS: number, scaleT: number, transS: num
     dst[7] = 9999.0;
     dst[11] = 9999.0;
     dst[15] = 9999.0;
+}
+
+function computeModelViewMatrixSR(dst: mat4, scaleX: number, scaleY: number, scaleZ: number, rxx: number, rxy: number, rxz: number, ryx: number, ryy: number, ryz: number, rzx: number, rzy: number, rzz: number): void {
+    dst[0] =  scaleX * rxx;
+    dst[1] =  scaleX * rxy;
+    dst[2] =  scaleX * rxz;
+    dst[3] =  0.0;
+
+    dst[4] =  scaleY * ryx;
+    dst[5] =  scaleY * ryy;
+    dst[6] =  scaleY * ryz;
+    dst[7] =  0.0;
+
+    dst[8] =  scaleZ * rzx;
+    dst[9] =  scaleZ * rzy;
+    dst[10] = scaleZ * rzz;
+    dst[11] = 0.0;
+}
+
+export function computeModelViewBillboard_STD(dst: mat4, modelViewMatrix: mat4, modelMatrix: mat4, v: vec3 = scratchVec3): void {
+    // World up vector.
+    vec3.set(v, modelViewMatrix[1], modelViewMatrix[5], 0);
+    vec3.normalize(v, v);
+
+    const [yx, yy] = v;
+    mat4.getScaling(v, modelMatrix);
+    const [scaleX, scaleY, scaleZ] = v;
+
+    computeModelViewMatrixSR(dst, scaleX, scaleY, scaleZ,
+         yy, yx, 0,
+        -yx, yy, 0,
+        0, 0, 1);
+}
+
+export function computeModelViewBillboard_Y(dst: mat4, modelViewMatrix: mat4, modelMatrix: mat4, v: vec3 = scratchVec3): void {
+    // TODO(jstpierre): Finish Y billboards
+
+    // World up vector.
+    vec3.set(v, modelViewMatrix[1], modelViewMatrix[5], 0);
+    vec3.normalize(v, v);
+
+    const [yx, yy] = v;
+    mat4.getScaling(v, modelMatrix);
+    const [scaleX, scaleY, scaleZ] = v;
+
+    computeModelViewMatrixSR(dst, scaleX, scaleY, scaleZ,
+         yy, yx, 0,
+        -yx, yy, 0,
+        0, 0, 1);
 }

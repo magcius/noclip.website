@@ -205,16 +205,7 @@ class Node {
 
     constructor(public objinfo: ObjInfo, private parentZone: ZoneNode, public modelInstance: BMDModelInstance, parentModelMatrix: mat4, public animationController: AnimationController) {
         this.name = modelInstance.name;
-        // BlackHole is special and doesn't inherit SR from parent.
-        if (objinfo.objName === 'BlackHole') {
-            mat4.copy(this.modelMatrix, objinfo.modelMatrix);
-            this.modelMatrix[12] += parentModelMatrix[12];
-            this.modelMatrix[13] += parentModelMatrix[13];
-            this.modelMatrix[14] += parentModelMatrix[14];
-        } else {
-            mat4.mul(this.modelMatrix, parentModelMatrix, objinfo.modelMatrix);
-        }
-
+        mat4.mul(this.modelMatrix, parentModelMatrix, objinfo.modelMatrix);
         this.setupAnimations();
     }
 
