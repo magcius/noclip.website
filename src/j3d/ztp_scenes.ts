@@ -136,6 +136,7 @@ class TwilightPrincessRenderer implements Viewer.SceneGfx {
                 m.gfxTexture = this.opaqueSceneTexture.gfxTexture;
                 m.width = EFB_WIDTH;
                 m.height = EFB_HEIGHT;
+                m.flipY = true;
             }
         }
     }

@@ -421,6 +421,7 @@ class SMGRenderer implements Viewer.SceneGfx {
                 m.gfxTexture = this.opaqueSceneTexture.gfxTexture;
                 m.width = EFB_WIDTH;
                 m.height = EFB_HEIGHT;
+                m.flipY = true;
             }
         }
     }
@@ -1133,7 +1134,7 @@ class SMGSpawner {
         case 'BlackHoleCube':
             spawnGraph(`BlackHole`);
             spawnGraph(`BlackHoleRange`).then(([node, rarc]) => {
-                const scale = node.objinfo.objArg0 / 1000;
+                const scale = node.objinfo.objArg0 >= 0 ? (node.objinfo.objArg0 / 1000) : 1;
                 mat4.scale(node.modelMatrix, node.modelMatrix, [scale, scale, scale]);
             });
             break;
