@@ -54,6 +54,49 @@ function conditionCheck(op: number, a: number, b: number) {
 
 const FPS = 30;
 
+function opLen(operCount: number): number {
+    return 0x08 + 0x04 * operCount;
+}
+
+function scanForLabel(thread: ScriptThread, view: DataView, labelId: number): number {
+    let pc = thread.start;
+    while (true) {
+        const op = view.getUint32(pc + 0x00);
+        const operCount = view.getUint32(pc + 0x04);
+        const oper0 = view.getUint32(pc + 0x08);
+
+        pc += opLen(operCount);
+
+        // Label.
+        if (op === 0x03 && oper0 === labelId)
+            return pc;
+    }
+}
+
+function scanPastNext(view: DataView, pc: number, needle: number): number {
+    while (true) {
+        const op = view.getUint32(pc + 0x00);
+        const operCount = view.getUint32(pc + 0x04);
+
+        pc += opLen(operCount);
+
+        if (op === needle)
+            return pc;
+
+        if (op === 0x05) // Loop
+            pc = scanPastNext(view, pc, 0x06); // EndLoop
+
+        if (op >= 0x0A && op <= 0x11) // If
+            pc = scanPastNext(view, pc, 0x13); // EndIf
+
+        if (op === 0x14) // Switch
+            pc = scanPastNext(view, pc, 0x23);
+
+        if (op === 0x01) // End
+            return -1;
+    }
+}
+
 export class ScriptExecutor {
     private threads: ScriptThread[] = [];
     private view: DataView;
@@ -223,49 +266,6 @@ export class ScriptExecutor {
         let pc = thread.pc;
         let nextPC = thread.pc;
 
-        function opLen(operCount: number): number {
-            return 0x08 + 0x04 * operCount;
-        }
-
-        function scanForLabel(labelId: number): number {
-            let pc = thread.start;
-            while (true) {
-                const op = view.getUint32(pc + 0x00);
-                const operCount = view.getUint32(pc + 0x04);
-                const oper0 = view.getUint32(pc + 0x08);
-
-                pc += opLen(operCount);
-
-                // Label.
-                if (op === 0x03 && oper0 === labelId)
-                    return pc;
-            }
-        }
-
-        function scanPastNext(pc: number, needle: number): number {
-            while (true) {
-                const op = view.getUint32(pc + 0x00);
-                const operCount = view.getUint32(pc + 0x04);
-
-                pc += opLen(operCount);
-
-                if (op === needle)
-                    return pc;
-
-                if (op === 0x05) // Loop
-                    pc = scanPastNext(pc, 0x06); // EndLoop
-
-                if (op >= 0x0A && op <= 0x11) // If
-                    pc = scanPastNext(pc, 0x13); // EndIf
-
-                if (op === 0x14) // Switch
-                    pc = scanPastNext(pc, 0x23);
-
-                if (op === 0x01) // End
-                    return -1;
-            }
-        }
-
         let i = 0;
         while (thread.state === ScriptThreadState.ALIVE) {
             const op = view.getUint32(pc + 0x00);
@@ -290,7 +290,7 @@ export class ScriptExecutor {
             case 0x03: // Label.
                 break;
             case 0x04: // Goto.
-                nextPC = scanForLabel(view.getUint32(pc + 0x08));
+                nextPC = scanForLabel(thread, view, view.getUint32(pc + 0x08));
                 break;
             case 0x05: // Loop. The first operand is the number of times to loop. 0 means infinite.
                 // assert(thread.loopCount == -1);
@@ -310,7 +310,7 @@ export class ScriptExecutor {
             case 0x07: // BreakLoop. Jump past the end of the loop.
                 thread.loopCount = -1;
                 // Scan forward for an EndLoop.
-                nextPC = scanPastNext(nextPC, 0x06);
+                nextPC = scanPastNext(view, nextPC, 0x06);
                 break;
             case 0x08: // Wait (Frames).
                 thread.state = ScriptThreadState.WAITING_ON_FRAME;
@@ -336,24 +336,24 @@ export class ScriptExecutor {
                     // Take first branch.
                 } else {
                     // Take else branch if it exists.
-                    const elseBranch = scanPastNext(nextPC, 0x12);
+                    const elseBranch = scanPastNext(view, nextPC, 0x12);
                     if (elseBranch >= 0)
                         nextPC = elseBranch;
                     else
-                        nextPC = scanPastNext(nextPC, 0x13);
+                        nextPC = scanPastNext(view, nextPC, 0x13);
                 }
                 break;
             case 0x12: // Else
                 // The only way that we should hit this "naturally" is if we
                 // run off the first branch. Scan for the next EndIf.
-                nextPC = scanPastNext(nextPC, 0x13);
+                nextPC = scanPastNext(view, nextPC, 0x13);
                 break;
             case 0x13: // EndIf
                 // No need to do anything.
                 break;
             case 0x14: // Switch
                 // TODO(jstpierre): Implement switch
-                nextPC = scanPastNext(nextPC, 0x23);
+                nextPC = scanPastNext(view, nextPC, 0x23);
                 break;
             case 0x24: // Set
                 this.setVariable(thread, view.getInt32(pc + 0x08), this.getValue(thread, view.getUint32(pc + 0x0C)));
@@ -430,7 +430,7 @@ export class ScriptExecutor {
                 break;
             case 0x56: { // Thread
                 this.startChildThread(thread, nextPC);
-                nextPC = scanPastNext(pc, 0x57);
+                nextPC = scanPastNext(view, pc, 0x57);
                 break;
             }
             case 0x57: // EndThread

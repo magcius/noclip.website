@@ -350,24 +350,27 @@ class ModelTreeLeafInstance {
 
         mat4.identity(dst);
 
+        // tileMatrix[tileId] is specified in pixel units, so we need to convert to abstract space.
+        // The 2.0 is because the game sets gsSPTexture with a scale of 0.5.
+        dst[0] = 2 / image.width;
+        dst[5] = 2 / image.height;
+        if (this.texAnimEnabled && texAnimGroups[this.texAnimGroup] !== undefined)
+            mat4.mul(dst, dst, texAnimGroups[this.texAnimGroup].tileMatrix[tileId]);
+
+        // Apply the shift scale.
         let scaleS;
         let scaleT;
         if (tileId === 0) {
-            // Tile 0's shift seems to always be 0x0F.
-            scaleS = calcScaleForShift(0x0F);
-            scaleT = calcScaleForShift(0x0F);
+            // Tile 0's shift seems to always be 0x00.
+            scaleS = calcScaleForShift(0x00);
+            scaleT = calcScaleForShift(0x00);
         } else if (tileId === 1) {
             scaleS = calcScaleForShift(this.secondaryTileShiftS);
             scaleT = calcScaleForShift(this.secondaryTileShiftT);
         }
 
-        const ss = scaleS / (image.width + 1);
-        const st = scaleT / (image.height + 1);
-        dst[0] = ss;
-        dst[5] = st;
-
-        if (this.texAnimEnabled && texAnimGroups[this.texAnimGroup] !== undefined)
-            mat4.mul(dst, dst, texAnimGroups[this.texAnimGroup].tileMatrix[tileId]);
+        dst[0] *= scaleS;
+        dst[5] *= scaleT;
     }
 
     public setTexAnimEnabled(enabled: boolean): void {
