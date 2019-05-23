@@ -257,6 +257,22 @@ class MaterialInstance {
         mat4.mul(dstPost, matrixScratch, dstPost);
     }
 
+    private calcColor(materialParams: MaterialParams, i: ColorKind, fallbackColor: GX_Material.Color, a: BRRES.AnimatableColor): void {
+        const dst = materialParams.u_Color[i];
+        let color: GX_Material.Color;
+        if (this.modelInstance && this.modelInstance.colorOverrides[i]) {
+            color = this.modelInstance.colorOverrides[i];
+        } else {
+            color = fallbackColor;
+        }
+
+        if (this.clr0Animators[a]) {
+            this.clr0Animators[a].calcColor(dst, color);
+        } else {
+            colorCopy(dst, color);
+        }
+    }
+
     public fillMaterialParams(materialParams: MaterialParams, textureHolder: GXTextureHolder, modelMatrix: mat4, viewerInput: ViewerRenderInput): void {
         const material = this.materialData.material;
 
@@ -279,36 +295,20 @@ class MaterialInstance {
         for (let i = 0; i < 3; i++)
             this.calcIndTexMatrix(materialParams.u_IndTexMtx[i], i);
 
-        const calcColor = (i: ColorKind, fallbackColor: GX_Material.Color, a: BRRES.AnimatableColor) => {
-            const dst = materialParams.u_Color[i];
-            let color: GX_Material.Color;
-            if (this.modelInstance && this.modelInstance.colorOverrides[i]) {
-                color = this.modelInstance.colorOverrides[i];
-            } else {
-                color = fallbackColor;
-            }
+        this.calcColor(materialParams, ColorKind.MAT0, material.colorMatRegs[0], BRRES.AnimatableColor.MAT0);
+        this.calcColor(materialParams, ColorKind.MAT1, material.colorMatRegs[1], BRRES.AnimatableColor.MAT1);
+        this.calcColor(materialParams, ColorKind.AMB0, material.colorAmbRegs[0], BRRES.AnimatableColor.AMB0);
+        this.calcColor(materialParams, ColorKind.AMB1, material.colorAmbRegs[1], BRRES.AnimatableColor.AMB1);
 
-            if (this.clr0Animators[a]) {
-                this.clr0Animators[a].calcColor(dst, color);
-            } else {
-                colorCopy(dst, color);
-            }
-        };
+        this.calcColor(materialParams, ColorKind.K0, material.colorConstants[0], BRRES.AnimatableColor.K0);
+        this.calcColor(materialParams, ColorKind.K1, material.colorConstants[1], BRRES.AnimatableColor.K1);
+        this.calcColor(materialParams, ColorKind.K2, material.colorConstants[2], BRRES.AnimatableColor.K2);
+        this.calcColor(materialParams, ColorKind.K3, material.colorConstants[3], BRRES.AnimatableColor.K3);
 
-        calcColor(ColorKind.MAT0, material.colorMatRegs[0], BRRES.AnimatableColor.MAT0);
-        calcColor(ColorKind.MAT1, material.colorMatRegs[1], BRRES.AnimatableColor.MAT1);
-        calcColor(ColorKind.AMB0, material.colorAmbRegs[0], BRRES.AnimatableColor.AMB0);
-        calcColor(ColorKind.AMB1, material.colorAmbRegs[1], BRRES.AnimatableColor.AMB1);
-
-        calcColor(ColorKind.K0, material.colorConstants[0], BRRES.AnimatableColor.K0);
-        calcColor(ColorKind.K1, material.colorConstants[1], BRRES.AnimatableColor.K1);
-        calcColor(ColorKind.K2, material.colorConstants[2], BRRES.AnimatableColor.K2);
-        calcColor(ColorKind.K3, material.colorConstants[3], BRRES.AnimatableColor.K3);
-
-        calcColor(ColorKind.CPREV, material.colorRegisters[0], -1);
-        calcColor(ColorKind.C0, material.colorRegisters[1], BRRES.AnimatableColor.C0);
-        calcColor(ColorKind.C1, material.colorRegisters[2], BRRES.AnimatableColor.C1);
-        calcColor(ColorKind.C2, material.colorRegisters[3], BRRES.AnimatableColor.C2);
+        this.calcColor(materialParams, ColorKind.CPREV, material.colorRegisters[0], -1);
+        this.calcColor(materialParams, ColorKind.C0, material.colorRegisters[1], BRRES.AnimatableColor.C0);
+        this.calcColor(materialParams, ColorKind.C1, material.colorRegisters[2], BRRES.AnimatableColor.C1);
+        this.calcColor(materialParams, ColorKind.C2, material.colorRegisters[3], BRRES.AnimatableColor.C2);
     }
 
     private fillTextureMapping(dst: TextureMapping, textureHolder: GXTextureHolder, i: number): void {
