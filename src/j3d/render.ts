@@ -1,5 +1,5 @@
 
-import { mat4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 
 import { BMD, BMT, HierarchyNode, HierarchyType, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, TTK1Animator, ANK1Animator, bindANK1Animator, bindVAF1Animator, VAF1, VAF1Animator, TPT1, bindTPT1Animator, TPT1Animator, TEX1, BTI_Texture } from './j3d';
 import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } from './j3d';
@@ -18,7 +18,7 @@ import { GfxBufferCoalescer, GfxCoalescedBuffers } from '../gfx/helpers/BufferHe
 import { ViewerRenderInput, Texture } from '../viewer';
 import { GfxRenderInst, GfxRenderInstBuilder, setSortKeyDepth, GfxRendererLayer, makeSortKey, setSortKeyBias } from '../gfx/render/GfxRenderer';
 import { colorCopy } from '../Color';
-import { computeNormalMatrix, texProjPerspMtx, texEnvMtx, computeModelViewBillboard_STD, computeModelViewBillboard_Y } from '../MathHelpers';
+import { computeNormalMatrix, texProjPerspMtx, texEnvMtx } from '../MathHelpers';
 import { calcMipChain } from '../gx/gx_texture';
 
 export class ShapeInstanceState {
@@ -44,6 +44,60 @@ class ShapeData {
     public destroy(device: GfxDevice) {
         this.shapeHelpers.forEach((shapeHelper) => shapeHelper.destroy(device));
     }
+}
+
+function J3DCalcBBoardMtx(m: mat4): void {
+    // Modifies m in-place.
+
+    // The column vectors lengths here are the scale.
+    const mx = Math.hypot(m[0], m[1], m[2]);
+    const my = Math.hypot(m[4], m[5], m[6]);
+    const mz = Math.hypot(m[8], m[9], m[10]);
+
+    m[0] = mx;
+    m[4] = 0;
+    m[8] = 0;
+
+    m[1] = 0;
+    m[5] = my;
+    m[9] = 0;
+
+    m[2] = 0;
+    m[6] = 0;
+    m[10] = mz;
+
+    // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
+    // since this is supposed to generate a mat4x3 matrix.
+    m[3] = 9999.0;
+    m[7] = 9999.0;
+    m[11] = 9999.0;
+    m[15] = 9999.0;
+}
+
+const scratchVec3 = vec3.create();
+function J3DCalcYBBoardMtx(m: mat4, v: vec3 = scratchVec3): void {
+    // Modifies m in-place.
+
+    // The column vectors lengths here are the scale.
+    const mx = Math.hypot(m[0], m[1], m[2]);
+    const mz = Math.hypot(m[8], m[9], m[10]);
+
+    vec3.set(v, 0.0, -m[6], m[5]);
+    vec3.normalize(v, v);
+
+    m[0] = mx;
+    m[8] = 0;
+    m[1] = 0;
+    m[2] = 0;
+    m[9] = v[1] * mz;
+    m[10] = v[2] * mz;
+
+    // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
+    // since this is supposed to generate a mat4x3 matrix.
+    m[3] = 9999.0;
+    m[7] = 9999.0;
+    m[11] = 9999.0;
+    m[15] = 9999.0;
 }
 
 const scratchViewMatrix = mat4.create();
@@ -111,9 +165,9 @@ export class ShapeInstance {
         mat4.mul(scratchViewMatrix, scratchViewMatrix, shapeInstanceState.modelMatrix);
 
         if (shape.displayFlags === ShapeDisplayFlags.BILLBOARD) {
-            computeModelViewBillboard_STD(scratchViewMatrix, scratchViewMatrix, shapeInstanceState.modelMatrix);
+            J3DCalcBBoardMtx(scratchViewMatrix);
         } else if (shape.displayFlags === ShapeDisplayFlags.Y_BILLBOARD) {
-            computeModelViewBillboard_Y(scratchViewMatrix, scratchViewMatrix, shapeInstanceState.modelMatrix);
+            J3DCalcYBBoardMtx(scratchViewMatrix);
         }
 
         return scratchViewMatrix;
@@ -134,7 +188,7 @@ function mat4SwapTranslationColumns(m: mat4): void {
     m[9] = ty;
 }
 
-function j3dMtxProjConcat(dst: mat4, a: mat4, b: mat4): void {
+function J3DMtxProjConcat(dst: mat4, a: mat4, b: mat4): void {
     // This is almost mat4.mul except it only outputs three rows of output.
     // Slightly more efficient.
 
@@ -424,7 +478,7 @@ export class MaterialInstance {
                     // Swap it out with our own.
                     if (matrixMode === 0x09) {
                         texProjPerspMtx(matrixProj, camera.fovY, camera.aspect, 0.5, -0.5 * flipYScale, 0.5, 0.5);
-                        j3dMtxProjConcat(matrixProj, matrixSRT, matrixProj);
+                        J3DMtxProjConcat(matrixProj, matrixSRT, matrixProj);
                     } else {
                         // TODO(jstpierre): This makes the Comet Observatory skybox go bonkers.
 
@@ -438,7 +492,7 @@ export class MaterialInstance {
 */
 
                         // PSMTXConcat(_88, _B8, _88)
-                        j3dMtxProjConcat(matrixProj, matrixSRT, texMtx.effectMatrix);
+                        J3DMtxProjConcat(matrixProj, matrixSRT, texMtx.effectMatrix);
                     }
 
                     // PSMtxConcat(_48, this->_94, this->_64)
@@ -469,7 +523,7 @@ export class MaterialInstance {
                     // PSMTXConcat(_88, _E8, _88)
                     mat43Concat(matrixSRT, matrixSRT, matrixProj);
                     // J3DMtxProjConcat(_88, this->_24, _48)
-                    j3dMtxProjConcat(matrixProj, matrixSRT, texMtx.effectMatrix);
+                    J3DMtxProjConcat(matrixProj, matrixSRT, texMtx.effectMatrix);
                     // PSMTXConcat(_48, this->_94, this->_64)
                     mat43Concat(dst, matrixProj, dst);
                 }
@@ -514,7 +568,7 @@ export class MaterialInstance {
                     // J3DMtxProjConcat(_88, this->_24, _48)
                     // PSMTXConcat(_48, this->_94, this->_64)
                     // Old, no swap
-                    j3dMtxProjConcat(matrixProj, texMtx.effectMatrix, matrixSRT);
+                    J3DMtxProjConcat(matrixProj, texMtx.effectMatrix, matrixSRT);
                     mat43Concat(dst, matrixProj, dst);
                 }
                 break;
@@ -528,7 +582,7 @@ export class MaterialInstance {
 
                     // J3DGetTextureMtxOld(_88)
                     // J3DMtxProjConcat(_88, this->_24, this->_64)
-                    j3dMtxProjConcat(dst, texMtx.effectMatrix, matrixSRT);
+                    J3DMtxProjConcat(dst, texMtx.effectMatrix, matrixSRT);
                 }
                 break;
 

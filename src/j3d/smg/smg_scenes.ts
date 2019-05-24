@@ -684,7 +684,7 @@ class SMGSpawner {
     private isSMG2 = false;
     private areaLightInfos: AreaLightInfo[] = [];
 
-    constructor(private pathBase: string, private renderHelper: GXRenderHelperGfx, private viewRenderer: GfxRenderInstViewRenderer, private planetTable: BCSV.Bcsv, private lightData: BCSV.Bcsv) {
+    constructor(private galaxyName: string, private pathBase: string, private renderHelper: GXRenderHelperGfx, private viewRenderer: GfxRenderInstViewRenderer, private planetTable: BCSV.Bcsv, private lightData: BCSV.Bcsv) {
         this.isSMG1 = this.pathBase === 'j3d/smg';
         this.isSMG2 = this.pathBase === 'j3d/smg2';
 
@@ -1245,7 +1245,7 @@ class SMGSpawner {
             spawnGraph(`PowerStar`, SceneGraphTag.Normal, { bck: null }).then(([node, rarc]) => {
                 if (this.isSMG1) {
                     // This appears to be hardcoded in the DOL itself, inside "GameEventFlagTable".
-                    const isRedStar = node.objinfo.objArg0 === 2;
+                    const isRedStar = this.galaxyName === 'HeavensDoorGalaxy' && node.objinfo.objArg0 === 2;
                     // This is also hardcoded, but the designers left us a clue.
                     const isGreenStar = name === 'GreenStar';
                     const frame = isRedStar ? 5 : isGreenStar ? 2 : 0;
@@ -1506,7 +1506,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
                 return Promise.all(buffers.map((buffer) => Yaz0.decompress(buffer)));
             }).then((zoneBuffers: ArrayBufferSlice[]): Viewer.SceneGfx => {
                 const zones = zoneBuffers.map((zoneBuffer, i) => this.parseZone(zoneNames[i], zoneBuffer));
-                const spawner = new SMGSpawner(this.pathBase, renderHelper, viewRenderer, planetTable, lightData);
+                const spawner = new SMGSpawner(galaxyName, this.pathBase, renderHelper, viewRenderer, planetTable, lightData);
                 const modelMatrixBase = mat4.create();
                 spawner.spawnZone(device, abortSignal, zones[0], zones, modelMatrixBase);
                 return new SMGRenderer(device, spawner, viewRenderer, scenariodata, zoneNames);
