@@ -118,9 +118,9 @@ function parseNKM(buffer: ArrayBufferSlice): NKM {
         const translationX = NSBMD.fx32(view.getInt32(objiTableIdx + 0x00, true)) / 16;
         const translationY = NSBMD.fx32(view.getInt32(objiTableIdx + 0x04, true)) / 16;
         const translationZ = NSBMD.fx32(view.getInt32(objiTableIdx + 0x08, true)) / 16;
-        const rotationX = NSBMD.fx32(view.getInt32(objiTableIdx + 0x0C, true)) * MathConstants.RAD_TO_DEG;
-        const rotationY = NSBMD.fx32(view.getInt32(objiTableIdx + 0x10, true)) * MathConstants.RAD_TO_DEG;
-        const rotationZ = NSBMD.fx32(view.getInt32(objiTableIdx + 0x14, true)) * MathConstants.RAD_TO_DEG;
+        const rotationX = NSBMD.fx32(view.getInt32(objiTableIdx + 0x0C, true)) * MathConstants.DEG_TO_RAD;
+        const rotationY = NSBMD.fx32(view.getInt32(objiTableIdx + 0x10, true)) * MathConstants.DEG_TO_RAD;
+        const rotationZ = NSBMD.fx32(view.getInt32(objiTableIdx + 0x14, true)) * MathConstants.DEG_TO_RAD;
         const scaleX = NSBMD.fx32(view.getInt32(objiTableIdx + 0x18, true));
         const scaleY = NSBMD.fx32(view.getInt32(objiTableIdx + 0x1C, true));
         const scaleZ = NSBMD.fx32(view.getInt32(objiTableIdx + 0x20, true));

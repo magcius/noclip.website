@@ -1,5 +1,5 @@
 
-import { mat2d, mat4, vec3 } from 'gl-matrix';
+import { mat2d, mat4, vec3, vec2 } from 'gl-matrix';
 
 import * as BYML from '../byml';
 import * as LZ77 from './lz77';
@@ -263,9 +263,14 @@ class BMDData {
     }
 }
 
+function selectArray(arr: Float32Array, time: number): number {
+    return arr[(time | 0) % arr.length];
+}
+
 const textureMapping = nArray(1, () => new TextureMapping());
 const scratchMat2d = mat2d.create();
 const scratchMat4 = mat4.create();
+const scratchVec2 = vec2.create();
 class MaterialInstance {
     private templateRenderInst: GfxRenderInst;
     private gfxSampler: GfxSampler | null = null;
@@ -340,10 +345,6 @@ class MaterialInstance {
     }
 
     public prepareToRender(materialParamsBuffer: GfxRenderBuffer, textureHolder: NITROTextureHolder, viewerInput: Viewer.ViewerRenderInput, normalMatrix: mat4, extraTexCoordMat: mat2d | null): void {
-        function selectArray(arr: Float32Array, time: number): number {
-            return arr[(time | 0) % arr.length];
-        }
-
         if (this.material.texture !== null) {
             if (this.texCoordMode === NITRO_BMD.TexCoordMode.NORMAL) {
                 mat4.copy(scratchMat4, normalMatrix);
@@ -362,9 +363,9 @@ class MaterialInstance {
                     const x = selectArray(this.crg1TextureAnimation.X, time);
                     const y = selectArray(this.crg1TextureAnimation.Y, time);
                     mat2d.identity(scratchMat2d);
-                    mat2d.scale(scratchMat2d, scratchMat2d, [scale, scale, scale]);
+                    mat2d.scale(scratchMat2d, scratchMat2d, vec2.set(scratchVec2, scale, scale));
                     mat2d.rotate(scratchMat2d, scratchMat2d, rotation / 180 * Math.PI);
-                    mat2d.translate(scratchMat2d, scratchMat2d, [-x, y, 0]);
+                    mat2d.translate(scratchMat2d, scratchMat2d, vec2.set(scratchVec2, -x, y));
                     mat2d.mul(scratchMat2d, scratchMat2d, this.material.texCoordMat);
                 } else {
                     mat2d.copy(scratchMat2d, this.material.texCoordMat);

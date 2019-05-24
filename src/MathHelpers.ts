@@ -1,10 +1,10 @@
 
-import { mat4, vec3 } from "gl-matrix";
+import { mat4, vec3, mat3 } from "gl-matrix";
 
 // Misc bits of 3D math.
 
 export const enum MathConstants {
-    RAD_TO_DEG = 0.01745, // Math.PI / 180,
+    DEG_TO_RAD = 0.01745, // Math.PI / 180,
     EPSILON = 0.000001,
 }
 
@@ -81,10 +81,77 @@ export function matrixHasUniformScale(m: mat4, v: vec3 = scratchVec3): boolean {
 
     // Within reason.
     return (Math.abs(v[0] - v[1]) <= MathConstants.EPSILON*Math.max(1, Math.abs(v[0]), Math.abs(v[1])) &&
-            Math.abs(v[0] - v[2]) <= MathConstants.EPSILON*Math.max(1, Math.abs(v[0]), Math.abs(v[1])));
+            Math.abs(v[0] - v[2]) <= MathConstants.EPSILON*Math.max(1, Math.abs(v[0]), Math.abs(v[2])));
 }
 
 // For reference. Please inline where used.
 function compareEpsilon(a: number, b: number) {
     return Math.abs(a-b) <= MathConstants.EPSILON*Math.max(1, Math.abs(a), Math.abs(b));
+}
+
+export function texProjPerspMtx(dst: mat4, fov: number, aspect: number, scaleS: number, scaleT: number, transS: number, transT: number): void {
+    const cot = 1 / Math.tan(fov / 2);
+
+    dst[0] = (cot / aspect) * scaleS;
+    dst[4] = 0.0;
+    dst[8] = -transS;
+    dst[12] = 0.0;
+
+    dst[1] = 0.0;
+    dst[5] = cot * scaleT;
+    dst[9] = -transT;
+    dst[13] = 0.0;
+
+    dst[2] = 0.0;
+    dst[6] = 0.0;
+    dst[10] = -1.0;
+    dst[14] = 0.0;
+
+    // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
+    // since this is supposed to generate a mat4x3 matrix.
+    dst[3] = 9999.0;
+    dst[7] = 9999.0;
+    dst[11] = 9999.0;
+    dst[15] = 9999.0;
+}
+
+export function texEnvMtx(dst: mat4, scaleS: number, scaleT: number, transS: number, transT: number) {
+    dst[0] = scaleS;
+    dst[4] = 0.0;
+    dst[8] = 0.0;
+    dst[12] = transS;
+
+    dst[1] = 0.0;
+    dst[5] = -scaleT;
+    dst[9] = 0.0;
+    dst[13] = transT;
+
+    dst[2] = 0.0;
+    dst[6] = 0.0;
+    dst[10] = 0.0;
+    dst[14] = 1.0;
+
+    // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
+    // since this is supposed to generate a mat4x3 matrix.
+    dst[3] = 9999.0;
+    dst[7] = 9999.0;
+    dst[11] = 9999.0;
+    dst[15] = 9999.0;
+}
+
+function computeModelViewMatrixSR(dst: mat4, scaleX: number, scaleY: number, scaleZ: number, rxx: number, rxy: number, rxz: number, ryx: number, ryy: number, ryz: number, rzx: number, rzy: number, rzz: number): void {
+    dst[0] =  scaleX * rxx;
+    dst[1] =  scaleX * rxy;
+    dst[2] =  scaleX * rxz;
+    dst[3] =  0.0;
+
+    dst[4] =  scaleY * ryx;
+    dst[5] =  scaleY * ryy;
+    dst[6] =  scaleY * ryz;
+    dst[7] =  0.0;
+
+    dst[8] =  scaleZ * rzx;
+    dst[9] =  scaleZ * rzy;
+    dst[10] = scaleZ * rzz;
+    dst[11] = 0.0;
 }

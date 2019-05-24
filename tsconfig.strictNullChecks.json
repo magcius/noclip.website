@@ -1,0 +1,26 @@
+{
+    "compilerOptions": {
+        "target": "es6",
+        "alwaysStrict": true,
+        "downlevelIteration": true,
+        "noImplicitReturns": true,
+        "noImplicitThis": true,
+        "noImplicitAny": true,
+        "strictNullChecks": true,
+        "noEmit": true,
+        "lib": [
+            "es2015",
+            "es2015.promise",
+            "es2016.array.include",
+            "dom"
+        ],
+    },
+    "include": [
+        "./src/gfx/",
+    ],
+    "exclude": [
+        "**/assembly/*.ts",
+        "**/worker/*.ts",
+        "**/tools/*.ts",
+    ]
+}

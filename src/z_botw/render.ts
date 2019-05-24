@@ -148,7 +148,7 @@ export class TerrainAreaRenderer {
             { buffer: this.loadedArea.gridAttributesBuffer, byteOffset: 0, byteStride: 0 },
         ];
         this.templateRenderInst.inputState = device.createInputState(staticData.inputLayout, inputBuffers, { buffer: staticData.indexBuffer, byteOffset: 0, byteStride: 0 });
-        this.templateRenderInst.setSamplerBindings([{ texture: this.loadedArea.mateTexture, sampler: null }], 2);
+        this.templateRenderInst.setSamplerBindings([{ gfxTexture: this.loadedArea.mateTexture, gfxSampler: null }], 2);
 
         for (let i = 0; i < 4; i++) {
             this.renderInsts[i] = renderInstBuilder.pushRenderInst();

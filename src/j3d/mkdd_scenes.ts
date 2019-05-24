@@ -68,9 +68,9 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
     private spawnBMD(device: GfxDevice, renderer: BasicRenderer, rarc: RARC.RARC, basename: string, modelMatrix: mat4 = null): BMDModelInstance {
         const bmdFileData = rarc.findFileData(`${basename}.bmd`);
         assertExists(bmdFileData);
-        const bmdModel = new BMDModel(device, renderer.renderHelper, BMD.parse(bmdFileData));
+        const bmdModel = new BMDModel(device, renderer.renderHelper.renderInstManager.gfxRenderCache, BMD.parse(bmdFileData));
 
-        const modelInstance = new BMDModelInstance(renderer.renderHelper, bmdModel);
+        const modelInstance = new BMDModelInstance(bmdModel);
 
         const btkFileData = rarc.findFileData(`${basename}.btk`);
         if (btkFileData !== null)
@@ -167,7 +167,6 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
                 }
             }
 
-            renderer.finish(device);
             return renderer;
         });
     }

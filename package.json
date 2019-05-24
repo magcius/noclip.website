@@ -28,7 +28,8 @@
     "asbuild:gx_tex": "npx asc gx_texture_as.ts --baseDir ./src/assembly -O3 --noLib -b gx_texture_as.wasm -t gx_texture_as.wat",
     "asbuild:yaz0": "npx asc Yaz0_as.ts --baseDir ./src/assembly -O3 --noLib -b Yaz0_as.wasm -t Yaz0_as.wat",
     "asbuild": "yarn asbuild:gx_tex && yarn asbuild:yaz0 && node src/build_wat.js",
-    "typecheck": "tsc -w --noEmit"
+    "typecheck": "tsc -w --noEmit",
+    "strict-null-checks": "tsc -p tsconfig.strictNullChecks.json -w"
   },
   "browserslist": [
     "last 2 Chrome versions"

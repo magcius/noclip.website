@@ -11,12 +11,12 @@ import * as RARC from './rarc';
 import { BMDModelInstance, BMDModel } from './render';
 import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
-import { GXRenderHelperGfx } from '../gx/gx_render';
+import { GXRenderHelperGfx } from '../gx/gx_render_2';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { GXMaterialHacks } from '../gx/gx_material';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 export class BasicRenderer implements Viewer.SceneGfx {
-    private viewRenderer = new GfxRenderInstViewRenderer();
     private renderTarget = new BasicRenderTarget();
     public renderHelper: GXRenderHelperGfx;
     public modelInstances: BMDModelInstance[] = [];
@@ -52,35 +52,35 @@ export class BasicRenderer implements Viewer.SceneGfx {
         this.modelInstances.push(scene);
     }
 
-    public finish(device: GfxDevice): void {
-        this.renderHelper.finishBuilder(device, this.viewRenderer);
-    }
+    private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        const renderInstManager = this.renderHelper.renderInstManager;
 
-    private prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         viewerInput.camera.setClipPlanes(20, 500000);
-        this.renderHelper.fillSceneParams(viewerInput);
+
+        const template = this.renderHelper.pushTemplateRenderInst();
+        this.renderHelper.fillSceneParams(viewerInput, template);
         for (let i = 0; i < this.modelInstances.length; i++)
-            this.modelInstances[i].prepareToRender(this.renderHelper, viewerInput);
-        this.renderHelper.prepareToRender(hostAccessPass);
+            this.modelInstances[i].prepareToRender(device, this.renderHelper, viewerInput);
+        renderInstManager.popTemplateRenderInst();
+
+        this.renderHelper.prepareToRender(device, hostAccessPass);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
         const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(hostAccessPass, viewerInput);
+        this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
-
-        this.viewRenderer.prepareToRender(device);
 
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
         const passRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
-        this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
-        this.viewRenderer.executeOnPass(device, passRenderer);
+        passRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.renderHelper.renderInstManager.drawOnPassRenderer(device, passRenderer);
+        this.renderHelper.renderInstManager.resetRenderInsts();
         return passRenderer;
     }
 
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy(device);
-        this.viewRenderer.destroy(device);
         this.renderTarget.destroy(device);
         for (let i = 0; i < this.modelInstances.length; i++)
             this.modelInstances[i].destroy(device);
@@ -91,11 +91,11 @@ const materialHacks: GXMaterialHacks = {
     lightingFudge: (p) => `(0.5 * (${p.ambSource} + 0.6) * ${p.matSource})`,
 };
 
-export function createModelInstance(device: GfxDevice, renderHelper: GXRenderHelperGfx, bmdFile: RARC.RARCFile, btkFile: RARC.RARCFile | null, brkFile: RARC.RARCFile | null, bckFile: RARC.RARCFile | null, bmtFile: RARC.RARCFile | null) {
+export function createModelInstance(device: GfxDevice, cache: GfxRenderCache, bmdFile: RARC.RARCFile, btkFile: RARC.RARCFile | null, brkFile: RARC.RARCFile | null, bckFile: RARC.RARCFile | null, bmtFile: RARC.RARCFile | null) {
     const bmd = BMD.parse(bmdFile.buffer);
     const bmt = bmtFile ? BMT.parse(bmtFile.buffer) : null;
-    const bmdModel = new BMDModel(device, renderHelper, bmd, bmt);
-    const scene = new BMDModelInstance(renderHelper, bmdModel, materialHacks);
+    const bmdModel = new BMDModel(device, cache, bmd, bmt);
+    const scene = new BMDModelInstance(bmdModel, materialHacks);
 
     if (btkFile !== null) {
         const btk = BTK.parse(btkFile.buffer);
@@ -135,7 +135,7 @@ function createScenesFromBuffer(device: GfxDevice, renderer: BasicRenderer, buff
                 const bmtFile = rarc.files.find((f) => f.name === `${basename}.bmt`) || null;
                 let scene;
                 try {
-                    scene = createModelInstance(device, renderer.renderHelper, bmdFile, btkFile, brkFile, bckFile, bmtFile);
+                    scene = createModelInstance(device, renderer.renderHelper.renderInstManager.gfxRenderCache, bmdFile, btkFile, brkFile, bckFile, bmtFile);
                 } catch(e) {
                     console.warn(`File ${basename} failed to parse:`, e);
                     return null;
@@ -151,8 +151,8 @@ function createScenesFromBuffer(device: GfxDevice, renderer: BasicRenderer, buff
 
         if (['J3D2bmd3', 'J3D2bdl4'].includes(readString(buffer, 0, 8))) {
             const bmd = BMD.parse(buffer);
-            const bmdModel = new BMDModel(device, renderer.renderHelper, bmd);
-            const modelInstance = new BMDModelInstance(renderer.renderHelper, bmdModel);
+            const bmdModel = new BMDModel(device, renderer.renderHelper.renderInstManager.gfxRenderCache, bmd);
+            const modelInstance = new BMDModelInstance(bmdModel);
             return [modelInstance];
         }
 
@@ -165,7 +165,6 @@ export function createMultiSceneFromBuffer(device: GfxDevice, buffer: ArrayBuffe
     return createScenesFromBuffer(device, renderer, buffer).then((scenes) => {
         for (let i = 0; i < scenes.length; i++)
             renderer.addModelInstance(scenes[i]);
-        renderer.finish(device);
         return renderer;
     });
 }

@@ -1132,7 +1132,7 @@ function translateCompareType(compareType: GX.CompareType): GfxCompareMode {
     }
 }
 
-export function translateGfxMegaState(megaState: GfxMegaStateDescriptor, material: GXMaterial) {
+export function translateGfxMegaState(megaState: Partial<GfxMegaStateDescriptor>, material: GXMaterial) {
     megaState.cullMode = translateCullMode(material.cullMode);
     megaState.depthWrite = material.ropInfo.depthWrite;
     megaState.depthCompare = material.ropInfo.depthTest ? translateCompareType(material.ropInfo.depthFunc) : GfxCompareMode.ALWAYS;

@@ -85,9 +85,9 @@ export function computeModelMatrixBillboard(out: mat4, camera: Camera): void {
     out[9] = camera.worldMatrix[9] * lengthU;
 
     // Forward vector
-    out[2] = camera.worldMatrix[2] * lengthF;
-    out[6] = camera.worldMatrix[6] * lengthF;
-    out[8] = camera.worldMatrix[10]* lengthF;
+    out[2] = camera.worldMatrix[2];
+    out[6] = camera.worldMatrix[6];
+    out[10] = camera.worldMatrix[10];
 }
 
 export function computeModelMatrixYBillboard(out: mat4, camera: Camera): void {
@@ -100,9 +100,9 @@ export function computeModelMatrixYBillboard(out: mat4, camera: Camera): void {
     out[8] = camera.worldMatrix[8] * lengthR;
 
     // Forward vector
-    out[2] = camera.worldMatrix[2] * lengthF;
-    out[6] = camera.worldMatrix[6] * lengthF;
-    out[8] = camera.worldMatrix[10]* lengthF;
+    out[2] = camera.worldMatrix[2];
+    out[6] = camera.worldMatrix[6];
+    out[10] = camera.worldMatrix[10];
 }
 
 const scratchVec3 = vec3.create();
@@ -504,57 +504,6 @@ export class OrbitCameraController implements CameraController {
 
         return updated;
     }
-}
-
-// Probably don't belong in here, but are helpful nonetheless.
-export function texProjPerspMtx(dst: mat4, fov: number, aspect: number, scaleS: number, scaleT: number, transS: number, transT: number): void {
-    const cot = 1 / Math.tan(fov / 2);
-
-    dst[0] = (cot / aspect) * scaleS;
-    dst[4] = 0.0;
-    dst[8] = -transS;
-    dst[12] = 0.0;
-
-    dst[1] = 0.0;
-    dst[5] = cot * scaleT;
-    dst[9] = -transT;
-    dst[13] = 0.0;
-
-    dst[2] = 0.0;
-    dst[6] = 0.0;
-    dst[10] = -1.0;
-    dst[14] = 0.0;
-
-    // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
-    // since this is supposed to generate a mat4x3 matrix.
-    dst[3] = 9999.0;
-    dst[7] = 9999.0;
-    dst[11] = 9999.0;
-    dst[15] = 9999.0;
-}
-
-export function texEnvMtx(dst: mat4, scaleS: number, scaleT: number, transS: number, transT: number) {
-    dst[0] = scaleS;
-    dst[4] = 0.0;
-    dst[8] = 0.0;
-    dst[12] = transS;
-
-    dst[1] = 0.0;
-    dst[5] = -scaleT;
-    dst[9] = 0.0;
-    dst[13] = transT;
-
-    dst[2] = 0.0;
-    dst[6] = 0.0;
-    dst[10] = 0.0;
-    dst[14] = 1.0;
-
-    // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
-    // since this is supposed to generate a mat4x3 matrix.
-    dst[3] = 9999.0;
-    dst[7] = 9999.0;
-    dst[11] = 9999.0;
-    dst[15] = 9999.0;
 }
 
 export function serializeMat4(dst: Float32Array, offs: number, m: mat4): number {

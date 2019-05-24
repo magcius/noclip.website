@@ -5,9 +5,7 @@ const path = require('path');
 const fs = require('fs');
 
 function buildBinaryArray(binary) {
-    const binStr = binary.join(',');
-    const src = `new Uint8Array([${binStr}])`;
-    return src;
+    return `"${binary.toString('base64')}"`;
 }
 
 function buildModuleExportsInterface(exportName, wasmModule) {
@@ -57,7 +55,7 @@ function buildModuleCode(mod) {
 ${buildModuleExportsInterface(exportName, wasmModule)}
 const ${exportName}Code = ${binArrayStr};
 export function ${exportName}Instance(imports?: any): Promise<${exportName}Exports> {
-    return WebAssembly.compile(${exportName}Code).then((module: WebAssembly.Module) => {
+    return WebAssembly.compile(Uint8Array.from(window.atob(${exportName}Code), function(c) { return c.charCodeAt(0); })).then((module: WebAssembly.Module) => {
         return WebAssembly.instantiate(module, imports);
     }).then((instance: WebAssembly.Instance) => {
         return (<${exportName}Exports> instance.exports);

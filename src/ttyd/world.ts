@@ -149,7 +149,7 @@ const _t: number[] = [0, 0, 0];
 function calcTexMtx(dst: mat4, translationS: number, translationT: number, scaleS: number, scaleT: number, rotation: number, skewS: number, skewT: number): void {
     function t(x: number, y: number, z: number = 0): number[] { _t[0] = x; _t[1] = y; _t[2] = z; return _t; }
     mat4.fromTranslation(dst, t(0.5 * skewS * scaleS, (0.5 * skewT - 1.0) * scaleT, 0.0));
-    mat4.fromZRotation(rot, MathConstants.RAD_TO_DEG * -rotation);
+    mat4.fromZRotation(rot, MathConstants.DEG_TO_RAD * -rotation);
     mat4.fromTranslation(trans1, t(-0.5 * skewS * scaleS, -(0.5 * skewT - 1.0) * scaleT, 0.0));
     mat4.mul(rot, rot, dst);
     mat4.mul(rot, trans1, rot);
@@ -1024,9 +1024,9 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         const scaleX = view.getFloat32(offs + 0x18);
         const scaleY = view.getFloat32(offs + 0x1C);
         const scaleZ = view.getFloat32(offs + 0x20);
-        const rotationX = view.getFloat32(offs + 0x24) * MathConstants.RAD_TO_DEG;
-        const rotationY = view.getFloat32(offs + 0x28) * MathConstants.RAD_TO_DEG;
-        const rotationZ = view.getFloat32(offs + 0x2C) * MathConstants.RAD_TO_DEG;
+        const rotationX = view.getFloat32(offs + 0x24) * MathConstants.DEG_TO_RAD;
+        const rotationY = view.getFloat32(offs + 0x28) * MathConstants.DEG_TO_RAD;
+        const rotationZ = view.getFloat32(offs + 0x2C) * MathConstants.DEG_TO_RAD;
         const translationX = view.getFloat32(offs + 0x30);
         const translationY = view.getFloat32(offs + 0x34);
         const translationZ = view.getFloat32(offs + 0x38);
@@ -1247,9 +1247,9 @@ export class MeshAnimator {
         const translationX = interpKeyframes(k0.translationX, k1.translationX, t, d) - this.track.translationOffsetX;
         const translationY = interpKeyframes(k0.translationY, k1.translationY, t, d) - this.track.translationOffsetY;
         const translationZ = interpKeyframes(k0.translationZ, k1.translationZ, t, d) - this.track.translationOffsetZ;
-        const rotationX = (interpKeyframes(k0.rotationX, k1.rotationX, t, d) - this.track.rotationOffsetX) * MathConstants.RAD_TO_DEG;
-        const rotationY = (interpKeyframes(k0.rotationY, k1.rotationY, t, d) - this.track.rotationOffsetY) * MathConstants.RAD_TO_DEG;
-        const rotationZ = (interpKeyframes(k0.rotationZ, k1.rotationZ, t, d) - this.track.rotationOffsetZ) * MathConstants.RAD_TO_DEG;
+        const rotationX = (interpKeyframes(k0.rotationX, k1.rotationX, t, d) - this.track.rotationOffsetX) * MathConstants.DEG_TO_RAD;
+        const rotationY = (interpKeyframes(k0.rotationY, k1.rotationY, t, d) - this.track.rotationOffsetY) * MathConstants.DEG_TO_RAD;
+        const rotationZ = (interpKeyframes(k0.rotationZ, k1.rotationZ, t, d) - this.track.rotationOffsetZ) * MathConstants.DEG_TO_RAD;
         const scaleX = interpKeyframes(k0.scaleX, k1.scaleX, t, d) / this.track.scaleDividerX;
         const scaleY = interpKeyframes(k0.scaleY, k1.scaleY, t, d) / this.track.scaleDividerY;
         const scaleZ = interpKeyframes(k0.scaleZ, k1.scaleZ, t, d) / this.track.scaleDividerZ;

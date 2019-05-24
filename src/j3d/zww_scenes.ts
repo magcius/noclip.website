@@ -19,19 +19,22 @@ import { BMDModelInstance, BMDModel, BTIData } from './render';
 import { Camera, computeViewMatrix } from '../Camera';
 import { DeviceProgram } from '../Program';
 import { colorToCSS, Color } from '../Color';
-import { ColorKind, GXRenderHelperGfx } from '../gx/gx_render';
+import { ColorKind } from '../gx/gx_render';
+import { GXRenderHelperGfx } from '../gx/gx_render_2';
 import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBufferUsage, GfxFormat, GfxVertexAttributeFrequency, GfxInputLayout, GfxInputState, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor, GfxCompareMode, GfxBufferFrequencyHint, GfxVertexAttributeDescriptor } from '../gfx/platform/GfxPlatform';
-import { GfxRenderInstViewRenderer, GfxRenderInstBuilder, GfxRenderInst, GfxRendererLayer } from '../gfx/render/GfxRenderer';
+import { GfxRendererLayer } from '../gfx/render/GfxRenderer';
+import { GfxRenderInst, GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
-import { BufferFillerHelper } from '../gfx/helpers/UniformBufferHelpers';
+import { BufferFillerHelper, fillMatrix4x4, fillMatrix4x3, fillColor } from '../gfx/helpers/UniformBufferHelpers';
 import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import AnimationController from '../AnimationController';
 import { prepareFrameDebugOverlayCanvas2D } from '../DebugJunk';
 
 import * as DZB from './zww_dzb';
 import { ObjectRenderer, BMDObjectRenderer, SymbolMap, WhiteFlowerData, FlowerObjectRenderer, PinkFlowerData, BessouFlowerData, FlowerData } from './zww_actors';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 class ZWWExtraTextures {
     constructor(public ZAtoon: BTIData, public ZBtoonEX: BTIData) {
@@ -176,7 +179,7 @@ function getColorsFromDZS(buffer: ArrayBufferSlice, roomIdx: number, timeOfDay: 
     return { actorShadow, actorAmbient, amb, light, wave, ocean, splash, splash2, doors, vr_back_cloud, vr_sky, vr_uso_umi, vr_kasumi_mae };
 }
 
-function createScene(device: GfxDevice, renderHelper: GXRenderHelperGfx, extraTextures: ZWWExtraTextures, rarc: RARC.RARC, name: string, isSkybox: boolean = false): BMDModelInstance | null {
+function createModelInstance(device: GfxDevice, cache: GfxRenderCache, extraTextures: ZWWExtraTextures, rarc: RARC.RARC, name: string, isSkybox: boolean = false): BMDModelInstance | null {
     let bdlFile = rarc.findFile(`bdl/${name}.bdl`);
     if (!bdlFile)
         bdlFile = rarc.findFile(`bmd/${name}.bmd`);
@@ -186,8 +189,8 @@ function createScene(device: GfxDevice, renderHelper: GXRenderHelperGfx, extraTe
     const brkFile = rarc.findFile(`brk/${name}.brk`);
     const bckFile = rarc.findFile(`bck/${name}.bck`);
     const bdl = BMD.parse(bdlFile.buffer);
-    const bmdModel = new BMDModel(device, renderHelper, bdl, null);
-    const modelInstance = new BMDModelInstance(renderHelper, bmdModel);
+    const bmdModel = new BMDModel(device, cache, bdl, null);
+    const modelInstance = new BMDModelInstance(bmdModel);
     extraTextures.fillExtraTextures(modelInstance);
     modelInstance.passMask = isSkybox ? WindWakerPass.SKYBOX : WindWakerPass.MAIN;
 
@@ -221,34 +224,39 @@ class WindWakerRoomRenderer {
     public objectRenderers: ObjectRenderer[] = [];
     public dzb: DZB.DZB;
 
-    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, extraTextures: ZWWExtraTextures, public roomIdx: number, public roomRarc: RARC.RARC) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, extraTextures: ZWWExtraTextures, public roomIdx: number, public roomRarc: RARC.RARC) {
         this.name = `Room ${roomIdx}`;
 
         this.dzb = DZB.parse(assertExists(roomRarc.findFileData(`dzb/room.dzb`)));
 
-        this.model = createScene(device, renderHelper, extraTextures, roomRarc, `model`)!;
+        this.model = createModelInstance(device, cache, extraTextures, roomRarc, `model`)!;
 
         // Ocean.
-        this.model1 = createScene(device, renderHelper, extraTextures, roomRarc, `model1`)!;
+        this.model1 = createModelInstance(device, cache, extraTextures, roomRarc, `model1`)!;
 
         // Special effects / Skybox as seen in Hyrule.
-        this.model2 = createScene(device, renderHelper, extraTextures, roomRarc, `model2`)!;
+        this.model2 = createModelInstance(device, cache, extraTextures, roomRarc, `model2`)!;
 
         // Windows / doors.
-        this.model3 = createScene(device, renderHelper, extraTextures, roomRarc, `model3`)!;
+        this.model3 = createModelInstance(device, cache, extraTextures, roomRarc, `model3`)!;
     }
 
-    public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!this.visible)
+            return;
+
         if (this.model)
-            this.model.prepareToRender(renderHelper, viewerInput);
+            this.model.prepareToRender(device, renderHelper, viewerInput);
         if (this.model1)
-            this.model1.prepareToRender(renderHelper, viewerInput);
+            this.model1.prepareToRender(device, renderHelper, viewerInput);
         if (this.model2)
-            this.model2.prepareToRender(renderHelper, viewerInput);
+            this.model2.prepareToRender(device, renderHelper, viewerInput);
         if (this.model3)
-            this.model3.prepareToRender(renderHelper, viewerInput);
-        for (let i = 0; i < this.objectRenderers.length; i++)
-            this.objectRenderers[i].prepareToRender(renderHelper, viewerInput, this.visible && this.objectsVisible);
+            this.model3.prepareToRender(device, renderHelper, viewerInput);
+
+        if (this.objectsVisible)
+            for (let i = 0; i < this.objectRenderers.length; i++)
+                this.objectRenderers[i].prepareToRender(device, renderHelper, viewerInput);
     }
 
     public setModelMatrix(modelMatrix: mat4): void {
@@ -297,14 +305,6 @@ class WindWakerRoomRenderer {
 
     public setVisible(v: boolean): void {
         this.visible = v;
-        if (this.model)
-            this.model.visible = v;
-        if (this.model1)
-            this.model1.visible = v;
-        if (this.model2)
-            this.model2.visible = v;
-        if (this.model3)
-            this.model3.visible = v;
     }
 
     public setVertexColorsEnabled(v: boolean): void {
@@ -372,44 +372,22 @@ void main() {
 }
 
 const scratchMatrix = mat4.create();
+const seaPlaneBindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 0 }];
 class SeaPlane {
     private posBuffer: GfxBuffer;
     private indexBuffer: GfxBuffer;
     private inputLayout: GfxInputLayout;
     private inputState: GfxInputState;
     private gfxProgram: GfxProgram;
-    private renderInst: GfxRenderInst;
-    private paramsBuffer: GfxRenderBuffer;
-    private bufferFiller: BufferFillerHelper;
-    private paramsBufferOffset: number;
     private modelMatrix = mat4.create();
     private color: Color;
 
-    constructor(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer) {
+    constructor(device: GfxDevice, cache: GfxRenderCache) {
         this.createBuffers(device);
         mat4.fromScaling(this.modelMatrix, [2000000, 1, 2000000]);
         mat4.translate(this.modelMatrix, this.modelMatrix, [0, -100, 0]);
 
-        this.gfxProgram = device.createProgram(new PlaneColorProgram());
-
-        const programReflection = device.queryProgram(this.gfxProgram);
-        const paramsLayout = programReflection.uniformBufferLayouts[0];
-        this.bufferFiller = new BufferFillerHelper(paramsLayout);
-        this.paramsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);
-
-        const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 0 }];
-        const renderInstBuilder = new GfxRenderInstBuilder(device, programReflection, bindingLayouts, [ this.paramsBuffer ]);
-        this.renderInst = renderInstBuilder.pushRenderInst();
-        this.renderInst.name = 'SeaPlane';
-        this.renderInst.setGfxProgram(this.gfxProgram);
-        this.renderInst.inputState = this.inputState;
-        this.renderInst.setMegaStateFlags({
-            depthWrite: true,
-            depthCompare: GfxCompareMode.LESS,
-        });
-        this.renderInst.drawIndexes(6, 0);
-        this.paramsBufferOffset = renderInstBuilder.newUniformBufferInstance(this.renderInst, 0);
-        renderInstBuilder.finish(device, viewRenderer);
+        this.gfxProgram = cache.createProgram(device, new PlaneColorProgram());
     }
 
     private computeModelView(dst: mat4, camera: Camera): void {
@@ -417,14 +395,23 @@ class SeaPlane {
         mat4.mul(dst, dst, this.modelMatrix);
     }
 
-    public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        this.bufferFiller.reset();
-        this.bufferFiller.fillMatrix4x4(viewerInput.camera.projectionMatrix);
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        const renderInst = renderInstManager.pushRenderInst();
+        renderInst.setBindingLayouts(seaPlaneBindingLayouts);
+        renderInst.setMegaStateFlags({
+            depthWrite: true,
+            depthCompare: GfxCompareMode.LESS,
+        });
+        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        renderInst.setGfxProgram(this.gfxProgram);
+        renderInst.drawIndexes(6);
+
+        let offs = renderInst.allocateUniformBuffer(0, 32);
+        const d = renderInst.mapUniformBufferF32(0);
+        offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
         this.computeModelView(scratchMatrix, viewerInput.camera);
-        this.bufferFiller.fillMatrix4x3(scratchMatrix);
-        this.bufferFiller.fillColor(this.color);
-        this.bufferFiller.endAndUpload(hostAccessPass, this.paramsBuffer, this.paramsBufferOffset);
-        this.paramsBuffer.prepareToRender(hostAccessPass);
+        offs += fillMatrix4x3(d, offs, scratchMatrix);
+        offs += fillColor(d, offs, this.color);
     }
 
     public setColor(color: GX_Material.Color): void {
@@ -437,7 +424,6 @@ class SeaPlane {
         device.destroyInputLayout(this.inputLayout);
         device.destroyInputState(this.inputState);
         device.destroyProgram(this.gfxProgram);
-        this.paramsBuffer.destroy(device);
     }
 
     private createBuffers(device: GfxDevice) {
@@ -473,11 +459,10 @@ const enum WindWakerPass {
 }
 
 export class WindWakerRenderer implements Viewer.SceneGfx {
-    private viewRenderer = new GfxRenderInstViewRenderer();
     private renderTarget = new BasicRenderTarget();
     public renderHelper: GXRenderHelperGfx;
 
-    private seaPlane: SeaPlane;
+    private seaPlane: SeaPlane | null;
     private vr_sky: BMDModelInstance;
     private vr_uso_umi: BMDModelInstance;
     private vr_kasumi_mae: BMDModelInstance;
@@ -491,14 +476,15 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice, public modelCache: ModelCache, public extraTextures: ZWWExtraTextures, wantsSeaPlane: boolean, private isFullSea: boolean, private stageRarc: RARC.RARC) {
         this.renderHelper = new GXRenderHelperGfx(device);
+        const cache = this.renderHelper.renderInstManager.gfxRenderCache;
 
         if (wantsSeaPlane)
-            this.seaPlane = new SeaPlane(device, this.viewRenderer);
+            this.seaPlane = new SeaPlane(device, cache);
 
-        this.vr_sky = createScene(device, this.renderHelper, this.extraTextures, stageRarc, `vr_sky`, true)!;
-        this.vr_uso_umi = createScene(device, this.renderHelper, this.extraTextures, stageRarc, `vr_uso_umi`, true)!;
-        this.vr_kasumi_mae = createScene(device, this.renderHelper, this.extraTextures, stageRarc, `vr_kasumi_mae`, true)!;
-        this.vr_back_cloud = createScene(device, this.renderHelper, this.extraTextures, stageRarc, `vr_back_cloud`, true)!;
+        this.vr_sky = createModelInstance(device, cache, this.extraTextures, stageRarc, `vr_sky`, true)!;
+        this.vr_uso_umi = createModelInstance(device, cache, this.extraTextures, stageRarc, `vr_uso_umi`, true)!;
+        this.vr_kasumi_mae = createModelInstance(device, cache, this.extraTextures, stageRarc, `vr_kasumi_mae`, true)!;
+        this.vr_back_cloud = createModelInstance(device, cache, this.extraTextures, stageRarc, `vr_back_cloud`, true)!;
     }
 
     private setTimeOfDay(timeOfDay: number): void {
@@ -538,10 +524,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             const roomColors = timeOfDay === -1 ? undefined : getColorsFromDZS(dzsFile.buffer, 0, timeOfDay);
             roomRenderer.setColors(roomColors);
         }
-    }
-
-    public finish(device: GfxDevice): void {
-        this.renderHelper.finishBuilder(device, this.viewRenderer);
     }
 
     public createPanels(): UI.Panel[] {
@@ -602,49 +584,55 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         return [timeOfDayPanel, layersPanel, renderHacksPanel];
     }
 
-    private prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+    private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         if (this.isFullSea)
             viewerInput.camera.setClipPlanes(20, 5000000);
         else
             viewerInput.camera.setClipPlanes(20, 5000000);
-        this.renderHelper.fillSceneParams(viewerInput);
+
+        const template = this.renderHelper.pushTemplateRenderInst();
+
+        this.renderHelper.fillSceneParams(viewerInput, template);
         if (this.seaPlane)
-            this.seaPlane.prepareToRender(hostAccessPass, viewerInput);
+            this.seaPlane.prepareToRender(this.renderHelper.renderInstManager, viewerInput);
         if (this.vr_sky)
-            this.vr_sky.prepareToRender(this.renderHelper, viewerInput);
+            this.vr_sky.prepareToRender(device, this.renderHelper, viewerInput);
         if (this.vr_kasumi_mae)
-            this.vr_kasumi_mae.prepareToRender(this.renderHelper, viewerInput);
+            this.vr_kasumi_mae.prepareToRender(device, this.renderHelper, viewerInput);
         if (this.vr_uso_umi)
-            this.vr_uso_umi.prepareToRender(this.renderHelper, viewerInput);
+            this.vr_uso_umi.prepareToRender(device, this.renderHelper, viewerInput);
         if (this.vr_back_cloud)
-            this.vr_back_cloud.prepareToRender(this.renderHelper, viewerInput);
+            this.vr_back_cloud.prepareToRender(device, this.renderHelper, viewerInput);
         for (let i = 0; i < this.roomRenderers.length; i++)
-            this.roomRenderers[i].prepareToRender(this.renderHelper, viewerInput);
-        this.renderHelper.prepareToRender(hostAccessPass);
+            this.roomRenderers[i].prepareToRender(device, this.renderHelper, viewerInput);
+        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.prepareToRender(device, hostAccessPass);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
         prepareFrameDebugOverlayCanvas2D();
 
-        viewerInput.camera.setClipPlanes(20, 500000);
+        const renderInstManager = this.renderHelper.renderInstManager;
 
         const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(hostAccessPass, viewerInput);
+        this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
 
-        this.viewRenderer.prepareToRender(device);
-
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
 
         // First, render the skybox.
         const skyboxPassRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
-        this.viewRenderer.executeOnPass(device, skyboxPassRenderer, WindWakerPass.SKYBOX);
+        skyboxPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        renderInstManager.setVisibleByFilterKeyExact(WindWakerPass.SKYBOX);
+        renderInstManager.drawOnPassRenderer(device, skyboxPassRenderer);
         skyboxPassRenderer.endPass(null);
         device.submitPass(skyboxPassRenderer);
         // Now do main pass.
         const mainPassRenderer = this.renderTarget.createRenderPass(device, depthClearRenderPassDescriptor);
-        this.viewRenderer.executeOnPass(device, mainPassRenderer, WindWakerPass.MAIN);
+        mainPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        renderInstManager.setVisibleByFilterKeyExact(WindWakerPass.MAIN);
+        renderInstManager.drawOnPassRenderer(device, mainPassRenderer);
+        renderInstManager.resetRenderInsts();
         return mainPassRenderer;
     }
 
@@ -664,7 +652,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     public destroy(device: GfxDevice) {
         this.renderHelper.destroy(device);
         this.extraTextures.destroy(device);
-        this.viewRenderer.destroy(device);
         this.renderTarget.destroy(device);
         if (this.vr_sky)
             this.vr_sky.destroy(device);
@@ -746,7 +733,7 @@ class ModelCache {
         return p;
     }
 
-    public getModel(device: GfxDevice, renderer: WindWakerRenderer, rarc: RARC.RARC, modelPath: string, hacks?: (bmd: BMD) => void): BMDModel {
+    public getModel(device: GfxDevice, cache: GfxRenderCache, rarc: RARC.RARC, modelPath: string, hacks?: (bmd: BMD) => void): BMDModel {
         let p = this.modelCache.get(modelPath);
 
         if (p === undefined) {
@@ -754,7 +741,7 @@ class ModelCache {
             const bmd = BMD.parse(bmdData);
             if (hacks !== undefined)
                 hacks(bmd);
-            p = new BMDModel(device, renderer.renderHelper, bmd);
+            p = new BMDModel(device, cache, bmd);
             this.modelCache.set(modelPath, p);
         }
 
@@ -812,6 +799,7 @@ class SceneDesc {
             const isSea = this.stageDir === 'sea';
             const isFullSea = isSea && this.rooms.length > 1;
             const renderer = new WindWakerRenderer(device, modelCache, extraTextures, isSea, isFullSea, stageRarc);
+            const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
             for (let i = 0; i < this.rooms.length; i++) {
                 const roomIdx = Math.abs(this.rooms[i]);
                 const roomRarc = modelCache.getArchive(`${pathBase}/Stage/${this.stageDir}/Room${roomIdx}.arc`);
@@ -825,7 +813,7 @@ class SceneDesc {
                     this.getRoomMult(modelMatrix, stageDzs, mult, roomIdx);
 
                 // Spawn the room.
-                const roomRenderer = new WindWakerRoomRenderer(device, renderer.renderHelper, renderer.extraTextures, roomIdx, roomRarc);
+                const roomRenderer = new WindWakerRoomRenderer(device, cache, renderer.extraTextures, roomIdx, roomRarc);
                 roomRenderer.visible = visible;
                 renderer.roomRenderers.push(roomRenderer);
 
@@ -843,7 +831,6 @@ class SceneDesc {
             }
 
             return modelCache.waitForLoad().then(() => {
-                renderer.finish(device);
                 return renderer;
             });
         });
@@ -874,6 +861,7 @@ class SceneDesc {
         const modelCache = renderer.modelCache;
         const stageName = this.id;
         const roomIdx = roomRenderer.roomIdx;
+        const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
 
         function fetchArchive(objArcName: string): Progressable<RARC.RARC> {
             return renderer.modelCache.fetchArchive(`${pathBase}/Object/${objArcName}`, abortSignal);
@@ -891,8 +879,8 @@ class SceneDesc {
         }
 
         function buildChildModel(rarc: RARC.RARC, modelPath: string): BMDObjectRenderer {
-            const model = modelCache.getModel(device, renderer, rarc, modelPath);
-            const modelInstance = new BMDModelInstance(renderer.renderHelper, model);
+            const model = modelCache.getModel(device, cache, rarc, modelPath);
+            const modelInstance = new BMDModelInstance(model);
             renderer.extraTextures.fillExtraTextures(modelInstance);
             modelInstance.name = name;
             modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 1);
@@ -913,9 +901,9 @@ class SceneDesc {
         function buildChildModelBMT(rarc: RARC.RARC, modelPath: string, bmtPath: string): BMDObjectRenderer {
             const bmd = BMD.parse(rarc.findFileData(modelPath)!);
             const bmt = BMT.parse(rarc.findFileData(bmtPath)!);
-            const model = new BMDModel(device, renderer.renderHelper, bmd, bmt);
+            const model = new BMDModel(device, cache, bmd, bmt);
             modelCache.extraModels.push(model);
-            const modelInstance = new BMDModelInstance(renderer.renderHelper, model);
+            const modelInstance = new BMDModelInstance(model);
             renderer.extraTextures.fillExtraTextures(modelInstance);
             modelInstance.name = name;
             modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 1);
@@ -943,18 +931,18 @@ class SceneDesc {
             if (stageName === 'sea' && roomIdx === 33) {
                 flowerData = modelCache.extraCache.get('Obessou') as FlowerData;
                 if (flowerData === undefined) {
-                    flowerData = new BessouFlowerData(device, symbolMap, renderer.renderHelper);
+                    flowerData = new BessouFlowerData(device, symbolMap, cache);
                     modelCache.extraCache.set('Obessou', flowerData);
                 }
             } else {
                 flowerData = modelCache.extraCache.get('Ohana_high') as FlowerData;
                 if (flowerData === undefined) {
-                    flowerData = new PinkFlowerData(device, symbolMap, renderer.renderHelper);
+                    flowerData = new PinkFlowerData(device, symbolMap, cache);
                     modelCache.extraCache.set('Ohana_high', flowerData);
                 }
             }
 
-            const objectRenderer = new FlowerObjectRenderer(device, renderer.renderHelper, flowerData);
+            const objectRenderer = new FlowerObjectRenderer(flowerData);
             setModelMatrix(objectRenderer.modelMatrix);
             setToNearestFloor(objectRenderer.modelMatrix, localModelMatrix);
             roomRenderer.objectRenderers.push(objectRenderer);
@@ -964,11 +952,11 @@ class SceneDesc {
         function buildWhiteFlowerModel(symbolMap: SymbolMap): ObjectRenderer {
             let flowerData: FlowerData = modelCache.extraCache.get('Ohana') as FlowerData;
             if (flowerData === undefined) {
-                flowerData = new WhiteFlowerData(device, symbolMap, renderer.renderHelper);
+                flowerData = new WhiteFlowerData(device, symbolMap, cache);
                 modelCache.extraCache.set('Ohana', flowerData);
             }
 
-            const objectRenderer = new FlowerObjectRenderer(device, renderer.renderHelper, flowerData);
+            const objectRenderer = new FlowerObjectRenderer(flowerData);
             setModelMatrix(objectRenderer.modelMatrix);
             setToNearestFloor(objectRenderer.modelMatrix, localModelMatrix);
             roomRenderer.objectRenderers.push(objectRenderer);

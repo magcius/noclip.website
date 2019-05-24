@@ -5,15 +5,13 @@ import Progressable from '../../Progressable';
 import { assert, assertExists } from '../../util';
 import { fetchData, AbortedError } from '../../fetch';
 import * as Viewer from '../../viewer';
-import { GfxDevice, GfxRenderPass, GfxHostAccessPass } from '../../gfx/platform/GfxPlatform';
-import { GfxRenderInstViewRenderer } from '../../gfx/render/GfxRenderer';
+import { GfxDevice, GfxRenderPass } from '../../gfx/platform/GfxPlatform';
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../../gfx/helpers/RenderTargetHelpers';
 import { BMD, BRK, BTK, BCK, LoopMode, BVA, BPK, BTP } from '../../j3d/j3d';
 import { BMDModel, BMDModelInstance } from '../../j3d/render';
 import * as RARC from '../../j3d/rarc';
 import { EFB_WIDTH, EFB_HEIGHT, Light, lightSetWorldPosition, lightSetWorldDirection } from '../../gx/gx_material';
-import { GXRenderHelperGfx } from '../../gx/gx_render';
-import { TextureOverride } from '../../TextureHolder';
+import { GXRenderHelperGfx } from '../../gx/gx_render_2';
 import { getPointBezier } from '../../Spline';
 import AnimationController from '../../AnimationController';
 import * as Yaz0 from '../../compression/Yaz0';
@@ -22,6 +20,7 @@ import * as UI from '../../ui';
 import { colorFromRGBA, Color, colorNew, colorCopy } from '../../Color';
 import { BloomPostFXParameters, BloomPostFXRenderer } from './Bloom';
 import { Camera } from '../../Camera';
+import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
 
 const enum SceneGraphTag {
     Skybox = 'Skybox',
@@ -206,16 +205,7 @@ class Node {
 
     constructor(public objinfo: ObjInfo, private parentZone: ZoneNode, public modelInstance: BMDModelInstance, parentModelMatrix: mat4, public animationController: AnimationController) {
         this.name = modelInstance.name;
-        // BlackHole is special and doesn't inherit SR from parent.
-        if (objinfo.objName === 'BlackHole') {
-            mat4.copy(this.modelMatrix, objinfo.modelMatrix);
-            this.modelMatrix[12] += parentModelMatrix[12];
-            this.modelMatrix[13] += parentModelMatrix[13];
-            this.modelMatrix[14] += parentModelMatrix[14];
-        } else {
-            mat4.mul(this.modelMatrix, parentModelMatrix, objinfo.modelMatrix);
-        }
-
+        mat4.mul(this.modelMatrix, parentModelMatrix, objinfo.modelMatrix);
         this.setupAnimations();
     }
 
@@ -275,10 +265,10 @@ class Node {
         }
     }
 
-    public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
         this.areaLightConfiguration.setOnModelInstance(this.modelInstance, viewerInput.camera);
         this.updateSpecialAnimations();
-        this.modelInstance.prepareToRender(renderHelper, viewerInput);
+        this.modelInstance.prepareToRender(device, renderHelper, viewerInput);
     }
 
     public destroy(device: GfxDevice): void {
@@ -325,14 +315,14 @@ class SMGRenderer implements Viewer.SceneGfx {
 
     public onstatechanged!: () => void;
 
-    constructor(device: GfxDevice, private spawner: SMGSpawner, private viewRenderer: GfxRenderInstViewRenderer, private scenarioData: BCSV.Bcsv, private zoneNames: string[]) {
+    constructor(device: GfxDevice, private renderHelper: GXRenderHelperGfx, private spawner: SMGSpawner, private scenarioData: BCSV.Bcsv, private zoneNames: string[]) {
         this.sceneGraph = spawner.sceneGraph;
 
         this.sceneGraph.onnodeadded = () => {
             this.applyCurrentScenario();
         };
 
-        this.bloomRenderer = new BloomPostFXRenderer(device, this.mainRenderTarget, this.viewRenderer);
+        this.bloomRenderer = new BloomPostFXRenderer(device, this.renderHelper.renderInstManager.gfxRenderCache, this.mainRenderTarget);
     }
 
     private applyCurrentScenario(): void {
@@ -407,75 +397,92 @@ class SMGRenderer implements Viewer.SceneGfx {
         return null;
     }
 
-    private prepareToRenderBloom(hostAccessPass: GfxHostAccessPass): void {
+    private prepareBloomParameters(bloomParameters: BloomPostFXParameters): void {
         // TODO(jstpierre): Dynamically adjust based on Area.
         const bloomArea = this.findBloomArea();
         if (bloomArea !== null) {
             // TODO(jstpierre): What is arg1
-            this.bloomParameters.blurStrength = bloomArea.objArg2 / 256;
-            this.bloomParameters.bokehStrength = bloomArea.objArg3 / 256;
-            this.bloomParameters.bokehCombineStrength = bloomArea.objArg0 / 256;
+            bloomParameters.blurStrength = bloomArea.objArg2 / 256;
+            bloomParameters.bokehStrength = bloomArea.objArg3 / 256;
+            bloomParameters.bokehCombineStrength = bloomArea.objArg0 / 256;
         } else {
-            this.bloomParameters.blurStrength = 25/256;
-            this.bloomParameters.bokehStrength = 25/256;
-            this.bloomParameters.bokehCombineStrength = 50/256;
+            bloomParameters.blurStrength = 25/256;
+            bloomParameters.bokehStrength = 25/256;
+            bloomParameters.bokehCombineStrength = 50/256;
         }
-
-        this.bloomRenderer.prepareToRender(hostAccessPass, this.bloomParameters);
     }
 
     private setIndirectTextureOverride(): void {
-        const textureOverride: TextureOverride = { gfxTexture: this.opaqueSceneTexture.gfxTexture, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
         for (let i = 0; i < this.spawner.sceneGraph.nodes.length; i++) {
             const m = this.spawner.sceneGraph.nodes[i].modelInstance.getTextureMappingReference("IndDummy");
-            if (m !== null)
-                m.fillFromTextureOverride(textureOverride);
+            if (m !== null) {
+                m.gfxTexture = this.opaqueSceneTexture.gfxTexture;
+                m.width = EFB_WIDTH;
+                m.height = EFB_HEIGHT;
+                m.flipY = true;
+            }
         }
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        const renderInstManager = this.renderHelper.renderInstManager;
+
+        // TODO(jstpierre): The game seems to have two different versions of IndDummy. One which uses last-frame's scene
+        // and one which uses the scene drawn so far. This appears to be done on a per-object basis.
+        this.setIndirectTextureOverride();
+
+        viewerInput.camera.setClipPlanes(20, 500000);
+
+        const template = this.renderHelper.pushTemplateRenderInst();
+        this.renderHelper.fillSceneParams(viewerInput, template);
+        for (let i = 0; i < this.sceneGraph.nodes.length; i++)
+            this.sceneGraph.nodes[i].prepareToRender(device, this.renderHelper, viewerInput);
+        this.prepareBloomParameters(this.bloomParameters);
+        const bloomParameterBufferOffs = this.bloomRenderer.allocateParameterBuffer(renderInstManager, this.bloomParameters);
+        renderInstManager.popTemplateRenderInst();
+
         const hostAccessPass = device.createHostAccessPass();
-
-        this.prepareToRenderBloom(hostAccessPass);
-
-        this.spawner.prepareToRender(hostAccessPass, viewerInput);
+        this.renderHelper.prepareToRender(device, hostAccessPass);
         device.submitPass(hostAccessPass);
+
         this.mainRenderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
         this.opaqueSceneTexture.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
-
-        this.viewRenderer.prepareToRender(device);
 
         const skyboxPassRenderer = this.mainRenderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
-        this.viewRenderer.executeOnPass(device, skyboxPassRenderer, SMGPass.SKYBOX);
+        skyboxPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        renderInstManager.setVisibleByFilterKeyExact(SMGPass.SKYBOX);
+        renderInstManager.drawOnPassRenderer(device, skyboxPassRenderer);
         skyboxPassRenderer.endPass(null);
         device.submitPass(skyboxPassRenderer);
 
         const opaquePassRenderer = this.mainRenderTarget.createRenderPass(device, depthClearRenderPassDescriptor);
-        this.viewRenderer.executeOnPass(device, opaquePassRenderer, SMGPass.OPAQUE);
+        opaquePassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        renderInstManager.setVisibleByFilterKeyExact(SMGPass.OPAQUE);
+        renderInstManager.drawOnPassRenderer(device, opaquePassRenderer);
 
         let lastPassRenderer: GfxRenderPass;
-        if (this.viewRenderer.hasAnyVisible(SMGPass.INDIRECT)) {
+
+        renderInstManager.setVisibleByFilterKeyExact(SMGPass.INDIRECT);
+        if (renderInstManager.hasAnyVisible()) {
             opaquePassRenderer.endPass(this.opaqueSceneTexture.gfxTexture);
             device.submitPass(opaquePassRenderer);
 
-            // TODO(jstpierre): The game seems to have two different versions of IndDummy. One which uses last-frame's scene
-            // and one which uses the scene drawn so far. This appears to be done on a per-object basis.
-            this.setIndirectTextureOverride();
-
             const indTexPassRenderer = this.mainRenderTarget.createRenderPass(device, noClearRenderPassDescriptor);
-            this.viewRenderer.executeOnPass(device, indTexPassRenderer, SMGPass.INDIRECT);
+            renderInstManager.drawOnPassRenderer(device, indTexPassRenderer);
             lastPassRenderer = indTexPassRenderer;
         } else {
             lastPassRenderer = opaquePassRenderer;
         }
 
-        if (this.viewRenderer.hasAnyVisible(SMGPass.BLOOM)) {
+        renderInstManager.setVisibleByFilterKeyExact(SMGPass.BLOOM);
+        if (renderInstManager.hasAnyVisible()) {
             lastPassRenderer.endPass(null);
             device.submitPass(lastPassRenderer);
 
-            lastPassRenderer = this.bloomRenderer.render(device, this.viewRenderer, this.mainRenderTarget, viewerInput, SMGPass.BLOOM);
+            lastPassRenderer = this.bloomRenderer.render(device, this.renderHelper.renderInstManager, this.mainRenderTarget, viewerInput, template, bloomParameterBufferOffs);
         }
+
+        renderInstManager.resetRenderInsts();
 
         return lastPassRenderer;
     }
@@ -499,6 +506,7 @@ class SMGRenderer implements Viewer.SceneGfx {
         this.mainRenderTarget.destroy(device);
         this.opaqueSceneTexture.destroy(device);
         this.bloomRenderer.destroy(device);
+        this.renderHelper.destroy(device);
     }
 }
 
@@ -609,7 +617,7 @@ class ModelCache {
     private models: BMDModel[] = [];
     private destroyed: boolean = false;
 
-    public getModel(device: GfxDevice, abortSignal: AbortSignal, renderHelper: GXRenderHelperGfx, archivePath: string, modelFilename: string): Progressable<BMDModel | null> {
+    public getModel(device: GfxDevice, abortSignal: AbortSignal, cache: GfxRenderCache, archivePath: string, modelFilename: string): Progressable<BMDModel | null> {
         if (this.promiseCache.has(archivePath))
             return this.promiseCache.get(archivePath);
 
@@ -626,7 +634,7 @@ class ModelCache {
                 throw new AbortedError();
             const rarc = RARC.parse(buffer);
             const bmd = BMD.parse(assertExists(rarc.findFileData(modelFilename)));
-            const bmdModel = new BMDModel(device, renderHelper, bmd, null);
+            const bmdModel = new BMDModel(device, cache, bmd, null);
             this.archiveCache.set(archivePath, rarc);
             this.models.push(bmdModel);
             return bmdModel;
@@ -691,7 +699,7 @@ class SMGSpawner {
     private isSMG2 = false;
     private areaLightInfos: AreaLightInfo[] = [];
 
-    constructor(private pathBase: string, private renderHelper: GXRenderHelperGfx, private viewRenderer: GfxRenderInstViewRenderer, private planetTable: BCSV.Bcsv, private lightData: BCSV.Bcsv) {
+    constructor(private galaxyName: string, private pathBase: string, private cache: GfxRenderCache, private planetTable: BCSV.Bcsv, private lightData: BCSV.Bcsv) {
         this.isSMG1 = this.pathBase === 'j3d/smg';
         this.isSMG2 = this.pathBase === 'j3d/smg2';
 
@@ -707,14 +715,6 @@ class SMGSpawner {
             areaLightInfo.setFromLightDataRecord(lightData, lightData.records[i]);
             this.areaLightInfos.push(areaLightInfo);
         }
-    }
-
-    public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        viewerInput.camera.setClipPlanes(20, 500000);
-        this.renderHelper.fillSceneParams(viewerInput);
-        for (let i = 0; i < this.sceneGraph.nodes.length; i++)
-            this.sceneGraph.nodes[i].prepareToRender(this.renderHelper, viewerInput);
-        this.renderHelper.prepareToRender(hostAccessPass);
     }
 
     public applyAnimations(node: Node, rarc: RARC.RARC, animOptions?: AnimOptions): void {
@@ -799,7 +799,7 @@ class SMGSpawner {
         const spawnGraph = (arcName: string, tag: SceneGraphTag = SceneGraphTag.Normal, animOptions: AnimOptions | null | undefined = undefined, planetRecord: BCSV.BcsvRecord | null = null) => {
             const arcPath = `${this.pathBase}/ObjectData/${arcName}.arc`;
             const modelFilename = `${arcName}.bdl`;
-            return this.modelCache.getModel(device, abortSignal, this.renderHelper, arcPath, modelFilename).then((bmdModel): [Node, RARC.RARC] => {
+            return this.modelCache.getModel(device, abortSignal, this.cache, arcPath, modelFilename).then((bmdModel): [Node, RARC.RARC] => {
                 // If this is a 404, then return null.
                 if (bmdModel === null)
                     return null;
@@ -810,7 +810,7 @@ class SMGSpawner {
                 // Trickery.
                 const rarc = this.modelCache.archiveCache.get(arcPath);
 
-                const modelInstance = new BMDModelInstance(this.renderHelper, bmdModel);
+                const modelInstance = new BMDModelInstance(bmdModel);
                 modelInstance.name = `${objinfo.objName} ${objinfo.objId}`;
 
                 if (tag === SceneGraphTag.Skybox) {
@@ -845,7 +845,6 @@ class SMGSpawner {
 
                 this.sceneGraph.addNode(node);
 
-                this.renderHelper.renderInstBuilder.constructRenderInsts(device, this.viewRenderer);
                 return [node, rarc];
             });
         };
@@ -1280,7 +1279,7 @@ class SMGSpawner {
             spawnGraph(`PowerStar`, SceneGraphTag.Normal, { bck: null }).then(([node, rarc]) => {
                 if (this.isSMG1) {
                     // This appears to be hardcoded in the DOL itself, inside "GameEventFlagTable".
-                    const isRedStar = node.objinfo.objArg0 === 2;
+                    const isRedStar = this.galaxyName === 'HeavensDoorGalaxy' && node.objinfo.objArg0 === 2;
                     // This is also hardcoded, but the designers left us a clue.
                     const isGreenStar = name === 'GreenStar';
                     const frame = isRedStar ? 5 : isGreenStar ? 2 : 0;
@@ -1411,8 +1410,6 @@ class SMGSpawner {
     public destroy(device: GfxDevice): void {
         this.modelCache.destroy(device);
         this.sceneGraph.destroy(device);
-        this.viewRenderer.destroy(device);
-        this.renderHelper.destroy(device);
     }
 }
 
@@ -1532,19 +1529,15 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
             assert(masterZoneName === galaxyName);
 
             const renderHelper = new GXRenderHelperGfx(device);
-            const viewRenderer = new GfxRenderInstViewRenderer();
-
-            // Construct initial state.
-            renderHelper.renderInstBuilder.constructRenderInsts(device, viewRenderer);
 
             return Progressable.all(zoneNames.map((zoneName) => fetchData(this.getZoneMapFilename(zoneName), abortSignal))).then((buffers: ArrayBufferSlice[]) => {
                 return Promise.all(buffers.map((buffer) => Yaz0.decompress(buffer)));
             }).then((zoneBuffers: ArrayBufferSlice[]): Viewer.SceneGfx => {
                 const zones = zoneBuffers.map((zoneBuffer, i) => this.parseZone(zoneNames[i], zoneBuffer));
-                const spawner = new SMGSpawner(this.pathBase, renderHelper, viewRenderer, planetTable, lightData);
+                const spawner = new SMGSpawner(galaxyName, this.pathBase, renderHelper.renderInstManager.gfxRenderCache, planetTable, lightData);
                 const modelMatrixBase = mat4.create();
                 spawner.spawnZone(device, abortSignal, zones[0], zones, modelMatrixBase);
-                return new SMGRenderer(device, spawner, viewRenderer, scenariodata, zoneNames);
+                return new SMGRenderer(device, renderHelper, spawner, scenariodata, zoneNames);
             });
         });
     }

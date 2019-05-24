@@ -18,8 +18,8 @@ export interface TextureBase {
 }
 
 export class TextureMapping {
-    public gfxTexture: GfxTexture = null;
-    public gfxSampler: GfxSampler = null;
+    public gfxTexture: GfxTexture | null = null;
+    public gfxSampler: GfxSampler | null = null;
     public width: number = 0;
     public height: number = 0;
     public lodBias: number = 0;

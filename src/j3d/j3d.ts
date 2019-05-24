@@ -1612,8 +1612,6 @@ function readTRK1Chunk(buffer: ArrayBufferSlice): TRK1 {
 }
 
 export class TRK1Animator {
-    private graph: Graph | null = null;
-
     constructor(public animationController: AnimationController, private trk1: TRK1, private animationEntry: TRK1AnimationEntry) {}
 
     public calcColor(dst: GX_Material.Color): void {
@@ -1624,17 +1622,6 @@ export class TRK1Animator {
         dst.g = sampleAnimationData(this.animationEntry.g, animFrame);
         dst.b = sampleAnimationData(this.animationEntry.b, animFrame);
         dst.a = sampleAnimationData(this.animationEntry.a, animFrame);
-
-        if (this.graph !== null) {
-            this.graph.clear();
-            this.graph.graphF('black', (t) => sampleAnimationData(this.animationEntry.a, t), this.trk1.duration);
-            this.graph.marker('red', animFrame / this.trk1.duration);
-            this.graph.hline('green', 0);
-        }
-    }
-
-    public viz(): void {
-        this.graph = new Graph(cv());
     }
 }
 

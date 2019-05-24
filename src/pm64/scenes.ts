@@ -27,8 +27,8 @@ class PaperMario64Renderer extends BasicRendererHelper {
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        this.scriptExecutor.stepTime(viewerInput.time);
-
+        if (this.scriptExecutor !== null)
+            this.scriptExecutor.stepTime(viewerInput.time);
         if (this.bgTextureRenderer !== null)
             this.bgTextureRenderer.prepareToRender(hostAccessPass, viewerInput);
         for (let i = 0; i < this.modelTreeRenderers.length; i++)
