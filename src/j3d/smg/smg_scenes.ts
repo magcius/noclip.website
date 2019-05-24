@@ -1136,40 +1136,54 @@ class SMGSpawner {
             });
             break;
         case 'BlackHole':
+            spawnGraph(`BlackHole`).then(([node, rarc]) => {
+                node.modelMatrix[0]  *= 0.5;
+                node.modelMatrix[1]  *= 0.5;
+                node.modelMatrix[2]  *= 0.5;
+
+                node.modelMatrix[4]  *= 0.5;
+                node.modelMatrix[5]  *= 0.5;
+                node.modelMatrix[6]  *= 0.5;
+
+                node.modelMatrix[8]  *= 0.5;
+                node.modelMatrix[9]  *= 0.5;
+                node.modelMatrix[10] *= 0.5;
+            });
+            spawnGraph(`BlackHoleRange`);
+            break;
         case 'BlackHoleCube':
             spawnGraph(`BlackHole`).then(([node, rarc]) => {
-                if(node.objinfo.objArg0!=-1||name=='BlackHoleCube'){
-                    const scale = node.objinfo.objArg0 / 1000;
-                    node.modelMatrix[0]  = scale*0.5;
-                    node.modelMatrix[1]  = 0;
-                    node.modelMatrix[2]  = 0;
+                let scale = node.objinfo.objArg0 / 1000;
+                if(node.objinfo.objArg0==-1)
+                    scale=1;
+                node.modelMatrix[0]  = scale*0.5;
+                node.modelMatrix[1]  = 0;
+                node.modelMatrix[2]  = 0;
 
-                    node.modelMatrix[4]  = 0;
-                    node.modelMatrix[5]  = scale*0.5;
-                    node.modelMatrix[6]  = 0;
+                node.modelMatrix[4]  = 0;
+                node.modelMatrix[5]  = scale*0.5;
+                node.modelMatrix[6]  = 0;
 
-                    node.modelMatrix[8]  = 0;
-                    node.modelMatrix[9]  = 0;
-                    node.modelMatrix[10] = scale*0.5;
-                    node.modelMatrix[15] = 1;
-                }
+                node.modelMatrix[8]  = 0;
+                node.modelMatrix[9]  = 0;
+                node.modelMatrix[10] = scale*0.5;
             });
             spawnGraph(`BlackHoleRange`).then(([node, rarc]) => {
-                if(node.objinfo.objArg0!=-1||name=='BlackHoleCube'){
-                    const scale = node.objinfo.objArg0 / 1000;
-                    node.modelMatrix[0]  = scale;
-                    node.modelMatrix[1]  = 0;
-                    node.modelMatrix[2]  = 0;
+                let scale = node.objinfo.objArg0 / 1000;
+                if(node.objinfo.objArg0==-1)
+                    scale=1;
+                node.modelMatrix[0]  = scale;
+                node.modelMatrix[1]  = 0;
+                node.modelMatrix[2]  = 0;
 
-                    node.modelMatrix[4]  = 0;
-                    node.modelMatrix[5]  = scale;
-                    node.modelMatrix[6]  = 0;
+                node.modelMatrix[4]  = 0;
+                node.modelMatrix[5]  = scale;
+                node.modelMatrix[6]  = 0;
 
-                    node.modelMatrix[8]  = 0;
-                    node.modelMatrix[9]  = 0;
-                    node.modelMatrix[10] = scale;
-                    node.modelMatrix[15] = 1;
-                }
+                node.modelMatrix[8]  = 0;
+                node.modelMatrix[9]  = 0;
+                node.modelMatrix[10] = scale;
+                node.modelMatrix[15] = 1;
             });
             break;
 
