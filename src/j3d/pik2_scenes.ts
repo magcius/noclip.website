@@ -28,7 +28,7 @@ class Pik2SceneDesc implements Viewer.SceneDesc {
         const btkFile = rarc.findFile(`${basename}.btk`);
         const brkFile = rarc.findFile(`${basename}.brk`);
         const bmtFile = rarc.findFile(`${basename}.bmt`);
-        const scene = createModelInstance(device, renderer.renderHelper, bmdFile, btkFile, brkFile, null, bmtFile);
+        const scene = createModelInstance(device, renderer.renderHelper.renderInstManager.gfxRenderCache, bmdFile, btkFile, brkFile, null, bmtFile);
         scene.name = basename;
         if (modelMatrix !== null)
             mat4.copy(scene.modelMatrix, modelMatrix);
@@ -56,7 +56,6 @@ class Pik2SceneDesc implements Viewer.SceneDesc {
             if (rarc.findFile(`opening.bmd`))
                 renderer.addModelInstance(this.spawnBMD(device, renderer, rarc, `opening`));
 
-            renderer.finish(device);
             return renderer;
         });
     }

@@ -225,8 +225,8 @@ class BatchInstance {
     private shapeHelper: GXShapeHelperGfx;
     private packetParams = new PacketParams();
 
-    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, private materialInstance: MaterialInstance, private nodeInstance: NodeInstance, private batch: Batch, private coalescedBuffers: GfxCoalescedBuffers) {
-        this.shapeHelper = new GXShapeHelperGfx(device, renderHelper, coalescedBuffers, batch.loadedVertexLayout, batch.loadedVertexData);
+    constructor(device: GfxDevice, cache: GfxRenderCache, private materialInstance: MaterialInstance, private nodeInstance: NodeInstance, private batch: Batch, private coalescedBuffers: GfxCoalescedBuffers) {
+        this.shapeHelper = new GXShapeHelperGfx(device, cache, coalescedBuffers, batch.loadedVertexLayout, batch.loadedVertexData);
     }
 
     private computeModelView(dst: mat4, camera: Camera): void {
@@ -468,7 +468,8 @@ export class WorldRenderer implements Viewer.SceneGfx {
         const batchIndex = this.batches.indexOf(batch);
         assert(batchIndex >= 0);
         const materialInstance = this.materialInstances[part.material.index];
-        const batchInstance = new BatchInstance(device, this.renderHelper, materialInstance, nodeInstance, batch, this.bufferCoalescer.coalescedBuffers[batchIndex]);
+        const cache = this.renderHelper.renderInstManager.gfxRenderCache;
+        const batchInstance = new BatchInstance(device, cache, materialInstance, nodeInstance, batch, this.bufferCoalescer.coalescedBuffers[batchIndex]);
         this.batchInstances.push(batchInstance);
     }
 

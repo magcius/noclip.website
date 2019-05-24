@@ -5,26 +5,27 @@ import * as GX_Material from '../gx/gx_material';
 
 import { mat4, vec3 } from "gl-matrix";
 import { BMDModelInstance, BTIData } from "./render";
-import { ANK1, TTK1, TRK1, TEX1_TextureData, BTI_Texture } from "./j3d";
+import { ANK1, TTK1, TRK1, BTI_Texture } from "./j3d";
 import AnimationController from "../AnimationController";
 import { Colors } from "./zww_scenes";
-import { ColorKind, GXRenderHelperGfx, GXTextureHolder, GXShapeHelperGfx, loadedDataCoalescerGfx, ub_PacketParams, PacketParams, MaterialParams, GXMaterialHelperGfx, translateWrapModeGfx } from "../gx/gx_render";
+import { ColorKind, loadedDataCoalescerGfx, ub_PacketParams, PacketParams, MaterialParams, ub_MaterialParams, u_MaterialParamsBufferSize } from "../gx/gx_render";
+import { GXRenderHelperGfx, GXShapeHelperGfx, GXMaterialHelperGfx } from '../gx/gx_render_2';
 import { AABB } from '../Geometry';
 import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB, computeViewMatrix } from '../Camera';
-import { GfxDevice, GfxSampler, GfxTexFilterMode, GfxMipFilterMode } from '../gfx/platform/GfxPlatform';
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assertExists } from '../util';
 import { DisplayListRegisters, runDisplayListRegisters, parseMaterialEntry } from '../rres/brres';
 import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader } from '../gx/gx_displaylist';
 import { GfxBufferCoalescer } from '../gfx/helpers/BufferHelpers';
 import { TextureMapping } from '../TextureHolder';
-import { GfxRenderInst } from '../gfx/render/GfxRenderer';
 import { colorFromRGBA } from '../Color';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 // Special-case actors
 
 export interface ObjectRenderer {
-    prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput, visible: boolean): void;
+    prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void;
     setColors(colors: Colors): void;
     destroy(device: GfxDevice): void;
     setVertexColorsEnabled(v: boolean): void;
@@ -82,22 +83,21 @@ export class BMDObjectRenderer implements ObjectRenderer {
             this.childObjects[i].setColors(colors);
     }
 
-    public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput, visible: boolean): void {
-        this.modelInstance.visible = visible && this.visible;
+    public prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!this.visible)
+            return;
 
-        if (this.modelInstance.visible) {
-            if (this.parentJointMatrix !== null) {
-                mat4.mul(this.modelInstance.modelMatrix, this.parentJointMatrix, this.modelMatrix);
-            } else {
-                mat4.copy(this.modelInstance.modelMatrix, this.modelMatrix);
+        if (this.parentJointMatrix !== null) {
+            mat4.mul(this.modelInstance.modelMatrix, this.parentJointMatrix, this.modelMatrix);
+        } else {
+            mat4.copy(this.modelInstance.modelMatrix, this.modelMatrix);
 
-                // Don't compute screen area culling on child meshes (don't want heads to disappear before bodies.)
-                bboxScratch.transform(this.modelInstance.bmdModel.bbox, this.modelInstance.modelMatrix);
-                computeScreenSpaceProjectionFromWorldSpaceAABB(screenProjection, viewerInput.camera, bboxScratch);
+            // Don't compute screen area culling on child meshes (don't want heads to disappear before bodies.)
+            bboxScratch.transform(this.modelInstance.bmdModel.bbox, this.modelInstance.modelMatrix);
+            computeScreenSpaceProjectionFromWorldSpaceAABB(screenProjection, viewerInput.camera, bboxScratch);
 
-                if (screenProjection.getScreenArea() <= 0.0002)
-                    this.modelInstance.visible = false;
-            }
+            if (screenProjection.getScreenArea() <= 0.0002)
+                return;
         }
 
         const light = this.modelInstance.getGXLightReference(0);
@@ -108,9 +108,9 @@ export class BMDObjectRenderer implements ObjectRenderer {
         vec3.set(light.CosAtten, 1.075, 0, 0);
         vec3.set(light.DistAtten, 1.075, 0, 0);
 
-        this.modelInstance.prepareToRender(renderHelper, viewerInput);
+        this.modelInstance.prepareToRender(device, renderHelper, viewerInput);
         for (let i = 0; i < this.childObjects.length; i++)
-            this.childObjects[i].prepareToRender(renderHelper, viewerInput, this.modelInstance.visible);
+            this.childObjects[i].prepareToRender(device, renderHelper, viewerInput);
     }
 
     public destroy(device: GfxDevice): void {
@@ -143,7 +143,7 @@ export class WhiteFlowerData {
     public gxMaterial: GX_Material.GXMaterial;
     public bufferCoalescer: GfxBufferCoalescer;
 
-    constructor(device: GfxDevice, symbolMap: SymbolMap, renderHelper: GXRenderHelperGfx) {
+    constructor(device: GfxDevice, symbolMap: SymbolMap, cache: GfxRenderCache) {
         const l_matDL = findSymbol(symbolMap, `d_flower.o`, `l_matDL`);
         const l_Txo_ob_flower_white_64x64TEX = findSymbol(symbolMap, `d_flower.o`, `l_Txo_ob_flower_white_64x64TEX`);
         const l_pos = findSymbol(symbolMap, `d_flower.o`, `l_pos`);
@@ -211,7 +211,7 @@ export class WhiteFlowerData {
         });
 
         this.bufferCoalescer = loadedDataCoalescerGfx(device, [ vtx_l_OhanaDL ]);
-        this.shapeHelperMain = new GXShapeHelperGfx(device, renderHelper, this.bufferCoalescer.coalescedBuffers[0], vtxLoader.loadedVertexLayout, vtx_l_OhanaDL);
+        this.shapeHelperMain = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[0], vtxLoader.loadedVertexLayout, vtx_l_OhanaDL);
     }
 
     public destroy(device: GfxDevice): void {
@@ -228,7 +228,7 @@ export class PinkFlowerData {
     public gxMaterial: GX_Material.GXMaterial;
     public bufferCoalescer: GfxBufferCoalescer;
 
-    constructor(device: GfxDevice, symbolMap: SymbolMap, renderHelper: GXRenderHelperGfx) {
+    constructor(device: GfxDevice, symbolMap: SymbolMap, cache: GfxRenderCache) {
         const l_matDL2 = findSymbol(symbolMap, `d_flower.o`, `l_matDL2`);
         const l_Txo_ob_flower_pink_64x64TEX = findSymbol(symbolMap, `d_flower.o`, `l_Txo_ob_flower_pink_64x64TEX`);
         const l_pos2 = findSymbol(symbolMap, `d_flower.o`, `l_pos2`);
@@ -296,7 +296,7 @@ export class PinkFlowerData {
         });
 
         this.bufferCoalescer = loadedDataCoalescerGfx(device, [ vtx_l_OhanaDL ]);
-        this.shapeHelperMain = new GXShapeHelperGfx(device, renderHelper, this.bufferCoalescer.coalescedBuffers[0], vtxLoader.loadedVertexLayout, vtx_l_OhanaDL);
+        this.shapeHelperMain = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[0], vtxLoader.loadedVertexLayout, vtx_l_OhanaDL);
     }
 
     public destroy(device: GfxDevice): void {
@@ -313,7 +313,7 @@ export class BessouFlowerData {
     public gxMaterial: GX_Material.GXMaterial;
     public bufferCoalescer: GfxBufferCoalescer;
 
-    constructor(device: GfxDevice, symbolMap: SymbolMap, renderHelper: GXRenderHelperGfx) {
+    constructor(device: GfxDevice, symbolMap: SymbolMap, cache: GfxRenderCache) {
         const l_matDL3 = findSymbol(symbolMap, `d_flower.o`, `l_matDL3`);
         const l_Txq_bessou_hanaTEX = findSymbol(symbolMap, `d_flower.o`, `l_Txq_bessou_hanaTEX`);
         const l_pos3 = findSymbol(symbolMap, `d_flower.o`, `l_pos3`);
@@ -381,7 +381,7 @@ export class BessouFlowerData {
         });
 
         this.bufferCoalescer = loadedDataCoalescerGfx(device, [ vtx_l_OhanaDL ]);
-        this.shapeHelperMain = new GXShapeHelperGfx(device, renderHelper, this.bufferCoalescer.coalescedBuffers[0], vtxLoader.loadedVertexLayout, vtx_l_OhanaDL);
+        this.shapeHelperMain = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[0], vtxLoader.loadedVertexLayout, vtx_l_OhanaDL);
     }
 
     public destroy(device: GfxDevice): void {
@@ -399,17 +399,9 @@ export class FlowerObjectRenderer implements ObjectRenderer {
     public modelMatrix = mat4.create();
 
     private materialHelper: GXMaterialHelperGfx;
-    private renderInst: GfxRenderInst;
 
-    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, private flowerData: FlowerData) {
-        const renderInstBuilder = renderHelper.renderInstBuilder;
-
-        this.materialHelper = new GXMaterialHelperGfx(device, renderHelper, this.flowerData.gxMaterial);
-
-        renderInstBuilder.pushTemplateRenderInst(this.materialHelper.templateRenderInst);
-        this.renderInst = flowerData.shapeHelperMain.buildRenderInst(renderInstBuilder);
-        renderInstBuilder.pushRenderInst(this.renderInst);
-        renderInstBuilder.popTemplateRenderInst();
+    constructor(private flowerData: FlowerData) {
+        this.materialHelper = new GXMaterialHelperGfx(this.flowerData.gxMaterial);
     }
 
     public setVertexColorsEnabled(v: boolean): void {
@@ -418,9 +410,7 @@ export class FlowerObjectRenderer implements ObjectRenderer {
     public setTexturesEnabled(v: boolean): void {
     }
 
-    public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput, visible: boolean): void {
-        this.renderInst.visible = visible;
-
+    public prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
         // Do some basic distance culling.
         mat4.getTranslation(scratchVec3a, viewerInput.camera.worldMatrix);
         mat4.getTranslation(scratchVec3b, this.modelMatrix);
@@ -430,21 +420,25 @@ export class FlowerObjectRenderer implements ObjectRenderer {
         const maxDist = 5000;
         const maxDistSq = maxDist*maxDist;
         if (distSq >= maxDistSq)
-            this.renderInst.visible = false;
+            return;
 
-        if (this.renderInst.visible) {
-            materialParams.m_TextureMapping[0].copy(this.flowerData.textureMapping);
-            colorFromRGBA(materialParams.u_Color[ColorKind.C0], 1.0, 1.0, 1.0, 1.0);
-            colorFromRGBA(materialParams.u_Color[ColorKind.C1], 1.0, 1.0, 1.0, 1.0);
-            const S = 0.5;
-            mat4.fromScaling(materialParams.u_PostTexMtx[0], [S, S, S]);
-            this.materialHelper.fillMaterialParams(materialParams, renderHelper);
+        materialParams.m_TextureMapping[0].copy(this.flowerData.textureMapping);
+        colorFromRGBA(materialParams.u_Color[ColorKind.C0], 1.0, 1.0, 1.0, 1.0);
+        colorFromRGBA(materialParams.u_Color[ColorKind.C1], 1.0, 1.0, 1.0, 1.0);
+        const S = 0.5;
+        mat4.fromScaling(materialParams.u_PostTexMtx[0], [S, S, S]);
 
-            const m = packetParams.u_PosMtx[0];
-            computeViewMatrix(m, viewerInput.camera);
-            mat4.mul(m, m, this.modelMatrix);
-            renderHelper.fillPacketParams(packetParams, this.renderInst.getUniformBufferOffset(ub_PacketParams));
-        }
+        const renderInst = this.flowerData.shapeHelperMain.pushRenderInst(renderHelper.renderInstManager);
+
+        const materialParamsOffs = renderInst.allocateUniformBuffer(ub_MaterialParams, u_MaterialParamsBufferSize);
+        this.materialHelper.fillMaterialParamsData(renderHelper, materialParamsOffs, materialParams);
+        this.materialHelper.setOnRenderInst(device, renderHelper.renderInstManager.gfxRenderCache, renderInst);
+        renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+
+        const m = packetParams.u_PosMtx[0];
+        computeViewMatrix(m, viewerInput.camera);
+        mat4.mul(m, m, this.modelMatrix);
+        this.flowerData.shapeHelperMain.fillPacketParams(packetParams, renderInst);
     }
 
     public setColors(colors: Colors): void {

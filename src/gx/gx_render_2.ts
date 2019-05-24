@@ -76,7 +76,7 @@ export class GXShapeHelperGfx {
     public inputLayout: GfxInputLayout;
     private zeroBuffer: GfxBuffer | null = null;
 
-    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, public coalescedBuffers: GfxCoalescedBuffers, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public coalescedBuffers: GfxCoalescedBuffers, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData) {
         // First, build the inputLayout
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
 
@@ -102,7 +102,7 @@ export class GXShapeHelperGfx {
         }
 
         const indexBufferFormat = this.loadedVertexData.indexFormat;
-        this.inputLayout = renderHelper.renderInstManager.gfxRenderCache.createInputLayout(device, {
+        this.inputLayout = cache.createInputLayout(device, {
             vertexAttributeDescriptors,
             indexBufferFormat,
         });
@@ -130,9 +130,11 @@ export class GXShapeHelperGfx {
         const renderInst = renderInstManager.pushRenderInst();
         renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
-        if (packet !== null)
+        if (packet !== null) {
+            if (packet.indexCount === 624)
+                debugger;
             renderInst.drawIndexes(packet.indexCount, packet.indexOffset);
-        else
+        } else
             renderInst.drawIndexes(this.loadedVertexData.totalIndexCount);
         return renderInst;
     }

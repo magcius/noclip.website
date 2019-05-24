@@ -69,6 +69,10 @@ export class GfxRenderInst {
             this._dynamicUniformBufferOffsets[i] = o._dynamicUniformBufferOffsets[i];
     }
 
+    public setVisible(v: boolean = true): void {
+        setVisible(this, v);
+    }
+
     public setGfxProgram(program: GfxProgram): void {
         this._renderPipelineDescriptor.program = program;
     }
@@ -285,11 +289,27 @@ export class GfxRenderInstManager {
         this.renderInstTemplateIndex = renderInst._parentTemplateIndex;
     }
 
-    // TODO(jstpierre): Build a better API for pass management.
+    public getTemplateRenderInst(): GfxRenderInst {
+        return this.gfxRenderInstPool.pool[this.renderInstTemplateIndex];
+    }
+
+    // TODO(jstpierre): Build a better API for pass management -- should not be attached to the GfxRenderer2.
     public setVisibleByFilterKeyExact(filterKey: number): void {
         for (let i = 0; i < this.gfxRenderInstPool.renderInstAllocCount; i++)
             if (this.gfxRenderInstPool.pool[i]._flags & GfxRenderInstFlags.DRAW_RENDER_INST)
                 setVisible(this.gfxRenderInstPool.pool[i], this.gfxRenderInstPool.pool[i].filterKey === filterKey);
+    }
+
+    public hasAnyVisible(): boolean {
+        for (let i = 0; i < this.gfxRenderInstPool.renderInstAllocCount; i++)
+            if (this.gfxRenderInstPool.pool[i]._flags & GfxRenderInstFlags.VISIBLE)
+                return true;
+        return false;
+    }
+
+    public setVisibleNone(): void {
+        for (let i = 0; i < this.gfxRenderInstPool.renderInstAllocCount; i++)
+            this.gfxRenderInstPool.pool[i]._flags &= ~GfxRenderInstFlags.VISIBLE;
     }
 
     public drawOnPassRenderer(device: GfxDevice, passRenderer: GfxRenderPass): void {

@@ -15,29 +15,29 @@ import * as RARC from '../j3d/rarc';
 import { BMDModel, MaterialInstance, MaterialInstanceState, ShapeInstanceState } from '../j3d/render';
 import { SunshineRenderer, SunshineSceneDesc, SMSPass } from '../j3d/sms_scenes';
 import * as Yaz0 from '../compression/Yaz0';
-import { GXRenderHelperGfx, ub_PacketParams, PacketParams } from '../gx/gx_render';
+import { ub_PacketParams, PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, ub_MaterialParams, u_MaterialParamsBufferSize } from '../gx/gx_render';
+import { GXRenderHelperGfx } from '../gx/gx_render_2';
 import AnimationController from '../AnimationController';
 import { GfxDevice, GfxHostAccessPass, GfxBuffer, GfxInputState, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexAttributeFrequency, GfxVertexBufferDescriptor } from '../gfx/platform/GfxPlatform';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { GfxRenderInst, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
+import { makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
-import { computeViewMatrix } from '../Camera';
-import { TextureMapping } from '../TextureHolder';
+import { computeViewMatrix, Camera } from '../Camera';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 const scale = 200;
 const posMtx = mat4.create();
 mat4.fromScaling(posMtx, [scale, scale, scale]);
 
+const scratchViewMatrix = mat4.create();
 class PlaneShape {
     private vtxBuffer: GfxBuffer;
     private idxBuffer: GfxBuffer;
     private zeroBuffer: GfxBuffer;
     private inputLayout: GfxInputLayout;
     private inputState: GfxInputState;
-    private renderInst: GfxRenderInst;
-    private packetParams = new PacketParams();
 
-    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx) {
+    constructor(device: GfxDevice, cache: GfxRenderCache) {
         const vtx = new Float32Array(4 * 5);
         vtx[0]  = -1;
         vtx[1]  = 0;
@@ -73,7 +73,7 @@ class PlaneShape {
         ];
 
         this.zeroBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, new Uint8Array(16).buffer);
-        this.inputLayout = device.createInputLayout({
+        this.inputLayout = cache.createInputLayout(device, {
             vertexAttributeDescriptors,
             indexBufferFormat: GfxFormat.U16_R,
         });
@@ -82,21 +82,20 @@ class PlaneShape {
             { buffer: this.zeroBuffer, byteOffset: 0, byteStride: 4 },
         ];
         this.inputState = device.createInputState(this.inputLayout, vertexBuffers, { buffer: this.idxBuffer, byteOffset: 0, byteStride: 1 });
-        const renderInstBuilder = renderHelper.renderInstBuilder;
-
-        this.renderInst = renderInstBuilder.pushRenderInst();
-        this.renderInst.setSamplerBindingsInherit();
-        // Force this so it renders after the skybox.
-        this.renderInst.sortKey = makeSortKey((GfxRendererLayer.TRANSLUCENT | GfxRendererLayer.OPAQUE) + 10);
-        this.renderInst.inputState = this.inputState;
-        renderInstBuilder.newUniformBufferInstance(this.renderInst, ub_PacketParams);
-        this.renderInst.drawIndexes(6);
     }
 
-    public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput): void {
-        computeViewMatrix(this.packetParams.u_PosMtx[0], viewerInput.camera);
-        mat4.mul(this.packetParams.u_PosMtx[0], this.packetParams.u_PosMtx[0], posMtx);
-        renderHelper.fillPacketParams(this.packetParams, this.renderInst.getUniformBufferOffset(ub_PacketParams));
+    public prepareToRender(renderHelper: GXRenderHelperGfx, packetParams: PacketParams): void {
+        const renderInstManager = renderHelper.renderInstManager;
+        const renderInst = renderInstManager.pushRenderInst();
+        // Force this so it renders after the skybox.
+        renderInst.filterKey = SMSPass.OPAQUE;
+        renderInst.sortKey = makeSortKey((GfxRendererLayer.TRANSLUCENT | GfxRendererLayer.OPAQUE) + 10);
+        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        renderInst.drawIndexes(6);
+
+        let offs = renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
+        const d = renderInst.mapUniformBufferF32(ub_PacketParams);
+        fillPacketParamsData(d, offs, packetParams);
     }
 
     public destroy(device: GfxDevice) {
@@ -108,6 +107,7 @@ class PlaneShape {
     }
 }
 
+const packetParams = new PacketParams();
 class SeaPlaneScene {
     private seaMaterialInstance: MaterialInstance;
     private shapeInstanceState = new ShapeInstanceState();
@@ -116,7 +116,9 @@ class SeaPlaneScene {
     private bmdModel: BMDModel;
     private animationController: AnimationController;
 
-    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, bmd: BMD, btk: BTK, configName: string) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, bmd: BMD, btk: BTK, configName: string) {
+        mat4.copy(this.shapeInstanceState.modelMatrix, posMtx);
+
         this.animationController = new AnimationController();
         // Make it go fast.
         this.animationController.fps = 30 * 5;
@@ -129,17 +131,14 @@ class SeaPlaneScene {
             }
         }
 
-        this.bmdModel = new BMDModel(device, renderHelper, bmd);
+        this.bmdModel = new BMDModel(device, cache, bmd);
         this.materialInstanceState.textureMappings = this.bmdModel.createDefaultTextureMappings();
 
         const seaMaterial = bmd.mat3.materialEntries.find((m) => m.name === '_umi');
         this.mangleMaterial(seaMaterial, configName);
-        this.seaMaterialInstance = new MaterialInstance(renderHelper, null, seaMaterial, {});
+        this.seaMaterialInstance = new MaterialInstance(seaMaterial, {});
         this.seaMaterialInstance.bindTTK1(this.animationController, btk.ttk1);
-        const renderInstBuilder = renderHelper.renderInstBuilder;
-        renderInstBuilder.pushTemplateRenderInst(this.seaMaterialInstance.templateRenderInst);
-        this.plane = new PlaneShape(device, renderHelper);
-        renderInstBuilder.popTemplateRenderInst();
+        this.plane = new PlaneShape(device, cache);
     }
 
     public mangleMaterial(material: MaterialEntry, configName: string): void {
@@ -182,10 +181,20 @@ class SeaPlaneScene {
         }
     }
 
-    public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput): void {
-        this.plane.prepareToRender(renderHelper, viewerInput);
+    public prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput): void {
         this.animationController.setTimeInMilliseconds(viewerInput.time);
-        this.seaMaterialInstance.prepareToRender(renderHelper, viewerInput, this.materialInstanceState, this.shapeInstanceState);
+        const template = renderHelper.pushTemplateRenderInst();
+        renderHelper.fillSceneParams(viewerInput, template);
+        this.seaMaterialInstance.setOnRenderInst(device, renderHelper.renderInstManager.gfxRenderCache, template);
+        template.allocateUniformBuffer(ub_MaterialParams, u_MaterialParamsBufferSize);
+
+        computeViewMatrix(packetParams.u_PosMtx[0], viewerInput.camera);
+        mat4.mul(packetParams.u_PosMtx[0], packetParams.u_PosMtx[0], this.shapeInstanceState.modelMatrix);
+
+        this.seaMaterialInstance.fillMaterialParams(template, this.materialInstanceState, packetParams.u_PosMtx[0], this.shapeInstanceState.modelMatrix, viewerInput.camera);
+
+        this.plane.prepareToRender(renderHelper, packetParams);
+        renderHelper.renderInstManager.popTemplateRenderInst();
     }
 
     public destroy(device: GfxDevice) {
@@ -197,9 +206,11 @@ class SeaPlaneScene {
 class SeaRenderer extends SunshineRenderer {
     public seaPlaneScene: SeaPlaneScene;
 
-    protected prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
-        this.seaPlaneScene.prepareToRender(this.renderHelper, viewerInput);
-        super.prepareToRender(hostAccessPass, viewerInput);
+    protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
+        this.renderHelper.pushTemplateRenderInst();
+        this.seaPlaneScene.prepareToRender(device, this.renderHelper, viewerInput);
+        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        super.prepareToRender(device, hostAccessPass, viewerInput);
     }
 }
 
@@ -210,7 +221,8 @@ export function createScene(device: GfxDevice, name: string): Progressable<Scene
         const rarc = RARC.parse(buffer);
 
         const renderer = new SeaRenderer(device, rarc);
-        const skyScene = SunshineSceneDesc.createSunshineSceneForBasename(device, renderer.renderHelper, SMSPass.SKYBOX, rarc, 'map/map/sky', true);
+        const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
+        const skyScene = SunshineSceneDesc.createSunshineSceneForBasename(device, cache, SMSPass.SKYBOX, rarc, 'map/map/sky', true);
         renderer.modelInstances.push(skyScene);
 
         const bmdFile = rarc.findFile('map/map/sea.bmd');
@@ -218,9 +230,8 @@ export function createScene(device: GfxDevice, name: string): Progressable<Scene
         const bmd = BMD.parse(bmdFile.buffer);
         const btk = BTK.parse(btkFile.buffer);
 
-        const seaScene = new SeaPlaneScene(device, renderer.renderHelper, bmd, btk, name);
+        const seaScene = new SeaPlaneScene(device, cache, bmd, btk, name);
         renderer.seaPlaneScene = seaScene;
-        renderer.finish(device);
         return renderer;
     });
 }
