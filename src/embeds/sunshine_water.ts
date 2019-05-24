@@ -117,7 +117,7 @@ class SeaPlaneScene {
     private animationController: AnimationController;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, bmd: BMD, btk: BTK, configName: string) {
-        mat4.copy(this.shapeInstanceState.modelMatrix, posMtx);
+        mat4.copy(this.shapeInstanceState.rootJointMatrix, posMtx);
 
         this.animationController = new AnimationController();
         // Make it go fast.
@@ -189,9 +189,9 @@ class SeaPlaneScene {
         template.allocateUniformBuffer(ub_MaterialParams, u_MaterialParamsBufferSize);
 
         computeViewMatrix(packetParams.u_PosMtx[0], viewerInput.camera);
-        mat4.mul(packetParams.u_PosMtx[0], packetParams.u_PosMtx[0], this.shapeInstanceState.modelMatrix);
+        mat4.mul(packetParams.u_PosMtx[0], packetParams.u_PosMtx[0], this.shapeInstanceState.rootJointMatrix);
 
-        this.seaMaterialInstance.fillMaterialParams(template, this.materialInstanceState, packetParams.u_PosMtx[0], this.shapeInstanceState.modelMatrix, viewerInput.camera);
+        this.seaMaterialInstance.fillMaterialParams(template, this.materialInstanceState, packetParams.u_PosMtx[0], this.shapeInstanceState.rootJointMatrix, viewerInput.camera);
 
         this.plane.prepareToRender(renderHelper, packetParams);
         renderHelper.renderInstManager.popTemplateRenderInst();

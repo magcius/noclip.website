@@ -6,7 +6,7 @@ import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } fr
 
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
-import { MaterialParams, PacketParams, ColorKind, translateTexFilterGfx, translateWrapModeGfx, loadedDataCoalescerGfx, ub_MaterialParams, loadTextureFromMipChain, ub_PacketParams, u_PacketParamsBufferSize, u_MaterialParamsBufferSize, fillMaterialParamsData } from '../gx/gx_render';
+import { MaterialParams, PacketParams, ColorKind, translateTexFilterGfx, translateWrapModeGfx, loadedDataCoalescerGfx, ub_MaterialParams, loadTextureFromMipChain, ub_PacketParams, u_MaterialParamsBufferSize, fillMaterialParamsData } from '../gx/gx_render';
 import { GXShapeHelperGfx, GXRenderHelperGfx } from '../gx/gx_render_2';
 
 import { computeViewMatrix, computeViewMatrixSkybox, Camera, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
@@ -17,7 +17,7 @@ import { AABB } from '../Geometry';
 import { GfxDevice, GfxSampler, GfxTexture, GfxMegaStateDescriptor, GfxProgram } from '../gfx/platform/GfxPlatform';
 import { GfxBufferCoalescer, GfxCoalescedBuffers } from '../gfx/helpers/BufferHelpers';
 import { ViewerRenderInput, Texture } from '../viewer';
-import { setSortKeyDepth, GfxRendererLayer, makeSortKey, setSortKeyBias } from '../gfx/render/GfxRenderer';
+import { setSortKeyDepth, GfxRendererLayer, setSortKeyBias, setSortKeyLayer, setSortKeyProgramKey } from '../gfx/render/GfxRenderer';
 import { GfxRenderInst, GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
 import { colorCopy } from '../Color';
 import { computeNormalMatrix, texProjPerspMtx, texEnvMtx } from '../MathHelpers';
@@ -25,7 +25,7 @@ import { calcMipChain } from '../gx/gx_texture';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 export class ShapeInstanceState {
-    public modelMatrix: mat4 = mat4.create();
+    public rootJointMatrix: mat4 = mat4.create();
     public matrixArray: mat4[] = [];
     public matrixVisibility: boolean[] = [];
     public shapeVisibility: boolean[] = [];
@@ -103,6 +103,7 @@ function J3DCalcYBBoardMtx(m: mat4, v: vec3 = scratchVec3): void {
     m[15] = 9999.0;
 }
 
+const scratchModelViewMatrix = mat4.create();
 const scratchViewMatrix = mat4.create();
 const packetParams = new PacketParams();
 export class ShapeInstance {
@@ -119,7 +120,6 @@ export class ShapeInstance {
 
         const shape = this.shapeData.shape;
 
-        const modelView = this.computeModelView(viewerInput.camera, shapeInstanceState);
         packetParams.clear();
 
         const template = renderInstManager.pushTemplateRenderInst();
@@ -129,9 +129,18 @@ export class ShapeInstance {
 
         materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
 
+        if (shapeInstanceState.isSkybox)
+            computeViewMatrixSkybox(scratchViewMatrix, viewerInput.camera);
+        else
+            computeViewMatrix(scratchViewMatrix, viewerInput.camera);
+
+        // Compute a combined model-view matrix based on the root matrix for the materialInstance to compute from.
+        // TODO(jstpierre): How does J3D do this? Does it pick a consistent for each packet?
+        mat4.mul(scratchModelViewMatrix, scratchViewMatrix, shapeInstanceState.rootJointMatrix);
+
         // TODO(jstpierre): Possibly share material instances between shapes? Should track statistics for this...
         template.allocateUniformBuffer(ub_MaterialParams, u_MaterialParamsBufferSize);
-        materialInstance.fillMaterialParams(template, materialInstanceState, modelView, shapeInstanceState.modelMatrix, viewerInput.camera);
+        materialInstance.fillMaterialParams(template, materialInstanceState, scratchModelViewMatrix, shapeInstanceState.rootJointMatrix, viewerInput.camera);
 
         for (let p = 0; p < shape.packets.length; p++) {
             const packet = shape.packets[p];
@@ -144,7 +153,13 @@ export class ShapeInstance {
                 if (matrixIndex === 0xFFFF)
                     continue;
 
-                mat4.mul(packetParams.u_PosMtx[i], modelView, shapeInstanceState.matrixArray[matrixIndex]);
+                mat4.mul(packetParams.u_PosMtx[i], scratchViewMatrix, shapeInstanceState.matrixArray[matrixIndex]);
+
+                if (shape.displayFlags === ShapeDisplayFlags.BILLBOARD) {
+                    J3DCalcBBoardMtx(packetParams.u_PosMtx[i]);
+                } else if (shape.displayFlags === ShapeDisplayFlags.Y_BILLBOARD) {
+                    J3DCalcYBBoardMtx(packetParams.u_PosMtx[i]);
+                }
 
                 if (shapeInstanceState.matrixVisibility[matrixIndex])
                     instVisible = true;
@@ -158,26 +173,6 @@ export class ShapeInstance {
         }
 
         renderInstManager.popTemplateRenderInst();
-    }
-
-    private computeModelView(camera: Camera, shapeInstanceState: ShapeInstanceState): mat4 {
-        const shape = this.shapeData.shape;
-
-        if (shapeInstanceState.isSkybox) {
-            computeViewMatrixSkybox(scratchViewMatrix, camera);
-        } else {
-            computeViewMatrix(scratchViewMatrix, camera);
-        }
-
-        mat4.mul(scratchViewMatrix, scratchViewMatrix, shapeInstanceState.modelMatrix);
-
-        if (shape.displayFlags === ShapeDisplayFlags.BILLBOARD) {
-            J3DCalcBBoardMtx(scratchViewMatrix);
-        } else if (shape.displayFlags === ShapeDisplayFlags.Y_BILLBOARD) {
-            J3DCalcYBBoardMtx(scratchViewMatrix);
-        }
-
-        return scratchViewMatrix;
     }
 }
 
@@ -285,7 +280,7 @@ export class MaterialInstance {
     public setSortKeyLayer(layer: GfxRendererLayer): void {
         if (this.material.translucent)
             layer |= GfxRendererLayer.TRANSLUCENT;
-        this.sortKey = makeSortKey(layer);
+        this.sortKey = setSortKeyLayer(this.sortKey, layer);
     }
 
     private createProgram(): void {
@@ -355,6 +350,7 @@ export class MaterialInstance {
         if (this.gfxProgram === null) {
             this.gfxProgram = cache.createProgram(device, this.program);
             this.programKey = this.gfxProgram.ResourceUniqueId;
+            this.sortKey = setSortKeyProgramKey(this.sortKey, this.programKey);
         }
 
         renderInst.setGfxProgram(this.gfxProgram);
@@ -424,7 +420,7 @@ export class MaterialInstance {
                 // Environment mapping. Uses the normal matrix.
                 computeNormalMatrix(dst, modelViewMatrix, true);
                 break;
-    
+
             case 0x02: // pinnaParco7.szs
             case 0x08: // Peach Beach.
                 // Copy over model matrix.
@@ -752,7 +748,7 @@ export class BMDModel {
     private bufferCoalescer: GfxBufferCoalescer;
 
     public shapeData: ShapeData[] = [];
-    public hasBillboard: boolean;
+    public hasBillboard: boolean = false;
 
     public bbox = new AABB();
 
@@ -966,7 +962,7 @@ export class BMDModelInstance {
      * Sets whether a certain material with name {@param name} should be shown ({@param v} is
      * {@constant true}), or hidden ({@param v} is {@constant false}). All materials are shown
      * by default.
-     */    
+     */
     public setMaterialVisible(name: string, v: boolean): void {
         const materialInstance = this.materialInstances.find((matInst) => matInst.name === name);
         materialInstance.visible = v;
@@ -976,7 +972,7 @@ export class BMDModelInstance {
      * Sets whether color write is enabled. This is equivalent to the native GX function
      * GXSetColorUpdate. There is no MAT3 material flag for this, so some games have special
      * engine hooks to enable and disable color write at runtime.
-     * 
+     *
      * Specifically, Wind Waker turns off color write when drawing a specific part of character's
      * eyes so it can draw them on top of the hair.
      */
@@ -988,9 +984,9 @@ export class BMDModelInstance {
      * Sets a color override for a specific color. The MAT3 has defaults for every color,
      * but engines can override colors on a model with their own colors if wanted. Color
      * overrides also take precedence over any bound color animations.
-     * 
+     *
      * Choose which color "slot" to override with {@param colorKind}.
-     * 
+     *
      * It is currently not possible to specify a color override per-material.
      *
      * By default, the alpha value in {@param color} is not used. Set {@param useAlpha}
@@ -1099,18 +1095,7 @@ export class BMDModelInstance {
         this.animationController.setTimeInMilliseconds(viewerInput.time);
 
         // Compute our root joint.
-        const rootJointMatrix = matrixScratch;
-        mat4.copy(rootJointMatrix, this.modelMatrix);
-
-        // Billboards shouldn't have their root joint modified, given that we have to compute a new model
-        // matrix that faces the camera view.
-        // TODO(jstpierre): There's a way to do this without this hackiness, I'm sure of it.
-        if (this.bmdModel.hasBillboard) {
-            mat4.copy(this.shapeInstanceState.modelMatrix, rootJointMatrix);
-            mat4.identity(rootJointMatrix);
-        } else {
-            mat4.identity(this.shapeInstanceState.modelMatrix);
-        }
+        mat4.copy(this.shapeInstanceState.rootJointMatrix, this.modelMatrix);
 
         // Skyboxes implicitly center themselves around the view matrix (their view translation is removed).
         // While we could represent this, a skybox is always visible in theory so it's probably not worth it
@@ -1124,7 +1109,7 @@ export class BMDModelInstance {
         const disableCulling = this.isSkybox || this.bmdModel.hasBillboard;
 
         this.shapeInstanceState.isSkybox = this.isSkybox;
-        this.updateMatrixArray(viewerInput.camera, rootJointMatrix, disableCulling);
+        this.updateMatrixArray(viewerInput.camera, this.shapeInstanceState.rootJointMatrix, disableCulling);
 
         // If entire model is culled away, then we don't need to render anything.
         if (!this.isAnyShapeVisible())
