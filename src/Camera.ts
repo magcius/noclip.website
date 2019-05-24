@@ -70,19 +70,17 @@ export function computeViewMatrixSkybox(out: mat4, camera: Camera): void {
 }
 
 export function computeModelMatrixBillboard(out: mat4, camera: Camera): void {
-    const lengthR = vec3.length(vec3.fromValues(out[0],out[4],out[8]));
-    const lengthU = vec3.length(vec3.fromValues(out[1],out[5],out[9]));
-    const lengthF = vec3.length(vec3.fromValues(out[2],out[6],out[10]));
+    mat4.identity(out);
 
     // Right vector
-    out[0] = camera.worldMatrix[0] * lengthR;
-    out[4] = camera.worldMatrix[4] * lengthR;
-    out[8] = camera.worldMatrix[8] * lengthR;
+    out[0] = camera.worldMatrix[0];
+    out[4] = camera.worldMatrix[4];
+    out[8] = camera.worldMatrix[8];
  
     // Up vector
-    out[1] = camera.worldMatrix[1] * lengthU;
-    out[5] = camera.worldMatrix[5] * lengthU;
-    out[9] = camera.worldMatrix[9] * lengthU;
+    out[1] = camera.worldMatrix[1];
+    out[5] = camera.worldMatrix[5];
+    out[9] = camera.worldMatrix[9];
 
     // Forward vector
     out[2] = camera.worldMatrix[2];
@@ -91,13 +89,12 @@ export function computeModelMatrixBillboard(out: mat4, camera: Camera): void {
 }
 
 export function computeModelMatrixYBillboard(out: mat4, camera: Camera): void {
-    const lengthR = vec3.length(vec3.fromValues(out[0],out[4],out[8]));
-    const lengthF = vec3.length(vec3.fromValues(out[2],out[6],out[10]));
+    mat4.identity(out);
 
     // Right vector
-    out[0] = camera.worldMatrix[0] * lengthR;
-    out[4] = camera.worldMatrix[4] * lengthR;
-    out[8] = camera.worldMatrix[8] * lengthR;
+    out[0] = camera.worldMatrix[0];
+    out[4] = camera.worldMatrix[4];
+    out[8] = camera.worldMatrix[8];
 
     // Forward vector
     out[2] = camera.worldMatrix[2];
