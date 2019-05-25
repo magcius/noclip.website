@@ -5,12 +5,12 @@ import Progressable from '../../Progressable';
 import { assert, assertExists } from '../../util';
 import { fetchData, AbortedError } from '../../fetch';
 import * as Viewer from '../../viewer';
-import { GfxDevice, GfxRenderPass } from '../../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxRenderPass, GfxTexture } from '../../gfx/platform/GfxPlatform';
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../../gfx/helpers/RenderTargetHelpers';
-import { BMD, BRK, BTK, BCK, LoopMode, BVA, BPK, BTP } from '../../j3d/j3d';
+import { BMD, BRK, BTK, BCK, LoopMode, BVA, BTP, BPK } from '../../j3d/j3d';
 import { BMDModel, BMDModelInstance } from '../../j3d/render';
 import * as RARC from '../../j3d/rarc';
-import { EFB_WIDTH, EFB_HEIGHT, Light, lightSetWorldPosition, lightSetWorldDirection } from '../../gx/gx_material';
+import { Light, lightSetWorldPosition, lightSetWorldDirection, EFB_WIDTH, EFB_HEIGHT, GXMaterial } from '../../gx/gx_material';
 import { GXRenderHelperGfx } from '../../gx/gx_render_2';
 import { getPointBezier } from '../../Spline';
 import AnimationController from '../../AnimationController';
@@ -190,12 +190,32 @@ class AreaLightInfo {
 
 const enum RotateAxis { X, Y, Z };
 
+interface ObjectBase {
+    layer: number;
+    visible: boolean;
+    setVertexColorsEnabled(v: boolean): void;
+    setTexturesEnabled(v: boolean): void;
+    setIndirectTextureOverride(sceneTexture: GfxTexture): void;
+    prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void;
+    destroy(device: GfxDevice): void;
+}
+
+function setIndirectTextureOverride(modelInstance: BMDModelInstance, sceneTexture: GfxTexture): void {
+    const m = modelInstance.getTextureMappingReference("IndDummy");
+    if (m !== null) {
+        m.gfxTexture = sceneTexture;
+        m.width = EFB_WIDTH;
+        m.height = EFB_HEIGHT;
+        m.flipY = true;
+    }
+}
+
 const scratchVec3 = vec3.create();
-class Node {
+class Node implements ObjectBase {
     public name: string = '';
     public modelMatrix = mat4.create();
-    public layer: number = -1;
     public planetRecord: BCSV.BcsvRecord | null = null;
+    public visible: boolean = true;
 
     private modelMatrixAnimator: ModelMatrixAnimator | null = null;
     private rotateSpeed = 0;
@@ -204,10 +224,22 @@ class Node {
     public areaLightInfo: AreaLightInfo;
     public areaLightConfiguration: AreaLightConfiguration;
 
-    constructor(public objinfo: ObjInfo, private parentZone: ZoneNode, public modelInstance: BMDModelInstance, parentModelMatrix: mat4, public animationController: AnimationController) {
+    constructor(public layer: number, public objinfo: ObjInfo, private parentZone: ZoneNode, public modelInstance: BMDModelInstance, parentModelMatrix: mat4, public animationController: AnimationController) {
         this.name = modelInstance.name;
         mat4.mul(this.modelMatrix, parentModelMatrix, objinfo.modelMatrix);
         this.setupAnimations();
+    }
+
+    public setVertexColorsEnabled(v: boolean): void {
+        this.modelInstance.setVertexColorsEnabled(v);
+    }
+
+    public setTexturesEnabled(v: boolean): void {
+        this.modelInstance.setTexturesEnabled(v);
+    }
+
+    public setIndirectTextureOverride(sceneTexture: GfxTexture): void {
+        setIndirectTextureOverride(this.modelInstance, sceneTexture);
     }
 
     public setupAnimations(): void {
@@ -267,6 +299,9 @@ class Node {
     }
 
     public prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!this.visible)
+            return;
+
         this.areaLightConfiguration.setOnModelInstance(this.modelInstance, viewerInput.camera);
         this.updateSpecialAnimations();
         this.modelInstance.prepareToRender(device, renderHelper, viewerInput);
@@ -278,10 +313,10 @@ class Node {
 }
 
 class SceneGraph {
-    public nodes: Node[] = [];
+    public nodes: ObjectBase[] = [];
     public onnodeadded: (() => void) | null = null;
 
-    public addNode(node: Node | null): void {
+    public addNode(node: ObjectBase | null): void {
         if (node === null)
             return;
         this.nodes.push(node);
@@ -370,13 +405,13 @@ class SMGRenderer implements Viewer.SceneGfx {
         const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
         enableVertexColorsCheckbox.onchanged = () => {
             for (let i = 0; i < this.sceneGraph.nodes.length; i++)
-                this.sceneGraph.nodes[i].modelInstance.setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
+                this.sceneGraph.nodes[i].setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
         };
         renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
         const enableTextures = new UI.Checkbox('Enable Textures', true);
         enableTextures.onchanged = () => {
             for (let i = 0; i < this.sceneGraph.nodes.length; i++)
-                this.sceneGraph.nodes[i].modelInstance.setTexturesEnabled(enableTextures.checked);
+                this.sceneGraph.nodes[i].setTexturesEnabled(enableTextures.checked);
         };
         renderHacksPanel.contents.appendChild(enableTextures.elem);
 
@@ -414,15 +449,8 @@ class SMGRenderer implements Viewer.SceneGfx {
     }
 
     private setIndirectTextureOverride(): void {
-        for (let i = 0; i < this.spawner.sceneGraph.nodes.length; i++) {
-            const m = this.spawner.sceneGraph.nodes[i].modelInstance.getTextureMappingReference("IndDummy");
-            if (m !== null) {
-                m.gfxTexture = this.opaqueSceneTexture.gfxTexture;
-                m.width = EFB_WIDTH;
-                m.height = EFB_HEIGHT;
-                m.flipY = true;
-            }
-        }
+        for (let i = 0; i < this.spawner.sceneGraph.nodes.length; i++)
+            this.spawner.sceneGraph.nodes[i].setIndirectTextureOverride(this.opaqueSceneTexture.gfxTexture);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
@@ -549,6 +577,9 @@ interface ObjInfo {
     rotateAccelType: number;
     modelMatrix: mat4;
     path: Path;
+
+    // Store the original record for our new-style nodes.
+    mapInfoIter: JMapInfoIter;
 }
 
 interface ZoneLayer {
@@ -613,35 +644,58 @@ function interpPathPoints(dst: vec3, pt0: Point, pt1: Point, t: number): void {
 }
 
 class ModelCache {
-    public promiseCache = new Map<string, Progressable<BMDModel>>();
-    public archiveCache = new Map<string, RARC.RARC>();
+    public archivePromiseCache = new Map<string, Progressable<RARC.RARC | null>>();
+    public archiveCache = new Map<string, RARC.RARC | null>();
+    public modelCache = new Map<string, BMDModel | null>();
     private models: BMDModel[] = [];
     private destroyed: boolean = false;
 
-    public getModel(device: GfxDevice, abortSignal: AbortSignal, cache: GfxRenderCache, archivePath: string, modelFilename: string): Progressable<BMDModel | null> {
-        if (this.promiseCache.has(archivePath))
-            return this.promiseCache.get(archivePath);
+    constructor(private pathBase: string, private abortSignal: AbortSignal) {
+    }
 
-        const p = fetchData(archivePath, abortSignal).then((buffer: ArrayBufferSlice) => {
+    public getModel(device: GfxDevice, cache: GfxRenderCache, archivePath: string, modelFilename: string): Progressable<BMDModel | null> {
+        if (this.modelCache.has(modelFilename))
+            return Progressable.resolve(this.modelCache.get(modelFilename));
+
+        const p = this.fetchArchiveData(archivePath).then((rarc: RARC.RARC) => {
+            if (rarc === null)
+                return null;
+            if (this.destroyed)
+                throw new AbortedError();
+            return this.getModel2(device, cache, rarc, modelFilename);
+        });
+
+        return p;
+    }
+
+    public getModel2(device: GfxDevice, cache: GfxRenderCache, rarc: RARC.RARC, modelFilename: string): BMDModel | null {
+        if (this.modelCache.has(modelFilename))
+            return this.modelCache.get(modelFilename);
+
+        const bmd = BMD.parse(assertExists(rarc.findFileData(modelFilename)));
+        const bmdModel = new BMDModel(device, cache, bmd, null);
+        this.models.push(bmdModel);
+        this.modelCache.set(modelFilename, bmdModel);
+        return bmdModel;
+    }
+
+    public fetchArchiveData(archivePath: string): Progressable<RARC.RARC | null> {
+        if (this.archivePromiseCache.has(archivePath))
+            return this.archivePromiseCache.get(archivePath);
+
+        const p = fetchData(`${this.pathBase}/${archivePath}`, this.abortSignal).then((buffer: ArrayBufferSlice) => {
             if (buffer.byteLength === 0) {
                 console.warn(`Could not fetch archive ${archivePath}`);
                 return null;
             }
             return Yaz0.decompress(buffer);
         }).then((buffer: ArrayBufferSlice) => {
-            if (buffer === null)
-                return null;
-            if (this.destroyed)
-                throw new AbortedError();
-            const rarc = RARC.parse(buffer);
-            const bmd = BMD.parse(assertExists(rarc.findFileData(modelFilename)));
-            const bmdModel = new BMDModel(device, cache, bmd, null);
+            const rarc = buffer !== null ? RARC.parse(buffer) : null;
             this.archiveCache.set(archivePath, rarc);
-            this.models.push(bmdModel);
-            return bmdModel;
+            return rarc;
         });
 
-        this.promiseCache.set(archivePath, p);
+        this.archivePromiseCache.set(archivePath, p);
         return p;
     }
 
@@ -649,6 +703,362 @@ class ModelCache {
         this.destroyed = true;
         for (let i = 0; i < this.models.length; i++)
             this.models[i].destroy(device);
+    }
+}
+
+class JMapInfoIter {
+    constructor(public bcsv: BCSV.Bcsv, public record: BCSV.BcsvRecord) {
+    }
+
+    public setRecord(i: number): void {
+        this.record = this.bcsv.records[i];
+    }
+
+    public getSRTMatrix(m: mat4): void {
+        computeModelMatrixFromRecord(m, this.bcsv, this.record);
+    }
+
+    public getValueString(name: string, fallback: string | null = null): string | null {
+        return BCSV.getField<string>(this.bcsv, this.record, name, fallback);
+    }
+
+    public getValueNumber(name: string, fallback: number | null = null): number | null {
+        return BCSV.getField<number>(this.bcsv, this.record, name, fallback);
+    }
+}
+
+class NPCItemGoods {
+    public goods0: string | null;
+    public goods1: string | null;
+    public goodsJoint0: string | null;
+    public goodsJoint1: string | null;
+
+    constructor() {
+        this.reset();
+    }
+
+    public reset(): void {
+        this.goods0 = null;
+        this.goods1 = null;
+        this.goodsJoint0 = null;
+        this.goodsJoint1 = null;
+    }
+}
+
+function getNPCItemGoods(itemGoods: NPCItemGoods, npcDataArc: RARC.RARC, npcName: string, index: number) {
+    if (index === -1)
+        return;
+
+    const bcsv = BCSV.parse(npcDataArc.findFileData(`${npcName}Item.bcsv`));
+    const record = bcsv.records[index];
+    itemGoods.goods0 = BCSV.getField(bcsv, record, 'mGoods0');
+    itemGoods.goods1 = BCSV.getField(bcsv, record, 'mGoods1');
+    itemGoods.goodsJoint0 = BCSV.getField(bcsv, record, 'mGoodsJoint0');
+    itemGoods.goodsJoint1 = BCSV.getField(bcsv, record, 'mGoodsJoint1');
+}
+
+function getMapInfoArg0(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg0', fallback); }
+function getMapInfoArg1(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg1', fallback); }
+function getMapInfoArg2(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg2', fallback); }
+function getMapInfoArg3(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg3', fallback); }
+function getMapInfoArg4(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg4', fallback); }
+function getMapInfoArg5(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg5', fallback); }
+function getMapInfoArg6(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg6', fallback); }
+function getMapInfoArg7(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg7', fallback); }
+
+function bindColorChangeAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, frame: number, brkName: string = 'colorchange.brk'): void {
+    const animationController = new AnimationController();
+    animationController.setTimeInFrames(frame);
+
+    const brk = BRK.parse(assertExists(arc.findFileData(brkName)));
+    modelInstance.bindTRK1(brk.trk1, animationController);
+}
+
+class ActorAnimDataInfo {
+    public Name: string;
+    public StartFrame: number;
+    public IsKeepAnim: boolean;
+
+    constructor(infoIter: JMapInfoIter, animType: string) {
+        this.Name = infoIter.getValueString(`${animType}Name`);
+        this.StartFrame = infoIter.getValueNumber(`${animType}StartFrame`);
+        this.IsKeepAnim = !!infoIter.getValueNumber(`${animType}IsKeepAnim`);
+    }
+}
+
+function getAnimName(keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): string {
+    if (dataInfo.Name)
+        return dataInfo.Name;
+    else
+        return keeperInfo.ActorAnimName;
+}
+
+class ActorAnimKeeperInfo {
+    public ActorAnimName: string;
+    public Bck: ActorAnimDataInfo;
+    public Btk: ActorAnimDataInfo;
+    public Brk: ActorAnimDataInfo;
+    public Bpk: ActorAnimDataInfo;
+    public Btp: ActorAnimDataInfo;
+    public Bva: ActorAnimDataInfo;
+
+    constructor(infoIter: JMapInfoIter) {
+        this.ActorAnimName = infoIter.getValueString('ActorAnimName').toLowerCase();
+        this.Bck = new ActorAnimDataInfo(infoIter, 'Bck');
+        this.Btk = new ActorAnimDataInfo(infoIter, 'Btk');
+        this.Brk = new ActorAnimDataInfo(infoIter, 'Brk');
+        this.Bpk = new ActorAnimDataInfo(infoIter, 'Bpk');
+        this.Btp = new ActorAnimDataInfo(infoIter, 'Btp');
+        this.Bva = new ActorAnimDataInfo(infoIter, 'Bva');
+    }
+}
+
+function setBckAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): void {
+    const data = arc.findFileData(`${animationName}.bck`);
+    modelInstance.bindANK1(data !== null ? BCK.parse(data).ank1 : null);
+}
+
+function setBtkAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): void {
+    const data = arc.findFileData(`${animationName}.btk`);
+    modelInstance.bindTTK1(data !== null ? BTK.parse(data).ttk1 : null);
+}
+
+function setBrkAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): void {
+    const data = arc.findFileData(`${animationName}.brk`);
+    modelInstance.bindTRK1(data !== null ? BRK.parse(data).trk1 : null);
+}
+
+function setBpkAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): void {
+    const data = arc.findFileData(`${animationName}.bpk`);
+    modelInstance.bindTRK1(data !== null ? BPK.parse(data).pak1 : null);
+}
+
+function setBtpAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): void {
+    const data = arc.findFileData(`${animationName}.btp`);
+    modelInstance.bindTPT1(data !== null ? BTP.parse(data).tpt1 : null);
+}
+
+function setBvaAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): void {
+    const data = arc.findFileData(`${animationName}.bva`);
+    modelInstance.bindVAF1(data !== null ? BVA.parse(data).vaf1 : null);
+}
+
+class ActorAnimKeeper {
+    public keeperInfo: ActorAnimKeeperInfo[] = [];
+
+    constructor(arc: RARC.RARC) {
+        const ctrl = BCSV.parse(arc.findFileData('actoranimctrl.bcsv'));
+        const infoIter = new JMapInfoIter(ctrl, ctrl.records[0]);
+
+        for (let i = 0; i < ctrl.records.length; i++) {
+            infoIter.setRecord(i);
+            this.keeperInfo.push(new ActorAnimKeeperInfo(infoIter));
+        }
+    }
+
+    public start(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): boolean {
+        animationName = animationName.toLowerCase();
+        const keeperInfo = this.keeperInfo.find((info) => info.ActorAnimName === animationName);
+        if (keeperInfo === undefined)
+            return false;
+
+        // TODO(jstpierre): Separate animation controllers for each player.
+        this.setBckAnimation(modelInstance, arc, keeperInfo, keeperInfo.Bck);
+        this.setBtkAnimation(modelInstance, arc, keeperInfo, keeperInfo.Btk);
+        this.setBrkAnimation(modelInstance, arc, keeperInfo, keeperInfo.Brk);
+        this.setBpkAnimation(modelInstance, arc, keeperInfo, keeperInfo.Bpk);
+        this.setBtpAnimation(modelInstance, arc, keeperInfo, keeperInfo.Btp);
+        this.setBvaAnimation(modelInstance, arc, keeperInfo, keeperInfo.Bva);
+        return true;
+    }
+
+    private setBckAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
+        setBckAnimation(modelInstance, arc, getAnimName(keeperInfo, dataInfo));
+    }
+
+    private setBtkAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
+        setBtkAnimation(modelInstance, arc, getAnimName(keeperInfo, dataInfo));
+    }
+
+    private setBrkAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
+        setBrkAnimation(modelInstance, arc, getAnimName(keeperInfo, dataInfo));
+    }
+
+    private setBpkAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
+        setBpkAnimation(modelInstance, arc, getAnimName(keeperInfo, dataInfo));
+    }
+
+    private setBtpAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
+        setBtpAnimation(modelInstance, arc, getAnimName(keeperInfo, dataInfo));
+    }
+
+    private setBvaAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
+        setBvaAnimation(modelInstance, arc, getAnimName(keeperInfo, dataInfo));
+    }
+}
+
+class Kinopio {
+    public visible: boolean = true;
+    private modelMatrix: mat4 = mat4.create();
+    private baseObject: BMDModelInstance | null = null;
+    private itemGoods: NPCItemGoods = new NPCItemGoods();
+    private goods0: BMDModelInstance | null = null;
+    private goods1: BMDModelInstance | null = null;
+    private areaLightConfiguration: AreaLightConfiguration;
+    private arc: RARC.RARC;
+    private animKeeper: ActorAnimKeeper;
+    private backlight = new Light();
+
+    constructor(device: GfxDevice, cache: GfxRenderCache, modelCache: ModelCache, areaLightInfo: AreaLightInfo, public layer: number, infoIter: JMapInfoIter) {
+        this.initDefaultPos(infoIter);
+
+        const itemGoodsIdx = getMapInfoArg7(infoIter);
+        this.spawnItemGoods(device, cache, modelCache, itemGoodsIdx);
+
+        modelCache.fetchArchiveData('ObjectData/Kinopio.arc').then((arc) => {
+            this.arc = arc;
+            this.animKeeper = new ActorAnimKeeper(arc);
+
+            const bmdModel = modelCache.getModel2(device, cache, arc, 'Kinopio.bdl');
+            this.baseObject = new BMDModelInstance(bmdModel);
+            this.baseObject.passMask = SMGPass.OPAQUE;
+            this.baseObject.getGXLightReference(2).copy(this.backlight);
+
+            const arg2 = getMapInfoArg2(infoIter);
+            if (arg2 === 0) {
+                this.startAction(`SpinWait1`);
+            } else if (arg2 === 1) {
+                this.startAction(`SpinWait2`);
+            } else if (arg2 === 2) {
+                this.startAction(`SpinWait3`);
+            } else if (arg2 === 3) {
+                this.startAction(`Wait`);
+            } else if (arg2 === 4) {
+                this.startAction(`Wait`);
+            } else if (arg2 === 5) {
+                this.startAction(`SwimWait`);
+            } else if (arg2 === 6) {
+                this.startAction(`Pickel`);
+            } else if (arg2 === 7) {
+                this.startAction(`Sleep`);
+            } else if (arg2 === 8) {
+                this.startAction(`Wait`);
+            } else if (arg2 === 9) {
+                this.startAction(`KinopioGoodsWeapon`);
+            } else if (arg2 === 10) {
+                this.startAction(`Joy`);
+            } else if (arg2 === 11) {
+                this.startAction(`Rightened`);
+            } else if (arg2 === 12) {
+                this.startAction(`StarPieceWait`);
+            } else if (arg2 === 13) {
+                this.startAction(`Getaway`);
+            } else if (arg2 === -1) {
+                if (itemGoodsIdx === 2) {
+                    this.startAction(`WaitPickel`);
+                } else {
+                    this.startAction(`Wait`);
+                }
+            }
+
+            // Bind the color change animation.
+            bindColorChangeAnimation(this.baseObject, arc, getMapInfoArg1(infoIter, 0));
+        });
+
+        this.areaLightConfiguration = areaLightInfo.Strong;
+
+        // "Rim" backlight settings.
+        colorFromRGBA(this.backlight.Color, 0, 0, 0, 0.5);
+        vec3.set(this.backlight.CosAtten, 1, 0, 0);
+        vec3.set(this.backlight.DistAtten, 1, 0, 0);
+        vec3.set(this.backlight.Position, 0, 0, 0);
+        vec3.set(this.backlight.Direction, 0, -1, 0);
+    }
+
+    private startAction(animationName: string): void {
+        if (!this.animKeeper.start(this.baseObject, this.arc, animationName))
+            this.tryStartAllAnim(animationName);
+    }
+
+    private tryStartAllAnim(animationName: string): void {
+        setBckAnimation(this.baseObject, this.arc, animationName);
+        setBtkAnimation(this.baseObject, this.arc, animationName);
+        setBrkAnimation(this.baseObject, this.arc, animationName);
+        setBpkAnimation(this.baseObject, this.arc, animationName);
+        setBtpAnimation(this.baseObject, this.arc, animationName);
+        setBvaAnimation(this.baseObject, this.arc, animationName);
+    }
+
+    private initDefaultPos(infoIter: JMapInfoIter): void {
+        infoIter.getSRTMatrix(this.modelMatrix);
+    }
+
+    private spawnNPCPart(device: GfxDevice, cache: GfxRenderCache, modelCache: ModelCache, partName: string): Progressable<BMDModelInstance | null> {
+        return modelCache.fetchArchiveData(`ObjectData/${partName}.arc`).then((arc) => {
+            const bmdModel = modelCache.getModel2(device, cache, arc, `${partName}.bdl`);
+            const modelInstance = new BMDModelInstance(bmdModel);
+            modelInstance.getGXLightReference(2).copy(this.backlight);
+            modelInstance.passMask = SMGPass.OPAQUE;
+            return modelInstance;
+        });
+    }
+
+    private spawnItemGoods(device: GfxDevice, cache: GfxRenderCache, modelCache: ModelCache, index: number): void {
+        modelCache.fetchArchiveData(`ObjectData/NPCData.arc`).then((npcDataArc) => {
+            getNPCItemGoods(this.itemGoods, npcDataArc, 'Kinopio', index);
+
+            if (this.itemGoods.goods0) {
+                this.spawnNPCPart(device, cache, modelCache, this.itemGoods.goods0).then((modelInstance) => {
+                    this.goods0 = modelInstance;
+                });
+            }
+
+            if (this.itemGoods.goods1) {
+                this.spawnNPCPart(device, cache, modelCache, this.itemGoods.goods1).then((modelInstance) => {
+                    this.goods1 = modelInstance;
+                });
+            }
+        });
+    }
+
+    // TODO(jstpierre): Find a better solution for these.
+    public setVertexColorsEnabled(v: boolean): void {
+    }
+
+    public setTexturesEnabled(v: boolean): void {
+    }
+
+    public setIndirectTextureOverride(): void {
+    }
+
+    public destroy(): void {
+    }
+
+    public prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!this.visible)
+            return;
+
+        if (this.baseObject === null)
+            return;
+
+        this.areaLightConfiguration.setOnModelInstance(this.baseObject, viewerInput.camera);
+
+        mat4.copy(this.baseObject.modelMatrix, this.modelMatrix);
+        this.baseObject.prepareToRender(device, renderHelper, viewerInput);
+
+        if (this.goods0 !== null) {
+            this.areaLightConfiguration.setOnModelInstance(this.goods0, viewerInput.camera);
+            const joint = this.baseObject.getJointMatrixReference(this.itemGoods.goodsJoint0);
+            mat4.copy(this.goods0.modelMatrix, joint);
+            this.goods0.prepareToRender(device, renderHelper, viewerInput);
+        }
+
+        if (this.goods1 !== null) {
+            this.areaLightConfiguration.setOnModelInstance(this.goods1, viewerInput.camera);
+            const joint = this.baseObject.getJointMatrixReference(this.itemGoods.goodsJoint1);
+            mat4.copy(this.goods1.modelMatrix, joint);
+            this.goods1.prepareToRender(device, renderHelper, viewerInput);
+        }
     }
 }
 
@@ -660,7 +1070,7 @@ function layerVisible(layer: number, layerMask: number): boolean {
 }
 
 class ZoneNode {
-    public objects: Node[] = [];
+    public objects: ObjectBase[] = [];
 
     // The current layer mask for objects and sub-zones in this zone.
     public layerMask: number = 0xFFFFFFFF;
@@ -673,7 +1083,7 @@ class ZoneNode {
 
     public computeObjectVisibility(): void {
         for (let i = 0; i < this.objects.length; i++)
-            this.objects[i].modelInstance.visible = this.visible && layerVisible(this.objects[i].layer, this.layerMask);
+            this.objects[i].visible = this.visible && layerVisible(this.objects[i].layer, this.layerMask);
 
         for (let i = 0; i < this.subzones.length; i++) {
             this.subzones[i].visible = this.visible && layerVisible(this.subzones[i].layer, this.layerMask);
@@ -703,16 +1113,17 @@ const starPieceColorTable = [
 class SMGSpawner {
     public sceneGraph = new SceneGraph();
     public zones: ZoneNode[] = [];
-    private modelCache = new ModelCache();
+    private modelCache: ModelCache;
     // BackLight
     private backlight = new Light();
     private isSMG1 = false;
     private isSMG2 = false;
     private areaLightInfos: AreaLightInfo[] = [];
 
-    constructor(private galaxyName: string, private pathBase: string, private cache: GfxRenderCache, private planetTable: BCSV.Bcsv, private lightData: BCSV.Bcsv) {
-        this.isSMG1 = this.pathBase === 'j3d/smg';
-        this.isSMG2 = this.pathBase === 'j3d/smg2';
+    constructor(abortSignal: AbortSignal, private galaxyName: string, pathBase: string, private cache: GfxRenderCache, private planetTable: BCSV.Bcsv, private lightData: BCSV.Bcsv) {
+        this.modelCache = new ModelCache(pathBase, abortSignal);
+        this.isSMG1 = pathBase === 'j3d/smg';
+        this.isSMG2 = pathBase === 'j3d/smg2';
 
         // "Rim" backlight settings.
         colorFromRGBA(this.backlight.Color, 0, 0, 0, 0.5);
@@ -806,11 +1217,23 @@ class SMGSpawner {
         node.setAreaLightInfo(areaLightInfo);
     }
 
-    public spawnObject(device: GfxDevice, abortSignal: AbortSignal, zone: ZoneNode, layer: number, objinfo: ObjInfo, modelMatrixBase: mat4): void {
+    public spawnObject(device: GfxDevice, zone: ZoneNode, layer: number, objinfo: ObjInfo, modelMatrixBase: mat4): void {
+        const cache = this.cache;
+        const modelCache = this.modelCache;
+
+        const lightName = '[共通]昼（どら焼き）';
+        const areaLightInfo = this.areaLightInfos.find((areaLight) => areaLight.AreaLightName === lightName);
+
+        const connectObject = (object: ObjectBase): void => {
+            zone.objects.push(object);
+            this.sceneGraph.addNode(object);
+        };
+
         const spawnGraph = (arcName: string, tag: SceneGraphTag = SceneGraphTag.Normal, animOptions: AnimOptions | null | undefined = undefined, planetRecord: BCSV.BcsvRecord | null = null) => {
-            const arcPath = `${this.pathBase}/ObjectData/${arcName}.arc`;
+            const arcPath = `ObjectData/${arcName}.arc`;
             const modelFilename = `${arcName}.bdl`;
-            return this.modelCache.getModel(device, abortSignal, this.cache, arcPath, modelFilename).then((bmdModel): [Node, RARC.RARC] => {
+
+            return modelCache.getModel(device, cache, arcPath, modelFilename).then((bmdModel): [Node, RARC.RARC] => {
                 // If this is a 404, then return null.
                 if (bmdModel === null)
                     return null;
@@ -819,7 +1242,7 @@ class SMGSpawner {
                     tag = SceneGraphTag.Indirect;
 
                 // Trickery.
-                const rarc = this.modelCache.archiveCache.get(arcPath);
+                const rarc = modelCache.archiveCache.get(arcPath);
 
                 const modelInstance = new BMDModelInstance(bmdModel);
                 modelInstance.name = `${objinfo.objName} ${objinfo.objId}`;
@@ -842,19 +1265,16 @@ class SMGSpawner {
                     modelInstance.passMask = SMGPass.OPAQUE;
                 }
 
-                const node = new Node(objinfo, zone, modelInstance, modelMatrixBase, modelInstance.animationController);
+                const node = new Node(layer, objinfo, zone, modelInstance, modelMatrixBase, modelInstance.animationController);
                 node.planetRecord = planetRecord;
-                node.layer = layer;
-                zone.objects.push(node);
 
                 // TODO(jstpierre): Parse out the proper area info.
-                const lightName = '[共通]昼（どら焼き）';
                 this.nodeSetLightName(node, lightName);
                 modelInstance.getGXLightReference(2).copy(this.backlight);
 
                 this.applyAnimations(node, rarc, animOptions);
 
-                this.sceneGraph.addNode(node);
+                connectObject(node);
 
                 return [node, rarc];
             });
@@ -1022,7 +1442,6 @@ class SMGSpawner {
         case 'CoinLinkGroup':
         case 'CollectTico':
         case 'BrightSun':
-        case 'SplashPieceBlock':
         case 'LavaSparksS':
         case 'InstantInferno':
         case 'FireRing':
@@ -1054,6 +1473,14 @@ class SMGSpawner {
         case 'HammerHeadPackunSpike':
             // No archives. Needs R&D for what to display.
             return;
+
+        case 'SplashCoinBlock':
+        case 'TimerCoinBlock':
+        case 'SplashPieceBlock':
+        case 'TimerPieceBlock':
+        case 'ItemBlockSwitch':
+            spawnGraph("CoinBlock", SceneGraphTag.Normal);
+            break;
 
         case 'StarPiece':
             spawnGraph(name, SceneGraphTag.Normal, { btk: 'normal.btk', bck: 'land.bck' }).then(([node, rarc]) => {
@@ -1130,7 +1557,7 @@ class SMGSpawner {
             spawnGraph('TrickRabbit');
             break;
         case 'Kinopio':
-            spawnGraph('Kinopio', SceneGraphTag.Normal, { bck: 'wait.bck' });
+            connectObject(new Kinopio(device, cache, modelCache, areaLightInfo, layer, objinfo.mapInfoIter));
             break;
         case 'Rosetta':
             spawnGraph(name, SceneGraphTag.Normal, { bck: 'waita.bck' }).then(([node, rarc]) => {
@@ -1396,41 +1823,41 @@ class SMGSpawner {
             return;
 
         case 'RedBlueTurnBlock':
-                spawnGraph(`RedBlueTurnBlock`);
-                spawnGraph(`RedBlueTurnBlockBase`);
-                break;
+            spawnGraph(`RedBlueTurnBlock`);
+            spawnGraph(`RedBlueTurnBlockBase`);
+            break;
 
         case 'TicoCoin':
-                spawnGraph(name).then(([node, rarc]) => {
-                    node.modelInstance.setMaterialVisible('TicoCoinEmpty_v', false);
-                });
-                break;
+            spawnGraph(name).then(([node, rarc]) => {
+                node.modelInstance.setMaterialVisible('TicoCoinEmpty_v', false);
+            });
+            break;
         case 'WanwanRolling':
-                spawnGraph(name, SceneGraphTag.Normal, { bck: null });
-                break;
+            spawnGraph(name, SceneGraphTag.Normal, { bck: null });
+            break;
         default:
             spawnDefault(name);
             break;
         }
     }
 
-    public spawnZone(device: GfxDevice, abortSignal: AbortSignal, zone: Zone, zones: Zone[], modelMatrixBase: mat4, parentLayer: number = -1): ZoneNode {
+    public spawnZone(device: GfxDevice, zone: Zone, zones: Zone[], modelMatrixBase: mat4, parentLayer: number = -1): ZoneNode {
         // Spawn all layers. We'll hide them later when masking out the others.
         const zoneNode = new ZoneNode(zone, parentLayer, modelMatrixBase);
         this.zones.push(zoneNode);
 
         for (const layer of zone.layers) {
             for (const objinfo of layer.objinfo)
-                this.spawnObject(device, abortSignal, zoneNode, layer.index, objinfo, modelMatrixBase);
+                this.spawnObject(device, zoneNode, layer.index, objinfo, modelMatrixBase);
 
             for (const objinfo of layer.mappartsinfo)
-                this.spawnObject(device, abortSignal, zoneNode, layer.index, objinfo, modelMatrixBase);
+                this.spawnObject(device, zoneNode, layer.index, objinfo, modelMatrixBase);
 
             for (const zoneinfo of layer.stageobjinfo) {
                 const subzone = zones.find((zone) => zone.name === zoneinfo.objName);
                 const subzoneModelMatrix = mat4.create();
                 mat4.mul(subzoneModelMatrix, modelMatrixBase, zoneinfo.modelMatrix);
-                const subzoneNode = this.spawnZone(device, abortSignal, subzone, zones, subzoneModelMatrix, layer.index);
+                const subzoneNode = this.spawnZone(device, subzone, zones, subzoneModelMatrix, layer.index);
                 zoneNode.subzones.push(subzoneNode);
             }
         }
@@ -1528,7 +1955,8 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
             const path = paths.find((path) => path.l_id === pathId) || null;
             const modelMatrix = mat4.create();
             computeModelMatrixFromRecord(modelMatrix, bcsv, record);
-            return { objId, objName, isMapPart, objArg0, objArg1, objArg2, objArg3, moveConditionType, rotateSpeed, rotateAccelType, rotateAxis, modelMatrix, path };
+            const mapInfoIter = new JMapInfoIter(bcsv, record);
+            return { objId, objName, isMapPart, objArg0, objArg1, objArg2, objArg3, moveConditionType, rotateSpeed, rotateAccelType, rotateAxis, modelMatrix, path, mapInfoIter };
         });
     }
 
@@ -1637,9 +2065,9 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
                 return Promise.all(buffers.map((buffer) => Yaz0.decompress(buffer)));
             }).then((zoneBuffers: ArrayBufferSlice[]): Viewer.SceneGfx => {
                 const zones = zoneBuffers.map((zoneBuffer, i) => this.parseZone(zoneNames[i], zoneBuffer));
-                const spawner = new SMGSpawner(galaxyName, this.pathBase, renderHelper.renderInstManager.gfxRenderCache, planetTable, lightData);
+                const spawner = new SMGSpawner(abortSignal, galaxyName, this.pathBase, renderHelper.renderInstManager.gfxRenderCache, planetTable, lightData);
                 const modelMatrixBase = mat4.create();
-                spawner.spawnZone(device, abortSignal, zones[0], zones, modelMatrixBase);
+                spawner.spawnZone(device, zones[0], zones, modelMatrixBase);
                 return new SMGRenderer(device, renderHelper, spawner, scenariodata, zoneNames);
             });
         });

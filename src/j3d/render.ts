@@ -276,9 +276,9 @@ function J3DBuildB8Mtx(dst: mat4, flipY: boolean): void {
 const matrixScratch = mat4.create(), matrixScratch2 = mat4.create(), matrixScratch3 = mat4.create();
 const materialParams = new MaterialParams();
 export class MaterialInstance {
-    public ttk1Animators: TTK1Animator[] = [];
-    public tpt1Animators: TPT1Animator[] = [];
-    public trk1Animators: TRK1Animator[] = [];
+    public ttk1Animators: (TTK1Animator | null)[] = [];
+    public tpt1Animators: (TPT1Animator | null)[] = [];
+    public trk1Animators: (TRK1Animator | null)[] = [];
     public name: string;
 
     public visible: boolean = true;
@@ -323,27 +323,24 @@ export class MaterialInstance {
         this.createProgram();
     }
 
-    public bindTRK1(animationController: AnimationController, trk1: TRK1): void {
+    public bindTRK1(animationController: AnimationController, trk1: TRK1 | null): void {
         for (let i: ColorKind = 0; i < ColorKind.COUNT; i++) {
-            const trk1Animator = bindTRK1Animator(animationController, trk1, this.name, i);
-            if (trk1Animator)
-                this.trk1Animators[i] = trk1Animator;
+            const trk1Animator = trk1 !== null ? bindTRK1Animator(animationController, trk1, this.name, i) : null;
+            this.trk1Animators[i] = trk1Animator;
         }
     }
 
-    public bindTTK1(animationController: AnimationController, ttk1: TTK1): void {
+    public bindTTK1(animationController: AnimationController, ttk1: TTK1 | null): void {
         for (let i = 0; i < 8; i++) {
-            const ttk1Animator = bindTTK1Animator(animationController, ttk1, this.name, i);
-            if (ttk1Animator)
-                this.ttk1Animators[i] = ttk1Animator;
+            const ttk1Animator = ttk1 !== null ? bindTTK1Animator(animationController, ttk1, this.name, i) : null;
+            this.ttk1Animators[i] = ttk1Animator;
         }
     }
 
-    public bindTPT1(animationController: AnimationController, tpt1: TPT1): void {
+    public bindTPT1(animationController: AnimationController, tpt1: TPT1 | null): void {
         for (let i = 0; i < 8; i++) {
-            const tpt1Animator = bindTPT1Animator(animationController, tpt1, this.name, i);
-            if (tpt1Animator)
-                this.tpt1Animators[i] = tpt1Animator;
+            const tpt1Animator = tpt1 !== null ? bindTPT1Animator(animationController, tpt1, this.name, i) : null;
+            this.tpt1Animators[i] = tpt1Animator;
         }
     }
 
@@ -356,7 +353,7 @@ export class MaterialInstance {
     }
 
     private calcColor(dst: GX_Material.Color, i: ColorKind, materialInstanceState: MaterialInstanceState, fallbackColor: GX_Material.Color, clampTo8Bit: boolean) {
-        if (this.trk1Animators[i] !== undefined) {
+        if (this.trk1Animators[i]) {
             this.trk1Animators[i].calcColor(dst);
         } else if (materialInstanceState.colorOverrides[i] !== undefined) {
             if (materialInstanceState.alphaOverrides[i])
@@ -404,7 +401,7 @@ export class MaterialInstance {
             m.reset();
 
             let samplerIndex: number;
-            if (this.tpt1Animators[i] !== undefined)
+            if (this.tpt1Animators[i])
                 samplerIndex = this.tpt1Animators[i].calcTextureIndex();
             else
                 samplerIndex = material.textureIndexes[i];
@@ -470,7 +467,7 @@ export class MaterialInstance {
 
             // Calculate SRT matrix.
             const texSRT = matrixScratch3;
-            if (this.ttk1Animators[i] !== undefined) {
+            if (this.ttk1Animators[i]) {
                 this.ttk1Animators[i].calcTexMtx(texSRT, isMaya);
             } else {
                 mat4.copy(texSRT, material.texMatrices[i].matrix);
@@ -1044,7 +1041,7 @@ export class BMDModelInstance {
      * @param animationController An {@link AnimationController} to control the progress of this animation to.
      * By default, this will default to this instance's own {@member animationController}.
      */
-    public bindTTK1(ttk1: TTK1, animationController: AnimationController = this.animationController): void {
+    public bindTTK1(ttk1: TTK1 | null, animationController: AnimationController = this.animationController): void {
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].bindTTK1(animationController, ttk1);
     }
@@ -1056,7 +1053,7 @@ export class BMDModelInstance {
      * @param animationController An {@link AnimationController} to control the progress of this animation to.
      * By default, this will default to this instance's own {@member animationController}.
      */
-    public bindTRK1(trk1: TRK1, animationController: AnimationController = this.animationController): void {
+    public bindTRK1(trk1: TRK1 | null, animationController: AnimationController = this.animationController): void {
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].bindTRK1(animationController, trk1);
     }
@@ -1068,7 +1065,7 @@ export class BMDModelInstance {
      * @param animationController An {@link AnimationController} to control the progress of this animation to.
      * By default, this will default to this instance's own {@member animationController}.
      */
-    public bindTPT1(tpt1: TPT1, animationController: AnimationController = this.animationController): void {
+    public bindTPT1(tpt1: TPT1 | null, animationController: AnimationController = this.animationController): void {
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].bindTPT1(animationController, tpt1);
     }
@@ -1080,8 +1077,8 @@ export class BMDModelInstance {
      * @param animationController An {@link AnimationController} to control the progress of this animation to.
      * By default, this will default to this instance's own {@member animationController}.
      */
-    public bindANK1(ank1: ANK1, animationController: AnimationController = this.animationController): void {
-        this.ank1Animator = bindANK1Animator(animationController, ank1);
+    public bindANK1(ank1: ANK1 | null, animationController: AnimationController = this.animationController): void {
+        this.ank1Animator = ank1 !== null ? bindANK1Animator(animationController, ank1) : null;
     }
 
     /**
@@ -1091,9 +1088,10 @@ export class BMDModelInstance {
      * @param animationController An {@link AnimationController} to control the progress of this animation to.
      * By default, this will default to this instance's own {@member animationController}.
      */
-    public bindVAF1(vaf1: VAF1, animationController: AnimationController = this.animationController): void {
-        assert(vaf1.visibilityAnimationTracks.length === this.shapeInstances.length);
-        this.vaf1Animator = bindVAF1Animator(animationController, vaf1);
+    public bindVAF1(vaf1: VAF1 | null, animationController: AnimationController = this.animationController): void {
+        if (vaf1 !== null)
+            assert(vaf1.visibilityAnimationTracks.length === this.shapeInstances.length);
+        this.vaf1Animator = vaf1 !== null ? bindVAF1Animator(animationController, vaf1) : null;
     }
 
     /**
