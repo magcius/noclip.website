@@ -7,7 +7,7 @@ import { fetchData, AbortedError } from '../../fetch';
 import * as Viewer from '../../viewer';
 import { GfxDevice, GfxRenderPass, GfxTexture } from '../../gfx/platform/GfxPlatform';
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../../gfx/helpers/RenderTargetHelpers';
-import { BMD, BRK, BTK, BCK, LoopMode, BVA, BTP } from '../../j3d/j3d';
+import { BMD, BRK, BTK, BCK, LoopMode, BVA, BTP, BPK } from '../../j3d/j3d';
 import { BMDModel, BMDModelInstance } from '../../j3d/render';
 import * as RARC from '../../j3d/rarc';
 import { Light, lightSetWorldPosition, lightSetWorldDirection, EFB_WIDTH, EFB_HEIGHT, GXMaterial } from '../../gx/gx_material';
@@ -708,11 +708,19 @@ class ModelCache {
 }
 
 class JMapInfoIter {
-    constructor(private bcsv: BCSV.Bcsv, private record: BCSV.BcsvRecord) {
+    constructor(public bcsv: BCSV.Bcsv, public record: BCSV.BcsvRecord) {
+    }
+
+    public setRecord(i: number): void {
+        this.record = this.bcsv.records[i];
     }
 
     public getSRTMatrix(m: mat4): void {
         computeModelMatrixFromRecord(m, this.bcsv, this.record);
+    }
+
+    public getValueString(name: string, fallback: string | null = null): string | null {
+        return BCSV.getField<string>(this.bcsv, this.record, name, fallback);
     }
 
     public getValueNumber(name: string, fallback: number | null = null): number | null {
@@ -767,6 +775,129 @@ function bindColorChangeAnimation(modelInstance: BMDModelInstance, arc: RARC.RAR
     modelInstance.bindTRK1(brk.trk1, animationController);
 }
 
+class ActorAnimDataInfo {
+    public Name: string;
+    public StartFrame: number;
+    public IsKeepAnim: boolean;
+
+    constructor(infoIter: JMapInfoIter, animType: string) {
+        this.Name = infoIter.getValueString(`${animType}Name`);
+        this.StartFrame = infoIter.getValueNumber(`${animType}StartFrame`);
+        this.IsKeepAnim = !!infoIter.getValueNumber(`${animType}IsKeepAnim`);
+    }
+}
+
+function getAnimName(keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): string {
+    if (dataInfo.Name)
+        return dataInfo.Name;
+    else
+        return keeperInfo.ActorAnimName;
+}
+
+class ActorAnimKeeperInfo {
+    public ActorAnimName: string;
+    public Bck: ActorAnimDataInfo;
+    public Btk: ActorAnimDataInfo;
+    public Brk: ActorAnimDataInfo;
+    public Bpk: ActorAnimDataInfo;
+    public Btp: ActorAnimDataInfo;
+    public Bva: ActorAnimDataInfo;
+
+    constructor(infoIter: JMapInfoIter) {
+        this.ActorAnimName = infoIter.getValueString('ActorAnimName').toLowerCase();
+        this.Bck = new ActorAnimDataInfo(infoIter, 'Bck');
+        this.Btk = new ActorAnimDataInfo(infoIter, 'Btk');
+        this.Brk = new ActorAnimDataInfo(infoIter, 'Brk');
+        this.Bpk = new ActorAnimDataInfo(infoIter, 'Bpk');
+        this.Btp = new ActorAnimDataInfo(infoIter, 'Btp');
+        this.Bva = new ActorAnimDataInfo(infoIter, 'Bva');
+    }
+}
+
+function setBckAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): void {
+    const data = arc.findFileData(`${animationName}.bck`);
+    modelInstance.bindANK1(data !== null ? BCK.parse(data).ank1 : null);
+}
+
+function setBtkAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): void {
+    const data = arc.findFileData(`${animationName}.btk`);
+    modelInstance.bindTTK1(data !== null ? BTK.parse(data).ttk1 : null);
+}
+
+function setBrkAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): void {
+    const data = arc.findFileData(`${animationName}.brk`);
+    modelInstance.bindTRK1(data !== null ? BRK.parse(data).trk1 : null);
+}
+
+function setBpkAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): void {
+    const data = arc.findFileData(`${animationName}.bpk`);
+    modelInstance.bindTRK1(data !== null ? BPK.parse(data).pak1 : null);
+}
+
+function setBtpAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): void {
+    const data = arc.findFileData(`${animationName}.btp`);
+    modelInstance.bindTPT1(data !== null ? BTP.parse(data).tpt1 : null);
+}
+
+function setBvaAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): void {
+    const data = arc.findFileData(`${animationName}.bva`);
+    modelInstance.bindVAF1(data !== null ? BVA.parse(data).vaf1 : null);
+}
+
+class ActorAnimKeeper {
+    public keeperInfo: ActorAnimKeeperInfo[] = [];
+
+    constructor(arc: RARC.RARC) {
+        const ctrl = BCSV.parse(arc.findFileData('actoranimctrl.bcsv'));
+        const infoIter = new JMapInfoIter(ctrl, ctrl.records[0]);
+
+        for (let i = 0; i < ctrl.records.length; i++) {
+            infoIter.setRecord(i);
+            this.keeperInfo.push(new ActorAnimKeeperInfo(infoIter));
+        }
+    }
+
+    public start(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): boolean {
+        animationName = animationName.toLowerCase();
+        const keeperInfo = this.keeperInfo.find((info) => info.ActorAnimName === animationName);
+        if (keeperInfo === undefined)
+            return false;
+
+        // TODO(jstpierre): Separate animation controllers for each player.
+        this.setBckAnimation(modelInstance, arc, keeperInfo, keeperInfo.Bck);
+        this.setBtkAnimation(modelInstance, arc, keeperInfo, keeperInfo.Btk);
+        this.setBrkAnimation(modelInstance, arc, keeperInfo, keeperInfo.Brk);
+        this.setBpkAnimation(modelInstance, arc, keeperInfo, keeperInfo.Bpk);
+        this.setBtpAnimation(modelInstance, arc, keeperInfo, keeperInfo.Btp);
+        this.setBvaAnimation(modelInstance, arc, keeperInfo, keeperInfo.Bva);
+        return true;
+    }
+
+    private setBckAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
+        setBckAnimation(modelInstance, arc, getAnimName(keeperInfo, dataInfo));
+    }
+
+    private setBtkAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
+        setBtkAnimation(modelInstance, arc, getAnimName(keeperInfo, dataInfo));
+    }
+
+    private setBrkAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
+        setBrkAnimation(modelInstance, arc, getAnimName(keeperInfo, dataInfo));
+    }
+
+    private setBpkAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
+        setBpkAnimation(modelInstance, arc, getAnimName(keeperInfo, dataInfo));
+    }
+
+    private setBtpAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
+        setBtpAnimation(modelInstance, arc, getAnimName(keeperInfo, dataInfo));
+    }
+
+    private setBvaAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
+        setBvaAnimation(modelInstance, arc, getAnimName(keeperInfo, dataInfo));
+    }
+}
+
 class Kinopio {
     public visible: boolean = true;
     private modelMatrix: mat4 = mat4.create();
@@ -774,8 +905,9 @@ class Kinopio {
     private itemGoods: NPCItemGoods = new NPCItemGoods();
     private goods0: BMDModelInstance | null = null;
     private goods1: BMDModelInstance | null = null;
-    private animationController = new AnimationController();
     private areaLightConfiguration: AreaLightConfiguration;
+    private arc: RARC.RARC;
+    private animKeeper: ActorAnimKeeper;
     private backlight = new Light();
 
     constructor(device: GfxDevice, cache: GfxRenderCache, modelCache: ModelCache, areaLightInfo: AreaLightInfo, public layer: number, infoIter: JMapInfoIter) {
@@ -785,6 +917,9 @@ class Kinopio {
         this.spawnItemGoods(device, cache, modelCache, itemGoodsIdx);
 
         modelCache.fetchArchiveData('ObjectData/Kinopio.arc').then((arc) => {
+            this.arc = arc;
+            this.animKeeper = new ActorAnimKeeper(arc);
+
             const bmdModel = modelCache.getModel2(device, cache, arc, 'Kinopio.bdl');
             this.baseObject = new BMDModelInstance(bmdModel);
             this.baseObject.passMask = SMGPass.OPAQUE;
@@ -792,38 +927,38 @@ class Kinopio {
 
             const arg2 = getMapInfoArg2(infoIter);
             if (arg2 === 0) {
-                this.startBckRandom(arc, `SpinWait1`);
+                this.startAction(`SpinWait1`);
             } else if (arg2 === 1) {
-                this.startBckRandom(arc, `SpinWait2`);
+                this.startAction(`SpinWait2`);
             } else if (arg2 === 2) {
-                this.startBckRandom(arc, `SpinWait3`);
+                this.startAction(`SpinWait3`);
             } else if (arg2 === 3) {
-                this.startBckRandom(arc, `Wait`);
+                this.startAction(`Wait`);
             } else if (arg2 === 4) {
-                this.startBckRandom(arc, `Wait`);
+                this.startAction(`Wait`);
             } else if (arg2 === 5) {
-                this.startBckRandom(arc, `SwimWait`);
+                this.startAction(`SwimWait`);
             } else if (arg2 === 6) {
-                this.startBckRandom(arc, `Pickel`);
+                this.startAction(`Pickel`);
             } else if (arg2 === 7) {
-                this.startBckRandom(arc, `Sleep`);
+                this.startAction(`Sleep`);
             } else if (arg2 === 8) {
-                this.startBckRandom(arc, `Wait`);
+                this.startAction(`Wait`);
             } else if (arg2 === 9) {
-                this.startBckRandom(arc, `KinopioGoodsWeapon`);
+                this.startAction(`KinopioGoodsWeapon`);
             } else if (arg2 === 10) {
-                this.startBckRandom(arc, `Joy`);
+                this.startAction(`Joy`);
             } else if (arg2 === 11) {
-                this.startBckRandom(arc, `Rightened`);
+                this.startAction(`Rightened`);
             } else if (arg2 === 12) {
-                this.startBckRandom(arc, `StarPieceWait`);
+                this.startAction(`StarPieceWait`);
             } else if (arg2 === 13) {
-                this.startBckRandom(arc, `Getaway`);
+                this.startAction(`Getaway`);
             } else if (arg2 === -1) {
                 if (itemGoodsIdx === 2) {
-                    this.startBckRandom(arc, `WaitPickel`);
+                    this.startAction(`WaitPickel`);
                 } else {
-                    this.startBckRandom(arc, `Wait`);
+                    this.startAction(`Wait`);
                 }
             }
 
@@ -841,12 +976,18 @@ class Kinopio {
         vec3.set(this.backlight.Direction, 0, -1, 0);
     }
 
-    private startBckRandom(arc: RARC.RARC, animationName: string): void {
-        const bck = BCK.parse(assertExists(arc.findFileData(`${animationName}.bck`)));
-        this.baseObject.bindANK1(bck.ank1);
+    private startAction(animationName: string): void {
+        if (!this.animKeeper.start(this.baseObject, this.arc, animationName))
+            this.tryStartAllAnim(animationName);
+    }
 
-        // Apply a random phase to the animation.
-        this.animationController.phaseFrames += Math.random() * bck.ank1.duration;
+    private tryStartAllAnim(animationName: string): void {
+        setBckAnimation(this.baseObject, this.arc, animationName);
+        setBtkAnimation(this.baseObject, this.arc, animationName);
+        setBrkAnimation(this.baseObject, this.arc, animationName);
+        setBpkAnimation(this.baseObject, this.arc, animationName);
+        setBtpAnimation(this.baseObject, this.arc, animationName);
+        setBvaAnimation(this.baseObject, this.arc, animationName);
     }
 
     private initDefaultPos(infoIter: JMapInfoIter): void {
@@ -902,7 +1043,6 @@ class Kinopio {
             return;
 
         this.areaLightConfiguration.setOnModelInstance(this.baseObject, viewerInput.camera);
-        this.animationController.setTimeInMilliseconds(viewerInput.time);
 
         mat4.copy(this.baseObject.modelMatrix, this.modelMatrix);
         this.baseObject.prepareToRender(device, renderHelper, viewerInput);
