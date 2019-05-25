@@ -1022,7 +1022,6 @@ class SMGSpawner {
         case 'CoinLinkGroup':
         case 'CollectTico':
         case 'BrightSun':
-        case 'SplashPieceBlock':
         case 'LavaSparksS':
         case 'InstantInferno':
         case 'BlackHoleCube':
@@ -1055,6 +1054,14 @@ class SMGSpawner {
         case 'HammerHeadPackunSpike':
             // No archives. Needs R&D for what to display.
             return;
+
+        case 'SplashCoinBlock':
+        case 'TimerCoinBlock':
+        case 'SplashPieceBlock':
+        case 'TimerPieceBlock':
+        case 'ItemBlockSwitch':
+            spawnGraph("CoinBlock", SceneGraphTag.Normal);
+            break;
 
         case 'StarPiece':
             spawnGraph(name, SceneGraphTag.Normal, { btk: 'normal.btk', bck: 'land.bck' }).then(([node, rarc]) => {
