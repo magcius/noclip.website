@@ -10,18 +10,19 @@ import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor,
 import { BMD, BRK, BTK, BCK, LoopMode, BVA, BTP, BPK } from '../../j3d/j3d';
 import { BMDModel, BMDModelInstance } from '../../j3d/render';
 import * as RARC from '../../j3d/rarc';
-import { Light, lightSetWorldPosition, lightSetWorldDirection, EFB_WIDTH, EFB_HEIGHT, GXMaterial } from '../../gx/gx_material';
+import { EFB_WIDTH, EFB_HEIGHT } from '../../gx/gx_material';
 import { GXRenderHelperGfx } from '../../gx/gx_render_2';
 import { getPointBezier } from '../../Spline';
 import AnimationController from '../../AnimationController';
 import * as Yaz0 from '../../compression/Yaz0';
 import * as BCSV from '../../luigis_mansion/bcsv';
 import * as UI from '../../ui';
-import { colorFromRGBA, Color, colorNew, colorCopy, colorNewFromRGBA8 } from '../../Color';
+import { colorNewFromRGBA8 } from '../../Color';
 import { BloomPostFXParameters, BloomPostFXRenderer } from './Bloom';
-import { Camera } from '../../Camera';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
 import { ColorKind } from '../../gx/gx_render';
+import { JMapInfoIter, getMapInfoArg7, getMapInfoArg2, getMapInfoArg1 } from './JMapInfo';
+import { AreaLightInfo, AreaLightConfiguration, LightDataHolder } from './LightData';
 
 const enum SceneGraphTag {
     Skybox = 'Skybox',
@@ -115,76 +116,6 @@ class RailAnimationTico {
 
         const ny = Math.atan2(c[2], -c[0]);
         mat4.rotateY(dst, dst, ny);
-    }
-}
-
-class AreaLight {
-    public Position = vec3.create();
-    public Color = colorNew(1, 1, 1, 1);
-    public FollowCamera: boolean;
-
-    public setFromLightDataRecord(bcsv: BCSV.Bcsv, record: BCSV.BcsvRecord, prefix: string): void {
-        colorSetFromCsvDataRecord(this.Color, bcsv, record, `${prefix}Color`);
-
-        const posX = BCSV.getField(bcsv, record, `${prefix}PosX`, 0);
-        const posY = BCSV.getField(bcsv, record, `${prefix}PosY`, 0);
-        const posZ = BCSV.getField(bcsv, record, `${prefix}PosZ`, 0);
-        vec3.set(this.Position, posX, posY, posZ);
-
-        this.FollowCamera = BCSV.getField(bcsv, record, `${prefix}FollowCamera`) !== 0;
-    }
-
-    public setLight(dst: Light, camera: Camera): void {
-        if (this.FollowCamera) {
-            vec3.copy(dst.Position, this.Position);
-            vec3.set(dst.Direction, 1, 0, 0);
-        } else {
-            lightSetWorldPosition(dst, camera, this.Position[0], this.Position[1], this.Position[2]);
-            lightSetWorldDirection(dst, camera, 1, 0, 0);
-        }
-
-        colorCopy(dst.Color, this.Color);
-        vec3.set(dst.CosAtten, 1, 0, 0);
-        vec3.set(dst.DistAtten, 1, 0, 0);
-    }
-}
-
-class AreaLightConfiguration {
-    public AreaLightName: string;
-    public Light0 = new AreaLight();
-    public Light1 = new AreaLight();
-    public Ambient = colorNew(1, 1, 1, 1);
-
-    public setFromLightDataRecord(bcsv: BCSV.Bcsv, record: BCSV.BcsvRecord, prefix: string): void {
-        this.Light0.setFromLightDataRecord(bcsv, record, `${prefix}Light0`);
-        this.Light1.setFromLightDataRecord(bcsv, record, `${prefix}Light1`);
-        colorSetFromCsvDataRecord(this.Ambient, bcsv, record, `${prefix}Ambient`);
-    }
-
-    public setOnModelInstance(modelInstance: BMDModelInstance, camera: Camera): void {
-        this.Light0.setLight(modelInstance.getGXLightReference(0), camera);
-        this.Light1.setLight(modelInstance.getGXLightReference(1), camera);
-        // TODO(jstpierre): This doesn't look quite right for planets.
-        // Needs investigation.
-        // modelInstance.setColorOverride(ColorKind.AMB0, this.Ambient, true);
-    }
-}
-
-class AreaLightInfo {
-    public AreaLightName: string;
-    public Interpolate: number;
-    public Player = new AreaLightConfiguration();
-    public Strong = new AreaLightConfiguration();
-    public Weak = new AreaLightConfiguration();
-    public Planet = new AreaLightConfiguration();
-
-    public setFromLightDataRecord(bcsv: BCSV.Bcsv, record: BCSV.BcsvRecord): void {
-        this.AreaLightName = BCSV.getField<string>(bcsv, record, 'AreaLightName');
-        this.Interpolate = BCSV.getField<number>(bcsv, record, 'Interpolate');
-        this.Player.setFromLightDataRecord(bcsv, record, 'Player');
-        this.Strong.setFromLightDataRecord(bcsv, record, 'Strong');
-        this.Weak.setFromLightDataRecord(bcsv, record, 'Weak');
-        this.Planet.setFromLightDataRecord(bcsv, record, 'Planet');
     }
 }
 
@@ -706,27 +637,6 @@ class ModelCache {
     }
 }
 
-class JMapInfoIter {
-    constructor(public bcsv: BCSV.Bcsv, public record: BCSV.BcsvRecord) {
-    }
-
-    public setRecord(i: number): void {
-        this.record = this.bcsv.records[i];
-    }
-
-    public getSRTMatrix(m: mat4): void {
-        computeModelMatrixFromRecord(m, this.bcsv, this.record);
-    }
-
-    public getValueString(name: string, fallback: string | null = null): string | null {
-        return BCSV.getField<string>(this.bcsv, this.record, name, fallback);
-    }
-
-    public getValueNumber(name: string, fallback: number | null = null): number | null {
-        return BCSV.getField<number>(this.bcsv, this.record, name, fallback);
-    }
-}
-
 class NPCItemGoods {
     public goods0: string | null;
     public goods1: string | null;
@@ -756,15 +666,6 @@ function getNPCItemGoods(itemGoods: NPCItemGoods, npcDataArc: RARC.RARC, npcName
     itemGoods.goodsJoint0 = BCSV.getField(bcsv, record, 'mGoodsJoint0');
     itemGoods.goodsJoint1 = BCSV.getField(bcsv, record, 'mGoodsJoint1');
 }
-
-function getMapInfoArg0(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg0', fallback); }
-function getMapInfoArg1(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg1', fallback); }
-function getMapInfoArg2(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg2', fallback); }
-function getMapInfoArg3(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg3', fallback); }
-function getMapInfoArg4(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg4', fallback); }
-function getMapInfoArg5(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg5', fallback); }
-function getMapInfoArg6(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg6', fallback); }
-function getMapInfoArg7(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg7', fallback); }
 
 function bindColorChangeAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, frame: number, brkName: string = 'colorchange.brk'): void {
     const animationController = new AnimationController();
@@ -907,7 +808,6 @@ class Kinopio {
     private areaLightConfiguration: AreaLightConfiguration;
     private arc: RARC.RARC;
     private animKeeper: ActorAnimKeeper;
-    private backlight = new Light();
 
     constructor(device: GfxDevice, cache: GfxRenderCache, modelCache: ModelCache, areaLightInfo: AreaLightInfo, public layer: number, infoIter: JMapInfoIter) {
         this.initDefaultPos(infoIter);
@@ -922,7 +822,6 @@ class Kinopio {
             const bmdModel = modelCache.getModel2(device, cache, arc, 'Kinopio.bdl');
             this.baseObject = new BMDModelInstance(bmdModel);
             this.baseObject.passMask = SMGPass.OPAQUE;
-            this.baseObject.getGXLightReference(2).copy(this.backlight);
 
             const arg2 = getMapInfoArg2(infoIter);
             if (arg2 === 0) {
@@ -966,13 +865,6 @@ class Kinopio {
         });
 
         this.areaLightConfiguration = areaLightInfo.Strong;
-
-        // "Rim" backlight settings.
-        colorFromRGBA(this.backlight.Color, 0, 0, 0, 0.5);
-        vec3.set(this.backlight.CosAtten, 1, 0, 0);
-        vec3.set(this.backlight.DistAtten, 1, 0, 0);
-        vec3.set(this.backlight.Position, 0, 0, 0);
-        vec3.set(this.backlight.Direction, 0, -1, 0);
     }
 
     private startAction(animationName: string): void {
@@ -997,7 +889,6 @@ class Kinopio {
         return modelCache.fetchArchiveData(`ObjectData/${partName}.arc`).then((arc) => {
             const bmdModel = modelCache.getModel2(device, cache, arc, `${partName}.bdl`);
             const modelInstance = new BMDModelInstance(bmdModel);
-            modelInstance.getGXLightReference(2).copy(this.backlight);
             modelInstance.passMask = SMGPass.OPAQUE;
             return modelInstance;
         });
@@ -1092,14 +983,6 @@ class ZoneNode {
     }
 }
 
-function colorSetFromCsvDataRecord(color: Color, bcsv: BCSV.Bcsv, record: BCSV.BcsvRecord, prefix: string): void {
-    const colorR = BCSV.getField(bcsv, record, `${prefix}R`, 0) / 0xFF;
-    const colorG = BCSV.getField(bcsv, record, `${prefix}G`, 0) / 0xFF;
-    const colorB = BCSV.getField(bcsv, record, `${prefix}B`, 0) / 0xFF;
-    const colorA = BCSV.getField(bcsv, record, `${prefix}A`, 0) / 0xFF;
-    colorFromRGBA(color, colorR, colorG, colorB, colorA);
-}
-
 const starPieceColorTable = [
     colorNewFromRGBA8(0x7F7F00FF),
     colorNewFromRGBA8(0x800099FF),
@@ -1115,28 +998,13 @@ class SMGSpawner {
     public zones: ZoneNode[] = [];
     private modelCache: ModelCache;
     // BackLight
-    private backlight = new Light();
     private isSMG1 = false;
     private isSMG2 = false;
-    private areaLightInfos: AreaLightInfo[] = [];
 
-    constructor(abortSignal: AbortSignal, private galaxyName: string, pathBase: string, private cache: GfxRenderCache, private planetTable: BCSV.Bcsv, private lightData: BCSV.Bcsv) {
+    constructor(abortSignal: AbortSignal, private galaxyName: string, pathBase: string, private cache: GfxRenderCache, private planetTable: BCSV.Bcsv, private lightData: LightDataHolder) {
         this.modelCache = new ModelCache(pathBase, abortSignal);
         this.isSMG1 = pathBase === 'j3d/smg';
         this.isSMG2 = pathBase === 'j3d/smg2';
-
-        // "Rim" backlight settings.
-        colorFromRGBA(this.backlight.Color, 0, 0, 0, 0.5);
-        vec3.set(this.backlight.CosAtten, 1, 0, 0);
-        vec3.set(this.backlight.DistAtten, 1, 0, 0);
-        vec3.set(this.backlight.Position, 0, 0, 0);
-        vec3.set(this.backlight.Direction, 0, -1, 0);
-
-        for (let i = 0; i < lightData.records.length; i++) {
-            const areaLightInfo = new AreaLightInfo();
-            areaLightInfo.setFromLightDataRecord(lightData, lightData.records[i]);
-            this.areaLightInfos.push(areaLightInfo);
-        }
     }
 
     public applyAnimations(node: Node, rarc: RARC.RARC, animOptions?: AnimOptions): void {
@@ -1213,7 +1081,7 @@ class SMGSpawner {
     }
 
     private nodeSetLightName(node: Node, lightName: string): void {
-        const areaLightInfo = this.areaLightInfos.find((areaLightInfo) => areaLightInfo.AreaLightName === lightName)!;
+        const areaLightInfo = this.lightData.findAreaLight(lightName);
         node.setAreaLightInfo(areaLightInfo);
     }
 
@@ -1222,7 +1090,7 @@ class SMGSpawner {
         const modelCache = this.modelCache;
 
         const lightName = '[共通]昼（どら焼き）';
-        const areaLightInfo = this.areaLightInfos.find((areaLight) => areaLight.AreaLightName === lightName);
+        const areaLightInfo = this.lightData.findAreaLight(lightName);
 
         const connectObject = (object: ObjectBase): void => {
             zone.objects.push(object);
@@ -1270,7 +1138,6 @@ class SMGSpawner {
 
                 // TODO(jstpierre): Parse out the proper area info.
                 this.nodeSetLightName(node, lightName);
-                modelInstance.getGXLightReference(2).copy(this.backlight);
 
                 this.applyAnimations(node, rarc, animOptions);
 
@@ -1929,7 +1796,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
 
             // Load light data.
             const lightDataRarc = RARC.parse(lightDataBuffer);
-            const lightData = BCSV.parse(lightDataRarc.findFileData('lightdata.bcsv'));
+            const lightDataHolder = new LightDataHolder(lightDataRarc);
 
             // Load all the subzones.
             const scenarioRarc = RARC.parse(scenarioBuffer);
@@ -1951,7 +1818,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
                 return Promise.all(buffers.map((buffer) => Yaz0.decompress(buffer)));
             }).then((zoneBuffers: ArrayBufferSlice[]): Viewer.SceneGfx => {
                 const zones = zoneBuffers.map((zoneBuffer, i) => this.parseZone(zoneNames[i], zoneBuffer));
-                const spawner = new SMGSpawner(abortSignal, galaxyName, this.pathBase, renderHelper.renderInstManager.gfxRenderCache, planetTable, lightData);
+                const spawner = new SMGSpawner(abortSignal, galaxyName, this.pathBase, renderHelper.renderInstManager.gfxRenderCache, planetTable, lightDataHolder);
                 const modelMatrixBase = mat4.create();
                 spawner.spawnZone(device, zones[0], zones, modelMatrixBase);
                 return new SMGRenderer(device, renderHelper, spawner, scenariodata, zoneNames);
