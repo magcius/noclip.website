@@ -214,7 +214,6 @@ const scratchVec3 = vec3.create();
 class Node implements ObjectBase {
     public name: string = '';
     public modelMatrix = mat4.create();
-    public layer: number = -1;
     public planetRecord: BCSV.BcsvRecord | null = null;
     public visible: boolean = true;
 
@@ -225,7 +224,7 @@ class Node implements ObjectBase {
     public areaLightInfo: AreaLightInfo;
     public areaLightConfiguration: AreaLightConfiguration;
 
-    constructor(layer: number, public objinfo: ObjInfo, private parentZone: ZoneNode, public modelInstance: BMDModelInstance, parentModelMatrix: mat4, public animationController: AnimationController) {
+    constructor(public layer: number, public objinfo: ObjInfo, private parentZone: ZoneNode, public modelInstance: BMDModelInstance, parentModelMatrix: mat4, public animationController: AnimationController) {
         this.name = modelInstance.name;
         mat4.mul(this.modelMatrix, parentModelMatrix, objinfo.modelMatrix);
         this.setupAnimations();
@@ -691,7 +690,7 @@ class ModelCache {
             }
             return Yaz0.decompress(buffer);
         }).then((buffer: ArrayBufferSlice) => {
-            const rarc = RARC.parse(buffer);
+            const rarc = buffer !== null ? RARC.parse(buffer) : null;
             this.archiveCache.set(archivePath, rarc);
             return rarc;
         });
