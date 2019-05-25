@@ -17,10 +17,11 @@ import AnimationController from '../../AnimationController';
 import * as Yaz0 from '../../compression/Yaz0';
 import * as BCSV from '../../luigis_mansion/bcsv';
 import * as UI from '../../ui';
-import { colorFromRGBA, Color, colorNew, colorCopy } from '../../Color';
+import { colorFromRGBA, Color, colorNew, colorCopy, colorNewFromRGBA8 } from '../../Color';
 import { BloomPostFXParameters, BloomPostFXRenderer } from './Bloom';
 import { Camera } from '../../Camera';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
+import { ColorKind } from '../../gx/gx_render';
 
 const enum SceneGraphTag {
     Skybox = 'Skybox',
@@ -689,6 +690,16 @@ function colorSetFromCsvDataRecord(color: Color, bcsv: BCSV.Bcsv, record: BCSV.B
     colorFromRGBA(color, colorR, colorG, colorB, colorA);
 }
 
+const starPieceColorTable = [
+    colorNewFromRGBA8(0x7F7F00FF),
+    colorNewFromRGBA8(0x800099FF),
+    colorNewFromRGBA8(0xE7A000FF),
+    colorNewFromRGBA8(0x46A108FF),
+    colorNewFromRGBA8(0x375AA0FF),
+    colorNewFromRGBA8(0xBE330BFF),
+    colorNewFromRGBA8(0x808080FF),
+];
+
 class SMGSpawner {
     public sceneGraph = new SceneGraph();
     public zones: ZoneNode[] = [];
@@ -1050,8 +1061,14 @@ class SMGSpawner {
                 const animationController = new AnimationController();
                 animationController.setTimeInFrames(objinfo.objArg3);
 
-                const bpk = BPK.parse(assertExists(rarc.findFileData(`starpiececc.bpk`)));
-                node.modelInstance.bindTRK1(bpk.pak1, animationController);
+                // The colors in starpiececc do not match the final colors.
+                // const bpk = BPK.parse(assertExists(rarc.findFileData(`starpiececc.bpk`)));
+
+                let idx = objinfo.objArg3;
+                if (idx < 0 || idx > 5)
+                    idx = ((Math.random() * 6.0) | 0) + 1;
+
+                node.modelInstance.setColorOverride(ColorKind.MAT0, starPieceColorTable[idx]);
             });
             return;
 
