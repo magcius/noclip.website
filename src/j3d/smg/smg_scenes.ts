@@ -1438,6 +1438,65 @@ class SMGSpawner {
         return zoneNode;
     }
 
+    public spawnWorldmapObject(device: GfxDevice, abortSignal: AbortSignal, zone: ZoneNode, layer: number, objinfo: ObjInfo, modelMatrixBase: mat4): void {
+        const spawnGraph = (arcName: string, tag: SceneGraphTag = SceneGraphTag.Normal, animOptions: AnimOptions | null | undefined = undefined, planetRecord: BCSV.BcsvRecord | null = null) => {
+            const arcPath = `${this.pathBase}/ObjectData/${arcName}.arc`;
+            const modelFilename = `${arcName}.bdl`;
+            return this.modelCache.getModel(device, abortSignal, this.cache, arcPath, modelFilename).then((bmdModel): [Node, RARC.RARC] => {
+                // If this is a 404, then return null.
+                if (bmdModel === null)
+                    return null;
+
+                if (this.hasIndirectTexture(bmdModel))
+                    tag = SceneGraphTag.Indirect;
+
+                // Trickery.
+                const rarc = this.modelCache.archiveCache.get(arcPath);
+
+                const modelInstance = new BMDModelInstance(bmdModel);
+                modelInstance.name = `${objinfo.objName} ${objinfo.objId}`;
+
+                if (tag === SceneGraphTag.Indirect) {
+                    modelInstance.passMask = SMGPass.INDIRECT;
+                } else if (tag === SceneGraphTag.Bloom) {
+                    modelInstance.passMask = SMGPass.BLOOM;
+                } else {
+                    modelInstance.passMask = SMGPass.OPAQUE;
+                }
+
+                const node = new Node(objinfo, zone, modelInstance, modelMatrixBase, modelInstance.animationController);
+                node.planetRecord = planetRecord;
+                node.layer = layer;
+                zone.objects.push(node);
+
+                // TODO(jstpierre): Parse out the proper area info.
+                const lightName = '[共通]昼（どら焼き）';
+                this.nodeSetLightName(node, lightName);
+                modelInstance.getGXLightReference(2).copy(this.backlight);
+
+                this.applyAnimations(node, rarc, animOptions);
+
+                this.sceneGraph.addNode(node);
+
+                return [node, rarc];
+            });
+        };
+
+        function animFrame(frame: number) {
+            const animationController = new AnimationController();
+            animationController.setTimeInFrames(frame);
+            return animationController;
+        }
+
+        const name = objinfo.objName;
+        switch (objinfo.objName) {
+
+        
+        default:
+            break;
+        }
+    }
+
     public destroy(device: GfxDevice): void {
         this.modelCache.destroy(device);
         this.sceneGraph.destroy(device);
@@ -1528,14 +1587,27 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
 
     public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         const galaxyName = this.galaxyName;
-        return Progressable.all([
-            fetchData(`${this.pathBase}/ObjectData/PlanetMapDataTable.arc`, abortSignal),
-            fetchData(this.getLightDataFilename(), abortSignal),
-            fetchData(`${this.pathBase}/StageData/${galaxyName}/${galaxyName}Scenario.arc`, abortSignal),
-        ]).then((buffers: ArrayBufferSlice[]) => {
+        const isWorldMap = galaxyName.startsWith("WorldMap") && this.pathBase == 'j3d/smg2';
+        return Progressable.all(
+            isWorldMap?[
+                fetchData(`${this.pathBase}/ObjectData/PlanetMapDataTable.arc`, abortSignal),
+                fetchData(this.getLightDataFilename(), abortSignal),
+                fetchData(`${this.pathBase}/StageData/${galaxyName}/${galaxyName}Scenario.arc`, abortSignal),
+                fetchData(`${this.pathBase}/ObjectData/${galaxyName.substr(0,10)}.arc`, abortSignal),
+            ] : [
+                fetchData(`${this.pathBase}/ObjectData/PlanetMapDataTable.arc`, abortSignal),
+                fetchData(this.getLightDataFilename(), abortSignal),
+                fetchData(`${this.pathBase}/StageData/${galaxyName}/${galaxyName}Scenario.arc`, abortSignal),
+            ]
+        ).then((buffers: ArrayBufferSlice[]) => {
             return Promise.all(buffers.map((buffer) => Yaz0.decompress(buffer)));
         }).then((buffers: ArrayBufferSlice[]) => {
-            const [planetTableBuffer, lightDataBuffer, scenarioBuffer] = buffers;
+            const [planetTableBuffer, lightDataBuffer, scenarioBuffer, worldMapBuffer] = buffers;
+
+            if(isWorldMap){
+                const worldMapRarc = RARC.parse(worldMapBuffer);
+                console.log(BCSV.parse(worldMapRarc.findFileData('ActorInfo/PointPos.bcsv')));
+            }
 
             // Load planet table.
             const planetTableRarc = RARC.parse(planetTableBuffer);
