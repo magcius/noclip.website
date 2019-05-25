@@ -248,7 +248,32 @@ function mat43Concat(dst: mat4, a: mat4, b: mat4): void {
     dst[14] = a20*b03 + a21*b13 + a22*b23 + a23;
 }
 
-const matrixScratch = mat4.create(), matrixScratch2 = mat4.create();
+function J3DGetTextureMtx(dst: mat4, srt: mat4): void {
+    mat4.copy(dst, srt);
+    mat4SwapTranslationColumns(dst);
+}
+
+function J3DGetTextureMtxOld(dst: mat4, srt: mat4): void {
+    mat4.copy(dst, srt);
+}
+
+function J3DBuildE8Mtx(dst: mat4, flipY: boolean): void {
+    const flipYScale = flipY ? -1.0 : 1.0;
+    texEnvMtx(dst, 0.5, 0.5 * flipYScale, 0.5, 0.5);
+    dst[14] = 0.0;
+    dst[10] = 1.0;
+}
+
+function J3DBuildB8Mtx(dst: mat4, flipY: boolean): void {
+    const flipYScale = flipY ? -1.0 : 1.0;
+    // B8 is column-swapped from E8.
+    texEnvMtx(dst, 0.5, 0.5 * flipYScale, 0.5, 0.5);
+    dst[14] = 0.0;
+    dst[10] = 1.0;
+    mat4SwapTranslationColumns(dst);
+}
+
+const matrixScratch = mat4.create(), matrixScratch2 = mat4.create(), matrixScratch3 = mat4.create();
 const materialParams = new MaterialParams();
 export class MaterialInstance {
     public ttk1Animators: TTK1Animator[] = [];
@@ -389,8 +414,6 @@ export class MaterialInstance {
         }
 
         // Bind our texture matrices.
-        const matrixSRT = matrixScratch;
-        const matrixProj = matrixScratch2;
         for (let i = 0; i < material.texMatrices.length; i++) {
             const texMtx = material.texMatrices[i];
             const dst = materialParams.u_TexMtx[i];
@@ -402,22 +425,17 @@ export class MaterialInstance {
             const flipY = materialParams.m_TextureMapping[i].flipY;
             const flipYScale = flipY ? -1.0 : 1.0;
 
-            const matrixMode = texMtx.type & 0x7F;
+            const isMaya = !!(texMtx.type >>> 7);
+            const matrixMode = texMtx.type & 0x3F;
 
             // First, compute input matrix.
 
+            // ref. J3DTexGenBlockPatched::calc()
             switch (matrixMode) {
-            case 0x00:
-            case 0x03:
-            case 0x04:
-                // No mapping.
-                mat4.identity(dst);
-                break;
-
             case 0x01: // Delfino Plaza
             case 0x06: // Rainbow Road
             case 0x07: // Rainbow Road
-                // Environment mapping. Uses the normal matrix.
+                // Environment mapping. Uses an approximation of the normal matrix (MV with the translation lopped off).
                 computeNormalMatrix(dst, modelViewMatrix, true);
                 break;
 
@@ -427,6 +445,7 @@ export class MaterialInstance {
                 mat4.copy(dst, modelMatrix);
                 break;
 
+            case 0x03:
             case 0x09:
                 // Projection. Used for indtexwater, mostly.
                 mat4.copy(dst, modelViewMatrix);
@@ -440,17 +459,21 @@ export class MaterialInstance {
                 break;
 
             default:
-                throw "whoops";
+                // No mapping.
+                mat4.identity(dst);
+                break;
             }
 
             // Now apply effects.
 
+            // ref. J3DTexMtx::calc()
+
             // Calculate SRT matrix.
-            const maya = !!((texMtx.type) & 0x80);
+            const texSRT = matrixScratch3;
             if (this.ttk1Animators[i] !== undefined) {
-                this.ttk1Animators[i].calcTexMtx(matrixSRT, maya);
+                this.ttk1Animators[i].calcTexMtx(texSRT, isMaya);
             } else {
-                mat4.copy(matrixSRT, material.texMatrices[i].matrix);
+                mat4.copy(texSRT, material.texMatrices[i].matrix);
             }
 
             // J3DGetTextureMtxOld puts the translation into the fourth column.
@@ -462,135 +485,140 @@ export class MaterialInstance {
             // _E8 is equivalent to texEnvMtx, and _B8 is the same but column-swapped.
             // _48 and _88 are scratch space, _24 is effectMatrix,
             // _94 is input matrix calculated above, _64 is output.
+            const tmp48 = matrixScratch;
+            const tmp88 = matrixScratch2;
             switch (matrixMode) {
-            case 0x08:
-            case 0x09:
-            case 0x0B:
+            case 0x01:
                 {
-                    // J3DGetTextureMtx(_88)
-                    mat4SwapTranslationColumns(matrixSRT); // non-Old, needs swap
+                    // J3DGetTextureMtxOld(_48)
+                    J3DGetTextureMtxOld(tmp48, texSRT);
 
-                    // The effect matrix here is typically a GameCube projection matrix.
-                    // Swap it out with our own.
-                    if (matrixMode === 0x09) {
-                        texProjPerspMtx(matrixProj, camera.fovY, camera.aspect, 0.5, -0.5 * flipYScale, 0.5, 0.5);
-                        J3DMtxProjConcat(matrixProj, matrixSRT, matrixProj);
-                    } else {
-                        // TODO(jstpierre): This makes the Comet Observatory skybox go bonkers.
-
-/*
-                        // Build _B8 matrix
-                        texEnvMtx(matrixProj, 0.5, 0.5 * flipYScale, 0.5, 0.5);
-                        mat4SwapTranslationColumns(matrixSRT);
-
-                        // J3DMtxProjConcat(_88, this->_24, _48)
-                        mat43Concat(matrixSRT, matrixProj, matrixSRT);
-*/
-
-                        // PSMTXConcat(_88, _B8, _88)
-                        J3DMtxProjConcat(matrixProj, matrixSRT, texMtx.effectMatrix);
+                    if (flipY) {
+                        texEnvMtx(tmp88, 1, 1, 0, 1);
+                        mat4.mul(tmp48, tmp88, tmp48);
                     }
 
-                    // PSMtxConcat(_48, this->_94, this->_64)
-                    mat43Concat(dst, matrixProj, dst);
+                    // PSMTXConcat(_48, _94, this->_64)
+                    mat43Concat(dst, tmp48, dst);
                 }
                 break;
 
-            case 0x07:
-                {
-                    // J3DGetTextureMtx(_48)
-                    mat4SwapTranslationColumns(matrixSRT); // non-Old, needs swap
-                    // Build _B8 matrix
-                    texEnvMtx(matrixProj, 0.5, 0.5 * flipYScale, 0.5, 0.5);
-                    mat4SwapTranslationColumns(matrixProj);
-                    // PSMTXConcat(_48, _B8, _48)
-                    mat43Concat(matrixSRT, matrixSRT, matrixProj);
-                    // PSMtxConcat(_48, this->_94, this->_64)
-                    mat43Concat(dst, matrixSRT, dst);
-                }
-                break;
-
-            case 0x0A:
+            case 0x02:
+            case 0x03:
+            case 0x05:
                 {
                     // J3DGetTextureMtxOld(_88)
-                    // Old, no swap
-                    // Build _E8 matrix
-                    texEnvMtx(matrixProj, 0.5, 0.5 * flipYScale, 0.5, 0.5);
-                    // PSMTXConcat(_88, _E8, _88)
-                    mat43Concat(matrixSRT, matrixSRT, matrixProj);
+                    J3DGetTextureMtxOld(tmp88, texSRT);
+
+                    if (flipY) {
+                        texEnvMtx(tmp48, 1, 1, 0, 1);
+                        mat4.mul(tmp88, tmp48, tmp88);
+                    }
+
                     // J3DMtxProjConcat(_88, this->_24, _48)
-                    J3DMtxProjConcat(matrixProj, matrixSRT, texMtx.effectMatrix);
-                    // PSMTXConcat(_48, this->_94, this->_64)
-                    mat43Concat(dst, matrixProj, dst);
+                    J3DMtxProjConcat(tmp48, tmp88, texMtx.effectMatrix);
+                    // PSMTXConcat(_48, _94, this->_64)
+                    mat43Concat(dst, tmp48, dst);
+                }
+                break;
+
+            case 0x04:
+                {
+                    // J3DGetTextureMtxOld(_88)
+                    J3DGetTextureMtxOld(tmp88, texSRT);
+
+                    if (flipY) {
+                        texEnvMtx(tmp48, 1, 1, 0, 1);
+                        mat4.mul(tmp88, tmp48, tmp88);
+                    }
+
+                    // J3DMtxProjConcat(_88, this->_24, this->_64);
+                    J3DMtxProjConcat(dst, tmp88, texMtx.effectMatrix);
                 }
                 break;
 
             case 0x06:
                 {
                     // J3DGetTextureMtxOld(_48)
-                    // Old, no swap
-                    // Build _E8 matrix
-                    texEnvMtx(matrixProj, 0.5, 0.5 * flipYScale, 0.5, 0.5);
+                    J3DGetTextureMtxOld(tmp48, texSRT);
+
                     // PSMTXConcat(_48, _E8, _48)
-                    mat43Concat(matrixSRT, matrixProj, matrixSRT);
-                    // PSMTXConcat(_48, this->_94, this->_64)
-                    mat43Concat(dst, matrixSRT, dst);
+                    J3DBuildE8Mtx(tmp88, flipY);
+                    mat43Concat(tmp48, tmp48, tmp88);
+
+                    // PSMTXConcat(_48, _94, this->_64)
+                    mat43Concat(dst, tmp48, dst);
                 }
                 break;
 
-            case 0x01:
+            case 0x07:
                 {
-                    if (flipY) {
-                        texEnvMtx(matrixProj, 1, 1, 0, 1);
-                        mat4.mul(matrixSRT, matrixProj, matrixSRT);
+                    // J3DGetTextureMtx(_48)
+                    J3DGetTextureMtx(tmp48, texSRT);
+
+                    // PSMTXConcat(_48, _B8, _48)
+                    J3DBuildB8Mtx(tmp88, flipY);
+                    mat43Concat(tmp48, tmp48, tmp88);
+
+                    // PSMTXConcat(_48, _94, this->_64)
+                    mat43Concat(dst, tmp48, dst);
+                }
+                break;
+            
+            case 0x08:
+            case 0x09:
+            case 0x0B:
+                {
+                    // J3DGetTextureMtx(_88)
+                    J3DGetTextureMtx(tmp88, texSRT);
+
+                    // The effect matrix here is typically a GameCube projection matrix.
+                    // Swap it out with our own.
+                    if (matrixMode === 0x09) {
+                        // Replaces the effectMatrix (this->_24)
+                        texProjPerspMtx(tmp48, camera.fovY, camera.aspect, 0.5, -0.5 * flipYScale, 0.5, 0.5);
+                        // J3DMtxProjConcat(_88, this->_24, _48)
+                        J3DMtxProjConcat(tmp48, tmp88, tmp48);
+                    } else {
+                        // PSMTXConcat(_88, _B8, _88)
+                        J3DBuildB8Mtx(tmp48, flipY);
+                        mat43Concat(tmp88, tmp88, tmp48);
+
+                        // J3DMtxProjConcat(_88, this->_24, _48)
+                        J3DMtxProjConcat(tmp48, tmp88, texMtx.effectMatrix);
                     }
 
-                    // J3DGetTextureMtxOld(_48)
-                    // Old, no swap
-                    // PSMTXConcat(_48, this->_94, this->_64)
-                    mat43Concat(dst, matrixSRT, dst);
+                    // PSMTXConcat(_48, _94, this->_64)
+                    mat43Concat(dst, tmp48, dst);
                 }
                 break;
 
-            case 0x02:
-            case 0x03:
+            case 0x0A:
                 {
-                    if (flipY) {
-                        texEnvMtx(matrixProj, 1, 1, 0, 1);
-                        mat4.mul(matrixSRT, matrixProj, matrixSRT);
-                    }
-
                     // J3DGetTextureMtxOld(_88)
+                    J3DGetTextureMtxOld(tmp88, texSRT);
+
+                    // PSMTXConcat(_88, _E8, _88)
+                    J3DBuildE8Mtx(tmp48, flipY);
+                    mat43Concat(tmp88, tmp88, tmp48);
+
                     // J3DMtxProjConcat(_88, this->_24, _48)
-                    // PSMTXConcat(_48, this->_94, this->_64)
-                    // Old, no swap
-                    J3DMtxProjConcat(matrixProj, texMtx.effectMatrix, matrixSRT);
-                    mat43Concat(dst, matrixProj, dst);
+                    J3DMtxProjConcat(tmp48, tmp88, texMtx.effectMatrix);
+
+                    // PSMTXConcat(_48, _94, this->_64)
+                    mat43Concat(dst, tmp48, dst);
                 }
                 break;
-
-            case 0x04:
-                {
-                    if (flipY) {
-                        texEnvMtx(matrixProj, 1, 1, 0, 1);
-                        mat4.mul(matrixSRT, matrixProj, matrixSRT);
-                    }
-
-                    // J3DGetTextureMtxOld(_88)
-                    // J3DMtxProjConcat(_88, this->_24, this->_64)
-                    J3DMtxProjConcat(dst, texMtx.effectMatrix, matrixSRT);
-                }
-                break;
-
+    
             case 0x00:
                 {
-                    if (flipY) {
-                        texEnvMtx(matrixProj, 1, 1, 0, 1);
-                        mat4.mul(matrixSRT, matrixProj, matrixSRT);
-                    }
+                    // J3DGetTextureMtxOld(this->_64)
+                    J3DGetTextureMtxOld(dst, texSRT);
 
-                    // J3DGetTextureMtxOld(_64)
-                    mat4.copy(dst, matrixSRT);
+                    if (flipY) {
+                        texEnvMtx(tmp48, 1, 1, 0, 1);
+                        mat4.mul(dst, tmp48, dst);
+                    }
                 }
                 break;
 
