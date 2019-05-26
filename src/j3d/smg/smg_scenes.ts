@@ -312,6 +312,74 @@ class Node implements ObjectBase {
     }
 }
 
+class WorldmapNode implements ObjectBase {
+    public name: string = '';
+    public visible: boolean = true;
+    public layer = -1;
+
+    private modelMatrixAnimator: ModelMatrixAnimator | null = null;
+    private rotateSpeed = 0;
+    private rotatePhase = 0;
+    public areaLightInfo: AreaLightInfo;
+    public areaLightConfiguration: AreaLightConfiguration;
+
+    constructor(public modelInstance: BMDModelInstance, public pointInfo: WorldmapPointInfo, public modelMatrix: mat4, public animationController: AnimationController) {
+        this.name = modelInstance.name;
+    }
+
+    public setVertexColorsEnabled(v: boolean): void {
+        this.modelInstance.setVertexColorsEnabled(v);
+    }
+
+    public setTexturesEnabled(v: boolean): void {
+        this.modelInstance.setTexturesEnabled(v);
+    }
+
+    public setIndirectTextureOverride(sceneTexture: GfxTexture): void {
+        setIndirectTextureOverride(this.modelInstance, sceneTexture);
+    }
+
+    public setRotateSpeed(speed: number, axis = RotateAxis.Y): void {
+        this.rotateSpeed = speed;
+    }
+
+    public updateMapPartsRotation(dst: mat4, time: number): void {
+        if (this.rotateSpeed !== 0) {
+            const speed = this.rotateSpeed * Math.PI / 100;
+            mat4.rotateY(dst, dst, (time + this.rotatePhase) * speed);
+        }
+    }
+
+    public updateSpecialAnimations(): void {
+        const time = this.animationController.getTimeInSeconds();
+        mat4.copy(this.modelInstance.modelMatrix, this.modelMatrix);
+        this.updateMapPartsRotation(this.modelInstance.modelMatrix, time);
+        if (this.modelMatrixAnimator !== null) {
+            this.modelMatrixAnimator.updateRailAnimation(this.modelInstance.modelMatrix, time);
+            // Apply zone transform to path results.
+        }
+    }
+
+    public setAreaLightInfo(areaLightInfo: AreaLightInfo): void {
+        this.areaLightInfo = areaLightInfo;
+
+        this.areaLightConfiguration = this.areaLightInfo.Strong;
+    }
+
+    public prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!this.visible)
+            return;
+
+        this.areaLightConfiguration.setOnModelInstance(this.modelInstance, viewerInput.camera);
+        this.updateSpecialAnimations();
+        this.modelInstance.prepareToRender(device, renderHelper, viewerInput);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.modelInstance.destroy(device);
+    }
+}
+
 class SceneGraph {
     public nodes: ObjectBase[] = [];
     public onnodeadded: (() => void) | null = null;
@@ -580,6 +648,17 @@ interface ObjInfo {
 
     // Store the original record for our new-style nodes.
     mapInfoIter: JMapInfoIter;
+}
+
+interface WorldmapPointInfo {
+    pointId: number;
+    objName: string;
+    miniatureScale: number;
+    miniatureOffset: vec3;
+    miniatureType: string;
+    isPink: boolean;
+
+    position: vec3;
 }
 
 interface ZoneLayer {
@@ -1186,6 +1265,45 @@ class SMGSpawner {
         }
     }
 
+    public applyAnimationsWM(node: WorldmapNode, rarc: RARC.RARC, animOptions?: AnimOptions): void {
+        const modelInstance = node.modelInstance;
+
+        let bckFile: RARC.RARCFile | null = null;
+        let brkFile: RARC.RARCFile | null = null;
+        let btkFile: RARC.RARCFile | null = null;
+
+        if (animOptions !== null) {
+            if (animOptions !== undefined) {
+                bckFile = animOptions.bck ? rarc.findFile(animOptions.bck) : null;
+                brkFile = animOptions.brk ? rarc.findFile(animOptions.brk) : null;
+                btkFile = animOptions.btk ? rarc.findFile(animOptions.btk) : null;
+            } else {
+                // Look for "wait" animation first, then fall back to the first animation.
+                bckFile = rarc.findFile(`${node.pointInfo.objName}.bck`);
+                brkFile = rarc.findFile(`${node.pointInfo.objName}.brk`);
+                btkFile = rarc.findFile(`${node.pointInfo.objName}.btk`);
+            }
+        }
+
+        if (btkFile !== null) {
+            const btk = BTK.parse(btkFile.buffer);
+            modelInstance.bindTTK1(btk.ttk1);
+        }
+
+        if (brkFile !== null) {
+            const brk = BRK.parse(brkFile.buffer);
+            modelInstance.bindTRK1(brk.trk1);
+        }
+
+        if (bckFile !== null) {
+            const bck = BCK.parse(bckFile.buffer);
+            modelInstance.bindANK1(bck.ank1);
+
+            // Apply a random phase to the animation.
+            modelInstance.animationController.phaseFrames += Math.random() * bck.ank1.duration;
+        }
+    }
+
     public bindChangeAnimation(node: Node, rarc: RARC.RARC, frame: number): void {
         const brkFile = rarc.findFile('colorchange.brk');
         const btkFile = rarc.findFile('texchange.btk');
@@ -1213,6 +1331,11 @@ class SMGSpawner {
     }
 
     private nodeSetLightName(node: Node, lightName: string): void {
+        const areaLightInfo = this.areaLightInfos.find((areaLightInfo) => areaLightInfo.AreaLightName === lightName)!;
+        node.setAreaLightInfo(areaLightInfo);
+    }
+
+    private wmNodeSetLightName(node: WorldmapNode, lightName: string): void {
         const areaLightInfo = this.areaLightInfos.find((areaLightInfo) => areaLightInfo.AreaLightName === lightName)!;
         node.setAreaLightInfo(areaLightInfo);
     }
@@ -1865,11 +1988,26 @@ class SMGSpawner {
         return zoneNode;
     }
 
-    public spawnWorldmapObject(device: GfxDevice, abortSignal: AbortSignal, zone: ZoneNode, layer: number, objinfo: ObjInfo, modelMatrixBase: mat4): void {
-        const spawnGraph = (arcName: string, tag: SceneGraphTag = SceneGraphTag.Normal, animOptions: AnimOptions | null | undefined = undefined, planetRecord: BCSV.BcsvRecord | null = null) => {
-            const arcPath = `${this.pathBase}/ObjectData/${arcName}.arc`;
+    public spawnWorldmapObject(device: GfxDevice, abortSignal: AbortSignal, zone: ZoneNode, pointInfo: WorldmapPointInfo): void {
+        const cache = this.cache;
+        const modelCache = this.modelCache;
+
+        let modelMatrixBase = mat4.create();
+        mat4.fromTranslation(modelMatrixBase, pointInfo.position);
+
+        const lightName = '[共通]昼（どら焼き）';
+        const areaLightInfo = this.areaLightInfos.find((areaLight) => areaLight.AreaLightName === lightName);
+
+        const connectObject = (object: ObjectBase): void => {
+            zone.objects.push(object);
+            this.sceneGraph.addNode(object);
+        };
+
+        const spawnGraph = (arcName: string, modelMatrix: mat4 = mat4.create(), tag: SceneGraphTag = SceneGraphTag.Normal, animOptions: AnimOptions | null | undefined = undefined) => {
+            const arcPath = `ObjectData/${arcName}.arc`;
             const modelFilename = `${arcName}.bdl`;
-            return this.modelCache.getModel(device, abortSignal, this.cache, arcPath, modelFilename).then((bmdModel): [Node, RARC.RARC] => {
+
+            return modelCache.getModel(device, cache, arcPath, modelFilename).then((bmdModel): [WorldmapNode, RARC.RARC] => {
                 // If this is a 404, then return null.
                 if (bmdModel === null)
                     return null;
@@ -1881,7 +2019,7 @@ class SMGSpawner {
                 const rarc = this.modelCache.archiveCache.get(arcPath);
 
                 const modelInstance = new BMDModelInstance(bmdModel);
-                modelInstance.name = `${objinfo.objName} ${objinfo.objId}`;
+                modelInstance.name = `Point ${pointInfo.pointId}`;
 
                 if (tag === SceneGraphTag.Indirect) {
                     modelInstance.passMask = SMGPass.INDIRECT;
@@ -1890,20 +2028,17 @@ class SMGSpawner {
                 } else {
                     modelInstance.passMask = SMGPass.OPAQUE;
                 }
-
-                const node = new Node(objinfo, zone, modelInstance, modelMatrixBase, modelInstance.animationController);
-                node.planetRecord = planetRecord;
-                node.layer = layer;
-                zone.objects.push(node);
+                let mat = mat4.create();
+                mat4.mul(mat, modelMatrix, modelMatrixBase);
+                const node = new WorldmapNode(modelInstance, pointInfo, mat, modelInstance.animationController);
 
                 // TODO(jstpierre): Parse out the proper area info.
-                const lightName = '[共通]昼（どら焼き）';
-                this.nodeSetLightName(node, lightName);
+                this.wmNodeSetLightName(node, lightName);
                 modelInstance.getGXLightReference(2).copy(this.backlight);
 
-                this.applyAnimations(node, rarc, animOptions);
+                this.applyAnimationsWM(node, rarc, animOptions);
 
-                this.sceneGraph.addNode(node);
+                connectObject(node);
 
                 return [node, rarc];
             });
@@ -1915,12 +2050,18 @@ class SMGSpawner {
             return animationController;
         }
 
-        const name = objinfo.objName;
-        switch (objinfo.objName) {
-
-        
-        default:
+        switch (pointInfo.objName) {
+        case 'MiniRoutePoint':
+            spawnGraph('MiniRoutePoint');
             break;
+        default:
+            spawnGraph('MiniRoutePoint');
+            let mat = mat4.create();
+            mat4.fromTranslation(mat, pointInfo.miniatureOffset)
+            spawnGraph(pointInfo.objName, mat).then(([node, rarc]) => {
+                if(pointInfo.miniatureType=='Galaxy' || pointInfo.miniatureType=='MiniGalaxy')
+                    node.setRotateSpeed(30);
+            });
         }
     }
 
@@ -2032,11 +2173,6 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         }).then((buffers: ArrayBufferSlice[]) => {
             const [planetTableBuffer, lightDataBuffer, scenarioBuffer, worldMapBuffer] = buffers;
 
-            if(isWorldMap){
-                const worldMapRarc = RARC.parse(worldMapBuffer);
-                console.log(BCSV.parse(worldMapRarc.findFileData('ActorInfo/PointPos.bcsv')));
-            }
-
             // Load planet table.
             const planetTableRarc = RARC.parse(planetTableBuffer);
             const planetTable = BCSV.parse(planetTableRarc.findFileData('planetmapdatatable.bcsv'));
@@ -2068,6 +2204,49 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
                 const spawner = new SMGSpawner(abortSignal, galaxyName, this.pathBase, renderHelper.renderInstManager.gfxRenderCache, planetTable, lightData);
                 const modelMatrixBase = mat4.create();
                 spawner.spawnZone(device, zones[0], zones, modelMatrixBase);
+                
+                if(isWorldMap){
+                    let points : WorldmapPointInfo[] = [];
+                    const worldMapRarc = RARC.parse(worldMapBuffer);
+                    const worldMapPointBcsv = BCSV.parse(worldMapRarc.findFileData('ActorInfo/PointPos.bcsv'));
+
+                    for(let i = 0; i<worldMapPointBcsv.records.length; i++){
+                        let position = vec3.fromValues(
+                            worldMapPointBcsv.records[i][5] as number,
+                            worldMapPointBcsv.records[i][6] as number,
+                            worldMapPointBcsv.records[i][7] as number);
+                        
+                        points.push({
+                            objName: 'MiniRoutePoint', 
+                            miniatureScale: 1,
+                            miniatureOffset: vec3.create(),
+                            miniatureType: '',
+                            pointId: worldMapPointBcsv.records[i][0] as number, 
+                            isPink: worldMapPointBcsv.records[i][2] as string == 'o', 
+                            position: position});
+                    }
+
+                    const worldMapGalaxiesBcsv = BCSV.parse(worldMapRarc.findFileData('ActorInfo/Galaxy.bcsv'));
+
+                    for(let i = 0; i<worldMapGalaxiesBcsv.records.length; i++){
+                        console.log(worldMapGalaxiesBcsv.records[i]);
+                        const index = worldMapGalaxiesBcsv.records[i][2];
+                        points[index].objName = worldMapGalaxiesBcsv.records[i][1] as string;
+                        points[index].miniatureType = worldMapGalaxiesBcsv.records[i][3] as string;
+                        points[index].miniatureScale = worldMapGalaxiesBcsv.records[i][4] as number;
+                        let offset = vec3.fromValues(
+                            worldMapGalaxiesBcsv.records[i][6] as number,
+                            worldMapGalaxiesBcsv.records[i][7] as number,
+                            worldMapGalaxiesBcsv.records[i][8] as number);
+
+                        points[index].miniatureOffset = offset;
+                    }
+
+                    for(let i = 0; i<points.length; i++){
+                        if(worldMapPointBcsv.records[i][1] as string == 'o')
+                            spawner.spawnWorldmapObject(device, abortSignal, spawner.zones[0], points[i]);
+                    }
+                }
                 return new SMGRenderer(device, renderHelper, spawner, scenariodata, zoneNames);
             });
         });
