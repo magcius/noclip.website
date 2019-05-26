@@ -305,6 +305,50 @@ class WorldmapNode implements ObjectBase {
     }
 }
 
+class WorldmapLineNode implements ObjectBase {
+    public name: string = '';
+    public visible: boolean = true;
+    public layerId = -1;
+    public areaLightInfo: AreaLightInfo;
+    public areaLightConfiguration: ActorLightInfo;
+
+    constructor(public modelInstance: BMDModelInstance, public point1Info: WorldmapPointInfo, public point2Info: WorldmapPointInfo,
+        public modelMatrix: mat4) {
+        this.name = modelInstance.name;
+        this.modelInstance.modelMatrix = modelMatrix;
+    }
+
+    public setVertexColorsEnabled(v: boolean): void {
+        this.modelInstance.setVertexColorsEnabled(v);
+    }
+
+    public setTexturesEnabled(v: boolean): void {
+        this.modelInstance.setTexturesEnabled(v);
+    }
+
+    public setIndirectTextureOverride(sceneTexture: GfxTexture): void {
+        setIndirectTextureOverride(this.modelInstance, sceneTexture);
+    }
+
+    public setAreaLightInfo(areaLightInfo: AreaLightInfo): void {
+        this.areaLightInfo = areaLightInfo;
+
+        this.areaLightConfiguration = this.areaLightInfo.Strong;
+    }
+
+    public prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!this.visible)
+            return;
+
+        this.areaLightConfiguration.setOnModelInstance(this.modelInstance, viewerInput.camera);
+        this.modelInstance.prepareToRender(device, renderHelper, viewerInput);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.modelInstance.destroy(device);
+    }
+}
+
 class SceneGraph {
     public nodes: ObjectBase[] = [];
     public onnodeadded: (() => void) | null = null;
@@ -1386,12 +1430,7 @@ class SMGSpawner {
         return false;
     }
 
-    private nodeSetLightName(node: Node, lightName: string): void {
-        const areaLightInfo = this.sceneObjHolder.lightDataHolder.findAreaLight(lightName);
-        node.setAreaLightInfo(areaLightInfo);
-    }
-
-    private wmNodeSetLightName(node: WorldmapNode, lightName: string): void {
+    private nodeSetLightName(node: Node | WorldmapNode | WorldmapLineNode, lightName: string): void {
         const areaLightInfo = this.sceneObjHolder.lightDataHolder.findAreaLight(lightName);
         node.setAreaLightInfo(areaLightInfo);
     }
@@ -2097,7 +2136,7 @@ class SMGSpawner {
                 const node = new WorldmapNode(modelInstance, pointInfo, mat, modelInstance.animationController);
 
                 // TODO(jstpierre): Parse out the proper area info.
-                this.wmNodeSetLightName(node, lightName);
+                this.nodeSetLightName(node, lightName);
 
                 this.applyAnimationsWM(node, rarc, animOptions);
 
@@ -2126,6 +2165,62 @@ class SMGSpawner {
                     node.setRotateSpeed(30);
             });
         }
+    }
+
+    public spawnWorldmapLine(device: GfxDevice, abortSignal: AbortSignal, zone: ZoneNode, point1Info: WorldmapPointInfo, point2Info: WorldmapPointInfo): void {
+        const modelCache = this.sceneObjHolder.modelCache;
+
+        let modelMatrix = mat4.create();
+        mat4.fromTranslation(modelMatrix, point1Info.position);
+
+        const lightName = '[共通]昼（どら焼き）';
+        const areaLightInfo = this.sceneObjHolder.lightDataHolder;
+
+        let r = vec3.create(); vec3.sub(r,point2Info.position,point1Info.position);
+        modelMatrix[0]  = r[0]/1000;
+        modelMatrix[1]  = r[1]/1000;
+        modelMatrix[2]  = r[2]/1000;
+        vec3.normalize(r, r);
+        let u = vec3.fromValues(0,1,0);
+        modelMatrix[4]  = 0;
+        modelMatrix[5]  = 1;
+        modelMatrix[6]  = 0;
+        let f = vec3.create(); vec3.cross(f, r, u);
+        modelMatrix[8]  = f[0]*2;
+        modelMatrix[9]  = f[1];
+        modelMatrix[10] = f[2]*2;
+
+        const arcName = `MiniRouteLine`;
+
+        const arcPath = `ObjectData/${arcName}.arc`;
+        const modelFilename = `${arcName}.bdl`;
+
+        modelCache.getModel(arcPath, modelFilename).then((bmdModel) => {
+            // If this is a 404, then return null.
+            if (bmdModel === null)
+                return null;
+
+            // Trickery.
+            const rarc = modelCache.archiveCache.get(arcPath);
+
+            const modelInstance = new BMDModelInstance(bmdModel);
+            modelInstance.name = `Route ${point1Info.pointId} to ${point2Info.pointId}`;
+
+            modelInstance.setMaterialVisible('CloseMat_v',false);
+
+            if (this.hasIndirectTexture(bmdModel)) {
+                modelInstance.passMask = SMGPass.INDIRECT;
+            } else {
+                modelInstance.passMask = SMGPass.OPAQUE;
+            }
+            const node = new WorldmapLineNode(modelInstance, point1Info, point2Info, modelMatrix);
+
+            // TODO(jstpierre): Parse out the proper area info.
+            this.nodeSetLightName(node, lightName);
+
+            zone.objects.push(node);
+            this.sceneGraph.addNode(node);
+        });
     }
 
     public placeZones(): void {
@@ -2423,6 +2518,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
                     let points : WorldmapPointInfo[] = [];
                     const worldMapRarc = modelCache.getObjectData(galaxyName.substr(0,10));
                     const worldMapPointBcsv = BCSV.parse(worldMapRarc.findFileData('ActorInfo/PointPos.bcsv'));
+                    const worldMapRouteBcsv = BCSV.parse(worldMapRarc.findFileData('ActorInfo/PointLink.bcsv'));
 
                     for(let i = 0; i<worldMapPointBcsv.records.length; i++){
                         let position = vec3.fromValues(
@@ -2459,6 +2555,15 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
                     for(let i = 0; i<points.length; i++){
                         if(worldMapPointBcsv.records[i][1] as string == 'o')
                             spawner.spawnWorldmapObject(device, abortSignal, spawner.zones[0], points[i]);
+                    }
+
+
+
+                    for(let i = 0; i<worldMapRouteBcsv.records.length; i++){
+                        console.log(worldMapRouteBcsv.records[i]);
+                        spawner.spawnWorldmapLine(device, abortSignal, spawner.zones[0], 
+                            points[worldMapRouteBcsv.records[i][0] as number],
+                            points[worldMapRouteBcsv.records[i][1] as number]);
                     }
                 }
 
