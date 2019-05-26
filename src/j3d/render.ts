@@ -325,8 +325,14 @@ export class MaterialInstance {
 
     public bindTRK1(animationController: AnimationController, trk1: TRK1 | null): void {
         for (let i: ColorKind = 0; i < ColorKind.COUNT; i++) {
-            const trk1Animator = trk1 !== null ? bindTRK1Animator(animationController, trk1, this.name, i) : null;
-            this.trk1Animators[i] = trk1Animator;
+            // If the TRK1 exists, only bind new channels. This is necessary for BPK/BRK animations to coexist.
+            if (trk1 !== null) {
+                const trk1Animator = bindTRK1Animator(animationController, trk1, this.name, i);
+                if (trk1Animator !== null)
+                    this.trk1Animators[i] = trk1Animator;
+            } else {
+                this.trk1Animators[i] = null;
+            }
         }
     }
 

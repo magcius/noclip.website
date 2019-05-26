@@ -50,11 +50,11 @@ export class Light {
     public Color = new Color();
 
     public reset(): void {
-        colorFromRGBA(this.Color, 0, 0, 0, 1);
         vec3.set(this.Position, 0, 0, 0);
         vec3.set(this.Direction, 0, 0, -1);
         vec3.set(this.DistAtten, 0, 0, 0);
         vec3.set(this.CosAtten, 0, 0, 0);
+        colorFromRGBA(this.Color, 0, 0, 0, 1);
     }
 
     public copy(o: Light): void {
