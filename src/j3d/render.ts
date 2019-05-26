@@ -113,7 +113,7 @@ export class ShapeInstance {
     constructor(public shapeData: ShapeData) {
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, depth: number, viewerInput: ViewerRenderInput, materialInstanceState: MaterialInstanceState, shapeInstanceState: ShapeInstanceState): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, depth: number, camera: Camera, materialInstanceState: MaterialInstanceState, shapeInstanceState: ShapeInstanceState): void {
         const materialInstance = this.materialInstance!;
         if (!materialInstance.visible)
             return;
@@ -130,9 +130,9 @@ export class ShapeInstance {
         materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
 
         if (shapeInstanceState.isSkybox)
-            computeViewMatrixSkybox(scratchViewMatrix, viewerInput.camera);
+            computeViewMatrixSkybox(scratchViewMatrix, camera);
         else
-            computeViewMatrix(scratchViewMatrix, viewerInput.camera);
+            computeViewMatrix(scratchViewMatrix, camera);
 
         // Compute a combined model-view matrix based on the root matrix for the materialInstance to compute from.
         // TODO(jstpierre): How does J3D do this? Does it pick a consistent for each packet?
@@ -140,7 +140,7 @@ export class ShapeInstance {
 
         // TODO(jstpierre): Possibly share material instances between shapes? Should track statistics for this...
         template.allocateUniformBuffer(ub_MaterialParams, u_MaterialParamsBufferSize);
-        materialInstance.fillMaterialParams(template, materialInstanceState, scratchModelViewMatrix, shapeInstanceState.rootJointMatrix, viewerInput.camera);
+        materialInstance.fillMaterialParams(template, materialInstanceState, scratchModelViewMatrix, shapeInstanceState.rootJointMatrix, camera);
 
         for (let p = 0; p < shape.packets.length; p++) {
             const packet = shape.packets[p];
@@ -1120,12 +1120,7 @@ export class BMDModelInstance {
         return false;
     }
 
-    public prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput): void {
-        if (!this.visible)
-            return;
-
-        this.animationController.setTimeInMilliseconds(viewerInput.time);
-
+    public calcAnim(camera: Camera): void {
         // Compute our root joint.
         mat4.copy(this.shapeInstanceState.rootJointMatrix, this.modelMatrix);
 
@@ -1141,28 +1136,66 @@ export class BMDModelInstance {
         const disableCulling = this.isSkybox || this.bmdModel.hasBillboard;
 
         this.shapeInstanceState.isSkybox = this.isSkybox;
-        this.updateMatrixArray(viewerInput.camera, this.shapeInstanceState.rootJointMatrix, disableCulling);
+        this.updateMatrixArray(camera, this.shapeInstanceState.rootJointMatrix, disableCulling);
+    }
+
+    private computeDepth(camera: Camera): number {
+        // Use the root joint to calculate depth.
+        const rootJoint = this.bmdModel.bmd.jnt1.joints[0];
+        bboxScratch.transform(rootJoint.bbox, this.modelMatrix);
+        const depth = Math.max(computeViewSpaceDepthFromWorldSpaceAABB(camera, bboxScratch), 0);
+        return depth;
+    }
+
+    // The classic public interface, for compatibility.
+    public prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput): void {
+        if (!this.visible)
+            return;
+
+        this.animationController.setTimeInMilliseconds(viewerInput.time);
+        this.calcAnim(viewerInput.camera);
 
         // If entire model is culled away, then we don't need to render anything.
         if (!this.isAnyShapeVisible())
             return;
 
-        // Use the root joint to calculate depth.
-        const rootJoint = this.bmdModel.bmd.jnt1.joints[0];
-        bboxScratch.transform(rootJoint.bbox, this.modelMatrix);
-        const depth = Math.max(computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, bboxScratch), 0);
-
+        const depth = this.computeDepth(viewerInput.camera);
         const template = renderHelper.renderInstManager.pushTemplateRenderInst();
         template.filterKey = this.passMask;
         for (let i = 0; i < this.shapeInstances.length; i++) {
             const shapeVisibility = this.shapeInstanceState.shapeVisibility[i] && (this.vaf1Animator !== null ? this.vaf1Animator.calcVisibility(i) : true);
-
             if (!shapeVisibility)
                 continue;
-
-            this.shapeInstances[i].prepareToRender(device, renderHelper.renderInstManager, depth, viewerInput, this.materialInstanceState, this.shapeInstanceState);
+            this.shapeInstances[i].prepareToRender(device, renderHelper.renderInstManager, depth, viewerInput.camera, this.materialInstanceState, this.shapeInstanceState);
         }
         renderHelper.renderInstManager.popTemplateRenderInst();
+    }
+
+    // TODO(jstpierre): Sort shapeInstances based on translucent material?
+    private draw(device: GfxDevice, renderHelper: GXRenderHelperGfx, camera: Camera, translucent: boolean): void {
+        if (!this.isAnyShapeVisible())
+            return;
+
+        const depth = this.computeDepth(camera);
+        const template = renderHelper.renderInstManager.pushTemplateRenderInst();
+        template.filterKey = this.passMask;
+        for (let i = 0; i < this.shapeInstances.length; i++) {
+            const shapeVisibility = this.shapeInstanceState.shapeVisibility[i] && (this.vaf1Animator !== null ? this.vaf1Animator.calcVisibility(i) : true);
+            if (!shapeVisibility)
+                continue;
+            if (this.shapeInstances[i].materialInstance.material.translucent !== translucent)
+                continue;
+            this.shapeInstances[i].prepareToRender(device, renderHelper.renderInstManager, depth, camera, this.materialInstanceState, this.shapeInstanceState);
+        }
+        renderHelper.renderInstManager.popTemplateRenderInst();
+    }
+
+    public drawOpa(device: GfxDevice, renderHelper: GXRenderHelperGfx, camera: Camera): void {
+        this.draw(device, renderHelper, camera, false);
+    }
+
+    public drawXlu(device: GfxDevice, renderHelper: GXRenderHelperGfx, camera: Camera): void {
+        this.draw(device, renderHelper, camera, true);
     }
 
     private updateJointMatrixHierarchy(camera: Camera, node: HierarchyNode, parentJointMatrix: mat4, disableCulling: boolean): void {

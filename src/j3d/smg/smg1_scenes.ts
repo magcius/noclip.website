@@ -1,14 +1,27 @@
 
 import * as Viewer from '../../viewer';
-import { SMGSceneDescBase } from "./smg_scenes";
+import { SMGSceneDescBase, ModelCache } from "./smg_scenes";
+import { JMapInfoIter, createCsvParser } from './JMapInfo';
+import { RARC } from '../rarc';
 
 class SMG1SceneDesc extends SMGSceneDescBase {
     protected pathBase: string = `j3d/smg`;
-    protected getLightDataFilename(): string {
-        return `ObjectData/LightData.arc`;
+    public getLightData(modelCache: ModelCache): JMapInfoIter {
+        const lightDataRarc = modelCache.getArchive(`ObjectData/LightData.arc`);
+        return createCsvParser(lightDataRarc.findFileData(`LightData.bcsv`));
     }
-    public getZoneMapFilename(zoneName: string): string {
-        return `StageData/${zoneName}.arc`;
+    public getZoneLightData(modelCache: ModelCache, zoneName: string): JMapInfoIter {
+        const lightDataRarc = modelCache.getArchive(`ObjectData/LightData.arc`);
+        return createCsvParser(lightDataRarc.findFileData(`Light${zoneName}.bcsv`));
+    }
+    public getZoneMapArchive(modelCache: ModelCache, zoneName: string): RARC {
+        return modelCache.getArchive(`StageData/${zoneName}.arc`);
+    }
+    public requestGlobalArchives(modelCache: ModelCache): void {
+        modelCache.requestArchiveData(`ObjectData/LightData.arc`);
+    }
+    public requestZoneArchives(modelCache: ModelCache, zoneName: string): void {
+        modelCache.requestArchiveData(`StageData/${zoneName}.arc`);
     }
 }
 

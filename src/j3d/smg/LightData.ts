@@ -6,6 +6,9 @@ import { Light, lightSetWorldPosition, lightSetWorldDirection, Color } from "../
 import { BMDModelInstance } from "../render";
 import { JMapInfoIter, createCsvParser } from "./JMapInfo";
 import { RARC } from "../rarc";
+import { LightType } from "./DrawBuffer";
+import { assertExists } from "../../util";
+import { SceneObjHolder, LiveActor, SMGSceneDescBase } from "./smg_scenes";
 
 function getValueColor(color: Color, infoIter: JMapInfoIter, prefix: string): void {
     const colorR = infoIter.getValueNumber(`${prefix}R`, 0) / 0xFF;
@@ -95,19 +98,89 @@ export class AreaLightInfo {
     }
 }
 
+export class ActorLightCtrl {
+    public currentAreaLight: AreaLightInfo | null = null;
+
+    constructor(private assocActor: LiveActor, public lightType: LightType = LightType.None) {
+    }
+
+    public initActorLightInfo(sceneObjHolder: SceneObjHolder): void {
+        if (this.lightType !== LightType.None)
+            return;
+        sceneObjHolder.sceneNameObjListExecutor.findLightInfo(this.assocActor);
+    }
+
+    public getActorLight(): ActorLightInfo | null {
+        if (this.currentAreaLight !== null)
+            return this.getTargetActorLight(this.currentAreaLight);
+        else
+            return null;
+    }
+
+    public getTargetActorLight(areaLight: AreaLightInfo): ActorLightInfo | null {
+        if (this.lightType === LightType.Player)
+            return areaLight.Player;
+        else if (this.lightType === LightType.Strong)
+            return areaLight.Strong;
+        else if (this.lightType === LightType.Weak)
+            return areaLight.Weak;
+        else if (this.lightType === LightType.Planet)
+            return areaLight.Planet;
+        else
+            return null;
+    }
+}
+
+class LightZoneInfo {
+    private lightIDToAreaLightName = new Map<number, string>();
+
+    constructor(public zoneName: string, infoIter: JMapInfoIter) {
+        for (let i = 0; i < infoIter.getNumRecords(); i++) {
+            infoIter.setRecord(i);
+            const lightID = infoIter.getValueNumber('LightID');
+            const areaLightName = infoIter.getValueString('AreaLightName');
+            this.lightIDToAreaLightName.set(lightID, areaLightName);
+        }
+    }
+
+    public getAreaLightName(lightID: number): string {
+        return this.lightIDToAreaLightName.get(lightID);
+    }
+}
+
 export class LightDataHolder {
     public areaLightInfos: AreaLightInfo[] = [];
+    public zoneInfos: LightZoneInfo[] = [];
 
-    constructor(lightDataRarc: RARC) {
-        const lightData = createCsvParser(lightDataRarc.findFileData('lightdata.bcsv'));
-
+    constructor(lightData: JMapInfoIter) {
         for (let i = 0; i < lightData.getNumRecords(); i++) {
             lightData.setRecord(i);
             this.areaLightInfos.push(new AreaLightInfo(lightData));
         }
     }
 
+    private ensureZoneInfo(sceneObjHolder: SceneObjHolder, zoneName: string): LightZoneInfo {
+        let zoneInfo = this.zoneInfos.find((zoneInfo) => zoneInfo.zoneName === zoneName);
+        if (zoneInfo === undefined) {
+            const zoneLightData = sceneObjHolder.sceneDesc.getZoneLightData(sceneObjHolder.modelCache, zoneName);
+            zoneInfo = new LightZoneInfo(zoneName, zoneLightData);
+            this.zoneInfos.push(zoneInfo);
+        }
+        return zoneInfo;
+    }
+
+    // The original uses a ZoneLightID which is composed of a ZoneID/LightID pair. We use zone names, not IDs.
+    public getAreaLightName(sceneObjHolder: SceneObjHolder, zoneName: string, lightID: number): string {
+        return this.ensureZoneInfo(sceneObjHolder, zoneName).getAreaLightName(lightID);
+    }
+
     public findAreaLight(areaLightName: string): AreaLightInfo {
         return this.areaLightInfos.find((areaLight) => areaLight.AreaLightName === areaLightName);
+    }
+
+    public findDefaultAreaLight(sceneObjHolder: SceneObjHolder): AreaLightInfo {
+        const stageName = sceneObjHolder.scenarioData.getMasterZoneFilename();
+        const areaLightName = this.getAreaLightName(sceneObjHolder, stageName, -1);
+        return this.findAreaLight(areaLightName);
     }
 }
