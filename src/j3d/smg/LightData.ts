@@ -15,7 +15,7 @@ function getValueColor(color: Color, infoIter: JMapInfoIter, prefix: string): vo
     colorFromRGBA(color, colorR, colorG, colorB, colorA);
 }
 
-export class AreaLight {
+export class LightInfo {
     public Position = vec3.create();
     public Color = colorNew(1, 1, 1, 1);
     public FollowCamera: boolean;
@@ -46,16 +46,16 @@ export class AreaLight {
     }
 }
 
-export class AreaLightConfiguration {
+export class ActorLightInfo {
     public AreaLightName: string;
-    public Light0: AreaLight;
-    public Light1: AreaLight;
+    public Light0: LightInfo;
+    public Light1: LightInfo;
     public Alpha2: number;
     public Ambient = colorNew(1, 1, 1, 1);
 
     constructor(infoIter: JMapInfoIter, prefix: string) {
-        this.Light0 = new AreaLight(infoIter, `${prefix}Light0`);
-        this.Light1 = new AreaLight(infoIter, `${prefix}Light1`);
+        this.Light0 = new LightInfo(infoIter, `${prefix}Light0`);
+        this.Light1 = new LightInfo(infoIter, `${prefix}Light1`);
         getValueColor(this.Ambient, infoIter, `${prefix}Ambient`);
         this.Alpha2 = infoIter.getValueNumber(`${prefix}Alpha2`) / 0xFF;
     }
@@ -80,18 +80,18 @@ export class AreaLightConfiguration {
 export class AreaLightInfo {
     public AreaLightName: string;
     public Interpolate: number;
-    public Player: AreaLightConfiguration;
-    public Strong: AreaLightConfiguration;
-    public Weak: AreaLightConfiguration;
-    public Planet: AreaLightConfiguration;
+    public Player: ActorLightInfo;
+    public Strong: ActorLightInfo;
+    public Weak: ActorLightInfo;
+    public Planet: ActorLightInfo;
 
     constructor(infoIter: JMapInfoIter) {
         this.AreaLightName = infoIter.getValueString('AreaLightName');
         this.Interpolate = infoIter.getValueNumber('Interpolate');
-        this.Player = new AreaLightConfiguration(infoIter, 'Player');
-        this.Strong = new AreaLightConfiguration(infoIter, 'Strong');
-        this.Weak = new AreaLightConfiguration(infoIter, 'Weak');
-        this.Planet = new AreaLightConfiguration(infoIter, 'Planet');
+        this.Player = new ActorLightInfo(infoIter, 'Player');
+        this.Strong = new ActorLightInfo(infoIter, 'Strong');
+        this.Weak = new ActorLightInfo(infoIter, 'Weak');
+        this.Planet = new ActorLightInfo(infoIter, 'Planet');
     }
 }
 

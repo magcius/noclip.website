@@ -17,17 +17,23 @@ function computeModelMatrixFromRecord(dst: mat4, infoIter: JMapInfoIter): void {
     computeModelMatrixSRT(dst, scale_x, scale_y, scale_z, dir_x, dir_y, dir_z, pos_x, pos_y, pos_z);
 }
 
-export function getMapInfoArg0(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg0', fallback); }
-export function getMapInfoArg1(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg1', fallback); }
-export function getMapInfoArg2(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg2', fallback); }
-export function getMapInfoArg3(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg3', fallback); }
-export function getMapInfoArg4(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg4', fallback); }
-export function getMapInfoArg5(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg5', fallback); }
-export function getMapInfoArg6(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg6', fallback); }
-export function getMapInfoArg7(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg7', fallback); }
+export function getJMapInfoArg0(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg0', fallback); }
+export function getJMapInfoArg1(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg1', fallback); }
+export function getJMapInfoArg2(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg2', fallback); }
+export function getJMapInfoArg3(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg3', fallback); }
+export function getJMapInfoArg4(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg4', fallback); }
+export function getJMapInfoArg5(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg5', fallback); }
+export function getJMapInfoArg6(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg6', fallback); }
+export function getJMapInfoArg7(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg7', fallback); }
+
+type Callback<T> = (jmp: JMapInfoIter, i: number) => T;
 
 export class JMapInfoIter {
     constructor(public bcsv: BCSV.Bcsv, public record: BCSV.BcsvRecord) {
+    }
+
+    public copy(): JMapInfoIter {
+        return new JMapInfoIter(this.bcsv, this.record);
     }
 
     public getNumRecords(): number {
@@ -36,6 +42,15 @@ export class JMapInfoIter {
 
     public setRecord(i: number): void {
         this.record = this.bcsv.records[i];
+    }
+
+    public mapRecords<T>(callback: Callback<T>): T[] {
+        const results: T[] = [];
+        for (let i = 0; i < this.bcsv.records.length; i++) {
+            this.setRecord(i);
+            results.push(callback(this, i));
+        }
+        return results;
     }
 
     public getSRTMatrix(m: mat4): void {

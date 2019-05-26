@@ -5,10 +5,10 @@ import { SMGSceneDescBase } from "./smg_scenes";
 class SMG2SceneDesc extends SMGSceneDescBase {
     protected pathBase: string = `j3d/smg2`;
     protected getLightDataFilename(): string {
-        return `${this.pathBase}/LightData/LightData.arc`;
+        return `LightData/LightData.arc`;
     }
-    protected getZoneMapFilename(zoneName: string): string {
-        return `${this.pathBase}/StageData/${zoneName}/${zoneName}Map.arc`;
+    public getZoneMapFilename(zoneName: string): string {
+        return `StageData/${zoneName}/${zoneName}Map.arc`;
     }
 }
 
