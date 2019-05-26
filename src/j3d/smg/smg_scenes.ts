@@ -388,6 +388,7 @@ class SMGRenderer implements Viewer.SceneGfx {
 
         // TODO(jstpierre): This is a very messy combination of the legacy render path and the new render path.
         // Anything in `sceneGraph` is legacy, the new stuff uses the drawBufferHolder.
+        viewerInput.camera.setClipPlanes(20, 500000);
 
         // First, prepare our legacy-style nodes.
         for (let i = 0; i < this.sceneGraph.nodes.length; i++) {
@@ -402,8 +403,6 @@ class SMGRenderer implements Viewer.SceneGfx {
         this.sceneObjHolder.sceneNameObjListExecutor.setIndirectTextureOverride(this.opaqueSceneTexture.gfxTexture);
 
         const renderInstManager = this.renderHelper.renderInstManager;
-
-        viewerInput.camera.setClipPlanes(20, 500000);
 
         const template = this.renderHelper.pushTemplateRenderInst();
         this.renderHelper.fillSceneParams(viewerInput, template);
@@ -748,11 +747,11 @@ class ActorAnimKeeper {
     }
 
     public static tryCreate(actor: LiveActor): ActorAnimKeeper | null {
-        let bcsv = actor.primaryModelArchive.findFileData('ActorAnimCtrl.bcsv');
+        let bcsv = actor.arc.findFileData('ActorAnimCtrl.bcsv');
 
         // Super Mario Galaxy 2 puts these assets in a subfolder.
         if (bcsv === null)
-            bcsv = actor.primaryModelArchive.findFileData('ActorInfo/ActorAnimCtrl.bcsv');
+            bcsv = actor.arc.findFileData('ActorInfo/ActorAnimCtrl.bcsv');
 
         if (bcsv === null)
             return null;
@@ -880,8 +879,8 @@ export class LiveActor extends NameObj implements ObjectBase {
     public actorLightCtrl: ActorLightCtrl | null = null;
 
     // Technically part of ModelManager.
-    public primaryModelArchive: RARC.RARC; // ResourceHolder
-    public primaryModelInstance: BMDModelInstance | null = null; // J3DModel
+    public arc: RARC.RARC; // ResourceHolder
+    public modelInstance: BMDModelInstance | null = null; // J3DModel
 
     constructor(public layerId: LayerId, public name: string) {
         super(name);
@@ -895,11 +894,11 @@ export class LiveActor extends NameObj implements ObjectBase {
     }
 
     public setIndirectTextureOverride(sceneTexture: GfxTexture): void {
-        setIndirectTextureOverride(this.primaryModelInstance, sceneTexture);
+        setIndirectTextureOverride(this.modelInstance, sceneTexture);
     }
 
     public getJointMtx(jointName: string): mat4 {
-        return this.primaryModelInstance.getJointMatrixReference(jointName);
+        return this.modelInstance.getJointMatrixReference(jointName);
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -913,12 +912,12 @@ export class LiveActor extends NameObj implements ObjectBase {
     public initModelManagerWithAnm(sceneObjHolder: SceneObjHolder, objName: string): void {
         const modelCache = sceneObjHolder.modelCache;
 
-        this.primaryModelArchive = modelCache.getObjectData(objName);
+        this.arc = modelCache.getObjectData(objName);
 
-        const bmdModel = modelCache.getModel2(this.primaryModelArchive, `${objName}.bdl`);
-        this.primaryModelInstance = new BMDModelInstance(bmdModel);
+        const bmdModel = modelCache.getModel2(this.arc, `${objName}.bdl`);
+        this.modelInstance = new BMDModelInstance(bmdModel);
         // TODO(jstpierre): connectToScene and friends...
-        this.primaryModelInstance.passMask = SMGPass.OPAQUE;
+        this.modelInstance.passMask = SMGPass.OPAQUE;
 
         // TODO(jstpierre): RE the whole ModelManager / XanimePlayer thing.
         // Seems like it's possible to have a secondary file for BCK animations?
@@ -926,7 +925,7 @@ export class LiveActor extends NameObj implements ObjectBase {
     }
 
     public initDefaultPos(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
-        getJMapInfoPlacementMtx(this.primaryModelInstance.modelMatrix, sceneObjHolder, infoIter);
+        getJMapInfoPlacementMtx(this.modelInstance.modelMatrix, sceneObjHolder, infoIter);
     }
 
     public initLightCtrl(sceneObjHolder: SceneObjHolder): void {
@@ -937,17 +936,17 @@ export class LiveActor extends NameObj implements ObjectBase {
     }
 
     public startAction(animationName: string): void {
-        if (this.actorAnimKeeper === null || !this.actorAnimKeeper.start(this.primaryModelInstance, this.primaryModelArchive, animationName))
+        if (this.actorAnimKeeper === null || !this.actorAnimKeeper.start(this.modelInstance, this.arc, animationName))
             this.tryStartAllAnim(animationName);
     }
 
     public tryStartAllAnim(animationName: string): void {
-        startBckIfExist(this.primaryModelInstance, this.primaryModelArchive, animationName);
-        startBtkIfExist(this.primaryModelInstance, this.primaryModelArchive, animationName);
-        startBrkIfExist(this.primaryModelInstance, this.primaryModelArchive, animationName);
-        startBpkIfExist(this.primaryModelInstance, this.primaryModelArchive, animationName);
-        startBtpIfExist(this.primaryModelInstance, this.primaryModelArchive, animationName);
-        startBvaIfExist(this.primaryModelInstance, this.primaryModelArchive, animationName);
+        startBckIfExist(this.modelInstance, this.arc, animationName);
+        startBtkIfExist(this.modelInstance, this.arc, animationName);
+        startBrkIfExist(this.modelInstance, this.arc, animationName);
+        startBpkIfExist(this.modelInstance, this.arc, animationName);
+        startBtpIfExist(this.modelInstance, this.arc, animationName);
+        startBvaIfExist(this.modelInstance, this.arc, animationName);
     }
 
     public calcAndSetBaseMtx(): void {
@@ -964,12 +963,12 @@ export class LiveActor extends NameObj implements ObjectBase {
             const lightInfo = this.actorLightCtrl.getActorLight();
             if (lightInfo !== null) {
                 // Load the light.
-                lightInfo.setOnModelInstance(this.primaryModelInstance, viewerInput.camera);
+                lightInfo.setOnModelInstance(this.modelInstance, viewerInput.camera);
             }
         }
 
-        this.primaryModelInstance.animationController.setTimeInMilliseconds(viewerInput.time);
-        this.primaryModelInstance.calcAnim(viewerInput.camera);
+        this.modelInstance.animationController.setTimeInMilliseconds(viewerInput.time);
+        this.modelInstance.calcAnim(viewerInput.camera);
     }
 }
 
@@ -987,7 +986,7 @@ class ModelObj extends LiveActor {
 
 function createModelObjBloomModel(layerId: LayerId, sceneObjHolder: SceneObjHolder, objName: string, modelName: string, baseMtx: mat4): ModelObj {
     const bloomModel = new ModelObj(layerId, sceneObjHolder, objName, modelName, baseMtx, 0x1E, -2, -2);
-    bloomModel.primaryModelInstance.passMask = SMGPass.BLOOM;
+    bloomModel.modelInstance.passMask = SMGPass.BLOOM;
     return bloomModel;
 }
 
@@ -1005,7 +1004,7 @@ class MapObjActor extends LiveActor {
 
         const bloomObjName = `${this.name}Bloom`;
         if (sceneObjHolder.modelCache.getObjectData(bloomObjName) !== null) {
-            this.bloomModel = createModelObjBloomModel(layerId, sceneObjHolder, this.name, bloomObjName, this.primaryModelInstance.modelMatrix);
+            this.bloomModel = createModelObjBloomModel(layerId, sceneObjHolder, this.name, bloomObjName, this.modelInstance.modelMatrix);
         }
     }
 
@@ -1027,7 +1026,7 @@ function createSubModel(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, 
 
 function createIndirectPlanetModel(sceneObjHolder: SceneObjHolder, parentActor: LiveActor) {
     const model = createSubModel(sceneObjHolder, parentActor, 'Indirect', 0x1D);
-    model.primaryModelInstance.passMask = SMGPass.INDIRECT;
+    model.modelInstance.passMask = SMGPass.INDIRECT;
     return model;
 }
 
@@ -1096,12 +1095,25 @@ class PartsModel extends LiveActor {
 
     public calcAndSetBaseMtx(): void {
         if (this.fixedPosition !== null)
-            this.fixedPosition.calc(this.primaryModelInstance.modelMatrix);
+            this.fixedPosition.calc(this.modelInstance.modelMatrix);
     }
 }
 
+function createPartsModelIndirectNpc(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, jointName: string) {
+    const model = new PartsModel(sceneObjHolder, "npc parts", objName, parentActor, DrawBufferType.NPC_INDIRECT);
+    model.modelInstance.passMask = SMGPass.INDIRECT;
+    model.initFixedPosition(jointName);
+    return model;
+}
+
+function createIndirectNPCGoods(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, jointName: string) {
+    const model = createPartsModelIndirectNpc(sceneObjHolder, parentActor, objName, jointName);
+    model.initLightCtrl(sceneObjHolder);
+    return model;
+}
+
 function createPartsModelNpcAndFix(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, jointName: string) {
-    const model = new PartsModel(sceneObjHolder, "npc parts", objName, parentActor, 0x10);
+    const model = new PartsModel(sceneObjHolder, "npc parts", objName, parentActor, DrawBufferType.NPC);
     model.initFixedPosition(jointName);
     return model;
 }
@@ -1117,14 +1129,45 @@ function connectToScene(sceneObjHolder: SceneObjHolder, actor: LiveActor, moveme
 }
 
 function connectToSceneNpc(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x28, 0x06, 0x10, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x28, 0x06, DrawBufferType.NPC, -1);
 }
 
-class Kinopio extends LiveActor {
-    private itemGoods = new NPCActorItem();
-    private goods0: PartsModel | null = null;
-    private goods1: PartsModel | null = null;
+function requestArchivesForNPCGoods(sceneObjHolder: SceneObjHolder, npcName: string, index: number): void {
+    const modelCache = sceneObjHolder.modelCache;
 
+    const itemGoods = sceneObjHolder.npcDirector.getNPCItemData(npcName, index);
+    if (itemGoods !== null) {
+        if (itemGoods.goods0)
+            modelCache.requestObjectData(itemGoods.goods0);
+
+        if (itemGoods.goods1)
+            modelCache.requestObjectData(itemGoods.goods1);
+    }
+}
+
+class NPCActor extends LiveActor {
+    public goods0: PartsModel | null = null;
+    public goods1: PartsModel | null = null;
+
+    protected equipment(sceneObjHolder: SceneObjHolder, itemGoods: NPCActorItem, isIndirect: boolean = false): void {
+        if (itemGoods === null)
+            return;
+
+        if (isIndirect) {
+            if (itemGoods.goods0)
+                this.goods0 = createNPCGoods(sceneObjHolder, this, itemGoods.goods0, itemGoods.goodsJoint0);
+            if (itemGoods.goods1)
+                this.goods1 = createNPCGoods(sceneObjHolder, this, itemGoods.goods1, itemGoods.goodsJoint1);
+        } else {
+            if (itemGoods.goods0)
+                this.goods0 = createIndirectNPCGoods(sceneObjHolder, this, itemGoods.goods0, itemGoods.goodsJoint0);
+            if (itemGoods.goods1)
+                this.goods1 = createIndirectNPCGoods(sceneObjHolder, this, itemGoods.goods1, itemGoods.goodsJoint1);
+        }
+    }
+}
+
+class Kinopio extends NPCActor {
     constructor(layerId: LayerId, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(layerId, getObjectName(infoIter));
 
@@ -1135,8 +1178,8 @@ class Kinopio extends LiveActor {
         this.initLightCtrl(sceneObjHolder);
 
         const itemGoodsIdx = getJMapInfoArg7(infoIter);
-        sceneObjHolder.npcDirector.getNPCItemData('Kinopio', itemGoodsIdx, this.itemGoods);
-        this.equipment(sceneObjHolder, this.itemGoods);
+        const itemGoods = sceneObjHolder.npcDirector.getNPCItemData('Kinopio', itemGoodsIdx);
+        this.equipment(sceneObjHolder, itemGoods);
 
         const arg2 = getJMapInfoArg2(infoIter);
         if (arg2 === 0) {
@@ -1176,30 +1219,46 @@ class Kinopio extends LiveActor {
         }
 
         // Bind the color change animation.
-        bindColorChangeAnimation(this.primaryModelInstance, this.primaryModelArchive, getJMapInfoArg1(infoIter, 0));
+        bindColorChangeAnimation(this.modelInstance, this.arc, getJMapInfoArg1(infoIter, 0));
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         super.requestArchives(sceneObjHolder, infoIter);
-
-        const modelCache = sceneObjHolder.modelCache;
         const itemGoodsIdx = getJMapInfoArg7(infoIter);
-        const itemGoods = sceneObjHolder.npcDirector.getNPCItemData('Kinopio', itemGoodsIdx);
-        if (itemGoods !== null) {
-            if (itemGoods.goods0)
-                modelCache.requestObjectData(itemGoods.goods0);
+        requestArchivesForNPCGoods(sceneObjHolder, 'Kinopio', itemGoodsIdx);
+    }
+}
 
-            if (itemGoods.goods1)
-                modelCache.requestObjectData(itemGoods.goods1);
-        }
+class TicoComet extends NPCActor {
+    constructor(layerId: LayerId, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(layerId, getObjectName(infoIter));
+
+        const objName = this.name;
+        this.initModelManagerWithAnm(sceneObjHolder, objName);
+        connectToSceneNpc(sceneObjHolder, this);
+        this.initDefaultPos(sceneObjHolder, infoIter);
+        this.initLightCtrl(sceneObjHolder);
+
+        const itemGoodsIdx = 0;
+        const itemGoods = sceneObjHolder.npcDirector.getNPCItemData('TicoComet', itemGoodsIdx);
+        this.equipment(sceneObjHolder, itemGoods);
+
+        this.goods0.startAction('LeftRotate');
+        this.goods1.startAction('RightRotate');
+
+        startBtkIfExist(this.modelInstance, this.arc, "TicoComet");
+        startBvaIfExist(this.modelInstance, this.arc, "Small0");
+
+        // TODO(jstpierre): setBrkFrameAndStop
+        bindColorChangeAnimation(this.modelInstance, this.arc, 0, "Normal.brk");
+
+        this.startAction('Wait');
     }
 
-    private equipment(sceneObjHolder: SceneObjHolder, itemGoods: NPCActorItem): void {
-        if (itemGoods.goods0)
-            this.goods0 = createNPCGoods(sceneObjHolder, this, itemGoods.goods0, itemGoods.goodsJoint0);
-
-        if (itemGoods.goods1)
-            this.goods1 = createNPCGoods(sceneObjHolder, this, itemGoods.goods1, itemGoods.goodsJoint1);
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        super.requestArchives(sceneObjHolder, infoIter);
+        const itemGoodsIdx = 0;
+        requestArchivesForNPCGoods(sceneObjHolder, 'TicoComet', itemGoodsIdx);
     }
 }
 
@@ -1347,10 +1406,9 @@ class SMGSpawner {
         if (planetFactory !== null)
             return planetFactory;
 
-        if (objName === 'Kinopio')
-            return Kinopio;
-        else
-            return null;
+        if (objName === 'Kinopio')         return Kinopio;
+        else if (objName === 'TicoComet')  return TicoComet;
+        return null;
     }
 
     public spawnObjectLegacy(zone: ZoneNode, layer: number, objinfo: ObjInfo): void {
@@ -1438,12 +1496,6 @@ class SMGSpawner {
                 spawnGraph(name, SceneGraphTag.Normal);
             }
         };
-
-        function animFrame(frame: number) {
-            const animationController = new AnimationController();
-            animationController.setTimeInFrames(frame);
-            return animationController;
-        }
 
         const name = objinfo.objName;
         switch (objinfo.objName) {
@@ -1711,9 +1763,7 @@ class SMGSpawner {
             break;
         case 'TicoShop':
             spawnGraph(`TicoShop`).then(([node, rarc]) => {
-                // TODO(jstpierre): Figure out what the deal is with the BVA not quite working...
                 startBvaIfExist(node.modelInstance, rarc, 'Small0');
-                startBrkIfExist(node.modelInstance, rarc, 'Metamorphosis');
             });
             break;
         case 'BlackHole':
@@ -1974,7 +2024,7 @@ class SMGSpawner {
         }
 
         const factory = this.getNameObjFactory(objName);
-        if (factory !== null)
+        if (factory !== null && factory.requestArchives !== undefined)
             factory.requestArchives(this.sceneObjHolder, infoIter);
     }
 

@@ -16,7 +16,8 @@ export const enum DrawType {
 }
 
 export const enum DrawBufferType {
-    // TODO(jstpierre): Fill in.
+    NPC = 0x10,
+    NPC_INDIRECT = 0x1B,
 }
 
 export class NameObj {

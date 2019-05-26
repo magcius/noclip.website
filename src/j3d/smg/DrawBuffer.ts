@@ -131,7 +131,7 @@ export class DrawBufferGroup {
 
     public registerDrawBuffer(actor: LiveActor): number {
         // The original does far more than this...
-        this.models.push(actor.primaryModelInstance);
+        this.models.push(actor.modelInstance);
         return this.models.length - 1;
     }
 
