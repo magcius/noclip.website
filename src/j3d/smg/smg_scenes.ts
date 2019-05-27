@@ -898,7 +898,7 @@ export class LiveActor extends NameObj implements ObjectBase {
     }
 
     public getJointMtx(jointName: string): mat4 {
-        return this.modelInstance.getDrawMatrixReference(jointName);
+        return this.modelInstance.getJointToWorldMatrixReference(jointName);
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {

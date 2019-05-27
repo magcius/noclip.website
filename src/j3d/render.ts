@@ -25,11 +25,11 @@ import { calcMipChain } from '../gx/gx_texture';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 export class ShapeInstanceState {
-    // One matrix for each joint -- in model space.
-    public jointToModelMatrices: mat4[] = [];
+    // The location of the root joint in world-space.
+    public rootJointToWorld: mat4 = mat4.create();
 
-    // Model space to world space.
-    public modelToWorldMatrix: mat4 = mat4.create();
+    // One matrix for each joint -- in world space.
+    public jointToWorldMatrices: mat4[] = [];
 
     // Draw (DRW1 matrix definitions, incl. envelopes), located in world space.
     public drawToWorldMatrices: mat4[] = [];
@@ -142,9 +142,9 @@ export class ShapeInstance {
             computeViewMatrix(scratchViewMatrix, camera);
 
         // Compute a combined model-view matrix based on the material's joint to compute from.
-        const materialJointMatrix = shapeInstanceState.jointToModelMatrices[this.materialInstance.materialData.jointData.jointIndex];
-        mat4.mul(scratchModelViewMatrix, shapeInstanceState.modelToWorldMatrix, materialJointMatrix);
-        mat4.mul(scratchModelViewMatrix, scratchViewMatrix, scratchModelViewMatrix);
+        const materialJointMatrix = shapeInstanceState.jointToWorldMatrices[this.materialInstance.materialData.jointData.jointIndex];
+        // mat4.mul(scratchModelViewMatrix, shapeInstanceState.modelToWorldMatrix, materialJointMatrix);
+        mat4.mul(scratchModelViewMatrix, scratchViewMatrix, materialJointMatrix);
 
         template.allocateUniformBuffer(ub_MaterialParams, u_MaterialParamsBufferSize);
         materialInstance.fillMaterialParams(template, materialInstanceState, scratchModelViewMatrix, materialJointMatrix, camera);
@@ -582,17 +582,32 @@ export class MaterialInstance {
                     // J3DGetTextureMtx(_88)
                     J3DGetTextureMtx(tmp88, texSRT);
 
-                    // The effect matrix here is typically a GameCube projection matrix.
-                    // Swap it out with our own.
                     if (matrixMode === 0x09) {
-                        // Replaces the effectMatrix (this->_24)
+                        // The effect matrix here is a GameCube projection matrix. Swap it out with out own.
+                        // In Galaxy, this is done in ViewProjmapEffectMtxSetter.
+
+                        // Replaces the effectMatrix (this->_24). B8 is built into this call, as well.
                         texProjPerspMtx(tmp48, camera.fovY, camera.aspect, 0.5, -0.5 * flipYScale, 0.5, 0.5);
+                        // J3DMtxProjConcat(_88, this->_24, _48)
+                        J3DMtxProjConcat(tmp48, tmp88, tmp48);
+                    } else if (matrixMode === 0x08) {
+                        // PSMTXConcat(_88, _B8, _88)
+                        J3DBuildB8Mtx(tmp48, flipY);
+                        mat43Concat(tmp88, tmp88, tmp48);
+
+                        // Multiply the effect matrix by the inverse of the model matrix.
+                        // In Galaxy, this is done in ProjmapEffectMtxSetter.
+                        mat4.invert(tmp48, modelMatrix);
+                        mat4.mul(tmp48, texMtx.effectMatrix, tmp48);
+
                         // J3DMtxProjConcat(_88, this->_24, _48)
                         J3DMtxProjConcat(tmp48, tmp88, tmp48);
                     } else {
                         // PSMTXConcat(_88, _B8, _88)
                         J3DBuildB8Mtx(tmp48, flipY);
                         mat43Concat(tmp88, tmp88, tmp48);
+
+                        mat4.mul(tmp48, texMtx.effectMatrix, tmp48);
 
                         // J3DMtxProjConcat(_88, this->_24, _48)
                         J3DMtxProjConcat(tmp48, tmp88, texMtx.effectMatrix);
@@ -964,7 +979,7 @@ export class BMDModelInstance {
         const bmd = this.bmdModel.bmd;
 
         const numJoints = bmd.jnt1.joints.length;
-        this.shapeInstanceState.jointToModelMatrices = nArray(numJoints, () => mat4.create());
+        this.shapeInstanceState.jointToWorldMatrices = nArray(numJoints, () => mat4.create());
         this.jointVisibility = nArray(numJoints, () => true);
 
         const numMatrices = bmd.drw1.matrixDefinitions.length;
@@ -1156,22 +1171,18 @@ export class BMDModelInstance {
     }
 
     /**
-     * Returns the draw matrix for the joint with name {@param jointName}, if one exists.
+     * Returns the joint-to-world matrix for the joint with name {@param jointName}.
      *
      * This object is not a copy; if an animation updates the joint, the values in this object will be
      * updated as well. You can use this as a way to parent an object to this one.
      */
-    public getDrawMatrixReference(jointName: string): mat4 | null {
+    public getJointToWorldMatrixReference(jointName: string): mat4 {
         // Find the joint index for the given joint name.
         const jointIndex = this.bmdModel.bmd.jnt1.joints.findIndex((j) => j.name === jointName);
         assert(jointIndex >= 0);
 
         // Now find the correct draw matrix for the joint.
-        const drw1Index = this.bmdModel.bmd.drw1.matrixDefinitions.findIndex((j) => j.kind === DRW1MatrixKind.Joint && j.jointIndex === jointIndex);
-        if (drw1Index !== -1)
-            return this.shapeInstanceState.drawToWorldMatrices[drw1Index];
-        else
-            return null;
+        return this.shapeInstanceState.jointToWorldMatrices[jointIndex];
     }
 
     private isAnyShapeVisible(): boolean {
@@ -1194,10 +1205,9 @@ export class BMDModelInstance {
         const disableCulling = this.isSkybox || this.bmdModel.hasBillboard;
 
         this.shapeInstanceState.isSkybox = this.isSkybox;
-        mat4.copy(this.shapeInstanceState.modelToWorldMatrix, this.modelMatrix);
 
-        mat4.identity(scratchModelViewMatrix);
-        this.computeJointMatrixArray(camera, this.bmdModel.rootJoint, scratchModelViewMatrix, disableCulling);
+        mat4.copy(this.shapeInstanceState.rootJointToWorld, this.modelMatrix);
+        this.computeJointMatrixArray(camera, this.bmdModel.rootJoint, this.shapeInstanceState.rootJointToWorld, disableCulling);
 
         this.computeDrawMatrixArray();
     }
@@ -1273,7 +1283,7 @@ export class BMDModelInstance {
             jointMatrix = jnt1.joints[jointIndex].matrix;
         }
 
-        const dstJointMatrix = this.shapeInstanceState.jointToModelMatrices[jointIndex];
+        const dstJointMatrix = this.shapeInstanceState.jointToWorldMatrices[jointIndex];
         mat4.mul(dstJointMatrix, parentJointMatrix, jointMatrix);
 
         // TODO(jstpierre): Use shape visibility if the bbox is empty.
@@ -1283,8 +1293,7 @@ export class BMDModelInstance {
             // Frustum cull.
             // Note to future self: joint bboxes do *not* contain their child joints (see: trees in Super Mario Sunshine).
             // You *cannot* use PARTIAL_INTERSECTION to optimize frustum culling.
-            mat4.mul(scratchModelViewMatrix, this.modelMatrix, dstJointMatrix);
-            bboxScratch.transform(jnt1.joints[jointIndex].bbox, scratchModelViewMatrix);
+            bboxScratch.transform(jnt1.joints[jointIndex].bbox, dstJointMatrix);
             this.jointVisibility[jointIndex] = camera.frustum.contains(bboxScratch);
         }
 
@@ -1303,7 +1312,7 @@ export class BMDModelInstance {
             if (matrixDefinition.kind === DRW1MatrixKind.Joint) {
                 const matrixVisible = this.jointVisibility[matrixDefinition.jointIndex];
                 this.shapeInstanceState.matrixVisibility[i] = matrixVisible;
-                mat4.mul(dst, this.shapeInstanceState.modelToWorldMatrix, this.shapeInstanceState.jointToModelMatrices[matrixDefinition.jointIndex]);
+                mat4.copy(dst, this.shapeInstanceState.jointToWorldMatrices[matrixDefinition.jointIndex]);
             } else if (matrixDefinition.kind === DRW1MatrixKind.Envelope) {
                 dst.fill(0);
                 const envelope = evp1.envelopes[matrixDefinition.envelopeIndex];
@@ -1322,8 +1331,7 @@ export class BMDModelInstance {
                 for (let i = 0; i < envelope.weightedBones.length; i++) {
                     const weightedBone = envelope.weightedBones[i];
                     const inverseBindPose = evp1.inverseBinds[weightedBone.jointIndex];
-                    mat4.mul(matrixScratch, this.shapeInstanceState.jointToModelMatrices[weightedBone.jointIndex], inverseBindPose);
-                    mat4.mul(matrixScratch, this.shapeInstanceState.modelToWorldMatrix, matrixScratch);
+                    mat4.mul(matrixScratch, this.shapeInstanceState.jointToWorldMatrices[weightedBone.jointIndex], inverseBindPose);
                     mat4.multiplyScalarAndAdd(dst, dst, matrixScratch, weightedBone.weight);
                 }
             }
