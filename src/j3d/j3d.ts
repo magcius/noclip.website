@@ -14,7 +14,6 @@ import AnimationController from '../AnimationController';
 import { ColorKind } from '../gx/gx_render';
 import { AABB } from '../Geometry';
 import { getPointHermite } from '../Spline';
-import { Graph, cv } from '../DebugJunk';
 import { computeModelMatrixSRT } from '../MathHelpers';
 import BitMap from '../BitMap';
 
@@ -138,84 +137,26 @@ export class BTI {
 //#endregion
 //#region J3DModel
 //#region INF1
-export enum HierarchyType {
-    End = 0x00,
-    Open = 0x01,
-    Close = 0x02,
-    Joint = 0x10,
-    Material = 0x11,
-    Shape = 0x12,
+export const enum MatrixCalcType {
+    BASIC,
+    XSI,
+    MAYA,
 }
-
-// Build the scene graph.
-export interface HierarchyRootNode {
-    type: HierarchyType.End;
-    children: HierarchyNode[];
-}
-export interface HierarchyShapeNode {
-    type: HierarchyType.Shape;
-    children: HierarchyNode[];
-    shapeIdx: number;
-}
-export interface HierarchyJointNode {
-    type: HierarchyType.Joint;
-    children: HierarchyNode[];
-    jointIdx: number;
-}
-export interface HierarchyMaterialNode {
-    type: HierarchyType.Material;
-    children: HierarchyNode[];
-    materialIdx: number;
-}
-export type HierarchyNode = HierarchyRootNode | HierarchyShapeNode | HierarchyJointNode | HierarchyMaterialNode;
 
 export interface INF1 {
-    sceneGraph: HierarchyNode;
+    hierarchyData: ArrayBufferSlice;
+    matrixCalcType: MatrixCalcType;
 }
 
 function readINF1Chunk(buffer: ArrayBufferSlice): INF1 {
     const view = buffer.createDataView();
-    // unk
+    const matrixCalcType: MatrixCalcType = view.getUint32(0x08) & 0x0F;
     const packetCount = view.getUint32(0x0C);
     const vertexCount = view.getUint32(0x10);
     const hierarchyOffs = view.getUint32(0x14);
+    const hierarchyData = buffer.slice(hierarchyOffs);
 
-    let node: HierarchyNode = { type: HierarchyType.End, children: [] };
-    const parentStack: HierarchyNode[] = [node];
-    let offs = hierarchyOffs;
-
-    outer:
-    while (true) {
-        const type: HierarchyType = view.getUint16(offs + 0x00);
-        const value: number = view.getUint16(offs + 0x02);
-
-        offs += 0x04;
-        switch (type) {
-        case HierarchyType.End:
-            break outer;
-        case HierarchyType.Open:
-            parentStack.unshift(node);
-            break;
-        case HierarchyType.Close:
-            node = parentStack.shift()!;
-            break;
-        case HierarchyType.Joint:
-            node = { type, children: [], jointIdx: value };
-            parentStack[0].children.unshift(node);
-            break;
-        case HierarchyType.Material:
-            node = { type, children: [], materialIdx: value };
-            parentStack[0].children.unshift(node);
-            break;
-        case HierarchyType.Shape:
-            node = { type, children: [], shapeIdx: value };
-            parentStack[0].children.unshift(node);
-            break;
-        }
-    }
-
-    assert(parentStack.length === 1);
-    return { sceneGraph: parentStack.pop() };
+    return { hierarchyData, matrixCalcType };
 }
 //#endregion
 //#region VTX1
@@ -306,7 +247,7 @@ function readVTX1Chunk(buffer: ArrayBufferSlice): VTX1 {
 //#region EVP1
 interface WeightedBone {
     weight: number;
-    index: number;
+    jointIndex: number;
 }
 
 interface Envelope {
@@ -337,7 +278,7 @@ function readEVP1Chunk(buffer: ArrayBufferSlice): EVP1 {
         for (let j = 0; j < numWeightedBones; j++) {
             const index = view.getUint16(weightedBoneIndexTableOffs + weightedBoneId * 0x02);
             const weight = view.getFloat32(weightedBoneWeightTableOffs + weightedBoneId * 0x04);
-            weightedBones.push({ index, weight });
+            weightedBones.push({ jointIndex: index, weight });
             maxBoneIndex = Math.max(maxBoneIndex, index);
             weightedBoneId++;
         }

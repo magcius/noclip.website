@@ -1,7 +1,7 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 
-import { BMD, BMT, HierarchyNode, HierarchyType, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, TTK1Animator, ANK1Animator, bindANK1Animator, bindVAF1Animator, VAF1, VAF1Animator, TPT1, bindTPT1Animator, TPT1Animator, TEX1, BTI_Texture } from './j3d';
+import { BMD, BMT, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, TTK1Animator, ANK1Animator, bindANK1Animator, bindVAF1Animator, VAF1, VAF1Animator, TPT1, bindTPT1Animator, TPT1Animator, TEX1, BTI_Texture, INF1 } from './j3d';
 import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } from './j3d';
 
 import * as GX from '../gx/gx_enum';
@@ -12,7 +12,7 @@ import { GXShapeHelperGfx, GXRenderHelperGfx } from '../gx/gx_render_2';
 import { computeViewMatrix, computeViewMatrixSkybox, Camera, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
 import AnimationController from '../AnimationController';
-import { nArray, assertExists, assert } from '../util';
+import { nArray, assert } from '../util';
 import { AABB } from '../Geometry';
 import { GfxDevice, GfxSampler, GfxTexture, GfxMegaStateDescriptor, GfxProgram } from '../gfx/platform/GfxPlatform';
 import { GfxBufferCoalescer, GfxCoalescedBuffers } from '../gfx/helpers/BufferHelpers';
@@ -25,8 +25,15 @@ import { calcMipChain } from '../gx/gx_texture';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 export class ShapeInstanceState {
-    public rootJointMatrix: mat4 = mat4.create();
-    public matrixArray: mat4[] = [];
+    // One matrix for each joint -- in model space.
+    public jointToModelMatrices: mat4[] = [];
+
+    // Model space to world space.
+    public modelToWorldMatrix: mat4 = mat4.create();
+
+    // Draw (DRW1 matrix definitions, incl. envelopes), located in world space.
+    public drawToWorldMatrices: mat4[] = [];
+
     public matrixVisibility: boolean[] = [];
     public shapeVisibility: boolean[] = [];
     public isSkybox: boolean = false;
@@ -34,6 +41,7 @@ export class ShapeInstanceState {
 
 class ShapeData {
     public shapeHelpers: GXShapeHelperGfx[] = [];
+    public materialIndex: number = -1;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public shape: Shape, coalescedBuffers: GfxCoalescedBuffers[]) {
         for (let i = 0; i < this.shape.packets.length; i++) {
@@ -108,13 +116,12 @@ const scratchViewMatrix = mat4.create();
 const packetParams = new PacketParams();
 export class ShapeInstance {
     public sortKeyBias: number = 0;
-    public materialInstance: MaterialInstance | null = null;
 
-    constructor(public shapeData: ShapeData) {
+    constructor(public shapeData: ShapeData, private materialInstance: MaterialInstance) {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, depth: number, camera: Camera, materialInstanceState: MaterialInstanceState, shapeInstanceState: ShapeInstanceState): void {
-        const materialInstance = this.materialInstance!;
+        const materialInstance = this.materialInstance;
         if (!materialInstance.visible)
             return;
 
@@ -134,13 +141,13 @@ export class ShapeInstance {
         else
             computeViewMatrix(scratchViewMatrix, camera);
 
-        // Compute a combined model-view matrix based on the root matrix for the materialInstance to compute from.
-        // TODO(jstpierre): How does J3D do this? Does it pick a consistent for each packet?
-        mat4.mul(scratchModelViewMatrix, scratchViewMatrix, shapeInstanceState.rootJointMatrix);
+        // Compute a combined model-view matrix based on the material's joint to compute from.
+        const materialJointMatrix = shapeInstanceState.jointToModelMatrices[this.materialInstance.materialData.jointData.jointIndex];
+        mat4.mul(scratchModelViewMatrix, shapeInstanceState.modelToWorldMatrix, materialJointMatrix);
+        mat4.mul(scratchModelViewMatrix, scratchViewMatrix, scratchModelViewMatrix);
 
-        // TODO(jstpierre): Possibly share material instances between shapes? Should track statistics for this...
         template.allocateUniformBuffer(ub_MaterialParams, u_MaterialParamsBufferSize);
-        materialInstance.fillMaterialParams(template, materialInstanceState, scratchModelViewMatrix, shapeInstanceState.rootJointMatrix, camera);
+        materialInstance.fillMaterialParams(template, materialInstanceState, scratchModelViewMatrix, materialJointMatrix, camera);
 
         for (let p = 0; p < shape.packets.length; p++) {
             const packet = shape.packets[p];
@@ -153,7 +160,7 @@ export class ShapeInstance {
                 if (matrixIndex === 0xFFFF)
                     continue;
 
-                mat4.mul(packetParams.u_PosMtx[i], scratchViewMatrix, shapeInstanceState.matrixArray[matrixIndex]);
+                mat4.mul(packetParams.u_PosMtx[i], scratchViewMatrix, shapeInstanceState.drawToWorldMatrices[matrixIndex]);
 
                 if (shape.displayFlags === ShapeDisplayFlags.BILLBOARD) {
                     J3DCalcBBoardMtx(packetParams.u_PosMtx[i]);
@@ -288,12 +295,12 @@ export class MaterialInstance {
     private gfxProgram: GfxProgram | null = null;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
 
-    constructor(public material: MaterialEntry, private materialHacks: GX_Material.GXMaterialHacks) {
+    constructor(public materialData: MaterialData, private materialHacks: GX_Material.GXMaterialHacks) {
+        const material = this.materialData.material;
         this.name = material.name;
-
         this.createProgram();
         this.megaStateFlags = {};
-        GX_Material.translateGfxMegaState(this.megaStateFlags, this.material.gxMaterial);
+        GX_Material.translateGfxMegaState(this.megaStateFlags, material.gxMaterial);
         let layer = !material.gxMaterial.ropInfo.depthTest ? GfxRendererLayer.BACKGROUND : material.translucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.setSortKeyLayer(layer);
     }
@@ -303,13 +310,13 @@ export class MaterialInstance {
     }
 
     public setSortKeyLayer(layer: GfxRendererLayer): void {
-        if (this.material.translucent)
+        if (this.materialData.material.translucent)
             layer |= GfxRendererLayer.TRANSLUCENT;
         this.sortKey = setSortKeyLayer(this.sortKey, layer);
     }
 
     private createProgram(): void {
-        this.program = new GX_Material.GX_Program(this.material.gxMaterial, this.materialHacks);
+        this.program = new GX_Material.GX_Program(this.materialData.material.gxMaterial, this.materialHacks);
         this.gfxProgram = null;
     }
 
@@ -386,7 +393,7 @@ export class MaterialInstance {
     }
 
     public fillMaterialParams(renderInst: GfxRenderInst, materialInstanceState: MaterialInstanceState, modelViewMatrix: mat4, modelMatrix: mat4, camera: Camera): void {
-        const material = this.material;
+        const material = this.materialData.material;
 
         this.calcColor(materialParams.u_Color[ColorKind.MAT0],  ColorKind.MAT0,  materialInstanceState, material.colorMatRegs[0],   false);
         this.calcColor(materialParams.u_Color[ColorKind.MAT1],  ColorKind.MAT1,  materialInstanceState, material.colorMatRegs[1],   false);
@@ -593,6 +600,7 @@ export class MaterialInstance {
 
                     // PSMTXConcat(_48, _94, this->_64)
                     mat43Concat(dst, tmp48, dst);
+                    // mat4.copy(dst, tmp48);
                 }
                 break;
 
@@ -772,13 +780,30 @@ export class TEX1Data {
     }
 }
 
+export class MaterialData {
+    public jointData: JointData | null = null;
+
+    constructor(public material: MaterialEntry) {
+    }
+}
+
+class JointData {
+    public children: JointData[] = [];
+
+    constructor(public jointIndex: number = 0) {
+    }
+}
+
 export class BMDModel {
     private realized: boolean = false;
     public tex1Data: TEX1Data;
 
     private bufferCoalescer: GfxBufferCoalescer;
 
+    public materialData: MaterialData[] = [];
     public shapeData: ShapeData[] = [];
+    public rootJoint!: JointData;
+
     public hasBillboard: boolean = false;
 
     public bbox = new AABB();
@@ -789,6 +814,7 @@ export class BMDModel {
         public bmd: BMD,
         public bmt: BMT | null = null,
     ) {
+        const mat3 = (bmt !== null && bmt.mat3 !== null) ? bmt.mat3 : bmd.mat3;
         const tex1 = (bmt !== null && bmt.tex1 !== null) ? bmt.tex1 : bmd.tex1;
         this.tex1Data = new TEX1Data(device, tex1);
 
@@ -812,8 +838,69 @@ export class BMDModel {
             this.shapeData.push(new ShapeData(device, cache, shp1, this.bufferCoalescer.coalescedBuffers));
         }
 
+        // Load material data.
+        for (let i = 0; i < mat3.materialEntries.length; i++)
+            this.materialData.push(new MaterialData(mat3.materialEntries[i]));
+
+        this.loadHierarchy(bmd.inf1);
+
         // Load scene graph.
         this.realized = true;
+    }
+
+    private loadHierarchy(inf1: INF1): void {
+        enum HierarchyType {
+            End = 0x00,
+            Open = 0x01,
+            Close = 0x02,
+            Joint = 0x10,
+            Material = 0x11,
+            Shape = 0x12,
+        };
+
+        let offs = 0;
+        const view = inf1.hierarchyData.createDataView();
+
+        let currentMaterialIndex: number = -1;
+        // Dummy joint to be the parent of our root node.
+        let lastJoint: JointData = new JointData(-1);
+        let jointStack: JointData[] = [lastJoint];
+        while (true) {
+            const type: HierarchyType = view.getUint16(offs + 0x00);
+            const value = view.getUint16(offs + 0x02);
+
+            if (type === HierarchyType.End) {
+                break;
+            } else if (type === HierarchyType.Open) {
+                jointStack.unshift(lastJoint);
+            } else if (type === HierarchyType.Close) {
+                jointStack.shift();
+            } else if (type === HierarchyType.Joint) {
+                const joint = new JointData(value);
+                jointStack[0].children.push(joint);
+                lastJoint = joint;
+            } else if (type === HierarchyType.Material) {
+                const materialData = this.materialData[value];
+                assert(materialData.jointData === null);
+                materialData.jointData = jointStack[0];
+                currentMaterialIndex = value;
+            } else if (type === HierarchyType.Shape) {
+                const shapeData = this.shapeData[value];
+                assert(shapeData.materialIndex === -1);
+                assert(currentMaterialIndex !== -1);
+                shapeData.materialIndex = currentMaterialIndex;
+            }
+
+            offs += 0x04;
+        }
+
+        assert(jointStack.length === 1);
+        assert(jointStack[0].children.length === 1);
+        this.rootJoint = jointStack[0].children[0];
+
+        // Double-check that we have everything done.
+        for (let i = 0; i < this.shapeData.length; i++)
+            assert(this.shapeData[i].materialIndex !== -1);
     }
 
     public createDefaultTextureMappings(): TextureMapping[] {
@@ -850,8 +937,6 @@ export class BMDModelInstance {
     public ank1Animator: ANK1Animator | null = null;
     public vaf1Animator: VAF1Animator | null = null;
 
-    // Temporary state when calculating bone matrices.
-    private jointMatrices: mat4[];
     private jointVisibility: boolean[];
 
     public materialInstanceState = new MaterialInstanceState();
@@ -867,56 +952,26 @@ export class BMDModelInstance {
         if (materialHacks)
             Object.assign(this.materialHacks, materialHacks);
 
-        this.shapeInstances = this.bmdModel.shapeData.map((shapeData) => {
-            return new ShapeInstance(shapeData);
+        this.materialInstances = this.bmdModel.materialData.map((materialData) => {
+            return new MaterialInstance(materialData, this.materialHacks);
         });
-
-        const mat3 = (this.bmdModel.bmt !== null && this.bmdModel.bmt.mat3 !== null) ? this.bmdModel.bmt.mat3 : this.bmdModel.bmd.mat3;
-        this.materialInstances = mat3.materialEntries.map((materialEntry) => {
-            return new MaterialInstance(materialEntry, this.materialHacks);
+        this.shapeInstances = this.bmdModel.shapeData.map((shapeData) => {
+            return new ShapeInstance(shapeData, this.materialInstances[shapeData.materialIndex]);
         });
 
         this.materialInstanceState.textureMappings = this.bmdModel.createDefaultTextureMappings();
 
         const bmd = this.bmdModel.bmd;
 
-        this.translateSceneGraph(bmd.inf1.sceneGraph);
-
         const numJoints = bmd.jnt1.joints.length;
-        this.jointMatrices = nArray(numJoints, () => mat4.create());
+        this.shapeInstanceState.jointToModelMatrices = nArray(numJoints, () => mat4.create());
         this.jointVisibility = nArray(numJoints, () => true);
 
         const numMatrices = bmd.drw1.matrixDefinitions.length;
-        this.shapeInstanceState.matrixArray = nArray(numMatrices, () => mat4.create());
+        this.shapeInstanceState.drawToWorldMatrices = nArray(numMatrices, () => mat4.create());
         this.shapeInstanceState.matrixVisibility = nArray(numMatrices, () => true);
         const numShapes = bmd.shp1.shapes.length;
         this.shapeInstanceState.shapeVisibility = nArray(numShapes, () => true);
-    }
-
-    private translateSceneGraph(root: HierarchyNode): void {
-        let currentMaterial: MaterialInstance | null = null;
-        let translucentDrawIndex = 0;
-
-        const translateNode = (node: HierarchyNode) => {
-            switch (node.type) {
-            case HierarchyType.Material:
-                currentMaterial = this.materialInstances[node.materialIdx];
-                break;
-            case HierarchyType.Shape:
-                assertExists(currentMaterial);
-                const shapeInstance = this.shapeInstances[node.shapeIdx];
-                shapeInstance.materialInstance = currentMaterial;
-                // Translucent draws need to be in-order, for J3D, as far as I can tell?
-                if (currentMaterial.material.translucent)
-                    shapeInstance.sortKeyBias = ++translucentDrawIndex;
-                break;
-            }
-
-            for (let i = 0; i < node.children.length; i++)
-                translateNode(node.children[i]);
-        };
-
-        translateNode(root);
     }
 
     public destroy(device: GfxDevice): void {
@@ -1101,16 +1156,22 @@ export class BMDModelInstance {
     }
 
     /**
-     * Returns the matrix for the joint with name {@param jointName}.
+     * Returns the draw matrix for the joint with name {@param jointName}, if one exists.
      *
      * This object is not a copy; if an animation updates the joint, the values in this object will be
      * updated as well. You can use this as a way to parent an object to this one.
      */
-    public getJointMatrixReference(jointName: string): mat4 {
-        // Find the matrix that corresponds to the bone.
-        const parentJointIndex = this.bmdModel.bmd.jnt1.joints.findIndex((j) => j.name === jointName);
-        assert(parentJointIndex >= 0);
-        return this.jointMatrices[parentJointIndex];
+    public getDrawMatrixReference(jointName: string): mat4 | null {
+        // Find the joint index for the given joint name.
+        const jointIndex = this.bmdModel.bmd.jnt1.joints.findIndex((j) => j.name === jointName);
+        assert(jointIndex >= 0);
+
+        // Now find the correct draw matrix for the joint.
+        const drw1Index = this.bmdModel.bmd.drw1.matrixDefinitions.findIndex((j) => j.kind === DRW1MatrixKind.Joint && j.jointIndex === jointIndex);
+        if (drw1Index !== -1)
+            return this.shapeInstanceState.drawToWorldMatrices[drw1Index];
+        else
+            return null;
     }
 
     private isAnyShapeVisible(): boolean {
@@ -1121,9 +1182,6 @@ export class BMDModelInstance {
     }
 
     public calcAnim(camera: Camera): void {
-        // Compute our root joint.
-        mat4.copy(this.shapeInstanceState.rootJointMatrix, this.modelMatrix);
-
         // Skyboxes implicitly center themselves around the view matrix (their view translation is removed).
         // While we could represent this, a skybox is always visible in theory so it's probably not worth it
         // to cull. If we ever have a fancy skybox model, then it might be worth it to represent it in world-space.
@@ -1136,7 +1194,12 @@ export class BMDModelInstance {
         const disableCulling = this.isSkybox || this.bmdModel.hasBillboard;
 
         this.shapeInstanceState.isSkybox = this.isSkybox;
-        this.updateMatrixArray(camera, this.shapeInstanceState.rootJointMatrix, disableCulling);
+        mat4.copy(this.shapeInstanceState.modelToWorldMatrix, this.modelMatrix);
+
+        mat4.identity(scratchModelViewMatrix);
+        this.computeJointMatrixArray(camera, this.bmdModel.rootJoint, scratchModelViewMatrix, disableCulling);
+
+        this.computeDrawMatrixArray();
     }
 
     private computeDepth(camera: Camera): number {
@@ -1183,7 +1246,8 @@ export class BMDModelInstance {
             const shapeVisibility = this.shapeInstanceState.shapeVisibility[i] && (this.vaf1Animator !== null ? this.vaf1Animator.calcVisibility(i) : true);
             if (!shapeVisibility)
                 continue;
-            if (this.shapeInstances[i].materialInstance.material.translucent !== translucent)
+            const materialIndex = this.shapeInstances[i].shapeData.materialIndex;
+            if (this.materialInstances[materialIndex].materialData.material.translucent !== translucent)
                 continue;
             this.shapeInstances[i].prepareToRender(device, renderHelper.renderInstManager, depth, camera, this.materialInstanceState, this.shapeInstanceState);
         }
@@ -1198,61 +1262,48 @@ export class BMDModelInstance {
         this.draw(device, renderHelper, camera, true);
     }
 
-    private updateJointMatrixHierarchy(camera: Camera, node: HierarchyNode, parentJointMatrix: mat4, disableCulling: boolean): void {
-        // TODO(jstpierre): Don't pointer chase when traversing hierarchy every frame...
+    private computeJointMatrixArray(camera: Camera, joint: JointData, parentJointMatrix: mat4, disableCulling: boolean): void {
         const jnt1 = this.bmdModel.bmd.jnt1;
+        const jointIndex = joint.jointIndex;
 
-        switch (node.type) {
-        case HierarchyType.Joint:
-            const jointIndex = node.jointIdx;
-
-            let jointMatrix: mat4;
-            if (this.ank1Animator !== null && this.ank1Animator.calcJointMatrix(matrixScratch2, jointIndex)) {
-                jointMatrix = matrixScratch2;
-            } else {
-                jointMatrix = jnt1.joints[jointIndex].matrix;
-            }
-
-            const dstJointMatrix = this.jointMatrices[jointIndex];
-            mat4.mul(dstJointMatrix, parentJointMatrix, jointMatrix);
-
-            // TODO(jstpierre): Use shape visibility if the bbox is empty.
-            if (disableCulling || jnt1.joints[jointIndex].bbox.isEmpty()) {
-                this.jointVisibility[jointIndex] = true;
-            } else {
-                // Frustum cull.
-                // Note to future self: joint bboxes do *not* contain their child joints (see: trees in Super Mario Sunshine).
-                // You *cannot* use PARTIAL_INTERSECTION to optimize frustum culling.
-                bboxScratch.transform(jnt1.joints[jointIndex].bbox, dstJointMatrix);
-                this.jointVisibility[jointIndex] = camera.frustum.contains(bboxScratch);
-            }
-
-            for (let i = 0; i < node.children.length; i++)
-                this.updateJointMatrixHierarchy(camera, node.children[i], dstJointMatrix, disableCulling);
-            break;
-        default:
-            // Pass through.
-            for (let i = 0; i < node.children.length; i++)
-                this.updateJointMatrixHierarchy(camera, node.children[i], parentJointMatrix, disableCulling);
-            break;
+        let jointMatrix: mat4;
+        if (this.ank1Animator !== null && this.ank1Animator.calcJointMatrix(matrixScratch2, jointIndex)) {
+            jointMatrix = matrixScratch2;
+        } else {
+            jointMatrix = jnt1.joints[jointIndex].matrix;
         }
+
+        const dstJointMatrix = this.shapeInstanceState.jointToModelMatrices[jointIndex];
+        mat4.mul(dstJointMatrix, parentJointMatrix, jointMatrix);
+
+        // TODO(jstpierre): Use shape visibility if the bbox is empty.
+        if (disableCulling || jnt1.joints[jointIndex].bbox.isEmpty()) {
+            this.jointVisibility[jointIndex] = true;
+        } else {
+            // Frustum cull.
+            // Note to future self: joint bboxes do *not* contain their child joints (see: trees in Super Mario Sunshine).
+            // You *cannot* use PARTIAL_INTERSECTION to optimize frustum culling.
+            mat4.mul(scratchModelViewMatrix, this.modelMatrix, dstJointMatrix);
+            bboxScratch.transform(jnt1.joints[jointIndex].bbox, scratchModelViewMatrix);
+            this.jointVisibility[jointIndex] = camera.frustum.contains(bboxScratch);
+        }
+
+        for (let i = 0; i < joint.children.length; i++)
+            this.computeJointMatrixArray(camera, joint.children[i], dstJointMatrix, disableCulling);
     }
 
-    private updateMatrixArray(camera: Camera, rootJointMatrix: mat4, disableCulling: boolean): void {
-        const inf1 = this.bmdModel.bmd.inf1;
+    private computeDrawMatrixArray(): void {
         const drw1 = this.bmdModel.bmd.drw1;
         const evp1 = this.bmdModel.bmd.evp1;
-
-        this.updateJointMatrixHierarchy(camera, inf1.sceneGraph, rootJointMatrix, disableCulling);
 
         // Now update our matrix definition array.
         for (let i = 0; i < drw1.matrixDefinitions.length; i++) {
             const matrixDefinition = drw1.matrixDefinitions[i];
-            const dst = this.shapeInstanceState.matrixArray[i];
+            const dst = this.shapeInstanceState.drawToWorldMatrices[i];
             if (matrixDefinition.kind === DRW1MatrixKind.Joint) {
                 const matrixVisible = this.jointVisibility[matrixDefinition.jointIndex];
                 this.shapeInstanceState.matrixVisibility[i] = matrixVisible;
-                mat4.copy(dst, this.jointMatrices[matrixDefinition.jointIndex]);
+                mat4.mul(dst, this.shapeInstanceState.modelToWorldMatrix, this.shapeInstanceState.jointToModelMatrices[matrixDefinition.jointIndex]);
             } else if (matrixDefinition.kind === DRW1MatrixKind.Envelope) {
                 dst.fill(0);
                 const envelope = evp1.envelopes[matrixDefinition.envelopeIndex];
@@ -1260,7 +1311,7 @@ export class BMDModelInstance {
                 let matrixVisible = false;
                 for (let i = 0; i < envelope.weightedBones.length; i++) {
                     const weightedBone = envelope.weightedBones[i];
-                    if (this.jointVisibility[weightedBone.index]) {
+                    if (this.jointVisibility[weightedBone.jointIndex]) {
                         matrixVisible = true;
                         break;
                     }
@@ -1270,8 +1321,9 @@ export class BMDModelInstance {
 
                 for (let i = 0; i < envelope.weightedBones.length; i++) {
                     const weightedBone = envelope.weightedBones[i];
-                    const inverseBindPose = evp1.inverseBinds[weightedBone.index];
-                    mat4.mul(matrixScratch, this.jointMatrices[weightedBone.index], inverseBindPose);
+                    const inverseBindPose = evp1.inverseBinds[weightedBone.jointIndex];
+                    mat4.mul(matrixScratch, this.shapeInstanceState.jointToModelMatrices[weightedBone.jointIndex], inverseBindPose);
+                    mat4.mul(matrixScratch, this.shapeInstanceState.modelToWorldMatrix, matrixScratch);
                     mat4.multiplyScalarAndAdd(dst, dst, matrixScratch, weightedBone.weight);
                 }
             }

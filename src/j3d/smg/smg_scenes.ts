@@ -898,7 +898,7 @@ export class LiveActor extends NameObj implements ObjectBase {
     }
 
     public getJointMtx(jointName: string): mat4 {
-        return this.modelInstance.getJointMatrixReference(jointName);
+        return this.modelInstance.getDrawMatrixReference(jointName);
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -916,7 +916,7 @@ export class LiveActor extends NameObj implements ObjectBase {
 
         const bmdModel = modelCache.getModel2(this.arc, `${objName}.bdl`);
         this.modelInstance = new BMDModelInstance(bmdModel);
-        // TODO(jstpierre): connectToScene and friends...
+        // TODO(jstpierre): Use connectToScene for final draw rather than passMask.
         this.modelInstance.passMask = SMGPass.OPAQUE;
 
         // TODO(jstpierre): RE the whole ModelManager / XanimePlayer thing.
