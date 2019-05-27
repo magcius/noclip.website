@@ -10,7 +10,7 @@ import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor,
 import { BMD, BRK, BTK, BCK, LoopMode, BVA, BTP, BPK } from '../../j3d/j3d';
 import { BMDModel, BMDModelInstance } from '../../j3d/render';
 import * as RARC from '../../j3d/rarc';
-import { EFB_WIDTH, EFB_HEIGHT } from '../../gx/gx_material';
+import { EFB_WIDTH, EFB_HEIGHT, Color } from '../../gx/gx_material';
 import { GXRenderHelperGfx } from '../../gx/gx_render_2';
 import { getPointBezier } from '../../Spline';
 import AnimationController from '../../AnimationController';
@@ -21,11 +21,12 @@ import { colorNewFromRGBA8 } from '../../Color';
 import { BloomPostFXParameters, BloomPostFXRenderer } from './Bloom';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
 import { ColorKind } from '../../gx/gx_render';
-import { JMapInfoIter, getJMapInfoArg7, getJMapInfoArg2, getJMapInfoArg1, createCsvParser } from './JMapInfo';
+import { JMapInfoIter, getJMapInfoArg7, getJMapInfoArg2, getJMapInfoArg1, createCsvParser, getJMapInfoArg3 } from './JMapInfo';
 import { AreaLightInfo, ActorLightInfo, LightDataHolder, ActorLightCtrl } from './LightData';
 import { NPCDirector, NPCActorItem } from './NPCDirector';
 import { MathConstants, computeModelMatrixSRT } from '../../MathHelpers';
 import { NameObj, SceneNameObjListExecutor, MovementType, CalcAnimType, DrawType, DrawBufferType } from './NameObj';
+import { LightType } from './DrawBuffer';
 
 const enum SceneGraphTag {
     Skybox = 'Skybox',
@@ -234,7 +235,7 @@ class Node implements ObjectBase {
         if (!this.visible)
             return;
 
-        this.areaLightConfiguration.setOnModelInstance(this.modelInstance, viewerInput.camera);
+        this.areaLightConfiguration.setOnModelInstance(this.modelInstance, viewerInput.camera, false);
         this.updateSpecialAnimations();
 
         this.modelInstance.animationController.setTimeInMilliseconds(viewerInput.time);
@@ -614,18 +615,6 @@ export class ModelCache {
         return bmdModel;
     }
 
-    public getArchive(archivePath: string): RARC.RARC | null {
-        return assertExists(this.archiveCache.get(archivePath));
-    }
-
-    public getObjectData(objectName: string): RARC.RARC | null {
-        return this.getArchive(`ObjectData/${objectName}.arc`);
-    }
-
-    public requestObjectData(objectName: string): void {
-        this.requestArchiveData(`ObjectData/${objectName}.arc`);
-    }
-
     public requestArchiveData(archivePath: string): Progressable<RARC.RARC | null> {
         if (this.archiveProgressableCache.has(archivePath))
             return this.archiveProgressableCache.get(archivePath);
@@ -644,6 +633,26 @@ export class ModelCache {
 
         this.archiveProgressableCache.set(archivePath, p);
         return p;
+    }
+
+    public isArchiveExist(archivePath: string): boolean {
+        return this.archiveCache.has(archivePath);
+    }
+
+    public getArchive(archivePath: string): RARC.RARC | null {
+        return assertExists(this.archiveCache.get(archivePath));
+    }
+
+    public requestObjectData(objectName: string): void {
+        this.requestArchiveData(`ObjectData/${objectName}.arc`);
+    }
+
+    public isObjectDataExist(objectName: string): boolean {
+        return this.isArchiveExist(`ObjectData/${objectName}.arc`);
+    }
+
+    public getObjectData(objectName: string): RARC.RARC | null {
+        return this.getArchive(`ObjectData/${objectName}.arc`);
     }
 
     public destroy(device: GfxDevice): void {
@@ -916,6 +925,7 @@ export class LiveActor extends NameObj implements ObjectBase {
 
         const bmdModel = modelCache.getModel2(this.arc, `${objName}.bdl`);
         this.modelInstance = new BMDModelInstance(bmdModel);
+        this.modelInstance.animationController.fps = 60;
         // TODO(jstpierre): Use connectToScene for final draw rather than passMask.
         this.modelInstance.passMask = SMGPass.OPAQUE;
 
@@ -963,7 +973,24 @@ export class LiveActor extends NameObj implements ObjectBase {
             const lightInfo = this.actorLightCtrl.getActorLight();
             if (lightInfo !== null) {
                 // Load the light.
-                lightInfo.setOnModelInstance(this.modelInstance, viewerInput.camera);
+                lightInfo.setOnModelInstance(this.modelInstance, viewerInput.camera, true);
+            }
+        } else {
+            // TODO(jstpierre): Move this to the LightDirector?
+            const areaLightInfo = sceneObjHolder.lightDataHolder.findDefaultAreaLight(sceneObjHolder);
+            const lightType = sceneObjHolder.sceneNameObjListExecutor.findLightType(this);
+            if (lightType !== LightType.None) {
+                const lightInfo = areaLightInfo.getActorLightInfo(lightType);
+
+                // The reason we don't setAmbient here is a bit funky -- normally how this works
+                // is that the J3DModel's DLs will set up the ambient, but when an actor has its
+                // own ActorLightCtrl, through a long series of convoluted of actions, the
+                // DrawBufferExecutor associated with that actor will stomp on the actor's ambient light
+                // configuration. Without this, we're left with the DrawBufferGroup's light configuration,
+                // and the actor's DL will override the ambient light there...
+                // Rather than emulate the whole DrawBufferGroup system, quirks and all, just hardcode
+                // this logic.
+                lightInfo.setOnModelInstance(this.modelInstance, viewerInput.camera, false);
             }
         }
 
@@ -990,26 +1017,101 @@ function createModelObjBloomModel(layerId: LayerId, sceneObjHolder: SceneObjHold
     return bloomModel;
 }
 
+class MapObjActorInitInfo {
+    public lightType: LightType = LightType.Planet;
+    public initLightControl: boolean = false;
+}
+
+function connectToSceneCollisionMapObjStrongLight(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    connectToScene(sceneObjHolder, actor, 0x1E, 0x02, 0x0A, -1);
+}
+
+function connectToSceneCollisionMapObjWeakLight(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    connectToScene(sceneObjHolder, actor, 0x1E, 0x02, 0x09, -1);
+}
+
+function connectToSceneCollisionMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    connectToScene(sceneObjHolder, actor, 0x1E, 0x02, 0x08, -1);
+}
+
 class MapObjActor extends LiveActor {
     private bloomModel: ModelObj | null = null;
 
-    constructor(layerId: LayerId, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+    constructor(layerId: LayerId, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, initInfo: MapObjActorInitInfo) {
         super(layerId, getObjectName(infoIter));
 
         this.initModelManagerWithAnm(sceneObjHolder, this.name);
         // TODO(jstpierre): Don't depend on the modelInstance for initDefaultPos.
         this.initDefaultPos(sceneObjHolder, infoIter);
-        this.connectToScene(sceneObjHolder);
-        this.initLightCtrl(sceneObjHolder);
+        this.connectToScene(sceneObjHolder, initInfo);
+        if (initInfo.initLightControl)
+            this.initLightCtrl(sceneObjHolder);
 
         const bloomObjName = `${this.name}Bloom`;
-        if (sceneObjHolder.modelCache.getObjectData(bloomObjName) !== null) {
+        if (sceneObjHolder.modelCache.isObjectDataExist(bloomObjName)) {
             this.bloomModel = createModelObjBloomModel(layerId, sceneObjHolder, this.name, bloomObjName, this.modelInstance.modelMatrix);
         }
     }
 
-    public connectToScene(sceneObjHolder: SceneObjHolder): void {
+    public connectToScene(sceneObjHolder: SceneObjHolder, initInfo: MapObjActorInitInfo): void {
         // Default implementation.
+        if (initInfo.lightType === LightType.Strong)
+            connectToSceneCollisionMapObjStrongLight(sceneObjHolder, this);
+        else if (initInfo.lightType === LightType.Weak)
+            connectToSceneCollisionMapObjWeakLight(sceneObjHolder, this);
+        else
+            connectToSceneCollisionMapObj(sceneObjHolder, this);
+    }
+}
+
+class CollapsePlane extends MapObjActor {
+    constructor(layerId: LayerId, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        const initInfo = new MapObjActorInitInfo();
+        super(layerId, sceneObjHolder, infoIter, initInfo);
+    }
+}
+
+function connectToSceneNoSilhouettedMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    connectToScene(sceneObjHolder, actor, 0x22, 0x05, 0x0D, -1);
+}
+
+const starPieceColorTable = [
+    colorNewFromRGBA8(0x7F7F00FF),
+    colorNewFromRGBA8(0x800099FF),
+    colorNewFromRGBA8(0xE7A000FF),
+    colorNewFromRGBA8(0x46A108FF),
+    colorNewFromRGBA8(0x375AA0FF),
+    colorNewFromRGBA8(0xBE330BFF),
+    colorNewFromRGBA8(0x808080FF),
+];
+
+class StarPiece extends LiveActor {
+    constructor(layerId: LayerId, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(layerId, getObjectName(infoIter));
+
+        this.initModelManagerWithAnm(sceneObjHolder, this.name);
+        connectToSceneNoSilhouettedMapObj(sceneObjHolder, this);
+
+        this.initDefaultPos(sceneObjHolder, infoIter);
+
+        let starPieceColorIndex = getJMapInfoArg3(infoIter, -1);
+        if (starPieceColorIndex < 0 || starPieceColorIndex > 5)
+            starPieceColorIndex = ((Math.random() * 6.0) | 0) + 1;
+
+        this.modelInstance.setColorOverride(ColorKind.MAT0, starPieceColorTable[starPieceColorIndex]);
+
+        const animationController = new AnimationController();
+        animationController.setTimeInFrames(5);
+        this.modelInstance.bindTTK1(BTK.parse(this.arc.findFileData(`Gift.btk`)).ttk1, animationController);
+    }
+
+    public calcAndSetBaseMtx(): void {
+        // The star piece rotates around the Y axis at 15 degrees every exeWait.
+        const enum Constants {
+            SPEED = MathConstants.DEG_TO_RAD * 15,
+        }
+
+        mat4.rotateY(this.modelInstance.modelMatrix, this.modelInstance.modelMatrix, Constants.SPEED);
     }
 }
 
@@ -1031,10 +1133,11 @@ function createIndirectPlanetModel(sceneObjHolder: SceneObjHolder, parentActor: 
 }
 
 class PeachCastleGardenPlanet extends MapObjActor {
-    private indirectModel: PartsModel | null = null;
+    private indirectModel: PartsModel | null;
 
     constructor(layerId: LayerId, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(layerId, sceneObjHolder, infoIter);
+        const initInfo = new MapObjActorInitInfo();
+        super(layerId, sceneObjHolder, infoIter, initInfo);
 
         this.indirectModel = createIndirectPlanetModel(sceneObjHolder, this);
         this.tryStartAllAnim('Before');
@@ -1301,16 +1404,6 @@ class ZoneNode {
     }
 }
 
-const starPieceColorTable = [
-    colorNewFromRGBA8(0x7F7F00FF),
-    colorNewFromRGBA8(0x800099FF),
-    colorNewFromRGBA8(0xE7A000FF),
-    colorNewFromRGBA8(0x46A108FF),
-    colorNewFromRGBA8(0x375AA0FF),
-    colorNewFromRGBA8(0xBE330BFF),
-    colorNewFromRGBA8(0x808080FF),
-];
-
 interface NameObjFactory {
     new(layer: number, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): ObjectBase;
     requestArchives?(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void;
@@ -1406,8 +1499,10 @@ class SMGSpawner {
         if (planetFactory !== null)
             return planetFactory;
 
-        if (objName === 'Kinopio')         return Kinopio;
-        else if (objName === 'TicoComet')  return TicoComet;
+        if (objName === 'Kinopio')            return Kinopio;
+        else if (objName === 'TicoComet')     return TicoComet;
+        else if (objName === 'CollapsePlane') return CollapsePlane;
+        else if (objName === 'StarPiece')     return StarPiece;
         return null;
     }
 
@@ -1443,6 +1538,7 @@ class SMGSpawner {
                 const rarc = modelCache.archiveCache.get(arcPath);
 
                 const modelInstance = new BMDModelInstance(bmdModel);
+                modelInstance.animationController.fps = 60;
                 modelInstance.name = `${objinfo.objName} ${objinfo.objId}`;
 
                 if (tag === SceneGraphTag.Skybox) {
@@ -1673,22 +1769,6 @@ class SMGSpawner {
         case 'ItemBlockSwitch':
             spawnGraph("CoinBlock", SceneGraphTag.Normal);
             break;
-
-        case 'StarPiece':
-            spawnGraph(name, SceneGraphTag.Normal, { btk: 'normal.btk', bck: 'land.bck' }).then(([node, rarc]) => {
-                const animationController = new AnimationController();
-                animationController.setTimeInFrames(objinfo.objArg3);
-
-                // The colors in starpiececc do not match the final colors.
-                // const bpk = BPK.parse(assertExists(rarc.findFileData(`starpiececc.bpk`)));
-
-                let idx = objinfo.objArg3;
-                if (idx < 0 || idx > 5)
-                    idx = ((Math.random() * 6.0) | 0) + 1;
-
-                node.modelInstance.setColorOverride(ColorKind.MAT0, starPieceColorTable[idx]);
-            });
-            return;
 
         case 'SurfingRaceSubGate':
             spawnGraph(name).then(([node, rarc]) => {
@@ -2127,11 +2207,11 @@ class StageDataHolder {
         for (let i = LayerId.COMMON; i <= LayerId.LAYER_MAX; i++) {
             const layerDirName = getLayerDirName(i);
 
-            const objInfo = this.zoneArchive.findFileData(`jmp/placement/${layerDirName}/ObjInfo`);
+            const objInfo = this.zoneArchive.findFileData(`jmp/Placement/${layerDirName}/ObjInfo`);
             if (objInfo !== null)
                 this.iterLayer(i, callback, objInfo, false);
 
-            const mapPartsInfo = this.zoneArchive.findFileData(`jmp/placement/${layerDirName}/MapPartsInfo`);
+            const mapPartsInfo = this.zoneArchive.findFileData(`jmp/MapParts/${layerDirName}/MapPartsInfo`);
             if (mapPartsInfo !== null)
                 this.iterLayer(i, callback, mapPartsInfo, true);
         }
@@ -2141,7 +2221,7 @@ class StageDataHolder {
         for (let i = LayerId.COMMON; i <= LayerId.LAYER_MAX; i++) {
             const layerDirName = getLayerDirName(i);
 
-            const areaObjInfo = this.zoneArchive.findFileData(`jmp/placement/${layerDirName}/AreaObjInfo`);
+            const areaObjInfo = this.zoneArchive.findFileData(`jmp/Placement/${layerDirName}/AreaObjInfo`);
             if (areaObjInfo !== null)
                 this.iterLayer(i, callback, areaObjInfo, false);
         }

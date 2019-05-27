@@ -1,5 +1,5 @@
 
-import { DrawBufferHolder, drawBufferInitialTable } from "./DrawBuffer";
+import { DrawBufferHolder, drawBufferInitialTable, LightType } from "./DrawBuffer";
 import { LiveActor, SceneObjHolder } from "./smg_scenes";
 import { ViewerRenderInput } from "../../viewer";
 import { GfxTexture, GfxDevice } from "../../gfx/platform/GfxPlatform";
@@ -71,9 +71,15 @@ export class SceneNameObjListExecutor {
     }
 
     // NameObjListExecutor::findLightInfo
-    public findLightInfo(actor: LiveActor) {
+    public findLightInfo(actor: LiveActor): void {
         const info = this.nameObjExecuteInfos[actor.nameObjExecuteInfoIndex];
         return this.drawBufferHolder.findLightInfo(info.nameObj as LiveActor, info.drawBufferType, info.drawBufferIndex);
+    }
+
+    // Hack for the lack of individual DrawBuffer execution.
+    public findLightType(actor: LiveActor): LightType {
+        const info = this.nameObjExecuteInfos[actor.nameObjExecuteInfoIndex];
+        return this.drawBufferHolder.findLightType(info.drawBufferType);
     }
 
     public executeDrawAll(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {

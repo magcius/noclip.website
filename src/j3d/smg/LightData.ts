@@ -2,13 +2,12 @@
 import { vec3 } from "gl-matrix";
 import { colorNew, colorCopy, colorFromRGBA } from "../../Color";
 import { Camera } from "../../Camera";
-import { Light, lightSetWorldPosition, lightSetWorldDirection, Color } from "../../gx/gx_material";
+import { Light, Color } from "../../gx/gx_material";
 import { BMDModelInstance } from "../render";
-import { JMapInfoIter, createCsvParser } from "./JMapInfo";
-import { RARC } from "../rarc";
+import { JMapInfoIter } from "./JMapInfo";
 import { LightType } from "./DrawBuffer";
-import { assertExists } from "../../util";
-import { SceneObjHolder, LiveActor, SMGSceneDescBase } from "./smg_scenes";
+import { SceneObjHolder, LiveActor } from "./smg_scenes";
+import { ColorKind } from "../../gx/gx_render";
 
 function getValueColor(color: Color, infoIter: JMapInfoIter, prefix: string): void {
     const colorR = infoIter.getValueNumber(`${prefix}R`, 0) / 0xFF;
@@ -36,13 +35,12 @@ export class LightInfo {
 
     public setLight(dst: Light, camera: Camera): void {
         if (this.FollowCamera) {
-            vec3.copy(dst.Position, this.Position);
-            vec3.set(dst.Direction, 1, 0, 0);
+            vec3.transformMat4(dst.Position, this.Position, camera.worldMatrix);
         } else {
-            lightSetWorldPosition(dst, camera, this.Position[0], this.Position[1], this.Position[2]);
-            lightSetWorldDirection(dst, camera, 1, 0, 0);
+            vec3.copy(dst.Position, this.Position);
         }
 
+        vec3.set(dst.Direction, 1, 0, 0);
         colorCopy(dst.Color, this.Color);
         vec3.set(dst.CosAtten, 1, 0, 0);
         vec3.set(dst.DistAtten, 1, 0, 0);
@@ -63,7 +61,7 @@ export class ActorLightInfo {
         this.Alpha2 = infoIter.getValueNumber(`${prefix}Alpha2`) / 0xFF;
     }
 
-    public setOnModelInstance(modelInstance: BMDModelInstance, camera: Camera): void {
+    public setOnModelInstance(modelInstance: BMDModelInstance, camera: Camera, setAmbient: boolean): void {
         this.Light0.setLight(modelInstance.getGXLightReference(0), camera);
         this.Light1.setLight(modelInstance.getGXLightReference(1), camera);
 
@@ -74,9 +72,8 @@ export class ActorLightInfo {
         vec3.set(light2.DistAtten, 1, 0, 0);
         colorFromRGBA(light2.Color, 0, 0, 0, this.Alpha2);
 
-        // TODO(jstpierre): This doesn't look quite right for planets.
-        // Needs investigation.
-        // modelInstance.setColorOverride(ColorKind.AMB0, this.Ambient, true);
+        if (setAmbient)
+            modelInstance.setColorOverride(ColorKind.AMB0, this.Ambient, true);
     }
 }
 
@@ -95,6 +92,19 @@ export class AreaLightInfo {
         this.Strong = new ActorLightInfo(infoIter, 'Strong');
         this.Weak = new ActorLightInfo(infoIter, 'Weak');
         this.Planet = new ActorLightInfo(infoIter, 'Planet');
+    }
+
+    public getActorLightInfo(lightType: LightType): ActorLightInfo {
+        if (lightType === LightType.Player)
+            return this.Player;
+        else if (lightType === LightType.Strong)
+            return this.Strong;
+        else if (lightType === LightType.Weak)
+            return this.Weak;
+        else if (lightType === LightType.Planet)
+            return this.Planet;
+        else
+            throw "whoops";
     }
 }
 
@@ -118,16 +128,7 @@ export class ActorLightCtrl {
     }
 
     public getTargetActorLight(areaLight: AreaLightInfo): ActorLightInfo | null {
-        if (this.lightType === LightType.Player)
-            return areaLight.Player;
-        else if (this.lightType === LightType.Strong)
-            return areaLight.Strong;
-        else if (this.lightType === LightType.Weak)
-            return areaLight.Weak;
-        else if (this.lightType === LightType.Planet)
-            return areaLight.Planet;
-        else
-            return null;
+        return areaLight.getActorLightInfo(this.lightType);
     }
 }
 

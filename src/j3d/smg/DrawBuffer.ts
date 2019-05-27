@@ -116,7 +116,7 @@ export class DrawBufferGroup {
     // TODO(jstpierre): DrawBufferExecuter? Do we need it? How does the lighting system work, exactly?
     private models: BMDModelInstance[] = [];
 
-    constructor(private tableEntry: DrawBufferInitialTableEntry) {
+    constructor(public tableEntry: DrawBufferInitialTableEntry) {
     }
 
     public drawOpa(device: GfxDevice, renderHelper: GXRenderHelperGfx, camera: Camera): void {
@@ -157,6 +157,10 @@ export class DrawBufferHolder {
 
     public findLightInfo(actor: LiveActor, drawBufferType: DrawBufferType, drawBufferIndex: number): void {
         this.groups[drawBufferType].findLightInfo(actor, drawBufferIndex);
+    }
+
+    public findLightType(drawBufferType: DrawBufferType): LightType {
+        return this.groups[drawBufferType].tableEntry.LightType;
     }
 
     public drawAllBuffers(device: GfxDevice, renderHelper: GXRenderHelperGfx, camera: Camera): void {
