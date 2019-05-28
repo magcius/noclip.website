@@ -10,7 +10,7 @@ import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor,
 import { BMD, BRK, BTK, BCK, LoopMode, BVA, BTP, BPK } from '../../j3d/j3d';
 import { BMDModel, BMDModelInstance } from '../../j3d/render';
 import * as RARC from '../../j3d/rarc';
-import { EFB_WIDTH, EFB_HEIGHT, Color } from '../../gx/gx_material';
+import { EFB_WIDTH, EFB_HEIGHT } from '../../gx/gx_material';
 import { GXRenderHelperGfx } from '../../gx/gx_render_2';
 import { getPointBezier } from '../../Spline';
 import AnimationController from '../../AnimationController';
@@ -27,6 +27,8 @@ import { NPCDirector, NPCActorItem } from './NPCDirector';
 import { MathConstants, computeModelMatrixSRT } from '../../MathHelpers';
 import { NameObj, SceneNameObjListExecutor, MovementType, CalcAnimType, DrawType, DrawBufferType } from './NameObj';
 import { LightType } from './DrawBuffer';
+import * as JPA from '../JPA';
+import * as GX from '../../gx/gx_enum';
 
 const enum SceneGraphTag {
     Skybox = 'Skybox',
@@ -127,7 +129,7 @@ const enum RotateAxis { X, Y, Z };
 
 interface ObjectBase {
     layerId: LayerId;
-    visible: boolean;
+    visibleScenario: boolean;
     setVertexColorsEnabled(v: boolean): void;
     setTexturesEnabled(v: boolean): void;
     setIndirectTextureOverride(sceneTexture: GfxTexture): void;
@@ -148,10 +150,9 @@ function setIndirectTextureOverride(modelInstance: BMDModelInstance, sceneTextur
 
 const scratchVec3 = vec3.create();
 class Node implements ObjectBase {
-    public name: string = '';
     public modelMatrix = mat4.create();
     public planetRecord: BCSV.BcsvRecord | null = null;
-    public visible: boolean = true;
+    public visibleScenario: boolean = true;
 
     private modelMatrixAnimator: ModelMatrixAnimator | null = null;
     private rotateSpeed = 0;
@@ -160,8 +161,7 @@ class Node implements ObjectBase {
     public areaLightInfo: AreaLightInfo;
     public areaLightConfiguration: ActorLightInfo;
 
-    constructor(public layerId: LayerId, public objinfo: ObjInfo, private parentZone: ZoneNode, public modelInstance: BMDModelInstance, parentModelMatrix: mat4, public animationController: AnimationController) {
-        this.name = modelInstance.name;
+    constructor(public name: string, public layerId: LayerId, public objinfo: ObjInfo, public modelInstance: BMDModelInstance, parentModelMatrix: mat4, public animationController: AnimationController) {
         mat4.mul(this.modelMatrix, parentModelMatrix, objinfo.modelMatrix);
         this.setupAnimations();
     }
@@ -232,7 +232,7 @@ class Node implements ObjectBase {
     }
 
     public draw(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        if (!this.visible)
+        if (!this.visibleScenario)
             return;
 
         this.areaLightConfiguration.setOnModelInstance(this.modelInstance, viewerInput.camera, false);
@@ -243,7 +243,7 @@ class Node implements ObjectBase {
     }
 
     public prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
-        if (!this.visible)
+        if (!this.visibleScenario)
             return;
 
         this.modelInstance.drawOpa(device, renderHelper, viewerInput.camera);
@@ -574,6 +574,41 @@ function interpPathPoints(dst: vec3, pt0: Point, pt1: Point, t: number): void {
         getPointBezier_3(dst, p0, c0, c1, p1, t);
 }
 
+function patchBMDModel(bmdModel: BMDModel): void {
+    // This might seem sketchy, but it's actually done by the core game, in ShapePacketUserData::init().
+    return;
+
+    // Look for any materials using environment mapping, and patch them to use a post matrix instead.
+    for (let i = 0; i < bmdModel.materialData.length; i++) {
+        const material = bmdModel.materialData[i].material;
+
+        let currentPostTexMtxIdx = 10;
+        for (let j = 0; j < material.gxMaterial.texGens.length; j++) {
+            const texGen = material.gxMaterial.texGens[j];
+            if (texGen === null)
+                continue;
+            if (texGen.matrix === GX.TexGenMatrix.IDENTITY)
+                continue;
+
+            const texMtxIdx = (texGen.matrix - GX.TexGenMatrix.TEXMTX0) / 3;
+            const texMtx = assertExists(material.texMatrices[texMtxIdx]);
+            if (texMtx.type === 0x06) {
+                if (texMtx.dstTexMtxIdx === texMtxIdx) {
+                    // Double-check that we have no post tex matrices already.
+                    for (let k = 0; k < material.postTexMatrices.length; k++)
+                        assert(material.postTexMatrices[k] === null);
+                    texMtx.dstTexMtxIdx = currentPostTexMtxIdx++;
+                }
+
+                texGen.normalize = true;
+                // TODO(jstpierre): ShapePacketUserData::load() looks like it does something more fancy...
+                texGen.matrix = GX.TexGenMatrix.IDENTITY;
+                texGen.postMatrix = GX.PostTexGenMatrix.PTTEXMTX0 + ((texMtx.dstTexMtxIdx - 10) * 3);
+            }
+        }
+    }
+}
+
 export class ModelCache {
     public archiveProgressableCache = new Map<string, Progressable<RARC.RARC | null>>();
     public archiveCache = new Map<string, RARC.RARC | null>();
@@ -610,6 +645,7 @@ export class ModelCache {
 
         const bmd = BMD.parse(assertExists(rarc.findFileData(modelFilename)));
         const bmdModel = new BMDModel(this.device, this.cache, bmd, null);
+        patchBMDModel(bmdModel);
         this.models.push(bmdModel);
         this.modelCache.set(modelFilename, bmdModel);
         return bmdModel;
@@ -636,7 +672,7 @@ export class ModelCache {
     }
 
     public isArchiveExist(archivePath: string): boolean {
-        return this.archiveCache.has(archivePath);
+        return this.archiveCache.has(archivePath) && this.archiveCache.get(archivePath) !== null;
     }
 
     public getArchive(archivePath: string): RARC.RARC | null {
@@ -838,6 +874,7 @@ export class SceneObjHolder {
     public lightDataHolder: LightDataHolder;
     public npcDirector: NPCDirector;
     public stageDataHolder: StageDataHolder;
+    public particleResourceHolder: ParticleResourceHolder;
 
     // This is technically stored outside the SceneObjHolder, separately
     // on the same singleton, but c'est la vie...
@@ -882,7 +919,8 @@ function getJMapInfoPlacementMtx(dst: mat4, sceneObjHolder: SceneObjHolder, info
 }
 
 export class LiveActor extends NameObj implements ObjectBase {
-    public visible: boolean = true;
+    public visibleScenario: boolean = true;
+    public visibleAlive: boolean = true;
 
     public actorAnimKeeper: ActorAnimKeeper | null = null;
     public actorLightCtrl: ActorLightCtrl | null = null;
@@ -900,6 +938,14 @@ export class LiveActor extends NameObj implements ObjectBase {
     }
 
     public setTexturesEnabled(v: boolean): void {
+    }
+
+    public makeActorAppeared(): void {
+        this.visibleAlive = true;
+    }
+
+    public makeActorDead(): void {
+        this.visibleAlive = false;
     }
 
     public setIndirectTextureOverride(sceneTexture: GfxTexture): void {
@@ -964,7 +1010,7 @@ export class LiveActor extends NameObj implements ObjectBase {
     }
 
     public draw(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        if (!this.visible)
+        if (!this.visibleScenario || !this.visibleAlive)
             return;
 
         this.calcAndSetBaseMtx();
@@ -1323,6 +1369,10 @@ class Kinopio extends NPCActor {
 
         // Bind the color change animation.
         bindColorChangeAnimation(this.modelInstance, this.arc, getJMapInfoArg1(infoIter, 0));
+
+        // If we have an SW_APPEAR, then hide us until that switch triggers...
+        if (infoIter.getValueNumber('SW_APPEAR') !== -1)
+            this.makeActorDead();
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -1395,7 +1445,7 @@ class ZoneNode {
 
     public computeObjectVisibility(): void {
         for (let i = 0; i < this.objects.length; i++)
-            this.objects[i].visible = this.visible && layerVisible(this.objects[i].layerId, this.layerMask);
+            this.objects[i].visibleScenario = this.visible && layerVisible(this.objects[i].layerId, this.layerMask);
 
         for (let i = 0; i < this.subzones.length; i++) {
             this.subzones[i].visible = this.visible && layerVisible(this.subzones[i].stageDataHolder.layer, this.layerMask);
@@ -1506,7 +1556,7 @@ class SMGSpawner {
         return null;
     }
 
-    public spawnObjectLegacy(zone: ZoneNode, layer: number, objinfo: ObjInfo): void {
+    public spawnObjectLegacy(zone: ZoneNode, layerId: LayerId, objinfo: ObjInfo): void {
         const modelMatrixBase = zone.stageDataHolder.placementMtx;
         const modelCache = this.sceneObjHolder.modelCache;
 
@@ -1559,7 +1609,7 @@ class SMGSpawner {
                     modelInstance.passMask = SMGPass.OPAQUE;
                 }
 
-                const node = new Node(layer, objinfo, zone, modelInstance, modelMatrixBase, modelInstance.animationController);
+                const node = new Node(arcName, layerId, objinfo, modelInstance, modelMatrixBase, modelInstance.animationController);
                 node.planetRecord = planetRecord;
 
                 // TODO(jstpierre): Parse out the proper area info.
@@ -2317,6 +2367,21 @@ class PlanetMapCreator {
     }
 }
 
+class ParticleResourceHolder {
+    private effectNames: string[];
+    private jpac: JPA.JPAC;
+
+    constructor(effectArc: RARC.RARC) {
+        const effectNames = createCsvParser(effectArc.findFileData(`ParticleNames.bcsv`));
+        this.effectNames = effectNames.mapRecords((iter) => {
+            return iter.getValueString('name');
+        });
+
+        const jpacData = effectArc.findFileData(`Particles.jpc`);
+        this.jpac = JPA.parse(jpacData);
+    }
+}
+
 export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
     protected pathBase: string;
 
@@ -2340,6 +2405,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
 
         this.requestGlobalArchives(modelCache);
         modelCache.requestArchiveData(scenarioDataFilename);
+        modelCache.requestArchiveData(`ParticleData/Effect.arc`);
         modelCache.requestObjectData('PlanetMapDataTable');
         modelCache.requestObjectData('NPCData');
 
@@ -2364,6 +2430,11 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
             sceneObjHolder.lightDataHolder = new LightDataHolder(this.getLightData(modelCache));
             sceneObjHolder.stageDataHolder = new StageDataHolder(this, modelCache, sceneObjHolder.scenarioData.getMasterZoneFilename());
             sceneObjHolder.sceneNameObjListExecutor = new SceneNameObjListExecutor();
+
+            if (modelCache.isArchiveExist(`ParticleData/Effect.arc`))
+                sceneObjHolder.particleResourceHolder = new ParticleResourceHolder(modelCache.getArchive(`ParticleData/Effect.arc`));
+            else
+                sceneObjHolder.particleResourceHolder = null;
 
             const spawner = new SMGSpawner(galaxyName, this.pathBase, sceneObjHolder);
             spawner.requestArchives();

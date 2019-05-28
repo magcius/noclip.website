@@ -426,11 +426,10 @@ export class MaterialInstance {
         // Bind our texture matrices.
         for (let i = 0; i < material.texMatrices.length; i++) {
             const texMtx = material.texMatrices[i];
-            const dst = materialParams.u_TexMtx[i];
-            mat4.identity(dst);
-
             if (texMtx === null)
                 continue;
+
+            const dst = materialParams.u_TexMtx[texMtx.dstTexMtxIdx];
 
             const flipY = materialParams.m_TextureMapping[i].flipY;
             const flipYScale = flipY ? -1.0 : 1.0;

@@ -556,6 +556,9 @@ export const enum TexMtxProjection {
 }
 
 export interface TexMtx {
+    // Normally the same as the index in the slot, but left patchable so that
+    // users can change the slot that this is writing to.
+    dstTexMtxIdx: number;
     type: number;
     projection: TexMtxProjection;
     effectMatrix: mat4;
@@ -732,11 +735,11 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
 
         const texMatrices: TexMtx[] = [];
         for (let j = 0; j < 10; j++) {
-            texMatrices[j] = null;
             const texMtxIndex = view.getInt16(materialEntryIdx + 0x48 + j * 0x02);
-            if (texMtxIndex < 0)
-                continue;
-            texMatrices[j] = readTexMatrix(texMtxTableOffs, j, texMtxIndex);
+            if (texMtxIndex >= 0)
+                texMatrices[j] = readTexMatrix(texMtxTableOffs, j, texMtxIndex);
+            else
+                texMatrices[j] = null;
         }
         // Since texture matrices are assigned in order, we should never actually have more than 8 of these.
         assert(texMatrices[8] === null);
@@ -1040,7 +1043,8 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             calcTexMtx(matrix, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
         }
 
-        const texMtx: TexMtx = { type, projection, effectMatrix, matrix };
+        const outTexMtxIdx = j;
+        const texMtx: TexMtx = { dstTexMtxIdx: outTexMtxIdx, type, projection, effectMatrix, matrix };
         return texMtx;
     }
 
