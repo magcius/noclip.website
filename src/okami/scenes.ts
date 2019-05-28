@@ -9,6 +9,7 @@ import { mat4 } from "gl-matrix";
 
 import * as ARC from './arc';
 import * as BRRES from '../rres/brres';
+import * as GX from '../gx/gx_enum';
 import { assert, readString, hexzero } from "../util";
 import { BasicRendererHelper } from "../oot3d/render";
 import { GXRenderHelperGfx } from "../gx/gx_render";
@@ -18,14 +19,61 @@ import { computeModelMatrixSRT } from "../MathHelpers";
 
 const pathBase = `okami`;
 
+interface MDEntry {
+    modelMatrix: mat4;
+}
+
+interface MD {
+    instances: MDEntry[];
+}
+
 interface SCREntry {
     index: number;
     materialFlags: number;
     modelMatrix: mat4;
+    texScrollFlags: number;
+    texSpeedS: number;
+    texSpeedT: number;
 }
 
 interface SCR {
     instances: SCREntry[];
+}
+
+class MapPartInstance {
+    private animationController = new AnimationController();
+
+    constructor(private scrMapEntry: SCREntry, private modelInstance: MDL0ModelInstance) {
+        mat4.copy(this.modelInstance.modelMatrix, this.scrMapEntry.modelMatrix);
+    }
+
+    public prepareToRender(renderHelper: GXRenderHelperGfx, viewerRenderInput: Viewer.ViewerRenderInput): void {
+        this.animationController.setTimeInMilliseconds(viewerRenderInput.time);
+
+        const frames = this.animationController.getTimeInFrames();
+        // Guessing this is units per frame... but is it relative to the texture size?
+        let transS = frames * this.scrMapEntry.texSpeedS;
+        let transT = frames * this.scrMapEntry.texSpeedT;
+
+        if (this.scrMapEntry.texScrollFlags & 0x40) {
+            transS *= 0.1;
+            transT *= 0.1;
+        }
+
+        transS /= 400;
+        transT /= 400;
+
+        // Used for the coastline on rf06/rf21, and only this, AFAICT.
+        if (this.scrMapEntry.texScrollFlags & 0x10) {
+            transT = Math.cos(transT) * 0.05;
+        }
+
+        const dst = this.modelInstance.materialInstances[0].materialData.material.texSrts[0].srtMtx;
+        dst[12] = transS;
+        dst[13] = transT;
+
+        this.modelInstance.prepareToRender(renderHelper, viewerRenderInput);
+    }
 }
 
 function parseSCR(buffer: ArrayBufferSlice): SCR {
@@ -35,6 +83,7 @@ function parseSCR(buffer: ArrayBufferSlice): SCR {
     // TODO(jstpierre): Figure out what this flag means. From casual looking
     // it seems to affect whether the fields are stored as int64 or float.
     const storageMode = view.getUint32(0x04);
+    assert(storageMode === 0x01);
 
     const numInstances = view.getUint16(0x08);
     const instances: SCREntry[] = [];
@@ -44,43 +93,60 @@ function parseSCR(buffer: ArrayBufferSlice): SCR {
         const instanceOffs = view.getUint32(instancesTableIdx + 0x00);
 
         const mdbRelOffs = view.getInt32(instanceOffs + 0x00);
-        let index: number;
-        let materialFlags: number;
 
         const modelMatrix = mat4.create();
-        if (storageMode === 0x01) {
-            index = view.getUint32(instanceOffs + 0x04);
-            materialFlags = view.getUint16(instanceOffs + 0x08);
+        const index = view.getUint32(instanceOffs + 0x04);
+        const materialFlags = view.getUint16(instanceOffs + 0x08);
+        const texScrollFlags = view.getUint16(instanceOffs + 0x0A);
+        const texScrollS = view.getUint8(instanceOffs + 0x14);
+        const texScrollT = view.getUint8(instanceOffs + 0x15);
 
-            const scaleX = view.getInt16(instanceOffs + 0x1E) / 0x1000;
-            const scaleY = view.getInt16(instanceOffs + 0x20) / 0x1000;
-            const scaleZ = view.getInt16(instanceOffs + 0x22) / 0x1000;
-            const rotationX = view.getInt16(instanceOffs + 0x24) / 0x800 * Math.PI;
-            const rotationY = view.getInt16(instanceOffs + 0x26) / 0x800 * Math.PI;
-            const rotationZ = view.getInt16(instanceOffs + 0x28) / 0x800 * Math.PI;
-            const translationX = view.getInt16(instanceOffs + 0x2A);
-            const translationY = view.getInt16(instanceOffs + 0x2C);
-            const translationZ = view.getInt16(instanceOffs + 0x2E);
-            computeModelMatrixSRT(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
-        } else if (storageMode === 0x00) {
-            index = i;
-            materialFlags = 0x00;
+        const scaleX = view.getUint16(instanceOffs + 0x1E) / 0x1000;
+        const scaleY = view.getUint16(instanceOffs + 0x20) / 0x1000;
+        const scaleZ = view.getUint16(instanceOffs + 0x22) / 0x1000;
+        const rotationX = view.getInt16(instanceOffs + 0x24) / 0x800 * Math.PI;
+        const rotationY = view.getInt16(instanceOffs + 0x26) / 0x800 * Math.PI;
+        const rotationZ = view.getInt16(instanceOffs + 0x28) / 0x800 * Math.PI;
+        const translationX = view.getInt16(instanceOffs + 0x2A);
+        const translationY = view.getInt16(instanceOffs + 0x2C);
+        const translationZ = view.getInt16(instanceOffs + 0x2E);
+        computeModelMatrixSRT(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+        instances.push({ index, materialFlags, modelMatrix, texScrollFlags, texSpeedS: texScrollS, texSpeedT: texScrollT });
+        instancesTableIdx += 0x04;
+    }
 
-            const scaleX = view.getFloat32(instanceOffs + 0x08);
-            const scaleY = view.getFloat32(instanceOffs + 0x0C);
-            const scaleZ = view.getFloat32(instanceOffs + 0x10);
-            const rotationX = view.getFloat32(instanceOffs + 0x14);
-            const rotationY = view.getFloat32(instanceOffs + 0x18);
-            const rotationZ = view.getFloat32(instanceOffs + 0x1C);
-            const translationX = view.getFloat32(instanceOffs + 0x20);
-            const translationY = view.getFloat32(instanceOffs + 0x24);
-            const translationZ = view.getFloat32(instanceOffs + 0x28);
-            computeModelMatrixSRT(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
-        } else {
-            throw "whoops";
-        }
+    return { instances };
+}
 
-        instances.push({ index, materialFlags, modelMatrix });
+function parseMD(buffer: ArrayBufferSlice): MD {
+    const view = buffer.createDataView();
+
+    assert(readString(buffer, 0x00, 0x04, false) === 'scr\0');
+    const storageMode = view.getUint32(0x04);
+    assert(storageMode === 0x00);
+
+    const numInstances = view.getUint16(0x08);
+    const instances: MDEntry[] = [];
+
+    let instancesTableIdx = 0x10;
+    for (let i = 0; i < numInstances; i++) {
+        const instanceOffs = view.getUint32(instancesTableIdx + 0x00);
+
+        const mdbRelOffs = view.getInt32(instanceOffs + 0x00);
+
+        const modelMatrix = mat4.create();
+
+        const scaleX = view.getFloat32(instanceOffs + 0x08);
+        const scaleY = view.getFloat32(instanceOffs + 0x0C);
+        const scaleZ = view.getFloat32(instanceOffs + 0x10);
+        const rotationX = view.getFloat32(instanceOffs + 0x14);
+        const rotationY = view.getFloat32(instanceOffs + 0x18);
+        const rotationZ = view.getFloat32(instanceOffs + 0x1C);
+        const translationX = view.getFloat32(instanceOffs + 0x20);
+        const translationY = view.getFloat32(instanceOffs + 0x24);
+        const translationZ = view.getFloat32(instanceOffs + 0x28);
+        computeModelMatrixSRT(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+        instances.push({ modelMatrix });
         instancesTableIdx += 0x04;
     }
 
@@ -89,6 +155,7 @@ function parseSCR(buffer: ArrayBufferSlice): SCR {
 
 export class OkamiRenderer extends BasicRendererHelper {
     public modelInstances: MDL0ModelInstance[] = [];
+    public mapPartInstances: MapPartInstance[] = [];
     public models: MDL0Model[] = [];
 
     public animationController = new AnimationController();
@@ -105,6 +172,8 @@ export class OkamiRenderer extends BasicRendererHelper {
         this.renderHelper.fillSceneParams(viewerInput);
         for (let i = 0; i < this.modelInstances.length; i++)
             this.modelInstances[i].prepareToRender(this.renderHelper, viewerInput);
+        for (let i = 0; i < this.mapPartInstances.length; i++)
+            this.mapPartInstances[i].prepareToRender(this.renderHelper, viewerInput);
         this.renderHelper.prepareToRender(hostAccessPass);
     }
 
@@ -124,12 +193,91 @@ const materialHacks: GXMaterialHacks = {
     lightingFudge: (p) => `vec4((0.5 * ${p.matSource}).rgb, ${p.matSource}.a)`,
 };
 
-class OkamiSCPArchiveData {
+function patchModel(mdl0: BRRES.MDL0): void {
+    // The original game doesn't use MDL0 for the materials, just the shapes, so we
+    // have to do a bit of patching to get it to do what we want...
+
+    for (let k = 0; k < mdl0.materials.length; k++) {
+        const material = mdl0.materials[k];
+        assert(material.gxMaterial.tevStages.length === 1);
+        material.gxMaterial.tevStages[0].texMap = 0;
+
+        // TODO(jstpierre): Parse out real material settings.
+        material.gxMaterial.alphaTest.op = GX.AlphaOp.AND;
+        material.gxMaterial.alphaTest.compareA = GX.CompareType.GREATER;
+        material.gxMaterial.alphaTest.referenceA = 0.2;
+
+        material.gxMaterial.alphaTest.compareB = GX.CompareType.ALWAYS;
+    }
+}
+
+class OkamiSCPArchiveDataObject {
+    private mdModels: MDL0Model[][] = [];
+    public md: MD[] = [];
+    public scpArc: ARC.Archive;
+
+    constructor(device: GfxDevice, renderer: OkamiRenderer, scpArcBuffer: ArrayBufferSlice) {
+        this.scpArc = ARC.parse(scpArcBuffer);
+
+        // Load the textures.
+        const brtFile = this.scpArc.files.find((file) => file.type === 'BRT');
+
+        // Several loaded archives appear to be useless. Not sure what to do with them.
+        if (brtFile === undefined)
+            return;
+
+        const textureRRES = BRRES.parse(brtFile.buffer);
+        renderer.textureHolder.addRRESTextures(device, textureRRES);
+
+        const mdFiles = this.scpArc.files.filter((file) => file.type === 'MD');
+        const brsFiles = this.scpArc.files.filter((file) => file.type === 'BRS');
+        assert(mdFiles.length === brsFiles.length);
+
+        for (let i = 0; i < mdFiles.length; i++) {
+            const scrFile = mdFiles[i];
+            const brsFile = brsFiles[i];
+            assert(scrFile.filename === brsFile.filename);
+
+            const scr = parseMD(scrFile.buffer);
+            this.md.push(scr);
+            const brs = BRRES.parse(brsFile.buffer);
+
+            const mdl0Models: MDL0Model[] = [];
+            for (let j = 0; j < brs.mdl0.length; j++) {
+                const mdl0 = brs.mdl0[j];
+                patchModel(mdl0);
+                const mdl0Model = new MDL0Model(device, renderer.renderHelper, brs.mdl0[j], materialHacks);
+                renderer.models.push(mdl0Model);
+                mdl0Models.push(mdl0Model);
+            }
+            this.mdModels.push(mdl0Models);
+        }
+    }
+
+    public createInstances(device: GfxDevice, renderer: OkamiRenderer, modelMatrix: mat4): void {
+        for (let i = 0; i < this.md.length; i++) {
+            const scr = this.md[i];
+            const mdl0Models = this.mdModels[i];
+
+            for (let j = 0; j < scr.instances.length; j++) {
+                const instance = scr.instances[j];
+                const mdl0Model = mdl0Models[j];
+                const modelInstance = new MDL0ModelInstance(device, renderer.renderHelper, renderer.textureHolder, mdl0Model);
+                // TODO(jstpierre): Sort properly
+                modelInstance.setSortKeyLayer(this.md.length - i);
+                mat4.mul(modelInstance.modelMatrix, modelMatrix, instance.modelMatrix);
+                renderer.modelInstances.push(modelInstance);
+            }
+        }
+    }
+}
+
+class OkamiSCPArchiveDataMap {
     private scrModels: MDL0Model[][] = [];
     public scr: SCR[] = [];
     public scpArc: ARC.Archive;
 
-    constructor(device: GfxDevice, renderer: OkamiRenderer, scpArcBuffer: ArrayBufferSlice, isObject: boolean = false) {
+    constructor(device: GfxDevice, renderer: OkamiRenderer, scpArcBuffer: ArrayBufferSlice) {
         this.scpArc = ARC.parse(scpArcBuffer);
 
         // Load the textures.
@@ -144,7 +292,7 @@ class OkamiSCPArchiveData {
 
         // Now load the models. For each model, we have an SCR file that tells
         // us how many instances to place.
-        const scrFiles = this.scpArc.files.filter((file) => file.type === (isObject ? 'MD' : 'SCR'));
+        const scrFiles = this.scpArc.files.filter((file) => file.type === 'SCR');
         const brsFiles = this.scpArc.files.filter((file) => file.type === 'BRS');
         assert(scrFiles.length === brsFiles.length);
 
@@ -160,12 +308,7 @@ class OkamiSCPArchiveData {
             const mdl0Models: MDL0Model[] = [];
             for (let j = 0; j < brs.mdl0.length; j++) {
                 const mdl0 = brs.mdl0[j];
-
-                // XXX(jstpierre): Dumb hacks.
-                for (let k = 0; k < mdl0.materials.length; k++) {
-                    assert(mdl0.materials[k].gxMaterial.tevStages.length === 1);
-                    mdl0.materials[k].gxMaterial.tevStages[0].texMap = 0;
-                }
+                patchModel(mdl0);
 
                 const mdl0Model = new MDL0Model(device, renderer.renderHelper, brs.mdl0[j], materialHacks);
                 renderer.models.push(mdl0Model);
@@ -186,8 +329,9 @@ class OkamiSCPArchiveData {
                 const modelInstance = new MDL0ModelInstance(device, renderer.renderHelper, renderer.textureHolder, mdl0Model);
                 // TODO(jstpierre): Sort properly
                 modelInstance.setSortKeyLayer(this.scr.length - i);
-                mat4.mul(modelInstance.modelMatrix, modelMatrix, instance.modelMatrix);
-                renderer.modelInstances.push(modelInstance);
+
+                const mapPartInstance = new MapPartInstance(instance, modelInstance);
+                renderer.mapPartInstances.push(mapPartInstance);
             }
         }
     }
@@ -195,8 +339,8 @@ class OkamiSCPArchiveData {
 
 class ModelCache {
     private fileProgressableCache = new Map<string, Progressable<ArrayBufferSlice>>();
-    private scpArchiveProgressableCache = new Map<string, Progressable<OkamiSCPArchiveData>>();
-    private scpArchiveCache = new Map<string, OkamiSCPArchiveData>();
+    private scpArchiveProgressableCache = new Map<string, Progressable<OkamiSCPArchiveDataObject>>();
+    private scpArchiveCache = new Map<string, OkamiSCPArchiveDataObject>();
 
     public waitForLoad(): Progressable<any> {
         const v: Progressable<any>[] = [... this.fileProgressableCache.values()];
@@ -213,14 +357,14 @@ class ModelCache {
         return p;
     }
 
-    public fetchSCPArchive(device: GfxDevice, renderer: OkamiRenderer, archivePath: string, abortSignal: AbortSignal, isObject: boolean): Progressable<OkamiSCPArchiveData> {
+    public fetchObjSCPArchive(device: GfxDevice, renderer: OkamiRenderer, archivePath: string, abortSignal: AbortSignal): Progressable<OkamiSCPArchiveDataObject> {
         let p = this.scpArchiveProgressableCache.get(archivePath);
 
         if (p === undefined) {
             p = this.fetchFile(archivePath, abortSignal).then((data) => {
                 return data;
             }).then((data) => {
-                const scpArchiveData = new OkamiSCPArchiveData(device, renderer, data, isObject);
+                const scpArchiveData = new OkamiSCPArchiveDataObject(device, renderer, data);
                 this.scpArchiveCache.set(archivePath, scpArchiveData);
                 return scpArchiveData;
             });
@@ -272,9 +416,9 @@ class OkamiSceneDesc implements Viewer.SceneDesc {
             const scaleX = view.getUint8(tableIdx + 0x04) / 0x14;
             const scaleY = view.getUint8(tableIdx + 0x05) / 0x14;
             const scaleZ = view.getUint8(tableIdx + 0x06) / 0x14;
-            const rotationX = view.getInt8(tableIdx + 0x07) / 90 * Math.PI;
-            const rotationY = view.getInt8(tableIdx + 0x08) / 90 * Math.PI;
-            const rotationZ = view.getInt8(tableIdx + 0x09) / 90 * Math.PI;
+            const rotationX = view.getUint8(tableIdx + 0x07) / 90 * Math.PI;
+            const rotationY = view.getUint8(tableIdx + 0x08) / 90 * Math.PI;
+            const rotationZ = view.getUint8(tableIdx + 0x09) / 90 * Math.PI;
             const translationX = view.getInt16(tableIdx + 0x0A);
             const translationY = view.getInt16(tableIdx + 0x0C);
             const translationZ = view.getInt16(tableIdx + 0x0E);
@@ -289,7 +433,7 @@ class OkamiSceneDesc implements Viewer.SceneDesc {
             if (filename === null)
                 continue;
 
-            modelCache.fetchSCPArchive(device, renderer, `${pathBase}/${filename}`, abortSignal, true).then((scpArcData) => {
+            modelCache.fetchObjSCPArchive(device, renderer, `${pathBase}/${filename}`, abortSignal).then((scpArcData) => {
                 scpArcData.createInstances(device, renderer, modelMatrix);
             });
         }
@@ -303,7 +447,7 @@ class OkamiSceneDesc implements Viewer.SceneDesc {
 
             // Look for the SCP file.
             const scpFile = datArc.files.find((file) => file.type === 'SCP')!;
-            const scpData = new OkamiSCPArchiveData(device, renderer, scpFile.buffer);
+            const scpData = new OkamiSCPArchiveDataMap(device, renderer, scpFile.buffer);
     
             // Create the main instances.
             const rootModelMatrix = mat4.create();
@@ -316,8 +460,8 @@ class OkamiSceneDesc implements Viewer.SceneDesc {
             this.spawnObjectTable(device, renderer, modelCache, tscTableFile.buffer, abortSignal);
 
             // TODO(jstpierre): Don't spawn trees until we figure out how the depth buffer write thing works.
-            // const treTableFile = datArc.files.find((file) => file.type === 'TRE');
-            // this.spawnObjectTable(device, renderer, modelCache, treTableFile.buffer, abortSignal);
+            const treTableFile = datArc.files.find((file) => file.type === 'TRE');
+            this.spawnObjectTable(device, renderer, modelCache, treTableFile.buffer, abortSignal);
 
             return modelCache.waitForLoad().then(() => {
                 renderer.renderHelper.finishBuilder(device, renderer.viewRenderer);

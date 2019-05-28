@@ -338,8 +338,9 @@ const matrixScratchArray = nArray(1, () => mat4.create());
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 export class MDL0ModelInstance {
-    private shapeInstances: ShapeInstance[] = [];
-    private materialInstances: MaterialInstance[] = [];
+    public shapeInstances: ShapeInstance[] = [];
+    public materialInstances: MaterialInstance[] = [];
+
     private chr0NodeAnimator: BRRES.CHR0NodesAnimator | null = null;
     private vis0NodeAnimator: BRRES.VIS0NodesAnimator | null = null;
 
