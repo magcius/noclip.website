@@ -38,11 +38,11 @@ builtinTypeWordSizes.set('Mat4x2', 4*2);
 builtinTypeWordSizes.set('Mat4x3', 4*3);
 builtinTypeWordSizes.set('Mat4x4', 4*4);
 
-function getTypeSize(layouts: Map<string, StructLayout>, type: string): number {
+function getTypeSize(layouts: Map<string, StructLayout>, type: string): number | undefined {
     if (layouts.has(type))
         return assertExists(layouts.get(type)).totalWordSize;
     else
-        return assertExists(builtinTypeWordSizes.get(type));
+        return builtinTypeWordSizes.get(type);
 }
 
 function parseDefinition(layouts: Map<string, StructLayout>, blockName: string, contents: string): StructLayout | null {
