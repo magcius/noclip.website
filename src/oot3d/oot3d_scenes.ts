@@ -282,6 +282,7 @@ const enum ActorId {
     Door_Ana               = 0x009B,
     Bg_Spot02_Objects      = 0x009C,
     Bg_Haka                = 0x009D,
+    En_Rl                  = 0x00A6,
     Demo_Du                = 0x00A8,
     Demo_Im                = 0x00A9,
     En_Heishi2             = 0x00B3,
@@ -1233,6 +1234,11 @@ class SceneDesc implements Viewer.SceneDesc {
             // Hide her veil; it's only used in the opening cutscenes.
             b.shapeInstances[9].visible = false;
         });
+        else if (actor.actorId === ActorId.En_Rl) fetchArchive(`zelda_rl.zar`).then((zar) => {
+            const b = buildModel(zar, `model/raul.cmb`, 0.01);
+            b.bindCSAB(parseCSAB(zar, `anim/rl_matsu.csab`));
+            b.setVertexColorScale(characterLightScale);
+        });
         else if (actor.actorId === ActorId.Demo_Du) fetchArchive(`zelda_du.zar`).then((zar) => {
             const b = buildModel(zar, `model/darunia.cmb`, 0.01);
             b.bindCSAB(parseCSAB(zar, `anim/du_matsu.csab`));
@@ -1809,7 +1815,7 @@ const sceneDescs = [
     new SceneDesc("shrine_n", "Temple of Time (Outside, Night)"),
     new SceneDesc("shrine_r", "Temple of Time (Outside, Adult)"),
     new SceneDesc("tokinoma", "Temple of Time (Interior)"),
-    new SceneDesc("kenjyanoma", "Chamber of the Sages"),
+    new SceneDesc("kenjyanoma", "Chamber of the Sages", 3),
     new SceneDesc("shop", 'Bazaar'),
 
     "Lake Hylia",
