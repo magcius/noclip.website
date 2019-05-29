@@ -6,7 +6,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString, hexzero } from "../util";
 import { BTI } from "./j3d";
 
-interface JPAResource {
+export interface JPAResource {
     resourceId: number;
     data: ArrayBufferSlice;
 }

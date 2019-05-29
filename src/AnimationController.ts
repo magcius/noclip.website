@@ -1,3 +1,4 @@
+import { ViewerRenderInput } from "./viewer";
 
 export default class AnimationController {
     private timeInFrames: number = 0;
@@ -19,5 +20,9 @@ export default class AnimationController {
 
     public setTimeInFrames(newTime: number): void {
         this.timeInFrames = newTime;
+    }
+
+    public setTimeFromViewerInput(viewerInput: ViewerRenderInput): void {
+        this.setTimeInMilliseconds(viewerInput.time);
     }
 }

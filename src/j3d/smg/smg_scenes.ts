@@ -21,7 +21,7 @@ import { colorNewFromRGBA8 } from '../../Color';
 import { BloomPostFXParameters, BloomPostFXRenderer } from './Bloom';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
 import { ColorKind } from '../../gx/gx_render';
-import { JMapInfoIter, getJMapInfoArg7, getJMapInfoArg2, getJMapInfoArg1, createCsvParser, getJMapInfoArg3 } from './JMapInfo';
+import { JMapInfoIter, getJMapInfoArg7, getJMapInfoArg2, getJMapInfoArg1, createCsvParser, getJMapInfoArg3, getJMapInfoArg0 } from './JMapInfo';
 import { AreaLightInfo, ActorLightInfo, LightDataHolder, ActorLightCtrl } from './LightData';
 import { NPCDirector, NPCActorItem } from './NPCDirector';
 import { MathConstants, computeModelMatrixSRT } from '../../MathHelpers';
@@ -1005,15 +1005,17 @@ export class LiveActor extends NameObj implements ObjectBase {
         startBvaIfExist(this.modelInstance, this.arc, animationName);
     }
 
-    public calcAndSetBaseMtx(): void {
+    public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
         // Nothing.
     }
 
     public draw(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        if (!this.visibleScenario || !this.visibleAlive)
+        const visible = this.visibleScenario && this.visibleAlive;
+        this.modelInstance.visible = visible;
+        if (!visible)
             return;
 
-        this.calcAndSetBaseMtx();
+        this.calcAndSetBaseMtx(viewerInput);
 
         if (this.actorLightCtrl !== null) {
             const lightInfo = this.actorLightCtrl.getActorLight();
@@ -1046,13 +1048,11 @@ export class LiveActor extends NameObj implements ObjectBase {
 }
 
 class ModelObj extends LiveActor {
-    protected modelMatrix = mat4.create();
-
     constructor(layerId: LayerId, sceneObjHolder: SceneObjHolder, objName: string, modelName: string, baseMtx: mat4 | null, drawBufferType: DrawBufferType, movementType: MovementType, calcAnimType: CalcAnimType) {
         super(layerId, objName);
         this.initModelManagerWithAnm(sceneObjHolder, modelName);
         if (baseMtx !== null)
-            mat4.copy(this.modelMatrix, baseMtx);
+            mat4.copy(this.modelInstance.modelMatrix, baseMtx);
         connectToScene(sceneObjHolder, this, movementType, calcAnimType, drawBufferType, -1);
     }
 }
@@ -1061,6 +1061,10 @@ function createModelObjBloomModel(layerId: LayerId, sceneObjHolder: SceneObjHold
     const bloomModel = new ModelObj(layerId, sceneObjHolder, objName, modelName, baseMtx, 0x1E, -2, -2);
     bloomModel.modelInstance.passMask = SMGPass.BLOOM;
     return bloomModel;
+}
+
+function createModelObjMapObj(layerId: LayerId, sceneObjHolder: SceneObjHolder, objName: string, modelName: string, baseMtx: mat4): ModelObj {
+    return new ModelObj(layerId, sceneObjHolder, objName, modelName, baseMtx, 0x08, -2, -2);
 }
 
 class MapObjActorInitInfo {
@@ -1132,6 +1136,9 @@ const starPieceColorTable = [
 ];
 
 class StarPiece extends LiveActor {
+    private spinAnimationController = new AnimationController(60);
+    private modelMatrix = mat4.create();
+
     constructor(layerId: LayerId, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(layerId, getObjectName(infoIter));
 
@@ -1139,6 +1146,7 @@ class StarPiece extends LiveActor {
         connectToSceneNoSilhouettedMapObj(sceneObjHolder, this);
 
         this.initDefaultPos(sceneObjHolder, infoIter);
+        mat4.copy(this.modelMatrix, this.modelInstance.modelMatrix);
 
         let starPieceColorIndex = getJMapInfoArg3(infoIter, -1);
         if (starPieceColorIndex < 0 || starPieceColorIndex > 5)
@@ -1151,13 +1159,91 @@ class StarPiece extends LiveActor {
         this.modelInstance.bindTTK1(BTK.parse(this.arc.findFileData(`Gift.btk`)).ttk1, animationController);
     }
 
-    public calcAndSetBaseMtx(): void {
-        // The star piece rotates around the Y axis at 15 degrees every exeWait.
+    public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
+        // The star piece rotates around the Y axis at 15 degrees every frame.
         const enum Constants {
             SPEED = MathConstants.DEG_TO_RAD * 15,
         }
 
-        mat4.rotateY(this.modelInstance.modelMatrix, this.modelInstance.modelMatrix, Constants.SPEED);
+        this.spinAnimationController.setTimeFromViewerInput(viewerInput);
+        const timeInFrames = this.spinAnimationController.getTimeInFrames();
+
+        mat4.rotateY(this.modelInstance.modelMatrix, this.modelMatrix, timeInFrames * Constants.SPEED);
+    }
+}
+
+class EarthenPipe extends LiveActor {
+    constructor(layerId: number, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(layerId, getObjectName(infoIter));
+
+        this.initModelManagerWithAnm(sceneObjHolder, "EarthenPipe");
+        this.initDefaultPos(sceneObjHolder, infoIter);
+
+        const colorFrame = getJMapInfoArg7(infoIter, 0);
+        const animationController = new AnimationController();
+        animationController.setTimeInFrames(colorFrame);
+        this.modelInstance.bindTRK1(BRK.parse(this.arc.findFileData(`EarthenPipe.brk`)).trk1, animationController);
+
+        connectToSceneCollisionMapObjStrongLight(sceneObjHolder, this);
+
+        const isHidden = getJMapInfoArg2(infoIter, 0);
+        if (isHidden !== 0)
+            this.modelInstance.visible = false;
+    }
+}
+
+function setMatrixScaleNoRotation(dst: mat4, scaleX: number, scaleY: number, scaleZ: number): void {
+    dst[0] = scaleX;
+    dst[1] = 0.0;
+    dst[2] = 0.0;
+
+    dst[4] = 0.0;
+    dst[5] = scaleY;
+    dst[6] = 0.0;
+
+    dst[8] = 0.0;
+    dst[9] = 0.0;
+    dst[10] = scaleZ;
+}
+
+class BlackHole extends LiveActor {
+    private blackHoleModel: ModelObj;
+
+    constructor(layerId: number, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(layerId, getObjectName(infoIter));
+
+        this.initModelManagerWithAnm(sceneObjHolder, 'BlackHoleRange');
+        this.initDefaultPos(sceneObjHolder, infoIter);
+        connectToSceneCollisionMapObj(sceneObjHolder, this);
+        this.blackHoleModel = createModelObjMapObj(layerId, sceneObjHolder, 'BlackHole', 'BlackHole', this.modelInstance.modelMatrix);
+
+        startBckIfExist(this.modelInstance, this.arc, `BlackHoleRange`);
+        startBtkIfExist(this.modelInstance, this.arc, `BlackHoleRange`);
+        startBtkIfExist(this.blackHoleModel.modelInstance, this.blackHoleModel.arc, `BlackHole`);
+
+        let rangeScale: number;
+        const arg0 = getJMapInfoArg0(infoIter, -1);
+        if (arg0 < 0) {
+            // If this is a cube, we behave slightly differently wrt. scaling.
+            if (getObjectName(infoIter) !== 'BlackHoleCube')
+                rangeScale = infoIter.getValueNumber('scale_x');
+            else
+                rangeScale = 1.0;
+        } else {
+            rangeScale = arg0 / 1000.0;
+        }
+
+        this.updateModelScale(rangeScale, rangeScale);
+    }
+
+    private updateModelScale(rangeScale: number, holeScale: number): void {
+        setMatrixScaleNoRotation(this.modelInstance.modelMatrix, rangeScale, rangeScale, rangeScale);
+        setMatrixScaleNoRotation(this.blackHoleModel.modelInstance.modelMatrix, 0.5 * holeScale, 0.5 * holeScale, 0.5 * holeScale);
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        sceneObjHolder.modelCache.requestObjectData(`BlackHole`);
+        sceneObjHolder.modelCache.requestObjectData(`BlackHoleRange`);
     }
 }
 
@@ -1553,6 +1639,9 @@ class SMGSpawner {
         else if (objName === 'TicoComet')     return TicoComet;
         else if (objName === 'CollapsePlane') return CollapsePlane;
         else if (objName === 'StarPiece')     return StarPiece;
+        else if (objName === 'EarthenPipe')   return EarthenPipe;
+        else if (objName === 'BlackHole')     return BlackHole;
+        else if (objName === 'BlackHoleCube') return BlackHole;
         return null;
     }
 
@@ -1781,7 +1870,6 @@ class SMGSpawner {
         case 'BrightSun':
         case 'LavaSparksS':
         case 'InstantInferno':
-        case 'BlackHoleCube':
         case 'FireRing':
         case 'FireBar':
         case 'JumpBeamer':
@@ -1894,14 +1982,6 @@ class SMGSpawner {
         case 'TicoShop':
             spawnGraph(`TicoShop`).then(([node, rarc]) => {
                 startBvaIfExist(node.modelInstance, rarc, 'Small0');
-            });
-            break;
-        case 'BlackHole':
-        case 'BlackHoleCube':
-            spawnGraph(`BlackHole`);
-            spawnGraph(`BlackHoleRange`).then(([node, rarc]) => {
-                const scale = node.objinfo.objArg0 >= 0 ? (node.objinfo.objArg0 / 1000) : 1;
-                mat4.scale(node.modelMatrix, node.modelMatrix, [scale, scale, scale]);
             });
             break;
 
@@ -2379,6 +2459,14 @@ class ParticleResourceHolder {
 
         const jpacData = effectArc.findFileData(`Particles.jpc`);
         this.jpac = JPA.parse(jpacData);
+    }
+
+    public getUserIndex(name: string): number {
+        return this.effectNames.findIndex((effectName) => effectName === name);
+    }
+
+    public getResource(name: string): JPA.JPAResource {
+        return this.jpac.effects[this.getUserIndex(name)];
     }
 }
 
