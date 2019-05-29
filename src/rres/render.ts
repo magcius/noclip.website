@@ -218,9 +218,18 @@ class MaterialInstance {
         const dstPre = materialParams.u_TexMtx[texIdx];
         const dstPost = materialParams.u_PostTexMtx[texIdx];
 
+        // Fast path.
+        if (texSrt.mapMode === BRRES.MapMode.TEXCOORD) {
+            this.calcTexAnimMatrix(dstPost, texIdx);
+            return;
+        }
+
         if (texSrt.mapMode === BRRES.MapMode.PROJECTION) {
             const camera = viewerInput.camera;
             texProjPerspMtx(dstPost, camera.fovY, camera.aspect, 0.5, -0.5 * flipYScale, 0.5, 0.5);
+
+            // Apply effect matrix.
+            mat4.mul(dstPost, texSrt.effectMtx, dstPost);
 
             // XXX(jstpierre): ZSS hack. Reference camera 31 is set up by the game to be an overhead
             // camera for clouds. Kill it until we can emulate the camera system in this game...
@@ -232,18 +241,16 @@ class MaterialInstance {
         } else if (texSrt.mapMode === BRRES.MapMode.ENV_CAMERA) {
             texEnvMtx(dstPost, 0.5, -0.5 * flipYScale, 0.5, 0.5);
 
+            // Apply effect matrix.
+            mat4.mul(dstPost, texSrt.effectMtx, dstPost);
+
             // Fill in the dstPre with our normal matrix.
             mat4.mul(dstPre, viewerInput.camera.viewMatrix, modelMatrix);
             computeNormalMatrix(dstPre, dstPre);
-        } else {
-            mat4.identity(dstPost);
         }
 
-        // Apply effect matrix.
-        mat4.mul(dstPost, texSrt.effectMtx, dstPost);
-
         // Calculate SRT.
-        this.calcTexAnimMatrix(matrixScratch, texIdx);
+        this.calcTexAnimMatrix(dstPost, texIdx);
 
         // SRT matrices have translation in fourth component, but we want our matrix to have translation
         // in third component. Swap.

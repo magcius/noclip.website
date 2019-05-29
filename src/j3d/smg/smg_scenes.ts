@@ -2385,7 +2385,7 @@ class ParticleResourceHolder {
 export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
     protected pathBase: string;
 
-    constructor(public name: string, public galaxyName: string, public id: string = galaxyName) {
+    constructor(public name: string, public galaxyName: string, public forceScenario: number | null = null, public id: string = galaxyName) {
     }
 
     public abstract getLightData(modelCache: ModelCache): JMapInfoIter;
@@ -2418,7 +2418,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
                 const zoneName = scenarioData.zoneNames[i];
                 this.requestZoneArchives(modelCache, zoneName);
             }
-        
+
             sceneObjHolder.scenarioData = scenarioData;
             return modelCache.waitForLoad();
         }).then(() => {

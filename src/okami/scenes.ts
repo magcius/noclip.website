@@ -10,12 +10,14 @@ import { mat4 } from "gl-matrix";
 import * as ARC from './arc';
 import * as BRRES from '../rres/brres';
 import * as GX from '../gx/gx_enum';
-import { assert, readString, hexzero } from "../util";
+import { assert, readString, hexzero, assertExists } from "../util";
 import { BasicRendererHelper } from "../oot3d/render";
 import { GXRenderHelperGfx } from "../gx/gx_render";
 import AnimationController from "../AnimationController";
 import { GXMaterialHacks } from "../gx/gx_material";
-import { computeModelMatrixSRT } from "../MathHelpers";
+import { computeModelMatrixSRT, computeMatrixWithoutRotation } from "../MathHelpers";
+import { computeModelMatrixYBillboard } from "../Camera";
+import { colorFromRGBA } from "../Color";
 
 const pathBase = `okami`;
 
@@ -28,9 +30,10 @@ interface MD {
 }
 
 interface SCREntry {
-    index: number;
+    modelIndex: number;
     materialFlags: number;
     modelMatrix: mat4;
+    bbFlags: number;
     texScrollFlags: number;
     texSpeedS: number;
     texSpeedT: number;
@@ -43,12 +46,15 @@ interface SCR {
 class MapPartInstance {
     private animationController = new AnimationController();
 
-    constructor(private scrMapEntry: SCREntry, private modelInstance: MDL0ModelInstance) {
-        mat4.copy(this.modelInstance.modelMatrix, this.scrMapEntry.modelMatrix);
+    constructor(private scrMapEntry: SCREntry, private modelMatrix: mat4, private modelInstance: MDL0ModelInstance) {
+        mat4.copy(this.modelInstance.modelMatrix, this.modelMatrix);
+
+        if (!!(this.scrMapEntry.bbFlags & 0x03))
+            computeMatrixWithoutRotation(this.modelMatrix, this.modelMatrix);
     }
 
-    public prepareToRender(renderHelper: GXRenderHelperGfx, viewerRenderInput: Viewer.ViewerRenderInput): void {
-        this.animationController.setTimeInMilliseconds(viewerRenderInput.time);
+    public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
+        this.animationController.setTimeInMilliseconds(viewerInput.time);
 
         const frames = this.animationController.getTimeInFrames();
         // Guessing this is units per frame... but is it relative to the texture size?
@@ -60,8 +66,8 @@ class MapPartInstance {
             transT *= 0.1;
         }
 
-        transS /= 400;
-        transT /= 400;
+        transS /= 800;
+        transT /= 800;
 
         // Used for the coastline on rf06/rf21, and only this, AFAICT.
         if (this.scrMapEntry.texScrollFlags & 0x10) {
@@ -72,7 +78,16 @@ class MapPartInstance {
         dst[12] = transS;
         dst[13] = transT;
 
-        this.modelInstance.prepareToRender(renderHelper, viewerRenderInput);
+        if (!!(this.scrMapEntry.bbFlags & 0x03)) {
+            computeModelMatrixYBillboard(this.modelInstance.modelMatrix, viewerInput.camera);
+            mat4.mul(this.modelInstance.modelMatrix, this.modelMatrix, this.modelInstance.modelMatrix);
+        }
+
+        this.modelInstance.prepareToRender(renderHelper, viewerInput);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.modelInstance.destroy(device);
     }
 }
 
@@ -96,10 +111,11 @@ function parseSCR(buffer: ArrayBufferSlice): SCR {
 
         const modelMatrix = mat4.create();
         const index = view.getUint32(instanceOffs + 0x04);
-        const materialFlags = view.getUint16(instanceOffs + 0x08);
+        const bbFlags = view.getUint16(instanceOffs + 0x08);
         const texScrollFlags = view.getUint16(instanceOffs + 0x0A);
-        const texScrollS = view.getUint8(instanceOffs + 0x14);
-        const texScrollT = view.getUint8(instanceOffs + 0x15);
+        const materialFlags = view.getUint16(instanceOffs + 0x0C);
+        const texSpeedS = view.getUint8(instanceOffs + 0x14);
+        const texSpeedT = view.getUint8(instanceOffs + 0x15);
 
         const scaleX = view.getUint16(instanceOffs + 0x1E) / 0x1000;
         const scaleY = view.getUint16(instanceOffs + 0x20) / 0x1000;
@@ -111,7 +127,7 @@ function parseSCR(buffer: ArrayBufferSlice): SCR {
         const translationY = view.getInt16(instanceOffs + 0x2C);
         const translationZ = view.getInt16(instanceOffs + 0x2E);
         computeModelMatrixSRT(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
-        instances.push({ index, materialFlags, modelMatrix, texScrollFlags, texSpeedS: texScrollS, texSpeedT: texScrollT });
+        instances.push({ modelIndex: index, bbFlags, materialFlags, modelMatrix, texScrollFlags, texSpeedS, texSpeedT });
         instancesTableIdx += 0x04;
     }
 
@@ -153,9 +169,49 @@ function parseMD(buffer: ArrayBufferSlice): MD {
     return { instances };
 }
 
+class ModelCache {
+    private fileProgressableCache = new Map<string, Progressable<ArrayBufferSlice>>();
+    private scpArchiveProgressableCache = new Map<string, Progressable<OkamiSCPArchiveDataObject>>();
+    private scpArchiveCache = new Map<string, OkamiSCPArchiveDataObject>();
+
+    public waitForLoad(): Progressable<any> {
+        const v: Progressable<any>[] = [... this.fileProgressableCache.values()];
+        return Progressable.all(v).then(() => {
+            // XXX(jstpierre): Don't ask.
+            return null;
+        });
+    }
+
+    private fetchFile(path: string, abortSignal: AbortSignal): Progressable<ArrayBufferSlice> {
+        assert(!this.fileProgressableCache.has(path));
+        const p = fetchData(path, abortSignal);
+        this.fileProgressableCache.set(path, p);
+        return p;
+    }
+
+    public fetchObjSCPArchive(device: GfxDevice, renderer: OkamiRenderer, objectTypeId: number, objectId: number, abortSignal: AbortSignal): Progressable<OkamiSCPArchiveDataObject> {
+        const filename = assertExists(getObjectFilename(objectTypeId, objectId));
+        const archivePath = `${pathBase}/${filename}`;
+        let p = this.scpArchiveProgressableCache.get(archivePath);
+
+        if (p === undefined) {
+            p = this.fetchFile(archivePath, abortSignal).then((data) => {
+                return data;
+            }).then((data) => {
+                const scpArchiveData = new OkamiSCPArchiveDataObject(device, renderer, data, objectTypeId, objectId, archivePath);
+                this.scpArchiveCache.set(archivePath, scpArchiveData);
+                return scpArchiveData;
+            });
+            this.scpArchiveProgressableCache.set(archivePath, p);
+        }
+
+        return p;
+    }
+}
+
 export class OkamiRenderer extends BasicRendererHelper {
-    public modelInstances: MDL0ModelInstance[] = [];
     public mapPartInstances: MapPartInstance[] = [];
+    public objectInstances: ObjectInstance[] = [];
     public models: MDL0Model[] = [];
 
     public animationController = new AnimationController();
@@ -170,10 +226,10 @@ export class OkamiRenderer extends BasicRendererHelper {
     protected prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         this.animationController.setTimeInMilliseconds(viewerInput.time);
         this.renderHelper.fillSceneParams(viewerInput);
-        for (let i = 0; i < this.modelInstances.length; i++)
-            this.modelInstances[i].prepareToRender(this.renderHelper, viewerInput);
         for (let i = 0; i < this.mapPartInstances.length; i++)
             this.mapPartInstances[i].prepareToRender(this.renderHelper, viewerInput);
+        for (let i = 0; i < this.objectInstances.length; i++)
+            this.objectInstances[i].prepareToRender(this.renderHelper, viewerInput);
         this.renderHelper.prepareToRender(hostAccessPass);
     }
 
@@ -184,8 +240,10 @@ export class OkamiRenderer extends BasicRendererHelper {
         this.renderHelper.destroy(device);
         for (let i = 0; i < this.models.length; i++)
             this.models[i].destroy(device);
-        for (let i = 0; i < this.modelInstances.length; i++)
-            this.modelInstances[i].destroy(device);
+        for (let i = 0; i < this.mapPartInstances.length; i++)
+            this.mapPartInstances[i].destroy(device);
+        for (let i = 0; i < this.objectInstances.length; i++)
+            this.objectInstances[i].destroy(device);
     }
 }
 
@@ -193,81 +251,128 @@ const materialHacks: GXMaterialHacks = {
     lightingFudge: (p) => `vec4((0.5 * ${p.matSource}).rgb, ${p.matSource}.a)`,
 };
 
-function patchModel(mdl0: BRRES.MDL0): void {
+function patchModel(mdl0: BRRES.MDL0, blendMode: number): void {
     // The original game doesn't use MDL0 for the materials, just the shapes, so we
     // have to do a bit of patching to get it to do what we want...
 
+    // These are PS2 blend modes configurations. This table was extracted from the PS2
+    // version of the game, for reference...
+
+/*
+    const blendModeTable = [
+        0x44, // (Src-Dst) * SrcA + Dst
+        0x48, // (Src-0.0) * SrcA + Dst
+        0xA1, // (Dst-Src) * 1.0  + 0.0
+        0x41, // (Dst-Src) * SrcA + Dst
+        0x49, // (Dst-0.0) * SrcA + Dst
+        0x68, // (Src-0.0) * 1.0  + Dst
+        0x09, // (Dst-0.0) * SrcA + Src
+        0x46, // (0.0-Dst) * SrcA + Dst
+        0xA4, // (Src-Dst) * 1.0  + 0.0
+        0x42, // (0.0-Src) * SrcA + Dst
+        0x06, // (0.0-Dst) * SrcA + Src
+    ];
+*/
+
+    // This is PS2's alternate formulation of typical blend lerp... for idiots like me,
+    // the obvious equivalence proof is below...
+    //    SrcA*(Src-Dst) + Dst ==
+    //    SrcA*Src - SrcA*Dst + Dst ==
+    //    SrcA*Src + (-SrcA*Dst) + (1.0*Dst) ==
+    //    SrcA*Src + (1.0-SrcA)*Dst
+
     for (let k = 0; k < mdl0.materials.length; k++) {
+        // Install a bbox on the root for frustum culling.
+        mdl0.bbox = mdl0.nodes[1].bbox;
+
         const material = mdl0.materials[k];
         assert(material.gxMaterial.tevStages.length === 1);
         material.gxMaterial.tevStages[0].texMap = 0;
 
-        // TODO(jstpierre): Parse out real material settings.
-        material.gxMaterial.alphaTest.op = GX.AlphaOp.AND;
-        material.gxMaterial.alphaTest.compareA = GX.CompareType.GREATER;
-        material.gxMaterial.alphaTest.referenceA = 0.2;
+        // TODO(jstpierre): Depth write? Alpha test?
 
-        material.gxMaterial.alphaTest.compareB = GX.CompareType.ALWAYS;
-    }
-}
-
-class OkamiSCPArchiveDataObject {
-    private mdModels: MDL0Model[][] = [];
-    public md: MD[] = [];
-    public scpArc: ARC.Archive;
-
-    constructor(device: GfxDevice, renderer: OkamiRenderer, scpArcBuffer: ArrayBufferSlice) {
-        this.scpArc = ARC.parse(scpArcBuffer);
-
-        // Load the textures.
-        const brtFile = this.scpArc.files.find((file) => file.type === 'BRT');
-
-        // Several loaded archives appear to be useless. Not sure what to do with them.
-        if (brtFile === undefined)
-            return;
-
-        const textureRRES = BRRES.parse(brtFile.buffer);
-        renderer.textureHolder.addRRESTextures(device, textureRRES);
-
-        const mdFiles = this.scpArc.files.filter((file) => file.type === 'MD');
-        const brsFiles = this.scpArc.files.filter((file) => file.type === 'BRS');
-        assert(mdFiles.length === brsFiles.length);
-
-        for (let i = 0; i < mdFiles.length; i++) {
-            const scrFile = mdFiles[i];
-            const brsFile = brsFiles[i];
-            assert(scrFile.filename === brsFile.filename);
-
-            const scr = parseMD(scrFile.buffer);
-            this.md.push(scr);
-            const brs = BRRES.parse(brsFile.buffer);
-
-            const mdl0Models: MDL0Model[] = [];
-            for (let j = 0; j < brs.mdl0.length; j++) {
-                const mdl0 = brs.mdl0[j];
-                patchModel(mdl0);
-                const mdl0Model = new MDL0Model(device, renderer.renderHelper, brs.mdl0[j], materialHacks);
-                renderer.models.push(mdl0Model);
-                mdl0Models.push(mdl0Model);
-            }
-            this.mdModels.push(mdl0Models);
+        if (blendMode === 0x00) {
+            // 0x44; SrcA*Src + (1.0-SrcA)*Dst
+            material.translucent = false;
+            material.gxMaterial.ropInfo.blendMode.type = GX.BlendMode.NONE;
+            // material.gxMaterial.ropInfo.blendMode.srcFactor = GX.BlendFactor.SRCALPHA;
+            // material.gxMaterial.ropInfo.blendMode.dstFactor = GX.BlendFactor.INVSRCALPHA;
+        } else if (blendMode === 0x01) {
+            // 0x48; Src*SrcA + Dst
+            material.translucent = true;
+            material.gxMaterial.ropInfo.blendMode.type = GX.BlendMode.BLEND;
+            material.gxMaterial.ropInfo.blendMode.srcFactor = GX.BlendFactor.SRCALPHA;
+            material.gxMaterial.ropInfo.blendMode.dstFactor = GX.BlendFactor.ONE;
+        } else if (blendMode === 0x02) {
+            // 0xA1; (Dst-Src) * 1.0  + 0.0
+            material.translucent = true;
+            material.gxMaterial.ropInfo.blendMode.type = GX.BlendMode.SUBTRACT;
+            material.gxMaterial.ropInfo.blendMode.srcFactor = GX.BlendFactor.ONE;
+            material.gxMaterial.ropInfo.blendMode.dstFactor = GX.BlendFactor.ONE;
+        } else if (blendMode === 0x03) {
+            // 0x41; (Dst-Src) * SrcA + Dst
+            // (1.0+SrcA)*Dst - SrcA*Src
+            // ?????? Can't have a coefficient bigger than one. Sort of emulate for now.
+            material.translucent = true;
+            material.gxMaterial.ropInfo.blendMode.type = GX.BlendMode.SUBTRACT;
+            material.gxMaterial.ropInfo.blendMode.srcFactor = GX.BlendFactor.SRCALPHA;
+            material.gxMaterial.ropInfo.blendMode.dstFactor = GX.BlendFactor.ONE;
+        } else if (blendMode === 0x04) {
+            // 0x49; (Dst-0.0) * SrcA + Dst
+            // (1.0+SrcA)*Dst
+            // In theory could be done with ADD/DESTCOLOR, but we don't have that on the Wii.
+            // Not exactly sure how Ready at Dawn did it.
+            material.translucent = true;
+            material.gxMaterial.ropInfo.blendMode.type = GX.BlendMode.BLEND;
+            material.gxMaterial.ropInfo.blendMode.srcFactor = GX.BlendFactor.ZERO;
+            material.gxMaterial.ropInfo.blendMode.dstFactor = GX.BlendFactor.SRCALPHA;
+        } else if (blendMode === 0x05) {
+            // 0x68; (Src-0.0) * 1.0  + Dst
+            material.translucent = true;
+            material.gxMaterial.ropInfo.blendMode.type = GX.BlendMode.BLEND;
+            material.gxMaterial.ropInfo.blendMode.srcFactor = GX.BlendFactor.ONE;
+            material.gxMaterial.ropInfo.blendMode.dstFactor = GX.BlendFactor.ONE;
+        } else if (blendMode === 0x06) {
+            // 0x09; (Dst-0.0) * SrcA + Src
+            material.translucent = true;
+            material.gxMaterial.ropInfo.blendMode.type = GX.BlendMode.BLEND;
+            material.gxMaterial.ropInfo.blendMode.srcFactor = GX.BlendFactor.ONE;
+            material.gxMaterial.ropInfo.blendMode.dstFactor = GX.BlendFactor.SRCALPHA;
+        } else if (blendMode === 0x07) {
+            // 0x46; (0.0-Dst) * SrcA + Dst
+            // (-Dst)*SrcA + Dst  ==  Dst1.0 + Dst*-SrcA  ==  (1.0-SrcA)*Dst
+            material.translucent = true;
+            material.gxMaterial.ropInfo.blendMode.type = GX.BlendMode.BLEND;
+            material.gxMaterial.ropInfo.blendMode.srcFactor = GX.BlendFactor.ZERO;
+            material.gxMaterial.ropInfo.blendMode.dstFactor = GX.BlendFactor.INVSRCALPHA;
+        } else if (blendMode === 0x08) {
+            // 0xA4; (Src-Dst) * 1.0  + 0.0
+            // Uh, we don't have "normal" subtract on Wii either.
+        } else if (blendMode === 0x09) {
+            // 0x42; (0.0-Src) * SrcA + Dst
+            // Dst - Src*SrcA
+            material.translucent = true;
+            material.gxMaterial.ropInfo.blendMode.type = GX.BlendMode.SUBTRACT;
+            material.gxMaterial.ropInfo.blendMode.srcFactor = GX.BlendFactor.SRCALPHA;
+            material.gxMaterial.ropInfo.blendMode.dstFactor = GX.BlendFactor.ONE;
+        } else if (blendMode === 0x0A) {
+            // 0x06; (0.0-Dst) * SrcA + Src
+            // Src - Dst*SrcA
+            // Uh, we don't have "normal" subtract on Wii either.
+        } else {
+            // Not sure. r104 uses this, but the table isn't big enough...
+            // throw "whoops";
+            console.warn(`Unknown blend mode ${blendMode}`);
         }
-    }
 
-    public createInstances(device: GfxDevice, renderer: OkamiRenderer, modelMatrix: mat4): void {
-        for (let i = 0; i < this.md.length; i++) {
-            const scr = this.md[i];
-            const mdl0Models = this.mdModels[i];
-
-            for (let j = 0; j < scr.instances.length; j++) {
-                const instance = scr.instances[j];
-                const mdl0Model = mdl0Models[j];
-                const modelInstance = new MDL0ModelInstance(device, renderer.renderHelper, renderer.textureHolder, mdl0Model);
-                // TODO(jstpierre): Sort properly
-                modelInstance.setSortKeyLayer(this.md.length - i);
-                mat4.mul(modelInstance.modelMatrix, modelMatrix, instance.modelMatrix);
-                renderer.modelInstances.push(modelInstance);
-            }
+        if (material.translucent) {
+            material.gxMaterial.ropInfo.depthWrite = false;
+        } else {
+            material.gxMaterial.ropInfo.depthWrite = true;
+            material.gxMaterial.alphaTest.op = GX.AlphaOp.OR;
+            material.gxMaterial.alphaTest.compareA = GX.CompareType.GREATER;
+            material.gxMaterial.alphaTest.referenceA = 0.2;
+            material.gxMaterial.alphaTest.compareB = GX.CompareType.NEVER;
         }
     }
 }
@@ -308,8 +413,20 @@ class OkamiSCPArchiveDataMap {
             const mdl0Models: MDL0Model[] = [];
             for (let j = 0; j < brs.mdl0.length; j++) {
                 const mdl0 = brs.mdl0[j];
-                patchModel(mdl0);
 
+                // Make sure that all SCR entries have the same flags.
+                let materialFlags = -1;
+                for (let k = 0; k < scr.instances.length; k++) {
+                    const instance = scr.instances[k];
+                    if (instance.modelIndex !== j)
+                        continue;
+                    if (materialFlags === -1)
+                        materialFlags = instance.materialFlags;
+                    else
+                        assert(materialFlags === instance.materialFlags);
+                }
+
+                patchModel(mdl0, materialFlags);
                 const mdl0Model = new MDL0Model(device, renderer.renderHelper, brs.mdl0[j], materialHacks);
                 renderer.models.push(mdl0Model);
                 mdl0Models.push(mdl0Model);
@@ -318,60 +435,128 @@ class OkamiSCPArchiveDataMap {
         }
     }
 
-    public createInstances(device: GfxDevice, renderer: OkamiRenderer, modelMatrix: mat4): void {
+    public createInstances(device: GfxDevice, renderer: OkamiRenderer, modelMatrixBase: mat4): void {
         for (let i = 0; i < this.scr.length; i++) {
             const scr = this.scr[i];
             const mdl0Models = this.scrModels[i];
 
             for (let j = 0; j < scr.instances.length; j++) {
                 const instance = scr.instances[j];
-                const mdl0Model = mdl0Models[instance.index];
+                const mdl0Model = mdl0Models[instance.modelIndex];
                 const modelInstance = new MDL0ModelInstance(device, renderer.renderHelper, renderer.textureHolder, mdl0Model);
                 // TODO(jstpierre): Sort properly
                 modelInstance.setSortKeyLayer(this.scr.length - i);
-
-                const mapPartInstance = new MapPartInstance(instance, modelInstance);
+                const modelMatrix = mat4.create();
+                mat4.mul(modelMatrix, modelMatrixBase, instance.modelMatrix);
+                const mapPartInstance = new MapPartInstance(instance, modelMatrix, modelInstance);
                 renderer.mapPartInstances.push(mapPartInstance);
             }
         }
     }
 }
 
-class ModelCache {
-    private fileProgressableCache = new Map<string, Progressable<ArrayBufferSlice>>();
-    private scpArchiveProgressableCache = new Map<string, Progressable<OkamiSCPArchiveDataObject>>();
-    private scpArchiveCache = new Map<string, OkamiSCPArchiveDataObject>();
+function shouldBillboard(objectTypeId: number, objectId: number): boolean {
+    const fullObjectId = objectTypeId << 8 | objectId;
+    switch (fullObjectId) {
+    case 0x0B17:
+    case 0x0B19:
+    case 0x0B1B:
+    case 0x0B21:
+    case 0x0BC1:
+    case 0x0BC5:
+    case 0x0BC7:
+    case 0x0BF0:
+        return true;
+    }
+    return false;
+}
 
-    public waitForLoad(): Progressable<any> {
-        const v: Progressable<any>[] = [... this.fileProgressableCache.values()];
-        return Progressable.all(v).then(() => {
-            // XXX(jstpierre): Don't ask.
-            return null;
-        });
+class ObjectInstance {
+    private shouldBillboard: boolean;
+
+    constructor(private objectTypeId: number, private objectId: number, private modelMatrix: mat4, private modelInstance: MDL0ModelInstance) {
+        this.shouldBillboard = shouldBillboard(this.objectTypeId, this.objectId);
+        mat4.copy(this.modelInstance.modelMatrix, this.modelMatrix);
+
+        // If we're going to billboard, then kill rotation from the MV matrix.
+        if (this.shouldBillboard)
+            computeMatrixWithoutRotation(this.modelMatrix, this.modelMatrix);
     }
 
-    private fetchFile(path: string, abortSignal: AbortSignal): Progressable<ArrayBufferSlice> {
-        assert(!this.fileProgressableCache.has(path));
-        const p = fetchData(path, abortSignal);
-        this.fileProgressableCache.set(path, p);
-        return p;
-    }
-
-    public fetchObjSCPArchive(device: GfxDevice, renderer: OkamiRenderer, archivePath: string, abortSignal: AbortSignal): Progressable<OkamiSCPArchiveDataObject> {
-        let p = this.scpArchiveProgressableCache.get(archivePath);
-
-        if (p === undefined) {
-            p = this.fetchFile(archivePath, abortSignal).then((data) => {
-                return data;
-            }).then((data) => {
-                const scpArchiveData = new OkamiSCPArchiveDataObject(device, renderer, data);
-                this.scpArchiveCache.set(archivePath, scpArchiveData);
-                return scpArchiveData;
-            });
-            this.scpArchiveProgressableCache.set(archivePath, p);
+    public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
+        if (this.shouldBillboard) {
+            computeModelMatrixYBillboard(this.modelInstance.modelMatrix, viewerInput.camera);
+            mat4.mul(this.modelInstance.modelMatrix, this.modelMatrix, this.modelInstance.modelMatrix);
         }
 
-        return p;
+        this.modelInstance.prepareToRender(renderHelper, viewerInput);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.modelInstance.destroy(device);
+    }
+}
+
+class OkamiSCPArchiveDataObject {
+    private mdModels: MDL0Model[][] = [];
+    public md: MD[] = [];
+    public scpArc: ARC.Archive;
+
+    constructor(device: GfxDevice, renderer: OkamiRenderer, scpArcBuffer: ArrayBufferSlice, private objectTypeId: number, private objectId: number, public filename: string) {
+        this.scpArc = ARC.parse(scpArcBuffer);
+
+        // Load the textures.
+        const brtFile = this.scpArc.files.find((file) => file.type === 'BRT');
+
+        // Several loaded archives appear to be useless. Not sure what to do with them.
+        if (brtFile === undefined)
+            return;
+
+        const textureRRES = BRRES.parse(brtFile.buffer);
+        renderer.textureHolder.addRRESTextures(device, textureRRES);
+
+        const mdFiles = this.scpArc.files.filter((file) => file.type === 'MD');
+        const brsFiles = this.scpArc.files.filter((file) => file.type === 'BRS');
+        assert(mdFiles.length === brsFiles.length);
+
+        for (let i = 0; i < mdFiles.length; i++) {
+            const scrFile = mdFiles[i];
+            const brsFile = brsFiles[i];
+            assert(scrFile.filename === brsFile.filename);
+
+            const md = parseMD(scrFile.buffer);
+            this.md.push(md);
+            const brs = BRRES.parse(brsFile.buffer);
+
+            const mdl0Models: MDL0Model[] = [];
+            for (let j = 0; j < brs.mdl0.length; j++) {
+                const mdl0 = brs.mdl0[j];
+                patchModel(mdl0, 0x00);
+                const mdl0Model = new MDL0Model(device, renderer.renderHelper, brs.mdl0[j], materialHacks);
+                renderer.models.push(mdl0Model);
+                mdl0Models.push(mdl0Model);
+            }
+            this.mdModels.push(mdl0Models);
+        }
+    }
+
+    public createInstances(device: GfxDevice, renderer: OkamiRenderer, modelMatrixBase: mat4): void {
+        for (let i = 0; i < this.md.length; i++) {
+            const scr = this.md[i];
+            const mdl0Models = this.mdModels[i];
+
+            for (let j = 0; j < scr.instances.length; j++) {
+                const instance = scr.instances[j];
+                const mdl0Model = mdl0Models[j];
+                const modelInstance = new MDL0ModelInstance(device, renderer.renderHelper, renderer.textureHolder, mdl0Model, this.filename);
+                // TODO(jstpierre): Sort properly
+                modelInstance.setSortKeyLayer(this.md.length - i);
+                const modelMatrix = mat4.create();
+                mat4.mul(modelMatrix, modelMatrixBase, instance.modelMatrix);
+                const objectInstance = new ObjectInstance(this.objectTypeId, this.objectId, modelMatrix, modelInstance);
+                renderer.objectInstances.push(objectInstance);
+            }
+        }
     }
 }
 
@@ -433,8 +618,8 @@ class OkamiSceneDesc implements Viewer.SceneDesc {
             if (filename === null)
                 continue;
 
-            modelCache.fetchObjSCPArchive(device, renderer, `${pathBase}/${filename}`, abortSignal).then((scpArcData) => {
-                scpArcData.createInstances(device, renderer, modelMatrix);
+            modelCache.fetchObjSCPArchive(device, renderer, objectTypeId, objectId, abortSignal).then((arcData) => {
+                arcData.createInstances(device, renderer, modelMatrix);
             });
         }
     }
@@ -448,7 +633,7 @@ class OkamiSceneDesc implements Viewer.SceneDesc {
             // Look for the SCP file.
             const scpFile = datArc.files.find((file) => file.type === 'SCP')!;
             const scpData = new OkamiSCPArchiveDataMap(device, renderer, scpFile.buffer);
-    
+
             // Create the main instances.
             const rootModelMatrix = mat4.create();
             scpData.createInstances(device, renderer, rootModelMatrix);
@@ -459,7 +644,6 @@ class OkamiSceneDesc implements Viewer.SceneDesc {
             const tscTableFile = datArc.files.find((file) => file.type === 'TSC')!;
             this.spawnObjectTable(device, renderer, modelCache, tscTableFile.buffer, abortSignal);
 
-            // TODO(jstpierre): Don't spawn trees until we figure out how the depth buffer write thing works.
             const treTableFile = datArc.files.find((file) => file.type === 'TRE');
             this.spawnObjectTable(device, renderer, modelCache, treTableFile.buffer, abortSignal);
 
