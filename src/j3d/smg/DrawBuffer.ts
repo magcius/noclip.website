@@ -121,12 +121,14 @@ export class DrawBufferGroup {
 
     public drawOpa(device: GfxDevice, renderHelper: GXRenderHelperGfx, camera: Camera): void {
         for (let i = 0; i < this.models.length; i++)
-            this.models[i].drawOpa(device, renderHelper, camera);
+            if (this.models[i].visible)
+                this.models[i].drawOpa(device, renderHelper, camera);
     }
 
     public drawXlu(device: GfxDevice, renderHelper: GXRenderHelperGfx, camera: Camera): void {
         for (let i = 0; i < this.models.length; i++)
-            this.models[i].drawXlu(device, renderHelper, camera);
+            if (this.models[i].visible)
+                this.models[i].drawXlu(device, renderHelper, camera);
     }
 
     public registerDrawBuffer(actor: LiveActor): number {

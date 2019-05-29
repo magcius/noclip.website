@@ -56,7 +56,7 @@ class NameObjExecuteInfo {
 // This is also NameObjExecuteHolder and NameObjListExecutor for our purposes... at least for now.
 export class SceneNameObjListExecutor {
     public drawBufferHolder: DrawBufferHolder;
-    private nameObjExecuteInfos: NameObjExecuteInfo[] = [];
+    public nameObjExecuteInfos: NameObjExecuteInfo[] = [];
 
     constructor() {
         this.drawBufferHolder = new DrawBufferHolder(drawBufferInitialTable);
