@@ -58,7 +58,7 @@ class ShapeInstance {
     public sortKeyBias = 0;
     private visible = true;
 
-    constructor(public shape: BRRES.MDL0_ShapeEntry, public shapeData: GXShapeHelperGfx, public node: BRRES.MDL0_NodeEntry) {
+    constructor(public shape: BRRES.MDL0_ShapeEntry, public shapeData: GXShapeHelperGfx, public sortVizNode: BRRES.MDL0_NodeEntry) {
     }
 
     public buildRenderInst(renderInstBuilder: GfxRenderInstBuilder, namePrefix: string): void {
@@ -90,7 +90,6 @@ class ShapeInstance {
             const renderInst = this.renderInsts[p];
 
             const camera = viewerInput.camera;
-            const modelMatrix = matrixArray[this.node.mtxId];
 
             let instVisible = false;
             if (visible) {
@@ -109,7 +108,7 @@ class ShapeInstance {
                     }
                 } else {
                     instVisible = true;
-                    this.computeModelView(packetParams.u_PosMtx[0], modelMatrix, camera, isSkybox);
+                    this.computeModelView(packetParams.u_PosMtx[0], matrixArray[this.shape.mtxIdx], camera, isSkybox);
                 }
             }
 
@@ -121,6 +120,15 @@ class ShapeInstance {
             }
         }
     }
+}
+
+function mat4SwapTranslationColumns(m: mat4): void {
+    const tx = m[12];
+    m[12] = m[8];
+    m[8] = tx;
+    const ty = m[13];
+    m[13] = m[9];
+    m[9] = ty;
 }
 
 class MaterialInstance {
@@ -204,7 +212,7 @@ class MaterialInstance {
         const material = this.materialData.material;
         const texMtxIdx: BRRES.TexMtxIndex = BRRES.TexMtxIndex.TEX0 + texIdx;
         if (this.srt0Animators[texMtxIdx]) {
-            this.srt0Animators[texMtxIdx].calcTexMtx(matrixScratch);
+            this.srt0Animators[texMtxIdx].calcTexMtx(dst);
         } else {
             mat4.copy(dst, material.texSrts[texMtxIdx].srtMtx);
         }
@@ -218,9 +226,18 @@ class MaterialInstance {
         const dstPre = materialParams.u_TexMtx[texIdx];
         const dstPost = materialParams.u_PostTexMtx[texIdx];
 
+        // Fast path.
+        if (texSrt.mapMode === BRRES.MapMode.TEXCOORD) {
+            this.calcTexAnimMatrix(dstPost, texIdx);
+            return;
+        }
+
         if (texSrt.mapMode === BRRES.MapMode.PROJECTION) {
             const camera = viewerInput.camera;
             texProjPerspMtx(dstPost, camera.fovY, camera.aspect, 0.5, -0.5 * flipYScale, 0.5, 0.5);
+
+            // Apply effect matrix.
+            mat4.mul(dstPost, texSrt.effectMtx, dstPost);
 
             // XXX(jstpierre): ZSS hack. Reference camera 31 is set up by the game to be an overhead
             // camera for clouds. Kill it until we can emulate the camera system in this game...
@@ -232,6 +249,9 @@ class MaterialInstance {
         } else if (texSrt.mapMode === BRRES.MapMode.ENV_CAMERA) {
             texEnvMtx(dstPost, 0.5, -0.5 * flipYScale, 0.5, 0.5);
 
+            // Apply effect matrix.
+            mat4.mul(dstPost, texSrt.effectMtx, dstPost);
+
             // Fill in the dstPre with our normal matrix.
             mat4.mul(dstPre, viewerInput.camera.viewMatrix, modelMatrix);
             computeNormalMatrix(dstPre, dstPre);
@@ -239,20 +259,12 @@ class MaterialInstance {
             mat4.identity(dstPost);
         }
 
-        // Apply effect matrix.
-        mat4.mul(dstPost, texSrt.effectMtx, dstPost);
-
         // Calculate SRT.
         this.calcTexAnimMatrix(matrixScratch, texIdx);
 
         // SRT matrices have translation in fourth component, but we want our matrix to have translation
         // in third component. Swap.
-        const tx = matrixScratch[12];
-        matrixScratch[12] = matrixScratch[8];
-        matrixScratch[8] = tx;
-        const ty = matrixScratch[13];
-        matrixScratch[13] = matrixScratch[9];
-        matrixScratch[9] = ty;
+        mat4SwapTranslationColumns(matrixScratch);
 
         mat4.mul(dstPost, matrixScratch, dstPost);
     }
@@ -338,8 +350,9 @@ const matrixScratchArray = nArray(1, () => mat4.create());
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 export class MDL0ModelInstance {
-    private shapeInstances: ShapeInstance[] = [];
-    private materialInstances: MaterialInstance[] = [];
+    public shapeInstances: ShapeInstance[] = [];
+    public materialInstances: MaterialInstance[] = [];
+
     private chr0NodeAnimator: BRRES.CHR0NodesAnimator | null = null;
     private vis0NodeAnimator: BRRES.VIS0NodesAnimator | null = null;
 
@@ -510,7 +523,7 @@ export class MDL0ModelInstance {
 
         for (let i = 0; i < this.shapeInstances.length; i++) {
             const shapeInstance = this.shapeInstances[i];
-            const shapeVisibility = (this.vis0NodeAnimator !== null ? this.vis0NodeAnimator.calcVisibility(shapeInstance.node.id) : shapeInstance.node.visible);
+            const shapeVisibility = (this.vis0NodeAnimator !== null ? this.vis0NodeAnimator.calcVisibility(shapeInstance.sortVizNode.id) : shapeInstance.sortVizNode.visible);
             const shapeDepth = shapeVisibility ? depth : -1;
             shapeInstance.prepareToRender(renderHelper, shapeDepth, viewerInput, this.matrixArray, this.matrixVisibility, this.isSkybox);
         }
@@ -529,10 +542,6 @@ export class MDL0ModelInstance {
             const op = opList[i];
 
             const node = mdl0.nodes[op.nodeId];
-            const usesEnvelope = (node.mtxId < 0);
-            if (usesEnvelope)
-                throw "whoops";
-
             const shape = this.mdl0Model.mdl0.shapes[op.shpId];
             const shapeData = this.mdl0Model.shapeData[op.shpId];
             const shapeInstance = new ShapeInstance(shape, shapeData, node);
@@ -562,7 +571,7 @@ export class MDL0ModelInstance {
                 const node = mdl0.nodes[op.nodeId];
                 const parentMtxId = op.parentMtxId;
                 const dstMtxId = node.mtxId;
-    
+
                 let modelMatrix;
                 if (this.chr0NodeAnimator !== null && this.chr0NodeAnimator.calcModelMtx(this.matrixScratch, op.nodeId)) {
                     modelMatrix = this.matrixScratch;

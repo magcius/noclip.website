@@ -1,14 +1,28 @@
 
 import * as Viewer from '../../viewer';
-import { SMGSceneDescBase } from "./smg_scenes";
+import { SMGSceneDescBase, ModelCache } from "./smg_scenes";
+import { createCsvParser, JMapInfoIter } from './JMapInfo';
+import { RARC } from '../rarc';
 
 class SMG2SceneDesc extends SMGSceneDescBase {
     protected pathBase: string = `j3d/smg2`;
-    protected getLightDataFilename(): string {
-        return `LightData/LightData.arc`;
+    public getLightData(modelCache: ModelCache): JMapInfoIter {
+        const lightDataRarc = modelCache.getArchive(`LightData/LightData.arc`);
+        return createCsvParser(lightDataRarc.findFileData(`LightData.bcsv`));
     }
-    public getZoneMapFilename(zoneName: string): string {
-        return `StageData/${zoneName}/${zoneName}Map.arc`;
+    public getZoneLightData(modelCache: ModelCache, zoneName: string): JMapInfoIter {
+        const lightDataRarc = modelCache.getArchive(`StageData/${zoneName}/${zoneName}Light.arc`);
+        return createCsvParser(lightDataRarc.findFileData(`csv/${zoneName}Light.bcsv`));
+    }
+    public getZoneMapArchive(modelCache: ModelCache, zoneName: string): RARC {
+        return modelCache.getArchive(`StageData/${zoneName}/${zoneName}Map.arc`);
+    }
+    public requestGlobalArchives(modelCache: ModelCache): void {
+        modelCache.requestArchiveData(`LightData/LightData.arc`);
+    }
+    public requestZoneArchives(modelCache: ModelCache, zoneName: string): void {
+        modelCache.requestArchiveData(`StageData/${zoneName}/${zoneName}Map.arc`);
+        modelCache.requestArchiveData(`StageData/${zoneName}/${zoneName}Light.arc`);
     }
 }
 

@@ -57,7 +57,7 @@ export class BMDObjectRenderer implements ObjectRenderer {
     }
 
     public setParentJoint(o: BMDObjectRenderer, jointName: string): void {
-        this.parentJointMatrix = o.modelInstance.getJointMatrixReference(jointName);
+        this.parentJointMatrix = o.modelInstance.getJointToWorldMatrixReference(jointName);
         o.childObjects.push(this);
     }
 

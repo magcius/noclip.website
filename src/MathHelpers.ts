@@ -155,3 +155,12 @@ function computeModelViewMatrixSR(dst: mat4, scaleX: number, scaleY: number, sca
     dst[10] = scaleZ * rzz;
     dst[11] = 0.0;
 }
+
+export function computeMatrixWithoutRotation(dst: mat4, m: mat4, v: vec3 = scratchVec3): void {
+    const tx = m[12], ty = m[13], tz = m[14];
+    mat4.getScaling(v, dst);
+    mat4.fromScaling(dst, v);
+    dst[12] = tx;
+    dst[13] = ty;
+    dst[14] = tz;
+}

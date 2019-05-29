@@ -143,3 +143,19 @@ export function decompress(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
         throw new Error("Unsupported CX compression type");
     }
 }
+
+export function maybeDecompress(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
+    const srcView = srcBuffer.createDataView();
+
+    const magic = srcView.getUint8(0x00);
+    const compressionType: CompressionType = magic & 0xF0;
+    if (compressionType === CompressionType.LZ) {
+        const extendedFormat = !!(magic & 0x0F);
+        if (extendedFormat)
+            return decompressLZ_Extended(srcView);
+        else
+            return decompressLZ_Normal(srcView);
+    } else {
+        return srcBuffer;
+    }
+}

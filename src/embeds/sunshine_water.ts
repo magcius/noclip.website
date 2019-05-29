@@ -12,7 +12,7 @@ import * as GX_Material from '../gx/gx_material';
 
 import { BMD, BTK, MaterialEntry } from '../j3d/j3d';
 import * as RARC from '../j3d/rarc';
-import { BMDModel, MaterialInstance, MaterialInstanceState, ShapeInstanceState } from '../j3d/render';
+import { BMDModel, MaterialInstance, MaterialInstanceState, ShapeInstanceState, MaterialData } from '../j3d/render';
 import { SunshineRenderer, SunshineSceneDesc, SMSPass } from '../j3d/sms_scenes';
 import * as Yaz0 from '../compression/Yaz0';
 import { ub_PacketParams, PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, ub_MaterialParams, u_MaterialParamsBufferSize } from '../gx/gx_render';
@@ -117,7 +117,7 @@ class SeaPlaneScene {
     private animationController: AnimationController;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, bmd: BMD, btk: BTK, configName: string) {
-        mat4.copy(this.shapeInstanceState.rootJointMatrix, posMtx);
+        mat4.copy(this.shapeInstanceState.rootJointToWorld, posMtx);
 
         this.animationController = new AnimationController();
         // Make it go fast.
@@ -136,7 +136,8 @@ class SeaPlaneScene {
 
         const seaMaterial = bmd.mat3.materialEntries.find((m) => m.name === '_umi');
         this.mangleMaterial(seaMaterial, configName);
-        this.seaMaterialInstance = new MaterialInstance(seaMaterial, {});
+        const seaMaterialData = new MaterialData(seaMaterial);
+        this.seaMaterialInstance = new MaterialInstance(seaMaterialData, {});
         this.seaMaterialInstance.bindTTK1(this.animationController, btk.ttk1);
         this.plane = new PlaneShape(device, cache);
     }
@@ -189,9 +190,9 @@ class SeaPlaneScene {
         template.allocateUniformBuffer(ub_MaterialParams, u_MaterialParamsBufferSize);
 
         computeViewMatrix(packetParams.u_PosMtx[0], viewerInput.camera);
-        mat4.mul(packetParams.u_PosMtx[0], packetParams.u_PosMtx[0], this.shapeInstanceState.rootJointMatrix);
+        mat4.mul(packetParams.u_PosMtx[0], packetParams.u_PosMtx[0], this.shapeInstanceState.rootJointToWorld);
 
-        this.seaMaterialInstance.fillMaterialParams(template, this.materialInstanceState, packetParams.u_PosMtx[0], this.shapeInstanceState.rootJointMatrix, viewerInput.camera);
+        this.seaMaterialInstance.fillMaterialParams(template, this.materialInstanceState, packetParams.u_PosMtx[0], this.shapeInstanceState.rootJointToWorld, viewerInput.camera);
 
         this.plane.prepareToRender(renderHelper, packetParams);
         renderHelper.renderInstManager.popTemplateRenderInst();

@@ -130,7 +130,7 @@ class BrawlSceneDesc implements Viewer.SceneDesc {
             assert(arc.files.length >= 2);
 
             // Second archive is a compressed archive full of stage render data.
-            const stageARC = parseARC(CX.decompress(arc.files[1].data));
+            const stageARC = parseARC(CX.maybeDecompress(arc.files[1].data));
 
             // Look for the texture archive, and load that.
             const textureFile = stageARC.files.find((arc) => arc.fileType === 0x03);

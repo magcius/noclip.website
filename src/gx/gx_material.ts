@@ -376,6 +376,8 @@ export class GX_Program extends DeviceProgram {
     }
 
     // TexGen
+
+    // Output is a vec4.
     private generateTexGenSource(src: GX.TexGenSrc) {
         switch (src) {
         case GX.TexGenSrc.POS:       return `vec4(a_Position, 1.0)`;
@@ -403,60 +405,75 @@ export class GX_Program extends DeviceProgram {
         }
     }
 
-    private generateTexGenMatrix(src: string, texCoordGen: TexGen) {
-        const matrix = texCoordGen.matrix;
-        if (matrix === GX.TexGenMatrix.IDENTITY) {
+    // Output is a vec3, src is a vec4.
+    private generatePostTexGenMatrixMult(texCoordGen: TexGen, src: string): string {
+        if (texCoordGen.postMatrix === GX.PostTexGenMatrix.PTIDENTITY) {
             return `${src}.xyz`;
-        } else if (matrix >= GX.TexGenMatrix.TEXMTX0) {
-            const texMtxIdx = (matrix - GX.TexGenMatrix.TEXMTX0) / 3;
+        } else if (texCoordGen.postMatrix >= GX.PostTexGenMatrix.PTTEXMTX0) {
+            const texMtxIdx = (texCoordGen.postMatrix - GX.PostTexGenMatrix.PTTEXMTX0) / 3;
+            return `Mul(u_PostTexMtx[${texMtxIdx}], ${src})`;
+        } else {
+            throw "whoops";
+        }
+    }
+
+    // Output is a vec3, src is a vec3.
+    private generateTexGenMatrixMult(texCoordGen: TexGen, src: string) {
+        if (texCoordGen.matrix === GX.TexGenMatrix.IDENTITY) {
+            return `${src}.xyz`;
+        } else if (texCoordGen.matrix >= GX.TexGenMatrix.TEXMTX0) {
+            const texMtxIdx = (texCoordGen.matrix - GX.TexGenMatrix.TEXMTX0) / 3;
             return `Mul(u_TexMtx[${texMtxIdx}], ${src})`;
-        } else if (matrix >= GX.TexGenMatrix.PNMTX0) {
-            const pnMtxIdx = (matrix - GX.TexGenMatrix.PNMTX0) / 3;
+        } else if (texCoordGen.matrix >= GX.TexGenMatrix.PNMTX0) {
+            const pnMtxIdx = (texCoordGen.matrix - GX.TexGenMatrix.PNMTX0) / 3;
             return `Mul(u_PosMtx[${pnMtxIdx}], ${src})`;
         } else {
             throw "whoops";
         }
     }
 
-    private generateTexGenType(texCoordGen: TexGen) {
-        const src = this.generateTexGenSource(texCoordGen.source);
+    // Output is a vec3, src is a vec4.
+    private generateTexGenType(texCoordGen: TexGen, src: string) {
         switch (texCoordGen.type) {
         case GX.TexGenType.SRTG:
-            // Expected to be used with colors, I suspect...
             return `vec3(${src}.xy, 1.0)`;
         case GX.TexGenType.MTX2x4:
+            // Mild cleanup to the generated shader.
             if (texCoordGen.matrix === GX.TexGenMatrix.IDENTITY)
-                return `${src}.xyz`;
-            return `vec3(${this.generateTexGenMatrix(src, texCoordGen)}.xy, 1.0)`;
+                return `vec3(${src}.xy, 1.0)`;
+            return `vec3(${this.generateTexGenMatrixMult(texCoordGen, src)}.xy, 1.0)`;
         case GX.TexGenType.MTX3x4:
-            return `${this.generateTexGenMatrix(src, texCoordGen)}`;
+            return `${this.generateTexGenMatrixMult(texCoordGen, src)}`;
         default:
             throw new Error("whoops");
         }
     }
 
+    // Output is a vec3.
     private generateTexGenNrm(texCoordGen: TexGen) {
-        const type = this.generateTexGenType(texCoordGen);
+        const src = this.generateTexGenSource(texCoordGen.source);
+        const type = this.generateTexGenType(texCoordGen, src);
         if (texCoordGen.normalize)
             return `normalize(${type})`;
         else
             return type;
     }
 
+    // Output is a vec3.
     private generateTexGenPost(texCoordGen: TexGen) {
-        const tex = this.generateTexGenNrm(texCoordGen);
+        const src = this.generateTexGenNrm(texCoordGen);
+
         if (texCoordGen.postMatrix === GX.PostTexGenMatrix.PTIDENTITY) {
-            return tex;
+            return src;
         } else {
-            const matrixIdx = (texCoordGen.postMatrix - GX.PostTexGenMatrix.PTTEXMTX0) / 3;
-            return `Mul(u_PostTexMtx[${matrixIdx}], vec4(${tex}, 1.0))`;
+            return this.generatePostTexGenMatrixMult(texCoordGen, `vec4(${src}, 1.0)`);
         }
     }
 
     private generateTexGen(texCoordGen: TexGen) {
         const i = texCoordGen.index;
         return `
-    // TexGen ${i}  Type: ${texCoordGen.type} Source: ${texCoordGen.source} Matrix: ${texCoordGen.matrix}
+    // TexGen ${i} Type: ${texCoordGen.type} Source: ${texCoordGen.source} Matrix: ${texCoordGen.matrix}
     v_TexCoord${i} = ${this.generateTexGenPost(texCoordGen)};`;
     }
 
