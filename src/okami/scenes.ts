@@ -14,10 +14,9 @@ import { assert, readString, hexzero, assertExists } from "../util";
 import { BasicRendererHelper } from "../oot3d/render";
 import { GXRenderHelperGfx } from "../gx/gx_render";
 import AnimationController from "../AnimationController";
-import { GXMaterialHacks } from "../gx/gx_material";
+import { GXMaterialHacks, GXMaterial } from "../gx/gx_material";
 import { computeModelMatrixSRT, computeMatrixWithoutRotation } from "../MathHelpers";
 import { computeModelMatrixYBillboard } from "../Camera";
-import { colorFromRGBA } from "../Color";
 
 const pathBase = `okami`;
 
@@ -31,10 +30,10 @@ interface MD {
 
 interface SCREntry {
     modelIndex: number;
-    materialFlags: number;
+    flags_0C: number;
     modelMatrix: mat4;
-    bbFlags: number;
-    texScrollFlags: number;
+    flags_08: number;
+    flags_0A: number;
     texSpeedS: number;
     texSpeedT: number;
 }
@@ -49,7 +48,7 @@ class MapPartInstance {
     constructor(private scrMapEntry: SCREntry, private modelMatrix: mat4, private modelInstance: MDL0ModelInstance) {
         mat4.copy(this.modelInstance.modelMatrix, this.modelMatrix);
 
-        if (!!(this.scrMapEntry.bbFlags & 0x03))
+        if (!!(this.scrMapEntry.flags_08 & 0x03))
             computeMatrixWithoutRotation(this.modelMatrix, this.modelMatrix);
     }
 
@@ -61,7 +60,7 @@ class MapPartInstance {
         let transS = frames * this.scrMapEntry.texSpeedS;
         let transT = frames * this.scrMapEntry.texSpeedT;
 
-        if (this.scrMapEntry.texScrollFlags & 0x40) {
+        if (this.scrMapEntry.flags_0A & 0x40) {
             transS *= 0.1;
             transT *= 0.1;
         }
@@ -70,7 +69,7 @@ class MapPartInstance {
         transT /= 800;
 
         // Used for the coastline on rf06/rf21, and only this, AFAICT.
-        if (this.scrMapEntry.texScrollFlags & 0x10) {
+        if (this.scrMapEntry.flags_0A & 0x10) {
             transT = Math.cos(transT) * 0.05;
         }
 
@@ -78,7 +77,7 @@ class MapPartInstance {
         dst[12] = transS;
         dst[13] = transT;
 
-        if (!!(this.scrMapEntry.bbFlags & 0x03)) {
+        if (!!(this.scrMapEntry.flags_08 & 0x03)) {
             computeModelMatrixYBillboard(this.modelInstance.modelMatrix, viewerInput.camera);
             mat4.mul(this.modelInstance.modelMatrix, this.modelMatrix, this.modelInstance.modelMatrix);
         }
@@ -111,9 +110,9 @@ function parseSCR(buffer: ArrayBufferSlice): SCR {
 
         const modelMatrix = mat4.create();
         const index = view.getUint32(instanceOffs + 0x04);
-        const bbFlags = view.getUint16(instanceOffs + 0x08);
-        const texScrollFlags = view.getUint16(instanceOffs + 0x0A);
-        const materialFlags = view.getUint16(instanceOffs + 0x0C);
+        const flags_08 = view.getUint16(instanceOffs + 0x08);
+        const flags_0A = view.getUint16(instanceOffs + 0x0A);
+        const flags_0C = view.getUint16(instanceOffs + 0x0C);
         const texSpeedS = view.getUint8(instanceOffs + 0x14);
         const texSpeedT = view.getUint8(instanceOffs + 0x15);
 
@@ -127,7 +126,7 @@ function parseSCR(buffer: ArrayBufferSlice): SCR {
         const translationY = view.getInt16(instanceOffs + 0x2C);
         const translationZ = view.getInt16(instanceOffs + 0x2E);
         computeModelMatrixSRT(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
-        instances.push({ modelIndex: index, bbFlags, materialFlags, modelMatrix, texScrollFlags, texSpeedS, texSpeedT });
+        instances.push({ modelIndex: index, flags_08, flags_0A, flags_0C, modelMatrix, texSpeedS, texSpeedT });
         instancesTableIdx += 0x04;
     }
 
@@ -251,13 +250,6 @@ const materialHacks: GXMaterialHacks = {
     lightingFudge: (p) => `vec4((0.5 * ${p.matSource}).rgb, ${p.matSource}.a)`,
 };
 
-function patchModel(mdl0: BRRES.MDL0, blendMode: number): void {
-    // The original game doesn't use MDL0 for the materials, just the shapes, so we
-    // have to do a bit of patching to get it to do what we want...
-
-    // These are PS2 blend modes configurations. This table was extracted from the PS2
-    // version of the game, for reference...
-
 /*
     const blendModeTable = [
         0x44, // (Src-Dst) * SrcA + Dst
@@ -274,106 +266,131 @@ function patchModel(mdl0: BRRES.MDL0, blendMode: number): void {
     ];
 */
 
-    // This is PS2's alternate formulation of typical blend lerp... for idiots like me,
-    // the obvious equivalence proof is below...
-    //    SrcA*(Src-Dst) + Dst ==
-    //    SrcA*Src - SrcA*Dst + Dst ==
-    //    SrcA*Src + (-SrcA*Dst) + (1.0*Dst) ==
-    //    SrcA*Src + (1.0-SrcA)*Dst
+const enum OkamiPass {
+    SKYBOX = 1 << 0,
+    GROUND = 1 << 1,
+    WATER = 1 << 2,
+    OBJECTS = 1 << 3,
+}
 
-    for (let k = 0; k < mdl0.materials.length; k++) {
-        // Install a bbox on the root for frustum culling.
-        mdl0.bbox = mdl0.nodes[1].bbox;
+function patchMaterialSetAlpha(material: BRRES.MDL0_MaterialEntry, alpha: number): void {
+    if (alpha === 0x44) {
+        // 0x44; SrcA*Src + (1.0-SrcA)*Dst
+        material.gxMaterial.ropInfo.blendMode.type = GX.BlendMode.BLEND;
+        material.gxMaterial.ropInfo.blendMode.srcFactor = GX.BlendFactor.SRCALPHA;
+        material.gxMaterial.ropInfo.blendMode.dstFactor = GX.BlendFactor.INVSRCALPHA;
+    } else {
+        // TODO(jstpierre): Rest of them.
+        throw "whoops";
+    }
 
-        const material = mdl0.materials[k];
+    /*
+    } else if (blendMode === 0x01) {
+        // 0x48; Src*SrcA + Dst
+        material.gxMaterial.ropInfo.blendMode.type = GX.BlendMode.BLEND;
+        material.gxMaterial.ropInfo.blendMode.srcFactor = GX.BlendFactor.SRCALPHA;
+        material.gxMaterial.ropInfo.blendMode.dstFactor = GX.BlendFactor.ONE;
+    } else if (blendMode === 0x02) {
+        // 0xA1; (Dst-Src) * 1.0  + 0.0
+        material.gxMaterial.ropInfo.blendMode.type = GX.BlendMode.SUBTRACT;
+        material.gxMaterial.ropInfo.blendMode.srcFactor = GX.BlendFactor.ONE;
+        material.gxMaterial.ropInfo.blendMode.dstFactor = GX.BlendFactor.ONE;
+    } else if (blendMode === 0x03) {
+        // 0x41; (Dst-Src) * SrcA + Dst
+        // (1.0+SrcA)*Dst - SrcA*Src
+        // ?????? Can't have a coefficient bigger than one. Sort of emulate for now.
+        material.gxMaterial.ropInfo.blendMode.type = GX.BlendMode.SUBTRACT;
+        material.gxMaterial.ropInfo.blendMode.srcFactor = GX.BlendFactor.SRCALPHA;
+        material.gxMaterial.ropInfo.blendMode.dstFactor = GX.BlendFactor.ONE;
+    } else if (blendMode === 0x04) {
+        // 0x49; (Dst-0.0) * SrcA + Dst
+        // (1.0+SrcA)*Dst
+        // In theory could be done with ADD/DESTCOLOR, but we don't have that on the Wii.
+        // Not exactly sure how Ready at Dawn did it.
+        material.gxMaterial.ropInfo.blendMode.type = GX.BlendMode.BLEND;
+        material.gxMaterial.ropInfo.blendMode.srcFactor = GX.BlendFactor.ZERO;
+        material.gxMaterial.ropInfo.blendMode.dstFactor = GX.BlendFactor.SRCALPHA;
+    } else if (blendMode === 0x05) {
+        // 0x68; (Src-0.0) * 1.0  + Dst
+        material.gxMaterial.ropInfo.blendMode.type = GX.BlendMode.BLEND;
+        material.gxMaterial.ropInfo.blendMode.srcFactor = GX.BlendFactor.ONE;
+        material.gxMaterial.ropInfo.blendMode.dstFactor = GX.BlendFactor.ONE;
+    } else if (blendMode === 0x06) {
+        // 0x09; (Dst-0.0) * SrcA + Src
+        material.gxMaterial.ropInfo.blendMode.type = GX.BlendMode.BLEND;
+        material.gxMaterial.ropInfo.blendMode.srcFactor = GX.BlendFactor.ONE;
+        material.gxMaterial.ropInfo.blendMode.dstFactor = GX.BlendFactor.SRCALPHA;
+    } else if (blendMode === 0x07) {
+        // 0x46; (0.0-Dst) * SrcA + Dst
+        // (-Dst)*SrcA + Dst  ==  Dst1.0 + Dst*-SrcA  ==  (1.0-SrcA)*Dst
+        material.gxMaterial.ropInfo.blendMode.type = GX.BlendMode.BLEND;
+        material.gxMaterial.ropInfo.blendMode.srcFactor = GX.BlendFactor.ZERO;
+        material.gxMaterial.ropInfo.blendMode.dstFactor = GX.BlendFactor.INVSRCALPHA;
+    } else if (blendMode === 0x08) {
+        // 0xA4; (Src-Dst) * 1.0  + 0.0
+        // Uh, we don't have "normal" subtract on Wii either.
+    } else if (blendMode === 0x09) {
+        // 0x42; (0.0-Src) * SrcA + Dst
+        // Dst - Src*SrcA
+        material.gxMaterial.ropInfo.blendMode.type = GX.BlendMode.SUBTRACT;
+        material.gxMaterial.ropInfo.blendMode.srcFactor = GX.BlendFactor.SRCALPHA;
+        material.gxMaterial.ropInfo.blendMode.dstFactor = GX.BlendFactor.ONE;
+    } else if (blendMode === 0x0A) {
+        // 0x06; (0.0-Dst) * SrcA + Src
+        // Src - Dst*SrcA
+        // Uh, we don't have "normal" subtract on Wii either.
+    }
+    */
+}
+
+function patchModelBase(mdl0: BRRES.MDL0): void {
+    // Find the first bbox we can, and install it on the root.
+    if (mdl0.nodes[0].bbox === null) {
+        for (let i = 1; i < mdl0.nodes.length; i++) {
+            if (mdl0.nodes[i].bbox !== null) {
+                mdl0.nodes[0].bbox = mdl0.nodes[i].bbox;
+                break;
+            }
+        }
+    }
+
+    if (mdl0.bbox === null)
+        mdl0.bbox = mdl0.nodes[0].bbox;
+
+    for (let i = 0; i < mdl0.materials.length; i++) {
+        const material = mdl0.materials[i];
         assert(material.gxMaterial.tevStages.length === 1);
         material.gxMaterial.tevStages[0].texMap = 0;
+    }
+}
 
-        // TODO(jstpierre): Depth write? Alpha test?
+function patchMaterialSetTest(material: BRRES.MDL0_MaterialEntry, test: number): void {
+    // The game always sorts back-to-front.
+    material.translucent = true;
 
-        if (blendMode === 0x00) {
-            // 0x44; SrcA*Src + (1.0-SrcA)*Dst
-            material.translucent = false;
-            material.gxMaterial.ropInfo.blendMode.type = GX.BlendMode.NONE;
-            // material.gxMaterial.ropInfo.blendMode.srcFactor = GX.BlendFactor.SRCALPHA;
-            // material.gxMaterial.ropInfo.blendMode.dstFactor = GX.BlendFactor.INVSRCALPHA;
-        } else if (blendMode === 0x01) {
-            // 0x48; Src*SrcA + Dst
-            material.translucent = true;
-            material.gxMaterial.ropInfo.blendMode.type = GX.BlendMode.BLEND;
-            material.gxMaterial.ropInfo.blendMode.srcFactor = GX.BlendFactor.SRCALPHA;
-            material.gxMaterial.ropInfo.blendMode.dstFactor = GX.BlendFactor.ONE;
-        } else if (blendMode === 0x02) {
-            // 0xA1; (Dst-Src) * 1.0  + 0.0
-            material.translucent = true;
-            material.gxMaterial.ropInfo.blendMode.type = GX.BlendMode.SUBTRACT;
-            material.gxMaterial.ropInfo.blendMode.srcFactor = GX.BlendFactor.ONE;
-            material.gxMaterial.ropInfo.blendMode.dstFactor = GX.BlendFactor.ONE;
-        } else if (blendMode === 0x03) {
-            // 0x41; (Dst-Src) * SrcA + Dst
-            // (1.0+SrcA)*Dst - SrcA*Src
-            // ?????? Can't have a coefficient bigger than one. Sort of emulate for now.
-            material.translucent = true;
-            material.gxMaterial.ropInfo.blendMode.type = GX.BlendMode.SUBTRACT;
-            material.gxMaterial.ropInfo.blendMode.srcFactor = GX.BlendFactor.SRCALPHA;
-            material.gxMaterial.ropInfo.blendMode.dstFactor = GX.BlendFactor.ONE;
-        } else if (blendMode === 0x04) {
-            // 0x49; (Dst-0.0) * SrcA + Dst
-            // (1.0+SrcA)*Dst
-            // In theory could be done with ADD/DESTCOLOR, but we don't have that on the Wii.
-            // Not exactly sure how Ready at Dawn did it.
-            material.translucent = true;
-            material.gxMaterial.ropInfo.blendMode.type = GX.BlendMode.BLEND;
-            material.gxMaterial.ropInfo.blendMode.srcFactor = GX.BlendFactor.ZERO;
-            material.gxMaterial.ropInfo.blendMode.dstFactor = GX.BlendFactor.SRCALPHA;
-        } else if (blendMode === 0x05) {
-            // 0x68; (Src-0.0) * 1.0  + Dst
-            material.translucent = true;
-            material.gxMaterial.ropInfo.blendMode.type = GX.BlendMode.BLEND;
-            material.gxMaterial.ropInfo.blendMode.srcFactor = GX.BlendFactor.ONE;
-            material.gxMaterial.ropInfo.blendMode.dstFactor = GX.BlendFactor.ONE;
-        } else if (blendMode === 0x06) {
-            // 0x09; (Dst-0.0) * SrcA + Src
-            material.translucent = true;
-            material.gxMaterial.ropInfo.blendMode.type = GX.BlendMode.BLEND;
-            material.gxMaterial.ropInfo.blendMode.srcFactor = GX.BlendFactor.ONE;
-            material.gxMaterial.ropInfo.blendMode.dstFactor = GX.BlendFactor.SRCALPHA;
-        } else if (blendMode === 0x07) {
-            // 0x46; (0.0-Dst) * SrcA + Dst
-            // (-Dst)*SrcA + Dst  ==  Dst1.0 + Dst*-SrcA  ==  (1.0-SrcA)*Dst
-            material.translucent = true;
-            material.gxMaterial.ropInfo.blendMode.type = GX.BlendMode.BLEND;
-            material.gxMaterial.ropInfo.blendMode.srcFactor = GX.BlendFactor.ZERO;
-            material.gxMaterial.ropInfo.blendMode.dstFactor = GX.BlendFactor.INVSRCALPHA;
-        } else if (blendMode === 0x08) {
-            // 0xA4; (Src-Dst) * 1.0  + 0.0
-            // Uh, we don't have "normal" subtract on Wii either.
-        } else if (blendMode === 0x09) {
-            // 0x42; (0.0-Src) * SrcA + Dst
-            // Dst - Src*SrcA
-            material.translucent = true;
-            material.gxMaterial.ropInfo.blendMode.type = GX.BlendMode.SUBTRACT;
-            material.gxMaterial.ropInfo.blendMode.srcFactor = GX.BlendFactor.SRCALPHA;
-            material.gxMaterial.ropInfo.blendMode.dstFactor = GX.BlendFactor.ONE;
-        } else if (blendMode === 0x0A) {
-            // 0x06; (0.0-Dst) * SrcA + Src
-            // Src - Dst*SrcA
-            // Uh, we don't have "normal" subtract on Wii either.
-        } else {
-            // Not sure. r104 uses this, but the table isn't big enough...
-            // throw "whoops";
-            console.warn(`Unknown blend mode ${blendMode}`);
-        }
+    if (test === 0x05001D) {
+        // ATE = 1, ATST = 6 (GREATER), AREF = 1, AFAIL = 0 (KEEP)
+        // DATE = 0, DATM = 0, ZTE = 1, ZTST = 2 (GEQUAL)
+        material.gxMaterial.ropInfo.depthWrite = true;
 
-        if (material.translucent) {
-            material.gxMaterial.ropInfo.depthWrite = false;
-        } else {
-            material.gxMaterial.ropInfo.depthWrite = true;
-            material.gxMaterial.alphaTest.op = GX.AlphaOp.OR;
-            material.gxMaterial.alphaTest.compareA = GX.CompareType.GREATER;
-            material.gxMaterial.alphaTest.referenceA = 0.2;
-            material.gxMaterial.alphaTest.compareB = GX.CompareType.NEVER;
-        }
+        material.gxMaterial.alphaTest.op = GX.AlphaOp.OR;
+        material.gxMaterial.alphaTest.compareA = GX.CompareType.GREATER;
+        material.gxMaterial.alphaTest.referenceA = 1 / 0xFF;
+        material.gxMaterial.alphaTest.compareB = GX.CompareType.NEVER;
+    } else if (test === 0x051001) {
+        // ATE = 1, ATST = 0 (NEVER), AREF = 0, AFAIL = 1 (FB_ONLY)
+        // DATE = 0, DATM = 0, ZTE = 1, ZTST = 2 (GEQUAL)
+        material.gxMaterial.ropInfo.depthWrite = false;
+        material.gxMaterial.alphaTest.op = GX.AlphaOp.OR;
+        material.gxMaterial.alphaTest.compareA = GX.CompareType.ALWAYS;
+    } else if (test === 0x00) {
+        // Unknown. Some default.
+
+        material.gxMaterial.ropInfo.depthWrite = true;
+        material.gxMaterial.alphaTest.op = GX.AlphaOp.OR;
+        material.gxMaterial.alphaTest.compareA = GX.CompareType.ALWAYS;
+    } else {
+        throw "whoops";
     }
 }
 
@@ -382,7 +399,7 @@ class OkamiSCPArchiveDataMap {
     public scr: SCR[] = [];
     public scpArc: ARC.Archive;
 
-    constructor(device: GfxDevice, renderer: OkamiRenderer, scpArcBuffer: ArrayBufferSlice) {
+    constructor(device: GfxDevice, renderer: OkamiRenderer, scpArcBuffer: ArrayBufferSlice, private filename: string) {
         this.scpArc = ARC.parse(scpArcBuffer);
 
         // Load the textures.
@@ -413,20 +430,40 @@ class OkamiSCPArchiveDataMap {
             const mdl0Models: MDL0Model[] = [];
             for (let j = 0; j < brs.mdl0.length; j++) {
                 const mdl0 = brs.mdl0[j];
+                mdl0.name = `${scrFile.filename}/${mdl0.name}`;
 
-                // Make sure that all SCR entries have the same flags.
-                let materialFlags = -1;
+                // TODO(jstpierre): Support different combinations of these flags?
+                let flags_08 = -1;
+                let flags_0A = -1;
+                let flags_0C = -1;
                 for (let k = 0; k < scr.instances.length; k++) {
                     const instance = scr.instances[k];
-                    if (instance.modelIndex !== j)
-                        continue;
-                    if (materialFlags === -1)
-                        materialFlags = instance.materialFlags;
-                    else
-                        assert(materialFlags === instance.materialFlags);
+                    if (instance.modelIndex === j) {
+                        flags_08 = instance.flags_08;
+                        flags_0A = instance.flags_0A;
+                        flags_0C = instance.flags_0C;
+                        break;
+                    }
                 }
 
-                patchModel(mdl0, materialFlags);
+                // This is a TEST_1 register.
+                let test: number  = 0;
+                if (((flags_08 >>> 6) & 0x01)) {
+                    test = 0x05001D;
+                }
+                if (((flags_08 >>> 14) & 0x01) || ((flags_0A >>> 3) & 0x01)) {
+                    test = 0x05001D;
+                }
+                if ((flags_0C >>> 4) & 0x01) {
+                    test = 0x051001;
+                }
+
+                patchModelBase(mdl0);
+                for (let i = 0; i < mdl0.materials.length; i++) {
+                    patchMaterialSetAlpha(mdl0.materials[i], 0x44);
+                    patchMaterialSetTest(mdl0.materials[i], test);
+                }
+
                 const mdl0Model = new MDL0Model(device, renderer.renderHelper, brs.mdl0[j], materialHacks);
                 renderer.models.push(mdl0Model);
                 mdl0Models.push(mdl0Model);
@@ -443,9 +480,10 @@ class OkamiSCPArchiveDataMap {
             for (let j = 0; j < scr.instances.length; j++) {
                 const instance = scr.instances[j];
                 const mdl0Model = mdl0Models[instance.modelIndex];
-                const modelInstance = new MDL0ModelInstance(device, renderer.renderHelper, renderer.textureHolder, mdl0Model);
+                const modelInstance = new MDL0ModelInstance(device, renderer.renderHelper, renderer.textureHolder, mdl0Model, this.filename);
+                const sortKeyLayer = (instance.flags_08 & 0xF0) >>> 4;
                 // TODO(jstpierre): Sort properly
-                modelInstance.setSortKeyLayer(this.scr.length - i);
+                modelInstance.setSortKeyLayer(sortKeyLayer);
                 const modelMatrix = mat4.create();
                 mat4.mul(modelMatrix, modelMatrixBase, instance.modelMatrix);
                 const mapPartInstance = new MapPartInstance(instance, modelMatrix, modelInstance);
@@ -531,7 +569,13 @@ class OkamiSCPArchiveDataObject {
             const mdl0Models: MDL0Model[] = [];
             for (let j = 0; j < brs.mdl0.length; j++) {
                 const mdl0 = brs.mdl0[j];
-                patchModel(mdl0, 0x00);
+
+                patchModelBase(mdl0);
+                for (let i = 0; i < mdl0.materials.length; i++) {
+                    patchMaterialSetAlpha(mdl0.materials[i], 0x44);
+                    patchMaterialSetTest(mdl0.materials[i], 0x05001D);
+                }
+
                 const mdl0Model = new MDL0Model(device, renderer.renderHelper, brs.mdl0[j], materialHacks);
                 renderer.models.push(mdl0Model);
                 mdl0Models.push(mdl0Model);
@@ -550,7 +594,7 @@ class OkamiSCPArchiveDataObject {
                 const mdl0Model = mdl0Models[j];
                 const modelInstance = new MDL0ModelInstance(device, renderer.renderHelper, renderer.textureHolder, mdl0Model, this.filename);
                 // TODO(jstpierre): Sort properly
-                modelInstance.setSortKeyLayer(this.md.length - i);
+                modelInstance.setSortKeyLayer(0xF0);
                 const modelMatrix = mat4.create();
                 mat4.mul(modelMatrix, modelMatrixBase, instance.modelMatrix);
                 const objectInstance = new ObjectInstance(this.objectTypeId, this.objectId, modelMatrix, modelInstance);
@@ -632,7 +676,7 @@ class OkamiSceneDesc implements Viewer.SceneDesc {
 
             // Look for the SCP file.
             const scpFile = datArc.files.find((file) => file.type === 'SCP')!;
-            const scpData = new OkamiSCPArchiveDataMap(device, renderer, scpFile.buffer);
+            const scpData = new OkamiSCPArchiveDataMap(device, renderer, scpFile.buffer, scpFile.filename);
 
             // Create the main instances.
             const rootModelMatrix = mat4.create();
