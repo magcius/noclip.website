@@ -42,6 +42,7 @@ export class ShapeInstanceState {
 class ShapeData {
     public shapeHelpers: GXShapeHelperGfx[] = [];
     public materialIndex: number = -1;
+    public sortKeyBias: number = 0;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public shape: Shape, coalescedBuffers: GfxCoalescedBuffers[]) {
         for (let i = 0; i < this.shape.packets.length; i++) {
@@ -115,8 +116,6 @@ const scratchModelViewMatrix = mat4.create();
 const scratchViewMatrix = mat4.create();
 const packetParams = new PacketParams();
 export class ShapeInstance {
-    public sortKeyBias: number = 0;
-
     constructor(public shapeData: ShapeData, private materialInstance: MaterialInstance) {
     }
 
@@ -132,7 +131,7 @@ export class ShapeInstance {
         const template = renderInstManager.pushTemplateRenderInst();
         template.sortKey = materialInstance.sortKey;
         template.sortKey = setSortKeyDepth(template.sortKey, depth);
-        template.sortKey = setSortKeyBias(template.sortKey, this.sortKeyBias);
+        template.sortKey = setSortKeyBias(template.sortKey, this.shapeData.sortKeyBias);
 
         materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
 
@@ -327,6 +326,11 @@ export class MaterialInstance {
 
     public setVertexColorsEnabled(v: boolean): void {
         this.materialHacks.disableVertexColors = !v;
+        this.createProgram();
+    }
+
+    public setLightingEnabled(v: boolean): void {
+        this.materialHacks.disableLighting = !v;
         this.createProgram();
     }
 
@@ -876,6 +880,7 @@ export class BMDModel {
         const view = inf1.hierarchyData.createDataView();
 
         let currentMaterialIndex: number = -1;
+        let translucentDrawIndex: number = 0;
         // Dummy joint to be the parent of our root node.
         let lastJoint: JointData = new JointData(-1);
         let jointStack: JointData[] = [lastJoint];
@@ -903,6 +908,10 @@ export class BMDModel {
                 assert(shapeData.materialIndex === -1);
                 assert(currentMaterialIndex !== -1);
                 shapeData.materialIndex = currentMaterialIndex;
+
+                // Translucent draws happen in reverse order -- later shapes are drawn first.
+                if (this.materialData[currentMaterialIndex].material.translucent)
+                    shapeData.sortKeyBias = --translucentDrawIndex;
             }
 
             offs += 0x04;
@@ -1021,6 +1030,18 @@ export class BMDModelInstance {
     public setTexturesEnabled(v: boolean): void {
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].setTexturesEnabled(v);
+    }
+
+    /**
+     * Render Hack. Sets whether lighting is enabled. If lighting is disabled, then it is treated
+     * like all light channels have lighting disabled -- meaning they become equivalent to the material
+     * color.
+     *
+     * By default, lighting is enabled.
+     */
+    public setLightingEnabled(v: boolean): void {
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].setLightingEnabled(v);
     }
 
     /**

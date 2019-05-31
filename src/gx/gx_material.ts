@@ -245,6 +245,7 @@ export interface GXMaterialHacks {
     lightingFudge?: LightingFudgeGenerator;
     disableTextures?: boolean;
     disableVertexColors?: boolean;
+    disableLighting?: boolean;
 }
 
 function colorChannelsEqual(a: ColorChannelControl, b: ColorChannelControl): boolean {
@@ -314,8 +315,12 @@ export class GX_Program extends DeviceProgram {
         const matSource = this.generateMaterialSource(chan, i);
         const ambSource = this.generateAmbientSource(chan, i);
 
+        let lightingEnabled = chan.lightingEnabled;
+        if (this.hacks !== null && this.hacks.disableLighting)
+            lightingEnabled = false;
+
         // HACK.
-        if (chan.lightingEnabled && this.hacks && this.hacks.lightingFudge) {
+        if (lightingEnabled && this.hacks !== null && this.hacks.lightingFudge) {
             const vtx = `a_Color${i}`;
             const amb = `u_ColorAmbReg[${i}]`;
             const mat = `u_ColorMatReg[${i}]`;
@@ -324,7 +329,7 @@ export class GX_Program extends DeviceProgram {
         }
 
         let generateLightAccum = ``;
-        if (chan.lightingEnabled) {
+        if (lightingEnabled) {
             generateLightAccum = `
     t_LightAccum = ${ambSource};`;
 

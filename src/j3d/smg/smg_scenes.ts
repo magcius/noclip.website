@@ -130,12 +130,6 @@ const enum RotateAxis { X, Y, Z };
 interface ObjectBase {
     zoneAndLayer: ZoneAndLayer;
     visibleScenario: boolean;
-    setVertexColorsEnabled(v: boolean): void;
-    setTexturesEnabled(v: boolean): void;
-    setIndirectTextureOverride(sceneTexture: GfxTexture): void;
-
-    // Equivalent to NameObj's draw -- calculates draw-time state (???)
-    draw(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void;
 }
 
 function setIndirectTextureOverride(modelInstance: BMDModelInstance, sceneTexture: GfxTexture): void {
@@ -172,6 +166,10 @@ class Node implements ObjectBase {
 
     public setTexturesEnabled(v: boolean): void {
         this.modelInstance.setTexturesEnabled(v);
+    }
+
+    public setLightingEnabled(v: boolean): void {
+        this.modelInstance.setLightingEnabled(v);
     }
 
     public setIndirectTextureOverride(sceneTexture: GfxTexture): void {
@@ -363,6 +361,12 @@ class SMGRenderer implements Viewer.SceneGfx {
                 this.sceneGraph.nodes[i].setTexturesEnabled(enableTextures.checked);
         };
         renderHacksPanel.contents.appendChild(enableTextures.elem);
+        const enableLighting = new UI.Checkbox('Enable Lighting', true);
+        enableLighting.onchanged = () => {
+            for (let i = 0; i < this.sceneGraph.nodes.length; i++)
+                this.sceneGraph.nodes[i].setLightingEnabled(enableLighting.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableLighting.elem);
 
         return [scenarioPanel, renderHacksPanel];
     }
