@@ -1289,6 +1289,7 @@ class PeachCastleGardenPlanet extends MapObjActor {
 
         this.indirectModel = createIndirectPlanetModel(sceneObjHolder, this);
         this.tryStartAllAnim('Before');
+        this.tryStartAllAnim('PeachCastleGardenPlanet');
     }
 
     public connectToScene(sceneObjHolder: SceneObjHolder): void {
@@ -1484,6 +1485,58 @@ class Kinopio extends NPCActor {
     }
 }
 
+class Peach extends NPCActor {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, getObjectName(infoIter));
+
+        const objName = this.name;
+        this.initModelManagerWithAnm(sceneObjHolder, objName);
+        connectToSceneNpc(sceneObjHolder, this);
+        this.initDefaultPos(sceneObjHolder, infoIter);
+        this.initLightCtrl(sceneObjHolder);
+
+        this.startAction('Help');
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        super.requestArchives(sceneObjHolder, infoIter);
+        const itemGoodsIdx = getJMapInfoArg7(infoIter);
+        requestArchivesForNPCGoods(sceneObjHolder, 'Kinopio', itemGoodsIdx);
+    }
+}
+
+class Penguin extends NPCActor {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, getObjectName(infoIter));
+
+        const objName = this.name;
+        this.initModelManagerWithAnm(sceneObjHolder, objName);
+        connectToSceneNpc(sceneObjHolder, this);
+        this.initDefaultPos(sceneObjHolder, infoIter);
+        this.initLightCtrl(sceneObjHolder);
+
+        const arg0 = getJMapInfoArg0(infoIter, -1);
+        if (arg0 === 0) {
+            this.startAction(`SitDown`);
+        } else if (arg0 === 1) {
+            this.startAction(`SwimWait`);
+        } else if (arg0 === 2) {
+            this.startAction(`SwimWaitSurface`);
+        } else if (arg0 === 3) {
+            this.startAction(`SwimWaitSurface`);
+        } else if (arg0 === 4) {
+            this.startAction(`SwimTurtleTalk`);
+        } else if (arg0 === 6) {
+            this.startAction(`Wait`);
+        } else {
+            this.startAction(`Wait`);
+        }
+
+        // Bind the color change animation.
+        bindColorChangeAnimation(this.modelInstance, this.arc, getJMapInfoArg7(infoIter, 0));
+    }
+}
+
 class TicoComet extends NPCActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, getObjectName(infoIter));
@@ -1658,6 +1711,8 @@ class SMGSpawner {
         else if (objName === 'EarthenPipe')   return EarthenPipe;
         else if (objName === 'BlackHole')     return BlackHole;
         else if (objName === 'BlackHoleCube') return BlackHole;
+        else if (objName === 'Peach')         return Peach;
+        else if (objName === 'Penguin')       return Penguin;
         return null;
     }
 
