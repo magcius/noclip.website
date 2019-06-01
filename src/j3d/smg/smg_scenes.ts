@@ -187,8 +187,6 @@ class Node implements ObjectBase {
             this.modelMatrixAnimator = new RailAnimationMapPart(this.objinfo.path, this.modelMatrix);
         } else if (objName === 'TicoRail') {
             this.modelMatrixAnimator = new RailAnimationTico(this.objinfo.path);
-        } else if (objName.endsWith('Coin')) {
-            this.setRotateSpeed(140);
         }
     }
 
@@ -987,7 +985,9 @@ export class LiveActor extends NameObj implements ObjectBase {
 
         const bmdModel = modelCache.getModel2(this.arc, `${objName}.bdl`);
         this.modelInstance = new BMDModelInstance(bmdModel);
+        this.modelInstance.name = objName;
         this.modelInstance.animationController.fps = 60;
+        this.modelInstance.animationController.phaseFrames = Math.random() * 1500;
         // TODO(jstpierre): Use connectToScene for final draw rather than passMask.
         this.modelInstance.passMask = SMGPass.OPAQUE;
 
@@ -1318,6 +1318,7 @@ class FixedPosition {
 
     public calc(dst: mat4): void {
         mat4.copy(dst, this.baseMtx);
+        mat4.translate(dst, dst, this.localTrans);
     }
 }
 
@@ -1341,8 +1342,12 @@ class PartsModel extends LiveActor {
         connectToScene(sceneObjHolder, this, movementType, calcAnimType, drawBufferType, -1);
     }
 
-    public initFixedPosition(jointName: string): void {
-        this.fixedPosition = new FixedPosition(this.parentActor.getJointMtx(jointName));
+    public initFixedPositionRelative(localTrans: vec3 | null): void {
+        this.fixedPosition = new FixedPosition(this.parentActor.modelInstance.modelMatrix, localTrans);
+    }
+
+    public initFixedPositionJoint(jointName: string, localTrans: vec3 | null): void {
+        this.fixedPosition = new FixedPosition(this.parentActor.getJointMtx(jointName), localTrans);
     }
 
     public calcAndSetBaseMtx(): void {
@@ -1351,22 +1356,28 @@ class PartsModel extends LiveActor {
     }
 }
 
-function createPartsModelIndirectNpc(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, jointName: string) {
+function createPartsModelIndirectNpc(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, jointName: string, localTrans: vec3 | null = null) {
     const model = new PartsModel(sceneObjHolder, "npc parts", objName, parentActor, DrawBufferType.NPC_INDIRECT);
     model.modelInstance.passMask = SMGPass.INDIRECT;
-    model.initFixedPosition(jointName);
+    model.initFixedPositionJoint(jointName, localTrans);
     return model;
 }
 
-function createIndirectNPCGoods(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, jointName: string) {
-    const model = createPartsModelIndirectNpc(sceneObjHolder, parentActor, objName, jointName);
+function createIndirectNPCGoods(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, jointName: string, localTrans: vec3 | null = null) {
+    const model = createPartsModelIndirectNpc(sceneObjHolder, parentActor, objName, jointName, localTrans);
     model.initLightCtrl(sceneObjHolder);
     return model;
 }
 
-function createPartsModelNpcAndFix(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, jointName: string) {
+function createPartsModelNpcAndFix(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, jointName: string, localTrans: vec3 | null = null) {
     const model = new PartsModel(sceneObjHolder, "npc parts", objName, parentActor, DrawBufferType.NPC);
-    model.initFixedPosition(jointName);
+    model.initFixedPositionJoint(jointName, localTrans);
+    return model;
+}
+
+function createPartsModelNoSilhouettedMapObj(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, localTrans: vec3 | null = null) {
+    const model = new PartsModel(sceneObjHolder, "AirBubble", objName, parentActor, 0x0D);
+    model.initFixedPositionRelative(localTrans);
     return model;
 }
 
@@ -1382,6 +1393,10 @@ function connectToScene(sceneObjHolder: SceneObjHolder, actor: LiveActor, moveme
 
 function connectToSceneNpc(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x28, 0x06, DrawBufferType.NPC, -1);
+}
+
+function connectToSceneItemStrongLight(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x2C, 0x10, 0x0F, -1);
 }
 
 function requestArchivesForNPCGoods(sceneObjHolder: SceneObjHolder, npcName: string, index: number): void {
@@ -1537,6 +1552,32 @@ class Penguin extends NPCActor {
     }
 }
 
+class PenguinRacer extends NPCActor {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, getObjectName(infoIter));
+
+        this.initModelManagerWithAnm(sceneObjHolder, "Penguin");
+        connectToSceneNpc(sceneObjHolder, this);
+        this.initDefaultPos(sceneObjHolder, infoIter);
+        this.initLightCtrl(sceneObjHolder);
+
+        const itemGoods = sceneObjHolder.npcDirector.getNPCItemData(this.name, 0);
+        this.equipment(sceneObjHolder, itemGoods);
+
+        const arg7 = getJMapInfoArg7(infoIter, 0);
+        bindColorChangeAnimation(this.modelInstance, this.arc, arg7);
+        this.startAction('RacerWait');
+
+        // Bind the color change animation.
+        bindColorChangeAnimation(this.modelInstance, this.arc, getJMapInfoArg7(infoIter, 0));
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        super.requestArchives(sceneObjHolder, infoIter);
+        requestArchivesForNPCGoods(sceneObjHolder, getObjectName(infoIter), 0);
+    }
+}
+
 class TicoComet extends NPCActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, getObjectName(infoIter));
@@ -1567,6 +1608,55 @@ class TicoComet extends NPCActor {
         super.requestArchives(sceneObjHolder, infoIter);
         const itemGoodsIdx = 0;
         requestArchivesForNPCGoods(sceneObjHolder, 'TicoComet', itemGoodsIdx);
+    }
+}
+
+class Coin extends LiveActor {
+    private spinAnimationController = new AnimationController(60);
+    private modelMatrix = mat4.create();
+    private airBubble: PartsModel | null = null;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, getObjectName(infoIter));
+
+        this.initModelManagerWithAnm(sceneObjHolder, getObjectName(infoIter));
+        connectToSceneItemStrongLight(sceneObjHolder, this);
+        this.initLightCtrl(sceneObjHolder);
+
+        this.initDefaultPos(sceneObjHolder, infoIter);
+        mat4.copy(this.modelMatrix, this.modelInstance.modelMatrix);
+
+        const isNeedBubble = getJMapInfoArg7(infoIter);
+        if (isNeedBubble !== -1) {
+            this.airBubble = createPartsModelNoSilhouettedMapObj(sceneObjHolder, this, "AirBubble", vec3.fromValues(0, 70, 0));
+            this.airBubble.tryStartAllAnim("Move");
+        }
+
+        this.tryStartAllAnim('Move');
+    }
+
+    public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
+        // TODO(jstpierre): CoinRotater has three separate matrices:
+        //   - getCoinRotateYMatrix()
+        //   - getCoinInWaterRotateYMatrix()
+        //   - getCoinHiSpeedRotateYMatrix()
+        // for now we just spin at 4 degrees per frame lol
+
+        const enum Constants {
+            SPEED = MathConstants.DEG_TO_RAD * 4,
+        }
+
+        this.spinAnimationController.setTimeFromViewerInput(viewerInput);
+        const timeInFrames = this.spinAnimationController.getTimeInFrames();
+
+        mat4.rotateY(this.modelInstance.modelMatrix, this.modelMatrix, timeInFrames * Constants.SPEED);
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        super.requestArchives(sceneObjHolder, infoIter);
+        const isNeedBubble = getJMapInfoArg7(infoIter);
+        if (isNeedBubble !== -1)
+            sceneObjHolder.modelCache.requestObjectData("AirBubble");
     }
 }
 
@@ -1704,15 +1794,19 @@ class SMGSpawner {
         if (planetFactory !== null)
             return planetFactory;
 
-        if (objName === 'Kinopio')            return Kinopio;
-        else if (objName === 'TicoComet')     return TicoComet;
-        else if (objName === 'CollapsePlane') return CollapsePlane;
-        else if (objName === 'StarPiece')     return StarPiece;
-        else if (objName === 'EarthenPipe')   return EarthenPipe;
-        else if (objName === 'BlackHole')     return BlackHole;
-        else if (objName === 'BlackHoleCube') return BlackHole;
-        else if (objName === 'Peach')         return Peach;
-        else if (objName === 'Penguin')       return Penguin;
+        if (objName === 'Kinopio')                      return Kinopio;
+        else if (objName === 'TicoComet')               return TicoComet;
+        else if (objName === 'CollapsePlane')           return CollapsePlane;
+        else if (objName === 'StarPiece')               return StarPiece;
+        else if (objName === 'EarthenPipe')             return EarthenPipe;
+        else if (objName === 'BlackHole')               return BlackHole;
+        else if (objName === 'BlackHoleCube')           return BlackHole;
+        else if (objName === 'Peach')                   return Peach;
+        else if (objName === 'Penguin')                 return Penguin;
+        else if (objName === 'PenguinRacer')            return PenguinRacer;
+        else if (objName === 'PenguinRacerLeader')      return PenguinRacer;
+        else if (objName === 'Coin')                    return Coin;
+        else if (objName === 'PurpleCoin')              return Coin;
         return null;
     }
 
@@ -2268,7 +2362,7 @@ class SMGSpawner {
 
     private placeStageData(stageDataHolder: StageDataHolder): ZoneNode {
         const zoneNode = new ZoneNode(stageDataHolder);
-        this.zones.push(zoneNode);
+        this.zones[stageDataHolder.zoneId] = zoneNode;
 
         const legacyPaths = stageDataHolder.legacyParsePaths();
 
@@ -2339,9 +2433,9 @@ class StageDataHolder {
     public localStageDataHolders: StageDataHolder[] = [];
     public placementMtx = mat4.create();
 
-    constructor(sceneDesc: SMGSceneDescBase, modelCache: ModelCache, public zoneName: string, public zoneId: number, public layerId: LayerId = -1) {
+    constructor(sceneDesc: SMGSceneDescBase, modelCache: ModelCache, scenarioData: ScenarioData, public zoneName: string, public zoneId: number, public layerId: LayerId = -1) {
         this.zoneArchive = sceneDesc.getZoneMapArchive(modelCache, zoneName);
-        this.createLocalStageDataHolder(sceneDesc, modelCache);
+        this.createLocalStageDataHolder(sceneDesc, modelCache, scenarioData);
     }
 
     private createCsvParser(buffer: ArrayBufferSlice): JMapInfoIter {
@@ -2438,7 +2532,7 @@ class StageDataHolder {
         }
     }
 
-    public createLocalStageDataHolder(sceneDesc: SMGSceneDescBase, modelCache: ModelCache): void {
+    public createLocalStageDataHolder(sceneDesc: SMGSceneDescBase, modelCache: ModelCache, scenarioData: ScenarioData): void {
         for (let i = LayerId.COMMON; i <= LayerId.LAYER_MAX; i++) {
             const layerDirName = getLayerDirName(i);
             const stageObjInfo = this.zoneArchive.findFileData(`jmp/placement/${layerDirName}/StageObjInfo`);
@@ -2451,7 +2545,8 @@ class StageDataHolder {
             for (let j = 0; j < mapInfoIter.getNumRecords(); j++) {
                 mapInfoIter.setRecord(j);
                 const zoneName = getObjectName(mapInfoIter);
-                const localStage = new StageDataHolder(sceneDesc, modelCache, zoneName, j, i);
+                const zoneId = scenarioData.zoneNames.indexOf(zoneName);
+                const localStage = new StageDataHolder(sceneDesc, modelCache, scenarioData, zoneName, zoneId, i);
                 localStage.calcPlacementMtx(mapInfoIter);
                 this.localStageDataHolders.push(localStage);
             }
@@ -2588,7 +2683,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
             sceneObjHolder.planetMapCreator = new PlanetMapCreator(modelCache.getObjectData(`PlanetMapDataTable`));
             sceneObjHolder.npcDirector = new NPCDirector(modelCache.getObjectData(`NPCData`));
             sceneObjHolder.lightDataHolder = new LightDataHolder(this.getLightData(modelCache));
-            sceneObjHolder.stageDataHolder = new StageDataHolder(this, modelCache, sceneObjHolder.scenarioData.getMasterZoneFilename(), 0);
+            sceneObjHolder.stageDataHolder = new StageDataHolder(this, modelCache, sceneObjHolder.scenarioData, sceneObjHolder.scenarioData.getMasterZoneFilename(), 0);
             sceneObjHolder.sceneNameObjListExecutor = new SceneNameObjListExecutor();
 
             if (modelCache.isArchiveExist(`ParticleData/Effect.arc`))
