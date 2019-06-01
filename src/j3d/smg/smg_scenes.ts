@@ -306,6 +306,8 @@ class SMGRenderer implements Viewer.SceneGfx {
 
         for (let i = 0; i < this.spawner.zones.length; i++) {
             const zoneNode = this.spawner.zones[i];
+            if (zoneNode === undefined)
+                continue;
             zoneNode.layerMask = scenarioData.getValueNumber(zoneNode.name);
         }
 
