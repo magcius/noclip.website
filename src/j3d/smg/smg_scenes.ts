@@ -337,10 +337,15 @@ class SMGRenderer implements Viewer.SceneGfx {
         const galaxyName = this.sceneObjHolder.sceneDesc.galaxyName;
         const scenarioData = this.sceneObjHolder.scenarioData.scenarioDataIter;
         const scenarioNames = scenarioData.mapRecords((jmp, i) => {
-            if (this.sceneObjHolder.messageDataHolder !== null)
-                return this.sceneObjHolder.messageDataHolder.getStringById(`ScenarioName_${galaxyName}${i + 1}`);
-            else
-                return jmp.getValueString(`ScenarioName`);
+            let name: string | null = null;
+
+            if (name === null && this.sceneObjHolder.messageDataHolder !== null)
+                name = this.sceneObjHolder.messageDataHolder.getStringById(`ScenarioName_${galaxyName}${i + 1}`);
+
+            if (name === null)
+                name = jmp.getValueString(`ScenarioName`);
+
+            return name;
         });
         this.scenarioSelect = new UI.SingleSelect();
         this.scenarioSelect.setStrings(scenarioNames);
