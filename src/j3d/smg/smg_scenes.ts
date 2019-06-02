@@ -2,12 +2,12 @@
 import { mat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
 import Progressable from '../../Progressable';
-import { assert, assertExists } from '../../util';
+import { assert, assertExists, readString, getTextDecoder, hexdump } from '../../util';
 import { fetchData, AbortedError } from '../../fetch';
 import * as Viewer from '../../viewer';
 import { GfxDevice, GfxRenderPass, GfxTexture } from '../../gfx/platform/GfxPlatform';
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../../gfx/helpers/RenderTargetHelpers';
-import { BMD, BRK, BTK, BCK, LoopMode, BVA, BTP, BPK } from '../../j3d/j3d';
+import { BMD, BRK, BTK, BCK, LoopMode, BVA, BTP, BPK, JSystemFileReaderHelper } from '../../j3d/j3d';
 import { BMDModel, BMDModelInstance } from '../../j3d/render';
 import * as RARC from '../../j3d/rarc';
 import { EFB_WIDTH, EFB_HEIGHT } from '../../gx/gx_material';
@@ -334,9 +334,13 @@ class SMGRenderer implements Viewer.SceneGfx {
         scenarioPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         scenarioPanel.setTitle(UI.TIME_OF_DAY_ICON, 'Scenario');
 
+        const galaxyName = this.sceneObjHolder.sceneDesc.galaxyName;
         const scenarioData = this.sceneObjHolder.scenarioData.scenarioDataIter;
-        const scenarioNames = scenarioData.mapRecords((jmp) => {
-            return jmp.getValueString(`ScenarioName`);
+        const scenarioNames = scenarioData.mapRecords((jmp, i) => {
+            if (this.sceneObjHolder.messageDataHolder !== null)
+                return this.sceneObjHolder.messageDataHolder.getStringById(`ScenarioName_${galaxyName}${i + 1}`);
+            else
+                return jmp.getValueString(`ScenarioName`);
         });
         this.scenarioSelect = new UI.SingleSelect();
         this.scenarioSelect.setStrings(scenarioNames);
@@ -894,7 +898,8 @@ export class SceneObjHolder {
     public lightDataHolder: LightDataHolder;
     public npcDirector: NPCDirector;
     public stageDataHolder: StageDataHolder;
-    public particleResourceHolder: ParticleResourceHolder;
+    public particleResourceHolder: ParticleResourceHolder | null;
+    public messageDataHolder: MessageDataHolder | null;
 
     // This is technically stored outside the SceneObjHolder, separately
     // on the same singleton, but c'est la vie...
@@ -902,6 +907,9 @@ export class SceneObjHolder {
 
     public destroy(device: GfxDevice): void {
         this.modelCache.destroy(device);
+
+        if (this.particleResourceHolder !== null)
+            this.particleResourceHolder.destroy(device);
     }
 }
 
@@ -2228,7 +2236,7 @@ class SMGSpawner {
             spawnGraph(`SuperSpinDriver`);
             break;
         case 'JetTurtle':
-            spawnGraph(`Koura`);
+            // spawnGraph(`Koura`);
             break;
 
         // TODO(jstpierre): Group spawn logic?
@@ -2621,7 +2629,7 @@ class PlanetMapCreator {
 class ParticleResourceHolder {
     private effectNames: string[];
     private jpac: JPA.JPAC;
-    private resources: JPA.JPAResource[] = [];
+    private resourceDatas = new Map<number, JPA.JPAResourceData>();
 
     constructor(effectArc: RARC.RARC) {
         const effectNames = createCsvParser(effectArc.findFileData(`ParticleNames.bcsv`));
@@ -2641,11 +2649,92 @@ class ParticleResourceHolder {
         return this.jpac.effects[this.getUserIndex(name)];
     }
 
-    public getResource(name: string): JPA.JPAResource {
+    public getResourceData(sceneObjHolder: SceneObjHolder, name: string): JPA.JPAResourceData {
+        const device = sceneObjHolder.modelCache.device;
+        const cache = sceneObjHolder.modelCache.cache;
+
         const idx = this.getUserIndex(name);
-        if (this.resources[idx] === undefined)
-            this.resources[idx] = JPA.parseResource(this.jpac.effects[idx]);
-        return this.resources[idx];
+        if (!this.resourceDatas.has(idx))
+            this.resourceDatas.set(idx, new JPA.JPAResourceData(device, cache, this.jpac, this.jpac.effects[idx]));
+        return this.resourceDatas.get(idx);
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (const [, resourceData] of this.resourceDatas.entries())
+            resourceData.destroy(device);
+    }
+}
+
+class BMG {
+    private inf1: ArrayBufferSlice;
+    private dat1: ArrayBufferSlice;
+    private numStrings: number;
+    private inf1ItemSize: number;
+
+    constructor(private mesgData: ArrayBufferSlice) {
+        const readerHelper = new JSystemFileReaderHelper(this.mesgData);
+        assert(readerHelper.magic === 'MESGbmg1');
+
+        this.inf1 = readerHelper.nextChunk('INF1');
+        this.dat1 = readerHelper.nextChunk('DAT1');
+
+        const view = this.inf1.createDataView();
+        this.numStrings = view.getUint16(0x08);
+        this.inf1ItemSize = view.getUint16(0x0A);
+    }
+
+    public getStringByIndex(i: number): string {
+        const inf1View = this.inf1.createDataView();
+        const dat1Offs = 0x08 + inf1View.getUint32(0x10 + (i * this.inf1ItemSize) + 0x00);
+
+        const view = this.dat1.createDataView();
+        let idx = dat1Offs;
+        let S = '';
+        while (true) {
+            const c = view.getUint16(idx + 0x00);
+            if (c === 0)
+                break;
+            if (c === 0x001A) {
+                // Escape sequence.
+                const size = view.getUint8(idx + 0x02);
+                const escapeKind = view.getUint8(idx + 0x03);
+
+                if (escapeKind === 0x05) {
+                    // Current character name -- 'Mario' or 'Luigi'. We use 'Mario'
+                    S += "Mario";
+                } else {
+                    console.warn(`Unknown escape kind ${escapeKind}`);
+                }
+
+                idx += size;
+            } else {
+                S += String.fromCharCode(c);
+                idx += 0x02;
+            }
+        }
+
+        return S;
+    }
+}
+
+class MessageDataHolder {
+    private mesg: BMG;
+    private messageIds: string[];
+
+    constructor(messageArc: RARC.RARC) {
+        const messageIds = createCsvParser(messageArc.findFileData(`MessageId.tbl`));
+        this.messageIds = messageIds.mapRecords((iter) => {
+            return iter.getValueString('MessageId');
+        });
+
+        this.mesg = new BMG(messageArc.findFileData(`Message.bmg`));
+    }
+
+    public getStringById(id: string): string | null {
+        const index = this.messageIds.indexOf(id);
+        if (index < 0)
+            return null;
+        return this.mesg.getStringByIndex(index);
     }
 }
 
@@ -2673,6 +2762,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         this.requestGlobalArchives(modelCache);
         modelCache.requestArchiveData(scenarioDataFilename);
         modelCache.requestArchiveData(`ParticleData/Effect.arc`);
+        modelCache.requestArchiveData(`UsEnglish/MessageData/Message.arc`);
         modelCache.requestObjectData('PlanetMapDataTable');
         modelCache.requestObjectData('NPCData');
 
@@ -2702,6 +2792,11 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
                 sceneObjHolder.particleResourceHolder = new ParticleResourceHolder(modelCache.getArchive(`ParticleData/Effect.arc`));
             else
                 sceneObjHolder.particleResourceHolder = null;
+
+            if (modelCache.isArchiveExist(`UsEnglish/MessageData/Message.arc`))
+                sceneObjHolder.messageDataHolder = new MessageDataHolder(modelCache.getArchive(`UsEnglish/MessageData/Message.arc`));
+            else
+                sceneObjHolder.messageDataHolder = null;
 
             const spawner = new SMGSpawner(galaxyName, this.pathBase, sceneObjHolder);
             spawner.requestArchives();

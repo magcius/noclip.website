@@ -34,7 +34,7 @@ function readStringTable(buffer: ArrayBufferSlice, offs: number): string[] {
     return strings;
 }
 
-class J3DFileReaderHelper {
+export class JSystemFileReaderHelper {
     public view: DataView;
     public magic: string;
     public size: number;
@@ -1149,7 +1149,7 @@ export class BMD {
     public static parse(buffer: ArrayBufferSlice): BMD {
         const bmd = new BMD();
 
-        const j3d = new J3DFileReaderHelper(buffer);
+        const j3d = new JSystemFileReaderHelper(buffer);
         assert(j3d.magic === 'J3D2bmd3' || j3d.magic === 'J3D2bdl4');
 
         bmd.inf1 = readINF1Chunk(j3d.nextChunk('INF1'));
@@ -1181,7 +1181,7 @@ export class BMT {
     public static parse(buffer: ArrayBufferSlice): BMT {
         const bmt = new BMT();
 
-        const j3d = new J3DFileReaderHelper(buffer);
+        const j3d = new JSystemFileReaderHelper(buffer);
         assert(j3d.magic === 'J3D2bmt3');
 
         const mat3Chunk = j3d.maybeNextChunk('MAT3');
@@ -1443,7 +1443,7 @@ export class BTK {
     public static parse(buffer: ArrayBufferSlice): BTK {
         const btk = new BTK();
 
-        const j3d = new J3DFileReaderHelper(buffer);
+        const j3d = new JSystemFileReaderHelper(buffer);
         assert(j3d.magic === 'J3D1btk1');
 
         // For some reason, TTK1 chunks have an invalid size chunk with 0x04 extra bytes.
@@ -1583,7 +1583,7 @@ export class BRK {
     public static parse(buffer: ArrayBufferSlice): BRK {
         const brk = new BRK();
 
-        const j3d = new J3DFileReaderHelper(buffer);
+        const j3d = new JSystemFileReaderHelper(buffer);
         assert(j3d.magic === 'J3D1brk1');
 
         brk.trk1 = readTRK1Chunk(j3d.nextChunk('TRK1'));
@@ -1652,7 +1652,7 @@ export class BPK {
     public static parse(buffer: ArrayBufferSlice): BPK {
         const bpk = new BPK();
 
-        const j3d = new J3DFileReaderHelper(buffer);
+        const j3d = new JSystemFileReaderHelper(buffer);
         assert(j3d.magic === 'J3D1bpk1');
 
         bpk.pak1 = readPAK1Chunk(j3d.nextChunk('PAK1'));
@@ -1768,7 +1768,7 @@ export class BCK {
     public static parse(buffer: ArrayBufferSlice): BCK {
         const bck = new BCK();
 
-        const j3d = new J3DFileReaderHelper(buffer);
+        const j3d = new JSystemFileReaderHelper(buffer);
         assert(j3d.magic === 'J3D1bck1');
 
         bck.ank1 = readANK1Chunk(j3d.nextChunk('ANK1'));
@@ -1860,7 +1860,7 @@ export class BTP {
     public static parse(buffer: ArrayBufferSlice): BTP {
         const btp = new BTP();
 
-        const j3d = new J3DFileReaderHelper(buffer);
+        const j3d = new JSystemFileReaderHelper(buffer);
         assert(j3d.magic === 'J3D1btp1');
 
         btp.tpt1 = readTPT1Chunk(j3d.nextChunk('TPT1'));
@@ -1941,7 +1941,7 @@ export class BVA {
     public static parse(buffer: ArrayBufferSlice): BVA {
         const bva = new BVA();
 
-        const j3d = new J3DFileReaderHelper(buffer);
+        const j3d = new JSystemFileReaderHelper(buffer);
         assert(j3d.magic === 'J3D1bva1');
 
         bva.vaf1 = readVAF1Chunk(j3d.nextChunk('VAF1'));

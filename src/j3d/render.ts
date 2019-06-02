@@ -142,7 +142,6 @@ export class ShapeInstance {
 
         // Compute a combined model-view matrix based on the material's joint to compute from.
         const materialJointMatrix = shapeInstanceState.jointToWorldMatrices[this.materialInstance.materialData.jointData.jointIndex];
-        // mat4.mul(scratchModelViewMatrix, shapeInstanceState.modelToWorldMatrix, materialJointMatrix);
         mat4.mul(scratchModelViewMatrix, scratchViewMatrix, materialJointMatrix);
 
         template.allocateUniformBuffer(ub_MaterialParams, u_MaterialParamsBufferSize);
@@ -618,7 +617,6 @@ export class MaterialInstance {
 
                     // PSMTXConcat(_48, _94, this->_64)
                     mat43Concat(dst, tmp48, dst);
-                    // mat4.copy(dst, tmp48);
                 }
                 break;
 

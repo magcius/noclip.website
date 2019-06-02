@@ -1920,6 +1920,7 @@ export class TimePanel extends Panel {
     private rewindButton: HTMLElement;
     private pausePlayButton: HTMLElement;
     private isPlaying: boolean = true;
+    private normalSceneTimeScale = 1;
 
     public ontimescrub: ((adj: number) => void) | null = null;
     public onrewind: (() => void) | null = null;
@@ -1986,7 +1987,7 @@ export class TimePanel extends Panel {
         if (!this.isPlaying)
             return 0;
 
-        return 1;
+        return this.normalSceneTimeScale;
     }
 
     public togglePausePlay(): void {
