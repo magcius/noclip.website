@@ -291,12 +291,13 @@ class SMGRenderer implements Viewer.SceneGfx {
         this.bloomRenderer = new BloomPostFXRenderer(device, this.renderHelper.renderInstManager.gfxRenderCache, this.mainRenderTarget);
     }
 
-    private layerVisible(zoneAndLayer: ZoneAndLayer): boolean {
-        return layerVisible(zoneAndLayer.layerId, this.spawner.zones[zoneAndLayer.zoneId].layerMask);
+    private zoneAndLayerVisible(zoneAndLayer: ZoneAndLayer): boolean {
+        const zone = this.spawner.zones[zoneAndLayer.zoneId];
+        return zone.visible && layerVisible(zoneAndLayer.layerId, zone.layerMask);
     }
 
     private syncObjectVisible(obj: ObjectBase): void {
-        obj.visibleScenario = this.layerVisible(obj.zoneAndLayer);
+        obj.visibleScenario = this.zoneAndLayerVisible(obj.zoneAndLayer);
     }
 
     private applyCurrentScenario(): void {
@@ -374,6 +375,9 @@ class SMGRenderer implements Viewer.SceneGfx {
     private findBloomArea(): ObjInfo | null {
         for (let i = 0; i < this.spawner.zones.length; i++) {
             const zone = this.spawner.zones[i];
+            if (zone === undefined)
+                continue;
+
             for (let j = 0; j < zone.areaObjInfo.length; j++) {
                 const area = zone.areaObjInfo[j];
                 if (area.objName === 'BloomCube' && area.objArg0 != -1)
@@ -2595,10 +2599,8 @@ class PlanetMapCreator {
     }
 
     public getNameObjFactory(objName: string): NameObjFactory | null {
-        if (objName === 'PeachCastleGardenPlanet')
-            return PeachCastleGardenPlanet;
-        else
-            return null;
+        if (objName === 'PeachCastleGardenPlanet') return PeachCastleGardenPlanet;
+        return null;
     }
 
     public requestArchive(sceneObjHolder: SceneObjHolder, objName: string): void {
@@ -2619,6 +2621,7 @@ class PlanetMapCreator {
 class ParticleResourceHolder {
     private effectNames: string[];
     private jpac: JPA.JPAC;
+    private resources: JPA.JPAResource[] = [];
 
     constructor(effectArc: RARC.RARC) {
         const effectNames = createCsvParser(effectArc.findFileData(`ParticleNames.bcsv`));
@@ -2634,8 +2637,15 @@ class ParticleResourceHolder {
         return this.effectNames.findIndex((effectName) => effectName === name);
     }
 
-    public getResource(name: string): JPA.JPAResource {
+    public getResourceRaw(name: string): JPA.JPAResourceRaw {
         return this.jpac.effects[this.getUserIndex(name)];
+    }
+
+    public getResource(name: string): JPA.JPAResource {
+        const idx = this.getUserIndex(name);
+        if (this.resources[idx] === undefined)
+            this.resources[idx] = JPA.parseResource(this.jpac.effects[idx]);
+        return this.resources[idx];
     }
 }
 
