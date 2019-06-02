@@ -279,6 +279,8 @@ class SMGRenderer implements Viewer.SceneGfx {
     private currentScenarioIndex: number = 0;
     private scenarioSelect: UI.SingleSelect;
 
+    private scenarioNoToIndex: number[] = [];
+
     public onstatechanged!: () => void;
 
     constructor(device: GfxDevice, private renderHelper: GXRenderHelperGfx, private spawner: SMGSpawner, private sceneObjHolder: SceneObjHolder) {
@@ -324,7 +326,8 @@ class SMGRenderer implements Viewer.SceneGfx {
             return;
 
         this.currentScenarioIndex = index;
-        this.scenarioSelect.setHighlighted(this.currentScenarioIndex);
+        const strIndex = this.scenarioNoToIndex.indexOf(index) - 1;
+        this.scenarioSelect.setHighlighted(strIndex);
         this.onstatechanged();
         this.applyCurrentScenario();
     }
@@ -336,21 +339,31 @@ class SMGRenderer implements Viewer.SceneGfx {
 
         const galaxyName = this.sceneObjHolder.sceneDesc.galaxyName;
         const scenarioData = this.sceneObjHolder.scenarioData.scenarioDataIter;
-        const scenarioNames = scenarioData.mapRecords((jmp, i) => {
-            let name: string | null = null;
 
+        scenarioData.mapRecords((jmp, i) => {
+            this.scenarioNoToIndex[jmp.getValueNumber('ScenarioNo')] = i;
+        });
+
+        const scenarioNames: string[] = [];
+        for (let i = 1; i < this.scenarioNoToIndex.length; i++) {
+            const scenarioIndex = this.scenarioNoToIndex[i];
+            scenarioData.setRecord(scenarioIndex);
+
+            let name: string | null = null;
             if (name === null && this.sceneObjHolder.messageDataHolder !== null)
-                name = this.sceneObjHolder.messageDataHolder.getStringById(`ScenarioName_${galaxyName}${i + 1}`);
+                name = this.sceneObjHolder.messageDataHolder.getStringById(`ScenarioName_${galaxyName}${i}`);
 
             if (name === null)
-                name = jmp.getValueString(`ScenarioName`);
+                name = scenarioData.getValueString(`ScenarioName`);
 
-            return name;
-        });
+            scenarioNames.push(name);
+        }
+
         this.scenarioSelect = new UI.SingleSelect();
         this.scenarioSelect.setStrings(scenarioNames);
-        this.scenarioSelect.onselectionchange = (index: number) => {
-            this.setCurrentScenario(index);
+        this.scenarioSelect.onselectionchange = (strIndex: number) => {
+            const scenarioIndex = this.scenarioNoToIndex[strIndex + 1];
+            this.setCurrentScenario(scenarioIndex);
         };
         this.scenarioSelect.selectItem(0);
 
