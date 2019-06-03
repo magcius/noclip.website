@@ -1680,6 +1680,37 @@ class Coin extends LiveActor {
     }
 }
 
+class WorldMapMiniature extends LiveActor {
+    private spinAnimationController = new AnimationController(60);
+    private modelMatrix = mat4.create();
+
+    private rotateSpeed = 0;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, pointInfo: WorldmapPointInfo, mat: mat4) {
+        super(zoneAndLayer, pointInfo.objName);
+        this.initModelManagerWithAnm(sceneObjHolder, this.name);
+
+        mat4.copy(this.modelInstance.modelMatrix, mat);
+        mat4.copy(this.modelMatrix, this.modelInstance.modelMatrix);
+
+        const animationController = new AnimationController();
+        
+        if(pointInfo.miniatureType=='Galaxy' || pointInfo.miniatureType=='MiniGalaxy')
+            this.rotateSpeed = 0.25 * MathConstants.DEG_TO_RAD;
+        
+        this.startAction(this.name);
+
+        connectToSceneNoSilhouettedMapObj(sceneObjHolder, this);
+    }
+
+    public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
+        this.spinAnimationController.setTimeFromViewerInput(viewerInput);
+        const timeInFrames = this.spinAnimationController.getTimeInFrames();
+
+        mat4.rotateY(this.modelInstance.modelMatrix, this.modelMatrix, timeInFrames * this.rotateSpeed);
+    }
+}
+
 function layerVisible(layer: LayerId, layerMask: number): boolean {
     if (layer >= 0)
         return !!(layerMask & (1 << layer));
@@ -2511,10 +2542,10 @@ class SMGSpawner {
         mat4.fromTranslation(modelMatrixBase, pointInfo.position);
 
 
-        const spawnGraph = (arcName: string, modelMatrix: mat4 = mat4.create(), tag: SceneGraphTag = SceneGraphTag.Normal, animOptions: AnimOptions | null | undefined = undefined) => {
-            let mat = mat4.create();
-            mat4.mul(mat, modelMatrix, modelMatrixBase);
-            const obj = createModelObjMapObj(zoneAndLayer, this.sceneObjHolder, `Point ${pointInfo.pointId}`, arcName, mat);
+        const spawnRoutePoint = () => {
+            const obj = createModelObjMapObj(zoneAndLayer, this.sceneObjHolder, `Point ${pointInfo.pointId}`, 'MiniRoutePoint', modelMatrixBase);
+            obj.modelInstance.setColorOverride(ColorKind.C0, pointInfo.isPink?WorldmapRouteColorP:WorldmapRouteColorY);
+            obj.modelInstance.setMaterialVisible('CloseMat_v',false);
             zoneNode.objects.push(obj);
             return obj;
         };
@@ -2522,29 +2553,22 @@ class SMGSpawner {
         switch (pointInfo.objName) {
         case 'MiniRoutePoint':
         {
-            const obj = spawnGraph('MiniRoutePoint');
-            obj.modelInstance.setColorOverride(ColorKind.C0, pointInfo.isPink?WorldmapRouteColorP:WorldmapRouteColorY);
-            obj.modelInstance.setMaterialVisible('CloseMat_v',false);
+            spawnRoutePoint();
             break;
         }
         default:
         {
-            let obj = spawnGraph('MiniRoutePoint');
-            obj.modelInstance.setColorOverride(ColorKind.C0, pointInfo.isPink?WorldmapRouteColorP:WorldmapRouteColorY);
-            obj.modelInstance.setMaterialVisible('CloseMat_v',false);
+            spawnRoutePoint();
             let mat = mat4.create();
             mat4.fromTranslation(mat, pointInfo.miniatureOffset)
-            obj = spawnGraph(pointInfo.objName, mat);
-            if(pointInfo.miniatureType=='Galaxy' || pointInfo.miniatureType=='MiniGalaxy'){
-                //obj.setRotateSpeed(30);
-            }
+            mat4.mul(mat, mat, modelMatrixBase);
+            let obj = new WorldMapMiniature(zoneAndLayer, this.sceneObjHolder, pointInfo, mat);
+            zoneNode.objects.push(obj);
         }
         }
     }
 
     public spawnWorldmapLine(zoneNode: ZoneNode, point1Info: WorldmapPointInfo, point2Info: WorldmapPointInfo, isPink: Boolean): void {
-        const modelCache = this.sceneObjHolder.modelCache;
-
         const zoneAndLayer: ZoneAndLayer = { zoneId: 0, layerId: LayerId.COMMON };
 
         let modelMatrix = mat4.create();
