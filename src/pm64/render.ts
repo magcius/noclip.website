@@ -7,7 +7,7 @@ import { GfxRenderBuffer } from "../gfx/render/GfxRenderBuffer";
 import { mat4 } from "gl-matrix";
 import { GfxRenderInst, GfxRenderInstBuilder, GfxRenderInstViewRenderer, makeSortKeyOpaque, GfxRendererLayer, setSortKeyDepth } from "../gfx/render/GfxRenderer";
 import { DeviceProgram, DeviceProgramReflection } from "../Program";
-import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, BufferFillerHelper } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, BufferFillerHelper, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { ModelTreeNode, ModelTreeLeaf, ModelTreeGroup, PropertyType } from "./map_shape";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { RSPOutput, Vertex } from "./f3dex2";
@@ -122,11 +122,11 @@ export class PaperMario64TextureHolder extends TextureHolder<Tex.Image> {
     public loadTexture(device: GfxDevice, texture: Tex.Image): LoadedTexture {
         const gfxTexture = device.createTexture({
             dimension: GfxTextureDimension.n2D, pixelFormat: GfxFormat.U8_RGBA,
-            width: texture.width, height: texture.height, depth: 1, numLevels: 1,
+            width: texture.width, height: texture.height, depth: 1, numLevels: texture.levels.length,
         });
         device.setResourceName(gfxTexture, texture.name);
         const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadTextureData(gfxTexture, 0, [texture.levels[0]]);
+        hostAccessPass.uploadTextureData(gfxTexture, 0, texture.levels);
         device.submitPass(hostAccessPass);
 
         const viewerTexture: Viewer.Texture = textureToCanvas(texture);
@@ -323,8 +323,8 @@ class ModelTreeLeafInstance {
                     wrapT: translateCM(image.cmt),
                     minFilter: GfxTexFilterMode.POINT,
                     magFilter: GfxTexFilterMode.POINT,
-                    mipFilter: GfxMipFilterMode.NO_MIP,
-                    minLOD: 0, maxLOD: 0,
+                    mipFilter: GfxMipFilterMode.LINEAR,
+                    minLOD: 0, maxLOD: 100,
                 });
 
                 textureMapping[i].gfxSampler = this.gfxSampler[i];
@@ -550,6 +550,9 @@ export class PaperMario64ModelTreeRenderer {
         let offs = this.templateRenderInst.getUniformBufferOffset(PaperMario64Program.ub_SceneParams);
         const mappedF32 = this.sceneParamsBuffer.mapBufferF32(offs, 16);
         offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);
+        // XXX(jstpierre): Empirically matched to the @SupperMarioBroth screenshot. No clue why it's necessary.
+        const lodBias = -1.5;
+        offs += fillVec4(mappedF32, offs, viewerInput.viewportWidth, viewerInput.viewportHeight, lodBias);
 
         this.modelTreeRootInstance.prepareToRender(this.drawParamsBuffer, this.texAnimGroup, this.modelMatrix, viewerInput);
 

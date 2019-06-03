@@ -4,7 +4,11 @@ precision mediump float;
 // Expected to be constant across the entire scene.
 layout(row_major, std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
+    vec4 u_Misc0;
 };
+
+#define u_ScreenSize (u_Misc0.xy)
+#define u_LodBias (u_Misc0.z)
 
 layout(row_major, std140) uniform ub_DrawParams {
     Mat4x3 u_BoneMatrix[1];
@@ -40,34 +44,42 @@ void main() {
 #endif
 
 #ifdef FRAG
-vec4 Texture2D_N64_Point(sampler2D t_Texture, vec2 t_TexCoord) {
-    return texture(t_Texture, t_TexCoord);
+vec4 Texture2D_N64_Point(sampler2D t_Texture, vec2 t_TexCoord, float t_LodLevel) {
+    return textureLod(t_Texture, t_TexCoord, t_LodLevel);
 }
 
-vec4 Texture2D_N64_Average(sampler2D t_Texture, vec2 t_TexCoord) {
+vec4 Texture2D_N64_Average(sampler2D t_Texture, vec2 t_TexCoord, float t_LodLevel) {
     // Unimplemented.
-    return texture(t_Texture, t_TexCoord);
+    return textureLod(t_Texture, t_TexCoord, t_LodLevel);
 }
 
 // Implements N64-style "triangle bilienar filtering" with three taps.
 // Based on ArthurCarvalho's implementation, modified by NEC and Jasper for noclip.
-vec4 Texture2D_N64_Bilerp(sampler2D t_Texture, vec2 t_TexCoord) {
+vec4 Texture2D_N64_Bilerp(sampler2D t_Texture, vec2 t_TexCoord, float t_LodLevel) {
     vec2 t_Size = vec2(textureSize(t_Texture, 0));
     vec2 t_Offs = fract(t_TexCoord*t_Size - vec2(0.5));
     t_Offs -= step(1.0, t_Offs.x + t_Offs.y);
-    vec4 t_S0 = texture(t_Texture, t_TexCoord - t_Offs / t_Size);
-    vec4 t_S1 = texture(t_Texture, t_TexCoord - vec2(t_Offs.x - sign(t_Offs.x), t_Offs.y) / t_Size);
-    vec4 t_S2 = texture(t_Texture, t_TexCoord - vec2(t_Offs.x, t_Offs.y - sign(t_Offs.y)) / t_Size);
+    vec4 t_S0 = textureLod(t_Texture, t_TexCoord - t_Offs / t_Size, t_LodLevel);
+    vec4 t_S1 = textureLod(t_Texture, t_TexCoord - vec2(t_Offs.x - sign(t_Offs.x), t_Offs.y) / t_Size, t_LodLevel);
+    vec4 t_S2 = textureLod(t_Texture, t_TexCoord - vec2(t_Offs.x, t_Offs.y - sign(t_Offs.y)) / t_Size, t_LodLevel);
     return t_S0 + abs(t_Offs.x)*(t_S1-t_S0) + abs(t_Offs.y)*(t_S2-t_S0);
 }
 
 vec4 Texture2D_N64(sampler2D t_Texture, vec2 t_TexCoord) {
+    vec2 t_Dx = abs(dFdx(t_TexCoord)) * u_ScreenSize;
+    float t_Lod = max(t_Dx.x, t_Dx.y);
+    float t_LodTile = floor(log2(floor(t_Lod)));
+    float t_LodFrac = fract(t_Lod/pow(2.0, t_LodTile));
+    float t_LodLevel = (t_LodTile + t_LodFrac);
+    // TODO(jstpierre): Figure out why we need this LOD bias. I don't believe the N64 even supports one...
+    t_LodLevel += u_LodBias;
+
 #if defined(USE_TEXTFILT_POINT)
-    return Texture2D_N64_Point(t_Texture, t_TexCoord);
+    return Texture2D_N64_Point(t_Texture, t_TexCoord, t_LodLevel);
 #elif defined(USE_TEXTFILT_AVERAGE)
-    return Texture2D_N64_Average(t_Texture, t_TexCoord);
+    return Texture2D_N64_Average(t_Texture, t_TexCoord, t_LodLevel);
 #elif defined(USE_TEXTFILT_BILERP)
-    return Texture2D_N64_Bilerp(t_Texture, t_TexCoord);
+    return Texture2D_N64_Bilerp(t_Texture, t_TexCoord, t_LodLevel);
 #endif
 }
 
