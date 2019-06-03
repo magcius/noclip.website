@@ -570,6 +570,17 @@ interface ObjInfo {
     mapInfoIter: JMapInfoIter;
 }
 
+interface WorldmapPointInfo {
+    pointId: number;
+    objName: string;
+    miniatureScale: number;
+    miniatureOffset: vec3;
+    miniatureType: string;
+    isPink: boolean;
+
+    position: vec3;
+}
+
 interface ZoneLayer {
     layerId: LayerId;
     objinfo: ObjInfo[];
@@ -1183,6 +1194,9 @@ const starPieceColorTable = [
     colorNewFromRGBA8(0x808080FF),
 ];
 
+const WorldmapRouteColorY = colorNewFromRGBA8(0xFEDB00FF);
+const WorldmapRouteColorP = colorNewFromRGBA8(0xFD7F95FF);
+
 class StarPiece extends LiveActor {
     private spinAnimationController = new AnimationController(60);
     private modelMatrix = mat4.create();
@@ -1689,6 +1703,48 @@ class Coin extends LiveActor {
         const isNeedBubble = getJMapInfoArg7(infoIter);
         if (isNeedBubble !== -1)
             sceneObjHolder.modelCache.requestObjectData("AirBubble");
+    }
+}
+
+class WorldMapPoint extends LiveActor {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, pointInfo: WorldmapPointInfo, mat: mat4) {
+        super(zoneAndLayer, pointInfo.objName);
+        this.initModelManagerWithAnm(sceneObjHolder, 'MiniRoutePoint');
+        mat4.copy(this.modelInstance.modelMatrix, mat);
+
+        this.modelInstance.setColorOverride(ColorKind.C0, pointInfo.isPink?WorldmapRouteColorP:WorldmapRouteColorY);
+        this.modelInstance.setMaterialVisible('CloseMat_v',false);
+
+        connectToSceneNoSilhouettedMapObj(sceneObjHolder, this);
+    }
+}
+
+class WorldMapMiniature extends WorldMapPoint {
+    private spinAnimationController = new AnimationController(60);
+    private modelMatrix = mat4.create();
+    private miniature: PartsModel;
+
+    private rotateSpeed = 0;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, pointInfo: WorldmapPointInfo, mat: mat4) {
+        super(zoneAndLayer, sceneObjHolder, pointInfo, mat);
+        this.miniature = createPartsModelNoSilhouettedMapObj(sceneObjHolder, this, pointInfo.objName, pointInfo.miniatureOffset);
+
+        mat4.copy(this.modelMatrix, this.modelInstance.modelMatrix);
+        
+        if(pointInfo.miniatureType=='Galaxy' || pointInfo.miniatureType=='MiniGalaxy')
+            this.rotateSpeed = 0.25 * MathConstants.DEG_TO_RAD;
+        
+        this.miniature.startAction(this.name);
+
+        connectToSceneNoSilhouettedMapObj(sceneObjHolder, this);
+    }
+
+    public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
+        this.spinAnimationController.setTimeFromViewerInput(viewerInput);
+        const timeInFrames = this.spinAnimationController.getTimeInFrames();
+
+        mat4.rotateY(this.modelInstance.modelMatrix, this.modelMatrix, timeInFrames * this.rotateSpeed);
     }
 }
 
@@ -2448,6 +2504,123 @@ class SMGSpawner {
     public requestArchives(): void {
         this.requestArchivesForStageDataHolder(this.sceneObjHolder.stageDataHolder);
     }
+    //SMG 2 only
+
+    public requestArchivesWorldmap(): void {
+        this.sceneObjHolder.modelCache.requestObjectData(this.galaxyName.substr(0,10));
+    }
+
+    public placeWorldmap(): void {
+        const modelCache = this.sceneObjHolder.modelCache;
+        let points : WorldmapPointInfo[] = [];
+        const worldMapRarc = this.sceneObjHolder.modelCache.getObjectData(this.galaxyName.substr(0,10));
+        const worldMapPointData = createCsvParser(worldMapRarc.findFileData('ActorInfo/PointPos.bcsv'));
+        
+        const worldMapLinkData = createCsvParser(worldMapRarc.findFileData('ActorInfo/PointLink.bcsv'));
+
+        modelCache.requestObjectData('MiniRoutePoint');
+        modelCache.requestObjectData('MiniRouteLine');
+
+        worldMapPointData.mapRecords((jmp) => {
+            const position = vec3.fromValues(
+                jmp.getValueNumber('PointPosX'),
+                jmp.getValueNumber('PointPosY'),
+                jmp.getValueNumber('PointPosZ'));
+            
+            points.push({
+                objName: 'MiniRoutePoint', 
+                miniatureScale: 1,
+                miniatureOffset: vec3.create(),
+                miniatureType: '',
+                pointId: jmp.getValueNumber('Index'),
+                isPink: jmp.getValueString('ColorChange') == 'o',
+                position: position});
+        });
+
+        const worldMapGalaxyData = createCsvParser(worldMapRarc.findFileData('ActorInfo/Galaxy.bcsv'));
+
+        worldMapGalaxyData.mapRecords((jmp) => {
+            const index = jmp.getValueNumber('PointPosIndex');
+            points[index].objName = jmp.getValueString('MiniatureName');
+            points[index].miniatureType = jmp.getValueString('StageType');
+            points[index].miniatureScale = jmp.getValueNumber('ScaleMin');
+            let offset = vec3.fromValues(
+                jmp.getValueNumber('PosOffsetX'),
+                jmp.getValueNumber('PosOffsetY'),
+                jmp.getValueNumber('PosOffsetZ'));
+
+            points[index].miniatureOffset = offset;
+
+            modelCache.requestObjectData(points[index].objName);
+        });
+
+        //spawn everything
+        modelCache.waitForLoad().then(()=>{
+            let i = 0;
+            worldMapPointData.mapRecords((jmp) => {
+                if(jmp.getValueString('Valid') == 'o')
+                    this.spawnWorldmapObject(this.zones[0], points[i++]);
+            });
+
+            worldMapLinkData.mapRecords((jmp) => {
+                this.spawnWorldmapLine(this.zones[0],
+                    points[jmp.getValueNumber('PointIndexA')],
+                    points[jmp.getValueNumber('PointIndexB')],
+                    jmp.getValueString('IsColorChange')=='o');
+            });
+        });
+    }
+
+    public spawnWorldmapObject(zoneNode: ZoneNode, pointInfo: WorldmapPointInfo): void {
+
+        const zoneAndLayer: ZoneAndLayer = { zoneId: 0, layerId: LayerId.COMMON };
+
+        let modelMatrix = mat4.create();
+        mat4.fromTranslation(modelMatrix, pointInfo.position);
+
+        switch (pointInfo.objName) {
+        case 'MiniRoutePoint':
+        {
+            let obj = new WorldMapPoint(zoneAndLayer,this.sceneObjHolder, pointInfo, modelMatrix);
+            zoneNode.objects.push(obj);
+            break;
+        }
+        default:
+        {
+            let obj = new WorldMapMiniature(zoneAndLayer, this.sceneObjHolder, pointInfo, modelMatrix);
+            zoneNode.objects.push(obj);
+        }
+        }
+    }
+
+    public spawnWorldmapLine(zoneNode: ZoneNode, point1Info: WorldmapPointInfo, point2Info: WorldmapPointInfo, isPink: Boolean): void {
+        const zoneAndLayer: ZoneAndLayer = { zoneId: 0, layerId: LayerId.COMMON };
+
+        let modelMatrix = mat4.create();
+        mat4.fromTranslation(modelMatrix, point1Info.position);
+
+        let r = vec3.create();
+        vec3.sub(r,point2Info.position,point1Info.position);
+        modelMatrix[0]  = r[0]/1000;
+        modelMatrix[1]  = r[1]/1000;
+        modelMatrix[2]  = r[2]/1000;
+        vec3.normalize(r, r);
+        let u = vec3.fromValues(0,1,0);
+        modelMatrix[4]  = 0;
+        modelMatrix[5]  = 1;
+        modelMatrix[6]  = 0;
+        let f = vec3.create();
+        vec3.cross(f, r, u);
+        modelMatrix[8]  = f[0]*2;
+        modelMatrix[9]  = f[1];
+        modelMatrix[10] = f[2]*2;
+
+        const obj = createModelObjMapObj(zoneAndLayer, this.sceneObjHolder, `Link ${point1Info.pointId} to ${point2Info.pointId}`, 'MiniRouteLine', modelMatrix);
+        obj.modelInstance.setMaterialVisible('CloseMat_v',false);
+        if(isPink)
+            obj.modelInstance.setColorOverride(ColorKind.C0, WorldmapRouteColorP);
+        zoneNode.objects.push(obj);
+    }
 
     public destroy(device: GfxDevice): void {
         this.sceneObjHolder.destroy(device);
@@ -2777,6 +2950,8 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
 
         const scenarioDataFilename = `StageData/${galaxyName}/${galaxyName}Scenario.arc`;
 
+        const isWorldMap = galaxyName.startsWith("WorldMap") && this.pathBase == 'j3d/smg2';
+
         this.requestGlobalArchives(modelCache);
         modelCache.requestArchiveData(scenarioDataFilename);
         modelCache.requestArchiveData(`ParticleData/Effect.arc`);
@@ -2819,8 +2994,15 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
             const spawner = new SMGSpawner(galaxyName, this.pathBase, sceneObjHolder);
             spawner.requestArchives();
 
+            if(isWorldMap)
+                spawner.requestArchivesWorldmap();
+
             return modelCache.waitForLoad().then(() => {
                 spawner.placeZones();
+
+                if(isWorldMap)
+                    spawner.placeWorldmap();
+                    
                 return new SMGRenderer(device, renderHelper, spawner, sceneObjHolder);
             });
         });
