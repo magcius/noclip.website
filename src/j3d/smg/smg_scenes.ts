@@ -2443,11 +2443,15 @@ class SMGSpawner {
     }
 
     public placeWorldmap(): void {
+        const modelCache = this.sceneObjHolder.modelCache;
         let points : WorldmapPointInfo[] = [];
         const worldMapRarc = this.sceneObjHolder.modelCache.getObjectData(this.galaxyName.substr(0,10));
         const worldMapPointData = createCsvParser(worldMapRarc.findFileData('ActorInfo/PointPos.bcsv'));
         
         const worldMapLinkData = createCsvParser(worldMapRarc.findFileData('ActorInfo/PointLink.bcsv'));
+
+        modelCache.requestObjectData('MiniRoutePoint');
+        modelCache.requestObjectData('MiniRouteLine');
 
         worldMapPointData.mapRecords((jmp) => {
             const position = vec3.fromValues(
@@ -2478,27 +2482,28 @@ class SMGSpawner {
                 jmp.getValueNumber('PosOffsetZ'));
 
             points[index].miniatureOffset = offset;
+
+            modelCache.requestObjectData(points[index].objName);
         });
 
         //spawn everything
-        let i = 0;
-        worldMapPointData.mapRecords((jmp) => {
-            if(jmp.getValueString('Valid') == 'o')
-                this.spawnWorldmapObject(this.zones[0], points[i++]);
-        });
+        modelCache.waitForLoad().then(()=>{
+            let i = 0;
+            worldMapPointData.mapRecords((jmp) => {
+                if(jmp.getValueString('Valid') == 'o')
+                    this.spawnWorldmapObject(this.zones[0], points[i++]);
+            });
 
-
-
-        worldMapLinkData.mapRecords((jmp) => {
-            this.spawnWorldmapLine(this.zones[0],
-                points[jmp.getValueNumber('PointIndexA')],
-                points[jmp.getValueNumber('PointIndexB')],
-                jmp.getValueString('IsColorChange')=='o');
+            worldMapLinkData.mapRecords((jmp) => {
+                this.spawnWorldmapLine(this.zones[0],
+                    points[jmp.getValueNumber('PointIndexA')],
+                    points[jmp.getValueNumber('PointIndexB')],
+                    jmp.getValueString('IsColorChange')=='o');
+            });
         });
     }
 
     public spawnWorldmapObject(zoneNode: ZoneNode, pointInfo: WorldmapPointInfo): void {
-        const modelCache = this.sceneObjHolder.modelCache;
 
         const zoneAndLayer: ZoneAndLayer = { zoneId: 0, layerId: LayerId.COMMON };
 
@@ -2507,34 +2512,33 @@ class SMGSpawner {
 
 
         const spawnGraph = (arcName: string, modelMatrix: mat4 = mat4.create(), tag: SceneGraphTag = SceneGraphTag.Normal, animOptions: AnimOptions | null | undefined = undefined) => {
-            modelCache.requestObjectData(arcName);
-            return modelCache.waitForLoad().then((): ModelObj=>{
-                let mat = mat4.create();
-                mat4.mul(mat, modelMatrix, modelMatrixBase);
-                const obj = createModelObjMapObj(zoneAndLayer, this.sceneObjHolder, `Point ${pointInfo.pointId}`, arcName, mat);
-                zoneNode.objects.push(obj);
-                return obj;
-            });
+            let mat = mat4.create();
+            mat4.mul(mat, modelMatrix, modelMatrixBase);
+            const obj = createModelObjMapObj(zoneAndLayer, this.sceneObjHolder, `Point ${pointInfo.pointId}`, arcName, mat);
+            zoneNode.objects.push(obj);
+            return obj;
         };
 
         switch (pointInfo.objName) {
         case 'MiniRoutePoint':
-            spawnGraph('MiniRoutePoint').then((obj)=>{
-                obj.modelInstance.setColorOverride(ColorKind.C0, pointInfo.isPink?WorldmapRouteColorP:WorldmapRouteColorY);
-                obj.modelInstance.setMaterialVisible('CloseMat_v',false);
-            });
+        {
+            const obj = spawnGraph('MiniRoutePoint');
+            obj.modelInstance.setColorOverride(ColorKind.C0, pointInfo.isPink?WorldmapRouteColorP:WorldmapRouteColorY);
+            obj.modelInstance.setMaterialVisible('CloseMat_v',false);
             break;
+        }
         default:
-            spawnGraph('MiniRoutePoint').then((obj)=>{
-                obj.modelInstance.setColorOverride(ColorKind.C0, pointInfo.isPink?WorldmapRouteColorP:WorldmapRouteColorY);
-                obj.modelInstance.setMaterialVisible('CloseMat_v',false);
-            });
+        {
+            let obj = spawnGraph('MiniRoutePoint');
+            obj.modelInstance.setColorOverride(ColorKind.C0, pointInfo.isPink?WorldmapRouteColorP:WorldmapRouteColorY);
+            obj.modelInstance.setMaterialVisible('CloseMat_v',false);
             let mat = mat4.create();
             mat4.fromTranslation(mat, pointInfo.miniatureOffset)
-            let obj = spawnGraph(pointInfo.objName, mat);
+            obj = spawnGraph(pointInfo.objName, mat);
             if(pointInfo.miniatureType=='Galaxy' || pointInfo.miniatureType=='MiniGalaxy'){
                 //obj.setRotateSpeed(30);
             }
+        }
         }
     }
 
@@ -2562,16 +2566,11 @@ class SMGSpawner {
         modelMatrix[9]  = f[1];
         modelMatrix[10] = f[2]*2;
 
-        const arcName = `MiniRouteLine`;
-
-        modelCache.requestObjectData(arcName);
-        modelCache.waitForLoad().then(()=>{
-            const obj = createModelObjMapObj(zoneAndLayer, this.sceneObjHolder, `Link ${point1Info.pointId} to ${point2Info.pointId}`, arcName, modelMatrix);
-            obj.modelInstance.setMaterialVisible('CloseMat_v',false);
-            if(isPink)
-                obj.modelInstance.setColorOverride(ColorKind.C0, WorldmapRouteColorP);
-            zoneNode.objects.push(obj);
-        });
+        const obj = createModelObjMapObj(zoneAndLayer, this.sceneObjHolder, `Link ${point1Info.pointId} to ${point2Info.pointId}`, 'MiniRouteLine', modelMatrix);
+        obj.modelInstance.setMaterialVisible('CloseMat_v',false);
+        if(isPink)
+            obj.modelInstance.setColorOverride(ColorKind.C0, WorldmapRouteColorP);
+        zoneNode.objects.push(obj);
     }
 
     public destroy(device: GfxDevice): void {
