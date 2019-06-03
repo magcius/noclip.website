@@ -1168,6 +1168,9 @@ const starPieceColorTable = [
     colorNewFromRGBA8(0x808080FF),
 ];
 
+const WorldmapRouteColorY = colorNewFromRGBA8(0xFEDB00FF);
+const WorldmapRouteColorP = colorNewFromRGBA8(0xFD7F95FF);
+
 class StarPiece extends LiveActor {
     private spinAnimationController = new AnimationController(60);
     private modelMatrix = mat4.create();
@@ -2447,7 +2450,7 @@ class SMGSpawner {
         const worldMapLinkData = createCsvParser(worldMapRarc.findFileData('ActorInfo/PointLink.bcsv'));
 
         worldMapPointData.mapRecords((jmp) => {
-            let position = vec3.fromValues(
+            const position = vec3.fromValues(
                 jmp.getValueNumber('PointPosX'),
                 jmp.getValueNumber('PointPosY'),
                 jmp.getValueNumber('PointPosZ'));
@@ -2457,7 +2460,7 @@ class SMGSpawner {
                 miniatureScale: 1,
                 miniatureOffset: vec3.create(),
                 miniatureType: '',
-                pointId: jmp.record[0] as number,
+                pointId: jmp.getValueNumber('Index'),
                 isPink: jmp.getValueString('ColorChange') == 'o',
                 position: position});
         });
@@ -2489,7 +2492,8 @@ class SMGSpawner {
         worldMapLinkData.mapRecords((jmp) => {
             this.spawnWorldmapLine(this.zones[0],
                 points[jmp.getValueNumber('PointIndexA')],
-                points[jmp.getValueNumber('PointIndexB')]);
+                points[jmp.getValueNumber('PointIndexB')],
+                jmp.getValueString('IsColorChange')=='o');
         });
     }
 
@@ -2502,9 +2506,9 @@ class SMGSpawner {
         mat4.fromTranslation(modelMatrixBase, pointInfo.position);
 
 
-        const spawnGraph = (arcName: string, modelMatrix: mat4 = mat4.create(), tag: SceneGraphTag = SceneGraphTag.Normal, animOptions: AnimOptions | null | undefined = undefined): ModelObj => {
+        const spawnGraph = (arcName: string, modelMatrix: mat4 = mat4.create(), tag: SceneGraphTag = SceneGraphTag.Normal, animOptions: AnimOptions | null | undefined = undefined) => {
             modelCache.requestObjectData(arcName);
-            modelCache.waitForLoad().then(()=>{
+            return modelCache.waitForLoad().then((): ModelObj=>{
                 let mat = mat4.create();
                 mat4.mul(mat, modelMatrix, modelMatrixBase);
                 const obj = createModelObjMapObj(zoneAndLayer, this.sceneObjHolder, `Point ${pointInfo.pointId}`, arcName, mat);
@@ -2513,18 +2517,18 @@ class SMGSpawner {
             });
         };
 
-        function animFrame(frame: number) {
-            const animationController = new AnimationController();
-            animationController.setTimeInFrames(frame);
-            return animationController;
-        }
-
         switch (pointInfo.objName) {
         case 'MiniRoutePoint':
-            spawnGraph('MiniRoutePoint');
+            spawnGraph('MiniRoutePoint').then((obj)=>{
+                obj.modelInstance.setColorOverride(ColorKind.C0, pointInfo.isPink?WorldmapRouteColorP:WorldmapRouteColorY);
+                obj.modelInstance.setMaterialVisible('CloseMat_v',false);
+            });
             break;
         default:
-            spawnGraph('MiniRoutePoint');
+            spawnGraph('MiniRoutePoint').then((obj)=>{
+                obj.modelInstance.setColorOverride(ColorKind.C0, pointInfo.isPink?WorldmapRouteColorP:WorldmapRouteColorY);
+                obj.modelInstance.setMaterialVisible('CloseMat_v',false);
+            });
             let mat = mat4.create();
             mat4.fromTranslation(mat, pointInfo.miniatureOffset)
             let obj = spawnGraph(pointInfo.objName, mat);
@@ -2534,7 +2538,7 @@ class SMGSpawner {
         }
     }
 
-    public spawnWorldmapLine(zoneNode: ZoneNode, point1Info: WorldmapPointInfo, point2Info: WorldmapPointInfo): void {
+    public spawnWorldmapLine(zoneNode: ZoneNode, point1Info: WorldmapPointInfo, point2Info: WorldmapPointInfo, isPink: Boolean): void {
         const modelCache = this.sceneObjHolder.modelCache;
 
         const zoneAndLayer: ZoneAndLayer = { zoneId: 0, layerId: LayerId.COMMON };
@@ -2542,7 +2546,8 @@ class SMGSpawner {
         let modelMatrix = mat4.create();
         mat4.fromTranslation(modelMatrix, point1Info.position);
 
-        let r = vec3.create(); vec3.sub(r,point2Info.position,point1Info.position);
+        let r = vec3.create();
+        vec3.sub(r,point2Info.position,point1Info.position);
         modelMatrix[0]  = r[0]/1000;
         modelMatrix[1]  = r[1]/1000;
         modelMatrix[2]  = r[2]/1000;
@@ -2551,7 +2556,8 @@ class SMGSpawner {
         modelMatrix[4]  = 0;
         modelMatrix[5]  = 1;
         modelMatrix[6]  = 0;
-        let f = vec3.create(); vec3.cross(f, r, u);
+        let f = vec3.create();
+        vec3.cross(f, r, u);
         modelMatrix[8]  = f[0]*2;
         modelMatrix[9]  = f[1];
         modelMatrix[10] = f[2]*2;
@@ -2560,8 +2566,10 @@ class SMGSpawner {
 
         modelCache.requestObjectData(arcName);
         modelCache.waitForLoad().then(()=>{
-            const obj = createModelObjMapObj(zoneAndLayer, this.sceneObjHolder, `Route ${point1Info.pointId} to ${point2Info.pointId}`, arcName, modelMatrix);
+            const obj = createModelObjMapObj(zoneAndLayer, this.sceneObjHolder, `Link ${point1Info.pointId} to ${point2Info.pointId}`, arcName, modelMatrix);
             obj.modelInstance.setMaterialVisible('CloseMat_v',false);
+            if(isPink)
+                obj.modelInstance.setColorOverride(ColorKind.C0, WorldmapRouteColorP);
             zoneNode.objects.push(obj);
         });
     }
