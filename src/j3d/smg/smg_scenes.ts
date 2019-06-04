@@ -1193,9 +1193,6 @@ const starPieceColorTable = [
     colorNewFromRGBA8(0x808080FF),
 ];
 
-const WorldmapRouteColorY = colorNewFromRGBA8(0xFEDB00FF);
-const WorldmapRouteColorP = colorNewFromRGBA8(0xFD7F95FF);
-
 class StarPiece extends LiveActor {
     private spinAnimationController = new AnimationController(60);
     private modelMatrix = mat4.create();
@@ -1713,8 +1710,11 @@ class MiniRoutePoint extends LiveActor {
         this.initModelManagerWithAnm(sceneObjHolder, 'MiniRoutePoint');
         mat4.copy(this.modelInstance.modelMatrix, mat);
 
-        this.modelInstance.setColorOverride(ColorKind.C0, pointInfo.isPink?WorldmapRouteColorP:WorldmapRouteColorY);
-        this.modelInstance.setMaterialVisible('CloseMat_v',false);
+        this.tryStartAllAnim('Open');
+        if (pointInfo.isPink)
+            startBrkIfExist(this.modelInstance, this.arc, 'TicoBuild');
+        else
+            startBrkIfExist(this.modelInstance, this.arc, 'Normal');
 
         connectToSceneNoSilhouettedMapObj(sceneObjHolder, this);
 
@@ -2620,10 +2620,11 @@ class SMGSpawner {
         modelMatrix[10] = f[2]*2;
 
         const obj = createModelObjMapObj(zoneAndLayer, this.sceneObjHolder, `Link ${point1Info.pointId} to ${point2Info.pointId}`, 'MiniRouteLine', modelMatrix);
-        obj.modelInstance.setMaterialVisible('CloseMat_v',false);
-
+        startBvaIfExist(obj.modelInstance, obj.arc, 'Open');
         if (isPink)
-            obj.modelInstance.setColorOverride(ColorKind.C0, WorldmapRouteColorP);
+            startBrkIfExist(obj.modelInstance, obj.arc, 'TicoBuild');
+        else
+            startBrkIfExist(obj.modelInstance, obj.arc, 'Normal');
 
         zoneNode.objects.push(obj);
     }

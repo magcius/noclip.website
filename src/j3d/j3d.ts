@@ -1896,9 +1896,10 @@ function readVAF1Chunk(buffer: ArrayBufferSlice): VAF1 {
 
     const shapeVisibilityEntries: ShapeVisibilityEntry[] = [];
     for (let i = 0; i < visibilityAnimationTableCount; i++) {
-        const showFirstIndex = view.getUint16(animationTableIdx + 0x00);
-        const showCount = view.getUint16(animationTableIdx + 0x02);
+        const showCount = view.getUint16(animationTableIdx + 0x00);
+        const showFirstIndex = view.getUint16(animationTableIdx + 0x02);
 
+        assert(showCount > 0);
         const shapeVisibility = new BitMap(showCount);
         for (let j = 0; j < showCount; j++) {
             const show = !!view.getUint8(showTableOffs + showFirstIndex + j);
@@ -1918,17 +1919,19 @@ export class VAF1Animator {
     public calcVisibility(shapeIndex: number): boolean {
         const entry = assertExists(this.vaf1.visibilityAnimationTracks[shapeIndex]);
 
-        // Empty tracks are visible by default.
-        if (entry.shapeVisibility.numBits === 0)
-            return true;
-
         const frame = this.animationController.getTimeInFrames();
         const animFrame = getAnimFrame(this.vaf1, frame);
 
         // animFrame can return a partial keyframe, but visibility information is frame-specific.
-        // Resolve this by treating this as a stepped track, floored. e.g. 15.9 is keyframe 15.
+        // Resolve this by treating this as a stepped track, rounded. e.g. 15.9 is keyframe 16.
+        const animFrameInt = (animFrame + 0.5) | 0;
 
-        return entry.shapeVisibility.getBit(animFrame | 0);
+        if (animFrameInt >= entry.shapeVisibility.numBits) {
+            // If we're past the end, use the last frame.
+            return entry.shapeVisibility.getBit(entry.shapeVisibility.numBits - 1);
+        } else {
+            return entry.shapeVisibility.getBit(animFrameInt);
+        }
     }
 }
 
