@@ -627,7 +627,15 @@ function interpPathPoints(dst: vec3, pt0: Point, pt1: Point, t: number): void {
 }
 
 function patchBMDModel(bmdModel: BMDModel): void {
+    // Kill off the sort-key bias; the game doesn't use the typical J3D rendering algorithm in favor
+    // of its own sort, which needs to be RE'd.
+    for (let i = 0; i < bmdModel.shapeData.length; i++)
+        bmdModel.shapeData[i].sortKeyBias = 0;
+
     // This might seem sketchy, but it's actually done by the core game, in ShapePacketUserData::init().
+    // XXX(jstpierre): This is actually what happens at all. MR::initEnvelopeAndEnvMapOrProjMapModelData()
+    // will set up each normal map with a separate TEXnMTXIDX and fill it with a per-joint texture matrix.
+    // Need to figure out how it actually plugs together.
     return;
 
     // Look for any materials using environment mapping, and patch them to use a post matrix instead.

@@ -278,6 +278,9 @@ export class GX_Program extends DeviceProgram {
 
     // Color Channels
     private generateMaterialSource(chan: ColorChannelControl, i: number) {
+        if (this.hacks !== null && this.hacks.disableVertexColors && chan.matColorSource === GX.ColorSrc.VTX)
+            return `vec4(1.0, 1.0, 1.0, 1.0)`;
+
         switch (chan.matColorSource) {
             case GX.ColorSrc.VTX: return `a_Color${i}`;
             case GX.ColorSrc.REG: return `u_ColorMatReg[${i}]`;
@@ -285,6 +288,9 @@ export class GX_Program extends DeviceProgram {
     }
 
     private generateAmbientSource(chan: ColorChannelControl, i: number) {
+        if (this.hacks !== null && this.hacks.disableVertexColors && chan.ambColorSource === GX.ColorSrc.VTX)
+            return `vec4(1.0, 1.0, 1.0, 1.0)`;
+
         switch (chan.ambColorSource) {
             case GX.ColorSrc.VTX: return `a_Color${i}`;
             case GX.ColorSrc.REG: return `u_ColorAmbReg[${i}]`;
@@ -357,10 +363,6 @@ export class GX_Program extends DeviceProgram {
     }
 
     private generateLightChannel(lightChannel: LightChannelControl, outputName: string, i: number) {
-        // If we have disabled vertex colors, then they are pure white.
-        if (this.hacks !== null && this.hacks.disableVertexColors)
-            return `    ${outputName} = vec4(1.0, 1.0, 1.0, 1.0);`;
-
         if (colorChannelsEqual(lightChannel.colorChannel, lightChannel.alphaChannel)) {
             return `
     ${this.generateColorChannel(lightChannel.colorChannel, outputName, i)}`;
