@@ -23,6 +23,8 @@ class SMG2SceneDesc extends SMGSceneDescBase {
     public requestZoneArchives(modelCache: ModelCache, zoneName: string): void {
         modelCache.requestArchiveData(`StageData/${zoneName}/${zoneName}Map.arc`);
         modelCache.requestArchiveData(`StageData/${zoneName}/${zoneName}Light.arc`);
+        if (zoneName.startsWith('WorldMap'))
+            modelCache.requestObjectData(zoneName.slice(0, 10));
     }
 }
 

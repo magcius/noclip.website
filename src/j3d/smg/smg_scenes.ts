@@ -572,12 +572,11 @@ interface ObjInfo {
 
 interface WorldmapPointInfo {
     pointId: number;
-    objName: string;
+    miniatureName: string | null;
     miniatureScale: number;
     miniatureOffset: vec3;
     miniatureType: string;
     isPink: boolean;
-
     position: vec3;
 }
 
@@ -1369,7 +1368,7 @@ class FixedPosition {
 }
 
 class PartsModel extends LiveActor {
-    private fixedPosition: FixedPosition | null = null;
+    public fixedPosition: FixedPosition | null = null;
 
     constructor(sceneObjHolder: SceneObjHolder, objName: string, modelName: string, private parentActor: LiveActor, drawBufferType: DrawBufferType) {
         super(parentActor.zoneAndLayer, objName);
@@ -1396,7 +1395,7 @@ class PartsModel extends LiveActor {
         this.fixedPosition = new FixedPosition(this.parentActor.getJointMtx(jointName), localTrans);
     }
 
-    public calcAndSetBaseMtx(): void {
+    public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
         if (this.fixedPosition !== null)
             this.fixedPosition.calc(this.modelInstance.modelMatrix);
     }
@@ -1422,7 +1421,7 @@ function createPartsModelNpcAndFix(sceneObjHolder: SceneObjHolder, parentActor: 
 }
 
 function createPartsModelNoSilhouettedMapObj(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, localTrans: vec3 | null = null) {
-    const model = new PartsModel(sceneObjHolder, "AirBubble", objName, parentActor, 0x0D);
+    const model = new PartsModel(sceneObjHolder, objName, objName, parentActor, 0x0D);
     model.initFixedPositionRelative(localTrans);
     return model;
 }
@@ -1706,9 +1705,11 @@ class Coin extends LiveActor {
     }
 }
 
-class WorldMapPoint extends LiveActor {
+class MiniRoutePoint extends LiveActor {
+    private miniature: MiniRouteMiniature | null;
+
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, pointInfo: WorldmapPointInfo, mat: mat4) {
-        super(zoneAndLayer, pointInfo.objName);
+        super(zoneAndLayer, 'MiniRoutePoint');
         this.initModelManagerWithAnm(sceneObjHolder, 'MiniRoutePoint');
         mat4.copy(this.modelInstance.modelMatrix, mat);
 
@@ -1716,35 +1717,37 @@ class WorldMapPoint extends LiveActor {
         this.modelInstance.setMaterialVisible('CloseMat_v',false);
 
         connectToSceneNoSilhouettedMapObj(sceneObjHolder, this);
+
+        // TODO(jstpierre): FixedPosition?
+        if (pointInfo.miniatureName !== null)
+            this.miniature = new MiniRouteMiniature(sceneObjHolder, this, pointInfo);
     }
 }
 
-class WorldMapMiniature extends WorldMapPoint {
+class MiniRouteMiniature extends PartsModel {
     private spinAnimationController = new AnimationController(60);
-    private modelMatrix = mat4.create();
-    private miniature: PartsModel;
 
     private rotateSpeed = 0;
 
-    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, pointInfo: WorldmapPointInfo, mat: mat4) {
-        super(zoneAndLayer, sceneObjHolder, pointInfo, mat);
-        this.miniature = createPartsModelNoSilhouettedMapObj(sceneObjHolder, this, pointInfo.objName, pointInfo.miniatureOffset);
+    constructor(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, pointInfo: WorldmapPointInfo) {
+        super(sceneObjHolder, pointInfo.miniatureName, pointInfo.miniatureName, parentActor, 0x0D);
+        this.initFixedPositionRelative(pointInfo.miniatureOffset);
 
-        mat4.copy(this.modelMatrix, this.modelInstance.modelMatrix);
-        
-        if(pointInfo.miniatureType=='Galaxy' || pointInfo.miniatureType=='MiniGalaxy')
+        if (pointInfo.miniatureType == 'Galaxy' || pointInfo.miniatureType == 'MiniGalaxy')
             this.rotateSpeed = 0.25 * MathConstants.DEG_TO_RAD;
-        
-        this.miniature.startAction(this.name);
+
+        this.startAction(this.name);
 
         connectToSceneNoSilhouettedMapObj(sceneObjHolder, this);
     }
 
     public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
+        super.calcAndSetBaseMtx(viewerInput);
+
         this.spinAnimationController.setTimeFromViewerInput(viewerInput);
         const timeInFrames = this.spinAnimationController.getTimeInFrames();
 
-        mat4.rotateY(this.modelInstance.modelMatrix, this.modelMatrix, timeInFrames * this.rotateSpeed);
+        mat4.rotateY(this.modelInstance.modelMatrix, this.modelInstance.modelMatrix, timeInFrames * this.rotateSpeed);
     }
 }
 
@@ -1798,10 +1801,12 @@ class SMGSpawner {
     // BackLight
     private isSMG1 = false;
     private isSMG2 = false;
+    private isWorldMap = false;
 
     constructor(private galaxyName: string, pathBase: string, private sceneObjHolder: SceneObjHolder) {
         this.isSMG1 = pathBase === 'j3d/smg';
         this.isSMG2 = pathBase === 'j3d/smg2';
+        this.isWorldMap = this.isSMG2 && galaxyName.startsWith('WorldMap');
     }
 
     public applyAnimations(node: Node, rarc: RARC.RARC, animOptions?: AnimOptions): void {
@@ -2475,8 +2480,11 @@ class SMGSpawner {
         return zoneNode;
     }
 
-    public placeZones(): void {
+    public place(): void {
         this.placeStageData(this.sceneObjHolder.stageDataHolder);
+
+        if (this.isWorldMap)
+            this.placeWorldMap();
     }
 
     private requestArchivesForObj(infoIter: JMapInfoIter): void {
@@ -2503,113 +2511,109 @@ class SMGSpawner {
 
     public requestArchives(): void {
         this.requestArchivesForStageDataHolder(this.sceneObjHolder.stageDataHolder);
-    }
-    //SMG 2 only
-
-    public requestArchivesWorldmap(): void {
-        this.sceneObjHolder.modelCache.requestObjectData(this.galaxyName.substr(0,10));
+        if (this.isWorldMap)
+            this.requestArchivesWorldMap();
     }
 
-    public placeWorldmap(): void {
+    // SMG2 World Map
+    private requestArchivesWorldMap(): void {
         const modelCache = this.sceneObjHolder.modelCache;
-        let points : WorldmapPointInfo[] = [];
-        const worldMapRarc = this.sceneObjHolder.modelCache.getObjectData(this.galaxyName.substr(0,10));
-        const worldMapPointData = createCsvParser(worldMapRarc.findFileData('ActorInfo/PointPos.bcsv'));
-        
-        const worldMapLinkData = createCsvParser(worldMapRarc.findFileData('ActorInfo/PointLink.bcsv'));
-
         modelCache.requestObjectData('MiniRoutePoint');
         modelCache.requestObjectData('MiniRouteLine');
+
+        const worldMapRarc = this.sceneObjHolder.modelCache.getObjectData(this.galaxyName.substr(0, 10));
+        const worldMapGalaxyData = createCsvParser(worldMapRarc.findFileData('ActorInfo/Galaxy.bcsv'));
+        worldMapGalaxyData.mapRecords((jmp) => {
+            modelCache.requestObjectData(jmp.getValueString('MiniatureName'));
+        })
+    }
+
+    public placeWorldMap(): void {
+        const points : WorldmapPointInfo[] = [];
+        const worldMapRarc = this.sceneObjHolder.modelCache.getObjectData(this.galaxyName.substr(0, 10));
+        const worldMapPointData = createCsvParser(worldMapRarc.findFileData('ActorInfo/PointPos.bcsv'));
+        const worldMapLinkData = createCsvParser(worldMapRarc.findFileData('ActorInfo/PointLink.bcsv'));
 
         worldMapPointData.mapRecords((jmp) => {
             const position = vec3.fromValues(
                 jmp.getValueNumber('PointPosX'),
                 jmp.getValueNumber('PointPosY'),
                 jmp.getValueNumber('PointPosZ'));
-            
+
             points.push({
-                objName: 'MiniRoutePoint', 
+                miniatureName: null,
                 miniatureScale: 1,
                 miniatureOffset: vec3.create(),
                 miniatureType: '',
                 pointId: jmp.getValueNumber('Index'),
                 isPink: jmp.getValueString('ColorChange') == 'o',
-                position: position});
+                position: position
+            });
         });
 
         const worldMapGalaxyData = createCsvParser(worldMapRarc.findFileData('ActorInfo/Galaxy.bcsv'));
 
         worldMapGalaxyData.mapRecords((jmp) => {
             const index = jmp.getValueNumber('PointPosIndex');
-            points[index].objName = jmp.getValueString('MiniatureName');
+            points[index].miniatureName = jmp.getValueString('MiniatureName');
             points[index].miniatureType = jmp.getValueString('StageType');
             points[index].miniatureScale = jmp.getValueNumber('ScaleMin');
-            let offset = vec3.fromValues(
+            points[index].miniatureOffset = vec3.fromValues(
                 jmp.getValueNumber('PosOffsetX'),
                 jmp.getValueNumber('PosOffsetY'),
                 jmp.getValueNumber('PosOffsetZ'));
-
-            points[index].miniatureOffset = offset;
-
-            modelCache.requestObjectData(points[index].objName);
         });
 
-        //spawn everything
-        modelCache.waitForLoad().then(()=>{
-            let i = 0;
-            worldMapPointData.mapRecords((jmp) => {
-                if(jmp.getValueString('Valid') == 'o')
-                    this.spawnWorldmapObject(this.zones[0], points[i++]);
-            });
+        // Spawn everything in Zone 0.
+        // TODO(jstpierre): Maybe not have a Zone for these objects? Not sure...
+        const zoneAndLayer: ZoneAndLayer = { zoneId: 0, layerId: LayerId.COMMON };
 
-            worldMapLinkData.mapRecords((jmp) => {
-                this.spawnWorldmapLine(this.zones[0],
-                    points[jmp.getValueNumber('PointIndexA')],
-                    points[jmp.getValueNumber('PointIndexB')],
-                    jmp.getValueString('IsColorChange')=='o');
-            });
+        worldMapPointData.mapRecords((jmp, i) => {
+            if (jmp.getValueString('Valid') !== 'o')
+                return;
+
+            this.spawnWorldMapObject(zoneAndLayer, points[i]);
+        });
+
+        worldMapLinkData.mapRecords((jmp) => {
+            const isColorChange = jmp.getValueString('IsColorChange') === 'o';
+            const pointA = points[jmp.getValueNumber('PointIndexA')];
+            const pointB = points[jmp.getValueNumber('PointIndexB')];
+            this.spawnWorldMapLine(zoneAndLayer, pointA, pointB, isColorChange);
         });
     }
 
-    public spawnWorldmapObject(zoneNode: ZoneNode, pointInfo: WorldmapPointInfo): void {
+    public spawnWorldMapObject(zoneAndLayer: ZoneAndLayer, pointInfo: WorldmapPointInfo): void {
+        const zoneNode = this.zones[zoneAndLayer.zoneId];
 
-        const zoneAndLayer: ZoneAndLayer = { zoneId: 0, layerId: LayerId.COMMON };
-
-        let modelMatrix = mat4.create();
+        const modelMatrix = mat4.create();
         mat4.fromTranslation(modelMatrix, pointInfo.position);
 
-        switch (pointInfo.objName) {
-        case 'MiniRoutePoint':
-        {
-            let obj = new WorldMapPoint(zoneAndLayer,this.sceneObjHolder, pointInfo, modelMatrix);
-            zoneNode.objects.push(obj);
-            break;
-        }
-        default:
-        {
-            let obj = new WorldMapMiniature(zoneAndLayer, this.sceneObjHolder, pointInfo, modelMatrix);
-            zoneNode.objects.push(obj);
-        }
-        }
+        const nameObj = new MiniRoutePoint(zoneAndLayer, this.sceneObjHolder, pointInfo, modelMatrix);
+        zoneNode.objects.push(nameObj);
     }
 
-    public spawnWorldmapLine(zoneNode: ZoneNode, point1Info: WorldmapPointInfo, point2Info: WorldmapPointInfo, isPink: Boolean): void {
-        const zoneAndLayer: ZoneAndLayer = { zoneId: 0, layerId: LayerId.COMMON };
+    public spawnWorldMapLine(zoneAndLayer: ZoneAndLayer, point1Info: WorldmapPointInfo, point2Info: WorldmapPointInfo, isPink: Boolean): void {
+        // TODO(jstpierre): Move to a LiveActor for the lines as well?
 
-        let modelMatrix = mat4.create();
+        const zoneNode = this.zones[zoneAndLayer.zoneId];
+
+        const modelMatrix = mat4.create();
         mat4.fromTranslation(modelMatrix, point1Info.position);
 
-        let r = vec3.create();
+        const r = vec3.create();
         vec3.sub(r,point2Info.position,point1Info.position);
         modelMatrix[0]  = r[0]/1000;
         modelMatrix[1]  = r[1]/1000;
         modelMatrix[2]  = r[2]/1000;
+
         vec3.normalize(r, r);
-        let u = vec3.fromValues(0,1,0);
+        const u = vec3.fromValues(0,1,0);
         modelMatrix[4]  = 0;
         modelMatrix[5]  = 1;
         modelMatrix[6]  = 0;
-        let f = vec3.create();
+
+        const f = vec3.create();
         vec3.cross(f, r, u);
         modelMatrix[8]  = f[0]*2;
         modelMatrix[9]  = f[1];
@@ -2617,8 +2621,10 @@ class SMGSpawner {
 
         const obj = createModelObjMapObj(zoneAndLayer, this.sceneObjHolder, `Link ${point1Info.pointId} to ${point2Info.pointId}`, 'MiniRouteLine', modelMatrix);
         obj.modelInstance.setMaterialVisible('CloseMat_v',false);
-        if(isPink)
+
+        if (isPink)
             obj.modelInstance.setColorOverride(ColorKind.C0, WorldmapRouteColorP);
+
         zoneNode.objects.push(obj);
     }
 
@@ -2950,8 +2956,6 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
 
         const scenarioDataFilename = `StageData/${galaxyName}/${galaxyName}Scenario.arc`;
 
-        const isWorldMap = galaxyName.startsWith("WorldMap") && this.pathBase == 'j3d/smg2';
-
         this.requestGlobalArchives(modelCache);
         modelCache.requestArchiveData(scenarioDataFilename);
         modelCache.requestArchiveData(`ParticleData/Effect.arc`);
@@ -2994,15 +2998,8 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
             const spawner = new SMGSpawner(galaxyName, this.pathBase, sceneObjHolder);
             spawner.requestArchives();
 
-            if(isWorldMap)
-                spawner.requestArchivesWorldmap();
-
             return modelCache.waitForLoad().then(() => {
-                spawner.placeZones();
-
-                if(isWorldMap)
-                    spawner.placeWorldmap();
-                    
+                spawner.place();
                 return new SMGRenderer(device, renderHelper, spawner, sceneObjHolder);
             });
         });
