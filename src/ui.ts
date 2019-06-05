@@ -17,6 +17,7 @@ import logoURL from './logo.png';
 
 export const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
 export const COOL_BLUE_COLOR = 'rgb(20, 105, 215)';
+export const PANEL_BG_COLOR = '#411';
 
 export function createDOMFromString(s: string): DocumentFragment {
     return document.createRange().createContextualFragment(s);
@@ -68,7 +69,7 @@ function setElementHighlighted(elem: HTMLElement, highlighted: boolean, normalTe
         elem.style.backgroundColor = HIGHLIGHT_COLOR;
         elem.style.color = 'black';
     } else {
-        elem.style.backgroundColor = '#411';
+        elem.style.backgroundColor = PANEL_BG_COLOR;
         elem.style.color = normalTextColor;
     }
 }
@@ -673,6 +674,7 @@ export class Panel implements Widget {
     public autoClosed: boolean = false;
     public customHeaderBackgroundColor: string = '';
     protected header: HTMLElement;
+    protected headerContainer: HTMLElement;
     protected svgIcon: SVGSVGElement;
 
     private toplevel: HTMLElement;
@@ -709,6 +711,9 @@ export class Panel implements Widget {
         this.extraRack.style.transition = '.15s ease-out .10s';
         this.toplevel.appendChild(this.extraRack);
 
+        this.headerContainer = document.createElement('div');
+        this.mainPanel.appendChild(this.headerContainer);
+
         this.header = document.createElement('h1');
         this.header.style.lineHeight = '28px';
         this.header.style.width = '400px';
@@ -731,7 +736,7 @@ export class Panel implements Widget {
 
             this.toggleExpanded();
         };
-        this.mainPanel.appendChild(this.header);
+        this.headerContainer.appendChild(this.header);
 
         this.contents = document.createElement('div');
         this.contents.style.width = '400px';
@@ -1020,20 +1025,21 @@ class SceneSelect extends Panel {
         this.onscenedescselected(this.selectedSceneGroup, this.sceneDescs[i] as Viewer.SceneDesc);
     }
 
-    private getLoadingGradient() {
+    private getLoadingGradient(rightColor: string) {
         const pct = `${Math.round(this.loadProgress * 100)}%`;
-        return `linear-gradient(to right, ${HIGHLIGHT_COLOR} ${pct}, transparent ${pct})`;
+        return `linear-gradient(to right, ${HIGHLIGHT_COLOR} ${pct}, ${rightColor} ${pct})`;
     }
 
     protected syncHeaderStyle() {
         super.syncHeaderStyle();
 
         setElementHighlighted(this.header, !!this.expanded);
+        this.header.style.backgroundColor = 'transparent';
 
         if (this.expanded)
-            this.header.style.background = HIGHLIGHT_COLOR;
+            this.headerContainer.style.background = HIGHLIGHT_COLOR;
         else
-            this.header.style.background = this.getLoadingGradient();
+            this.headerContainer.style.background = this.getLoadingGradient(PANEL_BG_COLOR);
     }
 
     private syncFlairs() {
@@ -1049,7 +1055,7 @@ class SceneSelect extends Panel {
         const selectedDescIndex = this.sceneDescs.indexOf(this.currentSceneDesc);
         if (selectedDescIndex >= 0) {
             const flair = ensureFlairIndex(sceneDescFlairs, selectedDescIndex);
-            flair.background = this.getLoadingGradient();
+            flair.background = this.getLoadingGradient('transparent');
             flair.color = this.loadProgress > 0.5 ? 'black' : undefined;
             flair.fontWeight = 'bold';
             const pct = `${Math.round(this.loadProgress * 100)}%`;
