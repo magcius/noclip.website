@@ -2002,6 +2002,10 @@ export class TimePanel extends Panel {
     }
 
     public update(sceneTime: number, timeScale: number): void {
+        // Expensive, so prevent it if we can help it...
+        if (!this.expanded)
+            return;
+
         this.scrubber.update(sceneTime, timeScale);
     }
 }
