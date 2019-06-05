@@ -349,11 +349,11 @@ class SMGRenderer implements Viewer.SceneGfx {
             const scenarioIndex = this.scenarioNoToIndex[i];
             scenarioData.setRecord(scenarioIndex);
 
-            let name: string | null = null;
-            if (name === null && this.sceneObjHolder.messageDataHolder !== null)
+            let name: string = "";
+            if (!name && this.sceneObjHolder.messageDataHolder !== null)
                 name = this.sceneObjHolder.messageDataHolder.getStringById(`ScenarioName_${galaxyName}${i}`);
 
-            if (name === null)
+            if (!name)
                 name = scenarioData.getValueString(`ScenarioName`);
 
             scenarioNames.push(name);
