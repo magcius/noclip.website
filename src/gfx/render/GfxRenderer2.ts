@@ -226,7 +226,7 @@ export class GfxRenderInstPool {
     }
 
     public reset(): void {
-        for (let i = 0; i < this.renderInstAllocCount; i++)
+        for (let i = 0; i < this.pool.length; i++)
             this.pool[i]._flags = 0;
 
         this.renderInstAllocCount = 0;
@@ -242,8 +242,10 @@ export class GfxRenderInstPool {
 
 function compareRenderInsts(a: GfxRenderInst, b: GfxRenderInst): number {
     // Force invisible items to the end of the list.
-    if (!(a._flags & GfxRenderInstFlags.VISIBLE)) return 1;
-    if (!(b._flags & GfxRenderInstFlags.VISIBLE)) return -1;
+    const aVisible = !!(a._flags & GfxRenderInstFlags.VISIBLE);
+    const bVisible = !!(b._flags & GfxRenderInstFlags.VISIBLE);
+    if (aVisible !== bVisible)
+        return aVisible ? -1 : 1;
     return a.sortKey - b.sortKey;
 }
 
@@ -295,20 +297,20 @@ export class GfxRenderInstManager {
 
     // TODO(jstpierre): Build a better API for pass management -- should not be attached to the GfxRenderer2.
     public setVisibleByFilterKeyExact(filterKey: number): void {
-        for (let i = 0; i < this.gfxRenderInstPool.renderInstAllocCount; i++)
+        for (let i = 0; i < this.gfxRenderInstPool.pool.length; i++)
             if (this.gfxRenderInstPool.pool[i]._flags & GfxRenderInstFlags.DRAW_RENDER_INST)
                 setVisible(this.gfxRenderInstPool.pool[i], this.gfxRenderInstPool.pool[i].filterKey === filterKey);
     }
 
     public hasAnyVisible(): boolean {
-        for (let i = 0; i < this.gfxRenderInstPool.renderInstAllocCount; i++)
+        for (let i = 0; i < this.gfxRenderInstPool.pool.length; i++)
             if (this.gfxRenderInstPool.pool[i]._flags & GfxRenderInstFlags.VISIBLE)
                 return true;
         return false;
     }
 
     public setVisibleNone(): void {
-        for (let i = 0; i < this.gfxRenderInstPool.renderInstAllocCount; i++)
+        for (let i = 0; i < this.gfxRenderInstPool.pool.length; i++)
             this.gfxRenderInstPool.pool[i]._flags &= ~GfxRenderInstFlags.VISIBLE;
     }
 
