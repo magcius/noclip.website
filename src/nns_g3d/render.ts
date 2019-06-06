@@ -194,9 +194,9 @@ class ShapeInstance {
     public templateRenderInst: GfxRenderInst;
     public renderInsts: GfxRenderInst[] = [];
 
-    constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, private materialCommand: Command_Material, public nodeCommand: Command_Node, public shape: NSBMD.MDL0Shape) {
+    constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, private materialCommand: Command_Material, public nodeCommand: Command_Node, public shape: NSBMD.MDL0Shape, posScale: number) {
         const baseCtx = this.materialCommand.baseCtx;
-        const nitroVertexData = NITRO_GX.readCmds(shape.dlBuffer, baseCtx);
+        const nitroVertexData = NITRO_GX.readCmds(shape.dlBuffer, baseCtx, posScale);
         this.vertexData = new VertexData(device, nitroVertexData);
 
         this.templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
@@ -227,13 +227,12 @@ class ShapeInstance {
         mat4.mul(dst, dst, this.nodeCommand.modelMatrix);
     }
 
-    public prepareToRender(packetParamsBuffer: GfxRenderBuffer, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean, posScale: number): void {
+    public prepareToRender(packetParamsBuffer: GfxRenderBuffer, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean): void {
         let offs = this.templateRenderInst.getUniformBufferOffset(NITRO_Program.ub_PacketParams);
         const packetParamsMapped = packetParamsBuffer.mapBufferF32(offs, 16);
 
         this.computeModelView(scratchMat4, viewerInput, isSkybox);
         offs += fillMatrix4x3(packetParamsMapped, offs, scratchMat4);
-        offs += fillVec4(packetParamsMapped, offs, posScale);
     }
 
     public destroy(device: GfxDevice): void {
@@ -347,7 +346,7 @@ export class MDL0Renderer {
                 const shpIdx = view.getUint8(idx++);
                 const shape = model.shapes[shpIdx];
                 renderInstBuilder.pushTemplateRenderInst(currentMaterial.templateRenderInst);
-                this.shapeInstances.push(new ShapeInstance(device, renderInstBuilder, currentMaterial, currentNode, shape));
+                this.shapeInstances.push(new ShapeInstance(device, renderInstBuilder, currentMaterial, currentNode, shape, this.model.posScale));
                 renderInstBuilder.popTemplateRenderInst();
             } else if (cmd === Op.NODEDESC) {
                 const idxNode = view.getUint8(idx++);
@@ -397,7 +396,7 @@ export class MDL0Renderer {
         for (let i = 0; i < this.materialCommands.length; i++)
             this.materialCommands[i].prepareToRender(this.materialParamsBuffer, viewerInput);
         for (let i = 0; i < this.shapeInstances.length; i++)
-            this.shapeInstances[i].prepareToRender(this.packetParamsBuffer, viewerInput, this.isSkybox, this.model.posScale);
+            this.shapeInstances[i].prepareToRender(this.packetParamsBuffer, viewerInput, this.isSkybox);
 
         this.sceneParamsBuffer.prepareToRender(hostAccessPass);
         this.materialParamsBuffer.prepareToRender(hostAccessPass);
