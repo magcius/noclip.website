@@ -5,18 +5,19 @@ import * as UI from '../ui';
 import * as BYML from '../byml';
 import * as LZ77 from './lz77';
 import * as BMD from './sm64ds_bmd';
-import * as BCA from './sm64ds_bca';
 
-import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
 import Progressable from '../Progressable';
 import { fetchData } from '../fetch';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { NITROTextureHolder, BMDData, Sm64DSCRG1, BMDModelInstance, SM64DSPass, CRG1Level, CRG1Object } from './render';
-import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
+import { NITROTextureHolder, BMDData, Sm64DSCRG1, BMDModelInstance, SM64DSPass, CRG1Level, CRG1Object, NITRO_Program } from './render';
 import { BasicRenderTarget, transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { vec3, mat4, mat2d } from 'gl-matrix';
 import { assertExists, assert } from '../util';
 import AnimationController from '../AnimationController';
+import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
+import { GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
+import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 
 const GLOBAL_SCALE = 1500;
 
@@ -80,13 +81,19 @@ class ModelCache {
     }
 }
 
+const bindingLayouts: GfxBindingLayoutDescriptor[] = [
+    { numUniformBuffers: 3, numSamplers: 1 },
+];
 class SM64DSRenderer implements Viewer.SceneGfx {
-    public viewRenderer = new GfxRenderInstViewRenderer();
     public renderTarget = new BasicRenderTarget();
     public bmdRenderers: BMDModelInstance[] = [];
     public animationController = new AnimationController();
 
-    constructor(public modelCache: ModelCache, public textureHolder: NITROTextureHolder) {
+    private uniformBuffer: GfxRenderDynamicUniformBuffer;
+    private renderInstManager = new GfxRenderInstManager();
+
+    constructor(device: GfxDevice, public modelCache: ModelCache, public textureHolder: NITROTextureHolder) {
+        this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
     }
 
     public createPanels(): UI.Panel[] {
@@ -111,36 +118,52 @@ class SM64DSRenderer implements Viewer.SceneGfx {
         return [renderHacksPanel];
     }
 
-    protected prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+    protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         this.animationController.setTimeFromViewerInput(viewerInput);
 
+        const template = this.renderInstManager.pushTemplateRenderInst();
+        template.setUniformBuffer(this.uniformBuffer);
+        template.setBindingLayouts(bindingLayouts);
+        let offs = template.allocateUniformBuffer(NITRO_Program.ub_SceneParams, 16);
+        const sceneParamsMapped = template.mapUniformBufferF32(NITRO_Program.ub_SceneParams);
+        offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
+
         for (let i = 0; i < this.bmdRenderers.length; i++)
-            this.bmdRenderers[i].prepareToRender(hostAccessPass, viewerInput);
+            this.bmdRenderers[i].prepareToRender(device, this.renderInstManager, viewerInput);
+
+        this.renderInstManager.popTemplateRenderInst();
+
+        this.uniformBuffer.prepareToRender(device, hostAccessPass);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
         const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(hostAccessPass, viewerInput);
+        this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
 
-        this.viewRenderer.prepareToRender(device);
-
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
 
         // First, render the skybox.
         const skyboxPassRenderer = this.renderTarget.createRenderPass(device, transparentBlackFullClearRenderPassDescriptor);
-        this.viewRenderer.executeOnPass(device, skyboxPassRenderer, SM64DSPass.SKYBOX);
+        skyboxPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.renderInstManager.setVisibleByFilterKeyExact(SM64DSPass.SKYBOX);
+        this.renderInstManager.drawOnPassRenderer(device, skyboxPassRenderer);
         skyboxPassRenderer.endPass(null);
         device.submitPass(skyboxPassRenderer);
         // Now do main pass.
         const mainPassRenderer = this.renderTarget.createRenderPass(device, depthClearRenderPassDescriptor);
-        this.viewRenderer.executeOnPass(device, mainPassRenderer, SM64DSPass.MAIN);
+        mainPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.renderInstManager.setVisibleByFilterKeyExact(SM64DSPass.MAIN);
+        this.renderInstManager.drawOnPassRenderer(device, mainPassRenderer);
+
+        this.renderInstManager.resetRenderInsts();
+
         return mainPassRenderer;
     }
 
     public destroy(device: GfxDevice): void {
-        this.viewRenderer.destroy(device);
+        this.renderInstManager.destroy(device);
+        this.uniformBuffer.destroy(device);
         this.renderTarget.destroy(device);
         this.textureHolder.destroy(device);
 
@@ -184,7 +207,6 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
             const bmdRenderer = new BMDModelInstance(device, renderer.textureHolder, bmdData, level);
             mat4.scale(bmdRenderer.modelMatrix, bmdRenderer.modelMatrix, [scale, scale, scale]);
             bmdRenderer.isSkybox = isSkybox;
-            bmdRenderer.addToViewRenderer(device, renderer.viewRenderer);
             renderer.bmdRenderers.push(bmdRenderer);
             return bmdRenderer;
         });
@@ -207,7 +229,6 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
         if (spinSpeed > 0)
             bmdRenderer.animation = new YSpinAnimation(spinSpeed, 0);
 
-        bmdRenderer.addToViewRenderer(device, renderer.viewRenderer);
         renderer.bmdRenderers.push(bmdRenderer);
         return bmdRenderer;
     }
@@ -395,7 +416,7 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
         const level = crg1.Levels[this.levelId];
         const modelCache = new ModelCache();
 
-        const renderer = new SM64DSRenderer(modelCache, textureHolder);
+        const renderer = new SM64DSRenderer(device, modelCache, textureHolder);
 
         this._createBMDRenderer(device, renderer, abortSignal, level.MapBmdFile, GLOBAL_SCALE, level, false);
 

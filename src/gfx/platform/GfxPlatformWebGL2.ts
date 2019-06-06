@@ -1379,7 +1379,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             if (buffer !== this._currentUniformBuffers[index] || byteOffset !== this._currentUniformBufferByteOffsets[index]) {
                 const platformBufferByteOffset = byteOffset % buffer.pageByteSize;
                 const platformBuffer = buffer.gl_buffer_pages[(byteOffset / buffer.pageByteSize) | 0];
-                assert(platformBufferByteOffset + byteSize < buffer.pageByteSize);
+                assert(platformBufferByteOffset + byteSize <= buffer.pageByteSize);
                 gl.bindBufferRange(gl.UNIFORM_BUFFER, index, platformBuffer, platformBufferByteOffset, byteSize);
                 this._currentUniformBuffers[index] = buffer;
                 this._currentUniformBufferByteOffsets[index] = byteOffset;
