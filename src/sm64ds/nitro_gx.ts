@@ -33,8 +33,8 @@ enum PolyType {
     QUAD_STRIP = 3,
 }
 
-// 3 pos + 4 color + 2 uv
-export const VERTEX_SIZE = 12;
+// 3 pos + 4 color + 2 uv + 3 nrm + 1 matrix ID
+export const VERTEX_SIZE = 13;
 export const VERTEX_BYTES = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;
 
 const tmp = new Uint8Array(3);
@@ -45,8 +45,7 @@ export function bgr5(pixel: number): Color {
 }
 
 function cmd_MTX_RESTORE(ctx: ContextInternal) {
-    // XXX: We don't implement the matrix stack yet.
-    ctx.readParam();
+    ctx.s_mtxId = ctx.readParam();
 }
 
 function cmd_COLOR(ctx: ContextInternal) {
@@ -285,6 +284,7 @@ interface Vertex {
     nrm: Point;
     color: Color;
     uv: TexCoord;
+    mtxId: number;
 }
 
 export class Context {
@@ -302,16 +302,17 @@ class ContextInternal {
     public s_vtx: Point;
     public s_nrm: Point;
     public s_polyType: PolyType;
+    public s_mtxId: number = -1;
     public s_startVertexIndex: number = 0;
 
     public vtxs: Vertex[] = [];
     public indexes: number[] = [];
     public drawCalls: DrawCall[] = [];
 
-    constructor(buffer: ArrayBufferSlice, baseCtx: Context) {
+    constructor(buffer: ArrayBufferSlice, baseCtx: Context, public posScale: number) {
+        this.view = buffer.createDataView();
         this.alpha = baseCtx.alpha;
         this.s_color = baseCtx.color;
-        this.view = buffer.createDataView();
         this.s_texCoord = { s: 0, t: 0 };
         this.s_nrm = { x: 0, y: 0, z: 0 };
     }
@@ -322,7 +323,7 @@ class ContextInternal {
 
     public vtx(x: number, y: number, z: number) {
         this.s_vtx = { x, y, z };
-        this.vtxs.push({ pos: this.s_vtx, nrm: this.s_nrm, color: this.s_color, uv: this.s_texCoord });
+        this.vtxs.push({ pos: this.s_vtx, nrm: this.s_nrm, color: this.s_color, uv: this.s_texCoord, mtxId: this.s_mtxId });
     }
 
     public makePackedVertexBuffer(): Float32Array {
@@ -330,9 +331,9 @@ class ContextInternal {
 
         for (let i = 0; i < this.vtxs.length; i++) {
             const v = this.vtxs[i];
-            vtxBuffer[i * VERTEX_SIZE + 0] = v.pos.x;
-            vtxBuffer[i * VERTEX_SIZE + 1] = v.pos.y;
-            vtxBuffer[i * VERTEX_SIZE + 2] = v.pos.z;
+            vtxBuffer[i * VERTEX_SIZE + 0] = v.pos.x * this.posScale;
+            vtxBuffer[i * VERTEX_SIZE + 1] = v.pos.y * this.posScale;
+            vtxBuffer[i * VERTEX_SIZE + 2] = v.pos.z * this.posScale;
             vtxBuffer[i * VERTEX_SIZE + 3] = v.color.r  / 0xFF;
             vtxBuffer[i * VERTEX_SIZE + 4] = v.color.g  / 0xFF;
             vtxBuffer[i * VERTEX_SIZE + 5] = v.color.b  / 0xFF;
@@ -342,7 +343,7 @@ class ContextInternal {
             vtxBuffer[i * VERTEX_SIZE + 9] = v.nrm.x;
             vtxBuffer[i * VERTEX_SIZE + 10] = v.nrm.y;
             vtxBuffer[i * VERTEX_SIZE + 11] = v.nrm.z;
-            
+            vtxBuffer[i * VERTEX_SIZE + 12] = v.mtxId;
         }
 
         return vtxBuffer;
@@ -355,8 +356,8 @@ export interface VertexData {
     drawCalls: DrawCall[];
 }
 
-export function readCmds(buffer: ArrayBufferSlice, baseCtx: Context): VertexData {
-    const ctx = new ContextInternal(buffer, baseCtx);
+export function readCmds(buffer: ArrayBufferSlice, baseCtx: Context, posScale: number = 1): VertexData {
+    const ctx = new ContextInternal(buffer, baseCtx, posScale);
 
     while (ctx.offs < buffer.byteLength) {
         // Commands are packed 4 at a time...

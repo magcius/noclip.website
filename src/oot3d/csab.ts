@@ -297,10 +297,13 @@ function lerp(k0: AnimationKeyframeLinear, k1: AnimationKeyframeLinear, t: numbe
     return k0.value + (k1.value - k0.value) * t;
 }
 
+// https://gist.github.com/shaunlebron/8832585
 function lerpAngle(k0: AnimationKeyframeLinear, k1: AnimationKeyframeLinear, t: number): number {
     const v0 = k0.value + Math.PI * 2;
     const v1 = k0.value + Math.PI * 2;
-    return v0 + (v1 - v0) * t;
+    const da = (v1 - v0) % 1.0;
+    const dist = (2*da) % 1.0 - da;
+    return v0 + dist * t;
 }
 
 function sampleAnimationTrackLinearRotation(track: AnimationTrackLinear, frame: number): number {

@@ -1,18 +1,12 @@
 
-import { mat2d, mat4, vec3, vec2 } from 'gl-matrix';
+import { mat2d, mat4, vec2 } from 'gl-matrix';
 
-import * as BYML from '../byml';
-import * as LZ77 from './lz77';
-import * as NITRO_BMD from './nitro_bmd';
+import * as BMD from './sm64ds_bmd';
 import * as NITRO_GX from './nitro_gx';
 
 import * as Viewer from '../viewer';
-import * as UI from '../ui';
 
 import { DeviceProgram } from '../Program';
-import Progressable from '../Progressable';
-import { fetchData } from '../fetch';
-import ArrayBufferSlice from '../ArrayBufferSlice';
 import { computeModelMatrixYBillboard, computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
 import { GfxFormat, GfxBufferUsage, GfxBufferFrequencyHint, GfxBlendMode, GfxBlendFactor, GfxDevice, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxBuffer, GfxVertexAttributeFrequency, GfxTexFilterMode, GfxMipFilterMode, GfxRenderPass, GfxInputState, GfxInputLayout, GfxVertexAttributeDescriptor, GfxTextureDimension, GfxSampler } from '../gfx/platform/GfxPlatform';
@@ -20,15 +14,17 @@ import { fillMatrix4x3, fillMatrix4x4, fillVec4, fillMatrix4x2 } from '../gfx/he
 import { GfxRenderInstViewRenderer, GfxRenderInstBuilder, GfxRenderInst, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { BasicRenderTarget, depthClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { getFormatName, parseTexImageParamWrapModeS, parseTexImageParamWrapModeT } from './nitro_tex';
 import { assert, nArray } from '../util';
+import { BCA, bindBCAAnimator, BCAAnimator } from './sm64ds_bca';
+import AnimationController from '../AnimationController';
 
 export class NITRO_Program extends DeviceProgram {
     public static a_Position = 0;
     public static a_UV = 1;
     public static a_Color = 2;
     public static a_Normal = 3;
+    public static a_PosMtxIdx = 4;
 
     public static ub_SceneParams = 0;
     public static ub_MaterialParams = 1;
@@ -50,10 +46,8 @@ layout(row_major, std140) uniform ub_MaterialParams {
 #define u_TexCoordMode (u_Misc0.x)
 
 layout(row_major, std140) uniform ub_PacketParams {
-    Mat4x3 u_ModelView;
-    vec4 u_Misc1;
+    Mat4x3 u_PosMtx[8];
 };
-#define u_PosScale (u_Misc1.x)
 
 uniform sampler2D u_Texture;
 `;
@@ -65,11 +59,13 @@ layout(location = ${NITRO_Program.a_Position}) in vec3 a_Position;
 layout(location = ${NITRO_Program.a_UV}) in vec2 a_UV;
 layout(location = ${NITRO_Program.a_Color}) in vec4 a_Color;
 layout(location = ${NITRO_Program.a_Normal}) in vec3 a_Normal;
+layout(location = ${NITRO_Program.a_PosMtxIdx}) in float a_PosMtxIdx;
 out vec4 v_Color;
 out vec2 v_TexCoord;
 
 void main() {
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_ModelView), vec4(a_Position * u_PosScale, 1.0)));
+    Mat4x3 t_PosMtx = u_PosMtx[int(a_PosMtxIdx)];
+    gl_Position = Mul(u_Projection, Mul(_Mat4x4(t_PosMtx), vec4(a_Position, 1.0)));
     v_Color = a_Color;
 
     vec2 t_TexSpaceCoord;
@@ -104,7 +100,7 @@ void main() {
     public static programReflection = DeviceProgram.parseReflectionDefinitions(NITRO_Program.both);
 }
 
-function textureToCanvas(bmdTex: NITRO_BMD.Texture): Viewer.Texture {
+function textureToCanvas(bmdTex: BMD.Texture): Viewer.Texture {
     const canvas = document.createElement("canvas");
     canvas.width = bmdTex.width;
     canvas.height = bmdTex.height;
@@ -120,26 +116,13 @@ function textureToCanvas(bmdTex: NITRO_BMD.Texture): Viewer.Texture {
     return { name: bmdTex.name, surfaces, extraInfo };
 }
 
-interface Animation {
+export interface Animation {
     updateModelMatrix(time: number, modelMatrix: mat4): void;
     updateNormalMatrix(time: number, normalMatrix: mat4): void;
 }
 
-class YSpinAnimation {
-    constructor(public speed: number, public phase: number) {}
-
-    public updateNormalMatrix(time: number, normalMatrix: mat4) {
-        const theta = this.phase + (time / 30 * this.speed);
-        mat4.rotateY(normalMatrix, normalMatrix, theta);
-    }
-
-    public updateModelMatrix(time: number, modelMatrix: mat4) {
-        this.updateNormalMatrix(time, modelMatrix);
-    }
-}
-
-export class NITROTextureHolder extends TextureHolder<NITRO_BMD.Texture> {
-    public loadTexture(device: GfxDevice, texture: NITRO_BMD.Texture): LoadedTexture {
+export class NITROTextureHolder extends TextureHolder<BMD.Texture> {
+    public loadTexture(device: GfxDevice, texture: BMD.Texture): LoadedTexture {
         const gfxTexture = device.createTexture({
             dimension: GfxTextureDimension.n2D, pixelFormat: GfxFormat.U8_RGBA,
             width: texture.width, height: texture.height, depth: 1, numLevels: 1,
@@ -168,7 +151,8 @@ export class VertexData {
             { location: NITRO_Program.a_Position, format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0*4, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
             { location: NITRO_Program.a_Color, format: GfxFormat.F32_RGBA, bufferIndex: 0, bufferByteOffset: 3*4, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
             { location: NITRO_Program.a_UV, format: GfxFormat.F32_RG, bufferIndex: 0, bufferByteOffset: 7*4, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
-            { location: NITRO_Program.a_Normal, format: GfxFormat.F32_RG, bufferIndex: 0, bufferByteOffset: 9*4, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
+            { location: NITRO_Program.a_Normal, format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 9*4, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
+            { location: NITRO_Program.a_PosMtxIdx, format: GfxFormat.F32_R, bufferIndex: 0, bufferByteOffset: 12*4, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
         ];
 
         const indexBufferFormat = GfxFormat.U16_R;
@@ -190,15 +174,17 @@ class ShapeInstance {
     public templateRenderInst: GfxRenderInst;
     public renderInsts: GfxRenderInst[] = [];
 
-    constructor(renderInstBuilder: GfxRenderInstBuilder, public vertexData: VertexData, public model: NITRO_BMD.Bone) {
+    constructor(renderInstBuilder: GfxRenderInstBuilder, private batchData: BatchData) {
+        const vertexData = this.batchData.vertexData;
+
         this.templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
         this.templateRenderInst.setSamplerBindingsInherit();
-        this.templateRenderInst.inputState = this.vertexData.inputState;
+        this.templateRenderInst.inputState = vertexData.inputState;
         this.templateRenderInst.name = name;
 
         renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, NITRO_Program.ub_PacketParams);
 
-        const nitroData = this.vertexData.nitroVertexData;
+        const nitroData = vertexData.nitroVertexData;
         for (let i = 0; i < nitroData.drawCalls.length; i++) {
             const renderInst = renderInstBuilder.pushRenderInst();
             renderInst.setSamplerBindingsInherit();
@@ -209,13 +195,16 @@ class ShapeInstance {
         renderInstBuilder.popTemplateRenderInst();
     }
 
-    public prepareToRender(packetParamsBuffer: GfxRenderBuffer, viewerInput: Viewer.ViewerRenderInput, modelInstance: BMDModelInstance, scaleFactor: number): void {
+    public prepareToRender(packetParamsBuffer: GfxRenderBuffer, viewerInput: Viewer.ViewerRenderInput, modelInstance: BMDModelInstance): void {
         let offs = this.templateRenderInst.getUniformBufferOffset(NITRO_Program.ub_PacketParams);
         const packetParamsMapped = packetParamsBuffer.mapBufferF32(offs, 16);
 
-        modelInstance.computeModelView(scratchMat4, viewerInput, this.model.billboard);
-        offs += fillMatrix4x3(packetParamsMapped, offs, scratchMat4);
-        offs += fillVec4(packetParamsMapped, offs, scaleFactor);
+        const rootJoint = this.batchData.rootJoint;
+        for (let i = 0; i < this.batchData.batch.matrixTable.length; i++) {
+            const matrixId = this.batchData.batch.matrixTable[i];
+            modelInstance.computeModelView(scratchMatrix, matrixId, viewerInput, rootJoint.billboard);
+            offs += fillMatrix4x3(packetParamsMapped, offs, scratchMatrix);
+        }
     }
 }
 
@@ -241,25 +230,37 @@ function mat4_from_mat2d(dst: mat4, m: mat2d): void {
     dst[15] = 1;
 }
 
-const enum SM64DSPass {
+export const enum SM64DSPass {
     MAIN = 0x01,
     SKYBOX = 0x02,
 }
 
-class BMDData {
-    public vertexData: VertexData[] = [];
+class BatchData {
+    public vertexData: VertexData;
 
-    constructor(device: GfxDevice, public bmd: NITRO_BMD.BMD) {
-        for (let i = 0; i < this.bmd.bones.length; i++) {
-            const model = this.bmd.bones[i];
-            for (let j = 0; j < model.batches.length; j++)
-                this.vertexData.push(new VertexData(device, model.batches[j].vertexData));
+    constructor(device: GfxDevice, public rootJoint: BMD.Joint, public batch: BMD.Batch) {
+        this.vertexData = new VertexData(device, batch.vertexData);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.vertexData.destroy(device);
+    }
+}
+
+export class BMDData {
+    public batchData: BatchData[] = [];
+
+    constructor(device: GfxDevice, public bmd: BMD.BMD) {
+        for (let i = 0; i < this.bmd.joints.length; i++) {
+            const rootJoint = this.bmd.joints[i];
+            for (let j = 0; j < rootJoint.batches.length; j++)
+                this.batchData.push(new BatchData(device, rootJoint, rootJoint.batches[j]));
         }
     }
 
     public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.vertexData.length; i++)
-            this.vertexData[i].destroy(device);
+        for (let i = 0; i < this.batchData.length; i++)
+            this.batchData[i].destroy(device);
     }
 }
 
@@ -269,18 +270,18 @@ function selectArray(arr: Float32Array, time: number): number {
 
 const textureMapping = nArray(1, () => new TextureMapping());
 const scratchMat2d = mat2d.create();
-const scratchMat4 = mat4.create();
+const scratchMatrix = mat4.create();
 const scratchVec2 = vec2.create();
 class MaterialInstance {
     private templateRenderInst: GfxRenderInst;
     private gfxSampler: GfxSampler | null = null;
     private crg1TextureAnimation: CRG1TextureAnimation | null = null;
-    private texCoordMode: NITRO_BMD.TexCoordMode;
+    private texCoordMode: BMD.TexCoordMode;
 
     private texturesEnabled: boolean = true;
     private vertexColorsEnabled: boolean = true;
 
-    constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, textureHolder: NITROTextureHolder, crg1Level: CRG1Level | null, public material: NITRO_BMD.Material) {
+    constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, textureHolder: NITROTextureHolder, crg1Level: CRG1Level | null, public material: BMD.Material) {
         this.templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
 
         if (this.material.texture !== null) {
@@ -346,12 +347,12 @@ class MaterialInstance {
 
     public prepareToRender(materialParamsBuffer: GfxRenderBuffer, textureHolder: NITROTextureHolder, viewerInput: Viewer.ViewerRenderInput, normalMatrix: mat4, extraTexCoordMat: mat2d | null): void {
         if (this.material.texture !== null) {
-            if (this.texCoordMode === NITRO_BMD.TexCoordMode.NORMAL) {
-                mat4.copy(scratchMat4, normalMatrix);
+            if (this.texCoordMode === BMD.TexCoordMode.NORMAL) {
+                mat4.copy(scratchMatrix, normalMatrix);
 
                 // Game seems to use this to offset the center of the reflection.
-                scratchMat4[12] += this.material.texCoordMat[4];
-                scratchMat4[13] += -this.material.texCoordMat[5];
+                scratchMatrix[12] += this.material.texCoordMat[4];
+                scratchMatrix[13] += -this.material.texCoordMat[5];
 
                 // We shouldn't have any texture animations on normal-mapped textures.
                 assert(this.crg1TextureAnimation === null);
@@ -374,12 +375,12 @@ class MaterialInstance {
                 if (extraTexCoordMat !== null)
                     mat2d.mul(scratchMat2d, scratchMat2d, extraTexCoordMat);
 
-                mat4_from_mat2d(scratchMat4, scratchMat2d);
+                mat4_from_mat2d(scratchMatrix, scratchMat2d);
             }
 
             let offs = this.templateRenderInst.getUniformBufferOffset(NITRO_Program.ub_MaterialParams);
             const materialParamsMapped = materialParamsBuffer.mapBufferF32(offs, 12);
-            offs += fillMatrix4x2(materialParamsMapped, offs, scratchMat4);
+            offs += fillMatrix4x2(materialParamsMapped, offs, scratchMatrix);
             offs += fillVec4(materialParamsMapped, offs, this.texCoordMode);
         }
     }
@@ -392,7 +393,7 @@ class MaterialInstance {
 
 const scratchModelMatrix = mat4.create();
 const scratchNormalMatrix = mat4.create();
-class BMDModelInstance {
+export class BMDModelInstance {
     public name: string = '';
     public isSkybox: boolean = false;
     public modelMatrix = mat4.create();
@@ -403,6 +404,8 @@ class BMDModelInstance {
     private templateRenderInst: GfxRenderInst;
     private materialInstances: MaterialInstance[] = [];
     private shapeInstances: ShapeInstance[] = [];
+    private jointMatrices: mat4[];
+    private bcaAnimator: BCAAnimator | null = null;
 
     private sceneParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_SceneParams`);
     private materialParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_MaterialParams`);
@@ -411,6 +414,8 @@ class BMDModelInstance {
     constructor(device: GfxDevice, public textureHolder: NITROTextureHolder, public bmdData: BMDData, public crg1Level: CRG1Level | null = null) {
         const bmd = this.bmdData.bmd;
         this.textureHolder.addTextures(device, bmd.textures);
+
+        this.jointMatrices = nArray(this.bmdData.bmd.joints.length, () => mat4.create());
     }
 
     public setVertexColorsEnabled(v: boolean): void {
@@ -423,7 +428,35 @@ class BMDModelInstance {
             this.materialInstances[i].setTexturesEnabled(v);
     }
 
+    public bindBCA(animationController: AnimationController, bca: BCA): void {
+        assert(bca.jointAnimationEntries.length === this.jointMatrices.length);
+        this.bcaAnimator = bindBCAAnimator(animationController, bca);
+    }
+
+    private computeJointMatrices(): void {
+        for (let i = 0; i < this.bmdData.bmd.joints.length; i++) {
+            const joint = this.bmdData.bmd.joints[i];
+            const dst = this.jointMatrices[i];
+
+            let jointMatrix: mat4;
+            if (this.bcaAnimator !== null) {
+                this.bcaAnimator.calcJointMatrix(scratchModelMatrix, i);
+                jointMatrix = scratchModelMatrix;
+            } else {
+                jointMatrix = joint.modelMatrix;
+            }
+
+            if (joint.parentJointIdx >= 0) {
+                mat4.mul(dst, this.jointMatrices[joint.parentJointIdx], jointMatrix);
+            } else {
+                mat4.mul(dst, this.modelMatrix, jointMatrix);
+            }
+        }
+    }
+
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        this.computeJointMatrices();
+
         let offs = this.templateRenderInst.getUniformBufferOffset(NITRO_Program.ub_SceneParams);
         const sceneParamsMapped = this.sceneParamsBuffer.mapBufferF32(offs, 16);
         offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
@@ -435,7 +468,7 @@ class BMDModelInstance {
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].prepareToRender(this.materialParamsBuffer, this.textureHolder, viewerInput, scratchNormalMatrix, this.extraTexCoordMat);
         for (let i = 0; i < this.shapeInstances.length; i++)
-            this.shapeInstances[i].prepareToRender(this.packetParamsBuffer, viewerInput, this, this.bmdData.bmd.scaleFactor);
+            this.shapeInstances[i].prepareToRender(this.packetParamsBuffer, viewerInput, this);
 
         this.sceneParamsBuffer.prepareToRender(hostAccessPass);
         this.materialParamsBuffer.prepareToRender(hostAccessPass);
@@ -463,22 +496,24 @@ class BMDModelInstance {
         }
     }
 
-    public computeModelView(dst: mat4, viewerInput: Viewer.ViewerRenderInput, isBillboard: boolean): void {
+    public computeModelView(dst: mat4, matrixIdx: number, viewerInput: Viewer.ViewerRenderInput, isBillboard: boolean): void {
+        const jointIdx = this.bmdData.bmd.matrixToJointTable[matrixIdx];
+        const jointMatrix = this.jointMatrices[jointIdx];
+
         // Build model matrix
-        const modelMatrix = scratchModelMatrix;
         if (isBillboard) {
             // Apply billboard model if necessary.
-            computeModelMatrixYBillboard(modelMatrix, viewerInput.camera);
-            mat4.mul(modelMatrix, this.modelMatrix, modelMatrix);
+            computeModelMatrixYBillboard(scratchModelMatrix, viewerInput.camera);
+            mat4.mul(scratchModelMatrix, jointMatrix, scratchModelMatrix);
         } else {
-            mat4.copy(modelMatrix, this.modelMatrix);
+            mat4.copy(scratchModelMatrix, jointMatrix);
         }
 
         if (this.animation !== null)
-            this.animation.updateModelMatrix(viewerInput.time, modelMatrix);
+            this.animation.updateModelMatrix(viewerInput.time, scratchModelMatrix);
 
         this.computeViewMatrix(dst, viewerInput);
-        mat4.mul(dst, dst, modelMatrix);
+        mat4.mul(dst, dst, scratchModelMatrix);
     }
 
     public computeNormalMatrix(dst: mat4, viewerInput: Viewer.ViewerRenderInput): void {
@@ -497,19 +532,13 @@ class BMDModelInstance {
     }
 
     private translateBMD(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder) {
-        let vertexDataIndex = 0;
-        const bmd = this.bmdData.bmd;
-        for (let i = 0; i < bmd.bones.length; i++) {
-            const model = bmd.bones[i];
-            for (let j = 0; j < model.batches.length; j++) {
-                const batch = model.batches[j];
-                const materialInstance = new MaterialInstance(device, renderInstBuilder, this.textureHolder, this.crg1Level, batch.material);
-                this.materialInstances.push(materialInstance);
-                const vertexData = this.bmdData.vertexData[vertexDataIndex++];
-                const shapeInstance = new ShapeInstance(renderInstBuilder, vertexData, model);
-                this.shapeInstances.push(shapeInstance);
-                renderInstBuilder.popTemplateRenderInst();
-            }
+        for (let i = 0; i < this.bmdData.batchData.length; i++) {
+            const batchData = this.bmdData.batchData[i];
+            const materialInstance = new MaterialInstance(device, renderInstBuilder, this.textureHolder, this.crg1Level, batchData.batch.material);
+            this.materialInstances.push(materialInstance);
+            const shapeInstance = new ShapeInstance(renderInstBuilder, batchData);
+            this.shapeInstances.push(shapeInstance);
+            renderInstBuilder.popTemplateRenderInst();
         }
     }
 
@@ -522,74 +551,7 @@ class BMDModelInstance {
     }
 }
 
-class SM64DSRenderer implements Viewer.SceneGfx {
-    public viewRenderer = new GfxRenderInstViewRenderer();
-    public renderTarget = new BasicRenderTarget();
-    public bmdRenderers: BMDModelInstance[] = [];
-
-    constructor(public modelCache: ModelCache, public textureHolder: NITROTextureHolder) {
-    }
-
-    public createPanels(): UI.Panel[] {
-        const renderHacksPanel = new UI.Panel();
-        renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
-        renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
-        const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
-        enableVertexColorsCheckbox.onchanged = () => {
-            const v = enableVertexColorsCheckbox.checked;
-            for (let i = 0; i < this.bmdRenderers.length; i++)
-                this.bmdRenderers[i].setVertexColorsEnabled(v);
-        };
-        renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
-        const enableTextures = new UI.Checkbox('Enable Textures', true);
-        enableTextures.onchanged = () => {
-            const v = enableTextures.checked;
-            for (let i = 0; i < this.bmdRenderers.length; i++)
-                this.bmdRenderers[i].setTexturesEnabled(v);
-        };
-        renderHacksPanel.contents.appendChild(enableTextures.elem);
-
-        return [renderHacksPanel];
-    }
-
-    protected prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        for (let i = 0; i < this.bmdRenderers.length; i++)
-            this.bmdRenderers[i].prepareToRender(hostAccessPass, viewerInput);
-    }
-
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
-
-        this.viewRenderer.prepareToRender(device);
-
-        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
-
-        // First, render the skybox.
-        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, transparentBlackFullClearRenderPassDescriptor);
-        this.viewRenderer.executeOnPass(device, skyboxPassRenderer, SM64DSPass.SKYBOX);
-        skyboxPassRenderer.endPass(null);
-        device.submitPass(skyboxPassRenderer);
-        // Now do main pass.
-        const mainPassRenderer = this.renderTarget.createRenderPass(device, depthClearRenderPassDescriptor);
-        this.viewRenderer.executeOnPass(device, mainPassRenderer, SM64DSPass.MAIN);
-        return mainPassRenderer;
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.viewRenderer.destroy(device);
-        this.renderTarget.destroy(device);
-        this.textureHolder.destroy(device);
-
-        this.modelCache.destroy(device);
-        for (let i = 0; i < this.bmdRenderers.length; i++)
-            this.bmdRenderers[i].destroy(device);
-    }
-}
-
-interface CRG1TextureAnimation {
+export interface CRG1TextureAnimation {
     MaterialName: string;
     Duration: number;
     Scale: Float32Array;
@@ -598,7 +560,7 @@ interface CRG1TextureAnimation {
     Y: Float32Array;
 }
 
-interface CRG1Object {
+export interface CRG1Object {
     Area: number;
     Setup: number;
     ObjectId: number;
@@ -607,288 +569,13 @@ interface CRG1Object {
     Parameters: number[];
 }
 
-interface CRG1Level {
+export interface CRG1Level {
     MapBmdFile: string;
     VrboxBmdFile: string;
     TextureAnimations: CRG1TextureAnimation[];
     Objects: CRG1Object[];
 }
 
-interface Sm64DSCRG1 {
+export interface Sm64DSCRG1 {
     Levels: CRG1Level[];
-}
-
-class ModelCache {
-    public map: Map<string, Progressable<BMDData>> = new Map();
-    private dataList: BMDData[] = [];
-
-    public waitForLoad(): Progressable<any> {
-        const p: Progressable<any>[] = [... this.map.values()];
-        return Progressable.all(p);
-    }
-
-    public fetchModel(device: GfxDevice, filename: string, abortSignal: AbortSignal): Progressable<BMDData> {
-        if (!this.map.has(filename)) {
-            const p = fetchData(filename, abortSignal).then((buffer) => {
-                const result = LZ77.maybeDecompress(buffer);
-                const bmd = NITRO_BMD.parse(result);
-                const bmdData = new BMDData(device, bmd);
-                this.dataList.push(bmdData);
-                return bmdData;
-            });
-            this.map.set(filename, p);
-        }
-        return this.map.get(filename);
-    }
-
-    public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.dataList.length; i++)
-            this.dataList[i].destroy(device);
-    }
-}
-
-const GLOBAL_SCALE = 1500;
-export class SceneDesc implements Viewer.SceneDesc {
-    public id: string;
-
-    constructor(public levelId: number, public name: string) {
-        this.id = '' + this.levelId;
-    }
-
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
-        return fetchData('sm64ds/sm64ds.crg1', abortSignal).then((result: ArrayBufferSlice) => {
-            const crg1 = BYML.parse<Sm64DSCRG1>(result, BYML.FileType.CRG1);
-            const textureHolder = new NITROTextureHolder();
-            return this._createSceneFromCRG1(device, textureHolder, crg1, abortSignal);
-        });
-    }
-
-    private _createBMDRenderer(device: GfxDevice, renderer: SM64DSRenderer, abortSignal: AbortSignal, filename: string, scale: number, level: CRG1Level, isSkybox: boolean): Progressable<BMDModelInstance> {
-        const modelCache = renderer.modelCache;
-        return modelCache.fetchModel(device, `sm64ds/${filename}`, abortSignal).then((bmdData: BMDData) => {
-            const bmdRenderer = new BMDModelInstance(device, renderer.textureHolder, bmdData, level);
-            mat4.scale(bmdRenderer.modelMatrix, bmdRenderer.modelMatrix, [scale, scale, scale]);
-            bmdRenderer.isSkybox = isSkybox;
-            bmdRenderer.addToViewRenderer(device, renderer.viewRenderer);
-            renderer.bmdRenderers.push(bmdRenderer);
-            return bmdRenderer;
-        });
-    }
-
-    private _createBMDObjRenderer(device: GfxDevice, renderer: SM64DSRenderer, abortSignal: AbortSignal, filename: string, translation: vec3, rotationY: number, scale: number = 1, spinSpeed: number = 0): Progressable<BMDModelInstance> {
-        const modelCache = renderer.modelCache;
-        return modelCache.fetchModel(device, `sm64ds/${filename}`, abortSignal).then((bmdData: BMDData) => {
-            const bmdRenderer = new BMDModelInstance(device, renderer.textureHolder, bmdData);
-            bmdRenderer.name = filename;
-
-            vec3.scale(translation, translation, GLOBAL_SCALE);
-            mat4.translate(bmdRenderer.modelMatrix, bmdRenderer.modelMatrix, translation);
-
-            mat4.rotateY(bmdRenderer.modelMatrix, bmdRenderer.modelMatrix, rotationY);
-
-            // Don't ask, ugh.
-            scale = scale * (GLOBAL_SCALE / 100);
-            mat4.scale(bmdRenderer.modelMatrix, bmdRenderer.modelMatrix, [scale, scale, scale]);
-
-            mat4.rotateY(bmdRenderer.normalMatrix, bmdRenderer.normalMatrix, rotationY);
-
-            if (spinSpeed > 0)
-                bmdRenderer.animation = new YSpinAnimation(spinSpeed, 0);
-
-            bmdRenderer.addToViewRenderer(device, renderer.viewRenderer);
-            renderer.bmdRenderers.push(bmdRenderer);
-            return bmdRenderer;
-        });
-    }
-
-    private _createBMDRendererForObject(device: GfxDevice, renderer: SM64DSRenderer, abortSignal: AbortSignal, object: CRG1Object): Progressable<BMDModelInstance> {
-        const translation = vec3.fromValues(object.Position.X, object.Position.Y, object.Position.Z);
-        const rotationY = object.Rotation.Y / 180 * Math.PI;
-
-        switch (object.ObjectId) {
-        case 7: // Up/down lift thingy
-        case 9: // Pathlift?
-        case 10: // Chain Chomp (copy/pasted)
-        case 13: // LONELY ROLLING BALL
-        case 15: // Goomba
-        case 19: // Bob-omb
-        case 20: // Friendly Bob-omb
-        case 21: // Koopa
-            return null;
-        case 23: // Brick Block
-            return this._createBMDObjRenderer(device, renderer, abortSignal, `normal_obj/obj_block/broken_block_l.bmd`, translation, rotationY, 0.8);
-        case 24: // Brick Block Larger
-            return this._createBMDObjRenderer(device, renderer, abortSignal, `normal_obj/obj_block/broken_block_l.bmd`, translation, rotationY, 1.2);
-        case 26: // Powerup inside block?
-        case 29: // Cannon hatch
-            return null;
-        case 30: // Item Block
-            return this._createBMDObjRenderer(device, renderer, abortSignal, `normal_obj/obj_hatena_box/hatena_box.bmd`, translation, rotationY, 0.8);
-        case 36: // Pole
-            return this._createBMDObjRenderer(device, renderer, abortSignal, `normal_obj/obj_pile/pile.bmd`, translation, rotationY, 0.8);
-        case 37: // Coin
-            return this._createBMDObjRenderer(device, renderer, abortSignal, `normal_obj/coin/coin_poly32.bmd`, translation, rotationY, 0.7, 0.1);
-        case 38: // Red Coin
-            return this._createBMDObjRenderer(device, renderer, abortSignal, `normal_obj/coin/coin_red_poly32.bmd`, translation, rotationY, 0.7, 0.1);
-        case 39: // Blue Coin
-            return this._createBMDObjRenderer(device, renderer, abortSignal, `normal_obj/coin/coin_blue_poly32.bmd`, translation, rotationY, 0.7, 0.1);
-        case 41: { // Tree
-            const treeType = (object.Parameters[0] >>> 4) & 0x07;
-            const treeFilenames = ['bomb', 'toge', 'yuki', 'yashi', 'castle', 'castle', 'castle', 'castle'];
-            const filename = `normal_obj/tree/${treeFilenames[treeType]}_tree.bmd`;
-            return this._createBMDObjRenderer(device, renderer, abortSignal, filename, translation, rotationY);
-        }
-        case 42: { // Castle Painting
-            const painting = (object.Parameters[0] >>> 8) & 0x1F;
-            const filenames = [
-                'for_bh', 'for_bk', 'for_ki', 'for_sm', 'for_cv_ex5', 'for_fl', 'for_dl', 'for_wl', 'for_sl', 'for_wc',
-                'for_hm', 'for_hs', 'for_td_tt', 'for_ct', 'for_ex_mario', 'for_ex_luigi', 'for_ex_wario', 'for_vs_cross', 'for_vs_island',
-            ];
-            const filename = `picture/${filenames[painting]}.bmd`;
-            const scaleX = (object.Parameters[0] & 0xF)+1;
-            const scaleY = ((object.Parameters[0] >> 4) & 0x0F) + 1;
-            const rotationX = object.Parameters[1] / 0x7FFF * (Math.PI);
-            const isMirrored = ((object.Parameters[0] >> 13) & 0x03) === 3;
-            return this._createBMDObjRenderer(device, renderer, abortSignal, filename, translation, rotationY, 0.8).then((renderer) => {
-                mat4.rotateX(renderer.modelMatrix, renderer.modelMatrix, rotationX);
-                mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [scaleX, scaleY, 1]);
-                mat4.translate(renderer.modelMatrix, renderer.modelMatrix, [0, 100/16, 0]);
-                if (isMirrored) {
-                    renderer.extraTexCoordMat = mat2d.create();
-                    renderer.extraTexCoordMat[0] *= -1;
-                }
-                return renderer;
-            });
-        }
-        case 43: // Switch
-        case 44: // Switch-powered Star
-        case 45: // Switch-powered Trapdoor
-        case 48: // Chain Chomp Unchained
-        case 49: // 1-up
-        case 50: // Cannon
-        case 51: // Chain-chomp fence (BoB)
-        case 52: // Water bombs (BoB)
-        case 53: // Birds
-        case 54: // Fish
-        case 55: // Butterflies
-        case 56: // Super Bob Fuckan Omb Bob-Omb In BoB (the summit)
-        case 59: // Pirahna Plant
-        case 60: // Star Camera Path
-        case 61: // Star Target
-            return null;
-        case 62: // Silver Star
-            return this._createBMDObjRenderer(device, renderer, abortSignal, `normal_obj/star/obj_star_silver.bmd`, translation, rotationY, 0.8, 0.08);
-        case 63: // Star
-            let filename = `normal_obj/star/obj_star.bmd`;
-            let startype = (object.Parameters[0] >>> 4) & 0x0F;
-            let rotateSpeed = 0.08;
-            switch (startype)
-            {
-                case 0:
-                    filename = `normal_obj/star/star_base.bmd`;
-                    break;
-                case 1:
-                case 4:
-                case 6:
-                    filename = `normal_obj/star_box/star_box.bmd`;
-                    rotateSpeed = 0;
-                    break;
-            }
-            return this._createBMDObjRenderer(device, renderer, abortSignal, filename, translation, rotationY, 0.8, rotateSpeed);
-        case 64: // Whomp
-        case 65: // Big Whomp
-        case 66: // Thwomp
-        case 67: // Boo
-        case 74: // Minigame Cabinet Trigger (Invisible)
-            return null;
-        case 75: // Wall sign
-            return this._createBMDObjRenderer(device, renderer, abortSignal, `normal_obj/obj_kanban/obj_kanban.bmd`, translation, rotationY, 0.8);
-        case 76: // Signpost
-            return this._createBMDObjRenderer(device, renderer, abortSignal, `normal_obj/obj_tatefuda/obj_tatefuda.bmd`, translation, rotationY, 0.8);
-        case 79: // Heart
-        case 80: // Toad
-        case 167: // Peach's Castle Tippy TTC Hour Hand
-        case 168: // Peach's Castle Tippy TTC Minute Hand
-        case 169: // Peach's Castle Tippy TTC Pendulum
-            return null;
-        case 187: // Left Arrow Sign
-            return this._createBMDObjRenderer(device, renderer, abortSignal, `normal_obj/obj_yajirusi_l/yajirusi_l.bmd`, translation, rotationY, 0.8);
-        case 188: // Right Arrow Sign
-            return this._createBMDObjRenderer(device, renderer, abortSignal, `normal_obj/obj_yajirusi_r/yajirusi_r.bmd`, translation, rotationY, 0.8);
-        case 196: // WF
-        case 197: // WF
-        case 198: // WF
-        case 199: // WF
-        case 200: // WF
-        case 201: // WF
-        case 202: // WF
-        case 203: // WF Tower
-            return null;
-        case 204: // WF Spinning Island
-            return this._createBMDObjRenderer(device, renderer, abortSignal, `special_obj/bk_ukisima/bk_ukisima.bmd`, translation, rotationY, 1, 0.05);
-        case 205: // WF
-        case 206: // WF
-        case 207: // WF
-        case 208: // WF
-        case 209: // WF
-        case 228: // Switch Pillar
-        case 237: // MIPS
-        case 239: // That Stupid Owl™
-        case 243: // Invisible pole hitbox
-        case 244: // Lakitu
-        case 254: // Mario's Iconic Cap
-        case 264: // Red Flame
-        case 265: // Blue Flame
-        case 269: // 1-Up Mushroom Inside Block
-        case 270: // Some brick thing?
-        case 273: // Peach's Castle First Floor Trapdoor
-        case 274: // Peach's Castle First Floor Light Beam
-        case 275: // Peach's Castle First Floor Peach/Bowser Fade Painting
-        case 281: // Koopa the Quick
-        case 282: // Koopa the Quick Finish Flag
-            return null;
-        case 284: // Wario Block
-            return this._createBMDObjRenderer(device, renderer, abortSignal, `normal_obj/obj_block/broken_block_ll.bmd`, translation, rotationY);
-        case 293: // Water
-            return this._createBMDObjRenderer(device, renderer, abortSignal, `special_obj/mc_water/mc_water.bmd`, translation, rotationY, 0.8);
-        case 295: // Metal net
-            return this._createBMDObjRenderer(device, renderer, abortSignal, `special_obj/mc_metalnet/mc_metalnet.bmd`, translation, rotationY, 0.8);
-        case 298: // Flag
-            return this._createBMDObjRenderer(device, renderer, abortSignal, `special_obj/mc_flag/mc_flag.bmd`, translation, rotationY, 0.8);
-        case 303: // Castle Basement Water
-        case 304: // Secret number thingy
-            return null;
-        case 305: // Blue Coin Switch
-            return this._createBMDObjRenderer(device, renderer, abortSignal, `normal_obj/b_coin_switch/b_coin_switch.bmd`, translation, rotationY, 0.8);
-        case 314: // Hidden Pirahna Plant
-        case 315: // Enemy spawner trigger
-        case 316: // Enemy spawner
-        case 323: // Ambient sound effects
-        case 324: // Music
-        case 511: // Appears to be a bug in the level layout
-            return null;
-        default:
-            console.warn(`Unknown object type ${object.ObjectId}`);
-            return null;
-        }
-    }
-
-    private _createSceneFromCRG1(device: GfxDevice, textureHolder: NITROTextureHolder, crg1: Sm64DSCRG1, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
-        const level = crg1.Levels[this.levelId];
-        const modelCache = new ModelCache();
-
-        const renderer = new SM64DSRenderer(modelCache, textureHolder);
-
-        this._createBMDRenderer(device, renderer, abortSignal, level.MapBmdFile, GLOBAL_SCALE, level, false);
-
-        if (level.VrboxBmdFile)
-            this._createBMDRenderer(device, renderer, abortSignal, level.VrboxBmdFile, 0.8, level, true);
-
-        for (let i = 0; i < level.Objects.length; i++)
-            this._createBMDRendererForObject(device, renderer, abortSignal, level.Objects[i]);
-
-        return modelCache.waitForLoad().then(() => {
-            return renderer;
-        });
-    }
 }

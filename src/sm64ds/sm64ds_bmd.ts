@@ -4,9 +4,10 @@ import { mat2d, mat4 } from 'gl-matrix';
 import * as NITRO_GX from './nitro_gx';
 import * as NITRO_Tex from './nitro_tex';
 
-import { readString } from '../util';
+import { readString, assert } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxCullMode } from '../gfx/platform/GfxPlatform';
+import { Endianness } from '../endian';
 import { computeModelMatrixSRT } from '../MathHelpers';
 
 // Super Mario 64 DS .bmd format
@@ -25,41 +26,48 @@ export class Material {
 
 export interface Batch {
     material: Material;
+    matrixTable: Uint8Array;
     vertexData: NITRO_GX.VertexData;
 }
 
-export class Bone {
-    public id: number;
+export class Joint {
     public name: string;
-    public parentBoneID: number;
+    public parentJointIdx: number;
     public batches: Batch[];
     public billboard: boolean;
+    public modelMatrix: mat4;
 }
 
 export const enum TexCoordMode { NONE, TEXCOORD, NORMAL, POSITION }
 
-function parseBone(bmd: BMD, buffer: ArrayBufferSlice, idx: number) {
+function parseJoint(bmd: BMD, buffer: ArrayBufferSlice, idx: number) {
     const offs = bmd.modelOffsBase + idx * 0x40;
     const view = buffer.createDataView();
 
-    const bone = new Bone();
-    bone.id = view.getUint32(offs + 0x00, true);
-    bone.name = readString(buffer, view.getUint32(offs + 0x04, true), 0xFF);
-    bone.parentBoneID = view.getUint16(offs + 0x08, true);
+    const joint = new Joint();
+    const id = view.getUint32(offs + 0x00, true);
+    assert(idx === id);
+    joint.name = readString(buffer, view.getUint32(offs + 0x04, true), 0xFF);
+    const parentJointRel = view.getInt16(offs + 0x08, true);
+
+    if (parentJointRel < 0)
+        joint.parentJointIdx = idx + parentJointRel;
+    else
+        joint.parentJointIdx = -1;
 
     // Local transform.
-    const scaleX = view.getUint32(offs + 0x10, true);
-    const scaleY = view.getUint32(offs + 0x14, true);
-    const scaleZ = view.getUint32(offs + 0x18, true);
-    const rotationX = view.getUint16(offs + 0x1C, true);
-    const rotationY = view.getUint16(offs + 0x1E, true);
-    const rotationZ = view.getUint16(offs + 0x20, true);
-    const translationX = view.getUint16(offs + 0x24, true);
-    const translationY = view.getUint16(offs + 0x28, true);
-    const translationZ = view.getUint16(offs + 0x2C, true);
+    const scaleX = view.getInt32(offs + 0x10, true) / 0x1000;
+    const scaleY = view.getInt32(offs + 0x14, true) / 0x1000;
+    const scaleZ = view.getInt32(offs + 0x18, true) / 0x1000;
+    const rotationX = view.getInt16(offs + 0x1C, true) / 0x0800 * Math.PI;
+    const rotationY = view.getInt16(offs + 0x1E, true) / 0x0800 * Math.PI;
+    const rotationZ = view.getInt16(offs + 0x20, true) / 0x0800 * Math.PI;
+    const translationX = view.getInt16(offs + 0x24, true) / 0x1000;
+    const translationY = view.getInt16(offs + 0x28, true) / 0x1000;
+    const translationZ = view.getInt16(offs + 0x2C, true) / 0x1000;
 
-    const modelMatrix = mat4.create();
-    computeModelMatrixSRT(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+    joint.modelMatrix = mat4.create();
+    computeModelMatrixSRT(joint.modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
 
     // A "batch" is a combination of a material and a poly.
     const batchCount = view.getUint32(offs + 0x30, true);
@@ -67,9 +75,13 @@ function parseBone(bmd: BMD, buffer: ArrayBufferSlice, idx: number) {
     const batchPolyOffs = view.getUint32(offs + 0x38, true);
 
     const flags = view.getUint32(offs + 0x3C, true);
-    bone.billboard = !!(flags & 0x01);
+    joint.billboard = !!(flags & 0x01);
 
-    bone.batches = [];
+    joint.batches = [];
+
+    // Batches should only be in root joints.
+    if (batchCount !== 0)
+        assert(joint.parentJointIdx === -1);
 
     for (let i = 0; i < batchCount; i++) {
         const materialIdx = view.getUint8(batchMaterialOffs + i);
@@ -77,24 +89,23 @@ function parseBone(bmd: BMD, buffer: ArrayBufferSlice, idx: number) {
         const baseCtx = { color: material.diffuse, alpha: material.alpha };
 
         const polyIdx = view.getUint8(batchPolyOffs + i);
-        const vertexData = parsePoly(bmd, buffer, polyIdx, baseCtx);
+        const polyOffs = view.getUint32((bmd.polyOffsBase + polyIdx * 0x08) + 0x04, true);
 
-        bone.batches.push({ material, vertexData });
+        const matrixTableCount = view.getUint32(polyOffs + 0x00, true);
+        const matrixTableOffs = view.getUint32(polyOffs + 0x04, true);
+        const matrixTable = buffer.createTypedArray(Uint8Array, matrixTableOffs, matrixTableCount);
+
+        const gxCmdSize = view.getUint32(polyOffs + 0x08, true);
+        const gxCmdOffs = view.getUint32(polyOffs + 0x0C, true);
+
+        const gxCmdBuf = buffer.slice(gxCmdOffs, gxCmdOffs + gxCmdSize);
+
+        const vertexData = NITRO_GX.readCmds(gxCmdBuf, baseCtx, bmd.scaleFactor);
+
+        joint.batches.push({ material, matrixTable, vertexData });
     }
 
-    return bone;
-}
-
-function parsePoly(bmd: BMD, buffer: ArrayBufferSlice, idx: number, baseCtx: NITRO_GX.Context): NITRO_GX.VertexData {
-    const view = buffer.createDataView();
-    const offs = view.getUint32((bmd.polyOffsBase + idx * 0x08) + 0x04, true);
-
-    const gxCmdSize = view.getUint32(offs + 0x08, true);
-    const gxCmdOffs = view.getUint32(offs + 0x0C, true);
-
-    const gxCmdBuf = buffer.slice(gxCmdOffs, gxCmdOffs + gxCmdSize);
-
-    return NITRO_GX.readCmds(gxCmdBuf, baseCtx);
+    return joint;
 }
 
 function expand5to8(n: number): number {
@@ -259,19 +270,15 @@ function parseTexture(bmd: BMD, buffer: ArrayBufferSlice, key: TextureKey): Text
 
 export class BMD {
     public scaleFactor: number;
-    public bones: Bone[];
+    public joints: Joint[];
+    public matrixToJointTable: Uint16Array;
     public textures: Texture[];
     public textureCache: Map<string, Texture>;
 
-    public boneCount: number;
     public modelOffsBase: number;
-    public polyCount: number;
     public polyOffsBase: number;
-    public textureCount: number;
     public textureOffsBase: number;
-    public paletteCount: number;
     public paletteOffsBase: number;
-    public materialCount: number;
     public materialOffsBase: number;
 }
 
@@ -282,22 +289,24 @@ export function parse(buffer: ArrayBufferSlice): BMD {
 
     bmd.scaleFactor = (1 << view.getUint32(0x00, true));
 
-    bmd.boneCount = view.getUint32(0x04, true);
+    const jointCount = view.getUint32(0x04, true);
     bmd.modelOffsBase = view.getUint32(0x08, true);
-    bmd.polyCount = view.getUint32(0x0C, true);
+    const polyCount = view.getUint32(0x0C, true);
     bmd.polyOffsBase = view.getUint32(0x10, true);
-    bmd.textureCount = view.getUint32(0x14, true);
+    const textureCount = view.getUint32(0x14, true);
     bmd.textureOffsBase = view.getUint32(0x18, true);
-    bmd.paletteCount = view.getUint32(0x1C, true);
+    const paletteCount = view.getUint32(0x1C, true);
     bmd.paletteOffsBase = view.getUint32(0x20, true);
-    bmd.materialCount = view.getUint32(0x24, true);
+    const materialCount = view.getUint32(0x24, true);
     bmd.materialOffsBase = view.getUint32(0x28, true);
+    const matrixToJointTableOffs = view.getUint32(0x2C, true);
+    bmd.matrixToJointTable = buffer.createTypedArray(Uint16Array, matrixToJointTableOffs, jointCount, Endianness.LITTLE_ENDIAN);
 
     bmd.textureCache = new Map<string, Texture>();
     bmd.textures = [];
-    bmd.bones = [];
-    for (let i = 0; i < bmd.boneCount; i++)
-        bmd.bones.push(parseBone(bmd, buffer, i));
+    bmd.joints = [];
+    for (let i = 0; i < jointCount; i++)
+        bmd.joints.push(parseJoint(bmd, buffer, i));
 
     return bmd;
 }
