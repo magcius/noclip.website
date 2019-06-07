@@ -51,6 +51,11 @@ export class GXMaterialHelperGfx {
         this.createProgram();
     }
 
+    public setUseTextureCoords(v: boolean): void {
+        this.materialHacks.useTextureCoords = v;
+        this.createProgram();
+    }
+
     public fillMaterialParamsData(renderHelper: GXRenderHelperGfx, offs: number, materialParams: MaterialParams): void {
         const d = renderHelper.uniformBuffer.mapBufferF32(offs, u_MaterialParamsBufferSize);
         fillMaterialParamsData(d, offs, materialParams);

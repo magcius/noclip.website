@@ -132,6 +132,10 @@ class MaterialInstance {
         this.materialHelper.setTexturesEnabled(v);
     }
 
+    public setUseTextureCoords(v: boolean): void {
+        this.materialHelper.setUseTextureCoords(v);
+    }
+
     private getRendererLayer(materialLayer: MaterialLayer): GfxRendererLayer {
         switch (materialLayer) {
         case MaterialLayer.OPAQUE:
@@ -437,6 +441,12 @@ export class WorldRenderer implements Viewer.SceneGfx {
                 this.materialInstances[i].setTexturesEnabled(enableTextures.checked);
         };
         renderHacksPanel.contents.appendChild(enableTextures.elem);
+        const showTextureCoords = new UI.Checkbox('Show Texture Coordinates', false);
+        showTextureCoords.onchanged = () => {
+            for (let i = 0; i < this.materialInstances.length; i++)
+                this.materialInstances[i].setUseTextureCoords(showTextureCoords.checked);
+        };
+        renderHacksPanel.contents.appendChild(showTextureCoords.elem);
         const enableANode = new UI.Checkbox('Enable Collision', false);
         enableANode.onchanged = () => {
             const aNodeInst = this.rootNode.children.find((nodeInstance) => nodeInstance.node.nameStr === this.d.information.aNodeStr);
