@@ -38,6 +38,7 @@ export class GXMaterialHelperGfx {
 
     private createProgram(): void {
         this.program = new GX_Material.GX_Program(this.material, this.materialHacks);
+        this.gfxProgram = null;
     }
 
     public setVertexColorsEnabled(v: boolean): void {
