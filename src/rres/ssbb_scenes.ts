@@ -133,9 +133,9 @@ class BrawlSceneDesc implements Viewer.SceneDesc {
             const stageARC = parseARC(CX.maybeDecompress(arc.files[1].data));
 
             // Look for the texture archive, and load that.
-            const textureFile = stageARC.files.find((arc) => arc.fileType === 0x03);
-            if (textureFile !== undefined) {
-                const textureRRES = BRRES.parse(textureFile.data);
+            const textureFiles = stageARC.files.filter((arc) => arc.fileType === 0x03);
+            for (let i = 0; i < textureFiles.length; i++) {
+                const textureRRES = BRRES.parse(textureFiles[i].data);
                 textureHolder.addRRESTextures(device, textureRRES);
             }
 

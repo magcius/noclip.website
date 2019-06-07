@@ -117,7 +117,7 @@ function fillSceneParamsData(d: Float32Array, camera: Camera, offs: number = 0):
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 2, numSamplers: 1 }, // Scene
+    { numUniformBuffers: 2, numSamplers: 1 },
 ];
 
 class KatamariDamacyRenderer implements Viewer.SceneGfx {
