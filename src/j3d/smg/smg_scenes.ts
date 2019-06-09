@@ -2,7 +2,7 @@
 import { mat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
 import Progressable from '../../Progressable';
-import { assert, assertExists, readString, getTextDecoder, hexdump } from '../../util';
+import { assert, assertExists } from '../../util';
 import { fetchData, AbortedError } from '../../fetch';
 import * as Viewer from '../../viewer';
 import { GfxDevice, GfxRenderPass, GfxTexture } from '../../gfx/platform/GfxPlatform';
@@ -21,7 +21,7 @@ import { colorNewFromRGBA8 } from '../../Color';
 import { BloomPostFXParameters, BloomPostFXRenderer } from './Bloom';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
 import { ColorKind } from '../../gx/gx_render';
-import { JMapInfoIter, getJMapInfoArg7, getJMapInfoArg2, getJMapInfoArg1, createCsvParser, getJMapInfoArg3, getJMapInfoArg0 } from './JMapInfo';
+import { JMapInfoIter, getJMapInfoArg7, getJMapInfoArg2, getJMapInfoArg1, createCsvParser, getJMapInfoArg3, getJMapInfoArg0, getJMapInfoTransLocal, getJMapInfoRotateLocal, getJMapInfoScale } from './JMapInfo';
 import { AreaLightInfo, ActorLightInfo, LightDataHolder, ActorLightCtrl } from './LightData';
 import { NPCDirector, NPCActorItem } from './NPCDirector';
 import { MathConstants, computeModelMatrixSRT } from '../../MathHelpers';
@@ -974,12 +974,43 @@ function getObjectName(infoIter: JMapInfoIter): string {
     return infoIter.getValueString(`name`);
 }
 
-function getJMapInfoPlacementMtx(dst: mat4, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
-    infoIter.getSRTMatrix(dst);
-
-    // Find the stageDataHolder for this zone...
+function getJMapInfoTrans(dst: vec3, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    getJMapInfoTransLocal(dst, infoIter);
     const stageDataHolder = sceneObjHolder.stageDataHolder.findPlacedStageDataHolder(infoIter);
-    mat4.mul(dst, stageDataHolder.placementMtx, dst);
+    vec3.transformMat4(dst, dst, stageDataHolder.placementMtx);
+}
+
+function matrixExtractEulerAngleRotation(dst: vec3, m: mat4): void {
+    // In SMG, this appears inline in getJMapInfoRotate. It appears to be a simplified form of
+    // "Euler Angle Conversion", Ken Shoemake, Graphics Gems IV. http://www.gregslabaugh.net/publications/euler.pdf
+
+    if (m[2] - 1.0 < -0.0001) {
+        if (m[2] + 1.0 > 0.0001) {
+            dst[0] = Math.atan2(m[6], m[10]);
+            dst[1] = -Math.asin(m[2]);
+            dst[2] = Math.atan2(m[1], m[0]);
+        } else {
+            dst[0] = Math.atan2(m[4], m[8]);
+            dst[1] = Math.PI / 2;
+            dst[2] = 0.0;
+        }
+    } else {
+        dst[0] = Math.atan2(m[4], m[8]);
+        dst[1] = -Math.PI / 2;
+        dst[2] = 0.0;
+    }
+}
+
+const scratchMatrix = mat4.create();
+function getJMapInfoRotate(dst: vec3, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, scratch: mat4 = scratchMatrix): void {
+    getJMapInfoRotateLocal(dst, infoIter);
+
+    // Compute local rotation matrix, combine with stage placement, and extract new rotation.
+    computeModelMatrixSRT(scratch, 1, 1, 1, dst[0], dst[1], dst[2], 0, 0, 0);
+    const stageDataHolder = sceneObjHolder.stageDataHolder.findPlacedStageDataHolder(infoIter);
+    mat4.mul(scratch, stageDataHolder.placementMtx, scratch);
+
+    matrixExtractEulerAngleRotation(dst, scratch);
 }
 
 export class LiveActor extends NameObj implements ObjectBase {
@@ -992,6 +1023,10 @@ export class LiveActor extends NameObj implements ObjectBase {
     // Technically part of ModelManager.
     public arc: RARC.RARC; // ResourceHolder
     public modelInstance: BMDModelInstance | null = null; // J3DModel
+
+    public translation = vec3.create();
+    public rotation = vec3.create();
+    public scale = vec3.fromValues(1, 1, 1);
 
     constructor(public zoneAndLayer: ZoneAndLayer, public name: string) {
         super(name);
@@ -1047,7 +1082,16 @@ export class LiveActor extends NameObj implements ObjectBase {
     }
 
     public initDefaultPos(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
-        getJMapInfoPlacementMtx(this.modelInstance.modelMatrix, sceneObjHolder, infoIter);
+        getJMapInfoTrans(this.translation, sceneObjHolder, infoIter);
+        getJMapInfoRotate(this.rotation, sceneObjHolder, infoIter);
+        getJMapInfoScale(this.scale, infoIter);
+
+        computeModelMatrixSRT(this.modelInstance.modelMatrix,
+            1, 1, 1,
+            this.rotation[0], this.rotation[1], this.rotation[2],
+            this.translation[0], this.translation[1], this.translation[2]);
+
+        vec3.copy(this.modelInstance.baseScale, this.scale);
     }
 
     public initLightCtrl(sceneObjHolder: SceneObjHolder): void {
@@ -1072,7 +1116,10 @@ export class LiveActor extends NameObj implements ObjectBase {
     }
 
     public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
-        // Nothing.
+        computeModelMatrixSRT(this.modelInstance.modelMatrix,
+            1, 1, 1,
+            this.rotation[0], this.rotation[1], this.rotation[2],
+            this.translation[0], this.translation[1], this.translation[2]);
     }
 
     public draw(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
@@ -1081,6 +1128,8 @@ export class LiveActor extends NameObj implements ObjectBase {
         if (!visible)
             return;
 
+        // calcAnmMtx
+        vec3.copy(this.modelInstance.baseScale, this.scale);
         this.calcAndSetBaseMtx(viewerInput);
 
         if (this.actorLightCtrl !== null) {
@@ -1114,12 +1163,21 @@ export class LiveActor extends NameObj implements ObjectBase {
 }
 
 class ModelObj extends LiveActor {
-    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, objName: string, modelName: string, baseMtx: mat4 | null, drawBufferType: DrawBufferType, movementType: MovementType, calcAnimType: CalcAnimType) {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, objName: string, modelName: string, private transformMatrix: mat4 | null, drawBufferType: DrawBufferType, movementType: MovementType, calcAnimType: CalcAnimType) {
         super(zoneAndLayer, objName);
         this.initModelManagerWithAnm(sceneObjHolder, modelName);
-        if (baseMtx !== null)
-            mat4.copy(this.modelInstance.modelMatrix, baseMtx);
+        if (this.transformMatrix !== null)
+            mat4.getTranslation(this.translation, this.transformMatrix);
         connectToScene(sceneObjHolder, this, movementType, calcAnimType, drawBufferType, -1);
+    }
+
+    public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
+        if (this.transformMatrix !== null) {
+            mat4.getTranslation(this.translation, this.transformMatrix);
+            mat4.copy(this.modelInstance.modelMatrix, this.transformMatrix);
+        } else {
+            super.calcAndSetBaseMtx(viewerInput);
+        }
     }
 }
 
@@ -1203,7 +1261,6 @@ const starPieceColorTable = [
 
 class StarPiece extends LiveActor {
     private spinAnimationController = new AnimationController(60);
-    private modelMatrix = mat4.create();
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, getObjectName(infoIter));
@@ -1212,7 +1269,6 @@ class StarPiece extends LiveActor {
         connectToSceneNoSilhouettedMapObj(sceneObjHolder, this);
 
         this.initDefaultPos(sceneObjHolder, infoIter);
-        mat4.copy(this.modelMatrix, this.modelInstance.modelMatrix);
 
         let starPieceColorIndex = getJMapInfoArg3(infoIter, -1);
         if (starPieceColorIndex < 0 || starPieceColorIndex > 5)
@@ -1233,8 +1289,8 @@ class StarPiece extends LiveActor {
 
         this.spinAnimationController.setTimeFromViewerInput(viewerInput);
         const timeInFrames = this.spinAnimationController.getTimeInFrames();
-
-        mat4.rotateY(this.modelInstance.modelMatrix, this.modelMatrix, timeInFrames * Constants.SPEED);
+        this.rotation[1] = timeInFrames * Constants.SPEED;
+        super.calcAndSetBaseMtx(viewerInput);
     }
 }
 
@@ -1303,8 +1359,8 @@ class BlackHole extends LiveActor {
     }
 
     private updateModelScale(rangeScale: number, holeScale: number): void {
-        setMatrixScaleNoRotation(this.modelInstance.modelMatrix, rangeScale, rangeScale, rangeScale);
-        setMatrixScaleNoRotation(this.blackHoleModel.modelInstance.modelMatrix, 0.5 * holeScale, 0.5 * holeScale, 0.5 * holeScale);
+        vec3.set(this.scale, rangeScale, rangeScale, rangeScale);
+        vec3.set(this.blackHoleModel.scale, 0.5 * holeScale, 0.5 * holeScale, 0.5 * holeScale);
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -1694,12 +1750,12 @@ class Coin extends LiveActor {
 
         const enum Constants {
             SPEED = MathConstants.DEG_TO_RAD * 4,
-        }
+        };
 
         this.spinAnimationController.setTimeFromViewerInput(viewerInput);
         const timeInFrames = this.spinAnimationController.getTimeInFrames();
-
-        mat4.rotateY(this.modelInstance.modelMatrix, this.modelMatrix, timeInFrames * Constants.SPEED);
+        this.rotation[1] = timeInFrames * Constants.SPEED;
+        super.calcAndSetBaseMtx(viewerInput);
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -1713,10 +1769,10 @@ class Coin extends LiveActor {
 class MiniRoutePoint extends LiveActor {
     private miniature: MiniRouteMiniature | null;
 
-    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, pointInfo: WorldmapPointInfo, mat: mat4) {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, pointInfo: WorldmapPointInfo) {
         super(zoneAndLayer, 'MiniRoutePoint');
         this.initModelManagerWithAnm(sceneObjHolder, 'MiniRoutePoint');
-        mat4.copy(this.modelInstance.modelMatrix, mat);
+        vec3.copy(this.translation, pointInfo.position);
 
         this.tryStartAllAnim('Open');
         if (pointInfo.isPink)
@@ -1726,7 +1782,6 @@ class MiniRoutePoint extends LiveActor {
 
         connectToSceneNoSilhouettedMapObj(sceneObjHolder, this);
 
-        // TODO(jstpierre): FixedPosition?
         if (pointInfo.miniatureName !== null)
             this.miniature = new MiniRouteMiniature(sceneObjHolder, this, pointInfo);
     }
@@ -1754,8 +1809,7 @@ class MiniRouteMiniature extends PartsModel {
 
         this.spinAnimationController.setTimeFromViewerInput(viewerInput);
         const timeInFrames = this.spinAnimationController.getTimeInFrames();
-
-        mat4.rotateY(this.modelInstance.modelMatrix, this.modelInstance.modelMatrix, timeInFrames * this.rotateSpeed);
+        mat4.rotateY(this.modelInstance.modelMatrix, this.modelInstance.modelMatrix, this.rotateSpeed * timeInFrames);
     }
 }
 
@@ -2593,11 +2647,7 @@ class SMGSpawner {
 
     public spawnWorldMapObject(zoneAndLayer: ZoneAndLayer, pointInfo: WorldmapPointInfo): void {
         const zoneNode = this.zones[zoneAndLayer.zoneId];
-
-        const modelMatrix = mat4.create();
-        mat4.fromTranslation(modelMatrix, pointInfo.position);
-
-        const nameObj = new MiniRoutePoint(zoneAndLayer, this.sceneObjHolder, pointInfo, modelMatrix);
+        const nameObj = new MiniRoutePoint(zoneAndLayer, this.sceneObjHolder, pointInfo);
         zoneNode.objects.push(nameObj);
     }
 
@@ -2678,7 +2728,16 @@ class StageDataHolder {
         const pathId: number = infoIter.getValueNumber('CommonPath_ID', -1);
         const path = paths.find((path) => path.l_id === pathId) || null;
         const modelMatrix = mat4.create();
-        infoIter.getSRTMatrix(modelMatrix);
+
+        const translation = vec3.create(), rotation = vec3.create(), scale = vec3.create();
+        getJMapInfoScale(scale, infoIter);
+        getJMapInfoRotateLocal(rotation, infoIter);
+        getJMapInfoTransLocal(translation, infoIter);
+        computeModelMatrixSRT(modelMatrix,
+            scale[0], scale[1], scale[2],
+            rotation[0], rotation[1], rotation[2],
+            translation[0], translation[1], translation[2]);
+
         const mapInfoIter = infoIter.copy();
         (mapInfoIter as JMapInfoIter_StageDataHolder).originalStageDataHolder = this;
         return { objId, objName, isMapPart, objArg0, objArg1, objArg2, objArg3, moveConditionType, rotateSpeed, rotateAccelType, rotateAxis, modelMatrix, path, mapInfoIter };

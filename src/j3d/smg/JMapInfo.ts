@@ -1,21 +1,8 @@
 
 import * as BCSV from '../../luigis_mansion/bcsv';
-import { mat4 } from 'gl-matrix';
-import { computeModelMatrixSRT, MathConstants } from '../../MathHelpers';
+import { vec3 } from 'gl-matrix';
+import { MathConstants } from '../../MathHelpers';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
-
-function computeModelMatrixFromRecord(dst: mat4, infoIter: JMapInfoIter): void {
-    const pos_x = infoIter.getValueNumber('pos_x', 0);
-    const pos_y = infoIter.getValueNumber('pos_y', 0);
-    const pos_z = infoIter.getValueNumber('pos_z', 0);
-    const dir_x = infoIter.getValueNumber('dir_x', 0) * MathConstants.DEG_TO_RAD;
-    const dir_y = infoIter.getValueNumber('dir_y', 0) * MathConstants.DEG_TO_RAD;
-    const dir_z = infoIter.getValueNumber('dir_z', 0) * MathConstants.DEG_TO_RAD;
-    const scale_x = infoIter.getValueNumber('scale_x', 1);
-    const scale_y = infoIter.getValueNumber('scale_y', 1);
-    const scale_z = infoIter.getValueNumber('scale_z', 1);
-    computeModelMatrixSRT(dst, scale_x, scale_y, scale_z, dir_x, dir_y, dir_z, pos_x, pos_y, pos_z);
-}
 
 export function getJMapInfoArg0(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg0', fallback); }
 export function getJMapInfoArg1(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg1', fallback); }
@@ -25,6 +12,24 @@ export function getJMapInfoArg4(infoIter: JMapInfoIter, fallback: number = null)
 export function getJMapInfoArg5(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg5', fallback); }
 export function getJMapInfoArg6(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg6', fallback); }
 export function getJMapInfoArg7(infoIter: JMapInfoIter, fallback: number = null): number | null { return infoIter.getValueNumber('Obj_arg7', fallback); }
+
+export function getJMapInfoTransLocal(dst: vec3, infoIter: JMapInfoIter): void {
+    dst[0] = infoIter.getValueNumber('pos_x', 0);
+    dst[1] = infoIter.getValueNumber('pos_y', 0);
+    dst[2] = infoIter.getValueNumber('pos_z', 0);
+}
+
+export function getJMapInfoRotateLocal(dst: vec3, infoIter: JMapInfoIter): void {
+    dst[0] = infoIter.getValueNumber('dir_x', 0) * MathConstants.DEG_TO_RAD;
+    dst[1] = infoIter.getValueNumber('dir_y', 0) * MathConstants.DEG_TO_RAD;
+    dst[2] = infoIter.getValueNumber('dir_z', 0) * MathConstants.DEG_TO_RAD;
+}
+
+export function getJMapInfoScale(dst: vec3, infoIter: JMapInfoIter): void {
+    dst[0] = infoIter.getValueNumber('scale_x', 1);
+    dst[1] = infoIter.getValueNumber('scale_y', 1);
+    dst[2] = infoIter.getValueNumber('scale_z', 1);
+}
 
 type Callback<T> = (jmp: JMapInfoIter, i: number) => T;
 
@@ -51,10 +56,6 @@ export class JMapInfoIter {
             results.push(callback(this, i));
         }
         return results;
-    }
-
-    public getSRTMatrix(m: mat4): void {
-        computeModelMatrixFromRecord(m, this);
     }
 
     public getValueString(name: string, fallback: string | null = null): string | null {

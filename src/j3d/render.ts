@@ -952,6 +952,7 @@ export class BMDModelInstance {
     public passMask: number = 0x01;
 
     public modelMatrix = mat4.create();
+    public baseScale = vec3.fromValues(1, 1, 1);
 
     // Animations.
     public animationController = new AnimationController();
@@ -1225,7 +1226,28 @@ export class BMDModelInstance {
         this.shapeInstanceState.isSkybox = this.isSkybox;
 
         mat4.copy(this.shapeInstanceState.rootJointToWorld, this.modelMatrix);
-        this.computeJointMatrixArray(camera, this.bmdModel.rootJoint, this.shapeInstanceState.rootJointToWorld, disableCulling);
+        this.computeJointMatrixArray(camera, this.bmdModel.rootJoint, this.shapeInstanceState.rootJointToWorld);
+
+        // Now go through and add in base scale and compute joint visibility.
+        mat4.fromScaling(matrixScratch, this.baseScale);
+
+        const jnt1 = this.bmdModel.bmd.jnt1;
+        for (let i = 0; i < this.bmdModel.bmd.jnt1.joints.length; i++) {
+            const jointToWorldMatrix = this.shapeInstanceState.jointToWorldMatrices[i];
+
+            mat4.mul(jointToWorldMatrix, jointToWorldMatrix, matrixScratch);
+
+            // TODO(jstpierre): Use shape visibility if the bbox is empty (?).
+            if (disableCulling || jnt1.joints[i].bbox.isEmpty()) {
+                this.jointVisibility[i] = true;
+            } else {
+                // Frustum cull.
+                // Note to future self: joint bboxes do *not* contain their child joints (see: trees in Super Mario Sunshine).
+                // You *cannot* use PARTIAL_INTERSECTION to optimize frustum culling.
+                bboxScratch.transform(jnt1.joints[i].bbox, jointToWorldMatrix);
+                this.jointVisibility[i] = camera.frustum.contains(bboxScratch);
+            }
+        }
 
         this.computeDrawMatrixArray();
     }
@@ -1290,33 +1312,22 @@ export class BMDModelInstance {
         this.draw(device, renderHelper, camera, true);
     }
 
-    private computeJointMatrixArray(camera: Camera, joint: JointData, parentJointMatrix: mat4, disableCulling: boolean): void {
+    private computeJointMatrixArray(camera: Camera, joint: JointData, parentJointToWorldMatrix: mat4): void {
         const jnt1 = this.bmdModel.bmd.jnt1;
         const jointIndex = joint.jointIndex;
 
-        let jointMatrix: mat4;
+        let jointToParentMatrix: mat4;
         if (this.ank1Animator !== null && this.ank1Animator.calcJointMatrix(matrixScratch2, jointIndex)) {
-            jointMatrix = matrixScratch2;
+            jointToParentMatrix = matrixScratch2;
         } else {
-            jointMatrix = jnt1.joints[jointIndex].matrix;
+            jointToParentMatrix = jnt1.joints[jointIndex].matrix;
         }
 
-        const dstJointMatrix = this.shapeInstanceState.jointToWorldMatrices[jointIndex];
-        mat4.mul(dstJointMatrix, parentJointMatrix, jointMatrix);
-
-        // TODO(jstpierre): Use shape visibility if the bbox is empty.
-        if (disableCulling || jnt1.joints[jointIndex].bbox.isEmpty()) {
-            this.jointVisibility[jointIndex] = true;
-        } else {
-            // Frustum cull.
-            // Note to future self: joint bboxes do *not* contain their child joints (see: trees in Super Mario Sunshine).
-            // You *cannot* use PARTIAL_INTERSECTION to optimize frustum culling.
-            bboxScratch.transform(jnt1.joints[jointIndex].bbox, dstJointMatrix);
-            this.jointVisibility[jointIndex] = camera.frustum.contains(bboxScratch);
-        }
+        const jointToWorldMatrix = this.shapeInstanceState.jointToWorldMatrices[jointIndex];
+        mat4.mul(jointToWorldMatrix, parentJointToWorldMatrix, jointToParentMatrix);
 
         for (let i = 0; i < joint.children.length; i++)
-            this.computeJointMatrixArray(camera, joint.children[i], dstJointMatrix, disableCulling);
+            this.computeJointMatrixArray(camera, joint.children[i], jointToWorldMatrix);
     }
 
     private computeDrawMatrixArray(): void {
