@@ -112,10 +112,10 @@ export class OceanBowl extends LiveActor {
     private inputState: GfxInputState;
     private materialHelper: GXMaterialHelperGfx;
     private gridAxisPointCount: number;
+    private gridSpacing: number;
     private tex0Trans = vec2.create();
     private tex1Trans = vec2.create();
     private tex2Trans = vec2.create();
-    private tex4Trans = vec2.create();
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, getObjectName(infoIter));
@@ -148,6 +148,8 @@ export class OceanBowl extends LiveActor {
         const gridRadius = this.scale[0] * 100;
         const gridSpacing = 200;
         const gridAxisPointCount = gridRadius * 2 / gridSpacing;
+
+        this.gridSpacing = gridSpacing;
         this.gridAxisPointCount = gridAxisPointCount;
 
         for (let z = 0; z < gridAxisPointCount; z++) {
@@ -327,11 +329,10 @@ export class OceanBowl extends LiveActor {
             // GXSetTevColorOp(2,9,0,0,0,0);
             // GXSetTevAlphaIn(2,7,5,4,7);
             // GXSetTevAlphaOp(2,0,0,0,0,0);
-
-            // Don't add a mask texture, since we want it to show up regardless of where the camera is...
-            ... setTevOrder(GX.TexCoordID.TEXCOORD4, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0),
+            ... setTevOrder(GX.TexCoordID.TEXCOORD4, GX.TexMapID.TEXMAP3, GX.RasColorChannelID.COLOR0A0),
             ... setTevColorIn(GX.CombineColorInput.CPREV, GX.CombineColorInput.A0, GX.CombineColorInput.C0, GX.CombineColorInput.CPREV),
             ... setTevColorOp(GX.TevOp.COMP_R8_EQ, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV),
+            // Artistic decision: changing the TEXA here to KONST to make the waves always visible.
             ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.RASA, GX.CombineAlphaInput.KONST, GX.CombineAlphaInput.ZERO),
             ... setTevAlphaOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV),
             konstColorSel: GX.KonstColorSel.KCSEL_1,
@@ -435,8 +436,22 @@ export class OceanBowl extends LiveActor {
         setTextureMatrixST(materialParams.u_TexMtx[2], scale2, this.tex2Trans);
         const camera = viewerInput.camera;
         loadTexProjectionMtx(materialParams.u_TexMtx[3], camera);
-        setTextureMatrixST(materialParams.u_TexMtx[4], scale4, this.tex4Trans);
         setTextureMatrixST(materialParams.u_IndTexMtx[0], 0.1, null);
+
+        setTextureMatrixST(materialParams.u_TexMtx[4], scale4, null);
+        // The original code centers around the player. We center around the camera.
+        const playerX = camera.worldMatrix[12];
+        const playerZ = camera.worldMatrix[14];
+        // The position of the point which has texture coordinate 0.
+        const zeroTexX = this.points[0].gridPosition[0];
+        const zeroTexZ = this.points[0].gridPosition[2];
+        const gridAxisSize = this.gridAxisPointCount * this.gridSpacing;
+        // Position the camera is along X/Z against the edges, but unclamped.
+        const normPosX = (playerX - zeroTexX) / gridAxisSize;
+        const normPosZ = (playerZ - zeroTexZ) / gridAxisSize;
+        // Place our texture centered in this scale.
+        materialParams.u_TexMtx[4][12] = (-normPosZ * scale4) + 0.5;
+        materialParams.u_TexMtx[4][13] = (-normPosX * scale4) + 0.5;
 
         // Now create our draw instance.
         const renderInst = renderHelper.renderInstManager.pushRenderInst();
