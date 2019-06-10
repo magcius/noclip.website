@@ -3,7 +3,7 @@
 import { AABB } from "./Geometry";
 import { Color, Magenta, colorToCSS } from "./Color";
 import { Camera, divideByW, ScreenSpaceProjection } from "./Camera";
-import { vec4, mat4, vec3 } from "gl-matrix";
+import { vec4, mat4, vec3, vec2 } from "gl-matrix";
 import { nArray, assert, assertExists } from "./util";
 
 export function stepF(f: (t: number) => number, maxt: number, step: number, callback: (t: number, v: number) => void) {
@@ -213,6 +213,19 @@ export function drawWorldSpaceAABB(ctx: CanvasRenderingContext2D, camera: Camera
     ctx.lineWidth = 2;
     ctx.strokeStyle = colorToCSS(color);
     ctx.stroke();
+}
+
+export function drawWorldSpacePoint(ctx: CanvasRenderingContext2D, camera: Camera, v: vec4, color: Color = Magenta, radius: number = 2): void {
+    const cw = ctx.canvas.width;
+    const ch = ctx.canvas.height;
+    vec4.copy(p[0], v);
+    transformToClipSpace(ctx, camera, 1);
+    if (shouldCull(p[0])) return;
+
+    const x = ( p[0][0] + 1) * cw / 2;
+    const y = (-p[0][1] + 1) * ch / 2;
+    ctx.fillStyle = colorToCSS(color);
+    ctx.fillRect(x - radius, y - radius, radius, radius);
 }
 
 export function drawScreenSpaceProjection(ctx: CanvasRenderingContext2D, proj: ScreenSpaceProjection, color: Color = Magenta): void {

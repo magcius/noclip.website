@@ -737,7 +737,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _currentBoundUBO: WebGLBuffer | null = null;
     private _currentBoundIBO: WebGLBuffer | null = null;
     private _currentBoundVBO: WebGLBuffer | null = null;
-    private _bindBuffer(gl_target: GLenum, gl_buffer: WebGLBuffer): void {
+    private _bindBuffer(gl_target: GLenum, gl_buffer: WebGLBuffer | null): void {
         if (gl_target === WebGL2RenderingContext.UNIFORM_BUFFER) {
             if (this._currentBoundUBO !== gl_buffer) {
                 this.gl.bindBuffer(gl_target, gl_buffer);
@@ -981,7 +981,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const pipeline: GfxRenderPipelineP_GL = { _T: _T.RenderPipeline, ResourceUniqueId: this.getNextUniqueId(), bindingLayouts, drawMode, program, megaState, inputLayout, ready: false };
         this._resourceCreationTracker.trackResourceCreated(pipeline);
 
-        // Start compiling the compiler. ANGLE compiles a separate underlying program for each InputLayout
+        // Start compiling the program. ANGLE compiles a separate underlying program for each InputLayout
         // it is used in. For that reason, when we call compileShader, we set up a dummy VAO with the right
         // formats and attributes so that it does not need to dynamically recompile shaders at useProgram time.
         const gl = this.gl;
@@ -992,7 +992,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                 const attr = inputLayout.vertexAttributeDescriptors[i];
                 const { size, type, normalized } = translateVertexFormat(attr.format);
 
-                gl.bindBuffer(gl.ARRAY_BUFFER, null);
+                this._bindBuffer(gl.ARRAY_BUFFER, null);
 
                 if (attr.usesIntInShader) {
                     gl.vertexAttribIPointer(attr.location, size, type, 0, 0);

@@ -136,11 +136,9 @@ export class GXShapeHelperGfx {
         const renderInst = renderInstManager.pushRenderInst();
         renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
-        if (packet !== null) {
-            if (packet.indexCount === 624)
-                debugger;
+        if (packet !== null)
             renderInst.drawIndexes(packet.indexCount, packet.indexOffset);
-        } else
+        else
             renderInst.drawIndexes(this.loadedVertexData.totalIndexCount);
         return renderInst;
     }

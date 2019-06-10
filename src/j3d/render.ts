@@ -6,7 +6,7 @@ import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } fr
 
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
-import { MaterialParams, PacketParams, ColorKind, translateTexFilterGfx, translateWrapModeGfx, loadedDataCoalescerGfx, ub_MaterialParams, loadTextureFromMipChain, ub_PacketParams, u_MaterialParamsBufferSize, fillMaterialParamsData } from '../gx/gx_render';
+import { MaterialParams, PacketParams, ColorKind, translateTexFilterGfx, translateWrapModeGfx, loadedDataCoalescerGfx, ub_MaterialParams, loadTextureFromMipChain, u_MaterialParamsBufferSize, fillMaterialParamsData } from '../gx/gx_render';
 import { GXShapeHelperGfx, GXRenderHelperGfx } from '../gx/gx_render_2';
 
 import { computeViewMatrix, computeViewMatrixSkybox, Camera, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';

@@ -26,7 +26,7 @@ export class NameObj {
     constructor(public name: string) {
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public draw(sceneObjHolder: SceneObjHolder, renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput): void {
         // Default implementation; nothing.
     }
 }
@@ -82,10 +82,10 @@ export class SceneNameObjListExecutor {
         return this.drawBufferHolder.findLightType(info.drawBufferType);
     }
 
-    public executeDrawAll(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public executeDrawAll(sceneObjHolder: SceneObjHolder, renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput): void {
         for (let i = 0; i < this.nameObjExecuteInfos.length; i++) {
             const nameObj = this.nameObjExecuteInfos[i].nameObj;
-            nameObj.draw(sceneObjHolder, viewerInput);
+            nameObj.draw(sceneObjHolder, renderHelper, viewerInput);
         }
     }
 

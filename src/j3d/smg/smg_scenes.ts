@@ -132,14 +132,17 @@ interface ObjectBase {
     visibleScenario: boolean;
 }
 
+function setTextureMappingIndirect(m: TextureMapping, sceneTexture: GfxTexture): void {
+    m.gfxTexture = sceneTexture;
+    m.width = EFB_WIDTH;
+    m.height = EFB_HEIGHT;
+    m.flipY = true;
+}
+
 function setIndirectTextureOverride(modelInstance: BMDModelInstance, sceneTexture: GfxTexture): void {
     const m = modelInstance.getTextureMappingReference("IndDummy");
-    if (m !== null) {
-        m.gfxTexture = sceneTexture;
-        m.width = EFB_WIDTH;
-        m.height = EFB_HEIGHT;
-        m.flipY = true;
-    }
+    if (m !== null)
+        setTextureMappingIndirect(m, sceneTexture);
 }
 
 const scratchVec3 = vec3.create();
@@ -261,7 +264,7 @@ class SceneGraph {
     }
 }
 
-const enum SMGPass {
+export const enum SMGPass {
     SKYBOX = 1 << 0,
     OPAQUE = 1 << 1,
     INDIRECT = 1 << 2,
@@ -429,6 +432,8 @@ class SMGRenderer implements Viewer.SceneGfx {
         this.mainRenderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
         this.opaqueSceneTexture.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
 
+        this.sceneObjHolder.captureSceneDirector.opaqueSceneTexture = this.opaqueSceneTexture.gfxTexture;
+
         // TODO(jstpierre): This is a very messy combination of the legacy render path and the new render path.
         // Anything in `sceneGraph` is legacy, the new stuff uses the drawBufferHolder.
         viewerInput.camera.setClipPlanes(20, 500000);
@@ -441,14 +446,12 @@ class SMGRenderer implements Viewer.SceneGfx {
             node.setIndirectTextureOverride(this.opaqueSceneTexture.gfxTexture);
         }
 
-        // Prepare all of our NameObjs.
-        this.sceneObjHolder.sceneNameObjListExecutor.executeDrawAll(this.sceneObjHolder, viewerInput);
-        this.sceneObjHolder.sceneNameObjListExecutor.setIndirectTextureOverride(this.opaqueSceneTexture.gfxTexture);
-
-        const renderInstManager = this.renderHelper.renderInstManager;
-
         const template = this.renderHelper.pushTemplateRenderInst();
         this.renderHelper.fillSceneParams(viewerInput, template);
+
+        // Prepare all of our NameObjs.
+        this.sceneObjHolder.sceneNameObjListExecutor.executeDrawAll(this.sceneObjHolder, this.renderHelper, viewerInput);
+        this.sceneObjHolder.sceneNameObjListExecutor.setIndirectTextureOverride(this.opaqueSceneTexture.gfxTexture);
 
         // Draw our legacy nodes.
         for (let i = 0; i < this.sceneGraph.nodes.length; i++)
@@ -456,6 +459,8 @@ class SMGRenderer implements Viewer.SceneGfx {
 
         // Draw our modern DrawBuffer stuff.
         this.sceneObjHolder.sceneNameObjListExecutor.drawAllBuffers(device, this.renderHelper, viewerInput.camera);
+
+        const renderInstManager = this.renderHelper.renderInstManager;
 
         this.prepareBloomParameters(this.bloomParameters);
         const bloomParameterBufferOffs = this.bloomRenderer.allocateParameterBuffer(renderInstManager, this.bloomParameters);
@@ -925,6 +930,14 @@ class ScenarioData {
     }
 }
 
+class CaptureSceneDirector {
+    public opaqueSceneTexture: GfxTexture;
+
+    public fillTextureMappingOpaqueSceneTexture(m: TextureMapping): void {
+        setTextureMappingIndirect(m, this.opaqueSceneTexture);
+    }
+}
+
 export class SceneObjHolder {
     public sceneDesc: SMGSceneDescBase;
     public modelCache: ModelCache;
@@ -936,6 +949,7 @@ export class SceneObjHolder {
     public stageDataHolder: StageDataHolder;
     public particleResourceHolder: ParticleResourceHolder | null;
     public messageDataHolder: MessageDataHolder | null;
+    public captureSceneDirector: CaptureSceneDirector;
 
     // This is technically stored outside the SceneObjHolder, separately
     // on the same singleton, but c'est la vie...
@@ -970,11 +984,11 @@ const enum LayerId {
     LAYER_MAX = LAYER_P,
 }
 
-function getObjectName(infoIter: JMapInfoIter): string {
+export function getObjectName(infoIter: JMapInfoIter): string {
     return infoIter.getValueString(`name`);
 }
 
-function getJMapInfoTrans(dst: vec3, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+export function getJMapInfoTrans(dst: vec3, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
     getJMapInfoTransLocal(dst, infoIter);
     const stageDataHolder = sceneObjHolder.stageDataHolder.findPlacedStageDataHolder(infoIter);
     vec3.transformMat4(dst, dst, stageDataHolder.placementMtx);
@@ -1086,12 +1100,14 @@ export class LiveActor extends NameObj implements ObjectBase {
         getJMapInfoRotate(this.rotation, sceneObjHolder, infoIter);
         getJMapInfoScale(this.scale, infoIter);
 
-        computeModelMatrixSRT(this.modelInstance.modelMatrix,
-            1, 1, 1,
-            this.rotation[0], this.rotation[1], this.rotation[2],
-            this.translation[0], this.translation[1], this.translation[2]);
+        if (this.modelInstance !== null) {
+            computeModelMatrixSRT(this.modelInstance.modelMatrix,
+                1, 1, 1,
+                this.rotation[0], this.rotation[1], this.rotation[2],
+                this.translation[0], this.translation[1], this.translation[2]);
 
-        vec3.copy(this.modelInstance.baseScale, this.scale);
+            vec3.copy(this.modelInstance.baseScale, this.scale);
+        }
     }
 
     public initLightCtrl(sceneObjHolder: SceneObjHolder): void {
@@ -1122,7 +1138,7 @@ export class LiveActor extends NameObj implements ObjectBase {
             this.translation[0], this.translation[1], this.translation[2]);
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    public draw(sceneObjHolder: SceneObjHolder, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
         const visible = this.visibleScenario && this.visibleAlive;
         this.modelInstance.visible = visible;
         if (!visible)
@@ -1161,6 +1177,9 @@ export class LiveActor extends NameObj implements ObjectBase {
         this.modelInstance.calcAnim(viewerInput.camera);
     }
 }
+
+import { OceanBowl } from './OceanBowl';
+import { TextureMapping } from '../../TextureHolder';
 
 class ModelObj extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, objName: string, modelName: string, private transformMatrix: mat4 | null, drawBufferType: DrawBufferType, movementType: MovementType, calcAnimType: CalcAnimType) {
@@ -1493,7 +1512,7 @@ function createNPCGoods(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, 
     return model;
 }
 
-function connectToScene(sceneObjHolder: SceneObjHolder, actor: LiveActor, movementType: MovementType, calcAnimType: CalcAnimType, drawBufferType: DrawBufferType, drawType: DrawType): void {
+export function connectToScene(sceneObjHolder: SceneObjHolder, actor: LiveActor, movementType: MovementType, calcAnimType: CalcAnimType, drawBufferType: DrawBufferType, drawType: DrawType): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, movementType, calcAnimType, drawBufferType, drawType);
 }
 
@@ -1852,7 +1871,7 @@ interface NameObjFactory {
     requestArchives?(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void;
 }
 
-interface ZoneAndLayer {
+export interface ZoneAndLayer {
     zoneId: number;
     layerId: LayerId;
 }
@@ -1962,6 +1981,7 @@ class SMGSpawner {
         else if (objName === 'PenguinRacerLeader')      return PenguinRacer;
         else if (objName === 'Coin')                    return Coin;
         else if (objName === 'PurpleCoin')              return Coin;
+        else if (objName === 'OceanBowl')               return OceanBowl;
         return null;
     }
 
@@ -3052,6 +3072,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
             sceneObjHolder.lightDataHolder = new LightDataHolder(this.getLightData(modelCache));
             sceneObjHolder.stageDataHolder = new StageDataHolder(this, modelCache, sceneObjHolder.scenarioData, sceneObjHolder.scenarioData.getMasterZoneFilename(), 0);
             sceneObjHolder.sceneNameObjListExecutor = new SceneNameObjListExecutor();
+            sceneObjHolder.captureSceneDirector = new CaptureSceneDirector();
 
             if (modelCache.isArchiveExist(`ParticleData/Effect.arc`))
                 sceneObjHolder.particleResourceHolder = new ParticleResourceHolder(modelCache.getArchive(`ParticleData/Effect.arc`));
