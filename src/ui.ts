@@ -833,6 +833,107 @@ export class Panel implements Widget {
     }
 }
 
+export class FloatingPanel implements Widget {
+    public elem: HTMLElement;
+
+    public customHeaderBackgroundColor: string = '';
+    protected header: HTMLElement;
+    protected headerContainer: HTMLElement;
+    protected svgIcon: SVGSVGElement;
+
+    private toplevel: HTMLElement;
+    public mainPanel: HTMLElement;
+    public contents: HTMLElement;
+
+    constructor() {
+        this.toplevel = document.createElement('div');
+        this.toplevel.style.color = 'white';
+        this.toplevel.style.font = '16px monospace';
+        this.toplevel.style.overflow = 'hidden';
+        this.toplevel.style.display = 'grid';
+        this.toplevel.style.gridAutoFlow = 'column';
+        this.toplevel.style.gridGap = '20px';
+        this.toplevel.style.alignItems = 'start';
+        this.toplevel.style.outline = 'none';
+        this.toplevel.style.minWidth = '300px';
+        this.toplevel.style.position = 'absolute';
+        this.toplevel.style.left = '20px';
+        this.toplevel.style.top = '20px';
+        this.toplevel.tabIndex = -1;
+
+        this.mainPanel = document.createElement('div');
+        this.mainPanel.style.overflow = 'hidden';
+        this.mainPanel.style.transition = '.25s ease-out';
+        this.mainPanel.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+        this.toplevel.appendChild(this.mainPanel);
+
+        this.headerContainer = document.createElement('div');
+        this.mainPanel.appendChild(this.headerContainer);
+
+        this.header = document.createElement('h1');
+        this.header.style.lineHeight = '28px';
+        this.header.style.width = '400px';
+        this.header.style.margin = '0';
+        this.header.style.fontSize = '100%';
+        this.header.style.textAlign = 'center';
+        this.header.style.cursor = 'pointer';
+        this.header.style.userSelect = 'none';
+        this.header.style.webkitUserSelect = 'none';
+        this.header.style.display = 'grid';
+        this.header.style.gridTemplateColumns = '28px 1fr';
+        this.header.style.alignItems = 'center';
+        this.header.style.justifyItems = 'center';
+        this.header.style.gridAutoFlow = 'column';
+        this.header.addEventListener('mousedown', (e) => {
+            GlobalGrabManager.takeGrab(this, e, { takePointerLock: false });
+        });
+
+        this.headerContainer.appendChild(this.header);
+
+        this.contents = document.createElement('div');
+        this.contents.style.width = '400px';
+        this.mainPanel.appendChild(this.contents);
+
+        this.elem = this.toplevel;
+    }
+
+    public destroy(): void {
+        this.toplevel.parentElement.removeChild(this.toplevel);
+    }
+
+    public onMotion(dx: number, dy: number): void {
+        this.toplevel.style.left = (parseFloat(this.toplevel.style.left) + dx) + 'px';
+        this.toplevel.style.top = (parseFloat(this.toplevel.style.top) + dy) + 'px';
+    }
+
+    public onGrabReleased(): void {
+    }
+
+    public setVisible(v: boolean) {
+        this.toplevel.style.display = v ? 'grid' : 'none';
+    }
+
+    public setTitle(icon: string, title: string) {
+        this.svgIcon = createDOMFromString(icon).querySelector('svg')!;
+        this.svgIcon.style.gridColumn = '1';
+        this.header.textContent = title;
+        this.header.appendChild(this.svgIcon);
+        this.toplevel.dataset.title = title;
+        this.syncHeaderStyle();
+    }
+
+    protected syncHeaderStyle() {
+        if (this.customHeaderBackgroundColor) {
+            this.svgIcon.style.fill = '';
+            this.header.style.backgroundColor = this.customHeaderBackgroundColor;
+            this.header.style.color = 'white';
+        } else {
+            this.svgIcon.style.fill = 'black';
+            setElementHighlighted(this.header, true, HIGHLIGHT_COLOR);
+        }
+    }
+}
+
 // https://stackoverflow.com/questions/3446170/escape-string-for-use-in-javascript-regex
 function escapeRegExp(S: string): string {
     return S.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -1412,21 +1513,18 @@ export class TextureViewer extends Panel {
     }
 }
 
-class ViewerSettings extends Panel {
-    private fovSlider: HTMLInputElement;
-    private camSpeedSlider: HTMLInputElement;
-    private cameraControllerWASD: HTMLElement;
-    private cameraControllerOrbit: HTMLElement;
-    private invertYCheckbox: Checkbox;
-    private invertXCheckbox: Checkbox;
+export class Slider implements Widget {
+    private toplevel: HTMLElement;
+    private sliderInput: HTMLInputElement;
 
-    constructor(private viewer: Viewer.Viewer) {
-        super();
+    public elem: HTMLElement;
+    public onvalue: ((value: number) => void) | null = null;
 
-        this.setTitle(FRUSTUM_ICON, 'Viewer Settings');
+    constructor() {
+        this.toplevel = document.createElement('div');
 
-        // TODO(jstpierre): make css not leak
-        this.contents.innerHTML = `
+        // DOM lacks a coherent way of adjusting pseudostyles, so this is what we end up with...
+        this.toplevel.innerHTML = `
 <style>
 .Slider {
     -webkit-appearance: none;
@@ -1462,6 +1560,68 @@ class ViewerSettings extends Panel {
     cursor: pointer;
     background: #aaa;
 }
+</style>
+<div style="display: grid; grid-template-columns: 1fr 1fr; align-items: center">
+<div style="font-weight: bold" class="Label"></div>
+<input class="Slider" type="range">
+</div>
+`;
+
+        this.sliderInput = this.toplevel.querySelector('.Slider');
+        this.sliderInput.oninput = this.onInput.bind(this);
+
+        this.elem = this.toplevel;
+    }
+
+    private onInput(): void {
+        if (this.onvalue !== null)
+            this.onvalue(this.getValue());
+    }
+
+    public setRange(min: number, max: number, step: number = (max - min) / 100) {
+        this.sliderInput.min = '' + min;
+        this.sliderInput.max = '' + max;
+        this.sliderInput.step = '' + step;
+    }
+
+    public setLabel(label: string): void {
+        this.toplevel.querySelector('.Label').textContent = label;
+    }
+
+    public getValue(): number {
+        return +this.sliderInput.value;
+    }
+
+    public setValue(v: number): void {
+        this.sliderInput.value = '' + v;
+    }
+
+    public getT(): number {
+        return (+this.sliderInput.value - +this.sliderInput.min) / (+this.sliderInput.max - +this.sliderInput.min);
+    }
+
+    public setT(t: number): void {
+        const v = (t * (+this.sliderInput.max - +this.sliderInput.min)) + +this.sliderInput.min;
+        this.setValue(v);
+    }
+}
+
+class ViewerSettings extends Panel {
+    private fovSlider: Slider;
+    private camSpeedSlider: Slider;
+    private cameraControllerWASD: HTMLElement;
+    private cameraControllerOrbit: HTMLElement;
+    private invertYCheckbox: Checkbox;
+    private invertXCheckbox: Checkbox;
+
+    constructor(private viewer: Viewer.Viewer) {
+        super();
+
+        this.setTitle(FRUSTUM_ICON, 'Viewer Settings');
+
+        // TODO(jstpierre): make css not leak
+        this.contents.innerHTML = `
+<style>
 .SettingsHeader, .SettingsButton {
     font-weight: bold;
 }
@@ -1473,14 +1633,7 @@ class ViewerSettings extends Panel {
 }
 </style>
 
-<div style="display: grid; grid-template-columns: 1fr 1fr; align-items: center;">
-<div class="SettingsHeader">Field of View</div>
-<input class="Slider FoVSlider" type="range" min="1" max="100">
-</div>
-
-<div style="display: grid; grid-template-columns: 1fr 1fr; align-items: center;">
-<div class="SettingsHeader">Camera Speed</div>
-<input class="Slider CamSpeedSlider" type="range" min="0" max="200">
+<div class="SliderContainer">
 </div>
 
 <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center;">
@@ -1490,12 +1643,20 @@ class ViewerSettings extends Panel {
 `;
         this.contents.style.lineHeight = '36px';
 
-        this.fovSlider = this.contents.querySelector('.FoVSlider') as HTMLInputElement;
-        this.fovSlider.oninput = this.onFovSliderChange.bind(this);
-        this.fovSlider.value = '25';
+        const sliderContainer = this.contents.querySelector('.SliderContainer');
+        this.fovSlider = new Slider();
+        this.fovSlider.setLabel("Field of View");
+        this.fovSlider.setRange(1, 100);
+        this.fovSlider.setValue(25);
+        this.fovSlider.onvalue = this.onFovSliderChange.bind(this);
+        sliderContainer.appendChild(this.fovSlider.elem);
 
-        this.camSpeedSlider = this.contents.querySelector('.CamSpeedSlider') as HTMLInputElement;
-        this.camSpeedSlider.oninput = this.updateCameraSpeed.bind(this);
+        this.camSpeedSlider = new Slider();
+        this.camSpeedSlider.setLabel("Camera Speed");
+        this.camSpeedSlider.setRange(0, 200);
+        this.camSpeedSlider.onvalue = this.updateCameraSpeed.bind(this);
+        sliderContainer.appendChild(this.camSpeedSlider.elem);
+
         this.viewer.addKeyMoveSpeedListener(this.onCameraController.bind(this));
         this.viewer.inputManager.addScrollListener(this.onScrollWheel.bind(this));
 
@@ -1520,22 +1681,19 @@ class ViewerSettings extends Panel {
         GlobalSaveManager.addSettingListener('InvertX', this.invertXChanged.bind(this));
     }
 
-    private _getSliderT(slider: HTMLInputElement) {
-        return (+slider.value - +slider.min) / (+slider.max - +slider.min);
-    }
-
     private onFovSliderChange(e: UIEvent): void {
         const slider = (<HTMLInputElement> e.target);
-        const value = this._getSliderT(slider);
+        const value = this.fovSlider.getT();
         this.viewer.fovY = value * (Math.PI * 0.995);
     }
 
     private onCameraController(): void {
-        this.camSpeedSlider.value = "" + this.viewer.cameraController!.getKeyMoveSpeed();
+        this.camSpeedSlider.setValue(this.viewer.cameraController!.getKeyMoveSpeed());
     }
 
     private onScrollWheel(): void {
-        this.camSpeedSlider.value = "" + (Number(this.camSpeedSlider.value) + Math.sign(this.viewer.inputManager.dz)*4);
+        const v = this.camSpeedSlider.getValue() + Math.sign(this.viewer.inputManager.dz)*4;
+        this.camSpeedSlider.setValue(v);
         this.updateCameraSpeed();
     }
 
@@ -1547,7 +1705,7 @@ class ViewerSettings extends Panel {
 
     private updateCameraSpeed(): void {
         if (this.viewer.cameraController !== null)
-            this.viewer.cameraController.setKeyMoveSpeed(Number(this.camSpeedSlider.value));
+            this.viewer.cameraController.setKeyMoveSpeed(this.camSpeedSlider.getValue());
     }
 
     public cameraControllerSelected(cameraControllerClass: CameraControllerClass) {

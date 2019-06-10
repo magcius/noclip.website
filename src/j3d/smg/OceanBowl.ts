@@ -116,6 +116,7 @@ export class OceanBowl extends LiveActor {
     private tex0Trans = vec2.create();
     private tex1Trans = vec2.create();
     private tex2Trans = vec2.create();
+    private tex4Scale = 0.04;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, getObjectName(infoIter));
@@ -332,8 +333,7 @@ export class OceanBowl extends LiveActor {
             ... setTevOrder(GX.TexCoordID.TEXCOORD4, GX.TexMapID.TEXMAP3, GX.RasColorChannelID.COLOR0A0),
             ... setTevColorIn(GX.CombineColorInput.CPREV, GX.CombineColorInput.A0, GX.CombineColorInput.C0, GX.CombineColorInput.CPREV),
             ... setTevColorOp(GX.TevOp.COMP_R8_EQ, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV),
-            // Artistic decision: changing the TEXA here to KONST to make the waves always visible.
-            ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.RASA, GX.CombineAlphaInput.KONST, GX.CombineAlphaInput.ZERO),
+            ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.RASA, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.ZERO),
             ... setTevAlphaOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV),
             konstColorSel: GX.KonstColorSel.KCSEL_1,
             konstAlphaSel: GX.KonstAlphaSel.KASEL_1,
@@ -429,7 +429,7 @@ export class OceanBowl extends LiveActor {
 
         const scale0 = 0.05 * this.gridAxisPointCount;
         const scale2 = 0.1 * this.gridAxisPointCount;
-        const scale4 = 0.04 * this.gridAxisPointCount;
+        const scale4 = this.tex4Scale * this.gridAxisPointCount;
 
         setTextureMatrixST(materialParams.u_TexMtx[0], scale0, this.tex0Trans);
         setTextureMatrixST(materialParams.u_TexMtx[1], scale0, this.tex1Trans);

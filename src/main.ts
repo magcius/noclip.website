@@ -55,9 +55,9 @@ import * as PM64 from './pm64/scenes';
 import * as OKAMI from './okami/scenes';
 import * as SSBB from './rres/ssbb_scenes';
 
-import { UI, SaveStatesAction } from './ui';
+import { UI, SaveStatesAction, FloatingPanel, RENDER_HACKS_ICON, Slider } from './ui';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera';
-import { hexdump } from './util';
+import { hexdump, assert } from './util';
 import { downloadBlob, downloadBufferSlice, downloadBuffer } from './fetch';
 import { ZipFileEntry, makeZipFile } from './ZipFile';
 import { TextureHolder } from './TextureHolder';
@@ -194,6 +194,8 @@ class Main {
 
     private uiContainers: HTMLElement;
     private dragHighlight: HTMLElement;
+    private floatingPanelContainer: HTMLElement;
+    private debugFloater: FloatingPanel | null = null;
     private currentSceneGroup: SceneGroup;
     private currentSceneDesc: SceneDesc;
 
@@ -620,6 +622,42 @@ class Main {
         this.dragHighlight.style.boxShadow = '0 0 40px 5px white inset';
         this.dragHighlight.style.display = 'none';
         this.dragHighlight.style.pointerEvents = 'none';
+
+        this.floatingPanelContainer = document.createElement('div');
+        this.uiContainers.appendChild(this.floatingPanelContainer);
+    }
+
+    private makeFloater(title: string = 'Floating Panel', icon: string = RENDER_HACKS_ICON): FloatingPanel {
+        const panel = new FloatingPanel();
+        panel.setTitle(icon, title);
+        this.floatingPanelContainer.appendChild(panel.elem);
+        return panel;
+    }
+
+    private getDebugFloater(): FloatingPanel {
+        if (this.debugFloater === null)
+            this.debugFloater = this.makeFloater('Debug');
+        return this.debugFloater;
+    }
+
+    public bindSlider(obj: { [k: string]: number }, paramName: string, min = 0, max = 1, panel: FloatingPanel | null = null): void {
+        const value = obj[paramName];
+        assert(typeof value === "number");
+        min = Math.min(value, min);
+        max = Math.max(value, max);
+
+        if (panel === null)
+            panel = this.getDebugFloater();
+
+        const slider = new Slider();
+        slider.setLabel(paramName);
+        slider.setRange(min, max);
+        slider.setValue(value);
+        slider.onvalue = (newValue: number) => {
+            obj[paramName] = newValue;
+        };
+
+        panel.contents.appendChild(slider.elem);
     }
 
     private _toggleUI() {
