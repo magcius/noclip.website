@@ -95,6 +95,7 @@ class Command_Bin {
     public visible: boolean = true;
 
     constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, private bin: BIN) {
+        this.name = bin.name;
         this.translateModel(device, renderHelper, bin);
     }
 
