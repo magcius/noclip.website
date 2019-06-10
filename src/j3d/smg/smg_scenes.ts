@@ -1738,7 +1738,6 @@ class TicoComet extends NPCActor {
 
 class Coin extends LiveActor {
     private spinAnimationController = new AnimationController(60);
-    private modelMatrix = mat4.create();
     private airBubble: PartsModel | null = null;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
@@ -1749,7 +1748,6 @@ class Coin extends LiveActor {
         this.initLightCtrl(sceneObjHolder);
 
         this.initDefaultPos(sceneObjHolder, infoIter);
-        mat4.copy(this.modelMatrix, this.modelInstance.modelMatrix);
 
         const isNeedBubble = getJMapInfoArg7(infoIter);
         if (isNeedBubble !== -1) {
@@ -1773,8 +1771,10 @@ class Coin extends LiveActor {
 
         this.spinAnimationController.setTimeFromViewerInput(viewerInput);
         const timeInFrames = this.spinAnimationController.getTimeInFrames();
-        this.rotation[1] = timeInFrames * Constants.SPEED;
+        const rotationY = timeInFrames * Constants.SPEED;
+        computeModelMatrixSRT(scratchMatrix, 1, 1, 1, 0, rotationY, 0, 0, 0, 0);
         super.calcAndSetBaseMtx(viewerInput);
+        mat4.mul(this.modelInstance.modelMatrix, this.modelInstance.modelMatrix, scratchMatrix);
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {

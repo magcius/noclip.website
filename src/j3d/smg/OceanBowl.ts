@@ -4,7 +4,6 @@ import { LiveActor, SceneObjHolder, ZoneAndLayer, getObjectName, connectToScene,
 import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputLayout, GfxInputState, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxCullMode } from "../../gfx/platform/GfxPlatform";
 import { ViewerRenderInput } from "../../viewer";
 import { JMapInfoIter } from "./JMapInfo";
-import { getDebugOverlayCanvas2D, drawWorldSpacePoint, prepareFrameDebugOverlayCanvas2D } from "../../DebugJunk";
 import { computeModelMatrixSRT, texProjPerspMtx } from "../../MathHelpers";
 import AnimationController from "../../AnimationController";
 import { colorNewCopy, Magenta, colorFromRGBA8 } from "../../Color";
@@ -29,9 +28,6 @@ class OceanBowlPoint {
     public drawPosition: vec3 = vec3.create();
     public gridPosition: vec3 = vec3.create();
     public heightScale: number = 1.0;
-
-    constructor() {
-    }
 
     public updatePos(wave1Time: number, wave2Time: number): void {
         const height = this.heightScale * calcHeightStatic(wave1Time, wave2Time, this.gridPosition[0], this.gridPosition[2]);
@@ -96,8 +92,6 @@ function loadTexProjectionMtx(m: mat4, camera: Camera): void {
 }
 
 const scratchMatrix = mat4.create();
-const scratchVec4 = vec4.create();
-const scratchColor = colorNewCopy(Magenta);
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
 export class OceanBowl extends LiveActor {
