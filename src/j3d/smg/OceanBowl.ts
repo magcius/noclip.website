@@ -186,8 +186,8 @@ export class OceanBowl extends LiveActor {
         let texCoordIdx = 0;
         for (let z = 0; z < gridAxisPointCount; z++) {
             for (let x = 0; x < gridAxisPointCount; x++) {
-                texCoordData[texCoordIdx++] = (x / (gridAxisPointCount - 1)) * 0x7FFF;
                 texCoordData[texCoordIdx++] = (z / (gridAxisPointCount - 1)) * 0x7FFF;
+                texCoordData[texCoordIdx++] = (x / (gridAxisPointCount - 1)) * 0x7FFF;
             }
         }
         this.texCoord0Buffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, texCoordData.buffer);

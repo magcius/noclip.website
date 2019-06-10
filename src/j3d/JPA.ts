@@ -3,7 +3,7 @@
 // Nintendo games. JPAC1-00 is an older variant which is unsupported.
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString, assertExists } from "../util";
+import { assert, readString, assertExists, hexzero } from "../util";
 import { BTI, BTI_Texture } from "./j3d";
 import { vec3, mat4, vec2 } from "gl-matrix";
 import { Endianness } from "../endian";
@@ -81,7 +81,7 @@ export interface JPABaseShapeBlock {
     flags: number;
     type: JPABSPType;
     texIdx: number;
-    texIdxAnimData: Uint16Array | null;
+    texIdxAnimData: Uint8Array | null;
     blendModeFlags: number;
     zModeFlags: number;
     alphaCompareFlags: number;
@@ -875,6 +875,7 @@ function parseResource(res: JPAResourceRaw): JPAResource {
             const alphaRef1 = view.getUint8(tableIdx + 0x1C);
             const zModeFlags = view.getUint8(tableIdx + 0x1D);
             const texFlags = view.getUint8(tableIdx + 0x1E);
+            const texIdxAnimCount = view.getUint8(tableIdx + 0x1F);
             const colorFlags = view.getUint8(tableIdx + 0x21);
 
             const colorPrmR = view.getUint8(tableIdx + 0x26) / 0xFF;
@@ -888,17 +889,16 @@ function parseResource(res: JPAResourceRaw): JPAResource {
             const colorEnvA = view.getUint8(tableIdx + 0x2D) / 0xFF;
             const colorEnv = colorNew(colorEnvR, colorEnvG, colorEnvB, colorEnvA);
 
-            let extraDataOffs = 0x34;
+            let extraDataOffs = tableIdx + 0x34;
 
             if (!!(flags & 0x1000000)) {
                 // mpTexCrdMtxAnimData
                 extraDataOffs += 0x28;
             }
 
-            let texIdxAnimData: Uint16Array | null = null;
-            if (!!(texFlags & 0x01)) {
-                texIdxAnimData = buffer.createTypedArray(Uint16Array, extraDataOffs, undefined, Endianness.BIG_ENDIAN);
-            }
+            let texIdxAnimData: Uint8Array | null = null;
+            if (!!(texFlags & 0x01))
+                texIdxAnimData = buffer.createTypedArray(Uint8Array, extraDataOffs, texIdxAnimCount, Endianness.BIG_ENDIAN);
 
             bsp1 = {
                 flags, type, blendModeFlags, alphaCompareFlags, alphaRef0, alphaRef1, zModeFlags,
