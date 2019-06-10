@@ -1,17 +1,18 @@
 
-import { vec3, vec4, mat4, vec2 } from "gl-matrix";
-import { LiveActor, SceneObjHolder, ZoneAndLayer, getObjectName, connectToScene, SMGPass } from "./smg_scenes";
+import { vec3, mat4, vec2 } from "gl-matrix";
+import { LiveActor, SceneObjHolder, ZoneAndLayer, getObjectName, SMGPass } from "./smg_scenes";
+import { connectToScene } from "./Actors";
 import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputLayout, GfxInputState, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxCullMode } from "../../gfx/platform/GfxPlatform";
 import { ViewerRenderInput } from "../../viewer";
 import { JMapInfoIter } from "./JMapInfo";
 import { computeModelMatrixSRT, texProjPerspMtx } from "../../MathHelpers";
 import AnimationController from "../../AnimationController";
-import { colorNewCopy, Magenta, colorFromRGBA8 } from "../../Color";
+import { colorFromRGBA8 } from "../../Color";
 import { BTIData } from "../render";
 import { BTI } from "../j3d";
 import { assert } from "../../util";
 import { makeStaticDataBuffer } from "../../gfx/helpers/BufferHelpers";
-import { getVertexAttribLocation, GXMaterial, LightChannelControl, ColorChannelControl, TexGen, IndTexStage, TevStage } from "../../gx/gx_material";
+import { getVertexAttribLocation, GXMaterial, ColorChannelControl, TexGen, IndTexStage, TevStage } from "../../gx/gx_material";
 import * as GX from "../../gx/gx_enum";
 import { GXRenderHelperGfx, GXMaterialHelperGfx } from "../../gx/gx_render_2";
 import { fillPacketParamsData, ub_PacketParams, u_PacketParamsBufferSize, MaterialParams, PacketParams, ub_MaterialParams, u_MaterialParamsBufferSize, fillMaterialParamsData, ColorKind } from "../../gx/gx_render";

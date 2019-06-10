@@ -148,6 +148,7 @@ const enum JPAKeyType {
     InitialVelAxis = 0x07,
     InitialVelDir  = 0x08,
     Spread         = 0x09,
+    ScaleOut       = 0x0A,
 }
 
 export interface JPAKeyBlock {
@@ -552,8 +553,8 @@ export class JPABaseEmitter {
                 this.initialVelDir = v;
             else if (kfa1.keyType === JPAKeyType.Spread)
                 this.spread = v;
-            else if (kfa1.keyType === 0x0A)
-                this.scaleOut = v; // Unknown
+            else if (kfa1.keyType === JPAKeyType.ScaleOut)
+                this.scaleOut = v;
             else
                 throw "whoops";
         }

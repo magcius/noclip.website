@@ -959,13 +959,15 @@ export class BMDModelInstance {
     public ank1Animator: ANK1Animator | null = null;
     public vaf1Animator: VAF1Animator | null = null;
 
-    private jointVisibility: boolean[];
 
     public materialInstanceState = new MaterialInstanceState();
     private materialInstances: MaterialInstance[] = [];
     private shapeInstances: ShapeInstance[] = [];
     private shapeInstanceState = new ShapeInstanceState();
     private materialHacks: GX_Material.GXMaterialHacks = {};
+
+    private jointMatrices: mat4[] = [];
+    private jointVisibility: boolean[];
 
     constructor(
         public bmdModel: BMDModel,
@@ -1204,6 +1206,23 @@ export class BMDModelInstance {
         return this.shapeInstanceState.jointToWorldMatrices[jointIndex];
     }
 
+    /**
+     * Sets the joint-to-parent-joint matrix for the joint at index {@param jointIndex}.
+     *
+     * This does not copy the values inside {@param m}; rather it takes a reference. Any updates to
+     * the passed-in matrix will be referenced automatically the next time the joint-to-world matrices
+     * are updated when calcAnim is called.
+     *
+     * This override takes precedence over any character animations that would be playing through an ANK1
+     * animator. To remove the override, pass {@constant null} as the joint matrix.
+     */
+    public setJointMatrixOverrideReference(jointIndex: number, m: mat4 | null): void {
+        if (m !== null)
+            this.jointMatrices[jointIndex] = m;
+        else
+            this.jointMatrices[jointIndex] = undefined;
+    }
+
     private isAnyShapeVisible(): boolean {
         for (let i = 0; i < this.shapeInstanceState.matrixVisibility.length; i++)
             if (this.shapeInstanceState.matrixVisibility[i])
@@ -1312,16 +1331,21 @@ export class BMDModelInstance {
         this.draw(device, renderHelper, camera, true);
     }
 
+    private computeJointMatrix(dst: mat4, jointIndex: number): void {
+        if (this.jointMatrices[jointIndex] !== undefined)
+            mat4.copy(dst, this.jointMatrices[jointIndex]);
+
+        if (this.ank1Animator !== null && this.ank1Animator.calcJointMatrix(dst, jointIndex))
+            return;
+
+        mat4.copy(dst, this.bmdModel.bmd.jnt1.joints[jointIndex].matrix);
+    }
+
     private computeJointMatrixArray(camera: Camera, joint: JointData, parentJointToWorldMatrix: mat4): void {
-        const jnt1 = this.bmdModel.bmd.jnt1;
         const jointIndex = joint.jointIndex;
 
-        let jointToParentMatrix: mat4;
-        if (this.ank1Animator !== null && this.ank1Animator.calcJointMatrix(matrixScratch2, jointIndex)) {
-            jointToParentMatrix = matrixScratch2;
-        } else {
-            jointToParentMatrix = jnt1.joints[jointIndex].matrix;
-        }
+        const jointToParentMatrix = matrixScratch2;
+        this.computeJointMatrix(jointToParentMatrix, jointIndex);
 
         const jointToWorldMatrix = this.shapeInstanceState.jointToWorldMatrices[jointIndex];
         mat4.mul(jointToWorldMatrix, parentJointToWorldMatrix, jointToParentMatrix);
