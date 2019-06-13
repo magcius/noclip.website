@@ -26,6 +26,14 @@ export class NameObj {
     constructor(public name: string) {
     }
 
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+        // Default implementation; nothing.
+    }
+
+    public calcAnim(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+        // Default implementation; nothing.
+    }
+
     public draw(sceneObjHolder: SceneObjHolder, renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput): void {
         // Default implementation; nothing.
     }
@@ -82,11 +90,22 @@ export class SceneNameObjListExecutor {
         return this.drawBufferHolder.findLightType(info.drawBufferType);
     }
 
+    public executeMovement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+        for (let i = 0; i < this.nameObjExecuteInfos.length; i++)
+            if (this.nameObjExecuteInfos[i].movementType !== -1)
+                this.nameObjExecuteInfos[i].nameObj.movement(sceneObjHolder, viewerInput);
+    }
+
+    public executeCalcAnim(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+        for (let i = 0; i < this.nameObjExecuteInfos.length; i++)
+            if (this.nameObjExecuteInfos[i].calcAnimType !== -1)
+                this.nameObjExecuteInfos[i].nameObj.calcAnim(sceneObjHolder, viewerInput);
+    }
+
     public executeDrawAll(sceneObjHolder: SceneObjHolder, renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput): void {
-        for (let i = 0; i < this.nameObjExecuteInfos.length; i++) {
-            const nameObj = this.nameObjExecuteInfos[i].nameObj;
-            nameObj.draw(sceneObjHolder, renderHelper, viewerInput);
-        }
+        for (let i = 0; i < this.nameObjExecuteInfos.length; i++)
+            if (this.nameObjExecuteInfos[i].drawType !== -1)
+                this.nameObjExecuteInfos[i].nameObj.draw(sceneObjHolder, renderHelper, viewerInput);
     }
 
     public drawAllBuffers(device: GfxDevice, renderHelper: GXRenderHelperGfx, camera: Camera): void {

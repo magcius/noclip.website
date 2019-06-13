@@ -380,7 +380,7 @@ export class OceanBowl extends LiveActor {
         this.materialHelper = new GXMaterialHelperGfx(material);
     }
 
-    private movement(viewerInput: ViewerRenderInput): void {
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
         // Every frame, we add -0.04 onto the counter.
         this.animationController.setTimeFromViewerInput(viewerInput);
         const time = this.animationController.getTimeInFrames();
@@ -400,8 +400,6 @@ export class OceanBowl extends LiveActor {
     }
 
     public draw(sceneObjHolder: SceneObjHolder, renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput): void {
-        this.movement(viewerInput);
-
         const device = sceneObjHolder.modelCache.device;
         const cache = sceneObjHolder.modelCache.cache;
 

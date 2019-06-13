@@ -106,6 +106,14 @@ export class AABB {
             a.minZ > b.maxZ || b.minZ > a.maxZ);
     }
 
+    public containsPoint(v: vec3): boolean {
+        const pX = v[0], pY = v[1], pZ = v[2];
+        return (
+            pX >= this.minX && pX <= this.maxX &&
+            pY >= this.minY && pY <= this.maxY &&
+            pZ >= this.minZ && pZ <= this.maxZ);
+    }
+
     public centerPoint(v: vec3): void {
         v[0] = (this.minX + this.maxX) / 2;
         v[1] = (this.minY + this.maxY) / 2;
@@ -305,6 +313,17 @@ export class Frustum {
 
     public contains(aabb: AABB): boolean {
         return this.intersect(aabb) !== IntersectionState.FULLY_OUTSIDE;
+    }
+
+    public containsPoint(v: vec3): boolean {
+        if (!this.aabb.containsPoint(v))
+            return false;
+
+        for (let i = 0; i < 6; i++)
+            if (this.planes[i].test(v[0], v[1], v[2]) > 0)
+                return false;
+
+        return true;
     }
 
     public newFrame(): void {

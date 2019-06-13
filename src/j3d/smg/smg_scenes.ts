@@ -1,5 +1,5 @@
 
-import { mat4, vec3, vec2 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
 import Progressable from '../../Progressable';
 import { assert, assertExists } from '../../util';
@@ -438,6 +438,9 @@ class SMGRenderer implements Viewer.SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        this.sceneObjHolder.sceneNameObjListExecutor.executeMovement(this.sceneObjHolder, viewerInput);
+        this.sceneObjHolder.sceneNameObjListExecutor.executeCalcAnim(this.sceneObjHolder, viewerInput);
+
         this.mainRenderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
         this.opaqueSceneTexture.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
 
@@ -1147,6 +1150,17 @@ export class LiveActor extends NameObj implements ObjectBase {
             this.translation[0], this.translation[1], this.translation[2]);
     }
 
+    public calcAnim(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        const visible = this.visibleScenario && this.visibleAlive;
+        if (!visible)
+            return;
+
+        if (this.modelInstance !== null) {
+            this.modelInstance.animationController.setTimeFromViewerInput(viewerInput);
+            this.modelInstance.calcAnim(viewerInput.camera);
+        }
+    }
+
     public draw(sceneObjHolder: SceneObjHolder, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
         const visible = this.visibleScenario && this.visibleAlive;
         this.modelInstance.visible = visible;
@@ -1181,9 +1195,6 @@ export class LiveActor extends NameObj implements ObjectBase {
                 lightInfo.setOnModelInstance(this.modelInstance, viewerInput.camera, false);
             }
         }
-
-        this.modelInstance.animationController.setTimeInMilliseconds(viewerInput.time);
-        this.modelInstance.calcAnim(viewerInput.camera);
     }
 }
 
@@ -1343,6 +1354,7 @@ class SMGSpawner {
         else if (objName === 'PurpleCoin')              return Coin;
         else if (objName === 'OceanBowl')               return OceanBowl;
         else if (objName === 'AstroTorchLightRed')      return SimpleEffect;
+        else if (objName === 'AstroTorchLightBlue')     return SimpleEffect;
         return null;
     }
 

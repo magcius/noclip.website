@@ -561,6 +561,7 @@ export class JPAEmitterManager {
 
 const enum BaseEmitterFlags {
     PAUSED           = 0x0002,
+    STOP_DRAW        = 0x0004,
     PAUSED_EMISSION  = 0x0008,
     FIRST_EMISSION   = 0x0010,
     RATE_STEP_EMIT   = 0x0020,
@@ -622,7 +623,7 @@ function calcColor(dstPrm: Color, dstEnv: Color, workData: JPAEmitterWorkData, t
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
 export class JPABaseEmitter {
-    private flags: BaseEmitterFlags;
+    public flags: BaseEmitterFlags;
     public resData: JPAResourceData;
     public emitterScl = vec3.create();
     public emitterTrs = vec3.create();
@@ -668,6 +669,18 @@ export class JPABaseEmitter {
         vec3.copy(this.globalScale, s);
         this.globalScale2D[0] = s[0];
         this.globalScale2D[1] = s[1];
+    }
+
+    public setVisible(v: boolean): void {
+        const stopDraw = !v;
+        if (stopDraw)
+            this.flags |= BaseEmitterFlags.STOP_DRAW;
+        else
+            this.flags &= ~BaseEmitterFlags.STOP_DRAW;
+    }
+
+    public getVisible(): boolean {
+        return !(this.flags & BaseEmitterFlags.STOP_DRAW);
     }
 
     public init(resData: JPAResourceData): void {
@@ -1040,6 +1053,9 @@ export class JPABaseEmitter {
     }
 
     public draw(device: GfxDevice, renderHelper: GXRenderHelperGfx, workData: JPAEmitterWorkData): void {
+        if (!!(this.flags & BaseEmitterFlags.STOP_DRAW))
+            return;
+
         this.calcWorkData_d(workData);
         this.drawP(device, renderHelper, workData);
     }

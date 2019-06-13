@@ -21,6 +21,10 @@ export function connectToScene(sceneObjHolder: SceneObjHolder, actor: LiveActor,
     sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, movementType, calcAnimType, drawBufferType, drawType);
 }
 
+export function connectToSceneMapObjMovement(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x22, -1, -1, -1);
+}
+
 export function connectToSceneNpc(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x28, 0x06, DrawBufferType.NPC, -1);
 }
@@ -691,8 +695,10 @@ class MiniRouteMiniature extends PartsModel {
     }
 }
 
+// TODO(jstpierre): Complete the effect system.
 export class SimpleEffect extends LiveActor {
     private emitter: JPABaseEmitter;
+    private offset = vec3.create();
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, getObjectName(infoIter));
@@ -702,12 +708,21 @@ export class SimpleEffect extends LiveActor {
             return;
 
         this.emitter = sceneObjHolder.effectSystem.createAutoEmitterDumb(sceneObjHolder, this.name);
+        vec3.copy(this.offset, this.emitter.globalTranslation);
 
-        this.emitter.globalTranslation[0] += this.translation[0];
-        this.emitter.globalTranslation[1] += this.translation[1];
-        this.emitter.globalTranslation[2] += this.translation[2];
+        connectToSceneMapObjMovement(sceneObjHolder, this);
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        // Don't need anything, effectSystem is already built-in.
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        this.emitter.setVisible(this.visibleScenario && this.visibleAlive);
+
+        if (this.emitter.getVisible()) {
+            vec3.add(this.emitter.globalTranslation, this.translation, this.offset);
+            this.emitter.setVisible(viewerInput.camera.frustum.containsPoint(this.emitter.globalTranslation));
+        }
     }
 }
