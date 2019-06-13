@@ -531,7 +531,7 @@ export class GX_Program extends DeviceProgram {
         const i = stage.index;
         return `
     // Indirect ${i}
-    vec3 t_IndTexCoord${i} = ${this.generateTextureSample(stage.texture, this.generateIndTexStageScale(stage))}.abg;`;
+    vec3 t_IndTexCoord${i} = 255.0 * ${this.generateTextureSample(stage.texture, this.generateIndTexStageScale(stage))}.abg;`;
     }
 
     private generateIndTexStages(stages: IndTexStage[]): string {
@@ -811,7 +811,7 @@ export class GX_Program extends DeviceProgram {
     }
 
     private generateTevTexCoordIndTexCoord(stage: TevStage): string {
-        const baseCoord = `(t_IndTexCoord${stage.indTexStage} * 255.0)`;
+        const baseCoord = `(t_IndTexCoord${stage.indTexStage})`;
         switch (stage.indTexFormat) {
         case GX.IndTexFormat._8: return baseCoord;
         default:
@@ -834,7 +834,7 @@ export class GX_Program extends DeviceProgram {
     }
 
     private generateTevTexCoordIndirectTranslation(stage: TevStage): string {
-        return `(${this.generateTevTexCoordIndirectMtx(stage)} / TextureSize(${stage.texCoordId}))`;
+        return `(${this.generateTevTexCoordIndirectMtx(stage)} * TextureScale(${stage.texMap}))`;
     }
 
     private generateTevTexCoordIndirect(stage: TevStage): string {
@@ -1043,7 +1043,7 @@ ${this.generateTexGens(this.material.texGens)}
 ${this.generateTexCoordGetters()}
 
 float TextureLODBias(int index) { return u_SceneTextureLODBias + u_TextureParams[index].w; }
-vec2 TextureSize(int index) { return u_TextureParams[index].xy; }
+vec2 TextureScale(int index) { return u_TextureParams[index].xy; }
 
 vec3 TevBias(vec3 a, float b) { return a + vec3(b); }
 float TevBias(float a, float b) { return a + b; }

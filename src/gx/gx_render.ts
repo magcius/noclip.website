@@ -84,7 +84,7 @@ export function fillMaterialParamsData(d: Float32Array, bOffs: number, materialP
     for (let i = 0; i < 3; i++)
         offs += fillMatrix4x2(d, offs, materialParams.u_IndTexMtx[i]);
     for (let i = 0; i < 8; i++)
-        offs += fillVec4(d, offs, materialParams.m_TextureMapping[i].width, materialParams.m_TextureMapping[i].height, 0, materialParams.m_TextureMapping[i].lodBias);
+        offs += fillVec4(d, offs, 1 / materialParams.m_TextureMapping[i].width, (materialParams.m_TextureMapping[i].flipY ? -1 : 1) / materialParams.m_TextureMapping[i].height, 0, materialParams.m_TextureMapping[i].lodBias);
     for (let i = 0; i < 8; i++) {
         const light = materialParams.u_Lights[i];
         offs += fillColor(d, offs, light.Color);
