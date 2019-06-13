@@ -5,7 +5,7 @@
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import * as GX from "../gx/gx_enum";
 
-import { assert, readString, assertExists, nArray } from "../util";
+import { assert, readString, assertExists, nArray, hexdump } from "../util";
 import { BTI, BTI_Texture } from "./j3d";
 import { vec3, mat4, vec2 } from "gl-matrix";
 import { Endianness } from "../endian";
@@ -104,6 +104,26 @@ export interface JPABaseShapeBlock {
 
 export interface JPAExtraShapeBlock {
     flags: number;
+    scaleInTiming: number;
+    scaleOutTiming: number;
+    scaleInValueX: number;
+    scaleOutValueX: number;
+    scaleInValueY: number;
+    scaleOutValueY: number;
+    scaleOutRandom: number;
+    scaleAnmMaxFrameX: number;
+    scaleAnmMaxFrameY: number;
+    scaleIncreaseRateX: number;
+    scaleIncreaseRateY: number;
+    scaleDecreaseRateX: number;
+    scaleDecreaseRateY: number;
+    alphaInTiming: number;
+    alphaOutTiming: number;
+    alphaInValue: number;
+    alphaBaseValue: number;
+    alphaOutValue: number;
+    alphaIncreaseRate: number;
+    alphaDecreaseRate: number;
 }
 
 export interface JPAExTexBlock {
@@ -157,7 +177,7 @@ const enum JPAKeyType {
     InitialVelAxis = 0x07,
     InitialVelDir  = 0x08,
     Spread         = 0x09,
-    ScaleOut       = 0x0A,
+    Scale       = 0x0A,
 }
 
 export interface JPAKeyBlock {
@@ -216,6 +236,12 @@ const enum CalcIdxType {
     Reverse = 0x02,
     Random  = 0x03,
     Merge   = 0x04,
+}
+
+const enum CalcScaleAnmType {
+    Normal  = 0x00,
+    Repeat  = 0x01,
+    Reverse = 0x02,
 }
 
 export class JPAResourceData {
@@ -420,6 +446,7 @@ class JPAEmitterWorkData {
     public ybbCamMtx = mat4.create();
     public posCamMtx = mat4.create();
     public prjMtx = mat4.create();
+    public deltaTime: number = 0;
 }
 
 class JPAGlobalRes {
@@ -472,8 +499,8 @@ class JPAGlobalRes {
 }
 
 export class JPADrawInfo {
-    posCamMtx: mat4;
-    prjMtx: mat4;
+    public posCamMtx: mat4;
+    public prjMtx: mat4;
 }
 
 export class JPAEmitterManager {
@@ -504,7 +531,9 @@ export class JPAEmitterManager {
         return emitter;
     }
 
-    public calc(groupId: number): void {
+    public calc(groupId: number, deltaTime: number): void {
+        this.workData.deltaTime = deltaTime;
+
         for (let i = 0; i < this.aliveEmitters.length; i++) {
             const emitter = this.aliveEmitters[i];
             const alive = emitter.calc(this.workData);
@@ -635,6 +664,12 @@ export class JPABaseEmitter {
     constructor(private emitterManager: JPAEmitterManager) {
     }
 
+    public setGlobalScale(s: vec3): void {
+        vec3.copy(this.globalScale, s);
+        this.globalScale2D[0] = s[0];
+        this.globalScale2D[1] = s[1];
+    }
+
     public init(resData: JPAResourceData): void {
         this.resData = resData;
         const bem1 = this.resData.res.bem1;
@@ -702,7 +737,7 @@ export class JPABaseEmitter {
                 this.initialVelDir = v;
             else if (kfa1.keyType === JPAKeyType.Spread)
                 this.spread = v;
-            else if (kfa1.keyType === JPAKeyType.ScaleOut)
+            else if (kfa1.keyType === JPAKeyType.Scale)
                 this.scaleOut = v;
             else
                 throw "whoops";
@@ -780,6 +815,8 @@ export class JPABaseEmitter {
     }
 
     private create(): void {
+        const workData = this.emitterManager.workData;
+
         // JPADynamicsBlock::create()
 
         const bem1 = this.resData.res.bem1;
@@ -801,15 +838,15 @@ export class JPABaseEmitter {
                     this.emitCount = 1;
             }
 
-            while (this.emitCount > 1.0) {
+            while (this.emitCount > 0) {
                 this.createParticle();
                 this.emitCount--;
             }
         }
 
-        this.rateStepTimer++;
+        this.rateStepTimer += workData.deltaTime;
         if (this.rateStepTimer >= bem1.rateStep + 1) {
-            this.rateStepTimer -= bem1.rateStep;
+            this.rateStepTimer -= bem1.rateStep + 1;
             this.flags |= BaseEmitterFlags.RATE_STEP_EMIT;
         } else {
             this.flags &= ~BaseEmitterFlags.RATE_STEP_EMIT;
@@ -823,9 +860,8 @@ export class JPABaseEmitter {
         if (this.waitTime >= this.resData.res.bem1.startFrame)
             return true;
 
-        // TODO(jstpierre): Fractional time unit updates?
         if (!!(this.flags & BaseEmitterFlags.PAUSED))
-            this.waitTime++;
+            this.waitTime += this.emitterManager.workData.deltaTime;
 
         return false;
     }
@@ -935,8 +971,7 @@ export class JPABaseEmitter {
                 }
             }
 
-            // TODO(jstpierre): Partial frame updates?
-            this.tick++;
+            this.tick += workData.deltaTime;
         } else {
             // Emitter callback +0x10
         }
@@ -1048,7 +1083,6 @@ export class JPABaseParticle {
     public init_p(workData: JPAEmitterWorkData): void {
         const baseEmitter = workData.baseEmitter;
         const bem1 = baseEmitter.resData.res.bem1;
-        const bsp1 = baseEmitter.resData.res.bsp1;
         const esp1 = baseEmitter.resData.res.esp1;
 
         this.tick = -1;
@@ -1115,7 +1149,11 @@ export class JPABaseParticle {
         colorCopy(this.colorEnv, baseEmitter.colorEnv);
 
         // ScaleX/Y/Out
-        this.scaleOut = baseEmitter.scaleOut;
+        if (esp1 !== null && !!(esp1.flags & 0x00000001)) {
+            this.scaleOut = baseEmitter.scaleOut * (1.0 + (esp1.scaleOutRandom * get_r_zp(baseEmitter.random)));
+        } else {
+            this.scaleOut = baseEmitter.scaleOut;
+        }
         vec2.set(this.scale, this.scaleOut, this.scaleOut);
 
         this.prmColorAlphaAnm = 1.0;
@@ -1142,8 +1180,26 @@ export class JPABaseParticle {
         return false;
     }
 
+    private calcScaleAnm(type: CalcScaleAnmType, maxFrame: number): number {
+        if (type === CalcScaleAnmType.Normal)
+            return this.time;
+        else if (type === CalcScaleAnmType.Repeat)
+            return (this.tick / maxFrame) % 1.0;
+        else
+            throw "whoops";
+    }
+
+    private calcScaleFade(scaleAnm: number, esp1: JPAExtraShapeBlock, base: number, increase: number, decrease: number): number {
+        if (scaleAnm < esp1.scaleInTiming)
+            return (scaleAnm * increase) + base;
+        else if (scaleAnm > esp1.scaleOutTiming)
+            return ((scaleAnm - esp1.scaleOutTiming) * decrease) + 1.0;
+        else
+            return 1;
+    }
+
     public calc_p(workData: JPAEmitterWorkData): boolean {
-        this.tick++;
+        this.tick += workData.deltaTime;
 
         if (this.tick >= this.lifeTime)
             return false;
@@ -1170,7 +1226,8 @@ export class JPABaseParticle {
 
         if (!(this.flags & 0x02)) {
             // mCalcParticleFuncList
-            const bsp1 = workData.baseEmitter.resData.res.bsp1;
+            const bsp1 = res.bsp1;
+            const esp1 = res.esp1;
 
             const texCalcOnEmitter = !!(bsp1.flags & 0x00004000);
             if (!texCalcOnEmitter)
@@ -1184,7 +1241,38 @@ export class JPABaseParticle {
                 colorCopy(this.colorEnv, workData.baseEmitter.colorEnv);
             }
 
-            this.rotateAngle += this.rotateSpeed;
+            if (esp1 !== null) {
+                const hasScaleAnm = !!(esp1.flags & 0x01);
+                if (hasScaleAnm) {
+                    const scaleAnmTypeX: CalcScaleAnmType = (esp1.flags >>> 0x08) & 0x03;
+                    const scaleAnmX = this.calcScaleAnm(scaleAnmTypeX, esp1.scaleAnmMaxFrameX);
+                    this.scale[0] = this.scaleOut * this.calcScaleFade(scaleAnmX, esp1, esp1.scaleInValueX, esp1.scaleIncreaseRateX, esp1.scaleDecreaseRateX);
+
+                    const hasScaleAnmY = !!(esp1.flags & 0x02);
+                    if (hasScaleAnmY) {
+                        const scaleAnmTypeY: CalcScaleAnmType = (esp1.flags >>> 0x0A) & 0x03;
+                        const scaleAnmY = this.calcScaleAnm(scaleAnmTypeY, esp1.scaleAnmMaxFrameY);
+                        this.scale[0] = this.scaleOut * this.calcScaleFade(scaleAnmY, esp1, esp1.scaleInValueY, esp1.scaleIncreaseRateY, esp1.scaleDecreaseRateY);
+                    } else {
+                        this.scale[1] = this.scale[0];
+                    }
+                }
+
+                const hasAlphaAnm = !!(esp1.flags & 0x00010000);
+                const hasAlphaFlickAnm = !!(esp1.flags & 0x00020000);
+                if (hasAlphaFlickAnm) {
+                    throw "whoops";
+                } else if (hasAlphaAnm) {
+                    if (this.time < esp1.alphaInTiming)
+                        this.prmColorAlphaAnm = esp1.alphaInValue + this.time * esp1.alphaIncreaseRate;
+                    else if (this.time > esp1.alphaOutTiming)
+                        this.prmColorAlphaAnm = esp1.alphaBaseValue + ((this.time - esp1.alphaOutTiming) * esp1.alphaDecreaseRate);
+                    else
+                        this.prmColorAlphaAnm = esp1.alphaBaseValue;
+                }
+            }
+
+            this.rotateAngle += this.rotateSpeed * workData.deltaTime;
 
             // Create children.
             if (workData.baseEmitter.resData.res.ssp1 !== null && this.canCreateChild(workData)) {
@@ -1298,6 +1386,8 @@ function parseResource(res: JPAResourceRaw): JPAResource {
     const fieldBlockCount = view.getUint8(0x04);
     const keyBlockCount = view.getUint8(0x05);
     // Unknown at 0x06. Seemingly unused?
+
+    hexdump(buffer);
 
     let bem1: JPADynamicsBlock | null = null;
     let bsp1: JPABaseShapeBlock | null = null;
@@ -1443,8 +1533,51 @@ function parseResource(res: JPAResourceRaw): JPAResource {
             // J3DExtraShape
 
             // Contains misc. extra particle draw settings.
+            const flags = view.getUint32(tableIdx + 0x08);
 
-            esp1 = { flags: 0 };
+            const scaleInTiming =  view.getFloat32(tableIdx + 0x0C);
+            const scaleOutTiming = view.getFloat32(tableIdx + 0x10);
+            const scaleInValueX =  view.getFloat32(tableIdx + 0x14);
+            const scaleOutValueX = view.getFloat32(tableIdx + 0x18);
+            const scaleInValueY =  view.getFloat32(tableIdx + 0x1C);
+            const scaleOutValueY = view.getFloat32(tableIdx + 0x20);
+            const scaleOutRandom = view.getFloat32(tableIdx + 0x24);
+            const scaleAnmMaxFrameX = view.getUint16(tableIdx + 0x28);
+            const scaleAnmMaxFrameY = view.getUint16(tableIdx + 0x2A);
+
+            let scaleIncreaseRateX = 1, scaleIncreaseRateY = 1;
+            if (scaleInTiming > 0) {
+                scaleIncreaseRateX = (1.0 - scaleInValueX) / scaleInTiming;
+                scaleIncreaseRateY = (1.0 - scaleInValueX) / scaleInTiming;
+            }
+
+            let scaleDecreaseRateX = 1, scaleDecreaseRateY = 1;
+            if (scaleOutTiming < 1) {
+                scaleDecreaseRateX = (scaleOutValueX - 1.0) / (1.0 - scaleOutTiming);
+                scaleDecreaseRateY = (scaleOutValueY - 1.0) / (1.0 - scaleOutTiming);
+            }
+
+            const alphaInTiming = view.getFloat32(tableIdx + 0x2C);
+            const alphaOutTiming = view.getFloat32(tableIdx + 0x30);
+            const alphaInValue = view.getFloat32(tableIdx + 0x34);
+            const alphaBaseValue = view.getFloat32(tableIdx + 0x38);
+            const alphaOutValue = view.getFloat32(tableIdx + 0x3C);
+
+            let alphaIncreaseRate = 1;
+            if (alphaInTiming > 0)
+                alphaIncreaseRate = (alphaBaseValue - alphaInValue) / alphaInTiming;
+
+            let alphaDecreaseRate = 1;
+            if (alphaOutTiming < 1)
+                alphaDecreaseRate = (alphaOutValue - alphaBaseValue) / (1.0 - alphaOutTiming);
+
+            esp1 = { flags,
+                scaleInTiming, scaleOutTiming, scaleInValueX, scaleOutValueX, scaleInValueY, scaleOutValueY,
+                scaleIncreaseRateX, scaleIncreaseRateY, scaleDecreaseRateX, scaleDecreaseRateY,
+                scaleOutRandom, scaleAnmMaxFrameX, scaleAnmMaxFrameY,
+                alphaInTiming, alphaOutTiming, alphaInValue, alphaBaseValue, alphaOutValue,
+                alphaIncreaseRate, alphaDecreaseRate,
+            };
         } else if (fourcc === 'SSP1') {
             // J3DChildShape
 

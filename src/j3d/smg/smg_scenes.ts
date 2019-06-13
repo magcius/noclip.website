@@ -1,5 +1,5 @@
 
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4, vec3, vec2 } from 'gl-matrix';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
 import Progressable from '../../Progressable';
 import { assert, assertExists } from '../../util';
@@ -26,6 +26,18 @@ import { NameObj, SceneNameObjListExecutor } from './NameObj';
 import { LightType } from './DrawBuffer';
 import * as JPA from '../JPA';
 import * as GX from '../../gx/gx_enum';
+
+// Galaxy ticks at 60fps.
+export const FPS = 60;
+const FPS_RATE = FPS/1000;
+
+export function getDeltaTimeFrames(viewerInput: Viewer.ViewerRenderInput): number {
+    return viewerInput.deltaTime * FPS_RATE;
+}
+
+export function getTimeFrames(viewerInput: Viewer.ViewerRenderInput): number {
+    return viewerInput.time * FPS_RATE;
+}
 
 const enum SceneGraphTag {
     Skybox = 'Skybox',
@@ -451,7 +463,8 @@ class SMGRenderer implements Viewer.SceneGfx {
 
         const effectSystem = this.sceneObjHolder.effectSystem;
         if (effectSystem !== null) {
-            effectSystem.calc(0);
+            const deltaTime = getDeltaTimeFrames(viewerInput);
+            effectSystem.calc(0, deltaTime);
             effectSystem.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix);
             effectSystem.draw(device, this.renderHelper, 0);
         }
@@ -1081,7 +1094,7 @@ export class LiveActor extends NameObj implements ObjectBase {
         const bmdModel = modelCache.getModel2(this.arc, `${objName}.bdl`);
         this.modelInstance = new BMDModelInstance(bmdModel);
         this.modelInstance.name = objName;
-        this.modelInstance.animationController.fps = 60;
+        this.modelInstance.animationController.fps = FPS;
         this.modelInstance.animationController.phaseFrames = Math.random() * 1500;
         // TODO(jstpierre): Use connectToScene for final draw rather than passMask.
         this.modelInstance.passMask = SMGPass.OPAQUE;
@@ -1365,7 +1378,7 @@ class SMGSpawner {
                 const rarc = modelCache.archiveCache.get(arcPath);
 
                 const modelInstance = new BMDModelInstance(bmdModel);
-                modelInstance.animationController.fps = 60;
+                modelInstance.animationController.fps = FPS;
                 modelInstance.name = `${objinfo.objName} ${objinfo.objId}`;
 
                 if (tag === SceneGraphTag.Skybox) {
@@ -2323,8 +2336,8 @@ class EffectSystem {
         this.autoEffectList = createCsvParser(effectArc.findFileData(`AutoEffectList.bcsv`));
     }
 
-    public calc(groupId: number): void {
-        this.emitterManager.calc(groupId);
+    public calc(groupId: number, deltaTime: number): void {
+        this.emitterManager.calc(groupId, deltaTime);
     }
 
     public setDrawInfo(posCamMtx: mat4, prjMtx: mat4): void {
@@ -2363,7 +2376,9 @@ class EffectSystem {
         emitter.globalTranslation[2] = this.autoEffectList.getValueNumber('OffsetZ', 0);
         parseColor(emitter.globalColorPrm, this.autoEffectList.getValueString('PrmColor'));
         parseColor(emitter.globalColorEnv, this.autoEffectList.getValueString('EnvColor'));
-        // TODO(jstpierre): The others?
+        const scaleValue = this.autoEffectList.getValueNumber('ScaleValue', 1.0);
+        vec3.set(scratchVec3, scaleValue, scaleValue, scaleValue);
+        emitter.setGlobalScale(scratchVec3);
         return emitter;
     }
 

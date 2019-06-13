@@ -604,10 +604,10 @@ class Main {
             this.doSaveStatesAction(action, key);
         };
         this.ui.timePanel.ontimescrub = (adj: number) => {
-            this.viewer.sceneTime = Math.max(this.viewer.sceneTime + adj, 0);
+            this.viewer.setSceneTime(Math.max(this.viewer.sceneTime + adj, 0));
         };
         this.ui.timePanel.onrewind = () => {
-            this.viewer.sceneTime = 0;
+            this.viewer.setSceneTime(0);
             this._saveState();
         };
 

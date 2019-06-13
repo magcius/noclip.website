@@ -19,6 +19,7 @@ export interface Texture {
 export interface ViewerRenderInput {
     camera: Camera;
     time: number;
+    deltaTime: number;
     viewportWidth: number;
     viewportHeight: number;
 }
@@ -75,6 +76,7 @@ export class Viewer {
         this.viewerRenderInput = {
             camera: this.camera,
             time: this.sceneTime,
+            deltaTime: 0,
             viewportWidth: 0,
             viewportHeight: 0,
         };
@@ -161,6 +163,11 @@ export class Viewer {
         this.scene = scene;
     }
 
+    public setSceneTime(newTime: number): void {
+        this.viewerRenderInput.deltaTime += newTime - this.sceneTime;
+        this.sceneTime = newTime;
+    }
+
     public update(nt: number): void {
         const dt = nt - this.rafTime;
         if (dt < 0)
@@ -176,9 +183,14 @@ export class Viewer {
         // TODO(jstpierre): Move this to main
         this.inputManager.afterFrame();
 
-        this.sceneTime += dt * this.sceneTimeScale;
+        const deltaTime = dt * this.sceneTimeScale;
+        this.viewerRenderInput.deltaTime += deltaTime;
+        this.sceneTime += deltaTime;
 
         this.render();
+
+        // Reset the delta for next frame.
+        this.viewerRenderInput.deltaTime = 0;
     }
 
     public takeScreenshotToCanvas(): HTMLCanvasElement {

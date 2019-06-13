@@ -2,7 +2,7 @@
 // Misc actors that aren't big enough to have their own file.
 
 import { LightType } from './DrawBuffer';
-import { SceneObjHolder, LiveActor, ZoneAndLayer, getObjectName, SMGPass, startBckIfExist, startBtkIfExist, startBvaIfExist, WorldmapPointInfo, startBrkIfExist } from './smg_scenes';
+import { SceneObjHolder, LiveActor, ZoneAndLayer, getObjectName, SMGPass, startBckIfExist, startBtkIfExist, startBvaIfExist, WorldmapPointInfo, startBrkIfExist, getDeltaTimeFrames, getTimeFrames } from './smg_scenes';
 import { JMapInfoIter, getJMapInfoArg3, getJMapInfoArg2, getJMapInfoArg7, getJMapInfoArg0, getJMapInfoArg1, createCsvParser } from './JMapInfo';
 import { mat4, vec3 } from 'gl-matrix';
 import AnimationController from '../../AnimationController';
@@ -135,8 +135,6 @@ const starPieceColorTable = [
 ];
 
 export class StarPiece extends LiveActor {
-    private spinAnimationController = new AnimationController(60);
-
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, getObjectName(infoIter));
 
@@ -162,9 +160,7 @@ export class StarPiece extends LiveActor {
             SPEED = MathConstants.DEG_TO_RAD * 15,
         }
 
-        this.spinAnimationController.setTimeFromViewerInput(viewerInput);
-        const timeInFrames = this.spinAnimationController.getTimeInFrames();
-        this.rotation[1] = timeInFrames * Constants.SPEED;
+        this.rotation[1] += getDeltaTimeFrames(viewerInput) * Constants.SPEED;
         super.calcAndSetBaseMtx(viewerInput);
     }
 }
@@ -606,7 +602,6 @@ export class TicoComet extends NPCActor {
 
 const scratchMatrix = mat4.create();
 export class Coin extends LiveActor {
-    private spinAnimationController = new AnimationController(60);
     private airBubble: PartsModel | null = null;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
@@ -638,9 +633,7 @@ export class Coin extends LiveActor {
             SPEED = MathConstants.DEG_TO_RAD * 4,
         };
 
-        this.spinAnimationController.setTimeFromViewerInput(viewerInput);
-        const timeInFrames = this.spinAnimationController.getTimeInFrames();
-        const rotationY = timeInFrames * Constants.SPEED;
+        const rotationY = getTimeFrames(viewerInput) * Constants.SPEED;
         computeModelMatrixSRT(scratchMatrix, 1, 1, 1, 0, rotationY, 0, 0, 0, 0);
         super.calcAndSetBaseMtx(viewerInput);
         mat4.mul(this.modelInstance.modelMatrix, this.modelInstance.modelMatrix, scratchMatrix);
@@ -676,8 +669,6 @@ export class MiniRoutePoint extends LiveActor {
 }
 
 class MiniRouteMiniature extends PartsModel {
-    private spinAnimationController = new AnimationController(60);
-
     private rotateSpeed = 0;
 
     constructor(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, pointInfo: WorldmapPointInfo) {
@@ -695,9 +686,8 @@ class MiniRouteMiniature extends PartsModel {
     public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
         super.calcAndSetBaseMtx(viewerInput);
 
-        this.spinAnimationController.setTimeFromViewerInput(viewerInput);
-        const timeInFrames = this.spinAnimationController.getTimeInFrames();
-        mat4.rotateY(this.modelInstance.modelMatrix, this.modelInstance.modelMatrix, this.rotateSpeed * timeInFrames);
+        const rotateY = getTimeFrames(viewerInput) * this.rotateSpeed;
+        mat4.rotateY(this.modelInstance.modelMatrix, this.modelInstance.modelMatrix, rotateY);
     }
 }
 
