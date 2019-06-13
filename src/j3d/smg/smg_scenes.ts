@@ -446,6 +446,16 @@ class SMGRenderer implements Viewer.SceneGfx {
         const template = this.renderHelper.pushTemplateRenderInst();
         this.renderHelper.fillSceneParams(viewerInput, template);
 
+        // Prepare all of our particle effects.
+        template.filterKey = SMGPass.OPAQUE;
+
+        const effectSystem = this.sceneObjHolder.effectSystem;
+        if (effectSystem !== null) {
+            effectSystem.calc(0);
+            effectSystem.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix);
+            effectSystem.draw(device, this.renderHelper, 0);
+        }
+
         // Prepare all of our NameObjs.
         this.sceneObjHolder.sceneNameObjListExecutor.executeDrawAll(this.sceneObjHolder, this.renderHelper, viewerInput);
         this.sceneObjHolder.sceneNameObjListExecutor.setIndirectTextureOverride(this.opaqueSceneTexture.gfxTexture);
@@ -933,7 +943,7 @@ export class SceneObjHolder {
     public lightDataHolder: LightDataHolder;
     public npcDirector: NPCDirector;
     public stageDataHolder: StageDataHolder;
-    public particleResourceHolder: ParticleResourceHolder | null;
+    public effectSystem: EffectSystem | null;
     public messageDataHolder: MessageDataHolder | null;
     public captureSceneDirector: CaptureSceneDirector;
 
@@ -944,8 +954,8 @@ export class SceneObjHolder {
     public destroy(device: GfxDevice): void {
         this.modelCache.destroy(device);
 
-        if (this.particleResourceHolder !== null)
-            this.particleResourceHolder.destroy(device);
+        if (this.effectSystem !== null)
+            this.effectSystem.destroy(device);
     }
 }
 
@@ -1166,7 +1176,8 @@ export class LiveActor extends NameObj implements ObjectBase {
 
 import { OceanBowl } from './OceanBowl';
 import { TextureMapping } from '../../TextureHolder';
-import { TicoComet, CollapsePlane, PenguinRacer, Coin, Kinopio, StarPiece, EarthenPipe, BlackHole, Peach, Penguin, NPCDirector, MiniRoutePoint, createModelObjMapObj, PeachCastleGardenPlanet } from './Actors';
+import { TicoComet, CollapsePlane, PenguinRacer, Coin, Kinopio, StarPiece, EarthenPipe, BlackHole, Peach, Penguin, NPCDirector, MiniRoutePoint, createModelObjMapObj, PeachCastleGardenPlanet, SimpleEffect } from './Actors';
+import { Color } from '../../Color';
 
 function layerVisible(layer: LayerId, layerMask: number): boolean {
     if (layer >= 0)
@@ -1318,6 +1329,7 @@ class SMGSpawner {
         else if (objName === 'Coin')                    return Coin;
         else if (objName === 'PurpleCoin')              return Coin;
         else if (objName === 'OceanBowl')               return OceanBowl;
+        else if (objName === 'AstroTorchLightRed')      return SimpleEffect;
         return null;
     }
 
@@ -2270,17 +2282,94 @@ class ParticleResourceHolder {
 
     public getResourceData(sceneObjHolder: SceneObjHolder, name: string): JPA.JPAResourceData {
         const device = sceneObjHolder.modelCache.device;
-        const cache = sceneObjHolder.modelCache.cache;
 
         const idx = this.getUserIndex(name);
         if (!this.resourceDatas.has(idx))
-            this.resourceDatas.set(idx, new JPA.JPAResourceData(device, cache, this.jpac, this.jpac.effects[idx]));
+            this.resourceDatas.set(idx, new JPA.JPAResourceData(device, this.jpac, this.jpac.effects[idx]));
         return this.resourceDatas.get(idx);
     }
 
     public destroy(device: GfxDevice): void {
         for (const [, resourceData] of this.resourceDatas.entries())
             resourceData.destroy(device);
+    }
+}
+
+function parseColor(dst: Color, s: string): void {
+    if (s === '')
+        return;
+
+    assert(s.length === 7);
+    dst.r = parseInt(s.slice(1, 3), 16) / 255;
+    dst.g = parseInt(s.slice(3, 5), 16) / 255;
+    dst.b = parseInt(s.slice(5, 7), 16) / 255;
+    dst.a = 1.0;
+}
+
+class EffectSystem {
+    public particleResourceHolder: ParticleResourceHolder;
+    public emitterManager: JPA.JPAEmitterManager;
+    public autoEffectList: JMapInfoIter;
+    public drawInfo = new JPA.JPADrawInfo();
+
+    constructor(device: GfxDevice, effectArc: RARC.RARC) {
+        this.particleResourceHolder = new ParticleResourceHolder(effectArc);
+
+        // These numbers are from GameScene::initEffect.
+        const maxParticleCount = 0x1800;
+        const maxEmitterCount = 0x200;
+        this.emitterManager = new JPA.JPAEmitterManager(device, maxParticleCount, maxEmitterCount);
+
+        this.autoEffectList = createCsvParser(effectArc.findFileData(`AutoEffectList.bcsv`));
+    }
+
+    public calc(groupId: number): void {
+        this.emitterManager.calc(groupId);
+    }
+
+    public setDrawInfo(posCamMtx: mat4, prjMtx: mat4): void {
+        this.drawInfo.posCamMtx = posCamMtx;
+        this.drawInfo.prjMtx = prjMtx;
+    }
+
+    public draw(device: GfxDevice, renderHelper: GXRenderHelperGfx, groupId: number): void {
+        this.emitterManager.draw(device, renderHelper, this.drawInfo, groupId);
+    }
+
+    public createSingleEmitter(sceneObjHolder: SceneObjHolder, resName: string): JPA.JPABaseEmitter {
+        const resData = this.particleResourceHolder.getResourceData(sceneObjHolder, resName);
+        return this.emitterManager.createEmitter(resData);
+    }
+
+    private setAutoRecordDumb(uniqueName: string): boolean {
+        for (let i = 0; i < this.autoEffectList.getNumRecords(); i++) {
+            this.autoEffectList.setRecord(i);
+            if (this.autoEffectList.getValueString(`UniqueName`) === uniqueName)
+                return true;
+        }
+        return false;
+    }
+
+    public createAutoEmitterDumb(sceneObjHolder: SceneObjHolder, uniqueName: string): JPA.JPABaseEmitter {
+        if (!this.setAutoRecordDumb(uniqueName))
+            throw "whoops";
+
+        const effectNameRaw = this.autoEffectList.getValueString('EffectName');
+        const effectName = `${effectNameRaw}00`;
+        const resData = this.particleResourceHolder.getResourceData(sceneObjHolder, effectName);
+        const emitter = this.emitterManager.createEmitter(resData);
+        emitter.globalTranslation[0] = this.autoEffectList.getValueNumber('OffsetX', 0);
+        emitter.globalTranslation[1] = this.autoEffectList.getValueNumber('OffsetY', 0);
+        emitter.globalTranslation[2] = this.autoEffectList.getValueNumber('OffsetZ', 0);
+        parseColor(emitter.globalColorPrm, this.autoEffectList.getValueString('PrmColor'));
+        parseColor(emitter.globalColorEnv, this.autoEffectList.getValueString('EnvColor'));
+        // TODO(jstpierre): The others?
+        return emitter;
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.particleResourceHolder.destroy(device);
+        this.emitterManager.destroy(device);
     }
 }
 
@@ -2409,9 +2498,9 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
             sceneObjHolder.captureSceneDirector = new CaptureSceneDirector();
 
             if (modelCache.isArchiveExist(`ParticleData/Effect.arc`))
-                sceneObjHolder.particleResourceHolder = new ParticleResourceHolder(modelCache.getArchive(`ParticleData/Effect.arc`));
+                sceneObjHolder.effectSystem = new EffectSystem(device, modelCache.getArchive(`ParticleData/Effect.arc`));
             else
-                sceneObjHolder.particleResourceHolder = null;
+                sceneObjHolder.effectSystem = null;
 
             if (modelCache.isArchiveExist(`UsEnglish/MessageData/Message.arc`))
                 sceneObjHolder.messageDataHolder = new MessageDataHolder(modelCache.getArchive(`UsEnglish/MessageData/Message.arc`));

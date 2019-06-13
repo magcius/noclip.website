@@ -4,15 +4,11 @@ import { readString, getTextDecoder } from "../util";
 
 const sjisDecoder = getTextDecoder('sjis')!;
 function readStringSJIS(buffer: ArrayBufferSlice, offs: number): string {
-    const arr = buffer.createTypedArray(Uint8Array, offs);
-    const raw = sjisDecoder.decode(arr);
-    const nul = raw.indexOf('\u0000');
-    let str: string;
-    if (nul >= 0)
-        str = raw.slice(0, nul);
-    else
-        str = raw;
-    return str;
+    const view = buffer.createDataView(offs);
+    let i = 0;
+    while (view.getUint8(i) !== 0)
+        i++;
+    return sjisDecoder.decode(buffer.createTypedArray(Uint8Array, offs, i));
 }
 
 // Luigi's Mansion

@@ -15,6 +15,7 @@ import * as RARC from '../../j3d/rarc';
 import { DrawBufferType, MovementType, CalcAnimType, DrawType } from './NameObj';
 import { BMDModelInstance } from '../render';
 import { assertExists } from '../../util';
+import { JPABaseEmitter } from '../JPA';
 
 export function connectToScene(sceneObjHolder: SceneObjHolder, actor: LiveActor, movementType: MovementType, calcAnimType: CalcAnimType, drawBufferType: DrawBufferType, drawType: DrawType): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, movementType, calcAnimType, drawBufferType, drawType);
@@ -697,5 +698,26 @@ class MiniRouteMiniature extends PartsModel {
         this.spinAnimationController.setTimeFromViewerInput(viewerInput);
         const timeInFrames = this.spinAnimationController.getTimeInFrames();
         mat4.rotateY(this.modelInstance.modelMatrix, this.modelInstance.modelMatrix, this.rotateSpeed * timeInFrames);
+    }
+}
+
+export class SimpleEffect extends LiveActor {
+    private emitter: JPABaseEmitter;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, getObjectName(infoIter));
+        this.initDefaultPos(sceneObjHolder, infoIter);
+
+        if (sceneObjHolder.effectSystem === null)
+            return;
+
+        this.emitter = sceneObjHolder.effectSystem.createAutoEmitterDumb(sceneObjHolder, this.name);
+
+        this.emitter.globalTranslation[0] += this.translation[0];
+        this.emitter.globalTranslation[1] += this.translation[1];
+        this.emitter.globalTranslation[2] += this.translation[2];
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
     }
 }
