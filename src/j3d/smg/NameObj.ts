@@ -103,9 +103,10 @@ export class SceneNameObjListExecutor {
     }
 
     public executeDrawAll(sceneObjHolder: SceneObjHolder, renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput): void {
-        for (let i = 0; i < this.nameObjExecuteInfos.length; i++)
-            if (this.nameObjExecuteInfos[i].drawType !== -1)
-                this.nameObjExecuteInfos[i].nameObj.draw(sceneObjHolder, renderHelper, viewerInput);
+        for (let i = 0; i < this.nameObjExecuteInfos.length; i++) {
+            const nameObj = this.nameObjExecuteInfos[i].nameObj;
+            nameObj.draw(sceneObjHolder, renderHelper, viewerInput);
+        }
     }
 
     public drawAllBuffers(device: GfxDevice, renderHelper: GXRenderHelperGfx, camera: Camera): void {

@@ -2,7 +2,7 @@
 import { mat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
 import Progressable from '../../Progressable';
-import { assert, assertExists } from '../../util';
+import { assert, assertExists, leftPad } from '../../util';
 import { fetchData, AbortedError } from '../../fetch';
 import * as Viewer from '../../viewer';
 import { GfxDevice, GfxRenderPass, GfxTexture } from '../../gfx/platform/GfxPlatform';
@@ -277,7 +277,8 @@ export const enum SMGPass {
     SKYBOX = 1 << 0,
     OPAQUE = 1 << 1,
     INDIRECT = 1 << 2,
-    BLOOM = 1 << 3,
+    AFTER_INDIRECT = 1 << 3,
+    BLOOM = 1 << 4,
 }
 
 class SMGRenderer implements Viewer.SceneGfx {
@@ -461,15 +462,18 @@ class SMGRenderer implements Viewer.SceneGfx {
         const template = this.renderHelper.pushTemplateRenderInst();
         this.renderHelper.fillSceneParams(viewerInput, template);
 
-        // Prepare all of our particle effects.
-        template.filterKey = SMGPass.OPAQUE;
-
         const effectSystem = this.sceneObjHolder.effectSystem;
         if (effectSystem !== null) {
             const deltaTime = getDeltaTimeFrames(viewerInput);
-            effectSystem.calc(0, deltaTime);
+            effectSystem.calc(deltaTime);
             effectSystem.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix);
-            effectSystem.draw(device, this.renderHelper, 0);
+
+            // TODO(jstpierre): Clean this mess up.
+            for (let i = 0; i < 2; i++) {
+                if (i === 0) template.filterKey = SMGPass.OPAQUE;
+                else if (i === 1) template.filterKey = SMGPass.AFTER_INDIRECT;
+                effectSystem.draw(device, this.renderHelper, i);
+            }
         }
 
         // Prepare all of our NameObjs.
@@ -517,6 +521,16 @@ class SMGRenderer implements Viewer.SceneGfx {
             lastPassRenderer = indTexPassRenderer;
         } else {
             lastPassRenderer = opaquePassRenderer;
+        }
+
+        renderInstManager.setVisibleByFilterKeyExact(SMGPass.AFTER_INDIRECT);
+        if (renderInstManager.hasAnyVisible()) {
+            lastPassRenderer.endPass(null);
+            device.submitPass(lastPassRenderer);
+
+            const afterIndirectPassRenderer = this.mainRenderTarget.createRenderPass(device, noClearRenderPassDescriptor);
+            renderInstManager.drawOnPassRenderer(device, afterIndirectPassRenderer);
+            lastPassRenderer = afterIndirectPassRenderer;
         }
 
         renderInstManager.setVisibleByFilterKeyExact(SMGPass.BLOOM);
@@ -1150,18 +1164,10 @@ export class LiveActor extends NameObj implements ObjectBase {
             this.translation[0], this.translation[1], this.translation[2]);
     }
 
-    public calcAnim(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        const visible = this.visibleScenario && this.visibleAlive;
-        if (!visible)
+    public draw(sceneObjHolder: SceneObjHolder, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
+        if (this.modelInstance === null)
             return;
 
-        if (this.modelInstance !== null) {
-            this.modelInstance.animationController.setTimeFromViewerInput(viewerInput);
-            this.modelInstance.calcAnim(viewerInput.camera);
-        }
-    }
-
-    public draw(sceneObjHolder: SceneObjHolder, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
         const visible = this.visibleScenario && this.visibleAlive;
         this.modelInstance.visible = visible;
         if (!visible)
@@ -1195,6 +1201,9 @@ export class LiveActor extends NameObj implements ObjectBase {
                 lightInfo.setOnModelInstance(this.modelInstance, viewerInput.camera, false);
             }
         }
+
+        this.modelInstance.animationController.setTimeFromViewerInput(viewerInput);
+        this.modelInstance.calcAnim(viewerInput.camera);
     }
 }
 
@@ -1355,6 +1364,7 @@ class SMGSpawner {
         else if (objName === 'OceanBowl')               return OceanBowl;
         else if (objName === 'AstroTorchLightRed')      return SimpleEffect;
         else if (objName === 'AstroTorchLightBlue')     return SimpleEffect;
+        else if (objName === 'WaterfallL')              return SimpleEffect;
         return null;
     }
 
@@ -2305,10 +2315,12 @@ class ParticleResourceHolder {
         return this.jpac.effects[this.getUserIndex(name)];
     }
 
-    public getResourceData(sceneObjHolder: SceneObjHolder, name: string): JPA.JPAResourceData {
-        const device = sceneObjHolder.modelCache.device;
-
+    public getResourceData(sceneObjHolder: SceneObjHolder, name: string): JPA.JPAResourceData | null {
         const idx = this.getUserIndex(name);
+        if (idx < 0)
+            return null;
+
+        const device = sceneObjHolder.modelCache.device;
         if (!this.resourceDatas.has(idx))
             this.resourceDatas.set(idx, new JPA.JPAResourceData(device, this.jpac, this.jpac.effects[idx]));
         return this.resourceDatas.get(idx);
@@ -2331,6 +2343,35 @@ function parseColor(dst: Color, s: string): void {
     dst.a = 1.0;
 }
 
+export class ParticleEmitter {
+    public offset: vec3;
+
+    constructor(public baseEmitter: JPA.JPABaseEmitter, autoEffectIter: JMapInfoIter) {
+        this.offset = vec3.fromValues(
+            autoEffectIter.getValueNumber('OffsetX', 0),
+            autoEffectIter.getValueNumber('OffsetY', 0),
+            autoEffectIter.getValueNumber('OffsetZ', 0),
+        );
+        vec3.copy(this.baseEmitter.globalTranslation, this.offset);
+
+        parseColor(this.baseEmitter.globalColorPrm, autoEffectIter.getValueString('PrmColor'));
+        parseColor(this.baseEmitter.globalColorEnv, autoEffectIter.getValueString('EnvColor'));
+        const scaleValue = autoEffectIter.getValueNumber('ScaleValue', 1.0);
+        vec3.set(scratchVec3, scaleValue, scaleValue, scaleValue);
+        this.baseEmitter.setGlobalScale(scratchVec3);
+
+        const drawOrder = autoEffectIter.getValueString('DrawOrder');
+        if (drawOrder === 'AFTER_INDIRECT')
+            this.baseEmitter.drawGroupId = 1;
+        else
+            this.baseEmitter.drawGroupId = 0;
+    }
+
+    public setGlobalTranslation(v: vec3): void {
+        vec3.add(this.baseEmitter.globalTranslation, v, this.offset);
+    }
+}
+
 class EffectSystem {
     public particleResourceHolder: ParticleResourceHolder;
     public emitterManager: JPA.JPAEmitterManager;
@@ -2348,8 +2389,8 @@ class EffectSystem {
         this.autoEffectList = createCsvParser(effectArc.findFileData(`AutoEffectList.bcsv`));
     }
 
-    public calc(groupId: number, deltaTime: number): void {
-        this.emitterManager.calc(groupId, deltaTime);
+    public calc(deltaTime: number): void {
+        this.emitterManager.calc(deltaTime);
     }
 
     public setDrawInfo(posCamMtx: mat4, prjMtx: mat4): void {
@@ -2375,23 +2416,27 @@ class EffectSystem {
         return false;
     }
 
-    public createAutoEmitterDumb(sceneObjHolder: SceneObjHolder, uniqueName: string): JPA.JPABaseEmitter {
+    public createAutoEmitterDumb(sceneObjHolder: SceneObjHolder, uniqueName: string): ParticleEmitter[] {
         if (!this.setAutoRecordDumb(uniqueName))
             throw "whoops";
 
         const effectNameRaw = this.autoEffectList.getValueString('EffectName');
-        const effectName = `${effectNameRaw}00`;
-        const resData = this.particleResourceHolder.getResourceData(sceneObjHolder, effectName);
-        const emitter = this.emitterManager.createEmitter(resData);
-        emitter.globalTranslation[0] = this.autoEffectList.getValueNumber('OffsetX', 0);
-        emitter.globalTranslation[1] = this.autoEffectList.getValueNumber('OffsetY', 0);
-        emitter.globalTranslation[2] = this.autoEffectList.getValueNumber('OffsetZ', 0);
-        parseColor(emitter.globalColorPrm, this.autoEffectList.getValueString('PrmColor'));
-        parseColor(emitter.globalColorEnv, this.autoEffectList.getValueString('EnvColor'));
-        const scaleValue = this.autoEffectList.getValueNumber('ScaleValue', 1.0);
-        vec3.set(scratchVec3, scaleValue, scaleValue, scaleValue);
-        emitter.setGlobalScale(scratchVec3);
-        return emitter;
+        const emitters: ParticleEmitter[] = [];
+
+        // TODO(jstpierre): The game does a lot of goofy parsing of EffectName.
+
+        for (let i = 0; i < 20; i++) {
+            const effectResName = `${effectNameRaw}${leftPad('' + i, 2, '0')}`;
+            const resData = this.particleResourceHolder.getResourceData(sceneObjHolder, effectResName);
+            if (resData === null)
+                break;
+
+            const baseEmitter = this.emitterManager.createEmitter(resData);
+            const emitter = new ParticleEmitter(baseEmitter, this.autoEffectList);
+            emitters.push(emitter);
+        }
+
+        return emitters;
     }
 
     public destroy(device: GfxDevice): void {

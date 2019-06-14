@@ -2,7 +2,7 @@
 // Misc actors that aren't big enough to have their own file.
 
 import { LightType } from './DrawBuffer';
-import { SceneObjHolder, LiveActor, ZoneAndLayer, getObjectName, SMGPass, startBckIfExist, startBtkIfExist, startBvaIfExist, WorldmapPointInfo, startBrkIfExist, getDeltaTimeFrames, getTimeFrames } from './smg_scenes';
+import { SceneObjHolder, LiveActor, ZoneAndLayer, getObjectName, SMGPass, startBckIfExist, startBtkIfExist, startBvaIfExist, WorldmapPointInfo, startBrkIfExist, getDeltaTimeFrames, getTimeFrames, ParticleEmitter } from './smg_scenes';
 import { JMapInfoIter, getJMapInfoArg3, getJMapInfoArg2, getJMapInfoArg7, getJMapInfoArg0, getJMapInfoArg1, createCsvParser } from './JMapInfo';
 import { mat4, vec3 } from 'gl-matrix';
 import AnimationController from '../../AnimationController';
@@ -217,7 +217,19 @@ export class BlackHole extends LiveActor {
         }
 
         this.updateModelScale(rangeScale, rangeScale);
+
+        // this.emitters = sceneObjHolder.effectSystem.createAutoEmitterDumb(sceneObjHolder, 'BlackHoleSuction');
+        // vec3.copy(this.emitter.globalTranslation, this.translation);
     }
+
+    /*
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        this.emitter.setVisible(this.visibleScenario && this.visibleAlive);
+
+        if (this.emitter.getVisible())
+            this.emitter.setVisible(viewerInput.camera.frustum.containsPoint(this.emitter.globalTranslation));
+    }
+    */
 
     private updateModelScale(rangeScale: number, holeScale: number): void {
         vec3.set(this.scale, rangeScale, rangeScale, rangeScale);
@@ -697,7 +709,7 @@ class MiniRouteMiniature extends PartsModel {
 
 // TODO(jstpierre): Complete the effect system.
 export class SimpleEffect extends LiveActor {
-    private emitter: JPABaseEmitter;
+    private emitters: ParticleEmitter[];
     private offset = vec3.create();
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
@@ -707,8 +719,7 @@ export class SimpleEffect extends LiveActor {
         if (sceneObjHolder.effectSystem === null)
             return;
 
-        this.emitter = sceneObjHolder.effectSystem.createAutoEmitterDumb(sceneObjHolder, this.name);
-        vec3.copy(this.offset, this.emitter.globalTranslation);
+        this.emitters = sceneObjHolder.effectSystem.createAutoEmitterDumb(sceneObjHolder, this.name);
 
         connectToSceneMapObjMovement(sceneObjHolder, this);
     }
@@ -718,11 +729,16 @@ export class SimpleEffect extends LiveActor {
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        this.emitter.setVisible(this.visibleScenario && this.visibleAlive);
+        const visible = this.visibleAlive && this.visibleScenario;
 
-        if (this.emitter.getVisible()) {
-            vec3.add(this.emitter.globalTranslation, this.translation, this.offset);
-            this.emitter.setVisible(viewerInput.camera.frustum.containsPoint(this.emitter.globalTranslation));
+        for (let i = 0; i < this.emitters.length; i++) {
+            const emitter = this.emitters[i];
+            if (visible) {
+                emitter.setGlobalTranslation(this.translation);
+                emitter.baseEmitter.setVisible(viewerInput.camera.frustum.containsPoint(emitter.baseEmitter.globalTranslation));
+            } else {
+                emitter.baseEmitter.setVisible(false);
+            }
         }
     }
 }
