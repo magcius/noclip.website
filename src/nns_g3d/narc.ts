@@ -3,7 +3,8 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString } from "../util";
 
 export interface NitroFSEntry {
-    path: string;
+    path: string | null;
+    fileId: number;
     buffer: ArrayBufferSlice;
 }
 
@@ -52,13 +53,22 @@ function parseNitroFS(fatBuffer: ArrayBufferSlice, fntBuffer: ArrayBufferSlice, 
                 parseDirectory(subdirFntTableOffs, fullPath);
             } else {
                 const buffer = getBufferForFileId(fileId);
-                files.push({ path: fullPath, buffer });
+                files.push({ path: fullPath, fileId, buffer });
                 fileId++;
             }
         }
     }
 
-    parseDirectory(0, '');
+    if (fntBuffer.byteLength === 0) {
+        // If we don't have an FNT, just fill in all the files one by one.
+        const fileCount = fatView.getUint32(0x00, true);
+        for (let i = 0; i < fileCount - 1; i++) {
+            const buffer = getBufferForFileId(i);
+            files.push({ path: null, fileId: i, buffer });
+        }
+    } else {
+        parseDirectory(0, '');
+    }
 
     return { files };
 }
