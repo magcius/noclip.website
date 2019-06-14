@@ -595,9 +595,27 @@ function JPAGetXYZRotateMtx(m: mat4, v: vec3): void {
     computeModelMatrixSRT(m, 1, 1, 1, v0, v1, v2, 0, 0, 0);
 }
 
-function JPAGetDirMtx(m: mat4, v: vec3): void {
-    // TODO(jstpierre)
-    mat4.identity(m);
+function JPAGetDirMtx(m: mat4, v: vec3, scratch: vec3 = scratchVec3a): void {
+    // Perp
+    vec3.set(scratch, v[1], -v[0], 0);
+    const mag = vec3.length(scratch);
+    vec3.normalize(scratch, scratch);
+
+    const x = scratch[0], y = scratch[1], z = v[2];
+    m[0]  = x*x + z * (1.0 - x*x);
+    m[4]  = (1.0 - z) * (x * y);
+    m[8]  = -y*mag;
+    m[12] = 0.0;
+
+    m[1]  = (1.0 - z) * (x * y);
+    m[5]  = y*y + z * (1.0 - y*y);
+    m[9]  = x*mag;
+    m[13] = 0.0;
+
+    m[2]  = y*mag;
+    m[6]  = -x*mag;
+    m[10] = z;
+    m[14] = 0.0;
 }
 
 function mirroredRepeat(t: number, duration: number): number {
@@ -1199,14 +1217,14 @@ export class JPABaseParticle {
             const randZ = next_rndm(baseEmitter.random) >>> 16;
             const randY = get_r_zp(baseEmitter.random);
             mat4.identity(scratchMatrix);
-            mat4.rotateZ(scratchMatrix, scratchMatrix, randZ / 0xFFFF);
-            mat4.rotateY(scratchMatrix, scratchMatrix, randY / 0xFFFF);
+            mat4.rotateZ(scratchMatrix, scratchMatrix, randZ / 0xFFFF * Math.PI);
+            mat4.rotateY(scratchMatrix, scratchMatrix, baseEmitter.spread * randY * Math.PI);
             mat4.mul(scratchMatrix, workData.directionMtx, scratchMatrix);
             this.velType1[0] += baseEmitter.initialVelDir * scratchMatrix[8];
             this.velType1[1] += baseEmitter.initialVelDir * scratchMatrix[9];
             this.velType1[2] += baseEmitter.initialVelDir * scratchMatrix[10];
         }
-        if (baseEmitter.initialVelDir !== 0) {
+        if (baseEmitter.initialVelRndm !== 0) {
             const randZ = get_rndm_f(baseEmitter.random) - 0.5;
             const randY = get_rndm_f(baseEmitter.random) - 0.5;
             const randX = get_rndm_f(baseEmitter.random) - 0.5;

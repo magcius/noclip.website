@@ -11,7 +11,7 @@ class Plane {
     // Distance
     public d: number;
 
-    public test(x: number, y: number, z: number): number {
+    public distance(x: number, y: number, z: number): number {
         const dot = x*this.x + y*this.y + z*this.z;
         return this.d + dot;
     }
@@ -114,6 +114,14 @@ export class AABB {
             pZ >= this.minZ && pZ <= this.maxZ);
     }
 
+    public containsSphere(v: vec3, rad: number): boolean {
+        const pX = v[0], pY = v[1], pZ = v[2];
+        return (
+            pX >= this.minX - rad && pX <= this.maxX + rad &&
+            pY >= this.minY - rad && pY <= this.maxY + rad &&
+            pZ >= this.minZ - rad && pZ <= this.maxZ + rad);
+    }
+
     public centerPoint(v: vec3): void {
         v[0] = (this.minX + this.maxX) / 2;
         v[1] = (this.minY + this.maxY) / 2;
@@ -180,6 +188,15 @@ class FrustumVisualizer {
         const x2 = this.dsx(aabb.maxX);
         const y2 = this.dsy(aabb.maxZ);
         this.ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+    }
+
+    public dsph(v: vec3, rad: number): void {
+        const xc = this.dsx(v[0]);
+        const yc = this.dsy(v[2]);
+        this.ctx.beginPath();
+        this.ctx.ellipse(xc, yc, rad*this.scale*this.canvas.width, rad*this.scale*this.canvas.height, 0, 0, Math.PI * 2);
+        this.ctx.closePath();
+        this.ctx.stroke();
     }
 }
 
@@ -286,13 +303,13 @@ export class Frustum {
             const px = plane.x >= 0 ? aabb.minX : aabb.maxX;
             const py = plane.y >= 0 ? aabb.minY : aabb.maxY;
             const pz = plane.z >= 0 ? aabb.minZ : aabb.maxZ;
-            if (plane.test(px, py, pz) > 0)
+            if (plane.distance(px, py, pz) > 0)
                 return IntersectionState.FULLY_OUTSIDE;
             // Farthest point from the frustum.
             const fx = plane.x >= 0 ? aabb.maxX : aabb.minX;
             const fy = plane.y >= 0 ? aabb.maxY : aabb.minY;
             const fz = plane.z >= 0 ? aabb.maxZ : aabb.minZ;
-            if (plane.test(fx, fy, fz) > 0)
+            if (plane.distance(fx, fy, fz) > 0)
                 ret = IntersectionState.PARTIAL_INTERSECT;
         }
 
@@ -315,12 +332,44 @@ export class Frustum {
         return this.intersect(aabb) !== IntersectionState.FULLY_OUTSIDE;
     }
 
+    private _intersectSphere(v: vec3, radius: number): IntersectionState {
+        if (!this.aabb.containsSphere(v, radius))
+            return IntersectionState.FULLY_OUTSIDE;
+
+        let res = IntersectionState.FULLY_INSIDE;
+        for (let i = 0; i < 6; i++) {
+            const dist = this.planes[i].distance(v[0], v[1], v[2]);
+            if (dist > radius)
+                return IntersectionState.FULLY_OUTSIDE;
+            else if (dist > -radius)
+                res = IntersectionState.PARTIAL_INTERSECT;
+        }
+
+        return res;
+    }
+
+    public intersectSphere(v: vec3, radius: number): IntersectionState {
+        const res = this._intersectSphere(v, radius);
+
+        if (this.visualizer) {
+            const ctx = this.visualizer.ctx;
+            ctx.strokeStyle = res === IntersectionState.FULLY_INSIDE ? 'black' : res === IntersectionState.FULLY_OUTSIDE ? 'red' : 'cyan';
+            this.visualizer.dsph(v, radius);
+        }
+
+        return res;
+    }
+
+    public containsSphere(v: vec3, radius: number): boolean {
+        return this.intersectSphere(v, radius) !== IntersectionState.FULLY_OUTSIDE;
+    }
+
     public containsPoint(v: vec3): boolean {
         if (!this.aabb.containsPoint(v))
             return false;
 
         for (let i = 0; i < 6; i++)
-            if (this.planes[i].test(v[0], v[1], v[2]) > 0)
+            if (this.planes[i].distance(v[0], v[1], v[2]) > 0)
                 return false;
 
         return true;

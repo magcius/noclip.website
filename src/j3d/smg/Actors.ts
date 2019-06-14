@@ -2,7 +2,7 @@
 // Misc actors that aren't big enough to have their own file.
 
 import { LightType } from './DrawBuffer';
-import { SceneObjHolder, LiveActor, ZoneAndLayer, getObjectName, SMGPass, startBckIfExist, startBtkIfExist, startBvaIfExist, WorldmapPointInfo, startBrkIfExist, getDeltaTimeFrames, getTimeFrames, ParticleEmitter } from './smg_scenes';
+import { SceneObjHolder, LiveActor, ZoneAndLayer, getObjectName, SMGPass, startBckIfExist, startBtkIfExist, startBvaIfExist, WorldmapPointInfo, startBrkIfExist, getDeltaTimeFrames, getTimeFrames } from './smg_scenes';
 import { JMapInfoIter, getJMapInfoArg3, getJMapInfoArg2, getJMapInfoArg7, getJMapInfoArg0, getJMapInfoArg1, createCsvParser } from './JMapInfo';
 import { mat4, vec3 } from 'gl-matrix';
 import AnimationController from '../../AnimationController';
@@ -15,7 +15,6 @@ import * as RARC from '../../j3d/rarc';
 import { DrawBufferType, MovementType, CalcAnimType, DrawType } from './NameObj';
 import { BMDModelInstance } from '../render';
 import { assertExists } from '../../util';
-import { JPABaseEmitter } from '../JPA';
 
 export function connectToScene(sceneObjHolder: SceneObjHolder, actor: LiveActor, movementType: MovementType, calcAnimType: CalcAnimType, drawBufferType: DrawBufferType, drawType: DrawType): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, movementType, calcAnimType, drawBufferType, drawType);
@@ -45,6 +44,14 @@ export function connectToSceneCollisionMapObj(sceneObjHolder: SceneObjHolder, ac
     connectToScene(sceneObjHolder, actor, 0x1E, 0x02, 0x08, -1);
 }
 
+export function connectToSceneNoSilhouettedMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    connectToScene(sceneObjHolder, actor, 0x22, 0x05, 0x0D, -1);
+}
+
+export function connectToSceneNoSilhouettedMapObjStrongLight(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    connectToScene(sceneObjHolder, actor, 0x22, 0x05, 0x0F, -1);
+}
+
 export function createModelObjBloomModel(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, objName: string, modelName: string, baseMtx: mat4): ModelObj {
     const bloomModel = new ModelObj(zoneAndLayer, sceneObjHolder, objName, modelName, baseMtx, 0x1E, -2, -2);
     bloomModel.modelInstance.passMask = SMGPass.BLOOM;
@@ -53,10 +60,6 @@ export function createModelObjBloomModel(zoneAndLayer: ZoneAndLayer, sceneObjHol
 
 export function createModelObjMapObj(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, objName: string, modelName: string, baseMtx: mat4): ModelObj {
     return new ModelObj(zoneAndLayer, sceneObjHolder, objName, modelName, baseMtx, 0x08, -2, -2);
-}
-
-export function connectToSceneNoSilhouettedMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    connectToScene(sceneObjHolder, actor, 0x22, 0x05, 0x0D, -1);
 }
 
 function bindColorChangeAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, frame: number, brkName: string = 'colorchange.brk'): void {
@@ -709,8 +712,7 @@ class MiniRouteMiniature extends PartsModel {
 
 // TODO(jstpierre): Complete the effect system.
 export class SimpleEffect extends LiveActor {
-    private emitters: ParticleEmitter[];
-    private offset = vec3.create();
+    private boundingSphereRadius: number = 500;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, getObjectName(infoIter));
@@ -719,7 +721,8 @@ export class SimpleEffect extends LiveActor {
         if (sceneObjHolder.effectSystem === null)
             return;
 
-        this.emitters = sceneObjHolder.effectSystem.createAutoEmitterDumb(sceneObjHolder, this.name);
+        this.initEffectKeeper(sceneObjHolder, this.name);
+        this.effectKeeper.createEmitter(sceneObjHolder, this.name);
 
         connectToSceneMapObjMovement(sceneObjHolder, this);
     }
@@ -729,16 +732,37 @@ export class SimpleEffect extends LiveActor {
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        const visible = this.visibleAlive && this.visibleScenario;
+        this.effectKeeper.setHostSRT();
 
-        for (let i = 0; i < this.emitters.length; i++) {
-            const emitter = this.emitters[i];
+        const visible = this.visibleAlive && this.visibleScenario;
+        for (let i = 0; i < this.effectKeeper.multiEmitters.length; i++) {
+            const emitter = this.effectKeeper.multiEmitters[i];
             if (visible) {
-                emitter.setGlobalTranslation(this.translation);
-                emitter.baseEmitter.setVisible(viewerInput.camera.frustum.containsPoint(emitter.baseEmitter.globalTranslation));
+                const globalTranslation = emitter.getGlobalTranslation();
+                const visible = viewerInput.camera.frustum.containsSphere(globalTranslation, this.boundingSphereRadius);
+                emitter.setDrawParticle(visible);
             } else {
-                emitter.baseEmitter.setVisible(false);
+                emitter.setDrawParticle(false);
             }
         }
+    }
+}
+
+export class GCaptureTarget extends LiveActor {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, getObjectName(infoIter));
+        this.initDefaultPos(sceneObjHolder, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, "GCaptureTarget");
+        connectToSceneNoSilhouettedMapObjStrongLight(sceneObjHolder, this);
+        this.initEffectKeeper(sceneObjHolder, null);
+        startBckIfExist(this.modelInstance, this.arc, 'Wait');
+        bindColorChangeAnimation(this.modelInstance, this.arc, 1, 'Switch.brk');
+
+        this.effectKeeper.createEmitter(sceneObjHolder, 'TargetLight');
+        this.effectKeeper.createEmitter(sceneObjHolder, 'TouchAble');
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        this.effectKeeper.setHostSRT();
     }
 }

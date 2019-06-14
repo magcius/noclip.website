@@ -49,6 +49,15 @@ export class JMapInfoIter {
         this.record = this.bcsv.records[i];
     }
 
+    public findRecord(callback: Callback<boolean>): boolean {
+        for (let i = 0; i < this.bcsv.records.length; i++) {
+            this.setRecord(i);
+            if (callback(this, i))
+                return true;
+        }
+        return false;
+    }
+
     public mapRecords<T>(callback: Callback<T>): T[] {
         const results: T[] = [];
         for (let i = 0; i < this.bcsv.records.length; i++) {

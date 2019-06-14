@@ -2,7 +2,7 @@
 import { mat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
 import Progressable from '../../Progressable';
-import { assert, assertExists, leftPad } from '../../util';
+import { assert, assertExists } from '../../util';
 import { fetchData, AbortedError } from '../../fetch';
 import * as Viewer from '../../viewer';
 import { GfxDevice, GfxRenderPass, GfxTexture } from '../../gfx/platform/GfxPlatform';
@@ -24,7 +24,7 @@ import { AreaLightInfo, ActorLightInfo, LightDataHolder, ActorLightCtrl } from '
 import { MathConstants, computeModelMatrixSRT } from '../../MathHelpers';
 import { NameObj, SceneNameObjListExecutor } from './NameObj';
 import { LightType } from './DrawBuffer';
-import * as JPA from '../JPA';
+import { EffectSystem, EffectKeeper } from './EffectSystem';
 import * as GX from '../../gx/gx_enum';
 
 // Galaxy ticks at 60fps.
@@ -838,8 +838,11 @@ class ActorAnimKeeperInfo {
 
 export function startBckIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): void {
     const data = arc.findFileData(`${animationName}.bck`);
-    if (data !== null)
-        modelInstance.bindANK1(BCK.parse(data).ank1);
+    if (data !== null) {
+        const bck = BCK.parse(data);
+        bck.ank1.loopMode = LoopMode.REPEAT;
+        modelInstance.bindANK1(bck.ank1);
+    }
 }
 
 export function startBtkIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): void {
@@ -1059,6 +1062,7 @@ export class LiveActor extends NameObj implements ObjectBase {
 
     public actorAnimKeeper: ActorAnimKeeper | null = null;
     public actorLightCtrl: ActorLightCtrl | null = null;
+    public effectKeeper: EffectKeeper | null = null;
 
     // Technically part of ModelManager.
     public arc: RARC.RARC; // ResourceHolder
@@ -1143,6 +1147,13 @@ export class LiveActor extends NameObj implements ObjectBase {
         this.actorLightCtrl.currentAreaLight = areaLightInfo;
     }
 
+    public initEffectKeeper(sceneObjHolder: SceneObjHolder, groupName: string | null): void {
+        // TODO(jstpierre): Read the model filename?
+        if (groupName === null)
+            groupName = this.name;
+        this.effectKeeper = new EffectKeeper(sceneObjHolder, this, groupName);
+    }
+
     public startAction(animationName: string): void {
         if (this.actorAnimKeeper === null || !this.actorAnimKeeper.start(this.modelInstance, this.arc, animationName))
             this.tryStartAllAnim(animationName);
@@ -1209,8 +1220,7 @@ export class LiveActor extends NameObj implements ObjectBase {
 
 import { OceanBowl } from './OceanBowl';
 import { TextureMapping } from '../../TextureHolder';
-import { TicoComet, CollapsePlane, PenguinRacer, Coin, Kinopio, StarPiece, EarthenPipe, BlackHole, Peach, Penguin, NPCDirector, MiniRoutePoint, createModelObjMapObj, PeachCastleGardenPlanet, SimpleEffect } from './Actors';
-import { Color } from '../../Color';
+import { TicoComet, CollapsePlane, PenguinRacer, Coin, Kinopio, StarPiece, EarthenPipe, BlackHole, Peach, Penguin, NPCDirector, MiniRoutePoint, createModelObjMapObj, PeachCastleGardenPlanet, SimpleEffect, GCaptureTarget } from './Actors';
 
 function layerVisible(layer: LayerId, layerMask: number): boolean {
     if (layer >= 0)
@@ -1365,6 +1375,7 @@ class SMGSpawner {
         else if (objName === 'AstroTorchLightRed')      return SimpleEffect;
         else if (objName === 'AstroTorchLightBlue')     return SimpleEffect;
         else if (objName === 'WaterfallL')              return SimpleEffect;
+        else if (objName === 'GCaptureTarget')          return GCaptureTarget;
         return null;
     }
 
@@ -2289,159 +2300,6 @@ class PlanetMapCreator {
             modelCache.requestObjectData(`${objName}Indirect`);
         if (this.planetMapDataTable.getValueNumber('WaterFlag') !== 0)
             modelCache.requestObjectData(`${objName}Water`);
-    }
-}
-
-class ParticleResourceHolder {
-    private effectNames: string[];
-    private jpac: JPA.JPAC;
-    private resourceDatas = new Map<number, JPA.JPAResourceData>();
-
-    constructor(effectArc: RARC.RARC) {
-        const effectNames = createCsvParser(effectArc.findFileData(`ParticleNames.bcsv`));
-        this.effectNames = effectNames.mapRecords((iter) => {
-            return iter.getValueString('name');
-        });
-
-        const jpacData = effectArc.findFileData(`Particles.jpc`);
-        this.jpac = JPA.parse(jpacData);
-    }
-
-    public getUserIndex(name: string): number {
-        return this.effectNames.findIndex((effectName) => effectName === name);
-    }
-
-    public getResourceRaw(name: string): JPA.JPAResourceRaw {
-        return this.jpac.effects[this.getUserIndex(name)];
-    }
-
-    public getResourceData(sceneObjHolder: SceneObjHolder, name: string): JPA.JPAResourceData | null {
-        const idx = this.getUserIndex(name);
-        if (idx < 0)
-            return null;
-
-        const device = sceneObjHolder.modelCache.device;
-        if (!this.resourceDatas.has(idx))
-            this.resourceDatas.set(idx, new JPA.JPAResourceData(device, this.jpac, this.jpac.effects[idx]));
-        return this.resourceDatas.get(idx);
-    }
-
-    public destroy(device: GfxDevice): void {
-        for (const [, resourceData] of this.resourceDatas.entries())
-            resourceData.destroy(device);
-    }
-}
-
-function parseColor(dst: Color, s: string): void {
-    if (s === '')
-        return;
-
-    assert(s.length === 7);
-    dst.r = parseInt(s.slice(1, 3), 16) / 255;
-    dst.g = parseInt(s.slice(3, 5), 16) / 255;
-    dst.b = parseInt(s.slice(5, 7), 16) / 255;
-    dst.a = 1.0;
-}
-
-export class ParticleEmitter {
-    public offset: vec3;
-
-    constructor(public baseEmitter: JPA.JPABaseEmitter, autoEffectIter: JMapInfoIter) {
-        this.offset = vec3.fromValues(
-            autoEffectIter.getValueNumber('OffsetX', 0),
-            autoEffectIter.getValueNumber('OffsetY', 0),
-            autoEffectIter.getValueNumber('OffsetZ', 0),
-        );
-        vec3.copy(this.baseEmitter.globalTranslation, this.offset);
-
-        parseColor(this.baseEmitter.globalColorPrm, autoEffectIter.getValueString('PrmColor'));
-        parseColor(this.baseEmitter.globalColorEnv, autoEffectIter.getValueString('EnvColor'));
-        const scaleValue = autoEffectIter.getValueNumber('ScaleValue', 1.0);
-        vec3.set(scratchVec3, scaleValue, scaleValue, scaleValue);
-        this.baseEmitter.setGlobalScale(scratchVec3);
-
-        const drawOrder = autoEffectIter.getValueString('DrawOrder');
-        if (drawOrder === 'AFTER_INDIRECT')
-            this.baseEmitter.drawGroupId = 1;
-        else
-            this.baseEmitter.drawGroupId = 0;
-    }
-
-    public setGlobalTranslation(v: vec3): void {
-        vec3.add(this.baseEmitter.globalTranslation, v, this.offset);
-    }
-}
-
-class EffectSystem {
-    public particleResourceHolder: ParticleResourceHolder;
-    public emitterManager: JPA.JPAEmitterManager;
-    public autoEffectList: JMapInfoIter;
-    public drawInfo = new JPA.JPADrawInfo();
-
-    constructor(device: GfxDevice, effectArc: RARC.RARC) {
-        this.particleResourceHolder = new ParticleResourceHolder(effectArc);
-
-        // These numbers are from GameScene::initEffect.
-        const maxParticleCount = 0x1800;
-        const maxEmitterCount = 0x200;
-        this.emitterManager = new JPA.JPAEmitterManager(device, maxParticleCount, maxEmitterCount);
-
-        this.autoEffectList = createCsvParser(effectArc.findFileData(`AutoEffectList.bcsv`));
-    }
-
-    public calc(deltaTime: number): void {
-        this.emitterManager.calc(deltaTime);
-    }
-
-    public setDrawInfo(posCamMtx: mat4, prjMtx: mat4): void {
-        this.drawInfo.posCamMtx = posCamMtx;
-        this.drawInfo.prjMtx = prjMtx;
-    }
-
-    public draw(device: GfxDevice, renderHelper: GXRenderHelperGfx, groupId: number): void {
-        this.emitterManager.draw(device, renderHelper, this.drawInfo, groupId);
-    }
-
-    public createSingleEmitter(sceneObjHolder: SceneObjHolder, resName: string): JPA.JPABaseEmitter {
-        const resData = this.particleResourceHolder.getResourceData(sceneObjHolder, resName);
-        return this.emitterManager.createEmitter(resData);
-    }
-
-    private setAutoRecordDumb(uniqueName: string): boolean {
-        for (let i = 0; i < this.autoEffectList.getNumRecords(); i++) {
-            this.autoEffectList.setRecord(i);
-            if (this.autoEffectList.getValueString(`UniqueName`) === uniqueName)
-                return true;
-        }
-        return false;
-    }
-
-    public createAutoEmitterDumb(sceneObjHolder: SceneObjHolder, uniqueName: string): ParticleEmitter[] {
-        if (!this.setAutoRecordDumb(uniqueName))
-            throw "whoops";
-
-        const effectNameRaw = this.autoEffectList.getValueString('EffectName');
-        const emitters: ParticleEmitter[] = [];
-
-        // TODO(jstpierre): The game does a lot of goofy parsing of EffectName.
-
-        for (let i = 0; i < 20; i++) {
-            const effectResName = `${effectNameRaw}${leftPad('' + i, 2, '0')}`;
-            const resData = this.particleResourceHolder.getResourceData(sceneObjHolder, effectResName);
-            if (resData === null)
-                break;
-
-            const baseEmitter = this.emitterManager.createEmitter(resData);
-            const emitter = new ParticleEmitter(baseEmitter, this.autoEffectList);
-            emitters.push(emitter);
-        }
-
-        return emitters;
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.particleResourceHolder.destroy(device);
-        this.emitterManager.destroy(device);
     }
 }
 
