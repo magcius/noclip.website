@@ -4,28 +4,32 @@ import ArrayBufferSlice from '../../ArrayBufferSlice';
 import Progressable from '../../Progressable';
 import { assert, assertExists } from '../../util';
 import { fetchData, AbortedError } from '../../fetch';
-import * as Viewer from '../../viewer';
-import { GfxDevice, GfxRenderPass, GfxTexture } from '../../gfx/platform/GfxPlatform';
-import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../../gfx/helpers/RenderTargetHelpers';
-import { BMD, BRK, BTK, BCK, LoopMode, BVA, BTP, BPK, JSystemFileReaderHelper } from '../../j3d/j3d';
-import { BMDModel, BMDModelInstance } from '../../j3d/render';
-import * as RARC from '../../j3d/rarc';
-import { EFB_WIDTH, EFB_HEIGHT } from '../../gx/gx_material';
-import { GXRenderHelperGfx } from '../../gx/gx_render_2';
+import { MathConstants, computeModelMatrixSRT } from '../../MathHelpers';
 import { getPointBezier } from '../../Spline';
-import AnimationController from '../../AnimationController';
+import * as Viewer from '../../viewer';
+import * as UI from '../../ui';
+
+import { TextureMapping } from '../../TextureHolder';
+import { GfxDevice, GfxRenderPass, GfxTexture } from '../../gfx/platform/GfxPlatform';
+import { GXRenderHelperGfx } from '../../gx/gx_render_2';
+import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
+import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../../gfx/helpers/RenderTargetHelpers';
+
+import * as GX from '../../gx/gx_enum';
 import * as Yaz0 from '../../compression/Yaz0';
 import * as BCSV from '../../luigis_mansion/bcsv';
-import * as UI from '../../ui';
-import { BloomPostFXParameters, BloomPostFXRenderer } from './Bloom';
-import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
+import * as RARC from '../../j3d/rarc';
+import AnimationController from '../../AnimationController';
+
+import { EFB_WIDTH, EFB_HEIGHT } from '../../gx/gx_material';
+import { BMD, BRK, BTK, BCK, LoopMode, BVA, BTP, BPK, JSystemFileReaderHelper } from '../../j3d/j3d';
+import { BMDModel, BMDModelInstance } from '../../j3d/render';
 import { JMapInfoIter, createCsvParser, getJMapInfoTransLocal, getJMapInfoRotateLocal, getJMapInfoScale } from './JMapInfo';
+import { BloomPostFXParameters, BloomPostFXRenderer } from './Bloom';
 import { AreaLightInfo, ActorLightInfo, LightDataHolder, ActorLightCtrl } from './LightData';
-import { MathConstants, computeModelMatrixSRT } from '../../MathHelpers';
 import { NameObj, SceneNameObjListExecutor } from './NameObj';
-import { LightType } from './DrawBuffer';
 import { EffectSystem, EffectKeeper } from './EffectSystem';
-import * as GX from '../../gx/gx_enum';
+import { LightType } from './DrawBuffer';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -1216,11 +1220,15 @@ export class LiveActor extends NameObj implements ObjectBase {
         this.modelInstance.animationController.setTimeFromViewerInput(viewerInput);
         this.modelInstance.calcAnim(viewerInput.camera);
     }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        if (this.effectKeeper !== null)
+            this.effectKeeper.setHostSRT();
+    }
 }
 
-import { OceanBowl } from './OceanBowl';
-import { TextureMapping } from '../../TextureHolder';
-import { TicoComet, CollapsePlane, PenguinRacer, Coin, Kinopio, StarPiece, EarthenPipe, BlackHole, Peach, Penguin, NPCDirector, MiniRoutePoint, createModelObjMapObj, PeachCastleGardenPlanet, SimpleEffect, GCaptureTarget } from './Actors';
+import { NPCDirector, MiniRoutePoint, createModelObjMapObj, PeachCastleGardenPlanet } from './Actors';
+import { getActorNameObjFactory } from './ActorTable';
 
 function layerVisible(layer: LayerId, layerMask: number): boolean {
     if (layer >= 0)
@@ -1256,7 +1264,7 @@ class ZoneNode {
     }
 }
 
-interface NameObjFactory {
+export interface NameObjFactory {
     new(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): ObjectBase;
     requestArchives?(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void;
 }
@@ -1358,24 +1366,10 @@ class SMGSpawner {
         if (planetFactory !== null)
             return planetFactory;
 
-        if (objName === 'Kinopio')                      return Kinopio;
-        else if (objName === 'TicoComet')               return TicoComet;
-        else if (objName === 'CollapsePlane')           return CollapsePlane;
-        else if (objName === 'StarPiece')               return StarPiece;
-        else if (objName === 'EarthenPipe')             return EarthenPipe;
-        else if (objName === 'BlackHole')               return BlackHole;
-        else if (objName === 'BlackHoleCube')           return BlackHole;
-        else if (objName === 'Peach')                   return Peach;
-        else if (objName === 'Penguin')                 return Penguin;
-        else if (objName === 'PenguinRacer')            return PenguinRacer;
-        else if (objName === 'PenguinRacerLeader')      return PenguinRacer;
-        else if (objName === 'Coin')                    return Coin;
-        else if (objName === 'PurpleCoin')              return Coin;
-        else if (objName === 'OceanBowl')               return OceanBowl;
-        else if (objName === 'AstroTorchLightRed')      return SimpleEffect;
-        else if (objName === 'AstroTorchLightBlue')     return SimpleEffect;
-        else if (objName === 'WaterfallL')              return SimpleEffect;
-        else if (objName === 'GCaptureTarget')          return GCaptureTarget;
+        const actorFactory = getActorNameObjFactory(objName);
+        if (actorFactory !== null)
+            return actorFactory;
+
         return null;
     }
 

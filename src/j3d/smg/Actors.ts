@@ -710,10 +710,7 @@ class MiniRouteMiniature extends PartsModel {
     }
 }
 
-// TODO(jstpierre): Complete the effect system.
-export class SimpleEffect extends LiveActor {
-    private boundingSphereRadius: number = 500;
-
+export class SimpleEffectObj extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, getObjectName(infoIter));
         this.initDefaultPos(sceneObjHolder, infoIter);
@@ -727,24 +724,34 @@ export class SimpleEffect extends LiveActor {
         connectToSceneMapObjMovement(sceneObjHolder, this);
     }
 
+    protected getClippingRadius(): number {
+        return 500;
+    }
+
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         // Don't need anything, effectSystem is already built-in.
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        this.effectKeeper.setHostSRT();
+        super.movement(sceneObjHolder, viewerInput);
 
         const visible = this.visibleAlive && this.visibleScenario;
         for (let i = 0; i < this.effectKeeper.multiEmitters.length; i++) {
             const emitter = this.effectKeeper.multiEmitters[i];
             if (visible) {
                 const globalTranslation = emitter.getGlobalTranslation();
-                const visible = viewerInput.camera.frustum.containsSphere(globalTranslation, this.boundingSphereRadius);
+                const visible = viewerInput.camera.frustum.containsSphere(globalTranslation, this.getClippingRadius());
                 emitter.setDrawParticle(visible);
             } else {
                 emitter.setDrawParticle(false);
             }
         }
+    }
+}
+
+export class EffectObjR1000F50 extends SimpleEffectObj {
+    protected getClippingRadius(): number {
+        return 1000;
     }
 }
 
@@ -760,9 +767,5 @@ export class GCaptureTarget extends LiveActor {
 
         this.effectKeeper.createEmitter(sceneObjHolder, 'TargetLight');
         this.effectKeeper.createEmitter(sceneObjHolder, 'TouchAble');
-    }
-
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        this.effectKeeper.setHostSRT();
     }
 }
