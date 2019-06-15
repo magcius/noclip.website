@@ -875,6 +875,12 @@ export function startBvaIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC,
         modelInstance.bindVAF1(BVA.parse(data).vaf1);
 }
 
+export function startBck(actor: LiveActor, animName: string): void {
+    startBckIfExist(actor.modelInstance, actor.arc, animName);
+    if (actor.effectKeeper !== null)
+        actor.effectKeeper.changeBck(animName);
+}
+
 class ActorAnimKeeper {
     public keeperInfo: ActorAnimKeeperInfo[] = [];
 
@@ -899,44 +905,44 @@ class ActorAnimKeeper {
         return new ActorAnimKeeper(infoIter);
     }
 
-    public start(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): boolean {
+    public start(actor: LiveActor, animationName: string): boolean {
         animationName = animationName.toLowerCase();
         const keeperInfo = this.keeperInfo.find((info) => info.ActorAnimName === animationName);
         if (keeperInfo === undefined)
             return false;
 
         // TODO(jstpierre): Separate animation controllers for each player.
-        this.setBckAnimation(modelInstance, arc, keeperInfo, keeperInfo.Bck);
-        this.setBtkAnimation(modelInstance, arc, keeperInfo, keeperInfo.Btk);
-        this.setBrkAnimation(modelInstance, arc, keeperInfo, keeperInfo.Brk);
-        this.setBpkAnimation(modelInstance, arc, keeperInfo, keeperInfo.Bpk);
-        this.setBtpAnimation(modelInstance, arc, keeperInfo, keeperInfo.Btp);
-        this.setBvaAnimation(modelInstance, arc, keeperInfo, keeperInfo.Bva);
+        this.setBckAnimation(actor, keeperInfo, keeperInfo.Bck);
+        this.setBtkAnimation(actor, keeperInfo, keeperInfo.Btk);
+        this.setBrkAnimation(actor, keeperInfo, keeperInfo.Brk);
+        this.setBpkAnimation(actor, keeperInfo, keeperInfo.Bpk);
+        this.setBtpAnimation(actor, keeperInfo, keeperInfo.Btp);
+        this.setBvaAnimation(actor, keeperInfo, keeperInfo.Bva);
         return true;
     }
 
-    private setBckAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
-        startBckIfExist(modelInstance, arc, getAnimName(keeperInfo, dataInfo));
+    private setBckAnimation(actor: LiveActor, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
+        startBck(actor, getAnimName(keeperInfo, dataInfo));
     }
 
-    private setBtkAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
-        startBtkIfExist(modelInstance, arc, getAnimName(keeperInfo, dataInfo));
+    private setBtkAnimation(actor: LiveActor, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
+        startBtkIfExist(actor.modelInstance, actor.arc, getAnimName(keeperInfo, dataInfo));
     }
 
-    private setBrkAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
-        startBrkIfExist(modelInstance, arc, getAnimName(keeperInfo, dataInfo));
+    private setBrkAnimation(actor: LiveActor, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
+        startBrkIfExist(actor.modelInstance, actor.arc, getAnimName(keeperInfo, dataInfo));
     }
 
-    private setBpkAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
-        startBpkIfExist(modelInstance, arc, getAnimName(keeperInfo, dataInfo));
+    private setBpkAnimation(actor: LiveActor, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
+        startBpkIfExist(actor.modelInstance, actor.arc, getAnimName(keeperInfo, dataInfo));
     }
 
-    private setBtpAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
-        startBtpIfExist(modelInstance, arc, getAnimName(keeperInfo, dataInfo));
+    private setBtpAnimation(actor: LiveActor, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
+        startBtpIfExist(actor.modelInstance, actor.arc, getAnimName(keeperInfo, dataInfo));
     }
 
-    private setBvaAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
-        startBvaIfExist(modelInstance, arc, getAnimName(keeperInfo, dataInfo));
+    private setBvaAnimation(actor: LiveActor, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
+        startBvaIfExist(actor.modelInstance, actor.arc, getAnimName(keeperInfo, dataInfo));
     }
 }
 
@@ -1150,19 +1156,18 @@ export class LiveActor extends NameObj implements ObjectBase {
     }
 
     public initEffectKeeper(sceneObjHolder: SceneObjHolder, groupName: string | null): void {
-        // TODO(jstpierre): Read the model filename?
-        if (groupName === null)
-            groupName = this.name;
+        if (groupName === null && this.modelInstance !== null)
+            groupName = this.modelInstance.name;
         this.effectKeeper = new EffectKeeper(sceneObjHolder, this, groupName);
     }
 
     public startAction(animationName: string): void {
-        if (this.actorAnimKeeper === null || !this.actorAnimKeeper.start(this.modelInstance, this.arc, animationName))
+        if (this.actorAnimKeeper === null || !this.actorAnimKeeper.start(this, animationName))
             this.tryStartAllAnim(animationName);
     }
 
     public tryStartAllAnim(animationName: string): void {
-        startBckIfExist(this.modelInstance, this.arc, animationName);
+        startBck(this, animationName);
         startBtkIfExist(this.modelInstance, this.arc, animationName);
         startBrkIfExist(this.modelInstance, this.arc, animationName);
         startBpkIfExist(this.modelInstance, this.arc, animationName);
@@ -1224,8 +1229,10 @@ export class LiveActor extends NameObj implements ObjectBase {
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        if (this.effectKeeper !== null)
+        if (this.effectKeeper !== null) {
+            this.effectKeeper.updateSyncBckEffect(sceneObjHolder.effectSystem);
             this.effectKeeper.followSRT();
+        }
     }
 }
 

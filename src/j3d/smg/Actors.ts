@@ -2,7 +2,7 @@
 // Misc actors that aren't big enough to have their own file.
 
 import { LightType } from './DrawBuffer';
-import { SceneObjHolder, LiveActor, ZoneAndLayer, getObjectName, SMGPass, startBckIfExist, startBtkIfExist, startBvaIfExist, WorldmapPointInfo, startBrkIfExist, getDeltaTimeFrames, getTimeFrames } from './smg_scenes';
+import { SceneObjHolder, LiveActor, ZoneAndLayer, getObjectName, SMGPass, startBckIfExist, startBtkIfExist, startBvaIfExist, WorldmapPointInfo, startBrkIfExist, getDeltaTimeFrames, getTimeFrames, startBck } from './smg_scenes';
 import { JMapInfoIter, getJMapInfoArg3, getJMapInfoArg2, getJMapInfoArg7, getJMapInfoArg0, getJMapInfoArg1, createCsvParser } from './JMapInfo';
 import { mat4, vec3 } from 'gl-matrix';
 import AnimationController from '../../AnimationController';
@@ -228,7 +228,7 @@ export class BlackHole extends LiveActor {
         connectToSceneCollisionMapObj(sceneObjHolder, this);
         this.blackHoleModel = createModelObjMapObj(zoneAndLayer, sceneObjHolder, 'BlackHole', 'BlackHole', this.modelInstance.modelMatrix);
 
-        startBckIfExist(this.modelInstance, this.arc, `BlackHoleRange`);
+        startBck(this, `BlackHoleRange`);
         startBtkIfExist(this.modelInstance, this.arc, `BlackHoleRange`);
         startBtkIfExist(this.blackHoleModel.modelInstance, this.blackHoleModel.arc, `BlackHole`);
 
@@ -335,6 +335,7 @@ class PartsModel extends LiveActor {
     constructor(sceneObjHolder: SceneObjHolder, objName: string, modelName: string, private parentActor: LiveActor, drawBufferType: DrawBufferType) {
         super(parentActor.zoneAndLayer, objName);
         this.initModelManagerWithAnm(sceneObjHolder, modelName);
+        this.initEffectKeeper(sceneObjHolder, null);
 
         let movementType: MovementType = 0x2B;
         let calcAnimType: CalcAnimType = 0x0B;
@@ -620,6 +621,7 @@ export class TicoComet extends NPCActor {
         connectToSceneNpc(sceneObjHolder, this);
         this.initDefaultPos(sceneObjHolder, infoIter);
         this.initLightCtrl(sceneObjHolder);
+        this.initEffectKeeper(sceneObjHolder, null);
 
         const itemGoodsIdx = 0;
         const itemGoods = sceneObjHolder.npcDirector.getNPCItemData('TicoComet', itemGoodsIdx);
@@ -782,7 +784,7 @@ export class GCaptureTarget extends LiveActor {
         this.initModelManagerWithAnm(sceneObjHolder, "GCaptureTarget");
         connectToSceneNoSilhouettedMapObjStrongLight(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
-        startBckIfExist(this.modelInstance, this.arc, 'Wait');
+        startBck(this, 'Wait');
         bindColorChangeAnimation(this.modelInstance, this.arc, 1, 'Switch.brk');
 
         this.effectKeeper.createEmitter(sceneObjHolder, 'TargetLight');

@@ -43,8 +43,11 @@ export class ParticleResourceHolder {
             return null;
 
         const device = sceneObjHolder.modelCache.device;
-        if (!this.resourceDatas.has(idx))
-            this.resourceDatas.set(idx, new JPA.JPAResourceData(device, this.jpac, this.jpac.effects[idx]));
+        if (!this.resourceDatas.has(idx)) {
+            const resData = new JPA.JPAResourceData(device, this.jpac, this.jpac.effects[idx]);
+            resData.name = name;
+            this.resourceDatas.set(idx, resData);
+        }
         return this.resourceDatas.get(idx);
     }
 
@@ -89,29 +92,6 @@ function parseSRTFlags(value: string): SRTFlags {
     return flags;
 }
 
-export function setupMultiEmitter(m: MultiEmitter, autoEffectIter: JMapInfoIter): void {
-    vec3.set(m.offset,
-        autoEffectIter.getValueNumber('OffsetX', 0),
-        autoEffectIter.getValueNumber('OffsetY', 0),
-        autoEffectIter.getValueNumber('OffsetZ', 0),
-    );
-    m.scaleValue = autoEffectIter.getValueNumber('ScaleValue', 1.0);
-    m.jointName = autoEffectIter.getValueString('JointName');
-    if (m.jointName === '')
-        m.jointName = null;
-    m.affectFlags = parseSRTFlags(autoEffectIter.getValueString('Affect'));
-    m.followFlags = parseSRTFlags(autoEffectIter.getValueString('Follow'));
-
-    parseColor(m.globalPrmColor, autoEffectIter.getValueString('PrmColor'));
-    parseColor(m.globalEnvColor, autoEffectIter.getValueString('EnvColor'));
-
-    const drawOrder = autoEffectIter.getValueString('DrawOrder');
-    if (drawOrder === 'AFTER_INDIRECT')
-        m.setDrawOrder(DrawOrder.DRW_AFTER_INDIRECT);
-    else
-        m.setDrawOrder(DrawOrder.DRW_3D);
-}
-
 class ParticleEmitter {
     public baseEmitter: JPA.JPABaseEmitter | null = null;
 
@@ -125,13 +105,23 @@ class ParticleEmitter {
     }
 }
 
+const enum EmitterLoopMode {
+    ONE_TIME, FOREVER,
+}
+
 class SingleEmitter {
     public particleEmitter: ParticleEmitter | null = null;
     public resource: JPA.JPAResourceData | null = null;
     public groupID: number = 0;
+    public loopMode: EmitterLoopMode;
 
     public init(resource: JPA.JPAResourceData): void {
         this.resource = resource;
+
+        // The original engine seems to unnecessarily create a ParticleEmitter
+        // and then immediately destroy it to read this field (in scanParticleEmitter).
+        // We just read the field directly lol.
+        this.loopMode = resource.res.bem1.maxFrame === 0 ? EmitterLoopMode.FOREVER : EmitterLoopMode.ONE_TIME;
     }
 
     public deleteEmitter(): void {
@@ -158,6 +148,46 @@ class SingleEmitter {
     public unlink(): void {
         this.particleEmitter = null;
     }
+
+    public isOneTime(): boolean {
+        return this.loopMode === EmitterLoopMode.ONE_TIME;
+    }
+}
+
+export function setupMultiEmitter(m: MultiEmitter, autoEffectIter: JMapInfoIter): void {
+    vec3.set(m.offset,
+        autoEffectIter.getValueNumber('OffsetX', 0),
+        autoEffectIter.getValueNumber('OffsetY', 0),
+        autoEffectIter.getValueNumber('OffsetZ', 0),
+    );
+    m.scaleValue = autoEffectIter.getValueNumber('ScaleValue', 1.0);
+    m.jointName = autoEffectIter.getValueString('JointName');
+    if (m.jointName === '')
+        m.jointName = null;
+    m.affectFlags = parseSRTFlags(autoEffectIter.getValueString('Affect'));
+    m.followFlags = parseSRTFlags(autoEffectIter.getValueString('Follow'));
+
+    parseColor(m.globalPrmColor, autoEffectIter.getValueString('PrmColor'));
+    parseColor(m.globalEnvColor, autoEffectIter.getValueString('EnvColor'));
+
+    const drawOrder = autoEffectIter.getValueString('DrawOrder');
+    if (drawOrder === 'AFTER_INDIRECT')
+        m.setDrawOrder(DrawOrder.DRW_AFTER_INDIRECT);
+    else
+        m.setDrawOrder(DrawOrder.DRW_3D);
+
+    const animName = autoEffectIter.getValueString('AnimName');
+    if (animName !== '') {
+        m.animNames = animName.toLowerCase().split(' ');
+        m.startFrame = autoEffectIter.getValueNumber('StartFrame');
+        m.endFrame = autoEffectIter.getValueNumber('EndFrame');
+    } else {
+        m.animNames = [];
+        m.startFrame = 0;
+        m.endFrame = -1;
+    }
+
+    m.continueAnimEnd = !!autoEffectIter.getValueNumber('ContinueAnimEnd', 0);
 }
 
 const scratchMatrix = mat4.create();
@@ -175,6 +205,10 @@ export class MultiEmitter {
     public affectFlags: SRTFlags = 0;
     public followFlags: SRTFlags = 0;
     public jointName: string;
+    public animNames: string[];
+    public startFrame: number;
+    public endFrame: number;
+    public continueAnimEnd: boolean;
 
     constructor(sceneObjHolder: SceneObjHolder, effectName: string) {
         this.allocateEmitter(sceneObjHolder, effectName);
@@ -216,24 +250,34 @@ export class MultiEmitter {
     }
 
     public createEmitter(effectSystem: EffectSystem): void {
-        for (let i = 0; i < this.singleEmitters.length; i++) {
-            const singleEmitter = this.singleEmitters[i];
+        for (let i = 0; i < this.singleEmitters.length; i++)
+            effectSystem.createSingleEmitter(this.singleEmitters[i]);
+        this.setColors();
+    }
 
-            effectSystem.createSingleEmitter(singleEmitter);
+    public createOneTimeEmitter(effectSystem: EffectSystem): void {
+        for (let i = 0; i < this.singleEmitters.length; i++)
+            if (this.singleEmitters[i].isOneTime())
+                effectSystem.createSingleEmitter(this.singleEmitters[i]);
+        this.setColors();
+    }
 
-            if (singleEmitter.isValid()) {
-                const baseEmitter = singleEmitter.particleEmitter.baseEmitter;
-
-                // The real system uses callbacks. Here, we shove the values we want.
-                colorCopy(baseEmitter.globalColorPrm, this.globalPrmColor);
-                colorCopy(baseEmitter.globalColorEnv, this.globalEnvColor);
-            }
-        }
+    public createForeverEmitter(effectSystem: EffectSystem): void {
+        for (let i = 0; i < this.singleEmitters.length; i++)
+            if (!this.singleEmitters[i].isOneTime())
+                effectSystem.createSingleEmitter(this.singleEmitters[i]);
+        this.setColors();
     }
 
     public deleteEmitter(): void {
         for (let i = 0; i < this.singleEmitters.length; i++)
             this.singleEmitters[i].deleteEmitter();
+    }
+
+    public deleteForeverEmitter(): void {
+        for (let i = 0; i < this.singleEmitters.length; i++)
+            if (!this.singleEmitters[i].isOneTime())
+                this.singleEmitters[i].deleteEmitter();
     }
 
     public setName(name: string): void {
@@ -298,6 +342,17 @@ export class MultiEmitter {
         this.setSRT(scale, rot, trans);
     }
 
+    public setColors(): void {
+        for (let i = 0; i < this.singleEmitters.length; i++) {
+            const emitter = this.singleEmitters[i];
+            if (!emitter.isValid())
+                continue;
+            const baseEmitter = emitter.particleEmitter.baseEmitter;
+            colorCopy(baseEmitter.globalColorPrm, this.globalPrmColor);
+            colorCopy(baseEmitter.globalColorEnv, this.globalEnvColor);
+        }
+    }
+
     public setSRTFromHostMtx(mtx: mat4, isFollow: boolean): void {
         const scale = scratchVec3a;
         const rot = scratchMatrix;
@@ -329,8 +384,32 @@ function registerAutoEffectInGroup(sceneObjHolder: SceneObjHolder, effectKeeper:
     }
 }
 
+function isCreate(multiEmitter: MultiEmitter, currentBckName: string, frame: number, loopMode: EmitterLoopMode): boolean {
+    if (multiEmitter.animNames.includes(currentBckName)) {
+        if (loopMode === EmitterLoopMode.FOREVER) {
+            return true;
+        } else {
+            if (frame >= multiEmitter.startFrame)
+                return true;
+        }
+    }
+    return false;
+}
+
+function isDelete(multiEmitter: MultiEmitter, currentBckName: string, frame: number): boolean {
+    if (multiEmitter.animNames.includes(currentBckName)) {
+        if (multiEmitter.endFrame >= 0 && frame > multiEmitter.endFrame)
+            return true;
+    } else {
+        if (!multiEmitter.continueAnimEnd)
+            return true;
+    }
+    return false;
+}
+
 export class EffectKeeper {
     public multiEmitters: MultiEmitter[] = [];
+    private currentBckName: string | null = null;
 
     constructor(sceneObjHolder: SceneObjHolder, public actor: LiveActor, public groupName: string) {
         registerAutoEffectInGroup(sceneObjHolder, this, this.actor, this.groupName);
@@ -383,6 +462,30 @@ export class EffectKeeper {
     public followSRT(): void {
         for (let i = 0; i < this.multiEmitters.length; i++)
             this.setHostSRT(this.multiEmitters[i], true);
+    }
+
+    public changeBck(bckName: string): void {
+        this.currentBckName = bckName.toLowerCase();
+    }
+
+    public updateSyncBckEffect(effectSystem: EffectSystem): void {
+        if (this.currentBckName === null)
+            return;
+
+        if (this.actor.modelInstance.ank1Animator === null)
+            return;
+
+        const timeInFrames = this.actor.modelInstance.ank1Animator.animationController.getTimeInFrames();
+        for (let i = 0; i < this.multiEmitters.length; i++) {
+            const multiEmitter = this.multiEmitters[i];
+
+            if (isCreate(multiEmitter, this.currentBckName, timeInFrames, EmitterLoopMode.ONE_TIME))
+                multiEmitter.createOneTimeEmitter(effectSystem);
+            if (isCreate(multiEmitter, this.currentBckName, timeInFrames, EmitterLoopMode.FOREVER))
+                multiEmitter.createForeverEmitter(effectSystem);
+            if (isDelete(multiEmitter, this.currentBckName, timeInFrames))
+                multiEmitter.deleteEmitter();
+        }
     }
 }
 
@@ -459,8 +562,8 @@ export class EffectSystem {
 
     public createSingleEmitter(singleEmitter: SingleEmitter): void {
         if (singleEmitter.isValid()) {
-            // if (singleEmitter.isOneTime())
-            //     return;
+            if (!singleEmitter.isOneTime())
+                return;
             singleEmitter.unlink();
         }
     

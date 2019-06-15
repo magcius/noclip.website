@@ -247,6 +247,7 @@ const enum CalcScaleAnmType {
 
 export class JPAResourceData {
     public res: JPAResource;
+    public name: string;
     public texData: BTIData[] = [];
     public materialHelper: GXMaterialHelperGfx;
 
@@ -1727,15 +1728,18 @@ function makeColorTable(buffer: ArrayBufferSlice, entryCount: number, duration: 
     for (let i = 1; i < entryCount; i++) {
         const entry0 = i - 1, entry1 = i;
         const time0 = view.getUint16(entry0 * 0x06 + 0x00);
-        assert(time0 === dstIdx - 1);
         const time1 = view.getUint16(entry1 * 0x06 + 0x00);
+        assert(time0 === dstIdx - 1);
 
         colorFromRGBA8(dst[time1], view.getUint32(entry1 * 0x06 + 0x02));
 
         // Lerp.
-        const range = time1 - time0 - 1;
+        const range = time1 - time0;
         for (let j = 1; j < range; j++)
             colorLerp(dst[dstIdx++], dst[time0], dst[time1], j / range);
+
+        assert(dstIdx === time1);
+        dstIdx++;
     }
 
     return dst;
