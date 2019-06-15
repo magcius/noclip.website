@@ -509,6 +509,13 @@ export const enum IndTexBiasSel {
     STU = 7,
 }
 
+export const enum IndTexAlphaSel {
+    OFF = 0,
+    S = 1,
+    T = 2,
+    U = 3,
+}
+
 export const enum IndTexFormat {
     _8 = 0, // 8-bit texture offset
     _5 = 1, // 5-bit texture offset

@@ -12,9 +12,9 @@ import { Endianness } from "../endian";
 import { GfxDevice, GfxInputLayout, GfxInputState, GfxBuffer, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxBufferUsage } from "../gfx/platform/GfxPlatform";
 import { BTIData } from "./render";
 import { getPointHermite } from "../Spline";
-import { GXMaterial, AlphaTest, RopInfo, TexGen, TevStage, getVertexAttribLocation } from "../gx/gx_material";
+import { GXMaterial, AlphaTest, RopInfo, TexGen, TevStage, getVertexAttribLocation, IndTexStage } from "../gx/gx_material";
 import { Color, colorNew, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult } from "../Color";
-import { MaterialParams, ColorKind, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, PacketParams, ub_MaterialParams, u_MaterialParamsBufferSize } from "../gx/gx_render";
+import { MaterialParams, ColorKind, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, PacketParams, ub_MaterialParams, u_MaterialParamsBufferSize, setIndTexOrder, setIndTexCoordScale, setTevIndirect, setTevOrder, setTevColorIn, setTevColorOp, setTevAlphaIn, setTevAlphaOp, fillIndTexMtx } from "../gx/gx_render";
 import { GXMaterialHelperGfx, GXRenderHelperGfx } from "../gx/gx_render_2";
 import { computeModelMatrixSRT, computeModelMatrixR, lerp } from "../MathHelpers";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
@@ -87,6 +87,7 @@ export interface JPABaseShapeBlock {
     type: JPABSPType;
     texIdx: number;
     texIdxAnimData: Uint8Array | null;
+    texCrdMtxAnimData: Float32Array | null;
     blendModeFlags: number;
     zModeFlags: number;
     alphaCompareFlags: number;
@@ -127,9 +128,18 @@ export interface JPAExtraShapeBlock {
     alphaOutValue: number;
     alphaIncreaseRate: number;
     alphaDecreaseRate: number;
+    rotateAngle: number;
+    rotateAngleRandom: number;
+    rotateSpeed: number;
+    rotateSpeedRandom: number;
+    rotateDirection: number;
 }
 
 export interface JPAExTexBlock {
+    flags: number;
+    indTextureMtx: Float32Array;
+    indTextureIdx: number;
+    secondTextureIdx: number;
 }
 
 export interface JPAChildShapeBlock {
@@ -255,13 +265,22 @@ export class JPAResourceData {
         this.res = parseResource(resRaw);
 
         const bsp1 = this.res.bsp1;
+        const etx1 = this.res.etx1;
 
         // Translate all of the texture data.
-        if (this.res.bsp1.texIdxAnimData !== null) {
+        if (bsp1.texIdxAnimData !== null) {
             for (let i = 0; i < bsp1.texIdxAnimData.length; i++)
                 this.translateTDB1Index(device, bsp1.texIdxAnimData[i]);
         } else {
             this.translateTDB1Index(device, bsp1.texIdx);
+        }
+
+        if (etx1 !== null) {
+            if (!!(etx1.flags & 0x00000001))
+                this.translateTDB1Index(device, etx1.indTextureIdx);
+
+            if (!!(etx1.flags & 0x00000100))
+                this.translateTDB1Index(device, etx1.secondTextureIdx);
         }
 
         const ropInfo: RopInfo = {
@@ -288,10 +307,22 @@ export class JPAResourceData {
         const texGens: TexGen[] = [];
         if (!!(bsp1.flags & 0x00100000))
             texGens.push({ index: 0, type: GX.TexGenType.MTX3x4, source: GX.TexGenSrc.POS,  matrix: GX.TexGenMatrix.TEXMTX0, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
-        else if (!!(bsp1.flags & 0x10000000))
+        else if (!!(bsp1.flags & 0x01000000))
             texGens.push({ index: 0, type: GX.TexGenType.MTX2x4, source: GX.TexGenSrc.TEX0, matrix: GX.TexGenMatrix.TEXMTX0, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
         else
             texGens.push({ index: 0, type: GX.TexGenType.MTX2x4, source: GX.TexGenSrc.TEX0, matrix: GX.TexGenMatrix.IDENTITY, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
+
+        let texCoord3Id = GX.TexCoordID.TEXCOORD1;
+        if (etx1 !== null) {
+            if (!!(etx1.flags & 0x00000001)) {
+                texGens.push({ index: 1, type: GX.TexGenType.MTX2x4, source: GX.TexGenSrc.TEX0, matrix: GX.TexGenMatrix.IDENTITY, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
+                texCoord3Id = GX.TexCoordID.TEXCOORD2;
+            }
+
+            if (!!(etx1.flags & 0x00000100)) {
+                texGens.push({ index: texCoord3Id, type: GX.TexGenType.MTX2x4, source: GX.TexGenSrc.TEX0, matrix: GX.TexGenMatrix.IDENTITY, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
+            }
+        }
 
         const tevStages: TevStage[] = [];
         const colorInSelect = (bsp1.flags >>> 0x0F) & 0x07;
@@ -306,36 +337,58 @@ export class JPAResourceData {
             konstColorSel: GX.KonstColorSel.KCSEL_1,
             konstAlphaSel: GX.KonstAlphaSel.KASEL_1,
 
-            // GXSetTevColorIn() is called in JPABaseShape::setGX()
+            // GXSetTevColorIn(0) is called in JPABaseShape::setGX()
             colorInA: st_ca[colorInSelect * 4 + 0],
             colorInB: st_ca[colorInSelect * 4 + 1],
             colorInC: st_ca[colorInSelect * 4 + 2],
             colorInD: st_ca[colorInSelect * 4 + 3],
 
-            // GXSetTevAlphaIn() is called in JPABaseShape::setGX()
+            // GXSetTevAlphaIn(0) is called in JPABaseShape::setGX()
             alphaInA: st_aa[alphaInSelect * 4 + 0],
             alphaInB: st_aa[alphaInSelect * 4 + 1],
             alphaInC: st_aa[alphaInSelect * 4 + 2],
             alphaInD: st_aa[alphaInSelect * 4 + 3],
 
-            // GXSetTevColorOp() is called in JPAEmitterManager::draw()
-            alphaOp: GX.TevOp.ADD,
-            alphaBias: GX.TevBias.ZERO,
-            alphaScale: GX.TevScale.SCALE_1,
-            alphaClamp: true,
-            alphaRegId: GX.Register.PREV,
-
-            // GXSetTevAlphaOp() is called in JPAEmitterManager::draw()
-            colorOp: GX.TevOp.ADD,
-            colorBias: GX.TevBias.ZERO,
-            colorScale: GX.TevScale.SCALE_1,
-            colorClamp: true,
-            colorRegId: GX.Register.PREV,
+            // GXSetTevColorOp(0) is called in JPAEmitterManager::draw()
+            ... setTevColorOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV),
+            ... setTevAlphaOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV),
 
             // GXSetTevDirect(0) is called in JPABaseShape::setGX()
-            // TODO(jstpierre): JPAExTexShape can have indirect.
             ... noIndTex,
         });
+
+        const indTexStages: IndTexStage[] = [];
+
+        // ESP properties are read in JPAResource::setPTev()
+        if (etx1 !== null) {
+            if (!!(etx1.flags & 0x00000001)) {
+                // Indirect.
+                indTexStages.push({
+                    index: GX.IndTexStageID.STAGE0,
+                    ... setIndTexOrder(GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP2),
+                    ... setIndTexCoordScale(GX.IndTexScale._1, GX.IndTexScale._1),
+                });
+                // Add the indirect stage to our TEV.
+                Object.assign(tevStages[0], setTevIndirect(GX.IndTexStageID.STAGE0, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._0, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, false, false, GX.IndTexAlphaSel.OFF));
+            }
+
+            if (!!(etx1.flags & 0x00000100)) {
+                // GX
+                // GXSetTevOrder(1, uVar10)
+                tevStages.push({
+                    index: 1,
+                    ... setTevOrder(texCoord3Id, GX.TexMapID.TEXMAP3, GX.RasColorChannelID.COLOR_ZERO),
+                    ... setTevColorIn(GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC, GX.CombineColorInput.CPREV, GX.CombineColorInput.ZERO),
+                    ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.ZERO),
+                    ... setTevColorOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV),
+                    ... setTevAlphaOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV),
+
+                    konstColorSel: GX.KonstColorSel.KCSEL_1,
+                    konstAlphaSel: GX.KonstAlphaSel.KASEL_1,
+                    ... noIndTex,
+                });
+            }
+        }
 
         // Translate the material.
         const gxMaterial: GXMaterial = {
@@ -347,7 +400,7 @@ export class JPAResourceData {
             lightChannels: [],
             texGens,
             tevStages,
-            indTexStages: [],
+            indTexStages,
             alphaTest,
             ropInfo,
         };
@@ -468,6 +521,7 @@ class JPAEmitterWorkData {
     public ybbCamMtx = mat4.create();
     public posCamMtx = mat4.create();
     public prjMtx = mat4.create();
+    public texPrjMtx = mat4.create();
     public deltaTime: number = 0;
 }
 
@@ -523,6 +577,7 @@ class JPAGlobalRes {
 export class JPADrawInfo {
     public posCamMtx: mat4;
     public prjMtx: mat4;
+    public texPrjMtx: mat4 | null;
 }
 
 export class JPAEmitterManager {
@@ -583,6 +638,10 @@ export class JPAEmitterManager {
     public draw(device: GfxDevice, renderHelper: GXRenderHelperGfx, drawInfo: JPADrawInfo, drawGroupId: number): void {
         mat4.copy(this.workData.posCamMtx, drawInfo.posCamMtx);
         mat4.copy(this.workData.prjMtx, drawInfo.prjMtx);
+        if (drawInfo.texPrjMtx !== null)
+            mat4.copy(this.workData.texPrjMtx, drawInfo.texPrjMtx);
+        else
+            mat4.identity(this.workData.texPrjMtx);
 
         for (let i = 0; i < this.aliveEmitters.length; i++) {
             const emitter = this.aliveEmitters[i];
@@ -795,7 +854,7 @@ export class JPABaseEmitter {
             this.flags &= ~BaseEmitterFlags.STOP_DRAW_PARTICLE;
     }
 
-    public getVisible(): boolean {
+    public getDrawParticle(): boolean {
         return !(this.flags & BaseEmitterFlags.STOP_DRAW_PARTICLE);
     }
 
@@ -1030,7 +1089,7 @@ export class JPABaseEmitter {
                 workData.volumeEmitIdx = 0;
             } else {
                 // Rate
-                const emitCountIncr = this.rate * (1.0 + bem1.rateRndm * get_r_zp(this.random));
+                const emitCountIncr = this.rate * (1.0 + bem1.rateRndm * get_r_zp(this.random)) * workData.deltaTime;
                 this.emitCount += emitCountIncr;
 
                 // If this is the first emission and we got extremely bad luck, force a particle.
@@ -1188,18 +1247,9 @@ export class JPABaseEmitter {
         mat4.identity(materialParams.u_TexMtx[0]);
     }
 
-    private genTexCrdMtxPrj(materialParams: MaterialParams): void {
-        // TODO(jstpierre)
-        mat4.identity(materialParams.u_TexMtx[0]);
-    }
-
-    private genCalcTexCrdMtxAnm(materialParams: MaterialParams): void {
-        // TODO(jstpierre)
-        mat4.identity(materialParams.u_TexMtx[0]);
-    }
-
     private drawP(device: GfxDevice, renderHelper: GXRenderHelperGfx, workData: JPAEmitterWorkData): void {
         const bsp1 = this.resData.res.bsp1;
+        const etx1 = this.resData.res.etx1;
 
         this.flags = this.flags & 0xFFFFFF7F;
         vec2.mul(workData.globalScale2D, this.globalScale2D, bsp1.globalScale2D);
@@ -1217,19 +1267,23 @@ export class JPABaseEmitter {
 
         // mpDrawEmitterFuncList
 
-        // TODO(jstpierre): JPALoadExTex
-
         const texCalcOnEmitter = !!(bsp1.flags & 0x00004000);
         if (texCalcOnEmitter)
             this.resData.texData[this.texAnmIdx].fillTextureMapping(materialParams.m_TextureMapping[0]);
 
+        if (etx1 !== null) {
+            if (!!(etx1.flags & 0x00000001)) {
+                this.resData.texData[etx1.indTextureIdx].fillTextureMapping(materialParams.m_TextureMapping[2]);
+                fillIndTexMtx(materialParams.u_IndTexMtx[0], etx1.indTextureMtx);
+            }
+
+            if (!!(etx1.flags & 0x00000100))
+                this.resData.texData[etx1.secondTextureIdx].fillTextureMapping(materialParams.m_TextureMapping[3]);
+        }
+
         if (bsp1.type === JPABSPType.Point || bsp1.type === JPABSPType.Line)
             this.genTexCrdMtxIdt(materialParams);
-        else if (!!(bsp1.flags & 0x00100000))
-            this.genTexCrdMtxPrj(materialParams);
-        else if (!!(bsp1.flags & 0x10000000))
-            this.genCalcTexCrdMtxAnm(materialParams);
-        else
+        else if (!(bsp1.flags & 0x01000000))
             this.genTexCrdMtxIdt(materialParams);
 
         // Draw in reverse.
@@ -1267,6 +1321,47 @@ function normToLengthAndAdd(dst: vec3, a: vec3, len: number): void {
     dst[0] += a[0] * inv;
     dst[1] += a[1] * inv;
     dst[2] += a[2] * inv;
+}
+
+function calcTexCrdMtxAnm(dst: mat4, bsp1: JPABaseShapeBlock, tick: number): void {
+    const animData = bsp1.texCrdMtxAnimData;
+    const offsS = 0.5 * (1.0 + ((bsp1.flags >>> 0x19) & 0x01));
+    const offsT = 0.5 * (1.0 + ((bsp1.flags >>> 0x1a) & 0x01));
+
+    const texStaticTransX = animData[0];
+    const texStaticTransY = animData[1];
+    const texStaticScaleX = animData[2];
+    const texStaticScaleY = animData[3];
+    const texStaticRotate = animData[4];
+    const texScrollTransX = animData[5];
+    const texScrollTransY = animData[6];
+    const texScrollScaleX = animData[7];
+    const texScrollScaleY = animData[8];
+    const texScrollRotate = animData[9];
+
+    const translationS = offsS + texStaticTransX + tick * texScrollTransX;
+    const translationT = offsT + texStaticTransY + tick * texScrollTransY;
+    const scaleS = texStaticScaleX + tick * texScrollScaleX;
+    const scaleT = texStaticScaleY + tick * texScrollScaleY;
+    const rotate = (texStaticRotate + tick * texScrollRotate) * Math.PI * 2;
+
+    const sinR = Math.sin(rotate);
+    const cosR = Math.cos(rotate);
+
+    dst[0]  = scaleS *  cosR;
+    dst[4]  = scaleS * -sinR;
+    dst[8]  = 0.0;
+    dst[12] = offsS - (scaleS * (cosR * translationS) + (-sinR * translationT));
+
+    dst[1]  = scaleT *  sinR;
+    dst[5]  = scaleT *  cosR;
+    dst[9]  = 0.0;
+    dst[13] = offsT - (scaleT * (sinR * translationS) + (cosR * translationT));
+
+    dst[2] = 0.0;
+    dst[6] = 0.0;
+    dst[10] = 1.0;
+    dst[14] = 0.0;
 }
 
 const scratchMatrix = mat4.create();
@@ -1383,7 +1478,14 @@ export class JPABaseParticle {
         // AlphaWaveRandom
 
         if (esp1 !== null && !!(esp1.flags & 0x01000000)) {
-            //
+            this.rotateAngle = esp1.rotateAngle + (get_rndm_f(baseEmitter.random) - 0.5) * esp1.rotateAngleRandom;
+            this.rotateSpeed = esp1.rotateSpeed + (1.0 + get_r_zp(baseEmitter.random) * esp1.rotateSpeedRandom);
+            if (get_r_zp(baseEmitter.random) >= esp1.rotateDirection)
+                this.rotateSpeed *= -1;
+
+            // Convert to radians.
+            this.rotateAngle *= Math.PI / 0x7FFF;
+            this.rotateSpeed *= Math.PI / 0x7FFF;
         } else {
             this.rotateAngle = 0;
             this.rotateSpeed = 0;
@@ -1653,6 +1755,26 @@ export class JPABaseParticle {
         return false;
     }
 
+    private loadTexMtx(dst: mat4, workData: JPAEmitterWorkData, posMtx: mat4): void {
+        const bsp1 = workData.baseEmitter.resData.res.bsp1;
+
+        const isPrj = !!(bsp1.flags & 0x00100000);
+        if (isPrj) {
+            if (!!((bsp1.flags >>> 0x18) & 0x01)) {
+                // loadPrjAnm
+                calcTexCrdMtxAnm(dst, bsp1, this.tick);
+                mat4.mul(dst, dst, workData.texPrjMtx);
+                mat4.mul(dst, dst, posMtx);
+            } else {
+                // loadPrj
+                mat4.mul(dst, workData.texPrjMtx, posMtx);
+            }
+        } else {
+            if (!!(bsp1.flags & 0x01000000))
+                calcTexCrdMtxAnm(dst, bsp1, this.tick);
+        }
+    }
+
     public draw(device: GfxDevice, renderHelper: GXRenderHelperGfx, workData: JPAEmitterWorkData, materialParams: MaterialParams): void {
         const bsp1 = workData.baseEmitter.resData.res.bsp1;
         const esp1 = workData.baseEmitter.resData.res.esp1;
@@ -1676,13 +1798,10 @@ export class JPABaseParticle {
         const renderInst = renderInstManager.pushRenderInst();
         renderInst.sortKey = makeSortKeyTranslucent(GfxRendererLayer.TRANSLUCENT);
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
-        const offs = renderInst.allocateUniformBuffer(ub_MaterialParams, u_MaterialParamsBufferSize);
-        materialHelper.fillMaterialParamsData(renderHelper, offs, materialParams);
-        renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
         const globalRes = workData.emitterManager.globalRes;
         if (bsp1.type === JPABSPType.BillBoard) {
-            // TODO(jstpierre): isRot
+            const rotateAngle = isRot ? this.rotateAngle : 0;
             renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateBillboard);
             renderInst.drawIndexes(6, 0);
             vec3.transformMat4(scratchVec3a, this.position, workData.posCamMtx);
@@ -1690,8 +1809,9 @@ export class JPABaseParticle {
                 this.scale[0] * workData.globalScale2D[0],
                 this.scale[1] * workData.globalScale2D[1],
                 1,
-                0, 0, 0,
+                0, 0, rotateAngle,
                 scratchVec3a[0], scratchVec3a[1], scratchVec3a[2]);
+            this.loadTexMtx(materialParams.u_TexMtx[0], workData, packetParams.u_PosMtx[0]);
         } else if (bsp1.type === JPABSPType.DirectionalCross) {
             renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateBillboard);
             renderInst.drawIndexes(6, 0);
@@ -1702,8 +1822,15 @@ export class JPABaseParticle {
                 1,
                 0, 0, 0,
                 scratchVec3a[0], scratchVec3a[1], scratchVec3a[2]);
+            this.loadTexMtx(materialParams.u_TexMtx[0], workData, packetParams.u_PosMtx[0]);
         } else {
             throw "whoops";
+        }
+
+        {
+            const offs = renderInst.allocateUniformBuffer(ub_MaterialParams, u_MaterialParamsBufferSize);
+            materialHelper.fillMaterialParamsData(renderHelper, offs, materialParams);
+            renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         }
 
         {
@@ -1843,8 +1970,8 @@ function parseResource(res: JPAResourceRaw): JPAResource {
 
             const blendModeFlags = view.getUint16(tableIdx + 0x18);
             const alphaCompareFlags = view.getUint8(tableIdx + 0x1A);
-            const alphaRef0 = view.getUint8(tableIdx + 0x1B);
-            const alphaRef1 = view.getUint8(tableIdx + 0x1C);
+            const alphaRef0 = view.getUint8(tableIdx + 0x1B) / 0xFF;
+            const alphaRef1 = view.getUint8(tableIdx + 0x1C) / 0xFF;
             const zModeFlags = view.getUint8(tableIdx + 0x1D);
             const texFlags = view.getUint8(tableIdx + 0x1E);
             const texIdxAnimCount = view.getUint8(tableIdx + 0x1F);
@@ -1867,8 +1994,9 @@ function parseResource(res: JPAResourceRaw): JPAResource {
 
             let extraDataOffs = tableIdx + 0x34;
 
-            if (!!(flags & 0x1000000)) {
-                // mpTexCrdMtxAnimData
+            let texCrdMtxAnimData: Float32Array | null = null;
+            if (!!(flags & 0x01000000)) {
+                texCrdMtxAnimData = buffer.createTypedArray(Float32Array, extraDataOffs, 10, Endianness.BIG_ENDIAN);
                 extraDataOffs += 0x28;
             }
 
@@ -1895,7 +2023,7 @@ function parseResource(res: JPAResourceRaw): JPAResource {
             bsp1 = {
                 flags, type, globalScale2D,
                 blendModeFlags, alphaCompareFlags, alphaRef0, alphaRef1, zModeFlags,
-                texFlags, texIdx, texIdxAnimData,
+                texFlags, texIdx, texIdxAnimData, texCrdMtxAnimData,
                 colorFlags, colorPrm, colorEnv, colorEnvAnimData, colorPrmAnimData, colorRegAnmMaxFrm,
                 anmRndm, texAnmRndmMask, colorAnmRndmMask,
             };
@@ -1941,12 +2069,19 @@ function parseResource(res: JPAResourceRaw): JPAResource {
             if (alphaOutTiming < 1)
                 alphaDecreaseRate = (alphaOutValue - alphaBaseValue) / (1.0 - alphaOutTiming);
 
+            const rotateAngle = view.getFloat32(tableIdx + 0x4C);
+            const rotateAngleRandom = view.getFloat32(tableIdx + 0x50);
+            const rotateSpeed = view.getFloat32(tableIdx + 0x54);
+            const rotateSpeedRandom = view.getFloat32(tableIdx + 0x58);
+            const rotateDirection = view.getFloat32(tableIdx + 0x5C);
+
             esp1 = { flags,
                 scaleInTiming, scaleOutTiming, scaleInValueX, scaleOutValueX, scaleInValueY, scaleOutValueY,
                 scaleIncreaseRateX, scaleIncreaseRateY, scaleDecreaseRateX, scaleDecreaseRateY,
                 scaleOutRandom, scaleAnmMaxFrameX, scaleAnmMaxFrameY,
                 alphaInTiming, alphaOutTiming, alphaInValue, alphaBaseValue, alphaOutValue,
                 alphaIncreaseRate, alphaDecreaseRate,
+                rotateAngle, rotateAngleRandom, rotateSpeed, rotateSpeedRandom, rotateDirection,
             };
         } else if (fourcc === 'SSP1') {
             // J3DChildShape
@@ -1959,7 +2094,24 @@ function parseResource(res: JPAResourceRaw): JPAResource {
 
             // Contains extra texture draw settings.
 
-            etx1 = {};
+            const flags = view.getUint32(tableIdx + 0x08);
+
+            const p00 = view.getFloat32(tableIdx + 0x0C);
+            const p01 = view.getFloat32(tableIdx + 0x10);
+            const p02 = view.getFloat32(tableIdx + 0x14);
+            const p10 = view.getFloat32(tableIdx + 0x18);
+            const p11 = view.getFloat32(tableIdx + 0x1C);
+            const p12 = view.getFloat32(tableIdx + 0x20);
+            const scale = Math.pow(2, view.getInt8(tableIdx + 0x24));
+            const indTextureMtx = new Float32Array([
+                p00*scale, p01*scale, p02*scale, scale,
+                p10*scale, p11*scale, p12*scale, 0.0,
+            ]);
+
+            const indTextureIdx = view.getUint8(tableIdx + 0x25);
+            const secondTextureIdx = view.getUint8(tableIdx + 0x26);
+
+            etx1 = { flags, indTextureMtx, indTextureIdx, secondTextureIdx };
         } else if (fourcc === 'KFA1') {
             // J3DKeyBlock
 

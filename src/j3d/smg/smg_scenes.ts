@@ -470,7 +470,7 @@ class SMGRenderer implements Viewer.SceneGfx {
         if (effectSystem !== null) {
             const deltaTime = getDeltaTimeFrames(viewerInput);
             effectSystem.calc(deltaTime);
-            effectSystem.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix);
+            effectSystem.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, null);
 
             // TODO(jstpierre): Clean this mess up.
             for (let i = 0; i < 2; i++) {

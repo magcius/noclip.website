@@ -15,7 +15,7 @@ import { makeStaticDataBuffer } from "../../gfx/helpers/BufferHelpers";
 import { getVertexAttribLocation, GXMaterial, ColorChannelControl, TexGen, IndTexStage, TevStage } from "../../gx/gx_material";
 import * as GX from "../../gx/gx_enum";
 import { GXRenderHelperGfx, GXMaterialHelperGfx } from "../../gx/gx_render_2";
-import { fillPacketParamsData, ub_PacketParams, u_PacketParamsBufferSize, MaterialParams, PacketParams, ub_MaterialParams, u_MaterialParamsBufferSize, fillMaterialParamsData, ColorKind } from "../../gx/gx_render";
+import { fillPacketParamsData, ub_PacketParams, u_PacketParamsBufferSize, MaterialParams, PacketParams, ub_MaterialParams, u_MaterialParamsBufferSize, fillMaterialParamsData, ColorKind, setTevOrder, setTevColorIn, setTevColorOp, setTevAlphaIn, setTevAlphaOp, setTevIndWarp, setIndTexOrder, setIndTexCoordScale } from "../../gx/gx_render";
 import { Camera } from "../../Camera";
 import { makeSortKey, GfxRendererLayer } from "../../gfx/render/GfxRenderer";
 
@@ -36,40 +36,6 @@ class OceanBowlPoint {
         vec3.copy(this.drawPosition, this.gridPosition);
         this.drawPosition[1] += height;
     }
-}
-
-function setTevOrder(texCoordId: GX.TexCoordID, texMap: GX.TexMapID, channelId: GX.RasColorChannelID) {
-    return { texCoordId, texMap, channelId };
-}
-
-function setTevColorIn(colorInA: GX.CombineColorInput, colorInB: GX.CombineColorInput, colorInC: GX.CombineColorInput, colorInD: GX.CombineColorInput) {
-    return { colorInA, colorInB, colorInC, colorInD };
-}
-
-function setTevAlphaIn(alphaInA: GX.CombineAlphaInput, alphaInB: GX.CombineAlphaInput, alphaInC: GX.CombineAlphaInput, alphaInD: GX.CombineAlphaInput) {
-    return { alphaInA, alphaInB, alphaInC, alphaInD };
-}
-
-function setTevColorOp(colorOp: GX.TevOp, colorBias: GX.TevBias, colorScale: GX.TevScale, colorClamp: boolean, colorRegId: GX.Register) {
-    return { colorOp, colorBias, colorScale, colorClamp, colorRegId };
-}
-
-function setTevAlphaOp(alphaOp: GX.TevOp, alphaBias: GX.TevBias, alphaScale: GX.TevScale, alphaClamp: boolean, alphaRegId: GX.Register) {
-    return { alphaOp, alphaBias, alphaScale, alphaClamp, alphaRegId };
-}
-
-function setTevIndWarp(indTexStageID: GX.IndTexStageID, signedOffsets: boolean, replaceMode: boolean, matrixSel: GX.IndTexMtxID) {
-    const wrap = replaceMode ? GX.IndTexWrap._0 : GX.IndTexWrap.OFF;
-    return {
-        indTexStage: indTexStageID,
-        indTexFormat: GX.IndTexFormat._8,
-        indTexBiasSel: signedOffsets ? GX.IndTexBiasSel.STU : GX.IndTexBiasSel.NONE,
-        indTexMatrix: matrixSel,
-        indTexWrapS: wrap,
-        indTexWrapT: wrap,
-        indTexAddPrev: false,
-        indTexUseOrigLOD: false,
-    };
 }
 
 function setTextureMatrixST(m: mat4, scale: number, v: vec2): void {
@@ -272,7 +238,11 @@ export class OceanBowl extends LiveActor {
 
         const indTexStages: IndTexStage[] = [];
         // GXSetIndTexOrder(0,2,2);
-        indTexStages.push({ index: 0, texCoordId: GX.TexCoordID.TEXCOORD2, texture: GX.TexMapID.TEXMAP2, scaleS: GX.IndTexScale._1, scaleT: GX.IndTexScale._1 });
+        indTexStages.push({
+            index: GX.IndTexStageID.STAGE0,
+            ... setIndTexOrder(GX.TexCoordID.TEXCOORD2, GX.TexMapID.TEXMAP2),
+            ... setIndTexCoordScale(GX.IndTexScale._1, GX.IndTexScale._1),
+        });
 
         const noIndTex = {
             // We don't use indtex.

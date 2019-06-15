@@ -6,7 +6,7 @@ import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } fr
 
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
-import { MaterialParams, PacketParams, ColorKind, translateTexFilterGfx, translateWrapModeGfx, loadedDataCoalescerGfx, ub_MaterialParams, loadTextureFromMipChain, u_MaterialParamsBufferSize, fillMaterialParamsData } from '../gx/gx_render';
+import { MaterialParams, PacketParams, ColorKind, translateTexFilterGfx, translateWrapModeGfx, loadedDataCoalescerGfx, ub_MaterialParams, loadTextureFromMipChain, u_MaterialParamsBufferSize, fillMaterialParamsData, fillIndTexMtx } from '../gx/gx_render';
 import { GXShapeHelperGfx, GXRenderHelperGfx } from '../gx/gx_render_2';
 
 import { computeViewMatrix, computeViewMatrixSkybox, Camera, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
@@ -671,15 +671,7 @@ export class MaterialInstance {
             const indTexMtx = material.indTexMatrices[i];
             if (indTexMtx === null)
                 continue;
-
-            const a = indTexMtx[0], c = indTexMtx[1], tx = indTexMtx[2], scale = indTexMtx[3];
-            const b = indTexMtx[4], d = indTexMtx[5], ty = indTexMtx[6];
-            mat4.set(materialParams.u_IndTexMtx[i],
-                a,     b,  0, 0,
-                c,     d,  0, 0,
-                tx,    ty, 0, 0,
-                scale, 0,  0, 0
-            );
+            fillIndTexMtx(materialParams.u_IndTexMtx[i], indTexMtx);
         }
 
         for (let i = 0; i < materialInstanceState.lights.length; i++)

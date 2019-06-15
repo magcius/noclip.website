@@ -1502,6 +1502,10 @@ export class TextureViewer extends Panel {
         this.showInFullSurfaceView(texture.surfaces);
     }
 
+    public setThingList(things: { viewerTexture: Viewer.Texture }[]) {
+        this.setTextureList(things.map((thing) => thing.viewerTexture));
+    }
+
     public setTextureList(textures: Viewer.Texture[]) {
         this.setVisible(textures.length > 0);
         if (textures.length === 0)

@@ -259,11 +259,11 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         for (let i = 0; i < this.modelInstances.length; i++) {
             const modelInstance = this.modelInstances[i];
             if (modelInstance.mdl0Model.mdl0.name.startsWith('model_obj'))
-                presentModels.push(modelInstance);
-
-            // Lanayru Sand Sea has a "past" decal on top of a present zone.
-            if (this.stageId === 'F301_1' && modelInstance.mdl0Model.mdl0.name === 'model1_s')
                 pastModels.push(modelInstance);
+
+            // Lanayru Sand Sea has a "present" decal on top of a past zone.
+            if (this.stageId === 'F301_1' && modelInstance.mdl0Model.mdl0.name === 'model1_s')
+                presentModels.push(modelInstance);
         }
 
         if (presentModels.length || pastModels.length) {

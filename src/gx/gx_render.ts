@@ -396,3 +396,70 @@ export class GXTextureHolder<TextureType extends GX_Texture.Texture = GX_Texture
         return loadTextureFromMipChain(device, mipChain);
     }
 }
+
+
+export function setTevOrder(texCoordId: GX.TexCoordID, texMap: GX.TexMapID, channelId: GX.RasColorChannelID) {
+    return { texCoordId, texMap, channelId };
+}
+
+export function setTevColorIn(colorInA: GX.CombineColorInput, colorInB: GX.CombineColorInput, colorInC: GX.CombineColorInput, colorInD: GX.CombineColorInput) {
+    return { colorInA, colorInB, colorInC, colorInD };
+}
+
+export function setTevAlphaIn(alphaInA: GX.CombineAlphaInput, alphaInB: GX.CombineAlphaInput, alphaInC: GX.CombineAlphaInput, alphaInD: GX.CombineAlphaInput) {
+    return { alphaInA, alphaInB, alphaInC, alphaInD };
+}
+
+export function setTevColorOp(colorOp: GX.TevOp, colorBias: GX.TevBias, colorScale: GX.TevScale, colorClamp: boolean, colorRegId: GX.Register) {
+    return { colorOp, colorBias, colorScale, colorClamp, colorRegId };
+}
+
+export function setTevAlphaOp(alphaOp: GX.TevOp, alphaBias: GX.TevBias, alphaScale: GX.TevScale, alphaClamp: boolean, alphaRegId: GX.Register) {
+    return { alphaOp, alphaBias, alphaScale, alphaClamp, alphaRegId };
+}
+
+export function setTevIndirect(indTexStageID: GX.IndTexStageID, format: GX.IndTexFormat, biasSel: GX.IndTexBiasSel, matrixSel: GX.IndTexMtxID, wrapS: GX.IndTexWrap, wrapT: GX.IndTexWrap, addPrev: boolean, utcLod: boolean, alphaSel: GX.IndTexAlphaSel) {
+    return {
+        indTexStage: indTexStageID,
+        indTexFormat: format,
+        indTexBiasSel: biasSel,
+        indTexMatrix: matrixSel,
+        indTexWrapS: wrapS,
+        indTexWrapT: wrapT,
+        indTexAddPrev: addPrev,
+        indTexUseOrigLOD: utcLod,
+    }
+}
+
+export function setTevIndWarp(indTexStageID: GX.IndTexStageID, signedOffsets: boolean, replaceMode: boolean, matrixSel: GX.IndTexMtxID) {
+    const wrap = replaceMode ? GX.IndTexWrap._0 : GX.IndTexWrap.OFF;
+    return {
+        indTexStage: indTexStageID,
+        indTexFormat: GX.IndTexFormat._8,
+        indTexBiasSel: signedOffsets ? GX.IndTexBiasSel.STU : GX.IndTexBiasSel.NONE,
+        indTexMatrix: matrixSel,
+        indTexWrapS: wrap,
+        indTexWrapT: wrap,
+        indTexAddPrev: false,
+        indTexUseOrigLOD: false,
+    };
+}
+
+export function setIndTexOrder(texCoordId: GX.TexCoordID, texture: GX.TexMapID) {
+    return { texCoordId, texture };
+}
+
+export function setIndTexCoordScale(scaleS: GX.IndTexScale, scaleT: GX.IndTexScale) {
+    return { scaleS, scaleT };
+}
+
+export function fillIndTexMtx(dst: mat4, src: Float32Array): void {
+    const a = src[0], c = src[1], tx = src[2], scale = src[3];
+    const b = src[4], d = src[5], ty = src[6];
+    mat4.set(dst,
+        a,     b,  0, 0,
+        c,     d,  0, 0,
+        tx,    ty, 0, 0,
+        scale, 0,  0, 0
+    );
+}

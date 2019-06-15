@@ -152,6 +152,11 @@ class SingleEmitter {
     public isOneTime(): boolean {
         return this.loopMode === EmitterLoopMode.ONE_TIME;
     }
+
+    public setDrawParticle(v: boolean) {
+        if (this.isValid())
+            this.particleEmitter.baseEmitter.setDrawParticle(v);
+    }
 }
 
 export function setupMultiEmitter(m: MultiEmitter, autoEffectIter: JMapInfoIter): void {
@@ -541,9 +546,10 @@ export class EffectSystem {
         this.emitterManager.calc(deltaTime);
     }
 
-    public setDrawInfo(posCamMtx: mat4, prjMtx: mat4): void {
+    public setDrawInfo(posCamMtx: mat4, prjMtx: mat4, texPrjMtx: mat4 | null): void {
         this.drawInfo.posCamMtx = posCamMtx;
         this.drawInfo.prjMtx = prjMtx;
+        this.drawInfo.texPrjMtx = texPrjMtx;
     }
 
     public draw(device: GfxDevice, renderHelper: GXRenderHelperGfx, groupID: number): void {
