@@ -872,7 +872,6 @@ export class FloatingPanel implements Widget {
 
         this.header = document.createElement('h1');
         this.header.style.lineHeight = '28px';
-        this.header.style.width = '400px';
         this.header.style.margin = '0';
         this.header.style.fontSize = '100%';
         this.header.style.textAlign = 'center';
@@ -891,10 +890,18 @@ export class FloatingPanel implements Widget {
         this.headerContainer.appendChild(this.header);
 
         this.contents = document.createElement('div');
-        this.contents.style.width = '400px';
+        this.contents.style.maxHeight = '50vh';
+        this.contents.style.overflow = 'auto';
         this.mainPanel.appendChild(this.contents);
 
+        this.setWidth(400);
+
         this.elem = this.toplevel;
+    }
+
+    public setWidth(v: number): void {
+        this.header.style.width = `${v}px`;
+        this.contents.style.width = `${v}px`;
     }
 
     public destroy(): void {

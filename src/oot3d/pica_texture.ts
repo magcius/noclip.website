@@ -1,5 +1,6 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
+import { clamp } from "../MathHelpers";
 
 export enum TextureFormat {
     ETC1     = 0x0000675A,
@@ -96,18 +97,12 @@ function decodeTexture_ETC1_4x4_Color(dst: Uint8Array, w1: number, w2: number, d
         return n << 29 >> 29;
     }
 
-    function clamp(n: number) {
-        if (n < 0) return 0;
-        if (n > 255) return 255;
-        return n;
-    }
-
     // Get the color table for a given block.
     function getColors(colors: Uint8Array, r: number, g: number, b: number, intensityMap: number[]): void {
         for (let i = 0; i < 4; i++) {
-            colors[(i * 3) + 0] = clamp(r + intensityMap[i]);
-            colors[(i * 3) + 1] = clamp(g + intensityMap[i]);
-            colors[(i * 3) + 2] = clamp(b + intensityMap[i]);
+            colors[(i * 3) + 0] = clamp(r + intensityMap[i], 0, 255);
+            colors[(i * 3) + 1] = clamp(g + intensityMap[i], 0, 255);
+            colors[(i * 3) + 2] = clamp(b + intensityMap[i], 0, 255);
         }
     }
 

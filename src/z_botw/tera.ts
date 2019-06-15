@@ -12,6 +12,7 @@ import { assertExists, assert, nArray } from '../util';
 import { GfxDevice, GfxFormat, GfxBufferUsage, GfxTexture, GfxTextureDimension } from '../gfx/platform/GfxPlatform';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { AABB } from '../Geometry';
+import { clamp } from '../MathHelpers';
 
 // Terrain System
 
@@ -342,10 +343,6 @@ export class TerrainManager {
         // TODO(jstpierre): Find a good, sensible value for this?
         const shouldLoadRadius = 1;
         const shouldLoadRadiusSq = shouldLoadRadius*shouldLoadRadius;
-
-        function clamp(v: number, min: number, max: number) {
-            return Math.max(Math.min(v, max), min);
-        }
 
         // Traverse down the quad tree, looking for the right LOD to load.
         function traverseNode(node: QuadTreeNode, mightBeVisible: boolean = true) {

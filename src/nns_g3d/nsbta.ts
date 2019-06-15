@@ -6,6 +6,7 @@ import { assert, readString } from "../util";
 import { parseResDictGeneric, parseResDict, fx16, fx32, calcTexMtx, TexMtxMode } from "./nsbmd";
 import { mat2d, vec2 } from "gl-matrix";
 import AnimationController from "../AnimationController";
+import { lerp } from "../MathHelpers";
 
 export interface BTA0 {
     srt0: SRT0;
@@ -148,10 +149,6 @@ export function getAnimFrame(anim: AnimationBase, frame: number, loopMode: LoopM
     } else {
         throw "whoops";
     }
-}
-
-function lerp(k0: number, k1: number, t: number): number {
-    return k0 + (k1 - k0) * t;
 }
 
 function sampleFloatAnimationTrack(track: AnimationTrack, frame: number): number {

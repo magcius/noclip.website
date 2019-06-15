@@ -1,7 +1,7 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 
-import { BMD, BMT, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, TTK1Animator, ANK1Animator, bindANK1Animator, bindVAF1Animator, VAF1, VAF1Animator, TPT1, bindTPT1Animator, TPT1Animator, TEX1, BTI_Texture, INF1 } from './j3d';
+import { BMD, BMT, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, TTK1Animator, ANK1Animator, bindANK1Animator, bindVAF1Animator, VAF1, VAF1Animator, TPT1, bindTPT1Animator, TPT1Animator, TEX1, BTI_Texture, INF1, calcJointMatrix } from './j3d';
 import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } from './j3d';
 
 import * as GX from '../gx/gx_enum';
@@ -99,9 +99,11 @@ function J3DCalcYBBoardMtx(m: mat4, v: vec3 = scratchVec3): void {
 
     m[0] = mx;
     m[8] = 0;
+
     m[1] = 0;
-    m[2] = 0;
     m[9] = v[1] * mz;
+
+    m[2] = 0;
     m[10] = v[2] * mz;
 
     // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
@@ -959,14 +961,12 @@ export class BMDModelInstance {
     public ank1Animator: ANK1Animator | null = null;
     public vaf1Animator: VAF1Animator | null = null;
 
-
     public materialInstanceState = new MaterialInstanceState();
     private materialInstances: MaterialInstance[] = [];
     private shapeInstances: ShapeInstance[] = [];
     private shapeInstanceState = new ShapeInstanceState();
     private materialHacks: GX_Material.GXMaterialHacks = {};
 
-    private jointMatrices: mat4[] = [];
     private jointVisibility: boolean[];
 
     constructor(
@@ -1206,23 +1206,6 @@ export class BMDModelInstance {
         return this.shapeInstanceState.jointToWorldMatrices[jointIndex];
     }
 
-    /**
-     * Sets the joint-to-parent-joint matrix for the joint at index {@param jointIndex}.
-     *
-     * This does not copy the values inside {@param m}; rather it takes a reference. Any updates to
-     * the passed-in matrix will be referenced automatically the next time the joint-to-world matrices
-     * are updated when calcAnim is called.
-     *
-     * This override takes precedence over any character animations that would be playing through an ANK1
-     * animator. To remove the override, pass {@constant null} as the joint matrix.
-     */
-    public setJointMatrixOverrideReference(jointIndex: number, m: mat4 | null): void {
-        if (m !== null)
-            this.jointMatrices[jointIndex] = m;
-        else
-            this.jointMatrices[jointIndex] = undefined;
-    }
-
     private isAnyShapeVisible(): boolean {
         for (let i = 0; i < this.shapeInstanceState.matrixVisibility.length; i++)
             if (this.shapeInstanceState.matrixVisibility[i])
@@ -1245,16 +1228,11 @@ export class BMDModelInstance {
         this.shapeInstanceState.isSkybox = this.isSkybox;
 
         mat4.copy(this.shapeInstanceState.rootJointToWorld, this.modelMatrix);
-        this.computeJointMatrixArray(camera, this.bmdModel.rootJoint, this.shapeInstanceState.rootJointToWorld);
-
-        // Now go through and add in base scale and compute joint visibility.
-        mat4.fromScaling(matrixScratch, this.baseScale);
+        this.computeJointMatrixArray(this.bmdModel.rootJoint, this.shapeInstanceState.rootJointToWorld);
 
         const jnt1 = this.bmdModel.bmd.jnt1;
         for (let i = 0; i < this.bmdModel.bmd.jnt1.joints.length; i++) {
             const jointToWorldMatrix = this.shapeInstanceState.jointToWorldMatrices[i];
-
-            mat4.mul(jointToWorldMatrix, jointToWorldMatrix, matrixScratch);
 
             // TODO(jstpierre): Use shape visibility if the bbox is empty (?).
             if (disableCulling || jnt1.joints[i].bbox.isEmpty()) {
@@ -1332,16 +1310,10 @@ export class BMDModelInstance {
     }
 
     private computeJointMatrix(dst: mat4, jointIndex: number): void {
-        if (this.jointMatrices[jointIndex] !== undefined)
-            mat4.copy(dst, this.jointMatrices[jointIndex]);
-
-        if (this.ank1Animator !== null && this.ank1Animator.calcJointMatrix(dst, jointIndex))
-            return;
-
-        mat4.copy(dst, this.bmdModel.bmd.jnt1.joints[jointIndex].matrix);
+        calcJointMatrix(dst, jointIndex, this.bmdModel.bmd, this.ank1Animator, this.baseScale, matrixScratch);
     }
 
-    private computeJointMatrixArray(camera: Camera, joint: JointData, parentJointToWorldMatrix: mat4): void {
+    private computeJointMatrixArray(joint: JointData, parentJointToWorldMatrix: mat4): void {
         const jointIndex = joint.jointIndex;
 
         const jointToParentMatrix = matrixScratch2;
@@ -1351,7 +1323,7 @@ export class BMDModelInstance {
         mat4.mul(jointToWorldMatrix, parentJointToWorldMatrix, jointToParentMatrix);
 
         for (let i = 0; i < joint.children.length; i++)
-            this.computeJointMatrixArray(camera, joint.children[i], jointToWorldMatrix);
+            this.computeJointMatrixArray(joint.children[i], jointToWorldMatrix);
     }
 
     private computeDrawMatrixArray(): void {

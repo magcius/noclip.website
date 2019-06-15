@@ -5,7 +5,7 @@ import { connectToScene } from "./Actors";
 import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputLayout, GfxInputState, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxCullMode } from "../../gfx/platform/GfxPlatform";
 import { ViewerRenderInput } from "../../viewer";
 import { JMapInfoIter } from "./JMapInfo";
-import { computeModelMatrixSRT, texProjPerspMtx } from "../../MathHelpers";
+import { computeModelMatrixSRT, texProjPerspMtx, clamp } from "../../MathHelpers";
 import AnimationController from "../../AnimationController";
 import { colorFromRGBA8 } from "../../Color";
 import { BTIData } from "../render";
@@ -36,10 +36,6 @@ class OceanBowlPoint {
         vec3.copy(this.drawPosition, this.gridPosition);
         this.drawPosition[1] += height;
     }
-}
-
-function clamp(v: number, min: number, max: number): number {
-    return Math.max(Math.min(v, max), min);
 }
 
 function setTevOrder(texCoordId: GX.TexCoordID, texMap: GX.TexMapID, channelId: GX.RasColorChannelID) {

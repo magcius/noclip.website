@@ -1,4 +1,6 @@
 
+import { lerp } from "./MathHelpers";
+
 // Color utilities
 
 export interface Color {
@@ -6,10 +8,6 @@ export interface Color {
     g: number;
     b: number;
     a: number;
-}
-
-function lerp(a: number, b: number, t: number): number {
-    return a + (b - a) * t;
 }
 
 export function colorNew(r: number, g: number, b: number, a: number = 1.0): Color {

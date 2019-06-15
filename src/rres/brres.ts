@@ -18,7 +18,7 @@ import { GXTextureHolder } from '../gx/gx_render';
 import { getFormatCompFlagsComponentCount } from '../gfx/platform/GfxPlatformFormat';
 import { getPointHermite } from '../Spline';
 import { colorToRGBA8, colorFromRGBA8 } from '../Color';
-import { computeModelMatrixSRT, MathConstants } from '../MathHelpers';
+import { computeModelMatrixSRT, MathConstants, lerp } from '../MathHelpers';
 import BitMap from '../BitMap';
 
 //#region Utility
@@ -1555,10 +1555,6 @@ function getAnimFrame(anim: AnimationBase, frame: number): number {
     } else {
         throw "whoops";
     }
-}
-
-function lerp(k0: number, k1: number, t: number): number {
-    return k0 + (k1 - k0) * t;
 }
 
 function lerpPeriodic(k0: number, k1: number, t: number, kp: number = 180): number {

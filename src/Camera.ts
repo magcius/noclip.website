@@ -2,6 +2,7 @@
 import { mat4, vec3, vec4 } from 'gl-matrix';
 import InputManager from './InputManager';
 import { Frustum, AABB } from './Geometry';
+import { clampRange } from './MathHelpers';
 
 export class Camera {
     public viewMatrix: mat4 = mat4.create();
@@ -227,14 +228,6 @@ export interface CameraController {
 
 export interface CameraControllerClass {
     new(): CameraController;
-}
-
-function clamp(v: number, min: number, max: number): number {
-    return Math.max(min, Math.min(v, max));
-}
-
-function clampRange(v: number, lim: number): number {
-    return clamp(v, -lim, lim);
 }
 
 const vec3Zero = [0, 0, 0];

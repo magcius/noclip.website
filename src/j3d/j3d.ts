@@ -359,10 +359,15 @@ function readDRW1Chunk(buffer: ArrayBufferSlice): DRW1 {
 //#region JNT1
 export interface Joint {
     name: string;
-    matrix: mat4;
     scaleX: number;
     scaleY: number;
     scaleZ: number;
+    rotationX: number;
+    rotationY: number;
+    rotationZ: number;
+    translationX: number;
+    translationY: number;
+    translationZ: number;
     boundingSphereRadius: number;
     bbox: AABB;
 }
@@ -412,9 +417,7 @@ function readJNT1Chunk(buffer: ArrayBufferSlice): JNT1 {
         const bboxMaxY = view.getFloat32(jointDataTableIdx + 0x38);
         const bboxMaxZ = view.getFloat32(jointDataTableIdx + 0x3C);
         const bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
-        const matrix = mat4.create();
-        computeModelMatrixSRT(matrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
-        joints.push({ name, matrix, scaleX, scaleY, scaleZ, boundingSphereRadius, bbox });
+        joints.push({ name, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ, boundingSphereRadius, bbox });
     }
 
     return { joints };
@@ -1738,29 +1741,58 @@ function readANK1Chunk(buffer: ArrayBufferSlice): ANK1 {
     return { loopMode, duration, jointAnimationEntries };
 }
 
+export function calcJointMatrix(dst: mat4, jointIndex: number, bmd: BMD, ank1Animator: ANK1Animator | null, baseScale: vec3, matrixScratch: mat4): void {
+    let scaleX: number;
+    let scaleY: number;
+    let scaleZ: number;
+    let rotationX: number;
+    let rotationY: number;
+    let rotationZ: number;
+    let translationX: number;
+    let translationY: number;
+    let translationZ: number;
+
+    let entry: JointAnimationEntry | null = null;
+
+    if (ank1Animator !== null)
+        entry = ank1Animator.ank1.jointAnimationEntries[jointIndex] || null;
+
+    if (entry !== null) {
+        const frame = ank1Animator.animationController.getTimeInFrames();
+        const animFrame = getAnimFrame(ank1Animator.ank1, frame);
+
+        scaleX = sampleAnimationData(entry.scaleX, animFrame);
+        scaleY = sampleAnimationData(entry.scaleY, animFrame);
+        scaleZ = sampleAnimationData(entry.scaleZ, animFrame);
+        rotationX = sampleAnimationData(entry.rotationX, animFrame) * Math.PI;
+        rotationY = sampleAnimationData(entry.rotationY, animFrame) * Math.PI;
+        rotationZ = sampleAnimationData(entry.rotationZ, animFrame) * Math.PI;
+        translationX = sampleAnimationData(entry.translationX, animFrame);
+        translationY = sampleAnimationData(entry.translationY, animFrame);
+        translationZ = sampleAnimationData(entry.translationZ, animFrame);
+    } else {
+        const jnt1 = bmd.jnt1.joints[jointIndex];
+        scaleX = jnt1.scaleX;
+        scaleY = jnt1.scaleY;
+        scaleZ = jnt1.scaleZ;
+        rotationX = jnt1.rotationX;
+        rotationY = jnt1.rotationY;
+        rotationZ = jnt1.rotationZ;
+        translationX = jnt1.translationX;
+        translationY = jnt1.translationY;
+        translationZ = jnt1.translationZ;
+    }
+
+    computeModelMatrixSRT(dst, 1, 1, 1, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+    mat4.identity(matrixScratch);
+    matrixScratch[0] = baseScale[0] * scaleX;
+    matrixScratch[5] = baseScale[1] * scaleY;
+    matrixScratch[10] = baseScale[2] * scaleZ;
+    mat4.mul(dst, dst, matrixScratch);
+}
+
 export class ANK1Animator { 
     constructor(public animationController: AnimationController, public ank1: ANK1) {}
-
-    public calcJointMatrix(dst: mat4, jointIndex: number): boolean {
-        const entry = this.ank1.jointAnimationEntries[jointIndex];
-        if (!entry)
-            return false;
-
-        const frame = this.animationController.getTimeInFrames();
-        const animFrame = getAnimFrame(this.ank1, frame);
-
-        const scaleX = sampleAnimationData(entry.scaleX, animFrame);
-        const scaleY = sampleAnimationData(entry.scaleY, animFrame);
-        const scaleZ = sampleAnimationData(entry.scaleZ, animFrame);
-        const rotationX = sampleAnimationData(entry.rotationX, animFrame) * Math.PI;
-        const rotationY = sampleAnimationData(entry.rotationY, animFrame) * Math.PI;
-        const rotationZ = sampleAnimationData(entry.rotationZ, animFrame) * Math.PI;
-        const translationX = sampleAnimationData(entry.translationX, animFrame);
-        const translationY = sampleAnimationData(entry.translationY, animFrame);
-        const translationZ = sampleAnimationData(entry.translationZ, animFrame);
-        computeModelMatrixSRT(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
-        return true;
-    }
 }
 
 export function bindANK1Animator(animationController: AnimationController, ank1: ANK1): ANK1Animator {

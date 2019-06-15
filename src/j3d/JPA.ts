@@ -16,7 +16,7 @@ import { GXMaterial, AlphaTest, RopInfo, TexGen, TevStage, getVertexAttribLocati
 import { Color, colorNew, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult } from "../Color";
 import { MaterialParams, ColorKind, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, PacketParams, ub_MaterialParams, u_MaterialParamsBufferSize } from "../gx/gx_render";
 import { GXMaterialHelperGfx, GXRenderHelperGfx } from "../gx/gx_render_2";
-import { computeModelMatrixSRT } from "../MathHelpers";
+import { computeModelMatrixSRT, computeModelMatrixR, lerp } from "../MathHelpers";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { makeSortKeyTranslucent, GfxRendererLayer } from "../gfx/render/GfxRenderer";
 
@@ -101,7 +101,8 @@ export interface JPABaseShapeBlock {
     colorEnvAnimData: Color[] | null;
     colorRegAnmMaxFrm: number;
     anmRndm: number;
-    anmRndmMask: number;
+    colorAnmRndmMask: number;
+    texAnmRndmMask: number;
 }
 
 export interface JPAExtraShapeBlock {
@@ -181,7 +182,7 @@ const enum JPAKeyType {
     InitialVelAxis = 0x07,
     InitialVelDir  = 0x08,
     Spread         = 0x09,
-    Scale       = 0x0A,
+    Scale          = 0x0A,
 }
 
 export interface JPAKeyBlock {
@@ -366,10 +367,13 @@ export class JPAResourceData {
     }
 }
 
-function hermiteInterpolate(k: Float32Array, i1: number, t: number): number {
+function hermiteInterpolate(k: Float32Array, i1: number, tn: number): number {
     const k0Idx = i1 - 4;
     const k1Idx = i1;
-    const length = k[k1Idx] - k[k0Idx];
+    const t0 = k[k0Idx + 0];
+    const t1 = k[k1Idx + 0];
+    const length = t1 - t0;
+    const t = (tn - t0) / length;
     const p0 = k[k0Idx + 1];
     const p1 = k[k1Idx + 1];
     const s0 = k[k0Idx + 3] * length;
@@ -379,19 +383,18 @@ function hermiteInterpolate(k: Float32Array, i1: number, t: number): number {
 
 function kfa1Findi1(kfa1: JPAKeyBlock, t: number): number {
     // TODO(jstpierre): isLoopEnable
-    let i: number;
-    for (i = 0; i < kfa1.keyValues.length; i += 4) {
+    for (let i = 0; i < kfa1.keyValues.length; i += 4) {
         const kt = kfa1.keyValues[i + 0];
         // Find the first frame that's past us -- that's our i1.
         if (kt > t)
-            break;
+            return i;
     }
-    return i;
+    return kfa1.keyValues.length - 4;
 }
 
 function kfa1Calc(kfa1: JPAKeyBlock, t: number): number {
     const i1 = kfa1Findi1(kfa1, t);
-    if (i1 === 0)
+    if (i1 === 0 || i1 >= kfa1.keyValues.length - 4)
         return kfa1.keyValues[i1 + 1];
     else
         return hermiteInterpolate(kfa1.keyValues, i1, t);
@@ -446,17 +449,19 @@ class JPAEmitterWorkData {
     public volumeSize: number;
     public volumeMinRad: number;
     public volumeSweep: number;
+    public volumeEmitIdx: number;
+    public volumeEmitCount: number;
     public divNumber: number;
 
-    public directionMtx = mat4.create();
-    public rotationMatrix = mat4.create();
+    public emitterTrs = vec3.create();
+    public emitterDirMtx = mat4.create();
+    public emitterGlobalRot = mat4.create();
+    public emitterGlobalSR = mat4.create();
+    public emitterGlobalScl = vec3.create();
+    public emitterGlobalDir = vec3.create();
+    public emitterGlobalSRT = vec3.create();
     public globalRotation = mat4.create();
-    public globalSR = mat4.create();
-    public emitterPosition = vec3.create();
     public globalScale = vec3.create();
-    public globalEmitterDir = vec3.create();
-    public publicScale = vec3.create();
-    public globalPosition = vec3.create();
     public globalScale2D = vec2.create();
 
     public ybbCamMtx = mat4.create();
@@ -543,8 +548,18 @@ export class JPAEmitterManager {
 
         const emitter = this.deadEmitterPool.pop();
         emitter.init(resData);
+        assert(emitter.aliveParticlesBase.length === 0);
         this.aliveEmitters.push(emitter);
         return emitter;
+    }
+
+    public forceDeleteEmitter(emitter: JPABaseEmitter): void {
+        emitter.deleteAllParticle();
+        emitter.flags |= BaseEmitterFlags.TERMINATE | BaseEmitterFlags.TERMINATE_FLAGGED;
+        const i = this.aliveEmitters.indexOf(emitter);
+        assert(i >= 0);
+        this.aliveEmitters.splice(i, 1);
+        this.deadEmitterPool.push(emitter);
     }
 
     public calc(deltaTime: number): void {
@@ -554,7 +569,9 @@ export class JPAEmitterManager {
             const emitter = this.aliveEmitters[i];
             const alive = emitter.calc(this.workData);
 
-            if (!alive) {
+            if (!alive && (emitter.flags & BaseEmitterFlags.TERMINATE_FLAGGED) === 0) {
+                emitter.deleteAllParticle();
+                emitter.flags |= BaseEmitterFlags.TERMINATE | BaseEmitterFlags.TERMINATE_FLAGGED;
                 this.aliveEmitters.splice(i, 1);
                 this.deadEmitterPool.push(emitter);
                 i--;
@@ -578,21 +595,23 @@ export class JPAEmitterManager {
     }
 }
 
-const enum BaseEmitterFlags {
-    PAUSED           = 0x0002,
-    STOP_DRAW        = 0x0004,
-    PAUSED_EMISSION  = 0x0008,
-    FIRST_EMISSION   = 0x0010,
-    RATE_STEP_EMIT   = 0x0020,
-    DO_NOT_TERMINATE = 0x0040,
-    TERMINATE        = 0x0100,
+export const enum BaseEmitterFlags {
+    STOP_EMIT_PARTICLES = 0x0001,
+    STOP_CALC_EMITTER   = 0x0002,
+    STOP_DRAW_PARTICLE  = 0x0004,
+    TERMINATED          = 0x0008,
+    FIRST_EMISSION      = 0x0010,
+    RATE_STEP_EMIT      = 0x0020,
+    DO_NOT_TERMINATE    = 0x0040,
+    TERMINATE           = 0x0100,
+    TERMINATE_FLAGGED   = 0x0200,
 }
 
 function JPAGetXYZRotateMtx(m: mat4, v: vec3): void {
     const v0 = Math.PI * v[0];
     const v1 = Math.PI * v[1];
     const v2 = Math.PI * v[2];
-    computeModelMatrixSRT(m, 1, 1, 1, v0, v1, v2, 0, 0, 0);
+    computeModelMatrixR(m, v0, v1, v2);
 }
 
 function JPAGetDirMtx(m: mat4, v: vec3, scratch: vec3 = scratchVec3a): void {
@@ -616,6 +635,40 @@ function JPAGetDirMtx(m: mat4, v: vec3, scratch: vec3 = scratchVec3a): void {
     m[6]  = -x*mag;
     m[10] = z;
     m[14] = 0.0;
+}
+
+export function JPASetRMtxSTVecFromMtx(scale: vec3, rot: mat4, trans: vec3, m: mat4): void {
+    // Extract our three column vectors.
+    mat4.identity(rot);
+
+    scale[0] = Math.hypot(m[0], m[1], m[2]);
+    scale[1] = Math.hypot(m[4], m[5], m[6]);
+    scale[2] = Math.hypot(m[8], m[9], m[10]);
+
+    if (scale[0] !== 0) {
+        const d = 1 / scale[0];
+        rot[0] = m[0] * d;
+        rot[1] = m[1] * d;
+        rot[2] = m[2] * d;
+    }
+
+    if (scale[1] !== 0) {
+        const d = 1 / scale[1];
+        rot[4] = m[4] * d;
+        rot[5] = m[5] * d;
+        rot[6] = m[6] * d;
+    }
+
+    if (scale[2] !== 0) {
+        const d = 1 / scale[2];
+        rot[8] = m[8] * d;
+        rot[9] = m[9] * d;
+        rot[10] = m[10] * d;
+    }
+
+    trans[0] = m[12];
+    trans[1] = m[13];
+    trans[2] = m[14];
 }
 
 function mirroredRepeat(t: number, duration: number): number {
@@ -658,13 +711,15 @@ function calcColor(dstPrm: Color, dstEnv: Color, workData: JPAEmitterWorkData, t
     const bsp1 = workData.baseEmitter.resData.res.bsp1;
 
     const calcColorIdxType: CalcIdxType = (bsp1.colorFlags >>> 4) & 0x07;
-    let colorKeyFrame = 0;
+    let anmIdx = 0;
     if (calcColorIdxType === CalcIdxType.Normal) {
-        colorKeyFrame = Math.min(bsp1.colorRegAnmMaxFrm, tick);
+        anmIdx = Math.min(bsp1.colorRegAnmMaxFrm, tick);
     } else if (calcColorIdxType === CalcIdxType.Repeat) {
-        colorKeyFrame = ((tick | 0) + randomPhase) % bsp1.colorRegAnmMaxFrm;
+        anmIdx = ((tick | 0) + randomPhase) % (bsp1.colorRegAnmMaxFrm + 1);
     } else if (calcColorIdxType === CalcIdxType.Reverse) {
-        colorKeyFrame = mirroredRepeat((tick | 0) + randomPhase, bsp1.colorRegAnmMaxFrm - 1);
+        anmIdx = mirroredRepeat((tick | 0) + randomPhase, bsp1.colorRegAnmMaxFrm);
+    } else if (calcColorIdxType === CalcIdxType.Merge) {
+        anmIdx = ((time | 0) + randomPhase) % (bsp1.colorRegAnmMaxFrm + 1);
     } else {
         throw "whoops";
     }
@@ -673,9 +728,9 @@ function calcColor(dstPrm: Color, dstEnv: Color, workData: JPAEmitterWorkData, t
     const calcEnvColor = !!(bsp1.colorFlags & 0x08);
 
     if (calcPrmColor)
-        colorCopy(dstPrm, bsp1.colorPrmAnimData[colorKeyFrame]);
+        colorCopy(dstPrm, bsp1.colorPrmAnimData[anmIdx]);
     if (calcEnvColor)
-        colorCopy(dstEnv, bsp1.colorEnvAnimData[colorKeyFrame]);
+        colorCopy(dstEnv, bsp1.colorEnvAnimData[anmIdx]);
 }
 
 const materialParams = new MaterialParams();
@@ -707,6 +762,7 @@ export class JPABaseEmitter {
     public rateStepTimer: number;
     public colorPrm: Color = colorNewCopy(White);
     public colorEnv: Color = colorNewCopy(White);
+    public userData: any = null;
 
     public globalColorPrm: Color = colorNewCopy(White);
     public globalColorEnv: Color = colorNewCopy(White);
@@ -730,16 +786,16 @@ export class JPABaseEmitter {
         this.globalScale2D[1] = s[1];
     }
 
-    public setVisible(v: boolean): void {
+    public setDrawParticle(v: boolean): void {
         const stopDraw = !v;
         if (stopDraw)
-            this.flags |= BaseEmitterFlags.STOP_DRAW;
+            this.flags |= BaseEmitterFlags.STOP_DRAW_PARTICLE;
         else
-            this.flags &= ~BaseEmitterFlags.STOP_DRAW;
+            this.flags &= ~BaseEmitterFlags.STOP_DRAW_PARTICLE;
     }
 
     public getVisible(): boolean {
-        return !(this.flags & BaseEmitterFlags.STOP_DRAW);
+        return !(this.flags & BaseEmitterFlags.STOP_DRAW_PARTICLE);
     }
 
     public init(resData: JPAResourceData): void {
@@ -779,6 +835,15 @@ export class JPABaseEmitter {
         this.rateStepTimer = 0;
         this.texAnmIdx = 0;
         this.flags = BaseEmitterFlags.FIRST_EMISSION | BaseEmitterFlags.RATE_STEP_EMIT;
+    }
+
+    public deleteAllParticle(): void {
+        for (let i = 0; i < this.aliveParticlesBase.length; i++)
+            this.emitterManager.deadParticlePool.push(this.aliveParticlesBase[i]);
+        this.aliveParticlesBase.length = 0;
+        for (let i = 0; i < this.aliveParticlesChild.length; i++)
+            this.emitterManager.deadParticlePool.push(this.aliveParticlesChild[i]);
+        this.aliveParticlesChild.length = 0;
     }
 
     public createChild(parent: JPABaseParticle): void {
@@ -821,12 +886,36 @@ export class JPABaseEmitter {
         const rndY = get_rndm_f(this.random) - 0.5;
         const rndZ = get_rndm_f(this.random) - 0.5;
         vec3.set(workData.volumePos, rndX * this.volumeSize, rndY * this.volumeSize, rndZ * this.volumeSize);
-        vec3.mul(workData.velOmni, workData.volumePos, this.globalScale);
+        vec3.mul(workData.velOmni, workData.volumePos, workData.emitterGlobalScl);
         vec3.set(workData.velAxis, workData.volumePos[0], 0.0, workData.volumePos[2]);
     }
 
     private calcVolumeSphere(workData: JPAEmitterWorkData): void {
-        throw "whoops";
+        const bem1 = workData.baseEmitter.resData.res.bem1;
+
+        let angle: number, x: number;
+        if (!!(bem1.flags & 0x02)) {
+            // Fixed interval
+            throw "whoops";
+        } else {
+            angle = workData.volumeSweep * get_rndm_f(this.random) * Math.PI * 2;
+            x = (Math.PI * 0.5) + (get_rndm_f(this.random) * Math.PI);
+        }
+
+        let distance = get_rndm_f(this.random);
+        if (!!(bem1.flags & 0x01)) {
+            // Fixed density
+            distance = 1.0 - (distance * distance * distance);
+        }
+
+        const size = workData.volumeSize * lerp(workData.volumeMinRad, 1.0, distance);
+        vec3.set(workData.volumePos,
+            size * Math.cos(x) * Math.sin(angle),
+            size * Math.sin(x),
+            size * Math.cos(x) * Math.cos(angle),
+        );
+        vec3.mul(workData.velOmni, workData.volumePos, workData.emitterGlobalScl);
+        vec3.set(workData.velAxis, workData.volumePos[0], 0, workData.volumePos[2]);
     }
 
     private calcVolumeCylinder(workData: JPAEmitterWorkData): void {
@@ -838,12 +927,15 @@ export class JPABaseEmitter {
             distance = 1.0 - (distance * distance);
         }
 
-        const sizeXZ = workData.volumeSize * (workData.volumeMinRad + (distance * (1.0 - workData.volumeMinRad)));
-        const angle = workData.volumeSweep * get_r_ss(this.random) * 2;
-        const height = get_r_zp(this.random);
-        vec3.set(workData.volumePos, sizeXZ * Math.sin(angle), workData.volumeSize * height, sizeXZ * Math.cos(angle));
-        vec3.mul(workData.velOmni, workData.volumePos, workData.globalScale);
-        vec3.set(workData.velAxis, workData.volumePos[0], 0, workData.volumePos[2]);;
+        const sizeXZ = workData.volumeSize * lerp(workData.volumeMinRad, 1.0, distance);
+        let angle = (workData.volumeSweep * get_rndm_f(this.random)) * Math.PI * 2;
+        // TODO(jstpierre): Why do we need this? Something's fishy in Beach Bowl Galaxy...
+        // VolumeSweep is 0.75 but it doesn't look like it goes 3/4ths of the way around...
+        angle -= Math.PI / 2;
+        const height = workData.volumeSize * get_r_zp(this.random);
+        vec3.set(workData.volumePos, sizeXZ * Math.sin(angle), height, sizeXZ * Math.cos(angle));
+        vec3.mul(workData.velOmni, workData.volumePos, workData.emitterGlobalScl);
+        vec3.set(workData.velAxis, workData.volumePos[0], 0, workData.volumePos[2]);
     }
 
     private calcVolumeTorus(workData: JPAEmitterWorkData): void {
@@ -860,7 +952,27 @@ export class JPABaseEmitter {
     }
 
     private calcVolumeCircle(workData: JPAEmitterWorkData): void {
-        throw "whoops";
+        const bem1 = this.resData.res.bem1;
+
+        let angle: number;
+        if (!!(bem1.flags & 0x02)) {
+            // Fixed interval
+            const idx = workData.volumeEmitIdx++;
+            angle = workData.volumeSweep * (idx / workData.volumeEmitCount) * Math.PI * 2;
+        } else {
+            angle = workData.volumeSweep * get_rndm_f(this.random) * Math.PI * 2;
+        }
+
+        let distance = get_rndm_f(this.random);
+        if (!!(bem1.flags & 0x01)) {
+            // Fixed density
+            distance = 1.0 - (distance * distance);
+        }
+
+        const sizeXZ = workData.volumeSize * lerp(workData.volumeMinRad, 1.0, distance);
+        vec3.set(workData.volumePos, sizeXZ * Math.sin(angle), 0, sizeXZ * Math.cos(angle));
+        vec3.mul(workData.velOmni, workData.volumePos, workData.emitterGlobalScl);
+        vec3.set(workData.velAxis, workData.volumePos[0], 0, workData.volumePos[2]);
     }
 
     private calcVolumeLine(workData: JPAEmitterWorkData): void {
@@ -913,9 +1025,11 @@ export class JPABaseEmitter {
                     this.emitCount = bem1.divNumber * bem1.divNumber * 4 + 2;
                 else
                     this.emitCount = bem1.divNumber;
+                workData.volumeEmitCount = this.emitCount;
+                workData.volumeEmitIdx = 0;
             } else {
                 // Rate
-                const emitCountIncr = bem1.rate + (bem1.rate * bem1.rateRndm * get_r_zp(this.random));
+                const emitCountIncr = this.rate * (1.0 + bem1.rateRndm * get_r_zp(this.random));
                 this.emitCount += emitCountIncr;
 
                 // If this is the first emission and we got extremely bad luck, force a particle.
@@ -923,7 +1037,10 @@ export class JPABaseEmitter {
                     this.emitCount = 1;
             }
 
-            while (this.emitCount > 0) {
+            if (!!(this.flags & BaseEmitterFlags.STOP_EMIT_PARTICLES))
+                this.emitCount = 0;
+
+            while (this.emitCount > 1) {
                 this.createParticle();
                 this.emitCount--;
             }
@@ -945,7 +1062,7 @@ export class JPABaseEmitter {
         if (this.waitTime >= this.resData.res.bem1.startFrame)
             return true;
 
-        if (!!(this.flags & BaseEmitterFlags.PAUSED))
+        if (!(this.flags & BaseEmitterFlags.STOP_CALC_EMITTER))
             this.waitTime += this.emitterManager.workData.deltaTime;
 
         return false;
@@ -959,11 +1076,13 @@ export class JPABaseEmitter {
             return false;
 
         if (this.maxFrame < 0) {
-            this.flags |= BaseEmitterFlags.PAUSED_EMISSION;
+            this.flags |= BaseEmitterFlags.TERMINATED;
             return (this.aliveParticlesBase.length === 0 && this.aliveParticlesChild.length === 0);
         }
 
         if (this.tick >= this.maxFrame) {
+            this.flags |= BaseEmitterFlags.TERMINATED;
+
             if (!!(this.flags & BaseEmitterFlags.DO_NOT_TERMINATE))
                 return false;
 
@@ -980,33 +1099,33 @@ export class JPABaseEmitter {
         workData.volumeSweep = this.volumeSweep;
         workData.divNumber = this.resData.res.bem1.divNumber * 2 + 1;
 
-        mat4.copy(workData.rotationMatrix, this.globalRotation);
+        mat4.copy(workData.globalRotation, this.globalRotation);
 
         JPAGetXYZRotateMtx(scratchMatrix, this.emitterRot);
-        mat4.mul(workData.globalRotation, workData.globalRotation, scratchMatrix);
+        mat4.mul(workData.emitterGlobalRot, workData.globalRotation, scratchMatrix);
 
         mat4.fromScaling(scratchMatrix, this.emitterScl);
-        mat4.mul(workData.globalSR, workData.globalRotation, scratchMatrix);
+        mat4.mul(workData.emitterGlobalSR, workData.emitterGlobalRot, scratchMatrix);
 
-        vec3.mul(workData.globalScale, this.globalScale, this.emitterScl);
-        JPAGetDirMtx(workData.directionMtx, this.emitterDir);
-        vec3.copy(workData.publicScale, this.globalScale);
+        vec3.mul(workData.emitterGlobalScl, this.globalScale, this.emitterScl);
+        JPAGetDirMtx(workData.emitterDirMtx, this.emitterDir);
+        vec3.copy(workData.globalScale, this.globalScale);
 
-        vec3.copy(workData.emitterPosition, this.emitterTrs);
+        vec3.copy(workData.emitterTrs, this.emitterTrs);
 
         mat4.fromScaling(scratchMatrix, this.globalScale);
         mat4.mul(scratchMatrix, this.globalRotation, scratchMatrix);
         scratchMatrix[12] = this.globalTranslation[0];
         scratchMatrix[13] = this.globalTranslation[1];
         scratchMatrix[14] = this.globalTranslation[2];
-        vec3.transformMat4(workData.globalPosition, this.emitterTrs, scratchMatrix);
+        vec3.transformMat4(workData.emitterGlobalSRT, this.emitterTrs, scratchMatrix);
     }
 
     private calcWorkData_d(workData: JPAEmitterWorkData): void {
         // Set up the work data for drawing.
         JPAGetXYZRotateMtx(scratchMatrix, this.emitterRot);
-        mat4.mul(workData.globalRotation, workData.globalRotation, scratchMatrix);
-        vec3.transformMat4(workData.globalEmitterDir, this.emitterDir, workData.globalRotation);
+        mat4.mul(workData.emitterGlobalRot, workData.emitterGlobalRot, scratchMatrix);
+        vec3.transformMat4(workData.emitterGlobalDir, this.emitterDir, workData.emitterGlobalRot);
     }
 
     public calc(workData: JPAEmitterWorkData): boolean {
@@ -1018,7 +1137,7 @@ export class JPABaseEmitter {
 
         workData.baseEmitter = this;
 
-        if (!(this.flags & BaseEmitterFlags.PAUSED)) {
+        if (!(this.flags & BaseEmitterFlags.STOP_CALC_EMITTER)) {
             this.calcKey();
 
             // Reset fields.
@@ -1040,7 +1159,7 @@ export class JPABaseEmitter {
 
             // mFieldBlocks
 
-            if (!(this.flags & BaseEmitterFlags.PAUSED_EMISSION))
+            if (!(this.flags & BaseEmitterFlags.TERMINATED))
                 this.create();
 
             // Emitter callback +0x10
@@ -1125,7 +1244,7 @@ export class JPABaseEmitter {
     }
 
     public draw(device: GfxDevice, renderHelper: GXRenderHelperGfx, workData: JPAEmitterWorkData): void {
-        if (!!(this.flags & BaseEmitterFlags.STOP_DRAW))
+        if (!!(this.flags & BaseEmitterFlags.STOP_DRAW_PARTICLE))
             return;
 
         workData.baseEmitter = this;
@@ -1147,10 +1266,6 @@ function normToLengthAndAdd(dst: vec3, a: vec3, len: number): void {
     dst[0] += a[0] * inv;
     dst[1] += a[1] * inv;
     dst[2] += a[2] * inv;
-}
-
-function lerp(a: number, b: number, t: number): number {
-    return a + (b - a) * t;
 }
 
 const scratchMatrix = mat4.create();
@@ -1196,16 +1311,16 @@ export class JPABaseParticle {
 
         const lifeTimeRandom = get_rndm_f(baseEmitter.random);
         this.lifeTime = baseEmitter.lifeTime * (1.0 - lifeTimeRandom * bem1.lifeTimeRndm);
-        vec3.transformMat4(this.localPosition, workData.volumePos, workData.globalSR);
+        vec3.transformMat4(this.localPosition, workData.volumePos, workData.emitterGlobalSR);
 
         if (!!(bem1.flags & 0x08))
             this.flags = this.flags | 0x20;
 
-        vec3.copy(this.globalPosition, workData.globalPosition);
+        vec3.copy(this.globalPosition, workData.emitterGlobalSRT);
 
-        this.position[0] = this.globalPosition[0] + this.localPosition[0] * workData.publicScale[0];
-        this.position[1] = this.globalPosition[1] + this.localPosition[1] * workData.publicScale[1];
-        this.position[2] = this.globalPosition[2] + this.localPosition[2] * workData.publicScale[2];
+        this.position[0] = this.globalPosition[0] + this.localPosition[0] * workData.globalScale[0];
+        this.position[1] = this.globalPosition[1] + this.localPosition[1] * workData.globalScale[1];
+        this.position[2] = this.globalPosition[2] + this.localPosition[2] * workData.globalScale[2];
 
         vec3.set(this.velType1, 0, 0, 0);
 
@@ -1219,7 +1334,7 @@ export class JPABaseParticle {
             mat4.identity(scratchMatrix);
             mat4.rotateZ(scratchMatrix, scratchMatrix, randZ / 0xFFFF * Math.PI);
             mat4.rotateY(scratchMatrix, scratchMatrix, baseEmitter.spread * randY * Math.PI);
-            mat4.mul(scratchMatrix, workData.directionMtx, scratchMatrix);
+            mat4.mul(scratchMatrix, workData.emitterDirMtx, scratchMatrix);
             this.velType1[0] += baseEmitter.initialVelDir * scratchMatrix[8];
             this.velType1[1] += baseEmitter.initialVelDir * scratchMatrix[9];
             this.velType1[2] += baseEmitter.initialVelDir * scratchMatrix[10];
@@ -1228,13 +1343,14 @@ export class JPABaseParticle {
             const randZ = get_rndm_f(baseEmitter.random) - 0.5;
             const randY = get_rndm_f(baseEmitter.random) - 0.5;
             const randX = get_rndm_f(baseEmitter.random) - 0.5;
-            this.velType1[0] += randX;
-            this.velType1[1] += randY;
-            this.velType1[2] += randZ;
+            this.velType1[0] += baseEmitter.initialVelRndm * randX;
+            this.velType1[1] += baseEmitter.initialVelRndm * randY;
+            this.velType1[2] += baseEmitter.initialVelRndm * randZ;
         }
-        this.velType1[0] *= bem1.initialVelRatio;
-        this.velType1[1] *= bem1.initialVelRatio;
-        this.velType1[2] *= bem1.initialVelRatio;
+        const velRatio = 1.0 + get_r_zp(baseEmitter.random) * bem1.initialVelRatio;
+        this.velType1[0] *= velRatio;
+        this.velType1[1] *= velRatio;
+        this.velType1[2] *= velRatio;
 
         if (!!(bem1.flags & 0x04)) {
             this.velType1[0] *= baseEmitter.emitterScl[0];
@@ -1242,12 +1358,12 @@ export class JPABaseParticle {
             this.velType1[2] *= baseEmitter.emitterScl[2];
         }
 
-        vec3.transformMat4(this.velType1, this.velType1, workData.globalRotation);
+        vec3.transformMat4(this.velType1, this.velType1, workData.emitterGlobalRot);
         vec3.set(this.velType0, 0, 0, 0);
 
         this.drag = 1.0;
         this.moment = 1.0 - (bem1.moment * get_rndm_f(baseEmitter.random));
-        vec3.set(this.upVector, workData.globalRotation[1], workData.globalRotation[5], workData.globalRotation[9]);
+        vec3.set(this.upVector, workData.emitterGlobalRot[1], workData.emitterGlobalRot[5], workData.emitterGlobalRot[9]);
 
         colorCopy(this.colorPrm, baseEmitter.colorPrm);
         colorCopy(this.colorEnv, baseEmitter.colorEnv);
@@ -1309,7 +1425,7 @@ export class JPABaseParticle {
         if (!!((field.flags >>> 0x10) & 2)) {
             vec3.scale(scratchVec3a, field.dir, field.param1);
         } else {
-            vec3.transformMat4(scratchVec3a, field.dir, workData.rotationMatrix);
+            vec3.transformMat4(scratchVec3a, field.dir, workData.globalRotation);
             vec3.scale(scratchVec3a, scratchVec3a, field.param1);
         }
 
@@ -1321,8 +1437,8 @@ export class JPABaseParticle {
         // Prepare
 
         // Convert to emitter space.
-        vec3.sub(scratchVec3a, field.pos, workData.emitterPosition);
-        vec3.transformMat4(scratchVec3a, scratchVec3a, workData.rotationMatrix);
+        vec3.sub(scratchVec3a, field.pos, workData.emitterTrs);
+        vec3.transformMat4(scratchVec3a, scratchVec3a, workData.globalRotation);
 
         const power = 10 * field.param1;
         const refDistanceSq = field.param3 * field.param3;
@@ -1343,7 +1459,7 @@ export class JPABaseParticle {
         const forceDir = scratchVec3a;
         const forceVec = scratchVec3b;
 
-        vec3.transformMat4(forceDir, field.dir, workData.globalRotation);
+        vec3.transformMat4(forceDir, field.dir, workData.emitterGlobalRot);
         vec3.normalize(forceDir, forceDir);
 
         const distance = field.pos[2];
@@ -1412,6 +1528,8 @@ export class JPABaseParticle {
                 this.calcFieldVortex(field, workData);
             else if (field.type === JPAFieldType.Random)
                 this.calcFieldRandom(field, workData);
+            else
+                throw "whoops";
         }
     }
 
@@ -1448,7 +1566,7 @@ export class JPABaseParticle {
         this.time = this.tick / this.lifeTime;
 
         if (!!(this.flags & 0x20))
-            vec3.copy(this.globalPosition, workData.globalPosition);
+            vec3.copy(this.globalPosition, workData.emitterGlobalSRT);
 
         vec3.set(this.velType2, 0, 0, 0);
 
@@ -1468,14 +1586,15 @@ export class JPABaseParticle {
             const bsp1 = res.bsp1;
             const esp1 = res.esp1;
 
-            const randomPhase = this.anmRandom & bsp1.anmRndmMask;
-
             const texCalcOnEmitter = !!(bsp1.flags & 0x00004000);
-            if (!texCalcOnEmitter)
+            if (!texCalcOnEmitter) {
+                const randomPhase = this.anmRandom & bsp1.texAnmRndmMask;
                 this.texAnmIdx = calcTexIdx(workData, this.tick, this.time, randomPhase);
+            }
 
             const colorCalcOnEmitter = !!(bsp1.flags & 0x00001000);
             if (!colorCalcOnEmitter) {
+                const randomPhase = this.anmRandom & bsp1.colorAnmRndmMask;
                 calcColor(this.colorPrm, this.colorEnv, workData, this.tick, this.time, randomPhase);
             } else {
                 colorCopy(this.colorPrm, workData.baseEmitter.colorPrm);
@@ -1535,6 +1654,7 @@ export class JPABaseParticle {
 
     public draw(device: GfxDevice, renderHelper: GXRenderHelperGfx, workData: JPAEmitterWorkData, materialParams: MaterialParams): void {
         const bsp1 = workData.baseEmitter.resData.res.bsp1;
+        const esp1 = workData.baseEmitter.resData.res.esp1;
 
         // mpDrawParticleFuncList
 
@@ -1547,8 +1667,7 @@ export class JPABaseParticle {
         if (!texCalcOnEmitter)
             workData.baseEmitter.resData.texData[this.texAnmIdx].fillTextureMapping(materialParams.m_TextureMapping[0]);
 
-        // TODO(jstpierre): RotBillboard. Rot flags are decided by flag 0x01000000 in ESP1.
-        const isRot = false;
+        const isRot = !!(esp1.flags & 0x01000000);
 
         const materialHelper = workData.baseEmitter.resData.materialHelper;
         const renderInstManager = renderHelper.renderInstManager;
@@ -1561,7 +1680,18 @@ export class JPABaseParticle {
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
         const globalRes = workData.emitterManager.globalRes;
-        if (bsp1.type === JPABSPType.BillBoard && !isRot) {
+        if (bsp1.type === JPABSPType.BillBoard) {
+            // TODO(jstpierre): isRot
+            renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateBillboard);
+            renderInst.drawIndexes(6, 0);
+            vec3.transformMat4(scratchVec3a, this.position, workData.posCamMtx);
+            computeModelMatrixSRT(packetParams.u_PosMtx[0],
+                this.scale[0] * workData.globalScale2D[0],
+                this.scale[1] * workData.globalScale2D[1],
+                1,
+                0, 0, 0,
+                scratchVec3a[0], scratchVec3a[1], scratchVec3a[2]);
+        } else if (bsp1.type === JPABSPType.DirectionalCross) {
             renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateBillboard);
             renderInst.drawIndexes(6, 0);
             vec3.transformMat4(scratchVec3a, this.position, workData.posCamMtx);
@@ -1728,7 +1858,8 @@ function parseResource(res: JPAResourceRaw): JPAResource {
             const colorEnv = colorNew(colorEnvR, colorEnvG, colorEnvB, colorEnvA);
 
             const anmRndm = view.getUint8(tableIdx + 0x2E);
-            const anmRndmMask = view.getUint8(tableIdx + 0x30);
+            const colorAnmRndmMask = view.getUint8(tableIdx + 0x2F);
+            const texAnmRndmMask = view.getUint8(tableIdx + 0x30);
 
             let extraDataOffs = tableIdx + 0x34;
 
@@ -1762,7 +1893,7 @@ function parseResource(res: JPAResourceRaw): JPAResource {
                 blendModeFlags, alphaCompareFlags, alphaRef0, alphaRef1, zModeFlags,
                 texFlags, texIdx, texIdxAnimData,
                 colorFlags, colorPrm, colorEnv, colorEnvAnimData, colorPrmAnimData, colorRegAnmMaxFrm,
-                anmRndm, anmRndmMask,
+                anmRndm, texAnmRndmMask, colorAnmRndmMask,
             };
         } else if (fourcc === 'ESP1') {
             // J3DExtraShape

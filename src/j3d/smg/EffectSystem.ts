@@ -1,7 +1,7 @@
 
 import { createCsvParser, JMapInfoIter } from "./JMapInfo";
 import { SceneObjHolder, LiveActor } from "./smg_scenes";
-import { leftPad, assert } from "../../util";
+import { leftPad, assert, assertExists } from "../../util";
 import { GfxDevice } from "../../gfx/platform/GfxPlatform";
 
 import * as RARC from '../../j3d/rarc';
@@ -9,7 +9,8 @@ import * as JPA from '../JPA';
 import { Color } from "../../gx/gx_material";
 import { vec3, mat4 } from "gl-matrix";
 import { GXRenderHelperGfx } from "../../gx/gx_render_2";
-import { colorNew, colorNewCopy, White, colorCopy } from "../../Color";
+import { colorNewCopy, White, colorCopy } from "../../Color";
+import { computeModelMatrixR } from "../../MathHelpers";
 
 export class ParticleResourceHolder {
     private effectNames: string[];
@@ -73,36 +74,107 @@ export const enum DrawOrder {
     DRW_AFTER_INDIRECT,
 }
 
+const enum SRTFlags {
+    S = 1, R = 2, T = 4,
+}
+
+function parseSRTFlags(value: string): SRTFlags {
+    let flags: SRTFlags = 0;
+    if (value.includes('S'))
+        flags |= SRTFlags.S;
+    if (value.includes('R'))
+        flags |= SRTFlags.R;
+    if (value.includes('T'))
+        flags |= SRTFlags.T;
+    return flags;
+}
+
 export function setupMultiEmitter(m: MultiEmitter, autoEffectIter: JMapInfoIter): void {
     vec3.set(m.offset,
         autoEffectIter.getValueNumber('OffsetX', 0),
         autoEffectIter.getValueNumber('OffsetY', 0),
         autoEffectIter.getValueNumber('OffsetZ', 0),
     );
+    m.scaleValue = autoEffectIter.getValueNumber('ScaleValue', 1.0);
+    m.jointName = autoEffectIter.getValueString('JointName');
+    if (m.jointName === '')
+        m.jointName = null;
+    m.affectFlags = parseSRTFlags(autoEffectIter.getValueString('Affect'));
+    m.followFlags = parseSRTFlags(autoEffectIter.getValueString('Follow'));
 
     parseColor(m.globalPrmColor, autoEffectIter.getValueString('PrmColor'));
     parseColor(m.globalEnvColor, autoEffectIter.getValueString('EnvColor'));
 
-    const scaleValue = autoEffectIter.getValueNumber('ScaleValue', 1.0);
-    vec3.set(m.scaleValue, scaleValue, scaleValue, scaleValue);
-
     const drawOrder = autoEffectIter.getValueString('DrawOrder');
     if (drawOrder === 'AFTER_INDIRECT')
-        m.drawOrder = DrawOrder.DRW_AFTER_INDIRECT;
+        m.setDrawOrder(DrawOrder.DRW_AFTER_INDIRECT);
     else
-        m.drawOrder = DrawOrder.DRW_3D;
+        m.setDrawOrder(DrawOrder.DRW_3D);
 }
 
+class ParticleEmitter {
+    public baseEmitter: JPA.JPABaseEmitter | null = null;
+
+    public init(baseEmitter: JPA.JPABaseEmitter): void {
+        this.baseEmitter = baseEmitter;
+        this.baseEmitter.flags |= JPA.BaseEmitterFlags.DO_NOT_TERMINATE;
+    }
+
+    public invalidate(): void {
+        this.baseEmitter = null;
+    }
+}
+
+class SingleEmitter {
+    public particleEmitter: ParticleEmitter | null = null;
+    public resource: JPA.JPAResourceData | null = null;
+    public groupID: number = 0;
+
+    public init(resource: JPA.JPAResourceData): void {
+        this.resource = resource;
+    }
+
+    public deleteEmitter(): void {
+        if (this.isValid())
+            deleteParticleEmitter(this.particleEmitter);
+    }
+
+    public isValid(): boolean {
+        if (this.particleEmitter === null)
+            return false;
+
+        return this.particleEmitter.baseEmitter !== null;
+    }
+
+    public setGroupID(groupID: number): void {
+        this.groupID = groupID;
+    }
+
+    public link(particleEmitter: ParticleEmitter): void {
+        this.particleEmitter = particleEmitter;
+        this.particleEmitter.baseEmitter.userData = this;
+    }
+
+    public unlink(): void {
+        this.particleEmitter = null;
+    }
+}
+
+const scratchMatrix = mat4.create();
+const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
+const scratchVec3c = vec3.create();
 export class MultiEmitter {
-    private baseEmitters: JPA.JPABaseEmitter[] = [];
-    private resources: JPA.JPAResourceData[] = [];
+    private singleEmitters: SingleEmitter[] = [];
     public name: string;
     public offset = vec3.create();
-    public translation = vec3.create();
-    public scaleValue = vec3.create();
+    public scaleValue: number = 0;
     public drawOrder: DrawOrder;
     public globalPrmColor = colorNewCopy(White);
     public globalEnvColor = colorNewCopy(White);
+    public affectFlags: SRTFlags = 0;
+    public followFlags: SRTFlags = 0;
+    public jointName: string;
 
     constructor(sceneObjHolder: SceneObjHolder, effectName: string) {
         this.allocateEmitter(sceneObjHolder, effectName);
@@ -132,21 +204,36 @@ export class MultiEmitter {
 
         for (let i = 0; i < qualifiedEffectNames.length; i++) {
             const resData = particleResourceHolder.getResourceData(sceneObjHolder, qualifiedEffectNames[i]);
-            this.resources.push(resData);
+            const singleEmitter = new SingleEmitter();
+            singleEmitter.init(resData);
+            this.singleEmitters.push(singleEmitter);
         }
     }
 
+    public setDrawOrder(drawOrder: DrawOrder): void {
+        for (let i = 0; i < this.singleEmitters.length; i++)
+            this.singleEmitters[i].setGroupID(drawOrder);
+    }
+
     public createEmitter(effectSystem: EffectSystem): void {
-        for (let i = 0; i < this.resources.length; i++) {
-            const baseEmitter = effectSystem.createSingleEmitter(this.resources[i]);
-            // The real system uses callbacks. Here, we shove the values we want.
-            baseEmitter.setGlobalScale(this.scaleValue);
-            vec3.copy(baseEmitter.globalTranslation, this.offset);
-            colorCopy(baseEmitter.globalColorPrm, this.globalPrmColor);
-            colorCopy(baseEmitter.globalColorEnv, this.globalEnvColor);
-            baseEmitter.drawGroupId = this.drawOrder;
-            this.baseEmitters.push(baseEmitter);
+        for (let i = 0; i < this.singleEmitters.length; i++) {
+            const singleEmitter = this.singleEmitters[i];
+
+            effectSystem.createSingleEmitter(singleEmitter);
+
+            if (singleEmitter.isValid()) {
+                const baseEmitter = singleEmitter.particleEmitter.baseEmitter;
+
+                // The real system uses callbacks. Here, we shove the values we want.
+                colorCopy(baseEmitter.globalColorPrm, this.globalPrmColor);
+                colorCopy(baseEmitter.globalColorEnv, this.globalEnvColor);
+            }
         }
+    }
+
+    public deleteEmitter(): void {
+        for (let i = 0; i < this.singleEmitters.length; i++)
+            this.singleEmitters[i].deleteEmitter();
     }
 
     public setName(name: string): void {
@@ -154,21 +241,79 @@ export class MultiEmitter {
     }
 
     public setDrawParticle(v: boolean): void {
-        for (let i = 0; i < this.baseEmitters.length; i++)
-            this.baseEmitters[i].setVisible(v);
+        for (let i = 0; i < this.singleEmitters.length; i++) {
+            const emitter = this.singleEmitters[i];
+            if (!emitter.isValid())
+                continue;
+            emitter.particleEmitter.baseEmitter.setDrawParticle(v);
+        }
     }
 
-    public setGlobalTranslation(v: vec3): void {
-        for (let i = 0; i < this.baseEmitters.length; i++)
-            vec3.add(this.baseEmitters[i].globalTranslation, v, this.offset);
+    private setSRT(scale: vec3 | null, rotation: mat4 | null, translation: vec3 | null): void {
+        for (let i = 0; i < this.singleEmitters.length; i++) {
+            const emitter = this.singleEmitters[i];
+            if (!emitter.isValid())
+                continue;
+            const baseEmitter = emitter.particleEmitter.baseEmitter;
+
+            if (scale !== null)
+                baseEmitter.setGlobalScale(scale);
+            if (translation !== null)
+                vec3.copy(baseEmitter.globalTranslation, translation);
+            if (rotation !== null)
+                mat4.copy(baseEmitter.globalRotation, rotation);
+        }
     }
 
-    public getGlobalTranslation(): vec3 {
-        return this.baseEmitters[0].globalTranslation;
+    private followSRT(scale: vec3, rot: mat4, trans: vec3, isFollow: boolean): void {
+        const srtFlags = isFollow ? this.followFlags : this.affectFlags;
+
+        if (!!(srtFlags & SRTFlags.T)) {
+            vec3.transformMat4(scratchVec3c, this.offset, rot);
+
+            if (!!(srtFlags & SRTFlags.S))
+                vec3.mul(scratchVec3c, scratchVec3c, scale);
+
+            vec3.add(trans, trans, scratchVec3c);
+        } else if (!isFollow) {
+            vec3.copy(scale, this.offset);
+        } else {
+            trans = null;
+        }
+
+        if (!!(srtFlags & SRTFlags.R)) {
+            // TODO(jstpierre): isEffect2D branch
+        } else {
+            rot = null;
+        }
+
+        if (!!(srtFlags & SRTFlags.S)) {
+            vec3.scale(scale, scale, this.scaleValue);
+        } else if (!isFollow) {
+            vec3.set(scale, this.scaleValue, this.scaleValue, this.scaleValue);
+        } else {
+            scale = null;
+        }
+
+        this.setSRT(scale, rot, trans);
     }
 
-    public setHostSRT(scale: vec3, rotation: vec3, translation: vec3): void {
-        this.setGlobalTranslation(translation);
+    public setSRTFromHostMtx(mtx: mat4, isFollow: boolean): void {
+        const scale = scratchVec3a;
+        const rot = scratchMatrix;
+        const trans = scratchVec3b;
+        JPA.JPASetRMtxSTVecFromMtx(scale, rot, trans, mtx);
+        this.followSRT(scale, rot, trans, isFollow);
+    }
+
+    public setSRTFromHostSRT(scaleIn: vec3, rotIn: vec3, transIn: vec3, isFollow: boolean): void {
+        const scale = scratchVec3a;
+        const rot = scratchMatrix;
+        const trans = scratchVec3b;
+        vec3.copy(scale, scaleIn);
+        computeModelMatrixR(rot, rotIn[0], rotIn[1], rotIn[2]);
+        vec3.copy(trans, transIn);
+        this.followSRT(scale, rot, trans, isFollow);
     }
 }
 
@@ -195,12 +340,6 @@ export class EffectKeeper {
         const m = new MultiEmitter(sceneObjHolder, autoEffectInfo.getValueString('EffectName'));
         m.setName(autoEffectInfo.getValueString('UniqueName'));
 
-        // TODO(jstpierre): jointName and other fun facts.
-        // const jointName = autoEffectInfo.getValueString('JointName');
-        // if (jointName !== null) {
-        // }
-        m.translation = this.actor.translation;
-
         setupMultiEmitter(m, autoEffectInfo);
         this.multiEmitters.push(m);
     }
@@ -214,19 +353,72 @@ export class EffectKeeper {
 
     public createEmitter(sceneObjHolder: SceneObjHolder, name: string): MultiEmitter | null {
         const multiEmitter = this.getEmitter(name);
-        if (multiEmitter !== null)
+        if (multiEmitter !== null) {
             multiEmitter.createEmitter(sceneObjHolder.effectSystem);
+            this.setHostSRT(multiEmitter, false);
+        }
         return multiEmitter;
     }
 
-    public setHostSRT(): void {
+    public deleteEmitter(name: string): void {
+        const multiEmitter = this.getEmitter(name);
+        if (multiEmitter !== null)
+            multiEmitter.deleteEmitter();
+    }
+
+    private setHostSRT(multiEmitter: MultiEmitter, isFollow: boolean): void {
+        if (multiEmitter.jointName !== null) {
+            const jointMtx = this.actor.getJointMtx(multiEmitter.jointName);
+            multiEmitter.setSRTFromHostMtx(jointMtx, isFollow);
+        } else {
+            const baseMtx = this.actor.getBaseMtx();
+            if (baseMtx !== null) {
+                multiEmitter.setSRTFromHostMtx(baseMtx, isFollow);
+            } else {
+                multiEmitter.setSRTFromHostSRT(this.actor.scale, this.actor.rotation, this.actor.translation, isFollow);
+            }
+        }
+    }
+
+    public followSRT(): void {
         for (let i = 0; i < this.multiEmitters.length; i++)
-            this.multiEmitters[i].setHostSRT(this.actor.scale, this.actor.rotation, this.actor.translation);
+            this.setHostSRT(this.multiEmitters[i], true);
+    }
+}
+
+export class ParticleEmitterHolder {
+    private particleEmitters: ParticleEmitter[] = [];
+
+    constructor(private effectSystem: EffectSystem, maxParticleCount: number) {
+        for (let i = 0; i < maxParticleCount; i++)
+            this.particleEmitters.push(new ParticleEmitter());
+    }
+
+    public findAvailableParticleEmitter(): ParticleEmitter | null {
+        for (let i = 0; i < this.particleEmitters.length; i++)
+            if (this.particleEmitters[i].baseEmitter === null)
+                return this.particleEmitters[i];
+        return null;
+    }
+
+    public update(): void {
+        for (let i = 0; i < this.particleEmitters.length; i++) {
+            const emitter = this.particleEmitters[i];
+            const baseEmitter = emitter.baseEmitter;
+            if (baseEmitter === null)
+                continue;
+
+            if (!!(baseEmitter.flags & JPA.BaseEmitterFlags.TERMINATED) &&
+                baseEmitter.aliveParticlesBase.length === 0 &&
+                baseEmitter.aliveParticlesChild.length === 0)
+                this.effectSystem.forceDeleteEmitter(emitter);
+        }
     }
 }
 
 export class EffectSystem {
     public particleResourceHolder: ParticleResourceHolder;
+    public particleEmitterHolder: ParticleEmitterHolder;
     public emitterManager: JPA.JPAEmitterManager;
     public drawInfo = new JPA.JPADrawInfo();
 
@@ -237,9 +429,12 @@ export class EffectSystem {
         const maxParticleCount = 0x1800;
         const maxEmitterCount = 0x200;
         this.emitterManager = new JPA.JPAEmitterManager(device, maxParticleCount, maxEmitterCount);
+
+        this.particleEmitterHolder = new ParticleEmitterHolder(this, maxParticleCount);
     }
 
     public calc(deltaTime: number): void {
+        this.particleEmitterHolder.update();
         this.emitterManager.calc(deltaTime);
     }
 
@@ -248,16 +443,53 @@ export class EffectSystem {
         this.drawInfo.prjMtx = prjMtx;
     }
 
-    public draw(device: GfxDevice, renderHelper: GXRenderHelperGfx, groupId: number): void {
-        this.emitterManager.draw(device, renderHelper, this.drawInfo, groupId);
+    public draw(device: GfxDevice, renderHelper: GXRenderHelperGfx, groupID: number): void {
+        this.emitterManager.draw(device, renderHelper, this.drawInfo, groupID);
     }
 
-    public createSingleEmitter(resData: JPA.JPAResourceData): JPA.JPABaseEmitter | null {
-        return this.emitterManager.createEmitter(resData);
+    private createEmitter(resData: JPA.JPAResourceData, groupID: number): ParticleEmitter | null {
+        const particleEmitter = this.particleEmitterHolder.findAvailableParticleEmitter();
+        if (particleEmitter === null)
+            return null;
+        const baseEmitter = this.emitterManager.createEmitter(resData);
+        baseEmitter.drawGroupId = groupID;
+        particleEmitter.init(baseEmitter);
+        return particleEmitter;
+    }
+
+    public createSingleEmitter(singleEmitter: SingleEmitter): void {
+        if (singleEmitter.isValid()) {
+            // if (singleEmitter.isOneTime())
+            //     return;
+            singleEmitter.unlink();
+        }
+    
+        const emitter = this.createEmitter(singleEmitter.resource, singleEmitter.groupID);
+
+        if (emitter !== null) {
+            singleEmitter.link(emitter);
+            // Install MultiEmitterCallBack.
+        }
+    }
+
+    public forceDeleteEmitter(emitter: ParticleEmitter): void {
+        if (emitter.baseEmitter.userData !== null) {
+            const singleEmitter = emitter.baseEmitter.userData as SingleEmitter;
+            singleEmitter.particleEmitter = null;
+        }
+
+        this.emitterManager.forceDeleteEmitter(emitter.baseEmitter);
+        emitter.invalidate();
     }
 
     public destroy(device: GfxDevice): void {
         this.particleResourceHolder.destroy(device);
         this.emitterManager.destroy(device);
     }
+}
+
+export function deleteParticleEmitter(emitter: ParticleEmitter): void {
+    const baseEmitter = assertExists(emitter.baseEmitter);
+    baseEmitter.flags |= JPA.BaseEmitterFlags.STOP_EMIT_PARTICLES;
+    baseEmitter.maxFrame = 1;
 }

@@ -6,7 +6,7 @@ import { SceneObjHolder, LiveActor, ZoneAndLayer, getObjectName, SMGPass, startB
 import { JMapInfoIter, getJMapInfoArg3, getJMapInfoArg2, getJMapInfoArg7, getJMapInfoArg0, getJMapInfoArg1, createCsvParser } from './JMapInfo';
 import { mat4, vec3 } from 'gl-matrix';
 import AnimationController from '../../AnimationController';
-import { MathConstants, computeModelMatrixSRT } from '../../MathHelpers';
+import { MathConstants, computeModelMatrixSRT, clamp } from '../../MathHelpers';
 import { colorNewFromRGBA8 } from '../../Color';
 import { ColorKind } from '../../gx/gx_render';
 import { BTK, BRK } from '../j3d';
@@ -44,6 +44,10 @@ export function connectToSceneCollisionMapObj(sceneObjHolder: SceneObjHolder, ac
     connectToScene(sceneObjHolder, actor, 0x1E, 0x02, 0x08, -1);
 }
 
+export function connectToSceneMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    connectToScene(sceneObjHolder, actor, 0x22, 0x05, 0x08, -1);
+}
+
 export function connectToSceneNoSilhouettedMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
     connectToScene(sceneObjHolder, actor, 0x22, 0x05, 0x0D, -1);
 }
@@ -60,6 +64,27 @@ export function createModelObjBloomModel(zoneAndLayer: ZoneAndLayer, sceneObjHol
 
 export function createModelObjMapObj(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, objName: string, modelName: string, baseMtx: mat4): ModelObj {
     return new ModelObj(zoneAndLayer, sceneObjHolder, objName, modelName, baseMtx, 0x08, -2, -2);
+}
+
+export function emitEffect(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string): void {
+    actor.effectKeeper.createEmitter(sceneObjHolder, name);
+}
+
+export function deleteEffect(actor: LiveActor, name: string): void {
+    actor.effectKeeper.deleteEmitter(name);
+}
+
+export function hideModel(actor: LiveActor): void {
+    actor.visibleDraw = false;
+}
+
+export function showModel(actor: LiveActor): void {
+    actor.visibleDraw = true;
+}
+
+export function calcUpVec(v: vec3, actor: LiveActor): void {
+    const mtx = actor.getBaseMtx();
+    vec3.set(v, mtx[4], mtx[5], mtx[6]);
 }
 
 function bindColorChangeAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, frame: number, brkName: string = 'colorchange.brk'): void {
@@ -735,17 +760,12 @@ export class SimpleEffectObj extends LiveActor {
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.movement(sceneObjHolder, viewerInput);
 
-        const visible = this.visibleAlive && this.visibleScenario;
-        for (let i = 0; i < this.effectKeeper.multiEmitters.length; i++) {
-            const emitter = this.effectKeeper.multiEmitters[i];
-            if (visible) {
-                const globalTranslation = emitter.getGlobalTranslation();
-                const visible = viewerInput.camera.frustum.containsSphere(globalTranslation, this.getClippingRadius());
-                emitter.setDrawParticle(visible);
-            } else {
-                emitter.setDrawParticle(false);
-            }
-        }
+        let visible = this.visibleAlive && this.visibleScenario;
+        if (visible)
+            visible = viewerInput.camera.frustum.containsSphere(this.translation, this.getClippingRadius());
+
+        for (let i = 0; i < this.effectKeeper.multiEmitters.length; i++)
+            this.effectKeeper.multiEmitters[i].setDrawParticle(visible);
     }
 }
 
@@ -767,5 +787,100 @@ export class GCaptureTarget extends LiveActor {
 
         this.effectKeeper.createEmitter(sceneObjHolder, 'TargetLight');
         this.effectKeeper.createEmitter(sceneObjHolder, 'TouchAble');
+    }
+}
+
+const enum FountainBigState {
+    WAIT_PHASE, WAIT, SIGN, SIGN_STOP, SPOUT, SPOUT_END
+}
+
+export class FountainBig extends LiveActor {
+    private upVec = vec3.create();
+
+    private state: FountainBigState;
+    private stateTicks: number;
+    private randomPhase: number = 0;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, getObjectName(infoIter));
+        this.initDefaultPos(sceneObjHolder, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, "FountainBig");
+        connectToSceneMapObj(sceneObjHolder, this);
+        this.initEffectKeeper(sceneObjHolder, null);
+
+        calcUpVec(this.upVec, this);
+        vec3.scaleAndAdd(this.upVec, this.translation, this.upVec, 300);
+
+        hideModel(this);
+        startBtkIfExist(this.modelInstance, this.arc, "FountainBig");
+
+        // TODO(jstpierre): Figure out what causes this phase for realsies. Might just be culling...
+        this.randomPhase = (Math.random() * 300) | 0;
+
+        this.setState(FountainBigState.WAIT_PHASE);
+    }
+
+    private setState(state: FountainBigState): void {
+        this.state = state;
+        this.stateTicks = 0;
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.movement(sceneObjHolder, viewerInput);
+
+        if (this.state === FountainBigState.WAIT_PHASE) {
+            if (this.stateTicks >= this.randomPhase) {
+                this.setState(FountainBigState.WAIT);
+                return;
+            }
+        } else if (this.state === FountainBigState.WAIT) {
+            if (this.stateTicks >= 120) {
+                this.setState(FountainBigState.SIGN);
+                return;
+            }
+        } else if (this.state === FountainBigState.SIGN) {
+            if (this.stateTicks === 0)
+                emitEffect(sceneObjHolder, this, 'FountainBigSign');
+
+            if (this.stateTicks >= 80) {
+                this.setState(FountainBigState.SIGN_STOP);
+                return;
+            }
+        } else if (this.state === FountainBigState.SIGN_STOP) {
+            if (this.stateTicks === 0)
+                deleteEffect(this, 'FountainBigSign');
+
+            if (this.stateTicks >= 30) {
+                this.setState(FountainBigState.SPOUT);
+                return;
+            }
+        } else if (this.state === FountainBigState.SPOUT) {
+            if (this.stateTicks === 0) {
+                showModel(this);
+                emitEffect(sceneObjHolder, this, 'FountainBig');
+            }
+
+            const t = this.stateTicks / 20;
+            if (t <= 1) {
+                this.scale[1] = clamp(t, 0.01, 1);
+            }
+
+            if (this.stateTicks >= 180) {
+                deleteEffect(this, 'FountainBig');
+                this.setState(FountainBigState.SPOUT_END);
+                return;
+            }
+        } else if (this.state === FountainBigState.SPOUT_END) {
+            const t = 1 - (this.stateTicks / 10);
+            this.scale[1] = clamp(t, 0.01, 1);
+
+            if (this.stateTicks >= 10) {
+                hideModel(this);
+                this.setState(FountainBigState.WAIT);
+                return;
+            }
+        }
+
+        this.stateTicks += getDeltaTimeFrames(viewerInput);
     }
 }

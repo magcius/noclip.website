@@ -45,6 +45,39 @@ export function computeModelMatrixSRT(dst: mat4, scaleX: number, scaleY: number,
 }
 
 /**
+ * Computes a model matrix {@param dst} from given rotation parameters. Rotation is assumed
+ * to be in radians.
+ * 
+ * This is equivalent to {@link computeModelMatrixSRT} with the scale parameters set to
+ * 1 and the translation set to 0, but it's slightly faster.
+ */
+export function computeModelMatrixR(dst: mat4, rotationX: number, rotationY: number, rotationZ: number): void {
+    const sinX = Math.sin(rotationX), cosX = Math.cos(rotationX);
+    const sinY = Math.sin(rotationY), cosY = Math.cos(rotationY);
+    const sinZ = Math.sin(rotationZ), cosZ = Math.cos(rotationZ);
+
+    dst[0] =  (cosY * cosZ);
+    dst[1] =  (sinZ * cosY);
+    dst[2] =  (-sinY);
+    dst[3] =  0.0;
+
+    dst[4] =  (sinX * cosZ * sinY - cosX * sinZ);
+    dst[5] =  (sinX * sinZ * sinY + cosX * cosZ);
+    dst[6] =  (sinX * cosY);
+    dst[7] =  0.0;
+
+    dst[8] =  (cosX * cosZ * sinY + sinX * sinZ);
+    dst[9] =  (cosX * sinZ * sinY - sinX * cosZ);
+    dst[10] = (cosY * cosX);
+    dst[11] = 0.0;
+
+    dst[12] = 0.0;
+    dst[13] = 0.0;
+    dst[14] = 0.0;
+    dst[15] = 1.0;
+}
+
+/**
  * Computes a normal matrix into {@param dst} from model-view matrix {@param m}.
  * 
  * If the model matrix is uniformly scaled, or you do not care about artifacts
@@ -163,4 +196,16 @@ export function computeMatrixWithoutRotation(dst: mat4, m: mat4, v: vec3 = scrat
     dst[12] = tx;
     dst[13] = ty;
     dst[14] = tz;
+}
+
+export function clamp(v: number, min: number, max: number): number {
+    return Math.max(min, Math.min(v, max));
+}
+
+export function clampRange(v: number, lim: number): number {
+    return clamp(v, -lim, lim);
+}
+
+export function lerp(a: number, b: number, t: number): number {
+    return a + (b - a) * t;
 }

@@ -5,6 +5,7 @@ import { BRTI } from "./bntx";
 import { GfxFormat } from "../gfx/platform/GfxPlatform";
 import { decompressBC, DecodedSurfaceSW, DecodedSurfaceBC } from "../fres/bc_texture";
 import { assert } from "../util";
+import { clamp } from "../MathHelpers";
 
 export function getFormatBlockWidth(channelFormat: ChannelFormat): number {
     switch (channelFormat) {
@@ -89,10 +90,6 @@ export function getFormatBytesPerPixel(channelFormat: ChannelFormat): number {
     default:
         throw "whoops";
     }
-}
-
-function clamp(v: number, min: number, max: number): number {
-    return Math.min(Math.max(v, min), max);
 }
 
 export function getBlockHeightLog2(heightInBlocks: number): number {

@@ -4,7 +4,7 @@ import ArrayBufferSlice from '../../ArrayBufferSlice';
 import Progressable from '../../Progressable';
 import { assert, assertExists } from '../../util';
 import { fetchData, AbortedError } from '../../fetch';
-import { MathConstants, computeModelMatrixSRT } from '../../MathHelpers';
+import { MathConstants, computeModelMatrixSRT, lerp } from '../../MathHelpers';
 import { getPointBezier } from '../../Spline';
 import * as Viewer from '../../viewer';
 import * as UI from '../../ui';
@@ -642,10 +642,6 @@ interface AnimOptions {
     brk?: string;
 }
 
-function lerp(a: number, b: number, t: number): number {
-    return a + (b - a) * t;
-}
-
 function getPointLinear_3(dst: vec3, p0: vec3, p1: vec3, t: number): void {
     dst[0] = lerp(p0[0], p1[0], t);
     dst[1] = lerp(p0[1], p1[1], t);
@@ -1063,6 +1059,7 @@ function getJMapInfoRotate(dst: vec3, sceneObjHolder: SceneObjHolder, infoIter: 
 export class LiveActor extends NameObj implements ObjectBase {
     public visibleScenario: boolean = true;
     public visibleAlive: boolean = true;
+    public visibleDraw: boolean = true;
 
     public actorAnimKeeper: ActorAnimKeeper | null = null;
     public actorLightCtrl: ActorLightCtrl | null = null;
@@ -1080,13 +1077,6 @@ export class LiveActor extends NameObj implements ObjectBase {
         super(name);
     }
 
-    // TODO(jstpierre): Find a better solution for these.
-    public setVertexColorsEnabled(v: boolean): void {
-    }
-
-    public setTexturesEnabled(v: boolean): void {
-    }
-
     public makeActorAppeared(): void {
         this.visibleAlive = true;
     }
@@ -1099,7 +1089,15 @@ export class LiveActor extends NameObj implements ObjectBase {
         setIndirectTextureOverride(this.modelInstance, sceneTexture);
     }
 
-    public getJointMtx(jointName: string): mat4 {
+    public getBaseMtx(): mat4 | null {
+        if (this.modelInstance === null)
+            return null;
+        return this.modelInstance.modelMatrix;
+    }
+
+    public getJointMtx(jointName: string): mat4 | null {
+        if (this.modelInstance === null)
+            return null;
         return this.modelInstance.getJointToWorldMatrixReference(jointName);
     }
 
@@ -1179,18 +1177,25 @@ export class LiveActor extends NameObj implements ObjectBase {
             this.translation[0], this.translation[1], this.translation[2]);
     }
 
+    protected getModelVisible(): boolean {
+        return this.visibleScenario && this.visibleAlive && this.visibleDraw;
+    }
+
     public draw(sceneObjHolder: SceneObjHolder, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
         if (this.modelInstance === null)
-            return;
-
-        const visible = this.visibleScenario && this.visibleAlive;
-        this.modelInstance.visible = visible;
-        if (!visible)
             return;
 
         // calcAnmMtx
         vec3.copy(this.modelInstance.baseScale, this.scale);
         this.calcAndSetBaseMtx(viewerInput);
+
+        this.modelInstance.animationController.setTimeFromViewerInput(viewerInput);
+        this.modelInstance.calcAnim(viewerInput.camera);
+
+        const visible = this.getModelVisible();
+        this.modelInstance.visible = visible;
+        if (!visible)
+            return;
 
         if (this.actorLightCtrl !== null) {
             const lightInfo = this.actorLightCtrl.getActorLight();
@@ -1216,14 +1221,11 @@ export class LiveActor extends NameObj implements ObjectBase {
                 lightInfo.setOnModelInstance(this.modelInstance, viewerInput.camera, false);
             }
         }
-
-        this.modelInstance.animationController.setTimeFromViewerInput(viewerInput);
-        this.modelInstance.calcAnim(viewerInput.camera);
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         if (this.effectKeeper !== null)
-            this.effectKeeper.setHostSRT();
+            this.effectKeeper.followSRT();
     }
 }
 

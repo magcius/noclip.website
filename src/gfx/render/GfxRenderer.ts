@@ -6,6 +6,7 @@ import { DeviceProgramReflection, DeviceProgram } from "../../Program";
 import { GfxRenderCache } from "./GfxRenderCache";
 import { setMegaStateFlags, copyMegaState, defaultMegaState } from "../helpers/GfxMegaStateDescriptorHelpers";
 import { StructLayout } from "../helpers/UniformBufferHelpers";
+import { clamp } from "../../MathHelpers";
 
 // The "Render" subsystem is a high-level scene graph, built on top of gfx/platform and gfx/helpers.
 // A rough overview of the design:
@@ -36,10 +37,6 @@ export const enum GfxRendererLayer {
     ALPHA_TEST  = 0x10,
     OPAQUE      = 0x20,
     TRANSLUCENT = 0x80,
-}
-
-function clamp(v: number, min: number, max: number): number {
-    return Math.max(min, Math.min(v, max));
 }
 
 const MAX_DEPTH = 0x10000;
