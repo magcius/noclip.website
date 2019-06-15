@@ -629,7 +629,7 @@ export class Checkbox implements Widget {
         this.emblem.style.height = '10px';
         this.emblem.style.justifySelf = 'center';
         this.emblem.style.margin = '4px';
-        this.emblem.style.borderRadius = '16px';
+        this.emblem.style.borderRadius = '4px';
         this.emblem.style.border = '2px solid white';
         this.toplevel.appendChild(this.emblem);
 
