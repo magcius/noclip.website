@@ -21,36 +21,25 @@ export class GfxRenderBuffer {
 
     public setWordCount(device: GfxDevice, newWordCount: number): boolean {
         if (newWordCount > this.wordCount) {
-            this.wordCount = newWordCount;
-
             if (this.usage === GfxBufferUsage.UNIFORM) {
-                this.shadowBufferF32 = new Float32Array(this.wordCount);
-                this.shadowBufferU8 = new Uint8Array(this.shadowBufferF32.buffer);
-
-                // Drop the last page, since it might not have the right amount of data in it.
-                if (this.bufferPages.length)
-                    device.destroyBuffer(this.bufferPages.pop()!);
-
-                const existingWordCount = this.bufferPages.length * UBO_PAGE_WORD_LIMIT;
-                let remaining = this.wordCount - existingWordCount;
-                while (remaining > 0) {
-                    const bufferSize = Math.min(remaining, UBO_PAGE_WORD_LIMIT);
-                    const buffer = device.createBuffer(bufferSize, this.usage, this.frequencyHint)
-                    device.setResourceName(buffer, `${this.resourceName} Page ${this.bufferPages.length}`);
+                while (this.wordCount < newWordCount) {
+                    const buffer = device.createBuffer(UBO_PAGE_WORD_LIMIT, this.usage, this.frequencyHint);
+                    device.setResourceName(buffer, `${this.resourceName} Page ${this.wordCount}`);
                     this.bufferPages.push(buffer);
-                    remaining -= bufferSize;
+                    this.wordCount += UBO_PAGE_WORD_LIMIT;
                 }
 
-                this.pageDirty.length = this.bufferPages.length;
-                for (let i = 0; i < this.pageDirty.length; i++)
-                    this.pageDirty[i] = false;
-
+                this.shadowBufferF32 = new Float32Array(this.wordCount);
+                this.shadowBufferU8 = new Uint8Array(this.shadowBufferF32.buffer);
                 this.usesMultiplePages = true;
             } else {
+                this.wordCount = newWordCount;
                 this.destroy(device);
+
                 const buffer = device.createBuffer(newWordCount, this.usage, this.frequencyHint);
                 device.setResourceName(buffer, `${this.resourceName} Full`);
                 this.bufferPages.push(buffer);
+    
                 this.pageDirty.push(false);
                 this.usesMultiplePages = false;
             }
@@ -112,8 +101,7 @@ export class GfxRenderBuffer {
                 if (!this.pageDirty[i])
                     continue;
                 const srcWordOffset = i * UBO_PAGE_WORD_LIMIT;
-                const wordCount = Math.min((this.wordCount - srcWordOffset), UBO_PAGE_WORD_LIMIT);
-                hostAccessPass.uploadBufferData(this.bufferPages[i], 0, this.shadowBufferU8, srcWordOffset, wordCount);
+                hostAccessPass.uploadBufferData(this.bufferPages[i], 0, this.shadowBufferU8, srcWordOffset, UBO_PAGE_WORD_LIMIT);
                 this.pageDirty[i] = false;
             }
         }
