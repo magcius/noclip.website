@@ -1670,7 +1670,6 @@ export class BPK {
 //#region J3DAnmTransformKey
 //#region ANK1
 interface JointAnimationEntry {
-    index: number;
     scaleX: AnimationTrack;
     rotationX: AnimationTrack;
     translationX: AnimationTrack;
@@ -1727,7 +1726,6 @@ function readANK1Chunk(buffer: ArrayBufferSlice): ANK1 {
         const rotationZ = readAnimationTrack(rTable, rotationScale);
         const translationZ = readAnimationTrack(tTable, 1);
         jointAnimationEntries.push({
-            index: i,
             scaleX, rotationX, translationX,
             scaleY, rotationY, translationY,
             scaleZ, rotationZ, translationZ,

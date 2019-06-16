@@ -1,5 +1,5 @@
 
-import { GfxSamplerBinding, GfxBufferBinding, GfxBindingsDescriptor, GfxRenderPipelineDescriptor } from './GfxPlatform';
+import { GfxSamplerBinding, GfxBufferBinding, GfxBindingsDescriptor, GfxRenderPipelineDescriptor, GfxBindingLayoutDescriptor } from './GfxPlatform';
 import { copyMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
 
 export type CopyFunc<T> = (a: T) => T;
@@ -12,12 +12,15 @@ export function arrayCopy<T>(a: T[], copyFunc: CopyFunc<T>): T[] {
 }
 
 export function gfxSamplerBindingCopy(a: GfxSamplerBinding): GfxSamplerBinding {
-    const { gfxSampler, gfxTexture } = a;
+    const gfxSampler = a.gfxSampler;
+    const gfxTexture = a.gfxTexture;
     return { gfxSampler, gfxTexture };
 }
 
 export function gfxBufferBindingCopy(a: GfxBufferBinding): GfxBufferBinding {
-    const { buffer, wordOffset, wordCount } = a;
+    const buffer = a.buffer;
+    const wordOffset = a.wordOffset;
+    const wordCount = a.wordCount;
     return { buffer, wordOffset, wordCount };
 }
 
@@ -28,8 +31,17 @@ export function gfxBindingsDescriptorCopy(a: GfxBindingsDescriptor): GfxBindings
     return { bindingLayout, samplerBindings, uniformBufferBindings };
 }
 
+export function gfxBindingLayoutDescriptorCopy(a: GfxBindingLayoutDescriptor): GfxBindingLayoutDescriptor {
+    const numSamplers = a.numSamplers;
+    const numUniformBuffers = a.numUniformBuffers;
+    return { numSamplers, numUniformBuffers };
+}
+
 export function gfxRenderPipelineDescriptorCopy(a: GfxRenderPipelineDescriptor): GfxRenderPipelineDescriptor {
-    const { bindingLayouts, inputLayout, program, topology } = a;
+    const bindingLayouts = arrayCopy(a.bindingLayouts, gfxBindingLayoutDescriptorCopy);
+    const inputLayout = a.inputLayout;
+    const program = a.program;
+    const topology = a.topology;
     const megaStateDescriptor = copyMegaState(a.megaStateDescriptor);
     return { bindingLayouts, inputLayout, megaStateDescriptor, program, topology };
 }
