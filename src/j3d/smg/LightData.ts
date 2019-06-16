@@ -161,12 +161,12 @@ export class LightDataHolder {
     }
 
     private ensureZoneInfo(sceneObjHolder: SceneObjHolder, zoneName: string): LightZoneInfo {
-        let zoneInfo = this.zoneInfos.find((zoneInfo) => zoneInfo.zoneName === zoneName);
-        if (zoneInfo === undefined) {
-            const zoneLightData = sceneObjHolder.sceneDesc.getZoneLightData(sceneObjHolder.modelCache, zoneName);
-            zoneInfo = new LightZoneInfo(zoneName, zoneLightData);
-            this.zoneInfos.push(zoneInfo);
-        }
+        for (let i = 0; i < this.zoneInfos.length; i++)
+            if (this.zoneInfos[i].zoneName === zoneName)
+                return this.zoneInfos[i];
+        const zoneLightData = sceneObjHolder.sceneDesc.getZoneLightData(sceneObjHolder.modelCache, zoneName);
+        const zoneInfo = new LightZoneInfo(zoneName, zoneLightData);
+        this.zoneInfos.push(zoneInfo);
         return zoneInfo;
     }
 
@@ -175,8 +175,11 @@ export class LightDataHolder {
         return this.ensureZoneInfo(sceneObjHolder, zoneName).getAreaLightName(lightID);
     }
 
-    public findAreaLight(areaLightName: string): AreaLightInfo {
-        return this.areaLightInfos.find((areaLight) => areaLight.AreaLightName === areaLightName);
+    public findAreaLight(areaLightName: string): AreaLightInfo | null {
+        for (let i = 0; i < this.areaLightInfos.length; i++)
+            if (this.areaLightInfos[i].AreaLightName === areaLightName)
+                return this.areaLightInfos[i];
+        return null;
     }
 
     public findDefaultAreaLight(sceneObjHolder: SceneObjHolder): AreaLightInfo {

@@ -1254,10 +1254,6 @@ function getAnimFrame(anim: AnimationBase, frame: number, loopMode: LoopMode = a
     return animFrame;
 }
 
-function lerp(k0: AnimationKeyframe, k1: AnimationKeyframe, t: number) {
-    return k0.value + (k1.value - k0.value) * t;
-}
-
 function hermiteInterpolate(k0: AnimationKeyframe, k1: AnimationKeyframe, t: number): number {
     const length = k1.time - k0.time;
     const p0 = k0.value;

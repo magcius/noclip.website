@@ -220,9 +220,25 @@ export class GfxRenderInstPool {
         return this.renderInstAllocCount - 1;
     }
 
-    public returnRenderInst(renderInst: GfxRenderInst): void {
+    public returnRenderInstIndex(renderInstIndex: number): number {
+        const renderInst = this.pool[renderInstIndex];
         renderInst._flags = 0;
+
+        // Swap to the beginning of the list so we don't need as big a linear scan next time we want to
+        // push a template... believe it or not this actually helps quite a lot. 20FPS diff on Firefox on
+        // Comet Observatory.
+        for (let i = this.renderInstFreeCount; i < this.renderInstAllocCount; i++) {
+            // Search for a non-template render inst, since we don't want to screw up any indexes.
+            const other = this.pool[i];
+            if (!(other._flags & GfxRenderInstFlags.TEMPLATE_RENDER_INST)) {
+                this.pool[i] = renderInst;
+                this.pool[renderInstIndex] = other;
+                break;
+            }
+        }
+
         this.renderInstFreeCount++;
+        return renderInst._parentTemplateIndex;
     }
 
     public reset(): void {
@@ -286,9 +302,7 @@ export class GfxRenderInstManager {
     }
 
     public popTemplateRenderInst(): void {
-        const renderInst = this.gfxRenderInstPool.pool[this.renderInstTemplateIndex];
-        this.gfxRenderInstPool.returnRenderInst(renderInst);
-        this.renderInstTemplateIndex = renderInst._parentTemplateIndex;
+        this.renderInstTemplateIndex = this.gfxRenderInstPool.returnRenderInstIndex(this.renderInstTemplateIndex);
     }
 
     public getTemplateRenderInst(): GfxRenderInst {

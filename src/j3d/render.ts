@@ -6,7 +6,7 @@ import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } fr
 
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
-import { MaterialParams, PacketParams, ColorKind, translateTexFilterGfx, translateWrapModeGfx, loadedDataCoalescerGfx, ub_MaterialParams, loadTextureFromMipChain, u_MaterialParamsBufferSize, fillMaterialParamsData, fillIndTexMtx } from '../gx/gx_render';
+import { PacketParams, ColorKind, translateTexFilterGfx, translateWrapModeGfx, loadedDataCoalescerGfx, ub_MaterialParams, loadTextureFromMipChain, u_MaterialParamsBufferSize, fillMaterialParamsData, fillIndTexMtx, fillIndTexMtxData, fillLightData, fillTextureMappingInfo } from '../gx/gx_render';
 import { GXShapeHelperGfx, GXRenderHelperGfx } from '../gx/gx_render_2';
 
 import { computeViewMatrix, computeViewMatrixSkybox, Camera, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
@@ -19,24 +19,25 @@ import { GfxBufferCoalescer, GfxCoalescedBuffers } from '../gfx/helpers/BufferHe
 import { ViewerRenderInput, Texture } from '../viewer';
 import { setSortKeyDepth, GfxRendererLayer, setSortKeyBias, setSortKeyLayer, setSortKeyProgramKey } from '../gfx/render/GfxRenderer';
 import { GfxRenderInst, GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
-import { colorCopy } from '../Color';
+import { colorCopy, Color, colorNewCopy, White } from '../Color';
 import { computeNormalMatrix, texProjPerspMtx, texEnvMtx } from '../MathHelpers';
 import { calcMipChain } from '../gx/gx_texture';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { fillColor, fillMatrix4x3 } from '../gfx/helpers/UniformBufferHelpers';
 
 export class ShapeInstanceState {
     // The location of the root joint in world-space.
     public rootJointToWorld: mat4 = mat4.create();
 
-    // One matrix for each joint -- in world space.
+    // One matrix for each joint, which transform into world space.
     public jointToWorldMatrices: mat4[] = [];
 
-    // Draw (DRW1 matrix definitions, incl. envelopes), located in world space.
-    public drawToWorldMatrices: mat4[] = [];
+    // Draw (DRW1 matrix definitions, incl. envelopes), which transform into view space.
+    public drawToViewMatrices: mat4[] = [];
 
     public matrixVisibility: boolean[] = [];
     public shapeVisibility: boolean[] = [];
-    public isSkybox: boolean = false;
+    public viewMatrix: mat4;
 }
 
 class ShapeData {
@@ -58,7 +59,7 @@ class ShapeData {
     }
 }
 
-function J3DCalcBBoardMtx(m: mat4): void {
+function J3DCalcBBoardMtx(dst: mat4, m: mat4): void {
     // Modifies m in-place.
 
     // The column vectors lengths here are the scale.
@@ -66,28 +67,31 @@ function J3DCalcBBoardMtx(m: mat4): void {
     const my = Math.hypot(m[4], m[5], m[6]);
     const mz = Math.hypot(m[8], m[9], m[10]);
 
-    m[0] = mx;
-    m[4] = 0;
-    m[8] = 0;
+    dst[0] = mx;
+    dst[4] = 0;
+    dst[8] = 0;
+    dst[12] = m[12];
 
-    m[1] = 0;
-    m[5] = my;
-    m[9] = 0;
+    dst[1] = 0;
+    dst[5] = my;
+    dst[9] = 0;
+    dst[13] = m[13];
 
-    m[2] = 0;
-    m[6] = 0;
-    m[10] = mz;
+    dst[2] = 0;
+    dst[6] = 0;
+    dst[10] = mz;
+    dst[14] = m[14];
 
     // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
     // since this is supposed to generate a mat4x3 matrix.
-    m[3] = 9999.0;
-    m[7] = 9999.0;
-    m[11] = 9999.0;
-    m[15] = 9999.0;
+    dst[3] = 9999.0;
+    dst[7] = 9999.0;
+    dst[11] = 9999.0;
+    dst[15] = 9999.0;
 }
 
 const scratchVec3 = vec3.create();
-function J3DCalcYBBoardMtx(m: mat4, v: vec3 = scratchVec3): void {
+function J3DCalcYBBoardMtx(dst: mat4, m: mat4, v: vec3 = scratchVec3): void {
     // Modifies m in-place.
 
     // The column vectors lengths here are the scale.
@@ -97,14 +101,20 @@ function J3DCalcYBBoardMtx(m: mat4, v: vec3 = scratchVec3): void {
     vec3.set(v, 0.0, -m[6], m[5]);
     vec3.normalize(v, v);
 
-    m[0] = mx;
-    m[8] = 0;
+    dst[0] = mx;
+    dst[4] = m[4];
+    dst[8] = 0;
+    dst[12] = m[12];
 
-    m[1] = 0;
-    m[9] = v[1] * mz;
+    dst[1] = 0;
+    dst[5] = m[5];
+    dst[9] = v[1] * mz;
+    dst[13] = m[13];
 
-    m[2] = 0;
-    m[10] = v[2] * mz;
+    dst[2] = 0;
+    dst[6] = m[6];
+    dst[10] = v[2] * mz;
+    dst[14] = m[14];
 
     // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
     // since this is supposed to generate a mat4x3 matrix.
@@ -115,7 +125,6 @@ function J3DCalcYBBoardMtx(m: mat4, v: vec3 = scratchVec3): void {
 }
 
 const scratchModelViewMatrix = mat4.create();
-const scratchViewMatrix = mat4.create();
 const packetParams = new PacketParams();
 export class ShapeInstance {
     constructor(public shapeData: ShapeData, private materialInstance: MaterialInstance) {
@@ -137,14 +146,9 @@ export class ShapeInstance {
 
         materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
 
-        if (shapeInstanceState.isSkybox)
-            computeViewMatrixSkybox(scratchViewMatrix, camera);
-        else
-            computeViewMatrix(scratchViewMatrix, camera);
-
         // Compute a combined model-view matrix based on the material's joint to compute from.
         const materialJointMatrix = shapeInstanceState.jointToWorldMatrices[this.materialInstance.materialData.jointData.jointIndex];
-        mat4.mul(scratchModelViewMatrix, scratchViewMatrix, materialJointMatrix);
+        mat4.mul(scratchModelViewMatrix, shapeInstanceState.viewMatrix, materialJointMatrix);
 
         template.allocateUniformBuffer(ub_MaterialParams, u_MaterialParamsBufferSize);
         materialInstance.fillMaterialParams(template, materialInstanceState, scratchModelViewMatrix, materialJointMatrix, camera);
@@ -160,12 +164,15 @@ export class ShapeInstance {
                 if (matrixIndex === 0xFFFF)
                     continue;
 
-                mat4.mul(packetParams.u_PosMtx[i], scratchViewMatrix, shapeInstanceState.drawToWorldMatrices[matrixIndex]);
+                const drw = shapeInstanceState.drawToViewMatrices[matrixIndex];
+                const dst = packetParams.u_PosMtx[i];
 
                 if (shape.displayFlags === ShapeDisplayFlags.BILLBOARD) {
-                    J3DCalcBBoardMtx(packetParams.u_PosMtx[i]);
+                    J3DCalcBBoardMtx(dst, drw);
                 } else if (shape.displayFlags === ShapeDisplayFlags.Y_BILLBOARD) {
-                    J3DCalcYBBoardMtx(packetParams.u_PosMtx[i]);
+                    J3DCalcYBBoardMtx(dst, drw);
+                } else {
+                    mat4.copy(dst, drw);
                 }
 
                 if (shapeInstanceState.matrixVisibility[matrixIndex])
@@ -280,8 +287,9 @@ function J3DBuildB8Mtx(dst: mat4, flipY: boolean): void {
     mat4SwapTranslationColumns(dst);
 }
 
-const matrixScratch = mat4.create(), matrixScratch2 = mat4.create(), matrixScratch3 = mat4.create();
-const materialParams = new MaterialParams();
+const matrixScratch = mat4.create(), matrixScratch2 = mat4.create(), matrixScratch3 = mat4.create(), matrixScratch4 = mat4.create();
+const colorScratch = colorNewCopy(White);
+const textureMapping = nArray(8, () => new TextureMapping());
 export class MaterialInstance {
     public ttk1Animators: (TTK1Animator | null)[] = [];
     public tpt1Animators: (TPT1Animator | null)[] = [];
@@ -370,7 +378,20 @@ export class MaterialInstance {
         color.a = Math.max(color.a, 0);
     }
 
-    private calcColor(dst: GX_Material.Color, i: ColorKind, materialInstanceState: MaterialInstanceState, fallbackColor: GX_Material.Color, clampTo8Bit: boolean) {
+    public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, renderInst: GfxRenderInst): void {
+        if (this.gfxProgram === null) {
+            this.gfxProgram = cache.createProgram(device, this.program);
+            this.programKey = this.gfxProgram.ResourceUniqueId;
+            this.sortKey = setSortKeyProgramKey(this.sortKey, this.programKey);
+        }
+
+        renderInst.setGfxProgram(this.gfxProgram);
+        renderInst.setMegaStateFlags(this.megaStateFlags);
+    }
+
+    private fillColor(d: Float32Array, offs: number, i: ColorKind, materialInstanceState: MaterialInstanceState, fallbackColor: GX_Material.Color, clampTo8Bit: boolean): number {
+        const dst = colorScratch;
+
         if (this.trk1Animators[i]) {
             this.trk1Animators[i].calcColor(dst);
         } else if (materialInstanceState.colorOverrides[i] !== undefined) {
@@ -384,38 +405,16 @@ export class MaterialInstance {
 
         if (clampTo8Bit)
             this.clampTo8Bit(dst);
-    }
 
-    public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, renderInst: GfxRenderInst): void {
-        if (this.gfxProgram === null) {
-            this.gfxProgram = cache.createProgram(device, this.program);
-            this.programKey = this.gfxProgram.ResourceUniqueId;
-            this.sortKey = setSortKeyProgramKey(this.sortKey, this.programKey);
-        }
-
-        renderInst.setGfxProgram(this.gfxProgram);
-        renderInst.setMegaStateFlags(this.megaStateFlags);
+        return fillColor(d, offs, dst);
     }
 
     public fillMaterialParams(renderInst: GfxRenderInst, materialInstanceState: MaterialInstanceState, modelViewMatrix: mat4, modelMatrix: mat4, camera: Camera): void {
         const material = this.materialData.material;
 
-        this.calcColor(materialParams.u_Color[ColorKind.MAT0],  ColorKind.MAT0,  materialInstanceState, material.colorMatRegs[0],   false);
-        this.calcColor(materialParams.u_Color[ColorKind.MAT1],  ColorKind.MAT1,  materialInstanceState, material.colorMatRegs[1],   false);
-        this.calcColor(materialParams.u_Color[ColorKind.AMB0],  ColorKind.AMB0,  materialInstanceState, material.colorAmbRegs[0],   false);
-        this.calcColor(materialParams.u_Color[ColorKind.AMB1],  ColorKind.AMB1,  materialInstanceState, material.colorAmbRegs[1],   false);
-        this.calcColor(materialParams.u_Color[ColorKind.K0],    ColorKind.K0,    materialInstanceState, material.colorConstants[0], true);
-        this.calcColor(materialParams.u_Color[ColorKind.K1],    ColorKind.K1,    materialInstanceState, material.colorConstants[1], true);
-        this.calcColor(materialParams.u_Color[ColorKind.K2],    ColorKind.K2,    materialInstanceState, material.colorConstants[2], true);
-        this.calcColor(materialParams.u_Color[ColorKind.K3],    ColorKind.K3,    materialInstanceState, material.colorConstants[3], true);
-        this.calcColor(materialParams.u_Color[ColorKind.CPREV], ColorKind.CPREV, materialInstanceState, material.colorRegisters[3], false);
-        this.calcColor(materialParams.u_Color[ColorKind.C0],    ColorKind.C0,    materialInstanceState, material.colorRegisters[0], false);
-        this.calcColor(materialParams.u_Color[ColorKind.C1],    ColorKind.C1,    materialInstanceState, material.colorRegisters[1], false);
-        this.calcColor(materialParams.u_Color[ColorKind.C2],    ColorKind.C2,    materialInstanceState, material.colorRegisters[2], false);
-
-        // Bind textures.
+        // Texture mappings.
         for (let i = 0; i < material.textureIndexes.length; i++) {
-            const m = materialParams.m_TextureMapping[i];
+            const m = textureMapping[i];
             m.reset();
 
             let samplerIndex: number;
@@ -428,15 +427,33 @@ export class MaterialInstance {
                 m.copy(materialInstanceState.textureMappings[samplerIndex]);
         }
 
-        // Bind our texture matrices.
+        let offs = renderInst.getUniformBufferOffset(ub_MaterialParams);
+        const d = renderInst.mapUniformBufferF32(ub_MaterialParams);
+
+        offs += this.fillColor(d, offs, ColorKind.MAT0,  materialInstanceState, material.colorMatRegs[0],   false);
+        offs += this.fillColor(d, offs, ColorKind.MAT1,  materialInstanceState, material.colorMatRegs[1],   false);
+        offs += this.fillColor(d, offs, ColorKind.AMB0,  materialInstanceState, material.colorAmbRegs[0],   false);
+        offs += this.fillColor(d, offs, ColorKind.AMB1,  materialInstanceState, material.colorAmbRegs[1],   false);
+        offs += this.fillColor(d, offs, ColorKind.K0,    materialInstanceState, material.colorConstants[0], true);
+        offs += this.fillColor(d, offs, ColorKind.K1,    materialInstanceState, material.colorConstants[1], true);
+        offs += this.fillColor(d, offs, ColorKind.K2,    materialInstanceState, material.colorConstants[2], true);
+        offs += this.fillColor(d, offs, ColorKind.K3,    materialInstanceState, material.colorConstants[3], true);
+        offs += this.fillColor(d, offs, ColorKind.CPREV, materialInstanceState, material.colorRegisters[3], false);
+        offs += this.fillColor(d, offs, ColorKind.C0,    materialInstanceState, material.colorRegisters[0], false);
+        offs += this.fillColor(d, offs, ColorKind.C1,    materialInstanceState, material.colorRegisters[1], false);
+        offs += this.fillColor(d, offs, ColorKind.C2,    materialInstanceState, material.colorRegisters[2], false);
+
+        // Texture matrices.
         for (let i = 0; i < material.texMatrices.length; i++) {
             const texMtx = material.texMatrices[i];
-            if (texMtx === null)
+            if (texMtx === null) {
+                offs += 4*3;
                 continue;
+            }
 
-            const dst = materialParams.u_TexMtx[texMtx.dstTexMtxIdx];
+            const dst = matrixScratch4;
 
-            const flipY = materialParams.m_TextureMapping[i].flipY;
+            const flipY = textureMapping[i].flipY;
             const flipYScale = flipY ? -1.0 : 1.0;
 
             const isMaya = !!(texMtx.type >>> 7);
@@ -656,31 +673,37 @@ export class MaterialInstance {
                     throw "whoops";
                 }
             }
+
+            offs += fillMatrix4x3(d, offs, dst);
         }
 
         for (let i = 0; i < material.postTexMatrices.length; i++) {
             const postTexMtx = material.postTexMatrices[i];
-            if (postTexMtx === null)
+            if (postTexMtx === null) {
+                offs += 4*3;
                 continue;
+            }
 
-            const finalMatrix = postTexMtx.matrix;
-            mat4.copy(materialParams.u_PostTexMtx[i], finalMatrix);
+            offs += fillMatrix4x3(d, offs, postTexMtx.matrix);
         }
 
         for (let i = 0; i < material.indTexMatrices.length; i++) {
             const indTexMtx = material.indTexMatrices[i];
-            if (indTexMtx === null)
+            if (indTexMtx === null) {
+                offs += 4*2;
                 continue;
-            fillIndTexMtx(materialParams.u_IndTexMtx[i], indTexMtx);
+            }
+
+            offs += fillIndTexMtxData(d, offs, indTexMtx);
         }
 
-        for (let i = 0; i < materialInstanceState.lights.length; i++)
-            materialParams.u_Lights[i].copy(materialInstanceState.lights[i]);
+        for (let i = 0; i < 8; i++)
+            offs += fillTextureMappingInfo(d, offs, textureMapping[i]);
 
-        let offs = renderInst.getUniformBufferOffset(ub_MaterialParams);
-        const d = renderInst.mapUniformBufferF32(ub_MaterialParams);
-        fillMaterialParamsData(d, offs, materialParams);
-        renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+        for (let i = 0; i < materialInstanceState.lights.length; i++)
+            offs += fillLightData(d, offs, materialInstanceState.lights[i]);
+
+        renderInst.setSamplerBindingsFromTextureMappings(textureMapping);
     }
 }
 
@@ -939,6 +962,7 @@ export class BMDModel {
 }
 
 const bboxScratch = new AABB();
+const scratchViewMatrix = mat4.create();
 export class BMDModelInstance {
     public name: string = '';
     public visible: boolean = true;
@@ -984,10 +1008,11 @@ export class BMDModelInstance {
         this.jointVisibility = nArray(numJoints, () => true);
 
         const numMatrices = bmd.drw1.matrixDefinitions.length;
-        this.shapeInstanceState.drawToWorldMatrices = nArray(numMatrices, () => mat4.create());
+        this.shapeInstanceState.drawToViewMatrices = nArray(numMatrices, () => mat4.create());
         this.shapeInstanceState.matrixVisibility = nArray(numMatrices, () => true);
         const numShapes = bmd.shp1.shapes.length;
         this.shapeInstanceState.shapeVisibility = nArray(numShapes, () => true);
+        this.shapeInstanceState.viewMatrix = scratchViewMatrix;
     }
 
     public destroy(device: GfxDevice): void {
@@ -1216,7 +1241,10 @@ export class BMDModelInstance {
         // render. In theory, we could cull billboards using the bounding sphere.
         const disableCulling = this.isSkybox || this.bmdModel.hasBillboard;
 
-        this.shapeInstanceState.isSkybox = this.isSkybox;
+        if (this.isSkybox)
+            computeViewMatrixSkybox(this.shapeInstanceState.viewMatrix, camera);
+        else
+            computeViewMatrix(this.shapeInstanceState.viewMatrix, camera);
 
         mat4.copy(this.shapeInstanceState.rootJointToWorld, this.modelMatrix);
         this.computeJointMatrixArray(this.bmdModel.rootJoint, this.shapeInstanceState.rootJointToWorld);
@@ -1237,7 +1265,7 @@ export class BMDModelInstance {
             }
         }
 
-        this.computeDrawMatrixArray();
+        this.computeDrawMatrixArray(this.shapeInstanceState.viewMatrix);
     }
 
     private computeDepth(camera: Camera): number {
@@ -1317,18 +1345,18 @@ export class BMDModelInstance {
             this.computeJointMatrixArray(joint.children[i], jointToWorldMatrix);
     }
 
-    private computeDrawMatrixArray(): void {
+    private computeDrawMatrixArray(viewMatrix: mat4): void {
         const drw1 = this.bmdModel.bmd.drw1;
         const evp1 = this.bmdModel.bmd.evp1;
 
         // Now update our matrix definition array.
         for (let i = 0; i < drw1.matrixDefinitions.length; i++) {
             const matrixDefinition = drw1.matrixDefinitions[i];
-            const dst = this.shapeInstanceState.drawToWorldMatrices[i];
+            const dst = this.shapeInstanceState.drawToViewMatrices[i];
             if (matrixDefinition.kind === DRW1MatrixKind.Joint) {
                 const matrixVisible = this.jointVisibility[matrixDefinition.jointIndex];
                 this.shapeInstanceState.matrixVisibility[i] = matrixVisible;
-                mat4.copy(dst, this.shapeInstanceState.jointToWorldMatrices[matrixDefinition.jointIndex]);
+                mat4.mul(dst, viewMatrix, this.shapeInstanceState.jointToWorldMatrices[matrixDefinition.jointIndex]);
             } else if (matrixDefinition.kind === DRW1MatrixKind.Envelope) {
                 dst.fill(0);
                 const envelope = evp1.envelopes[matrixDefinition.envelopeIndex];
@@ -1350,6 +1378,8 @@ export class BMDModelInstance {
                     mat4.mul(matrixScratch, this.shapeInstanceState.jointToWorldMatrices[weightedBone.jointIndex], inverseBindPose);
                     mat4.multiplyScalarAndAdd(dst, dst, matrixScratch, weightedBone.weight);
                 }
+
+                mat4.mul(dst, viewMatrix, dst);
             }
         }
     }

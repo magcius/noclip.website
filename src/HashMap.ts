@@ -36,7 +36,7 @@ class HashBucket<K, V> {
 export class HashMap<K, V> {
     public buckets: (HashBucket<K, V> | null)[];
 
-    constructor(private keyEqualFunc: EqualFunc<K>, private keyHashFunc: HashFunc<K>, numBuckets = 16) {
+    constructor(private keyEqualFunc: EqualFunc<K>, private keyHashFunc: HashFunc<K>, numBuckets = 16, private autoLoadFactor: number | null = null) {
         if (keyHashFunc === nullHashFunc)
             numBuckets = 1;
         this.buckets = nArray(numBuckets, () => null);
@@ -62,13 +62,15 @@ export class HashMap<K, V> {
         return bucket.values[bi];
     }
 
-    public add(k: K, v: V, bi = -1): void {
+    public add(k: K, v: V): void {
         const bw = this.keyHashFunc(k) % this.buckets.length;
         if (this.buckets[bw] === null) this.buckets[bw] = new HashBucket<K, V>();
         const bucket = this.buckets[bw]!;
-        if (bi === -1) bi = bucket.keys.length;
-        bucket.keys[bi] = k;
-        bucket.values[bi] = v;
+        bucket.keys.push(k);
+        bucket.values.push(v);
+
+        if (this.autoLoadFactor !== null)
+            this.reconfigureForLoadFactor(this.autoLoadFactor);
     }
 
     public delete(k: K): void {
@@ -106,5 +108,31 @@ export class HashMap<K, V> {
             for (let j = bucket.keys.length; j >= 0; j--)
                 yield [bucket.keys[j], bucket.values[j]];
         }
+    }
+
+    public reconfigureForLoadFactor(loadFactor: number): void {
+        let numBuckets = Math.ceil(this.size() / loadFactor);
+        if (numBuckets <= this.buckets.length)
+            return;
+
+        // Align to nearest multiple of original numBuckets.
+
+        const newBuckets: (HashBucket<K, V> | null)[] = nArray(numBuckets, () => null);
+        for (let i = 0; i < this.buckets.length; i++) {
+            const bucket = this.buckets[i];
+            if (bucket === null) continue;
+            for (let j = 0; j < bucket.keys.length; j++) {
+                const bw = this.keyHashFunc(bucket.keys[j]) % newBuckets.length;
+                if (newBuckets[bw] === null) newBuckets[bw] = new HashBucket<K, V>();
+                const newBucket = newBuckets[bw]!;
+                newBucket.keys.push(bucket.keys[j]);
+                newBucket.values.push(bucket.values[j]);
+            }
+        }
+        this.buckets = newBuckets;
+    }
+
+    public calcLoadFactor(): number {
+        return this.size() / this.buckets.length;
     }
 }

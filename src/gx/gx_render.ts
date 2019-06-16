@@ -72,6 +72,19 @@ export function fillSceneParamsData(d: Float32Array, bOffs: number, sceneParams:
     assert(d.length >= offs);
 }
 
+export function fillLightData(d: Float32Array, offs: number, light: GX_Material.Light): number {
+    offs += fillColor(d, offs, light.Color);
+    offs += fillVec3(d, offs, light.Position);
+    offs += fillVec3(d, offs, light.Direction);
+    offs += fillVec3(d, offs, light.DistAtten);
+    offs += fillVec3(d, offs, light.CosAtten);
+    return 4*5;
+}
+
+export function fillTextureMappingInfo(d: Float32Array, offs: number, textureMapping: TextureMapping): number {
+    return fillVec4(d, offs, 1 / textureMapping.width, (textureMapping.flipY ? -1 : 1) / textureMapping.height, 0, textureMapping.lodBias);
+}
+
 export function fillMaterialParamsData(d: Float32Array, bOffs: number, materialParams: MaterialParams): void {
     let offs = bOffs;
 
@@ -84,15 +97,9 @@ export function fillMaterialParamsData(d: Float32Array, bOffs: number, materialP
     for (let i = 0; i < 3; i++)
         offs += fillMatrix4x2(d, offs, materialParams.u_IndTexMtx[i]);
     for (let i = 0; i < 8; i++)
-        offs += fillVec4(d, offs, 1 / materialParams.m_TextureMapping[i].width, (materialParams.m_TextureMapping[i].flipY ? -1 : 1) / materialParams.m_TextureMapping[i].height, 0, materialParams.m_TextureMapping[i].lodBias);
-    for (let i = 0; i < 8; i++) {
-        const light = materialParams.u_Lights[i];
-        offs += fillColor(d, offs, light.Color);
-        offs += fillVec3(d, offs, light.Position);
-        offs += fillVec3(d, offs, light.Direction);
-        offs += fillVec3(d, offs, light.DistAtten);
-        offs += fillVec3(d, offs, light.CosAtten);
-    }
+        offs += fillTextureMappingInfo(d, offs, materialParams.m_TextureMapping[i]);
+    for (let i = 0; i < 8; i++)
+        offs += fillLightData(d, offs, materialParams.u_Lights[i]);
 
     assert(offs === bOffs + u_MaterialParamsBufferSize);
     assert(d.length >= offs);
@@ -462,4 +469,18 @@ export function fillIndTexMtx(dst: mat4, src: Float32Array): void {
         tx,    ty, 0, 0,
         scale, 0,  0, 0
     );
+}
+
+export function fillIndTexMtxData(d_: Float32Array, offs: number, src: Float32Array): number {
+    const a = src[0], c = src[1], tx = src[2], scale = src[3];
+    const b = src[4], d = src[5], ty = src[6];
+    d_[offs + 0] = a;
+    d_[offs + 1] = c;
+    d_[offs + 2] = tx;
+    d_[offs + 3] = scale;
+    d_[offs + 4] = b;
+    d_[offs + 5] = d;
+    d_[offs + 6] = ty;
+    d_[offs + 7] = 0;
+    return 4*2;
 }

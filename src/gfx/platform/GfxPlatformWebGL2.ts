@@ -803,6 +803,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             // It seems like this is a bug because there is supposed to be code to handle it, but it doesn't appear to work.
             const UBO_PAGE_BYTE_SIZE = 0x10000;
 
+            assert((byteSize % UBO_PAGE_BYTE_SIZE) === 0);
             let byteSizeLeft = byteSize;
             while (byteSizeLeft > 0) {
                 gl_buffer_pages.push(this._createBufferPage(Math.min(byteSizeLeft, UBO_PAGE_BYTE_SIZE), usage, hint));
@@ -1492,8 +1493,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private uploadBufferData(buffer: GfxBuffer, dstByteOffset: number, data: Uint8Array, srcByteOffset: number, byteSize: number): void {
         const gl = this.gl;
         const { gl_target, byteSize: dstByteSize, pageByteSize: dstPageByteSize } = buffer as GfxBufferP_GL;
-        if (gl_target === gl.UNIFORM_BUFFER)
+        if (gl_target === gl.UNIFORM_BUFFER) {
             assert((dstByteOffset % dstPageByteSize) === 0);
+            assert((byteSize % dstPageByteSize) === 0);
+        }
         assert((dstByteOffset + byteSize) <= dstByteSize);
 
         const virtBufferByteOffsetEnd = dstByteOffset + byteSize;
@@ -1505,8 +1508,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             virtBufferByteOffset += dstPageByteSize;
             physBufferByteOffset = 0;
             srcByteOffset += dstPageByteSize;
+            this._debugGroupStatisticsBufferUpload();
         }
-        this._debugGroupStatisticsBufferUpload();
     }
     //#endregion
 }

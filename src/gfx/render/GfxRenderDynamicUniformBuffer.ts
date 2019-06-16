@@ -47,8 +47,9 @@ export class GfxRenderDynamicUniformBuffer {
         } else if (wordOffset + wordCount >= this.shadowBufferF32.length) {
             assert(wordOffset < this.currentWordOffset && wordOffset + wordCount <= this.currentWordOffset);
 
-            // Grow logarithmically.
-            const newBuffer = new Uint8Array(Math.max(this.currentWordOffset, this.shadowBufferF32.length * 2) * 4);
+            // Grow logarithmically, aligned to page size.
+            const newWordCount = align(Math.max(this.currentWordOffset, this.shadowBufferF32.length * 2), this.uniformBufferMaxPageWordSize);
+            const newBuffer = new Uint8Array(newWordCount * 4);
 
             newBuffer.set(this.shadowBufferU8, 0);
             this.shadowBufferU8 = newBuffer;
@@ -74,8 +75,9 @@ export class GfxRenderDynamicUniformBuffer {
             this.gfxBuffer = device.createBuffer(this.currentBufferWordSize, GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);
         }
 
+        const wordCount = align(this.currentWordOffset, this.uniformBufferMaxPageWordSize);
         const gfxBuffer = assertExists(this.gfxBuffer);
-        hostAccessPass.uploadBufferData(gfxBuffer, 0, this.shadowBufferU8!);
+        hostAccessPass.uploadBufferData(gfxBuffer, 0, this.shadowBufferU8!, 0, wordCount);
 
         // Reset the offset for next frame.
         // TODO(jstpierre): Should this be a separate step?
