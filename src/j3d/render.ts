@@ -6,7 +6,7 @@ import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } fr
 
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
-import { PacketParams, ColorKind, translateTexFilterGfx, translateWrapModeGfx, loadedDataCoalescerGfx, ub_MaterialParams, loadTextureFromMipChain, u_MaterialParamsBufferSize, fillMaterialParamsData, fillIndTexMtx, fillIndTexMtxData, fillLightData, fillTextureMappingInfo } from '../gx/gx_render';
+import { PacketParams, ColorKind, translateTexFilterGfx, translateWrapModeGfx, loadedDataCoalescerGfx, ub_MaterialParams, loadTextureFromMipChain, u_MaterialParamsBufferSize, fillIndTexMtxData, fillLightData, fillTextureMappingInfo } from '../gx/gx_render';
 import { GXShapeHelperGfx, GXRenderHelperGfx } from '../gx/gx_render_2';
 
 import { computeViewMatrix, computeViewMatrixSkybox, Camera, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
@@ -143,12 +143,9 @@ export class ShapeInstance {
 
         materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
 
-        // Compute a combined model-view matrix based on the material's joint to compute from.
-        const materialJointMatrix = shapeInstanceState.jointToWorldMatrices[this.materialInstance.materialData.jointData.jointIndex];
-        mat4.mul(scratchModelViewMatrix, shapeInstanceState.viewMatrix, materialJointMatrix);
-
         template.allocateUniformBuffer(ub_MaterialParams, u_MaterialParamsBufferSize);
-        materialInstance.fillMaterialParams(template, materialInstanceState, scratchModelViewMatrix, materialJointMatrix, camera);
+        const materialJointMatrix = shapeInstanceState.jointToWorldMatrices[materialInstance.materialData.jointData.jointIndex];
+        materialInstance.fillMaterialParams(template, materialInstanceState, shapeInstanceState.viewMatrix, materialJointMatrix, camera);
 
         for (let p = 0; p < shape.packets.length; p++) {
             const packet = shape.packets[p];
@@ -406,8 +403,9 @@ export class MaterialInstance {
         return fillColor(d, offs, dst);
     }
 
-    public fillMaterialParams(renderInst: GfxRenderInst, materialInstanceState: MaterialInstanceState, modelViewMatrix: mat4, modelMatrix: mat4, camera: Camera): void {
+    public fillMaterialParams(renderInst: GfxRenderInst, materialInstanceState: MaterialInstanceState, viewMatrix: mat4, modelMatrix: mat4, camera: Camera): void {
         const material = this.materialData.material;
+        let hasModelViewMatrix = false;
 
         // Texture mappings.
         for (let i = 0; i < material.textureIndexes.length; i++) {
@@ -464,7 +462,8 @@ export class MaterialInstance {
             case 0x06: // Rainbow Road
             case 0x07: // Rainbow Road
                 // Environment mapping. Uses an approximation of the normal matrix (MV with the translation lopped off).
-                computeNormalMatrix(dst, modelViewMatrix, true);
+                if (!hasModelViewMatrix) mat4.mul(scratchModelViewMatrix, viewMatrix, modelMatrix), hasModelViewMatrix = true;
+                computeNormalMatrix(dst, scratchModelViewMatrix, true);
                 break;
 
             case 0x02: // pinnaParco7.szs
@@ -476,7 +475,8 @@ export class MaterialInstance {
             case 0x03:
             case 0x09:
                 // Projection. Used for indtexwater, mostly.
-                mat4.copy(dst, modelViewMatrix);
+                if (!hasModelViewMatrix) mat4.mul(scratchModelViewMatrix, viewMatrix, modelMatrix), hasModelViewMatrix = true;
+                mat4.copy(dst, scratchModelViewMatrix);
                 break;
 
             case 0x05:

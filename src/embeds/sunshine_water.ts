@@ -22,7 +22,7 @@ import { GfxDevice, GfxHostAccessPass, GfxBuffer, GfxInputState, GfxInputLayout,
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
-import { computeViewMatrix, Camera } from '../Camera';
+import { computeViewMatrix } from '../Camera';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 const scale = 200;
@@ -115,9 +115,10 @@ class SeaPlaneScene {
     private plane: PlaneShape;
     private bmdModel: BMDModel;
     private animationController: AnimationController;
+    private modelMatrix = mat4.create();
 
     constructor(device: GfxDevice, cache: GfxRenderCache, bmd: BMD, btk: BTK, configName: string) {
-        mat4.copy(this.shapeInstanceState.rootJointToWorld, posMtx);
+        mat4.copy(this.modelMatrix, posMtx);
 
         this.animationController = new AnimationController();
         // Make it go fast.
@@ -190,9 +191,9 @@ class SeaPlaneScene {
         template.allocateUniformBuffer(ub_MaterialParams, u_MaterialParamsBufferSize);
 
         computeViewMatrix(packetParams.u_PosMtx[0], viewerInput.camera);
-        mat4.mul(packetParams.u_PosMtx[0], packetParams.u_PosMtx[0], this.shapeInstanceState.rootJointToWorld);
+        mat4.mul(packetParams.u_PosMtx[0], packetParams.u_PosMtx[0], this.modelMatrix);
 
-        this.seaMaterialInstance.fillMaterialParams(template, this.materialInstanceState, packetParams.u_PosMtx[0], this.shapeInstanceState.rootJointToWorld, viewerInput.camera);
+        this.seaMaterialInstance.fillMaterialParams(template, this.materialInstanceState, this.shapeInstanceState.viewMatrix, this.modelMatrix, viewerInput.camera);
 
         this.plane.prepareToRender(renderHelper, packetParams);
         renderHelper.renderInstManager.popTemplateRenderInst();
