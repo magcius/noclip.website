@@ -1571,6 +1571,20 @@ export class JPABaseParticle {
         this.calcFieldAffect(scratchVec3a, field);
     }
 
+    private calcFieldAir(field: JPAFieldBlock, workData: JPAEmitterWorkData): void {
+        // Prepare
+        vec3.normalize(scratchVec3a, field.dir);
+        if (!!((field.flags >>> 0x10) & 2)) {
+            vec3.scale(scratchVec3a, scratchVec3a, field.param1);
+        } else {
+            vec3.transformMat4(scratchVec3a, scratchVec3a, workData.globalRotation);
+            vec3.scale(scratchVec3a, scratchVec3a, field.param1);
+        }
+
+        // Calc
+        this.calcFieldAffect(scratchVec3a, field);
+    }
+
     private calcFieldNewton(field: JPAFieldBlock, workData: JPAEmitterWorkData): void {
         // Prepare
 
@@ -1660,6 +1674,8 @@ export class JPABaseParticle {
             const field = fld1[i];
             if (field.type === JPAFieldType.Gravity)
                 this.calcFieldGravity(field, workData);
+            else if (field.type === JPAFieldType.Air)
+                this.calcFieldAir(field, workData);
             else if (field.type === JPAFieldType.Newton)
                 this.calcFieldNewton(field, workData);
             else if (field.type === JPAFieldType.Vortex)
@@ -1858,6 +1874,17 @@ export class JPABaseParticle {
                 scratchVec3a[0], scratchVec3a[1], scratchVec3a[2]);
             this.loadTexMtx(materialParams.u_TexMtx[0], workData, packetParams.u_PosMtx[0]);
         } else if (bsp1.type === ShapeType.DirectionCross) {
+            renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateBillboard);
+            renderInst.drawIndexes(6, 0);
+            vec3.transformMat4(scratchVec3a, this.position, workData.posCamMtx);
+            computeModelMatrixSRT(packetParams.u_PosMtx[0],
+                this.scale[0] * workData.globalScale2D[0],
+                this.scale[1] * workData.globalScale2D[1],
+                1,
+                0, 0, 0,
+                scratchVec3a[0], scratchVec3a[1], scratchVec3a[2]);
+            this.loadTexMtx(materialParams.u_TexMtx[0], workData, packetParams.u_PosMtx[0]);
+        } else if (bsp1.type === ShapeType.YBillboard) {
             renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateBillboard);
             renderInst.drawIndexes(6, 0);
             vec3.transformMat4(scratchVec3a, this.position, workData.posCamMtx);

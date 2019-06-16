@@ -111,9 +111,8 @@ class MapObjActor extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, initInfo: MapObjActorInitInfo) {
         super(zoneAndLayer, getObjectName(infoIter));
 
-        this.initModelManagerWithAnm(sceneObjHolder, this.name);
-        // TODO(jstpierre): Don't depend on the modelInstance for initDefaultPos.
         this.initDefaultPos(sceneObjHolder, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, this.name);
         this.connectToScene(sceneObjHolder, initInfo);
         if (initInfo.initLightControl)
             this.initLightCtrl(sceneObjHolder);
@@ -175,10 +174,9 @@ export class StarPiece extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, getObjectName(infoIter));
 
+        this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, this.name);
         connectToSceneNoSilhouettedMapObj(sceneObjHolder, this);
-
-        this.initDefaultPos(sceneObjHolder, infoIter);
 
         let starPieceColorIndex = getJMapInfoArg3(infoIter, -1);
         if (starPieceColorIndex < 0 || starPieceColorIndex > 5)
@@ -206,8 +204,8 @@ export class EarthenPipe extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, getObjectName(infoIter));
 
-        this.initModelManagerWithAnm(sceneObjHolder, "EarthenPipe");
         this.initDefaultPos(sceneObjHolder, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, "EarthenPipe");
 
         const colorFrame = getJMapInfoArg7(infoIter, 0);
         const animationController = new AnimationController();
@@ -228,8 +226,8 @@ export class BlackHole extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, getObjectName(infoIter));
 
-        this.initModelManagerWithAnm(sceneObjHolder, 'BlackHoleRange');
         this.initDefaultPos(sceneObjHolder, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, 'BlackHoleRange');
         connectToSceneCollisionMapObj(sceneObjHolder, this);
         this.blackHoleModel = createModelObjMapObj(zoneAndLayer, sceneObjHolder, 'BlackHole', 'BlackHole', this.modelInstance.modelMatrix);
 
@@ -478,9 +476,9 @@ export class Kinopio extends NPCActor {
         super(zoneAndLayer, getObjectName(infoIter));
 
         const objName = this.name;
+        this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, objName);
         connectToSceneNpc(sceneObjHolder, this);
-        this.initDefaultPos(sceneObjHolder, infoIter);
         this.initLightCtrl(sceneObjHolder);
 
         this.boundingSphereRadius = 100;
@@ -546,9 +544,9 @@ export class Peach extends NPCActor {
         super(zoneAndLayer, getObjectName(infoIter));
 
         const objName = this.name;
+        this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, objName);
         connectToSceneNpc(sceneObjHolder, this);
-        this.initDefaultPos(sceneObjHolder, infoIter);
         this.initLightCtrl(sceneObjHolder);
 
         this.boundingSphereRadius = 100;
@@ -568,9 +566,9 @@ export class Penguin extends NPCActor {
         super(zoneAndLayer, getObjectName(infoIter));
 
         const objName = this.name;
+        this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, objName);
         connectToSceneNpc(sceneObjHolder, this);
-        this.initDefaultPos(sceneObjHolder, infoIter);
         this.initLightCtrl(sceneObjHolder);
 
         this.boundingSphereRadius = 100;
@@ -601,9 +599,9 @@ export class PenguinRacer extends NPCActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, getObjectName(infoIter));
 
+        this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, "Penguin");
         connectToSceneNpc(sceneObjHolder, this);
-        this.initDefaultPos(sceneObjHolder, infoIter);
         this.initLightCtrl(sceneObjHolder);
 
         this.boundingSphereRadius = 100;
@@ -630,9 +628,9 @@ export class TicoComet extends NPCActor {
         super(zoneAndLayer, getObjectName(infoIter));
 
         const objName = this.name;
+        this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, objName);
         connectToSceneNpc(sceneObjHolder, this);
-        this.initDefaultPos(sceneObjHolder, infoIter);
         this.initLightCtrl(sceneObjHolder);
         this.initEffectKeeper(sceneObjHolder, null);
 
@@ -668,11 +666,10 @@ export class Coin extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, getObjectName(infoIter));
 
+        this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, getObjectName(infoIter));
         connectToSceneItemStrongLight(sceneObjHolder, this);
         this.initLightCtrl(sceneObjHolder);
-
-        this.initDefaultPos(sceneObjHolder, infoIter);
 
         const isNeedBubble = getJMapInfoArg7(infoIter);
         if (isNeedBubble !== -1) {
@@ -957,5 +954,19 @@ export class WarpPod extends LiveActor {
             emitEffect(sceneObjHolder, this, 'EndGlow');
             setEffectEnvColor(this, 'EndGlow', warpPodColorTable[this.colorIndex]);
         }
+    }
+}
+
+export class AstroCountDownPlate extends LiveActor {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, getObjectName(infoIter));
+
+        this.initDefaultPos(sceneObjHolder, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, "AstroCountDownPlate");
+        connectToSceneMapObj(sceneObjHolder, this);
+        this.initEffectKeeper(sceneObjHolder, null);
+        emitEffect(sceneObjHolder, this, "Light");
+
+        startBrkIfExist(this.modelInstance, this.arc, "Green");
     }
 }

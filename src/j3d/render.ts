@@ -26,9 +26,6 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { fillColor, fillMatrix4x3 } from '../gfx/helpers/UniformBufferHelpers';
 
 export class ShapeInstanceState {
-    // The location of the root joint in world-space.
-    public rootJointToWorld: mat4 = mat4.create();
-
     // One matrix for each joint, which transform into world space.
     public jointToWorldMatrices: mat4[] = [];
 
@@ -1229,7 +1226,13 @@ export class BMDModelInstance {
         return false;
     }
 
+    public calcJointArray(): void {
+        this.computeJointMatrixArray(this.bmdModel.rootJoint, this.modelMatrix);
+    }
+
     public calcAnim(camera: Camera): void {
+        this.calcJointArray();
+
         // Skyboxes implicitly center themselves around the view matrix (their view translation is removed).
         // While we could represent this, a skybox is always visible in theory so it's probably not worth it
         // to cull. If we ever have a fancy skybox model, then it might be worth it to represent it in world-space.
@@ -1245,9 +1248,6 @@ export class BMDModelInstance {
             computeViewMatrixSkybox(this.shapeInstanceState.viewMatrix, camera);
         else
             computeViewMatrix(this.shapeInstanceState.viewMatrix, camera);
-
-        mat4.copy(this.shapeInstanceState.rootJointToWorld, this.modelMatrix);
-        this.computeJointMatrixArray(this.bmdModel.rootJoint, this.shapeInstanceState.rootJointToWorld);
 
         const jnt1 = this.bmdModel.bmd.jnt1;
         for (let i = 0; i < this.bmdModel.bmd.jnt1.joints.length; i++) {

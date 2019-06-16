@@ -1129,6 +1129,9 @@ export class LiveActor extends NameObj implements ObjectBase {
         // TODO(jstpierre): Use connectToScene for final draw rather than passMask.
         this.modelInstance.passMask = SMGPass.OPAQUE;
 
+        // Compute the joint matrices an initial time in case anything wants to rely on them...
+        this.modelInstance.calcJointArray();
+
         // TODO(jstpierre): RE the whole ModelManager / XanimePlayer thing.
         // Seems like it's possible to have a secondary file for BCK animations?
         this.actorAnimKeeper = ActorAnimKeeper.tryCreate(this);

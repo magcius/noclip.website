@@ -1,6 +1,6 @@
 
 import { NameObjFactory } from "./smg_scenes";
-import { Kinopio, TicoComet, EarthenPipe, StarPiece, CollapsePlane, BlackHole, Peach, PenguinRacer, Coin, Penguin, SimpleEffectObj, EffectObjR1000F50, GCaptureTarget, FountainBig, AstroEffectObj, WarpPod } from "./Actors";
+import { Kinopio, TicoComet, EarthenPipe, StarPiece, CollapsePlane, BlackHole, Peach, PenguinRacer, Coin, Penguin, SimpleEffectObj, EffectObjR1000F50, GCaptureTarget, FountainBig, AstroEffectObj, WarpPod, AstroCountDownPlate } from "./Actors";
 import { OceanBowl } from "./OceanBowl";
 
 interface ActorTableEntry {
@@ -35,6 +35,7 @@ const ActorTable: ActorTableEntry[] = [
     _("GCaptureTarget",       GCaptureTarget),
     _("FountainBig",          FountainBig),
     _("WarpPod",              WarpPod),
+    _("AstroCountDownPlate",  AstroCountDownPlate),
 ];
 
 export function getActorNameObjFactory(objName: string): NameObjFactory | null {
