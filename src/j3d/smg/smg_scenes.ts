@@ -1066,6 +1066,7 @@ export class LiveActor extends NameObj implements ObjectBase {
     public visibleScenario: boolean = true;
     public visibleAlive: boolean = true;
     public visibleDraw: boolean = true;
+    public boundingSphereRadius: number | null = null;
 
     public actorAnimKeeper: ActorAnimKeeper | null = null;
     public actorLightCtrl: ActorLightCtrl | null = null;
@@ -1182,8 +1183,15 @@ export class LiveActor extends NameObj implements ObjectBase {
             this.translation[0], this.translation[1], this.translation[2]);
     }
 
-    protected getModelVisible(): boolean {
-        return this.visibleScenario && this.visibleAlive && this.visibleDraw;
+    protected getModelVisible(camera: Camera): boolean {
+        if (this.visibleScenario && this.visibleAlive && this.visibleDraw) {
+            if (this.boundingSphereRadius !== null)
+                return camera.frustum.containsSphere(this.translation, this.boundingSphereRadius);
+            else
+                return true;
+        } else {
+            return false;
+        }
     }
 
     public draw(sceneObjHolder: SceneObjHolder, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
@@ -1197,7 +1205,7 @@ export class LiveActor extends NameObj implements ObjectBase {
         this.modelInstance.animationController.setTimeFromViewerInput(viewerInput);
         this.modelInstance.calcAnim(viewerInput.camera);
 
-        const visible = this.getModelVisible();
+        const visible = this.getModelVisible(viewerInput.camera);
         this.modelInstance.visible = visible;
         if (!visible)
             return;
@@ -1232,12 +1240,14 @@ export class LiveActor extends NameObj implements ObjectBase {
         if (this.effectKeeper !== null) {
             this.effectKeeper.updateSyncBckEffect(sceneObjHolder.effectSystem);
             this.effectKeeper.followSRT();
+            this.effectKeeper.setDrawParticle(this.getModelVisible(viewerInput.camera));
         }
     }
 }
 
 import { NPCDirector, MiniRoutePoint, createModelObjMapObj, PeachCastleGardenPlanet } from './Actors';
 import { getActorNameObjFactory } from './ActorTable';
+import { Camera } from '../../Camera';
 
 function layerVisible(layer: LayerId, layerMask: number): boolean {
     if (layer >= 0)

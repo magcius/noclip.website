@@ -5,6 +5,7 @@ import { mat4, vec3, mat3 } from "gl-matrix";
 
 export const enum MathConstants {
     DEG_TO_RAD = 0.01745, // Math.PI / 180,
+    TAU = 6.283, // Math.PI * 2
     EPSILON = 0.000001,
 }
 

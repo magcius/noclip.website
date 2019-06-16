@@ -103,6 +103,16 @@ class ParticleEmitter {
     public invalidate(): void {
         this.baseEmitter = null;
     }
+
+    public setGlobalPrmColor(color: Color): void {
+        if (this.baseEmitter !== null)
+            colorCopy(this.baseEmitter.globalColorPrm, color);
+    }
+
+    public setGlobalEnvColor(color: Color): void {
+        if (this.baseEmitter !== null)
+            colorCopy(this.baseEmitter.globalColorEnv, color);
+    }
 }
 
 const enum EmitterLoopMode {
@@ -214,6 +224,7 @@ export class MultiEmitter {
     public startFrame: number;
     public endFrame: number;
     public continueAnimEnd: boolean;
+    public bckName: string | null = null;
 
     constructor(sceneObjHolder: SceneObjHolder, effectName: string) {
         this.allocateEmitter(sceneObjHolder, effectName);
@@ -347,14 +358,13 @@ export class MultiEmitter {
         this.setSRT(scale, rot, trans);
     }
 
-    public setColors(): void {
+    private setColors(): void {
         for (let i = 0; i < this.singleEmitters.length; i++) {
             const emitter = this.singleEmitters[i];
             if (!emitter.isValid())
                 continue;
-            const baseEmitter = emitter.particleEmitter.baseEmitter;
-            colorCopy(baseEmitter.globalColorPrm, this.globalPrmColor);
-            colorCopy(baseEmitter.globalColorEnv, this.globalEnvColor);
+            emitter.particleEmitter.setGlobalPrmColor(this.globalPrmColor);
+            emitter.particleEmitter.setGlobalEnvColor(this.globalEnvColor);
         }
     }
 
@@ -374,6 +384,14 @@ export class MultiEmitter {
         computeModelMatrixR(rot, rotIn[0], rotIn[1], rotIn[2]);
         vec3.copy(trans, transIn);
         this.followSRT(scale, rot, trans, isFollow);
+    }
+
+    public setGlobalEnvColor(color: Color, emitterIndex: number = -1): void {
+        for (let i = 0; i < this.singleEmitters.length; i++) {
+            const emitter = this.singleEmitters[i];
+            if (emitter.isValid() && emitterIndex < 0 || i === emitterIndex)
+                emitter.particleEmitter.setGlobalEnvColor(color);
+        }
     }
 }
 
@@ -402,10 +420,10 @@ function isCreate(multiEmitter: MultiEmitter, currentBckName: string, frame: num
 }
 
 function isDelete(multiEmitter: MultiEmitter, currentBckName: string, frame: number): boolean {
-    if (multiEmitter.animNames.includes(currentBckName)) {
+    if (multiEmitter.bckName === currentBckName) {
         if (multiEmitter.endFrame >= 0 && frame > multiEmitter.endFrame)
             return true;
-    } else {
+    } else if (multiEmitter.bckName !== null) {
         if (!multiEmitter.continueAnimEnd)
             return true;
     }
@@ -484,13 +502,26 @@ export class EffectKeeper {
         for (let i = 0; i < this.multiEmitters.length; i++) {
             const multiEmitter = this.multiEmitters[i];
 
-            if (isCreate(multiEmitter, this.currentBckName, timeInFrames, EmitterLoopMode.ONE_TIME))
+            if (isCreate(multiEmitter, this.currentBckName, timeInFrames, EmitterLoopMode.ONE_TIME)) {
                 multiEmitter.createOneTimeEmitter(effectSystem);
-            if (isCreate(multiEmitter, this.currentBckName, timeInFrames, EmitterLoopMode.FOREVER))
+                multiEmitter.bckName = this.currentBckName;
+                this.setHostSRT(multiEmitter, false);
+            }
+            if (isCreate(multiEmitter, this.currentBckName, timeInFrames, EmitterLoopMode.FOREVER)) {
                 multiEmitter.createForeverEmitter(effectSystem);
-            if (isDelete(multiEmitter, this.currentBckName, timeInFrames))
+                multiEmitter.bckName = this.currentBckName;
+                this.setHostSRT(multiEmitter, false);
+            }
+            if (isDelete(multiEmitter, this.currentBckName, timeInFrames)) {
                 multiEmitter.deleteEmitter();
+                multiEmitter.bckName = null;
+            }
         }
+    }
+
+    public setDrawParticle(v: boolean): void {
+        for (let i = 0; i < this.multiEmitters.length; i++)
+            this.multiEmitters[i].setDrawParticle(v);
     }
 }
 

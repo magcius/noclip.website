@@ -2,14 +2,14 @@
 // Misc actors that aren't big enough to have their own file.
 
 import { LightType } from './DrawBuffer';
-import { SceneObjHolder, LiveActor, ZoneAndLayer, getObjectName, SMGPass, startBckIfExist, startBtkIfExist, startBvaIfExist, WorldmapPointInfo, startBrkIfExist, getDeltaTimeFrames, getTimeFrames, startBck } from './smg_scenes';
-import { JMapInfoIter, getJMapInfoArg3, getJMapInfoArg2, getJMapInfoArg7, getJMapInfoArg0, getJMapInfoArg1, createCsvParser } from './JMapInfo';
+import { SceneObjHolder, LiveActor, ZoneAndLayer, getObjectName, SMGPass, startBtkIfExist, startBvaIfExist, WorldmapPointInfo, startBrkIfExist, getDeltaTimeFrames, getTimeFrames, startBck } from './smg_scenes';
+import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg6, getJMapInfoArg7 } from './JMapInfo';
 import { mat4, vec3 } from 'gl-matrix';
 import AnimationController from '../../AnimationController';
 import { MathConstants, computeModelMatrixSRT, clamp } from '../../MathHelpers';
-import { colorNewFromRGBA8 } from '../../Color';
+import { colorNewFromRGBA8, Color } from '../../Color';
 import { ColorKind } from '../../gx/gx_render';
-import { BTK, BRK } from '../j3d';
+import { BTK, BRK, LoopMode } from '../j3d';
 import * as Viewer from '../../viewer';
 import * as RARC from '../../j3d/rarc';
 import { DrawBufferType, MovementType, CalcAnimType, DrawType } from './NameObj';
@@ -68,6 +68,11 @@ export function createModelObjMapObj(zoneAndLayer: ZoneAndLayer, sceneObjHolder:
 
 export function emitEffect(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string): void {
     actor.effectKeeper.createEmitter(sceneObjHolder, name);
+}
+
+export function setEffectEnvColor(actor: LiveActor, name: string, color: Color): void {
+    const emitter = actor.effectKeeper.getEmitter(name);
+    emitter.setGlobalEnvColor(color, -1);
 }
 
 export function deleteEffect(actor: LiveActor, name: string): void {
@@ -478,6 +483,8 @@ export class Kinopio extends NPCActor {
         this.initDefaultPos(sceneObjHolder, infoIter);
         this.initLightCtrl(sceneObjHolder);
 
+        this.boundingSphereRadius = 100;
+
         const itemGoodsIdx = getJMapInfoArg7(infoIter);
         const itemGoods = sceneObjHolder.npcDirector.getNPCItemData('Kinopio', itemGoodsIdx);
         this.equipment(sceneObjHolder, itemGoods);
@@ -544,6 +551,8 @@ export class Peach extends NPCActor {
         this.initDefaultPos(sceneObjHolder, infoIter);
         this.initLightCtrl(sceneObjHolder);
 
+        this.boundingSphereRadius = 100;
+
         this.startAction('Help');
     }
 
@@ -563,6 +572,8 @@ export class Penguin extends NPCActor {
         connectToSceneNpc(sceneObjHolder, this);
         this.initDefaultPos(sceneObjHolder, infoIter);
         this.initLightCtrl(sceneObjHolder);
+
+        this.boundingSphereRadius = 100;
 
         const arg0 = getJMapInfoArg0(infoIter, -1);
         if (arg0 === 0) {
@@ -595,6 +606,8 @@ export class PenguinRacer extends NPCActor {
         this.initDefaultPos(sceneObjHolder, infoIter);
         this.initLightCtrl(sceneObjHolder);
 
+        this.boundingSphereRadius = 100;
+
         const itemGoods = sceneObjHolder.npcDirector.getNPCItemData(this.name, 0);
         this.equipment(sceneObjHolder, itemGoods);
 
@@ -622,6 +635,8 @@ export class TicoComet extends NPCActor {
         this.initDefaultPos(sceneObjHolder, infoIter);
         this.initLightCtrl(sceneObjHolder);
         this.initEffectKeeper(sceneObjHolder, null);
+
+        this.boundingSphereRadius = 100;
 
         const itemGoodsIdx = 0;
         const itemGoods = sceneObjHolder.npcDirector.getNPCItemData('TicoComet', itemGoodsIdx);
@@ -745,6 +760,8 @@ export class SimpleEffectObj extends LiveActor {
         if (sceneObjHolder.effectSystem === null)
             return;
 
+        this.boundingSphereRadius = this.getClippingRadius();
+
         this.initEffectKeeper(sceneObjHolder, this.name);
         this.effectKeeper.createEmitter(sceneObjHolder, this.name);
 
@@ -757,17 +774,6 @@ export class SimpleEffectObj extends LiveActor {
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         // Don't need anything, effectSystem is already built-in.
-    }
-
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
-
-        let visible = this.visibleAlive && this.visibleScenario;
-        if (visible)
-            visible = viewerInput.camera.frustum.containsSphere(this.translation, this.getClippingRadius());
-
-        for (let i = 0; i < this.effectKeeper.multiEmitters.length; i++)
-            this.effectKeeper.multiEmitters[i].setDrawParticle(visible);
     }
 }
 
@@ -884,5 +890,72 @@ export class FountainBig extends LiveActor {
         }
 
         this.stateTicks += getDeltaTimeFrames(viewerInput);
+    }
+}
+
+export class AstroEffectObj extends SimpleEffectObj {
+    // The game will check whether the user has the correct dome enabled,
+    // but it is otherwise identical to SimpleEffectObj.
+}
+
+const warpPodColorTable = [
+    colorNewFromRGBA8(0x0064C8FF),
+    colorNewFromRGBA8(0x2CFF2AFF),
+    colorNewFromRGBA8(0xFF3C3CFF),
+    colorNewFromRGBA8(0xC4A600FF),
+    colorNewFromRGBA8(0x00FF00FF),
+    colorNewFromRGBA8(0xFF00FFFF),
+    colorNewFromRGBA8(0xFFFF00FF),
+    colorNewFromRGBA8(0xFFFFFFFF),
+];
+
+export class WarpPod extends LiveActor {
+    private visible: boolean;
+    private colorIndex: number;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, getObjectName(infoIter));
+
+        this.initDefaultPos(sceneObjHolder, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, "WarpPod");
+
+        this.visible = !!getJMapInfoArg1(infoIter, 0);
+        const hasSaveFlag = !!getJMapInfoArg3(infoIter, 0);
+        const astroDomeNum = !!getJMapInfoArg4(infoIter, 0);
+        this.colorIndex = getJMapInfoArg6(infoIter, 0);
+
+        if (this.visible) {
+            connectToScene(sceneObjHolder, this, 0x22, 5, 8, -1);
+        } else {
+            connectToScene(sceneObjHolder, this, 0x22, -1, -1, -1);
+        }
+
+        this.initEffectKeeper(sceneObjHolder, null);
+
+        if (this.visible) {
+            startBck(this, 'Active');
+            startBrkIfExist(this.modelInstance, this.arc, 'Active');
+            // This is a bit hokey, but we don't have an XanimePlayer, so this is our solution...
+            this.modelInstance.ank1Animator.ank1.loopMode = LoopMode.ONCE;
+        }
+
+        // The game normally will check a few different save file bits
+        // or the highest unlocked AstroDome, but we just declare all
+        // WarpPods are active.
+        const inactive = false;
+
+        if (inactive) {
+            startBck(this, 'Wait');
+            startBrkIfExist(this.modelInstance, this.arc, 'Wait');
+        } else {
+            this.glowEffect(sceneObjHolder);
+        }
+    }
+
+    private glowEffect(sceneObjHolder: SceneObjHolder): void {
+        if (this.visible) {
+            emitEffect(sceneObjHolder, this, 'EndGlow');
+            setEffectEnvColor(this, 'EndGlow', warpPodColorTable[this.colorIndex]);
+        }
     }
 }

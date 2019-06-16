@@ -16,7 +16,7 @@ import { GXMaterial, AlphaTest, RopInfo, TexGen, TevStage, getVertexAttribLocati
 import { Color, colorNew, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult } from "../Color";
 import { MaterialParams, ColorKind, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, PacketParams, ub_MaterialParams, u_MaterialParamsBufferSize, setIndTexOrder, setIndTexCoordScale, setTevIndirect, setTevOrder, setTevColorIn, setTevColorOp, setTevAlphaIn, setTevAlphaOp, fillIndTexMtx } from "../gx/gx_render";
 import { GXMaterialHelperGfx, GXRenderHelperGfx } from "../gx/gx_render_2";
-import { computeModelMatrixSRT, computeModelMatrixR, lerp } from "../MathHelpers";
+import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants } from "../MathHelpers";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { makeSortKeyTranslucent, GfxRendererLayer } from "../gfx/render/GfxRenderer";
 
@@ -68,23 +68,47 @@ export interface JPADynamicsBlock {
     rateStep: number;
 }
 
-const enum JPABSPType {
+const enum ShapeType {
     Point            = 0x00,
     Line             = 0x01,
-    BillBoard        = 0x02,
-    Directional      = 0x03,
-    DirectionalCross = 0x04,
+    Billboard        = 0x02,
+    Direction        = 0x03,
+    DirectionCross   = 0x04,
     Stripe           = 0x05,
     StripeCross      = 0x06,
     Rotation         = 0x07,
-    Particle         = 0x08,
-    DirBillBoard     = 0x09,
-    YBillBoard       = 0x0A,
+    RotationCross    = 0x08,
+    DirBillboard     = 0x09,
+    YBillboard       = 0x0A,
+}
+
+const enum DirType {
+    Vel      = 0,
+    Pos      = 1,
+    PosInv   = 2,
+    EmtrDir  = 3,
+    PrevPctl = 4,
+}
+
+const enum RotType {
+    Y   = 0,
+    X   = 1,
+    Z   = 2,
+    XYZ = 3,
+}
+
+const enum PlaneType {
+    XY = 0,
+    XZ = 1,
+    X  = 2,
 }
 
 export interface JPABaseShapeBlock {
     flags: number;
-    type: JPABSPType;
+    type: ShapeType;
+    dirType: DirType;
+    rotType: RotType;
+    planeType: PlaneType;
     texIdx: number;
     texIdxAnimData: Uint8Array | null;
     texCrdMtxAnimData: Float32Array | null;
@@ -128,6 +152,9 @@ export interface JPAExtraShapeBlock {
     alphaOutValue: number;
     alphaIncreaseRate: number;
     alphaDecreaseRate: number;
+    alphaWaveAmplitude: number;
+    alphaWaveRandom: number;
+    alphaWaveFrequency: number;
     rotateAngle: number;
     rotateAngleRandom: number;
     rotateSpeed: number;
@@ -919,7 +946,7 @@ export class JPABaseEmitter {
             else if (kfa1.keyType === JPAKeyType.VolumeSize)
                 this.volumeSize = v;
             else if (kfa1.keyType === JPAKeyType.VolumeSweep)
-                throw "whoops"; // this.volumeSweep = v;
+                throw "whoops"; // Was removed from JPA2.
             else if (kfa1.keyType === JPAKeyType.VolumeMinRad)
                 this.volumeMinRad = v;
             else if (kfa1.keyType === JPAKeyType.LifeTime)
@@ -958,7 +985,7 @@ export class JPABaseEmitter {
             // Fixed interval
             throw "whoops";
         } else {
-            angle = workData.volumeSweep * get_rndm_f(this.random) * Math.PI * 2;
+            angle = workData.volumeSweep * get_rndm_f(this.random) * MathConstants.TAU;
             x = (Math.PI * 0.5) + (get_rndm_f(this.random) * Math.PI);
         }
 
@@ -988,7 +1015,7 @@ export class JPABaseEmitter {
         }
 
         const sizeXZ = workData.volumeSize * lerp(workData.volumeMinRad, 1.0, distance);
-        let angle = (workData.volumeSweep * get_rndm_f(this.random)) * Math.PI * 2;
+        let angle = (workData.volumeSweep * get_rndm_f(this.random)) * MathConstants.TAU;
         // TODO(jstpierre): Why do we need this? Something's fishy in Beach Bowl Galaxy...
         // VolumeSweep is 0.75 but it doesn't look like it goes 3/4ths of the way around...
         angle -= Math.PI / 2;
@@ -1018,9 +1045,9 @@ export class JPABaseEmitter {
         if (!!(bem1.flags & 0x02)) {
             // Fixed interval
             const idx = workData.volumeEmitIdx++;
-            angle = workData.volumeSweep * (idx / workData.volumeEmitCount) * Math.PI * 2;
+            angle = workData.volumeSweep * (idx / workData.volumeEmitCount) * MathConstants.TAU;
         } else {
-            angle = workData.volumeSweep * get_rndm_f(this.random) * Math.PI * 2;
+            angle = workData.volumeSweep * get_rndm_f(this.random) * MathConstants.TAU;
         }
 
         let distance = get_rndm_f(this.random);
@@ -1254,16 +1281,12 @@ export class JPABaseEmitter {
         this.flags = this.flags & 0xFFFFFF7F;
         vec2.mul(workData.globalScale2D, this.globalScale2D, bsp1.globalScale2D);
 
-        if (bsp1.type === JPABSPType.Point) {
+        if (bsp1.type === ShapeType.Point) {
             workData.globalScale2D[0] *= 1.02;
-        } else if (bsp1.type === JPABSPType.Line) {
+        } else if (bsp1.type === ShapeType.Line) {
             workData.globalScale2D[0] *= 1.02;
             workData.globalScale2D[1] *= 0.4;
         }
-
-        // Extra Shape stuff.
-
-        // DL type stuff.
 
         // mpDrawEmitterFuncList
 
@@ -1281,17 +1304,16 @@ export class JPABaseEmitter {
                 this.resData.texData[etx1.secondTextureIdx].fillTextureMapping(materialParams.m_TextureMapping[3]);
         }
 
-        if (bsp1.type === JPABSPType.Point || bsp1.type === JPABSPType.Line)
+        if (bsp1.type === ShapeType.Point || bsp1.type === ShapeType.Line)
             this.genTexCrdMtxIdt(materialParams);
         else if (!(bsp1.flags & 0x01000000))
             this.genTexCrdMtxIdt(materialParams);
 
-        // Draw in reverse.
         if (!!(bsp1.flags & 0x200000)) {
-            for (let i = this.aliveParticlesBase.length - 1; i >= 0; i--)
+            for (let i = 0; i < this.aliveParticlesBase.length; i++)
                 this.aliveParticlesBase[i].draw(device, renderHelper, workData, materialParams);
         } else {
-            for (let i = 0; i < this.aliveParticlesBase.length; i++)
+            for (let i = this.aliveParticlesBase.length - 1; i >= 0; i--)
                 this.aliveParticlesBase[i].draw(device, renderHelper, workData, materialParams);
         }
 
@@ -1343,7 +1365,7 @@ function calcTexCrdMtxAnm(dst: mat4, bsp1: JPABaseShapeBlock, tick: number): voi
     const translationT = offsT + texStaticTransY + tick * texScrollTransY;
     const scaleS = texStaticScaleX + tick * texScrollScaleX;
     const scaleT = texStaticScaleY + tick * texScrollScaleY;
-    const rotate = (texStaticRotate + tick * texScrollRotate) * Math.PI * 2;
+    const rotate = (texStaticRotate + tick * texScrollRotate) * MathConstants.TAU / 0x3FFF;
 
     const sinR = Math.sin(rotate);
     const cosR = Math.cos(rotate);
@@ -1351,17 +1373,26 @@ function calcTexCrdMtxAnm(dst: mat4, bsp1: JPABaseShapeBlock, tick: number): voi
     dst[0]  = scaleS *  cosR;
     dst[4]  = scaleS * -sinR;
     dst[8]  = 0.0;
-    dst[12] = offsS - (scaleS * (cosR * translationS) + (-sinR * translationT));
+    dst[12] = offsS + scaleS * (sinR * translationT - cosR * translationS);
 
     dst[1]  = scaleT *  sinR;
     dst[5]  = scaleT *  cosR;
     dst[9]  = 0.0;
-    dst[13] = offsT - (scaleT * (sinR * translationS) + (cosR * translationT));
+    dst[13] = offsT + -scaleT * (sinR * translationS + cosR * translationT);
 
     dst[2] = 0.0;
     dst[6] = 0.0;
     dst[10] = 1.0;
     dst[14] = 0.0;
+}
+
+function mat4SwapTranslationColumns(m: mat4): void {
+    const tx = m[12];
+    m[12] = m[8];
+    m[8] = tx;
+    const ty = m[13];
+    m[13] = m[9];
+    m[9] = ty;
 }
 
 const scratchMatrix = mat4.create();
@@ -1475,7 +1506,11 @@ export class JPABaseParticle {
 
         this.prmColorAlphaAnm = 1.0;
 
-        // AlphaWaveRandom
+        if (esp1 !== null && !!(esp1.flags & 0x00020000)) {
+            this.alphaWaveRandom = 1.0 + (get_r_zp(baseEmitter.random) * esp1.alphaWaveRandom);
+        } else {
+            this.alphaWaveRandom = 1.0;
+        }
 
         if (esp1 !== null && !!(esp1.flags & 0x01000000)) {
             this.rotateAngle = esp1.rotateAngle + (get_rndm_f(baseEmitter.random) - 0.5) * esp1.rotateAngleRandom;
@@ -1723,15 +1758,24 @@ export class JPABaseParticle {
 
                 const hasAlphaAnm = !!(esp1.flags & 0x00010000);
                 const hasAlphaFlickAnm = !!(esp1.flags & 0x00020000);
-                if (hasAlphaFlickAnm) {
-                    // throw "whoops";
-                } else if (hasAlphaAnm) {
+
+                if (hasAlphaAnm || hasAlphaAnm) {
+                    let alpha: number;
+
                     if (this.time < esp1.alphaInTiming)
-                        this.prmColorAlphaAnm = esp1.alphaInValue + this.time * esp1.alphaIncreaseRate;
+                        alpha = esp1.alphaInValue + this.time * esp1.alphaIncreaseRate;
                     else if (this.time > esp1.alphaOutTiming)
-                        this.prmColorAlphaAnm = esp1.alphaBaseValue + ((this.time - esp1.alphaOutTiming) * esp1.alphaDecreaseRate);
+                        alpha = esp1.alphaBaseValue + ((this.time - esp1.alphaOutTiming) * esp1.alphaDecreaseRate);
                     else
-                        this.prmColorAlphaAnm = esp1.alphaBaseValue;
+                        alpha = esp1.alphaBaseValue;
+
+                    if (hasAlphaFlickAnm) {
+                        const theta = this.alphaWaveRandom * this.tick * (1.0 - esp1.alphaWaveFrequency) * MathConstants.TAU / 4;
+                        const flickerMult = (0.5 * (Math.sin(theta) - 1.0) * esp1.alphaWaveAmplitude);
+                        this.prmColorAlphaAnm = alpha * (1.0 + flickerMult);
+                    } else {
+                        this.prmColorAlphaAnm = alpha;
+                    }
                 }
             }
 
@@ -1762,7 +1806,8 @@ export class JPABaseParticle {
         if (isPrj) {
             if (!!((bsp1.flags >>> 0x18) & 0x01)) {
                 // loadPrjAnm
-                calcTexCrdMtxAnm(dst, bsp1, this.tick);
+                calcTexCrdMtxAnm(dst, bsp1, workData.baseEmitter.tick);
+                mat4SwapTranslationColumns(dst);
                 mat4.mul(dst, dst, workData.texPrjMtx);
                 mat4.mul(dst, dst, posMtx);
             } else {
@@ -1800,7 +1845,7 @@ export class JPABaseParticle {
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
 
         const globalRes = workData.emitterManager.globalRes;
-        if (bsp1.type === JPABSPType.BillBoard) {
+        if (bsp1.type === ShapeType.Billboard) {
             const rotateAngle = isRot ? this.rotateAngle : 0;
             renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateBillboard);
             renderInst.drawIndexes(6, 0);
@@ -1812,7 +1857,7 @@ export class JPABaseParticle {
                 0, 0, rotateAngle,
                 scratchVec3a[0], scratchVec3a[1], scratchVec3a[2]);
             this.loadTexMtx(materialParams.u_TexMtx[0], workData, packetParams.u_PosMtx[0]);
-        } else if (bsp1.type === JPABSPType.DirectionalCross) {
+        } else if (bsp1.type === ShapeType.DirectionCross) {
             renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateBillboard);
             renderInst.drawIndexes(6, 0);
             vec3.transformMat4(scratchVec3a, this.position, workData.posCamMtx);
@@ -1960,7 +2005,12 @@ function parseResource(res: JPAResourceRaw): JPAResource {
 
             // Contains particle draw settings.
             const flags = view.getUint32(tableIdx + 0x08);
-            const type: JPABSPType = flags & 0x0F;
+            const type: ShapeType = (flags >>> 0) & 0x0F;
+            const dirType: DirType = (flags >>> 4) & 0x07;
+            const rotType: RotType = (flags >>> 7) & 0x07;
+            let planeType: PlaneType = (flags >>> 10) & 0x01;
+            if (type === ShapeType.DirectionCross || type === ShapeType.RotationCross)
+                planeType = PlaneType.X;
 
             const globalScale2DX = view.getFloat32(tableIdx + 0x10);
             const globalScale2DY = view.getFloat32(tableIdx + 0x14);
@@ -2021,7 +2071,7 @@ function parseResource(res: JPAResourceRaw): JPAResource {
             }
 
             bsp1 = {
-                flags, type, globalScale2D,
+                flags, type, dirType, rotType, planeType, globalScale2D,
                 blendModeFlags, alphaCompareFlags, alphaRef0, alphaRef1, zModeFlags,
                 texFlags, texIdx, texIdxAnimData, texCrdMtxAnimData,
                 colorFlags, colorPrm, colorEnv, colorEnvAnimData, colorPrmAnimData, colorRegAnmMaxFrm,
@@ -2069,6 +2119,10 @@ function parseResource(res: JPAResourceRaw): JPAResource {
             if (alphaOutTiming < 1)
                 alphaDecreaseRate = (alphaOutValue - alphaBaseValue) / (1.0 - alphaOutTiming);
 
+            const alphaWaveFrequency = view.getFloat32(tableIdx + 0x40);
+            const alphaWaveRandom = view.getFloat32(tableIdx + 0x44);
+            const alphaWaveAmplitude = view.getFloat32(tableIdx + 0x48);
+
             const rotateAngle = view.getFloat32(tableIdx + 0x4C);
             const rotateAngleRandom = view.getFloat32(tableIdx + 0x50);
             const rotateSpeed = view.getFloat32(tableIdx + 0x54);
@@ -2081,6 +2135,7 @@ function parseResource(res: JPAResourceRaw): JPAResource {
                 scaleOutRandom, scaleAnmMaxFrameX, scaleAnmMaxFrameY,
                 alphaInTiming, alphaOutTiming, alphaInValue, alphaBaseValue, alphaOutValue,
                 alphaIncreaseRate, alphaDecreaseRate,
+                alphaWaveAmplitude, alphaWaveRandom, alphaWaveFrequency,
                 rotateAngle, rotateAngleRandom, rotateSpeed, rotateSpeedRandom, rotateDirection,
             };
         } else if (fourcc === 'SSP1') {

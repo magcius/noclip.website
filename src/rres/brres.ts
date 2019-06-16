@@ -22,15 +22,6 @@ import { computeModelMatrixSRT, MathConstants, lerp } from '../MathHelpers';
 import BitMap from '../BitMap';
 
 //#region Utility
-function calc2dMtx(dst: mat2d, src: mat4): void {
-    dst[0] = src[0];
-    dst[1] = src[1];
-    dst[2] = src[4];
-    dst[3] = src[5];
-    dst[4] = src[12];
-    dst[5] = src[13]
-}
-
 function calcTexMtx_Basic(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
     const theta = rotation * MathConstants.DEG_TO_RAD;
     const sinR = Math.sin(theta);

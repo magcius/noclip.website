@@ -1053,10 +1053,10 @@ export class BMDModelInstance {
     public getTextureMappingReference(samplerName: string): TextureMapping | null {
         // Find the correct slot for the texture name.
         const samplers = this.bmdModel.tex1Data.tex1.samplers;
-        const samplerIndex = samplers.findIndex((sampler) => sampler.name === samplerName);
-        if (samplerIndex < 0)
-            return null;
-        return this.materialInstanceState.textureMappings[samplerIndex];
+        for (let i = 0; i < samplers.length; i++)
+            if (samplers[i].name === samplerName)
+                return this.materialInstanceState.textureMappings[i];
+        return null;
     }
 
     /**
@@ -1190,12 +1190,11 @@ export class BMDModelInstance {
      * updated as well. You can use this as a way to parent an object to this one.
      */
     public getJointToWorldMatrixReference(jointName: string): mat4 {
-        // Find the joint index for the given joint name.
-        const jointIndex = this.bmdModel.bmd.jnt1.joints.findIndex((j) => j.name === jointName);
-        assert(jointIndex >= 0);
-
-        // Now find the correct draw matrix for the joint.
-        return this.shapeInstanceState.jointToWorldMatrices[jointIndex];
+        const joints = this.bmdModel.bmd.jnt1.joints;
+        for (let i = 0; i < joints.length; i++)
+            if (joints[i].name === jointName)
+                return this.shapeInstanceState.jointToWorldMatrices[i];
+        throw "could not find joint";
     }
 
     private isAnyShapeVisible(): boolean {
