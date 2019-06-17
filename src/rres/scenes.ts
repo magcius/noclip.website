@@ -37,15 +37,14 @@ export class BasicRRESRenderer extends BasicRendererHelper {
         for (let i = 0; i < stageRRESes.length; i++) {
             const stageRRES = stageRRESes[i];
             this.textureHolder.addRRESTextures(device, stageRRES);
-            if (stageRRES.mdl0.length < 1)
-                continue;
 
-            const model = new MDL0Model(device, this.renderHelper, stageRRES.mdl0[0], materialHacks);
-            this.models.push(model);
-            const modelRenderer = new MDL0ModelInstance(device, this.renderHelper, this.textureHolder, model);
-            this.modelInstances.push(modelRenderer);
-
-            modelRenderer.bindRRESAnimations(this.animationController, stageRRES);
+            for (let j = 0; j < stageRRES.mdl0.length; j++) {
+                const model = new MDL0Model(device, this.renderHelper, stageRRES.mdl0[j], materialHacks);
+                this.models.push(model);
+                const modelRenderer = new MDL0ModelInstance(device, this.renderHelper, this.textureHolder, model);
+                this.modelInstances.push(modelRenderer);
+                modelRenderer.bindRRESAnimations(this.animationController, stageRRES);
+            }
         }
 
         this.renderHelper.finishBuilder(device, this.viewRenderer);
