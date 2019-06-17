@@ -103,7 +103,7 @@ export function createBasicRRESRendererFromBRRES(device: GfxDevice, buffer: Arra
 export function createBasicRRESRendererFromU8Archive(device: GfxDevice, arc: U8Archive) {
     function findRRES(rres: BRRES.RRES[], dir: U8.U8Dir) {
         for (let i = 0; i < dir.files.length; i++)
-            if (dir.files[i].name.endsWith('.brres'))
+            if (dir.files[i].name.endsWith('.brres') || dir.files[i].name.endsWith('.brtex'))
                 rres.push(BRRES.parse(dir.files[i].buffer));
         for (let i = 0; i < dir.subdirs.length; i++)
             findRRES(rres, dir.subdirs[i]);
