@@ -54,6 +54,7 @@ import * as KATAMARI_DAMACY from './katamari_damacy/scenes';
 import * as PM64 from './pm64/scenes';
 import * as OKAMI from './okami/scenes';
 import * as SSBB from './rres/ssbb_scenes';
+import * as TestScenes from './TestScenes';
 
 import { UI, SaveStatesAction, FloatingPanel, RENDER_HACKS_ICON, Slider } from './ui';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera';
@@ -121,6 +122,9 @@ const sceneGroups = [
     THUG2.sceneGroup,
     Z_BOTW.sceneGroup,
 ];
+
+if (IS_DEVELOPMENT)
+    sceneGroups.push(TestScenes.sceneGroup);
 
 function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
     return new Response(blob).arrayBuffer();

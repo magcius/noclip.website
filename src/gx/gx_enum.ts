@@ -645,3 +645,34 @@ export const enum AttenuationFunction {
     SPOT = 0x01, // Distance/spotlight attenuation
     NONE,
 }
+
+export const enum SpotFunction {
+    OFF = 0x00,
+    FLAT,
+    COS,
+    COS2,
+    SHARP,
+    RING1,
+    RING2,
+}
+
+export const enum ProjectionType {
+    PERSPECTIVE = 0x00,
+    ORTHOGRAPHIC,
+}
+
+export const enum FogType {
+    NONE          = 0x00,
+
+    PERSP_LIN     = 0x02,
+    PERSP_EXP     = 0x04,
+    PERSP_EXP2    = 0x05,
+    PERSP_REVEXP  = 0x06,
+    PERSP_REVEXP2 = 0x07,
+
+    ORTHO_LIN     = 0x0A,
+    ORTHO_EXP     = 0x0C,
+    ORTHO_EXP2    = 0x0D,
+    ORTHO_REVEXP  = 0x0E,
+    ORTHO_REVEXP2 = 0x0F,
+}

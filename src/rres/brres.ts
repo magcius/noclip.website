@@ -5,10 +5,10 @@
 import * as GX from '../gx/gx_enum';
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString, assertExists, hexzero } from "../util";
+import { assert, readString, assertExists } from "../util";
 import * as GX_Material from '../gx/gx_material';
 import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, compileVtxLoader, LoadedVertexLayout, getAttributeComponentByteSizeRaw, getAttributeFormatCompFlagsRaw } from '../gx/gx_displaylist';
-import { mat4, mat2d } from 'gl-matrix';
+import { mat4 } from 'gl-matrix';
 import { Endianness } from '../endian';
 import { AABB } from '../Geometry';
 import { TextureMapping } from '../TextureHolder';
@@ -20,6 +20,7 @@ import { getPointHermite } from '../Spline';
 import { colorToRGBA8, colorFromRGBA8 } from '../Color';
 import { computeModelMatrixSRT, MathConstants, lerp } from '../MathHelpers';
 import BitMap from '../BitMap';
+import { buf } from 'crc-32/types';
 
 //#region Utility
 function calcTexMtx_Basic(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
@@ -367,6 +368,8 @@ export interface MDL0_MaterialEntry {
     index: number;
     name: string;
     translucent: boolean;
+    lightSetIdx: number;
+    fogIdx: number;
     gxMaterial: GX_Material.GXMaterial;
     samplers: MDL0_MaterialSamplerEntry[];
     texSrts: MDL0_TexSrtEntry[];
@@ -633,6 +636,21 @@ export function parseMaterialEntry(r: DisplayListRegisters, index: number, name:
     return gxMaterial;
 }
 
+function parseColorChannelControlRegister(chanCtrl: number): GX_Material.ColorChannelControl {
+    const matColorSource: GX.ColorSrc =           (chanCtrl >>>  0) & 0x01;
+    const lightingEnabled: boolean =           !!((chanCtrl >>>  1) & 0x01);
+    const litMaskL: number =                      (chanCtrl >>>  2) & 0x0F;
+    const ambColorSource: GX.ColorSrc =           (chanCtrl >>>  6) & 0x01;
+    const diffuseFunction: GX.DiffuseFunction =   (chanCtrl >>>  7) & 0x03;
+    const attnEn: boolean =                    !!((chanCtrl >>>  9) & 0x01);
+    const attnSelect: boolean =                !!((chanCtrl >>> 10) & 0x01);
+    const litMaskH: number =                      (chanCtrl >>> 11) & 0x0F;
+
+    const litMask: number =                       (litMaskH << 4) | litMaskL;
+    const attenuationFunction = attnEn ? (attnSelect ? GX.AttenuationFunction.SPOT : GX.AttenuationFunction.SPEC) : GX.AttenuationFunction.NONE;
+    return { lightingEnabled, matColorSource, ambColorSource, litMask, diffuseFunction, attenuationFunction };
+}
+
 function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL0_MaterialEntry {
     const view = buffer.createDataView();
 
@@ -652,8 +670,8 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
     const cullMode: GX.CullMode = view.getUint32(0x18);
     // matMisc
     const zCompLoc = !!view.getUint8(0x1C);
-    const lightset = view.getInt8(0x1D);
-    const fogset = view.getInt8(0x1E);
+    const lightSetIdx = view.getInt8(0x1D);
+    const fogIdx = view.getInt8(0x1E);
     // pad
     const indMethod0 = view.getUint8(0x20);
     const indMethod1 = view.getUint8(0x21);
@@ -763,29 +781,8 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
         const chanCtrlC = view.getUint32(lightChannelTableIdx + 0x0C);
         const chanCtrlA = view.getUint32(lightChannelTableIdx + 0x10);
 
-        const chanCtrlCMatSrc: GX.ColorSrc =             (chanCtrlC >>>  0) & 0x01;
-        const chanCtrlCEnable: boolean =              !!((chanCtrlC >>>  1) & 0x01);
-        const chanCtrlCLitMaskL: number =                (chanCtrlC >>>  2) & 0x0F;
-        const chanCtrlCAmbSrc: GX.ColorSrc =             (chanCtrlC >>>  6) & 0x01;
-        const chanCtrlCDiffuseFn: GX.DiffuseFunction =   (chanCtrlC >>>  7) & 0x03;
-        const chanCtrlCAttnEn: boolean =              !!((chanCtrlC >>>  9) & 0x01);
-        const chanCtrlCAttnSelect: boolean =          !!((chanCtrlC >>> 10) & 0x01);
-        const chanCtrlCLitMaskH: number =                (chanCtrlC >>> 11) & 0x0F;
-        const chanCtrlCLitMask: number = (chanCtrlCLitMaskH << 4) | chanCtrlCLitMaskL;
-        const chanCtrlCAttnFn = chanCtrlCAttnEn ? (chanCtrlCAttnSelect ? GX.AttenuationFunction.SPOT : GX.AttenuationFunction.SPEC) : GX.AttenuationFunction.NONE;
-        const colorChannel: GX_Material.ColorChannelControl = { lightingEnabled: chanCtrlCEnable, matColorSource: chanCtrlCMatSrc, ambColorSource: chanCtrlCAmbSrc, litMask: chanCtrlCLitMask, diffuseFunction: chanCtrlCDiffuseFn, attenuationFunction: chanCtrlCAttnFn };
-
-        const chanCtrlAMatSrc: GX.ColorSrc =             (chanCtrlA >>>  0) & 0x01;
-        const chanCtrlAEnable: boolean =              !!((chanCtrlA >>>  1) & 0x01);
-        const chanCtrlALitMaskL: number =                (chanCtrlA >>>  2) & 0x0F;
-        const chanCtrlAAmbSrc: GX.ColorSrc =             (chanCtrlA >>>  6) & 0x01;
-        const chanCtrlADiffuseFn: GX.DiffuseFunction =   (chanCtrlA >>>  7) & 0x03;
-        const chanCtrlAAttnEn: boolean =              !!((chanCtrlA >>>  9) & 0x01);
-        const chanCtrlAAttnSelect: boolean =          !!((chanCtrlA >>> 10) & 0x01);
-        const chanCtrlALitMaskH: number =                (chanCtrlA >>> 11) & 0x0F;
-        const chanCtrlALitMask: number = (chanCtrlALitMaskH << 4) | chanCtrlALitMaskL;
-        const chanCtrlAAttnFn = chanCtrlAAttnEn ? (chanCtrlAAttnSelect ? GX.AttenuationFunction.SPOT : GX.AttenuationFunction.SPEC) : GX.AttenuationFunction.NONE;
-        const alphaChannel: GX_Material.ColorChannelControl = { lightingEnabled: chanCtrlAEnable, matColorSource: chanCtrlAMatSrc, ambColorSource: chanCtrlAAmbSrc, litMask: chanCtrlALitMask, diffuseFunction: chanCtrlADiffuseFn, attenuationFunction: chanCtrlAAttnFn };
+        const colorChannel = parseColorChannelControlRegister(chanCtrlC);
+        const alphaChannel = parseColorChannelControlRegister(chanCtrlA);
 
         colorMatRegs.push(new GX_Material.Color(matColorR, matColorG, matColorB, matColorA));
         colorAmbRegs.push(new GX_Material.Color(ambColorR, ambColorG, ambColorB, ambColorA));
@@ -878,7 +875,10 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
         texMtxTableIdx += 0x34;
     }
 
-    return { index, name, translucent, gxMaterial, samplers, texSrts, indTexMatrices, colorMatRegs, colorAmbRegs, colorRegisters, colorConstants };
+    return { index, name, translucent, lightSetIdx, fogIdx,
+        gxMaterial, samplers, texSrts, indTexMatrices,
+        colorMatRegs, colorAmbRegs, colorRegisters, colorConstants,
+    };
 }
 
 interface VtxBufferData {
@@ -1622,6 +1622,45 @@ function sampleFloatAnimationTrack(track: FloatAnimationTrack, frame: number): n
         throw "whoops";
 }
 
+function lerpColor(k0: number, k1: number, t: number): number {
+    const k0r = (k0 >>> 24) & 0xFF;
+    const k0g = (k0 >>> 16) & 0xFF;
+    const k0b = (k0 >>>  8) & 0xFF;
+    const k0a = (k0 >>>  0) & 0xFF;
+
+    const k1r = (k1 >>> 24) & 0xFF;
+    const k1g = (k1 >>> 16) & 0xFF;
+    const k1b = (k1 >>>  8) & 0xFF;
+    const k1a = (k1 >>>  0) & 0xFF;
+
+    const r = lerp(k0r, k1r, t);
+    const g = lerp(k0g, k1g, t);
+    const b = lerp(k0b, k1b, t);
+    const a = lerp(k0a, k1a, t);
+    return (r << 24) | (g << 16) | (b << 8) | a;
+}
+
+function sampleAnimationTrackColor(frames: Uint32Array, frame: number): number {
+    const n = frames.length;
+    if (n === 1)
+        return frames[0];
+
+    if (frame === 0)
+        return frames[0];
+    else if (frame > n - 1)
+        return frames[n - 1];
+
+    // Find the first frame.
+    const idx0 = (frame | 0);
+    const k0 = frames[idx0];
+    const idx1 = idx0 + 1;
+    const k1 = frames[idx1];
+
+    const t = (frame - idx0);
+
+    return lerpColor(k0, k1, t);
+}
+
 function makeConstantAnimationTrack(value: number): FloatAnimationTrack {
     return { type: AnimationTrackType.LINEAR, frames: Float32Array.of(value) };
 }
@@ -1717,6 +1756,49 @@ function parseAnimationTrackF96(buffer: ArrayBufferSlice): FloatAnimationTrack {
     }
     return { type: AnimationTrackType.HERMITE, frames };
 }
+
+function parseAnimationTrackF96OrConst(buffer: ArrayBufferSlice, isConstant: boolean): FloatAnimationTrack {
+    const view = buffer.createDataView();
+
+    if (isConstant) {
+        const value = view.getFloat32(0x00);
+        return makeConstantAnimationTrack(value);
+    } else {
+        const animationTrackOffs = view.getUint32(0x00);
+        return parseAnimationTrackF96(buffer.slice(animationTrackOffs));
+    }
+}
+
+function parseAnimationTrackBoolean(buffer: ArrayBufferSlice, numKeyframes: number, isConstant: boolean, constantValue: boolean): BitMap {
+    if (isConstant) {
+        const nodeVisibility = new BitMap(1);
+        nodeVisibility.setBit(0, constantValue);
+        return nodeVisibility;
+    } else {
+        const nodeVisibility = new BitMap(numKeyframes);
+        const view = buffer.createDataView();
+
+        let trackIdx = 0x08;
+        for (let i = 0; i < numKeyframes; i += 32) {
+            const word = view.getUint32(trackIdx);
+            nodeVisibility.setWord(i >>> 5, word);
+            trackIdx += 0x04;
+        }
+
+        return nodeVisibility;
+    }
+}
+
+function parseAnimationTrackColor(buffer: ArrayBufferSlice, numKeyframes: number, isConstant: boolean): Uint32Array {
+    const view = buffer.createDataView();
+    if (isConstant) {
+        const color = view.getUint32(0x00);
+        return Uint32Array.of(color);
+    } else {
+        const animationTrackOffs = view.getUint32(0x00);
+        return buffer.createTypedArray(Uint32Array, animationTrackOffs, numKeyframes + 1, Endianness.BIG_ENDIAN);
+    }
+}
 //#endregion
 //#region SRT0
 export interface SRT0_TexData {
@@ -1774,15 +1856,7 @@ function parseSRT0_TexData(buffer: ArrayBufferSlice): SRT0_TexData {
 
     let animationTableIdx = 0x04;
     function nextAnimationTrack(isConstant: boolean): FloatAnimationTrack {
-        let animationTrack: FloatAnimationTrack;
-        if (isConstant) {
-            const value = view.getFloat32(animationTableIdx);
-            animationTrack = makeConstantAnimationTrack(value);
-        } else {
-            // Relative to the table idx.
-            const animationTrackOffs = animationTableIdx + view.getUint32(animationTableIdx);
-            animationTrack = parseAnimationTrackF96(buffer.slice(animationTrackOffs));
-        }
+        const animationTrack: FloatAnimationTrack = parseAnimationTrackF96OrConst(buffer.slice(animationTableIdx), isConstant);
         animationTableIdx += 0x04;
         return animationTrack;
     }
@@ -2146,17 +2220,6 @@ function findAnimationData_CLR0(clr0: CLR0, materialName: string, color: Animata
     return clrData;
 }
 
-function parseColorDataFrames(buffer: ArrayBufferSlice, numKeyframes: number, isConstant: boolean): Uint32Array {
-    const view = buffer.createDataView();
-    if (isConstant) {
-        const color = view.getUint32(0x00);
-        return Uint32Array.of(color);
-    } else {
-        const animationTrackOffs = view.getUint32(0x00);
-        return buffer.createTypedArray(Uint32Array, animationTrackOffs, numKeyframes + 1, Endianness.BIG_ENDIAN);
-    }
-}
-
 function parseCLR0_MatData(buffer: ArrayBufferSlice, numKeyframes: number): CLR0_MatData {
     const view = buffer.createDataView();
 
@@ -2172,7 +2235,7 @@ function parseCLR0_MatData(buffer: ArrayBufferSlice, numKeyframes: number): CLR0
     let animationTableIdx = 0x08;
     function nextColorData(isConstant: boolean): CLR0_ColorData {
         const mask = view.getUint32(animationTableIdx + 0x00);
-        const frames = parseColorDataFrames(buffer.slice(animationTableIdx + 0x04), numKeyframes, isConstant);
+        const frames = parseAnimationTrackColor(buffer.slice(animationTableIdx + 0x04), numKeyframes, isConstant);
         animationTableIdx += 0x08;
         return { mask, frames };
     }
@@ -2223,45 +2286,6 @@ function parseCLR0(buffer: ArrayBufferSlice): CLR0 {
     return { name, loopMode, duration, matAnimations };
 }
 
-function lerpColor(k0: number, k1: number, t: number): number {
-    const k0r = (k0 >>> 24) & 0xFF;
-    const k0g = (k0 >>> 16) & 0xFF;
-    const k0b = (k0 >>>  8) & 0xFF;
-    const k0a = (k0 >>>  0) & 0xFF;
-
-    const k1r = (k1 >>> 24) & 0xFF;
-    const k1g = (k1 >>> 16) & 0xFF;
-    const k1b = (k1 >>>  8) & 0xFF;
-    const k1a = (k1 >>>  0) & 0xFF;
-
-    const r = lerp(k0r, k1r, t);
-    const g = lerp(k0g, k1g, t);
-    const b = lerp(k0b, k1b, t);
-    const a = lerp(k0a, k1a, t);
-    return (r << 24) | (g << 16) | (b << 8) | a;
-}
-
-function sampleColorData(frames: Uint32Array, frame: number): number {
-    const n = frames.length;
-    if (n === 1)
-        return frames[0];
-
-    if (frame === 0)
-        return frames[0];
-    else if (frame > n - 1)
-        return frames[n - 1];
-
-    // Find the first frame.
-    const idx0 = (frame | 0);
-    const k0 = frames[idx0];
-    const idx1 = idx0 + 1;
-    const k1 = frames[idx1];
-
-    const t = (frame - idx0);
-
-    return lerpColor(k0, k1, t);
-}
-
 export class CLR0ColorAnimator {
     constructor(public animationController: AnimationController, public clr0: CLR0, public clrData: CLR0_ColorData) {
     }
@@ -2272,7 +2296,7 @@ export class CLR0ColorAnimator {
         const frame = this.animationController.getTimeInFrames();
         const animFrame = getAnimFrame(this.clr0, frame);
 
-        const animColor: number = sampleColorData(clrData.frames, animFrame);
+        const animColor: number = sampleAnimationTrackColor(clrData.frames, animFrame);
         const c = (colorToRGBA8(orig) & clrData.mask) | animColor;
         colorFromRGBA8(dst, c);
     }
@@ -2574,23 +2598,8 @@ function parseVIS0_NodeData(buffer: ArrayBufferSlice, duration: number): VIS0_No
     const nodeName = readString(buffer, nodeNameOffs);
     const flags: Flags = view.getUint32(0x04);
 
-    if (!!(flags & Flags.IS_CONSTANT)) {
-        const isVisible = !!(flags & Flags.CONSTANT_VALUE);
-        const nodeVisibility = new BitMap(1);
-        nodeVisibility.setBit(0, isVisible);
-        return { nodeName, nodeVisibility };
-    } else {
-        const nodeVisibility = new BitMap(duration);
-
-        let trackIdx = 0x08;
-        for (let i = 0; i < duration; i += 32) {
-            const word = view.getUint32(trackIdx);
-            nodeVisibility.setWord(i >>> 5, word);
-            trackIdx += 0x04;
-        }
-
-        return { nodeName, nodeVisibility };
-    }
+    const nodeVisibility = parseAnimationTrackBoolean(buffer, duration, !!(flags & Flags.IS_CONSTANT), !!(flags & Flags.CONSTANT_VALUE));
+    return { nodeName, nodeVisibility };
 }
 
 export interface VIS0 extends AnimationBase {
@@ -2669,6 +2678,393 @@ export function bindVIS0Animator(animationController: AnimationController, vis0:
     return new VIS0NodesAnimator(animationController, vis0, nodeData);
 }
 //#endregion
+//#region SCN0
+export interface SCN0 extends AnimationBase {
+    name: string;
+    lightSets: SCN0_LightSet[];
+    ambLights: SCN0_AmbLight[];
+    lights: SCN0_Light[];
+    fogs: SCN0_Fog[];
+    cameras: SCN0_Camera[];
+}
+
+export interface SCN0_LightSet {
+    name: string;
+    ambLightName: string;
+    lightNames: string[];
+}
+
+function parseSCN0_LightSet(buffer: ArrayBufferSlice, version: number): SCN0_LightSet {
+    const view = buffer.createDataView();
+
+    const size = view.getUint32(0x00);
+
+    const nameOffs = view.getUint32(0x08);
+    const name = readString(buffer, nameOffs);
+    const index = view.getUint32(0x0C);
+    const refNumber = view.getUint32(0x10);
+
+    const ambLightNameOffs = view.getUint32(0x14);
+    const ambLightName = readString(buffer, ambLightNameOffs);
+    const ambLightId = view.getUint16(0x18);
+
+    const numLight = view.getUint8(0x1A);
+    // Padding
+
+    const lightNames: string[] = [];
+    let lightNameTableIdx = 0x1C;
+    for (let i = 0; i < numLight; i++) {
+        const lightNameOffs = view.getUint32(lightNameTableIdx + 0x00);
+        lightNames.push(readString(buffer, lightNameOffs));
+        lightNameTableIdx += 0x04;
+    }
+
+    return { name, ambLightName, lightNames };
+}
+
+export interface SCN0_AmbLight {
+    name: string;
+    hasColor: boolean;
+    hasAlpha: boolean;
+    color: Uint32Array;
+}
+
+function parseSCN0_AmbLight(buffer: ArrayBufferSlice, version: number, numKeyframes: number): SCN0_AmbLight {
+    const view = buffer.createDataView();
+
+    const size = view.getUint32(0x00);
+
+    const nameOffs = view.getUint32(0x08);
+    const name = readString(buffer, nameOffs);
+    const index = view.getUint32(0x0C);
+    const refNumber = view.getUint32(0x10);
+
+    const enum Flags {
+        HAS_COLOR = 1 << 0,
+        HAS_ALPHA = 1 << 1,
+
+        COLOR_CONSTANT = 1 << 31,
+    }
+    const flags: Flags = view.getUint32(0x14);
+
+    const isConstant = !!(flags & Flags.COLOR_CONSTANT);
+    const hasColor = !!(flags & Flags.HAS_COLOR);
+    const hasAlpha = !!(flags & Flags.HAS_ALPHA);
+    const color = parseAnimationTrackColor(buffer.slice(0x18), numKeyframes, isConstant);
+
+    return { name, hasColor, hasAlpha, color };
+}
+
+export const enum SCN0_LightType {
+    POINT, DIRECTIONAL, SPOT,
+}
+
+export interface SCN0_Light {
+    name: string;
+    specLightObjIdx: number;
+    lightType: SCN0_LightType;
+    hasColor: boolean;
+    hasAlpha: boolean;
+    hasSpecular: boolean;
+
+    enable: BitMap;
+    posX: FloatAnimationTrack;
+    posY: FloatAnimationTrack;
+    posZ: FloatAnimationTrack;
+    color: Uint32Array;
+    aimX: FloatAnimationTrack;
+    aimY: FloatAnimationTrack;
+    aimZ: FloatAnimationTrack;
+
+    distFunc: GX.AttenuationFunction;
+    refDistance: FloatAnimationTrack;
+    refBrightness: FloatAnimationTrack;
+
+    spotFunc: GX.SpotFunction;
+    cutoff: FloatAnimationTrack;
+
+    specColor: Uint32Array;
+    shininess: FloatAnimationTrack;
+}
+
+function parseSCN0_Light(buffer: ArrayBufferSlice, version: number, numKeyframes: number): SCN0_Light {
+    const view = buffer.createDataView();
+
+    const size = view.getUint32(0x00);
+
+    const nameOffs = view.getUint32(0x08);
+    const name = readString(buffer, nameOffs);
+    const index = view.getUint32(0x0C);
+    const refNumber = view.getUint32(0x10);
+
+    const specLightObjIdx = view.getUint32(0x14);
+
+    const enum Flags {
+        ENABLE        = 1 << 2,
+        HAS_SPECULAR  = 1 << 3,
+        HAS_COLOR     = 1 << 4,
+        HAS_ALPHA     = 1 << 5,
+
+        POSX_CONSTANT          = 1 << 19,
+        POSY_CONSTANT          = 1 << 20,
+        POSZ_CONSTANT          = 1 << 21,
+        COLOR_CONSTANT         = 1 << 22,
+        ENABLE_CONSTANT        = 1 << 23,
+        AIMX_CONSTANT          = 1 << 24,
+        AIMY_CONSTANT          = 1 << 25,
+        AIMZ_CONSTANT          = 1 << 26,
+        CUTOFF_CONSTANT        = 1 << 27,
+        REFDISTANCE_CONSTANT   = 1 << 28,
+        REFBRIGHTNESS_CONSTANT = 1 << 29,
+        SPECCOLOR_CONSTANT     = 1 << 30,
+        SHININESS_CONSTANT     = 1 << 31,
+    }
+    const flags: Flags = view.getUint32(0x1C);
+
+    const lightType: SCN0_LightType = (flags & 0x03);
+
+    const hasColor = !!(flags & Flags.HAS_COLOR);
+    const hasAlpha = !!(flags & Flags.HAS_ALPHA);
+    const hasSpecular = !!(flags & Flags.HAS_SPECULAR);
+
+    const enable = parseAnimationTrackBoolean(buffer.slice(0x20), numKeyframes, !!(flags & Flags.ENABLE_CONSTANT), !!(flags & Flags.ENABLE));
+    const posX = parseAnimationTrackF96OrConst(buffer.slice(0x24), !!(flags & Flags.POSX_CONSTANT));
+    const posY = parseAnimationTrackF96OrConst(buffer.slice(0x28), !!(flags & Flags.POSY_CONSTANT));
+    const posZ = parseAnimationTrackF96OrConst(buffer.slice(0x2C), !!(flags & Flags.POSZ_CONSTANT));
+    const color = parseAnimationTrackColor(buffer.slice(0x30), numKeyframes, !!(flags & Flags.COLOR_CONSTANT));
+    const aimX = parseAnimationTrackF96OrConst(buffer.slice(0x34), !!(flags & Flags.AIMX_CONSTANT));
+    const aimY = parseAnimationTrackF96OrConst(buffer.slice(0x38), !!(flags & Flags.AIMY_CONSTANT));
+    const aimZ = parseAnimationTrackF96OrConst(buffer.slice(0x3C), !!(flags & Flags.AIMZ_CONSTANT));
+
+    const distFunc: GX.AttenuationFunction = view.getUint32(0x40);
+    const refDistance = parseAnimationTrackF96OrConst(buffer.slice(0x44), !!(flags & Flags.REFDISTANCE_CONSTANT));
+    const refBrightness = parseAnimationTrackF96OrConst(buffer.slice(0x48), !!(flags & Flags.REFBRIGHTNESS_CONSTANT));
+
+    const spotFunc: GX.SpotFunction = view.getUint32(0x4C);
+    const cutoff = parseAnimationTrackF96OrConst(buffer.slice(0x50), !!(flags & Flags.CUTOFF_CONSTANT));
+
+    const specColor = parseAnimationTrackColor(buffer.slice(0x54), numKeyframes, !!(flags & Flags.SPECCOLOR_CONSTANT));
+    const shininess = parseAnimationTrackF96OrConst(buffer.slice(0x58), !!(flags & Flags.SHININESS_CONSTANT));
+
+    return { name, specLightObjIdx, lightType, hasColor, hasAlpha, hasSpecular,
+        enable, posX, posY, posZ, color, aimX, aimY, aimZ,
+        distFunc, refDistance, refBrightness,
+        spotFunc, cutoff,
+        specColor, shininess,
+    };
+}
+
+export interface SCN0_Fog {
+    name: string;
+    fogType: GX.FogType;
+    startZ: FloatAnimationTrack;
+    endZ: FloatAnimationTrack;
+    color: Uint32Array;
+}
+
+function parseSCN0_Fog(buffer: ArrayBufferSlice, version: number, numKeyframes: number): SCN0_Fog {
+    const view = buffer.createDataView();
+
+    const size = view.getUint32(0x00);
+
+    const nameOffs = view.getUint32(0x08);
+    const name = readString(buffer, nameOffs);
+    const index = view.getUint32(0x0C);
+    const refNumber = view.getUint32(0x10);
+
+    const enum Flags {
+        STARTZ_CONSTANT = 1 << 29,
+        ENDZ_CONSTANT   = 1 << 30,
+        COLOR_CONSTANT  = 1 << 31,
+    };
+    const flags: Flags = view.getUint32(0x14);
+
+    const fogType: GX.FogType = view.getUint32(0x14);
+    const startZ = parseAnimationTrackF96OrConst(buffer.slice(0x18), !!(flags & Flags.STARTZ_CONSTANT));
+    const endZ = parseAnimationTrackF96OrConst(buffer.slice(0x1C), !!(flags & Flags.ENDZ_CONSTANT));
+    const color = parseAnimationTrackColor(buffer.slice(0x20), numKeyframes, !!(flags & Flags.COLOR_CONSTANT));
+
+    return { name, fogType,
+        startZ, endZ, color,
+    };
+}
+
+export const enum SCN0_CameraType {
+    ROTATE, AIM,
+}
+
+export interface SCN0_Camera {
+    name: string;
+    projType: GX.ProjectionType;
+    cameraType: SCN0_CameraType;
+
+    posX: FloatAnimationTrack;
+    posY: FloatAnimationTrack;
+    posZ: FloatAnimationTrack;
+    aspect: FloatAnimationTrack;
+    near: FloatAnimationTrack;
+    far: FloatAnimationTrack;
+
+    rotX: FloatAnimationTrack;
+    rotY: FloatAnimationTrack;
+    rotZ: FloatAnimationTrack;
+
+    aimX: FloatAnimationTrack;
+    aimY: FloatAnimationTrack;
+    aimZ: FloatAnimationTrack;
+    twist: FloatAnimationTrack;
+
+    perspFovy: FloatAnimationTrack;
+    orthoHeight: FloatAnimationTrack;
+}
+
+function parseSCN0_Camera(buffer: ArrayBufferSlice, version: number, numKeyframes: number): SCN0_Camera {
+    const view = buffer.createDataView();
+
+    const size = view.getUint32(0x00);
+
+    const nameOffs = view.getUint32(0x08);
+    const name = readString(buffer, nameOffs);
+    const index = view.getUint32(0x0C);
+    const refNumber = view.getUint32(0x10);
+
+    const projType: GX.ProjectionType = view.getUint32(0x14);
+
+    const enum Flags {
+        POSX_CONSTANT        = 1 << 17,
+        POSY_CONSTANT        = 1 << 18,
+        POSZ_CONSTANT        = 1 << 19,
+        ASPECT_CONSTANT      = 1 << 20,
+        NEAR_CONSTANT        = 1 << 21,
+        FAR_CONSTANT         = 1 << 22,
+        PERSPFOVY_CONSTANT   = 1 << 23,
+        ORTHOHEIGHT_CONSTANT = 1 << 24,
+        AIMX_CONSTANT        = 1 << 25,
+        AIMY_CONSTANT        = 1 << 26,
+        AIMZ_CONSTANT        = 1 << 27,
+        TWIST_CONSTANT       = 1 << 28,
+        ROTX_CONSTANT        = 1 << 29,
+        ROTY_CONSTANT        = 1 << 30,
+        ROTZ_CONSTANT        = 1 << 31,
+    };
+    const flags: Flags = view.getUint32(0x18);
+
+    const cameraType = (flags >>> 0) & 0x01;
+
+    const posX = parseAnimationTrackF96OrConst(buffer.slice(0x20), !!(flags & Flags.POSX_CONSTANT));
+    const posY = parseAnimationTrackF96OrConst(buffer.slice(0x24), !!(flags & Flags.POSY_CONSTANT));
+    const posZ = parseAnimationTrackF96OrConst(buffer.slice(0x28), !!(flags & Flags.POSZ_CONSTANT));
+    const aspect = parseAnimationTrackF96OrConst(buffer.slice(0x2C), !!(flags & Flags.ASPECT_CONSTANT));
+    const near = parseAnimationTrackF96OrConst(buffer.slice(0x30), !!(flags & Flags.NEAR_CONSTANT));
+    const far = parseAnimationTrackF96OrConst(buffer.slice(0x34), !!(flags & Flags.FAR_CONSTANT));
+
+    const rotX = parseAnimationTrackF96OrConst(buffer.slice(0x38), !!(flags & Flags.ROTX_CONSTANT));
+    const rotY = parseAnimationTrackF96OrConst(buffer.slice(0x3C), !!(flags & Flags.ROTY_CONSTANT));
+    const rotZ = parseAnimationTrackF96OrConst(buffer.slice(0x40), !!(flags & Flags.ROTZ_CONSTANT));
+
+    const aimX = parseAnimationTrackF96OrConst(buffer.slice(0x44), !!(flags & Flags.AIMX_CONSTANT));
+    const aimY = parseAnimationTrackF96OrConst(buffer.slice(0x48), !!(flags & Flags.AIMY_CONSTANT));
+    const aimZ = parseAnimationTrackF96OrConst(buffer.slice(0x4C), !!(flags & Flags.AIMZ_CONSTANT));
+    const twist = parseAnimationTrackF96OrConst(buffer.slice(0x50), !!(flags & Flags.TWIST_CONSTANT));
+
+    const perspFovy = parseAnimationTrackF96OrConst(buffer.slice(0x54), !!(flags & Flags.PERSPFOVY_CONSTANT));
+    const orthoHeight = parseAnimationTrackF96OrConst(buffer.slice(0x58), !!(flags & Flags.ORTHOHEIGHT_CONSTANT));
+
+    return { name, projType, cameraType,
+        posX, posY, posZ, aspect, near, far,
+        rotX, rotY, rotZ,
+        aimX, aimY, aimZ, twist,
+        perspFovy, orthoHeight,
+    };
+}
+
+function parseSCN0(buffer: ArrayBufferSlice): SCN0 {
+    const view = buffer.createDataView();
+
+    assert(readString(buffer, 0x00, 0x04) === 'SCN0');
+    const version = view.getUint32(0x08);
+    const supportedVersions = [0x05];
+    assert(supportedVersions.includes(version));
+
+    const scnTopLevelResDicOffs = view.getUint32(0x10);
+    const scnTopLevelResDic = parseResDic(buffer, scnTopLevelResDicOffs);
+
+    let offs = 0x28;
+
+    // user data
+    offs += 0x04;
+
+    const nameOffs = view.getUint32(offs + 0x00);
+    const name = readString(buffer, nameOffs);
+
+    const lightSetEntry = scnTopLevelResDic.find((entry) => entry.name === 'LightSet(NW4R)');
+    const ambLightsEntry = scnTopLevelResDic.find((entry) => entry.name === 'AmbLights(NW4R)');
+    const lightsEntry = scnTopLevelResDic.find((entry) => entry.name === 'Lights(NW4R)');
+    const fogsEntry = scnTopLevelResDic.find((entry) => entry.name === 'Fogs(NW4R)');
+    const camerasEntry = scnTopLevelResDic.find((entry) => entry.name === 'Cameras(NW4R)');
+
+    const duration = view.getUint16(offs + 0x08);
+    const specularLightCount = view.getUint16(offs + 0x0A);
+    const loopMode: LoopMode = view.getUint32(offs + 0x0C);
+
+    const lightSets: SCN0_LightSet[] = [];
+    if (lightSetEntry !== undefined) {
+        const lightSetResDic = parseResDic(buffer, lightSetEntry.offs);
+        for (let i = 0; i < lightSetResDic.length; i++) {
+            const lightSetEntry = lightSetResDic[i];
+            const lightSet = parseSCN0_LightSet(buffer.subarray(lightSetEntry.offs), version);
+            assert(lightSet.name === lightSetEntry.name);
+            lightSets.push(lightSet);
+        }
+    }
+
+    const ambLights: SCN0_AmbLight[] = [];
+    if (ambLightsEntry !== undefined) {
+        const ambLightsResDic = parseResDic(buffer, ambLightsEntry.offs);
+        for (let i = 0; i < ambLightsResDic.length; i++) {
+            const ambLightEntry = ambLightsResDic[i];
+            const ambLight = parseSCN0_AmbLight(buffer.subarray(ambLightEntry.offs), version, duration);
+            assert(ambLight.name === ambLightEntry.name);
+            ambLights.push(ambLight);
+        }
+    }
+
+    const lights: SCN0_Light[] = [];
+    if (lightsEntry !== undefined) {
+        const lightsResDic = parseResDic(buffer, lightsEntry.offs);
+        for (let i = 0; i < lightsResDic.length; i++) {
+            const lightEntry = lightsResDic[i];
+            const light = parseSCN0_Light(buffer.subarray(lightEntry.offs), version, duration);
+            assert(light.name === lightEntry.name);
+            lights.push(light);
+        }
+    }
+
+    const fogs: SCN0_Fog[] = [];
+    if (fogsEntry !== undefined) {
+        const fogsResDic = parseResDic(buffer, fogsEntry.offs);
+        for (let i = 0; i < fogsResDic.length; i++) {
+            const fogEntry = fogsResDic[i];
+            const fog = parseSCN0_Fog(buffer.subarray(fogEntry.offs), version, duration);
+            assert(fog.name === fogEntry.name);
+            fogs.push(fog);
+        }
+    }
+
+    const cameras: SCN0_Camera[] = [];
+    if (camerasEntry !== undefined) {
+        const camerasResDic = parseResDic(buffer, camerasEntry.offs);
+        for (let i = 0; i < camerasResDic.length; i++) {
+            const cameraEntry = camerasResDic[i];
+            const camera = parseSCN0_Camera(buffer.subarray(cameraEntry.offs), version, duration);
+            assert(camera.name === cameraEntry.name);
+            cameras.push(camera);
+        }
+    }
+
+    return { name, duration, loopMode, lightSets, ambLights, lights, fogs, cameras };
+}
+//#endregion
 //#region RRES
 export interface RRES {
     plt0: PLT0[];
@@ -2679,6 +3075,7 @@ export interface RRES {
     clr0: CLR0[];
     chr0: CHR0[];
     vis0: VIS0[];
+    scn0: SCN0[];
 }
 
 export function parse(buffer: ArrayBufferSlice): RRES {
@@ -2745,18 +3142,20 @@ export function parse(buffer: ArrayBufferSlice): RRES {
     if (modelsEntry) {
         const modelsResDic = parseResDic(buffer, modelsEntry.offs);
         for (let i = 0; i < modelsResDic.length; i++) {
-            const mdl0_ = parseMDL0(buffer.subarray(modelsResDic[i].offs));
-            assert(mdl0_.name === modelsResDic[i].name);
+            const modelsEntry = modelsResDic[i];
+            const mdl0_ = parseMDL0(buffer.subarray(modelsEntry.offs));
+            assert(mdl0_.name === modelsEntry.name);
             mdl0.push(mdl0_);
         }
     }
 
     // Tex SRT Animations
     const srt0: SRT0[] = [];
-    const animTexSrtsEntry = rootResDic.find((entry) => entry.name === 'AnmTexSrt(NW4R)');
-    if (animTexSrtsEntry) {
-        const animTexSrtResDic = parseResDic(buffer, animTexSrtsEntry.offs);
-        for (const srt0Entry of animTexSrtResDic) {
+    const anmTexSrtEntry = rootResDic.find((entry) => entry.name === 'AnmTexSrt(NW4R)');
+    if (anmTexSrtEntry) {
+        const anmTexSrtResDic = parseResDic(buffer, anmTexSrtEntry.offs);
+        for (let i = 0; i < anmTexSrtResDic.length; i++) {
+            const srt0Entry = anmTexSrtResDic[i];
             const srt0_ = parseSRT0(buffer.subarray(srt0Entry.offs));
             assert(srt0_.name === srt0Entry.name);
             srt0.push(srt0_);
@@ -2765,10 +3164,11 @@ export function parse(buffer: ArrayBufferSlice): RRES {
 
     // Tex Pattern Animations
     const pat0: PAT0[] = [];
-    const animTexPatsEntry = rootResDic.find((entry) => entry.name === 'AnmTexPat(NW4R)');
-    if (animTexPatsEntry) {
-        const animTexPatResDic = parseResDic(buffer, animTexPatsEntry.offs);
-        for (const pat0Entry of animTexPatResDic) {
+    const anmTexPatEntry = rootResDic.find((entry) => entry.name === 'AnmTexPat(NW4R)');
+    if (anmTexPatEntry) {
+        const anmTexPatResDic = parseResDic(buffer, anmTexPatEntry.offs);
+        for (let i = 0; i < anmTexPatResDic.length; i++) {
+            const pat0Entry = anmTexPatResDic[i];
             let pat0_: PAT0;
             try {
                 pat0_ = parsePAT0(buffer.subarray(pat0Entry.offs));
@@ -2780,10 +3180,11 @@ export function parse(buffer: ArrayBufferSlice): RRES {
 
     // Color Animations
     const clr0: CLR0[] = [];
-    const animClrsEntry = rootResDic.find((entry) => entry.name === 'AnmClr(NW4R)');
-    if (animClrsEntry) {
-        const animClrResDic = parseResDic(buffer, animClrsEntry.offs);
-        for (const clr0Entry of animClrResDic) {
+    const anmClrEntry = rootResDic.find((entry) => entry.name === 'AnmClr(NW4R)');
+    if (anmClrEntry) {
+        const anmClrResDic = parseResDic(buffer, anmClrEntry.offs);
+        for (let i = 0; i < anmClrResDic.length; i++) {
+            const clr0Entry = anmClrResDic[i];
             const clr0_ = parseCLR0(buffer.subarray(clr0Entry.offs));
             assert(clr0_.name === clr0Entry.name);
             clr0.push(clr0_);
@@ -2792,10 +3193,11 @@ export function parse(buffer: ArrayBufferSlice): RRES {
 
     // Node Animations
     const chr0: CHR0[] = [];
-    const animChrsEntry = rootResDic.find((entry) => entry.name === 'AnmChr(NW4R)');
-    if (animChrsEntry) {
-        const animChrResDic = parseResDic(buffer, animChrsEntry.offs);
-        for (const chr0Entry of animChrResDic) {
+    const anmChrEntry = rootResDic.find((entry) => entry.name === 'AnmChr(NW4R)');
+    if (anmChrEntry) {
+        const anmChrResDic = parseResDic(buffer, anmChrEntry.offs);
+        for (let i = 0; i < anmChrResDic.length; i++) {
+            const chr0Entry = anmChrResDic[i];
             const chr0_ = parseCHR0(buffer.subarray(chr0Entry.offs));
             assert(chr0_.name === chr0Entry.name);
             chr0.push(chr0_);
@@ -2804,16 +3206,30 @@ export function parse(buffer: ArrayBufferSlice): RRES {
 
     // Visibility Animations
     const vis0: VIS0[] = [];
-    const animVisEntry = rootResDic.find((entry) => entry.name === 'AnmVis(NW4R)');
-    if (animVisEntry) {
-        const animVisResDic = parseResDic(buffer, animVisEntry.offs);
-        for (const vis0Entry of animVisResDic) {
+    const anmVisEntry = rootResDic.find((entry) => entry.name === 'AnmVis(NW4R)');
+    if (anmVisEntry) {
+        const anmVisResDic = parseResDic(buffer, anmVisEntry.offs);
+        for (let i = 0; i < anmVisResDic.length; i++) {
+            const vis0Entry = anmVisResDic[i];
             const vis0_ = parseVIS0(buffer.subarray(vis0Entry.offs));
             assert(vis0_.name === vis0Entry.name);
             vis0.push(vis0_);
         }
     }
 
-    return { plt0, tex0, mdl0, srt0, pat0, clr0, chr0, vis0 };
+    // Scene Animations
+    const scn0: SCN0[] = [];
+    const anmScnEntry = rootResDic.find((entry) => entry.name === 'AnmScn(NW4R)');
+    if (anmScnEntry) {
+        const anmScnResDic = parseResDic(buffer, anmScnEntry.offs);
+        for (let i = 0; i < anmScnResDic.length; i++) {
+            const scn0Entry = anmScnResDic[i];
+            const scn0_ = parseSCN0(buffer.subarray(scn0Entry.offs));
+            assert(scn0_.name === scn0Entry.name);
+            scn0.push(scn0_);
+        }
+    }
+
+    return { plt0, tex0, mdl0, srt0, pat0, clr0, chr0, vis0, scn0 };
 }
 //#endregion
