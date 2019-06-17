@@ -6,15 +6,14 @@ import * as Viewer from '../viewer';
 import * as UI from '../ui';
 
 import { U8Archive } from "./u8";
-import { createMarioKartWiiSceneFromU8Archive } from "./mkwii_scenes";
+import { createMarioKartWiiSceneFromU8Archive } from "./Scenes_MarioKartWii";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { readString } from "../util";
 import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render';
 import { GXMaterialHacks } from '../gx/gx_material';
 import AnimationController from '../AnimationController';
-import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
-import { GXRenderHelperGfx, BasicGXRendererHelper } from '../gx/gx_render_2';
-import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
+import { BasicGXRendererHelper } from '../gx/gx_render_2';
 
 const materialHacks: GXMaterialHacks = {
     lightingFudge: (p) => `(0.5 * (${p.ambSource} + 0.2) * ${p.matSource})`,
@@ -26,6 +25,9 @@ export class BasicRRESRenderer extends BasicGXRendererHelper {
 
     private animationController: AnimationController;
 
+    private scn0Animators: BRRES.SCN0Animator[] = [];
+    private lightSettings: BRRES.LightSetting[] = [];
+
     constructor(device: GfxDevice, public stageRRESes: BRRES.RRES[], public textureHolder = new RRESTextureHolder()) {
         super(device);
 
@@ -35,12 +37,24 @@ export class BasicRRESRenderer extends BasicGXRendererHelper {
             const stageRRES = stageRRESes[i];
             this.textureHolder.addRRESTextures(device, stageRRES);
 
+            let lightSetting: BRRES.LightSetting | null = null;
+
+            if (stageRRES.scn0.length > 0) {
+                lightSetting = new BRRES.LightSetting();
+                const scn0Animator = new BRRES.SCN0Animator(this.animationController, stageRRES.scn0[i]);
+                this.lightSettings.push(lightSetting);
+                this.scn0Animators.push(scn0Animator);
+            }
+
             for (let j = 0; j < stageRRES.mdl0.length; j++) {
-                const model = new MDL0Model(device, this.getCache(), stageRRES.mdl0[j], materialHacks);
+                const model = new MDL0Model(device, this.getCache(), stageRRES.mdl0[j], lightSetting ? undefined : materialHacks);
                 this.models.push(model);
                 const modelRenderer = new MDL0ModelInstance(this.textureHolder, model);
                 this.modelInstances.push(modelRenderer);
                 modelRenderer.bindRRESAnimations(this.animationController, stageRRES);
+
+                if (lightSetting !== null)
+                    modelRenderer.bindLightSetting(lightSetting);
             }
         }
     }
@@ -59,6 +73,9 @@ export class BasicRRESRenderer extends BasicGXRendererHelper {
 
     protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         this.animationController.setTimeInMilliseconds(viewerInput.time);
+
+        for (let i = 0; i < this.scn0Animators.length; i++)
+            this.scn0Animators[i].calcLightSetting(this.lightSettings[i]);
 
         const template = this.renderHelper.pushTemplateRenderInst();
         this.renderHelper.fillSceneParams(viewerInput, template);
@@ -95,6 +112,7 @@ export function createBasicRRESRendererFromU8Archive(device: GfxDevice, arc: U8A
     const rres: BRRES.RRES[] = [];
     findRRES(rres, arc.root);
 
+    console.log(arc, rres);
     return new BasicRRESRenderer(device, rres);
 }
 

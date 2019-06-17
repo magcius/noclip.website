@@ -665,7 +665,7 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
             this.spawnObjectFromKMP(device, renderer, arc, kmp.gobj[i]);
 
         return renderer;
-}
+    }
 
     public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         return fetchData(`mkwii/${this.id}.szs`, abortSignal).then((buffer: ArrayBufferSlice) => {

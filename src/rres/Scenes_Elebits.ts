@@ -24,7 +24,7 @@ const materialHacks: GXMaterialHacks = {
     lightingFudge: (p) => `${p.matSource} + 0.2`,
 };
 
-export class ElebitsRenderer extends BasicGXRendererHelper {
+class ElebitsRenderer extends BasicGXRendererHelper {
     private modelInstances: MDL0ModelInstance[] = [];
     private models: MDL0Model[] = [];
 

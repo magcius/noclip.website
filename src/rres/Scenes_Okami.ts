@@ -4,11 +4,10 @@ import * as Viewer from '../viewer';
 import Progressable from "../Progressable";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { fetchData } from "../fetch";
-import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from "../rres/render";
+import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from "./render";
 import { mat4 } from "gl-matrix";
 
-import * as ARC from './arc';
-import * as BRRES from '../rres/brres';
+import * as BRRES from './brres';
 import * as GX from '../gx/gx_enum';
 import { assert, readString, hexzero, assertExists } from "../util";
 import { GXRenderHelperGfx } from "../gx/gx_render_2";
@@ -19,6 +18,41 @@ import { computeModelMatrixYBillboard } from "../Camera";
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 
 const pathBase = `okami`;
+
+interface FileEntry {
+    filename: string;
+    type: string;
+    buffer: ArrayBufferSlice;
+}
+
+interface Archive {
+    files: FileEntry[];
+}
+
+function parseArc(buffer: ArrayBufferSlice): Archive {
+    const view = buffer.createDataView();
+    const numEntries = view.getUint32(0x00);
+
+    let entryTableIdx = 0x04;
+    const files: FileEntry[] = [];
+    for (let i = 0; i < numEntries; i++) {
+        const fileDataOffs = view.getUint32(entryTableIdx + 0x00);
+
+        let fileDataEnd: number;
+        if (i < numEntries - 1)
+            fileDataEnd = view.getUint32(entryTableIdx + 0x04);
+        else
+            fileDataEnd = buffer.byteLength;
+
+        const fileType = readString(buffer, fileDataOffs - 0x18, 0x04, true);
+        const filename = readString(buffer, fileDataOffs - 0x14, 0x14, true);
+        const fileData = buffer.slice(fileDataOffs, fileDataEnd);
+        files.push({ filename, type: fileType, buffer: fileData });
+
+        entryTableIdx += 0x04;
+    }
+    return { files };
+}
 
 interface MDEntry {
     modelMatrix: mat4;
@@ -415,10 +449,10 @@ function patchMaterialSetTest(material: BRRES.MDL0_MaterialEntry, test: number):
 class OkamiSCPArchiveDataMap {
     private scrModels: MDL0Model[][] = [];
     public scr: SCR[] = [];
-    public scpArc: ARC.Archive;
+    public scpArc: Archive;
 
     constructor(device: GfxDevice, renderer: OkamiRenderer, scpArcBuffer: ArrayBufferSlice, private filename: string) {
-        this.scpArc = ARC.parse(scpArcBuffer);
+        this.scpArc = parseArc(scpArcBuffer);
 
         // Load the textures.
         const brtFile = this.scpArc.files.find((file) => file.type === 'BRT');
@@ -558,10 +592,10 @@ class ObjectInstance {
 class OkamiSCPArchiveDataObject {
     private mdModels: MDL0Model[][] = [];
     public md: MD[] = [];
-    public scpArc: ARC.Archive;
+    public scpArc: Archive;
 
     constructor(device: GfxDevice, renderer: OkamiRenderer, scpArcBuffer: ArrayBufferSlice, private objectTypeId: number, private objectId: number, public filename: string) {
-        this.scpArc = ARC.parse(scpArcBuffer);
+        this.scpArc = parseArc(scpArcBuffer);
 
         // Load the textures.
         const brtFile = this.scpArc.files.find((file) => file.type === 'BRT');
@@ -694,7 +728,7 @@ class OkamiSceneDesc implements Viewer.SceneDesc {
         return fetchData(`${pathBase}/${this.id}.dat`, abortSignal).then((datArcBuffer: ArrayBufferSlice) => {
             const renderer = new OkamiRenderer(device);
 
-            const datArc = ARC.parse(datArcBuffer);
+            const datArc = parseArc(datArcBuffer);
 
             // Look for the SCP file.
             const scpFile = datArc.files.find((file) => file.type === 'SCP')!;

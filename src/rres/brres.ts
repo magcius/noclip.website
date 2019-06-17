@@ -5,10 +5,10 @@
 import * as GX from '../gx/gx_enum';
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString, assertExists } from "../util";
+import { assert, readString, assertExists, hexdump, nArray } from "../util";
 import * as GX_Material from '../gx/gx_material';
 import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, compileVtxLoader, LoadedVertexLayout, getAttributeComponentByteSizeRaw, getAttributeFormatCompFlagsRaw } from '../gx/gx_displaylist';
-import { mat4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 import { Endianness } from '../endian';
 import { AABB } from '../Geometry';
 import { TextureMapping } from '../TextureHolder';
@@ -17,10 +17,9 @@ import { cv, Graph } from '../DebugJunk';
 import { GXTextureHolder } from '../gx/gx_render';
 import { getFormatCompFlagsComponentCount } from '../gfx/platform/GfxPlatformFormat';
 import { getPointHermite } from '../Spline';
-import { colorToRGBA8, colorFromRGBA8 } from '../Color';
+import { colorToRGBA8, colorFromRGBA8, colorNewCopy, White, Color, colorMult } from '../Color';
 import { computeModelMatrixSRT, MathConstants, lerp } from '../MathHelpers';
 import BitMap from '../BitMap';
-import { buf } from 'crc-32/types';
 
 //#region Utility
 function calcTexMtx_Basic(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
@@ -532,7 +531,8 @@ export function parseMaterialEntry(r: DisplayListRegisters, index: number, name:
         // Find the op.
         const alpha = r.bp[GX.BPRegister.TEV_ALPHA_ENV_0_ID + (i * 2)];
 
-        // TODO(jstpierre): swap table
+        const rswap: number =                  (alpha >>>  0) & 0x03;
+        const tswap: number =                  (alpha >>>  2) & 0x03;
         const alphaInD: GX.CombineAlphaInput = (alpha >>>  4) & 0x07;
         const alphaInC: GX.CombineAlphaInput = (alpha >>>  7) & 0x07;
         const alphaInB: GX.CombineAlphaInput = (alpha >>> 10) & 0x07;
@@ -560,6 +560,26 @@ export function parseMaterialEntry(r: DisplayListRegisters, index: number, name:
         const indTexUseOrigLOD: boolean =    !!((indCmd >>> 19) & 0x01);
         const indTexAddPrev: boolean =       !!((indCmd >>> 20) & 0x01);
 
+        const rasSwapTableRG = r.bp[GX.BPRegister.TEV_KSEL_0_ID + (rswap * 2)];
+        const rasSwapTableBA = r.bp[GX.BPRegister.TEV_KSEL_0_ID + (rswap * 2) + 1];
+
+        const rasSwapTable: number[] = [
+            (rasSwapTableRG >>> 0) & 0x03,
+            (rasSwapTableRG >>> 2) & 0x03,
+            (rasSwapTableBA >>> 0) & 0x03,
+            (rasSwapTableBA >>> 2) & 0x03,
+        ];
+
+        const texSwapTableRG = r.bp[GX.BPRegister.TEV_KSEL_0_ID + (tswap * 2)];
+        const texSwapTableBA = r.bp[GX.BPRegister.TEV_KSEL_0_ID + (tswap * 2) + 1];
+
+        const texSwapTable: number[] = [
+            (texSwapTableRG >>> 0) & 0x03,
+            (texSwapTableRG >>> 2) & 0x03,
+            (texSwapTableBA >>> 0) & 0x03,
+            (texSwapTableBA >>> 2) & 0x03,
+        ];
+
         const tevStage: GX_Material.TevStage = {
             index: i,
 
@@ -571,6 +591,7 @@ export function parseMaterialEntry(r: DisplayListRegisters, index: number, name:
             channelId: tevOrders[i].channelId,
 
             konstColorSel, konstAlphaSel,
+            rasSwapTable, texSwapTable,
 
             indTexStage, indTexFormat, indTexBiasSel, indTexMatrix, indTexWrapS, indTexWrapT, indTexAddPrev, indTexUseOrigLOD,
         };
@@ -786,7 +807,10 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
 
         colorMatRegs.push(new GX_Material.Color(matColorR, matColorG, matColorB, matColorA));
         colorAmbRegs.push(new GX_Material.Color(ambColorR, ambColorG, ambColorB, ambColorA));
-        gxMaterial.lightChannels.push({ colorChannel, alphaChannel });
+
+        if (i < numChans)
+            gxMaterial.lightChannels.push({ colorChannel, alphaChannel });
+
         lightChannelTableIdx += 0x14;
     }
 
@@ -1659,6 +1683,16 @@ function sampleAnimationTrackColor(frames: Uint32Array, frame: number): number {
     const t = (frame - idx0);
 
     return lerpColor(k0, k1, t);
+}
+
+function sampleAnimationTrackBoolean(frames: BitMap, animFrame: number): boolean {
+    // Constant tracks are of length 1.
+    if (frames.numBits === 1)
+        return frames.getBit(0);
+
+    // animFrame can return a partial keyframe, but boolean tracks are frame-specific.
+    // Resolve this by treating this as a stepped track, floored. e.g. 15.9 is keyframe 15.
+    return frames.getBit(animFrame | 0);
 }
 
 function makeConstantAnimationTrack(value: number): FloatAnimationTrack {
@@ -2648,17 +2682,10 @@ export class VIS0NodesAnimator {
         if (!nodeData)
             return null;
 
-        // Constant tracks are of length 1.
-        if (nodeData.nodeVisibility.numBits === 1)
-            return nodeData.nodeVisibility.getBit(0);
-
         const frame = this.animationController.getTimeInFrames();
         const animFrame = getAnimFrame(this.vis0, frame);
 
-        // animFrame can return a partial keyframe, but visibility information is frame-specific.
-        // Resolve this by treating this as a stepped track, floored. e.g. 15.9 is keyframe 15.
-
-        return nodeData.nodeVisibility.getBit(animFrame | 0);
+        return sampleAnimationTrackBoolean(nodeData.nodeVisibility, frame);
     }
 }
 
@@ -2690,7 +2717,10 @@ export interface SCN0 extends AnimationBase {
 
 export interface SCN0_LightSet {
     name: string;
+    refNumber: number;
+    ambLightId: number;
     ambLightName: string;
+    lightIds: number[];
     lightNames: string[];
 }
 
@@ -2706,24 +2736,28 @@ function parseSCN0_LightSet(buffer: ArrayBufferSlice, version: number): SCN0_Lig
 
     const ambLightNameOffs = view.getUint32(0x14);
     const ambLightName = readString(buffer, ambLightNameOffs);
-    const ambLightId = view.getUint16(0x18);
+    const ambLightId = -1;
 
     const numLight = view.getUint8(0x1A);
     // Padding
 
+    const lightIds: number[] = [];
     const lightNames: string[] = [];
-    let lightNameTableIdx = 0x1C;
+    const lightNameTableOffs = 0x1C;
+    let lightNameTableIdx = lightNameTableOffs;
     for (let i = 0; i < numLight; i++) {
         const lightNameOffs = view.getUint32(lightNameTableIdx + 0x00);
-        lightNames.push(readString(buffer, lightNameOffs));
+        lightNames.push(readString(buffer, lightNameTableOffs + lightNameOffs));
         lightNameTableIdx += 0x04;
+        lightIds.push(-1);
     }
 
-    return { name, ambLightName, lightNames };
+    return { name, refNumber, ambLightName, ambLightId, lightNames, lightIds };
 }
 
 export interface SCN0_AmbLight {
     name: string;
+    refNumber: number;
     hasColor: boolean;
     hasAlpha: boolean;
     color: Uint32Array;
@@ -2752,7 +2786,7 @@ function parseSCN0_AmbLight(buffer: ArrayBufferSlice, version: number, numKeyfra
     const hasAlpha = !!(flags & Flags.HAS_ALPHA);
     const color = parseAnimationTrackColor(buffer.slice(0x18), numKeyframes, isConstant);
 
-    return { name, hasColor, hasAlpha, color };
+    return { name, refNumber, hasColor, hasAlpha, color };
 }
 
 export const enum SCN0_LightType {
@@ -2761,6 +2795,7 @@ export const enum SCN0_LightType {
 
 export interface SCN0_Light {
     name: string;
+    refNumber: number;
     specLightObjIdx: number;
     lightType: SCN0_LightType;
     hasColor: boolean;
@@ -2846,7 +2881,7 @@ function parseSCN0_Light(buffer: ArrayBufferSlice, version: number, numKeyframes
     const specColor = parseAnimationTrackColor(buffer.slice(0x54), numKeyframes, !!(flags & Flags.SPECCOLOR_CONSTANT));
     const shininess = parseAnimationTrackF96OrConst(buffer.slice(0x58), !!(flags & Flags.SHININESS_CONSTANT));
 
-    return { name, specLightObjIdx, lightType, hasColor, hasAlpha, hasSpecular,
+    return { name, refNumber, specLightObjIdx, lightType, hasColor, hasAlpha, hasSpecular,
         enable, posX, posY, posZ, color, aimX, aimY, aimZ,
         distFunc, refDistance, refBrightness,
         spotFunc, cutoff,
@@ -2856,6 +2891,7 @@ function parseSCN0_Light(buffer: ArrayBufferSlice, version: number, numKeyframes
 
 export interface SCN0_Fog {
     name: string;
+    refNumber: number;
     fogType: GX.FogType;
     startZ: FloatAnimationTrack;
     endZ: FloatAnimationTrack;
@@ -2884,7 +2920,7 @@ function parseSCN0_Fog(buffer: ArrayBufferSlice, version: number, numKeyframes: 
     const endZ = parseAnimationTrackF96OrConst(buffer.slice(0x1C), !!(flags & Flags.ENDZ_CONSTANT));
     const color = parseAnimationTrackColor(buffer.slice(0x20), numKeyframes, !!(flags & Flags.COLOR_CONSTANT));
 
-    return { name, fogType,
+    return { name, refNumber, fogType,
         startZ, endZ, color,
     };
 }
@@ -2895,6 +2931,7 @@ export const enum SCN0_CameraType {
 
 export interface SCN0_Camera {
     name: string;
+    refNumber: number;
     projType: GX.ProjectionType;
     cameraType: SCN0_CameraType;
 
@@ -2970,7 +3007,7 @@ function parseSCN0_Camera(buffer: ArrayBufferSlice, version: number, numKeyframe
     const perspFovy = parseAnimationTrackF96OrConst(buffer.slice(0x54), !!(flags & Flags.PERSPFOVY_CONSTANT));
     const orthoHeight = parseAnimationTrackF96OrConst(buffer.slice(0x58), !!(flags & Flags.ORTHOHEIGHT_CONSTANT));
 
-    return { name, projType, cameraType,
+    return { name, refNumber, projType, cameraType,
         posX, posY, posZ, aspect, near, far,
         rotX, rotY, rotZ,
         aimX, aimY, aimZ, twist,
@@ -3060,6 +3097,18 @@ function parseSCN0(buffer: ArrayBufferSlice): SCN0 {
             assert(camera.name === cameraEntry.name);
             cameras.push(camera);
         }
+    }
+
+    // Do some post-processing on the light sets.
+    for (let i = 0; i < lightSets.length; i++) {
+        const lightSet = lightSets[i];
+        for (let j = 0; j < lightSet.lightNames.length; j++) {
+            if (lightSet.lightNames[j] !== "")
+                lightSet.lightIds[j] = lights.findIndex((light) => light.name === lightSet.lightNames[j]);
+        }
+
+        if (lightSet.ambLightName !== "")
+            lightSet.ambLightId = ambLights.findIndex((light) => light.name === lightSet.ambLightName);
     }
 
     return { name, duration, loopMode, lightSets, ambLights, lights, fogs, cameras };
@@ -3231,5 +3280,203 @@ export function parse(buffer: ArrayBufferSlice): RRES {
     }
 
     return { plt0, tex0, mdl0, srt0, pat0, clr0, chr0, vis0, scn0 };
+}
+
+const enum LightObjFlags {
+    ENABLE = 1 << 0,
+    HAS_COLOR = 1 << 1,
+    HAS_ALPHA = 1 << 2,
+    SPECULAR = 1 << 3,
+}
+
+export class LightObj {
+    public flags: LightObjFlags = 0;
+    public light = new GX_Material.Light();
+}
+
+export class LightSet {
+    public lightObjIndexes: number[] = nArray(8, () => -1);
+    public ambLightObjIndex: number = -1;
+
+    public calcLights(m: GX_Material.Light[], lightSetting: LightSetting, viewMatrix: mat4): void {
+        for (let i = 0; i < this.lightObjIndexes.length; i++) {
+            if (this.lightObjIndexes[i] < 0)
+                continue;
+
+            const lightObj = lightSetting.lightObj[i];
+            if (!!(lightObj.flags & LightObjFlags.ENABLE)) {
+                m[i].copy(lightObj.light);
+                GX_Material.lightSetWorldPositionViewMatrix(m[i], viewMatrix, lightObj.light.Position[0], lightObj.light.Position[1], lightObj.light.Position[2]);
+                // GX_Material.lightSetWorldDirectionNormalMatrix(lightObj.light, viewMatrix, lightObj.light.Direction[0], lightObj.light.Direction[1], lightObj.light.Direction[2]);
+            }
+        }
+    }
+
+    public calcAmbColorMult(m: Color, lightSetting: LightSetting): void {
+        if (this.ambLightObjIndex < 0)
+            return;
+
+        colorMult(m, m, lightSetting.ambLightObj[this.ambLightObjIndex]);
+    }
+
+    public calcLightSetLitMask(lightChannels: GX_Material.LightChannelControl[], lightSetting: LightSetting): boolean {
+        assert(lightChannels.length >= 1);
+
+        let maskc0 = 0;
+        let maska0 = 0;
+        let maskc1 = 0;
+        let maska1 = 0;
+
+        for (let i = 0; i < this.lightObjIndexes.length; i++) {
+            if (this.lightObjIndexes[i] < 0)
+                continue;
+
+            const lightObj = lightSetting.lightObj[i];
+            const bit = 1 << i;
+            if (!!(lightObj.flags & LightObjFlags.ENABLE)) {
+                if (!(lightObj.flags & LightObjFlags.SPECULAR)) {
+                    // Diffuse
+                    if (!!(lightObj.flags & LightObjFlags.HAS_COLOR))
+                        maskc0 |= bit;
+                    if (!!(lightObj.flags & LightObjFlags.HAS_ALPHA))
+                        maska0 |= bit;
+                } else {
+                    // Specular
+                    if (!!(lightObj.flags & LightObjFlags.HAS_COLOR))
+                        maskc1 |= bit;
+                    if (!!(lightObj.flags & LightObjFlags.HAS_ALPHA))
+                        maska1 |= bit;
+                }
+            }
+        }
+
+        const chan0 = assertExists(lightChannels[0]);
+        let changed = false;
+
+        // TODO(jstpierre): This appear to be required for Olympic Games. But the light makes things worse...
+        /*
+        if (!chan0.colorChannel.lightingEnabled) {
+            chan0.colorChannel.lightingEnabled = true;
+            changed = true;
+        }
+
+        if (!chan0.alphaChannel.lightingEnabled) {
+            chan0.alphaChannel.lightingEnabled = true;
+            changed = true;
+        }
+        */
+
+        if (chan0.colorChannel.lightingEnabled && chan0.colorChannel.litMask !== maskc0) {
+            chan0.colorChannel.litMask = maskc0;
+            changed = true;
+        }
+
+        if (chan0.alphaChannel.lightingEnabled && chan0.alphaChannel.litMask !== maska0) {
+            chan0.alphaChannel.litMask = maska0;
+            changed = true;
+        }
+
+        const chan1 = lightChannels[1];
+        if (chan1) {
+            if (chan1.colorChannel.lightingEnabled && chan1.colorChannel.litMask !== maskc1) {
+                chan1.colorChannel.litMask = maskc1;
+                changed = true;
+            }
+
+            if (chan1.alphaChannel.lightingEnabled && chan1.alphaChannel.litMask !== maska1) {
+                chan1.alphaChannel.litMask = maska0;
+                changed = true;
+            }
+        }
+
+        return changed;
+    }
+}
+
+export class LightSetting {
+    public ambLightObj: Color[];
+    public lightObj: LightObj[];
+    public lightSet: LightSet[];
+
+    constructor(numLight: number = 128, numLightSet: number = 128) {
+        this.ambLightObj = nArray(numLight, () => colorNewCopy(White));
+        this.lightObj = nArray(numLight, () => new LightObj());
+        this.lightSet = nArray(numLightSet, () => new LightSet());
+    }
+}
+
+export class SCN0Animator {
+    constructor(private animationController: AnimationController, private scn0: SCN0) {
+    }
+
+    public calcLightSetting(lightSetting: LightSetting): void {
+        const animFrame = getAnimFrame(this.scn0, this.animationController.getTimeInFrames());
+
+        for (let i = 0; i < this.scn0.lightSets.length; i++) {
+            const entry = this.scn0.lightSets[i];
+            const dst = lightSetting.lightSet[entry.refNumber];
+
+            for (let j = 0; j < entry.lightIds.length; j++) {
+                if (entry.lightIds[j] !== -1)
+                    dst.lightObjIndexes[j] = this.scn0.lights[entry.lightIds[j]].refNumber;
+                else
+                    dst.lightObjIndexes[j] = -1;
+            }
+
+            if (entry.ambLightId !== -1)
+                dst.ambLightObjIndex = this.scn0.ambLights[entry.ambLightId].refNumber;
+            else
+                dst.ambLightObjIndex = -1;
+        }
+
+        for (let i = 0; i < this.scn0.lights.length; i++) {
+            const entry = this.scn0.lights[i];
+            const dst = assertExists(lightSetting.lightObj[entry.refNumber]);
+
+            const enable = sampleAnimationTrackBoolean(entry.enable, animFrame);
+            if (enable) {
+                dst.flags = LightObjFlags.ENABLE;
+
+                if (entry.hasColor)
+                    dst.flags |= LightObjFlags.HAS_COLOR;
+                if (entry.hasAlpha)
+                    dst.flags |= LightObjFlags.HAS_ALPHA;
+
+                if (entry.lightType === SCN0_LightType.DIRECTIONAL) {
+                    colorFromRGBA8(dst.light.Color, sampleAnimationTrackColor(entry.color, animFrame));
+
+                    const posX = sampleFloatAnimationTrack(entry.posX, animFrame);
+                    const posY = sampleFloatAnimationTrack(entry.posY, animFrame);
+                    const posZ = sampleFloatAnimationTrack(entry.posZ, animFrame);
+                    const aimX = sampleFloatAnimationTrack(entry.aimX, animFrame);
+                    const aimY = sampleFloatAnimationTrack(entry.aimY, animFrame);
+                    const aimZ = sampleFloatAnimationTrack(entry.aimZ, animFrame);
+
+                    // This is in world-space. When copying it to the material params, we'll multiply by the view matrix.
+                    vec3.set(dst.light.Position, (aimX - posX) * -1e10, (aimY - posY) * -1e10, (aimZ - posZ) * -1e10);
+                    vec3.set(dst.light.Direction, 0, 0, 0);
+                    vec3.set(dst.light.DistAtten, 1, 0, 0);
+                    vec3.set(dst.light.CosAtten, 1, 0, 0);
+                }
+
+                // TODO(jstpierre): Specular.
+            } else {
+                dst.flags &= ~LightObjFlags.ENABLE;
+            }
+        }
+
+        for (let i = 0; i < this.scn0.ambLights.length; i++) {
+            const entry = this.scn0.ambLights[i];
+            const dst = assertExists(lightSetting.ambLightObj[entry.refNumber]);
+
+            let color = sampleAnimationTrackColor(entry.color, animFrame);
+            if (!entry.hasColor)
+                color &= 0x000000FF;
+            if (!entry.hasAlpha)
+                color &= 0xFFFFFF00;
+
+            colorFromRGBA8(dst, color);
+        }
+    }
 }
 //#endregion

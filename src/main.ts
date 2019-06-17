@@ -16,45 +16,47 @@ import { SceneDesc, SceneGroup, Viewer, SceneGfx, getSceneDescs, InitErrorCode, 
 import ArrayBufferSlice from './ArrayBufferSlice';
 import Progressable from './Progressable';
 
-import * as BK from './bk/scenes';
-import * as THUG2 from './thug2/scenes';
-import * as ZTP from './j3d/ztp_scenes';
-import * as MKDD from './j3d/mkdd_scenes';
-import * as ZWW from './j3d/zww_scenes';
-import * as SMS from './j3d/sms_scenes';
-import * as PIK2 from './j3d/pik2_scenes';
-import * as SMG1 from './j3d/smg/smg1_scenes';
-import * as SMG2 from './j3d/smg/smg2_scenes';
-import * as SM64DS from './sm64ds/scenes';
-import * as MDL0 from './mdl0/scenes';
-import * as OOT3D from './oot3d/oot3d_scenes';
-import * as MM3D from './oot3d/mm3d_scenes';
-import * as LM3D from './oot3d/lm3d_scenes';
-import * as SPL from './fres/splatoon_scenes';
-import * as DKSIV from './dksiv/scenes';
-import * as MP1 from './metroid_prime/scenes';
-import * as DKCR from './metroid_prime/dkcr_scenes';
-import * as LM from './luigis_mansion/scenes';
-import * as ZSS from './rres/zss_scenes';
-import * as ELB from './rres/elb_scenes';
-import * as MKWII from './rres/mkwii_scenes';
-import * as TTYD from './ttyd/scenes';
-import * as SPM from './ttyd/spm_scenes';
-import * as MKDS from './nns_g3d/mkds_scenes';
-import * as NSMBDS from './nns_g3d/nsmbds_scenes';
-import * as KH from './kh/scenes';
-import * as Z_BOTW from './z_botw/scenes';
-import * as SMO from './fres_nx/smo_scenes';
-import * as PSY from './psychonauts/scenes';
-import * as DKS from './dks/scenes';
-import * as RTDL from './rres/rtdl_scenes';
-import * as SONIC_COLORS from './rres/sonic_colors_scenes';
-import * as KLONOA from './rres/klonoa_scenes';
-import * as KATAMARI_DAMACY from './katamari_damacy/scenes';
-import * as PM64 from './pm64/scenes';
-import * as OKAMI from './okami/scenes';
-import * as SSBB from './rres/ssbb_scenes';
-import * as TestScenes from './TestScenes';
+import * as Scenes_BanjoKazooie from './bk/scenes';
+import * as Scenes_THUG2 from './thug2/scenes';
+import * as Scenes_Zelda_TwilightPrincess from './j3d/ztp_scenes';
+import * as Scenes_MarioKartDoubleDash from './j3d/mkdd_scenes';
+import * as Scenes_Zelda_TheWindWaker from './j3d/zww_scenes';
+import * as Scenes_SuperMarioSunshine from './j3d/sms_scenes';
+import * as Scenes_Pikmin2 from './j3d/pik2_scenes';
+import * as Scenes_SuperMarioGalaxy1 from './j3d/smg/smg1_scenes';
+import * as Scenes_SuperMarioGalaxy2 from './j3d/smg/smg2_scenes';
+import * as Scenes_SuperMario64DS from './sm64ds/scenes';
+import * as Scenes_SonicMania from './mdl0/scenes';
+import * as Scenes_Zelda_OcarinaOfTime3D from './oot3d/oot3d_scenes';
+import * as Scenes_Zelda_MajorasMask3D from './oot3d/mm3d_scenes';
+import * as Scenes_LuigisMansion3D from './oot3d/lm3d_scenes';
+import * as Scenes_Splatoon from './fres/splatoon_scenes';
+import * as Scenes_DarkSoulsCollision from './dksiv/scenes';
+import * as Scenes_MetroidPrime1 from './metroid_prime/scenes';
+import * as Scenes_DonkeyKongCountryReturns from './metroid_prime/dkcr_scenes';
+import * as Scenes_LuigisMansion from './luigis_mansion/scenes';
+import * as Scenes_PaperMario_TheThousandYearDoor from './ttyd/scenes';
+import * as Scenes_SuperPaperMario from './ttyd/spm_scenes';
+import * as Scenes_MarioKartDS from './nns_g3d/mkds_scenes';
+import * as Scenes_NewSuperMarioBrosDS from './nns_g3d/nsmbds_scenes';
+import * as Scenes_KingdomHearts from './kh/scenes';
+import * as Scenes_Zelda_BreathOfTheWild from './z_botw/scenes';
+import * as Scenes_SuperMarioOdyssey from './fres_nx/smo_scenes';
+import * as Scenes_Psychonauts from './psychonauts/scenes';
+import * as Scenes_DarkSouls from './dks/scenes';
+import * as Scenes_KatamariDamacy from './katamari_damacy/scenes';
+import * as Scenes_PaperMario64 from './pm64/scenes';
+
+import * as Scenes_Elebits from './rres/Scenes_Elebits';
+import * as Scenes_KirbysReturnToDreamLand from './rres/Scenes_KirbysReturnToDreamLand';
+import * as Scenes_Klonoa from './rres/Scenes_Klonoa';
+import * as Scenes_MarioAndSonicAtThe2012OlympicGames from './rres/Scenes_MarioAndSonicAtTheOlympicGames2012';
+import * as Scenes_MarioKartWii from './rres/Scenes_MarioKartWii';
+import * as Scenes_Okami from './rres/Scenes_Okami';
+import * as Scenes_SonicColors from './rres/Scenes_SonicColors';
+import * as Scenes_SuperSmashBrosBrawl from './rres/Scenes_SuperSmashBrosBrawl';
+import * as Scenes_Test from './Scenes_Test';
+import * as Scenes_Zelda_SkywardSword from './rres/Scenes_Zelda_SkywardSword';
 
 import { UI, SaveStatesAction, FloatingPanel, RENDER_HACKS_ICON, Slider } from './ui';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera';
@@ -76,55 +78,56 @@ import { GIT_REVISION, IS_DEVELOPMENT } from './BuildVersion';
 
 const sceneGroups = [
     "Wii",
-    MKWII.sceneGroup,
-    RTDL.sceneGroup,
-    KLONOA.sceneGroup,
-    OKAMI.sceneGroup,
-    SMG1.sceneGroup,
-    SMG2.sceneGroup,
-    SPM.sceneGroup,
-    SSBB.sceneGroup,
-    ZSS.sceneGroup,
+    Scenes_MarioKartWii.sceneGroup,
+    Scenes_KirbysReturnToDreamLand.sceneGroup,
+    Scenes_Klonoa.sceneGroup,
+    Scenes_Okami.sceneGroup,
+    Scenes_SuperMarioGalaxy1.sceneGroup,
+    Scenes_SuperMarioGalaxy2.sceneGroup,
+    Scenes_SuperPaperMario.sceneGroup,
+    Scenes_SuperSmashBrosBrawl.sceneGroup,
+    Scenes_Zelda_SkywardSword.sceneGroup,
     "GameCube",
-    LM.sceneGroup,
-    MKDD.sceneGroup,
-    MP1.sceneGroup,
-    TTYD.sceneGroup,
-    PIK2.sceneGroup,
-    SMS.sceneGroup,
-    ZTP.sceneGroup,
-    ZWW.sceneGroup,
+    Scenes_LuigisMansion.sceneGroup,
+    Scenes_MarioKartDoubleDash.sceneGroup,
+    Scenes_MetroidPrime1.sceneGroup,
+    Scenes_PaperMario_TheThousandYearDoor.sceneGroup,
+    Scenes_Pikmin2.sceneGroup,
+    Scenes_SuperMarioSunshine.sceneGroup,
+    Scenes_Zelda_TwilightPrincess.sceneGroup,
+    Scenes_Zelda_TheWindWaker.sceneGroup,
     "Nintendo 3DS",
-    LM3D.sceneGroup,
-    MM3D.sceneGroup,
-    OOT3D.sceneGroup,
+    Scenes_LuigisMansion3D.sceneGroup,
+    Scenes_Zelda_MajorasMask3D.sceneGroup,
+    Scenes_Zelda_OcarinaOfTime3D.sceneGroup,
     "Nintendo DS",
-    MKDS.sceneGroup,
-    NSMBDS.sceneGroup,
-    SM64DS.sceneGroup,
+    Scenes_MarioKartDS.sceneGroup,
+    Scenes_NewSuperMarioBrosDS.sceneGroup,
+    Scenes_SuperMario64DS.sceneGroup,
     "Nintendo 64",
-    BK.sceneGroup,
-    PM64.sceneGroup,
+    Scenes_BanjoKazooie.sceneGroup,
+    Scenes_PaperMario64.sceneGroup,
     "PlayStation 2",
-    KATAMARI_DAMACY.sceneGroup,
-    KH.sceneGroup,
+    Scenes_KatamariDamacy.sceneGroup,
+    Scenes_KingdomHearts.sceneGroup,
     "Other",
-    DKSIV.sceneGroup,
-    MDL0.sceneGroup,
+    Scenes_DarkSoulsCollision.sceneGroup,
+    Scenes_SonicMania.sceneGroup,
     "Experimental",
-    DKCR.sceneGroup,
-    DKS.sceneGroup,
-    ELB.sceneGroup,
-    PSY.sceneGroup,
-    SONIC_COLORS.sceneGroup,
-    SMO.sceneGroup,
-    SPL.sceneGroup,
-    THUG2.sceneGroup,
-    Z_BOTW.sceneGroup,
+    Scenes_DonkeyKongCountryReturns.sceneGroup,
+    Scenes_DarkSouls.sceneGroup,
+    Scenes_Elebits.sceneGroup,
+    Scenes_MarioAndSonicAtThe2012OlympicGames.sceneGroup,
+    Scenes_Psychonauts.sceneGroup,
+    Scenes_SonicColors.sceneGroup,
+    Scenes_SuperMarioOdyssey.sceneGroup,
+    Scenes_Splatoon.sceneGroup,
+    Scenes_THUG2.sceneGroup,
+    Scenes_Zelda_BreathOfTheWild.sceneGroup,
 ];
 
 if (IS_DEVELOPMENT)
-    sceneGroups.push(TestScenes.sceneGroup);
+    sceneGroups.push(Scenes_Test.sceneGroup);
 
 function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
     return new Response(blob).arrayBuffer();

@@ -25,7 +25,7 @@ export class GXMaterialHelperGfx {
     private program!: GX_Material.GX_Program;
     private gfxProgram: GfxProgram | null = null;
 
-    constructor(private material: GX_Material.GXMaterial, materialHacks?: GX_Material.GXMaterialHacks) {
+    constructor(public material: GX_Material.GXMaterial, materialHacks?: GX_Material.GXMaterialHacks) {
         if (materialHacks)
             Object.assign(this.materialHacks, materialHacks);
 
@@ -42,7 +42,7 @@ export class GXMaterialHelperGfx {
         }
     }
 
-    private createProgram(): void {
+    public createProgram(): void {
         this.program = new GX_Material.GX_Program(this.material, this.materialHacks);
         this.gfxProgram = null;
     }
