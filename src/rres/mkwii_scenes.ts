@@ -14,7 +14,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { mat4 } from 'gl-matrix';
 import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render';
 import AnimationController from '../AnimationController';
-import { GXRenderHelperGfx } from '../gx/gx_render';
+import { GXRenderHelperGfx, BasicGXRendererHelper } from '../gx/gx_render_2';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
@@ -37,8 +37,9 @@ class ModelCache {
             renderer.textureHolder.addRRESTextures(device, rres);
             this.rresCache.set(path, rres);
 
+            const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
             for (let i = 0; i < rres.mdl0.length; i++) {
-                const mdl0Model = new MDL0Model(device, renderer.renderHelper, rres.mdl0[i]);
+                const mdl0Model = new MDL0Model(device, cache, rres.mdl0[i]);
                 this.modelCache.set(rres.mdl0[i].name, mdl0Model);
             }
         }
@@ -47,20 +48,12 @@ class ModelCache {
     }
 }
 
-class MarioKartWiiRenderer implements Viewer.SceneGfx {
-    public viewRenderer = new GfxRenderInstViewRenderer();
-    public renderTarget = new BasicRenderTarget();
-
-    public renderHelper: GXRenderHelperGfx;
+class MarioKartWiiRenderer extends BasicGXRendererHelper {
     public textureHolder = new RRESTextureHolder();
     public animationController = new AnimationController();
 
     public modelInstances: MDL0ModelInstance[] = [];
     public modelCache = new ModelCache();
-
-    constructor(device: GfxDevice) {
-        this.renderHelper = new GXRenderHelperGfx(device);
-    }
 
     public createPanels(): UI.Panel[] {
         const renderHacksPanel = new UI.Panel();
@@ -84,38 +77,22 @@ class MarioKartWiiRenderer implements Viewer.SceneGfx {
         return [renderHacksPanel];
     }
 
-    protected prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        this.renderHelper.fillSceneParams(viewerInput);
-        for (let i = 0; i < this.modelInstances.length; i++)
-            this.modelInstances[i].prepareToRender(this.renderHelper, viewerInput);
-        this.renderHelper.prepareToRender(hostAccessPass);
-    }
-
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+    protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         this.animationController.setTimeInMilliseconds(viewerInput.time);
 
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
-
-        this.viewRenderer.prepareToRender(device);
-
-        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
-        const mainPassRenderer = this.renderTarget.createRenderPass(device, transparentBlackFullClearRenderPassDescriptor);
-        this.viewRenderer.executeOnPass(device, mainPassRenderer, MKWiiPass.MAIN);
-        return mainPassRenderer;
+        const template = this.renderHelper.pushTemplateRenderInst();
+        this.renderHelper.fillSceneParams(viewerInput, template);
+        for (let i = 0; i < this.modelInstances.length; i++)
+            this.modelInstances[i].prepareToRender(device, this.renderHelper, viewerInput);
+        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.renderInstManager.popTemplateRenderInst();
     }
 
     public destroy(device: GfxDevice): void {
+        super.destroy(device);
         this.textureHolder.destroy(device);
-        this.viewRenderer.destroy(device);
-        this.renderTarget.destroy(device);
-        this.renderHelper.destroy(device);
-
         for (let i = 0; i < this.modelInstances.length; i++)
             this.modelInstances[i].destroy(device);
-
         this.modelCache.destroy(device);
     }
 }
@@ -202,7 +179,7 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
     private static spawnObjectFromRRES(device: GfxDevice, renderer: MarioKartWiiRenderer, rres: BRRES.RRES, objectName: string): MDL0ModelInstance {
         const modelCache = renderer.modelCache;
         const mdl0Model = modelCache.modelCache.get(objectName);
-        const mdl0Instance = new MDL0ModelInstance(device, renderer.renderHelper, renderer.textureHolder, mdl0Model, objectName);
+        const mdl0Instance = new MDL0ModelInstance(renderer.textureHolder, mdl0Model, objectName);
         mdl0Instance.bindRRESAnimations(renderer.animationController, rres, null);
         renderer.modelInstances.push(mdl0Instance);
         return mdl0Instance;
@@ -686,8 +663,6 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
 
         for (let i = 0; i < kmp.gobj.length; i++)
             this.spawnObjectFromKMP(device, renderer, arc, kmp.gobj[i]);
-
-        renderer.renderHelper.finishBuilder(device, renderer.viewRenderer);
 
         return renderer;
 }

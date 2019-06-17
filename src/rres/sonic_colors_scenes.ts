@@ -11,10 +11,10 @@ import Progressable from '../Progressable';
 import { fetchData } from '../fetch';
 import { MDL0ModelInstance, RRESTextureHolder, MDL0Model } from './render';
 import AnimationController from '../AnimationController';
-import { GXRenderHelperGfx } from '../gx/gx_render';
+import { GXRenderHelperGfx } from '../gx/gx_render_2';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
-import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { GXMaterialHacks } from '../gx/gx_material';
+import { executeOnPass } from '../gfx/render/GfxRenderer2';
 
 interface MapEntry {
     index: number;
@@ -58,7 +58,6 @@ enum SonicColorsPass {
 }
 
 class SonicColorsRenderer implements Viewer.SceneGfx {
-    public viewRenderer = new GfxRenderInstViewRenderer();
     public renderTarget = new BasicRenderTarget();
 
     public renderHelper: GXRenderHelperGfx;
@@ -72,38 +71,38 @@ class SonicColorsRenderer implements Viewer.SceneGfx {
         this.renderHelper = new GXRenderHelperGfx(device);
     }
 
-    protected prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        this.renderHelper.fillSceneParams(viewerInput);
+    protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        this.animationController.setTimeInMilliseconds(viewerInput.time);
+
+        const template = this.renderHelper.pushTemplateRenderInst();
+        this.renderHelper.fillSceneParams(viewerInput, template);
         for (let i = 0; i < this.modelInstances.length; i++)
-            this.modelInstances[i].prepareToRender(this.renderHelper, viewerInput);
-        this.renderHelper.prepareToRender(hostAccessPass);
+            this.modelInstances[i].prepareToRender(device, this.renderHelper, viewerInput);
+        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.renderInstManager.popTemplateRenderInst();
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
-        this.animationController.setTimeInMilliseconds(viewerInput.time);
-
         const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(hostAccessPass, viewerInput);
+        this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
 
-        this.viewRenderer.prepareToRender(device);
-
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
         // First, render the skybox.
         const skyboxPassRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
-        this.viewRenderer.executeOnPass(device, skyboxPassRenderer, SonicColorsPass.SKYBOX);
+        skyboxPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        executeOnPass(this.renderHelper.renderInstManager, device, skyboxPassRenderer, SonicColorsPass.SKYBOX);
         skyboxPassRenderer.endPass(null);
         device.submitPass(skyboxPassRenderer);
         // Now do main pass.
         const mainPassRenderer = this.renderTarget.createRenderPass(device, depthClearRenderPassDescriptor);
-        this.viewRenderer.executeOnPass(device, mainPassRenderer, SonicColorsPass.MAIN);
+        executeOnPass(this.renderHelper.renderInstManager, device, mainPassRenderer, SonicColorsPass.MAIN);
+        this.renderHelper.renderInstManager.resetRenderInsts();
         return mainPassRenderer;
     }
 
     public destroy(device: GfxDevice): void {
         this.textureHolder.destroy(device);
-        this.viewRenderer.destroy(device);
         this.renderTarget.destroy(device);
         this.renderHelper.destroy(device);
 
@@ -134,6 +133,7 @@ class SonicColorsSceneDesc implements Viewer.SceneDesc {
             const texRRES = BRRES.parse(texRRESData);
 
             const renderer = new SonicColorsRenderer(device);
+            const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
             renderer.textureHolder.addRRESTextures(device, texRRES);
 
             return Progressable.all(mapFile.entries.map((entry) => {
@@ -146,8 +146,8 @@ class SonicColorsSceneDesc implements Viewer.SceneDesc {
                 if (motData !== null)
                     motRRES = BRRES.parse(motData);
 
-                const skyboxModel = new MDL0Model(device, renderer.renderHelper, skyboxRRES.mdl0[0], materialHacks);
-                const skyboxModelInstance = new MDL0ModelInstance(device, renderer.renderHelper, renderer.textureHolder, skyboxModel);
+                const skyboxModel = new MDL0Model(device, cache, skyboxRRES.mdl0[0], materialHacks);
+                const skyboxModelInstance = new MDL0ModelInstance(renderer.textureHolder, skyboxModel);
                 skyboxModelInstance.isSkybox = true;
                 skyboxModelInstance.passMask = SonicColorsPass.SKYBOX;
                 renderer.modelData.push(skyboxModel);
@@ -161,8 +161,8 @@ class SonicColorsSceneDesc implements Viewer.SceneDesc {
                     for (let j = 0; j < dir.files.length; j++) {
                         const rres = BRRES.parse(dir.files[j].buffer);
                         assert(rres.mdl0.length === 1);
-                        const modelData = new MDL0Model(device, renderer.renderHelper, rres.mdl0[0], materialHacks);
-                        const modelInstance = new MDL0ModelInstance(device, renderer.renderHelper, renderer.textureHolder, modelData);
+                        const modelData = new MDL0Model(device, cache, rres.mdl0[0], materialHacks);
+                        const modelInstance = new MDL0ModelInstance(renderer.textureHolder, modelData);
                         modelInstance.passMask = SonicColorsPass.MAIN;
                         if (motRRES)
                             modelInstance.bindRRESAnimations(renderer.animationController, motRRES);
@@ -172,7 +172,6 @@ class SonicColorsSceneDesc implements Viewer.SceneDesc {
                     }
                 }
 
-                renderer.renderHelper.finishBuilder(device, renderer.viewRenderer);
                 return renderer;
             });
         });

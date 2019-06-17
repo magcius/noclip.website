@@ -1,6 +1,6 @@
 
 import { GXTextureHolder, MaterialParams, PacketParams, ColorKind, loadedDataCoalescerGfx, translateWrapModeGfx, ub_MaterialParams, u_MaterialParamsBufferSize } from '../gx/gx_render';
-import { GXRenderHelperGfx, GXMaterialHelperGfx, GXShapeHelperGfx } from '../gx/gx_render_2';
+import { GXRenderHelperGfx, GXMaterialHelperGfx, GXShapeHelperGfx, BasicGXRendererHelper } from '../gx/gx_render_2';
 
 import * as TPL from './tpl';
 import { TTYDWorld, Material, SceneGraphNode, Batch, SceneGraphPart, Sampler, MaterialAnimator, bindMaterialAnimator, AnimationEntry, MeshAnimator, bindMeshAnimator, MaterialLayer } from './world';
@@ -10,13 +10,12 @@ import { mat4 } from 'gl-matrix';
 import { assert, nArray } from '../util';
 import AnimationController from '../AnimationController';
 import { DeviceProgram } from '../Program';
-import { GfxDevice, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxRenderPass, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxProgram } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxProgram } from '../gfx/platform/GfxPlatform';
 import { fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
 import { TextureMapping } from '../TextureHolder';
 import { GfxBufferCoalescer, GfxCoalescedBuffers } from '../gfx/helpers/BufferHelpers';
 import { GfxRendererLayer, makeSortKey, makeSortKeyOpaque, setSortKeyDepth } from '../gfx/render/GfxRenderer';
 import { Camera, computeViewMatrix, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
-import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { AABB } from '../Geometry';
 import { colorCopy } from '../Color';
 import * as UI from '../ui';
@@ -70,7 +69,7 @@ class BackgroundBillboardRenderer {
     private gfxProgram: GfxProgram;
     private textureMappings = nArray(1, () => new TextureMapping());
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public textureHolder: TPLTextureHolder, public textureName: string) {
+    constructor(device: GfxDevice, public textureHolder: TPLTextureHolder, public textureName: string) {
         this.gfxProgram = device.createProgram(this.program);
         // Fill texture mapping.
         this.textureHolder.fillTextureMapping(this.textureMappings[0], this.textureName);
@@ -309,10 +308,8 @@ class NodeInstance {
     }
 }
 
-export class WorldRenderer implements Viewer.SceneGfx {
+export class WorldRenderer extends BasicGXRendererHelper {
     public name: string;
-
-    private renderTarget = new BasicRenderTarget();
 
     private bufferCoalescer: GfxBufferCoalescer;
     private batches: Batch[];
@@ -322,13 +319,13 @@ export class WorldRenderer implements Viewer.SceneGfx {
     private rootNode: NodeInstance;
     private rootMatrix: mat4 = mat4.create();
 
-    private renderHelper: GXRenderHelperGfx;
     private backgroundRenderer: BackgroundBillboardRenderer | null = null;
     private animationController = new AnimationController();
     public animationNames: string[];
 
     constructor(device: GfxDevice, private d: TTYDWorld, public textureHolder: TPLTextureHolder, backgroundTextureName: string | null) {
-        this.renderHelper = new GXRenderHelperGfx(device);
+        super(device);
+
         this.translateModel(device, d);
 
         const rootScale = 75;
@@ -340,7 +337,7 @@ export class WorldRenderer implements Viewer.SceneGfx {
         this.playAllAnimations();
 
         if (backgroundTextureName !== null)
-            this.backgroundRenderer = new BackgroundBillboardRenderer(device, this.renderHelper.renderInstManager.gfxRenderCache, textureHolder, backgroundTextureName);
+            this.backgroundRenderer = new BackgroundBillboardRenderer(device, textureHolder, backgroundTextureName);
     }
 
     public playAllAnimations(): void {
@@ -380,6 +377,8 @@ export class WorldRenderer implements Viewer.SceneGfx {
         const renderInstManager = this.renderHelper.renderInstManager;
         const template = this.renderHelper.pushTemplateRenderInst();
 
+        this.animationController.setTimeInMilliseconds(viewerInput.time);
+
         if (this.backgroundRenderer !== null)
             this.backgroundRenderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
 
@@ -408,22 +407,6 @@ export class WorldRenderer implements Viewer.SceneGfx {
 
         renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender(device, hostAccessPass);
-    }
-
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
-        this.animationController.setTimeInMilliseconds(viewerInput.time);
-
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
-
-        const renderInstManager = this.renderHelper.renderInstManager;
-        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        const passRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
-        passRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
-        renderInstManager.drawOnPassRenderer(device, passRenderer);
-        renderInstManager.resetRenderInsts();
-        return passRenderer;
     }
 
     public createPanels(): UI.Panel[] {
@@ -463,11 +446,11 @@ export class WorldRenderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
+        super.destroy(device);
+
         this.bufferCoalescer.destroy(device);
         this.materialInstances.forEach((cmd) => cmd.destroy(device));
         this.batchInstances.forEach((cmd) => cmd.destroy(device));
-        this.renderHelper.destroy(device);
-        this.renderTarget.destroy(device);
         this.textureHolder.destroy(device);
         if (this.backgroundRenderer !== null)
             this.backgroundRenderer.destroy(device);
@@ -478,7 +461,7 @@ export class WorldRenderer implements Viewer.SceneGfx {
         const batchIndex = this.batches.indexOf(batch);
         assert(batchIndex >= 0);
         const materialInstance = this.materialInstances[part.material.index];
-        const cache = this.renderHelper.renderInstManager.gfxRenderCache;
+        const cache = this.getCache();
         const batchInstance = new BatchInstance(device, cache, materialInstance, nodeInstance, batch, this.bufferCoalescer.coalescedBuffers[batchIndex]);
         this.batchInstances.push(batchInstance);
     }

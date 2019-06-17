@@ -7,7 +7,7 @@ import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } fr
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
 import { PacketParams, ColorKind, translateTexFilterGfx, translateWrapModeGfx, loadedDataCoalescerGfx, ub_MaterialParams, loadTextureFromMipChain, u_MaterialParamsBufferSize, fillIndTexMtxData, fillLightData, fillTextureMappingInfo } from '../gx/gx_render';
-import { GXShapeHelperGfx, GXRenderHelperGfx } from '../gx/gx_render_2';
+import { GXShapeHelperGfx, GXRenderHelperGfx, GXMaterialHelperGfx } from '../gx/gx_render_2';
 
 import { computeViewMatrix, computeViewMatrixSkybox, Camera, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
@@ -19,7 +19,7 @@ import { GfxBufferCoalescer, GfxCoalescedBuffers } from '../gfx/helpers/BufferHe
 import { ViewerRenderInput, Texture } from '../viewer';
 import { setSortKeyDepth, GfxRendererLayer, setSortKeyBias, setSortKeyLayer, setSortKeyProgramKey } from '../gfx/render/GfxRenderer';
 import { GfxRenderInst, GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
-import { colorCopy, Color, colorNewCopy, White } from '../Color';
+import { colorCopy, colorNewCopy, White } from '../Color';
 import { computeNormalMatrix, texProjPerspMtx, texEnvMtx } from '../MathHelpers';
 import { calcMipChain } from '../gx/gx_texture';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
@@ -143,7 +143,6 @@ export class ShapeInstance {
 
         materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
 
-        template.allocateUniformBuffer(ub_MaterialParams, u_MaterialParamsBufferSize);
         const materialJointMatrix = shapeInstanceState.jointToWorldMatrices[materialInstance.materialData.jointData.jointIndex];
         materialInstance.fillMaterialParams(template, materialInstanceState, shapeInstanceState.viewMatrix, materialJointMatrix, camera);
 
@@ -289,26 +288,20 @@ export class MaterialInstance {
     public tpt1Animators: (TPT1Animator | null)[] = [];
     public trk1Animators: (TRK1Animator | null)[] = [];
     public name: string;
-
+    public materialHelper: GXMaterialHelperGfx;
     public visible: boolean = true;
     public sortKey: number = 0;
-    public programKey: number;
-    private program!: GX_Material.GX_Program;
-    private gfxProgram: GfxProgram | null = null;
-    private megaStateFlags: Partial<GfxMegaStateDescriptor>;
 
-    constructor(public materialData: MaterialData, private materialHacks: GX_Material.GXMaterialHacks) {
+    constructor(public materialData: MaterialData, materialHacks: GX_Material.GXMaterialHacks) {
         const material = this.materialData.material;
+        this.materialHelper = new GXMaterialHelperGfx(material.gxMaterial, materialHacks);
         this.name = material.name;
-        this.createProgram();
-        this.megaStateFlags = {};
-        GX_Material.translateGfxMegaState(this.megaStateFlags, material.gxMaterial);
         let layer = !material.gxMaterial.ropInfo.depthTest ? GfxRendererLayer.BACKGROUND : material.translucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.setSortKeyLayer(layer);
     }
 
     public setColorWriteEnabled(colorWrite: boolean): void {
-        this.megaStateFlags.colorWrite = colorWrite;
+        this.materialHelper.megaStateFlags.colorWrite = colorWrite;
     }
 
     public setSortKeyLayer(layer: GfxRendererLayer): void {
@@ -317,24 +310,20 @@ export class MaterialInstance {
         this.sortKey = setSortKeyLayer(this.sortKey, layer);
     }
 
-    private createProgram(): void {
-        this.program = new GX_Material.GX_Program(this.materialData.material.gxMaterial, this.materialHacks);
-        this.gfxProgram = null;
-    }
-
     public setTexturesEnabled(v: boolean): void {
-        this.materialHacks.disableTextures = !v;
-        this.createProgram();
+        this.materialHelper.setTexturesEnabled(v);
     }
 
     public setVertexColorsEnabled(v: boolean): void {
-        this.materialHacks.disableVertexColors = !v;
-        this.createProgram();
+        this.materialHelper.setVertexColorsEnabled(v);
     }
 
     public setLightingEnabled(v: boolean): void {
-        this.materialHacks.disableLighting = !v;
-        this.createProgram();
+        this.materialHelper.setLightingEnabled(v);
+    }
+
+    public setUseTextureCoords(v: boolean): void {
+        this.materialHelper.setUseTextureCoords(v);
     }
 
     public bindTRK1(animationController: AnimationController, trk1: TRK1 | null): void {
@@ -373,14 +362,7 @@ export class MaterialInstance {
     }
 
     public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, renderInst: GfxRenderInst): void {
-        if (this.gfxProgram === null) {
-            this.gfxProgram = cache.createProgram(device, this.program);
-            this.programKey = this.gfxProgram.ResourceUniqueId;
-            this.sortKey = setSortKeyProgramKey(this.sortKey, this.programKey);
-        }
-
-        renderInst.setGfxProgram(this.gfxProgram);
-        renderInst.setMegaStateFlags(this.megaStateFlags);
+        this.materialHelper.setOnRenderInst(device, cache, renderInst);
     }
 
     private fillColor(d: Float32Array, offs: number, i: ColorKind, materialInstanceState: MaterialInstanceState, fallbackColor: GX_Material.Color, clampTo8Bit: boolean): number {
@@ -422,7 +404,7 @@ export class MaterialInstance {
                 m.copy(materialInstanceState.textureMappings[samplerIndex]);
         }
 
-        let offs = renderInst.getUniformBufferOffset(ub_MaterialParams);
+        let offs = renderInst.allocateUniformBuffer(ub_MaterialParams, u_MaterialParamsBufferSize);
         const d = renderInst.mapUniformBufferF32(ub_MaterialParams);
 
         offs += this.fillColor(d, offs, ColorKind.MAT0,  materialInstanceState, material.colorMatRegs[0],   false);

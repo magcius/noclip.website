@@ -16,10 +16,12 @@ import { TextureOverride } from '../TextureHolder';
 import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks, Color } from '../gx/gx_material';
 import { mat4, quat } from 'gl-matrix';
 import AnimationController from '../AnimationController';
-import { ColorKind, GXRenderHelperGfx } from '../gx/gx_render';
+import { GXRenderHelperGfx } from '../gx/gx_render_2';
 import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxTexture, GfxTextureDimension, GfxFormat } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstViewRenderer, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { ColorKind } from '../gx/gx_render';
+import { executeOnPass, hasAnyVisible } from '../gfx/render/GfxRenderer2';
 
 const materialHacks: GXMaterialHacks = {
     lightingFudge: (p) => `vec4((0.5 * ${p.matSource}).rgb, 1.0)`,
@@ -111,7 +113,8 @@ class ModelCache {
         if (this.cache.has(mdl0))
             return this.cache.get(mdl0);
 
-        const mdl0Model = new MDL0Model(device, renderHelper, mdl0, materialHacks);
+        const cache = renderHelper.renderInstManager.gfxRenderCache;
+        const mdl0Model = new MDL0Model(device, cache, mdl0, materialHacks);
         this.cache.set(mdl0, mdl0Model);
         return mdl0Model;
     }
@@ -144,7 +147,6 @@ class ZSSTextureHolder extends RRESTextureHolder {
 }
 
 class SkywardSwordRenderer implements Viewer.SceneGfx {
-    public viewRenderer = new GfxRenderInstViewRenderer();
     public mainRenderTarget = new BasicRenderTarget();
     public opaqueSceneTexture = new ColorTexture();
     public textureHolder: RRESTextureHolder;
@@ -208,7 +210,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
                     const mdl0 = roomRRES.mdl0[i];
 
                     const model = this.modelCache.getModel(device, this.renderHelper, mdl0, materialHacks);
-                    const modelInstance = new MDL0ModelInstance(device, this.renderHelper, this.textureHolder, model, roomArchiveFile.name);
+                    const modelInstance = new MDL0ModelInstance(this.textureHolder, model, roomArchiveFile.name);
                     modelInstance.bindRRESAnimations(this.animationController, roomRRES, null);
                     modelInstance.bindRRESAnimations(this.animationController, this.commonRRES, `MA01`);
                     modelInstance.bindRRESAnimations(this.animationController, this.commonRRES, `MA02`);
@@ -242,8 +244,6 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
                 }
             }
         }
-
-        this.renderHelper.finishBuilder(device, this.viewRenderer);
     }
 
     public createPanels(): UI.Panel[] {
@@ -311,7 +311,6 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         this.textureHolder.destroy(device);
         this.renderHelper.destroy(device);
         this.modelCache.destroy(device);
-        this.viewRenderer.destroy(device);
         this.mainRenderTarget.destroy(device);
         this.opaqueSceneTexture.destroy(device);
         for (let i = 0; i < this.modelInstances.length; i++)
@@ -319,35 +318,37 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         device.destroyTexture(this.blackTexture);
     }
 
-    private prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+    private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        this.animationController.setTimeInMilliseconds(viewerInput.time);
+
+        const template = this.renderHelper.pushTemplateRenderInst();
         viewerInput.camera.setClipPlanes(10, 500000);
-        this.renderHelper.fillSceneParams(viewerInput);
+        this.renderHelper.fillSceneParams(viewerInput, template);
         for (let i = 0; i < this.modelInstances.length; i++)
-            this.modelInstances[i].prepareToRender(this.renderHelper, viewerInput);
-        this.renderHelper.prepareToRender(hostAccessPass);
+            this.modelInstances[i].prepareToRender(device, this.renderHelper, viewerInput);
+        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.renderInstManager.popTemplateRenderInst();
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
-        this.animationController.setTimeInMilliseconds(viewerInput.time);
-
         const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(hostAccessPass, viewerInput);
+        this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
 
-        this.viewRenderer.prepareToRender(device);
-
         this.mainRenderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
 
         const skyboxPassRenderer = this.mainRenderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
-        this.viewRenderer.executeOnPass(device, skyboxPassRenderer, ZSSPass.SKYBOX);
+        skyboxPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        executeOnPass(this.renderHelper.renderInstManager, device, skyboxPassRenderer, ZSSPass.SKYBOX);
         skyboxPassRenderer.endPass(null);
         device.submitPass(skyboxPassRenderer);
 
         const opaquePassRenderer = this.mainRenderTarget.createRenderPass(device, depthClearRenderPassDescriptor);
-        this.viewRenderer.executeOnPass(device, opaquePassRenderer, ZSSPass.OPAQUE);
+        opaquePassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        executeOnPass(this.renderHelper.renderInstManager, device, opaquePassRenderer, ZSSPass.OPAQUE);
 
-        if (this.viewRenderer.hasAnyVisible(ZSSPass.INDIRECT)) {
+        let lastPassRenderer: GfxRenderPass;
+        if (hasAnyVisible(this.renderHelper.renderInstManager, ZSSPass.INDIRECT)) {
             this.opaqueSceneTexture.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
             opaquePassRenderer.endPass(this.opaqueSceneTexture.gfxTexture);
             device.submitPass(opaquePassRenderer);
@@ -357,11 +358,15 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             this.textureHolder.setTextureOverride("DummyWater", textureOverride);
 
             const indTexPassRenderer = this.mainRenderTarget.createRenderPass(device, noClearRenderPassDescriptor);
-            this.viewRenderer.executeOnPass(device, indTexPassRenderer, ZSSPass.INDIRECT);
-            return indTexPassRenderer;
+            indTexPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+            executeOnPass(this.renderHelper.renderInstManager, device, indTexPassRenderer, ZSSPass.INDIRECT);
+            lastPassRenderer = indTexPassRenderer;
         } else {
-            return opaquePassRenderer;
+            lastPassRenderer = opaquePassRenderer;
         }
+
+        this.renderHelper.renderInstManager.resetRenderInsts();
+        return lastPassRenderer;
     }
 
     private spawnObj(device: GfxDevice, obj: BaseObj, modelMatrix: mat4): void {
@@ -376,7 +381,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             const mdl0 = rres.mdl0.find((model) => model.name === modelName);
 
             const model = this.modelCache.getModel(device, renderHelper, mdl0, materialHacks);
-            const modelRenderer = new MDL0ModelInstance(device, renderHelper, this.textureHolder, model, obj.name);
+            const modelRenderer = new MDL0ModelInstance(this.textureHolder, model, obj.name);
             modelRenderer.passMask = ZSSPass.OPAQUE;
             mat4.copy(modelRenderer.modelMatrix, modelMatrix);
             this.modelInstances.push(modelRenderer);

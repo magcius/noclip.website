@@ -14,6 +14,7 @@ import { BasicRendererHelper } from '../oot3d/render';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import AnimationController from '../AnimationController';
 import { GXMaterialHacks } from '../gx/gx_material';
+import { BasicGXRendererHelper } from '../gx/gx_render_2';
 
 interface ARCFileEntry {
     fileType: number;
@@ -54,17 +55,14 @@ const materialHacks: GXMaterialHacks = {
     lightingFudge: (p) => `(0.5 * (${p.ambSource} + 0.2) * ${p.matSource})`,
 };
 
-class BrawlRenderer extends BasicRendererHelper {
+class BrawlRenderer extends BasicGXRendererHelper {
     private modelInstances: MDL0ModelInstance[] = [];
     private models: MDL0Model[] = [];
 
-    public renderHelper: GXRenderHelperGfx;
     private animationController: AnimationController;
 
     constructor(device: GfxDevice, public stageRRESes: BRRES.RRES[], public textureHolder = new RRESTextureHolder()) {
-        super();
-
-        this.renderHelper = new GXRenderHelperGfx(device);
+        super(device);
 
         this.animationController = new AnimationController();
 
@@ -74,15 +72,13 @@ class BrawlRenderer extends BasicRendererHelper {
             if (stageRRES.mdl0.length === 0)
                 continue;
 
-            const model = new MDL0Model(device, this.renderHelper, stageRRES.mdl0[0], materialHacks);
+            const model = new MDL0Model(device, this.getCache(), stageRRES.mdl0[0], materialHacks);
             this.models.push(model);
-            const modelRenderer = new MDL0ModelInstance(device, this.renderHelper, this.textureHolder, model);
+            const modelRenderer = new MDL0ModelInstance(this.textureHolder, model);
             this.modelInstances.push(modelRenderer);
 
             modelRenderer.bindRRESAnimations(this.animationController, stageRRES);
         }
-
-        this.renderHelper.finishBuilder(device, this.viewRenderer);
     }
 
     public createPanels(): UI.Panel[] {
@@ -97,13 +93,15 @@ class BrawlRenderer extends BasicRendererHelper {
         return panels;
     }
 
-    protected prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+    protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         this.animationController.setTimeInMilliseconds(viewerInput.time);
         viewerInput.camera.setClipPlanes(20, 500000);
-        this.renderHelper.fillSceneParams(viewerInput);
+        const template = this.renderHelper.pushTemplateRenderInst();
+        this.renderHelper.fillSceneParams(viewerInput, template);
         for (let i = 0; i < this.modelInstances.length; i++)
-            this.modelInstances[i].prepareToRender(this.renderHelper, viewerInput);
-        this.renderHelper.prepareToRender(hostAccessPass);
+            this.modelInstances[i].prepareToRender(device, this.renderHelper, viewerInput);
+        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.renderInstManager.popTemplateRenderInst();
     }
 
     public destroy(device: GfxDevice): void {

@@ -9,15 +9,18 @@ import { assert } from '../util';
 import { LoadedVertexData, LoadedVertexLayout, LoadedVertexPacket } from './gx_displaylist';
 
 import { GfxCoalescedBuffers, makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxInputState, GfxVertexAttributeDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxProgram, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxVertexAttributeFrequency } from '../gfx/platform/GfxPlatform';
+import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxInputState, GfxVertexAttributeDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxProgram, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxVertexAttributeFrequency, GfxMegaStateDescriptor, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { getFormatTypeFlags, FormatTypeFlags } from '../gfx/platform/GfxPlatformFormat';
 import { GfxRenderInstManager, GfxRenderInst } from '../gfx/render/GfxRenderer2';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 import { MaterialParams, u_MaterialParamsBufferSize, ub_PacketParams, u_PacketParamsBufferSize, PacketParams, fillPacketParamsData, SceneParams, u_SceneParamsBufferSize, fillSceneParams, fillSceneParamsData, ub_SceneParams, fillMaterialParamsData } from './gx_render';
+import { setSortKeyProgramKey } from '../gfx/render/GfxRenderer';
+import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 
 export class GXMaterialHelperGfx {
     public programKey: number;
+    public megaStateFlags: Partial<GfxMegaStateDescriptor>;
     private materialHacks: GX_Material.GXMaterialHacks = {};
     private program!: GX_Material.GX_Program;
     private gfxProgram: GfxProgram | null = null;
@@ -27,6 +30,9 @@ export class GXMaterialHelperGfx {
             Object.assign(this.materialHacks, materialHacks);
 
         this.createProgram();
+
+        this.megaStateFlags = {};
+        GX_Material.translateGfxMegaState(this.megaStateFlags, this.material);
     }
 
     public cacheProgram(device: GfxDevice, cache: GfxRenderCache): void {
@@ -51,6 +57,11 @@ export class GXMaterialHelperGfx {
         this.createProgram();
     }
 
+    public setLightingEnabled(v: boolean): void {
+        this.materialHacks.disableLighting = !v;
+        this.createProgram();
+    }
+
     public setUseTextureCoords(v: boolean): void {
         this.materialHacks.useTextureCoords = v;
         this.createProgram();
@@ -67,8 +78,9 @@ export class GXMaterialHelperGfx {
 
     public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, renderInst: GfxRenderInst): void {
         this.cacheProgram(device, cache);
-        GX_Material.translateGfxMegaState(renderInst.getMegaStateFlags(), this.material);
+        renderInst.setMegaStateFlags(this.megaStateFlags);
         renderInst.setGfxProgram(this.gfxProgram);
+        setSortKeyProgramKey(renderInst.sortKey, this.programKey);
     }
 
     public destroy(device: GfxDevice): void {
@@ -197,5 +209,40 @@ export class GXRenderHelperGfx {
     public destroy(device: GfxDevice): void {
         this.renderInstManager.destroy(device);
         this.uniformBuffer.destroy(device);
+    }
+}
+
+export abstract class BasicGXRendererHelper implements Viewer.SceneGfx {
+    public renderTarget = new BasicRenderTarget();
+    public renderHelper: GXRenderHelperGfx;
+    public clearRenderPassDescriptor = standardFullClearRenderPassDescriptor;
+
+    constructor(device: GfxDevice) {
+        this.renderHelper = new GXRenderHelperGfx(device);
+    }
+
+    protected abstract prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void;
+
+    public getCache(): GfxRenderCache {
+        return this.renderHelper.renderInstManager.gfxRenderCache;
+    }
+
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        const hostAccessPass = device.createHostAccessPass();
+        this.prepareToRender(device, hostAccessPass, viewerInput);
+        device.submitPass(hostAccessPass);
+
+        const renderInstManager = this.renderHelper.renderInstManager;
+        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        const passRenderer = this.renderTarget.createRenderPass(device, this.clearRenderPassDescriptor);
+        passRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        renderInstManager.drawOnPassRenderer(device, passRenderer);
+        renderInstManager.resetRenderInsts();
+        return passRenderer;
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.renderTarget.destroy(device);
+        this.renderHelper.destroy(device);
     }
 }

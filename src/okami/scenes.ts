@@ -1,5 +1,5 @@
 
-import { GfxDevice, GfxHostAccessPass } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from "../gfx/platform/GfxPlatform";
 import * as Viewer from '../viewer';
 import Progressable from "../Progressable";
 import ArrayBufferSlice from "../ArrayBufferSlice";
@@ -11,12 +11,12 @@ import * as ARC from './arc';
 import * as BRRES from '../rres/brres';
 import * as GX from '../gx/gx_enum';
 import { assert, readString, hexzero, assertExists } from "../util";
-import { BasicRendererHelper } from "../oot3d/render";
-import { GXRenderHelperGfx } from "../gx/gx_render";
+import { GXRenderHelperGfx } from "../gx/gx_render_2";
 import AnimationController from "../AnimationController";
-import { GXMaterialHacks, GXMaterial } from "../gx/gx_material";
+import { GXMaterialHacks } from "../gx/gx_material";
 import { computeModelMatrixSRT, computeMatrixWithoutRotation } from "../MathHelpers";
 import { computeModelMatrixYBillboard } from "../Camera";
+import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 
 const pathBase = `okami`;
 
@@ -52,7 +52,7 @@ class MapPartInstance {
             computeMatrixWithoutRotation(this.modelMatrix, this.modelMatrix);
     }
 
-    public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
         this.animationController.setTimeInMilliseconds(viewerInput.time);
 
         const frames = this.animationController.getTimeInFrames();
@@ -82,7 +82,7 @@ class MapPartInstance {
             mat4.mul(this.modelInstance.modelMatrix, this.modelMatrix, this.modelInstance.modelMatrix);
         }
 
-        this.modelInstance.prepareToRender(renderHelper, viewerInput);
+        this.modelInstance.prepareToRender(device, renderHelper, viewerInput);
     }
 
     public destroy(device: GfxDevice): void {
@@ -208,7 +208,9 @@ class ModelCache {
     }
 }
 
-export class OkamiRenderer extends BasicRendererHelper {
+export class OkamiRenderer implements Viewer.SceneGfx {
+    public renderTarget = new BasicRenderTarget();
+
     public mapPartInstances: MapPartInstance[] = [];
     public objectInstances: ObjectInstance[] = [];
     public models: MDL0Model[] = [];
@@ -218,23 +220,39 @@ export class OkamiRenderer extends BasicRendererHelper {
     public renderHelper: GXRenderHelperGfx;
 
     constructor(device: GfxDevice) {
-        super();
         this.renderHelper = new GXRenderHelperGfx(device);
     }
 
-    protected prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+    protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        const template = this.renderHelper.pushTemplateRenderInst();
+
         this.animationController.setTimeInMilliseconds(viewerInput.time);
-        this.renderHelper.fillSceneParams(viewerInput);
+
+        this.renderHelper.fillSceneParams(viewerInput, template);
         for (let i = 0; i < this.mapPartInstances.length; i++)
-            this.mapPartInstances[i].prepareToRender(this.renderHelper, viewerInput);
+            this.mapPartInstances[i].prepareToRender(device, this.renderHelper, viewerInput);
         for (let i = 0; i < this.objectInstances.length; i++)
-            this.objectInstances[i].prepareToRender(this.renderHelper, viewerInput);
-        this.renderHelper.prepareToRender(hostAccessPass);
+            this.objectInstances[i].prepareToRender(device, this.renderHelper, viewerInput);
+        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.renderInstManager.popTemplateRenderInst();
+    }
+
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        const hostAccessPass = device.createHostAccessPass();
+        this.prepareToRender(device, hostAccessPass, viewerInput);
+        device.submitPass(hostAccessPass);
+
+        const renderInstManager = this.renderHelper.renderInstManager;
+        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        const passRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
+        passRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        renderInstManager.drawOnPassRenderer(device, passRenderer);
+        renderInstManager.resetRenderInsts();
+        return passRenderer;
     }
 
     public destroy(device: GfxDevice): void {
-        super.destroy(device);
-
+        this.renderTarget.destroy(device);
         this.textureHolder.destroy(device);
         this.renderHelper.destroy(device);
         for (let i = 0; i < this.models.length; i++)
@@ -412,6 +430,8 @@ class OkamiSCPArchiveDataMap {
         const textureRRES = BRRES.parse(brtFile.buffer);
         renderer.textureHolder.addRRESTextures(device, textureRRES);
 
+        const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
+
         // Now load the models. For each model, we have an SCR file that tells
         // us how many instances to place.
         const scrFiles = this.scpArc.files.filter((file) => file.type === 'SCR');
@@ -464,7 +484,7 @@ class OkamiSCPArchiveDataMap {
                     patchMaterialSetTest(mdl0.materials[i], test);
                 }
 
-                const mdl0Model = new MDL0Model(device, renderer.renderHelper, brs.mdl0[j], materialHacks);
+                const mdl0Model = new MDL0Model(device, cache, brs.mdl0[j], materialHacks);
                 renderer.models.push(mdl0Model);
                 mdl0Models.push(mdl0Model);
             }
@@ -480,7 +500,7 @@ class OkamiSCPArchiveDataMap {
             for (let j = 0; j < scr.instances.length; j++) {
                 const instance = scr.instances[j];
                 const mdl0Model = mdl0Models[instance.modelIndex];
-                const modelInstance = new MDL0ModelInstance(device, renderer.renderHelper, renderer.textureHolder, mdl0Model, this.filename);
+                const modelInstance = new MDL0ModelInstance(renderer.textureHolder, mdl0Model, this.filename);
                 const sortKeyLayer = (instance.flags_08 & 0xF0) >>> 4;
                 // TODO(jstpierre): Sort properly
                 modelInstance.setSortKeyLayer(sortKeyLayer);
@@ -521,13 +541,13 @@ class ObjectInstance {
             computeMatrixWithoutRotation(this.modelMatrix, this.modelMatrix);
     }
 
-    public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
         if (this.shouldBillboard) {
             computeModelMatrixYBillboard(this.modelInstance.modelMatrix, viewerInput.camera);
             mat4.mul(this.modelInstance.modelMatrix, this.modelMatrix, this.modelInstance.modelMatrix);
         }
 
-        this.modelInstance.prepareToRender(renderHelper, viewerInput);
+        this.modelInstance.prepareToRender(device, renderHelper, viewerInput);
     }
 
     public destroy(device: GfxDevice): void {
@@ -553,6 +573,8 @@ class OkamiSCPArchiveDataObject {
         const textureRRES = BRRES.parse(brtFile.buffer);
         renderer.textureHolder.addRRESTextures(device, textureRRES);
 
+        const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
+
         const mdFiles = this.scpArc.files.filter((file) => file.type === 'MD');
         const brsFiles = this.scpArc.files.filter((file) => file.type === 'BRS');
         assert(mdFiles.length === brsFiles.length);
@@ -576,7 +598,7 @@ class OkamiSCPArchiveDataObject {
                     patchMaterialSetTest(mdl0.materials[i], 0x05001D);
                 }
 
-                const mdl0Model = new MDL0Model(device, renderer.renderHelper, brs.mdl0[j], materialHacks);
+                const mdl0Model = new MDL0Model(device, cache, brs.mdl0[j], materialHacks);
                 renderer.models.push(mdl0Model);
                 mdl0Models.push(mdl0Model);
             }
@@ -592,7 +614,7 @@ class OkamiSCPArchiveDataObject {
             for (let j = 0; j < scr.instances.length; j++) {
                 const instance = scr.instances[j];
                 const mdl0Model = mdl0Models[j];
-                const modelInstance = new MDL0ModelInstance(device, renderer.renderHelper, renderer.textureHolder, mdl0Model, this.filename);
+                const modelInstance = new MDL0ModelInstance(renderer.textureHolder, mdl0Model, this.filename);
                 // TODO(jstpierre): Sort properly
                 modelInstance.setSortKeyLayer(0xF0);
                 const modelMatrix = mat4.create();
@@ -692,7 +714,6 @@ class OkamiSceneDesc implements Viewer.SceneDesc {
             this.spawnObjectTable(device, renderer, modelCache, treTableFile.buffer, abortSignal);
 
             return modelCache.waitForLoad().then(() => {
-                renderer.renderHelper.finishBuilder(device, renderer.viewRenderer);
                 return renderer;
             });
         });

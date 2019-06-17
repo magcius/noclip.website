@@ -359,3 +359,14 @@ export class GfxRenderInstManager {
         this.gfxRenderCache.destroy(device);
     }
 }
+
+// Convenience for porting.
+export function executeOnPass(renderInstManager: GfxRenderInstManager, device: GfxDevice, passRenderer: GfxRenderPass, passMask: number): void {
+    renderInstManager.setVisibleByFilterKeyExact(passMask);
+    renderInstManager.drawOnPassRenderer(device, passRenderer);
+}
+
+export function hasAnyVisible(renderInstManager: GfxRenderInstManager, passMask: number): boolean {
+    renderInstManager.setVisibleByFilterKeyExact(passMask);
+    return renderInstManager.hasAnyVisible();
+}

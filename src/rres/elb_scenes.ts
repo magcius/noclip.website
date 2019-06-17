@@ -11,8 +11,7 @@ import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
 import { MDL0ModelInstance, MDL0Model, RRESTextureHolder } from './render';
-import { GXRenderHelperGfx } from '../gx/gx_render';
-import { BasicRendererHelper } from '../oot3d/render';
+import { BasicGXRendererHelper } from '../gx/gx_render_2';
 import AnimationController from '../AnimationController';
 import { GXMaterialHacks } from '../gx/gx_material';
 
@@ -25,17 +24,14 @@ const materialHacks: GXMaterialHacks = {
     lightingFudge: (p) => `${p.matSource} + 0.2`,
 };
 
-export class ElebitsRenderer extends BasicRendererHelper {
+export class ElebitsRenderer extends BasicGXRendererHelper {
     private modelInstances: MDL0ModelInstance[] = [];
     private models: MDL0Model[] = [];
 
-    public renderHelper: GXRenderHelperGfx;
     private animationController: AnimationController;
 
     constructor(device: GfxDevice, public stageRRESes: BRRES.RRES[], public textureHolder = new RRESTextureHolder()) {
-        super();
-
-        this.renderHelper = new GXRenderHelperGfx(device);
+        super(device);
 
         this.animationController = new AnimationController();
 
@@ -45,15 +41,13 @@ export class ElebitsRenderer extends BasicRendererHelper {
             if (stageRRES.mdl0.length < 1)
                 continue;
 
-            const model = new MDL0Model(device, this.renderHelper, stageRRES.mdl0[0], materialHacks);
+            const model = new MDL0Model(device, this.getCache(), stageRRES.mdl0[0], materialHacks);
             this.models.push(model);
-            const modelRenderer = new MDL0ModelInstance(device, this.renderHelper, this.textureHolder, model);
+            const modelRenderer = new MDL0ModelInstance(this.textureHolder, model);
             this.modelInstances.push(modelRenderer);
 
             modelRenderer.bindRRESAnimations(this.animationController, stageRRES);
         }
-
-        this.renderHelper.finishBuilder(device, this.viewRenderer);
     }
 
     public createPanels(): UI.Panel[] {
@@ -68,11 +62,13 @@ export class ElebitsRenderer extends BasicRendererHelper {
         return panels;
     }
 
-    protected prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        this.renderHelper.fillSceneParams(viewerInput);
+    protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        const template = this.renderHelper.pushTemplateRenderInst();
+        this.renderHelper.fillSceneParams(viewerInput, template);
         for (let i = 0; i < this.modelInstances.length; i++)
-            this.modelInstances[i].prepareToRender(this.renderHelper, viewerInput);
-        this.renderHelper.prepareToRender(hostAccessPass);
+            this.modelInstances[i].prepareToRender(device, this.renderHelper, viewerInput);
+        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.renderInstManager.popTemplateRenderInst();
     }
 
     public destroy(device: GfxDevice): void {
