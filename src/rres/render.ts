@@ -112,7 +112,7 @@ class ShapeInstance {
             if (!instVisible)
                 continue;
 
-            const renderInst = this.shapeData.pushRenderInst(renderInstManager);
+            const renderInst = this.shapeData.pushRenderInst(renderInstManager, packet);
             this.shapeData.fillPacketParams(packetParams, renderInst);
         }
         renderInstManager.popTemplateRenderInst();

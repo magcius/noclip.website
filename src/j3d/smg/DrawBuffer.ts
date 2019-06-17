@@ -162,6 +162,8 @@ export class DrawBufferHolder {
     }
 
     public findLightType(drawBufferType: DrawBufferType): LightType {
+        if (drawBufferType < 0)
+            return LightType.None;
         return this.groups[drawBufferType].tableEntry.LightType;
     }
 
