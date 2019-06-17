@@ -69,7 +69,6 @@ export class OceanBowl extends LiveActor {
     private colorBuffer: GfxBuffer;
     private indexBuffer: GfxBuffer;
     private texCoord0Buffer: GfxBuffer;
-    private zeroBuffer: GfxBuffer;
     private indexCount: number;
     private inputLayout: GfxInputLayout;
     private inputState: GfxInputState;
@@ -195,10 +194,7 @@ export class OceanBowl extends LiveActor {
             { location: getVertexAttribLocation(GX.VertexAttribute.TEX1), format: GfxFormat.S16_RG_NORM, bufferIndex: 2, bufferByteOffset: 0, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
             { location: getVertexAttribLocation(GX.VertexAttribute.TEX2), format: GfxFormat.S16_RG_NORM, bufferIndex: 2, bufferByteOffset: 0, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
             { location: getVertexAttribLocation(GX.VertexAttribute.TEX3), format: GfxFormat.S16_RG_NORM, bufferIndex: 2, bufferByteOffset: 0, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
-            { location: getVertexAttribLocation(GX.VertexAttribute.PNMTXIDX), format: GfxFormat.U8_R, bufferIndex: 3, bufferByteOffset: 0, frequency: GfxVertexAttributeFrequency.PER_INSTANCE, usesIntInShader: true },
         ];
-
-        this.zeroBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, new Uint8Array(16).buffer);
 
         this.inputLayout = device.createInputLayout({
             indexBufferFormat: GfxFormat.U16_R,
@@ -209,7 +205,6 @@ export class OceanBowl extends LiveActor {
             { buffer: this.positionBuffer, byteOffset: 0, byteStride: 4*3 },
             { buffer: this.colorBuffer, byteOffset: 0, byteStride: 4 },
             { buffer: this.texCoord0Buffer, byteOffset: 0, byteStride: 4 },
-            { buffer: this.zeroBuffer, byteOffset: 0, byteStride: 0 },
         ], { buffer: this.indexBuffer, byteOffset: 0, byteStride: 2 });
 
         // Material.
@@ -341,6 +336,9 @@ export class OceanBowl extends LiveActor {
             texGens,
             indTexStages,
             tevStages,
+
+            usePnMtxIdx: false,
+            useTexMtxIdx: [],
         };
 
         this.materialHelper = new GXMaterialHelperGfx(material);
@@ -445,7 +443,6 @@ export class OceanBowl extends LiveActor {
         this.mask.destroy(device);
         device.destroyBuffer(this.positionBuffer);
         device.destroyBuffer(this.colorBuffer);
-        device.destroyBuffer(this.zeroBuffer);
         device.destroyBuffer(this.indexBuffer);
         device.destroyInputLayout(this.inputLayout);
         device.destroyInputState(this.inputState);

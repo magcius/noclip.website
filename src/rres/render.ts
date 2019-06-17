@@ -3,7 +3,7 @@ import * as BRRES from './brres';
 
 import * as GX_Material from '../gx/gx_material';
 import { mat4, vec3 } from "gl-matrix";
-import { MaterialParams, GXTextureHolder, ColorKind, translateTexFilterGfx, translateWrapModeGfx, loadedDataCoalescerGfx, PacketParams, ub_MaterialParams, u_MaterialParamsBufferSize, fillMaterialParamsData } from "../gx/gx_render";
+import { MaterialParams, GXTextureHolder, ColorKind, translateTexFilterGfx, translateWrapModeGfx, PacketParams, ub_MaterialParams, u_MaterialParamsBufferSize, fillMaterialParamsData, loadedDataCoalescerComboGfx } from "../gx/gx_render";
 import { GXRenderHelperGfx, GXShapeHelperGfx, GXMaterialHelperGfx } from "../gx/gx_render_2";
 import { computeViewMatrix, computeViewMatrixSkybox, Camera, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
 import AnimationController from "../AnimationController";
@@ -12,7 +12,7 @@ import { IntersectionState, AABB } from "../Geometry";
 import { GfxDevice, GfxSampler } from "../gfx/platform/GfxPlatform";
 import { ViewerRenderInput } from "../viewer";
 import { GfxRendererLayer, makeSortKey, setSortKeyDepth, setSortKeyBias } from "../gfx/render/GfxRenderer";
-import { GfxBufferCoalescer } from '../gfx/helpers/BufferHelpers';
+import { GfxBufferCoalescer, GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
 import { nArray } from '../util';
 import { prepareFrameDebugOverlayCanvas2D, getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
 import { colorCopy } from '../Color';
@@ -30,10 +30,10 @@ export class RRESTextureHolder extends GXTextureHolder<BRRES.TEX0> {
 export class MDL0Model {
     public shapeData: GXShapeHelperGfx[] = [];
     public materialData: MaterialData[] = [];
-    private bufferCoalescer: GfxBufferCoalescer;
+    private bufferCoalescer: GfxBufferCoalescerCombo;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public mdl0: BRRES.MDL0, private materialHacks: GX_Material.GXMaterialHacks | null = null) {
-        this.bufferCoalescer = loadedDataCoalescerGfx(device, this.mdl0.shapes.map((shape) => shape.loadedVertexData));
+        this.bufferCoalescer = loadedDataCoalescerComboGfx(device, this.mdl0.shapes.map((shape) => shape.loadedVertexData));
  
         for (let i = 0; i < this.mdl0.shapes.length; i++) {
             const shape = this.mdl0.shapes[i];

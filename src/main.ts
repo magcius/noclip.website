@@ -766,4 +766,11 @@ declare global {
     }
 }
 window.hexdump = hexdump;
-window.downloadBuffer = downloadBuffer;
+window.downloadBuffer = (name: any, buffer: any) => {
+    if (buffer instanceof ArrayBufferSlice)
+        downloadBufferSlice(name, buffer);
+    else if (name.name && name.buffer)
+        window.downloadBuffer(name.name, name.buffer);
+    else if (buffer instanceof ArrayBuffer) 
+        downloadBuffer(name, buffer);
+};

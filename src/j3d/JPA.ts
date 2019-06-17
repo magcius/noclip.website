@@ -430,6 +430,8 @@ export class JPAResourceData {
             indTexStages,
             alphaTest,
             ropInfo,
+            usePnMtxIdx: false,
+            useTexMtxIdx: [],
         };
 
         this.materialHelper = new GXMaterialHelperGfx(gxMaterial);
@@ -556,7 +558,6 @@ class JPAGlobalRes {
     public inputLayout: GfxInputLayout;
     public inputStateBillboard: GfxInputState;
 
-    private zeroBuffer: GfxBuffer;
     private vertexBufferBillboard: GfxBuffer;
     private indexBufferBillboard: GfxBuffer;
 
@@ -564,7 +565,6 @@ class JPAGlobalRes {
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: getVertexAttribLocation(GX.VertexAttribute.POS), format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
             { location: getVertexAttribLocation(GX.VertexAttribute.TEX0), format: GfxFormat.F32_RG, bufferIndex: 0, bufferByteOffset: 3*4, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
-            { location: getVertexAttribLocation(GX.VertexAttribute.PNMTXIDX), format: GfxFormat.U8_R, bufferIndex: 1, bufferByteOffset: 0, frequency: GfxVertexAttributeFrequency.PER_INSTANCE, usesIntInShader: true },
         ];
 
         this.inputLayout = device.createInputLayout({
@@ -574,8 +574,6 @@ class JPAGlobalRes {
 
         const x0 = -25;
         const x1 =  25;
-
-        this.zeroBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, new Uint8Array(16).buffer);
 
         this.vertexBufferBillboard = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, new Float32Array([
             x0, x0, 0, 1, 1,
@@ -589,7 +587,6 @@ class JPAGlobalRes {
 
         this.inputStateBillboard = device.createInputState(this.inputLayout, [
             { buffer: this.vertexBufferBillboard, byteOffset: 0, byteStride: 3*4+2*4 },
-            { buffer: this.zeroBuffer, byteOffset: 0, byteStride: 0 },
         ], { buffer: this.indexBufferBillboard, byteOffset: 0, byteStride: 2 });
     }
 

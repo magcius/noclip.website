@@ -9,6 +9,7 @@ import { GfxFormat } from '../gfx/platform/GfxPlatformFormat';
 import { GfxCompareMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
 import { vec3, vec4, mat4 } from 'gl-matrix';
 import { Camera } from '../Camera';
+import { assert } from '../util';
 
 // TODO(jstpierre): Move somewhere better...
 export const EFB_WIDTH = 640;
@@ -35,6 +36,10 @@ export interface GXMaterial {
     // Raster / blend state.
     alphaTest: AlphaTest;
     ropInfo: RopInfo;
+
+    // Optimization state.
+    usePnMtxIdx?: boolean;
+    useTexMtxIdx?: boolean[];
 }
 
 export class Color {
@@ -208,19 +213,22 @@ interface VertexAttributeGenDef {
 }
 
 const vtxAttributeGenDefs: VertexAttributeGenDef[] = [
-    { attrib: GX.VertexAttribute.POS,        name: "Position",   format: GfxFormat.F32_RGB },
-    { attrib: GX.VertexAttribute.PNMTXIDX,   name: "PosMtxIdx",  format: GfxFormat.U8_R },
-    { attrib: GX.VertexAttribute.NRM,        name: "Normal",     format: GfxFormat.F32_RGB },
-    { attrib: GX.VertexAttribute.CLR0,       name: "Color0",     format: GfxFormat.F32_RGBA },
-    { attrib: GX.VertexAttribute.CLR1,       name: "Color1",     format: GfxFormat.F32_RGBA },
-    { attrib: GX.VertexAttribute.TEX0,       name: "Tex0",       format: GfxFormat.F32_RG },
-    { attrib: GX.VertexAttribute.TEX1,       name: "Tex1",       format: GfxFormat.F32_RG },
-    { attrib: GX.VertexAttribute.TEX2,       name: "Tex2",       format: GfxFormat.F32_RG },
-    { attrib: GX.VertexAttribute.TEX3,       name: "Tex3",       format: GfxFormat.F32_RG },
-    { attrib: GX.VertexAttribute.TEX4,       name: "Tex4",       format: GfxFormat.F32_RG },
-    { attrib: GX.VertexAttribute.TEX5,       name: "Tex5",       format: GfxFormat.F32_RG },
-    { attrib: GX.VertexAttribute.TEX6,       name: "Tex6",       format: GfxFormat.F32_RG },
-    { attrib: GX.VertexAttribute.TEX7,       name: "Tex7",       format: GfxFormat.F32_RG },
+    { attrib: GX.VertexAttribute.POS,        name: "Position",      format: GfxFormat.F32_RGB },
+    { attrib: GX.VertexAttribute.PNMTXIDX,   name: "PnMtxIdx",      format: GfxFormat.U8_R },
+    // These are packed separately since we would run out of attribute space otherwise.
+    { attrib: GX.VertexAttribute.TEX0MTXIDX, name: "TexMtx0123Idx", format: GfxFormat.U8_RGBA },
+    { attrib: GX.VertexAttribute.TEX4MTXIDX, name: "TexMtx4567Idx", format: GfxFormat.U8_RGBA },
+    { attrib: GX.VertexAttribute.NRM,        name: "Normal",        format: GfxFormat.F32_RGB },
+    { attrib: GX.VertexAttribute.CLR0,       name: "Color0",        format: GfxFormat.F32_RGBA },
+    { attrib: GX.VertexAttribute.CLR1,       name: "Color1",        format: GfxFormat.F32_RGBA },
+    { attrib: GX.VertexAttribute.TEX0,       name: "Tex0",          format: GfxFormat.F32_RG },
+    { attrib: GX.VertexAttribute.TEX1,       name: "Tex1",          format: GfxFormat.F32_RG },
+    { attrib: GX.VertexAttribute.TEX2,       name: "Tex2",          format: GfxFormat.F32_RG },
+    { attrib: GX.VertexAttribute.TEX3,       name: "Tex3",          format: GfxFormat.F32_RG },
+    { attrib: GX.VertexAttribute.TEX4,       name: "Tex4",          format: GfxFormat.F32_RG },
+    { attrib: GX.VertexAttribute.TEX5,       name: "Tex5",          format: GfxFormat.F32_RG },
+    { attrib: GX.VertexAttribute.TEX6,       name: "Tex6",          format: GfxFormat.F32_RG },
+    { attrib: GX.VertexAttribute.TEX7,       name: "Tex7",          format: GfxFormat.F32_RG },
 ];
 
 export function getVertexAttribLocation(vtxAttrib: GX.VertexAttribute): number {
@@ -383,6 +391,38 @@ export class GX_Program extends DeviceProgram {
         }).join('\n');
     }
 
+    // Output is a vec3, src is a vec4.
+    private generateMulPntMatrixStatic(pnt: GX.TexGenMatrix, src: string): string {
+        if (pnt === GX.TexGenMatrix.IDENTITY) {
+            return `${src}.xyz`;
+        } else if (pnt >= GX.TexGenMatrix.TEXMTX0) {
+            const texMtxIdx = (pnt - GX.TexGenMatrix.TEXMTX0) / 3;
+            return `Mul(u_TexMtx[${texMtxIdx}], ${src})`;
+        } else if (pnt >= GX.TexGenMatrix.PNMTX0) {
+            const pnMtxIdx = (pnt - GX.TexGenMatrix.PNMTX0) / 3;
+            return `Mul(u_PosMtx[${pnMtxIdx}], ${src})`;
+        } else {
+            throw "whoops";
+        }
+    }
+
+    // Output is a vec3, src is a vec4.
+    private generateMulPntMatrixDynamic(attrStr: string, src: string): string {
+        return `Mul(GetPosTexMatrix(${attrStr}), ${src})`;
+    }
+
+    private generateTexMtxIdxAttr(index: GX.TexCoordID): string {
+        if (index === GX.TexCoordID.TEXCOORD0) return `a_TexMtx0123Idx.x`;
+        if (index === GX.TexCoordID.TEXCOORD1) return `a_TexMtx0123Idx.y`;
+        if (index === GX.TexCoordID.TEXCOORD2) return `a_TexMtx0123Idx.z`;
+        if (index === GX.TexCoordID.TEXCOORD3) return `a_TexMtx0123Idx.w`;
+        if (index === GX.TexCoordID.TEXCOORD4) return `a_TexMtx4567Idx.x`;
+        if (index === GX.TexCoordID.TEXCOORD5) return `a_TexMtx4567Idx.y`;
+        if (index === GX.TexCoordID.TEXCOORD6) return `a_TexMtx4567Idx.z`;
+        if (index === GX.TexCoordID.TEXCOORD7) return `a_TexMtx4567Idx.w`;
+        throw "whoops";
+    }
+
     // TexGen
 
     // Output is a vec4.
@@ -427,16 +467,15 @@ export class GX_Program extends DeviceProgram {
 
     // Output is a vec3, src is a vec3.
     private generateTexGenMatrixMult(texCoordGen: TexGen, src: string) {
-        if (texCoordGen.matrix === GX.TexGenMatrix.IDENTITY) {
-            return `${src}.xyz`;
-        } else if (texCoordGen.matrix >= GX.TexGenMatrix.TEXMTX0) {
-            const texMtxIdx = (texCoordGen.matrix - GX.TexGenMatrix.TEXMTX0) / 3;
-            return `Mul(u_TexMtx[${texMtxIdx}], ${src})`;
-        } else if (texCoordGen.matrix >= GX.TexGenMatrix.PNMTX0) {
-            const pnMtxIdx = (texCoordGen.matrix - GX.TexGenMatrix.PNMTX0) / 3;
-            return `Mul(u_PosMtx[${pnMtxIdx}], ${src})`;
+        // Dynamic TexMtxIdx is off by default.
+        let useTexMtxIdx = false;
+        if (this.material.useTexMtxIdx !== undefined && !!this.material.useTexMtxIdx[texCoordGen.index])
+            useTexMtxIdx = true;
+        if (useTexMtxIdx) {
+            const attrStr = this.generateTexMtxIdxAttr(texCoordGen.index);
+            return this.generateMulPntMatrixDynamic(attrStr, src);
         } else {
-            throw "whoops";
+            return this.generateMulPntMatrixStatic(texCoordGen.matrix, src);
         }
     }
 
@@ -928,6 +967,7 @@ export class GX_Program extends DeviceProgram {
     private generateAttributeStorageType(fmt: GfxFormat): string {
         switch (fmt) {
         case GfxFormat.U8_R:     return 'uint';
+        case GfxFormat.U8_RGBA:  return 'uvec4';
         case GfxFormat.F32_RG:   return 'vec2';
         case GfxFormat.F32_RGB:  return 'vec3';
         case GfxFormat.F32_RGBA: return 'vec4';
@@ -939,6 +979,27 @@ export class GX_Program extends DeviceProgram {
         return vtxAttributeGenDefs.map((a, i) => {
             return `layout(location = ${i}) in ${this.generateAttributeStorageType(a.format)} a_${a.name};`;
         }).join('\n');
+    }
+
+    private generateMulPos(): string {
+        // Default to using pnmtxidx.
+        const usePnMtxIdx = this.material.usePnMtxIdx !== undefined ? this.material.usePnMtxIdx : true;
+        const src = `vec4(a_Position, 1.0)`;
+        if (usePnMtxIdx)
+            return this.generateMulPntMatrixDynamic(`a_PnMtxIdx`, src);
+        else
+            return this.generateMulPntMatrixStatic(GX.TexGenMatrix.PNMTX0, src);
+    }
+
+    private generateMulNrm(): string {
+        // Default to using pnmtxidx.
+        const usePnMtxIdx = this.material.usePnMtxIdx !== undefined ? this.material.usePnMtxIdx : true;
+        const src = `vec4(a_Normal, 0.0)`;
+        // TODO(jstpierre): Move to a normal matrix calculated on the CPU
+        if (usePnMtxIdx)
+            return this.generateMulPntMatrixDynamic(`a_PnMtxIdx`, src);
+        else
+            return this.generateMulPntMatrixStatic(GX.TexGenMatrix.PNMTX0, src);
     }
 
     public static BindingsDefinition = `
@@ -1004,13 +1065,13 @@ varying vec3 v_TexCoord7;
         this.vert = `
 ${this.generateVertAttributeDefs()}
 
-Mat4x4 GetPosTexMatrix(uint t_MtxIdx) {
+Mat4x3 GetPosTexMatrix(uint t_MtxIdx) {
     if (t_MtxIdx == ${GX.TexGenMatrix.IDENTITY}u)
-        return _Mat4x4(1.0);
+        return _Mat4x3(1.0);
     else if (t_MtxIdx >= ${GX.TexGenMatrix.TEXMTX0}u)
-        return _Mat4x4(u_TexMtx[(t_MtxIdx - ${GX.TexGenMatrix.TEXMTX0}u) / 3u]);
+        return u_TexMtx[(t_MtxIdx - ${GX.TexGenMatrix.TEXMTX0}u) / 3u];
     else
-        return _Mat4x4(u_PosMtx[t_MtxIdx / 3u]);
+        return u_PosMtx[t_MtxIdx / 3u];
 }
 
 float ApplyCubic(vec3 t_Coeff, float t_Value) {
@@ -1018,12 +1079,9 @@ float ApplyCubic(vec3 t_Coeff, float t_Value) {
 }
 
 void main() {
-    Mat4x4 t_PosMtx = GetPosTexMatrix(a_PosMtxIdx);
-    vec4 t_Position = Mul(t_PosMtx, vec4(a_Position, 1.0));
-    v_Position = t_Position.xyz;
-    // TODO(jstpierre): Move this calculation to the CPU? Is it worth it?
-    Mat4x3 t_NrmMtx = _Mat4x3(t_PosMtx);
-    vec3 t_Normal = normalize(Mul(t_NrmMtx, vec4(a_Normal, 0.0)));
+    vec3 t_Position = ${this.generateMulPos()};
+    v_Position = t_Position;
+    vec3 t_Normal = ${this.generateMulNrm()};
 
     vec4 t_LightAccum;
     vec3 t_LightDelta, t_LightDeltaDir;
@@ -1031,7 +1089,7 @@ void main() {
     vec4 t_ColorChanTemp;
 ${this.generateLightChannels()}
 ${this.generateTexGens(this.material.texGens)}
-    gl_Position = Mul(u_Projection, t_Position);
+    gl_Position = Mul(u_Projection, vec4(t_Position, 1.0));
 }
 `;
 

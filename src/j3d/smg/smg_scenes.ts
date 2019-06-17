@@ -2,7 +2,7 @@
 import { mat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
 import Progressable from '../../Progressable';
-import { assert, assertExists } from '../../util';
+import { assert, assertExists, align, nArray } from '../../util';
 import { fetchData, AbortedError } from '../../fetch';
 import { MathConstants, computeModelMatrixSRT, lerp } from '../../MathHelpers';
 import { getPointBezier } from '../../Spline';
@@ -10,7 +10,7 @@ import * as Viewer from '../../viewer';
 import * as UI from '../../ui';
 
 import { TextureMapping } from '../../TextureHolder';
-import { GfxDevice, GfxRenderPass, GfxTexture } from '../../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat } from '../../gfx/platform/GfxPlatform';
 import { GXRenderHelperGfx } from '../../gx/gx_render_2';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../../gfx/helpers/RenderTargetHelpers';
@@ -22,8 +22,8 @@ import * as RARC from '../../j3d/rarc';
 import AnimationController from '../../AnimationController';
 
 import { EFB_WIDTH, EFB_HEIGHT } from '../../gx/gx_material';
-import { BMD, BRK, BTK, BCK, LoopMode, BVA, BTP, BPK, JSystemFileReaderHelper } from '../../j3d/j3d';
-import { BMDModel, BMDModelInstance } from '../../j3d/render';
+import { BMD, BRK, BTK, BCK, LoopMode, BVA, BTP, BPK, JSystemFileReaderHelper, TexMtxProjection, MaterialEntry, ShapeDisplayFlags } from '../../j3d/j3d';
+import { BMDModel, BMDModelInstance, MaterialInstance } from '../../j3d/render';
 import { JMapInfoIter, createCsvParser, getJMapInfoTransLocal, getJMapInfoRotateLocal, getJMapInfoScale } from './JMapInfo';
 import { BloomPostFXParameters, BloomPostFXRenderer } from './Bloom';
 import { AreaLightInfo, ActorLightInfo, LightDataHolder, ActorLightCtrl } from './LightData';
@@ -623,19 +623,6 @@ export interface WorldmapPointInfo {
     position: vec3;
 }
 
-interface ZoneLayer {
-    layerId: LayerId;
-    objinfo: ObjInfo[];
-    mappartsinfo: ObjInfo[];
-    stageobjinfo: ObjInfo[];
-    areaobjinfo: ObjInfo[];
-}
-
-interface Zone {
-    name: string;
-    layers: ZoneLayer[];
-}
-
 interface AnimOptions {
     bck?: string;
     btk?: string;
@@ -665,23 +652,38 @@ function interpPathPoints(dst: vec3, pt0: Point, pt1: Point, t: number): void {
         getPointBezier_3(dst, p0, c0, c1, p1, t);
 }
 
-function patchBMDModel(bmdModel: BMDModel): void {
-    // Kill off the sort-key bias; the game doesn't use the typical J3D rendering algorithm in favor
-    // of its own sort, which needs to be RE'd.
-    for (let i = 0; i < bmdModel.shapeData.length; i++)
-        bmdModel.shapeData[i].sortKeyBias = 0;
+function patchInTexMtxIdxBuffer(loadedVertexLayout: LoadedVertexLayout, loadedVertexData: LoadedVertexData, bufferStride: number, texMtxIdxBaseOffsets: number[]): void {
+    const vertexCount = loadedVertexData.totalVertexCount;
 
-    // This might seem sketchy, but it's actually done by the core game, in ShapePacketUserData::init().
-    // XXX(jstpierre): This is actually what happens at all. MR::initEnvelopeAndEnvMapOrProjMapModelData()
-    // will set up each normal map with a separate TEXnMTXIDX and fill it with a per-joint texture matrix.
-    // Need to figure out how it actually plugs together.
-    return;
+    const buffer = new Uint8Array(vertexCount * bufferStride);
+    loadedVertexData.vertexBuffers[1] = buffer;
+    loadedVertexData.vertexBufferStrides[1] = bufferStride;
 
-    // Look for any materials using environment mapping, and patch them to use a post matrix instead.
-    for (let i = 0; i < bmdModel.materialData.length; i++) {
-        const material = bmdModel.materialData[i].material;
+    const view = new DataView(loadedVertexData.vertexBuffers[0]);
+    let offs = loadedVertexLayout.dstVertexAttributeLayouts.find((attrib) => attrib.vtxAttrib === GX.VertexAttribute.PNMTXIDX).bufferOffset;
+    const loadedStride = loadedVertexData.vertexBufferStrides[0];
 
-        let currentPostTexMtxIdx = 10;
+    for (let i = 0; i < vertexCount; i++) {
+        const p = view.getUint8(offs);
+        for (let j = 0; j < bufferStride; j++) {
+            if (texMtxIdxBaseOffsets[j] >= 0)
+                buffer[i*bufferStride + j] = p + texMtxIdxBaseOffsets[j];
+        }
+        offs += loadedStride;
+    }
+}
+
+function patchBMD(bmd: BMD): void {
+    for (let i = 0; i < bmd.shp1.shapes.length; i++) {
+        const shape = bmd.shp1.shapes[i];
+        if (shape.displayFlags !== ShapeDisplayFlags.USE_PNMTXIDX)
+            continue;
+
+        const material = bmd.mat3.materialEntries[shape.materialIndex];
+        material.gxMaterial.useTexMtxIdx = nArray(8, () => false);
+
+        let bufferStride = 0;
+        let texMtxIdxBaseOffsets: number[] = nArray(8, () => -1);
         for (let j = 0; j < material.gxMaterial.texGens.length; j++) {
             const texGen = material.gxMaterial.texGens[j];
             if (texGen === null)
@@ -691,19 +693,95 @@ function patchBMDModel(bmdModel: BMDModel): void {
 
             const texMtxIdx = (texGen.matrix - GX.TexGenMatrix.TEXMTX0) / 3;
             const texMtx = assertExists(material.texMatrices[texMtxIdx]);
-            if (texMtx.type === 0x06) {
-                if (texMtx.dstTexMtxIdx === texMtxIdx) {
-                    // Double-check that we have no post tex matrices already.
-                    for (let k = 0; k < material.postTexMatrices.length; k++)
-                        assert(material.postTexMatrices[k] === null);
-                    texMtx.dstTexMtxIdx = currentPostTexMtxIdx++;
-                }
 
-                texGen.normalize = true;
-                // TODO(jstpierre): ShapePacketUserData::load() looks like it does something more fancy...
-                texGen.matrix = GX.TexGenMatrix.IDENTITY;
-                texGen.postMatrix = GX.PostTexGenMatrix.PTTEXMTX0 + ((texMtx.dstTexMtxIdx - 10) * 3);
+            const matrixMode = texMtx.info & 0x3F;
+            const isUsingEnvMap = (matrixMode === 0x01 || matrixMode === 0x06 || matrixMode === 0x07);
+            const isUsingProjMap = (matrixMode === 0x02 || matrixMode === 0x03 || matrixMode === 0x08 || matrixMode === 0x09);
+
+            if (isUsingEnvMap || isUsingProjMap) {
+                // Mark as requiring TexMtxIdx
+                material.gxMaterial.useTexMtxIdx[j] = true;
+                texGen.postMatrix = GX.PostTexGenMatrix.PTTEXMTX0 + (j * 3);
             }
+
+            const vtxAttrib = GX.VertexAttribute.TEX0MTXIDX + j;
+            shape.loadedVertexLayout.dstVertexAttributeLayouts.push({ vtxAttrib, format: GfxFormat.U8_RGBA, bufferIndex: 1, bufferOffset: j });
+            bufferStride = Math.max(bufferStride, j);
+
+            if (texGen.type === GX.TexGenType.MTX2x4)
+                texMtxIdxBaseOffsets[j] = GX.TexGenMatrix.TEXMTX0;
+            else if (texGen.type === GX.TexGenType.MTX3x4)
+                texMtxIdxBaseOffsets[j] = GX.TexGenMatrix.PNMTX0;
+        }
+
+        bufferStride = align(bufferStride, 4);
+
+        if (material.gxMaterial.useTexMtxIdx) {
+            // Install TEXMTXIDX data.
+
+            if (material.name === 'Body1_v')
+                debugger;
+
+            for (let j = 0; j < shape.packets.length; j++) {
+                const packet = shape.packets[j];
+                patchInTexMtxIdxBuffer(shape.loadedVertexLayout, packet.loadedVertexData, bufferStride, texMtxIdxBaseOffsets);
+            }
+        }
+    }
+}
+
+// This is roughly ShapePacketUserData::callDL().
+function fillMaterialParamsCallback(materialParams: MaterialParams, materialInstance: MaterialInstance, viewMatrix: mat4, modelMatrix: mat4, camera: Camera, packetParams: PacketParams): void {
+    const material = materialInstance.materialData.material;
+    let needsCopy = false;
+
+    for (let i = 0; i < material.texMatrices.length; i++) {
+        const texMtx = material.texMatrices[i];
+        if (texMtx === null)
+            continue;
+
+        const matrixMode = texMtx.info & 0x3F;
+        const isUsingEnvMap = (matrixMode === 0x01 || matrixMode === 0x06 || matrixMode === 0x07);
+        const isUsingProjMap = (matrixMode === 0x02 || matrixMode === 0x03 || matrixMode === 0x08 || matrixMode === 0x09);
+
+        if (!isUsingEnvMap && !isUsingProjMap)
+            continue;
+
+        mat4.invert(materialParams.u_PostTexMtx[i], viewMatrix);
+        materialInstance.calcTexMtxInputPost(materialParams.u_PostTexMtx[i], texMtx);
+        const flipY = materialParams.m_TextureMapping[i].flipY;
+        materialInstance.calcTexSRT(scratchMatrix, i);
+        materialInstance.calcTexMtx(materialParams.u_PostTexMtx[i], texMtx, scratchMatrix, modelMatrix, camera, flipY);
+
+        if (texMtx.projection === TexMtxProjection.MTX2x4)
+            needsCopy = true;
+    }
+
+    if (needsCopy) {
+        // Input matrices come from the shape data with translation lopped off...
+        for (let i = 0; i < 10; i++) {
+            const m = materialParams.u_TexMtx[i];
+            mat4.copy(m, packetParams.u_PosMtx[i]);
+            m[12] = 0;
+            m[13] = 0;
+            m[14] = 0;
+        }
+    }
+}
+
+function patchBMDModel(bmdModel: BMDModel): void {
+    // Kill off the sort-key bias; the game doesn't use the typical J3D rendering algorithm in favor
+    // of its own sort, which needs to be RE'd.
+    for (let i = 0; i < bmdModel.shapeData.length; i++)
+        bmdModel.shapeData[i].sortKeyBias = 0;
+
+    for (let i = 0; i < bmdModel.materialData.length; i++) {
+        const materialData = bmdModel.materialData[i];
+
+        const gxMaterial = materialData.material.gxMaterial;
+        if (gxMaterial.useTexMtxIdx !== undefined && gxMaterial.useTexMtxIdx.some((v) => v)) {
+            // Requires a callback.
+            materialData.fillMaterialParamsCallback = fillMaterialParamsCallback;
         }
     }
 }
@@ -743,6 +821,7 @@ export class ModelCache {
             return this.modelCache.get(modelFilename);
 
         const bmd = BMD.parse(assertExists(rarc.findFileData(modelFilename)));
+        patchBMD(bmd);
         const bmdModel = new BMDModel(this.device, this.cache, bmd, null);
         patchBMDModel(bmdModel);
         this.models.push(bmdModel);
@@ -1251,6 +1330,8 @@ export class LiveActor extends NameObj implements ObjectBase {
 import { NPCDirector, MiniRoutePoint, createModelObjMapObj, PeachCastleGardenPlanet } from './Actors';
 import { getActorNameObjFactory } from './ActorTable';
 import { Camera } from '../../Camera';
+import { MaterialParams, PacketParams } from '../../gx/gx_render';
+import { LoadedVertexPacket, LoadedVertexData, LoadedVertexLayout } from '../../gx/gx_displaylist';
 
 function layerVisible(layer: LayerId, layerMask: number): boolean {
     if (layer >= 0)

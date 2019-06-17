@@ -8,7 +8,7 @@ import * as Viewer from '../viewer';
 import { assert } from '../util';
 import { LoadedVertexData, LoadedVertexLayout, LoadedVertexPacket } from './gx_displaylist';
 
-import { GfxCoalescedBuffers, makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
+import { GfxCoalescedBuffers, makeStaticDataBuffer, GfxCoalescedBuffersCombo } from '../gfx/helpers/BufferHelpers';
 import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxInputState, GfxVertexAttributeDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxProgram, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxVertexAttributeFrequency, GfxMegaStateDescriptor, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { getFormatTypeFlags, FormatTypeFlags } from '../gfx/platform/GfxPlatformFormat';
 import { GfxRenderInstManager, GfxRenderInst } from '../gfx/render/GfxRenderer2';
@@ -94,15 +94,15 @@ export class GXShapeHelperGfx {
     public inputLayout: GfxInputLayout;
     private zeroBuffer: GfxBuffer | null = null;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public coalescedBuffers: GfxCoalescedBuffers, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, coalescedBuffers: GfxCoalescedBuffersCombo, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData) {
         // First, build the inputLayout
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
 
         let usesZeroBuffer = false;
+        const zeroBufferIndex = loadedVertexData.vertexBuffers.length;
         for (let vtxAttrib: GX.VertexAttribute = 0; vtxAttrib <= GX.VertexAttribute.MAX; vtxAttrib++) {
             const attribLocation = GX_Material.getVertexAttribLocation(vtxAttrib);
 
-            // TODO(jstpierre): Handle TEXMTXIDX attributes.
             if (attribLocation === -1)
                 continue;
 
@@ -111,11 +111,12 @@ export class GXShapeHelperGfx {
             const usesIntInShader = getFormatTypeFlags(attribGenDef.format) !== FormatTypeFlags.F32;
 
             if (attrib !== undefined) {
-                const bufferByteOffset = attrib.offset;
-                vertexAttributeDescriptors.push({ location: attribLocation, format: attrib.format, bufferIndex: 0, bufferByteOffset, frequency: GfxVertexAttributeFrequency.PER_VERTEX, usesIntInShader });
+                const bufferByteOffset = attrib.bufferOffset;
+                const bufferIndex = attrib.bufferIndex;
+                vertexAttributeDescriptors.push({ location: attribLocation, format: attrib.format, bufferIndex, bufferByteOffset, frequency: GfxVertexAttributeFrequency.PER_VERTEX, usesIntInShader });
             } else {
                 usesZeroBuffer = true;
-                vertexAttributeDescriptors.push({ location: attribLocation, format: attribGenDef.format, bufferIndex: 1, bufferByteOffset: 0, frequency: GfxVertexAttributeFrequency.PER_INSTANCE, usesIntInShader });
+                vertexAttributeDescriptors.push({ location: attribLocation, format: attribGenDef.format, bufferIndex: zeroBufferIndex, bufferByteOffset: 0, frequency: GfxVertexAttributeFrequency.PER_INSTANCE, usesIntInShader });
             }
         }
 
@@ -124,11 +125,15 @@ export class GXShapeHelperGfx {
             vertexAttributeDescriptors,
             indexBufferFormat,
         });
-        const buffers: GfxVertexBufferDescriptor[] = [{
-            buffer: coalescedBuffers.vertexBuffer.buffer,
-            byteOffset: coalescedBuffers.vertexBuffer.wordOffset * 4,
-            byteStride: loadedVertexLayout.dstVertexSize,
-        }];
+
+        const buffers: GfxVertexBufferDescriptor[] = [];
+        for (let i = 0; i < loadedVertexData.vertexBuffers.length; i++) {
+            buffers.push({
+                buffer: coalescedBuffers.vertexBuffers[i].buffer,
+                byteOffset: coalescedBuffers.vertexBuffers[i].wordOffset * 4,
+                byteStride: loadedVertexData.vertexBufferStrides[i],
+            });
+        }
 
         if (usesZeroBuffer) {
             // TODO(jstpierre): Move this to a global somewhere?

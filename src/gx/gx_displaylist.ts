@@ -63,7 +63,8 @@ export interface GX_Array {
 
 export interface VertexAttributeLayout {
     vtxAttrib: GX.VertexAttribute;
-    offset: number;
+    bufferOffset: number;
+    bufferIndex: number;
     format: GfxFormat;
 }
 
@@ -95,7 +96,8 @@ export interface LoadedVertexPacket {
 export interface LoadedVertexData {
     indexFormat: GfxFormat;
     indexData: ArrayBuffer;
-    packedVertexData: ArrayBuffer;
+    vertexBuffers: ArrayBuffer[];
+    vertexBufferStrides: number[];
     totalIndexCount: number;
     totalVertexCount: number;
     vertexId: number;
@@ -132,8 +134,11 @@ export function getAttributeComponentByteSizeRaw(compType: GX.CompType): CompSiz
 
 // PNMTXIDX, TEXnMTXIDX are special cases in GX.
 function isVtxAttribMtxIdx(vtxAttrib: GX.VertexAttribute): boolean {
+    return vtxAttrib === GX.VertexAttribute.PNMTXIDX || isVtxAttribTexMtxIdx(vtxAttrib);
+}
+
+function isVtxAttribTexMtxIdx(vtxAttrib: GX.VertexAttribute): boolean {
     switch (vtxAttrib) {
-    case GX.VertexAttribute.PNMTXIDX:
     case GX.VertexAttribute.TEX0MTXIDX:
     case GX.VertexAttribute.TEX1MTXIDX:
     case GX.VertexAttribute.TEX2MTXIDX:
@@ -328,7 +333,7 @@ function getAttrName(vtxAttrib: GX.VertexAttribute): string {
 }
 
 function getAttributeBaseFormat(vtxAttrib: GX.VertexAttribute): GfxFormat {
-    if (isVtxAttribMtxIdx(vtxAttrib))
+    if (vtxAttrib === GX.VertexAttribute.PNMTXIDX)
         return GfxFormat.U8_R;
 
     // To save on space, we put color data in U8.
@@ -380,6 +385,9 @@ function translateVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): Verte
     // Create source VAT layouts.
     const vatLayouts = vat.map((vatFormat) => translateVatLayout(vatFormat, vcd));
 
+    const texMtxIdxLayout: (VertexAttributeLayout | null)[] = [null, null];
+    const bufferIndex = 0;
+
     // Create destination vertex layout.
     let dstVertexSize = 0;
     const dstVertexAttributeLayouts: VertexAttributeLayout[] = [];
@@ -392,12 +400,26 @@ function translateVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): Verte
         if (!enableOutput)
             continue;
 
-        const baseFormat = getAttributeBaseFormat(vtxAttrib);
+        let baseFormat = getAttributeBaseFormat(vtxAttrib);
+        let fieldBase = -1;
+        let fieldByteOffset = 0;
+
+        // TEXnMTXIDX are packed specially because of GL limitations.
+        if (isVtxAttribTexMtxIdx(vtxAttrib)) {
+            const layoutIdx = (vtxAttrib < GX.VertexAttribute.TEX4) ? 0 : 1;
+            fieldByteOffset = (vtxAttrib - 1) & 0x03;
+
+            if (texMtxIdxLayout[layoutIdx] === null) {
+                // Allocate a 4-wide field...
+                baseFormat = GfxFormat.U8_RGBA;
+            } else {
+                // Don't allocate a field in the packed data if we already have one...
+                fieldBase = texMtxIdxLayout[layoutIdx].bufferOffset & ~0x03;
+            }
+        }
+
         const formatTypeFlags = getFormatTypeFlags(baseFormat);
         const formatComponentSize = getFormatTypeFlagsByteSize(formatTypeFlags);
-
-        dstVertexSize = align(dstVertexSize, formatComponentSize);
-        const offset = dstVertexSize;
 
         // Find our maximum component count by choosing from a maximum of all the VAT formats.
         let formatCompFlags = 0;
@@ -409,10 +431,17 @@ function translateVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): Verte
         if (isVtxAttribColor(vtxAttrib))
             formatCompFlags = FormatCompFlags.COMP_RGBA;
 
-        dstVertexSize += formatComponentSize * getFormatCompFlagsComponentCount(formatCompFlags);
+        // Allocate a field if we need to...
+        if (fieldBase === -1) {
+            dstVertexSize = align(dstVertexSize, formatComponentSize);
+            fieldBase = dstVertexSize + fieldByteOffset;
+            dstVertexSize += formatComponentSize * getFormatCompFlagsComponentCount(formatCompFlags);
+        }
+
+        const bufferOffset = fieldBase + fieldByteOffset;
 
         const format = makeFormat(formatTypeFlags, formatCompFlags, getFormatFlags(baseFormat));
-        dstVertexAttributeLayouts.push({ vtxAttrib, offset, format });
+        dstVertexAttributeLayouts.push({ vtxAttrib, bufferIndex, bufferOffset, format });
     }
 
     // Align the whole thing to our minimum required alignment (F32).
@@ -556,7 +585,7 @@ function _compileVtxLoader(desc: VtxLoaderDesc): VtxLoader {
                 const dstComponentCount = getFormatComponentCount(dstAttribLayout.format);
 
                 for (let i = 0; i < dstComponentCount; i++) {
-                    const dstOffs: number = dstAttribLayout.offset + (i * dstComponentSize);
+                    const dstOffs: number = dstAttribLayout.bufferOffset + (i * dstComponentSize);
                     const srcOffs: string = `${attrOffs} + ${i * srcAttrCompSize}`;
 
                     // Fill in components not in the source with zero.
@@ -579,7 +608,7 @@ function _compileVtxLoader(desc: VtxLoaderDesc): VtxLoader {
 
             if (outputEnabled) {
                 const dstComponentCount = getFormatComponentCount(dstAttribLayout.format);
-                const dstOffs: number = dstAttribLayout.offset;
+                const dstOffs: number = dstAttribLayout.bufferOffset;
                 assert(dstComponentCount === 4);
 
                 const temp = `_T${vtxAttrib}`;
@@ -904,7 +933,7 @@ ${compileVatFormats()}
     }
 }
 
-return { indexFormat: ${GfxFormat.U16_R}, indexData: dstIndexData.buffer, packedVertexData: dstVertexData, totalVertexCount: totalVertexCount, totalIndexCount: totalIndexCount, vertexId: vertexId, packets: packets };
+return { indexFormat: ${GfxFormat.U16_R}, indexData: dstIndexData.buffer, vertexBuffers: [dstVertexData], vertexBufferStrides: [${loadedVertexLayout.dstVertexSize}], totalVertexCount: totalVertexCount, totalIndexCount: totalIndexCount, vertexId: vertexId, packets: packets };
 
 };
 `;
@@ -989,7 +1018,7 @@ export function coalesceLoadedDatas(loadedDatas: LoadedVertexData[]): LoadedVert
         totalIndexCount += loadedData.totalIndexCount;
         totalVertexCount += loadedData.totalVertexCount;
         indexDataSize += loadedData.indexData.byteLength;
-        packedVertexDataSize += loadedData.packedVertexData.byteLength;
+        packedVertexDataSize += loadedData.vertexBuffers[0].byteLength;
         assert(loadedData.indexFormat === loadedDatas[0].indexFormat);
     }
 
@@ -1001,15 +1030,16 @@ export function coalesceLoadedDatas(loadedDatas: LoadedVertexData[]): LoadedVert
     for (let i = 0; i < loadedDatas.length; i++) {
         const loadedData = loadedDatas[i];
         indexData.set(new Uint8Array(loadedData.indexData), indexDataOffs);
-        packedVertexData.set(new Uint8Array(loadedData.packedVertexData), packedVertexDataOffs);
+        packedVertexData.set(new Uint8Array(loadedData.vertexBuffers[0]), packedVertexDataOffs);
         indexDataOffs += loadedData.indexData.byteLength;
-        packedVertexDataOffs += loadedData.packedVertexData.byteLength;
+        packedVertexDataOffs += loadedData.vertexBuffers[0].byteLength;
     }
 
     return {
         indexData: indexData.buffer,
         indexFormat: loadedDatas[0].indexFormat,
-        packedVertexData: packedVertexData.buffer,
+        vertexBuffers: [packedVertexData.buffer],
+        vertexBufferStrides: [packedVertexDataSize],
         totalIndexCount,
         totalVertexCount,
         vertexId: 0,

@@ -1,5 +1,5 @@
 
-import { GXTextureHolder, MaterialParams, PacketParams, ColorKind, loadedDataCoalescerGfx, translateWrapModeGfx, ub_MaterialParams, u_MaterialParamsBufferSize } from '../gx/gx_render';
+import { GXTextureHolder, MaterialParams, PacketParams, ColorKind, translateWrapModeGfx, ub_MaterialParams, u_MaterialParamsBufferSize, loadedDataCoalescerComboGfx } from '../gx/gx_render';
 import { GXRenderHelperGfx, GXMaterialHelperGfx, GXShapeHelperGfx, BasicGXRendererHelper } from '../gx/gx_render_2';
 
 import * as TPL from './tpl';
@@ -13,7 +13,7 @@ import { DeviceProgram } from '../Program';
 import { GfxDevice, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxProgram } from '../gfx/platform/GfxPlatform';
 import { fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
 import { TextureMapping } from '../TextureHolder';
-import { GfxBufferCoalescer, GfxCoalescedBuffers } from '../gfx/helpers/BufferHelpers';
+import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
 import { GfxRendererLayer, makeSortKey, makeSortKeyOpaque, setSortKeyDepth } from '../gfx/render/GfxRenderer';
 import { Camera, computeViewMatrix, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
 import { AABB } from '../Geometry';
@@ -228,7 +228,7 @@ class BatchInstance {
     private shapeHelper: GXShapeHelperGfx;
     private packetParams = new PacketParams();
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, private materialInstance: MaterialInstance, private nodeInstance: NodeInstance, private batch: Batch, private coalescedBuffers: GfxCoalescedBuffers) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, private materialInstance: MaterialInstance, private nodeInstance: NodeInstance, private batch: Batch, private coalescedBuffers: GfxCoalescedBuffersCombo) {
         this.shapeHelper = new GXShapeHelperGfx(device, cache, coalescedBuffers, batch.loadedVertexLayout, batch.loadedVertexData);
     }
 
@@ -311,7 +311,7 @@ class NodeInstance {
 export class WorldRenderer extends BasicGXRendererHelper {
     public name: string;
 
-    private bufferCoalescer: GfxBufferCoalescer;
+    private bufferCoalescer: GfxBufferCoalescerCombo;
     private batches: Batch[];
 
     private batchInstances: BatchInstance[] = [];
@@ -491,7 +491,7 @@ export class WorldRenderer extends BasicGXRendererHelper {
         this.collectBatches(this.batches, rootNode);
 
         // Coalesce buffers.
-        this.bufferCoalescer = loadedDataCoalescerGfx(device, this.batches.map((batch) => batch.loadedVertexData));
+        this.bufferCoalescer = loadedDataCoalescerComboGfx(device, this.batches.map((batch) => batch.loadedVertexData));
 
         this.rootNode = this.translateSceneGraph(device, rootNode);
 

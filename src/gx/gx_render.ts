@@ -13,7 +13,7 @@ import { LoadedVertexData, LoadedVertexLayout, LoadedVertexPacket } from './gx_d
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { TextureMapping, TextureHolder, LoadedTexture } from '../TextureHolder';
 
-import { GfxBufferCoalescer, GfxCoalescedBuffers, makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
+import { GfxBufferCoalescer, makeStaticDataBuffer, GfxBufferCoalescerCombo, GfxCoalescedBuffersCombo } from '../gfx/helpers/BufferHelpers';
 import { fillColor, fillMatrix4x3, fillVec4, fillMatrix4x4, fillVec3, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxFormat, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxDevice, GfxInputState, GfxVertexAttributeDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxProgram, GfxBindingLayoutDescriptor, GfxProgramReflection, GfxHostAccessPass, GfxRenderPass, GfxBufferBinding, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxVertexAttributeFrequency, GfxTextureDimension } from '../gfx/platform/GfxPlatform';
 import { getFormatTypeFlags, FormatTypeFlags } from '../gfx/platform/GfxPlatformFormat';
@@ -165,15 +165,15 @@ export class GXShapeHelperGfx {
     public inputLayout: GfxInputLayout;
     private zeroBuffer: GfxBuffer | null = null;
 
-    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, public coalescedBuffers: GfxCoalescedBuffers, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData) {
+    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, public coalescedBuffers: GfxCoalescedBuffersCombo, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData) {
         // First, build the inputLayout
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
 
         let usesZeroBuffer = false;
+        const zeroBufferIndex = loadedVertexData.vertexBuffers.length;
         for (let vtxAttrib: GX.VertexAttribute = 0; vtxAttrib <= GX.VertexAttribute.MAX; vtxAttrib++) {
             const attribLocation = GX_Material.getVertexAttribLocation(vtxAttrib);
 
-            // TODO(jstpierre): Handle TEXMTXIDX attributes.
             if (attribLocation === -1)
                 continue;
 
@@ -182,11 +182,12 @@ export class GXShapeHelperGfx {
             const usesIntInShader = getFormatTypeFlags(attribGenDef.format) !== FormatTypeFlags.F32;
 
             if (attrib !== undefined) {
-                const bufferByteOffset = attrib.offset;
-                vertexAttributeDescriptors.push({ location: attribLocation, format: attrib.format, bufferIndex: 0, bufferByteOffset, frequency: GfxVertexAttributeFrequency.PER_VERTEX, usesIntInShader });
+                const bufferByteOffset = attrib.bufferOffset;
+                const bufferIndex = attrib.bufferIndex;
+                vertexAttributeDescriptors.push({ location: attribLocation, format: attrib.format, bufferIndex, bufferByteOffset, frequency: GfxVertexAttributeFrequency.PER_VERTEX, usesIntInShader });
             } else {
                 usesZeroBuffer = true;
-                vertexAttributeDescriptors.push({ location: attribLocation, format: attribGenDef.format, bufferIndex: 1, bufferByteOffset: 0, frequency: GfxVertexAttributeFrequency.PER_INSTANCE, usesIntInShader });
+                vertexAttributeDescriptors.push({ location: attribLocation, format: attribGenDef.format, bufferIndex: zeroBufferIndex, bufferByteOffset: 0, frequency: GfxVertexAttributeFrequency.PER_INSTANCE, usesIntInShader });
             }
         }
 
@@ -195,11 +196,15 @@ export class GXShapeHelperGfx {
             vertexAttributeDescriptors,
             indexBufferFormat,
         });
-        const buffers: GfxVertexBufferDescriptor[] = [{
-            buffer: coalescedBuffers.vertexBuffer.buffer,
-            byteOffset: coalescedBuffers.vertexBuffer.wordOffset * 4,
-            byteStride: loadedVertexLayout.dstVertexSize,
-        }];
+
+        const buffers: GfxVertexBufferDescriptor[] = [];
+        for (let i = 0; i < loadedVertexData.vertexBuffers.length; i++) {
+            buffers.push({
+                buffer: coalescedBuffers.vertexBuffers[i].buffer,
+                byteOffset: coalescedBuffers.vertexBuffers[i].wordOffset * 4,
+                byteStride: loadedVertexData.vertexBufferStrides[i],
+            });
+        }
 
         if (usesZeroBuffer) {
             // TODO(jstpierre): Move this to a global somewhere?
@@ -319,7 +324,14 @@ export function fillSceneParams(sceneParams: SceneParams, camera: Camera, viewpo
 
 export function loadedDataCoalescerGfx(device: GfxDevice, loadedVertexDatas: LoadedVertexData[]): GfxBufferCoalescer {
     return new GfxBufferCoalescer(device,
-        loadedVertexDatas.map((data) => new ArrayBufferSlice(data.packedVertexData)),
+        loadedVertexDatas.map((data) => new ArrayBufferSlice(data.vertexBuffers[0])),
+        loadedVertexDatas.map((data) => new ArrayBufferSlice(data.indexData))
+    );
+}
+
+export function loadedDataCoalescerComboGfx(device: GfxDevice, loadedVertexDatas: LoadedVertexData[]): GfxBufferCoalescerCombo {
+    return new GfxBufferCoalescerCombo(device,
+        loadedVertexDatas.map((data) => data.vertexBuffers.map((buffer) => new ArrayBufferSlice(buffer))),
         loadedVertexDatas.map((data) => new ArrayBufferSlice(data.indexData))
     );
 }

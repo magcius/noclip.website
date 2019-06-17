@@ -1,12 +1,12 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 
-import { BMD, BMT, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, TTK1Animator, ANK1Animator, bindANK1Animator, bindVAF1Animator, VAF1, VAF1Animator, TPT1, bindTPT1Animator, TPT1Animator, TEX1, BTI_Texture, INF1, calcJointMatrix } from './j3d';
+import { BMD, BMT, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, TTK1Animator, ANK1Animator, bindANK1Animator, bindVAF1Animator, VAF1, VAF1Animator, TPT1, bindTPT1Animator, TPT1Animator, TEX1, BTI_Texture, INF1, calcJointMatrix, HierarchyNodeType, TexMtx } from './j3d';
 import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } from './j3d';
 
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
-import { PacketParams, ColorKind, translateTexFilterGfx, translateWrapModeGfx, loadedDataCoalescerGfx, ub_MaterialParams, loadTextureFromMipChain, u_MaterialParamsBufferSize, fillIndTexMtxData, fillLightData, fillTextureMappingInfo } from '../gx/gx_render';
+import { PacketParams, ColorKind, translateTexFilterGfx, translateWrapModeGfx, ub_MaterialParams, loadTextureFromMipChain, loadedDataCoalescerComboGfx, MaterialParams, fillIndTexMtx, fillMaterialParamsData, u_MaterialParamsBufferSize } from '../gx/gx_render';
 import { GXShapeHelperGfx, GXRenderHelperGfx, GXMaterialHelperGfx } from '../gx/gx_render_2';
 
 import { computeViewMatrix, computeViewMatrixSkybox, Camera, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
@@ -14,16 +14,15 @@ import { TextureMapping } from '../TextureHolder';
 import AnimationController from '../AnimationController';
 import { nArray, assert } from '../util';
 import { AABB } from '../Geometry';
-import { GfxDevice, GfxSampler, GfxTexture, GfxMegaStateDescriptor, GfxProgram } from '../gfx/platform/GfxPlatform';
-import { GfxBufferCoalescer, GfxCoalescedBuffers } from '../gfx/helpers/BufferHelpers';
+import { GfxDevice, GfxSampler, GfxTexture } from '../gfx/platform/GfxPlatform';
+import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
 import { ViewerRenderInput, Texture } from '../viewer';
-import { setSortKeyDepth, GfxRendererLayer, setSortKeyBias, setSortKeyLayer, setSortKeyProgramKey } from '../gfx/render/GfxRenderer';
+import { setSortKeyDepth, GfxRendererLayer, setSortKeyBias, setSortKeyLayer } from '../gfx/render/GfxRenderer';
 import { GfxRenderInst, GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
-import { colorCopy, colorNewCopy, White } from '../Color';
+import { colorCopy, Color } from '../Color';
 import { computeNormalMatrix, texProjPerspMtx, texEnvMtx } from '../MathHelpers';
 import { calcMipChain } from '../gx/gx_texture';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { fillColor, fillMatrix4x3 } from '../gfx/helpers/UniformBufferHelpers';
 
 export class ShapeInstanceState {
     // One matrix for each joint, which transform into world space.
@@ -39,10 +38,9 @@ export class ShapeInstanceState {
 
 class ShapeData {
     public shapeHelpers: GXShapeHelperGfx[] = [];
-    public materialIndex: number = -1;
     public sortKeyBias: number = 0;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public shape: Shape, coalescedBuffers: GfxCoalescedBuffers[]) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public shape: Shape, coalescedBuffers: GfxCoalescedBuffersCombo[]) {
         for (let i = 0; i < this.shape.packets.length; i++) {
             const packet = this.shape.packets[i];
             // TODO(jstpierre): Use only one ShapeHelper.
@@ -53,6 +51,21 @@ class ShapeData {
 
     public destroy(device: GfxDevice) {
         this.shapeHelpers.forEach((shapeHelper) => shapeHelper.destroy(device));
+    }
+}
+
+export class MaterialData {
+    public jointData: JointData | null = null;
+    public fillMaterialParamsCallback: ((materialParams: MaterialParams, materialInstance: MaterialInstance, viewMatrix: mat4, modelMatrix: mat4, camera: Camera, packetParams: PacketParams) => void) | null = null;
+
+    constructor(public material: MaterialEntry) {
+    }
+}
+
+class JointData {
+    public children: JointData[] = [];
+
+    constructor(public jointIndex: number = 0) {
     }
 }
 
@@ -144,7 +157,9 @@ export class ShapeInstance {
         materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
 
         const materialJointMatrix = shapeInstanceState.jointToWorldMatrices[materialInstance.materialData.jointData.jointIndex];
-        materialInstance.fillMaterialParams(template, materialInstanceState, shapeInstanceState.viewMatrix, materialJointMatrix, camera);
+
+        if (shape.displayFlags !== ShapeDisplayFlags.USE_PNMTXIDX)
+            materialInstance.fillMaterialParams(template, materialInstanceState, shapeInstanceState.viewMatrix, materialJointMatrix, camera, packetParams);
 
         for (let p = 0; p < shape.packets.length; p++) {
             const packet = shape.packets[p];
@@ -160,13 +175,12 @@ export class ShapeInstance {
                 const drw = shapeInstanceState.drawToViewMatrices[matrixIndex];
                 const dst = packetParams.u_PosMtx[i];
 
-                if (shape.displayFlags === ShapeDisplayFlags.BILLBOARD) {
+                if (shape.displayFlags === ShapeDisplayFlags.BILLBOARD)
                     J3DCalcBBoardMtx(dst, drw);
-                } else if (shape.displayFlags === ShapeDisplayFlags.Y_BILLBOARD) {
+                else if (shape.displayFlags === ShapeDisplayFlags.Y_BILLBOARD)
                     J3DCalcYBBoardMtx(dst, drw);
-                } else {
+                else
                     mat4.copy(dst, drw);
-                }
 
                 if (shapeInstanceState.matrixVisibility[matrixIndex])
                     instVisible = true;
@@ -177,6 +191,9 @@ export class ShapeInstance {
 
             const renderInst = this.shapeData.shapeHelpers[p].pushRenderInst(renderInstManager);
             this.shapeData.shapeHelpers[p].fillPacketParams(packetParams, renderInst);
+
+            if (shape.displayFlags === ShapeDisplayFlags.USE_PNMTXIDX)
+                materialInstance.fillMaterialParams(renderInst, materialInstanceState, shapeInstanceState.viewMatrix, materialJointMatrix, camera, packetParams);
         }
 
         renderInstManager.popTemplateRenderInst();
@@ -280,9 +297,8 @@ function J3DBuildB8Mtx(dst: mat4, flipY: boolean): void {
     mat4SwapTranslationColumns(dst);
 }
 
-const matrixScratch = mat4.create(), matrixScratch2 = mat4.create(), matrixScratch3 = mat4.create(), matrixScratch4 = mat4.create();
-const colorScratch = colorNewCopy(White);
-const textureMapping = nArray(8, () => new TextureMapping());
+const materialParams = new MaterialParams();
+const matrixScratch = mat4.create(), matrixScratch2 = mat4.create(), matrixScratch3 = mat4.create();
 export class MaterialInstance {
     public ttk1Animators: (TTK1Animator | null)[] = [];
     public tpt1Animators: (TPT1Animator | null)[] = [];
@@ -365,9 +381,7 @@ export class MaterialInstance {
         this.materialHelper.setOnRenderInst(device, cache, renderInst);
     }
 
-    private fillColor(d: Float32Array, offs: number, i: ColorKind, materialInstanceState: MaterialInstanceState, fallbackColor: GX_Material.Color, clampTo8Bit: boolean): number {
-        const dst = colorScratch;
-
+    private calcColor(dst: Color, i: ColorKind, materialInstanceState: MaterialInstanceState, fallbackColor: GX_Material.Color, clampTo8Bit: boolean): void {
         if (this.trk1Animators[i]) {
             this.trk1Animators[i].calcColor(dst);
         } else if (materialInstanceState.colorOverrides[i] !== undefined) {
@@ -381,17 +395,269 @@ export class MaterialInstance {
 
         if (clampTo8Bit)
             this.clampTo8Bit(dst);
-
-        return fillColor(d, offs, dst);
     }
 
-    public fillMaterialParams(renderInst: GfxRenderInst, materialInstanceState: MaterialInstanceState, viewMatrix: mat4, modelMatrix: mat4, camera: Camera): void {
+    private calcTexMtxInput(dst: mat4, texMtx: TexMtx, modelViewMatrix: mat4, modelMatrix: mat4): void {
+        const matrixMode = texMtx.info & 0x3F;
+
+        // ref. J3DTexGenBlockPatched::calc()
+        switch (matrixMode) {
+        case 0x01:
+        case 0x06:
+        case 0x07:
+            // Environment mapping. Uses an approximation of the normal matrix (MV with the translation lopped off).
+            computeNormalMatrix(dst, modelViewMatrix, true);
+            break;
+
+        case 0x02:
+        case 0x08:
+            // Copy over model matrix.
+            mat4.copy(dst, modelMatrix);
+            break;
+
+        case 0x03:
+        case 0x09:
+            // Projection. Used for indtexwater, mostly.
+            mat4.copy(dst, modelViewMatrix);
+            break;
+
+        case 0x05:
+        case 0x0A:
+        case 0x0B:
+            // Environment mapping, but only using the model matrix.
+            computeNormalMatrix(dst, modelMatrix, true);
+            break;
+
+        default:
+            // No mapping.
+            mat4.identity(dst);
+            break;
+        }
+    }
+
+    public calcTexMtxInputPost(dst: mat4, texMtx: TexMtx): void {
+        const matrixMode = texMtx.info & 0x3F;
+
+        // ref. J3DTexGenBlockPatched::calc()
+        switch (matrixMode) {
+        case 0x01:
+        case 0x06:
+        case 0x07:
+        case 0x03:
+        case 0x04:
+        case 0x09:
+            mat4.identity(dst);
+            break;
+        }
+    }
+
+    public calcTexSRT(dst: mat4, i: number): void {
+        const texMtx = this.materialData.material.texMatrices[i];
+        const isMaya = !!(texMtx.info >>> 7);
+        if (this.ttk1Animators[i]) {
+            this.ttk1Animators[i].calcTexMtx(dst, isMaya);
+        } else {
+            mat4.copy(dst, texMtx.matrix);
+        }
+    }
+
+    public calcTexMtx(dst: mat4, texMtx: TexMtx, texSRT: mat4, modelMatrix: mat4, camera: Camera, flipY: boolean): void {
+        // The input matrix is passed in in dst.
+
+        const matrixMode = texMtx.info & 0x3F;
+        const flipYScale = flipY ? -1.0 : 1.0;
+
+        // Now apply effects.
+
+        // ref. J3DTexMtx::calc()
+
+        // J3DGetTextureMtxOld puts the translation into the fourth column.
+        // J3DGetTextureMtx puts the translation into the third column.
+        // Our calcTexMtx uses fourth column, so we need to swap for non-Old.
+
+        // _B8 and _E8 are constant 4x3 matrices
+        // _B8 has the translation mapping in the third column, _E8 has the translation mapping in the fourth column.
+        // _E8 is equivalent to texEnvMtx, and _B8 is the same but column-swapped.
+        // _48 and _88 are scratch space, _24 is effectMatrix,
+        // _94 is input matrix calculated above, _64 is output.
+        const tmp48 = matrixScratch;
+        const tmp88 = matrixScratch2;
+        switch (matrixMode) {
+        case 0x01:
+            {
+                // J3DGetTextureMtxOld(_48)
+                J3DGetTextureMtxOld(tmp48, texSRT);
+
+                if (flipY) {
+                    texEnvMtx(tmp88, 1, 1, 0, 1);
+                    mat4.mul(tmp48, tmp88, tmp48);
+                }
+
+                // PSMTXConcat(_48, _94, this->_64)
+                mat43Concat(dst, tmp48, dst);
+            }
+            break;
+
+        case 0x02:
+        case 0x03:
+        case 0x05:
+            {
+                // J3DGetTextureMtxOld(_88)
+                J3DGetTextureMtxOld(tmp88, texSRT);
+
+                if (flipY) {
+                    texEnvMtx(tmp48, 1, 1, 0, 1);
+                    mat4.mul(tmp88, tmp48, tmp88);
+                }
+
+                // J3DMtxProjConcat(_88, this->_24, _48)
+                J3DMtxProjConcat(tmp48, tmp88, texMtx.effectMatrix);
+                // PSMTXConcat(_48, _94, this->_64)
+                mat43Concat(dst, tmp48, dst);
+            }
+            break;
+
+        case 0x04:
+            {
+                // J3DGetTextureMtxOld(_88)
+                J3DGetTextureMtxOld(tmp88, texSRT);
+
+                if (flipY) {
+                    texEnvMtx(tmp48, 1, 1, 0, 1);
+                    mat4.mul(tmp88, tmp48, tmp88);
+                }
+
+                // J3DMtxProjConcat(_88, this->_24, this->_64);
+                J3DMtxProjConcat(dst, tmp88, texMtx.effectMatrix);
+            }
+            break;
+
+        case 0x06:
+            {
+                // J3DGetTextureMtxOld(_48)
+                J3DGetTextureMtxOld(tmp48, texSRT);
+
+                // PSMTXConcat(_48, _E8, _48)
+                J3DBuildE8Mtx(tmp88, flipY);
+                mat43Concat(tmp48, tmp48, tmp88);
+
+                // PSMTXConcat(_48, _94, this->_64)
+                mat43Concat(dst, tmp48, dst);
+            }
+            break;
+
+        case 0x07:
+            {
+                // J3DGetTextureMtx(_48)
+                J3DGetTextureMtx(tmp48, texSRT);
+
+                // PSMTXConcat(_48, _B8, _48)
+                J3DBuildB8Mtx(tmp88, flipY);
+                mat43Concat(tmp48, tmp48, tmp88);
+
+                // PSMTXConcat(_48, _94, this->_64)
+                mat43Concat(dst, tmp48, dst);
+            }
+            break;
+
+        case 0x08:
+        case 0x09:
+        case 0x0B:
+            {
+                // J3DGetTextureMtx(_88)
+                J3DGetTextureMtx(tmp88, texSRT);
+
+                if (matrixMode === 0x09) {
+                    // The effect matrix here is a GameCube projection matrix. Swap it out with out own.
+                    // In Galaxy, this is done in ViewProjmapEffectMtxSetter.
+
+                    // Replaces the effectMatrix (this->_24). B8 is built into this call, as well.
+                    texProjPerspMtx(tmp48, camera.fovY, camera.aspect, 0.5, -0.5 * flipYScale, 0.5, 0.5);
+                    // J3DMtxProjConcat(_88, this->_24, _48)
+                    J3DMtxProjConcat(tmp48, tmp88, tmp48);
+                } else if (matrixMode === 0x08) {
+                    // PSMTXConcat(_88, _B8, _88)
+                    J3DBuildB8Mtx(tmp48, flipY);
+                    mat43Concat(tmp88, tmp88, tmp48);
+
+                    // Multiply the effect matrix by the inverse of the model matrix.
+                    // In Galaxy, this is done in ProjmapEffectMtxSetter.
+                    mat4.invert(tmp48, modelMatrix);
+                    mat4.mul(tmp48, texMtx.effectMatrix, tmp48);
+
+                    // J3DMtxProjConcat(_88, this->_24, _48)
+                    J3DMtxProjConcat(tmp48, tmp88, tmp48);
+                } else {
+                    // PSMTXConcat(_88, _B8, _88)
+                    J3DBuildB8Mtx(tmp48, flipY);
+                    mat43Concat(tmp88, tmp88, tmp48);
+
+                    mat4.mul(tmp48, texMtx.effectMatrix, tmp48);
+
+                    // J3DMtxProjConcat(_88, this->_24, _48)
+                    J3DMtxProjConcat(tmp48, tmp88, texMtx.effectMatrix);
+                }
+
+                // PSMTXConcat(_48, _94, this->_64)
+                mat43Concat(dst, tmp48, dst);
+            }
+            break;
+
+        case 0x0A:
+            {
+                // J3DGetTextureMtxOld(_88)
+                J3DGetTextureMtxOld(tmp88, texSRT);
+
+                // PSMTXConcat(_88, _E8, _88)
+                J3DBuildE8Mtx(tmp48, flipY);
+                mat43Concat(tmp88, tmp88, tmp48);
+
+                // J3DMtxProjConcat(_88, this->_24, _48)
+                J3DMtxProjConcat(tmp48, tmp88, texMtx.effectMatrix);
+
+                // PSMTXConcat(_48, _94, this->_64)
+                mat43Concat(dst, tmp48, dst);
+            }
+            break;
+
+        case 0x00:
+            {
+                // J3DGetTextureMtxOld(this->_64)
+                J3DGetTextureMtxOld(dst, texSRT);
+
+                if (flipY) {
+                    texEnvMtx(tmp48, 1, 1, 0, 1);
+                    mat4.mul(dst, tmp48, dst);
+                }
+            }
+            break;
+
+        default:
+            {
+                throw "whoops";
+            }
+        }
+    }
+
+    public fillMaterialParams(renderInst: GfxRenderInst, materialInstanceState: MaterialInstanceState, viewMatrix: mat4, modelMatrix: mat4, camera: Camera, packetParams: PacketParams): void {
         const material = this.materialData.material;
-        let hasModelViewMatrix = false;
+
+        this.calcColor(materialParams.u_Color[ColorKind.MAT0],  ColorKind.MAT0,  materialInstanceState, material.colorMatRegs[0],   false);
+        this.calcColor(materialParams.u_Color[ColorKind.MAT1],  ColorKind.MAT1,  materialInstanceState, material.colorMatRegs[1],   false);
+        this.calcColor(materialParams.u_Color[ColorKind.AMB0],  ColorKind.AMB0,  materialInstanceState, material.colorAmbRegs[0],   false);
+        this.calcColor(materialParams.u_Color[ColorKind.AMB1],  ColorKind.AMB1,  materialInstanceState, material.colorAmbRegs[1],   false);
+        this.calcColor(materialParams.u_Color[ColorKind.K0],    ColorKind.K0,    materialInstanceState, material.colorConstants[0], true);
+        this.calcColor(materialParams.u_Color[ColorKind.K1],    ColorKind.K1,    materialInstanceState, material.colorConstants[1], true);
+        this.calcColor(materialParams.u_Color[ColorKind.K2],    ColorKind.K2,    materialInstanceState, material.colorConstants[2], true);
+        this.calcColor(materialParams.u_Color[ColorKind.K3],    ColorKind.K3,    materialInstanceState, material.colorConstants[3], true);
+        this.calcColor(materialParams.u_Color[ColorKind.CPREV], ColorKind.CPREV, materialInstanceState, material.colorRegisters[3], false);
+        this.calcColor(materialParams.u_Color[ColorKind.C0],    ColorKind.C0,    materialInstanceState, material.colorRegisters[0], false);
+        this.calcColor(materialParams.u_Color[ColorKind.C1],    ColorKind.C1,    materialInstanceState, material.colorRegisters[1], false);
+        this.calcColor(materialParams.u_Color[ColorKind.C2],    ColorKind.C2,    materialInstanceState, material.colorRegisters[2], false);
 
         // Texture mappings.
         for (let i = 0; i < material.textureIndexes.length; i++) {
-            const m = textureMapping[i];
+            const m = materialParams.m_TextureMapping[i];
             m.reset();
 
             let samplerIndex: number;
@@ -404,285 +670,51 @@ export class MaterialInstance {
                 m.copy(materialInstanceState.textureMappings[samplerIndex]);
         }
 
-        let offs = renderInst.allocateUniformBuffer(ub_MaterialParams, u_MaterialParamsBufferSize);
-        const d = renderInst.mapUniformBufferF32(ub_MaterialParams);
-
-        offs += this.fillColor(d, offs, ColorKind.MAT0,  materialInstanceState, material.colorMatRegs[0],   false);
-        offs += this.fillColor(d, offs, ColorKind.MAT1,  materialInstanceState, material.colorMatRegs[1],   false);
-        offs += this.fillColor(d, offs, ColorKind.AMB0,  materialInstanceState, material.colorAmbRegs[0],   false);
-        offs += this.fillColor(d, offs, ColorKind.AMB1,  materialInstanceState, material.colorAmbRegs[1],   false);
-        offs += this.fillColor(d, offs, ColorKind.K0,    materialInstanceState, material.colorConstants[0], true);
-        offs += this.fillColor(d, offs, ColorKind.K1,    materialInstanceState, material.colorConstants[1], true);
-        offs += this.fillColor(d, offs, ColorKind.K2,    materialInstanceState, material.colorConstants[2], true);
-        offs += this.fillColor(d, offs, ColorKind.K3,    materialInstanceState, material.colorConstants[3], true);
-        offs += this.fillColor(d, offs, ColorKind.CPREV, materialInstanceState, material.colorRegisters[3], false);
-        offs += this.fillColor(d, offs, ColorKind.C0,    materialInstanceState, material.colorRegisters[0], false);
-        offs += this.fillColor(d, offs, ColorKind.C1,    materialInstanceState, material.colorRegisters[1], false);
-        offs += this.fillColor(d, offs, ColorKind.C2,    materialInstanceState, material.colorRegisters[2], false);
+        mat4.mul(scratchModelViewMatrix, viewMatrix, modelMatrix);
 
         // Texture matrices.
         for (let i = 0; i < material.texMatrices.length; i++) {
             const texMtx = material.texMatrices[i];
-            if (texMtx === null) {
-                offs += 4*3;
+            if (texMtx === null)
                 continue;
-            }
 
-            const dst = matrixScratch4;
+            const dst = materialParams.u_TexMtx[i];
+            const flipY = materialParams.m_TextureMapping[i].flipY;
 
-            const flipY = textureMapping[i].flipY;
-            const flipYScale = flipY ? -1.0 : 1.0;
-
-            const isMaya = !!(texMtx.type >>> 7);
-            const matrixMode = texMtx.type & 0x3F;
-
-            // First, compute input matrix.
-
-            // ref. J3DTexGenBlockPatched::calc()
-            switch (matrixMode) {
-            case 0x01: // Delfino Plaza
-            case 0x06: // Rainbow Road
-            case 0x07: // Rainbow Road
-                // Environment mapping. Uses an approximation of the normal matrix (MV with the translation lopped off).
-                if (!hasModelViewMatrix) mat4.mul(scratchModelViewMatrix, viewMatrix, modelMatrix), hasModelViewMatrix = true;
-                computeNormalMatrix(dst, scratchModelViewMatrix, true);
-                break;
-
-            case 0x02: // pinnaParco7.szs
-            case 0x08: // Peach Beach.
-                // Copy over model matrix.
-                mat4.copy(dst, modelMatrix);
-                break;
-
-            case 0x03:
-            case 0x09:
-                // Projection. Used for indtexwater, mostly.
-                if (!hasModelViewMatrix) mat4.mul(scratchModelViewMatrix, viewMatrix, modelMatrix), hasModelViewMatrix = true;
-                mat4.copy(dst, scratchModelViewMatrix);
-                break;
-
-            case 0x05:
-            case 0x0A:
-            case 0x0B:
-                // Environment mapping, but only using the model matrix.
-                computeNormalMatrix(dst, modelMatrix, true);
-                break;
-
-            default:
-                // No mapping.
-                mat4.identity(dst);
-                break;
-            }
-
-            // Now apply effects.
-
-            // ref. J3DTexMtx::calc()
-
-            // Calculate SRT matrix.
+            this.calcTexMtxInput(dst, texMtx, scratchModelViewMatrix, modelMatrix);
             const texSRT = matrixScratch3;
-            if (this.ttk1Animators[i]) {
-                this.ttk1Animators[i].calcTexMtx(texSRT, isMaya);
-            } else {
-                mat4.copy(texSRT, material.texMatrices[i].matrix);
-            }
-
-            // J3DGetTextureMtxOld puts the translation into the fourth column.
-            // J3DGetTextureMtx puts the translation into the third column.
-            // Our calcTexMtx uses fourth column, so we need to swap for non-Old.
-
-            // _B8 and _E8 are constant 4x3 matrices
-            // _B8 has the translation mapping in the third column, _E8 has the translation mapping in the fourth column.
-            // _E8 is equivalent to texEnvMtx, and _B8 is the same but column-swapped.
-            // _48 and _88 are scratch space, _24 is effectMatrix,
-            // _94 is input matrix calculated above, _64 is output.
-            const tmp48 = matrixScratch;
-            const tmp88 = matrixScratch2;
-            switch (matrixMode) {
-            case 0x01:
-                {
-                    // J3DGetTextureMtxOld(_48)
-                    J3DGetTextureMtxOld(tmp48, texSRT);
-
-                    if (flipY) {
-                        texEnvMtx(tmp88, 1, 1, 0, 1);
-                        mat4.mul(tmp48, tmp88, tmp48);
-                    }
-
-                    // PSMTXConcat(_48, _94, this->_64)
-                    mat43Concat(dst, tmp48, dst);
-                }
-                break;
-
-            case 0x02:
-            case 0x03:
-            case 0x05:
-                {
-                    // J3DGetTextureMtxOld(_88)
-                    J3DGetTextureMtxOld(tmp88, texSRT);
-
-                    if (flipY) {
-                        texEnvMtx(tmp48, 1, 1, 0, 1);
-                        mat4.mul(tmp88, tmp48, tmp88);
-                    }
-
-                    // J3DMtxProjConcat(_88, this->_24, _48)
-                    J3DMtxProjConcat(tmp48, tmp88, texMtx.effectMatrix);
-                    // PSMTXConcat(_48, _94, this->_64)
-                    mat43Concat(dst, tmp48, dst);
-                }
-                break;
-
-            case 0x04:
-                {
-                    // J3DGetTextureMtxOld(_88)
-                    J3DGetTextureMtxOld(tmp88, texSRT);
-
-                    if (flipY) {
-                        texEnvMtx(tmp48, 1, 1, 0, 1);
-                        mat4.mul(tmp88, tmp48, tmp88);
-                    }
-
-                    // J3DMtxProjConcat(_88, this->_24, this->_64);
-                    J3DMtxProjConcat(dst, tmp88, texMtx.effectMatrix);
-                }
-                break;
-
-            case 0x06:
-                {
-                    // J3DGetTextureMtxOld(_48)
-                    J3DGetTextureMtxOld(tmp48, texSRT);
-
-                    // PSMTXConcat(_48, _E8, _48)
-                    J3DBuildE8Mtx(tmp88, flipY);
-                    mat43Concat(tmp48, tmp48, tmp88);
-
-                    // PSMTXConcat(_48, _94, this->_64)
-                    mat43Concat(dst, tmp48, dst);
-                }
-                break;
-
-            case 0x07:
-                {
-                    // J3DGetTextureMtx(_48)
-                    J3DGetTextureMtx(tmp48, texSRT);
-
-                    // PSMTXConcat(_48, _B8, _48)
-                    J3DBuildB8Mtx(tmp88, flipY);
-                    mat43Concat(tmp48, tmp48, tmp88);
-
-                    // PSMTXConcat(_48, _94, this->_64)
-                    mat43Concat(dst, tmp48, dst);
-                }
-                break;
-            
-            case 0x08:
-            case 0x09:
-            case 0x0B:
-                {
-                    // J3DGetTextureMtx(_88)
-                    J3DGetTextureMtx(tmp88, texSRT);
-
-                    if (matrixMode === 0x09) {
-                        // The effect matrix here is a GameCube projection matrix. Swap it out with out own.
-                        // In Galaxy, this is done in ViewProjmapEffectMtxSetter.
-
-                        // Replaces the effectMatrix (this->_24). B8 is built into this call, as well.
-                        texProjPerspMtx(tmp48, camera.fovY, camera.aspect, 0.5, -0.5 * flipYScale, 0.5, 0.5);
-                        // J3DMtxProjConcat(_88, this->_24, _48)
-                        J3DMtxProjConcat(tmp48, tmp88, tmp48);
-                    } else if (matrixMode === 0x08) {
-                        // PSMTXConcat(_88, _B8, _88)
-                        J3DBuildB8Mtx(tmp48, flipY);
-                        mat43Concat(tmp88, tmp88, tmp48);
-
-                        // Multiply the effect matrix by the inverse of the model matrix.
-                        // In Galaxy, this is done in ProjmapEffectMtxSetter.
-                        mat4.invert(tmp48, modelMatrix);
-                        mat4.mul(tmp48, texMtx.effectMatrix, tmp48);
-
-                        // J3DMtxProjConcat(_88, this->_24, _48)
-                        J3DMtxProjConcat(tmp48, tmp88, tmp48);
-                    } else {
-                        // PSMTXConcat(_88, _B8, _88)
-                        J3DBuildB8Mtx(tmp48, flipY);
-                        mat43Concat(tmp88, tmp88, tmp48);
-
-                        mat4.mul(tmp48, texMtx.effectMatrix, tmp48);
-
-                        // J3DMtxProjConcat(_88, this->_24, _48)
-                        J3DMtxProjConcat(tmp48, tmp88, texMtx.effectMatrix);
-                    }
-
-                    // PSMTXConcat(_48, _94, this->_64)
-                    mat43Concat(dst, tmp48, dst);
-                }
-                break;
-
-            case 0x0A:
-                {
-                    // J3DGetTextureMtxOld(_88)
-                    J3DGetTextureMtxOld(tmp88, texSRT);
-
-                    // PSMTXConcat(_88, _E8, _88)
-                    J3DBuildE8Mtx(tmp48, flipY);
-                    mat43Concat(tmp88, tmp88, tmp48);
-
-                    // J3DMtxProjConcat(_88, this->_24, _48)
-                    J3DMtxProjConcat(tmp48, tmp88, texMtx.effectMatrix);
-
-                    // PSMTXConcat(_48, _94, this->_64)
-                    mat43Concat(dst, tmp48, dst);
-                }
-                break;
-    
-            case 0x00:
-                {
-                    // J3DGetTextureMtxOld(this->_64)
-                    J3DGetTextureMtxOld(dst, texSRT);
-
-                    if (flipY) {
-                        texEnvMtx(tmp48, 1, 1, 0, 1);
-                        mat4.mul(dst, tmp48, dst);
-                    }
-                }
-                break;
-
-            default:
-                {
-                    throw "whoops";
-                }
-            }
-
-            offs += fillMatrix4x3(d, offs, dst);
+            this.calcTexSRT(texSRT, i);
+            this.calcTexMtx(dst, texMtx, texSRT, modelMatrix, camera, flipY);
         }
 
         for (let i = 0; i < material.postTexMatrices.length; i++) {
-            const postTexMtx = material.postTexMatrices[i];
-            if (postTexMtx === null) {
-                offs += 4*3;
+            const texMtx = material.postTexMatrices[i];
+            if (texMtx === null)
                 continue;
-            }
 
-            offs += fillMatrix4x3(d, offs, postTexMtx.matrix);
+            const dst = materialParams.u_PostTexMtx[i];
+            mat4.copy(dst, texMtx.matrix);
         }
 
         for (let i = 0; i < material.indTexMatrices.length; i++) {
             const indTexMtx = material.indTexMatrices[i];
-            if (indTexMtx === null) {
-                offs += 4*2;
+            if (indTexMtx === null)
                 continue;
-            }
 
-            offs += fillIndTexMtxData(d, offs, indTexMtx);
+            fillIndTexMtx(materialParams.u_IndTexMtx[i], indTexMtx);
         }
 
-        for (let i = 0; i < 8; i++)
-            offs += fillTextureMappingInfo(d, offs, textureMapping[i]);
-
         for (let i = 0; i < materialInstanceState.lights.length; i++)
-            offs += fillLightData(d, offs, materialInstanceState.lights[i]);
+            materialParams.u_Lights[i].copy(materialInstanceState.lights[i]);
 
-        renderInst.setSamplerBindingsFromTextureMappings(textureMapping);
+        if (this.materialData.fillMaterialParamsCallback !== null)
+            this.materialData.fillMaterialParamsCallback(materialParams, this, viewMatrix, modelMatrix, camera, packetParams);
+
+        let offs = renderInst.allocateUniformBuffer(ub_MaterialParams, u_MaterialParamsBufferSize);
+        const d = renderInst.mapUniformBufferF32(ub_MaterialParams);
+        fillMaterialParamsData(d, offs, materialParams);
+
+        renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
     }
 }
 
@@ -792,25 +824,11 @@ export class TEX1Data {
     }
 }
 
-export class MaterialData {
-    public jointData: JointData | null = null;
-
-    constructor(public material: MaterialEntry) {
-    }
-}
-
-class JointData {
-    public children: JointData[] = [];
-
-    constructor(public jointIndex: number = 0) {
-    }
-}
-
 export class BMDModel {
     private realized: boolean = false;
     public tex1Data: TEX1Data;
 
-    private bufferCoalescer: GfxBufferCoalescer;
+    private bufferCoalescer: GfxBufferCoalescerCombo;
 
     public materialData: MaterialData[] = [];
     public shapeData: ShapeData[] = [];
@@ -835,7 +853,7 @@ export class BMDModel {
         for (let i = 0; i < bmd.shp1.shapes.length; i++)
             for (let j = 0; j < bmd.shp1.shapes[i].packets.length; j++)
                 loadedVertexDatas.push(bmd.shp1.shapes[i].packets[j].loadedVertexData);
-        this.bufferCoalescer = loadedDataCoalescerGfx(device, loadedVertexDatas);
+        this.bufferCoalescer = loadedDataCoalescerComboGfx(device, loadedVertexDatas);
 
         for (let i = 0; i < bmd.shp1.shapes.length; i++) {
             const shp1 = bmd.shp1.shapes[i];
@@ -861,50 +879,37 @@ export class BMDModel {
     }
 
     private loadHierarchy(inf1: INF1): void {
-        enum HierarchyType {
-            End = 0x00,
-            Open = 0x01,
-            Close = 0x02,
-            Joint = 0x10,
-            Material = 0x11,
-            Shape = 0x12,
-        };
 
         let offs = 0;
         const view = inf1.hierarchyData.createDataView();
 
-        let currentMaterialIndex: number = -1;
         let translucentDrawIndex: number = 0;
         // Dummy joint to be the parent of our root node.
         let lastJoint: JointData = new JointData(-1);
         let jointStack: JointData[] = [lastJoint];
         while (true) {
-            const type: HierarchyType = view.getUint16(offs + 0x00);
+            const type: HierarchyNodeType = view.getUint16(offs + 0x00);
             const value = view.getUint16(offs + 0x02);
 
-            if (type === HierarchyType.End) {
+            if (type === HierarchyNodeType.End) {
                 break;
-            } else if (type === HierarchyType.Open) {
+            } else if (type === HierarchyNodeType.Open) {
                 jointStack.unshift(lastJoint);
-            } else if (type === HierarchyType.Close) {
+            } else if (type === HierarchyNodeType.Close) {
                 jointStack.shift();
-            } else if (type === HierarchyType.Joint) {
+            } else if (type === HierarchyNodeType.Joint) {
                 const joint = new JointData(value);
                 jointStack[0].children.push(joint);
                 lastJoint = joint;
-            } else if (type === HierarchyType.Material) {
+            } else if (type === HierarchyNodeType.Material) {
                 const materialData = this.materialData[value];
                 assert(materialData.jointData === null);
                 materialData.jointData = jointStack[0];
-                currentMaterialIndex = value;
-            } else if (type === HierarchyType.Shape) {
+            } else if (type === HierarchyNodeType.Shape) {
                 const shapeData = this.shapeData[value];
-                assert(shapeData.materialIndex === -1);
-                assert(currentMaterialIndex !== -1);
-                shapeData.materialIndex = currentMaterialIndex;
 
                 // Translucent draws happen in reverse order -- later shapes are drawn first.
-                if (this.materialData[currentMaterialIndex].material.translucent)
+                if (this.materialData[shapeData.shape.materialIndex].material.translucent)
                     shapeData.sortKeyBias = --translucentDrawIndex;
             }
 
@@ -914,10 +919,6 @@ export class BMDModel {
         assert(jointStack.length === 1);
         assert(jointStack[0].children.length === 1);
         this.rootJoint = jointStack[0].children[0];
-
-        // Double-check that we have everything done.
-        for (let i = 0; i < this.shapeData.length; i++)
-            assert(this.shapeData[i].materialIndex !== -1);
     }
 
     public createDefaultTextureMappings(): TextureMapping[] {
@@ -975,7 +976,7 @@ export class BMDModelInstance {
             return new MaterialInstance(materialData, this.materialHacks);
         });
         this.shapeInstances = this.bmdModel.shapeData.map((shapeData) => {
-            return new ShapeInstance(shapeData, this.materialInstances[shapeData.materialIndex]);
+            return new ShapeInstance(shapeData, this.materialInstances[shapeData.shape.materialIndex]);
         });
 
         this.materialInstanceState.textureMappings = this.bmdModel.createDefaultTextureMappings();
@@ -1294,7 +1295,7 @@ export class BMDModelInstance {
             const shapeVisibility = this.shapeInstanceState.shapeVisibility[i] && (this.vaf1Animator !== null ? this.vaf1Animator.calcVisibility(i) : true);
             if (!shapeVisibility)
                 continue;
-            const materialIndex = this.shapeInstances[i].shapeData.materialIndex;
+            const materialIndex = this.shapeInstances[i].shapeData.shape.materialIndex;
             if (this.materialInstances[materialIndex].materialData.material.translucent !== translucent)
                 continue;
             this.shapeInstances[i].prepareToRender(device, renderHelper.renderInstManager, depth, camera, this.materialInstanceState, this.shapeInstanceState);

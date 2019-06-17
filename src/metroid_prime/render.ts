@@ -12,7 +12,7 @@ import { TXTR } from './txtr';
 import { CMDL } from './cmdl';
 import { TextureMapping } from '../TextureHolder';
 import { GfxDevice, GfxFormat, GfxSampler, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from '../gfx/platform/GfxPlatform';
-import { GfxCoalescedBuffers, GfxBufferCoalescer } from '../gfx/helpers/BufferHelpers';
+import { GfxCoalescedBuffers, GfxBufferCoalescer, GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
 import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyDepthKey } from '../gfx/render/GfxRenderer';
 import { computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
 import { LoadedVertexData, LoadedVertexPacket } from '../gx/gx_displaylist';
@@ -88,7 +88,7 @@ const bboxScratch = new AABB();
 class SurfaceData {
     public shapeHelper: GXShapeHelperGfx;
 
-    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, public surface: Surface, coalescedBuffers: GfxCoalescedBuffers, public bbox: AABB) {
+    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, public surface: Surface, coalescedBuffers: GfxCoalescedBuffersCombo, public bbox: AABB) {
         this.shapeHelper = new GXShapeHelperGfx(device, renderHelper, coalescedBuffers, surface.loadedVertexLayout, surface.loadedVertexData);
     }
 
@@ -347,7 +347,7 @@ function mergeSurfaces(surfaces: Surface[]): MergedSurface {
         const surface = surfaces[i];
         totalIndexCount += surface.loadedVertexData.totalIndexCount;
         totalVertexCount += surface.loadedVertexData.totalVertexCount;
-        packedVertexDataSize += surface.loadedVertexData.packedVertexData.byteLength;
+        packedVertexDataSize += surface.loadedVertexData.vertexBuffers[0].byteLength;
 
         for (let j = 0; j < surface.loadedVertexData.packets.length; j++) {
             const packet = surface.loadedVertexData.packets[j];
@@ -373,14 +373,15 @@ function mergeSurfaces(surfaces: Surface[]): MergedSurface {
         vertexOffset += surface.loadedVertexData.totalVertexCount;
         assert(vertexOffset <= 0xFFFFFFFF);
 
-        packedVertexData.set(new Uint8Array(surface.loadedVertexData.packedVertexData), packedVertexDataOffs);
-        packedVertexDataOffs += surface.loadedVertexData.packedVertexData.byteLength;
+        packedVertexData.set(new Uint8Array(surface.loadedVertexData.vertexBuffers[0]), packedVertexDataOffs);
+        packedVertexDataOffs += surface.loadedVertexData.vertexBuffers[0].byteLength;
     }
 
     const newLoadedVertexData: LoadedVertexData = {
         indexFormat: GfxFormat.U32_R,
         indexData: indexData.buffer,
-        packedVertexData: packedVertexData.buffer,
+        vertexBuffers: [packedVertexData.buffer],
+        vertexBufferStrides: [packedVertexDataSize],
         totalIndexCount,
         totalVertexCount,
         packets,
@@ -397,7 +398,7 @@ function mergeSurfaces(surfaces: Surface[]): MergedSurface {
 }
 
 export class MREARenderer {
-    private bufferCoalescer: GfxBufferCoalescer;
+    private bufferCoalescer: GfxBufferCoalescerCombo;
     private materialGroupInstances: MaterialGroupInstance[] = [];
     private materialInstances: MaterialInstance[] = [];
     private surfaceData: SurfaceData[] = [];
@@ -444,7 +445,7 @@ export class MREARenderer {
         surfaces.sort((a, b) => a.materialIndex - b.materialIndex);
 
         // Merge surfaces with the same material.
-        const vertexDatas: ArrayBufferSlice[] = [];
+        const vertexDatas: ArrayBufferSlice[][] = [];
         const indexDatas: ArrayBufferSlice[] = [];
 
         const mergedSurfaces: Surface[] = [];
@@ -466,11 +467,11 @@ export class MREARenderer {
         }
 
         for (let i = 0; i < mergedSurfaces.length; i++) {
-            vertexDatas.push(new ArrayBufferSlice(mergedSurfaces[i].loadedVertexData.packedVertexData));
+            vertexDatas.push([new ArrayBufferSlice(mergedSurfaces[i].loadedVertexData.vertexBuffers[0])]);
             indexDatas.push(new ArrayBufferSlice(mergedSurfaces[i].loadedVertexData.indexData));
         }
 
-        this.bufferCoalescer = new GfxBufferCoalescer(device, vertexDatas, indexDatas);
+        this.bufferCoalescer = new GfxBufferCoalescerCombo(device, vertexDatas, indexDatas);
         for (let i = 0; i < mergedSurfaces.length; i++) {
             const surface = mergedSurfaces[i];
 
@@ -552,21 +553,21 @@ export class MREARenderer {
 }
 
 export class CMDLData {
-    private bufferCoalescer: GfxBufferCoalescer;
+    private bufferCoalescer: GfxBufferCoalescerCombo;
     public surfaceData: SurfaceData[] = [];
 
     constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, public cmdl: CMDL) {
-        const vertexDatas: ArrayBufferSlice[] = [];
+        const vertexDatas: ArrayBufferSlice[][] = [];
         const indexDatas: ArrayBufferSlice[] = [];
 
         // Coalesce surface data.
         const surfaces = this.cmdl.geometry.surfaces;
         for (let i = 0; i < surfaces.length; i++) {
-            vertexDatas.push(new ArrayBufferSlice(surfaces[i].loadedVertexData.packedVertexData));
+            vertexDatas.push([new ArrayBufferSlice(surfaces[i].loadedVertexData.vertexBuffers[0])]);
             indexDatas.push(new ArrayBufferSlice(surfaces[i].loadedVertexData.indexData));
         }
 
-        this.bufferCoalescer = new GfxBufferCoalescer(device, vertexDatas, indexDatas);
+        this.bufferCoalescer = new GfxBufferCoalescerCombo(device, vertexDatas, indexDatas);
 
         for (let i = 0; i < surfaces.length; i++) {
             const coalescedBuffers = this.bufferCoalescer.coalescedBuffers[i];

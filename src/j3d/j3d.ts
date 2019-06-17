@@ -143,6 +143,15 @@ export const enum MatrixCalcType {
     MAYA  = 0x02,
 }
 
+export enum HierarchyNodeType {
+    End = 0x00,
+    Open = 0x01,
+    Close = 0x02,
+    Joint = 0x10,
+    Material = 0x11,
+    Shape = 0x12,
+};
+
 export interface INF1 {
     hierarchyData: ArrayBufferSlice;
     matrixCalcType: MatrixCalcType;
@@ -155,7 +164,6 @@ function readINF1Chunk(buffer: ArrayBufferSlice): INF1 {
     const vertexCount = view.getUint32(0x10);
     const hierarchyOffs = view.getUint32(0x14);
     const hierarchyData = buffer.slice(hierarchyOffs);
-
     return { hierarchyData, matrixCalcType };
 }
 //#endregion
@@ -445,6 +453,7 @@ export interface Shape {
     packets: Packet[];
     bbox: AABB;
     boundingSphereRadius: number;
+    materialIndex: number;
 }
 
 export interface SHP1 {
@@ -547,8 +556,10 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
         const bboxMaxZ = view.getFloat32(shapeIdx + 0x24);
         const bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
 
+        const materialIdx = -1;
+
         // Now we should have a complete shape. Onto the next!
-        shapes.push({ displayFlags, loadedVertexLayout, packets, bbox, boundingSphereRadius });
+        shapes.push({ displayFlags, loadedVertexLayout, packets, bbox, boundingSphereRadius, materialIndex: materialIdx });
 
         shapeIdx += 0x28;
     }
@@ -558,15 +569,12 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
 //#endregion
 //#region MAT3
 export const enum TexMtxProjection {
-    ST = 0,
-    STQ = 1,
+    MTX3x4 = 0,
+    MTX2x4 = 1,
 }
 
 export interface TexMtx {
-    // Normally the same as the index in the slot, but left patchable so that
-    // users can change the slot that this is writing to.
-    dstTexMtxIdx: number;
-    type: number;
+    info: number;
     projection: TexMtxProjection;
     effectMatrix: mat4;
     matrix: mat4;
@@ -1006,7 +1014,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             return null;
         const texMtxOffs = tableOffs + texMtxIndex * 0x64;
         const projection: TexMtxProjection = view.getUint8(texMtxOffs + 0x00);
-        const type = view.getUint8(texMtxOffs + 0x01);
+        const info = view.getUint8(texMtxOffs + 0x01);
         assert(view.getUint16(texMtxOffs + 0x02) === 0xFFFF);
         const centerS = view.getFloat32(texMtxOffs + 0x04);
         const centerT = view.getFloat32(texMtxOffs + 0x08);
@@ -1042,7 +1050,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             p03, p13, p23, p33,
         );
 
-        const maya = !!((type) & 0x80);
+        const maya = !!((info) & 0x80);
         const matrix = mat4.create();
         if (maya) {
             calcTexMtx_Maya(matrix, scaleS, scaleT, rotation, translationS, translationT);
@@ -1050,8 +1058,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             calcTexMtx(matrix, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
         }
 
-        const outTexMtxIdx = j;
-        const texMtx: TexMtx = { dstTexMtxIdx: outTexMtxIdx, type, projection, effectMatrix, matrix };
+        const texMtx: TexMtx = { info, projection, effectMatrix, matrix };
         return texMtx;
     }
 
@@ -1152,6 +1159,34 @@ function readTEX1Chunk(buffer: ArrayBufferSlice): TEX1 {
 }
 //#endregion
 //#region BMD
+function assocHierarchy(bmd: BMD): void {
+    const view = bmd.inf1.hierarchyData.createDataView();
+
+    let offs = 0x00;
+    let currentMaterialIndex = -1;
+    while (true) {
+        const type: HierarchyNodeType = view.getUint16(offs + 0x00);
+        const value = view.getUint16(offs + 0x02);
+
+        if (type === HierarchyNodeType.End) {
+            break;
+        } else if (type === HierarchyNodeType.Material) {
+            currentMaterialIndex = value;
+        } else if (type === HierarchyNodeType.Shape) {
+            const shape = bmd.shp1.shapes[value];
+            assert(currentMaterialIndex !== -1);
+            assert(shape.materialIndex === -1);
+            shape.materialIndex = currentMaterialIndex;
+        }
+
+        offs += 0x04;
+    }
+
+    // Double-check that we have everything done.
+    for (let i = 0; i < bmd.shp1.shapes.length; i++)
+        assert(bmd.shp1.shapes[i].materialIndex !== -1);
+}
+
 export class BMD {
     public static parse(buffer: ArrayBufferSlice): BMD {
         const bmd = new BMD();
@@ -1168,6 +1203,8 @@ export class BMD {
         bmd.mat3 = readMAT3Chunk(j3d.nextChunk('MAT3'));
         const mdl3 = j3d.maybeNextChunk('MDL3');
         bmd.tex1 = readTEX1Chunk(j3d.nextChunk('TEX1'));
+
+        assocHierarchy(bmd);
 
         return bmd;
     }

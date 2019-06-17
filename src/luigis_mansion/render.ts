@@ -4,12 +4,12 @@ import * as UI from '../ui';
 import { BIN, Batch, Material, SceneGraphNode, SceneGraphPart } from "./bin";
 
 import * as GX_Texture from '../gx/gx_texture';
-import { MaterialParams, PacketParams, loadTextureFromMipChain, GXMaterialHelperGfx, GXRenderHelperGfx, GXShapeHelperGfx, loadedDataCoalescerGfx, translateWrapModeGfx } from '../gx/gx_render';
+import { MaterialParams, PacketParams, loadTextureFromMipChain, GXMaterialHelperGfx, GXRenderHelperGfx, GXShapeHelperGfx, loadedDataCoalescerGfx, translateWrapModeGfx, loadedDataCoalescerComboGfx } from '../gx/gx_render';
 import { assert } from "../util";
 import { mat4 } from "gl-matrix";
 import { AABB } from "../Geometry";
 import { GfxTexture, GfxDevice, GfxRenderPass, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxHostAccessPass } from "../gfx/platform/GfxPlatform";
-import { GfxCoalescedBuffers, GfxBufferCoalescer } from "../gfx/helpers/BufferHelpers";
+import { GfxCoalescedBuffers, GfxBufferCoalescer, GfxBufferCoalescerCombo, GfxCoalescedBuffersCombo } from "../gfx/helpers/BufferHelpers";
 import { GfxRenderInst, GfxRenderInstViewRenderer } from "../gfx/render/GfxRenderer";
 import { Camera, computeViewMatrix } from "../Camera";
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
@@ -52,7 +52,7 @@ class Command_Batch {
     private packetParams = new PacketParams();
     private renderInst: GfxRenderInst;
 
-    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, private sceneGraphNode: SceneGraphNode, batch: Batch, coalescedBuffers: GfxCoalescedBuffers) {
+    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, private sceneGraphNode: SceneGraphNode, batch: Batch, coalescedBuffers: GfxCoalescedBuffersCombo) {
         this.shapeHelper = new GXShapeHelperGfx(device, renderHelper, coalescedBuffers, batch.loadedVertexLayout, batch.loadedVertexData);
         this.renderInst = this.shapeHelper.buildRenderInst(renderHelper.renderInstBuilder);
         renderHelper.renderInstBuilder.pushRenderInst(this.renderInst);
@@ -87,7 +87,7 @@ class Command_Bin {
 
     private batchCommands: Command_Batch[] = [];
     private materialCommands: Command_Material[] = [];
-    private bufferCoalescer: GfxBufferCoalescer;
+    private bufferCoalescer: GfxBufferCoalescerCombo;
     private batches: Batch[];
 
     public gfxSamplers: GfxSampler[] = [];
@@ -173,7 +173,7 @@ class Command_Bin {
         this.collectBatches(this.batches, bin.rootNode);
 
         // Coalesce buffers.
-        this.bufferCoalescer = loadedDataCoalescerGfx(device, this.batches.map((batch) => batch.loadedVertexData));
+        this.bufferCoalescer = loadedDataCoalescerComboGfx(device, this.batches.map((batch) => batch.loadedVertexData));
         this.translateSceneGraph(device, renderHelper, bin.rootNode);
     }
 }

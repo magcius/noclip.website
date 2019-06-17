@@ -8,7 +8,7 @@ import { BMDModelInstance, BTIData } from "./render";
 import { ANK1, TTK1, TRK1, BTI_Texture } from "./j3d";
 import AnimationController from "../AnimationController";
 import { Colors } from "./zww_scenes";
-import { ColorKind, loadedDataCoalescerGfx, ub_PacketParams, PacketParams, MaterialParams, ub_MaterialParams, u_MaterialParamsBufferSize } from "../gx/gx_render";
+import { ColorKind, PacketParams, MaterialParams, ub_MaterialParams, u_MaterialParamsBufferSize, loadedDataCoalescerComboGfx } from "../gx/gx_render";
 import { GXRenderHelperGfx, GXShapeHelperGfx, GXMaterialHelperGfx } from '../gx/gx_render_2';
 import { AABB } from '../Geometry';
 import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB, computeViewMatrix } from '../Camera';
@@ -17,7 +17,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assertExists } from '../util';
 import { DisplayListRegisters, runDisplayListRegisters, parseMaterialEntry } from '../rres/brres';
 import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader } from '../gx/gx_displaylist';
-import { GfxBufferCoalescer } from '../gfx/helpers/BufferHelpers';
+import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
 import { TextureMapping } from '../TextureHolder';
 import { colorFromRGBA } from '../Color';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
@@ -132,7 +132,7 @@ export interface FlowerData {
     textureMapping: TextureMapping;
     shapeHelperMain: GXShapeHelperGfx;
     gxMaterial: GX_Material.GXMaterial;
-    bufferCoalescer: GfxBufferCoalescer;
+    bufferCoalescer: GfxBufferCoalescerCombo;
     destroy(device: GfxDevice): void;
 }
 
@@ -141,7 +141,7 @@ export class WhiteFlowerData {
     public textureData: BTIData;
     public shapeHelperMain: GXShapeHelperGfx;
     public gxMaterial: GX_Material.GXMaterial;
-    public bufferCoalescer: GfxBufferCoalescer;
+    public bufferCoalescer: GfxBufferCoalescerCombo;
 
     constructor(device: GfxDevice, symbolMap: SymbolMap, cache: GfxRenderCache) {
         const l_matDL = findSymbol(symbolMap, `d_flower.o`, `l_matDL`);
@@ -210,7 +210,7 @@ export class WhiteFlowerData {
             alphaChannel: { lightingEnabled: false, matColorSource: GX.ColorSrc.VTX, ambColorSource: GX.ColorSrc.REG, litMask: 0, attenuationFunction: GX.AttenuationFunction.NONE, diffuseFunction: GX.DiffuseFunction.NONE },
         });
 
-        this.bufferCoalescer = loadedDataCoalescerGfx(device, [ vtx_l_OhanaDL ]);
+        this.bufferCoalescer = loadedDataCoalescerComboGfx(device, [ vtx_l_OhanaDL ]);
         this.shapeHelperMain = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[0], vtxLoader.loadedVertexLayout, vtx_l_OhanaDL);
     }
 
@@ -226,7 +226,7 @@ export class PinkFlowerData {
     public textureData: BTIData;
     public shapeHelperMain: GXShapeHelperGfx;
     public gxMaterial: GX_Material.GXMaterial;
-    public bufferCoalescer: GfxBufferCoalescer;
+    public bufferCoalescer: GfxBufferCoalescerCombo;
 
     constructor(device: GfxDevice, symbolMap: SymbolMap, cache: GfxRenderCache) {
         const l_matDL2 = findSymbol(symbolMap, `d_flower.o`, `l_matDL2`);
@@ -295,7 +295,7 @@ export class PinkFlowerData {
             alphaChannel: { lightingEnabled: false, matColorSource: GX.ColorSrc.VTX, ambColorSource: GX.ColorSrc.REG, litMask: 0, attenuationFunction: GX.AttenuationFunction.NONE, diffuseFunction: GX.DiffuseFunction.NONE },
         });
 
-        this.bufferCoalescer = loadedDataCoalescerGfx(device, [ vtx_l_OhanaDL ]);
+        this.bufferCoalescer = loadedDataCoalescerComboGfx(device, [ vtx_l_OhanaDL ]);
         this.shapeHelperMain = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[0], vtxLoader.loadedVertexLayout, vtx_l_OhanaDL);
     }
 
@@ -311,7 +311,7 @@ export class BessouFlowerData {
     public textureData: BTIData;
     public shapeHelperMain: GXShapeHelperGfx;
     public gxMaterial: GX_Material.GXMaterial;
-    public bufferCoalescer: GfxBufferCoalescer;
+    public bufferCoalescer: GfxBufferCoalescerCombo;
 
     constructor(device: GfxDevice, symbolMap: SymbolMap, cache: GfxRenderCache) {
         const l_matDL3 = findSymbol(symbolMap, `d_flower.o`, `l_matDL3`);
@@ -380,7 +380,7 @@ export class BessouFlowerData {
             alphaChannel: { lightingEnabled: false, matColorSource: GX.ColorSrc.VTX, ambColorSource: GX.ColorSrc.REG, litMask: 0, attenuationFunction: GX.AttenuationFunction.NONE, diffuseFunction: GX.DiffuseFunction.NONE },
         });
 
-        this.bufferCoalescer = loadedDataCoalescerGfx(device, [ vtx_l_OhanaDL ]);
+        this.bufferCoalescer = loadedDataCoalescerComboGfx(device, [ vtx_l_OhanaDL ]);
         this.shapeHelperMain = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[0], vtxLoader.loadedVertexLayout, vtx_l_OhanaDL);
     }
 
