@@ -1753,30 +1753,6 @@ class SMGSpawner {
         case 'AstroCore':
             spawnGraph(name, SceneGraphTag.Normal, { bck: 'revival4.bck', brk: 'revival4.brk', btk: 'astrocore.btk' });
             break;
-        case 'AstroDomeEntrance': {
-            switch (objinfo.objArg0) {
-            case 1: spawnGraph('AstroDomeEntranceObservatory'); break;
-            case 2: spawnGraph('AstroDomeEntranceWell'); break;
-            case 3: spawnGraph('AstroDomeEntranceKitchen'); break;
-            case 4: spawnGraph('AstroDomeEntranceBedRoom'); break;
-            case 5: spawnGraph('AstroDomeEntranceMachine'); break;
-            case 6: spawnGraph('AstroDomeEntranceTower'); break;
-            default: assert(false);
-            }
-            break;
-        }
-        case 'AstroStarPlate': {
-            switch (objinfo.objArg0) {
-            case 1: spawnGraph('AstroStarPlateObservatory'); break;
-            case 2: spawnGraph('AstroStarPlateWell'); break;
-            case 3: spawnGraph('AstroStarPlateKitchen'); break;
-            case 4: spawnGraph('AstroStarPlateBedRoom'); break;
-            case 5: spawnGraph('AstroStarPlateMachine'); break;
-            case 6: spawnGraph('AstroStarPlateTower'); break;
-            default: assert(false);
-            }
-            break;
-        }
         case 'SignBoard':
             // SignBoard has a single animation for falling over which we don't want to play.
             spawnGraph('SignBoard', SceneGraphTag.Normal, null);

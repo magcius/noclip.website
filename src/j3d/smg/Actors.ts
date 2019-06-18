@@ -97,6 +97,10 @@ export function deleteEffectAll(actor: LiveActor): void {
     actor.effectKeeper.deleteEmitterAll();
 }
 
+export function isRegisteredEffect(actor: LiveActor, name: string): boolean {
+    return actor.effectKeeper.isRegisteredEmitter(name);
+}
+
 export function hideModel(actor: LiveActor): void {
     actor.visibleModel = false;
 }
@@ -178,21 +182,44 @@ function bindColorChangeAnimation(modelInstance: BMDModelInstance, arc: RARC.RAR
 class MapObjActorInitInfo {
     public lightType: LightType = LightType.Planet;
     public initLightControl: boolean = false;
+    public connectToScene: boolean = false;
+    public modelName: string | null = null;
+    public initEffect: string | null = null;
+
+    public setupConnectToScene(): void {
+        this.connectToScene = true;
+    }
+
+    public setupModelName(name: string): void {
+        this.modelName = name;
+    }
+
+    public setupEffect(name: string): void {
+        this.initEffect = name;
+    }
 }
 
 class MapObjActor extends LiveActor {
     private bloomModel: ModelObj | null = null;
+    private objName: string;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, initInfo: MapObjActorInitInfo) {
         super(zoneAndLayer, getObjectName(infoIter));
 
+        this.objName = this.name;
+        if (initInfo.modelName !== null)
+            this.objName = initInfo.modelName;
+
         this.initDefaultPos(sceneObjHolder, infoIter);
-        this.initModelManagerWithAnm(sceneObjHolder, this.name);
-        this.connectToScene(sceneObjHolder, initInfo);
+        this.initModelManagerWithAnm(sceneObjHolder, this.objName);
+        if (initInfo.connectToScene)
+            this.connectToScene(sceneObjHolder, initInfo);
         if (initInfo.initLightControl)
             this.initLightCtrl(sceneObjHolder);
+        if (initInfo.initEffect !== null)
+            this.initEffectKeeper(sceneObjHolder, initInfo.initEffect)
 
-        const bloomObjName = `${this.name}Bloom`;
+        const bloomObjName = `${this.objName}Bloom`;
         if (sceneObjHolder.modelCache.isObjectDataExist(bloomObjName)) {
             this.bloomModel = createModelObjBloomModel(zoneAndLayer, sceneObjHolder, this.name, bloomObjName, this.modelInstance.modelMatrix);
         }
@@ -207,11 +234,16 @@ class MapObjActor extends LiveActor {
         else
             connectToSceneCollisionMapObj(sceneObjHolder, this);
     }
+
+    public isObjectName(name: string): boolean {
+        return this.objName === name;
+    }
 }
 
 export class CollapsePlane extends MapObjActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         const initInfo = new MapObjActorInitInfo();
+        initInfo.setupConnectToScene();
         super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
     }
 }
@@ -401,6 +433,7 @@ export class PeachCastleGardenPlanet extends MapObjActor {
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         const initInfo = new MapObjActorInitInfo();
+        initInfo.setupConnectToScene();
         super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
 
         this.indirectModel = createIndirectPlanetModel(sceneObjHolder, this);
@@ -1332,6 +1365,60 @@ export class ShootingStar extends LiveActor {
             if (isGreaterStep(this, this.delay)) {
                 this.setNerve(ShootingStarNrv.PRE_SHOOTING);
             }
+        }
+    }
+}
+
+export class AstroMapObj extends MapObjActor {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        const initInfo = new MapObjActorInitInfo();
+        const objectName = getObjectName(infoIter);
+        const domeId = getJMapInfoArg0(infoIter);
+        initInfo.setupModelName(AstroMapObj.getModelName(objectName, domeId));
+        initInfo.setupConnectToScene();
+        initInfo.setupEffect(objectName);
+        super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
+
+        this.tryStartAllAnimAndEffect(sceneObjHolder, 'AliveWait');
+    }
+
+    private tryStartAllAnimAndEffect(sceneObjHolder: SceneObjHolder, name: string): void {
+        this.tryStartAllAnim(name);
+        if (this.isObjectName('AstroDomeEntranceKitchen'))
+            emitEffect(sceneObjHolder, this, 'KitchenSmoke');
+        if (isRegisteredEffect(this, name))
+            emitEffect(sceneObjHolder, this, name);
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        const objectName = getObjectName(infoIter);
+        const domeId = getJMapInfoArg0(infoIter);
+        sceneObjHolder.modelCache.requestObjectData(AstroMapObj.getModelName(objectName, domeId));
+    }
+
+    public static getModelName(objName: string, domeId: number): string {
+        if (objName === 'AstroDomeEntrance') {
+            const table = [
+                'AstroDomeEntranceObservatory',
+                'AstroDomeEntranceWell',
+                'AstroDomeEntranceKitchen',
+                'AstroDomeEntranceBedRoom',
+                'AstroDomeEntranceMachine',
+                'AstroDomeEntranceTower',
+            ];
+            return table[domeId - 1];
+        } else if (objName === 'AstroStarPlate') {
+            const table = [
+                'AstroStarPlateObservatory',
+                'AstroStarPlateWell',
+                'AstroStarPlateKitchen',
+                'AstroStarPlateBedRoom',
+                'AstroStarPlateMachine',
+                'AstroStarPlateTower',
+            ];
+            return table[domeId - 1];
+        } else {
+            throw "whoops";
         }
     }
 }

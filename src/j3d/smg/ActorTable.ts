@@ -1,6 +1,6 @@
 
 import { NameObjFactory } from "./smg_scenes";
-import { Kinopio, TicoComet, EarthenPipe, StarPiece, CollapsePlane, BlackHole, Peach, PenguinRacer, Coin, Penguin, SimpleEffectObj, EffectObjR1000F50, GCaptureTarget, FountainBig, AstroEffectObj, WarpPod, AstroCountDownPlate, Butler, Rosetta, Tico, Sky, Air, ShootingStar, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObj10x10x10SyncClipping } from "./Actors";
+import { Kinopio, TicoComet, EarthenPipe, StarPiece, CollapsePlane, BlackHole, Peach, PenguinRacer, Coin, Penguin, SimpleEffectObj, EffectObjR1000F50, GCaptureTarget, FountainBig, AstroEffectObj, WarpPod, AstroCountDownPlate, Butler, Rosetta, Tico, Sky, Air, ShootingStar, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObj10x10x10SyncClipping, AstroMapObj } from "./Actors";
 import { OceanBowl } from "./OceanBowl";
 
 interface ActorTableEntry {
@@ -32,7 +32,6 @@ const ActorTable: ActorTableEntry[] = [
     _("GCaptureTarget",                 GCaptureTarget),
     _("FountainBig",                    FountainBig),
     _("WarpPod",                        WarpPod),
-    _("AstroCountDownPlate",            AstroCountDownPlate),
     _("Butler",                         Butler),
     _("Rosetta",                        Rosetta),
 
@@ -94,6 +93,11 @@ const ActorTable: ActorTableEntry[] = [
     _("ForestWaterfallL",               EffectObjR1000F50),
     _("ForestWaterfallS",               EffectObjR1000F50),
     _("TwinFallLakeWaterFall",          EffectObjR1000F50),
+
+    // Astro
+    _("AstroCountDownPlate",            AstroCountDownPlate),
+    _("AstroDomeEntrance",              AstroMapObj),
+    _("AstroStarPlate",                 AstroMapObj),
 ];
 
 export function getActorNameObjFactory(objName: string): NameObjFactory | null {

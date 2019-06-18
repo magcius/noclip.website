@@ -450,10 +450,14 @@ export class EffectKeeper {
     }
 
     public getEmitter(name: string): MultiEmitter | null {
-        const emitter = this.multiEmitters.find((m) => m.name == name);
-        if (emitter === undefined)
-            return null;
-        return emitter;
+        for (let i = 0; i < this.multiEmitters.length; i++)
+            if (this.multiEmitters[i].name === name)
+                return this.multiEmitters[i];
+        return null;
+    }
+
+    public isRegisteredEmitter(name: string): boolean {
+        return this.getEmitter(name) !== null;
     }
 
     public createEmitter(sceneObjHolder: SceneObjHolder, name: string): MultiEmitter | null {
