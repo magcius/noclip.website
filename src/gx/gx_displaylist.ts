@@ -997,7 +997,7 @@ export function compileVtxLoader(vatFormat: GX_VtxAttrFmt[], vcd: GX_VtxDesc[]):
     return compileVtxLoaderDesc(desc);
 }
 
-export function coalesceLoadedDatas(loadedDatas: LoadedVertexData[]): LoadedVertexData {
+export function coalesceLoadedDatas(loadedVertexLayout: LoadedVertexLayout, loadedDatas: LoadedVertexData[]): LoadedVertexData {
     let totalIndexCount = 0;
     let totalVertexCount = 0;
     let indexDataSize = 0;
@@ -1006,6 +1006,8 @@ export function coalesceLoadedDatas(loadedDatas: LoadedVertexData[]): LoadedVert
 
     for (let i = 0; i < loadedDatas.length; i++) {
         const loadedData = loadedDatas[i];
+        assert(loadedData.vertexBuffers.length === 1);
+        assert(loadedData.vertexBufferStrides[0] === loadedVertexLayout.dstVertexSize);
 
         for (let j = 0; j < loadedData.packets.length; j++) {
             const packet = loadedData.packets[j];
@@ -1039,7 +1041,7 @@ export function coalesceLoadedDatas(loadedDatas: LoadedVertexData[]): LoadedVert
         indexData: indexData.buffer,
         indexFormat: loadedDatas[0].indexFormat,
         vertexBuffers: [packedVertexData.buffer],
-        vertexBufferStrides: [packedVertexDataSize],
+        vertexBufferStrides: [loadedVertexLayout.dstVertexSize],
         totalIndexCount,
         totalVertexCount,
         vertexId: 0,

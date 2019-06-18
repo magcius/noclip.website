@@ -322,13 +322,6 @@ export function fillSceneParams(sceneParams: SceneParams, camera: Camera, viewpo
     sceneParams.u_SceneTextureLODBias = textureLODBias;
 }
 
-export function loadedDataCoalescerGfx(device: GfxDevice, loadedVertexDatas: LoadedVertexData[]): GfxBufferCoalescer {
-    return new GfxBufferCoalescer(device,
-        loadedVertexDatas.map((data) => new ArrayBufferSlice(data.vertexBuffers[0])),
-        loadedVertexDatas.map((data) => new ArrayBufferSlice(data.indexData))
-    );
-}
-
 export function loadedDataCoalescerComboGfx(device: GfxDevice, loadedVertexDatas: LoadedVertexData[]): GfxBufferCoalescerCombo {
     return new GfxBufferCoalescerCombo(device,
         loadedVertexDatas.map((data) => data.vertexBuffers.map((buffer) => new ArrayBufferSlice(buffer))),

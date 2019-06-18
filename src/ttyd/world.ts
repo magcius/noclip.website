@@ -1143,7 +1143,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                 displayListTableIdx += 0x08;
             }
 
-            const loadedVertexData = coalesceLoadedDatas(loadedDatas);
+            const loadedVertexData = coalesceLoadedDatas(loadedVertexLayout, loadedDatas);
             const batch: Batch = { loadedVertexLayout, loadedVertexData };
 
             parts.push({ material, batch });

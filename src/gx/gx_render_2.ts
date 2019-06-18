@@ -8,7 +8,7 @@ import * as Viewer from '../viewer';
 import { assert } from '../util';
 import { LoadedVertexData, LoadedVertexLayout, LoadedVertexPacket } from './gx_displaylist';
 
-import { GfxCoalescedBuffers, makeStaticDataBuffer, GfxCoalescedBuffersCombo } from '../gfx/helpers/BufferHelpers';
+import { makeStaticDataBuffer, GfxCoalescedBuffersCombo } from '../gfx/helpers/BufferHelpers';
 import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxInputState, GfxVertexAttributeDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxProgram, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxVertexAttributeFrequency, GfxMegaStateDescriptor, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { getFormatTypeFlags, FormatTypeFlags } from '../gfx/platform/GfxPlatformFormat';
 import { GfxRenderInstManager, GfxRenderInst } from '../gfx/render/GfxRenderer2';
