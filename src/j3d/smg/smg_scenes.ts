@@ -22,7 +22,9 @@ import * as RARC from '../../j3d/rarc';
 import AnimationController from '../../AnimationController';
 
 import { EFB_WIDTH, EFB_HEIGHT } from '../../gx/gx_material';
-import { BMD, BRK, BTK, BCK, LoopMode, BVA, BTP, BPK, JSystemFileReaderHelper, TexMtxProjection, MaterialEntry, ShapeDisplayFlags } from '../../j3d/j3d';
+import { MaterialParams, PacketParams } from '../../gx/gx_render';
+import { LoadedVertexData, LoadedVertexLayout } from '../../gx/gx_displaylist';
+import { BMD, BRK, BTK, BCK, LoopMode, BVA, BTP, BPK, JSystemFileReaderHelper, TexMtxProjection, ShapeDisplayFlags } from '../../j3d/j3d';
 import { BMDModel, BMDModelInstance, MaterialInstance } from '../../j3d/render';
 import { JMapInfoIter, createCsvParser, getJMapInfoTransLocal, getJMapInfoRotateLocal, getJMapInfoScale } from './JMapInfo';
 import { BloomPostFXParameters, BloomPostFXRenderer } from './Bloom';
@@ -30,6 +32,7 @@ import { AreaLightInfo, ActorLightInfo, LightDataHolder, ActorLightCtrl } from '
 import { NameObj, SceneNameObjListExecutor } from './NameObj';
 import { EffectSystem, EffectKeeper } from './EffectSystem';
 import { LightType } from './DrawBuffer';
+import { Camera } from '../../Camera';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -674,6 +677,8 @@ function patchInTexMtxIdxBuffer(loadedVertexLayout: LoadedVertexLayout, loadedVe
 }
 
 function patchBMD(bmd: BMD): void {
+    let hasAnyEnvMap = false;
+
     for (let i = 0; i < bmd.shp1.shapes.length; i++) {
         const shape = bmd.shp1.shapes[i];
         if (shape.displayFlags !== ShapeDisplayFlags.USE_PNMTXIDX)
@@ -702,25 +707,31 @@ function patchBMD(bmd: BMD): void {
                 // Mark as requiring TexMtxIdx
                 material.gxMaterial.useTexMtxIdx[j] = true;
                 texGen.postMatrix = GX.PostTexGenMatrix.PTTEXMTX0 + (j * 3);
+
+                if (texGen.type === GX.TexGenType.MTX2x4)
+                    texMtxIdxBaseOffsets[j] = GX.TexGenMatrix.TEXMTX0;
+                else if (texGen.type === GX.TexGenType.MTX3x4)
+                    texMtxIdxBaseOffsets[j] = GX.TexGenMatrix.PNMTX0;
+
+                const vtxAttrib = GX.VertexAttribute.TEX0MTXIDX + j;
+                shape.loadedVertexLayout.dstVertexAttributeLayouts.push({ vtxAttrib, format: GfxFormat.U8_RGBA, bufferIndex: 1, bufferOffset: j });
+                bufferStride = Math.max(bufferStride, j);
+
+                hasAnyEnvMap = hasAnyEnvMap || isUsingEnvMap;
             }
+        }
 
-            const vtxAttrib = GX.VertexAttribute.TEX0MTXIDX + j;
-            shape.loadedVertexLayout.dstVertexAttributeLayouts.push({ vtxAttrib, format: GfxFormat.U8_RGBA, bufferIndex: 1, bufferOffset: j });
-            bufferStride = Math.max(bufferStride, j);
-
-            if (texGen.type === GX.TexGenType.MTX2x4)
-                texMtxIdxBaseOffsets[j] = GX.TexGenMatrix.TEXMTX0;
-            else if (texGen.type === GX.TexGenType.MTX3x4)
-                texMtxIdxBaseOffsets[j] = GX.TexGenMatrix.PNMTX0;
+        // If we have an environment map, then all texture matrices are IDENTITY.
+        // Done in ShapeUserPacketData::init() with the GDSetCurrentMtx().
+        if (hasAnyEnvMap) {
+            for (let j = 0; j < material.gxMaterial.texGens.length; j++)
+                material.gxMaterial.texGens[j].matrix = GX.TexGenMatrix.IDENTITY;
         }
 
         bufferStride = align(bufferStride, 4);
 
         if (material.gxMaterial.useTexMtxIdx) {
             // Install TEXMTXIDX data.
-
-            if (material.name === 'Body1_v')
-                debugger;
 
             for (let j = 0; j < shape.packets.length; j++) {
                 const packet = shape.packets[j];
@@ -1234,8 +1245,7 @@ export class LiveActor extends NameObj implements ObjectBase {
     public initLightCtrl(sceneObjHolder: SceneObjHolder): void {
         this.actorLightCtrl = new ActorLightCtrl(this);
         this.actorLightCtrl.initActorLightInfo(sceneObjHolder);
-        const areaLightInfo = sceneObjHolder.lightDataHolder.findDefaultAreaLight(sceneObjHolder);
-        this.actorLightCtrl.currentAreaLight = areaLightInfo;
+        this.actorLightCtrl.setDefaultAreaLight(sceneObjHolder);
     }
 
     public initEffectKeeper(sceneObjHolder: SceneObjHolder, groupName: string | null): void {
@@ -1329,9 +1339,6 @@ export class LiveActor extends NameObj implements ObjectBase {
 
 import { NPCDirector, MiniRoutePoint, createModelObjMapObj, PeachCastleGardenPlanet } from './Actors';
 import { getActorNameObjFactory } from './ActorTable';
-import { Camera } from '../../Camera';
-import { MaterialParams, PacketParams } from '../../gx/gx_render';
-import { LoadedVertexPacket, LoadedVertexData, LoadedVertexLayout } from '../../gx/gx_displaylist';
 
 function layerVisible(layer: LayerId, layerMask: number): boolean {
     if (layer >= 0)

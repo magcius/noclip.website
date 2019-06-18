@@ -120,6 +120,14 @@ export class ActorLightCtrl {
         sceneObjHolder.sceneNameObjListExecutor.findLightInfo(this.assocActor);
     }
 
+    public setAreaLightFromZoneAndId(sceneObjHolder: SceneObjHolder, zoneId: number, lightId: number): void {
+        this.currentAreaLight = sceneObjHolder.lightDataHolder.findAreaLightFromZoneAndId(sceneObjHolder, zoneId, lightId);
+    }
+
+    public setDefaultAreaLight(sceneObjHolder: SceneObjHolder): void {
+        this.currentAreaLight = sceneObjHolder.lightDataHolder.findDefaultAreaLight(sceneObjHolder);
+    }
+
     public getActorLight(): ActorLightInfo | null {
         if (this.currentAreaLight !== null)
             return this.getTargetActorLight(this.currentAreaLight);
@@ -135,7 +143,7 @@ export class ActorLightCtrl {
 class LightZoneInfo {
     private lightIDToAreaLightName = new Map<number, string>();
 
-    constructor(public zoneName: string, infoIter: JMapInfoIter) {
+    constructor(public zoneId: number, public zoneName: string, infoIter: JMapInfoIter) {
         for (let i = 0; i < infoIter.getNumRecords(); i++) {
             infoIter.setRecord(i);
             const lightID = infoIter.getValueNumber('LightID');
@@ -160,19 +168,19 @@ export class LightDataHolder {
         }
     }
 
-    private ensureZoneInfo(sceneObjHolder: SceneObjHolder, zoneName: string): LightZoneInfo {
+    private ensureZoneInfo(sceneObjHolder: SceneObjHolder, zoneId: number): LightZoneInfo {
         for (let i = 0; i < this.zoneInfos.length; i++)
-            if (this.zoneInfos[i].zoneName === zoneName)
+            if (this.zoneInfos[i].zoneId === zoneId)
                 return this.zoneInfos[i];
+        const zoneName = sceneObjHolder.scenarioData.zoneNames[zoneId];
         const zoneLightData = sceneObjHolder.sceneDesc.getZoneLightData(sceneObjHolder.modelCache, zoneName);
-        const zoneInfo = new LightZoneInfo(zoneName, zoneLightData);
+        const zoneInfo = new LightZoneInfo(zoneId, zoneName, zoneLightData);
         this.zoneInfos.push(zoneInfo);
         return zoneInfo;
     }
 
-    // The original uses a ZoneLightID which is composed of a ZoneID/LightID pair. We use zone names, not IDs.
-    public getAreaLightName(sceneObjHolder: SceneObjHolder, zoneName: string, lightID: number): string {
-        return this.ensureZoneInfo(sceneObjHolder, zoneName).getAreaLightName(lightID);
+    public getAreaLightName(sceneObjHolder: SceneObjHolder, zoneId: number, lightId: number): string {
+        return this.ensureZoneInfo(sceneObjHolder, zoneId).getAreaLightName(lightId);
     }
 
     public findAreaLight(areaLightName: string): AreaLightInfo | null {
@@ -183,8 +191,11 @@ export class LightDataHolder {
     }
 
     public findDefaultAreaLight(sceneObjHolder: SceneObjHolder): AreaLightInfo {
-        const stageName = sceneObjHolder.scenarioData.getMasterZoneFilename();
-        const areaLightName = this.getAreaLightName(sceneObjHolder, stageName, -1);
+        return this.findAreaLightFromZoneAndId(sceneObjHolder, 0, -1);
+    }
+
+    public findAreaLightFromZoneAndId(sceneObjHolder: SceneObjHolder, zoneId: number, lightId: number): AreaLightInfo {
+        const areaLightName = this.getAreaLightName(sceneObjHolder, zoneId, lightId);
         return this.findAreaLight(areaLightName);
     }
 }

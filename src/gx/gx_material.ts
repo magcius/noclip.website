@@ -485,9 +485,6 @@ export class GX_Program extends DeviceProgram {
         case GX.TexGenType.SRTG:
             return `vec3(${src}.xy, 1.0)`;
         case GX.TexGenType.MTX2x4:
-            // Mild cleanup to the generated shader.
-            if (texCoordGen.matrix === GX.TexGenMatrix.IDENTITY)
-                return `vec3(${src}.xy, 1.0)`;
             return `vec3(${this.generateTexGenMatrixMult(texCoordGen, src)}.xy, 1.0)`;
         case GX.TexGenType.MTX3x4:
             return `${this.generateTexGenMatrixMult(texCoordGen, src)}`;
