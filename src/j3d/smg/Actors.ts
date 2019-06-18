@@ -15,6 +15,7 @@ import * as RARC from '../../j3d/rarc';
 import { DrawBufferType, MovementType, CalcAnimType, DrawType } from './NameObj';
 import { BMDModelInstance } from '../render';
 import { assertExists } from '../../util';
+import { Camera } from '../../Camera';
 
 export function connectToScene(sceneObjHolder: SceneObjHolder, actor: LiveActor, movementType: MovementType, calcAnimType: CalcAnimType, drawBufferType: DrawBufferType, drawType: DrawType): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, movementType, calcAnimType, drawBufferType, drawType);
@@ -90,6 +91,27 @@ export function showModel(actor: LiveActor): void {
 export function calcUpVec(v: vec3, actor: LiveActor): void {
     const mtx = actor.getBaseMtx();
     vec3.set(v, mtx[4], mtx[5], mtx[6]);
+}
+
+export function getCamPos(v: vec3, camera: Camera): void {
+    const m = camera.worldMatrix;
+    vec3.set(v, m[12], m[13], m[14]);
+}
+
+export function getCamYdir(v: vec3, camera: Camera): void {
+    camera.getWorldUp(v);
+}
+
+export function scaleMatrixScalar(m: mat4, s: number): void {
+    m[0] *= s;
+    m[4] *= s;
+    m[8] *= s;
+    m[1] *= s;
+    m[5] *= s;
+    m[9] *= s;
+    m[2] *= s;
+    m[6] *= s;
+    m[10] *= s;
 }
 
 function bindColorChangeAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, frame: number, brkName: string = 'colorchange.brk'): void {
@@ -220,6 +242,34 @@ export class EarthenPipe extends LiveActor {
     }
 }
 
+function setXYZDir(dst: mat4, x: vec3, y: vec3, z: vec3): void {
+    dst[0] = x[0];
+    dst[1] = x[1];
+    dst[2] = x[2];
+    dst[3] = 9999;
+    dst[4] = y[0];
+    dst[5] = y[1];
+    dst[6] = y[2];
+    dst[7] = 9999;
+    dst[8] = z[0];
+    dst[9] = z[1];
+    dst[10] = z[2];
+    dst[11] = 9999;
+}
+
+const scratchVec3 = vec3.create();
+function makeMtxFrontUpPos(dst: mat4, front: vec3, up: vec3, pos: vec3): void {
+    vec3.normalize(front, front);
+    vec3.normalize(up, up);
+    vec3.cross(scratchVec3, front, up);
+    setXYZDir(dst, scratchVec3, up, front);
+    dst[12] = pos[0];
+    dst[13] = pos[1];
+    dst[14] = pos[2];
+}
+
+const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
 export class BlackHole extends LiveActor {
     private blackHoleModel: ModelObj;
 
@@ -230,6 +280,7 @@ export class BlackHole extends LiveActor {
         this.initModelManagerWithAnm(sceneObjHolder, 'BlackHoleRange');
         connectToSceneCollisionMapObj(sceneObjHolder, this);
         this.blackHoleModel = createModelObjMapObj(zoneAndLayer, sceneObjHolder, 'BlackHole', 'BlackHole', this.modelInstance.modelMatrix);
+        this.initEffectKeeper(sceneObjHolder, 'BlackHoleRange');
 
         startBck(this, `BlackHoleRange`);
         startBtkIfExist(this.modelInstance, this.arc, `BlackHoleRange`);
@@ -248,19 +299,21 @@ export class BlackHole extends LiveActor {
         }
 
         this.updateModelScale(rangeScale, rangeScale);
-
-        // this.emitters = sceneObjHolder.effectSystem.createAutoEmitterDumb(sceneObjHolder, 'BlackHoleSuction');
-        // vec3.copy(this.emitter.globalTranslation, this.translation);
     }
 
-    /*
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        this.emitter.setVisible(this.visibleScenario && this.visibleAlive);
+    public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
+        super.calcAndSetBaseMtx(viewerInput);
 
-        if (this.emitter.getVisible())
-            this.emitter.setVisible(viewerInput.camera.frustum.containsPoint(this.emitter.globalTranslation));
+        const front = scratchVec3a;
+        const up = scratchVec3b;
+
+        getCamPos(front, viewerInput.camera);
+        vec3.sub(front, front, this.translation);
+        getCamYdir(up, viewerInput.camera);
+        makeMtxFrontUpPos(scratchMatrix, front, up, this.translation);
+        scaleMatrixScalar(scratchMatrix, this.scale[0]);
+        this.effectKeeper.setSRTFromHostMtx(scratchMatrix);
     }
-    */
 
     private updateModelScale(rangeScale: number, holeScale: number): void {
         vec3.set(this.scale, rangeScale, rangeScale, rangeScale);

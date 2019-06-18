@@ -408,12 +408,14 @@ function registerAutoEffectInGroup(sceneObjHolder: SceneObjHolder, effectKeeper:
 }
 
 function isCreate(multiEmitter: MultiEmitter, currentBckName: string, frame: number, loopMode: EmitterLoopMode): boolean {
-    if (multiEmitter.animNames.includes(currentBckName)) {
-        if (loopMode === EmitterLoopMode.FOREVER) {
-            return true;
-        } else {
-            if (frame >= multiEmitter.startFrame)
+    if (multiEmitter.bckName !== currentBckName) {
+        if (multiEmitter.animNames.includes(currentBckName)) {
+            if (loopMode === EmitterLoopMode.FOREVER) {
                 return true;
+            } else {
+                if (frame >= multiEmitter.startFrame)
+                    return true;
+            }
         }
     }
     return false;
@@ -432,6 +434,7 @@ function isDelete(multiEmitter: MultiEmitter, currentBckName: string, frame: num
 
 export class EffectKeeper {
     public multiEmitters: MultiEmitter[] = [];
+    private autoFollow: boolean = true;
     private currentBckName: string | null = null;
 
     constructor(sceneObjHolder: SceneObjHolder, public actor: LiveActor, public groupName: string) {
@@ -482,7 +485,17 @@ export class EffectKeeper {
         }
     }
 
+    public setSRTFromHostMtx(mtx: mat4): void {
+        this.autoFollow = false;
+
+        for (let i = 0; i < this.multiEmitters.length; i++)
+            this.multiEmitters[i].setSRTFromHostMtx(mtx, true);
+    }
+
     public followSRT(): void {
+        if (!this.autoFollow)
+            return;
+
         for (let i = 0; i < this.multiEmitters.length; i++)
             this.setHostSRT(this.multiEmitters[i], true);
     }
@@ -502,13 +515,16 @@ export class EffectKeeper {
         for (let i = 0; i < this.multiEmitters.length; i++) {
             const multiEmitter = this.multiEmitters[i];
 
+            let created = false;
             if (isCreate(multiEmitter, this.currentBckName, timeInFrames, EmitterLoopMode.ONE_TIME)) {
                 multiEmitter.createOneTimeEmitter(effectSystem);
-                multiEmitter.bckName = this.currentBckName;
-                this.setHostSRT(multiEmitter, false);
+                created = true;
             }
             if (isCreate(multiEmitter, this.currentBckName, timeInFrames, EmitterLoopMode.FOREVER)) {
                 multiEmitter.createForeverEmitter(effectSystem);
+                created = true;
+            }
+            if (created) {
                 multiEmitter.bckName = this.currentBckName;
                 this.setHostSRT(multiEmitter, false);
             }
