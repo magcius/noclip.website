@@ -61,6 +61,14 @@ export function connectToSceneNoSilhouettedMapObjStrongLight(sceneObjHolder: Sce
     connectToScene(sceneObjHolder, actor, 0x22, 0x05, 0x0F, -1);
 }
 
+export function connectToSceneSky(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    connectToScene(sceneObjHolder, actor, 0x24, 0x05, DrawBufferType.SKY, -1);
+}
+
+export function connectToSceneAir(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    connectToScene(sceneObjHolder, actor, 0x24, 0x05, DrawBufferType.AIR, -1);
+}
+
 export function createModelObjBloomModel(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, objName: string, modelName: string, baseMtx: mat4): ModelObj {
     const bloomModel = new ModelObj(zoneAndLayer, sceneObjHolder, objName, modelName, baseMtx, 0x1E, -2, -2);
     bloomModel.modelInstance.passMask = SMGPass.BLOOM;
@@ -104,6 +112,16 @@ export function getCamPos(v: vec3, camera: Camera): void {
 
 export function getCamYdir(v: vec3, camera: Camera): void {
     camera.getWorldUp(v);
+}
+
+export function calcSqDistanceToPlayer(actor: LiveActor, camera: Camera, scratch: vec3 = scratchVec3): number {
+    getCamPos(scratch, camera);
+    return vec3.squaredDistance(actor.translation, scratch);
+}
+
+export function calcDistanceToPlayer(actor: LiveActor, camera: Camera, scratch: vec3 = scratchVec3): number {
+    getCamPos(scratch, camera);
+    return vec3.distance(actor.translation, scratch);
 }
 
 export function scaleMatrixScalar(m: mat4, s: number): void {
@@ -264,8 +282,8 @@ function setXYZDir(dst: mat4, x: vec3, y: vec3, z: vec3): void {
 const scratchVec3 = vec3.create();
 function makeMtxFrontUpPos(dst: mat4, front: vec3, up: vec3, pos: vec3): void {
     vec3.normalize(front, front);
-    vec3.normalize(up, up);
     vec3.cross(scratchVec3, front, up);
+    vec3.normalize(scratchVec3, scratchVec3);
     setXYZDir(dst, scratchVec3, up, front);
     dst[12] = pos[0];
     dst[13] = pos[1];
@@ -294,7 +312,7 @@ export class BlackHole extends LiveActor {
         const arg0 = getJMapInfoArg0(infoIter, -1);
         if (arg0 < 0) {
             // If this is a cube, we behave slightly differently wrt. scaling.
-            if (getObjectName(infoIter) !== 'BlackHoleCube')
+            if (this.name !== 'BlackHoleCube')
                 rangeScale = infoIter.getValueNumber('scale_x');
             else
                 rangeScale = 1.0;
@@ -1079,5 +1097,65 @@ export class Tico extends NPCActor {
 
         this.startAction('Wait');
         this.modelInstance.animationController.phaseFrames += Math.random() * 1000;
+    }
+}
+
+export class Sky extends LiveActor {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, getObjectName(infoIter));
+
+        this.initDefaultPos(sceneObjHolder, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, this.name);
+        connectToSceneSky(sceneObjHolder, this);
+
+        this.modelInstance.passMask = SMGPass.SKYBOX;
+    }
+
+    public calcAnim(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.calcAnim(sceneObjHolder, viewerInput);
+        getCamPos(this.translation, viewerInput.camera);
+    }
+}
+
+const enum AirState {
+    IN, OUT,
+}
+
+export class Air extends LiveActor {
+    private distInThresholdSq: number;
+    private distOutThresholdSq: number;
+    private state: AirState = AirState.IN;
+    private animationController: AnimationController
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, getObjectName(infoIter));
+
+        this.initDefaultPos(sceneObjHolder, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, this.name);
+        connectToSceneAir(sceneObjHolder, this);
+
+        let thresholdParam = getJMapInfoArg0(infoIter, -1);
+        if (thresholdParam < 0)
+            thresholdParam = 70;
+
+        const distInThreshold = 100 * thresholdParam;
+        this.distInThresholdSq = distInThreshold*distInThreshold;
+        const distOutThreshold = 100 * (20 + thresholdParam);
+        this.distOutThresholdSq = distOutThreshold*distOutThreshold;
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.movement(sceneObjHolder, viewerInput);
+
+        const distanceToPlayer = calcSqDistanceToPlayer(this, viewerInput.camera);
+        if (this.state === AirState.OUT && distanceToPlayer < this.distInThresholdSq) {
+            this.tryStartAllAnim('Appear');
+            this.modelInstance.animationController.setPhaseToCurrent();
+            this.state = AirState.IN;
+        } else if (this.state === AirState.IN && distanceToPlayer > this.distOutThresholdSq) {
+            this.tryStartAllAnim('Disappear');
+            this.modelInstance.animationController.setPhaseToCurrent();
+            this.state = AirState.OUT;
+        }
     }
 }

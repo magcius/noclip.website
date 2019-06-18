@@ -456,7 +456,7 @@ class SMGRenderer implements Viewer.SceneGfx {
 
         // TODO(jstpierre): This is a very messy combination of the legacy render path and the new render path.
         // Anything in `sceneGraph` is legacy, the new stuff uses the drawBufferHolder.
-        viewerInput.camera.setClipPlanes(20, 500000);
+        viewerInput.camera.setClipPlanes(100, 800000);
 
         // First, prepare our legacy-style nodes.
         for (let i = 0; i < this.sceneGraph.nodes.length; i++) {
@@ -706,8 +706,6 @@ function patchBMD(bmd: BMD): void {
             if (isUsingEnvMap || isUsingProjMap) {
                 // Mark as requiring TexMtxIdx
                 material.gxMaterial.useTexMtxIdx[j] = true;
-                // Install a post matrix.
-                material.postTexMatrices[j] = material.texMatrices[j];
                 texGen.postMatrix = GX.PostTexGenMatrix.PTTEXMTX0 + (j * 3);
 
                 if (isUsingEnvMap)
@@ -759,6 +757,14 @@ function fillMaterialParamsCallback(materialParams: MaterialParams, materialInst
 
         if (isUsingEnvMap)
             hasAnyEnvMap = true;
+
+        const dst = materialParams.u_PostTexMtx[i];
+        const flipY = materialParams.m_TextureMapping[i].flipY;
+
+        materialInstance.calcPostTexMtxInput(dst, texMtx, viewMatrix);
+        const texSRT = scratchMatrix;
+        materialInstance.calcTexSRT(texSRT, i);
+        materialInstance.calcTexMtx(dst, texMtx, texSRT, modelMatrix, camera, flipY);
     }
 
     if (hasAnyEnvMap) {
@@ -1479,11 +1485,6 @@ class SMGSpawner {
 
         const areaLightInfo = this.sceneObjHolder.lightDataHolder.findDefaultAreaLight(this.sceneObjHolder);
 
-        const setLightName = (node: Node, lightName: string): void => {
-            const areaLightInfo = this.sceneObjHolder.lightDataHolder.findAreaLight(lightName);
-            node.setAreaLightInfo(areaLightInfo);
-        };
-
         const connectObject = (node: Node): void => {
             zone.objects.push(node);
             this.sceneGraph.addNode(node);
@@ -1562,49 +1563,6 @@ class SMGSpawner {
 
         const name = objinfo.objName;
         switch (objinfo.objName) {
-
-            // Skyboxen.
-        case 'AuroraSky':
-        case 'BeyondGalaxySky':
-        case 'BeyondHellValleySky':
-        case 'BeyondHorizonSky':
-        case 'BeyondOrbitSky':
-        case 'BeyondPhantomSky':
-        case 'BeyondSandSky':
-        case 'BeyondSandNightSky':
-        case 'BeyondSummerSky':
-        case 'BeyondTitleSky':
-        case 'BigFallSky':
-        case 'Blue2DSky':
-        case 'BrightGalaxySky':
-        case 'ChildRoomSky':
-        case 'CloudSky':
-        case 'DarkSpaceStormSky':
-        case 'DesertSky':
-        case 'DotPatternSky':
-        case 'FamicomMarioSky':
-        case 'GalaxySky':
-        case 'GoodWeatherSky':
-        case 'GreenPlanetOrbitSky':
-        case 'HalfGalaxySky':
-        case 'HolePlanetInsideSky':
-        case 'KoopaVS1Sky':
-        case 'KoopaVS2Sky':
-        case 'KoopaJrLv3Sky':
-        case 'MagmaMonsterSky':
-        case 'MemoryRoadSky':
-        case 'MilkyWaySky':
-        case 'OmoteuLandSky':
-        case 'PhantomSky':
-        case 'RockPlanetOrbitSky':
-        case 'SummerSky':
-        case 'VRDarkSpace':
-        case 'VROrbit':
-        case 'VRSandwichSun':
-        case 'VsKoopaLv3Sky':
-            spawnGraph(name, SceneGraphTag.Skybox);
-            break;
-
         case 'PeachCastleTownAfterAttack':
             // Don't show. We want the pristine town state.
             return;

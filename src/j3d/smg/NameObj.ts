@@ -16,6 +16,8 @@ export const enum DrawType {
 }
 
 export const enum DrawBufferType {
+    SKY = 0x01,
+    AIR = 0x02,
     NPC = 0x10,
     NPC_INDIRECT = 0x1B,
 }

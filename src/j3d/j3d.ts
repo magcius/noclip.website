@@ -587,7 +587,6 @@ export interface MaterialEntry {
     textureIndexes: number[];
     gxMaterial: GX_Material.GXMaterial;
     texMatrices: TexMtx[];
-    postTexMatrices: TexMtx[];
     indTexMatrices: Float32Array[];
     colorMatRegs: GX_Material.Color[];
     colorAmbRegs: GX_Material.Color[];
@@ -985,7 +984,6 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             translucent,
             textureIndexes,
             texMatrices,
-            postTexMatrices,
             gxMaterial,
             indTexMatrices,
             colorMatRegs,

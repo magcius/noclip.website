@@ -671,7 +671,9 @@ export class JPAEmitterManager {
     }
 
     public calc(deltaTime: number): void {
-        this.workData.deltaTime = deltaTime;
+        // Clamp deltaTime to something reasonable so we don't get a combinatorial
+        // explosion of particles at scene load...
+        this.workData.deltaTime = Math.min(deltaTime, 1.5);
 
         for (let i = 0; i < this.aliveEmitters.length; i++) {
             const emitter = this.aliveEmitters[i];

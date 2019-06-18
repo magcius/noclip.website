@@ -435,7 +435,7 @@ export class MaterialInstance {
         }
     }
 
-    private calcPostTexMtxInput(dst: mat4, texMtx: TexMtx, viewMatrix: mat4): void {
+    public calcPostTexMtxInput(dst: mat4, texMtx: TexMtx, viewMatrix: mat4): void {
         const matrixMode = texMtx.info & 0x3F;
 
         // ref. J3DTexGenBlockPatched::calc()
@@ -460,6 +460,7 @@ export class MaterialInstance {
             case 0x0A:
             case 0x0B:
                 mat4.invert(dst, viewMatrix);
+                computeNormalMatrix(dst, dst, true);
                 break;
 
             default:
@@ -700,20 +701,6 @@ export class MaterialInstance {
             const flipY = materialParams.m_TextureMapping[i].flipY;
 
             this.calcTexMtxInput(dst, texMtx, scratchModelViewMatrix, modelMatrix);
-            const texSRT = matrixScratch3;
-            this.calcTexSRT(texSRT, i);
-            this.calcTexMtx(dst, texMtx, texSRT, modelMatrix, camera, flipY);
-        }
-
-        for (let i = 0; i < material.postTexMatrices.length; i++) {
-            const texMtx = material.postTexMatrices[i];
-            if (texMtx === null)
-                continue;
-
-            const dst = materialParams.u_PostTexMtx[i];
-            const flipY = materialParams.m_TextureMapping[i].flipY;
-
-            this.calcPostTexMtxInput(dst, texMtx, viewMatrix);
             const texSRT = matrixScratch3;
             this.calcTexSRT(texSRT, i);
             this.calcTexMtx(dst, texMtx, texSRT, modelMatrix, camera, flipY);
