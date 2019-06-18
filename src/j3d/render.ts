@@ -435,19 +435,37 @@ export class MaterialInstance {
         }
     }
 
-    public calcTexMtxInputPost(dst: mat4, texMtx: TexMtx): void {
+    private calcPostTexMtxInput(dst: mat4, texMtx: TexMtx, viewMatrix: mat4): void {
         const matrixMode = texMtx.info & 0x3F;
 
         // ref. J3DTexGenBlockPatched::calc()
         switch (matrixMode) {
-        case 0x01:
-        case 0x06:
-        case 0x07:
-        case 0x03:
-        case 0x04:
-        case 0x09:
-            mat4.identity(dst);
-            break;
+            case 0x01:
+            case 0x06:
+            case 0x07:
+                mat4.identity(dst);
+                break;
+
+            case 0x02:
+            case 0x08:
+                mat4.invert(dst, viewMatrix);
+                break;
+
+            case 0x03:
+            case 0x09:
+                mat4.identity(dst);
+                break;
+
+            case 0x05:
+            case 0x0A:
+            case 0x0B:
+                mat4.invert(dst, viewMatrix);
+                break;
+
+            default:
+                // No mapping.
+                mat4.identity(dst);
+                break;
         }
     }
 
@@ -693,7 +711,12 @@ export class MaterialInstance {
                 continue;
 
             const dst = materialParams.u_PostTexMtx[i];
-            mat4.copy(dst, texMtx.matrix);
+            const flipY = materialParams.m_TextureMapping[i].flipY;
+
+            this.calcPostTexMtxInput(dst, texMtx, viewMatrix);
+            const texSRT = matrixScratch3;
+            this.calcTexSRT(texSRT, i);
+            this.calcTexMtx(dst, texMtx, texSRT, modelMatrix, camera, flipY);
         }
 
         for (let i = 0; i < material.indTexMatrices.length; i++) {
@@ -879,7 +902,6 @@ export class BMDModel {
     }
 
     private loadHierarchy(inf1: INF1): void {
-
         let offs = 0;
         const view = inf1.hierarchyData.createDataView();
 

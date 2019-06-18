@@ -4,7 +4,7 @@ import ArrayBufferSlice from '../../ArrayBufferSlice';
 import Progressable from '../../Progressable';
 import { assert, assertExists, align, nArray } from '../../util';
 import { fetchData, AbortedError } from '../../fetch';
-import { MathConstants, computeModelMatrixSRT, lerp } from '../../MathHelpers';
+import { MathConstants, computeModelMatrixSRT, lerp, computeNormalMatrix } from '../../MathHelpers';
 import { getPointBezier } from '../../Spline';
 import * as Viewer from '../../viewer';
 import * as UI from '../../ui';
@@ -706,11 +706,13 @@ function patchBMD(bmd: BMD): void {
             if (isUsingEnvMap || isUsingProjMap) {
                 // Mark as requiring TexMtxIdx
                 material.gxMaterial.useTexMtxIdx[j] = true;
+                // Install a post matrix.
+                material.postTexMatrices[j] = material.texMatrices[j];
                 texGen.postMatrix = GX.PostTexGenMatrix.PTTEXMTX0 + (j * 3);
 
-                if (texGen.type === GX.TexGenType.MTX2x4)
+                if (isUsingEnvMap)
                     texMtxIdxBaseOffsets[j] = GX.TexGenMatrix.TEXMTX0;
-                else if (texGen.type === GX.TexGenType.MTX3x4)
+                else if (isUsingProjMap)
                     texMtxIdxBaseOffsets[j] = GX.TexGenMatrix.PNMTX0;
 
                 const vtxAttrib = GX.VertexAttribute.TEX0MTXIDX + j;
@@ -721,7 +723,8 @@ function patchBMD(bmd: BMD): void {
             }
         }
 
-        // If we have an environment map, then all texture matrices are IDENTITY.
+        // If we have an environment map, then all texture matrices are IDENTITY,
+        // as we're going to reuse the texture memory for normal environment matrices.
         // Done in ShapeUserPacketData::init() with the GDSetCurrentMtx().
         if (hasAnyEnvMap) {
             for (let j = 0; j < material.gxMaterial.texGens.length; j++)
@@ -744,7 +747,7 @@ function patchBMD(bmd: BMD): void {
 // This is roughly ShapePacketUserData::callDL().
 function fillMaterialParamsCallback(materialParams: MaterialParams, materialInstance: MaterialInstance, viewMatrix: mat4, modelMatrix: mat4, camera: Camera, packetParams: PacketParams): void {
     const material = materialInstance.materialData.material;
-    let needsCopy = false;
+    let hasAnyEnvMap = false;
 
     for (let i = 0; i < material.texMatrices.length; i++) {
         const texMtx = material.texMatrices[i];
@@ -753,29 +756,16 @@ function fillMaterialParamsCallback(materialParams: MaterialParams, materialInst
 
         const matrixMode = texMtx.info & 0x3F;
         const isUsingEnvMap = (matrixMode === 0x01 || matrixMode === 0x06 || matrixMode === 0x07);
-        const isUsingProjMap = (matrixMode === 0x02 || matrixMode === 0x03 || matrixMode === 0x08 || matrixMode === 0x09);
 
-        if (!isUsingEnvMap && !isUsingProjMap)
-            continue;
-
-        mat4.invert(materialParams.u_PostTexMtx[i], viewMatrix);
-        materialInstance.calcTexMtxInputPost(materialParams.u_PostTexMtx[i], texMtx);
-        const flipY = materialParams.m_TextureMapping[i].flipY;
-        materialInstance.calcTexSRT(scratchMatrix, i);
-        materialInstance.calcTexMtx(materialParams.u_PostTexMtx[i], texMtx, scratchMatrix, modelMatrix, camera, flipY);
-
-        if (texMtx.projection === TexMtxProjection.MTX2x4)
-            needsCopy = true;
+        if (isUsingEnvMap)
+            hasAnyEnvMap = true;
     }
 
-    if (needsCopy) {
-        // Input matrices come from the shape data with translation lopped off...
+    if (hasAnyEnvMap) {
+        // Fill texture memory with normal matrices.
         for (let i = 0; i < 10; i++) {
             const m = materialParams.u_TexMtx[i];
-            mat4.copy(m, packetParams.u_PosMtx[i]);
-            m[12] = 0;
-            m[13] = 0;
-            m[14] = 0;
+            computeNormalMatrix(m, packetParams.u_PosMtx[i], true);
         }
     }
 }
