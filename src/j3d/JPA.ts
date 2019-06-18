@@ -493,7 +493,6 @@ function hermiteInterpolate(k: Float32Array, i1: number, tn: number): number {
 }
 
 function kfa1Findi1(kfa1: JPAKeyBlock, t: number): number {
-    // TODO(jstpierre): isLoopEnable
     for (let i = 0; i < kfa1.keyValues.length; i += 4) {
         const kt = kfa1.keyValues[i + 0];
         // Find the first frame that's past us -- that's our i1.
@@ -503,12 +502,17 @@ function kfa1Findi1(kfa1: JPAKeyBlock, t: number): number {
     return kfa1.keyValues.length - 4;
 }
 
-function kfa1Calc(kfa1: JPAKeyBlock, t: number): number {
-    const i1 = kfa1Findi1(kfa1, t);
+function kfa1Calc(kfa1: JPAKeyBlock, tick: number): number {
+    if (kfa1.isLoopEnable) {
+        const tickMax = kfa1.keyValues[(kfa1.keyValues.length - 1) * 4] + 1;
+        tick = tick % tickMax;
+    }
+
+    const i1 = kfa1Findi1(kfa1, tick);
     if (i1 === 0 || i1 >= kfa1.keyValues.length - 4)
         return kfa1.keyValues[i1 + 1];
     else
-        return hermiteInterpolate(kfa1.keyValues, i1, t);
+        return hermiteInterpolate(kfa1.keyValues, i1, tick);
 }
 
 interface JPARandom {
@@ -812,6 +816,8 @@ function calcTexIdx(workData: JPAEmitterWorkData, tick: number, time: number, ra
         anmIdx = ((tick | 0) + randomPhase) % bsp1.texIdxAnimData.length;
     } else if (calcTexIdxType === CalcIdxType.Reverse) {
         anmIdx = mirroredRepeat((tick | 0) + randomPhase, bsp1.texIdxAnimData.length - 1);
+    } else if (calcTexIdxType === CalcIdxType.Random) {
+        anmIdx = randomPhase % bsp1.colorRegAnmMaxFrm;
     } else if (calcTexIdxType === CalcIdxType.Merge) {
         anmIdx = ((time | 0) + randomPhase) % bsp1.texIdxAnimData.length;
     } else {
@@ -832,6 +838,8 @@ function calcColor(dstPrm: Color, dstEnv: Color, workData: JPAEmitterWorkData, t
         anmIdx = ((tick | 0) + randomPhase) % (bsp1.colorRegAnmMaxFrm + 1);
     } else if (calcColorIdxType === CalcIdxType.Reverse) {
         anmIdx = mirroredRepeat((tick | 0) + randomPhase, bsp1.colorRegAnmMaxFrm);
+    } else if (calcColorIdxType === CalcIdxType.Random) {
+        anmIdx = randomPhase % (bsp1.colorRegAnmMaxFrm + 1);
     } else if (calcColorIdxType === CalcIdxType.Merge) {
         anmIdx = ((time | 0) + randomPhase) % (bsp1.colorRegAnmMaxFrm + 1);
     } else {
@@ -1049,7 +1057,7 @@ export class JPABaseEmitter {
         const sizeXZ = workData.volumeSize * lerp(workData.volumeMinRad, 1.0, distance);
         let angle = (workData.volumeSweep * get_rndm_f(this.random)) * MathConstants.TAU;
         // TODO(jstpierre): Why do we need this? Something's fishy in Beach Bowl Galaxy...
-        // VolumeSweep is 0.75 but it doesn't look like it goes 3/4ths of the way around...
+        // VolumeSweep is 0.74 but it doesn't look like it goes 3/4ths of the way around...
         angle -= Math.PI / 2;
         const height = workData.volumeSize * get_r_zp(this.random);
         vec3.set(workData.volumePos, sizeXZ * Math.sin(angle), height, sizeXZ * Math.cos(angle));
@@ -1719,16 +1727,16 @@ export class JPABaseParticle {
 
     private calcFieldFadeAffect(field: JPAFieldBlock, time: number): number {
         const fieldFadeFlags = field.flags >>> 0x10;
-        if ((!!(fieldFadeFlags & 0x08) && time < field.disTime) ||
-            (!!(fieldFadeFlags & 0x10) && time >= field.enTime)) {
+        if ((!!(fieldFadeFlags & 0x08) && time < field.enTime) ||
+            (!!(fieldFadeFlags & 0x10) && time >= field.disTime)) {
             return 0;
         }
 
         if (!!(fieldFadeFlags & 0x40) && time >= field.fadeOut)
-            return (field.enTime - time) * field.fadeOutRate;
+            return (field.disTime - time) * field.fadeOutRate;
 
         if (!!(fieldFadeFlags & 0x20) && time >= field.fadeIn)
-            return (time - field.disTime) * field.fadeInRate;
+            return (time - field.enTime) * field.fadeInRate;
 
         return 1;
     }
@@ -1858,6 +1866,17 @@ export class JPABaseParticle {
         }
     }
 
+    private calcFieldDrag(field: JPAFieldBlock, workData: JPAEmitterWorkData): void {
+        // Prepare
+
+        // Calc
+        if (!(this.flags & 0x04)) {
+            this.drag *= (1.0 - (this.calcFieldFadeAffect(field, this.time) * (1.0 - field.param1)));
+        } else {
+            this.drag *= field.param1;
+        }
+    }
+
     private calcField(workData: JPAEmitterWorkData): void {
         const fld1 = workData.baseEmitter.resData.res.fld1;
         for (let i = fld1.length - 1; i >= 0; i--) {
@@ -1872,6 +1891,8 @@ export class JPABaseParticle {
                 this.calcFieldVortex(field, workData);
             else if (field.type === JPAFieldType.Random)
                 this.calcFieldRandom(field, workData);
+            else if (field.type === JPAFieldType.Drag)
+                this.calcFieldDrag(field, workData);
             else
                 throw "whoops";
         }
@@ -1880,8 +1901,8 @@ export class JPABaseParticle {
     private canCreateChild(workData: JPAEmitterWorkData): boolean {
         const ssp1 = workData.baseEmitter.resData.res.ssp1;
 
-        const timing = this.tick - (this.lifeTime - 1) * ssp1.timing;
-        if (timing < 0)
+        const timing = (this.tick - (this.lifeTime - 1) * ssp1.timing) * workData.deltaTime;
+        if (timing <= 0)
             return false;
 
         const timingInt = (timing | 0);
@@ -2109,7 +2130,9 @@ export class JPABaseParticle {
 
         const globalRes = workData.emitterManager.globalRes;
         const shapeType = sp1.shapeType;
-        if (shapeType === ShapeType.Billboard) {
+
+        // TODO(jstpierre): Other shape types
+        if (true || shapeType === ShapeType.Billboard) {
             const rotateAngle = isRot ? this.rotateAngle : 0;
             renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateBillboard);
             renderInst.drawIndexes(6, 0);
@@ -2119,28 +2142,6 @@ export class JPABaseParticle {
                 this.scale[1] * workData.globalScale2D[1],
                 1,
                 0, 0, rotateAngle,
-                scratchVec3a[0], scratchVec3a[1], scratchVec3a[2]);
-            this.loadTexMtx(materialParams.u_TexMtx[0], workData, packetParams.u_PosMtx[0]);
-        } else if (shapeType === ShapeType.DirectionCross) {
-            renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateBillboard);
-            renderInst.drawIndexes(6, 0);
-            vec3.transformMat4(scratchVec3a, this.position, workData.posCamMtx);
-            computeModelMatrixSRT(packetParams.u_PosMtx[0],
-                this.scale[0] * workData.globalScale2D[0],
-                this.scale[1] * workData.globalScale2D[1],
-                1,
-                0, 0, 0,
-                scratchVec3a[0], scratchVec3a[1], scratchVec3a[2]);
-            this.loadTexMtx(materialParams.u_TexMtx[0], workData, packetParams.u_PosMtx[0]);
-        } else if (shapeType === ShapeType.YBillboard) {
-            renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateBillboard);
-            renderInst.drawIndexes(6, 0);
-            vec3.transformMat4(scratchVec3a, this.position, workData.posCamMtx);
-            computeModelMatrixSRT(packetParams.u_PosMtx[0],
-                this.scale[0] * workData.globalScale2D[0],
-                this.scale[1] * workData.globalScale2D[1],
-                1,
-                0, 0, 0,
                 scratchVec3a[0], scratchVec3a[1], scratchVec3a[2]);
             this.loadTexMtx(materialParams.u_TexMtx[0], workData, packetParams.u_PosMtx[0]);
         } else {
@@ -2191,6 +2192,10 @@ function makeColorTable(buffer: ArrayBufferSlice, entryCount: number, duration: 
 
     const color0 = view.getUint32(0x02);
     colorFromRGBA8(dst[dstIdx++], color0);
+
+    const time0 = view.getUint16(0x00);
+    for (let i = 1; i <= time0; i++)
+        colorCopy(dst[dstIdx++], dst[0]);
 
     for (let i = 1; i < entryCount; i++) {
         const entry0 = i - 1, entry1 = i;

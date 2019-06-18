@@ -438,7 +438,7 @@ export class MaterialInstance {
     public calcPostTexMtxInput(dst: mat4, texMtx: TexMtx, viewMatrix: mat4): void {
         const matrixMode = texMtx.info & 0x3F;
 
-        // ref. J3DTexGenBlockPatched::calc()
+        // ref. J3DTexGenBlockPatched::calcPostTexMtx()
         switch (matrixMode) {
             case 0x01:
             case 0x06:

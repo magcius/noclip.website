@@ -24,7 +24,7 @@ import AnimationController from '../../AnimationController';
 import { EFB_WIDTH, EFB_HEIGHT } from '../../gx/gx_material';
 import { MaterialParams, PacketParams } from '../../gx/gx_render';
 import { LoadedVertexData, LoadedVertexLayout } from '../../gx/gx_displaylist';
-import { BMD, BRK, BTK, BCK, LoopMode, BVA, BTP, BPK, JSystemFileReaderHelper, TexMtxProjection, ShapeDisplayFlags } from '../../j3d/j3d';
+import { BMD, BRK, BTK, BCK, LoopMode, BVA, BTP, BPK, JSystemFileReaderHelper, ShapeDisplayFlags } from '../../j3d/j3d';
 import { BMDModel, BMDModelInstance, MaterialInstance } from '../../j3d/render';
 import { JMapInfoIter, createCsvParser, getJMapInfoTransLocal, getJMapInfoRotateLocal, getJMapInfoScale } from './JMapInfo';
 import { BloomPostFXParameters, BloomPostFXRenderer } from './Bloom';
@@ -677,8 +677,6 @@ function patchInTexMtxIdxBuffer(loadedVertexLayout: LoadedVertexLayout, loadedVe
 }
 
 function patchBMD(bmd: BMD): void {
-    let hasAnyEnvMap = false;
-
     for (let i = 0; i < bmd.shp1.shapes.length; i++) {
         const shape = bmd.shp1.shapes[i];
         if (shape.displayFlags !== ShapeDisplayFlags.USE_PNMTXIDX)
@@ -689,6 +687,7 @@ function patchBMD(bmd: BMD): void {
 
         let bufferStride = 0;
         let texMtxIdxBaseOffsets: number[] = nArray(8, () => -1);
+        let hasAnyEnvMap = false;
         for (let j = 0; j < material.gxMaterial.texGens.length; j++) {
             const texGen = material.gxMaterial.texGens[j];
             if (texGen === null)
@@ -713,10 +712,7 @@ function patchBMD(bmd: BMD): void {
                 else if (isUsingProjMap)
                     texMtxIdxBaseOffsets[j] = GX.TexGenMatrix.PNMTX0;
 
-                const vtxAttrib = GX.VertexAttribute.TEX0MTXIDX + j;
-                shape.loadedVertexLayout.dstVertexAttributeLayouts.push({ vtxAttrib, format: GfxFormat.U8_RGBA, bufferIndex: 1, bufferOffset: j });
                 bufferStride = Math.max(bufferStride, j + 1);
-
                 hasAnyEnvMap = hasAnyEnvMap || isUsingEnvMap;
             }
         }
@@ -729,15 +725,18 @@ function patchBMD(bmd: BMD): void {
                 material.gxMaterial.texGens[j].matrix = GX.TexGenMatrix.IDENTITY;
         }
 
-        bufferStride = align(bufferStride, 4);
-
-        if (material.gxMaterial.useTexMtxIdx) {
-            // Install TEXMTXIDX data.
+        if (bufferStride > 0) {
+            bufferStride = align(bufferStride, 4);
 
             for (let j = 0; j < shape.packets.length; j++) {
                 const packet = shape.packets[j];
                 patchInTexMtxIdxBuffer(shape.loadedVertexLayout, packet.loadedVertexData, bufferStride, texMtxIdxBaseOffsets);
             }
+
+            if (texMtxIdxBaseOffsets[0] >= 0 || texMtxIdxBaseOffsets[1] >= 0 || texMtxIdxBaseOffsets[2] >= 0 || texMtxIdxBaseOffsets[3] >= 0)
+                shape.loadedVertexLayout.dstVertexAttributeLayouts.push({ vtxAttrib: GX.VertexAttribute.TEX0MTXIDX, format: GfxFormat.U8_RGBA, bufferIndex: 1, bufferOffset: 0 });
+            if (texMtxIdxBaseOffsets[4] >= 0 || texMtxIdxBaseOffsets[5] >= 0 || texMtxIdxBaseOffsets[6] >= 0 || texMtxIdxBaseOffsets[7] >= 0)
+                shape.loadedVertexLayout.dstVertexAttributeLayouts.push({ vtxAttrib: GX.VertexAttribute.TEX4MTXIDX, format: GfxFormat.U8_RGBA, bufferIndex: 1, bufferOffset: 4 });
         }
     }
 }
@@ -1151,12 +1150,13 @@ function getJMapInfoRotate(dst: vec3, sceneObjHolder: SceneObjHolder, infoIter: 
 export class LiveActor extends NameObj implements ObjectBase {
     public visibleScenario: boolean = true;
     public visibleAlive: boolean = true;
-    public visibleDraw: boolean = true;
+    public visibleModel: boolean = true;
     public boundingSphereRadius: number | null = null;
 
     public actorAnimKeeper: ActorAnimKeeper | null = null;
     public actorLightCtrl: ActorLightCtrl | null = null;
     public effectKeeper: EffectKeeper | null = null;
+    public spine: Spine | null = null;
 
     // Technically part of ModelManager.
     public arc: RARC.RARC; // ResourceHolder
@@ -1165,6 +1165,7 @@ export class LiveActor extends NameObj implements ObjectBase {
     public translation = vec3.create();
     public rotation = vec3.create();
     public scale = vec3.fromValues(1, 1, 1);
+    public velocity = vec3.create();
 
     constructor(public zoneAndLayer: ZoneAndLayer, public name: string) {
         super(name);
@@ -1250,6 +1251,23 @@ export class LiveActor extends NameObj implements ObjectBase {
         this.effectKeeper = new EffectKeeper(sceneObjHolder, this, groupName);
     }
 
+    public initNerve(nerve: Nerve): void {
+        this.spine = new Spine();
+        this.spine.setNerve(nerve);
+    }
+
+    public setNerve(nerve: Nerve): void {
+        this.spine.setNerve(nerve);
+    }
+
+    public getCurrentNerve(): Nerve {
+        return this.spine.getCurrentNerve();
+    }
+
+    public getNerveStep(): number {
+        return this.spine.getNerveStep();
+    }
+
     public startAction(animationName: string): void {
         if (this.actorAnimKeeper === null || !this.actorAnimKeeper.start(this, animationName))
             this.tryStartAllAnim(animationName);
@@ -1271,8 +1289,8 @@ export class LiveActor extends NameObj implements ObjectBase {
             this.translation[0], this.translation[1], this.translation[2]);
     }
 
-    protected getModelVisible(camera: Camera): boolean {
-        if (this.visibleScenario && this.visibleAlive && this.visibleDraw) {
+    protected getActorVisible(camera: Camera): boolean {
+        if (this.visibleScenario && this.visibleAlive) {
             if (this.boundingSphereRadius !== null)
                 return camera.frustum.containsSphere(this.translation, this.boundingSphereRadius);
             else
@@ -1293,7 +1311,7 @@ export class LiveActor extends NameObj implements ObjectBase {
         this.modelInstance.animationController.setTimeFromViewerInput(viewerInput);
         this.modelInstance.calcAnim(viewerInput.camera);
 
-        const visible = this.getModelVisible(viewerInput.camera);
+        const visible = this.getActorVisible(viewerInput.camera) && this.visibleModel;
         this.modelInstance.visible = visible;
         if (!visible)
             return;
@@ -1325,16 +1343,27 @@ export class LiveActor extends NameObj implements ObjectBase {
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        if (this.spine !== null) {
+            this.spine.update(getDeltaTimeFrames(viewerInput));
+        }
+
+        // updateBinder
+        vec3.scaleAndAdd(this.translation, this.translation, this.velocity, getDeltaTimeFrames(viewerInput));
+
         if (this.effectKeeper !== null) {
             this.effectKeeper.updateSyncBckEffect(sceneObjHolder.effectSystem);
             this.effectKeeper.followSRT();
-            this.effectKeeper.setDrawParticle(this.getModelVisible(viewerInput.camera));
+
+            // TODO(jstpierre): Remove.
+            if (!this.visibleAlive || !this.visibleScenario)
+                this.effectKeeper.setDrawParticle(false);
         }
     }
 }
 
 import { NPCDirector, MiniRoutePoint, createModelObjMapObj, PeachCastleGardenPlanet } from './Actors';
 import { getActorNameObjFactory } from './ActorTable';
+import { Spine, Nerve } from './Spine';
 
 function layerVisible(layer: LayerId, layerMask: number): boolean {
     if (layer >= 0)
@@ -1572,6 +1601,9 @@ class SMGSpawner {
             return;
 
         case 'ShootingStar':
+            // Actor implementation in the works, but it requires stripe particles to look good...
+            return;
+
         case 'MeteorCannon':
         case 'Plant':
         case 'WaterPlant':

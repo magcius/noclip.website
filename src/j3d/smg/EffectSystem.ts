@@ -471,6 +471,11 @@ export class EffectKeeper {
             multiEmitter.deleteEmitter();
     }
 
+    public deleteEmitterAll(): void {
+        for (let i = 0; i < this.multiEmitters.length; i++)
+            this.multiEmitters[i].deleteEmitter();
+    }
+
     private setHostSRT(multiEmitter: MultiEmitter, isFollow: boolean): void {
         if (multiEmitter.jointName !== null) {
             const jointMtx = this.actor.getJointMtx(multiEmitter.jointName);
@@ -615,8 +620,8 @@ export class EffectSystem {
 
     public createSingleEmitter(singleEmitter: SingleEmitter): void {
         if (singleEmitter.isValid()) {
-            if (!singleEmitter.isOneTime())
-                return;
+            // if (!singleEmitter.isOneTime())
+            //     return;
             singleEmitter.unlink();
         }
     

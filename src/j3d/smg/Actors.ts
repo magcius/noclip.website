@@ -2,7 +2,7 @@
 // Misc actors that aren't big enough to have their own file.
 
 import { LightType } from './DrawBuffer';
-import { SceneObjHolder, LiveActor, ZoneAndLayer, getObjectName, SMGPass, startBtkIfExist, startBvaIfExist, WorldmapPointInfo, startBrkIfExist, getDeltaTimeFrames, getTimeFrames, startBck } from './smg_scenes';
+import { SceneObjHolder, LiveActor, ZoneAndLayer, getObjectName, SMGPass, startBtkIfExist, startBvaIfExist, WorldmapPointInfo, startBrkIfExist, getDeltaTimeFrames, getTimeFrames, startBck, startBpkIfExist } from './smg_scenes';
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg6, getJMapInfoArg7 } from './JMapInfo';
 import { mat4, vec3 } from 'gl-matrix';
 import AnimationController from '../../AnimationController';
@@ -16,6 +16,7 @@ import { DrawBufferType, MovementType, CalcAnimType, DrawType } from './NameObj'
 import { BMDModelInstance } from '../render';
 import { assertExists } from '../../util';
 import { Camera } from '../../Camera';
+import { isGreaterStep, isFirstStep, calcNerveRate } from './Spine';
 
 export function connectToScene(sceneObjHolder: SceneObjHolder, actor: LiveActor, movementType: MovementType, calcAnimType: CalcAnimType, drawBufferType: DrawBufferType, drawType: DrawType): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, movementType, calcAnimType, drawBufferType, drawType);
@@ -92,12 +93,16 @@ export function deleteEffect(actor: LiveActor, name: string): void {
     actor.effectKeeper.deleteEmitter(name);
 }
 
+export function deleteEffectAll(actor: LiveActor): void {
+    actor.effectKeeper.deleteEmitterAll();
+}
+
 export function hideModel(actor: LiveActor): void {
-    actor.visibleDraw = false;
+    actor.visibleModel = false;
 }
 
 export function showModel(actor: LiveActor): void {
-    actor.visibleDraw = true;
+    actor.visibleModel = true;
 }
 
 export function calcUpVec(v: vec3, actor: LiveActor): void {
@@ -134,6 +139,32 @@ export function scaleMatrixScalar(m: mat4, s: number): void {
     m[2] *= s;
     m[6] *= s;
     m[10] *= s;
+}
+
+// ClippingJudge has these distances.
+const clippingJudgeDistances = [
+    -1, 60000, 50000, 40000, 30000, 20000, 10000, 5000,
+];
+
+// Mapping from "far clipping" values to the actual distances.
+function setClippingFar(f: number): number {
+    if (f === -1)
+        return 0;
+    if (f === 50)
+        return 7;
+    if (f === 100)
+        return 6;
+    if (f === 200)
+        return 5;
+    if (f === 300)
+        return 4;
+    if (f === 400)
+        return 3;
+    if (f === 500)
+        return 2;
+    if (f === 600)
+        return 1;
+    throw "whoops";
 }
 
 function bindColorChangeAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, frame: number, brkName: string = 'colorchange.brk'): void {
@@ -825,6 +856,8 @@ class MiniRouteMiniature extends PartsModel {
 }
 
 export class SimpleEffectObj extends LiveActor {
+    private isVisible: boolean = true;
+
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, getObjectName(infoIter));
         this.initDefaultPos(sceneObjHolder, infoIter);
@@ -832,16 +865,53 @@ export class SimpleEffectObj extends LiveActor {
         if (sceneObjHolder.effectSystem === null)
             return;
 
-        this.boundingSphereRadius = this.getClippingRadius();
-
         this.initEffectKeeper(sceneObjHolder, this.name);
-        this.effectKeeper.createEmitter(sceneObjHolder, this.name);
+        emitEffect(sceneObjHolder, this, this.name);
 
         connectToSceneMapObjMovement(sceneObjHolder, this);
     }
 
     protected getClippingRadius(): number {
         return 500;
+    }
+
+    protected getFarClipDistance(): number {
+        return 50;
+    }
+
+    protected getClippingCenterOffset(v: vec3): void {
+        vec3.set(v, 0, 0, 0);
+    }
+
+    protected isSyncClipping(): boolean {
+        return false;
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.movement(sceneObjHolder, viewerInput);
+
+        this.getClippingCenterOffset(scratchVec3);
+        vec3.add(scratchVec3, this.translation, scratchVec3);
+
+        const visibleScenario = this.visibleScenario && this.visibleAlive;
+        let visible = visibleScenario;
+
+        const camera = viewerInput.camera;
+        if (visible)
+            visible = camera.frustum.containsSphere(scratchVec3, this.getClippingRadius());
+
+        if (this.isVisible === visible)
+            return;
+
+        this.isVisible = visible;
+        this.effectKeeper.setDrawParticle(visible);
+
+        if (this.isSyncClipping()) {
+            if (visible)
+                emitEffect(sceneObjHolder, this, this.name);
+            else
+                deleteEffectAll(this);
+        }
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -852,6 +922,48 @@ export class SimpleEffectObj extends LiveActor {
 export class EffectObjR1000F50 extends SimpleEffectObj {
     protected getClippingRadius(): number {
         return 1000;
+    }
+}
+
+export class EffectObj10x10x10SyncClipping extends SimpleEffectObj {
+    protected getClippingCenterOffset(v: vec3): void {
+        vec3.set(v, 0, 580, 0);
+    }
+
+    protected getClippingRadius(): number {
+        return 1000;
+    }
+
+    protected isSyncClipping(): boolean {
+        return true;
+    }
+}
+
+export class EffectObj20x20x10SyncClipping extends SimpleEffectObj {
+    protected getClippingCenterOffset(v: vec3): void {
+        vec3.set(v, 0, 200, 0);
+    }
+
+    protected getClippingRadius(): number {
+        return 1000;
+    }
+
+    protected isSyncClipping(): boolean {
+        return true;
+    }
+}
+
+export class EffectObj50x50x10SyncClipping extends SimpleEffectObj {
+    protected getClippingCenterOffset(v: vec3): void {
+        vec3.set(v, 0, 200, 0);
+    }
+
+    protected getClippingRadius(): number {
+        return 2500;
+    }
+
+    protected isSyncClipping(): boolean {
+        return true;
     }
 }
 
@@ -870,15 +982,12 @@ export class GCaptureTarget extends LiveActor {
     }
 }
 
-const enum FountainBigState {
+const enum FountainBigNrv {
     WAIT_PHASE, WAIT, SIGN, SIGN_STOP, SPOUT, SPOUT_END
 }
 
 export class FountainBig extends LiveActor {
     private upVec = vec3.create();
-
-    private state: FountainBigState;
-    private stateTicks: number;
     private randomPhase: number = 0;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
@@ -897,71 +1006,66 @@ export class FountainBig extends LiveActor {
         // TODO(jstpierre): Figure out what causes this phase for realsies. Might just be culling...
         this.randomPhase = (Math.random() * 300) | 0;
 
-        this.setState(FountainBigState.WAIT_PHASE);
-    }
-
-    private setState(state: FountainBigState): void {
-        this.state = state;
-        this.stateTicks = 0;
+        this.initNerve(FountainBigNrv.WAIT_PHASE);
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.movement(sceneObjHolder, viewerInput);
 
-        if (this.state === FountainBigState.WAIT_PHASE) {
-            if (this.stateTicks >= this.randomPhase) {
-                this.setState(FountainBigState.WAIT);
+        const currentNerve = this.getCurrentNerve();
+
+        if (currentNerve === FountainBigNrv.WAIT_PHASE) {
+            if (isGreaterStep(this, this.randomPhase)) {
+                this.setNerve(FountainBigNrv.WAIT);
                 return;
             }
-        } else if (this.state === FountainBigState.WAIT) {
-            if (this.stateTicks >= 120) {
-                this.setState(FountainBigState.SIGN);
+        } else if (currentNerve === FountainBigNrv.WAIT) {
+            if (isGreaterStep(this, 120)) {
+                this.setNerve(FountainBigNrv.SIGN);
                 return;
             }
-        } else if (this.state === FountainBigState.SIGN) {
-            if (this.stateTicks === 0)
+        } else if (currentNerve === FountainBigNrv.SIGN) {
+            if (isFirstStep(this))
                 emitEffect(sceneObjHolder, this, 'FountainBigSign');
 
-            if (this.stateTicks >= 80) {
-                this.setState(FountainBigState.SIGN_STOP);
+            if (isGreaterStep(this, 80)) {
+                this.setNerve(FountainBigNrv.SIGN_STOP);
                 return;
             }
-        } else if (this.state === FountainBigState.SIGN_STOP) {
-            if (this.stateTicks === 0)
+        } else if (currentNerve === FountainBigNrv.SIGN_STOP) {
+            if (isFirstStep(this))
                 deleteEffect(this, 'FountainBigSign');
 
-            if (this.stateTicks >= 30) {
-                this.setState(FountainBigState.SPOUT);
+            if (isGreaterStep(this, 30)) {
+                this.setNerve(FountainBigNrv.SPOUT);
                 return;
             }
-        } else if (this.state === FountainBigState.SPOUT) {
-            if (this.stateTicks === 0) {
+        } else if (currentNerve === FountainBigNrv.SPOUT) {
+            if (isFirstStep(this)) {
                 showModel(this);
                 emitEffect(sceneObjHolder, this, 'FountainBig');
             }
 
-            const t = this.stateTicks / 20;
+            const t = calcNerveRate(this, 20);
             if (t <= 1) {
                 this.scale[1] = clamp(t, 0.01, 1);
             }
 
-            if (this.stateTicks >= 180) {
+            if (isGreaterStep(this, 180)) {
                 deleteEffect(this, 'FountainBig');
-                this.setState(FountainBigState.SPOUT_END);
+                this.setNerve(FountainBigNrv.SPOUT_END);
                 return;
             }
-        } else if (this.state === FountainBigState.SPOUT_END) {
-            const t = 1 - (this.stateTicks / 10);
+        } else if (currentNerve === FountainBigNrv.SPOUT_END) {
+            const t = 1 - calcNerveRate(this, 10);
             this.scale[1] = clamp(t, 0.01, 1);
 
-            if (this.stateTicks >= 10) {
+            if (isGreaterStep(this, 10)) {
                 hideModel(this);
-                this.setState(FountainBigState.WAIT);
+                this.setNerve(FountainBigNrv.WAIT);
                 return;
             }
         }
-
-        this.stateTicks += getDeltaTimeFrames(viewerInput);
     }
 }
 
@@ -1125,7 +1229,6 @@ export class Air extends LiveActor {
     private distInThresholdSq: number;
     private distOutThresholdSq: number;
     private state: AirState = AirState.IN;
-    private animationController: AnimationController
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, getObjectName(infoIter));
@@ -1156,6 +1259,79 @@ export class Air extends LiveActor {
             this.tryStartAllAnim('Disappear');
             this.modelInstance.animationController.setPhaseToCurrent();
             this.state = AirState.OUT;
+        }
+    }
+}
+
+const enum ShootingStarNrv {
+    PRE_SHOOTING, SHOOTING, WAIT_FOR_NEXT_SHOOT,
+}
+
+export class ShootingStar extends LiveActor {
+    private delay: number;
+    private distance: number;
+    private axisY = vec3.create();
+    private initialTranslation = vec3.create();
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, getObjectName(infoIter));
+
+        this.initModelManagerWithAnm(sceneObjHolder, this.name);
+        connectToSceneMapObj(sceneObjHolder, this);
+        this.initDefaultPos(sceneObjHolder, infoIter);
+        vec3.copy(this.initialTranslation, this.translation);
+
+        const numStarBits = getJMapInfoArg0(infoIter, 5);
+        this.delay = getJMapInfoArg1(infoIter, 240);
+        this.distance = getJMapInfoArg2(infoIter, 2000);
+
+        calcUpVec(this.axisY, this);
+
+        this.initNerve(ShootingStarNrv.PRE_SHOOTING);
+        this.initEffectKeeper(sceneObjHolder, 'ShootingStar');
+
+        startBpkIfExist(this.modelInstance, this.arc, 'ShootingStar');
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.movement(sceneObjHolder, viewerInput);
+
+        const currentNerve = this.getCurrentNerve();
+
+        if (currentNerve === ShootingStarNrv.PRE_SHOOTING) {
+            if (isFirstStep(this)) {
+                vec3.scaleAndAdd(this.translation, this.initialTranslation, this.axisY, this.distance);
+                showModel(this);
+                emitEffect(sceneObjHolder, this, 'ShootingStarAppear');
+            }
+
+            const scale = calcNerveRate(this, 20);
+            vec3.set(this.scale, scale, scale, scale);
+
+            if (isGreaterStep(this, 20)) {
+                this.setNerve(ShootingStarNrv.SHOOTING);
+            }
+        } else if (currentNerve === ShootingStarNrv.SHOOTING) {
+            if (isFirstStep(this)) {
+                vec3.negate(this.velocity, this.axisY);
+                vec3.scale(this.velocity, this.velocity, 25);
+                emitEffect(sceneObjHolder, this, 'ShootingStarBlur');
+            }
+
+            if (isGreaterStep(this, 360)) {
+                this.setNerve(ShootingStarNrv.WAIT_FOR_NEXT_SHOOT);
+                deleteEffect(this, 'ShootingStarBlur');
+            }
+        } else if (currentNerve === ShootingStarNrv.WAIT_FOR_NEXT_SHOOT) {
+            if (isFirstStep(this)) {
+                hideModel(this);
+                emitEffect(sceneObjHolder, this, 'ShootingStarBreak');
+                vec3.set(this.velocity, 0, 0, 0);
+            }
+
+            if (isGreaterStep(this, this.delay)) {
+                this.setNerve(ShootingStarNrv.PRE_SHOOTING);
+            }
         }
     }
 }
