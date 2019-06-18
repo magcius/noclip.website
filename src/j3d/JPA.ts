@@ -1809,7 +1809,7 @@ export class JPABaseParticle {
 
         // Calc
         vec3.scale(forceVec, forceDir, vec3.dot(forceDir, this.localPosition));
-        vec3.sub(forceVec, forceVec, this.localPosition);
+        vec3.sub(forceVec, this.localPosition, forceVec);
 
         const sqDist = vec3.squaredLength(forceVec);
         if (sqDist === 0)

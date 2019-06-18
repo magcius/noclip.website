@@ -29,6 +29,10 @@ export function connectToSceneNpc(sceneObjHolder: SceneObjHolder, actor: LiveAct
     sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x28, 0x06, DrawBufferType.NPC, -1);
 }
 
+export function connectToSceneIndirectNpc(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x28, 0x06, DrawBufferType.NPC_INDIRECT, -1);
+}
+
 export function connectToSceneItemStrongLight(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x2C, 0x10, 0x0F, -1);
 }
@@ -1021,5 +1025,59 @@ export class AstroCountDownPlate extends LiveActor {
         emitEffect(sceneObjHolder, this, "Light");
 
         startBrkIfExist(this.modelInstance, this.arc, "Green");
+    }
+}
+
+export class Butler extends NPCActor {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, getObjectName(infoIter));
+
+        this.initDefaultPos(sceneObjHolder, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, 'Butler');
+        connectToSceneNpc(sceneObjHolder, this);
+        this.initLightCtrl(sceneObjHolder);
+        this.initEffectKeeper(sceneObjHolder, null);
+
+        const location = getJMapInfoArg0(infoIter);
+
+        this.startAction('Wait');
+    }
+}
+
+export class Rosetta extends NPCActor {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, getObjectName(infoIter));
+
+        this.initDefaultPos(sceneObjHolder, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, 'Rosetta');
+        connectToSceneIndirectNpc(sceneObjHolder, this);
+        this.initLightCtrl(sceneObjHolder);
+        this.initEffectKeeper(sceneObjHolder, null);
+
+        this.startAction('WaitA');
+
+        // "Rosetta Encounter" -- she looks dim without this.
+        // Total hack.
+        this.actorLightCtrl.setAreaLightFromName(sceneObjHolder, `ロゼッタ出会い`);
+    }
+}
+
+export class Tico extends NPCActor {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, getObjectName(infoIter));
+
+        this.initDefaultPos(sceneObjHolder, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, 'Tico');
+        connectToSceneIndirectNpc(sceneObjHolder, this);
+        this.initLightCtrl(sceneObjHolder);
+        this.initEffectKeeper(sceneObjHolder, null);
+
+        const color = getJMapInfoArg0(infoIter, -1);
+        if (color !== -1) {
+            bindColorChangeAnimation(this.modelInstance, this.arc, color);
+        }
+
+        this.startAction('Wait');
+        this.modelInstance.animationController.phaseFrames += Math.random() * 1000;
     }
 }

@@ -124,6 +124,10 @@ export class ActorLightCtrl {
         this.currentAreaLight = sceneObjHolder.lightDataHolder.findAreaLightFromZoneAndId(sceneObjHolder, zoneId, lightId);
     }
 
+    public setAreaLightFromName(sceneObjHolder: SceneObjHolder, name: string): void {
+        this.currentAreaLight = sceneObjHolder.lightDataHolder.findAreaLight(name);
+    }
+
     public setDefaultAreaLight(sceneObjHolder: SceneObjHolder): void {
         this.currentAreaLight = sceneObjHolder.lightDataHolder.findDefaultAreaLight(sceneObjHolder);
     }

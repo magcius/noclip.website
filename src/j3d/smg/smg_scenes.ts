@@ -715,7 +715,7 @@ function patchBMD(bmd: BMD): void {
 
                 const vtxAttrib = GX.VertexAttribute.TEX0MTXIDX + j;
                 shape.loadedVertexLayout.dstVertexAttributeLayouts.push({ vtxAttrib, format: GfxFormat.U8_RGBA, bufferIndex: 1, bufferOffset: j });
-                bufferStride = Math.max(bufferStride, j);
+                bufferStride = Math.max(bufferStride, j + 1);
 
                 hasAnyEnvMap = hasAnyEnvMap || isUsingEnvMap;
             }
@@ -1804,14 +1804,6 @@ class SMGSpawner {
         case 'Rabbit':
             spawnGraph('TrickRabbit');
             break;
-        case 'Rosetta':
-            spawnGraph(name, SceneGraphTag.Normal, { bck: 'waita.bck' }).then(([node, rarc]) => {
-                // "Rosetta Encounter"
-                setLightName(node, `ロゼッタ出会い`);
-            });
-            break;
-        case 'Tico':
-        case 'TicoAstro':
         case 'TicoRail':
             spawnGraph('Tico').then(([node, rarc]) => {
                 this.bindChangeAnimation(node, rarc, objinfo.objArg0);
