@@ -6,6 +6,7 @@ import { assert, assertExists, align, nArray } from '../../util';
 import { fetchData, AbortedError } from '../../fetch';
 import { MathConstants, computeModelMatrixSRT, lerp, computeNormalMatrix } from '../../MathHelpers';
 import { getPointBezier } from '../../Spline';
+import { Camera } from '../../Camera';
 import * as Viewer from '../../viewer';
 import * as UI from '../../ui';
 
@@ -32,7 +33,7 @@ import { AreaLightInfo, ActorLightInfo, LightDataHolder, ActorLightCtrl } from '
 import { NameObj, SceneNameObjListExecutor } from './NameObj';
 import { EffectSystem, EffectKeeper } from './EffectSystem';
 import { LightType } from './DrawBuffer';
-import { Camera } from '../../Camera';
+import { Spine, Nerve } from './Spine';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -1217,7 +1218,7 @@ export class LiveActor extends NameObj implements ObjectBase {
         this.modelInstance.passMask = SMGPass.OPAQUE;
 
         // Compute the joint matrices an initial time in case anything wants to rely on them...
-        this.modelInstance.calcJointArray();
+        this.modelInstance.calcJointToWorld();
 
         // TODO(jstpierre): RE the whole ModelManager / XanimePlayer thing.
         // Seems like it's possible to have a secondary file for BCK animations?
@@ -1353,17 +1354,13 @@ export class LiveActor extends NameObj implements ObjectBase {
         if (this.effectKeeper !== null) {
             this.effectKeeper.updateSyncBckEffect(sceneObjHolder.effectSystem);
             this.effectKeeper.followSRT();
-
-            // TODO(jstpierre): Remove.
-            if (!this.visibleAlive || !this.visibleScenario)
-                this.effectKeeper.setDrawParticle(false);
+            this.effectKeeper.setVisibleScenario(this.visibleAlive && this.visibleScenario);
         }
     }
 }
 
-import { NPCDirector, MiniRoutePoint, createModelObjMapObj, PeachCastleGardenPlanet } from './Actors';
+import { NPCDirector, MiniRoutePoint, createModelObjMapObj, PeachCastleGardenPlanet, PlanetMap } from './Actors';
 import { getActorNameObjFactory } from './ActorTable';
-import { Spine, Nerve } from './Spine';
 
 function layerVisible(layer: LayerId, layerMask: number): boolean {
     if (layer >= 0)
@@ -1497,13 +1494,13 @@ class SMGSpawner {
     }
 
     private getNameObjFactory(objName: string): NameObjFactory | null {
-        const planetFactory = this.sceneObjHolder.planetMapCreator.getNameObjFactory(objName);
-        if (planetFactory !== null)
-            return planetFactory;
-
         const actorFactory = getActorNameObjFactory(objName);
         if (actorFactory !== null)
             return actorFactory;
+
+        const planetFactory = this.sceneObjHolder.planetMapCreator.getNameObjFactory(objName);
+        if (planetFactory !== null)
+            return planetFactory;
 
         return null;
     }
@@ -1571,23 +1568,7 @@ class SMGSpawner {
         };
 
         const spawnDefault = (name: string): void => {
-            // Spawn planets.
-            const planetMapCreator = this.sceneObjHolder.planetMapCreator;
-            if (planetMapCreator.isRegisteredObj(name)) {
-                const iterInfo = planetMapCreator.planetMapDataTable;
-                const planetRecord = iterInfo.record;
-
-                spawnGraph(name, SceneGraphTag.Normal, undefined, planetRecord);
-
-                if (iterInfo.getValueNumber('BloomFlag') !== 0)
-                    spawnGraph(`${name}Bloom`, SceneGraphTag.Bloom, undefined, planetRecord);
-                if (iterInfo.getValueNumber('WaterFlag') !== 0)
-                    spawnGraph(`${name}Water`, SceneGraphTag.Water, undefined, planetRecord);
-                if (iterInfo.getValueNumber('IndirectFlag') !== 0)
-                    spawnGraph(`${name}Indirect`, SceneGraphTag.Indirect, undefined, planetRecord);
-            } else {
-                spawnGraph(name, SceneGraphTag.Normal);
-            }
+            spawnGraph(name, SceneGraphTag.Normal);
         };
 
         const name = objinfo.objName;
@@ -2336,7 +2317,14 @@ class PlanetMapCreator {
     }
 
     public getNameObjFactory(objName: string): NameObjFactory | null {
-        if (objName === 'PeachCastleGardenPlanet') return PeachCastleGardenPlanet;
+        // Special cases.
+
+        if (objName === 'PeachCastleGardenPlanet')
+            return PeachCastleGardenPlanet;
+
+        if (this.isRegisteredObj(objName))
+            return PlanetMap;
+
         return null;
     }
 

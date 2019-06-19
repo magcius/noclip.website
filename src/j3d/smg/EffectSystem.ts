@@ -436,6 +436,8 @@ export class EffectKeeper {
     public multiEmitters: MultiEmitter[] = [];
     private autoFollow: boolean = true;
     private currentBckName: string | null = null;
+    private visibleScenario: boolean = true;
+    private visibleDrawParticle: boolean = true;
 
     constructor(sceneObjHolder: SceneObjHolder, public actor: LiveActor, public groupName: string) {
         registerAutoEffectInGroup(sceneObjHolder, this, this.actor, this.groupName);
@@ -544,9 +546,19 @@ export class EffectKeeper {
         }
     }
 
-    public setDrawParticle(v: boolean): void {
+    private syncVisibility(): void {
         for (let i = 0; i < this.multiEmitters.length; i++)
-            this.multiEmitters[i].setDrawParticle(v);
+            this.multiEmitters[i].setDrawParticle(this.visibleScenario && this.visibleDrawParticle);
+    }
+
+    public setVisibleScenario(v: boolean): void {
+        this.visibleScenario = v;
+        this.syncVisibility();
+    }
+
+    public setDrawParticle(v: boolean): void {
+        this.visibleDrawParticle = v;
+        this.syncVisibility();
     }
 }
 

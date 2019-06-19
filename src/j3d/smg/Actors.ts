@@ -70,6 +70,13 @@ export function connectToSceneAir(sceneObjHolder: SceneObjHolder, actor: LiveAct
     connectToScene(sceneObjHolder, actor, 0x24, 0x05, DrawBufferType.AIR, -1);
 }
 
+export function connectToScenePlanet(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    if (isExistIndirectTexture(actor))
+        connectToScene(sceneObjHolder, actor, 0x1D, 0x01, 0x1D, -1);
+    else 
+        connectToScene(sceneObjHolder, actor, 0x1D, 0x01, 0x04, -1);
+}
+
 export function createModelObjBloomModel(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, objName: string, modelName: string, baseMtx: mat4): ModelObj {
     const bloomModel = new ModelObj(zoneAndLayer, sceneObjHolder, objName, modelName, baseMtx, 0x1E, -2, -2);
     bloomModel.modelInstance.passMask = SMGPass.BLOOM;
@@ -143,6 +150,13 @@ export function scaleMatrixScalar(m: mat4, s: number): void {
     m[2] *= s;
     m[6] *= s;
     m[10] *= s;
+}
+
+export function isExistIndirectTexture(actor: LiveActor): boolean {
+    const modelInstance = assertExists(actor.modelInstance);
+    if (modelInstance.getTextureMappingReference('IndDummy') !== null)
+        return true;
+    return false;
 }
 
 // ClippingJudge has these distances.
@@ -415,16 +429,25 @@ function createSubModelObjName(parentActor: LiveActor, suffix: string): string {
     return `${parentActor.name}${suffix}`;
 }
 
-function createSubModel(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, suffix: string, drawBufferType: DrawBufferType): PartsModel {
+function createSubModel(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, suffix: string, drawBufferType: DrawBufferType): PartsModel | null {
     const subModelObjName = createSubModelObjName(parentActor, suffix);
+    if (!sceneObjHolder.modelCache.isObjectDataExist(subModelObjName))
+        return null;
     const model = new PartsModel(sceneObjHolder, subModelObjName, subModelObjName, parentActor, drawBufferType);
+    model.initFixedPositionRelative(null);
     model.tryStartAllAnim(subModelObjName);
+    return model;
+}
+
+function createWaterModel(sceneObjHolder: SceneObjHolder, parentActor: LiveActor) {
+    const model = createSubModel(sceneObjHolder, parentActor, 'Water', 0x08);
     return model;
 }
 
 function createIndirectPlanetModel(sceneObjHolder: SceneObjHolder, parentActor: LiveActor) {
     const model = createSubModel(sceneObjHolder, parentActor, 'Indirect', 0x1D);
-    model.modelInstance.passMask = SMGPass.INDIRECT;
+    if (model)
+        model.modelInstance.passMask = SMGPass.INDIRECT;
     return model;
 }
 
@@ -958,6 +981,16 @@ export class EffectObjR1000F50 extends SimpleEffectObj {
     }
 }
 
+export class EffectObjR100F50SyncClipping extends SimpleEffectObj {
+    protected getClippingRadius(): number {
+        return 1000;
+    }
+
+    protected isSyncClipping(): boolean {
+        return true;
+    }
+}
+
 export class EffectObj10x10x10SyncClipping extends SimpleEffectObj {
     protected getClippingCenterOffset(v: vec3): void {
         vec3.set(v, 0, 580, 0);
@@ -1245,6 +1278,8 @@ export class Sky extends LiveActor {
         this.initModelManagerWithAnm(sceneObjHolder, this.name);
         connectToSceneSky(sceneObjHolder, this);
 
+        this.tryStartAllAnim(this.name);
+
         this.modelInstance.passMask = SMGPass.SKYBOX;
     }
 
@@ -1420,6 +1455,36 @@ export class AstroMapObj extends MapObjActor {
             return table[domeId - 1];
         } else {
             throw "whoops";
+        }
+    }
+}
+
+export class PlanetMap extends LiveActor {
+    private bloomModel: ModelObj | null = null;
+    private waterModel: PartsModel | null = null;
+    private indirectModel: PartsModel | null = null;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, getObjectName(infoIter));
+
+        this.initDefaultPos(sceneObjHolder, infoIter);
+        this.initModel(sceneObjHolder, this.name, infoIter);
+        connectToScenePlanet(sceneObjHolder, this);
+    }
+
+    private initModel(sceneObjHolder: SceneObjHolder, name: string, infoIter: JMapInfoIter): void {
+        this.initModelManagerWithAnm(sceneObjHolder, this.name);
+        this.initBloomModel(sceneObjHolder, name);
+
+        this.waterModel = createWaterModel(sceneObjHolder, this);
+        this.indirectModel = createIndirectPlanetModel(sceneObjHolder, this);
+    }
+
+    private initBloomModel(sceneObjHolder: SceneObjHolder, name: string): void {
+        const bloomModelName = `${name}Bloom`;
+        if (sceneObjHolder.modelCache.isObjectDataExist(bloomModelName)) {
+            this.bloomModel = createModelObjBloomModel(this.zoneAndLayer, sceneObjHolder, this.name, bloomModelName, this.getBaseMtx());
+            vec3.copy(this.bloomModel.scale, this.scale);
         }
     }
 }

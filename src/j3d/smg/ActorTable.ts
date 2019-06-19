@@ -1,6 +1,6 @@
 
 import { NameObjFactory } from "./smg_scenes";
-import { Kinopio, TicoComet, EarthenPipe, StarPiece, CollapsePlane, BlackHole, Peach, PenguinRacer, Coin, Penguin, SimpleEffectObj, EffectObjR1000F50, GCaptureTarget, FountainBig, AstroEffectObj, WarpPod, AstroCountDownPlate, Butler, Rosetta, Tico, Sky, Air, ShootingStar, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObj10x10x10SyncClipping, AstroMapObj } from "./Actors";
+import { Kinopio, TicoComet, EarthenPipe, StarPiece, CollapsePlane, BlackHole, Peach, PenguinRacer, Coin, Penguin, SimpleEffectObj, EffectObjR1000F50, GCaptureTarget, FountainBig, AstroEffectObj, WarpPod, AstroCountDownPlate, Butler, Rosetta, Tico, Sky, Air, ShootingStar, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObj10x10x10SyncClipping, AstroMapObj, EffectObjR100F50SyncClipping } from "./Actors";
 import { OceanBowl } from "./OceanBowl";
 
 interface ActorTableEntry {
@@ -83,16 +83,21 @@ const ActorTable: ActorTableEntry[] = [
     // Effects.
     _("AstroTorchLightRed",             SimpleEffectObj),
     _("AstroTorchLightBlue",            SimpleEffectObj),
+    _("Steam",                          SimpleEffectObj),
     _("EffectTicoS",                    AstroEffectObj),
     _("EffectTicoL",                    AstroEffectObj),
     _("WaterfallL",                     EffectObjR1000F50),
     _("WaterfallS",                     EffectObj20x20x10SyncClipping),
     _("FallGreenLeaf",                  EffectObj10x10x10SyncClipping),
+    _("FallRedLeaf",                    EffectObj10x10x10SyncClipping),
     _("BirdLouseS",                     EffectObj20x20x10SyncClipping),
     _("BirdLouseL",                     EffectObj50x50x10SyncClipping),
+    _("SpaceDustL",                     EffectObj50x50x10SyncClipping),
     _("ForestWaterfallL",               EffectObjR1000F50),
     _("ForestWaterfallS",               EffectObjR1000F50),
     _("TwinFallLakeWaterFall",          EffectObjR1000F50),
+    _("IcePlanetLight",                 EffectObjR100F50SyncClipping),
+    _("IcicleRockLight",                EffectObjR100F50SyncClipping),
 
     // Astro
     _("AstroCountDownPlate",            AstroCountDownPlate),

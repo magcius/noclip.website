@@ -63,9 +63,7 @@ export class MaterialData {
 }
 
 class JointData {
-    public children: JointData[] = [];
-
-    constructor(public jointIndex: number = 0) {
+    constructor(public jointIndex: number = 0, public parentJointIndex: number = 0) {
     }
 }
 
@@ -842,7 +840,7 @@ export class BMDModel {
 
     public materialData: MaterialData[] = [];
     public shapeData: ShapeData[] = [];
-    public rootJoint!: JointData;
+    public jointData: JointData[] = [];
 
     public hasBillboard: boolean = false;
 
@@ -907,8 +905,10 @@ export class BMDModel {
             } else if (type === HierarchyNodeType.Close) {
                 jointStack.shift();
             } else if (type === HierarchyNodeType.Joint) {
-                const joint = new JointData(value);
-                jointStack[0].children.push(joint);
+                const jointIndex = value, parentJointIndex = jointStack[0].jointIndex;
+                assert(jointIndex > parentJointIndex);
+                const joint = new JointData(jointIndex, parentJointIndex);
+                this.jointData.push(joint);
                 lastJoint = joint;
             } else if (type === HierarchyNodeType.Material) {
                 const materialData = this.materialData[value];
@@ -926,8 +926,7 @@ export class BMDModel {
         }
 
         assert(jointStack.length === 1);
-        assert(jointStack[0].children.length === 1);
-        this.rootJoint = jointStack[0].children[0];
+        assert(this.jointData[0].jointIndex === 0 && this.jointData[0].parentJointIndex === -1);
     }
 
     public createDefaultTextureMappings(): TextureMapping[] {
@@ -973,6 +972,7 @@ export class BMDModelInstance {
     private materialHacks: GX_Material.GXMaterialHacks = {};
 
     private jointVisibility: boolean[];
+    private jointMatrices: mat4[] = [];
 
     constructor(
         public bmdModel: BMDModel,
@@ -995,6 +995,7 @@ export class BMDModelInstance {
         const numJoints = bmd.jnt1.joints.length;
         this.shapeInstanceState.jointToWorldMatrices = nArray(numJoints, () => mat4.create());
         this.jointVisibility = nArray(numJoints, () => true);
+        this.jointMatrices = nArray(numJoints, () => mat4.create());
 
         const numMatrices = bmd.drw1.matrixDefinitions.length;
         this.shapeInstanceState.drawToViewMatrices = nArray(numMatrices, () => mat4.create());
@@ -1218,12 +1219,8 @@ export class BMDModelInstance {
         return false;
     }
 
-    public calcJointArray(): void {
-        this.computeJointMatrixArray(this.bmdModel.rootJoint, this.modelMatrix);
-    }
-
     public calcAnim(camera: Camera): void {
-        this.calcJointArray();
+        this.calcJointToWorld();
 
         // Skyboxes implicitly center themselves around the view matrix (their view translation is removed).
         // While we could represent this, a skybox is always visible in theory so it's probably not worth it
@@ -1257,7 +1254,7 @@ export class BMDModelInstance {
             }
         }
 
-        this.computeDrawMatrixArray(this.shapeInstanceState.viewMatrix);
+        this.calcDrawMatrixArray(this.shapeInstanceState.viewMatrix);
     }
 
     private computeDepth(camera: Camera): number {
@@ -1320,24 +1317,32 @@ export class BMDModelInstance {
         this.draw(device, renderHelper, camera, true);
     }
 
-    private computeJointMatrix(dst: mat4, jointIndex: number): void {
-        calcJointMatrix(dst, jointIndex, this.bmdModel.bmd, this.ank1Animator, this.baseScale, matrixScratch);
+    public calcJointToWorld(): void {
+        for (let i = 0; i < this.bmdModel.jointData.length; i++) {
+            const joint = this.bmdModel.jointData[i];
+
+            const jointIndex = joint.jointIndex;
+            const jointToParentMatrix = matrixScratch2;
+            calcJointMatrix(jointToParentMatrix, jointIndex, this.bmdModel.bmd, this.ank1Animator);
+
+            const dst = this.shapeInstanceState.jointToWorldMatrices[jointIndex];
+
+            if (joint.parentJointIndex < 0) {
+                // Special: construct model matrix.
+                mat4.identity(matrixScratch);
+                matrixScratch[0] *= this.baseScale[0];
+                matrixScratch[5] *= this.baseScale[1];
+                matrixScratch[10] *= this.baseScale[2];
+                mat4.mul(matrixScratch, this.modelMatrix, matrixScratch);
+                mat4.mul(dst, matrixScratch, jointToParentMatrix);
+            } else {
+                const parentJointToWorldMatrix = this.shapeInstanceState.jointToWorldMatrices[joint.parentJointIndex];
+                mat4.mul(dst, parentJointToWorldMatrix, jointToParentMatrix);
+            }
+        }
     }
 
-    private computeJointMatrixArray(joint: JointData, parentJointToWorldMatrix: mat4): void {
-        const jointIndex = joint.jointIndex;
-
-        const jointToParentMatrix = matrixScratch2;
-        this.computeJointMatrix(jointToParentMatrix, jointIndex);
-
-        const jointToWorldMatrix = this.shapeInstanceState.jointToWorldMatrices[jointIndex];
-        mat4.mul(jointToWorldMatrix, parentJointToWorldMatrix, jointToParentMatrix);
-
-        for (let i = 0; i < joint.children.length; i++)
-            this.computeJointMatrixArray(joint.children[i], jointToWorldMatrix);
-    }
-
-    private computeDrawMatrixArray(viewMatrix: mat4): void {
+    private calcDrawMatrixArray(viewMatrix: mat4): void {
         const drw1 = this.bmdModel.bmd.drw1;
         const evp1 = this.bmdModel.bmd.evp1;
 

@@ -1770,7 +1770,7 @@ function readANK1Chunk(buffer: ArrayBufferSlice): ANK1 {
     return { loopMode, duration, jointAnimationEntries };
 }
 
-export function calcJointMatrix(dst: mat4, jointIndex: number, bmd: BMD, ank1Animator: ANK1Animator | null, baseScale: vec3, matrixScratch: mat4): void {
+export function calcJointMatrix(dst: mat4, jointIndex: number, bmd: BMD, ank1Animator: ANK1Animator | null): void {
     let scaleX: number;
     let scaleY: number;
     let scaleZ: number;
@@ -1812,12 +1812,7 @@ export function calcJointMatrix(dst: mat4, jointIndex: number, bmd: BMD, ank1Ani
         translationZ = jnt1.translationZ;
     }
 
-    computeModelMatrixSRT(dst, 1, 1, 1, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
-    mat4.identity(matrixScratch);
-    matrixScratch[0] = baseScale[0] * scaleX;
-    matrixScratch[5] = baseScale[1] * scaleY;
-    matrixScratch[10] = baseScale[2] * scaleZ;
-    mat4.mul(dst, dst, matrixScratch);
+    computeModelMatrixSRT(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
 }
 
 export class ANK1Animator { 
