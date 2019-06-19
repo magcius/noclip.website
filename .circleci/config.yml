@@ -40,4 +40,4 @@ jobs:
           name: deploy
           command: |
             echo 'foxcraft.dreamhost.com,173.236.176.143 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDjDUVvhTtiSo7nczLMlOaTk/fQ7dcmDTLNIzGy4QAg/PhFp3b4AGuS7qyjEZV31Wt0nwN0lC7X3CnsIxY5bBCFJ+ATwwLwxG3bcZKf4IJMP1coDcIxTRAQ9CeLsPmiNGDURLCX33ZI/+ZSxEOi4Ir0sqCE11CElKivVebeRBQiIpEWvW5ZoD4j52uksjDxwsjRKp+CDCHBhVMmJ9DjnPBTCach1zi9AkVeSpa6yh/chKPutHjqx4Xli/w8mXsQcS7Y79H0YMCAk7Y3xknKPO+QTXR7P+KKTx4eyKxHFXEd0fp1VE5JOdLB/SsZS+VWXeusVRcM2oDnSlyi5pEimUjf' >> ~/.ssh/known_hosts
-            rsync -va --delete-after --exclude=data/ dist/ gznoclip@foxcraft.dreamhost.com:noclip.website/
+            rsync -va --delete-after --exclude=data/ --exclude=priv/ dist/ gznoclip@foxcraft.dreamhost.com:noclip.website/

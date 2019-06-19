@@ -688,8 +688,8 @@ class SMGRenderer implements Viewer.SceneGfx {
             for (let i = 0; i < renderInstManager.instPool.allocCount; i++) {
                 const k = renderInstManager.instPool.pool[i];
                 k.setVisible(k.filterKey === bloomOpa || k.filterKey === bloomXlu);
-
             }
+
             passRenderer = this.bloomRenderer.render(device, this.renderHelper.renderInstManager, this.mainRenderTarget, viewerInput, template, bloomParameterBufferOffs);
         }
 
