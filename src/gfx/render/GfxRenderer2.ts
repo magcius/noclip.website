@@ -32,7 +32,6 @@ export class GfxRenderInst {
     private _dynamicUniformBufferOffsets: number[] = nArray(4, () => 0);
 
     public _flags: number = 0;
-    public _parentTemplateIndex: number = -1;
     private _inputState: GfxInputState | null = null;
     private _drawStart: number;
     private _drawCount: number;
@@ -199,60 +198,30 @@ export class GfxRenderInstPool {
     // The pool contains all render insts that we've ever created.
     public pool: GfxRenderInst[] = [];
     // The number of render insts currently allocated out to the user.
-    public renderInstAllocCount: number = 0;
-    // The number of render insts that we know are free, somewhere in the allocated portion of the pool.
-    public renderInstFreeCount: number = 0;
+    public allocCount: number = 0;
 
     public allocRenderInstIndex(): number {
-        if (this.renderInstFreeCount > 0) {
-            this.renderInstFreeCount--;
-            // Search for the next free render inst.
-            for (let i = 0; i < this.renderInstAllocCount; i++)
-                if (this.pool[i]._flags === 0)
-                    return i;
-        }
+        this.allocCount++;
 
-        this.renderInstAllocCount++;
-
-        if (this.renderInstAllocCount > this.pool.length)
+        if (this.allocCount > this.pool.length)
             this.pool.push(new GfxRenderInst());
 
-        return this.renderInstAllocCount - 1;
+        return this.allocCount - 1;
     }
 
-    public returnRenderInstIndex(renderInstIndex: number): number {
-        const renderInst = this.pool[renderInstIndex];
-        renderInst._flags = 0;
-
-        // Swap to the beginning of the list so we don't need as big a linear scan next time we want to
-        // push a template... believe it or not this actually helps quite a lot. 20FPS diff on Firefox on
-        // Comet Observatory.
-        for (let i = this.renderInstFreeCount; i < this.renderInstAllocCount; i++) {
-            // Search for a non-template render inst, since we don't want to screw up any indexes.
-            const other = this.pool[i];
-            if (!(other._flags & GfxRenderInstFlags.TEMPLATE_RENDER_INST)) {
-                this.pool[i] = renderInst;
-                this.pool[renderInstIndex] = other;
-                break;
-            }
-        }
-
-        this.renderInstFreeCount++;
-        return renderInst._parentTemplateIndex;
+    public popRenderInst(): void {
+        this.allocCount--;
     }
 
     public reset(): void {
         for (let i = 0; i < this.pool.length; i++)
             this.pool[i]._flags = 0;
-
-        this.renderInstAllocCount = 0;
-        this.renderInstFreeCount = 0;
+        this.allocCount = 0;
     }
 
     public destroy(): void {
         this.pool.length = 0;
-        this.renderInstAllocCount = 0;
-        this.renderInstFreeCount = 0;
+        this.allocCount = 0;
     }
 }
 
@@ -275,14 +244,15 @@ function setVisible(a: GfxRenderInst, visible: boolean): void {
 export class GfxRenderInstManager {
     // TODO(jstpierre): Share these caches between scenes.
     public gfxRenderCache = new GfxRenderCache();
-    public gfxRenderInstPool = new GfxRenderInstPool();
-    private renderInstTemplateIndex: number = -1;
+    public instPool = new GfxRenderInstPool();
+    public templatePool = new GfxRenderInstPool();
 
     public pushRenderInst(): GfxRenderInst {
-        const renderInstIndex = this.gfxRenderInstPool.allocRenderInstIndex();
-        const renderInst = this.gfxRenderInstPool.pool[renderInstIndex];
-        if (this.renderInstTemplateIndex >= 0)
-            renderInst.setFromTemplate(this.gfxRenderInstPool.pool[this.renderInstTemplateIndex]);
+        const templateIndex = this.templatePool.allocCount - 1;
+        const renderInstIndex = this.instPool.allocRenderInstIndex();
+        const renderInst = this.instPool.pool[renderInstIndex];
+        if (templateIndex >= 0)
+            renderInst.setFromTemplate(this.templatePool.pool[templateIndex]);
         else
             renderInst.reset();
         // draw render insts are visible by default.
@@ -291,71 +261,68 @@ export class GfxRenderInstManager {
     }
 
     public pushTemplateRenderInst(): GfxRenderInst {
-        const newTemplateIndex = this.gfxRenderInstPool.allocRenderInstIndex();
-        const newTemplate = this.gfxRenderInstPool.pool[newTemplateIndex];
-        newTemplate._parentTemplateIndex = this.renderInstTemplateIndex;
-        if (this.renderInstTemplateIndex >= 0)
-            newTemplate.setFromTemplate(this.gfxRenderInstPool.pool[this.renderInstTemplateIndex]);
+        const templateIndex = this.templatePool.allocCount - 1;
+        const newTemplateIndex = this.templatePool.allocRenderInstIndex();
+        const newTemplate = this.templatePool.pool[newTemplateIndex];
+        if (templateIndex >= 0)
+            newTemplate.setFromTemplate(this.templatePool.pool[templateIndex]);
         newTemplate._flags = GfxRenderInstFlags.TEMPLATE_RENDER_INST;
-        this.renderInstTemplateIndex = newTemplateIndex;
         return newTemplate;
     }
 
     public popTemplateRenderInst(): void {
-        this.renderInstTemplateIndex = this.gfxRenderInstPool.returnRenderInstIndex(this.renderInstTemplateIndex);
+        this.templatePool.popRenderInst();
     }
 
     public getTemplateRenderInst(): GfxRenderInst {
-        return this.gfxRenderInstPool.pool[this.renderInstTemplateIndex];
+        const templateIndex = this.templatePool.allocCount - 1;
+        return this.templatePool.pool[templateIndex];
     }
 
     // TODO(jstpierre): Build a better API for pass management -- should not be attached to the GfxRenderer2.
     public setVisibleByFilterKeyExact(filterKey: number): void {
-        for (let i = 0; i < this.gfxRenderInstPool.pool.length; i++)
-            if (this.gfxRenderInstPool.pool[i]._flags & GfxRenderInstFlags.DRAW_RENDER_INST)
-                setVisible(this.gfxRenderInstPool.pool[i], this.gfxRenderInstPool.pool[i].filterKey === filterKey);
+        for (let i = 0; i < this.instPool.pool.length; i++)
+            if (this.instPool.pool[i]._flags & GfxRenderInstFlags.DRAW_RENDER_INST)
+                setVisible(this.instPool.pool[i], this.instPool.pool[i].filterKey === filterKey);
     }
 
     public hasAnyVisible(): boolean {
-        for (let i = 0; i < this.gfxRenderInstPool.pool.length; i++)
-            if (this.gfxRenderInstPool.pool[i]._flags & GfxRenderInstFlags.VISIBLE)
+        for (let i = 0; i < this.instPool.pool.length; i++)
+            if (this.instPool.pool[i]._flags & GfxRenderInstFlags.VISIBLE)
                 return true;
         return false;
     }
 
     public setVisibleNone(): void {
-        for (let i = 0; i < this.gfxRenderInstPool.pool.length; i++)
-            this.gfxRenderInstPool.pool[i]._flags &= ~GfxRenderInstFlags.VISIBLE;
+        for (let i = 0; i < this.instPool.pool.length; i++)
+            this.instPool.pool[i]._flags &= ~GfxRenderInstFlags.VISIBLE;
     }
 
     public drawOnPassRenderer(device: GfxDevice, passRenderer: GfxRenderPass): void {
-        // We should have zero templates.
-        assert(this.renderInstTemplateIndex === -1);
-
-        if (this.gfxRenderInstPool.renderInstAllocCount === 0)
+        if (this.instPool.allocCount === 0)
             return;
 
         // Sort the render insts. This is guaranteed to keep invisible render insts at the end of the list.
-        this.gfxRenderInstPool.pool.sort(compareRenderInsts);
+        this.instPool.pool.sort(compareRenderInsts);
 
-        for (let i = 0; i < this.gfxRenderInstPool.renderInstAllocCount; i++) {
-            const renderInst = this.gfxRenderInstPool.pool[i];
+        for (let i = 0; i < this.instPool.allocCount; i++) {
+            const renderInst = this.instPool.pool[i];
 
             // Once we reach the first invisible item, we're done.
             if (!(renderInst._flags & GfxRenderInstFlags.VISIBLE))
                 break;
 
-            this.gfxRenderInstPool.pool[i].drawOnPass(device, this.gfxRenderCache, passRenderer);
+            this.instPool.pool[i].drawOnPass(device, this.gfxRenderCache, passRenderer);
         }
     }
 
     public resetRenderInsts(): void {
         // Retire the existing render insts.
-        this.gfxRenderInstPool.reset();
+        this.instPool.reset();
     }
 
     public destroy(device: GfxDevice): void {
-        this.gfxRenderInstPool.destroy();
+        this.instPool.destroy();
         this.gfxRenderCache.destroy(device);
     }
 }

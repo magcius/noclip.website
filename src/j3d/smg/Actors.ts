@@ -2,7 +2,7 @@
 // Misc actors that aren't big enough to have their own file.
 
 import { LightType } from './DrawBuffer';
-import { SceneObjHolder, LiveActor, ZoneAndLayer, getObjectName, SMGPass, startBtkIfExist, startBvaIfExist, WorldmapPointInfo, startBrkIfExist, getDeltaTimeFrames, getTimeFrames, startBck, startBpkIfExist, startBtpIfExist } from './smg_scenes';
+import { SceneObjHolder, LiveActor, ZoneAndLayer, getObjectName, startBtkIfExist, startBvaIfExist, WorldmapPointInfo, startBrkIfExist, getDeltaTimeFrames, getTimeFrames, startBck, startBpkIfExist, startBtpIfExist } from './smg_scenes';
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg6, getJMapInfoArg7 } from './JMapInfo';
 import { mat4, vec3 } from 'gl-matrix';
 import AnimationController from '../../AnimationController';
@@ -31,35 +31,35 @@ export function connectToSceneNpc(sceneObjHolder: SceneObjHolder, actor: LiveAct
 }
 
 export function connectToSceneIndirectNpc(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x28, 0x06, DrawBufferType.NPC_INDIRECT, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x28, 0x06, DrawBufferType.INDIRECT_NPC, -1);
 }
 
 export function connectToSceneItemStrongLight(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x2C, 0x10, DrawBufferType.ITEM_STRONG_LIGHT, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x2C, 0x10, DrawBufferType.NO_SILHOUETTED_MAP_OBJ_STRONG_LIGHT, -1);
 }
 
 export function connectToSceneCollisionMapObjStrongLight(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    connectToScene(sceneObjHolder, actor, 0x1E, 0x02, 0x0A, -1);
+    connectToScene(sceneObjHolder, actor, 0x1E, 0x02, DrawBufferType.MAP_OBJ_STRONG_LIGHT, -1);
 }
 
 export function connectToSceneCollisionMapObjWeakLight(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    connectToScene(sceneObjHolder, actor, 0x1E, 0x02, 0x09, -1);
+    connectToScene(sceneObjHolder, actor, 0x1E, 0x02, DrawBufferType.MAP_OBJ_WEAK_LIGHT, -1);
 }
 
 export function connectToSceneCollisionMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    connectToScene(sceneObjHolder, actor, 0x1E, 0x02, 0x08, -1);
+    connectToScene(sceneObjHolder, actor, 0x1E, 0x02, DrawBufferType.MAP_OBJ, -1);
 }
 
 export function connectToSceneMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    connectToScene(sceneObjHolder, actor, 0x22, 0x05, 0x08, -1);
+    connectToScene(sceneObjHolder, actor, 0x22, 0x05, DrawBufferType.MAP_OBJ, -1);
 }
 
 export function connectToSceneNoSilhouettedMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    connectToScene(sceneObjHolder, actor, 0x22, 0x05, 0x0D, -1);
+    connectToScene(sceneObjHolder, actor, 0x22, 0x05, DrawBufferType.NO_SHADOWED_MAP_OBJ, -1);
 }
 
 export function connectToSceneNoSilhouettedMapObjStrongLight(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    connectToScene(sceneObjHolder, actor, 0x22, 0x05, 0x0F, -1);
+    connectToScene(sceneObjHolder, actor, 0x22, 0x05, DrawBufferType.NO_SHADOWED_MAP_OBJ_STRONG_LIGHT, -1);
 }
 
 export function connectToSceneSky(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
@@ -76,14 +76,13 @@ export function connectToSceneCrystal(sceneObjHolder: SceneObjHolder, actor: Liv
 
 export function connectToScenePlanet(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
     if (isExistIndirectTexture(actor))
-        connectToScene(sceneObjHolder, actor, 0x1D, 0x01, 0x1D, -1);
+        connectToScene(sceneObjHolder, actor, 0x1D, 0x01, DrawBufferType.INDIRECT_PLANET, -1);
     else 
-        connectToScene(sceneObjHolder, actor, 0x1D, 0x01, 0x04, -1);
+        connectToScene(sceneObjHolder, actor, 0x1D, 0x01, DrawBufferType.PLANET, -1);
 }
 
 export function createModelObjBloomModel(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, objName: string, modelName: string, baseMtx: mat4): ModelObj {
-    const bloomModel = new ModelObj(zoneAndLayer, sceneObjHolder, objName, modelName, baseMtx, 0x1E, -2, -2);
-    bloomModel.modelInstance.passMask = SMGPass.BLOOM;
+    const bloomModel = new ModelObj(zoneAndLayer, sceneObjHolder, objName, modelName, baseMtx, DrawBufferType.BLOOM_MODEL, -2, -2);
     return bloomModel;
 }
 
@@ -259,20 +258,17 @@ function createSubModel(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, 
 }
 
 function createWaterModel(sceneObjHolder: SceneObjHolder, parentActor: LiveActor) {
-    const model = createSubModel(sceneObjHolder, parentActor, 'Water', 0x08);
+    const model = createSubModel(sceneObjHolder, parentActor, 'Water', DrawBufferType.MAP_OBJ);
     return model;
 }
 
 function createIndirectPlanetModel(sceneObjHolder: SceneObjHolder, parentActor: LiveActor) {
-    const model = createSubModel(sceneObjHolder, parentActor, 'Indirect', 0x1D);
-    if (model)
-        model.modelInstance.passMask = SMGPass.INDIRECT;
+    const model = createSubModel(sceneObjHolder, parentActor, 'Indirect', DrawBufferType.INDIRECT_PLANET);
     return model;
 }
 
 function createPartsModelIndirectNpc(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, jointName: string, localTrans: vec3 | null = null) {
-    const model = new PartsModel(sceneObjHolder, "npc parts", objName, parentActor, DrawBufferType.NPC_INDIRECT);
-    model.modelInstance.passMask = SMGPass.INDIRECT;
+    const model = new PartsModel(sceneObjHolder, "npc parts", objName, parentActor, DrawBufferType.INDIRECT_NPC);
     model.initFixedPositionJoint(jointName, localTrans);
     return model;
 }
@@ -290,13 +286,13 @@ function createPartsModelNpcAndFix(sceneObjHolder: SceneObjHolder, parentActor: 
 }
 
 function createPartsModelMapObj(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, localTrans: vec3 | null = null) {
-    const model = new PartsModel(sceneObjHolder, objName, objName, parentActor, 0x08);
+    const model = new PartsModel(sceneObjHolder, objName, objName, parentActor, DrawBufferType.MAP_OBJ);
     model.initFixedPositionRelative(localTrans);
     return model;
 }
 
 function createPartsModelNoSilhouettedMapObj(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, localTrans: vec3 | null = null) {
-    const model = new PartsModel(sceneObjHolder, objName, objName, parentActor, 0x0D);
+    const model = new PartsModel(sceneObjHolder, objName, objName, parentActor, DrawBufferType.NO_SILHOUETTED_MAP_OBJ);
     model.initFixedPositionRelative(localTrans);
     return model;
 }
@@ -337,6 +333,13 @@ function setupInitInfoColorChangeArg0(initInfo: MapObjActorInitInfo, infoIter: J
 
 function setupInitInfoTextureChangeArg1(initInfo: MapObjActorInitInfo, infoIter: JMapInfoIter): void {
     initInfo.texChangeFrame = getJMapInfoArg1(infoIter, -1);
+}
+
+function setupInitInfoPlanet(initInfo: MapObjActorInitInfo): void {
+    initInfo.setupDefaultPos = true;
+    initInfo.connectToScene = true;
+    initInfo.initEffect = true;
+    initInfo.effectFilename = null;
 }
 
 class MapObjActorInitInfo {
@@ -397,7 +400,7 @@ class MapObjActor extends LiveActor {
         }
     }
 
-    public connectToScene(sceneObjHolder: SceneObjHolder, initInfo: MapObjActorInitInfo): void {
+    protected connectToScene(sceneObjHolder: SceneObjHolder, initInfo: MapObjActorInitInfo): void {
         // Default implementation.
         if (initInfo.lightType === LightType.Strong)
             connectToSceneCollisionMapObjStrongLight(sceneObjHolder, this);
@@ -734,7 +737,7 @@ export class PeachCastleGardenPlanet extends MapObjActor {
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         const initInfo = new MapObjActorInitInfo();
-        initInfo.setupConnectToScene();
+        setupInitInfoPlanet(initInfo);
         super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
 
         this.indirectModel = createIndirectPlanetModel(sceneObjHolder, this);
@@ -742,15 +745,9 @@ export class PeachCastleGardenPlanet extends MapObjActor {
         this.tryStartAllAnim('PeachCastleGardenPlanet');
     }
 
-    public connectToScene(sceneObjHolder: SceneObjHolder): void {
+    protected connectToScene(sceneObjHolder: SceneObjHolder): void {
         // won't this check always fail for PeachCastleGardenPlanet?
-/*
-        if (isExistIndirectTexture(this) === 0)
-            registerNameObjToExecuteHolder(this, 0x1D, 0x01, 0x04, -1);
-        else
-            registerNameObjToExecuteHolder(this, 0x1D, 0x01, 0x1D, -1);
-*/
-        connectToScene(sceneObjHolder, this, 0x1D, 0x01, 0x04, -1);
+        connectToScenePlanet(sceneObjHolder, this);
     }
 }
 
@@ -1288,7 +1285,7 @@ export class WarpPod extends LiveActor {
         this.colorIndex = getJMapInfoArg6(infoIter, 0);
 
         if (this.visible) {
-            connectToScene(sceneObjHolder, this, 0x22, 5, 8, -1);
+            connectToScene(sceneObjHolder, this, 0x22, 5, DrawBufferType.MAP_OBJ, -1);
         } else {
             connectToScene(sceneObjHolder, this, 0x22, -1, -1, -1);
         }
@@ -1400,8 +1397,6 @@ export class Sky extends LiveActor {
         connectToSceneSky(sceneObjHolder, this);
 
         this.tryStartAllAnim(this.name);
-
-        this.modelInstance.passMask = SMGPass.SKYBOX;
     }
 
     public calcAnim(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
@@ -1647,7 +1642,6 @@ export class CrystalCage extends LiveActor {
             this.size = CrystalCageSize.L;
 
         this.initModelManagerWithAnm(sceneObjHolder, this.name);
-        this.modelInstance.passMask = SMGPass.INDIRECT;
 
         connectToSceneCrystal(sceneObjHolder, this);
 

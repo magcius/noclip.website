@@ -1295,8 +1295,6 @@ export class BMDModelInstance {
             return;
 
         const depth = this.computeDepth(camera);
-        const template = renderHelper.renderInstManager.pushTemplateRenderInst();
-        template.filterKey = this.passMask;
         for (let i = 0; i < this.shapeInstances.length; i++) {
             const shapeVisibility = this.shapeInstanceState.shapeVisibility[i] && (this.vaf1Animator !== null ? this.vaf1Animator.calcVisibility(i) : true);
             if (!shapeVisibility)
@@ -1306,7 +1304,6 @@ export class BMDModelInstance {
                 continue;
             this.shapeInstances[i].prepareToRender(device, renderHelper.renderInstManager, depth, camera, this.materialInstanceState, this.shapeInstanceState);
         }
-        renderHelper.renderInstManager.popTemplateRenderInst();
     }
 
     public drawOpa(device: GfxDevice, renderHelper: GXRenderHelperGfx, camera: Camera): void {

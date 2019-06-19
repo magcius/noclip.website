@@ -5,6 +5,7 @@ import { ViewerRenderInput } from "../../viewer";
 import { GfxTexture, GfxDevice } from "../../gfx/platform/GfxPlatform";
 import { GXRenderHelperGfx } from "../../gx/gx_render_2";
 import { Camera } from "../../Camera";
+import { DrawOrder } from "./EffectSystem";
 
 export const enum MovementType {
 }
@@ -13,15 +14,70 @@ export const enum CalcAnimType {
 }
 
 export const enum DrawType {
-}
+    OCEAN_BOWL                     = 0x07,
+
+    EFFECT_DRAW_3D                 = 0x47,
+    EFFECT_DRAW_INDIRECT           = 0x48,
+    EFFECT_DRAW_AFTER_INDIRECT     = 0x49,
+    EFFECT_DRAW_2D                 = 0x4A,
+    EFFECT_DRAW_FOR_2D_MODEL       = 0x4B,
+    EFFECT_DRAW_FOR_BLOOM_EFFECT   = 0x4C,
+    EFFECT_DRAW_AFTER_IMAGE_EFFECT = 0x4D,
+};
 
 export const enum DrawBufferType {
-    SKY               = 0x01,
-    AIR               = 0x02,
-    ITEM_STRONG_LIGHT = 0x0F,
-    NPC               = 0x10,
-    NPC_INDIRECT      = 0x1B,
-    CRYSTAL           = 0x20,
+    SKY                                 = 0x01,
+    AIR                                 = 0x02,
+    SUN                                 = 0x03,
+    PLANET                              = 0x04,
+    ENVIRONMENT                         = 0x06,
+    ENVIRONMENT_STRONG_LIGHT            = 0x07,
+    MAP_OBJ                             = 0x08,
+    MAP_OBJ_WEAK_LIGHT                  = 0x09,
+    MAP_OBJ_STRONG_LIGHT                = 0x0A,
+    NO_SHADOWED_MAP_OBJ                 = 0x0B,
+    NO_SHADOWED_MAP_OBJ_STRONG_LIGHT    = 0x0C,
+    NO_SILHOUETTED_MAP_OBJ              = 0x0D,
+    NO_SILHOUETTED_MAP_OBJ_WEAK_LIGHT   = 0x0E,
+    NO_SILHOUETTED_MAP_OBJ_STRONG_LIGHT = 0x0F,
+    NPC                                 = 0x10,
+    RIDE                                = 0x11,
+    ENEMY                               = 0x12,
+    ENEMY_DECORATION                    = 0x13,
+    INDIRECT_MAP_OBJ                    = 0x19,
+    INDIRECT_MAP_OBJ_STRONG_LIGHT       = 0x1A,
+    INDIRECT_NPC                        = 0x1B,
+    INDIRECT_ENEMY                      = 0x1C,
+    INDIRECT_PLANET                     = 0x1D,
+    BLOOM_MODEL                         = 0x1E,
+    CRYSTAL                             = 0x20,
+    MIRROR_MAP_OBJ                      = 0x27,
+}
+
+export const enum OpaXlu {
+    OPA, XLU,
+}
+
+export const enum FilterKeyBase {
+    LEGACY_NODE_OPA = 0x0800,
+    LEGACY_NODE_XLU = 0x0400,
+
+    DRAW_BUFFER_OPA = 0x0200,
+    DRAW_BUFFER_XLU = 0x0100,
+
+    EXECUTE         = 0x2000,
+    EFFECT          = 0x1000,
+}
+
+export function createFilterKeyForDrawBufferType(xlu: OpaXlu, drawBufferType: DrawBufferType): number {
+    if (xlu === OpaXlu.OPA)
+        return FilterKeyBase.DRAW_BUFFER_OPA | drawBufferType;
+    else
+        return FilterKeyBase.DRAW_BUFFER_XLU | drawBufferType;
+}
+
+export function createFilterKeyForDrawType(drawType: DrawType): number {
+    return FilterKeyBase.EXECUTE | drawType;
 }
 
 export class NameObj {
@@ -115,6 +171,10 @@ export class SceneNameObjListExecutor {
 
     public drawAllBuffers(device: GfxDevice, renderHelper: GXRenderHelperGfx, camera: Camera): void {
         this.drawBufferHolder.drawAllBuffers(device, renderHelper, camera);
+    }
+
+    public drawBufferHasVisible(drawBufferType: DrawBufferType): boolean {
+        return this.drawBufferHolder.drawBufferHasVisible(drawBufferType);
     }
 
     // TODO(jstpierre): Workaround.

@@ -30,8 +30,8 @@ import { BMDModel, BMDModelInstance, MaterialInstance } from '../../j3d/render';
 import { JMapInfoIter, createCsvParser, getJMapInfoTransLocal, getJMapInfoRotateLocal, getJMapInfoScale } from './JMapInfo';
 import { BloomPostFXParameters, BloomPostFXRenderer } from './Bloom';
 import { AreaLightInfo, ActorLightInfo, LightDataHolder, ActorLightCtrl } from './LightData';
-import { NameObj, SceneNameObjListExecutor } from './NameObj';
-import { EffectSystem, EffectKeeper } from './EffectSystem';
+import { NameObj, SceneNameObjListExecutor, DrawBufferType, FilterKeyBase, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType } from './NameObj';
+import { EffectSystem, EffectKeeper, DrawOrder } from './EffectSystem';
 import { LightType } from './DrawBuffer';
 import { Spine, Nerve } from './Spine';
 
@@ -48,11 +48,10 @@ export function getTimeFrames(viewerInput: Viewer.ViewerRenderInput): number {
 }
 
 const enum SceneGraphTag {
-    Skybox = 'Skybox',
-    Normal = 'Normal',
-    Bloom = 'Bloom',
-    Water = 'Water',
-    Indirect = 'Indirect',
+    Skybox = 0,
+    Normal = 1,
+    Bloom = 2,
+    Indirect = 3,
 };
 
 interface ModelMatrixAnimator {
@@ -175,7 +174,7 @@ class Node implements ObjectBase {
     public areaLightInfo: AreaLightInfo;
     public areaLightConfiguration: ActorLightInfo;
 
-    constructor(public name: string, public zoneAndLayer: ZoneAndLayer, public objinfo: ObjInfo, public modelInstance: BMDModelInstance, parentModelMatrix: mat4, public animationController: AnimationController) {
+    constructor(public sceneGraphTag: SceneGraphTag, public name: string, public zoneAndLayer: ZoneAndLayer, public objinfo: ObjInfo, public modelInstance: BMDModelInstance, parentModelMatrix: mat4, public animationController: AnimationController) {
         mat4.mul(this.modelMatrix, parentModelMatrix, objinfo.modelMatrix);
         this.setupAnimations();
     }
@@ -248,6 +247,8 @@ class Node implements ObjectBase {
     }
 
     public draw(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        this.modelInstance.visible = this.visibleScenario;
+
         if (!this.visibleScenario)
             return;
 
@@ -256,14 +257,6 @@ class Node implements ObjectBase {
 
         this.modelInstance.animationController.setTimeInMilliseconds(viewerInput.time);
         this.modelInstance.calcAnim(viewerInput.camera);
-    }
-
-    public prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
-        if (!this.visibleScenario)
-            return;
-
-        this.modelInstance.drawOpa(device, renderHelper, viewerInput.camera);
-        this.modelInstance.drawXlu(device, renderHelper, viewerInput.camera);
     }
 }
 
@@ -281,12 +274,15 @@ class SceneGraph {
     }
 }
 
-export const enum SMGPass {
-    SKYBOX = 1 << 0,
-    OPAQUE = 1 << 1,
-    INDIRECT = 1 << 2,
-    AFTER_INDIRECT = 1 << 3,
-    BLOOM = 1 << 4,
+function createFilterKeyForLegacyNode(xlu: OpaXlu, sceneGraphTag: SceneGraphTag): number {
+    if (xlu === OpaXlu.OPA)
+        return FilterKeyBase.LEGACY_NODE_OPA | sceneGraphTag;
+    else
+        return FilterKeyBase.LEGACY_NODE_XLU | sceneGraphTag;
+}
+
+function createFilterKeyForEffectDrawOrder(drawOrder: DrawOrder): number {
+    return FilterKeyBase.EFFECT | drawOrder;
 }
 
 class SMGRenderer implements Viewer.SceneGfx {
@@ -296,7 +292,7 @@ class SMGRenderer implements Viewer.SceneGfx {
     private bloomParameters = new BloomPostFXParameters();
 
     private mainRenderTarget = new BasicRenderTarget();
-    private opaqueSceneTexture = new ColorTexture();
+    private sceneTexture = new ColorTexture();
     private currentScenarioIndex: number = 0;
     private scenarioSelect: UI.SingleSelect;
 
@@ -446,14 +442,73 @@ class SMGRenderer implements Viewer.SceneGfx {
         }
     }
 
+    private drawAllLegacyNodes(camera: Camera): void {
+        for (let i = 0; i < this.sceneGraph.nodes.length; i++) {
+            const node = this.sceneGraph.nodes[i];
+            if (!node.visibleScenario)
+                continue;
+
+            const templateOpa = this.renderHelper.renderInstManager.pushTemplateRenderInst();
+            templateOpa.filterKey = createFilterKeyForLegacyNode(OpaXlu.OPA, node.sceneGraphTag);
+            node.modelInstance.drawOpa(this.sceneObjHolder.modelCache.device, this.renderHelper, camera);
+            this.renderHelper.renderInstManager.popTemplateRenderInst();
+
+            const templateXlu = this.renderHelper.renderInstManager.pushTemplateRenderInst();
+            templateXlu.filterKey = createFilterKeyForLegacyNode(OpaXlu.XLU, node.sceneGraphTag);
+            node.modelInstance.drawXlu(this.sceneObjHolder.modelCache.device, this.renderHelper, camera);
+            this.renderHelper.renderInstManager.popTemplateRenderInst();
+        }
+    }
+
+    private drawAllEffects(): void {
+        for (let drawOrder = 0; drawOrder < 2; drawOrder++) {
+            const template = this.renderHelper.renderInstManager.pushTemplateRenderInst();
+            template.filterKey = createFilterKeyForEffectDrawOrder(drawOrder);
+            this.sceneObjHolder.effectSystem.draw(this.sceneObjHolder.modelCache.device, this.renderHelper, drawOrder);
+            this.renderHelper.renderInstManager.popTemplateRenderInst();
+        }
+    }
+
+    private drawLegacyNodeOpa(passRenderer: GfxRenderPass, sceneGraphTag: SceneGraphTag): void {
+        executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForLegacyNode(OpaXlu.OPA, sceneGraphTag));
+    }
+
+    private drawLegacyNodeXlu(passRenderer: GfxRenderPass, sceneGraphTag: SceneGraphTag): void {
+        executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForLegacyNode(OpaXlu.XLU, sceneGraphTag));
+    }
+
+    private execute(passRenderer: GfxRenderPass, drawType: DrawType): void {
+        executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForDrawType(drawType));
+    }
+
+    private drawEffect(passRenderer: GfxRenderPass, drawOrder: DrawOrder): void {
+        executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForEffectDrawOrder(drawOrder));
+    }
+
+    private drawOpa(passRenderer: GfxRenderPass, drawBufferType: DrawBufferType): void {
+        executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForDrawBufferType(OpaXlu.OPA, drawBufferType));
+    }
+
+    private drawXlu(passRenderer: GfxRenderPass, drawBufferType: DrawBufferType): void {
+        executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForDrawBufferType(OpaXlu.XLU, drawBufferType));
+    }
+
+    private isNormalBloomOn(): boolean {
+        const hasBloomObjects = this.sceneObjHolder.sceneNameObjListExecutor.drawBufferHasVisible(DrawBufferType.BLOOM_MODEL);
+        return hasBloomObjects;
+    }
+
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
-        this.sceneObjHolder.sceneNameObjListExecutor.executeMovement(this.sceneObjHolder, viewerInput);
-        this.sceneObjHolder.sceneNameObjListExecutor.executeCalcAnim(this.sceneObjHolder, viewerInput);
+        const executor = this.sceneObjHolder.sceneNameObjListExecutor;
+        const camera = viewerInput.camera;
+
+        executor.executeMovement(this.sceneObjHolder, viewerInput);
+        executor.executeCalcAnim(this.sceneObjHolder, viewerInput);
 
         this.mainRenderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        this.opaqueSceneTexture.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.sceneTexture.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
 
-        this.sceneObjHolder.captureSceneDirector.opaqueSceneTexture = this.opaqueSceneTexture.gfxTexture;
+        this.sceneObjHolder.captureSceneDirector.opaqueSceneTexture = this.sceneTexture.gfxTexture;
 
         // TODO(jstpierre): This is a very messy combination of the legacy render path and the new render path.
         // Anything in `sceneGraph` is legacy, the new stuff uses the drawBufferHolder.
@@ -464,7 +519,7 @@ class SMGRenderer implements Viewer.SceneGfx {
             const node = this.sceneGraph.nodes[i];
             node.draw(this.sceneObjHolder, viewerInput);
             // TODO(jstpierre): Remove.
-            node.setIndirectTextureOverride(this.opaqueSceneTexture.gfxTexture);
+            node.setIndirectTextureOverride(this.sceneTexture.gfxTexture);
         }
 
         const template = this.renderHelper.pushTemplateRenderInst();
@@ -475,83 +530,172 @@ class SMGRenderer implements Viewer.SceneGfx {
             const deltaTime = getDeltaTimeFrames(viewerInput);
             effectSystem.calc(deltaTime);
             effectSystem.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, null);
-
-            // TODO(jstpierre): Clean this mess up.
-            for (let i = 0; i < 2; i++) {
-                if (i === 0) template.filterKey = SMGPass.OPAQUE;
-                else if (i === 1) template.filterKey = SMGPass.AFTER_INDIRECT;
-                effectSystem.draw(device, this.renderHelper, i);
-            }
         }
 
         // Prepare all of our NameObjs.
-        this.sceneObjHolder.sceneNameObjListExecutor.executeDrawAll(this.sceneObjHolder, this.renderHelper, viewerInput);
-        this.sceneObjHolder.sceneNameObjListExecutor.setIndirectTextureOverride(this.opaqueSceneTexture.gfxTexture);
+        executor.executeDrawAll(this.sceneObjHolder, this.renderHelper, viewerInput);
+        executor.setIndirectTextureOverride(this.sceneTexture.gfxTexture);
 
-        // Draw our legacy nodes.
-        for (let i = 0; i < this.sceneGraph.nodes.length; i++)
-            this.sceneGraph.nodes[i].prepareToRender(device, this.renderHelper, viewerInput);
+        // Push to the renderinst.
+        executor.drawAllBuffers(this.sceneObjHolder.modelCache.device, this.renderHelper, camera);
+        this.drawAllLegacyNodes(camera);
+        this.drawAllEffects();
 
-        // Draw our modern DrawBuffer stuff.
-        this.sceneObjHolder.sceneNameObjListExecutor.drawAllBuffers(device, this.renderHelper, viewerInput.camera);
+        let bloomParameterBufferOffs = -1;
+        if (this.isNormalBloomOn()) {
+            this.prepareBloomParameters(this.bloomParameters);
+            bloomParameterBufferOffs = this.bloomRenderer.allocateParameterBuffer(this.renderHelper.renderInstManager, this.bloomParameters);
+        }
 
-        const renderInstManager = this.renderHelper.renderInstManager;
-
-        this.prepareBloomParameters(this.bloomParameters);
-        const bloomParameterBufferOffs = this.bloomRenderer.allocateParameterBuffer(renderInstManager, this.bloomParameters);
-        renderInstManager.popTemplateRenderInst();
-
+        // Now that we've completed our UBOs, upload.
         const hostAccessPass = device.createHostAccessPass();
         this.renderHelper.prepareToRender(device, hostAccessPass);
         device.submitPass(hostAccessPass);
 
-        const skyboxPassRenderer = this.mainRenderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
-        skyboxPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
-        renderInstManager.setVisibleByFilterKeyExact(SMGPass.SKYBOX);
-        renderInstManager.drawOnPassRenderer(device, skyboxPassRenderer);
-        skyboxPassRenderer.endPass(null);
-        device.submitPass(skyboxPassRenderer);
+        let passRenderer;
 
-        const opaquePassRenderer = this.mainRenderTarget.createRenderPass(device, depthClearRenderPassDescriptor);
-        opaquePassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
-        renderInstManager.setVisibleByFilterKeyExact(SMGPass.OPAQUE);
-        renderInstManager.drawOnPassRenderer(device, opaquePassRenderer);
+        passRenderer = this.mainRenderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
+        passRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
 
-        let lastPassRenderer: GfxRenderPass;
+        // GameScene::draw3D()
+        // drawOpa(0);
 
-        renderInstManager.setVisibleByFilterKeyExact(SMGPass.INDIRECT);
-        if (renderInstManager.hasAnyVisible()) {
-            opaquePassRenderer.endPass(this.opaqueSceneTexture.gfxTexture);
-            device.submitPass(opaquePassRenderer);
+        // SceneFunction::executeDrawBufferListNormalBeforeVolumeShadow()
+        // drawOpa(0x21); drawXlu(0x21);
+        // XXX(jstpierre): Crystal is here? It seems like it uses last frame's indirect texture, which makes sense...
+        // but are we sure crystals draw before everything else?
+        this.drawOpa(passRenderer, DrawBufferType.CRYSTAL);
+        this.drawXlu(passRenderer, DrawBufferType.CRYSTAL);
+        // drawOpa(0x20); drawXlu(0x20);
+        // drawOpa(0x23); drawXlu(0x23);
 
-            const indTexPassRenderer = this.mainRenderTarget.createRenderPass(device, noClearRenderPassDescriptor);
-            renderInstManager.drawOnPassRenderer(device, indTexPassRenderer);
-            lastPassRenderer = indTexPassRenderer;
-        } else {
-            lastPassRenderer = opaquePassRenderer;
+        // if (isExistPriorDrawAir())
+        // We assume that prior airs are drawing.
+        this.drawOpa(passRenderer, DrawBufferType.SKY);
+        this.drawXlu(passRenderer, DrawBufferType.SKY);
+        this.drawOpa(passRenderer, DrawBufferType.AIR);
+        this.drawOpa(passRenderer, DrawBufferType.SUN);
+        this.drawLegacyNodeOpa(passRenderer, SceneGraphTag.Skybox);
+        this.drawXlu(passRenderer, DrawBufferType.SKY);
+        this.drawXlu(passRenderer, DrawBufferType.AIR);
+        this.drawXlu(passRenderer, DrawBufferType.SUN);
+        this.drawLegacyNodeXlu(passRenderer, SceneGraphTag.Skybox);
+        // if (isDrawSpinDriverPathAtOpa())
+        //     execute(0x12);
+        this.drawOpa(passRenderer, DrawBufferType.PLANET);
+        this.drawOpa(passRenderer, 0x05); // planet strong light?
+        // execute(0x19);
+        this.drawOpa(passRenderer, DrawBufferType.ENVIRONMENT);
+        this.drawOpa(passRenderer, DrawBufferType.MAP_OBJ);
+        this.drawOpa(passRenderer, DrawBufferType.MAP_OBJ_STRONG_LIGHT);
+        this.drawOpa(passRenderer, DrawBufferType.MAP_OBJ_WEAK_LIGHT);
+        this.drawOpa(passRenderer, 0x1F); // player light?
+
+        // execute(0x27);
+
+        // executeDrawBufferListNormalOpaBeforeSilhouette()
+        this.drawOpa(passRenderer, DrawBufferType.NO_SHADOWED_MAP_OBJ);
+        this.drawOpa(passRenderer, DrawBufferType.NO_SHADOWED_MAP_OBJ_STRONG_LIGHT);
+
+        // execute(0x28);
+        // executeDrawSilhouetteAndFillShadow();
+        // executeDrawAlphaShadow();
+        // execute(0x39);
+        // setLensFlareDrawSyncToken();
+
+        // executeDrawBufferListBeforeOpa()
+        this.drawOpa(passRenderer, DrawBufferType.NO_SILHOUETTED_MAP_OBJ);
+        this.drawOpa(passRenderer, DrawBufferType.NO_SILHOUETTED_MAP_OBJ_WEAK_LIGHT);
+        this.drawOpa(passRenderer, DrawBufferType.NO_SILHOUETTED_MAP_OBJ_STRONG_LIGHT);
+        this.drawOpa(passRenderer, DrawBufferType.NPC);
+        this.drawOpa(passRenderer, DrawBufferType.RIDE);
+        this.drawOpa(passRenderer, DrawBufferType.ENEMY);
+        this.drawOpa(passRenderer, DrawBufferType.ENEMY_DECORATION);
+        this.drawOpa(passRenderer, 0x15);
+        this.drawLegacyNodeOpa(passRenderer, SceneGraphTag.Normal);
+        // if not PriorDrawAir, they would go here...
+
+        // executeDrawListOpa();
+        this.drawOpa(passRenderer, 0x18);
+
+        // executeDrawBufferListNormalXlu()
+        this.drawXlu(passRenderer, DrawBufferType.PLANET);
+        this.drawXlu(passRenderer, 0x05);
+        this.drawXlu(passRenderer, DrawBufferType.ENVIRONMENT);
+        this.drawXlu(passRenderer, DrawBufferType.ENVIRONMENT_STRONG_LIGHT);
+        this.drawXlu(passRenderer, DrawBufferType.MAP_OBJ);
+        this.drawXlu(passRenderer, DrawBufferType.MAP_OBJ_WEAK_LIGHT);
+        this.drawXlu(passRenderer, 0x1F);
+        this.drawXlu(passRenderer, DrawBufferType.MAP_OBJ_STRONG_LIGHT);
+        this.drawXlu(passRenderer, DrawBufferType.NO_SHADOWED_MAP_OBJ);
+        this.drawXlu(passRenderer, DrawBufferType.NO_SHADOWED_MAP_OBJ_STRONG_LIGHT);
+        this.drawXlu(passRenderer, DrawBufferType.NO_SILHOUETTED_MAP_OBJ);
+        this.drawXlu(passRenderer, DrawBufferType.NO_SILHOUETTED_MAP_OBJ_WEAK_LIGHT);
+        this.drawXlu(passRenderer, DrawBufferType.NO_SILHOUETTED_MAP_OBJ_STRONG_LIGHT);
+        this.drawXlu(passRenderer, DrawBufferType.NPC);
+        this.drawXlu(passRenderer, DrawBufferType.RIDE);
+        this.drawXlu(passRenderer, DrawBufferType.ENEMY);
+        this.drawXlu(passRenderer, DrawBufferType.ENEMY_DECORATION);
+        this.drawXlu(passRenderer, 0x15);
+        this.drawLegacyNodeXlu(passRenderer, SceneGraphTag.Normal);
+        // executeDrawListXlu()
+        this.drawXlu(passRenderer, 0x18);
+
+        // execute(0x26)
+        // execute(0x47) -- ParticleDrawExecutor / draw3D
+        this.drawEffect(passRenderer, DrawOrder.DRW_3D);
+        // execute(0x4c) -- ParticleDrawExecutor / drawForBloomEffect (???)
+        // execute(0x2f)
+
+        // This execute directs to CaptureScreenActor, which ends up taking the indirect screen capture.
+        // So, end our pass here and do indirect.
+        // execute(0x2d)
+        passRenderer.endPass(this.sceneTexture.gfxTexture);
+        device.submitPass(passRenderer);
+
+        passRenderer = this.mainRenderTarget.createRenderPass(device, noClearRenderPassDescriptor);
+        passRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+
+        // executeDrawAfterIndirect()
+        this.drawOpa(passRenderer, DrawBufferType.INDIRECT_PLANET);
+        this.drawOpa(passRenderer, DrawBufferType.INDIRECT_MAP_OBJ);
+        this.drawOpa(passRenderer, DrawBufferType.INDIRECT_MAP_OBJ_STRONG_LIGHT);
+        this.drawOpa(passRenderer, DrawBufferType.INDIRECT_NPC);
+        this.drawOpa(passRenderer, DrawBufferType.INDIRECT_ENEMY);
+        this.drawOpa(passRenderer, 0x22);
+        this.drawOpa(passRenderer, 0x17);
+        this.drawOpa(passRenderer, 0x16);
+        this.drawLegacyNodeOpa(passRenderer, SceneGraphTag.Indirect);
+        this.execute(passRenderer, DrawType.OCEAN_BOWL);
+        this.drawXlu(passRenderer, DrawBufferType.INDIRECT_PLANET);
+        this.drawXlu(passRenderer, DrawBufferType.INDIRECT_MAP_OBJ);
+        this.drawXlu(passRenderer, DrawBufferType.INDIRECT_MAP_OBJ_STRONG_LIGHT);
+        this.drawXlu(passRenderer, DrawBufferType.INDIRECT_NPC);
+        this.drawXlu(passRenderer, DrawBufferType.INDIRECT_ENEMY);
+        this.drawXlu(passRenderer, 0x22);
+        this.drawXlu(passRenderer, 0x17);
+        this.drawXlu(passRenderer, 0x16);
+        this.drawLegacyNodeXlu(passRenderer, SceneGraphTag.Indirect);
+        this.drawEffect(passRenderer, DrawOrder.DRW_AFTER_INDIRECT);
+
+        // executeDrawImageEffect()
+        if (this.isNormalBloomOn()) {
+            // Make bloomables visible.
+            const renderInstManager = this.renderHelper.renderInstManager;
+            const bloomOpa = createFilterKeyForDrawBufferType(OpaXlu.OPA, DrawBufferType.BLOOM_MODEL);
+            const bloomXlu = createFilterKeyForDrawBufferType(OpaXlu.XLU, DrawBufferType.BLOOM_MODEL);
+
+            for (let i = 0; i < renderInstManager.instPool.allocCount; i++) {
+                const k = renderInstManager.instPool.pool[i];
+                k.setVisible(k.filterKey === bloomOpa || k.filterKey === bloomXlu);
+
+            }
+            passRenderer = this.bloomRenderer.render(device, this.renderHelper.renderInstManager, this.mainRenderTarget, viewerInput, template, bloomParameterBufferOffs);
         }
 
-        renderInstManager.setVisibleByFilterKeyExact(SMGPass.AFTER_INDIRECT);
-        if (renderInstManager.hasAnyVisible()) {
-            lastPassRenderer.endPass(null);
-            device.submitPass(lastPassRenderer);
-
-            const afterIndirectPassRenderer = this.mainRenderTarget.createRenderPass(device, noClearRenderPassDescriptor);
-            renderInstManager.drawOnPassRenderer(device, afterIndirectPassRenderer);
-            lastPassRenderer = afterIndirectPassRenderer;
-        }
-
-        renderInstManager.setVisibleByFilterKeyExact(SMGPass.BLOOM);
-        if (renderInstManager.hasAnyVisible()) {
-            lastPassRenderer.endPass(null);
-            device.submitPass(lastPassRenderer);
-
-            lastPassRenderer = this.bloomRenderer.render(device, this.renderHelper.renderInstManager, this.mainRenderTarget, viewerInput, template, bloomParameterBufferOffs);
-        }
-
-        renderInstManager.resetRenderInsts();
-
-        return lastPassRenderer;
+        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.renderInstManager.resetRenderInsts();
+        return passRenderer;
     }
 
     public serializeSaveState(dst: ArrayBuffer, offs: number): number {
@@ -571,7 +715,7 @@ class SMGRenderer implements Viewer.SceneGfx {
         this.spawner.destroy(device);
 
         this.mainRenderTarget.destroy(device);
-        this.opaqueSceneTexture.destroy(device);
+        this.sceneTexture.destroy(device);
         this.bloomRenderer.destroy(device);
         this.renderHelper.destroy(device);
     }
@@ -1224,8 +1368,6 @@ export class LiveActor extends NameObj implements ObjectBase {
         this.modelInstance.name = objName;
         this.modelInstance.animationController.fps = FPS;
         this.modelInstance.animationController.phaseFrames = Math.random() * 1500;
-        // TODO(jstpierre): Use connectToScene for final draw rather than passMask.
-        this.modelInstance.passMask = SMGPass.OPAQUE;
 
         // Compute the joint matrices an initial time in case anything wants to rely on them...
         this.modelInstance.calcJointToWorld();
@@ -1373,6 +1515,7 @@ export class LiveActor extends NameObj implements ObjectBase {
 
 import { NPCDirector, MiniRoutePoint, createModelObjMapObj, PeachCastleGardenPlanet, PlanetMap } from './Actors';
 import { getActorNameObjFactory } from './ActorTable';
+import { executeOnPass } from '../../gfx/render/GfxRenderer2';
 
 function layerVisible(layer: LayerId, layerMask: number): boolean {
     if (layer >= 0)
@@ -1528,7 +1671,7 @@ class SMGSpawner {
             this.sceneGraph.addNode(node);
         };
 
-        const spawnGraph = (arcName: string, tag: SceneGraphTag = SceneGraphTag.Normal, animOptions: AnimOptions | null | undefined = undefined, planetRecord: BCSV.BcsvRecord | null = null) => {
+        const spawnGraph = (arcName: string, tag: SceneGraphTag = SceneGraphTag.Normal, animOptions: AnimOptions | null | undefined = undefined) => {
             const arcPath = `ObjectData/${arcName}.arc`;
             const modelFilename = `${arcName}.bdl`;
 
@@ -1556,17 +1699,9 @@ class SMGSpawner {
                     objinfo.modelMatrix[14] = 0;
 
                     modelInstance.isSkybox = true;
-                    modelInstance.passMask = SMGPass.SKYBOX;
-                } else if (tag === SceneGraphTag.Indirect) {
-                    modelInstance.passMask = SMGPass.INDIRECT;
-                } else if (tag === SceneGraphTag.Bloom) {
-                    modelInstance.passMask = SMGPass.BLOOM;
-                } else {
-                    modelInstance.passMask = SMGPass.OPAQUE;
                 }
 
-                const node = new Node(arcName, zoneAndLayer, objinfo, modelInstance, modelMatrixBase, modelInstance.animationController);
-                node.planetRecord = planetRecord;
+                const node = new Node(tag, arcName, zoneAndLayer, objinfo, modelInstance, modelMatrixBase, modelInstance.animationController);
 
                 // TODO(jstpierre): Parse out the proper area info.
                 node.setAreaLightInfo(areaLightInfo);
@@ -1770,7 +1905,7 @@ class SMGSpawner {
                 this.bindChangeAnimation(node, rarc, objinfo.objArg1);
             });
             break;
-    
+
         case 'OtaKing':
             spawnGraph('OtaKing');
             spawnGraph('OtaKingMagma');

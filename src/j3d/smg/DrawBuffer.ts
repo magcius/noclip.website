@@ -4,7 +4,7 @@ import { BMDModelInstance } from "../render";
 import { GXRenderHelperGfx } from "../../gx/gx_render_2";
 import { Camera } from "../../Camera";
 import { GfxDevice } from "../../gfx/platform/GfxPlatform";
-import { DrawBufferType } from "./NameObj";
+import { DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu } from "./NameObj";
 
 export const enum DrawBufferFlags {
     // TODO(jstpierre): Fill in.
@@ -141,6 +141,13 @@ export class DrawBufferGroup {
         // Will also set the mpDrawBuffer on the ActorLightCtrl -- not sure why yet...
         actor.actorLightCtrl.lightType = this.tableEntry.LightType;
     }
+
+    public hasVisible(): boolean {
+        for (let i = 0; i < this.models.length; i++)
+            if (this.models[i].visible)
+                return true;
+        return false;
+    }
 }
 
 export class DrawBufferHolder {
@@ -172,8 +179,26 @@ export class DrawBufferHolder {
             const group = this.groups[i];
             if (group === undefined)
                 continue;
-            group.drawOpa(device, renderHelper, camera);
-            group.drawXlu(device, renderHelper, camera);
+            this.drawOpa(device, renderHelper, camera, i);
+            this.drawXlu(device, renderHelper, camera, i);
         }
+    }
+
+    private drawOpa(device: GfxDevice, renderHelper: GXRenderHelperGfx, camera: Camera, drawBufferType: DrawBufferType): void {
+        const template = renderHelper.renderInstManager.pushTemplateRenderInst();
+        template.filterKey = createFilterKeyForDrawBufferType(OpaXlu.OPA, drawBufferType);
+        this.groups[drawBufferType].drawOpa(device, renderHelper, camera);
+        renderHelper.renderInstManager.popTemplateRenderInst();
+    }
+
+    private drawXlu(device: GfxDevice, renderHelper: GXRenderHelperGfx, camera: Camera, drawBufferType: DrawBufferType): void {
+        const template = renderHelper.renderInstManager.pushTemplateRenderInst();
+        template.filterKey = createFilterKeyForDrawBufferType(OpaXlu.XLU, drawBufferType);
+        this.groups[drawBufferType].drawXlu(device, renderHelper, camera);
+        renderHelper.renderInstManager.popTemplateRenderInst();
+    }
+
+    public drawBufferHasVisible(drawBufferType: DrawBufferType): boolean {
+        return this.groups[drawBufferType].hasVisible();
     }
 }

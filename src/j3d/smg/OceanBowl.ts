@@ -1,6 +1,6 @@
 
 import { vec3, mat4, vec2 } from "gl-matrix";
-import { LiveActor, SceneObjHolder, ZoneAndLayer, getObjectName, SMGPass } from "./smg_scenes";
+import { LiveActor, SceneObjHolder, ZoneAndLayer, getObjectName } from "./smg_scenes";
 import { connectToScene } from "./Actors";
 import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputLayout, GfxInputState, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxCullMode } from "../../gfx/platform/GfxPlatform";
 import { ViewerRenderInput } from "../../viewer";
@@ -15,9 +15,10 @@ import { makeStaticDataBuffer } from "../../gfx/helpers/BufferHelpers";
 import { getVertexAttribLocation, GXMaterial, ColorChannelControl, TexGen, IndTexStage, TevStage } from "../../gx/gx_material";
 import * as GX from "../../gx/gx_enum";
 import { GXRenderHelperGfx, GXMaterialHelperGfx, autoOptimizeMaterial } from "../../gx/gx_render_2";
-import { fillPacketParamsData, ub_PacketParams, u_PacketParamsBufferSize, MaterialParams, PacketParams, ub_MaterialParams, u_MaterialParamsBufferSize, fillMaterialParamsData, ColorKind, setTevOrder, setTevColorIn, setTevColorOp, setTevAlphaIn, setTevAlphaOp, setTevIndWarp, setIndTexOrder, setIndTexCoordScale } from "../../gx/gx_render";
+import { MaterialParams, PacketParams, ColorKind, setTevOrder, setTevColorIn, setTevColorOp, setTevAlphaIn, setTevAlphaOp, setTevIndWarp, setIndTexOrder, setIndTexCoordScale, ub_MaterialParams, u_MaterialParamsBufferSize, u_PacketParamsBufferSize, ub_PacketParams, fillPacketParamsData } from "../../gx/gx_render";
 import { Camera } from "../../Camera";
 import { makeSortKey, GfxRendererLayer } from "../../gfx/render/GfxRenderer";
+import { createFilterKeyForDrawType, DrawType } from "./NameObj";
 
 function calcHeightStatic(wave1Time: number, wave2Time: number, x: number, z: number): number {
     const wave1 = 40 * Math.sin(wave1Time + 0.003 * z);
@@ -420,13 +421,13 @@ export class OceanBowl extends LiveActor {
 
         // Now create our draw instance.
         const renderInst = renderHelper.renderInstManager.pushRenderInst();
-        renderInst.filterKey = SMGPass.INDIRECT;
+        renderInst.filterKey = createFilterKeyForDrawType(DrawType.OCEAN_BOWL);
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         renderInst.drawIndexes(this.indexCount);
 
         this.materialHelper.setOnRenderInst(device, cache, renderInst);
         renderInst.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT, this.materialHelper.programKey);
-        renderInst.allocateUniformBuffer(ub_MaterialParams, u_MaterialParamsBufferSize);
+        renderInst.allocateUniformBuffer(ub_MaterialParams, this.materialHelper.materialParamsBufferSize);
 
         let offs = renderInst.getUniformBufferOffset(ub_MaterialParams);
         this.materialHelper.fillMaterialParamsData(renderHelper, offs, materialParams);
