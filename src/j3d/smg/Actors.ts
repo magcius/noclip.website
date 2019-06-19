@@ -1379,6 +1379,7 @@ export class AstroMapObj extends MapObjActor {
         initInfo.setupEffect(objectName);
         super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
 
+        this.tryStartAllAnim('Open');
         this.tryStartAllAnimAndEffect(sceneObjHolder, 'AliveWait');
     }
 
