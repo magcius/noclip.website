@@ -2,14 +2,14 @@
 // Misc actors that aren't big enough to have their own file.
 
 import { LightType } from './DrawBuffer';
-import { SceneObjHolder, LiveActor, ZoneAndLayer, getObjectName, SMGPass, startBtkIfExist, startBvaIfExist, WorldmapPointInfo, startBrkIfExist, getDeltaTimeFrames, getTimeFrames, startBck, startBpkIfExist } from './smg_scenes';
+import { SceneObjHolder, LiveActor, ZoneAndLayer, getObjectName, SMGPass, startBtkIfExist, startBvaIfExist, WorldmapPointInfo, startBrkIfExist, getDeltaTimeFrames, getTimeFrames, startBck, startBpkIfExist, startBtpIfExist } from './smg_scenes';
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg6, getJMapInfoArg7 } from './JMapInfo';
 import { mat4, vec3 } from 'gl-matrix';
 import AnimationController from '../../AnimationController';
 import { MathConstants, computeModelMatrixSRT, clamp } from '../../MathHelpers';
 import { colorNewFromRGBA8, Color } from '../../Color';
 import { ColorKind } from '../../gx/gx_render';
-import { BTK, BRK, LoopMode } from '../j3d';
+import { BTK, BRK, LoopMode, BTP } from '../j3d';
 import * as Viewer from '../../viewer';
 import * as RARC from '../../j3d/rarc';
 import { DrawBufferType, MovementType, CalcAnimType, DrawType } from './NameObj';
@@ -68,6 +68,10 @@ export function connectToSceneSky(sceneObjHolder: SceneObjHolder, actor: LiveAct
 
 export function connectToSceneAir(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
     connectToScene(sceneObjHolder, actor, 0x24, 0x05, DrawBufferType.AIR, -1);
+}
+
+export function connectToSceneCrystal(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    connectToScene(sceneObjHolder, actor, 0x22, 0x05, DrawBufferType.CRYSTAL, -1);
 }
 
 export function connectToScenePlanet(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
@@ -159,6 +163,32 @@ export function isExistIndirectTexture(actor: LiveActor): boolean {
     return false;
 }
 
+function setXYZDir(dst: mat4, x: vec3, y: vec3, z: vec3): void {
+    dst[0] = x[0];
+    dst[1] = x[1];
+    dst[2] = x[2];
+    dst[3] = 9999;
+    dst[4] = y[0];
+    dst[5] = y[1];
+    dst[6] = y[2];
+    dst[7] = 9999;
+    dst[8] = z[0];
+    dst[9] = z[1];
+    dst[10] = z[2];
+    dst[11] = 9999;
+}
+
+const scratchVec3 = vec3.create();
+function makeMtxFrontUpPos(dst: mat4, front: vec3, up: vec3, pos: vec3): void {
+    vec3.normalize(front, front);
+    vec3.cross(scratchVec3, front, up);
+    vec3.normalize(scratchVec3, scratchVec3);
+    setXYZDir(dst, scratchVec3, up, front);
+    dst[12] = pos[0];
+    dst[13] = pos[1];
+    dst[14] = pos[2];
+}
+
 // ClippingJudge has these distances.
 const clippingJudgeDistances = [
     -1, 60000, 50000, 40000, 30000, 20000, 10000, 5000,
@@ -185,20 +215,140 @@ function setClippingFar(f: number): number {
     throw "whoops";
 }
 
-function bindColorChangeAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, frame: number, brkName: string = 'colorchange.brk'): void {
+function bindColorChangeAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, frame: number, baseName: string = 'ColorChange'): void {
+    const brkName = `${baseName}.brk`;
+    if (arc.findFile(brkName) !== null) {
+        const animationController = new AnimationController();
+        animationController.setTimeInFrames(frame);
+
+        const brk = BRK.parse(assertExists(arc.findFileData(brkName)));
+        modelInstance.bindTRK1(brk.trk1, animationController);
+    }
+}
+
+function bindTexChangeAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, frame: number, baseName: string = 'TexChange'): void {
+    const btpName = `${baseName}.btp`;
+    const btkName = `${baseName}.btp`;
+
     const animationController = new AnimationController();
     animationController.setTimeInFrames(frame);
 
-    const brk = BRK.parse(assertExists(arc.findFileData(brkName)));
-    modelInstance.bindTRK1(brk.trk1, animationController);
+    if (arc.findFile(btpName) !== null) {
+        const btp = BTP.parse(assertExists(arc.findFileData(btpName)));
+        modelInstance.bindTPT1(btp.tpt1, animationController);
+    }
+
+    if (arc.findFile(btkName) !== null) {
+        const btk = BTK.parse(assertExists(arc.findFileData(btkName)));
+        modelInstance.bindTTK1(btk.ttk1, animationController);
+    }
+}
+
+function createSubModelObjName(parentActor: LiveActor, suffix: string): string {
+    return `${parentActor.name}${suffix}`;
+}
+
+function createSubModel(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, suffix: string, drawBufferType: DrawBufferType): PartsModel | null {
+    const subModelObjName = createSubModelObjName(parentActor, suffix);
+    if (!sceneObjHolder.modelCache.isObjectDataExist(subModelObjName))
+        return null;
+    const model = new PartsModel(sceneObjHolder, subModelObjName, subModelObjName, parentActor, drawBufferType);
+    model.initFixedPositionRelative(null);
+    model.tryStartAllAnim(subModelObjName);
+    return model;
+}
+
+function createWaterModel(sceneObjHolder: SceneObjHolder, parentActor: LiveActor) {
+    const model = createSubModel(sceneObjHolder, parentActor, 'Water', 0x08);
+    return model;
+}
+
+function createIndirectPlanetModel(sceneObjHolder: SceneObjHolder, parentActor: LiveActor) {
+    const model = createSubModel(sceneObjHolder, parentActor, 'Indirect', 0x1D);
+    if (model)
+        model.modelInstance.passMask = SMGPass.INDIRECT;
+    return model;
+}
+
+function createPartsModelIndirectNpc(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, jointName: string, localTrans: vec3 | null = null) {
+    const model = new PartsModel(sceneObjHolder, "npc parts", objName, parentActor, DrawBufferType.NPC_INDIRECT);
+    model.modelInstance.passMask = SMGPass.INDIRECT;
+    model.initFixedPositionJoint(jointName, localTrans);
+    return model;
+}
+
+function createIndirectNPCGoods(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, jointName: string, localTrans: vec3 | null = null) {
+    const model = createPartsModelIndirectNpc(sceneObjHolder, parentActor, objName, jointName, localTrans);
+    model.initLightCtrl(sceneObjHolder);
+    return model;
+}
+
+function createPartsModelNpcAndFix(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, jointName: string, localTrans: vec3 | null = null) {
+    const model = new PartsModel(sceneObjHolder, "npc parts", objName, parentActor, DrawBufferType.NPC);
+    model.initFixedPositionJoint(jointName, localTrans);
+    return model;
+}
+
+function createPartsModelMapObj(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, localTrans: vec3 | null = null) {
+    const model = new PartsModel(sceneObjHolder, objName, objName, parentActor, 0x08);
+    model.initFixedPositionRelative(localTrans);
+    return model;
+}
+
+function createPartsModelNoSilhouettedMapObj(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, localTrans: vec3 | null = null) {
+    const model = new PartsModel(sceneObjHolder, objName, objName, parentActor, 0x0D);
+    model.initFixedPositionRelative(localTrans);
+    return model;
+}
+
+function createNPCGoods(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, jointName: string) {
+    const model = createPartsModelNpcAndFix(sceneObjHolder, parentActor, objName, jointName);
+    model.initLightCtrl(sceneObjHolder);
+    return model;
+}
+
+function requestArchivesForNPCGoods(sceneObjHolder: SceneObjHolder, npcName: string, index: number): void {
+    const modelCache = sceneObjHolder.modelCache;
+
+    const itemGoods = sceneObjHolder.npcDirector.getNPCItemData(npcName, index);
+    if (itemGoods !== null) {
+        if (itemGoods.goods0)
+            modelCache.requestObjectData(itemGoods.goods0);
+
+        if (itemGoods.goods1)
+            modelCache.requestObjectData(itemGoods.goods1);
+    }
+}
+
+function setupInitInfoSimpleMapObj(initInfo: MapObjActorInitInfo): void {
+    initInfo.setupDefaultPos = true;
+    initInfo.connectToScene = true;
+    initInfo.initEffect = true;
+    initInfo.effectFilename = null;
+}
+
+function setupInitInfoTypical(initInfo: MapObjActorInitInfo, objName: string): void {
+    // Special cases go here.
+}
+
+function setupInitInfoColorChangeArg0(initInfo: MapObjActorInitInfo, infoIter: JMapInfoIter): void {
+    initInfo.colorChangeFrame = getJMapInfoArg0(infoIter, -1);
+}
+
+function setupInitInfoTextureChangeArg1(initInfo: MapObjActorInitInfo, infoIter: JMapInfoIter): void {
+    initInfo.texChangeFrame = getJMapInfoArg1(infoIter, -1);
 }
 
 class MapObjActorInitInfo {
     public lightType: LightType = LightType.Planet;
     public initLightControl: boolean = false;
     public connectToScene: boolean = false;
+    public setupDefaultPos: boolean = true;
     public modelName: string | null = null;
-    public initEffect: string | null = null;
+    public initEffect: boolean = false;
+    public effectFilename: string | null = null;
+    public colorChangeFrame: number = -1;
+    public texChangeFrame: number = -1;
 
     public setupConnectToScene(): void {
         this.connectToScene = true;
@@ -209,7 +359,8 @@ class MapObjActorInitInfo {
     }
 
     public setupEffect(name: string): void {
-        this.initEffect = name;
+        this.initEffect = true;
+        this.effectFilename = name;
     }
 }
 
@@ -224,14 +375,21 @@ class MapObjActor extends LiveActor {
         if (initInfo.modelName !== null)
             this.objName = initInfo.modelName;
 
-        this.initDefaultPos(sceneObjHolder, infoIter);
+        if (initInfo.setupDefaultPos)
+            this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, this.objName);
         if (initInfo.connectToScene)
             this.connectToScene(sceneObjHolder, initInfo);
         if (initInfo.initLightControl)
             this.initLightCtrl(sceneObjHolder);
         if (initInfo.initEffect !== null)
-            this.initEffectKeeper(sceneObjHolder, initInfo.initEffect)
+            this.initEffectKeeper(sceneObjHolder, initInfo.effectFilename);
+
+        if (initInfo.colorChangeFrame !== -1)
+            bindColorChangeAnimation(this.modelInstance, this.arc, initInfo.colorChangeFrame);
+
+        if (initInfo.texChangeFrame !== -1)
+            bindTexChangeAnimation(this.modelInstance, this.arc, initInfo.texChangeFrame);
 
         const bloomObjName = `${this.objName}Bloom`;
         if (sceneObjHolder.modelCache.isObjectDataExist(bloomObjName)) {
@@ -254,10 +412,13 @@ class MapObjActor extends LiveActor {
     }
 }
 
-export class CollapsePlane extends MapObjActor {
+export class SimpleMapObj extends MapObjActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         const initInfo = new MapObjActorInitInfo();
-        initInfo.setupConnectToScene();
+        setupInitInfoSimpleMapObj(initInfo);
+        setupInitInfoTypical(initInfo, getObjectName(infoIter));
+        setupInitInfoColorChangeArg0(initInfo, infoIter);
+        setupInitInfoTextureChangeArg1(initInfo, infoIter);
         super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
     }
 }
@@ -278,6 +439,159 @@ export class ModelObj extends LiveActor {
         } else {
             super.calcAndSetBaseMtx(viewerInput);
         }
+    }
+}
+
+class NPCActorItem {
+    public goods0: string | null;
+    public goods1: string | null;
+    public goodsJoint0: string | null;
+    public goodsJoint1: string | null;
+
+    constructor() {
+        this.reset();
+    }
+
+    public reset(): void {
+        this.goods0 = null;
+        this.goods1 = null;
+        this.goodsJoint0 = null;
+        this.goodsJoint1 = null;
+    }
+}
+
+export class NPCDirector {
+    private scratchNPCActorItem = new NPCActorItem();
+
+    constructor(private npcDataArc: RARC.RARC) {
+    }
+
+    public getNPCItemData(npcName: string, index: number, npcActorItem = this.scratchNPCActorItem): NPCActorItem | null {
+        if (index === -1)
+            return null;
+
+        const infoIter = createCsvParser(this.npcDataArc.findFileData(`${npcName}Item.bcsv`));
+        infoIter.setRecord(index);
+        npcActorItem.goods0 = infoIter.getValueString('mGoods0');
+        npcActorItem.goods1 = infoIter.getValueString('mGoods1');
+        npcActorItem.goodsJoint0 = infoIter.getValueString('mGoodsJoint0');
+        npcActorItem.goodsJoint1 = infoIter.getValueString('mGoodsJoint1');
+        return npcActorItem;
+    }
+}
+
+export class PlanetMap extends LiveActor {
+    private bloomModel: ModelObj | null = null;
+    private waterModel: PartsModel | null = null;
+    private indirectModel: PartsModel | null = null;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, getObjectName(infoIter));
+
+        this.initDefaultPos(sceneObjHolder, infoIter);
+        this.initModel(sceneObjHolder, this.name, infoIter);
+        connectToScenePlanet(sceneObjHolder, this);
+        this.initEffectKeeper(sceneObjHolder, null);
+        this.tryStartAllAnim(this.name);
+    }
+
+    private initModel(sceneObjHolder: SceneObjHolder, name: string, infoIter: JMapInfoIter): void {
+        this.initModelManagerWithAnm(sceneObjHolder, this.name);
+        this.initBloomModel(sceneObjHolder, name);
+
+        this.waterModel = createWaterModel(sceneObjHolder, this);
+        this.indirectModel = createIndirectPlanetModel(sceneObjHolder, this);
+    }
+
+    private initBloomModel(sceneObjHolder: SceneObjHolder, name: string): void {
+        const bloomModelName = `${name}Bloom`;
+        if (sceneObjHolder.modelCache.isObjectDataExist(bloomModelName)) {
+            this.bloomModel = createModelObjBloomModel(this.zoneAndLayer, sceneObjHolder, this.name, bloomModelName, this.getBaseMtx());
+            vec3.copy(this.bloomModel.scale, this.scale);
+        }
+    }
+}
+
+class NPCActor extends LiveActor {
+    public goods0: PartsModel | null = null;
+    public goods1: PartsModel | null = null;
+
+    protected equipment(sceneObjHolder: SceneObjHolder, itemGoods: NPCActorItem, isIndirect: boolean = false): void {
+        if (itemGoods === null)
+            return;
+
+        if (isIndirect) {
+            if (itemGoods.goods0)
+                this.goods0 = createNPCGoods(sceneObjHolder, this, itemGoods.goods0, itemGoods.goodsJoint0);
+            if (itemGoods.goods1)
+                this.goods1 = createNPCGoods(sceneObjHolder, this, itemGoods.goods1, itemGoods.goodsJoint1);
+        } else {
+            if (itemGoods.goods0)
+                this.goods0 = createIndirectNPCGoods(sceneObjHolder, this, itemGoods.goods0, itemGoods.goodsJoint0);
+            if (itemGoods.goods1)
+                this.goods1 = createIndirectNPCGoods(sceneObjHolder, this, itemGoods.goods1, itemGoods.goodsJoint1);
+        }
+    }
+}
+
+class FixedPosition {
+    private localTrans = vec3.create();
+
+    constructor(private baseMtx: mat4, localTrans: vec3 | null = null) {
+        if (localTrans !== null)
+            this.setLocalTrans(localTrans);
+    }
+
+    public setLocalTrans(localTrans: vec3): void {
+        vec3.copy(this.localTrans, localTrans);
+    }
+
+    public calc(dst: mat4): void {
+        mat4.copy(dst, this.baseMtx);
+        mat4.translate(dst, dst, this.localTrans);
+    }
+}
+
+class PartsModel extends LiveActor {
+    public fixedPosition: FixedPosition | null = null;
+
+    constructor(sceneObjHolder: SceneObjHolder, objName: string, modelName: string, private parentActor: LiveActor, drawBufferType: DrawBufferType) {
+        super(parentActor.zoneAndLayer, objName);
+        this.initModelManagerWithAnm(sceneObjHolder, modelName);
+        this.initEffectKeeper(sceneObjHolder, null);
+
+        let movementType: MovementType = 0x2B;
+        let calcAnimType: CalcAnimType = 0x0B;
+        if (drawBufferType >= 0x15 && drawBufferType <= 0x18) {
+            movementType = 0x26;
+            calcAnimType = 0x0A;
+        } else if (drawBufferType === 0x10 || drawBufferType === 0x1B) {
+            movementType = 0x28;
+            calcAnimType = 0x06;
+        }
+
+        connectToScene(sceneObjHolder, this, movementType, calcAnimType, drawBufferType, -1);
+    }
+
+    public initFixedPositionRelative(localTrans: vec3 | null): void {
+        this.fixedPosition = new FixedPosition(this.parentActor.modelInstance.modelMatrix, localTrans);
+    }
+
+    public initFixedPositionJoint(jointName: string, localTrans: vec3 | null): void {
+        this.fixedPosition = new FixedPosition(this.parentActor.getJointMtx(jointName), localTrans);
+    }
+
+    public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
+        if (this.fixedPosition !== null)
+            this.fixedPosition.calc(this.modelInstance.modelMatrix);
+    }
+}
+
+export class CollapsePlane extends MapObjActor {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        const initInfo = new MapObjActorInitInfo();
+        initInfo.setupConnectToScene();
+        super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
     }
 }
 
@@ -357,32 +671,6 @@ export class EarthenPipe extends LiveActor {
     }
 }
 
-function setXYZDir(dst: mat4, x: vec3, y: vec3, z: vec3): void {
-    dst[0] = x[0];
-    dst[1] = x[1];
-    dst[2] = x[2];
-    dst[3] = 9999;
-    dst[4] = y[0];
-    dst[5] = y[1];
-    dst[6] = y[2];
-    dst[7] = 9999;
-    dst[8] = z[0];
-    dst[9] = z[1];
-    dst[10] = z[2];
-    dst[11] = 9999;
-}
-
-const scratchVec3 = vec3.create();
-function makeMtxFrontUpPos(dst: mat4, front: vec3, up: vec3, pos: vec3): void {
-    vec3.normalize(front, front);
-    vec3.cross(scratchVec3, front, up);
-    vec3.normalize(scratchVec3, scratchVec3);
-    setXYZDir(dst, scratchVec3, up, front);
-    dst[12] = pos[0];
-    dst[13] = pos[1];
-    dst[14] = pos[2];
-}
-
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 export class BlackHole extends LiveActor {
@@ -441,32 +729,6 @@ export class BlackHole extends LiveActor {
     }
 }
 
-function createSubModelObjName(parentActor: LiveActor, suffix: string): string {
-    return `${parentActor.name}${suffix}`;
-}
-
-function createSubModel(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, suffix: string, drawBufferType: DrawBufferType): PartsModel | null {
-    const subModelObjName = createSubModelObjName(parentActor, suffix);
-    if (!sceneObjHolder.modelCache.isObjectDataExist(subModelObjName))
-        return null;
-    const model = new PartsModel(sceneObjHolder, subModelObjName, subModelObjName, parentActor, drawBufferType);
-    model.initFixedPositionRelative(null);
-    model.tryStartAllAnim(subModelObjName);
-    return model;
-}
-
-function createWaterModel(sceneObjHolder: SceneObjHolder, parentActor: LiveActor) {
-    const model = createSubModel(sceneObjHolder, parentActor, 'Water', 0x08);
-    return model;
-}
-
-function createIndirectPlanetModel(sceneObjHolder: SceneObjHolder, parentActor: LiveActor) {
-    const model = createSubModel(sceneObjHolder, parentActor, 'Indirect', 0x1D);
-    if (model)
-        model.modelInstance.passMask = SMGPass.INDIRECT;
-    return model;
-}
-
 export class PeachCastleGardenPlanet extends MapObjActor {
     private indirectModel: PartsModel | null;
 
@@ -489,169 +751,6 @@ export class PeachCastleGardenPlanet extends MapObjActor {
             registerNameObjToExecuteHolder(this, 0x1D, 0x01, 0x1D, -1);
 */
         connectToScene(sceneObjHolder, this, 0x1D, 0x01, 0x04, -1);
-    }
-}
-
-class FixedPosition {
-    private localTrans = vec3.create();
-
-    constructor(private baseMtx: mat4, localTrans: vec3 | null = null) {
-        if (localTrans !== null)
-            this.setLocalTrans(localTrans);
-    }
-
-    public setLocalTrans(localTrans: vec3): void {
-        vec3.copy(this.localTrans, localTrans);
-    }
-
-    public calc(dst: mat4): void {
-        mat4.copy(dst, this.baseMtx);
-        mat4.translate(dst, dst, this.localTrans);
-    }
-}
-
-class PartsModel extends LiveActor {
-    public fixedPosition: FixedPosition | null = null;
-
-    constructor(sceneObjHolder: SceneObjHolder, objName: string, modelName: string, private parentActor: LiveActor, drawBufferType: DrawBufferType) {
-        super(parentActor.zoneAndLayer, objName);
-        this.initModelManagerWithAnm(sceneObjHolder, modelName);
-        this.initEffectKeeper(sceneObjHolder, null);
-
-        let movementType: MovementType = 0x2B;
-        let calcAnimType: CalcAnimType = 0x0B;
-        if (drawBufferType >= 0x15 && drawBufferType <= 0x18) {
-            movementType = 0x26;
-            calcAnimType = 0x0A;
-        } else if (drawBufferType === 0x10 || drawBufferType === 0x1B) {
-            movementType = 0x28;
-            calcAnimType = 0x06;
-        }
-
-        connectToScene(sceneObjHolder, this, movementType, calcAnimType, drawBufferType, -1);
-    }
-
-    public initFixedPositionRelative(localTrans: vec3 | null): void {
-        this.fixedPosition = new FixedPosition(this.parentActor.modelInstance.modelMatrix, localTrans);
-    }
-
-    public initFixedPositionJoint(jointName: string, localTrans: vec3 | null): void {
-        this.fixedPosition = new FixedPosition(this.parentActor.getJointMtx(jointName), localTrans);
-    }
-
-    public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
-        if (this.fixedPosition !== null)
-            this.fixedPosition.calc(this.modelInstance.modelMatrix);
-    }
-}
-
-function createPartsModelIndirectNpc(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, jointName: string, localTrans: vec3 | null = null) {
-    const model = new PartsModel(sceneObjHolder, "npc parts", objName, parentActor, DrawBufferType.NPC_INDIRECT);
-    model.modelInstance.passMask = SMGPass.INDIRECT;
-    model.initFixedPositionJoint(jointName, localTrans);
-    return model;
-}
-
-function createIndirectNPCGoods(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, jointName: string, localTrans: vec3 | null = null) {
-    const model = createPartsModelIndirectNpc(sceneObjHolder, parentActor, objName, jointName, localTrans);
-    model.initLightCtrl(sceneObjHolder);
-    return model;
-}
-
-function createPartsModelNpcAndFix(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, jointName: string, localTrans: vec3 | null = null) {
-    const model = new PartsModel(sceneObjHolder, "npc parts", objName, parentActor, DrawBufferType.NPC);
-    model.initFixedPositionJoint(jointName, localTrans);
-    return model;
-}
-
-function createPartsModelMapObj(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, localTrans: vec3 | null = null) {
-    const model = new PartsModel(sceneObjHolder, objName, objName, parentActor, 0x08);
-    model.initFixedPositionRelative(localTrans);
-    return model;
-}
-
-function createPartsModelNoSilhouettedMapObj(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, localTrans: vec3 | null = null) {
-    const model = new PartsModel(sceneObjHolder, objName, objName, parentActor, 0x0D);
-    model.initFixedPositionRelative(localTrans);
-    return model;
-}
-
-function createNPCGoods(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, jointName: string) {
-    const model = createPartsModelNpcAndFix(sceneObjHolder, parentActor, objName, jointName);
-    model.initLightCtrl(sceneObjHolder);
-    return model;
-}
-
-function requestArchivesForNPCGoods(sceneObjHolder: SceneObjHolder, npcName: string, index: number): void {
-    const modelCache = sceneObjHolder.modelCache;
-
-    const itemGoods = sceneObjHolder.npcDirector.getNPCItemData(npcName, index);
-    if (itemGoods !== null) {
-        if (itemGoods.goods0)
-            modelCache.requestObjectData(itemGoods.goods0);
-
-        if (itemGoods.goods1)
-            modelCache.requestObjectData(itemGoods.goods1);
-    }
-}
-
-class NPCActorItem {
-    public goods0: string | null;
-    public goods1: string | null;
-    public goodsJoint0: string | null;
-    public goodsJoint1: string | null;
-
-    constructor() {
-        this.reset();
-    }
-
-    public reset(): void {
-        this.goods0 = null;
-        this.goods1 = null;
-        this.goodsJoint0 = null;
-        this.goodsJoint1 = null;
-    }
-}
-
-export class NPCDirector {
-    private scratchNPCActorItem = new NPCActorItem();
-
-    constructor(private npcDataArc: RARC.RARC) {
-    }
-
-    public getNPCItemData(npcName: string, index: number, npcActorItem = this.scratchNPCActorItem): NPCActorItem | null {
-        if (index === -1)
-            return null;
-
-        const infoIter = createCsvParser(this.npcDataArc.findFileData(`${npcName}Item.bcsv`));
-        infoIter.setRecord(index);
-        npcActorItem.goods0 = infoIter.getValueString('mGoods0');
-        npcActorItem.goods1 = infoIter.getValueString('mGoods1');
-        npcActorItem.goodsJoint0 = infoIter.getValueString('mGoodsJoint0');
-        npcActorItem.goodsJoint1 = infoIter.getValueString('mGoodsJoint1');
-        return npcActorItem;
-    }
-}
-
-class NPCActor extends LiveActor {
-    public goods0: PartsModel | null = null;
-    public goods1: PartsModel | null = null;
-
-    protected equipment(sceneObjHolder: SceneObjHolder, itemGoods: NPCActorItem, isIndirect: boolean = false): void {
-        if (itemGoods === null)
-            return;
-
-        if (isIndirect) {
-            if (itemGoods.goods0)
-                this.goods0 = createNPCGoods(sceneObjHolder, this, itemGoods.goods0, itemGoods.goodsJoint0);
-            if (itemGoods.goods1)
-                this.goods1 = createNPCGoods(sceneObjHolder, this, itemGoods.goods1, itemGoods.goodsJoint1);
-        } else {
-            if (itemGoods.goods0)
-                this.goods0 = createIndirectNPCGoods(sceneObjHolder, this, itemGoods.goods0, itemGoods.goodsJoint0);
-            if (itemGoods.goods1)
-                this.goods1 = createIndirectNPCGoods(sceneObjHolder, this, itemGoods.goods1, itemGoods.goodsJoint1);
-        }
     }
 }
 
@@ -831,7 +930,7 @@ export class TicoComet extends NPCActor {
         startBvaIfExist(this.modelInstance, this.arc, "Small0");
 
         // TODO(jstpierre): setBrkFrameAndStop
-        bindColorChangeAnimation(this.modelInstance, this.arc, 0, "Normal.brk");
+        bindColorChangeAnimation(this.modelInstance, this.arc, 0, "Normal");
 
         this.startAction('Wait');
     }
@@ -1063,7 +1162,7 @@ export class GCaptureTarget extends LiveActor {
         connectToSceneNoSilhouettedMapObjStrongLight(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
         startBck(this, 'Wait');
-        bindColorChangeAnimation(this.modelInstance, this.arc, 1, 'Switch.brk');
+        bindColorChangeAnimation(this.modelInstance, this.arc, 1, 'Switch');
 
         this.effectKeeper.createEmitter(sceneObjHolder, 'TargetLight');
         this.effectKeeper.createEmitter(sceneObjHolder, 'TouchAble');
@@ -1491,38 +1590,6 @@ export class AstroMapObj extends MapObjActor {
     }
 }
 
-export class PlanetMap extends LiveActor {
-    private bloomModel: ModelObj | null = null;
-    private waterModel: PartsModel | null = null;
-    private indirectModel: PartsModel | null = null;
-
-    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
-
-        this.initDefaultPos(sceneObjHolder, infoIter);
-        this.initModel(sceneObjHolder, this.name, infoIter);
-        connectToScenePlanet(sceneObjHolder, this);
-        this.initEffectKeeper(sceneObjHolder, null);
-        this.tryStartAllAnim(this.name);
-    }
-
-    private initModel(sceneObjHolder: SceneObjHolder, name: string, infoIter: JMapInfoIter): void {
-        this.initModelManagerWithAnm(sceneObjHolder, this.name);
-        this.initBloomModel(sceneObjHolder, name);
-
-        this.waterModel = createWaterModel(sceneObjHolder, this);
-        this.indirectModel = createIndirectPlanetModel(sceneObjHolder, this);
-    }
-
-    private initBloomModel(sceneObjHolder: SceneObjHolder, name: string): void {
-        const bloomModelName = `${name}Bloom`;
-        if (sceneObjHolder.modelCache.isObjectDataExist(bloomModelName)) {
-            this.bloomModel = createModelObjBloomModel(this.zoneAndLayer, sceneObjHolder, this.name, bloomModelName, this.getBaseMtx());
-            vec3.copy(this.bloomModel.scale, this.scale);
-        }
-    }
-}
-
 class ChipBase extends LiveActor {
     private airBubble: PartsModel | null = null;
 
@@ -1559,5 +1626,32 @@ export class BlueChip extends ChipBase {
 export class YellowChip extends ChipBase {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, infoIter, "YellowChip");
+    }
+}
+
+const enum CrystalCageSize { S, M, L }
+
+export class CrystalCage extends LiveActor {
+    private size: CrystalCageSize;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, getObjectName(infoIter));
+
+        this.initDefaultPos(sceneObjHolder, infoIter);
+
+        if (this.name === 'CrystalCageS')
+            this.size = CrystalCageSize.S;
+        else if (this.name === 'CrystalCageM')
+            this.size = CrystalCageSize.M;
+        else if (this.name === 'CrystalCageL')
+            this.size = CrystalCageSize.L;
+
+        this.initModelManagerWithAnm(sceneObjHolder, this.name);
+        this.modelInstance.passMask = SMGPass.INDIRECT;
+
+        connectToSceneCrystal(sceneObjHolder, this);
+
+        if (this.size === CrystalCageSize.L)
+            this.initEffectKeeper(sceneObjHolder, null);
     }
 }

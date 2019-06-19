@@ -16,11 +16,12 @@ export const enum DrawType {
 }
 
 export const enum DrawBufferType {
-    SKY = 0x01,
-    AIR = 0x02,
+    SKY               = 0x01,
+    AIR               = 0x02,
     ITEM_STRONG_LIGHT = 0x0F,
-    NPC = 0x10,
-    NPC_INDIRECT = 0x1B,
+    NPC               = 0x10,
+    NPC_INDIRECT      = 0x1B,
+    CRYSTAL           = 0x20,
 }
 
 export class NameObj {

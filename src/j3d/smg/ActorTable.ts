@@ -1,6 +1,6 @@
 
 import { NameObjFactory } from "./smg_scenes";
-import { Kinopio, TicoComet, EarthenPipe, StarPiece, CollapsePlane, BlackHole, Peach, PenguinRacer, Coin, Penguin, SimpleEffectObj, EffectObjR1000F50, GCaptureTarget, FountainBig, AstroEffectObj, WarpPod, AstroCountDownPlate, Butler, Rosetta, Tico, Sky, Air, ShootingStar, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObj10x10x10SyncClipping, AstroMapObj, EffectObjR100F50SyncClipping, PriorDrawAir, BlueChip, YellowChip } from "./Actors";
+import { Kinopio, TicoComet, EarthenPipe, StarPiece, CollapsePlane, BlackHole, Peach, PenguinRacer, Coin, Penguin, SimpleEffectObj, EffectObjR1000F50, GCaptureTarget, FountainBig, AstroEffectObj, WarpPod, AstroCountDownPlate, Butler, Rosetta, Tico, Sky, Air, ShootingStar, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObj10x10x10SyncClipping, AstroMapObj, EffectObjR100F50SyncClipping, PriorDrawAir, BlueChip, YellowChip, PeachCastleGardenPlanet, SimpleMapObj, CrystalCage } from "./Actors";
 import { OceanBowl } from "./OceanBowl";
 
 interface ActorTableEntry {
@@ -32,6 +32,9 @@ const ActorTable: ActorTableEntry[] = [
     _("Coin",                           Coin),
     _("PurpleCoin",                     Coin),
     _("CollapsePlane",                  CollapsePlane),
+    _("CrystalCageS",                   CrystalCage),
+    _("CrystalCageM",                   CrystalCage),
+    _("CrystalCageL",                   CrystalCage),
     _("EarthenPipe",                    EarthenPipe),
     _("EarthenPipeInWater",             EarthenPipe),
     _("FountainBig",                    FountainBig),
@@ -90,6 +93,11 @@ const ActorTable: ActorTableEntry[] = [
     _("DimensionAir",                   Air),
     _("DarknessRoomAir",                Air),
     _("TwilightAir",                    Air),
+
+    // Misc. Map Objects
+    _("KoopaShipE",                     SimpleMapObj),
+    _("PeachCastleTownBeforeAttack",    SimpleMapObj),
+    _("PeachCastleTownGate",            SimpleMapObj),
 
     // Astro
     _("AstroCountDownPlate",            AstroCountDownPlate),

@@ -506,7 +506,7 @@ function kfa1Findi1(kfa1: JPAKeyBlock, t: number): number {
 
 function kfa1Calc(kfa1: JPAKeyBlock, tick: number): number {
     if (kfa1.isLoopEnable) {
-        const tickMax = kfa1.keyValues[(kfa1.keyValues.length - 1) * 4] + 1;
+        const tickMax = kfa1.keyValues[kfa1.keyValues.length - 4];
         tick = tick % tickMax;
     }
 
@@ -1380,9 +1380,9 @@ export class JPABaseEmitter {
         this.flags = this.flags | 0x00000080;
 
         if (!!(ssp1.flags & 0x00010000))
-            vec2.mul(workData.globalScale2D, this.globalScale2D, ssp1.globalScale2D);
-        else
             vec2.mul(workData.globalScale2D, this.globalScale2D, bsp1.globalScale2D);
+        else
+            vec2.mul(workData.globalScale2D, this.globalScale2D, ssp1.globalScale2D);
 
         if (ssp1.shapeType === ShapeType.Point) {
             workData.globalScale2D[0] *= 1.02;
@@ -1935,9 +1935,12 @@ export class JPABaseParticle {
     }
 
     public calc_p(workData: JPAEmitterWorkData): boolean {
-        this.tick += workData.deltaTime;
+        if (this.tick === -1)
+            this.tick++;
+        else
+            this.tick += workData.deltaTime;
 
-        if (this.tick >= this.lifeTime)
+        if (this.tick < 0 || this.tick >= this.lifeTime)
             return false;
 
         const res = workData.baseEmitter.resData.res;
@@ -2039,9 +2042,12 @@ export class JPABaseParticle {
     }
 
     public calc_c(workData: JPAEmitterWorkData): boolean {
-        this.tick += workData.deltaTime;
+        if (this.tick === -1)
+            this.tick++;
+        else
+            this.tick += workData.deltaTime;
 
-        if (this.tick >= this.lifeTime)
+        if (this.tick < 0 || this.tick >= this.lifeTime)
             return false;
 
         const res = workData.baseEmitter.resData.res;
