@@ -1,7 +1,10 @@
 
-import { NameObjFactory } from "./smg_scenes";
-import { Kinopio, TicoComet, EarthenPipe, StarPiece, CollapsePlane, BlackHole, Peach, PenguinRacer, Coin, Penguin, SimpleEffectObj, EffectObjR1000F50, GCaptureTarget, FountainBig, AstroEffectObj, WarpPod, AstroCountDownPlate, Butler, Rosetta, Tico, Sky, Air, ShootingStar, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObj10x10x10SyncClipping, AstroMapObj, EffectObjR100F50SyncClipping, PriorDrawAir, BlueChip, YellowChip, PeachCastleGardenPlanet, SimpleMapObj, CrystalCage } from "./Actors";
+import * as RARC from '../rarc';
+
+import { NameObjFactory, SceneObjHolder } from "./smg_scenes";
+import { Kinopio, TicoComet, EarthenPipe, StarPiece, CollapsePlane, BlackHole, Peach, PenguinRacer, Coin, Penguin, SimpleEffectObj, EffectObjR1000F50, GCaptureTarget, FountainBig, AstroEffectObj, WarpPod, AstroCountDownPlate, Butler, Rosetta, Tico, Sky, Air, ShootingStar, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObj10x10x10SyncClipping, AstroMapObj, EffectObjR100F50SyncClipping, PriorDrawAir, BlueChip, YellowChip, PeachCastleGardenPlanet, SimpleMapObj, CrystalCage, PlanetMap, HatchWaterPlanet } from "./Actors";
 import { OceanBowl } from "./OceanBowl";
+import { JMapInfoIter, createCsvParser } from "./JMapInfo";
 
 interface ActorTableEntry {
     objName: string;
@@ -127,9 +130,61 @@ const ActorTable: ActorTableEntry[] = [
     _("WaterfallS",                     EffectObj20x20x10SyncClipping),
 ];
 
-export function getNameObjTableEntry(objName: string): ActorTableEntry | null {
-    const entry = ActorTable.find((entry) => entry.objName === objName);
+export function getNameObjTableEntry(objName: string, table: ActorTableEntry[] = ActorTable): ActorTableEntry | null {
+    const entry = table.find((entry) => entry.objName === objName);
     if (entry !== undefined)
         return entry;
     return null;
+}
+
+const SpecialPlanetTable: ActorTableEntry[] = [
+    _("PeachCastleGardenPlanet",       PeachCastleGardenPlanet),
+    _("HatchWaterPlanet",              HatchWaterPlanet),
+];
+
+export class PlanetMapCreator {
+    public planetMapDataTable: JMapInfoIter;
+
+    constructor(arc: RARC.RARC) {
+        this.planetMapDataTable = createCsvParser(arc.findFileData('PlanetMapDataTable.bcsv'));
+    }
+
+    private setPlanetRecordFromName(objName: string): boolean {
+        for (let i = 0; i < this.planetMapDataTable.getNumRecords(); i++) {
+            this.planetMapDataTable.setRecord(i);
+            if (this.planetMapDataTable.getValueString('PlanetName') === objName)
+                return true;
+        }
+
+        return false;
+    }
+
+    public isRegisteredObj(objName: string): boolean {
+        return this.setPlanetRecordFromName(objName);
+    }
+
+    public getNameObjFactory(objName: string): NameObjFactory | null {
+        const specialPlanetEntry = getNameObjTableEntry(objName, SpecialPlanetTable);
+        if (specialPlanetEntry !== null)
+            return specialPlanetEntry.factory;
+
+        if (this.isRegisteredObj(objName))
+            return PlanetMap;
+
+        return null;
+    }
+
+    public requestArchive(sceneObjHolder: SceneObjHolder, objName: string): void {
+        const modelCache = sceneObjHolder.modelCache;
+
+        this.setPlanetRecordFromName(objName);
+
+        modelCache.requestObjectData(objName);
+        if (this.planetMapDataTable.getValueNumber('BloomFlag') !== 0)
+            modelCache.requestObjectData(`${objName}Bloom`);
+        if (this.planetMapDataTable.getValueNumber('IndirectFlag') !== 0)
+            modelCache.requestObjectData(`${objName}Indirect`);
+        if (this.planetMapDataTable.getValueNumber('WaterFlag') !== 0)
+            modelCache.requestObjectData(`${objName}Water`);
+    }
 }

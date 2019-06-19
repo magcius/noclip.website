@@ -1512,7 +1512,7 @@ export class LiveActor extends NameObj implements ObjectBase {
 }
 
 import { NPCDirector, MiniRoutePoint, createModelObjMapObj, PeachCastleGardenPlanet, PlanetMap } from './Actors';
-import { getNameObjTableEntry } from './ActorTable';
+import { getNameObjTableEntry, PlanetMapCreator } from './ActorTable';
 
 function layerVisible(layer: LayerId, layerMask: number): boolean {
     if (layer >= 0)
@@ -2442,54 +2442,6 @@ class StageDataHolder {
         // We can't easily do that here (lol), so we apply our secret trick.
         const iterExpando = infoIter as JMapInfoIter_StageDataHolder;
         return iterExpando.originalStageDataHolder;
-    }
-}
-
-class PlanetMapCreator {
-    public planetMapDataTable: JMapInfoIter;
-
-    constructor(arc: RARC.RARC) {
-        this.planetMapDataTable = createCsvParser(arc.findFileData('PlanetMapDataTable.bcsv'));
-    }
-
-    private setPlanetRecordFromName(objName: string): boolean {
-        for (let i = 0; i < this.planetMapDataTable.getNumRecords(); i++) {
-            this.planetMapDataTable.setRecord(i);
-            if (this.planetMapDataTable.getValueString('PlanetName') === objName)
-                return true;
-        }
-
-        return false;
-    }
-
-    public isRegisteredObj(objName: string): boolean {
-        return this.setPlanetRecordFromName(objName);
-    }
-
-    public getNameObjFactory(objName: string): NameObjFactory | null {
-        // Special cases.
-
-        if (objName === 'PeachCastleGardenPlanet')
-            return PeachCastleGardenPlanet;
-
-        if (this.isRegisteredObj(objName))
-            return PlanetMap;
-
-        return null;
-    }
-
-    public requestArchive(sceneObjHolder: SceneObjHolder, objName: string): void {
-        const modelCache = sceneObjHolder.modelCache;
-
-        this.setPlanetRecordFromName(objName);
-
-        modelCache.requestObjectData(objName);
-        if (this.planetMapDataTable.getValueNumber('BloomFlag') !== 0)
-            modelCache.requestObjectData(`${objName}Bloom`);
-        if (this.planetMapDataTable.getValueNumber('IndirectFlag') !== 0)
-            modelCache.requestObjectData(`${objName}Indirect`);
-        if (this.planetMapDataTable.getValueNumber('WaterFlag') !== 0)
-            modelCache.requestObjectData(`${objName}Water`);
     }
 }
 

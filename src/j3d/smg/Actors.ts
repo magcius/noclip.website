@@ -2,7 +2,7 @@
 // Misc actors that aren't big enough to have their own file.
 
 import { LightType } from './DrawBuffer';
-import { SceneObjHolder, LiveActor, ZoneAndLayer, getObjectName, startBtkIfExist, startBvaIfExist, WorldmapPointInfo, startBrkIfExist, getDeltaTimeFrames, getTimeFrames, startBck, startBpkIfExist, startBtpIfExist } from './smg_scenes';
+import { SceneObjHolder, LiveActor, ZoneAndLayer, getObjectName, startBtkIfExist, startBvaIfExist, WorldmapPointInfo, startBrkIfExist, getDeltaTimeFrames, getTimeFrames, startBck, startBpkIfExist, startBtpIfExist, NameObjFactory } from './smg_scenes';
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg6, getJMapInfoArg7 } from './JMapInfo';
 import { mat4, vec3 } from 'gl-matrix';
 import AnimationController from '../../AnimationController';
@@ -747,6 +747,20 @@ export class PeachCastleGardenPlanet extends MapObjActor {
 
     protected connectToScene(sceneObjHolder: SceneObjHolder): void {
         connectToScenePlanet(sceneObjHolder, this);
+    }
+}
+
+export class HatchWaterPlanet extends LiveActor {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, getObjectName(infoIter));
+
+        this.initDefaultPos(sceneObjHolder, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, 'HatchWaterPlanet');
+        connectToScenePlanet(sceneObjHolder, this);
+        this.initEffectKeeper(sceneObjHolder, null);
+
+        this.tryStartAllAnim('HatchWaterPlanet');
+        this.modelInstance.ank1Animator.ank1.loopMode = LoopMode.ONCE;
     }
 }
 
