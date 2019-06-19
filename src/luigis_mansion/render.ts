@@ -4,12 +4,12 @@ import * as UI from '../ui';
 import { BIN, Batch, Material, SceneGraphNode, SceneGraphPart } from "./bin";
 
 import * as GX_Texture from '../gx/gx_texture';
-import { MaterialParams, PacketParams, loadTextureFromMipChain, GXMaterialHelperGfx, GXRenderHelperGfx, GXShapeHelperGfx, loadedDataCoalescerGfx, translateWrapModeGfx, loadedDataCoalescerComboGfx } from '../gx/gx_render';
+import { MaterialParams, PacketParams, loadTextureFromMipChain, GXMaterialHelperGfx, GXRenderHelperGfx, GXShapeHelperGfx, translateWrapModeGfx, loadedDataCoalescerComboGfx } from '../gx/gx_render';
 import { assert } from "../util";
 import { mat4 } from "gl-matrix";
 import { AABB } from "../Geometry";
 import { GfxTexture, GfxDevice, GfxRenderPass, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxHostAccessPass } from "../gfx/platform/GfxPlatform";
-import { GfxCoalescedBuffers, GfxBufferCoalescer, GfxBufferCoalescerCombo, GfxCoalescedBuffersCombo } from "../gfx/helpers/BufferHelpers";
+import { GfxBufferCoalescerCombo, GfxCoalescedBuffersCombo } from "../gfx/helpers/BufferHelpers";
 import { GfxRenderInst, GfxRenderInstViewRenderer } from "../gfx/render/GfxRenderer";
 import { Camera, computeViewMatrix } from "../Camera";
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";

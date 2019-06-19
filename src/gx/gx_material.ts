@@ -37,9 +37,11 @@ export interface GXMaterial {
     alphaTest: AlphaTest;
     ropInfo: RopInfo;
 
-    // Optimization state.
+    // Optimization and other state.
     usePnMtxIdx?: boolean;
     useTexMtxIdx?: boolean[];
+    hasPostTexMtxBlock?: boolean;
+    hasLightsBlock?: boolean;
 }
 
 export class Color {
@@ -267,6 +269,74 @@ function colorChannelsEqual(a: ColorChannelControl, b: ColorChannelControl): boo
     return true;
 }
 
+export function materialHasPostTexMtxBlock(material: { hasPostTexMtxBlock?: boolean }): boolean {
+    return material.hasPostTexMtxBlock !== undefined ? material.hasPostTexMtxBlock : true;
+}
+
+export function materialHasLightsBlock(material: { hasLightsBlock?: boolean }): boolean {
+    return material.hasLightsBlock !== undefined ? material.hasLightsBlock : true;
+}
+
+function generateBindingsDefinition(material: { hasPostTexMtxBlock?: boolean, hasLightsBlock?: boolean }): string {
+    return `
+// Expected to be constant across the entire scene.
+layout(row_major, std140) uniform ub_SceneParams {
+    Mat4x4 u_Projection;
+    vec4 u_Misc0;
+};
+
+#define u_SceneTextureLODBias u_Misc0[0]
+
+struct Light {
+    vec4 Color;
+    vec4 Position;
+    vec4 Direction;
+    vec4 DistAtten;
+    vec4 CosAtten;
+};
+
+// Expected to change with each material.
+layout(row_major, std140) uniform ub_MaterialParams {
+    vec4 u_ColorMatReg[2];
+    vec4 u_ColorAmbReg[2];
+    vec4 u_KonstColor[4];
+    vec4 u_Color[4];
+    Mat4x3 u_TexMtx[10];
+    // SizeX, SizeY, 0, Bias
+    vec4 u_TextureParams[8];
+    Mat4x2 u_IndTexMtx[3];
+
+    // Optional parameters.
+${materialHasPostTexMtxBlock(material) ? `
+    Mat4x3 u_PostTexMtx[20];
+` : ``}
+${materialHasLightsBlock(material) ? `
+    Light u_LightParams[8];
+` : ``}
+};
+
+// Expected to change with each shape packet.
+layout(row_major, std140) uniform ub_PacketParams {
+    Mat4x3 u_PosMtx[10];
+};
+
+uniform sampler2D u_Texture[8];
+`;
+}
+
+export function getMaterialParamsBlockSize(material: GXMaterial): number {
+    const hasPostTexMtxBlock = material.hasPostTexMtxBlock !== undefined ? material.hasPostTexMtxBlock : true;
+    const hasLightsBlock = material.hasLightsBlock !== undefined ? material.hasLightsBlock : true;
+
+    let size = 4*2 + 4*2 + 4*4 + 4*4 + 4*3*10 + 4*2*3 + 4*8;
+    if (hasPostTexMtxBlock)
+        size += 4*3*20;
+    if (hasLightsBlock)
+        size += 4*5*8;
+
+    return size;
+}
+
 export class GX_Program extends DeviceProgram {
     public static ub_SceneParams = 0;
     public static ub_MaterialParams = 1;
@@ -347,6 +417,9 @@ export class GX_Program extends DeviceProgram {
         if (lightingEnabled) {
             generateLightAccum = `
     t_LightAccum = ${ambSource};`;
+
+            if (chan.litMask !== 0)
+                assert(materialHasLightsBlock(this.material));
 
             for (let j = 0; j < 8; j++) {
                 if (!(chan.litMask & (1 << j)))
@@ -999,52 +1072,16 @@ export class GX_Program extends DeviceProgram {
             return this.generateMulPntMatrixStatic(GX.TexGenMatrix.PNMTX0, src);
     }
 
-    public static BindingsDefinition = `
-// Expected to be constant across the entire scene.
-layout(row_major, std140) uniform ub_SceneParams {
-    Mat4x4 u_Projection;
-    vec4 u_Misc0;
-};
-
-#define u_SceneTextureLODBias u_Misc0[0]
-
-struct Light {
-    vec4 Color;
-    vec4 Position;
-    vec4 Direction;
-    vec4 DistAtten;
-    vec4 CosAtten;
-};
-
-// Expected to change with each material.
-layout(row_major, std140) uniform ub_MaterialParams {
-    vec4 u_ColorMatReg[2];
-    vec4 u_ColorAmbReg[2];
-    vec4 u_KonstColor[4];
-    vec4 u_Color[4];
-    Mat4x3 u_TexMtx[10];
-    Mat4x3 u_PostTexMtx[20];
-    Mat4x2 u_IndTexMtx[3];
-    // SizeX, SizeY, 0, Bias
-    vec4 u_TextureParams[8];
-    Light u_LightParams[8];
-};
-
-// Expected to change with each shape packet.
-layout(row_major, std140) uniform ub_PacketParams {
-    Mat4x3 u_PosMtx[10];
-};
-
-uniform sampler2D u_Texture[8];
-`;
-
-    public static programReflection: DeviceProgramReflection = DeviceProgram.parseReflectionDefinitions(GX_Program.BindingsDefinition);
+    // Program reflection with standard configuration for legacy renderer.
+    public static programReflection: DeviceProgramReflection = DeviceProgram.parseReflectionDefinitions(generateBindingsDefinition({}));
 
     private generateShaders() {
+        const bindingsDefinition = generateBindingsDefinition(this.material);
+
         this.both = `
 // ${this.material.name}
 precision mediump float;
-${GX_Program.BindingsDefinition}
+${bindingsDefinition}
 
 varying vec3 v_Position;
 varying vec4 v_Color0;

@@ -715,6 +715,9 @@ function patchBMD(bmd: BMD): void {
 
                 bufferStride = Math.max(bufferStride, j + 1);
                 hasAnyEnvMap = hasAnyEnvMap || isUsingEnvMap;
+
+                // Disable optimizations
+                material.gxMaterial.hasPostTexMtxBlock = true;
             }
         }
 
@@ -1283,12 +1286,12 @@ export class LiveActor extends NameObj implements ObjectBase {
 
     public tryStartAllAnim(animationName: string): boolean {
         let anyPlayed = false;
-        anyPlayed |= startBck(this, animationName);
-        anyPlayed |= startBtkIfExist(this.modelInstance, this.arc, animationName);
-        anyPlayed |= startBrkIfExist(this.modelInstance, this.arc, animationName);
-        anyPlayed |= startBpkIfExist(this.modelInstance, this.arc, animationName);
-        anyPlayed |= startBtpIfExist(this.modelInstance, this.arc, animationName);
-        anyPlayed |= startBvaIfExist(this.modelInstance, this.arc, animationName);
+        anyPlayed = startBck(this, animationName) || anyPlayed;
+        anyPlayed = startBtkIfExist(this.modelInstance, this.arc, animationName) || anyPlayed;
+        anyPlayed = startBrkIfExist(this.modelInstance, this.arc, animationName) || anyPlayed;
+        anyPlayed = startBpkIfExist(this.modelInstance, this.arc, animationName) || anyPlayed;
+        anyPlayed = startBtpIfExist(this.modelInstance, this.arc, animationName) || anyPlayed;
+        anyPlayed = startBvaIfExist(this.modelInstance, this.arc, animationName) || anyPlayed;
         return anyPlayed;
     }
 

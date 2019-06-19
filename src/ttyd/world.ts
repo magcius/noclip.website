@@ -15,6 +15,7 @@ import { GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
 import { colorFromRGBA8 } from '../Color';
 import { computeModelMatrixSRT, MathConstants } from '../MathHelpers';
 import { getPointHermite } from '../Spline';
+import { autoOptimizeMaterial } from '../gx/gx_render_2';
 
 export interface TTYDWorld {
     information: Information;
@@ -970,6 +971,8 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             ropInfo,
             indTexStages: [],
         };
+
+        autoOptimizeMaterial(gxMaterial);
 
         const material: Material = { index: i, name: materialName, materialLayer, samplers, gxMaterial, matColorReg, texMtx };
         materialMap.set(materialOffs, material);

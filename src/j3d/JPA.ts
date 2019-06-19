@@ -12,13 +12,14 @@ import { Endianness } from "../endian";
 import { GfxDevice, GfxInputLayout, GfxInputState, GfxBuffer, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxBufferUsage } from "../gfx/platform/GfxPlatform";
 import { BTIData } from "./render";
 import { getPointHermite } from "../Spline";
-import { GXMaterial, AlphaTest, RopInfo, TexGen, TevStage, getVertexAttribLocation, IndTexStage } from "../gx/gx_material";
+import { GXMaterial, AlphaTest, RopInfo, TexGen, TevStage, getVertexAttribLocation, IndTexStage, getMaterialParamsBlockSize } from "../gx/gx_material";
 import { Color, colorNew, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8 } from "../Color";
-import { MaterialParams, ColorKind, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, PacketParams, ub_MaterialParams, u_MaterialParamsBufferSize, setIndTexOrder, setIndTexCoordScale, setTevIndirect, setTevOrder, setTevColorIn, setTevColorOp, setTevAlphaIn, setTevAlphaOp, fillIndTexMtx } from "../gx/gx_render";
+import { MaterialParams, ColorKind, ub_PacketParams, u_PacketParamsBufferSize, PacketParams, ub_MaterialParams, u_MaterialParamsBufferSize, setIndTexOrder, setIndTexCoordScale, setTevIndirect, setTevOrder, setTevColorIn, setTevColorOp, setTevAlphaIn, setTevAlphaOp, fillIndTexMtx, fillTextureMappingInfo } from "../gx/gx_render";
 import { GXMaterialHelperGfx, GXRenderHelperGfx } from "../gx/gx_render_2";
 import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants } from "../MathHelpers";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { makeSortKeyTranslucent, GfxRendererLayer } from "../gfx/render/GfxRenderer";
+import { fillMatrix4x3, fillColor, fillMatrix4x2 } from "../gfx/helpers/UniformBufferHelpers";
 
 export interface JPAResourceRaw {
     resourceId: number;
@@ -309,8 +310,7 @@ export class JPAResourceData {
     public res: JPAResource;
     public name: string;
     public texData: BTIData[] = [];
-    public materialHelperP: GXMaterialHelperGfx;
-    public materialHelperC: GXMaterialHelperGfx;
+    public materialHelper: GXMaterialHelperGfx;
 
     constructor(device: GfxDevice, private jpac: JPAC, resRaw: JPAResourceRaw) {
         this.res = parseResource(resRaw);
@@ -446,7 +446,7 @@ export class JPAResourceData {
         }
 
         // Translate the material.
-        const gxMaterialP: GXMaterial = {
+        const gxMaterial: GXMaterial = {
             index: 0,
             name: 'JPA Material',
             // JPAEmitterManager::draw() calls GXSetCullMode(GX_CULL_NONE)
@@ -460,9 +460,11 @@ export class JPAResourceData {
             ropInfo,
             usePnMtxIdx: false,
             useTexMtxIdx: [],
+            hasLightsBlock: false,
+            hasPostTexMtxBlock: false,
         };
 
-        this.materialHelperP = new GXMaterialHelperGfx(gxMaterialP);
+        this.materialHelper = new GXMaterialHelperGfx(gxMaterial);
     }
 
     private translateTDB1Index(device: GfxDevice, idx: number): void {
@@ -474,7 +476,7 @@ export class JPAResourceData {
         for (let i = 0; i < this.texData.length; i++)
             if (this.texData[i] !== undefined)
                 this.texData[i].destroy(device);
-        this.materialHelperP.destroy(device);
+        this.materialHelper.destroy(device);
     }
 }
 
@@ -2117,7 +2119,7 @@ export class JPABaseParticle {
         const esp1 = workData.baseEmitter.resData.res.esp1;
         const isRot = !!(esp1.flags & 0x01000000);
 
-        const materialHelper = workData.baseEmitter.resData.materialHelperP;
+        const materialHelper = workData.baseEmitter.resData.materialHelper;
         const renderInstManager = renderHelper.renderInstManager;
 
         const renderInst = renderInstManager.pushRenderInst();
@@ -2148,17 +2150,34 @@ export class JPABaseParticle {
             throw "whoops";
         }
 
-        {
-            const offs = renderInst.allocateUniformBuffer(ub_MaterialParams, u_MaterialParamsBufferSize);
-            materialHelper.fillMaterialParamsData(renderHelper, offs, materialParams);
-            renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-        }
+        let materialOffs = renderInst.allocateUniformBuffer(ub_MaterialParams, materialHelper.materialParamsBufferSize);
+        let packetOffs = renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
+        const d = renderHelper.uniformBuffer.mapBufferF32(materialOffs, materialHelper.materialParamsBufferSize);
 
-        {
-            const offs = renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
-            const d = renderInst.mapUniformBufferF32(ub_PacketParams);
-            fillPacketParamsData(d, offs, packetParams);
-        }
+        // Since this is called quite a *lot*, we have hand-crafted versions of
+        // fillMaterialParamsData and fillPacketParamsData for speed here.
+
+        // Skip AMB0, AMB1, MAT0, MAT1, K0, K1, K2, K3, CPREV.
+        materialOffs += 4*9;
+        materialOffs += fillColor(d, materialOffs, materialParams.u_Color[ColorKind.C0]);
+        materialOffs += fillColor(d, materialOffs, materialParams.u_Color[ColorKind.C1]);
+        // Skip C2.
+        materialOffs += 4*1;
+
+        materialOffs += fillMatrix4x3(d, materialOffs, materialParams.u_TexMtx[0]);
+        // Skip u_TexMtx[1-9]
+        materialOffs += 4*3*9;
+
+        materialOffs += fillTextureMappingInfo(d, materialOffs, materialParams.m_TextureMapping[0]);
+        materialOffs += fillTextureMappingInfo(d, materialOffs, materialParams.m_TextureMapping[1]);
+        // Skip u_TextureInfo[2-8]
+        materialOffs += 4*6;
+
+        materialOffs += fillMatrix4x2(d, materialOffs, materialParams.u_IndTexMtx[0]);
+
+        packetOffs += fillMatrix4x3(d, packetOffs, packetParams.u_PosMtx[0]);
+
+        renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
     }
 
     public drawP(device: GfxDevice, renderHelper: GXRenderHelperGfx, workData: JPAEmitterWorkData, materialParams: MaterialParams): void {

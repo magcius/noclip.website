@@ -35,7 +35,7 @@ export function connectToSceneIndirectNpc(sceneObjHolder: SceneObjHolder, actor:
 }
 
 export function connectToSceneItemStrongLight(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x2C, 0x10, 0x0F, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x2C, 0x10, DrawBufferType.ITEM_STRONG_LIGHT, -1);
 }
 
 export function connectToSceneCollisionMapObjStrongLight(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {

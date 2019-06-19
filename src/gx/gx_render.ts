@@ -13,7 +13,7 @@ import { LoadedVertexData, LoadedVertexLayout, LoadedVertexPacket } from './gx_d
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { TextureMapping, TextureHolder, LoadedTexture } from '../TextureHolder';
 
-import { GfxBufferCoalescer, makeStaticDataBuffer, GfxBufferCoalescerCombo, GfxCoalescedBuffersCombo } from '../gfx/helpers/BufferHelpers';
+import { makeStaticDataBuffer, GfxBufferCoalescerCombo, GfxCoalescedBuffersCombo } from '../gfx/helpers/BufferHelpers';
 import { fillColor, fillMatrix4x3, fillVec4, fillMatrix4x4, fillVec3, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxFormat, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxDevice, GfxInputState, GfxVertexAttributeDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxProgram, GfxBindingLayoutDescriptor, GfxProgramReflection, GfxHostAccessPass, GfxRenderPass, GfxBufferBinding, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxVertexAttributeFrequency, GfxTextureDimension } from '../gfx/platform/GfxPlatform';
 import { getFormatTypeFlags, FormatTypeFlags } from '../gfx/platform/GfxPlatformFormat';
@@ -58,7 +58,7 @@ export const ub_MaterialParams = 1;
 export const ub_PacketParams = 2;
 
 export const u_SceneParamsBufferSize = 4*4 + 4;
-export const u_MaterialParamsBufferSize = 4*2 + 4*2 + 4*4 + 4*4 + 4*3*10 + 4*3*20 + 4*2*3 + 4*8 + 4*5*8;
+export const u_MaterialParamsBufferSize = 4*2 + 4*2 + 4*4 + 4*4 + 4*3*10 + 4*8 + 4*2*3 + 4*3*20 + 4*5*8;
 export const u_PacketParamsBufferSize = 4*3*10;
 
 export function fillSceneParamsData(d: Float32Array, bOffs: number, sceneParams: SceneParams): void {
@@ -92,16 +92,37 @@ export function fillMaterialParamsData(d: Float32Array, bOffs: number, materialP
         offs += fillColor(d, offs, materialParams.u_Color[i]);
     for (let i = 0; i < 10; i++)
         offs += fillMatrix4x3(d, offs, materialParams.u_TexMtx[i]);
-    for (let i = 0; i < 20; i++)
-        offs += fillMatrix4x3(d, offs, materialParams.u_PostTexMtx[i]);
-    for (let i = 0; i < 3; i++)
-        offs += fillMatrix4x2(d, offs, materialParams.u_IndTexMtx[i]);
     for (let i = 0; i < 8; i++)
         offs += fillTextureMappingInfo(d, offs, materialParams.m_TextureMapping[i]);
+    for (let i = 0; i < 3; i++)
+        offs += fillMatrix4x2(d, offs, materialParams.u_IndTexMtx[i]);
+    for (let i = 0; i < 20; i++)
+        offs += fillMatrix4x3(d, offs, materialParams.u_PostTexMtx[i]);
     for (let i = 0; i < 8; i++)
         offs += fillLightData(d, offs, materialParams.u_Lights[i]);
 
     assert(offs === bOffs + u_MaterialParamsBufferSize);
+    assert(d.length >= offs);
+}
+
+export function fillMaterialParamsDataWithOptimizations(material: GX_Material.GXMaterial, d: Float32Array, bOffs: number, materialParams: MaterialParams): void {
+    let offs = bOffs;
+
+    for (let i = 0; i < 12; i++)
+        offs += fillColor(d, offs, materialParams.u_Color[i]);
+    for (let i = 0; i < 10; i++)
+        offs += fillMatrix4x3(d, offs, materialParams.u_TexMtx[i]);
+    for (let i = 0; i < 8; i++)
+        offs += fillTextureMappingInfo(d, offs, materialParams.m_TextureMapping[i]);
+    for (let i = 0; i < 3; i++)
+        offs += fillMatrix4x2(d, offs, materialParams.u_IndTexMtx[i]);
+    if (GX_Material.materialHasPostTexMtxBlock(material))
+        for (let i = 0; i < 20; i++)
+            offs += fillMatrix4x3(d, offs, materialParams.u_PostTexMtx[i]);
+    if (GX_Material.materialHasLightsBlock(material))
+        for (let i = 0; i < 8; i++)
+            offs += fillLightData(d, offs, materialParams.u_Lights[i]);
+
     assert(d.length >= offs);
 }
 

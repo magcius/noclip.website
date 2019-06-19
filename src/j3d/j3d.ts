@@ -16,6 +16,7 @@ import { AABB } from '../Geometry';
 import { getPointHermite } from '../Spline';
 import { computeModelMatrixSRT } from '../MathHelpers';
 import BitMap from '../BitMap';
+import { autoOptimizeMaterial } from '../gx/gx_render_2';
 
 //#region Helpers
 function readStringTable(buffer: ArrayBufferSlice, offs: number): string[] {
@@ -978,6 +979,8 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             alphaTest,
             ropInfo,
         };
+
+        autoOptimizeMaterial(gxMaterial);
 
         materialEntries.push({
             index, name,

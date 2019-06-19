@@ -14,7 +14,7 @@ import { assert } from "../../util";
 import { makeStaticDataBuffer } from "../../gfx/helpers/BufferHelpers";
 import { getVertexAttribLocation, GXMaterial, ColorChannelControl, TexGen, IndTexStage, TevStage } from "../../gx/gx_material";
 import * as GX from "../../gx/gx_enum";
-import { GXRenderHelperGfx, GXMaterialHelperGfx } from "../../gx/gx_render_2";
+import { GXRenderHelperGfx, GXMaterialHelperGfx, autoOptimizeMaterial } from "../../gx/gx_render_2";
 import { fillPacketParamsData, ub_PacketParams, u_PacketParamsBufferSize, MaterialParams, PacketParams, ub_MaterialParams, u_MaterialParamsBufferSize, fillMaterialParamsData, ColorKind, setTevOrder, setTevColorIn, setTevColorOp, setTevAlphaIn, setTevAlphaOp, setTevIndWarp, setIndTexOrder, setIndTexCoordScale } from "../../gx/gx_render";
 import { Camera } from "../../Camera";
 import { makeSortKey, GfxRendererLayer } from "../../gfx/render/GfxRenderer";
@@ -341,6 +341,8 @@ export class OceanBowl extends LiveActor {
             useTexMtxIdx: [],
         };
 
+        autoOptimizeMaterial(material);
+
         this.materialHelper = new GXMaterialHelperGfx(material);
     }
 
@@ -427,8 +429,7 @@ export class OceanBowl extends LiveActor {
         renderInst.allocateUniformBuffer(ub_MaterialParams, u_MaterialParamsBufferSize);
 
         let offs = renderInst.getUniformBufferOffset(ub_MaterialParams);
-        const d = renderInst.mapUniformBufferF32(ub_MaterialParams);
-        fillMaterialParamsData(d, offs, materialParams);
+        this.materialHelper.fillMaterialParamsData(renderHelper, offs, materialParams);
 
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 

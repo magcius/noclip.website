@@ -5,7 +5,6 @@ import * as GX from './gx_enum';
 import * as GX_Material from './gx_material';
 import * as Viewer from '../viewer';
 
-import { assert } from '../util';
 import { LoadedVertexData, LoadedVertexLayout, LoadedVertexPacket } from './gx_displaylist';
 
 import { makeStaticDataBuffer, GfxCoalescedBuffersCombo } from '../gfx/helpers/BufferHelpers';
@@ -14,13 +13,52 @@ import { getFormatTypeFlags, FormatTypeFlags } from '../gfx/platform/GfxPlatform
 import { GfxRenderInstManager, GfxRenderInst } from '../gfx/render/GfxRenderer2';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
-import { MaterialParams, u_MaterialParamsBufferSize, ub_PacketParams, u_PacketParamsBufferSize, PacketParams, fillPacketParamsData, SceneParams, u_SceneParamsBufferSize, fillSceneParams, fillSceneParamsData, ub_SceneParams, fillMaterialParamsData } from './gx_render';
+import { MaterialParams, ub_PacketParams, u_PacketParamsBufferSize, PacketParams, fillPacketParamsData, SceneParams, u_SceneParamsBufferSize, fillSceneParams, fillSceneParamsData, ub_SceneParams, fillMaterialParamsDataWithOptimizations } from './gx_render';
 import { setSortKeyProgramKey } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+
+function autoOptimizeMaterialHasPostTexMtxBlock(material: GX_Material.GXMaterial): boolean {
+    for (let i = 0; i < material.texGens.length; i++)
+        if (material.texGens[i].postMatrix !== GX.PostTexGenMatrix.PTIDENTITY)
+            return true;
+
+    return false;
+}
+
+function channelControlUsesLights(chan: GX_Material.ColorChannelControl): boolean {
+    return chan.lightingEnabled && chan.litMask !== 0;
+}
+
+function autoOptimizeMaterialHasLightsBlock(material: GX_Material.GXMaterial): boolean {
+    if (material.lightChannels[0] !== undefined) {
+        if (channelControlUsesLights(material.lightChannels[0].colorChannel))
+            return true;
+        if (channelControlUsesLights(material.lightChannels[0].alphaChannel))
+            return true;
+    }
+
+    if (material.lightChannels[1] !== undefined) {
+        if (channelControlUsesLights(material.lightChannels[1].colorChannel))
+            return true;
+        if (channelControlUsesLights(material.lightChannels[1].alphaChannel))
+            return true;
+    }
+
+    return false;
+}
+
+export function autoOptimizeMaterial(material: GX_Material.GXMaterial): void {
+    if (material.hasPostTexMtxBlock === undefined)
+        material.hasPostTexMtxBlock = autoOptimizeMaterialHasPostTexMtxBlock(material);
+
+    if (material.hasLightsBlock === undefined)
+        material.hasLightsBlock = autoOptimizeMaterialHasLightsBlock(material);
+}
 
 export class GXMaterialHelperGfx {
     public programKey: number;
     public megaStateFlags: Partial<GfxMegaStateDescriptor>;
+    public materialParamsBufferSize: number;
     private materialHacks: GX_Material.GXMaterialHacks = {};
     private program!: GX_Material.GX_Program;
     private gfxProgram: GfxProgram | null = null;
@@ -30,6 +68,8 @@ export class GXMaterialHelperGfx {
             Object.assign(this.materialHacks, materialHacks);
 
         this.createProgram();
+
+        this.materialParamsBufferSize = GX_Material.getMaterialParamsBlockSize(this.material);
 
         this.megaStateFlags = {};
         GX_Material.translateGfxMegaState(this.megaStateFlags, this.material);
@@ -68,12 +108,12 @@ export class GXMaterialHelperGfx {
     }
 
     public fillMaterialParamsData(renderHelper: GXRenderHelperGfx, offs: number, materialParams: MaterialParams): void {
-        const d = renderHelper.uniformBuffer.mapBufferF32(offs, u_MaterialParamsBufferSize);
-        fillMaterialParamsData(d, offs, materialParams);
+        const d = renderHelper.uniformBuffer.mapBufferF32(offs, this.materialParamsBufferSize);
+        fillMaterialParamsDataWithOptimizations(this.material, d, offs, materialParams);
     }
 
     public allocateMaterialParamsBlock(renderHelper: GXRenderHelperGfx): number {
-        return renderHelper.uniformBuffer.allocateChunk(u_MaterialParamsBufferSize);
+        return renderHelper.uniformBuffer.allocateChunk(this.materialParamsBufferSize);
     }
 
     public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, renderInst: GfxRenderInst): void {
@@ -184,10 +224,6 @@ export class GXRenderHelperGfx {
     public uniformBuffer: GfxRenderDynamicUniformBuffer;
 
     constructor(device: GfxDevice) {
-        assert(GX_Material.GX_Program.programReflection.uniformBufferLayouts[0].totalWordSize === u_SceneParamsBufferSize);
-        assert(GX_Material.GX_Program.programReflection.uniformBufferLayouts[1].totalWordSize === u_MaterialParamsBufferSize);
-        assert(GX_Material.GX_Program.programReflection.uniformBufferLayouts[2].totalWordSize === u_PacketParamsBufferSize);
-
         this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
     }
 

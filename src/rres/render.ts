@@ -3,7 +3,7 @@ import * as BRRES from './brres';
 
 import * as GX_Material from '../gx/gx_material';
 import { mat4, vec3 } from "gl-matrix";
-import { MaterialParams, GXTextureHolder, ColorKind, translateTexFilterGfx, translateWrapModeGfx, PacketParams, ub_MaterialParams, u_MaterialParamsBufferSize, fillMaterialParamsData, loadedDataCoalescerComboGfx } from "../gx/gx_render";
+import { MaterialParams, GXTextureHolder, ColorKind, translateTexFilterGfx, translateWrapModeGfx, PacketParams, ub_MaterialParams, loadedDataCoalescerComboGfx, fillMaterialParamsDataWithOptimizations } from "../gx/gx_render";
 import { GXRenderHelperGfx, GXShapeHelperGfx, GXMaterialHelperGfx } from "../gx/gx_render_2";
 import { computeViewMatrix, computeViewMatrixSkybox, Camera, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
 import AnimationController from "../AnimationController";
@@ -12,7 +12,7 @@ import { IntersectionState, AABB } from "../Geometry";
 import { GfxDevice, GfxSampler } from "../gfx/platform/GfxPlatform";
 import { ViewerRenderInput } from "../viewer";
 import { GfxRendererLayer, makeSortKey, setSortKeyDepth, setSortKeyBias } from "../gfx/render/GfxRenderer";
-import { GfxBufferCoalescer, GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
+import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
 import { nArray } from '../util';
 import { prepareFrameDebugOverlayCanvas2D, getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
 import { colorCopy } from '../Color';
@@ -83,7 +83,7 @@ class ShapeInstance {
 
         materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
 
-        template.allocateUniformBuffer(ub_MaterialParams, u_MaterialParamsBufferSize);
+        template.allocateUniformBuffer(ub_MaterialParams, materialInstance.materialHelper.materialParamsBufferSize);
         materialInstance.fillMaterialParams(template, textureHolder, instanceStateData, modelMatrix, camera);
 
         packetParams.clear();
@@ -115,6 +115,7 @@ class ShapeInstance {
             const renderInst = this.shapeData.pushRenderInst(renderInstManager, packet);
             this.shapeData.fillPacketParams(packetParams, renderInst);
         }
+
         renderInstManager.popTemplateRenderInst();
     }
 }
@@ -143,7 +144,7 @@ class MaterialInstance {
     private srt0Animators: BRRES.SRT0TexMtxAnimator[] = [];
     private pat0Animators: BRRES.PAT0TexAnimator[] = [];
     private clr0Animators: BRRES.CLR0ColorAnimator[] = [];
-    private materialHelper: GXMaterialHelperGfx;
+    public materialHelper: GXMaterialHelperGfx;
     public sortKey: number = 0;
 
     constructor(private modelInstance: MDL0ModelInstance, public materialData: MaterialData) {
@@ -361,9 +362,9 @@ class MaterialInstance {
     public fillMaterialParams(renderInst: GfxRenderInst, textureHolder: GXTextureHolder, instanceStateData: InstanceStateData, modelMatrix: mat4, camera: Camera): void {
         this.fillMaterialParamsData(materialParams, textureHolder, instanceStateData, modelMatrix, camera);
 
-        let offs = renderInst.allocateUniformBuffer(ub_MaterialParams, u_MaterialParamsBufferSize);
+        let offs = renderInst.allocateUniformBuffer(ub_MaterialParams, this.materialHelper.materialParamsBufferSize);
         const d = renderInst.mapUniformBufferF32(ub_MaterialParams);
-        fillMaterialParamsData(d, offs, materialParams);
+        fillMaterialParamsDataWithOptimizations(this.materialHelper.material, d, offs, materialParams);
 
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
     }

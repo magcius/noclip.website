@@ -20,6 +20,7 @@ import { getPointHermite } from '../Spline';
 import { colorToRGBA8, colorFromRGBA8, colorNewCopy, White, Color, colorMult } from '../Color';
 import { computeModelMatrixSRT, MathConstants, lerp } from '../MathHelpers';
 import BitMap from '../BitMap';
+import { autoOptimizeMaterial } from '../gx/gx_render_2';
 
 //#region Utility
 function calcTexMtx_Basic(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
@@ -653,6 +654,8 @@ export function parseMaterialEntry(r: DisplayListRegisters, index: number, name:
         tevStages, texGens,
         indTexStages, alphaTest, ropInfo,
     };
+
+    autoOptimizeMaterial(gxMaterial);
 
     return gxMaterial;
 }
