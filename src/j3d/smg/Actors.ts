@@ -746,7 +746,6 @@ export class PeachCastleGardenPlanet extends MapObjActor {
     }
 
     protected connectToScene(sceneObjHolder: SceneObjHolder): void {
-        // won't this check always fail for PeachCastleGardenPlanet?
         connectToScenePlanet(sceneObjHolder, this);
     }
 }

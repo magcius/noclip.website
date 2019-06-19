@@ -5,7 +5,6 @@ import { ViewerRenderInput } from "../../viewer";
 import { GfxTexture, GfxDevice } from "../../gfx/platform/GfxPlatform";
 import { GXRenderHelperGfx } from "../../gx/gx_render_2";
 import { Camera } from "../../Camera";
-import { DrawOrder } from "./EffectSystem";
 
 export const enum MovementType {
 }
@@ -66,7 +65,6 @@ export const enum FilterKeyBase {
     DRAW_BUFFER_XLU = 0x0100,
 
     EXECUTE         = 0x2000,
-    EFFECT          = 0x1000,
 }
 
 export function createFilterKeyForDrawBufferType(xlu: OpaXlu, drawBufferType: DrawBufferType): number {

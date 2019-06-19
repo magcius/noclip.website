@@ -260,6 +260,14 @@ export class GfxRenderInstManager {
         return renderInst;
     }
 
+    public returnRenderInst(renderInst: GfxRenderInst): void {
+        renderInst._flags = 0;
+
+        // We leave it completely dead for now, since we don't expect to see too many "returned" instances.
+        // That said, if this is ever a memory pressure, we can have allocRenderInst allocate from dead items
+        // again...
+    }
+
     public pushTemplateRenderInst(): GfxRenderInst {
         const templateIndex = this.templatePool.allocCount - 1;
         const newTemplateIndex = this.templatePool.allocRenderInstIndex();

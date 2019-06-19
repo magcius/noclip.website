@@ -12,9 +12,9 @@ import * as UI from '../../ui';
 
 import { TextureMapping } from '../../TextureHolder';
 import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat } from '../../gfx/platform/GfxPlatform';
-import { GXRenderHelperGfx } from '../../gx/gx_render_2';
+import { executeOnPass } from '../../gfx/render/GfxRenderer2';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
-import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../../gfx/helpers/RenderTargetHelpers';
+import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../../gfx/helpers/RenderTargetHelpers';
 
 import * as GX from '../../gx/gx_enum';
 import * as Yaz0 from '../../compression/Yaz0';
@@ -25,6 +25,7 @@ import AnimationController from '../../AnimationController';
 import { EFB_WIDTH, EFB_HEIGHT } from '../../gx/gx_material';
 import { MaterialParams, PacketParams } from '../../gx/gx_render';
 import { LoadedVertexData, LoadedVertexLayout } from '../../gx/gx_displaylist';
+import { GXRenderHelperGfx } from '../../gx/gx_render_2';
 import { BMD, BRK, BTK, BCK, LoopMode, BVA, BTP, BPK, JSystemFileReaderHelper, ShapeDisplayFlags } from '../../j3d/j3d';
 import { BMDModel, BMDModelInstance, MaterialInstance } from '../../j3d/render';
 import { JMapInfoIter, createCsvParser, getJMapInfoTransLocal, getJMapInfoRotateLocal, getJMapInfoScale } from './JMapInfo';
@@ -282,7 +283,12 @@ function createFilterKeyForLegacyNode(xlu: OpaXlu, sceneGraphTag: SceneGraphTag)
 }
 
 function createFilterKeyForEffectDrawOrder(drawOrder: DrawOrder): number {
-    return FilterKeyBase.EFFECT | drawOrder;
+    if (drawOrder === DrawOrder.DRW_3D)
+        return createFilterKeyForDrawType(DrawType.EFFECT_DRAW_3D);
+    else if (drawOrder === DrawOrder.DRW_AFTER_INDIRECT)
+        return createFilterKeyForDrawType(DrawType.EFFECT_DRAW_AFTER_INDIRECT);
+    else
+        throw "whoops";
 }
 
 class SMGRenderer implements Viewer.SceneGfx {
@@ -477,20 +483,16 @@ class SMGRenderer implements Viewer.SceneGfx {
         executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForLegacyNode(OpaXlu.XLU, sceneGraphTag));
     }
 
-    private execute(passRenderer: GfxRenderPass, drawType: DrawType): void {
-        executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForDrawType(drawType));
-    }
-
-    private drawEffect(passRenderer: GfxRenderPass, drawOrder: DrawOrder): void {
-        executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForEffectDrawOrder(drawOrder));
-    }
-
     private drawOpa(passRenderer: GfxRenderPass, drawBufferType: DrawBufferType): void {
         executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForDrawBufferType(OpaXlu.OPA, drawBufferType));
     }
 
     private drawXlu(passRenderer: GfxRenderPass, drawBufferType: DrawBufferType): void {
         executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForDrawBufferType(OpaXlu.XLU, drawBufferType));
+    }
+
+    private execute(passRenderer: GfxRenderPass, drawType: DrawType): void {
+        executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForDrawType(drawType));
     }
 
     private isNormalBloomOn(): boolean {
@@ -642,9 +644,8 @@ class SMGRenderer implements Viewer.SceneGfx {
         this.drawXlu(passRenderer, 0x18);
 
         // execute(0x26)
-        // execute(0x47) -- ParticleDrawExecutor / draw3D
-        this.drawEffect(passRenderer, DrawOrder.DRW_3D);
-        // execute(0x4c) -- ParticleDrawExecutor / drawForBloomEffect (???)
+        this.execute(passRenderer, DrawType.EFFECT_DRAW_3D);
+        // this.execute(passRenderer, DrawType.EFFECT_DRAW_FOR_BLOOM_EFFECT);
         // execute(0x2f)
 
         // This execute directs to CaptureScreenActor, which ends up taking the indirect screen capture.
@@ -676,21 +677,18 @@ class SMGRenderer implements Viewer.SceneGfx {
         this.drawXlu(passRenderer, 0x17);
         this.drawXlu(passRenderer, 0x16);
         this.drawLegacyNodeXlu(passRenderer, SceneGraphTag.Indirect);
-        this.drawEffect(passRenderer, DrawOrder.DRW_AFTER_INDIRECT);
+        this.execute(passRenderer, DrawType.EFFECT_DRAW_AFTER_INDIRECT);
 
         // executeDrawImageEffect()
         if (this.isNormalBloomOn()) {
-            // Make bloomables visible.
-            const renderInstManager = this.renderHelper.renderInstManager;
-            const bloomOpa = createFilterKeyForDrawBufferType(OpaXlu.OPA, DrawBufferType.BLOOM_MODEL);
-            const bloomXlu = createFilterKeyForDrawBufferType(OpaXlu.XLU, DrawBufferType.BLOOM_MODEL);
+            passRenderer.endPass(null);
+            device.submitPass(passRenderer);
 
-            for (let i = 0; i < renderInstManager.instPool.allocCount; i++) {
-                const k = renderInstManager.instPool.pool[i];
-                k.setVisible(k.filterKey === bloomOpa || k.filterKey === bloomXlu);
-            }
-
-            passRenderer = this.bloomRenderer.render(device, this.renderHelper.renderInstManager, this.mainRenderTarget, viewerInput, template, bloomParameterBufferOffs);
+            const objPassRenderer = this.bloomRenderer.renderBeginObjects(device, viewerInput);
+            this.drawOpa(objPassRenderer, DrawBufferType.BLOOM_MODEL);
+            this.drawXlu(objPassRenderer, DrawBufferType.BLOOM_MODEL);
+            this.execute(objPassRenderer, DrawType.EFFECT_DRAW_FOR_BLOOM_EFFECT);
+            passRenderer = this.bloomRenderer.renderEndObjects(device, objPassRenderer, this.renderHelper.renderInstManager, this.mainRenderTarget, viewerInput, template, bloomParameterBufferOffs);
         }
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
@@ -1514,8 +1512,7 @@ export class LiveActor extends NameObj implements ObjectBase {
 }
 
 import { NPCDirector, MiniRoutePoint, createModelObjMapObj, PeachCastleGardenPlanet, PlanetMap } from './Actors';
-import { getActorNameObjFactory } from './ActorTable';
-import { executeOnPass } from '../../gfx/render/GfxRenderer2';
+import { getNameObjTableEntry } from './ActorTable';
 
 function layerVisible(layer: LayerId, layerMask: number): boolean {
     if (layer >= 0)
@@ -1649,9 +1646,9 @@ class SMGSpawner {
     }
 
     private getNameObjFactory(objName: string): NameObjFactory | null {
-        const actorFactory = getActorNameObjFactory(objName);
+        const actorFactory = getNameObjTableEntry(objName);
         if (actorFactory !== null)
-            return actorFactory;
+            return actorFactory.factory;
 
         const planetFactory = this.sceneObjHolder.planetMapCreator.getNameObjFactory(objName);
         if (planetFactory !== null)
@@ -2154,6 +2151,12 @@ class SMGSpawner {
         const factory = this.getNameObjFactory(objName);
         if (factory !== null && factory.requestArchives !== undefined)
             factory.requestArchives(this.sceneObjHolder, infoIter);
+
+        const entry = getNameObjTableEntry(objName);
+        if (entry !== null && entry.extraObjectDataArchiveNames.length) {
+            for (let i = 0; i < entry.extraObjectDataArchiveNames.length; i++)
+                this.sceneObjHolder.modelCache.requestObjectData(entry.extraObjectDataArchiveNames[i]);
+        }
     }
 
     private requestArchivesForStageDataHolder(stageDataHolder: StageDataHolder): void {

@@ -6,10 +6,11 @@ import { OceanBowl } from "./OceanBowl";
 interface ActorTableEntry {
     objName: string;
     factory: NameObjFactory;
+    extraObjectDataArchiveNames: string[];
 }
 
-function _(objName: string, factory: NameObjFactory): ActorTableEntry {
-    return { objName, factory };
+function _(objName: string, factory: NameObjFactory, extraObjectDataArchiveNames: string[] = []): ActorTableEntry {
+    return { objName, factory, extraObjectDataArchiveNames };
 }
 
 const ActorTable: ActorTableEntry[] = [
@@ -96,7 +97,7 @@ const ActorTable: ActorTableEntry[] = [
 
     // Misc. Map Objects
     _("KoopaShipE",                     SimpleMapObj),
-    _("PeachCastleTownBeforeAttack",    SimpleMapObj),
+    _("PeachCastleTownBeforeAttack",    SimpleMapObj, ["PeachCastleTownBeforeAttackBloom"]),
     _("PeachCastleTownGate",            SimpleMapObj),
 
     // Astro
@@ -126,9 +127,9 @@ const ActorTable: ActorTableEntry[] = [
     _("WaterfallS",                     EffectObj20x20x10SyncClipping),
 ];
 
-export function getActorNameObjFactory(objName: string): NameObjFactory | null {
+export function getNameObjTableEntry(objName: string): ActorTableEntry | null {
     const entry = ActorTable.find((entry) => entry.objName === objName);
     if (entry !== undefined)
-        return entry.factory;
+        return entry;
     return null;
 }
