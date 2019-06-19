@@ -1,6 +1,6 @@
 
 import { NameObjFactory } from "./smg_scenes";
-import { Kinopio, TicoComet, EarthenPipe, StarPiece, CollapsePlane, BlackHole, Peach, PenguinRacer, Coin, Penguin, SimpleEffectObj, EffectObjR1000F50, GCaptureTarget, FountainBig, AstroEffectObj, WarpPod, AstroCountDownPlate, Butler, Rosetta, Tico, Sky, Air, ShootingStar, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObj10x10x10SyncClipping, AstroMapObj, EffectObjR100F50SyncClipping } from "./Actors";
+import { Kinopio, TicoComet, EarthenPipe, StarPiece, CollapsePlane, BlackHole, Peach, PenguinRacer, Coin, Penguin, SimpleEffectObj, EffectObjR1000F50, GCaptureTarget, FountainBig, AstroEffectObj, WarpPod, AstroCountDownPlate, Butler, Rosetta, Tico, Sky, Air, ShootingStar, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObj10x10x10SyncClipping, AstroMapObj, EffectObjR100F50SyncClipping, PriorDrawAir, BlueChip, YellowChip } from "./Actors";
 import { OceanBowl } from "./OceanBowl";
 
 interface ActorTableEntry {
@@ -13,29 +13,38 @@ function _(objName: string, factory: NameObjFactory): ActorTableEntry {
 }
 
 const ActorTable: ActorTableEntry[] = [
+    // NPCs
+    _("Butler",                         Butler),
     _("Kinopio",                        Kinopio),
-    _("Tico",                           Tico),
-    _("TicoAstro",                      Tico),
-    _("TicoComet",                      TicoComet),
-    _("CollapsePlane",                  CollapsePlane),
-    _("StarPiece",                      StarPiece),
-    _("EarthenPipe",                    EarthenPipe),
-    _("BlackHole",                      BlackHole),
-    _("BlackHoleCube",                  BlackHole),
     _("Peach",                          Peach),
     _("Penguin",                        Penguin),
     _("PenguinRacer",                   PenguinRacer),
     _("PenguinRacerLeader",             PenguinRacer),
+    _("Rosetta",                        Rosetta),
+    _("Tico",                           Tico),
+    _("TicoAstro",                      Tico),
+    _("TicoComet",                      TicoComet),
+
+    // Misc objects
+    _("BlackHole",                      BlackHole),
+    _("BlackHoleCube",                  BlackHole),
+    _("BlueChip",                       BlueChip),
     _("Coin",                           Coin),
     _("PurpleCoin",                     Coin),
-    _("OceanBowl",                      OceanBowl),
-    _("GCaptureTarget",                 GCaptureTarget),
+    _("CollapsePlane",                  CollapsePlane),
+    _("EarthenPipe",                    EarthenPipe),
+    _("EarthenPipeInWater",             EarthenPipe),
     _("FountainBig",                    FountainBig),
+    _("GCaptureTarget",                 GCaptureTarget),
+    _("OceanBowl",                      OceanBowl),
+    _("StarPiece",                      StarPiece),
     _("WarpPod",                        WarpPod),
-    _("Butler",                         Butler),
-    _("Rosetta",                        Rosetta),
+    _("YellowChip",                     YellowChip),
 
-    // Sky/Air.
+    // Not good enough for prime-time yet.
+    // _("ShootingStar",         ShootingStar),
+
+    // Sky/Air
     _("AuroraSky",                      Sky),
     _("BeyondGalaxySky",                Sky),
     _("BeyondHellValleySky",            Sky),
@@ -75,34 +84,38 @@ const ActorTable: ActorTableEntry[] = [
     _("VRSandwichSun",                  Sky),
     _("VsKoopaLv3Sky",                  Sky),
     _("HomeAir",                        Air),
+    _("SphereAir",                      PriorDrawAir),
+    _("SunsetAir",                      Air),
+    _("FineAir",                        Air),
     _("DimensionAir",                   Air),
     _("DarknessRoomAir",                Air),
-    // Not good enough for prime-time yet.
-    // _("ShootingStar",         ShootingStar),
-
-    // Effects.
-    _("AstroTorchLightRed",             SimpleEffectObj),
-    _("AstroTorchLightBlue",            SimpleEffectObj),
-    _("Steam",                          SimpleEffectObj),
-    _("EffectTicoS",                    AstroEffectObj),
-    _("EffectTicoL",                    AstroEffectObj),
-    _("WaterfallL",                     EffectObjR1000F50),
-    _("WaterfallS",                     EffectObj20x20x10SyncClipping),
-    _("FallGreenLeaf",                  EffectObj10x10x10SyncClipping),
-    _("FallRedLeaf",                    EffectObj10x10x10SyncClipping),
-    _("BirdLouseS",                     EffectObj20x20x10SyncClipping),
-    _("BirdLouseL",                     EffectObj50x50x10SyncClipping),
-    _("SpaceDustL",                     EffectObj50x50x10SyncClipping),
-    _("ForestWaterfallL",               EffectObjR1000F50),
-    _("ForestWaterfallS",               EffectObjR1000F50),
-    _("TwinFallLakeWaterFall",          EffectObjR1000F50),
-    _("IcePlanetLight",                 EffectObjR100F50SyncClipping),
-    _("IcicleRockLight",                EffectObjR100F50SyncClipping),
+    _("TwilightAir",                    Air),
 
     // Astro
     _("AstroCountDownPlate",            AstroCountDownPlate),
     _("AstroDomeEntrance",              AstroMapObj),
     _("AstroStarPlate",                 AstroMapObj),
+
+    // Effects
+    _("AstroTorchLightRed",             SimpleEffectObj),
+    _("AstroTorchLightBlue",            SimpleEffectObj),
+    _("BirdLouseS",                     EffectObj20x20x10SyncClipping),
+    _("BirdLouseL",                     EffectObj50x50x10SyncClipping),
+    _("EffectTicoS",                    AstroEffectObj),
+    _("EffectTicoL",                    AstroEffectObj),
+    _("FallGreenLeaf",                  EffectObj10x10x10SyncClipping),
+    _("FallRedLeaf",                    EffectObj10x10x10SyncClipping),
+    _("ForestWaterfallL",               EffectObjR1000F50),
+    _("ForestWaterfallS",               EffectObjR1000F50),
+    _("IcePlanetLight",                 EffectObjR100F50SyncClipping),
+    _("IcicleRockLight",                EffectObjR100F50SyncClipping),
+    _("SandBreezeS",                    EffectObj10x10x10SyncClipping),
+    _("SnowS",                          EffectObj10x10x10SyncClipping),
+    _("SpaceDustL",                     EffectObj50x50x10SyncClipping),
+    _("Steam",                          SimpleEffectObj),
+    _("TwinFallLakeWaterFall",          EffectObjR1000F50),
+    _("WaterfallL",                     EffectObjR1000F50),
+    _("WaterfallS",                     EffectObj20x20x10SyncClipping),
 ];
 
 export function getActorNameObjFactory(objName: string): NameObjFactory | null {

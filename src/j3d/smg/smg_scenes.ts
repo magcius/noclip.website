@@ -922,49 +922,56 @@ class ActorAnimKeeperInfo {
     }
 }
 
-export function startBckIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): void {
+export function startBckIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): boolean {
     const data = arc.findFileData(`${animationName}.bck`);
     if (data !== null) {
         const bck = BCK.parse(data);
         bck.ank1.loopMode = LoopMode.REPEAT;
         modelInstance.bindANK1(bck.ank1);
     }
+    return data !== null;
 }
 
-export function startBtkIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): void {
+export function startBtkIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): boolean {
     const data = arc.findFileData(`${animationName}.btk`);
     if (data !== null)
         modelInstance.bindTTK1(BTK.parse(data).ttk1);
+    return data !== null;
 }
 
-export function startBrkIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): void {
+export function startBrkIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): boolean {
     const data = arc.findFileData(`${animationName}.brk`);
     if (data !== null)
         modelInstance.bindTRK1(BRK.parse(data).trk1);
+    return data !== null;
 }
 
-export function startBpkIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): void {
+export function startBpkIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): boolean {
     const data = arc.findFileData(`${animationName}.bpk`);
     if (data !== null)
         modelInstance.bindTRK1(BPK.parse(data).pak1);
+    return data !== null;
 }
 
-export function startBtpIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): void {
+export function startBtpIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): boolean {
     const data = arc.findFileData(`${animationName}.btp`);
     if (data !== null)
         modelInstance.bindTPT1(BTP.parse(data).tpt1);
+    return data !== null;
 }
 
-export function startBvaIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): void {
+export function startBvaIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): boolean {
     const data = arc.findFileData(`${animationName}.bva`);
     if (data !== null)
         modelInstance.bindVAF1(BVA.parse(data).vaf1);
+    return data !== null;
 }
 
-export function startBck(actor: LiveActor, animName: string): void {
-    startBckIfExist(actor.modelInstance, actor.arc, animName);
-    if (actor.effectKeeper !== null)
+export function startBck(actor: LiveActor, animName: string): boolean {
+    const played = startBckIfExist(actor.modelInstance, actor.arc, animName);
+    if (played && actor.effectKeeper !== null)
         actor.effectKeeper.changeBck(animName);
+    return played;
 }
 
 class ActorAnimKeeper {
@@ -1274,13 +1281,15 @@ export class LiveActor extends NameObj implements ObjectBase {
             this.tryStartAllAnim(animationName);
     }
 
-    public tryStartAllAnim(animationName: string): void {
-        startBck(this, animationName);
-        startBtkIfExist(this.modelInstance, this.arc, animationName);
-        startBrkIfExist(this.modelInstance, this.arc, animationName);
-        startBpkIfExist(this.modelInstance, this.arc, animationName);
-        startBtpIfExist(this.modelInstance, this.arc, animationName);
-        startBvaIfExist(this.modelInstance, this.arc, animationName);
+    public tryStartAllAnim(animationName: string): boolean {
+        let anyPlayed = false;
+        anyPlayed |= startBck(this, animationName);
+        anyPlayed |= startBtkIfExist(this.modelInstance, this.arc, animationName);
+        anyPlayed |= startBrkIfExist(this.modelInstance, this.arc, animationName);
+        anyPlayed |= startBpkIfExist(this.modelInstance, this.arc, animationName);
+        anyPlayed |= startBtpIfExist(this.modelInstance, this.arc, animationName);
+        anyPlayed |= startBvaIfExist(this.modelInstance, this.arc, animationName);
+        return anyPlayed;
     }
 
     public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {

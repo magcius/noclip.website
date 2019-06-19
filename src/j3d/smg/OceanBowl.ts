@@ -108,7 +108,7 @@ export class OceanBowl extends LiveActor {
 
         // The original code uses a grid of 25x25 surrounding the player camera, spaced 200 units apart.
         // We use a grid big enough to cover scaleX * 100 units.
-        const gridRadius = this.scale[0] * 100;
+        const gridRadius = Math.ceil(this.scale[0]) * 100;
         const gridSpacing = 200;
         const gridAxisPointCount = gridRadius * 2 / gridSpacing;
 

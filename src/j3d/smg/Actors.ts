@@ -322,6 +322,8 @@ export class StarPiece extends LiveActor {
 }
 
 export class EarthenPipe extends LiveActor {
+    private pipeStream: PartsModel | null = null;
+
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, getObjectName(infoIter));
 
@@ -335,9 +337,23 @@ export class EarthenPipe extends LiveActor {
 
         connectToSceneCollisionMapObjStrongLight(sceneObjHolder, this);
 
+        this.initEffectKeeper(sceneObjHolder, null);
+
         const isHidden = getJMapInfoArg2(infoIter, 0);
         if (isHidden !== 0)
-            this.modelInstance.visible = false;
+            hideModel(this);
+
+        if (this.name === "EarthenPipeInWater") {
+            this.pipeStream = createPartsModelMapObj(sceneObjHolder, this, "EarthenPipeStream");
+            this.pipeStream.tryStartAllAnim("EarthenPipeStream");
+        }
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        sceneObjHolder.modelCache.requestObjectData("EarthenPipe");
+
+        if (getObjectName(infoIter) === "EarthenPipeInWater")
+            sceneObjHolder.modelCache.requestObjectData("EarthenPipeStream");
     }
 }
 
@@ -545,6 +561,12 @@ function createIndirectNPCGoods(sceneObjHolder: SceneObjHolder, parentActor: Liv
 function createPartsModelNpcAndFix(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, jointName: string, localTrans: vec3 | null = null) {
     const model = new PartsModel(sceneObjHolder, "npc parts", objName, parentActor, DrawBufferType.NPC);
     model.initFixedPositionJoint(jointName, localTrans);
+    return model;
+}
+
+function createPartsModelMapObj(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, localTrans: vec3 | null = null) {
+    const model = new PartsModel(sceneObjHolder, objName, objName, parentActor, 0x08);
+    model.initFixedPositionRelative(localTrans);
     return model;
 }
 
@@ -1289,14 +1311,13 @@ export class Sky extends LiveActor {
     }
 }
 
-const enum AirState {
+const enum AirNrv {
     IN, OUT,
 }
 
 export class Air extends LiveActor {
     private distInThresholdSq: number;
     private distOutThresholdSq: number;
-    private state: AirState = AirState.IN;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, getObjectName(infoIter));
@@ -1313,22 +1334,33 @@ export class Air extends LiveActor {
         this.distInThresholdSq = distInThreshold*distInThreshold;
         const distOutThreshold = 100 * (20 + thresholdParam);
         this.distOutThresholdSq = distOutThreshold*distOutThreshold;
+
+        this.tryStartAllAnim(getObjectName(infoIter));
+        this.initNerve(AirNrv.IN);
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.movement(sceneObjHolder, viewerInput);
 
+        const currentNerve = this.getCurrentNerve();
         const distanceToPlayer = calcSqDistanceToPlayer(this, viewerInput.camera);
-        if (this.state === AirState.OUT && distanceToPlayer < this.distInThresholdSq) {
-            this.tryStartAllAnim('Appear');
-            this.modelInstance.animationController.setPhaseToCurrent();
-            this.state = AirState.IN;
-        } else if (this.state === AirState.IN && distanceToPlayer > this.distOutThresholdSq) {
-            this.tryStartAllAnim('Disappear');
-            this.modelInstance.animationController.setPhaseToCurrent();
-            this.state = AirState.OUT;
+
+        if (currentNerve === AirNrv.OUT && distanceToPlayer < this.distInThresholdSq) {
+            if (this.tryStartAllAnim('Appear'))
+                this.modelInstance.animationController.setPhaseToCurrent();
+            this.setNerve(AirNrv.IN);
+        } else if (currentNerve === AirNrv.IN && distanceToPlayer > this.distOutThresholdSq) {
+            if (this.tryStartAllAnim('Disappear'))
+                this.modelInstance.animationController.setPhaseToCurrent();
+            this.setNerve(AirNrv.OUT);
         }
     }
+}
+
+export class PriorDrawAir extends Air {
+    // When this actor is drawing, the core drawing routines change slightly -- Air
+    // draws in a slightly different spot. We don't implement anything close to core drawing
+    // routines yet, so we leave this out for now...
 }
 
 const enum ShootingStarNrv {
@@ -1470,6 +1502,8 @@ export class PlanetMap extends LiveActor {
         this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModel(sceneObjHolder, this.name, infoIter);
         connectToScenePlanet(sceneObjHolder, this);
+        this.initEffectKeeper(sceneObjHolder, null);
+        this.tryStartAllAnim(this.name);
     }
 
     private initModel(sceneObjHolder: SceneObjHolder, name: string, infoIter: JMapInfoIter): void {
@@ -1486,5 +1520,44 @@ export class PlanetMap extends LiveActor {
             this.bloomModel = createModelObjBloomModel(this.zoneAndLayer, sceneObjHolder, this.name, bloomModelName, this.getBaseMtx());
             vec3.copy(this.bloomModel.scale, this.scale);
         }
+    }
+}
+
+class ChipBase extends LiveActor {
+    private airBubble: PartsModel | null = null;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, modelName: string) {
+        super(zoneAndLayer, getObjectName(infoIter));
+
+        this.initDefaultPos(sceneObjHolder, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, modelName);
+        connectToSceneNoSilhouettedMapObjStrongLight(sceneObjHolder, this);
+        this.initEffectKeeper(sceneObjHolder, null);
+        this.tryStartAllAnim('Wait');
+
+        const isNeedBubble = getJMapInfoArg3(infoIter);
+        if (isNeedBubble !== -1) {
+            this.airBubble = createPartsModelNoSilhouettedMapObj(sceneObjHolder, this, "AirBubble");
+            this.airBubble.tryStartAllAnim("Move");
+        }
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        super.requestArchives(sceneObjHolder, infoIter);
+        const isNeedBubble = getJMapInfoArg3(infoIter);
+        if (isNeedBubble !== -1)
+            sceneObjHolder.modelCache.requestObjectData("AirBubble");
+    }
+}
+
+export class BlueChip extends ChipBase {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, infoIter, "BlueChip");
+    }
+}
+
+export class YellowChip extends ChipBase {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, infoIter, "YellowChip");
     }
 }
