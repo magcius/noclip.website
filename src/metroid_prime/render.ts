@@ -345,6 +345,7 @@ function mergeSurfaces(surfaces: Surface[]): MergedSurface {
     const packets: LoadedVertexPacket[] = [];
     for (let i = 0; i < surfaces.length; i++) {
         const surface = surfaces[i];
+        assert(surface.loadedVertexLayout.dstVertexSize === surfaces[0].loadedVertexLayout.dstVertexSize);
         totalIndexCount += surface.loadedVertexData.totalIndexCount;
         totalVertexCount += surface.loadedVertexData.totalVertexCount;
         packedVertexDataSize += surface.loadedVertexData.vertexBuffers[0].byteLength;
@@ -381,7 +382,7 @@ function mergeSurfaces(surfaces: Surface[]): MergedSurface {
         indexFormat: GfxFormat.U32_R,
         indexData: indexData.buffer,
         vertexBuffers: [packedVertexData.buffer],
-        vertexBufferStrides: [packedVertexDataSize],
+        vertexBufferStrides: [surfaces[0].loadedVertexLayout.dstVertexSize],
         totalIndexCount,
         totalVertexCount,
         packets,
