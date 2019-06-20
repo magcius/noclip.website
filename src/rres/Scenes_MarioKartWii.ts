@@ -14,13 +14,9 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { mat4 } from 'gl-matrix';
 import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render';
 import AnimationController from '../AnimationController';
-import { GXRenderHelperGfx, BasicGXRendererHelper } from '../gx/gx_render_2';
-import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
-import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
-import { BasicRenderTarget, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { BasicGXRendererHelper } from '../gx/gx_render_2';
+import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
 import { computeModelMatrixSRT, MathConstants } from '../MathHelpers';
-
-const enum MKWiiPass { MAIN = 0x01 }
 
 class ModelCache {
     public rresCache = new Map<string, BRRES.RRES>();

@@ -56,7 +56,7 @@ export function makeDepthKeyEx(depth: number, flipDepth: boolean, maxDepth: numb
 
 // Common sort key kinds.
 // Indexed:     TLLLLLLL IIIIIIII IIIIIIII IIIIIIII
-// Opaque:      0LLLLLLL DDDDDDDD DDDDDDPP PPPPPPDD
+// Opaque:      0LLLLLLL PPPPPPPP PPPPPPPP DDDDDDDD
 // Translucent: 1LLLLLLL DDDDDDDD DDDDDDDD BBBBBBBB
 
 export function getSortKeyLayer(sortKey: number): number {
@@ -72,7 +72,7 @@ export function setSortKeyProgramKey(sortKey: number, programKey: number): numbe
     if (isTransparent)
         return sortKey;
     else
-        return (sortKey & 0xFFFFFC03) | ((programKey & 0xFF) << 2);
+        return ((sortKey & 0xFF0000FF) | ((programKey & 0xFFFF) << 16)) >>> 0;
 }
 
 export function setSortKeyBias(sortKey: number, bias: number): number {
@@ -89,7 +89,7 @@ export function makeSortKeyOpaque(layer: number, programKey: number): number {
 
 export function setSortKeyOpaqueDepth(sortKey: number, depthKey: number): number {
     assert(depthKey >= 0);
-    return ((sortKey & 0xFF0003FC) | ((depthKey & 0xFFFC) << 8) | (depthKey & 0x0003)) >>> 0;
+    return ((sortKey & 0xFFFFFF00) | ((depthKey >>> 8) & 0xFF)) >>> 0;
 }
 
 export function makeSortKeyTranslucent(layer: number): number {

@@ -236,6 +236,10 @@ export interface GfxInputStateReflection {
     inputLayout: GfxInputLayout;
 }
 
+export interface GfxRenderPipelineReflection {
+    uniqueHash: number;
+}
+
 export interface GfxDebugGroup {
     name: string;
     drawCallCount: number;

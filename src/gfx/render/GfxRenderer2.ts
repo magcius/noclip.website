@@ -1,9 +1,10 @@
 
-import { GfxMegaStateDescriptor, GfxInputState, GfxDevice, GfxRenderPass, GfxRenderPipelineDescriptor, GfxPrimitiveTopology, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxBindings, GfxSamplerBinding, GfxProgram, GfxInputLayout, GfxBuffer } from "../platform/GfxPlatform";
+import { GfxMegaStateDescriptor, GfxInputState, GfxDevice, GfxRenderPass, GfxRenderPipelineDescriptor, GfxPrimitiveTopology, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxBindings, GfxSamplerBinding, GfxProgram, GfxInputLayout, GfxBuffer, GfxRenderPipeline } from "../platform/GfxPlatform";
 import { defaultMegaState, copyMegaState, setMegaStateFlags } from "../helpers/GfxMegaStateDescriptorHelpers";
 import { GfxRenderCache } from "./GfxRenderCache";
 import { GfxRenderDynamicUniformBuffer } from "./GfxRenderDynamicUniformBuffer";
 import { nArray, assert } from "../../util";
+import { gfxRenderPipelineDescriptorEquals, gfxBindingsDescriptorEquals } from "../platform/GfxPlatformUtil";
 
 // Changes to V2:
 //  * RenderInst is now meant to be reconstructed every frame, even more similarly to T3.
@@ -17,6 +18,14 @@ const enum GfxRenderInstFlags {
     TEMPLATE_RENDER_INST = 1 << 1,
     DRAW_RENDER_INST = 1 << 2,
     DRAW_INDEXED = 1 << 3,
+}
+
+interface GfxRendererTransientState {
+    currentRenderPipelineDescriptor: GfxRenderPipelineDescriptor | null;
+    currentRenderPipelineReady: boolean;
+    currentInputState: GfxInputState | null;
+    currentBindingDescriptors: GfxBindingsDescriptor | null;
+    currentBindings: GfxBindings | null;
 }
 
 export class GfxRenderInst {
@@ -169,13 +178,47 @@ export class GfxRenderInst {
         }
     }
 
+    public drawOnPassWithState(device: GfxDevice, cache: GfxRenderCache, passRenderer: GfxRenderPass, state: GfxRendererTransientState): void {
+        assert(!!(this._flags & GfxRenderInstFlags.DRAW_RENDER_INST));
+
+        if (state.currentRenderPipelineDescriptor === null || !gfxRenderPipelineDescriptorEquals(this._renderPipelineDescriptor, state.currentRenderPipelineDescriptor)) {
+            state.currentRenderPipelineDescriptor = this._renderPipelineDescriptor;
+            const gfxPipeline = cache.createRenderPipeline(device, state.currentRenderPipelineDescriptor);
+            state.currentRenderPipelineReady = device.queryPipelineReady(gfxPipeline);
+            if (!state.currentRenderPipelineReady)
+                return;
+
+            passRenderer.setPipeline(gfxPipeline);
+        } else {
+            if (!state.currentRenderPipelineReady)
+                return;
+        }
+
+        if (this._inputState !== state.currentInputState) {
+            state.currentInputState = this._inputState;
+            passRenderer.setInputState(state.currentInputState);
+        }
+
+        for (let i = 0; i < this._bindingDescriptors[0].uniformBufferBindings.length; i++)
+            this._bindingDescriptors[0].uniformBufferBindings[i].buffer = this._uniformBuffer.gfxBuffer!;
+
+        if (state.currentBindingDescriptors === null || !gfxBindingsDescriptorEquals(this._bindingDescriptors[0], state.currentBindingDescriptors)) {
+            state.currentBindingDescriptors = this._bindingDescriptors[0];
+            state.currentBindings = cache.createBindings(device, state.currentBindingDescriptors);
+        }
+
+        passRenderer.setBindings(0, state.currentBindings, this._dynamicUniformBufferOffsets);
+
+        if ((this._flags & GfxRenderInstFlags.DRAW_INDEXED))
+            passRenderer.drawIndexed(this._drawCount, this._drawStart);
+        else
+            passRenderer.draw(this._drawCount, this._drawStart);
+    }
+
     public drawOnPass(device: GfxDevice, cache: GfxRenderCache, passRenderer: GfxRenderPass): void {
         assert(!!(this._flags & GfxRenderInstFlags.DRAW_RENDER_INST));
 
         const gfxPipeline = cache.createRenderPipeline(device, this._renderPipelineDescriptor);
-        if (!device.queryPipelineReady(gfxPipeline))
-            return;
-
         passRenderer.setPipeline(gfxPipeline);
         passRenderer.setInputState(this._inputState);
 
@@ -240,6 +283,26 @@ function setVisible(a: GfxRenderInst, visible: boolean): void {
     else
         a._flags &= ~GfxRenderInstFlags.VISIBLE;
 }
+
+function gfxRendererTransientStateReset(state: GfxRendererTransientState): void {
+    state.currentRenderPipelineDescriptor = null;
+    state.currentRenderPipelineReady = false;
+    state.currentInputState = null;
+    state.currentBindingDescriptors = null;
+    state.currentBindings = null;
+}
+
+export function gfxRendererTransientStateNew(): GfxRendererTransientState {
+    return {
+        currentRenderPipelineDescriptor: null,
+        currentRenderPipelineReady: false,
+        currentInputState: null,
+        currentBindingDescriptors: null,
+        currentBindings: null,
+    };
+}
+
+const defaultTransientState = gfxRendererTransientStateNew();
 
 export class GfxRenderInstManager {
     // TODO(jstpierre): Share these caches between scenes.
@@ -306,9 +369,14 @@ export class GfxRenderInstManager {
             this.instPool.pool[i]._flags &= ~GfxRenderInstFlags.VISIBLE;
     }
 
-    public drawOnPassRenderer(device: GfxDevice, passRenderer: GfxRenderPass): void {
+    public drawOnPassRenderer(device: GfxDevice, passRenderer: GfxRenderPass, state: GfxRendererTransientState | null = null): void {
         if (this.instPool.allocCount === 0)
             return;
+
+        if (state === null) {
+            gfxRendererTransientStateReset(defaultTransientState);
+            state = defaultTransientState;
+        }
 
         // Sort the render insts. This is guaranteed to keep invisible render insts at the end of the list.
         this.instPool.pool.sort(compareRenderInsts);
@@ -320,7 +388,7 @@ export class GfxRenderInstManager {
             if (!(renderInst._flags & GfxRenderInstFlags.VISIBLE))
                 break;
 
-            this.instPool.pool[i].drawOnPass(device, this.gfxRenderCache, passRenderer);
+            this.instPool.pool[i].drawOnPassWithState(device, this.gfxRenderCache, passRenderer, state);
         }
     }
 
