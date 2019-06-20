@@ -578,7 +578,6 @@ class SMGRenderer implements Viewer.SceneGfx {
         // if (isExistPriorDrawAir())
         // We assume that prior airs are drawing.
         this.drawOpa(passRenderer, DrawBufferType.SKY);
-        this.drawXlu(passRenderer, DrawBufferType.SKY);
         this.drawOpa(passRenderer, DrawBufferType.AIR);
         this.drawOpa(passRenderer, DrawBufferType.SUN);
         this.drawLegacyNodeOpa(passRenderer, SceneGraphTag.Skybox);
