@@ -1349,6 +1349,9 @@ export class JPABaseEmitter {
             }
 
             this.tick += workData.deltaTime;
+
+            if (this.tick < 0)
+                this.tick = 0;
         } else {
             // Emitter callback +0x10
         }

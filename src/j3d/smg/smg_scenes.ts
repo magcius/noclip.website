@@ -287,6 +287,8 @@ function createFilterKeyForEffectDrawOrder(drawOrder: DrawOrder): number {
         return createFilterKeyForDrawType(DrawType.EFFECT_DRAW_3D);
     else if (drawOrder === DrawOrder.DRW_AFTER_INDIRECT)
         return createFilterKeyForDrawType(DrawType.EFFECT_DRAW_AFTER_INDIRECT);
+    else if (drawOrder === DrawOrder.DRW_BLOOM_EFFECT)
+        return createFilterKeyForDrawType(DrawType.EFFECT_DRAW_INDIRECT);
     else
         throw "whoops";
 }
@@ -650,7 +652,7 @@ class SMGRenderer implements Viewer.SceneGfx {
 
         // execute(0x26)
         this.execute(passRenderer, DrawType.EFFECT_DRAW_3D);
-        // this.execute(passRenderer, DrawType.EFFECT_DRAW_FOR_BLOOM_EFFECT);
+        this.execute(passRenderer, DrawType.EFFECT_DRAW_FOR_BLOOM_EFFECT);
         // execute(0x2f)
 
         // This execute directs to CaptureScreenActor, which ends up taking the indirect screen capture.
@@ -697,6 +699,8 @@ class SMGRenderer implements Viewer.SceneGfx {
             this.execute(objPassRenderer, DrawType.EFFECT_DRAW_FOR_BLOOM_EFFECT);
             passRenderer = this.bloomRenderer.renderEndObjects(device, objPassRenderer, this.renderHelper.renderInstManager, this.mainRenderTarget, viewerInput, template, bloomParameterBufferOffs);
         }
+
+        this.execute(passRenderer, DrawType.EFFECT_DRAW_AFTER_IMAGE_EFFECT);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.renderInstManager.resetRenderInsts();
@@ -1624,7 +1628,8 @@ class SMGSpawner {
             modelInstance.bindANK1(bck.ank1);
 
             // Apply a random phase to the animation.
-            modelInstance.animationController.phaseFrames += Math.random() * bck.ank1.duration;
+            if (bck.ank1.loopMode === LoopMode.REPEAT)
+                modelInstance.animationController.phaseFrames += Math.random() * bck.ank1.duration;
         }
     }
 

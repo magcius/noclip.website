@@ -77,10 +77,6 @@ export class GfxRenderInst {
             this._dynamicUniformBufferOffsets[i] = o._dynamicUniformBufferOffsets[i];
     }
 
-    public setVisible(v: boolean = true): void {
-        setVisible(this, v);
-    }
-
     public setGfxProgram(program: GfxProgram): void {
         this._renderPipelineDescriptor.program = program;
     }
@@ -269,11 +265,6 @@ export class GfxRenderInstPool {
 }
 
 function compareRenderInsts(a: GfxRenderInst, b: GfxRenderInst): number {
-    // Force invisible items to the end of the list.
-    const aVisible = !!(a._flags & GfxRenderInstFlags.VISIBLE);
-    const bVisible = !!(b._flags & GfxRenderInstFlags.VISIBLE);
-    if (aVisible !== bVisible)
-        return aVisible ? -1 : 1;
     return a.sortKey - b.sortKey;
 }
 
@@ -309,6 +300,7 @@ export class GfxRenderInstManager {
     public gfxRenderCache = new GfxRenderCache();
     public instPool = new GfxRenderInstPool();
     public templatePool = new GfxRenderInstPool();
+    public visibleRenderInsts: GfxRenderInst[] = [];
 
     public pushRenderInst(): GfxRenderInst {
         const templateIndex = this.templatePool.allocCount - 1;
@@ -350,51 +342,45 @@ export class GfxRenderInstManager {
         return this.templatePool.pool[templateIndex];
     }
 
-    // TODO(jstpierre): Build a better API for pass management -- should not be attached to the GfxRenderer2.
-    public setVisibleByFilterKeyExact(filterKey: number): void {
-        for (let i = 0; i < this.instPool.pool.length; i++)
-            if (this.instPool.pool[i]._flags & GfxRenderInstFlags.DRAW_RENDER_INST)
-                setVisible(this.instPool.pool[i], this.instPool.pool[i].filterKey === filterKey);
+    public hasAnyVisible(): boolean {
+        return this.visibleRenderInsts.length > 0;
     }
 
-    public hasAnyVisible(): boolean {
-        for (let i = 0; i < this.instPool.pool.length; i++)
-            if (this.instPool.pool[i]._flags & GfxRenderInstFlags.VISIBLE)
-                return true;
-        return false;
+    // TODO(jstpierre): Build a better API for pass management -- should not be attached to the GfxRenderer2.
+    public setVisibleByFilterKeyExact(filterKey: number): void {
+        this.visibleRenderInsts.length = 0;
+
+        for (let i = 0; i < this.instPool.pool.length; i++) {
+            if ((this.instPool.pool[i]._flags & GfxRenderInstFlags.DRAW_RENDER_INST &&
+                 this.instPool.pool[i].filterKey === filterKey))
+                this.visibleRenderInsts.push(this.instPool.pool[i]);
+        }
     }
 
     public setVisibleNone(): void {
-        for (let i = 0; i < this.instPool.pool.length; i++)
-            this.instPool.pool[i]._flags &= ~GfxRenderInstFlags.VISIBLE;
+        this.visibleRenderInsts.length = 0;
     }
 
-    public drawOnPassRenderer(device: GfxDevice, passRenderer: GfxRenderPass, state: GfxRendererTransientState | null = null): void {
-        if (this.instPool.allocCount === 0)
+    public drawOnPassRenderer(device: GfxDevice, passRenderer: GfxRenderPass, state: GfxRendererTransientState = null): void {
+        if (this.visibleRenderInsts.length === 0)
             return;
 
         if (state === null) {
             gfxRendererTransientStateReset(defaultTransientState);
             state = defaultTransientState;
         }
+    
+        // Sort the render insts.
+        this.visibleRenderInsts.sort(compareRenderInsts);
 
-        // Sort the render insts. This is guaranteed to keep invisible render insts at the end of the list.
-        this.instPool.pool.sort(compareRenderInsts);
-
-        for (let i = 0; i < this.instPool.allocCount; i++) {
-            const renderInst = this.instPool.pool[i];
-
-            // Once we reach the first invisible item, we're done.
-            if (!(renderInst._flags & GfxRenderInstFlags.VISIBLE))
-                break;
-
-            this.instPool.pool[i].drawOnPassWithState(device, this.gfxRenderCache, passRenderer, state);
-        }
+        for (let i = 0; i < this.visibleRenderInsts.length; i++)
+            this.visibleRenderInsts[i].drawOnPassWithState(device, this.gfxRenderCache, passRenderer, state);
     }
 
     public resetRenderInsts(): void {
         // Retire the existing render insts.
         this.instPool.reset();
+        this.visibleRenderInsts.length = 0;
     }
 
     public destroy(device: GfxDevice): void {
@@ -404,9 +390,9 @@ export class GfxRenderInstManager {
 }
 
 // Convenience for porting.
-export function executeOnPass(renderInstManager: GfxRenderInstManager, device: GfxDevice, passRenderer: GfxRenderPass, passMask: number): void {
+export function executeOnPass(renderInstManager: GfxRenderInstManager, device: GfxDevice, passRenderer: GfxRenderPass, passMask: number, state: GfxRendererTransientState = null): void {
     renderInstManager.setVisibleByFilterKeyExact(passMask);
-    renderInstManager.drawOnPassRenderer(device, passRenderer);
+    renderInstManager.drawOnPassRenderer(device, passRenderer, state);
 }
 
 export function hasAnyVisible(renderInstManager: GfxRenderInstManager, passMask: number): boolean {

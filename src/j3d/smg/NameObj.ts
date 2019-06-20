@@ -15,6 +15,8 @@ export const enum CalcAnimType {
 export const enum DrawType {
     OCEAN_BOWL                     = 0x07,
 
+    WATER_CAMERA_FILTER            = 0x3A,
+
     EFFECT_DRAW_3D                 = 0x47,
     EFFECT_DRAW_INDIRECT           = 0x48,
     EFFECT_DRAW_AFTER_INDIRECT     = 0x49,

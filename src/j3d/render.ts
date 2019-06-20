@@ -972,7 +972,6 @@ export class BMDModelInstance {
     private materialHacks: GX_Material.GXMaterialHacks = {};
 
     private jointVisibility: boolean[];
-    private jointMatrices: mat4[] = [];
 
     constructor(
         public bmdModel: BMDModel,
@@ -995,7 +994,6 @@ export class BMDModelInstance {
         const numJoints = bmd.jnt1.joints.length;
         this.shapeInstanceState.jointToWorldMatrices = nArray(numJoints, () => mat4.create());
         this.jointVisibility = nArray(numJoints, () => true);
-        this.jointMatrices = nArray(numJoints, () => mat4.create());
 
         const numMatrices = bmd.drw1.matrixDefinitions.length;
         this.shapeInstanceState.drawToViewMatrices = nArray(numMatrices, () => mat4.create());

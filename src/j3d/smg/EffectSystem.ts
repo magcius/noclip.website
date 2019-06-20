@@ -75,6 +75,8 @@ function isDigitStringTail(s: string): boolean {
 export const enum DrawOrder {
     DRW_3D,
     DRW_AFTER_INDIRECT,
+    DRW_BLOOM_EFFECT,
+    DRW_AFTER_IMAGE_EFFECT,
 }
 
 const enum SRTFlags {
@@ -188,8 +190,16 @@ export function setupMultiEmitter(m: MultiEmitter, autoEffectIter: JMapInfoIter)
     const drawOrder = autoEffectIter.getValueString('DrawOrder');
     if (drawOrder === 'AFTER_INDIRECT')
         m.setDrawOrder(DrawOrder.DRW_AFTER_INDIRECT);
-    else
+    else if (drawOrder === '3D')
         m.setDrawOrder(DrawOrder.DRW_3D);
+    else if (drawOrder === 'BLOOM_EFFECT')
+        m.setDrawOrder(DrawOrder.DRW_BLOOM_EFFECT);
+    else if (drawOrder === 'AFTER_IMAGE_EFFECT')
+        m.setDrawOrder(DrawOrder.DRW_AFTER_IMAGE_EFFECT);
+    else {
+        console.warn('unknown draw order', drawOrder);
+        m.setDrawOrder(DrawOrder.DRW_3D);
+    }
 
     const animName = autoEffectIter.getValueString('AnimName');
     if (animName !== '') {
