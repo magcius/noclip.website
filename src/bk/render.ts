@@ -92,8 +92,8 @@ export class N64Data {
 
         const vertexBufferData = makeVertexBufferData(this.rspOutput.vertices);
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vertexBufferData);
-        assert(this.rspOutput.vertices.length <= 0xFFFF);
-        const indexBufferData = new Uint16Array(this.rspOutput.indices);
+        assert(this.rspOutput.vertices.length <= 0xFFFFFFFF);
+        const indexBufferData = new Uint32Array(this.rspOutput.indices);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexBufferData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
@@ -103,7 +103,7 @@ export class N64Data {
         ];
 
         this.inputLayout = device.createInputLayout({
-            indexBufferFormat: GfxFormat.U16_R,
+            indexBufferFormat: GfxFormat.U32_R,
             vertexAttributeDescriptors,
         });
 
