@@ -12,9 +12,9 @@ import { Endianness } from "../endian";
 import { GfxDevice, GfxInputLayout, GfxInputState, GfxBuffer, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxBufferUsage } from "../gfx/platform/GfxPlatform";
 import { BTIData } from "./render";
 import { getPointHermite } from "../Spline";
-import { GXMaterial, AlphaTest, RopInfo, TexGen, TevStage, getVertexAttribLocation, IndTexStage, getMaterialParamsBlockSize } from "../gx/gx_material";
+import { GXMaterial, AlphaTest, RopInfo, TexGen, TevStage, getVertexAttribLocation, IndTexStage } from "../gx/gx_material";
 import { Color, colorNew, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8 } from "../Color";
-import { MaterialParams, ColorKind, ub_PacketParams, u_PacketParamsBufferSize, PacketParams, ub_MaterialParams, u_MaterialParamsBufferSize, setIndTexOrder, setIndTexCoordScale, setTevIndirect, setTevOrder, setTevColorIn, setTevColorOp, setTevAlphaIn, setTevAlphaOp, fillIndTexMtx, fillTextureMappingInfo } from "../gx/gx_render";
+import { MaterialParams, ColorKind, ub_PacketParams, u_PacketParamsBufferSize, PacketParams, ub_MaterialParams, setIndTexOrder, setIndTexCoordScale, setTevIndirect, setTevOrder, setTevColorIn, setTevColorOp, setTevAlphaIn, setTevAlphaOp, fillIndTexMtx, fillTextureMappingInfo } from "../gx/gx_render";
 import { GXMaterialHelperGfx, GXRenderHelperGfx } from "../gx/gx_render_2";
 import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants } from "../MathHelpers";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
@@ -106,6 +106,9 @@ const enum PlaneType {
 
 interface CommonShapeTypeFields {
     shapeType: ShapeType;
+    dirType: DirType;
+    rotType: RotType;
+    planeType: PlaneType;
 }
 
 export interface JPABaseShapeBlock {
@@ -177,6 +180,9 @@ export interface JPAExTexBlock {
 export interface JPAChildShapeBlock {
     flags: number;
     shapeType: ShapeType;
+    dirType: DirType;
+    rotType: RotType;
+    planeType: PlaneType;
     posRndm: number;
     baseVel: number;
     baseVelRndm: number;
@@ -550,9 +556,54 @@ function get_r_zh(random: JPARandom): number {
     return get_rndm_f(random) - 0.5;
 }
 
-// Return a random number between 0 and 0xFFFF.
-function get_r_ss(random: JPARandom): number {
-    return (next_rndm(random) >>> 0x10) & 0xFFFF;
+class JPAGlobalRes {
+    public inputLayout: GfxInputLayout;
+    public inputStateBillboard: GfxInputState;
+
+    private vertexBufferBillboard: GfxBuffer;
+    private indexBufferBillboard: GfxBuffer;
+
+    constructor(device: GfxDevice) {
+        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
+            { location: getVertexAttribLocation(GX.VertexAttribute.POS), format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
+            { location: getVertexAttribLocation(GX.VertexAttribute.TEX0), format: GfxFormat.F32_RG, bufferIndex: 0, bufferByteOffset: 3*4, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
+        ];
+
+        this.inputLayout = device.createInputLayout({
+            indexBufferFormat: GfxFormat.U16_R,
+            vertexAttributeDescriptors,
+        });
+
+        const x0 = -25;
+        const x1 =  25;
+
+        this.vertexBufferBillboard = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, new Float32Array([
+            x0, x0, 0, 1, 1,
+            x1, x0, 0, 0, 1,
+            x0, x1, 0, 1, 0,
+            x1, x1, 0, 0, 0,
+            // Cross
+            0, x0, x0, 1, 1,
+            0, x1, x0, 0, 1,
+            0, x0, x1, 1, 0,
+            0, x1, x1, 0, 0,
+        ]).buffer);
+        this.indexBufferBillboard = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, new Uint16Array([
+            0, 1, 2, 2, 1, 3,
+            4, 5, 6, 6, 5, 7,
+        ]).buffer);
+
+        this.inputStateBillboard = device.createInputState(this.inputLayout, [
+            { buffer: this.vertexBufferBillboard, byteOffset: 0, byteStride: 3*4+2*4 },
+        ], { buffer: this.indexBufferBillboard, byteOffset: 0, byteStride: 2 });
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyInputLayout(this.inputLayout);
+        device.destroyInputState(this.inputStateBillboard);
+        device.destroyBuffer(this.vertexBufferBillboard);
+        device.destroyBuffer(this.indexBufferBillboard);
+    }
 }
 
 class JPAEmitterWorkData {
@@ -586,50 +637,8 @@ class JPAEmitterWorkData {
     public prjMtx = mat4.create();
     public texPrjMtx = mat4.create();
     public deltaTime: number = 0;
-}
 
-class JPAGlobalRes {
-    public inputLayout: GfxInputLayout;
-    public inputStateBillboard: GfxInputState;
-
-    private vertexBufferBillboard: GfxBuffer;
-    private indexBufferBillboard: GfxBuffer;
-
-    constructor(device: GfxDevice) {
-        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: getVertexAttribLocation(GX.VertexAttribute.POS), format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
-            { location: getVertexAttribLocation(GX.VertexAttribute.TEX0), format: GfxFormat.F32_RG, bufferIndex: 0, bufferByteOffset: 3*4, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
-        ];
-
-        this.inputLayout = device.createInputLayout({
-            indexBufferFormat: GfxFormat.U16_R,
-            vertexAttributeDescriptors,
-        });
-
-        const x0 = -25;
-        const x1 =  25;
-
-        this.vertexBufferBillboard = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, new Float32Array([
-            x0, x0, 0, 1, 1,
-            x1, x0, 0, 0, 1,
-            x0, x1, 0, 1, 0,
-            x1, x1, 0, 0, 0,
-        ]).buffer);
-        this.indexBufferBillboard = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, new Uint16Array([
-            0, 1, 2, 2, 1, 3,
-        ]).buffer);
-
-        this.inputStateBillboard = device.createInputState(this.inputLayout, [
-            { buffer: this.vertexBufferBillboard, byteOffset: 0, byteStride: 3*4+2*4 },
-        ], { buffer: this.indexBufferBillboard, byteOffset: 0, byteStride: 2 });
-    }
-
-    public destroy(device: GfxDevice): void {
-        device.destroyInputLayout(this.inputLayout);
-        device.destroyInputState(this.inputStateBillboard);
-        device.destroyBuffer(this.vertexBufferBillboard);
-        device.destroyBuffer(this.indexBufferBillboard);
-    }
+    public prevParticlePos = vec3.create();
 }
 
 export class JPADrawInfo {
@@ -695,9 +704,33 @@ export class JPAEmitterManager {
         }
     }
 
+    private calcYBBMtx(): void {
+        const posCamMtx = this.workData.posCamMtx;
+        const dst = this.workData.ybbCamMtx;
+
+        vec3.set(scratchVec3a, 0, posCamMtx[5], posCamMtx[6]);
+        vec3.normalize(scratchVec3a, scratchVec3a);
+
+        //dst[0] = 1;
+        //dst[4] = 0;
+        //dst[8] = 0;
+        dst[12] = posCamMtx[12];
+
+        //dst[1] = 0;
+        dst[5] = scratchVec3a[1];
+        dst[9] = -scratchVec3a[2];
+        dst[13] = posCamMtx[13];
+
+        //dst[2] = 0;
+        dst[6] = scratchVec3a[2];
+        dst[10] = scratchVec3a[1];
+        dst[14] = posCamMtx[14];
+    }
+
     public draw(device: GfxDevice, renderHelper: GXRenderHelperGfx, drawInfo: JPADrawInfo, drawGroupId: number): void {
         mat4.copy(this.workData.posCamMtx, drawInfo.posCamMtx);
         mat4.copy(this.workData.prjMtx, drawInfo.prjMtx);
+        this.calcYBBMtx();
         if (drawInfo.texPrjMtx !== null)
             mat4.copy(this.workData.texPrjMtx, drawInfo.texPrjMtx);
         else
@@ -1327,6 +1360,14 @@ export class JPABaseEmitter {
         mat4.identity(materialParams.u_TexMtx[0]);
     }
 
+    private calcEmitterGlobalPosition(v: vec3): void {
+        mat4.scale(scratchMatrix, this.globalRotation, this.globalScale);
+        scratchMatrix[12] += this.globalTranslation[0];
+        scratchMatrix[13] += this.globalTranslation[1];
+        scratchMatrix[14] += this.globalTranslation[2];
+        vec3.transformMat4(v, this.emitterTrs, scratchMatrix);
+    }
+
     private drawP(device: GfxDevice, renderHelper: GXRenderHelperGfx, workData: JPAEmitterWorkData): void {
         const bsp1 = this.resData.res.bsp1;
         const etx1 = this.resData.res.etx1;
@@ -1362,12 +1403,22 @@ export class JPABaseEmitter {
         else if (!(bsp1.flags & 0x01000000))
             this.genTexCrdMtxIdt(materialParams);
 
+        const needsPrevPos = bsp1.dirType === DirType.PrevPctl;
+        if (needsPrevPos)
+            this.calcEmitterGlobalPosition(workData.prevParticlePos);
+
         if (!!(bsp1.flags & 0x200000)) {
-            for (let i = 0; i < this.aliveParticlesBase.length; i++)
+            for (let i = 0; i < this.aliveParticlesBase.length; i++) {
                 this.aliveParticlesBase[i].drawP(device, renderHelper, workData, materialParams);
+                if (needsPrevPos)
+                    vec3.copy(workData.prevParticlePos, this.aliveParticlesBase[i].position);
+            }
         } else {
-            for (let i = this.aliveParticlesBase.length - 1; i >= 0; i--)
+            for (let i = this.aliveParticlesBase.length - 1; i >= 0; i--) {
                 this.aliveParticlesBase[i].drawP(device, renderHelper, workData, materialParams);
+                if (needsPrevPos)
+                    vec3.copy(workData.prevParticlePos, this.aliveParticlesBase[i].position);
+            }
         }
 
         // Emitter Callback 0x18
@@ -1395,12 +1446,22 @@ export class JPABaseEmitter {
 
         // mpDrawEmitterChildFuncList
 
+        const needsPrevPos = bsp1.dirType === DirType.PrevPctl;
+        if (needsPrevPos)
+            this.calcEmitterGlobalPosition(workData.prevParticlePos);
+
         if (!!(bsp1.flags & 0x200000)) {
-            for (let i = 0; i < this.aliveParticlesChild.length; i++)
+            for (let i = 0; i < this.aliveParticlesChild.length; i++) {
                 this.aliveParticlesChild[i].drawC(device, renderHelper, workData, materialParams);
+                if (needsPrevPos)
+                    vec3.copy(workData.prevParticlePos, this.aliveParticlesChild[i].position);
+            }
         } else {
-            for (let i = this.aliveParticlesChild.length - 1; i >= 0; i--)
+            for (let i = this.aliveParticlesChild.length - 1; i >= 0; i--) {
                 this.aliveParticlesChild[i].drawC(device, renderHelper, workData, materialParams);
+                if (needsPrevPos)
+                    vec3.copy(workData.prevParticlePos, this.aliveParticlesChild[i].position);
+            }
         }
     }
 
@@ -2121,7 +2182,55 @@ export class JPABaseParticle {
         }
     }
 
+    private applyDir(v: vec3, dirType: DirType, workData: JPAEmitterWorkData): void {
+        if (dirType === DirType.Vel)
+            vec3.copy(v, this.velocity);
+        else if (dirType === DirType.Pos)
+            vec3.copy(v, this.localPosition);
+        else if (dirType === DirType.PosInv)
+            vec3.negate(v, this.localPosition);
+        else if (dirType === DirType.EmtrDir)
+            vec3.copy(v, workData.emitterGlobalDir);
+        else if (dirType === DirType.PrevPctl)
+            vec3.copy(v, workData.prevParticlePos);
+    }
+
+    private applyPlane(m: mat4, plane: PlaneType, scaleX: number, scaleY: number): void {
+        if (plane === PlaneType.XY) {
+            m[0] *= scaleX;
+            m[1] *= scaleX;
+            m[2] *= scaleX;
+
+            m[4] *= scaleY;
+            m[5] *= scaleY;
+            m[6] *= scaleY;
+        } else if (plane === PlaneType.XZ) {
+            m[0] *= scaleX;
+            m[1] *= scaleX;
+            m[2] *= scaleX;
+
+            m[8] *= scaleY;
+            m[9] *= scaleY;
+            m[10] *= scaleY;
+        } else if (plane === PlaneType.X) {
+            m[0] *= scaleX;
+            m[1] *= scaleX;
+            m[2] *= scaleX;
+
+            m[4] *= scaleY;
+            m[5] *= scaleY;
+            m[6] *= scaleY;
+
+            m[8] *= scaleX;
+            m[9] *= scaleX;
+            m[10] *= scaleX;
+        }
+    }
+
     private drawCommon(device: GfxDevice, renderHelper: GXRenderHelperGfx, workData: JPAEmitterWorkData, materialParams: MaterialParams, sp1: CommonShapeTypeFields): void {
+        if (!!(this.flags & 0x08))
+            return;
+
         const esp1 = workData.baseEmitter.resData.res.esp1;
         const isRot = !!(esp1.flags & 0x01000000);
 
@@ -2140,10 +2249,8 @@ export class JPABaseParticle {
         const shapeType = sp1.shapeType;
 
         // TODO(jstpierre): Other shape types
-        if (true || shapeType === ShapeType.Billboard) {
+        if (shapeType === ShapeType.Billboard) {
             const rotateAngle = isRot ? this.rotateAngle : 0;
-            renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateBillboard);
-            renderInst.drawIndexes(6, 0);
             vec3.transformMat4(scratchVec3a, this.position, workData.posCamMtx);
             computeModelMatrixSRT(packetParams.u_PosMtx[0],
                 this.scale[0] * workData.globalScale2D[0],
@@ -2152,13 +2259,79 @@ export class JPABaseParticle {
                 0, 0, rotateAngle,
                 scratchVec3a[0], scratchVec3a[1], scratchVec3a[2]);
             this.loadTexMtx(materialParams.u_TexMtx[0], workData, packetParams.u_PosMtx[0]);
+
+            renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateBillboard);
+            renderInst.drawIndexes(6, 0);
+        } else if (shapeType === ShapeType.Direction || shapeType === ShapeType.DirectionCross) {
+            // TODO(jstpierre): IsRot
+            this.applyDir(scratchVec3a, sp1.dirType, workData);
+            vec3.normalize(scratchVec3a, scratchVec3a);
+
+            vec3.cross(scratchVec3b, this.axisY, scratchVec3a);
+            vec3.normalize(scratchVec3b, scratchVec3b);
+
+            vec3.cross(this.axisY, scratchVec3a, scratchVec3b);
+            vec3.normalize(this.axisY, this.axisY);
+
+            const dst = packetParams.u_PosMtx[0];
+            dst[0] = this.axisY[0];
+            dst[1] = this.axisY[1];
+            dst[2] = this.axisY[2];
+            dst[4] = scratchVec3a[0];
+            dst[5] = scratchVec3a[1];
+            dst[6] = scratchVec3a[2];
+            dst[8] = scratchVec3b[0];
+            dst[9] = scratchVec3b[1];
+            dst[10] = scratchVec3b[2];
+            dst[12] = this.position[0];
+            dst[13] = this.position[1];
+            dst[14] = this.position[2];
+
+            const scaleX = workData.globalScale2D[0] * this.scale[0];
+            const scaleY = workData.globalScale2D[1] * this.scale[1];
+            this.applyPlane(packetParams.u_PosMtx[0], sp1.planeType, scaleX, scaleY);
+            mat4.mul(packetParams.u_PosMtx[0], workData.posCamMtx, packetParams.u_PosMtx[0]);
+            this.loadTexMtx(materialParams.u_TexMtx[0], workData, packetParams.u_PosMtx[0]);
+
+            renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateBillboard);
+            if (shapeType === ShapeType.DirectionCross)
+                renderInst.drawIndexes(12, 0);
+            else
+                renderInst.drawIndexes(6, 0);
+        } else if (shapeType === ShapeType.YBillboard) {
+            // TODO(jstpierre): IsRot
+            vec3.set(scratchVec3a, 0, workData.posCamMtx[1], workData.posCamMtx[2]);
+            vec3.normalize(scratchVec3a, scratchVec3a);
+
+            vec3.transformMat4(scratchVec3b, this.position, workData.posCamMtx);
+            const dst = packetParams.u_PosMtx[0];
+
+            const scaleX = workData.globalScale2D[0] * this.scale[0];
+            const scaleY = workData.globalScale2D[1] * this.scale[1];
+            dst[0] = scaleX;
+            dst[1] = 0;
+            dst[2] = 0;
+            dst[4] = 0;
+            dst[5] = workData.ybbCamMtx[5] * scaleY;
+            dst[6] = workData.ybbCamMtx[6] * scaleY;
+            dst[8] = 0;
+            dst[9] = workData.ybbCamMtx[9];
+            dst[10] = workData.ybbCamMtx[10];
+            dst[12] = scratchVec3b[0];
+            dst[13] = scratchVec3b[1];
+            dst[14] = scratchVec3b[2];
+            this.loadTexMtx(materialParams.u_TexMtx[0], workData, packetParams.u_PosMtx[0]);
+
+            renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateBillboard);
+            renderInst.drawIndexes(6, 0);
         } else {
-            throw "whoops";
+            debugger;
+            return;
         }
 
         let materialOffs = renderInst.allocateUniformBuffer(ub_MaterialParams, materialHelper.materialParamsBufferSize);
         let packetOffs = renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
-        const d = renderHelper.uniformBuffer.mapBufferF32(materialOffs, materialHelper.materialParamsBufferSize);
+        const d = renderHelper.uniformBuffer.mapBufferF32(materialOffs, materialHelper.materialParamsBufferSize + u_PacketParamsBufferSize);
 
         // Since this is called quite a *lot*, we have hand-crafted versions of
         // fillMaterialParamsData and fillPacketParamsData for speed here.
@@ -2462,6 +2635,11 @@ function parseResource(res: JPAResourceRaw): JPAResource {
 
             const flags = view.getUint32(tableIdx + 0x08);
             const shapeType: ShapeType = (flags >>> 0) & 0x0F;
+            const dirType: DirType = (flags >>> 4) & 0x07;
+            const rotType: RotType = (flags >>> 7) & 0x07;
+            let planeType: PlaneType = (flags >>> 10) & 0x01;
+            if (shapeType === ShapeType.DirectionCross || shapeType === ShapeType.RotationCross)
+                planeType = PlaneType.X;
             const posRndm = view.getFloat32(tableIdx + 0x0C);
             const baseVel = view.getFloat32(tableIdx + 0x10);
             const baseVelRndm = view.getFloat32(tableIdx + 0x14);
@@ -2484,7 +2662,7 @@ function parseResource(res: JPAResourceRaw): JPAResource {
             const texIdx = view.getUint8(tableIdx + 0x45);
             const rotateSpeed = view.getUint16(tableIdx + 0x46) / 0xFFFF;
 
-            ssp1 = { flags, shapeType,
+            ssp1 = { flags, shapeType, dirType, rotType, planeType,
                 posRndm, baseVel, baseVelRndm, velInfRndm, gravity, globalScale2D,
                 inheritScale, inheritAlpha, inheritRGB, colorPrm, colorEnv, timing,
                 life, childrenCount, rate, texIdx, rotateSpeed,

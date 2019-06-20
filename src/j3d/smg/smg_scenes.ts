@@ -496,8 +496,12 @@ class SMGRenderer implements Viewer.SceneGfx {
     }
 
     private isNormalBloomOn(): boolean {
-        const hasBloomObjects = this.sceneObjHolder.sceneNameObjListExecutor.drawBufferHasVisible(DrawBufferType.BLOOM_MODEL);
-        return hasBloomObjects;
+        if (this.sceneObjHolder.sceneNameObjListExecutor.drawBufferHasVisible(DrawBufferType.BLOOM_MODEL))
+            return true;
+        for (let i = 0; i < this.sceneGraph.nodes.length; i++)
+            if (this.sceneGraph.nodes[i].sceneGraphTag === SceneGraphTag.Bloom)
+                return true;
+        return false;
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
@@ -687,6 +691,8 @@ class SMGRenderer implements Viewer.SceneGfx {
             const objPassRenderer = this.bloomRenderer.renderBeginObjects(device, viewerInput);
             this.drawOpa(objPassRenderer, DrawBufferType.BLOOM_MODEL);
             this.drawXlu(objPassRenderer, DrawBufferType.BLOOM_MODEL);
+            this.drawLegacyNodeOpa(objPassRenderer, SceneGraphTag.Bloom);
+            this.drawLegacyNodeXlu(objPassRenderer, SceneGraphTag.Bloom);
             this.execute(objPassRenderer, DrawType.EFFECT_DRAW_FOR_BLOOM_EFFECT);
             passRenderer = this.bloomRenderer.renderEndObjects(device, objPassRenderer, this.renderHelper.renderInstManager, this.mainRenderTarget, viewerInput, template, bloomParameterBufferOffs);
         }
