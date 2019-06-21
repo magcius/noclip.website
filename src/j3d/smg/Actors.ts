@@ -91,23 +91,33 @@ export function createModelObjMapObj(zoneAndLayer: ZoneAndLayer, sceneObjHolder:
 }
 
 export function emitEffect(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string): void {
+    if (actor.effectKeeper === null)
+        return;
     actor.effectKeeper.createEmitter(sceneObjHolder, name);
 }
 
 export function setEffectEnvColor(actor: LiveActor, name: string, color: Color): void {
+    if (actor.effectKeeper === null)
+        return;
     const emitter = actor.effectKeeper.getEmitter(name);
     emitter.setGlobalEnvColor(color, -1);
 }
 
 export function deleteEffect(actor: LiveActor, name: string): void {
+    if (actor.effectKeeper === null)
+        return;
     actor.effectKeeper.deleteEmitter(name);
 }
 
 export function deleteEffectAll(actor: LiveActor): void {
+    if (actor.effectKeeper === null)
+        return;
     actor.effectKeeper.deleteEmitterAll();
 }
 
 export function isRegisteredEffect(actor: LiveActor, name: string): boolean {
+    if (actor.effectKeeper === null)
+        return false;
     return actor.effectKeeper.isRegisteredEmitter(name);
 }
 
@@ -710,15 +720,17 @@ export class BlackHole extends LiveActor {
     public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
         super.calcAndSetBaseMtx(viewerInput);
 
-        const front = scratchVec3a;
-        const up = scratchVec3b;
+        if (this.effectKeeper !== null) {
+            const front = scratchVec3a;
+            const up = scratchVec3b;
 
-        getCamPos(front, viewerInput.camera);
-        vec3.sub(front, front, this.translation);
-        getCamYdir(up, viewerInput.camera);
-        makeMtxFrontUpPos(scratchMatrix, front, up, this.translation);
-        scaleMatrixScalar(scratchMatrix, this.scale[0]);
-        this.effectKeeper.setSRTFromHostMtx(scratchMatrix);
+            getCamPos(front, viewerInput.camera);
+            vec3.sub(front, front, this.translation);
+            getCamYdir(up, viewerInput.camera);
+            makeMtxFrontUpPos(scratchMatrix, front, up, this.translation);
+            scaleMatrixScalar(scratchMatrix, this.scale[0]);
+            this.effectKeeper.setSRTFromHostMtx(scratchMatrix);
+        }
     }
 
     private updateModelScale(rangeScale: number, holeScale: number): void {
@@ -1091,7 +1103,8 @@ export class SimpleEffectObj extends LiveActor {
             return;
 
         this.isVisible = visible;
-        this.effectKeeper.setDrawParticle(visible);
+        if (this.effectKeeper !== null)
+            this.effectKeeper.setDrawParticle(visible);
 
         if (this.isSyncClipping()) {
             if (visible)
@@ -1174,8 +1187,8 @@ export class GCaptureTarget extends LiveActor {
         startBck(this, 'Wait');
         bindColorChangeAnimation(this.modelInstance, this.arc, 1, 'Switch');
 
-        this.effectKeeper.createEmitter(sceneObjHolder, 'TargetLight');
-        this.effectKeeper.createEmitter(sceneObjHolder, 'TouchAble');
+        emitEffect(sceneObjHolder, this, 'TargetLight');
+        emitEffect(sceneObjHolder, this, 'TouchAble');
     }
 }
 

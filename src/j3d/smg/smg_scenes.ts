@@ -467,6 +467,8 @@ class SMGRenderer implements Viewer.SceneGfx {
     }
 
     private drawAllEffects(): void {
+        if (this.sceneObjHolder.effectSystem === null)
+            return;
         for (let drawOrder = 0; drawOrder < 2; drawOrder++) {
             const template = this.renderHelper.renderInstManager.pushTemplateRenderInst();
             template.filterKey = createFilterKeyForEffectDrawOrder(drawOrder);
@@ -1402,6 +1404,8 @@ export class LiveActor extends NameObj implements ObjectBase {
     }
 
     public initEffectKeeper(sceneObjHolder: SceneObjHolder, groupName: string | null): void {
+        if (sceneObjHolder.effectSystem === null)
+            return;
         if (groupName === null && this.modelInstance !== null)
             groupName = this.modelInstance.name;
         this.effectKeeper = new EffectKeeper(sceneObjHolder, this, groupName);
