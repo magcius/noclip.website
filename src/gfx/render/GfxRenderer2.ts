@@ -14,7 +14,6 @@ import { gfxRenderPipelineDescriptorEquals, gfxBindingsDescriptorEquals } from "
 //    templates become a "blueprint" rather than an actual RenderInst.
 
 const enum GfxRenderInstFlags {
-    VISIBLE = 1 << 0,
     TEMPLATE_RENDER_INST = 1 << 1,
     DRAW_RENDER_INST = 1 << 2,
     DRAW_INDEXED = 1 << 3,
@@ -268,13 +267,6 @@ function compareRenderInsts(a: GfxRenderInst, b: GfxRenderInst): number {
     return a.sortKey - b.sortKey;
 }
 
-function setVisible(a: GfxRenderInst, visible: boolean): void {
-    if (visible)
-        a._flags |= GfxRenderInstFlags.VISIBLE;
-    else
-        a._flags &= ~GfxRenderInstFlags.VISIBLE;
-}
-
 function gfxRendererTransientStateReset(state: GfxRendererTransientState): void {
     state.currentRenderPipelineDescriptor = null;
     state.currentRenderPipelineReady = false;
@@ -311,7 +303,8 @@ export class GfxRenderInstManager {
         else
             renderInst.reset();
         // draw render insts are visible by default.
-        renderInst._flags = GfxRenderInstFlags.DRAW_RENDER_INST | GfxRenderInstFlags.VISIBLE;
+        renderInst._flags = GfxRenderInstFlags.DRAW_RENDER_INST;
+        this.visibleRenderInsts.push(renderInst);
         return renderInst;
     }
 
