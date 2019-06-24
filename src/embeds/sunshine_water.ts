@@ -188,7 +188,7 @@ class SeaPlaneScene {
         const template = renderHelper.pushTemplateRenderInst();
         renderHelper.fillSceneParams(viewerInput, template);
         this.seaMaterialInstance.setOnRenderInst(device, renderHelper.renderInstManager.gfxRenderCache, template);
-        template.allocateUniformBuffer(ub_MaterialParams, u_MaterialParamsBufferSize);
+        template.allocateUniformBuffer(ub_MaterialParams, this.seaMaterialInstance.materialHelper.materialParamsBufferSize);
 
         computeViewMatrix(packetParams.u_PosMtx[0], viewerInput.camera);
         mat4.mul(packetParams.u_PosMtx[0], packetParams.u_PosMtx[0], this.modelMatrix);

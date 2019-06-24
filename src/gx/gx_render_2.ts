@@ -13,7 +13,7 @@ import { getFormatTypeFlags, FormatTypeFlags } from '../gfx/platform/GfxPlatform
 import { GfxRenderInstManager, GfxRenderInst } from '../gfx/render/GfxRenderer2';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
-import { MaterialParams, ub_PacketParams, u_PacketParamsBufferSize, PacketParams, fillPacketParamsData, SceneParams, u_SceneParamsBufferSize, fillSceneParams, fillSceneParamsData, ub_SceneParams, fillMaterialParamsDataWithOptimizations } from './gx_render';
+import { MaterialParams, ub_PacketParams, u_PacketParamsBufferSize, PacketParams, fillPacketParamsData, SceneParams, u_SceneParamsBufferSize, fillSceneParams, fillSceneParamsData, ub_SceneParams, fillMaterialParamsDataWithOptimizations, ub_MaterialParams } from './gx_render';
 import { setSortKeyProgramKey } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 
@@ -110,6 +110,10 @@ export class GXMaterialHelperGfx {
     public fillMaterialParamsData(renderHelper: GXRenderHelperGfx, offs: number, materialParams: MaterialParams): void {
         const d = renderHelper.uniformBuffer.mapBufferF32(offs, this.materialParamsBufferSize);
         fillMaterialParamsDataWithOptimizations(this.material, d, offs, materialParams);
+    }
+
+    public allocateMaterialParams(renderInst: GfxRenderInst): number {
+        return renderInst.allocateUniformBuffer(ub_MaterialParams, this.materialParamsBufferSize);
     }
 
     public allocateMaterialParamsBlock(renderHelper: GXRenderHelperGfx): number {
