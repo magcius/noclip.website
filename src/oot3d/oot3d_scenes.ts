@@ -11,56 +11,69 @@ import * as UI from '../ui';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import Progressable from '../Progressable';
-import { RoomRenderer, CtrTextureHolder, CmbRenderer, CmbData } from './render';
+import { RoomRenderer, CtrTextureHolder, CmbInstance, CmbData, fillSceneParamsDataOnTemplate } from './render';
 import { SceneGroup } from '../viewer';
 import { assert, assertExists, hexzero, readString } from '../util';
 import { fetchData } from '../fetch';
-import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
 import { mat4 } from 'gl-matrix';
 import AnimationController from '../AnimationController';
 import { TransparentBlack, colorNew, White } from '../Color';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
-import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstManager, executeOnPass } from '../gfx/render/GfxRenderer2';
+import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
+
+const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numSamplers: 3, numUniformBuffers: 3 }];
 
 const enum OoT3DPass { MAIN = 0x01, SKYBOX = 0x02 };
 export class OoT3DRenderer implements Viewer.SceneGfx {
-    public viewRenderer = new GfxRenderInstViewRenderer();
     public renderTarget = new BasicRenderTarget();
     public roomRenderers: RoomRenderer[] = [];
+    private renderInstManager = new GfxRenderInstManager();
+    private uniformBuffer: GfxRenderDynamicUniformBuffer;
 
     constructor(device: GfxDevice, public textureHolder: CtrTextureHolder, public zsi: ZSI.ZSIScene, public modelCache: ModelCache) {
-        for (let i = 0; i < this.roomRenderers.length; i++)
-            this.roomRenderers[i].addToViewRenderer(device, this.viewRenderer);
+        this.renderInstManager = new GfxRenderInstManager();
+        this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
     }
 
-    protected prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+    protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        const template = this.renderInstManager.pushTemplateRenderInst();
+        template.setUniformBuffer(this.uniformBuffer);
+        template.setBindingLayouts(bindingLayouts);
+        fillSceneParamsDataOnTemplate(template, viewerInput.camera);
+
         for (let i = 0; i < this.roomRenderers.length; i++)
-            this.roomRenderers[i].prepareToRender(hostAccessPass, viewerInput);
+            this.roomRenderers[i].prepareToRender(device, this.renderInstManager, hostAccessPass, viewerInput);
+
+        this.renderInstManager.popTemplateRenderInst();
+        this.uniformBuffer.prepareToRender(device, hostAccessPass);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
         const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(hostAccessPass, viewerInput);
+        this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
 
-        this.viewRenderer.prepareToRender(device);
-
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
 
         // First, render the skybox.
         const skyboxPassRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
-        this.viewRenderer.executeOnPass(device, skyboxPassRenderer, OoT3DPass.SKYBOX);
+        skyboxPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        executeOnPass(this.renderInstManager, device, skyboxPassRenderer, OoT3DPass.SKYBOX);
         skyboxPassRenderer.endPass(null);
         device.submitPass(skyboxPassRenderer);
         // Now do main pass.
         const mainPassRenderer = this.renderTarget.createRenderPass(device, depthClearRenderPassDescriptor);
-        this.viewRenderer.executeOnPass(device, mainPassRenderer, OoT3DPass.MAIN);
+        mainPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        executeOnPass(this.renderInstManager, device, mainPassRenderer, OoT3DPass.MAIN);
+        this.renderInstManager.resetRenderInsts();
         return mainPassRenderer;
     }
 
     public destroy(device: GfxDevice): void {
-        this.viewRenderer.destroy(device);
+        this.renderInstManager.destroy(device);
+        this.uniformBuffer.destroy(device);
         this.renderTarget.destroy(device);
 
         this.textureHolder.destroy(device);
@@ -455,14 +468,13 @@ class SceneDesc implements Viewer.SceneDesc {
             return renderer.modelCache.fetchArchive(`${pathBase}/actor/${archivePath}`, abortSignal);
         }
 
-        function buildModel(zar: ZAR.ZAR, modelPath: string, scale: number = 0.01): CmbRenderer {
+        function buildModel(zar: ZAR.ZAR, modelPath: string, scale: number = 0.01): CmbInstance {
             const cmbData = renderer.modelCache.getModel(device, renderer, zar, modelPath);
-            const cmbRenderer = new CmbRenderer(device, renderer.textureHolder, cmbData);
+            const cmbRenderer = new CmbInstance(device, renderer.textureHolder, cmbData);
             cmbRenderer.animationController.fps = 20;
             cmbRenderer.setConstantColor(1, TransparentBlack);
             cmbRenderer.name = `${hexzero(actor.actorId, 4)} / ${hexzero(actor.variable, 4)} / ${modelPath}`;
             mat4.scale(cmbRenderer.modelMatrix, actor.modelMatrix, [scale, scale, scale]);
-            cmbRenderer.addToViewRenderer(device, renderer.viewRenderer);
             roomRenderer.objectRenderers.push(cmbRenderer);
             return cmbRenderer;
         }
@@ -1639,13 +1651,12 @@ class SceneDesc implements Viewer.SceneDesc {
         // Attach the skybox to the first roomRenderer.
         const roomRenderer = renderer.roomRenderers[0];
 
-        function buildModel(zar: ZAR.ZAR, modelPath: string): CmbRenderer {
+        function buildModel(zar: ZAR.ZAR, modelPath: string): CmbInstance {
             const cmbData = renderer.modelCache.getModel(device, renderer, zar, modelPath);
-            const cmbRenderer = new CmbRenderer(device, renderer.textureHolder, cmbData);
+            const cmbRenderer = new CmbInstance(device, renderer.textureHolder, cmbData);
             cmbRenderer.isSkybox = true;
             cmbRenderer.animationController.fps = 20;
-            cmbRenderer.addToViewRenderer(device, renderer.viewRenderer);
-            cmbRenderer.setPassMask(OoT3DPass.SKYBOX);
+            cmbRenderer.passMask = OoT3DPass.SKYBOX;
             roomRenderer.objectRenderers.push(cmbRenderer);
             return cmbRenderer;
         }
@@ -1712,8 +1723,6 @@ class SceneDesc implements Viewer.SceneDesc {
                         roomRenderer.bindCMAB(cmab);
                     }
                 }
-
-                roomRenderer.addToViewRenderer(device, renderer.viewRenderer);
                 renderer.roomRenderers.push(roomRenderer);
 
                 for (let j = 0; j < roomSetup.actors.length; j++)

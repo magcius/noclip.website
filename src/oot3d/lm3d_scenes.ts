@@ -10,7 +10,7 @@ import * as CTXB from './ctxb';
 import * as Viewer from '../viewer';
 
 import Progressable from '../Progressable';
-import { CmbRenderer, CmbData } from './render';
+import { CmbInstance, CmbData } from './render';
 import { SceneGroup } from '../viewer';
 import { fetchData } from '../fetch';
 import { leftPad } from '../util';
@@ -45,7 +45,7 @@ class SceneDesc implements Viewer.SceneDesc {
             const modelCache = new Map<string, CmbData>();
 
             const renderer = new MultiCmbScene(device, textureHolder);
-            const progressables: Progressable<CmbRenderer>[] = [];
+            const progressables: Progressable<CmbInstance>[] = [];
             for (let i = 0; i < roomInfo.records.length; i++) {
                 progressables.push(fetchData(`${models_path}/room_${leftPad(''+i, 2, '0')}.gar`, abortSignal).then((outerRoomGarBuf) => {
                     const outerRoomGar = ZAR.parse(outerRoomGarBuf);
@@ -69,8 +69,7 @@ class SceneDesc implements Viewer.SceneDesc {
                     textureHolder.addCMB(device, cmb);
                     renderer.cmbData.push(cmbData);
 
-                    const cmbRenderer = new CmbRenderer(device, textureHolder, cmbData, cmb.name);
-                    cmbRenderer.addToViewRenderer(device, renderer.viewRenderer);
+                    const cmbRenderer = new CmbInstance(device, textureHolder, cmbData, cmb.name);
                     renderer.cmbRenderers.push(cmbRenderer);
 
                     const cmbBasename = firstCMB.name.split('.')[0];
@@ -102,8 +101,7 @@ class SceneDesc implements Viewer.SceneDesc {
                             modelCache.set(cmbFilename, cmbData);
                         }
 
-                        const cmbRenderer = new CmbRenderer(device, textureHolder, cmbData, cmb.name);
-                        cmbRenderer.addToViewRenderer(device, renderer.viewRenderer);
+                        const cmbRenderer = new CmbInstance(device, textureHolder, cmbData, cmb.name);
 
                         const rotationX = BCSV.getField<number>(roomFurnitureEntries, record, "dir_x") / 180 * Math.PI;
                         const rotationY = BCSV.getField<number>(roomFurnitureEntries, record, "dir_y") / 180 * Math.PI;

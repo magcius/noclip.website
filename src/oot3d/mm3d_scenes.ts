@@ -8,7 +8,7 @@ import * as ZSI from './zsi';
 import * as Viewer from '../viewer';
 
 import Progressable from '../Progressable';
-import { RoomRenderer, CtrTextureHolder, CmbRenderer } from './render';
+import { RoomRenderer, CtrTextureHolder, CmbInstance } from './render';
 import { SceneGroup } from '../viewer';
 import { assert, assertExists, hexzero } from '../util';
 import { fetchData, NamedArrayBufferSlice } from '../fetch';
@@ -613,14 +613,13 @@ class SceneDesc implements Viewer.SceneDesc {
             return renderer.modelCache.fetchArchive(`${pathBase}/actors/${archivePath}`, abortSignal);
         }
 
-        function buildModel(gar: ZAR.ZAR, modelPath: string, scale: number = 0.01): CmbRenderer {
+        function buildModel(gar: ZAR.ZAR, modelPath: string, scale: number = 0.01): CmbInstance {
             const cmbData = renderer.modelCache.getModel(device, renderer, gar, modelPath);
-            const cmbRenderer = new CmbRenderer(device, renderer.textureHolder, cmbData);
+            const cmbRenderer = new CmbInstance(device, renderer.textureHolder, cmbData);
             cmbRenderer.animationController.fps = 20;
             cmbRenderer.setConstantColor(1, TransparentBlack);
             cmbRenderer.name = `${hexzero(actor.actorId, 4)} / ${hexzero(actor.variable, 4)} / ${modelPath}`;
             mat4.scale(cmbRenderer.modelMatrix, actor.modelMatrix, [scale, scale, scale]);
-            cmbRenderer.addToViewRenderer(device, renderer.viewRenderer);
             roomRenderer.objectRenderers.push(cmbRenderer);
             return cmbRenderer;
         }
@@ -687,7 +686,6 @@ class SceneDesc implements Viewer.SceneDesc {
                     }
                 }
 
-                roomRenderer.addToViewRenderer(device, renderer.viewRenderer);
                 renderer.roomRenderers.push(roomRenderer);
 
                 for (let j = 0; j < roomSetup.actors.length; j++)

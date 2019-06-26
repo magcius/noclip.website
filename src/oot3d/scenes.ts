@@ -8,9 +8,12 @@ import * as ZAR from './zar';
 import * as Viewer from '../viewer';
 import * as UI from '../ui';
 
-import { CtrTextureHolder, BasicRendererHelper, CmbRenderer, CmbData } from "./render";
-import { GfxDevice, GfxHostAccessPass } from "../gfx/platform/GfxPlatform";
+import { CtrTextureHolder, BasicRendererHelper, CmbInstance, CmbData, RoomRenderer, fillSceneParamsDataOnTemplate } from "./render";
+import { GfxDevice, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxRenderPass } from "../gfx/platform/GfxPlatform";
 import ArrayBufferSlice from '../ArrayBufferSlice';
+import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
+import { GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
 
 export class GrezzoTextureHolder extends CtrTextureHolder {
     public findTextureEntryIndex(name: string): number {
@@ -38,26 +41,59 @@ export class GrezzoTextureHolder extends CtrTextureHolder {
     }
 }
 
-export class MultiCmbScene extends BasicRendererHelper implements Viewer.SceneGfx {
-    public cmbData: CmbData[] = [];
-    public cmbRenderers: CmbRenderer[] = [];
+const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numSamplers: 3, numUniformBuffers: 3 }];
 
-    constructor(device: GfxDevice, public textureHolder: CtrTextureHolder, public cmab: CMAB.CMAB[] = [], public csab: CSAB.CSAB[] = []) {
-        super();
+export class MultiCmbScene implements Viewer.SceneGfx {
+    public renderTarget = new BasicRenderTarget();
+    public cmbData: CmbData[] = [];
+    public cmbRenderers: CmbInstance[] = [];
+    private renderInstManager = new GfxRenderInstManager();
+    private uniformBuffer: GfxRenderDynamicUniformBuffer;
+    public cmab: CMAB.CMAB[] = [];
+    public csab: CSAB.CSAB[] = [];
+
+    constructor(device: GfxDevice, public textureHolder: CtrTextureHolder) {
+        this.renderInstManager = new GfxRenderInstManager();
+        this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
     }
 
-    protected prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+    protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        const template = this.renderInstManager.pushTemplateRenderInst();
+        template.setUniformBuffer(this.uniformBuffer);
+        template.setBindingLayouts(bindingLayouts);
+        fillSceneParamsDataOnTemplate(template, viewerInput.camera);
+
         for (let i = 0; i < this.cmbRenderers.length; i++)
-            this.cmbRenderers[i].prepareToRender(hostAccessPass, viewerInput);
+            this.cmbRenderers[i].prepareToRender(device, this.renderInstManager, hostAccessPass, viewerInput);
+
+        this.renderInstManager.popTemplateRenderInst();
+        this.uniformBuffer.prepareToRender(device, hostAccessPass);
+    }
+
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        const hostAccessPass = device.createHostAccessPass();
+        this.prepareToRender(device, hostAccessPass, viewerInput);
+        device.submitPass(hostAccessPass);
+
+        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+
+        const mainPassRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
+        mainPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.renderInstManager.drawOnPassRenderer(device, mainPassRenderer);
+        this.renderInstManager.resetRenderInsts();
+        return mainPassRenderer;
     }
 
     public destroy(device: GfxDevice): void {
-        super.destroy(device);
+        this.renderInstManager.destroy(device);
+        this.uniformBuffer.destroy(device);
+        this.renderTarget.destroy(device);
+
         this.textureHolder.destroy(device);
-        for (let i = 0; i < this.cmbData.length; i++)
-            this.cmbData[i].destroy(device);
         for (let i = 0; i < this.cmbRenderers.length; i++)
             this.cmbRenderers[i].destroy(device);
+        for (let i = 0; i < this.cmbData.length; i++)
+            this.cmbData[i].destroy(device);
     }
 
     public createPanels(): UI.Panel[] {
@@ -103,8 +139,7 @@ export function createSceneFromZARBuffer(device: GfxDevice, buffer: ArrayBufferS
                 const cmbData = new CmbData(device, cmb);
                 textureHolder.addTextures(device, cmb.textures);
                 renderer.cmbData.push(cmbData);
-                const cmbRenderer = new CmbRenderer(device, textureHolder, cmbData, cmb.name);
-                cmbRenderer.addToViewRenderer(device, renderer.viewRenderer);
+                const cmbRenderer = new CmbInstance(device, textureHolder, cmbData, cmb.name);
                 renderer.cmbRenderers.push(cmbRenderer);
             } else if (file.name.endsWith('.ctxb')) {
                 const ctxb = CTXB.parse(file.buffer);

@@ -14,7 +14,7 @@ import { fillMatrix4x3, fillVec4, fillMatrix4x2 } from '../gfx/helpers/UniformBu
 import { makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { getFormatName, parseTexImageParamWrapModeS, parseTexImageParamWrapModeT } from './nitro_tex';
-import { assert, nArray, assertExists } from '../util';
+import { assert, nArray } from '../util';
 import { BCA, bindBCAAnimator, BCAAnimator } from './sm64ds_bca';
 import AnimationController from '../AnimationController';
 import { GfxRenderInstManager, GfxRenderInst } from '../gfx/render/GfxRenderer2';

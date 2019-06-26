@@ -1,4 +1,6 @@
+
 // Implements support for Retro Studios actor data
+
 import { ResourceSystem } from "./resource";
 import { readString } from "../util";
 import ArrayBufferSlice from '../ArrayBufferSlice';
