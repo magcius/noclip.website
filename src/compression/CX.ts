@@ -19,7 +19,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 //       Literal: copy one byte from src to dest.
 
 export function decompressLZ_Normal(srcView: DataView) {
-    let uncompressedSize = srcView.getUint32(0x00, true) >> 8;
+    let uncompressedSize = srcView.getUint32(0x00, true) >>> 8;
     const dstBuffer = new Uint8Array(uncompressedSize);
 
     let srcOffs = 0x04;
