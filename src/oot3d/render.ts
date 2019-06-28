@@ -494,6 +494,8 @@ class MaterialInstance {
             this.gfxSamplers.push(gfxSampler);
             this.textureMappings[i].gfxSampler = gfxSampler;
         }
+
+        this.createProgram();
     }
 
     public setVertexColorsEnabled(v: boolean): void {
