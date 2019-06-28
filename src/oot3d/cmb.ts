@@ -199,18 +199,18 @@ export interface Material {
 }
 
 export function calcTexMtx(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
-    const sinR = Math.sin(rotation);
-    const cosR = Math.cos(rotation);
+    const theta = rotation * Math.PI;
+    const sinR = Math.sin(theta);
+    const cosR = Math.cos(theta);
 
     mat4.identity(dst);
 
     dst[0]  = scaleS *  cosR;
-    dst[4]  = scaleT * -sinR;
-    dst[12] = translationS;
-
-    dst[1]  = scaleS *  sinR;
+    dst[1]  = scaleT * -sinR;
+    dst[4]  = scaleS *  sinR;
     dst[5]  = scaleT *  cosR;
-    dst[13] = translationT;
+    dst[12] = scaleS * ((-0.5 * cosR) - (0.5 * sinR - 0.5) - translationS);
+    dst[13] = scaleT * ((-0.5 * cosR) + (0.5 * sinR - 0.5) + translationT) + 1;
 }
 
 function translateCullModeFlags(cullModeFlags: number): GfxCullMode {
@@ -282,7 +282,7 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
             const translationT = view.getFloat32(matricesOffs + 0x10, true);
             const rotation = view.getFloat32(matricesOffs + 0x14, true);
             const texMtx = mat4.create();
-            calcTexMtx(texMtx, scaleS, scaleT, translationS, translationT, rotation);
+            calcTexMtx(texMtx, scaleS, scaleT, rotation, translationS, translationT);
             textureMatrices.push(texMtx);
             matricesOffs += 0x18;
         }
