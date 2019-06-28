@@ -918,7 +918,8 @@ interface VtxBufferData {
     stride: number;
 
     count: number;
-    data: ArrayBufferSlice;
+    buffer: ArrayBufferSlice;
+    offs: 0;
 }
 
 function parseMDL0_VtxData(buffer: ArrayBufferSlice, vtxAttrib: GX.VertexAttribute): VtxBufferData {
@@ -942,10 +943,12 @@ function parseMDL0_VtxData(buffer: ArrayBufferSlice, vtxAttrib: GX.VertexAttribu
     const numComponents = getFormatCompFlagsComponentCount(getAttributeFormatCompFlagsRaw(vtxAttrib, compCnt));
     const compSize = getAttributeComponentByteSizeRaw(compType);
     const compByteSize = numComponents * compSize;
-    const dataByteSize = compByteSize * count;
+    // Add some padding at the end for incorrectly formatted vertex buffers, as seen in some
+    // custom Mario Kart: Wii levels (like Night Factory).
+    const dataByteSize = compByteSize * count + 4;
 
     const data: ArrayBufferSlice = buffer.subarray(dataOffs, dataByteSize);
-    return { name, id, compCnt, compType, compShift, stride, count, data };
+    return { name, id, compCnt, compType, compShift, stride, count, buffer: data, offs: 0 };
 }
 
 interface InputVertexBuffers {
@@ -1114,29 +1117,29 @@ function parseMDL0_ShapeEntry(buffer: ArrayBufferSlice, inputBuffers: InputVerte
     const vtxArrays: GX_Array[] = [];
     assert(idVtxPos >= 0);
     if (idVtxPos >= 0)
-        vtxArrays[GX.VertexAttribute.POS] = { buffer: inputBuffers.pos[idVtxPos].data, offs: 0 };
+        vtxArrays[GX.VertexAttribute.POS] = inputBuffers.pos[idVtxPos];
     if (idVtxNrm >= 0)
-        vtxArrays[GX.VertexAttribute.NRM] = { buffer: inputBuffers.nrm[idVtxNrm].data, offs: 0 };
+        vtxArrays[GX.VertexAttribute.NRM] = inputBuffers.nrm[idVtxNrm];
     if (idVtxClr0 >= 0)
-        vtxArrays[GX.VertexAttribute.CLR0] = { buffer: inputBuffers.clr[idVtxClr0].data, offs: 0 };
+        vtxArrays[GX.VertexAttribute.CLR0] = inputBuffers.clr[idVtxClr0];
     if (idVtxClr1 >= 0)
-        vtxArrays[GX.VertexAttribute.CLR1] = { buffer: inputBuffers.clr[idVtxClr1].data, offs: 0 };
+        vtxArrays[GX.VertexAttribute.CLR1] = inputBuffers.clr[idVtxClr1];
     if (idVtxTxc0 >= 0)
-        vtxArrays[GX.VertexAttribute.TEX0] = { buffer: inputBuffers.txc[idVtxTxc0].data, offs: 0 };
+        vtxArrays[GX.VertexAttribute.TEX0] = inputBuffers.txc[idVtxTxc0];
     if (idVtxTxc1 >= 0)
-        vtxArrays[GX.VertexAttribute.TEX1] = { buffer: inputBuffers.txc[idVtxTxc1].data, offs: 0 };
+        vtxArrays[GX.VertexAttribute.TEX1] = inputBuffers.txc[idVtxTxc1];
     if (idVtxTxc2 >= 0)
-        vtxArrays[GX.VertexAttribute.TEX2] = { buffer: inputBuffers.txc[idVtxTxc2].data, offs: 0 };
+        vtxArrays[GX.VertexAttribute.TEX2] = inputBuffers.txc[idVtxTxc2];
     if (idVtxTxc3 >= 0)
-        vtxArrays[GX.VertexAttribute.TEX3] = { buffer: inputBuffers.txc[idVtxTxc3].data, offs: 0 };
+        vtxArrays[GX.VertexAttribute.TEX3] = inputBuffers.txc[idVtxTxc3];
     if (idVtxTxc4 >= 0)
-        vtxArrays[GX.VertexAttribute.TEX4] = { buffer: inputBuffers.txc[idVtxTxc4].data, offs: 0 };
+        vtxArrays[GX.VertexAttribute.TEX4] = inputBuffers.txc[idVtxTxc4];
     if (idVtxTxc5 >= 0)
-        vtxArrays[GX.VertexAttribute.TEX5] = { buffer: inputBuffers.txc[idVtxTxc5].data, offs: 0 };
+        vtxArrays[GX.VertexAttribute.TEX5] = inputBuffers.txc[idVtxTxc5];
     if (idVtxTxc6 >= 0)
-        vtxArrays[GX.VertexAttribute.TEX6] = { buffer: inputBuffers.txc[idVtxTxc6].data, offs: 0 };
+        vtxArrays[GX.VertexAttribute.TEX6] = inputBuffers.txc[idVtxTxc6];
     if (idVtxTxc7 >= 0)
-        vtxArrays[GX.VertexAttribute.TEX7] = { buffer: inputBuffers.txc[idVtxTxc7].data, offs: 0 };
+        vtxArrays[GX.VertexAttribute.TEX7] = inputBuffers.txc[idVtxTxc7];
 
     const vtxLoader = compileVtxLoader(vat, vcd);
     const loadedVertexLayout = vtxLoader.loadedVertexLayout;

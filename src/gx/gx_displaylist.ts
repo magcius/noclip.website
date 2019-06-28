@@ -58,7 +58,7 @@ export interface GX_VtxDesc {
 export interface GX_Array {
     buffer: ArrayBufferSlice;
     offs: number;
-    // TODO(jstpierre): stride
+    stride?: number;
 }
 
 export interface VertexAttributeLayout {
@@ -670,7 +670,8 @@ function _compileVtxLoader(desc: VtxLoaderDesc): VtxLoader {
         }
 
         function compileOneIndex(viewName: string, readIndex: string, drawCallIdxIncr: number, uniqueSuffix: string = ''): string {
-            const attrOffsetBase = `(${readIndex}) * ${srcAttrByteSize}`;
+            const stride = `(vtxArrays[${vtxAttrib}].stride !== undefined ? vtxArrays[${vtxAttrib}].stride : ${srcAttrByteSize})`;
+            const attrOffsetBase = `(${readIndex}) * ${stride}`;
             const arrayOffsetVarName = `arrayOffset${vtxAttrib}${uniqueSuffix}`;
             if (outputEnabled) {
                 return `const ${arrayOffsetVarName} = ${attrOffsetBase};${compileOneAttrib(viewName, arrayOffsetVarName, drawCallIdxIncr)}`;
