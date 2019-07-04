@@ -5,7 +5,7 @@ import { assert, readString, align, assertExists } from "../util";
 import AnimationController from "../AnimationController";
 import { mat4 } from "gl-matrix";
 import { getPointHermite } from "../Spline";
-import { computeModelMatrixSRT } from "../MathHelpers";
+import { computeModelMatrixSRT, lerpAngle, lerp } from "../MathHelpers";
 
 // CSAB (CTR Skeletal Animation Binary)
 
@@ -103,7 +103,7 @@ function parseTrackOcarina(version: Version, buffer: ArrayBufferSlice): Animatio
     }
 }
 
-function parseTrackMajora(version: Version, buffer: ArrayBufferSlice, isRotation: boolean): AnimationTrack {
+function parseTrackMajora(version: Version, buffer: ArrayBufferSlice): AnimationTrack {
     const view = buffer.createDataView();
 
     assert(view.getUint8(0x00) === 0x00);
@@ -129,11 +129,11 @@ function parseTrackMajora(version: Version, buffer: ArrayBufferSlice, isRotation
     }
 }
 
-function parseTrack(version: Version, buffer: ArrayBufferSlice, isRotation: boolean): AnimationTrack {
+function parseTrack(version: Version, buffer: ArrayBufferSlice): AnimationTrack {
     if (version === Version.Ocarina)
         return parseTrackOcarina(version, buffer);
     else if (version === Version.Majora)
-        return parseTrackMajora(version, buffer, isRotation);
+        return parseTrackMajora(version, buffer);
     else
         throw "xxx";
 }
@@ -156,15 +156,15 @@ function parseAnod(version: Version, buffer: ArrayBufferSlice): AnimationNode {
     const scaleZOffs = view.getUint16(0x18, true);
     assert(view.getUint16(0x1A, true) === 0x00);
 
-    const translationX = translationXOffs !== 0 ? parseTrack(version, buffer.slice(translationXOffs), false) : null;
-    const translationY = translationYOffs !== 0 ? parseTrack(version, buffer.slice(translationYOffs), false) : null;
-    const translationZ = translationZOffs !== 0 ? parseTrack(version, buffer.slice(translationZOffs), false) : null;
-    const rotationX = rotationXOffs !== 0 ? parseTrack(version, buffer.slice(rotationXOffs), true) : null;
-    const rotationY = rotationYOffs !== 0 ? parseTrack(version, buffer.slice(rotationYOffs), true) : null;
-    const rotationZ = rotationZOffs !== 0 ? parseTrack(version, buffer.slice(rotationZOffs), true) : null;
-    const scaleX = scaleXOffs !== 0 ? parseTrack(version, buffer.slice(scaleXOffs), false) : null;
-    const scaleY = scaleYOffs !== 0 ? parseTrack(version, buffer.slice(scaleYOffs), false) : null;
-    const scaleZ = scaleZOffs !== 0 ? parseTrack(version, buffer.slice(scaleZOffs), false) : null;
+    const translationX = translationXOffs !== 0 ? parseTrack(version, buffer.slice(translationXOffs)) : null;
+    const translationY = translationYOffs !== 0 ? parseTrack(version, buffer.slice(translationYOffs)) : null;
+    const translationZ = translationZOffs !== 0 ? parseTrack(version, buffer.slice(translationZOffs)) : null;
+    const rotationX = rotationXOffs !== 0 ? parseTrack(version, buffer.slice(rotationXOffs)) : null;
+    const rotationY = rotationYOffs !== 0 ? parseTrack(version, buffer.slice(rotationYOffs)) : null;
+    const rotationZ = rotationZOffs !== 0 ? parseTrack(version, buffer.slice(rotationZOffs)) : null;
+    const scaleX = scaleXOffs !== 0 ? parseTrack(version, buffer.slice(scaleXOffs)) : null;
+    const scaleY = scaleYOffs !== 0 ? parseTrack(version, buffer.slice(scaleYOffs)) : null;
+    const scaleZ = scaleZOffs !== 0 ? parseTrack(version, buffer.slice(scaleZOffs)) : null;
 
     return { boneIndex, translationX, translationY, translationZ, rotationX, rotationY, rotationZ, scaleX, scaleY, scaleZ };
 }
@@ -293,17 +293,22 @@ function getAnimFrame(anim: AnimationBase, frame: number): number {
     }
 }
 
-function lerp(k0: AnimationKeyframeLinear, k1: AnimationKeyframeLinear, t: number) {
-    return k0.value + (k1.value - k0.value) * t;
-}
+function sampleAnimationTrackLinear(track: AnimationTrackLinear, frame: number): number {
+    const frames = track.frames;
 
-// https://gist.github.com/shaunlebron/8832585
-function lerpAngle(k0: AnimationKeyframeLinear, k1: AnimationKeyframeLinear, t: number): number {
-    const v0 = k0.value + Math.PI * 2;
-    const v1 = k0.value + Math.PI * 2;
-    const da = (v1 - v0) % 1.0;
-    const dist = (2*da) % 1.0 - da;
-    return v0 + dist * t;
+    // Find the first frame.
+    const idx1 = frames.findIndex((key) => (frame < key.time));
+    if (idx1 === 0)
+        return frames[0].value;
+    if (idx1 < 0)
+        return frames[frames.length - 1].value;
+    const idx0 = idx1 - 1;
+
+    const k0 = frames[idx0];
+    const k1 = frames[idx1];
+
+    const t = (frame - k0.time) / (k1.time - k0.time);
+    return lerp(k0.value, k1.value, t);
 }
 
 function sampleAnimationTrackLinearRotation(track: AnimationTrackLinear, frame: number): number {
@@ -321,25 +326,7 @@ function sampleAnimationTrackLinearRotation(track: AnimationTrackLinear, frame: 
     const k1 = frames[idx1];
 
     const t = (frame - k0.time) / (k1.time - k0.time);
-    return lerpAngle(k0, k1, t);
-}
-
-function sampleAnimationTrackLinear(track: AnimationTrackLinear, frame: number): number {
-    const frames = track.frames;
-
-    // Find the first frame.
-    const idx1 = frames.findIndex((key) => (frame < key.time));
-    if (idx1 === 0)
-        return frames[0].value;
-    if (idx1 < 0)
-        return frames[frames.length - 1].value;
-    const idx0 = idx1 - 1;
-
-    const k0 = frames[idx0];
-    const k1 = frames[idx1];
-
-    const t = (frame - k0.time) / (k1.time - k0.time);
-    return lerp(k0, k1, t);
+    return lerpAngle(k0.value, k1.value, t);
 }
 
 function hermiteInterpolate(k0: AnimationKeyframeHermite, k1: AnimationKeyframeHermite, t: number, length: number): number {

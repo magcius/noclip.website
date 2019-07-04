@@ -70,7 +70,7 @@ interface DMPMaterialHacks {
     vertexColorsEnabled: boolean;
 }
 
-abstract class DMPProgram extends DeviceProgram {
+class DMPProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
     public static ub_MaterialParams = 1;
     public static ub_PrmParams = 2;
@@ -160,6 +160,7 @@ uniform sampler2D u_Texture[3];
         case 2: // Texture 2 has either TexCoord 1 or 2 as input. TODO(jstpierre): Add a material setting for this.
             return `texture(u_Texture[2], v_TexCoord2)`;
         case 3: // Texture 3 is the procedural texture unit. We don't support this yet; return white.
+            console.warn("Accessing procedural texture slot");
             return `vec4(1.0)`;
         }
     }

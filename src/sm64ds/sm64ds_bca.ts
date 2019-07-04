@@ -1,7 +1,7 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { mat4 } from "gl-matrix";
-import { computeModelMatrixSRT } from "../MathHelpers";
+import { computeModelMatrixSRT, lerp, lerpAngle } from "../MathHelpers";
 import AnimationController from "../AnimationController";
 
 const enum LoopMode {
@@ -93,17 +93,6 @@ export function parse(buffer: ArrayBufferSlice): BCA {
     }
 
     return { duration, loopMode, jointAnimationEntries: entries };
-}
-
-function lerp(v0: number, v1: number, t: number): number {
-    return v0 + (v1 - v0) * t;
-}
-
-// https://gist.github.com/shaunlebron/8832585
-function lerpAngle(v0: number, v1: number, t: number): number {
-    const da = (v1 - v0) % 1.0;
-    const dist = (2*da) % 1.0 - da;
-    return v0 + dist * t;
 }
 
 function sampleAnimationData(animationTrack: AnimationTrack, animFrame: number): number {
