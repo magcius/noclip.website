@@ -596,22 +596,24 @@ class MaterialInstance {
 
         for (let i = 0; i < 3; i++) {
             const binding = this.material.textureBindings[i];
-            if (binding.textureIdx < 0)
-                continue;
-
-            if (this.texturePaletteAnimators[i]) {
-                this.texturePaletteAnimators[i].fillTextureMapping(textureHolder, this.textureMappings[i]);
+            if (binding.textureIdx >= 0) {
+                if (this.texturePaletteAnimators[i]) {
+                    this.texturePaletteAnimators[i].fillTextureMapping(textureHolder, this.textureMappings[i]);
+                } else {
+                    const texture = this.cmb.textures[binding.textureIdx];
+                    textureHolder.fillTextureMapping(this.textureMappings[i], texture.name);
+                }
+    
+                if (this.srtAnimators[i]) {
+                    this.srtAnimators[i].calcTexMtx(scratchTexMatrix);
+                    mat4.mul(scratchTexMatrix, this.material.textureMatrices[i], scratchTexMatrix);
+                } else {
+                    mat4.copy(scratchTexMatrix, this.material.textureMatrices[i]);
+                }
             } else {
-                const texture = this.cmb.textures[binding.textureIdx];
-                textureHolder.fillTextureMapping(this.textureMappings[i], texture.name);
+                mat4.identity(scratchTexMatrix);
             }
 
-            if (this.srtAnimators[i]) {
-                this.srtAnimators[i].calcTexMtx(scratchTexMatrix);
-                mat4.mul(scratchTexMatrix, this.material.textureMatrices[i], scratchTexMatrix);
-            } else {
-                mat4.copy(scratchTexMatrix, this.material.textureMatrices[i]);
-            }
             offs += fillMatrix4x3(mapped, offs, scratchTexMatrix);
         }
 
