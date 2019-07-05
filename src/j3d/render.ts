@@ -161,7 +161,7 @@ export class ShapeInstance {
 
         const usesSkinning = shape.displayFlags === ShapeDisplayFlags.USE_PNMTXIDX;
 
-        if (usesSkinning)
+        if (!usesSkinning)
             materialInstance.fillMaterialParams(template, materialInstanceState, shapeInstanceState.worldToViewMatrix, materialJointMatrix, camera, packetParams);
 
         for (let p = 0; p < shape.packets.length; p++) {
