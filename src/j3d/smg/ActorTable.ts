@@ -52,6 +52,7 @@ const ActorTable: ActorTableEntry[] = [
     // _("ShootingStar",         ShootingStar),
 
     // Sky/Air
+    _("AstroDomeSkyA",                  Sky),
     _("AuroraSky",                      Sky),
     _("BeyondGalaxySky",                Sky),
     _("BeyondHellValleySky",            Sky),
