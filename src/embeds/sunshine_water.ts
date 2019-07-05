@@ -193,7 +193,7 @@ class SeaPlaneScene {
         computeViewMatrix(packetParams.u_PosMtx[0], viewerInput.camera);
         mat4.mul(packetParams.u_PosMtx[0], packetParams.u_PosMtx[0], this.modelMatrix);
 
-        this.seaMaterialInstance.fillMaterialParams(template, this.materialInstanceState, this.shapeInstanceState.viewMatrix, this.modelMatrix, viewerInput.camera, packetParams);
+        this.seaMaterialInstance.fillMaterialParams(template, this.materialInstanceState, this.shapeInstanceState.worldToViewMatrix, this.modelMatrix, viewerInput.camera, packetParams);
 
         this.plane.prepareToRender(renderHelper, packetParams);
         renderHelper.renderInstManager.popTemplateRenderInst();

@@ -26,14 +26,17 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 export class ShapeInstanceState {
     // One matrix for each joint, which transform into world space.
-    public jointToWorldMatrices: mat4[] = [];
+    public jointToWorldMatrixArray: mat4[] = [];
 
     // Draw (DRW1 matrix definitions, incl. envelopes), which transform into view space.
-    public drawToViewMatrices: mat4[] = [];
+    public drawViewMatrixArray: mat4[] = [];
 
-    public matrixVisibility: boolean[] = [];
-    public shapeVisibility: boolean[] = [];
-    public viewMatrix: mat4;
+    // View-specific visibility for each of the matrices in drawToViewMatrices.
+    // TODO(jstpierre): Currently true for all envelope matrices.
+    public drawViewMatrixVisibility: boolean[] = [];
+
+    // The camera's view matrix.
+    public worldToViewMatrix: mat4;
 }
 
 class ShapeData {
@@ -154,10 +157,12 @@ export class ShapeInstance {
 
         materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
 
-        const materialJointMatrix = shapeInstanceState.jointToWorldMatrices[materialInstance.materialData.jointData.jointIndex];
+        const materialJointMatrix = shapeInstanceState.jointToWorldMatrixArray[materialInstance.materialData.jointData.jointIndex];
 
-        if (shape.displayFlags !== ShapeDisplayFlags.USE_PNMTXIDX)
-            materialInstance.fillMaterialParams(template, materialInstanceState, shapeInstanceState.viewMatrix, materialJointMatrix, camera, packetParams);
+        const usesSkinning = shape.displayFlags === ShapeDisplayFlags.USE_PNMTXIDX;
+
+        if (usesSkinning)
+            materialInstance.fillMaterialParams(template, materialInstanceState, shapeInstanceState.worldToViewMatrix, materialJointMatrix, camera, packetParams);
 
         for (let p = 0; p < shape.packets.length; p++) {
             const packet = shape.packets[p];
@@ -170,7 +175,7 @@ export class ShapeInstance {
                 if (matrixIndex === 0xFFFF)
                     continue;
 
-                const drw = shapeInstanceState.drawToViewMatrices[matrixIndex];
+                const drw = shapeInstanceState.drawViewMatrixArray[matrixIndex];
                 const dst = packetParams.u_PosMtx[i];
 
                 if (shape.displayFlags === ShapeDisplayFlags.BILLBOARD)
@@ -180,7 +185,7 @@ export class ShapeInstance {
                 else
                     mat4.copy(dst, drw);
 
-                if (shapeInstanceState.matrixVisibility[matrixIndex])
+                if (shapeInstanceState.drawViewMatrixVisibility[matrixIndex])
                     instVisible = true;
             }
 
@@ -190,8 +195,8 @@ export class ShapeInstance {
             const renderInst = this.shapeData.shapeHelpers[p].pushRenderInst(renderInstManager);
             this.shapeData.shapeHelpers[p].fillPacketParams(packetParams, renderInst);
 
-            if (shape.displayFlags === ShapeDisplayFlags.USE_PNMTXIDX)
-                materialInstance.fillMaterialParams(renderInst, materialInstanceState, shapeInstanceState.viewMatrix, materialJointMatrix, camera, packetParams);
+            if (usesSkinning)
+                materialInstance.fillMaterialParams(renderInst, materialInstanceState, shapeInstanceState.worldToViewMatrix, materialJointMatrix, camera, packetParams);
         }
 
         renderInstManager.popTemplateRenderInst();
@@ -992,15 +997,13 @@ export class BMDModelInstance {
         const bmd = this.bmdModel.bmd;
 
         const numJoints = bmd.jnt1.joints.length;
-        this.shapeInstanceState.jointToWorldMatrices = nArray(numJoints, () => mat4.create());
+        this.shapeInstanceState.jointToWorldMatrixArray = nArray(numJoints, () => mat4.create());
         this.jointVisibility = nArray(numJoints, () => true);
 
-        const numMatrices = bmd.drw1.matrixDefinitions.length;
-        this.shapeInstanceState.drawToViewMatrices = nArray(numMatrices, () => mat4.create());
-        this.shapeInstanceState.matrixVisibility = nArray(numMatrices, () => true);
-        const numShapes = bmd.shp1.shapes.length;
-        this.shapeInstanceState.shapeVisibility = nArray(numShapes, () => true);
-        this.shapeInstanceState.viewMatrix = scratchViewMatrix;
+        const drawViewMatrixCount = bmd.drw1.matrixDefinitions.length;
+        this.shapeInstanceState.drawViewMatrixArray = nArray(drawViewMatrixCount, () => mat4.create());
+        this.shapeInstanceState.drawViewMatrixVisibility = nArray(drawViewMatrixCount, () => true);
+        this.shapeInstanceState.worldToViewMatrix = scratchViewMatrix;
     }
 
     public destroy(device: GfxDevice): void {
@@ -1206,13 +1209,13 @@ export class BMDModelInstance {
         const joints = this.bmdModel.bmd.jnt1.joints;
         for (let i = 0; i < joints.length; i++)
             if (joints[i].name === jointName)
-                return this.shapeInstanceState.jointToWorldMatrices[i];
+                return this.shapeInstanceState.jointToWorldMatrixArray[i];
         throw "could not find joint";
     }
 
     private isAnyShapeVisible(): boolean {
-        for (let i = 0; i < this.shapeInstanceState.matrixVisibility.length; i++)
-            if (this.shapeInstanceState.matrixVisibility[i])
+        for (let i = 0; i < this.shapeInstanceState.drawViewMatrixVisibility.length; i++)
+            if (this.shapeInstanceState.drawViewMatrixVisibility[i])
                 return true;
         return false;
     }
@@ -1232,13 +1235,13 @@ export class BMDModelInstance {
         const disableCulling = this.isSkybox || this.bmdModel.hasBillboard;
 
         if (this.isSkybox)
-            computeViewMatrixSkybox(this.shapeInstanceState.viewMatrix, camera);
+            computeViewMatrixSkybox(this.shapeInstanceState.worldToViewMatrix, camera);
         else
-            computeViewMatrix(this.shapeInstanceState.viewMatrix, camera);
+            computeViewMatrix(this.shapeInstanceState.worldToViewMatrix, camera);
 
         const jnt1 = this.bmdModel.bmd.jnt1;
         for (let i = 0; i < this.bmdModel.bmd.jnt1.joints.length; i++) {
-            const jointToWorldMatrix = this.shapeInstanceState.jointToWorldMatrices[i];
+            const jointToWorldMatrix = this.shapeInstanceState.jointToWorldMatrixArray[i];
 
             // TODO(jstpierre): Use shape visibility if the bbox is empty (?).
             if (disableCulling || jnt1.joints[i].bbox.isEmpty()) {
@@ -1252,7 +1255,7 @@ export class BMDModelInstance {
             }
         }
 
-        this.calcDrawMatrixArray(this.shapeInstanceState.viewMatrix);
+        this.calcDrawMatrixArray(this.shapeInstanceState.worldToViewMatrix);
     }
 
     private computeDepth(camera: Camera): number {
@@ -1279,7 +1282,7 @@ export class BMDModelInstance {
         const template = renderHelper.renderInstManager.pushTemplateRenderInst();
         template.filterKey = this.passMask;
         for (let i = 0; i < this.shapeInstances.length; i++) {
-            const shapeVisibility = this.shapeInstanceState.shapeVisibility[i] && (this.vaf1Animator !== null ? this.vaf1Animator.calcVisibility(i) : true);
+            const shapeVisibility = (this.vaf1Animator !== null ? this.vaf1Animator.calcVisibility(i) : true);
             if (!shapeVisibility)
                 continue;
             this.shapeInstances[i].prepareToRender(device, renderHelper.renderInstManager, depth, viewerInput.camera, this.materialInstanceState, this.shapeInstanceState);
@@ -1294,7 +1297,7 @@ export class BMDModelInstance {
 
         const depth = this.computeDepth(camera);
         for (let i = 0; i < this.shapeInstances.length; i++) {
-            const shapeVisibility = this.shapeInstanceState.shapeVisibility[i] && (this.vaf1Animator !== null ? this.vaf1Animator.calcVisibility(i) : true);
+            const shapeVisibility = (this.vaf1Animator !== null ? this.vaf1Animator.calcVisibility(i) : true);
             if (!shapeVisibility)
                 continue;
             const materialIndex = this.shapeInstances[i].shapeData.shape.materialIndex;
@@ -1320,7 +1323,7 @@ export class BMDModelInstance {
             const jointToParentMatrix = matrixScratch2;
             calcJointMatrix(jointToParentMatrix, jointIndex, this.bmdModel.bmd, this.ank1Animator);
 
-            const dst = this.shapeInstanceState.jointToWorldMatrices[jointIndex];
+            const dst = this.shapeInstanceState.jointToWorldMatrixArray[jointIndex];
 
             if (joint.parentJointIndex < 0) {
                 // Special: construct model matrix.
@@ -1331,24 +1334,24 @@ export class BMDModelInstance {
                 mat4.mul(matrixScratch, this.modelMatrix, matrixScratch);
                 mat4.mul(dst, matrixScratch, jointToParentMatrix);
             } else {
-                const parentJointToWorldMatrix = this.shapeInstanceState.jointToWorldMatrices[joint.parentJointIndex];
+                const parentJointToWorldMatrix = this.shapeInstanceState.jointToWorldMatrixArray[joint.parentJointIndex];
                 mat4.mul(dst, parentJointToWorldMatrix, jointToParentMatrix);
             }
         }
     }
 
-    private calcDrawMatrixArray(viewMatrix: mat4): void {
+    private calcDrawMatrixArray(worldToViewMatrix: mat4): void {
         const drw1 = this.bmdModel.bmd.drw1;
         const evp1 = this.bmdModel.bmd.evp1;
 
         // Now update our matrix definition array.
         for (let i = 0; i < drw1.matrixDefinitions.length; i++) {
             const matrixDefinition = drw1.matrixDefinitions[i];
-            const dst = this.shapeInstanceState.drawToViewMatrices[i];
+            const dst = this.shapeInstanceState.drawViewMatrixArray[i];
             if (matrixDefinition.kind === DRW1MatrixKind.Joint) {
                 const matrixVisible = this.jointVisibility[matrixDefinition.jointIndex];
-                this.shapeInstanceState.matrixVisibility[i] = matrixVisible;
-                mat4.mul(dst, viewMatrix, this.shapeInstanceState.jointToWorldMatrices[matrixDefinition.jointIndex]);
+                this.shapeInstanceState.drawViewMatrixVisibility[i] = matrixVisible;
+                mat4.mul(dst, worldToViewMatrix, this.shapeInstanceState.jointToWorldMatrixArray[matrixDefinition.jointIndex]);
             } else if (matrixDefinition.kind === DRW1MatrixKind.Envelope) {
                 dst.fill(0);
                 const envelope = evp1.envelopes[matrixDefinition.envelopeIndex];
@@ -1362,16 +1365,16 @@ export class BMDModelInstance {
                     }
                 }
 
-                this.shapeInstanceState.matrixVisibility[i] = matrixVisible;
+                this.shapeInstanceState.drawViewMatrixVisibility[i] = matrixVisible;
 
                 for (let i = 0; i < envelope.weightedBones.length; i++) {
                     const weightedBone = envelope.weightedBones[i];
                     const inverseBindPose = evp1.inverseBinds[weightedBone.jointIndex];
-                    mat4.mul(matrixScratch, this.shapeInstanceState.jointToWorldMatrices[weightedBone.jointIndex], inverseBindPose);
+                    mat4.mul(matrixScratch, this.shapeInstanceState.jointToWorldMatrixArray[weightedBone.jointIndex], inverseBindPose);
                     mat4.multiplyScalarAndAdd(dst, dst, matrixScratch, weightedBone.weight);
                 }
 
-                mat4.mul(dst, viewMatrix, dst);
+                mat4.mul(dst, worldToViewMatrix, dst);
             }
         }
     }

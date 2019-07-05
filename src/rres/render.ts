@@ -20,11 +20,19 @@ import { computeNormalMatrix, texProjPerspMtx, texEnvMtx } from '../MathHelpers'
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { GfxRenderInst, GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
 import { arrayCopy } from '../gfx/platform/GfxPlatformUtil';
+import { LoadedVertexPacket } from '../gx/gx_displaylist';
 
 export class RRESTextureHolder extends GXTextureHolder<BRRES.TEX0> {
     public addRRESTextures(device: GfxDevice, rres: BRRES.RRES): void {
         this.addTextures(device, rres.tex0);
     }
+}
+
+class InstanceStateData {
+    public jointToWorldMatrixVisibility: IntersectionState[] = [];
+    public jointToWorldMatrixArray: mat4[] = [];
+    public drawViewMatrixArray: mat4[] = [];
+    public lightSetting: BRRES.LightSetting | null = null;
 }
 
 export class MDL0Model {
@@ -63,17 +71,7 @@ class ShapeInstance {
     constructor(public shape: BRRES.MDL0_ShapeEntry, public shapeData: GXShapeHelperGfx, public sortVizNode: BRRES.MDL0_NodeEntry, public materialInstance: MaterialInstance) {
     }
 
-    private computeModelView(dst: mat4, modelMatrix: mat4, camera: Camera, isSkybox: boolean): void {
-        if (isSkybox) {
-            computeViewMatrixSkybox(dst, camera);
-        } else {
-            computeViewMatrix(dst, camera);
-        }
-
-        mat4.mul(dst, dst, modelMatrix);
-    }
-
-    public prepareToRender(device: GfxDevice, textureHolder: GXTextureHolder, renderInstManager: GfxRenderInstManager, depth: number, camera: Camera, modelMatrix: mat4, instanceStateData: InstanceStateData, isSkybox: boolean): void {
+    public prepareToRender(device: GfxDevice, textureHolder: GXTextureHolder, renderInstManager: GfxRenderInstManager, depth: number, camera: Camera, modelMatrix: mat4, instanceStateData: InstanceStateData, isSkybox: boolean, usesSkinning: boolean): void {
         const materialInstance = this.materialInstance;
 
         const template = renderInstManager.pushTemplateRenderInst();
@@ -83,8 +81,8 @@ class ShapeInstance {
 
         materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
 
-        template.allocateUniformBuffer(ub_MaterialParams, materialInstance.materialHelper.materialParamsBufferSize);
-        materialInstance.fillMaterialParams(template, textureHolder, instanceStateData, modelMatrix, camera);
+        if (!usesSkinning)
+            materialInstance.fillMaterialParams(template, textureHolder, instanceStateData, modelMatrix, null, camera);
 
         packetParams.clear();
         for (let p = 0; p < this.shape.loadedVertexData.packets.length; p++) {
@@ -93,20 +91,20 @@ class ShapeInstance {
             let instVisible = false;
             if (this.shape.mtxIdx < 0) {
                 for (let j = 0; j < packet.posNrmMatrixTable.length; j++) {
-                    const mtxIdx = packet.posNrmMatrixTable[j];
+                    const posNrmMatrixIdx = packet.posNrmMatrixTable[j];
 
                     // Leave existing matrix.
-                    if (mtxIdx === 0xFFFF)
+                    if (posNrmMatrixIdx === 0xFFFF)
                         continue;
 
-                    this.computeModelView(packetParams.u_PosMtx[j], instanceStateData.matrixArray[mtxIdx], camera, isSkybox);
+                    mat4.copy(packetParams.u_PosMtx[j], instanceStateData.drawViewMatrixArray[posNrmMatrixIdx]);
 
-                    if (instanceStateData.matrixVisibility[j] !== IntersectionState.FULLY_OUTSIDE)
+                    if (instanceStateData.jointToWorldMatrixVisibility[j] !== IntersectionState.FULLY_OUTSIDE)
                         instVisible = true;
                 }
             } else {
                 instVisible = true;
-                this.computeModelView(packetParams.u_PosMtx[0], instanceStateData.matrixArray[this.shape.mtxIdx], camera, isSkybox);
+                mat4.copy(packetParams.u_PosMtx[0], instanceStateData.drawViewMatrixArray[this.shape.mtxIdx]);
             }
 
             if (!instVisible)
@@ -114,6 +112,9 @@ class ShapeInstance {
 
             const renderInst = this.shapeData.pushRenderInst(renderInstManager, packet);
             this.shapeData.fillPacketParams(packetParams, renderInst);
+
+            if (usesSkinning)
+                materialInstance.fillMaterialParams(renderInst, textureHolder, instanceStateData, modelMatrix, packet, camera);
         }
 
         renderInstManager.popTemplateRenderInst();
@@ -151,10 +152,21 @@ class MaterialInstance {
         // Create a copy of the GX material, so we can patch in custom channel controls without affecting the original.
         const gxMaterial: GX_Material.GXMaterial = Object.assign({}, materialData.material.gxMaterial);
         gxMaterial.lightChannels = arrayCopy(gxMaterial.lightChannels, lightChannelCopy);
+        gxMaterial.useTexMtxIdx = nArray(8, () => false);
 
         this.materialHelper = new GXMaterialHelperGfx(gxMaterial, materialData.materialHacks);
         const layer = this.materialData.material.translucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.setSortKeyLayer(layer);
+    }
+
+    public setSkinningEnabled(v: boolean): void {
+        for (let i = 0; i < this.materialData.material.texSrts.length; i++) {
+            const mapMode = this.materialData.material.texSrts[i].mapMode;
+            if (mapMode === BRRES.MapMode.ENV_CAMERA || mapMode === BRRES.MapMode.ENV_SPEC || mapMode === BRRES.MapMode.ENV_LIGHT)
+                this.materialHelper.material.useTexMtxIdx[i] = v;
+        }
+
+        this.materialHelper.createProgram();
     }
 
     public setSortKeyLayer(layer: GfxRendererLayer): void {
@@ -228,12 +240,11 @@ class MaterialInstance {
         }
     }
 
-    private calcTexMatrix(materialParams: MaterialParams, texIdx: number, modelMatrix: mat4, camera: Camera): void {
+    private calcTexMatrix(materialParams: MaterialParams, texIdx: number, camera: Camera): void {
         const material = this.materialData.material;
         const texSrt = material.texSrts[texIdx];
         const flipY = materialParams.m_TextureMapping[texIdx].flipY;
         const flipYScale = flipY ? -1.0 : 1.0;
-        const dstPre = materialParams.u_TexMtx[texIdx];
         const dstPost = materialParams.u_PostTexMtx[texIdx];
 
         // Fast path.
@@ -260,10 +271,6 @@ class MaterialInstance {
 
             // Apply effect matrix.
             mat4.mul(dstPost, texSrt.effectMtx, dstPost);
-
-            // Fill in the dstPre with our normal matrix.
-            mat4.mul(dstPre, camera.viewMatrix, modelMatrix);
-            computeNormalMatrix(dstPre, dstPre);
         } else {
             mat4.identity(dstPost);
         }
@@ -294,7 +301,7 @@ class MaterialInstance {
         }
     }
 
-    private fillMaterialParamsData(materialParams: MaterialParams, textureHolder: GXTextureHolder, instanceStateData: InstanceStateData, modelMatrix: mat4, camera: Camera): void {
+    private fillMaterialParamsData(materialParams: MaterialParams, textureHolder: GXTextureHolder, instanceStateData: InstanceStateData, modelMatrix: mat4, packet: LoadedVertexPacket | null = null, camera: Camera): void {
         const material = this.materialData.material;
 
         for (let i = 0; i < 8; i++) {
@@ -311,8 +318,22 @@ class MaterialInstance {
             m.lodBias = sampler.lodBias;
         }
 
+        // Fill in our environment mapped texture matrices.
+        for (let i = 0; i < 10; i++) {
+            let texEnvMtx: mat4;
+            if (packet !== null && packet.texMatrixTable[i] !== 0xFFFF) {
+                const texMtxIdx = packet.texMatrixTable[i];
+                texEnvMtx = instanceStateData.drawViewMatrixArray[texMtxIdx];
+            } else {
+                texEnvMtx = matrixScratch;
+                mat4.mul(texEnvMtx, camera.viewMatrix, modelMatrix);
+            }
+
+            computeNormalMatrix(materialParams.u_TexMtx[i], texEnvMtx);
+        }
+
         for (let i = 0; i < 8; i++)
-            this.calcTexMatrix(materialParams, i, modelMatrix, camera);
+            this.calcTexMatrix(materialParams, i, camera);
         for (let i = 0; i < 3; i++)
             this.calcIndTexMatrix(materialParams.u_IndTexMtx[i], i);
 
@@ -359,8 +380,8 @@ class MaterialInstance {
         this.materialHelper.setOnRenderInst(device, cache, renderInst);
     }
 
-    public fillMaterialParams(renderInst: GfxRenderInst, textureHolder: GXTextureHolder, instanceStateData: InstanceStateData, modelMatrix: mat4, camera: Camera): void {
-        this.fillMaterialParamsData(materialParams, textureHolder, instanceStateData, modelMatrix, camera);
+    public fillMaterialParams(renderInst: GfxRenderInst, textureHolder: GXTextureHolder, instanceStateData: InstanceStateData, modelMatrix: mat4, packet: LoadedVertexPacket | null, camera: Camera): void {
+        this.fillMaterialParamsData(materialParams, textureHolder, instanceStateData, modelMatrix, packet, camera);
 
         let offs = renderInst.allocateUniformBuffer(ub_MaterialParams, this.materialHelper.materialParamsBufferSize);
         const d = renderInst.mapUniformBufferF32(ub_MaterialParams);
@@ -372,12 +393,6 @@ class MaterialInstance {
     public destroy(device: GfxDevice): void {
         this.materialHelper.destroy(device);
     }
-}
-
-class InstanceStateData {
-    public matrixVisibility: IntersectionState[] = [];
-    public matrixArray: mat4[] = [];
-    public lightSetting: BRRES.LightSetting | null = null;
 }
 
 const matrixScratchArray = nArray(1, () => mat4.create());
@@ -405,8 +420,9 @@ export class MDL0ModelInstance {
     constructor(public textureHolder: GXTextureHolder, public mdl0Model: MDL0Model, public namePrefix: string = '') {
         this.name = `${namePrefix}/${mdl0Model.mdl0.name}`;
 
-        this.instanceStateData.matrixArray = nArray(mdl0Model.mdl0.numWorldMtx, () => mat4.create());
-        while (matrixScratchArray.length < this.instanceStateData.matrixArray.length)
+        this.instanceStateData.jointToWorldMatrixArray = nArray(mdl0Model.mdl0.numWorldMtx, () => mat4.create());
+        this.instanceStateData.drawViewMatrixArray = nArray(mdl0Model.mdl0.numViewMtx, () => mat4.create());
+        while (matrixScratchArray.length < this.instanceStateData.jointToWorldMatrixArray.length)
             matrixScratchArray.push(mat4.create());
 
         for (let i = 0; i < this.mdl0Model.materialData.length; i++)
@@ -503,10 +519,23 @@ export class MDL0ModelInstance {
     }
 
     private isAnyShapeVisible(): boolean {
-        for (let i = 0; i < this.instanceStateData.matrixVisibility.length; i++)
-            if (this.instanceStateData.matrixVisibility[i] !== IntersectionState.FULLY_OUTSIDE)
+        for (let i = 0; i < this.instanceStateData.jointToWorldMatrixVisibility.length; i++)
+            if (this.instanceStateData.jointToWorldMatrixVisibility[i] !== IntersectionState.FULLY_OUTSIDE)
                 return true;
         return false;
+    }
+
+    private calcView(camera: Camera): void {
+        if (this.isSkybox)
+            computeViewMatrixSkybox(matrixScratch, camera);
+        else
+            computeViewMatrix(matrixScratch, camera);
+
+        const numViewMtx = this.mdl0Model.mdl0.numViewMtx;
+        for (let i = 0; i < numViewMtx; i++) {
+            mat4.mul(this.instanceStateData.drawViewMatrixArray[i], matrixScratch, this.instanceStateData.jointToWorldMatrixArray[i]);
+            // TOOD(jstpierre): Billboards
+        }
     }
 
     public prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput): void {
@@ -530,7 +559,7 @@ export class MDL0ModelInstance {
             if (this.debugBones)
                 prepareFrameDebugOverlayCanvas2D();
 
-            this.execNodeTreeOpList(mdl0.sceneGraph.nodeTreeOps, viewerInput, modelVisibility);
+            this.execNodeTreeOpList(mdl0.sceneGraph.nodeTreeOps, viewerInput.camera, modelVisibility);
             this.execNodeMixOpList(mdl0.sceneGraph.nodeMixOps);
 
             if (!this.isAnyShapeVisible())
@@ -551,6 +580,8 @@ export class MDL0ModelInstance {
         if (depth < 0)
             return;
 
+        this.calcView(viewerInput.camera);
+
         const template = renderInstManager.pushTemplateRenderInst();
         template.filterKey = this.passMask;
         for (let i = 0; i < this.shapeInstances.length; i++) {
@@ -558,7 +589,7 @@ export class MDL0ModelInstance {
             const shapeVisibility = (this.vis0NodeAnimator !== null ? this.vis0NodeAnimator.calcVisibility(shapeInstance.sortVizNode.id) : shapeInstance.sortVizNode.visible);
             if (!shapeVisibility)
                 continue;
-            shapeInstance.prepareToRender(device, this.textureHolder, renderInstManager, depth, camera, this.modelMatrix, this.instanceStateData, this.isSkybox);
+            shapeInstance.prepareToRender(device, this.textureHolder, renderInstManager, depth, camera, this.modelMatrix, this.instanceStateData, this.isSkybox, this.mdl0Model.mdl0.needTexMtxArray);
         }
         renderInstManager.popTemplateRenderInst();
     }
@@ -583,15 +614,18 @@ export class MDL0ModelInstance {
             if (translucent)
                 shapeInstance.sortKeyBias = i;
 
+            const usesSkinning = shape.mtxIdx < 0;
+            materialInstance.setSkinningEnabled(usesSkinning);
+
             this.shapeInstances.push(shapeInstance);
         }
     }
 
-    private execNodeTreeOpList(opList: BRRES.NodeTreeOp[], viewerInput: ViewerRenderInput, rootVisibility: IntersectionState): void {
+    private execNodeTreeOpList(opList: BRRES.NodeTreeOp[], camera: Camera, rootVisibility: IntersectionState): void {
         const mdl0 = this.mdl0Model.mdl0;
 
-        mat4.copy(this.instanceStateData.matrixArray[0], this.modelMatrix);
-        this.instanceStateData.matrixVisibility[0] = rootVisibility;
+        mat4.copy(this.instanceStateData.jointToWorldMatrixArray[0], this.modelMatrix);
+        this.instanceStateData.jointToWorldMatrixVisibility[0] = rootVisibility;
 
         for (let i = 0; i < opList.length; i++) {
             const op = opList[i];
@@ -607,34 +641,34 @@ export class MDL0ModelInstance {
                 } else {
                     modelMatrix = node.modelMatrix;
                 }
-                mat4.mul(this.instanceStateData.matrixArray[dstMtxId], this.instanceStateData.matrixArray[parentMtxId], modelMatrix);
+                mat4.mul(this.instanceStateData.jointToWorldMatrixArray[dstMtxId], this.instanceStateData.jointToWorldMatrixArray[parentMtxId], modelMatrix);
 
                 if (rootVisibility !== IntersectionState.FULLY_OUTSIDE) {
                     if (rootVisibility === IntersectionState.FULLY_INSIDE || node.bbox === null) {
-                        this.instanceStateData.matrixVisibility[dstMtxId] = IntersectionState.FULLY_INSIDE;
+                        this.instanceStateData.jointToWorldMatrixVisibility[dstMtxId] = IntersectionState.FULLY_INSIDE;
                     } else {
-                        bboxScratch.transform(node.bbox, this.instanceStateData.matrixArray[dstMtxId]);
-                        this.instanceStateData.matrixVisibility[dstMtxId] = viewerInput.camera.frustum.intersect(bboxScratch);
+                        bboxScratch.transform(node.bbox, this.instanceStateData.jointToWorldMatrixArray[dstMtxId]);
+                        this.instanceStateData.jointToWorldMatrixVisibility[dstMtxId] = camera.frustum.intersect(bboxScratch);
                     }
                 } else {
-                    this.instanceStateData.matrixVisibility[dstMtxId] = IntersectionState.FULLY_OUTSIDE;
+                    this.instanceStateData.jointToWorldMatrixVisibility[dstMtxId] = IntersectionState.FULLY_OUTSIDE;
                 }
 
                 if (this.debugBones) {
                     const ctx = getDebugOverlayCanvas2D();
 
                     vec3.set(scratchVec3a, 0, 0, 0);
-                    vec3.transformMat4(scratchVec3a, scratchVec3a, this.instanceStateData.matrixArray[parentMtxId]);
+                    vec3.transformMat4(scratchVec3a, scratchVec3a, this.instanceStateData.jointToWorldMatrixArray[parentMtxId]);
                     vec3.set(scratchVec3b, 0, 0, 0);
-                    vec3.transformMat4(scratchVec3b, scratchVec3b, this.instanceStateData.matrixArray[dstMtxId]);
+                    vec3.transformMat4(scratchVec3b, scratchVec3b, this.instanceStateData.jointToWorldMatrixArray[dstMtxId]);
 
-                    drawWorldSpaceLine(ctx, viewerInput.camera, scratchVec3a, scratchVec3b);
+                    drawWorldSpaceLine(ctx, camera, scratchVec3a, scratchVec3b);
                 }
             } else if (op.op === BRRES.ByteCodeOp.MTXDUP) {
                 const srcMtxId = op.fromMtxId;
                 const dstMtxId = op.toMtxId;
-                mat4.copy(this.instanceStateData.matrixArray[dstMtxId], this.instanceStateData.matrixArray[srcMtxId]);
-                this.instanceStateData.matrixVisibility[dstMtxId] = this.instanceStateData.matrixVisibility[srcMtxId];
+                mat4.copy(this.instanceStateData.jointToWorldMatrixArray[dstMtxId], this.instanceStateData.jointToWorldMatrixArray[srcMtxId]);
+                this.instanceStateData.jointToWorldMatrixVisibility[dstMtxId] = this.instanceStateData.jointToWorldMatrixVisibility[srcMtxId];
             }
         }
     }
@@ -644,14 +678,14 @@ export class MDL0ModelInstance {
             const op = opList[i];
 
             if (op.op === BRRES.ByteCodeOp.NODEMIX) {
-                const dst = this.instanceStateData.matrixArray[op.dstMtxId];
+                const dst = this.instanceStateData.jointToWorldMatrixArray[op.dstMtxId];
                 dst.fill(0);
 
                 for (let j = 0; j < op.blendMtxIds.length; j++)
                     mat4.multiplyScalarAndAdd(dst, dst, matrixScratchArray[op.blendMtxIds[j]], op.weights[j]);
             } else if (op.op === BRRES.ByteCodeOp.EVPMTX) {
                 const node = this.mdl0Model.mdl0.nodes[op.nodeId];
-                mat4.mul(matrixScratchArray[op.mtxId], this.instanceStateData.matrixArray[op.mtxId], node.inverseBindPose);
+                mat4.mul(matrixScratchArray[op.mtxId], this.instanceStateData.jointToWorldMatrixArray[op.mtxId], node.inverseBindPose);
             }
         }
     }

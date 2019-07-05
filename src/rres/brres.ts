@@ -884,11 +884,12 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
             // No matrix needed.
             break;
         case MapMode.PROJECTION:
-            // Use the PNMTX0 matrix for projection and environment.
+            // Use the PNMTX0 matrix for projection.
             gxMaterial.texGens[i].matrix = GX.TexGenMatrix.PNMTX0;
             break;
         case MapMode.ENV_CAMERA:
         case MapMode.ENV_LIGHT:
+            // Environment maps need a texture matrix.
             gxMaterial.texGens[i].matrix = GX.TexGenMatrix.TEXMTX0 + i*3;
             break;
         }
@@ -1432,6 +1433,8 @@ export interface MDL0 {
     sceneGraph: MDL0_SceneGraph;
     numWorldMtx: number;
     numViewMtx: number;
+    needNrmMtxArray: boolean;
+    needTexMtxArray: boolean;
 }
 
 function parseMDL0(buffer: ArrayBufferSlice): MDL0 {
@@ -1480,8 +1483,9 @@ function parseMDL0(buffer: ArrayBufferSlice): MDL0 {
     const numPolygons = view.getUint32(infoOffs + 0x14);
 
     const numViewMtx = view.getUint32(infoOffs + 0x1C);
-
-    const isValidBBox = view.getUint8(infoOffs + 0x22);
+    const needNrmMtxArray = !!view.getUint8(infoOffs + 0x20);
+    const needTexMtxArray = !!view.getUint8(infoOffs + 0x20);
+    const isValidBBox = !!view.getUint8(infoOffs + 0x22);
 
     const mtxIdToNodeIdOffs = infoOffs + view.getUint32(infoOffs + 0x24);
     const numWorldMtx = view.getUint32(mtxIdToNodeIdOffs + 0x00);
@@ -1524,7 +1528,7 @@ function parseMDL0(buffer: ArrayBufferSlice): MDL0 {
 
     const sceneGraph = parseMDL0_SceneGraph(buffer, byteCodeResDic);
 
-    return { name, bbox, materials, shapes, nodes, sceneGraph, numWorldMtx, numViewMtx };
+    return { name, bbox, materials, shapes, nodes, sceneGraph, numWorldMtx, numViewMtx, needNrmMtxArray, needTexMtxArray };
 }
 //#endregion
 //#region Animation Core

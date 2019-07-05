@@ -91,6 +91,7 @@ export interface LoadedVertexPacket {
     indexOffset: number;
     indexCount: number;
     posNrmMatrixTable: number[];
+    texMatrixTable: number[];
 }
 
 export interface LoadedVertexData {
@@ -333,7 +334,7 @@ function getAttrName(vtxAttrib: GX.VertexAttribute): string {
 }
 
 function getAttributeBaseFormat(vtxAttrib: GX.VertexAttribute): GfxFormat {
-    if (vtxAttrib === GX.VertexAttribute.PNMTXIDX)
+    if (isVtxAttribMtxIdx(vtxAttrib))
         return GfxFormat.U8_R;
 
     // To save on space, we put color data in U8.
@@ -406,15 +407,12 @@ function translateVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): Verte
 
         // TEXnMTXIDX are packed specially because of GL limitations.
         if (isVtxAttribTexMtxIdx(vtxAttrib)) {
-            const layoutIdx = (vtxAttrib < GX.VertexAttribute.TEX4) ? 0 : 1;
+            const layoutIdx = (vtxAttrib < GX.VertexAttribute.TEX4MTXIDX) ? 0 : 1;
             fieldByteOffset = (vtxAttrib - 1) & 0x03;
 
-            if (texMtxIdxLayout[layoutIdx] === null) {
-                // Allocate a 4-wide field...
-                baseFormat = GfxFormat.U8_RGBA;
-            } else {
+            if (texMtxIdxLayout[layoutIdx] !== null) {
                 // Don't allocate a field in the packed data if we already have one...
-                fieldBase = texMtxIdxLayout[layoutIdx].bufferOffset & ~0x03;
+                fieldBase = texMtxIdxLayout[layoutIdx].bufferOffset;
             }
         }
 
@@ -431,6 +429,9 @@ function translateVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): Verte
         if (isVtxAttribColor(vtxAttrib))
             formatCompFlags = FormatCompFlags.COMP_RGBA;
 
+        if (isVtxAttribTexMtxIdx(vtxAttrib))
+            formatCompFlags = FormatCompFlags.COMP_RGBA;
+
         // Allocate a field if we need to...
         if (fieldBase === -1) {
             dstVertexSize = align(dstVertexSize, formatComponentSize);
@@ -441,7 +442,23 @@ function translateVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): Verte
         const bufferOffset = fieldBase + fieldByteOffset;
 
         const format = makeFormat(formatTypeFlags, formatCompFlags, getFormatFlags(baseFormat));
-        dstVertexAttributeLayouts.push({ vtxAttrib, bufferIndex, bufferOffset, format });
+        const vtxAttribLayout = { vtxAttrib, bufferIndex, bufferOffset, format };
+        dstVertexAttributeLayouts.push(vtxAttribLayout);
+
+        if (isVtxAttribTexMtxIdx(vtxAttrib)) {
+            const layoutIdx = (vtxAttrib < GX.VertexAttribute.TEX4MTXIDX) ? 0 : 1;
+
+            if (texMtxIdxLayout[layoutIdx] === null) {
+                const baseVtxAttrib = (vtxAttrib < GX.VertexAttribute.TEX4MTXIDX) ? GX.VertexAttribute.TEX0MTXIDX : GX.VertexAttribute.TEX4MTXIDX;
+                if (vtxAttrib === baseVtxAttrib) {
+                    texMtxIdxLayout[layoutIdx] = vtxAttribLayout
+                } else {
+                    const baseAttribLayout = { vtxAttrib: baseVtxAttrib, bufferIndex, bufferOffset: fieldBase, format };
+                    dstVertexAttributeLayouts.push(baseAttribLayout);
+                    texMtxIdxLayout[layoutIdx] = baseAttribLayout;
+                }
+            }
+        }
     }
 
     // Align the whole thing to our minimum required alignment (F32).
@@ -773,7 +790,7 @@ let currentPacketDraw = null;
 let currentPacketXfmem = null;
 
 function newPacket(indexOffset) {
-    return { indexOffset: indexOffset, indexCount: 0, posNrmMatrixTable: Array(10).fill(0xFFFF) };
+    return { indexOffset: indexOffset, indexCount: 0, posNrmMatrixTable: Array(10).fill(0xFFFF), texMatrixTable: Array(10).fill(0xFFFF) };
 }
 
 while (true) {
@@ -783,12 +800,14 @@ while (true) {
     if (cmd === 0)
         break;
 
+    // TODO(jstpierre): This hardcodes some assumptions about the arrays and indexed units.
     switch (cmd) {
     case ${GX.Command.LOAD_INDX_A}: { // Position Matrices
         currentPacketDraw = null;
         if (currentPacketXfmem === null)
             currentPacketXfmem = newPacket(totalIndexCount);
-        // PosMtx memory address space starts at 0x0000 and goes until 0x0400, each element being 3*4 in size.
+        // PosMtx memory address space starts at 0x0000 and goes until 0x0400 (including TexMtx),
+        // each element being 3*4 in size.
         const memoryElemSize = 3*4;
         const memoryBaseAddr = 0x0000;
         const table = currentPacketXfmem.posNrmMatrixTable;
@@ -808,8 +827,33 @@ while (true) {
 
         continue;
     }
+    case ${GX.Command.LOAD_INDX_C}: { // Texture Matrices
+        currentPacketDraw = null;
+        if (currentPacketXfmem === null)
+            currentPacketXfmem = newPacket(totalIndexCount);
+        // TexMtx memory address space is the same as PosMtx memory address space, but by convention
+        // uses the upper 10 matrices. We enforce this convention.
+        // Elements should be 3*4 in size. GD has ways to break this but BRRES should not generate this.
+        const memoryElemSize = 3*4;
+        const memoryBaseAddr = 0x0078;
+        const table = currentPacketXfmem.texMatrixTable;
+
+        const arrayIndex = dlView.getUint16(drawCallIdx + 0x01);
+        const addrLen = dlView.getUint16(drawCallIdx + 0x03);
+        const len = (addrLen >>> 12) + 1;
+        const addr = addrLen & 0x0FFF;
+        const tableIndex = ((addr - memoryBaseAddr) / memoryElemSize) | 0;
+
+        // For now -- it's technically valid but I'm not sure if BRRES uses it.
+        if (len !== memoryElemSize)
+            throw Error();
+
+        table[tableIndex] = arrayIndex;
+        drawCallIdx += 0x05;
+
+        continue;
+    }
     case ${GX.Command.LOAD_INDX_B}: // Normal Matrices
-    case ${GX.Command.LOAD_INDX_C}: // Texture Matrices
     case ${GX.Command.LOAD_INDX_D}: // Light Objects
         // TODO(jstpierre): Load these arrays as well.
         drawCallIdx += 0x05;
@@ -1015,7 +1059,8 @@ export function coalesceLoadedDatas(loadedVertexLayout: LoadedVertexLayout, load
             const indexOffset = totalIndexCount + packet.indexOffset;
             const indexCount = packet.indexCount;
             const posNrmMatrixTable = packet.posNrmMatrixTable;
-            packets.push({ indexOffset, indexCount, posNrmMatrixTable });
+            const texMatrixTable = packet.texMatrixTable;
+            packets.push({ indexOffset, indexCount, posNrmMatrixTable, texMatrixTable });
         }
 
         totalIndexCount += loadedData.totalIndexCount;
