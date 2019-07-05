@@ -173,23 +173,6 @@ export function texEnvMtx(dst: mat4, scaleS: number, scaleT: number, transS: num
     dst[15] = 9999.0;
 }
 
-function computeModelViewMatrixSR(dst: mat4, scaleX: number, scaleY: number, scaleZ: number, rxx: number, rxy: number, rxz: number, ryx: number, ryy: number, ryz: number, rzx: number, rzy: number, rzz: number): void {
-    dst[0] =  scaleX * rxx;
-    dst[1] =  scaleX * rxy;
-    dst[2] =  scaleX * rxz;
-    dst[3] =  0.0;
-
-    dst[4] =  scaleY * ryx;
-    dst[5] =  scaleY * ryy;
-    dst[6] =  scaleY * ryz;
-    dst[7] =  0.0;
-
-    dst[8] =  scaleZ * rzx;
-    dst[9] =  scaleZ * rzy;
-    dst[10] = scaleZ * rzz;
-    dst[11] = 0.0;
-}
-
 export function computeMatrixWithoutRotation(dst: mat4, m: mat4, v: vec3 = scratchVec3): void {
     const tx = m[12], ty = m[13], tz = m[14];
     mat4.getScaling(v, dst);

@@ -1150,13 +1150,14 @@ function parseMDL0_ShapeEntry(buffer: ArrayBufferSlice, inputBuffers: InputVerte
     return { name, mtxIdx, loadedVertexLayout, loadedVertexData };
 }
 
-const enum NodeFlags {
-    SRT_IDENTITY = 0x00000001,
-    TRANS_ZERO   = 0x00000002,
-    ROT_ZERO     = 0x00000004,
-    SCALE_ONE    = 0x00000008,
-    SCALE_HOMO   = 0x00000010,
-    VISIBLE      = 0x00000100,
+export const enum NodeFlags {
+    SRT_IDENTITY      = 0x00000001,
+    TRANS_ZERO        = 0x00000002,
+    ROT_ZERO          = 0x00000004,
+    SCALE_ONE         = 0x00000008,
+    SCALE_HOMO        = 0x00000010,
+    VISIBLE           = 0x00000100,
+    REFER_BB_ANCESTOR = 0x00000400,
 }
 
 export const enum BillboardMode {
@@ -1175,14 +1176,16 @@ export interface MDL0_NodeEntry {
     mtxId: number;
     flags: NodeFlags;
     billboardMode: BillboardMode;
+    billboardRefNodeId: number;
     modelMatrix: mat4;
     bbox: AABB;
     visible: boolean;
+    parentNodeId: number;
     forwardBindPose: mat4;
     inverseBindPose: mat4;
 }
 
-function parseMDL0_NodeEntry(buffer: ArrayBufferSlice): MDL0_NodeEntry {
+function parseMDL0_NodeEntry(buffer: ArrayBufferSlice, entryOffs: number, baseOffs: number): MDL0_NodeEntry {
     const view = buffer.createDataView();
     const nameOffs = view.getUint32(0x08);
     const name = readString(buffer, nameOffs);
@@ -1191,7 +1194,7 @@ function parseMDL0_NodeEntry(buffer: ArrayBufferSlice): MDL0_NodeEntry {
     const mtxId = view.getUint32(0x10);
     const flags: NodeFlags = view.getUint32(0x14);
     const billboardMode: BillboardMode = view.getUint32(0x18);
-    const bbrefNodeId = view.getUint32(0x1C);
+    const billboardRefNodeId = view.getUint32(0x1C);
 
     const scaleX = view.getFloat32(0x20);
     const scaleY = view.getFloat32(0x24);
@@ -1202,6 +1205,9 @@ function parseMDL0_NodeEntry(buffer: ArrayBufferSlice): MDL0_NodeEntry {
     const translationX = view.getFloat32(0x38);
     const translationY = view.getFloat32(0x3C);
     const translationZ = view.getFloat32(0x40);
+
+    const modelMatrix = mat4.create();
+    computeModelMatrixSRT(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
 
     // TODO(jstpierre): NW4R doesn't appear to use this anymore?
     const bboxMinX = view.getFloat32(0x44);
@@ -1215,8 +1221,23 @@ function parseMDL0_NodeEntry(buffer: ArrayBufferSlice): MDL0_NodeEntry {
     if ((bboxMaxX - bboxMinX) > 0)
         bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
 
-    const modelMatrix = mat4.create();
-    computeModelMatrixSRT(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+    const toParentNode = view.getInt32(0x5C);
+    const toChildNode = view.getInt32(0x60);
+    const toNextSibling = view.getInt32(0x64);
+    const toPrevSibling = view.getInt32(0x68);
+    const toResUserData = view.getInt32(0x6C);
+
+    let parentNodeId: number = -1;
+    if (toParentNode !== 0) {
+        // The root node should not have a parent.
+        assert(id > 0);
+
+        // The to*Node offsets are relative offsets from the start of this ResNode, in bytes.
+        // Since the nodes are tightly packed, we can find the proper index from the start of the
+        // node array. Nodes are 0xD0 in size, so the index is just this.
+
+        parentNodeId = ((entryOffs + toParentNode) - baseOffs) / 0xD0;
+    }
 
     const forwardBindPose00 = view.getFloat32(0x70);
     const forwardBindPose01 = view.getFloat32(0x74);
@@ -1258,7 +1279,7 @@ function parseMDL0_NodeEntry(buffer: ArrayBufferSlice): MDL0_NodeEntry {
 
     const visible = !!(flags & NodeFlags.VISIBLE);
 
-    return { name, id, mtxId, flags, billboardMode, modelMatrix, bbox, visible, forwardBindPose, inverseBindPose };
+    return { name, id, mtxId, flags, billboardMode, billboardRefNodeId, modelMatrix, bbox, visible, parentNodeId, forwardBindPose, inverseBindPose };
 }
 
 export const enum ByteCodeOp {
@@ -1435,6 +1456,7 @@ export interface MDL0 {
     numViewMtx: number;
     needNrmMtxArray: boolean;
     needTexMtxArray: boolean;
+    mtxIdToNodeId: Int32Array;
 }
 
 function parseMDL0(buffer: ArrayBufferSlice): MDL0 {
@@ -1489,6 +1511,7 @@ function parseMDL0(buffer: ArrayBufferSlice): MDL0 {
 
     const mtxIdToNodeIdOffs = infoOffs + view.getUint32(infoOffs + 0x24);
     const numWorldMtx = view.getUint32(mtxIdToNodeIdOffs + 0x00);
+    const mtxIdToNodeId = buffer.createTypedArray(Int32Array, mtxIdToNodeIdOffs + 0x04, numWorldMtx, Endianness.BIG_ENDIAN);
 
     // TODO(jstpierre): Skyward Sword doesn't use this.
     let bbox: AABB | null = null;
@@ -1521,14 +1544,14 @@ function parseMDL0(buffer: ArrayBufferSlice): MDL0 {
 
     const nodes: MDL0_NodeEntry[] = [];
     for (const nodeResDicEntry of nodeResDic) {
-        const node = parseMDL0_NodeEntry(buffer.subarray(nodeResDicEntry.offs));
+        const node = parseMDL0_NodeEntry(buffer.subarray(nodeResDicEntry.offs), nodeResDicEntry.offs, nodeResDic[0].offs);
         assert(node.name === nodeResDicEntry.name);
         nodes.push(node);
     }
 
     const sceneGraph = parseMDL0_SceneGraph(buffer, byteCodeResDic);
 
-    return { name, bbox, materials, shapes, nodes, sceneGraph, numWorldMtx, numViewMtx, needNrmMtxArray, needTexMtxArray };
+    return { name, bbox, materials, shapes, nodes, sceneGraph, numWorldMtx, numViewMtx, needNrmMtxArray, needTexMtxArray, mtxIdToNodeId };
 }
 //#endregion
 //#region Animation Core
