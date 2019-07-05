@@ -13,7 +13,7 @@ import { GfxDevice, GfxSampler } from "../gfx/platform/GfxPlatform";
 import { ViewerRenderInput } from "../viewer";
 import { GfxRendererLayer, makeSortKey, setSortKeyDepth, setSortKeyBias } from "../gfx/render/GfxRenderer";
 import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
-import { nArray, assert, assertExists } from '../util';
+import { nArray } from '../util';
 import { prepareFrameDebugOverlayCanvas2D, getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
 import { colorCopy } from '../Color';
 import { computeNormalMatrix, texProjPerspMtx, texEnvMtx } from '../MathHelpers';
@@ -315,8 +315,6 @@ class MaterialInstance {
                 continue;
 
             this.fillTextureMapping(m, textureHolder, i);
-            // Fill in sampler state.
-            m.gfxSampler = this.materialData.gfxSamplers[i];
             m.lodBias = sampler.lodBias;
         }
 
