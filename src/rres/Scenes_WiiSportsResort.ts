@@ -147,12 +147,15 @@ function parsePMPF(buffer: ArrayBufferSlice): PMPEntry[] {
     return entries;
 }
 
+const scratchVec4 = vec4.create();
 class WS2_Renderer extends BasicGXRendererHelper {
     public animationController = new AnimationController();
     public modelInstances: MDL0ModelInstance[] = [];
     public textureHolder = new RRESTextureHolder();
     public lightSetting = new BRRES.LightSetting();
     public scn0Animator: BRRES.SCN0Animator;
+    public pmp: PMPEntry[] = [];
+    public debugObjects = false;
 
     constructor(device: GfxDevice, private resourceSystem: ResourceSystem) {
         super(device);
@@ -170,7 +173,6 @@ class WS2_Renderer extends BasicGXRendererHelper {
     }
 
     public spawnModel(device: GfxDevice, rres: BRRES.RRES, modelName: string): MDL0ModelInstance {
-        // TODO(jstpierre): Cache model data?
         const mdl0Data = this.resourceSystem.mountMDL0(device, this.getCache(), rres, modelName);
         const instance = new MDL0ModelInstance(this.textureHolder, mdl0Data);
         instance.bindRRESAnimations(this.animationController, rres);
@@ -191,6 +193,17 @@ class WS2_Renderer extends BasicGXRendererHelper {
             this.modelInstances[i].prepareToRender(device, this.renderHelper, viewerInput);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender(device, hostAccessPass);
+
+        if (this.debugObjects) {
+            const ctx = prepareFrameDebugOverlayCanvas2D();
+            for (let i = 0; i < this.pmp.length; i++) {
+                const p = this.pmp[i];
+                const v = scratchVec4;
+                vec4.set(v, 0, 0, 0, 1);
+                vec4.transformMat4(v, v, p.modelMatrix);
+                drawWorldSpacePoint(ctx, viewerInput.camera, v, Magenta, 10);
+            }
+        }
     }
 
     public destroy(device: GfxDevice): void {
@@ -207,7 +220,7 @@ const dataPath = `WiiSportsResort`;
 class IslandSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string = id) {}
 
-    private spawnObject(device: GfxDevice, renderer: WS2_Renderer, p: PMPEntry): void {
+    private spawnObject(device: GfxDevice, renderer: WS2_Renderer, p: PMPEntry): boolean {
         if (p.objectId === 0x00010000) { // Tree1
             const tree3 = renderer.mountRRES(device, 'Tree/G3D/WS2_common_tree.brres');
             const instance = renderer.spawnModel(device, tree3, 'WS2_common_tree_H');
@@ -220,7 +233,19 @@ class IslandSceneDesc implements Viewer.SceneDesc {
             const tree3 = renderer.mountRRES(device, 'Tree/G3D/WS2_common_tree3.brres');
             const instance = renderer.spawnModel(device, tree3, 'WS2_common_tree3');
             mat4.copy(instance.modelMatrix, p.modelMatrix);
+        } else if (p.objectId === 0x0001001A) { // WindMill
+            const fountain = renderer.mountRRES(device, 'WindMill/G3D/WS2_common_windmill.brres');
+            const instance = renderer.spawnModel(device, fountain, 'WS2_common_windmill');
+            mat4.copy(instance.modelMatrix, p.modelMatrix);
+        } else if (p.objectId === 0x0001001E) { // Fountain
+            const fountain = renderer.mountRRES(device, 'Fountain/G3D/WS2_common_fountain.brres');
+            const instance = renderer.spawnModel(device, fountain, 'WS2_common_fountain');
+            mat4.copy(instance.modelMatrix, p.modelMatrix);
+        } else {
+            return false;
         }
+
+        return true;
     }
 
     public async createScene2(device: GfxDevice, abortSignal: AbortSignal, progressMeter: ProgressMeter): Promise<Viewer.SceneGfx> {
@@ -235,7 +260,6 @@ class IslandSceneDesc implements Viewer.SceneDesc {
         ]);
 
         const pmp = parsePMPF(resourceSystem.findFileData('WS2_omk_island_tag.pmp'));
-        console.log(pmp);
 
         const renderer = new WS2_Renderer(device, resourceSystem);
         renderer.mountRRES(device, 'Island/G3D/WS2_common_seatex.brres');
@@ -247,7 +271,8 @@ class IslandSceneDesc implements Viewer.SceneDesc {
         sea.bindRRESAnimations(renderer.animationController, island, 'WS2_common_sea_B');
 
         for (let i = 0; i < pmp.length; i++) {
-            this.spawnObject(device, renderer, pmp[i]);
+            if (!this.spawnObject(device, renderer, pmp[i]))
+                renderer.pmp.push(pmp[i]);
         }
 
         return renderer;
