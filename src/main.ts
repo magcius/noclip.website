@@ -56,6 +56,7 @@ import * as Scenes_Okami from './rres/Scenes_Okami';
 import * as Scenes_SonicColors from './rres/Scenes_SonicColors';
 import * as Scenes_SuperSmashBrosBrawl from './rres/Scenes_SuperSmashBrosBrawl';
 import * as Scenes_Test from './Scenes_Test';
+import * as Scenes_WiiSportsResort from './rres/Scenes_WiiSportsResort';
 import * as Scenes_Zelda_SkywardSword from './rres/Scenes_Zelda_SkywardSword';
 
 import { DroppedFileSceneDesc } from './Scenes_FileDrops';
@@ -124,6 +125,7 @@ const sceneGroups = [
     Scenes_SuperMarioOdyssey.sceneGroup,
     Scenes_Splatoon.sceneGroup,
     Scenes_THUG2.sceneGroup,
+    Scenes_WiiSportsResort.sceneGroup,
     Scenes_Zelda_BreathOfTheWild.sceneGroup,
 ];
 
@@ -151,21 +153,29 @@ class SceneLoader {
 
         this.loadingSceneDesc = sceneDesc;
 
+        let progressable: Progressable<SceneGfx> | null = null;
+
         if (sceneDesc.createScene !== undefined) {
-            const progressable = sceneDesc.createScene(this.viewer.gfxDevice, this.abortController.signal);
-            if (progressable !== null) {
-                progressable.then((scene: SceneGfx) => {
-                    if (this.loadingSceneDesc === sceneDesc) {
-                        this.loadingSceneDesc = null;
-                        this.abortController = null;
-                        this.viewer.setScene(scene);
-                    }
-                });
-                return progressable;
-            }
+            progressable = sceneDesc.createScene(this.viewer.gfxDevice, this.abortController.signal);
+        } else if (sceneDesc.createScene2 !== undefined) {
+            // TODO(jstpierre): This is a bit of an ugly hack until we can split out ProgressMeter from Progressable.
+            progressable = new Progressable<SceneGfx>(null);
+            const promise = sceneDesc.createScene2(this.viewer.gfxDevice, this.abortController.signal, progressable);
+            progressable.promise = promise;
         }
 
-        console.error(`Cannot create scene. Probably an unsupported file extension.`);
+        if (progressable !== null) {
+            progressable.then((scene: SceneGfx) => {
+                if (this.loadingSceneDesc === sceneDesc) {
+                    this.loadingSceneDesc = null;
+                    this.abortController = null;
+                    this.viewer.setScene(scene);
+                }
+            });
+            return progressable;
+        }
+
+        console.error(`Cannot load ${sceneDesc.id}. Probably an unsupported file extension.`);
         throw "whoops";
     }
 }

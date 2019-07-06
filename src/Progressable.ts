@@ -1,4 +1,8 @@
 
+export interface ProgressMeter {
+    setProgress(n: number): void;
+}
+
 export default class Progressable<T> {
     public promise: PromiseLike<T> | null;
     public chainProgressable: Progressable<any> | null = null;

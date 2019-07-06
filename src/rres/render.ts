@@ -4,7 +4,7 @@ import * as BRRES from './brres';
 import * as GX_Material from '../gx/gx_material';
 import { mat4, vec3 } from "gl-matrix";
 import { MaterialParams, GXTextureHolder, ColorKind, translateTexFilterGfx, translateWrapModeGfx, PacketParams, ub_MaterialParams, loadedDataCoalescerComboGfx, fillMaterialParamsDataWithOptimizations } from "../gx/gx_render";
-import { GXRenderHelperGfx, GXShapeHelperGfx, GXMaterialHelperGfx } from "../gx/gx_render_2";
+import { GXRenderHelperGfx, GXShapeHelperGfx, GXMaterialHelperGfx, autoOptimizeMaterial } from "../gx/gx_render_2";
 import { computeViewMatrix, computeViewMatrixSkybox, Camera, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
 import AnimationController from "../AnimationController";
 import { TextureMapping } from "../TextureHolder";
@@ -360,8 +360,12 @@ class MaterialInstance {
             if (lightSet !== undefined) {
                 lightSet.calcLights(materialParams.u_Lights, lightSetting, camera.viewMatrix);
                 lightSet.calcAmbColorMult(materialParams.u_Color[ColorKind.AMB0], lightSetting);
-                if (lightSet.calcLightSetLitMask(this.materialHelper.material.lightChannels, lightSetting))
+                if (lightSet.calcLightSetLitMask(this.materialHelper.material.lightChannels, lightSetting)) {
+                    this.materialHelper.material.hasLightsBlock = undefined;
+                    autoOptimizeMaterial(this.materialHelper.material);
+                    this.materialHelper.calcMaterialParamsBufferSize();
                     this.materialHelper.createProgram();
+                }
             }
         }
     }

@@ -21,6 +21,7 @@ import { colorToRGBA8, colorFromRGBA8, colorNewCopy, White, Color, colorMult } f
 import { computeModelMatrixSRT, MathConstants, lerp } from '../MathHelpers';
 import BitMap from '../BitMap';
 import { autoOptimizeMaterial } from '../gx/gx_render_2';
+import { Camera } from '../Camera';
 
 //#region Utility
 function calcTexMtx_Basic(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
@@ -3340,7 +3341,7 @@ export class LightSet {
             if (!!(lightObj.flags & LightObjFlags.ENABLE)) {
                 m[i].copy(lightObj.light);
                 GX_Material.lightSetWorldPositionViewMatrix(m[i], viewMatrix, lightObj.light.Position[0], lightObj.light.Position[1], lightObj.light.Position[2]);
-                // GX_Material.lightSetWorldDirectionNormalMatrix(lightObj.light, viewMatrix, lightObj.light.Direction[0], lightObj.light.Direction[1], lightObj.light.Direction[2]);
+                GX_Material.lightSetWorldDirectionNormalMatrix(lightObj.light, viewMatrix, lightObj.light.Direction[0], lightObj.light.Direction[1], lightObj.light.Direction[2]);
             }
         }
     }
@@ -3440,6 +3441,16 @@ export class LightSetting {
 
 export class SCN0Animator {
     constructor(private animationController: AnimationController, private scn0: SCN0) {
+    }
+
+    public calcCameraClipPlanes(camera: Camera, cameraIndex: number): void {
+        const animFrame = getAnimFrame(this.scn0, this.animationController.getTimeInFrames());
+
+        const scn0Cam = this.scn0.cameras[cameraIndex];
+        const near = sampleFloatAnimationTrack(scn0Cam.near, animFrame);
+        const far = sampleFloatAnimationTrack(scn0Cam.far, animFrame);
+
+        camera.setClipPlanes(near, far);
     }
 
     public calcLightSetting(lightSetting: LightSetting): void {

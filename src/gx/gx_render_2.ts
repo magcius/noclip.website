@@ -67,12 +67,15 @@ export class GXMaterialHelperGfx {
         if (materialHacks)
             Object.assign(this.materialHacks, materialHacks);
 
+        this.calcMaterialParamsBufferSize();
         this.createProgram();
-
-        this.materialParamsBufferSize = GX_Material.getMaterialParamsBlockSize(this.material);
 
         this.megaStateFlags = {};
         GX_Material.translateGfxMegaState(this.megaStateFlags, this.material);
+    }
+
+    public calcMaterialParamsBufferSize(): void {
+        this.materialParamsBufferSize = GX_Material.getMaterialParamsBlockSize(this.material);
     }
 
     public cacheProgram(device: GfxDevice, cache: GfxRenderCache): void {

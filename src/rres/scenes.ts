@@ -28,6 +28,9 @@ export class BasicRRESRenderer extends BasicGXRendererHelper {
     private scn0Animators: BRRES.SCN0Animator[] = [];
     private lightSettings: BRRES.LightSetting[] = [];
 
+    protected nearClip = 10;
+    protected farClip = 50000;
+
     constructor(device: GfxDevice, public stageRRESes: BRRES.RRES[], public textureHolder = new RRESTextureHolder()) {
         super(device);
 
@@ -41,7 +44,7 @@ export class BasicRRESRenderer extends BasicGXRendererHelper {
 
             if (stageRRES.scn0.length > 0) {
                 lightSetting = new BRRES.LightSetting();
-                const scn0Animator = new BRRES.SCN0Animator(this.animationController, stageRRES.scn0[i]);
+                const scn0Animator = new BRRES.SCN0Animator(this.animationController, stageRRES.scn0[0]);
                 this.lightSettings.push(lightSetting);
                 this.scn0Animators.push(scn0Animator);
             }
@@ -72,6 +75,8 @@ export class BasicRRESRenderer extends BasicGXRendererHelper {
     }
 
     protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        viewerInput.camera.setClipPlanes(this.nearClip, this.farClip);
+
         this.animationController.setTimeInMilliseconds(viewerInput.time);
 
         for (let i = 0; i < this.scn0Animators.length; i++)
