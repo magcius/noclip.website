@@ -142,11 +142,11 @@ export function getDebugOverlayCanvas2D(): CanvasRenderingContext2D {
     return _debugOverlayCanvas!;
 }
 
-export function prepareFrameDebugOverlayCanvas2D(): void {
-    if (_debugOverlayCanvas) {
-        _debugOverlayCanvas.canvas.width = window.innerWidth;
-        _debugOverlayCanvas.canvas.height = window.innerHeight;
-    }
+export function prepareFrameDebugOverlayCanvas2D(): CanvasRenderingContext2D {
+    const ctx = getDebugOverlayCanvas2D();
+    ctx.canvas.width = window.innerWidth;
+    ctx.canvas.height = window.innerHeight;
+    return ctx;
 }
 
 const p = nArray(8, () => vec4.create());

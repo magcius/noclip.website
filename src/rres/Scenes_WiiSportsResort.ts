@@ -6,11 +6,16 @@ import { fetchData, NamedArrayBufferSlice } from "../fetch";
 import * as U8 from "./u8";
 import * as Yaz0 from "../compression/Yaz0";
 import * as BRRES from "./brres";
-import { assertExists } from "../util";
+import { assertExists, readString, assert } from "../util";
 import { BasicGXRendererHelper } from "../gx/gx_render_2";
 import { MDL0ModelInstance, MDL0Model, RRESTextureHolder } from "./render";
 import AnimationController from "../AnimationController";
 import ArrayBufferSlice from "../ArrayBufferSlice";
+import { vec3, vec4, mat4 } from "gl-matrix";
+import { prepareFrameDebugOverlayCanvas2D, drawWorldSpacePoint } from "../DebugJunk";
+import { Magenta, Color, colorNewFromRGBA8, colorNew } from "../Color";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { computeModelMatrixSRT } from "../MathHelpers";
 
 class DataFetcher {
     private fileProgressables: Progressable<any>[] = [];
@@ -43,12 +48,18 @@ class DataFetcher {
 class ResourceSystem {
     private mounts: U8.U8Archive[] = [];
     private brresCache = new Map<string, BRRES.RRES>();
+    private mdl0Cache = new Map<string, MDL0Model>();
+
+    public destroy(device: GfxDevice): void {
+        for (const v of this.mdl0Cache.values())
+            v.destroy(device);
+    }
 
     public mountArchive(archive: U8.U8Archive): void {
         this.mounts.push(archive);
     }
 
-    private findFileData(path: string): ArrayBufferSlice | null {
+    public findFileData(path: string): ArrayBufferSlice | null {
         for (let i = 0; i < this.mounts.length; i++) {
             const file = this.mounts[i].findFileData(path);
             if (file !== null)
@@ -65,6 +76,12 @@ class ResourceSystem {
         }
         return this.brresCache.get(path);
     }
+
+    public mountMDL0(device: GfxDevice, cache: GfxRenderCache, rres: BRRES.RRES, modelName: string): MDL0Model {
+        if (!this.mdl0Cache.has(modelName))
+            this.mdl0Cache.set(modelName, new MDL0Model(device, cache, assertExists(rres.mdl0.find((m) => m.name === modelName))));
+        return this.mdl0Cache.get(modelName);
+    }
 }
 
 async function fetchCarc(dataFetcher: DataFetcher, path: string): Promise<U8.U8Archive> {
@@ -80,10 +97,59 @@ function fetchAndMount(resourceSystem: ResourceSystem, dataFetcher: DataFetcher,
     });
 }
 
-class WS2_RRESRenderer extends BasicGXRendererHelper {
+interface PMPEntry {
+    objectId: number;
+    modelMatrix: mat4;
+}
+
+function parsePMPF(buffer: ArrayBufferSlice): PMPEntry[] {
+    const view = buffer.createDataView();
+    assertExists(readString(buffer, 0x00, 0x04) === 'PMPF');
+
+    const tableCount = view.getUint16(0x10);
+    const tableStart = view.getUint32(0x40);
+    assert(tableStart === 0x80);
+
+    const entries: PMPEntry[] = [];
+    let tableIdx = tableStart;
+    for (let i = 0; i < tableCount; i++) {
+        const objectId = view.getUint32(tableIdx + 0x00);
+        assert(view.getUint32(tableIdx + 0x04) === 0);
+        const translationX = view.getFloat32(tableIdx + 0x08);
+        const translationY = view.getFloat32(tableIdx + 0x0C);
+        const translationZ = view.getFloat32(tableIdx + 0x10);
+        const scaleX = view.getFloat32(tableIdx + 0x14);
+        const scaleY = view.getFloat32(tableIdx + 0x18);
+        const scaleZ = view.getFloat32(tableIdx + 0x1C);
+
+        // TODO(jstpierre): Rotation matrix?
+        const r00 = view.getFloat32(tableIdx + 0x20);
+        const r01 = view.getFloat32(tableIdx + 0x24);
+        const r02 = view.getFloat32(tableIdx + 0x28);
+        const r10 = view.getFloat32(tableIdx + 0x2C);
+        const r11 = view.getFloat32(tableIdx + 0x30);
+        const r12 = view.getFloat32(tableIdx + 0x34);
+        const r20 = view.getFloat32(tableIdx + 0x38);
+        const r21 = view.getFloat32(tableIdx + 0x3C);
+        const r22 = view.getFloat32(tableIdx + 0x40);
+
+        const modelMatrix = mat4.fromValues(
+            scaleX * r00, scaleX * r10, scaleX * r20, 0,
+            scaleY * r01, scaleY * r11, scaleY * r21, 0,
+            scaleZ * r02, scaleZ * r12, scaleZ * r22, 0,
+            translationX, translationY, translationZ, 1,
+        );
+
+        entries.push({ objectId, modelMatrix });
+        tableIdx += 0x58;
+    }
+
+    return entries;
+}
+
+class WS2_Renderer extends BasicGXRendererHelper {
     public animationController = new AnimationController();
     public modelInstances: MDL0ModelInstance[] = [];
-    public models: MDL0Model[] = [];
     public textureHolder = new RRESTextureHolder();
     public lightSetting = new BRRES.LightSetting();
     public scn0Animator: BRRES.SCN0Animator;
@@ -93,6 +159,10 @@ class WS2_RRESRenderer extends BasicGXRendererHelper {
 
         const WS2_Scene = this.resourceSystem.mountRRES(device, this.textureHolder, 'G3D/WS2_Scene.brres');
         this.scn0Animator = new BRRES.SCN0Animator(this.animationController, WS2_Scene.scn0[0]);
+
+        // TODO(jstpierre): Implement EggLightManager
+        for (let i = 0; i < this.lightSetting.lightObj.length; i++)
+            this.lightSetting.lightObj[i].space = BRRES.LightObjSpace.VIEW_SPACE;
     }
 
     public mountRRES(device: GfxDevice, rresName: string): BRRES.RRES {
@@ -101,9 +171,7 @@ class WS2_RRESRenderer extends BasicGXRendererHelper {
 
     public spawnModel(device: GfxDevice, rres: BRRES.RRES, modelName: string): MDL0ModelInstance {
         // TODO(jstpierre): Cache model data?
-        const mdl0 = assertExists(rres.mdl0.find((mdl0) => mdl0.name === modelName));
-        const mdl0Data = new MDL0Model(device, this.getCache(), mdl0);
-        this.models.push(mdl0Data);
+        const mdl0Data = this.resourceSystem.mountMDL0(device, this.getCache(), rres, modelName);
         const instance = new MDL0ModelInstance(this.textureHolder, mdl0Data);
         instance.bindRRESAnimations(this.animationController, rres);
         instance.bindLightSetting(this.lightSetting);
@@ -128,8 +196,7 @@ class WS2_RRESRenderer extends BasicGXRendererHelper {
     public destroy(device: GfxDevice): void {
         super.destroy(device);
         this.textureHolder.destroy(device);
-        for (let i = 0; i < this.models.length; i++)
-            this.models[i].destroy(device);
+        this.resourceSystem.destroy(device);
         for (let i = 0; i < this.modelInstances.length; i++)
             this.modelInstances[i].destroy(device);
     }
@@ -140,6 +207,22 @@ const dataPath = `WiiSportsResort`;
 class IslandSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string = id) {}
 
+    private spawnObject(device: GfxDevice, renderer: WS2_Renderer, p: PMPEntry): void {
+        if (p.objectId === 0x00010000) { // Tree1
+            const tree3 = renderer.mountRRES(device, 'Tree/G3D/WS2_common_tree.brres');
+            const instance = renderer.spawnModel(device, tree3, 'WS2_common_tree_H');
+            mat4.copy(instance.modelMatrix, p.modelMatrix);
+        } else if (p.objectId === 0x00010001) { // Tree2
+            const tree3 = renderer.mountRRES(device, 'Tree/G3D/WS2_common_tree2.brres');
+            const instance = renderer.spawnModel(device, tree3, 'WS2_common_tree2_H');
+            mat4.copy(instance.modelMatrix, p.modelMatrix);
+        } else if (p.objectId === 0x00010002) { // Tree3
+            const tree3 = renderer.mountRRES(device, 'Tree/G3D/WS2_common_tree3.brres');
+            const instance = renderer.spawnModel(device, tree3, 'WS2_common_tree3');
+            mat4.copy(instance.modelMatrix, p.modelMatrix);
+        }
+    }
+
     public async createScene2(device: GfxDevice, abortSignal: AbortSignal, progressMeter: ProgressMeter): Promise<Viewer.SceneGfx> {
         // Fetch the SCN0.
         const d = new DataFetcher(abortSignal, progressMeter);
@@ -147,10 +230,14 @@ class IslandSceneDesc implements Viewer.SceneDesc {
         const resourceSystem = new ResourceSystem();
         await fetchAndMount(resourceSystem, d, [
             `${dataPath}/Common/Static/common.carc`,
+            `${dataPath}/Common/OmkScene/common.carc`,
             `${dataPath}/Stage/Static/StageArc.carc`,
         ]);
 
-        const renderer = new WS2_RRESRenderer(device, resourceSystem);
+        const pmp = parsePMPF(resourceSystem.findFileData('WS2_omk_island_tag.pmp'));
+        console.log(pmp);
+
+        const renderer = new WS2_Renderer(device, resourceSystem);
         renderer.mountRRES(device, 'Island/G3D/WS2_common_seatex.brres');
         const island = renderer.mountRRES(device, 'Island/G3D/WS2_common_island.brres');
         renderer.spawnModel(device, island, 'WS2_common_island');
@@ -158,6 +245,11 @@ class IslandSceneDesc implements Viewer.SceneDesc {
         const sea = renderer.spawnModel(device, island, 'WS2_common_sea');
         sea.bindRRESAnimations(renderer.animationController, island, 'WS2_common_sea_nami');
         sea.bindRRESAnimations(renderer.animationController, island, 'WS2_common_sea_B');
+
+        for (let i = 0; i < pmp.length; i++) {
+            this.spawnObject(device, renderer, pmp[i]);
+        }
+
         return renderer;
     }
 }

@@ -3323,9 +3323,15 @@ const enum LightObjFlags {
     SPECULAR = 1 << 3,
 }
 
+export const enum LightObjSpace {
+    WORLD_SPACE,
+    VIEW_SPACE,
+}
+
 export class LightObj {
     public flags: LightObjFlags = 0;
     public light = new GX_Material.Light();
+    public space: LightObjSpace = LightObjSpace.WORLD_SPACE;
 }
 
 export class LightSet {
@@ -3340,8 +3346,13 @@ export class LightSet {
             const lightObj = lightSetting.lightObj[i];
             if (!!(lightObj.flags & LightObjFlags.ENABLE)) {
                 m[i].copy(lightObj.light);
-                GX_Material.lightSetWorldPositionViewMatrix(m[i], viewMatrix, lightObj.light.Position[0], lightObj.light.Position[1], lightObj.light.Position[2]);
-                GX_Material.lightSetWorldDirectionNormalMatrix(lightObj.light, viewMatrix, lightObj.light.Direction[0], lightObj.light.Direction[1], lightObj.light.Direction[2]);
+
+                if (lightObj.space === LightObjSpace.WORLD_SPACE) {
+                    GX_Material.lightSetWorldPositionViewMatrix(m[i], viewMatrix, lightObj.light.Position[0], lightObj.light.Position[1], lightObj.light.Position[2]);
+                    GX_Material.lightSetWorldDirectionNormalMatrix(lightObj.light, viewMatrix, lightObj.light.Direction[0], lightObj.light.Direction[1], lightObj.light.Direction[2]);
+                } else if (lightObj.space === LightObjSpace.VIEW_SPACE) {
+                    // Parameters are in view-space; already copied correctly.
+                }
             }
         }
     }
