@@ -83,12 +83,13 @@ const sceneGroups = [
     Scenes_MarioKartWii.sceneGroup,
     Scenes_KirbysReturnToDreamLand.sceneGroup,
     Scenes_Klonoa.sceneGroup,
+    Scenes_Zelda_SkywardSword.sceneGroup,
     Scenes_Okami.sceneGroup,
     Scenes_SuperMarioGalaxy1.sceneGroup,
     Scenes_SuperMarioGalaxy2.sceneGroup,
     Scenes_SuperPaperMario.sceneGroup,
     Scenes_SuperSmashBrosBrawl.sceneGroup,
-    Scenes_Zelda_SkywardSword.sceneGroup,
+    Scenes_WiiSportsResort.sceneGroup,
     "GameCube",
     Scenes_LuigisMansion.sceneGroup,
     Scenes_MarioKartDoubleDash.sceneGroup,
@@ -125,7 +126,6 @@ const sceneGroups = [
     Scenes_SuperMarioOdyssey.sceneGroup,
     Scenes_Splatoon.sceneGroup,
     Scenes_THUG2.sceneGroup,
-    Scenes_WiiSportsResort.sceneGroup,
     Scenes_Zelda_BreathOfTheWild.sceneGroup,
 ];
 
