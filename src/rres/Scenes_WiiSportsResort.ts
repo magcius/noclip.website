@@ -73,6 +73,13 @@ async function fetchCarc(dataFetcher: DataFetcher, path: string): Promise<U8.U8A
     return U8.parse(g);
 }
 
+function fetchAndMount(resourceSystem: ResourceSystem, dataFetcher: DataFetcher, paths: string[]): Promise<any> {
+    return Promise.all(paths.map((path) => fetchCarc(dataFetcher, path))).then((arcs) => {
+        for (let i = 0; i < arcs.length; i++)
+            resourceSystem.mountArchive(arcs[i]);
+    });
+}
+
 class WS2_RRESRenderer extends BasicGXRendererHelper {
     public animationController = new AnimationController();
     public modelInstances: MDL0ModelInstance[] = [];
@@ -138,8 +145,10 @@ class IslandSceneDesc implements Viewer.SceneDesc {
         const d = new DataFetcher(abortSignal, progressMeter);
 
         const resourceSystem = new ResourceSystem();
-        resourceSystem.mountArchive(await fetchCarc(d, `${dataPath}/Common/Static/common.carc`));
-        resourceSystem.mountArchive(await fetchCarc(d, `${dataPath}/Stage/Static/StageArc.carc`));
+        await fetchAndMount(resourceSystem, d, [
+            `${dataPath}/Common/Static/common.carc`,
+            `${dataPath}/Stage/Static/StageArc.carc`,
+        ]);
 
         const renderer = new WS2_RRESRenderer(device, resourceSystem);
         renderer.mountRRES(device, 'Island/G3D/WS2_common_seatex.brres');
