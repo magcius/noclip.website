@@ -405,6 +405,7 @@ class SeaPlane {
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.drawIndexes(6);
+        renderInst.filterKey = WindWakerPass.MAIN;
 
         let offs = renderInst.allocateUniformBuffer(0, 32);
         const d = renderInst.mapUniformBufferF32(0);
