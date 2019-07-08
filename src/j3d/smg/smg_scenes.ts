@@ -163,124 +163,6 @@ function setIndirectTextureOverride(modelInstance: BMDModelInstance, sceneTextur
 }
 
 const scratchVec3 = vec3.create();
-class Node implements ObjectBase {
-    public modelMatrix = mat4.create();
-    public planetRecord: BCSV.BcsvRecord | null = null;
-    public visibleScenario: boolean = true;
-
-    private modelMatrixAnimator: ModelMatrixAnimator | null = null;
-    private rotateSpeed = 0;
-    private rotatePhase = 0;
-    private rotateAxis: RotateAxis = RotateAxis.Y;
-    public areaLightInfo: AreaLightInfo;
-    public areaLightConfiguration: ActorLightInfo;
-
-    constructor(public sceneGraphTag: SceneGraphTag, public name: string, public zoneAndLayer: ZoneAndLayer, public objinfo: ObjInfo, public modelInstance: BMDModelInstance, parentModelMatrix: mat4, public animationController: AnimationController) {
-        mat4.mul(this.modelMatrix, parentModelMatrix, objinfo.modelMatrix);
-        this.setupAnimations();
-    }
-
-    public setVertexColorsEnabled(v: boolean): void {
-        this.modelInstance.setVertexColorsEnabled(v);
-    }
-
-    public setTexturesEnabled(v: boolean): void {
-        this.modelInstance.setTexturesEnabled(v);
-    }
-
-    public setLightingEnabled(v: boolean): void {
-        this.modelInstance.setLightingEnabled(v);
-    }
-
-    public setIndirectTextureOverride(sceneTexture: GfxTexture): void {
-        setIndirectTextureOverride(this.modelInstance, sceneTexture);
-    }
-
-    public setupAnimations(): void {
-        if (this.objinfo.moveConditionType === 0) {
-            this.rotateSpeed = this.objinfo.rotateSpeed;
-            this.rotateAxis = this.objinfo.rotateAxis;
-        }
-
-        const objName = this.objinfo.objName;
-        if (objName.startsWith('HoleBeltConveyerParts') && this.objinfo.path) {
-            this.modelMatrixAnimator = new RailAnimationMapPart(this.objinfo.path, this.modelMatrix);
-        } else if (objName === 'TicoRail') {
-            this.modelMatrixAnimator = new RailAnimationTico(this.objinfo.path);
-        }
-    }
-
-    public setRotateSpeed(speed: number, axis = RotateAxis.Y): void {
-        this.rotatePhase = (this.objinfo.modelMatrix[12] + this.objinfo.modelMatrix[13] + this.objinfo.modelMatrix[14]);
-        this.rotateSpeed = speed;
-        this.rotateAxis = axis;
-    }
-
-    public updateMapPartsRotation(dst: mat4, time: number): void {
-        if (this.rotateSpeed !== 0) {
-            const speed = this.rotateSpeed * Math.PI / 100;
-            if (this.rotateAxis === RotateAxis.X)
-                mat4.rotateX(dst, dst, (time + this.rotatePhase) * speed);
-            else if (this.rotateAxis === RotateAxis.Y)
-                mat4.rotateY(dst, dst, (time + this.rotatePhase) * speed);
-            else if (this.rotateAxis === RotateAxis.Z)
-                mat4.rotateZ(dst, dst, (time + this.rotatePhase) * speed);
-        }
-    }
-
-    public updateSpecialAnimations(): void {
-        const time = this.animationController.getTimeInSeconds();
-        mat4.copy(this.modelInstance.modelMatrix, this.modelMatrix);
-        this.updateMapPartsRotation(this.modelInstance.modelMatrix, time);
-        if (this.modelMatrixAnimator !== null)
-            this.modelMatrixAnimator.updateRailAnimation(this.modelInstance.modelMatrix, time);
-    }
-
-    public setAreaLightInfo(areaLightInfo: AreaLightInfo): void {
-        this.areaLightInfo = areaLightInfo;
-
-        // Which light configuration to use?
-        if (this.planetRecord !== null) {
-            this.areaLightConfiguration = this.areaLightInfo.Planet;
-        } else {
-            this.areaLightConfiguration = this.areaLightInfo.Strong;            
-        }
-    }
-
-    public draw(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        this.modelInstance.visible = this.visibleScenario;
-
-        if (!this.visibleScenario)
-            return;
-
-        this.areaLightConfiguration.setOnModelInstance(this.modelInstance, viewerInput.camera, false);
-        this.updateSpecialAnimations();
-
-        this.modelInstance.animationController.setTimeInMilliseconds(viewerInput.time);
-        this.modelInstance.calcAnim(viewerInput.camera);
-    }
-}
-
-class SceneGraph {
-    public nodes: Node[] = [];
-    public onnodeadded: (() => void) | null = null;
-
-    public addNode(node: Node | null): void {
-        if (node === null)
-            return;
-        this.nodes.push(node);
-        const i = this.nodes.length - 1;
-        if (this.onnodeadded !== null)
-            this.onnodeadded();
-    }
-}
-
-function createFilterKeyForLegacyNode(xlu: OpaXlu, sceneGraphTag: SceneGraphTag): number {
-    if (xlu === OpaXlu.OPA)
-        return FilterKeyBase.LEGACY_NODE_OPA | sceneGraphTag;
-    else
-        return FilterKeyBase.LEGACY_NODE_XLU | sceneGraphTag;
-}
 
 function createFilterKeyForEffectDrawOrder(drawOrder: DrawOrder): number {
     if (drawOrder === DrawOrder.DRW_3D)
@@ -294,14 +176,12 @@ function createFilterKeyForEffectDrawOrder(drawOrder: DrawOrder): number {
 }
 
 class SMGRenderer implements Viewer.SceneGfx {
-    private sceneGraph: SceneGraph;
-
     private bloomRenderer: BloomPostFXRenderer;
     private bloomParameters = new BloomPostFXParameters();
 
     private mainRenderTarget = new BasicRenderTarget();
     private sceneTexture = new ColorTexture();
-    private currentScenarioIndex: number = 0;
+    private currentScenarioIndex: number = -1;
     private scenarioSelect: UI.SingleSelect;
 
     private scenarioNoToIndex: number[] = [];
@@ -309,22 +189,7 @@ class SMGRenderer implements Viewer.SceneGfx {
     public onstatechanged!: () => void;
 
     constructor(device: GfxDevice, private renderHelper: GXRenderHelperGfx, private spawner: SMGSpawner, private sceneObjHolder: SceneObjHolder) {
-        this.sceneGraph = spawner.sceneGraph;
-
-        this.sceneGraph.onnodeadded = () => {
-            this.applyCurrentScenario();
-        };
-
         this.bloomRenderer = new BloomPostFXRenderer(device, this.renderHelper.renderInstManager.gfxRenderCache, this.mainRenderTarget);
-    }
-
-    private zoneAndLayerVisible(zoneAndLayer: ZoneAndLayer): boolean {
-        const zone = this.spawner.zones[zoneAndLayer.zoneId];
-        return zone.visible && layerVisible(zoneAndLayer.layerId, zone.layerMask);
-    }
-
-    private syncObjectVisible(obj: ObjectBase): void {
-        obj.visibleScenario = this.zoneAndLayerVisible(obj.zoneAndLayer);
     }
 
     private applyCurrentScenario(): void {
@@ -339,11 +204,9 @@ class SMGRenderer implements Viewer.SceneGfx {
             zoneNode.layerMask = scenarioData.getValueNumber(zoneNode.name);
         }
 
-        this.spawner.zones[0].computeObjectVisibility();
-        for (let i = 0; i < this.sceneGraph.nodes.length; i++)
-            this.syncObjectVisible(this.sceneGraph.nodes[i]);
+        this.spawner.zones[0].computeZoneVisibility();
         for (let i = 0; i < this.sceneObjHolder.sceneNameObjListExecutor.nameObjExecuteInfos.length; i++)
-            this.syncObjectVisible(this.sceneObjHolder.sceneNameObjListExecutor.nameObjExecuteInfos[i].nameObj as LiveActor);
+            this.spawner.syncActorVisible(this.sceneObjHolder.sceneNameObjListExecutor.nameObjExecuteInfos[i].nameObj as LiveActor);
     }
 
     public setCurrentScenario(index: number): void {
@@ -394,29 +257,7 @@ class SMGRenderer implements Viewer.SceneGfx {
 
         scenarioPanel.contents.appendChild(this.scenarioSelect.elem);
 
-        const renderHacksPanel = new UI.Panel();
-        renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
-        renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
-        const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
-        enableVertexColorsCheckbox.onchanged = () => {
-            for (let i = 0; i < this.sceneGraph.nodes.length; i++)
-                this.sceneGraph.nodes[i].setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
-        };
-        renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
-        const enableTextures = new UI.Checkbox('Enable Textures', true);
-        enableTextures.onchanged = () => {
-            for (let i = 0; i < this.sceneGraph.nodes.length; i++)
-                this.sceneGraph.nodes[i].setTexturesEnabled(enableTextures.checked);
-        };
-        renderHacksPanel.contents.appendChild(enableTextures.elem);
-        const enableLighting = new UI.Checkbox('Enable Lighting', true);
-        enableLighting.onchanged = () => {
-            for (let i = 0; i < this.sceneGraph.nodes.length; i++)
-                this.sceneGraph.nodes[i].setLightingEnabled(enableLighting.checked);
-        };
-        renderHacksPanel.contents.appendChild(enableLighting.elem);
-
-        return [scenarioPanel, renderHacksPanel];
+        return [scenarioPanel];
     }
 
     private findBloomArea(): ObjInfo | null {
@@ -450,24 +291,6 @@ class SMGRenderer implements Viewer.SceneGfx {
         }
     }
 
-    private drawAllLegacyNodes(camera: Camera): void {
-        for (let i = 0; i < this.sceneGraph.nodes.length; i++) {
-            const node = this.sceneGraph.nodes[i];
-            if (!node.visibleScenario)
-                continue;
-
-            const templateOpa = this.renderHelper.renderInstManager.pushTemplateRenderInst();
-            templateOpa.filterKey = createFilterKeyForLegacyNode(OpaXlu.OPA, node.sceneGraphTag);
-            node.modelInstance.drawOpa(this.sceneObjHolder.modelCache.device, this.renderHelper, camera);
-            this.renderHelper.renderInstManager.popTemplateRenderInst();
-
-            const templateXlu = this.renderHelper.renderInstManager.pushTemplateRenderInst();
-            templateXlu.filterKey = createFilterKeyForLegacyNode(OpaXlu.XLU, node.sceneGraphTag);
-            node.modelInstance.drawXlu(this.sceneObjHolder.modelCache.device, this.renderHelper, camera);
-            this.renderHelper.renderInstManager.popTemplateRenderInst();
-        }
-    }
-
     private drawAllEffects(): void {
         if (this.sceneObjHolder.effectSystem === null)
             return;
@@ -477,14 +300,6 @@ class SMGRenderer implements Viewer.SceneGfx {
             this.sceneObjHolder.effectSystem.draw(this.sceneObjHolder.modelCache.device, this.renderHelper, drawOrder);
             this.renderHelper.renderInstManager.popTemplateRenderInst();
         }
-    }
-
-    private drawLegacyNodeOpa(passRenderer: GfxRenderPass, sceneGraphTag: SceneGraphTag): void {
-        executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForLegacyNode(OpaXlu.OPA, sceneGraphTag));
-    }
-
-    private drawLegacyNodeXlu(passRenderer: GfxRenderPass, sceneGraphTag: SceneGraphTag): void {
-        executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForLegacyNode(OpaXlu.XLU, sceneGraphTag));
     }
 
     private drawOpa(passRenderer: GfxRenderPass, drawBufferType: DrawBufferType): void {
@@ -502,9 +317,6 @@ class SMGRenderer implements Viewer.SceneGfx {
     private isNormalBloomOn(): boolean {
         if (this.sceneObjHolder.sceneNameObjListExecutor.drawBufferHasVisible(DrawBufferType.BLOOM_MODEL))
             return true;
-        for (let i = 0; i < this.sceneGraph.nodes.length; i++)
-            if (this.sceneGraph.nodes[i].sceneGraphTag === SceneGraphTag.Bloom)
-                return true;
         return false;
     }
 
@@ -524,14 +336,6 @@ class SMGRenderer implements Viewer.SceneGfx {
         // Anything in `sceneGraph` is legacy, the new stuff uses the drawBufferHolder.
         viewerInput.camera.setClipPlanes(100, 800000);
 
-        // First, prepare our legacy-style nodes.
-        for (let i = 0; i < this.sceneGraph.nodes.length; i++) {
-            const node = this.sceneGraph.nodes[i];
-            node.draw(this.sceneObjHolder, viewerInput);
-            // TODO(jstpierre): Remove.
-            node.setIndirectTextureOverride(this.sceneTexture.gfxTexture);
-        }
-
         const template = this.renderHelper.pushTemplateRenderInst();
         this.renderHelper.fillSceneParams(viewerInput, template);
 
@@ -548,7 +352,6 @@ class SMGRenderer implements Viewer.SceneGfx {
 
         // Push to the renderinst.
         executor.drawAllBuffers(this.sceneObjHolder.modelCache.device, this.renderHelper, camera);
-        this.drawAllLegacyNodes(camera);
         this.drawAllEffects();
 
         let bloomParameterBufferOffs = -1;
@@ -584,11 +387,9 @@ class SMGRenderer implements Viewer.SceneGfx {
         this.drawOpa(passRenderer, DrawBufferType.SKY);
         this.drawOpa(passRenderer, DrawBufferType.AIR);
         this.drawOpa(passRenderer, DrawBufferType.SUN);
-        this.drawLegacyNodeOpa(passRenderer, SceneGraphTag.Skybox);
         this.drawXlu(passRenderer, DrawBufferType.SKY);
         this.drawXlu(passRenderer, DrawBufferType.AIR);
         this.drawXlu(passRenderer, DrawBufferType.SUN);
-        this.drawLegacyNodeXlu(passRenderer, SceneGraphTag.Skybox);
         // if (isDrawSpinDriverPathAtOpa())
         //     execute(0x12);
         this.drawOpa(passRenderer, DrawBufferType.PLANET);
@@ -621,7 +422,6 @@ class SMGRenderer implements Viewer.SceneGfx {
         this.drawOpa(passRenderer, DrawBufferType.ENEMY);
         this.drawOpa(passRenderer, DrawBufferType.ENEMY_DECORATION);
         this.drawOpa(passRenderer, 0x15);
-        this.drawLegacyNodeOpa(passRenderer, SceneGraphTag.Normal);
         // if not PriorDrawAir, they would go here...
 
         // executeDrawListOpa();
@@ -646,18 +446,17 @@ class SMGRenderer implements Viewer.SceneGfx {
         this.drawXlu(passRenderer, DrawBufferType.ENEMY);
         this.drawXlu(passRenderer, DrawBufferType.ENEMY_DECORATION);
         this.drawXlu(passRenderer, 0x15);
-        this.drawLegacyNodeXlu(passRenderer, SceneGraphTag.Normal);
         // executeDrawListXlu()
         this.drawXlu(passRenderer, 0x18);
 
-        // execute(0x26)
+        // execute(0x26);
         this.execute(passRenderer, DrawType.EFFECT_DRAW_3D);
         this.execute(passRenderer, DrawType.EFFECT_DRAW_FOR_BLOOM_EFFECT);
-        // execute(0x2f)
+        // execute(0x2f);
 
         // This execute directs to CaptureScreenActor, which ends up taking the indirect screen capture.
         // So, end our pass here and do indirect.
-        // execute(0x2d)
+        // execute(0x2d);
         passRenderer.endPass(this.sceneTexture.gfxTexture);
         device.submitPass(passRenderer);
 
@@ -673,7 +472,6 @@ class SMGRenderer implements Viewer.SceneGfx {
         this.drawOpa(passRenderer, 0x22);
         this.drawOpa(passRenderer, 0x17);
         this.drawOpa(passRenderer, 0x16);
-        this.drawLegacyNodeOpa(passRenderer, SceneGraphTag.Indirect);
         this.execute(passRenderer, DrawType.OCEAN_BOWL);
         this.drawXlu(passRenderer, DrawBufferType.INDIRECT_PLANET);
         this.drawXlu(passRenderer, DrawBufferType.INDIRECT_MAP_OBJ);
@@ -683,7 +481,6 @@ class SMGRenderer implements Viewer.SceneGfx {
         this.drawXlu(passRenderer, 0x22);
         this.drawXlu(passRenderer, 0x17);
         this.drawXlu(passRenderer, 0x16);
-        this.drawLegacyNodeXlu(passRenderer, SceneGraphTag.Indirect);
         this.execute(passRenderer, DrawType.EFFECT_DRAW_AFTER_INDIRECT);
 
         // executeDrawImageEffect()
@@ -694,8 +491,6 @@ class SMGRenderer implements Viewer.SceneGfx {
             const objPassRenderer = this.bloomRenderer.renderBeginObjects(device, viewerInput);
             this.drawOpa(objPassRenderer, DrawBufferType.BLOOM_MODEL);
             this.drawXlu(objPassRenderer, DrawBufferType.BLOOM_MODEL);
-            this.drawLegacyNodeOpa(objPassRenderer, SceneGraphTag.Bloom);
-            this.drawLegacyNodeXlu(objPassRenderer, SceneGraphTag.Bloom);
             this.execute(objPassRenderer, DrawType.EFFECT_DRAW_FOR_BLOOM_EFFECT);
             passRenderer = this.bloomRenderer.renderEndObjects(device, objPassRenderer, this.renderHelper.renderInstManager, this.mainRenderTarget, viewerInput, template, bloomParameterBufferOffs);
         }
@@ -1082,7 +877,8 @@ export function startBckIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC,
     const data = arc.findFileData(`${animationName}.bck`);
     if (data !== null) {
         const bck = BCK.parse(data);
-        bck.ank1.loopMode = LoopMode.REPEAT;
+        if (animationName.toLowerCase() === 'wait')
+            bck.ank1.loopMode = LoopMode.REPEAT;
         modelInstance.bindANK1(bck.ank1);
     }
     return data !== null;
@@ -1524,8 +1320,90 @@ export class LiveActor extends NameObj implements ObjectBase {
     }
 }
 
-import { NPCDirector, MiniRoutePoint, createModelObjMapObj, PeachCastleGardenPlanet, PlanetMap } from './Actors';
+import { NPCDirector, MiniRoutePoint, createModelObjMapObj, bindColorChangeAnimation, bindTexChangeAnimation, isExistIndirectTexture, connectToSceneIndirectMapObjStrongLight, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneBloom } from './Actors';
 import { getNameObjTableEntry, PlanetMapCreator } from './ActorTable';
+
+// Random actor for other things that otherwise do not have their own actors.
+class NoclipLegacyActor extends LiveActor {
+    private modelMatrixAnimator: ModelMatrixAnimator | null = null;
+    private rotateSpeed = 0;
+    private rotatePhase = 0;
+    private rotateAxis: RotateAxis = RotateAxis.Y;
+
+    constructor(zoneAndLayer: ZoneAndLayer, arcName: string, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, tag: SceneGraphTag, public objinfo: ObjInfo) {
+        super(zoneAndLayer, getObjectName(infoIter));
+
+        this.initDefaultPos(sceneObjHolder, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, arcName);
+
+        if (isExistIndirectTexture(this))
+            tag = SceneGraphTag.Indirect;
+
+        if (tag === SceneGraphTag.Normal)
+            connectToSceneMapObjStrongLight(sceneObjHolder, this);
+        else if (tag === SceneGraphTag.Skybox)
+            connectToSceneSky(sceneObjHolder, this);
+        else if (tag === SceneGraphTag.Indirect)
+            connectToSceneIndirectMapObjStrongLight(sceneObjHolder, this);
+        else if (tag === SceneGraphTag.Bloom)
+            connectToSceneBloom(sceneObjHolder, this);
+
+        if (tag === SceneGraphTag.Skybox) {
+            mat4.scale(objinfo.modelMatrix, objinfo.modelMatrix, [.5, .5, .5]);
+
+            // Kill translation. Need to figure out how the game does skyboxes.
+            objinfo.modelMatrix[12] = 0;
+            objinfo.modelMatrix[13] = 0;
+            objinfo.modelMatrix[14] = 0;
+
+            this.modelInstance.isSkybox = true;
+        }
+
+        this.initEffectKeeper(sceneObjHolder, null);
+
+        this.setupAnimations();
+    }
+
+    public setupAnimations(): void {
+        if (this.objinfo.moveConditionType === 0) {
+            this.rotateSpeed = this.objinfo.rotateSpeed;
+            this.rotateAxis = this.objinfo.rotateAxis;
+        }
+
+        const objName = this.objinfo.objName;
+        if (objName.startsWith('HoleBeltConveyerParts') && this.objinfo.path) {
+            this.modelMatrixAnimator = new RailAnimationMapPart(this.objinfo.path, this.modelInstance.modelMatrix);
+        } else if (objName === 'TicoRail') {
+            this.modelMatrixAnimator = new RailAnimationTico(this.objinfo.path);
+        }
+    }
+
+    public setRotateSpeed(speed: number, axis = RotateAxis.Y): void {
+        this.rotatePhase = (this.objinfo.modelMatrix[12] + this.objinfo.modelMatrix[13] + this.objinfo.modelMatrix[14]);
+        this.rotateSpeed = speed;
+        this.rotateAxis = axis;
+    }
+
+    public updateMapPartsRotation(dst: mat4, time: number): void {
+        if (this.rotateSpeed !== 0) {
+            const speed = this.rotateSpeed * Math.PI / 100;
+            if (this.rotateAxis === RotateAxis.X)
+                mat4.rotateX(dst, dst, (time + this.rotatePhase) * speed);
+            else if (this.rotateAxis === RotateAxis.Y)
+                mat4.rotateY(dst, dst, (time + this.rotatePhase) * speed);
+            else if (this.rotateAxis === RotateAxis.Z)
+                mat4.rotateZ(dst, dst, (time + this.rotatePhase) * speed);
+        }
+    }
+
+    public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
+        const time = viewerInput.time / 1000;
+        super.calcAndSetBaseMtx(viewerInput);
+        this.updateMapPartsRotation(this.modelInstance.modelMatrix, time);
+        if (this.modelMatrixAnimator !== null)
+            this.modelMatrixAnimator.updateRailAnimation(this.modelInstance.modelMatrix, time);
+    }
+}
 
 function layerVisible(layer: LayerId, layerMask: number): boolean {
     if (layer >= 0)
@@ -1555,7 +1433,7 @@ class ZoneNode {
         });
     }
 
-    public computeObjectVisibility(): void {
+    public computeZoneVisibility(): void {
         for (let i = 0; i < this.subzones.length; i++)
             this.subzones[i].visible = this.visible && layerVisible(this.subzones[i].stageDataHolder.layerId, this.layerMask);
     }
@@ -1572,7 +1450,6 @@ export interface ZoneAndLayer {
 }
 
 class SMGSpawner {
-    public sceneGraph = new SceneGraph();
     public zones: ZoneNode[] = [];
     // BackLight
     private isSMG1 = false;
@@ -1585,78 +1462,58 @@ class SMGSpawner {
         this.isWorldMap = this.isSMG2 && galaxyName.startsWith('WorldMap');
     }
 
-    public applyAnimations(node: Node, rarc: RARC.RARC, animOptions?: AnimOptions): void {
-        const modelInstance = node.modelInstance;
+    private zoneAndLayerVisible(zoneAndLayer: ZoneAndLayer): boolean {
+        const zone = this.zones[zoneAndLayer.zoneId];
+        return zone.visible && layerVisible(zoneAndLayer.layerId, zone.layerMask);
+    }
 
-        let bckFile: RARC.RARCFile | null = null;
-        let brkFile: RARC.RARCFile | null = null;
-        let btkFile: RARC.RARCFile | null = null;
+    public syncActorVisible(obj: LiveActor): void {
+        obj.visibleScenario = this.zoneAndLayerVisible(obj.zoneAndLayer);
+    }
 
+    public applyAnimations(actor: LiveActor, animOptions?: AnimOptions): void {
         if (animOptions !== null) {
             if (animOptions !== undefined) {
-                bckFile = animOptions.bck ? rarc.findFile(animOptions.bck) : null;
-                brkFile = animOptions.brk ? rarc.findFile(animOptions.brk) : null;
-                btkFile = animOptions.btk ? rarc.findFile(animOptions.btk) : null;
+                startBck(actor, animOptions.bck);
+                startBrkIfExist(actor.modelInstance, actor.arc, animOptions.brk);
+                startBtkIfExist(actor.modelInstance, actor.arc, animOptions.btk);
             } else {
-                // Look for "wait" animation first, then fall back to the first animation.
-                bckFile = rarc.findFile('wait.bck');
-                brkFile = rarc.findFile('wait.brk');
-                btkFile = rarc.findFile('wait.btk');
-                if (!(bckFile || brkFile || btkFile)) {
-                    bckFile = rarc.files.find((file) => file.name.endsWith('.bck')) || null;
-                    brkFile = rarc.files.find((file) => file.name.endsWith('.brk') && file.name.toLowerCase() !== 'colorchange.brk') || null;
-                    btkFile = rarc.files.find((file) => file.name.endsWith('.btk') && file.name.toLowerCase() !== 'texchange.btk') || null;
+                // Look for "Wait" animation first, then fall back to the first animation.
+                let hasAnim = false;
+                hasAnim = startBck(actor, 'Wait') || hasAnim;
+                hasAnim = startBrkIfExist(actor.modelInstance, actor.arc, 'Wait') || hasAnim;
+                hasAnim = startBtkIfExist(actor.modelInstance, actor.arc, 'Wait') || hasAnim;
+                if (!hasAnim) {
+                    // If there's no "Wait" animation, then play the first animations that we can...
+                    const bckFile = actor.arc.files.find((file) => file.name.endsWith('.bck')) || null;
+                    if (bckFile !== null) {
+                        const bckFilename = bckFile.name.slice(0, -4);
+                        startBck(actor, bckFilename);
+                    }
+
+                    const brkFile = actor.arc.files.find((file) => file.name.endsWith('.brk') && file.name.toLowerCase() !== 'colorchange.brk') || null;
+                    if (brkFile !== null) {
+                        const brkFilename = brkFile.name.slice(0, -4);
+                        startBckIfExist(actor.modelInstance, actor.arc, brkFilename);
+                    }
+
+                    const btkFile = actor.arc.files.find((file) => file.name.endsWith('.btk') && file.name.toLowerCase() !== 'texchange.btk') || null;
+                    if (btkFile !== null) {
+                        const btkFilename = btkFile.name.slice(0, -4);
+                        startBtkIfExist(actor.modelInstance, actor.arc, btkFilename);
+                    }            
                 }
             }
         }
 
-        if (btkFile !== null) {
-            const btk = BTK.parse(btkFile.buffer);
-            modelInstance.bindTTK1(btk.ttk1);
-        }
-
-        if (brkFile !== null) {
-            const brk = BRK.parse(brkFile.buffer);
-            modelInstance.bindTRK1(brk.trk1);
-        }
-
-        if (bckFile !== null) {
-            const bck = BCK.parse(bckFile.buffer);
-            // XXX(jstpierre): Some wait.bck animations are set to ONCE instead of REPEAT (e.g. Kinopio/Toad in SMG2)
-            if (bckFile.name === 'wait.bck')
-                bck.ank1.loopMode = LoopMode.REPEAT;
-            modelInstance.bindANK1(bck.ank1);
-
-            // Apply a random phase to the animation.
-            if (bck.ank1.loopMode === LoopMode.REPEAT)
-                modelInstance.animationController.phaseFrames += Math.random() * bck.ank1.duration;
-        }
+        // Apply a random phase to the animation.
+        if (actor.modelInstance.ank1Animator !== null && actor.modelInstance.ank1Animator.ank1.loopMode === LoopMode.REPEAT)
+            actor.modelInstance.animationController.phaseFrames += Math.random() * actor.modelInstance.ank1Animator.ank1.duration;
     }
 
-    public bindChangeAnimation(node: Node, rarc: RARC.RARC, frame: number): void {
-        const brkFile = rarc.findFile('colorchange.brk');
-        const btkFile = rarc.findFile('texchange.btk');
-
-        const animationController = new AnimationController();
-        animationController.setTimeInFrames(frame);
-
-        if (brkFile) {
-            const brk = BRK.parse(brkFile.buffer);
-            node.modelInstance.bindTRK1(brk.trk1, animationController);
-        }
-
-        if (btkFile) {
-            const btk = BTK.parse(btkFile.buffer);
-            node.modelInstance.bindTTK1(btk.ttk1, animationController);
-        }
-    }
-
-    private hasIndirectTexture(bmdModel: BMDModel): boolean {
-        const tex1Samplers = bmdModel.bmd.tex1.samplers;
-        for (let i = 0; i < tex1Samplers.length; i++)
-            if (tex1Samplers[i].name === 'IndDummy')
-                return true;
-        return false;
+    public bindChangeAnimation(actor: NoclipLegacyActor, rarc: RARC.RARC, frame: number): void {
+        bindColorChangeAnimation(actor.modelInstance, rarc, frame);
+        bindTexChangeAnimation(actor.modelInstance, rarc, frame);
     }
 
     private getNameObjFactory(objName: string): NameObjFactory | null {
@@ -1671,57 +1528,25 @@ class SMGSpawner {
         return null;
     }
 
-    public spawnObjectLegacy(zone: ZoneNode, zoneAndLayer: ZoneAndLayer, objinfo: ObjInfo): void {
-        const modelMatrixBase = zone.stageDataHolder.placementMtx;
+    public spawnObjectLegacy(zone: ZoneNode, zoneAndLayer: ZoneAndLayer, infoIter: JMapInfoIter, objinfo: ObjInfo): void {
         const modelCache = this.sceneObjHolder.modelCache;
-
-        const areaLightInfo = this.sceneObjHolder.lightDataHolder.findDefaultAreaLight(this.sceneObjHolder);
-
-        const connectObject = (node: Node): void => {
-            zone.objects.push(node);
-            this.sceneGraph.addNode(node);
-        };
 
         const spawnGraph = (arcName: string, tag: SceneGraphTag = SceneGraphTag.Normal, animOptions: AnimOptions | null | undefined = undefined) => {
             const arcPath = `ObjectData/${arcName}.arc`;
             const modelFilename = `${arcName}.bdl`;
 
-            return modelCache.getModel(arcPath, modelFilename).then((bmdModel): [Node, RARC.RARC] => {
+            return modelCache.getModel(arcPath, modelFilename).then((bmdModel): [NoclipLegacyActor, RARC.RARC] => {
                 // If this is a 404, then return null.
                 if (bmdModel === null)
                     return null;
 
-                if (this.hasIndirectTexture(bmdModel))
-                    tag = SceneGraphTag.Indirect;
+                const actor = new NoclipLegacyActor(zoneAndLayer, arcName, this.sceneObjHolder, infoIter, tag, objinfo);
+                this.applyAnimations(actor, animOptions);
 
-                // Trickery.
-                const rarc = modelCache.archiveCache.get(arcPath);
+                zone.objects.push(actor);
+                this.syncActorVisible(actor);
 
-                const modelInstance = new BMDModelInstance(bmdModel);
-                modelInstance.animationController.fps = FPS;
-                modelInstance.name = `${objinfo.objName} ${objinfo.objId}`;
-
-                if (tag === SceneGraphTag.Skybox) {
-                    mat4.scale(objinfo.modelMatrix, objinfo.modelMatrix, [.5, .5, .5]);
-
-                    // Kill translation. Need to figure out how the game does skyboxes.
-                    objinfo.modelMatrix[12] = 0;
-                    objinfo.modelMatrix[13] = 0;
-                    objinfo.modelMatrix[14] = 0;
-
-                    modelInstance.isSkybox = true;
-                }
-
-                const node = new Node(tag, arcName, zoneAndLayer, objinfo, modelInstance, modelMatrixBase, modelInstance.animationController);
-
-                // TODO(jstpierre): Parse out the proper area info.
-                node.setAreaLightInfo(areaLightInfo);
-
-                this.applyAnimations(node, rarc, animOptions);
-
-                connectObject(node);
-
-                return [node, rarc];
+                return [actor, actor.arc];
             });
         };
 
@@ -2026,7 +1851,7 @@ class SMGSpawner {
 
                     const btp = BTP.parse(rarc.findFileData(`powerstar.btp`));
                     node.modelInstance.bindTPT1(btp.tpt1, animationController);
-                }else{
+                } else {
                     const frame = name === 'GreenStar' ? 2 : 0;
 
                     const animationController = new AnimationController();
@@ -2134,8 +1959,8 @@ class SMGSpawner {
                 zoneNode.objects.push(nameObj);
             } else {
                 const objInfoLegacy = stageDataHolder.legacyCreateObjinfo(infoIter, legacyPaths, isMapPart);
-                // Fall back to legacy spawn.
-                this.spawnObjectLegacy(zoneNode, zoneAndLayer, objInfoLegacy);
+                const infoIterCopy = copyInfoIter(infoIter);
+                this.spawnObjectLegacy(zoneNode, zoneAndLayer, infoIterCopy, objInfoLegacy);
             }
         });
 
@@ -2305,6 +2130,12 @@ class SMGSpawner {
 
 interface JMapInfoIter_StageDataHolder extends JMapInfoIter {
     originalStageDataHolder: StageDataHolder;
+}
+
+function copyInfoIter(infoIter: JMapInfoIter): JMapInfoIter {
+    const iter = new JMapInfoIter(infoIter.bcsv, infoIter.record);
+    (iter as JMapInfoIter_StageDataHolder).originalStageDataHolder = (infoIter as JMapInfoIter_StageDataHolder).originalStageDataHolder;
+    return iter;
 }
 
 type LayerObjInfoCallback = (infoIter: JMapInfoIter, layerId: LayerId, isMapPart: boolean) => void;

@@ -37,10 +37,6 @@ export class JMapInfoIter {
     constructor(public bcsv: BCSV.Bcsv, public record: BCSV.BcsvRecord) {
     }
 
-    public copy(): JMapInfoIter {
-        return new JMapInfoIter(this.bcsv, this.record);
-    }
-
     public getNumRecords(): number {
         return this.bcsv.records.length;
     }

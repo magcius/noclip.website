@@ -868,7 +868,7 @@ function calcColor(dstPrm: Color, dstEnv: Color, workData: JPAEmitterWorkData, t
     const calcColorIdxType: CalcIdxType = (bsp1.colorFlags >>> 4) & 0x07;
     let anmIdx = 0;
     if (calcColorIdxType === CalcIdxType.Normal) {
-        anmIdx = Math.min(bsp1.colorRegAnmMaxFrm, tick);
+        anmIdx = Math.min(bsp1.colorRegAnmMaxFrm, tick | 0);
     } else if (calcColorIdxType === CalcIdxType.Repeat) {
         anmIdx = ((tick | 0) + randomPhase) % (bsp1.colorRegAnmMaxFrm + 1);
     } else if (calcColorIdxType === CalcIdxType.Reverse) {
@@ -1960,7 +1960,7 @@ export class JPABaseParticle {
             else if (field.type === JPAFieldType.Drag)
                 this.calcFieldDrag(field, workData);
             else
-                throw "whoops";
+                ; // throw "whoops";
         }
     }
 
@@ -1985,6 +1985,9 @@ export class JPABaseParticle {
             return this.time;
         else if (type === CalcScaleAnmType.Repeat)
             return (this.tick / maxFrame) % 1.0;
+        else if (type === CalcScaleAnmType.Reverse)
+            // TODO(jstpierre): Verify
+            return 1.0 - this.time;
         else
             throw "whoops";
     }
@@ -2328,7 +2331,7 @@ export class JPABaseParticle {
             renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateBillboard);
             renderInst.drawIndexes(6, 0);
         } else {
-            debugger;
+            // debugger;
             return;
         }
 

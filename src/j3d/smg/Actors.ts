@@ -54,6 +54,14 @@ export function connectToSceneMapObj(sceneObjHolder: SceneObjHolder, actor: Live
     connectToScene(sceneObjHolder, actor, 0x22, 0x05, DrawBufferType.MAP_OBJ, -1);
 }
 
+export function connectToSceneMapObjStrongLight(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    connectToScene(sceneObjHolder, actor, 0x22, 0x05, DrawBufferType.MAP_OBJ_STRONG_LIGHT, -1);
+}
+
+export function connectToSceneIndirectMapObjStrongLight(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    connectToScene(sceneObjHolder, actor, 0x22, 0x05, DrawBufferType.INDIRECT_MAP_OBJ_STRONG_LIGHT, -1);
+}
+
 export function connectToSceneNoSilhouettedMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
     connectToScene(sceneObjHolder, actor, 0x22, 0x05, DrawBufferType.NO_SHADOWED_MAP_OBJ, -1);
 }
@@ -72,6 +80,11 @@ export function connectToSceneAir(sceneObjHolder: SceneObjHolder, actor: LiveAct
 
 export function connectToSceneCrystal(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
     connectToScene(sceneObjHolder, actor, 0x22, 0x05, DrawBufferType.CRYSTAL, -1);
+}
+
+export function connectToSceneBloom(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    // TODO(jstpierre): Verify
+    connectToScene(sceneObjHolder, actor, 0x22, 0x05, DrawBufferType.BLOOM_MODEL, -1);
 }
 
 export function connectToScenePlanet(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
@@ -224,7 +237,7 @@ function setClippingFar(f: number): number {
     throw "whoops";
 }
 
-function bindColorChangeAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, frame: number, baseName: string = 'ColorChange'): void {
+export function bindColorChangeAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, frame: number, baseName: string = 'ColorChange'): void {
     const brkName = `${baseName}.brk`;
     if (arc.findFile(brkName) !== null) {
         const animationController = new AnimationController();
@@ -235,7 +248,7 @@ function bindColorChangeAnimation(modelInstance: BMDModelInstance, arc: RARC.RAR
     }
 }
 
-function bindTexChangeAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, frame: number, baseName: string = 'TexChange'): void {
+export function bindTexChangeAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, frame: number, baseName: string = 'TexChange'): void {
     const btpName = `${baseName}.btp`;
     const btkName = `${baseName}.btp`;
 
