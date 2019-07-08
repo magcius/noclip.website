@@ -30,8 +30,8 @@ import { BMD, BRK, BTK, BCK, LoopMode, BVA, BTP, BPK, JSystemFileReaderHelper, S
 import { BMDModel, BMDModelInstance, MaterialInstance } from '../../j3d/render';
 import { JMapInfoIter, createCsvParser, getJMapInfoTransLocal, getJMapInfoRotateLocal, getJMapInfoScale } from './JMapInfo';
 import { BloomPostFXParameters, BloomPostFXRenderer } from './Bloom';
-import { AreaLightInfo, ActorLightInfo, LightDataHolder, ActorLightCtrl } from './LightData';
-import { NameObj, SceneNameObjListExecutor, DrawBufferType, FilterKeyBase, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType } from './NameObj';
+import { LightDataHolder, ActorLightCtrl } from './LightData';
+import { NameObj, SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType } from './NameObj';
 import { EffectSystem, EffectKeeper, DrawOrder } from './EffectSystem';
 import { LightType } from './DrawBuffer';
 import { Spine, Nerve } from './Spine';
@@ -62,11 +62,9 @@ interface ModelMatrixAnimator {
 class RailAnimationMapPart {
     private railPhase: number = 0;
 
-    constructor(public path: Path, modelMatrix: mat4) {
+    constructor(public path: Path, translation: vec3) {
         assert(path.points.length === 2);
         assert(path.closed === 'OPEN');
-        const translation = scratchVec3;
-        mat4.getTranslation(translation, modelMatrix);
 
         // Project translation onto our line segment to find t.
         const seg = vec3.create();
@@ -143,11 +141,6 @@ class RailAnimationTico {
 }
 
 const enum RotateAxis { X, Y, Z };
-
-interface ObjectBase {
-    zoneAndLayer: ZoneAndLayer;
-    visibleScenario: boolean;
-}
 
 function setTextureMappingIndirect(m: TextureMapping, sceneTexture: GfxTexture): void {
     m.gfxTexture = sceneTexture;
@@ -552,7 +545,6 @@ interface Path {
 interface ObjInfo {
     objId: number;
     objName: string;
-    isMapPart: boolean;
     objArg0: number;
     objArg1: number;
     objArg2: number;
@@ -1107,7 +1099,7 @@ function getJMapInfoRotate(dst: vec3, sceneObjHolder: SceneObjHolder, infoIter: 
     matrixExtractEulerAngleRotation(dst, scratch);
 }
 
-export class LiveActor extends NameObj implements ObjectBase {
+export class LiveActor extends NameObj {
     public visibleScenario: boolean = true;
     public visibleAlive: boolean = true;
     public visibleModel: boolean = true;
@@ -1163,6 +1155,17 @@ export class LiveActor extends NameObj implements ObjectBase {
         modelCache.requestObjectData(objName);
     }
 
+    private calcBaseMtxInit(): void {
+        if (this.modelInstance !== null) {
+            computeModelMatrixSRT(this.modelInstance.modelMatrix,
+                1, 1, 1,
+                this.rotation[0], this.rotation[1], this.rotation[2],
+                this.translation[0], this.translation[1], this.translation[2]);
+
+            vec3.copy(this.modelInstance.baseScale, this.scale);
+        }
+    }
+
     public initModelManagerWithAnm(sceneObjHolder: SceneObjHolder, objName: string): void {
         const modelCache = sceneObjHolder.modelCache;
 
@@ -1173,6 +1176,8 @@ export class LiveActor extends NameObj implements ObjectBase {
         this.modelInstance.name = objName;
         this.modelInstance.animationController.fps = FPS;
         this.modelInstance.animationController.phaseFrames = Math.random() * 1500;
+
+        this.calcBaseMtxInit();
 
         // Compute the joint matrices an initial time in case anything wants to rely on them...
         this.modelInstance.calcJointToWorld();
@@ -1187,14 +1192,7 @@ export class LiveActor extends NameObj implements ObjectBase {
         getJMapInfoRotate(this.rotation, sceneObjHolder, infoIter);
         getJMapInfoScale(this.scale, infoIter);
 
-        if (this.modelInstance !== null) {
-            computeModelMatrixSRT(this.modelInstance.modelMatrix,
-                1, 1, 1,
-                this.rotation[0], this.rotation[1], this.rotation[2],
-                this.translation[0], this.translation[1], this.translation[2]);
-
-            vec3.copy(this.modelInstance.baseScale, this.scale);
-        }
+        this.calcBaseMtxInit();
     }
 
     public initLightCtrl(sceneObjHolder: SceneObjHolder): void {
@@ -1372,7 +1370,7 @@ class NoclipLegacyActor extends LiveActor {
 
         const objName = this.objinfo.objName;
         if (objName.startsWith('HoleBeltConveyerParts') && this.objinfo.path) {
-            this.modelMatrixAnimator = new RailAnimationMapPart(this.objinfo.path, this.modelInstance.modelMatrix);
+            this.modelMatrixAnimator = new RailAnimationMapPart(this.objinfo.path, this.translation);
         } else if (objName === 'TicoRail') {
             this.modelMatrixAnimator = new RailAnimationTico(this.objinfo.path);
         }
@@ -1415,7 +1413,7 @@ function layerVisible(layer: LayerId, layerMask: number): boolean {
 class ZoneNode {
     public name: string;
 
-    public objects: ObjectBase[] = [];
+    public objects: LiveActor[] = [];
 
     // The current layer mask for objects and sub-zones in this zone.
     public layerMask: number = 0xFFFFFFFF;
@@ -1429,7 +1427,7 @@ class ZoneNode {
         this.name = stageDataHolder.zoneName;
 
         stageDataHolder.iterAreas((infoIter, layerId) => {
-            this.areaObjInfo.push(stageDataHolder.legacyCreateObjinfo(infoIter, [], false));
+            this.areaObjInfo.push(stageDataHolder.legacyCreateObjinfo(infoIter, []));
         });
     }
 
@@ -1440,7 +1438,7 @@ class ZoneNode {
 }
 
 export interface NameObjFactory {
-    new(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): ObjectBase;
+    new(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): LiveActor;
     requestArchives?(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void;
 }
 
@@ -1471,51 +1469,6 @@ class SMGSpawner {
         obj.visibleScenario = this.zoneAndLayerVisible(obj.zoneAndLayer);
     }
 
-    public applyAnimations(actor: LiveActor, animOptions?: AnimOptions): void {
-        if (animOptions !== null) {
-            if (animOptions !== undefined) {
-                startBck(actor, animOptions.bck);
-                startBrkIfExist(actor.modelInstance, actor.arc, animOptions.brk);
-                startBtkIfExist(actor.modelInstance, actor.arc, animOptions.btk);
-            } else {
-                // Look for "Wait" animation first, then fall back to the first animation.
-                let hasAnim = false;
-                hasAnim = startBck(actor, 'Wait') || hasAnim;
-                hasAnim = startBrkIfExist(actor.modelInstance, actor.arc, 'Wait') || hasAnim;
-                hasAnim = startBtkIfExist(actor.modelInstance, actor.arc, 'Wait') || hasAnim;
-                if (!hasAnim) {
-                    // If there's no "Wait" animation, then play the first animations that we can...
-                    const bckFile = actor.arc.files.find((file) => file.name.endsWith('.bck')) || null;
-                    if (bckFile !== null) {
-                        const bckFilename = bckFile.name.slice(0, -4);
-                        startBck(actor, bckFilename);
-                    }
-
-                    const brkFile = actor.arc.files.find((file) => file.name.endsWith('.brk') && file.name.toLowerCase() !== 'colorchange.brk') || null;
-                    if (brkFile !== null) {
-                        const brkFilename = brkFile.name.slice(0, -4);
-                        startBckIfExist(actor.modelInstance, actor.arc, brkFilename);
-                    }
-
-                    const btkFile = actor.arc.files.find((file) => file.name.endsWith('.btk') && file.name.toLowerCase() !== 'texchange.btk') || null;
-                    if (btkFile !== null) {
-                        const btkFilename = btkFile.name.slice(0, -4);
-                        startBtkIfExist(actor.modelInstance, actor.arc, btkFilename);
-                    }            
-                }
-            }
-        }
-
-        // Apply a random phase to the animation.
-        if (actor.modelInstance.ank1Animator !== null && actor.modelInstance.ank1Animator.ank1.loopMode === LoopMode.REPEAT)
-            actor.modelInstance.animationController.phaseFrames += Math.random() * actor.modelInstance.ank1Animator.ank1.duration;
-    }
-
-    public bindChangeAnimation(actor: NoclipLegacyActor, rarc: RARC.RARC, frame: number): void {
-        bindColorChangeAnimation(actor.modelInstance, rarc, frame);
-        bindTexChangeAnimation(actor.modelInstance, rarc, frame);
-    }
-
     private getNameObjFactory(objName: string): NameObjFactory | null {
         const actorFactory = getNameObjTableEntry(objName);
         if (actorFactory !== null)
@@ -1531,6 +1484,51 @@ class SMGSpawner {
     public spawnObjectLegacy(zone: ZoneNode, zoneAndLayer: ZoneAndLayer, infoIter: JMapInfoIter, objinfo: ObjInfo): void {
         const modelCache = this.sceneObjHolder.modelCache;
 
+        const applyAnimations = (actor: LiveActor, animOptions?: AnimOptions) => {
+            if (animOptions !== null) {
+                if (animOptions !== undefined) {
+                    startBck(actor, animOptions.bck);
+                    startBrkIfExist(actor.modelInstance, actor.arc, animOptions.brk);
+                    startBtkIfExist(actor.modelInstance, actor.arc, animOptions.btk);
+                } else {
+                    // Look for "Wait" animation first, then fall back to the first animation.
+                    let hasAnim = false;
+                    hasAnim = startBck(actor, 'Wait') || hasAnim;
+                    hasAnim = startBrkIfExist(actor.modelInstance, actor.arc, 'Wait') || hasAnim;
+                    hasAnim = startBtkIfExist(actor.modelInstance, actor.arc, 'Wait') || hasAnim;
+                    if (!hasAnim) {
+                        // If there's no "Wait" animation, then play the first animations that we can...
+                        const bckFile = actor.arc.files.find((file) => file.name.endsWith('.bck')) || null;
+                        if (bckFile !== null) {
+                            const bckFilename = bckFile.name.slice(0, -4);
+                            startBck(actor, bckFilename);
+                        }
+    
+                        const brkFile = actor.arc.files.find((file) => file.name.endsWith('.brk') && file.name.toLowerCase() !== 'colorchange.brk') || null;
+                        if (brkFile !== null) {
+                            const brkFilename = brkFile.name.slice(0, -4);
+                            startBckIfExist(actor.modelInstance, actor.arc, brkFilename);
+                        }
+    
+                        const btkFile = actor.arc.files.find((file) => file.name.endsWith('.btk') && file.name.toLowerCase() !== 'texchange.btk') || null;
+                        if (btkFile !== null) {
+                            const btkFilename = btkFile.name.slice(0, -4);
+                            startBtkIfExist(actor.modelInstance, actor.arc, btkFilename);
+                        }            
+                    }
+                }
+            }
+    
+            // Apply a random phase to the animation.
+            if (actor.modelInstance.ank1Animator !== null && actor.modelInstance.ank1Animator.ank1.loopMode === LoopMode.REPEAT)
+                actor.modelInstance.animationController.phaseFrames += Math.random() * actor.modelInstance.ank1Animator.ank1.duration;
+        }
+    
+        const bindChangeAnimation = (actor: NoclipLegacyActor, rarc: RARC.RARC, frame: number) => {
+            bindColorChangeAnimation(actor.modelInstance, rarc, frame);
+            bindTexChangeAnimation(actor.modelInstance, rarc, frame);
+        };
+    
         const spawnGraph = (arcName: string, tag: SceneGraphTag = SceneGraphTag.Normal, animOptions: AnimOptions | null | undefined = undefined) => {
             const arcPath = `ObjectData/${arcName}.arc`;
             const modelFilename = `${arcName}.bdl`;
@@ -1541,7 +1539,7 @@ class SMGSpawner {
                     return null;
 
                 const actor = new NoclipLegacyActor(zoneAndLayer, arcName, this.sceneObjHolder, infoIter, tag, objinfo);
-                this.applyAnimations(actor, animOptions);
+                applyAnimations(actor, animOptions);
 
                 zone.objects.push(actor);
                 this.syncActorVisible(actor);
@@ -1692,7 +1690,7 @@ class SMGSpawner {
 
         case 'SurfingRaceSubGate':
             spawnGraph(name).then(([node, rarc]) => {
-                this.bindChangeAnimation(node, rarc, objinfo.objArg1);
+                bindChangeAnimation(node, rarc, objinfo.objArg1);
             });
             return;
 
@@ -1726,7 +1724,7 @@ class SMGSpawner {
             break;
         case 'TicoRail':
             spawnGraph('Tico').then(([node, rarc]) => {
-                this.bindChangeAnimation(node, rarc, objinfo.objArg0);
+                bindChangeAnimation(node, rarc, objinfo.objArg0);
             });
             break;
         case 'TicoShop':
@@ -1738,7 +1736,7 @@ class SMGSpawner {
         case 'SweetsDecoratePartsFork':
         case 'SweetsDecoratePartsSpoon':
             spawnGraph(name, SceneGraphTag.Normal, null).then(([node, rarc]) => {
-                this.bindChangeAnimation(node, rarc, objinfo.objArg1);
+                bindChangeAnimation(node, rarc, objinfo.objArg1);
             });
             break;
 
@@ -1750,7 +1748,7 @@ class SMGSpawner {
 
         case 'UFOKinoko':
             spawnGraph(name, SceneGraphTag.Normal, null).then(([node, rarc]) => {
-                this.bindChangeAnimation(node, rarc, objinfo.objArg0);
+                bindChangeAnimation(node, rarc, objinfo.objArg0);
             });
             break;
         case 'PlantA':
@@ -1951,14 +1949,14 @@ class SMGSpawner {
 
         const legacyPaths = stageDataHolder.legacyParsePaths();
 
-        stageDataHolder.iterPlacement((infoIter, layerId, isMapPart) => {
+        stageDataHolder.iterPlacement((infoIter, layerId) => {
             const factory = this.getNameObjFactory(getObjectName(infoIter));
             const zoneAndLayer: ZoneAndLayer = { zoneId: stageDataHolder.zoneId, layerId };
             if (factory !== null) {
                 const nameObj = new factory(zoneAndLayer, this.sceneObjHolder, infoIter);
                 zoneNode.objects.push(nameObj);
             } else {
-                const objInfoLegacy = stageDataHolder.legacyCreateObjinfo(infoIter, legacyPaths, isMapPart);
+                const objInfoLegacy = stageDataHolder.legacyCreateObjinfo(infoIter, legacyPaths);
                 const infoIterCopy = copyInfoIter(infoIter);
                 this.spawnObjectLegacy(zoneNode, zoneAndLayer, infoIterCopy, objInfoLegacy);
             }
@@ -2138,7 +2136,7 @@ function copyInfoIter(infoIter: JMapInfoIter): JMapInfoIter {
     return iter;
 }
 
-type LayerObjInfoCallback = (infoIter: JMapInfoIter, layerId: LayerId, isMapPart: boolean) => void;
+type LayerObjInfoCallback = (infoIter: JMapInfoIter, layerId: LayerId) => void;
 
 class StageDataHolder {
     private zoneArchive: RARC.RARC;
@@ -2156,7 +2154,7 @@ class StageDataHolder {
         return iter;
     }
 
-    public legacyCreateObjinfo(infoIter: JMapInfoIter, paths: Path[], isMapPart: boolean): ObjInfo {
+    public legacyCreateObjinfo(infoIter: JMapInfoIter, paths: Path[]): ObjInfo {
         const objId = infoIter.getValueNumber('l_id', -1);
         const objName = infoIter.getValueString('name', 'Unknown');
         const objArg0 = infoIter.getValueNumber('Obj_arg0', -1);
@@ -2180,7 +2178,7 @@ class StageDataHolder {
             rotation[0], rotation[1], rotation[2],
             translation[0], translation[1], translation[2]);
 
-        return { objId, objName, isMapPart, objArg0, objArg1, objArg2, objArg3, moveConditionType, rotateSpeed, rotateAccelType, rotateAxis, modelMatrix, path };
+        return { objId, objName, objArg0, objArg1, objArg2, objArg3, moveConditionType, rotateSpeed, rotateAccelType, rotateAxis, modelMatrix, path };
     }
 
     public legacyParsePaths(): Path[] {
@@ -2224,11 +2222,11 @@ class StageDataHolder {
 
             const objInfo = this.zoneArchive.findFileData(`jmp/Placement/${layerDirName}/ObjInfo`);
             if (objInfo !== null)
-                this.iterLayer(i, callback, objInfo, false);
+                this.iterLayer(i, callback, objInfo);
 
             const mapPartsInfo = this.zoneArchive.findFileData(`jmp/MapParts/${layerDirName}/MapPartsInfo`);
             if (mapPartsInfo !== null)
-                this.iterLayer(i, callback, mapPartsInfo, true);
+                this.iterLayer(i, callback, mapPartsInfo);
         }
     }
 
@@ -2238,16 +2236,16 @@ class StageDataHolder {
 
             const areaObjInfo = this.zoneArchive.findFileData(`jmp/Placement/${layerDirName}/AreaObjInfo`);
             if (areaObjInfo !== null)
-                this.iterLayer(i, callback, areaObjInfo, false);
+                this.iterLayer(i, callback, areaObjInfo);
         }
     }
 
-    private iterLayer(layerId: LayerId, callback: LayerObjInfoCallback, buffer: ArrayBufferSlice, isMapPart: boolean): void {
+    private iterLayer(layerId: LayerId, callback: LayerObjInfoCallback, buffer: ArrayBufferSlice): void {
         const iter = this.createCsvParser(buffer);
 
         for (let i = 0; i < iter.getNumRecords(); i++) {
             iter.setRecord(i);
-            callback(iter, layerId, isMapPart);
+            callback(iter, layerId);
         }
     }
 

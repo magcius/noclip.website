@@ -60,9 +60,6 @@ export const enum OpaXlu {
 }
 
 export const enum FilterKeyBase {
-    LEGACY_NODE_OPA = 0x0800,
-    LEGACY_NODE_XLU = 0x0400,
-
     DRAW_BUFFER_OPA = 0x0200,
     DRAW_BUFFER_XLU = 0x0100,
 
