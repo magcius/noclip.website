@@ -1101,7 +1101,8 @@ export class JPABaseEmitter {
     }
 
     private calcVolumeTorus(workData: JPAEmitterWorkData): void {
-        throw "whoops";
+        // TODO
+        this.calcVolumePoint(workData);
     }
 
     private calcVolumePoint(workData: JPAEmitterWorkData): void {
@@ -1138,7 +1139,8 @@ export class JPABaseEmitter {
     }
 
     private calcVolumeLine(workData: JPAEmitterWorkData): void {
-        throw "whoops";
+        // TODO
+        this.calcVolumePoint(workData);
     }
 
     private calcVolume(workData: JPAEmitterWorkData): void {

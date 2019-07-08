@@ -1428,6 +1428,9 @@ export class Tico extends NPCActor {
 }
 
 export class Sky extends LiveActor {
+    // Some people want to disable skyboxes from translating.
+    private isSkybox = true;
+
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, getObjectName(infoIter));
 
@@ -1440,7 +1443,8 @@ export class Sky extends LiveActor {
 
     public calcAnim(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.calcAnim(sceneObjHolder, viewerInput);
-        getCamPos(this.translation, viewerInput.camera);
+        if (this.isSkybox)
+            getCamPos(this.translation, viewerInput.camera);
     }
 }
 
