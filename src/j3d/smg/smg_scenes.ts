@@ -2055,7 +2055,8 @@ class SMGSpawner {
             this.addActor(galaxy);
         });
 
-        const worldMapPointParts = createCsvParser(worldMapRarc.findFileData('PointParts.bcsv'));
+        // Sometimes it's in the ActorInfo directory, sometimes its not... WTF?
+        const worldMapPointParts = createCsvParser(worldMapRarc.files.find((file) => file.name.toLowerCase() === 'pointparts.bcsv').buffer);
         worldMapPointParts.mapRecords((infoIter) => {
             const pointIndex = infoIter.getValueNumber('PointIndex');
             const pointPart = new MiniRoutePart(zoneAndLayer, this.sceneObjHolder, infoIter, points[pointIndex]);

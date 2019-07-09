@@ -1059,15 +1059,12 @@ export class MiniRouteGalaxy extends LiveActor {
         this.initModelManagerWithAnm(sceneObjHolder, miniatureName);
         this.initEffectKeeper(sceneObjHolder, null);
 
-        if (miniatureType == 'Galaxy' || miniatureType == 'MiniGalaxy')
-            this.rotateSpeed = 0.25 * MathConstants.DEG_TO_RAD;
-        else
-            this.rotateSpeed = 0;
+        this.rotateSpeed = 0.25 * MathConstants.DEG_TO_RAD;
 
         connectToSceneNoSilhouettedMapObj(sceneObjHolder, this);
 
-        this.startAction(this.name);
-        emitEffect(sceneObjHolder, this, this.name);
+        this.startAction(miniatureName);
+        emitEffect(sceneObjHolder, this, miniatureName);
     }
 
     public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
