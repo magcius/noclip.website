@@ -1024,8 +1024,6 @@ export class Coin extends LiveActor {
 }
 
 export class MiniRoutePoint extends LiveActor {
-    private miniature: MiniRouteMiniature | null;
-
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, pointInfo: WorldmapPointInfo) {
         super(zoneAndLayer, 'MiniRoutePoint');
         this.initModelManagerWithAnm(sceneObjHolder, 'MiniRoutePoint');
@@ -1038,22 +1036,35 @@ export class MiniRoutePoint extends LiveActor {
             startBrkIfExist(this.modelInstance, this.arc, 'Normal');
 
         connectToSceneNoSilhouettedMapObj(sceneObjHolder, this);
-
-        if (pointInfo.miniatureName !== null)
-            this.miniature = new MiniRouteMiniature(sceneObjHolder, this, pointInfo);
     }
 }
 
-class MiniRouteMiniature extends PartsModel {
-    private rotateSpeed = 0;
+export class MiniRouteGalaxy extends LiveActor {
+    private rotateSpeed: number;
 
-    constructor(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, private pointInfo: WorldmapPointInfo) {
-        super(sceneObjHolder, pointInfo.miniatureName, pointInfo.miniatureName, parentActor, 0x0D);
-        this.initFixedPositionRelative(pointInfo.miniatureOffset);
-        // vec3.set(this.scale, pointInfo.miniatureScale, pointInfo.miniatureScale, pointInfo.miniatureScale);
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, pointInfo: WorldmapPointInfo) {
+        super(zoneAndLayer, 'MiniRouteGalaxy');
 
-        if (pointInfo.miniatureType == 'Galaxy' || pointInfo.miniatureType == 'MiniGalaxy')
+        const miniatureName = infoIter.getValueString('MiniatureName');
+        const miniatureType = infoIter.getValueString('StageType');
+        const miniatureScale = infoIter.getValueNumber('ScaleMin');
+        const miniatureOffset = vec3.fromValues(
+            infoIter.getValueNumber('PosOffsetX'),
+            infoIter.getValueNumber('PosOffsetY'),
+            infoIter.getValueNumber('PosOffsetZ'));
+
+        vec3.add(this.translation, pointInfo.position, miniatureOffset);
+        // vec3.set(this.scale, miniatureScale, miniatureScale, miniatureScale);
+
+        this.initModelManagerWithAnm(sceneObjHolder, miniatureName);
+        this.initEffectKeeper(sceneObjHolder, null);
+
+        if (miniatureType == 'Galaxy' || miniatureType == 'MiniGalaxy')
             this.rotateSpeed = 0.25 * MathConstants.DEG_TO_RAD;
+        else
+            this.rotateSpeed = 0;
+
+        connectToSceneNoSilhouettedMapObj(sceneObjHolder, this);
 
         this.startAction(this.name);
         emitEffect(sceneObjHolder, this, this.name);
@@ -1064,6 +1075,40 @@ class MiniRouteMiniature extends PartsModel {
 
         const rotateY = getTimeFrames(viewerInput) * this.rotateSpeed;
         mat4.rotateY(this.modelInstance.modelMatrix, this.modelInstance.modelMatrix, rotateY);
+    }
+}
+
+export class MiniRoutePart extends LiveActor {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, pointInfo: WorldmapPointInfo) {
+        super(zoneAndLayer, 'MiniRoutePart');
+
+        const partsTypeName = infoIter.getValueString('PartsTypeName');
+        let modelName: string;
+        if (partsTypeName === 'WorldWarpPoint')
+            modelName = 'MiniWorldWarpPoint';
+        else if (partsTypeName === 'EarthenPipe')
+            modelName = 'MiniEarthenPipe';
+        else if (partsTypeName === 'StarCheckPoint')
+            modelName = 'MiniStarCheckPointMark';
+        else if (partsTypeName === 'TicoRouteCreator')
+            modelName = 'MiniTicoMasterMark';
+        else if (partsTypeName === 'StarPieceMine')
+            modelName = 'MiniStarPieceMine';
+        else
+            throw "whoops";
+
+        this.initModelManagerWithAnm(sceneObjHolder, modelName);
+        vec3.copy(this.translation, pointInfo.position);
+
+        this.tryStartAllAnim('Open');
+        if (pointInfo.isPink)
+            startBrkIfExist(this.modelInstance, this.arc, 'TicoBuild');
+        else
+            startBrkIfExist(this.modelInstance, this.arc, 'Normal');
+
+        this.initEffectKeeper(sceneObjHolder, null);
+
+        connectToSceneNoSilhouettedMapObj(sceneObjHolder, this);
     }
 }
 

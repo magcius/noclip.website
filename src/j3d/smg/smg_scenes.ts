@@ -547,11 +547,6 @@ interface ObjInfo {
 }
 
 export interface WorldmapPointInfo {
-    pointId: number;
-    miniatureName: string | null;
-    miniatureScale: number;
-    miniatureOffset: vec3;
-    miniatureType: string;
     isPink: boolean;
     position: vec3;
 }
@@ -1307,7 +1302,7 @@ export class LiveActor extends NameObj {
     }
 }
 
-import { NPCDirector, MiniRoutePoint, createModelObjMapObj, bindColorChangeAnimation, bindTexChangeAnimation, isExistIndirectTexture, connectToSceneIndirectMapObjStrongLight, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneBloom } from './Actors';
+import { NPCDirector, MiniRoutePoint, createModelObjMapObj, bindColorChangeAnimation, bindTexChangeAnimation, isExistIndirectTexture, connectToSceneIndirectMapObjStrongLight, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneBloom, MiniRouteGalaxy, MiniRoutePart } from './Actors';
 import { getNameObjTableEntry, PlanetMapCreator } from './ActorTable';
 import { prepareFrameDebugOverlayCanvas2D } from '../../DebugJunk';
 
@@ -1471,7 +1466,7 @@ class SMGSpawner {
         return null;
     }
 
-    public spawnObjectLegacy(zone: ZoneNode, zoneAndLayer: ZoneAndLayer, infoIter: JMapInfoIter, objinfo: ObjInfo): void {
+    public spawnObjectLegacy(zoneAndLayer: ZoneAndLayer, infoIter: JMapInfoIter, objinfo: ObjInfo): void {
         const modelCache = this.sceneObjHolder.modelCache;
 
         const applyAnimations = (actor: LiveActor, animOptions?: AnimOptions) => {
@@ -1534,7 +1529,7 @@ class SMGSpawner {
                 const actor = new NoclipLegacyActor(zoneAndLayer, arcName, this.sceneObjHolder, infoIter, tag, objinfo);
                 applyAnimations(actor, animOptions);
 
-                zone.objects.push(actor);
+                this.addActor(actor);
                 this.syncActorVisible(actor);
 
                 return [actor, actor.arc];
@@ -1936,6 +1931,10 @@ class SMGSpawner {
         }
     }
 
+    private addActor(object: LiveActor): void {
+        this.zones[object.zoneAndLayer.zoneId].objects.push(object);
+    }
+
     private placeStageData(stageDataHolder: StageDataHolder): ZoneNode {
         const zoneNode = new ZoneNode(stageDataHolder);
         this.zones[stageDataHolder.zoneId] = zoneNode;
@@ -1946,12 +1945,12 @@ class SMGSpawner {
             const factory = this.getNameObjFactory(getObjectName(infoIter));
             const zoneAndLayer: ZoneAndLayer = { zoneId: stageDataHolder.zoneId, layerId };
             if (factory !== null) {
-                const nameObj = new factory(zoneAndLayer, this.sceneObjHolder, infoIter);
-                zoneNode.objects.push(nameObj);
+                const actor = new factory(zoneAndLayer, this.sceneObjHolder, infoIter);
+                this.addActor(actor);
             } else {
                 const objInfoLegacy = stageDataHolder.legacyCreateObjinfo(infoIter, legacyPaths);
                 const infoIterCopy = copyInfoIter(infoIter);
-                this.spawnObjectLegacy(zoneNode, zoneAndLayer, infoIterCopy, objInfoLegacy);
+                this.spawnObjectLegacy(zoneAndLayer, infoIterCopy, objInfoLegacy);
             }
         });
 
@@ -2009,6 +2008,11 @@ class SMGSpawner {
         const modelCache = this.sceneObjHolder.modelCache;
         modelCache.requestObjectData('MiniRoutePoint');
         modelCache.requestObjectData('MiniRouteLine');
+        modelCache.requestObjectData('MiniWorldWarpPoint');
+        modelCache.requestObjectData('MiniEarthenPipe');
+        modelCache.requestObjectData('MiniStarPieceMine');
+        modelCache.requestObjectData('MiniTicoMasterMark');
+        modelCache.requestObjectData('MiniStarCheckPointMark');
 
         const worldMapRarc = this.sceneObjHolder.modelCache.getObjectData(this.galaxyName.substr(0, 10));
         const worldMapGalaxyData = createCsvParser(worldMapRarc.findFileData('ActorInfo/Galaxy.bcsv'));
@@ -2018,64 +2022,53 @@ class SMGSpawner {
     }
 
     public placeWorldMap(): void {
-        const points : WorldmapPointInfo[] = [];
+        const points: WorldmapPointInfo[] = [];
         const worldMapRarc = this.sceneObjHolder.modelCache.getObjectData(this.galaxyName.substr(0, 10));
         const worldMapPointData = createCsvParser(worldMapRarc.findFileData('ActorInfo/PointPos.bcsv'));
-        const worldMapLinkData = createCsvParser(worldMapRarc.findFileData('ActorInfo/PointLink.bcsv'));
 
-        worldMapPointData.mapRecords((jmp) => {
+        // Spawn everything in Zone 0.
+        const zoneAndLayer: ZoneAndLayer = { zoneId: 0, layerId: LayerId.COMMON };
+
+        worldMapPointData.mapRecords((infoIter) => {
             const position = vec3.fromValues(
-                jmp.getValueNumber('PointPosX'),
-                jmp.getValueNumber('PointPosY'),
-                jmp.getValueNumber('PointPosZ'));
+                infoIter.getValueNumber('PointPosX'),
+                infoIter.getValueNumber('PointPosY'),
+                infoIter.getValueNumber('PointPosZ'));
 
-            points.push({
-                miniatureName: null,
-                miniatureScale: 1,
-                miniatureOffset: vec3.create(),
-                miniatureType: '',
-                pointId: jmp.getValueNumber('Index'),
-                isPink: jmp.getValueString('ColorChange') == 'o',
+            const pointInfo: WorldmapPointInfo = {
+                isPink: infoIter.getValueString('ColorChange') == 'o',
                 position: position
-            });
+            };
+            points.push(pointInfo);
+
+            const isValid = infoIter.getValueString('Valid') === 'o';
+            if (isValid) {
+                const point = new MiniRoutePoint(zoneAndLayer, this.sceneObjHolder, pointInfo);
+                this.addActor(point);
+            }
         });
 
         const worldMapGalaxyData = createCsvParser(worldMapRarc.findFileData('ActorInfo/Galaxy.bcsv'));
-
-        worldMapGalaxyData.mapRecords((jmp) => {
-            const index = jmp.getValueNumber('PointPosIndex');
-            points[index].miniatureName = jmp.getValueString('MiniatureName');
-            points[index].miniatureType = jmp.getValueString('StageType');
-            points[index].miniatureScale = jmp.getValueNumber('ScaleMin');
-            points[index].miniatureOffset = vec3.fromValues(
-                jmp.getValueNumber('PosOffsetX'),
-                jmp.getValueNumber('PosOffsetY'),
-                jmp.getValueNumber('PosOffsetZ'));
+        worldMapGalaxyData.mapRecords((infoIter) => {
+            const pointIndex = infoIter.getValueNumber('PointPosIndex');
+            const galaxy = new MiniRouteGalaxy(zoneAndLayer, this.sceneObjHolder, infoIter, points[pointIndex]);
+            this.addActor(galaxy);
         });
 
-        // Spawn everything in Zone 0.
-        // TODO(jstpierre): Maybe not have a Zone for these objects? Not sure...
-        const zoneAndLayer: ZoneAndLayer = { zoneId: 0, layerId: LayerId.COMMON };
-
-        worldMapPointData.mapRecords((jmp, i) => {
-            if (jmp.getValueString('Valid') !== 'o')
-                return;
-
-            this.spawnWorldMapObject(zoneAndLayer, points[i]);
+        const worldMapPointParts = createCsvParser(worldMapRarc.findFileData('PointParts.bcsv'));
+        worldMapPointParts.mapRecords((infoIter) => {
+            const pointIndex = infoIter.getValueNumber('PointIndex');
+            const pointPart = new MiniRoutePart(zoneAndLayer, this.sceneObjHolder, infoIter, points[pointIndex]);
+            this.addActor(pointPart);
         });
 
+        const worldMapLinkData = createCsvParser(worldMapRarc.findFileData('ActorInfo/PointLink.bcsv'));
         worldMapLinkData.mapRecords((jmp) => {
             const isColorChange = jmp.getValueString('IsColorChange') === 'o';
             const pointA = points[jmp.getValueNumber('PointIndexA')];
             const pointB = points[jmp.getValueNumber('PointIndexB')];
             this.spawnWorldMapLine(zoneAndLayer, pointA, pointB, isColorChange);
         });
-    }
-
-    public spawnWorldMapObject(zoneAndLayer: ZoneAndLayer, pointInfo: WorldmapPointInfo): void {
-        const zoneNode = this.zones[zoneAndLayer.zoneId];
-        const nameObj = new MiniRoutePoint(zoneAndLayer, this.sceneObjHolder, pointInfo);
-        zoneNode.objects.push(nameObj);
     }
 
     public spawnWorldMapLine(zoneAndLayer: ZoneAndLayer, point1Info: WorldmapPointInfo, point2Info: WorldmapPointInfo, isPink: Boolean): void {
@@ -2104,14 +2097,14 @@ class SMGSpawner {
         modelMatrix[9]  = f[1];
         modelMatrix[10] = f[2]*2;
 
-        const obj = createModelObjMapObj(zoneAndLayer, this.sceneObjHolder, `Link ${point1Info.pointId} to ${point2Info.pointId}`, 'MiniRouteLine', modelMatrix);
+        const obj = createModelObjMapObj(zoneAndLayer, this.sceneObjHolder, `MiniRouteLine`, 'MiniRouteLine', modelMatrix);
         startBvaIfExist(obj.modelInstance, obj.arc, 'Open');
         if (isPink)
             startBrkIfExist(obj.modelInstance, obj.arc, 'TicoBuild');
         else
             startBrkIfExist(obj.modelInstance, obj.arc, 'Normal');
 
-        zoneNode.objects.push(obj);
+        this.addActor(obj);
     }
 
     public destroy(device: GfxDevice): void {
