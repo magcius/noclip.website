@@ -54,15 +54,6 @@ const ActorTable: ActorTableEntry[] = [
     // Sky/Air
     _("AstroDomeSkyA",                  Sky),
     _("AuroraSky",                      Sky),
-    _("BeyondGalaxySky",                Sky),
-    _("BeyondHellValleySky",            Sky),
-    _("BeyondHorizonSky",               Sky),
-    _("BeyondOrbitSky",                 Sky),
-    _("BeyondPhantomSky",               Sky),
-    _("BeyondSandSky",                  Sky),
-    _("BeyondSandNightSky",             Sky),
-    _("BeyondSummerSky",                Sky),
-    _("BeyondTitleSky",                 Sky),
     _("BigFallSky",                     Sky),
     _("Blue2DSky",                      Sky),
     _("BrightGalaxySky",                Sky),
@@ -98,6 +89,18 @@ const ActorTable: ActorTableEntry[] = [
     _("DimensionAir",                   Air),
     _("DarknessRoomAir",                Air),
     _("TwilightAir",                    Air),
+
+    // SMG2 skies
+    _("BeyondGalaxySky",                Sky),
+    _("BeyondHellValleySky",            Sky),
+    _("BeyondHorizonSky",               Sky),
+    _("BeyondOrbitSky",                 Sky),
+    _("BeyondPhantomSky",               Sky),
+    _("BeyondSandSky",                  Sky),
+    _("BeyondSandNightSky",             Sky),
+    _("BeyondSummerSky",                Sky),
+    _("BeyondTitleSky",                 Sky),
+    _("FineAndStormSky",                Sky),
 
     // Misc. Map Objects
     _("KoopaShipE",                     SimpleMapObj),

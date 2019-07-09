@@ -18,8 +18,9 @@ import { MaterialParams, ColorKind, ub_PacketParams, u_PacketParamsBufferSize, P
 import { GXMaterialHelperGfx, GXRenderHelperGfx } from "../gx/gx_render_2";
 import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants } from "../MathHelpers";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { makeSortKeyTranslucent, GfxRendererLayer } from "../gfx/render/GfxRenderer";
+import { makeSortKeyTranslucent, GfxRendererLayer, setSortKeyDepth } from "../gfx/render/GfxRenderer";
 import { fillMatrix4x3, fillColor, fillMatrix4x2 } from "../gfx/helpers/UniformBufferHelpers";
+import { computeViewSpaceDepthFromWorldSpacePoint, computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
 
 export interface JPAResourceRaw {
     resourceId: number;
@@ -1405,9 +1406,10 @@ export class JPABaseEmitter {
                 this.resData.texData[etx1.secondTextureIdx].fillTextureMapping(materialParams.m_TextureMapping[3]);
         }
 
+        const isAnm = !!(bsp1.flags & 0x01000000);
         if (bsp1.shapeType === ShapeType.Point || bsp1.shapeType === ShapeType.Line)
             this.genTexCrdMtxIdt(materialParams);
-        else if (!(bsp1.flags & 0x01000000))
+        else if (!isAnm)
             this.genTexCrdMtxIdt(materialParams);
 
         const needsPrevPos = bsp1.dirType === DirType.PrevPctl;
@@ -2175,8 +2177,9 @@ export class JPABaseParticle {
         const bsp1 = workData.baseEmitter.resData.res.bsp1;
 
         const isPrj = !!(bsp1.flags & 0x00100000);
+        const isAnm = !!(bsp1.flags & 0x01000000);
         if (isPrj) {
-            if (!!((bsp1.flags >>> 0x18) & 0x01)) {
+            if (isAnm) {
                 // loadPrjAnm
                 calcTexCrdMtxAnm(dst, bsp1, workData.baseEmitter.tick);
                 mat4SwapTranslationColumns(dst);
@@ -2186,9 +2189,8 @@ export class JPABaseParticle {
                 // loadPrj
                 mat4.mul(dst, workData.texPrjMtx, posMtx);
             }
-        } else {
-            if (!!(bsp1.flags & 0x01000000))
-                calcTexCrdMtxAnm(dst, bsp1, this.tick);
+        } else if (isAnm) {
+            calcTexCrdMtxAnm(dst, bsp1, this.tick);
         }
     }
 
@@ -2256,6 +2258,8 @@ export class JPABaseParticle {
 
         const renderInst = renderInstManager.pushRenderInst();
         renderInst.sortKey = makeSortKeyTranslucent(GfxRendererLayer.TRANSLUCENT);
+        const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(workData.posCamMtx, this.position);
+        renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
 
         colorMult(materialParams.u_Color[ColorKind.C0], this.colorPrm, workData.baseEmitter.globalColorPrm);
@@ -2530,7 +2534,7 @@ function parseResource(res: JPAResourceRaw): JPAResource {
             const shapeType: ShapeType = (flags >>> 0) & 0x0F;
             const dirType: DirType = (flags >>> 4) & 0x07;
             const rotType: RotType = (flags >>> 7) & 0x07;
-            let planeType: PlaneType = (flags >>> 10) & 0x03;
+            let planeType: PlaneType = (flags >>> 10) & 0x01;
             if (shapeType === ShapeType.DirectionCross || shapeType === ShapeType.RotationCross)
                 planeType = PlaneType.X;
 

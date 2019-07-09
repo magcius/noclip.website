@@ -120,6 +120,7 @@ class SingleEmitter {
     public resource: JPA.JPAResourceData | null = null;
     public groupID: number = 0;
     public loopMode: EmitterLoopMode;
+    public visibleForce: boolean = true;
 
     public init(resource: JPA.JPAResourceData): void {
         this.resource = resource;
@@ -161,7 +162,7 @@ class SingleEmitter {
 
     public setDrawParticle(v: boolean) {
         if (this.isValid())
-            this.particleEmitter.baseEmitter.setDrawParticle(v);
+            this.particleEmitter.baseEmitter.setDrawParticle(v && this.visibleForce);
     }
 }
 
@@ -309,7 +310,7 @@ export class MultiEmitter {
             const emitter = this.singleEmitters[i];
             if (!emitter.isValid())
                 continue;
-            emitter.particleEmitter.baseEmitter.setDrawParticle(v);
+            emitter.setDrawParticle(v);
         }
     }
 

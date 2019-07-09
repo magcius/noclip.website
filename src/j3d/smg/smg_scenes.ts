@@ -14,7 +14,7 @@ import { TextureMapping } from '../../TextureHolder';
 import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat } from '../../gfx/platform/GfxPlatform';
 import { executeOnPass } from '../../gfx/render/GfxRenderer2';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
-import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../../gfx/helpers/RenderTargetHelpers';
+import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../../gfx/helpers/RenderTargetHelpers';
 
 import * as GX from '../../gx/gx_enum';
 import * as Yaz0 from '../../compression/Yaz0';
@@ -187,8 +187,7 @@ class SMGRenderer implements Viewer.SceneGfx {
         }
 
         this.spawner.zones[0].computeZoneVisibility();
-        for (let i = 0; i < this.sceneObjHolder.sceneNameObjListExecutor.nameObjExecuteInfos.length; i++)
-            this.spawner.syncActorVisible(this.sceneObjHolder.sceneNameObjListExecutor.nameObjExecuteInfos[i].nameObj as LiveActor);
+        this.spawner.syncActorsVisible();
     }
 
     public setCurrentScenario(index: number): void {
@@ -374,6 +373,12 @@ class SMGRenderer implements Viewer.SceneGfx {
         this.drawXlu(passRenderer, DrawBufferType.SUN);
         // if (isDrawSpinDriverPathAtOpa())
         //     execute(0x12);
+
+        // Clear depth buffer.
+        passRenderer.endPass(null);
+        device.submitPass(passRenderer);
+        passRenderer = this.mainRenderTarget.createRenderPass(device, depthClearRenderPassDescriptor);
+
         this.drawOpa(passRenderer, DrawBufferType.PLANET);
         this.drawOpa(passRenderer, 0x05); // planet strong light?
         // execute(0x19);
@@ -548,6 +553,7 @@ interface ObjInfo {
 
 export interface WorldmapPointInfo {
     isPink: boolean;
+    isSmall: boolean;
     position: vec3;
 }
 
@@ -1402,8 +1408,10 @@ class ZoneNode {
 
     // The current layer mask for objects and sub-zones in this zone.
     public layerMask: number = 0xFFFFFFFF;
-    // Whether the layer of our parent zone is visible.
+    // Game might be able to set the visibility of a zone at runtime in SMG2.
     public visible: boolean = true;
+    // Whether the layer of our parent zone is visible.
+    public layerVisible: boolean = true;
     public subzones: ZoneNode[] = [];
 
     public areaObjInfo: ObjInfo[] = [];
@@ -1418,7 +1426,7 @@ class ZoneNode {
 
     public computeZoneVisibility(): void {
         for (let i = 0; i < this.subzones.length; i++)
-            this.subzones[i].visible = this.visible && layerVisible(this.subzones[i].stageDataHolder.layerId, this.layerMask);
+            this.subzones[i].layerVisible = this.layerVisible && layerVisible(this.subzones[i].stageDataHolder.layerId, this.layerMask);
     }
 }
 
@@ -1432,9 +1440,9 @@ export interface ZoneAndLayer {
     layerId: LayerId;
 }
 
+// TODO(jstpierre): Remove
 class SMGSpawner {
     public zones: ZoneNode[] = [];
-    // BackLight
     private isSMG1 = false;
     private isSMG2 = false;
     private isWorldMap = false;
@@ -1447,11 +1455,16 @@ class SMGSpawner {
 
     private zoneAndLayerVisible(zoneAndLayer: ZoneAndLayer): boolean {
         const zone = this.zones[zoneAndLayer.zoneId];
-        return zone.visible && layerVisible(zoneAndLayer.layerId, zone.layerMask);
+        return zone.visible && zone.layerVisible && layerVisible(zoneAndLayer.layerId, zone.layerMask);
     }
 
     public syncActorVisible(obj: LiveActor): void {
         obj.visibleScenario = this.zoneAndLayerVisible(obj.zoneAndLayer);
+    }
+
+    public syncActorsVisible(): void {
+        for (let i = 0; i < this.sceneObjHolder.sceneNameObjListExecutor.nameObjExecuteInfos.length; i++)
+            this.syncActorVisible(this.sceneObjHolder.sceneNameObjListExecutor.nameObjExecuteInfos[i].nameObj as LiveActor);
     }
 
     private getNameObjFactory(objName: string): NameObjFactory | null {
@@ -1965,8 +1978,12 @@ class SMGSpawner {
     public place(): void {
         this.placeStageData(this.sceneObjHolder.stageDataHolder);
 
-        if (this.isWorldMap)
+        if (this.isWorldMap) {
             this.placeWorldMap();
+            // This zone appears to be toggled at runtime? Not sure how the WorldMap system is implemented...
+            this.zones[1].visible = false;
+            this.syncActorsVisible();
+        }
     }
 
     private requestArchivesForObj(infoIter: JMapInfoIter): void {
@@ -2035,22 +2052,18 @@ class SMGSpawner {
                 infoIter.getValueNumber('PointPosY'),
                 infoIter.getValueNumber('PointPosZ'));
 
+            const isPink = infoIter.getValueString('ColorChange') == 'o';
+            const isSmall = true;
             const pointInfo: WorldmapPointInfo = {
-                isPink: infoIter.getValueString('ColorChange') == 'o',
-                position: position
+                position, isPink, isSmall,
             };
             points.push(pointInfo);
-
-            const isValid = infoIter.getValueString('Valid') === 'o';
-            if (isValid) {
-                const point = new MiniRoutePoint(zoneAndLayer, this.sceneObjHolder, pointInfo);
-                this.addActor(point);
-            }
         });
 
         const worldMapGalaxyData = createCsvParser(worldMapRarc.findFileData('ActorInfo/Galaxy.bcsv'));
         worldMapGalaxyData.mapRecords((infoIter) => {
             const pointIndex = infoIter.getValueNumber('PointPosIndex');
+            points[pointIndex].isSmall = false;
             const galaxy = new MiniRouteGalaxy(zoneAndLayer, this.sceneObjHolder, infoIter, points[pointIndex]);
             this.addActor(galaxy);
         });
@@ -2059,9 +2072,19 @@ class SMGSpawner {
         const worldMapPointParts = createCsvParser(worldMapRarc.files.find((file) => file.name.toLowerCase() === 'pointparts.bcsv').buffer);
         worldMapPointParts.mapRecords((infoIter) => {
             const pointIndex = infoIter.getValueNumber('PointIndex');
+            points[pointIndex].isSmall = false;
             const pointPart = new MiniRoutePart(zoneAndLayer, this.sceneObjHolder, infoIter, points[pointIndex]);
             this.addActor(pointPart);
         });
+
+        // Spawn our points
+        worldMapPointData.mapRecords((infoIter, i) => {
+            const isValid = infoIter.getValueString('Valid') === 'o';
+            if (isValid) {
+                const point = new MiniRoutePoint(zoneAndLayer, this.sceneObjHolder, points[i]);
+                this.addActor(point);
+            }
+        })
 
         const worldMapLinkData = createCsvParser(worldMapRarc.findFileData('ActorInfo/PointLink.bcsv'));
         worldMapLinkData.mapRecords((jmp) => {

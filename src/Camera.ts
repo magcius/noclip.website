@@ -127,9 +127,25 @@ export function computeViewSpaceDepthFromWorldSpaceAABB(camera: Camera, aabb: AA
  * The returned value can be passed directly to {@link GfxRenderer.setSortKeyDepth},
  * which will clamp if the value is below 0.
  */
-export function computeViewSpaceDepthFromWorldSpacePoint(camera: Camera, v: vec3): number {
-    vec3.transformMat4(v, v, camera.viewMatrix);
-    return -v[2];
+export function computeViewSpaceDepthFromWorldSpacePoint(camera: Camera, v: vec3, v_ = scratchVec3): number {
+    vec3.transformMat4(v_, v, camera.viewMatrix);
+    return -v_[2];
+}
+
+/**
+ * Computes a view-space depth given @param viewMatrix and @param v in world-space.
+ * 
+ * The convention of "view-space depth" is that 0 is near plane, +z is further away.
+ *
+ * The returned value is not clamped to the near or far planes -- that is, the depth
+ * value is less than zero if the camera is behind the point.
+ *
+ * The returned value can be passed directly to {@link GfxRenderer.setSortKeyDepth},
+ * which will clamp if the value is below 0.
+ */
+export function computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(viewMatrix: mat4, v: vec3, v_ = scratchVec3): number {
+    vec3.transformMat4(v_, v, viewMatrix);
+    return -v_[2];
 }
 
 export function divideByW(dst: vec4, src: vec4): void {

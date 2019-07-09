@@ -1035,6 +1035,9 @@ export class MiniRoutePoint extends LiveActor {
         else
             startBrkIfExist(this.modelInstance, this.arc, 'Normal');
 
+        if (pointInfo.isSmall)
+            vec3.set(this.scale, 0.5, 1, 0.5);
+
         connectToSceneNoSilhouettedMapObj(sceneObjHolder, this);
     }
 }
@@ -1059,7 +1062,12 @@ export class MiniRouteGalaxy extends LiveActor {
         this.initModelManagerWithAnm(sceneObjHolder, miniatureName);
         this.initEffectKeeper(sceneObjHolder, null);
 
-        this.rotateSpeed = 0.25 * MathConstants.DEG_TO_RAD;
+        if (miniatureType === 'BossGalaxyLv3') {
+            this.rotateSpeed = 0;
+            this.rotation[1] = -0.25 * Math.PI;
+        } else {
+            this.rotateSpeed = 0.25 * MathConstants.DEG_TO_RAD;
+        }
 
         connectToSceneNoSilhouettedMapObj(sceneObjHolder, this);
 
