@@ -1047,16 +1047,16 @@ export class MiniRoutePoint extends LiveActor {
 class MiniRouteMiniature extends PartsModel {
     private rotateSpeed = 0;
 
-    constructor(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, pointInfo: WorldmapPointInfo) {
+    constructor(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, private pointInfo: WorldmapPointInfo) {
         super(sceneObjHolder, pointInfo.miniatureName, pointInfo.miniatureName, parentActor, 0x0D);
         this.initFixedPositionRelative(pointInfo.miniatureOffset);
+        // vec3.set(this.scale, pointInfo.miniatureScale, pointInfo.miniatureScale, pointInfo.miniatureScale);
 
         if (pointInfo.miniatureType == 'Galaxy' || pointInfo.miniatureType == 'MiniGalaxy')
             this.rotateSpeed = 0.25 * MathConstants.DEG_TO_RAD;
 
         this.startAction(this.name);
-
-        connectToSceneNoSilhouettedMapObj(sceneObjHolder, this);
+        emitEffect(sceneObjHolder, this, this.name);
     }
 
     public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {

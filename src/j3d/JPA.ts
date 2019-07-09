@@ -474,8 +474,10 @@ export class JPAResourceData {
     }
 
     private translateTDB1Index(device: GfxDevice, idx: number): void {
-        const timg = this.jpac.textures[this.res.tdb1[idx]].texture;
-        this.texData[idx] = new BTIData(device, timg);
+        if (this.texData[idx] === undefined) {
+            const timg = this.jpac.textures[this.res.tdb1[idx]].texture;
+            this.texData[idx] = new BTIData(device, timg);
+        }
     }
 
     public destroy(device: GfxDevice): void {
@@ -1288,7 +1290,7 @@ export class JPABaseEmitter {
     private calcWorkData_d(workData: JPAEmitterWorkData): void {
         // Set up the work data for drawing.
         JPAGetXYZRotateMtx(scratchMatrix, this.emitterRot);
-        mat4.mul(workData.emitterGlobalRot, workData.emitterGlobalRot, scratchMatrix);
+        mat4.mul(workData.emitterGlobalRot, this.globalRotation, scratchMatrix);
         vec3.transformMat4(workData.emitterGlobalDir, this.emitterDir, workData.emitterGlobalRot);
     }
 
@@ -1654,7 +1656,7 @@ export class JPABaseParticle {
 
         this.drag = 1.0;
         this.moment = 1.0 - (bem1.moment * get_rndm_f(baseEmitter.random));
-        vec3.set(this.axisY, workData.emitterGlobalRot[1], workData.emitterGlobalRot[5], workData.emitterGlobalRot[9]);
+        vec3.set(this.axisY, workData.emitterGlobalRot[4], workData.emitterGlobalRot[5], workData.emitterGlobalRot[6]);
 
         colorCopy(this.colorPrm, baseEmitter.colorPrm);
         colorCopy(this.colorEnv, baseEmitter.colorEnv);
@@ -2073,7 +2075,7 @@ export class JPABaseParticle {
                 const hasAlphaAnm = !!(esp1.flags & 0x00010000);
                 const hasAlphaFlickAnm = !!(esp1.flags & 0x00020000);
 
-                if (hasAlphaAnm || hasAlphaAnm) {
+                if (hasAlphaAnm || hasAlphaFlickAnm) {
                     let alpha: number;
 
                     if (this.time < esp1.alphaInTiming)
@@ -2204,6 +2206,8 @@ export class JPABaseParticle {
     }
 
     private applyPlane(m: mat4, plane: PlaneType, scaleX: number, scaleY: number): void {
+        // TODO(jstpierre): This doesn't seem quite right... need
+        // to figure out what's up with the plane stuff....
         if (plane === PlaneType.XY) {
             m[0] *= scaleX;
             m[1] *= scaleX;
@@ -2216,6 +2220,11 @@ export class JPABaseParticle {
             m[0] *= scaleX;
             m[1] *= scaleX;
             m[2] *= scaleX;
+
+            // TODO(jstpierre): Menbo ripples break without this...
+            m[4] *= scaleY;
+            m[5] *= scaleY;
+            m[6] *= scaleY;
 
             m[8] *= scaleY;
             m[9] *= scaleY;
@@ -2356,9 +2365,12 @@ export class JPABaseParticle {
         materialOffs += 4*3*9;
 
         materialOffs += fillTextureMappingInfo(d, materialOffs, materialParams.m_TextureMapping[0]);
-        materialOffs += fillTextureMappingInfo(d, materialOffs, materialParams.m_TextureMapping[1]);
+        // Skip u_TextureInfo[1]
+        materialOffs += 4;
+        materialOffs += fillTextureMappingInfo(d, materialOffs, materialParams.m_TextureMapping[2]);
+        materialOffs += fillTextureMappingInfo(d, materialOffs, materialParams.m_TextureMapping[3]);
         // Skip u_TextureInfo[2-8]
-        materialOffs += 4*6;
+        materialOffs += 4*4;
 
         materialOffs += fillMatrix4x2(d, materialOffs, materialParams.u_IndTexMtx[0]);
 
@@ -2403,10 +2415,11 @@ function makeColorTable(buffer: ArrayBufferSlice, entryCount: number, duration: 
     for (let i = 1; i <= time0; i++)
         colorCopy(dst[dstIdx++], dst[0]);
 
+    let time1: number = time0;
     for (let i = 1; i < entryCount; i++) {
         const entry0 = i - 1, entry1 = i;
         const time0 = view.getUint16(entry0 * 0x06 + 0x00);
-        const time1 = view.getUint16(entry1 * 0x06 + 0x00);
+        time1 = view.getUint16(entry1 * 0x06 + 0x00);
         assert(time0 === dstIdx - 1);
 
         colorFromRGBA8(dst[time1], view.getUint32(entry1 * 0x06 + 0x02));
@@ -2419,6 +2432,9 @@ function makeColorTable(buffer: ArrayBufferSlice, entryCount: number, duration: 
         assert(dstIdx === time1);
         dstIdx++;
     }
+
+    for (let i = time1 + 1; i <= duration; i++)
+        colorCopy(dst[i], dst[time1]);
 
     return dst;
 }
@@ -2514,7 +2530,7 @@ function parseResource(res: JPAResourceRaw): JPAResource {
             const shapeType: ShapeType = (flags >>> 0) & 0x0F;
             const dirType: DirType = (flags >>> 4) & 0x07;
             const rotType: RotType = (flags >>> 7) & 0x07;
-            let planeType: PlaneType = (flags >>> 10) & 0x01;
+            let planeType: PlaneType = (flags >>> 10) & 0x03;
             if (shapeType === ShapeType.DirectionCross || shapeType === ShapeType.RotationCross)
                 planeType = PlaneType.X;
 

@@ -32,7 +32,7 @@ import { JMapInfoIter, createCsvParser, getJMapInfoTransLocal, getJMapInfoRotate
 import { BloomPostFXParameters, BloomPostFXRenderer } from './Bloom';
 import { LightDataHolder, ActorLightCtrl } from './LightData';
 import { NameObj, SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType } from './NameObj';
-import { EffectSystem, EffectKeeper, DrawOrder } from './EffectSystem';
+import { EffectSystem, EffectKeeper } from './EffectSystem';
 import { LightType } from './DrawBuffer';
 import { Spine, Nerve } from './Spine';
 
@@ -157,17 +157,6 @@ function setIndirectTextureOverride(modelInstance: BMDModelInstance, sceneTextur
 
 const scratchVec3 = vec3.create();
 
-function createFilterKeyForEffectDrawOrder(drawOrder: DrawOrder): number {
-    if (drawOrder === DrawOrder.DRW_3D)
-        return createFilterKeyForDrawType(DrawType.EFFECT_DRAW_3D);
-    else if (drawOrder === DrawOrder.DRW_AFTER_INDIRECT)
-        return createFilterKeyForDrawType(DrawType.EFFECT_DRAW_AFTER_INDIRECT);
-    else if (drawOrder === DrawOrder.DRW_BLOOM_EFFECT)
-        return createFilterKeyForDrawType(DrawType.EFFECT_DRAW_INDIRECT);
-    else
-        throw "whoops";
-}
-
 class SMGRenderer implements Viewer.SceneGfx {
     private bloomRenderer: BloomPostFXRenderer;
     private bloomParameters = new BloomPostFXParameters();
@@ -287,10 +276,10 @@ class SMGRenderer implements Viewer.SceneGfx {
     private drawAllEffects(): void {
         if (this.sceneObjHolder.effectSystem === null)
             return;
-        for (let drawOrder = 0; drawOrder < 2; drawOrder++) {
+        for (let drawType = DrawType.EFFECT_DRAW_3D; drawType <= DrawType.EFFECT_DRAW_AFTER_IMAGE_EFFECT; drawType++) {
             const template = this.renderHelper.renderInstManager.pushTemplateRenderInst();
-            template.filterKey = createFilterKeyForEffectDrawOrder(drawOrder);
-            this.sceneObjHolder.effectSystem.draw(this.sceneObjHolder.modelCache.device, this.renderHelper, drawOrder);
+            template.filterKey = createFilterKeyForDrawType(drawType);
+            this.sceneObjHolder.effectSystem.draw(this.sceneObjHolder.modelCache.device, this.renderHelper, drawType);
             this.renderHelper.renderInstManager.popTemplateRenderInst();
         }
     }
@@ -1320,6 +1309,7 @@ export class LiveActor extends NameObj {
 
 import { NPCDirector, MiniRoutePoint, createModelObjMapObj, bindColorChangeAnimation, bindTexChangeAnimation, isExistIndirectTexture, connectToSceneIndirectMapObjStrongLight, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneBloom } from './Actors';
 import { getNameObjTableEntry, PlanetMapCreator } from './ActorTable';
+import { prepareFrameDebugOverlayCanvas2D } from '../../DebugJunk';
 
 // Random actor for other things that otherwise do not have their own actors.
 class NoclipLegacyActor extends LiveActor {
@@ -1487,9 +1477,12 @@ class SMGSpawner {
         const applyAnimations = (actor: LiveActor, animOptions?: AnimOptions) => {
             if (animOptions !== null) {
                 if (animOptions !== undefined) {
-                    startBck(actor, animOptions.bck);
-                    startBrkIfExist(actor.modelInstance, actor.arc, animOptions.brk);
-                    startBtkIfExist(actor.modelInstance, actor.arc, animOptions.btk);
+                    if (animOptions.bck !== undefined)
+                        startBck(actor, animOptions.bck.slice(0, -4));
+                    if (animOptions.brk !== undefined)
+                        startBrkIfExist(actor.modelInstance, actor.arc, animOptions.brk.slice(0, -4));
+                    if (animOptions.btk !== undefined)
+                        startBtkIfExist(actor.modelInstance, actor.arc, animOptions.btk.slice(0, -4));
                 } else {
                     // Look for "Wait" animation first, then fall back to the first animation.
                     let hasAnim = false;
@@ -1836,7 +1829,7 @@ class SMGSpawner {
 
         case 'GreenStar':
         case 'PowerStar':
-            spawnGraph(`PowerStar`, SceneGraphTag.Normal, { bck: null }).then(([node, rarc]) => {
+            spawnGraph(`PowerStar`, SceneGraphTag.Normal, { }).then(([node, rarc]) => {
                 if (this.isSMG1) {
                     // This appears to be hardcoded in the DOL itself, inside "GameEventFlagTable".
                     const isRedStar = this.galaxyName === 'HeavensDoorGalaxy' && node.objinfo.objArg0 === 2;
@@ -1935,7 +1928,7 @@ class SMGSpawner {
             });
             break;
         case 'WanwanRolling':
-            spawnGraph(name, SceneGraphTag.Normal, { bck: null });
+            spawnGraph(name, SceneGraphTag.Normal, { });
             break;
         default:
             spawnDefault(name);

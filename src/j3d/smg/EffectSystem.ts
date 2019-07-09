@@ -11,6 +11,7 @@ import { vec3, mat4 } from "gl-matrix";
 import { GXRenderHelperGfx } from "../../gx/gx_render_2";
 import { colorNewCopy, White, colorCopy } from "../../Color";
 import { computeModelMatrixR } from "../../MathHelpers";
+import { DrawType } from "./NameObj";
 
 export class ParticleResourceHolder {
     private effectNames: string[];
@@ -70,13 +71,6 @@ function parseColor(dst: Color, s: string): void {
 
 function isDigitStringTail(s: string): boolean {
     return !!s.match(/\d+$/);
-}
-
-export const enum DrawOrder {
-    DRW_3D,
-    DRW_AFTER_INDIRECT,
-    DRW_BLOOM_EFFECT,
-    DRW_AFTER_IMAGE_EFFECT,
 }
 
 const enum SRTFlags {
@@ -189,16 +183,16 @@ export function setupMultiEmitter(m: MultiEmitter, autoEffectIter: JMapInfoIter)
 
     const drawOrder = autoEffectIter.getValueString('DrawOrder');
     if (drawOrder === 'AFTER_INDIRECT')
-        m.setDrawOrder(DrawOrder.DRW_AFTER_INDIRECT);
+        m.setDrawOrder(DrawType.EFFECT_DRAW_AFTER_INDIRECT);
     else if (drawOrder === '3D')
-        m.setDrawOrder(DrawOrder.DRW_3D);
+        m.setDrawOrder(DrawType.EFFECT_DRAW_3D);
     else if (drawOrder === 'BLOOM_EFFECT')
-        m.setDrawOrder(DrawOrder.DRW_BLOOM_EFFECT);
+        m.setDrawOrder(DrawType.EFFECT_DRAW_FOR_BLOOM_EFFECT);
     else if (drawOrder === 'AFTER_IMAGE_EFFECT')
-        m.setDrawOrder(DrawOrder.DRW_AFTER_IMAGE_EFFECT);
+        m.setDrawOrder(DrawType.EFFECT_DRAW_AFTER_IMAGE_EFFECT);
     else {
         console.warn('unknown draw order', drawOrder);
-        m.setDrawOrder(DrawOrder.DRW_3D);
+        m.setDrawOrder(DrawType.EFFECT_DRAW_3D);
     }
 
     const animName = autoEffectIter.getValueString('AnimName');
@@ -224,7 +218,7 @@ export class MultiEmitter {
     public name: string;
     public offset = vec3.create();
     public scaleValue: number = 0;
-    public drawOrder: DrawOrder;
+    public drawType: DrawType;
     public globalPrmColor = colorNewCopy(White);
     public globalEnvColor = colorNewCopy(White);
     public affectFlags: SRTFlags = 0;
@@ -270,7 +264,7 @@ export class MultiEmitter {
         }
     }
 
-    public setDrawOrder(drawOrder: DrawOrder): void {
+    public setDrawOrder(drawOrder: DrawType): void {
         for (let i = 0; i < this.singleEmitters.length; i++)
             this.singleEmitters[i].setGroupID(drawOrder);
     }
