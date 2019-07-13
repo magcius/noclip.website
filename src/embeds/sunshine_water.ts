@@ -141,6 +141,8 @@ class SeaPlaneScene {
         this.seaMaterialInstance = new MaterialInstance(seaMaterialData, {});
         this.seaMaterialInstance.bindTTK1(this.animationController, btk.ttk1);
         this.plane = new PlaneShape(device, cache);
+
+        this.shapeInstanceState.worldToViewMatrix = scratchViewMatrix;
     }
 
     public mangleMaterial(material: MaterialEntry, configName: string): void {
@@ -190,8 +192,8 @@ class SeaPlaneScene {
         this.seaMaterialInstance.setOnRenderInst(device, renderHelper.renderInstManager.gfxRenderCache, template);
         template.allocateUniformBuffer(ub_MaterialParams, this.seaMaterialInstance.materialHelper.materialParamsBufferSize);
 
-        computeViewMatrix(packetParams.u_PosMtx[0], viewerInput.camera);
-        mat4.mul(packetParams.u_PosMtx[0], packetParams.u_PosMtx[0], this.modelMatrix);
+        computeViewMatrix(this.shapeInstanceState.worldToViewMatrix, viewerInput.camera);
+        mat4.mul(packetParams.u_PosMtx[0], this.shapeInstanceState.worldToViewMatrix, this.modelMatrix);
 
         this.seaMaterialInstance.fillMaterialParams(template, this.materialInstanceState, this.shapeInstanceState.worldToViewMatrix, this.modelMatrix, viewerInput.camera, packetParams);
 
