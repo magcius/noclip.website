@@ -1,12 +1,12 @@
 
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4, vec3, vec4 } from 'gl-matrix';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
 import Progressable from '../../Progressable';
 import { assert, assertExists, align, nArray } from '../../util';
 import { fetchData, AbortedError } from '../../fetch';
-import { MathConstants, computeModelMatrixSRT, lerp, computeNormalMatrix } from '../../MathHelpers';
+import { MathConstants, computeModelMatrixSRT, lerp, computeNormalMatrix, clamp } from '../../MathHelpers';
 import { getPointBezier } from '../../Spline';
-import { Camera } from '../../Camera';
+import { Camera, ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceSphere, computeClipSpacePointFromWorldSpacePoint } from '../../Camera';
 import * as Viewer from '../../viewer';
 import * as UI from '../../ui';
 
@@ -305,6 +305,8 @@ class SMGRenderer implements Viewer.SceneGfx {
         const executor = this.sceneObjHolder.sceneNameObjListExecutor;
         const camera = viewerInput.camera;
 
+        camera.setClipPlanes(100, 800000);
+
         executor.executeMovement(this.sceneObjHolder, viewerInput);
         executor.executeCalcAnim(this.sceneObjHolder, viewerInput);
 
@@ -312,10 +314,6 @@ class SMGRenderer implements Viewer.SceneGfx {
         this.sceneTexture.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
 
         this.sceneObjHolder.captureSceneDirector.opaqueSceneTexture = this.sceneTexture.gfxTexture;
-
-        // TODO(jstpierre): This is a very messy combination of the legacy render path and the new render path.
-        // Anything in `sceneGraph` is legacy, the new stuff uses the drawBufferHolder.
-        viewerInput.camera.setClipPlanes(100, 800000);
 
         const template = this.renderHelper.pushTemplateRenderInst();
         this.renderHelper.fillSceneParams(viewerInput, template);
@@ -983,6 +981,95 @@ class CaptureSceneDirector {
     }
 }
 
+export class Dot {
+    public elem: HTMLElement;
+
+    private x: number = 0;
+    private y: number = 0;
+    private radius: number = 0;
+
+    public minRadius = 4;
+    public maxRadius = 50;
+
+    constructor(private uiSystem: UISystem) {
+        this.elem = document.createElement('div');
+        this.elem.style.position = 'absolute';
+        this.elem.style.borderRadius = '100%';
+        this.elem.style.backgroundColor = '#ff00ff';
+        this.elem.style.pointerEvents = 'auto';
+        this.elem.style.cursor = 'pointer';
+        this.elem.style.transition = 'background-color .15s ease-out';
+        this.elem.style.boxShadow = '0px 0px 10px rgba(0, 0, 0, 0.6)';
+        this.elem.onmouseover = () => {
+            this.elem.style.backgroundColor = 'white';
+        };
+        this.elem.onmouseout = () => {
+            this.elem.style.backgroundColor = '#ff00ff';
+        };
+
+        this.uiSystem.uiContainer.appendChild(this.elem);
+    }
+
+    public setWorldPosition(camera: Camera, translation: vec3): void {
+        computeClipSpacePointFromWorldSpacePoint(scratchVec3, camera, translation);
+
+        const screenX = this.uiSystem.convertViewToScreenX(scratchVec3[0]);
+        const screenY = this.uiSystem.convertViewToScreenY(scratchVec3[1]);
+        const radiusRamp = (1.0 - scratchVec3[2]);
+        const radius = clamp(this.maxRadius * radiusRamp, this.minRadius, this.maxRadius);
+        const visible = scratchVec3[2] <= 1.0;
+        this.setScreenPosition(screenX, screenY, radius, visible);
+    }
+
+    private setScreenPosition(x: number, y: number, radius: number, visible: boolean): void {
+        if (visible) {
+            if (x === this.x && y === this.y && radius === this.radius)
+                return;
+
+            this.x = x;
+            this.y = y;
+            this.radius = radius;
+
+            // Clip.
+            const padLeft = radius;
+            const padRight = -radius;
+            const padTop = radius;
+            const padBottom = -radius;
+            visible = (((this.x + padLeft) > 0) && ((this.x + padRight) < this.uiSystem.convertViewToScreenX(1.0)) &&
+                       ((this.y + padTop) > 0) && ((this.y + padBottom) < this.uiSystem.convertViewToScreenY(-1.0)));
+        }
+
+        if (visible) {
+            this.elem.style.left = `${x - radius}px`;
+            this.elem.style.top = `${y - radius}px`;
+            this.elem.style.width = `${radius * 2}px`;
+            this.elem.style.height = `${radius * 2}px`;
+            this.elem.style.display = 'block';
+        } else {
+            this.elem.style.display = 'none';
+        }
+    }
+}
+
+export class UISystem {
+    constructor(public uiContainer: HTMLElement) {
+    }
+
+    public convertViewToScreenX(v: number) {
+        const w = window.innerWidth;
+        return (v * 0.5 + 0.5) * w;
+    }
+
+    public convertViewToScreenY(v: number) {
+        const h = window.innerHeight;
+        return (-v * 0.5 + 0.5) * h;
+    }
+
+    public createDot(): Dot {
+        return new Dot(this);
+    }
+}
+
 export class SceneObjHolder {
     public sceneDesc: SMGSceneDescBase;
     public modelCache: ModelCache;
@@ -999,6 +1086,8 @@ export class SceneObjHolder {
     // This is technically stored outside the SceneObjHolder, separately
     // on the same singleton, but c'est la vie...
     public sceneNameObjListExecutor: SceneNameObjListExecutor;
+
+    public uiSystem: UISystem;
 
     public destroy(device: GfxDevice): void {
         this.modelCache.destroy(device);
@@ -1294,6 +1383,7 @@ export class LiveActor extends NameObj {
 import { NPCDirector, MiniRoutePoint, createModelObjMapObj, bindColorChangeAnimation, bindTexChangeAnimation, isExistIndirectTexture, connectToSceneIndirectMapObjStrongLight, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneBloom, MiniRouteGalaxy, MiniRoutePart } from './Actors';
 import { getNameObjTableEntry, PlanetMapCreator } from './ActorTable';
 import { prepareFrameDebugOverlayCanvas2D } from '../../DebugJunk';
+import { SceneContext } from '../../SceneBase';
 
 // Random actor for other things that otherwise do not have their own actors.
 class NoclipLegacyActor extends LiveActor {
@@ -2360,7 +2450,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
     public abstract requestGlobalArchives(modelCache: ModelCache): void;
     public abstract requestZoneArchives(modelCache: ModelCache, zoneName: string): void;
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, abortSignal: AbortSignal, context: SceneContext): Progressable<Viewer.SceneGfx> {
         const renderHelper = new GXRenderHelperGfx(device);
         const gfxRenderCache = renderHelper.renderInstManager.gfxRenderCache;
         const modelCache = new ModelCache(device, gfxRenderCache, this.pathBase, abortSignal);
@@ -2377,6 +2467,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         modelCache.requestObjectData('NPCData');
 
         const sceneObjHolder = new SceneObjHolder();
+        sceneObjHolder.uiSystem = new UISystem(context.uiContainer);
 
         return modelCache.waitForLoad().then(() => {
             const scenarioData = new ScenarioData(modelCache.getArchive(scenarioDataFilename));

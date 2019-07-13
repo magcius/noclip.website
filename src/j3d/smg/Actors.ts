@@ -2,9 +2,9 @@
 // Misc actors that aren't big enough to have their own file.
 
 import { LightType } from './DrawBuffer';
-import { SceneObjHolder, LiveActor, ZoneAndLayer, getObjectName, startBtkIfExist, startBvaIfExist, WorldmapPointInfo, startBrkIfExist, getDeltaTimeFrames, getTimeFrames, startBck, startBpkIfExist, startBtpIfExist, NameObjFactory } from './smg_scenes';
+import { SceneObjHolder, LiveActor, ZoneAndLayer, getObjectName, startBtkIfExist, startBvaIfExist, WorldmapPointInfo, startBrkIfExist, getDeltaTimeFrames, getTimeFrames, startBck, startBpkIfExist, startBtpIfExist, NameObjFactory, Dot } from './smg_scenes';
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg6, getJMapInfoArg7 } from './JMapInfo';
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4, vec3, vec4 } from 'gl-matrix';
 import AnimationController from '../../AnimationController';
 import { MathConstants, computeModelMatrixSRT, clamp } from '../../MathHelpers';
 import { colorNewFromRGBA8, Color } from '../../Color';
@@ -1424,6 +1424,8 @@ export class AstroCountDownPlate extends LiveActor {
 }
 
 export class Butler extends NPCActor {
+    private dot: Dot;
+
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, getObjectName(infoIter));
 
@@ -1436,6 +1438,16 @@ export class Butler extends NPCActor {
         const location = getJMapInfoArg0(infoIter);
 
         this.startAction('Wait');
+
+        this.dot = sceneObjHolder.uiSystem.createDot();
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.movement(sceneObjHolder, viewerInput);
+
+        vec3.copy(scratchVec3, this.translation);
+        scratchVec3[1] += 50;
+        this.dot.setWorldPosition(viewerInput.camera, scratchVec3);
     }
 }
 

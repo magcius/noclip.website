@@ -61,7 +61,7 @@ import * as Scenes_Zelda_SkywardSword from './rres/Scenes_Zelda_SkywardSword';
 
 import { DroppedFileSceneDesc } from './Scenes_FileDrops';
 
-import { UI, SaveStatesAction, FloatingPanel, RENDER_HACKS_ICON, Slider } from './ui';
+import { UI, SaveStatesAction, FloatingPanel, RENDER_HACKS_ICON, Slider, setChildren, Panel } from './ui';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera';
 import { hexdump, assert } from './util';
 import { downloadBlob, downloadBufferSlice, downloadBuffer } from './fetch';
@@ -141,12 +141,14 @@ class SceneLoader {
     public loadingSceneDesc: SceneDesc = null;
     public abortController: AbortController | null = null;
 
-    constructor(public viewer: Viewer) {
+    constructor(public viewer: Viewer, public sceneUIContainer: HTMLElement) {
     }
 
     public loadSceneDesc(sceneDesc: SceneDesc): Progressable<SceneGfx> {
+        // Tear down old scene.
         this.viewer.setScene(null);
         gfxDeviceGetImpl(this.viewer.gfxDevice).checkForLeaks();
+        setChildren(this.sceneUIContainer, []);
 
         if (this.abortController !== null)
             this.abortController.abort();
@@ -160,7 +162,8 @@ class SceneLoader {
         const device = this.viewer.gfxDevice;
         const abortSignal = this.abortController.signal;
         const progressMeter = progressable;
-        const uiContainer: HTMLElement = null;
+        const uiContainer: HTMLElement = document.createElement('div');
+        this.sceneUIContainer.appendChild(uiContainer);
         const context: SceneContext = {
             device, abortSignal, progressMeter, uiContainer,
         };
@@ -260,9 +263,9 @@ class Main {
             this.ui.setIsDragging(this.viewer.inputManager.isDragging());
         };
 
-        this.sceneLoader = new SceneLoader(this.viewer);
-
         this._makeUI();
+
+        this.sceneLoader = new SceneLoader(this.viewer, this.ui.sceneUIContainer);
 
         this.groups = sceneGroups;
 
@@ -525,7 +528,10 @@ class Main {
             this._saveState();
         };
 
-        this.ui.setScene(scene);
+        let scenePanels: Panel[] = [];
+        if (scene.createPanels)
+            scenePanels = scene.createPanels();
+        this.ui.setScenePanels(scenePanels);
 
         const sceneDescId = this._getCurrentSceneDescId();
         this.saveManager.setCurrentSceneDescId(sceneDescId);

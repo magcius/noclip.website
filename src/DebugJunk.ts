@@ -150,12 +150,10 @@ export function prepareFrameDebugOverlayCanvas2D(): CanvasRenderingContext2D {
 }
 
 const p = nArray(8, () => vec4.create());
-const vp = mat4.create();
 
 function transformToClipSpace(ctx: CanvasRenderingContext2D, camera: Camera, nPoints: number): void {
-    mat4.mul(vp, camera.projectionMatrix, camera.viewMatrix);
     for (let i = 0; i < nPoints; i++) {
-        vec4.transformMat4(p[i], p[i], vp);
+        vec4.transformMat4(p[i], p[i], camera.clipFromWorldMatrix);
         divideByW(p[i], p[i]);
     }
 }
@@ -215,10 +213,10 @@ export function drawWorldSpaceAABB(ctx: CanvasRenderingContext2D, camera: Camera
     ctx.stroke();
 }
 
-export function drawWorldSpacePoint(ctx: CanvasRenderingContext2D, camera: Camera, v: vec4, color: Color = Magenta, radius: number = 2): void {
+export function drawWorldSpacePoint(ctx: CanvasRenderingContext2D, camera: Camera, v: vec3, color: Color = Magenta, radius: number = 2): void {
     const cw = ctx.canvas.width;
     const ch = ctx.canvas.height;
-    vec4.copy(p[0], v);
+    vec4.set(p[0], v[0], v[1], v[2], 1.0);
     transformToClipSpace(ctx, camera, 1);
     if (shouldCull(p[0])) return;
 

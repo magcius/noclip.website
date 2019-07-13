@@ -11,7 +11,7 @@ import { BasicGXRendererHelper } from "../gx/gx_render_2";
 import { MDL0ModelInstance, MDL0Model, RRESTextureHolder } from "./render";
 import AnimationController from "../AnimationController";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { vec4, mat4 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
 import { prepareFrameDebugOverlayCanvas2D, drawWorldSpacePoint } from "../DebugJunk";
 import { Magenta } from "../Color";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
@@ -147,7 +147,7 @@ function parsePMPF(buffer: ArrayBufferSlice): PMPEntry[] {
     return entries;
 }
 
-const scratchVec4 = vec4.create();
+const scratchVec3 = vec3.create();
 class WS2_Renderer extends BasicGXRendererHelper {
     public animationController = new AnimationController();
     public modelInstances: MDL0ModelInstance[] = [];
@@ -198,9 +198,9 @@ class WS2_Renderer extends BasicGXRendererHelper {
             const ctx = prepareFrameDebugOverlayCanvas2D();
             for (let i = 0; i < this.pmp.length; i++) {
                 const p = this.pmp[i];
-                const v = scratchVec4;
-                vec4.set(v, 0, 0, 0, 1);
-                vec4.transformMat4(v, v, p.modelMatrix);
+                const v = scratchVec3;
+                vec3.set(v, 0, 0, 0);
+                vec3.transformMat4(v, v, p.modelMatrix);
                 drawWorldSpacePoint(ctx, viewerInput.camera, v, Magenta, 10);
             }
         }

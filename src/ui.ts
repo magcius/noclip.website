@@ -37,7 +37,7 @@ export const TIME_OF_DAY_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox
 export const RENDER_HACKS_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 110 105" height="20" fill="white"><path d="M95,5v60H65c0-16.6-13.4-30-30-30V5H95z"/><path d="M65,65c0,16.6-13.4,30-30,30C18.4,95,5,81.6,5,65c0-16.6,13.4-30,30-30v30H65z"/></svg>`;
 export const SAND_CLOCK_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" height="20" fill="white"><g><path d="M79.3,83.3h-6.2H24.9h-6.2c-1.7,0-3,1.3-3,3s1.3,3,3,3h60.6c1.7,0,3-1.3,3-3S81,83.3,79.3,83.3z"/><path d="M18.7,14.7h6.2h48.2h6.2c1.7,0,3-1.3,3-3s-1.3-3-3-3H18.7c-1.7,0-3,1.3-3,3S17,14.7,18.7,14.7z"/><path d="M73.1,66c0-0.9-0.4-1.8-1.1-2.4L52.8,48.5L72,33.4c0.7-0.6,1.1-1.4,1.1-2.4V20.7H24.9V31c0,0.9,0.4,1.8,1.1,2.4l19.1,15.1   L26,63.6c-0.7,0.6-1.1,1.4-1.1,2.4v11.3h48.2V66z"/></g></svg>';
 
-function setChildren(parent: Element, children: Element[]): void {
+export function setChildren(parent: Element, children: Element[]): void {
     // We want to swap children around without removing them, since removing them will cause
     // a relayout and possibly break scroll positions.
 
@@ -1914,7 +1914,7 @@ class FAQPanel implements Widget {
         this.toplevel.style.top = '0';
         this.toplevel.style.right = '0';
         this.toplevel.style.bottom = '0';
-        this.toplevel.style.background = 'rgba(0, 0, 0, 0.4)';
+        this.toplevel.style.background = 'rgba(0, 0, 0, 0.8)';
         this.toplevel.onclick = () => {
             this.elem.style.display = 'none';
         };
@@ -2389,6 +2389,7 @@ export class UI {
     private toplevel: HTMLElement;
 
     public dragHighlight: HTMLElement;
+    public sceneUIContainer: HTMLElement;
     public floatingPanelContainer: HTMLElement;
 
     private panelToplevel: HTMLElement;
@@ -2406,6 +2407,10 @@ export class UI {
 
     constructor(public viewer: Viewer.Viewer) {
         this.toplevel = document.createElement('div');
+
+        this.sceneUIContainer = document.createElement('div');
+        this.sceneUIContainer.style.pointerEvents = 'none';
+        this.toplevel.appendChild(this.sceneUIContainer);
 
         this.panelToplevel = document.createElement('div');
         this.panelToplevel.style.position = 'absolute';
@@ -2463,7 +2468,7 @@ export class UI {
         this.faqPanel.elem.style.display = 'none';
         this.toplevel.appendChild(this.faqPanel.elem);
 
-        this.setScene(null);
+        this.setScenePanels(null);
 
         this.elem = this.toplevel;
     }
@@ -2491,15 +2496,11 @@ export class UI {
         setChildren(this.panelContainer, panels.map((panel) => panel.elem));
     }
 
-    public setScene(scene: Viewer.SceneGfx | null): void {
-        if (scene !== null) {
-            let panels: Panel[] = [];
-            if (scene.createPanels !== undefined)
-                panels = scene.createPanels();
-            this.setPanels([this.sceneSelect, ...panels, this.textureViewer, this.timePanel, this.saveStatesPanel, this.viewerSettings, this.statisticsPanel, this.about]);
-        } else {
+    public setScenePanels(scenePanels: Panel[] | null): void {
+        if (scenePanels !== null)
+            this.setPanels([this.sceneSelect, ...scenePanels, this.textureViewer, this.timePanel, this.saveStatesPanel, this.viewerSettings, this.statisticsPanel, this.about]);
+        else
             this.setPanels([this.sceneSelect, this.about]);
-        }
     }
 
     public setPanelsAutoClosed(v: boolean): void {

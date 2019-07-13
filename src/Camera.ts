@@ -217,6 +217,19 @@ export class ScreenSpaceProjection {
 }
 
 /**
+ * Transforms the world-space point @param p, viewed by the camera @param Camera into
+ * normalized clip space and stores the result in @param output. Note that this is normalized
+ * clip space (between -1 and 1 on all three axes). Conversion into screen or viewport space
+ * is not done in this function.
+ */
+export function computeClipSpacePointFromWorldSpacePoint(output: vec3, camera: Camera, p: vec3, v4 = scratchVec4): void {
+    vec4.set(v4, p[0], p[1], p[2], 1.0);
+    vec4.transformMat4(v4, v4, camera.clipFromWorldMatrix);
+    const w = v4[3];
+    vec3.set(output, v4[0] / w, v4[1] / w, v4[2] / w);
+}
+
+/**
  * Computes the screen-space projection @param screenSpaceProjection, that
  * a sphere in world-space coordinates with parameters @param center and @param radius
  * will take up when viewed by @param camera.
