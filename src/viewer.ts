@@ -217,23 +217,8 @@ export class Viewer {
     }
 }
 
-export interface SceneDesc {
-    id: string;
-    name: string;
-    createScene?(device: GfxDevice, abortSignal: AbortSignal): Progressable<SceneGfx>;
-    createScene2?(device: GfxDevice, abortSignal: AbortSignal, progressMeter: ProgressMeter): PromiseLike<SceneGfx>;
-}
-
-export interface SceneGroup {
-    id: string;
-    name: string;
-    sceneDescs: (string | SceneDesc)[];
-    sceneIdMap?: Map<string, string>;
-}
-
-export function getSceneDescs(sceneGroup: SceneGroup): SceneDesc[] {
-    return sceneGroup.sceneDescs.filter((g) => typeof g !== 'string') as SceneDesc[];
-}
+import { SceneDesc, SceneGroup } from "./SceneBase"
+export { SceneDesc, SceneGroup };
 
 interface ViewerOut {
     viewer: Viewer;

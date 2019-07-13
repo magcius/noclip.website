@@ -1057,7 +1057,7 @@ export class MiniRouteGalaxy extends LiveActor {
             infoIter.getValueNumber('PosOffsetZ'));
 
         vec3.add(this.translation, pointInfo.position, miniatureOffset);
-        // vec3.set(this.scale, miniatureScale, miniatureScale, miniatureScale);
+        vec3.set(this.scale, miniatureScale, miniatureScale, miniatureScale);
 
         this.initModelManagerWithAnm(sceneObjHolder, miniatureName);
         this.initEffectKeeper(sceneObjHolder, null);

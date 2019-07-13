@@ -11,7 +11,7 @@ if (module.hot) {
     });
 }
 
-import { SceneDesc, SceneGroup, Viewer, SceneGfx, getSceneDescs, InitErrorCode, initializeViewer, makeErrorUI } from './viewer';
+import { SceneDesc, SceneGroup, Viewer, SceneGfx, InitErrorCode, initializeViewer, makeErrorUI } from './viewer';
 
 import ArrayBufferSlice from './ArrayBufferSlice';
 import Progressable from './Progressable';
@@ -77,6 +77,7 @@ import { standardFullClearRenderPassDescriptor } from './gfx/helpers/RenderTarge
 
 import * as Sentry from '@sentry/browser';
 import { GIT_REVISION, IS_DEVELOPMENT } from './BuildVersion';
+import { SceneContext, getSceneDescs } from './SceneBase';
 
 const sceneGroups = [
     "Wii",
@@ -153,18 +154,25 @@ class SceneLoader {
 
         this.loadingSceneDesc = sceneDesc;
 
-        let progressable: Progressable<SceneGfx> | null = null;
+        // TODO(jstpierre): This is a bit of an ugly hack until we can split out ProgressMeter from Progressable.
+        let progressable: Progressable<SceneGfx> | null = new Progressable<SceneGfx>(null);
 
-        if (sceneDesc.createScene !== undefined) {
-            progressable = sceneDesc.createScene(this.viewer.gfxDevice, this.abortController.signal);
-        } else if (sceneDesc.createScene2 !== undefined) {
-            // TODO(jstpierre): This is a bit of an ugly hack until we can split out ProgressMeter from Progressable.
-            progressable = new Progressable<SceneGfx>(null);
-            const promise = sceneDesc.createScene2(this.viewer.gfxDevice, this.abortController.signal, progressable);
-            progressable.promise = promise;
-        }
+        const device = this.viewer.gfxDevice;
+        const abortSignal = this.abortController.signal;
+        const progressMeter = progressable;
+        const uiContainer: HTMLElement = null;
+        const context: SceneContext = {
+            device, abortSignal, progressMeter, uiContainer,
+        };
 
-        if (progressable !== null) {
+        const promise = sceneDesc.createScene(device, abortSignal, context);
+
+        if (promise !== null) {
+            if (promise instanceof Progressable)
+                progressable = promise;
+            else
+                progressable.promise = promise;
+
             progressable.then((scene: SceneGfx) => {
                 if (this.loadingSceneDesc === sceneDesc) {
                     this.loadingSceneDesc = null;
@@ -210,9 +218,6 @@ class Main {
 
     private droppedFileGroup: SceneGroup;
 
-    private uiContainers: HTMLElement;
-    private dragHighlight: HTMLElement;
-    private floatingPanelContainer: HTMLElement;
     private debugFloater: FloatingPanel | null = null;
     private currentSceneGroup: SceneGroup;
     private currentSceneDesc: SceneDesc;
@@ -225,21 +230,18 @@ class Main {
 
         this.canvas = document.createElement('canvas');
 
-        this.uiContainers = document.createElement('div');
-        this.toplevel.appendChild(this.uiContainers);
-
         const errorCode = initializeViewer(this, this.canvas);
         if (errorCode !== InitErrorCode.SUCCESS) {
-            this.uiContainers.appendChild(makeErrorUI(errorCode));
+            this.toplevel.appendChild(makeErrorUI(errorCode));
             return;
         }
 
         this.toplevel.ondragover = (e) => {
-            this.dragHighlight.style.display = 'block';
+            this.ui.dragHighlight.style.display = 'block';
             e.preventDefault();
         };
         this.toplevel.ondragleave = (e) => {
-            this.dragHighlight.style.display = 'none';
+            this.ui.dragHighlight.style.display = 'none';
             e.preventDefault();
         };
         this.toplevel.ondrop = this._onDrop.bind(this);
@@ -371,7 +373,7 @@ class Main {
     };
 
     private _onDrop(e: DragEvent) {
-        this.dragHighlight.style.display = 'none';
+        this.ui.dragHighlight.style.display = 'none';
         e.preventDefault();
         const transfer = e.dataTransfer;
         if (transfer.files.length === 0)
@@ -616,7 +618,7 @@ class Main {
 
     private _makeUI() {
         this.ui = new UI(this.viewer);
-        this.uiContainers.appendChild(this.ui.elem);
+        this.toplevel.appendChild(this.ui.elem);
         this.ui.sceneSelect.onscenedescselected = this._onSceneDescSelected.bind(this);
         this.ui.saveStatesPanel.onsavestatesaction = (action: SaveStatesAction, key: string) => {
             this.doSaveStatesAction(action, key);
@@ -628,28 +630,13 @@ class Main {
             this.viewer.setSceneTime(0);
             this._saveState();
         };
-
-        this.dragHighlight = document.createElement('div');
-        this.uiContainers.appendChild(this.dragHighlight);
-        this.dragHighlight.style.position = 'absolute';
-        this.dragHighlight.style.left = '0';
-        this.dragHighlight.style.right = '0';
-        this.dragHighlight.style.top = '0';
-        this.dragHighlight.style.bottom = '0';
-        this.dragHighlight.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
-        this.dragHighlight.style.boxShadow = '0 0 40px 5px white inset';
-        this.dragHighlight.style.display = 'none';
-        this.dragHighlight.style.pointerEvents = 'none';
-
-        this.floatingPanelContainer = document.createElement('div');
-        this.uiContainers.appendChild(this.floatingPanelContainer);
     }
 
     private makeFloater(title: string = 'Floating Panel', icon: string = RENDER_HACKS_ICON): FloatingPanel {
         const panel = new FloatingPanel();
         panel.setWidth(600);
         panel.setTitle(icon, title);
-        this.floatingPanelContainer.appendChild(panel.elem);
+        this.ui.floatingPanelContainer.appendChild(panel.elem);
         return panel;
     }
 
@@ -704,7 +691,7 @@ class Main {
     }
 
     private _toggleUI() {
-        this.uiContainers.style.display = this.uiContainers.style.display === 'none' ? '' : 'none';
+        this.ui.elem.style.display = this.ui.elem.style.display === 'none' ? '' : 'none';
     }
 
     private _getSceneDownloadPrefix() {

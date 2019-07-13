@@ -731,7 +731,6 @@ export class ModelCache {
     public archiveCache = new Map<string, RARC.RARC | null>();
     public modelCache = new Map<string, BMDModel | null>();
     private models: BMDModel[] = [];
-    private destroyed: boolean = false;
 
     constructor(public device: GfxDevice, public cache: GfxRenderCache, private pathBase: string, private abortSignal: AbortSignal) {
     }
@@ -741,22 +740,7 @@ export class ModelCache {
         return Progressable.all(v);
     }
 
-    public getModel(archivePath: string, modelFilename: string): Progressable<BMDModel | null> {
-        if (this.modelCache.has(modelFilename))
-            return Progressable.resolve(this.modelCache.get(modelFilename));
-
-        const p = this.requestArchiveData(archivePath).then((rarc: RARC.RARC) => {
-            if (rarc === null)
-                return null;
-            if (this.destroyed)
-                throw new AbortedError();
-            return this.getModel2(rarc, modelFilename);
-        });
-
-        return p;
-    }
-
-    public getModel2(rarc: RARC.RARC, modelFilename: string): BMDModel | null {
+    public getModel(rarc: RARC.RARC, modelFilename: string): BMDModel | null {
         if (this.modelCache.has(modelFilename))
             return this.modelCache.get(modelFilename);
 
@@ -797,8 +781,8 @@ export class ModelCache {
         return assertExists(this.archiveCache.get(archivePath));
     }
 
-    public requestObjectData(objectName: string): void {
-        this.requestArchiveData(`ObjectData/${objectName}.arc`);
+    public requestObjectData(objectName: string) {
+        return this.requestArchiveData(`ObjectData/${objectName}.arc`);
     }
 
     public isObjectDataExist(objectName: string): boolean {
@@ -810,7 +794,6 @@ export class ModelCache {
     }
 
     public destroy(device: GfxDevice): void {
-        this.destroyed = true;
         for (let i = 0; i < this.models.length; i++)
             this.models[i].destroy(device);
     }
@@ -1161,7 +1144,7 @@ export class LiveActor extends NameObj {
 
         this.arc = modelCache.getObjectData(objName);
 
-        const bmdModel = modelCache.getModel2(this.arc, `${objName}.bdl`);
+        const bmdModel = modelCache.getModel(this.arc, `${objName}.bdl`);
         this.modelInstance = new BMDModelInstance(bmdModel);
         this.modelInstance.name = objName;
         this.modelInstance.animationController.fps = FPS;
@@ -1531,14 +1514,12 @@ class SMGSpawner {
         };
     
         const spawnGraph = (arcName: string, tag: SceneGraphTag = SceneGraphTag.Normal, animOptions: AnimOptions | null | undefined = undefined) => {
-            const arcPath = `ObjectData/${arcName}.arc`;
-            const modelFilename = `${arcName}.bdl`;
-
-            return modelCache.getModel(arcPath, modelFilename).then((bmdModel): [NoclipLegacyActor, RARC.RARC] => {
-                // If this is a 404, then return null.
-                if (bmdModel === null)
+            return modelCache.requestObjectData(arcName).then((data): [NoclipLegacyActor, RARC.RARC] | null => {
+                if (data === null) {
+                    // Received a 404.
                     return null;
-
+                }
+                
                 const actor = new NoclipLegacyActor(zoneAndLayer, arcName, this.sceneObjHolder, infoIter, tag, objinfo);
                 applyAnimations(actor, animOptions);
 
@@ -1547,10 +1528,6 @@ class SMGSpawner {
 
                 return [actor, actor.arc];
             });
-        };
-
-        const spawnDefault = (name: string): void => {
-            spawnGraph(name, SceneGraphTag.Normal);
         };
 
         const name = objinfo.objName;
@@ -1939,7 +1916,7 @@ class SMGSpawner {
             spawnGraph(name, SceneGraphTag.Normal, { });
             break;
         default:
-            spawnDefault(name);
+            spawnGraph(name);
             break;
         }
     }

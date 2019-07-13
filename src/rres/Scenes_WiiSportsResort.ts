@@ -11,11 +11,11 @@ import { BasicGXRendererHelper } from "../gx/gx_render_2";
 import { MDL0ModelInstance, MDL0Model, RRESTextureHolder } from "./render";
 import AnimationController from "../AnimationController";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { vec3, vec4, mat4 } from "gl-matrix";
+import { vec4, mat4 } from "gl-matrix";
 import { prepareFrameDebugOverlayCanvas2D, drawWorldSpacePoint } from "../DebugJunk";
-import { Magenta, Color, colorNewFromRGBA8, colorNew } from "../Color";
+import { Magenta } from "../Color";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { computeModelMatrixSRT } from "../MathHelpers";
+import { SceneContext } from "../SceneBase";
 
 class DataFetcher {
     private fileProgressables: Progressable<any>[] = [];
@@ -248,9 +248,9 @@ class IslandSceneDesc implements Viewer.SceneDesc {
         return true;
     }
 
-    public async createScene2(device: GfxDevice, abortSignal: AbortSignal, progressMeter: ProgressMeter): Promise<Viewer.SceneGfx> {
+    public async createScene(device: GfxDevice, abortSignal: AbortSignal, context: SceneContext): Promise<Viewer.SceneGfx> {
         // Fetch the SCN0.
-        const d = new DataFetcher(abortSignal, progressMeter);
+        const d = new DataFetcher(abortSignal, context.progressMeter);
 
         const resourceSystem = new ResourceSystem();
         await fetchAndMount(resourceSystem, d, [

@@ -5,10 +5,23 @@ import { Frustum, AABB } from './Geometry';
 import { clampRange } from './MathHelpers';
 
 export class Camera {
-    public viewMatrix: mat4 = mat4.create();
-    public worldMatrix: mat4 = mat4.create();
-    public projectionMatrix: mat4 = mat4.create();
-    public frustum: Frustum = new Frustum();
+    // Converts to view space from world space.
+    // Should be called viewFromWorldMatrix
+    public viewMatrix = mat4.create();
+
+    // The world matrix is the camera's model matrix -- that is, it converts from
+    // view space to the abstract world space.
+    // Should be called worldFromViewMatrix
+    public worldMatrix = mat4.create();
+
+    // Converts to clip space from view space.
+    // Should be called clipFromViewMatrix
+    public projectionMatrix = mat4.create();
+
+    // Combined view/projection matrix, using our new naming convention.
+    public clipFromWorldMatrix = mat4.create();
+
+    public frustum = new Frustum();
     public fovY: number;
     public aspect: number;
 
@@ -20,6 +33,8 @@ export class Camera {
     public worldMatrixUpdated(): void {
         mat4.invert(this.viewMatrix, this.worldMatrix);
         this.frustum.updateWorldFrustum(this.worldMatrix);
+
+        this.updateClipFromWorld();
     }
 
     public setPerspective(fovY: number, aspect: number, n: number, f: number): void {
@@ -39,10 +54,16 @@ export class Camera {
         this.frustum.setViewFrustum(left, right, bottom, top, n, f);
         this.frustum.updateWorldFrustum(this.worldMatrix);
         mat4.frustum(this.projectionMatrix, left, right, bottom, top, n, f);
+
+        this.updateClipFromWorld();
     }
 
     public newFrame(): void {
         this.frustum.newFrame();
+    }
+
+    private updateClipFromWorld(): void {
+        mat4.mul(this.clipFromWorldMatrix, this.projectionMatrix, this.viewMatrix);
     }
 
     // For documentation more than anything.
@@ -196,7 +217,7 @@ export class ScreenSpaceProjection {
 }
 
 /**
- * Computes the area, in screen space (normalized screen space from 0 to 1), that
+ * Computes the screen-space projection @param screenSpaceProjection, that
  * a sphere in world-space coordinates with parameters @param center and @param radius
  * will take up when viewed by @param camera.
  */
@@ -221,7 +242,7 @@ export function computeScreenSpaceProjectionFromWorldSpaceSphere(screenSpaceProj
 }
 
 /**
- * Computes the area, in screen space (normalized screen space from 0 to 1), that
+ * Computes the screen-space projection @param screenSpaceProjection, that
  * world-space AABB @param aabb will take up when viewed by @param camera.
  */
 export function computeScreenSpaceProjectionFromWorldSpaceAABB(screenSpaceProjection: ScreenSpaceProjection, camera: Camera, aabb: AABB, v: vec3 = scratchVec3, v4: vec4 = scratchVec4): void {
