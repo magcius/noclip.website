@@ -1424,7 +1424,7 @@ export class AstroCountDownPlate extends LiveActor {
 }
 
 export class Butler extends NPCActor {
-    private dot: Dot;
+    private dot: Dot | null = null;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, getObjectName(infoIter));
@@ -1439,15 +1439,17 @@ export class Butler extends NPCActor {
 
         this.startAction('Wait');
 
-        this.dot = sceneObjHolder.uiSystem.createDot();
+        // this.dot = sceneObjHolder.uiSystem.createDot();
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.movement(sceneObjHolder, viewerInput);
 
-        vec3.copy(scratchVec3, this.translation);
-        scratchVec3[1] += 50;
-        this.dot.setWorldPosition(viewerInput.camera, scratchVec3);
+        if (this.dot !== null) {
+            vec3.copy(scratchVec3, this.translation);
+            scratchVec3[1] += 50;
+            this.dot.setWorldPosition(viewerInput.camera, scratchVec3);
+        }
     }
 }
 

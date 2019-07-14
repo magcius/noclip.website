@@ -1864,6 +1864,9 @@ class About extends Panel {
     margin: 0px;
     font-size: 2em;
 }
+#About h2 {
+    font-size: 12.8pt;
+}
 #About h1 span, #About h1 img {
     vertical-align: middle;
     line-height: 64px;
@@ -2055,8 +2058,9 @@ command that would let you fly through the levels here, just like in the game.</
 ## Have you seen the YouTube show Boundary Break?
 
 <p>Of course! I love that show. I'm ecstatic to see that exploring video game levels from
-different angles has captured the imaginations of such a wide audience. While there will always
-be room for </p>
+different angles has captured the imaginations of such a wide audience. And I hope that this
+site encourages that same curiosity that's visible all throughout Boundary Break, trekking
+through these levels on your own adventures!</p>
 
 ## Who made this site?
 
