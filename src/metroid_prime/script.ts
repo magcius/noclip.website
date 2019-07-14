@@ -8,7 +8,7 @@ import { mat4, vec3 } from 'gl-matrix';
 import { CMDL } from './cmdl';
 import { Color } from "../gx/gx_material";
 import { colorFromRGBA } from "../Color";
-import { computeModelMatrixSRT } from "../MathHelpers";
+import { computeModelMatrixSRT, MathConstants } from "../MathHelpers";
 
 export const enum MP1EntityType {
     Actor                   = 0x00,
@@ -80,19 +80,22 @@ export const enum WorldLightingOptions {
 }
 
 export class LightParameters {
-    ambient: Color = new Color(1, 1, 1, 1);
-    options: WorldLightingOptions = WorldLightingOptions.NormalWorld;
-    layerIdx: number = 0;
-    maxAreaLights: Number = 4;
+    public ambient: Color = new Color(1, 1, 1, 1);
+    public options: WorldLightingOptions = WorldLightingOptions.NormalWorld;
+    public layerIdx: number = 0;
+    public maxAreaLights: Number = 4;
 }
 
 export class Entity {
-    active: boolean;
-    name: string;
-    modelMatrix: mat4;
-    model: CMDL;
-    animParams: AnimationParameters;
-    lightParams: LightParameters = new LightParameters;
+    public active: boolean;
+    public name: string;
+    public modelMatrix: mat4;
+    public model: CMDL;
+    public animParams: AnimationParameters;
+    public lightParams: LightParameters = new LightParameters();
+
+    constructor(public entityId: number) {
+    }
 }
 
 export interface ScriptLayer {
@@ -113,25 +116,27 @@ function readTransform(buffer: ArrayBufferSlice, offs: number, ent: Entity, hasP
     let scale: vec3 = vec3.fromValues(1, 1, 1);
 
     if (hasPos) {
-        const posX = view.getFloat32(offs+0);
-        const posY = view.getFloat32(offs+4);
-        const posZ = view.getFloat32(offs+8);
+        const posX = view.getFloat32(offs + 0x00);
+        const posY = view.getFloat32(offs + 0x04);
+        const posZ = view.getFloat32(offs + 0x08);
         vec3.set(position, posX, posY, posZ);
-        offs += 12;
+        offs += 0x0C;
     }
+
     if (hasRot) {
-        const rotX = view.getFloat32(offs+0);
-        const rotY = view.getFloat32(offs+4);
-        const rotZ = view.getFloat32(offs+8);
+        const rotX = view.getFloat32(offs + 0x00) * MathConstants.DEG_TO_RAD;
+        const rotY = view.getFloat32(offs + 0x04) * MathConstants.DEG_TO_RAD;
+        const rotZ = view.getFloat32(offs + 0x08) * MathConstants.DEG_TO_RAD;
         vec3.set(rotation, rotX, rotY, rotZ);
-        offs += 12;
+        offs += 0x0C;
     }
+
     if (hasScale) {
-        const scaleX = view.getFloat32(offs+0);
-        const scaleY = view.getFloat32(offs+4);
-        const scaleZ = view.getFloat32(offs+8);
+        const scaleX = view.getFloat32(offs + 0x00);
+        const scaleY = view.getFloat32(offs + 0x04);
+        const scaleZ = view.getFloat32(offs + 0x08);
         vec3.set(scale, scaleX, scaleY, scaleZ);
-        offs += 12;
+        offs += 0x0C;
     }
 
     ent.modelMatrix = mat4.create();
@@ -146,91 +151,130 @@ function readAssetId(buffer: ArrayBufferSlice, offs: number, type: string, resou
 
 function readAnimationParameters(buffer: ArrayBufferSlice, offs: number, ent: Entity): number {
     const view = buffer.createDataView();
-    ent.animParams = new AnimationParameters;
+    ent.animParams = new AnimationParameters();
     ent.animParams.ancsID = readString(buffer, offs, 4);
-    ent.animParams.charId = view.getUint32(offs+4);
-    ent.animParams.animId = view.getUint32(offs+8);
-    return 12;
+    ent.animParams.charId = view.getUint32(offs + 0x04);
+    ent.animParams.animId = view.getUint32(offs + 0x08);
+    return 0x0C;
 }
 
 function readLightParameters(buffer: ArrayBufferSlice, offs: number, ent: Entity): number {
     const view = buffer.createDataView();
-    const ambR = view.getFloat32(offs+17);
-    const ambG = view.getFloat32(offs+21);
-    const ambB = view.getFloat32(offs+25);
-    const ambA = view.getFloat32(offs+29);
-    const options = view.getInt32(offs+34);
-    const maxAreaLights = view.getInt32(offs+54);
-    const layerIndex = view.getInt32(offs+59);
+
+    const castsShadow = view.getUint8(offs + 0x00);
+    const shadowScale = view.getFloat32(offs + 0x01);
+    const shadowTesselation = view.getUint32(offs + 0x05);
+    const shadowAlpha = view.getFloat32(offs + 0x09);
+    const maxShadowHeight = view.getFloat32(offs + 0x0D);
+    const ambR = view.getFloat32(offs + 0x11);
+    const ambG = view.getFloat32(offs + 0x15);
+    const ambB = view.getFloat32(offs + 0x19);
+    const ambA = view.getFloat32(offs + 0x1D);
+    const makeLights = view.getUint8(offs + 0x21);
+    const options = view.getUint32(offs + 0x22);
+    const maxAreaLights = view.getUint32(offs + 0x26);
+    const layerIndex = view.getUint32(offs + 0x3B);
 
     // ent.lightParams is allocated by default
-    // TODO(jstpierre): Is the * 255 right here? This function seems unused though.
-    colorFromRGBA(ent.lightParams.ambient, ambR * 255, ambG * 255, ambB * 255, ambA * 255);
-    ent.lightParams.options = options;
-    ent.lightParams.maxAreaLights = maxAreaLights;
-    ent.lightParams.layerIdx = layerIndex;
-    
-    return 63;
+    // colorFromRGBA(ent.lightParams.ambient, ambR, ambG, ambB, ambA);
+    // ent.lightParams.options = options;
+    // ent.lightParams.maxAreaLights = maxAreaLights;
+    // ent.lightParams.layerIdx = layerIndex;
+
+    return 0x3F;
+}
+
+function readScannableParameters(buffer: ArrayBufferSlice, offs: number, ent: Entity): number {
+    return 0x04;
+}
+
+function readVisorParameters(buffer: ArrayBufferSlice, offs: number, ent: Entity): number {
+    return 0x06;
+}
+
+function readActorParameters(buffer: ArrayBufferSlice, offs: number, ent: Entity): number {
+    const view = buffer.createDataView();
+    const originalOffs = offs;
+    offs += readLightParameters(buffer, offs, ent);
+    offs += readScannableParameters(buffer, offs, ent);
+    const cmdlXray = view.getUint32(offs + 0x00);
+    const cskrXray = view.getUint32(offs + 0x04);
+    const cmdlThermal = view.getUint32(offs + 0x08);
+    const cskrThermal = view.getUint32(offs + 0x0C);
+    const globalTimeProvider = view.getUint8(offs + 0x10);
+    const fadeInTime = view.getFloat32(offs + 0x11);
+    const fadeOutTime = view.getFloat32(offs + 0x15);
+    offs += 0x19;
+    offs += readVisorParameters(buffer, offs, ent);
+    const thermalHeat = view.getUint8(offs + 0x00);
+    const renderUnsorted = view.getUint8(offs + 0x01);
+    const noSortThermal = view.getUint8(offs + 0x02);
+    const thermalMag = view.getFloat32(offs + 0x03);
+    offs += 0x07;
+    return offs - originalOffs;
 }
 
 export function parseScriptLayer(buffer: ArrayBufferSlice, layerOffset: number, resourceSystem: ResourceSystem): ScriptLayer {
     const view = buffer.createDataView();
     const entities: Entity[] = [];
-    let offs = layerOffset;
-    offs += 1; // skipping 'version' byte which is always 0
-    const numEnts = view.getUint32(offs);
-    offs += 4;
+    let entityTableIdx = layerOffset;
+    entityTableIdx += 1; // skipping 'version' byte which is always 0
+    const numEnts = view.getUint32(entityTableIdx);
+    entityTableIdx += 4;
 
-    for (let i = 0; i < numEnts; i++)
-    {
-        const entityType = view.getUint8(offs);
-        const entitySize = view.getUint32(offs+1);
-        const nextEntity = offs + entitySize + 5;
-        const entityId = view.getUint32(offs+5);
-        const numLinks = view.getUint32(offs+9);
-        offs += 17 + (numLinks * 12);
+    for (let i = 0; i < numEnts; i++) {
+        const entityType = view.getUint8(entityTableIdx + 0x00);
+        const entitySize = view.getUint32(entityTableIdx + 0x01);
+        const nextEntity = entityTableIdx + entitySize + 0x05;
+        const entityId = view.getUint32(entityTableIdx + 0x05);
+        const numLinks = view.getUint32(entityTableIdx + 0x09);
+        entityTableIdx += 17 + (numLinks * 12);
 
-        switch (entityType)
-        {
+        switch (entityType) {
         case MP1EntityType.Actor: {
-            const entity = new Entity;
-            offs += readName(buffer, offs, entity);
-            offs += readTransform(buffer, offs, entity, true, true, true);
-            offs += 0xA0;
-            entity.model = readAssetId(buffer, offs, 'CMDL', resourceSystem);
-            offs += readAnimationParameters(buffer, offs+4, entity);
-            offs += 0x81;
-            entity.active = view.getUint8(offs) !== 0;
+            const entity = new Entity(entityId);
+            entityTableIdx += readName(buffer, entityTableIdx, entity);
+            entityTableIdx += readTransform(buffer, entityTableIdx, entity, true, true, true);
+            entityTableIdx += 0xA0;
+            entity.model = readAssetId(buffer, entityTableIdx, 'CMDL', resourceSystem);
+            entityTableIdx += readAnimationParameters(buffer, entityTableIdx, entity);
+            entityTableIdx += readActorParameters(buffer, entityTableIdx, entity);
+            const looping = !!(view.getUint8(entityTableIdx + 0x00));
+            const immovable = !!(view.getUint8(entityTableIdx + 0x01));
+            const solid = !!(view.getUint8(entityTableIdx + 0x02));
+            const cameraPassthrough = !!(view.getUint8(entityTableIdx + 0x03));
+            const active = !!(view.getUint8(entityTableIdx + 0x04));
+            entity.active = active;
             entities.push(entity);
             break;
         }
 
         case MP1EntityType.Door: {
-            const entity = new Entity;
-            offs += readName(buffer, offs, entity);
-            offs += readTransform(buffer, offs, entity, true, true, true);
-            offs += readAnimationParameters(buffer, offs, entity);
+            const entity = new Entity(entityId);
+            entityTableIdx += readName(buffer, entityTableIdx, entity);
+            entityTableIdx += readTransform(buffer, entityTableIdx, entity, true, true, true);
+            entityTableIdx += readAnimationParameters(buffer, entityTableIdx, entity);
+            entityTableIdx += 0xA1;
+            entity.active = view.getUint8(entityTableIdx) !== 0;
             entities.push(entity);
-            offs += 0xA1;
-            entity.active = view.getUint8(offs) !== 0;
             break;
         }
 
         case MP1EntityType.Platform: {
-            const entity = new Entity;
-            offs += readName(buffer, offs, entity);
-            offs += readTransform(buffer, offs, entity, true,  true, true);
-            offs += 24;
-            entity.model = readAssetId(buffer, offs, 'CMDL', resourceSystem);
-            offs += readAnimationParameters(buffer, offs+4, entity);
-            offs += 0x81;
-            entity.active = view.getUint8(offs) !== 0;
+            const entity = new Entity(entityId);
+            entityTableIdx += readName(buffer, entityTableIdx, entity);
+            entityTableIdx += readTransform(buffer, entityTableIdx, entity, true,  true, true);
+            entityTableIdx += 24;
+            entity.model = readAssetId(buffer, entityTableIdx, 'CMDL', resourceSystem);
+            entityTableIdx += readAnimationParameters(buffer, entityTableIdx+4, entity);
+            entityTableIdx += 0x81;
+            entity.active = view.getUint8(entityTableIdx) !== 0;
             entities.push(entity);
             break;
         }
         }
 
-        offs = nextEntity;
+        entityTableIdx = nextEntity;
     }
 
     return { entities };

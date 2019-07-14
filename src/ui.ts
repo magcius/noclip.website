@@ -1880,7 +1880,7 @@ class About extends Panel {
 <h1> <img src="${logoURL}"> <span> noclip.website </span> </h1>
 <h2> A digital museum of video game levels </h2>
 
-<a href="#" class="FAQLink"> What's all this about? </a>
+<a href="#" class="FAQLink"> What is this? / FAQ </a>
 
 <p> <strong>CLICK AND DRAG</strong> to look around and use <strong>WASD</strong> to move the camera </p>
 <p> Hold <strong>SHIFT</strong> to go faster, and use <strong>MOUSE WHEEL</strong> to fine tune the speed
@@ -1924,7 +1924,7 @@ class FAQPanel implements Widget {
 
         const styleFrag = createDOMFromString(`
 <style>
-.FAQPanel a:link { color: #ccc; }
+.FAQPanel a:link, .FAQPanel a:visited { color: #ddd; }
 .FAQPanel a:hover { color: #fff; }
 </style>
 `);
@@ -1939,7 +1939,7 @@ class FAQPanel implements Widget {
         this.panel.style.padding = '2em';
         this.panel.style.font = '11pt monospace';
         this.panel.style.overflow = 'auto';
-        this.panel.style.color = '#ccc';
+        this.panel.style.color = '#ddd';
         this.panel.style.textAlign = 'justify';
         this.panel.onclick = (e) => {
             e.stopPropagation();
@@ -1982,12 +1982,13 @@ very careful with which games I choose to spend my time with.</p>
 welcome that. Join the Discord and I will be happy to help you get set up with a
 development environment and walk you through the code.</p>
 
-## Why do some levels not really look correct?
+## Why do some levels look broken?
 
 <p>In order to put a game on the website, I first need to take apart the game, extract
 the data, and then figure out how to put it back together. Some of these games, especially
-the newer ones, have complex and intricate data formats for their levels and their models,
-and the line between "game engine" and "game data" is only getting blurrier and blurrier.</p>
+the newer ones, are really complex with their levels and their models, and that often means
+it takes more work to make it look correct. The line between "game engine" and "game data"
+is only getting blurrier and blurrier.</p>
 
 <p>My dream is that the site contains fully accurate versions of each game, and I try
 to get closer to that goal when I can, but the effort and time involved to make an accurate
@@ -2005,14 +2006,15 @@ is open-source and source code can be found at <a href="https://github.com/magci
 
 <p>If you are looking for art for your own projects, there are some fantastic artists
 out there in the community that are always looking for work. Hire them instead of
-using other people's work unlicensed.</p>
+using art assets from other games.</p>
 
 ## This is cool! Any way I can help you out!
 
-<p>Absolutely. Join the official Discord and ask around if you would like to help out.
-The easiest things to do are savestates and naming maps, and can be done even if you
-do not know how to code. There's also some work that would be appreciated to help me
-improve accuracy, like running games in certain modes to help me compare the two.</p>
+<p>Absolutely. Join <a href="https://discord.gg/bkJmKKv">the official Discord</a> and ask around if you would like to help out.
+The easiest things to help out with are providing savestates and naming maps, and can
+be done even if you do not know how to code. There's also some work that would be
+appreciated to help me improve accuracy, like running games in certain modes to help
+me compare the two.</p>
 
 <p>If you have a more tech-y background, there's always coding work to be done. All
 the source code to the site is available at <a href="https://github.com/magcius/noclip.website">GitHub</a>,

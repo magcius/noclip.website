@@ -92,7 +92,7 @@ export interface MaterialSet {
 export const enum MaterialFlags {
     HAS_KONST      = 0x0008,
     IS_TRANSPARENT = 0x0010,
-    PUNCHTHROUGH   = 0x0020,
+    ALPHA_TEST  = 0x0020,
     HAS_SAMUS_REFL = 0x0040,
     DEPTH_WRITE    = 0x0080,
     OCCLUDER       = 0x0200,
@@ -369,6 +369,7 @@ export function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBu
         const isTransparent = !!(flags & MaterialFlags.IS_TRANSPARENT);
         const isOccluder = !!(flags & MaterialFlags.OCCLUDER);
         const depthWrite = !!(flags & MaterialFlags.DEPTH_WRITE);
+        const useAlphaTest = !!(flags & MaterialFlags.ALPHA_TEST);
 
         const colorRegisters: GX_Material.Color[] = [];
         colorRegisters.push(new GX_Material.Color(0, 0, 0, 0));
@@ -378,7 +379,7 @@ export function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBu
 
         const alphaTest: GX_Material.AlphaTest = {
             op: GX.AlphaOp.OR,
-            compareA: GX.CompareType.GREATER,
+            compareA: useAlphaTest ? GX.CompareType.GREATER : GX.CompareType.ALWAYS,
             referenceA: 0.25,
             compareB: GX.CompareType.NEVER,
             referenceB: 0,
@@ -786,16 +787,14 @@ function parse_MP1(resourceSystem: ResourceSystem, assetID: string, buffer: Arra
 
     const numLayers = view.getUint32(scriptLayerOffs+8);
     const scriptLayerSizes: number[] = [];
-    scriptLayerOffs += 12;
+    scriptLayerOffs += 0x0C;
 
-    for (let i = 0; i < numLayers; i++)
-    {
-        scriptLayerSizes.push( view.getUint32(scriptLayerOffs) );
+    for (let i = 0; i < numLayers; i++) {
+        scriptLayerSizes.push(view.getUint32(scriptLayerOffs));
         scriptLayerOffs += 4;
     }
 
-    for (let i = 0; i < numLayers; i++)
-    {
+    for (let i = 0; i < numLayers; i++) {
         const layer = Script.parseScriptLayer(buffer, scriptLayerOffs, resourceSystem);
         scriptLayers.push(layer);
         scriptLayerOffs += scriptLayerSizes[i];
@@ -817,6 +816,7 @@ function parse_MP1(resourceSystem: ResourceSystem, assetID: string, buffer: Arra
         lightLayers.push(lightLayer);
         lightOffs += size;
     }
+
     return { materialSet, worldModels, scriptLayers, lightLayers };
 }
 

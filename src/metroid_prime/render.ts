@@ -355,7 +355,8 @@ function mergeSurfaces(surfaces: Surface[]): MergedSurface {
             const indexOffset = totalIndexCount + packet.indexOffset;
             const indexCount = packet.indexCount;
             const posNrmMatrixTable = packet.posNrmMatrixTable;
-            packets.push({ indexOffset, indexCount, posNrmMatrixTable });
+            const texMatrixTable = packet.texMatrixTable;
+            packets.push({ indexOffset, indexCount, posNrmMatrixTable, texMatrixTable });
         }
     }
 
