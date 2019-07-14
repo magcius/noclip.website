@@ -32,7 +32,6 @@ class DKCRSceneDesc implements Viewer.SceneDesc {
                 const renderer = new RetroSceneRenderer(device, mlvl, textureHolder);
                 const mreaRenderer = new MREARenderer(device, renderer.renderHelper, textureHolder, this.name, mrea);
                 renderer.areaRenderers.push(mreaRenderer);
-                renderer.renderHelper.finishBuilder(device, renderer.viewRenderer);
                 return renderer;
             }
             return null;

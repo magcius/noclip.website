@@ -13,15 +13,13 @@ import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import * as BYML from '../byml';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
-import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
-import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
 import { mat4 } from 'gl-matrix';
-import { GXRenderHelperGfx } from '../gx/gx_render';
+import { GXRenderHelperGfx } from '../gx/gx_render_2';
 
 export class RetroSceneRenderer implements Viewer.SceneGfx {
-    public viewRenderer = new GfxRenderInstViewRenderer();
-    public renderTarget = new BasicRenderTarget();
     public renderHelper: GXRenderHelperGfx;
+    public renderTarget = new BasicRenderTarget();
     public areaRenderers: MREARenderer[] = [];
     public cmdlRenderers: CMDLRenderer[] = [];
 
@@ -29,41 +27,47 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
         this.renderHelper = new GXRenderHelperGfx(device);
     }
 
-    public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+    private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        const template = this.renderHelper.pushTemplateRenderInst();
         viewerInput.camera.setClipPlanes(2, 75000);
-        this.renderHelper.fillSceneParams(viewerInput);
-
+        this.renderHelper.fillSceneParams(viewerInput, template);
         for (let i = 0; i < this.areaRenderers.length; i++)
-            this.areaRenderers[i].prepareToRender(this.renderHelper, viewerInput);
+            this.areaRenderers[i].prepareToRender(device, this.renderHelper, viewerInput);
         for (let i = 0; i < this.cmdlRenderers.length; i++)
-            this.cmdlRenderers[i].prepareToRender(this.renderHelper, viewerInput);
-
-        this.renderHelper.prepareToRender(hostAccessPass);
+            this.cmdlRenderers[i].prepareToRender(device, this.renderHelper, viewerInput);
+        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.renderInstManager.popTemplateRenderInst();
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
-        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        const renderInstManager = this.renderHelper.renderInstManager;
 
-        this.viewRenderer.prepareToRender(device);
+        const hostAccessPass = device.createHostAccessPass();
+        this.prepareToRender(device, hostAccessPass, viewerInput);
+        device.submitPass(hostAccessPass);
+
+        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
 
         // First, render the skybox.
         const skyboxPassRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
-        this.viewRenderer.executeOnPass(device, skyboxPassRenderer, RetroPass.SKYBOX);
+        skyboxPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        renderInstManager.setVisibleByFilterKeyExact(RetroPass.SKYBOX);
+        renderInstManager.drawOnPassRenderer(device, skyboxPassRenderer);
         skyboxPassRenderer.endPass(null);
         device.submitPass(skyboxPassRenderer);
         // Now do main pass.
         const mainPassRenderer = this.renderTarget.createRenderPass(device, depthClearRenderPassDescriptor);
-        this.viewRenderer.executeOnPass(device, mainPassRenderer, RetroPass.MAIN);
+        mainPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        renderInstManager.setVisibleByFilterKeyExact(RetroPass.MAIN);
+        renderInstManager.drawOnPassRenderer(device, mainPassRenderer);
+
+        renderInstManager.resetRenderInsts();
+
         return mainPassRenderer;
     }
 
     public destroy(device: GfxDevice): void {
         this.textureHolder.destroy(device);
-        this.viewRenderer.destroy(device);
         this.renderTarget.destroy(device);
         this.renderHelper.destroy(device);
         for (let i = 0; i < this.areaRenderers.length; i++)
@@ -118,11 +122,10 @@ class MP1SceneDesc implements Viewer.SceneDesc {
                     const areaRenderer = new MREARenderer(device, renderer.renderHelper, renderer.textureHolder, mreaEntry.areaName, mrea);
                     renderer.areaRenderers.push(areaRenderer);
 
-                    // By default, set only the first 10 area renderers to visible, so as to not "crash my browser please".
+                    // By default, set only the first area renderer is visible, so as to not "crash my browser please".
                     areaRenderer.visible = (i < 1);
                 }
 
-                renderer.renderHelper.finishBuilder(device, renderer.viewRenderer);
                 return renderer;
             }
 

@@ -201,7 +201,7 @@ class MaterialInstance {
         // Set up the program.
         this.materialHelper.setOnRenderInst(device, cache, renderInst);
 
-        renderInst.setUniformBufferOffset(ub_MaterialParams, this.materialParamsBlockOffs, u_MaterialParamsBufferSize);
+        renderInst.setUniformBufferOffset(ub_MaterialParams, this.materialParamsBlockOffs, this.materialHelper.materialParamsBufferSize);
         renderInst.setSamplerBindingsFromTextureMappings(this.materialParams.m_TextureMapping);
 
         const layer = this.getRendererLayer(this.material.materialLayer);
