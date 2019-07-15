@@ -8,12 +8,13 @@ import { readFileSync } from 'fs';
 import { BasicRenderTarget, depthClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { DeviceProgram, DeviceProgramReflection } from "../Program";
 import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxHostAccessPass, GfxInputLayout, GfxInputState, GfxMipFilterMode, GfxRenderPass, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxWrapMode } from '../gfx/platform/GfxPlatform';
-import { GfxRenderInst, GfxRenderInstBuilder, GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
-import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxHostAccessPass, GfxInputLayout, GfxInputState, GfxMipFilterMode, GfxRenderPass, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxWrapMode, GfxProgram, GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { mat4, vec2, vec4 } from 'gl-matrix';
 import { TextureHolder, TextureMapping } from '../TextureHolder';
+import { nArray } from '../util';
+import { GfxRenderInstManager, executeOnPass } from '../gfx/render/GfxRenderer2';
+import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 
 export function textureToCanvas(texture: BinTex.Texture): Viewer.Texture {
     const canvas = document.createElement("canvas");
@@ -388,44 +389,47 @@ export class MapData {
 
 const modelMatrixScratch = mat4.create();
 const uvAnimOffsetScratch = vec2.create();
-const textureMapping = new TextureMapping();
-class DrawCallInstance{
-    private renderInst: GfxRenderInst;
+class DrawCallInstance {
     private vertexColorsEnabled = true;
     private texturesEnabled = true;
+    private textureMappings = nArray(1, () => new TextureMapping());
+    private program!: DeviceProgram;
+    private gfxProgram: GfxProgram | null = null;
+    private megaStateFlags: Partial<GfxMegaStateDescriptor>;
     
-    constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, private mapData: MapData, private drawCall: DrawCall, private drawCallIndex: number) {
-        this.renderInst = renderInstBuilder.pushRenderInst();
-        renderInstBuilder.newUniformBufferInstance(this.renderInst, KingdomHeartsProgram.ub_DrawParams);
-        this.renderInst.inputState = this.mapData.inputState;
-        this.renderInst.sortKey = drawCallIndex;
+    constructor(private mapData: MapData, private drawCall: DrawCall, private drawCallIndex: number) {
         this.createProgram();
 
+        this.megaStateFlags = {};
         if (!drawCall.cullBackfaces) {
-            this.renderInst.setMegaStateFlags({
-                cullMode: GfxCullMode.NONE
-            });
-        }
-        if (drawCall.translucent) {
-            this.renderInst.setMegaStateFlags({
-                blendMode: GfxBlendMode.ADD,
-                depthWrite: false,
-            });
+            this.megaStateFlags.cullMode = GfxCullMode.NONE;
         }
 
-        textureMapping.reset();
+        if (drawCall.translucent) {
+            this.megaStateFlags.blendMode = GfxBlendMode.ADD;
+            this.megaStateFlags.depthWrite = false;
+        }
+
+        const textureMapping = this.textureMappings[0];
         textureMapping.gfxTexture = mapData.textures[drawCall.textureIndex];
         textureMapping.gfxSampler = mapData.sampler;
-        this.renderInst.setSamplerBindingsFromTextureMappings([textureMapping]);
-
-        this.renderInst.drawIndexes(this.drawCall.indexCount, this.drawCall.firstIndex);
     }
 
-    public prepareToRender(isSkybox: boolean, meshParamsBuffer: GfxRenderBuffer, modelMatrix: mat4, viewerInput: Viewer.ViewerRenderInput) {
-        this.renderInst.visible = this.drawCall.layer.visible;
-        if (!this.renderInst.visible) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, isSkybox: boolean, modelMatrix: mat4, viewerInput: Viewer.ViewerRenderInput) {
+        if (!this.drawCall.layer.visible)
             return;
-        }
+
+        const renderInst = renderInstManager.pushRenderInst();
+        renderInst.setInputLayoutAndState(this.mapData.inputLayout, this.mapData.inputState);
+        renderInst.sortKey = this.drawCallIndex;
+
+        if (this.gfxProgram === null)
+            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
+
+        renderInst.setGfxProgram(this.gfxProgram);
+        renderInst.setMegaStateFlags(this.megaStateFlags);
+        renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
+        renderInst.drawIndexes(this.drawCall.indexCount, this.drawCall.firstIndex);
 
         mat4.copy(modelMatrixScratch, modelMatrix);
         if (isSkybox) {
@@ -435,8 +439,8 @@ class DrawCallInstance{
             mat4.rotateY(modelMatrixScratch, modelMatrixScratch, this.drawCall.rotYFactor * viewerInput.time / (Math.PI * 6));
         }
 
-        let offs = this.renderInst.getUniformBufferOffset(KingdomHeartsProgram.ub_DrawParams);
-        const mapped = meshParamsBuffer.mapBufferF32(offs, 32);
+        let offs = renderInst.allocateUniformBuffer(KingdomHeartsProgram.ub_DrawParams, 32);
+        const mapped = renderInst.mapUniformBufferF32(KingdomHeartsProgram.ub_DrawParams);
         offs += fillMatrix4x4(mapped, offs, modelMatrixScratch);
         offs += fillMatrix4x3(mapped, offs, viewerInput.camera.viewMatrix);
         
@@ -457,9 +461,6 @@ class DrawCallInstance{
         this.createProgram();
     }
 
-    public destroy(device: GfxDevice): void {
-    }
-
     private createProgram(): void {
         const program = new KingdomHeartsProgram();
         if (this.vertexColorsEnabled) {
@@ -471,69 +472,55 @@ class DrawCallInstance{
         if (!this.drawCall.translucent) {
             program.defines.set(`USE_ALPHA_MASK`, '1');
         }
-        this.renderInst.setDeviceProgram(program);
+
+        this.gfxProgram = null;
+        this.program = program;
     }
 }
 
+const bindingLayouts: GfxBindingLayoutDescriptor[] = [
+    { numUniformBuffers: 2, numSamplers: 1 },
+];
+
 export class SceneRenderer {
-    private sceneParamsBuffer: GfxRenderBuffer;
-    private meshParamsBuffer: GfxRenderBuffer;
-    private renderInstBuilder: GfxRenderInstBuilder;
-    private templateRenderInst: GfxRenderInst;
     private worldTransform: mat4;
     private drawCallInstances: DrawCallInstance[] = [];
+    private megaStateFlags: Partial<GfxMegaStateDescriptor>;
 
     constructor(device: GfxDevice, mapData: MapData, drawCalls: DrawCall[], private isSkybox: boolean) {
-        this.sceneParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_SceneParams`);
-        this.meshParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_DrawParams`);
-
-        const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-            { numUniformBuffers: 1, numSamplers: 0 }, // Scene
-            { numUniformBuffers: 1, numSamplers: 1 }, // Mesh
-        ];
-        const uniformBuffers = [ this.sceneParamsBuffer, this.meshParamsBuffer ];
-
-        this.renderInstBuilder = new GfxRenderInstBuilder(device, KingdomHeartsProgram.programReflection, bindingLayouts, uniformBuffers);
-        this.templateRenderInst = this.renderInstBuilder.pushTemplateRenderInst();
-        this.renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, KingdomHeartsProgram.ub_SceneParams);
-
-        this.templateRenderInst.setMegaStateFlags({
+        this.megaStateFlags = {
             cullMode: GfxCullMode.BACK,
             blendMode: GfxBlendMode.NONE,
             blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
             blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
             depthWrite: true,
             depthCompare: GfxCompareMode.LEQUAL
-        });
+        };
 
-        for (let i = 0; i < drawCalls.length; i++) {
-            this.drawCallInstances.push(new DrawCallInstance(device, this.renderInstBuilder, mapData, drawCalls[i], i));
-        }
+        for (let i = 0; i < drawCalls.length; i++)
+            this.drawCallInstances.push(new DrawCallInstance(mapData, drawCalls[i], i));
 
         this.worldTransform = mat4.create();
         mat4.rotateZ(this.worldTransform, this.worldTransform, Math.PI);
     }
 
-    public addToViewRenderer(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer): void {
-        this.renderInstBuilder.popTemplateRenderInst();
-        this.renderInstBuilder.finish(device, viewRenderer);
-    }
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        const template = renderInstManager.pushTemplateRenderInst();
+        template.setBindingLayouts(bindingLayouts);
+        template.setMegaStateFlags(this.megaStateFlags);
+        template.filterKey = this.isSkybox ? RenderPass.SKYBOX : RenderPass.MAIN;
 
-    public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        this.templateRenderInst.passMask = this.isSkybox ? RenderPass.SKYBOX : RenderPass.MAIN;
         viewerInput.camera.setClipPlanes(20, 5000000);
 
-        let offs = this.templateRenderInst.getUniformBufferOffset(KingdomHeartsProgram.ub_SceneParams);
-        const sceneParamsMapped = this.sceneParamsBuffer.mapBufferF32(offs, 20);
+        let offs = template.allocateUniformBuffer(KingdomHeartsProgram.ub_SceneParams, 20);
+        const sceneParamsMapped = template.mapUniformBufferF32(KingdomHeartsProgram.ub_SceneParams);
         offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
         sceneParamsMapped[offs] = viewerInput.time;
 
-        for (let i = 0; i < this.drawCallInstances.length; i++) {
-            this.drawCallInstances[i].prepareToRender(this.isSkybox, this.meshParamsBuffer, this.worldTransform, viewerInput);
-        }
+        for (let i = 0; i < this.drawCallInstances.length; i++)
+            this.drawCallInstances[i].prepareToRender(device, renderInstManager, this.isSkybox, this.worldTransform, viewerInput);
 
-        this.sceneParamsBuffer.prepareToRender(hostAccessPass);
-        this.meshParamsBuffer.prepareToRender(hostAccessPass);
+        renderInstManager.popTemplateRenderInst();
     }
 
     public setVertexColorsEnabled(v: boolean): void {
@@ -545,18 +532,12 @@ export class SceneRenderer {
         for (let i = 0; i < this.drawCallInstances.length; i++)
             this.drawCallInstances[i].setTexturesEnabled(v);
     }
-
-    public destroy(device: GfxDevice): void {
-        this.sceneParamsBuffer.destroy(device);
-        this.meshParamsBuffer.destroy(device);
-        for (let i = 0; i < this.drawCallInstances.length; i++)
-            this.drawCallInstances[i].destroy(device);
-    }
 }
 
 export class KingdomHeartsRenderer implements Viewer.SceneGfx {
-    private viewRenderer = new GfxRenderInstViewRenderer();
+    private renderInstManager = new GfxRenderInstManager();
     private renderTarget = new BasicRenderTarget();
+    private uniformBuffer: GfxRenderDynamicUniformBuffer;
     private sceneRenderers: SceneRenderer[] = [];
 
     private mapData: MapData;
@@ -564,10 +545,12 @@ export class KingdomHeartsRenderer implements Viewer.SceneGfx {
     constructor(device: GfxDevice, public textureHolder: TextureHolder<any>, bin: Bin.BIN) {
         this.mapData = new MapData(device, bin);
 
+        this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
+
         const mapSceneRenderer = new SceneRenderer(device, this.mapData, this.mapData.mapDrawCalls, /*isSkybox=*/false);
+        this.sceneRenderers.push(mapSceneRenderer);
         const skyboxSceneRenderer = new SceneRenderer(device, this.mapData, this.mapData.skyboxDrawCalls, /*isSkybox=*/true);
-        this.addSceneRenderer(device, mapSceneRenderer);
-        this.addSceneRenderer(device, skyboxSceneRenderer);
+        this.sceneRenderers.push(skyboxSceneRenderer);
     }
 
     public createPanels(): UI.Panel[] {
@@ -594,43 +577,42 @@ export class KingdomHeartsRenderer implements Viewer.SceneGfx {
         return [renderHacksPanel, layersPanel];
     }
 
-    private addSceneRenderer(device: GfxDevice, sceneRenderer: SceneRenderer): void {
-        this.sceneRenderers.push(sceneRenderer);
-        sceneRenderer.addToViewRenderer(device, this.viewRenderer);
-    }
+    protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        const template = this.renderInstManager.pushTemplateRenderInst();
+        template.setUniformBuffer(this.uniformBuffer);
+        for (let i = 0; i < this.sceneRenderers.length; i++)
+            this.sceneRenderers[i].prepareToRender(device, this.renderInstManager, viewerInput);
+        this.renderInstManager.popTemplateRenderInst();
 
-    protected prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        for (let i = 0; i < this.sceneRenderers.length; i++) {
-            this.sceneRenderers[i].prepareToRender(hostAccessPass, viewerInput);
-        }
+        this.uniformBuffer.prepareToRender(device, hostAccessPass);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
         const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(hostAccessPass, viewerInput);
+        this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
-
-        this.viewRenderer.prepareToRender(device);
 
         // Create render pass for skybox.
         const skyboxPassRenderer = this.renderTarget.createRenderPass(device, transparentBlackFullClearRenderPassDescriptor);
-        this.viewRenderer.executeOnPass(device, skyboxPassRenderer, RenderPass.SKYBOX);
+        skyboxPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        executeOnPass(this.renderInstManager, device, skyboxPassRenderer, RenderPass.SKYBOX);
         skyboxPassRenderer.endPass(null);
         device.submitPass(skyboxPassRenderer);
         // Create main render pass.
         const passRenderer = this.renderTarget.createRenderPass(device, depthClearRenderPassDescriptor);
-        this.viewRenderer.executeOnPass(device, passRenderer, RenderPass.MAIN);
+        passRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        executeOnPass(this.renderInstManager, device, passRenderer, RenderPass.MAIN);
+
+        this.renderInstManager.resetRenderInsts();
+
         return passRenderer;
     }
 
     public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.sceneRenderers.length; i++) {
-            this.sceneRenderers[i].destroy(device);
-        }
-        this.viewRenderer.destroy(device);
+        this.renderInstManager.destroy(device);
         this.renderTarget.destroy(device);
+        this.uniformBuffer.destroy(device);
         this.textureHolder.destroy(device);
     }
 };
