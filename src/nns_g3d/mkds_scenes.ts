@@ -21,52 +21,64 @@ import { FakeTextureHolder } from '../TextureHolder';
 import { mat4 } from 'gl-matrix';
 import AnimationController from '../AnimationController';
 import { computeModelMatrixSRT, MathConstants } from '../MathHelpers';
+import { GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
+import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 
 export class MKDSRenderer implements Viewer.SceneGfx {
-    public viewRenderer = new GfxRenderInstViewRenderer();
     public renderTarget = new BasicRenderTarget();
+    public renderInstManager = new GfxRenderInstManager();
+    public uniformBuffer: GfxRenderDynamicUniformBuffer;
+
     public textureHolder: FakeTextureHolder;
     public objectRenderers: MDL0Renderer[] = [];
 
     constructor(device: GfxDevice, public courseRenderer: MDL0Renderer, public skyboxRenderer: MDL0Renderer | null) {
+        this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
         this.textureHolder = new FakeTextureHolder(this.courseRenderer.viewerTextures);
-        this.courseRenderer.addToViewRenderer(device, this.viewRenderer);
-        if (this.skyboxRenderer !== null)
-            this.skyboxRenderer.addToViewRenderer(device, this.viewRenderer);
     }
 
-    public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        this.courseRenderer.prepareToRender(hostAccessPass, viewerInput);
+    private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        const template = this.renderInstManager.pushTemplateRenderInst();
+        template.setUniformBuffer(this.uniformBuffer);
+        this.courseRenderer.prepareToRender(this.renderInstManager, viewerInput);
         if (this.skyboxRenderer !== null)
-            this.skyboxRenderer.prepareToRender(hostAccessPass, viewerInput);
+            this.skyboxRenderer.prepareToRender(this.renderInstManager, viewerInput);
         for (let i = 0; i < this.objectRenderers.length; i++)
-            this.objectRenderers[i].prepareToRender(hostAccessPass, viewerInput);
+            this.objectRenderers[i].prepareToRender(this.renderInstManager, viewerInput);
+        this.renderInstManager.popTemplateRenderInst();
+
+        this.uniformBuffer.prepareToRender(device, hostAccessPass);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
         const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(hostAccessPass, viewerInput);
+        this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
 
-        this.viewRenderer.prepareToRender(device);
-
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
 
         // First, render the skybox.
         const skyboxPassRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
-        this.viewRenderer.executeOnPass(device, skyboxPassRenderer, G3DPass.SKYBOX);
+        skyboxPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.renderInstManager.setVisibleByFilterKeyExact(G3DPass.SKYBOX);
+        this.renderInstManager.drawOnPassRenderer(device, skyboxPassRenderer);
         skyboxPassRenderer.endPass(null);
         device.submitPass(skyboxPassRenderer);
         // Now do main pass.
         const mainPassRenderer = this.renderTarget.createRenderPass(device, depthClearRenderPassDescriptor);
-        this.viewRenderer.executeOnPass(device, mainPassRenderer, G3DPass.MAIN);
+        mainPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.renderInstManager.setVisibleByFilterKeyExact(G3DPass.MAIN);
+        this.renderInstManager.drawOnPassRenderer(device, mainPassRenderer);
+
+        this.renderInstManager.resetRenderInsts();
+
         return mainPassRenderer;
     }
 
-    public destroy(device: GfxDevice): void {
-        this.viewRenderer.destroy(device);
+    public destroy(device: GfxDevice) {
+        this.renderInstManager.destroy(device);
         this.renderTarget.destroy(device);
+        this.uniformBuffer.destroy(device);
 
         this.courseRenderer.destroy(device);
         if (this.skyboxRenderer !== null)
@@ -171,7 +183,6 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
             assert(bmd.models.length === 1);
             const mdl0Renderer = new MDL0Renderer(device, bmd.models[0], bmd.tex0);
             setModelMtx(mdl0Renderer);
-            mdl0Renderer.addToViewRenderer(device, renderer.viewRenderer);
             renderer.objectRenderers.push(mdl0Renderer);
             return mdl0Renderer;
         }

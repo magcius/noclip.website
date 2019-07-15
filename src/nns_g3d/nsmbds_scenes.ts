@@ -14,59 +14,73 @@ import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/Gfx
 import { MDL0Renderer, G3DPass } from './render';
 import { assert } from '../util';
 import { mat4 } from 'gl-matrix';
-import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, depthClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { FakeTextureHolder } from '../TextureHolder';
+import { GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
+import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 
 export class WorldMapRenderer implements Viewer.SceneGfx {
-    public viewRenderer = new GfxRenderInstViewRenderer();
     public renderTarget = new BasicRenderTarget();
+    public renderInstManager = new GfxRenderInstManager();
+    public uniformBuffer: GfxRenderDynamicUniformBuffer;
     public textureHolder: FakeTextureHolder;
 
-    constructor(device: GfxDevice, public objs: MDL0Renderer[]) {
-        let viewerTextures: Viewer.Texture[] = [];
+    constructor(device: GfxDevice, public objectRenderers: MDL0Renderer[]) {
+        this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
 
-        for (let i = 0; i < this.objs.length; i++) {
-            const element = this.objs[i];
-            viewerTextures = viewerTextures.concat(element.viewerTextures);
-            element.addToViewRenderer(device, this.viewRenderer);
+        const viewerTextures: Viewer.Texture[] = [];
+        for (let i = 0; i < this.objectRenderers.length; i++) {
+            const element = this.objectRenderers[i];
+            for (let j = 0; j < element.viewerTextures.length; j++)
+                viewerTextures.push(element.viewerTextures[j]);
         }
-
         this.textureHolder = new FakeTextureHolder(viewerTextures);
     }
 
-    public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        for (let i = 0; i < this.objs.length; i++)
-            this.objs[i].prepareToRender(hostAccessPass, viewerInput);
+    public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        const template = this.renderInstManager.pushTemplateRenderInst();
+        template.setUniformBuffer(this.uniformBuffer);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].prepareToRender(this.renderInstManager, viewerInput);
+        this.renderInstManager.popTemplateRenderInst();
+
+        this.uniformBuffer.prepareToRender(device, hostAccessPass);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
         const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(hostAccessPass, viewerInput);
+        this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
 
-        this.viewRenderer.prepareToRender(device);
-
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
 
         // First, render the skybox.
         const skyboxPassRenderer = this.renderTarget.createRenderPass(device, transparentBlackFullClearRenderPassDescriptor);
-        this.viewRenderer.executeOnPass(device, skyboxPassRenderer, G3DPass.SKYBOX);
+        skyboxPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.renderInstManager.setVisibleByFilterKeyExact(G3DPass.SKYBOX);
+        this.renderInstManager.drawOnPassRenderer(device, skyboxPassRenderer);
         skyboxPassRenderer.endPass(null);
         device.submitPass(skyboxPassRenderer);
         // Now do main pass.
         const mainPassRenderer = this.renderTarget.createRenderPass(device, depthClearRenderPassDescriptor);
-        this.viewRenderer.executeOnPass(device, mainPassRenderer, G3DPass.MAIN);
+        mainPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.renderInstManager.setVisibleByFilterKeyExact(G3DPass.MAIN);
+        this.renderInstManager.drawOnPassRenderer(device, mainPassRenderer);
+
+        this.renderInstManager.resetRenderInsts();
+
         return mainPassRenderer;
     }
 
     public destroy(device: GfxDevice): void {
-        this.viewRenderer.destroy(device);
+        this.renderInstManager.destroy(device);
+        this.renderTarget.destroy(device);
+        this.uniformBuffer.destroy(device);
+
         this.renderTarget.destroy(device);
 
-        for (let i = 0; i < this.objs.length; i++)
-            this.objs[i].destroy(device);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].destroy(device);
     }
 }
 
@@ -121,10 +135,10 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
             this.fetchBTA(path + `.nsbta`, abortSignal),
             this.fetchBTP(path + `.nsbtp`, abortSignal),
         ]).then(([_bmd, _btx, _bta, _btp]) => {
-            const bmd = _bmd as NSBMD.BMD0;
-            const btx = _btx as NSBTX.BTX0;
-            const bta = _bta as NSBTA.BTA0;
-            const btp = _btp as NSBTP.BTP0;
+            const bmd = _bmd as NSBMD.BMD0 | null;
+            const btx = _btx as NSBTX.BTX0 | null;
+            const bta = _bta as NSBTA.BTA0 | null;
+            const btp = _btp as NSBTP.BTP0 | null;
 
             if (bmd === null)
                 return null;

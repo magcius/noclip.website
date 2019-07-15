@@ -361,7 +361,7 @@ class ShapeInstance {
         template.setInputLayoutAndState(vertexData.inputLayout, vertexData.inputState);
         this.materialInstance.prepareToRender(device, renderInstManager, template, viewerInput, normalMatrix, extraTexCoordMat);
 
-        let offs = template.allocateUniformBuffer(NITRO_Program.ub_PacketParams, 16*8);
+        let offs = template.allocateUniformBuffer(NITRO_Program.ub_PacketParams, 12*8);
         const d = template.mapUniformBufferF32(NITRO_Program.ub_PacketParams);
         const rootJoint = this.batchData.rootJoint;
         for (let i = 0; i < this.batchData.batch.matrixTable.length; i++) {

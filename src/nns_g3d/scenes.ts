@@ -1,27 +1,53 @@
 
-import { BasicRendererHelper } from "../oot3d/render";
 import { MDL0Renderer } from "./render";
-import { GfxDevice, GfxHostAccessPass } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from "../gfx/platform/GfxPlatform";
 import { FakeTextureHolder } from "../TextureHolder";
-import { ViewerRenderInput } from "../viewer";
+import { ViewerRenderInput, SceneGfx } from "../viewer";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-
 import * as NSBMD from './nsbmd';
+import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderer2";
+import { GfxRenderDynamicUniformBuffer } from "../gfx/render/GfxRenderDynamicUniformBuffer";
 
-export class BasicNSBMDRenderer extends BasicRendererHelper {
+class BasicNSBMDRenderer implements SceneGfx {
+    public renderTarget = new BasicRenderTarget();
+    public renderInstManager = new GfxRenderInstManager();
+    public uniformBuffer: GfxRenderDynamicUniformBuffer;
+
     public mdl0Renderers: MDL0Renderer[] = [];
 
-    constructor(public textureHolder: FakeTextureHolder) {
-        super();
+    constructor(device: GfxDevice, public textureHolder: FakeTextureHolder) {
+        this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
     }
 
-    public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
+    private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
+        const template = this.renderInstManager.pushTemplateRenderInst();
+        template.setUniformBuffer(this.uniformBuffer);
         for (let i = 0; i < this.mdl0Renderers.length; i++)
-            this.mdl0Renderers[i].prepareToRender(hostAccessPass, viewerInput);
+            this.mdl0Renderers[i].prepareToRender(this.renderInstManager, viewerInput);
+        this.renderInstManager.popTemplateRenderInst();
+
+        this.uniformBuffer.prepareToRender(device, hostAccessPass);
     }
 
-    public destroy(device: GfxDevice): void {
-        super.destroy(device);
+    public render(device: GfxDevice, viewerInput: ViewerRenderInput): GfxRenderPass {
+        const hostAccessPass = device.createHostAccessPass();
+        this.prepareToRender(device, hostAccessPass, viewerInput);
+        device.submitPass(hostAccessPass);
+
+        const renderInstManager = this.renderInstManager;
+        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        const passRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
+        passRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        renderInstManager.drawOnPassRenderer(device, passRenderer);
+        renderInstManager.resetRenderInsts();
+        return passRenderer;
+    }
+
+    public destroy(device: GfxDevice) {
+        this.renderInstManager.destroy(device);
+        this.renderTarget.destroy(device);
+        this.uniformBuffer.destroy(device);
         for (let i = 0; i < this.mdl0Renderers.length; i++)
             this.mdl0Renderers[i].destroy(device);
     }
@@ -29,7 +55,7 @@ export class BasicNSBMDRenderer extends BasicRendererHelper {
 
 export function createBasicNSBMDRendererFromNSBMD(device: GfxDevice, buffer: ArrayBufferSlice) {
     const textureHolder = new FakeTextureHolder([]);
-    const renderer = new BasicNSBMDRenderer(textureHolder);
+    const renderer = new BasicNSBMDRenderer(device, textureHolder);
 
     const bmd = NSBMD.parse(buffer);
     for (let i = 0; i < bmd.models.length; i++) {
@@ -37,8 +63,6 @@ export function createBasicNSBMDRendererFromNSBMD(device: GfxDevice, buffer: Arr
         const mdl0Renderer = new MDL0Renderer(device, mdl0, bmd.tex0);
         for (let j = 0; j < mdl0Renderer.viewerTextures.length; j++)
             textureHolder.viewerTextures.push(mdl0Renderer.viewerTextures[j]);
-
-        mdl0Renderer.addToViewRenderer(device, renderer.viewRenderer);
         renderer.mdl0Renderers.push(mdl0Renderer);
     }
 

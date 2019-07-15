@@ -302,7 +302,7 @@ class ContextInternal {
     public s_vtx: Point;
     public s_nrm: Point;
     public s_polyType: PolyType;
-    public s_mtxId: number = -1;
+    public s_mtxId: number = 0;
     public s_startVertexIndex: number = 0;
 
     public vtxs: Vertex[] = [];
