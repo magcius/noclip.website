@@ -68,10 +68,11 @@ export class GfxRenderInst {
         this._uniformBuffer = o._uniformBuffer;
         this.sortKey = o.sortKey;
         this.filterKey = o.filterKey;
-        this._setBindingLayout(o._bindingDescriptors[0].bindingLayout);
-        this.setSamplerBindingsFromTextureMappings(o._bindingDescriptors[0].samplerBindings);
-        for (let i = 0; i < o._bindingDescriptors[0].bindingLayout.numUniformBuffers; i++)
+        if (o._bindingDescriptors[0].bindingLayout !== null)
+            this._setBindingLayout(o._bindingDescriptors[0].bindingLayout);
+        for (let i = 0; i < o._bindingDescriptors[0].uniformBufferBindings.length; i++)
             this._bindingDescriptors[0].uniformBufferBindings[i].wordCount = o._bindingDescriptors[0].uniformBufferBindings[i].wordCount;
+        this.setSamplerBindingsFromTextureMappings(o._bindingDescriptors[0].samplerBindings);
         for (let i = 0; i < o._dynamicUniformBufferOffsets.length; i++)
             this._dynamicUniformBufferOffsets[i] = o._dynamicUniformBufferOffsets[i];
     }

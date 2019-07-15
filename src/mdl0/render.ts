@@ -8,13 +8,13 @@ import Progressable from '../Progressable';
 import { fetchData } from '../fetch';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { OrbitCameraController } from '../Camera';
-import { GfxBlendMode, GfxBlendFactor, GfxDevice, GfxBufferUsage, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexAttributeFrequency, GfxVertexBufferDescriptor, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
-import { GfxRenderInstBuilder, GfxRenderInstViewRenderer, GfxRenderInst } from '../gfx/render/GfxRenderer';
+import { GfxBlendMode, GfxBlendFactor, GfxDevice, GfxBufferUsage, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexAttributeFrequency, GfxVertexBufferDescriptor, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from '../gfx/helpers/BufferHelpers';
-import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
 import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
-import { BasicRendererHelper } from '../oot3d/render';
 import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
+import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
+import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 
 class FancyGrid_Program extends DeviceProgram {
     public static a_Position = 0;
@@ -80,19 +80,20 @@ void main() {
 `;
 }
 
+const fancyGridBindingLayouts: GfxBindingLayoutDescriptor[] = [
+    { numSamplers: 0, numUniformBuffers: 1 },
+];
+
 class FancyGrid {
     public gfxProgram: GfxProgram;
     private posBuffer: GfxBuffer;
     private idxBuffer: GfxBuffer;
-    private sceneParamsBuffer: GfxRenderBuffer;
     private inputLayout: GfxInputLayout;
     private inputState: GfxInputState;
-    private renderInst: GfxRenderInst;
 
-    constructor(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer) {
+    constructor(device: GfxDevice) {
         const program = new FancyGrid_Program();
         this.gfxProgram = device.createProgram(program);
-        this.sceneParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_SceneParams`);
 
         const vtx = new Float32Array(4 * 3);
         vtx[0]  = -1;
@@ -111,13 +112,6 @@ class FancyGrid {
 
         this.idxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, makeTriangleIndexBuffer(GfxTopology.TRISTRIP, 0, 4).buffer);
 
-        const programReflection = device.queryProgram(this.gfxProgram);
-        const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-            { numSamplers: 0, numUniformBuffers: 1 },
-        ];
-        const uniformBuffers = [ this.sceneParamsBuffer ];
-        const renderInstBuilder = new GfxRenderInstBuilder(device, programReflection, bindingLayouts, uniformBuffers);
-
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: FancyGrid_Program.a_Position, format: GfxFormat.F32_RGB, bufferByteOffset: 0, bufferIndex: 0, frequency: GfxVertexAttributeFrequency.PER_VERTEX, },
         ];
@@ -129,27 +123,24 @@ class FancyGrid {
             { buffer: this.posBuffer, byteOffset: 0, byteStride: 12 },
         ];
         this.inputState = device.createInputState(this.inputLayout, vertexBuffers, { buffer: this.idxBuffer, byteOffset: 0, byteStride: 1 });
-        this.renderInst = renderInstBuilder.pushRenderInst();
-        renderInstBuilder.newUniformBufferInstance(this.renderInst, 0);
-        this.renderInst.setGfxProgram(this.gfxProgram);
-        this.renderInst.inputState = this.inputState;
-        this.renderInst.setMegaStateFlags({
+    }
+
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        const renderInst = renderInstManager.pushRenderInst();
+        renderInst.setBindingLayouts(fancyGridBindingLayouts);
+        renderInst.setGfxProgram(this.gfxProgram);
+        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        renderInst.setMegaStateFlags({
             blendMode: GfxBlendMode.ADD,
             blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
             blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
         });
-        this.renderInst.drawIndexes(6);
+        renderInst.drawIndexes(6);
 
-        renderInstBuilder.finish(device, viewRenderer);
-    }
-
-    public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        let offs = this.renderInst.getUniformBufferOffset(FancyGrid_Program.a_Position);
-        const mappedF32 = this.sceneParamsBuffer.mapBufferF32(offs, 4*7);
+        let offs = renderInst.allocateUniformBuffer(FancyGrid_Program.a_Position, 4*4 + 4*3);
+        const mappedF32 = renderInst.mapUniformBufferF32(FancyGrid_Program.a_Position);
         offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);
         offs += fillMatrix4x3(mappedF32, offs, viewerInput.camera.viewMatrix);
-
-        this.sceneParamsBuffer.prepareToRender(hostAccessPass);
     }
 
     public destroy(device: GfxDevice) {
@@ -158,7 +149,6 @@ class FancyGrid {
         device.destroyBuffer(this.idxBuffer);
         device.destroyInputLayout(this.inputLayout);
         device.destroyInputState(this.inputState);
-        this.sceneParamsBuffer.destroy(device);
     }
 }
 
@@ -197,27 +187,21 @@ void main() {
 `;
 }
 
+const mdl0BindingLayouts: GfxBindingLayoutDescriptor[] = [
+    { numSamplers: 0, numUniformBuffers: 1 },
+];
+
 class MDL0Renderer {
     private gfxProgram: GfxProgram;
     private posBuffer: GfxBuffer;
     private clrBuffer: GfxBuffer;
     private idxBuffer: GfxBuffer;
     private inputLayout: GfxInputLayout;
-    private templateRenderInst: GfxRenderInst;
-    private renderInsts: GfxRenderInst[] = [];
-    private sceneParamsBuffer: GfxRenderBuffer;
+    private inputStates: GfxInputState[] = [];
 
-    constructor(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer, public mdl0: MDL0.MDL0) {
+    constructor(device: GfxDevice, public mdl0: MDL0.MDL0) {
         const program = new MDL0_Program();
         this.gfxProgram = device.createProgram(program);
-        const programReflection = device.queryProgram(this.gfxProgram);
-
-        const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-            { numSamplers: 0, numUniformBuffers: 1 },
-        ];
-        this.sceneParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_SceneParams`);
-        const uniformBuffers = [ this.sceneParamsBuffer ];
-        const renderInstBuilder = new GfxRenderInstBuilder(device, programReflection, bindingLayouts, uniformBuffers);
 
         this.posBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.VERTEX, this.mdl0.vtxData);
         this.clrBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.VERTEX, this.mdl0.clrData);
@@ -232,40 +216,31 @@ class MDL0Renderer {
             indexBufferFormat: GfxFormat.U16_R,
         });
 
-        this.templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
-        this.templateRenderInst.setGfxProgram(this.gfxProgram);
-        renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, MDL0_Program.ub_SceneParams);
-
-        const idxCount = this.mdl0.idxData.byteLength / 2;
-
         for (let i = 0; i < this.mdl0.animCount; i++) {
             const posByteOffset = i * this.mdl0.animSize;
-            const renderInst = renderInstBuilder.pushRenderInst();
-            renderInst.inputState = device.createInputState(this.inputLayout, [
+            const inputState = device.createInputState(this.inputLayout, [
                 { buffer: this.posBuffer, byteOffset: posByteOffset, byteStride: this.mdl0.vertSize },
                 { buffer: this.clrBuffer, byteOffset: 0, byteStride: 4 },
             ], { buffer: this.idxBuffer, byteOffset: 0, byteStride: 2 });
-            renderInst.drawIndexes(idxCount);
-
-            this.renderInsts[i] = renderInst;
+            this.inputStates.push(inputState);
         }
-
-        renderInstBuilder.popTemplateRenderInst();
-        renderInstBuilder.finish(device, viewRenderer);
     }
 
-    public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        let offs = this.templateRenderInst.getUniformBufferOffset(FancyGrid_Program.a_Position);
-        const mappedF32 = this.sceneParamsBuffer.mapBufferF32(offs, 4*7);
-        offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);
-        offs += fillMatrix4x3(mappedF32, offs, viewerInput.camera.viewMatrix);
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        const renderInst = renderInstManager.pushRenderInst();
+        renderInst.setBindingLayouts(mdl0BindingLayouts);
+        renderInst.setGfxProgram(this.gfxProgram);
 
         const frameNumber = ((viewerInput.time / 16) % this.mdl0.animCount) | 0;
-        for (let i = 0; i < this.renderInsts.length; i++) {
-            this.renderInsts[i].visible = (i === frameNumber);
-        }
+        renderInst.setInputLayoutAndState(this.inputLayout, this.inputStates[frameNumber]);
 
-        this.sceneParamsBuffer.prepareToRender(hostAccessPass);
+        const idxCount = this.mdl0.idxData.byteLength / 2;
+        renderInst.drawIndexes(idxCount);
+
+        let offs = renderInst.allocateUniformBuffer(MDL0_Program.ub_SceneParams, 4*4 + 4*3);
+        const mappedF32 = renderInst.mapUniformBufferF32(MDL0_Program.ub_SceneParams);
+        offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);
+        offs += fillMatrix4x3(mappedF32, offs, viewerInput.camera.viewMatrix);
     }
 
     public destroy(device: GfxDevice): void {
@@ -274,31 +249,56 @@ class MDL0Renderer {
         device.destroyBuffer(this.clrBuffer);
         device.destroyBuffer(this.idxBuffer);
         device.destroyInputLayout(this.inputLayout);
-        this.sceneParamsBuffer.destroy(device);
-        for (let i = 0; i < this.renderInsts.length; i++)
-            device.destroyInputState(this.renderInsts[i].inputState);
+        for (let i = 0; i < this.inputStates.length; i++)
+            device.destroyInputState(this.inputStates[i]);
     }
 }
 
-class SceneRenderer extends BasicRendererHelper {
+class SonicManiaSceneRenderer implements Viewer.SceneGfx {
     public defaultCameraController = OrbitCameraController;
+
+    public renderTarget = new BasicRenderTarget();
+    public renderInstManager = new GfxRenderInstManager();
+    public uniformBuffer: GfxRenderDynamicUniformBuffer;
 
     public mdl0Renderer: MDL0Renderer;
     public fancyGrid: FancyGrid;
 
     constructor(device: GfxDevice, mdl0: MDL0.MDL0) {
-        super();
-        this.mdl0Renderer = new MDL0Renderer(device, this.viewRenderer, mdl0);
-        this.fancyGrid = new FancyGrid(device, this.viewRenderer);
+        this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
+
+        this.mdl0Renderer = new MDL0Renderer(device, mdl0);
+        this.fancyGrid = new FancyGrid(device);
     }
 
-    public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        this.mdl0Renderer.prepareToRender(hostAccessPass, viewerInput);
-        this.fancyGrid.prepareToRender(hostAccessPass, viewerInput);
+    private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        const template = this.renderInstManager.pushTemplateRenderInst();
+        template.setUniformBuffer(this.uniformBuffer);
+        this.mdl0Renderer.prepareToRender(this.renderInstManager, viewerInput);
+        this.fancyGrid.prepareToRender(this.renderInstManager, viewerInput);
+        this.renderInstManager.popTemplateRenderInst();
+
+        this.uniformBuffer.prepareToRender(device, hostAccessPass);
+    }
+
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        const hostAccessPass = device.createHostAccessPass();
+        this.prepareToRender(device, hostAccessPass, viewerInput);
+        device.submitPass(hostAccessPass);
+
+        const renderInstManager = this.renderInstManager;
+        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        const passRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
+        passRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        renderInstManager.drawOnPassRenderer(device, passRenderer);
+        renderInstManager.resetRenderInsts();
+        return passRenderer;
     }
 
     public destroy(device: GfxDevice) {
-        super.destroy(device);
+        this.renderInstManager.destroy(device);
+        this.renderTarget.destroy(device);
+        this.uniformBuffer.destroy(device);
         this.mdl0Renderer.destroy(device);
         this.fancyGrid.destroy(device);
     }
@@ -315,10 +315,10 @@ export class SceneDesc implements Viewer.SceneDesc {
         this.id = this.path;
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<SceneRenderer> {
+    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<SonicManiaSceneRenderer> {
         return fetchData(this.path, abortSignal).then((result: ArrayBufferSlice) => {
             const mdl0 = MDL0.parse(result);
-            return new SceneRenderer(device, mdl0);
+            return new SonicManiaSceneRenderer(device, mdl0);
         });
     }
 }
