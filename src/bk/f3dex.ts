@@ -743,7 +743,7 @@ export function runDL_F3DEX(state: RSPState, addr: number): void {
         const w1 = view.getUint32(i + 0x04);
 
         const cmd: F3DEX_GBI = w0 >>> 24;
-        console.log(hexzero(i, 8), F3DEX_GBI_NameTable[cmd], hexzero(w0, 8), hexzero(w1, 8));
+        // console.log(hexzero(i, 8), F3DEX_GBI_NameTable[cmd], hexzero(w0, 8), hexzero(w1, 8));
 
         switch (cmd) {
         case F3DEX_GBI.G_ENDDL:

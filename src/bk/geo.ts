@@ -1,6 +1,6 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, hexdump, hexzero } from "../util";
+import { assert, hexdump, hexzero, align } from "../util";
 import * as F3DEX from "./f3dex";
 
 // Banjo-Kazooie Geometry
@@ -52,7 +52,7 @@ export function parse(buffer: ArrayBufferSlice, initialZUpd: boolean): Geometry 
     // end of the decompressed buffer it has...
     while (geoIdx < buffer.byteLength) {
         const cmd = view.getUint32(geoIdx + 0x00);
-        console.log(hexzero(cmd, 0x08));
+        // console.log(hexzero(cmd, 0x08));
         if (cmd === 0x00) {
             // NOOP?
             geoIdx += 0x04;
@@ -78,13 +78,20 @@ export function parse(buffer: ArrayBufferSlice, initialZUpd: boolean): Geometry 
             geoIdx += 0x18;
         } else if (cmd === 0x0C) {
             // Unknown. Skip.
-            geoIdx += 0x10;
+            const dataSize = view.getUint32(geoIdx + 0x0C);
+            // hexdump(buffer, geoIdx, 0x100);
+            geoIdx += dataSize;
         } else if (cmd === 0x0D) {
             // DRAW DISTANCE. Skip.
             geoIdx += 0x18;
+        } else if (cmd === 0x0E) {
+            // Unknown. Skip.
+            // hexdump(buffer, geoIdx, 0x100);
+            geoIdx += 0x30;
         } else if (cmd === 0x0F) {
-            hexdump(buffer, geoIdx, 0x20);
-            geoIdx += 0x10;
+            const count = view.getUint8(geoIdx + 0x0A);
+            // hexdump(buffer, geoIdx, 0x20);
+            geoIdx += 0x0C + align(count, 4);
         } else if (cmd === 0x10) {
             // Unknown. Skip.
             const contFlag = view.getUint32(geoIdx + 0x04);
