@@ -20,7 +20,7 @@ import { GXMaterialHacks, Color, lightSetWorldPositionViewMatrix, lightSetWorldD
 import { LightParameters, WorldLightingOptions } from './script';
 import { colorMult, colorCopy, colorFromRGBA } from '../Color';
 import { texEnvMtx } from '../MathHelpers';
-import { GXShapeHelperGfx, GXRenderHelperGfx, GXMaterialHelperGfx } from '../gx/gx_render_2';
+import { GXShapeHelperGfx, GXRenderHelperGfx, GXMaterialHelperGfx } from '../gx/gx_render';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { GfxRenderInst } from '../gfx/render/GfxRenderer2';
 

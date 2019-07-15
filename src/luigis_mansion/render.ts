@@ -4,14 +4,13 @@ import * as UI from '../ui';
 import { BIN, Batch, Material, SceneGraphNode, SceneGraphPart } from "./bin";
 
 import * as GX_Texture from '../gx/gx_texture';
-import { MaterialParams, PacketParams, loadTextureFromMipChain, translateWrapModeGfx, loadedDataCoalescerComboGfx } from '../gx/gx_render';
+import { MaterialParams, PacketParams, loadTextureFromMipChain, translateWrapModeGfx, loadedDataCoalescerComboGfx, BasicGXRendererHelper, GXMaterialHelperGfx, GXRenderHelperGfx, GXShapeHelperGfx } from '../gx/gx_render';
 import { assert } from "../util";
 import { mat4 } from "gl-matrix";
 import { AABB } from "../Geometry";
 import { GfxTexture, GfxDevice, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxHostAccessPass } from "../gfx/platform/GfxPlatform";
 import { GfxBufferCoalescerCombo, GfxCoalescedBuffersCombo } from "../gfx/helpers/BufferHelpers";
 import { Camera, computeViewMatrix } from "../Camera";
-import { BasicGXRendererHelper, GXMaterialHelperGfx, GXRenderHelperGfx, GXShapeHelperGfx } from "../gx/gx_render_2";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
 class Command_Material {

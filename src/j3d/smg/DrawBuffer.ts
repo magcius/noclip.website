@@ -1,7 +1,7 @@
 
 import { LiveActor } from "./smg_scenes";
 import { BMDModelInstance } from "../render";
-import { GXRenderHelperGfx } from "../../gx/gx_render_2";
+import { GXRenderHelperGfx } from "../../gx/gx_render";
 import { Camera } from "../../Camera";
 import { GfxDevice } from "../../gfx/platform/GfxPlatform";
 import { DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu } from "./NameObj";

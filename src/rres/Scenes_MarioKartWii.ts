@@ -14,7 +14,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { mat4 } from 'gl-matrix';
 import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render';
 import AnimationController from '../AnimationController';
-import { BasicGXRendererHelper } from '../gx/gx_render_2';
+import { BasicGXRendererHelper } from '../gx/gx_render';
 import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
 import { computeModelMatrixSRT, MathConstants } from '../MathHelpers';
 

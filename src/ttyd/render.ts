@@ -1,6 +1,6 @@
 
 import { GXTextureHolder, MaterialParams, PacketParams, ColorKind, translateWrapModeGfx, ub_MaterialParams, loadedDataCoalescerComboGfx } from '../gx/gx_render';
-import { GXRenderHelperGfx, GXMaterialHelperGfx, GXShapeHelperGfx, BasicGXRendererHelper } from '../gx/gx_render_2';
+import { GXRenderHelperGfx, GXMaterialHelperGfx, GXShapeHelperGfx, BasicGXRendererHelper } from '../gx/gx_render';
 
 import * as TPL from './tpl';
 import { TTYDWorld, Material, SceneGraphNode, Batch, SceneGraphPart, Sampler, MaterialAnimator, bindMaterialAnimator, AnimationEntry, MeshAnimator, bindMeshAnimator, MaterialLayer } from './world';

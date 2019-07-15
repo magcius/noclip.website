@@ -10,7 +10,7 @@ import { mat4 } from "gl-matrix";
 import * as BRRES from './brres';
 import * as GX from '../gx/gx_enum';
 import { assert, readString, hexzero, assertExists } from "../util";
-import { GXRenderHelperGfx } from "../gx/gx_render_2";
+import { GXRenderHelperGfx } from "../gx/gx_render";
 import AnimationController from "../AnimationController";
 import { GXMaterialHacks } from "../gx/gx_material";
 import { computeModelMatrixSRT, computeMatrixWithoutRotation } from "../MathHelpers";

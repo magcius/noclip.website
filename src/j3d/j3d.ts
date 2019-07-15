@@ -16,7 +16,7 @@ import { AABB } from '../Geometry';
 import { getPointHermite } from '../Spline';
 import { computeModelMatrixSRT } from '../MathHelpers';
 import BitMap from '../BitMap';
-import { autoOptimizeMaterial } from '../gx/gx_render_2';
+import { autoOptimizeMaterial } from '../gx/gx_render';
 
 //#region Helpers
 function readStringTable(buffer: ArrayBufferSlice, offs: number): string[] {

@@ -11,7 +11,7 @@ import Progressable from '../Progressable';
 import { fetchData } from '../fetch';
 import { MDL0ModelInstance, RRESTextureHolder, MDL0Model } from './render';
 import AnimationController from '../AnimationController';
-import { GXRenderHelperGfx } from '../gx/gx_render_2';
+import { GXRenderHelperGfx } from '../gx/gx_render';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GXMaterialHacks } from '../gx/gx_material';
 import { executeOnPass } from '../gfx/render/GfxRenderer2';

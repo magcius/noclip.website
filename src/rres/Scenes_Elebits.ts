@@ -11,7 +11,7 @@ import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
 import { MDL0ModelInstance, MDL0Model, RRESTextureHolder } from './render';
-import { BasicGXRendererHelper } from '../gx/gx_render_2';
+import { BasicGXRendererHelper } from '../gx/gx_render';
 import AnimationController from '../AnimationController';
 import { GXMaterialHacks } from '../gx/gx_material';
 

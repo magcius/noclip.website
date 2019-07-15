@@ -20,7 +20,7 @@ import { getPointHermite } from '../Spline';
 import { colorToRGBA8, colorFromRGBA8, colorNewCopy, White, Color, colorMult } from '../Color';
 import { computeModelMatrixSRT, MathConstants, lerp } from '../MathHelpers';
 import BitMap from '../BitMap';
-import { autoOptimizeMaterial } from '../gx/gx_render_2';
+import { autoOptimizeMaterial } from '../gx/gx_render';
 import { Camera } from '../Camera';
 
 //#region Utility

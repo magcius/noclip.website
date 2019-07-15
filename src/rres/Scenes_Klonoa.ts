@@ -11,7 +11,7 @@ import { fetchData } from '../fetch';
 import { RRESTextureHolder, MDL0ModelInstance, MDL0Model } from './render';
 import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor, ColorTexture, noClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
-import { GXRenderHelperGfx } from '../gx/gx_render_2';
+import { GXRenderHelperGfx } from '../gx/gx_render';
 import AnimationController from '../AnimationController';
 import { assert } from '../util';
 import { TextureOverride } from '../TextureHolder';

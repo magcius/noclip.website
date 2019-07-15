@@ -3,7 +3,7 @@ import { DrawBufferHolder, drawBufferInitialTable, LightType } from "./DrawBuffe
 import { LiveActor, SceneObjHolder } from "./smg_scenes";
 import { ViewerRenderInput } from "../../viewer";
 import { GfxTexture, GfxDevice } from "../../gfx/platform/GfxPlatform";
-import { GXRenderHelperGfx } from "../../gx/gx_render_2";
+import { GXRenderHelperGfx } from "../../gx/gx_render";
 import { Camera } from "../../Camera";
 
 export const enum MovementType {

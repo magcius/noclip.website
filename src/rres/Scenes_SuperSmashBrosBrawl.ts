@@ -12,7 +12,7 @@ import { fetchData } from '../fetch';
 import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render';
 import AnimationController from '../AnimationController';
 import { GXMaterialHacks } from '../gx/gx_material';
-import { BasicGXRendererHelper } from '../gx/gx_render_2';
+import { BasicGXRendererHelper } from '../gx/gx_render';
 
 interface ARCFileEntry {
     fileType: number;

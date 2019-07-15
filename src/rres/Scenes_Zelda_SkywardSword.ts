@@ -16,7 +16,7 @@ import { TextureOverride } from '../TextureHolder';
 import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks, Color } from '../gx/gx_material';
 import { mat4, quat } from 'gl-matrix';
 import AnimationController from '../AnimationController';
-import { GXRenderHelperGfx } from '../gx/gx_render_2';
+import { GXRenderHelperGfx } from '../gx/gx_render';
 import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxTexture, GfxTextureDimension, GfxFormat } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstViewRenderer, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';

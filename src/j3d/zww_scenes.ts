@@ -20,7 +20,7 @@ import { Camera, computeViewMatrix } from '../Camera';
 import { DeviceProgram } from '../Program';
 import { colorToCSS, Color } from '../Color';
 import { ColorKind } from '../gx/gx_render';
-import { GXRenderHelperGfx } from '../gx/gx_render_2';
+import { GXRenderHelperGfx } from '../gx/gx_render';
 import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBufferUsage, GfxFormat, GfxVertexAttributeFrequency, GfxInputLayout, GfxInputState, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor, GfxCompareMode, GfxBufferFrequencyHint, GfxVertexAttributeDescriptor } from '../gfx/platform/GfxPlatform';
 import { GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { GfxRenderInst, GfxRenderInstManager } from '../gfx/render/GfxRenderer2';

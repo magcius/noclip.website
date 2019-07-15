@@ -16,7 +16,7 @@ import { BMDModel, MaterialInstance, MaterialInstanceState, ShapeInstanceState, 
 import { SunshineRenderer, SunshineSceneDesc, SMSPass } from '../j3d/sms_scenes';
 import * as Yaz0 from '../compression/Yaz0';
 import { ub_PacketParams, PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, ub_MaterialParams } from '../gx/gx_render';
-import { GXRenderHelperGfx } from '../gx/gx_render_2';
+import { GXRenderHelperGfx } from '../gx/gx_render';
 import AnimationController from '../AnimationController';
 import { GfxDevice, GfxHostAccessPass, GfxBuffer, GfxInputState, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexAttributeFrequency, GfxVertexBufferDescriptor } from '../gfx/platform/GfxPlatform';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';

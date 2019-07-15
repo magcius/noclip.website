@@ -25,7 +25,7 @@ import AnimationController from '../../AnimationController';
 import { EFB_WIDTH, EFB_HEIGHT } from '../../gx/gx_material';
 import { MaterialParams, PacketParams } from '../../gx/gx_render';
 import { LoadedVertexData, LoadedVertexLayout } from '../../gx/gx_displaylist';
-import { GXRenderHelperGfx } from '../../gx/gx_render_2';
+import { GXRenderHelperGfx } from '../../gx/gx_render';
 import { BMD, BRK, BTK, BCK, LoopMode, BVA, BTP, BPK, JSystemFileReaderHelper, ShapeDisplayFlags } from '../../j3d/j3d';
 import { BMDModel, BMDModelInstance, MaterialInstance } from '../../j3d/render';
 import { JMapInfoIter, createCsvParser, getJMapInfoTransLocal, getJMapInfoRotateLocal, getJMapInfoScale } from './JMapInfo';

@@ -7,7 +7,7 @@ import * as U8 from "./u8";
 import * as Yaz0 from "../compression/Yaz0";
 import * as BRRES from "./brres";
 import { assertExists, readString, assert } from "../util";
-import { BasicGXRendererHelper } from "../gx/gx_render_2";
+import { BasicGXRendererHelper } from "../gx/gx_render";
 import { MDL0ModelInstance, MDL0Model, RRESTextureHolder } from "./render";
 import AnimationController from "../AnimationController";
 import ArrayBufferSlice from "../ArrayBufferSlice";

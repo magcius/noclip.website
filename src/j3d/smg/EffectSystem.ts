@@ -8,7 +8,7 @@ import * as RARC from '../../j3d/rarc';
 import * as JPA from '../JPA';
 import { Color } from "../../gx/gx_material";
 import { vec3, mat4 } from "gl-matrix";
-import { GXRenderHelperGfx } from "../../gx/gx_render_2";
+import { GXRenderHelperGfx } from "../../gx/gx_render";
 import { colorNewCopy, White, colorCopy } from "../../Color";
 import { computeModelMatrixR } from "../../MathHelpers";
 import { DrawType } from "./NameObj";

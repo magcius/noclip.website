@@ -9,7 +9,7 @@ import { ANK1, TTK1, TRK1, BTI_Texture } from "./j3d";
 import AnimationController from "../AnimationController";
 import { Colors } from "./zww_scenes";
 import { ColorKind, PacketParams, MaterialParams, ub_MaterialParams, loadedDataCoalescerComboGfx } from "../gx/gx_render";
-import { GXRenderHelperGfx, GXShapeHelperGfx, GXMaterialHelperGfx } from '../gx/gx_render_2';
+import { GXRenderHelperGfx, GXShapeHelperGfx, GXMaterialHelperGfx } from '../gx/gx_render';
 import { AABB } from '../Geometry';
 import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB, computeViewMatrix } from '../Camera';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';

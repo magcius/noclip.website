@@ -13,7 +13,7 @@ import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render';
 import { GXMaterialHacks } from '../gx/gx_material';
 import AnimationController from '../AnimationController';
 import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
-import { BasicGXRendererHelper } from '../gx/gx_render_2';
+import { BasicGXRendererHelper } from '../gx/gx_render';
 
 const materialHacks: GXMaterialHacks = {
     lightingFudge: (p) => `(0.5 * (${p.ambSource} + 0.2) * ${p.matSource})`,

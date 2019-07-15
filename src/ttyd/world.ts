@@ -15,7 +15,7 @@ import { GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
 import { colorFromRGBA8 } from '../Color';
 import { computeModelMatrixSRT, MathConstants } from '../MathHelpers';
 import { getPointHermite } from '../Spline';
-import { autoOptimizeMaterial } from '../gx/gx_render_2';
+import { autoOptimizeMaterial } from '../gx/gx_render';
 
 export interface TTYDWorld {
     information: Information;

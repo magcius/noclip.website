@@ -15,7 +15,7 @@ import * as BYML from '../byml';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
 import { mat4 } from 'gl-matrix';
-import { GXRenderHelperGfx } from '../gx/gx_render_2';
+import { GXRenderHelperGfx } from '../gx/gx_render';
 
 export class RetroSceneRenderer implements Viewer.SceneGfx {
     public renderHelper: GXRenderHelperGfx;

@@ -15,7 +15,7 @@ import { getPointHermite } from "../Spline";
 import { GXMaterial, AlphaTest, RopInfo, TexGen, TevStage, getVertexAttribLocation, IndTexStage } from "../gx/gx_material";
 import { Color, colorNew, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8 } from "../Color";
 import { MaterialParams, ColorKind, ub_PacketParams, u_PacketParamsBufferSize, PacketParams, ub_MaterialParams, setIndTexOrder, setIndTexCoordScale, setTevIndirect, setTevOrder, setTevColorIn, setTevColorOp, setTevAlphaIn, setTevAlphaOp, fillIndTexMtx, fillTextureMappingInfo } from "../gx/gx_render";
-import { GXMaterialHelperGfx, GXRenderHelperGfx } from "../gx/gx_render_2";
+import { GXMaterialHelperGfx, GXRenderHelperGfx } from "../gx/gx_render";
 import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants } from "../MathHelpers";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { makeSortKeyTranslucent, GfxRendererLayer, setSortKeyDepth } from "../gfx/render/GfxRenderer";
