@@ -300,12 +300,12 @@ export class BINModelInstance {
         this.visible = visible;
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, textureHolder: KatamariDamacyTextureHolder, viewRenderer: Viewer.ViewerRenderInput) {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, textureHolder: KatamariDamacyTextureHolder, viewRenderer: Viewer.ViewerRenderInput) {
         if (!this.visible)
             return;
 
         const template = renderInstManager.pushTemplateRenderInst();
-        template.setInputState(device, this.binModelData.inputState);
+        template.setInputLayoutAndState(this.binModelData.inputLayout, this.binModelData.inputState);
         template.setMegaStateFlags(cullModeFlags);
 
         computeViewMatrix(scratchMat4, viewRenderer.camera);

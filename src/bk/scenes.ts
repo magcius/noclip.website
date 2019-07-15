@@ -9,18 +9,23 @@ import Progressable from '../Progressable';
 import { fetchData } from '../fetch';
 import { FakeTextureHolder, TextureHolder } from '../TextureHolder';
 import { textureToCanvas, N64Renderer, N64Data, BKPass } from './render';
-import { BasicRendererHelper } from '../oot3d/render';
 import { mat4 } from 'gl-matrix';
-import { transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
+import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
+import { GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
 
 const pathBase = `bk`;
 
-class BKRenderer extends BasicRendererHelper implements Viewer.SceneGfx {
-    private sceneRenderers: N64Renderer[] = [];
+class BKRenderer implements Viewer.SceneGfx {
+    public n64Renderers: N64Renderer[] = [];
     public n64Datas: N64Data[] = [];
 
-    constructor(public textureHolder: TextureHolder<any>) {
-        super();
+    public renderTarget = new BasicRenderTarget();
+    public renderInstManager = new GfxRenderInstManager();
+    public uniformBuffer: GfxRenderDynamicUniformBuffer;
+
+    constructor(device: GfxDevice, public textureHolder: TextureHolder<any>) {
+        this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
     }
 
     public createPanels(): UI.Panel[] {
@@ -30,72 +35,80 @@ class BKRenderer extends BasicRendererHelper implements Viewer.SceneGfx {
         renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
         const enableCullingCheckbox = new UI.Checkbox('Enable Culling', true);
         enableCullingCheckbox.onchanged = () => {
-            for (let i = 0; i < this.sceneRenderers.length; i++)
-                this.sceneRenderers[i].setBackfaceCullingEnabled(enableCullingCheckbox.checked);
+            for (let i = 0; i < this.n64Renderers.length; i++)
+                this.n64Renderers[i].setBackfaceCullingEnabled(enableCullingCheckbox.checked);
         };
         renderHacksPanel.contents.appendChild(enableCullingCheckbox.elem);
         const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
         enableVertexColorsCheckbox.onchanged = () => {
-            for (let i = 0; i < this.sceneRenderers.length; i++)
-                this.sceneRenderers[i].setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
+            for (let i = 0; i < this.n64Renderers.length; i++)
+                this.n64Renderers[i].setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
         };
         renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
         const enableTextures = new UI.Checkbox('Enable Textures', true);
         enableTextures.onchanged = () => {
-            for (let i = 0; i < this.sceneRenderers.length; i++)
-                this.sceneRenderers[i].setTexturesEnabled(enableTextures.checked);
+            for (let i = 0; i < this.n64Renderers.length; i++)
+                this.n64Renderers[i].setTexturesEnabled(enableTextures.checked);
         };
         renderHacksPanel.contents.appendChild(enableTextures.elem);
         const enableMonochromeVertexColors = new UI.Checkbox('Grayscale Vertex Colors', false);
         enableMonochromeVertexColors.onchanged = () => {
-            for (let i = 0; i < this.sceneRenderers.length; i++)
-                this.sceneRenderers[i].setMonochromeVertexColorsEnabled(enableMonochromeVertexColors.checked);
+            for (let i = 0; i < this.n64Renderers.length; i++)
+                this.n64Renderers[i].setMonochromeVertexColorsEnabled(enableMonochromeVertexColors.checked);
         };
         renderHacksPanel.contents.appendChild(enableMonochromeVertexColors.elem);
         const enableAlphaVisualizer = new UI.Checkbox('Visualize Vertex Alpha', false);
         enableAlphaVisualizer.onchanged = () => {
-            for (let i = 0; i < this.sceneRenderers.length; i++)
-                this.sceneRenderers[i].setAlphaVisualizerEnabled(enableAlphaVisualizer.checked);
+            for (let i = 0; i < this.n64Renderers.length; i++)
+                this.n64Renderers[i].setAlphaVisualizerEnabled(enableAlphaVisualizer.checked);
         };
         renderHacksPanel.contents.appendChild(enableAlphaVisualizer.elem);
 
         return [renderHacksPanel];
     }
 
-    public addSceneRenderer(device: GfxDevice, sceneRenderer: N64Renderer): void {
-        this.sceneRenderers.push(sceneRenderer);
-        sceneRenderer.addToViewRenderer(device, this.viewRenderer);
-    }
+    public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        const template = this.renderInstManager.pushTemplateRenderInst();
+        template.setUniformBuffer(this.uniformBuffer);
 
-    public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        for (let i = 0; i < this.sceneRenderers.length; i++)
-            this.sceneRenderers[i].prepareToRender(hostAccessPass, viewerInput);
+        for (let i = 0; i < this.n64Renderers.length; i++)
+            this.n64Renderers[i].prepareToRender(device, this.renderInstManager, viewerInput);
+
+        this.renderInstManager.popTemplateRenderInst();
+        this.uniformBuffer.prepareToRender(device, hostAccessPass);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
         const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(hostAccessPass, viewerInput);
+        this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
-        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
 
-        this.viewRenderer.prepareToRender(device);
+        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
 
         // First, render the skybox.
         const skyboxPassRenderer = this.renderTarget.createRenderPass(device, transparentBlackFullClearRenderPassDescriptor);
-        this.viewRenderer.executeOnPass(device, skyboxPassRenderer, BKPass.SKYBOX);
+        skyboxPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.renderInstManager.setVisibleByFilterKeyExact(BKPass.SKYBOX);
+        this.renderInstManager.drawOnPassRenderer(device, skyboxPassRenderer);
         skyboxPassRenderer.endPass(null);
         device.submitPass(skyboxPassRenderer);
         // Now do main pass.
         const mainPassRenderer = this.renderTarget.createRenderPass(device, depthClearRenderPassDescriptor);
-        this.viewRenderer.executeOnPass(device, mainPassRenderer, BKPass.MAIN);
+        mainPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.renderInstManager.setVisibleByFilterKeyExact(BKPass.MAIN);
+        this.renderInstManager.drawOnPassRenderer(device, mainPassRenderer);
+
+        this.renderInstManager.resetRenderInsts();
+
         return mainPassRenderer;
     }
 
     public destroy(device: GfxDevice): void {
-        super.destroy(device);
-        for (let i = 0; i < this.sceneRenderers.length; i++)
-            this.sceneRenderers[i].destroy(device);
+        this.renderInstManager.destroy(device);
+        this.renderTarget.destroy(device);
+        this.uniformBuffer.destroy(device);
+        for (let i = 0; i < this.n64Renderers.length; i++)
+            this.n64Renderers[i].destroy(device);
         for (let i = 0; i < this.n64Datas.length; i++)
             this.n64Datas[i].destroy(device);
         this.textureHolder.destroy(device);
@@ -112,9 +125,9 @@ class SceneDesc implements Viewer.SceneDesc {
 
         const n64Data = new N64Data(device, geo.rspOutput);
         sceneRenderer.n64Datas.push(n64Data);
-        const renderer = new N64Renderer(device, n64Data);
-        sceneRenderer.addSceneRenderer(device, renderer);
-        return renderer;
+        const n64Renderer = new N64Renderer(n64Data);
+        sceneRenderer.n64Renderers.push(n64Renderer);
+        return n64Renderer;
     }
 
     public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
@@ -123,7 +136,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
             const viewerTextures: Viewer.Texture[] = [];
             const fakeTextureHolder = new FakeTextureHolder(viewerTextures);
-            const sceneRenderer = new BKRenderer(fakeTextureHolder);
+            const sceneRenderer = new BKRenderer(device, fakeTextureHolder);
 
             if (obj.OpaGeoFileId >= 0) {
                 const geo = Geo.parse(obj.Files[obj.OpaGeoFileId].Data, true);

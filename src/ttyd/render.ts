@@ -75,11 +75,11 @@ class BackgroundBillboardRenderer {
         this.textureHolder.fillTextureMapping(this.textureMappings[0], this.textureName);
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, renderInput: Viewer.ViewerRenderInput): void {
         const renderInst = renderInstManager.pushRenderInst();
         renderInst.drawPrimitives(3);
         renderInst.sortKey = makeSortKeyOpaque(GfxRendererLayer.BACKGROUND, this.gfxProgram.ResourceUniqueId);
-        renderInst.setInputState(device, null);
+        renderInst.setInputLayoutAndState(null, null);
         renderInst.setBindingLayouts(backgroundBillboardBindingLayouts);
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.allocateUniformBuffer(BackgroundBillboardProgram.ub_Params, 4);
@@ -380,7 +380,7 @@ export class WorldRenderer extends BasicGXRendererHelper {
         this.animationController.setTimeInMilliseconds(viewerInput.time);
 
         if (this.backgroundRenderer !== null)
-            this.backgroundRenderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+            this.backgroundRenderer.prepareToRender(this.renderHelper.renderInstManager, viewerInput);
 
         this.renderHelper.fillSceneParams(viewerInput, template);
 

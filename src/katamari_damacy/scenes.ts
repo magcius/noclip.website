@@ -67,9 +67,9 @@ class ObjectRenderer {
     constructor(public objectSpawn: BIN.MissionSetupObjectSpawn) {
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, textureHolder: KatamariDamacyTextureHolder, viewRenderer: Viewer.ViewerRenderInput) {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, textureHolder: KatamariDamacyTextureHolder, viewRenderer: Viewer.ViewerRenderInput) {
         for (let i = 0; i < this.modelInstance.length; i++)
-            this.modelInstance[i].prepareToRender(device, renderInstManager, textureHolder, viewRenderer);
+            this.modelInstance[i].prepareToRender(renderInstManager, textureHolder, viewRenderer);
     }
 
     public setVisible(visible: boolean): void {
@@ -96,9 +96,9 @@ class StageAreaRenderer {
     public stageAreaSector: StageAreaSector[] = [];
     public modelInstance: BINModelInstance[] = [];
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, textureHolder: KatamariDamacyTextureHolder, viewRenderer: Viewer.ViewerRenderInput) {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, textureHolder: KatamariDamacyTextureHolder, viewRenderer: Viewer.ViewerRenderInput) {
         for (let i = 0; i < this.modelInstance.length; i++)
-            this.modelInstance[i].prepareToRender(device, renderInstManager, textureHolder, viewRenderer);
+            this.modelInstance[i].prepareToRender(renderInstManager, textureHolder, viewRenderer);
     }
 
     public setVisible(visible: boolean): void {
@@ -195,9 +195,9 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
         fillSceneParamsData(sceneParamsMapped, viewerInput.camera, offs);
 
         for (let i = 0; i < this.stageAreaRenderers.length; i++)
-            this.stageAreaRenderers[i].prepareToRender(device, this.renderInstManager, this.textureHolder, viewerInput);
+            this.stageAreaRenderers[i].prepareToRender(this.renderInstManager, this.textureHolder, viewerInput);
         for (let i = 0; i < this.objectRenderers.length; i++)
-            this.objectRenderers[i].prepareToRender(device, this.renderInstManager, this.textureHolder, viewerInput);
+            this.objectRenderers[i].prepareToRender(this.renderInstManager, this.textureHolder, viewerInput);
 
         this.renderInstManager.popTemplateRenderInst();
 

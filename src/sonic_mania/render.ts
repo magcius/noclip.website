@@ -254,7 +254,7 @@ class MDL0Renderer {
     }
 }
 
-class SonicManiaSceneRenderer implements Viewer.SceneGfx {
+class SonicManiaRenderer implements Viewer.SceneGfx {
     public defaultCameraController = OrbitCameraController;
 
     public renderTarget = new BasicRenderTarget();
@@ -315,10 +315,10 @@ export class SceneDesc implements Viewer.SceneDesc {
         this.id = this.path;
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<SonicManiaSceneRenderer> {
+    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<SonicManiaRenderer> {
         return fetchData(this.path, abortSignal).then((result: ArrayBufferSlice) => {
             const mdl0 = MDL0.parse(result);
-            return new SonicManiaSceneRenderer(device, mdl0);
+            return new SonicManiaRenderer(device, mdl0);
         });
     }
 }

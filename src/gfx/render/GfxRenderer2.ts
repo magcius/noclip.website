@@ -89,11 +89,6 @@ export class GfxRenderInst {
         return this._renderPipelineDescriptor.megaStateDescriptor;
     }
 
-    public setInputState(device: GfxDevice, inputState: GfxInputState | null): void {
-        this._inputState = inputState;
-        this._renderPipelineDescriptor.inputLayout = inputState !== null ? device.queryInputState(inputState).inputLayout : null;
-    }
-
     public setInputLayoutAndState(inputLayout: GfxInputLayout | null, inputState: GfxInputState | null): void {
         this._inputState = inputState;
         this._renderPipelineDescriptor.inputLayout = inputLayout;

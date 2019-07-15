@@ -4,15 +4,15 @@ import { readFileSync } from 'fs';
 import * as Viewer from '../viewer';
 import { DeviceProgram, DeviceProgramReflection } from "../Program";
 import { Texture, getFormatString, RSPOutput, Vertex, DrawCall, GeometryMode } from "./f3dex";
-import { GfxDevice, GfxTextureDimension, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxHostAccessPass, GfxBlendMode, GfxBlendFactor, GfxCullMode } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxTextureDimension, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxHostAccessPass, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { assert, nArray } from '../util';
-import { GfxRenderInstBuilder, GfxRenderInst, GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
 import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers';
 import { mat4 } from 'gl-matrix';
 import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
+import { GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
 
 export function textureToCanvas(texture: Texture): Viewer.Texture {
     const canvas = document.createElement("canvas");
@@ -168,38 +168,31 @@ const enum TextFilt {
 
 const modelViewScratch = mat4.create();
 const texMatrixScratch = mat4.create();
-const textureMappings = nArray(2, () => new TextureMapping());
 class DrawCallInstance {
-    private renderInst: GfxRenderInst;
     private textureEntry: Texture[] = [];
     private vertexColorsEnabled = true;
     private texturesEnabled = true;
     private monochromeVertexColorsEnabled = false;
     private alphaVisualizerEnabled = false;
+    private megaStateFlags: Partial<GfxMegaStateDescriptor>;
+    private program!: DeviceProgram;
+    private gfxProgram: GfxProgram | null = null;
+    private textureMappings = nArray(2, () => new TextureMapping());
 
-    constructor(device: GfxDevice, n64Data: N64Data, renderInstBuilder: GfxRenderInstBuilder, private drawCall: DrawCall, private drawIndex: number) {
-        this.renderInst = renderInstBuilder.pushRenderInst();
-        renderInstBuilder.newUniformBufferInstance(this.renderInst, F3DEX_Program.ub_DrawParams);
-
-        for (let i = 0; i < textureMappings.length; i++) {
-            textureMappings[i].reset();
-
+    constructor(n64Data: N64Data, private drawCall: DrawCall) {
+        for (let i = 0; i < this.textureMappings.length; i++) {
             if (i < this.drawCall.textureIndices.length) {
                 const idx = this.drawCall.textureIndices[i];
                 this.textureEntry[i] = n64Data.rspOutput.textures[idx];
-                textureMappings[i].gfxTexture = n64Data.textures[idx];
-                textureMappings[i].gfxSampler = n64Data.samplers[idx];
+                this.textureMappings[i].gfxTexture = n64Data.textures[idx];
+                this.textureMappings[i].gfxSampler = n64Data.samplers[idx];
             }
         }
 
         const zUpd = !!(this.drawCall.DP_OtherModeL & 0x20);
-        this.renderInst.setMegaStateFlags({ depthWrite: zUpd });
+        this.megaStateFlags = { depthWrite: zUpd };
         this.setBackfaceCullingEnabled(true);
         this.createProgram();
-
-        this.renderInst.setSamplerBindingsFromTextureMappings(textureMappings);
-
-        this.renderInst.drawIndexes(drawCall.indexCount, drawCall.firstIndex);
     }
 
     private createProgram(): void {
@@ -230,12 +223,13 @@ class DrawCallInstance {
         if (alphaCompare !== 0x00)
             program.defines.set(`USE_ALPHA_MASK`, '1');
 
-        this.renderInst.setDeviceProgram(program);
+        this.program = program;
+        this.gfxProgram = null;
     }
 
     public setBackfaceCullingEnabled(v: boolean): void {
         const cullMode = v ? translateCullMode(this.drawCall.SP_GeometryMode) : GfxCullMode.NONE;
-        this.renderInst.setMegaStateFlags({ cullMode });
+        this.megaStateFlags.cullMode = cullMode;
     }
 
     public setVertexColorsEnabled(v: boolean): void {
@@ -274,9 +268,17 @@ class DrawCallInstance {
         }
     }
 
-    public prepareToRender(drawParamsBuffer: GfxRenderBuffer, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean, modelMatrix: mat4): void {
-        let offs = this.renderInst.getUniformBufferOffset(F3DEX_Program.ub_DrawParams);
-        const mappedF32 = drawParamsBuffer.mapBufferF32(offs, 12 + 8*2);
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean, modelMatrix: mat4): void {
+        if (this.gfxProgram === null)
+            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
+
+        const renderInst = renderInstManager.pushRenderInst();
+        renderInst.setGfxProgram(this.gfxProgram);
+        renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
+        renderInst.drawIndexes(this.drawCall.indexCount, this.drawCall.firstIndex);
+
+        let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12 + 8*2);
+        const mappedF32 = renderInst.mapUniformBufferF32(F3DEX_Program.ub_DrawParams);
         if (isSkybox)
             computeViewMatrixSkybox(modelViewScratch, viewerInput.camera);
         else
@@ -292,7 +294,8 @@ class DrawCallInstance {
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyProgram(this.renderInst.gfxProgram);
+        if (this.gfxProgram !== null)
+            device.destroyProgram(this.gfxProgram);
     }
 }
 
@@ -301,43 +304,25 @@ export const enum BKPass {
     SKYBOX = 0x02,
 }
 
+const bindingLayouts: GfxBindingLayoutDescriptor[] = [
+    { numUniformBuffers: 2, numSamplers: 2, },
+];
+
 export class N64Renderer {
-    private sceneParamsBuffer: GfxRenderBuffer;
-    private drawParamsBuffer: GfxRenderBuffer;
-    private renderInstBuilder: GfxRenderInstBuilder;
-    private templateRenderInst: GfxRenderInst;
     private drawCallInstances: DrawCallInstance[] = [];
+    private megaStateFlags: Partial<GfxMegaStateDescriptor>;
     public isSkybox = false;
     public modelMatrix = mat4.create();
 
-    constructor(device: GfxDevice, private n64Data: N64Data) {
-        this.sceneParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_SceneParams`);
-        this.drawParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_DrawParams`);
-
-        const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-            { numUniformBuffers: 1, numSamplers: 0, }, // Scene
-            { numUniformBuffers: 1, numSamplers: 2, }, // Mesh
-        ];
-        const uniformBuffers = [ this.sceneParamsBuffer, this.drawParamsBuffer ];
-
-        this.renderInstBuilder = new GfxRenderInstBuilder(device, F3DEX_Program.programReflection, bindingLayouts, uniformBuffers);
-        this.templateRenderInst = this.renderInstBuilder.pushTemplateRenderInst();
-        this.renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, F3DEX_Program.ub_SceneParams);
-
-        this.templateRenderInst.inputState = this.n64Data.inputState;
-        this.templateRenderInst.setMegaStateFlags({
+    constructor(private n64Data: N64Data) {
+        this.megaStateFlags = {
             blendMode: GfxBlendMode.ADD,
             blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
             blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
-        });
+        };
 
         for (let i = 0; i < this.n64Data.rspOutput.drawCalls.length; i++)
-            this.drawCallInstances.push(new DrawCallInstance(device, this.n64Data, this.renderInstBuilder, this.n64Data.rspOutput.drawCalls[i], i));
-    }
-
-    public addToViewRenderer(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer): void {
-        this.renderInstBuilder.popTemplateRenderInst();
-        this.renderInstBuilder.finish(device, viewRenderer);
+            this.drawCallInstances.push(new DrawCallInstance(this.n64Data, this.n64Data.rspOutput.drawCalls[i]));
     }
 
     public setBackfaceCullingEnabled(v: boolean): void {
@@ -365,23 +350,23 @@ export class N64Renderer {
             this.drawCallInstances[i].setAlphaVisualizerEnabled(v);
     }
 
-    public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        this.templateRenderInst.passMask = this.isSkybox ? BKPass.SKYBOX : BKPass.MAIN;
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        const template = renderInstManager.pushTemplateRenderInst();
+        template.setBindingLayouts(bindingLayouts);
+        template.setInputLayoutAndState(this.n64Data.inputLayout, this.n64Data.inputState);
+        template.setMegaStateFlags(this.megaStateFlags);
 
-        let offs = this.templateRenderInst.getUniformBufferOffset(F3DEX_Program.ub_SceneParams);
-        const mappedF32 = this.sceneParamsBuffer.mapBufferF32(offs, 16);
+        template.filterKey = this.isSkybox ? BKPass.SKYBOX : BKPass.MAIN;
+
+        let offs = template.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, 16);
+        const mappedF32 = template.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
         offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);
 
         for (let i = 0; i < this.drawCallInstances.length; i++)
-            this.drawCallInstances[i].prepareToRender(this.drawParamsBuffer, viewerInput, this.isSkybox, this.modelMatrix);
-
-        this.sceneParamsBuffer.prepareToRender(hostAccessPass);
-        this.drawParamsBuffer.prepareToRender(hostAccessPass);
+            this.drawCallInstances[i].prepareToRender(device, renderInstManager, viewerInput, this.isSkybox, this.modelMatrix);
     }
 
     public destroy(device: GfxDevice): void {
-        this.sceneParamsBuffer.destroy(device);
-        this.drawParamsBuffer.destroy(device);
         for (let i = 0; i < this.drawCallInstances.length; i++)
             this.drawCallInstances[i].destroy(device);
     }
