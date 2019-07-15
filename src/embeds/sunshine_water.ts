@@ -15,7 +15,7 @@ import * as RARC from '../j3d/rarc';
 import { BMDModel, MaterialInstance, MaterialInstanceState, ShapeInstanceState, MaterialData } from '../j3d/render';
 import { SunshineRenderer, SunshineSceneDesc, SMSPass } from '../j3d/sms_scenes';
 import * as Yaz0 from '../compression/Yaz0';
-import { ub_PacketParams, PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, ub_MaterialParams, u_MaterialParamsBufferSize } from '../gx/gx_render';
+import { ub_PacketParams, PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, ub_MaterialParams } from '../gx/gx_render';
 import { GXRenderHelperGfx } from '../gx/gx_render_2';
 import AnimationController from '../AnimationController';
 import { GfxDevice, GfxHostAccessPass, GfxBuffer, GfxInputState, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexAttributeFrequency, GfxVertexBufferDescriptor } from '../gfx/platform/GfxPlatform';

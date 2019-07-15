@@ -10,8 +10,6 @@ import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
 import Progressable from '../Progressable';
 import { fetchData } from '../fetch';
 import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render';
-import { BasicRendererHelper } from '../oot3d/render';
-import { GXRenderHelperGfx } from '../gx/gx_render';
 import AnimationController from '../AnimationController';
 import { GXMaterialHacks } from '../gx/gx_material';
 import { BasicGXRendererHelper } from '../gx/gx_render_2';

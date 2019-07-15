@@ -8,7 +8,7 @@ import { BMDModelInstance, BTIData } from "./render";
 import { ANK1, TTK1, TRK1, BTI_Texture } from "./j3d";
 import AnimationController from "../AnimationController";
 import { Colors } from "./zww_scenes";
-import { ColorKind, PacketParams, MaterialParams, ub_MaterialParams, u_MaterialParamsBufferSize, loadedDataCoalescerComboGfx } from "../gx/gx_render";
+import { ColorKind, PacketParams, MaterialParams, ub_MaterialParams, loadedDataCoalescerComboGfx } from "../gx/gx_render";
 import { GXRenderHelperGfx, GXShapeHelperGfx, GXMaterialHelperGfx } from '../gx/gx_render_2';
 import { AABB } from '../Geometry';
 import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB, computeViewMatrix } from '../Camera';
@@ -430,7 +430,7 @@ export class FlowerObjectRenderer implements ObjectRenderer {
 
         const renderInst = this.flowerData.shapeHelperMain.pushRenderInst(renderHelper.renderInstManager);
 
-        const materialParamsOffs = renderInst.allocateUniformBuffer(ub_MaterialParams, u_MaterialParamsBufferSize);
+        const materialParamsOffs = renderInst.allocateUniformBuffer(ub_MaterialParams, this.materialHelper.materialParamsBufferSize);
         this.materialHelper.fillMaterialParamsData(renderHelper, materialParamsOffs, materialParams);
         this.materialHelper.setOnRenderInst(device, renderHelper.renderInstManager.gfxRenderCache, renderInst);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);

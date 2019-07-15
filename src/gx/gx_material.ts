@@ -387,12 +387,13 @@ export class GX_Program extends DeviceProgram {
     }
 
     private generateLightAttnFn(chan: ColorChannelControl, lightName: string) {
-        const cosAttn = `ApplyCubic(${lightName}.CosAtten.xyz, dot(t_LightDeltaDir, ${lightName}.Direction.xyz))`;
+        const attn = `dot(t_LightDeltaDir, ${lightName}.Direction.xyz)`;
+        const cosAttn = `ApplyCubic(${lightName}.CosAtten.xyz, ${attn})`;
 
         switch (chan.attenuationFunction) {
         case GX.AttenuationFunction.NONE: return `1.0`;
         case GX.AttenuationFunction.SPOT: return `max(${cosAttn} / max(dot(${lightName}.DistAtten.xyz, vec3(1.0, t_LightDeltaDist2, t_LightDeltaDist)), 0.0), 0.0)`;
-        case GX.AttenuationFunction.SPEC: return `1.0`; // TODO(jtspierre): Specular
+        case GX.AttenuationFunction.SPEC: return `max(${cosAttn} / ApplyCubic(${lightName}.DistAtten.xyz, ${attn}))`;
         }
     }
 
