@@ -309,7 +309,6 @@ export interface GfxDevice {
     submitPass(o: GfxPass): void;
 
     queryLimits(): GfxDeviceLimits;
-    queryProgram(program: GfxProgram): GfxProgramReflection;
     queryInputState(o: GfxInputState): GfxInputStateReflection;
     queryTextureFormatSupported(format: GfxFormat): boolean;
     queryPipelineReady(o: GfxRenderPipeline): boolean;

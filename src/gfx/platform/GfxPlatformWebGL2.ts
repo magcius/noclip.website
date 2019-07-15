@@ -1125,11 +1125,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         };
     }
 
-    public queryProgram(program_: GfxProgram): GfxProgramReflection {
-        const program = program_ as GfxProgramP_GL;
-        return program.deviceProgram;
-    }
-
     public queryInputState(inputState_: GfxInputState): GfxInputStateReflection {
         const inputState = inputState_ as GfxInputStateP_GL;
         return inputState;
