@@ -5,7 +5,7 @@
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import * as GX from "../gx/gx_enum";
 
-import { assert, readString, assertExists, nArray } from "../util";
+import { assert, readString, assertExists, nArray, hexdump } from "../util";
 import { BTI } from "./j3d";
 import { vec3, mat4, vec2 } from "gl-matrix";
 import { Endianness } from "../endian";
@@ -362,7 +362,7 @@ export class JPAResourceData {
         const ssp1 = this.res.ssp1;
 
         const shapeType = bsp1.shapeType;
-        if (!(shapeType === ShapeType.Billboard || shapeType === ShapeType.Direction || shapeType === ShapeType.DirectionCross)) {
+        if (!(shapeType === ShapeType.Billboard || shapeType === ShapeType.Direction || shapeType === ShapeType.DirectionCross || shapeType === ShapeType.YBillboard)) {
             console.warn(`Unsupported shape type ${shapeType}`);
             this.supported = false;
         }
@@ -2603,9 +2603,8 @@ function makeColorTable(buffer: ArrayBufferSlice, entryCount: number, duration: 
 
         colorFromRGBA8(scratchColor, view.getUint32(entry1 * 0x06 + 0x02));
 
-        // Lerp.
         for (let j = time0 + 1; j <= Math.min(time1, duration); j++)
-            colorLerp(dst[dstIdx++], dst[time0], scratchColor, (j - time0) / time1);
+            colorLerp(dst[dstIdx++], dst[time0], scratchColor, (j - time0) / (time1 - time0));
 
         assert(dstIdx === Math.min(time1, duration) + 1);
     }
