@@ -20,7 +20,7 @@ import * as Scenes_BanjoKazooie from './bk/scenes';
 import * as Scenes_THUG2 from './thug2/scenes';
 import * as Scenes_Zelda_TwilightPrincess from './j3d/ztp_scenes';
 import * as Scenes_MarioKartDoubleDash from './j3d/mkdd_scenes';
-import * as Scenes_Zelda_TheWindWaker from './j3d/zww_scenes';
+import * as Scenes_Zelda_TheWindWaker from './j3d/WindWaker/zww_scenes';
 import * as Scenes_SuperMarioSunshine from './j3d/sms_scenes';
 import * as Scenes_Pikmin2 from './j3d/pik2_scenes';
 import * as Scenes_SuperMarioGalaxy1 from './j3d/smg/smg1_scenes';

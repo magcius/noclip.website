@@ -1,26 +1,26 @@
 
-import * as Viewer from '../viewer';
-import * as GX from '../gx/gx_enum';
-import * as GX_Material from '../gx/gx_material';
+import * as Viewer from '../../viewer';
+import * as GX from '../../gx/gx_enum';
+import * as GX_Material from '../../gx/gx_material';
 
 import { mat4, vec3 } from "gl-matrix";
-import { BMDModelInstance, BTIData } from "./render";
-import { ANK1, TTK1, TRK1, BTI_Texture } from "./j3d";
-import AnimationController from "../AnimationController";
+import { BMDModelInstance, BTIData } from "../render";
+import { ANK1, TTK1, TRK1, BTI_Texture } from "../j3d";
+import AnimationController from "../../AnimationController";
 import { Colors } from "./zww_scenes";
-import { ColorKind, PacketParams, MaterialParams, ub_MaterialParams, loadedDataCoalescerComboGfx } from "../gx/gx_render";
-import { GXRenderHelperGfx, GXShapeHelperGfx, GXMaterialHelperGfx } from '../gx/gx_render';
-import { AABB } from '../Geometry';
-import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB, computeViewMatrix } from '../Camera';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { assertExists } from '../util';
-import { DisplayListRegisters, runDisplayListRegisters, parseMaterialEntry } from '../rres/brres';
-import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader } from '../gx/gx_displaylist';
-import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
-import { TextureMapping } from '../TextureHolder';
-import { colorFromRGBA } from '../Color';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { ColorKind, PacketParams, MaterialParams, ub_MaterialParams, loadedDataCoalescerComboGfx } from "../../gx/gx_render";
+import { GXRenderHelperGfx, GXShapeHelperGfx, GXMaterialHelperGfx } from '../../gx/gx_render';
+import { AABB } from '../../Geometry';
+import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB, computeViewMatrix } from '../../Camera';
+import { GfxDevice } from '../../gfx/platform/GfxPlatform';
+import ArrayBufferSlice from '../../ArrayBufferSlice';
+import { assertExists } from '../../util';
+import { DisplayListRegisters, runDisplayListRegisters, parseMaterialEntry } from '../../rres/brres';
+import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader } from '../../gx/gx_displaylist';
+import { GfxBufferCoalescerCombo } from '../../gfx/helpers/BufferHelpers';
+import { TextureMapping } from '../../TextureHolder';
+import { colorFromRGBA } from '../../Color';
+import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
 
 // Special-case actors
 

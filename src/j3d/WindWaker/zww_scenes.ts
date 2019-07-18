@@ -1,40 +1,39 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import Progressable from '../Progressable';
-import { readString, assertExists, hexzero, leftPad, assert } from '../util';
-import { fetchData } from '../fetch';
+import ArrayBufferSlice from '../../ArrayBufferSlice';
+import Progressable from '../../Progressable';
+import { readString, assertExists, hexzero, leftPad, assert } from '../../util';
+import { fetchData } from '../../fetch';
 
-import * as Viewer from '../viewer';
-import * as BYML from '../byml';
-import * as Yaz0 from '../compression/Yaz0';
-import * as UI from '../ui';
+import * as Viewer from '../../viewer';
+import * as BYML from '../../byml';
+import * as RARC from '../rarc';
+import * as Yaz0 from '../../compression/Yaz0';
+import * as UI from '../../ui';
 
-import * as GX_Material from '../gx/gx_material';
+import * as GX_Material from '../../gx/gx_material';
 
-import { BMD, BTK, BRK, BCK, BTI, LoopMode, BMT } from './j3d';
-import * as RARC from './rarc';
-import { BMDModelInstance, BMDModel, BTIData } from './render';
-import { Camera, computeViewMatrix } from '../Camera';
-import { DeviceProgram } from '../Program';
-import { colorToCSS, Color } from '../Color';
-import { ColorKind } from '../gx/gx_render';
-import { GXRenderHelperGfx } from '../gx/gx_render';
-import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBufferUsage, GfxFormat, GfxVertexAttributeFrequency, GfxInputLayout, GfxInputState, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor, GfxCompareMode, GfxBufferFrequencyHint, GfxVertexAttributeDescriptor } from '../gfx/platform/GfxPlatform';
-import { GfxRendererLayer } from '../gfx/render/GfxRenderer';
-import { GfxRenderInst, GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
-import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
-import { BufferFillerHelper, fillMatrix4x4, fillMatrix4x3, fillColor } from '../gfx/helpers/UniformBufferHelpers';
-import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
-import AnimationController from '../AnimationController';
-import { prepareFrameDebugOverlayCanvas2D } from '../DebugJunk';
-
-import * as DZB from './zww_dzb';
-import { ObjectRenderer, BMDObjectRenderer, SymbolMap, WhiteFlowerData, FlowerObjectRenderer, PinkFlowerData, BessouFlowerData, FlowerData } from './zww_actors';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import * as DZB from './DZB';
+import * as JPA from '../JPA';
+import { BMD, BTK, BRK, BCK, BTI, LoopMode, BMT } from '../j3d';
+import { BMDModelInstance, BMDModel, BTIData } from '../render';
+import { Camera, computeViewMatrix } from '../../Camera';
+import { DeviceProgram } from '../../Program';
+import { colorToCSS, Color } from '../../Color';
+import { ColorKind } from '../../gx/gx_render';
+import { GXRenderHelperGfx } from '../../gx/gx_render';
+import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBufferUsage, GfxFormat, GfxVertexAttributeFrequency, GfxInputLayout, GfxInputState, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor, GfxCompareMode, GfxBufferFrequencyHint, GfxVertexAttributeDescriptor } from '../../gfx/platform/GfxPlatform';
+import { GfxRendererLayer } from '../../gfx/render/GfxRenderer';
+import { GfxRenderInstManager } from '../../gfx/render/GfxRenderer2';
+import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../../gfx/helpers/RenderTargetHelpers';
+import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers';
+import { fillMatrix4x4, fillMatrix4x3, fillColor } from '../../gfx/helpers/UniformBufferHelpers';
+import { makeTriangleIndexBuffer, GfxTopology } from '../../gfx/helpers/TopologyHelpers';
+import AnimationController from '../../AnimationController';
+import { prepareFrameDebugOverlayCanvas2D } from '../../DebugJunk';
+import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
+import { ObjectRenderer, BMDObjectRenderer, SymbolMap, WhiteFlowerData, FlowerObjectRenderer, PinkFlowerData, BessouFlowerData, FlowerData } from './Actors';
 
 class ZWWExtraTextures {
     constructor(public ZAtoon: BTIData, public ZBtoonEX: BTIData) {
@@ -454,6 +453,52 @@ class SeaPlane {
     }
 }
 
+class SimpleEffectSystem {
+    private emitterManager: JPA.JPAEmitterManager;
+    private drawInfo = new JPA.JPADrawInfo();
+    private resourceDatas = new Map<number, JPA.JPAResourceData>();
+
+    constructor(device: GfxDevice, private jpac: JPA.JPAC) {
+        this.emitterManager = new JPA.JPAEmitterManager(device, 3000, 150);
+    }
+
+    private getResourceData(device: GfxDevice, userIndex: number): JPA.JPAResourceData | null {
+        if (!this.resourceDatas.has(userIndex)) {
+            const resData = new JPA.JPAResourceData(device, this.jpac, this.jpac.effects.find((resource) => resource.resourceId === userIndex));
+            this.resourceDatas.set(userIndex, resData);
+        }
+
+        return this.resourceDatas.get(userIndex);
+    }
+
+    public setDrawInfo(posCamMtx: mat4, prjMtx: mat4, texPrjMtx: mat4 | null): void {
+        this.drawInfo.posCamMtx = posCamMtx;
+        this.drawInfo.prjMtx = prjMtx;
+        this.drawInfo.texPrjMtx = texPrjMtx;
+    }
+
+    public calc(viewerInput: Viewer.ViewerRenderInput): void {
+        const inc = viewerInput.deltaTime * 30/1000;
+        this.emitterManager.calc(inc);
+    }
+
+    public draw(device: GfxDevice, renderHelper: GXRenderHelperGfx, drawGroupId: number = 0): void {
+        this.emitterManager.draw(device, renderHelper, this.drawInfo, drawGroupId);
+    }
+
+    public createDisappear(device: GfxDevice, which: number = 0x14): void {
+        const emitter = this.emitterManager.createEmitter(this.getResourceData(device, which));
+        emitter.globalTranslation[1] -= 800;
+        emitter.globalTranslation[2] -= 1200;
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (const [, resourceData] of this.resourceDatas.entries())
+            resourceData.destroy(device);
+        this.emitterManager.destroy(device);
+    }
+}
+
 const enum WindWakerPass {
     MAIN = 0x01,
     SKYBOX = 0x02,
@@ -468,7 +513,9 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     private vr_uso_umi: BMDModelInstance;
     private vr_kasumi_mae: BMDModelInstance;
     private vr_back_cloud: BMDModelInstance;
+
     public roomRenderers: WindWakerRoomRenderer[] = [];
+    public effectSystem: SimpleEffectSystem | null = null;
 
     private currentTimeOfDay: number;
     private timeOfDaySelector: UI.SingleSelect;
@@ -606,6 +653,16 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             this.vr_back_cloud.prepareToRender(device, this.renderHelper, viewerInput);
         for (let i = 0; i < this.roomRenderers.length; i++)
             this.roomRenderers[i].prepareToRender(device, this.renderHelper, viewerInput);
+
+        if (this.effectSystem !== null) {
+            const template = this.renderHelper.renderInstManager.pushTemplateRenderInst();
+            template.filterKey = WindWakerPass.MAIN;
+            this.effectSystem.calc(viewerInput);
+            this.effectSystem.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, null);
+            this.effectSystem.draw(device, this.renderHelper);
+            this.renderHelper.renderInstManager.popTemplateRenderInst();
+        }
+
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender(device, hostAccessPass);
     }
@@ -777,10 +834,11 @@ class SceneDesc {
     public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
         const modelCache = new ModelCache();
 
-        // XXX(jstpierre): This is really terrible code.
         modelCache.fetchArchive(`${pathBase}/Object/System.arc`, abortSignal);
         modelCache.fetchArchive(`${pathBase}/Stage/${this.stageDir}/Stage.arc`, abortSignal);
+        modelCache.fetchFileData(`${pathBase}/Particle/common.jpc`, abortSignal);
 
+        // XXX(jstpierre): This is really terrible code.
         for (let i = 0; i < this.rooms.length; i++) {
             const roomIdx = Math.abs(this.rooms[i]);
             modelCache.fetchArchive(`${pathBase}/Stage/${this.stageDir}/Room${roomIdx}.arc`, abortSignal);
@@ -829,6 +887,12 @@ class SceneDesc {
                 // Now spawn any objects that might show up in it.
                 const dzr = roomRarc.findFileData('dzr/room.dzr')!;
                 this.spawnObjectsFromDZR(device, abortSignal, renderer, roomRenderer, dzr, modelMatrix);
+            }
+
+            const particleCommon = modelCache.getFileData(`${pathBase}/Particle/common.jpc`);
+            if (particleCommon !== null) {
+                const jpac = JPA.parse(particleCommon);
+                renderer.effectSystem = new SimpleEffectSystem(device, jpac);
             }
 
             return modelCache.waitForLoad().then(() => {

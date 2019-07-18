@@ -1,8 +1,8 @@
 
-import ArrayBufferSlice from "../../ArrayBufferSlice";
-import * as BYML from "../../byml";
+import ArrayBufferSlice from "../../../ArrayBufferSlice";
+import * as BYML from "../../../byml";
 import { openSync, readSync, closeSync, readFileSync, writeFileSync } from "fs";
-import { assertExists } from "../../util";
+import { assertExists } from "../../../util";
 
 // Standalone tool designed for node to extract data.
 
