@@ -188,9 +188,9 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
             return assertExists(renderer.modelCache.rresCache.get(arcPath));
         };
 
-        const spawnObject = (objectName: string): MDL0ModelInstance => {
-            const rres = getRRES(objectName);
-            const b = this.spawnObjectFromRRES(device, renderer, rres, objectName);
+        const spawnObject = (rresName: string, mdl0Name: string = rresName): MDL0ModelInstance => {
+            const rres = getRRES(rresName);
+            const b = this.spawnObjectFromRRES(device, renderer, rres, mdl0Name);
             computeModelMatrixSRT(b.modelMatrix, gobj.scaleX, gobj.scaleY, gobj.scaleZ, gobj.rotationX, gobj.rotationY, gobj.rotationZ, gobj.translationX, gobj.translationY, gobj.translationZ);
             mat4.mul(b.modelMatrix, posMtx, b.modelMatrix);
             return b;
@@ -326,7 +326,9 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
         } else if (gobj.objectId === 0x0142) { // kinokoT1
             spawnObject(`kinokoT1`);
         } else if (gobj.objectId === 0x0144) { // pylon01
-            spawnObject(`pylon01`);
+            const b = spawnObject(`pylon01`);
+            const rres = getRRES(`pylon01`);
+            b.bindCLR0(animFrame(gobj.objectArg0), rres.clr0.find((clr0) => clr0.name === `pylon01`));
         } else if (gobj.objectId === 0x0145) { // PalmTree
             spawnObject(`PalmTree`);
         } else if (gobj.objectId === 0x0146) { // parasol
@@ -499,16 +501,32 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
             spawnObject(`puchi_pakkun`);
         //} else if (gobj.objectId === 0x01f5) { // kinoko_ud
         //    spawnObject(`kinoko`);
-        //} else if (gobj.objectId === 0x01f6) { // kinoko_bend
-        //    spawnObject(`kinoko`);
+        } else if (gobj.objectId === 0x01f6) { // kinoko_bend
+            if (gobj.objectArg0 === 0) {
+                spawnObject(`kinoko`, `kinoko_kuki`);
+                spawnObject(`kinoko`, `kinoko_r`);
+            } else if (gobj.objectArg0 === 1) {
+                spawnObject(`kinoko`, `kinoko_d_kuki`);
+                spawnObject(`kinoko`, `kinoko_d_r`);
+            } else {
+                throw "whoops";
+            }
         } else if (gobj.objectId === 0x01f7) { // VolcanoRock1
             spawnObject(`VolcanoRock1`);
         } else if (gobj.objectId === 0x01f8) { // bulldozer_left
             spawnObject(`bulldozer_left`);
         } else if (gobj.objectId === 0x01f9) { // bulldozer_right
             spawnObject(`bulldozer_right`);
-        //} else if (gobj.objectId === 0x01fa) { // kinoko_nm
-        //    spawnObject(`kinoko`);
+        } else if (gobj.objectId === 0x01fa) { // kinoko_nm
+            if (gobj.objectArg0 === 0) {
+                spawnObject(`kinoko`, `kinoko_kuki`);
+                spawnObject(`kinoko`, `kinoko_g`);
+            } else if (gobj.objectArg0 === 1) {
+                spawnObject(`kinoko`, `kinoko_d_kuki`);
+                spawnObject(`kinoko`, `kinoko_d_g`);
+            } else {
+                throw "whoops";
+            }
         } else if (gobj.objectId === 0x01fb) { // Crane
             spawnObject(`Crane`);
         } else if (gobj.objectId === 0x01fc) { // VolcanoPiece
