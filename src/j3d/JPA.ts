@@ -16,7 +16,7 @@ import { GXMaterial, AlphaTest, RopInfo, TexGen, TevStage, getVertexAttribLocati
 import { Color, colorNew, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8 } from "../Color";
 import { MaterialParams, ColorKind, ub_PacketParams, u_PacketParamsBufferSize, PacketParams, ub_MaterialParams, setIndTexOrder, setIndTexCoordScale, setTevIndirect, setTevOrder, setTevColorIn, setTevColorOp, setTevAlphaIn, setTevAlphaOp, fillIndTexMtx, fillTextureMappingInfo } from "../gx/gx_render";
 import { GXMaterialHelperGfx, GXRenderHelperGfx } from "../gx/gx_render";
-import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants } from "../MathHelpers";
+import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, computeMatrixWithoutTranslation } from "../MathHelpers";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { makeSortKeyTranslucent, GfxRendererLayer, setSortKeyBias, setSortKeyDepth } from "../gfx/render/GfxRenderer";
 import { fillMatrix4x3, fillColor, fillMatrix4x2 } from "../gfx/helpers/UniformBufferHelpers";
@@ -364,7 +364,7 @@ export class JPAResourceData {
         const ssp1 = this.res.ssp1;
 
         const shapeType = bsp1.shapeType;
-        if (!(shapeType === ShapeType.Billboard || shapeType === ShapeType.Direction || shapeType === ShapeType.DirectionCross || shapeType === ShapeType.YBillboard || shapeType === ShapeType.Rotation || shapeType === ShapeType.RotationCross)) {
+        if (!(shapeType === ShapeType.Billboard || shapeType === ShapeType.Direction || shapeType === ShapeType.DirectionCross || shapeType === ShapeType.YBillboard || shapeType === ShapeType.Rotation || shapeType === ShapeType.RotationCross || shapeType === ShapeType.DirBillboard)) {
             console.warn(`Unsupported shape type ${shapeType}`);
             this.supported = false;
         }
@@ -1045,7 +1045,7 @@ export class JPABaseEmitter {
         this.flags = BaseEmitterFlags.FIRST_EMISSION | BaseEmitterFlags.RATE_STEP_EMIT;
 
         if (!this.resData.supported)
-            this.flags |= BaseEmitterFlags.STOP_DRAW_PARTICLE;
+            this.flags |= BaseEmitterFlags.TERMINATED;
     }
 
     public deleteAllParticle(): void {
@@ -2114,6 +2114,7 @@ export class JPABaseParticle {
     private calcFieldSpin(field: JPAFieldBlock, workData: JPAEmitterWorkData): void {
         // Prepare
         vec3.transformMat4(scratchVec3a, field.dir, workData.emitterGlobalRot);
+        vec3.normalize(scratchVec3a, scratchVec3a);
         mat4.identity(scratchMatrix);
         mat4.rotate(scratchMatrix, scratchMatrix, field.innerSpeed, scratchVec3a);
 
@@ -2618,6 +2619,39 @@ export class JPABaseParticle {
                 renderInst.drawIndexes(12, 0);
             else
                 renderInst.drawIndexes(6, 0);
+        } else if (shapeType === ShapeType.DirBillboard) {
+            this.applyDir(scratchVec3a, sp1.dirType, workData);
+            vec3.set(scratchVec3b, workData.posCamMtx[2], workData.posCamMtx[6], workData.posCamMtx[10]);
+
+            vec3.cross(scratchVec3a, scratchVec3a, scratchVec3b);
+            vec3.normalize(scratchVec3a, scratchVec3a);
+
+            computeMatrixWithoutTranslation(scratchMatrix, workData.posCamMtx);
+            vec3.transformMat4(scratchVec3a, scratchVec3a, scratchMatrix);
+            vec3.transformMat4(scratchVec3b, this.position, workData.posCamMtx);
+
+            const scaleX = workData.globalScale2D[0] * this.scale[0];
+            const scaleY = workData.globalScale2D[1] * this.scale[1];
+
+            const dst = packetParams.u_PosMtx[0];
+            dst[0] = scratchVec3a[0] * scaleX;
+            dst[4] = -scratchVec3a[1] * scaleY;
+            dst[8] = 0;
+            dst[12] = scratchVec3b[0];
+
+            dst[1] = scratchVec3a[1] * scaleX;
+            dst[5] = scratchVec3a[0] * scaleY;
+            dst[9] = 0;
+            dst[13] = scratchVec3b[1];
+
+            dst[2] = 0;
+            dst[6] = 0;
+            dst[10] = 1;
+            dst[14] = scratchVec3b[2];
+            this.loadTexMtx(materialParams.u_TexMtx[0], workData, dst);
+
+            renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateBillboard);
+            renderInst.drawIndexes(6, 0);
         } else if (shapeType === ShapeType.YBillboard) {
             vec3.set(scratchVec3a, 0, workData.posCamMtx[1], workData.posCamMtx[2]);
             vec3.normalize(scratchVec3a, scratchVec3a);
@@ -3528,9 +3562,12 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             }
 
             if (type === JPAFieldType.Vortex) {
-                // In the case of a Vortex, we have two required parameters: innerSpeed and outerSpeed.
                 innerSpeed = param1;
                 outerSpeed = param2;
+            }
+
+            if (type === JPAFieldType.Spin) {
+                innerSpeed = param1;
             }
 
             fld1.push({ flags, type, velType, pos, dir, mag, magRndm, refDistanceSq, innerSpeed, outerSpeed, fadeIn, fadeOut, enTime, disTime, cycle, fadeInRate, fadeOutRate });

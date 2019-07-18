@@ -173,6 +173,13 @@ export function texEnvMtx(dst: mat4, scaleS: number, scaleT: number, transS: num
     dst[15] = 9999.0;
 }
 
+export function computeMatrixWithoutTranslation(dst: mat4, m: mat4): void {
+    mat4.copy(dst, m);
+    dst[12] = 0;
+    dst[13] = 0;
+    dst[14] = 0;
+}
+
 export function computeMatrixWithoutRotation(dst: mat4, m: mat4, v: vec3 = scratchVec3): void {
     const tx = m[12], ty = m[13], tz = m[14];
     mat4.getScaling(v, dst);
