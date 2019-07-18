@@ -4,7 +4,7 @@
 import { LightType } from './DrawBuffer';
 import { SceneObjHolder, LiveActor, ZoneAndLayer, getObjectName, startBtkIfExist, startBvaIfExist, WorldmapPointInfo, startBrkIfExist, getDeltaTimeFrames, getTimeFrames, startBck, startBpkIfExist, startBtpIfExist, NameObjFactory, Dot } from './smg_scenes';
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg6, getJMapInfoArg7 } from './JMapInfo';
-import { mat4, vec3, vec4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 import AnimationController from '../../AnimationController';
 import { MathConstants, computeModelMatrixSRT, clamp } from '../../MathHelpers';
 import { colorNewFromRGBA8, Color } from '../../Color';

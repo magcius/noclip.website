@@ -18,9 +18,8 @@ import { MaterialParams, ColorKind, ub_PacketParams, u_PacketParamsBufferSize, P
 import { GXMaterialHelperGfx, GXRenderHelperGfx } from "../gx/gx_render";
 import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants } from "../MathHelpers";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { makeSortKeyTranslucent, GfxRendererLayer, setSortKeyDepth } from "../gfx/render/GfxRenderer";
+import { makeSortKeyTranslucent, GfxRendererLayer, setSortKeyBias } from "../gfx/render/GfxRenderer";
 import { fillMatrix4x3, fillColor, fillMatrix4x2 } from "../gfx/helpers/UniformBufferHelpers";
-import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
 
 export interface JPAResourceRaw {
     resourceId: number;
@@ -127,6 +126,8 @@ export interface JPABaseShapeBlock {
     dirType: DirType;
     rotType: RotType;
     planeType: PlaneType;
+    tilingX: number;
+    tilingY: number;
     texIdx: number;
     texIdxAnimData: Uint8Array | null;
     texStaticTransX: number;
@@ -159,7 +160,13 @@ export interface JPABaseShapeBlock {
 
 export interface JPAExtraShapeBlock {
     flags: number;
-    hasRotation: boolean;
+    isEnableScale: boolean;
+    isDiffXY: boolean;
+    scaleAnmTypeX: CalcScaleAnmType;
+    scaleAnmTypeY: CalcScaleAnmType;
+    isEnableRotate: boolean;
+    isEnableAlpha: boolean;
+    isEnableSinWave: boolean;
     scaleInTiming: number;
     scaleOutTiming: number;
     scaleInValueX: number;
@@ -193,8 +200,8 @@ export interface JPAExtraShapeBlock {
 export interface JPAExTexBlock {
     flags: number;
     indTextureMtx: Float32Array;
-    indTextureIdx: number;
-    secondTextureIdx: number;
+    indTextureID: number;
+    subTextureID: number;
 }
 
 export interface JPAChildShapeBlock {
@@ -206,7 +213,7 @@ export interface JPAChildShapeBlock {
     posRndm: number;
     baseVel: number;
     baseVelRndm: number;
-    velInfRndm: number;
+    velInfRate: number;
     gravity: number;
     globalScale2D: vec2;
     inheritScale: number;
@@ -216,8 +223,8 @@ export interface JPAChildShapeBlock {
     colorEnv: Color;
     timing: number;
     life: number;
-    childrenCount: number;
     rate: number;
+    step: number;
     texIdx: number;
     rotateSpeed: number;
 }
@@ -258,11 +265,11 @@ interface JPAFieldBlock {
     mag: number;
     // Used by Drag
     magRndm: number;
-    // Used by Newton
+    // Used by Newton and Convection
     refDistanceSq: number;
-    power: number;
-    // Used by Vortex
+    // Used by Vortex and Spin
     innerSpeed: number;
+    // Used by Vortex
     outerSpeed: number;
 }
 
@@ -342,6 +349,7 @@ const enum CalcScaleAnmType {
 
 export class JPAResourceData {
     public res: JPAResource;
+    public supported: boolean = true;
     public name: string;
     public texData: BTIData[] = [];
     public materialHelper: GXMaterialHelperGfx;
@@ -353,6 +361,12 @@ export class JPAResourceData {
         const etx1 = this.res.etx1;
         const ssp1 = this.res.ssp1;
 
+        const shapeType = bsp1.shapeType;
+        if (!(shapeType === ShapeType.Billboard || shapeType === ShapeType.Direction || shapeType === ShapeType.DirectionCross)) {
+            console.warn(`Unsupported shape type ${shapeType}`);
+            this.supported = false;
+        }
+
         // Translate all of the texture data.
         if (bsp1.texIdxAnimData !== null) {
             for (let i = 0; i < bsp1.texIdxAnimData.length; i++)
@@ -363,10 +377,10 @@ export class JPAResourceData {
 
         if (etx1 !== null) {
             if (!!(etx1.flags & 0x00000001))
-                this.translateTDB1Index(device, etx1.indTextureIdx);
+                this.translateTDB1Index(device, etx1.indTextureID);
 
             if (!!(etx1.flags & 0x00000100))
-                this.translateTDB1Index(device, etx1.secondTextureIdx);
+                this.translateTDB1Index(device, etx1.subTextureID);
         }
 
         if (ssp1 !== null)
@@ -394,12 +408,11 @@ export class JPAResourceData {
         };
 
         const texGens: TexGen[] = [];
-        if (!!(bsp1.flags & 0x00100000))
+        const isEnableProjection = !!(bsp1.flags & 0x00100000);
+        if (isEnableProjection)
             texGens.push({ index: 0, type: GX.TexGenType.MTX3x4, source: GX.TexGenSrc.POS,  matrix: GX.TexGenMatrix.TEXMTX0, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
-        else if (!!(bsp1.flags & 0x01000000))
-            texGens.push({ index: 0, type: GX.TexGenType.MTX2x4, source: GX.TexGenSrc.TEX0, matrix: GX.TexGenMatrix.TEXMTX0, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
         else
-            texGens.push({ index: 0, type: GX.TexGenType.MTX2x4, source: GX.TexGenSrc.TEX0, matrix: GX.TexGenMatrix.IDENTITY, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
+            texGens.push({ index: 0, type: GX.TexGenType.MTX2x4, source: GX.TexGenSrc.TEX0, matrix: GX.TexGenMatrix.TEXMTX0, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
 
         let texCoord3Id = GX.TexCoordID.TEXCOORD1;
         if (etx1 !== null) {
@@ -649,6 +662,9 @@ class JPAEmitterWorkData {
     public volumeSweep: number;
     public volumeEmitIdx: number;
     public volumeEmitCount: number;
+    public volumeEmitAngleMax: number = 1;
+    public volumeEmitAngleCount: number = 0;
+    public volumeEmitXCount: number = 0;
     public divNumber: number;
 
     public emitterTrs = vec3.create();
@@ -669,6 +685,7 @@ class JPAEmitterWorkData {
     public deltaTime: number = 0;
 
     public prevParticlePos = vec3.create();
+    public particleSortKey: number = makeSortKeyTranslucent(GfxRendererLayer.TRANSLUCENT);
 }
 
 export class JPADrawInfo {
@@ -1024,6 +1041,9 @@ export class JPABaseEmitter {
         this.rateStepTimer = 0;
         this.texAnmIdx = 0;
         this.flags = BaseEmitterFlags.FIRST_EMISSION | BaseEmitterFlags.RATE_STEP_EMIT;
+
+        if (!this.resData.supported)
+            this.flags |= BaseEmitterFlags.STOP_DRAW_PARTICLE;
     }
 
     public deleteAllParticle(): void {
@@ -1048,6 +1068,7 @@ export class JPABaseEmitter {
         for (let i = 0; i < this.resData.res.kfa1.length; i++) {
             const kfa1 = this.resData.res.kfa1[i];
             const v = kfa1Calc(kfa1, this.tick);
+            assert(v !== undefined);
             if (kfa1.keyType === JPAKeyType.Rate)
                 this.rate = v;
             else if (kfa1.keyType === JPAKeyType.VolumeSize)
@@ -1089,8 +1110,20 @@ export class JPABaseEmitter {
 
         let angle: number, x: number;
         if (!!(bem1.flags & 0x02)) {
+            angle = workData.volumeSweep * (workData.volumeEmitAngleCount / (workData.volumeEmitAngleMax - 1)) * MathConstants.TAU + Math.PI;
+            x = (Math.PI * 0.5) + (workData.volumeEmitXCount / (workData.divNumber - 1)) * Math.PI;
             // Fixed interval
-            throw "whoops";
+            workData.volumeEmitAngleCount++;
+            if (workData.volumeEmitAngleCount === workData.volumeEmitAngleMax) {
+                workData.volumeEmitAngleCount = 0;
+                workData.volumeEmitXCount++;
+
+                if (workData.volumeEmitXCount * 2 < workData.divNumber) {
+                    workData.volumeEmitAngleMax = (workData.volumeEmitAngleMax !== 1) ? workData.volumeEmitAngleMax + 4 : workData.volumeEmitAngleMax + 3;
+                } else {
+                    workData.volumeEmitAngleMax = (workData.volumeEmitAngleMax !== 4) ? workData.volumeEmitAngleMax - 4 : 1;
+                }
+            }
         } else {
             angle = workData.volumeSweep * get_rndm_f(this.random) * MathConstants.TAU;
             x = (Math.PI * 0.5) + (get_rndm_f(this.random) * Math.PI);
@@ -1315,6 +1348,9 @@ export class JPABaseEmitter {
         workData.volumeSize = this.volumeSize;
         workData.volumeMinRad = this.volumeMinRad;
         workData.volumeSweep = this.volumeSweep;
+        workData.volumeEmitXCount = 0;
+        workData.volumeEmitAngleCount = 0;
+        workData.volumeEmitAngleMax = 1;
         workData.divNumber = this.resData.res.bem1.divNumber * 2 + 1;
 
         mat4.copy(workData.globalRotation, this.globalRotation);
@@ -1415,10 +1451,6 @@ export class JPABaseEmitter {
         return true;
     }
 
-    private genTexCrdMtxIdt(materialParams: MaterialParams): void {
-        mat4.identity(materialParams.u_TexMtx[0]);
-    }
-
     private calcEmitterGlobalPosition(v: vec3): void {
         mat4.scale(scratchMatrix, this.globalRotation, this.globalScale);
         scratchMatrix[12] += this.globalTranslation[0];
@@ -1449,32 +1481,35 @@ export class JPABaseEmitter {
 
         if (etx1 !== null) {
             if (!!(etx1.flags & 0x00000001)) {
-                this.resData.texData[etx1.indTextureIdx].fillTextureMapping(materialParams.m_TextureMapping[2]);
+                this.resData.texData[etx1.indTextureID].fillTextureMapping(materialParams.m_TextureMapping[2]);
                 fillIndTexMtx(materialParams.u_IndTexMtx[0], etx1.indTextureMtx);
             }
 
             if (!!(etx1.flags & 0x00000100))
-                this.resData.texData[etx1.secondTextureIdx].fillTextureMapping(materialParams.m_TextureMapping[3]);
+                this.resData.texData[etx1.subTextureID].fillTextureMapping(materialParams.m_TextureMapping[3]);
         }
 
-        const isAnm = !!(bsp1.flags & 0x01000000);
+        const isEnableTexScrollAnm = !!(bsp1.flags & 0x01000000);
         if (bsp1.shapeType === ShapeType.Point || bsp1.shapeType === ShapeType.Line)
-            this.genTexCrdMtxIdt(materialParams);
-        else if (!isAnm)
-            this.genTexCrdMtxIdt(materialParams);
+            mat4.identity(materialParams.u_TexMtx[0]);
+        else if (!isEnableTexScrollAnm)
+            calcTexCrdMtxIdt(materialParams.u_TexMtx[0], bsp1);
 
         const needsPrevPos = bsp1.dirType === DirType.PrevPctl;
         if (needsPrevPos)
             this.calcEmitterGlobalPosition(workData.prevParticlePos);
 
+        let sortKeyBias = 0;
         if (!!(bsp1.flags & 0x200000)) {
             for (let i = 0; i < this.aliveParticlesBase.length; i++) {
+                workData.particleSortKey = setSortKeyBias(workData.particleSortKey, sortKeyBias++);
                 this.aliveParticlesBase[i].drawP(device, renderHelper, workData, materialParams);
                 if (needsPrevPos)
                     vec3.copy(workData.prevParticlePos, this.aliveParticlesBase[i].position);
             }
         } else {
             for (let i = this.aliveParticlesBase.length - 1; i >= 0; i--) {
+                workData.particleSortKey = setSortKeyBias(workData.particleSortKey, sortKeyBias++);
                 this.aliveParticlesBase[i].drawP(device, renderHelper, workData, materialParams);
                 if (needsPrevPos)
                     vec3.copy(workData.prevParticlePos, this.aliveParticlesBase[i].position);
@@ -1566,13 +1601,10 @@ function normToLengthAndAdd(dst: vec3, a: vec3, len: number): void {
 }
 
 function calcTexCrdMtxAnm(dst: mat4, bsp1: JPABaseShapeBlock, tick: number): void {
-    const offsS = 0.5 * (1.0 + ((bsp1.flags >>> 0x19) & 0x01));
-    const offsT = 0.5 * (1.0 + ((bsp1.flags >>> 0x1a) & 0x01));
-
-    const translationS = offsS + bsp1.texStaticTransX + tick * bsp1.texScrollTransX;
-    const translationT = offsT + bsp1.texStaticTransY + tick * bsp1.texScrollTransY;
-    const scaleS = bsp1.texStaticScaleX + tick * bsp1.texScrollScaleX;
-    const scaleT = bsp1.texStaticScaleY + tick * bsp1.texScrollScaleY;
+    const translationS = bsp1.texStaticTransX + tick * bsp1.texScrollTransX;
+    const translationT = bsp1.texStaticTransY + tick * bsp1.texScrollTransY;
+    const scaleS = (bsp1.texStaticScaleX + tick * bsp1.texScrollScaleX) * bsp1.tilingX;
+    const scaleT = (bsp1.texStaticScaleY + tick * bsp1.texScrollScaleY) * bsp1.tilingY;
     const rotate = (bsp1.texStaticRotate + tick * bsp1.texScrollRotate) * MathConstants.TAU / 0x3FFF;
 
     const sinR = Math.sin(rotate);
@@ -1581,12 +1613,37 @@ function calcTexCrdMtxAnm(dst: mat4, bsp1: JPABaseShapeBlock, tick: number): voi
     dst[0]  = scaleS *  cosR;
     dst[4]  = scaleS * -sinR;
     dst[8]  = 0.0;
-    dst[12] = offsS + scaleS * (sinR * translationT - cosR * translationS);
+    dst[12] = scaleS * (sinR * translationT - cosR * translationS);
 
     dst[1]  = scaleT *  sinR;
     dst[5]  = scaleT *  cosR;
     dst[9]  = 0.0;
-    dst[13] = offsT + -scaleT * (sinR * translationS + cosR * translationT);
+    dst[13] = -scaleT * (sinR * translationS + cosR * translationT);
+
+    dst[2] = 0.0;
+    dst[6] = 0.0;
+    dst[10] = 1.0;
+    dst[14] = 0.0;
+}
+
+function calcTexCrdMtxIdt(dst: mat4, bsp1: JPABaseShapeBlock): void {
+    // Normally, this is done by choosing a separate texcoord array
+    // through the GXSetArray call in in setPTev. If tiling is on, then
+    // it uses a texcoord of 2.0. In our case, we just set up a matrix
+    // to scale everything instead.
+
+    const scaleS = bsp1.tilingX;
+    const scaleT = bsp1.tilingY;
+
+    dst[0]  = scaleS;
+    dst[4]  = 0.0;
+    dst[8]  = 0.0;
+    dst[12] = 0.0;
+
+    dst[1]  = 0.0;
+    dst[5]  = scaleT;
+    dst[9]  = 0.0;
+    dst[13] = 0.0;
 
     dst[2] = 0.0;
     dst[6] = 0.0;
@@ -1606,6 +1663,7 @@ function mat4SwapTranslationColumns(m: mat4): void {
 const scratchMatrix = mat4.create();
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
+const scratchVec3c = vec3.create();
 export class JPABaseParticle {
     public flags: number;
     public time: number;
@@ -1707,7 +1765,7 @@ export class JPABaseParticle {
         this.anmRandom = (get_rndm_f(baseEmitter.random) * bsp1.anmRndm) & 0xFF;
 
         // ScaleX/Y/Out
-        if (esp1 !== null && !!(esp1.flags & 0x00000001)) {
+        if (esp1 !== null && esp1.isEnableScale) {
             this.scaleOut = baseEmitter.scaleOut * (1.0 + (esp1.scaleOutRandom * get_r_zp(baseEmitter.random)));
         } else {
             this.scaleOut = baseEmitter.scaleOut;
@@ -1716,21 +1774,21 @@ export class JPABaseParticle {
 
         this.prmColorAlphaAnm = 1.0;
 
-        if (esp1 !== null && !!(esp1.flags & 0x00020000)) {
+        if (esp1 !== null && esp1.isEnableSinWave) {
             this.alphaWaveRandom = 1.0 + (get_r_zp(baseEmitter.random) * esp1.alphaWaveRandom);
         } else {
             this.alphaWaveRandom = 1.0;
         }
 
-        if (esp1 !== null && esp1.hasRotation) {
+        if (esp1 !== null && esp1.isEnableRotate) {
             this.rotateAngle = esp1.rotateAngle + (get_rndm_f(baseEmitter.random) - 0.5) * esp1.rotateAngleRandom;
             this.rotateSpeed = esp1.rotateSpeed * (1.0 + (esp1.rotateSpeedRandom * get_r_zp(baseEmitter.random)));
             if (get_r_zp(baseEmitter.random) >= esp1.rotateDirection)
                 this.rotateSpeed *= -1;
 
             // Convert to radians.
-            this.rotateAngle *= Math.PI / 0x7FFF;
-            this.rotateSpeed *= Math.PI / 0x7FFF;
+            this.rotateAngle *= Math.PI;
+            this.rotateSpeed *= Math.PI;
         } else {
             this.rotateAngle = 0;
             this.rotateSpeed = 0;
@@ -1772,8 +1830,8 @@ export class JPABaseParticle {
         const rndZ = get_rndm_f(baseEmitter.random);
         vec3.set(scratchVec3a, rndX, rndY, rndZ);
         normToLength(scratchVec3a, velRndm);
-        vec3.scaleAndAdd(this.velType1, parent.velType1, scratchVec3a, ssp1.velInfRndm);
-        vec3.scale(this.velType0, parent.velType2, ssp1.velInfRndm);
+        vec3.scaleAndAdd(this.velType1, parent.velType1, scratchVec3a, ssp1.velInfRate);
+        vec3.scale(this.velType0, parent.velType2, ssp1.velInfRate);
 
         this.moment = parent.moment;
 
@@ -1897,6 +1955,19 @@ export class JPABaseParticle {
         this.calcFieldAffect(scratchVec3a, field);
     }
 
+    private calcFieldMagnet(field: JPAFieldBlock, workData: JPAEmitterWorkData): void {
+        // Prepare
+
+        // Convert to emitter space.
+        vec3.sub(scratchVec3a, field.pos, workData.emitterTrs);
+        vec3.transformMat4(scratchVec3a, scratchVec3a, workData.globalRotation);
+
+        // Calc
+        vec3.sub(scratchVec3a, scratchVec3a, this.localPosition);
+        normToLength(scratchVec3a, field.mag);
+        this.calcFieldAffect(scratchVec3a, field);
+    }
+
     private calcFieldNewton(field: JPAFieldBlock, workData: JPAEmitterWorkData): void {
         // Prepare
 
@@ -1904,8 +1975,8 @@ export class JPABaseParticle {
         vec3.sub(scratchVec3a, field.pos, workData.emitterTrs);
         vec3.transformMat4(scratchVec3a, scratchVec3a, workData.globalRotation);
 
-        const power = 10 * field.power;
-        const refDistanceSq = field.refDistanceSq * field.refDistanceSq;
+        const power = 10 * field.mag;
+        const refDistanceSq = field.refDistanceSq;
 
         // Calc
         vec3.sub(scratchVec3a, scratchVec3a, this.localPosition);
@@ -1993,6 +2064,54 @@ export class JPABaseParticle {
         }
     }
 
+    private calcFieldConvection(field: JPAFieldBlock, workData: JPAEmitterWorkData): void {
+        // Prepare
+        vec3.cross(scratchVec3a, field.pos, field.dir);
+        vec3.cross(scratchVec3b, field.dir, scratchVec3a);
+
+        vec3.transformMat4(scratchVec3a, scratchVec3a, workData.emitterGlobalRot);
+        vec3.normalize(scratchVec3a, scratchVec3a);
+
+        vec3.transformMat4(scratchVec3b, scratchVec3b, workData.emitterGlobalRot);
+        vec3.normalize(scratchVec3b, scratchVec3b);
+
+        vec3.transformMat4(scratchVec3c, field.dir, workData.emitterGlobalRot);
+        vec3.normalize(scratchVec3c, scratchVec3c);
+
+        // Calc
+        const aDotPos = vec3.dot(scratchVec3a, this.localPosition);
+        vec3.scale(scratchVec3a, scratchVec3a, aDotPos);
+        const cDotPos = vec3.dot(scratchVec3c, this.localPosition);
+        vec3.scale(scratchVec3c, scratchVec3c, cDotPos);
+        vec3.add(scratchVec3a, scratchVec3a, scratchVec3c);
+
+        const sqDist = vec3.squaredLength(scratchVec3a);
+        if (field.refDistanceSq < sqDist) {
+            const scale = field.refDistanceSq * 1 / sqDist;
+            vec3.scale(scratchVec3a, scratchVec3a, scale);
+        } else {
+            vec3.set(scratchVec3a, 0, 0, 0);
+        }
+
+        vec3.cross(scratchVec3b, scratchVec3b, scratchVec3a);
+        vec3.sub(scratchVec3a, this.localPosition, scratchVec3a);
+        vec3.cross(scratchVec3a, scratchVec3b, scratchVec3a);
+        normToLength(scratchVec3a, field.mag);
+        this.calcFieldAffect(scratchVec3a, field);
+    }
+
+    private calcFieldSpin(field: JPAFieldBlock, workData: JPAEmitterWorkData): void {
+        // Prepare
+        vec3.transformMat4(scratchVec3a, field.dir, workData.emitterGlobalRot);
+        mat4.identity(scratchMatrix);
+        mat4.rotate(scratchMatrix, scratchMatrix, field.innerSpeed, scratchVec3a);
+
+        // Calc
+        vec3.transformMat4(scratchVec3a, this.localPosition, scratchMatrix);
+        vec3.sub(scratchVec3a, scratchVec3a, this.localPosition);
+        this.calcFieldAffect(scratchVec3a, field);
+    }
+
     private calcField(workData: JPAEmitterWorkData): void {
         const fld1 = workData.baseEmitter.resData.res.fld1;
         for (let i = fld1.length - 1; i >= 0; i--) {
@@ -2001,6 +2120,8 @@ export class JPABaseParticle {
                 this.calcFieldGravity(field, workData);
             else if (field.type === JPAFieldType.Air)
                 this.calcFieldAir(field, workData);
+            else if (field.type === JPAFieldType.Magnet)
+                this.calcFieldMagnet(field, workData);
             else if (field.type === JPAFieldType.Newton)
                 this.calcFieldNewton(field, workData);
             else if (field.type === JPAFieldType.Vortex)
@@ -2009,8 +2130,12 @@ export class JPABaseParticle {
                 this.calcFieldRandom(field, workData);
             else if (field.type === JPAFieldType.Drag)
                 this.calcFieldDrag(field, workData);
+            else if (field.type === JPAFieldType.Convection)
+                this.calcFieldConvection(field, workData);
+            else if (field.type === JPAFieldType.Spin)
+                this.calcFieldSpin(field, workData);
             else
-                ; // throw "whoops";
+                throw "whoops";
         }
     }
 
@@ -2036,8 +2161,8 @@ export class JPABaseParticle {
 
         const timingInt = (timing | 0);
 
-        const rate = ssp1.rate + 1;
-        if ((timingInt % rate) === 0)
+        const step = ssp1.step + 1;
+        if ((timingInt % step) === 0)
             return true;
 
         return false;
@@ -2049,11 +2174,9 @@ export class JPABaseParticle {
         else if (type === CalcScaleAnmType.Repeat)
             return (this.tick / maxFrame) % 1.0;
         else if (type === CalcScaleAnmType.Reverse)
-            // TODO(jstpierre): Verify
-            return 1.0 - this.time;
+            return maxFrame - this.tick;
         else
-            return this.time;
-            // throw "whoops";
+            throw "whoops";
     }
 
     private calcScaleFade(scaleAnm: number, esp1: JPAExtraShapeBlock, base: number, increase: number, decrease: number): number {
@@ -2116,26 +2239,21 @@ export class JPABaseParticle {
             }
 
             if (esp1 !== null) {
-                const hasScaleAnm = !!(esp1.flags & 0x01);
+                const hasScaleAnm = esp1.isEnableScale;
                 if (hasScaleAnm) {
-                    const scaleAnmTypeX: CalcScaleAnmType = (esp1.flags >>> 0x08) & 0x03;
-                    const scaleAnmX = this.calcScaleAnm(scaleAnmTypeX, esp1.scaleAnmMaxFrameX);
+                    const scaleAnmX = this.calcScaleAnm(esp1.scaleAnmTypeX, esp1.scaleAnmMaxFrameX);
                     this.scale[0] = this.scaleOut * this.calcScaleFade(scaleAnmX, esp1, esp1.scaleInValueX, esp1.scaleIncreaseRateX, esp1.scaleDecreaseRateX);
 
-                    const hasScaleAnmY = !!(esp1.flags & 0x02);
+                    const hasScaleAnmY = esp1.isDiffXY;
                     if (hasScaleAnmY) {
-                        const scaleAnmTypeY: CalcScaleAnmType = (esp1.flags >>> 0x0A) & 0x03;
-                        const scaleAnmY = this.calcScaleAnm(scaleAnmTypeY, esp1.scaleAnmMaxFrameY);
+                        const scaleAnmY = this.calcScaleAnm(esp1.scaleAnmTypeX, esp1.scaleAnmMaxFrameY);
                         this.scale[0] = this.scaleOut * this.calcScaleFade(scaleAnmY, esp1, esp1.scaleInValueY, esp1.scaleIncreaseRateY, esp1.scaleDecreaseRateY);
                     } else {
                         this.scale[1] = this.scale[0];
                     }
                 }
 
-                const hasAlphaAnm = !!(esp1.flags & 0x00010000);
-                const hasAlphaFlickAnm = !!(esp1.flags & 0x00020000);
-
-                if (hasAlphaAnm || hasAlphaFlickAnm) {
+                if (esp1.isEnableAlpha || esp1.isEnableSinWave) {
                     let alpha: number;
 
                     if (this.time < esp1.alphaInTiming)
@@ -2145,7 +2263,7 @@ export class JPABaseParticle {
                     else
                         alpha = esp1.alphaBaseValue;
 
-                    if (hasAlphaFlickAnm) {
+                    if (esp1.isEnableSinWave) {
                         const theta = this.alphaWaveRandom * this.tick * (1.0 - esp1.alphaWaveFrequency) * MathConstants.TAU / 4;
                         const flickerMult = (0.5 * (Math.sin(theta) - 1.0) * esp1.alphaWaveAmplitude);
                         this.prmColorAlphaAnm = alpha * (1.0 + flickerMult);
@@ -2159,7 +2277,7 @@ export class JPABaseParticle {
 
             // Create children.
             if (ssp1 !== null && this.canCreateChild(workData))
-                for (let i = 0; i < ssp1.childrenCount; i++)
+                for (let i = 0; i < ssp1.rate; i++)
                     workData.baseEmitter.createChild(this);
 
             vec3.scaleAndAdd(this.localPosition, this.localPosition, this.velocity, workData.deltaTime);
@@ -2234,10 +2352,10 @@ export class JPABaseParticle {
     private loadTexMtx(dst: mat4, workData: JPAEmitterWorkData, posMtx: mat4): void {
         const bsp1 = workData.baseEmitter.resData.res.bsp1;
 
-        const isPrj = !!(bsp1.flags & 0x00100000);
-        const isAnm = !!(bsp1.flags & 0x01000000);
-        if (isPrj) {
-            if (isAnm) {
+        const isEnableProjection = !!(bsp1.flags & 0x00100000);
+        const isEnableTexScrollAnm = !!(bsp1.flags & 0x01000000);
+        if (isEnableProjection) {
+            if (isEnableTexScrollAnm) {
                 // loadPrjAnm
                 calcTexCrdMtxAnm(dst, bsp1, workData.baseEmitter.tick);
                 mat4SwapTranslationColumns(dst);
@@ -2247,7 +2365,7 @@ export class JPABaseParticle {
                 // loadPrj
                 mat4.mul(dst, workData.texPrjMtx, posMtx);
             }
-        } else if (isAnm) {
+        } else if (isEnableTexScrollAnm) {
             calcTexCrdMtxAnm(dst, bsp1, this.tick);
         }
     }
@@ -2309,15 +2427,13 @@ export class JPABaseParticle {
             return;
 
         const esp1 = workData.baseEmitter.resData.res.esp1;
-        const isRot = esp1 !== null && esp1.hasRotation;
+        const isRot = esp1 !== null && esp1.isEnableRotate;
 
         const materialHelper = workData.baseEmitter.resData.materialHelper;
         const renderInstManager = renderHelper.renderInstManager;
 
         const renderInst = renderInstManager.pushRenderInst();
-        renderInst.sortKey = makeSortKeyTranslucent(GfxRendererLayer.TRANSLUCENT);
-        const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(workData.posCamMtx, this.position);
-        renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
+        renderInst.sortKey = workData.particleSortKey;
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
 
         colorMult(materialParams.u_Color[ColorKind.C0], this.colorPrm, workData.baseEmitter.globalColorPrm);
@@ -2404,7 +2520,6 @@ export class JPABaseParticle {
             renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateBillboard);
             renderInst.drawIndexes(6, 0);
         } else {
-            // debugger;
             return;
         }
 
@@ -2463,6 +2578,7 @@ export class JPABaseParticle {
 }
 //#endregion
 
+const scratchColor = colorNew(0, 0, 0, 0);
 function makeColorTable(buffer: ArrayBufferSlice, entryCount: number, duration: number): Color[] {
     const view = buffer.createDataView();
 
@@ -2485,15 +2601,13 @@ function makeColorTable(buffer: ArrayBufferSlice, entryCount: number, duration: 
         time1 = view.getUint16(entry1 * 0x06 + 0x00);
         assert(time0 === dstIdx - 1);
 
-        colorFromRGBA8(dst[time1], view.getUint32(entry1 * 0x06 + 0x02));
+        colorFromRGBA8(scratchColor, view.getUint32(entry1 * 0x06 + 0x02));
 
         // Lerp.
-        const range = time1 - time0;
-        for (let j = 1; j < range; j++)
-            colorLerp(dst[dstIdx++], dst[time0], dst[time1], j / range);
+        for (let j = time0 + 1; j <= Math.min(time1, duration); j++)
+            colorLerp(dst[dstIdx++], dst[time0], scratchColor, (j - time0) / time1);
 
-        assert(dstIdx === time1);
-        dstIdx++;
+        assert(dstIdx === Math.min(time1, duration) + 1);
     }
 
     for (let i = time1 + 1; i <= duration; i++)
@@ -2624,6 +2738,9 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             const colorPrm = colorNewFromRGBA8(view.getUint32(dataBegin + 0x20));
             const colorEnv = colorNewFromRGBA8(view.getUint32(dataBegin + 0x24));
 
+            const tilingX = view.getFloat32(dataBegin + 0x28);
+            const tilingY = view.getFloat32(dataBegin + 0x2C);
+
             let colorPrmAnimData: Color[] | null = null;
             if (!!(colorFlags & 0x02)) {
                 const colorPrmAnimDataOffs = tableIdx + view.getUint16(dataBegin + 0x04);
@@ -2655,7 +2772,7 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
                 texIdxAnimData = buffer.createTypedArray(Uint8Array, tableIdx + 0x60, texIdxAnimCount, Endianness.BIG_ENDIAN);
 
             bsp1 = {
-                flags, shapeType, dirType, rotType, planeType, globalScale2D,
+                flags, shapeType, dirType, rotType, planeType, tilingX, tilingY, globalScale2D,
                 blendModeFlags, alphaCompareFlags, alphaRef0, alphaRef1, zModeFlags,
                 texFlags, texIdx, texIdxAnimData,
                 texStaticTransX, texStaticTransY, texStaticScaleX, texStaticScaleY, texStaticRotate,
@@ -2668,7 +2785,17 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             // Contains misc. extra particle draw settings.
 
             const flags = view.getUint32(dataBegin + 0x00);
-            const hasRotation = !!(flags & 0x01000000);
+            const isEnableScale     = !!(flags & 0x00000100);
+            const isDiffXY          = !!(flags & 0x00000200);
+            const isEnableScaleAnmY = !!(flags & 0x00000400);
+            const isEnableScaleAnmX = !!(flags & 0x00000800);
+            const isEnableAlpha     = !!(flags & 0x00000001);
+            const isEnableSinWave   = !!(flags & 0x00000002);
+            const isEnableRotate    = !!(flags & 0x01000000);
+            const anmTypeX = !!((flags >>> 0x12) & 0x01);
+            const anmTypeY = !!((flags >>> 0x13) & 0x01);
+            const scaleAnmTypeX = isEnableScaleAnmX ? anmTypeX ? CalcScaleAnmType.Reverse : CalcScaleAnmType.Repeat : CalcScaleAnmType.Normal;
+            const scaleAnmTypeY = isEnableScaleAnmY ? anmTypeY ? CalcScaleAnmType.Reverse : CalcScaleAnmType.Repeat : CalcScaleAnmType.Normal;
 
             const alphaInTiming = view.getFloat32(dataBegin + 0x08);
             const alphaOutTiming = view.getFloat32(dataBegin + 0x0C);
@@ -2712,8 +2839,8 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             }
 
             const rotateAngle = view.getFloat32(dataBegin + 0x4C);
-            const rotateAngleRandom = view.getFloat32(dataBegin + 0x50);
-            const rotateSpeed = view.getFloat32(dataBegin + 0x54) / 0x7FFF;
+            const rotateSpeed = view.getFloat32(dataBegin + 0x50);
+            const rotateAngleRandom = view.getFloat32(dataBegin + 0x54);
             const rotateSpeedRandom = view.getFloat32(dataBegin + 0x58);
             const rotateDirection = view.getFloat32(dataBegin + 0x5C);
 
@@ -2721,10 +2848,8 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             const alphaWaveAmplitude = alphaWaveParam1;
             const alphaWaveFrequency = alphaWaveParam2;
 
-            // TODO(jstpierre): Actually do this properly (parse out flags in parsing)
-
             esp1 = { flags,
-                hasRotation,
+                isEnableScale, isDiffXY, scaleAnmTypeX, scaleAnmTypeY, isEnableAlpha, isEnableSinWave, isEnableRotate,
                 scaleInTiming, scaleOutTiming, scaleInValueX, scaleOutValueX, scaleInValueY, scaleOutValueY,
                 scaleIncreaseRateX, scaleIncreaseRateY, scaleDecreaseRateX, scaleDecreaseRateY,
                 scaleOutRandom, scaleAnmMaxFrameX, scaleAnmMaxFrameY,
@@ -2737,82 +2862,79 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             // J3DChildShape / J3DSweepShape
             // Contains child particle draw settings.
 
-            /*
-            const flags = view.getUint32(tableIdx + 0x08);
+            const flags = view.getUint32(dataBegin + 0x00);
             const shapeType: ShapeType = (flags >>> 0) & 0x0F;
             const dirType: DirType = (flags >>> 4) & 0x07;
             const rotType: RotType = (flags >>> 7) & 0x07;
             let planeType: PlaneType = (flags >>> 10) & 0x01;
             if (shapeType === ShapeType.DirectionCross || shapeType === ShapeType.RotationCross)
                 planeType = PlaneType.X;
-            const posRndm = view.getFloat32(tableIdx + 0x0C);
-            const baseVel = view.getFloat32(tableIdx + 0x10);
-            const baseVelRndm = view.getFloat32(tableIdx + 0x14);
-            const velInfRndm = view.getFloat32(tableIdx + 0x18);
-            const gravity = view.getFloat32(tableIdx + 0x1C);
+            const posRndm = view.getFloat32(dataBegin + 0x04);
+            const baseVel = view.getFloat32(dataBegin + 0x08);
+            const baseVelRndm = view.getFloat32(dataBegin + 0x0C);
+            const velInfRate = view.getFloat32(dataBegin + 0x10);
+            const gravity = view.getFloat32(dataBegin + 0x14);
+            const timing = view.getFloat32(dataBegin + 0x18);
+            const life = view.getUint16(dataBegin + 0x1C);
+            const rate = view.getUint8(dataBegin + 0x1E);
+            const step = view.getUint32(dataBegin + 0x20);
 
-            const globalScale2DX = view.getFloat32(tableIdx + 0x20);
-            const globalScale2DY = view.getFloat32(tableIdx + 0x24);
+            const globalScale2DX = view.getFloat32(dataBegin + 0x24);
+            const globalScale2DY = view.getFloat32(dataBegin + 0x28);
             const globalScale2D = vec2.fromValues(globalScale2DX, globalScale2DY);
 
-            const inheritScale = view.getFloat32(tableIdx + 0x28);
-            const inheritAlpha = view.getFloat32(tableIdx + 0x2C);
-            const inheritRGB = view.getFloat32(tableIdx + 0x30);
-            const colorPrm = colorNewFromRGBA8(view.getUint32(tableIdx + 0x34));
-            const colorEnv = colorNewFromRGBA8(view.getUint32(tableIdx + 0x38));
-            const timing = view.getFloat32(tableIdx + 0x3C);
-            const life = view.getUint16(tableIdx + 0x40);
-            const childrenCount = view.getUint16(tableIdx + 0x42);
-            const rate = view.getUint8(tableIdx + 0x44);
-            const texIdx = view.getUint8(tableIdx + 0x45);
-            const rotateSpeed = view.getUint16(tableIdx + 0x46) / 0xFFFF;
+            const rotateSpeed = view.getFloat32(dataBegin + 0x2C);
+
+            const inheritScale = view.getFloat32(dataBegin + 0x30);
+            const inheritAlpha = view.getFloat32(dataBegin + 0x34);
+            const inheritRGB = view.getFloat32(dataBegin + 0x38);
+            const colorPrm = colorNewFromRGBA8(view.getUint32(dataBegin + 0x3C));
+            const colorEnv = colorNewFromRGBA8(view.getUint32(dataBegin + 0x40));
+            const texIdx = view.getUint8(dataBegin + 0x44);
 
             ssp1 = { flags, shapeType, dirType, rotType, planeType,
-                posRndm, baseVel, baseVelRndm, velInfRndm, gravity, globalScale2D,
+                posRndm, baseVel, baseVelRndm, velInfRate, gravity, globalScale2D,
                 inheritScale, inheritAlpha, inheritRGB, colorPrm, colorEnv, timing,
-                life, childrenCount, rate, texIdx, rotateSpeed,
+                life, rate, step, texIdx, rotateSpeed,
             };
-            */
         } else if (fourcc === 'ETX1') {
             // J3DExTexShape
             // Contains extra texture draw settings.
 
-            /*
-            const flags = view.getUint32(tableIdx + 0x08);
+            const flags = view.getUint32(dataBegin + 0x00);
 
-            const p00 = view.getFloat32(tableIdx + 0x0C);
-            const p01 = view.getFloat32(tableIdx + 0x10);
-            const p02 = view.getFloat32(tableIdx + 0x14);
-            const p10 = view.getFloat32(tableIdx + 0x18);
-            const p11 = view.getFloat32(tableIdx + 0x1C);
-            const p12 = view.getFloat32(tableIdx + 0x20);
-            const scale = Math.pow(2, view.getInt8(tableIdx + 0x24));
+            const p00 = view.getFloat32(dataBegin + 0x04);
+            const p01 = view.getFloat32(dataBegin + 0x08);
+            const p02 = view.getFloat32(dataBegin + 0x0C);
+            const p10 = view.getFloat32(dataBegin + 0x10);
+            const p11 = view.getFloat32(dataBegin + 0x14);
+            const p12 = view.getFloat32(dataBegin + 0x18);
+            const scale = Math.pow(2, view.getInt8(tableIdx + 0x1C));
             const indTextureMtx = new Float32Array([
                 p00*scale, p01*scale, p02*scale, scale,
                 p10*scale, p11*scale, p12*scale, 0.0,
             ]);
 
-            const indTextureIdx = view.getUint8(tableIdx + 0x25);
-            const secondTextureIdx = view.getUint8(tableIdx + 0x26);
+            const indTextureID = view.getUint8(tableIdx + 0x25);
+            const subTextureID = view.getUint8(tableIdx + 0x26);
 
-            etx1 = { flags, indTextureMtx, indTextureIdx, secondTextureIdx };
-            */
+            etx1 = { flags, indTextureMtx, indTextureID, subTextureID };
         } else if (fourcc === 'KFA1') {
             // J3DKeyBlock
-
             // Contains curve animations for various emitter parameters.
-            const keyType: JPAKeyType = view.getUint8(tableIdx + 0x08);
-            const keyCount = view.getUint8(tableIdx + 0x09);
-            const isLoopEnable = !!view.getUint8(tableIdx + 0x0B);
+
+            const keyType: JPAKeyType = view.getUint8(dataBegin + 0x00);
+            const keyCount = view.getUint8(dataBegin + 0x04);
+            const isLoopEnable = !!view.getUint8(dataBegin + 0x06);
 
             // The curves are four floats per key, in typical time/value/tangent in/tangent out order.
-            const keyValues = buffer.createTypedArray(Float32Array, tableIdx + 0x0C, keyCount * 4, Endianness.BIG_ENDIAN);
+            const keyValues = buffer.createTypedArray(Float32Array, tableIdx + 0x20, keyCount * 4, Endianness.BIG_ENDIAN);
 
             kfa1.push({ keyType, isLoopEnable, keyValues });
         } else if (fourcc === 'FLD1') {
             // J3DFieldBlock
-
             // Contains physics simulation fields that act on the particles.
+
             const flags = view.getUint32(dataBegin + 0x00);
             const type: JPAFieldType = flags & 0x0F;
             const velType: JPAFieldVelType = (flags >>> 8) & 0x03;
@@ -2831,7 +2953,6 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             const dirZ = view.getFloat32(dataBegin + 0x24);
             const dir = vec3.fromValues(dirX, dirY, dirZ);
 
-            // TODO(jstpierre): Reparameterize these.
             const param1 = view.getFloat32(dataBegin + 0x28);
             const param2 = view.getFloat32(dataBegin + 0x2C);
             const param3 = view.getFloat32(dataBegin + 0x30);
@@ -2849,23 +2970,28 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             if (fadeOut > 0)
                 fadeOutRate = 1 / fadeOut;
 
-            let power = -1;
             let refDistanceSq = -1;
             let innerSpeed = -1;
             let outerSpeed = -1;
     
             if (type === JPAFieldType.Newton) {
-                power = mag;
-                refDistanceSq = param1;
+                refDistanceSq = param1 * param1;
             }
 
             if (type === JPAFieldType.Vortex) {
-                // In the case of a Vortex, we have two required parameters: innerSpeed and outerSpeed.
                 innerSpeed = param1;
                 outerSpeed = param2;
             }
     
-            fld1.push({ flags, type, velType, pos, dir, mag, magRndm, power, refDistanceSq, innerSpeed, outerSpeed, fadeIn, fadeOut, enTime, disTime, cycle, fadeInRate, fadeOutRate });
+            if (type === JPAFieldType.Convection) {
+                refDistanceSq = param2;
+            }
+
+            if (type === JPAFieldType.Spin) {
+                innerSpeed = mag;
+            }
+
+            fld1.push({ flags, type, velType, pos, dir, mag, magRndm, refDistanceSq, innerSpeed, outerSpeed, fadeIn, fadeOut, enTime, disTime, cycle, fadeInRate, fadeOutRate });
         } else if (fourcc === 'TDB1') {
             // Not a block. Stores a mapping of particle texture indexes
             // to JPAC texture indices -- I assume this is "Texture Database".
@@ -2990,6 +3116,8 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             let planeType: PlaneType = (flags >>> 10) & 0x01;
             if (shapeType === ShapeType.DirectionCross || shapeType === ShapeType.RotationCross)
                 planeType = PlaneType.X;
+            const tilingX = !!((flags >>> 0x19) & 0x01) ? 2.0 : 1.0;
+            const tilingY = !!((flags >>> 0x1A) & 0x01) ? 2.0 : 1.0;
 
             const globalScale2DX = view.getFloat32(tableIdx + 0x10);
             const globalScale2DY = view.getFloat32(tableIdx + 0x14);
@@ -3061,7 +3189,7 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             }
 
             bsp1 = {
-                flags, shapeType, dirType, rotType, planeType, globalScale2D,
+                flags, shapeType, dirType, rotType, planeType, tilingX, tilingY, globalScale2D,
                 blendModeFlags, alphaCompareFlags, alphaRef0, alphaRef1, zModeFlags,
                 texFlags, texIdx, texIdxAnimData,
                 texStaticTransX, texStaticTransY, texStaticScaleX, texStaticScaleY, texStaticRotate,
@@ -3074,7 +3202,13 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             // Contains misc. extra particle draw settings.
 
             const flags = view.getUint32(tableIdx + 0x08);
-            const hasRotation = !!(flags & 0x01000000);
+            const isEnableScale   = !!(flags & 0x00000001);
+            const isDiffXY        = !!(flags & 0x00000002);
+            const isEnableAlpha   = !!(flags & 0x00010000);
+            const isEnableSinWave = !!(flags & 0x00020000);
+            const isEnableRotate  = !!(flags & 0x01000000);
+            const scaleAnmTypeX   = (flags >>> 0x08) & 0x03;
+            const scaleAnmTypeY   = (flags >>> 0x0A) & 0x03;
 
             const scaleInTiming =  view.getFloat32(tableIdx + 0x0C);
             const scaleOutTiming = view.getFloat32(tableIdx + 0x10);
@@ -3116,14 +3250,14 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             const alphaWaveRandom = view.getFloat32(tableIdx + 0x44);
             const alphaWaveAmplitude = view.getFloat32(tableIdx + 0x48);
 
-            const rotateAngle = view.getFloat32(tableIdx + 0x4C);
+            const rotateAngle = view.getFloat32(tableIdx + 0x4C) / 0x7FFF;
             const rotateAngleRandom = view.getFloat32(tableIdx + 0x50);
-            const rotateSpeed = view.getFloat32(tableIdx + 0x54);
+            const rotateSpeed = view.getFloat32(tableIdx + 0x54) / 0x7FFF;
             const rotateSpeedRandom = view.getFloat32(tableIdx + 0x58);
             const rotateDirection = view.getFloat32(tableIdx + 0x5C);
 
             esp1 = { flags,
-                hasRotation,
+                isEnableScale, isDiffXY, scaleAnmTypeX, scaleAnmTypeY, isEnableAlpha, isEnableSinWave, isEnableRotate,
                 scaleInTiming, scaleOutTiming, scaleInValueX, scaleOutValueX, scaleInValueY, scaleOutValueY,
                 scaleIncreaseRateX, scaleIncreaseRateY, scaleDecreaseRateX, scaleDecreaseRateY,
                 scaleOutRandom, scaleAnmMaxFrameX, scaleAnmMaxFrameY,
@@ -3146,7 +3280,7 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             const posRndm = view.getFloat32(tableIdx + 0x0C);
             const baseVel = view.getFloat32(tableIdx + 0x10);
             const baseVelRndm = view.getFloat32(tableIdx + 0x14);
-            const velInfRndm = view.getFloat32(tableIdx + 0x18);
+            const velInfRate = view.getFloat32(tableIdx + 0x18);
             const gravity = view.getFloat32(tableIdx + 0x1C);
 
             const globalScale2DX = view.getFloat32(tableIdx + 0x20);
@@ -3160,15 +3294,15 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             const colorEnv = colorNewFromRGBA8(view.getUint32(tableIdx + 0x38));
             const timing = view.getFloat32(tableIdx + 0x3C);
             const life = view.getUint16(tableIdx + 0x40);
-            const childrenCount = view.getUint16(tableIdx + 0x42);
-            const rate = view.getUint8(tableIdx + 0x44);
+            const rate = view.getUint16(tableIdx + 0x42);
+            const step = view.getUint8(tableIdx + 0x44);
             const texIdx = view.getUint8(tableIdx + 0x45);
             const rotateSpeed = view.getUint16(tableIdx + 0x46) / 0xFFFF;
 
             ssp1 = { flags, shapeType, dirType, rotType, planeType,
-                posRndm, baseVel, baseVelRndm, velInfRndm, gravity, globalScale2D,
+                posRndm, baseVel, baseVelRndm, velInfRate, gravity, globalScale2D,
                 inheritScale, inheritAlpha, inheritRGB, colorPrm, colorEnv, timing,
-                life, childrenCount, rate, texIdx, rotateSpeed,
+                life, rate, step, texIdx, rotateSpeed,
             };
         } else if (fourcc === 'ETX1') {
             // J3DExTexShape
@@ -3188,10 +3322,10 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
                 p10*scale, p11*scale, p12*scale, 0.0,
             ]);
 
-            const indTextureIdx = view.getUint8(tableIdx + 0x25);
-            const secondTextureIdx = view.getUint8(tableIdx + 0x26);
+            const indTextureID = view.getUint8(tableIdx + 0x25);
+            const subTextureID = view.getUint8(tableIdx + 0x26);
 
-            etx1 = { flags, indTextureMtx, indTextureIdx, secondTextureIdx };
+            etx1 = { flags, indTextureMtx, indTextureID, subTextureID };
         } else if (fourcc === 'KFA1') {
             // J3DKeyBlock
             // Contains curve animations for various emitter parameters.
@@ -3222,7 +3356,6 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             const dirZ = view.getFloat32(tableIdx + 0x20);
             const dir = vec3.fromValues(dirX, dirY, dirZ);
 
-            // TODO(jstpierre): Reparameterize these.
             const param1 = view.getFloat32(tableIdx + 0x24);
             const param2 = view.getFloat32(tableIdx + 0x28);
             const param3 = view.getFloat32(tableIdx + 0x2C);
@@ -3243,20 +3376,18 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             // All of our parameters.
             let mag = 0;
             let magRndm = 0;
-            let power = -1;
             let refDistanceSq = -1;
             let innerSpeed = -1;
             let outerSpeed = -1;
 
-            if (type === JPAFieldType.Gravity || type === JPAFieldType.Air || type === JPAFieldType.Magnet ||
-                type === JPAFieldType.Newton || type === JPAFieldType.Random || type === JPAFieldType.Drag || type === JPAFieldType.Convection) {
+            if (type === JPAFieldType.Gravity || type === JPAFieldType.Air || type === JPAFieldType.Magnet || type === JPAFieldType.Random || type === JPAFieldType.Drag) {
                 mag = param1;
             }
 
             // magRndm should be left at 0.0 in JPA 2.0
 
-            if (type === JPAFieldType.Newton) {
-                power = param1;
+            if (type === JPAFieldType.Newton || type === JPAFieldType.Convection) {
+                mag = param1;
                 refDistanceSq = param3;
             }
 
@@ -3266,7 +3397,7 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
                 outerSpeed = param2;
             }
 
-            fld1.push({ flags, type, velType, pos, dir, mag, magRndm, power, refDistanceSq, innerSpeed, outerSpeed, fadeIn, fadeOut, enTime, disTime, cycle, fadeInRate, fadeOutRate });
+            fld1.push({ flags, type, velType, pos, dir, mag, magRndm, refDistanceSq, innerSpeed, outerSpeed, fadeIn, fadeOut, enTime, disTime, cycle, fadeInRate, fadeOutRate });
         } else if (fourcc === 'TDB1') {
             // Not a block. Stores a mapping of particle texture indexes
             // to JPAC texture indices -- I assume this is "Texture Database".

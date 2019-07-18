@@ -459,7 +459,7 @@ class SimpleEffectSystem {
     private resourceDatas = new Map<number, JPA.JPAResourceData>();
 
     constructor(device: GfxDevice, private jpac: JPA.JPAC) {
-        this.emitterManager = new JPA.JPAEmitterManager(device, 3000, 150);
+        this.emitterManager = new JPA.JPAEmitterManager(device, 6000, 300);
     }
 
     private getResourceData(device: GfxDevice, userIndex: number): JPA.JPAResourceData | null {
@@ -486,10 +486,13 @@ class SimpleEffectSystem {
         this.emitterManager.draw(device, renderHelper, this.drawInfo, drawGroupId);
     }
 
-    public createDisappear(device: GfxDevice, which: number = 0x14): void {
-        const emitter = this.emitterManager.createEmitter(this.getResourceData(device, which));
-        emitter.globalTranslation[1] -= 800;
-        emitter.globalTranslation[2] -= 1200;
+    public createEmitter(device: GfxDevice, resourceId: number = 0x14) {
+        const emitter = this.emitterManager.createEmitter(this.getResourceData(device, resourceId));
+        if (emitter !== null) {
+            emitter.globalTranslation[1] -= 800;
+            emitter.globalTranslation[2] -= 1200;
+        }
+        return emitter;
     }
 
     public destroy(device: GfxDevice): void {
