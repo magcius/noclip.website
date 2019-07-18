@@ -2098,7 +2098,7 @@ export class JPABaseParticle {
 
         const sqDist = vec3.squaredLength(scratchVec3a);
         if (field.refDistanceSq < sqDist) {
-            const scale = field.refDistanceSq * 1 / sqDist;
+            const scale = field.refDistanceSq / sqDist;
             vec3.scale(scratchVec3a, scratchVec3a, scale);
         } else {
             vec3.set(scratchVec3a, 0, 0, 0);
@@ -3115,8 +3115,8 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             }
 
             if (type === JPAFieldType.Vortex) {
-                innerSpeed = param1;
-                outerSpeed = param2;
+                innerSpeed = mag;
+                outerSpeed = magRndm;
             }
     
             if (type === JPAFieldType.Convection) {
