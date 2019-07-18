@@ -652,11 +652,8 @@ export class StarPiece extends LiveActor {
 
     public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
         // The star piece rotates around the Y axis at 15 degrees every frame.
-        const enum Constants {
-            SPEED = MathConstants.DEG_TO_RAD * 15,
-        }
-
-        this.rotation[1] += getDeltaTimeFrames(viewerInput) * Constants.SPEED;
+        const SPEED = MathConstants.DEG_TO_RAD * 15;
+        this.rotation[1] += getDeltaTimeFrames(viewerInput) * SPEED;
         super.calcAndSetBaseMtx(viewerInput);
     }
 }
@@ -1004,12 +1001,8 @@ export class Coin extends LiveActor {
         //   - getCoinInWaterRotateYMatrix()
         //   - getCoinHiSpeedRotateYMatrix()
         // for now we just spin at 4 degrees per frame lol
-
-        const enum Constants {
-            SPEED = MathConstants.DEG_TO_RAD * 4,
-        };
-
-        const rotationY = getTimeFrames(viewerInput) * Constants.SPEED;
+        const SPEED = MathConstants.DEG_TO_RAD * 4;
+        const rotationY = getTimeFrames(viewerInput) * SPEED;
         computeModelMatrixSRT(scratchMatrix, 1, 1, 1, 0, rotationY, 0, 0, 0, 0);
         super.calcAndSetBaseMtx(viewerInput);
         mat4.mul(this.modelInstance.modelMatrix, this.modelInstance.modelMatrix, scratchMatrix);

@@ -489,8 +489,9 @@ class SimpleEffectSystem {
     public createEmitter(device: GfxDevice, resourceId: number = 0x14) {
         const emitter = this.emitterManager.createEmitter(this.getResourceData(device, resourceId));
         if (emitter !== null) {
-            emitter.globalTranslation[1] -= 800;
-            emitter.globalTranslation[2] -= 1200;
+            emitter.globalTranslation[0] = -275;
+            emitter.globalTranslation[1] = 150;
+            emitter.globalTranslation[2] = 2130;
         }
         return emitter;
     }
@@ -893,7 +894,7 @@ class SceneDesc {
             }
 
             const particleCommon = modelCache.getFileData(`${pathBase}/Particle/common.jpc`);
-            if (particleCommon !== null) {
+            if (particleCommon !== null && particleCommon.byteLength > 0) {
                 const jpac = JPA.parse(particleCommon);
                 renderer.effectSystem = new SimpleEffectSystem(device, jpac);
             }

@@ -5,7 +5,7 @@
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import * as GX from "../gx/gx_enum";
 
-import { assert, readString, assertExists, nArray, hexdump } from "../util";
+import { assert, readString, assertExists, nArray } from "../util";
 import { BTI } from "./j3d";
 import { vec3, mat4, vec2 } from "gl-matrix";
 import { Endianness } from "../endian";
@@ -18,8 +18,9 @@ import { MaterialParams, ColorKind, ub_PacketParams, u_PacketParamsBufferSize, P
 import { GXMaterialHelperGfx, GXRenderHelperGfx } from "../gx/gx_render";
 import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants } from "../MathHelpers";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { makeSortKeyTranslucent, GfxRendererLayer, setSortKeyBias } from "../gfx/render/GfxRenderer";
+import { makeSortKeyTranslucent, GfxRendererLayer, setSortKeyBias, setSortKeyDepth } from "../gfx/render/GfxRenderer";
 import { fillMatrix4x3, fillColor, fillMatrix4x2 } from "../gfx/helpers/UniformBufferHelpers";
+import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
 
 export interface JPAResourceRaw {
     resourceId: number;
@@ -101,10 +102,11 @@ const enum DirType {
 }
 
 const enum RotType {
-    Y   = 0,
-    X   = 1,
-    Z   = 2,
-    XYZ = 3,
+    Y        = 0,
+    X        = 1,
+    Z        = 2,
+    XYZ      = 3,
+    Y_JIGGLE = 4,
 }
 
 const enum PlaneType {
@@ -362,7 +364,7 @@ export class JPAResourceData {
         const ssp1 = this.res.ssp1;
 
         const shapeType = bsp1.shapeType;
-        if (!(shapeType === ShapeType.Billboard || shapeType === ShapeType.Direction || shapeType === ShapeType.DirectionCross || shapeType === ShapeType.YBillboard)) {
+        if (!(shapeType === ShapeType.Billboard || shapeType === ShapeType.Direction || shapeType === ShapeType.DirectionCross || shapeType === ShapeType.YBillboard || shapeType === ShapeType.Rotation || shapeType === ShapeType.RotationCross)) {
             console.warn(`Unsupported shape type ${shapeType}`);
             this.supported = false;
         }
@@ -685,7 +687,7 @@ class JPAEmitterWorkData {
     public deltaTime: number = 0;
 
     public prevParticlePos = vec3.create();
-    public particleSortKey: number = makeSortKeyTranslucent(GfxRendererLayer.TRANSLUCENT);
+    public particleSortKey = makeSortKeyTranslucent(GfxRendererLayer.TRANSLUCENT);
 }
 
 export class JPADrawInfo {
@@ -1110,7 +1112,12 @@ export class JPABaseEmitter {
 
         let angle: number, x: number;
         if (!!(bem1.flags & 0x02)) {
-            angle = workData.volumeSweep * (workData.volumeEmitAngleCount / (workData.volumeEmitAngleMax - 1)) * MathConstants.TAU + Math.PI;
+            const startAngle = Math.PI;
+
+            angle = startAngle;
+            if (workData.volumeEmitAngleMax > 1)
+                angle += workData.volumeSweep * (workData.volumeEmitAngleCount / (workData.volumeEmitAngleMax - 1)) * MathConstants.TAU;
+
             x = (Math.PI * 0.5) + (workData.volumeEmitXCount / (workData.divNumber - 1)) * Math.PI;
             // Fixed interval
             workData.volumeEmitAngleCount++;
@@ -1380,6 +1387,10 @@ export class JPABaseEmitter {
         JPAGetXYZRotateMtx(scratchMatrix, this.emitterRot);
         mat4.mul(workData.emitterGlobalRot, this.globalRotation, scratchMatrix);
         vec3.transformMat4(workData.emitterGlobalDir, this.emitterDir, workData.emitterGlobalRot);
+
+        this.calcEmitterGlobalPosition(scratchVec3a);
+        const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(workData.posCamMtx, scratchVec3a);
+        workData.particleSortKey = setSortKeyDepth(workData.particleSortKey, depth);
     }
 
     public calc(workData: JPAEmitterWorkData): boolean {
@@ -1545,14 +1556,18 @@ export class JPABaseEmitter {
         if (needsPrevPos)
             this.calcEmitterGlobalPosition(workData.prevParticlePos);
 
+        let sortKeyBias = 0;
+
         if (!!(bsp1.flags & 0x200000)) {
             for (let i = 0; i < this.aliveParticlesChild.length; i++) {
+                workData.particleSortKey = setSortKeyBias(workData.particleSortKey, sortKeyBias++);
                 this.aliveParticlesChild[i].drawC(device, renderHelper, workData, materialParams);
                 if (needsPrevPos)
                     vec3.copy(workData.prevParticlePos, this.aliveParticlesChild[i].position);
             }
         } else {
             for (let i = this.aliveParticlesChild.length - 1; i >= 0; i--) {
+                workData.particleSortKey = setSortKeyBias(workData.particleSortKey, sortKeyBias++);
                 this.aliveParticlesChild[i].drawC(device, renderHelper, workData, materialParams);
                 if (needsPrevPos)
                     vec3.copy(workData.prevParticlePos, this.aliveParticlesChild[i].position);
@@ -1785,10 +1800,6 @@ export class JPABaseParticle {
             this.rotateSpeed = esp1.rotateSpeed * (1.0 + (esp1.rotateSpeedRandom * get_r_zp(baseEmitter.random)));
             if (get_r_zp(baseEmitter.random) >= esp1.rotateDirection)
                 this.rotateSpeed *= -1;
-
-            // Convert to radians.
-            this.rotateAngle *= Math.PI;
-            this.rotateSpeed *= Math.PI;
         } else {
             this.rotateAngle = 0;
             this.rotateSpeed = 0;
@@ -2422,6 +2433,94 @@ export class JPABaseParticle {
         }
     }
 
+    private applyRot(dst: mat4, angle: number, rotType: RotType): void {
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+
+        if (rotType === RotType.X) {
+            dst[0] = 1;
+            dst[4] = 0;
+            dst[8] = 0;
+            dst[12] = 0;
+
+            dst[1] = 0;
+            dst[5] = cos;
+            dst[9] = -sin;
+            dst[13] = 0;
+
+            dst[2] = 0;
+            dst[6] = sin;
+            dst[10] = cos;
+            dst[14] = 0;
+        } else if (rotType === RotType.Y) {
+            dst[0] = cos;
+            dst[4] = 0;
+            dst[8] = -sin;
+            dst[12] = 0;
+
+            dst[1] = 0;
+            dst[5] = 1;
+            dst[9] = 0;
+            dst[13] = 0;
+
+            dst[2] = sin;
+            dst[6] = 0;
+            dst[10] = cos;
+            dst[14] = 0;
+        } else if (rotType === RotType.Z) {
+            dst[0] = cos;
+            dst[4] = -sin;
+            dst[8] = 0;
+            dst[12] = 0;
+
+            dst[1] = sin;
+            dst[5] = cos;
+            dst[9] = 0;
+            dst[13] = 0;
+
+            dst[2] = 0;
+            dst[6] = 0;
+            dst[10] = 1;
+            dst[14] = 0;
+        } else if (rotType === RotType.XYZ) {
+            // Rotate around all three angles.
+            const rot = (1/3) * (1.0 - cos);
+            const a = rot + cos, b = rot - (0.57735 * sin), c = rot + (0.57735 * sin);
+            dst[0] = a;
+            dst[4] = b;
+            dst[8] = c;
+            dst[12] = 0;
+
+            dst[1] = b;
+            dst[5] = a;
+            dst[9] = c;
+            dst[13] = 0;
+
+            dst[2] = c;
+            dst[6] = b;
+            dst[10] = a;
+            dst[14] = 0;
+        } else if (rotType === RotType.Y_JIGGLE) {
+            // Seems to be a 12deg rotation.
+            const jiggleSin = 0.207912;
+            const jiggleCos = 0.978148;
+            dst[0] = cos;
+            dst[4] = jiggleSin;
+            dst[8] = -sin;
+            dst[12] = 0;
+
+            dst[1] = 0;
+            dst[5] = jiggleCos;
+            dst[9] = -jiggleSin;
+            dst[13] = 0;
+
+            dst[2] = sin;
+            dst[6] = cos * jiggleSin;
+            dst[10] = cos * jiggleCos;
+            dst[14] = 0;
+        }
+    }
+
     private drawCommon(device: GfxDevice, renderHelper: GXRenderHelperGfx, workData: JPAEmitterWorkData, materialParams: MaterialParams, sp1: CommonShapeTypeFields): void {
         if (!!(this.flags & 0x08))
             return;
@@ -2458,7 +2557,6 @@ export class JPABaseParticle {
             renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateBillboard);
             renderInst.drawIndexes(6, 0);
         } else if (shapeType === ShapeType.Direction || shapeType === ShapeType.DirectionCross) {
-            // TODO(jstpierre): IsRot
             this.applyDir(scratchVec3a, sp1.dirType, workData);
             vec3.normalize(scratchVec3a, scratchVec3a);
 
@@ -2484,17 +2582,43 @@ export class JPABaseParticle {
 
             const scaleX = workData.globalScale2D[0] * this.scale[0];
             const scaleY = workData.globalScale2D[1] * this.scale[1];
-            this.applyPlane(packetParams.u_PosMtx[0], sp1.planeType, scaleX, scaleY);
-            mat4.mul(packetParams.u_PosMtx[0], workData.posCamMtx, packetParams.u_PosMtx[0]);
-            this.loadTexMtx(materialParams.u_TexMtx[0], workData, packetParams.u_PosMtx[0]);
+            if (isRot) {
+                this.applyRot(scratchMatrix, this.rotateAngle, sp1.rotType);
+                mat4.copy(packetParams.u_PosMtx[1], scratchMatrix);
+                this.applyPlane(scratchMatrix, sp1.planeType, scaleX, scaleY);
+                mat4.mul(dst, dst, scratchMatrix);
+            } else {
+                this.applyPlane(dst, sp1.planeType, scaleX, scaleY);
+            }
+
+            mat4.mul(dst, workData.posCamMtx, dst);
+
+            this.loadTexMtx(materialParams.u_TexMtx[0], workData, dst);
 
             renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateBillboard);
             if (shapeType === ShapeType.DirectionCross)
                 renderInst.drawIndexes(12, 0);
             else
                 renderInst.drawIndexes(6, 0);
+        } else if (shapeType === ShapeType.Rotation || shapeType === ShapeType.RotationCross) {
+            const dst = packetParams.u_PosMtx[0];
+            this.applyRot(dst, this.rotateAngle, sp1.rotType);
+
+            const scaleX = workData.globalScale2D[0] * this.scale[0];
+            const scaleY = workData.globalScale2D[1] * this.scale[1];
+            this.applyPlane(dst, sp1.planeType, scaleX, scaleY);
+            dst[12] = this.position[0];
+            dst[13] = this.position[1];
+            dst[14] = this.position[2];
+            mat4.mul(dst, workData.posCamMtx, dst);
+            this.loadTexMtx(materialParams.u_TexMtx[0], workData, dst);
+
+            renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateBillboard);
+            if (shapeType === ShapeType.RotationCross)
+                renderInst.drawIndexes(12, 0);
+            else
+                renderInst.drawIndexes(6, 0);
         } else if (shapeType === ShapeType.YBillboard) {
-            // TODO(jstpierre): IsRot
             vec3.set(scratchVec3a, 0, workData.posCamMtx[1], workData.posCamMtx[2]);
             vec3.normalize(scratchVec3a, scratchVec3a);
 
@@ -2503,15 +2627,28 @@ export class JPABaseParticle {
 
             const scaleX = workData.globalScale2D[0] * this.scale[0];
             const scaleY = workData.globalScale2D[1] * this.scale[1];
-            dst[0] = scaleX;
-            dst[1] = 0;
-            dst[2] = 0;
-            dst[4] = 0;
-            dst[5] = workData.ybbCamMtx[5] * scaleY;
-            dst[6] = workData.ybbCamMtx[6] * scaleY;
-            dst[8] = 0;
-            dst[9] = workData.ybbCamMtx[9];
-            dst[10] = workData.ybbCamMtx[10];
+            if (isRot) {
+                const sin = Math.sin(this.rotateAngle), cos = Math.cos(this.rotateAngle);
+                dst[0] = cos * scaleX;
+                dst[1] = sin * workData.ybbCamMtx[5] * scaleX;
+                dst[2] = sin * scaleX * workData.ybbCamMtx[9];
+                dst[4] = -sin * scaleY;
+                dst[5] = cos * workData.ybbCamMtx[5] * scaleY;
+                dst[6] = cos * scaleY * workData.ybbCamMtx[9];
+                dst[8] = 0;
+                dst[9] = -workData.ybbCamMtx[9];
+                dst[10] = workData.ybbCamMtx[5];
+            } else {
+                dst[0] = scaleX;
+                dst[1] = 0;
+                dst[2] = 0;
+                dst[4] = 0;
+                dst[5] = workData.ybbCamMtx[5] * scaleY;
+                dst[6] = workData.ybbCamMtx[6] * scaleY;
+                dst[8] = 0;
+                dst[9] = workData.ybbCamMtx[9];
+                dst[10] = workData.ybbCamMtx[10];
+            }
             dst[12] = scratchVec3b[0];
             dst[13] = scratchVec3b[1];
             dst[14] = scratchVec3b[2];
@@ -2520,7 +2657,7 @@ export class JPABaseParticle {
             renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateBillboard);
             renderInst.drawIndexes(6, 0);
         } else {
-            return;
+            throw "whoops";
         }
 
         let materialOffs = renderInst.allocateUniformBuffer(ub_MaterialParams, materialHelper.materialParamsBufferSize);
@@ -2837,9 +2974,9 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
                 scaleDecreaseRateY = (scaleOutValueY - 1.0) / (1.0 - scaleOutTiming);
             }
 
-            const rotateAngle = view.getFloat32(dataBegin + 0x4C);
-            const rotateSpeed = view.getFloat32(dataBegin + 0x50);
-            const rotateAngleRandom = view.getFloat32(dataBegin + 0x54);
+            const rotateAngle = view.getFloat32(dataBegin + 0x4C) * MathConstants.TAU;
+            const rotateSpeed = view.getFloat32(dataBegin + 0x50) * MathConstants.TAU;
+            const rotateAngleRandom = view.getFloat32(dataBegin + 0x54) * MathConstants.TAU;
             const rotateSpeedRandom = view.getFloat32(dataBegin + 0x58);
             const rotateDirection = view.getFloat32(dataBegin + 0x5C);
 
@@ -3249,9 +3386,9 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             const alphaWaveRandom = view.getFloat32(tableIdx + 0x44);
             const alphaWaveAmplitude = view.getFloat32(tableIdx + 0x48);
 
-            const rotateAngle = view.getFloat32(tableIdx + 0x4C) / 0x7FFF;
-            const rotateAngleRandom = view.getFloat32(tableIdx + 0x50);
-            const rotateSpeed = view.getFloat32(tableIdx + 0x54) / 0x7FFF;
+            const rotateAngle = view.getFloat32(tableIdx + 0x4C) * MathConstants.TAU / 0xFFFF;
+            const rotateAngleRandom = view.getFloat32(tableIdx + 0x50) * MathConstants.TAU / 0xFFFF;
+            const rotateSpeed = view.getFloat32(tableIdx + 0x54) * MathConstants.TAU / 0xFFFF;
             const rotateSpeedRandom = view.getFloat32(tableIdx + 0x58);
             const rotateDirection = view.getFloat32(tableIdx + 0x5C);
 

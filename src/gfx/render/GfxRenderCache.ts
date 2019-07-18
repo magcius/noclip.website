@@ -15,7 +15,6 @@ function gfxRenderPipelineDescriptorHash(a: GfxRenderPipelineDescriptor): number
     return hash;
 }
 
-
 function gfxBindingsDescriptorHash(a: GfxBindingsDescriptor): number {
     // Hash on textures bindings.
     let hash: number = 0;
