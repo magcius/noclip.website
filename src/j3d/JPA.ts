@@ -352,12 +352,14 @@ const enum CalcScaleAnmType {
 export class JPAResourceData {
     public res: JPAResource;
     public supported: boolean = true;
+    public resourceId: number;
     public name: string;
     public texData: BTIData[] = [];
     public materialHelper: GXMaterialHelperGfx;
 
     constructor(device: GfxDevice, private jpac: JPAC, resRaw: JPAResourceRaw) {
         this.res = parseResource(this.jpac.version, resRaw);
+        this.resourceId = resRaw.resourceId;
 
         const bsp1 = this.res.bsp1;
         const etx1 = this.res.etx1;
@@ -623,15 +625,15 @@ class JPAGlobalRes {
         const x1 =  25;
 
         this.vertexBufferBillboard = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, new Float32Array([
-            x0, x0, 0, 1, 1,
-            x1, x0, 0, 0, 1,
-            x0, x1, 0, 1, 0,
-            x1, x1, 0, 0, 0,
+            x0, x0, 0, 1, 0,
+            x0, x1, 0, 1, 1,
+            x1, x0, 0, 0, 0,
+            x1, x1, 0, 0, 1,
             // Cross
-            0, x0, x0, 1, 1,
-            0, x1, x0, 0, 1,
-            0, x0, x1, 1, 0,
-            0, x1, x1, 0, 0,
+            0, x0, x0, 1, 0,
+            0, x1, x0, 1, 1,
+            0, x0, x1, 0, 0,
+            0, x1, x1, 0, 1,
         ]).buffer);
         this.indexBufferBillboard = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, new Uint16Array([
             0, 1, 2, 2, 1, 3,
