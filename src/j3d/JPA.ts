@@ -1743,7 +1743,7 @@ export class JPABaseEmitter {
         const texCalcOnEmitter = !!(bsp1.flags & 0x00004000);
         if (!isEnableTextureAnm)
             this.resData.texData[bsp1.texIdx].fillTextureMapping(materialParams.m_TextureMapping[0]);
-        else if (!texCalcOnEmitter)
+        else if (texCalcOnEmitter)
             this.resData.texData[this.texAnmIdx].fillTextureMapping(materialParams.m_TextureMapping[0]);
 
         if (etx1 !== null) {
