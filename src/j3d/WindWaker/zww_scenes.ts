@@ -493,6 +493,18 @@ class SimpleEffectSystem {
             emitter.globalTranslation[1] = 150;
             emitter.globalTranslation[2] = 2130;
         }
+
+        const orig = vec3.clone(emitter.globalTranslation);
+        let t = 0;
+        function move() {
+            t += 0.1;
+            emitter.globalTranslation[0] = orig[0] + Math.sin(t) * 50;
+            emitter.globalTranslation[1] = orig[1];
+            emitter.globalTranslation[2] = orig[2] + Math.cos(t) * 50;
+            requestAnimationFrame(move);
+        }
+        requestAnimationFrame(move);
+
         return emitter;
     }
 
@@ -727,6 +739,8 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             this.seaPlane.destroy(device);
         for (let i = 0; i < this.roomRenderers.length; i++)
             this.roomRenderers[i].destroy(device);
+        if (this.effectSystem !== null)
+            this.effectSystem.destroy(device);
         this.modelCache.destroy(device);
     }
 }

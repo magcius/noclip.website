@@ -9,7 +9,7 @@ import { assert, readString, assertExists, nArray } from "../util";
 import { BTI } from "./j3d";
 import { vec3, mat4, vec2 } from "gl-matrix";
 import { Endianness } from "../endian";
-import { GfxDevice, GfxInputLayout, GfxInputState, GfxBuffer, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxBufferUsage } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxInputLayout, GfxInputState, GfxBuffer, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxBufferUsage, GfxBufferFrequencyHint, GfxHostAccessPass, GfxVertexBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { BTIData } from "./render";
 import { getPointHermite } from "../Spline";
 import { GXMaterial, AlphaTest, RopInfo, TexGen, TevStage, getVertexAttribLocation, IndTexStage } from "../gx/gx_material";
@@ -21,6 +21,8 @@ import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { makeSortKeyTranslucent, GfxRendererLayer, setSortKeyBias, setSortKeyDepth } from "../gfx/render/GfxRenderer";
 import { fillMatrix4x3, fillColor, fillMatrix4x2 } from "../gfx/helpers/UniformBufferHelpers";
 import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
+import { makeTriangleIndexBuffer, GfxTopology, getTriangleIndexCountForTopologyIndexCount } from "../gfx/helpers/TopologyHelpers";
+import { GfxRenderInst } from "../gfx/render/GfxRenderer2";
 
 export interface JPAResourceRaw {
     resourceId: number;
@@ -169,6 +171,8 @@ export interface JPAExtraShapeBlock {
     isEnableRotate: boolean;
     isEnableAlpha: boolean;
     isEnableSinWave: boolean;
+    pivotX: number;
+    pivotY: number;
     scaleInTiming: number;
     scaleOutTiming: number;
     scaleInValueX: number;
@@ -353,8 +357,6 @@ function shapeTypeSupported(shapeType: ShapeType): boolean {
     switch (shapeType) {
     case ShapeType.Point:
     case ShapeType.Line:
-    case ShapeType.Stripe:
-    case ShapeType.StripeCross:
         return false;
     default:
         return true;
@@ -715,12 +717,84 @@ export class JPADrawInfo {
     public texPrjMtx: mat4 | null;
 }
 
+class StripeEntry {
+    public isInUse: boolean = true;
+    public shadowBufferF32: Float32Array;
+    public shadowBufferU8: Uint8Array;
+
+    constructor(public wordCount: number, public gfxBuffer: GfxBuffer, public inputState: GfxInputState) {
+        this.shadowBufferF32 = new Float32Array(wordCount);
+        this.shadowBufferU8 = new Uint8Array(this.shadowBufferF32.buffer);
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyBuffer(this.gfxBuffer);
+        device.destroyInputState(this.inputState);
+    }
+}
+
+const MAX_STRIPE_VERTEX_COUNT = 256;
+class StripeBufferManager {
+    public stripeEntry: StripeEntry[] = [];
+    private indexBuffer: GfxBuffer;
+    private indexBufferDescriptor: GfxVertexBufferDescriptor;
+
+    constructor(device: GfxDevice, public inputLayout: GfxInputLayout) {
+        const tristripIndexData = makeTriangleIndexBuffer(GfxTopology.TRISTRIP, 0, MAX_STRIPE_VERTEX_COUNT);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, tristripIndexData.buffer);
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0, byteStride: 0 };
+    }
+
+    public allocateVertexBuffer(device: GfxDevice, vertexCount: number): StripeEntry {
+        assert(vertexCount < MAX_STRIPE_VERTEX_COUNT);
+
+        // Allocate all buffers to max size for now.
+        const wordCount = MAX_STRIPE_VERTEX_COUNT * 5;
+
+        for (let i = 0; i < this.stripeEntry.length; i++) {
+            const entry = this.stripeEntry[i];
+            if (!entry.isInUse && entry.wordCount >= wordCount) {
+                entry.isInUse = true;
+                return entry;
+            }
+        }
+
+        const gfxBuffer = device.createBuffer(wordCount, GfxBufferUsage.VERTEX, GfxBufferFrequencyHint.DYNAMIC);
+        const inputState = device.createInputState(this.inputLayout, [
+            { buffer: gfxBuffer, byteOffset: 0, byteStride: 5*4 },
+        ], this.indexBufferDescriptor);
+        const entry = new StripeEntry(wordCount, gfxBuffer, inputState);
+        this.stripeEntry.push(entry);
+        return entry;
+    }
+
+    public upload(hostAccessPass: GfxHostAccessPass): void {
+        for (let i = 0; i < this.stripeEntry.length; i++) {
+            const entry = this.stripeEntry[i];
+            if (entry.isInUse)
+                hostAccessPass.uploadBufferData(entry.gfxBuffer, 0, entry.shadowBufferU8);
+        }
+    }
+
+    public reset(): void {
+        for (let i = 0; i < this.stripeEntry.length; i++)
+            this.stripeEntry[i].isInUse = false;
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.stripeEntry.length; i++)
+            this.stripeEntry[i].destroy(device);
+        device.destroyBuffer(this.indexBuffer);
+    }
+}
+
 export class JPAEmitterManager {
     public workData = new JPAEmitterWorkData();
     public deadParticlePool: JPABaseParticle[] = [];
     public deadEmitterPool: JPABaseEmitter[] = [];
     public aliveEmitters: JPABaseEmitter[] = [];
     public globalRes: JPAGlobalRes;
+    public stripeBufferManager: StripeBufferManager;
 
     constructor(device: GfxDevice, private maxParticleCount: number, private maxEmitterCount: number) {
         this.workData.emitterManager = this;
@@ -731,6 +805,7 @@ export class JPAEmitterManager {
             this.deadParticlePool.push(new JPABaseParticle());
 
         this.globalRes = new JPAGlobalRes(device);
+        this.stripeBufferManager = new StripeBufferManager(device, this.globalRes.inputLayout);
     }
 
     public createEmitter(resData: JPAResourceData): JPABaseEmitter | null {
@@ -809,10 +884,16 @@ export class JPAEmitterManager {
             if (emitter.drawGroupId === drawGroupId)
                 this.aliveEmitters[i].draw(device, renderHelper, this.workData);
         }
+
+        const hostAccessPass = device.createHostAccessPass();
+        this.stripeBufferManager.upload(hostAccessPass);
+        device.submitPass(hostAccessPass);
+        this.stripeBufferManager.reset();
     }
 
     public destroy(device: GfxDevice): void {
         this.globalRes.destroy(device);
+        this.stripeBufferManager.destroy(device);
     }
 }
 
@@ -907,8 +988,8 @@ function mirroredRepeat(t: number, duration: number): number {
 function calcTexIdx(workData: JPAEmitterWorkData, tick: number, time: number, randomPhase: number): number {
     const bsp1 = workData.baseEmitter.resData.res.bsp1;
 
-    const texHasAnm = !!(bsp1.texFlags & 0x01);
-    if (!texHasAnm)
+    const isEnableTextureAnm = !!(bsp1.texFlags & 0x00000001);
+    if (!isEnableTextureAnm)
         return bsp1.texIdx;
 
     const calcTexIdxType: CalcIdxType = (bsp1.texFlags >>> 2) & 0x07;
@@ -960,6 +1041,7 @@ function calcColor(dstPrm: Color, dstEnv: Color, workData: JPAEmitterWorkData, t
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
+const scratchVec3Points = nArray(4, () => vec3.create());
 export class JPABaseEmitter {
     public flags: BaseEmitterFlags;
     public resData: JPAResourceData;
@@ -1489,6 +1571,131 @@ export class JPABaseEmitter {
         vec3.transformMat4(v, this.emitterTrs, scratchMatrix);
     }
 
+    private drawStripe(device: GfxDevice, renderHelper: GXRenderHelperGfx, workData: JPAEmitterWorkData, sp1: CommonShapeTypeFields): void {
+        const particleCount = this.aliveParticlesBase.length;
+
+        if (particleCount < 2)
+            return;
+
+        const bsp1 = this.resData.res.bsp1;
+        const esp1 = this.resData.res.esp1;
+        const reverseOrder = !!(bsp1.flags & 0x200000);
+
+        const globalScaleX = 25 * workData.globalScale2D[0];
+        const pivotX = (esp1 !== null && esp1.isEnableScale) ? (esp1.pivotX - 1.0) : 0.0;
+        const pivotY = (esp1 !== null && esp1.isEnableScale) ? (esp1.pivotY - 1.0) : 0.0;
+
+        const px0 = globalScaleX * (1.0 + pivotX);
+        const px1 = globalScaleX * (1.0 - pivotX);
+        const py0 = globalScaleX * (1.0 + pivotY);
+        const py1 = globalScaleX * (1.0 - pivotY);
+
+        const isCross = sp1.shapeType === ShapeType.StripeCross;
+
+        const oneStripVertexCount = particleCount * 2;
+        const bufferVertexCount = isCross ? oneStripVertexCount * 2 : oneStripVertexCount;
+        const entry = workData.emitterManager.stripeBufferManager.allocateVertexBuffer(device, bufferVertexCount);
+
+        mat4.copy(packetParams.u_PosMtx[0], workData.posCamMtx);
+        loadPrjTexMtx(materialParams.u_TexMtx[0], workData, workData.posCamMtx);
+
+        scratchMatrix[12] = 0;
+        scratchMatrix[13] = 0;
+        scratchMatrix[14] = 0;
+
+        const numPoints = isCross ? 4 : 2;
+        let stripe0Idx = 0;
+        let stripe1Idx = oneStripVertexCount * 5;
+        for (let i = 0; i < particleCount; i++) {
+            const particleIndex = reverseOrder ? particleCount - 1 - i : i;
+            const p = this.aliveParticlesBase[particleIndex];
+
+            applyDir(scratchVec3c, p, sp1.dirType, workData);
+            vec3.normalize(scratchVec3c, scratchVec3c);
+            vec3.cross(scratchVec3d, p.prevAxis, scratchVec3c);
+            vec3.normalize(scratchVec3d, scratchVec3d);
+            vec3.cross(p.prevAxis, scratchVec3c, scratchVec3d);
+            vec3.normalize(p.prevAxis, p.prevAxis);
+
+            scratchMatrix[0] = scratchVec3d[0];
+            scratchMatrix[1] = scratchVec3d[1];
+            scratchMatrix[2] = scratchVec3d[2];
+            scratchMatrix[4] = scratchVec3c[0];
+            scratchMatrix[5] = scratchVec3c[1];
+            scratchMatrix[6] = scratchVec3c[2];
+            scratchMatrix[8] = p.prevAxis[0];
+            scratchMatrix[9] = p.prevAxis[1];
+            scratchMatrix[10] = p.prevAxis[2];
+
+            const sx0 = px0 * -p.scale[0];
+            const sx1 = px1 *  p.scale[0];
+            const sin = Math.sin(p.rotateAngle), cos = Math.cos(p.rotateAngle);
+            vec3.set(scratchVec3Points[0], sx0 * cos, 0, sx0 * sin);
+            vec3.set(scratchVec3Points[1], sx1 * cos, 0, sx1 * sin);
+            if (isCross) {
+                const sy0 = py0 * -p.scale[1];
+                const sy1 = py1 *  p.scale[1];
+                vec3.set(scratchVec3Points[2], sy0 * -sin, 0, sy0 * cos);
+                vec3.set(scratchVec3Points[3], sy1 * -sin, 0, sy1 * cos);
+            }
+
+            for (let j = 0; j < numPoints; j++)
+                vec3.transformMat4(scratchVec3Points[j], scratchVec3Points[j], scratchMatrix);
+
+            const texT = i / (particleCount - 1);
+            entry.shadowBufferF32[stripe0Idx++] = scratchVec3Points[0][0] + p.position[0];
+            entry.shadowBufferF32[stripe0Idx++] = scratchVec3Points[0][1] + p.position[1];
+            entry.shadowBufferF32[stripe0Idx++] = scratchVec3Points[0][2] + p.position[2];
+            entry.shadowBufferF32[stripe0Idx++] = 0;
+            entry.shadowBufferF32[stripe0Idx++] = texT;
+            entry.shadowBufferF32[stripe0Idx++] = scratchVec3Points[1][0] + p.position[0];
+            entry.shadowBufferF32[stripe0Idx++] = scratchVec3Points[1][1] + p.position[1];
+            entry.shadowBufferF32[stripe0Idx++] = scratchVec3Points[1][2] + p.position[2];
+            entry.shadowBufferF32[stripe0Idx++] = 1;
+            entry.shadowBufferF32[stripe0Idx++] = texT;
+
+            if (isCross) {
+                entry.shadowBufferF32[stripe1Idx++] = scratchVec3Points[2][0] + p.position[0];
+                entry.shadowBufferF32[stripe1Idx++] = scratchVec3Points[2][1] + p.position[1];
+                entry.shadowBufferF32[stripe1Idx++] = scratchVec3Points[2][2] + p.position[2];
+                entry.shadowBufferF32[stripe1Idx++] = 0;
+                entry.shadowBufferF32[stripe1Idx++] = texT;
+                entry.shadowBufferF32[stripe1Idx++] = scratchVec3Points[3][0] + p.position[0];
+                entry.shadowBufferF32[stripe1Idx++] = scratchVec3Points[3][1] + p.position[1];
+                entry.shadowBufferF32[stripe1Idx++] = scratchVec3Points[3][2] + p.position[2];
+                entry.shadowBufferF32[stripe1Idx++] = 1;
+                entry.shadowBufferF32[stripe1Idx++] = texT;
+            }
+        }
+
+        const globalRes = workData.emitterManager.globalRes;
+
+        const template = renderHelper.renderInstManager.pushTemplateRenderInst();
+        template.sortKey = workData.particleSortKey;
+        template.setInputLayoutAndState(globalRes.inputLayout, entry.inputState);
+
+        colorMult(materialParams.u_Color[ColorKind.C0], this.colorPrm, workData.baseEmitter.globalColorPrm);
+        colorMult(materialParams.u_Color[ColorKind.C1], this.colorEnv, workData.baseEmitter.globalColorEnv);
+
+        fillParticleRenderInst(device, renderHelper, workData, template, materialParams, packetParams);
+
+        const oneStripIndexCount = getTriangleIndexCountForTopologyIndexCount(GfxTopology.TRISTRIP, oneStripVertexCount);
+
+        const renderInst1 = renderHelper.renderInstManager.pushRenderInst();
+        renderInst1.drawIndexes(oneStripIndexCount);
+
+        if (isCross) {
+            // Since we use a tristrip, that means that if we have 5 particles, we'll have 10 vertices (0-9), with the index
+            // buffer doing something like this at the end: 6 7 8,  8 7 9,  8 9 10,  10 9 11,  10 11 12
+            // In order to start a "new" tristrip after 10 vertices, we need to find that first "10 11 12", which should be
+            // two index pairs (or 6 index values) after the last used index pair.
+            const renderInst2 = renderHelper.renderInstManager.pushRenderInst();
+            renderInst2.drawIndexes(oneStripIndexCount, oneStripIndexCount + 6);
+        }
+
+        renderHelper.renderInstManager.popTemplateRenderInst();
+    }
+
     private drawP(device: GfxDevice, renderHelper: GXRenderHelperGfx, workData: JPAEmitterWorkData): void {
         const bsp1 = this.resData.res.bsp1;
         const etx1 = this.resData.res.etx1;
@@ -1505,8 +1712,9 @@ export class JPABaseEmitter {
 
         // mpDrawEmitterFuncList
 
+        const isEnableTextureAnm = !!(bsp1.texFlags & 0x00000001);
         const texCalcOnEmitter = !!(bsp1.flags & 0x00004000);
-        if (texCalcOnEmitter)
+        if (!isEnableTextureAnm || texCalcOnEmitter)
             this.resData.texData[this.texAnmIdx].fillTextureMapping(materialParams.m_TextureMapping[0]);
 
         if (etx1 !== null) {
@@ -1525,24 +1733,28 @@ export class JPABaseEmitter {
         else if (!isEnableTexScrollAnm)
             calcTexCrdMtxIdt(materialParams.u_TexMtx[0], bsp1);
 
-        const needsPrevPos = bsp1.dirType === DirType.PrevPctl;
-        if (needsPrevPos)
-            this.calcEmitterGlobalPosition(workData.prevParticlePos);
-
-        let sortKeyBias = 0;
-        if (!!(bsp1.flags & 0x200000)) {
-            for (let i = 0; i < this.aliveParticlesBase.length; i++) {
-                workData.particleSortKey = setSortKeyBias(workData.particleSortKey, sortKeyBias++);
-                this.aliveParticlesBase[i].drawP(device, renderHelper, workData, materialParams);
-                if (needsPrevPos)
-                    vec3.copy(workData.prevParticlePos, this.aliveParticlesBase[i].position);
-            }
+        if (bsp1.shapeType === ShapeType.Stripe || bsp1.shapeType === ShapeType.StripeCross) {
+            this.drawStripe(device, renderHelper, workData, bsp1);
         } else {
-            for (let i = this.aliveParticlesBase.length - 1; i >= 0; i--) {
-                workData.particleSortKey = setSortKeyBias(workData.particleSortKey, sortKeyBias++);
-                this.aliveParticlesBase[i].drawP(device, renderHelper, workData, materialParams);
-                if (needsPrevPos)
-                    vec3.copy(workData.prevParticlePos, this.aliveParticlesBase[i].position);
+            const needsPrevPos = bsp1.dirType === DirType.PrevPctl;
+            if (needsPrevPos)
+                this.calcEmitterGlobalPosition(workData.prevParticlePos);
+
+            let sortKeyBias = 0;
+            if (!!(bsp1.flags & 0x200000)) {
+                for (let i = 0; i < this.aliveParticlesBase.length; i++) {
+                    workData.particleSortKey = setSortKeyBias(workData.particleSortKey, sortKeyBias++);
+                    this.aliveParticlesBase[i].drawP(device, renderHelper, workData, materialParams);
+                    if (needsPrevPos)
+                        vec3.copy(workData.prevParticlePos, this.aliveParticlesBase[i].position);
+                }
+            } else {
+                for (let i = this.aliveParticlesBase.length - 1; i >= 0; i--) {
+                    workData.particleSortKey = setSortKeyBias(workData.particleSortKey, sortKeyBias++);
+                    this.aliveParticlesBase[i].drawP(device, renderHelper, workData, materialParams);
+                    if (needsPrevPos)
+                        vec3.copy(workData.prevParticlePos, this.aliveParticlesBase[i].position);
+                }
             }
         }
 
@@ -1571,25 +1783,28 @@ export class JPABaseEmitter {
 
         // mpDrawEmitterChildFuncList
 
-        const needsPrevPos = bsp1.dirType === DirType.PrevPctl;
-        if (needsPrevPos)
-            this.calcEmitterGlobalPosition(workData.prevParticlePos);
-
-        let sortKeyBias = 0;
-
-        if (!!(bsp1.flags & 0x200000)) {
-            for (let i = 0; i < this.aliveParticlesChild.length; i++) {
-                workData.particleSortKey = setSortKeyBias(workData.particleSortKey, sortKeyBias++);
-                this.aliveParticlesChild[i].drawC(device, renderHelper, workData, materialParams);
-                if (needsPrevPos)
-                    vec3.copy(workData.prevParticlePos, this.aliveParticlesChild[i].position);
-            }
+        if (bsp1.shapeType === ShapeType.Stripe || bsp1.shapeType === ShapeType.StripeCross) {
+            this.drawStripe(device, renderHelper, workData, ssp1);
         } else {
-            for (let i = this.aliveParticlesChild.length - 1; i >= 0; i--) {
-                workData.particleSortKey = setSortKeyBias(workData.particleSortKey, sortKeyBias++);
-                this.aliveParticlesChild[i].drawC(device, renderHelper, workData, materialParams);
-                if (needsPrevPos)
-                    vec3.copy(workData.prevParticlePos, this.aliveParticlesChild[i].position);
+            const needsPrevPos = bsp1.dirType === DirType.PrevPctl;
+            if (needsPrevPos)
+                this.calcEmitterGlobalPosition(workData.prevParticlePos);
+
+            let sortKeyBias = 0;
+            if (!!(bsp1.flags & 0x200000)) {
+                for (let i = 0; i < this.aliveParticlesChild.length; i++) {
+                    workData.particleSortKey = setSortKeyBias(workData.particleSortKey, sortKeyBias++);
+                    this.aliveParticlesChild[i].drawC(device, renderHelper, workData, materialParams);
+                    if (needsPrevPos)
+                        vec3.copy(workData.prevParticlePos, this.aliveParticlesChild[i].position);
+                }
+            } else {
+                for (let i = this.aliveParticlesChild.length - 1; i >= 0; i--) {
+                    workData.particleSortKey = setSortKeyBias(workData.particleSortKey, sortKeyBias++);
+                    this.aliveParticlesChild[i].drawC(device, renderHelper, workData, materialParams);
+                    if (needsPrevPos)
+                        vec3.copy(workData.prevParticlePos, this.aliveParticlesChild[i].position);
+                }
             }
         }
     }
@@ -1692,6 +1907,78 @@ function mat4SwapTranslationColumns(m: mat4): void {
     const ty = m[13];
     m[13] = m[9];
     m[9] = ty;
+}
+
+
+function loadPrjTexMtx(dst: mat4, workData: JPAEmitterWorkData, posMtx: mat4): boolean {
+    const bsp1 = workData.baseEmitter.resData.res.bsp1;
+
+    const isEnableProjection = !!(bsp1.flags & 0x00100000);
+    const isEnableTexScrollAnm = !!(bsp1.flags & 0x01000000);
+    if (isEnableProjection) {
+        if (isEnableTexScrollAnm) {
+            // loadPrjAnm
+            calcTexCrdMtxAnm(dst, bsp1, workData.baseEmitter.tick);
+            mat4SwapTranslationColumns(dst);
+            mat4.mul(dst, dst, workData.texPrjMtx);
+            mat4.mul(dst, dst, posMtx);
+        } else {
+            // loadPrj
+            mat4.mul(dst, workData.texPrjMtx, posMtx);
+        }
+    }
+
+    return isEnableProjection;
+}
+
+function applyDir(v: vec3, p: JPABaseParticle, dirType: DirType, workData: JPAEmitterWorkData): void {
+    if (dirType === DirType.Vel)
+        vec3.copy(v, p.velocity);
+    else if (dirType === DirType.Pos)
+        vec3.copy(v, p.localPosition);
+    else if (dirType === DirType.PosInv)
+        vec3.negate(v, p.localPosition);
+    else if (dirType === DirType.EmtrDir)
+        vec3.copy(v, workData.emitterGlobalDir);
+    else if (dirType === DirType.PrevPctl)
+        vec3.copy(v, workData.prevParticlePos);
+}
+
+function fillParticleRenderInst(device: GfxDevice, renderHelper: GXRenderHelperGfx, workData: JPAEmitterWorkData, renderInst: GfxRenderInst, materialParams: MaterialParams, packetParams: PacketParams): void {
+    const materialHelper = workData.baseEmitter.resData.materialHelper;
+    materialHelper.setOnRenderInst(device, renderHelper.renderInstManager.gfxRenderCache, renderInst);
+
+    let materialOffs = renderInst.allocateUniformBuffer(ub_MaterialParams, materialHelper.materialParamsBufferSize);
+    let packetOffs = renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
+    const d = renderHelper.uniformBuffer.mapBufferF32(materialOffs, materialHelper.materialParamsBufferSize + u_PacketParamsBufferSize);
+
+    // Since this is called quite a *lot*, we have hand-crafted versions of
+    // fillMaterialParamsData and fillPacketParamsData for speed here.
+
+    // Skip AMB0, AMB1, MAT0, MAT1, K0, K1, K2, K3, CPREV.
+    materialOffs += 4*9;
+    materialOffs += fillColor(d, materialOffs, materialParams.u_Color[ColorKind.C0]);
+    materialOffs += fillColor(d, materialOffs, materialParams.u_Color[ColorKind.C1]);
+    // Skip C2.
+    materialOffs += 4*1;
+
+    materialOffs += fillMatrix4x3(d, materialOffs, materialParams.u_TexMtx[0]);
+    // Skip u_TexMtx[1-9]
+    materialOffs += 4*3*9;
+
+    materialOffs += fillTextureMappingInfo(d, materialOffs, materialParams.m_TextureMapping[0]);
+    // Skip u_TextureInfo[1]
+    materialOffs += 4;
+    materialOffs += fillTextureMappingInfo(d, materialOffs, materialParams.m_TextureMapping[2]);
+    materialOffs += fillTextureMappingInfo(d, materialOffs, materialParams.m_TextureMapping[3]);
+    // Skip u_TextureInfo[4-8]
+    materialOffs += 4*4;
+
+    materialOffs += fillMatrix4x2(d, materialOffs, materialParams.u_IndTexMtx[0]);
+
+    packetOffs += fillMatrix4x3(d, packetOffs, packetParams.u_PosMtx[0]);
+
+    renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 }
 
 const scratchMatrix = mat4.create();
@@ -2383,37 +2670,13 @@ export class JPABaseParticle {
     }
 
     private loadTexMtx(dst: mat4, workData: JPAEmitterWorkData, posMtx: mat4): void {
-        const bsp1 = workData.baseEmitter.resData.res.bsp1;
-
-        const isEnableProjection = !!(bsp1.flags & 0x00100000);
-        const isEnableTexScrollAnm = !!(bsp1.flags & 0x01000000);
-        if (isEnableProjection) {
+        if (!loadPrjTexMtx(dst, workData, posMtx)) {
+            const bsp1 = workData.baseEmitter.resData.res.bsp1;
+            const isEnableTexScrollAnm = !!(bsp1.flags & 0x01000000);
             if (isEnableTexScrollAnm) {
-                // loadPrjAnm
-                calcTexCrdMtxAnm(dst, bsp1, workData.baseEmitter.tick);
-                mat4SwapTranslationColumns(dst);
-                mat4.mul(dst, dst, workData.texPrjMtx);
-                mat4.mul(dst, dst, posMtx);
-            } else {
-                // loadPrj
-                mat4.mul(dst, workData.texPrjMtx, posMtx);
+                calcTexCrdMtxAnm(dst, bsp1, this.tick);
             }
-        } else if (isEnableTexScrollAnm) {
-            calcTexCrdMtxAnm(dst, bsp1, this.tick);
         }
-    }
-
-    private applyDir(v: vec3, dirType: DirType, workData: JPAEmitterWorkData): void {
-        if (dirType === DirType.Vel)
-            vec3.copy(v, this.velocity);
-        else if (dirType === DirType.Pos)
-            vec3.copy(v, this.localPosition);
-        else if (dirType === DirType.PosInv)
-            vec3.negate(v, this.localPosition);
-        else if (dirType === DirType.EmtrDir)
-            vec3.copy(v, workData.emitterGlobalDir);
-        else if (dirType === DirType.PrevPctl)
-            vec3.copy(v, workData.prevParticlePos);
     }
 
     private applyPlane(m: mat4, plane: PlaneType, scaleX: number, scaleY: number): void {
@@ -2545,21 +2808,13 @@ export class JPABaseParticle {
         const esp1 = workData.baseEmitter.resData.res.esp1;
         const isRot = esp1 !== null && esp1.isEnableRotate;
 
-        const materialHelper = workData.baseEmitter.resData.materialHelper;
         const renderInstManager = renderHelper.renderInstManager;
-
         const renderInst = renderInstManager.pushRenderInst();
         renderInst.sortKey = workData.particleSortKey;
-        materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
-
-        colorMult(materialParams.u_Color[ColorKind.C0], this.colorPrm, workData.baseEmitter.globalColorPrm);
-        materialParams.u_Color[ColorKind.C0].a *= this.prmColorAlphaAnm;
-        colorMult(materialParams.u_Color[ColorKind.C1], this.colorEnv, workData.baseEmitter.globalColorEnv);
 
         const globalRes = workData.emitterManager.globalRes;
         const shapeType = sp1.shapeType;
 
-        // TODO(jstpierre): Other shape types
         if (shapeType === ShapeType.Billboard) {
             const rotateAngle = isRot ? this.rotateAngle : 0;
             vec3.transformMat4(scratchVec3a, this.position, workData.posCamMtx);
@@ -2574,7 +2829,7 @@ export class JPABaseParticle {
             renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateBillboard);
             renderInst.drawIndexes(6, 0);
         } else if (shapeType === ShapeType.Direction || shapeType === ShapeType.DirectionCross) {
-            this.applyDir(scratchVec3a, sp1.dirType, workData);
+            applyDir(scratchVec3a, this, sp1.dirType, workData);
             vec3.normalize(scratchVec3a, scratchVec3a);
 
             vec3.cross(scratchVec3b, this.prevAxis, scratchVec3a);
@@ -2636,7 +2891,7 @@ export class JPABaseParticle {
             else
                 renderInst.drawIndexes(6, 0);
         } else if (shapeType === ShapeType.DirBillboard) {
-            this.applyDir(scratchVec3a, sp1.dirType, workData);
+            applyDir(scratchVec3a, this, sp1.dirType, workData);
             vec3.set(scratchVec3b, workData.posCamMtx[2], workData.posCamMtx[6], workData.posCamMtx[10]);
 
             vec3.cross(scratchVec3a, scratchVec3a, scratchVec3b);
@@ -2702,7 +2957,7 @@ export class JPABaseParticle {
             dst[12] = scratchVec3b[0];
             dst[13] = scratchVec3b[1];
             dst[14] = scratchVec3b[2];
-            this.loadTexMtx(materialParams.u_TexMtx[0], workData, packetParams.u_PosMtx[0]);
+            this.loadTexMtx(materialParams.u_TexMtx[0], workData, dst);
 
             renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateBillboard);
             renderInst.drawIndexes(6, 0);
@@ -2710,37 +2965,11 @@ export class JPABaseParticle {
             throw "whoops";
         }
 
-        let materialOffs = renderInst.allocateUniformBuffer(ub_MaterialParams, materialHelper.materialParamsBufferSize);
-        let packetOffs = renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
-        const d = renderHelper.uniformBuffer.mapBufferF32(materialOffs, materialHelper.materialParamsBufferSize + u_PacketParamsBufferSize);
+        colorMult(materialParams.u_Color[ColorKind.C0], this.colorPrm, workData.baseEmitter.globalColorPrm);
+        materialParams.u_Color[ColorKind.C0].a *= this.prmColorAlphaAnm;
+        colorMult(materialParams.u_Color[ColorKind.C1], this.colorEnv, workData.baseEmitter.globalColorEnv);
 
-        // Since this is called quite a *lot*, we have hand-crafted versions of
-        // fillMaterialParamsData and fillPacketParamsData for speed here.
-
-        // Skip AMB0, AMB1, MAT0, MAT1, K0, K1, K2, K3, CPREV.
-        materialOffs += 4*9;
-        materialOffs += fillColor(d, materialOffs, materialParams.u_Color[ColorKind.C0]);
-        materialOffs += fillColor(d, materialOffs, materialParams.u_Color[ColorKind.C1]);
-        // Skip C2.
-        materialOffs += 4*1;
-
-        materialOffs += fillMatrix4x3(d, materialOffs, materialParams.u_TexMtx[0]);
-        // Skip u_TexMtx[1-9]
-        materialOffs += 4*3*9;
-
-        materialOffs += fillTextureMappingInfo(d, materialOffs, materialParams.m_TextureMapping[0]);
-        // Skip u_TextureInfo[1]
-        materialOffs += 4;
-        materialOffs += fillTextureMappingInfo(d, materialOffs, materialParams.m_TextureMapping[2]);
-        materialOffs += fillTextureMappingInfo(d, materialOffs, materialParams.m_TextureMapping[3]);
-        // Skip u_TextureInfo[4-8]
-        materialOffs += 4*4;
-
-        materialOffs += fillMatrix4x2(d, materialOffs, materialParams.u_IndTexMtx[0]);
-
-        packetOffs += fillMatrix4x3(d, packetOffs, packetParams.u_PosMtx[0]);
-
-        renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+        fillParticleRenderInst(device, renderHelper, workData, renderInst, materialParams, packetParams);
     }
 
     public drawP(device: GfxDevice, renderHelper: GXRenderHelperGfx, workData: JPAEmitterWorkData, materialParams: MaterialParams): void {
@@ -2954,7 +3183,8 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             const texScrollRotate = view.getFloat32(dataBegin + 0x50);
 
             let texIdxAnimData: Uint8Array | null = null;
-            if (!!(texFlags & 0x01))
+            const isEnableTextureAnm = !!(texFlags & 0x00000001);
+            if (isEnableTextureAnm)
                 texIdxAnimData = buffer.createTypedArray(Uint8Array, tableIdx + 0x60, texIdxAnimCount, Endianness.BIG_ENDIAN);
 
             bsp1 = {
@@ -2982,6 +3212,8 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             const anmTypeY = !!((flags >>> 0x13) & 0x01);
             const scaleAnmTypeX = isEnableScaleAnmX ? anmTypeX ? CalcScaleAnmType.Reverse : CalcScaleAnmType.Repeat : CalcScaleAnmType.Normal;
             const scaleAnmTypeY = isEnableScaleAnmY ? anmTypeY ? CalcScaleAnmType.Reverse : CalcScaleAnmType.Repeat : CalcScaleAnmType.Normal;
+            const pivotX = (flags >>> 0x0C) & 0x03;
+            const pivotY = (flags >>> 0x10) & 0x03;
 
             const alphaInTiming = view.getFloat32(dataBegin + 0x08);
             const alphaOutTiming = view.getFloat32(dataBegin + 0x0C);
@@ -3035,7 +3267,7 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             const alphaWaveFrequency = alphaWaveParam2;
 
             esp1 = { flags,
-                isEnableScale, isDiffXY, scaleAnmTypeX, scaleAnmTypeY, isEnableAlpha, isEnableSinWave, isEnableRotate,
+                isEnableScale, isDiffXY, scaleAnmTypeX, scaleAnmTypeY, isEnableAlpha, isEnableSinWave, isEnableRotate, pivotX, pivotY,
                 scaleInTiming, scaleOutTiming, scaleInValueX, scaleOutValueX, scaleInValueY, scaleOutValueY,
                 scaleIncreaseRateX, scaleIncreaseRateY, scaleDecreaseRateX, scaleDecreaseRateY,
                 scaleOutRandom, scaleAnmMaxFrameX, scaleAnmMaxFrameY,
@@ -3357,7 +3589,9 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             }
 
             let texIdxAnimData: Uint8Array | null = null;
-            if (!!(texFlags & 0x01))
+
+            const isEnableTextureAnm = !!(texFlags & 0x00000001);
+            if (isEnableTextureAnm)
                 texIdxAnimData = buffer.createTypedArray(Uint8Array, extraDataOffs, texIdxAnimCount, Endianness.BIG_ENDIAN);
 
             const colorRegAnmMaxFrm = view.getUint16(tableIdx + 0x24);
@@ -3397,6 +3631,8 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             const isEnableRotate  = !!(flags & 0x01000000);
             const scaleAnmTypeX   = (flags >>> 0x08) & 0x03;
             const scaleAnmTypeY   = (flags >>> 0x0A) & 0x03;
+            const pivotX          = (flags >>> 0x0C) & 0x03;
+            const pivotY          = (flags >>> 0x0E) & 0x03;
 
             const scaleInTiming =  view.getFloat32(tableIdx + 0x0C);
             const scaleOutTiming = view.getFloat32(tableIdx + 0x10);
@@ -3445,7 +3681,7 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             const rotateDirection = view.getFloat32(tableIdx + 0x5C);
 
             esp1 = { flags,
-                isEnableScale, isDiffXY, scaleAnmTypeX, scaleAnmTypeY, isEnableAlpha, isEnableSinWave, isEnableRotate,
+                isEnableScale, isDiffXY, scaleAnmTypeX, scaleAnmTypeY, isEnableAlpha, isEnableSinWave, isEnableRotate, pivotX, pivotY,
                 scaleInTiming, scaleOutTiming, scaleInValueX, scaleOutValueX, scaleInValueY, scaleOutValueY,
                 scaleIncreaseRateX, scaleIncreaseRateY, scaleDecreaseRateX, scaleDecreaseRateY,
                 scaleOutRandom, scaleAnmMaxFrameX, scaleAnmMaxFrameY,

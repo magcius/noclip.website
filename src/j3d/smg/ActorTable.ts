@@ -49,7 +49,7 @@ const ActorTable: ActorTableEntry[] = [
     _("YellowChip",                     YellowChip),
 
     // Not good enough for prime-time yet.
-    // _("ShootingStar",         ShootingStar),
+    _("ShootingStar",                   ShootingStar),
 
     // Sky/Air
     _("AstroDomeSkyA",                  Sky),

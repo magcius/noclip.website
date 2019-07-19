@@ -356,8 +356,8 @@ class SMGRenderer implements Viewer.SceneGfx {
         // drawOpa(0x21); drawXlu(0x21);
         // XXX(jstpierre): Crystal is here? It seems like it uses last frame's indirect texture, which makes sense...
         // but are we sure crystals draw before everything else?
-        this.drawOpa(passRenderer, DrawBufferType.CRYSTAL);
-        this.drawXlu(passRenderer, DrawBufferType.CRYSTAL);
+        // XXX(jstpierre): This doesn't jive with the cleared depth buffer, so I'm moving it to right after we draw the prior airs...
+        // are prior airs just incompatible with crystals?
         // drawOpa(0x20); drawXlu(0x20);
         // drawOpa(0x23); drawXlu(0x23);
 
@@ -376,6 +376,9 @@ class SMGRenderer implements Viewer.SceneGfx {
         passRenderer.endPass(null);
         device.submitPass(passRenderer);
         passRenderer = this.mainRenderTarget.createRenderPass(device, depthClearRenderPassDescriptor);
+
+        this.drawOpa(passRenderer, DrawBufferType.CRYSTAL);
+        this.drawXlu(passRenderer, DrawBufferType.CRYSTAL);
 
         this.drawOpa(passRenderer, DrawBufferType.PLANET);
         this.drawOpa(passRenderer, 0x05); // planet strong light?
