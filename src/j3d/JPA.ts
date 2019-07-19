@@ -1039,6 +1039,25 @@ function calcColor(dstPrm: Color, dstEnv: Color, workData: JPAEmitterWorkData, t
         colorCopy(dstEnv, bsp1.colorEnvAnimData[anmIdx]);
 }
 
+function isNearZero(v: vec3, min: number): boolean {
+    return (
+        v[0] > -min && v[0] < min &&
+        v[1] > -min && v[1] < min &&
+        v[2] > -min && v[2] < min
+    );
+}
+
+// JPA appends new particles to the *front* of its linked list. We append
+// particles to the *end* of our array (since adding to the start is expensive).
+//
+// That means wherever we iterate over particles, we do the opposite of what
+// the traversal order bit says. In the original code, FORWARD is 0x00, and
+// REVERSE is 0x01.
+const enum TraverseOrder {
+    REVERSE = 0x00,
+    FORWARD = 0x01,
+}
+
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
 const scratchVec3Points = nArray(4, () => vec3.create());
@@ -1579,7 +1598,8 @@ export class JPABaseEmitter {
 
         const bsp1 = this.resData.res.bsp1;
         const esp1 = this.resData.res.esp1;
-        const reverseOrder = !!(bsp1.flags & 0x200000);
+        const traverseOrder: TraverseOrder = (bsp1.flags >>> 21) & 0x01;
+        const reverseOrder = traverseOrder === TraverseOrder.REVERSE;
 
         const globalScaleX = 25 * workData.globalScale2D[0];
         const pivotX = (esp1 !== null && esp1.isEnableScale) ? (esp1.pivotX - 1.0) : 0.0;
@@ -1597,7 +1617,8 @@ export class JPABaseEmitter {
         const entry = workData.emitterManager.stripeBufferManager.allocateVertexBuffer(device, bufferVertexCount);
 
         mat4.copy(packetParams.u_PosMtx[0], workData.posCamMtx);
-        loadPrjTexMtx(materialParams.u_TexMtx[0], workData, workData.posCamMtx);
+        if (!calcTexCrdMtxPrj(materialParams.u_TexMtx[0], workData, workData.posCamMtx))
+            calcTexCrdMtxAnm(materialParams.u_TexMtx[0], bsp1, workData.baseEmitter.tick);
 
         scratchMatrix[12] = 0;
         scratchMatrix[13] = 0;
@@ -1611,9 +1632,15 @@ export class JPABaseEmitter {
             const p = this.aliveParticlesBase[particleIndex];
 
             applyDir(scratchVec3c, p, sp1.dirType, workData);
-            vec3.normalize(scratchVec3c, scratchVec3c);
+            if (isNearZero(scratchVec3c, 0.001))
+                vec3.set(scratchVec3c, 0, 1, 0);
+            else
+                vec3.normalize(scratchVec3c, scratchVec3c);
             vec3.cross(scratchVec3d, p.prevAxis, scratchVec3c);
-            vec3.normalize(scratchVec3d, scratchVec3d);
+            if (isNearZero(scratchVec3d, 0.001))
+                vec3.set(scratchVec3d, 1, 0, 0);
+            else
+                vec3.normalize(scratchVec3d, scratchVec3d);
             vec3.cross(p.prevAxis, scratchVec3c, scratchVec3d);
             vec3.normalize(p.prevAxis, p.prevAxis);
 
@@ -1714,7 +1741,9 @@ export class JPABaseEmitter {
 
         const isEnableTextureAnm = !!(bsp1.texFlags & 0x00000001);
         const texCalcOnEmitter = !!(bsp1.flags & 0x00004000);
-        if (!isEnableTextureAnm || texCalcOnEmitter)
+        if (!isEnableTextureAnm)
+            this.resData.texData[bsp1.texIdx].fillTextureMapping(materialParams.m_TextureMapping[0]);
+        else if (!texCalcOnEmitter)
             this.resData.texData[this.texAnmIdx].fillTextureMapping(materialParams.m_TextureMapping[0]);
 
         if (etx1 !== null) {
@@ -1741,20 +1770,15 @@ export class JPABaseEmitter {
                 this.calcEmitterGlobalPosition(workData.prevParticlePos);
 
             let sortKeyBias = 0;
-            if (!!(bsp1.flags & 0x200000)) {
-                for (let i = 0; i < this.aliveParticlesBase.length; i++) {
-                    workData.particleSortKey = setSortKeyBias(workData.particleSortKey, sortKeyBias++);
-                    this.aliveParticlesBase[i].drawP(device, renderHelper, workData, materialParams);
-                    if (needsPrevPos)
-                        vec3.copy(workData.prevParticlePos, this.aliveParticlesBase[i].position);
-                }
-            } else {
-                for (let i = this.aliveParticlesBase.length - 1; i >= 0; i--) {
-                    workData.particleSortKey = setSortKeyBias(workData.particleSortKey, sortKeyBias++);
-                    this.aliveParticlesBase[i].drawP(device, renderHelper, workData, materialParams);
-                    if (needsPrevPos)
-                        vec3.copy(workData.prevParticlePos, this.aliveParticlesBase[i].position);
-                }
+
+            const traverseOrder: TraverseOrder = (bsp1.flags >>> 21) & 0x01;
+            const n = this.aliveParticlesBase.length;
+            for (let i = 0; i < n; i++) {
+                const index = traverseOrder === TraverseOrder.REVERSE ? n - 1 - i : i;
+                workData.particleSortKey = setSortKeyBias(workData.particleSortKey, sortKeyBias++);
+                this.aliveParticlesBase[index].drawP(device, renderHelper, workData, materialParams);
+                if (needsPrevPos)
+                    vec3.copy(workData.prevParticlePos, this.aliveParticlesBase[index].position);
             }
         }
 
@@ -1791,20 +1815,15 @@ export class JPABaseEmitter {
                 this.calcEmitterGlobalPosition(workData.prevParticlePos);
 
             let sortKeyBias = 0;
-            if (!!(bsp1.flags & 0x200000)) {
-                for (let i = 0; i < this.aliveParticlesChild.length; i++) {
-                    workData.particleSortKey = setSortKeyBias(workData.particleSortKey, sortKeyBias++);
-                    this.aliveParticlesChild[i].drawC(device, renderHelper, workData, materialParams);
-                    if (needsPrevPos)
-                        vec3.copy(workData.prevParticlePos, this.aliveParticlesChild[i].position);
-                }
-            } else {
-                for (let i = this.aliveParticlesChild.length - 1; i >= 0; i--) {
-                    workData.particleSortKey = setSortKeyBias(workData.particleSortKey, sortKeyBias++);
-                    this.aliveParticlesChild[i].drawC(device, renderHelper, workData, materialParams);
-                    if (needsPrevPos)
-                        vec3.copy(workData.prevParticlePos, this.aliveParticlesChild[i].position);
-                }
+
+            const traverseOrder: TraverseOrder = (bsp1.flags >>> 21) & 0x01;
+            const n = this.aliveParticlesChild.length;
+            for (let i = 0; i < n; i++) {
+                const index = traverseOrder === TraverseOrder.REVERSE ? n - 1 - i : i;
+                workData.particleSortKey = setSortKeyBias(workData.particleSortKey, sortKeyBias++);
+                this.aliveParticlesChild[index].drawP(device, renderHelper, workData, materialParams);
+                if (needsPrevPos)
+                    vec3.copy(workData.prevParticlePos, this.aliveParticlesChild[index].position);
             }
         }
     }
@@ -1850,8 +1869,11 @@ function normToLengthAndAdd(dst: vec3, a: vec3, len: number): void {
 }
 
 function calcTexCrdMtxAnm(dst: mat4, bsp1: JPABaseShapeBlock, tick: number): void {
-    const translationS = bsp1.texStaticTransX + tick * bsp1.texScrollTransX;
-    const translationT = bsp1.texStaticTransY + tick * bsp1.texScrollTransY;
+    const offsS = 0.5 * bsp1.tilingX;
+    const offsT = 0.5 * bsp1.tilingY;
+
+    const translationS = (bsp1.texStaticTransX + tick * bsp1.texScrollTransX) + offsS;
+    const translationT = (bsp1.texStaticTransY + tick * bsp1.texScrollTransY) + offsS;
     const scaleS = (bsp1.texStaticScaleX + tick * bsp1.texScrollScaleX) * bsp1.tilingX;
     const scaleT = (bsp1.texStaticScaleY + tick * bsp1.texScrollScaleY) * bsp1.tilingY;
     const rotate = (bsp1.texStaticRotate + tick * bsp1.texScrollRotate) * MathConstants.TAU / 0x3FFF;
@@ -1862,12 +1884,12 @@ function calcTexCrdMtxAnm(dst: mat4, bsp1: JPABaseShapeBlock, tick: number): voi
     dst[0]  = scaleS *  cosR;
     dst[4]  = scaleS * -sinR;
     dst[8]  = 0.0;
-    dst[12] = scaleS * (sinR * translationT - cosR * translationS);
+    dst[12] = offsS + scaleS * (sinR * translationT - cosR * translationS);
 
     dst[1]  = scaleT *  sinR;
     dst[5]  = scaleT *  cosR;
     dst[9]  = 0.0;
-    dst[13] = -scaleT * (sinR * translationS + cosR * translationT);
+    dst[13] = offsT + -scaleT * (sinR * translationS + cosR * translationT);
 
     dst[2] = 0.0;
     dst[6] = 0.0;
@@ -1910,7 +1932,7 @@ function mat4SwapTranslationColumns(m: mat4): void {
 }
 
 
-function loadPrjTexMtx(dst: mat4, workData: JPAEmitterWorkData, posMtx: mat4): boolean {
+function calcTexCrdMtxPrj(dst: mat4, workData: JPAEmitterWorkData, posMtx: mat4): boolean {
     const bsp1 = workData.baseEmitter.resData.res.bsp1;
 
     const isEnableProjection = !!(bsp1.flags & 0x00100000);
@@ -2670,7 +2692,7 @@ export class JPABaseParticle {
     }
 
     private loadTexMtx(dst: mat4, workData: JPAEmitterWorkData, posMtx: mat4): void {
-        if (!loadPrjTexMtx(dst, workData, posMtx)) {
+        if (!calcTexCrdMtxPrj(dst, workData, posMtx)) {
             const bsp1 = workData.baseEmitter.resData.res.bsp1;
             const isEnableTexScrollAnm = !!(bsp1.flags & 0x01000000);
             if (isEnableTexScrollAnm) {
@@ -3355,8 +3377,6 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
 
             const flags = view.getUint32(dataBegin + 0x00);
             const type: JPAFieldType = flags & 0x0F;
-            if (type === JPAFieldType.Convection)
-                console.log(`${res.resourceId} convect`);
             const velType: JPAFieldVelType = (flags >>> 8) & 0x03;
 
             const mag = view.getFloat32(dataBegin + 0x04);

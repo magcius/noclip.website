@@ -643,8 +643,8 @@ export class EffectSystem {
 
     public createSingleEmitter(singleEmitter: SingleEmitter): void {
         if (singleEmitter.isValid()) {
-            // if (!singleEmitter.isOneTime())
-            //     return;
+            if (!singleEmitter.isOneTime())
+                return;
             singleEmitter.unlink();
         }
     

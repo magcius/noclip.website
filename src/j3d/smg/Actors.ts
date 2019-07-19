@@ -1590,6 +1590,8 @@ export class ShootingStar extends LiveActor {
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.movement(sceneObjHolder, viewerInput);
 
+        const SPEED = 10 * MathConstants.DEG_TO_RAD;
+        this.rotation[1] = (this.rotation[1] + (SPEED * getDeltaTimeFrames(viewerInput))) % MathConstants.TAU;
         const currentNerve = this.getCurrentNerve();
 
         if (currentNerve === ShootingStarNrv.PRE_SHOOTING) {

@@ -499,7 +499,7 @@ class SimpleEffectSystem {
         function move() {
             t += 0.1;
             emitter.globalTranslation[0] = orig[0] + Math.sin(t) * 50;
-            emitter.globalTranslation[1] = orig[1];
+            emitter.globalTranslation[1] = orig[1] + Math.sin(t * 0.777) * 50;
             emitter.globalTranslation[2] = orig[2] + Math.cos(t) * 50;
             requestAnimationFrame(move);
         }
