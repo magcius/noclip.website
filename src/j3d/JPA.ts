@@ -349,9 +349,22 @@ const enum CalcScaleAnmType {
     Reverse = 0x02,
 }
 
+function shapeTypeSupported(shapeType: ShapeType): boolean {
+    switch (shapeType) {
+    case ShapeType.Point:
+    case ShapeType.Line:
+    case ShapeType.Stripe:
+    case ShapeType.StripeCross:
+        return false;
+    default:
+        return true;
+    }
+}
+
 export class JPAResourceData {
     public res: JPAResource;
-    public supported: boolean = true;
+    public supportedParticle: boolean = true;
+    public supportedChild: boolean = true;
     public resourceId: number;
     public name: string;
     public texData: BTIData[] = [];
@@ -365,10 +378,14 @@ export class JPAResourceData {
         const etx1 = this.res.etx1;
         const ssp1 = this.res.ssp1;
 
-        const shapeType = bsp1.shapeType;
-        if (!(shapeType === ShapeType.Billboard || shapeType === ShapeType.Direction || shapeType === ShapeType.DirectionCross || shapeType === ShapeType.YBillboard || shapeType === ShapeType.Rotation || shapeType === ShapeType.RotationCross || shapeType === ShapeType.DirBillboard)) {
-            console.warn(`Unsupported shape type ${shapeType}`);
-            this.supported = false;
+        if (!shapeTypeSupported(bsp1.shapeType)) {
+            console.warn(`Unsupported particle shape type ${bsp1.shapeType}`);
+            this.supportedParticle = false;
+        }
+
+        if (ssp1 !== null && !shapeTypeSupported(ssp1.shapeType)) {
+            console.warn(`Unsupported child shape type ${ssp1.shapeType}`);
+            this.supportedChild = false;
         }
 
         // Translate all of the texture data.
@@ -1046,7 +1063,7 @@ export class JPABaseEmitter {
         this.texAnmIdx = 0;
         this.flags = BaseEmitterFlags.FIRST_EMISSION | BaseEmitterFlags.RATE_STEP_EMIT;
 
-        if (!this.resData.supported)
+        if (!this.resData.supportedParticle)
             this.flags |= BaseEmitterFlags.TERMINATED;
     }
 
@@ -1692,7 +1709,7 @@ export class JPABaseParticle {
     public velType1 = vec3.create();
     public velType0 = vec3.create();
     public velType2 = vec3.create();
-    public axisY = vec3.create();
+    public prevAxis = vec3.create();
 
     public scale = vec2.create();
     public scaleOut: number;
@@ -1775,7 +1792,7 @@ export class JPABaseParticle {
         this.drag = 1.0;
         this.airResist = Math.min(bem1.airResist + (bem1.airResistRndm * get_r_zh(baseEmitter.random)), 1);
         this.moment = baseEmitter.moment * (1.0 - (bem1.momentRndm * get_rndm_f(baseEmitter.random)));
-        vec3.set(this.axisY, workData.emitterGlobalRot[4], workData.emitterGlobalRot[5], workData.emitterGlobalRot[6]);
+        vec3.set(this.prevAxis, workData.emitterGlobalRot[4], workData.emitterGlobalRot[5], workData.emitterGlobalRot[6]);
 
         colorCopy(this.colorPrm, baseEmitter.colorPrm);
         colorCopy(this.colorEnv, baseEmitter.colorEnv);
@@ -1862,7 +1879,7 @@ export class JPABaseParticle {
         const totalMomentum = this.moment * this.drag;
         vec3.scale(this.velocity, this.velocity, totalMomentum);
 
-        vec3.copy(this.axisY, parent.axisY);
+        vec3.copy(this.prevAxis, parent.prevAxis);
 
         if (!!(ssp1.flags & 0x00010000)) {
             // isInheritedScale
@@ -2167,6 +2184,9 @@ export class JPABaseParticle {
     }
 
     private canCreateChild(workData: JPAEmitterWorkData): boolean {
+        if (!workData.baseEmitter.resData.supportedChild)
+            return false;
+
         const ssp1 = workData.baseEmitter.resData.res.ssp1;
 
         const timing = (this.tick - (this.lifeTime - 1) * ssp1.timing) * workData.deltaTime;
@@ -2413,11 +2433,6 @@ export class JPABaseParticle {
             m[1] *= scaleX;
             m[2] *= scaleX;
 
-            // TODO(jstpierre): Menbo ripples break without this...
-            m[4] *= scaleY;
-            m[5] *= scaleY;
-            m[6] *= scaleY;
-
             m[8] *= scaleY;
             m[9] *= scaleY;
             m[10] *= scaleY;
@@ -2563,22 +2578,23 @@ export class JPABaseParticle {
             this.applyDir(scratchVec3a, sp1.dirType, workData);
             vec3.normalize(scratchVec3a, scratchVec3a);
 
-            vec3.cross(scratchVec3b, this.axisY, scratchVec3a);
+            vec3.cross(scratchVec3b, this.prevAxis, scratchVec3a);
             vec3.normalize(scratchVec3b, scratchVec3b);
 
-            vec3.cross(this.axisY, scratchVec3a, scratchVec3b);
-            vec3.normalize(this.axisY, this.axisY);
+            vec3.cross(this.prevAxis, scratchVec3a, scratchVec3b);
+            vec3.normalize(this.prevAxis, this.prevAxis);
 
             const dst = packetParams.u_PosMtx[0];
-            dst[0] = this.axisY[0];
-            dst[1] = this.axisY[1];
-            dst[2] = this.axisY[2];
+            dst[0] = this.prevAxis[0];
+            dst[1] = this.prevAxis[1];
+            dst[2] = this.prevAxis[2];
             dst[4] = scratchVec3a[0];
             dst[5] = scratchVec3a[1];
             dst[6] = scratchVec3a[2];
             dst[8] = scratchVec3b[0];
             dst[9] = scratchVec3b[1];
             dst[10] = scratchVec3b[2];
+
             dst[12] = this.position[0];
             dst[13] = this.position[1];
             dst[14] = this.position[2];
@@ -2587,7 +2603,6 @@ export class JPABaseParticle {
             const scaleY = workData.globalScale2D[1] * this.scale[1];
             if (isRot) {
                 this.applyRot(scratchMatrix, this.rotateAngle, sp1.rotType);
-                mat4.copy(packetParams.u_PosMtx[1], scratchMatrix);
                 this.applyPlane(scratchMatrix, sp1.planeType, scaleX, scaleY);
                 mat4.mul(dst, dst, scratchMatrix);
             } else {
@@ -2719,7 +2734,7 @@ export class JPABaseParticle {
         materialOffs += 4;
         materialOffs += fillTextureMappingInfo(d, materialOffs, materialParams.m_TextureMapping[2]);
         materialOffs += fillTextureMappingInfo(d, materialOffs, materialParams.m_TextureMapping[3]);
-        // Skip u_TextureInfo[2-8]
+        // Skip u_TextureInfo[4-8]
         materialOffs += 4*4;
 
         materialOffs += fillMatrix4x2(d, materialOffs, materialParams.u_IndTexMtx[0]);

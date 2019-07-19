@@ -185,6 +185,8 @@ export function setupMultiEmitter(m: MultiEmitter, autoEffectIter: JMapInfoIter)
     const drawOrder = autoEffectIter.getValueString('DrawOrder');
     if (drawOrder === 'AFTER_INDIRECT')
         m.setDrawOrder(DrawType.EFFECT_DRAW_AFTER_INDIRECT);
+    else if (drawOrder === 'INDIRECT')
+        m.setDrawOrder(DrawType.EFFECT_DRAW_INDIRECT);
     else if (drawOrder === '3D')
         m.setDrawOrder(DrawType.EFFECT_DRAW_3D);
     else if (drawOrder === 'BLOOM_EFFECT')

@@ -466,6 +466,7 @@ class SMGRenderer implements Viewer.SceneGfx {
         this.drawXlu(passRenderer, 0x22);
         this.drawXlu(passRenderer, 0x17);
         this.drawXlu(passRenderer, 0x16);
+        this.execute(passRenderer, DrawType.EFFECT_DRAW_INDIRECT);
         this.execute(passRenderer, DrawType.EFFECT_DRAW_AFTER_INDIRECT);
 
         // executeDrawImageEffect()
