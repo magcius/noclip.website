@@ -2880,9 +2880,9 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             const emitterDir = vec3.fromValues(emitterDirX, emitterDirY, emitterDirZ);
             vec3.normalize(emitterDir, emitterDir);
 
-            const emitterRotX = view.getInt16(dataBegin + 0x78) / 0x7FFF;
-            const emitterRotY = view.getInt16(dataBegin + 0x7A) / 0x7FFF;
-            const emitterRotZ = view.getInt16(dataBegin + 0x7C) / 0x7FFF;
+            const emitterRotX = view.getInt16(dataBegin + 0x78) / 180;
+            const emitterRotY = view.getInt16(dataBegin + 0x7A) / 180;
+            const emitterRotZ = view.getInt16(dataBegin + 0x7C) / 180;
             const emitterRot = vec3.fromValues(emitterRotX, emitterRotY, emitterRotZ);
 
             bem1 = {
@@ -3269,9 +3269,9 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             const volumeMinRad = view.getFloat32(tableIdx + 0x5C);
             const airResist = view.getFloat32(tableIdx + 0x60);
             const momentRndm = view.getFloat32(tableIdx + 0x64);
-            const emitterRotX = view.getInt16(tableIdx + 0x68) / 0x7FFF;
-            const emitterRotY = view.getInt16(tableIdx + 0x6A) / 0x7FFF;
-            const emitterRotZ = view.getInt16(tableIdx + 0x6C) / 0x7FFF;
+            const emitterRotX = view.getInt16(tableIdx + 0x68) / 180;
+            const emitterRotY = view.getInt16(tableIdx + 0x6A) / 180;
+            const emitterRotZ = view.getInt16(tableIdx + 0x6C) / 180;
             const emitterRot = vec3.fromValues(emitterRotX, emitterRotY, emitterRotZ);
             const maxFrame = view.getInt16(tableIdx + 0x6E);
             const startFrame = view.getInt16(tableIdx + 0x70);
