@@ -11,7 +11,7 @@ if (module.hot) {
     });
 }
 
-import { SceneDesc, SceneGroup, Viewer, SceneGfx, InitErrorCode, initializeViewer, makeErrorUI } from './viewer';
+import { Viewer, SceneGfx, InitErrorCode, initializeViewer, makeErrorUI } from './viewer';
 
 import ArrayBufferSlice from './ArrayBufferSlice';
 import Progressable from './Progressable';
@@ -46,7 +46,6 @@ import * as Scenes_Psychonauts from './psychonauts/scenes';
 import * as Scenes_DarkSouls from './dks/scenes';
 import * as Scenes_KatamariDamacy from './katamari_damacy/scenes';
 import * as Scenes_PaperMario64 from './pm64/scenes';
-
 import * as Scenes_Elebits from './rres/Scenes_Elebits';
 import * as Scenes_KirbysReturnToDreamLand from './rres/Scenes_KirbysReturnToDreamLand';
 import * as Scenes_Klonoa from './rres/Scenes_Klonoa';
@@ -61,9 +60,9 @@ import * as Scenes_Zelda_SkywardSword from './rres/Scenes_Zelda_SkywardSword';
 
 import { DroppedFileSceneDesc } from './Scenes_FileDrops';
 
-import { UI, SaveStatesAction, FloatingPanel, RENDER_HACKS_ICON, Slider, setChildren, Panel } from './ui';
+import { UI, SaveStatesAction, setChildren, Panel } from './ui';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera';
-import { hexdump, assert } from './util';
+import { hexdump } from './util';
 import { downloadBlob, downloadBufferSlice, downloadBuffer } from './fetch';
 import { ZipFileEntry, makeZipFile } from './ZipFile';
 import { TextureHolder } from './TextureHolder';
@@ -77,7 +76,7 @@ import { standardFullClearRenderPassDescriptor } from './gfx/helpers/RenderTarge
 
 import * as Sentry from '@sentry/browser';
 import { GIT_REVISION, IS_DEVELOPMENT } from './BuildVersion';
-import { SceneContext, getSceneDescs } from './SceneBase';
+import { SceneDesc, SceneGroup, SceneContext, getSceneDescs } from './SceneBase';
 
 const sceneGroups = [
     "Wii",
@@ -221,7 +220,6 @@ class Main {
 
     private droppedFileGroup: SceneGroup;
 
-    private debugFloater: FloatingPanel | null = null;
     private currentSceneGroup: SceneGroup;
     private currentSceneDesc: SceneDesc;
 
@@ -636,64 +634,6 @@ class Main {
             this.viewer.setSceneTime(0);
             this._saveState();
         };
-    }
-
-    private makeFloater(title: string = 'Floating Panel', icon: string = RENDER_HACKS_ICON): FloatingPanel {
-        const panel = new FloatingPanel();
-        panel.setWidth(600);
-        panel.setTitle(icon, title);
-        this.ui.floatingPanelContainer.appendChild(panel.elem);
-        return panel;
-    }
-
-    private getDebugFloater(): FloatingPanel {
-        if (this.debugFloater === null)
-            this.debugFloater = this.makeFloater('Debug');
-        return this.debugFloater;
-    }
-
-    public bindSlider(obj: { [k: string]: number }, paramName: string, min = 0, max = 1, labelName: string = paramName, panel: FloatingPanel | null = null): void {
-        let value = obj[paramName];
-        assert(typeof value === "number");
-
-        if (panel === null)
-            panel = this.getDebugFloater();
-
-        const slider = new Slider();
-        slider.onvalue = (newValue: number) => {
-            obj[paramName] = newValue;
-            window.debugObj = obj;
-            update();
-        };
-        update();
-
-        function update() {
-            value = obj[paramName];
-            slider.setLabel(`${labelName} = ${value.toFixed(2)}`);
-            min = Math.min(value, min);
-            max = Math.max(value, max);
-            slider.setRange(min, max);
-            slider.setValue(value);
-        }
-
-        setInterval(() => {
-            if (obj[paramName] !== value)
-                update();
-        }, 100);
-
-        panel.contents.appendChild(slider.elem);
-    }
-
-    public bindSliders(obj: { [k: string]: any }, parentName: string = '', panel: FloatingPanel | null = null): void {
-        for (const keyName in obj) {
-            const v = obj[keyName];
-            if (typeof v === "number")
-                this.bindSlider(obj, keyName, 0, 1, `${parentName}.${keyName}`, panel);
-            if (v instanceof Float32Array)
-                this.bindSliders(v, `${parentName}.${keyName}`, panel);
-        }
-        
-        window.debugObj = obj;
     }
 
     private _toggleUI() {

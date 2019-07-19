@@ -2526,4 +2526,66 @@ export class UI {
         if (isDragging && this.shouldPanelsAutoClose())
             this.setPanelsAutoClosed(true);
     }
+
+    private makeFloater(title: string = 'Floating Panel', icon: string = RENDER_HACKS_ICON): FloatingPanel {
+        const panel = new FloatingPanel();
+        panel.setWidth(600);
+        panel.setTitle(icon, title);
+        this.floatingPanelContainer.appendChild(panel.elem);
+        return panel;
+    }
+
+    private debugFloater: FloatingPanel;
+    private getDebugFloater(): FloatingPanel {
+        if (this.debugFloater === null)
+            this.debugFloater = this.makeFloater('Debug');
+        return this.debugFloater;
+    }
+
+    public bindSlider(obj: { [k: string]: number }, paramName: string, min = 0, max = 1, labelName: string = paramName, panel: FloatingPanel): void {
+        let value = obj[paramName];
+        assert(typeof value === "number");
+
+        const slider = new Slider();
+        slider.onvalue = (newValue: number) => {
+            obj[paramName] = newValue;
+            window.debugObj = obj;
+            update();
+        };
+        update();
+
+        function update() {
+            value = obj[paramName];
+            slider.setLabel(`${labelName} = ${value.toFixed(2)}`);
+            min = Math.min(value, min);
+            max = Math.max(value, max);
+            slider.setRange(min, max);
+            slider.setValue(value);
+        }
+
+        setInterval(() => {
+            if (obj[paramName] !== value)
+                update();
+        }, 100);
+
+        panel.contents.appendChild(slider.elem);
+    }
+
+    public bindSliders(obj: { [k: string]: any }, parentName: string = '', panel: FloatingPanel | null = null): void {
+        if (panel === null)
+            panel = this.getDebugFloater();
+
+        while (panel.contents.firstChild)
+            panel.contents.removeChild(panel.contents.firstChild);
+
+        for (const keyName in obj) {
+            const v = obj[keyName];
+            if (typeof v === "number")
+                this.bindSlider(obj, keyName, 0, 1, `${parentName}.${keyName}`, panel);
+            if (v instanceof Float32Array)
+                this.bindSliders(v, `${parentName}.${keyName}`, panel);
+        }
+        
+        window.debugObj = obj;
+    }
 }
