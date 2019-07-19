@@ -1698,6 +1698,7 @@ const scratchMatrix = mat4.create();
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
+const scratchVec3d = vec3.create();
 export class JPABaseParticle {
     public flags: number;
     public time: number;
@@ -2096,16 +2097,14 @@ export class JPABaseParticle {
 
     private calcFieldConvection(field: JPAFieldBlock, workData: JPAEmitterWorkData): void {
         // Prepare
-        vec3.cross(scratchVec3a, field.pos, field.dir);
-        vec3.cross(scratchVec3b, field.dir, scratchVec3a);
+        vec3.cross(scratchVec3c, field.pos, field.dir);
+        vec3.cross(scratchVec3a, field.dir, scratchVec3c);
 
         vec3.transformMat4(scratchVec3a, scratchVec3a, workData.emitterGlobalRot);
+        vec3.transformMat4(scratchVec3b, field.dir, workData.emitterGlobalRot);
+        vec3.transformMat4(scratchVec3c, scratchVec3c, workData.emitterGlobalRot);
         vec3.normalize(scratchVec3a, scratchVec3a);
-
-        vec3.transformMat4(scratchVec3b, scratchVec3b, workData.emitterGlobalRot);
         vec3.normalize(scratchVec3b, scratchVec3b);
-
-        vec3.transformMat4(scratchVec3c, field.dir, workData.emitterGlobalRot);
         vec3.normalize(scratchVec3c, scratchVec3c);
 
         // Calc
@@ -2115,17 +2114,17 @@ export class JPABaseParticle {
         vec3.scale(scratchVec3c, scratchVec3c, cDotPos);
         vec3.add(scratchVec3a, scratchVec3a, scratchVec3c);
 
-        const sqDist = vec3.squaredLength(scratchVec3a);
-        if (field.refDistanceSq < sqDist) {
-            const scale = field.refDistanceSq / sqDist;
-            vec3.scale(scratchVec3a, scratchVec3a, scale);
-        } else {
+        const dist = vec3.length(scratchVec3a);
+        if (dist === 0) {
             vec3.set(scratchVec3a, 0, 0, 0);
+        } else {
+            const scale = field.refDistanceSq / dist;
+            vec3.scale(scratchVec3a, scratchVec3a, scale);
         }
 
-        vec3.cross(scratchVec3b, scratchVec3b, scratchVec3a);
-        vec3.sub(scratchVec3a, this.localPosition, scratchVec3a);
-        vec3.cross(scratchVec3a, scratchVec3b, scratchVec3a);
+        vec3.sub(scratchVec3d, this.localPosition, scratchVec3a);
+        vec3.cross(scratchVec3c, scratchVec3b, scratchVec3a);
+        vec3.cross(scratchVec3a, scratchVec3c, scratchVec3d);
         normToLength(scratchVec3a, field.mag);
         this.calcFieldAffect(scratchVec3a, field);
     }
@@ -3124,6 +3123,8 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
 
             const flags = view.getUint32(dataBegin + 0x00);
             const type: JPAFieldType = flags & 0x0F;
+            if (type === JPAFieldType.Convection)
+                console.log(`${res.resourceId} convect`);
             const velType: JPAFieldVelType = (flags >>> 8) & 0x03;
 
             const mag = view.getFloat32(dataBegin + 0x04);
