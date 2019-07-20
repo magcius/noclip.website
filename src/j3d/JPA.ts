@@ -624,10 +624,10 @@ function get_r_zh(random: JPARandom): number {
 
 class JPAGlobalRes {
     public inputLayout: GfxInputLayout;
-    public inputStateBillboard: GfxInputState;
+    public inputStateQuad: GfxInputState;
 
-    private vertexBufferBillboard: GfxBuffer;
-    private indexBufferBillboard: GfxBuffer;
+    private vertexBufferQuad: GfxBuffer;
+    private indexBufferQuad: GfxBuffer;
 
     constructor(device: GfxDevice) {
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
@@ -640,35 +640,142 @@ class JPAGlobalRes {
             vertexAttributeDescriptors,
         });
 
-        const x0 = -25;
-        const x1 =  25;
+        // The original JPA uses a number of different hardcoded vertex buffers
+        // depending on PivotX/PivotY and PlaneType. We handle those differences with matrices
+        // applied to this core quad.
 
-        this.vertexBufferBillboard = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, new Float32Array([
-            x0, x0, 0, 1, 0,
-            x0, x1, 0, 1, 1,
-            x1, x0, 0, 0, 0,
-            x1, x1, 0, 0, 1,
+        // Original code documentation:
+        //
+        // The used position array = BaseAddress + PivotOffs + (PlaneType * 0x6C)
+        // PivotOffs = ((PivotY * 0x03) + PivotX) * 0x0C
+        //
+        // If the ESP1 block is missing, then PivotX/PivotY are assumed to be 1, so offset 0x30 is used.
+        // Note that PlaneType is only used if the type is Direction or Rotation, so XZ plane types have
+        // no Cross variants.
+        //
+        // Original data table as follows:
+        //
+        // Pivot X: 0  Pivot Y: 0  Plane Type: XY
+        //   Offset  : 0x0000
+        //   Normal  : [[0, 0, 0], [50, 0, 0], [50, -50, 0], [0, -50, 0]]
+        //   Cross   : [[0, 0, 0], [0, 0, 50], [0, -50, 50], [0, -50, 0]]
+        //
+        // Pivot X: 0  Pivot Y: 0  Plane Type: XZ
+        //   Offset  : 0x006c
+        //   Normal  : [[0, 0, 0], [50, 0, 0], [50, 0, 50], [0, 0, 50]]
+        //   Cross   : N/A
+        //
+        // Pivot X: 0  Pivot Y: 1  Plane Type: XY
+        //   Offset  : 0x0024
+        //   Normal  : [[0, 25, 0], [50, 25, 0], [50, -25, 0], [0, -25, 0]]
+        //   Cross   : [[0, 25, 0], [0, 25, 50], [0, -25, 50], [0, -25, 0]]
+        //
+        // Pivot X: 0  Pivot Y: 1  Plane Type: XZ
+        //   Offset  : 0x0090
+        //   Normal  : [[0, 0, -25], [50, 0, -25], [50, 0, 25], [0, 0, 25]]
+        //   Cross   : N/A
+        //
+        // Pivot X: 0  Pivot Y: 2  Plane Type: XY
+        //   Offset  : 0x0048
+        //   Normal  : [[0, 50, 0], [50, 50, 0], [50, 0, 0], [0, 0, 0]]
+        //   Cross   : [[0, 50, 0], [0, 50, 50], [0, 0, 50], [0, 0, 0]]
+        //
+        // Pivot X: 0  Pivot Y: 2  Plane Type: XZ
+        //   Offset  : 0x00b4
+        //   Normal  : [[0, 0, -50], [50, 0, -50], [50, 0, 0], [0, 0, 0]]
+        //   Cross   : N/A
+        //
+        // Pivot X: 1  Pivot Y: 0  Plane Type: XY
+        //   Offset  : 0x000c
+        //   Normal  : [[-25, 0, 0], [25, 0, 0], [25, -50, 0], [-25, -50, 0]]
+        //   Cross   : [[0, 0, -25], [0, 0, 25], [0, -50, 25], [0, -50, -25]]
+        //
+        // Pivot X: 1  Pivot Y: 0  Plane Type: XZ
+        //   Offset  : 0x0078
+        //   Normal  : [[-25, 0, 0], [25, 0, 0], [25, 0, 50], [-25, 0, 50]]
+        //   Cross   : N/A
+        //
+        // Pivot X: 1  Pivot Y: 1  Plane Type: XY
+        //   Offset  : 0x0030
+        //   Normal  : [[-25, 25, 0], [25, 25, 0], [25, -25, 0], [-25, -25, 0]]
+        //   Cross   : [[0, 25, -25], [0, 25, 25], [0, -25, 25], [0, -25, -25]]
+        //
+        // Pivot X: 1  Pivot Y: 1  Plane Type: XZ
+        //   Offset  : 0x009c
+        //   Normal  : [[-25, 0, -25], [25, 0, -25], [25, 0, 25], [-25, 0, 25]]
+        //   Cross   : N/A
+        //
+        // Pivot X: 1  Pivot Y: 2  Plane Type: XY
+        //   Offset  : 0x0054
+        //   Normal  : [[-25, 50, 0], [25, 50, 0], [25, 0, 0], [-25, 0, 0]]
+        //   Cross   : [[0, 50, -25], [0, 50, 25], [0, 0, 25], [0, 0, -25]]
+        //
+        // Pivot X: 1  Pivot Y: 2  Plane Type: XZ
+        //   Offset  : 0x00c0
+        //   Normal  : [[-25, 0, -50], [25, 0, -50], [25, 0, 0], [-25, 0, 0]]
+        //   Cross   : N/A
+        //
+        // Pivot X: 2  Pivot Y: 0  Plane Type: XY
+        //   Offset  : 0x0018
+        //   Normal  : [[-50, 0, 0], [0, 0, 0], [0, -50, 0], [-50, -50, 0]]
+        //   Cross   : [[0, 0, -50], [0, 0, 0], [0, -50, 0], [0, -50, -50]]
+        //
+        // Pivot X: 2  Pivot Y: 0  Plane Type: XZ
+        //   Offset  : 0x0084
+        //   Normal  : [[-50, 0, 0], [0, 0, 0], [0, 0, 50], [-50, 0, 50]]
+        //   Cross   : N/A
+        //
+        // Pivot X: 2  Pivot Y: 1  Plane Type: XY
+        //   Offset  : 0x003c
+        //   Normal  : [[-50, 25, 0], [0, 25, 0], [0, -25, 0], [-50, -25, 0]]
+        //   Cross   : [[0, 25, -50], [0, 25, 0], [0, -25, 0], [0, -25, -50]]
+        //
+        // Pivot X: 2  Pivot Y: 1  Plane Type: XZ
+        //   Offset  : 0x00a8
+        //   Normal  : [[-50, 0, -25], [0, 0, -25], [0, 0, 25], [-50, 0, 25]]
+        //   Cross   : N/A
+        //
+        // Pivot X: 2  Pivot Y: 2  Plane Type: XY
+        //   Offset  : 0x0060
+        //   Normal  : [[-50, 50, 0], [0, 50, 0], [0, 0, 0], [-50, 0, 0]]
+        //   Cross   : [[0, 50, -50], [0, 50, 0], [0, 0, 0], [0, 0, -50]]
+        //
+        // Pivot X: 2  Pivot Y: 2  Plane Type: XZ
+        //   Offset  : 0x00cc
+        //   Normal  : [[-50, 0, -50], [0, 0, -50], [0, 0, 0], [-50, 0, 0]]
+        //   Cross   : N/A
+
+        // We handle both Pivot and Plane Type with special matrix transforms.
+
+        const n0 = -25;
+        const n1 =  25;
+
+        this.vertexBufferQuad = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, new Float32Array([
+            n0, -n0, 0, 1, 0,
+            n0, -n1, 0, 1, 1,
+            n1, -n0, 0, 0, 0,
+            n1, -n1, 0, 0, 1,
             // Cross
-            0, x0, x0, 1, 0,
-            0, x1, x0, 1, 1,
-            0, x0, x1, 0, 0,
-            0, x1, x1, 0, 1,
+            0, -n0, n0, 1, 0,
+            0, -n1, n0, 1, 1,
+            0, -n0, n1, 0, 0,
+            0, -n1, n1, 0, 1,
         ]).buffer);
-        this.indexBufferBillboard = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, new Uint16Array([
+        this.indexBufferQuad = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, new Uint16Array([
             0, 1, 2, 2, 1, 3,
             4, 5, 6, 6, 5, 7,
         ]).buffer);
 
-        this.inputStateBillboard = device.createInputState(this.inputLayout, [
-            { buffer: this.vertexBufferBillboard, byteOffset: 0, byteStride: 3*4+2*4 },
-        ], { buffer: this.indexBufferBillboard, byteOffset: 0, byteStride: 2 });
+        this.inputStateQuad = device.createInputState(this.inputLayout, [
+            { buffer: this.vertexBufferQuad, byteOffset: 0, byteStride: 3*4+2*4 },
+        ], { buffer: this.indexBufferQuad, byteOffset: 0, byteStride: 2 });
     }
 
     public destroy(device: GfxDevice): void {
         device.destroyInputLayout(this.inputLayout);
-        device.destroyInputState(this.inputStateBillboard);
-        device.destroyBuffer(this.vertexBufferBillboard);
-        device.destroyBuffer(this.indexBufferBillboard);
+        device.destroyInputState(this.inputStateQuad);
+        device.destroyBuffer(this.vertexBufferQuad);
+        device.destroyBuffer(this.indexBufferQuad);
     }
 }
 
@@ -700,6 +807,9 @@ class JPAEmitterWorkData {
     public globalRotation = mat4.create();
     public globalScale = vec3.create();
     public globalScale2D = vec2.create();
+
+    public pivotX: number = 1;
+    public pivotY: number = 1;
 
     public ybbCamMtx = mat4.create();
     public posCamMtx = mat4.create();
@@ -2008,6 +2118,14 @@ const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
 const scratchVec3d = vec3.create();
+
+const planeXZSwizzle = mat4.fromValues(
+    1, 0,  0, 0,
+    0, 0, -1, 0,
+    0, 1,  0, 0,
+    0, 0,  0, 1,
+);
+
 export class JPABaseParticle {
     public flags: number;
     public time: number;
@@ -2592,7 +2710,7 @@ export class JPABaseParticle {
                     const hasScaleAnmY = esp1.isDiffXY;
                     if (hasScaleAnmY) {
                         const scaleAnmY = this.calcScaleAnm(esp1.scaleAnmTypeX, esp1.scaleAnmMaxFrameY);
-                        this.scale[0] = this.scaleOut * this.calcScaleFade(scaleAnmY, esp1, esp1.scaleInValueY, esp1.scaleIncreaseRateY, esp1.scaleDecreaseRateY);
+                        this.scale[1] = this.scaleOut * this.calcScaleFade(scaleAnmY, esp1, esp1.scaleInValueY, esp1.scaleIncreaseRateY, esp1.scaleDecreaseRateY);
                     } else {
                         this.scale[1] = this.scale[0];
                     }
@@ -2705,8 +2823,6 @@ export class JPABaseParticle {
     }
 
     private applyPlane(m: mat4, plane: PlaneType, scaleX: number, scaleY: number): void {
-        // TODO(jstpierre): This doesn't seem quite right... need
-        // to figure out what's up with the plane stuff....
         if (plane === PlaneType.XY) {
             m[0] *= scaleX;
             m[1] *= scaleX;
@@ -2723,6 +2839,8 @@ export class JPABaseParticle {
             m[8] *= scaleY;
             m[9] *= scaleY;
             m[10] *= scaleY;
+
+            mat4.mul(m, m, planeXZSwizzle);
         } else if (plane === PlaneType.X) {
             m[0] *= scaleX;
             m[1] *= scaleX;
@@ -2826,6 +2944,32 @@ export class JPABaseParticle {
         }
     }
 
+    private applyPivot(m: mat4, workData: JPAEmitterWorkData): void {
+        // If pivot is 0, then the coords are 0 and 50.
+        // If pivot is 1, then the coords are -25 and 25 (default).
+        // If pivot is 2, then the coords are -50 and 0.
+
+        const pivotX = workData.pivotX;
+        if (pivotX === 0 || pivotX === 2) {
+            mat4.identity(scratchMatrix);
+            if (pivotX === 0)
+                scratchMatrix[12] = -25;
+            else if (pivotX === 2)
+                scratchMatrix[12] = 25;
+            mat4.mul(m, m, scratchMatrix);
+        }
+
+        const pivotY = workData.pivotY;
+        if (pivotY === 0 || pivotY === 2) {
+            mat4.identity(scratchMatrix);
+            if (pivotY === 0)
+                scratchMatrix[13] = -25;
+            else if (pivotY === 2)
+                scratchMatrix[13] = 25;
+            mat4.mul(m, m, scratchMatrix);
+        }
+    }
+
     private drawCommon(device: GfxDevice, renderHelper: GXRenderHelperGfx, workData: JPAEmitterWorkData, materialParams: MaterialParams, sp1: CommonShapeTypeFields): void {
         if (!!(this.flags & 0x08))
             return;
@@ -2849,9 +2993,10 @@ export class JPABaseParticle {
                 1,
                 0, 0, rotateAngle,
                 scratchVec3a[0], scratchVec3a[1], scratchVec3a[2]);
+            this.applyPivot(packetParams.u_PosMtx[0], workData);
             this.loadTexMtx(materialParams.u_TexMtx[0], workData, packetParams.u_PosMtx[0]);
 
-            renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateBillboard);
+            renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateQuad);
             renderInst.drawIndexes(6, 0);
         } else if (shapeType === ShapeType.Direction || shapeType === ShapeType.DirectionCross) {
             applyDir(scratchVec3a, this, sp1.dirType, workData);
@@ -2878,6 +3023,9 @@ export class JPABaseParticle {
             dst[13] = this.position[1];
             dst[14] = this.position[2];
 
+            // We want:
+            //   View x Particle x Rot x Scale x PlaneSwizzle x Pivot
+
             const scaleX = workData.globalScale2D[0] * this.scale[0];
             const scaleY = workData.globalScale2D[1] * this.scale[1];
             if (isRot) {
@@ -2888,11 +3036,13 @@ export class JPABaseParticle {
                 this.applyPlane(dst, sp1.planeType, scaleX, scaleY);
             }
 
+            this.applyPivot(dst, workData);
+
             mat4.mul(dst, workData.posCamMtx, dst);
 
             this.loadTexMtx(materialParams.u_TexMtx[0], workData, dst);
 
-            renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateBillboard);
+            renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateQuad);
             if (shapeType === ShapeType.DirectionCross)
                 renderInst.drawIndexes(12, 0);
             else
@@ -2907,10 +3057,11 @@ export class JPABaseParticle {
             dst[12] = this.position[0];
             dst[13] = this.position[1];
             dst[14] = this.position[2];
+            this.applyPivot(dst, workData);
             mat4.mul(dst, workData.posCamMtx, dst);
             this.loadTexMtx(materialParams.u_TexMtx[0], workData, dst);
 
-            renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateBillboard);
+            renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateQuad);
             if (shapeType === ShapeType.RotationCross)
                 renderInst.drawIndexes(12, 0);
             else
@@ -2944,9 +3095,10 @@ export class JPABaseParticle {
             dst[6] = 0;
             dst[10] = 1;
             dst[14] = scratchVec3b[2];
+            this.applyPivot(dst, workData);
             this.loadTexMtx(materialParams.u_TexMtx[0], workData, dst);
 
-            renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateBillboard);
+            renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateQuad);
             renderInst.drawIndexes(6, 0);
         } else if (shapeType === ShapeType.YBillboard) {
             vec3.set(scratchVec3a, 0, workData.posCamMtx[1], workData.posCamMtx[2]);
@@ -2982,9 +3134,10 @@ export class JPABaseParticle {
             dst[12] = scratchVec3b[0];
             dst[13] = scratchVec3b[1];
             dst[14] = scratchVec3b[2];
+            this.applyPivot(dst, workData);
             this.loadTexMtx(materialParams.u_TexMtx[0], workData, dst);
 
-            renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateBillboard);
+            renderInst.setInputLayoutAndState(globalRes.inputLayout, globalRes.inputStateQuad);
             renderInst.drawIndexes(6, 0);
         } else {
             throw "whoops";
@@ -2999,6 +3152,7 @@ export class JPABaseParticle {
 
     public drawP(device: GfxDevice, renderHelper: GXRenderHelperGfx, workData: JPAEmitterWorkData, materialParams: MaterialParams): void {
         const bsp1 = workData.baseEmitter.resData.res.bsp1;
+        const esp1 = workData.baseEmitter.resData.res.esp1;
 
         // mpDrawParticleFuncList
 
@@ -3007,6 +3161,14 @@ export class JPABaseParticle {
         if (isEnableTextureAnm && !texCalcOnEmitter)
             workData.baseEmitter.resData.texData[this.texAnmIdx].fillTextureMapping(materialParams.m_TextureMapping[0]);
 
+        if (esp1 !== null) {
+            workData.pivotX = esp1.pivotX;
+            workData.pivotY = esp1.pivotY;
+        } else {
+            workData.pivotX = 1;
+            workData.pivotY = 1;
+        }
+
         this.drawCommon(device, renderHelper, workData, materialParams, bsp1);
     }
 
@@ -3014,6 +3176,9 @@ export class JPABaseParticle {
         const ssp1 = workData.baseEmitter.resData.res.ssp1;
 
         // mpDrawParticleChildFuncList
+
+        workData.pivotX = 1;
+        workData.pivotY = 1;
 
         this.drawCommon(device, renderHelper, workData, materialParams, ssp1);
     }
@@ -3238,7 +3403,7 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             const anmTypeY = !!((flags >>> 0x13) & 0x01);
             const scaleAnmTypeX = isEnableScaleAnmX ? anmTypeX ? CalcScaleAnmType.Reverse : CalcScaleAnmType.Repeat : CalcScaleAnmType.Normal;
             const scaleAnmTypeY = isEnableScaleAnmY ? anmTypeY ? CalcScaleAnmType.Reverse : CalcScaleAnmType.Repeat : CalcScaleAnmType.Normal;
-            const pivotX = (flags >>> 0x0C) & 0x03;
+            const pivotX = (flags >>> 0x0E) & 0x03;
             const pivotY = (flags >>> 0x10) & 0x03;
 
             const alphaInTiming = view.getFloat32(dataBegin + 0x08);

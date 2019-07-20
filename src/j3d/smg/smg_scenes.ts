@@ -1,12 +1,13 @@
 
-import { mat4, vec3, vec4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
 import Progressable from '../../Progressable';
 import { assert, assertExists, align, nArray } from '../../util';
-import { fetchData, AbortedError } from '../../fetch';
+import { fetchData } from '../../fetch';
 import { MathConstants, computeModelMatrixSRT, lerp, computeNormalMatrix, clamp } from '../../MathHelpers';
 import { getPointBezier } from '../../Spline';
-import { Camera, ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceSphere, computeClipSpacePointFromWorldSpacePoint } from '../../Camera';
+import { Camera, computeClipSpacePointFromWorldSpacePoint } from '../../Camera';
+import { SceneContext } from '../../SceneBase';
 import * as Viewer from '../../viewer';
 import * as UI from '../../ui';
 
@@ -1386,8 +1387,6 @@ export class LiveActor extends NameObj {
 
 import { NPCDirector, MiniRoutePoint, createModelObjMapObj, bindColorChangeAnimation, bindTexChangeAnimation, isExistIndirectTexture, connectToSceneIndirectMapObjStrongLight, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneBloom, MiniRouteGalaxy, MiniRoutePart } from './Actors';
 import { getNameObjTableEntry, PlanetMapCreator } from './ActorTable';
-import { prepareFrameDebugOverlayCanvas2D } from '../../DebugJunk';
-import { SceneContext } from '../../SceneBase';
 
 // Random actor for other things that otherwise do not have their own actors.
 class NoclipLegacyActor extends LiveActor {
