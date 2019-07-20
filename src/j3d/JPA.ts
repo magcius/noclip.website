@@ -1516,7 +1516,7 @@ export class JPABaseEmitter {
                 workData.volumeEmitIdx = 0;
             } else {
                 // Rate
-                const emitCountIncr = this.rate * (1.0 + bem1.rateRndm * get_r_zp(this.random)) * workData.deltaTime;
+                const emitCountIncr = this.rate * (1.0 + bem1.rateRndm * get_r_zp(this.random));
                 this.emitCount += emitCountIncr;
 
                 // If this is the first emission and we got extremely bad luck, force a particle.
@@ -1917,7 +1917,7 @@ export class JPABaseEmitter {
 
         // mpDrawEmitterChildFuncList
 
-        if (bsp1.shapeType === ShapeType.Stripe || bsp1.shapeType === ShapeType.StripeCross) {
+        if (ssp1.shapeType === ShapeType.Stripe || ssp1.shapeType === ShapeType.StripeCross) {
             this.drawStripe(device, renderHelper, workData, ssp1);
         } else {
             const needsPrevPos = bsp1.dirType === DirType.PrevPctl;
