@@ -1700,8 +1700,8 @@ export class JPABaseEmitter {
         vec3.transformMat4(v, this.emitterTrs, scratchMatrix);
     }
 
-    private drawStripe(device: GfxDevice, renderHelper: GXRenderHelperGfx, workData: JPAEmitterWorkData, sp1: CommonShapeTypeFields): void {
-        const particleCount = this.aliveParticlesBase.length;
+    private drawStripe(device: GfxDevice, renderHelper: GXRenderHelperGfx, workData: JPAEmitterWorkData, particleList: JPABaseParticle[], sp1: CommonShapeTypeFields): void {
+        const particleCount = particleList.length;
 
         if (particleCount < 2)
             return;
@@ -1739,7 +1739,7 @@ export class JPABaseEmitter {
         let stripe1Idx = oneStripVertexCount * 5;
         for (let i = 0; i < particleCount; i++) {
             const particleIndex = reverseOrder ? particleCount - 1 - i : i;
-            const p = this.aliveParticlesBase[particleIndex];
+            const p = particleList[particleIndex];
 
             applyDir(scratchVec3c, p, sp1.dirType, workData);
             if (isNearZero(scratchVec3c, 0.001))
@@ -1873,7 +1873,7 @@ export class JPABaseEmitter {
             calcTexCrdMtxIdt(materialParams.u_TexMtx[0], bsp1);
 
         if (bsp1.shapeType === ShapeType.Stripe || bsp1.shapeType === ShapeType.StripeCross) {
-            this.drawStripe(device, renderHelper, workData, bsp1);
+            this.drawStripe(device, renderHelper, workData, this.aliveParticlesBase, bsp1);
         } else {
             const needsPrevPos = bsp1.dirType === DirType.PrevPctl;
             if (needsPrevPos)
@@ -1918,7 +1918,7 @@ export class JPABaseEmitter {
         // mpDrawEmitterChildFuncList
 
         if (ssp1.shapeType === ShapeType.Stripe || ssp1.shapeType === ShapeType.StripeCross) {
-            this.drawStripe(device, renderHelper, workData, ssp1);
+            this.drawStripe(device, renderHelper, workData, this.aliveParticlesChild, ssp1);
         } else {
             const needsPrevPos = bsp1.dirType === DirType.PrevPctl;
             if (needsPrevPos)
@@ -3198,7 +3198,7 @@ function makeColorTable(buffer: ArrayBufferSlice, entryCount: number, duration: 
     colorFromRGBA8(dst[dstIdx++], color0);
 
     const time0 = view.getUint16(0x00);
-    for (let i = 1; i <= time0; i++)
+    for (let i = 1; i <= Math.min(time0, duration); i++)
         colorCopy(dst[dstIdx++], dst[0]);
 
     let time1: number = time0;
