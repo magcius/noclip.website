@@ -747,19 +747,19 @@ class JPAGlobalRes {
 
         // We handle both Pivot and Plane Type with special matrix transforms.
 
-        const n0 = -25;
-        const n1 =  25;
+        const n0 =  25;
+        const n1 = -25;
 
         this.vertexBufferQuad = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, new Float32Array([
-            n0, -n0, 0, 1, 0,
-            n0, -n1, 0, 1, 1,
-            n1, -n0, 0, 0, 0,
-            n1, -n1, 0, 0, 1,
+            n0, n0, 0, 1, 0,
+            n0, n1, 0, 1, 1,
+            n1, n0, 0, 0, 0,
+            n1, n1, 0, 0, 1,
             // Cross
-            0, -n0, n0, 1, 0,
-            0, -n1, n0, 1, 1,
-            0, -n0, n1, 0, 0,
-            0, -n1, n1, 0, 1,
+            0, n0, n0, 1, 0,
+            0, n1, n0, 1, 1,
+            0, n0, n1, 0, 0,
+            0, n1, n1, 0, 1,
         ]).buffer);
         this.indexBufferQuad = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, new Uint16Array([
             0, 1, 2, 2, 1, 3,
@@ -1931,7 +1931,7 @@ export class JPABaseEmitter {
             for (let i = 0; i < n; i++) {
                 const index = traverseOrder === TraverseOrder.REVERSE ? n - 1 - i : i;
                 workData.particleSortKey = setSortKeyBias(workData.particleSortKey, sortKeyBias++);
-                this.aliveParticlesChild[index].drawP(device, renderHelper, workData, materialParams);
+                this.aliveParticlesChild[index].drawC(device, renderHelper, workData, materialParams);
                 if (needsPrevPos)
                     vec3.copy(workData.prevParticlePos, this.aliveParticlesChild[index].position);
             }
@@ -2285,12 +2285,12 @@ export class JPABaseParticle {
         vec3.copy(this.globalPosition, parent.globalPosition);
 
         const velRndm = ssp1.baseVel * (1.0 + ssp1.baseVelRndm * get_rndm_f(baseEmitter.random));
-        const rndX = get_rndm_f(baseEmitter.random);
-        const rndY = get_rndm_f(baseEmitter.random);
-        const rndZ = get_rndm_f(baseEmitter.random);
+        const rndX = get_rndm_f(baseEmitter.random) - 0.5;
+        const rndY = get_rndm_f(baseEmitter.random) - 0.5;
+        const rndZ = get_rndm_f(baseEmitter.random) - 0.5;
         vec3.set(scratchVec3a, rndX, rndY, rndZ);
         normToLength(scratchVec3a, velRndm);
-        vec3.scaleAndAdd(this.velType1, parent.velType1, scratchVec3a, ssp1.velInfRate);
+        vec3.scaleAndAdd(this.velType1, scratchVec3a, parent.velType1, ssp1.velInfRate);
         vec3.scale(this.velType0, parent.velType2, ssp1.velInfRate);
 
         this.moment = parent.moment;
@@ -3438,7 +3438,7 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             let scaleIncreaseRateX = 1, scaleIncreaseRateY = 1;
             if (scaleInTiming > 0) {
                 scaleIncreaseRateX = (1.0 - scaleInValueX) / scaleInTiming;
-                scaleIncreaseRateY = (1.0 - scaleInValueX) / scaleInTiming;
+                scaleIncreaseRateY = (1.0 - scaleInValueY) / scaleInTiming;
             }
 
             let scaleDecreaseRateX = 1, scaleDecreaseRateY = 1;
@@ -3836,7 +3836,7 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             let scaleIncreaseRateX = 1, scaleIncreaseRateY = 1;
             if (scaleInTiming > 0) {
                 scaleIncreaseRateX = (1.0 - scaleInValueX) / scaleInTiming;
-                scaleIncreaseRateY = (1.0 - scaleInValueX) / scaleInTiming;
+                scaleIncreaseRateY = (1.0 - scaleInValueY) / scaleInTiming;
             }
 
             let scaleDecreaseRateX = 1, scaleDecreaseRateY = 1;
