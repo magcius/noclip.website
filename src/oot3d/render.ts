@@ -1146,6 +1146,9 @@ export class RoomRenderer {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!this.visible)
+            return;
+
         if (this.opaqueMesh !== null)
             this.opaqueMesh.prepareToRender(device, renderInstManager, hostAccessPass, viewerInput);
         if (this.transparentMesh !== null)

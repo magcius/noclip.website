@@ -343,8 +343,8 @@ const enum CalcIdxType {
     Normal  = 0x00,
     Repeat  = 0x01,
     Reverse = 0x02,
-    Random  = 0x03,
-    Merge   = 0x04,
+    Merge   = 0x03,
+    Random  = 0x04,
 }
 
 const enum CalcScaleAnmType {
@@ -989,8 +989,7 @@ function calcTexIdx(workData: JPAEmitterWorkData, tick: number, time: number, ra
     const bsp1 = workData.baseEmitter.resData.res.bsp1;
 
     const isEnableTextureAnm = !!(bsp1.texFlags & 0x00000001);
-    if (!isEnableTextureAnm)
-        return bsp1.texIdx;
+    assert(isEnableTextureAnm);
 
     const calcTexIdxType: CalcIdxType = (bsp1.texFlags >>> 2) & 0x07;
     let anmIdx: number;
@@ -1000,10 +999,10 @@ function calcTexIdx(workData: JPAEmitterWorkData, tick: number, time: number, ra
         anmIdx = ((tick | 0) + randomPhase) % bsp1.texIdxAnimData.length;
     } else if (calcTexIdxType === CalcIdxType.Reverse) {
         anmIdx = mirroredRepeat((tick | 0) + randomPhase, bsp1.texIdxAnimData.length - 1);
-    } else if (calcTexIdxType === CalcIdxType.Random) {
-        anmIdx = randomPhase % bsp1.colorRegAnmMaxFrm;
     } else if (calcTexIdxType === CalcIdxType.Merge) {
-        anmIdx = ((time | 0) + randomPhase) % bsp1.texIdxAnimData.length;
+        anmIdx = (((time * bsp1.texIdxAnimData.length) | 0) + randomPhase) % bsp1.texIdxAnimData.length;
+    } else if (calcTexIdxType === CalcIdxType.Random) {
+        anmIdx = randomPhase % bsp1.texIdxAnimData.length;
     } else {
         throw "whoops";
     }
@@ -1022,10 +1021,10 @@ function calcColor(dstPrm: Color, dstEnv: Color, workData: JPAEmitterWorkData, t
         anmIdx = ((tick | 0) + randomPhase) % (bsp1.colorRegAnmMaxFrm + 1);
     } else if (calcColorIdxType === CalcIdxType.Reverse) {
         anmIdx = mirroredRepeat((tick | 0) + randomPhase, bsp1.colorRegAnmMaxFrm);
+    } else if (calcColorIdxType === CalcIdxType.Merge) {
+        anmIdx = (((time * (bsp1.colorRegAnmMaxFrm + 1)) | 0) + randomPhase) % (bsp1.colorRegAnmMaxFrm + 1);
     } else if (calcColorIdxType === CalcIdxType.Random) {
         anmIdx = randomPhase % (bsp1.colorRegAnmMaxFrm + 1);
-    } else if (calcColorIdxType === CalcIdxType.Merge) {
-        anmIdx = ((time | 0) + randomPhase) % (bsp1.colorRegAnmMaxFrm + 1);
     } else {
         throw "whoops";
     }
@@ -1535,7 +1534,8 @@ export class JPABaseEmitter {
             const bsp1 = this.resData.res.bsp1;
 
             const texCalcOnEmitter = !!(bsp1.flags & 0x00004000);
-            if (texCalcOnEmitter)
+            const isEnableTextureAnm = !!(bsp1.texFlags & 0x00000001);
+            if (isEnableTextureAnm && texCalcOnEmitter)
                 this.texAnmIdx = calcTexIdx(workData, this.tick, 0, 0);
 
             const colorCalcOnEmitter = !!(bsp1.flags & 0x00001000);
@@ -2134,6 +2134,8 @@ export class JPABaseParticle {
             this.rotateSpeed = 0;
         }
 
+        this.texAnmIdx = 0;
+
         this.initField(workData);
     }
 
@@ -2565,8 +2567,9 @@ export class JPABaseParticle {
             const esp1 = res.esp1;
             const ssp1 = res.ssp1;
 
+            const isEnableTextureAnm = !!(bsp1.texFlags & 0x00000001);
             const texCalcOnEmitter = !!(bsp1.flags & 0x00004000);
-            if (!texCalcOnEmitter) {
+            if (isEnableTextureAnm && !texCalcOnEmitter) {
                 const randomPhase = this.anmRandom & bsp1.texAnmRndmMask;
                 this.texAnmIdx = calcTexIdx(workData, this.tick, this.time, randomPhase);
             }
@@ -2999,8 +3002,9 @@ export class JPABaseParticle {
 
         // mpDrawParticleFuncList
 
+        const isEnableTextureAnm = !!(bsp1.texFlags & 0x00000001);
         const texCalcOnEmitter = !!(bsp1.flags & 0x00004000);
-        if (!texCalcOnEmitter)
+        if (isEnableTextureAnm && !texCalcOnEmitter)
             workData.baseEmitter.resData.texData[this.texAnmIdx].fillTextureMapping(materialParams.m_TextureMapping[0]);
 
         this.drawCommon(device, renderHelper, workData, materialParams, bsp1);
@@ -3158,8 +3162,8 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             const globalScale2D = vec2.fromValues(globalScale2DX, globalScale2DY);
 
             const anmRndm = view.getInt16(dataBegin + 0x10);
-            const colorAnmRndmMask = -((flags >>> 12) & 0x01);
-            const texAnmRndmMask = -((flags >>> 14) & 0x01);
+            const colorAnmRndmMask = -((flags >>> 11) & 0x01);
+            const texAnmRndmMask = -((flags >>> 13) & 0x01);
 
             const blendModeFlags = view.getUint16(dataBegin + 0x12);
             const alphaCompareFlags = view.getUint8(dataBegin + 0x14);
