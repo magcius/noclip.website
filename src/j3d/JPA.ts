@@ -821,6 +821,7 @@ class JPAEmitterWorkData {
 
     public prevParticlePos = vec3.create();
     public particleSortKey = makeSortKeyTranslucent(GfxRendererLayer.TRANSLUCENT);
+    public forceTexMtxIdentity: boolean = false;
 }
 
 export class JPADrawInfo {
@@ -944,6 +945,9 @@ export class JPAEmitterManager {
         // Clamp deltaTime to something reasonable so we don't get a combinatorial
         // explosion of particles at scene load...
         this.workData.deltaTime = Math.min(deltaTime, 1.5);
+
+        if (this.workData.deltaTime === 0)
+            return;
 
         for (let i = 0; i < this.aliveEmitters.length; i++) {
             const emitter = this.aliveEmitters[i];
@@ -1683,7 +1687,7 @@ export class JPABaseEmitter {
             this.tick += workData.deltaTime;
 
             if (this.tick < 0)
-                this.tick = 0;
+                this.tick = 0.01;
         } else {
             // Emitter callback +0x10
         }
@@ -1873,6 +1877,8 @@ export class JPABaseEmitter {
                 this.resData.texData[etx1.subTextureID].fillTextureMapping(materialParams.m_TextureMapping[3]);
         }
 
+        workData.forceTexMtxIdentity = false;
+
         const isEnableTexScrollAnm = !!(bsp1.flags & 0x01000000);
         if (bsp1.shapeType === ShapeType.Point || bsp1.shapeType === ShapeType.Line)
             mat4.identity(materialParams.u_TexMtx[0]);
@@ -1922,6 +1928,9 @@ export class JPABaseEmitter {
             workData.globalScale2D[0] *= 1.02;
             workData.globalScale2D[1] *= 0.4;
         }
+
+        workData.forceTexMtxIdentity = true;
+        mat4.identity(materialParams.u_TexMtx[0]);
 
         workData.baseEmitter.resData.texData[ssp1.texIdx].fillTextureMapping(materialParams.m_TextureMapping[0]);
 
@@ -2355,6 +2364,7 @@ export class JPABaseParticle {
         }
 
         this.prmColorAlphaAnm = 1.0;
+
         if (!!(ssp1.flags & 0x00020000)) {
             // isInheritedAlpha
             this.colorPrm.a = (parent.colorPrm.a * parent.prmColorAlphaAnm) * ssp1.inheritAlpha;
@@ -2631,8 +2641,8 @@ export class JPABaseParticle {
 
         const ssp1 = workData.baseEmitter.resData.res.ssp1;
 
-        const timing = (this.tick - (this.lifeTime - 1) * ssp1.timing) * workData.deltaTime;
-        if (timing <= 0)
+        const timing = this.tick - ((this.lifeTime - 1) * ssp1.timing);
+        if (timing < 0)
             return false;
 
         const timingInt = (timing | 0);
@@ -2828,6 +2838,9 @@ export class JPABaseParticle {
     }
 
     private loadTexMtx(dst: mat4, workData: JPAEmitterWorkData, posMtx: mat4): void {
+        if (workData.forceTexMtxIdentity)
+            return;
+
         if (!calcTexCrdMtxPrj(dst, workData, posMtx)) {
             const bsp1 = workData.baseEmitter.resData.res.bsp1;
             const isEnableTexScrollAnm = !!(bsp1.flags & 0x01000000);
