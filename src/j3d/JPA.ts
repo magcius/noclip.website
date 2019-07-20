@@ -1363,8 +1363,8 @@ export class JPABaseEmitter {
                 }
             }
         } else {
-            angle = workData.volumeSweep * get_rndm_f(this.random) * MathConstants.TAU;
-            x = (Math.PI * 0.5) + (get_rndm_f(this.random) * Math.PI);
+            angle = workData.volumeSweep * get_r_zh(this.random) * MathConstants.TAU;
+            x = (Math.PI * 0.5) + (get_r_zh(this.random) * Math.PI);
         }
 
         let distance = get_rndm_f(this.random);
@@ -1393,10 +1393,7 @@ export class JPABaseEmitter {
         }
 
         const sizeXZ = workData.volumeSize * lerp(workData.volumeMinRad, 1.0, distance);
-        let angle = (workData.volumeSweep * get_rndm_f(this.random)) * MathConstants.TAU;
-        // TODO(jstpierre): Why do we need this? Something's fishy in Beach Bowl Galaxy...
-        // VolumeSweep is 0.74 but it doesn't look like it goes 3/4ths of the way around...
-        angle -= Math.PI / 2;
+        let angle = (workData.volumeSweep * get_r_zh(this.random)) * MathConstants.TAU;
         const height = workData.volumeSize * get_r_zp(this.random);
         vec3.set(workData.volumePos, sizeXZ * Math.sin(angle), height, sizeXZ * Math.cos(angle));
         vec3.mul(workData.velOmni, workData.volumePos, workData.emitterGlobalScl);
@@ -1405,8 +1402,8 @@ export class JPABaseEmitter {
 
     private calcVolumeTorus(workData: JPAEmitterWorkData): void {
         const size = workData.volumeSize * workData.volumeMinRad;
-        const angle1 = (workData.volumeSweep * get_rndm_f(this.random)) * MathConstants.TAU;
-        const angle2 = get_rndm_f(this.random) * MathConstants.TAU;
+        const angle1 = (workData.volumeSweep * get_r_zh(this.random)) * MathConstants.TAU;
+        const angle2 = get_r_zh(this.random) * MathConstants.TAU;
         vec3.set(workData.velAxis,
             size * Math.sin(angle1) * Math.cos(angle2),
             size * Math.sin(angle2),
@@ -1438,7 +1435,7 @@ export class JPABaseEmitter {
             const idx = workData.volumeEmitIdx++;
             angle = workData.volumeSweep * (idx / workData.volumeEmitCount) * MathConstants.TAU;
         } else {
-            angle = workData.volumeSweep * get_rndm_f(this.random) * MathConstants.TAU;
+            angle = workData.volumeSweep * get_r_zh(this.random) * MathConstants.TAU;
         }
 
         let distance = get_rndm_f(this.random);
