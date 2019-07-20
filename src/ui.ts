@@ -2535,7 +2535,7 @@ export class UI {
         return panel;
     }
 
-    private debugFloater: FloatingPanel;
+    private debugFloater: FloatingPanel | null = null;
     private getDebugFloater(): FloatingPanel {
         if (this.debugFloater === null)
             this.debugFloater = this.makeFloater('Debug');
@@ -2571,21 +2571,25 @@ export class UI {
         panel.contents.appendChild(slider.elem);
     }
 
-    public bindSliders(obj: { [k: string]: any }, parentName: string = '', panel: FloatingPanel | null = null): void {
+    private bindSlidersRecurse(obj: { [k: string]: any }, parentName: string, panel: FloatingPanel): void {
+        for (const keyName in obj) {
+            const v = obj[keyName];
+            if (typeof v === "number")
+                this.bindSlider(obj, keyName, 0, 1, `${parentName}.${keyName}`, panel);
+            if (v instanceof Float32Array)
+                this.bindSlidersRecurse(v, `${parentName}.${keyName}`, panel);
+        }
+    }
+
+    public bindSliders(obj: { [k: string]: any }, panel: FloatingPanel | null = null): void {
         if (panel === null)
             panel = this.getDebugFloater();
 
         while (panel.contents.firstChild)
             panel.contents.removeChild(panel.contents.firstChild);
 
-        for (const keyName in obj) {
-            const v = obj[keyName];
-            if (typeof v === "number")
-                this.bindSlider(obj, keyName, 0, 1, `${parentName}.${keyName}`, panel);
-            if (v instanceof Float32Array)
-                this.bindSliders(v, `${parentName}.${keyName}`, panel);
-        }
-        
+        this.bindSlidersRecurse(obj, '', panel);
+
         window.debugObj = obj;
     }
 }
