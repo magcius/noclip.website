@@ -77,6 +77,7 @@ import { standardFullClearRenderPassDescriptor } from './gfx/helpers/RenderTarge
 import * as Sentry from '@sentry/browser';
 import { GIT_REVISION, IS_DEVELOPMENT } from './BuildVersion';
 import { SceneDesc, SceneGroup, SceneContext, getSceneDescs } from './SceneBase';
+import { prepareFrameDebugOverlayCanvas2D } from './DebugJunk';
 
 const sceneGroups = [
     "Wii",
@@ -356,6 +357,8 @@ class Main {
 
     private _updateLoop = (time: number) => {
         this.checkKeyShortcuts();
+
+        prepareFrameDebugOverlayCanvas2D();
 
         // Needs to be called before this.viewer.update
         const shouldTakeScreenshot = this.viewer.inputManager.isKeyDownEventTriggered('Numpad7');

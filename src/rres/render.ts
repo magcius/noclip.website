@@ -14,7 +14,7 @@ import { ViewerRenderInput } from "../viewer";
 import { GfxRendererLayer, makeSortKey, setSortKeyDepth, setSortKeyBias } from "../gfx/render/GfxRenderer";
 import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
 import { nArray } from '../util';
-import { prepareFrameDebugOverlayCanvas2D, getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
+import { getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
 import { colorCopy } from '../Color';
 import { computeNormalMatrix, texProjPerspMtx, texEnvMtx } from '../MathHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
@@ -734,9 +734,6 @@ export class MDL0ModelInstance {
         }
 
         if (modelVisibility !== IntersectionState.FULLY_OUTSIDE) {
-            if (this.debugBones)
-                prepareFrameDebugOverlayCanvas2D();
-
             this.execNodeTreeOpList(mdl0.sceneGraph.nodeTreeOps, viewerInput.camera, modelVisibility);
             this.execNodeMixOpList(mdl0.sceneGraph.nodeMixOps);
 

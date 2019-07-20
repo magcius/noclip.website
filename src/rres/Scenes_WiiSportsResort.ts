@@ -12,7 +12,7 @@ import { MDL0ModelInstance, MDL0Model, RRESTextureHolder } from "./render";
 import AnimationController from "../AnimationController";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { mat4, vec3 } from "gl-matrix";
-import { prepareFrameDebugOverlayCanvas2D, drawWorldSpacePoint } from "../DebugJunk";
+import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { Magenta } from "../Color";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { SceneContext } from "../SceneBase";
@@ -195,7 +195,7 @@ class WS2_Renderer extends BasicGXRendererHelper {
         this.renderHelper.prepareToRender(device, hostAccessPass);
 
         if (this.debugObjects) {
-            const ctx = prepareFrameDebugOverlayCanvas2D();
+            const ctx = getDebugOverlayCanvas2D();
             for (let i = 0; i < this.pmp.length; i++) {
                 const p = this.pmp[i];
                 const v = scratchVec3;

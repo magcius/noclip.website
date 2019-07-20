@@ -126,7 +126,7 @@ export function cv(): CanvasRenderingContext2D {
 
 let _debugOverlayCanvas: CanvasRenderingContext2D | null = null;
 export function getDebugOverlayCanvas2D(): CanvasRenderingContext2D {
-    if (!_debugOverlayCanvas) {
+    if (_debugOverlayCanvas === null) {
         const canvas = document.createElement('canvas');
         const ctx = assertExists(canvas.getContext('2d'));
 
@@ -137,16 +137,18 @@ export function getDebugOverlayCanvas2D(): CanvasRenderingContext2D {
 
         document.body.appendChild(canvas);
         _debugOverlayCanvas = ctx;
+
+        prepareFrameDebugOverlayCanvas2D();
     }
 
     return _debugOverlayCanvas!;
 }
 
-export function prepareFrameDebugOverlayCanvas2D(): CanvasRenderingContext2D {
-    const ctx = getDebugOverlayCanvas2D();
-    ctx.canvas.width = window.innerWidth;
-    ctx.canvas.height = window.innerHeight;
-    return ctx;
+export function prepareFrameDebugOverlayCanvas2D(): void {
+    if (_debugOverlayCanvas !== null) {
+        _debugOverlayCanvas.canvas.width = window.innerWidth;
+        _debugOverlayCanvas.canvas.height = window.innerHeight;
+    }
 }
 
 const p = nArray(8, () => vec4.create());

@@ -1,5 +1,6 @@
 
 import { lerp } from "./MathHelpers";
+import { assert } from "./util";
 
 // Color utilities
 
@@ -90,6 +91,21 @@ export function colorToCSS(src: Color): string {
 
 export function colorEqual(c0: Color, c1: Color): boolean {
     return c0.r === c1.r && c0.g === c1.g && c0.b === c1.b && c0.a === c1.a;
+}
+
+export function colorFromHex(c: Color, s: string): void {
+    assert(s.length === 7 || s.length === 9);
+    const r = parseInt(s.slice(1, 3), 16) / 0xFF;
+    const g = parseInt(s.slice(3, 5), 16) / 0xFF;
+    const b = parseInt(s.slice(5, 7), 16) / 0xFF;
+    const a = s.length === 9 ? (parseInt(s.slice(7, 9), 16) / 0xFF) : 1;
+    colorFromRGBA(c, r, g, b, a);
+}
+
+export function colorNewFromHex(s: string): Color {
+    const dst = colorNew(0, 0, 0, 0);
+    colorFromHex(dst, s);
+    return dst;
 }
 
 export const TransparentBlack = colorNew(0, 0, 0, 0);

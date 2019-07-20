@@ -20,7 +20,7 @@ import { makeFormat, FormatFlags, FormatTypeFlags, FormatCompFlags } from '../gf
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { Camera, computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
 import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from '../gfx/helpers/BufferHelpers';
-import { getDebugOverlayCanvas2D, prepareFrameDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
+import { getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
 import { GfxRenderInstManager, GfxRenderInst } from '../gfx/render/GfxRenderer2';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
@@ -969,7 +969,6 @@ export class CmbInstance {
         this.updateBoneMatrices();
 
         if (this.debugBones) {
-            prepareFrameDebugOverlayCanvas2D();
             const ctx = getDebugOverlayCanvas2D();
             for (let i = 0; i < this.cmbData.cmb.bones.length; i++) {
                 const bone = this.cmbData.cmb.bones[i];

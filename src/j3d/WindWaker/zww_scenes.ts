@@ -31,7 +31,6 @@ import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers';
 import { fillMatrix4x4, fillMatrix4x3, fillColor } from '../../gfx/helpers/UniformBufferHelpers';
 import { makeTriangleIndexBuffer, GfxTopology } from '../../gfx/helpers/TopologyHelpers';
 import AnimationController from '../../AnimationController';
-import { prepareFrameDebugOverlayCanvas2D } from '../../DebugJunk';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
 import { ObjectRenderer, BMDObjectRenderer, SymbolMap, WhiteFlowerData, FlowerObjectRenderer, PinkFlowerData, BessouFlowerData, FlowerData } from './Actors';
 
@@ -684,8 +683,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
-        prepareFrameDebugOverlayCanvas2D();
-
         const renderInstManager = this.renderHelper.renderInstManager;
 
         const hostAccessPass = device.createHostAccessPass();
