@@ -12,11 +12,11 @@ import { TextureMapping } from "../TextureHolder";
 import { mat4, vec4 } from "gl-matrix";
 import * as Viewer from "../viewer";
 import { Camera, computeViewMatrix, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
-import { fillMatrix4x4, fillMatrix4x3, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x4, fillMatrix4x3, fillVec4v, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { AABB } from "../Geometry";
 import { ModelHolder, MaterialDataHolder } from "./scenes";
 import { MSB, Part } from "./msb";
-import { MathConstants, computeNormalMatrix } from "../MathHelpers";
+import { MathConstants } from "../MathHelpers";
 import { MTD, MTDTexture } from './mtd';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
 import { interactiveVizSliderSelect } from '../DebugJunk';
@@ -214,13 +214,19 @@ layout(row_major, std140) uniform ub_SceneParams {
 };
 
 layout(row_major, std140) uniform ub_MeshFragParams {
-    Mat4x3 u_BoneMatrix[1];
-    Mat4x3 u_NormalMatrix[1];
-    Mat4x3 u_ModelMatrix[1];
+    Mat4x3 u_ViewFromLocal[1];
     // Fourth element has g_DiffuseMapColorPower
     vec4 u_DiffuseMapColor;
+    // Fourth element has g_SpecularMapColorPower
+    vec4 u_SpecularMapColor;
     vec4 u_TexScroll[3];
+    // Light direction in view space
+    vec4 u_LightDirView;
+    // g_SpecularPower
+    vec4 u_Misc[1];
 };
+
+#define u_SpecularPower (u_Misc[0].x)
 
 uniform sampler2D u_Texture[8];
 `;
@@ -232,9 +238,10 @@ ${DKSProgram.BindingDefinitions}
 
 varying vec4 v_Color;
 varying vec2 v_TexCoord[3];
-varying vec3 v_NormalWorld;
-varying vec3 v_TangentWorld;
-varying vec3 v_BitangentWorld;
+varying vec3 v_PositionView;
+varying vec3 v_NormalView;
+varying vec3 v_TangentView;
+varying vec3 v_BitangentView;
 `;
 
     public vert = `
@@ -249,10 +256,12 @@ layout(location = 6) in vec4 a_Bitangent;
 #define UNORM_TO_SNORM(xyz) ((xyz - 0.5) * 2.0)
 
 void main() {
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix[0]), vec4(a_Position, 1.0)));
-    v_NormalWorld = normalize(Mul(_Mat4x4(u_NormalMatrix[0]), vec4(UNORM_TO_SNORM(a_Normal.xyz), 0.0)).xyz);
-    v_TangentWorld = normalize(Mul(_Mat4x4(u_ModelMatrix[0]), vec4(UNORM_TO_SNORM(a_Tangent.xyz), 0.0)).xyz);
-    v_BitangentWorld = normalize(Mul(_Mat4x4(u_ModelMatrix[0]), vec4(UNORM_TO_SNORM(a_Bitangent.xyz), 0.0)).xyz);
+    vec4 t_PositionView = Mul(_Mat4x4(u_ViewFromLocal[0]), vec4(a_Position, 1.0));
+    v_PositionView = -t_PositionView.xyz;
+    gl_Position = Mul(u_Projection, t_PositionView);
+    v_NormalView = normalize(Mul(_Mat4x4(u_ViewFromLocal[0]), vec4(UNORM_TO_SNORM(a_Normal.xyz), 0.0)).xyz);
+    v_TangentView = normalize(Mul(_Mat4x4(u_ViewFromLocal[0]), -vec4(UNORM_TO_SNORM(a_Tangent.xyz), 0.0)).xyz);
+    v_BitangentView = normalize(Mul(_Mat4x4(u_ViewFromLocal[0]), vec4(UNORM_TO_SNORM(a_Bitangent.xyz), 0.0)).xyz);
     v_Color = a_Color;
     v_TexCoord[0] = ((a_TexCoord0.xy) / 1024.0) + u_TexScroll[0].xy;
     v_TexCoord[1] = ((a_TexCoord0.zw) / 1024.0) + u_TexScroll[1].xy;
@@ -285,7 +294,6 @@ void main() {
 
         const diffuseEpi = `
     t_Diffuse.rgb = t_Diffuse.rgb * u_DiffuseMapColor.rgb * u_DiffuseMapColor.w;
-    t_Color *= t_Diffuse;
 `;
 
         if (diffuse1 !== null && diffuse2 !== null) {
@@ -302,7 +310,37 @@ ${diffuseEpi}
 ${diffuseEpi}
     `;
         } else {
-            return '';
+            return `
+    vec4 t_Diffuse = vec4(1.0);
+`;
+        }
+    }
+
+    private genSpecular(): string {
+        const specular1 = this.getTexture('g_Specular');
+        const specular2 = this.getTexture('g_Specular_2');
+
+        const specularEpi = `
+    t_Specular.rgb = t_Specular.rgb * u_SpecularMapColor.rgb * u_SpecularMapColor.w;
+`;
+
+        if (specular1 !== null && specular2 !== null) {
+            return `
+    vec3 t_Specular1 = ${this.buildTexAccess(specular1)}.rgb;
+    vec3 t_Specular2 = ${this.buildTexAccess(specular2)}.rgb;
+    vec3 t_Specular = mix(t_Specular1, t_Specular2, v_Color.a);
+${specularEpi}
+`;
+        } else if (specular1 !== null) {
+            return `
+    vec3 t_Specular1 = ${this.buildTexAccess(specular1)}.rgb;
+    vec3 t_Specular = t_Specular1;
+${specularEpi}
+    `;
+        } else {
+            return `
+    vec3 t_Specular = vec3(0.0);
+`;
         }
     }
 
@@ -311,13 +349,13 @@ ${diffuseEpi}
         const bumpmap2 = this.getTexture('g_Bumpmap_2');
 
         const bumpmapPro = `
-    vec3 t_Normal = v_NormalWorld.xyz;
-    vec3 t_Tangent = v_TangentWorld.xyz;
-    vec3 t_Bitangent = v_BitangentWorld.xyz;
+    vec3 t_Normal = v_NormalView.xyz;
+    vec3 t_Tangent = v_TangentView.xyz;
+    vec3 t_Bitangent = v_BitangentView.xyz;
 `;
 
         const bumpmapEpi = `
-    vec3 t_NormalDir = (t_LocalNormal.x * t_Tangent + t_LocalNormal.y * t_Bitangent + t_LocalNormal.z * t_Normal);
+    vec3 t_NormalDirView = (t_LocalNormal.x * t_Tangent + t_LocalNormal.y * t_Bitangent + t_LocalNormal.z * t_Normal);
 `;
 
         if (bumpmap1 !== null && bumpmap2 !== null) {
@@ -337,7 +375,7 @@ ${bumpmapEpi}
 `;
         } else {
             return `
-    vec3 t_NormalDir = v_NormalWorld;
+    vec3 t_NormalDirView = v_NormalView;
 `;
         }
     }
@@ -347,14 +385,14 @@ ${bumpmapEpi}
 
         if (lightmap !== null) {
             return `
-    t_DirectIrradiance *= ${this.buildTexAccess(lightmap)}.rgb;
+    t_IncomingDiffuseRadiance += ${this.buildTexAccess(lightmap)}.rgb;
 `;
         } else {
             return '';
         }
     }
 
-    private buildAlphaTest(): string {
+    private genAlphaTest(): string {
         const blendMode = getBlendMode(this.mtd);
 
         if (blendMode === BlendMode.TexEdge) {
@@ -377,26 +415,62 @@ void main() {
     ${this.genDiffuse()}
 
 #ifdef USE_LIGHTING
-    vec3 t_DirectIrradiance = vec3(1.0);
+    vec3 t_OutgoingLight = vec3(0.0);
+
+    vec3 t_IncomingDiffuseRadiance = vec3(0.0);
+    vec3 t_IncomingSpecularRadiance = vec3(0.0);
+    vec3 t_IncomingIndirectRadiance = vec3(0.0);
 
     ${this.genNormalDir()}
 
     // Basic fake directional.
-    vec3 t_LightDirection = normalize(vec3(0.8, -1, 0.5));
-    t_DirectIrradiance *= mix(0.0, 2.0, max(dot(-t_NormalDir, t_LightDirection), 0.0));
+    vec3 t_LightDirView = u_LightDirView.xyz;
+
+    float t_DiffuseIntensity = max(dot(t_NormalDirView, t_LightDirView), 0.0);
+    t_IncomingDiffuseRadiance += vec3(mix(0.0, 0.6, t_DiffuseIntensity));
+
+    vec3 t_ViewDir = normalize(-v_PositionView);
+    vec3 t_HalfDirView = normalize(t_ViewDir + t_LightDirView);
+
+    float t_SpecularIntensity = pow(max(dot(t_NormalDirView, t_HalfDirView), 0.0), u_SpecularPower);
+    t_IncomingSpecularRadiance += vec3(t_SpecularIntensity);
 
     ${this.genLightMap()}
 
-    // Add in some fake ambient.
-    t_DirectIrradiance += 0.5;
+    t_IncomingIndirectRadiance += vec3(0.2); // Fake ambient.
 
-    t_Color.rgb *= t_DirectIrradiance;
+    ${this.genSpecular()}
+
+    t_OutgoingLight += t_Diffuse.rgb * (t_IncomingDiffuseRadiance + t_IncomingIndirectRadiance);
+    // t_OutgoingLight += t_Specular * t_IncomingSpecularRadiance;
+
+    t_Color.rgb *= t_OutgoingLight;
+    t_Color.a *= t_Diffuse.a;
+#else
+    t_Color *= t_Diffuse;
 #endif
 
-    ${this.buildAlphaTest()}
+    t_Color *= v_Color;
+
+    ${this.genAlphaTest()}
 
     // Convert to gamma-space
     t_Color.rgb = pow(t_Color.rgb, vec3(1.0 / 2.2));
+
+#ifdef USE_LIGHTING
+    int t_Debug = int(u_Misc[0].y);
+
+    if (t_Debug == 1)
+        t_Color.rgb = vec3(t_ViewDir * 0.5 + 0.5);
+    else if (t_Debug == 2)
+        t_Color.rgb = vec3(t_HalfDirView * 0.5 + 0.5);
+    else if (t_Debug == 3)
+        t_Color.rgb = vec3(t_LightDirView * 0.5 + 0.5);
+    else if (t_Debug == 4)
+        t_Color.rgb = vec3(t_DiffuseIntensity);
+    else if (t_Debug == 5)
+        t_Color.rgb = vec3(t_NormalDirView * 0.5 + 0.5);
+#endif
 
     gl_FragColor = t_Color;
 }
@@ -468,10 +542,15 @@ function linkTextureParameter(textureMapping: TextureMapping[], textureHolder: D
     }
 }
 
+window.debug = 0.0;
+
 const scratchVec4 = vec4.create();
 class BatchInstance {
     private visible = true;
     private diffuseColor = vec4.fromValues(1, 1, 1, 1);
+    private specularColor = vec4.fromValues(0, 0, 0, 0);
+    private specularPower = 1.0;
+    private lightDir = vec4.fromValues(0.8, 0.5, -0.5, 0.0);
     private texScroll = nArray(3, () => vec4.create());
     private textureMapping = nArray(8, () => new TextureMapping());
     private megaState: Partial<GfxMegaStateDescriptor>;
@@ -485,11 +564,13 @@ class BatchInstance {
         if (mtd.shaderPath.includes('_Phn_'))
             program.defines.set('USE_LIGHTING', '1');
 
-        linkTextureParameter(this.textureMapping, textureHolder, 'g_Diffuse',   material, mtd);
-        linkTextureParameter(this.textureMapping, textureHolder, 'g_Bumpmap',   material, mtd);
-        linkTextureParameter(this.textureMapping, textureHolder, 'g_Diffuse_2', material, mtd);
-        linkTextureParameter(this.textureMapping, textureHolder, 'g_Bumpmap_2', material, mtd);
-        linkTextureParameter(this.textureMapping, textureHolder, 'g_Lightmap',  material, mtd);
+        linkTextureParameter(this.textureMapping, textureHolder, 'g_Diffuse',    material, mtd);
+        linkTextureParameter(this.textureMapping, textureHolder, 'g_Specular',   material, mtd);
+        linkTextureParameter(this.textureMapping, textureHolder, 'g_Bumpmap',    material, mtd);
+        linkTextureParameter(this.textureMapping, textureHolder, 'g_Diffuse_2',  material, mtd);
+        linkTextureParameter(this.textureMapping, textureHolder, 'g_Specular_2', material, mtd);
+        linkTextureParameter(this.textureMapping, textureHolder, 'g_Bumpmap_2',  material, mtd);
+        linkTextureParameter(this.textureMapping, textureHolder, 'g_Lightmap',   material, mtd);
 
         const blendMode = getBlendMode(mtd);
         let isTranslucent = false;
@@ -520,9 +601,20 @@ class BatchInstance {
         }
 
         const diffuseMapColor = getMaterialParam(mtd, 'g_DiffuseMapColor');
-        if (diffuseMapColor !== undefined) {
+        if (diffuseMapColor !== null) {
             const diffuseMapColorPower = assertExists(getMaterialParam(mtd, `g_DiffuseMapColorPower`))[0];
             vec4.set(this.diffuseColor, diffuseMapColor[0], diffuseMapColor[1], diffuseMapColor[2], diffuseMapColorPower);
+        }
+
+        const specularMapColor = getMaterialParam(mtd, 'g_SpecularMapColor');
+        if (specularMapColor !== null) {
+            const specularMapColorPower = assertExists(getMaterialParam(mtd, `g_SpecularMapColorPower`))[0];
+            vec4.set(this.specularColor, specularMapColor[0], specularMapColor[1], specularMapColor[2], specularMapColorPower);
+        }
+
+        const specularPower = getMaterialParam(mtd, 'g_SpecularPower');
+        if (specularPower !== null) {
+            this.specularPower = specularPower[0];
         }
 
         for (let i = 0; i < 3; i++) {
@@ -545,24 +637,28 @@ class BatchInstance {
         template.setSamplerBindingsFromTextureMappings(this.textureMapping);
         template.setGfxProgram(this.gfxProgram);
 
-        let offs = template.allocateUniformBuffer(DKSProgram.ub_MeshFragParams, 12*3 + 4*4);
+        let offs = template.allocateUniformBuffer(DKSProgram.ub_MeshFragParams, 12*1 + 4*7);
         const d = template.mapUniformBufferF32(DKSProgram.ub_MeshFragParams);
 
         computeViewMatrix(matrixScratch, viewerInput.camera);
         mat4.mul(matrixScratch, matrixScratch, modelMatrix);
         offs += fillMatrix4x3(d, offs, matrixScratch);
 
-        computeNormalMatrix(matrixScratch, modelMatrix, false);
-        offs += fillMatrix4x3(d, offs, matrixScratch);
-
-        offs += fillMatrix4x3(d, offs, modelMatrix);
-
+        offs += fillVec4v(d, offs, this.specularColor);
         offs += fillVec4v(d, offs, this.diffuseColor);
 
         const scrollTime = viewerInput.time / 120;
         offs += fillVec4v(d, offs, vec4.scale(scratchVec4, this.texScroll[0], scrollTime));
         offs += fillVec4v(d, offs, vec4.scale(scratchVec4, this.texScroll[1], scrollTime));
         offs += fillVec4v(d, offs, vec4.scale(scratchVec4, this.texScroll[2], scrollTime));
+
+        // Light direction
+        vec4.copy(scratchVec4, this.lightDir);
+        vec4.transformMat4(scratchVec4, scratchVec4, matrixScratch);
+        vec4.normalize(scratchVec4, scratchVec4);
+        offs += fillVec4v(d, offs, scratchVec4);
+
+        offs += fillVec4(d, offs, this.specularPower, window.debug);
 
         const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, bboxScratch);
 
@@ -605,12 +701,6 @@ export class FLVERInstance {
             const batchData = this.flverData.batchData[i];
             const batch = batchData.batch;
             const material = this.flverData.flver.materials[batch.materialIndex];
-
-            const diffuseTextureName = lookupTextureParameter(material, 'g_Diffuse');
-
-            // TODO(jstpierre): Implement untextured materials.
-            if (diffuseTextureName === null || !textureHolder.hasTexture(diffuseTextureName))
-                continue;
 
             const mtdFilePath = material.mtdName;
             const mtdName = mtdFilePath.split('\\').pop();
