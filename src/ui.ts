@@ -2396,7 +2396,9 @@ export class UI {
 
     public dragHighlight: HTMLElement;
     public sceneUIContainer: HTMLElement;
-    public floatingPanelContainer: HTMLElement;
+
+    private floatingPanelContainer: HTMLElement;
+    private floatingPanels: FloatingPanel[] = [];
 
     private panelToplevel: HTMLElement;
     private panelContainer: HTMLElement;
@@ -2502,6 +2504,13 @@ export class UI {
         setChildren(this.panelContainer, panels.map((panel) => panel.elem));
     }
 
+    public destroyScene(): void {
+        setChildren(this.sceneUIContainer, []);
+
+        for (let i = 0; i < this.floatingPanels.length; i++)
+            this.floatingPanels[i].destroy();
+    }
+
     public setScenePanels(scenePanels: Panel[] | null): void {
         if (scenePanels !== null)
             this.setPanels([this.sceneSelect, ...scenePanels, this.textureViewer, this.timePanel, this.saveStatesPanel, this.viewerSettings, this.statisticsPanel, this.about]);
@@ -2527,18 +2536,19 @@ export class UI {
             this.setPanelsAutoClosed(true);
     }
 
-    private makeFloater(title: string = 'Floating Panel', icon: string = RENDER_HACKS_ICON): FloatingPanel {
+    public makeFloatingPanel(title: string = 'Floating Panel', icon: string = RENDER_HACKS_ICON): FloatingPanel {
         const panel = new FloatingPanel();
         panel.setWidth(600);
         panel.setTitle(icon, title);
         this.floatingPanelContainer.appendChild(panel.elem);
+        this.floatingPanels.push(panel);
         return panel;
     }
 
     private debugFloater: FloatingPanel | null = null;
     private getDebugFloater(): FloatingPanel {
         if (this.debugFloater === null)
-            this.debugFloater = this.makeFloater('Debug');
+            this.debugFloater = this.makeFloatingPanel('Debug');
         return this.debugFloater;
     }
 

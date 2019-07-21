@@ -1,6 +1,6 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, hexdump, hexzero, align } from "../util";
+import { assert, align } from "../util";
 import * as F3DEX from "./f3dex";
 
 // Banjo-Kazooie Geometry
@@ -18,8 +18,6 @@ export function parse(buffer: ArrayBufferSlice, initialZUpd: boolean): Geometry 
     const f3dexOffs = view.getUint32(0x0C);
     const f3dexCount = view.getUint32(f3dexOffs + 0x00);
     const f3dexData = buffer.subarray(f3dexOffs + 0x08, f3dexCount * 0x08);
-
-    hexdump(buffer, 0x00, 0x40);
 
     const vertexDataOffs = view.getUint32(0x10);
     const vertexCount = view.getUint16(0x32);

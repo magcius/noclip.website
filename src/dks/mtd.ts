@@ -21,10 +21,18 @@ export interface MTDParam {
     value: number[];
 }
 
+export interface MTDTexture {
+    name: string;
+    uvNumberUncollapsed: number;
+    uvNumber: number;
+    shaderDataIndex: number;
+}
+
 export interface MTD {
     shaderPath: string;
     description: string;
     params: MTDParam[];
+    textures: MTDTexture[];
 }
 
 class DataReader {
@@ -35,7 +43,7 @@ class DataReader {
         this.view = buffer.createDataView();
     }
 
-    public assertBlock(expectedType: number | null, expectedVersion: number | null, expectedMarker: number | null): void {
+    public assertBlock(expectedType: number | null, expectedVersion: number | null, expectedMarker: number | null): number {
         assert(this.readUint32() === 0x00);
         const length = this.readUint32();
         const type = this.readUint32();
@@ -47,6 +55,7 @@ class DataReader {
         const marker = this.readMarker();
         if (expectedMarker !== null)
             assert(marker === expectedMarker);
+        return version;
     }
 
     public readUint8(): number {
@@ -149,6 +158,42 @@ export function parse(buffer: ArrayBufferSlice): MTD {
 
         params.push({ name, type, value });
     }
+    reader.assertMarker(0x03);
 
-    return { shaderPath, description, params };
+    const textureCount = reader.readUint32();
+    const textures: MTDTexture[] = [];
+
+    let lastUvUncollapsed = -1, lastUvIndex = -1;
+    for (let i = 0; i < textureCount; i++) {
+        const version = reader.assertBlock(0x2000, null, 0xA3);
+        assert(version === 3 || version === 5);
+
+        const name = reader.readMarkedString(0x35);
+        const uvNumberUncollapsed = reader.readUint32();
+        reader.assertMarker(0x35);
+        const shaderDataIndex = reader.readUint32();
+
+        if (version === 5) {
+            reader.assertUint32(0xA3);
+            const path = reader.readMarkedString(0xBA);
+            const floatCount = reader.readUint32();
+            for (let j = 0; j < floatCount; j++)
+                reader.readFloat32();
+        }
+
+        // Collapse UV
+        let uvNumber = -1;
+        if (uvNumberUncollapsed === lastUvUncollapsed) {
+            uvNumber = lastUvIndex;
+        } else {
+            uvNumber = ++lastUvIndex;
+            lastUvUncollapsed = uvNumberUncollapsed;
+        }
+
+        textures.push({ name, uvNumberUncollapsed, uvNumber, shaderDataIndex });
+    }
+    reader.assertMarker(0x04);
+    reader.assertUint32(0);
+
+    return { shaderPath, description, params, textures };
 }

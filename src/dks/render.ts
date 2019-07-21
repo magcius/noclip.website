@@ -1,7 +1,5 @@
 
-// @ts-ignore
-import { readFileSync } from 'fs';
-import { FLVER, VertexInputSemantic, Material, Primitive, Batch } from "./flver";
+import { FLVER, VertexInputSemantic, Material, Primitive, Batch, VertexAttribute } from "./flver";
 import { GfxDevice, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxBufferUsage, GfxBuffer, GfxVertexBufferDescriptor, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram } from "../gfx/platform/GfxPlatform";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { coalesceBuffer, GfxCoalescedBuffer } from "../gfx/helpers/BufferHelpers";
@@ -19,11 +17,36 @@ import { AABB } from "../Geometry";
 import { ModelHolder, MaterialDataHolder } from "./scenes";
 import { MSB, Part } from "./msb";
 import { MathConstants, computeNormalMatrix } from "../MathHelpers";
-import { MTD } from './mtd';
+import { MTD, MTDTexture } from './mtd';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
+import { interactiveVizSliderSelect } from '../DebugJunk';
 
 function shouldRenderPrimitive(primitive: Primitive): boolean {
     return primitive.flags === 0;
+}
+
+function isLODModel(name: string): boolean {
+    // The original game handles LOD models through "draw groups" where when you are on a certain
+    // collision mesh, the game will only show models that have any draw group bits in common with the
+    // collision triangle. While a reasonable approximation might be to calculate the collision bounds
+    // and check if the camera is inside that, parsing collision is too much for us right now. So this
+    // is a manual approach.
+
+    const lodModels = [
+        // Undead Burg / Parish
+        "m2000B1",
+        "m2380B1",
+        "m2430B1",
+        "m2410B1",
+        "m3301B1",
+        // Anor Londo
+        "m8000B1_0000",
+        "m8010B1_0000",
+        "m8020B1_0000",
+        "m8030B1_0000",
+    ];
+
+    return lodModels.includes(name);
 }
 
 class BatchData {
@@ -62,7 +85,7 @@ export class FLVERData {
 
             for (let j = 0; j < inputLayout.vertexAttributes.length; j++) {
                 const vertexAttributes = inputLayout.vertexAttributes[j];
-                const location = this.translateSemantic(vertexAttributes.semantic);
+                const location = this.translateLocation(vertexAttributes);
                 if (location < 0)
                     continue;
 
@@ -108,11 +131,18 @@ export class FLVERData {
         }
     }
 
-    private translateSemantic(semantic: VertexInputSemantic): number {
-        switch (semantic) {
+    private translateLocation(attr: VertexAttribute): number {
+        switch (attr.semantic) {
         case VertexInputSemantic.Position:  return DKSProgram.a_Position;
         case VertexInputSemantic.Color:     return DKSProgram.a_Color;
-        case VertexInputSemantic.UV:        return DKSProgram.a_TexCoord;
+        case VertexInputSemantic.UV:        {
+            if (attr.index === 0)
+                return DKSProgram.a_TexCoord0;
+            else if (attr.index === 1)
+                return DKSProgram.a_TexCoord1;
+            else
+                throw "whoops";
+        }
         case VertexInputSemantic.Normal:    return DKSProgram.a_Normal;
         case VertexInputSemantic.Tangent:   return DKSProgram.a_Tangent;
         case VertexInputSemantic.Bitangent: return DKSProgram.a_Bitangent;
@@ -161,20 +191,219 @@ export class FLVERData {
     }
 }
 
+function getTexAssign(mtd: MTD, name: string): number {
+    return mtd.textures.findIndex((t) => t.name === name);
+}
+
 class DKSProgram extends DeviceProgram {
     public static a_Position = 0;
     public static a_Color = 1;
-    public static a_TexCoord = 2;
-    public static a_Normal = 3;
-    public static a_Tangent = 4;
-    public static a_Bitangent = 5;
+    public static a_TexCoord0 = 2;
+    public static a_TexCoord1 = 3;
+    public static a_Normal = 4;
+    public static a_Tangent = 5;
+    public static a_Bitangent = 6;
 
     public static ub_SceneParams = 0;
     public static ub_MeshFragParams = 1;
 
-    private static program = readFileSync('src/dks/program.glsl', { encoding: 'utf8' });
-    public static programReflection: DeviceProgramReflection = DeviceProgram.parseReflectionDefinitions(DKSProgram.program);
-    public both = DKSProgram.program;
+    public static BindingDefinitions = `
+// Expected to be constant across the entire scene.
+layout(row_major, std140) uniform ub_SceneParams {
+    Mat4x4 u_Projection;
+};
+
+layout(row_major, std140) uniform ub_MeshFragParams {
+    Mat4x3 u_BoneMatrix[1];
+    Mat4x3 u_NormalMatrix[1];
+    Mat4x3 u_ModelMatrix[1];
+    // Fourth element has g_DiffuseMapColorPower
+    vec4 u_DiffuseMapColor;
+    vec4 u_TexScroll[3];
+};
+
+uniform sampler2D u_Texture[8];
+`;
+
+    public both = `
+precision mediump float;
+
+${DKSProgram.BindingDefinitions}
+
+varying vec4 v_Color;
+varying vec2 v_TexCoord[3];
+varying vec3 v_NormalWorld;
+varying vec3 v_TangentWorld;
+varying vec3 v_BitangentWorld;
+`;
+
+    public vert = `
+layout(location = 0) in vec3 a_Position;
+layout(location = 1) in vec4 a_Color;
+layout(location = 2) in vec4 a_TexCoord0;
+layout(location = 3) in vec4 a_TexCoord1;
+layout(location = 4) in vec4 a_Normal;
+layout(location = 5) in vec4 a_Tangent;
+layout(location = 6) in vec4 a_Bitangent;
+
+#define UNORM_TO_SNORM(xyz) ((xyz - 0.5) * 2.0)
+
+void main() {
+    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix[0]), vec4(a_Position, 1.0)));
+    v_NormalWorld = normalize(Mul(_Mat4x4(u_NormalMatrix[0]), vec4(UNORM_TO_SNORM(a_Normal.xyz), 0.0)).xyz);
+    v_TangentWorld = normalize(Mul(_Mat4x4(u_ModelMatrix[0]), vec4(UNORM_TO_SNORM(a_Tangent.xyz), 0.0)).xyz);
+    v_BitangentWorld = normalize(Mul(_Mat4x4(u_ModelMatrix[0]), vec4(UNORM_TO_SNORM(a_Bitangent.xyz), 0.0)).xyz);
+    v_Color = a_Color;
+    v_TexCoord[0] = ((a_TexCoord0.xy) / 1024.0) + u_TexScroll[0].xy;
+    v_TexCoord[1] = ((a_TexCoord0.zw) / 1024.0) + u_TexScroll[1].xy;
+    v_TexCoord[2] = ((a_TexCoord1.xy) / 1024.0) + u_TexScroll[2].xy;
+}
+`;
+
+    constructor(private mtd: MTD) {
+        super();
+        this.frag = this.genFrag();
+    }
+
+    private getTexture(name: string): MTDTexture | null {
+        const texDef = this.mtd.textures.find((t) => t.name === name);
+        if (texDef !== undefined)
+            return texDef;
+        else
+            return null;
+    }
+
+    private buildTexAccess(texParam: MTDTexture): string {
+        const texAssign = getTexAssign(this.mtd, texParam.name);
+        assert(texAssign > -1);
+        return `texture2D(u_Texture[${texAssign}], v_TexCoord[${texParam.uvNumber}])`;
+    }
+
+    private genDiffuse(): string {
+        const diffuse1 = this.getTexture('g_Diffuse');
+        const diffuse2 = this.getTexture('g_Diffuse_2');
+
+        const diffuseEpi = `
+    t_Diffuse.rgb = t_Diffuse.rgb * u_DiffuseMapColor.rgb * u_DiffuseMapColor.w;
+    t_Color *= t_Diffuse;
+`;
+
+        if (diffuse1 !== null && diffuse2 !== null) {
+            return `
+    vec4 t_Diffuse1 = ${this.buildTexAccess(diffuse1)};
+    vec4 t_Diffuse2 = ${this.buildTexAccess(diffuse2)};
+    vec4 t_Diffuse = mix(t_Diffuse1, t_Diffuse2, v_Color.a);
+${diffuseEpi}
+`;
+        } else if (diffuse1 !== null) {
+            return `
+    vec4 t_Diffuse1 = ${this.buildTexAccess(diffuse1)};
+    vec4 t_Diffuse = t_Diffuse1;
+${diffuseEpi}
+    `;
+        } else {
+            return '';
+        }
+    }
+
+    private genNormalDir(): string {
+        const bumpmap1 = this.getTexture('g_Bumpmap');
+        const bumpmap2 = this.getTexture('g_Bumpmap_2');
+
+        const bumpmapPro = `
+    vec3 t_Normal = v_NormalWorld.xyz;
+    vec3 t_Tangent = v_TangentWorld.xyz;
+    vec3 t_Bitangent = v_BitangentWorld.xyz;
+`;
+
+        const bumpmapEpi = `
+    vec3 t_NormalDir = (t_LocalNormal.x * t_Tangent + t_LocalNormal.y * t_Bitangent + t_LocalNormal.z * t_Normal);
+`;
+
+        if (bumpmap1 !== null && bumpmap2 !== null) {
+            return `
+${bumpmapPro}
+    vec3 t_Bumpmap1 = ${this.buildTexAccess(bumpmap1)}.rgb;
+    vec3 t_Bumpmap2 = ${this.buildTexAccess(bumpmap2)}.rgb;
+    vec3 t_LocalNormal = mix(t_Bumpmap1, t_Bumpmap2, v_Color.a);
+${bumpmapEpi}
+`;
+        } else if (bumpmap1 !== null) {
+            return `
+${bumpmapPro}
+    vec3 t_Bumpmap1 = ${this.buildTexAccess(bumpmap1)}.rgb;
+    vec3 t_LocalNormal = t_Bumpmap1;
+${bumpmapEpi}
+`;
+        } else {
+            return `
+    vec3 t_NormalDir = v_NormalWorld;
+`;
+        }
+    }
+
+    private genLightMap(): string {
+        const lightmap = this.getTexture('g_Lightmap');
+
+        if (lightmap !== null) {
+            return `
+    t_DirectIrradiance *= ${this.buildTexAccess(lightmap)}.rgb;
+`;
+        } else {
+            return '';
+        }
+    }
+
+    private buildAlphaTest(): string {
+        const blendMode = getBlendMode(this.mtd);
+
+        if (blendMode === BlendMode.TexEdge) {
+            return `
+    if (t_Color.a < 0.1)
+        discard;
+`;
+        } else {
+            return '';
+        }
+    }
+
+    private genFrag(): string {
+        return `
+void main() {
+    vec4 t_Color = vec4(1.0);
+
+    t_Color *= v_Color;
+
+    ${this.genDiffuse()}
+
+#ifdef USE_LIGHTING
+    vec3 t_DirectIrradiance = vec3(1.0);
+
+    ${this.genNormalDir()}
+
+    // Basic fake directional.
+    vec3 t_LightDirection = normalize(vec3(0.8, -1, 0.5));
+    t_DirectIrradiance *= mix(0.0, 2.0, max(dot(-t_NormalDir, t_LightDirection), 0.0));
+
+    ${this.genLightMap()}
+
+    // Add in some fake ambient.
+    t_DirectIrradiance += 0.5;
+
+    t_Color.rgb *= t_DirectIrradiance;
+#endif
+
+    ${this.buildAlphaTest()}
+
+    // Convert to gamma-space
+    t_Color.rgb = pow(t_Color.rgb, vec3(1.0 / 2.2));
+
+    gl_FragColor = t_Color;
+}
+`;
+    }
+
+    public static programReflection: DeviceProgramReflection = DeviceProgram.parseReflectionDefinitions(DKSProgram.BindingDefinitions);
 }
 
 function lookupTextureParameter(material: Material, paramName: string): string | null {
@@ -227,49 +456,40 @@ function getBlendMode(mtd: MTD): BlendMode {
     return blendMode;
 }
 
+function linkTextureParameter(textureMapping: TextureMapping[], textureHolder: DDSTextureHolder, name: string, material: Material, mtd: MTD): void {
+    const texDef = mtd.textures.find((t) => t.name === name);
+    if (texDef === undefined)
+        return;
+
+    const textureName = assertExists(lookupTextureParameter(material, name));
+    if (textureHolder.hasTexture(textureName)) {
+        const texAssign = getTexAssign(mtd, name);
+        textureHolder.fillTextureMapping(textureMapping[texAssign], textureName);
+    }
+}
+
 const scratchVec4 = vec4.create();
 class BatchInstance {
     private visible = true;
     private diffuseColor = vec4.fromValues(1, 1, 1, 1);
     private texScroll = nArray(3, () => vec4.create());
-    private textureMapping = nArray(5, () => new TextureMapping());
+    private textureMapping = nArray(8, () => new TextureMapping());
     private megaState: Partial<GfxMegaStateDescriptor>;
     private gfxProgram: GfxProgram;
     private sortKey: number;
 
     constructor(device: GfxDevice, private flverData: FLVERData, private batchData: BatchData, textureHolder: DDSTextureHolder, material: Material, mtd: MTD) {
-        const program = new DKSProgram();
+        const program = new DKSProgram(mtd);
 
         // If this is a Phong shader, then turn on lighting.
         if (mtd.shaderPath.includes('_Phn_'))
             program.defines.set('USE_LIGHTING', '1');
 
-        const diffuseTextureName = lookupTextureParameter(material, 'g_Diffuse');
-        textureHolder.fillTextureMapping(this.textureMapping[0], diffuseTextureName);
-
-        const bumpmapTextureName = lookupTextureParameter(material, 'g_Bumpmap');
-        if (bumpmapTextureName !== null && textureHolder.hasTexture(bumpmapTextureName)) {
-            program.defines.set('USE_BUMPMAP', '1');
-            textureHolder.fillTextureMapping(this.textureMapping[1], bumpmapTextureName);
-        }
-
-        const diffuse2TextureName = lookupTextureParameter(material, 'g_Diffuse_2');
-        if (diffuse2TextureName) {
-            program.defines.set('USE_DIFFUSE_2', '1');
-            textureHolder.fillTextureMapping(this.textureMapping[2], diffuse2TextureName);
-        }
-
-        const bumpmap2TextureName = lookupTextureParameter(material, 'g_Bumpmap_2');
-        if (bumpmap2TextureName) {
-            program.defines.set('USE_BUMPMAP_2', '1');
-            textureHolder.fillTextureMapping(this.textureMapping[3], bumpmap2TextureName);
-        }
-
-        const lightmapTextureName = lookupTextureParameter(material, 'g_Lightmap');
-        if (lightmapTextureName !== null && textureHolder.hasTexture(lightmapTextureName)) {
-            program.defines.set('USE_LIGHTMAP', '1');
-            textureHolder.fillTextureMapping(this.textureMapping[4], lightmapTextureName);
-        }
+        linkTextureParameter(this.textureMapping, textureHolder, 'g_Diffuse',   material, mtd);
+        linkTextureParameter(this.textureMapping, textureHolder, 'g_Bumpmap',   material, mtd);
+        linkTextureParameter(this.textureMapping, textureHolder, 'g_Diffuse_2', material, mtd);
+        linkTextureParameter(this.textureMapping, textureHolder, 'g_Bumpmap_2', material, mtd);
+        linkTextureParameter(this.textureMapping, textureHolder, 'g_Lightmap',  material, mtd);
 
         const blendMode = getBlendMode(mtd);
         let isTranslucent = false;
@@ -294,7 +514,6 @@ class BatchInstance {
             isTranslucent = true;
         } else if (blendMode === BlendMode.TexEdge) {
             this.megaState = {};
-            program.defines.set('USE_ALPHATEST', '1');
         } else {
             this.megaState = {};
             console.warn(`Unknown blend mode ${blendMode} in material ${material.mtdName}`);
@@ -428,7 +647,7 @@ function fillSceneParamsData(d: Float32Array, camera: Camera, offs: number = 0):
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 2, numSamplers: 5 },
+    { numUniformBuffers: 2, numSamplers: 8 },
 ];
 
 function modelMatrixFromPart(m: mat4, part: Part): void {
@@ -456,11 +675,23 @@ export class MSBRenderer {
                     continue;
 
                 const instance = new FLVERInstance(device, this.textureHolder, this.materialDataHolder, flverData);
+                instance.visible = !isLODModel(part.name);
                 instance.name = part.name;
                 modelMatrixFromPart(instance.modelMatrix, part);
                 this.flverInstances.push(instance);
             }
         }
+    }
+
+    private lodModels: string[] = [];
+    public chooseLODModel(): void {
+        interactiveVizSliderSelect(this.flverInstances, (index) => {
+            const instance = this.flverInstances[index];
+            this.lodModels.push(instance.name);
+            setTimeout(() => { instance.visible = false; }, 2000);
+
+            this.chooseLODModel();
+        });
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {

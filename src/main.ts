@@ -60,7 +60,7 @@ import * as Scenes_Zelda_SkywardSword from './rres/Scenes_Zelda_SkywardSword';
 
 import { DroppedFileSceneDesc } from './Scenes_FileDrops';
 
-import { UI, SaveStatesAction, setChildren, Panel } from './ui';
+import { UI, SaveStatesAction, Panel } from './ui';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera';
 import { hexdump } from './util';
 import { downloadBlob, downloadBufferSlice, downloadBuffer } from './fetch';
@@ -145,11 +145,6 @@ class SceneLoader {
     }
 
     public loadSceneDesc(sceneDesc: SceneDesc): Progressable<SceneGfx> {
-        // Tear down old scene.
-        this.viewer.setScene(null);
-        gfxDeviceGetImpl(this.viewer.gfxDevice).checkForLeaks();
-        setChildren(this.sceneUIContainer, []);
-
         if (this.abortController !== null)
             this.abortController.abort();
         this.abortController = new AbortController();
@@ -581,6 +576,11 @@ class Main {
     private _loadSceneDesc(sceneGroup: SceneGroup, sceneDesc: SceneDesc, sceneStateStr: string | null = null): Progressable<SceneGfx> {
         if (this.currentSceneDesc === sceneDesc)
             return Progressable.resolve(null);
+
+        // Tear down old scene.
+        this.ui.destroyScene();
+        this.viewer.setScene(null);
+        gfxDeviceGetImpl(this.viewer.gfxDevice).checkForLeaks();
 
         this.currentSceneGroup = sceneGroup;
         this.currentSceneDesc = sceneDesc;

@@ -12,6 +12,7 @@ import { mat4 } from 'gl-matrix';
 import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
+import { interactiveVisTestBisect, interactiveVizSliderSelect } from '../DebugJunk';
 
 export function textureToCanvas(texture: Texture): Viewer.Texture {
     const canvas = document.createElement("canvas");
@@ -177,6 +178,7 @@ class DrawCallInstance {
     private program!: DeviceProgram;
     private gfxProgram: GfxProgram | null = null;
     private textureMappings = nArray(2, () => new TextureMapping());
+    public visible = true;
 
     constructor(n64Data: N64Data, private drawCall: DrawCall) {
         for (let i = 0; i < this.textureMappings.length; i++) {
@@ -268,6 +270,9 @@ class DrawCallInstance {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean, modelMatrix: mat4): void {
+        if (!this.visible)
+            return;
+
         if (this.gfxProgram === null)
             this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
 
@@ -322,6 +327,10 @@ export class N64Renderer {
 
         for (let i = 0; i < this.n64Data.rspOutput.drawCalls.length; i++)
             this.drawCallInstances.push(new DrawCallInstance(this.n64Data, this.n64Data.rspOutput.drawCalls[i]));
+    }
+
+    public slider(): void {
+        interactiveVizSliderSelect(this.drawCallInstances);
     }
 
     public setBackfaceCullingEnabled(v: boolean): void {

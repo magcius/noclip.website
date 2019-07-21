@@ -3,8 +3,9 @@
 import { AABB } from "./Geometry";
 import { Color, Magenta, colorToCSS } from "./Color";
 import { Camera, divideByW, ScreenSpaceProjection } from "./Camera";
-import { vec4, mat4, vec3, vec2 } from "gl-matrix";
+import { vec4, vec3 } from "gl-matrix";
 import { nArray, assert, assertExists } from "./util";
+import { UI, Slider } from "./ui";
 
 export function stepF(f: (t: number) => number, maxt: number, step: number, callback: (t: number, v: number) => void) {
     for (let t = 0; t < maxt; t += step) {
@@ -243,4 +244,126 @@ export function drawScreenSpaceProjection(ctx: CanvasRenderingContext2D, proj: S
     ctx.lineWidth = 2;
     ctx.strokeStyle = colorToCSS(color);
     ctx.stroke();
+}
+
+export function interactiveBisect(items: any[], testItem: (itemIndex: number, v: boolean) => void, done: (itemIndex: number) => void): (v: boolean) => void {
+    let min = 0;
+    let max = items.length;
+
+    const performTest = () => {
+        // Set our new test.
+        let testMin = (min + (max - min) / 2) | 0;
+
+        const numSteps = Math.ceil(Math.log2(max - min));
+        console.log(`Set bounds are ${min} to ${max}. Test set bounds are now ${testMin} to ${max}. ${numSteps} step(s) left`);
+        for (let i = 0; i < max; i++) {
+            const isInTestSet = i >= testMin && i < max;
+            testItem(i, isInTestSet);
+        }
+    };
+
+    const step = (objectWasInTestSet: boolean) => {
+        assert(max > min);
+
+        // Special case (boundary edges)
+        if ((max - min) <= 2) {
+            // If we have two objects in our set, then the one we pick is the one that was in the test set.
+            if (objectWasInTestSet)
+                return done(min + 1);
+            else
+                return done(min);
+        }
+
+        if (objectWasInTestSet) {
+            // If the object is in our test set, then our new range should be that test set.
+            min = (min + (max - min) / 2) | 0;
+        } else {
+            // Otherwise, the new range are the objects that *weren't* in the test set last time.
+            max = ((min + (max - min) / 2) | 0) + 1;
+        }
+
+        performTest();
+    };
+
+    // Set up our initial test.
+    performTest();
+
+    return step;
+}
+
+interface VisTestItem {
+    visible: boolean;
+}
+
+function flashItem(item: VisTestItem, step: number = 0) {
+    item.visible = step % 2 === 1;
+    if (step < 7)
+        setTimeout(() => { flashItem(item, step + 1) }, 200);
+}
+
+export function interactiveVisTestBisect(items: VisTestItem[]): void {
+    const visibleItems = items.filter((v) => v.visible);
+
+    const step = interactiveBisect(visibleItems, (i, v) => { visibleItems[i].visible = v; }, (i) => {
+        visibleItems.forEach((v) => v.visible = true);
+        const item = visibleItems[i];
+        console.log(`Found item @ ${items.indexOf(item)}:`, item);
+        flashItem(item);
+        delete (window as any).visible;
+        delete (window as any).invisible;
+    });
+
+    (window as any).visible = () => {
+        step(true);
+    };
+    (window as any).invisible = () => {
+        step(false);
+    };
+}
+
+export function interactiveSliderSelect(items: any[], testItem: (itemIndex: number, v: boolean) => void, done: (itemIndex: number) => void): void {
+    const ui: UI = window.main.ui;
+    const debugFloater = ui.makeFloatingPanel('SliderSelect');
+    const slider = new Slider();
+    // Revert to default style for clarity
+    slider.elem.querySelector('input').classList.remove('Slider');
+    debugFloater.contents.append(slider.elem);
+
+    const doneButton = document.createElement('div');
+    doneButton.textContent = 'Select';
+    doneButton.style.background = '#333';
+    doneButton.style.cursor = 'pointer';
+    doneButton.style.padding = '1em';
+    debugFloater.contents.append(doneButton);
+
+    slider.setRange(0, items.length, 1);
+
+    slider.onvalue = (v: number) => {
+        slider.setLabel('' + v);
+        for (let i = 0; i < items.length; i++)
+            testItem(i, (i <= v));
+    };
+
+    slider.setValue(items.length);
+    slider.setLabel('' + items.length);
+
+    doneButton.onclick = () => {
+        const index = slider.getValue();
+        debugFloater.destroy();
+        done(index);
+    };
+}
+
+export function interactiveVizSliderSelect(items: VisTestItem[], callback: ((item: number) => void) | null = null): void {
+    const visibleItems = items.filter((v) => v.visible);
+
+    interactiveSliderSelect(visibleItems, (i, v) => { visibleItems[i].visible = v; }, (index) => {
+        visibleItems.forEach((v) => v.visible = true);
+        const item = visibleItems[index];
+        const origIndex = items.indexOf(item);
+        flashItem(item);
+        console.log(`Found item @ ${items.indexOf(item)}:`, item);
+        if (callback !== null)
+            callback(origIndex);
+    });
 }

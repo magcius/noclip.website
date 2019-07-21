@@ -15,7 +15,6 @@ import { fetchData, NamedArrayBufferSlice } from "../fetch";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { DDSTextureHolder } from "./dds";
 import { assert, assertExists } from "../util";
-import { BasicRendererHelper } from "../oot3d/render";
 import { FLVERData, MSBRenderer } from "./render";
 import { Panel, LayerPanel } from "../ui";
 import { SceneContext } from "../SceneBase";
@@ -206,7 +205,6 @@ export class DKSSceneDesc implements Viewer.SceneDesc {
         const dataFetcher = new DataFetcher(sceneContext.abortSignal, sceneContext.progressMeter);
         const resourceSystem = new ResourceSystem();
 
-        resourceSystem
         const arcName = `${this.id}_arc.crg1`;
 
         await Promise.all([
