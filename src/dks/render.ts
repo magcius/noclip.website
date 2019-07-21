@@ -2,18 +2,17 @@
 // @ts-ignore
 import { readFileSync } from 'fs';
 import { FLVER, VertexInputSemantic, Material, Primitive, Batch } from "./flver";
-import { GfxDevice, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxBufferUsage, GfxBuffer, GfxVertexBufferDescriptor, GfxHostAccessPass, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxBufferUsage, GfxBuffer, GfxVertexBufferDescriptor, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram } from "../gfx/platform/GfxPlatform";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { coalesceBuffer } from "../gfx/helpers/BufferHelpers";
+import { coalesceBuffer, GfxCoalescedBuffer } from "../gfx/helpers/BufferHelpers";
 import { convertToTriangleIndexBuffer, GfxTopology, getTriangleIndexCountForTopologyIndexCount } from "../gfx/helpers/TopologyHelpers";
-import { GfxRenderInstViewRenderer, GfxRenderInstBuilder, GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyDepth } from "../gfx/render/GfxRenderer";
+import { makeSortKey, GfxRendererLayer, setSortKeyDepth } from "../gfx/render/GfxRenderer";
 import { DeviceProgram, DeviceProgramReflection } from "../Program";
 import { DDSTextureHolder } from "./dds";
 import { nArray, assert, assertExists } from "../util";
 import { TextureMapping } from "../TextureHolder";
 import { mat4, vec4 } from "gl-matrix";
 import * as Viewer from "../viewer";
-import { GfxRenderBuffer } from "../gfx/render/GfxRenderBuffer";
 import { Camera, computeViewMatrix, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
 import { fillMatrix4x4, fillMatrix4x3, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
 import { AABB } from "../Geometry";
@@ -21,15 +20,37 @@ import { ModelHolder, MaterialDataHolder } from "./scenes";
 import { MSB, Part } from "./msb";
 import { MathConstants, computeNormalMatrix } from "../MathHelpers";
 import { MTD } from './mtd';
+import { GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
 
 function shouldRenderPrimitive(primitive: Primitive): boolean {
     return primitive.flags === 0;
 }
 
+class BatchData {
+    public inputStates: GfxInputState[] = [];
+
+    constructor(device: GfxDevice, flverData: FLVERData, public batch: Batch, vertexBuffer: GfxCoalescedBuffer, indexBuffers: GfxCoalescedBuffer[]) {
+        const flverInputState = flverData.flver.inputStates[batch.inputStateIndex];
+        const buffers: GfxVertexBufferDescriptor[] = [{ buffer: vertexBuffer.buffer, byteOffset: vertexBuffer.wordOffset * 0x04, byteStride: flverInputState.vertexSize }];
+
+        for (let j = 0; j < batch.primitiveIndexes.length; j++) {
+            const coaIndexBuffer = indexBuffers.shift();
+            const indexBuffer: GfxVertexBufferDescriptor = { buffer: coaIndexBuffer.buffer, byteOffset: coaIndexBuffer.wordOffset * 0x04, byteStride: 0x02 };
+            const inputState = device.createInputState(flverData.inputLayouts[flverInputState.inputLayoutIndex], buffers, indexBuffer);
+            this.inputStates.push(inputState);
+        }
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.inputStates.length; i++)
+            device.destroyInputState(this.inputStates[i]);
+    }
+}
+
 // TODO(jstpierre): Refactor with BatchData
 export class FLVERData {
-    public inputStates: GfxInputState[] = [];
     public inputLayouts: GfxInputLayout[] = [];
+    public batchData: BatchData[] = [];
     private indexBuffer: GfxBuffer;
     private vertexBuffer: GfxBuffer;
 
@@ -79,19 +100,11 @@ export class FLVERData {
         const indexBuffers = coalesceBuffer(device, GfxBufferUsage.INDEX, indexBufferDatas);
         this.indexBuffer = indexBuffers[0].buffer;
 
-        let indexBufferIndex = 0;
         for (let i = 0; i < flver.batches.length; i++) {
             const batch = flver.batches[i];
-            const flverInputState = flver.inputStates[batch.inputStateIndex];
             const coaVertexBuffer = vertexBuffers[batch.inputStateIndex];
-            const buffers: GfxVertexBufferDescriptor[] = [{ buffer: coaVertexBuffer.buffer, byteOffset: coaVertexBuffer.wordOffset * 0x04, byteStride: flverInputState.vertexSize }];
-
-            for (let j = 0; j < batch.primitiveIndexes.length; j++) {
-                const coaIndexBuffer = indexBuffers[indexBufferIndex++];
-                const indexBuffer: GfxVertexBufferDescriptor = { buffer: coaIndexBuffer.buffer, byteOffset: coaIndexBuffer.wordOffset * 0x04, byteStride: 0x02 };
-                const inputState = device.createInputState(this.inputLayouts[flverInputState.inputLayoutIndex], buffers, indexBuffer);
-                this.inputStates.push(inputState);
-            }
+            const batchData = new BatchData(device, this, batch, coaVertexBuffer, indexBuffers);
+            this.batchData.push(batchData);
         }
     }
 
@@ -143,8 +156,8 @@ export class FLVERData {
 
         for (let i = 0; i < this.inputLayouts.length; i++)
             device.destroyInputLayout(this.inputLayouts[i]);
-        for (let i = 0; i < this.inputStates.length; i++)
-            device.destroyInputState(this.inputStates[i]);
+        for (let i = 0; i < this.batchData.length; i++)
+            this.batchData[i].destroy(device);
     }
 }
 
@@ -185,7 +198,7 @@ const enum BlendMode {
 
     // Below are "linear space" variants, but as far as the community can tell, all lighting is in linear space.
     // It's likely that these were used at some point during development and the values were never removed.
-    LSNormal,
+    LSNormal = 0x20,
     LSTexEdge,
     LSBlend,
     LSWater,
@@ -214,19 +227,17 @@ function getBlendMode(mtd: MTD): BlendMode {
     return blendMode;
 }
 
-const textureMapping = nArray(5, () => new TextureMapping());
 const scratchVec4 = vec4.create();
 class BatchInstance {
     private visible = true;
-    private templateRenderInst: GfxRenderInst;
-    private renderInsts: GfxRenderInst[] = [];
     private diffuseColor = vec4.fromValues(1, 1, 1, 1);
     private texScroll = nArray(3, () => vec4.create());
+    private textureMapping = nArray(5, () => new TextureMapping());
+    private megaState: Partial<GfxMegaStateDescriptor>;
+    private gfxProgram: GfxProgram;
+    private sortKey: number;
 
-    constructor(device: GfxDevice, flverData: FLVERData, renderInstBuilder: GfxRenderInstBuilder, textureHolder: DDSTextureHolder, batch: Batch, material: Material, mtd: MTD, inputStateIndex: number) {
-        this.templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
-        renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, DKSProgram.ub_MeshFragParams);
-
+    constructor(device: GfxDevice, private flverData: FLVERData, private batchData: BatchData, textureHolder: DDSTextureHolder, material: Material, mtd: MTD) {
         const program = new DKSProgram();
 
         // If this is a Phong shader, then turn on lighting.
@@ -234,56 +245,59 @@ class BatchInstance {
             program.defines.set('USE_LIGHTING', '1');
 
         const diffuseTextureName = lookupTextureParameter(material, 'g_Diffuse');
-        textureHolder.fillTextureMapping(textureMapping[0], diffuseTextureName);
+        textureHolder.fillTextureMapping(this.textureMapping[0], diffuseTextureName);
 
         const bumpmapTextureName = lookupTextureParameter(material, 'g_Bumpmap');
         if (bumpmapTextureName !== null && textureHolder.hasTexture(bumpmapTextureName)) {
             program.defines.set('USE_BUMPMAP', '1');
-            textureHolder.fillTextureMapping(textureMapping[1], bumpmapTextureName);
+            textureHolder.fillTextureMapping(this.textureMapping[1], bumpmapTextureName);
         }
 
         const diffuse2TextureName = lookupTextureParameter(material, 'g_Diffuse_2');
         if (diffuse2TextureName) {
             program.defines.set('USE_DIFFUSE_2', '1');
-            textureHolder.fillTextureMapping(textureMapping[2], diffuse2TextureName);
+            textureHolder.fillTextureMapping(this.textureMapping[2], diffuse2TextureName);
         }
 
         const bumpmap2TextureName = lookupTextureParameter(material, 'g_Bumpmap_2');
         if (bumpmap2TextureName) {
             program.defines.set('USE_BUMPMAP_2', '1');
-            textureHolder.fillTextureMapping(textureMapping[3], diffuse2TextureName);
+            textureHolder.fillTextureMapping(this.textureMapping[3], bumpmap2TextureName);
         }
 
         const lightmapTextureName = lookupTextureParameter(material, 'g_Lightmap');
         if (lightmapTextureName !== null && textureHolder.hasTexture(lightmapTextureName)) {
             program.defines.set('USE_LIGHTMAP', '1');
-            textureHolder.fillTextureMapping(textureMapping[4], lightmapTextureName);
+            textureHolder.fillTextureMapping(this.textureMapping[4], lightmapTextureName);
         }
 
         const blendMode = getBlendMode(mtd);
         let isTranslucent = false;
         if (blendMode === BlendMode.Normal) {
             // Default
+            this.megaState = {};
         } else if (blendMode === BlendMode.Blend) {
-            this.templateRenderInst.setMegaStateFlags({
+            this.megaState = {
                 blendMode: GfxBlendMode.ADD,
                 blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
                 blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
                 depthWrite: false,
-            });
+            };
             isTranslucent = true;
         } else if (blendMode === BlendMode.Add) {
-            this.templateRenderInst.setMegaStateFlags({
+            this.megaState = {
                 blendMode: GfxBlendMode.ADD,
                 blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
                 blendDstFactor: GfxBlendFactor.ONE,
                 depthWrite: false,
-            });
+            };
             isTranslucent = true;
         } else if (blendMode === BlendMode.TexEdge) {
+            this.megaState = {};
             program.defines.set('USE_ALPHATEST', '1');
         } else {
-            console.warn(`Unknown blend mode ${blendMode}`);
+            this.megaState = {};
+            console.warn(`Unknown blend mode ${blendMode} in material ${material.mtdName}`);
         }
 
         const diffuseMapColor = getMaterialParam(mtd, 'g_DiffuseMapColor');
@@ -298,63 +312,64 @@ class BatchInstance {
                 vec4.set(this.texScroll[i], param[0], param[1], 0, 0);
         }
 
-        this.templateRenderInst.setGfxProgram(device.createProgram(program));
-        this.templateRenderInst.setSamplerBindingsFromTextureMappings(textureMapping);
+        this.gfxProgram = device.createProgram(program);
 
         const layer = isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
-        this.templateRenderInst.sortKey = makeSortKey(layer, 0);
-
-        for (let j = 0; j < batch.primitiveIndexes.length; j++) {
-            const primitive = flverData.flver.primitives[batch.primitiveIndexes[j]];
-            const inputState = flverData.inputStates[inputStateIndex++];
-            if (!shouldRenderPrimitive(primitive))
-                continue;
-            const renderInst = renderInstBuilder.pushRenderInst();
-            renderInst.inputState = inputState;
-            if (primitive.cullMode)
-                renderInst.setMegaStateFlags({ cullMode: GfxCullMode.BACK });
-            renderInst.drawIndexes(getTriangleIndexCountForTopologyIndexCount(GfxTopology.TRISTRIP, primitive.indexCount));
-            this.renderInsts.push(renderInst);
-        }
-
-        renderInstBuilder.popTemplateRenderInst();
+        this.sortKey = makeSortKey(layer, 0);
     }
 
-    public prepareToRender(meshFragParamsBuffer: GfxRenderBuffer, viewerInput: Viewer.ViewerRenderInput, visible: boolean, modelMatrix: mat4): void {
-        visible = visible && this.visible;
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4): void {
+        if (!this.visible)
+            return;
 
-        for (let i = 0; i < this.renderInsts.length; i++)
-            this.renderInsts[i].visible = visible;
+        const template = renderInstManager.pushTemplateRenderInst();
+        template.setSamplerBindingsFromTextureMappings(this.textureMapping);
+        template.setGfxProgram(this.gfxProgram);
 
-        if (visible) {
-            const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, bboxScratch);
+        let offs = template.allocateUniformBuffer(DKSProgram.ub_MeshFragParams, 12*3 + 4*4);
+        const d = template.mapUniformBufferF32(DKSProgram.ub_MeshFragParams);
 
-            for (let i = 0; i < this.renderInsts.length; i++)
-                this.renderInsts[i].sortKey = setSortKeyDepth(this.renderInsts[i].sortKey, depth);
+        computeViewMatrix(matrixScratch, viewerInput.camera);
+        mat4.mul(matrixScratch, matrixScratch, modelMatrix);
+        offs += fillMatrix4x3(d, offs, matrixScratch);
 
-            let offs = this.templateRenderInst.getUniformBufferOffset(DKSProgram.ub_MeshFragParams);
-            const d = meshFragParamsBuffer.mapBufferF32(offs, 12*2 + 4*4);
+        computeNormalMatrix(matrixScratch, modelMatrix, false);
+        offs += fillMatrix4x3(d, offs, matrixScratch);
 
-            computeViewMatrix(matrixScratch, viewerInput.camera);
-            mat4.mul(matrixScratch, matrixScratch, modelMatrix);
-            offs += fillMatrix4x3(d, offs, matrixScratch);
+        offs += fillMatrix4x3(d, offs, modelMatrix);
 
-            computeNormalMatrix(matrixScratch, modelMatrix, false);
-            offs += fillMatrix4x3(d, offs, matrixScratch);
+        offs += fillVec4v(d, offs, this.diffuseColor);
 
-            offs += fillMatrix4x3(d, offs, modelMatrix);
+        const scrollTime = viewerInput.time / 120;
+        offs += fillVec4v(d, offs, vec4.scale(scratchVec4, this.texScroll[0], scrollTime));
+        offs += fillVec4v(d, offs, vec4.scale(scratchVec4, this.texScroll[1], scrollTime));
+        offs += fillVec4v(d, offs, vec4.scale(scratchVec4, this.texScroll[2], scrollTime));
 
-            offs += fillVec4v(d, offs, this.diffuseColor);
+        const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, bboxScratch);
 
-            const scrollTime = viewerInput.time / 30;
-            offs += fillVec4v(d, offs, vec4.scale(scratchVec4, this.texScroll[0], scrollTime));
-            offs += fillVec4v(d, offs, vec4.scale(scratchVec4, this.texScroll[1], scrollTime));
-            offs += fillVec4v(d, offs, vec4.scale(scratchVec4, this.texScroll[2], scrollTime));
+        for (let j = 0; j < this.batchData.batch.primitiveIndexes.length; j++) {
+            const primitive = this.flverData.flver.primitives[this.batchData.batch.primitiveIndexes[j]];
+            if (!shouldRenderPrimitive(primitive))
+                continue;
+
+            const inputState = this.flverData.flver.inputStates[this.batchData.batch.inputStateIndex];
+            const gfxInputState = this.batchData.inputStates[j];
+            const gfxInputLayout = this.flverData.inputLayouts[inputState.inputLayoutIndex];
+
+            const renderInst = renderInstManager.pushRenderInst();
+            renderInst.setInputLayoutAndState(gfxInputLayout, gfxInputState);
+            renderInst.setMegaStateFlags(this.megaState);
+            if (primitive.cullMode)
+                renderInst.getMegaStateFlags().cullMode = GfxCullMode.BACK;
+            renderInst.drawIndexes(getTriangleIndexCountForTopologyIndexCount(GfxTopology.TRISTRIP, primitive.indexCount));
+            renderInst.sortKey = setSortKeyDepth(this.sortKey, depth);
         }
+
+        renderInstManager.popTemplateRenderInst();
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyProgram(this.templateRenderInst.gfxProgram!);
+        device.destroyProgram(this.gfxProgram);
     }
 }
 
@@ -366,14 +381,11 @@ export class FLVERInstance {
     public visible = true;
     public name: string;
 
-    constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, textureHolder: DDSTextureHolder, materialDataHolder: MaterialDataHolder, public flverData: FLVERData) {
-        let inputStateIndex = 0, nextInputStateIndex = 0;
+    constructor(device: GfxDevice, textureHolder: DDSTextureHolder, materialDataHolder: MaterialDataHolder, public flverData: FLVERData) {
         for (let i = 0; i < this.flverData.flver.batches.length; i++) {
-            const batch = this.flverData.flver.batches[i];
+            const batchData = this.flverData.batchData[i];
+            const batch = batchData.batch;
             const material = this.flverData.flver.materials[batch.materialIndex];
-    
-            inputStateIndex = nextInputStateIndex;
-            nextInputStateIndex += batch.primitiveIndexes.length;
 
             const diffuseTextureName = lookupTextureParameter(material, 'g_Diffuse');
 
@@ -385,24 +397,24 @@ export class FLVERInstance {
             const mtdName = mtdFilePath.split('\\').pop();
             const mtd = materialDataHolder.getMaterial(mtdName);
 
-            this.batchInstances.push(new BatchInstance(device, flverData, renderInstBuilder, textureHolder, batch, material, mtd, inputStateIndex));
+            this.batchInstances.push(new BatchInstance(device, flverData, batchData, textureHolder, material, mtd));
         }
-        assert(nextInputStateIndex === this.flverData.inputStates.length);
     }
 
     public setVisible(v: boolean) {
         this.visible = v;
     }
 
-    public prepareToRender(meshFragParamsBuffer: GfxRenderBuffer, viewerInput: Viewer.ViewerRenderInput): void {
-        let visible = this.visible;
-        if (visible) {
-            bboxScratch.transform(this.flverData.flver.bbox, this.modelMatrix);
-            visible = viewerInput.camera.frustum.contains(bboxScratch);
-        }
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!this.visible)
+            return;
+
+        bboxScratch.transform(this.flverData.flver.bbox, this.modelMatrix);
+        if (!viewerInput.camera.frustum.contains(bboxScratch))
+            return;
 
         for (let i = 0; i < this.batchInstances.length; i++)
-            this.batchInstances[i].prepareToRender(meshFragParamsBuffer, viewerInput, visible, this.modelMatrix);
+            this.batchInstances[i].prepareToRender(device, renderInstManager, viewerInput, this.modelMatrix);
     }
 
     public destroy(device: GfxDevice): void {
@@ -415,28 +427,27 @@ function fillSceneParamsData(d: Float32Array, camera: Camera, offs: number = 0):
     offs += fillMatrix4x4(d, offs, camera.projectionMatrix);
 }
 
+const bindingLayouts: GfxBindingLayoutDescriptor[] = [
+    { numUniformBuffers: 2, numSamplers: 5 },
+];
+
+function modelMatrixFromPart(m: mat4, part: Part): void {
+    const modelScale = 100;
+
+    // Game uses +x = left convention for some reason.
+    mat4.scale(m, m, [-modelScale, modelScale, modelScale]);
+
+    mat4.translate(m, m, part.translation);
+    mat4.rotateX(m, m, part.rotation[0] * MathConstants.DEG_TO_RAD);
+    mat4.rotateY(m, m, part.rotation[1] * MathConstants.DEG_TO_RAD);
+    mat4.rotateZ(m, m, part.rotation[2] * MathConstants.DEG_TO_RAD);
+    mat4.scale(m, m, part.scale);
+}
+
 export class MSBRenderer {
-    private sceneParamsBuffer: GfxRenderBuffer;
-    private meshFragParamsBuffer: GfxRenderBuffer;
-    private templateRenderInst: GfxRenderInst;
-    public renderInstBuilder: GfxRenderInstBuilder;
     public flverInstances: FLVERInstance[] = [];
 
     constructor(device: GfxDevice, private textureHolder: DDSTextureHolder, private modelHolder: ModelHolder, private materialDataHolder: MaterialDataHolder, private msb: MSB) {
-        this.sceneParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_SceneParams`);
-        this.meshFragParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_MeshFragParams`);
-
-        const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-            { numUniformBuffers: 1, numSamplers: 0 }, // Scene
-            { numUniformBuffers: 1, numSamplers: 5 }, // Shape
-        ];
-        const uniformBuffers = [ this.sceneParamsBuffer, this.meshFragParamsBuffer ];
-
-        this.renderInstBuilder = new GfxRenderInstBuilder(device, DKSProgram.programReflection, bindingLayouts, uniformBuffers);
-
-        this.templateRenderInst = this.renderInstBuilder.pushTemplateRenderInst();
-        this.renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, DKSProgram.ub_SceneParams);
-
         for (let i = 0; i < msb.parts.length; i++) {
             const part = msb.parts[i];
             if (part.type === 0) {
@@ -444,48 +455,31 @@ export class MSBRenderer {
                 if (flverData === undefined)
                     continue;
 
-                const instance = new FLVERInstance(device, this.renderInstBuilder, this.textureHolder, this.materialDataHolder, flverData);
+                const instance = new FLVERInstance(device, this.textureHolder, this.materialDataHolder, flverData);
                 instance.name = part.name;
-                this.modelMatrixFromPart(instance.modelMatrix, part);
+                modelMatrixFromPart(instance.modelMatrix, part);
                 this.flverInstances.push(instance);
             }
         }
     }
 
-    private modelMatrixFromPart(m: mat4, part: Part): void {
-        const modelScale = 100;
-        // Game uses +x = left convention for some reason.
-        mat4.scale(m, m, [-modelScale, modelScale, modelScale]);
-
-        mat4.translate(m, m, part.translation);
-        mat4.rotateX(m, m, part.rotation[0] * MathConstants.DEG_TO_RAD);
-        mat4.rotateY(m, m, part.rotation[1] * MathConstants.DEG_TO_RAD);
-        mat4.rotateZ(m, m, part.rotation[2] * MathConstants.DEG_TO_RAD);
-        mat4.scale(m, m, part.scale);
-    }
-
-    public addToViewRenderer(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer): void {
-        this.renderInstBuilder.popTemplateRenderInst();
-        this.renderInstBuilder.finish(device, viewRenderer);
-    }
-
-    public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         viewerInput.camera.setClipPlanes(20, 500000);
-        const offs = this.templateRenderInst.getUniformBufferOffset(DKSProgram.ub_SceneParams);
-        const sceneParamsMapped = this.sceneParamsBuffer.mapBufferF32(offs, 16);
+
+        const template = renderInstManager.pushTemplateRenderInst();
+        template.setBindingLayouts(bindingLayouts);
+
+        const offs = template.allocateUniformBuffer(DKSProgram.ub_SceneParams, 16);
+        const sceneParamsMapped = template.mapUniformBufferF32(DKSProgram.ub_SceneParams);
         fillSceneParamsData(sceneParamsMapped, viewerInput.camera, offs);
 
         for (let i = 0; i < this.flverInstances.length; i++)
-            this.flverInstances[i].prepareToRender(this.meshFragParamsBuffer, viewerInput);
+            this.flverInstances[i].prepareToRender(device, renderInstManager, viewerInput);
 
-        this.sceneParamsBuffer.prepareToRender(hostAccessPass);
-        this.meshFragParamsBuffer.prepareToRender(hostAccessPass);
+        renderInstManager.popTemplateRenderInst();
     }
 
     public destroy(device: GfxDevice): void {
-        this.sceneParamsBuffer.destroy(device);
-        this.meshFragParamsBuffer.destroy(device);
-
         for (let i = 0; i < this.flverInstances.length; i++)
             this.flverInstances[i].destroy(device);
     }

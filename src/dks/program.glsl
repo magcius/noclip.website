@@ -87,14 +87,14 @@ void main() {
 
     // Basic fake directional.
     vec3 t_LightDirection = normalize(vec3(0.8, -1, 0.5));
-    t_DirectIrradiance *= mix(0.0, 1.2, max(dot(-t_NormalDir, t_LightDirection), 0.0));
+    t_DirectIrradiance *= mix(0.0, 2.0, max(dot(-t_NormalDir, t_LightDirection), 0.0));
 
 #ifdef USE_LIGHTMAP
     t_DirectIrradiance *= texture2D(u_Texture[4], v_TexCoord[1]).rgb;
 #endif
 
     // Add in some fake ambient.
-    t_DirectIrradiance += 0.2;
+    t_DirectIrradiance += 0.5;
 
     t_Color.rgb *= t_DirectIrradiance;
 #endif

@@ -9,7 +9,7 @@ import * as BHD from "./bhd";
 import * as BND3 from "./bnd3";
 import * as FLVER from "./flver";
 
-import { GfxDevice, GfxHostAccessPass } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from "../gfx/platform/GfxPlatform";
 import Progressable, { ProgressMeter } from "../Progressable";
 import { fetchData, NamedArrayBufferSlice } from "../fetch";
 import ArrayBufferSlice from "../ArrayBufferSlice";
@@ -20,6 +20,9 @@ import { FLVERData, MSBRenderer } from "./render";
 import { Panel, LayerPanel } from "../ui";
 import { SceneContext } from "../SceneBase";
 import * as MTD from "./mtd";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderer2";
+import { GfxRenderDynamicUniformBuffer } from "../gfx/render/GfxRenderDynamicUniformBuffer";
+import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 
 interface CRG1Arc {
     Files: { [filename: string]: ArrayBufferSlice };
@@ -74,32 +77,52 @@ class ResourceSystem {
     }
 }
 
-class DKSRenderer extends BasicRendererHelper implements Viewer.SceneGfx {
-    private sceneRenderers: MSBRenderer[] = [];
+class DKSRenderer implements Viewer.SceneGfx {
+    public msbRenderers: MSBRenderer[] = [];
+    private renderTarget = new BasicRenderTarget();
+    private renderInstManager = new GfxRenderInstManager();
+    private uniformBuffer: GfxRenderDynamicUniformBuffer;
 
     constructor(device: GfxDevice, public textureHolder: DDSTextureHolder, private modelHolder: ModelHolder) {
-        super();
+        this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
     }
 
     public createPanels(): Panel[] {
-        const layerPanel = new LayerPanel(this.sceneRenderers[0].flverInstances);
+        const layerPanel = new LayerPanel(this.msbRenderers[0].flverInstances);
         return [layerPanel];
     }
 
-    public addSceneRenderer(device: GfxDevice, sceneRenderer: MSBRenderer): void {
-        this.sceneRenderers.push(sceneRenderer);
-        sceneRenderer.addToViewRenderer(device, this.viewRenderer);
+    private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        const template = this.renderInstManager.pushTemplateRenderInst();
+        template.setUniformBuffer(this.uniformBuffer);
+
+        for (let i = 0; i < this.msbRenderers.length; i++)
+            this.msbRenderers[i].prepareToRender(device, this.renderInstManager, viewerInput);
+
+        this.uniformBuffer.prepareToRender(device, hostAccessPass);
+
+        this.renderInstManager.popTemplateRenderInst();
     }
 
-    public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        for (let i = 0; i < this.sceneRenderers.length; i++)
-            this.sceneRenderers[i].prepareToRender(hostAccessPass, viewerInput);
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        const hostAccessPass = device.createHostAccessPass();
+        this.prepareToRender(device, hostAccessPass, viewerInput);
+        device.submitPass(hostAccessPass);
+
+        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        const passRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
+        passRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.renderInstManager.drawOnPassRenderer(device, passRenderer);
+        this.renderInstManager.resetRenderInsts();
+        return passRenderer;
     }
 
     public destroy(device: GfxDevice): void {
-        super.destroy(device);
-        for (let i = 0; i < this.sceneRenderers.length; i++)
-            this.sceneRenderers[i].destroy(device);
+        this.renderTarget.destroy(device);
+        this.renderInstManager.destroy(device);
+        this.uniformBuffer.destroy(device);
+        for (let i = 0; i < this.msbRenderers.length; i++)
+            this.msbRenderers[i].destroy(device);
         this.textureHolder.destroy(device);
         this.modelHolder.destroy(device);
     }
@@ -219,10 +242,10 @@ export class DKSSceneDesc implements Viewer.SceneDesc {
         this.loadTextureBHD(device, textureHolder, resourceSystem, `/map/${mapKey}/${mapKey}_0003`);
         this.loadTextureTPFDCX(device, textureHolder, resourceSystem, `/map/${mapKey}/${mapKey}_9999`);
 
-        const sceneRenderer = new MSBRenderer(device, textureHolder, modelHolder, materialDataHolder, msb);
+        const msbRenderer = new MSBRenderer(device, textureHolder, modelHolder, materialDataHolder, msb);
 
         const renderer = new DKSRenderer(device, textureHolder, modelHolder);
-        renderer.addSceneRenderer(device, sceneRenderer);
+        renderer.msbRenderers.push(msbRenderer);
         return renderer;
     }
 }
