@@ -2,7 +2,7 @@
 // Parse uniform buffer definitions, and provide helpers for filling them...
 
 import { Color } from "../../Color";
-import { mat4, mat2d, vec3 } from "gl-matrix";
+import { mat4, mat2d, vec3, vec4 } from "gl-matrix";
 import { assertExists } from "../../util";
 
 function findall(haystack: string, needle: RegExp): RegExpExecArray[] {
@@ -96,6 +96,14 @@ export function fillVec4(d: Float32Array, offs: number, v0: number, v1: number =
     d[offs + 1] = v1;
     d[offs + 2] = v2;
     d[offs + 3] = v3;
+    return 4;
+}
+
+export function fillVec4v(d: Float32Array, offs: number, v: vec4): number {
+    d[offs + 0] = v[0];
+    d[offs + 1] = v[1];
+    d[offs + 2] = v[2];
+    d[offs + 3] = v[3];
     return 4;
 }
 

@@ -14,11 +14,12 @@ import Progressable, { ProgressMeter } from "../Progressable";
 import { fetchData, NamedArrayBufferSlice } from "../fetch";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { DDSTextureHolder } from "./dds";
-import { assert } from "../util";
+import { assert, assertExists } from "../util";
 import { BasicRendererHelper } from "../oot3d/render";
 import { FLVERData, MSBRenderer } from "./render";
 import { Panel, LayerPanel } from "../ui";
 import { SceneContext } from "../SceneBase";
+import * as MTD from "./mtd";
 
 interface CRG1Arc {
     Files: { [filename: string]: ArrayBufferSlice };
@@ -120,6 +121,22 @@ export class ModelHolder {
     }
 }
 
+export class MaterialDataHolder {
+    public materialData = new Map<string, MTD.MTD>();
+
+    constructor(private mtdBnd: BND3.BND) {
+    }
+
+    public getMaterial(fileName: string): MTD.MTD {
+        fileName = fileName.toLowerCase();
+        if (!this.materialData.has(fileName)) {
+            const file = assertExists(this.mtdBnd.files.find((n) => n.name.toLowerCase() === fileName));
+            this.materialData.set(fileName, MTD.parse(file.data));
+        }
+        return this.materialData.get(fileName)!;
+    }
+}
+
 const pathBase = `dks`;
 
 async function fetchCRG1Arc(resourceSystem: ResourceSystem, dataFetcher: DataFetcher, archiveName: string) {
@@ -181,7 +198,7 @@ export class DKSSceneDesc implements Viewer.SceneDesc {
         const msb = MSB.parse(msbBuffer, this.id);
 
         const mtdBnd = BND3.parse(resourceSystem.lookupFile(`mtd/Mtd.mtdbnd`));
-        console.log(mtdBnd);
+        const materialDataHolder = new MaterialDataHolder(mtdBnd);
 
         const flver: (FLVER.FLVER | undefined)[] = [];
         for (let i = 0; i < msb.models.length; i++) {
@@ -202,7 +219,7 @@ export class DKSSceneDesc implements Viewer.SceneDesc {
         this.loadTextureBHD(device, textureHolder, resourceSystem, `/map/${mapKey}/${mapKey}_0003`);
         this.loadTextureTPFDCX(device, textureHolder, resourceSystem, `/map/${mapKey}/${mapKey}_9999`);
 
-        const sceneRenderer = new MSBRenderer(device, textureHolder, modelHolder, msb);
+        const sceneRenderer = new MSBRenderer(device, textureHolder, modelHolder, materialDataHolder, msb);
 
         const renderer = new DKSRenderer(device, textureHolder, modelHolder);
         renderer.addSceneRenderer(device, sceneRenderer);

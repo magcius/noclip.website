@@ -22,6 +22,8 @@ export interface MTDParam {
 }
 
 export interface MTD {
+    shaderPath: string;
+    description: string;
     params: MTDParam[];
 }
 
@@ -47,8 +49,12 @@ class DataReader {
             assert(marker === expectedMarker);
     }
 
+    public readUint8(): number {
+        return this.view.getUint8(this.offs++);
+    }
+
     public readMarker(): number {
-        const marker = this.view.getUint32(this.offs + 0x00);
+        const marker = this.view.getUint8(this.offs + 0x00);
         this.offs = align(this.offs + 1, 4);
         return marker;
     }
@@ -105,7 +111,7 @@ export function parse(buffer: ArrayBufferSlice): MTD {
     const params: MTDParam[] = [];
     for (let i = 0; i < paramCount; i++) {
         reader.assertBlock(4, 4, 0xA3); // Param
-        const name = reader.readMarkedString(0x43);
+        const name = reader.readMarkedString(0xA3);
         const type = reader.readMarkedString(0x04) as MTDParamType;
         reader.assertUint32(1);
 
@@ -119,7 +125,7 @@ export function parse(buffer: ArrayBufferSlice): MTD {
             value.push(reader.readUint32());
             value.push(reader.readUint32());
         } else if (type === MTDParamType.Bool) {
-            value.push(reader.readUint32());
+            value.push(reader.readUint8());
         } else if (type === MTDParamType.Float) {
             value.push(reader.readFloat32());
         } else if (type === MTDParamType.Float2) {
@@ -144,5 +150,5 @@ export function parse(buffer: ArrayBufferSlice): MTD {
         params.push({ name, type, value });
     }
 
-    return { params };
+    return { shaderPath, description, params };
 }

@@ -105,7 +105,7 @@ export class DDSTextureHolder extends TextureHolder<DDS> {
         }
 
         const gfxTexture = device.createTexture({
-            dimension: GfxTextureDimension.n2D, pixelFormat: GfxFormat.U8_RGBA,
+            dimension: GfxTextureDimension.n2D, pixelFormat: GfxFormat.U8_RGBA_SRGB,
             width: textureEntry.width, height: textureEntry.height, depth: 1, numLevels: textureEntry.levels.length,
         });
         const hostAccessPass = device.createHostAccessPass();
