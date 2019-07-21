@@ -1,6 +1,8 @@
 
-import { FLVER, VertexInputSemantic, Material } from "./flver";
-import { GfxDevice, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxBufferUsage, GfxBuffer, GfxVertexBufferDescriptor, GfxProgram, GfxHostAccessPass, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor } from "../gfx/platform/GfxPlatform";
+// @ts-ignore
+import { readFileSync } from 'fs';
+import { FLVER, VertexInputSemantic, Material, Primitive } from "./flver";
+import { GfxDevice, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxBufferUsage, GfxBuffer, GfxVertexBufferDescriptor, GfxHostAccessPass, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor } from "../gfx/platform/GfxPlatform";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { coalesceBuffer } from "../gfx/helpers/BufferHelpers";
 import { convertToTriangleIndexBuffer, GfxTopology, getTriangleIndexCountForTopologyIndexCount } from "../gfx/helpers/TopologyHelpers";
@@ -15,7 +17,15 @@ import { GfxRenderBuffer } from "../gfx/render/GfxRenderBuffer";
 import { Camera, computeViewMatrix, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
 import { fillMatrix4x4, fillMatrix4x3 } from "../gfx/helpers/UniformBufferHelpers";
 import { AABB } from "../Geometry";
+import { ModelHolder } from "./scenes";
+import { MSB, Part } from "./msb";
+import { MathConstants } from "../MathHelpers";
 
+function shouldRenderPrimitive(primitive: Primitive): boolean {
+    return primitive.flags === 0;
+}
+
+// TODO(jstpierre): Refactor with BatchData
 export class FLVERData {
     public inputStates: GfxInputState[] = [];
     public inputLayouts: GfxInputLayout[] = [];
@@ -86,9 +96,12 @@ export class FLVERData {
 
     private translateSemantic(semantic: VertexInputSemantic): number {
         switch (semantic) {
-        case VertexInputSemantic.Position: return DKSProgram.a_Position;
-        case VertexInputSemantic.Color:    return DKSProgram.a_Color;
-        case VertexInputSemantic.UV:       return DKSProgram.a_TexCoord;
+        case VertexInputSemantic.Position:  return DKSProgram.a_Position;
+        case VertexInputSemantic.Color:     return DKSProgram.a_Color;
+        case VertexInputSemantic.UV:        return DKSProgram.a_TexCoord;
+        case VertexInputSemantic.Normal:    return DKSProgram.a_Normal;
+        case VertexInputSemantic.Tangent:   return DKSProgram.a_Tangent;
+        case VertexInputSemantic.Bitangent: return DKSProgram.a_Bitangent;
         default: return -1;
         }
     }
@@ -134,13 +147,13 @@ export class FLVERData {
     }
 }
 
-// @ts-ignore
-import { readFileSync } from 'fs';
-
 class DKSProgram extends DeviceProgram {
     public static a_Position = 0;
     public static a_Color = 1;
     public static a_TexCoord = 2;
+    public static a_Normal = 3;
+    public static a_Tangent = 4;
+    public static a_Bitangent = 5;
 
     public static ub_SceneParams = 0;
     public static ub_MeshFragParams = 1;
@@ -152,11 +165,8 @@ class DKSProgram extends DeviceProgram {
 
 function lookupTextureParameter(material: Material, paramName: string): string | null {
     const param = material.parameters.find((param) => param.name === paramName);
-
-    // XXX(jstpierre): wtf do I do?
-    if (param == null)
+    if (param === undefined)
         return null;
-
     return param.value.split('\\').pop()!.replace(/\.tga|\.psd/, '');
 }
 
@@ -173,7 +183,7 @@ export class FLVERInstance {
     constructor(device: GfxDevice, renderInstBuilder: GfxRenderInstBuilder, textureHolder: DDSTextureHolder, public flverData: FLVERData) {
         this.templateRenderInst = renderInstBuilder.pushTemplateRenderInst();
         renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, DKSProgram.ub_MeshFragParams);
-        const textureMapping = nArray(2, () => new TextureMapping());
+        const textureMapping = nArray(3, () => new TextureMapping());
 
         let inputStateIndex = 0, nextInputStateIndex = 0;
         for (let i = 0; i < this.flverData.flver.batches.length; i++) {
@@ -194,14 +204,20 @@ export class FLVERInstance {
 
             const program = new DKSProgram();
 
-            let lightmapTextureName = lookupTextureParameter(material, 'g_Lightmap');
+            const bumpmapTextureName = lookupTextureParameter(material, 'g_Bumpmap');
+            if (bumpmapTextureName !== null && textureHolder.hasTexture(bumpmapTextureName)) {
+                program.defines.set('USE_BUMPMAP', '1');
+                textureHolder.fillTextureMapping(textureMapping[1], bumpmapTextureName);
+            }
+
+            const lightmapTextureName = lookupTextureParameter(material, 'g_Lightmap');
             if (lightmapTextureName !== null && textureHolder.hasTexture(lightmapTextureName)) {
                 program.defines.set('USE_LIGHTMAP', '1');
-                textureHolder.fillTextureMapping(textureMapping[1], lightmapTextureName);
+                textureHolder.fillTextureMapping(textureMapping[2], lightmapTextureName);
             }
 
             // TODO(jstpierre): Until we can parse out MTDs, just rely on this hack for now.
-            const hasAlphaBlend = material.mtdName.includes('_Add') || material.mtdName.includes('_Edge');
+            const hasAlphaBlend = material.mtdName.includes('_Add') || material.mtdName.includes('_Alp');
             if (hasAlphaBlend) {
                 batchTemplateRenderInst.setMegaStateFlags({
                     blendMode: GfxBlendMode.ADD,
@@ -211,7 +227,7 @@ export class FLVERInstance {
                 });
             }
 
-            const hasAlphaTest = material.mtdName.includes('_Alp');
+            const hasAlphaTest = material.mtdName.includes('_Edge');
             if (hasAlphaTest) {
                 program.defines.set('USE_ALPHATEST', '1');
             }
@@ -225,8 +241,11 @@ export class FLVERInstance {
 
             for (let j = 0; j < batch.primitiveIndexes.length; j++) {
                 const primitive = this.flverData.flver.primitives[batch.primitiveIndexes[j]];
+                const inputState = this.flverData.inputStates[inputStateIndex++];
+                if (!shouldRenderPrimitive(primitive))
+                    continue;
                 const renderInst = renderInstBuilder.pushRenderInst();
-                renderInst.inputState = this.flverData.inputStates[inputStateIndex++];
+                renderInst.inputState = inputState;
                 renderInst.drawIndexes(getTriangleIndexCountForTopologyIndexCount(GfxTopology.TRISTRIP, primitive.indexCount));
                 this.renderInsts.push(renderInst);
             }
@@ -264,8 +283,9 @@ export class FLVERInstance {
             mat4.mul(matrixScratch, matrixScratch, this.modelMatrix);
 
             let offs = this.templateRenderInst.getUniformBufferOffset(DKSProgram.ub_MeshFragParams);
-            const mapped = meshFragParamsBuffer.mapBufferF32(offs, 12);
-            fillMatrix4x3(mapped, offs, matrixScratch);
+            const mapped = meshFragParamsBuffer.mapBufferF32(offs, 12*2);
+            offs += fillMatrix4x3(mapped, offs, matrixScratch);
+            offs += fillMatrix4x3(mapped, offs, this.modelMatrix);
         }
     }
 
@@ -279,20 +299,20 @@ function fillSceneParamsData(d: Float32Array, camera: Camera, offs: number = 0):
     offs += fillMatrix4x4(d, offs, camera.projectionMatrix);
 }
 
-export class SceneRenderer {
+export class MSBRenderer {
     private sceneParamsBuffer: GfxRenderBuffer;
     private meshFragParamsBuffer: GfxRenderBuffer;
     private templateRenderInst: GfxRenderInst;
     public renderInstBuilder: GfxRenderInstBuilder;
     public flverInstances: FLVERInstance[] = [];
 
-    constructor(device: GfxDevice) {
+    constructor(device: GfxDevice, private textureHolder: DDSTextureHolder, private modelHolder: ModelHolder, private msb: MSB) {
         this.sceneParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_SceneParams`);
         this.meshFragParamsBuffer = new GfxRenderBuffer(GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC, `ub_MeshFragParams`);
 
         const bindingLayouts: GfxBindingLayoutDescriptor[] = [
             { numUniformBuffers: 1, numSamplers: 0 }, // Scene
-            { numUniformBuffers: 1, numSamplers: 2 }, // Shape
+            { numUniformBuffers: 1, numSamplers: 3 }, // Shape
         ];
         const uniformBuffers = [ this.sceneParamsBuffer, this.meshFragParamsBuffer ];
 
@@ -300,6 +320,32 @@ export class SceneRenderer {
 
         this.templateRenderInst = this.renderInstBuilder.pushTemplateRenderInst();
         this.renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, DKSProgram.ub_SceneParams);
+
+        for (let i = 0; i < msb.parts.length; i++) {
+            const part = msb.parts[i];
+            if (part.type === 0) {
+                const flverData = modelHolder.flverData[part.modelIndex];
+                if (flverData === undefined)
+                    continue;
+
+                const instance = new FLVERInstance(device, this.renderInstBuilder, this.textureHolder, flverData);
+                instance.name = part.name;
+                this.modelMatrixFromPart(instance.modelMatrix, part);
+                this.flverInstances.push(instance);
+            }
+        }
+    }
+
+    private modelMatrixFromPart(m: mat4, part: Part): void {
+        const modelScale = 100;
+        // Game uses +x = left convention for some reason.
+        mat4.scale(m, m, [-modelScale, modelScale, modelScale]);
+
+        mat4.translate(m, m, part.translation);
+        mat4.rotateX(m, m, part.rotation[0] * MathConstants.DEG_TO_RAD);
+        mat4.rotateY(m, m, part.rotation[1] * MathConstants.DEG_TO_RAD);
+        mat4.rotateZ(m, m, part.rotation[2] * MathConstants.DEG_TO_RAD);
+        mat4.scale(m, m, part.scale);
     }
 
     public addToViewRenderer(device: GfxDevice, viewRenderer: GfxRenderInstViewRenderer): void {

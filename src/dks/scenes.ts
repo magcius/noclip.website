@@ -6,31 +6,66 @@ import * as MSB from "./msb";
 import * as DCX from "./dcx";
 import * as TPF from "./tpf";
 import * as BHD from "./bhd";
+import * as BND3 from "./bnd3";
 import * as FLVER from "./flver";
 
-import { GfxDevice, GfxHostAccessPass, GfxFormat, GfxTextureDimension } from "../gfx/platform/GfxPlatform";
-import Progressable from "../Progressable";
-import { fetchData } from "../fetch";
+import { GfxDevice, GfxHostAccessPass } from "../gfx/platform/GfxPlatform";
+import Progressable, { ProgressMeter } from "../Progressable";
+import { fetchData, NamedArrayBufferSlice } from "../fetch";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { DDSTextureHolder } from "./dds";
 import { assert } from "../util";
 import { BasicRendererHelper } from "../oot3d/render";
-import { FLVERData, SceneRenderer, FLVERInstance } from "./render";
-import { mat4 } from "gl-matrix";
+import { FLVERData, MSBRenderer } from "./render";
 import { Panel, LayerPanel } from "../ui";
-import { MathConstants } from "../MathHelpers";
+import { SceneContext } from "../SceneBase";
 
 interface CRG1Arc {
     Files: { [filename: string]: ArrayBufferSlice };
 }
 
+class DataFetcher {
+    private fileProgressables: Progressable<any>[] = [];
+
+    constructor(private abortSignal: AbortSignal, private progressMeter: ProgressMeter) {
+    }
+
+    private calcProgress(): number {
+        let n = 0;
+        for (let i = 0; i < this.fileProgressables.length; i++)
+            n += this.fileProgressables[i].progress;
+        return n / this.fileProgressables.length;
+    }
+
+    private setProgress(): void {
+        this.progressMeter.setProgress(this.calcProgress());
+    }
+
+    public fetchData(path: string): PromiseLike<NamedArrayBufferSlice> {
+        const p = fetchData(path, this.abortSignal);
+        this.fileProgressables.push(p);
+        p.onProgress = () => {
+            this.setProgress();
+        };
+        this.setProgress();
+        return p.promise;
+    }
+}
+
 class ResourceSystem {
     public files = new Map<string, ArrayBufferSlice>();
+
+    constructor() {
+    }
 
     public mountCRG1(n: CRG1Arc): void {
         const filenames = Object.keys(n.Files);
         for (let i = 0; i < filenames.length; i++)
             this.files.set(filenames[i], n.Files[filenames[i]]);
+    }
+
+    public mountFile(fileName: string, buffer: ArrayBufferSlice): void {
+        this.files.set(fileName, buffer);
     }
 
     public lookupFile(filename: string) {
@@ -39,7 +74,7 @@ class ResourceSystem {
 }
 
 class DKSRenderer extends BasicRendererHelper implements Viewer.SceneGfx {
-    private sceneRenderers: SceneRenderer[] = [];
+    private sceneRenderers: MSBRenderer[] = [];
 
     constructor(device: GfxDevice, public textureHolder: DDSTextureHolder, private modelHolder: ModelHolder) {
         super();
@@ -50,7 +85,7 @@ class DKSRenderer extends BasicRendererHelper implements Viewer.SceneGfx {
         return [layerPanel];
     }
 
-    public addSceneRenderer(device: GfxDevice, sceneRenderer: SceneRenderer): void {
+    public addSceneRenderer(device: GfxDevice, sceneRenderer: MSBRenderer): void {
         this.sceneRenderers.push(sceneRenderer);
         sceneRenderer.addToViewRenderer(device, this.viewRenderer);
     }
@@ -69,7 +104,7 @@ class DKSRenderer extends BasicRendererHelper implements Viewer.SceneGfx {
     }
 }
 
-class ModelHolder {
+export class ModelHolder {
     public flverData: (FLVERData | undefined)[] = [];
 
     constructor(device: GfxDevice, flver: (FLVER.FLVER | undefined)[]) {
@@ -85,15 +120,21 @@ class ModelHolder {
     }
 }
 
+const pathBase = `dks`;
+
+async function fetchCRG1Arc(resourceSystem: ResourceSystem, dataFetcher: DataFetcher, archiveName: string) {
+    const buffer = await dataFetcher.fetchData(`${pathBase}/${archiveName}`);
+    const crg1Arc = BYML.parse<CRG1Arc>(buffer, BYML.FileType.CRG1);
+    resourceSystem.mountCRG1(crg1Arc);
+}
+
+async function fetchLoose(resourceSystem: ResourceSystem, dataFetcher: DataFetcher, fileName: string) {
+    const buffer = await dataFetcher.fetchData(`${pathBase}/${fileName}`);
+    resourceSystem.mountFile(fileName, buffer);
+}
+
 export class DKSSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
-    }
-
-    public fetchCRG1Arc(resourceSystem: ResourceSystem, archiveName: string, abortSignal: AbortSignal): Progressable<void> {
-        return fetchData(`dks/${archiveName}`, abortSignal).then((buffer) => {
-            const crg1Arc = BYML.parse<CRG1Arc>(buffer, BYML.FileType.CRG1)
-            resourceSystem.mountCRG1(crg1Arc);
-        });
     }
 
     private loadTextureTPFDCX(device: GfxDevice, textureHolder: DDSTextureHolder, resourceSystem: ResourceSystem, baseName: string): void {
@@ -121,67 +162,51 @@ export class DKSSceneDesc implements Viewer.SceneDesc {
         }
     }
 
-    private modelMatrixFromPart(m: mat4, part: MSB.Part): void {
-        const modelScale = 100;
-        // Game uses +x = left convention for some reason.
-        mat4.scale(m, m, [-modelScale, modelScale, modelScale]);
-
-        mat4.translate(m, m, part.translation);
-        mat4.rotateX(m, m, part.rotation[0] * MathConstants.DEG_TO_RAD);
-        mat4.rotateY(m, m, part.rotation[1] * MathConstants.DEG_TO_RAD);
-        mat4.rotateZ(m, m, part.rotation[2] * MathConstants.DEG_TO_RAD);
-        mat4.scale(m, m, part.scale);
-    }
-
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+    public async createScene(device: GfxDevice, abortSignal: AbortSignal, sceneContext: SceneContext): Promise<Viewer.SceneGfx> {
+        const dataFetcher = new DataFetcher(sceneContext.abortSignal, sceneContext.progressMeter);
         const resourceSystem = new ResourceSystem();
 
+        resourceSystem
         const arcName = `${this.id}_arc.crg1`;
-        return this.fetchCRG1Arc(resourceSystem, arcName, abortSignal).then(() => {
-            const textureHolder = new DDSTextureHolder();
 
-            const msbPath = `/map/MapStudio/${this.id}.msb`;
-            const msbBuffer = resourceSystem.lookupFile(msbPath);
-            const msb = MSB.parse(msbBuffer, this.id);
+        await Promise.all([
+            fetchCRG1Arc(resourceSystem, dataFetcher, arcName),
+            fetchLoose(resourceSystem, dataFetcher, `mtd/Mtd.mtdbnd`),
+        ]);
 
-            const flver: (FLVER.FLVER | undefined)[] = [];
-            for (let i = 0; i < msb.models.length; i++) {
-                if (msb.models[i].type === 0) {
-                    const flverBuffer = resourceSystem.lookupFile(msb.models[i].flverPath);
-                    const flver_ = FLVER.parse(new ArrayBufferSlice(DCX.decompressBuffer(flverBuffer)));
-                    if (flver_.batches.length > 0)
-                        flver[i] = flver_;
-                }
+        const textureHolder = new DDSTextureHolder();
+
+        const msbPath = `/map/MapStudio/${this.id}.msb`;
+        const msbBuffer = resourceSystem.lookupFile(msbPath);
+        const msb = MSB.parse(msbBuffer, this.id);
+
+        const mtdBnd = BND3.parse(resourceSystem.lookupFile(`mtd/Mtd.mtdbnd`));
+        console.log(mtdBnd);
+
+        const flver: (FLVER.FLVER | undefined)[] = [];
+        for (let i = 0; i < msb.models.length; i++) {
+            if (msb.models[i].type === 0) {
+                const flverBuffer = resourceSystem.lookupFile(msb.models[i].flverPath);
+                const flver_ = FLVER.parse(new ArrayBufferSlice(DCX.decompressBuffer(flverBuffer)));
+                if (flver_.batches.length > 0)
+                    flver[i] = flver_;
             }
+        }
 
-            const modelHolder = new ModelHolder(device, flver);
+        const modelHolder = new ModelHolder(device, flver);
 
-            const mapKey = this.id.slice(0, 3) // "m10"
-            this.loadTextureBHD(device, textureHolder, resourceSystem, `/map/${mapKey}/${mapKey}_0000`);
-            this.loadTextureBHD(device, textureHolder, resourceSystem, `/map/${mapKey}/${mapKey}_0001`);
-            this.loadTextureBHD(device, textureHolder, resourceSystem, `/map/${mapKey}/${mapKey}_0002`);
-            this.loadTextureBHD(device, textureHolder, resourceSystem, `/map/${mapKey}/${mapKey}_0003`);
-            this.loadTextureTPFDCX(device, textureHolder, resourceSystem, `/map/${mapKey}/${mapKey}_9999`);
+        const mapKey = this.id.slice(0, 3); // "m10"
+        this.loadTextureBHD(device, textureHolder, resourceSystem, `/map/${mapKey}/${mapKey}_0000`);
+        this.loadTextureBHD(device, textureHolder, resourceSystem, `/map/${mapKey}/${mapKey}_0001`);
+        this.loadTextureBHD(device, textureHolder, resourceSystem, `/map/${mapKey}/${mapKey}_0002`);
+        this.loadTextureBHD(device, textureHolder, resourceSystem, `/map/${mapKey}/${mapKey}_0003`);
+        this.loadTextureTPFDCX(device, textureHolder, resourceSystem, `/map/${mapKey}/${mapKey}_9999`);
 
-            const sceneRenderer = new SceneRenderer(device);
-            for (let i = 0; i < msb.parts.length; i++) {
-                const part = msb.parts[i];
-                if (part.type === 0) {
-                    const flverData = modelHolder.flverData[part.modelIndex];
-                    if (flverData === undefined)
-                        continue;
+        const sceneRenderer = new MSBRenderer(device, textureHolder, modelHolder, msb);
 
-                    const instance = new FLVERInstance(device, sceneRenderer.renderInstBuilder, textureHolder, flverData);
-                    instance.name = part.name;
-                    this.modelMatrixFromPart(instance.modelMatrix, part);
-                    sceneRenderer.flverInstances.push(instance);
-                }
-            }
-
-            const renderer = new DKSRenderer(device, textureHolder, modelHolder);
-            renderer.addSceneRenderer(device, sceneRenderer);
-            return renderer;
-        });
+        const renderer = new DKSRenderer(device, textureHolder, modelHolder);
+        renderer.addSceneRenderer(device, sceneRenderer);
+        return renderer;
     }
 }
 

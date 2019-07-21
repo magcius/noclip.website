@@ -59,7 +59,8 @@ export const enum VertexInputSemantic {
     JointWeight = 2,
     Normal      = 3,
     UV          = 5,
-    Bitangent   = 6,
+    Tangent     = 6,
+    Bitangent   = 7,
     Color       = 10,
 }
 
