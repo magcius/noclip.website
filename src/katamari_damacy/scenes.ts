@@ -96,6 +96,9 @@ class StageAreaRenderer {
     public stageAreaSector: StageAreaSector[] = [];
     public modelInstance: BINModelInstance[] = [];
 
+    constructor(private areaIndex: number) {
+    }
+
     public prepareToRender(renderInstManager: GfxRenderInstManager, textureHolder: KatamariDamacyTextureHolder, viewRenderer: Viewer.ViewerRenderInput) {
         for (let i = 0; i < this.modelInstance.length; i++)
             this.modelInstance[i].prepareToRender(renderInstManager, textureHolder, viewRenderer);
@@ -104,6 +107,10 @@ class StageAreaRenderer {
     public setVisible(visible: boolean): void {
         for (let i = 0; i < this.modelInstance.length; i++)
             this.modelInstance[i].setVisible(visible);
+    }
+
+    public setActiveAreaNo(areaNo: number): void {
+        this.setVisible(areaNo === this.areaIndex);
     }
 
     public destroy(device: GfxDevice): void {
@@ -129,6 +136,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
     public modelSectorData: BINModelSectorData[] = [];
     public textureHolder = new KatamariDamacyTextureHolder();
     public isWorld = false;
+    public missionSetupBin: BIN.LevelSetupBIN;
 
     public stageAreaRenderers: StageAreaRenderer[] = [];
     public objectRenderers: ObjectRenderer[] = [];
@@ -207,10 +215,11 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
     private setCurrentAreaNo(areaNo: number): void {
         this.currentAreaNo = areaNo;
         for (let i = 0; i < this.stageAreaRenderers.length; i++)
-            this.stageAreaRenderers[i].setVisible(i === areaNo);
+            this.stageAreaRenderers[i].setActiveAreaNo(areaNo);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].setActiveAreaNo(areaNo);
     }
+
     public createPanels(): UI.Panel[] {
         const areasPanel = new UI.Panel();
         areasPanel.setTitle(UI.LAYER_ICON, 'Areas');
@@ -219,7 +228,8 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
         const areaSelect = new UI.SingleSelect();
         areaSelect.setStrings(this.stageAreaRenderers.map((renderer, i) => `Area ${i+1}`));
         areaSelect.onselectionchange = (index: number) => {
-            this.setCurrentAreaNo(index);
+            const areaNo = this.missionSetupBin.activeStageAreas[index];
+            this.setCurrentAreaNo(areaNo);
         };
         areaSelect.selectItem(0);
         areasPanel.contents.appendChild(areaSelect.elem);
@@ -270,19 +280,25 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
             for (let i = 0; i < this.missionSetupFile.length; i++)
                 buffers.push(cache.getFileData(getMissionSetupFilePath(this.missionSetupFile[i])));
             const missionSetupBin = BIN.parseMissionSetupBIN(buffers, gsMemoryMap);
+            renderer.missionSetupBin = missionSetupBin;
 
             // Parse our different stages.
-            const maxStageArea = Math.min(missionSetupBin.maxStageArea, this.stageAreaFileGroup.length);
-            for (let i = 0; i <= maxStageArea; i++) {
-                const stageTexBinData = cache.getFileData(getStageAreaFilePath(this.stageAreaFileGroup[i].texFile));
-                const stageModelBinData = cache.getFileData(getStageAreaFilePath(this.stageAreaFileGroup[i].modelFile));
+            for (let i = 0; i < missionSetupBin.activeStageAreas.length; i++) {
+                const stageAreaIndex = missionSetupBin.activeStageAreas[i];
+
+                // TODO(jstpierre): What does it mean to have an "active stage" that's past our level set?
+                if (stageAreaIndex >= this.stageAreaFileGroup.length)
+                    continue;
+
+                const stageTexBinData = cache.getFileData(getStageAreaFilePath(this.stageAreaFileGroup[stageAreaIndex].texFile));
+                const stageModelBinData = cache.getFileData(getStageAreaFilePath(this.stageAreaFileGroup[stageAreaIndex].modelFile));
                 BIN.parseStageTextureBIN(stageTexBinData, gsMemoryMap);
                 const stageModelBin = BIN.parseLevelModelBIN(stageModelBinData, gsMemoryMap, this.id);
 
-                const stageAreaRenderer = new StageAreaRenderer();
+                const stageAreaRenderer = new StageAreaRenderer(stageAreaIndex);
 
-                for (let i = 0; i < stageModelBin.sectors.length; i++) {
-                    const sector = stageModelBin.sectors[i];
+                for (let j = 0; j < stageModelBin.sectors.length; j++) {
+                    const sector = stageModelBin.sectors[j];
                     renderer.textureHolder.addBINTexture(device, sector);
 
                     const stageAreaSector = new StageAreaSector();
@@ -290,8 +306,8 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
                     const binModelSectorData = new BINModelSectorData(device, renderer.renderInstManager.gfxRenderCache, sector);
                     renderer.modelSectorData.push(binModelSectorData);
 
-                    for (let j = 0; j < sector.models.length; j++) {
-                        const binModelInstance = new BINModelInstance(device, renderer.renderInstManager.gfxRenderCache, renderer.textureHolder, binModelSectorData.modelData[j]);
+                    for (let k = 0; k < sector.models.length; k++) {
+                        const binModelInstance = new BINModelInstance(device, renderer.renderInstManager.gfxRenderCache, renderer.textureHolder, binModelSectorData.modelData[k]);
                         stageAreaRenderer.modelInstance.push(binModelInstance);
                         stageAreaSector.modelInstance.push(binModelInstance);
                     }
@@ -353,8 +369,8 @@ const cityStageAreaGroup: StageAreaFileGroup[] = [
 ];
 
 const worldStageAreaGroup: StageAreaFileGroup[] = [
-    // The game loads 135299, 135301, 135369 as the texture files, but these files are byte-for-byte
-    // identical to 135231, so we cut down on loading time here.
+    // The game loads 13548c, 134fda as the texture files, but these files are byte-for-byte
+    // identical to 1353d1, so we cut down on loading time here.
     { texFile: '1353d1', modelFile: '1363c5', },
     { texFile: '1353d1', modelFile: '1364a3', },
     { texFile: '1353d1', modelFile: '136599', },
@@ -364,6 +380,7 @@ const worldStageAreaGroup: StageAreaFileGroup[] = [
 ];
 
 const sceneDescs = [
+    "Planets",
     new KatamariLevelSceneDesc('lvl1',  "Make a Star 1 (House)", houseStageAreaGroup, ['13d9bd', '13da02', '13da55', '13daa6']),
     new KatamariLevelSceneDesc('lvl2',  "Make a Star 2 (House)", houseStageAreaGroup, ['13daff', '13db9c', '13dc59', '13dd08']),
     new KatamariLevelSceneDesc('lvl3',  "Make a Star 3 (City)",  cityStageAreaGroup,  ['13e462', '13e553', '13e68e', '13e7b1']),
@@ -374,6 +391,16 @@ const sceneDescs = [
     new KatamariLevelSceneDesc('lvl8',  "Make a Star 8 (City)",  cityStageAreaGroup,  ['13ff91', '14017a', '1403d3', '140616']),
     new KatamariLevelSceneDesc('lvl9',  "Make a Star 9 (World)", worldStageAreaGroup, ['140850', '140a3e', '140cc7', '140f02']),
     new KatamariLevelSceneDesc('lvl10', "Make the Moon (World)", worldStageAreaGroup, ['141133', '141339', '1415d4', '141829']),
+
+    "Constellations",
+    new KatamariLevelSceneDesc('clvl1', "Make Cancer",           houseStageAreaGroup, ['141ab5', '141b43', '141bf5', '141cae']),
+    new KatamariLevelSceneDesc('clvl2', "Make Cygnus",           houseStageAreaGroup, ['141d5d', '141dfb', '141ec1', '141f82']),
+    new KatamariLevelSceneDesc('clvl3', "Make Corona Borealis",  cityStageAreaGroup,  ['1422c5', '1423de', '142542', '1426ac']),
+    new KatamariLevelSceneDesc('clvl4', "Make Gemini",           worldStageAreaGroup, ['14364f', '143796', '143938', '143aae']),
+    new KatamariLevelSceneDesc('clvl5', "Make Ursa Major",       cityStageAreaGroup,  ['14317d', '143287', '1433dc', '143518']),
+    new KatamariLevelSceneDesc('clvl6', "Make Taurus",           worldStageAreaGroup, ['143c24', '143d77', '143f34', '1440b8']),
+    new KatamariLevelSceneDesc('clvl7', "Make Pisces",           cityStageAreaGroup,  ['142801', '14290d', '142a52', '142b90']),
+    new KatamariLevelSceneDesc('clvl8', "Make Virgo",            cityStageAreaGroup,  ['142cc5', '142dd2', '142f0e', '143046']),
 ];
 const sceneIdMap = new Map<string, string>();
 // When I first was testing Katamari, I was testing the Tutorial Level. At some point

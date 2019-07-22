@@ -1044,9 +1044,9 @@ export interface MissionSetupObjectSpawn {
 }
 
 export interface LevelSetupBIN {
+    activeStageAreas: number[];
     objectModels: BINModelSector[];
     objectSpawns: MissionSetupObjectSpawn[];
-    maxStageArea: number;
 }
 
 function combineSlices(buffers: ArrayBufferSlice[]): ArrayBufferSlice {
@@ -1122,15 +1122,17 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: G
     }
 
     const q = quat.create();
+    const activeStageAreas: number[] = [];
     let setupSpawnTableIdx = 0x14;
-    let maxStageArea = -1;
     for (let i = 0; i < 5; i++) {
         let setupSpawnsIdx = view.getUint32(setupSpawnTableIdx, true);
 
-        if (readString(buffer, setupSpawnsIdx, 0x04) === 'NIL ')
-            break;
+        if (readString(buffer, setupSpawnsIdx, 0x04) === 'NIL ') {
+            setupSpawnTableIdx += 0x04;
+            continue;
+        }
 
-        maxStageArea = i;
+        activeStageAreas.push(i);
         let j = 0;
         while (true) {
             const objectId = view.getUint16(setupSpawnsIdx + 0x00, true);
@@ -1204,5 +1206,5 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: G
         setupSpawnTableIdx += 0x04;
     }
 
-    return { objectModels, objectSpawns, maxStageArea };
+    return { objectModels, objectSpawns, activeStageAreas };
 }

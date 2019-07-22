@@ -112,7 +112,7 @@ void main() {
     // Basic fake directional.
     vec3 t_LightDirection = normalize(vec3(0.8, -1, 0.5));
     float t_LightIntensity = max(dot(-v_Normal, t_LightDirection), 0.0);
-    t_Color.rgb *= mix(0.7, 1.0, t_LightIntensity);
+    t_Color.rgb *= mix(0.7, 1.3, t_LightIntensity);
 
 ${this.generateAlphaTest(ate, atst, aref, afail)}
 
