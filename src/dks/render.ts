@@ -447,13 +447,13 @@ void main() {
     t_IncomingDiffuseRadiance += t_LightColor * t_DiffuseIntensity;
 
     vec3 t_ViewDir = normalize(-v_PositionView);
-    vec3 t_HalfDirView = normalize(t_ViewDir + t_LightDirView);
 
     // Fake ambient with a sun color.
     t_IncomingIndirectRadiance += vec3(0.92, 0.95, 0.85) * 0.4;
 
     if (t_DiffuseIntensity > 0.0) {
-        float t_SpecularIntensity = pow(max(dot(t_NormalDirView, t_HalfDirView), 0.0), u_SpecularPower);
+        vec3 t_ReflectanceDir = reflect(-t_LightDirView, t_NormalDirView);
+        float t_SpecularIntensity = pow(max(dot(t_ReflectanceDir, t_ViewDir), 0.0), u_SpecularPower);
         t_IncomingSpecularRadiance += t_LightColor * t_SpecularIntensity;
     }
 
@@ -479,8 +479,6 @@ void main() {
 
     if (t_Debug == 1)
         t_Color.rgb = vec3(t_ViewDir * 0.5 + 0.5);
-    else if (t_Debug == 2)
-        t_Color.rgb = vec3(t_HalfDirView * 0.5 + 0.5);
     else if (t_Debug == 3)
         t_Color.rgb = vec3(t_LightDirView * 0.5 + 0.5);
     else if (t_Debug == 4)

@@ -663,6 +663,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             return WebGL2RenderingContext.RGBA32F;
         case GfxFormat.U16_R:
             return WebGL2RenderingContext.R16UI;
+        case GfxFormat.U8_RGB:
+            return WebGL2RenderingContext.RGB8;
         case GfxFormat.U8_RGB_SRGB:
             return WebGL2RenderingContext.SRGB8;
         case GfxFormat.U8_RGBA:
