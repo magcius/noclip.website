@@ -1,6 +1,6 @@
 
 import { FLVER, VertexInputSemantic, Material, Primitive, Batch, VertexAttribute } from "./flver";
-import { GfxDevice, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxBufferUsage, GfxBuffer, GfxVertexBufferDescriptor, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxBufferUsage, GfxBuffer, GfxVertexBufferDescriptor, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { coalesceBuffer, GfxCoalescedBuffer } from "../gfx/helpers/BufferHelpers";
 import { convertToTriangleIndexBuffer, GfxTopology, getTriangleIndexCountForTopologyIndexCount } from "../gfx/helpers/TopologyHelpers";
@@ -70,10 +70,10 @@ class BatchData {
     }
 }
 
-// TODO(jstpierre): Refactor with BatchData
 export class FLVERData {
     public inputLayouts: GfxInputLayout[] = [];
     public batchData: BatchData[] = [];
+    public gfxSampler: GfxSampler;
     private indexBuffer: GfxBuffer;
     private vertexBuffer: GfxBuffer;
 
@@ -106,8 +106,10 @@ export class FLVERData {
 
         const vertexBufferDatas: ArrayBufferSlice[] = [];
         const indexBufferDatas: ArrayBufferSlice[] = [];
-        for (let i = 0; i < flver.inputStates.length; i++)
+        for (let i = 0; i < flver.inputStates.length; i++) {
             vertexBufferDatas.push(flver.inputStates[i].vertexData);
+            flver.inputStates[i].vertexData = null;
+        }
         const vertexBuffers = coalesceBuffer(device, GfxBufferUsage.VERTEX, vertexBufferDatas);
         this.vertexBuffer = vertexBuffers[0].buffer;
 
@@ -117,6 +119,7 @@ export class FLVERData {
                 const primitive = flver.primitives[batch.primitiveIndexes[j]];
                 const triangleIndexData = convertToTriangleIndexBuffer(GfxTopology.TRISTRIP, primitive.indexData.createTypedArray(Uint16Array));
                 indexBufferDatas.push(new ArrayBufferSlice(triangleIndexData.buffer));
+                primitive.indexData = null;
             }
         }
 
@@ -129,6 +132,16 @@ export class FLVERData {
             const batchData = new BatchData(device, this, batch, coaVertexBuffer, indexBuffers);
             this.batchData.push(batchData);
         }
+
+        this.gfxSampler = device.createSampler({
+            minFilter: GfxTexFilterMode.BILINEAR,
+            magFilter: GfxTexFilterMode.BILINEAR,
+            mipFilter: GfxMipFilterMode.LINEAR,
+            minLOD: 0,
+            maxLOD: 100,
+            wrapS: GfxWrapMode.REPEAT,
+            wrapT: GfxWrapMode.REPEAT,
+        });
     }
 
     private translateLocation(attr: VertexAttribute): number {
@@ -183,6 +196,7 @@ export class FLVERData {
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.indexBuffer);
+        device.destroySampler(this.gfxSampler);
 
         for (let i = 0; i < this.inputLayouts.length; i++)
             device.destroyInputLayout(this.inputLayouts[i]);
@@ -257,10 +271,10 @@ layout(location = 6) in vec4 a_Bitangent;
 
 void main() {
     vec4 t_PositionView = Mul(_Mat4x4(u_ViewFromLocal[0]), vec4(a_Position, 1.0));
-    v_PositionView = -t_PositionView.xyz;
+    v_PositionView = t_PositionView.xyz;
     gl_Position = Mul(u_Projection, t_PositionView);
     v_NormalView = normalize(Mul(_Mat4x4(u_ViewFromLocal[0]), vec4(UNORM_TO_SNORM(a_Normal.xyz), 0.0)).xyz);
-    v_TangentView = normalize(Mul(_Mat4x4(u_ViewFromLocal[0]), -vec4(UNORM_TO_SNORM(a_Tangent.xyz), 0.0)).xyz);
+    v_TangentView = normalize(Mul(_Mat4x4(u_ViewFromLocal[0]), vec4(UNORM_TO_SNORM(a_Tangent.xyz), 0.0)).xyz);
     v_BitangentView = normalize(Mul(_Mat4x4(u_ViewFromLocal[0]), vec4(UNORM_TO_SNORM(a_Bitangent.xyz), 0.0)).xyz);
     v_Color = a_Color;
     v_TexCoord[0] = ((a_TexCoord0.xy) / 1024.0) + u_TexScroll[0].xy;
@@ -424,25 +438,31 @@ void main() {
     ${this.genNormalDir()}
 
     // Basic fake directional.
-    vec3 t_LightDirView = u_LightDirView.xyz;
+    // TODO(jstpierre): Read environment maps.
+
+    vec3 t_LightDirView = -u_LightDirView.xyz;
+    vec3 t_LightColor = vec3(0.9, 0.95, 0.95) * 2.0;
 
     float t_DiffuseIntensity = max(dot(t_NormalDirView, t_LightDirView), 0.0);
-    t_IncomingDiffuseRadiance += vec3(mix(0.0, 0.6, t_DiffuseIntensity));
+    t_IncomingDiffuseRadiance += t_LightColor * t_DiffuseIntensity;
 
     vec3 t_ViewDir = normalize(-v_PositionView);
     vec3 t_HalfDirView = normalize(t_ViewDir + t_LightDirView);
 
-    float t_SpecularIntensity = pow(max(dot(t_NormalDirView, t_HalfDirView), 0.0), u_SpecularPower);
-    t_IncomingSpecularRadiance += vec3(t_SpecularIntensity);
+    // Fake ambient with a sun color.
+    t_IncomingIndirectRadiance += vec3(0.92, 0.95, 0.85) * 0.4;
+
+    if (t_DiffuseIntensity > 0.0) {
+        float t_SpecularIntensity = pow(max(dot(t_NormalDirView, t_HalfDirView), 0.0), u_SpecularPower);
+        t_IncomingSpecularRadiance += t_LightColor * t_SpecularIntensity;
+    }
 
     ${this.genLightMap()}
-
-    t_IncomingIndirectRadiance += vec3(0.2); // Fake ambient.
 
     ${this.genSpecular()}
 
     t_OutgoingLight += t_Diffuse.rgb * (t_IncomingDiffuseRadiance + t_IncomingIndirectRadiance);
-    // t_OutgoingLight += t_Specular * t_IncomingSpecularRadiance;
+    t_OutgoingLight += t_Specular * t_IncomingSpecularRadiance;
 
     t_Color.rgb *= t_OutgoingLight;
     t_Color.a *= t_Diffuse.a;
@@ -453,9 +473,6 @@ void main() {
     t_Color *= v_Color;
 
     ${this.genAlphaTest()}
-
-    // Convert to gamma-space
-    t_Color.rgb = pow(t_Color.rgb, vec3(1.0 / 2.2));
 
 #ifdef USE_LIGHTING
     int t_Debug = int(u_Misc[0].y);
@@ -469,8 +486,13 @@ void main() {
     else if (t_Debug == 4)
         t_Color.rgb = vec3(t_DiffuseIntensity);
     else if (t_Debug == 5)
-        t_Color.rgb = vec3(t_NormalDirView * 0.5 + 0.5);
+        t_Color.rgb = vec3(t_IncomingSpecularRadiance);
+    else if (t_Debug == 6)
+        t_Color.rgb = t_Specular * t_IncomingSpecularRadiance;
 #endif
+
+    // Convert to gamma-space
+    t_Color.rgb = pow(t_Color.rgb, vec3(1.0 / 2.2));
 
     gl_FragColor = t_Color;
 }
@@ -485,6 +507,12 @@ function lookupTextureParameter(material: Material, paramName: string): string |
     if (param === undefined)
         return null;
     return param.value.split('\\').pop()!.replace(/\.tga|\.psd/, '');
+}
+
+const enum LightingType {
+    None,
+    HemDirDifSpcx3,
+    HemEnvDifSpc,
 }
 
 const enum BlendMode {
@@ -535,8 +563,9 @@ function linkTextureParameter(textureMapping: TextureMapping[], textureHolder: D
     if (texDef === undefined)
         return;
 
-    const textureName = assertExists(lookupTextureParameter(material, name));
+    const textureName = assertExists(lookupTextureParameter(material, name)).toLowerCase();
     if (textureHolder.hasTexture(textureName)) {
+        // TODO(jstpierre): Figure out why textures aren't in the proper archives.
         const texAssign = getTexAssign(mtd, name);
         textureHolder.fillTextureMapping(textureMapping[texAssign], textureName);
     }
@@ -550,7 +579,7 @@ class BatchInstance {
     private diffuseColor = vec4.fromValues(1, 1, 1, 1);
     private specularColor = vec4.fromValues(0, 0, 0, 0);
     private specularPower = 1.0;
-    private lightDir = vec4.fromValues(0.8, 0.5, -0.5, 0.0);
+    private lightDir = vec4.fromValues(-0.4, -0.8, -0.4, 0.0);
     private texScroll = nArray(3, () => vec4.create());
     private textureMapping = nArray(8, () => new TextureMapping());
     private megaState: Partial<GfxMegaStateDescriptor>;
@@ -561,8 +590,16 @@ class BatchInstance {
         const program = new DKSProgram(mtd);
 
         // If this is a Phong shader, then turn on lighting.
-        if (mtd.shaderPath.includes('_Phn_'))
-            program.defines.set('USE_LIGHTING', '1');
+        if (mtd.shaderPath.includes('_Phn_')) {
+            const lightingType: LightingType = getMaterialParam(mtd, 'g_LightingType')[0];
+
+            if (lightingType !== LightingType.None)
+                program.defines.set('USE_LIGHTING', '1');
+        }
+
+        // If this is a Water shader, turn off by default until we RE this.
+        if (mtd.shaderPath.includes('_Water_'))
+            this.visible = false;
 
         linkTextureParameter(this.textureMapping, textureHolder, 'g_Diffuse',    material, mtd);
         linkTextureParameter(this.textureMapping, textureHolder, 'g_Specular',   material, mtd);
@@ -571,6 +608,9 @@ class BatchInstance {
         linkTextureParameter(this.textureMapping, textureHolder, 'g_Specular_2', material, mtd);
         linkTextureParameter(this.textureMapping, textureHolder, 'g_Bumpmap_2',  material, mtd);
         linkTextureParameter(this.textureMapping, textureHolder, 'g_Lightmap',   material, mtd);
+
+        for (let i = 0; i < this.textureMapping.length; i++)
+            this.textureMapping[i].gfxSampler = this.flverData.gfxSampler;
 
         const blendMode = getBlendMode(mtd);
         let isTranslucent = false;
@@ -644,8 +684,8 @@ class BatchInstance {
         mat4.mul(matrixScratch, matrixScratch, modelMatrix);
         offs += fillMatrix4x3(d, offs, matrixScratch);
 
-        offs += fillVec4v(d, offs, this.specularColor);
         offs += fillVec4v(d, offs, this.diffuseColor);
+        offs += fillVec4v(d, offs, this.specularColor);
 
         const scrollTime = viewerInput.time / 120;
         offs += fillVec4v(d, offs, vec4.scale(scratchVec4, this.texScroll[0], scrollTime));
@@ -653,7 +693,7 @@ class BatchInstance {
         offs += fillVec4v(d, offs, vec4.scale(scratchVec4, this.texScroll[2], scrollTime));
 
         // Light direction
-        vec4.copy(scratchVec4, this.lightDir);
+        vec4.normalize(scratchVec4, this.lightDir);
         vec4.transformMat4(scratchVec4, scratchVec4, matrixScratch);
         vec4.normalize(scratchVec4, scratchVec4);
         offs += fillVec4v(d, offs, scratchVec4);
@@ -803,5 +843,6 @@ export class MSBRenderer {
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.flverInstances.length; i++)
             this.flverInstances[i].destroy(device);
+        this.modelHolder.destroy(device);
     }
 }

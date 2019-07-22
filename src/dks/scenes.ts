@@ -82,7 +82,7 @@ class DKSRenderer implements Viewer.SceneGfx {
     private renderInstManager = new GfxRenderInstManager();
     private uniformBuffer: GfxRenderDynamicUniformBuffer;
 
-    constructor(device: GfxDevice, public textureHolder: DDSTextureHolder, private modelHolder: ModelHolder) {
+    constructor(device: GfxDevice, public textureHolder: DDSTextureHolder) {
         this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
     }
 
@@ -123,7 +123,6 @@ class DKSRenderer implements Viewer.SceneGfx {
         for (let i = 0; i < this.msbRenderers.length; i++)
             this.msbRenderers[i].destroy(device);
         this.textureHolder.destroy(device);
-        this.modelHolder.destroy(device);
     }
 }
 
@@ -172,7 +171,7 @@ async function fetchLoose(resourceSystem: ResourceSystem, dataFetcher: DataFetch
     resourceSystem.mountFile(fileName, buffer);
 }
 
-export class DKSSceneDesc implements Viewer.SceneDesc {
+class DKSSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
 
@@ -213,6 +212,7 @@ export class DKSSceneDesc implements Viewer.SceneDesc {
         ]);
 
         const textureHolder = new DDSTextureHolder();
+        const renderer = new DKSRenderer(device, textureHolder);
 
         const msbPath = `/map/MapStudio/${this.id}.msb`;
         const msbBuffer = resourceSystem.lookupFile(msbPath);
@@ -241,9 +241,111 @@ export class DKSSceneDesc implements Viewer.SceneDesc {
         this.loadTextureTPFDCX(device, textureHolder, resourceSystem, `/map/${mapKey}/${mapKey}_9999`);
 
         const msbRenderer = new MSBRenderer(device, textureHolder, modelHolder, materialDataHolder, msb);
-
-        const renderer = new DKSRenderer(device, textureHolder, modelHolder);
         renderer.msbRenderers.push(msbRenderer);
+        return renderer;
+    }
+}
+
+class DKSEverySceneDesc implements Viewer.SceneDesc {
+    constructor(public id: string, public name: string) {
+    }
+
+    private loadTextureTPFDCX(device: GfxDevice, textureHolder: DDSTextureHolder, resourceSystem: ResourceSystem, baseName: string): void {
+        const buffer = resourceSystem.lookupFile(`${baseName}.tpf.dcx`);
+        const decompressed = new ArrayBufferSlice(DCX.decompressBuffer(buffer));
+        const tpf = TPF.parse(decompressed);
+        textureHolder.addTextures(device, tpf.textures);
+    }
+
+    private loadTextureBHD(device: GfxDevice, textureHolder: DDSTextureHolder, resourceSystem: ResourceSystem, baseName: string): void {
+        const bhdBuffer = resourceSystem.lookupFile(`${baseName}.tpfbhd`);
+        const bdtBuffer = resourceSystem.lookupFile(`${baseName}.tpfbdt`);
+        const bhd = BHD.parse(bhdBuffer, bdtBuffer);
+        for (let i = 0; i < bhd.fileRecords.length; i++) {
+            const r = bhd.fileRecords[i];
+            assert(r.name.endsWith('.tpf.dcx'));
+            const decompressed = new ArrayBufferSlice(DCX.decompressBuffer(r.buffer));
+            const tpf = TPF.parse(decompressed);
+            assert(tpf.textures.length === 1);
+            const key1 = r.name.replace(/\\/g, '').replace('.tpf.dcx', '').toLowerCase();
+            const key2 = tpf.textures[0].name.toLowerCase();
+            assert(key1 === key2);
+            // WTF do we do if we have more than one texture?
+            textureHolder.addTextures(device, tpf.textures);
+        }
+    }
+
+    public async createScene(device: GfxDevice, abortSignal: AbortSignal, sceneContext: SceneContext): Promise<Viewer.SceneGfx> {
+        const dataFetcher = new DataFetcher(sceneContext.abortSignal, sceneContext.progressMeter);
+        const resourceSystem = new ResourceSystem();
+
+        const allMaps = [
+            "m18_01_00_00",
+            "m10_02_00_00",
+            "m10_01_00_00",
+            "m10_00_00_00",
+            "m14_00_00_00",
+            "m14_01_00_00",
+            "m12_00_00_01",
+            "m15_00_00_00",
+            "m15_01_00_00",
+            "m11_00_00_00",
+            "m17_00_00_00",
+            "m13_00_00_00",
+            "m13_01_00_00",
+            "m13_02_00_00",
+            "m16_00_00_00",
+            "m18_00_00_00",
+            "m12_01_00_00",
+        ];
+
+        const textureHolder = new DDSTextureHolder();
+
+        const renderer = new DKSRenderer(device, textureHolder);
+
+        const promises = [];
+        promises.push(fetchLoose(resourceSystem, dataFetcher, `mtd/Mtd.mtdbnd`));
+
+        for (let i = 0; i < allMaps.length; i++) {
+            const mapID = allMaps[i];
+            const arcName = `${mapID}_arc.crg1`;
+            promises.push(fetchCRG1Arc(resourceSystem, dataFetcher, arcName));
+        }
+
+        await Promise.all(promises);
+
+        for (let i = 0; i < allMaps.length; i++) {
+            const mapID = allMaps[i];
+            const msbPath = `/map/MapStudio/${mapID}.msb`;
+            const msbBuffer = resourceSystem.lookupFile(msbPath);
+            const msb = MSB.parse(msbBuffer, mapID);
+
+            const mtdBnd = BND3.parse(resourceSystem.lookupFile(`mtd/Mtd.mtdbnd`));
+            const materialDataHolder = new MaterialDataHolder(mtdBnd);
+
+            const flver: (FLVER.FLVER | undefined)[] = [];
+            for (let i = 0; i < msb.models.length; i++) {
+                if (msb.models[i].type === 0) {
+                    const flverBuffer = resourceSystem.lookupFile(msb.models[i].flverPath);
+                    const flver_ = FLVER.parse(new ArrayBufferSlice(DCX.decompressBuffer(flverBuffer)));
+                    if (flver_.batches.length > 0)
+                        flver[i] = flver_;
+                }
+            }
+
+            const modelHolder = new ModelHolder(device, flver);
+
+            const mapKey = mapID.slice(0, 3); // "m10"
+            this.loadTextureBHD(device, textureHolder, resourceSystem, `/map/${mapKey}/${mapKey}_0000`);
+            this.loadTextureBHD(device, textureHolder, resourceSystem, `/map/${mapKey}/${mapKey}_0001`);
+            this.loadTextureBHD(device, textureHolder, resourceSystem, `/map/${mapKey}/${mapKey}_0002`);
+            this.loadTextureBHD(device, textureHolder, resourceSystem, `/map/${mapKey}/${mapKey}_0003`);
+            this.loadTextureTPFDCX(device, textureHolder, resourceSystem, `/map/${mapKey}/${mapKey}_9999`);
+
+            const msbRenderer = new MSBRenderer(device, textureHolder, modelHolder, materialDataHolder, msb);
+            renderer.msbRenderers.push(msbRenderer);
+        }
+
         return renderer;
     }
 }
@@ -252,24 +354,25 @@ const id = 'dks';
 const name = "Dark Souls";
 
 const sceneDescs = [
-    new DKSSceneDesc('m10_01_00_00', "Undead Burg / Parish"),
-    new DKSSceneDesc('m10_00_00_00', "The Depths"),
+    new DKSSceneDesc('m18_01_00_00', "Undead Asylum"),
     new DKSSceneDesc('m10_02_00_00', "Firelink Shrine"),
-    new DKSSceneDesc('m11_00_00_00', "Painted World"),
-    new DKSSceneDesc('m12_00_00_00', "Darkroot Forest"),
-    new DKSSceneDesc('m12_00_00_01', "Darkroot Basin"),
-    new DKSSceneDesc('m12_01_00_00', "Royal Wood"),
-    new DKSSceneDesc('m13_00_00_00', "The Catacombs"),
-    new DKSSceneDesc('m13_01_00_00', "Tomb of the Giants"),
-    new DKSSceneDesc('m13_02_00_00', "Ash Lake"),
-    new DKSSceneDesc('m14_00_00_00', "Blighttown"),
-    new DKSSceneDesc('m14_01_00_00', "Demon Ruins"),
+    new DKSSceneDesc('m10_01_00_00', "Undead Burg / Undead Parish"),
+    new DKSSceneDesc('m10_00_00_00', "The Depths"),
+    new DKSSceneDesc('m14_00_00_00', "Blighttown / Quelaag's Domain"),
+    new DKSSceneDesc('m14_01_00_00', "Demon Ruins / Lost Izalith"),
+    new DKSSceneDesc('m12_00_00_01', "Darkroot Forest / Darkroot Basin"),
     new DKSSceneDesc('m15_00_00_00', "Sen's Fortress"),
     new DKSSceneDesc('m15_01_00_00', "Anor Londo"),
-    new DKSSceneDesc('m16_00_00_00', "New Londo Ruins"),
+    new DKSSceneDesc('m11_00_00_00', "Painted World"),
     new DKSSceneDesc('m17_00_00_00', "Duke's Archives / Crystal Caves"),
-    new DKSSceneDesc('m18_00_00_00', "Kiln of the First Flame"),
-    new DKSSceneDesc('m18_01_00_00', "Undead Asylum"),
+    new DKSSceneDesc('m13_00_00_00', "The Catacombs"),
+    new DKSSceneDesc('m13_01_00_00', "Tomb of the Giants"),
+    new DKSSceneDesc('m13_02_00_00', "Great Hollow / Ash Lake"),
+    new DKSSceneDesc('m16_00_00_00', "New Londo Ruins / Valley of the Drakes"),
+    new DKSSceneDesc('m18_00_00_00', "Firelink Altar / Kiln of the First Flame"),
+    new DKSSceneDesc('m12_01_00_00', "Royal Wood / Oolacile Township / Chasm of the Abyss"),
+
+    new DKSEverySceneDesc("hell yea bro", "Click here to crash your browser"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };

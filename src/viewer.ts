@@ -1,7 +1,6 @@
 
 import * as UI from './ui';
 
-import Progressable, { ProgressMeter } from './Progressable';
 import InputManager from './InputManager';
 import { CameraController, Camera, CameraControllerClass } from './Camera';
 import { TextureHolder } from './TextureHolder';

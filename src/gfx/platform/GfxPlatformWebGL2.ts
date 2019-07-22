@@ -663,6 +663,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             return WebGL2RenderingContext.RGBA32F;
         case GfxFormat.U16_R:
             return WebGL2RenderingContext.R16UI;
+        case GfxFormat.U8_RGB_SRGB:
+            return WebGL2RenderingContext.SRGB8;
         case GfxFormat.U8_RGBA:
             return WebGL2RenderingContext.RGBA8;
         case GfxFormat.U8_RGBA_SRGB:
@@ -672,9 +674,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         case GfxFormat.BC1:
             return this._WEBGL_compressed_texture_s3tc!.COMPRESSED_RGBA_S3TC_DXT1_EXT;
         case GfxFormat.BC1_SRGB:
-            return this._WEBGL_compressed_texture_s3tc!.COMPRESSED_RGBA_S3TC_DXT5_EXT;
+            return this._WEBGL_compressed_texture_s3tc_srgb!.COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT;
         case GfxFormat.BC3:
-            return this._WEBGL_compressed_texture_s3tc_srgb!.COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT;
+            return this._WEBGL_compressed_texture_s3tc!.COMPRESSED_RGBA_S3TC_DXT3_EXT;
         case GfxFormat.BC3_SRGB:
             return this._WEBGL_compressed_texture_s3tc_srgb!.COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT;
         default:
@@ -683,6 +685,19 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     }
     
     private translateTextureFormat(fmt: GfxFormat): GLenum {
+        switch (fmt) {
+        case GfxFormat.BC1:
+            return this._WEBGL_compressed_texture_s3tc!.COMPRESSED_RGBA_S3TC_DXT1_EXT;
+        case GfxFormat.BC1_SRGB:
+            return this._WEBGL_compressed_texture_s3tc_srgb!.COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT;
+        case GfxFormat.BC3:
+            return this._WEBGL_compressed_texture_s3tc!.COMPRESSED_RGBA_S3TC_DXT3_EXT;
+        case GfxFormat.BC3_SRGB:
+            return this._WEBGL_compressed_texture_s3tc_srgb!.COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT;
+        default:
+            break;
+        }
+
         const compFlags: FormatCompFlags = getFormatCompFlags(fmt);
         switch (compFlags) {
         case FormatCompFlags.COMP_R:
@@ -1281,6 +1296,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                             } else {
                                 const gl_type = this.translateTextureType(pixelFormat);
                                 gl.texSubImage2D(gl_target, i, 0, 0, w, h, gl_format, gl_type, levelData);
+                                if (gl.getError() !== gl.NO_ERROR)
+                                    throw "whoops";
                             }
                         }
                     }

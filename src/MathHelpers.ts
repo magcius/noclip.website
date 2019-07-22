@@ -1,5 +1,5 @@
 
-import { mat4, vec3 } from "gl-matrix";
+import { mat4, vec3, vec4 } from "gl-matrix";
 
 // Misc bits of 3D math.
 

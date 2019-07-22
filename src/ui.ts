@@ -1498,7 +1498,9 @@ export class TextureViewer extends Panel {
             div.appendChild(valueSpan);
         });
 
+        if (texture.surfaces.length > 0)
         this.showInSurfaceView(texture.surfaces[0]);
+
         this.showInFullSurfaceView(texture.surfaces);
     }
 
