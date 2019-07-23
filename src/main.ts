@@ -128,10 +128,8 @@ const sceneGroups = [
     Scenes_Splatoon.sceneGroup,
     Scenes_THUG2.sceneGroup,
     Scenes_Zelda_BreathOfTheWild.sceneGroup,
+    Scenes_Test.sceneGroup,
 ];
-
-if (IS_DEVELOPMENT)
-    sceneGroups.push(Scenes_Test.sceneGroup);
 
 function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
     return new Response(blob).arrayBuffer();
@@ -581,6 +579,10 @@ class Main {
         this.ui.destroyScene();
         this.viewer.setScene(null);
         gfxDeviceGetImpl(this.viewer.gfxDevice).checkForLeaks();
+
+        // Unhide any hidden scene groups upon being loaded.
+        if (sceneGroup.hidden)
+            sceneGroup.hidden = false;
 
         this.currentSceneGroup = sceneGroup;
         this.currentSceneDesc = sceneDesc;

@@ -21,6 +21,7 @@ export interface SceneGroup {
     name: string;
     sceneDescs: (string | SceneDesc)[];
     sceneIdMap?: Map<string, string>;
+    hidden?: boolean;
 }
 
 export function getSceneDescs(sceneGroup: SceneGroup): SceneDesc[] {

@@ -1,10 +1,36 @@
 
 import { SceneGroup } from '../viewer';
-import { SceneDesc } from './render';
+import { SceneDesc } from '../SceneBase';
+import Progressable from '../Progressable';
+import ArrayBufferSlice from '../ArrayBufferSlice';
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
+import { fetchData } from '../fetch';
+
+import * as MDL0 from './mdl0';
+import { SonicManiaRenderer } from './render';
+
+class SonicManiaSceneDesc implements SceneDesc {
+    public id: string;
+    public name: string;
+    public path: string;
+
+    constructor(name: string, path: string) {
+        this.name = name;
+        this.path = path;
+        this.id = this.path;
+    }
+
+    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<SonicManiaRenderer> {
+        return fetchData(this.path, abortSignal).then((result: ArrayBufferSlice) => {
+            const mdl0 = MDL0.parse(result);
+            return new SonicManiaRenderer(device, mdl0);
+        });
+    }
+}
 
 const name = "Sonic Mania";
 const id = "mdl0";
-const sceneDescs: SceneDesc[] = [
+const sceneDescs = [
     'Meshes/Continue/Count0.bin',
     'Meshes/Continue/Count1.bin',
     'Meshes/Continue/Count2.bin',
@@ -57,7 +83,7 @@ const sceneDescs: SceneDesc[] = [
 ].map((filename): SceneDesc => {
     const path = `mdl0/${filename}`;
     const name = filename;
-    return new SceneDesc(name, path);
+    return new SonicManiaSceneDesc(name, path);
 });
 
 export const sceneGroup: SceneGroup = { id, name, sceneDescs };

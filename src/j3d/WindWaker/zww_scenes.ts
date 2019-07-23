@@ -93,7 +93,7 @@ function parseDZSHeaders(buffer: ArrayBufferSlice): Map<string, DZSChunkHeader> 
     return chunkHeaders;
 }
 
-function getColorsFromDZS(buffer: ArrayBufferSlice, roomIdx: number, timeOfDay: number): Colors | undefined {
+export function getColorsFromDZS(buffer: ArrayBufferSlice, roomIdx: number, timeOfDay: number): Colors | undefined {
     const view = buffer.createDataView();
     const chunkHeaders = parseDZSHeaders(buffer);
 
@@ -1138,8 +1138,7 @@ class SceneDesc {
         // The King of Hyrule
         else if (name === 'Hi1') fetchArchive(`Hi.arc`).then((rarc) => buildModel(rarc, `bdlm/hi.bdl`).bindANK1(parseBCK(rarc, `bcks/hi_wait01.bck`)));
         // Princess Zelda
-        else if (name === 'p_zelda') fetchArchive(`Pz.arc`).then((rarc) => 
-        {
+        else if (name === 'p_zelda') fetchArchive(`Pz.arc`).then((rarc) => {
             const m = buildModel(rarc, `bdlm/pz.bdl`);            
             m.setMaterialColorWriteEnabled("m_pz_eyeLdamA", false);
             m.setMaterialColorWriteEnabled("m_pz_eyeLdamB", false);

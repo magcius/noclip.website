@@ -4,11 +4,8 @@ import * as MDL0 from './mdl0';
 import * as Viewer from '../viewer';
 
 import { DeviceProgram } from '../Program';
-import Progressable from '../Progressable';
-import { fetchData } from '../fetch';
-import ArrayBufferSlice from '../ArrayBufferSlice';
 import { OrbitCameraController } from '../Camera';
-import { GfxBlendMode, GfxBlendFactor, GfxDevice, GfxBufferUsage, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexAttributeFrequency, GfxVertexBufferDescriptor, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
+import { GfxBlendMode, GfxBlendFactor, GfxDevice, GfxBufferUsage, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexAttributeFrequency, GfxVertexBufferDescriptor, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from '../gfx/helpers/BufferHelpers';
 import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
@@ -254,7 +251,7 @@ class MDL0Renderer {
     }
 }
 
-class SonicManiaRenderer implements Viewer.SceneGfx {
+export class SonicManiaRenderer implements Viewer.SceneGfx {
     public defaultCameraController = OrbitCameraController;
 
     public renderTarget = new BasicRenderTarget();
@@ -301,24 +298,5 @@ class SonicManiaRenderer implements Viewer.SceneGfx {
         this.uniformBuffer.destroy(device);
         this.mdl0Renderer.destroy(device);
         this.fancyGrid.destroy(device);
-    }
-}
-
-export class SceneDesc implements Viewer.SceneDesc {
-    public id: string;
-    public name: string;
-    public path: string;
-
-    constructor(name: string, path: string) {
-        this.name = name;
-        this.path = path;
-        this.id = this.path;
-    }
-
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<SonicManiaRenderer> {
-        return fetchData(this.path, abortSignal).then((result: ArrayBufferSlice) => {
-            const mdl0 = MDL0.parse(result);
-            return new SonicManiaRenderer(device, mdl0);
-        });
     }
 }
