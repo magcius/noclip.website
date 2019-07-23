@@ -212,7 +212,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
         this.uniformBuffer.prepareToRender(device, hostAccessPass);
     }
 
-    private setCurrentAreaNo(areaNo: number): void {
+    public setCurrentAreaNo(areaNo: number): void {
         this.currentAreaNo = areaNo;
         for (let i = 0; i < this.stageAreaRenderers.length; i++)
             this.stageAreaRenderers[i].setActiveAreaNo(areaNo);
@@ -254,7 +254,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
 }
 
 class KatamariLevelSceneDesc implements Viewer.SceneDesc {
-    constructor(public id: string, public name: string, public stageAreaFileGroup: StageAreaFileGroup[], public missionSetupFile: string[]) {
+    constructor(public id: string, public name: string, public stageAreaFileGroup: StageAreaFileGroup[], public missionSetupFile: string[], public initialAreaNo: number = -1) {
     }
 
     public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
@@ -342,6 +342,9 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
                 renderer.objectRenderers.push(objectRenderer);
             }
 
+            if (this.initialAreaNo !== -1)
+                renderer.setCurrentAreaNo(this.initialAreaNo);
+
             return renderer;
         });
     }
@@ -401,6 +404,9 @@ const sceneDescs = [
     new KatamariLevelSceneDesc('clvl6', "Make Taurus",           worldStageAreaGroup, ['143c24', '143d77', '143f34', '1440b8']),
     new KatamariLevelSceneDesc('clvl7', "Make Pisces",           cityStageAreaGroup,  ['142801', '14290d', '142a52', '142b90']),
     new KatamariLevelSceneDesc('clvl8', "Make Virgo",            cityStageAreaGroup,  ['142cc5', '142dd2', '142f0e', '143046']),
+
+    // Make the North Star seems to have a dummy mission setup as the first area... just display the other one by default...
+    new KatamariLevelSceneDesc('clvl9', "Make the North Star",   worldStageAreaGroup, ['144633', '1447b1', '1449ba', '144b78'], 1),
 ];
 const sceneIdMap = new Map<string, string>();
 // When I first was testing Katamari, I was testing the Tutorial Level. At some point
