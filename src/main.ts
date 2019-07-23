@@ -57,6 +57,7 @@ import * as Scenes_SuperSmashBrosBrawl from './rres/Scenes_SuperSmashBrosBrawl';
 import * as Scenes_Test from './Scenes_Test';
 import * as Scenes_WiiSportsResort from './rres/Scenes_WiiSportsResort';
 import * as Scenes_Zelda_SkywardSword from './rres/Scenes_Zelda_SkywardSword';
+import * as Scenes_InteractiveExamples from './interactive_examples/Scenes';
 
 import { DroppedFileSceneDesc } from './Scenes_FileDrops';
 
@@ -129,6 +130,7 @@ const sceneGroups = [
     Scenes_THUG2.sceneGroup,
     Scenes_Zelda_BreathOfTheWild.sceneGroup,
     Scenes_Test.sceneGroup,
+    Scenes_InteractiveExamples.sceneGroup,
 ];
 
 function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {

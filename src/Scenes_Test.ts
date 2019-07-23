@@ -4,7 +4,6 @@ import Progressable from "./Progressable";
 import { GfxDevice } from "./gfx/platform/GfxPlatform";
 import { fetchData } from "./fetch";
 import { createBasicRRESRendererFromBRRES } from "./rres/scenes";
-import { WindWakerWater } from "./test/Scenes_WindWakerWater";
 import { IS_DEVELOPMENT } from "./BuildVersion";
 
 const id = 'test';
@@ -22,7 +21,6 @@ class BasicRRESSceneDesc implements Viewer.SceneDesc {
 
 const sceneDescs = [
     new BasicRRESSceneDesc('test/dthro_cmn1.brres'),
-    new WindWakerWater('www', "Wind Waker Water"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = {
