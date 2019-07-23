@@ -439,6 +439,7 @@ export class OrbitCameraController implements CameraController {
     public x: number = 0.15;
     public y: number = 0.35;
     public z: number = -150;
+    public orbitSpeed: number = -0.05;
     public xVel: number = 0;
     public yVel: number = 0;
     public zVel: number = 0;
@@ -480,8 +481,8 @@ export class OrbitCameraController implements CameraController {
             this.xVel += inputManager.dx / 200;
             this.yVel += inputManager.dy / 200;
         } else if (shouldOrbit) {
-            if (this.xVel > -0.05)
-                this.xVel -= 0.001;
+            if (Math.abs(this.xVel) < Math.abs(this.orbitSpeed))
+                this.xVel += this.orbitSpeed * 1/50;
         }
         this.zVel += inputManager.dz;
         if (inputManager.isKeyDown('KeyA')) {
