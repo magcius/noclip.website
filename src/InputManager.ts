@@ -36,7 +36,7 @@ export default class InputManager {
     public dx: number;
     public dy: number;
     public dz: number;
-    public button: number;
+    public button: number = -1;
     public onisdraggingchanged: (() => void) | null = null;
     private listeners: Listener[] = [];
     private scrollListeners: Listener[] = [];
@@ -55,6 +55,7 @@ export default class InputManager {
         window.addEventListener('blur', this._onBlur);
         this.toplevel.addEventListener('wheel', this._onWheel, { passive: false });
         this.toplevel.addEventListener('mousedown', (e) => {
+            this.button = e.button;
             GlobalGrabManager.takeGrab(this, e, { takePointerLock: this.usePointerLock });
             if (this.onisdraggingchanged !== null)
                 this.onisdraggingchanged();
@@ -161,6 +162,7 @@ export default class InputManager {
     };
 
     public onGrabReleased = (): void => {
+        this.button = -1;
         if (this.onisdraggingchanged !== null)
             this.onisdraggingchanged();
     };
