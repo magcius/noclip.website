@@ -1063,7 +1063,7 @@ class SceneSelect extends Panel {
                 let visible = false;
                 let explicitlyInvisible = false;
 
-                explicitlyInvisible = item.sceneDescs.length <= 0;
+                explicitlyInvisible = item.sceneDescs.length <= 0 || item.hidden;
                 if (!explicitlyInvisible) {
                     // If header matches, then we are explicitly visible.
                     if (!visible == lastGroupHeaderVisible)
