@@ -31,6 +31,10 @@ const scale = 200;
 const posMtx = mat4.create();
 mat4.fromScaling(posMtx, [scale, scale, scale]);
 
+const scale2 = 1/6;
+const posMtx2 = mat4.create();
+mat4.fromScaling(posMtx2, [scale2, scale2, scale2]);
+
 const scratchViewMatrix = mat4.create();
 class PlaneShape {
     private vtxBuffer: GfxBuffer;
@@ -314,6 +318,7 @@ export class WindWakerWater implements SceneDesc {
                     plane.modelMatrix[12] = x;
                     plane.modelMatrix[13] += i++ * layerY;
                     renderer.plane.push(plane);
+                    mat4.mul(plane.modelMatrix, posMtx2, plane.modelMatrix);
                 }
 
                 let i = 1;
