@@ -4,14 +4,14 @@ import { mat4, vec3 } from 'gl-matrix';
 import Progressable from '../Progressable';
 
 import { fetchData } from '../fetch';
-import { SceneGfx, ViewerRenderInput } from '../viewer';
+import { SceneGfx, ViewerRenderInput, Texture } from '../viewer';
 
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
 
 import { BMD, BTK } from '../j3d/j3d';
 import * as RARC from '../j3d/rarc';
-import { BMDModel, MaterialInstance, MaterialInstanceState, ShapeInstanceState, MaterialData, BMDModelInstance } from '../j3d/render';
+import { BMDModel, MaterialInstance, MaterialInstanceState, ShapeInstanceState, MaterialData, BMDModelInstance, TEX1Data } from '../j3d/render';
 import * as Yaz0 from '../compression/Yaz0';
 import { ub_PacketParams, PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, ub_MaterialParams, ColorKind } from '../gx/gx_render';
 import { GXRenderHelperGfx } from '../gx/gx_render';
@@ -23,9 +23,10 @@ import { computeViewMatrix, OrbitCameraController, computeViewSpaceDepthFromWorl
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { SceneDesc, SceneContext } from '../SceneBase';
-import { readString, nArray } from '../util';
+import { readString, nArray, concat } from '../util';
 import { getColorsFromDZS, Colors } from '../j3d/WindWaker/zww_scenes';
 import { setSortKeyDepth } from '../gfx/render/GfxRenderer';
+import { FakeTextureHolder } from '../TextureHolder';
 
 const scale = 200;
 const posMtx = mat4.create();
@@ -122,22 +123,20 @@ class Plane {
     public shapeInstanceState = new ShapeInstanceState();
     public materialInstanceState = new MaterialInstanceState();
     public plane: PlaneShape;
-    public bmdModel: BMDModel;
     public animationController: AnimationController;
     public modelMatrix = mat4.create();
     private origin = vec3.create();
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, bmd: BMD, btk: BTK | null, materialIndex: number = 0) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, private bmdModel: BMDModel, btk: BTK | null, materialIndex: number = 0) {
         mat4.copy(this.modelMatrix, posMtx);
 
         this.animationController = new AnimationController();
         // Make it go fast.
         this.animationController.fps = 30;
 
-        this.bmdModel = new BMDModel(device, cache, bmd);
         this.materialInstanceState.textureMappings = this.bmdModel.createDefaultTextureMappings();
 
-        const mat = bmd.mat3.materialEntries[materialIndex];
+        const mat = bmdModel.bmd.mat3.materialEntries[materialIndex];
         const matData = new MaterialData(mat);
         this.materialInstance = new MaterialInstance(matData, {});
         if (btk !== null)
@@ -169,7 +168,6 @@ class Plane {
 
     public destroy(device: GfxDevice) {
         this.plane.destroy(device);
-        this.bmdModel.destroy(device);
     }
 }
 
@@ -203,6 +201,7 @@ export class WindWakerRenderer implements SceneGfx {
     private vr_kasumi_mae: BMDModelInstance;
     private vr_back_cloud: BMDModelInstance;
     public plane: Plane[] = [];
+    public textureHolder = new FakeTextureHolder([]);
 
     constructor(device: GfxDevice, private stageRarc: RARC.RARC, colors: Colors) {
         this.renderHelper = new GXRenderHelperGfx(device);
@@ -296,8 +295,10 @@ export class WindWakerWater implements SceneDesc {
             const renderer = new WindWakerRenderer(device, stageRarc, colors);
 
             const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
-            const model_bmd = BMD.parse(roomRarc.findFileData('bdl/model.bdl'));
-            const model1_bmd = BMD.parse(roomRarc.findFileData('bdl/model1.bdl'));
+            const model_bmd = new BMDModel(device, cache, BMD.parse(roomRarc.findFileData('bdl/model.bdl')));
+            concat(renderer.textureHolder.viewerTextures, model_bmd.tex1Data.viewerTextures);
+            const model1_bmd = new BMDModel(device, cache, BMD.parse(roomRarc.findFileData('bdl/model1.bdl')));
+            concat(renderer.textureHolder.viewerTextures, model1_bmd.tex1Data.viewerTextures);
             const model1_btk = BTK.parse(roomRarc.findFileData('btk/model1.btk'));
 
             function setEnvColors(p: Plane): void {

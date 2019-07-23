@@ -99,3 +99,8 @@ export function hexdump(b_: ArrayBufferSlice | ArrayBuffer, offs: number = 0, le
 export function wordCountFromByteCount(byteCount: number): number {
     return align(byteCount, 4) / 4;
 }
+
+export function concat<T>(dst: T[], src: T[]): void {
+    for (let i = 0; i < src.length; i++)
+        dst.push(src[i]);
+}
