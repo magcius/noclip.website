@@ -4,14 +4,14 @@ import { mat4, vec3 } from 'gl-matrix';
 import Progressable from '../Progressable';
 
 import { fetchData } from '../fetch';
-import { SceneGfx, ViewerRenderInput, Texture } from '../viewer';
+import { SceneGfx, ViewerRenderInput } from '../viewer';
 
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
 
 import { BMD, BTK } from '../j3d/j3d';
 import * as RARC from '../j3d/rarc';
-import { BMDModel, MaterialInstance, MaterialInstanceState, ShapeInstanceState, MaterialData, BMDModelInstance, TEX1Data } from '../j3d/render';
+import { BMDModel, MaterialInstance, MaterialInstanceState, ShapeInstanceState, MaterialData, BMDModelInstance } from '../j3d/render';
 import * as Yaz0 from '../compression/Yaz0';
 import { ub_PacketParams, PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, ub_MaterialParams, ColorKind } from '../gx/gx_render';
 import { GXRenderHelperGfx } from '../gx/gx_render';
@@ -47,6 +47,8 @@ class PlaneShape {
 
     constructor(device: GfxDevice, cache: GfxRenderCache) {
         const vtx = new Float32Array(4 * 5);
+        const txc = 1;
+        const tyc = 2;
         vtx[0]  = -1;
         vtx[1]  = 0;
         vtx[2]  = -1;
@@ -56,20 +58,20 @@ class PlaneShape {
         vtx[5]  = 1;
         vtx[6]  = 0;
         vtx[7]  = -1;
-        vtx[8]  = 2;
+        vtx[8]  = txc;
         vtx[9]  = 0;
 
         vtx[10] = -1;
         vtx[11] = 0;
         vtx[12] = 1;
         vtx[13] = 0;
-        vtx[14] = 2;
+        vtx[14] = tyc;
 
         vtx[15] = 1;
         vtx[16] = 0;
         vtx[17] = 1;
-        vtx[18] = 2;
-        vtx[19] = 2;
+        vtx[18] = txc;
+        vtx[19] = tyc;
 
         this.vtxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vtx.buffer);
         this.idxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, makeTriangleIndexBuffer(GfxTopology.TRISTRIP, 0, 4).buffer);
@@ -201,6 +203,7 @@ export class WindWakerRenderer implements SceneGfx {
     private vr_kasumi_mae: BMDModelInstance;
     private vr_back_cloud: BMDModelInstance;
     public plane: Plane[] = [];
+    public modelData: BMDModel[] = [];
     public textureHolder = new FakeTextureHolder([]);
 
     constructor(device: GfxDevice, private stageRarc: RARC.RARC, colors: Colors) {
@@ -266,6 +269,10 @@ export class WindWakerRenderer implements SceneGfx {
         this.vr_kasumi_mae.destroy(device);
         this.vr_uso_umi.destroy(device);
         this.vr_back_cloud.destroy(device);
+        for (let i = 0; i < this.modelData.length; i++)
+            this.modelData[i].destroy(device);
+        for (let i = 0; i < this.plane.length; i++)
+            this.plane[i].destroy(device);
     }
 }
 
@@ -297,8 +304,10 @@ export class WindWakerWater implements SceneDesc {
             const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
             const model_bmd = new BMDModel(device, cache, BMD.parse(roomRarc.findFileData('bdl/model.bdl')));
             concat(renderer.textureHolder.viewerTextures, model_bmd.tex1Data.viewerTextures);
+            renderer.modelData.push(model_bmd);
             const model1_bmd = new BMDModel(device, cache, BMD.parse(roomRarc.findFileData('bdl/model1.bdl')));
             concat(renderer.textureHolder.viewerTextures, model1_bmd.tex1Data.viewerTextures);
+            renderer.modelData.push(model1_bmd);
             const model1_btk = BTK.parse(roomRarc.findFileData('btk/model1.btk'));
 
             function setEnvColors(p: Plane): void {
