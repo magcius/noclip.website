@@ -147,7 +147,7 @@ class BrawlSceneDesc implements Viewer.SceneDesc {
 }
 
 // Stages organized and tagged by rabidrodent on Discord.
-// Subspace named by Matthew @tanukimatthew
+// Subspace Emissary maps named by Matthew @tanukimatthew
 const id = 'ssbb';
 const name = "Super Smash Bros. Brawl";
 const sceneDescs = [
@@ -317,7 +317,7 @@ const sceneDescs = [
     new BrawlSceneDesc('adventure/240002b.pac', 'The Wilds 1-3'),
     new BrawlSceneDesc('adventure/240101.pac', 'Galleom Fight'),
     new BrawlSceneDesc('adventure/250001.pac', 'The Ruined Hall'),
-    new BrawlSceneDesc('adventure/260001.pac', 'The Wilds 2-1),
+    new BrawlSceneDesc('adventure/260001.pac', 'The Wilds 2-1'),
     new BrawlSceneDesc('adventure/260001a.pac', 'The Wilds 2-1 Bonus'),
     new BrawlSceneDesc('adventure/260002.pac', 'The Wilds 2-2'),
     new BrawlSceneDesc('adventure/270001.pac', 'The Swamp 1'),
