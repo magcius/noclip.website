@@ -1449,6 +1449,10 @@ export class TextureViewer extends Panel {
         this.extraRack.appendChild(this.fullSurfaceView);
     }
 
+    public getViewerTextureList(): Viewer.Texture[] {
+        return this.textureList;
+    }
+
     private showInSurfaceView(surface: HTMLCanvasElement) {
         this.surfaceView.innerHTML = '';
         surface.style.width = '100%';

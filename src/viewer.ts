@@ -208,12 +208,6 @@ export class Viewer {
 
         return canvas;
     }
-
-    public getCurrentTextureHolder(): TextureHolder<any> | null {
-        if (this.scene !== null && this.scene.textureHolder !== undefined)
-            return this.scene.textureHolder;
-        return null;
-    }
 }
 
 import { SceneDesc, SceneGroup } from "./SceneBase"

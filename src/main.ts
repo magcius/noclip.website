@@ -660,11 +660,12 @@ class Main {
         convertCanvasToPNG(canvas).then((blob) => downloadBlob(filename, blob));
     }
 
-    private _makeZipFileFromTextureHolder(textureHolder: TextureHolder<any>): Promise<ZipFileEntry[]> {
+    private _makeTextureZipFile(): Promise<ZipFileEntry[]> | null {
+        const viewerTextures = this.ui.textureViewer.getViewerTextureList();
         const zipFileEntries: ZipFileEntry[] = [];
         const promises: Promise<void>[] = [];
-        for (let i = 0; i < textureHolder.viewerTextures.length; i++) {
-            const tex = textureHolder.viewerTextures[i];
+        for (let i = 0; i < viewerTextures.length; i++) {
+            const tex = viewerTextures[i];
             for (let j = 0; j < tex.surfaces.length; j++) {
                 const filename = `${tex.name}_${j}.png`;
                 promises.push(convertCanvasToPNG(tex.surfaces[j]).then((blob) => blobToArrayBuffer(blob)).then((data) => {
@@ -677,14 +678,14 @@ class Main {
     }
 
     private _downloadTextures() {
-        const textureHolder = this.viewer.getCurrentTextureHolder();
-        if (textureHolder) {
-            this._makeZipFileFromTextureHolder(textureHolder).then((zipFileEntries) => {
-                const zipBuffer = makeZipFile(zipFileEntries);
-                const filename = `${this._getSceneDownloadPrefix()}_Textures.zip`;
-                downloadBufferSlice(filename, new ArrayBufferSlice(zipBuffer), 'application/zip');
-            });
-        }
+        this._makeTextureZipFile().then((zipFileEntries) => {
+            if (zipFileEntries.length === 0)
+                return;
+
+            const zipBuffer = makeZipFile(zipFileEntries);
+            const filename = `${this._getSceneDownloadPrefix()}_Textures.zip`;
+            downloadBufferSlice(filename, new ArrayBufferSlice(zipBuffer), 'application/zip');
+        });
     }
 
     // Hooks for people who want to mess with stuff.
