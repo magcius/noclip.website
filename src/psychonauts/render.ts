@@ -227,15 +227,19 @@ class MeshFragInstance {
 
             const textureId = meshFragData.meshFrag.textureIds[0];
             const textureReference = scene.textureReferences[textureId];
-            textureHolder.fillTextureMapping(textureMapping, textureReference.textureName);
-            const ppakTexture = textureHolder.findPPAKTexture(textureReference.textureName);
+
+            if (textureHolder.hasTexture(textureReference.textureName)) {
+                textureHolder.fillTextureMapping(textureMapping, textureReference.textureName);
+            } else {
+                textureMapping.gfxTexture = null;
+            }
 
             const gfxSampler = device.createSampler({
                 magFilter: GfxTexFilterMode.BILINEAR,
                 minFilter: GfxTexFilterMode.BILINEAR,
                 mipFilter: GfxMipFilterMode.LINEAR,
                 minLOD: 0,
-                maxLOD: ppakTexture.mipData.length,
+                maxLOD: 1000,
                 wrapS: GfxWrapMode.REPEAT,
                 wrapT: GfxWrapMode.REPEAT,
             });
