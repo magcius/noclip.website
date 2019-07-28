@@ -3437,10 +3437,6 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             const pivotX = (flags >>> 0x0E) & 0x03;
             const pivotY = (flags >>> 0x10) & 0x03;
 
-            assertExists(bsp1);
-            const isEnableDrawParent = !!(flags & 0x00080000);
-            bsp1.stopDrawParent = !isEnableDrawParent;
-
             const alphaInTiming = view.getFloat32(dataBegin + 0x08);
             const alphaOutTiming = view.getFloat32(dataBegin + 0x0C);
             const alphaInValue = view.getFloat32(dataBegin + 0x10);
@@ -3513,6 +3509,11 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             let planeType: PlaneType = (flags >>> 10) & 0x01;
             if (shapeType === ShapeType.DirectionCross || shapeType === ShapeType.RotationCross)
                 planeType = PlaneType.X;
+
+            assertExists(bsp1);
+            const isEnableDrawParent = !!(flags & 0x00080000);
+            bsp1.stopDrawParent = !isEnableDrawParent;
+    
             const posRndm = view.getFloat32(dataBegin + 0x04);
             const baseVel = view.getFloat32(dataBegin + 0x08);
             const baseVelRndm = view.getFloat32(dataBegin + 0x0C);
