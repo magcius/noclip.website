@@ -366,8 +366,14 @@ const sceneDescs = [
     new TTYDSceneDesc('stg_03', "Battle Stage: Blue (Unused)"),
     new TTYDSceneDesc('stg_04', "Battle Stage: White (Unused)"),
 
-    new TTYDSceneDesc('tik_09', "Pit of 100 Trials Intermediate Floor (Unused)"),
-    new TTYDSceneDesc('tik_10', "Pit of 100 Trials Lowest Floor (Unused)"),
+    new TTYDSceneDesc('tik_09', "Pit of 100 Trials Intermediate Floor #1 (Unused)"),
+    new TTYDSceneDesc('tik_10', "Pit of 100 Trials Intermediate Floor #2 (Unused)"),
+    new TTYDSceneDesc('tik_14', "Pit of 100 Trials Lower Floor (Unused)"),
+
+    // new TTYDSceneDesc('rsh_05_b'),
+    // new TTYDSceneDesc('rsh_05_c'),
+    // new TTYDSceneDesc('rsh_06_b'),
+    // new TTYDSceneDesc('rsh_06_c'),
 
     "Battle Backgrounds",
     new TTYDSceneDesc('stg_00_0'),
@@ -418,10 +424,6 @@ const sceneDescs = [
     new TTYDSceneDesc('stg_08_5'),
     new TTYDSceneDesc('stg_08_6'),
     new TTYDSceneDesc('stg01_1'),
-    new TTYDSceneDesc('rsh_05_b'),
-    new TTYDSceneDesc('rsh_05_c'),
-    new TTYDSceneDesc('rsh_06_b'),
-    new TTYDSceneDesc('rsh_06_c'),
 ];
 
 const id = 'ttyd';
