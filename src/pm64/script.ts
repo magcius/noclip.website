@@ -9,6 +9,11 @@ const enum ScriptThreadState {
     ALIVE, DEAD, WAITING_ON_CHILD, WAITING_ON_FRAME,
 }
 
+function copyThreadVars(dst: ScriptThread, src: ScriptThread): void {
+    for (let i = 0; i < src.var.length; i++)
+        dst.var[i] = src.var[i];
+}
+
 class ScriptThread {
     public pc: number;
     public addr: number;
@@ -23,11 +28,6 @@ class ScriptThread {
     constructor(public start: number) {
         this.pc = start;
         this.addr = scriptAddrBase + start;
-    }
-
-    public copy(src: ScriptThread): void {
-        for (let i = 0; i < src.var.length; i++)
-            this.var[i] = src.var[i];
     }
 }
 
@@ -118,9 +118,10 @@ export class ScriptExecutor {
         return thread;
     }
 
-    private startChildThread(thread: ScriptThread, pc: number): ScriptThread {
+    private startChildThread(parentThread: ScriptThread, pc: number): ScriptThread {
         const child = this.startThread(pc);
-        child.parentThread = thread;
+        copyThreadVars(child, parentThread);
+        child.parentThread = parentThread;
         return child;
     }
 
@@ -245,8 +246,8 @@ export class ScriptExecutor {
         } else if (addr === 0x802C9000) {
             // SetTexPanner
             assert(operCount === 2);
-            const modelId = view.getUint32(operOffs + 0x00);
-            const groupId = view.getUint32(operOffs + 0x04);
+            const modelId = this.getValue(thread, view.getInt32(operOffs + 0x00));
+            const groupId = this.getValue(thread, view.getInt32(operOffs + 0x04));
             this.scriptHost.setModelTexAnimGroup(modelId, groupId);
         } else if (addr === 0x802C9364) {
             // SetTexPan
@@ -283,7 +284,7 @@ export class ScriptExecutor {
             case 0x02: // Return. Copy our state to the parent thread and kill ourselves.
                 thread.state = ScriptThreadState.DEAD;
                 if (thread.parentThread !== null && thread.parentThread.state === ScriptThreadState.WAITING_ON_CHILD) {
-                    thread.parentThread.copy(thread);
+                    copyThreadVars(thread.parentThread, thread);
                     thread.parentThread.state = ScriptThreadState.ALIVE;
                 }
                 break;
