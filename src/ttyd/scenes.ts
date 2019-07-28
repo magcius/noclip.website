@@ -366,6 +366,9 @@ const sceneDescs = [
     new TTYDSceneDesc('stg_03', "Battle Stage: Blue (Unused)"),
     new TTYDSceneDesc('stg_04', "Battle Stage: White (Unused)"),
 
+    new TTYDSceneDesc('tik_09', "Pit of 100 Trials Intermediate Floor (Unused)"),
+    new TTYDSceneDesc('tik_10', "Pit of 100 Trials Lowest Floor (Unused)"),
+
     "Battle Backgrounds",
     new TTYDSceneDesc('stg_00_0'),
     new TTYDSceneDesc('stg_00_1'),
