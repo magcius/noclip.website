@@ -202,7 +202,10 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         'texture_table',
         'vcd_table',
     ];
-    assert(namedChunkTableCount === chunkNames.length);
+
+    const isVersion102 = namedChunkTableCount === 8;
+    const isVersion100 = namedChunkTableCount === 7;
+    assert(isVersion100 || isVersion102);
 
     const chunkOffsets: number[] = [];
 
@@ -980,34 +983,17 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
     }
     //#endregion
 
-    //#region vcd_table
-    const vtxArrays: GX_Array[] = [];
-    // First element of the blocks is item count, so we add 0x04 to skip past it.
-
-    vtxArrays[GX.VertexAttribute.POS] = { buffer, offs: mainDataOffs + view.getUint32(vcd_tableOffs + 0x00) + 0x04 };
-    // NRM, probably?
-    vtxArrays[GX.VertexAttribute.NRM] = { buffer, offs: mainDataOffs + view.getUint32(vcd_tableOffs + 0x04) + 0x04 };
-
-    const clrCount = view.getUint32(vcd_tableOffs + 0x08);
-    assert(clrCount === 0x01);
-
-    vtxArrays[GX.VertexAttribute.CLR0] = { buffer, offs: mainDataOffs + view.getUint32(vcd_tableOffs + 0x0C) + 0x04 };
-    // vtxArrays[GX.VertexAttribute.CLR1] = { buffer, offs: mainDataOffs + view.getUint32(vcd_tableOffs + 0x10) + 0x04 };
-    assert(view.getUint32(vcd_tableOffs + 0x10) === 0);
-
-    const texCoordCount = view.getUint32(vcd_tableOffs + 0x14);
-    assert(texCoordCount <= 0x03);
-    vtxArrays[GX.VertexAttribute.TEX0] = { buffer, offs: mainDataOffs + view.getUint32(vcd_tableOffs + 0x18) + 0x04 };
-    vtxArrays[GX.VertexAttribute.TEX1] = { buffer, offs: mainDataOffs + view.getUint32(vcd_tableOffs + 0x1C) + 0x04 };
-    vtxArrays[GX.VertexAttribute.TEX2] = { buffer, offs: mainDataOffs + view.getUint32(vcd_tableOffs + 0x20) + 0x04 };
-    //#endregion
-
     //#region information
     assert(informationOffs === 0x20);
     const versionStr = readString(buffer, mainDataOffs + view.getUint32(informationOffs + 0x00));
+    if (isVersion100)
+        assert(versionStr === 'ver1.00');
+    else if (isVersion102)
+        assert(versionStr === 'ver1.02');
+
     const sNodeStr = readString(buffer, mainDataOffs + view.getUint32(informationOffs + 0x08));
     const aNodeStr = readString(buffer, mainDataOffs + view.getUint32(informationOffs + 0x0C));
-    const dateStr = readString(buffer, mainDataOffs + view.getUint32(informationOffs + 0x10));
+    const dateStr = isVersion100 ? '' : readString(buffer, mainDataOffs + view.getUint32(informationOffs + 0x10));
 
     // Read meshes.
     const sceneGraphRootOffs = mainDataOffs + view.getUint32(informationOffs + 0x04);
@@ -1064,92 +1050,121 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
 
             // Parse mesh.
             // VAT, perhaps? Doesn't seem like there's enough bits for that...
-            const meshUnk00 = view.getUint32(meshOffs + 0x00);
-            // assert(meshUnk00 === 0x01000001);
+            const isPackedDisplayList = !!view.getUint8(meshOffs + 0x03);
             const displayListTableCount = view.getUint32(meshOffs + 0x04);
             const vcdBits = view.getUint32(meshOffs + 0x08);
-            const arrayOffs = mainDataOffs + view.getUint32(meshOffs + 0x0C);
-            assert(arrayOffs === vcd_tableOffs);
+            const modelVcdTableOffs = mainDataOffs + view.getUint32(meshOffs + 0x0C);
 
-            const enum VcdBitFlags {
-                POS  = 1 << 0,
-                NRM  = 1 << 1,
-                CLR0 = 1 << 2,
-                CLR1 = 1 << 3,
-                TEX0 = 1 << 4,
-                TEX1 = 1 << 5,
-                TEX2 = 1 << 6,
-                TEX3 = 1 << 7,
-                TEX4 = 1 << 8,
-                TEX5 = 1 << 9,
-                TEX6 = 1 << 10,
-                TEX7 = 1 << 11,
-            };
-
-            let workingBits = vcdBits;
-
-            const vat: GX_VtxAttrFmt[] = [];
-            const vcd: GX_VtxDesc[] = [];
-
-            assert((workingBits & VcdBitFlags.POS) !== 0);
-            if ((workingBits & VcdBitFlags.POS) !== 0) {
-                vat[GX.VertexAttribute.POS] = { compType: GX.CompType.S16, compCnt: GX.CompCnt.POS_XYZ, compShift: view.getUint32(vcd_tableOffs + 0x44) };
-                vcd[GX.VertexAttribute.POS] = { type: GX.AttrType.INDEX16 };
-                workingBits &= ~VcdBitFlags.POS;
+            if (isVersion102) {
+                assert(modelVcdTableOffs === vcd_tableOffs);
+                assert(isPackedDisplayList);
+            } else if (isVersion100) {
+                assert(!isPackedDisplayList);
             }
 
-            if ((workingBits & VcdBitFlags.NRM) !== 0) {
-                vat[GX.VertexAttribute.NRM] = { compType: GX.CompType.S16, compCnt: GX.CompCnt.NRM_XYZ, compShift: 0 };
-                vcd[GX.VertexAttribute.NRM] = { type: GX.AttrType.INDEX16 };
-                workingBits &= ~VcdBitFlags.NRM;
+            if (isPackedDisplayList) {
+                const vtxArrays: GX_Array[] = [];
+                // First element of the blocks is item count, so we add 0x04 to skip past it.
+
+                vtxArrays[GX.VertexAttribute.POS] = { buffer, offs: mainDataOffs + view.getUint32(modelVcdTableOffs + 0x00) + 0x04 };
+                vtxArrays[GX.VertexAttribute.NRM] = { buffer, offs: mainDataOffs + view.getUint32(modelVcdTableOffs + 0x04) + 0x04 };
+
+                const clrCount = view.getUint32(modelVcdTableOffs + 0x08);
+                assert(clrCount === 0x01);
+
+                vtxArrays[GX.VertexAttribute.CLR0] = { buffer, offs: mainDataOffs + view.getUint32(modelVcdTableOffs + 0x0C) + 0x04 };
+                // vtxArrays[GX.VertexAttribute.CLR1] = { buffer, offs: mainDataOffs + view.getUint32(modelVcdTableOffs + 0x10) + 0x04 };
+                assert(view.getUint32(modelVcdTableOffs + 0x10) === 0);
+
+                const texCoordCount = view.getUint32(modelVcdTableOffs + 0x14);
+                assert(texCoordCount <= 0x03);
+                vtxArrays[GX.VertexAttribute.TEX0] = { buffer, offs: mainDataOffs + view.getUint32(modelVcdTableOffs + 0x18) + 0x04 };
+                vtxArrays[GX.VertexAttribute.TEX1] = { buffer, offs: mainDataOffs + view.getUint32(modelVcdTableOffs + 0x1C) + 0x04 };
+                vtxArrays[GX.VertexAttribute.TEX2] = { buffer, offs: mainDataOffs + view.getUint32(modelVcdTableOffs + 0x20) + 0x04 };
+
+                const enum VcdBitFlags {
+                    POS  = 1 << 0,
+                    NRM  = 1 << 1,
+                    CLR0 = 1 << 2,
+                    CLR1 = 1 << 3,
+                    TEX0 = 1 << 4,
+                    TEX1 = 1 << 5,
+                    TEX2 = 1 << 6,
+                    TEX3 = 1 << 7,
+                    TEX4 = 1 << 8,
+                    TEX5 = 1 << 9,
+                    TEX6 = 1 << 10,
+                    TEX7 = 1 << 11,
+                };
+
+                let workingBits = vcdBits;
+
+                const vat: GX_VtxAttrFmt[] = [];
+                const vcd: GX_VtxDesc[] = [];
+
+                assert((workingBits & VcdBitFlags.POS) !== 0);
+                if ((workingBits & VcdBitFlags.POS) !== 0) {
+                    vat[GX.VertexAttribute.POS] = { compType: GX.CompType.S16, compCnt: GX.CompCnt.POS_XYZ, compShift: view.getUint32(vcd_tableOffs + 0x44) };
+                    vcd[GX.VertexAttribute.POS] = { type: GX.AttrType.INDEX16 };
+                    workingBits &= ~VcdBitFlags.POS;
+                }
+
+                if ((workingBits & VcdBitFlags.NRM) !== 0) {
+                    vat[GX.VertexAttribute.NRM] = { compType: GX.CompType.S16, compCnt: GX.CompCnt.NRM_XYZ, compShift: 0 };
+                    vcd[GX.VertexAttribute.NRM] = { type: GX.AttrType.INDEX16 };
+                    workingBits &= ~VcdBitFlags.NRM;
+                }
+
+                if ((workingBits & VcdBitFlags.CLR0) !== 0) {
+                    vat[GX.VertexAttribute.CLR0] = { compType: GX.CompType.RGBA8, compCnt: GX.CompCnt.CLR_RGBA, compShift: 0 };
+                    vcd[GX.VertexAttribute.CLR0] = { type: GX.AttrType.INDEX16 };
+                    workingBits &= ~VcdBitFlags.CLR0;
+                }
+
+                if ((workingBits & VcdBitFlags.TEX0) !== 0) {
+                    vat[GX.VertexAttribute.TEX0] = { compType: GX.CompType.S16, compCnt: GX.CompCnt.TEX_ST, compShift: view.getUint32(vcd_tableOffs + 0x48) };
+                    vcd[GX.VertexAttribute.TEX0] = { type: GX.AttrType.INDEX16 };
+                    workingBits &= ~VcdBitFlags.TEX0;
+                }
+
+                if ((workingBits & VcdBitFlags.TEX1) !== 0) {
+                    vat[GX.VertexAttribute.TEX1] = { compType: GX.CompType.S16, compCnt: GX.CompCnt.TEX_ST, compShift: view.getUint32(vcd_tableOffs + 0x4C) };
+                    vcd[GX.VertexAttribute.TEX1] = { type: GX.AttrType.INDEX16 };
+                    workingBits &= ~VcdBitFlags.TEX1;
+                }
+
+                if ((workingBits & VcdBitFlags.TEX2) !== 0) {
+                    vat[GX.VertexAttribute.TEX2] = { compType: GX.CompType.S16, compCnt: GX.CompCnt.TEX_ST, compShift: view.getUint32(vcd_tableOffs + 0x50) };
+                    vcd[GX.VertexAttribute.TEX2] = { type: GX.AttrType.INDEX16 };
+                    workingBits &= ~VcdBitFlags.TEX2;
+                }
+
+                // No bits leftover.
+                assert(workingBits === 0);
+
+                const vtxLoader = compileVtxLoader(vat, vcd);
+                const loadedVertexLayout = vtxLoader.loadedVertexLayout;
+
+                let displayListTableIdx = meshOffs + 0x10;
+                const loadedDatas: LoadedVertexData[] = [];
+                let vertexId = 0;
+                for (let i = 0; i < displayListTableCount; i++) {
+                    const displayListOffs = mainDataOffs + view.getUint32(displayListTableIdx + 0x00);
+                    const displayListSize = view.getUint32(displayListTableIdx + 0x04);
+                    const loadedVertexData = vtxLoader.runVertices(vtxArrays, buffer.subarray(displayListOffs, displayListSize), { firstVertexId: vertexId });
+                    vertexId = loadedVertexData.vertexId;
+                    loadedDatas.push(loadedVertexData);
+                    displayListTableIdx += 0x08;
+                }
+
+                const loadedVertexData = coalesceLoadedDatas(loadedVertexLayout, loadedDatas);
+                const batch: Batch = { loadedVertexLayout, loadedVertexData };
+
+                parts.push({ material, batch });
+            } else {
+                // TODO(jstpierre): Write non-packed display list parser
             }
 
-            if ((workingBits & VcdBitFlags.CLR0) !== 0) {
-                vat[GX.VertexAttribute.CLR0] = { compType: GX.CompType.RGBA8, compCnt: GX.CompCnt.CLR_RGBA, compShift: 0 };
-                vcd[GX.VertexAttribute.CLR0] = { type: GX.AttrType.INDEX16 };
-                workingBits &= ~VcdBitFlags.CLR0;
-            }
-
-            if ((workingBits & VcdBitFlags.TEX0) !== 0) {
-                vat[GX.VertexAttribute.TEX0] = { compType: GX.CompType.S16, compCnt: GX.CompCnt.TEX_ST, compShift: view.getUint32(vcd_tableOffs + 0x48) };
-                vcd[GX.VertexAttribute.TEX0] = { type: GX.AttrType.INDEX16 };
-                workingBits &= ~VcdBitFlags.TEX0;
-            }
-
-            if ((workingBits & VcdBitFlags.TEX1) !== 0) {
-                vat[GX.VertexAttribute.TEX1] = { compType: GX.CompType.S16, compCnt: GX.CompCnt.TEX_ST, compShift: view.getUint32(vcd_tableOffs + 0x4C) };
-                vcd[GX.VertexAttribute.TEX1] = { type: GX.AttrType.INDEX16 };
-                workingBits &= ~VcdBitFlags.TEX1;
-            }
-
-            if ((workingBits & VcdBitFlags.TEX2) !== 0) {
-                vat[GX.VertexAttribute.TEX2] = { compType: GX.CompType.S16, compCnt: GX.CompCnt.TEX_ST, compShift: view.getUint32(vcd_tableOffs + 0x50) };
-                vcd[GX.VertexAttribute.TEX2] = { type: GX.AttrType.INDEX16 };
-                workingBits &= ~VcdBitFlags.TEX2;
-            }
-
-            // No bits leftover.
-            assert(workingBits === 0);
-
-            const vtxLoader = compileVtxLoader(vat, vcd);
-            const loadedVertexLayout = vtxLoader.loadedVertexLayout;
-
-            let displayListTableIdx = meshOffs + 0x10;
-            const loadedDatas: LoadedVertexData[] = [];
-            let vertexId = 0;
-            for (let i = 0; i < displayListTableCount; i++) {
-                const displayListOffs = mainDataOffs + view.getUint32(displayListTableIdx + 0x00);
-                const displayListSize = view.getUint32(displayListTableIdx + 0x04);
-                const loadedVertexData = vtxLoader.runVertices(vtxArrays, buffer.subarray(displayListOffs, displayListSize), { firstVertexId: vertexId });
-                vertexId = loadedVertexData.vertexId;
-                loadedDatas.push(loadedVertexData);
-                displayListTableIdx += 0x08;
-            }
-
-            const loadedVertexData = coalesceLoadedDatas(loadedVertexLayout, loadedDatas);
-            const batch: Batch = { loadedVertexLayout, loadedVertexData };
-
-            parts.push({ material, batch });
             partTableIdx += 0x08;
         }
 
