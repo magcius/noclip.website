@@ -1513,6 +1513,8 @@ export class TextureViewer extends Panel {
     }
 
     public setTextureList(textures: Viewer.Texture[]) {
+        textures = textures.filter((tex) => tex.surfaces.length > 0);
+
         this.setVisible(textures.length > 0);
         if (textures.length === 0)
             return;
