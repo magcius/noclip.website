@@ -382,7 +382,7 @@ function translateVatLayout(vatFormat: GX_VtxAttrFmt[], vcd: GX_VtxDesc[]): VatL
     return { srcVertexSize, vatFormat, vcd };
 }
 
-function translateVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VertexLayout {
+export function compileLoadedVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VertexLayout {
     // Create source VAT layouts.
     const vatLayouts = vat.map((vatFormat) => translateVatLayout(vatFormat, vcd));
 
@@ -472,7 +472,7 @@ function _compileVtxLoader(desc: VtxLoaderDesc): VtxLoader {
     const vat = desc.vat;
     const vcd = desc.vcd;
 
-    const loadedVertexLayout: VertexLayout = translateVertexLayout(vat, vcd);
+    const loadedVertexLayout: VertexLayout = compileLoadedVertexLayout(vat, vcd);
 
     function makeLoaderName(): string {
         let name = 'VtxLoader';
