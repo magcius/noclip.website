@@ -442,6 +442,14 @@ export class WorldRenderer extends BasicGXRendererHelper {
             sNodeInst.setVisible(enableSNode.checked);
         };
         renderHacksPanel.contents.appendChild(enableSNode.elem);
+        const otherNodes = this.rootNode.children.filter((nodeInstance) => nodeInstance.node.nameStr !== this.d.information.aNodeStr && nodeInstance.node.nameStr !== this.d.information.sNodeStr);
+        if (otherNodes.length > 0) {
+            const enableOtherNodes = new UI.Checkbox('Enable Other Root Nodes', false);
+            enableOtherNodes.onchanged = () => {
+                otherNodes.forEach((nodeInstance) => nodeInstance.setVisible(enableOtherNodes.checked));
+            };
+            renderHacksPanel.contents.appendChild(enableOtherNodes.elem);
+        }
         return [renderHacksPanel];
     }
 
