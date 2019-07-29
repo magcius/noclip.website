@@ -23,7 +23,7 @@ export class TextureMapping {
     public width: number = 0;
     public height: number = 0;
     public lodBias: number = 0;
-    // GL fucking sucks. This is a convenience when building texture matrices.
+    // GL sucks. This is a convenience when building texture matrices.
     // The core renderer does not use this code at all.
     public flipY: boolean = false;
 
