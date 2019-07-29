@@ -22,6 +22,7 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
     public renderTarget = new BasicRenderTarget();
     public areaRenderers: MREARenderer[] = [];
     public cmdlRenderers: CMDLRenderer[] = [];
+    public cmdlData: CMDLData[] = [];
 
     constructor(device: GfxDevice, public mlvl: MLVL.MLVL, public textureHolder = new RetroTextureHolder()) {
         this.renderHelper = new GXRenderHelperGfx(device);
@@ -74,6 +75,8 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
             this.areaRenderers[i].destroy(device);
         for (let i = 0; i < this.cmdlRenderers.length; i++)
             this.cmdlRenderers[i].destroy(device);
+        for (let i = 0; i < this.cmdlData.length; i++)
+            this.cmdlData[i].destroy(device);
     }
 
     public createPanels(): UI.Panel[] {
@@ -111,6 +114,7 @@ class MP1SceneDesc implements Viewer.SceneDesc {
                 if (skyboxCMDL) {
                     const skyboxName = resourceSystem.findResourceNameByID(mlvl.defaultSkyboxID);
                     const skyboxCMDLData = new CMDLData(device, renderer.renderHelper, skyboxCMDL);
+                    renderer.cmdlData.push(skyboxCMDLData);
                     skyboxRenderer = new CMDLRenderer(device, renderer.renderHelper, renderer.textureHolder, null, skyboxName, mat4.create(), skyboxCMDLData);
                     skyboxRenderer.isSkybox = true;
                     renderer.cmdlRenderers.push(skyboxRenderer);

@@ -403,6 +403,7 @@ export class MREARenderer {
     private materialInstances: MaterialInstance[] = [];
     private surfaceData: SurfaceData[] = [];
     private surfaceInstances: SurfaceInstance[] = [];
+    private cmdlData: CMDLData[] = [];
     private actors: CMDLRenderer[] = [];
     public visible: boolean = true;
 
@@ -509,6 +510,7 @@ export class MREARenderer {
                     const actorLights = new ActorLights(aabb, ent.lightParams, this.mrea);
                     // TODO(jstpierre): Add a ModelCache.
                     const cmdlData = new CMDLData(device, renderHelper, ent.model);
+                    this.cmdlData.push(cmdlData);
                     this.actors.push(new CMDLRenderer(device, renderHelper, this.textureHolder, actorLights, ent.name, ent.modelMatrix, cmdlData));
                 }
             }
@@ -541,6 +543,8 @@ export class MREARenderer {
     public destroy(device: GfxDevice): void {
         this.materialGroupInstances.forEach((cmd) => cmd.destroy(device));
         this.bufferCoalescer.destroy(device);
+        for (let i = 0; i < this.cmdlData.length; i++)
+            this.cmdlData[i].destroy(device);
         for (let i = 0; i < this.actors.length; i++)
             this.actors[i].destroy(device);
         for (let i = 0; i < this.surfaceData.length; i++)
