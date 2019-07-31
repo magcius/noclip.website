@@ -38,7 +38,7 @@ import { align, assert } from '../util';
 
 import * as GX from './gx_enum';
 import { Endianness, getSystemEndianness } from '../endian';
-import { GfxFormat, FormatCompFlags, FormatTypeFlags, getFormatCompByteSize, getFormatTypeFlagsByteSize, makeFormat, getFormatCompFlagsComponentCount, getFormatTypeFlags, getFormatComponentCount, getFormatFlags, FormatFlags } from '../gfx/platform/GfxPlatformFormat';
+import { GfxFormat, FormatCompFlags, FormatTypeFlags, getFormatCompByteSize, getFormatTypeFlagsByteSize, getFormatCompFlagsComponentCount, getFormatTypeFlags, getFormatComponentCount, getFormatFlags, FormatFlags, makeFormat } from '../gfx/platform/GfxPlatformFormat';
 import { EqualFunc, HashMap, nullHashFunc } from '../HashMap';
 
 // GX_SetVtxAttrFmt
@@ -243,7 +243,7 @@ export function getAttributeFormatCompFlagsRaw(vtxAttrib: GX.VertexAttribute, co
     }
 }
 
-export function getAttributeFormatCompFlags(vtxAttrib: GX.VertexAttribute, vatFormat: GX_VtxAttrFmt): FormatCompFlags {
+function getAttributeFormatCompFlags(vtxAttrib: GX.VertexAttribute, vatFormat: GX_VtxAttrFmt): FormatCompFlags {
     // MTXIDX fields don't have VAT entries.
     if (isVtxAttribMtxIdx(vtxAttrib))
         return FormatCompFlags.COMP_R;
@@ -251,7 +251,7 @@ export function getAttributeFormatCompFlags(vtxAttrib: GX.VertexAttribute, vatFo
     return getAttributeFormatCompFlagsRaw(vtxAttrib, vatFormat.compCnt);
 }
 
-export function getAttributeComponentCount(vtxAttrib: GX.VertexAttribute, vatFormat: GX_VtxAttrFmt): number {
+function getAttributeComponentCount(vtxAttrib: GX.VertexAttribute, vatFormat: GX_VtxAttrFmt): number {
     return getFormatCompFlagsComponentCount(getAttributeFormatCompFlags(vtxAttrib, vatFormat));
 }
 
@@ -341,7 +341,29 @@ function getAttributeBaseFormat(vtxAttrib: GX.VertexAttribute): GfxFormat {
     if (vtxAttrib === GX.VertexAttribute.CLR0 || vtxAttrib === GX.VertexAttribute.CLR1)
         return GfxFormat.U8_R_NORM;
 
+    // In theory, we could use U8_R/S8_R/S16_R/U16_R for the other types,
+    // but we can't easily express compShift, so we fall back to F32 for now.
     return GfxFormat.F32_R;
+}
+
+function getAttributeFormat(vatLayouts: VatLayout[], vtxAttrib: GX.VertexAttribute): GfxFormat {
+    let formatCompFlags = 0;
+
+    const baseFormat = getAttributeBaseFormat(vtxAttrib);
+
+    if (isVtxAttribColor(vtxAttrib)) {
+        // For color attributes, we always output all 4 components.
+        formatCompFlags = FormatCompFlags.COMP_RGBA;
+    } else if (isVtxAttribTexMtxIdx(vtxAttrib)) {
+        // We pack TexMtxIdx into multi-channel vertex inputs.
+        formatCompFlags = FormatCompFlags.COMP_RGBA;
+    } else {
+        // Go over all layouts and pick the best one.
+        for (let i = 0; i < vatLayouts.length; i++)
+            formatCompFlags = Math.max(formatCompFlags, getAttributeFormatCompFlags(vtxAttrib, vatLayouts[i].vatFormat[vtxAttrib]));
+    }
+
+    return makeFormat(getFormatTypeFlags(baseFormat), formatCompFlags, getFormatFlags(baseFormat));
 }
 
 function translateVatLayout(vatFormat: GX_VtxAttrFmt[], vcd: GX_VtxDesc[]): VatLayout {
@@ -401,7 +423,6 @@ export function compileLoadedVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDes
         if (!enableOutput)
             continue;
 
-        let baseFormat = getAttributeBaseFormat(vtxAttrib);
         let fieldBase = -1;
         let fieldByteOffset = 0;
 
@@ -416,32 +437,19 @@ export function compileLoadedVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDes
             }
         }
 
-        const formatTypeFlags = getFormatTypeFlags(baseFormat);
+        const format = getAttributeFormat(vatLayouts, vtxAttrib);
+        const formatTypeFlags = getFormatTypeFlags(format);
         const formatComponentSize = getFormatTypeFlagsByteSize(formatTypeFlags);
-
-        // Find our maximum component count by choosing from a maximum of all the VAT formats.
-        let formatCompFlags = 0;
-        vatLayouts.forEach((vatLayout) => {
-            formatCompFlags = Math.max(formatCompFlags, getAttributeFormatCompFlags(vtxAttrib, vatLayout.vatFormat[vtxAttrib]));
-        });
-
-        // For color attributes, we always output all 4 components.
-        if (isVtxAttribColor(vtxAttrib))
-            formatCompFlags = FormatCompFlags.COMP_RGBA;
-
-        if (isVtxAttribTexMtxIdx(vtxAttrib))
-            formatCompFlags = FormatCompFlags.COMP_RGBA;
 
         // Allocate a field if we need to...
         if (fieldBase === -1) {
             dstVertexSize = align(dstVertexSize, formatComponentSize);
             fieldBase = dstVertexSize + fieldByteOffset;
-            dstVertexSize += formatComponentSize * getFormatCompFlagsComponentCount(formatCompFlags);
+            dstVertexSize += formatComponentSize * getFormatComponentCount(format);
         }
 
         const bufferOffset = fieldBase + fieldByteOffset;
 
-        const format = makeFormat(formatTypeFlags, formatCompFlags, getFormatFlags(baseFormat));
         const vtxAttribLayout = { vtxAttrib, bufferIndex, bufferOffset, format };
         dstVertexAttributeLayouts.push(vtxAttribLayout);
 
@@ -1041,7 +1049,9 @@ export function compileVtxLoader(vatFormat: GX_VtxAttrFmt[], vcd: GX_VtxDesc[]):
     const desc = { vat, vcd };
     return compileVtxLoaderDesc(desc);
 }
+//#endregion
 
+//#region Utilities
 export function coalesceLoadedDatas(loadedVertexLayout: LoadedVertexLayout, loadedDatas: LoadedVertexData[]): LoadedVertexData {
     let totalIndexCount = 0;
     let totalVertexCount = 0;
