@@ -114,7 +114,6 @@ class PlaneShape {
         device.destroyBuffer(this.idxBuffer);
         device.destroyBuffer(this.zeroBuffer);
         device.destroyBuffer(this.colorBuffer);
-        device.destroyInputLayout(this.inputLayout);
         device.destroyInputState(this.inputState);
     }
 }
