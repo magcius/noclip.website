@@ -2,7 +2,8 @@
 import { mat4, vec3, vec4 } from 'gl-matrix';
 import InputManager from './InputManager';
 import { Frustum, AABB } from './Geometry';
-import { clampRange } from './MathHelpers';
+import { clampRange, computeProjectionMatrixFromFrustum } from './MathHelpers';
+import { reverseDepthForProjectionMatrix } from './gfx/helpers/ReversedDepthHelpers';
 
 export class Camera {
     // Converts to view space from world space.
@@ -37,7 +38,7 @@ export class Camera {
         this.updateClipFromWorld();
     }
 
-    public setPerspective(fovY: number, aspect: number, n: number, f: number): void {
+    public setPerspective(fovY: number, aspect: number, n: number, f: number = Infinity): void {
         this.fovY = fovY;
         this.aspect = aspect;
 
@@ -46,15 +47,15 @@ export class Camera {
         this.setFrustum(-nearX, nearX, -nearY, nearY, n, f);
     }
 
-    public setClipPlanes(n: number, f: number): void {
+    public setClipPlanes(n: number, f: number = Infinity): void {
         this.setPerspective(this.fovY, this.aspect, n, f);
     }
 
     private setFrustum(left: number, right: number, bottom: number, top: number, n: number, f: number): void {
         this.frustum.setViewFrustum(left, right, bottom, top, n, f);
         this.frustum.updateWorldFrustum(this.worldMatrix);
-        mat4.frustum(this.projectionMatrix, left, right, bottom, top, n, f);
-
+        computeProjectionMatrixFromFrustum(this.projectionMatrix, left, right, bottom, top, n, f);
+        reverseDepthForProjectionMatrix(this.projectionMatrix);
         this.updateClipFromWorld();
     }
 

@@ -20,6 +20,7 @@ import { mat4 } from 'gl-matrix';
 import { computeViewMatrix, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
 import { BasicRendererHelper } from '../oot3d/render';
 import { AABB } from '../Geometry';
+import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
 
 export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
     public addFRESTextures(device: GfxDevice, fres: FRES): void {
@@ -470,7 +471,7 @@ class FMATInstance {
         const isTranslucent = program.isTranslucent;
         this.templateRenderInst.setMegaStateFlags({
             cullMode:       translateCullMode(fmat),
-            depthCompare:   translateDepthCompare(fmat),
+            depthCompare:   reverseDepthForCompareMode(translateDepthCompare(fmat)),
             depthWrite:     isTranslucent ? false : translateDepthWrite(fmat),
             blendMode:      isTranslucent ? GfxBlendMode.ADD : GfxBlendMode.NONE,
             blendSrcFactor: translateBlendSrcFactor(fmat),
@@ -867,7 +868,6 @@ export class BasicFRESRenderer extends BasicRendererHelper {
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        viewerInput.camera.setClipPlanes(10, 500000);
         for (let i = 0; i < this.fmdlRenderers.length; i++)
             this.fmdlRenderers[i].prepareToRender(hostAccessPass, viewerInput);
     }

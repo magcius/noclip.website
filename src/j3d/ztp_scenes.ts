@@ -118,7 +118,6 @@ class TwilightPrincessRenderer implements Viewer.SceneGfx {
 
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         const template = this.renderHelper.pushTemplateRenderInst();
-        viewerInput.camera.setClipPlanes(20, 500000);
         this.renderHelper.fillSceneParams(viewerInput, template);
         for (let i = 0; i < this.modelInstances.length; i++)
             this.modelInstances[i].prepareToRender(device, this.renderHelper, viewerInput);

@@ -651,11 +651,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     }
 
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        if (this.isFullSea)
-            viewerInput.camera.setClipPlanes(20, 5000000);
-        else
-            viewerInput.camera.setClipPlanes(20, 5000000);
-
         const template = this.renderHelper.pushTemplateRenderInst();
 
         this.renderHelper.fillSceneParams(viewerInput, template);

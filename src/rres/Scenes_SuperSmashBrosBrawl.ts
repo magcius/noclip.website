@@ -93,7 +93,6 @@ class BrawlRenderer extends BasicGXRendererHelper {
 
     protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         this.animationController.setTimeInMilliseconds(viewerInput.time);
-        viewerInput.camera.setClipPlanes(20, 500000);
         const template = this.renderHelper.pushTemplateRenderInst();
         this.renderHelper.fillSceneParams(viewerInput, template);
         for (let i = 0; i < this.modelInstances.length; i++)

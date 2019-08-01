@@ -333,7 +333,7 @@ void main() {
     v_TexCoord.x = (gl_VertexID == 1) ? 2.0 : 0.0;
     v_TexCoord.y = (gl_VertexID == 2) ? 2.0 : 0.0;
     gl_Position.xy = v_TexCoord * vec2(2) - vec2(1);
-    gl_Position.zw = vec2(1);
+    gl_Position.zw = vec2(-1, 1);
 }
 `;
 }

@@ -322,7 +322,6 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         this.animationController.setTimeInMilliseconds(viewerInput.time);
 
         const template = this.renderHelper.pushTemplateRenderInst();
-        viewerInput.camera.setClipPlanes(10, 500000);
         this.renderHelper.fillSceneParams(viewerInput, template);
         for (let i = 0; i < this.modelInstances.length; i++)
             this.modelInstances[i].prepareToRender(device, this.renderHelper, viewerInput);

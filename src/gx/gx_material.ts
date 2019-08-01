@@ -10,6 +10,7 @@ import { GfxCompareMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxCull
 import { vec3, vec4, mat4 } from 'gl-matrix';
 import { Camera } from '../Camera';
 import { assert } from '../util';
+import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
 
 // TODO(jstpierre): Move somewhere better...
 export const EFB_WIDTH = 640;
@@ -1256,7 +1257,7 @@ function translateCompareType(compareType: GX.CompareType): GfxCompareMode {
 export function translateGfxMegaState(megaState: Partial<GfxMegaStateDescriptor>, material: GXMaterial) {
     megaState.cullMode = translateCullMode(material.cullMode);
     megaState.depthWrite = material.ropInfo.depthWrite;
-    megaState.depthCompare = material.ropInfo.depthTest ? translateCompareType(material.ropInfo.depthFunc) : GfxCompareMode.ALWAYS;
+    megaState.depthCompare = material.ropInfo.depthTest ? reverseDepthForCompareMode(translateCompareType(material.ropInfo.depthFunc)) : GfxCompareMode.ALWAYS;
     megaState.frontFace = GfxFrontFaceMode.CW;
 
     if (material.ropInfo.blendMode.type === GX.BlendMode.NONE) {

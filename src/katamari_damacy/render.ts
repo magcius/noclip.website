@@ -11,6 +11,7 @@ import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
 import { nArray, assert } from "../util";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer2";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers";
 
 export class KatamariDamacyProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -216,7 +217,7 @@ export class BINModelPartInstance {
         assert(zte);
 
         this.megaStateFlags = {
-            depthCompare: translateDepthCompareMode(ztst),
+            depthCompare: reverseDepthForCompareMode(translateDepthCompareMode(ztst)),
         };
 
         if (this.binModelPart.textureName !== null) {

@@ -103,7 +103,7 @@ export class Viewer {
         // Hack in projection for now until we have that unfolded from RenderState.
         camera.newFrame();
         const aspect = this.canvas.width / this.canvas.height;
-        camera.setPerspective(this.fovY, aspect, 10, 50000);
+        camera.setPerspective(this.fovY, aspect, 10);
 
         this.viewerRenderInput.time = this.sceneTime;
         this.viewerRenderInput.viewportWidth = this.canvas.width;

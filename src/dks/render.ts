@@ -823,8 +823,6 @@ export class MSBRenderer {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        viewerInput.camera.setClipPlanes(20, 500000);
-
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
 

@@ -207,3 +207,32 @@ export function lerpAngle(v0: number, v1: number, t: number): number {
     const dist = (2*da) % 1.0 - da;
     return v0 + dist * t;
 }
+
+// Similar to mat4.frustum, except it can handle infinite far planes.
+export function computeProjectionMatrixFromFrustum(m: mat4, left: number, right: number, bottom: number, top: number, near: number, far: number) {
+    const rl = 1 / (right - left);
+    const tb = 1 / (top - bottom);
+    m[0] = near * 2 * rl;
+    m[1] = 0;
+    m[2] = 0;
+    m[3] = 0;
+    m[4] = 0;
+    m[5] = near * 2 * tb;
+    m[6] = 0;
+    m[7] = 0;
+    m[8] = (right + left) * rl;
+    m[9] = (top + bottom) * tb;
+    m[11] = -1;
+    m[12] = 0;
+    m[13] = 0;
+    m[15] = 0;
+
+    if (far !== Infinity) {
+        const nf = 1 / (near - far);
+        m[10] = (far + near) * nf;
+        m[14] = far * near * 2 * nf;
+    } else {
+        m[10] = -1;
+        m[14] = -2 * near;
+    }
+}

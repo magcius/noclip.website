@@ -1,6 +1,7 @@
 
 import { GfxMegaStateDescriptor, GfxFrontFaceMode, GfxCullMode, GfxStencilOp, GfxCompareMode, GfxBlendFactor, GfxBlendMode, GfxAttachmentState } from "../platform/GfxPlatform";
 import { colorCopy, colorNewCopy } from "../../Color";
+import { reverseDepthForCompareMode } from "./ReversedDepthHelpers";
 
 function resolveField<T>(v: T | undefined, parentV: T): T {
     return v !== undefined ? v : parentV;
@@ -67,7 +68,7 @@ export const defaultMegaState: GfxMegaStateDescriptor = {
     blendSrcFactor: GfxBlendFactor.ONE,
     blendDstFactor: GfxBlendFactor.ZERO,
     depthWrite: true,
-    depthCompare: GfxCompareMode.LEQUAL,
+    depthCompare: reverseDepthForCompareMode(GfxCompareMode.LEQUAL),
     stencilCompare: GfxCompareMode.NEVER,
     stencilWrite: false,
     stencilPassOp: GfxStencilOp.KEEP,

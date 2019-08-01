@@ -188,13 +188,6 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
     }
 
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        // If the stage is the world, use a large near plane so we can see everything.
-        // Otherwise, use a small near plane so we can get super up close.
-        if (this.isWorld)
-            viewerInput.camera.setClipPlanes(20, 12000000);
-        else
-            viewerInput.camera.setClipPlanes(2,  1200000);
-
         const template = this.renderInstManager.pushTemplateRenderInst();
         template.setUniformBuffer(this.uniformBuffer);
         template.setBindingLayouts(bindingLayouts);
