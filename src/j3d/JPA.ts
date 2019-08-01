@@ -365,6 +365,25 @@ function shapeTypeSupported(shapeType: ShapeType): boolean {
     }
 }
 
+export class JPACData {
+    public texData: BTIData[] = [];
+
+    constructor(public jpac: JPAC) {
+    }
+
+    public translateTexture(device: GfxDevice, index: number): BTIData {
+        if (this.texData[index] === undefined)
+            this.texData[index] = new BTIData(device, this.jpac.textures[index].texture);
+        return this.texData[index];
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.texData.length; i++)
+            if (this.texData[i] !== undefined)
+                this.texData[i].destroy(device);
+    }
+}
+
 export class JPAResourceData {
     public res: JPAResource;
     public supportedParticle: boolean = true;
@@ -374,8 +393,8 @@ export class JPAResourceData {
     public texData: BTIData[] = [];
     public materialHelper: GXMaterialHelperGfx;
 
-    constructor(device: GfxDevice, private jpac: JPAC, resRaw: JPAResourceRaw) {
-        this.res = parseResource(this.jpac.version, resRaw);
+    constructor(device: GfxDevice, private jpacData: JPACData, resRaw: JPAResourceRaw) {
+        this.res = parseResource(this.jpacData.jpac.version, resRaw);
         this.resourceId = resRaw.resourceId;
 
         const bsp1 = this.res.bsp1;
@@ -540,10 +559,8 @@ export class JPAResourceData {
     }
 
     private translateTDB1Index(device: GfxDevice, idx: number): void {
-        if (this.texData[idx] === undefined) {
-            const timg = this.jpac.textures[this.res.tdb1[idx]].texture;
-            this.texData[idx] = new BTIData(device, timg);
-        }
+        if (this.texData[idx] === undefined)
+            this.texData[idx] = this.jpacData.translateTexture(device, this.res.tdb1[idx]);
     }
 
     public destroy(device: GfxDevice): void {

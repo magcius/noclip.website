@@ -455,15 +455,17 @@ class SeaPlane {
 class SimpleEffectSystem {
     private emitterManager: JPA.JPAEmitterManager;
     private drawInfo = new JPA.JPADrawInfo();
+    private jpacData: JPA.JPACData;
     private resourceDatas = new Map<number, JPA.JPAResourceData>();
 
     constructor(device: GfxDevice, private jpac: JPA.JPAC) {
         this.emitterManager = new JPA.JPAEmitterManager(device, 6000, 300);
+        this.jpacData = new JPA.JPACData(this.jpac);
     }
 
     private getResourceData(device: GfxDevice, userIndex: number): JPA.JPAResourceData | null {
         if (!this.resourceDatas.has(userIndex)) {
-            const resData = new JPA.JPAResourceData(device, this.jpac, this.jpac.effects.find((resource) => resource.resourceId === userIndex));
+            const resData = new JPA.JPAResourceData(device, this.jpacData, this.jpac.effects.find((resource) => resource.resourceId === userIndex));
             this.resourceDatas.set(userIndex, resData);
         }
 
@@ -508,6 +510,7 @@ class SimpleEffectSystem {
     }
 
     public destroy(device: GfxDevice): void {
+        this.jpacData.destroy(device);
         for (const [, resourceData] of this.resourceDatas.entries())
             resourceData.destroy(device);
         this.emitterManager.destroy(device);
