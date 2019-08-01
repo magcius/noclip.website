@@ -122,21 +122,20 @@ function parsePMPF(buffer: ArrayBufferSlice): PMPEntry[] {
         const scaleY = view.getFloat32(tableIdx + 0x18);
         const scaleZ = view.getFloat32(tableIdx + 0x1C);
 
-        // TODO(jstpierre): Rotation matrix?
-        const r00 = view.getFloat32(tableIdx + 0x20);
-        const r01 = view.getFloat32(tableIdx + 0x24);
-        const r02 = view.getFloat32(tableIdx + 0x28);
+        const r20 = view.getFloat32(tableIdx + 0x20);
+        const r21 = view.getFloat32(tableIdx + 0x24);
+        const r22 = view.getFloat32(tableIdx + 0x28);
         const r10 = view.getFloat32(tableIdx + 0x2C);
         const r11 = view.getFloat32(tableIdx + 0x30);
         const r12 = view.getFloat32(tableIdx + 0x34);
-        const r20 = view.getFloat32(tableIdx + 0x38);
-        const r21 = view.getFloat32(tableIdx + 0x3C);
-        const r22 = view.getFloat32(tableIdx + 0x40);
+        const r00 = view.getFloat32(tableIdx + 0x38);
+        const r01 = view.getFloat32(tableIdx + 0x3C);
+        const r02 = view.getFloat32(tableIdx + 0x40);
 
         const modelMatrix = mat4.fromValues(
-            scaleX * r00, scaleX * r10, scaleX * r20, 0,
-            scaleY * r01, scaleY * r11, scaleY * r21, 0,
-            scaleZ * r02, scaleZ * r12, scaleZ * r22, 0,
+            scaleX * r00, scaleX * r01, scaleX * r02, 0,
+            scaleY * r10, scaleY * r11, scaleY * r12, 0,
+            scaleZ * r20, scaleZ * r21, scaleZ * r22, 0,
             translationX, translationY, translationZ, 1,
         );
 
