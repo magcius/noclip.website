@@ -2,7 +2,7 @@
 import { mat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
 import { assert, assertExists, align, nArray } from '../../util';
-import { DataFetcher } from '../../fetch';
+import { DataFetcher } from '../../DataFetcher';
 import { MathConstants, computeModelMatrixSRT, lerp, computeNormalMatrix, clamp } from '../../MathHelpers';
 import { getPointBezier } from '../../Spline';
 import { Camera, computeClipSpacePointFromWorldSpacePoint } from '../../Camera';

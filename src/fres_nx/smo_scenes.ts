@@ -2,7 +2,7 @@
 import * as Viewer from '../viewer';
 import * as Yaz0 from '../compression/Yaz0';
 import * as BYML from '../byml';
-import { DataFetcher } from '../fetch';
+import { DataFetcher } from '../DataFetcher';
 import * as SARC from '../fres/sarc';
 import * as BFRES from './bfres';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';

@@ -3,7 +3,7 @@ import { mat4, vec3 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../../ArrayBufferSlice';
 import { readString, assertExists, hexzero, leftPad, assert } from '../../util';
-import { DataFetcher } from '../../fetch';
+import { DataFetcher } from '../../DataFetcher';
 
 import * as Viewer from '../../viewer';
 import * as BYML from '../../byml';

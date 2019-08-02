@@ -3,7 +3,7 @@ import { mat4 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 
-import { DataFetcher } from '../fetch';
+import { DataFetcher } from '../DataFetcher';
 import { SceneGfx, ViewerRenderInput } from '../viewer';
 
 import * as GX from '../gx/gx_enum';

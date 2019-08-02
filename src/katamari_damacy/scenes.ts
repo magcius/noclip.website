@@ -1,7 +1,7 @@
 
 import * as Viewer from '../viewer';
 import { GfxDevice, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxRenderPass } from "../gfx/platform/GfxPlatform";
-import { DataFetcher } from "../fetch";
+import { DataFetcher } from "../DataFetcher";
 import * as BIN from "./bin";
 import { BINModelInstance, BINModelSectorData, KatamariDamacyTextureHolder, KatamariDamacyProgram } from './render';
 import { mat4 } from 'gl-matrix';

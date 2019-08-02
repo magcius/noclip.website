@@ -1,7 +1,7 @@
 
 import * as Viewer from '../viewer';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { DataFetcher } from '../fetch';
+import { DataFetcher } from '../DataFetcher';
 import * as PPF from './ppf';
 import { PsychonautsRenderer, SceneRenderer } from './render';
 import { SceneContext } from '../SceneBase';

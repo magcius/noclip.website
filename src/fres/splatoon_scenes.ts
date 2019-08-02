@@ -2,7 +2,7 @@
 import * as Viewer from '../viewer';
 import * as Yaz0 from '../compression/Yaz0';
 
-import { DataFetcher } from '../fetch';
+import { DataFetcher } from '../DataFetcher';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 
 import * as SARC from './sarc';

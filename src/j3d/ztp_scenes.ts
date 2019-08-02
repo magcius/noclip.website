@@ -1,6 +1,6 @@
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { DataFetcher } from '../fetch';
+import { DataFetcher } from '../DataFetcher';
 import * as Viewer from '../viewer';
 import * as Yaz0 from '../compression/Yaz0';
 import * as UI from '../ui';

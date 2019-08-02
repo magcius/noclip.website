@@ -13,7 +13,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { RoomRenderer, CtrTextureHolder, CmbInstance, CmbData, fillSceneParamsDataOnTemplate } from './render';
 import { SceneGroup } from '../viewer';
 import { assert, assertExists, hexzero, readString } from '../util';
-import { DataFetcher } from '../fetch';
+import { DataFetcher } from '../DataFetcher';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
 import { mat4 } from 'gl-matrix';
 import AnimationController from '../AnimationController';

@@ -3,7 +3,7 @@ import { parseIV } from './iv';
 import { Scene } from './render';
 
 import * as Viewer from '../viewer';
-import { DataFetcher } from '../fetch';
+import { DataFetcher } from '../DataFetcher';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
 

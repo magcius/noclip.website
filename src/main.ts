@@ -63,9 +63,8 @@ import { DroppedFileSceneDesc } from './Scenes_FileDrops';
 import { UI, SaveStatesAction, Panel } from './ui';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera';
 import { hexdump } from './util';
-import { downloadBlob, downloadBufferSlice, downloadBuffer, DataFetcher } from './fetch';
+import { DataFetcher } from './DataFetcher';
 import { ZipFileEntry, makeZipFile } from './ZipFile';
-import { TextureHolder } from './TextureHolder';
 import { atob, btoa } from './Ascii85';
 import { vec3, mat4 } from 'gl-matrix';
 import { GlobalSaveManager, SaveStateLocation } from './SaveManager';
@@ -78,6 +77,7 @@ import * as Sentry from '@sentry/browser';
 import { GIT_REVISION, IS_DEVELOPMENT } from './BuildVersion';
 import { SceneDesc, SceneGroup, SceneContext, getSceneDescs, ProgressMeter } from './SceneBase';
 import { prepareFrameDebugOverlayCanvas2D } from './DebugJunk';
+import { downloadBlob, downloadBufferSlice, downloadBuffer } from './DownloadUtils';
 
 const sceneGroups = [
     "Wii",
@@ -670,7 +670,7 @@ class Main {
 
             const zipBuffer = makeZipFile(zipFileEntries);
             const filename = `${this._getSceneDownloadPrefix()}_Textures.zip`;
-            downloadBufferSlice(filename, new ArrayBufferSlice(zipBuffer), 'application/zip');
+            downloadBuffer(filename, zipBuffer, 'application/zip');
         });
     }
 

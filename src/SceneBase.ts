@@ -1,7 +1,7 @@
 
 import { GfxDevice } from "./gfx/platform/GfxPlatform";
 import { SceneGfx } from "./viewer";
-import { DataFetcher } from "./fetch";
+import { DataFetcher } from "./DataFetcher";
 
 export interface ProgressMeter {
     setProgress(progress: number): void;

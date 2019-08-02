@@ -4,7 +4,7 @@ import * as SARC from '../fres/sarc';
 import * as Yaz0 from '../compression/Yaz0';
 import { Area, LoadedTerrainArea, TerrainAreaRenderer, TerrainRenderer } from './render';
 import { AreaInfo, TSCB } from './tscb';
-import { DataFetcher } from '../fetch';
+import { DataFetcher } from '../DataFetcher';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { vec3 } from 'gl-matrix';
 import { assertExists, assert, nArray } from '../util';

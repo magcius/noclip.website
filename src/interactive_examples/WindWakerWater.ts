@@ -1,7 +1,7 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 
-import { DataFetcher } from '../fetch';
+import { DataFetcher } from '../DataFetcher';
 import { SceneGfx, ViewerRenderInput } from '../viewer';
 
 import * as GX from '../gx/gx_enum';

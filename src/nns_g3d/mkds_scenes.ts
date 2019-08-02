@@ -9,7 +9,7 @@ import * as NSBTA from './nsbta';
 import * as NSBTP from './nsbtp';
 import * as NSBTX from './nsbtx';
 
-import { DataFetcher } from '../fetch';
+import { DataFetcher } from '../DataFetcher';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { MDL0Renderer, G3DPass } from './render';

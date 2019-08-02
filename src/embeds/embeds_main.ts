@@ -14,7 +14,7 @@ import { OrbitCameraController } from '../Camera';
 
 import * as sunshine_water from './sunshine_water';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { DataFetcher } from '../fetch';
+import { DataFetcher } from '../DataFetcher';
 
 type CreateSceneFunc = (device: GfxDevice, dataFetcher: DataFetcher, name: string) => Promise<Viewer.SceneGfx>;
 

@@ -14,7 +14,7 @@ import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { Magenta } from "../Color";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { SceneContext } from "../SceneBase";
-import { DataFetcher } from "../fetch";
+import { DataFetcher } from "../DataFetcher";
 
 class ResourceSystem {
     private mounts: U8.U8Archive[] = [];

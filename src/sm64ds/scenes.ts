@@ -17,7 +17,7 @@ import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUni
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
 import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { SceneContext } from '../SceneBase';
-import { DataFetcher } from '../fetch';
+import { DataFetcher } from '../DataFetcher';
 
 const GLOBAL_SCALE = 1500;
 

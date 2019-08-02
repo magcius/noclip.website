@@ -2,7 +2,7 @@
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from "../gfx/platform/GfxPlatform";
 import * as Viewer from '../viewer';
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { DataFetcher } from "../fetch";
+import { DataFetcher } from "../DataFetcher";
 import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from "./render";
 import { mat4 } from "gl-matrix";
 

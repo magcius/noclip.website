@@ -10,7 +10,7 @@ import * as BND3 from "./bnd3";
 import * as FLVER from "./flver";
 
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from "../gfx/platform/GfxPlatform";
-import { DataFetcher } from "../fetch";
+import { DataFetcher } from "../DataFetcher";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { DDSTextureHolder } from "./dds";
 import { assert, assertExists } from "../util";

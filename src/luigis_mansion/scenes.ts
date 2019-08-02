@@ -1,6 +1,6 @@
 
 import * as Viewer from '../viewer';
-import { DataFetcher } from '../fetch';
+import { DataFetcher } from '../DataFetcher';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import * as RARC from '../j3d/rarc';
 import * as BIN from './bin';
