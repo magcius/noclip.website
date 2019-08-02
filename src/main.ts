@@ -164,7 +164,7 @@ class SceneLoader {
             device, abortSignal, progressMeter, dataFetcher, uiContainer,
         };
 
-        const promise = sceneDesc.createScene(device, abortSignal, context);
+        const promise = sceneDesc.createScene(device, context);
 
         if (promise !== null) {
             if (promise instanceof Progressable)

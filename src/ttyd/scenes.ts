@@ -6,13 +6,15 @@ import * as Viewer from '../viewer';
 import { TPLTextureHolder, WorldRenderer } from './render';
 import * as TPL from './tpl';
 import * as World from './world';
+import { SceneContext } from '../SceneBase';
 
 
 class TTYDSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string = id) {
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, context: SceneContext): Progressable<Viewer.SceneGfx> {
+        const abortSignal = context.abortSignal;
         const pathBase = `ttyd/${this.id}`;
         const bgPath = `ttyd/b/${this.id}.tpl`;
         return Progressable.all([fetchData(`${pathBase}/d.blob`, abortSignal), fetchData(`${pathBase}/t.blob`, abortSignal), fetchData(bgPath, abortSignal)]).then(([dBuffer, tBuffer, bgBuffer]) => {

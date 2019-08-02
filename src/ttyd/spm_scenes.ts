@@ -15,7 +15,7 @@ class SPMSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string = id) {
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal, context: SceneContext): Promise<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
         return dataFetcher.fetchData(`spm/${this.id}.bin`).then((buffer: ArrayBufferSlice) => {
             const decompressed = CX.decompress(buffer);

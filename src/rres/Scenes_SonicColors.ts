@@ -15,6 +15,7 @@ import { GXRenderHelperGfx } from '../gx/gx_render';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GXMaterialHacks } from '../gx/gx_material';
 import { executeOnPass } from '../gfx/render/GfxRenderer2';
+import { SceneContext } from '../SceneBase';
 
 interface MapEntry {
     index: number;
@@ -123,7 +124,8 @@ class SonicColorsSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, context: SceneContext): Progressable<Viewer.SceneGfx> {
+        const abortSignal = context.abortSignal;
         const stageDir = `${pathBase}/${this.id}`;
         const commonArcPath = `${stageDir}/${this.id}_cmn.arc`;
         const texRRESPath = `${stageDir}/${this.id}_tex.brres`;

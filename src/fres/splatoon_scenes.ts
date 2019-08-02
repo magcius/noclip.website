@@ -12,6 +12,7 @@ import { GX2TextureHolder, FMDLRenderer, FMDLData } from './render';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, depthClearRenderPassDescriptor, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { SceneContext } from '../SceneBase';
 
 enum SplatoonPass {
     SKYBOX = 0x01,
@@ -75,8 +76,9 @@ class SplatoonSceneDesc implements Viewer.SceneDesc {
         this.id = this.path;
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, context: SceneContext): Progressable<Viewer.SceneGfx> {
         const renderer = new SplatoonRenderer();
+        const abortSignal = context.abortSignal;
 
         return Progressable.all([
             this._createRenderersFromPath(device, renderer, `spl/${this.path}`, false, abortSignal),

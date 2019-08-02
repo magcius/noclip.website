@@ -600,7 +600,7 @@ class SceneDesc implements Viewer.SceneDesc {
         this.id = id;
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal, context: SceneContext): Promise<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         // Fetch the GAR & ZSI.
         const path_zar = `${pathBase}/scenes/${this.id}_info.gar`;
         const path_info_zsi = `${pathBase}/scenes/${this.id}_info.zsi`;

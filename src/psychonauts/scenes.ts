@@ -5,6 +5,7 @@ import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { fetchData } from '../fetch';
 import * as PPF from './ppf';
 import { PsychonautsRenderer, SceneRenderer } from './render';
+import { SceneContext } from '../SceneBase';
 
 class PsychonautsSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
@@ -17,7 +18,8 @@ class PsychonautsSceneDesc implements Viewer.SceneDesc {
         })
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, context: SceneContext): Progressable<Viewer.SceneGfx> {
+        const abortSignal = context.abortSignal;
         return Progressable.all([this.fetchPPF('common', abortSignal, false), this.fetchPPF(this.id, abortSignal, true)]).then(([commonPPF, scenePPF]) => {
             const renderer = new PsychonautsRenderer();
             // TODO(jstpierre): Only translate the textures that are actually used.

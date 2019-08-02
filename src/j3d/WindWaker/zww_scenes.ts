@@ -33,6 +33,7 @@ import { makeTriangleIndexBuffer, GfxTopology } from '../../gfx/helpers/Topology
 import AnimationController from '../../AnimationController';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
 import { ObjectRenderer, BMDObjectRenderer, SymbolMap, WhiteFlowerData, FlowerObjectRenderer, PinkFlowerData, BessouFlowerData, FlowerData } from './Actors';
+import { SceneContext } from '../../SceneBase';
 
 class ZWWExtraTextures {
     constructor(public ZAtoon: BTIData, public ZBtoonEX: BTIData) {
@@ -844,7 +845,8 @@ class SceneDesc {
             this.id = `Room${rooms[0]}.arc`;
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, context: SceneContext): Progressable<Viewer.SceneGfx> {
+        const abortSignal = context.abortSignal;
         const modelCache = new ModelCache();
 
         modelCache.fetchArchive(`${pathBase}/Object/System.arc`, abortSignal);

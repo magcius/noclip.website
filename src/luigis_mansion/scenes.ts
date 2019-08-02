@@ -7,6 +7,7 @@ import * as RARC from '../j3d/rarc';
 import * as BIN from './bin';
 import { LuigisMansionRenderer } from './render';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
+import { SceneContext } from '../SceneBase';
 
 function fetchBin(path: string, abortSignal: AbortSignal): Progressable<BIN.BIN> {
     return fetchData(`luigis_mansion/${path}`, abortSignal).then((buffer: ArrayBufferSlice) => {
@@ -27,7 +28,8 @@ function fetchBin(path: string, abortSignal: AbortSignal): Progressable<BIN.BIN>
 class LuigisMansionBinSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string, public paths: string[]) {}
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, context: SceneContext): Progressable<Viewer.SceneGfx> {
+        const abortSignal = context.abortSignal;
         const promises: Progressable<BIN.BIN>[] = this.paths.map((path) => fetchBin(path, abortSignal));
 
         // TODO(jstpierre): J3D format in VRB has a different version with a different MAT3 chunk.

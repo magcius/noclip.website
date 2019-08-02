@@ -13,6 +13,7 @@ import { BRTITextureHolder, BasicFRESRenderer, FMDLRenderer, FMDLData } from './
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assert, assertExists } from '../util';
 import { mat4, quat, vec3 } from 'gl-matrix';
+import { SceneContext } from '../SceneBase';
 
 const basePath = `smo`;
 
@@ -140,8 +141,9 @@ class OdysseySceneDesc implements Viewer.SceneDesc {
         return true;
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, context: SceneContext): Progressable<Viewer.SceneGfx> {
         const resourceSystem = new ResourceSystem();
+        const abortSignal = context.abortSignal;
 
         return this._fetchSARC(`SystemData/WorldList.szs`, abortSignal).then((worldListSARC) => {
             type WorldListFromDb = { Name: string, StageList: [{ category: string, name: string }], WorldName: string, ScenarioNum: number, ClearMainScenario: number, AfterEndingScenario: number, MoonRockScenario: number };

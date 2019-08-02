@@ -6,12 +6,14 @@ import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { FakeTextureHolder } from '../TextureHolder';
 import { KingdomHeartsRenderer, textureToCanvas } from './render';
 import Progressable from '../Progressable';
+import { SceneContext } from '../SceneBase';
 
 export class KingdomHeartsSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string = id) {
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, context: SceneContext): Progressable<Viewer.SceneGfx> {
+        const abortSignal = context.abortSignal;
         const pathBin = `kh/${this.id}.bin`;
         const pathImg = `kh/${this.id}.img`;
         return Progressable.all([fetchData(pathBin, abortSignal), fetchData(pathImg, abortSignal)]).then(([binBuffer, imgBuffer]) => {

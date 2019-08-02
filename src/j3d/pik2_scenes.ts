@@ -13,6 +13,7 @@ import * as RARC from './rarc';
 import { BMDModelInstance } from './render';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { BTK } from './j3d';
+import { SceneContext } from '../SceneBase';
 
 const id = "pik2";
 const name = "Pikmin 2";
@@ -35,7 +36,8 @@ class Pik2SceneDesc implements Viewer.SceneDesc {
         return scene;
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, context: SceneContext): Progressable<Viewer.SceneGfx> {
+        const abortSignal = context.abortSignal;
         const path = `j3d/pik2/${this.path}`;
         return fetchData(path, abortSignal).then((result: ArrayBufferSlice) => {
             return Yaz0.decompress(result);

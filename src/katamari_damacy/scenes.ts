@@ -15,6 +15,7 @@ import { ColorTexture, BasicRenderTarget, standardFullClearRenderPassDescriptor,
 import { TextureOverride } from '../TextureHolder';
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
+import { SceneContext } from '../SceneBase';
 
 const pathBase = `katamari_damacy`;
 
@@ -250,7 +251,8 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string, public stageAreaFileGroup: StageAreaFileGroup[], public missionSetupFile: string[], public initialAreaNo: number = -1) {
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, context: SceneContext): Progressable<Viewer.SceneGfx> {
+        const abortSignal = context.abortSignal;
         const cache = new LevelCache();
 
         for (let i = 0; i < this.stageAreaFileGroup.length; i++) {

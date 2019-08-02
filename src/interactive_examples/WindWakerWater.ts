@@ -290,10 +290,11 @@ export class WindWakerWater implements SceneDesc {
     constructor(public id: string, public name: string) {
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal, sceneContext: SceneContext): Progressable<SceneGfx> {
+    public createScene(device: GfxDevice, context: SceneContext): Progressable<SceneGfx> {
+        const abortSignal = context.abortSignal;
         return Progressable.all([
-            fetchArc(`j3d/ww/Stage/sea/Stage.arc`, sceneContext.abortSignal),
-            fetchArc(`j3d/ww/Stage/sea/Room44.arc`, sceneContext.abortSignal),
+            fetchArc(`j3d/ww/Stage/sea/Stage.arc`, abortSignal),
+            fetchArc(`j3d/ww/Stage/sea/Room44.arc`, abortSignal),
         ]).then(([stageRarc, roomRarc]) => {
             const dzsFile = stageRarc.findFileData(`dzs/stage.dzs`)!;
             const colors = getColorsFromDZS(dzsFile, 0, 2);

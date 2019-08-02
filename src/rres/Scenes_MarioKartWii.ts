@@ -680,7 +680,7 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
         return renderer;
     }
 
-    public async createScene(device: GfxDevice, abortSignal: AbortSignal, context: SceneContext): Promise<Viewer.SceneGfx> {
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
 
         const buffer = await dataFetcher.fetchData(`mkwii/${this.id}.szs`);

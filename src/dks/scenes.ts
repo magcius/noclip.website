@@ -171,7 +171,7 @@ class DKSSceneDesc implements Viewer.SceneDesc {
         }
     }
 
-    public async createScene(device: GfxDevice, abortSignal: AbortSignal, context: SceneContext): Promise<Viewer.SceneGfx> {
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
         const resourceSystem = new ResourceSystem();
 
@@ -246,7 +246,7 @@ class DKSEverySceneDesc implements Viewer.SceneDesc {
         }
     }
 
-    public async createScene(device: GfxDevice, abortSignal: AbortSignal, context: SceneContext): Promise<Viewer.SceneGfx> {
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
         const resourceSystem = new ResourceSystem();
 

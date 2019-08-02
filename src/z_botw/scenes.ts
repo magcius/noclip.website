@@ -10,6 +10,7 @@ import { TerrainManager } from "./tera";
 import { TerrainScene } from "./render";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { GX2TextureHolder } from "../fres/render";
+import { SceneContext } from "../SceneBase";
 
 function decodeFRES(buffer: ArrayBufferSlice): Progressable<BFRES.FRES> {
     return new Progressable(Yaz0.decompress(buffer)).then((d) => BFRES.parse(d));
@@ -20,7 +21,8 @@ export class TerrainSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, context: SceneContext): Progressable<Viewer.SceneGfx> {
+        const abortSignal = context.abortSignal;
         const teraPath = `${pathBase}/Terrain/A/${this.id}`;
         return Progressable.all([fetchData(`${pathBase}/Model/Terrain.Tex1.sbfres`, abortSignal), fetchData(`${pathBase}/Model/Terrain.Tex2.sbfres`, abortSignal), fetchData(`${teraPath}.tscb`, abortSignal)]).then(([terrainTex1Buffer, terrainTex2Buffer, tscbBuffer]) => {
             const tscb = TSCB.parse(tscbBuffer);

@@ -107,7 +107,7 @@ class KlonoaSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string, public texBinName = `tex${id.slice(1, 3)}.bin`) {
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal, context: SceneContext): Promise<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const stageBinName = `${this.id}.bin`;
 
         function fetchLandscapeBin(filename: string) {

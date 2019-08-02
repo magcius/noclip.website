@@ -218,7 +218,7 @@ class IslandSceneDesc implements Viewer.SceneDesc {
         return true;
     }
 
-    public async createScene(device: GfxDevice, abortSignal: AbortSignal, context: SceneContext): Promise<Viewer.SceneGfx> {
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         // Fetch the SCN0.
         const d = context.dataFetcher;
 

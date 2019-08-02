@@ -11,7 +11,7 @@ class SceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string, public paths: string[]) {
     }
 
-    public async createScene(gfxDevice: GfxDevice, abortSignal: AbortSignal, context: SceneContext): Promise<Viewer.SceneGfx> {
+    public async createScene(gfxDevice: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
         const buffers = await Promise.all(this.paths.map((path) => dataFetcher.fetchData(path)));
         const ivs = buffers.map((buffer) => parseIV(buffer));

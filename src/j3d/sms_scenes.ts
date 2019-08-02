@@ -5,9 +5,7 @@ import * as Yaz0 from '../compression/Yaz0';
 import * as RARC from './rarc';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import Progressable from '../Progressable';
 import { readString, assert, getTextDecoder } from '../util';
-import { fetchData } from '../fetch';
 
 import { BMDModelInstance, BMDModel } from './render';
 import { createModelInstance } from './scenes';
@@ -19,6 +17,7 @@ import { BasicRenderTarget, ColorTexture, makeClearRenderPassDescriptor, depthCl
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { colorNew } from '../Color';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { SceneContext } from '../SceneBase';
 
 const sjisDecoder = getTextDecoder('sjis');
 
@@ -395,10 +394,11 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const pathBase = `j3d/sms`;
         const path = `${pathBase}/${this.id}.szs`;
-        return fetchData(path, abortSignal).then((result: ArrayBufferSlice) => {
+        const dataFetcher = context.dataFetcher;
+        return dataFetcher.fetchData(path).then((result: ArrayBufferSlice) => {
             return Yaz0.decompress(result);
         }).then((buffer: ArrayBufferSlice) => {
             const rarc = RARC.parse(buffer);

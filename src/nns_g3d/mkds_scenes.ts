@@ -323,7 +323,7 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
         }
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal, context: SceneContext): Promise<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
         return Promise.all([
             this.fetchCARC(`mkds/Course/${this.id}.carc`, dataFetcher),

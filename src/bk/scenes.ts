@@ -13,6 +13,7 @@ import { mat4 } from 'gl-matrix';
 import { transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
+import { SceneContext } from '../SceneBase';
 
 const pathBase = `bk`;
 
@@ -130,8 +131,9 @@ class SceneDesc implements Viewer.SceneDesc {
         return n64Renderer;
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
-        return fetchData(`${pathBase}/${this.id}_arc.crg1`, abortSignal).then((data) => {
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const dataFetcher = context.dataFetcher;
+        return dataFetcher.fetchData(`${pathBase}/${this.id}_arc.crg1`).then((data) => {
             const obj: any = BYML.parse(data, BYML.FileType.CRG1);
 
             const viewerTextures: Viewer.Texture[] = [];

@@ -12,6 +12,7 @@ import * as RARC from './rarc';
 import { BMDModelInstance, BMDModel } from './render';
 import { BCK, BMD, BTK, BRK, BTP } from './j3d';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
+import { SceneContext } from '../SceneBase';
 
 const id = "mkdd";
 const name = "Mario Kart: Double Dash!!";
@@ -91,7 +92,8 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
         return modelInstance;
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, context: SceneContext): Progressable<Viewer.SceneGfx> {
+        const abortSignal = context.abortSignal;
         const path = `j3d/mkdd/Course/${this.path}`;
         return fetchData(path, abortSignal).then((buffer: ArrayBufferSlice) => {
             const rarc = RARC.parse(buffer);

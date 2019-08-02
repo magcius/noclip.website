@@ -118,7 +118,7 @@ class BrawlRenderer extends BasicGXRendererHelper {
 class BrawlSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal, context: SceneContext): Promise<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         return context.dataFetcher.fetchData(`ssbb/stage/${this.id}`).then((buffer: ArrayBufferSlice) => {
             const textureHolder = new RRESTextureHolder();
 

@@ -13,7 +13,7 @@ import { SceneContext } from '../SceneBase';
 class RTDLSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal, context: SceneContext): Promise<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
 
         return dataFetcher.fetchData(`rtdl/${this.id}.brres`).then((buffer: ArrayBufferSlice) => {

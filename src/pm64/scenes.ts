@@ -13,6 +13,7 @@ import * as BYML from '../byml';
 import { ScriptExecutor } from './script';
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
+import { SceneContext } from '../SceneBase';
 
 const pathBase = `pm64`;
 
@@ -110,7 +111,8 @@ class PaperMario64SceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, context: SceneContext): Progressable<Viewer.SceneGfx> {
+        const abortSignal = context.abortSignal;
         const p: Progressable<ArrayBufferSlice>[] = [
             fetchData(`${pathBase}/${this.id}_arc.crg1`, abortSignal),
         ];

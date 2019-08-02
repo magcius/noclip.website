@@ -18,6 +18,7 @@ import { BasicRenderTarget, depthClearRenderPassDescriptor, transparentBlackFull
 import { FakeTextureHolder } from '../TextureHolder';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
+import { SceneContext } from '../SceneBase';
 
 export class WorldMapRenderer implements Viewer.SceneGfx {
     public renderTarget = new BasicRenderTarget();
@@ -161,7 +162,8 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
         return renderer;
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, context: SceneContext): Progressable<Viewer.SceneGfx> {
+        const abortSignal = context.abortSignal;
         const basePath = `nsmbds`;
 
         return Progressable.all([

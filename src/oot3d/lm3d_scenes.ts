@@ -26,7 +26,7 @@ class SceneDesc implements Viewer.SceneDesc {
         this.id = `map${mapNumber}`;
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal, context: SceneContext): Promise<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         // Fetch the ZAR & info ZSI.
         const path_gar = `lm3d/map/map${leftPad(''+this.mapNumber, 2, '0')}.gar`;
         const models_path = `lm3d/mapmdl/map${this.mapNumber}`;

@@ -754,7 +754,7 @@ class SceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string, public setupIndex: number = -1) {
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal, context: SceneContext): Promise<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         // Fetch the ZAR & info ZSI.
         const path_zar = `${pathBase}/scene/${this.id}.zar`;
         const path_info_zsi = `${pathBase}/scene/${this.id}_info.zsi`;

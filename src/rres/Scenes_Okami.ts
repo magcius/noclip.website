@@ -727,7 +727,7 @@ class OkamiSceneDesc implements Viewer.SceneDesc {
         }
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal, context: SceneContext): Promise<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
 
         return dataFetcher.fetchData(`${pathBase}/${this.id}.dat`).then((datArcBuffer: ArrayBufferSlice) => {
