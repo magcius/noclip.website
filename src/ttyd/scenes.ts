@@ -5,6 +5,7 @@ import { TPLTextureHolder, WorldRenderer } from './render';
 import * as TPL from './tpl';
 import * as World from './world';
 import { SceneContext } from '../SceneBase';
+import { DataFetcherFlags } from '../DataFetcher';
 
 class TTYDSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string = id) {
@@ -14,7 +15,7 @@ class TTYDSceneDesc implements Viewer.SceneDesc {
         const dataFetcher = context.dataFetcher;
         const pathBase = `ttyd/${this.id}`;
         const bgPath = `ttyd/b/${this.id}.tpl`;
-        return Promise.all([dataFetcher.fetchData(`${pathBase}/d.blob`), dataFetcher.fetchData(`${pathBase}/t.blob`), dataFetcher.fetchData(bgPath)]).then(([dBuffer, tBuffer, bgBuffer]) => {
+        return Promise.all([dataFetcher.fetchData(`${pathBase}/d.blob`), dataFetcher.fetchData(`${pathBase}/t.blob`), dataFetcher.fetchData(bgPath, DataFetcherFlags.ALLOW_404)]).then(([dBuffer, tBuffer, bgBuffer]) => {
             const d = World.parse(dBuffer);
             const textureHolder = new TPLTextureHolder();
             const tpl = TPL.parse(tBuffer, d.textureNameTable);

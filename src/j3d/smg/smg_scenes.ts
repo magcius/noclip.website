@@ -2,7 +2,7 @@
 import { mat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
 import { assert, assertExists, align, nArray } from '../../util';
-import { DataFetcher } from '../../DataFetcher';
+import { DataFetcher, DataFetcherFlags } from '../../DataFetcher';
 import { MathConstants, computeModelMatrixSRT, lerp, computeNormalMatrix, clamp } from '../../MathHelpers';
 import { getPointBezier } from '../../Spline';
 import { Camera, computeClipSpacePointFromWorldSpacePoint } from '../../Camera';
@@ -759,7 +759,7 @@ export class ModelCache {
         if (this.archivePromiseCache.has(archivePath))
             return this.archivePromiseCache.get(archivePath);
 
-        const p = this.dataFetcher.fetchData(`${this.pathBase}/${archivePath}`).then((buffer: ArrayBufferSlice) => {
+        const p = this.dataFetcher.fetchData(`${this.pathBase}/${archivePath}`, DataFetcherFlags.ALLOW_404).then((buffer: ArrayBufferSlice) => {
             if (buffer.byteLength === 0) {
                 console.warn(`Could not fetch archive ${archivePath}`);
                 return null;

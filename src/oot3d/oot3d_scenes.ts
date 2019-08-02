@@ -13,7 +13,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { RoomRenderer, CtrTextureHolder, CmbInstance, CmbData, fillSceneParamsDataOnTemplate } from './render';
 import { SceneGroup } from '../viewer';
 import { assert, assertExists, hexzero, readString } from '../util';
-import { DataFetcher } from '../DataFetcher';
+import { DataFetcher, DataFetcherFlags } from '../DataFetcher';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
 import { mat4 } from 'gl-matrix';
 import AnimationController from '../AnimationController';
@@ -759,7 +759,7 @@ class SceneDesc implements Viewer.SceneDesc {
         const path_zar = `${pathBase}/scene/${this.id}.zar`;
         const path_info_zsi = `${pathBase}/scene/${this.id}_info.zsi`;
         const dataFetcher = context.dataFetcher;
-        return Promise.all([dataFetcher.fetchData(path_zar), dataFetcher.fetchData(path_info_zsi)]).then(([zar, zsi]) => {
+        return Promise.all([dataFetcher.fetchData(path_zar, DataFetcherFlags.ALLOW_404), dataFetcher.fetchData(path_info_zsi)]).then(([zar, zsi]) => {
             return this.createSceneFromData(device, dataFetcher, zar, zsi);
         });
     }

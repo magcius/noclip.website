@@ -20,21 +20,51 @@ function getDataURLForPath(url: string): string {
     return `${getDataStorageBaseURL()}/${url}`;
 }
 
+export const enum DataFetcherFlags {
+    ALLOW_404 = 0x01,
+}
+
 class DataFetcherRequest {
     public request: XMLHttpRequest | null = null;
     public progress: number = 0;
     public ondone: (() => void) | null = null;
     public onprogress: (() => void) | null = null;
 
-    public promise: Promise<NamedArrayBufferSlice>;
-    private resolve: (slice: NamedArrayBufferSlice) => void;
-    private reject: (e: Error) => void;
+    public promise: Promise<NamedArrayBufferSlice | null>;
+    private resolve: (slice: NamedArrayBufferSlice | null) => void;
+    private reject: (e: Error | null) => void;
+    private retriesLeft = 2;
 
-    constructor(public url: string) {
+    constructor(public url: string, private flags: DataFetcherFlags) {
         this.promise = new Promise((resolve, reject) => {
             this.resolve = resolve;
             this.reject = reject;
         });
+    }
+
+    private done(): void {
+        this.progress = 1.0;
+        if (this.onprogress !== null)
+            this.onprogress();
+        if (this.ondone !== null)
+            this.ondone();
+    }
+
+    private resolveError(): void {
+        const allow404 = !!(this.flags & DataFetcherFlags.ALLOW_404);
+        if (allow404) {
+            const emptySlice = new ArrayBufferSlice(new ArrayBuffer(0)) as NamedArrayBufferSlice;
+            emptySlice.name = this.url;
+            this.resolve(emptySlice);
+            this.done();
+        } else if (this.retriesLeft > 0) {
+            this.retriesLeft--;
+            this.destroy();
+            this.start();
+        } else {
+            this.reject(null);
+            this.done();
+        }
     }
 
     public start(): void {
@@ -43,27 +73,22 @@ class DataFetcherRequest {
         this.request.responseType = "arraybuffer";
         this.request.send();
         this.request.onload = (e) => {
-            this.progress = 1.0;
-            if (this.onprogress !== null)
-                this.onprogress();
-
-            const buffer: ArrayBuffer = this.request.response;
-            const slice = new ArrayBufferSlice(buffer) as NamedArrayBufferSlice;
-            slice.name = this.url;
-            if (this.ondone !== null)
-                this.ondone();
-            this.resolve(slice);
+            if (this.request.status !== 200 || this.request.getResponseHeader('Content-Type').startsWith('text/html')) {
+                console.error(`DataFetcherRequest: Received non-success status code ${this.request.status} when fetching file ${this.url}. Status: ${this.request.status}`);
+                this.resolveError();
+            } else {
+                const buffer: ArrayBuffer = this.request.response;
+                const slice = new ArrayBufferSlice(buffer) as NamedArrayBufferSlice;
+                slice.name = this.url;
+                this.resolve(slice);
+                this.done();
+            }
         };
         this.request.onerror = (e) => {
-            this.progress = 1.0;
-            if (this.onprogress !== null)
-                this.onprogress();
-
             // TODO(jstpierre): Proper error handling.
-            console.error(`DataFetcherRequest error`, this, this.request, e);
+            console.error(`DataFetcherRequest: Received error`, this, this.request, e);
 
-            if (this.ondone !== null)
-                this.ondone();
+            this.resolveError();
         };
         this.request.onprogress = (e) => {
             if (e.lengthComputable)
@@ -128,12 +153,12 @@ export class DataFetcher {
         }
     }
 
-    public fetchData(path: string): Promise<NamedArrayBufferSlice> {
+    public fetchData(path: string, flags: DataFetcherFlags = 0): Promise<NamedArrayBufferSlice | null> {
         if (this.aborted)
             throw new Error("Tried to fetch new data while aborted; should not happen");
 
         const url = getDataURLForPath(path);
-        const request = new DataFetcherRequest(url);
+        const request = new DataFetcherRequest(url, flags);
         this.requests.push(request);
         request.ondone = () => {
             this.doneRequestCount++;

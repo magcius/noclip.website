@@ -329,7 +329,6 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
 
     private fetchRarc(path: string, dataFetcher: DataFetcher): Promise<RARC.RARC | null> {
         return dataFetcher.fetchData(path).then((buffer: ArrayBufferSlice) => {
-            if (buffer.byteLength === 0) return null;
             return Yaz0.decompress(buffer).then((buffer: ArrayBufferSlice) => RARC.parse(buffer));
         });
     }

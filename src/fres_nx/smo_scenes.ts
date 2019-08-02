@@ -2,7 +2,7 @@
 import * as Viewer from '../viewer';
 import * as Yaz0 from '../compression/Yaz0';
 import * as BYML from '../byml';
-import { DataFetcher } from '../DataFetcher';
+import { DataFetcher, DataFetcherFlags } from '../DataFetcher';
 import * as SARC from '../fres/sarc';
 import * as BFRES from './bfres';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
@@ -116,7 +116,7 @@ class OdysseySceneDesc implements Viewer.SceneDesc {
     }
 
     private _fetchSARC(arcPath: string, dataFetcher: DataFetcher): Promise<SARC.SARC | null> {
-        return dataFetcher.fetchData(`${basePath}/${arcPath}`).then((buffer) => {
+        return dataFetcher.fetchData(`${basePath}/${arcPath}`, DataFetcherFlags.ALLOW_404).then((buffer) => {
             if (buffer.byteLength === 0) return null;
             return Yaz0.decompress(buffer).then((buffer) => SARC.parse(buffer));
         });

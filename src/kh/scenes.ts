@@ -15,9 +15,6 @@ export class KingdomHeartsSceneDesc implements Viewer.SceneDesc {
         const pathBin = `kh/${this.id}.bin`;
         const pathImg = `kh/${this.id}.img`;
         return Promise.all([dataFetcher.fetchData(pathBin), dataFetcher.fetchData(pathImg)]).then(([binBuffer, imgBuffer]) => {
-            if (binBuffer.byteLength == 0 || imgBuffer.byteLength == 0) {
-                return null;
-            }
             const bin = BIN.parse(binBuffer, imgBuffer);
 
             const viewerTextures: Viewer.Texture[] = [];
