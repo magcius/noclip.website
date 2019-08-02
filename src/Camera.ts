@@ -2,7 +2,7 @@
 import { mat4, vec3, vec4 } from 'gl-matrix';
 import InputManager from './InputManager';
 import { Frustum, AABB } from './Geometry';
-import { clampRange, computeProjectionMatrixFromFrustum } from './MathHelpers';
+import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates } from './MathHelpers';
 import { reverseDepthForProjectionMatrix } from './gfx/helpers/ReversedDepthHelpers';
 
 export class Camera {
@@ -15,7 +15,7 @@ export class Camera {
     // Should be called worldFromViewMatrix
     public worldMatrix = mat4.create();
 
-    // Converts to clip space from view space.
+    // Converts to (OpenGL) NDC/clip space from view space.
     // Should be called clipFromViewMatrix
     public projectionMatrix = mat4.create();
 
@@ -32,9 +32,7 @@ export class Camera {
     }
 
     public worldMatrixUpdated(): void {
-        mat4.invert(this.viewMatrix, this.worldMatrix);
         this.frustum.updateWorldFrustum(this.worldMatrix);
-
         this.updateClipFromWorld();
     }
 
@@ -125,7 +123,8 @@ export function computeModelMatrixYBillboard(out: mat4, camera: Camera): void {
     out[10] = camera.worldMatrix[10];
 }
 
-const scratchVec3 = vec3.create();
+const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
 const scratchVec4 = vec4.create();
 
 /**
@@ -133,7 +132,7 @@ const scratchVec4 = vec4.create();
  * 
  * This is computed by taking the depth of the world-space depth of @param aabb.
  */
-export function computeViewSpaceDepthFromWorldSpaceAABB(camera: Camera, aabb: AABB, v: vec3 = scratchVec3): number {
+export function computeViewSpaceDepthFromWorldSpaceAABB(camera: Camera, aabb: AABB, v: vec3 = scratchVec3a): number {
     aabb.centerPoint(v);
     return computeViewSpaceDepthFromWorldSpacePoint(camera, v);
 }
@@ -149,7 +148,7 @@ export function computeViewSpaceDepthFromWorldSpaceAABB(camera: Camera, aabb: AA
  * The returned value can be passed directly to {@link GfxRenderer.setSortKeyDepth},
  * which will clamp if the value is below 0.
  */
-export function computeViewSpaceDepthFromWorldSpacePoint(camera: Camera, v: vec3, v_ = scratchVec3): number {
+export function computeViewSpaceDepthFromWorldSpacePoint(camera: Camera, v: vec3, v_ = scratchVec3a): number {
     vec3.transformMat4(v_, v, camera.viewMatrix);
     return -v_[2];
 }
@@ -165,7 +164,7 @@ export function computeViewSpaceDepthFromWorldSpacePoint(camera: Camera, v: vec3
  * The returned value can be passed directly to {@link GfxRenderer.setSortKeyDepth},
  * which will clamp if the value is below 0.
  */
-export function computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(viewMatrix: mat4, v: vec3, v_ = scratchVec3): number {
+export function computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(viewMatrix: mat4, v: vec3, v_ = scratchVec3a): number {
     vec3.transformMat4(v_, v, viewMatrix);
     return -v_[2];
 }
@@ -235,7 +234,7 @@ export function computeClipSpacePointFromWorldSpacePoint(output: vec3, camera: C
  * a sphere in world-space coordinates with parameters @param center and @param radius
  * will take up when viewed by @param camera.
  */
-export function computeScreenSpaceProjectionFromWorldSpaceSphere(screenSpaceProjection: ScreenSpaceProjection, camera: Camera, center: vec3, radius: number, v: vec3 = scratchVec3, v4: vec4 = scratchVec4): void {
+export function computeScreenSpaceProjectionFromWorldSpaceSphere(screenSpaceProjection: ScreenSpaceProjection, camera: Camera, center: vec3, radius: number, v: vec3 = scratchVec3a, v4: vec4 = scratchVec4): void {
     screenSpaceProjection.reset();
 
     vec3.transformMat4(v, center, camera.viewMatrix);
@@ -259,7 +258,7 @@ export function computeScreenSpaceProjectionFromWorldSpaceSphere(screenSpaceProj
  * Computes the screen-space projection @param screenSpaceProjection, that
  * world-space AABB @param aabb will take up when viewed by @param camera.
  */
-export function computeScreenSpaceProjectionFromWorldSpaceAABB(screenSpaceProjection: ScreenSpaceProjection, camera: Camera, aabb: AABB, v: vec3 = scratchVec3, v4: vec4 = scratchVec4): void {
+export function computeScreenSpaceProjectionFromWorldSpaceAABB(screenSpaceProjection: ScreenSpaceProjection, camera: Camera, aabb: AABB, v: vec3 = scratchVec3a, v4: vec4 = scratchVec4): void {
     const radius = aabb.boundingSphereRadius();
 
     // Compute view-space center.
@@ -281,7 +280,8 @@ export interface CameraControllerClass {
     new(): CameraController;
 }
 
-const vec3Zero = [0, 0, 0];
+const vec3Zero = vec3.fromValues(0, 0, 0);
+const vec3Up = vec3.fromValues(0, 1, 0);
 export class FPSCameraController implements CameraController {
     public camera: Camera;
     public forceUpdate: boolean = false;
@@ -290,8 +290,6 @@ export class FPSCameraController implements CameraController {
 
     private keyMovement = vec3.create();
     private mouseMovement = vec3.create();
-    private tmp1: vec3 = vec3.create();
-    private tmp2: vec3 = vec3.create();
 
     private keyMoveSpeed = 60;
     private keyMoveShiftMult = 5;
@@ -337,7 +335,7 @@ export class FPSCameraController implements CameraController {
         const keyMoveVelocity = keyMoveSpeedCap * this.keyMoveVelocityMult;
     
         const keyMovement = this.keyMovement;
-        const worldUp = this.tmp2;
+        const worldUp = scratchVec3b;
         // Instead of getting the camera up, instead use world up. Feels more natural.
         if (this.useWorldUp)
             camera.getWorldUp(worldUp);
@@ -374,7 +372,7 @@ export class FPSCameraController implements CameraController {
         }
 
         if (!vec3.exactEquals(keyMovement, vec3Zero)) {
-            const finalMovement = this.tmp1;
+            const finalMovement = scratchVec3a;
             vec3.set(finalMovement, keyMovement[0], 0, keyMovement[2]);
             vec3.scaleAndAdd(finalMovement, finalMovement, worldUp, keyMovement[1]);
             mat4.translate(camera.worldMatrix, camera.worldMatrix, finalMovement);
@@ -411,19 +409,18 @@ export class FPSCameraController implements CameraController {
             mat4.rotate(camera.worldMatrix, camera.worldMatrix, this.mouseMovement[1], [1, 0, 0]);
             mat4.rotate(camera.worldMatrix, camera.worldMatrix, this.mouseMovement[2], [0, 0, 1]);
             updated = true;
-        }
 
-        if (inputManager.isDragging()) {
-            vec3.scale(this.mouseMovement, this.mouseMovement, this.mouseLookDragFast);
-        } else {
-            vec3.scale(this.mouseMovement, this.mouseMovement, this.mouseLookDragSlow);
+            const mouseLookDrag = inputManager.isDragging() ? this.mouseLookDragFast : this.mouseLookDragSlow;
+            vec3.scale(this.mouseMovement, this.mouseMovement, mouseLookDrag);
+
+            if (Math.abs(this.mouseMovement[0]) < mouseMoveLowSpeedCap) this.mouseMovement[0] = 0.0;
+            if (Math.abs(this.mouseMovement[1]) < mouseMoveLowSpeedCap) this.mouseMovement[1] = 0.0;
         }
-        if (Math.abs(this.mouseMovement[0]) < mouseMoveLowSpeedCap) this.mouseMovement[0] = 0.0;
-        if (Math.abs(this.mouseMovement[1]) < mouseMoveLowSpeedCap) this.mouseMovement[1] = 0.0;
 
         updated = updated || this.forceUpdate;
 
         if (updated) {
+            mat4.invert(this.camera.viewMatrix, this.camera.worldMatrix);
             this.camera.worldMatrixUpdated();
             this.forceUpdate = false;
         }
@@ -445,8 +442,7 @@ export class OrbitCameraController implements CameraController {
     public yVel: number = 0;
     public zVel: number = 0;
 
-    public tx: number = 0;
-    public ty: number = 0;
+    public translation = vec3.create();
     public txVel: number = 0;
     public tyVel: number = 0;
     public shouldOrbit: boolean = true;
@@ -476,8 +472,8 @@ export class OrbitCameraController implements CameraController {
 
         // Get new velocities from inputs.
         if (inputManager.button === 1) {
-            this.txVel += inputManager.dx * (-10 - Math.min(this.z, 0.01)) /  5000;
-            this.tyVel += inputManager.dy * (-10 - Math.min(this.z, 0.01)) / -5000;
+            this.txVel += inputManager.dx * (-10 - Math.min(this.z, 0.01)) / -5000;
+            this.tyVel += inputManager.dy * (-10 - Math.min(this.z, 0.01)) /  5000;
         } else if (inputManager.isDragging()) {
             this.xVel += inputManager.dx / 200;
             this.yVel += inputManager.dy / 200;
@@ -506,40 +502,35 @@ export class OrbitCameraController implements CameraController {
             // Apply velocities.
             const drag = inputManager.isDragging() ? 0.92 : 0.96;
 
-            this.x += this.xVel / 10;
+            this.x += -this.xVel / 10;
             this.xVel *= drag;
 
-            this.y += this.yVel / 10;
+            this.y += -this.yVel / 10;
             this.yVel *= drag;
 
-            this.tx += this.txVel;
             this.txVel *= drag;
-
-            this.ty += this.tyVel;
             this.tyVel *= drag;
 
-            this.z += this.zVel;
-            this.zVel *= 0.8;
+            this.z += this.zVel * 4;
+            if (inputManager.dz === 0)
+                this.zVel *= 0.85;
             if (this.z > -10) {
                 this.z = -10;
                 this.zVel = 0;
             }
 
-            const camera = this.camera;
+            vec3.set(scratchVec3a, this.camera.worldMatrix[0], this.camera.worldMatrix[1], this.camera.worldMatrix[2]);
+            vec3.scaleAndAdd(this.translation, this.translation, scratchVec3a, this.txVel);
 
-            // Calculate new camera from new x/y/z.
-            const sinX = Math.sin(this.x);
-            const cosX = Math.cos(this.x);
-            const sinY = Math.sin(this.y);
-            const cosY = Math.cos(this.y);
-            // TODO(jstpierre): Replace this with position/look direction.
-            mat4.set(camera.worldMatrix,
-                cosX, sinY * sinX, -cosY * sinX, 0,
-                0, cosY, sinY, 0,
-                sinX, -sinY * cosX, cosY * cosX, 0,
-                this.tx, this.ty, this.z, 1
-            );
-            mat4.invert(camera.worldMatrix, camera.worldMatrix);
+            vec3.set(scratchVec3a, this.camera.worldMatrix[4], this.camera.worldMatrix[5], this.camera.worldMatrix[6]);
+            vec3.scaleAndAdd(this.translation, this.translation, scratchVec3a, this.tyVel);
+
+            const eyePos = scratchVec3a;
+            computeUnitSphericalCoordinates(eyePos, this.x, this.y);
+            vec3.scale(eyePos, eyePos, this.z);
+            vec3.add(eyePos, eyePos, this.translation);
+            mat4.lookAt(this.camera.viewMatrix, eyePos, this.translation, vec3Up);
+            mat4.invert(this.camera.worldMatrix, this.camera.viewMatrix);
             this.camera.worldMatrixUpdated();
             this.forceUpdate = false;
         }

@@ -1,5 +1,5 @@
 
-import { mat4, vec3, vec4 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
 
 // Misc bits of 3D math.
 
@@ -235,4 +235,35 @@ export function computeProjectionMatrixFromFrustum(m: mat4, left: number, right:
         m[10] = -1;
         m[14] = -2 * near;
     }
+}
+
+export function computeEulerAngleRotationFromSRTMatrix(dst: vec3, m: mat4): void {
+    // "Euler Angle Conversion", Ken Shoemake, Graphics Gems IV. http://www.gregslabaugh.net/publications/euler.pdf
+
+    if (m[2] - 1.0 < -0.0001) {
+        if (m[2] + 1.0 > 0.0001) {
+            dst[0] = Math.atan2(m[6], m[10]);
+            dst[1] = -Math.asin(m[2]);
+            dst[2] = Math.atan2(m[1], m[0]);
+        } else {
+            dst[0] = Math.atan2(m[4], m[8]);
+            dst[1] = Math.PI / 2;
+            dst[2] = 0.0;
+        }
+    } else {
+        dst[0] = -Math.atan2(-m[4], -m[8]);
+        dst[1] = -Math.PI / 2;
+        dst[2] = 0.0;
+    }
+}
+
+export function computeUnitSphericalCoordinates(dst: vec3, azimuthal: number, polar: number): void {
+    // https://en.wikipedia.org/wiki/Spherical_coordinate_system
+    // https://en.wikipedia.org/wiki/List_of_common_coordinate_transformations#From_spherical_coordinates
+    // Wikipedia uses the (wrong) convention of Z-up tho...
+
+    const sinP = Math.sin(polar);
+    dst[0] = sinP * Math.cos(azimuthal);
+    dst[1] = Math.cos(polar);
+    dst[2] = sinP * Math.sin(azimuthal);
 }

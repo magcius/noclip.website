@@ -3,7 +3,7 @@ import { mat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
 import { assert, assertExists, align, nArray } from '../../util';
 import { DataFetcher, DataFetcherFlags } from '../../DataFetcher';
-import { MathConstants, computeModelMatrixSRT, lerp, computeNormalMatrix, clamp } from '../../MathHelpers';
+import { MathConstants, computeModelMatrixSRT, lerp, computeNormalMatrix, clamp, computeEulerAngleRotationFromSRTMatrix } from '../../MathHelpers';
 import { getPointBezier } from '../../Spline';
 import { Camera, computeClipSpacePointFromWorldSpacePoint } from '../../Camera';
 import { SceneContext } from '../../SceneBase';
@@ -1132,27 +1132,6 @@ export function getJMapInfoTrans(dst: vec3, sceneObjHolder: SceneObjHolder, info
     vec3.transformMat4(dst, dst, stageDataHolder.placementMtx);
 }
 
-function matrixExtractEulerAngleRotation(dst: vec3, m: mat4): void {
-    // In SMG, this appears inline in getJMapInfoRotate. It appears to be a simplified form of
-    // "Euler Angle Conversion", Ken Shoemake, Graphics Gems IV. http://www.gregslabaugh.net/publications/euler.pdf
-
-    if (m[2] - 1.0 < -0.0001) {
-        if (m[2] + 1.0 > 0.0001) {
-            dst[0] = Math.atan2(m[6], m[10]);
-            dst[1] = -Math.asin(m[2]);
-            dst[2] = Math.atan2(m[1], m[0]);
-        } else {
-            dst[0] = Math.atan2(m[4], m[8]);
-            dst[1] = Math.PI / 2;
-            dst[2] = 0.0;
-        }
-    } else {
-        dst[0] = -Math.atan2(-m[4], -m[8]);
-        dst[1] = -Math.PI / 2;
-        dst[2] = 0.0;
-    }
-}
-
 const scratchMatrix = mat4.create();
 function getJMapInfoRotate(dst: vec3, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, scratch: mat4 = scratchMatrix): void {
     getJMapInfoRotateLocal(dst, infoIter);
@@ -1162,7 +1141,7 @@ function getJMapInfoRotate(dst: vec3, sceneObjHolder: SceneObjHolder, infoIter: 
     const stageDataHolder = sceneObjHolder.stageDataHolder.findPlacedStageDataHolder(infoIter);
     mat4.mul(scratch, stageDataHolder.placementMtx, scratch);
 
-    matrixExtractEulerAngleRotation(dst, scratch);
+    computeEulerAngleRotationFromSRTMatrix(dst, scratch);
 }
 
 export class LiveActor extends NameObj {
