@@ -14,6 +14,7 @@ import { GlobalGrabManager } from './GrabManager';
 
 // @ts-ignore
 import logoURL from './logo.png';
+import { ProgressMeter } from './Progressable';
 
 export const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
 export const COOL_BLUE_COLOR = 'rgb(20, 105, 215)';
@@ -1123,7 +1124,7 @@ class SceneSelect extends Panel {
         this.syncSceneDescs();
     }
 
-    public setLoadProgress(pct: number) {
+    public setProgress(pct: number): void {
         this.loadProgress = pct;
         this.syncFlairs();
         this.syncHeaderStyle();

@@ -2,9 +2,8 @@
 import { mat4 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import Progressable from '../Progressable';
 
-import { fetchData } from '../fetch';
+import { DataFetcher } from '../fetch';
 import { SceneGfx, ViewerRenderInput } from '../viewer';
 
 import * as GX from '../gx/gx_enum';
@@ -217,8 +216,8 @@ class SeaRenderer extends SunshineRenderer {
     }
 }
 
-export function createScene(device: GfxDevice, name: string): Progressable<SceneGfx> {
-    return fetchData("j3d/sms/dolpic0.szs", null).then((buffer: ArrayBufferSlice) => {
+export function createScene(device: GfxDevice, dataFetcher: DataFetcher, name: string): Promise<SceneGfx> {
+    return dataFetcher.fetchData("j3d/sms/dolpic0.szs").then((buffer: ArrayBufferSlice) => {
         return Yaz0.decompress(buffer);
     }).then((buffer: ArrayBufferSlice) => {
         const rarc = RARC.parse(buffer);

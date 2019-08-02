@@ -1,8 +1,11 @@
 
-import { ProgressMeter } from "./Progressable";
 import { GfxDevice } from "./gfx/platform/GfxPlatform";
 import { SceneGfx } from "./viewer";
 import { DataFetcher } from "./fetch";
+
+export interface ProgressMeter {
+    setProgress(progress: number): void;
+}
 
 export interface SceneContext {
     device: GfxDevice;

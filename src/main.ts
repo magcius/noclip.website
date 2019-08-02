@@ -14,7 +14,6 @@ if (module.hot) {
 import { Viewer, SceneGfx, InitErrorCode, initializeViewer, makeErrorUI } from './viewer';
 
 import ArrayBufferSlice from './ArrayBufferSlice';
-import Progressable from './Progressable';
 
 import * as Scenes_BanjoKazooie from './bk/scenes';
 import * as Scenes_THUG2 from './thug2/scenes';
@@ -77,7 +76,7 @@ import { standardFullClearRenderPassDescriptor } from './gfx/helpers/RenderTarge
 
 import * as Sentry from '@sentry/browser';
 import { GIT_REVISION, IS_DEVELOPMENT } from './BuildVersion';
-import { SceneDesc, SceneGroup, SceneContext, getSceneDescs } from './SceneBase';
+import { SceneDesc, SceneGroup, SceneContext, getSceneDescs, ProgressMeter } from './SceneBase';
 import { prepareFrameDebugOverlayCanvas2D } from './DebugJunk';
 
 const sceneGroups = [
@@ -144,19 +143,15 @@ class SceneLoader {
     constructor(public viewer: Viewer, public sceneUIContainer: HTMLElement) {
     }
 
-    public loadSceneDesc(sceneDesc: SceneDesc): Progressable<SceneGfx> {
+    public loadSceneDesc(sceneDesc: SceneDesc, progressMeter: ProgressMeter): PromiseLike<SceneGfx> {
         if (this.abortController !== null)
             this.abortController.abort();
         this.abortController = new AbortController();
 
         this.loadingSceneDesc = sceneDesc;
 
-        // TODO(jstpierre): This is a bit of an ugly hack until we can split out ProgressMeter from Progressable.
-        let progressable: Progressable<SceneGfx> | null = new Progressable<SceneGfx>(null);
-
         const device = this.viewer.gfxDevice;
         const abortSignal = this.abortController.signal;
-        const progressMeter = progressable;
         const dataFetcher = new DataFetcher(abortSignal, progressMeter);
         const uiContainer: HTMLElement = document.createElement('div');
         this.sceneUIContainer.appendChild(uiContainer);
@@ -167,19 +162,14 @@ class SceneLoader {
         const promise = sceneDesc.createScene(device, context);
 
         if (promise !== null) {
-            if (promise instanceof Progressable)
-                progressable = promise;
-            else
-                progressable.promise = promise;
-
-            progressable.then((scene: SceneGfx) => {
+            promise.then((scene: SceneGfx) => {
                 if (this.loadingSceneDesc === sceneDesc) {
                     this.loadingSceneDesc = null;
                     this.abortController = null;
                     this.viewer.setScene(scene);
                 }
             });
-            return progressable;
+            return promise;
         }
 
         console.error(`Cannot load ${sceneDesc.id}. Probably an unsupported file extension.`);
@@ -469,7 +459,7 @@ class Main {
             return this._loadSceneSaveStateVersion1(state);
     }
 
-    private _loadSceneDescById(id: string, sceneState: string | null): Progressable<SceneGfx> | null {
+    private _loadSceneDescById(id: string, sceneState: string | null): void {
         const [groupId, ...sceneRest] = id.split('/');
         let sceneId = decodeURIComponent(sceneRest.join('/'));
 
@@ -481,7 +471,7 @@ class Main {
             sceneId = group.sceneIdMap.get(sceneId);
 
         const desc = getSceneDescs(group).find((d) => d.id === sceneId);
-        return this._loadSceneDesc(group, desc, sceneState);
+        this._loadSceneDesc(group, desc, sceneState);
     }
 
     private _loadState(state: string) {
@@ -574,9 +564,9 @@ class Main {
         }
     }
 
-    private _loadSceneDesc(sceneGroup: SceneGroup, sceneDesc: SceneDesc, sceneStateStr: string | null = null): Progressable<SceneGfx> {
+    private _loadSceneDesc(sceneGroup: SceneGroup, sceneDesc: SceneDesc, sceneStateStr: string | null = null): void {
         if (this.currentSceneDesc === sceneDesc)
-            return Progressable.resolve(null);
+            return;
 
         // Tear down old scene.
         this.ui.destroyScene();
@@ -591,14 +581,11 @@ class Main {
         this.currentSceneDesc = sceneDesc;
         this.ui.sceneSelect.setCurrentDesc(this.currentSceneGroup, this.currentSceneDesc);
 
-        const progressable = this.sceneLoader.loadSceneDesc(sceneDesc).then((scene) => {
+        this.ui.sceneSelect.setProgress(0);
+        this.sceneLoader.loadSceneDesc(sceneDesc, this.ui.sceneSelect).then((scene) => {
             this._onSceneChanged(scene, sceneStateStr);
             return scene;
         });
-        this.ui.sceneSelect.setLoadProgress(progressable.progress);
-        progressable.onProgress = () => {
-            this.ui.sceneSelect.setLoadProgress(progressable.progress);
-        };
 
         // Set window title.
         document.title = `${sceneDesc.name} - ${sceneGroup.name} - noclip`;
@@ -620,8 +607,6 @@ class Main {
         Sentry.configureScope((scope) => {
             scope.setExtra('sceneDescId', sceneDescId);
         });
-
-        return progressable;
     }
 
     private _loadSceneGroups() {

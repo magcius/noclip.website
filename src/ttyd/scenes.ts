@@ -1,5 +1,4 @@
 
-import { fetchData } from '../fetch';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import * as Viewer from '../viewer';
 import { TPLTextureHolder, WorldRenderer } from './render';

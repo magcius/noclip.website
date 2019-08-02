@@ -9,14 +9,14 @@ if (module.hot) {
     });
 }
 
-import Progressable from '../Progressable';
 import * as Viewer from '../viewer';
 import { OrbitCameraController } from '../Camera';
 
 import * as sunshine_water from './sunshine_water';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
+import { DataFetcher } from '../fetch';
 
-type CreateSceneFunc = (device: GfxDevice, name: string) => Progressable<Viewer.SceneGfx>;
+type CreateSceneFunc = (device: GfxDevice, dataFetcher: DataFetcher, name: string) => Promise<Viewer.SceneGfx>;
 
 const embeds: { [key: string]: CreateSceneFunc } = {
     "sunshine_water": sunshine_water.createScene,
@@ -108,8 +108,9 @@ class Main {
     private async loadScene(hash: string) {
         const [file, name] = hash.split('/');
         const device = this.viewer.gfxDevice;
+        const dataFetcher = new DataFetcher(new AbortSignal(), { setProgress: () => {} });
         const createScene = embeds[file];
-        const scene = await createScene(device, name);
+        const scene = await createScene(device, dataFetcher, name);
         this.viewer.setScene(scene);
         this.viewer.setCameraController(new OrbitCameraController());
     }

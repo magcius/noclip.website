@@ -1,8 +1,8 @@
 
 import ArrayBufferSlice from './ArrayBufferSlice';
-import Progressable, { ProgressMeter } from './Progressable';
 import { assert } from './util';
 import { IS_DEVELOPMENT } from './BuildVersion';
+import { ProgressMeter } from './SceneBase';
 
 export interface NamedArrayBufferSlice extends ArrayBufferSlice {
     name: string;
@@ -15,61 +15,9 @@ function getDataStorageBaseURL(): string {
         return `https://noclip.beyond3d.com`;
 }
 
-export class AbortedError extends Error {
-    constructor(...args: any[]) {
-        super(...args);
-        this.name = 'AbortedError';
-    }
-}
-
-export function getDataURLForPath(url: string): string {
+function getDataURLForPath(url: string): string {
     assert(!url.startsWith(`data/`));
     return `${getDataStorageBaseURL()}/${url}`;
-}
-
-export function fetchData(path: string, abortSignal: AbortSignal | null): Progressable<NamedArrayBufferSlice> {
-    const request = new XMLHttpRequest();
-    const url = getDataURLForPath(path);
-    request.open("GET", url, true);
-    request.responseType = "arraybuffer";
-    request.send();
-    if (abortSignal !== null) {
-        abortSignal.addEventListener('abort', () => {
-            request.abort();
-        });
-    }
-    const pFetch = new Promise<NamedArrayBufferSlice>((resolve, reject) => {
-        function done() {
-            prFetch.setProgress(1);
-            let slice: NamedArrayBufferSlice;
-
-            // If we aborted the request, then don't call our callback.
-            if (request.status === 0 && (abortSignal !== null && abortSignal.aborted))
-                reject(new AbortedError());
-
-            if (request.status !== 200 || request.getResponseHeader('Content-Type').startsWith('text/html')) {
-                console.error(`fetchData: Received non-success status code ${request.status} when fetching file ${path}. Status: ${request.status}, aborted: ${abortSignal ? abortSignal.aborted : 'no signal'}`);
-                slice = new ArrayBufferSlice(new ArrayBuffer(0)) as NamedArrayBufferSlice;
-            } else {
-                const buffer: ArrayBuffer = request.response;
-                slice = new ArrayBufferSlice(buffer) as NamedArrayBufferSlice;
-            }
-            slice.name = url;
-            resolve(slice);
-        }
-
-        request.onload = done;
-        request.onerror = done;
-        request.onabort = () => {
-            reject(new AbortedError());
-        };
-        request.onprogress = (e) => {
-            if (e.lengthComputable)
-                prFetch.setProgress(e.loaded / e.total);
-        };
-    });
-    const prFetch = new Progressable<NamedArrayBufferSlice>(pFetch);
-    return prFetch;
 }
 
 class DataFetcherRequest {
@@ -95,6 +43,10 @@ class DataFetcherRequest {
         this.request.responseType = "arraybuffer";
         this.request.send();
         this.request.onload = (e) => {
+            this.progress = 1.0;
+            if (this.onprogress !== null)
+                this.onprogress();
+
             const buffer: ArrayBuffer = this.request.response;
             const slice = new ArrayBufferSlice(buffer) as NamedArrayBufferSlice;
             slice.name = this.url;

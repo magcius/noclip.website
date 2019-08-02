@@ -1,7 +1,6 @@
 
 import { SceneDesc, SceneGfx } from "./viewer";
 import ArrayBufferSlice from "./ArrayBufferSlice";
-import { ProgressMeter } from "./Progressable";
 import { GfxDevice } from "./gfx/platform/GfxPlatform";
 import { readString } from "./util";
 
@@ -13,7 +12,7 @@ import * as FRES from './fres/scenes';
 import * as NNS_G3D from './nns_g3d/scenes';
 import * as J3D from './j3d/scenes';
 import * as RRES from './rres/scenes';
-import { SceneContext } from "./SceneBase";
+import { SceneContext, ProgressMeter } from "./SceneBase";
 
 function loadFileAsPromise(file: File, progressMeter: ProgressMeter): Promise<ArrayBufferSlice> {
     const request = new FileReader();
