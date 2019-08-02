@@ -434,8 +434,8 @@ export class OrbitCameraController implements CameraController {
     public forceUpdate: boolean = false;
     public onkeymovespeed: () => void = () => {};
 
-    public x: number = 0.15;
-    public y: number = 0.35;
+    public x: number = -Math.PI / 2;
+    public y: number = 2;
     public z: number = -150;
     public orbitSpeed: number = -0.05;
     public xVel: number = 0;
@@ -470,13 +470,16 @@ export class OrbitCameraController implements CameraController {
 
         const shouldOrbit = this.shouldOrbit;
 
+        const invertXMult = inputManager.invertX ? -1 : 1;
+        const invertYMult = inputManager.invertY ? -1 : 1;
+
         // Get new velocities from inputs.
         if (inputManager.button === 1) {
             this.txVel += inputManager.dx * (-10 - Math.min(this.z, 0.01)) / -5000;
             this.tyVel += inputManager.dy * (-10 - Math.min(this.z, 0.01)) /  5000;
         } else if (inputManager.isDragging()) {
-            this.xVel += inputManager.dx / 200;
-            this.yVel += inputManager.dy / 200;
+            this.xVel += inputManager.dx / -200 * invertXMult;
+            this.yVel += inputManager.dy /  200 * invertYMult;
         } else if (shouldOrbit) {
             if (Math.abs(this.xVel) < Math.abs(this.orbitSpeed))
                 this.xVel += this.orbitSpeed * 1/50;
