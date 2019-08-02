@@ -1,7 +1,6 @@
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import Progressable from '../Progressable';
-import { fetchData } from '../fetch';
+import { DataFetcher } from '../fetch';
 import * as Viewer from '../viewer';
 import * as Yaz0 from '../compression/Yaz0';
 import * as UI from '../ui';
@@ -270,12 +269,12 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    public createScene(device: GfxDevice, context: SceneContext): Progressable<Viewer.SceneGfx> {
-        const abortSignal = context.abortSignal;
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const dataFetcher = context.dataFetcher;
         const stagePath = `${pathBase}/res/Stage/${this.stageId}`;
         const extraTextures = new ZTPExtraTextures();
 
-        return this.fetchRarc(`${stagePath}/STG_00.arc`, abortSignal).then((stageRarc: RARC.RARC) => {
+        return this.fetchRarc(`${stagePath}/STG_00.arc`, dataFetcher).then((stageRarc: RARC.RARC) => {
             // Load stage shared textures.
             const texcFolder = stageRarc.findDir(`texc`);
             const extraTextureFiles = texcFolder !== null ? texcFolder.files : [];
@@ -317,7 +316,7 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
                 roomNames = roomList.map((i) => `R${leftPad(''+i, 2)}_00`);
             }
 
-            return Progressable.all(roomNames.map((roomName) => this.fetchRarc(`${stagePath}/${roomName}.arc`, abortSignal))).then((roomRarcs: (RARC.RARC | null)[]) => {
+            return Promise.all(roomNames.map((roomName) => this.fetchRarc(`${stagePath}/${roomName}.arc`, dataFetcher))).then((roomRarcs: (RARC.RARC | null)[]) => {
                 roomRarcs.forEach((rarc: RARC.RARC | null, i) => {
                     if (rarc === null) return;
                     this.createRoomScenes(device, renderer, rarc, roomNames[i]);
@@ -328,8 +327,8 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private fetchRarc(path: string, abortSignal: AbortSignal): Progressable<RARC.RARC | null> {
-        return fetchData(path, abortSignal).then((buffer: ArrayBufferSlice) => {
+    private fetchRarc(path: string, dataFetcher: DataFetcher): Promise<RARC.RARC | null> {
+        return dataFetcher.fetchData(path).then((buffer: ArrayBufferSlice) => {
             if (buffer.byteLength === 0) return null;
             return Yaz0.decompress(buffer).then((buffer: ArrayBufferSlice) => RARC.parse(buffer));
         });

@@ -7,8 +7,7 @@ import * as NSBTA from './nsbta';
 import * as NSBTP from './nsbtp';
 import * as NSBTX from './nsbtx';
 
-import { fetchData } from '../fetch';
-import Progressable from '../Progressable';
+import { DataFetcher } from '../fetch';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { MDL0Renderer, G3DPass } from './render';
@@ -89,8 +88,8 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
     constructor(public worldNumber: number, public name: string, public id: string = '' + worldNumber) {
     }
 
-    private fetchBMD(path: string, abortSignal: AbortSignal): Progressable<NSBMD.BMD0> {
-        return fetchData(path, abortSignal).then((buffer: ArrayBufferSlice) => {
+    private fetchBMD(path: string, dataFetcher: DataFetcher): Promise<NSBMD.BMD0> {
+        return dataFetcher.fetchData(path).then((buffer: ArrayBufferSlice) => {
             try {
                 return NSBMD.parse(buffer);
             } catch (error) {
@@ -99,8 +98,8 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private fetchBTX(path: string, abortSignal: AbortSignal): Progressable<NSBTX.BTX0> {
-        return fetchData(path, abortSignal).then((buffer: ArrayBufferSlice) => {
+    private fetchBTX(path: string, dataFetcher: DataFetcher): Promise<NSBTX.BTX0> {
+        return dataFetcher.fetchData(path).then((buffer: ArrayBufferSlice) => {
             try {
                 return NSBTX.parse(buffer);
             } catch (error) {
@@ -109,8 +108,8 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private fetchBTA(path: string, abortSignal: AbortSignal): Progressable<NSBTA.BTA0> {
-        return fetchData(path, abortSignal).then((buffer: ArrayBufferSlice) => {
+    private fetchBTA(path: string, dataFetcher: DataFetcher): Promise<NSBTA.BTA0> {
+        return dataFetcher.fetchData(path).then((buffer: ArrayBufferSlice) => {
             try {
                 return NSBTA.parse(buffer);
             } catch (error) {
@@ -119,8 +118,8 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private fetchBTP(path: string, abortSignal: AbortSignal): Progressable<NSBTP.BTP0> {
-        return fetchData(path, abortSignal).then((buffer: ArrayBufferSlice) => {
+    private fetchBTP(path: string, dataFetcher: DataFetcher): Promise<NSBTP.BTP0> {
+        return dataFetcher.fetchData(path).then((buffer: ArrayBufferSlice) => {
             try {
                 return NSBTP.parse(buffer);
             } catch (error) {
@@ -129,12 +128,12 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private fetchObjectData(path: string, abortSignal: AbortSignal): Progressable<ObjectData> {
-        return Progressable.all<any>([
-            this.fetchBMD(path + `.nsbmd`, abortSignal),
-            this.fetchBTX(path + `.nsbtx`, abortSignal),
-            this.fetchBTA(path + `.nsbta`, abortSignal),
-            this.fetchBTP(path + `.nsbtp`, abortSignal),
+    private fetchObjectData(path: string, dataFetcher: DataFetcher): Promise<ObjectData> {
+        return Promise.all<any>([
+            this.fetchBMD(path + `.nsbmd`, dataFetcher),
+            this.fetchBTX(path + `.nsbtx`, dataFetcher),
+            this.fetchBTA(path + `.nsbta`, dataFetcher),
+            this.fetchBTP(path + `.nsbtp`, dataFetcher),
         ]).then(([_bmd, _btx, _bta, _btp]) => {
             const bmd = _bmd as NSBMD.BMD0 | null;
             const btx = _btx as NSBTX.BTX0 | null;
@@ -162,17 +161,17 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
         return renderer;
     }
 
-    public createScene(device: GfxDevice, context: SceneContext): Progressable<Viewer.SceneGfx> {
-        const abortSignal = context.abortSignal;
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const dataFetcher = context.dataFetcher;
         const basePath = `nsmbds`;
 
-        return Progressable.all([
-            this.fetchObjectData(`${basePath}/map/w${this.worldNumber}`, abortSignal),
-            this.fetchObjectData(`${basePath}/map/w${this.worldNumber}_tree`, abortSignal),
-            this.fetchObjectData(`${basePath}/map/w1_castle`, abortSignal),
-            this.fetchObjectData(`${basePath}/map/w8_koppaC`, abortSignal),
-            this.fetchObjectData(`${basePath}/map/w1_tower`, abortSignal),
-            this.fetchObjectData(`${basePath}/map/map_point`, abortSignal),
+        return Promise.all([
+            this.fetchObjectData(`${basePath}/map/w${this.worldNumber}`, dataFetcher),
+            this.fetchObjectData(`${basePath}/map/w${this.worldNumber}_tree`, dataFetcher),
+            this.fetchObjectData(`${basePath}/map/w1_castle`, dataFetcher),
+            this.fetchObjectData(`${basePath}/map/w8_koppaC`, dataFetcher),
+            this.fetchObjectData(`${basePath}/map/w1_tower`, dataFetcher),
+            this.fetchObjectData(`${basePath}/map/map_point`, dataFetcher),
         ]).then(([mainObjData, treeObjData, castleObjData, bigCastleObjData, towerObjData, mapPointObjData]) => {
             // Adjust the nodes/bones to emulate the flag animations.
             mat4.fromTranslation(castleObjData.bmd.models[0].nodes[3].jointMatrix, [0, 88, 0]);

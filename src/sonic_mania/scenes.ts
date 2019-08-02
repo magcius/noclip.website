@@ -20,9 +20,9 @@ class SonicManiaSceneDesc implements SceneDesc {
         this.id = this.path;
     }
 
-    public createScene(device: GfxDevice, context: SceneContext): Progressable<SonicManiaRenderer> {
-        const abortSignal = context.abortSignal;
-        return fetchData(this.path, abortSignal).then((result: ArrayBufferSlice) => {
+    public createScene(device: GfxDevice, context: SceneContext): Promise<SonicManiaRenderer> {
+        const dataFetcher = context.dataFetcher;
+        return dataFetcher.fetchData(this.path).then((result: ArrayBufferSlice) => {
             const mdl0 = MDL0.parse(result);
             return new SonicManiaRenderer(device, mdl0);
         });

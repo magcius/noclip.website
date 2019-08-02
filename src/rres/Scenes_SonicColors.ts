@@ -124,12 +124,12 @@ class SonicColorsSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
 
-    public createScene(device: GfxDevice, context: SceneContext): Progressable<Viewer.SceneGfx> {
-        const abortSignal = context.abortSignal;
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const dataFetcher = context.dataFetcher;
         const stageDir = `${pathBase}/${this.id}`;
         const commonArcPath = `${stageDir}/${this.id}_cmn.arc`;
         const texRRESPath = `${stageDir}/${this.id}_tex.brres`;
-        return Progressable.all([fetchData(commonArcPath, abortSignal), fetchData(texRRESPath, abortSignal)]).then(([commonArcData, texRRESData]) => {
+        return Promise.all([dataFetcher.fetchData(commonArcPath), dataFetcher.fetchData(texRRESPath)]).then(([commonArcData, texRRESData]) => {
             const commonArc = U8.parse(commonArcData);
             const mapFile = parseMapFile(assertExists(commonArc.findFile(`arc/${this.id}_map.map.bin`)).buffer);
             const texRRES = BRRES.parse(texRRESData);
@@ -138,9 +138,9 @@ class SonicColorsSceneDesc implements Viewer.SceneDesc {
             const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
             renderer.textureHolder.addRRESTextures(device, texRRES);
 
-            return Progressable.all(mapFile.entries.map((entry) => {
+            return Promise.all(mapFile.entries.map((entry) => {
                 const path = `${stageDir}/${entry.filename}.arc`;
-                return fetchData(path, abortSignal);
+                return dataFetcher.fetchData(path);
             })).then((entryArcDatas) => {
                 const skyboxRRES = BRRES.parse(assertExists(commonArc.findFile(`arc/${this.id}_sky.brres`)).buffer);
                 let motRRES: BRRES.RRES | null = null;

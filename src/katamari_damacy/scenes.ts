@@ -1,8 +1,7 @@
 
 import * as Viewer from '../viewer';
 import { GfxDevice, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxRenderPass } from "../gfx/platform/GfxPlatform";
-import Progressable from "../Progressable";
-import { fetchData } from "../fetch";
+import { DataFetcher } from "../fetch";
 import * as BIN from "./bin";
 import { BINModelInstance, BINModelSectorData, KatamariDamacyTextureHolder, KatamariDamacyProgram } from './render';
 import { mat4 } from 'gl-matrix';
@@ -25,25 +24,28 @@ interface StageAreaFileGroup {
 }
 
 class LevelCache {
-    private fileProgressableCache = new Map<string, Progressable<ArrayBufferSlice>>();
+    private filePromiseCache = new Map<string, Promise<ArrayBufferSlice>>();
     private fileDataCache = new Map<string, ArrayBufferSlice>();
 
-    public waitForLoad(): Progressable<any> {
-        const v: Progressable<any>[] = [... this.fileProgressableCache.values()];
-        return Progressable.all(v);
+    constructor(private dataFetcher: DataFetcher) {
     }
 
-    private fetchFile(path: string, abortSignal: AbortSignal): Progressable<ArrayBufferSlice> {
-        assert(!this.fileProgressableCache.has(path));
-        const p = fetchData(path, abortSignal);
-        this.fileProgressableCache.set(path, p);
+    public waitForLoad(): Promise<any> {
+        const v: Promise<any>[] = [... this.filePromiseCache.values()];
+        return Promise.all(v);
+    }
+
+    private fetchFile(path: string): Promise<ArrayBufferSlice> {
+        assert(!this.filePromiseCache.has(path));
+        const p = this.dataFetcher.fetchData(path);
+        this.filePromiseCache.set(path, p);
         return p;
     }
 
-    public fetchFileData(path: string, abortSignal: AbortSignal): void {
-        const p = this.fileProgressableCache.get(path);
+    public fetchFileData(path: string): void {
+        const p = this.filePromiseCache.get(path);
         if (p === undefined) {
-            this.fetchFile(path, abortSignal).then((data) => {
+            this.fetchFile(path).then((data) => {
                 this.fileDataCache.set(path, data);
             });
         }
@@ -251,17 +253,17 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string, public stageAreaFileGroup: StageAreaFileGroup[], public missionSetupFile: string[], public initialAreaNo: number = -1) {
     }
 
-    public createScene(device: GfxDevice, context: SceneContext): Progressable<Viewer.SceneGfx> {
-        const abortSignal = context.abortSignal;
-        const cache = new LevelCache();
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const dataFetcher = context.dataFetcher;
+        const cache = new LevelCache(dataFetcher);
 
         for (let i = 0; i < this.stageAreaFileGroup.length; i++) {
-            cache.fetchFileData(getStageAreaFilePath(this.stageAreaFileGroup[i].texFile), abortSignal);
-            cache.fetchFileData(getStageAreaFilePath(this.stageAreaFileGroup[i].modelFile), abortSignal);
+            cache.fetchFileData(getStageAreaFilePath(this.stageAreaFileGroup[i].texFile));
+            cache.fetchFileData(getStageAreaFilePath(this.stageAreaFileGroup[i].modelFile));
         }
 
         for (let i = 0; i < this.missionSetupFile.length; i++) {
-            cache.fetchFileData(getMissionSetupFilePath(this.missionSetupFile[i]), abortSignal);
+            cache.fetchFileData(getMissionSetupFilePath(this.missionSetupFile[i]));
         }
 
         return cache.waitForLoad().then(() => {

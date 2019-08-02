@@ -2,9 +2,8 @@
 import { mat4, vec3 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../../ArrayBufferSlice';
-import Progressable from '../../Progressable';
 import { readString, assertExists, hexzero, leftPad, assert } from '../../util';
-import { fetchData } from '../../fetch';
+import { DataFetcher } from '../../fetch';
 
 import * as Viewer from '../../viewer';
 import * as BYML from '../../byml';
@@ -746,32 +745,35 @@ interface Destroyable {
 }
 
 class ModelCache {
-    private fileProgressableCache = new Map<string, Progressable<ArrayBufferSlice>>();
+    private filePromiseCache = new Map<string, Promise<ArrayBufferSlice>>();
     private fileDataCache = new Map<string, ArrayBufferSlice>();
-    private archiveProgressableCache = new Map<string, Progressable<RARC.RARC>>();
+    private archivePromiseCache = new Map<string, Promise<RARC.RARC>>();
     private archiveCache = new Map<string, RARC.RARC>();
     private modelCache = new Map<string, BMDModel>();
     public extraCache = new Map<string, Destroyable>();
     public extraModels: BMDModel[] = [];
 
-    public waitForLoad(): Progressable<any> {
-        const v: Progressable<any>[] = [... this.fileProgressableCache.values(), ... this.archiveProgressableCache.values()];
-        return Progressable.all(v);
+    constructor(private dataFetcher: DataFetcher) {
     }
 
-    private fetchFile(path: string, abortSignal: AbortSignal): Progressable<ArrayBufferSlice> {
-        assert(!this.fileProgressableCache.has(path));
-        const p = fetchData(path, abortSignal);
-        this.fileProgressableCache.set(path, p);
+    public waitForLoad(): Promise<any> {
+        const v: Promise<any>[] = [... this.filePromiseCache.values(), ... this.archivePromiseCache.values()];
+        return Promise.all(v);
+    }
+
+    private fetchFile(path: string): Promise<ArrayBufferSlice> {
+        assert(!this.filePromiseCache.has(path));
+        const p = this.dataFetcher.fetchData(path);
+        this.filePromiseCache.set(path, p);
         return p;
     }
 
-    public fetchFileData(path: string, abortSignal: AbortSignal): Progressable<ArrayBufferSlice> {
-        const p = this.fileProgressableCache.get(path);
+    public fetchFileData(path: string): Promise<ArrayBufferSlice> {
+        const p = this.filePromiseCache.get(path);
         if (p !== undefined) {
             return p.then(() => this.getFileData(path));
         } else {
-            return this.fetchFile(path, abortSignal).then((data) => {
+            return this.fetchFile(path).then((data) => {
                 this.fileDataCache.set(path, data);
                 return data;
             });
@@ -786,10 +788,10 @@ class ModelCache {
         return assertExists(this.archiveCache.get(archivePath));
     }
 
-    public fetchArchive(archivePath: string, abortSignal: AbortSignal): Progressable<RARC.RARC> {
-        let p = this.archiveProgressableCache.get(archivePath);
+    public fetchArchive(archivePath: string): Promise<RARC.RARC> {
+        let p = this.archivePromiseCache.get(archivePath);
         if (p === undefined) {
-            p = this.fetchFile(archivePath, abortSignal).then((data) => {
+            p = this.fetchFile(archivePath).then((data) => {
                 if (readString(data, 0, 0x04) === 'Yaz0')
                     return Yaz0.decompress(data);
                 else
@@ -799,7 +801,7 @@ class ModelCache {
                 this.archiveCache.set(archivePath, arc);
                 return arc;
             });
-            this.archiveProgressableCache.set(archivePath, p);
+            this.archivePromiseCache.set(archivePath, p);
         }
 
         return p;
@@ -845,18 +847,17 @@ class SceneDesc {
             this.id = `Room${rooms[0]}.arc`;
     }
 
-    public createScene(device: GfxDevice, context: SceneContext): Progressable<Viewer.SceneGfx> {
-        const abortSignal = context.abortSignal;
-        const modelCache = new ModelCache();
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const modelCache = new ModelCache(context.dataFetcher);
 
-        modelCache.fetchArchive(`${pathBase}/Object/System.arc`, abortSignal);
-        modelCache.fetchArchive(`${pathBase}/Stage/${this.stageDir}/Stage.arc`, abortSignal);
-        modelCache.fetchFileData(`${pathBase}/Particle/common.jpc`, abortSignal);
+        modelCache.fetchArchive(`${pathBase}/Object/System.arc`);
+        modelCache.fetchArchive(`${pathBase}/Stage/${this.stageDir}/Stage.arc`);
+        modelCache.fetchFileData(`${pathBase}/Particle/common.jpc`);
 
         // XXX(jstpierre): This is really terrible code.
         for (let i = 0; i < this.rooms.length; i++) {
             const roomIdx = Math.abs(this.rooms[i]);
-            modelCache.fetchArchive(`${pathBase}/Stage/${this.stageDir}/Room${roomIdx}.arc`, abortSignal);
+            modelCache.fetchArchive(`${pathBase}/Stage/${this.stageDir}/Room${roomIdx}.arc`);
         }
 
         return modelCache.waitForLoad().then(() => {
@@ -901,7 +902,7 @@ class SceneDesc {
 
                 // Now spawn any objects that might show up in it.
                 const dzr = roomRarc.findFileData('dzr/room.dzr')!;
-                this.spawnObjectsFromDZR(device, abortSignal, renderer, roomRenderer, dzr, modelMatrix);
+                this.spawnObjectsFromDZR(device, renderer, roomRenderer, dzr, modelMatrix);
             }
 
             const particleCommon = modelCache.getFileData(`${pathBase}/Particle/common.jpc`);
@@ -937,20 +938,20 @@ class SceneDesc {
         }
     }
 
-    private spawnObjectsForActor(device: GfxDevice, abortSignal: AbortSignal, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, name: string, parameters: number, localModelMatrix: mat4, worldModelMatrix: mat4): void {
+    private spawnObjectsForActor(device: GfxDevice, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, name: string, parameters: number, localModelMatrix: mat4, worldModelMatrix: mat4): void {
         const modelCache = renderer.modelCache;
         const stageName = this.id;
         const roomIdx = roomRenderer.roomIdx;
         const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
 
-        function fetchArchive(objArcName: string): Progressable<RARC.RARC> {
-            return renderer.modelCache.fetchArchive(`${pathBase}/Object/${objArcName}`, abortSignal);
+        function fetchArchive(objArcName: string): Promise<RARC.RARC> {
+            return renderer.modelCache.fetchArchive(`${pathBase}/Object/${objArcName}`);
         }
 
-        let _extraSymbols: Progressable<SymbolMap> | null = null;
-        function fetchExtraSymbols(): Progressable<SymbolMap> {
+        let _extraSymbols: Promise<SymbolMap> | null = null;
+        function fetchExtraSymbols(): Promise<SymbolMap> {
             if (_extraSymbols === null) {
-                _extraSymbols = renderer.modelCache.fetchFileData(`${pathBase}/extra.crg1_arc`, abortSignal).then((data) => {
+                _extraSymbols = renderer.modelCache.fetchFileData(`${pathBase}/extra.crg1_arc`).then((data) => {
                     return BYML.parse<SymbolMap>(data, BYML.FileType.CRG1);
                 });
             }
@@ -2060,7 +2061,7 @@ class SceneDesc {
             console.warn(`Unknown object: ${name} ${hexzero(parameters, 8)}`);
     }
 
-    private spawnObjectsFromTGOBLayer(device: GfxDevice, abortSignal: AbortSignal, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, buffer: ArrayBufferSlice, tgobHeader: DZSChunkHeader | undefined, worldModelMatrix: mat4): void {
+    private spawnObjectsFromTGOBLayer(device: GfxDevice, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, buffer: ArrayBufferSlice, tgobHeader: DZSChunkHeader | undefined, worldModelMatrix: mat4): void {
         if (tgobHeader === undefined)
             return;
 
@@ -2081,13 +2082,13 @@ class SceneDesc {
             localModelMatrix[13] += posY;
             localModelMatrix[14] += posZ;
 
-            this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, name, parameters, localModelMatrix, worldModelMatrix);
+            this.spawnObjectsForActor(device, renderer, roomRenderer, name, parameters, localModelMatrix, worldModelMatrix);
 
             actrTableIdx += 0x20;
         }
     }
 
-    private spawnObjectsFromACTRLayer(device: GfxDevice, abortSignal: AbortSignal, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, buffer: ArrayBufferSlice, actrHeader: DZSChunkHeader | undefined, worldModelMatrix: mat4): void {
+    private spawnObjectsFromACTRLayer(device: GfxDevice, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, buffer: ArrayBufferSlice, actrHeader: DZSChunkHeader | undefined, worldModelMatrix: mat4): void {
         if (actrHeader === undefined)
             return;
 
@@ -2111,30 +2112,30 @@ class SceneDesc {
             localModelMatrix[13] += posY;
             localModelMatrix[14] += posZ;
 
-            this.spawnObjectsForActor(device, abortSignal, renderer, roomRenderer, name, parameters, localModelMatrix, worldModelMatrix);
+            this.spawnObjectsForActor(device, renderer, roomRenderer, name, parameters, localModelMatrix, worldModelMatrix);
 
             actrTableIdx += 0x20;
         }
     }
 
-    private spawnObjectsFromDZR(device: GfxDevice, abortSignal: AbortSignal, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, buffer: ArrayBufferSlice, modelMatrix: mat4): void {
+    private spawnObjectsFromDZR(device: GfxDevice, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, buffer: ArrayBufferSlice, modelMatrix: mat4): void {
         const chunkHeaders = parseDZSHeaders(buffer);
 
-        this.spawnObjectsFromACTRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACTR'), modelMatrix);
-        this.spawnObjectsFromACTRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT0'), modelMatrix);
-        this.spawnObjectsFromACTRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT1'), modelMatrix);
-        this.spawnObjectsFromACTRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT2'), modelMatrix);
-        this.spawnObjectsFromACTRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT3'), modelMatrix);
-        this.spawnObjectsFromACTRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT4'), modelMatrix);
-        this.spawnObjectsFromACTRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT5'), modelMatrix);
-        this.spawnObjectsFromACTRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT6'), modelMatrix);
-        this.spawnObjectsFromACTRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT7'), modelMatrix);
-        this.spawnObjectsFromACTRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT8'), modelMatrix);
-        this.spawnObjectsFromACTRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACT9'), modelMatrix);
-        this.spawnObjectsFromACTRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACTA'), modelMatrix);
-        this.spawnObjectsFromACTRLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('ACTB'), modelMatrix);
+        this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, chunkHeaders.get('ACTR'), modelMatrix);
+        this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, chunkHeaders.get('ACT0'), modelMatrix);
+        this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, chunkHeaders.get('ACT1'), modelMatrix);
+        this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, chunkHeaders.get('ACT2'), modelMatrix);
+        this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, chunkHeaders.get('ACT3'), modelMatrix);
+        this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, chunkHeaders.get('ACT4'), modelMatrix);
+        this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, chunkHeaders.get('ACT5'), modelMatrix);
+        this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, chunkHeaders.get('ACT6'), modelMatrix);
+        this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, chunkHeaders.get('ACT7'), modelMatrix);
+        this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, chunkHeaders.get('ACT8'), modelMatrix);
+        this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, chunkHeaders.get('ACT9'), modelMatrix);
+        this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, chunkHeaders.get('ACTA'), modelMatrix);
+        this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, chunkHeaders.get('ACTB'), modelMatrix);
 
-        this.spawnObjectsFromTGOBLayer(device, abortSignal, renderer, roomRenderer, buffer, chunkHeaders.get('TGOB'), modelMatrix);
+        this.spawnObjectsFromTGOBLayer(device, renderer, roomRenderer, buffer, chunkHeaders.get('TGOB'), modelMatrix);
     }
 }
 

@@ -1,23 +1,21 @@
 
 import { fetchData } from '../fetch';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import Progressable from '../Progressable';
 import * as Viewer from '../viewer';
 import { TPLTextureHolder, WorldRenderer } from './render';
 import * as TPL from './tpl';
 import * as World from './world';
 import { SceneContext } from '../SceneBase';
 
-
 class TTYDSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string = id) {
     }
 
-    public createScene(device: GfxDevice, context: SceneContext): Progressable<Viewer.SceneGfx> {
-        const abortSignal = context.abortSignal;
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const dataFetcher = context.dataFetcher;
         const pathBase = `ttyd/${this.id}`;
         const bgPath = `ttyd/b/${this.id}.tpl`;
-        return Progressable.all([fetchData(`${pathBase}/d.blob`, abortSignal), fetchData(`${pathBase}/t.blob`, abortSignal), fetchData(bgPath, abortSignal)]).then(([dBuffer, tBuffer, bgBuffer]) => {
+        return Promise.all([dataFetcher.fetchData(`${pathBase}/d.blob`), dataFetcher.fetchData(`${pathBase}/t.blob`), dataFetcher.fetchData(bgPath)]).then(([dBuffer, tBuffer, bgBuffer]) => {
             const d = World.parse(dBuffer);
             const textureHolder = new TPLTextureHolder();
             const tpl = TPL.parse(tBuffer, d.textureNameTable);

@@ -3,10 +3,8 @@ import * as Viewer from '../viewer';
 
 import { BasicRenderer } from './scenes';
 
-import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { readString, assert, assertExists } from '../util';
-import { fetchData } from '../fetch';
 import { mat4, quat } from 'gl-matrix';
 import * as RARC from './rarc';
 import { BMDModelInstance, BMDModel } from './render';
@@ -92,10 +90,10 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
         return modelInstance;
     }
 
-    public createScene(device: GfxDevice, context: SceneContext): Progressable<Viewer.SceneGfx> {
-        const abortSignal = context.abortSignal;
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const dataFetcher = context.dataFetcher;
         const path = `j3d/mkdd/Course/${this.path}`;
-        return fetchData(path, abortSignal).then((buffer: ArrayBufferSlice) => {
+        return dataFetcher.fetchData(path).then((buffer: ArrayBufferSlice) => {
             const rarc = RARC.parse(buffer);
             // Find course name.
             const bolFile = rarc.files.find((f) => f.name.endsWith('_course.bol'));

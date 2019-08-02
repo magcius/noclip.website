@@ -11,9 +11,9 @@ const dataPath = `MarioAndSonicAtTheOlympicGames2012`;
 class BasicRRESSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string = id) {}
 
-    public createScene(device: GfxDevice, context: SceneContext): Progressable<Viewer.SceneGfx> {
-        const abortSignal = context.abortSignal;
-        return fetchData(`${dataPath}/Terrain/${this.id}`, abortSignal).then((data) => {
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const dataFetcher = context.dataFetcher;
+        return dataFetcher.fetchData(`${dataPath}/Terrain/${this.id}`).then((data) => {
             return createBasicRRESRendererFromU8Buffer(device, data);
         });
     }

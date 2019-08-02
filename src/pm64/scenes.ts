@@ -1,8 +1,6 @@
 
 import * as Viewer from '../viewer';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPassDescriptor, GfxRenderPass } from '../gfx/platform/GfxPlatform';
-import Progressable from '../Progressable';
-import { fetchData } from '../fetch';
 import * as MapShape from './map_shape';
 import * as Tex from './tex';
 import { PaperMario64TextureHolder, PaperMario64ModelTreeRenderer, BackgroundBillboardRenderer } from './render';
@@ -111,36 +109,32 @@ class PaperMario64SceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
 
-    public createScene(device: GfxDevice, context: SceneContext): Progressable<Viewer.SceneGfx> {
-        const abortSignal = context.abortSignal;
-        const p: Progressable<ArrayBufferSlice>[] = [
-            fetchData(`${pathBase}/${this.id}_arc.crg1`, abortSignal),
-        ];
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const dataFetcher = context.dataFetcher;
+        const arcData = await dataFetcher.fetchData(`${pathBase}/${this.id}_arc.crg1`);
+        
+        const arc: Arc = BYML.parse(arcData, BYML.FileType.CRG1);
+        const renderer = new PaperMario64Renderer(device);
 
-        return Progressable.all(p).then(([arcData]) => {
-            const arc: Arc = BYML.parse(arcData, BYML.FileType.CRG1);
-            const renderer = new PaperMario64Renderer(device);
+        const tex = Tex.parseTextureArchive(arc.TexFile);
+        renderer.textureHolder.addTextureArchive(device, tex);
 
-            const tex = Tex.parseTextureArchive(arc.TexFile);
-            renderer.textureHolder.addTextureArchive(device, tex);
+        if (arc.BGTexFile !== null) {
+            const bgName = arc.BGTexName;
+            const bgTexture = Tex.parseBackground(arc.BGTexFile, bgName);
+            renderer.textureHolder.addTextures(device, [bgTexture]);
+            renderer.bgTextureRenderer = new BackgroundBillboardRenderer(device, renderer.textureHolder, bgName);
+        }
 
-            if (arc.BGTexFile !== null) {
-                const bgName = arc.BGTexName;
-                const bgTexture = Tex.parseBackground(arc.BGTexFile, bgName);
-                renderer.textureHolder.addTextures(device, [bgTexture]);
-                renderer.bgTextureRenderer = new BackgroundBillboardRenderer(device, renderer.textureHolder, bgName);
-            }
+        const mapShape = MapShape.parse(arc.ShapeFile);
+        const modelTreeRenderer = new PaperMario64ModelTreeRenderer(device, tex, renderer.textureHolder, mapShape.rootNode);
+        renderer.modelTreeRenderers.push(modelTreeRenderer);
 
-            const mapShape = MapShape.parse(arc.ShapeFile);
-            const modelTreeRenderer = new PaperMario64ModelTreeRenderer(device, tex, renderer.textureHolder, mapShape.rootNode);
-            renderer.modelTreeRenderers.push(modelTreeRenderer);
+        const scriptExecutor = new ScriptExecutor(renderer, arc.ROMOverlayData);
+        scriptExecutor.startFromHeader(arc.HeaderAddr);
+        renderer.scriptExecutor = scriptExecutor;
 
-            const scriptExecutor = new ScriptExecutor(renderer, arc.ROMOverlayData);
-            scriptExecutor.startFromHeader(arc.HeaderAddr);
-            renderer.scriptExecutor = scriptExecutor;
-
-            return renderer;
-        });
+        return renderer;
     }
 }
 
