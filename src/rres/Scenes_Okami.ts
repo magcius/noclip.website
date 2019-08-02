@@ -1,9 +1,8 @@
 
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from "../gfx/platform/GfxPlatform";
 import * as Viewer from '../viewer';
-import Progressable from "../Progressable";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { fetchData } from "../fetch";
+import { DataFetcher } from "../fetch";
 import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from "./render";
 import { mat4 } from "gl-matrix";
 
@@ -16,6 +15,7 @@ import { GXMaterialHacks } from "../gx/gx_material";
 import { computeModelMatrixSRT, computeMatrixWithoutRotation } from "../MathHelpers";
 import { computeModelMatrixYBillboard } from "../Camera";
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { SceneContext } from "../SceneBase";
 
 const pathBase = `okami`;
 
@@ -203,39 +203,42 @@ function parseMD(buffer: ArrayBufferSlice): MD {
 }
 
 class ModelCache {
-    private fileProgressableCache = new Map<string, Progressable<ArrayBufferSlice>>();
-    private scpArchiveProgressableCache = new Map<string, Progressable<OkamiSCPArchiveDataObject>>();
+    private filePromiseCache = new Map<string, Promise<ArrayBufferSlice>>();
+    private scpArchivePromiseCache = new Map<string, Promise<OkamiSCPArchiveDataObject>>();
     private scpArchiveCache = new Map<string, OkamiSCPArchiveDataObject>();
 
-    public waitForLoad(): Progressable<any> {
-        const v: Progressable<any>[] = [... this.fileProgressableCache.values()];
-        return Progressable.all(v).then(() => {
+    constructor(private dataFetcher: DataFetcher) {
+    }
+
+    public waitForLoad(): Promise<any> {
+        const v: Promise<any>[] = [... this.filePromiseCache.values()];
+        return Promise.all(v).then(() => {
             // XXX(jstpierre): Don't ask.
             return null;
         });
     }
 
-    private fetchFile(path: string, abortSignal: AbortSignal): Progressable<ArrayBufferSlice> {
-        assert(!this.fileProgressableCache.has(path));
-        const p = fetchData(path, abortSignal);
-        this.fileProgressableCache.set(path, p);
+    private fetchFile(path: string): Promise<ArrayBufferSlice> {
+        assert(!this.filePromiseCache.has(path));
+        const p = this.dataFetcher.fetchData(path);
+        this.filePromiseCache.set(path, p);
         return p;
     }
 
-    public fetchObjSCPArchive(device: GfxDevice, renderer: OkamiRenderer, objectTypeId: number, objectId: number, abortSignal: AbortSignal): Progressable<OkamiSCPArchiveDataObject> {
+    public fetchObjSCPArchive(device: GfxDevice, renderer: OkamiRenderer, objectTypeId: number, objectId: number): Promise<OkamiSCPArchiveDataObject> {
         const filename = assertExists(getObjectFilename(objectTypeId, objectId));
         const archivePath = `${pathBase}/${filename}`;
-        let p = this.scpArchiveProgressableCache.get(archivePath);
+        let p = this.scpArchivePromiseCache.get(archivePath);
 
         if (p === undefined) {
-            p = this.fetchFile(archivePath, abortSignal).then((data) => {
+            p = this.fetchFile(archivePath).then((data) => {
                 return data;
             }).then((data) => {
                 const scpArchiveData = new OkamiSCPArchiveDataObject(device, renderer, data, objectTypeId, objectId, archivePath);
                 this.scpArchiveCache.set(archivePath, scpArchiveData);
                 return scpArchiveData;
             });
-            this.scpArchiveProgressableCache.set(archivePath, p);
+            this.scpArchivePromiseCache.set(archivePath, p);
         }
 
         return p;
@@ -689,7 +692,7 @@ function getObjectFilename(objectTypeId: number, objectId: number): string | nul
 class OkamiSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
 
-    private spawnObjectTable(device: GfxDevice, renderer: OkamiRenderer, modelCache: ModelCache, objTableFile: ArrayBufferSlice, abortSignal: AbortSignal): void {
+    private spawnObjectTable(device: GfxDevice, renderer: OkamiRenderer, modelCache: ModelCache, objTableFile: ArrayBufferSlice): void {
         const view = objTableFile.createDataView();
 
         const tableCount = view.getUint16(0x00);
@@ -718,14 +721,16 @@ class OkamiSceneDesc implements Viewer.SceneDesc {
             if (filename === null)
                 continue;
 
-            modelCache.fetchObjSCPArchive(device, renderer, objectTypeId, objectId, abortSignal).then((arcData) => {
+            modelCache.fetchObjSCPArchive(device, renderer, objectTypeId, objectId).then((arcData) => {
                 arcData.createInstances(device, renderer, modelMatrix);
             });
         }
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
-        return fetchData(`${pathBase}/${this.id}.dat`, abortSignal).then((datArcBuffer: ArrayBufferSlice) => {
+    public createScene(device: GfxDevice, abortSignal: AbortSignal, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const dataFetcher = context.dataFetcher;
+
+        return dataFetcher.fetchData(`${pathBase}/${this.id}.dat`).then((datArcBuffer: ArrayBufferSlice) => {
             const renderer = new OkamiRenderer(device);
 
             const datArc = parseArc(datArcBuffer);
@@ -738,14 +743,14 @@ class OkamiSceneDesc implements Viewer.SceneDesc {
             const rootModelMatrix = mat4.create();
             scpData.createInstances(device, renderer, rootModelMatrix);
 
-            const modelCache = new ModelCache();
+            const modelCache = new ModelCache(dataFetcher);
 
             // Spawn the object tables.
             const tscTableFile = datArc.files.find((file) => file.type === 'TSC')!;
-            this.spawnObjectTable(device, renderer, modelCache, tscTableFile.buffer, abortSignal);
+            this.spawnObjectTable(device, renderer, modelCache, tscTableFile.buffer);
 
             const treTableFile = datArc.files.find((file) => file.type === 'TRE');
-            this.spawnObjectTable(device, renderer, modelCache, treTableFile.buffer, abortSignal);
+            this.spawnObjectTable(device, renderer, modelCache, treTableFile.buffer);
 
             return modelCache.waitForLoad().then(() => {
                 return renderer;

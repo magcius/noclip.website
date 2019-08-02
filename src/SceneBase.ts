@@ -2,11 +2,13 @@
 import { ProgressMeter } from "./Progressable";
 import { GfxDevice } from "./gfx/platform/GfxPlatform";
 import { SceneGfx } from "./viewer";
+import { DataFetcher } from "./fetch";
 
 export interface SceneContext {
     device: GfxDevice;
     abortSignal: AbortSignal;
     progressMeter: ProgressMeter;
+    dataFetcher: DataFetcher;
     uiContainer: HTMLElement;
 }
 

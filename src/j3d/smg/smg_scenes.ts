@@ -1,9 +1,8 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
-import Progressable from '../../Progressable';
 import { assert, assertExists, align, nArray } from '../../util';
-import { fetchData } from '../../fetch';
+import { DataFetcher } from '../../fetch';
 import { MathConstants, computeModelMatrixSRT, lerp, computeNormalMatrix, clamp } from '../../MathHelpers';
 import { getPointBezier } from '../../Spline';
 import { Camera, computeClipSpacePointFromWorldSpacePoint } from '../../Camera';
@@ -730,17 +729,17 @@ function patchBMDModel(bmdModel: BMDModel): void {
 }
 
 export class ModelCache {
-    public archiveProgressableCache = new Map<string, Progressable<RARC.RARC | null>>();
+    public archivePromiseCache = new Map<string, Promise<RARC.RARC | null>>();
     public archiveCache = new Map<string, RARC.RARC | null>();
     public modelCache = new Map<string, BMDModel | null>();
     private models: BMDModel[] = [];
 
-    constructor(public device: GfxDevice, public cache: GfxRenderCache, private pathBase: string, private abortSignal: AbortSignal) {
+    constructor(public device: GfxDevice, public cache: GfxRenderCache, private pathBase: string, private dataFetcher: DataFetcher) {
     }
 
-    public waitForLoad(): Progressable<any> {
-        const v: Progressable<any>[] = [... this.archiveProgressableCache.values()];
-        return Progressable.all(v);
+    public waitForLoad(): Promise<void> {
+        const v: Promise<any>[] = [... this.archivePromiseCache.values()];
+        return Promise.all(v) as Promise<any>;
     }
 
     public getModel(rarc: RARC.RARC, modelFilename: string): BMDModel | null {
@@ -756,11 +755,11 @@ export class ModelCache {
         return bmdModel;
     }
 
-    public requestArchiveData(archivePath: string): Progressable<RARC.RARC | null> {
-        if (this.archiveProgressableCache.has(archivePath))
-            return this.archiveProgressableCache.get(archivePath);
+    public requestArchiveData(archivePath: string): Promise<RARC.RARC | null> {
+        if (this.archivePromiseCache.has(archivePath))
+            return this.archivePromiseCache.get(archivePath);
 
-        const p = fetchData(`${this.pathBase}/${archivePath}`, this.abortSignal).then((buffer: ArrayBufferSlice) => {
+        const p = this.dataFetcher.fetchData(`${this.pathBase}/${archivePath}`).then((buffer: ArrayBufferSlice) => {
             if (buffer.byteLength === 0) {
                 console.warn(`Could not fetch archive ${archivePath}`);
                 return null;
@@ -772,7 +771,7 @@ export class ModelCache {
             return rarc;
         });
 
-        this.archiveProgressableCache.set(archivePath, p);
+        this.archivePromiseCache.set(archivePath, p);
         return p;
     }
 
@@ -2453,10 +2452,10 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
     public abstract requestGlobalArchives(modelCache: ModelCache): void;
     public abstract requestZoneArchives(modelCache: ModelCache, zoneName: string): void;
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal, context: SceneContext): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, abortSignal: AbortSignal, context: SceneContext): Promise<Viewer.SceneGfx> {
         const renderHelper = new GXRenderHelperGfx(device);
         const gfxRenderCache = renderHelper.renderInstManager.gfxRenderCache;
-        const modelCache = new ModelCache(device, gfxRenderCache, this.pathBase, abortSignal);
+        const modelCache = new ModelCache(device, gfxRenderCache, this.pathBase, context.dataFetcher);
 
         const galaxyName = this.galaxyName;
 

@@ -22,6 +22,7 @@ import { GfxRenderInstViewRenderer, GfxRendererLayer } from '../gfx/render/GfxRe
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { ColorKind } from '../gx/gx_render';
 import { executeOnPass, hasAnyVisible } from '../gfx/render/GfxRenderer2';
+import { SceneContext } from '../SceneBase';
 
 const materialHacks: GXMaterialHacks = {
     lightingFudge: (p) => `vec4((0.5 * ${p.matSource}).rgb, 1.0)`,
@@ -634,12 +635,13 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
 class SkywardSwordSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, abortSignal: AbortSignal, context: SceneContext): Promise<Viewer.SceneGfx> {
         const basePath = `zss`;
         const systemPath = `${basePath}/Object/System.arc`;
         const objPackPath = `${basePath}/Object/ObjectPack.arc.LZ`;
         const stagePath = `${basePath}/Stage/${this.id}/${this.id}_stg_l0.arc.LZ`;
-        return Progressable.all([fetchData(systemPath, abortSignal), fetchData(objPackPath, abortSignal), fetchData(stagePath, abortSignal)]).then((buffers: ArrayBufferSlice[]) => {
+        const dataFetcher = context.dataFetcher;
+        return Promise.all([dataFetcher.fetchData(systemPath), dataFetcher.fetchData(objPackPath), dataFetcher.fetchData(stagePath)]).then((buffers: ArrayBufferSlice[]) => {
             const [systemBuffer, objPackBuffer, stageBuffer] = buffers;
 
             const systemArchive = U8.parse(systemBuffer);

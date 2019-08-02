@@ -64,7 +64,7 @@ import { DroppedFileSceneDesc } from './Scenes_FileDrops';
 import { UI, SaveStatesAction, Panel } from './ui';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera';
 import { hexdump } from './util';
-import { downloadBlob, downloadBufferSlice, downloadBuffer } from './fetch';
+import { downloadBlob, downloadBufferSlice, downloadBuffer, DataFetcher } from './fetch';
 import { ZipFileEntry, makeZipFile } from './ZipFile';
 import { TextureHolder } from './TextureHolder';
 import { atob, btoa } from './Ascii85';
@@ -157,10 +157,11 @@ class SceneLoader {
         const device = this.viewer.gfxDevice;
         const abortSignal = this.abortController.signal;
         const progressMeter = progressable;
+        const dataFetcher = new DataFetcher(abortSignal, progressMeter);
         const uiContainer: HTMLElement = document.createElement('div');
         this.sceneUIContainer.appendChild(uiContainer);
         const context: SceneContext = {
-            device, abortSignal, progressMeter, uiContainer,
+            device, abortSignal, progressMeter, dataFetcher, uiContainer,
         };
 
         const promise = sceneDesc.createScene(device, abortSignal, context);

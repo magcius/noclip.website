@@ -9,13 +9,11 @@ import * as NSBTA from './nsbta';
 import * as NSBTP from './nsbtp';
 import * as NSBTX from './nsbtx';
 
-import { fetchData } from '../fetch';
-import Progressable from '../Progressable';
+import { DataFetcher } from '../fetch';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { MDL0Renderer, G3DPass } from './render';
 import { assert, readString, assertExists } from '../util';
-import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { FakeTextureHolder } from '../TextureHolder';
 import { mat4 } from 'gl-matrix';
@@ -23,6 +21,7 @@ import AnimationController from '../AnimationController';
 import { computeModelMatrixSRT, MathConstants } from '../MathHelpers';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
+import { SceneContext } from '../SceneBase';
 
 export class MKDSRenderer implements Viewer.SceneGfx {
     public renderTarget = new BasicRenderTarget();
@@ -159,8 +158,8 @@ const scratchMatrix = mat4.create();
 class MarioKartDSSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
 
-    private fetchCARC(path: string, abortSignal: AbortSignal): Progressable<NARC.NitroFS> {
-        return fetchData(path, abortSignal).then((buffer: ArrayBufferSlice) => {
+    private fetchCARC(path: string, dataFetcher: DataFetcher): Promise<NARC.NitroFS> {
+        return dataFetcher.fetchData(path).then((buffer: ArrayBufferSlice) => {
             return NARC.parse(CX.decompress(buffer));
         });
     }
@@ -324,10 +323,11 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
         }
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
-        return Progressable.all([
-            this.fetchCARC(`mkds/Course/${this.id}.carc`, abortSignal),
-            this.fetchCARC(`mkds/Course/${this.id}Tex.carc`, abortSignal),
+    public createScene(device: GfxDevice, abortSignal: AbortSignal, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const dataFetcher = context.dataFetcher;
+        return Promise.all([
+            this.fetchCARC(`mkds/Course/${this.id}.carc`, dataFetcher),
+            this.fetchCARC(`mkds/Course/${this.id}Tex.carc`, dataFetcher),
         ]).then(([courseNARC, textureNARC]) => {
             const courseBmdFile = courseNARC.files.find((file) => file.path === '/course_model.nsbmd');
             const courseBmd = NSBMD.parse(courseBmdFile.buffer);

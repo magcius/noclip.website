@@ -17,6 +17,7 @@ import { leftPad } from '../util';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { GrezzoTextureHolder, MultiCmbScene } from './scenes';
 import { computeModelMatrixSRT } from '../MathHelpers';
+import { SceneContext } from '../SceneBase';
 
 class SceneDesc implements Viewer.SceneDesc {
     public id: string;
@@ -25,14 +26,15 @@ class SceneDesc implements Viewer.SceneDesc {
         this.id = `map${mapNumber}`;
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, abortSignal: AbortSignal, context: SceneContext): Promise<Viewer.SceneGfx> {
         // Fetch the ZAR & info ZSI.
         const path_gar = `lm3d/map/map${leftPad(''+this.mapNumber, 2, '0')}.gar`;
         const models_path = `lm3d/mapmdl/map${this.mapNumber}`;
 
         const textureHolder = new GrezzoTextureHolder();
+        const dataFetcher = context.dataFetcher;
 
-        return fetchData(path_gar, abortSignal).then((garBuffer) => {
+        return dataFetcher.fetchData(path_gar).then((garBuffer) => {
             const gar = ZAR.parse(garBuffer);
 
             const jmpGarFile = gar.files.find((file) => file.name === 'JMP.gar');
@@ -45,9 +47,9 @@ class SceneDesc implements Viewer.SceneDesc {
             const modelCache = new Map<string, CmbData>();
 
             const renderer = new MultiCmbScene(device, textureHolder);
-            const progressables: Progressable<CmbInstance>[] = [];
+            const promises: Promise<CmbInstance>[] = [];
             for (let i = 0; i < roomInfo.records.length; i++) {
-                progressables.push(fetchData(`${models_path}/room_${leftPad(''+i, 2, '0')}.gar`, abortSignal).then((outerRoomGarBuf) => {
+                promises.push(dataFetcher.fetchData(`${models_path}/room_${leftPad(''+i, 2, '0')}.gar`).then((outerRoomGarBuf) => {
                     const outerRoomGar = ZAR.parse(outerRoomGarBuf);
                     const roomGarFile = outerRoomGar.files.find((file) => file.name === 'room.gar');
                     if (roomGarFile === undefined)
@@ -116,7 +118,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 }));
             }
 
-            return Progressable.all(progressables).then(() => {
+            return dataFetcher.waitForLoad().then(() => {
                 return renderer;
             });
         });

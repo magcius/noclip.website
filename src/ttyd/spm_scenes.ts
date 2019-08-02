@@ -1,7 +1,5 @@
 
 import * as Viewer from '../viewer';
-import Progressable from '../Progressable';
-import { fetchData } from '../fetch';
 
 import * as CX from '../compression/CX';
 import * as U8 from '../rres/u8';
@@ -11,13 +9,15 @@ import * as World from './world';
 import { WorldRenderer, TPLTextureHolder } from './render';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
+import { SceneContext } from '../SceneBase';
 
 class SPMSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string = id) {
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
-        return fetchData(`spm/${this.id}.bin`, abortSignal).then((buffer: ArrayBufferSlice) => {
+    public createScene(device: GfxDevice, abortSignal: AbortSignal, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const dataFetcher = context.dataFetcher;
+        return dataFetcher.fetchData(`spm/${this.id}.bin`).then((buffer: ArrayBufferSlice) => {
             const decompressed = CX.decompress(buffer);
             const arc = U8.parse(decompressed);
             const dFile = arc.findFile(`./dvd/map/*/map.dat`);

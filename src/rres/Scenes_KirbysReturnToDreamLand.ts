@@ -5,17 +5,18 @@ import * as Viewer from '../viewer';
 import * as BRRES from './brres';
 import * as CX from '../compression/CX';
 
-import { fetchData } from '../fetch';
-import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { BasicRRESRenderer } from './scenes';
+import { SceneContext } from '../SceneBase';
 
 class RTDLSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
-        return fetchData(`rtdl/${this.id}.brres`, abortSignal).then((buffer: ArrayBufferSlice) => {
+    public createScene(device: GfxDevice, abortSignal: AbortSignal, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const dataFetcher = context.dataFetcher;
+
+        return dataFetcher.fetchData(`rtdl/${this.id}.brres`).then((buffer: ArrayBufferSlice) => {
             return CX.decompress(buffer);
         }).then((buffer: ArrayBufferSlice): Viewer.SceneGfx => {
             const courseRRES = BRRES.parse(buffer);

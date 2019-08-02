@@ -11,12 +11,13 @@ import Progressable from '../Progressable';
 import { RoomRenderer, CtrTextureHolder, CmbInstance } from './render';
 import { SceneGroup } from '../viewer';
 import { assert, assertExists, hexzero } from '../util';
-import { fetchData, NamedArrayBufferSlice } from '../fetch';
+import { fetchData, NamedArrayBufferSlice, DataFetcher } from '../fetch';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { OoT3DRenderer, ModelCache, maybeDecompress } from './oot3d_scenes';
 import { TransparentBlack } from '../Color';
 import { mat4 } from 'gl-matrix';
 import AnimationController from '../AnimationController';
+import { SceneContext } from '../SceneBase';
 
 const pathBase = `mm3d`;
 
@@ -599,18 +600,19 @@ class SceneDesc implements Viewer.SceneDesc {
         this.id = id;
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, abortSignal: AbortSignal, context: SceneContext): Promise<Viewer.SceneGfx> {
         // Fetch the GAR & ZSI.
         const path_zar = `${pathBase}/scenes/${this.id}_info.gar`;
         const path_info_zsi = `${pathBase}/scenes/${this.id}_info.zsi`;
-        return Progressable.all([fetchData(path_zar, abortSignal), fetchData(path_info_zsi, abortSignal)]).then(([zar, zsi]) => {
-            return this.createSceneFromData(device, abortSignal, zar, zsi);
+        const dataFetcher = context.dataFetcher;
+        return Promise.all([dataFetcher.fetchData(path_zar), dataFetcher.fetchData(path_info_zsi)]).then(([zar, zsi]) => {
+            return this.createSceneFromData(device, dataFetcher, zar, zsi);
         });
     }
 
-    private spawnActorForRoom(device: GfxDevice, abortSignal: AbortSignal, renderer: OoT3DRenderer, roomRenderer: RoomRenderer, actor: ZSI.Actor, j: number): void {
-        function fetchArchive(archivePath: string): Progressable<ZAR.ZAR> { 
-            return renderer.modelCache.fetchArchive(`${pathBase}/actors/${archivePath}`, abortSignal);
+    private spawnActorForRoom(device: GfxDevice, renderer: OoT3DRenderer, roomRenderer: RoomRenderer, actor: ZSI.Actor, j: number): void {
+        function fetchArchive(archivePath: string): Promise<ZAR.ZAR> { 
+            return renderer.modelCache.fetchArchive(`${pathBase}/actors/${archivePath}`);
         }
 
         function buildModel(gar: ZAR.ZAR, modelPath: string, scale: number = 0.01): CmbInstance {
@@ -647,9 +649,9 @@ class SceneDesc implements Viewer.SceneDesc {
         else console.warn(`Unknown actor ${j} / ${stringifyActorId(actor.actorId)} / ${hexzero(actor.variable, 4)}`);
     }
 
-    private createSceneFromData(device: GfxDevice, abortSignal: AbortSignal, zarBuffer: NamedArrayBufferSlice, zsiBuffer: NamedArrayBufferSlice): Progressable<Viewer.SceneGfx> {
+    private createSceneFromData(device: GfxDevice, dataFetcher: DataFetcher, zarBuffer: NamedArrayBufferSlice, zsiBuffer: NamedArrayBufferSlice): Promise<Viewer.SceneGfx> {
         const textureHolder = new CtrTextureHolder();
-        const modelCache = new ModelCache();
+        const modelCache = new ModelCache(dataFetcher);
 
         const gar = ZAR.parse(maybeDecompress(zarBuffer));
 
@@ -663,7 +665,7 @@ class SceneDesc implements Viewer.SceneDesc {
             const filename = zsi.rooms[i].split('/').pop();
             const roomZSIName = `${pathBase}/scenes/${filename}`;
             roomZSINames.push(roomZSIName);
-            modelCache.fetchFileData(roomZSIName, abortSignal);
+            modelCache.fetchFileData(roomZSIName);
         }
 
         return modelCache.waitForLoad().then(() => {
@@ -688,7 +690,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 renderer.roomRenderers.push(roomRenderer);
 
                 for (let j = 0; j < roomSetup.actors.length; j++)
-                    this.spawnActorForRoom(device, abortSignal, renderer, roomRenderer, roomSetup.actors[j], j);
+                    this.spawnActorForRoom(device, renderer, roomRenderer, roomSetup.actors[j], j);
 
                 if (this.disabledRooms.includes(i))
                     roomRenderer.setVisible(false);

@@ -8,8 +8,6 @@ import * as U8 from './u8';
 import * as Yaz0 from '../compression/Yaz0';
 
 import { assert, readString, hexzero, assertExists } from '../util';
-import { fetchData } from '../fetch';
-import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { mat4 } from 'gl-matrix';
 import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render';
@@ -17,6 +15,7 @@ import AnimationController from '../AnimationController';
 import { BasicGXRendererHelper } from '../gx/gx_render';
 import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
 import { computeModelMatrixSRT, MathConstants } from '../MathHelpers';
+import { SceneContext } from '../SceneBase';
 
 class ModelCache {
     public rresCache = new Map<string, BRRES.RRES>();
@@ -681,13 +680,13 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
         return renderer;
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
-        return fetchData(`mkwii/${this.id}.szs`, abortSignal).then((buffer: ArrayBufferSlice) => {
-            return Yaz0.decompress(buffer);
-        }).then((buffer: ArrayBufferSlice) => {
-            const arc = U8.parse(buffer);
-            return MarioKartWiiSceneDesc.createSceneFromU8Archive(device, arc);
-        });
+    public async createScene(device: GfxDevice, abortSignal: AbortSignal, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const dataFetcher = context.dataFetcher;
+
+        const buffer = await dataFetcher.fetchData(`mkwii/${this.id}.szs`);
+        const decompressed = await Yaz0.decompress(buffer);
+        const arc = U8.parse(decompressed);
+        return MarioKartWiiSceneDesc.createSceneFromU8Archive(device, arc);
     }
 }
 

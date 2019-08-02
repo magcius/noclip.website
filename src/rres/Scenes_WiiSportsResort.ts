@@ -1,8 +1,6 @@
 
 import * as Viewer from "../viewer";
-import Progressable, { ProgressMeter } from "../Progressable";
 import { GfxDevice, GfxHostAccessPass } from "../gfx/platform/GfxPlatform";
-import { fetchData, NamedArrayBufferSlice } from "../fetch";
 import * as U8 from "./u8";
 import * as Yaz0 from "../compression/Yaz0";
 import * as BRRES from "./brres";
@@ -16,34 +14,7 @@ import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { Magenta } from "../Color";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { SceneContext } from "../SceneBase";
-
-class DataFetcher {
-    private fileProgressables: Progressable<any>[] = [];
-
-    constructor(private abortSignal: AbortSignal, private progressMeter: ProgressMeter) {
-    }
-
-    private calcProgress(): number {
-        let n = 0;
-        for (let i = 0; i < this.fileProgressables.length; i++)
-            n += this.fileProgressables[i].progress;
-        return n / this.fileProgressables.length;
-    }
-
-    private setProgress(): void {
-        this.progressMeter.setProgress(this.calcProgress());
-    }
-
-    public fetchData(path: string): PromiseLike<NamedArrayBufferSlice> {
-        const p = fetchData(path, this.abortSignal);
-        this.fileProgressables.push(p);
-        p.onProgress = () => {
-            this.setProgress();
-        };
-        this.setProgress();
-        return p.promise;
-    }
-}
+import { DataFetcher } from "../fetch";
 
 class ResourceSystem {
     private mounts: U8.U8Archive[] = [];
@@ -249,7 +220,7 @@ class IslandSceneDesc implements Viewer.SceneDesc {
 
     public async createScene(device: GfxDevice, abortSignal: AbortSignal, context: SceneContext): Promise<Viewer.SceneGfx> {
         // Fetch the SCN0.
-        const d = new DataFetcher(abortSignal, context.progressMeter);
+        const d = context.dataFetcher;
 
         const resourceSystem = new ResourceSystem();
         await fetchAndMount(resourceSystem, d, [
