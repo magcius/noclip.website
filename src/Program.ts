@@ -1,5 +1,4 @@
 
-import MemoizeCache from "./MemoizeCache";
 import CodeEditor from "./CodeEditor";
 import { assertExists, leftPad } from "./util";
 import { StructLayout, parseShaderSource } from "./gfx/helpers/UniformBufferHelpers";
@@ -341,6 +340,29 @@ void main() {
 interface ProgramKey {
     vert: string;
     frag: string;
+}
+
+abstract class MemoizeCache<TKey, TRes> {
+    private cache = new Map<string, TRes>();
+
+    protected abstract make(key: TKey): TRes | null;
+    protected abstract makeKey(key: TKey): string;
+
+    public get(key: TKey): TRes | null {
+        const keyStr = this.makeKey(key);
+        if (this.cache.has(keyStr)) {
+            return assertExists(this.cache.get(keyStr));
+        } else {
+            const obj = this.make(key);
+            if (obj !== null)
+                this.cache.set(keyStr, obj);
+            return obj;
+        }
+    }
+
+    public clear(): void {
+        this.cache.clear();
+    }
 }
 
 export class ProgramCache extends MemoizeCache<ProgramKey, ProgramWithKey> {

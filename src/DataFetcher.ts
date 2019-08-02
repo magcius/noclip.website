@@ -9,7 +9,7 @@ export interface NamedArrayBufferSlice extends ArrayBufferSlice {
 }
 
 function getDataStorageBaseURL(): string {
-    if (IS_DEVELOPMENT)
+    if (false && IS_DEVELOPMENT)
         return `/data`;
     else
         return `https://noclip.beyond3d.com`;
@@ -23,7 +23,7 @@ function getDataURLForPath(url: string): string {
 class DataFetcherRequest {
     public request: XMLHttpRequest | null = null;
     public progress: number = 0;
-    public ondone: ((slice: NamedArrayBufferSlice) => void) | null = null;
+    public ondone: (() => void) | null = null;
     public onprogress: (() => void) | null = null;
 
     public promise: Promise<NamedArrayBufferSlice>;
@@ -51,12 +51,19 @@ class DataFetcherRequest {
             const slice = new ArrayBufferSlice(buffer) as NamedArrayBufferSlice;
             slice.name = this.url;
             if (this.ondone !== null)
-                this.ondone(slice);
+                this.ondone();
             this.resolve(slice);
         };
         this.request.onerror = (e) => {
+            this.progress = 1.0;
+            if (this.onprogress !== null)
+                this.onprogress();
+
             // TODO(jstpierre): Proper error handling.
             console.error(`DataFetcherRequest error`, this, this.request, e);
+
+            if (this.ondone !== null)
+                this.ondone();
         };
         this.request.onprogress = (e) => {
             if (e.lengthComputable)

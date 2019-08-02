@@ -12,6 +12,7 @@ import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/Gfx
 import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, depthClearRenderPassDescriptor, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { SceneContext } from '../SceneBase';
+import { deswizzler } from './gx2_texture';
 
 enum SplatoonPass {
     SKYBOX = 0x01,
@@ -61,6 +62,8 @@ class SplatoonRenderer implements Viewer.SceneGfx {
             this.fmdlData[i].destroy(device);
         for (let i = 0; i < this.fmdlRenderers.length; i++)
             this.fmdlRenderers[i].destroy(device);
+
+        deswizzler.terminate();
     }
 }
 
