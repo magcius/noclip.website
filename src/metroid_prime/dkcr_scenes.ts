@@ -7,8 +7,6 @@ import { MREARenderer, RetroTextureHolder } from './render';
 
 import * as Viewer from '../viewer';
 import { assert } from '../util';
-import { fetchData } from '../fetch';
-import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { RetroSceneRenderer } from './scenes';
@@ -20,9 +18,9 @@ class DKCRSceneDesc implements Viewer.SceneDesc {
         this.id = filename;
     }
 
-    public createScene(device: GfxDevice, context: SceneContext): Progressable<Viewer.SceneGfx> {
-        const abortSignal = context.abortSignal;
-        return fetchData(`dkcr/${this.filename}`, abortSignal).then((buffer: ArrayBufferSlice) => {
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const dataFetcher = context.dataFetcher;
+        return dataFetcher.fetchData(`dkcr/${this.filename}`).then((buffer: ArrayBufferSlice) => {
             const levelPak = PAK.parse(buffer);
             const resourceSystem = new ResourceSystem([levelPak], null);
             for (const mlvlEntry of levelPak.namedResourceTable.values()) {

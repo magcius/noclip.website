@@ -1,8 +1,7 @@
 
 import * as Viewer from '../viewer';
-import Progressable from '../Progressable';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { fetchData } from '../fetch';
+import { DataFetcher } from '../fetch';
 import * as PPF from './ppf';
 import { PsychonautsRenderer, SceneRenderer } from './render';
 import { SceneContext } from '../SceneBase';
@@ -11,16 +10,16 @@ class PsychonautsSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
 
-    private fetchPPF(id: string, abortSignal: AbortSignal, hasScene: boolean): Progressable<PPF.PPAK> {
-        return fetchData(`psychonauts/${id}.ppf`, abortSignal).then((buffer) => {
+    private fetchPPF(id: string, dataFetcher: DataFetcher, hasScene: boolean): Promise<PPF.PPAK> {
+        return dataFetcher.fetchData(`psychonauts/${id}.ppf`).then((buffer) => {
             const ppf = PPF.parse(buffer, hasScene);
             return ppf;
         })
     }
 
-    public createScene(device: GfxDevice, context: SceneContext): Progressable<Viewer.SceneGfx> {
-        const abortSignal = context.abortSignal;
-        return Progressable.all([this.fetchPPF('common', abortSignal, false), this.fetchPPF(this.id, abortSignal, true)]).then(([commonPPF, scenePPF]) => {
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const dataFetcher = context.dataFetcher;
+        return Promise.all([this.fetchPPF('common', dataFetcher, false), this.fetchPPF(this.id, dataFetcher, true)]).then(([commonPPF, scenePPF]) => {
             const renderer = new PsychonautsRenderer();
             // TODO(jstpierre): Only translate the textures that are actually used.
             renderer.textureHolder.addTextures(device, commonPPF.textures);

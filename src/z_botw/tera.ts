@@ -4,8 +4,7 @@ import * as SARC from '../fres/sarc';
 import * as Yaz0 from '../compression/Yaz0';
 import { Area, LoadedTerrainArea, TerrainAreaRenderer, TerrainRenderer } from './render';
 import { AreaInfo, TSCB } from './tscb';
-import { fetchData } from '../fetch';
-import Progressable from '../Progressable';
+import { DataFetcher } from '../fetch';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { vec3 } from 'gl-matrix';
 import { assertExists, assert, nArray } from '../util';
@@ -151,7 +150,7 @@ export interface AreaArchive {
 }
 
 export class TerrainManager {
-    public archiveCache = new Map<string, Progressable<AreaArchive>>();
+    public archiveCache = new Map<string, Promise<AreaArchive>>();
 
     public quadTreeRoot: QuadTreeNode;
 
@@ -160,7 +159,7 @@ export class TerrainManager {
 
     public terrainRenderer: TerrainRenderer;
 
-    constructor(public device: GfxDevice, public abortSignal: AbortSignal, public tscb: TSCB, public terrainFRES: BFRES.FRES, public teraPath: string) {
+    constructor(public device: GfxDevice, public dataFetcher: DataFetcher, public tscb: TSCB, public terrainFRES: BFRES.FRES, public teraPath: string) {
         this.quadTreeRoot = this.buildQuadTree(0);
 
         const materialAlb = terrainFRES.ftex.find((e) => e.name === 'MaterialAlb');
@@ -269,20 +268,20 @@ export class TerrainManager {
         setRenderMasks(this.quadTreeRoot);
     }
 
-    public fetchAreaArchive(archiveName: string): Progressable<AreaArchive> {
+    public fetchAreaArchive(archiveName: string): Promise<AreaArchive> {
         if (this.archiveCache.has(archiveName))
             return this.archiveCache.get(archiveName);
 
-        const hght = fetchData(`${this.teraPath}/${archiveName}.hght.sstera`, this.abortSignal).then(decodeSSTERA);
-        const mate = fetchData(`${this.teraPath}/${archiveName}.mate.sstera`, this.abortSignal).then(decodeSSTERA);
-        const p = Progressable.all([hght, mate]).then(([hghtArc, mateArc]) => {
+        const hght = this.dataFetcher.fetchData(`${this.teraPath}/${archiveName}.hght.sstera`).then(decodeSSTERA);
+        const mate = this.dataFetcher.fetchData(`${this.teraPath}/${archiveName}.mate.sstera`).then(decodeSSTERA);
+        const p = Promise.all([hght, mate]).then(([hghtArc, mateArc]) => {
             return { hghtArc, mateArc };
         });
         this.archiveCache.set(archiveName, p);
         return p;
     }
 
-    public fetchAreaData(areaInfo: AreaInfo): Progressable<Area> {
+    public fetchAreaData(areaInfo: AreaInfo): Promise<Area> {
         const xMax = 256, zMax = 256;
 
         const lastChar = parseInt(areaInfo.filename[9], 16);

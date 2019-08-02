@@ -1,8 +1,6 @@
 
 import * as Viewer from "../viewer";
-import Progressable from "../Progressable";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { fetchData } from "../fetch";
 import { createBasicRRESRendererFromU8Buffer } from "./scenes";
 import { SceneContext } from "../SceneBase";
 

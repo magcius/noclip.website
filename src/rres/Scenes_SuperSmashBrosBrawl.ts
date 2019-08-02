@@ -7,8 +7,6 @@ import * as UI from '../ui';
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString, align } from "../util";
 import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
-import Progressable from '../Progressable';
-import { fetchData } from '../fetch';
 import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render';
 import AnimationController from '../AnimationController';
 import { GXMaterialHacks } from '../gx/gx_material';

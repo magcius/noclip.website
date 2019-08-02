@@ -6,8 +6,6 @@ import * as UI from '../ui';
 import * as BRRES from './brres';
 
 import { leftPad } from '../util';
-import { fetchData } from '../fetch';
-import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
 import { MDL0ModelInstance, MDL0Model, RRESTextureHolder } from './render';

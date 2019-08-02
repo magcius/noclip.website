@@ -7,8 +7,6 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { vec3 } from "gl-matrix";
 import { readString, assert, assertExists } from "../util";
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
-import Progressable from '../Progressable';
-import { fetchData } from '../fetch';
 import { MDL0ModelInstance, RRESTextureHolder, MDL0Model } from './render';
 import AnimationController from '../AnimationController';
 import { GXRenderHelperGfx } from '../gx/gx_render';

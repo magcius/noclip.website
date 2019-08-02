@@ -1,10 +1,8 @@
 
 import { SceneGroup } from '../viewer';
 import { SceneDesc, SceneContext } from '../SceneBase';
-import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { fetchData } from '../fetch';
 
 import * as MDL0 from './mdl0';
 import { SonicManiaRenderer } from './render';

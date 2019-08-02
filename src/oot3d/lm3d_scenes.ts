@@ -9,10 +9,8 @@ import * as CTXB from './ctxb';
 
 import * as Viewer from '../viewer';
 
-import Progressable from '../Progressable';
 import { CmbInstance, CmbData } from './render';
 import { SceneGroup } from '../viewer';
-import { fetchData } from '../fetch';
 import { leftPad } from '../util';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { GrezzoTextureHolder, MultiCmbScene } from './scenes';

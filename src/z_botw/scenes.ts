@@ -2,8 +2,6 @@
 import * as Viewer from "../viewer";
 import * as Yaz0 from "../compression/Yaz0";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import Progressable from "../Progressable";
-import { fetchData } from "../fetch";
 import * as TSCB from "./tscb";
 import * as BFRES from "../fres/bfres";
 import { TerrainManager } from "./tera";
@@ -12,8 +10,8 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { GX2TextureHolder } from "../fres/render";
 import { SceneContext } from "../SceneBase";
 
-function decodeFRES(buffer: ArrayBufferSlice): Progressable<BFRES.FRES> {
-    return new Progressable(Yaz0.decompress(buffer)).then((d) => BFRES.parse(d));
+function decodeFRES(buffer: ArrayBufferSlice): Promise<BFRES.FRES> {
+    return Yaz0.decompress(buffer).then((d) => BFRES.parse(d));
 }
 
 const pathBase = `z_botw`;
@@ -21,14 +19,14 @@ export class TerrainSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
 
-    public createScene(device: GfxDevice, context: SceneContext): Progressable<Viewer.SceneGfx> {
-        const abortSignal = context.abortSignal;
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const dataFetcher = context.dataFetcher;
         const teraPath = `${pathBase}/Terrain/A/${this.id}`;
-        return Progressable.all([fetchData(`${pathBase}/Model/Terrain.Tex1.sbfres`, abortSignal), fetchData(`${pathBase}/Model/Terrain.Tex2.sbfres`, abortSignal), fetchData(`${teraPath}.tscb`, abortSignal)]).then(([terrainTex1Buffer, terrainTex2Buffer, tscbBuffer]) => {
+        return Promise.all([dataFetcher.fetchData(`${pathBase}/Model/Terrain.Tex1.sbfres`), dataFetcher.fetchData(`${pathBase}/Model/Terrain.Tex2.sbfres`), dataFetcher.fetchData(`${teraPath}.tscb`)]).then(([terrainTex1Buffer, terrainTex2Buffer, tscbBuffer]) => {
             const tscb = TSCB.parse(tscbBuffer);
 
-            return Progressable.all([decodeFRES(terrainTex1Buffer), decodeFRES(terrainTex2Buffer)]).then(([tex1, tex2]) => {
-                const terrainManager = new TerrainManager(device, abortSignal, tscb, tex1, teraPath);
+            return Promise.all([decodeFRES(terrainTex1Buffer), decodeFRES(terrainTex2Buffer)]).then(([tex1, tex2]) => {
+                const terrainManager = new TerrainManager(device, dataFetcher, tscb, tex1, teraPath);
                 console.log(tex1, tex2);
                 const textureHolder = new GX2TextureHolder();
                 // Mangle things a bit.

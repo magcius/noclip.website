@@ -5,8 +5,6 @@ import * as Geo from './geo';
 import * as BYML from '../byml';
 
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
-import Progressable from '../Progressable';
-import { fetchData } from '../fetch';
 import { FakeTextureHolder, TextureHolder } from '../TextureHolder';
 import { textureToCanvas, N64Renderer, N64Data, BKPass } from './render';
 import { mat4 } from 'gl-matrix';

@@ -7,11 +7,10 @@ import * as ZSI from './zsi';
 
 import * as Viewer from '../viewer';
 
-import Progressable from '../Progressable';
 import { RoomRenderer, CtrTextureHolder, CmbInstance } from './render';
 import { SceneGroup } from '../viewer';
 import { assert, assertExists, hexzero } from '../util';
-import { fetchData, NamedArrayBufferSlice, DataFetcher } from '../fetch';
+import { NamedArrayBufferSlice, DataFetcher } from '../fetch';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { OoT3DRenderer, ModelCache, maybeDecompress } from './oot3d_scenes';
 import { TransparentBlack } from '../Color';

@@ -8,8 +8,6 @@ import { MREARenderer, RetroTextureHolder, CMDLRenderer, RetroPass, CMDLData } f
 import * as Viewer from '../viewer';
 import * as UI from '../ui';
 import { assert } from '../util';
-import { fetchData } from '../fetch';
-import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import * as BYML from '../byml';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
@@ -93,12 +91,12 @@ class MP1SceneDesc implements Viewer.SceneDesc {
         this.id = filename;
     }
 
-    public createScene(device: GfxDevice, context: SceneContext): Progressable<Viewer.SceneGfx> {
-        const abortSignal = context.abortSignal;
-        const stringsPakP = fetchData(`metroid_prime/mp1/Strings.pak`, abortSignal);
-        const levelPakP = fetchData(`metroid_prime/mp1/${this.filename}`, abortSignal);
-        const nameDataP = fetchData(`metroid_prime/mp1/MP1_NameData.crg1`, abortSignal);
-        return Progressable.all([levelPakP, stringsPakP, nameDataP]).then((datas: ArrayBufferSlice[]) => {
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const dataFetcher = context.dataFetcher;
+        const stringsPakP = dataFetcher.fetchData(`metroid_prime/mp1/Strings.pak`);
+        const levelPakP = dataFetcher.fetchData(`metroid_prime/mp1/${this.filename}`);
+        const nameDataP = dataFetcher.fetchData(`metroid_prime/mp1/MP1_NameData.crg1`);
+        return Promise.all([levelPakP, stringsPakP, nameDataP]).then((datas: ArrayBufferSlice[]) => {
             const levelPak = PAK.parse(datas[0]);
             const stringsPak = PAK.parse(datas[1]);
             const nameData = BYML.parse<NameData>(datas[2], BYML.FileType.CRG1);

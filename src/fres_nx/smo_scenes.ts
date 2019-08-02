@@ -2,10 +2,7 @@
 import * as Viewer from '../viewer';
 import * as Yaz0 from '../compression/Yaz0';
 import * as BYML from '../byml';
-
-import Progressable from '../Progressable';
-import { fetchData } from '../fetch';
-
+import { DataFetcher } from '../fetch';
 import * as SARC from '../fres/sarc';
 import * as BFRES from './bfres';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
@@ -22,9 +19,6 @@ class ResourceSystem {
     public mounts = new Map<string, SARC.SARC>();
     public bfresCache = new Map<string, BFRES.FRES | null>();
     public fmdlDataCache = new Map<string, FMDLData | null>();
-
-    public fetchSARC(device: GfxDevice, mountName: string, abortSignal: AbortSignal): void {
-    }
 
     public loadResource(device: GfxDevice, mountName: string, sarc: SARC.SARC): void {
         assert(!this.mounts.has(mountName));
@@ -121,8 +115,8 @@ class OdysseySceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string = id) {
     }
 
-    private _fetchSARC(arcPath: string, abortSignal: AbortSignal): Progressable<SARC.SARC | null> {
-        return fetchData(`${basePath}/${arcPath}`, abortSignal).then((buffer) => {
+    private _fetchSARC(arcPath: string, dataFetcher: DataFetcher): Promise<SARC.SARC | null> {
+        return dataFetcher.fetchData(`${basePath}/${arcPath}`).then((buffer) => {
             if (buffer.byteLength === 0) return null;
             return Yaz0.decompress(buffer).then((buffer) => SARC.parse(buffer));
         });
@@ -141,11 +135,11 @@ class OdysseySceneDesc implements Viewer.SceneDesc {
         return true;
     }
 
-    public createScene(device: GfxDevice, context: SceneContext): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const resourceSystem = new ResourceSystem();
-        const abortSignal = context.abortSignal;
+        const dataFetcher = context.dataFetcher;
 
-        return this._fetchSARC(`SystemData/WorldList.szs`, abortSignal).then((worldListSARC) => {
+        return this._fetchSARC(`SystemData/WorldList.szs`, dataFetcher).then((worldListSARC) => {
             type WorldListFromDb = { Name: string, StageList: [{ category: string, name: string }], WorldName: string, ScenarioNum: number, ClearMainScenario: number, AfterEndingScenario: number, MoonRockScenario: number };
             const worldList: WorldListFromDb[] = BYML.parse(worldListSARC.files.find((f) => f.name === 'WorldListFromDb.byml').buffer);
 
@@ -165,8 +159,8 @@ class OdysseySceneDesc implements Viewer.SceneDesc {
             let resources = assertExists(worldResource.find((r) => r.WorldName === world.WorldName)).WorldResource;
             resources = resources.filter((r) => this._shouldFetchWorldResource(r.Name));
 
-            const resourceLoad = Progressable.all(resources.map((r) => {
-                return this._fetchSARC(`${r.Name}.${r.Ext}`, abortSignal).then((sarc: SARC.SARC | null) => {
+            const resourceLoad = Promise.all(resources.map((r) => {
+                return this._fetchSARC(`${r.Name}.${r.Ext}`, dataFetcher).then((sarc: SARC.SARC | null) => {
                     if (sarc === null) return;
                     resourceSystem.loadResource(device, r.Name, sarc);
                 });
