@@ -1,9 +1,9 @@
 
-import { GXTextureHolder, MaterialParams, PacketParams, ColorKind, translateWrapModeGfx, ub_MaterialParams, loadedDataCoalescerComboGfx } from '../gx/gx_render';
+import { GXTextureHolder, MaterialParams, PacketParams, ColorKind, translateWrapModeGfx, ub_MaterialParams, loadedDataCoalescerComboGfx, ub_SceneParams, fillSceneParamsData, u_SceneParamsBufferSize, SceneParams, fillSceneParams } from '../gx/gx_render';
 import { GXRenderHelperGfx, GXMaterialHelperGfx, GXShapeHelperGfx, BasicGXRendererHelper } from '../gx/gx_render';
 
 import * as TPL from './tpl';
-import { TTYDWorld, Material, SceneGraphNode, Batch, SceneGraphPart, Sampler, MaterialAnimator, bindMaterialAnimator, AnimationEntry, MeshAnimator, bindMeshAnimator, MaterialLayer } from './world';
+import { TTYDWorld, Material, SceneGraphNode, Batch, SceneGraphPart, Sampler, MaterialAnimator, bindMaterialAnimator, AnimationEntry, MeshAnimator, bindMeshAnimator, MaterialLayer, DrawModeFlags } from './world';
 
 import * as Viewer from '../viewer';
 import { mat4 } from 'gl-matrix';
@@ -237,14 +237,15 @@ class BatchInstance {
         mat4.mul(dst, dst, this.nodeInstance.modelMatrix);
     }
 
-    public prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, renderInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.nodeInstance.visible)
             return;
 
         const renderInst = this.shapeHelper.pushRenderInst(renderHelper.renderInstManager);
+        this.nodeInstance.setOnRenderInst(renderInst, viewerInput);
         this.materialInstance.setOnRenderInst(device, renderHelper.renderInstManager.gfxRenderCache, renderInst);
         renderInst.setMegaStateFlags(this.nodeInstance.node.renderFlags);
-        this.computeModelView(this.packetParams.u_PosMtx[0], renderInput.camera);
+        this.computeModelView(this.packetParams.u_PosMtx[0], viewerInput.camera);
         this.shapeHelper.fillPacketParams(this.packetParams, renderInst);
         renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, this.nodeInstance.depth);
     }
@@ -254,6 +255,7 @@ class BatchInstance {
     }
 }
 
+const sceneParams = new SceneParams();
 const bboxScratch = new AABB();
 class NodeInstance {
     public visible: boolean = true;
@@ -262,9 +264,11 @@ class NodeInstance {
     public meshAnimator: MeshAnimator | null = null;
     public depth: number = 0;
     public namePath: string;
+    public isDecal: boolean;
 
-    constructor(public node: SceneGraphNode, parentNamePath: string) {
+    constructor(public node: SceneGraphNode, parentNamePath: string, private childIndex: number) {
         this.namePath = `${parentNamePath}/${node.nameStr}`;
+        this.isDecal = !!(node.drawModeFlags & DrawModeFlags.IS_DECAL);
     }
 
     public updateModelMatrix(parentMatrix: mat4): void {
@@ -274,6 +278,27 @@ class NodeInstance {
             mat4.mul(this.modelMatrix, parentMatrix, this.modelMatrix);
         } else {
             mat4.mul(this.modelMatrix, parentMatrix, this.node.modelMatrix);
+        }
+    }
+
+    public setOnRenderInst(renderInst: GfxRenderInst, viewerInput: Viewer.ViewerRenderInput): void {
+        if (this.isDecal) {
+            let offs = renderInst.allocateUniformBuffer(ub_SceneParams, u_SceneParamsBufferSize);
+            const d = renderInst.mapUniformBufferF32(ub_SceneParams);
+            fillSceneParams(sceneParams, viewerInput.camera, viewerInput.viewportWidth, viewerInput.viewportHeight);
+            // The game will actually adjust the projection matrix based on the child index, if the decal flag
+            // is set. This happens in _mapDispMapObj.
+            //
+            //      proj[5] = proj[5] * (1.0 + (indexBias * -2.0 * pCam->far * pCam->near) /
+            //                          (1.0 * (pCam->far + pCam->near) * (1.0 + indexBias)));
+            //
+            // TODO(jstpierre): This is designed for a GX viewport transform. Port it to OpenGL.
+
+            const indexBias = this.childIndex * 0.02;
+            const frustum = viewerInput.camera.frustum, far = frustum.far, near = frustum.near;
+            const depthBias = (1.0 + (indexBias * -2 * far * near) / (far + near) * (1.0 + indexBias));
+            sceneParams.u_Projection[10] *= depthBias;
+            fillSceneParamsData(d, offs, sceneParams);
         }
     }
 
@@ -476,12 +501,16 @@ export class WorldRenderer extends BasicGXRendererHelper {
         this.batchInstances.push(batchInstance);
     }
 
-    private translateSceneGraph(device: GfxDevice, node: SceneGraphNode, parentPath: string = ''): NodeInstance {
-        const nodeInstance = new NodeInstance(node, parentPath);
-        for (const part of node.parts)
-            this.translatePart(device, nodeInstance, part);
-        for (const child of node.children)
-            nodeInstance.children.push(this.translateSceneGraph(device, child, nodeInstance.namePath));
+    private translateSceneGraph(device: GfxDevice, node: SceneGraphNode, parentPath: string = '', childIndex: number = 0): NodeInstance {
+        const nodeInstance = new NodeInstance(node, parentPath, childIndex);
+        for (let i = 0; i < node.parts.length; i++)
+            this.translatePart(device, nodeInstance, node.parts[i]);
+        for (let i = 0; i < node.children.length; i++) {
+            const childInstance = this.translateSceneGraph(device, node.children[i], nodeInstance.namePath, i);
+            if (nodeInstance.isDecal)
+                childInstance.isDecal = true;
+            nodeInstance.children.push(childInstance);
+        }
         return nodeInstance;
     }
 

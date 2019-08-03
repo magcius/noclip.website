@@ -68,6 +68,10 @@ export interface SceneGraphPart {
     batch: Batch;
 }
 
+export const enum DrawModeFlags {
+    IS_DECAL = 0x10,
+}
+
 export interface SceneGraphNode {
     nameStr: string;
     typeStr: string;
@@ -77,6 +81,7 @@ export interface SceneGraphNode {
     parts: SceneGraphPart[];
     isTranslucent: boolean;
     renderFlags: Partial<GfxMegaStateDescriptor>;
+    drawModeFlags: DrawModeFlags;
     visible?: boolean;
 }
 
@@ -1032,9 +1037,11 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         const modelMatrix = mat4.create();
         computeModelMatrixSRT(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
 
-        const renderModeStructOffs = mainDataOffs + view.getUint32(offs + 0x58);
+        const drawModeStructOffs = mainDataOffs + view.getUint32(offs + 0x58);
         const cullModes: GX.CullMode[] = [GX.CullMode.FRONT, GX.CullMode.BACK, GX.CullMode.ALL, GX.CullMode.NONE];
-        const cullMode: GX.CullMode = cullModes[view.getUint8(renderModeStructOffs + 0x01)];
+        const cullMode: GX.CullMode = cullModes[view.getUint8(drawModeStructOffs + 0x01)];
+
+        const drawModeFlags: DrawModeFlags = view.getUint8(drawModeStructOffs + 0x02);
 
         const partTableCount = view.getUint32(offs + 0x5C);
         let partTableIdx = offs + 0x60;
@@ -1308,7 +1315,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             nextSibling = readSceneGraph(mainDataOffs + nextSiblingOffs);
 
         const renderFlags: Partial<GfxMegaStateDescriptor> = { cullMode: GX_Material.translateCullMode(cullMode) };
-        return { nameStr, typeStr, modelMatrix, bbox, children, parts, isTranslucent, renderFlags, nextSibling };
+        return { nameStr, typeStr, modelMatrix, bbox, children, parts, isTranslucent, renderFlags, drawModeFlags, nextSibling };
     }
 
     const rootNode = readSceneGraph(sceneGraphRootOffs);
