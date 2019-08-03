@@ -346,7 +346,8 @@ const sceneDescs = [
     new TwilightPrincessSceneDesc("Lake Hylia", "F_SP123"),
 
     new TwilightPrincessSceneDesc("Ordon Ranch", "F_SP00"),
-    new TwilightPrincessSceneDesc("Link's House Area", "F_SP103"),
+    new TwilightPrincessSceneDesc("Ordon Village", "F_SP103", ['R00_00']),
+    new TwilightPrincessSceneDesc("Link's House Area", "F_SP103", ['R01_00']),
     new TwilightPrincessSceneDesc("Ordon Woods", "F_SP104"),
     new TwilightPrincessSceneDesc("Faron Woods", "F_SP108"),
     new TwilightPrincessSceneDesc("Kakariko Village", "F_SP109"),
