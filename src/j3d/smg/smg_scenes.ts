@@ -505,12 +505,9 @@ class SMGRenderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        this.spawner.destroy(device);
-
         this.mainRenderTarget.destroy(device);
         this.sceneTexture.destroy(device);
         this.bloomRenderer.destroy(device);
-        this.renderHelper.destroy(device);
     }
 }
 
@@ -2433,6 +2430,8 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
 
     public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const renderHelper = new GXRenderHelperGfx(device);
+        context.destroyablePool.push(renderHelper);
+
         const gfxRenderCache = renderHelper.renderInstManager.gfxRenderCache;
         const modelCache = new ModelCache(device, gfxRenderCache, this.pathBase, context.dataFetcher);
 
@@ -2449,6 +2448,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
 
         const sceneObjHolder = new SceneObjHolder();
         sceneObjHolder.uiSystem = new UISystem(context.uiContainer);
+        context.destroyablePool.push(sceneObjHolder);
 
         return modelCache.waitForLoad().then(() => {
             const scenarioData = new ScenarioData(modelCache.getArchive(scenarioDataFilename));
@@ -2482,6 +2482,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
                 sceneObjHolder.messageDataHolder = null;
 
             const spawner = new SMGSpawner(galaxyName, this.pathBase, sceneObjHolder);
+            context.destroyablePool.push(spawner);
             spawner.requestArchives();
 
             return modelCache.waitForLoad().then(() => {

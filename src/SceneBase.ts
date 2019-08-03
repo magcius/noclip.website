@@ -7,12 +7,17 @@ export interface ProgressMeter {
     setProgress(progress: number): void;
 }
 
+export interface Destroyable {
+    destroy(device: GfxDevice): void;
+}
+
 export interface SceneContext {
     device: GfxDevice;
     abortSignal: AbortSignal;
     progressMeter: ProgressMeter;
     dataFetcher: DataFetcher;
     uiContainer: HTMLElement;
+    destroyablePool: Destroyable[];
 }
 
 export interface SceneDesc {

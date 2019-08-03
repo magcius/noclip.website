@@ -75,7 +75,7 @@ import { standardFullClearRenderPassDescriptor } from './gfx/helpers/RenderTarge
 
 import * as Sentry from '@sentry/browser';
 import { GIT_REVISION, IS_DEVELOPMENT } from './BuildVersion';
-import { SceneDesc, SceneGroup, SceneContext, getSceneDescs, ProgressMeter } from './SceneBase';
+import { SceneDesc, SceneGroup, SceneContext, getSceneDescs, ProgressMeter, Destroyable } from './SceneBase';
 import { prepareFrameDebugOverlayCanvas2D } from './DebugJunk';
 import { downloadBlob, downloadBufferSlice, downloadBuffer } from './DownloadUtils';
 
@@ -136,47 +136,6 @@ function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
     return new Response(blob).arrayBuffer();
 }
 
-class SceneLoader {
-    public loadingSceneDesc: SceneDesc = null;
-    public abortController: AbortController | null = null;
-
-    constructor(public viewer: Viewer, public sceneUIContainer: HTMLElement) {
-    }
-
-    public loadSceneDesc(sceneDesc: SceneDesc, progressMeter: ProgressMeter): PromiseLike<SceneGfx> {
-        if (this.abortController !== null)
-            this.abortController.abort();
-        this.abortController = new AbortController();
-
-        this.loadingSceneDesc = sceneDesc;
-
-        const device = this.viewer.gfxDevice;
-        const abortSignal = this.abortController.signal;
-        const dataFetcher = new DataFetcher(abortSignal, progressMeter);
-        const uiContainer: HTMLElement = document.createElement('div');
-        this.sceneUIContainer.appendChild(uiContainer);
-        const context: SceneContext = {
-            device, abortSignal, progressMeter, dataFetcher, uiContainer,
-        };
-
-        const promise = sceneDesc.createScene(device, context);
-
-        if (promise !== null) {
-            promise.then((scene: SceneGfx) => {
-                if (this.loadingSceneDesc === sceneDesc) {
-                    this.loadingSceneDesc = null;
-                    this.abortController = null;
-                    this.viewer.setScene(scene);
-                }
-            });
-            return promise;
-        }
-
-        console.error(`Cannot load ${sceneDesc.id}. Probably an unsupported file extension.`);
-        throw "whoops";
-    }
-}
-
 function convertCanvasToPNG(canvas: HTMLCanvasElement): Promise<Blob> {
     return new Promise((resolve) => canvas.toBlob((b) => resolve(b), 'image/png'));
 }
@@ -210,7 +169,9 @@ class Main {
     private currentSceneGroup: SceneGroup;
     private currentSceneDesc: SceneDesc;
 
-    private sceneLoader: SceneLoader;
+    private loadingSceneDesc: SceneDesc = null;
+    private abortController: AbortController | null = null;
+    private destroyablePool: Destroyable[] = [];
 
     constructor() {
         this.toplevel = document.createElement('div');
@@ -249,8 +210,6 @@ class Main {
         };
 
         this._makeUI();
-
-        this.sceneLoader = new SceneLoader(this.viewer, this.ui.sceneUIContainer);
 
         this.groups = sceneGroups;
 
@@ -568,9 +527,16 @@ class Main {
         if (this.currentSceneDesc === sceneDesc)
             return;
 
+        const device = this.viewer.gfxDevice;
+
         // Tear down old scene.
+        if (this.abortController !== null)
+            this.abortController.abort();
         this.ui.destroyScene();
         this.viewer.setScene(null);
+        for (let i = 0; i < this.destroyablePool.length; i++)
+            this.destroyablePool[i].destroy(device);
+        this.abortController = new AbortController();
         gfxDeviceGetImpl(this.viewer.gfxDevice).checkForLeaks();
 
         // Unhide any hidden scene groups upon being loaded.
@@ -582,9 +548,32 @@ class Main {
         this.ui.sceneSelect.setCurrentDesc(this.currentSceneGroup, this.currentSceneDesc);
 
         this.ui.sceneSelect.setProgress(0);
-        this.sceneLoader.loadSceneDesc(sceneDesc, this.ui.sceneSelect).then((scene) => {
-            this._onSceneChanged(scene, sceneStateStr);
-            return scene;
+
+        const abortSignal = this.abortController.signal;
+        const progressMeter = this.ui.sceneSelect;
+        const dataFetcher = new DataFetcher(abortSignal, progressMeter);
+        const uiContainer: HTMLElement = document.createElement('div');
+        this.ui.sceneUIContainer.appendChild(uiContainer);
+        const destroyablePool: Destroyable[] = this.destroyablePool;
+        const context: SceneContext = {
+            device, abortSignal, progressMeter, dataFetcher, uiContainer, destroyablePool,
+        };
+
+        this.loadingSceneDesc = sceneDesc;
+        const promise = sceneDesc.createScene(device, context);
+
+        if (promise === null) {
+            console.error(`Cannot load ${sceneDesc.id}. Probably an unsupported file extension.`);
+            throw "whoops";
+        }
+
+        promise.then((scene: SceneGfx) => {
+            if (this.loadingSceneDesc === sceneDesc) {
+                this.loadingSceneDesc = null;
+                this.abortController = null;
+                this.viewer.setScene(scene);
+                this._onSceneChanged(scene, sceneStateStr);
+            }
         });
 
         // Set window title.
@@ -603,7 +592,7 @@ class Main {
             category: 'loadScene',
             message: sceneDescId,
         });
-        
+
         Sentry.configureScope((scope) => {
             scope.setExtra('sceneDescId', sceneDescId);
         });
