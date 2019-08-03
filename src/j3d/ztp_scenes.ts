@@ -327,11 +327,12 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private fetchRarc(path: string, dataFetcher: DataFetcher): Promise<RARC.RARC | null> {
-        return dataFetcher.fetchData(path, DataFetcherFlags.ALLOW_404).then((buffer: ArrayBufferSlice) => {
-            if (buffer.byteLength === 0) return null;
-            return Yaz0.decompress(buffer).then((buffer: ArrayBufferSlice) => RARC.parse(buffer));
-        });
+    private async fetchRarc(path: string, dataFetcher: DataFetcher): Promise<RARC.RARC | null> {
+        const buffer = await dataFetcher.fetchData(path, DataFetcherFlags.ALLOW_404);
+        if (buffer.byteLength === 0)
+            return null;
+        const decompressed = await Yaz0.decompress(buffer);
+        return RARC.parse(decompressed);
     }
 }
 
