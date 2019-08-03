@@ -510,10 +510,11 @@ function _compileVtxLoader(desc: VtxLoaderDesc): VtxLoader {
     function compileVtxArrayViews(): string {
         const sources = [];
         for (let vtxAttrib: GX.VertexAttribute = 0; vtxAttrib <= GX.VertexAttribute.MAX; vtxAttrib++) {
-            const dstAttribLayout = loadedVertexLayout.dstVertexAttributeLayouts.find((layout) => layout.vtxAttrib === vtxAttrib);
+            if (vcd[vtxAttrib] === undefined)
+                continue;
 
-            const outputEnabled = !!dstAttribLayout;
-            if (!outputEnabled)
+            const dstAttribLayout = loadedVertexLayout.dstVertexAttributeLayouts.find((layout) => layout.vtxAttrib === vtxAttrib);
+            if (dstAttribLayout === undefined)
                 continue;
 
             const attrType = vcd[vtxAttrib].type;
