@@ -133,6 +133,7 @@ class SonicColorsSceneDesc implements Viewer.SceneDesc {
             const texRRES = BRRES.parse(texRRESData);
 
             const renderer = new SonicColorsRenderer(device);
+            context.destroyablePool.push(renderer);
             const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
             renderer.textureHolder.addRRESTextures(device, texRRES);
 

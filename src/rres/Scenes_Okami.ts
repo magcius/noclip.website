@@ -732,6 +732,7 @@ class OkamiSceneDesc implements Viewer.SceneDesc {
 
         return dataFetcher.fetchData(`${pathBase}/${this.id}.dat`).then((datArcBuffer: ArrayBufferSlice) => {
             const renderer = new OkamiRenderer(device);
+            context.destroyablePool.push(renderer);
 
             const datArc = parseArc(datArcBuffer);
 

@@ -754,16 +754,6 @@ class SceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string, public setupIndex: number = -1) {
     }
 
-    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        // Fetch the ZAR & info ZSI.
-        const path_zar = `${pathBase}/scene/${this.id}.zar`;
-        const path_info_zsi = `${pathBase}/scene/${this.id}_info.zsi`;
-        const dataFetcher = context.dataFetcher;
-        return Promise.all([dataFetcher.fetchData(path_zar, DataFetcherFlags.ALLOW_404), dataFetcher.fetchData(path_info_zsi)]).then(([zar, zsi]) => {
-            return this.createSceneFromData(device, dataFetcher, zar, zsi);
-        });
-    }
-
     private spawnActorForRoom(device: GfxDevice, scene: Scene, renderer: OoT3DRenderer, roomRenderer: RoomRenderer, actor: ZSI.Actor, j: number): void {
         function fetchArchive(archivePath: string): Promise<ZAR.ZAR> { 
             return renderer.modelCache.fetchArchive(`${pathBase}/actor/${archivePath}`);
@@ -1978,7 +1968,16 @@ class SceneDesc implements Viewer.SceneDesc {
         }
     }
 
-    private createSceneFromData(device: GfxDevice, dataFetcher: DataFetcher, zarBuffer: ArrayBufferSlice, zsiBuffer: ArrayBufferSlice): Promise<Viewer.SceneGfx> {
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const path_zar = `${pathBase}/scene/${this.id}.zar`;
+        const path_info_zsi = `${pathBase}/scene/${this.id}_info.zsi`;
+        const dataFetcher = context.dataFetcher;
+
+        const [zarBuffer, zsiBuffer] = await Promise.all([
+            dataFetcher.fetchData(path_zar, DataFetcherFlags.ALLOW_404),
+            dataFetcher.fetchData(path_info_zsi),
+        ]);
+
         const textureHolder = new CtrTextureHolder();
         const modelCache = new ModelCache(dataFetcher);
 
@@ -1988,8 +1987,8 @@ class SceneDesc implements Viewer.SceneDesc {
         assert(zsi.rooms !== null);
 
         const renderer = new OoT3DRenderer(device, textureHolder, zsi, modelCache);
+        context.destroyablePool.push(renderer);
 
-        // TODO(jstpierre): Fix this.
         const scene = chooseSceneFromId(this.id);
 
         const roomZSINames: string[] = [];

@@ -196,15 +196,6 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
         this.id = '' + this.levelId;
     }
 
-    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        const dataFetcher = context.dataFetcher;
-        return dataFetcher.fetchData('sm64ds/sm64ds.crg1').then((result: ArrayBufferSlice) => {
-            const crg1 = BYML.parse<Sm64DSCRG1>(result, BYML.FileType.CRG1);
-            const textureHolder = new NITROTextureHolder();
-            return this._createSceneFromCRG1(device, textureHolder, crg1, dataFetcher);
-        });
-    }
-
     private _createBMDRenderer(device: GfxDevice, renderer: SM64DSRenderer, filename: string, scale: number, level: CRG1Level, isSkybox: boolean): Promise<BMDModelInstance> {
         const modelCache = renderer.modelCache;
         return modelCache.fetchModel(device, filename).then((bmdData: BMDData) => {
@@ -416,11 +407,16 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
         }
     }
 
-    private _createSceneFromCRG1(device: GfxDevice, textureHolder: NITROTextureHolder, crg1: Sm64DSCRG1, dataFetcher: DataFetcher): Promise<Viewer.SceneGfx> {
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const dataFetcher = context.dataFetcher;
+        const crg1Buffer = await dataFetcher.fetchData('sm64ds/sm64ds.crg1');
+        const crg1 = BYML.parse<Sm64DSCRG1>(crg1Buffer, BYML.FileType.CRG1);
         const level = crg1.Levels[this.levelId];
-        const modelCache = new ModelCache(dataFetcher);
 
+        const modelCache = new ModelCache(dataFetcher);
+        const textureHolder = new NITROTextureHolder();
         const renderer = new SM64DSRenderer(device, modelCache, textureHolder);
+        context.destroyablePool.push(renderer);
 
         this._createBMDRenderer(device, renderer, level.MapBmdFile, GLOBAL_SCALE, level, false);
 
