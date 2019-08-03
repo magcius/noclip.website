@@ -294,7 +294,7 @@ class NodeInstance {
             //
             // TODO(jstpierre): This is designed for a GX viewport transform. Port it to OpenGL.
 
-            const indexBias = this.childIndex * 0.02;
+            const indexBias = this.childIndex * 0.01;
             const frustum = viewerInput.camera.frustum, far = frustum.far, near = frustum.near;
             const depthBias = (1.0 + (indexBias * -2 * far * near) / (far + near) * (1.0 + indexBias));
             sceneParams.u_Projection[10] *= depthBias;

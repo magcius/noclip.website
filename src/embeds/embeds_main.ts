@@ -108,7 +108,10 @@ class Main {
     private async loadScene(hash: string) {
         const [file, name] = hash.split('/');
         const device = this.viewer.gfxDevice;
-        const dataFetcher = new DataFetcher(new AbortSignal(), { setProgress: () => {} });
+        const progressMeter = { setProgress: () => {} };
+        const abortController = new AbortController();
+        const abortSignal = abortController.signal;
+        const dataFetcher = new DataFetcher(abortSignal, progressMeter);
         const createScene = embeds[file];
         const scene = await createScene(device, dataFetcher, name);
         this.viewer.setScene(scene);
