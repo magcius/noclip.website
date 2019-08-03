@@ -77,6 +77,8 @@ class Main {
     public viewer: Viewer.Viewer;
     private canvas: HTMLCanvasElement;
     private fsButton: FsButton;
+    private destroyablePool: Destroyable[] = [];
+    private abortController: AbortController | null = null;
 
     constructor() {
         this.canvas = document.createElement('canvas');
@@ -89,16 +91,14 @@ class Main {
 
         document.body.appendChild(this.canvas);
         window.onresize = this.onResize.bind(this);
+        window.onhashchange = this.loadFromHash.bind(this);
 
         this.fsButton = new FsButton();
         document.body.appendChild(this.fsButton.elem);
 
-        // Dispatch to the main embed.
-        const hash = window.location.hash.slice(1);
-
         this.onResize();
-        this.loadScene(hash);
 
+        this.loadFromHash();
         this._updateLoop(0);
     }
 
@@ -107,16 +107,31 @@ class Main {
         window.requestAnimationFrame(this._updateLoop);
     };
 
+    private loadFromHash(): void {
+        const hash = window.location.hash.slice(1);
+        this.loadScene(hash);
+    }
+
     private async loadScene(hash: string) {
         const firstSlash = hash.indexOf('/');
         const embedId = hash.slice(0, firstSlash);
         const state = hash.slice(firstSlash + 1);
+
         const device = this.viewer.gfxDevice;
+        // Destroy the old scene.
+        for (let i = 0; i < this.destroyablePool.length; i++)
+            this.destroyablePool[i].destroy(device);
+        this.destroyablePool.length = 0;
+
+        if (this.abortController !== null)
+            this.abortController.abort();
+
+        // TODO(jstpierre): ProgressMeter
         const progressMeter = { setProgress: () => {} };
-        const abortController = new AbortController();
-        const abortSignal = abortController.signal;
+        this.abortController = new AbortController();
+        const abortSignal = this.abortController.signal;
+        const destroyablePool = this.destroyablePool;
         const dataFetcher = new DataFetcher(abortSignal, progressMeter);
-        const destroyablePool: Destroyable[] = [];
         // TODO(jstpierre): Support uiContainer in embeds.
         const uiContainer = document.createElement('div');
         const context: SceneContext = { device, dataFetcher, destroyablePool, uiContainer };
