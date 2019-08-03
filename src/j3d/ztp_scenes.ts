@@ -1,6 +1,6 @@
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { DataFetcher } from '../DataFetcher';
+import { DataFetcher, DataFetcherFlags } from '../DataFetcher';
 import * as Viewer from '../viewer';
 import * as Yaz0 from '../compression/Yaz0';
 import * as UI from '../ui';
@@ -328,7 +328,8 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
     }
 
     private fetchRarc(path: string, dataFetcher: DataFetcher): Promise<RARC.RARC | null> {
-        return dataFetcher.fetchData(path).then((buffer: ArrayBufferSlice) => {
+        return dataFetcher.fetchData(path, DataFetcherFlags.ALLOW_404).then((buffer: ArrayBufferSlice) => {
+            if (buffer.byteLength === 0) return null;
             return Yaz0.decompress(buffer).then((buffer: ArrayBufferSlice) => RARC.parse(buffer));
         });
     }
