@@ -23,6 +23,7 @@ import { makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { computeViewMatrix } from '../Camera';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { SceneContext } from '../SceneBase';
 
 const scale = 200;
 const posMtx = mat4.create();
@@ -216,7 +217,10 @@ class SeaRenderer extends SunshineRenderer {
     }
 }
 
-export function createScene(device: GfxDevice, dataFetcher: DataFetcher, name: string): Promise<SceneGfx> {
+export function createScene(context: SceneContext, name: string): Promise<SceneGfx> {
+    const device = context.device;
+    const dataFetcher = context.dataFetcher;
+
     return dataFetcher.fetchData("j3d/sms/dolpic0.szs").then((buffer: ArrayBufferSlice) => {
         return Yaz0.decompress(buffer);
     }).then((buffer: ArrayBufferSlice) => {

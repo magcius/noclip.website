@@ -479,7 +479,7 @@ export class OrbitCameraController implements CameraController {
             this.tyVel += inputManager.dy * (-10 - Math.min(this.z, 0.01)) /  5000;
         } else if (inputManager.isDragging()) {
             this.xVel += inputManager.dx / -200 * invertXMult;
-            this.yVel += inputManager.dy /  200 * invertYMult;
+            this.yVel += inputManager.dy / -200 * invertYMult;
         } else if (shouldOrbit) {
             if (Math.abs(this.xVel) < Math.abs(this.orbitSpeed))
                 this.xVel += this.orbitSpeed * 1/50;

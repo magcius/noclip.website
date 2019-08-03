@@ -556,7 +556,7 @@ class Main {
         this.ui.sceneUIContainer.appendChild(uiContainer);
         const destroyablePool: Destroyable[] = this.destroyablePool;
         const context: SceneContext = {
-            device, abortSignal, progressMeter, dataFetcher, uiContainer, destroyablePool,
+            device, dataFetcher, uiContainer, destroyablePool,
         };
 
         this.loadingSceneDesc = sceneDesc;

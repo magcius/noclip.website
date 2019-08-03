@@ -13,8 +13,6 @@ export interface Destroyable {
 
 export interface SceneContext {
     device: GfxDevice;
-    abortSignal: AbortSignal;
-    progressMeter: ProgressMeter;
     dataFetcher: DataFetcher;
     uiContainer: HTMLElement;
     destroyablePool: Destroyable[];

@@ -13,13 +13,15 @@ import * as Viewer from '../viewer';
 import { OrbitCameraController } from '../Camera';
 
 import * as sunshine_water from './sunshine_water';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
+import * as orbitview from './orbitview';
 import { DataFetcher } from '../DataFetcher';
+import { SceneContext, Destroyable } from '../SceneBase';
 
-type CreateSceneFunc = (device: GfxDevice, dataFetcher: DataFetcher, name: string) => Promise<Viewer.SceneGfx>;
+type CreateSceneFunc = (context: SceneContext, state: string) => Promise<Viewer.SceneGfx>;
 
 const embeds: { [key: string]: CreateSceneFunc } = {
     "sunshine_water": sunshine_water.createScene,
+    "orbitview": orbitview.createScene,
 };
 
 class FsButton {
@@ -106,14 +108,20 @@ class Main {
     };
 
     private async loadScene(hash: string) {
-        const [file, name] = hash.split('/');
+        const firstSlash = hash.indexOf('/');
+        const embedId = hash.slice(0, firstSlash);
+        const state = hash.slice(firstSlash + 1);
         const device = this.viewer.gfxDevice;
         const progressMeter = { setProgress: () => {} };
         const abortController = new AbortController();
         const abortSignal = abortController.signal;
         const dataFetcher = new DataFetcher(abortSignal, progressMeter);
-        const createScene = embeds[file];
-        const scene = await createScene(device, dataFetcher, name);
+        const destroyablePool: Destroyable[] = [];
+        // TODO(jstpierre): Support uiContainer in embeds.
+        const uiContainer = document.createElement('div');
+        const context: SceneContext = { device, dataFetcher, destroyablePool, uiContainer };
+        const createScene = embeds[embedId];
+        const scene = await createScene(context, state);
         this.viewer.setScene(scene);
         this.viewer.setCameraController(new OrbitCameraController());
     }

@@ -121,7 +121,7 @@ export class DataFetcher {
     public maxParallelRequests: number = 2;
     public aborted: boolean = false;
 
-    constructor(private abortSignal: AbortSignal, private progressMeter: ProgressMeter) {
+    constructor(private abortSignal: AbortSignal, public progressMeter: ProgressMeter) {
         abortSignal.addEventListener('abort', () => {
             this.aborted = true;
             for (let i = 0; i < this.requests.length; i++)
@@ -153,11 +153,10 @@ export class DataFetcher {
         }
     }
 
-    public fetchData(path: string, flags: DataFetcherFlags = 0): Promise<NamedArrayBufferSlice | null> {
+    public fetchURL(url: string, flags: DataFetcherFlags = 0): Promise<NamedArrayBufferSlice | null> {
         if (this.aborted)
             throw new Error("Tried to fetch new data while aborted; should not happen");
 
-        const url = getDataURLForPath(path);
         const request = new DataFetcherRequest(url, flags);
         this.requests.push(request);
         request.ondone = () => {
@@ -171,5 +170,10 @@ export class DataFetcher {
         };
         this.pump();
         return request.promise!;
+    }
+
+    public fetchData(path: string, flags: DataFetcherFlags = 0): Promise<NamedArrayBufferSlice | null> {
+        const url = getDataURLForPath(path);
+        return this.fetchURL(url, flags);
     }
 }
