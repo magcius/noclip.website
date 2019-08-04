@@ -473,7 +473,7 @@ class SMGRenderer implements Viewer.SceneGfx {
         this.execute(passRenderer, DrawType.EFFECT_DRAW_AFTER_INDIRECT);
 
         // executeDrawImageEffect()
-        if (this.isNormalBloomOn()) {
+        if (this.isNormalBloomOn() && this.bloomRenderer.pipelinesReady(device)) {
             passRenderer.endPass(null);
             device.submitPass(passRenderer);
 

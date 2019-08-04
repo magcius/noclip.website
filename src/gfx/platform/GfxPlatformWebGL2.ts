@@ -1166,8 +1166,18 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             return true;
         } else {
             if (this._KHR_parallel_shader_compile !== null) {
-                const glProgram = pipeline.program.deviceProgram.glProgram;
-                pipeline.ready = this.gl.getProgramParameter(glProgram, this._KHR_parallel_shader_compile.COMPLETION_STATUS_KHR);
+                const gl = this.gl;
+                const deviceProgram = pipeline.program.deviceProgram;
+                const prog = deviceProgram.glProgram;
+                pipeline.ready = gl.getProgramParameter(prog, this._KHR_parallel_shader_compile.COMPLETION_STATUS_KHR);
+
+                if (pipeline.ready) {
+                    if (IS_DEVELOPMENT && !gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+                        console.error(deviceProgram.vert);
+                        console.error(deviceProgram.frag);
+                        console.error(gl.getProgramInfoLog(prog));
+                    }
+                }
             } else {
                 pipeline.ready = true;
             }
@@ -1439,6 +1449,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     private setPipeline(pipeline: GfxRenderPipeline): void {
         this._currentPipeline = pipeline as GfxRenderPipelineP_GL;
+        assert(this.queryPipelineReady(this._currentPipeline));
         this._setMegaState(this._currentPipeline.megaState);
 
         // Hotpatch support.

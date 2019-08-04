@@ -1,15 +1,15 @@
 
 import { DeviceProgram } from "../../Program";
 import { TextureMapping } from "../../TextureHolder";
-import { nArray } from "../../util";
-import { GfxRenderPassDescriptor, GfxLoadDisposition, GfxDevice, GfxRenderPass, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxBindingLayoutDescriptor, GfxMipFilterMode, GfxBufferUsage, GfxBufferFrequencyHint, GfxBlendMode, GfxBlendFactor, GfxHostAccessPass, GfxProgram } from "../../gfx/platform/GfxPlatform";
+import { nArray, assert } from "../../util";
+import { GfxRenderPassDescriptor, GfxLoadDisposition, GfxDevice, GfxRenderPass, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxBindingLayoutDescriptor, GfxMipFilterMode, GfxBufferUsage, GfxBufferFrequencyHint, GfxBlendMode, GfxBlendFactor, GfxHostAccessPass, GfxProgram, GfxRenderPipelineDescriptor, GfxPrimitiveTopology, GfxRenderPipeline, GfxMegaStateDescriptor } from "../../gfx/platform/GfxPlatform";
 import { TransparentBlack } from "../../Color";
 import { copyRenderPassDescriptor, DepthStencilAttachment, DEFAULT_NUM_SAMPLES, makeEmptyRenderPassDescriptor, ColorAttachment, ColorTexture, PostFXRenderTarget, BasicRenderTarget, noClearRenderPassDescriptor } from "../../gfx/helpers/RenderTargetHelpers";
 import { fillVec4 } from "../../gfx/helpers/UniformBufferHelpers";
 import { ViewerRenderInput, Viewer } from "../../viewer";
 import { GfxRenderInst, GfxRenderInstManager } from "../../gfx/render/GfxRenderer2";
 import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
-import { fullscreenMegaState } from "../../gfx/helpers/GfxMegaStateDescriptorHelpers";
+import { fullscreenMegaState, copyMegaState, makeMegaState } from "../../gfx/helpers/GfxMegaStateDescriptorHelpers";
 
 // Should I try to do this with GX? lol.
 class BloomPassBaseProgram extends DeviceProgram {
@@ -202,10 +202,22 @@ export class BloomPostFXParameters {
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 1 }];
 
+function makeFullscreenPipeline(device: GfxDevice, cache: GfxRenderCache, program: DeviceProgram, megaStateDescriptor: GfxMegaStateDescriptor = fullscreenMegaState): GfxRenderPipeline {
+    const gfxProgram = cache.createProgram(device, program);
+    return cache.createRenderPipeline(device, {
+        bindingLayouts,
+        inputLayout: null,
+        megaStateDescriptor,
+        topology: GfxPrimitiveTopology.TRIANGLES,
+        program: gfxProgram,
+    });
+}
+
 export class BloomPostFXRenderer {
-    private fullscreenGfxProgram: GfxProgram;
-    private blurGfxProgram: GfxProgram;
-    private bokehGfxProgram: GfxProgram;
+    private fullscreenCopyPipeline: GfxRenderPipeline;
+    private blurPipeline: GfxRenderPipeline;
+    private bokehPipeline: GfxRenderPipeline;
+    private fullscreenCombinePipeline: GfxRenderPipeline;
 
     private bloomSampler: GfxSampler;
     private textureMapping: TextureMapping[] = nArray(1, () => new TextureMapping());
@@ -230,9 +242,14 @@ export class BloomPostFXRenderer {
 
         this.bloomObjectsTarget = new WeirdFancyRenderTarget(mainRenderTarget.depthStencilAttachment);
 
-        this.fullscreenGfxProgram = cache.createProgram(device, new BloomPassFullscreenCopyProgram());
-        this.blurGfxProgram = cache.createProgram(device, new BloomPassBlurProgram());
-        this.bokehGfxProgram = cache.createProgram(device, new BloomPassBokehProgram());
+        this.fullscreenCopyPipeline = makeFullscreenPipeline(device, cache, new BloomPassFullscreenCopyProgram());
+        this.blurPipeline = makeFullscreenPipeline(device, cache, new BloomPassBlurProgram());
+        this.bokehPipeline = makeFullscreenPipeline(device, cache, new BloomPassBokehProgram());
+        this.fullscreenCombinePipeline = makeFullscreenPipeline(device, cache, new BloomPassFullscreenCopyProgram(), makeMegaState({
+            blendMode: GfxBlendMode.ADD,
+            blendSrcFactor: GfxBlendFactor.ONE,
+            blendDstFactor: GfxBlendFactor.ONE,
+        }, fullscreenMegaState));
     }
 
     public allocateParameterBuffer(renderInstManager: GfxRenderInstManager, bloomParameters: BloomPostFXParameters): number {
@@ -246,7 +263,21 @@ export class BloomPostFXRenderer {
         return parameterBufferOffs;
     }
 
+    public pipelinesReady(device: GfxDevice): boolean {
+        if (!device.queryPipelineReady(this.fullscreenCopyPipeline))
+            return false;
+        if (!device.queryPipelineReady(this.blurPipeline))
+            return false;
+        if (!device.queryPipelineReady(this.bokehPipeline))
+            return false;
+        if (!device.queryPipelineReady(this.fullscreenCombinePipeline))
+            return false;
+        return true;
+    }
+
     public renderBeginObjects(device: GfxDevice, viewerInput: ViewerRenderInput): GfxRenderPass {
+        assert(this.pipelinesReady(device));
+
         this.bloomObjectsTexture.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
         this.bloomObjectsTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
         const rt = this.bloomObjectsTarget.createRenderPass(device, bloomClearRenderPassDescriptor);
@@ -277,7 +308,7 @@ export class BloomPostFXRenderer {
         // Downsample.
         const downsamplePassRenderer = downsampleColorTarget.createRenderPass(device, noClearRenderPassDescriptor);
         downsamplePassRenderer.setViewport(targetWidth, targetHeight);
-        renderInst.setGfxProgram(this.fullscreenGfxProgram);
+        renderInst.setGfxRenderPipeline(this.fullscreenCopyPipeline);
         this.textureMapping[0].gfxTexture = this.bloomObjectsTexture.gfxTexture!;
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
         renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, downsamplePassRenderer);
@@ -291,7 +322,7 @@ export class BloomPostFXRenderer {
         blurColorTexture.setParameters(device, targetWidth, targetHeight);
         const blurPassRenderer = blurColorTarget.createRenderPass(device, noClearRenderPassDescriptor);
         blurPassRenderer.setViewport(targetWidth, targetHeight);
-        renderInst.setGfxProgram(this.blurGfxProgram);
+        renderInst.setGfxRenderPipeline(this.blurPipeline);
         this.textureMapping[0].gfxTexture = downsampleColorTexture.gfxTexture!;
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
         renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, blurPassRenderer);
@@ -306,7 +337,7 @@ export class BloomPostFXRenderer {
         const bokehColorTexture = this.scratch1ColorTexture;
         const bokehPassRenderer = bokehColorTarget.createRenderPass(device, noClearRenderPassDescriptor);
         bokehPassRenderer.setViewport(targetWidth, targetHeight);
-        renderInst.setGfxProgram(this.bokehGfxProgram);
+        renderInst.setGfxRenderPipeline(this.bokehPipeline);
         this.textureMapping[0].gfxTexture = blurColorTexture.gfxTexture!;
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
         renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, bokehPassRenderer);
@@ -316,14 +347,9 @@ export class BloomPostFXRenderer {
         // Combine.
         const combinePassRenderer = mainRenderTarget.createRenderPass(device, noClearRenderPassDescriptor);
         combinePassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
-        renderInst.setGfxProgram(this.fullscreenGfxProgram);
+        renderInst.setGfxRenderPipeline(this.fullscreenCombinePipeline);
         this.textureMapping[0].gfxTexture = bokehColorTexture.gfxTexture!;
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-        renderInst.setMegaStateFlags({
-            blendMode: GfxBlendMode.ADD,
-            blendSrcFactor: GfxBlendFactor.ONE,
-            blendDstFactor: GfxBlendFactor.ONE,
-        });
         renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, combinePassRenderer);
 
         renderInstManager.returnRenderInst(renderInst);
@@ -332,10 +358,6 @@ export class BloomPostFXRenderer {
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyProgram(this.fullscreenGfxProgram);
-        device.destroyProgram(this.blurGfxProgram);
-        device.destroyProgram(this.bokehGfxProgram);
-
         device.destroySampler(this.bloomSampler);
         this.bloomObjectsTexture.destroy(device);
         this.bloomObjectsTarget.destroy(device);
