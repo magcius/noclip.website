@@ -501,14 +501,15 @@ export class MREARenderer {
 
             for (let j = 0; j < scriptLayer.entities.length; j++) {
                 const ent = scriptLayer.entities[j];
+                const model = ent.getRenderModel();
 
-                if (ent.active && ent.model) {
+                if (ent.active && model != null) {
                     const aabb = new AABB();
-                    aabb.transform(ent.model.bbox, ent.modelMatrix);
+                    aabb.transform(model.bbox, ent.modelMatrix);
 
                     const actorLights = new ActorLights(aabb, ent.lightParams, this.mrea);
                     // TODO(jstpierre): Add a ModelCache.
-                    const cmdlData = new CMDLData(device, renderHelper, ent.model);
+                    const cmdlData = new CMDLData(device, renderHelper, model);
                     this.actors.push(new CMDLRenderer(device, renderHelper, this.textureHolder, actorLights, ent.name, ent.modelMatrix, cmdlData));
                 }
             }
