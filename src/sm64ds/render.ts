@@ -351,10 +351,15 @@ class MaterialInstance {
 }
 
 class ShapeInstance {
+    public visible = true;
+
     constructor(private materialInstance: MaterialInstance, private batchData: BatchData) {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, normalMatrix: mat4, extraTexCoordMat: mat2d | null, modelInstance: BMDModelInstance): void {
+        if (!this.visible)
+            return;
+
         const vertexData = this.batchData.vertexData;
 
         const template = renderInstManager.pushTemplateRenderInst();
@@ -389,6 +394,7 @@ export class BMDModelInstance {
     public normalMatrix = mat4.create();
     public extraTexCoordMat: mat2d | null = null;
     public animation: Animation | null = null;
+    public visible = true;
 
     private materialInstances: MaterialInstance[] = [];
     private shapeInstances: ShapeInstance[] = [];
@@ -447,6 +453,9 @@ export class BMDModelInstance {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!this.visible)
+            return;
+
         this.computeJointMatrices();
 
         const template = renderInstManager.pushTemplateRenderInst();
@@ -526,7 +535,7 @@ export interface CRG1Object {
 
 export interface CRG1Level {
     MapBmdFile: string;
-    VrboxBmdFile: string;
+    Background: number;
     TextureAnimations: CRG1TextureAnimation[];
     Objects: CRG1Object[];
 }
