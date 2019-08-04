@@ -105,13 +105,15 @@ export class Entity {
     }
 
     public getRenderModel() : CMDL {
-        if (this.animParams != null &&
-            this.animParams.ancs != null &&
-            this.animParams.ancs.characters.length > 0)
-        {
-            const model = this.animParams.ancs.characters[0].model;
-            if (model != null) {
-                return model;
+        if (this.animParams != null) {
+            const charID = this.animParams.charID;
+            const ancs = this.animParams.ancs;
+
+            if (ancs != null && ancs.characters.length > charID) {
+                const model = ancs.characters[charID].model;
+                if (model != null) {
+                    return model;
+                }
             }
         }
 
