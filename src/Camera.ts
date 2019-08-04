@@ -580,6 +580,7 @@ export function deserializeCamera(camera: Camera, src: Float32Array, offs: numbe
     m[7]  = 0;
     m[11] = 0;
     m[15] = 1;
+    mat4.invert(camera.viewMatrix, camera.worldMatrix);
     camera.worldMatrixUpdated();
     return 4*3;
 }
