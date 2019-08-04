@@ -6,6 +6,7 @@ import * as NARC from '../nns_g3d/narc';
 import * as BYML from '../byml';
 import * as LZ77 from './lz77';
 import * as BMD from './sm64ds_bmd';
+import * as BCA from './sm64ds_bca';
 
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
 import ArrayBufferSlice from '../ArrayBufferSlice';
@@ -580,7 +581,7 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private _createBMDRendererForObject(device: GfxDevice, renderer: SM64DSRenderer, object: CRG1Object): Promise<BMDModelInstance> {
+    private async _createBMDRendererForObject(device: GfxDevice, renderer: SM64DSRenderer, object: CRG1Object): Promise<void> {
         const translation = vec3.fromValues(object.Position.X, object.Position.Y, object.Position.Z);
         const rotationY = object.Rotation.Y / 180 * Math.PI;
 
@@ -588,21 +589,51 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
             return this._createBMDObjRenderer(device, renderer, filename, translation, rotationY, scale, spinSpeed);
         };
 
-        switch (object.ObjectId) {
-        case ObjectId.BLOCK_L:      return spawnObject(`/data/normal_obj/obj_block/broken_block_l.bmd`, 0.8);
-        case ObjectId.BLOCK_LL:     return spawnObject(`/data/normal_obj/obj_block/broken_block_l.bmd`, 1.2);
-        case ObjectId.HATENA_BLOCK: return spawnObject(`/data/normal_obj/obj_hatena_box/hatena_box.bmd`, 0.8);
-        case ObjectId.PILE:         return spawnObject(`/data/normal_obj/obj_pile/pile.bmd`, 0.8);
-        case ObjectId.COIN:         return spawnObject(`/data/normal_obj/coin/coin_poly32.bmd`, 0.7, 0.1);
-        case ObjectId.RED_COIN:     return spawnObject(`/data/normal_obj/coin/coin_red_poly32.bmd`, 0.7, 0.1);
-        case ObjectId.BLUE_COIN:    return spawnObject(`/data/normal_obj/coin/coin_blue_poly32.bmd`, 0.7, 0.1);
-        case ObjectId.TREE: {
+        const bindBCA = async (b: BMDModelInstance, filename: string) => {
+            const data = await renderer.modelCache.fetchFileData(filename);
+            const bca = BCA.parse(LZ77.maybeDecompress(data));
+            bca.loopMode = BCA.LoopMode.REPEAT;
+            b.bindBCA(renderer.animationController, bca);
+        }
+
+        const objectId: ObjectId = object.ObjectId;
+        if (objectId === ObjectId.UPDOWN_LIFT) {
+            const b = await spawnObject(`/data/normal_obj/obj_updnlift/obj_updnlift.bmd`);
+        } else if (objectId === ObjectId.KURIBO) {
+            const b = await spawnObject(`/data/enemy/kuribo/kuribo_model.bmd`);
+            await bindBCA(b, `/data/enemy/kuribo/kuribo_wait.bca`);
+        } else if (objectId === ObjectId.KURIBO_S) {
+            const b = await spawnObject(`/data/enemy/kuribo/kuribo_model.bmd`, 0.2);
+            await bindBCA(b, `/data/enemy/kuribo/kuribo_wait.bca`);
+        } else if (objectId === ObjectId.KURIBO_L) {
+            const b = await spawnObject(`/data/enemy/kuribo/kuribo_model.bmd`, 1.6);
+            await bindBCA(b, `/data/enemy/kuribo/kuribo_wait.bca`);
+        } else if (objectId === ObjectId.BOMBHEI) {
+            const b = await spawnObject(`/data/enemy/bombhei/bombhei.bmd`);
+            await bindBCA(b, `/data/enemy/bombhei/bombhei_walk.bca`);
+        } else if (objectId === ObjectId.RED_BOMBHEI) {
+            const b = await spawnObject(`/data/enemy/bombhei/red_bombhei.bmd`);
+            await bindBCA(b, `/data/enemy/bombhei/red_wait.bca`);
+        } else if (objectId === ObjectId.BLOCK_L) {
+            const b = await spawnObject(`/data/normal_obj/obj_block/broken_block_l.bmd`);
+        } else if (objectId === ObjectId.BLOCK_LL) {
+            const b = await spawnObject(`/data/normal_obj/obj_block/broken_block_l.bmd`, 1.2);
+        } else if (objectId === ObjectId.HATENA_BLOCK) {
+            const b = await spawnObject(`/data/normal_obj/obj_hatena_box/hatena_box.bmd`);
+        } else if (objectId === ObjectId.PILE) {
+            const b = await spawnObject(`/data/normal_obj/obj_pile/pile.bmd`);
+        } else if (objectId === ObjectId.COIN) {
+            const b = await spawnObject(`/data/normal_obj/coin/coin_poly32.bmd`, 0.7, 0.1);
+        } else if (objectId === ObjectId.RED_COIN) {
+            const b = await spawnObject(`/data/normal_obj/coin/coin_red_poly32.bmd`, 0.7, 0.1);
+        } else if (objectId === ObjectId.BLUE_COIN) {
+            const b = await spawnObject(`/data/normal_obj/coin/coin_blue_poly32.bmd`, 0.7, 0.1);
+        } else if (objectId === ObjectId.TREE) {
             const treeType = (object.Parameters[0] >>> 4) & 0x07;
             const treeFilenames = ['bomb', 'toge', 'yuki', 'yashi', 'castle', 'castle', 'castle', 'castle'];
             const filename = `/data/normal_obj/tree/${treeFilenames[treeType]}_tree.bmd`;
-            return spawnObject(filename);
-        }
-        case ObjectId.PICTURE_GATE: { // Castle Painting
+            const b = await spawnObject(filename);
+        } else if (objectId === ObjectId.PICTURE_GATE) { // Castle Painting
             const painting = (object.Parameters[0] >>> 8) & 0x1F;
             const filenames = [
                 'for_bh', 'for_bk', 'for_ki', 'for_sm', 'for_cv_ex5', 'for_fl', 'for_dl', 'for_wl', 'for_sl', 'for_wc',
@@ -613,23 +644,27 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
             const scaleY = ((object.Parameters[0] >> 4) & 0x0F) + 1;
             const rotationX = object.Parameters[1] / 0x7FFF * (Math.PI);
             const isMirrored = ((object.Parameters[0] >> 13) & 0x03) === 3;
-            return spawnObject(filename, 0.8).then((renderer) => {
-                mat4.rotateX(renderer.modelMatrix, renderer.modelMatrix, rotationX);
-                mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [scaleX, scaleY, 1]);
-                mat4.translate(renderer.modelMatrix, renderer.modelMatrix, [0, 100/16, 0]);
-                if (isMirrored) {
-                    renderer.extraTexCoordMat = mat2d.create();
-                    renderer.extraTexCoordMat[0] *= -1;
-                }
-                return renderer;
-            });
-        }
-        case ObjectId.STAR_CAMERA: // Star Camera Path
-        case ObjectId.STAR: // Star Target
+            const b = await spawnObject(filename);
+            mat4.rotateX(b.modelMatrix, b.modelMatrix, rotationX);
+            mat4.scale(b.modelMatrix, b.modelMatrix, [scaleX, scaleY, 1]);
+            mat4.translate(b.modelMatrix, b.modelMatrix, [0, 100/16, 0]);
+            if (isMirrored) {
+                b.extraTexCoordMat = mat2d.create();
+                b.extraTexCoordMat[0] *= -1;
+            }
+        } else if (objectId === ObjectId.HANSWITCH) {
+            const b = await spawnObject(`/data/normal_obj/obj_box_switch/obj_box_switch.bmd`);
+        } else if (objectId === ObjectId.SWITCHDOOR) {
+            const b = await spawnObject(`/data/special_obj/b_ana_shutter/b_ana_shutter.bmd`);
+        } else if (objectId === ObjectId.ONEUPKINOKO) {
+            const b = await spawnObject(`/data/normal_obj/oneup_kinoko/oneup_kinoko.bmd`);
+        } else if (objectId === ObjectId.STAR_CAMERA) { // Star Camera Path
             return null;
-        case ObjectId.SILVER_STAR: // Silver Star
-            return spawnObject(`/data/normal_obj/star/obj_star_silver.bmd`, 0.8, 0.08);
-        case ObjectId.STARBASE: { // Star
+        } else if (objectId === ObjectId.STAR) { // Star Target
+            return null;
+        } else if (objectId === ObjectId.SILVER_STAR) { // Silver Star
+            const b = await spawnObject(`/data/normal_obj/star/obj_star_silver.bmd`, 0.08);
+        } else if (objectId === ObjectId.STARBASE) { // Star
             let filename = `/data/normal_obj/star/obj_star.bmd`;
             let startype = (object.Parameters[0] >>> 4) & 0x0F;
             let rotateSpeed = 0.08;
@@ -644,29 +679,48 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
                 rotateSpeed = 0;
                 break;
             }
-            return spawnObject(filename, 0.8, rotateSpeed);
-        }
-        case ObjectId.PL_CLOSET: // Minigame Cabinet Trigger (Invisible)
-            return null;
-        case ObjectId.KANBAN:       return spawnObject(`/data/normal_obj/obj_kanban/obj_kanban.bmd`, 0.8);
-        case ObjectId.TATEFUDA:     return spawnObject(`/data/normal_obj/obj_tatefuda/obj_tatefuda.bmd`, 0.8);
-        case ObjectId.YAJIRUSI_L:   return spawnObject(`/data/normal_obj/obj_yajirusi_l/yajirusi_l.bmd`, 0.8);
-        case ObjectId.YAJIRUSI_R:   return spawnObject(`/data/normal_obj/obj_yajirusi_r/yajirusi_r.bmd`, 0.8);
-        case ObjectId.BK_UKISIMA:   return spawnObject(`/data/special_obj/bk_ukisima/bk_ukisima.bmd`, 1, 0.05);
-        case ObjectId.BLOCK_LL:     return spawnObject(`/data/normal_obj/obj_block/broken_block_ll.bmd`);
-        case ObjectId.MC_WATER:     return spawnObject(`/data/special_obj/mc_water/mc_water.bmd`, 0.8);
-        case ObjectId.MC_METALNET:  return spawnObject(`/data/special_obj/mc_metalnet/mc_metalnet.bmd`, 0.8);
-        case ObjectId.MC_FLAG:      return spawnObject(`/data/special_obj/mc_flag/mc_flag.bmd`, 0.8);
-        case ObjectId.BC_SWITCH:    return spawnObject(`/data/normal_obj/b_coin_switch/b_coin_switch.bmd`, 0.8);
-        case ObjectId.PAKUN2:       return null;
-        case ObjectId.ENEMY_SWITCH: return null;
-        case ObjectId.ENEMY_CREATE: return null;
-        case ObjectId.SET_SE:       return null;
-        case ObjectId.MUGEN_BGM:    return null;
-        case ObjectId.TRG_MINIMAP_CHANGE: return null;
-        default:
-            console.warn(`Unknown object type ${hexzero(object.ObjectId, 4)} / ${ObjectId[object.ObjectId]}`);
-            return null;
+            const b = await spawnObject(filename, 0.8, rotateSpeed);
+        } else if (objectId === ObjectId.PL_CLOSET) { // Minigame Cabinet Trigger (Invisible)
+            // Invisible
+        } else if (objectId === ObjectId.KANBAN) {
+            const b = await spawnObject(`/data/normal_obj/obj_kanban/obj_kanban.bmd`);
+        } else if (objectId === ObjectId.TATEFUDA) {
+            const b = await spawnObject(`/data/normal_obj/obj_tatefuda/obj_tatefuda.bmd`);
+        } else if (objectId === ObjectId.HEART) {
+            const b = await spawnObject(`/data/normal_obj/obj_heart/obj_heart.bmd`, 0.8, 0.05);
+        } else if (objectId === ObjectId.BOMB_SEESAW) {
+            const b = await spawnObject(`/data/special_obj/b_si_so/b_si_so.bmd`);
+        } else if (objectId === ObjectId.YAJIRUSI_L) {
+            const b = await spawnObject(`/data/normal_obj/obj_yajirusi_l/yajirusi_l.bmd`);
+        } else if (objectId === ObjectId.YAJIRUSI_R) {
+            const b = await spawnObject(`/data/normal_obj/obj_yajirusi_r/yajirusi_r.bmd`);
+        } else if (objectId === ObjectId.BK_UKISIMA) {
+            const b = await spawnObject(`/data/special_obj/bk_ukisima/bk_ukisima.bmd`, 1, 0.05);
+        } else if (objectId === ObjectId.BLK_SKINOKO_TAG) {
+            // Invisible
+        } else if (objectId === ObjectId.RACE_NOKO) {
+            const b = await spawnObject(`/data/enemy/nokonoko/nokonoko.bmd`, 1);
+            await bindBCA(b, '/data/enemy/nokonoko/nokonoko_wait1.bca');
+        } else if (objectId === ObjectId.MC_WATER) {
+            const b = await spawnObject(`/data/special_obj/mc_water/mc_water.bmd`);
+        } else if (objectId === ObjectId.MC_METALNET) {
+            const b = await spawnObject(`/data/special_obj/mc_metalnet/mc_metalnet.bmd`);
+        } else if (objectId === ObjectId.MC_FLAG) {
+            const b = await spawnObject(`/data/special_obj/mc_flag/mc_flag.bmd`);
+        } else if (objectId === ObjectId.BC_SWITCH) {
+            const b = await spawnObject(`/data/normal_obj/b_coin_switch/b_coin_switch.bmd`);
+        } else if (objectId === ObjectId.ENEMY_SWITCH) {
+            // Invisible
+        } else if (objectId === ObjectId.ENEMY_CREATE) {
+            // Invisible
+        } else if (objectId === ObjectId.SET_SE) {
+            // Invisible
+        } else if (objectId === ObjectId.MUGEN_BGM) {
+            // Invisible
+        } else if (objectId === ObjectId.TRG_MINIMAP_CHANGE) {
+            // Invisible
+        } else {
+            console.warn(`Unknown object type ${object.ObjectId} / ${ObjectId[object.ObjectId]}`);
         }
     }
 
