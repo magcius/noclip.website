@@ -1,6 +1,6 @@
 
 import { GfxBuffer, GfxDevice, GfxHostAccessPass, GfxBufferUsage, GfxBufferFrequencyHint } from "../platform/GfxPlatform";
-import { align, assert, hexzero, assertExists } from "../../util";
+import { assert, assertExists, alignNonPowerOfTwo } from "../../util";
 
 // TODO(jstpierre): Maybe this makes more sense as a native platform object
 
@@ -27,14 +27,14 @@ export class GfxRenderDynamicUniformBuffer {
     }
 
     public allocateChunk(wordCount: number): number {
-        wordCount = align(wordCount, this.uniformBufferWordAlignment);
+        wordCount = alignNonPowerOfTwo(wordCount, this.uniformBufferWordAlignment);
         assert(wordCount < this.uniformBufferMaxPageWordSize);
 
         let wordOffset = this.currentWordOffset;
 
         // If we straddle the page, then put it at the start of the next one.
         if (this.findPageIndex(wordOffset) !== this.findPageIndex(wordOffset + wordCount - 1))
-            wordOffset = align(wordOffset, this.uniformBufferMaxPageWordSize);
+            wordOffset = alignNonPowerOfTwo(wordOffset, this.uniformBufferMaxPageWordSize);
 
         this.currentWordOffset = wordOffset + wordCount;
         return wordOffset;
@@ -42,14 +42,14 @@ export class GfxRenderDynamicUniformBuffer {
 
     private ensureShadowBuffer(wordOffset: number, wordCount: number): void {
         if (this.shadowBufferU8 === null || this.shadowBufferF32 === null) {
-            const newWordCount = align(this.currentWordOffset, this.uniformBufferMaxPageWordSize);
+            const newWordCount = alignNonPowerOfTwo(this.currentWordOffset, this.uniformBufferMaxPageWordSize);
             this.shadowBufferU8 = new Uint8Array(newWordCount * 4);
             this.shadowBufferF32 = new Float32Array(this.shadowBufferU8.buffer);
         } else if (wordOffset + wordCount >= this.shadowBufferF32.length) {
             assert(wordOffset < this.currentWordOffset && wordOffset + wordCount <= this.currentWordOffset);
 
             // Grow logarithmically, aligned to page size.
-            const newWordCount = align(Math.max(this.currentWordOffset, this.shadowBufferF32.length * 2), this.uniformBufferMaxPageWordSize);
+            const newWordCount = alignNonPowerOfTwo(Math.max(this.currentWordOffset, this.shadowBufferF32.length * 2), this.uniformBufferMaxPageWordSize);
             const newBuffer = new Uint8Array(newWordCount * 4);
 
             newBuffer.set(this.shadowBufferU8, 0);
@@ -76,7 +76,7 @@ export class GfxRenderDynamicUniformBuffer {
             this.gfxBuffer = device.createBuffer(this.currentBufferWordSize, GfxBufferUsage.UNIFORM, GfxBufferFrequencyHint.DYNAMIC);
         }
 
-        const wordCount = align(this.currentWordOffset, this.uniformBufferMaxPageWordSize);
+        const wordCount = alignNonPowerOfTwo(this.currentWordOffset, this.uniformBufferMaxPageWordSize);
         const gfxBuffer = assertExists(this.gfxBuffer);
         hostAccessPass.uploadBufferData(gfxBuffer, 0, this.shadowBufferU8!, 0, wordCount);
 
