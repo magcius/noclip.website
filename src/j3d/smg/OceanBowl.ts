@@ -445,6 +445,7 @@ export class OceanBowl extends LiveActor {
         this.mask.destroy(device);
         device.destroyBuffer(this.positionBuffer);
         device.destroyBuffer(this.colorBuffer);
+        device.destroyBuffer(this.texCoord0Buffer);
         device.destroyBuffer(this.indexBuffer);
         device.destroyInputLayout(this.inputLayout);
         device.destroyInputState(this.inputState);

@@ -1092,6 +1092,7 @@ export class SceneObjHolder {
 
     public destroy(device: GfxDevice): void {
         this.modelCache.destroy(device);
+        this.sceneNameObjListExecutor.destroy(device);
 
         if (this.effectSystem !== null)
             this.effectSystem.destroy(device);

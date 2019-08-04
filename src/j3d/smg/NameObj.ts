@@ -94,6 +94,10 @@ export class NameObj {
     public draw(sceneObjHolder: SceneObjHolder, renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput): void {
         // Default implementation; nothing.
     }
+
+    public destroy(device: GfxDevice): void {
+        // Default implementation; nothing.
+    }
 }
 
 class NameObjExecuteInfo {
@@ -182,5 +186,10 @@ export class SceneNameObjListExecutor {
                 actor.setIndirectTextureOverride(sceneTexture);
             }
         }
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.nameObjExecuteInfos.length; i++)
+            this.nameObjExecuteInfos[i].nameObj.destroy(device);
     }
 }
