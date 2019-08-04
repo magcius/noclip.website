@@ -4,11 +4,10 @@ import * as PRX from './prx';
 import * as TEX from './tex';
 import * as SCN from './scn';
 import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
-import Progressable from '../Progressable';
-import { fetchData } from '../fetch';
 import { assert } from '../util';
 import { SceneRenderer, SCNData, SCNInstance } from './render';
 import { BasicRendererHelper } from '../oot3d/render';
+import { SceneContext } from '../SceneBase';
 
 const pathBase = `thug2`;
 
@@ -44,8 +43,9 @@ class SceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
-        return fetchData(`${pathBase}/pre/${this.id}.prx`, abortSignal).then((data) => {
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const dataFetcher = context.dataFetcher;
+        return dataFetcher.fetchData(`${pathBase}/pre/${this.id}.prx`).then((data) => {
             const prx = PRX.parse(data);
             assert(prx.files.length >= 2);
 

@@ -4,15 +4,14 @@ import * as Viewer from '../viewer';
 import { createModelInstance, BasicRenderer } from './scenes';
 import * as Yaz0 from '../compression/Yaz0';
 
-import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assertExists } from '../util';
-import { fetchData } from '../fetch';
 import { mat4, } from 'gl-matrix';
 import * as RARC from './rarc';
 import { BMDModelInstance } from './render';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { BTK } from './j3d';
+import { SceneContext } from '../SceneBase';
 
 const id = "pik2";
 const name = "Pikmin 2";
@@ -35,9 +34,10 @@ class Pik2SceneDesc implements Viewer.SceneDesc {
         return scene;
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const dataFetcher = context.dataFetcher;
         const path = `j3d/pik2/${this.path}`;
-        return fetchData(path, abortSignal).then((result: ArrayBufferSlice) => {
+        return dataFetcher.fetchData(path).then((result: ArrayBufferSlice) => {
             return Yaz0.decompress(result);
         }).then((buffer: ArrayBufferSlice) => {
             const rarc = RARC.parse(buffer);

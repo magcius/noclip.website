@@ -3,19 +3,19 @@ import { parseIV } from './iv';
 import { Scene } from './render';
 
 import * as Viewer from '../viewer';
-import Progressable from '../Progressable';
-import { fetchData, NamedArrayBufferSlice } from '../fetch';
+import { DataFetcher } from '../DataFetcher';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
+import { SceneContext } from '../SceneBase';
 
 class SceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string, public paths: string[]) {
     }
 
-    public createScene(gfxDevice: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
-        return Progressable.all(this.paths.map((path) => fetchData(path, abortSignal))).then((buffers: NamedArrayBufferSlice[]) => {
-            const ivs = buffers.map((buffer) => parseIV(buffer));
-            return new Scene(gfxDevice, ivs);
-        });
+    public async createScene(gfxDevice: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const dataFetcher = context.dataFetcher;
+        const buffers = await Promise.all(this.paths.map((path) => dataFetcher.fetchData(path)));
+        const ivs = buffers.map((buffer) => parseIV(buffer));
+        return new Scene(gfxDevice, ivs);
     }
 }
 

@@ -8,20 +8,20 @@ import { MREARenderer, RetroTextureHolder, CMDLRenderer, RetroPass, CMDLData } f
 import * as Viewer from '../viewer';
 import * as UI from '../ui';
 import { assert } from '../util';
-import { fetchData } from '../fetch';
-import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import * as BYML from '../byml';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
 import { mat4 } from 'gl-matrix';
 import { GXRenderHelperGfx } from '../gx/gx_render';
+import { SceneContext } from '../SceneBase';
 
 export class RetroSceneRenderer implements Viewer.SceneGfx {
     public renderHelper: GXRenderHelperGfx;
     public renderTarget = new BasicRenderTarget();
     public areaRenderers: MREARenderer[] = [];
     public cmdlRenderers: CMDLRenderer[] = [];
+    public cmdlData: CMDLData[] = [];
 
     constructor(device: GfxDevice, public mlvl: MLVL.MLVL, public textureHolder = new RetroTextureHolder()) {
         this.renderHelper = new GXRenderHelperGfx(device);
@@ -74,6 +74,8 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
             this.areaRenderers[i].destroy(device);
         for (let i = 0; i < this.cmdlRenderers.length; i++)
             this.cmdlRenderers[i].destroy(device);
+        for (let i = 0; i < this.cmdlData.length; i++)
+            this.cmdlData[i].destroy(device);
     }
 
     public createPanels(): UI.Panel[] {
@@ -89,11 +91,12 @@ class MP1SceneDesc implements Viewer.SceneDesc {
         this.id = filename;
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
-        const stringsPakP = fetchData(`metroid_prime/mp1/Strings.pak`, abortSignal);
-        const levelPakP = fetchData(`metroid_prime/mp1/${this.filename}`, abortSignal);
-        const nameDataP = fetchData(`metroid_prime/mp1/MP1_NameData.crg1`, abortSignal);
-        return Progressable.all([levelPakP, stringsPakP, nameDataP]).then((datas: ArrayBufferSlice[]) => {
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const dataFetcher = context.dataFetcher;
+        const stringsPakP = dataFetcher.fetchData(`metroid_prime/mp1/Strings.pak`);
+        const levelPakP = dataFetcher.fetchData(`metroid_prime/mp1/${this.filename}`);
+        const nameDataP = dataFetcher.fetchData(`metroid_prime/mp1/MP1_NameData.crg1`);
+        return Promise.all([levelPakP, stringsPakP, nameDataP]).then((datas: ArrayBufferSlice[]) => {
             const levelPak = PAK.parse(datas[0]);
             const stringsPak = PAK.parse(datas[1]);
             const nameData = BYML.parse<NameData>(datas[2], BYML.FileType.CRG1);
@@ -111,6 +114,7 @@ class MP1SceneDesc implements Viewer.SceneDesc {
                 if (skyboxCMDL) {
                     const skyboxName = resourceSystem.findResourceNameByID(mlvl.defaultSkyboxID);
                     const skyboxCMDLData = new CMDLData(device, renderer.renderHelper, skyboxCMDL);
+                    renderer.cmdlData.push(skyboxCMDLData);
                     skyboxRenderer = new CMDLRenderer(device, renderer.renderHelper, renderer.textureHolder, null, skyboxName, mat4.create(), skyboxCMDLData);
                     skyboxRenderer.isSkybox = true;
                     renderer.cmdlRenderers.push(skyboxRenderer);

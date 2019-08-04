@@ -80,8 +80,8 @@ function parseJoint(bmd: BMD, buffer: ArrayBufferSlice, idx: number) {
     joint.batches = [];
 
     // Batches should only be in root joints.
-    if (batchCount !== 0)
-        assert(joint.parentJointIdx === -1);
+    // if (batchCount !== 0)
+    //     assert(joint.parentJointIdx === -1);
 
     for (let i = 0; i < batchCount; i++) {
         const materialIdx = view.getUint8(batchMaterialOffs + i);

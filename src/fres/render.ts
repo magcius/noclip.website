@@ -23,6 +23,7 @@ import { AABB } from '../Geometry';
 import { GfxRenderBuffer } from '../gfx/render/GfxRenderBuffer';
 import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { BasicRendererHelper } from '../oot3d/render';
+import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
 
 class AglProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
@@ -705,7 +706,7 @@ class FMATInstance {
             blendMode:      translateBlendCombine(fmat.renderState.blendEnabled, fmat.renderState.blendColorCombine),
             blendSrcFactor: translateBlendFunction(fmat.renderState.blendSrcColorFunc),
             blendDstFactor: translateBlendFunction(fmat.renderState.blendDstColorFunc),
-            depthCompare:   translateCompareFunction(fmat.renderState.depthCompareFunc),
+            depthCompare:   reverseDepthForCompareMode(translateCompareFunction(fmat.renderState.depthCompareFunc)),
             depthWrite:     isTranslucent ? false : fmat.renderState.depthWrite,
             frontFace:      translateFrontFaceMode(fmat.renderState.frontFaceMode),
         });
@@ -929,7 +930,6 @@ export class BasicFRESRenderer extends BasicRendererHelper {
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        viewerInput.camera.setClipPlanes(10, 500000);
         for (let i = 0; i < this.fmdlRenderers.length; i++)
             this.fmdlRenderers[i].prepareToRender(hostAccessPass, viewerInput);
     }

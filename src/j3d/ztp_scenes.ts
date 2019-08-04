@@ -1,7 +1,6 @@
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import Progressable from '../Progressable';
-import { fetchData } from '../fetch';
+import { DataFetcher, DataFetcherFlags } from '../DataFetcher';
 import * as Viewer from '../viewer';
 import * as Yaz0 from '../compression/Yaz0';
 import * as UI from '../ui';
@@ -16,6 +15,7 @@ import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/Gfx
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { SceneContext } from '../SceneBase';
 
 class ZTPExtraTextures {
     public extraTextures: BTIData[] = [];
@@ -118,7 +118,6 @@ class TwilightPrincessRenderer implements Viewer.SceneGfx {
 
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         const template = this.renderHelper.pushTemplateRenderInst();
-        viewerInput.camera.setClipPlanes(20, 500000);
         this.renderHelper.fillSceneParams(viewerInput, template);
         for (let i = 0; i < this.modelInstances.length; i++)
             this.modelInstances[i].prepareToRender(device, this.renderHelper, viewerInput);
@@ -270,11 +269,12 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const dataFetcher = context.dataFetcher;
         const stagePath = `${pathBase}/res/Stage/${this.stageId}`;
         const extraTextures = new ZTPExtraTextures();
 
-        return this.fetchRarc(`${stagePath}/STG_00.arc`, abortSignal).then((stageRarc: RARC.RARC) => {
+        return this.fetchRarc(`${stagePath}/STG_00.arc`, dataFetcher).then((stageRarc: RARC.RARC) => {
             // Load stage shared textures.
             const texcFolder = stageRarc.findDir(`texc`);
             const extraTextureFiles = texcFolder !== null ? texcFolder.files : [];
@@ -316,7 +316,7 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
                 roomNames = roomList.map((i) => `R${leftPad(''+i, 2)}_00`);
             }
 
-            return Progressable.all(roomNames.map((roomName) => this.fetchRarc(`${stagePath}/${roomName}.arc`, abortSignal))).then((roomRarcs: (RARC.RARC | null)[]) => {
+            return Promise.all(roomNames.map((roomName) => this.fetchRarc(`${stagePath}/${roomName}.arc`, dataFetcher))).then((roomRarcs: (RARC.RARC | null)[]) => {
                 roomRarcs.forEach((rarc: RARC.RARC | null, i) => {
                     if (rarc === null) return;
                     this.createRoomScenes(device, renderer, rarc, roomNames[i]);
@@ -327,11 +327,12 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private fetchRarc(path: string, abortSignal: AbortSignal): Progressable<RARC.RARC | null> {
-        return fetchData(path, abortSignal).then((buffer: ArrayBufferSlice) => {
-            if (buffer.byteLength === 0) return null;
-            return Yaz0.decompress(buffer).then((buffer: ArrayBufferSlice) => RARC.parse(buffer));
-        });
+    private async fetchRarc(path: string, dataFetcher: DataFetcher): Promise<RARC.RARC | null> {
+        const buffer = await dataFetcher.fetchData(path, DataFetcherFlags.ALLOW_404);
+        if (buffer.byteLength === 0)
+            return null;
+        const decompressed = await Yaz0.decompress(buffer);
+        return RARC.parse(decompressed);
     }
 }
 
@@ -347,7 +348,8 @@ const sceneDescs = [
     new TwilightPrincessSceneDesc("Lake Hylia", "F_SP123"),
 
     new TwilightPrincessSceneDesc("Ordon Ranch", "F_SP00"),
-    new TwilightPrincessSceneDesc("Link's House Area", "F_SP103"),
+    new TwilightPrincessSceneDesc("Ordon Village", "F_SP103", ['R00_00']),
+    new TwilightPrincessSceneDesc("Link's House Area", "F_SP103", ['R01_00']),
     new TwilightPrincessSceneDesc("Ordon Woods", "F_SP104"),
     new TwilightPrincessSceneDesc("Faron Woods", "F_SP108"),
     new TwilightPrincessSceneDesc("Kakariko Village", "F_SP109"),

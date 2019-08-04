@@ -16,6 +16,7 @@ import { GX2TextureHolder } from "../fres/render";
 import { TextureMapping } from "../TextureHolder";
 import { TerrainManager } from "./tera";
 import { AABB } from "../Geometry";
+import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers";
 
 export interface Area {
     areaInfo: AreaInfo;
@@ -205,15 +206,13 @@ export class TerrainRenderer {
         this.templateRenderInst.setSamplerBindingsFromTextureMappings(textureMappings);
 
         this.templateRenderInst.setGfxProgram(this.gfxProgram);
-        this.templateRenderInst.setMegaStateFlags({ depthCompare: GfxCompareMode.LESS, depthWrite: true });
+        this.templateRenderInst.setMegaStateFlags({ depthCompare: reverseDepthForCompareMode(GfxCompareMode.LESS), depthWrite: true });
         this.renderInstBuilder.newUniformBufferInstance(this.templateRenderInst, TerrainProgram.ub_SceneParams);
         this.renderInstBuilder.finish(device, this.viewRenderer);
     }
 
     public prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         let offs: number;
-
-        viewerInput.camera.setClipPlanes(20, 5000000);
 
         // Compute view projection.
         mat4.mul(scratch, viewerInput.camera.projectionMatrix, viewerInput.camera.viewMatrix);

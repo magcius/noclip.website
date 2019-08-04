@@ -16,6 +16,7 @@ import { DrawType } from "./NameObj";
 export class ParticleResourceHolder {
     private effectNames: string[];
     private jpac: JPA.JPAC;
+    private jpacData: JPA.JPACData;
     private resourceDatas = new Map<number, JPA.JPAResourceData>();
     public autoEffectList: JMapInfoIter;
 
@@ -28,6 +29,7 @@ export class ParticleResourceHolder {
 
         const jpacData = effectArc.findFileData(`Particles.jpc`);
         this.jpac = JPA.parse(jpacData);
+        this.jpacData = new JPA.JPACData(this.jpac);
     }
 
     public getUserIndex(name: string): number {
@@ -45,7 +47,7 @@ export class ParticleResourceHolder {
 
         const device = sceneObjHolder.modelCache.device;
         if (!this.resourceDatas.has(idx)) {
-            const resData = new JPA.JPAResourceData(device, this.jpac, this.jpac.effects[idx]);
+            const resData = new JPA.JPAResourceData(device, this.jpacData, this.jpac.effects[idx]);
             resData.name = name;
             this.resourceDatas.set(idx, resData);
         }
@@ -53,6 +55,7 @@ export class ParticleResourceHolder {
     }
 
     public destroy(device: GfxDevice): void {
+        this.jpacData.destroy(device);
         for (const [, resourceData] of this.resourceDatas.entries())
             resourceData.destroy(device);
     }

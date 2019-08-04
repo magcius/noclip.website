@@ -10,8 +10,7 @@ import * as BND3 from "./bnd3";
 import * as FLVER from "./flver";
 
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from "../gfx/platform/GfxPlatform";
-import Progressable, { ProgressMeter } from "../Progressable";
-import { fetchData, NamedArrayBufferSlice } from "../fetch";
+import { DataFetcher } from "../DataFetcher";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { DDSTextureHolder } from "./dds";
 import { assert, assertExists } from "../util";
@@ -25,34 +24,6 @@ import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx
 
 interface CRG1Arc {
     Files: { [filename: string]: ArrayBufferSlice };
-}
-
-class DataFetcher {
-    private fileProgressables: Progressable<any>[] = [];
-
-    constructor(private abortSignal: AbortSignal, private progressMeter: ProgressMeter) {
-    }
-
-    private calcProgress(): number {
-        let n = 0;
-        for (let i = 0; i < this.fileProgressables.length; i++)
-            n += this.fileProgressables[i].progress;
-        return n / this.fileProgressables.length;
-    }
-
-    private setProgress(): void {
-        this.progressMeter.setProgress(this.calcProgress());
-    }
-
-    public fetchData(path: string): PromiseLike<NamedArrayBufferSlice> {
-        const p = fetchData(path, this.abortSignal);
-        this.fileProgressables.push(p);
-        p.onProgress = () => {
-            this.setProgress();
-        };
-        this.setProgress();
-        return p.promise;
-    }
 }
 
 class ResourceSystem {
@@ -200,16 +171,15 @@ class DKSSceneDesc implements Viewer.SceneDesc {
         }
     }
 
-    public async createScene(device: GfxDevice, abortSignal: AbortSignal, sceneContext: SceneContext): Promise<Viewer.SceneGfx> {
-        const dataFetcher = new DataFetcher(sceneContext.abortSignal, sceneContext.progressMeter);
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const dataFetcher = context.dataFetcher;
         const resourceSystem = new ResourceSystem();
 
         const arcName = `${this.id}_arc.crg1`;
 
-        await Promise.all([
-            fetchCRG1Arc(resourceSystem, dataFetcher, arcName),
-            fetchLoose(resourceSystem, dataFetcher, `mtd/Mtd.mtdbnd`),
-        ]);
+        fetchCRG1Arc(resourceSystem, dataFetcher, arcName);
+        fetchLoose(resourceSystem, dataFetcher, `mtd/Mtd.mtdbnd`);
+        await dataFetcher.waitForLoad();
 
         const textureHolder = new DDSTextureHolder();
         const renderer = new DKSRenderer(device, textureHolder);
@@ -246,6 +216,7 @@ class DKSSceneDesc implements Viewer.SceneDesc {
     }
 }
 
+// TODO(jstpierre): Make this less messy
 class DKSEverySceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
@@ -275,8 +246,8 @@ class DKSEverySceneDesc implements Viewer.SceneDesc {
         }
     }
 
-    public async createScene(device: GfxDevice, abortSignal: AbortSignal, sceneContext: SceneContext): Promise<Viewer.SceneGfx> {
-        const dataFetcher = new DataFetcher(sceneContext.abortSignal, sceneContext.progressMeter);
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const dataFetcher = context.dataFetcher;
         const resourceSystem = new ResourceSystem();
 
         const allMaps = [
@@ -303,16 +274,15 @@ class DKSEverySceneDesc implements Viewer.SceneDesc {
 
         const renderer = new DKSRenderer(device, textureHolder);
 
-        const promises = [];
-        promises.push(fetchLoose(resourceSystem, dataFetcher, `mtd/Mtd.mtdbnd`));
+        fetchLoose(resourceSystem, dataFetcher, `mtd/Mtd.mtdbnd`);
 
         for (let i = 0; i < allMaps.length; i++) {
             const mapID = allMaps[i];
             const arcName = `${mapID}_arc.crg1`;
-            promises.push(fetchCRG1Arc(resourceSystem, dataFetcher, arcName));
+            fetchCRG1Arc(resourceSystem, dataFetcher, arcName);
         }
 
-        await Promise.all(promises);
+        await dataFetcher.waitForLoad();
 
         for (let i = 0; i < allMaps.length; i++) {
             const mapID = allMaps[i];

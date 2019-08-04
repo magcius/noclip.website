@@ -1,19 +1,27 @@
 
-import { ProgressMeter } from "./Progressable";
 import { GfxDevice } from "./gfx/platform/GfxPlatform";
 import { SceneGfx } from "./viewer";
+import { DataFetcher } from "./DataFetcher";
+
+export interface ProgressMeter {
+    setProgress(progress: number): void;
+}
+
+export interface Destroyable {
+    destroy(device: GfxDevice): void;
+}
 
 export interface SceneContext {
     device: GfxDevice;
-    abortSignal: AbortSignal;
-    progressMeter: ProgressMeter;
+    dataFetcher: DataFetcher;
     uiContainer: HTMLElement;
+    destroyablePool: Destroyable[];
 }
 
 export interface SceneDesc {
     id: string;
     name: string;
-    createScene(device: GfxDevice, abortSignal: AbortSignal, sceneContext: SceneContext): PromiseLike<SceneGfx>;
+    createScene(device: GfxDevice, sceneContext: SceneContext): PromiseLike<SceneGfx>;
 }
 
 export interface SceneGroup {

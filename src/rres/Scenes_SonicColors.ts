@@ -7,14 +7,13 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { vec3 } from "gl-matrix";
 import { readString, assert, assertExists } from "../util";
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
-import Progressable from '../Progressable';
-import { fetchData } from '../fetch';
 import { MDL0ModelInstance, RRESTextureHolder, MDL0Model } from './render';
 import AnimationController from '../AnimationController';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GXMaterialHacks } from '../gx/gx_material';
 import { executeOnPass } from '../gfx/render/GfxRenderer2';
+import { SceneContext } from '../SceneBase';
 
 interface MapEntry {
     index: number;
@@ -123,22 +122,24 @@ class SonicColorsSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const dataFetcher = context.dataFetcher;
         const stageDir = `${pathBase}/${this.id}`;
         const commonArcPath = `${stageDir}/${this.id}_cmn.arc`;
         const texRRESPath = `${stageDir}/${this.id}_tex.brres`;
-        return Progressable.all([fetchData(commonArcPath, abortSignal), fetchData(texRRESPath, abortSignal)]).then(([commonArcData, texRRESData]) => {
+        return Promise.all([dataFetcher.fetchData(commonArcPath), dataFetcher.fetchData(texRRESPath)]).then(([commonArcData, texRRESData]) => {
             const commonArc = U8.parse(commonArcData);
             const mapFile = parseMapFile(assertExists(commonArc.findFile(`arc/${this.id}_map.map.bin`)).buffer);
             const texRRES = BRRES.parse(texRRESData);
 
             const renderer = new SonicColorsRenderer(device);
+            context.destroyablePool.push(renderer);
             const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
             renderer.textureHolder.addRRESTextures(device, texRRES);
 
-            return Progressable.all(mapFile.entries.map((entry) => {
+            return Promise.all(mapFile.entries.map((entry) => {
                 const path = `${stageDir}/${entry.filename}.arc`;
-                return fetchData(path, abortSignal);
+                return dataFetcher.fetchData(path);
             })).then((entryArcDatas) => {
                 const skyboxRRES = BRRES.parse(assertExists(commonArc.findFile(`arc/${this.id}_sky.brres`)).buffer);
                 let motRRES: BRRES.RRES | null = null;

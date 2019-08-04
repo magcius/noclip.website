@@ -8,8 +8,6 @@ import * as BRRES from './brres';
 import * as U8 from './u8';
 
 import { assert, readString, assertExists, hexzero } from '../util';
-import { fetchData } from '../fetch';
-import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render';
 import { TextureOverride } from '../TextureHolder';
@@ -18,10 +16,11 @@ import { mat4, quat } from 'gl-matrix';
 import AnimationController from '../AnimationController';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxTexture, GfxTextureDimension, GfxFormat } from '../gfx/platform/GfxPlatform';
-import { GfxRenderInstViewRenderer, GfxRendererLayer } from '../gfx/render/GfxRenderer';
+import { GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { ColorKind } from '../gx/gx_render';
 import { executeOnPass, hasAnyVisible } from '../gfx/render/GfxRenderer2';
+import { SceneContext } from '../SceneBase';
 
 const materialHacks: GXMaterialHacks = {
     lightingFudge: (p) => `vec4((0.5 * ${p.matSource}).rgb, 1.0)`,
@@ -322,7 +321,6 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         this.animationController.setTimeInMilliseconds(viewerInput.time);
 
         const template = this.renderHelper.pushTemplateRenderInst();
-        viewerInput.camera.setClipPlanes(10, 500000);
         this.renderHelper.fillSceneParams(viewerInput, template);
         for (let i = 0; i < this.modelInstances.length; i++)
             this.modelInstances[i].prepareToRender(device, this.renderHelper, viewerInput);
@@ -635,12 +633,13 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
 class SkywardSwordSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const basePath = `zss`;
         const systemPath = `${basePath}/Object/System.arc`;
         const objPackPath = `${basePath}/Object/ObjectPack.arc.LZ`;
         const stagePath = `${basePath}/Stage/${this.id}/${this.id}_stg_l0.arc.LZ`;
-        return Progressable.all([fetchData(systemPath, abortSignal), fetchData(objPackPath, abortSignal), fetchData(stagePath, abortSignal)]).then((buffers: ArrayBufferSlice[]) => {
+        const dataFetcher = context.dataFetcher;
+        return Promise.all([dataFetcher.fetchData(systemPath), dataFetcher.fetchData(objPackPath), dataFetcher.fetchData(stagePath)]).then((buffers: ArrayBufferSlice[]) => {
             const [systemBuffer, objPackBuffer, stageBuffer] = buffers;
 
             const systemArchive = U8.parse(systemBuffer);

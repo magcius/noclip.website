@@ -79,6 +79,8 @@ export class GfxRenderCache {
             device.destroyBindings(bindings);
         for (const [descriptor, renderPipeline] of this.gfxRenderPipelinesCache.entries())
             device.destroyRenderPipeline(renderPipeline);
+        for (const [descriptor, inputLayout] of this.gfxInputLayoutsCache.entries())
+            device.destroyInputLayout(inputLayout);
         for (const [descriptor, program] of this.gfxProgramCache.entries())
             device.destroyProgram(program);
         this.gfxBindingsCache.clear();

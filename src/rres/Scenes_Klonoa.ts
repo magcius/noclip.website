@@ -5,11 +5,8 @@ import * as Viewer from '../viewer';
 import * as CX from '../compression/CX';
 import * as BRRES from './brres';
 import * as U8 from './u8';
-import Progressable from '../Progressable';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
-import { fetchData } from '../fetch';
 import { RRESTextureHolder, MDL0ModelInstance, MDL0Model } from './render';
-import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor, ColorTexture, noClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import AnimationController from '../AnimationController';
@@ -17,6 +14,7 @@ import { assert } from '../util';
 import { TextureOverride } from '../TextureHolder';
 import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 import { executeOnPass, hasAnyVisible } from '../gfx/render/GfxRenderer2';
+import { SceneContext } from '../SceneBase';
 
 const id = 'klonoa';
 const name = "Klonoa";
@@ -109,11 +107,11 @@ class KlonoaSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string, public texBinName = `tex${id.slice(1, 3)}.bin`) {
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const stageBinName = `${this.id}.bin`;
 
         function fetchLandscapeBin(filename: string) {
-            return fetchData(`${pathBase}/us/landscape/${filename}`, abortSignal).then((data) => {
+            return context.dataFetcher.fetchData(`${pathBase}/us/landscape/${filename}`).then((data) => {
                 if (data.byteLength === 0)
                     return data;
                 else
@@ -121,7 +119,7 @@ class KlonoaSceneDesc implements Viewer.SceneDesc {
             });
         }
 
-        return Progressable.all([fetchLandscapeBin(stageBinName), fetchLandscapeBin(this.texBinName)]).then(([stageBinData, texBinData]) => {
+        return Promise.all([fetchLandscapeBin(stageBinName), fetchLandscapeBin(this.texBinName)]).then(([stageBinData, texBinData]) => {
             const renderer = new KlonoaRenderer(device);
             const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
 

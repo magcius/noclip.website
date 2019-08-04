@@ -1,10 +1,8 @@
 
 import { SceneGroup } from '../viewer';
-import { SceneDesc } from '../SceneBase';
-import Progressable from '../Progressable';
+import { SceneDesc, SceneContext } from '../SceneBase';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { fetchData } from '../fetch';
 
 import * as MDL0 from './mdl0';
 import { SonicManiaRenderer } from './render';
@@ -20,8 +18,9 @@ class SonicManiaSceneDesc implements SceneDesc {
         this.id = this.path;
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<SonicManiaRenderer> {
-        return fetchData(this.path, abortSignal).then((result: ArrayBufferSlice) => {
+    public createScene(device: GfxDevice, context: SceneContext): Promise<SonicManiaRenderer> {
+        const dataFetcher = context.dataFetcher;
+        return dataFetcher.fetchData(this.path).then((result: ArrayBufferSlice) => {
             const mdl0 = MDL0.parse(result);
             return new SonicManiaRenderer(device, mdl0);
         });

@@ -513,7 +513,6 @@ export class GXShapeHelperGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyInputLayout(this.inputLayout);
         device.destroyInputState(this.inputState);
         if (this.zeroBuffer !== null)
             device.destroyBuffer(this.zeroBuffer);

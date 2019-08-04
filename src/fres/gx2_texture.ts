@@ -7,7 +7,7 @@ import WorkerPool from '../WorkerPool';
 import { DeswizzleRequest, deswizzle } from './gx2_swizzle';
 import { DecodedSurface, DecodedSurfaceSW, decompressBC } from './bc_texture';
 
-class Deswizzler {
+class WorkerDeswizzler {
     private pool: WorkerPool<DeswizzleRequest, DeswizzledSurface>;
 
     constructor() {
@@ -15,10 +15,8 @@ class Deswizzler {
     }
 
     public deswizzle(surface: GX2Surface, buffer: ArrayBuffer, mipLevel: number): Promise<DeswizzledSurface> {
-        return Promise.resolve<DeswizzledSurface>(deswizzle(surface, buffer, mipLevel));
-        // TODO(jstpierre): For some reason the worker version seems to crash now? Not sure what's going on...
-        // const req: DeswizzleRequest = { surface, buffer, mipLevel, priority: mipLevel };
-        // return this.pool.execute(req);
+        const req: DeswizzleRequest = { surface, buffer, mipLevel, priority: mipLevel };
+        return this.pool.execute(req);
     }
 
     public terminate() {
@@ -26,10 +24,19 @@ class Deswizzler {
     }
 }
 
-export const deswizzler: Deswizzler = new Deswizzler();
+class BlockingDeswizzler {
+    public deswizzle(surface: GX2Surface, buffer: ArrayBuffer, mipLevel: number): Promise<DeswizzledSurface> {
+        return Promise.resolve<DeswizzledSurface>(deswizzle(surface, buffer, mipLevel));
+    }
+
+    public terminate() {
+    }
+}
+
+// TODO(jstpierre): For some reason the worker version seems to crash now? Not sure what's going on...
+export const deswizzler = new BlockingDeswizzler();
 
 export function deswizzleSurface(surface: GX2Surface, texData: ArrayBufferSlice, mipLevel: number): Promise<DeswizzledSurface> {
-    // Copy the buffer since we might transfer the ArrayBuffer.
     return deswizzler.deswizzle(surface, texData.copyToBuffer(), mipLevel);
 }
 

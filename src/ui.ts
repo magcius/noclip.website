@@ -1123,7 +1123,7 @@ class SceneSelect extends Panel {
         this.syncSceneDescs();
     }
 
-    public setLoadProgress(pct: number) {
+    public setProgress(pct: number): void {
         this.loadProgress = pct;
         this.syncFlairs();
         this.syncHeaderStyle();

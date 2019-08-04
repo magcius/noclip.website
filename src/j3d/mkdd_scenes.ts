@@ -3,15 +3,14 @@ import * as Viewer from '../viewer';
 
 import { BasicRenderer } from './scenes';
 
-import Progressable from '../Progressable';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { readString, assert, assertExists } from '../util';
-import { fetchData } from '../fetch';
 import { mat4, quat } from 'gl-matrix';
 import * as RARC from './rarc';
 import { BMDModelInstance, BMDModel } from './render';
 import { BCK, BMD, BTK, BRK, BTP } from './j3d';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
+import { SceneContext } from '../SceneBase';
 
 const id = "mkdd";
 const name = "Mario Kart: Double Dash!!";
@@ -91,9 +90,10 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
         return modelInstance;
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const dataFetcher = context.dataFetcher;
         const path = `j3d/mkdd/Course/${this.path}`;
-        return fetchData(path, abortSignal).then((buffer: ArrayBufferSlice) => {
+        return dataFetcher.fetchData(path).then((buffer: ArrayBufferSlice) => {
             const rarc = RARC.parse(buffer);
             // Find course name.
             const bolFile = rarc.files.find((f) => f.name.endsWith('_course.bol'));

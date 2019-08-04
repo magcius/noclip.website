@@ -2,9 +2,8 @@
 import { mat4 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import Progressable from '../Progressable';
 
-import { fetchData } from '../fetch';
+import { DataFetcher } from '../DataFetcher';
 import { SceneGfx, ViewerRenderInput } from '../viewer';
 
 import * as GX from '../gx/gx_enum';
@@ -24,6 +23,7 @@ import { makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { computeViewMatrix } from '../Camera';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { SceneContext } from '../SceneBase';
 
 const scale = 200;
 const posMtx = mat4.create();
@@ -102,7 +102,6 @@ class PlaneShape {
         device.destroyBuffer(this.vtxBuffer);
         device.destroyBuffer(this.idxBuffer);
         device.destroyBuffer(this.zeroBuffer);
-        device.destroyInputLayout(this.inputLayout);
         device.destroyInputState(this.inputState);
     }
 }
@@ -218,8 +217,11 @@ class SeaRenderer extends SunshineRenderer {
     }
 }
 
-export function createScene(device: GfxDevice, name: string): Progressable<SceneGfx> {
-    return fetchData("j3d/sms/dolpic0.szs", null).then((buffer: ArrayBufferSlice) => {
+export function createScene(context: SceneContext, name: string): Promise<SceneGfx> {
+    const device = context.device;
+    const dataFetcher = context.dataFetcher;
+
+    return dataFetcher.fetchData("j3d/sms/dolpic0.szs").then((buffer: ArrayBufferSlice) => {
         return Yaz0.decompress(buffer);
     }).then((buffer: ArrayBufferSlice) => {
         const rarc = RARC.parse(buffer);

@@ -4,7 +4,7 @@ import { readFileSync } from 'fs';
 import * as Viewer from '../viewer';
 import { DeviceProgram, DeviceProgramReflection } from "../Program";
 import { Texture, getFormatString, RSPOutput, Vertex, DrawCall, GeometryMode } from "./f3dex";
-import { GfxDevice, GfxTextureDimension, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxHostAccessPass, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxTextureDimension, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { assert, nArray } from '../util';
 import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers';
@@ -12,7 +12,7 @@ import { mat4 } from 'gl-matrix';
 import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
-import { interactiveVisTestBisect, interactiveVizSliderSelect } from '../DebugJunk';
+import { interactiveVizSliderSelect } from '../DebugJunk';
 
 export function textureToCanvas(texture: Texture): Viewer.Texture {
     const canvas = document.createElement("canvas");
@@ -279,6 +279,7 @@ class DrawCallInstance {
         const renderInst = renderInstManager.pushRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
+        renderInst.setMegaStateFlags(this.megaStateFlags);
         renderInst.drawIndexes(this.drawCall.indexCount, this.drawCall.firstIndex);
 
         let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12 + 8*2);

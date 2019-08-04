@@ -1,10 +1,9 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
-import Progressable from '../../Progressable';
 import { assert, assertExists, align, nArray } from '../../util';
-import { fetchData } from '../../fetch';
-import { MathConstants, computeModelMatrixSRT, lerp, computeNormalMatrix, clamp } from '../../MathHelpers';
+import { DataFetcher, DataFetcherFlags } from '../../DataFetcher';
+import { MathConstants, computeModelMatrixSRT, lerp, computeNormalMatrix, clamp, computeEulerAngleRotationFromSRTMatrix } from '../../MathHelpers';
 import { getPointBezier } from '../../Spline';
 import { Camera, computeClipSpacePointFromWorldSpacePoint } from '../../Camera';
 import { SceneContext } from '../../SceneBase';
@@ -506,12 +505,9 @@ class SMGRenderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        this.spawner.destroy(device);
-
         this.mainRenderTarget.destroy(device);
         this.sceneTexture.destroy(device);
         this.bloomRenderer.destroy(device);
-        this.renderHelper.destroy(device);
     }
 }
 
@@ -730,17 +726,17 @@ function patchBMDModel(bmdModel: BMDModel): void {
 }
 
 export class ModelCache {
-    public archiveProgressableCache = new Map<string, Progressable<RARC.RARC | null>>();
+    public archivePromiseCache = new Map<string, Promise<RARC.RARC | null>>();
     public archiveCache = new Map<string, RARC.RARC | null>();
     public modelCache = new Map<string, BMDModel | null>();
     private models: BMDModel[] = [];
 
-    constructor(public device: GfxDevice, public cache: GfxRenderCache, private pathBase: string, private abortSignal: AbortSignal) {
+    constructor(public device: GfxDevice, public cache: GfxRenderCache, private pathBase: string, private dataFetcher: DataFetcher) {
     }
 
-    public waitForLoad(): Progressable<any> {
-        const v: Progressable<any>[] = [... this.archiveProgressableCache.values()];
-        return Progressable.all(v);
+    public waitForLoad(): Promise<void> {
+        const v: Promise<any>[] = [... this.archivePromiseCache.values()];
+        return Promise.all(v) as Promise<any>;
     }
 
     public getModel(rarc: RARC.RARC, modelFilename: string): BMDModel | null {
@@ -756,11 +752,11 @@ export class ModelCache {
         return bmdModel;
     }
 
-    public requestArchiveData(archivePath: string): Progressable<RARC.RARC | null> {
-        if (this.archiveProgressableCache.has(archivePath))
-            return this.archiveProgressableCache.get(archivePath);
+    public requestArchiveData(archivePath: string): Promise<RARC.RARC | null> {
+        if (this.archivePromiseCache.has(archivePath))
+            return this.archivePromiseCache.get(archivePath);
 
-        const p = fetchData(`${this.pathBase}/${archivePath}`, this.abortSignal).then((buffer: ArrayBufferSlice) => {
+        const p = this.dataFetcher.fetchData(`${this.pathBase}/${archivePath}`, DataFetcherFlags.ALLOW_404).then((buffer: ArrayBufferSlice) => {
             if (buffer.byteLength === 0) {
                 console.warn(`Could not fetch archive ${archivePath}`);
                 return null;
@@ -772,7 +768,7 @@ export class ModelCache {
             return rarc;
         });
 
-        this.archiveProgressableCache.set(archivePath, p);
+        this.archivePromiseCache.set(archivePath, p);
         return p;
     }
 
@@ -1133,27 +1129,6 @@ export function getJMapInfoTrans(dst: vec3, sceneObjHolder: SceneObjHolder, info
     vec3.transformMat4(dst, dst, stageDataHolder.placementMtx);
 }
 
-function matrixExtractEulerAngleRotation(dst: vec3, m: mat4): void {
-    // In SMG, this appears inline in getJMapInfoRotate. It appears to be a simplified form of
-    // "Euler Angle Conversion", Ken Shoemake, Graphics Gems IV. http://www.gregslabaugh.net/publications/euler.pdf
-
-    if (m[2] - 1.0 < -0.0001) {
-        if (m[2] + 1.0 > 0.0001) {
-            dst[0] = Math.atan2(m[6], m[10]);
-            dst[1] = -Math.asin(m[2]);
-            dst[2] = Math.atan2(m[1], m[0]);
-        } else {
-            dst[0] = Math.atan2(m[4], m[8]);
-            dst[1] = Math.PI / 2;
-            dst[2] = 0.0;
-        }
-    } else {
-        dst[0] = -Math.atan2(-m[4], -m[8]);
-        dst[1] = -Math.PI / 2;
-        dst[2] = 0.0;
-    }
-}
-
 const scratchMatrix = mat4.create();
 function getJMapInfoRotate(dst: vec3, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, scratch: mat4 = scratchMatrix): void {
     getJMapInfoRotateLocal(dst, infoIter);
@@ -1163,7 +1138,7 @@ function getJMapInfoRotate(dst: vec3, sceneObjHolder: SceneObjHolder, infoIter: 
     const stageDataHolder = sceneObjHolder.stageDataHolder.findPlacedStageDataHolder(infoIter);
     mat4.mul(scratch, stageDataHolder.placementMtx, scratch);
 
-    matrixExtractEulerAngleRotation(dst, scratch);
+    computeEulerAngleRotationFromSRTMatrix(dst, scratch);
 }
 
 export class LiveActor extends NameObj {
@@ -2453,10 +2428,12 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
     public abstract requestGlobalArchives(modelCache: ModelCache): void;
     public abstract requestZoneArchives(modelCache: ModelCache, zoneName: string): void;
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal, context: SceneContext): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const renderHelper = new GXRenderHelperGfx(device);
+        context.destroyablePool.push(renderHelper);
+
         const gfxRenderCache = renderHelper.renderInstManager.gfxRenderCache;
-        const modelCache = new ModelCache(device, gfxRenderCache, this.pathBase, abortSignal);
+        const modelCache = new ModelCache(device, gfxRenderCache, this.pathBase, context.dataFetcher);
 
         const galaxyName = this.galaxyName;
 
@@ -2471,6 +2448,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
 
         const sceneObjHolder = new SceneObjHolder();
         sceneObjHolder.uiSystem = new UISystem(context.uiContainer);
+        context.destroyablePool.push(sceneObjHolder);
 
         return modelCache.waitForLoad().then(() => {
             const scenarioData = new ScenarioData(modelCache.getArchive(scenarioDataFilename));
@@ -2504,6 +2482,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
                 sceneObjHolder.messageDataHolder = null;
 
             const spawner = new SMGSpawner(galaxyName, this.pathBase, sceneObjHolder);
+            context.destroyablePool.push(spawner);
             spawner.requestArchives();
 
             return modelCache.waitForLoad().then(() => {

@@ -7,12 +7,11 @@ import * as UI from '../ui';
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString, align } from "../util";
 import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
-import Progressable from '../Progressable';
-import { fetchData } from '../fetch';
 import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render';
 import AnimationController from '../AnimationController';
 import { GXMaterialHacks } from '../gx/gx_material';
 import { BasicGXRendererHelper } from '../gx/gx_render';
+import { SceneContext } from '../SceneBase';
 
 interface ARCFileEntry {
     fileType: number;
@@ -93,7 +92,6 @@ class BrawlRenderer extends BasicGXRendererHelper {
 
     protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         this.animationController.setTimeInMilliseconds(viewerInput.time);
-        viewerInput.camera.setClipPlanes(20, 500000);
         const template = this.renderHelper.pushTemplateRenderInst();
         this.renderHelper.fillSceneParams(viewerInput, template);
         for (let i = 0; i < this.modelInstances.length; i++)
@@ -118,8 +116,8 @@ class BrawlRenderer extends BasicGXRendererHelper {
 class BrawlSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
-        return fetchData(`ssbb/stage/${this.id}`, abortSignal).then((buffer: ArrayBufferSlice) => {
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        return context.dataFetcher.fetchData(`ssbb/stage/${this.id}`).then((buffer: ArrayBufferSlice) => {
             const textureHolder = new RRESTextureHolder();
 
             const arc = parseARC(buffer);

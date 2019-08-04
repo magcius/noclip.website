@@ -41,9 +41,14 @@ export function readString(buffer: ArrayBufferSlice, offs: number, length: numbe
     return S;
 }
 
+// Requires that multiple is a power of two.
 export function align(n: number, multiple: number): number {
     const mask = (multiple - 1);
     return (n + mask) & ~mask;
+}
+
+export function alignNonPowerOfTwo(n: number, multiple: number): number {
+    return (((n + multiple - 1) / multiple) | 0) * multiple;
 }
 
 export function nArray<T>(n: number, c: () => T): T[] {

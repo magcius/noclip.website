@@ -2,8 +2,7 @@
 import * as Viewer from '../viewer';
 import * as Yaz0 from '../compression/Yaz0';
 
-import Progressable from '../Progressable';
-import { fetchData } from '../fetch';
+import { DataFetcher } from '../DataFetcher';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 
 import * as SARC from './sarc';
@@ -12,6 +11,8 @@ import { GX2TextureHolder, FMDLRenderer, FMDLData } from './render';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, depthClearRenderPassDescriptor, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { SceneContext } from '../SceneBase';
+import { deswizzler } from './gx2_texture';
 
 enum SplatoonPass {
     SKYBOX = 0x01,
@@ -61,6 +62,8 @@ class SplatoonRenderer implements Viewer.SceneGfx {
             this.fmdlData[i].destroy(device);
         for (let i = 0; i < this.fmdlRenderers.length; i++)
             this.fmdlRenderers[i].destroy(device);
+
+        deswizzler.terminate();
     }
 }
 
@@ -75,21 +78,22 @@ class SplatoonSceneDesc implements Viewer.SceneDesc {
         this.id = this.path;
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const renderer = new SplatoonRenderer();
+        const dataFetcher = context.dataFetcher;
 
-        return Progressable.all([
-            this._createRenderersFromPath(device, renderer, `spl/${this.path}`, false, abortSignal),
-            this._createRenderersFromPath(device, renderer, 'spl/VR_SkyDayCumulonimbus.szs', true, abortSignal),
+        return Promise.all([
+            this._createRenderersFromPath(device, renderer, `spl/${this.path}`, false, dataFetcher),
+            this._createRenderersFromPath(device, renderer, 'spl/VR_SkyDayCumulonimbus.szs', true, dataFetcher),
         ]).then(() => {
             return renderer;
         });
     }
 
-    private _createRenderersFromPath(device: GfxDevice, renderer: SplatoonRenderer, path: string, isSkybox: boolean, abortSignal: AbortSignal): Progressable<void> {
+    private _createRenderersFromPath(device: GfxDevice, renderer: SplatoonRenderer, path: string, isSkybox: boolean, dataFetcher: DataFetcher): Promise<void> {
         const textureHolder = renderer.textureHolder;
 
-        return fetchData(path, abortSignal).then((result: ArrayBufferSlice) => {
+        return dataFetcher.fetchData(path).then((result: ArrayBufferSlice) => {
             return Yaz0.decompress(result);
         }).then((result: ArrayBufferSlice) => {
             const sarc = SARC.parse(result);

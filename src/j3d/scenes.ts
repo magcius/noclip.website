@@ -54,8 +54,6 @@ export class BasicRenderer implements Viewer.SceneGfx {
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         const renderInstManager = this.renderHelper.renderInstManager;
 
-        viewerInput.camera.setClipPlanes(20, 500000);
-
         const template = this.renderHelper.pushTemplateRenderInst();
         this.renderHelper.fillSceneParams(viewerInput, template);
         for (let i = 0; i < this.modelInstances.length; i++)

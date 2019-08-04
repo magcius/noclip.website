@@ -9,17 +9,19 @@ if (module.hot) {
     });
 }
 
-import Progressable from '../Progressable';
 import * as Viewer from '../viewer';
 import { OrbitCameraController } from '../Camera';
 
 import * as sunshine_water from './sunshine_water';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
+import * as orbitview from './orbitview';
+import { DataFetcher } from '../DataFetcher';
+import { SceneContext, Destroyable } from '../SceneBase';
 
-type CreateSceneFunc = (device: GfxDevice, name: string) => Progressable<Viewer.SceneGfx>;
+type CreateSceneFunc = (context: SceneContext, state: string) => Promise<Viewer.SceneGfx>;
 
 const embeds: { [key: string]: CreateSceneFunc } = {
     "sunshine_water": sunshine_water.createScene,
+    "orbitview": orbitview.createScene,
 };
 
 class FsButton {
@@ -75,6 +77,8 @@ class Main {
     public viewer: Viewer.Viewer;
     private canvas: HTMLCanvasElement;
     private fsButton: FsButton;
+    private destroyablePool: Destroyable[] = [];
+    private abortController: AbortController | null = null;
 
     constructor() {
         this.canvas = document.createElement('canvas');
@@ -87,16 +91,14 @@ class Main {
 
         document.body.appendChild(this.canvas);
         window.onresize = this.onResize.bind(this);
+        window.onhashchange = this.loadFromHash.bind(this);
 
         this.fsButton = new FsButton();
         document.body.appendChild(this.fsButton.elem);
 
-        // Dispatch to the main embed.
-        const hash = window.location.hash.slice(1);
-
         this.onResize();
-        this.loadScene(hash);
 
+        this.loadFromHash();
         this._updateLoop(0);
     }
 
@@ -105,11 +107,36 @@ class Main {
         window.requestAnimationFrame(this._updateLoop);
     };
 
+    private loadFromHash(): void {
+        const hash = window.location.hash.slice(1);
+        this.loadScene(hash);
+    }
+
     private async loadScene(hash: string) {
-        const [file, name] = hash.split('/');
+        const firstSlash = hash.indexOf('/');
+        const embedId = hash.slice(0, firstSlash);
+        const state = hash.slice(firstSlash + 1);
+
         const device = this.viewer.gfxDevice;
-        const createScene = embeds[file];
-        const scene = await createScene(device, name);
+        // Destroy the old scene.
+        for (let i = 0; i < this.destroyablePool.length; i++)
+            this.destroyablePool[i].destroy(device);
+        this.destroyablePool.length = 0;
+
+        if (this.abortController !== null)
+            this.abortController.abort();
+
+        // TODO(jstpierre): ProgressMeter
+        const progressMeter = { setProgress: () => {} };
+        this.abortController = new AbortController();
+        const abortSignal = this.abortController.signal;
+        const destroyablePool = this.destroyablePool;
+        const dataFetcher = new DataFetcher(abortSignal, progressMeter);
+        // TODO(jstpierre): Support uiContainer in embeds.
+        const uiContainer = document.createElement('div');
+        const context: SceneContext = { device, dataFetcher, destroyablePool, uiContainer };
+        const createScene = embeds[embedId];
+        const scene = await createScene(context, state);
         this.viewer.setScene(scene);
         this.viewer.setCameraController(new OrbitCameraController());
     }

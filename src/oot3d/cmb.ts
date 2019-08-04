@@ -6,6 +6,7 @@ import { TextureFormat, decodeTexture, computeTextureByteSize } from './pica_tex
 import { GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor, GfxCompareMode, GfxColorWriteMask, GfxChannelBlendState } from '../gfx/platform/GfxPlatform';
 import { makeMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { Color, colorNewFromRGBA8, colorNew } from '../Color';
+import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
 
 export interface VatrChunk {
     dataBuffer: ArrayBufferSlice;
@@ -422,7 +423,7 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
                     alphaBlendState,
                 },
             ],
-            depthCompare: depthTestFunction,
+            depthCompare: reverseDepthForCompareMode(depthTestFunction),
             depthWrite: depthWriteEnabled,
             cullMode,
         });

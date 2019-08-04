@@ -365,6 +365,25 @@ function shapeTypeSupported(shapeType: ShapeType): boolean {
     }
 }
 
+export class JPACData {
+    public texData: BTIData[] = [];
+
+    constructor(public jpac: JPAC) {
+    }
+
+    public translateTexture(device: GfxDevice, index: number): BTIData {
+        if (this.texData[index] === undefined)
+            this.texData[index] = new BTIData(device, this.jpac.textures[index].texture);
+        return this.texData[index];
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.texData.length; i++)
+            if (this.texData[i] !== undefined)
+                this.texData[i].destroy(device);
+    }
+}
+
 export class JPAResourceData {
     public res: JPAResource;
     public supportedParticle: boolean = true;
@@ -374,8 +393,8 @@ export class JPAResourceData {
     public texData: BTIData[] = [];
     public materialHelper: GXMaterialHelperGfx;
 
-    constructor(device: GfxDevice, private jpac: JPAC, resRaw: JPAResourceRaw) {
-        this.res = parseResource(this.jpac.version, resRaw);
+    constructor(device: GfxDevice, private jpacData: JPACData, resRaw: JPAResourceRaw) {
+        this.res = parseResource(this.jpacData.jpac.version, resRaw);
         this.resourceId = resRaw.resourceId;
 
         const bsp1 = this.res.bsp1;
@@ -540,10 +559,8 @@ export class JPAResourceData {
     }
 
     private translateTDB1Index(device: GfxDevice, idx: number): void {
-        if (this.texData[idx] === undefined) {
-            const timg = this.jpac.textures[this.res.tdb1[idx]].texture;
-            this.texData[idx] = new BTIData(device, timg);
-        }
+        if (this.texData[idx] === undefined)
+            this.texData[idx] = this.jpacData.translateTexture(device, this.res.tdb1[idx]);
     }
 
     public destroy(device: GfxDevice): void {
@@ -822,6 +839,9 @@ class JPAEmitterWorkData {
     public prevParticlePos = vec3.create();
     public particleSortKey = makeSortKeyTranslucent(GfxRendererLayer.TRANSLUCENT);
     public forceTexMtxIdentity: boolean = false;
+
+    public materialParams = new MaterialParams();
+    public packetParams = new PacketParams();
 }
 
 export class JPADrawInfo {
@@ -1173,8 +1193,6 @@ const enum TraverseOrder {
     FORWARD = 0x01,
 }
 
-const materialParams = new MaterialParams();
-const packetParams = new PacketParams();
 const scratchVec3Points = nArray(4, () => vec3.create());
 export class JPABaseEmitter {
     public flags: BaseEmitterFlags;
@@ -1714,6 +1732,9 @@ export class JPABaseEmitter {
         const traverseOrder: TraverseOrder = (bsp1.flags >>> 21) & 0x01;
         const reverseOrder = traverseOrder === TraverseOrder.REVERSE;
 
+        const packetParams = workData.packetParams;
+        const materialParams = workData.materialParams;
+
         mat4.copy(packetParams.u_PosMtx[0], workData.posCamMtx);
 
         if (!calcTexCrdMtxPrj(materialParams.u_TexMtx[0], workData, workData.posCamMtx)) {
@@ -1860,6 +1881,8 @@ export class JPABaseEmitter {
 
         // mpDrawEmitterFuncList
 
+        const materialParams = workData.materialParams;
+
         const isEnableTextureAnm = !!(bsp1.texFlags & 0x00000001);
         const texCalcOnEmitter = !!(bsp1.flags & 0x00004000);
         if (!isEnableTextureAnm)
@@ -1914,6 +1937,8 @@ export class JPABaseEmitter {
     private drawC(device: GfxDevice, renderHelper: GXRenderHelperGfx, workData: JPAEmitterWorkData): void {
         const bsp1 = this.resData.res.bsp1;
         const ssp1 = this.resData.res.ssp1;
+
+        const materialParams = workData.materialParams;
 
         this.flags = this.flags | 0x00000080;
 
@@ -3010,6 +3035,8 @@ export class JPABaseParticle {
 
         const globalRes = workData.emitterManager.globalRes;
         const shapeType = sp1.shapeType;
+
+        const packetParams = workData.packetParams;
 
         if (shapeType === ShapeType.Billboard) {
             const rotateAngle = isRot ? this.rotateAngle : 0;

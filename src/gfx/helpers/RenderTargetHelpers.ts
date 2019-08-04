@@ -1,6 +1,7 @@
 
 import { GfxColorAttachment, GfxDevice, GfxDepthStencilAttachment, GfxLoadDisposition, GfxRenderPassDescriptor, GfxFormat, GfxTexture, GfxTextureDimension, GfxRenderPass } from "../platform/GfxPlatform";
 import { colorNew, TransparentBlack, Color } from "../../Color";
+import { reverseDepthForClearValue } from "./ReversedDepthHelpers";
 
 export const DEFAULT_NUM_SAMPLES = 4;
 
@@ -149,7 +150,7 @@ export function makeClearRenderPassDescriptor(shouldClearColor: boolean, clearCo
         depthStencilAttachment: null,
         colorClearColor: clearColor,
         colorLoadDisposition: shouldClearColor ? GfxLoadDisposition.CLEAR : GfxLoadDisposition.LOAD,
-        depthClearValue: 1.0,
+        depthClearValue: reverseDepthForClearValue(1.0),
         depthLoadDisposition: GfxLoadDisposition.CLEAR,
         stencilClearValue: 0.0,
         stencilLoadDisposition: GfxLoadDisposition.CLEAR,
@@ -164,7 +165,7 @@ export const noClearRenderPassDescriptor: GfxRenderPassDescriptor = {
     depthStencilAttachment: null,
     colorClearColor: TransparentBlack,
     colorLoadDisposition: GfxLoadDisposition.LOAD,
-    depthClearValue: 1.0,
+    depthClearValue: reverseDepthForClearValue(1.0),
     depthLoadDisposition: GfxLoadDisposition.LOAD,
     stencilClearValue: 0.0,
     stencilLoadDisposition: GfxLoadDisposition.LOAD,

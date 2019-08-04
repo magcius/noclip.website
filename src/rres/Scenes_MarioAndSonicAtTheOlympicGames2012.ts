@@ -1,17 +1,17 @@
 
 import * as Viewer from "../viewer";
-import Progressable from "../Progressable";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { fetchData } from "../fetch";
 import { createBasicRRESRendererFromU8Buffer } from "./scenes";
+import { SceneContext } from "../SceneBase";
 
 const dataPath = `MarioAndSonicAtTheOlympicGames2012`;
 
 class BasicRRESSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string = id) {}
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
-        return fetchData(`${dataPath}/Terrain/${this.id}`, abortSignal).then((data) => {
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const dataFetcher = context.dataFetcher;
+        return dataFetcher.fetchData(`${dataPath}/Terrain/${this.id}`).then((data) => {
             return createBasicRRESRendererFromU8Buffer(device, data);
         });
     }

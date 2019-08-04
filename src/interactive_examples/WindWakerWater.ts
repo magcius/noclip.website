@@ -1,9 +1,7 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 
-import Progressable from '../Progressable';
-
-import { fetchData } from '../fetch';
+import { DataFetcher } from '../DataFetcher';
 import { SceneGfx, ViewerRenderInput } from '../viewer';
 
 import * as GX from '../gx/gx_enum';
@@ -114,7 +112,6 @@ class PlaneShape {
         device.destroyBuffer(this.idxBuffer);
         device.destroyBuffer(this.zeroBuffer);
         device.destroyBuffer(this.colorBuffer);
-        device.destroyInputLayout(this.inputLayout);
         device.destroyInputState(this.inputState);
     }
 }
@@ -276,8 +273,8 @@ export class WindWakerRenderer implements SceneGfx {
     }
 }
 
-function fetchArc(archivePath: string, abortSignal: AbortSignal): Progressable<RARC.RARC> {
-    return fetchData(archivePath, abortSignal).then((data) => {
+function fetchArc(archivePath: string, dataFetcher: DataFetcher): Promise<RARC.RARC> {
+    return dataFetcher.fetchData(archivePath).then((data) => {
         if (readString(data, 0, 0x04) === 'Yaz0')
             return Yaz0.decompress(data);
         else
@@ -291,10 +288,11 @@ export class WindWakerWater implements SceneDesc {
     constructor(public id: string, public name: string) {
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal, sceneContext: SceneContext): Progressable<SceneGfx> {
-        return Progressable.all([
-            fetchArc(`j3d/ww/Stage/sea/Stage.arc`, sceneContext.abortSignal),
-            fetchArc(`j3d/ww/Stage/sea/Room44.arc`, sceneContext.abortSignal),
+    public createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
+        const dataFetcher = context.dataFetcher;
+        return Promise.all([
+            fetchArc(`j3d/ww/Stage/sea/Stage.arc`, dataFetcher),
+            fetchArc(`j3d/ww/Stage/sea/Room44.arc`, dataFetcher),
         ]).then(([stageRarc, roomRarc]) => {
             const dzsFile = stageRarc.findFileData(`dzs/stage.dzs`)!;
             const colors = getColorsFromDZS(dzsFile, 0, 2);

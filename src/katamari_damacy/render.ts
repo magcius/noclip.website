@@ -11,6 +11,7 @@ import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
 import { nArray, assert } from "../util";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer2";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers";
 
 export class KatamariDamacyProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -151,7 +152,6 @@ export class BINModelData {
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.indexBuffer);
-        device.destroyInputLayout(this.inputLayout);
         device.destroyInputState(this.inputState);
     }
 }
@@ -217,7 +217,7 @@ export class BINModelPartInstance {
         assert(zte);
 
         this.megaStateFlags = {
-            depthCompare: translateDepthCompareMode(ztst),
+            depthCompare: reverseDepthForCompareMode(translateDepthCompareMode(ztst)),
         };
 
         if (this.binModelPart.textureName !== null) {

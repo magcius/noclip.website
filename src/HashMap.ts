@@ -32,9 +32,9 @@ class HashBucket<K, V> {
     public values: V[] = [];
 }
 
-// TODO(jstpierre): Dynamic load factor.
 export class HashMap<K, V> {
     public buckets: (HashBucket<K, V> | null)[];
+    private needsReconfigure: boolean = false;
 
     constructor(private keyEqualFunc: EqualFunc<K>, private keyHashFunc: HashFunc<K>, numBuckets = 16, private autoLoadFactor: number | null = null) {
         if (keyHashFunc === nullHashFunc)
@@ -70,7 +70,7 @@ export class HashMap<K, V> {
         bucket.values.push(v);
 
         if (this.autoLoadFactor !== null)
-            this.reconfigureForLoadFactor(this.autoLoadFactor);
+            this.manuallyReconfigure();
     }
 
     public delete(k: K): void {
@@ -110,8 +110,23 @@ export class HashMap<K, V> {
         }
     }
 
-    public reconfigureForLoadFactor(loadFactor: number): void {
-        let numBuckets = Math.ceil(this.size() / loadFactor);
+    public checkForReconfigure(): void {
+        // In order to cut down on rehashing time, we will only reconfigure our HashMap
+        // after a frame delay. This is designed for the case where items are inserted
+        // in a large time block at the beginning of the scene load.
+        if (this.needsReconfigure)
+            return;
+
+        let numBuckets = Math.ceil(this.size() / this.autoLoadFactor);
+        if (numBuckets <= this.buckets.length)
+            return;
+
+        this.needsReconfigure = true;
+        requestAnimationFrame(() => this.manuallyReconfigure());
+    }
+
+    public manuallyReconfigure(): void {
+        let numBuckets = Math.ceil(this.size() / this.autoLoadFactor);
         if (numBuckets <= this.buckets.length)
             return;
 
@@ -130,6 +145,7 @@ export class HashMap<K, V> {
             }
         }
         this.buckets = newBuckets;
+        this.needsReconfigure = false;
     }
 
     public calcLoadFactor(): number {

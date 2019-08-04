@@ -9,6 +9,10 @@ import { copyMegaState, defaultMegaState, fullscreenMegaState } from '../helpers
 import { IS_DEVELOPMENT } from '../../BuildVersion';
 import { White, colorEqual, colorCopy } from '../../Color';
 
+// This is a workaround for ANGLE not supporting UBOs greater than 64kb (the limit of D3D).
+// https://bugs.chromium.org/p/angleproject/issues/detail?id=3388
+const UBO_PAGE_BYTE_SIZE = 0x10000;
+
 export class FullscreenCopyProgram extends FullscreenProgram {
     public frag: string = `
 uniform sampler2D u_Texture;
@@ -817,10 +821,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
         let pageByteSize: number;
         if (usage === GfxBufferUsage.UNIFORM) {
-            // This is a workaround for ANGLE not supporting UBOs greater than 64kb (the limit of D3D).
-            // It seems like this is a bug because there is supposed to be code to handle it, but it doesn't appear to work.
-            const UBO_PAGE_BYTE_SIZE = 0x10000;
-
             assert((byteSize % UBO_PAGE_BYTE_SIZE) === 0);
             let byteSizeLeft = byteSize;
             while (byteSizeLeft > 0) {
@@ -1138,7 +1138,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const gl = this.gl;
         return {
             uniformBufferWordAlignment: gl.getParameter(gl.UNIFORM_BUFFER_OFFSET_ALIGNMENT) / 4,
-            uniformBufferMaxPageWordSize: gl.getParameter(gl.MAX_UNIFORM_BLOCK_SIZE) / 4,
+            uniformBufferMaxPageWordSize: Math.min(gl.getParameter(gl.MAX_UNIFORM_BLOCK_SIZE), UBO_PAGE_BYTE_SIZE) / 4,
         };
     }
 
@@ -1298,8 +1298,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                             } else {
                                 const gl_type = this.translateTextureType(pixelFormat);
                                 gl.texSubImage2D(gl_target, i, 0, 0, w, h, gl_format, gl_type, levelData);
-                                if (gl.getError() !== gl.NO_ERROR)
-                                    throw "whoops";
                             }
                         }
                     }

@@ -15,6 +15,7 @@ import { TextureHolder, TextureMapping } from '../TextureHolder';
 import { nArray } from '../util';
 import { GfxRenderInstManager, executeOnPass } from '../gfx/render/GfxRenderer2';
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
+import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
 
 export function textureToCanvas(texture: BinTex.Texture): Viewer.Texture {
     const canvas = document.createElement("canvas");
@@ -494,7 +495,7 @@ export class SceneRenderer {
             blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
             blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
             depthWrite: true,
-            depthCompare: GfxCompareMode.LEQUAL
+            depthCompare: reverseDepthForCompareMode(GfxCompareMode.LEQUAL),
         };
 
         for (let i = 0; i < drawCalls.length; i++)

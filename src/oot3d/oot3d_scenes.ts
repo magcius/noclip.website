@@ -10,11 +10,10 @@ import * as Viewer from '../viewer';
 import * as UI from '../ui';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import Progressable from '../Progressable';
 import { RoomRenderer, CtrTextureHolder, CmbInstance, CmbData, fillSceneParamsDataOnTemplate } from './render';
 import { SceneGroup } from '../viewer';
 import { assert, assertExists, hexzero, readString } from '../util';
-import { fetchData } from '../fetch';
+import { DataFetcher, DataFetcherFlags } from '../DataFetcher';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
 import { mat4 } from 'gl-matrix';
 import AnimationController from '../AnimationController';
@@ -22,6 +21,7 @@ import { TransparentBlack, colorNew, White } from '../Color';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxRenderInstManager, executeOnPass } from '../gfx/render/GfxRenderer2';
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
+import { SceneContext } from '../SceneBase';
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numSamplers: 3, numUniformBuffers: 3 }];
 
@@ -165,30 +165,33 @@ export function maybeDecompress(buffer: ArrayBufferSlice): ArrayBufferSlice {
 }
 
 export class ModelCache {
-    private fileProgressableCache = new Map<string, Progressable<ArrayBufferSlice>>();
+    private filePromiseCache = new Map<string, Promise<ArrayBufferSlice>>();
     private fileDataCache = new Map<string, ArrayBufferSlice>();
-    private archiveProgressableCache = new Map<string, Progressable<ZAR.ZAR>>();
+    private archivePromiseCache = new Map<string, Promise<ZAR.ZAR>>();
     private archiveCache = new Map<string, ZAR.ZAR>();
     private modelCache = new Map<string, CmbData>();
 
-    public waitForLoad(): Progressable<any> {
-        const v: Progressable<any>[] = [... this.fileProgressableCache.values(), ... this.archiveProgressableCache.values()];
-        return Progressable.all(v);
+    constructor(private dataFetcher: DataFetcher) {
     }
 
-    private fetchFile(path: string, abortSignal: AbortSignal): Progressable<ArrayBufferSlice> {
-        assert(!this.fileProgressableCache.has(path));
-        const p = fetchData(path, abortSignal);
-        this.fileProgressableCache.set(path, p);
+    public waitForLoad(): Promise<any> {
+        const v: Promise<any>[] = [... this.filePromiseCache.values(), ... this.archivePromiseCache.values()];
+        return Promise.all(v);
+    }
+
+    private fetchFile(path: string): Promise<ArrayBufferSlice> {
+        assert(!this.filePromiseCache.has(path));
+        const p = this.dataFetcher.fetchData(path);
+        this.filePromiseCache.set(path, p);
         return p;
     }
 
-    public fetchFileData(path: string, abortSignal: AbortSignal): Progressable<ArrayBufferSlice> {
-        const p = this.fileProgressableCache.get(path);
+    public fetchFileData(path: string): Promise<ArrayBufferSlice> {
+        const p = this.filePromiseCache.get(path);
         if (p !== undefined) {
             return p.then(() => this.getFileData(path));
         } else {
-            return this.fetchFile(path, abortSignal).then((data) => {
+            return this.fetchFile(path).then((data) => {
                 this.fileDataCache.set(path, data);
                 return data;
             });
@@ -203,17 +206,17 @@ export class ModelCache {
         return assertExists(this.archiveCache.get(archivePath));
     }
 
-    public fetchArchive(archivePath: string, abortSignal: AbortSignal): Progressable<ZAR.ZAR> {
-        let p = this.archiveProgressableCache.get(archivePath);
+    public fetchArchive(archivePath: string): Promise<ZAR.ZAR> {
+        let p = this.archivePromiseCache.get(archivePath);
         if (p === undefined) {
-            p = this.fetchFileData(archivePath, abortSignal).then((data) => {
+            p = this.fetchFileData(archivePath).then((data) => {
                 return data;
             }).then((data) => {
                 const arc = ZAR.parse(maybeDecompress(data));
                 this.archiveCache.set(archivePath, arc);
                 return arc;
             });
-            this.archiveProgressableCache.set(archivePath, p);
+            this.archivePromiseCache.set(archivePath, p);
         }
 
         return p;
@@ -751,18 +754,9 @@ class SceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string, public setupIndex: number = -1) {
     }
 
-    public createScene(device: GfxDevice, abortSignal: AbortSignal): Progressable<Viewer.SceneGfx> {
-        // Fetch the ZAR & info ZSI.
-        const path_zar = `${pathBase}/scene/${this.id}.zar`;
-        const path_info_zsi = `${pathBase}/scene/${this.id}_info.zsi`;
-        return Progressable.all([fetchData(path_zar, abortSignal), fetchData(path_info_zsi, abortSignal)]).then(([zar, zsi]) => {
-            return this.createSceneFromData(device, abortSignal, zar, zsi);
-        });
-    }
-
-    private spawnActorForRoom(device: GfxDevice, abortSignal: AbortSignal, scene: Scene, renderer: OoT3DRenderer, roomRenderer: RoomRenderer, actor: ZSI.Actor, j: number): void {
-        function fetchArchive(archivePath: string): Progressable<ZAR.ZAR> { 
-            return renderer.modelCache.fetchArchive(`${pathBase}/actor/${archivePath}`, abortSignal);
+    private spawnActorForRoom(device: GfxDevice, scene: Scene, renderer: OoT3DRenderer, roomRenderer: RoomRenderer, actor: ZSI.Actor, j: number): void {
+        function fetchArchive(archivePath: string): Promise<ZAR.ZAR> { 
+            return renderer.modelCache.fetchArchive(`${pathBase}/actor/${archivePath}`);
         }
 
         function buildModel(zar: ZAR.ZAR, modelPath: string, scale: number = 0.01): CmbInstance {
@@ -1974,9 +1968,18 @@ class SceneDesc implements Viewer.SceneDesc {
         }
     }
 
-    private createSceneFromData(device: GfxDevice, abortSignal: AbortSignal, zarBuffer: ArrayBufferSlice, zsiBuffer: ArrayBufferSlice): Progressable<Viewer.SceneGfx> {
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const path_zar = `${pathBase}/scene/${this.id}.zar`;
+        const path_info_zsi = `${pathBase}/scene/${this.id}_info.zsi`;
+        const dataFetcher = context.dataFetcher;
+
+        const [zarBuffer, zsiBuffer] = await Promise.all([
+            dataFetcher.fetchData(path_zar, DataFetcherFlags.ALLOW_404),
+            dataFetcher.fetchData(path_info_zsi),
+        ]);
+
         const textureHolder = new CtrTextureHolder();
-        const modelCache = new ModelCache();
+        const modelCache = new ModelCache(dataFetcher);
 
         const zar = zarBuffer.byteLength ? ZAR.parse(zarBuffer) : null;
 
@@ -1984,8 +1987,8 @@ class SceneDesc implements Viewer.SceneDesc {
         assert(zsi.rooms !== null);
 
         const renderer = new OoT3DRenderer(device, textureHolder, zsi, modelCache);
+        context.destroyablePool.push(renderer);
 
-        // TODO(jstpierre): Fix this.
         const scene = chooseSceneFromId(this.id);
 
         const roomZSINames: string[] = [];
@@ -1993,10 +1996,10 @@ class SceneDesc implements Viewer.SceneDesc {
             const filename = zsi.rooms[i].split('/').pop();
             const roomZSIName = `${pathBase}/scene/${filename}`;
             roomZSINames.push(roomZSIName);
-            modelCache.fetchFileData(roomZSIName, abortSignal);
+            modelCache.fetchFileData(roomZSIName);
         }
 
-        modelCache.fetchArchive(`${pathBase}/kankyo/BlueSky.zar`, abortSignal);
+        modelCache.fetchArchive(`${pathBase}/kankyo/BlueSky.zar`);
 
         return modelCache.waitForLoad().then(() => {
             for (let i = 0; i < roomZSINames.length; i++) {
@@ -2023,12 +2026,12 @@ class SceneDesc implements Viewer.SceneDesc {
                 renderer.roomRenderers.push(roomRenderer);
 
                 for (let j = 0; j < roomSetup.actors.length; j++)
-                    this.spawnActorForRoom(device, abortSignal, scene, renderer, roomRenderer, roomSetup.actors[j], j);
+                    this.spawnActorForRoom(device, scene, renderer, roomRenderer, roomSetup.actors[j], j);
             }
 
             // We stick doors into the first roomRenderer to keep things simple.
             for (let j = 0; j < zsi.doorActors.length; j++)
-                this.spawnActorForRoom(device, abortSignal, scene, renderer, renderer.roomRenderers[0], zsi.doorActors[j], j);
+                this.spawnActorForRoom(device, scene, renderer, renderer.roomRenderers[0], zsi.doorActors[j], j);
 
             const skyboxZAR = modelCache.getArchive(`${pathBase}/kankyo/BlueSky.zar`);
             this.spawnSkybox(device, renderer, skyboxZAR, zsi.skyboxSettings);

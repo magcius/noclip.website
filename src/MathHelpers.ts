@@ -1,5 +1,5 @@
 
-import { mat4, vec3, vec4 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
 
 // Misc bits of 3D math.
 
@@ -206,4 +206,64 @@ export function lerpAngle(v0: number, v1: number, t: number): number {
     const da = (v1 - v0) % 1.0;
     const dist = (2*da) % 1.0 - da;
     return v0 + dist * t;
+}
+
+// Similar to mat4.frustum, except it can handle infinite far planes.
+export function computeProjectionMatrixFromFrustum(m: mat4, left: number, right: number, bottom: number, top: number, near: number, far: number) {
+    const rl = 1 / (right - left);
+    const tb = 1 / (top - bottom);
+    m[0] = near * 2 * rl;
+    m[1] = 0;
+    m[2] = 0;
+    m[3] = 0;
+    m[4] = 0;
+    m[5] = near * 2 * tb;
+    m[6] = 0;
+    m[7] = 0;
+    m[8] = (right + left) * rl;
+    m[9] = (top + bottom) * tb;
+    m[11] = -1;
+    m[12] = 0;
+    m[13] = 0;
+    m[15] = 0;
+
+    if (far !== Infinity) {
+        const nf = 1 / (near - far);
+        m[10] = (far + near) * nf;
+        m[14] = far * near * 2 * nf;
+    } else {
+        m[10] = -1;
+        m[14] = -2 * near;
+    }
+}
+
+export function computeEulerAngleRotationFromSRTMatrix(dst: vec3, m: mat4): void {
+    // "Euler Angle Conversion", Ken Shoemake, Graphics Gems IV. http://www.gregslabaugh.net/publications/euler.pdf
+
+    if (m[2] - 1.0 < -0.0001) {
+        if (m[2] + 1.0 > 0.0001) {
+            dst[0] = Math.atan2(m[6], m[10]);
+            dst[1] = -Math.asin(m[2]);
+            dst[2] = Math.atan2(m[1], m[0]);
+        } else {
+            dst[0] = Math.atan2(m[4], m[8]);
+            dst[1] = Math.PI / 2;
+            dst[2] = 0.0;
+        }
+    } else {
+        dst[0] = -Math.atan2(-m[4], -m[8]);
+        dst[1] = -Math.PI / 2;
+        dst[2] = 0.0;
+    }
+}
+
+export function computeUnitSphericalCoordinates(dst: vec3, azimuthal: number, polar: number): void {
+    // https://en.wikipedia.org/wiki/Spherical_coordinate_system
+    // https://en.wikipedia.org/wiki/List_of_common_coordinate_transformations#From_spherical_coordinates
+    // Wikipedia uses the (wrong) convention of Z-up tho...
+
+    const sinP = Math.sin(polar);
+    dst[0] = sinP * Math.cos(azimuthal);
+    dst[1] = Math.cos(polar);
+    dst[2] = sinP * Math.sin(azimuthal);
 }
