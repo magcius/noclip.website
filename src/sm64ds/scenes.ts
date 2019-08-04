@@ -574,11 +574,12 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
         return bmdRenderer;
     }
 
-    private _createBMDObjRenderer(device: GfxDevice, renderer: SM64DSRenderer, filename: string, translation: vec3, rotationY: number, scale: number = 1, spinSpeed: number = 0): Promise<BMDModelInstance> {
+    private async _createBMDObjRenderer(device: GfxDevice, renderer: SM64DSRenderer, filename: string, translation: vec3, rotationY: number, scale: number = 1, spinSpeed: number = 0): Promise<BMDModelInstance> {
         const modelCache = renderer.modelCache;
-        return modelCache.fetchModel(device, filename).then((bmdData: BMDData) => {
-            return this._createObjectRenderer(device, renderer, bmdData, translation, rotationY, scale, spinSpeed);
-        });
+        const bmdData = await modelCache.fetchModel(device, filename);
+        const b = this._createObjectRenderer(device, renderer, bmdData, translation, rotationY, scale, spinSpeed);
+        b.name = filename;
+        return b;
     }
 
     private async _createBMDRendererForObject(device: GfxDevice, renderer: SM64DSRenderer, object: CRG1Object): Promise<void> {
@@ -599,6 +600,8 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
         const objectId: ObjectId = object.ObjectId;
         if (objectId === ObjectId.UPDOWN_LIFT) {
             const b = await spawnObject(`/data/normal_obj/obj_updnlift/obj_updnlift.bmd`);
+        } else if (objectId === ObjectId.IRONBALL) {
+            const b = await spawnObject(`/data/enemy/iron_ball/iron_ball.bmd`);
         } else if (objectId === ObjectId.KURIBO) {
             const b = await spawnObject(`/data/enemy/kuribo/kuribo_model.bmd`);
             await bindBCA(b, `/data/enemy/kuribo/kuribo_wait.bca`);
@@ -616,8 +619,8 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
             await bindBCA(b, `/data/enemy/bombhei/red_wait.bca`);
         } else if (objectId === ObjectId.BLOCK_L) {
             const b = await spawnObject(`/data/normal_obj/obj_block/broken_block_l.bmd`);
-        } else if (objectId === ObjectId.BLOCK_LL) {
-            const b = await spawnObject(`/data/normal_obj/obj_block/broken_block_l.bmd`, 1.2);
+        } else if (objectId === ObjectId.CANNON_SHUTTER) {
+            const b = await spawnObject(`/data/normal_obj/obj_cannon_shutter/cannon_shutter.bmd`);
         } else if (objectId === ObjectId.HATENA_BLOCK) {
             const b = await spawnObject(`/data/normal_obj/obj_hatena_box/hatena_box.bmd`);
         } else if (objectId === ObjectId.PILE) {
@@ -658,6 +661,11 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
             const b = await spawnObject(`/data/special_obj/b_ana_shutter/b_ana_shutter.bmd`);
         } else if (objectId === ObjectId.ONEUPKINOKO) {
             const b = await spawnObject(`/data/normal_obj/oneup_kinoko/oneup_kinoko.bmd`);
+        } else if (objectId === ObjectId.CANNON) {
+            const b = await spawnObject(`/data/normal_obj/obj_cannon/houdai.bmd`);
+        } else if (objectId === ObjectId.BOMBKING) {
+            const b = await spawnObject(`/data/enemy/bombking/bomb_king.bmd`);
+            await bindBCA(b, `/data/enemy/bombking/bombking_wait1.bca`);
         } else if (objectId === ObjectId.STAR_CAMERA) { // Star Camera Path
             return null;
         } else if (objectId === ObjectId.STAR) { // Star Target
@@ -701,6 +709,8 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
         } else if (objectId === ObjectId.RACE_NOKO) {
             const b = await spawnObject(`/data/enemy/nokonoko/nokonoko.bmd`, 1);
             await bindBCA(b, '/data/enemy/nokonoko/nokonoko_wait1.bca');
+        } else if (objectId === ObjectId.BLOCK_LL) {
+            const b = await spawnObject(`/data/normal_obj/obj_block/broken_block_l.bmd`, 1.2);
         } else if (objectId === ObjectId.MC_WATER) {
             const b = await spawnObject(`/data/special_obj/mc_water/mc_water.bmd`);
         } else if (objectId === ObjectId.MC_METALNET) {

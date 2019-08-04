@@ -46,7 +46,7 @@ layout(row_major, std140) uniform ub_MaterialParams {
 #define u_TexCoordMode (u_Misc0.x)
 
 layout(row_major, std140) uniform ub_PacketParams {
-    Mat4x3 u_PosMtx[8];
+    Mat4x3 u_PosMtx[16];
 };
 
 uniform sampler2D u_Texture;
@@ -354,6 +354,7 @@ class ShapeInstance {
     public visible = true;
 
     constructor(private materialInstance: MaterialInstance, private batchData: BatchData) {
+        assert(this.batchData.batch.matrixTable.length <= 16);
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, normalMatrix: mat4, extraTexCoordMat: mat2d | null, modelInstance: BMDModelInstance): void {
@@ -366,7 +367,7 @@ class ShapeInstance {
         template.setInputLayoutAndState(vertexData.inputLayout, vertexData.inputState);
         this.materialInstance.prepareToRender(device, renderInstManager, template, viewerInput, normalMatrix, extraTexCoordMat);
 
-        let offs = template.allocateUniformBuffer(NITRO_Program.ub_PacketParams, 12*8);
+        let offs = template.allocateUniformBuffer(NITRO_Program.ub_PacketParams, 12*16);
         const d = template.mapUniformBufferF32(NITRO_Program.ub_PacketParams);
         const rootJoint = this.batchData.rootJoint;
         for (let i = 0; i < this.batchData.batch.matrixTable.length; i++) {
