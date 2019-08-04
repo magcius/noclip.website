@@ -13,6 +13,7 @@ import * as MREA from './mrea';
 import * as STRG from './strg';
 import * as TXTR from './txtr';
 import * as CMDL from './cmdl';
+import * as ANCS from './ancs';
 
 type ParseFunc<T> = (resourceSystem: ResourceSystem, assetID: string, buffer: ArrayBufferSlice) => T;
 type Resource = any;
@@ -23,6 +24,7 @@ const FourCCLoaders: { [n: string]: ParseFunc<Resource> } = {
     'STRG': STRG.parse,
     'TXTR': TXTR.parse,
     'CMDL': CMDL.parse,
+    'ANCS': ANCS.parse,
 };
 
 interface NameDataAsset {
