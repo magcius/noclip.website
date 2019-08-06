@@ -173,6 +173,31 @@ export function texEnvMtx(dst: mat4, scaleS: number, scaleT: number, transS: num
     dst[15] = 9999.0;
 }
 
+export function computeTranslationMatrixFromSRTMatrix(dst: mat4, m: mat4): void {
+    mat4.identity(dst);
+    dst[12] = m[12];
+    dst[13] = m[13];
+    dst[14] = m[14];
+}
+
+export function computeRotationMatrixFromSRTMatrix(dst: mat4, m: mat4): void {
+    const mx = 1 / Math.hypot(m[0], m[4], m[8]);
+    const my = 1 / Math.hypot(m[1], m[5], m[9]);
+    const mz = 1 / Math.hypot(m[2], m[6], m[10]);
+    dst[0] = m[0] * mx;
+    dst[4] = m[4] * mx;
+    dst[8] = m[8] * mx;
+    dst[1] = m[1] * my;
+    dst[5] = m[5] * my;
+    dst[9] = m[9] * my;
+    dst[2] = m[2] * mz;
+    dst[6] = m[6] * mz;
+    dst[10] = m[10] * mz;
+    dst[12] = 0;
+    dst[13] = 0;
+    dst[14] = 0;
+}
+
 export function computeMatrixWithoutTranslation(dst: mat4, m: mat4): void {
     mat4.copy(dst, m);
     dst[12] = 0;

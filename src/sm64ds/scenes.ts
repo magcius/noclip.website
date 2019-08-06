@@ -13,7 +13,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { NITROTextureHolder, BMDData, Sm64DSCRG1, BMDModelInstance, SM64DSPass, CRG1Level, CRG1Object, NITRO_Program } from './render';
 import { BasicRenderTarget, transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { vec3, mat4, mat2d } from 'gl-matrix';
-import { assertExists, assert, leftPad, hexzero } from '../util';
+import { assertExists, assert, leftPad } from '../util';
 import AnimationController from '../AnimationController';
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
@@ -431,11 +431,43 @@ class ModelCache {
     }
 }
 
+interface Animation {
+    updateModelMatrix(time: number, modelMatrix: mat4): void;
+}
+
+class ObjectRenderer {
+    public animationController = new AnimationController();
+    public animation: Animation | null = null;
+    public modelMatrix = mat4.create();
+
+    constructor(public modelInstance: BMDModelInstance) {
+    }
+
+    public calcAnim(viewerInput: Viewer.ViewerRenderInput): void {
+        this.animationController.setTimeFromViewerInput(viewerInput);
+
+        mat4.copy(this.modelInstance.modelMatrix, this.modelMatrix);
+        if (this.animation !== null)
+            this.animation.updateModelMatrix(viewerInput.time, this.modelInstance.modelMatrix);
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        this.calcAnim(viewerInput);
+
+        this.modelInstance.prepareToRender(device, renderInstManager, viewerInput);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.modelInstance.destroy(device);
+    }
+}
+
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 3, numSamplers: 1 },
 ];
 class SM64DSRenderer implements Viewer.SceneGfx {
     public renderTarget = new BasicRenderTarget();
+    public objectRenderers: ObjectRenderer[] = [];
     public bmdRenderers: BMDModelInstance[] = [];
     public animationController = new AnimationController();
 
@@ -480,6 +512,8 @@ class SM64DSRenderer implements Viewer.SceneGfx {
 
         for (let i = 0; i < this.bmdRenderers.length; i++)
             this.bmdRenderers[i].prepareToRender(device, this.renderInstManager, viewerInput);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].prepareToRender(device, this.renderInstManager, viewerInput);
 
         this.renderInstManager.popTemplateRenderInst();
 
@@ -520,6 +554,8 @@ class SM64DSRenderer implements Viewer.SceneGfx {
         this.modelCache.destroy(device);
         for (let i = 0; i < this.bmdRenderers.length; i++)
             this.bmdRenderers[i].destroy(device);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].destroy(device);
     }
 }
 
@@ -553,32 +589,30 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
         return bmdRenderer;
     }
 
-    private _createObjectRenderer(device: GfxDevice, renderer: SM64DSRenderer, bmdData: BMDData, translation: vec3, rotationY: number, scale: number = 1, spinSpeed: number = 0): BMDModelInstance {
-        const bmdRenderer = new BMDModelInstance(device, renderer.textureHolder, bmdData);
+    private _createObjectRenderer(device: GfxDevice, renderer: SM64DSRenderer, bmdData: BMDData, translation: vec3, rotationY: number, scale: number = 1, spinSpeed: number = 0): ObjectRenderer {
+        const modelInstance = new BMDModelInstance(device, renderer.textureHolder, bmdData);
+        const objectRenderer = new ObjectRenderer(modelInstance);
 
         vec3.scale(translation, translation, GLOBAL_SCALE);
-        mat4.translate(bmdRenderer.modelMatrix, bmdRenderer.modelMatrix, translation);
-
-        mat4.rotateY(bmdRenderer.modelMatrix, bmdRenderer.modelMatrix, rotationY);
+        mat4.translate(objectRenderer.modelMatrix, objectRenderer.modelMatrix, translation);
+        mat4.rotateY(objectRenderer.modelMatrix, objectRenderer.modelMatrix, rotationY);
 
         // Don't ask, ugh.
         scale = scale * (GLOBAL_SCALE / 100);
-        mat4.scale(bmdRenderer.modelMatrix, bmdRenderer.modelMatrix, [scale, scale, scale]);
-
-        mat4.rotateY(bmdRenderer.normalMatrix, bmdRenderer.normalMatrix, rotationY);
+        mat4.scale(objectRenderer.modelMatrix, objectRenderer.modelMatrix, [scale, scale, scale]);
 
         if (spinSpeed > 0)
-            bmdRenderer.animation = new YSpinAnimation(spinSpeed, 0);
+            objectRenderer.animation = new YSpinAnimation(spinSpeed, 0);
 
-        renderer.bmdRenderers.push(bmdRenderer);
-        return bmdRenderer;
+        renderer.objectRenderers.push(objectRenderer);
+        return objectRenderer;
     }
 
-    private async _createBMDObjRenderer(device: GfxDevice, renderer: SM64DSRenderer, filename: string, translation: vec3, rotationY: number, scale: number = 1, spinSpeed: number = 0): Promise<BMDModelInstance> {
+    private async _createBMDObjRenderer(device: GfxDevice, renderer: SM64DSRenderer, filename: string, translation: vec3, rotationY: number, scale: number = 1, spinSpeed: number = 0): Promise<ObjectRenderer> {
         const modelCache = renderer.modelCache;
         const bmdData = await modelCache.fetchModel(device, filename);
         const b = this._createObjectRenderer(device, renderer, bmdData, translation, rotationY, scale, spinSpeed);
-        b.name = filename;
+        b.modelInstance.name = filename;
         return b;
     }
 
@@ -590,11 +624,12 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
             return this._createBMDObjRenderer(device, renderer, filename, translation, rotationY, scale, spinSpeed);
         };
 
-        const bindBCA = async (b: BMDModelInstance, filename: string) => {
+        const bindBCA = async (b: ObjectRenderer, filename: string) => {
             const data = await renderer.modelCache.fetchFileData(filename);
             const bca = BCA.parse(LZ77.maybeDecompress(data));
             bca.loopMode = BCA.LoopMode.REPEAT;
-            b.bindBCA(renderer.animationController, bca);
+            b.animationController.phaseFrames += Math.random() * bca.duration;
+            b.modelInstance.bindBCA(b.animationController, bca);
         }
 
         const objectId: ObjectId = object.ObjectId;
@@ -652,8 +687,8 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
             mat4.scale(b.modelMatrix, b.modelMatrix, [scaleX, scaleY, 1]);
             mat4.translate(b.modelMatrix, b.modelMatrix, [0, 100/16, 0]);
             if (isMirrored) {
-                b.extraTexCoordMat = mat2d.create();
-                b.extraTexCoordMat[0] *= -1;
+                b.modelInstance.extraTexCoordMat = mat2d.create();
+                b.modelInstance.extraTexCoordMat[0] *= -1;
             }
         } else if (objectId === ObjectId.HANSWITCH) {
             const b = await spawnObject(`/data/normal_obj/obj_box_switch/obj_box_switch.bmd`);

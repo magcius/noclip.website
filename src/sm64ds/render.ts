@@ -1,5 +1,5 @@
 
-import { mat2d, mat4, vec2 } from 'gl-matrix';
+import { mat2d, mat4, vec2, vec3 } from 'gl-matrix';
 
 import * as BMD from './sm64ds_bmd';
 import * as NITRO_GX from './nitro_gx';
@@ -7,7 +7,7 @@ import * as NITRO_GX from './nitro_gx';
 import * as Viewer from '../viewer';
 
 import { DeviceProgram } from '../Program';
-import { computeModelMatrixYBillboard, computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
+import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
 import { GfxFormat, GfxBufferUsage, GfxBlendMode, GfxBlendFactor, GfxDevice, GfxBuffer, GfxVertexAttributeFrequency, GfxTexFilterMode, GfxMipFilterMode, GfxInputState, GfxInputLayout, GfxVertexAttributeDescriptor, GfxSampler, makeTextureDescriptor2D, GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
 import { fillMatrix4x3, fillVec4, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers';
@@ -18,6 +18,38 @@ import { assert, nArray } from '../util';
 import { BCA, bindBCAAnimator, BCAAnimator } from './sm64ds_bca';
 import AnimationController from '../AnimationController';
 import { GfxRenderInstManager, GfxRenderInst } from '../gfx/render/GfxRenderer2';
+import { computeRotationMatrixFromSRTMatrix } from '../MathHelpers';
+
+function calcBBoardMtx(dst: mat4, m: mat4): void {
+    // Modifies m in-place.
+
+    // The column vectors lengths here are the scale.
+    const mx = Math.hypot(m[0], m[1], m[2]);
+    const my = Math.hypot(m[4], m[5], m[6]);
+    const mz = Math.hypot(m[8], m[9], m[10]);
+
+    dst[0] = mx;
+    dst[4] = 0;
+    dst[8] = 0;
+    dst[12] = m[12];
+
+    dst[1] = 0;
+    dst[5] = my;
+    dst[9] = 0;
+    dst[13] = m[13];
+
+    dst[2] = 0;
+    dst[6] = 0;
+    dst[10] = mz;
+    dst[14] = m[14];
+
+    // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
+    // since this is supposed to generate a mat4x3 matrix.
+    dst[3] = 9999.0;
+    dst[7] = 9999.0;
+    dst[11] = 9999.0;
+    dst[15] = 9999.0;
+}
 
 export class NITRO_Program extends DeviceProgram {
     public static a_Position = 0;
@@ -114,11 +146,6 @@ function textureToCanvas(bmdTex: BMD.Texture): Viewer.Texture {
     const extraInfo = new Map<string, string>();
     extraInfo.set('Format', getFormatName(bmdTex.format));
     return { name: bmdTex.name, surfaces, extraInfo };
-}
-
-export interface Animation {
-    updateModelMatrix(time: number, modelMatrix: mat4): void;
-    updateNormalMatrix(time: number, normalMatrix: mat4): void;
 }
 
 export class NITROTextureHolder extends TextureHolder<BMD.Texture> {
@@ -392,9 +419,7 @@ export class BMDModelInstance {
     public name: string = '';
     public isSkybox: boolean = false;
     public modelMatrix = mat4.create();
-    public normalMatrix = mat4.create();
     public extraTexCoordMat: mat2d | null = null;
-    public animation: Animation | null = null;
     public visible = true;
 
     private materialInstances: MaterialInstance[] = [];
@@ -479,35 +504,26 @@ export class BMDModelInstance {
         const jointIdx = this.bmdData.bmd.matrixToJointTable[matrixIdx];
         const jointMatrix = this.jointMatrices[jointIdx];
 
-        // Build model matrix
-        if (isBillboard) {
-            // Apply billboard model if necessary.
-            computeModelMatrixYBillboard(scratchModelMatrix, viewerInput.camera);
-            mat4.mul(scratchModelMatrix, jointMatrix, scratchModelMatrix);
-        } else {
-            mat4.copy(scratchModelMatrix, jointMatrix);
-        }
-
-        if (this.animation !== null)
-            this.animation.updateModelMatrix(viewerInput.time, scratchModelMatrix);
+        mat4.copy(scratchModelMatrix, jointMatrix);
 
         this.computeViewMatrix(dst, viewerInput);
         mat4.mul(dst, dst, scratchModelMatrix);
+
+        if (isBillboard) {
+            // Apply billboard model if necessary.
+            calcBBoardMtx(dst, dst);
+        }
     }
 
     public computeNormalMatrix(dst: mat4, viewerInput: Viewer.ViewerRenderInput): void {
-        const normalMatrix = scratchModelMatrix;
-
-        mat4.copy(normalMatrix, this.normalMatrix);
-        if (this.animation !== null)
-            this.animation.updateNormalMatrix(viewerInput.time, normalMatrix);
+        computeRotationMatrixFromSRTMatrix(scratchModelMatrix, this.modelMatrix);
 
         this.computeViewMatrix(dst, viewerInput);
         dst[12] = 0;
         dst[13] = 0;
         dst[14] = 0;
 
-        mat4.mul(dst, dst, normalMatrix);
+        mat4.mul(dst, dst, scratchModelMatrix);
     }
 
     public destroy(device: GfxDevice) {
