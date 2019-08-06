@@ -147,6 +147,13 @@ export class ShapeInstance {
             return;
 
         const shape = this.shapeData.shape;
+        const materialJointMatrix = shapeInstanceState.jointToWorldMatrixArray[materialInstance.materialData.jointData.jointIndex];
+
+        if (!shape.bbox.isEmpty()) {
+            bboxScratch.transform(shape.bbox, materialJointMatrix);
+            if (!camera.frustum.contains(bboxScratch))
+                return;
+        }
 
         packetParams.clear();
 
@@ -156,8 +163,6 @@ export class ShapeInstance {
         template.sortKey = setSortKeyBias(template.sortKey, this.shapeData.sortKeyBias);
 
         materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
-
-        const materialJointMatrix = shapeInstanceState.jointToWorldMatrixArray[materialInstance.materialData.jointData.jointIndex];
 
         const usesSkinning = shape.displayFlags === ShapeDisplayFlags.USE_PNMTXIDX;
 
@@ -1221,23 +1226,21 @@ export class BMDModelInstance {
     }
 
     public calcAnim(camera: Camera): void {
+        if (this.isSkybox) {
+            this.modelMatrix[12] = camera.worldMatrix[12];
+            this.modelMatrix[13] = camera.worldMatrix[13];
+            this.modelMatrix[14] = camera.worldMatrix[14];
+        }
+
         this.calcJointToWorld();
 
-        // Skyboxes implicitly center themselves around the view matrix (their view translation is removed).
-        // While we could represent this, a skybox is always visible in theory so it's probably not worth it
-        // to cull. If we ever have a fancy skybox model, then it might be worth it to represent it in world-space.
-        //
         // Billboards have their model matrix modified to face the camera, so their world space position doesn't
         // quite match what they kind of do.
         //
         // For now, we simply don't cull both of these special cases, hoping they'll be simple enough to just always
         // render. In theory, we could cull billboards using the bounding sphere.
-        const disableCulling = this.isSkybox || this.bmdModel.hasBillboard;
-
-        if (this.isSkybox)
-            computeViewMatrixSkybox(this.shapeInstanceState.worldToViewMatrix, camera);
-        else
-            computeViewMatrix(this.shapeInstanceState.worldToViewMatrix, camera);
+        const disableCulling = this.bmdModel.hasBillboard;
+        computeViewMatrix(this.shapeInstanceState.worldToViewMatrix, camera);
 
         const jnt1 = this.bmdModel.bmd.jnt1;
         for (let i = 0; i < this.bmdModel.bmd.jnt1.joints.length; i++) {
