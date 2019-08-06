@@ -33,6 +33,7 @@ import AnimationController from '../../AnimationController';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
 import { ObjectRenderer, BMDObjectRenderer, SymbolMap, WhiteFlowerData, FlowerObjectRenderer, PinkFlowerData, BessouFlowerData, FlowerData } from './Actors';
 import { SceneContext } from '../../SceneBase';
+import { reverseDepthForCompareMode } from '../../gfx/helpers/ReversedDepthHelpers';
 
 class ZWWExtraTextures {
     constructor(public ZAtoon: BTIData, public ZBtoonEX: BTIData) {
@@ -398,7 +399,7 @@ class SeaPlane {
         renderInst.setBindingLayouts(seaPlaneBindingLayouts);
         renderInst.setMegaStateFlags({
             depthWrite: true,
-            depthCompare: GfxCompareMode.LESS,
+            depthCompare: reverseDepthForCompareMode(GfxCompareMode.LESS),
         });
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         renderInst.setGfxProgram(this.gfxProgram);
