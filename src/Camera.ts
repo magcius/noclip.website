@@ -284,6 +284,8 @@ export class FPSCameraController implements CameraController {
     private mouseLookDragFast = 0;
     private mouseLookDragSlow = 0;
 
+    public sceneKeySpeedMult = 1;
+
     public cameraUpdateForced(): void {
         vec3.set(this.keyMovement, 0, 0, 0);
     }
@@ -317,13 +319,6 @@ export class FPSCameraController implements CameraController {
         const keyMoveVelocity = keyMoveSpeedCap * this.keyMoveVelocityMult;
     
         const keyMovement = this.keyMovement;
-        const worldUp = scratchVec3b;
-        // Instead of getting the camera up, instead use world up. Feels more natural.
-        if (this.useWorldUp)
-            camera.getWorldUp(worldUp);
-        else
-            vec3.set(worldUp, 0, 1, 0);
-
         const keyMoveLowSpeedCap = 0.01;
 
         if (inputManager.isKeyDown('KeyW') || inputManager.isKeyDown('ArrowUp')) {
@@ -353,10 +348,18 @@ export class FPSCameraController implements CameraController {
             if (Math.abs(keyMovement[1]) < keyMoveLowSpeedCap) keyMovement[1] = 0.0;
         }
 
+        const worldUp = scratchVec3b;
+        // Instead of getting the camera up, instead use world up. Feels more natural.
+        if (this.useWorldUp)
+            camera.getWorldUp(worldUp);
+        else
+            vec3.set(worldUp, 0, 1, 0);
+
         if (!vec3.exactEquals(keyMovement, vec3Zero)) {
             const finalMovement = scratchVec3a;
             vec3.set(finalMovement, keyMovement[0], 0, keyMovement[2]);
             vec3.scaleAndAdd(finalMovement, finalMovement, worldUp, keyMovement[1]);
+            vec3.scale(finalMovement, finalMovement, this.sceneKeySpeedMult);
             mat4.translate(camera.worldMatrix, camera.worldMatrix, finalMovement);
             updated = true;
         }

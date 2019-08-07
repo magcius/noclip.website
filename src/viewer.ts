@@ -152,6 +152,8 @@ export class Viewer {
             this.scene.destroy(this.gfxDevice);
             this.scene = null;
         }
+
+        this.cameraController = null;
     }
 
     public setScene(scene: SceneGfx | null): void {

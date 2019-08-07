@@ -15,6 +15,7 @@ import { standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, 
 import { mat4 } from 'gl-matrix';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { SceneContext } from '../SceneBase';
+import { FPSCameraController } from '../Camera';
 
 export class RetroSceneRenderer implements Viewer.SceneGfx {
     public renderHelper: GXRenderHelperGfx;
@@ -25,6 +26,12 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice, public mlvl: MLVL.MLVL, public textureHolder = new RetroTextureHolder()) {
         this.renderHelper = new GXRenderHelperGfx(device);
+    }
+
+    public createCameraController() {
+        const controller = new FPSCameraController();
+        controller.sceneKeySpeedMult = 0.1;
+        return controller;
     }
 
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
