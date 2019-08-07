@@ -1,5 +1,5 @@
 
-import { mat2d, mat4, vec2, vec3 } from 'gl-matrix';
+import { mat2d, mat4, vec2 } from 'gl-matrix';
 
 import * as BMD from './sm64ds_bmd';
 import * as NITRO_GX from './nitro_gx';

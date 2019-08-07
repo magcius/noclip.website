@@ -70,7 +70,7 @@ export class HashMap<K, V> {
         bucket.values.push(v);
 
         if (this.autoLoadFactor !== null)
-            this.manuallyReconfigure();
+            this.checkForReconfigure();
     }
 
     public delete(k: K): void {
