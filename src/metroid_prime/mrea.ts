@@ -806,7 +806,7 @@ function parse_MP1(resourceSystem: ResourceSystem, assetID: string, buffer: Arra
     const lightsMagic = view.getUint32(lightOffs);
     assert(lightsMagic == 0xbabedead);
 
-    const numLightLayers = 2; // number of layers is set per-game
+    const numLightLayers = 2; // number of layers is fixed on a game-by-game basis
     lightOffs += 4;
 
     for (let i = 0; i < numLightLayers; i++) {

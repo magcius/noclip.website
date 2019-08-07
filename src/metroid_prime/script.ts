@@ -2,7 +2,7 @@
 // Implements support for Retro Studios actor data
 
 import { ResourceSystem } from "./resource";
-import { readString } from "../util";
+import { readString, assert } from "../util";
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { mat4, vec3 } from 'gl-matrix';
 import { CMDL } from './cmdl';
@@ -105,13 +105,15 @@ export class Entity {
     }
 
     public getRenderModel() : CMDL {
-        if (this.animParams != null &&
-            this.animParams.ancs != null &&
-            this.animParams.ancs.characters.length > 0)
-        {
-            const model = this.animParams.ancs.characters[0].model;
-            if (model != null) {
-                return model;
+        if (this.animParams != null) {
+            const charID = this.animParams.charID;
+            const ancs = this.animParams.ancs;
+
+            if (ancs != null && ancs.characters.length > charID) {
+                const model = ancs.characters[charID].model;
+                if (model != null) {
+                    return model;
+                }
             }
         }
 
@@ -183,27 +185,37 @@ function readAnimationParameters(buffer: ArrayBufferSlice, offs: number, ent: En
 function readLightParameters(buffer: ArrayBufferSlice, offs: number, ent: Entity): number {
     const view = buffer.createDataView();
 
-    const castsShadow = view.getUint8(offs + 0x00);
-    const shadowScale = view.getFloat32(offs + 0x01);
-    const shadowTesselation = view.getUint32(offs + 0x05);
-    const shadowAlpha = view.getFloat32(offs + 0x09);
-    const maxShadowHeight = view.getFloat32(offs + 0x0D);
-    const ambR = view.getFloat32(offs + 0x11);
-    const ambG = view.getFloat32(offs + 0x15);
-    const ambB = view.getFloat32(offs + 0x19);
-    const ambA = view.getFloat32(offs + 0x1D);
-    const makeLights = view.getUint8(offs + 0x21);
-    const options = view.getUint32(offs + 0x22);
-    const maxAreaLights = view.getUint32(offs + 0x26);
-    const layerIndex = view.getUint32(offs + 0x3B);
+    const numProperties = view.getUint32(offs + 0x00);
+    assert(numProperties == 14);
+
+    const castsShadow = view.getUint8(offs + 0x04);
+    const shadowScale = view.getFloat32(offs + 0x05);
+    const shadowTesselation = view.getUint32(offs + 0x09);
+    const shadowAlpha = view.getFloat32(offs + 0x0D);
+    const maxShadowHeight = view.getFloat32(offs + 0x11);
+    const ambR = view.getFloat32(offs + 0x15);
+    const ambG = view.getFloat32(offs + 0x19);
+    const ambB = view.getFloat32(offs + 0x1D);
+    const ambA = view.getFloat32(offs + 0x21);
+    const makeLights = view.getUint8(offs + 0x25);
+    const worldLightingOptions = view.getUint32(offs + 0x26);
+    const lightRecalculationOptions = view.getUint32(offs + 0x2A);
+    const lightingPositionOffsetX = view.getFloat32(offs + 0x2E);
+    const lightingPositionOffsetY = view.getFloat32(offs + 0x32);
+    const lightingPositionOffsetZ = view.getFloat32(offs + 0x36);
+    const maxDynamicLights = view.getUint32(offs + 0x3A);
+    const maxAreaLights = view.getUint32(offs + 0x3E);
+    const ambientChannelOverflow = view.getUint8(offs + 0x42);
+    const layerIndex = view.getUint32(offs + 0x43);
 
     // ent.lightParams is allocated by default
-    // colorFromRGBA(ent.lightParams.ambient, ambR, ambG, ambB, ambA);
-    // ent.lightParams.options = options;
-    // ent.lightParams.maxAreaLights = maxAreaLights;
-    // ent.lightParams.layerIdx = layerIndex;
+    colorFromRGBA(ent.lightParams.ambient, ambR, ambG, ambB, ambA);
+    ent.lightParams.options = worldLightingOptions;
+    ent.lightParams.maxAreaLights = maxAreaLights;
+    ent.lightParams.layerIdx = layerIndex;
+    assert(layerIndex >= 0 && layerIndex < 2);
 
-    return 0x3F;
+    return 0x47;
 }
 
 function readScannableParameters(buffer: ArrayBufferSlice, offs: number, ent: Entity): number {
@@ -217,6 +229,11 @@ function readVisorParameters(buffer: ArrayBufferSlice, offs: number, ent: Entity
 function readActorParameters(buffer: ArrayBufferSlice, offs: number, ent: Entity): number {
     const view = buffer.createDataView();
     const originalOffs = offs;
+
+    const numProperties = view.getUint32(offs);
+    assert(numProperties == 14);
+    offs += 4;
+
     offs += readLightParameters(buffer, offs, ent);
     offs += readScannableParameters(buffer, offs, ent);
     const cmdlXray = view.getUint32(offs + 0x00);
