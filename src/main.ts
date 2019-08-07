@@ -483,12 +483,8 @@ class Main {
         this.saveManager.setCurrentSceneDescId(sceneDescId);
         this.ui.saveStatesPanel.setCurrentSceneDescId(sceneDescId);
 
-        // Set camera controller.
-        if (scene.defaultCameraController !== undefined) {
-            const controller = new scene.defaultCameraController();
-            this.viewer.setCameraController(controller);
-        }
-
+        if (scene.createCameraController !== undefined)
+            this.viewer.setCameraController(scene.createCameraController());
         if (this.viewer.cameraController === null)
             this.viewer.setCameraController(new FPSCameraController());
 

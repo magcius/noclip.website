@@ -11,7 +11,7 @@ import { BMD, BTK } from '../j3d/j3d';
 import * as RARC from '../j3d/rarc';
 import { BMDModel, MaterialInstance, MaterialInstanceState, ShapeInstanceState, MaterialData, BMDModelInstance } from '../j3d/render';
 import * as Yaz0 from '../compression/Yaz0';
-import { ub_PacketParams, PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, ub_MaterialParams, ColorKind } from '../gx/gx_render';
+import { ub_PacketParams, PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, ub_MaterialParams, ColorKind, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import AnimationController from '../AnimationController';
 import { GfxDevice, GfxHostAccessPass, GfxBuffer, GfxInputState, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexAttributeFrequency, GfxVertexBufferDescriptor, GfxRenderPass } from '../gfx/platform/GfxPlatform';
@@ -25,6 +25,7 @@ import { readString, nArray, concat } from '../util';
 import { getColorsFromDZS, Colors } from '../j3d/WindWaker/zww_scenes';
 import { setSortKeyDepth } from '../gfx/render/GfxRenderer';
 import { FakeTextureHolder } from '../TextureHolder';
+import { GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
 
 const scale = 200;
 const posMtx = mat4.create();
@@ -95,8 +96,7 @@ class PlaneShape {
         this.inputState = device.createInputState(this.inputLayout, vertexBuffers, { buffer: this.idxBuffer, byteOffset: 0, byteStride: 0 });
     }
 
-    public prepareToRender(renderHelper: GXRenderHelperGfx, packetParams: PacketParams, depth: number): void {
-        const renderInstManager = renderHelper.renderInstManager;
+    public prepareToRender(renderInstManager: GfxRenderInstManager, packetParams: PacketParams, depth: number): void {
         const renderInst = renderInstManager.pushRenderInst();
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         renderInst.drawIndexes(6);
@@ -145,11 +145,10 @@ class Plane {
         this.shapeInstanceState.worldToViewMatrix = scratchViewMatrix;
     }
 
-    public prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         this.animationController.setTimeInMilliseconds(viewerInput.time);
-        const template = renderHelper.pushTemplateRenderInst();
-        renderHelper.fillSceneParams(viewerInput, template);
-        this.materialInstance.setOnRenderInst(device, renderHelper.renderInstManager.gfxRenderCache, template);
+        const template = renderInstManager.pushTemplateRenderInst();
+        this.materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
         template.filterKey = WindWakerPass.MAIN;
         template.allocateUniformBuffer(ub_MaterialParams, this.materialInstance.materialHelper.materialParamsBufferSize);
         template.sortKey = this.materialInstance.sortKey;
@@ -160,9 +159,9 @@ class Plane {
         this.materialInstance.fillMaterialParams(template, this.materialInstanceState, this.shapeInstanceState.worldToViewMatrix, this.modelMatrix, viewerInput.camera, packetParams);
 
         const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(packetParams.u_PosMtx[0], this.origin);
-        this.plane.prepareToRender(renderHelper, packetParams, depth);
+        this.plane.prepareToRender(renderInstManager, packetParams, depth);
 
-        renderHelper.renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplateRenderInst();
     }
 
     public destroy(device: GfxDevice) {
@@ -218,19 +217,24 @@ export class WindWakerRenderer implements SceneGfx {
         this.vr_back_cloud.setColorOverride(ColorKind.K0, colors.vr_back_cloud, true);
     }
 
+    public createCameraController() {
+        return new OrbitCameraController();
+    }
+
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
         const template = this.renderHelper.pushTemplateRenderInst();
 
-        this.renderHelper.fillSceneParams(viewerInput, template);
-        this.vr_sky.prepareToRender(device, this.renderHelper, viewerInput);
-        this.vr_kasumi_mae.prepareToRender(device, this.renderHelper, viewerInput);
-        this.vr_uso_umi.prepareToRender(device, this.renderHelper, viewerInput);
-        this.vr_back_cloud.prepareToRender(device, this.renderHelper, viewerInput);
+        const renderInstManager = this.renderHelper.renderInstManager;
+        fillSceneParamsDataOnTemplate(template, viewerInput);
+        this.vr_sky.prepareToRender(device, renderInstManager, viewerInput);
+        this.vr_kasumi_mae.prepareToRender(device, renderInstManager, viewerInput);
+        this.vr_uso_umi.prepareToRender(device, renderInstManager, viewerInput);
+        this.vr_back_cloud.prepareToRender(device, renderInstManager, viewerInput);
 
         for (let i = 0; i < this.plane.length; i++)
-            this.plane[i].prepareToRender(device, this.renderHelper, viewerInput);
+            this.plane[i].prepareToRender(device, renderInstManager, viewerInput);
 
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender(device, hostAccessPass);
     }
 

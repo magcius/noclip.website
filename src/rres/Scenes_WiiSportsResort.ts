@@ -5,7 +5,7 @@ import * as U8 from "./u8";
 import * as Yaz0 from "../compression/Yaz0";
 import * as BRRES from "./brres";
 import { assertExists, readString, assert } from "../util";
-import { BasicGXRendererHelper } from "../gx/gx_render";
+import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from "../gx/gx_render";
 import { MDL0ModelInstance, MDL0Model, RRESTextureHolder } from "./render";
 import AnimationController from "../AnimationController";
 import ArrayBufferSlice from "../ArrayBufferSlice";
@@ -158,9 +158,9 @@ class WS2_Renderer extends BasicGXRendererHelper {
         this.scn0Animator.calcLightSetting(this.lightSetting);
 
         const template = this.renderHelper.pushTemplateRenderInst();
-        this.renderHelper.fillSceneParams(viewerInput, template);
+        fillSceneParamsDataOnTemplate(template, viewerInput);
         for (let i = 0; i < this.modelInstances.length; i++)
-            this.modelInstances[i].prepareToRender(device, this.renderHelper, viewerInput);
+            this.modelInstances[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender(device, hostAccessPass);
 

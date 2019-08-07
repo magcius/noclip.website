@@ -15,14 +15,14 @@ import { getPointHermite } from "../Spline";
 import { GXMaterial, AlphaTest, RopInfo, TexGen, TevStage, getVertexAttribLocation, IndTexStage } from "../gx/gx_material";
 import { Color, colorNew, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8 } from "../Color";
 import { MaterialParams, ColorKind, ub_PacketParams, u_PacketParamsBufferSize, PacketParams, ub_MaterialParams, setIndTexOrder, setIndTexCoordScale, setTevIndirect, setTevOrder, setTevColorIn, setTevColorOp, setTevAlphaIn, setTevAlphaOp, fillIndTexMtx, fillTextureMappingInfo } from "../gx/gx_render";
-import { GXMaterialHelperGfx, GXRenderHelperGfx } from "../gx/gx_render";
+import { GXMaterialHelperGfx } from "../gx/gx_render";
 import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, computeMatrixWithoutTranslation } from "../MathHelpers";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { makeSortKeyTranslucent, GfxRendererLayer, setSortKeyBias, setSortKeyDepth } from "../gfx/render/GfxRenderer";
 import { fillMatrix4x3, fillColor, fillMatrix4x2 } from "../gfx/helpers/UniformBufferHelpers";
 import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
 import { makeTriangleIndexBuffer, GfxTopology, getTriangleIndexCountForTopologyIndexCount } from "../gfx/helpers/TopologyHelpers";
-import { GfxRenderInst } from "../gfx/render/GfxRenderer2";
+import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderer2";
 
 export interface JPAResourceRaw {
     resourceId: number;
@@ -1006,7 +1006,7 @@ export class JPAEmitterManager {
         dst[14] = posCamMtx[14];
     }
 
-    public draw(device: GfxDevice, renderHelper: GXRenderHelperGfx, drawInfo: JPADrawInfo, drawGroupId: number): void {
+    public draw(device: GfxDevice, renderInstManager: GfxRenderInstManager, drawInfo: JPADrawInfo, drawGroupId: number): void {
         mat4.copy(this.workData.posCamMtx, drawInfo.posCamMtx);
         mat4.copy(this.workData.prjMtx, drawInfo.prjMtx);
         this.calcYBBMtx();
@@ -1018,7 +1018,7 @@ export class JPAEmitterManager {
         for (let i = 0; i < this.aliveEmitters.length; i++) {
             const emitter = this.aliveEmitters[i];
             if (emitter.drawGroupId === drawGroupId)
-                this.aliveEmitters[i].draw(device, renderHelper, this.workData);
+                this.aliveEmitters[i].draw(device, renderInstManager, this.workData);
         }
 
         const hostAccessPass = device.createHostAccessPass();
@@ -1721,7 +1721,7 @@ export class JPABaseEmitter {
         vec3.transformMat4(v, this.emitterTrs, scratchMatrix);
     }
 
-    private drawStripe(device: GfxDevice, renderHelper: GXRenderHelperGfx, workData: JPAEmitterWorkData, particleList: JPABaseParticle[], sp1: CommonShapeTypeFields): void {
+    private drawStripe(device: GfxDevice, renderInstManager: GfxRenderInstManager, workData: JPAEmitterWorkData, particleList: JPABaseParticle[], sp1: CommonShapeTypeFields): void {
         const particleCount = particleList.length;
 
         if (particleCount < 2)
@@ -1842,15 +1842,15 @@ export class JPABaseEmitter {
 
         const globalRes = workData.emitterManager.globalRes;
 
-        const template = renderHelper.renderInstManager.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplateRenderInst();
         template.sortKey = workData.particleSortKey;
         template.setInputLayoutAndState(globalRes.inputLayout, entry.inputState);
 
-        fillParticleRenderInst(device, renderHelper, workData, template, materialParams, packetParams);
+        fillParticleRenderInst(device, renderInstManager, workData, template, materialParams, packetParams);
 
         const oneStripIndexCount = getTriangleIndexCountForTopologyIndexCount(GfxTopology.TRISTRIP, oneStripVertexCount);
 
-        const renderInst1 = renderHelper.renderInstManager.pushRenderInst();
+        const renderInst1 = renderInstManager.pushRenderInst();
         renderInst1.drawIndexes(oneStripIndexCount);
 
         if (isCross) {
@@ -1858,14 +1858,14 @@ export class JPABaseEmitter {
             // buffer doing something like this at the end: 6 7 8,  8 7 9,  8 9 10,  10 9 11,  10 11 12
             // In order to start a "new" tristrip after 10 vertices, we need to find that first "10 11 12", which should be
             // two index pairs (or 6 index values) after the last used index pair.
-            const renderInst2 = renderHelper.renderInstManager.pushRenderInst();
+            const renderInst2 = renderInstManager.pushRenderInst();
             renderInst2.drawIndexes(oneStripIndexCount, oneStripIndexCount + 6);
         }
 
-        renderHelper.renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplateRenderInst();
     }
 
-    private drawP(device: GfxDevice, renderHelper: GXRenderHelperGfx, workData: JPAEmitterWorkData): void {
+    private drawP(device: GfxDevice, renderInstManager: GfxRenderInstManager, workData: JPAEmitterWorkData): void {
         const bsp1 = this.resData.res.bsp1;
         const etx1 = this.resData.res.etx1;
 
@@ -1912,7 +1912,7 @@ export class JPABaseEmitter {
             colorMult(materialParams.u_Color[ColorKind.C0], this.colorPrm, workData.baseEmitter.globalColorPrm);
             colorMult(materialParams.u_Color[ColorKind.C1], this.colorEnv, workData.baseEmitter.globalColorEnv);
 
-            this.drawStripe(device, renderHelper, workData, this.aliveParticlesBase, bsp1);
+            this.drawStripe(device, renderInstManager, workData, this.aliveParticlesBase, bsp1);
         } else {
             const needsPrevPos = bsp1.dirType === DirType.PrevPctl;
             if (needsPrevPos)
@@ -1925,7 +1925,7 @@ export class JPABaseEmitter {
             for (let i = 0; i < n; i++) {
                 const index = traverseOrder === TraverseOrder.REVERSE ? n - 1 - i : i;
                 workData.particleSortKey = setSortKeyBias(workData.particleSortKey, sortKeyBias++);
-                this.aliveParticlesBase[index].drawP(device, renderHelper, workData, materialParams);
+                this.aliveParticlesBase[index].drawP(device, renderInstManager, workData, materialParams);
                 if (needsPrevPos)
                     vec3.copy(workData.prevParticlePos, this.aliveParticlesBase[index].position);
             }
@@ -1934,7 +1934,7 @@ export class JPABaseEmitter {
         // Emitter Callback 0x18
     }
 
-    private drawC(device: GfxDevice, renderHelper: GXRenderHelperGfx, workData: JPAEmitterWorkData): void {
+    private drawC(device: GfxDevice, renderInstManager: GfxRenderInstManager, workData: JPAEmitterWorkData): void {
         const bsp1 = this.resData.res.bsp1;
         const ssp1 = this.resData.res.ssp1;
 
@@ -1965,7 +1965,7 @@ export class JPABaseEmitter {
             colorMult(materialParams.u_Color[ColorKind.C0], ssp1.colorPrm, workData.baseEmitter.globalColorPrm);
             colorMult(materialParams.u_Color[ColorKind.C1], ssp1.colorEnv, workData.baseEmitter.globalColorEnv);
 
-            this.drawStripe(device, renderHelper, workData, this.aliveParticlesChild, ssp1);
+            this.drawStripe(device, renderInstManager, workData, this.aliveParticlesChild, ssp1);
         } else {
             const needsPrevPos = ssp1.dirType === DirType.PrevPctl;
             if (needsPrevPos)
@@ -1978,14 +1978,14 @@ export class JPABaseEmitter {
             for (let i = 0; i < n; i++) {
                 const index = traverseOrder === TraverseOrder.REVERSE ? n - 1 - i : i;
                 workData.particleSortKey = setSortKeyBias(workData.particleSortKey, sortKeyBias++);
-                this.aliveParticlesChild[index].drawC(device, renderHelper, workData, materialParams);
+                this.aliveParticlesChild[index].drawC(device, renderInstManager, workData, materialParams);
                 if (needsPrevPos)
                     vec3.copy(workData.prevParticlePos, this.aliveParticlesChild[index].position);
             }
         }
     }
 
-    public draw(device: GfxDevice, renderHelper: GXRenderHelperGfx, workData: JPAEmitterWorkData): void {
+    public draw(device: GfxDevice, renderInstManager: GfxRenderInstManager, workData: JPAEmitterWorkData): void {
         if (!!(this.flags & BaseEmitterFlags.STOP_DRAW_PARTICLE))
             return;
 
@@ -1998,11 +1998,11 @@ export class JPABaseEmitter {
 
         const drawChildrenBefore = !!(bsp1.flags & 0x00400000);
         if (!bsp1.stopDrawChild && ssp1 !== null && drawChildrenBefore)
-            this.drawC(device, renderHelper, workData);
+            this.drawC(device, renderInstManager, workData);
         if (!bsp1.stopDrawParent)
-            this.drawP(device, renderHelper, workData);
+            this.drawP(device, renderInstManager, workData);
         if (!bsp1.stopDrawChild && ssp1 !== null && !drawChildrenBefore)
-            this.drawC(device, renderHelper, workData);
+            this.drawC(device, renderInstManager, workData);
     }
 }
 
@@ -2124,13 +2124,14 @@ function applyDir(v: vec3, p: JPABaseParticle, dirType: DirType, workData: JPAEm
         vec3.sub(v, workData.prevParticlePos, p.position);
 }
 
-function fillParticleRenderInst(device: GfxDevice, renderHelper: GXRenderHelperGfx, workData: JPAEmitterWorkData, renderInst: GfxRenderInst, materialParams: MaterialParams, packetParams: PacketParams): void {
+function fillParticleRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, workData: JPAEmitterWorkData, renderInst: GfxRenderInst, materialParams: MaterialParams, packetParams: PacketParams): void {
     const materialHelper = workData.baseEmitter.resData.materialHelper;
-    materialHelper.setOnRenderInst(device, renderHelper.renderInstManager.gfxRenderCache, renderInst);
+    materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
 
+    // These should be one allocation.
     let materialOffs = renderInst.allocateUniformBuffer(ub_MaterialParams, materialHelper.materialParamsBufferSize);
     let packetOffs = renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
-    const d = renderHelper.uniformBuffer.mapBufferF32(materialOffs, materialHelper.materialParamsBufferSize + u_PacketParamsBufferSize);
+    const d = renderInst.getUniformBuffer().mapBufferF32(materialOffs, materialHelper.materialParamsBufferSize + u_PacketParamsBufferSize);
 
     // Since this is called quite a *lot*, we have hand-crafted versions of
     // fillMaterialParamsData and fillPacketParamsData for speed here.
@@ -3022,14 +3023,13 @@ export class JPABaseParticle {
         }
     }
 
-    private drawCommon(device: GfxDevice, renderHelper: GXRenderHelperGfx, workData: JPAEmitterWorkData, materialParams: MaterialParams, sp1: CommonShapeTypeFields): void {
+    private drawCommon(device: GfxDevice, renderInstManager: GfxRenderInstManager, workData: JPAEmitterWorkData, materialParams: MaterialParams, sp1: CommonShapeTypeFields): void {
         if (!!(this.flags & 0x08))
             return;
 
         const esp1 = workData.baseEmitter.resData.res.esp1;
         const isRot = esp1 !== null && esp1.isEnableRotate;
 
-        const renderInstManager = renderHelper.renderInstManager;
         const renderInst = renderInstManager.pushRenderInst();
         renderInst.sortKey = workData.particleSortKey;
 
@@ -3201,10 +3201,10 @@ export class JPABaseParticle {
         materialParams.u_Color[ColorKind.C0].a *= this.prmColorAlphaAnm;
         colorMult(materialParams.u_Color[ColorKind.C1], this.colorEnv, workData.baseEmitter.globalColorEnv);
 
-        fillParticleRenderInst(device, renderHelper, workData, renderInst, materialParams, packetParams);
+        fillParticleRenderInst(device, renderInstManager, workData, renderInst, materialParams, packetParams);
     }
 
-    public drawP(device: GfxDevice, renderHelper: GXRenderHelperGfx, workData: JPAEmitterWorkData, materialParams: MaterialParams): void {
+    public drawP(device: GfxDevice, renderInstManager: GfxRenderInstManager, workData: JPAEmitterWorkData, materialParams: MaterialParams): void {
         const bsp1 = workData.baseEmitter.resData.res.bsp1;
         const esp1 = workData.baseEmitter.resData.res.esp1;
 
@@ -3223,10 +3223,10 @@ export class JPABaseParticle {
             workData.pivotY = 1;
         }
 
-        this.drawCommon(device, renderHelper, workData, materialParams, bsp1);
+        this.drawCommon(device, renderInstManager, workData, materialParams, bsp1);
     }
 
-    public drawC(device: GfxDevice, renderHelper: GXRenderHelperGfx, workData: JPAEmitterWorkData, materialParams: MaterialParams): void {
+    public drawC(device: GfxDevice, renderInstManager: GfxRenderInstManager, workData: JPAEmitterWorkData, materialParams: MaterialParams): void {
         const ssp1 = workData.baseEmitter.resData.res.ssp1;
 
         // mpDrawParticleChildFuncList
@@ -3234,7 +3234,7 @@ export class JPABaseParticle {
         workData.pivotX = 1;
         workData.pivotY = 1;
 
-        this.drawCommon(device, renderHelper, workData, materialParams, ssp1);
+        this.drawCommon(device, renderInstManager, workData, materialParams, ssp1);
     }
 }
 //#endregion

@@ -4,7 +4,7 @@ import * as BRRES from './brres';
 import * as GX_Material from '../gx/gx_material';
 import { mat4, vec3 } from "gl-matrix";
 import { MaterialParams, GXTextureHolder, ColorKind, translateTexFilterGfx, translateWrapModeGfx, PacketParams, ub_MaterialParams, loadedDataCoalescerComboGfx, fillMaterialParamsDataWithOptimizations } from "../gx/gx_render";
-import { GXRenderHelperGfx, GXShapeHelperGfx, GXMaterialHelperGfx, autoOptimizeMaterial } from "../gx/gx_render";
+import { GXShapeHelperGfx, GXMaterialHelperGfx, autoOptimizeMaterial } from "../gx/gx_render";
 import { computeViewMatrix, computeViewMatrixSkybox, Camera, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
 import AnimationController from "../AnimationController";
 import { TextureMapping } from "../TextureHolder";
@@ -177,12 +177,8 @@ class MaterialInstance {
         this.sortKey = makeSortKey(layer);
     }
 
-    public setVertexColorsEnabled(v: boolean): void {
-        this.materialHelper.setVertexColorsEnabled(v);
-    }
-
-    public setTexturesEnabled(v: boolean): void {
-        this.materialHelper.setTexturesEnabled(v);
+    public setMaterialHacks(materialHacks: GX_Material.GXMaterialHacks): void {
+        this.materialHelper.setMaterialHacks(materialHacks);
     }
 
     public bindSRT0(animationController: AnimationController, srt0: BRRES.SRT0): void {
@@ -579,12 +575,12 @@ export class MDL0ModelInstance {
 
     public setVertexColorsEnabled(v: boolean): void {
         for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].setVertexColorsEnabled(v);
+            this.materialInstances[i].setMaterialHacks({ disableVertexColors: !v });
     }
 
     public setTexturesEnabled(v: boolean): void {
         for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].setTexturesEnabled(v);
+            this.materialInstances[i].setMaterialHacks({ disableTextures: !v });
     }
 
     public bindCHR0(animationController: AnimationController, chr0: BRRES.CHR0): void {
@@ -716,10 +712,9 @@ export class MDL0ModelInstance {
         }
     }
 
-    public prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         let modelVisibility = this.visible ? IntersectionState.PARTIAL_INTERSECT : IntersectionState.FULLY_OUTSIDE;
         const mdl0 = this.mdl0Model.mdl0;
-        const renderInstManager = renderHelper.renderInstManager;
         const camera = viewerInput.camera;
 
         if (modelVisibility !== IntersectionState.FULLY_OUTSIDE) {

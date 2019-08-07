@@ -9,9 +9,9 @@ import { FakeTextureHolder, TextureHolder } from '../TextureHolder';
 import { textureToCanvas, N64Renderer, N64Data, BKPass } from './render';
 import { mat4 } from 'gl-matrix';
 import { transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
-import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
 import { SceneContext } from '../SceneBase';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
+import { executeOnPass } from '../gfx/render/GfxRenderer2';
 
 const pathBase = `bk`;
 
@@ -20,11 +20,10 @@ class BKRenderer implements Viewer.SceneGfx {
     public n64Datas: N64Data[] = [];
 
     public renderTarget = new BasicRenderTarget();
-    public renderInstManager = new GfxRenderInstManager();
-    public uniformBuffer: GfxRenderDynamicUniformBuffer;
+    public renderHelper: GfxRenderHelper;
 
     constructor(device: GfxDevice, public textureHolder: TextureHolder<any>) {
-        this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
+        this.renderHelper = new GfxRenderHelper(device);
     }
 
     public createPanels(): UI.Panel[] {
@@ -67,14 +66,11 @@ class BKRenderer implements Viewer.SceneGfx {
     }
 
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        const template = this.renderInstManager.pushTemplateRenderInst();
-        template.setUniformBuffer(this.uniformBuffer);
-
+        this.renderHelper.pushTemplateRenderInst();
         for (let i = 0; i < this.n64Renderers.length; i++)
-            this.n64Renderers[i].prepareToRender(device, this.renderInstManager, viewerInput);
-
-        this.renderInstManager.popTemplateRenderInst();
-        this.uniformBuffer.prepareToRender(device, hostAccessPass);
+            this.n64Renderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.prepareToRender(device, hostAccessPass);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
@@ -83,29 +79,27 @@ class BKRenderer implements Viewer.SceneGfx {
         device.submitPass(hostAccessPass);
 
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        const renderInstManager = this.renderHelper.renderInstManager;
 
         // First, render the skybox.
         const skyboxPassRenderer = this.renderTarget.createRenderPass(device, transparentBlackFullClearRenderPassDescriptor);
         skyboxPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
-        this.renderInstManager.setVisibleByFilterKeyExact(BKPass.SKYBOX);
-        this.renderInstManager.drawOnPassRenderer(device, skyboxPassRenderer);
+        executeOnPass(renderInstManager, device, skyboxPassRenderer, BKPass.SKYBOX);
         skyboxPassRenderer.endPass(null);
         device.submitPass(skyboxPassRenderer);
         // Now do main pass.
         const mainPassRenderer = this.renderTarget.createRenderPass(device, depthClearRenderPassDescriptor);
         mainPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
-        this.renderInstManager.setVisibleByFilterKeyExact(BKPass.MAIN);
-        this.renderInstManager.drawOnPassRenderer(device, mainPassRenderer);
+        executeOnPass(renderInstManager, device, mainPassRenderer, BKPass.MAIN);
 
-        this.renderInstManager.resetRenderInsts();
+        renderInstManager.resetRenderInsts();
 
         return mainPassRenderer;
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderInstManager.destroy(device);
         this.renderTarget.destroy(device);
-        this.uniformBuffer.destroy(device);
+        this.renderHelper.destroy(device);
         for (let i = 0; i < this.n64Renderers.length; i++)
             this.n64Renderers[i].destroy(device);
         for (let i = 0; i < this.n64Datas.length; i++)

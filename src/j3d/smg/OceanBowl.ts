@@ -14,11 +14,12 @@ import { assert } from "../../util";
 import { makeStaticDataBuffer } from "../../gfx/helpers/BufferHelpers";
 import { getVertexAttribLocation, GXMaterial, ColorChannelControl, TexGen, IndTexStage, TevStage } from "../../gx/gx_material";
 import * as GX from "../../gx/gx_enum";
-import { GXRenderHelperGfx, GXMaterialHelperGfx, autoOptimizeMaterial } from "../../gx/gx_render";
+import { GXMaterialHelperGfx, autoOptimizeMaterial } from "../../gx/gx_render";
 import { MaterialParams, PacketParams, ColorKind, setTevOrder, setTevColorIn, setTevColorOp, setTevAlphaIn, setTevAlphaOp, setTevIndWarp, setIndTexOrder, setIndTexCoordScale, ub_MaterialParams, u_PacketParamsBufferSize, ub_PacketParams, fillPacketParamsData } from "../../gx/gx_render";
 import { Camera } from "../../Camera";
 import { makeSortKey, GfxRendererLayer } from "../../gfx/render/GfxRenderer";
 import { createFilterKeyForDrawType, DrawType } from "./NameObj";
+import { GfxRenderInstManager } from "../../gfx/render/GfxRenderer2";
 
 function calcHeightStatic(wave1Time: number, wave2Time: number, x: number, z: number): number {
     const wave1 = 40 * Math.sin(wave1Time + 0.003 * z);
@@ -366,7 +367,7 @@ export class OceanBowl extends LiveActor {
         this.tex2Trans[1] = (1.0 + time * -0.001) % 1.0;
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput): void {
+    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         const device = sceneObjHolder.modelCache.device;
         const cache = sceneObjHolder.modelCache.cache;
 
@@ -420,7 +421,7 @@ export class OceanBowl extends LiveActor {
         materialParams.u_TexMtx[4][13] = (-normPosX * scale4) + 0.5;
 
         // Now create our draw instance.
-        const renderInst = renderHelper.renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.pushRenderInst();
         renderInst.filterKey = createFilterKeyForDrawType(DrawType.OCEAN_BOWL);
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         renderInst.drawIndexes(this.indexCount);
@@ -430,7 +431,7 @@ export class OceanBowl extends LiveActor {
         renderInst.allocateUniformBuffer(ub_MaterialParams, this.materialHelper.materialParamsBufferSize);
 
         let offs = renderInst.getUniformBufferOffset(ub_MaterialParams);
-        this.materialHelper.fillMaterialParamsData(renderHelper, offs, materialParams);
+        this.materialHelper.fillMaterialParamsData(renderInstManager, offs, materialParams);
 
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 

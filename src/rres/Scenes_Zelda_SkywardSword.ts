@@ -14,7 +14,7 @@ import { TextureOverride } from '../TextureHolder';
 import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks, Color } from '../gx/gx_material';
 import { mat4, quat } from 'gl-matrix';
 import AnimationController from '../AnimationController';
-import { GXRenderHelperGfx } from '../gx/gx_render';
+import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxTexture, GfxTextureDimension, GfxFormat } from '../gfx/platform/GfxPlatform';
 import { GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
@@ -193,7 +193,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
 
         this.stageBZS = this.parseBZS(stageArchive.findFile('dat/stage.bzs').buffer);
         const stageLayout = this.stageBZS.layouts[0];
-        this.spawnLayout(device, this.renderHelper, stageLayout);
+        this.spawnLayout(device, stageLayout);
 
         // Load rooms.
         const roomArchivesDir = stageArchive.findDir('rarc');
@@ -225,7 +225,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
                 const roomBZS = this.parseBZS(roomArchive.findFile('dat/room.bzs').buffer);
                 this.roomBZSes.push(roomBZS);
                 const layout = roomBZS.layouts[0];
-                this.spawnLayout(device, this.renderHelper, layout);
+                this.spawnLayout(device, layout);
             }
         }
 
@@ -321,9 +321,9 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         this.animationController.setTimeInMilliseconds(viewerInput.time);
 
         const template = this.renderHelper.pushTemplateRenderInst();
-        this.renderHelper.fillSceneParams(viewerInput, template);
+        fillSceneParamsDataOnTemplate(template, viewerInput);
         for (let i = 0; i < this.modelInstances.length; i++)
-            this.modelInstances[i].prepareToRender(device, this.renderHelper, viewerInput);
+            this.modelInstances[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         this.renderHelper.prepareToRender(device, hostAccessPass);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
     }
@@ -494,7 +494,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         }
     }
 
-    private spawnLayout(device: GfxDevice, renderHelper: GXRenderHelperGfx, layout: RoomLayout): void {
+    private spawnLayout(device: GfxDevice, layout: RoomLayout): void {
         const q = quat.create();
 
         const modelMatrix = mat4.create();

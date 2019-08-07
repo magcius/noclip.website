@@ -12,7 +12,7 @@ import * as UI from '../../ui';
 
 import { TextureMapping } from '../../TextureHolder';
 import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat } from '../../gfx/platform/GfxPlatform';
-import { executeOnPass } from '../../gfx/render/GfxRenderer2';
+import { executeOnPass, GfxRenderInstManager } from '../../gfx/render/GfxRenderer2';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../../gfx/helpers/RenderTargetHelpers';
 
@@ -23,7 +23,7 @@ import * as RARC from '../../j3d/rarc';
 import AnimationController from '../../AnimationController';
 
 import { EFB_WIDTH, EFB_HEIGHT } from '../../gx/gx_material';
-import { MaterialParams, PacketParams } from '../../gx/gx_render';
+import { MaterialParams, PacketParams, fillSceneParamsDataOnTemplate } from '../../gx/gx_render';
 import { LoadedVertexData, LoadedVertexLayout } from '../../gx/gx_displaylist';
 import { GXRenderHelperGfx } from '../../gx/gx_render';
 import { BMD, BRK, BTK, BCK, LoopMode, BVA, BTP, BPK, JSystemFileReaderHelper, ShapeDisplayFlags } from '../../j3d/j3d';
@@ -278,7 +278,7 @@ class SMGRenderer implements Viewer.SceneGfx {
         for (let drawType = DrawType.EFFECT_DRAW_3D; drawType <= DrawType.EFFECT_DRAW_AFTER_IMAGE_EFFECT; drawType++) {
             const template = this.renderHelper.renderInstManager.pushTemplateRenderInst();
             template.filterKey = createFilterKeyForDrawType(drawType);
-            this.sceneObjHolder.effectSystem.draw(this.sceneObjHolder.modelCache.device, this.renderHelper, drawType);
+            this.sceneObjHolder.effectSystem.draw(this.sceneObjHolder.modelCache.device, this.renderHelper.renderInstManager, drawType);
             this.renderHelper.renderInstManager.popTemplateRenderInst();
         }
     }
@@ -316,7 +316,7 @@ class SMGRenderer implements Viewer.SceneGfx {
         this.sceneObjHolder.captureSceneDirector.opaqueSceneTexture = this.sceneTexture.gfxTexture;
 
         const template = this.renderHelper.pushTemplateRenderInst();
-        this.renderHelper.fillSceneParams(viewerInput, template);
+        fillSceneParamsDataOnTemplate(template, viewerInput);
 
         const effectSystem = this.sceneObjHolder.effectSystem;
         if (effectSystem !== null) {
@@ -326,11 +326,11 @@ class SMGRenderer implements Viewer.SceneGfx {
         }
 
         // Prepare all of our NameObjs.
-        executor.executeDrawAll(this.sceneObjHolder, this.renderHelper, viewerInput);
+        executor.executeDrawAll(this.sceneObjHolder, this.renderHelper.renderInstManager, viewerInput);
         executor.setIndirectTextureOverride(this.sceneTexture.gfxTexture);
 
         // Push to the renderinst.
-        executor.drawAllBuffers(this.sceneObjHolder.modelCache.device, this.renderHelper, camera);
+        executor.drawAllBuffers(this.sceneObjHolder.modelCache.device, this.renderHelper.renderInstManager, camera);
         this.drawAllEffects();
 
         let bloomParameterBufferOffs = -1;
@@ -1303,7 +1303,7 @@ export class LiveActor extends NameObj {
         }
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
+    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (this.modelInstance === null)
             return;
 

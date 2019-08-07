@@ -4,7 +4,7 @@ import * as UI from '../ui';
 import { BIN, Batch, Material, SceneGraphNode, SceneGraphPart } from "./bin";
 
 import * as GX_Texture from '../gx/gx_texture';
-import { MaterialParams, PacketParams, loadTextureFromMipChain, translateWrapModeGfx, loadedDataCoalescerComboGfx, BasicGXRendererHelper, GXMaterialHelperGfx, GXRenderHelperGfx, GXShapeHelperGfx } from '../gx/gx_render';
+import { MaterialParams, PacketParams, loadTextureFromMipChain, translateWrapModeGfx, loadedDataCoalescerComboGfx, BasicGXRendererHelper, GXMaterialHelperGfx, GXRenderHelperGfx, GXShapeHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { assert } from "../util";
 import { mat4 } from "gl-matrix";
 import { AABB } from "../Geometry";
@@ -12,6 +12,7 @@ import { GfxTexture, GfxDevice, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, 
 import { GfxBufferCoalescerCombo, GfxCoalescedBuffersCombo } from "../gfx/helpers/BufferHelpers";
 import { Camera, computeViewMatrix } from "../Camera";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderer2";
 
 class Command_Material {
     public materialHelper: GXMaterialHelperGfx;
@@ -52,19 +53,19 @@ class Command_Batch {
         mat4.mul(dst, dst, this.sceneGraphNode.modelMatrix);
     }
 
-    public prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (this.sceneGraphNode.bbox !== null) {
             bboxScratch.transform(this.sceneGraphNode.bbox, this.sceneGraphNode.modelMatrix);
             if (!viewerInput.camera.frustum.contains(bboxScratch))
                 return;
         }
 
-        const renderInst = this.shapeHelper.pushRenderInst(renderHelper.renderInstManager);
+        const renderInst = this.shapeHelper.pushRenderInst(renderInstManager);
         const materialOffs = this.materialCommand.materialHelper.allocateMaterialParams(renderInst);
         this.materialCommand.fillMaterialParams(materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-        this.materialCommand.materialHelper.setOnRenderInst(device, renderHelper.renderInstManager.gfxRenderCache, renderInst);
-        this.materialCommand.materialHelper.fillMaterialParamsData(renderHelper, materialOffs, materialParams);
+        this.materialCommand.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+        this.materialCommand.materialHelper.fillMaterialParamsData(renderInstManager, materialOffs, materialParams);
         this.computeModelView(packetParams.u_PosMtx[0], viewerInput.camera);
         this.shapeHelper.fillPacketParams(packetParams, renderInst);
     }
@@ -91,11 +92,11 @@ class Command_Bin {
         this.translateModel(device, renderHelper, bin);
     }
 
-    public prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.visible)
             return;
         for (let i = 0; i < this.batchCommands.length; i++)
-            this.batchCommands[i].prepareToRender(device, renderHelper, viewerInput);
+            this.batchCommands[i].prepareToRender(device, renderInstManager, viewerInput);
     }
 
     public setVisible(visible: boolean) {
@@ -186,11 +187,11 @@ export class LuigisMansionRenderer extends BasicGXRendererHelper {
 
     protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         const template = this.renderHelper.pushTemplateRenderInst();
-        
-        this.renderHelper.fillSceneParams(viewerInput, template);
+
+        fillSceneParamsDataOnTemplate(template, viewerInput);
 
         for (let i = 0; i < this.binCommands.length; i++)
-            this.binCommands[i].prepareToRender(device, this.renderHelper, viewerInput);
+            this.binCommands[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender(device, hostAccessPass);

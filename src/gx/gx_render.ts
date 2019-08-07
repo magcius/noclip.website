@@ -18,11 +18,11 @@ import { fillColor, fillMatrix4x3, fillVec4, fillMatrix4x4, fillVec3, fillMatrix
 import { GfxFormat, GfxDevice, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxTextureDimension, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxBuffer, GfxInputLayout, GfxInputState, GfxMegaStateDescriptor, GfxProgram, GfxVertexAttributeFrequency, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { Camera } from '../Camera';
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
-import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 import { GfxRenderInst, GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
 import { getFormatTypeFlags, FormatTypeFlags } from '../gfx/platform/GfxPlatformFormat';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { setSortKeyProgramKey } from '../gfx/render/GfxRenderer';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 
 export enum ColorKind {
     MAT0, MAT1, AMB0, AMB1,
@@ -389,28 +389,14 @@ export class GXMaterialHelperGfx {
         this.gfxProgram = null;
     }
 
-    public setVertexColorsEnabled(v: boolean): void {
-        this.materialHacks.disableVertexColors = !v;
+    public setMaterialHacks(materialHacks: GX_Material.GXMaterialHacks): void {
+        Object.assign(this.materialHacks, materialHacks);
         this.createProgram();
     }
 
-    public setTexturesEnabled(v: boolean): void {
-        this.materialHacks.disableTextures = !v;
-        this.createProgram();
-    }
-
-    public setLightingEnabled(v: boolean): void {
-        this.materialHacks.disableLighting = !v;
-        this.createProgram();
-    }
-
-    public setUseTextureCoords(v: boolean): void {
-        this.materialHacks.useTextureCoords = v;
-        this.createProgram();
-    }
-
-    public fillMaterialParamsData(renderHelper: GXRenderHelperGfx, offs: number, materialParams: MaterialParams): void {
-        const d = renderHelper.uniformBuffer.mapBufferF32(offs, this.materialParamsBufferSize);
+    public fillMaterialParamsData(renderInstManager: GfxRenderInstManager, offs: number, materialParams: MaterialParams): void {
+        const uniformBuffer = renderInstManager.getTemplateRenderInst().getUniformBuffer();
+        const d = uniformBuffer.mapBufferF32(offs, this.materialParamsBufferSize);
         fillMaterialParamsDataWithOptimizations(this.material, d, offs, materialParams);
     }
 
@@ -418,8 +404,9 @@ export class GXMaterialHelperGfx {
         return renderInst.allocateUniformBuffer(ub_MaterialParams, this.materialParamsBufferSize);
     }
 
-    public allocateMaterialParamsBlock(renderHelper: GXRenderHelperGfx): number {
-        return renderHelper.uniformBuffer.allocateChunk(this.materialParamsBufferSize);
+    public allocateMaterialParamsBlock(renderInstManager: GfxRenderInstManager): number {
+        const uniformBuffer = renderInstManager.getTemplateRenderInst().getUniformBuffer();
+        return uniformBuffer.allocateChunk(this.materialParamsBufferSize);
     }
 
     public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, renderInst: GfxRenderInst): void {
@@ -519,42 +506,25 @@ export class GXShapeHelperGfx {
     }
 }
 
-const bindingLayouts: GfxBindingLayoutDescriptor[] = [
+export const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 3, numSamplers: 8, },
 ];
 
-export class GXRenderHelperGfx {
-    private sceneParams = new SceneParams();
-    public renderInstManager = new GfxRenderInstManager();
-    public uniformBuffer: GfxRenderDynamicUniformBuffer;
+const sceneParams = new SceneParams();
+export function fillSceneParamsDataOnTemplate(renderInst: GfxRenderInst, viewerInput: Viewer.ViewerRenderInput, sceneParamsScratch = sceneParams): void {
+    fillSceneParams(sceneParamsScratch, viewerInput.camera, viewerInput.viewportWidth, viewerInput.viewportHeight);
 
-    constructor(device: GfxDevice) {
-        this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
-    }
+    let offs = renderInst.getUniformBufferOffset(ub_SceneParams);
+    const d = renderInst.mapUniformBufferF32(ub_SceneParams);
+    fillSceneParamsData(d, offs, sceneParamsScratch);
+}
 
-    public fillSceneParams(viewerInput: Viewer.ViewerRenderInput, renderInst: GfxRenderInst): void {
-        fillSceneParams(this.sceneParams, viewerInput.camera, viewerInput.viewportWidth, viewerInput.viewportHeight);
-
-        let offs = renderInst.getUniformBufferOffset(ub_SceneParams);
-        const d = renderInst.mapUniformBufferF32(ub_SceneParams);
-        fillSceneParamsData(d, offs, this.sceneParams);
-    }
-
+export class GXRenderHelperGfx extends GfxRenderHelper {
     public pushTemplateRenderInst(): GfxRenderInst {
-        const template = this.renderInstManager.pushTemplateRenderInst();
-        template.setUniformBuffer(this.uniformBuffer);
+        const template = super.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
         template.allocateUniformBuffer(ub_SceneParams, u_SceneParamsBufferSize);
         return template;
-    }
-
-    public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass): void {
-        this.uniformBuffer.prepareToRender(device, hostAccessPass);
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.renderInstManager.destroy(device);
-        this.uniformBuffer.destroy(device);
     }
 }
 

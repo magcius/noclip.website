@@ -65,6 +65,11 @@ export class GfxRenderDynamicUniformBuffer {
     }
 
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass): void {
+        if (this.shadowBufferF32 === null) {
+            // Nothing to do.
+            return;
+        }
+
         const shadowBufferF32 = assertExists(this.shadowBufferF32);
 
         if (shadowBufferF32.length !== this.currentBufferWordSize) {

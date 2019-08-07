@@ -13,7 +13,7 @@ import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render';
 import { GXMaterialHacks } from '../gx/gx_material';
 import AnimationController from '../AnimationController';
 import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
-import { BasicGXRendererHelper } from '../gx/gx_render';
+import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 
 const materialHacks: GXMaterialHacks = {
     lightingFudge: (p) => `(0.5 * (${p.ambSource} + 0.2) * ${p.matSource})`,
@@ -78,9 +78,9 @@ export class BasicRRESRenderer extends BasicGXRendererHelper {
             this.scn0Animators[i].calcLightSetting(this.lightSettings[i]);
 
         const template = this.renderHelper.pushTemplateRenderInst();
-        this.renderHelper.fillSceneParams(viewerInput, template);
+        fillSceneParamsDataOnTemplate(template, viewerInput);
         for (let i = 0; i < this.modelInstances.length; i++)
-            this.modelInstances[i].prepareToRender(device, this.renderHelper, viewerInput);
+            this.modelInstances[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender(device, hostAccessPass);
     }

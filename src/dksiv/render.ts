@@ -10,8 +10,8 @@ import { GfxDevice, GfxBufferUsage, GfxBuffer, GfxInputState, GfxFormat, GfxInpu
 import { fillColor, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
-import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 
 class IVProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -179,11 +179,10 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
 export class Scene implements Viewer.SceneGfx {
     private inputLayout: GfxInputLayout;
     private program: GfxProgram;
-    private uniformBuffer: GfxRenderDynamicUniformBuffer;
     private renderTarget = new BasicRenderTarget();
     private ivRenderers: IVRenderer[] = [];
     private sceneUniformBufferBinding: GfxBindings;
-    private renderInstManager = new GfxRenderInstManager();
+    private renderHelper: GfxRenderHelper;
 
     constructor(device: GfxDevice, public ivs: IV.IV[]) {
         this.program = device.createProgram(new IVProgram());
@@ -195,16 +194,15 @@ export class Scene implements Viewer.SceneGfx {
         const indexBufferFormat: GfxFormat | null = null;
         this.inputLayout = device.createInputLayout({ vertexAttributeDescriptors, indexBufferFormat });
 
-        this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
-
         this.ivRenderers = this.ivs.map((iv) => {
             return new IVRenderer(device, iv, this.inputLayout);
         });
+
+        this.renderHelper = new GfxRenderHelper(device);
     }
 
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        const template = this.renderInstManager.pushTemplateRenderInst();
-        template.setUniformBuffer(this.uniformBuffer);
+        const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
         template.setGfxProgram(this.program);
 
@@ -214,11 +212,10 @@ export class Scene implements Viewer.SceneGfx {
         offs += fillMatrix4x4(mapped, offs, viewerInput.camera.viewMatrix);
 
         for (let i = 0; i < this.ivRenderers.length; i++)
-            this.ivRenderers[i].prepareToRender(this.renderInstManager);
+            this.ivRenderers[i].prepareToRender(this.renderHelper.renderInstManager);
 
-        this.renderInstManager.popTemplateRenderInst();
-
-        this.uniformBuffer.prepareToRender(device, hostAccessPass);
+        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.prepareToRender(device, hostAccessPass);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
@@ -229,8 +226,8 @@ export class Scene implements Viewer.SceneGfx {
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
         const passRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
         passRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
-        this.renderInstManager.drawOnPassRenderer(device, passRenderer);
-        this.renderInstManager.resetRenderInsts();
+        this.renderHelper.renderInstManager.drawOnPassRenderer(device, passRenderer);
+        this.renderHelper.renderInstManager.resetRenderInsts();
         return passRenderer;
     }
 
@@ -239,8 +236,7 @@ export class Scene implements Viewer.SceneGfx {
         device.destroyProgram(this.program);
         device.destroyBindings(this.sceneUniformBufferBinding);
         this.ivRenderers.forEach((r) => r.destroy(device));
-        this.renderInstManager.destroy(device);
-        this.uniformBuffer.destroy(device);
+        this.renderHelper.destroy(device);
         this.renderTarget.destroy(device);
     }
 

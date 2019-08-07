@@ -20,7 +20,7 @@ import { BMDModelInstance, BMDModel, BTIData } from '../render';
 import { Camera, computeViewMatrix } from '../../Camera';
 import { DeviceProgram } from '../../Program';
 import { colorToCSS, Color } from '../../Color';
-import { ColorKind } from '../../gx/gx_render';
+import { ColorKind, fillSceneParamsDataOnTemplate } from '../../gx/gx_render';
 import { GXRenderHelperGfx } from '../../gx/gx_render';
 import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBufferUsage, GfxFormat, GfxVertexAttributeFrequency, GfxInputLayout, GfxInputState, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor, GfxCompareMode, GfxBufferFrequencyHint, GfxVertexAttributeDescriptor } from '../../gfx/platform/GfxPlatform';
 import { GfxRendererLayer } from '../../gfx/render/GfxRenderer';
@@ -240,22 +240,22 @@ class WindWakerRoomRenderer {
         this.model3 = createModelInstance(device, cache, extraTextures, roomRarc, `model3`)!;
     }
 
-    public prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.visible)
             return;
 
         if (this.model)
-            this.model.prepareToRender(device, renderHelper, viewerInput);
+            this.model.prepareToRender(device, renderInstManager, viewerInput);
         if (this.model1)
-            this.model1.prepareToRender(device, renderHelper, viewerInput);
+            this.model1.prepareToRender(device, renderInstManager, viewerInput);
         if (this.model2)
-            this.model2.prepareToRender(device, renderHelper, viewerInput);
+            this.model2.prepareToRender(device, renderInstManager, viewerInput);
         if (this.model3)
-            this.model3.prepareToRender(device, renderHelper, viewerInput);
+            this.model3.prepareToRender(device, renderInstManager, viewerInput);
 
         if (this.objectsVisible)
             for (let i = 0; i < this.objectRenderers.length; i++)
-                this.objectRenderers[i].prepareToRender(device, renderHelper, viewerInput);
+                this.objectRenderers[i].prepareToRender(device, renderInstManager, viewerInput);
     }
 
     public setModelMatrix(modelMatrix: mat4): void {
@@ -484,8 +484,8 @@ class SimpleEffectSystem {
         this.emitterManager.calc(inc);
     }
 
-    public draw(device: GfxDevice, renderHelper: GXRenderHelperGfx, drawGroupId: number = 0): void {
-        this.emitterManager.draw(device, renderHelper, this.drawInfo, drawGroupId);
+    public draw(device: GfxDevice, renderInstManager: GfxRenderInstManager, drawGroupId: number = 0): void {
+        this.emitterManager.draw(device, renderInstManager, this.drawInfo, drawGroupId);
     }
 
     public createEmitter(device: GfxDevice, resourceId: number = 0x14) {
@@ -653,27 +653,28 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         const template = this.renderHelper.pushTemplateRenderInst();
+        const renderInstManager = this.renderHelper.renderInstManager;
 
-        this.renderHelper.fillSceneParams(viewerInput, template);
+        fillSceneParamsDataOnTemplate(template, viewerInput);
         if (this.seaPlane)
-            this.seaPlane.prepareToRender(this.renderHelper.renderInstManager, viewerInput);
+            this.seaPlane.prepareToRender(renderInstManager, viewerInput);
         if (this.vr_sky)
-            this.vr_sky.prepareToRender(device, this.renderHelper, viewerInput);
+            this.vr_sky.prepareToRender(device, renderInstManager, viewerInput);
         if (this.vr_kasumi_mae)
-            this.vr_kasumi_mae.prepareToRender(device, this.renderHelper, viewerInput);
+            this.vr_kasumi_mae.prepareToRender(device, renderInstManager, viewerInput);
         if (this.vr_uso_umi)
-            this.vr_uso_umi.prepareToRender(device, this.renderHelper, viewerInput);
+            this.vr_uso_umi.prepareToRender(device, renderInstManager, viewerInput);
         if (this.vr_back_cloud)
-            this.vr_back_cloud.prepareToRender(device, this.renderHelper, viewerInput);
+            this.vr_back_cloud.prepareToRender(device, renderInstManager, viewerInput);
         for (let i = 0; i < this.roomRenderers.length; i++)
-            this.roomRenderers[i].prepareToRender(device, this.renderHelper, viewerInput);
+            this.roomRenderers[i].prepareToRender(device, renderInstManager, viewerInput);
 
         if (this.effectSystem !== null) {
-            const template = this.renderHelper.renderInstManager.pushTemplateRenderInst();
+            const template = renderInstManager.pushTemplateRenderInst();
             template.filterKey = WindWakerPass.MAIN;
             this.effectSystem.calc(viewerInput);
             this.effectSystem.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, null);
-            this.effectSystem.draw(device, this.renderHelper);
+            this.effectSystem.draw(device, this.renderHelper.renderInstManager);
             this.renderHelper.renderInstManager.popTemplateRenderInst();
         }
 

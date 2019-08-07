@@ -3,8 +3,8 @@ import { DrawBufferHolder, drawBufferInitialTable, LightType } from "./DrawBuffe
 import { LiveActor, SceneObjHolder } from "./smg_scenes";
 import { ViewerRenderInput } from "../../viewer";
 import { GfxTexture, GfxDevice } from "../../gfx/platform/GfxPlatform";
-import { GXRenderHelperGfx } from "../../gx/gx_render";
 import { Camera } from "../../Camera";
+import { GfxRenderInstManager } from "../../gfx/render/GfxRenderer2";
 
 export const enum MovementType {
 }
@@ -91,7 +91,7 @@ export class NameObj {
         // Default implementation; nothing.
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput): void {
+    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         // Default implementation; nothing.
     }
 
@@ -163,15 +163,15 @@ export class SceneNameObjListExecutor {
                 this.nameObjExecuteInfos[i].nameObj.calcAnim(sceneObjHolder, viewerInput);
     }
 
-    public executeDrawAll(sceneObjHolder: SceneObjHolder, renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput): void {
+    public executeDrawAll(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         for (let i = 0; i < this.nameObjExecuteInfos.length; i++) {
             const nameObj = this.nameObjExecuteInfos[i].nameObj;
-            nameObj.draw(sceneObjHolder, renderHelper, viewerInput);
+            nameObj.draw(sceneObjHolder, renderInstManager, viewerInput);
         }
     }
 
-    public drawAllBuffers(device: GfxDevice, renderHelper: GXRenderHelperGfx, camera: Camera): void {
-        this.drawBufferHolder.drawAllBuffers(device, renderHelper, camera);
+    public drawAllBuffers(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera): void {
+        this.drawBufferHolder.drawAllBuffers(device, renderInstManager, camera);
     }
 
     public drawBufferHasVisible(drawBufferType: DrawBufferType): boolean {

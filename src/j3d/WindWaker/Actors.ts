@@ -9,7 +9,7 @@ import { ANK1, TTK1, TRK1, BTI_Texture } from "../j3d";
 import AnimationController from "../../AnimationController";
 import { Colors } from "./zww_scenes";
 import { ColorKind, PacketParams, MaterialParams, ub_MaterialParams, loadedDataCoalescerComboGfx } from "../../gx/gx_render";
-import { GXRenderHelperGfx, GXShapeHelperGfx, GXMaterialHelperGfx } from '../../gx/gx_render';
+import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../../gx/gx_render';
 import { AABB } from '../../Geometry';
 import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB, computeViewMatrix } from '../../Camera';
 import { GfxDevice } from '../../gfx/platform/GfxPlatform';
@@ -21,11 +21,12 @@ import { GfxBufferCoalescerCombo } from '../../gfx/helpers/BufferHelpers';
 import { TextureMapping } from '../../TextureHolder';
 import { colorFromRGBA } from '../../Color';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
+import { GfxRenderInstManager } from '../../gfx/render/GfxRenderer2';
 
 // Special-case actors
 
 export interface ObjectRenderer {
-    prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void;
+    prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void;
     setColors(colors: Colors): void;
     destroy(device: GfxDevice): void;
     setVertexColorsEnabled(v: boolean): void;
@@ -83,7 +84,7 @@ export class BMDObjectRenderer implements ObjectRenderer {
             this.childObjects[i].setColors(colors);
     }
 
-    public prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.visible)
             return;
 
@@ -108,9 +109,9 @@ export class BMDObjectRenderer implements ObjectRenderer {
         vec3.set(light.CosAtten, 1.075, 0, 0);
         vec3.set(light.DistAtten, 1.075, 0, 0);
 
-        this.modelInstance.prepareToRender(device, renderHelper, viewerInput);
+        this.modelInstance.prepareToRender(device, renderInstManager, viewerInput);
         for (let i = 0; i < this.childObjects.length; i++)
-            this.childObjects[i].prepareToRender(device, renderHelper, viewerInput);
+            this.childObjects[i].prepareToRender(device, renderInstManager, viewerInput);
     }
 
     public destroy(device: GfxDevice): void {
@@ -410,7 +411,7 @@ export class FlowerObjectRenderer implements ObjectRenderer {
     public setTexturesEnabled(v: boolean): void {
     }
 
-    public prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         // Do some basic distance culling.
         mat4.getTranslation(scratchVec3a, viewerInput.camera.worldMatrix);
         mat4.getTranslation(scratchVec3b, this.modelMatrix);
@@ -428,11 +429,11 @@ export class FlowerObjectRenderer implements ObjectRenderer {
         const S = 0.5;
         mat4.fromScaling(materialParams.u_PostTexMtx[0], [S, S, S]);
 
-        const renderInst = this.flowerData.shapeHelperMain.pushRenderInst(renderHelper.renderInstManager);
+        const renderInst = this.flowerData.shapeHelperMain.pushRenderInst(renderInstManager);
 
         const materialParamsOffs = renderInst.allocateUniformBuffer(ub_MaterialParams, this.materialHelper.materialParamsBufferSize);
-        this.materialHelper.fillMaterialParamsData(renderHelper, materialParamsOffs, materialParams);
-        this.materialHelper.setOnRenderInst(device, renderHelper.renderInstManager.gfxRenderCache, renderInst);
+        this.materialHelper.fillMaterialParamsData(renderInstManager, materialParamsOffs, materialParams);
+        this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
         const m = packetParams.u_PosMtx[0];

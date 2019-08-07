@@ -8,10 +8,10 @@ import * as RARC from '../../j3d/rarc';
 import * as JPA from '../JPA';
 import { Color } from "../../gx/gx_material";
 import { vec3, mat4 } from "gl-matrix";
-import { GXRenderHelperGfx } from "../../gx/gx_render";
 import { colorNewCopy, White, colorCopy } from "../../Color";
 import { computeModelMatrixR } from "../../MathHelpers";
 import { DrawType } from "./NameObj";
+import { GfxRenderInstManager } from "../../gfx/render/GfxRenderer2";
 
 export class ParticleResourceHolder {
     private effectNames: string[];
@@ -630,8 +630,8 @@ export class EffectSystem {
         this.drawInfo.texPrjMtx = texPrjMtx;
     }
 
-    public draw(device: GfxDevice, renderHelper: GXRenderHelperGfx, groupID: number): void {
-        this.emitterManager.draw(device, renderHelper, this.drawInfo, groupID);
+    public draw(device: GfxDevice, renderInstManager: GfxRenderInstManager, groupID: number): void {
+        this.emitterManager.draw(device, renderInstManager, this.drawInfo, groupID);
     }
 
     private createEmitter(resData: JPA.JPAResourceData, groupID: number): ParticleEmitter | null {

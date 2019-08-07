@@ -22,7 +22,7 @@ import { colorMult, colorCopy, colorFromRGBA } from '../Color';
 import { texEnvMtx } from '../MathHelpers';
 import { GXShapeHelperGfx, GXRenderHelperGfx, GXMaterialHelperGfx } from '../gx/gx_render';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { GfxRenderInst } from '../gfx/render/GfxRenderer2';
+import { GfxRenderInst, GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
 
 const fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = mat4.fromValues(
     1, 0,  0, 0,
@@ -185,11 +185,11 @@ class MaterialGroupInstance {
         renderInst.sortKey = makeSortKey(layer, this.materialHelper.programKey);
     }
 
-    public prepareToRender(renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4 | null, isSkybox: boolean, actorLights: ActorLights | null): void {
-        this.materialParamsBlockOffs = this.materialHelper.allocateMaterialParamsBlock(renderHelper);
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4 | null, isSkybox: boolean, actorLights: ActorLights | null): void {
+        this.materialParamsBlockOffs = this.materialHelper.allocateMaterialParamsBlock(renderInstManager);
 
         this.fillMaterialParamsData(materialParams, viewerInput, modelMatrix, isSkybox, actorLights);
-        this.materialHelper.fillMaterialParamsData(renderHelper, this.materialParamsBlockOffs, materialParams);
+        this.materialHelper.fillMaterialParamsData(renderInstManager, this.materialParamsBlockOffs, materialParams);
     }
 
     public fillMaterialParamsData(materialParams: MaterialParams, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4 | null, isSkybox: boolean, actorLights: ActorLights | null): void {
@@ -531,7 +531,7 @@ export class MREARenderer {
 
         // Render the MREA's native surfaces.
         for (let i = 0; i < this.materialGroupInstances.length; i++)
-            this.materialGroupInstances[i].prepareToRender(renderHelper, viewerInput, null, false, null);
+            this.materialGroupInstances[i].prepareToRender(renderHelper.renderInstManager, viewerInput, null, false, null);
         for (let i = 0; i < this.surfaceInstances.length; i++)
             this.surfaceInstances[i].prepareToRender(device, renderHelper, viewerInput, false);
 
@@ -640,7 +640,7 @@ export class CMDLRenderer {
         templateRenderInst.filterKey = this.isSkybox ? RetroPass.SKYBOX : RetroPass.MAIN;
 
         for (let i = 0; i < this.materialGroupInstances.length; i++)
-            this.materialGroupInstances[i].prepareToRender(renderHelper, viewerInput, this.modelMatrix, this.isSkybox, this.actorLights);
+            this.materialGroupInstances[i].prepareToRender(renderHelper.renderInstManager, viewerInput, this.modelMatrix, this.isSkybox, this.actorLights);
         for (let i = 0; i < this.surfaceInstances.length; i++)
             this.surfaceInstances[i].prepareToRender(device, renderHelper, viewerInput, this.isSkybox);
 

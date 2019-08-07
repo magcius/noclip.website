@@ -38,7 +38,7 @@ function loadFileAsPromise(file: File, dataFetcher: DataFetcher): Promise<NamedA
     });
 }
 
-function decompressArbitraryFile(buffer: ArrayBufferSlice): Promise<ArrayBufferSlice> {
+export function decompressArbitraryFile(buffer: ArrayBufferSlice): Promise<ArrayBufferSlice> {
     const magic = readString(buffer, 0x00, 0x04);
     if (magic === 'Yaz0')
         return Yaz0.decompress(buffer);

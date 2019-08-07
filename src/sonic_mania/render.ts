@@ -252,8 +252,6 @@ class MDL0Renderer {
 }
 
 export class SonicManiaRenderer implements Viewer.SceneGfx {
-    public defaultCameraController = OrbitCameraController;
-
     public renderTarget = new BasicRenderTarget();
     public renderInstManager = new GfxRenderInstManager();
     public uniformBuffer: GfxRenderDynamicUniformBuffer;
@@ -266,6 +264,10 @@ export class SonicManiaRenderer implements Viewer.SceneGfx {
 
         this.mdl0Renderer = new MDL0Renderer(device, mdl0);
         this.fancyGrid = new FancyGrid(device);
+    }
+
+    public createCameraController() {
+        return new OrbitCameraController();
     }
 
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {

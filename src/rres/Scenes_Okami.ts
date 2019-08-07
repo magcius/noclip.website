@@ -9,7 +9,7 @@ import { mat4 } from "gl-matrix";
 import * as BRRES from './brres';
 import * as GX from '../gx/gx_enum';
 import { assert, readString, hexzero, assertExists } from "../util";
-import { GXRenderHelperGfx } from "../gx/gx_render";
+import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from "../gx/gx_render";
 import AnimationController from "../AnimationController";
 import { GXMaterialHacks } from "../gx/gx_material";
 import { computeModelMatrixSRT, computeMatrixWithoutRotation } from "../MathHelpers";
@@ -116,7 +116,7 @@ class MapPartInstance {
             mat4.mul(this.modelInstance.modelMatrix, this.modelMatrix, this.modelInstance.modelMatrix);
         }
 
-        this.modelInstance.prepareToRender(device, renderHelper, viewerInput);
+        this.modelInstance.prepareToRender(device, renderHelper.renderInstManager, viewerInput);
     }
 
     public destroy(device: GfxDevice): void {
@@ -265,7 +265,7 @@ export class OkamiRenderer implements Viewer.SceneGfx {
 
         this.animationController.setTimeInMilliseconds(viewerInput.time);
 
-        this.renderHelper.fillSceneParams(viewerInput, template);
+        fillSceneParamsDataOnTemplate(template, viewerInput);
         for (let i = 0; i < this.mapPartInstances.length; i++)
             this.mapPartInstances[i].prepareToRender(device, this.renderHelper, viewerInput);
         for (let i = 0; i < this.objectInstances.length; i++)
@@ -584,7 +584,7 @@ class ObjectInstance {
             mat4.mul(this.modelInstance.modelMatrix, this.modelMatrix, this.modelInstance.modelMatrix);
         }
 
-        this.modelInstance.prepareToRender(device, renderHelper, viewerInput);
+        this.modelInstance.prepareToRender(device, renderHelper.renderInstManager, viewerInput);
     }
 
     public destroy(device: GfxDevice): void {

@@ -1,6 +1,6 @@
 
-import { GXTextureHolder, MaterialParams, PacketParams, ColorKind, translateWrapModeGfx, ub_MaterialParams, loadedDataCoalescerComboGfx, ub_SceneParams, fillSceneParamsData, u_SceneParamsBufferSize, SceneParams, fillSceneParams } from '../gx/gx_render';
-import { GXRenderHelperGfx, GXMaterialHelperGfx, GXShapeHelperGfx, BasicGXRendererHelper } from '../gx/gx_render';
+import { GXTextureHolder, MaterialParams, PacketParams, ColorKind, translateWrapModeGfx, ub_MaterialParams, loadedDataCoalescerComboGfx, ub_SceneParams, fillSceneParamsData, u_SceneParamsBufferSize, SceneParams, fillSceneParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
+import { GXMaterialHelperGfx, GXShapeHelperGfx, BasicGXRendererHelper } from '../gx/gx_render';
 
 import * as TPL from './tpl';
 import { TTYDWorld, Material, SceneGraphNode, Batch, SceneGraphPart, Sampler, MaterialAnimator, bindMaterialAnimator, AnimationEntry, MeshAnimator, bindMeshAnimator, MaterialLayer, DrawModeFlags } from './world';
@@ -21,6 +21,7 @@ import { colorCopy } from '../Color';
 import * as UI from '../ui';
 import { GfxRenderInstManager, GfxRenderInst } from '../gfx/render/GfxRenderer2';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { GXMaterialHacks } from '../gx/gx_material';
 
 export class TPLTextureHolder extends GXTextureHolder<TPL.TPLTexture> {
     public addTPLTextures(device: GfxDevice, tpl: TPL.TPL): void {
@@ -112,9 +113,9 @@ class MaterialInstance {
     public materialParamsBlockOffs: number = 0;
     public isTranslucent: boolean;
 
-    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, public material: Material) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public material: Material) {
         this.materialHelper = new GXMaterialHelperGfx(this.material.gxMaterial);
-        this.materialHelper.cacheProgram(device, renderHelper.renderInstManager.gfxRenderCache);
+        this.materialHelper.cacheProgram(device, cache);
 
         this.gfxSamplers = this.material.samplers.map((sampler) => {
             return MaterialInstance.translateSampler(device, sampler);
@@ -123,16 +124,8 @@ class MaterialInstance {
         this.isTranslucent = material.materialLayer === MaterialLayer.BLEND;
     }
 
-    public setVertexColorsEnabled(v: boolean): void {
-        this.materialHelper.setVertexColorsEnabled(v);
-    }
-
-    public setTexturesEnabled(v: boolean): void {
-        this.materialHelper.setTexturesEnabled(v);
-    }
-
-    public setUseTextureCoords(v: boolean): void {
-        this.materialHelper.setUseTextureCoords(v);
+    public setMaterialHacks(materialHacks: GXMaterialHacks): void {
+        this.materialHelper.setMaterialHacks(materialHacks);
     }
 
     private getRendererLayer(materialLayer: MaterialLayer): GfxRendererLayer {
@@ -210,12 +203,12 @@ class MaterialInstance {
         megaStateFlags.polygonOffset = this.material.materialLayer === MaterialLayer.ALPHA_TEST;
     }
 
-    public prepareToRender(renderHelper: GXRenderHelperGfx, textureHolder: TPLTextureHolder): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, textureHolder: TPLTextureHolder): void {
         assert(this.materialParamsBlockOffs === 0);
-        this.materialParamsBlockOffs = this.materialHelper.allocateMaterialParamsBlock(renderHelper);
+        this.materialParamsBlockOffs = this.materialHelper.allocateMaterialParamsBlock(renderInstManager);
 
         this.fillMaterialParams(this.materialParams, textureHolder);
-        this.materialHelper.fillMaterialParamsData(renderHelper, this.materialParamsBlockOffs, this.materialParams);
+        this.materialHelper.fillMaterialParamsData(renderInstManager, this.materialParamsBlockOffs, this.materialParams);
     }
 
     public destroy(device: GfxDevice) {
@@ -237,13 +230,13 @@ class BatchInstance {
         mat4.mul(dst, dst, this.nodeInstance.modelMatrix);
     }
 
-    public prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.nodeInstance.visible)
             return;
 
-        const renderInst = this.shapeHelper.pushRenderInst(renderHelper.renderInstManager);
+        const renderInst = this.shapeHelper.pushRenderInst(renderInstManager);
         this.nodeInstance.setOnRenderInst(renderInst, viewerInput);
-        this.materialInstance.setOnRenderInst(device, renderHelper.renderInstManager.gfxRenderCache, renderInst);
+        this.materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
         renderInst.setMegaStateFlags(this.nodeInstance.node.renderFlags);
         this.computeModelView(this.packetParams.u_PosMtx[0], viewerInput.camera);
         this.shapeHelper.fillPacketParams(this.packetParams, renderInst);
@@ -409,7 +402,7 @@ export class WorldRenderer extends BasicGXRendererHelper {
         if (this.backgroundRenderer !== null)
             this.backgroundRenderer.prepareToRender(this.renderHelper.renderInstManager, viewerInput);
 
-        this.renderHelper.fillSceneParams(viewerInput, template);
+        fillSceneParamsDataOnTemplate(template, viewerInput);
 
         // Recursively update node model matrices.
         const updateNode = (nodeInstance: NodeInstance, parentMatrix: mat4) => {
@@ -423,11 +416,11 @@ export class WorldRenderer extends BasicGXRendererHelper {
 
         // First, go through materials and reset their material params blocks...
         for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].prepareToRender(this.renderHelper, this.textureHolder);
+            this.materialInstances[i].prepareToRender(this.renderHelper.renderInstManager, this.textureHolder);
 
         // Update shapes
         for (let i = 0; i < this.batchInstances.length; i++)
-            this.batchInstances[i].prepareToRender(device, this.renderHelper, viewerInput);
+            this.batchInstances[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
 
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].materialParamsBlockOffs = 0;
@@ -442,19 +435,19 @@ export class WorldRenderer extends BasicGXRendererHelper {
         const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
         enableVertexColorsCheckbox.onchanged = () => {
             for (let i = 0; i < this.materialInstances.length; i++)
-                this.materialInstances[i].setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
+                this.materialInstances[i].setMaterialHacks({ disableVertexColors: !enableVertexColorsCheckbox.checked });
         };
         renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
         const enableTextures = new UI.Checkbox('Enable Textures', true);
         enableTextures.onchanged = () => {
             for (let i = 0; i < this.materialInstances.length; i++)
-                this.materialInstances[i].setTexturesEnabled(enableTextures.checked);
+                this.materialInstances[i].setMaterialHacks({ disableTextures: !enableTextures.checked });
         };
         renderHacksPanel.contents.appendChild(enableTextures.elem);
         const showTextureCoords = new UI.Checkbox('Show Texture Coordinates', false);
         showTextureCoords.onchanged = () => {
             for (let i = 0; i < this.materialInstances.length; i++)
-                this.materialInstances[i].setUseTextureCoords(showTextureCoords.checked);
+                this.materialInstances[i].setMaterialHacks({ useTextureCoords: showTextureCoords.checked });
         };
         renderHacksPanel.contents.appendChild(showTextureCoords.elem);
         const enableANode = new UI.Checkbox('Enable Collision', false);
@@ -522,7 +515,9 @@ export class WorldRenderer extends BasicGXRendererHelper {
     }
 
     private translateModel(device: GfxDevice, d: TTYDWorld): void {
-        this.materialInstances = d.materials.map((material) => new MaterialInstance(device, this.renderHelper, material));
+        this.materialInstances = d.materials.map((material) => {
+            return new MaterialInstance(device, this.renderHelper.renderInstManager.gfxRenderCache, material);
+        });
 
         const rootNode = d.rootNode;
 

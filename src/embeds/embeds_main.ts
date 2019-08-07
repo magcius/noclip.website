@@ -14,14 +14,17 @@ import { OrbitCameraController } from '../Camera';
 
 import * as sunshine_water from './sunshine_water';
 import * as orbitview from './orbitview';
+import * as script from './script';
 import { DataFetcher } from '../DataFetcher';
 import { SceneContext, Destroyable } from '../SceneBase';
+import { setChildren } from '../ui';
 
 type CreateSceneFunc = (context: SceneContext, state: string) => Promise<Viewer.SceneGfx>;
 
 const embeds: { [key: string]: CreateSceneFunc } = {
     "sunshine_water": sunshine_water.createScene,
     "orbitview": orbitview.createScene,
+    "script": script.createScene,
 };
 
 class FsButton {
@@ -75,6 +78,8 @@ class FsButton {
 
 class Main {
     public viewer: Viewer.Viewer;
+    private toplevel: HTMLElement;
+    private sceneUIContainer: HTMLElement;
     private canvas: HTMLCanvasElement;
     private fsButton: FsButton;
     private destroyablePool: Destroyable[] = [];
@@ -89,12 +94,22 @@ class Main {
             return;
         }
 
-        document.body.appendChild(this.canvas);
+        this.toplevel = document.createElement('div');
+        document.body.appendChild(this.toplevel);
+
+        this.toplevel.appendChild(this.canvas);
         window.onresize = this.onResize.bind(this);
         window.onhashchange = this.loadFromHash.bind(this);
 
         this.fsButton = new FsButton();
-        document.body.appendChild(this.fsButton.elem);
+        this.toplevel.appendChild(this.fsButton.elem);
+
+        this.sceneUIContainer = document.createElement('div');
+        this.sceneUIContainer.style.pointerEvents = 'none';
+        this.sceneUIContainer.style.position = 'absolute';
+        this.sceneUIContainer.style.top = '0';
+        this.sceneUIContainer.style.left = '0';
+        this.toplevel.appendChild(this.sceneUIContainer);
 
         this.onResize();
 
@@ -114,14 +129,18 @@ class Main {
 
     private async loadScene(hash: string) {
         const firstSlash = hash.indexOf('/');
-        const embedId = hash.slice(0, firstSlash);
-        const state = hash.slice(firstSlash + 1);
+        let embedId = hash, state = '';
+        if (firstSlash >= 0) {
+            embedId = hash.slice(0, firstSlash);
+            state = hash.slice(firstSlash + 1);
+        }
 
         const device = this.viewer.gfxDevice;
         // Destroy the old scene.
         for (let i = 0; i < this.destroyablePool.length; i++)
             this.destroyablePool[i].destroy(device);
         this.destroyablePool.length = 0;
+        setChildren(this.sceneUIContainer, []);
 
         if (this.abortController !== null)
             this.abortController.abort();
@@ -132,13 +151,18 @@ class Main {
         const abortSignal = this.abortController.signal;
         const destroyablePool = this.destroyablePool;
         const dataFetcher = new DataFetcher(abortSignal, progressMeter);
-        // TODO(jstpierre): Support uiContainer in embeds.
         const uiContainer = document.createElement('div');
+        this.sceneUIContainer.appendChild(uiContainer);
+        uiContainer.style.pointerEvents = 'auto';
         const context: SceneContext = { device, dataFetcher, destroyablePool, uiContainer };
         const createScene = embeds[embedId];
         const scene = await createScene(context, state);
         this.viewer.setScene(scene);
-        this.viewer.setCameraController(new OrbitCameraController());
+
+        if (scene.createCameraController !== undefined)
+            this.viewer.setCameraController(scene.createCameraController());
+        if (this.viewer.cameraController === null)
+            this.viewer.setCameraController(new OrbitCameraController());
     }
 
     private onResize() {

@@ -24,9 +24,9 @@ export interface ViewerRenderInput {
 }
 
 export interface SceneGfx {
-    defaultCameraController?: CameraControllerClass;
     textureHolder?: TextureHolder<any>;
     createPanels?(): UI.Panel[];
+    createCameraController?(): CameraController;
     serializeSaveState?(dst: ArrayBuffer, offs: number): number;
     deserializeSaveState?(dst: ArrayBuffer, offs: number, byteLength: number): number;
     onstatechanged?: () => void;
@@ -152,8 +152,6 @@ export class Viewer {
             this.scene.destroy(this.gfxDevice);
             this.scene = null;
         }
-
-        this.cameraController = null;
     }
 
     public setScene(scene: SceneGfx | null): void {
