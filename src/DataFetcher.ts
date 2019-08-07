@@ -15,7 +15,7 @@ function getDataStorageBaseURL(): string {
         return `https://gznoclip1.b-cdn.net`;
 }
 
-function getDataURLForPath(url: string): string {
+export function getDataURLForPath(url: string): string {
     assert(!url.startsWith(`data/`));
     return `${getDataStorageBaseURL()}/${url}`;
 }

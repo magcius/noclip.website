@@ -15,6 +15,7 @@ import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget } from "../gfx/helpers/RenderTargetHelpers";
 import { bindingLayouts, ub_SceneParams, u_SceneParamsBufferSize, fillSceneParamsDataOnTemplate } from "../gx/gx_render";
 import { OrbitCameraController } from "../Camera";
+import { getDataURLForPath } from "../DataFetcher";
 
 interface CommonArchive {
     findFileData(path: string): ArrayBufferSlice | null;
@@ -27,6 +28,8 @@ function basedir(S: string): string {
 function getDataURL(basedir: string, path: string): string {
     if (path.startsWith('http://') || path.startsWith('https://')) {
         return path;
+    } else if (path.startsWith('noclip://')) {
+        return getDataURLForPath(path.slice(9));
     } else {
         return `${basedir}/${path}`;
     }
@@ -55,16 +58,6 @@ class J3DGraphNode extends BMDModelInstance implements GraphBase {
 }
 
 class ScriptRenderer implements SceneGfx {
-    public static PUBLIC_API = [
-        'fetchData',
-        'fetchArchive',
-        'args',
-        'spawnBMD',
-        'cameraController',
-        'setInterval',
-        'uiContainer',
-    ];
-
     public renderTarget = new BasicRenderTarget();
     public renderHelper: GfxRenderHelper;
     public clearRenderPassDescriptor = standardFullClearRenderPassDescriptor;
@@ -114,6 +107,17 @@ class ScriptRenderer implements SceneGfx {
         for (let i = 0; i < this.intervals.length; i++)
             clearInterval(this.intervals[i]);
     }
+
+    // Script API.
+    public static PUBLIC_API = [
+        'args',
+        'uiContainer',
+        'fetchData',
+        'fetchArchive',
+        'spawnBMD',
+        'cameraController',
+        'setInterval',
+    ];
 
     public fetchData = async (url: string): Promise<ArrayBufferSlice> => {
         const dataFetcher = this.context.dataFetcher;
