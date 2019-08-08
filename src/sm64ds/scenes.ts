@@ -775,6 +775,10 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
             dataFetcher.fetchData(`${pathBase}/sm64ds.crg1`),
             dataFetcher.fetchData(`${pathBase}/ARCHIVE/ar1.narc`),
             dataFetcher.fetchData(`${pathBase}/ARCHIVE/arc0.narc`),
+            dataFetcher.fetchData(`${pathBase}/ARCHIVE/vs1.narc`),
+            dataFetcher.fetchData(`${pathBase}/ARCHIVE/vs2.narc`),
+            dataFetcher.fetchData(`${pathBase}/ARCHIVE/vs3.narc`),
+            dataFetcher.fetchData(`${pathBase}/ARCHIVE/vs4.narc`),
         ]);
 
         const modelCache = new ModelCache(dataFetcher);
