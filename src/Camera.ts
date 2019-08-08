@@ -526,10 +526,10 @@ export class OrbitCameraController implements CameraController {
         this.xVel = clampRange(this.xVel, 2);
         this.yVel = clampRange(this.yVel, 2);
 
-        const updated = this.forceUpdate || this.xVel !== 0 || this.yVel !== 0 || this.zVel !== 0;
+        const updated = this.forceUpdate || this.xVel !== 0 || this.yVel !== 0 || this.zVel !== 0 || this.txVel !== 0 || this.tyVel !== 0;
         if (updated) {
             // Apply velocities.
-            const drag = inputManager.isDragging() ? 0.92 : 0.96;
+            const drag = (inputManager.isDragging() || isShiftPressed) ? 0.92 : 0.96;
 
             this.x += -this.xVel / 10;
             this.xVel *= drag;
@@ -585,7 +585,7 @@ export class OrthoCameraController implements CameraController {
     public translation = vec3.create();
     public txVel: number = 0;
     public tyVel: number = 0;
-    public shouldOrbit: boolean = true;
+    public shouldOrbit: boolean = false;
     private farPlane = 100000;
     private nearPlane = -this.farPlane / 2;
 
@@ -663,6 +663,7 @@ export class OrthoCameraController implements CameraController {
             if (Math.abs(this.xVel) < Math.abs(this.orbitSpeed))
                 this.xVel += this.orbitSpeed * 1/50;
         }
+        let hasZVel = inputManager.dz !== 0;
         this.zVel += inputManager.dz * -1;
         let keyVelX = 0, keyVelY = 0;
         if (inputManager.isKeyDown('KeyA'))
@@ -686,10 +687,19 @@ export class OrthoCameraController implements CameraController {
         this.xVel = clampRange(this.xVel, 2);
         this.yVel = clampRange(this.yVel, 2);
 
+        if (inputManager.isKeyDown('KeyQ')) {
+            this.zVel += 1.0;
+            hasZVel = true;
+        }
+        if (inputManager.isKeyDown('KeyE')) {
+            this.zVel -= 1.0;
+            hasZVel = true;
+        }
+
         const updated = this.forceUpdate || this.xVel !== 0 || this.yVel !== 0 || this.zVel !== 0 || this.txVel !== 0 || this.tyVel !== 0;
         if (updated) {
             // Apply velocities.
-            const drag = inputManager.isDragging() ? 0.92 : 0.96;
+            const drag = (inputManager.isDragging() || isShiftPressed) ? 0.92 : 0.96;
 
             this.x += -this.xVel / 10;
             this.xVel *= drag;
@@ -700,8 +710,8 @@ export class OrthoCameraController implements CameraController {
             this.txVel *= drag;
             this.tyVel *= drag;
 
-            this.z += this.zVel * 4;
-            if (inputManager.dz === 0)
+            this.z += Math.max(Math.log(Math.abs(this.zVel)), 0) * 4 * Math.sign(this.zVel);
+            if (!hasZVel)
                 this.zVel *= 0.85;
             if (this.z < 1) {
                 this.z = 1;
