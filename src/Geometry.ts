@@ -216,6 +216,7 @@ export class Frustum {
     public top: number;
     public near: number;
     public far: number;
+    public isOrthographic: boolean;
 
     // World-space configuration.
     public aabb: AABB = new AABB();
@@ -229,19 +230,20 @@ export class Frustum {
         return this.visualizer;
     }
 
-    public setViewFrustum(left: number, right: number, bottom: number, top: number, n: number, f: number): void {
+    public setViewFrustum(left: number, right: number, bottom: number, top: number, n: number, f: number, isOrthographic: boolean): void {
         this.left = left;
         this.right = right;
         this.bottom = bottom;
         this.top = top;
         this.near = -n;
         this.far = -f;
+        this.isOrthographic = isOrthographic;
     }
 
     public updateWorldFrustum(worldMatrix: mat4): void {
         const scratch = Frustum.scratchPlaneVec3;
 
-        const fn = this.far / this.near;
+        const fn = this.isOrthographic ? 1 : this.far / this.near;
         vec3.set(scratch[0], this.left, this.top, this.near);
         vec3.set(scratch[1], this.right, this.top, this.near);
         vec3.set(scratch[2], this.right, this.bottom, this.near);
@@ -266,9 +268,6 @@ export class Frustum {
 
         if (this.visualizer) {
             const ctx = this.visualizer.ctx;
-            const scale = this.visualizer.scale;
-            // TODO(jstpierre): why isn't this working?
-            ctx.setTransform(1, 0, 0, 1, -worldMatrix[12]*scale, -worldMatrix[14]*scale);
             ctx.strokeStyle = 'red';
             this.visualizer.daabb(this.aabb);
 

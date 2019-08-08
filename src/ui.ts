@@ -3,7 +3,7 @@
 
 import * as Viewer from './viewer';
 import { assertExists, assert } from './util';
-import { CameraControllerClass, OrbitCameraController, FPSCameraController } from './Camera';
+import { CameraControllerClass, OrbitCameraController, FPSCameraController, OrthoCameraController } from './Camera';
 import { Color, colorToCSS } from './Color';
 import { TextureHolder } from './TextureHolder';
 import { GITHUB_REVISION_URL, GITHUB_URL, GIT_SHORT_REVISION } from './BuildVersion';
@@ -62,6 +62,10 @@ export function setChildren(parent: Element, children: Element[]): void {
     for (let i = 0; i < children.length - 1; i++)
         if (parent.children.item(i) !== children[i])
             parent.insertBefore(children[i], parent.children.item(i));
+}
+
+function setElementVisible(elem: HTMLElement, v: boolean, normalDisplay = 'block') {
+    elem.style.display = v ? normalDisplay : 'none';
 }
 
 function setElementHighlighted(elem: HTMLElement, highlighted: boolean, normalTextColor: string = '') {
@@ -1630,6 +1634,7 @@ class ViewerSettings extends Panel {
     private camSpeedSlider: Slider;
     private cameraControllerWASD: HTMLElement;
     private cameraControllerOrbit: HTMLElement;
+    private cameraControllerOrtho: HTMLElement;
     private invertYCheckbox: Checkbox;
     private invertXCheckbox: Checkbox;
 
@@ -1652,12 +1657,12 @@ class ViewerSettings extends Panel {
 }
 </style>
 
-<div class="SliderContainer">
+<div style="display: grid; grid-template-columns: 3fr 1fr 1fr 1fr; align-items: center;">
+<div class="SettingsHeader">Camera Controller</div>
+<div class="SettingsButton CameraControllerWASD">WASD</div><div class="SettingsButton CameraControllerOrbit">Orbit</div><div class="SettingsButton CameraControllerOrtho">Ortho</div>
 </div>
 
-<div style="display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center;">
-<div class="SettingsHeader">Camera Controller</div>
-<div class="SettingsButton CameraControllerWASD">WASD</div><div class="SettingsButton CameraControllerOrbit">Orbit</div>
+<div class="SliderContainer">
 </div>
 `;
         this.contents.style.lineHeight = '36px';
@@ -1689,6 +1694,11 @@ class ViewerSettings extends Panel {
             this.setCameraControllerClass(OrbitCameraController);
         };
 
+        this.cameraControllerOrtho = this.contents.querySelector('.CameraControllerOrtho') as HTMLInputElement;
+        this.cameraControllerOrtho.onclick = () => {
+            this.setCameraControllerClass(OrthoCameraController);
+        };
+
         this.invertYCheckbox = new Checkbox('Invert Y Axis?');
         this.invertYCheckbox.onchanged = () => { GlobalSaveManager.saveSetting(`InvertY`, this.invertYCheckbox.checked); };
         this.contents.appendChild(this.invertYCheckbox.elem);
@@ -1701,7 +1711,6 @@ class ViewerSettings extends Panel {
     }
 
     private onFovSliderChange(e: UIEvent): void {
-        const slider = (<HTMLInputElement> e.target);
         const value = this.fovSlider.getT();
         this.viewer.fovY = value * (Math.PI * 0.995);
     }
@@ -1730,6 +1739,10 @@ class ViewerSettings extends Panel {
     public cameraControllerSelected(cameraControllerClass: CameraControllerClass) {
         setElementHighlighted(this.cameraControllerWASD, cameraControllerClass === FPSCameraController);
         setElementHighlighted(this.cameraControllerOrbit, cameraControllerClass === OrbitCameraController);
+        setElementHighlighted(this.cameraControllerOrtho, cameraControllerClass === OrthoCameraController);
+
+        setElementVisible(this.fovSlider.elem, cameraControllerClass === FPSCameraController);
+        setElementVisible(this.camSpeedSlider.elem, cameraControllerClass === FPSCameraController);
     }
 
     private invertYChanged(saveManager: SaveManager, key: string): void {

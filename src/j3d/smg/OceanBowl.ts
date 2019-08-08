@@ -5,7 +5,7 @@ import { connectToScene } from "./Actors";
 import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputLayout, GfxInputState, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxCullMode } from "../../gfx/platform/GfxPlatform";
 import { ViewerRenderInput } from "../../viewer";
 import { JMapInfoIter } from "./JMapInfo";
-import { computeModelMatrixSRT, texProjPerspMtx, clamp } from "../../MathHelpers";
+import { computeModelMatrixSRT, clamp } from "../../MathHelpers";
 import AnimationController from "../../AnimationController";
 import { colorFromRGBA8 } from "../../Color";
 import { BTIData } from "../render";
@@ -16,7 +16,7 @@ import { getVertexAttribLocation, GXMaterial, ColorChannelControl, TexGen, IndTe
 import * as GX from "../../gx/gx_enum";
 import { GXMaterialHelperGfx, autoOptimizeMaterial } from "../../gx/gx_render";
 import { MaterialParams, PacketParams, ColorKind, setTevOrder, setTevColorIn, setTevColorOp, setTevAlphaIn, setTevAlphaOp, setTevIndWarp, setIndTexOrder, setIndTexCoordScale, ub_MaterialParams, u_PacketParamsBufferSize, ub_PacketParams, fillPacketParamsData } from "../../gx/gx_render";
-import { Camera } from "../../Camera";
+import { Camera, texProjCamera } from "../../Camera";
 import { makeSortKey, GfxRendererLayer } from "../../gfx/render/GfxRenderer";
 import { createFilterKeyForDrawType, DrawType } from "./NameObj";
 import { GfxRenderInstManager } from "../../gfx/render/GfxRenderer2";
@@ -52,7 +52,7 @@ function setTextureMatrixST(m: mat4, scale: number, v: vec2): void {
 }
 
 function loadTexProjectionMtx(m: mat4, camera: Camera): void {
-    texProjPerspMtx(m, camera.fovY, camera.aspect, 0.5, -0.5 * -1, 0.5, 0.5);
+    texProjCamera(m, camera, 0.5, -0.5 * -1, 0.5, 0.5);
     mat4.mul(m, m, camera.viewMatrix);
 }
 

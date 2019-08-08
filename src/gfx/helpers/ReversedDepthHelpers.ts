@@ -5,9 +5,16 @@ import { GfxCompareMode } from "../platform/GfxPlatform";
 // Utilities for depth reversal
 const IS_DEPTH_REVERSED = true;
 
-export function reverseDepthForProjectionMatrix(m: mat4, isDepthReversed = IS_DEPTH_REVERSED): void {
+export function reverseDepthForPerspectiveProjectionMatrix(m: mat4, isDepthReversed = IS_DEPTH_REVERSED): void {
     if (isDepthReversed) {
         m[10] = -m[10] - 1;
+        m[14] = -m[14];
+    }
+}
+
+export function reverseDepthForOrthographicProjectionMatrix(m: mat4, isDepthReversed = IS_DEPTH_REVERSED): void {
+    if (isDepthReversed) {
+        m[10] = -m[10];
         m[14] = -m[14];
     }
 }
