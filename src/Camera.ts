@@ -504,18 +504,25 @@ export class OrbitCameraController implements CameraController {
                 this.xVel += this.orbitSpeed * 1/50;
         }
         this.zVel += inputManager.dz;
-        if (inputManager.isKeyDown('KeyA')) {
-            this.xVel += 0.05;
+        let keyVelX = 0, keyVelY = 0;
+        if (inputManager.isKeyDown('KeyA'))
+            keyVelX += 0.02;
+        if (inputManager.isKeyDown('KeyD'))
+            keyVelX -= 0.02;
+        if (inputManager.isKeyDown('KeyW'))
+            keyVelY += 0.02;
+        if (inputManager.isKeyDown('KeyS'))
+            keyVelY -= 0.02;
+        const isShiftPressed = inputManager.isKeyDown('ShiftLeft') || inputManager.isKeyDown('ShiftRight');
+
+        if (isShiftPressed) {
+            this.xVel += -keyVelX;
+            this.yVel += -keyVelY;
+        } else {
+            this.txVel += keyVelX;
+            this.tyVel += -keyVelY;
         }
-        if (inputManager.isKeyDown('KeyD')) {
-            this.xVel -= 0.05;
-        }
-        if (inputManager.isKeyDown('KeyW')) {
-            this.yVel += 0.05;
-        }
-        if (inputManager.isKeyDown('KeyS')) {
-            this.yVel -= 0.05;
-        }
+
         this.xVel = clampRange(this.xVel, 2);
         this.yVel = clampRange(this.yVel, 2);
 
@@ -598,9 +605,6 @@ export class OrthoCameraController implements CameraController {
         return 1;
     }
 
-    private forceStopOrbit(): void {
-    }
-
     public update(inputManager: InputManager, dt: number): boolean {
         if (inputManager.isKeyDownEventTriggered('KeyR')) {
             this.shouldOrbit = !this.shouldOrbit;
@@ -660,22 +664,29 @@ export class OrthoCameraController implements CameraController {
                 this.xVel += this.orbitSpeed * 1/50;
         }
         this.zVel += inputManager.dz * -1;
-        if (inputManager.isKeyDown('KeyA')) {
-            this.xVel += 0.05;
+        let keyVelX = 0, keyVelY = 0;
+        if (inputManager.isKeyDown('KeyA'))
+            keyVelX += 0.02;
+        if (inputManager.isKeyDown('KeyD'))
+            keyVelX -= 0.02;
+        if (inputManager.isKeyDown('KeyW'))
+            keyVelY += 0.02;
+        if (inputManager.isKeyDown('KeyS'))
+            keyVelY -= 0.02;
+        const isShiftPressed = inputManager.isKeyDown('ShiftLeft') || inputManager.isKeyDown('ShiftRight');
+
+        if (isShiftPressed) {
+            this.xVel += -keyVelX;
+            this.yVel += -keyVelY;
+        } else {
+            this.txVel += keyVelX;
+            this.tyVel += -keyVelY;
         }
-        if (inputManager.isKeyDown('KeyD')) {
-            this.xVel -= 0.05;
-        }
-        if (inputManager.isKeyDown('KeyW')) {
-            this.yVel += 0.05;
-        }
-        if (inputManager.isKeyDown('KeyS')) {
-            this.yVel -= 0.05;
-        }
+
         this.xVel = clampRange(this.xVel, 2);
         this.yVel = clampRange(this.yVel, 2);
 
-        const updated = this.forceUpdate || this.xVel !== 0 || this.yVel !== 0 || this.zVel !== 0;
+        const updated = this.forceUpdate || this.xVel !== 0 || this.yVel !== 0 || this.zVel !== 0 || this.txVel !== 0 || this.tyVel !== 0;
         if (updated) {
             // Apply velocities.
             const drag = inputManager.isDragging() ? 0.92 : 0.96;
