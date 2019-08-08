@@ -994,14 +994,14 @@ class SceneSelect extends Panel {
         this.contents.appendChild(this.searchEntry.elem);
 
         this.sceneGroupList = new SingleSelect();
-        this.sceneGroupList.setHeight('300px');
+        this.sceneGroupList.setHeight('auto');
         this.contents.appendChild(this.sceneGroupList.elem);
 
         this.sceneDescList = new SingleSelect();
         this.sceneDescList.setHighlightFlair = false;
         this.sceneDescList.elem.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
         this.sceneDescList.elem.style.width = '500px';
-        this.sceneDescList.setHeight('372px');
+        this.sceneDescList.setHeight('auto');
         this.extraRack.appendChild(this.sceneDescList.elem);
 
         this.sceneGroupList.onselectionchange = (i: number) => {
