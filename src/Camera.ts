@@ -59,10 +59,12 @@ export class Camera {
     }
 
     public setClipPlanes(n: number, f: number = Infinity): void {
-        if (this.isOrthographic)
-            this.setOrthographic(this.orthoScaleY, this.aspect, n, f);
-        else
+        if (this.isOrthographic) {
+            // Don't override OrthoCameraController clip planes. Really.
+            // this.setOrthographic(this.orthoScaleY, this.aspect, n, f);
+        } else {
             this.setPerspective(this.fovY, this.aspect, n, f);
+        }
     }
 
     private setFrustum(left: number, right: number, bottom: number, top: number, n: number, f: number): void {
@@ -611,18 +613,28 @@ export class OrthoCameraController implements CameraController {
 
         if (inputManager.isKeyDownEventTriggered('Numpad8')) {
             this.xVel = this.yVel = 0;
+            this.x = -Math.PI * 0.5;
             this.y = Math.PI - 0.001;
         }
 
         if (inputManager.isKeyDownEventTriggered('Numpad4')) {
+            // Left view.
             this.xVel = this.yVel = 0;
-            this.x = -Math.PI * 5;
+            this.x = 0;
+            this.y = Math.PI * 0.5;
+        }
+
+        if (inputManager.isKeyDownEventTriggered('Numpad6')) {
+            // Right view.
+            this.xVel = this.yVel = 0;
+            this.x = Math.PI;
             this.y = Math.PI * 0.5;
         }
 
         if (inputManager.isKeyDownEventTriggered('Numpad2')) {
+            // Front view.
             this.xVel = this.yVel = 0;
-            this.x = 0;
+            this.x = -Math.PI * 0.5;
             this.y = Math.PI * 0.5;
         }
 
@@ -691,16 +703,17 @@ export class OrthoCameraController implements CameraController {
             vec3.set(scratchVec3a, this.camera.worldMatrix[4], this.camera.worldMatrix[5], this.camera.worldMatrix[6]);
             vec3.scaleAndAdd(this.translation, this.translation, scratchVec3a, this.tyVel * -this.z);
 
-            const eyePos = scratchVec3a;
-            computeUnitSphericalCoordinates(eyePos, this.x, this.y);
-            vec3.scale(eyePos, eyePos, this.nearPlane);
-            vec3.add(eyePos, eyePos, this.translation);
-            mat4.lookAt(this.camera.viewMatrix, eyePos, this.translation, vec3Up);
-            mat4.invert(this.camera.worldMatrix, this.camera.viewMatrix);
-            this.camera.setOrthographic(this.z * 10, this.camera.aspect, 0, this.farPlane);
-            this.camera.worldMatrixUpdated();
             this.forceUpdate = false;
         }
+
+        const eyePos = scratchVec3a;
+        computeUnitSphericalCoordinates(eyePos, this.x, this.y);
+        vec3.scale(eyePos, eyePos, this.nearPlane);
+        vec3.add(eyePos, eyePos, this.translation);
+        mat4.lookAt(this.camera.viewMatrix, eyePos, this.translation, vec3Up);
+        mat4.invert(this.camera.worldMatrix, this.camera.viewMatrix);
+        this.camera.setOrthographic(this.z * 10, this.camera.aspect, 0, this.farPlane);
+        this.camera.worldMatrixUpdated();
 
         return updated;
     }
