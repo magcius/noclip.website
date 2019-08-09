@@ -114,7 +114,7 @@ export class ResourceSystem {
     public findResourceNameByID(assetID: string): string {
         const assetIDHex = hexName(assetID);
         assert(assetIDHex.length === 8 || assetIDHex.length === 16);
-        if (this.nameData) {
+        if (this.nameData !== null) {
             const nameDataAsset = this.nameData.Assets[assetIDHex];
             if (nameDataAsset)
                 return nameDataAsset.Filename;

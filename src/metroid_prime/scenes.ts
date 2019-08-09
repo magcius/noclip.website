@@ -16,6 +16,7 @@ import { mat4 } from 'gl-matrix';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { SceneContext } from '../SceneBase';
 import { FPSCameraController } from '../Camera';
+import { DataFetcherFlags } from '../DataFetcher';
 
 export class RetroSceneRenderer implements Viewer.SceneGfx {
     public renderHelper: GXRenderHelperGfx;
@@ -102,11 +103,11 @@ class MP1SceneDesc implements Viewer.SceneDesc {
         const dataFetcher = context.dataFetcher;
         const stringsPakP = dataFetcher.fetchData(`metroid_prime/mp1/Strings.pak`);
         const levelPakP = dataFetcher.fetchData(`metroid_prime/mp1/${this.filename}`);
-        const nameDataP = dataFetcher.fetchData(`metroid_prime/mp1/MP1_NameData.crg1`);
+        const nameDataP = dataFetcher.fetchData(`metroid_prime/mp1/MP1_NameData.crg1`, DataFetcherFlags.ALLOW_404);
         return Promise.all([levelPakP, stringsPakP, nameDataP]).then((datas: ArrayBufferSlice[]) => {
             const levelPak = PAK.parse(datas[0]);
             const stringsPak = PAK.parse(datas[1]);
-            const nameData = BYML.parse<NameData>(datas[2], BYML.FileType.CRG1);
+            const nameData = datas[2] !== null ? BYML.parse<NameData>(datas[2], BYML.FileType.CRG1) : null;
             const resourceSystem = new ResourceSystem([levelPak, stringsPak], nameData);
 
             for (const mlvlEntry of levelPak.namedResourceTable.values()) {
