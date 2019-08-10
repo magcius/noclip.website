@@ -16,7 +16,6 @@ import { Viewer, SceneGfx, InitErrorCode, initializeViewer, makeErrorUI } from '
 import ArrayBufferSlice from './ArrayBufferSlice';
 
 import * as Scenes_BanjoKazooie from './bk/scenes';
-import * as Scenes_THUG2 from './thug2/scenes';
 import * as Scenes_Zelda_TwilightPrincess from './j3d/ztp_scenes';
 import * as Scenes_MarioKartDoubleDash from './j3d/mkdd_scenes';
 import * as Scenes_Zelda_TheWindWaker from './j3d/WindWaker/zww_scenes';
@@ -29,7 +28,6 @@ import * as Scenes_SonicMania from './sonic_mania/scenes';
 import * as Scenes_Zelda_OcarinaOfTime3D from './oot3d/oot3d_scenes';
 import * as Scenes_Zelda_MajorasMask3D from './oot3d/mm3d_scenes';
 import * as Scenes_LuigisMansion3D from './oot3d/lm3d_scenes';
-import * as Scenes_Splatoon from './fres/splatoon_scenes';
 import * as Scenes_DarkSoulsCollision from './dksiv/scenes';
 import * as Scenes_MetroidPrime1 from './metroid_prime/scenes';
 import * as Scenes_DonkeyKongCountryReturns from './metroid_prime/dkcr_scenes';
@@ -39,8 +37,6 @@ import * as Scenes_SuperPaperMario from './ttyd/spm_scenes';
 import * as Scenes_MarioKartDS from './nns_g3d/mkds_scenes';
 import * as Scenes_NewSuperMarioBrosDS from './nns_g3d/nsmbds_scenes';
 import * as Scenes_KingdomHearts from './kh/scenes';
-import * as Scenes_Zelda_BreathOfTheWild from './z_botw/scenes';
-import * as Scenes_SuperMarioOdyssey from './fres_nx/smo_scenes';
 import * as Scenes_Psychonauts from './psychonauts/scenes';
 import * as Scenes_DarkSouls from './dks/scenes';
 import * as Scenes_KatamariDamacy from './katamari_damacy/scenes';
@@ -75,7 +71,7 @@ import { standardFullClearRenderPassDescriptor } from './gfx/helpers/RenderTarge
 
 import * as Sentry from '@sentry/browser';
 import { GIT_REVISION, IS_DEVELOPMENT } from './BuildVersion';
-import { SceneDesc, SceneGroup, SceneContext, getSceneDescs, ProgressMeter, Destroyable } from './SceneBase';
+import { SceneDesc, SceneGroup, SceneContext, getSceneDescs, Destroyable } from './SceneBase';
 import { prepareFrameDebugOverlayCanvas2D } from './DebugJunk';
 import { downloadBlob, downloadBufferSlice, downloadBuffer } from './DownloadUtils';
 
@@ -124,10 +120,6 @@ const sceneGroups = [
     Scenes_MarioAndSonicAtThe2012OlympicGames.sceneGroup,
     Scenes_Psychonauts.sceneGroup,
     Scenes_SonicColors.sceneGroup,
-    Scenes_SuperMarioOdyssey.sceneGroup,
-    Scenes_Splatoon.sceneGroup,
-    Scenes_THUG2.sceneGroup,
-    Scenes_Zelda_BreathOfTheWild.sceneGroup,
     Scenes_Test.sceneGroup,
     Scenes_InteractiveExamples.sceneGroup,
 ];

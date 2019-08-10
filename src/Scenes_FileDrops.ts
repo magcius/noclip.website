@@ -8,7 +8,6 @@ import * as Yaz0 from './compression/Yaz0';
 import * as CX from './compression/CX';
 
 import * as Grezzo3DS from './oot3d/scenes';
-import * as FRES from './fres/scenes';
 import * as NNS_G3D from './nns_g3d/scenes';
 import * as J3D from './j3d/scenes';
 import * as CTR_H3D from './Common/CTR_H3D/H3D';
@@ -77,9 +76,6 @@ export async function createSceneFromFiles(device: GfxDevice, buffers: NamedArra
 
     if (buffer.name.endsWith('.brres'))
         return RRES.createBasicRRESRendererFromBRRES(device, buffers);
-
-    if (buffer.name.endsWith('.bfres'))
-        return FRES.createSceneFromFRESBuffer(device, buffer);
 
     if (buffer.name.endsWith('.rarc') || buffer.name.endsWith('.bmd') || buffer.name.endsWith('.bdl'))
         return J3D.createMultiSceneFromBuffer(device, buffer);
