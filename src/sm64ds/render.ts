@@ -11,13 +11,12 @@ import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
 import { GfxFormat, GfxBufferUsage, GfxBlendMode, GfxBlendFactor, GfxDevice, GfxBuffer, GfxVertexAttributeFrequency, GfxTexFilterMode, GfxMipFilterMode, GfxInputState, GfxInputLayout, GfxVertexAttributeDescriptor, GfxSampler, makeTextureDescriptor2D, GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
 import { fillMatrix4x3, fillVec4, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers';
-import { makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstManager, GfxRenderInst, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { getFormatName, parseTexImageParamWrapModeS, parseTexImageParamWrapModeT } from './nitro_tex';
 import { assert, nArray } from '../util';
 import { BCA, bindBCAAnimator, BCAAnimator } from './sm64ds_bca';
 import AnimationController from '../AnimationController';
-import { GfxRenderInstManager, GfxRenderInst } from '../gfx/render/GfxRenderer2';
 import { computeRotationMatrixFromSRTMatrix } from '../MathHelpers';
 
 function calcBBoardMtx(dst: mat4, m: mat4): void {

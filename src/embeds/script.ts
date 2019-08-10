@@ -8,7 +8,7 @@ import { GfxDevice, GfxRenderPass, GfxHostAccessPass } from "../gfx/platform/Gfx
 
 import * as RARC from '../j3d/rarc';
 import { BMD, BCK, BRK, BTK, BTP } from "../j3d/j3d";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer2";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { mat4 } from "gl-matrix";
 import { BMDModelInstance, BMDModel } from "../j3d/render";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";

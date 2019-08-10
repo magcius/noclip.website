@@ -9,7 +9,7 @@ import { mat4 } from "gl-matrix";
 import { fillMatrix4x3, fillColor, fillMatrix4x2 } from "../gfx/helpers/UniformBufferHelpers";
 import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
 import { nArray, assert } from "../util";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer2";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers";
 

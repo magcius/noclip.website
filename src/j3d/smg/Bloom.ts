@@ -6,10 +6,10 @@ import { GfxRenderPassDescriptor, GfxLoadDisposition, GfxDevice, GfxRenderPass, 
 import { TransparentBlack } from "../../Color";
 import { copyRenderPassDescriptor, DepthStencilAttachment, DEFAULT_NUM_SAMPLES, makeEmptyRenderPassDescriptor, ColorAttachment, ColorTexture, PostFXRenderTarget, BasicRenderTarget, noClearRenderPassDescriptor } from "../../gfx/helpers/RenderTargetHelpers";
 import { fillVec4 } from "../../gfx/helpers/UniformBufferHelpers";
-import { ViewerRenderInput, Viewer } from "../../viewer";
-import { GfxRenderInst, GfxRenderInstManager } from "../../gfx/render/GfxRenderer2";
+import { ViewerRenderInput } from "../../viewer";
+import { GfxRenderInst, GfxRenderInstManager } from "../../gfx/render/GfxRenderer";
 import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
-import { fullscreenMegaState, copyMegaState, makeMegaState } from "../../gfx/helpers/GfxMegaStateDescriptorHelpers";
+import { fullscreenMegaState, makeMegaState } from "../../gfx/helpers/GfxMegaStateDescriptorHelpers";
 
 // Should I try to do this with GX? lol.
 class BloomPassBaseProgram extends DeviceProgram {

@@ -6,7 +6,7 @@ import { ViewerRenderInput, SceneGfx } from "../viewer";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import * as NSBMD from './nsbmd';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer2";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { GfxRenderDynamicUniformBuffer } from "../gfx/render/GfxRenderDynamicUniformBuffer";
 
 class BasicNSBMDRenderer implements SceneGfx {

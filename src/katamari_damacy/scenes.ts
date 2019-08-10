@@ -13,7 +13,7 @@ import { Camera } from '../Camera';
 import { ColorTexture, BasicRenderTarget, standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { TextureOverride } from '../TextureHolder';
 import { SceneContext } from '../SceneBase';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
+import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 
 const pathBase = `katamari_damacy`;

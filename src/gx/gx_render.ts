@@ -18,10 +18,9 @@ import { fillColor, fillMatrix4x3, fillVec4, fillMatrix4x4, fillVec3, fillMatrix
 import { GfxFormat, GfxDevice, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxTextureDimension, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxBuffer, GfxInputLayout, GfxInputState, GfxMegaStateDescriptor, GfxProgram, GfxVertexAttributeFrequency, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { Camera } from '../Camera';
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
-import { GfxRenderInst, GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
+import { GfxRenderInst, GfxRenderInstManager, setSortKeyProgramKey } from '../gfx/render/GfxRenderer';
 import { getFormatTypeFlags, FormatTypeFlags } from '../gfx/platform/GfxPlatformFormat';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { setSortKeyProgramKey } from '../gfx/render/GfxRenderer';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 
 export enum ColorKind {

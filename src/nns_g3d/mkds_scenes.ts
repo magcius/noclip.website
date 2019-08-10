@@ -19,7 +19,7 @@ import { FakeTextureHolder } from '../TextureHolder';
 import { mat4 } from 'gl-matrix';
 import AnimationController from '../AnimationController';
 import { computeModelMatrixSRT, MathConstants } from '../MathHelpers';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
+import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 import { SceneContext } from '../SceneBase';
 

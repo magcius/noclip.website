@@ -15,12 +15,11 @@ import { colorNew, Color, colorNewCopy, colorCopy, TransparentBlack } from '../C
 import { getTextureFormatName } from './pica_texture';
 import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
 import { nArray, assert } from '../util';
-import { GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstManager, GfxRenderInst, GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderer';
 import { makeFormat, FormatFlags, FormatTypeFlags, FormatCompFlags } from '../gfx/platform/GfxPlatformFormat';
 import { Camera, computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
 import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from '../gfx/helpers/BufferHelpers';
 import { getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
-import { GfxRenderInstManager, GfxRenderInst } from '../gfx/render/GfxRenderer2';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 function surfaceToCanvas(textureLevel: CMB.TextureLevel): HTMLCanvasElement {

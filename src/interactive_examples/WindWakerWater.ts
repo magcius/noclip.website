@@ -23,9 +23,8 @@ import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRen
 import { SceneDesc, SceneContext } from '../SceneBase';
 import { readString, nArray, concat } from '../util';
 import { getColorsFromDZS, Colors } from '../j3d/WindWaker/zww_scenes';
-import { setSortKeyDepth } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstManager, setSortKeyDepth } from '../gfx/render/GfxRenderer';
 import { FakeTextureHolder } from '../TextureHolder';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
 
 const scale = 200;
 const posMtx = mat4.create();

@@ -12,7 +12,7 @@ import * as UI from '../../ui';
 
 import { TextureMapping } from '../../TextureHolder';
 import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat } from '../../gfx/platform/GfxPlatform';
-import { executeOnPass, GfxRenderInstManager } from '../../gfx/render/GfxRenderer2';
+import { executeOnPass, GfxRenderInstManager } from '../../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../../gfx/helpers/RenderTargetHelpers';
 

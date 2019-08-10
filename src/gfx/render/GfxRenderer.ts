@@ -477,7 +477,7 @@ export class GfxRenderInstManager {
         return this.visibleRenderInsts.length > 0;
     }
 
-    // TODO(jstpierre): Build a better API for pass management -- should not be attached to the GfxRenderer2.
+    // TODO(jstpierre): Build a better API for pass management -- should not be attached to the GfxRenderInstManager.
     public setVisibleByFilterKeyExact(filterKey: number): void {
         this.visibleRenderInsts.length = 0;
 

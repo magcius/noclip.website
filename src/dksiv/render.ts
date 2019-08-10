@@ -11,7 +11,7 @@ import { fillColor, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
+import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 
 class IVProgram extends DeviceProgram {
     public static a_Position = 0;

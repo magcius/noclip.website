@@ -10,7 +10,7 @@ import { OpaqueBlack, Color } from '../Color';
 import * as BYML from '../byml';
 import { ScriptExecutor } from './script';
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
+import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { SceneContext } from '../SceneBase';
 
 const pathBase = `pm64`;

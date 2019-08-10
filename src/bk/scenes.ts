@@ -11,7 +11,7 @@ import { mat4 } from 'gl-matrix';
 import { transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
 import { SceneContext } from '../SceneBase';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
-import { executeOnPass } from '../gfx/render/GfxRenderer2';
+import { executeOnPass } from '../gfx/render/GfxRenderer';
 
 const pathBase = `bk`;
 

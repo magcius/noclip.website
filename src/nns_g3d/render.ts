@@ -1,6 +1,6 @@
 
 import { mat4, mat2d } from "gl-matrix";
-import { GfxFormat, GfxDevice, GfxProgram, GfxBufferUsage, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxTexture, GfxBlendMode, GfxBlendFactor, GfxMipFilterMode, GfxTexFilterMode, GfxSampler, GfxRenderPass, GfxTextureDimension, GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
+import { GfxFormat, GfxDevice, GfxProgram, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxTexture, GfxBlendMode, GfxBlendFactor, GfxMipFilterMode, GfxTexFilterMode, GfxSampler, GfxTextureDimension, GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
 import * as Viewer from '../viewer';
 import * as NSBMD from './nsbmd';
 import * as NSBTA from "./nsbta";
@@ -8,14 +8,13 @@ import * as NSBTP from "./nsbtp";
 import * as NITRO_GX from '../sm64ds/nitro_gx';
 import { readTexture, getFormatName, Texture, parseTexImageParamWrapModeS, parseTexImageParamWrapModeT, textureFormatIsTranslucent } from "../sm64ds/nitro_tex";
 import { NITRO_Program, VertexData } from '../sm64ds/render';
-import { GfxRendererLayer, makeSortKeyOpaque } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager, GfxRenderInst, GfxRendererLayer, makeSortKeyOpaque } from "../gfx/render/GfxRenderer";
 import { TEX0, TEX0Texture } from "./nsbtx";
 import { TextureMapping } from "../TextureHolder";
 import { fillMatrix4x3, fillMatrix4x4, fillMatrix3x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { computeViewMatrix, computeViewMatrixSkybox, computeModelMatrixYBillboard } from "../Camera";
 import AnimationController from "../AnimationController";
 import { nArray } from "../util";
-import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer2";
 
 function textureToCanvas(bmdTex: TEX0Texture, pixels: Uint8Array, name: string): Viewer.Texture {
     const canvas = document.createElement("canvas");

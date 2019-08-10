@@ -13,7 +13,7 @@ import AnimationController from '../AnimationController';
 import { assert } from '../util';
 import { TextureOverride } from '../TextureHolder';
 import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
-import { executeOnPass, hasAnyVisible } from '../gfx/render/GfxRenderer2';
+import { executeOnPass, hasAnyVisible } from '../gfx/render/GfxRenderer';
 import { SceneContext } from '../SceneBase';
 
 const id = 'klonoa';

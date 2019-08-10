@@ -4,7 +4,7 @@ import { GfxDevice, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttribute
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { coalesceBuffer, GfxCoalescedBuffer } from "../gfx/helpers/BufferHelpers";
 import { convertToTriangleIndexBuffer, GfxTopology, getTriangleIndexCountForTopologyIndexCount } from "../gfx/helpers/TopologyHelpers";
-import { makeSortKey, GfxRendererLayer, setSortKeyDepth } from "../gfx/render/GfxRenderer";
+import { makeSortKey, GfxRendererLayer, setSortKeyDepth, GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { DeviceProgram, DeviceProgramReflection } from "../Program";
 import { DDSTextureHolder } from "./dds";
 import { nArray, assert, assertExists } from "../util";
@@ -18,7 +18,6 @@ import { ModelHolder, MaterialDataHolder } from "./scenes";
 import { MSB, Part } from "./msb";
 import { MathConstants } from "../MathHelpers";
 import { MTD, MTDTexture } from './mtd';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
 import { interactiveVizSliderSelect } from '../DebugJunk';
 
 function shouldRenderPrimitive(primitive: Primitive): boolean {

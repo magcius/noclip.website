@@ -11,8 +11,8 @@ import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2 } from '../gfx/helpers/Unif
 import { mat4 } from 'gl-matrix';
 import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
 import { interactiveVizSliderSelect } from '../DebugJunk';
+import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 
 export function textureToCanvas(texture: Texture): Viewer.Texture {
     const canvas = document.createElement("canvas");

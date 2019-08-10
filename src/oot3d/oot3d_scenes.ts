@@ -19,7 +19,7 @@ import { mat4 } from 'gl-matrix';
 import AnimationController from '../AnimationController';
 import { TransparentBlack, colorNew, White } from '../Color';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
-import { GfxRenderInstManager, executeOnPass } from '../gfx/render/GfxRenderer2';
+import { GfxRenderInstManager, executeOnPass } from '../gfx/render/GfxRenderer';
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 import { SceneContext } from '../SceneBase';
 

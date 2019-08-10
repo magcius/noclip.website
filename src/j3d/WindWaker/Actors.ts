@@ -21,7 +21,7 @@ import { GfxBufferCoalescerCombo } from '../../gfx/helpers/BufferHelpers';
 import { TextureMapping } from '../../TextureHolder';
 import { colorFromRGBA } from '../../Color';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
-import { GfxRenderInstManager } from '../../gfx/render/GfxRenderer2';
+import { GfxRenderInstManager } from '../../gfx/render/GfxRenderer';
 
 // Special-case actors
 

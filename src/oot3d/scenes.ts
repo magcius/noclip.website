@@ -13,7 +13,7 @@ import { GfxDevice, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxRenderPass
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
+import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 
 export class GrezzoTextureHolder extends CtrTextureHolder {
     public findTextureEntryIndex(name: string): number {
