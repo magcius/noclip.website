@@ -15,9 +15,8 @@ import { colorNew, Color, colorNewCopy, colorCopy, TransparentBlack } from '../C
 import { getTextureFormatName } from './pica_texture';
 import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
 import { nArray, assert } from '../util';
-import { GfxRendererLayer, makeSortKey, GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
+import { GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderer';
 import { makeFormat, FormatFlags, FormatTypeFlags, FormatCompFlags } from '../gfx/platform/GfxPlatformFormat';
-import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { Camera, computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
 import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from '../gfx/helpers/BufferHelpers';
 import { getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
@@ -1008,33 +1007,6 @@ export class CmbInstance {
     public bindCMAB(cmab: CMAB.CMAB, animationController = this.animationController): void {
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].bindCMAB(cmab, animationController);
-    }
-}
-
-export abstract class BasicRendererHelper {
-    public viewRenderer = new GfxRenderInstViewRenderer();
-    public renderTarget = new BasicRenderTarget();
-    public clearRenderPassDescriptor = standardFullClearRenderPassDescriptor;
-
-    protected abstract prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void;
-
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
-
-        this.viewRenderer.prepareToRender(device);
-
-        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        const finalPassRenderer = this.renderTarget.createRenderPass(device, this.clearRenderPassDescriptor);
-        this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
-        this.viewRenderer.executeOnPass(device, finalPassRenderer);
-        return finalPassRenderer;
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.viewRenderer.destroy(device);
-        this.renderTarget.destroy(device);
     }
 }
 

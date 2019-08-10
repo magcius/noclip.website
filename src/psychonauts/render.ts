@@ -1,4 +1,6 @@
 
+// @ts-ignore
+import { readFileSync } from 'fs';
 import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
 import { PPAK_Texture, TextureFormat, getTextureFormatName } from "./ppf";
 import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxInputLayout, GfxInputState, GfxVertexBufferDescriptor, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxProgram, GfxHostAccessPass, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxTextureDimension, GfxRenderPass } from "../gfx/platform/GfxPlatform";
@@ -12,6 +14,10 @@ import { fillMatrix4x3, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelper
 import { mat4 } from "gl-matrix";
 import { computeViewMatrix, Camera } from "../Camera";
 import ArrayBufferSlice from "../ArrayBufferSlice";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
+import { nArray } from "../util";
+import { standardFullClearRenderPassDescriptor, BasicRenderTarget } from "../gfx/helpers/RenderTargetHelpers";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 
 function decodeTextureData(format: TextureFormat, width: number, height: number, pixels: Uint8Array): DecodedSurfaceSW {
     switch (format) {
@@ -76,13 +82,6 @@ export class PsychonautsTextureHolder extends TextureHolder<PPAK_Texture> {
         return { gfxTexture, viewerTexture };
     }
 }
-
-// @ts-ignore
-import { readFileSync } from 'fs';
-import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
-import { GfxRenderInstManager, executeOnPass } from "../gfx/render/GfxRenderer2";
-import { nArray } from "../util";
-import { standardFullClearRenderPassDescriptor, BasicRenderTarget } from "../gfx/helpers/RenderTargetHelpers";
 
 class PsychonautsProgram extends DeviceProgram {
     public static a_Position = 0;
