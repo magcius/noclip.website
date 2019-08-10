@@ -171,7 +171,7 @@ function parseTxpt(buffer: ArrayBufferSlice, texData: ArrayBufferSlice | null, s
             }
         }
 
-        textures.push({ name, format, width, height, levels, totalTextureSize: size });
+        textures.push({ name, format, width, height, levels });
 
         txptTableIdx += 0x18;
     }

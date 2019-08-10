@@ -8,7 +8,7 @@ import * as ZAR from './zar';
 import * as Viewer from '../viewer';
 import * as UI from '../ui';
 
-import { CtrTextureHolder, BasicRendererHelper, CmbInstance, CmbData, RoomRenderer, fillSceneParamsDataOnTemplate } from "./render";
+import { CtrTextureHolder, CmbInstance, CmbData, fillSceneParamsDataOnTemplate } from "./render";
 import { GfxDevice, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxRenderPass } from "../gfx/platform/GfxPlatform";
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';

@@ -11,6 +11,7 @@ import * as Grezzo3DS from './oot3d/scenes';
 import * as FRES from './fres/scenes';
 import * as NNS_G3D from './nns_g3d/scenes';
 import * as J3D from './j3d/scenes';
+import * as CTR_H3D from './Common/CTR_H3D/H3D';
 import * as RRES from './rres/scenes';
 import { SceneContext } from "./SceneBase";
 import { DataFetcher, NamedArrayBufferSlice } from "./DataFetcher";
@@ -85,6 +86,9 @@ export async function createSceneFromFiles(device: GfxDevice, buffers: NamedArra
 
     if (buffer.name.endsWith('.nsbmd'))
         return NNS_G3D.createBasicNSBMDRendererFromNSBMD(device, buffer);
+
+    if (buffer.name.endsWith('.bch'))
+        CTR_H3D.parse(buffer);
 
     throw "whoops";
 }

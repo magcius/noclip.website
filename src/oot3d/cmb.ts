@@ -2,7 +2,7 @@
 import { assert, readString } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { mat4, vec4 } from 'gl-matrix';
-import { TextureFormat, decodeTexture, computeTextureByteSize } from './pica_texture';
+import { TextureFormat, decodeTexture, computeTextureByteSize, getTextureFormatFromGLFormat } from './pica_texture';
 import { GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor, GfxCompareMode, GfxColorWriteMask, GfxChannelBlendState } from '../gfx/platform/GfxPlatform';
 import { makeMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { Color, colorNewFromRGBA8, colorNew } from '../Color';
@@ -452,7 +452,6 @@ export interface Texture {
     height: number;
     format: TextureFormat;
     levels: TextureLevel[];
-    totalTextureSize: number;
 }
 
 export function parseTexChunk(buffer: ArrayBufferSlice, texData: ArrayBufferSlice | null, cmbName: string = ''): Texture[] {
@@ -469,7 +468,7 @@ export function parseTexChunk(buffer: ArrayBufferSlice, texData: ArrayBufferSlic
         const unk06 = view.getUint16(offs + 0x06, true);
         const width = view.getUint16(offs + 0x08, true);
         const height = view.getUint16(offs + 0x0A, true);
-        const format = view.getUint32(offs + 0x0C, true);
+        const glFormat = view.getUint32(offs + 0x0C, true);
         let dataOffs = view.getUint32(offs + 0x10, true);
         const dataEnd = dataOffs + size;
         const texName = readString(buffer, offs + 0x14, 0x10);
@@ -478,6 +477,8 @@ export function parseTexChunk(buffer: ArrayBufferSlice, texData: ArrayBufferSlic
         offs += 0x24;
 
         const levels: TextureLevel[] = [];
+
+        const format = getTextureFormatFromGLFormat(glFormat);
 
         if (texData !== null) {
             let mipWidth = width, mipHeight = height;
@@ -490,7 +491,7 @@ export function parseTexChunk(buffer: ArrayBufferSlice, texData: ArrayBufferSlic
             }
         }
 
-        textures.push({ name, format, width, height, levels, totalTextureSize: size });
+        textures.push({ name, format, width, height, levels });
     }
 
     return textures;

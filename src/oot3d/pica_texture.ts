@@ -3,15 +3,20 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { clamp } from "../MathHelpers";
 
 export enum TextureFormat {
-    ETC1     = 0x0000675A,
-    ETC1A4   = 0x0000675B,
-    RGBA4444 = 0x80336752,
-    RGBA5551 = 0x80346752,
-    RGB565   = 0x83636754,
-    A8       = 0x14016756,
-    L8       = 0x14016757,
-    L4       = 0x67616757,
-    LA8      = 0x14016758,
+    RGB8,
+    RGBA8,
+    RGBA5551,
+    RGB565,
+    RGBA4444,
+    LA8,
+    HILO8,
+    L8,
+    A8,
+    LA4,
+    L4,
+    A4,
+    ETC1,
+    ETC1A4,
 }
 
 export interface Texture {
@@ -39,6 +44,8 @@ export function computeTextureByteSize(format: TextureFormat, width: number, hei
         return (width * height);
     case TextureFormat.L4:
         return (width * height) / 2;
+    default:
+        throw "whoops";
     }
 }
 
@@ -367,14 +374,46 @@ export function decodeTexture(format: TextureFormat, width: number, height: numb
 
 export function getTextureFormatName(format: TextureFormat): string {
     switch (format) {
-    case TextureFormat.ETC1: return 'ETC1';
-    case TextureFormat.ETC1A4: return 'ETC1A4';
-    case TextureFormat.RGBA4444: return 'RGBA4444';
+    case TextureFormat.RGB8: return 'RGB8';
+    case TextureFormat.RGBA8: return 'RGBA8';
     case TextureFormat.RGBA5551: return 'RGBA5551';
     case TextureFormat.RGB565: return 'RGB565';
-    case TextureFormat.A8: return 'A8';
-    case TextureFormat.L4: return 'L4';
-    case TextureFormat.L8: return 'L8';
+    case TextureFormat.RGBA4444: return 'RGBA4444';
     case TextureFormat.LA8: return 'LA8';
+    case TextureFormat.HILO8: return 'HILO8';
+    case TextureFormat.L8: return 'L8';
+    case TextureFormat.A8: return 'A8';
+    case TextureFormat.LA4: return 'LA4';
+    case TextureFormat.L4: return 'L4';
+    case TextureFormat.A4: return 'A4';
+    case TextureFormat.ETC1: return 'ETC1';
+    case TextureFormat.ETC1A4: return 'ETC1A4';
+    }
+}
+
+export enum TextureFormatGL {
+    ETC1     = 0x0000675A,
+    ETC1A4   = 0x0000675B,
+    RGBA4444 = 0x80336752,
+    RGBA5551 = 0x80346752,
+    RGB565   = 0x83636754,
+    A8       = 0x14016756,
+    L8       = 0x14016757,
+    L4       = 0x67616757,
+    LA8      = 0x14016758,
+}
+
+export function getTextureFormatFromGLFormat(glFormat: TextureFormatGL): TextureFormat {
+    switch (glFormat) {
+    case TextureFormatGL.ETC1:     return TextureFormat.ETC1;
+    case TextureFormatGL.ETC1A4:   return TextureFormat.ETC1A4;
+    case TextureFormatGL.RGBA4444: return TextureFormat.RGBA4444;
+    case TextureFormatGL.RGBA4444: return TextureFormat.RGBA4444;
+    case TextureFormatGL.RGBA5551: return TextureFormat.RGBA5551;
+    case TextureFormatGL.RGB565:   return TextureFormat.RGB565;
+    case TextureFormatGL.A8:       return TextureFormat.A8;
+    case TextureFormatGL.L8:       return TextureFormat.L8;
+    case TextureFormatGL.L4:       return TextureFormat.L4;
+    case TextureFormatGL.LA8:      return TextureFormat.LA8;
     }
 }

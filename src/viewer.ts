@@ -109,9 +109,11 @@ export class Viewer {
         this.gfxDevice.pushDebugGroup(this.debugGroup);
 
         const renderPass = this.scene!.render(this.gfxDevice, this.viewerRenderInput);
-        const onscreenTexture = this.gfxSwapChain.getOnscreenTexture();
-        renderPass.endPass(onscreenTexture);
-        this.gfxDevice.submitPass(renderPass);
+        if (renderPass !== null) {
+            const onscreenTexture = this.gfxSwapChain.getOnscreenTexture();
+            renderPass.endPass(onscreenTexture);
+            this.gfxDevice.submitPass(renderPass);
+        }
         this.gfxSwapChain.present();
 
         this.gfxDevice.popDebugGroup();
