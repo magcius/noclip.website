@@ -104,6 +104,7 @@ const sceneDescs = [
     new SPMSceneDesc('he4_11', "Merlumina's Chamber"),
 
     "Chapter 2 - Gloam Valley",
+    new SPMSceneDesc('mi1_01', "Gloam Valley 1"),
     new SPMSceneDesc('mi1_05', "Gloam Valley 1 - Pipe Room 1"),
     new SPMSceneDesc('mi1_08', "Gloam Valley 2"),
     new SPMSceneDesc('mi1_09', "Gloam Valley 3"),
