@@ -393,7 +393,7 @@ export class GX_Program extends DeviceProgram {
 
         switch (chan.attenuationFunction) {
         case GX.AttenuationFunction.NONE: return `1.0`;
-        case GX.AttenuationFunction.SPOT: return `max(${cosAttn} / max(dot(${lightName}.DistAtten.xyz, vec3(1.0, t_LightDeltaDist2, t_LightDeltaDist)), 0.0), 0.0)`;
+        case GX.AttenuationFunction.SPOT: return `max(${cosAttn} / max(dot(${lightName}.DistAtten.xyz, vec3(1.0, t_LightDeltaDist, t_LightDeltaDist2)), 0.0), 0.0)`;
         case GX.AttenuationFunction.SPEC: return `max(${cosAttn} / ApplyCubic(${lightName}.DistAtten.xyz, ${attn}), 0.0)`;
         }
     }
