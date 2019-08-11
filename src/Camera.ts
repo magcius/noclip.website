@@ -681,9 +681,9 @@ export class OrthoCameraController implements CameraController {
             if (inputManager.isKeyDownEventTriggered('KeyD'))
                 this.xTarget = snapToMult(this.xTarget, Math.PI / 4) - Math.PI / 4;
             if (inputManager.isKeyDownEventTriggered('KeyW'))
-                this.yTarget = snapToMult(this.yTarget, Math.PI / 4) + Math.PI / 4;
+                this.yTarget = snapToMult(this.yTarget, Math.PI / 8) + Math.PI / 8;
             if (inputManager.isKeyDownEventTriggered('KeyS'))
-                this.yTarget = snapToMult(this.yTarget, Math.PI / 4) - Math.PI / 4;
+                this.yTarget = snapToMult(this.yTarget, Math.PI / 8) - Math.PI / 8;
         }
 
         if (inputManager.isKeyDown('KeyQ')) {
