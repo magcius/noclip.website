@@ -569,10 +569,7 @@ export class OrbitCameraController implements CameraController {
 }
 
 function snapToMultIncr(n: number, incr: number): number {
-    if (incr > 0)
-        return Math.ceil(n / incr) * incr + incr;
-    else
-        return Math.floor(n / incr) * incr + incr;
+    return Math.floor(n / incr) * incr + incr;
 }
 
 export class OrthoCameraController implements CameraController {
