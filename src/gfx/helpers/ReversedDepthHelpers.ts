@@ -40,3 +40,11 @@ export function reverseDepthForClearValue(n: number, isDepthReversed = IS_DEPTH_
         return n;
     }
 }
+
+export function reverseDepthForDepthOffset(n: number, isDepthReversed = IS_DEPTH_REVERSED): number {
+    if (isDepthReversed) {
+        return -n;
+    } else {
+        return n;
+    }
+}

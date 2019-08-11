@@ -21,6 +21,7 @@ import { Camera, computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
 import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from '../gfx/helpers/BufferHelpers';
 import { getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers';
 
 function surfaceToCanvas(textureLevel: CMB.TextureLevel): HTMLCanvasElement {
     const canvas = document.createElement("canvas");
@@ -307,10 +308,7 @@ void main() {
 
     gl_FragColor = t_ResultColor;
 
-    float t_BasicDepth = 2.0 * gl_FragCoord.z - 1.0;
-    float t_DepthScale = 1.0;
-    float t_DepthOffset = u_DepthOffset;
-    gl_FragDepth = t_BasicDepth * t_DepthScale + t_DepthOffset;
+    gl_FragDepth = gl_FragCoord.z + u_DepthOffset;
 }
 `;
     }
@@ -616,7 +614,8 @@ class MaterialInstance {
             offs += fillMatrix4x3(mapped, offs, scratchTexMatrix);
         }
 
-        offs += fillVec4(mapped, offs, this.material.polygonOffset);
+        const depthOffset = reverseDepthForDepthOffset(this.material.polygonOffset);
+        offs += fillVec4(mapped, offs, depthOffset);
 
         template.setSamplerBindingsFromTextureMappings(this.textureMappings);
     }
