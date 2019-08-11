@@ -253,9 +253,9 @@ export function lerp(a: number, b: number, t: number): number {
 }
 
 // https://gist.github.com/shaunlebron/8832585
-export function lerpAngle(v0: number, v1: number, t: number): number {
-    const da = (v1 - v0) % 1.0;
-    const dist = (2*da) % 1.0 - da;
+export function lerpAngle(v0: number, v1: number, t: number, maxAngle: number = MathConstants.TAU): number {
+    const da = (v1 - v0) % maxAngle;
+    const dist = (2*da) % maxAngle - da;
     return v0 + dist * t;
 }
 

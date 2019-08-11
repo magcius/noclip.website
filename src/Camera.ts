@@ -2,7 +2,7 @@
 import { mat4, vec3, vec4 } from 'gl-matrix';
 import InputManager from './InputManager';
 import { Frustum, AABB } from './Geometry';
-import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates, computeProjectionMatrixFromCuboid, texProjPerspMtx, texProjOrthoMtx } from './MathHelpers';
+import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates, computeProjectionMatrixFromCuboid, texProjPerspMtx, texProjOrthoMtx, lerpAngle, lerp, MathConstants } from './MathHelpers';
 import { reverseDepthForOrthographicProjectionMatrix, reverseDepthForPerspectiveProjectionMatrix } from './gfx/helpers/ReversedDepthHelpers';
 
 export class Camera {
@@ -60,7 +60,6 @@ export class Camera {
 
     public setClipPlanes(n: number, f: number = Infinity): void {
         if (this.isOrthographic) {
-            // Don't override OrthoCameraController clip planes. Really.
             // this.setOrthographic(this.orthoScaleY, this.aspect, n, f);
         } else {
             this.setPerspective(this.fovY, this.aspect, n, f);
@@ -569,8 +568,11 @@ export class OrbitCameraController implements CameraController {
     }
 }
 
-function snapToMult(n: number, multiple: number): number {
-    return Math.round(n / multiple) * multiple;
+function snapToMultIncr(n: number, incr: number): number {
+    if (incr > 0)
+        return Math.ceil(n / incr) * incr + incr;
+    else
+        return Math.floor(n / incr) * incr + incr;
 }
 
 export class OrthoCameraController implements CameraController {
@@ -591,7 +593,6 @@ export class OrthoCameraController implements CameraController {
     public tyVel: number = 0;
     public shouldOrbit: boolean = false;
     private farPlane = 100000;
-    private nearPlane = -this.farPlane / 2;
 
     constructor() {
     }
@@ -621,7 +622,7 @@ export class OrthoCameraController implements CameraController {
         if (inputManager.isKeyDownEventTriggered('Numpad8')) {
             // Top view.
             this.xTarget = -Math.PI * 0.5;
-            this.yTarget = Math.PI;
+            this.yTarget = Math.PI - 0.001;
         }
 
         if (inputManager.isKeyDownEventTriggered('Numpad4')) {
@@ -677,14 +678,23 @@ export class OrthoCameraController implements CameraController {
                 this.tyVel += 0.02;
         } else {
             if (inputManager.isKeyDownEventTriggered('KeyA'))
-                this.xTarget = snapToMult(this.xTarget, Math.PI / 4) + Math.PI / 4;
+                this.xTarget = snapToMultIncr(this.xTarget, +Math.PI / 4);
             if (inputManager.isKeyDownEventTriggered('KeyD'))
-                this.xTarget = snapToMult(this.xTarget, Math.PI / 4) - Math.PI / 4;
-            if (inputManager.isKeyDownEventTriggered('KeyW'))
-                this.yTarget = snapToMult(this.yTarget, Math.PI / 8) + Math.PI / 8;
-            if (inputManager.isKeyDownEventTriggered('KeyS'))
-                this.yTarget = snapToMult(this.yTarget, Math.PI / 8) - Math.PI / 8;
+                this.xTarget = snapToMultIncr(this.xTarget, -Math.PI / 4);
+            if (inputManager.isKeyDownEventTriggered('KeyW')) {
+                this.yTarget = snapToMultIncr(this.yTarget, +Math.PI / 8);
+                if (this.yTarget === Math.PI)
+                    this.yTarget -= 0.001;
+            }
+            if (inputManager.isKeyDownEventTriggered('KeyS')) {
+                this.yTarget = snapToMultIncr(this.yTarget - 0.001, -Math.PI / 8);
+                if (this.yTarget === Math.PI)
+                    this.yTarget += 0.001;
+            }
         }
+
+        this.xTarget = this.xTarget % MathConstants.TAU;
+        this.yTarget = this.yTarget % MathConstants.TAU;
 
         if (inputManager.isKeyDown('KeyQ')) {
             this.zVel += 1.0;
@@ -695,14 +705,10 @@ export class OrthoCameraController implements CameraController {
             hasZVel = true;
         }
 
-        // If we're exactly above, finagle it above, or mat4.lookAt() will break...
-        if (this.yTarget === Math.PI)
-            this.yTarget += 0.001;
-
         const updated = this.forceUpdate || this.xTarget !== this.x || this.yTarget !== this.y || this.zVel !== 0 || this.txVel !== 0 || this.tyVel !== 0;
         if (updated) {
-            this.x += (this.xTarget - this.x) / 10;
-            this.y += (this.yTarget - this.y) / 10;
+            this.x = lerpAngle(this.x, this.xTarget, 0.1);
+            this.y = lerpAngle(this.y, this.yTarget, 0.1);
 
             const drag = (inputManager.isDragging() || isShiftPressed) ? 0.92 : 0.96;
 
@@ -729,7 +735,7 @@ export class OrthoCameraController implements CameraController {
         const eyePos = scratchVec3a;
 
         computeUnitSphericalCoordinates(eyePos, this.x, this.y);
-        vec3.scale(eyePos, eyePos, this.nearPlane);
+        vec3.scale(eyePos, eyePos, -this.farPlane / 2);
         vec3.add(eyePos, eyePos, this.translation);
         mat4.lookAt(this.camera.viewMatrix, eyePos, this.translation, vec3Up);
         mat4.invert(this.camera.worldMatrix, this.camera.viewMatrix);

@@ -126,7 +126,7 @@ function sampleAnimationDataRotation(animationTrack: AnimationTrack, animFrame: 
 
     const v0 = animationTrack.values[animFrame | 0];
     const v1 = animationTrack.values[(animFrame + 1) | 0];
-    return lerpAngle(v0, v1, animFrame - (animFrame | 0));
+    return lerpAngle(v0, v1, animFrame - (animFrame | 0), 1.0);
 }
 
 function getAnimFrame(anim: BCA, frame: number): number {
