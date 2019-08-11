@@ -569,6 +569,10 @@ export class OrbitCameraController implements CameraController {
     }
 }
 
+function snapToMult(n: number, multiple: number): number {
+    return Math.round(n / multiple) * multiple;
+}
+
 export class OrthoCameraController implements CameraController {
     public camera: Camera;
     public forceUpdate: boolean = false;
@@ -578,9 +582,9 @@ export class OrthoCameraController implements CameraController {
     public y: number = 2;
     public z: number = 200;
     public orbitSpeed: number = -0.05;
-    public xVel: number = 0;
-    public yVel: number = 0;
     public zVel: number = 0;
+    public xTarget: number = this.x;
+    public yTarget: number = this.y;
 
     public translation = vec3.create();
     public txVel: number = 0;
@@ -612,34 +616,30 @@ export class OrthoCameraController implements CameraController {
 
         if (inputManager.isKeyDownEventTriggered('Numpad5')) {
             this.shouldOrbit = false;
-            this.xVel = this.yVel = 0;
         }
 
         if (inputManager.isKeyDownEventTriggered('Numpad8')) {
-            this.xVel = this.yVel = 0;
-            this.x = -Math.PI * 0.5;
-            this.y = Math.PI - 0.001;
+            // Top view.
+            this.xTarget = -Math.PI * 0.5;
+            this.yTarget = Math.PI;
         }
 
         if (inputManager.isKeyDownEventTriggered('Numpad4')) {
             // Left view.
-            this.xVel = this.yVel = 0;
-            this.x = 0;
-            this.y = Math.PI * 0.5;
+            this.xTarget = 0;
+            this.yTarget = Math.PI * 0.5;
         }
 
         if (inputManager.isKeyDownEventTriggered('Numpad6')) {
             // Right view.
-            this.xVel = this.yVel = 0;
-            this.x = Math.PI;
-            this.y = Math.PI * 0.5;
+            this.xTarget = Math.PI;
+            this.yTarget = Math.PI * 0.5;
         }
 
         if (inputManager.isKeyDownEventTriggered('Numpad2')) {
             // Front view.
-            this.xVel = this.yVel = 0;
-            this.x = -Math.PI * 0.5;
-            this.y = Math.PI * 0.5;
+            this.xTarget = -Math.PI * 0.5;
+            this.yTarget = Math.PI * 0.5;
         }
 
         if (inputManager.isKeyDownEventTriggered('KeyB')) {
@@ -657,35 +657,34 @@ export class OrthoCameraController implements CameraController {
             this.txVel += inputManager.dx * (-10 - Math.min(this.z, 0.01)) / -5000;
             this.tyVel += inputManager.dy * (-10 - Math.min(this.z, 0.01)) /  5000;
         } else if (inputManager.isDragging()) {
-            this.xVel += inputManager.dx / -200 * invertXMult;
-            this.yVel += inputManager.dy / -200 * invertYMult;
+            this.xTarget += inputManager.dx / -200 * invertXMult;
+            this.yTarget += inputManager.dy / -200 * invertYMult;
         } else if (shouldOrbit) {
-            if (Math.abs(this.xVel) < Math.abs(this.orbitSpeed))
-                this.xVel += this.orbitSpeed * 1/50;
+            this.xTarget += this.orbitSpeed * 1/25;
         }
         let hasZVel = inputManager.dz !== 0;
         this.zVel += inputManager.dz * -1;
-        let keyVelX = 0, keyVelY = 0;
-        if (inputManager.isKeyDown('KeyA'))
-            keyVelX += 0.02;
-        if (inputManager.isKeyDown('KeyD'))
-            keyVelX -= 0.02;
-        if (inputManager.isKeyDown('KeyW'))
-            keyVelY += 0.02;
-        if (inputManager.isKeyDown('KeyS'))
-            keyVelY -= 0.02;
+
         const isShiftPressed = inputManager.isKeyDown('ShiftLeft') || inputManager.isKeyDown('ShiftRight');
-
-        if (isShiftPressed) {
-            this.xVel += -keyVelX;
-            this.yVel += -keyVelY;
+        if (!isShiftPressed) {
+            if (inputManager.isKeyDown('KeyA'))
+                this.txVel += 0.02;
+            if (inputManager.isKeyDown('KeyD'))
+                this.txVel -= 0.02;
+            if (inputManager.isKeyDown('KeyW'))
+                this.tyVel -= 0.02;
+            if (inputManager.isKeyDown('KeyS'))
+                this.tyVel += 0.02;
         } else {
-            this.txVel += keyVelX;
-            this.tyVel += -keyVelY;
+            if (inputManager.isKeyDownEventTriggered('KeyA'))
+                this.xTarget = snapToMult(this.xTarget, Math.PI / 4) + Math.PI / 4;
+            if (inputManager.isKeyDownEventTriggered('KeyD'))
+                this.xTarget = snapToMult(this.xTarget, Math.PI / 4) - Math.PI / 4;
+            if (inputManager.isKeyDownEventTriggered('KeyW'))
+                this.yTarget = snapToMult(this.yTarget, Math.PI / 4) + Math.PI / 4;
+            if (inputManager.isKeyDownEventTriggered('KeyS'))
+                this.yTarget = snapToMult(this.yTarget, Math.PI / 4) - Math.PI / 4;
         }
-
-        this.xVel = clampRange(this.xVel, 2);
-        this.yVel = clampRange(this.yVel, 2);
 
         if (inputManager.isKeyDown('KeyQ')) {
             this.zVel += 1.0;
@@ -696,16 +695,16 @@ export class OrthoCameraController implements CameraController {
             hasZVel = true;
         }
 
-        const updated = this.forceUpdate || this.xVel !== 0 || this.yVel !== 0 || this.zVel !== 0 || this.txVel !== 0 || this.tyVel !== 0;
+        // If we're exactly above, finagle it above, or mat4.lookAt() will break...
+        if (this.yTarget === Math.PI)
+            this.yTarget += 0.001;
+
+        const updated = this.forceUpdate || this.xTarget !== this.x || this.yTarget !== this.y || this.zVel !== 0 || this.txVel !== 0 || this.tyVel !== 0;
         if (updated) {
-            // Apply velocities.
+            this.x += (this.xTarget - this.x) / 10;
+            this.y += (this.yTarget - this.y) / 10;
+
             const drag = (inputManager.isDragging() || isShiftPressed) ? 0.92 : 0.96;
-
-            this.x += -this.xVel / 10;
-            this.xVel *= drag;
-
-            this.y += -this.yVel / 10;
-            this.yVel *= drag;
 
             this.txVel *= drag;
             this.tyVel *= drag;
@@ -728,6 +727,7 @@ export class OrthoCameraController implements CameraController {
         }
 
         const eyePos = scratchVec3a;
+
         computeUnitSphericalCoordinates(eyePos, this.x, this.y);
         vec3.scale(eyePos, eyePos, this.nearPlane);
         vec3.add(eyePos, eyePos, this.translation);
