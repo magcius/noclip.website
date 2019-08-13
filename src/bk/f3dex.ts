@@ -177,7 +177,7 @@ export class RSPOutput {
     }
 }
 
-const enum OtherModeH_CycleType {
+export const enum OtherModeH_CycleType {
     G_CYC_1CYCLE = 0x00,
     G_CYC_2CYCLE = 0x01,
     G_CYC_COPY   = 0x02,
