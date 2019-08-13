@@ -24,8 +24,6 @@ layout(std140) uniform ub_Params {
 #define u_BokehCombineStrength (u_Misc0.z)
 `;
 
-    public static programReflection = DeviceProgram.parseReflectionDefinitions(BloomPassBaseProgram.BindingsDefinition); 
-
     public vert: string = `
 ${BloomPassBaseProgram.BindingsDefinition}
 

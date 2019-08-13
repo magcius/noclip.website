@@ -5,7 +5,7 @@
 
 import { GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource } from "./GfxPlatformImpl";
 import { GfxFormat } from "./GfxPlatformFormat";
-import { DeviceProgram, DeviceProgramReflection } from "../../Program";
+import { DeviceProgram } from "../../Program";
 import { Color } from "../../Color";
 
 export enum GfxCompareMode {
@@ -227,7 +227,7 @@ export interface GfxDeviceLimits {
     uniformBufferMaxPageWordSize: number;
 }
 
-export interface GfxProgramReflection extends DeviceProgramReflection {
+export interface GfxProgramReflection {
     name: string;
     uniqueKey: number;
 }

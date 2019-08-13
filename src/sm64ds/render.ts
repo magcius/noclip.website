@@ -127,8 +127,6 @@ void main() {
         discard;
 }
 `;
-
-    public static programReflection = DeviceProgram.parseReflectionDefinitions(NITRO_Program.both);
 }
 
 function textureToCanvas(bmdTex: BMD.Texture): Viewer.Texture {

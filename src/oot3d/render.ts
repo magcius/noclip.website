@@ -6,7 +6,7 @@ import * as ZSI from './zsi';
 
 import * as Viewer from '../viewer';
 
-import { DeviceProgram, DeviceProgramReflection } from '../Program';
+import { DeviceProgram } from '../Program';
 import AnimationController from '../AnimationController';
 import { mat4, vec3 } from 'gl-matrix';
 import { GfxBuffer, GfxBufferUsage, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler, GfxDevice, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxHostAccessPass, GfxRenderPass, GfxTextureDimension, GfxInputState, GfxInputLayout, GfxCompareMode, GfxProgram } from '../gfx/platform/GfxPlatform';
@@ -113,8 +113,6 @@ layout(row_major, std140) uniform ub_PrmParams {
 
 uniform sampler2D u_Texture[3];
 `;
-
-    public static programReflection: DeviceProgramReflection = DeviceProgram.parseReflectionDefinitions(DMPProgram.BindingsDefinition);
 
     constructor(public material: CMB.Material, private materialHacks: DMPMaterialHacks) {
         super();

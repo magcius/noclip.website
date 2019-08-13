@@ -2,7 +2,7 @@
 // @ts-ignore
 import { readFileSync } from 'fs';
 import * as Viewer from '../viewer';
-import { DeviceProgram, DeviceProgramReflection } from "../Program";
+import { DeviceProgram } from "../Program";
 import { Texture, getFormatString, RSPOutput, Vertex, DrawCall, GeometryMode } from "./f3dex";
 import { GfxDevice, GfxTextureDimension, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
@@ -39,7 +39,6 @@ class F3DEX_Program extends DeviceProgram {
     public static ub_DrawParams = 1;
 
     private static program = readFileSync('src/bk/program.glsl', { encoding: 'utf8' });
-    public static programReflection: DeviceProgramReflection = DeviceProgram.parseReflectionDefinitions(F3DEX_Program.program);
     public both = F3DEX_Program.program;
 }
 

@@ -3,7 +3,7 @@
 
 import * as GX from './gx_enum';
 
-import { DeviceProgram, DeviceProgramReflection } from '../Program';
+import { DeviceProgram } from '../Program';
 import { colorCopy, colorFromRGBA } from '../Color';
 import { GfxFormat } from '../gfx/platform/GfxPlatformFormat';
 import { GfxCompareMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
@@ -1073,9 +1073,6 @@ export class GX_Program extends DeviceProgram {
         else
             return this.generateMulPntMatrixStatic(GX.TexGenMatrix.PNMTX0, src);
     }
-
-    // Program reflection with standard configuration for legacy renderer.
-    public static programReflection: DeviceProgramReflection = DeviceProgram.parseReflectionDefinitions(generateBindingsDefinition({}));
 
     private generateShaders() {
         const bindingsDefinition = generateBindingsDefinition(this.material);
