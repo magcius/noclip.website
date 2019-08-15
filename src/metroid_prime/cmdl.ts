@@ -7,6 +7,7 @@ import { assert, align } from "../util";
 import { ResourceSystem } from "./resource";
 import { Geometry, MaterialSet, parseGeometry, parseMaterialSet } from "./mrea";
 import { AABB } from "../Geometry";
+import { InputStream } from "./stream";
 
 export interface CMDL {
     bbox: AABB;
@@ -21,34 +22,31 @@ enum Flags {
     UV_SHORT = 0x04,
 }
 
-export function parse(resourceSystem: ResourceSystem, assetID: string, buffer: ArrayBufferSlice): CMDL {
-    const view = buffer.createDataView();
+export function parse(stream: InputStream, resourceSystem: ResourceSystem, assetID: string): CMDL {
+    assert(stream.readUint32() === 0xDEADBABE);
+    const version = stream.readUint32();
+    assert(version === 0x02 || version === 0x04, `Unsupported CMDL version: ${version}`);
 
-    assert(view.getUint32(0x00) === 0xDEADBABE);
-    const version = view.getUint32(0x04);
-    assert(version === 0x02);
-
-    const flags: Flags = view.getUint32(0x08);
-    const minX = view.getFloat32(0x0C);
-    const minY = view.getFloat32(0x10);
-    const minZ = view.getFloat32(0x14);
-    const maxX = view.getFloat32(0x18);
-    const maxY = view.getFloat32(0x1C);
-    const maxZ = view.getFloat32(0x20);
+    const flags: Flags = stream.readUint32();
+    const minX = stream.readFloat32();
+    const minY = stream.readFloat32();
+    const minZ = stream.readFloat32();
+    const maxX = stream.readFloat32();
+    const maxY = stream.readFloat32();
+    const maxZ = stream.readFloat32();
     const bbox = new AABB(minX, minY, minZ, maxX, maxY, maxZ);
 
-    const dataSectionCount = view.getUint32(0x24);
-    const materialSetCount = view.getUint32(0x28);
+    const dataSectionCount = stream.readUint32();
+    const materialSetCount = stream.readUint32();
 
     const dataSectionSizeTable: number[] = [];
-    let dataSectionSizeTableIdx = 0x2C;
     for (let i = 0; i < dataSectionCount; i++) {
-        const size = view.getUint32(dataSectionSizeTableIdx + 0x00);
+        const size = stream.readUint32();
         dataSectionSizeTable.push(size);
-        dataSectionSizeTableIdx += 0x04;
     }
+    stream.align(32);
 
-    const firstDataSectionOffs = align(dataSectionSizeTableIdx, 32);
+    const firstDataSectionOffs = stream.tell();
     const dataSectionOffsTable: number[] = [firstDataSectionOffs];
     for (let i = 1; i < dataSectionCount; i++) {
         const prevOffs = dataSectionOffsTable[i - 1];
@@ -60,13 +58,14 @@ export function parse(resourceSystem: ResourceSystem, assetID: string, buffer: A
 
     const materialSets: MaterialSet[] = [];
     for (let i = 0; i < materialSetCount; i++) {
-        const materialSet = parseMaterialSet(resourceSystem, buffer, dataSectionOffsTable[dataSectionIndex++]);
+        stream.goTo(dataSectionOffsTable[dataSectionIndex++]);
+        const materialSet = parseMaterialSet(stream, resourceSystem, version === 0x04);
         materialSets.push(materialSet);
     }
 
     const hasUVShort = !!(flags & Flags.UV_SHORT);
     let geometry;
-    [geometry, dataSectionIndex] = parseGeometry(buffer, materialSets[0], dataSectionOffsTable, hasUVShort, dataSectionIndex++, -1);
+    [geometry, dataSectionIndex] = parseGeometry(stream, materialSets[0], dataSectionOffsTable, hasUVShort, version === 0x04, dataSectionIndex, -1);
 
     return { bbox, assetID, materialSets, geometry };
 }

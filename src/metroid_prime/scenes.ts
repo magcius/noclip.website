@@ -37,7 +37,7 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
 
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         const template = this.renderHelper.pushTemplateRenderInst();
-        viewerInput.camera.setClipPlanes(0.2);
+        viewerInput.camera.setClipPlanes(0.2, 750);
         fillSceneParamsDataOnTemplate(template, viewerInput);
         for (let i = 0; i < this.areaRenderers.length; i++)
             this.areaRenderers[i].prepareToRender(device, this.renderHelper, viewerInput);
@@ -93,7 +93,7 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
     }
 }
 
-class MP1SceneDesc implements Viewer.SceneDesc {
+class RetroSceneDesc implements Viewer.SceneDesc {
     public id: string;
     constructor(public filename: string, public name: string) {
         this.id = filename;
@@ -101,13 +101,15 @@ class MP1SceneDesc implements Viewer.SceneDesc {
 
     public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
-        const stringsPakP = dataFetcher.fetchData(`metroid_prime/mp1/Strings.pak`);
-        const levelPakP = dataFetcher.fetchData(`metroid_prime/mp1/${this.filename}`);
+        const folder = this.id.substring(0, this.id.indexOf(`/`));
+        const stringsPakP = dataFetcher.fetchData(`metroid_prime/${folder}/Strings.pak`);
+        const levelPakP = dataFetcher.fetchData(`metroid_prime/${this.filename}`);
         const nameDataP = dataFetcher.fetchData(`metroid_prime/mp1/MP1_NameData.crg1`, DataFetcherFlags.ALLOW_404);
+
         return Promise.all([levelPakP, stringsPakP, nameDataP]).then((datas: ArrayBufferSlice[]) => {
             const levelPak = PAK.parse(datas[0]);
             const stringsPak = PAK.parse(datas[1]);
-            const nameData = datas[2] !== null ? BYML.parse<NameData>(datas[2], BYML.FileType.CRG1) : null;
+            const nameData = (datas[2] != null ? BYML.parse<NameData>(datas[2], BYML.FileType.CRG1) : null);
             const resourceSystem = new ResourceSystem([levelPak, stringsPak], nameData);
 
             for (const mlvlEntry of levelPak.namedResourceTable.values()) {
@@ -146,16 +148,30 @@ class MP1SceneDesc implements Viewer.SceneDesc {
     }
 }
 
-const id = "mp1";
-const name = "Metroid Prime 1";
-const sceneDescs: Viewer.SceneDesc[] = [
-    new MP1SceneDesc(`Metroid1.pak`, "Space Pirate Frigate"),
-    new MP1SceneDesc(`Metroid2.pak`, "Chozo Ruins"),
-    new MP1SceneDesc(`Metroid3.pak`, "Phendrana Drifts"),
-    new MP1SceneDesc(`Metroid4.pak`, "Tallon Overworld"),
-    new MP1SceneDesc(`Metroid5.pak`, "Phazon Mines"),
-    new MP1SceneDesc(`Metroid6.pak`, "Magmoor Caverns"),
-    new MP1SceneDesc(`Metroid7.pak`, "Impact Crater"),
+const idMP1 = "mp1";
+const nameMP1 = "Metroid Prime";
+const sceneDescsMP1: Viewer.SceneDesc[] = [
+    new RetroSceneDesc(`mp1/Metroid1.pak`, "Space Pirate Frigate"),
+    new RetroSceneDesc(`mp1/Metroid2.pak`, "Chozo Ruins"),
+    new RetroSceneDesc(`mp1/Metroid3.pak`, "Phendrana Drifts"),
+    new RetroSceneDesc(`mp1/Metroid4.pak`, "Tallon Overworld"),
+    new RetroSceneDesc(`mp1/Metroid5.pak`, "Phazon Mines"),
+    new RetroSceneDesc(`mp1/Metroid6.pak`, "Magmoor Caverns"),
+    new RetroSceneDesc(`mp1/Metroid7.pak`, "Impact Crater"),
 ];
 
-export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
+export const sceneGroupMP1: Viewer.SceneGroup = { id: idMP1, name: nameMP1, sceneDescs: sceneDescsMP1 };
+
+
+const idMP2 = "mp2";
+const nameMP2 = "Metroid Prime 2: Echoes";
+const sceneDescsMP2: Viewer.SceneDesc[] = [
+    new RetroSceneDesc(`mp2/Metroid1.pak`, "Temple Grounds"),
+    new RetroSceneDesc(`mp2/Metroid2.pak`, "Great Temple"),
+    new RetroSceneDesc(`mp2/Metroid3.pak`, "Agon Wastes"),
+    new RetroSceneDesc(`mp2/Metroid4.pak`, "Torvus Bog"),
+    new RetroSceneDesc(`mp2/metroid5.pak`, "Sanctuary Fortress"),
+    new RetroSceneDesc(`mp2/Metroid6.pak`, "Multiplayer"),
+];
+
+export const sceneGroupMP2: Viewer.SceneGroup = { id: idMP2, name: nameMP2, sceneDescs: sceneDescsMP2 };
