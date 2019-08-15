@@ -4,8 +4,8 @@ import { GfxDevice, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttribute
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { coalesceBuffer, GfxCoalescedBuffer } from "../gfx/helpers/BufferHelpers";
 import { convertToTriangleIndexBuffer, GfxTopology, getTriangleIndexCountForTopologyIndexCount } from "../gfx/helpers/TopologyHelpers";
-import { makeSortKey, GfxRendererLayer, setSortKeyDepth } from "../gfx/render/GfxRenderer";
-import { DeviceProgram, DeviceProgramReflection } from "../Program";
+import { makeSortKey, GfxRendererLayer, setSortKeyDepth, GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { DeviceProgram } from "../Program";
 import { DDSTextureHolder } from "./dds";
 import { nArray, assert, assertExists } from "../util";
 import { TextureMapping } from "../TextureHolder";
@@ -18,7 +18,6 @@ import { ModelHolder, MaterialDataHolder } from "./scenes";
 import { MSB, Part } from "./msb";
 import { MathConstants } from "../MathHelpers";
 import { MTD, MTDTexture } from './mtd';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
 import { interactiveVizSliderSelect } from '../DebugJunk';
 
 function shouldRenderPrimitive(primitive: Primitive): boolean {
@@ -496,8 +495,6 @@ void main() {
 }
 `;
     }
-
-    public static programReflection: DeviceProgramReflection = DeviceProgram.parseReflectionDefinitions(DKSProgram.BindingDefinitions);
 }
 
 function lookupTextureParameter(material: Material, paramName: string): string | null {

@@ -1,19 +1,19 @@
+
+// @ts-ignore
+import { readFileSync } from 'fs';
 import * as Bin from './bin';
 import * as BinTex from './bin_tex';
 import * as UI from '../ui';
 import * as Viewer from '../viewer';
-
-// @ts-ignore
-import { readFileSync } from 'fs';
 import { BasicRenderTarget, depthClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
-import { DeviceProgram, DeviceProgramReflection } from "../Program";
+import { DeviceProgram } from "../Program";
 import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxHostAccessPass, GfxInputLayout, GfxInputState, GfxMipFilterMode, GfxRenderPass, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxWrapMode, GfxProgram, GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { mat4, vec2, vec4 } from 'gl-matrix';
 import { TextureHolder, TextureMapping } from '../TextureHolder';
 import { nArray } from '../util';
-import { GfxRenderInstManager, executeOnPass } from '../gfx/render/GfxRenderer2';
+import { GfxRenderInstManager, executeOnPass } from '../gfx/render/GfxRenderer';
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
 
@@ -49,7 +49,6 @@ class KingdomHeartsProgram extends DeviceProgram {
     public static ub_DrawParams = 1;
 
     private static program = readFileSync('src/kh/program.glsl', { encoding: 'utf8' });
-    public static programReflection: DeviceProgramReflection = DeviceProgram.parseReflectionDefinitions(KingdomHeartsProgram.program);
     public both = KingdomHeartsProgram.program;
 }
 

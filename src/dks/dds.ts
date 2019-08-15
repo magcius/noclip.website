@@ -4,7 +4,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString } from "../util";
 import { TextureHolder, LoadedTexture } from "../TextureHolder";
 import { GfxDevice, GfxTextureDimension, GfxFormat } from "../gfx/platform/GfxPlatform";
-import { decompressBC, DecodedSurfaceSW } from "../fres/bc_texture";
+import { decompressBC, DecodedSurfaceSW } from "../Common/bc_texture";
 
 export interface Level {
     width: number;

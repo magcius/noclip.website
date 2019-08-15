@@ -1,7 +1,6 @@
 
 import CodeEditor from "./CodeEditor";
 import { assertExists, leftPad } from "./util";
-import { StructLayout, parseShaderSource } from "./gfx/helpers/UniformBufferHelpers";
 import { GfxDevice } from "./gfx/platform/GfxPlatform";
 import { gfxDeviceGetImpl } from "./gfx/platform/GfxPlatformWebGL2";
 import { IS_DEVELOPMENT } from "./BuildVersion";
@@ -54,34 +53,6 @@ function range(start: number, num: number): number[] {
     return L;
 }
 
-interface DeviceProgramConstructor extends Function {
-    programReflection?: DeviceProgramReflection;
-}
-
-export interface DeviceProgramReflection {
-    uniformBufferLayouts: StructLayout[];
-    samplerBindings: SamplerBindingReflection[];
-    totalSamplerBindingsCount: number;
-}
-
-export interface SamplerBindingReflection {
-    name: string;
-    arraySize: number;
-}
-
-// XXX(jstpierre): This is absolutely terrible. The whole DeviceProgram interface is just an ugly duckling.
-function findProgramReflection(program: DeviceProgram): DeviceProgramReflection | null {
-    while (true) {
-        const constructor = program.constructor as DeviceProgramConstructor;
-        if (constructor.programReflection !== undefined)
-            return constructor.programReflection;
-        if (constructor === DeviceProgram)
-            break;
-        program = Object.getPrototypeOf(program);
-    }
-    return null;
-}
-
 function definesEqual(a: DeviceProgram, b: DeviceProgram): boolean {
     if (a.defines.size !== b.defines.size)
         return false;
@@ -96,10 +67,6 @@ function definesEqual(a: DeviceProgram, b: DeviceProgram): boolean {
 export class DeviceProgram {
     public name: string = '(unnamed)';
 
-    // Reflection.
-    public uniformBufferLayouts: StructLayout[];
-    public samplerBindings: SamplerBindingReflection[];
-    public totalSamplerBindingsCount: number;
     public uniqueKey: number;
 
     // Compiled program.
@@ -131,16 +98,6 @@ export class DeviceProgram {
         if (this.preprocessedVert === '') {
             this.preprocessedVert = this.preprocessShader(device, this.both + this.vert, 'vert');
             this.preprocessedFrag = this.preprocessShader(device, this.both + this.frag, 'frag');
-
-            // TODO(jstpierre): Would love a better place to do this.
-            const programReflection = findProgramReflection(this);
-            if (programReflection !== null) {
-                this.uniformBufferLayouts = programReflection.uniformBufferLayouts;
-                this.samplerBindings = programReflection.samplerBindings;
-                this.totalSamplerBindingsCount = programReflection.totalSamplerBindingsCount;
-            } else {
-                DeviceProgram.parseReflectionDefinitionsInto(this, this.preprocessedVert);
-            }
         }
     }
 
@@ -232,17 +189,23 @@ ${rest}
         const gl = gfxDeviceGetImpl(device).gl;
         const prog = this.glProgram;
 
-        for (let i = 0; i < this.uniformBufferLayouts.length; i++) {
-            const uniformBufferLayout = this.uniformBufferLayouts[i];
-            gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, uniformBufferLayout.blockName), i);
+        // TODO(jstpierre): Remove this reflection.
+
+        const uniformBlocks = findall(this.preprocessedVert, /uniform (\w+) {([^]*?)}/g);
+        for (let i = 0; i < uniformBlocks.length; i++) {
+            const [m, blockName, contents] = uniformBlocks[i];
+            gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, blockName), i);
         }
 
+        const samplers = findall(this.preprocessedVert, /^uniform .*sampler\S+ (\w+)(?:\[(\d+)\])?;$/gm);
         let samplerIndex = 0;
-        for (let i = 0; i < this.samplerBindings.length; i++) {
+        for (let i = 0; i < samplers.length; i++) {
+            const [m, name, arraySizeStr] = samplers[i];
+            const arraySize = arraySizeStr ? parseInt(arraySizeStr) : 1;
             // Assign identities in order.
-            const samplerUniformLocation = gl.getUniformLocation(prog, this.samplerBindings[i].name);
-            gl.uniform1iv(samplerUniformLocation, range(samplerIndex, this.samplerBindings[i].arraySize));
-            samplerIndex += this.samplerBindings[i].arraySize;
+            const samplerUniformLocation = gl.getUniformLocation(prog, name);
+            gl.uniform1iv(samplerUniformLocation, range(samplerIndex, arraySize));
+            samplerIndex += arraySize;
         }
 
         this.bindDirty = false;
@@ -300,27 +263,6 @@ ${rest}
 
     public editf() {
         this._editShader('frag');
-    }
-
-    private static parseReflectionDefinitionsInto(refl: DeviceProgramReflection, vert: string): void {
-        refl.uniformBufferLayouts = [];
-        parseShaderSource(refl.uniformBufferLayouts, vert);
-
-        const samplers = findall(vert, /^uniform .*sampler\S+ (\w+)(?:\[(\d+)\])?;$/gm);
-        refl.samplerBindings = [];
-        refl.totalSamplerBindingsCount = 0;
-        for (let i = 0; i < samplers.length; i++) {
-            const [m, name, arraySizeStr] = samplers[i];
-            let arraySize: number = arraySizeStr ? parseInt(arraySizeStr) : 1;
-            refl.samplerBindings.push({ name, arraySize });
-            refl.totalSamplerBindingsCount += arraySize;
-        }
-    }
-
-    public static parseReflectionDefinitions(vert: string): DeviceProgramReflection {
-        const refl: DeviceProgramReflection = {} as DeviceProgramReflection;
-        DeviceProgram.parseReflectionDefinitionsInto(refl, vert);
-        return refl;
     }
 }
 

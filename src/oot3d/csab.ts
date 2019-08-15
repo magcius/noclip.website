@@ -5,7 +5,7 @@ import { assert, readString, align, assertExists } from "../util";
 import AnimationController from "../AnimationController";
 import { mat4 } from "gl-matrix";
 import { getPointHermite } from "../Spline";
-import { computeModelMatrixSRT, lerpAngle, lerp } from "../MathHelpers";
+import { computeModelMatrixSRT, lerpAngle, lerp, MathConstants } from "../MathHelpers";
 
 // CSAB (CTR Skeletal Animation Binary)
 
@@ -326,7 +326,7 @@ function sampleAnimationTrackLinearRotation(track: AnimationTrackLinear, frame: 
     const k1 = frames[idx1];
 
     const t = (frame - k0.time) / (k1.time - k0.time);
-    return lerpAngle(k0.value, k1.value, t);
+    return lerpAngle(k0.value, k1.value, t, MathConstants.TAU);
 }
 
 function hermiteInterpolate(k0: AnimationKeyframeHermite, k1: AnimationKeyframeHermite, t: number, length: number): number {

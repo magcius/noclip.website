@@ -2,7 +2,7 @@
 import * as UI from './ui';
 
 import InputManager from './InputManager';
-import { CameraController, Camera, CameraControllerClass } from './Camera';
+import { CameraController, Camera } from './Camera';
 import { TextureHolder } from './TextureHolder';
 import { GfxDevice, GfxSwapChain, GfxRenderPass, GfxDebugGroup } from './gfx/platform/GfxPlatform';
 import { createSwapChainForWebGL2, gfxDeviceGetImpl, getPlatformTexture } from './gfx/platform/GfxPlatformWebGL2';
@@ -98,13 +98,6 @@ export class Viewer {
     }
 
     private renderGfxPlatform(): void {
-        const camera = this.camera;
-
-        // Hack in projection for now until we have that unfolded from RenderState.
-        camera.newFrame();
-        const aspect = this.canvas.width / this.canvas.height;
-        camera.setPerspective(this.fovY, aspect, 10);
-
         this.viewerRenderInput.time = this.sceneTime;
         this.viewerRenderInput.viewportWidth = this.canvas.width;
         this.viewerRenderInput.viewportHeight = this.canvas.height;
@@ -116,9 +109,11 @@ export class Viewer {
         this.gfxDevice.pushDebugGroup(this.debugGroup);
 
         const renderPass = this.scene!.render(this.gfxDevice, this.viewerRenderInput);
-        const onscreenTexture = this.gfxSwapChain.getOnscreenTexture();
-        renderPass.endPass(onscreenTexture);
-        this.gfxDevice.submitPass(renderPass);
+        if (renderPass !== null) {
+            const onscreenTexture = this.gfxSwapChain.getOnscreenTexture();
+            renderPass.endPass(onscreenTexture);
+            this.gfxDevice.submitPass(renderPass);
+        }
         this.gfxSwapChain.present();
 
         this.gfxDevice.popDebugGroup();
@@ -152,6 +147,8 @@ export class Viewer {
             this.scene.destroy(this.gfxDevice);
             this.scene = null;
         }
+
+        this.cameraController = null;
     }
 
     public setScene(scene: SceneGfx | null): void {
@@ -169,6 +166,15 @@ export class Viewer {
         if (dt < 0)
             return;
         this.rafTime = nt;
+
+        const camera = this.camera;
+
+        // Hack in projection for now until we have that unfolded from RenderState.
+        camera.newFrame();
+        const aspect = this.canvas.width / this.canvas.height;
+        camera.fovY = this.fovY;
+        camera.aspect = aspect;
+        camera.setClipPlanes(10);
 
         if (this.cameraController) {
             const updated = this.cameraController.update(this.inputManager, dt);

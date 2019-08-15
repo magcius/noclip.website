@@ -15,6 +15,8 @@ import { standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, 
 import { mat4 } from 'gl-matrix';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { SceneContext } from '../SceneBase';
+import { FPSCameraController } from '../Camera';
+import { DataFetcherFlags } from '../DataFetcher';
 
 export class RetroSceneRenderer implements Viewer.SceneGfx {
     public renderHelper: GXRenderHelperGfx;
@@ -27,9 +29,15 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
         this.renderHelper = new GXRenderHelperGfx(device);
     }
 
+    public createCameraController() {
+        const controller = new FPSCameraController();
+        controller.sceneKeySpeedMult = 0.1;
+        return controller;
+    }
+
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         const template = this.renderHelper.pushTemplateRenderInst();
-        viewerInput.camera.setClipPlanes(2, 75000);
+        viewerInput.camera.setClipPlanes(0.2);
         fillSceneParamsDataOnTemplate(template, viewerInput);
         for (let i = 0; i < this.areaRenderers.length; i++)
             this.areaRenderers[i].prepareToRender(device, this.renderHelper, viewerInput);
@@ -95,11 +103,11 @@ class MP1SceneDesc implements Viewer.SceneDesc {
         const dataFetcher = context.dataFetcher;
         const stringsPakP = dataFetcher.fetchData(`metroid_prime/mp1/Strings.pak`);
         const levelPakP = dataFetcher.fetchData(`metroid_prime/mp1/${this.filename}`);
-        const nameDataP = dataFetcher.fetchData(`metroid_prime/mp1/MP1_NameData.crg1`);
+        const nameDataP = dataFetcher.fetchData(`metroid_prime/mp1/MP1_NameData.crg1`, DataFetcherFlags.ALLOW_404);
         return Promise.all([levelPakP, stringsPakP, nameDataP]).then((datas: ArrayBufferSlice[]) => {
             const levelPak = PAK.parse(datas[0]);
             const stringsPak = PAK.parse(datas[1]);
-            const nameData = BYML.parse<NameData>(datas[2], BYML.FileType.CRG1);
+            const nameData = datas[2] !== null ? BYML.parse<NameData>(datas[2], BYML.FileType.CRG1) : null;
             const resourceSystem = new ResourceSystem([levelPak, stringsPak], nameData);
 
             for (const mlvlEntry of levelPak.namedResourceTable.values()) {

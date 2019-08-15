@@ -6,10 +6,10 @@ import { GfxRenderPassDescriptor, GfxLoadDisposition, GfxDevice, GfxRenderPass, 
 import { TransparentBlack } from "../../Color";
 import { copyRenderPassDescriptor, DepthStencilAttachment, DEFAULT_NUM_SAMPLES, makeEmptyRenderPassDescriptor, ColorAttachment, ColorTexture, PostFXRenderTarget, BasicRenderTarget, noClearRenderPassDescriptor } from "../../gfx/helpers/RenderTargetHelpers";
 import { fillVec4 } from "../../gfx/helpers/UniformBufferHelpers";
-import { ViewerRenderInput, Viewer } from "../../viewer";
-import { GfxRenderInst, GfxRenderInstManager } from "../../gfx/render/GfxRenderer2";
+import { ViewerRenderInput } from "../../viewer";
+import { GfxRenderInst, GfxRenderInstManager } from "../../gfx/render/GfxRenderer";
 import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
-import { fullscreenMegaState, copyMegaState, makeMegaState } from "../../gfx/helpers/GfxMegaStateDescriptorHelpers";
+import { fullscreenMegaState, makeMegaState } from "../../gfx/helpers/GfxMegaStateDescriptorHelpers";
 
 // Should I try to do this with GX? lol.
 class BloomPassBaseProgram extends DeviceProgram {
@@ -23,8 +23,6 @@ layout(std140) uniform ub_Params {
 #define u_BokehStrength        (u_Misc0.y)
 #define u_BokehCombineStrength (u_Misc0.z)
 `;
-
-    public static programReflection = DeviceProgram.parseReflectionDefinitions(BloomPassBaseProgram.BindingsDefinition); 
 
     public vert: string = `
 ${BloomPassBaseProgram.BindingsDefinition}

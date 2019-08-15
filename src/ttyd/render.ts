@@ -14,12 +14,11 @@ import { GfxDevice, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLa
 import { fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
 import { TextureMapping } from '../TextureHolder';
 import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
-import { GfxRendererLayer, makeSortKey, makeSortKeyOpaque, setSortKeyDepth } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstManager, GfxRenderInst, GfxRendererLayer, makeSortKey, makeSortKeyOpaque, setSortKeyDepth } from '../gfx/render/GfxRenderer';
 import { Camera, computeViewMatrix, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
 import { AABB } from '../Geometry';
 import { colorCopy } from '../Color';
 import * as UI from '../ui';
-import { GfxRenderInstManager, GfxRenderInst } from '../gfx/render/GfxRenderer2';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { GXMaterialHacks } from '../gx/gx_material';
 

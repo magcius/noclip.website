@@ -4,7 +4,7 @@ import { LiveActor, SceneObjHolder } from "./smg_scenes";
 import { ViewerRenderInput } from "../../viewer";
 import { GfxTexture, GfxDevice } from "../../gfx/platform/GfxPlatform";
 import { Camera } from "../../Camera";
-import { GfxRenderInstManager } from "../../gfx/render/GfxRenderer2";
+import { GfxRenderInstManager } from "../../gfx/render/GfxRenderer";
 
 export const enum MovementType {
 }

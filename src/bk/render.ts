@@ -1,9 +1,7 @@
 
-// @ts-ignore
-import { readFileSync } from 'fs';
 import * as Viewer from '../viewer';
-import { DeviceProgram, DeviceProgramReflection } from "../Program";
-import { Texture, getFormatString, RSPOutput, Vertex, DrawCall, GeometryMode } from "./f3dex";
+import { DeviceProgram } from "../Program";
+import { Texture, getFormatString, RSPOutput, Vertex, DrawCall, GeometryMode, OtherModeH_CycleType } from "./f3dex";
 import { GfxDevice, GfxTextureDimension, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { assert, nArray } from '../util';
@@ -11,8 +9,135 @@ import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2 } from '../gfx/helpers/Unif
 import { mat4 } from 'gl-matrix';
 import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
 import { interactiveVizSliderSelect } from '../DebugJunk';
+import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
+
+class F3DEX_Program extends DeviceProgram {
+    public static a_Position = 0;
+    public static a_Color = 1;
+    public static a_TexCoord = 2;
+
+    public static ub_SceneParams = 0;
+    public static ub_DrawParams = 1;
+
+    public both = `
+precision mediump float;
+
+layout(row_major, std140) uniform ub_SceneParams {
+    Mat4x4 u_Projection;
+};
+
+layout(row_major, std140) uniform ub_DrawParams {
+    Mat4x3 u_BoneMatrix[1];
+    Mat4x2 u_TexMatrix[2];
+};
+
+uniform sampler2D u_Texture[2];
+
+varying vec4 v_Color;
+varying vec4 v_TexCoord;
+`;
+
+    public vert = `
+layout(location = 0) in vec3 a_Position;
+layout(location = 1) in vec4 a_Color;
+layout(location = 2) in vec2 a_TexCoord;
+
+vec3 Monochrome(vec3 t_Color) {
+    // NTSC primaries.
+    return vec3(dot(t_Color.rgb, vec3(0.299, 0.587, 0.114)));
+}
+
+void main() {
+    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix[0]), vec4(a_Position, 1.0)));
+    v_Color = a_Color;
+
+#ifdef USE_MONOCHROME_VERTEX_COLOR
+    v_Color.rgb = Monochrome(v_Color.rgb);
+#endif
+
+    v_TexCoord.xy = Mul(u_TexMatrix[0], vec4(a_TexCoord, 1.0, 1.0));
+    v_TexCoord.zw = Mul(u_TexMatrix[1], vec4(a_TexCoord, 1.0, 1.0));
+}
+`;
+
+    constructor(private drawCall: DrawCall) {
+        super();
+        this.frag = this.generateFrag();
+    }
+
+    private generateAlphaTest(): string {
+        const alphaCompare = (this.drawCall.DP_OtherModeL >>> 0) & 0x03;
+        if (alphaCompare !== 0x00) {
+            return `
+    if (t_Color.a < 0.0125)
+        discard;
+`;
+        } else {
+            return "";
+        }
+    }
+
+    private generateFrag(): string {
+        const drawCall = this.drawCall;
+        const cycletype: OtherModeH_CycleType = (drawCall.DP_OtherModeH >>> 20) & 0x03;
+
+        const textFilt = (this.drawCall.DP_OtherModeH >>> 12) & 0x03;
+        let texFiltStr: string;
+        if (textFilt === TextFilt.G_TF_POINT)
+            texFiltStr = 'Point';
+        else if (textFilt === TextFilt.G_TF_AVERAGE)
+            texFiltStr = 'Average';
+        else if (textFilt === TextFilt.G_TF_BILERP)
+            texFiltStr = 'Bilerp';
+
+        return `
+vec4 Texture2D_N64_Point(sampler2D t_Texture, vec2 t_TexCoord) {
+    return texture(t_Texture, t_TexCoord);
+}
+
+vec4 Texture2D_N64_Average(sampler2D t_Texture, vec2 t_TexCoord) {
+    // Unimplemented.
+    return texture(t_Texture, t_TexCoord);
+}
+
+// Implements N64-style "triangle bilienar filtering" with three taps.
+// Based on ArthurCarvalho's implementation, modified by NEC and Jasper for noclip.
+vec4 Texture2D_N64_Bilerp(sampler2D t_Texture, vec2 t_TexCoord) {
+    vec2 t_Size = vec2(textureSize(t_Texture, 0));
+    vec2 t_Offs = fract(t_TexCoord*t_Size - vec2(0.5));
+    t_Offs -= step(1.0, t_Offs.x + t_Offs.y);
+    vec4 t_S0 = texture(t_Texture, t_TexCoord - t_Offs / t_Size);
+    vec4 t_S1 = texture(t_Texture, t_TexCoord - vec2(t_Offs.x - sign(t_Offs.x), t_Offs.y) / t_Size);
+    vec4 t_S2 = texture(t_Texture, t_TexCoord - vec2(t_Offs.x, t_Offs.y - sign(t_Offs.y)) / t_Size);
+    return t_S0 + abs(t_Offs.x)*(t_S1-t_S0) + abs(t_Offs.y)*(t_S2-t_S0);
+}
+
+#define Texture2D_N64 Texture2D_N64_${texFiltStr}
+
+void main() {
+    vec4 t_Color = vec4(1.0);
+
+#ifdef USE_TEXTURE
+    t_Color *= Texture2D_N64(u_Texture[0], v_TexCoord.xy);
+#endif
+
+#ifdef USE_VERTEX_COLOR
+    t_Color.rgba *= v_Color.rgba;
+#endif
+
+#ifdef USE_ALPHA_VISUALIZER
+    t_Color.rgb = vec3(v_Color.a);
+    t_Color.a = 1.0;
+#endif
+
+${this.generateAlphaTest()}
+
+    gl_FragColor = t_Color;
+}
+`;
+    }
+}
 
 export function textureToCanvas(texture: Texture): Viewer.Texture {
     const canvas = document.createElement("canvas");
@@ -28,19 +153,6 @@ export function textureToCanvas(texture: Texture): Viewer.Texture {
     const extraInfo = new Map<string, string>();
     extraInfo.set('Format', getFormatString(texture.tile.fmt, texture.tile.siz));
     return { name: texture.name, surfaces, extraInfo };
-}
-
-class F3DEX_Program extends DeviceProgram {
-    public static a_Position = 0;
-    public static a_Color = 1;
-    public static a_TexCoord = 2;
-
-    public static ub_SceneParams = 0;
-    public static ub_DrawParams = 1;
-
-    private static program = readFileSync('src/bk/program.glsl', { encoding: 'utf8' });
-    public static programReflection: DeviceProgramReflection = DeviceProgram.parseReflectionDefinitions(F3DEX_Program.program);
-    public both = F3DEX_Program.program;
 }
 
 const enum TexCM {
@@ -197,7 +309,8 @@ class DrawCallInstance {
     }
 
     private createProgram(): void {
-        const program = new F3DEX_Program();
+        const program = new F3DEX_Program(this.drawCall);
+
         // TODO(jstpierre): texture combiners.
         if (this.texturesEnabled && this.drawCall.textureIndices.length)
             program.defines.set('USE_TEXTURE', '1');
@@ -211,18 +324,6 @@ class DrawCallInstance {
 
         if (this.alphaVisualizerEnabled)
             program.defines.set('USE_ALPHA_VISUALIZER', '1');
-
-        const textFilt = (this.drawCall.DP_OtherModeH >>> 12) & 0x03;
-        if (textFilt === TextFilt.G_TF_POINT)
-            program.defines.set(`USE_TEXTFILT_POINT`, '1');
-        else if (textFilt === TextFilt.G_TF_AVERAGE)
-            program.defines.set(`USE_TEXTFILT_AVERAGE`, '1');
-        else if (textFilt === TextFilt.G_TF_BILERP)
-            program.defines.set(`USE_TEXTFILT_BILERP`, '1')
-
-        const alphaCompare = (this.drawCall.DP_OtherModeL >>> 0) & 0x03;
-        if (alphaCompare !== 0x00)
-            program.defines.set(`USE_ALPHA_MASK`, '1');
 
         this.program = program;
         this.gfxProgram = null;

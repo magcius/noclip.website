@@ -1,13 +1,12 @@
 
-import * as Viewer from '../viewer';
-import * as Tex from './tex';
-
 //@ts-ignore
 import { readFileSync } from 'fs';
+import * as Viewer from '../viewer';
+import * as Tex from './tex';
 import { GfxBufferUsage, GfxDevice, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxFormat, GfxBuffer, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxProgram, GfxMegaStateDescriptor } from "../gfx/platform/GfxPlatform";
 import { mat4 } from "gl-matrix";
-import { makeSortKeyOpaque, GfxRendererLayer, setSortKeyDepth } from "../gfx/render/GfxRenderer";
-import { DeviceProgram, DeviceProgramReflection } from "../Program";
+import { GfxRenderInstManager, makeSortKeyOpaque, GfxRendererLayer, setSortKeyDepth } from "../gfx/render/GfxRenderer";
+import { DeviceProgram } from "../Program";
 import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { ModelTreeNode, ModelTreeLeaf, ModelTreeGroup, PropertyType } from "./map_shape";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
@@ -17,7 +16,6 @@ import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
 import { computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
 import { AABB } from "../Geometry";
 import { getFormatString } from "../bk/f3dex";
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
 
 class PaperMario64Program extends DeviceProgram {
     public static a_Position = 0;
@@ -28,7 +26,6 @@ class PaperMario64Program extends DeviceProgram {
     public static ub_DrawParams = 1;
 
     private static program = readFileSync('src/pm64/program.glsl', { encoding: 'utf8' });
-    public static programReflection: DeviceProgramReflection = DeviceProgram.parseReflectionDefinitions(PaperMario64Program.program);
     public both = PaperMario64Program.program;
 }
 

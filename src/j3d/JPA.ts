@@ -18,11 +18,10 @@ import { MaterialParams, ColorKind, ub_PacketParams, u_PacketParamsBufferSize, P
 import { GXMaterialHelperGfx } from "../gx/gx_render";
 import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, computeMatrixWithoutTranslation } from "../MathHelpers";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { makeSortKeyTranslucent, GfxRendererLayer, setSortKeyBias, setSortKeyDepth } from "../gfx/render/GfxRenderer";
+import { GfxRenderInst, GfxRenderInstManager, makeSortKeyTranslucent, GfxRendererLayer, setSortKeyBias, setSortKeyDepth } from "../gfx/render/GfxRenderer";
 import { fillMatrix4x3, fillColor, fillMatrix4x2 } from "../gfx/helpers/UniformBufferHelpers";
 import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
 import { makeTriangleIndexBuffer, GfxTopology, getTriangleIndexCountForTopologyIndexCount } from "../gfx/helpers/TopologyHelpers";
-import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderer2";
 
 export interface JPAResourceRaw {
     resourceId: number;

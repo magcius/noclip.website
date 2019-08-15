@@ -2,8 +2,8 @@
 import { mat4, vec3, vec4 } from 'gl-matrix';
 import InputManager from './InputManager';
 import { Frustum, AABB } from './Geometry';
-import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates } from './MathHelpers';
-import { reverseDepthForProjectionMatrix } from './gfx/helpers/ReversedDepthHelpers';
+import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates, computeProjectionMatrixFromCuboid, texProjPerspMtx, texProjOrthoMtx, lerpAngle, lerp, MathConstants } from './MathHelpers';
+import { reverseDepthForOrthographicProjectionMatrix, reverseDepthForPerspectiveProjectionMatrix } from './gfx/helpers/ReversedDepthHelpers';
 
 export class Camera {
     // Converts to view space from world space.
@@ -24,7 +24,9 @@ export class Camera {
 
     public frustum = new Frustum();
     public fovY: number;
+    public orthoScaleY: number;
     public aspect: number;
+    public isOrthographic: boolean = false;
 
     public identity(): void {
         mat4.identity(this.worldMatrix);
@@ -39,21 +41,41 @@ export class Camera {
     public setPerspective(fovY: number, aspect: number, n: number, f: number = Infinity): void {
         this.fovY = fovY;
         this.aspect = aspect;
+        this.isOrthographic = false;
 
         const nearY = Math.tan(fovY * 0.5) * n;
         const nearX = nearY * aspect;
         this.setFrustum(-nearX, nearX, -nearY, nearY, n, f);
     }
 
+    public setOrthographic(orthoScaleY: number, aspect: number, n: number, f: number): void {
+        this.orthoScaleY = orthoScaleY;
+        this.aspect = aspect;
+
+        this.isOrthographic = true;
+        const nearY = orthoScaleY;
+        const nearX = orthoScaleY * aspect;
+        this.setFrustum(-nearX, nearX, -nearY, nearY, n, f);
+    }
+
     public setClipPlanes(n: number, f: number = Infinity): void {
-        this.setPerspective(this.fovY, this.aspect, n, f);
+        if (this.isOrthographic) {
+            // this.setOrthographic(this.orthoScaleY, this.aspect, n, f);
+        } else {
+            this.setPerspective(this.fovY, this.aspect, n, f);
+        }
     }
 
     private setFrustum(left: number, right: number, bottom: number, top: number, n: number, f: number): void {
-        this.frustum.setViewFrustum(left, right, bottom, top, n, f);
+        this.frustum.setViewFrustum(left, right, bottom, top, n, f, this.isOrthographic);
         this.frustum.updateWorldFrustum(this.worldMatrix);
-        computeProjectionMatrixFromFrustum(this.projectionMatrix, left, right, bottom, top, n, f);
-        reverseDepthForProjectionMatrix(this.projectionMatrix);
+        if (this.isOrthographic) {
+            computeProjectionMatrixFromCuboid(this.projectionMatrix, left, right, bottom, top, n, f);
+            reverseDepthForOrthographicProjectionMatrix(this.projectionMatrix);
+        } else {
+            computeProjectionMatrixFromFrustum(this.projectionMatrix, left, right, bottom, top, n, f);
+            reverseDepthForPerspectiveProjectionMatrix(this.projectionMatrix);
+        }
         this.updateClipFromWorld();
     }
 
@@ -284,6 +306,8 @@ export class FPSCameraController implements CameraController {
     private mouseLookDragFast = 0;
     private mouseLookDragSlow = 0;
 
+    public sceneKeySpeedMult = 1;
+
     public cameraUpdateForced(): void {
         vec3.set(this.keyMovement, 0, 0, 0);
     }
@@ -317,13 +341,6 @@ export class FPSCameraController implements CameraController {
         const keyMoveVelocity = keyMoveSpeedCap * this.keyMoveVelocityMult;
     
         const keyMovement = this.keyMovement;
-        const worldUp = scratchVec3b;
-        // Instead of getting the camera up, instead use world up. Feels more natural.
-        if (this.useWorldUp)
-            camera.getWorldUp(worldUp);
-        else
-            vec3.set(worldUp, 0, 1, 0);
-
         const keyMoveLowSpeedCap = 0.01;
 
         if (inputManager.isKeyDown('KeyW') || inputManager.isKeyDown('ArrowUp')) {
@@ -353,10 +370,18 @@ export class FPSCameraController implements CameraController {
             if (Math.abs(keyMovement[1]) < keyMoveLowSpeedCap) keyMovement[1] = 0.0;
         }
 
+        const worldUp = scratchVec3b;
+        // Instead of getting the camera up, instead use world up. Feels more natural.
+        if (this.useWorldUp)
+            camera.getWorldUp(worldUp);
+        else
+            vec3.set(worldUp, 0, 1, 0);
+
         if (!vec3.exactEquals(keyMovement, vec3Zero)) {
             const finalMovement = scratchVec3a;
             vec3.set(finalMovement, keyMovement[0], 0, keyMovement[2]);
             vec3.scaleAndAdd(finalMovement, finalMovement, worldUp, keyMovement[1]);
+            vec3.scale(finalMovement, finalMovement, this.sceneKeySpeedMult);
             mat4.translate(camera.worldMatrix, camera.worldMatrix, finalMovement);
             updated = true;
         }
@@ -402,6 +427,7 @@ export class FPSCameraController implements CameraController {
         updated = updated || this.forceUpdate;
 
         if (updated) {
+            this.camera.isOrthographic = false;
             mat4.invert(this.camera.viewMatrix, this.camera.worldMatrix);
             this.camera.worldMatrixUpdated();
             this.forceUpdate = false;
@@ -446,8 +472,18 @@ export class OrbitCameraController implements CameraController {
     }
 
     public update(inputManager: InputManager, dt: number): boolean {
-        if (inputManager.isKeyDownEventTriggered('KeyG')) {
+        if (inputManager.isKeyDownEventTriggered('KeyR')) {
             this.shouldOrbit = !this.shouldOrbit;
+        }
+
+        if (inputManager.isKeyDownEventTriggered('Numpad5')) {
+            this.shouldOrbit = false;
+            this.xVel = this.yVel = 0;
+        }
+
+        if (inputManager.isKeyDownEventTriggered('KeyB')) {
+            this.txVel = this.tyVel = 0;
+            vec3.set(this.translation, 0, 0, 0);
         }
 
         const shouldOrbit = this.shouldOrbit;
@@ -467,25 +503,32 @@ export class OrbitCameraController implements CameraController {
                 this.xVel += this.orbitSpeed * 1/50;
         }
         this.zVel += inputManager.dz;
-        if (inputManager.isKeyDown('KeyA')) {
-            this.xVel += 0.05;
+        let keyVelX = 0, keyVelY = 0;
+        if (inputManager.isKeyDown('KeyA'))
+            keyVelX += 0.02;
+        if (inputManager.isKeyDown('KeyD'))
+            keyVelX -= 0.02;
+        if (inputManager.isKeyDown('KeyW'))
+            keyVelY += 0.02;
+        if (inputManager.isKeyDown('KeyS'))
+            keyVelY -= 0.02;
+        const isShiftPressed = inputManager.isKeyDown('ShiftLeft') || inputManager.isKeyDown('ShiftRight');
+
+        if (isShiftPressed) {
+            this.xVel += -keyVelX;
+            this.yVel += -keyVelY;
+        } else {
+            this.txVel += keyVelX;
+            this.tyVel += -keyVelY;
         }
-        if (inputManager.isKeyDown('KeyD')) {
-            this.xVel -= 0.05;
-        }
-        if (inputManager.isKeyDown('KeyW')) {
-            this.yVel += 0.05;
-        }
-        if (inputManager.isKeyDown('KeyS')) {
-            this.yVel -= 0.05;
-        }
+
         this.xVel = clampRange(this.xVel, 2);
         this.yVel = clampRange(this.yVel, 2);
 
-        const updated = this.forceUpdate || this.xVel !== 0 || this.yVel !== 0 || this.zVel !== 0;
+        const updated = this.forceUpdate || this.xVel !== 0 || this.yVel !== 0 || this.zVel !== 0 || this.txVel !== 0 || this.tyVel !== 0;
         if (updated) {
             // Apply velocities.
-            const drag = inputManager.isDragging() ? 0.92 : 0.96;
+            const drag = (inputManager.isDragging() || isShiftPressed) ? 0.92 : 0.96;
 
             this.x += -this.xVel / 10;
             this.xVel *= drag;
@@ -514,11 +557,187 @@ export class OrbitCameraController implements CameraController {
             computeUnitSphericalCoordinates(eyePos, this.x, this.y);
             vec3.scale(eyePos, eyePos, this.z);
             vec3.add(eyePos, eyePos, this.translation);
+            this.camera.isOrthographic = false;
             mat4.lookAt(this.camera.viewMatrix, eyePos, this.translation, vec3Up);
             mat4.invert(this.camera.worldMatrix, this.camera.viewMatrix);
             this.camera.worldMatrixUpdated();
             this.forceUpdate = false;
         }
+
+        return updated;
+    }
+}
+
+function snapToMultIncr(n: number, incr: number): number {
+    return Math.floor(n / incr) * incr + incr;
+}
+
+export class OrthoCameraController implements CameraController {
+    public camera: Camera;
+    public forceUpdate: boolean = false;
+    public onkeymovespeed: () => void = () => {};
+
+    public x: number = -Math.PI / 2;
+    public y: number = 2;
+    public z: number = 200;
+    public orbitSpeed: number = -0.05;
+    public zVel: number = 0;
+    public xTarget: number = this.x;
+    public yTarget: number = this.y;
+
+    public translation = vec3.create();
+    public txVel: number = 0;
+    public tyVel: number = 0;
+    public shouldOrbit: boolean = false;
+    private farPlane = 100000;
+
+    constructor() {
+    }
+
+    public cameraUpdateForced(): void {
+    }
+
+    public deserialize(state: string): void {
+    }
+
+    public setKeyMoveSpeed(speed: number): void {
+    }
+
+    public getKeyMoveSpeed(): number {
+        return 1;
+    }
+
+    public update(inputManager: InputManager, dt: number): boolean {
+        if (inputManager.isKeyDownEventTriggered('KeyR')) {
+            this.shouldOrbit = !this.shouldOrbit;
+        }
+
+        if (inputManager.isKeyDownEventTriggered('Numpad5')) {
+            this.shouldOrbit = false;
+        }
+
+        if (inputManager.isKeyDownEventTriggered('Numpad8')) {
+            // Top view.
+            this.xTarget = -Math.PI * 0.5;
+            this.yTarget = Math.PI - 0.001;
+        }
+
+        if (inputManager.isKeyDownEventTriggered('Numpad4')) {
+            // Left view.
+            this.xTarget = 0;
+            this.yTarget = Math.PI * 0.5;
+        }
+
+        if (inputManager.isKeyDownEventTriggered('Numpad6')) {
+            // Right view.
+            this.xTarget = Math.PI;
+            this.yTarget = Math.PI * 0.5;
+        }
+
+        if (inputManager.isKeyDownEventTriggered('Numpad2')) {
+            // Front view.
+            this.xTarget = -Math.PI * 0.5;
+            this.yTarget = Math.PI * 0.5;
+        }
+
+        if (inputManager.isKeyDownEventTriggered('KeyB')) {
+            this.txVel = this.tyVel = 0;
+            vec3.set(this.translation, 0, 0, 0);
+        }
+
+        const shouldOrbit = this.shouldOrbit;
+
+        const invertXMult = inputManager.invertX ? -1 : 1;
+        const invertYMult = inputManager.invertY ? -1 : 1;
+
+        // Get new velocities from inputs.
+        if (inputManager.button === 1) {
+            this.txVel += inputManager.dx * (-10 - Math.min(this.z, 0.01)) / -5000;
+            this.tyVel += inputManager.dy * (-10 - Math.min(this.z, 0.01)) /  5000;
+        } else if (inputManager.isDragging()) {
+            this.xTarget += inputManager.dx / -200 * invertXMult;
+            this.yTarget += inputManager.dy / -200 * invertYMult;
+        } else if (shouldOrbit) {
+            this.xTarget += this.orbitSpeed * 1/25;
+        }
+        let hasZVel = inputManager.dz !== 0;
+        this.zVel += inputManager.dz * -1;
+
+        const isShiftPressed = inputManager.isKeyDown('ShiftLeft') || inputManager.isKeyDown('ShiftRight');
+        if (!isShiftPressed) {
+            if (inputManager.isKeyDown('KeyA'))
+                this.txVel += 0.02;
+            if (inputManager.isKeyDown('KeyD'))
+                this.txVel -= 0.02;
+            if (inputManager.isKeyDown('KeyW'))
+                this.tyVel -= 0.02;
+            if (inputManager.isKeyDown('KeyS'))
+                this.tyVel += 0.02;
+        } else {
+            if (inputManager.isKeyDownEventTriggered('KeyA'))
+                this.xTarget = snapToMultIncr(this.xTarget, +Math.PI / 4);
+            if (inputManager.isKeyDownEventTriggered('KeyD'))
+                this.xTarget = snapToMultIncr(this.xTarget, -Math.PI / 4);
+            if (inputManager.isKeyDownEventTriggered('KeyW')) {
+                this.yTarget = snapToMultIncr(this.yTarget, +Math.PI / 8);
+                if (this.yTarget === Math.PI)
+                    this.yTarget -= 0.001;
+            }
+            if (inputManager.isKeyDownEventTriggered('KeyS')) {
+                this.yTarget = snapToMultIncr(this.yTarget - 0.001, -Math.PI / 8);
+                if (this.yTarget === Math.PI)
+                    this.yTarget += 0.001;
+            }
+        }
+
+        this.xTarget = this.xTarget % MathConstants.TAU;
+        this.yTarget = this.yTarget % MathConstants.TAU;
+
+        if (inputManager.isKeyDown('KeyQ')) {
+            this.zVel += 1.0;
+            hasZVel = true;
+        }
+        if (inputManager.isKeyDown('KeyE')) {
+            this.zVel -= 1.0;
+            hasZVel = true;
+        }
+
+        const updated = this.forceUpdate || this.xTarget !== this.x || this.yTarget !== this.y || this.zVel !== 0 || this.txVel !== 0 || this.tyVel !== 0;
+        if (updated) {
+            this.x = lerpAngle(this.x, this.xTarget, 0.1);
+            this.y = lerpAngle(this.y, this.yTarget, 0.1);
+
+            const drag = (inputManager.isDragging() || isShiftPressed) ? 0.92 : 0.96;
+
+            this.txVel *= drag;
+            this.tyVel *= drag;
+
+            this.z += Math.max(Math.log(Math.abs(this.zVel)), 0) * 4 * Math.sign(this.zVel);
+            if (!hasZVel)
+                this.zVel *= 0.85;
+            if (this.z < 1) {
+                this.z = 1;
+                this.zVel = 0;
+            }
+
+            vec3.set(scratchVec3a, this.camera.worldMatrix[0], this.camera.worldMatrix[1], this.camera.worldMatrix[2]);
+            vec3.scaleAndAdd(this.translation, this.translation, scratchVec3a, this.txVel * -this.z);
+
+            vec3.set(scratchVec3a, this.camera.worldMatrix[4], this.camera.worldMatrix[5], this.camera.worldMatrix[6]);
+            vec3.scaleAndAdd(this.translation, this.translation, scratchVec3a, this.tyVel * -this.z);
+
+            this.forceUpdate = false;
+        }
+
+        const eyePos = scratchVec3a;
+
+        computeUnitSphericalCoordinates(eyePos, this.x, this.y);
+        vec3.scale(eyePos, eyePos, -this.farPlane / 2);
+        vec3.add(eyePos, eyePos, this.translation);
+        mat4.lookAt(this.camera.viewMatrix, eyePos, this.translation, vec3Up);
+        mat4.invert(this.camera.worldMatrix, this.camera.viewMatrix);
+        this.camera.setOrthographic(this.z * 10, this.camera.aspect, 0, this.farPlane);
+        this.camera.worldMatrixUpdated();
 
         return updated;
     }
@@ -565,4 +784,11 @@ export function deserializeCamera(camera: Camera, src: Float32Array, offs: numbe
     mat4.invert(camera.viewMatrix, camera.worldMatrix);
     camera.worldMatrixUpdated();
     return 4*3;
+}
+
+export function texProjCamera(dst: mat4, camera: Camera, scaleS: number, scaleT: number, transS: number, transT: number): void {
+    if (camera.isOrthographic)
+        texProjOrthoMtx(dst, camera.frustum.left, camera.frustum.right, camera.frustum.bottom, camera.frustum.top, scaleS, scaleT, transS, transT);
+    else
+        texProjPerspMtx(dst, camera.fovY, camera.aspect, scaleS, scaleT, transS, transT);
 }

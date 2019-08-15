@@ -1,6 +1,6 @@
 
 import { GfxRenderDynamicUniformBuffer } from "./GfxRenderDynamicUniformBuffer";
-import { GfxRenderInstManager, GfxRenderInst } from "./GfxRenderer2";
+import { GfxRenderInstManager, GfxRenderInst } from "./GfxRenderer";
 import { GfxDevice, GfxHostAccessPass } from "../platform/GfxPlatform";
 import { GfxRenderCache } from "./GfxRenderCache";
 

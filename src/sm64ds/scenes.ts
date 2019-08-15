@@ -16,7 +16,7 @@ import { vec3, mat4, mat2d } from 'gl-matrix';
 import { assertExists, assert, leftPad } from '../util';
 import AnimationController from '../AnimationController';
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
+import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { SceneContext } from '../SceneBase';
 import { DataFetcher } from '../DataFetcher';
@@ -775,6 +775,10 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
             dataFetcher.fetchData(`${pathBase}/sm64ds.crg1`),
             dataFetcher.fetchData(`${pathBase}/ARCHIVE/ar1.narc`),
             dataFetcher.fetchData(`${pathBase}/ARCHIVE/arc0.narc`),
+            dataFetcher.fetchData(`${pathBase}/ARCHIVE/vs1.narc`),
+            dataFetcher.fetchData(`${pathBase}/ARCHIVE/vs2.narc`),
+            dataFetcher.fetchData(`${pathBase}/ARCHIVE/vs3.narc`),
+            dataFetcher.fetchData(`${pathBase}/ARCHIVE/vs4.narc`),
         ]);
 
         const modelCache = new ModelCache(dataFetcher);

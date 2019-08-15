@@ -6,7 +6,7 @@ import * as ZSI from './zsi';
 
 import * as Viewer from '../viewer';
 
-import { DeviceProgram, DeviceProgramReflection } from '../Program';
+import { DeviceProgram } from '../Program';
 import AnimationController from '../AnimationController';
 import { mat4, vec3 } from 'gl-matrix';
 import { GfxBuffer, GfxBufferUsage, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler, GfxDevice, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxHostAccessPass, GfxRenderPass, GfxTextureDimension, GfxInputState, GfxInputLayout, GfxCompareMode, GfxProgram } from '../gfx/platform/GfxPlatform';
@@ -15,14 +15,13 @@ import { colorNew, Color, colorNewCopy, colorCopy, TransparentBlack } from '../C
 import { getTextureFormatName } from './pica_texture';
 import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
 import { nArray, assert } from '../util';
-import { GfxRendererLayer, makeSortKey, GfxRenderInstViewRenderer } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstManager, GfxRenderInst, GfxRendererLayer, makeSortKey } from '../gfx/render/GfxRenderer';
 import { makeFormat, FormatFlags, FormatTypeFlags, FormatCompFlags } from '../gfx/platform/GfxPlatformFormat';
-import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { Camera, computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
 import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from '../gfx/helpers/BufferHelpers';
 import { getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
-import { GfxRenderInstManager, GfxRenderInst } from '../gfx/render/GfxRenderer2';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers';
 
 function surfaceToCanvas(textureLevel: CMB.TextureLevel): HTMLCanvasElement {
     const canvas = document.createElement("canvas");
@@ -114,8 +113,6 @@ layout(row_major, std140) uniform ub_PrmParams {
 
 uniform sampler2D u_Texture[3];
 `;
-
-    public static programReflection: DeviceProgramReflection = DeviceProgram.parseReflectionDefinitions(DMPProgram.BindingsDefinition);
 
     constructor(public material: CMB.Material, private materialHacks: DMPMaterialHacks) {
         super();
@@ -309,10 +306,7 @@ void main() {
 
     gl_FragColor = t_ResultColor;
 
-    float t_BasicDepth = 2.0 * gl_FragCoord.z - 1.0;
-    float t_DepthScale = 1.0;
-    float t_DepthOffset = u_DepthOffset;
-    gl_FragDepth = t_BasicDepth * t_DepthScale + t_DepthOffset;
+    gl_FragDepth = gl_FragCoord.z + u_DepthOffset;
 }
 `;
     }
@@ -618,7 +612,8 @@ class MaterialInstance {
             offs += fillMatrix4x3(mapped, offs, scratchTexMatrix);
         }
 
-        offs += fillVec4(mapped, offs, this.material.polygonOffset);
+        const depthOffset = reverseDepthForDepthOffset(this.material.polygonOffset);
+        offs += fillVec4(mapped, offs, depthOffset);
 
         template.setSamplerBindingsFromTextureMappings(this.textureMappings);
     }
@@ -1008,33 +1003,6 @@ export class CmbInstance {
     public bindCMAB(cmab: CMAB.CMAB, animationController = this.animationController): void {
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].bindCMAB(cmab, animationController);
-    }
-}
-
-export abstract class BasicRendererHelper {
-    public viewRenderer = new GfxRenderInstViewRenderer();
-    public renderTarget = new BasicRenderTarget();
-    public clearRenderPassDescriptor = standardFullClearRenderPassDescriptor;
-
-    protected abstract prepareToRender(hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void;
-
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
-
-        this.viewRenderer.prepareToRender(device);
-
-        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        const finalPassRenderer = this.renderTarget.createRenderPass(device, this.clearRenderPassDescriptor);
-        this.viewRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
-        this.viewRenderer.executeOnPass(device, finalPassRenderer);
-        return finalPassRenderer;
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.viewRenderer.destroy(device);
-        this.renderTarget.destroy(device);
     }
 }
 

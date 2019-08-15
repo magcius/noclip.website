@@ -578,21 +578,23 @@ export const enum AreaLightType {
 }
 
 export class AreaLight {
-    type: AreaLightType = AreaLightType.Custom;
-    radius: number = 0;
-    gxLight: GX_Material.Light = new GX_Material.Light;
+    public type: AreaLightType = AreaLightType.Custom;
+    public radius: number = 0;
+    public gxLight = new GX_Material.Light();
 }
+
 export interface AreaLightLayer {
     lights: AreaLight[];
     ambientColor: GX_Material.Color;
 }
+
 export interface EntityLights {
     lights: AreaLight[];
     ambientColor: GX_Material.Color;
 }
 
 export function parseLightLayer(buffer: ArrayBufferSlice, offs: number): [AreaLightLayer, number] {
-    let ambientColor: GX_Material.Color = new GX_Material.Color;
+    let ambientColor: GX_Material.Color = new GX_Material.Color();
     const view = buffer.createDataView();
     const epsilon = 1.192092896e-07;
     const originalOffs = offs;
@@ -621,9 +623,8 @@ export function parseLightLayer(buffer: ArrayBufferSlice, offs: number): [AreaLi
             ambientColor.g = Math.min(lightColorG * brightness, 1);
             ambientColor.b = Math.min(lightColorB * brightness, 1);
             ambientColor.a = 1;
-        }
-        else {
-            let light: AreaLight = new AreaLight();
+        } else {
+            const light = new AreaLight();
             light.type = lightType;
             light.gxLight.Color.r = lightColorR;
             light.gxLight.Color.g = lightColorG;
@@ -633,10 +634,9 @@ export function parseLightLayer(buffer: ArrayBufferSlice, offs: number): [AreaLi
             vec3.set(light.gxLight.Direction, dirX, dirY, dirZ);
 
             if (lightType == AreaLightType.Directional) {
-                vec3.set(light.gxLight.DistAtten, 0, 1, 0);
-                vec3.set(light.gxLight.CosAtten, 0, 1, 0);
-            }
-            else {
+                vec3.set(light.gxLight.DistAtten, 1, 0, 0);
+                vec3.set(light.gxLight.CosAtten, 1, 0, 0);
+            } else {
                 const distAttenA = (falloffType == 0) ? (2.0 / brightness) : 0;
                 const distAttenB = (falloffType == 1) ? (250.0 / brightness) : 0;
                 const distAttenC = (falloffType == 2) ? (25000.0 / brightness) : 0;
@@ -648,43 +648,35 @@ export function parseLightLayer(buffer: ArrayBufferSlice, offs: number): [AreaLi
                     // Calculate angle atten
                     if (spotCutoff < 0 || spotCutoff > 90) {
                         vec3.set(light.gxLight.CosAtten, 1, 0, 0);
-                    }
-                    else {
+                    } else {
                         const radCutoff = spotCutoff * MathConstants.DEG_TO_RAD;
                         const cosCutoff = Math.cos(radCutoff);
                         const invCosCutoff = 1 - cosCutoff;
                         vec3.set(light.gxLight.CosAtten, 0, -cosCutoff / invCosCutoff, 1.0 / invCosCutoff);
                     }
-                }
-                // All other values default to Custom (which are standard point lights)
-                else {
+                } else {
+                    // All other values default to Custom (which are standard point lights)
                     vec3.set(light.gxLight.CosAtten, 1, 0, 0);
                 }
             }
-                    
+
             // Calculate radius
-            if (light.gxLight.DistAtten[1] >= epsilon || light.gxLight.DistAtten[2] >= epsilon) {
-                const intensity = Math.max(lightColorR, lightColorG, lightColorB);
-                
-                if (light.gxLight.DistAtten[2] > epsilon) {
-                    if (intensity <= epsilon) {
-                        light.radius = 0;
-                    }
-                    else {
-                        light.radius = Math.sqrt(intensity / (intensity * 5 / 255 * light.gxLight.DistAtten[2]));
-                    }
-                }
-                else {
-                    if (light.gxLight.DistAtten[1] <= epsilon) {
-                        light.radius = 0;
-                    }
-                    else {
-                        light.radius = intensity / (Math.max(intensity * 5 / 255, 0.2) * light.gxLight.DistAtten[1]);
-                    }
-                }
-            }
-            else {
+            if (light.gxLight.DistAtten[1] < epsilon && light.gxLight.DistAtten[2] < epsilon) {
+                // No distance attenuation curve, so the light is effectively a directional.
                 light.radius = 3000000000000000000000000000000000000.0;
+            } else {
+                // Calculate the maximum influence radius from the distance attentuation / intensity curves.
+                let intensity = Math.max(lightColorR, lightColorG, lightColorB);
+                if (light.type === AreaLightType.Custom)
+                    intensity *= light.gxLight.CosAtten[0];
+
+                const lightRadAtten = 15.0/255.0;
+                if (light.gxLight.DistAtten[2] > epsilon) {
+                    if (intensity >= epsilon)
+                        light.radius = Math.sqrt(intensity / (lightRadAtten * light.gxLight.DistAtten[2]));
+                } else if (light.gxLight.DistAtten[1] > epsilon) {
+                    light.radius = intensity / (lightRadAtten * light.gxLight.DistAtten[1]);
+                }
             }
 
             lights.push(light);

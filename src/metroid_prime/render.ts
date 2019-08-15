@@ -13,7 +13,7 @@ import { CMDL } from './cmdl';
 import { TextureMapping } from '../TextureHolder';
 import { GfxDevice, GfxFormat, GfxSampler, GfxMipFilterMode, GfxTexFilterMode, GfxWrapMode } from '../gfx/platform/GfxPlatform';
 import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
-import { makeSortKey, GfxRendererLayer, setSortKeyDepthKey } from '../gfx/render/GfxRenderer';
+import { GfxRenderInst, GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepthKey } from '../gfx/render/GfxRenderer';
 import { computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
 import { LoadedVertexData, LoadedVertexPacket } from '../gx/gx_displaylist';
 import { GXMaterialHacks, Color, lightSetWorldPositionViewMatrix, lightSetWorldDirectionNormalMatrix } from '../gx/gx_material';
@@ -22,7 +22,6 @@ import { colorMult, colorCopy, colorFromRGBA } from '../Color';
 import { texEnvMtx } from '../MathHelpers';
 import { GXShapeHelperGfx, GXRenderHelperGfx, GXMaterialHelperGfx } from '../gx/gx_render';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { GfxRenderInst, GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
 
 const fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = mat4.fromValues(
     1, 0,  0, 0,

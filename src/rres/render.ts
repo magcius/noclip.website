@@ -5,20 +5,19 @@ import * as GX_Material from '../gx/gx_material';
 import { mat4, vec3 } from "gl-matrix";
 import { MaterialParams, GXTextureHolder, ColorKind, translateTexFilterGfx, translateWrapModeGfx, PacketParams, ub_MaterialParams, loadedDataCoalescerComboGfx, fillMaterialParamsDataWithOptimizations } from "../gx/gx_render";
 import { GXShapeHelperGfx, GXMaterialHelperGfx, autoOptimizeMaterial } from "../gx/gx_render";
-import { computeViewMatrix, computeViewMatrixSkybox, Camera, computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
+import { computeViewMatrix, computeViewMatrixSkybox, Camera, computeViewSpaceDepthFromWorldSpaceAABB, texProjCamera } from "../Camera";
 import AnimationController from "../AnimationController";
 import { TextureMapping } from "../TextureHolder";
 import { IntersectionState, AABB } from "../Geometry";
 import { GfxDevice, GfxSampler } from "../gfx/platform/GfxPlatform";
 import { ViewerRenderInput } from "../viewer";
-import { GfxRendererLayer, makeSortKey, setSortKeyDepth, setSortKeyBias } from "../gfx/render/GfxRenderer";
+import { GfxRenderInst, GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth, setSortKeyBias } from "../gfx/render/GfxRenderer";
 import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
 import { nArray } from '../util';
 import { getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
 import { colorCopy } from '../Color';
-import { computeNormalMatrix, texProjPerspMtx, texEnvMtx } from '../MathHelpers';
+import { computeNormalMatrix, texEnvMtx } from '../MathHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { GfxRenderInst, GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
 import { arrayCopy } from '../gfx/platform/GfxPlatformUtil';
 import { LoadedVertexPacket } from '../gx/gx_displaylist';
 
@@ -252,7 +251,7 @@ class MaterialInstance {
         }
 
         if (texSrt.mapMode === BRRES.MapMode.PROJECTION) {
-            texProjPerspMtx(dstPost, camera.fovY, camera.aspect, 0.5, -0.5 * flipYScale, 0.5, 0.5);
+            texProjCamera(dstPost, camera, 0.5, -0.5 * flipYScale, 0.5, 0.5);
 
             // Apply effect matrix.
             mat4.mul(dstPost, texSrt.effectMtx, dstPost);

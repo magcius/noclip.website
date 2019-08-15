@@ -4,7 +4,7 @@ import { BMDModelInstance } from "../render";
 import { Camera } from "../../Camera";
 import { GfxDevice } from "../../gfx/platform/GfxPlatform";
 import { DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu } from "./NameObj";
-import { GfxRenderInstManager } from "../../gfx/render/GfxRenderer2";
+import { GfxRenderInstManager } from "../../gfx/render/GfxRenderer";
 
 export const enum DrawBufferFlags {
     // TODO(jstpierre): Fill in.

@@ -18,7 +18,7 @@ import { FLVERData, MSBRenderer } from "./render";
 import { Panel, LayerPanel } from "../ui";
 import { SceneContext } from "../SceneBase";
 import * as MTD from "./mtd";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer2";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { GfxRenderDynamicUniformBuffer } from "../gfx/render/GfxRenderDynamicUniformBuffer";
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 

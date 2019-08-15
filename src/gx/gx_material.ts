@@ -3,7 +3,7 @@
 
 import * as GX from './gx_enum';
 
-import { DeviceProgram, DeviceProgramReflection } from '../Program';
+import { DeviceProgram } from '../Program';
 import { colorCopy, colorFromRGBA } from '../Color';
 import { GfxFormat } from '../gfx/platform/GfxPlatformFormat';
 import { GfxCompareMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
@@ -393,7 +393,7 @@ export class GX_Program extends DeviceProgram {
 
         switch (chan.attenuationFunction) {
         case GX.AttenuationFunction.NONE: return `1.0`;
-        case GX.AttenuationFunction.SPOT: return `max(${cosAttn} / max(dot(${lightName}.DistAtten.xyz, vec3(1.0, t_LightDeltaDist2, t_LightDeltaDist)), 0.0), 0.0)`;
+        case GX.AttenuationFunction.SPOT: return `max(${cosAttn} / max(dot(${lightName}.DistAtten.xyz, vec3(1.0, t_LightDeltaDist, t_LightDeltaDist2)), 0.0), 0.0)`;
         case GX.AttenuationFunction.SPEC: return `max(${cosAttn} / ApplyCubic(${lightName}.DistAtten.xyz, ${attn}), 0.0)`;
         }
     }
@@ -1073,9 +1073,6 @@ export class GX_Program extends DeviceProgram {
         else
             return this.generateMulPntMatrixStatic(GX.TexGenMatrix.PNMTX0, src);
     }
-
-    // Program reflection with standard configuration for legacy renderer.
-    public static programReflection: DeviceProgramReflection = DeviceProgram.parseReflectionDefinitions(generateBindingsDefinition({}));
 
     private generateShaders() {
         const bindingsDefinition = generateBindingsDefinition(this.material);

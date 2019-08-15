@@ -9,7 +9,7 @@ import * as GX_Material from '../gx/gx_material';
 import { PacketParams, ColorKind, translateTexFilterGfx, translateWrapModeGfx, ub_MaterialParams, loadTextureFromMipChain, loadedDataCoalescerComboGfx, MaterialParams, fillIndTexMtx, fillMaterialParamsDataWithOptimizations } from '../gx/gx_render';
 import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../gx/gx_render';
 
-import { computeViewMatrix, Camera, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
+import { computeViewMatrix, Camera, computeViewSpaceDepthFromWorldSpaceAABB, texProjCamera } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
 import AnimationController from '../AnimationController';
 import { nArray, assert } from '../util';
@@ -17,13 +17,11 @@ import { AABB } from '../Geometry';
 import { GfxDevice, GfxSampler, GfxTexture } from '../gfx/platform/GfxPlatform';
 import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
 import { ViewerRenderInput, Texture } from '../viewer';
-import { setSortKeyDepth, GfxRendererLayer, setSortKeyBias, setSortKeyLayer } from '../gfx/render/GfxRenderer';
-import { GfxRenderInst, GfxRenderInstManager } from '../gfx/render/GfxRenderer2';
+import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, setSortKeyBias, setSortKeyLayer } from '../gfx/render/GfxRenderer';
 import { colorCopy, Color } from '../Color';
-import { computeNormalMatrix, texProjPerspMtx, texEnvMtx } from '../MathHelpers';
+import { computeNormalMatrix, texEnvMtx } from '../MathHelpers';
 import { calcMipChain } from '../gx/gx_texture';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import ArrayBufferSlice from '../ArrayBufferSlice';
 
 export class ShapeInstanceState {
     // One matrix for each joint, which transform into world space.
@@ -588,7 +586,7 @@ export class MaterialInstance {
                     // In Galaxy, this is done in ViewProjmapEffectMtxSetter.
 
                     // Replaces the effectMatrix (this->_24). B8 is built into this call, as well.
-                    texProjPerspMtx(tmp48, camera.fovY, camera.aspect, 0.5, -0.5 * flipYScale, 0.5, 0.5);
+                    texProjCamera(tmp48, camera, 0.5, -0.5 * flipYScale, 0.5, 0.5);
                     // J3DMtxProjConcat(_88, this->_24, _48)
                     J3DMtxProjConcat(tmp48, tmp88, tmp48);
                 } else if (matrixMode === 0x08) {

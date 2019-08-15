@@ -12,7 +12,7 @@ import AnimationController from '../AnimationController';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GXMaterialHacks } from '../gx/gx_material';
-import { executeOnPass } from '../gfx/render/GfxRenderer2';
+import { executeOnPass } from '../gfx/render/GfxRenderer';
 import { SceneContext } from '../SceneBase';
 
 interface MapEntry {

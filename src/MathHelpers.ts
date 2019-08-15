@@ -149,6 +149,32 @@ export function texProjPerspMtx(dst: mat4, fov: number, aspect: number, scaleS: 
     dst[15] = 9999.0;
 }
 
+export function texProjOrthoMtx(dst: mat4, l: number, r: number, b: number, t: number, scaleS: number, scaleT: number, transS: number, transT: number): void {
+    const lr = 1.0 / (r - l);
+    dst[0] = 2 * lr * scaleS;
+    dst[4] = 0.0;
+    dst[8] = 0.0;
+    dst[12] = -(r + l) * lr * scaleS + transS;
+
+    const tb = 1.0 / (t - b);
+    dst[1] = 0.0;
+    dst[5] = 2 * tb * scaleT;
+    dst[9] = 0.0;
+    dst[13] = -(t + b) * tb * scaleT + transT;
+
+    dst[2] = 0.0;
+    dst[6] = 0.0;
+    dst[10] = 0.0;
+    dst[14] = 1.0;
+
+    // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
+    // since this is supposed to generate a mat4x3 matrix.
+    dst[3] = 9999.0;
+    dst[7] = 9999.0;
+    dst[11] = 9999.0;
+    dst[15] = 9999.0;
+}
+
 export function texEnvMtx(dst: mat4, scaleS: number, scaleT: number, transS: number, transT: number) {
     dst[0] = scaleS;
     dst[4] = 0.0;
@@ -227,9 +253,9 @@ export function lerp(a: number, b: number, t: number): number {
 }
 
 // https://gist.github.com/shaunlebron/8832585
-export function lerpAngle(v0: number, v1: number, t: number): number {
-    const da = (v1 - v0) % 1.0;
-    const dist = (2*da) % 1.0 - da;
+export function lerpAngle(v0: number, v1: number, t: number, maxAngle: number = MathConstants.TAU): number {
+    const da = (v1 - v0) % maxAngle;
+    const dist = (2*da) % maxAngle - da;
     return v0 + dist * t;
 }
 
@@ -260,6 +286,28 @@ export function computeProjectionMatrixFromFrustum(m: mat4, left: number, right:
         m[10] = -1;
         m[14] = -2 * near;
     }
+}
+
+export function computeProjectionMatrixFromCuboid(m: mat4, left: number, right: number, bottom: number, top: number, near: number, far: number) {
+    const rl = 1 / (right - left);
+    const tb = 1 / (top - bottom);
+    const nf = 1 / (near - far);
+    m[0] = 2 * rl;
+    m[1] = 0;
+    m[2] = 0;
+    m[3] = 0;
+    m[4] = 0;
+    m[5] = 2 * tb;
+    m[6] = 0;
+    m[7] = 0;
+    m[8] = 0;
+    m[9] = 0;
+    m[10] = 2 * nf;
+    m[11] = 0;
+    m[12] = -(right + left) * rl;
+    m[13] = -(top + bottom) * tb;
+    m[14] = (far + near) * nf;
+    m[15] = 1;
 }
 
 export function computeEulerAngleRotationFromSRTMatrix(dst: vec3, m: mat4): void {

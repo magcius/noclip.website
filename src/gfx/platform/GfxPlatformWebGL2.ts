@@ -1037,7 +1037,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             gl.bindVertexArray(this._currentBoundVAO);
         }
 
-        assert(program.deviceProgram.uniformBufferLayouts.length === bindingLayouts.numUniformBuffers);
         return pipeline;
     }
 
