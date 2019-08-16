@@ -49,7 +49,7 @@ export class PacketParams {
     public u_PosMtx: mat4[] = nArray(10, () => mat4.create());
 
     public clear(): void {
-        for (let i = 0; i < 8; i++)
+        for (let i = 0; i < 10; i++)
             mat4.identity(this.u_PosMtx[i]);
     }
 }
