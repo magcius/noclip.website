@@ -2,7 +2,7 @@
 // Misc actors that aren't big enough to have their own file.
 
 import { LightType } from './DrawBuffer';
-import { SceneObjHolder, LiveActor, ZoneAndLayer, getObjectName, startBtkIfExist, startBvaIfExist, WorldmapPointInfo, startBrkIfExist, getDeltaTimeFrames, getTimeFrames, startBck, startBpkIfExist, startBtpIfExist, NameObjFactory, Dot } from './smg_scenes';
+import { SceneObjHolder, ZoneAndLayer, getObjectName, WorldmapPointInfo, getDeltaTimeFrames, getTimeFrames, Dot } from './smg_scenes';
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg6, getJMapInfoArg7 } from './JMapInfo';
 import { mat4, vec3 } from 'gl-matrix';
 import AnimationController from '../../AnimationController';
@@ -17,6 +17,7 @@ import { BMDModelInstance } from '../render';
 import { assertExists } from '../../util';
 import { Camera } from '../../Camera';
 import { isGreaterStep, isFirstStep, calcNerveRate } from './Spine';
+import { LiveActor, startBck, startBtkIfExist, startBrkIfExist, startBvaIfExist, startBpkIfExist } from './LiveActor';
 
 export function connectToScene(sceneObjHolder: SceneObjHolder, actor: LiveActor, movementType: MovementType, calcAnimType: CalcAnimType, drawBufferType: DrawBufferType, drawType: DrawType): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, movementType, calcAnimType, drawBufferType, drawType);
