@@ -660,6 +660,9 @@ export class StarPiece extends LiveActor {
 
 export class EarthenPipe extends LiveActor {
     private pipeStream: PartsModel | null = null;
+    private scaleY: number;
+    private axisY = vec3.create();
+    private origTranslation = vec3.create();
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, getObjectName(infoIter));
@@ -676,14 +679,33 @@ export class EarthenPipe extends LiveActor {
 
         this.initEffectKeeper(sceneObjHolder, null);
 
-        const isHidden = getJMapInfoArg2(infoIter, 0);
-        if (isHidden !== 0)
+        const hiddenFlag = getJMapInfoArg2(infoIter, -1);
+        if (hiddenFlag > 0)
             hideModel(this);
+
+        vec3.copy(this.origTranslation, this.translation);
+
+        const obeyLocalGravity = getJMapInfoArg7(infoIter, -1);
+        if (false && obeyLocalGravity) {
+            // TODO(jstpierre): Compute gravity vectors
+        } else {
+            calcUpVec(this.axisY, this);
+        }
+
+        this.scaleY = 100 * this.scale[1];
+        this.scale[1] = 1.0;
+        this.calcTrans();
 
         if (this.name === "EarthenPipeInWater") {
             this.pipeStream = createPartsModelMapObj(sceneObjHolder, this, "EarthenPipeStream");
             this.pipeStream.tryStartAllAnim("EarthenPipeStream");
         }
+    }
+
+    private calcTrans(): void {
+        vec3.copy(this.translation, this.axisY);
+        vec3.scale(this.translation, this.translation, this.scaleY);
+        vec3.add(this.translation, this.translation, this.origTranslation);
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {

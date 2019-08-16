@@ -1,7 +1,7 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
-import { assert, assertExists, align, nArray } from '../../util';
+import { assert, assertExists, align, nArray, hexzero } from '../../util';
 import { DataFetcher, DataFetcherFlags } from '../../DataFetcher';
 import { MathConstants, computeModelMatrixSRT, lerp, computeNormalMatrix, clamp, computeEulerAngleRotationFromSRTMatrix } from '../../MathHelpers';
 import { getPointBezier } from '../../Spline';
@@ -1600,7 +1600,7 @@ class SMGSpawner {
         };
 
         const name = objinfo.objName;
-        switch (objinfo.objName) {
+        switch (name) {
         case 'PeachCastleTownAfterAttack':
             // Don't show. We want the pristine town state.
             return;
@@ -1799,16 +1799,16 @@ class SMGSpawner {
             });
             break;
         case 'PlantA':
-            spawnGraph(`PlantA00`);
+            spawnGraph(`PlantA${hexzero(infoIter.getValueNumber('ShapeModelNo'), 2)}`);
             break;
         case 'PlantB':
-            spawnGraph(`PlantB00`);
+            spawnGraph(`PlantB${hexzero(infoIter.getValueNumber('ShapeModelNo'), 2)}`);
             break;
         case 'PlantC':
-            spawnGraph(`PlantC00`);
+            spawnGraph(`PlantC${hexzero(infoIter.getValueNumber('ShapeModelNo'), 2)}`);
             break;
         case 'PlantD':
-            spawnGraph(`PlantD01`);
+            spawnGraph(`PlantD${hexzero(infoIter.getValueNumber('ShapeModelNo'), 2)}`);
             break;
         case 'BenefitItemOneUp':
             spawnGraph(`KinokoOneUp`);
