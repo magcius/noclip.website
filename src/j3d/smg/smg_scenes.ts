@@ -33,7 +33,7 @@ import { LightDataHolder } from './LightData';
 import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType } from './NameObj';
 import { EffectSystem } from './EffectSystem';
 
-import { NPCDirector, MiniRoutePoint, createModelObjMapObj, bindColorChangeAnimation, bindTexChangeAnimation, isExistIndirectTexture, connectToSceneIndirectMapObjStrongLight, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneBloom, MiniRouteGalaxy, MiniRoutePart } from './Actors';
+import { NPCDirector, MiniRoutePoint, createModelObjMapObj, bindColorChangeAnimation, bindTexChangeAnimation, isExistIndirectTexture, connectToSceneIndirectMapObjStrongLight, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneBloom, MiniRouteGalaxy, MiniRoutePart, emitEffect } from './Actors';
 import { getNameObjTableEntry, PlanetMapCreator } from './ActorTable';
 import { LiveActor, setTextureMappingIndirect, startBck, startBrkIfExist, startBtkIfExist, startBckIfExist, startBvaIfExist } from './LiveActor';
 
@@ -1577,6 +1577,10 @@ class SMGSpawner {
         case 'WanwanRolling':
             spawnGraph(name, SceneGraphTag.Normal, { });
             break;
+        case 'PhantomCandlestand':
+            spawnGraph(name).then(([node, rarc]) => {
+                emitEffect(this.sceneObjHolder, node, 'Fire');
+            });
         default:
             spawnGraph(name);
             break;
