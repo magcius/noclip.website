@@ -180,30 +180,45 @@ class MaterialInstance {
         this.materialHelper.setMaterialHacks(materialHacks);
     }
 
-    public bindSRT0(animationController: AnimationController, srt0: BRRES.SRT0): void {
-        const material = this.materialData.material;
-        for (let i: BRRES.TexMtxIndex = 0; i < BRRES.TexMtxIndex.COUNT; i++) {
-            const srtAnimator = BRRES.bindSRT0Animator(animationController, srt0, material.name, i);
-            if (srtAnimator)
-                this.srt0Animators[i] = srtAnimator;
+    public bindSRT0(animationController: AnimationController | null, srt0: BRRES.SRT0 | null): void {
+        if (srt0 !== null) {
+            const material = this.materialData.material;
+            for (let i: BRRES.TexMtxIndex = 0; i < BRRES.TexMtxIndex.COUNT; i++) {
+                const srtAnimator = BRRES.bindSRT0Animator(animationController, srt0, material.name, i);
+                if (srtAnimator)
+                    this.srt0Animators[i] = srtAnimator;
+            }
+        } else {
+            for (let i: BRRES.TexMtxIndex = 0; i < BRRES.TexMtxIndex.COUNT; i++)
+                this.srt0Animators[i] = null;
         }
     }
 
-    public bindPAT0(animationController: AnimationController, pat0: BRRES.PAT0): void {
-        const material = this.materialData.material;
-        for (let i = 0; i < 8; i++) {
-            const patAnimator = BRRES.bindPAT0Animator(animationController, pat0, material.name, i);
-            if (patAnimator)
-                this.pat0Animators[i] = patAnimator;
+    public bindPAT0(animationController: AnimationController | null, pat0: BRRES.PAT0 | null): void {
+        if (pat0 !== null) {
+            const material = this.materialData.material;
+            for (let i = 0; i < 8; i++) {
+                const patAnimator = BRRES.bindPAT0Animator(animationController, pat0, material.name, i);
+                if (patAnimator)
+                    this.pat0Animators[i] = patAnimator;
+            }
+        } else {
+            for (let i = 0; i < 8; i++)
+                this.pat0Animators[i] = null;
         }
     }
 
-    public bindCLR0(animationController: AnimationController, clr0: BRRES.CLR0): void {
-        const material = this.materialData.material;
-        for (let i = 0; i < BRRES.AnimatableColor.COUNT; i++) {
-            const clrAnimator = BRRES.bindCLR0Animator(animationController, clr0, material.name, i);
-            if (clrAnimator)
-                this.clr0Animators[i] = clrAnimator;
+    public bindCLR0(animationController: AnimationController | null, clr0: BRRES.CLR0 | null): void {
+        if (clr0 !== null) {
+            const material = this.materialData.material;
+            for (let i = 0; i < BRRES.AnimatableColor.COUNT; i++) {
+                const clrAnimator = BRRES.bindCLR0Animator(animationController, clr0, material.name, i);
+                if (clrAnimator)
+                    this.clr0Animators[i] = clrAnimator;
+            }
+        } else {
+            for (let i = 0; i < BRRES.AnimatableColor.COUNT; i++)
+                this.clr0Animators[i] = null;
         }
     }
 
@@ -596,17 +611,17 @@ export class MDL0ModelInstance {
      * @param animationController An {@link AnimationController} to control the progress of this animation to.
      * By default, this will default to this instance's own {@member animationController}.
      */
-    public bindSRT0(animationController: AnimationController, srt0: BRRES.SRT0): void {
+    public bindSRT0(animationController: AnimationController | null, srt0: BRRES.SRT0 | null): void {
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].bindSRT0(animationController, srt0);
     }
 
-    public bindPAT0(animationController: AnimationController, pat0: BRRES.PAT0): void {
+    public bindPAT0(animationController: AnimationController | null, pat0: BRRES.PAT0 | null): void {
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].bindPAT0(animationController, pat0);
     }
 
-    public bindCLR0(animationController: AnimationController, clr0: BRRES.CLR0): void {
+    public bindCLR0(animationController: AnimationController | null, clr0: BRRES.CLR0 | null): void {
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].bindCLR0(animationController, clr0);
     }

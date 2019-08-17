@@ -554,6 +554,13 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
             spawnObject(`bblock1`);
         } else if (gobj.objectId === 0x020e) { // ami
             spawnObject(`ami`);
+        } else if (gobj.objectId === 0x0211) { // RM_ring1
+            const ringNames = ['RM_ring1', 'RM_ring2', 'RM_ring3'];
+            const ringName = ringNames[gobj.objectArg0 - 1];
+            const b = spawnObject(`RM_ring1`, ringName);
+            const rres = getRRES(`RM_ring1`);
+            b.bindRRESAnimations(renderer.animationController, rres, ringName);
+            b.bindCLR0(null, null);
         //} else if (gobj.objectId === 0x0212) { // FlamePole_v
         //    spawnObject(`FlamePole_v`);
         } else if (gobj.objectId === 0x0214) { // InsekiA
