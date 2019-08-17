@@ -217,13 +217,14 @@ export class BINModelPartInstance {
 
         this.megaStateFlags = {
             depthCompare: reverseDepthForCompareMode(translateDepthCompareMode(ztst)),
-            blendMode: GfxBlendMode.ADD,
         };
 
         if (gsConfiguration.alpha_1_data0 === 0x44) {
+            this.megaStateFlags.blendMode = GfxBlendMode.ADD;
             this.megaStateFlags.blendSrcFactor = GfxBlendFactor.SRC_ALPHA;
             this.megaStateFlags.blendDstFactor = GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
         } else if (gsConfiguration.alpha_1_data0 === 0x48) {
+            this.megaStateFlags.blendMode = GfxBlendMode.ADD;
             this.megaStateFlags.blendSrcFactor = GfxBlendFactor.SRC_ALPHA;
             this.megaStateFlags.blendDstFactor = GfxBlendFactor.ONE;
         } else {
