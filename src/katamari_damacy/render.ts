@@ -231,13 +231,6 @@ export class BINModelPartInstance {
             throw "whoops";
         }
 
-        const alpa = (gsConfiguration.alpha_1_data0 >>> 0) & 0x03;
-        const alpb = (gsConfiguration.alpha_1_data0 >>> 2) & 0x03;
-        const alpc = (gsConfiguration.alpha_1_data0 >>> 4) & 0x03;
-        const alpd = (gsConfiguration.alpha_1_data0 >>> 6) & 0x03;
-
-        console.log(gsConfiguration.alpha_1_data0.toString(16), alpa, alpb, alpc, alpd);
-
         if (this.binModelPart.textureName !== null) {
             this.hasDynamicTexture = this.binModelPart.textureName.endsWith('/0000/0000');
             if (!this.hasDynamicTexture)
