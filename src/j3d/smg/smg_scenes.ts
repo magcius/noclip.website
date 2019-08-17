@@ -1593,6 +1593,7 @@ class SMGSpawner {
 
     private placeStageData(stageDataHolder: StageDataHolder): ZoneNode {
         const zoneNode = new ZoneNode(stageDataHolder);
+        assert(this.zones[stageDataHolder.zoneId] === undefined);
         this.zones[stageDataHolder.zoneId] = zoneNode;
 
         const legacyPaths = stageDataHolder.legacyParsePaths();
@@ -1796,7 +1797,7 @@ class StageDataHolder {
 
     constructor(sceneDesc: SMGSceneDescBase, modelCache: ModelCache, scenarioData: ScenarioData, public zoneName: string, public zoneId: number, public layerId: LayerId = -1) {
         this.zoneArchive = sceneDesc.getZoneMapArchive(modelCache, zoneName);
-        this.createLocalStageDataHolder(sceneDesc, modelCache, scenarioData);
+        this.createLocalStageDataHolders(sceneDesc, modelCache, scenarioData);
     }
 
     private createCsvParser(buffer: ArrayBufferSlice): JMapInfoIter {
@@ -1900,7 +1901,9 @@ class StageDataHolder {
         }
     }
 
-    public createLocalStageDataHolder(sceneDesc: SMGSceneDescBase, modelCache: ModelCache, scenarioData: ScenarioData): void {
+    public createLocalStageDataHolders(sceneDesc: SMGSceneDescBase, modelCache: ModelCache, scenarioData: ScenarioData): void {
+        let currentZoneId = this.zoneId + 1;
+
         for (let i = LayerId.COMMON; i <= LayerId.LAYER_MAX; i++) {
             const layerDirName = getLayerDirName(i);
             const stageObjInfo = this.zoneArchive.findFileData(`jmp/placement/${layerDirName}/StageObjInfo`);
@@ -1913,8 +1916,9 @@ class StageDataHolder {
             for (let j = 0; j < mapInfoIter.getNumRecords(); j++) {
                 mapInfoIter.setRecord(j);
                 const zoneName = getObjectName(mapInfoIter);
-                const zoneId = scenarioData.zoneNames.indexOf(zoneName);
+                const zoneId = currentZoneId++;
                 const localStage = new StageDataHolder(sceneDesc, modelCache, scenarioData, zoneName, zoneId, i);
+                currentZoneId += localStage.localStageDataHolders.length;
                 localStage.calcPlacementMtx(mapInfoIter);
                 this.localStageDataHolders.push(localStage);
             }
