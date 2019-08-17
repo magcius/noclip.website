@@ -908,7 +908,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
 
                     const indexRunData = indexData.slice(0, indexDataIdx);
                     const textureName = currentTextureName;
-                    const gsConfiguration = currentGSConfiguration;
+                    const gsConfiguration: GSConfiguration = Object.assign({}, currentGSConfiguration);
                     modelVertexRuns.push({ vertexRunData, vertexRunCount, indexRunData, vertexRunColor, textureName, gsConfiguration });
                 }
 
@@ -963,7 +963,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
 
             // TODO(jstpierre): Texture settings
             if (!modelPartsCompatible) {
-                currentModelPart = { diffuseColor: vertexRun.vertexRunColor, indexOffset: indexDst, indexCount: 0, textureName: vertexRun.textureName, gsConfiguration: currentGSConfiguration };
+                currentModelPart = { diffuseColor: vertexRun.vertexRunColor, indexOffset: indexDst, indexCount: 0, textureName: vertexRun.textureName, gsConfiguration: vertexRun.gsConfiguration };
                 modelParts.push(currentModelPart);
             }
 

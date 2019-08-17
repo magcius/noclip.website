@@ -219,7 +219,9 @@ export class BINModelPartInstance {
             depthCompare: reverseDepthForCompareMode(translateDepthCompareMode(ztst)),
         };
 
-        if (gsConfiguration.alpha_1_data0 === 0x44) {
+        if (gsConfiguration.alpha_1_data0 === -1) {
+            // Do nothing? Not sure what the default is...
+        } else if (gsConfiguration.alpha_1_data0 === 0x44) {
             this.megaStateFlags.blendMode = GfxBlendMode.ADD;
             this.megaStateFlags.blendSrcFactor = GfxBlendFactor.SRC_ALPHA;
             this.megaStateFlags.blendDstFactor = GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
