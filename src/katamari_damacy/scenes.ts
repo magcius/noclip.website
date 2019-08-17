@@ -131,7 +131,7 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
 ];
 
 class KatamariDamacyRenderer implements Viewer.SceneGfx {
-    private currentAreaNo: number;
+    private currentAreaNo: number = 0;
     private sceneTexture = new ColorTexture();
     public renderTarget = new BasicRenderTarget();
     public renderHelper: GfxRenderHelper;
@@ -222,7 +222,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
             const areaNo = this.missionSetupBin.activeStageAreas[index];
             this.setCurrentAreaNo(areaNo);
         };
-        areaSelect.selectItem(0);
+        areaSelect.selectItem(this.currentAreaNo);
         areasPanel.contents.appendChild(areaSelect.elem);
 
         return [areasPanel];
@@ -334,7 +334,7 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
             }
 
             if (this.initialAreaNo !== -1)
-                renderer.setCurrentAreaNo(this.initialAreaNo);
+                renderer.setCurrentAreaNo(missionSetupBin.activeStageAreas[this.initialAreaNo]);
 
             return renderer;
         });
