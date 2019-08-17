@@ -398,6 +398,11 @@ const sceneDescs = [
 
     // Make the North Star seems to have a dummy mission setup as the first area... just display the other one by default...
     new KatamariLevelSceneDesc('clvl9', "Make the North Star",   worldStageAreaGroup, ['144633', '1447b1', '1449ba', '144b78'], 1),
+
+    "Unused Levels",
+    new KatamariLevelSceneDesc('snow', "Snow", [
+        { texFile: '135042', modelFile: '135adb' },
+    ], ['13d9b1', '13d9b3', '13d9b5', '13d9b8']),
 ];
 const sceneIdMap = new Map<string, string>();
 // When I first was testing Katamari, I was testing the Tutorial Level. At some point

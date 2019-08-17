@@ -44,6 +44,7 @@ const enum GSRegister {
     TEX0_1  = 0x06,
     CLAMP_1 = 0x08,
     TEX1_1  = 0x14,
+    TEX2_1  = 0x16,
     ALPHA_1 = 0x42,
     TEST_1  = 0x47,
 }
@@ -850,6 +851,8 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
                     } else if (addr === GSRegister.TEX1_1) {
                         currentGSConfiguration.tex1_1_data0 = data0;
                         currentGSConfiguration.tex1_1_data1 = data1;
+                    } else if (addr === GSRegister.TEX2_1) {
+                        // We don't need this.
                     } else if (addr === GSRegister.CLAMP_1) {
                         currentGSConfiguration.clamp_1_data0 = data0;
                         currentGSConfiguration.clamp_1_data1 = data1;
