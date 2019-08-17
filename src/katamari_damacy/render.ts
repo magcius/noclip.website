@@ -1,5 +1,5 @@
 
-import { GfxDevice, GfxBuffer, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxCompareMode, makeTextureDescriptor2D, GfxProgram, GfxMegaStateDescriptor } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxBuffer, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxCompareMode, makeTextureDescriptor2D, GfxProgram, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor } from "../gfx/platform/GfxPlatform";
 import { BINModel, BINTexture, BINModelSector, BINModelPart, GSPixelStorageFormat, psmToString, GSConfiguration, GSTextureFunction, GSAlphaCompareMode, GSDepthCompareMode, GSAlphaFailMode, GSTextureFilter } from "./bin";
 import { DeviceProgram } from "../Program";
 import * as Viewer from "../viewer";
@@ -104,7 +104,7 @@ void main() {
         return `
 ${KatamariDamacyProgram.reflectionDeclarations}
 void main() {
-    vec4 t_Color = vec4(1.0);
+    vec4 t_Color;
 
     t_Color = texture(u_Texture[0], v_TexCoord);
     t_Color.rgba *= u_Color.rgba;
@@ -217,7 +217,25 @@ export class BINModelPartInstance {
 
         this.megaStateFlags = {
             depthCompare: reverseDepthForCompareMode(translateDepthCompareMode(ztst)),
+            blendMode: GfxBlendMode.ADD,
         };
+
+        if (gsConfiguration.alpha_1_data0 === 0x44) {
+            this.megaStateFlags.blendSrcFactor = GfxBlendFactor.SRC_ALPHA;
+            this.megaStateFlags.blendDstFactor = GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
+        } else if (gsConfiguration.alpha_1_data0 === 0x48) {
+            this.megaStateFlags.blendSrcFactor = GfxBlendFactor.SRC_ALPHA;
+            this.megaStateFlags.blendDstFactor = GfxBlendFactor.ONE;
+        } else {
+            throw "whoops";
+        }
+
+        const alpa = (gsConfiguration.alpha_1_data0 >>> 0) & 0x03;
+        const alpb = (gsConfiguration.alpha_1_data0 >>> 2) & 0x03;
+        const alpc = (gsConfiguration.alpha_1_data0 >>> 4) & 0x03;
+        const alpd = (gsConfiguration.alpha_1_data0 >>> 6) & 0x03;
+
+        console.log(gsConfiguration.alpha_1_data0.toString(16), alpa, alpb, alpc, alpd);
 
         if (this.binModelPart.textureName !== null) {
             this.hasDynamicTexture = this.binModelPart.textureName.endsWith('/0000/0000');
