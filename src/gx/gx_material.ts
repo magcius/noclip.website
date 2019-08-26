@@ -60,8 +60,8 @@ export class Light {
     public reset(): void {
         vec3.set(this.Position, 0, 0, 0);
         vec3.set(this.Direction, 0, 0, -1);
-        vec3.set(this.DistAtten, 0, 0, 0);
-        vec3.set(this.CosAtten, 0, 0, 0);
+        vec3.set(this.DistAtten, 1, 0, 0);
+        vec3.set(this.CosAtten, 1, 0, 0);
         colorFromRGBA(this.Color, 0, 0, 0, 1);
     }
 
@@ -388,13 +388,13 @@ export class GX_Program extends DeviceProgram {
     }
 
     private generateLightAttnFn(chan: ColorChannelControl, lightName: string) {
-        const attn = `dot(t_LightDeltaDir, ${lightName}.Direction.xyz)`;
-        const cosAttn = `ApplyCubic(${lightName}.CosAtten.xyz, ${attn})`;
+        const attn = `max(0.0, dot(t_LightDeltaDir, ${lightName}.Direction.xyz))`;
+        const cosAttn = `max(0.0, ApplyCubic(${lightName}.CosAtten.xyz, ${attn}))`;
 
         switch (chan.attenuationFunction) {
         case GX.AttenuationFunction.NONE: return `1.0`;
-        case GX.AttenuationFunction.SPOT: return `max(${cosAttn} / max(dot(${lightName}.DistAtten.xyz, vec3(1.0, t_LightDeltaDist, t_LightDeltaDist2)), 0.0), 0.0)`;
-        case GX.AttenuationFunction.SPEC: return `max(${cosAttn} / ApplyCubic(${lightName}.DistAtten.xyz, ${attn}), 0.0)`;
+        case GX.AttenuationFunction.SPOT: return `${cosAttn} / dot(${lightName}.DistAtten.xyz, vec3(1.0, t_LightDeltaDist, t_LightDeltaDist2))`;
+        case GX.AttenuationFunction.SPEC: return `${cosAttn} / ApplyCubic(${lightName}.DistAtten.xyz, ${attn})`;
         }
     }
 

@@ -5,6 +5,7 @@ import * as GX_Material from '../gx/gx_material';
 import * as GX from '../gx/gx_enum';
 
 import * as Script from './script';
+import * as Collision from './collision';
 import { InputStream } from './stream'
 import { TXTR } from './txtr';
 
@@ -22,6 +23,7 @@ export interface MREA {
     materialSet: MaterialSet;
     worldModels: WorldModel[];
     scriptLayers: Script.ScriptLayer[];
+    collision: Collision.AreaCollision;
     lightLayers: AreaLightLayer[];
 }
 
@@ -574,6 +576,7 @@ export const enum AreaLightType {
 export class AreaLight {
     public type: AreaLightType = AreaLightType.Custom;
     public radius: number = 0;
+    public castShadows: boolean = false;
     public gxLight = new GX_Material.Light();
 }
 
@@ -607,7 +610,9 @@ export function parseLightLayer(stream: InputStream): AreaLightLayer {
         const dirZ = stream.readFloat32();
         const brightness = stream.readFloat32();
         const spotCutoff = stream.readFloat32() / 2;
-        stream.skip(0x9);
+        stream.skip(0x4);
+        const castShadows = stream.readBool();
+        stream.skip(0x4);
         const falloffType = stream.readUint32();
         stream.skip(0x4);
 
@@ -619,6 +624,7 @@ export function parseLightLayer(stream: InputStream): AreaLightLayer {
         } else {
             const light = new AreaLight();
             light.type = lightType;
+            light.castShadows = castShadows;
             light.gxLight.Color.r = lightColorR;
             light.gxLight.Color.g = lightColorG;
             light.gxLight.Color.b = lightColorB;
@@ -626,6 +632,7 @@ export function parseLightLayer(stream: InputStream): AreaLightLayer {
             vec3.set(light.gxLight.Position, posX, posY, posZ);
             vec3.set(light.gxLight.Direction, dirX, dirY, dirZ);
             vec3.normalize(light.gxLight.Direction, light.gxLight.Direction);
+            vec3.negate(light.gxLight.Direction, light.gxLight.Direction);
 
             if (lightType == AreaLightType.Directional) {
                 vec3.set(light.gxLight.DistAtten, 1, 0, 0);
@@ -760,7 +767,9 @@ function parse_MP1(stream: InputStream, resourceSystem: ResourceSystem): MREA {
     const dataSectionCount = stream.readUint32();
     const worldGeometrySectionIndex = stream.readUint32();
     const scriptLayersSectionIndex = stream.readUint32();
-    stream.skip( version === 0x19 ? 0xC : 0x8 );
+    if (version >= 0x19) stream.skip(4);
+    const collisionSectionIndex = stream.readUint32();
+    stream.skip(4);
     const lightsSectionIndex = stream.readUint32();
     stream.skip( version === 0x19 ? 0x14 : 0xC );
     const numCompressedBlocks = ( version === 0x19 ? stream.readUint32() : 0 );
@@ -877,6 +886,11 @@ function parse_MP1(stream: InputStream, resourceSystem: ResourceSystem): MREA {
         }
     }
 
+    // Parse out collision.
+    const collisionOffs = dataSectionOffsTable[collisionSectionIndex];
+    stream.goTo(collisionOffs);
+    const collision = Collision.parseAreaCollision(stream);
+
     // Parse out lights.
     const lightOffs = dataSectionOffsTable[lightsSectionIndex];
     stream.goTo(lightOffs);
@@ -892,7 +906,7 @@ function parse_MP1(stream: InputStream, resourceSystem: ResourceSystem): MREA {
         lightLayers.push(lightLayer);
     }
 
-    return { materialSet, worldModels, scriptLayers, lightLayers };
+    return { materialSet, worldModels, scriptLayers, collision, lightLayers };
 }
 
 export const enum MaterialFlags_MP3 {

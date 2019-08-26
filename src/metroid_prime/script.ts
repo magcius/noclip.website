@@ -81,14 +81,14 @@ export class AnimationParameters {
 
 export const enum WorldLightingOptions {
     Zero = 0,
-    NormalWorld = 1,
+    NormalLighting = 1,
     NoShadowCast = 2,
-    DisableWorld = 3
+    NoWorldLighting = 3
 }
 
 export class LightParameters {
     public ambient: Color = new Color(1, 1, 1, 1);
-    public options: WorldLightingOptions = WorldLightingOptions.NormalWorld;
+    public options: WorldLightingOptions = WorldLightingOptions.NormalLighting;
     public layerIdx: number = 0;
     public maxAreaLights: Number = 4;
 }

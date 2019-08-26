@@ -22,6 +22,7 @@ import { colorMult, colorCopy, colorFromRGBA } from '../Color';
 import { texEnvMtx } from '../MathHelpers';
 import { GXShapeHelperGfx, GXRenderHelperGfx, GXMaterialHelperGfx } from '../gx/gx_render';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { areaCollisionLineCheck } from './collision';
 
 const fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = mat4.fromValues(
     1, 0,  0, 0,
@@ -48,13 +49,15 @@ export const enum RetroPass {
     SKYBOX = 0x02,
 }
 
+const scratchPos = vec3.create();
+
 export class ActorLights {
     public ambient: Color = new Color;
     public lights: AreaLight[] = [];
 
     constructor(actorBounds: AABB, lightParams: LightParameters, mrea: MREA) {
         // DisableWorld indicates the actor doesn't use any area lights (including ambient ones)
-        if (lightParams.options === WorldLightingOptions.DisableWorld) {
+        if (lightParams.options === WorldLightingOptions.NoWorldLighting) {
             colorFromRGBA(this.ambient, 0, 0, 0, 1);
         } else {
             const layerIdx = lightParams.layerIdx;
@@ -71,13 +74,27 @@ export class ActorLights {
                 const light = layer.lights[i];
                 const sqDist = squaredDistanceFromPointToAABB(light.gxLight.Position, actorBounds);
 
-                if (sqDist < (light.radius * light.radius))
-                    actorLights.push({ sqDist, light });
+                if (sqDist < (light.radius * light.radius)) {
+                    // Shadow cast logic
+                    if (light.castShadows && lightParams.options != WorldLightingOptions.NoShadowCast) {
+                        const bb = actorBounds;
+                        const actorPos = scratchPos;
+                        vec3.set(actorPos, (bb.minX + bb.maxX)/2, (bb.minY + bb.maxY)/2, (bb.minZ + bb.maxZ)/2);
+
+                        if (!areaCollisionLineCheck(light.gxLight.Position, actorPos, mrea.collision)) {
+                            actorLights.push({ sqDist, light });
+                        }
+                    }
+                    else {
+                        actorLights.push({ sqDist, light });
+                    }
+                }
             }
 
             actorLights.sort((a, b) => a.sqDist - b.sqDist);
 
-            for (let i = 0; i < actorLights.length && i < lightParams.maxAreaLights && i < 8; i++)
+            // maxAreaLights check removed because currently the light selection logic does not match the game, causing highly influential lights to not render
+            for (let i = 0; i < actorLights.length /*&& i < lightParams.maxAreaLights*/ && i < 8; i++)
                 this.lights.push(actorLights[i].light);
         }
     }
