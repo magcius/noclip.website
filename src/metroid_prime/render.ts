@@ -526,8 +526,6 @@ export class MREARenderer {
                     const aabb = new AABB();
                     aabb.transform(model.bbox, ent.modelMatrix);
 
-                    if (ent.entityId == 0x00202718) debugger;
-
                     const actorLights = new ActorLights(aabb, ent.lightParams, this.mrea);
                     // TODO(jstpierre): Add a ModelCache.
                     const cmdlData = new CMDLData(device, renderHelper, model);

@@ -206,10 +206,10 @@ export function parseMaterialSet(stream: InputStream, resourceSystem: ResourceSy
             const konstCount = stream.readUint32();
 
             for (let j = 0; j < konstCount; j++) {
-                const r = stream.readUint8();
-                const g = stream.readUint8();
-                const b = stream.readUint8();
-                const a = stream.readUint8();
+                const r = stream.readUint8() / 255;
+                const g = stream.readUint8() / 255;
+                const b = stream.readUint8() / 255;
+                const a = stream.readUint8() / 255;
                 colorConstants.push(new GX_Material.Color(r, g, b, a));
             }
         }

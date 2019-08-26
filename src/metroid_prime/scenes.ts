@@ -127,7 +127,7 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
 
 class RetroSceneDesc implements Viewer.SceneDesc {
     public id: string;
-    constructor(public filename: string, public name: string) {
+    constructor(public filename: string, public name: string, public worldName: string = "") {
         this.id = filename;
     }
 
@@ -146,6 +146,10 @@ class RetroSceneDesc implements Viewer.SceneDesc {
 
             for (const mlvlEntry of levelPak.namedResourceTable.values()) {
                 assert(mlvlEntry.fourCC === 'MLVL');
+                if (this.worldName !== "" && this.worldName !== mlvlEntry.name) {
+                    continue;
+                }
+
                 const mlvl: MLVL.MLVL = resourceSystem.loadAssetByID(mlvlEntry.fileID, mlvlEntry.fourCC);
 
                 const renderer = new RetroSceneRenderer(device, mlvl);
@@ -201,7 +205,12 @@ const sceneDescsMP2: Viewer.SceneDesc[] = [
     new RetroSceneDesc(`mp2/Metroid3.pak`, "Agon Wastes"),
     new RetroSceneDesc(`mp2/Metroid4.pak`, "Torvus Bog"),
     new RetroSceneDesc(`mp2/metroid5.pak`, "Sanctuary Fortress"),
-    new RetroSceneDesc(`mp2/Metroid6.pak`, "Multiplayer"),
+    new RetroSceneDesc(`mp2/Metroid6.pak`, "Multiplayer - Sidehopper Station", "M01_SidehopperStation"),
+    new RetroSceneDesc(`mp2/Metroid6.pak`, "Multiplayer - Spires", "M02_Spires"),
+    new RetroSceneDesc(`mp2/Metroid6.pak`, "Multiplayer - Crossfire Chaos", "M03_CrossfireChaos"),
+    new RetroSceneDesc(`mp2/Metroid6.pak`, "Multiplayer - Pipeline", "M04_Pipeline"),
+    new RetroSceneDesc(`mp2/Metroid6.pak`, "Multiplayer - Spider Complex", "M05_SpiderComplex"),
+    new RetroSceneDesc(`mp2/Metroid6.pak`, "Multiplayer - Shooting Gallery", "M06_ShootingGallery"),
 ];
 
 export const sceneGroupMP2: Viewer.SceneGroup = { id: idMP2, name: nameMP2, sceneDescs: sceneDescsMP2 };
