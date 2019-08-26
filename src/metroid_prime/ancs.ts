@@ -44,8 +44,11 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
         const numAnimNames = stream.readUint32();
 
         for (let nameIdx = 0; nameIdx < numAnimNames; nameIdx++) {
-            stream.skip(5);
-            stream.readString();
+            const animID = stream.readUint32();
+            if (charVersion < 10) {
+                const unk = stream.readString();
+            }
+            const animName = stream.readString();
         }
 
         const pas4 = stream.readFourCC();
@@ -112,7 +115,13 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
                 for (let componentIdx = 0; componentIdx < numComponents; componentIdx++) {
                     const componentName = stream.readString();
                     stream.skip(8);
-                    const locatorBoneName = stream.readString();
+                    // Bone name in MP1, bone ID in MP2
+                    if (charVersion >= 10) {
+                        stream.skip(4);
+                    }
+                    else {
+                        const locatorBoneName = stream.readString();
+                    }   
                     stream.skip(12);
                 }
             }

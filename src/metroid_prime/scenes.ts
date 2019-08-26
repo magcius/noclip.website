@@ -11,7 +11,7 @@ import { assert } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import * as BYML from '../byml';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
-import { standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
+import { transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
 import { mat4 } from 'gl-matrix';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { SceneContext } from '../SceneBase';
@@ -24,6 +24,7 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
     public areaRenderers: MREARenderer[] = [];
     public cmdlRenderers: CMDLRenderer[] = [];
     public cmdlData: CMDLData[] = [];
+    public defaultSkyRenderer: CMDLRenderer = null;
 
     constructor(device: GfxDevice, public mlvl: MLVL.MLVL, public textureHolder = new RetroTextureHolder()) {
         this.renderHelper = new GXRenderHelperGfx(device);
@@ -43,8 +44,39 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
             this.areaRenderers[i].prepareToRender(device, this.renderHelper, viewerInput);
         for (let i = 0; i < this.cmdlRenderers.length; i++)
             this.cmdlRenderers[i].prepareToRender(device, this.renderHelper, viewerInput);
+        this.prepareToRenderSkybox(device, viewerInput);
         this.renderHelper.prepareToRender(device, hostAccessPass);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
+    }
+
+    private prepareToRenderSkybox(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
+        // set all skyboxes to invisible
+        if (this.defaultSkyRenderer !== null) {
+            this.defaultSkyRenderer.setVisible(false);
+        }
+        for (let i = 0; i < this.areaRenderers.length; i++) {
+            if (this.areaRenderers[i].overrideSky !== null) {
+                this.areaRenderers[i].overrideSky.setVisible(false);
+            }
+        }
+
+        // pick an active skybox and render it
+        let skybox: CMDLRenderer = null;
+        for (let i = 0; i < this.areaRenderers.length; i++) {
+            if (this.areaRenderers[i].visible && this.areaRenderers[i].needSky) {
+                if (this.areaRenderers[i].overrideSky !== null) {
+                    skybox = this.areaRenderers[i].overrideSky;
+                }
+                else {
+                    skybox = this.defaultSkyRenderer;
+                }
+                break;
+            }
+        }
+        if (skybox !== null) {
+            skybox.setVisible(true);
+            skybox.prepareToRender(device, this.renderHelper, viewerInput);
+        }
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
@@ -57,7 +89,7 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
 
         // First, render the skybox.
-        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
+        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, transparentBlackFullClearRenderPassDescriptor);
         skyboxPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
         renderInstManager.setVisibleByFilterKeyExact(RetroPass.SKYBOX);
         renderInstManager.drawOnPassRenderer(device, skyboxPassRenderer);
@@ -119,15 +151,13 @@ class RetroSceneDesc implements Viewer.SceneDesc {
                 const renderer = new RetroSceneRenderer(device, mlvl);
 
                 const areas = mlvl.areaTable;
-                let skyboxRenderer: CMDLRenderer = null;
-                const skyboxCMDL = resourceSystem.loadAssetByID(mlvl.defaultSkyboxID, 'CMDL');
-                if (skyboxCMDL) {
-                    const skyboxName = resourceSystem.findResourceNameByID(mlvl.defaultSkyboxID);
-                    const skyboxCMDLData = new CMDLData(device, renderer.renderHelper, skyboxCMDL);
-                    renderer.cmdlData.push(skyboxCMDLData);
-                    skyboxRenderer = new CMDLRenderer(device, renderer.renderHelper, renderer.textureHolder, null, skyboxName, mat4.create(), skyboxCMDLData);
-                    skyboxRenderer.isSkybox = true;
-                    renderer.cmdlRenderers.push(skyboxRenderer);
+                const defaultSkyboxCMDL = resourceSystem.loadAssetByID(mlvl.defaultSkyboxID, 'CMDL');
+                if (defaultSkyboxCMDL) {
+                    const defaultSkyboxName = resourceSystem.findResourceNameByID(mlvl.defaultSkyboxID);
+                    const defaultSkyboxCMDLData = new CMDLData(device, renderer.renderHelper, defaultSkyboxCMDL);
+                    const defaultSkyboxRenderer = new CMDLRenderer(device, renderer.renderHelper, renderer.textureHolder, null, defaultSkyboxName, mat4.create(), defaultSkyboxCMDLData);
+                    defaultSkyboxRenderer.isSkybox = true;
+                    renderer.defaultSkyRenderer = defaultSkyboxRenderer;
                 }
 
                 for (let i = 0; i < areas.length; i++) {

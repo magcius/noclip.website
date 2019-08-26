@@ -413,6 +413,14 @@ export function parseMaterialSet(stream: InputStream, resourceSystem: ResourceSy
 }
 
 export const vtxAttrFormats = [
+    { vtxAttrib: GX.VertexAttribute.PNMTXIDX,   type: GX.AttrType.DIRECT, mask: 0x01000000 },
+    { vtxAttrib: GX.VertexAttribute.TEX0MTXIDX, type: GX.AttrType.DIRECT, mask: 0x02000000 },
+    { vtxAttrib: GX.VertexAttribute.TEX1MTXIDX, type: GX.AttrType.DIRECT, mask: 0x04000000 },
+    { vtxAttrib: GX.VertexAttribute.TEX2MTXIDX, type: GX.AttrType.DIRECT, mask: 0x08000000 },
+    { vtxAttrib: GX.VertexAttribute.TEX3MTXIDX, type: GX.AttrType.DIRECT, mask: 0x10000000 },
+    { vtxAttrib: GX.VertexAttribute.TEX4MTXIDX, type: GX.AttrType.DIRECT, mask: 0x20000000 },
+    { vtxAttrib: GX.VertexAttribute.TEX5MTXIDX, type: GX.AttrType.DIRECT, mask: 0x40000000 },
+    { vtxAttrib: GX.VertexAttribute.TEX6MTXIDX, type: GX.AttrType.DIRECT, mask: 0x80000000 },
     { vtxAttrib: GX.VertexAttribute.POS,  type: GX.AttrType.INDEX16, mask: 0x00000003 },
     { vtxAttrib: GX.VertexAttribute.NRM,  type: GX.AttrType.INDEX16, mask: 0x0000000C },
     { vtxAttrib: GX.VertexAttribute.CLR0, type: GX.AttrType.INDEX16, mask: 0x00000030 },
@@ -424,14 +432,6 @@ export const vtxAttrFormats = [
     { vtxAttrib: GX.VertexAttribute.TEX4, type: GX.AttrType.INDEX16, mask: 0x00030000 },
     { vtxAttrib: GX.VertexAttribute.TEX5, type: GX.AttrType.INDEX16, mask: 0x000C0000 },
     { vtxAttrib: GX.VertexAttribute.TEX6, type: GX.AttrType.INDEX16, mask: 0x00300000 },
-    { vtxAttrib: GX.VertexAttribute.PNMTXIDX,   type: GX.AttrType.INDEX8, mask: 0x01000000 },
-    { vtxAttrib: GX.VertexAttribute.TEX0MTXIDX, type: GX.AttrType.INDEX8, mask: 0x02000000 },
-    { vtxAttrib: GX.VertexAttribute.TEX1MTXIDX, type: GX.AttrType.INDEX8, mask: 0x04000000 },
-    { vtxAttrib: GX.VertexAttribute.TEX2MTXIDX, type: GX.AttrType.INDEX8, mask: 0x08000000 },
-    { vtxAttrib: GX.VertexAttribute.TEX3MTXIDX, type: GX.AttrType.INDEX8, mask: 0x10000000 },
-    { vtxAttrib: GX.VertexAttribute.TEX4MTXIDX, type: GX.AttrType.INDEX8, mask: 0x20000000 },
-    { vtxAttrib: GX.VertexAttribute.TEX5MTXIDX, type: GX.AttrType.INDEX8, mask: 0x40000000 },
-    { vtxAttrib: GX.VertexAttribute.TEX6MTXIDX, type: GX.AttrType.INDEX8, mask: 0x80000000 },
 ];
 
 export interface Surface {
@@ -532,7 +532,7 @@ export function parseGeometry(stream: InputStream, materialSet: MaterialSet, sec
         for (const format of vtxAttrFormats) {
             if (!(vtxAttrFormat & format.mask))
                 continue;
-            vcd[format.vtxAttrib] = { type: format.type };
+            vcd[format.vtxAttrib] = { type: format.type, enableOutput: (format.mask <=0x00FFFFFF) };
         }
 
         // GX_VTXFMT0 | GX_VA_NRM = GX_F32
@@ -763,7 +763,7 @@ function parse_MP1(stream: InputStream, resourceSystem: ResourceSystem): MREA {
     stream.skip(4*12); // Transform matrix
 
     const worldModelCount = stream.readUint32();
-    const scriptLayerCount = ( version === 0x19 ? stream.readUint32() : 0 );
+    let scriptLayerCount = ( version === 0x19 ? stream.readUint32() : 0 );
     const dataSectionCount = stream.readUint32();
     const worldGeometrySectionIndex = stream.readUint32();
     const scriptLayersSectionIndex = stream.readUint32();
@@ -859,7 +859,7 @@ function parse_MP1(stream: InputStream, resourceSystem: ResourceSystem): MREA {
         }
     }
 
-    // Parse out script layers. MP1 only for now.
+    // Parse out script layers.
     const scriptLayers: Script.ScriptLayer[] = [];
 
     if (version === 0xF) {
@@ -871,18 +871,36 @@ function parse_MP1(stream: InputStream, resourceSystem: ResourceSystem): MREA {
         assert(sclyMagic === 'SCLY');
         assert(sclyVersion === 1);
 
-        const numLayers = stream.readUint32();
+        scriptLayerCount = stream.readUint32();
         const scriptLayerSizes: number[] = [];
 
-        for (let i = 0; i < numLayers; i++) {
+        for (let i = 0; i < scriptLayerCount; i++) {
             scriptLayerSizes.push(stream.readUint32());
         }
 
-        for (let i = 0; i < numLayers; i++) {
+        for (let i = 0; i < scriptLayerCount; i++) {
             const layerEnd = stream.tell() + scriptLayerSizes[i];
-            const layer = Script.parseScriptLayer(stream.getBuffer(), stream.tell(), resourceSystem);
+            const layer = Script.parseScriptLayer_MP1(stream.getBuffer(), stream.tell(), resourceSystem);
             scriptLayers.push(layer);
             stream.goTo(layerEnd);
+        }
+    }
+    else {
+        let currentSection = scriptLayersSectionIndex;
+
+        for (let i = 0; i < scriptLayerCount; i++) {
+            const scriptLayerOffs = dataSectionOffsTable[currentSection];
+            stream.goTo(scriptLayerOffs);
+            currentSection++;
+
+            const sclyMagic = stream.readFourCC();
+            stream.skip(1);
+            const sclyIndex = stream.readUint32();
+            assert(sclyMagic == 'SCLY');
+            assert(sclyIndex == i);
+
+            const layer = Script.parseScriptLayer_MP2(stream, resourceSystem);
+            scriptLayers.push(layer);
         }
     }
 

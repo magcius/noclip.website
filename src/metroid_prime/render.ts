@@ -1,5 +1,5 @@
 
-import { mat4 } from 'gl-matrix';
+import { vec3, mat4 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { nArray, assert } from '../util';
@@ -17,7 +17,7 @@ import { GfxRenderInst, GfxRenderInstManager, makeSortKey, GfxRendererLayer, set
 import { computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
 import { LoadedVertexData, LoadedVertexPacket } from '../gx/gx_displaylist';
 import { GXMaterialHacks, Color, lightSetWorldPositionViewMatrix, lightSetWorldDirectionNormalMatrix } from '../gx/gx_material';
-import { LightParameters, WorldLightingOptions } from './script';
+import { LightParameters, WorldLightingOptions, MP1EntityType, AreaAttributes } from './script';
 import { colorMult, colorCopy, colorFromRGBA } from '../Color';
 import { texEnvMtx } from '../MathHelpers';
 import { GXShapeHelperGfx, GXRenderHelperGfx, GXMaterialHelperGfx } from '../gx/gx_render';
@@ -421,6 +421,8 @@ export class MREARenderer {
     private surfaceInstances: SurfaceInstance[] = [];
     private cmdlData: CMDLData[] = [];
     private actors: CMDLRenderer[] = [];
+    public overrideSky: CMDLRenderer = null;
+    public needSky: boolean = false;
     public visible: boolean = true;
 
     constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, public textureHolder: RetroTextureHolder, public name: string, public mrea: MREA) {
@@ -524,11 +526,31 @@ export class MREARenderer {
                     const aabb = new AABB();
                     aabb.transform(model.bbox, ent.modelMatrix);
 
+                    if (ent.entityId == 0x00202718) debugger;
+
                     const actorLights = new ActorLights(aabb, ent.lightParams, this.mrea);
                     // TODO(jstpierre): Add a ModelCache.
                     const cmdlData = new CMDLData(device, renderHelper, model);
                     this.cmdlData.push(cmdlData);
                     this.actors.push(new CMDLRenderer(device, renderHelper, this.textureHolder, actorLights, ent.name, ent.modelMatrix, cmdlData));
+                }
+
+                if (ent.type === MP1EntityType.AreaAttributes || ent.type === "REAA") {
+                    const areaAttributes = <AreaAttributes>(ent);
+
+                    // Only process AreaAttributes properties if this is the first one in the area with a sky configured, to avoid mixing and matching different entities
+                    if (!this.needSky && areaAttributes.needSky) {
+                        this.needSky = true;
+
+                        if (areaAttributes.overrideSky !== null) {
+                            const identityMtx = mat4.create();
+                            mat4.identity(identityMtx);
+
+                            const skyData = new CMDLData(device, renderHelper, areaAttributes.overrideSky);
+                            this.overrideSky = new CMDLRenderer(device, renderHelper, this.textureHolder, null, `Sky_AreaAttributes_Layer${i}`, identityMtx, skyData);
+                            this.overrideSky.isSkybox = true;
+                        }
+                    }
                 }
             }
         }
