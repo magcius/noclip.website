@@ -12,7 +12,7 @@ import { mat4 } from 'gl-matrix';
 import { AABB } from '../Geometry';
 import AnimationController from '../AnimationController';
 import { GfxMegaStateDescriptor, GfxFormat } from '../gfx/platform/GfxPlatform';
-import { colorFromRGBA8 } from '../Color';
+import { colorFromRGBA8, colorNewFromRGBA8, Color } from '../Color';
 import { computeModelMatrixSRT, MathConstants } from '../MathHelpers';
 import { getPointHermite } from '../Spline';
 import { autoOptimizeMaterial } from '../gx/gx_render';
@@ -54,7 +54,7 @@ export interface Material {
     materialLayer: MaterialLayer;
     samplers: Sampler[];
     gxMaterial: GX_Material.GXMaterial;
-    matColorReg: GX_Material.Color;
+    matColorReg: Color;
     texMtx: mat4[];
 }
 
@@ -387,8 +387,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         // Parse material.
         const materialName2 = readString(buffer, mainDataOffs + view.getUint32(materialOffs + 0x00));
         assert(materialName === materialName2);
-        const matColorReg = new GX_Material.Color();
-        colorFromRGBA8(matColorReg, view.getUint32(materialOffs + 0x04))
+        const matColorReg = colorNewFromRGBA8(view.getUint32(materialOffs + 0x04));
         const matColorSrc: GX.ColorSrc = view.getUint8(materialOffs + 0x08);
 
         let materialLayer: MaterialLayer = MaterialLayer.OPAQUE;

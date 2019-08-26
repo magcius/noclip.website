@@ -216,10 +216,10 @@ export function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBu
             offs += 0x04;
 
             for (let j = 0; j < konstCount; j++) {
-                const r = view.getUint8(offs + 0x00);
-                const g = view.getUint8(offs + 0x01);
-                const b = view.getUint8(offs + 0x02);
-                const a = view.getUint8(offs + 0x03);
+                const r = view.getUint8(offs + 0x00) / 0xFF;
+                const g = view.getUint8(offs + 0x01) / 0xFF;
+                const b = view.getUint8(offs + 0x02) / 0xFF;
+                const a = view.getUint8(offs + 0x03) / 0xFF;
                 colorConstants.push(new GX_Material.Color(r, g, b, a));
                 offs += 0x04;
             }

@@ -208,7 +208,7 @@ export class ShapeInstance {
 }
 
 export class MaterialInstanceState {
-    public colorOverrides: GX_Material.Color[] = [];
+    public colorOverrides: Color[] = [];
     public alphaOverrides: boolean[] = [];
     public lights = nArray(8, () => new GX_Material.Light());
     public textureMappings: TextureMapping[];
@@ -364,7 +364,7 @@ export class MaterialInstance {
         }
     }
 
-    private clampTo8Bit(color: GX_Material.Color): void {
+    private clampTo8Bit(color: Color): void {
         // TODO(jstpierre): Actually clamp. For now, just make sure it doesn't go negative.
         color.r = Math.max(color.r, 0);
         color.g = Math.max(color.g, 0);
@@ -376,7 +376,7 @@ export class MaterialInstance {
         this.materialHelper.setOnRenderInst(device, cache, renderInst);
     }
 
-    private calcColor(dst: Color, i: ColorKind, materialInstanceState: MaterialInstanceState, fallbackColor: GX_Material.Color, clampTo8Bit: boolean): void {
+    private calcColor(dst: Color, i: ColorKind, materialInstanceState: MaterialInstanceState, fallbackColor: Color, clampTo8Bit: boolean): void {
         if (this.trk1Animators[i]) {
             this.trk1Animators[i].calcColor(dst);
         } else if (materialInstanceState.colorOverrides[i] !== undefined) {
@@ -1117,7 +1117,7 @@ export class BMDModelInstance {
      *
      * To unset a color override, pass {@constant undefined} as for {@param color}.
      */
-    public setColorOverride(colorKind: ColorKind, color: GX_Material.Color | undefined, useAlpha: boolean = false): void {
+    public setColorOverride(colorKind: ColorKind, color: Color | undefined, useAlpha: boolean = false): void {
         this.materialInstanceState.colorOverrides[colorKind] = color;
         this.materialInstanceState.alphaOverrides[colorKind] = useAlpha;
     }

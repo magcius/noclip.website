@@ -19,7 +19,7 @@ import { BMD, BTK, BRK, BCK, BTI, LoopMode, BMT } from '../j3d';
 import { BMDModelInstance, BMDModel, BTIData } from '../render';
 import { Camera, computeViewMatrix } from '../../Camera';
 import { DeviceProgram } from '../../Program';
-import { colorToCSS, Color } from '../../Color';
+import { colorToCSS, Color, colorNew } from '../../Color';
 import { ColorKind, fillSceneParamsDataOnTemplate } from '../../gx/gx_render';
 import { GXRenderHelperGfx } from '../../gx/gx_render';
 import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBufferUsage, GfxFormat, GfxVertexAttributeFrequency, GfxInputLayout, GfxInputState, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor, GfxCompareMode, GfxBufferFrequencyHint, GfxVertexAttributeDescriptor } from '../../gfx/platform/GfxPlatform';
@@ -55,19 +55,19 @@ class ZWWExtraTextures {
 }
 
 export interface Colors {
-    actorShadow: GX_Material.Color;
-    actorAmbient: GX_Material.Color;
-    amb: GX_Material.Color;
-    light: GX_Material.Color;
-    ocean: GX_Material.Color;
-    wave: GX_Material.Color;
-    splash: GX_Material.Color;
-    splash2: GX_Material.Color;
-    doors: GX_Material.Color;
-    vr_back_cloud: GX_Material.Color;
-    vr_sky: GX_Material.Color;
-    vr_uso_umi: GX_Material.Color;
-    vr_kasumi_mae: GX_Material.Color;
+    actorShadow: Color;
+    actorAmbient: Color;
+    amb: Color;
+    light: Color;
+    ocean: Color;
+    wave: Color;
+    splash: Color;
+    splash2: Color;
+    doors: Color;
+    vr_back_cloud: Color;
+    vr_sky: Color;
+    vr_uso_umi: Color;
+    vr_kasumi_mae: Color;
 }
 
 interface DZSChunkHeader {
@@ -111,68 +111,68 @@ export function getColorsFromDZS(buffer: ArrayBufferSlice, roomIdx: number, time
     const actorShadowR = view.getUint8(paleOffs + 0x00) / 0xFF;
     const actorShadowG = view.getUint8(paleOffs + 0x01) / 0xFF;
     const actorShadowB = view.getUint8(paleOffs + 0x02) / 0xFF;
-    const actorShadow = new GX_Material.Color(actorShadowR, actorShadowG, actorShadowB, 1);
+    const actorShadow = colorNew(actorShadowR, actorShadowG, actorShadowB, 1);
 
     const actorAmbientR = view.getUint8(paleOffs + 0x03) / 0xFF;
     const actorAmbientG = view.getUint8(paleOffs + 0x04) / 0xFF;
     const actorAmbientB = view.getUint8(paleOffs + 0x05) / 0xFF;
-    const actorAmbient = new GX_Material.Color(actorAmbientR, actorAmbientG, actorAmbientB, 1);
+    const actorAmbient = colorNew(actorAmbientR, actorAmbientG, actorAmbientB, 1);
 
     const ambR = view.getUint8(paleOffs + 0x06) / 0xFF;
     const ambG = view.getUint8(paleOffs + 0x07) / 0xFF;
     const ambB = view.getUint8(paleOffs + 0x08) / 0xFF;
-    const amb = new GX_Material.Color(ambR, ambG, ambB, 1);
+    const amb = colorNew(ambR, ambG, ambB, 1);
 
     const lightR = view.getUint8(paleOffs + 0x09) / 0xFF;
     const lightG = view.getUint8(paleOffs + 0x0A) / 0xFF;
     const lightB = view.getUint8(paleOffs + 0x0B) / 0xFF;
-    const light = new GX_Material.Color(lightR, lightG, lightB, 1);
+    const light = colorNew(lightR, lightG, lightB, 1);
 
     const waveR = view.getUint8(paleOffs + 0x0C) / 0xFF;
     const waveG = view.getUint8(paleOffs + 0x0D) / 0xFF;
     const waveB = view.getUint8(paleOffs + 0x0E) / 0xFF;
-    const wave = new GX_Material.Color(waveR, waveG, waveB, 1);
+    const wave = colorNew(waveR, waveG, waveB, 1);
 
     const oceanR = view.getUint8(paleOffs + 0x0F) / 0xFF;
     const oceanG = view.getUint8(paleOffs + 0x10) / 0xFF;
     const oceanB = view.getUint8(paleOffs + 0x11) / 0xFF;
-    const ocean = new GX_Material.Color(oceanR, oceanG, oceanB, 1);
+    const ocean = colorNew(oceanR, oceanG, oceanB, 1);
 
     const splashR = view.getUint8(paleOffs + 0x12) / 0xFF;
     const splashG = view.getUint8(paleOffs + 0x13) / 0xFF;
     const splashB = view.getUint8(paleOffs + 0x14) / 0xFF;
-    const splash = new GX_Material.Color(splashR, splashG, splashB, 1);
+    const splash = colorNew(splashR, splashG, splashB, 1);
 
     const splash2R = view.getUint8(paleOffs + 0x15) / 0xFF;
     const splash2G = view.getUint8(paleOffs + 0x16) / 0xFF;
     const splash2B = view.getUint8(paleOffs + 0x17) / 0xFF;
-    const splash2 = new GX_Material.Color(splash2R, splash2G, splash2B, 1);
+    const splash2 = colorNew(splash2R, splash2G, splash2B, 1);
 
     const doorsR = view.getUint8(paleOffs + 0x18) / 0xFF;
     const doorsG = view.getUint8(paleOffs + 0x19) / 0xFF;
     const doorsB = view.getUint8(paleOffs + 0x1A) / 0xFF;
-    const doors = new GX_Material.Color(doorsR, doorsG, doorsB, 1);
+    const doors = colorNew(doorsR, doorsG, doorsB, 1);
 
     const vr_back_cloudR = view.getUint8(virtOffs + 0x10) / 0xFF;
     const vr_back_cloudG = view.getUint8(virtOffs + 0x11) / 0xFF;
     const vr_back_cloudB = view.getUint8(virtOffs + 0x12) / 0xFF;
     const vr_back_cloudA = view.getUint8(virtOffs + 0x13) / 0xFF;
-    const vr_back_cloud = new GX_Material.Color(vr_back_cloudR, vr_back_cloudG, vr_back_cloudB, vr_back_cloudA);
+    const vr_back_cloud = colorNew(vr_back_cloudR, vr_back_cloudG, vr_back_cloudB, vr_back_cloudA);
 
     const vr_skyR = view.getUint8(virtOffs + 0x18) / 0xFF;
     const vr_skyG = view.getUint8(virtOffs + 0x19) / 0xFF;
     const vr_skyB = view.getUint8(virtOffs + 0x1A) / 0xFF;
-    const vr_sky = new GX_Material.Color(vr_skyR, vr_skyG, vr_skyB, 1);
+    const vr_sky = colorNew(vr_skyR, vr_skyG, vr_skyB, 1);
 
     const vr_uso_umiR = view.getUint8(virtOffs + 0x1B) / 0xFF;
     const vr_uso_umiG = view.getUint8(virtOffs + 0x1C) / 0xFF;
     const vr_uso_umiB = view.getUint8(virtOffs + 0x1D) / 0xFF;
-    const vr_uso_umi = new GX_Material.Color(vr_uso_umiR, vr_uso_umiG, vr_uso_umiB, 1);
+    const vr_uso_umi = colorNew(vr_uso_umiR, vr_uso_umiG, vr_uso_umiB, 1);
 
     const vr_kasumi_maeG = view.getUint8(virtOffs + 0x1F) / 0xFF;
     const vr_kasumi_maeR = view.getUint8(virtOffs + 0x1E) / 0xFF;
     const vr_kasumi_maeB = view.getUint8(virtOffs + 0x20) / 0xFF;
-    const vr_kasumi_mae = new GX_Material.Color(vr_kasumi_maeR, vr_kasumi_maeG, vr_kasumi_maeB, 1);
+    const vr_kasumi_mae = colorNew(vr_kasumi_maeR, vr_kasumi_maeG, vr_kasumi_maeB, 1);
 
     return { actorShadow, actorAmbient, amb, light, wave, ocean, splash, splash2, doors, vr_back_cloud, vr_sky, vr_uso_umi, vr_kasumi_mae };
 }
@@ -413,7 +413,7 @@ class SeaPlane {
         offs += fillColor(d, offs, this.color);
     }
 
-    public setColor(color: GX_Material.Color): void {
+    public setColor(color: Color): void {
         this.color = color;
     }
 

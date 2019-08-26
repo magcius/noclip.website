@@ -17,6 +17,7 @@ import { getPointHermite } from '../Spline';
 import { computeModelMatrixSRT } from '../MathHelpers';
 import BitMap from '../BitMap';
 import { autoOptimizeMaterial } from '../gx/gx_render';
+import { Color, colorNew } from '../Color';
 
 //#region Helpers
 function readStringTable(buffer: ArrayBufferSlice, offs: number): string[] {
@@ -589,10 +590,10 @@ export interface MaterialEntry {
     gxMaterial: GX_Material.GXMaterial;
     texMatrices: TexMtx[];
     indTexMatrices: Float32Array[];
-    colorMatRegs: GX_Material.Color[];
-    colorAmbRegs: GX_Material.Color[];
-    colorConstants: GX_Material.Color[];
-    colorRegisters: GX_Material.Color[];
+    colorMatRegs: Color[];
+    colorAmbRegs: Color[];
+    colorConstants: Color[];
+    colorRegisters: Color[];
 }
 
 export interface MAT3 {
@@ -628,20 +629,20 @@ function calcTexMtx_Maya(dst: mat4, scaleS: number, scaleT: number, rotation: nu
     dst[13] = scaleT * ((-0.5 * cosR) + (0.5 * sinR - 0.5) + translationT) + 1;
 }
 
-function readColor32(view: DataView, srcOffs: number): GX_Material.Color {
-    const r = view.getUint8(srcOffs + 0x00) / 255;
-    const g = view.getUint8(srcOffs + 0x01) / 255;
-    const b = view.getUint8(srcOffs + 0x02) / 255;
-    const a = view.getUint8(srcOffs + 0x03) / 255;
-    return new GX_Material.Color(r, g, b, a);
+function readColorU8(view: DataView, srcOffs: number): Color {
+    const r = view.getUint8(srcOffs + 0x00) / 0xFF;
+    const g = view.getUint8(srcOffs + 0x01) / 0xFF;
+    const b = view.getUint8(srcOffs + 0x02) / 0xFF;
+    const a = view.getUint8(srcOffs + 0x03) / 0xFF;
+    return colorNew(r, g, b, a);
 }
 
-function readColorShort(view: DataView, srcOffs: number): GX_Material.Color {
-    const r = view.getInt16(srcOffs + 0x00) / 255;
-    const g = view.getInt16(srcOffs + 0x02) / 255;
-    const b = view.getInt16(srcOffs + 0x04) / 255;
-    const a = view.getInt16(srcOffs + 0x06) / 255;
-    return new GX_Material.Color(r, g, b, a);
+function readColorS16(view: DataView, srcOffs: number): Color {
+    const r = view.getInt16(srcOffs + 0x00) / 0xFF;
+    const g = view.getInt16(srcOffs + 0x02) / 0xFF;
+    const b = view.getInt16(srcOffs + 0x04) / 0xFF;
+    const a = view.getInt16(srcOffs + 0x06) / 0xFF;
+    return colorNew(r, g, b, a);
 }
 
 function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
@@ -692,19 +693,19 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         const depthModeIndex = view.getUint8(materialEntryIdx + 0x06);
         // unk
 
-        const colorMatRegs: GX_Material.Color[] = [null, null];
+        const colorMatRegs: Color[] = [null, null];
         for (let j = 0; j < 2; j++) {
             const matColorIndex = view.getUint16(materialEntryIdx + 0x08 + j * 0x02);
             const matColorOffs = materialColorTableOffs + matColorIndex * 0x04;
-            const matColorReg = readColor32(view, matColorOffs);
+            const matColorReg = readColorU8(view, matColorOffs);
             colorMatRegs[j] = matColorReg;
         }
 
-        const colorAmbRegs: GX_Material.Color[] = [null, null];
+        const colorAmbRegs: Color[] = [null, null];
         for (let j = 0; j < 2; j++) {
             const ambColorIndex = view.getUint16(materialEntryIdx + 0x14 + j * 0x02);
             const ambColorOffs = ambientColorTableOffs + ambColorIndex * 0x04;
-            const ambColorReg = readColor32(view, ambColorOffs);
+            const ambColorReg = readColorU8(view, ambColorOffs);
             colorAmbRegs[j] = ambColorReg;
         }
 
@@ -769,17 +770,17 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             postTexMatrices[j] = readTexMatrix(postTexMtxTableOffs, j, postTexMtxIndex);
         }
 
-        const colorConstants: GX_Material.Color[] = [];
+        const colorConstants: Color[] = [];
         for (let j = 0; j < 4; j++) {
             const colorIndex = view.getUint16(materialEntryIdx + 0x94 + j * 0x02);
-            const color = readColor32(view, colorConstantTableOffs + colorIndex * 0x04);
+            const color = readColorU8(view, colorConstantTableOffs + colorIndex * 0x04);
             colorConstants.push(color);
         }
 
-        const colorRegisters: GX_Material.Color[] = [];
+        const colorRegisters: Color[] = [];
         for (let j = 0; j < 4; j++) {
             const colorIndex = view.getUint16(materialEntryIdx + 0xDC + j * 0x02);
-            const color = readColorShort(view, colorRegisterTableOffs + colorIndex * 0x08);
+            const color = readColorS16(view, colorRegisterTableOffs + colorIndex * 0x08);
             colorRegisters.push(color);
         }
 
@@ -1600,7 +1601,7 @@ function readTRK1Chunk(buffer: ArrayBufferSlice): TRK1 {
 export class TRK1Animator {
     constructor(public animationController: AnimationController, private trk1: TRK1, private animationEntry: TRK1AnimationEntry) {}
 
-    public calcColor(dst: GX_Material.Color): void {
+    public calcColor(dst: Color): void {
         const frame = this.animationController.getTimeInFrames();
         const animFrame = getAnimFrame(this.trk1, frame);
 

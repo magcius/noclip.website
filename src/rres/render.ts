@@ -15,7 +15,7 @@ import { GfxRenderInst, GfxRenderInstManager, GfxRendererLayer, makeSortKey, set
 import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
 import { nArray } from '../util';
 import { getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
-import { colorCopy } from '../Color';
+import { colorCopy, Color } from '../Color';
 import { computeNormalMatrix, texEnvMtx } from '../MathHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { arrayCopy } from '../gfx/platform/GfxPlatformUtil';
@@ -297,9 +297,9 @@ class MaterialInstance {
         mat4.mul(dstPost, matrixScratch, dstPost);
     }
 
-    private calcColor(materialParams: MaterialParams, i: ColorKind, fallbackColor: GX_Material.Color, a: BRRES.AnimatableColor): void {
+    private calcColor(materialParams: MaterialParams, i: ColorKind, fallbackColor: Color, a: BRRES.AnimatableColor): void {
         const dst = materialParams.u_Color[i];
-        let color: GX_Material.Color;
+        let color: Color;
         if (this.modelInstance && this.modelInstance.colorOverrides[i]) {
             color = this.modelInstance.colorOverrides[i];
         } else {
@@ -559,7 +559,7 @@ export class MDL0ModelInstance {
 
     private debugBones = false;
 
-    public colorOverrides: GX_Material.Color[] = [];
+    public colorOverrides: Color[] = [];
 
     public modelMatrix: mat4 = mat4.create();
     public visible: boolean = true;
@@ -661,7 +661,7 @@ export class MDL0ModelInstance {
                 this.bindVIS0(animationController, rres.vis0[i]);
     }
 
-    public setColorOverride(i: ColorKind, color: GX_Material.Color): void {
+    public setColorOverride(i: ColorKind, color: Color): void {
         this.colorOverrides[i] = color;
     }
 
