@@ -15,6 +15,7 @@ import { TextureOverride } from '../TextureHolder';
 import { SceneContext } from '../SceneBase';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
+import { gsMemoryMapNew } from '../Common/ps2/gs';
 
 const pathBase = `katamari_damacy`;
 
@@ -261,7 +262,7 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
         }
 
         return cache.waitForLoad().then(() => {
-            const gsMemoryMap = BIN.gsMemoryMapNew();
+            const gsMemoryMap = gsMemoryMapNew();
 
             const renderer = new KatamariDamacyRenderer(device);
             const gfxCache = renderer.renderHelper.getCache();

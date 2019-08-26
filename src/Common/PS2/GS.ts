@@ -1,4 +1,5 @@
-import ArrayBufferSlice from "../ArrayBufferSlice";
+
+import ArrayBufferSlice from "../../ArrayBufferSlice";
 
 export const enum GSRegister {
     PRIM      = 0x00,
@@ -212,19 +213,6 @@ export interface GSMemoryMap {
 export function gsMemoryMapNew(): GSMemoryMap {
     // GS Memory is 4MB.
     return { data: new Uint8Array(4 * 1024 * 1024) };
-}
-
-export interface GSConfiguration {
-    tex0_1_data0: number;
-    tex0_1_data1: number;
-    tex1_1_data0: number;
-    tex1_1_data1: number;
-    clamp_1_data0: number;
-    clamp_1_data1: number;
-    alpha_1_data0: number;
-    alpha_1_data1: number;
-    test_1_data0: number;
-    test_1_data1: number;
 }
 
 const blockTablePSMCT32 = [

@@ -1,7 +1,7 @@
 import { vec2, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert } from "../util";
-import { psmToString, gsMemoryMapReadImagePSMT8_PSMCT32, gsMemoryMapReadImagePSMT4_PSMCT32, gsMemoryMapUploadImage, GSRegisterBITBLTBUF, getGSRegisterBITBLTBUF, getGSRegisterTRXPOS, getGSRegisterTRXREG, GSRegister, GSMemoryMap, gsMemoryMapNew, GSRegisterTRXPOS, GSRegisterTRXREG, GSRegisterTEX0, GSRegisterCLAMP, getGSRegisterTEX0, getGSRegisterCLAMP, GSPixelStorageFormat, GSWrapMode, GSTextureColorComponent } from "../ps2/gs";
+import { psmToString, gsMemoryMapReadImagePSMT8_PSMCT32, gsMemoryMapReadImagePSMT4_PSMCT32, gsMemoryMapUploadImage, GSRegisterBITBLTBUF, getGSRegisterBITBLTBUF, getGSRegisterTRXPOS, getGSRegisterTRXREG, GSRegister, GSMemoryMap, gsMemoryMapNew, GSRegisterTRXPOS, GSRegisterTRXREG, GSRegisterTEX0, GSRegisterCLAMP, getGSRegisterTEX0, getGSRegisterCLAMP, GSPixelStorageFormat, GSWrapMode, GSTextureColorComponent } from "../Common/PS2/GS";
 
 export interface KingdomHeartsIIMap {
     mapGroup: MapGroup;
