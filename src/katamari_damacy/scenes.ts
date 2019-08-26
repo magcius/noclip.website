@@ -15,7 +15,7 @@ import { TextureOverride } from '../TextureHolder';
 import { SceneContext } from '../SceneBase';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
-import { gsMemoryMapNew } from '../Common/ps2/gs';
+import { gsMemoryMapNew } from '../Common/PS2/GS';
 
 const pathBase = `katamari_damacy`;
 
