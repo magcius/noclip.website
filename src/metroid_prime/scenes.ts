@@ -134,15 +134,13 @@ class RetroSceneDesc implements Viewer.SceneDesc {
     public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
         const folder = this.id.substring(0, this.id.indexOf(`/`));
-        const stringsPakP = dataFetcher.fetchData(`metroid_prime/${folder}/Strings.pak`);
         const levelPakP = dataFetcher.fetchData(`metroid_prime/${this.filename}`);
         const nameDataP = dataFetcher.fetchData(`metroid_prime/mp1/MP1_NameData.crg1`, DataFetcherFlags.ALLOW_404);
 
-        return Promise.all([levelPakP, stringsPakP, nameDataP]).then((datas: ArrayBufferSlice[]) => {
+        return Promise.all([levelPakP, nameDataP]).then((datas: ArrayBufferSlice[]) => {
             const levelPak = PAK.parse(datas[0]);
-            const stringsPak = PAK.parse(datas[1]);
-            const nameData = (datas[2] != null ? BYML.parse<NameData>(datas[2], BYML.FileType.CRG1) : null);
-            const resourceSystem = new ResourceSystem([levelPak, stringsPak], nameData);
+            const nameData = (datas[1] != null ? BYML.parse<NameData>(datas[1], BYML.FileType.CRG1) : null);
+            const resourceSystem = new ResourceSystem([levelPak], nameData);
 
             for (const mlvlEntry of levelPak.namedResourceTable.values()) {
                 assert(mlvlEntry.fourCC === 'MLVL');
@@ -167,11 +165,14 @@ class RetroSceneDesc implements Viewer.SceneDesc {
                 for (let i = 0; i < areas.length; i++) {
                     const mreaEntry = areas[i];
                     const mrea: MREA.MREA = resourceSystem.loadAssetByID(mreaEntry.areaMREAID, 'MREA');
-                    const areaRenderer = new MREARenderer(device, renderer.renderHelper, renderer.textureHolder, mreaEntry.areaName, mrea);
-                    renderer.areaRenderers.push(areaRenderer);
 
-                    // By default, set only the first area renderer is visible, so as to not "crash my browser please".
-                    areaRenderer.visible = (i < 1);
+                    if (mrea !== null && mreaEntry.areaName.indexOf("worldarea") === -1) {
+                        const areaRenderer = new MREARenderer(device, renderer.renderHelper, renderer.textureHolder, mreaEntry.areaName, mrea);
+                        renderer.areaRenderers.push(areaRenderer);
+
+                        // By default, set only the first area renderer is visible, so as to not "crash my browser please".
+                        areaRenderer.visible = (renderer.areaRenderers.length === 1);
+                    }
                 }
 
                 return renderer;
@@ -214,3 +215,26 @@ const sceneDescsMP2: Viewer.SceneDesc[] = [
 ];
 
 export const sceneGroupMP2: Viewer.SceneGroup = { id: idMP2, name: nameMP2, sceneDescs: sceneDescsMP2 };
+
+const idMP3 = "mp3";
+const nameMP3 = "Metroid Prime 3: Corruption";
+const sceneDescsMP3: Viewer.SceneDesc[] = [
+    new RetroSceneDesc(`mp3/Metroid1.pak`, "G.F.S. Olympus", "01a_GFShip_#SERIAL#"),
+    new RetroSceneDesc(`mp3/Metroid1.pak`, "Norion", "01b_GFPlanet_#SERIAL#"),
+    new RetroSceneDesc(`mp3/Metroid1.pak`, "G.F.S. Valhalla", "01c_Abandoned_#SERIAL#"),
+    new RetroSceneDesc(`mp3/Metroid3.pak`, "Bryyo Cliffside", "03a_Bryyo_Reptilicus_#SERIAL#"),
+    new RetroSceneDesc(`mp3/Metroid3.pak`, "Bryyo Fire", "03b_Bryyo_Fire_#SERIAL#"),
+    new RetroSceneDesc(`mp3/Metroid3.pak`, "Bryyo Ice", "03c_Bryyo_Ice_#SERIAL#"),
+    new RetroSceneDesc(`mp3/Metroid4.pak`, "SkyTown, Elysia", "04a_Skytown_Main_#SERIAL#"),
+    new RetroSceneDesc(`mp3/Metroid4.pak`, "Eastern SkyTown, Elysia", "04b_Skytown_Pod_#SERIAL#"),
+    new RetroSceneDesc(`mp3/Metroid5.pak`, "Pirate Research", "05a_Pirate_Research_#SERIAL#"),
+    new RetroSceneDesc(`mp3/Metroid5.pak`, "Pirate Command", "05b_Pirate_Command_#SERIAL#"),
+    new RetroSceneDesc(`mp3/Metroid5.pak`, "Pirate Mines", "05c_Pirate_Mines_#SERIAL#"),
+    new RetroSceneDesc(`mp3/Metroid6.pak`, "Phaaze", "06_Phaaze_#SERIAL#"),
+    new RetroSceneDesc(`mp3/Metroid7.pak`, "Bryyo Seed", "03d_Bryyo_Seed_#SERIAL#"),
+    new RetroSceneDesc(`mp3/Metroid7.pak`, "Elysia Seed", "04c_Skytown_Seed_#SERIAL#"),
+    new RetroSceneDesc(`mp3/Metroid7.pak`, "Pirate Homeworld Seed", "05d_Pirate_Seed_#SERIAL#"),
+    new RetroSceneDesc(`mp3/Metroid8.pak`, "Space", "08_Space_#SERIAL#")
+];
+
+export const sceneGroupMP3: Viewer.SceneGroup = { id: idMP3, name: nameMP3, sceneDescs: sceneDescsMP3 };

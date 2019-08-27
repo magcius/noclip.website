@@ -5,7 +5,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, align } from "../util";
 
 import { ResourceSystem } from "./resource";
-import { Geometry, MaterialSet, parseGeometry, parseMaterialSet } from "./mrea";
+import { Geometry, MaterialSet, parseGeometry, parseMaterialSet, parseMaterialSet_MP3 } from "./mrea";
 import { AABB } from "../Geometry";
 import { InputStream } from "./stream";
 
@@ -14,6 +14,12 @@ export interface CMDL {
     assetID: string;
     materialSets: MaterialSet[];
     geometry: Geometry;
+}
+
+enum ModelVersion {
+    MP1 = 0x2,
+    MP2 = 0x4,
+    MP3 = 0x5
 }
 
 enum Flags {
@@ -25,7 +31,8 @@ enum Flags {
 export function parse(stream: InputStream, resourceSystem: ResourceSystem, assetID: string): CMDL {
     assert(stream.readUint32() === 0xDEADBABE);
     const version = stream.readUint32();
-    assert(version === 0x02 || version === 0x04, `Unsupported CMDL version: ${version}`);
+    assert(version === ModelVersion.MP1 || version === ModelVersion.MP2 || version === ModelVersion.MP3, `Unsupported CMDL version: ${version}`);
+    stream.assetIdLength = (version >= ModelVersion.MP3 ? 8 : 4);
 
     const flags: Flags = stream.readUint32();
     const minX = stream.readFloat32();
@@ -57,10 +64,17 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
     let dataSectionIndex = 0;
 
     const materialSets: MaterialSet[] = [];
+    stream.goTo(dataSectionOffsTable[dataSectionIndex++]);
     for (let i = 0; i < materialSetCount; i++) {
-        stream.goTo(dataSectionOffsTable[dataSectionIndex++]);
-        const materialSet = parseMaterialSet(stream, resourceSystem, version === 0x04);
+        const materialSet = (version <= ModelVersion.MP2 ?
+            parseMaterialSet(stream, resourceSystem, version === ModelVersion.MP2) :
+            parseMaterialSet_MP3(stream, resourceSystem));
+        
         materialSets.push(materialSet);
+
+        if (version <= ModelVersion.MP2) {
+            stream.goTo(dataSectionOffsTable[dataSectionIndex++]);
+        }
     }
 
     const hasUVShort = !!(flags & Flags.UV_SHORT);

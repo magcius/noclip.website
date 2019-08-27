@@ -27,6 +27,13 @@ export interface MREA {
     lightLayers: AreaLightLayer[];
 }
 
+enum AreaVersion {
+    MP1 = 0xF,
+    MP2 = 0x19,
+    MP3 = 0x1E,
+    DKCR = 0x20
+}
+
 export const enum UVAnimationType {
     INV_MAT_SKY = 0x00,
     INV_MAT     = 0x01,
@@ -451,19 +458,95 @@ export interface Geometry {
     surfaces: Surface[];
 }
 
-export function parseGeometry(stream: InputStream, materialSet: MaterialSet, sectionOffsTable: number[], hasUVShort: boolean, isEchoes: boolean, sectionIndex: number, worldModelIndex: number): [Geometry, number] {
-    const posSectionOffs = sectionOffsTable[sectionIndex++];
-    const nrmSectionOffs = sectionOffsTable[sectionIndex++];
-    const clrSectionOffs = sectionOffsTable[sectionIndex++];
-    const uvfSectionOffs = sectionOffsTable[sectionIndex++];
-    const uvsSectionOffs = hasUVShort ? sectionOffsTable[sectionIndex++] : null;
+export function parseWorldModelHeader(stream: InputStream): [number, mat4, AABB] {
+    const visorFlags = stream.readUint32();
+    const m00 = stream.readFloat32();
+    const m01 = stream.readFloat32();
+    const m02 = stream.readFloat32();
+    const m03 = stream.readFloat32();
+    const m10 = stream.readFloat32();
+    const m11 = stream.readFloat32();
+    const m12 = stream.readFloat32();
+    const m13 = stream.readFloat32();
+    const m20 = stream.readFloat32();
+    const m21 = stream.readFloat32();
+    const m22 = stream.readFloat32();
+    const m23 = stream.readFloat32();
+    const modelMatrix = mat4.fromValues(
+        m00, m10, m20, 0.0,
+        m01, m11, m21, 0.0,
+        m02, m12, m22, 0.0,
+        m03, m13, m23, 1.0,
+    );
+    const bboxMinX = stream.readFloat32();
+    const bboxMinY = stream.readFloat32();
+    const bboxMinZ = stream.readFloat32();
+    const bboxMaxX = stream.readFloat32();
+    const bboxMaxY = stream.readFloat32();
+    const bboxMaxZ = stream.readFloat32();
+    const bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
 
-    const surfaceTableOffs = sectionOffsTable[sectionIndex++];
-    stream.goTo(surfaceTableOffs);
-    const surfaceCount = stream.readUint32();
+    return [visorFlags, modelMatrix, bbox];
+}
 
-    const surfaces: Surface[] = [];
+function parseWorldModels_MP1(stream: InputStream, worldModelCount: number, sectionIndex: number, sectionOffsTable: number[], materialSet: MaterialSet, version: number): WorldModel[] {
+    let worldModels: WorldModel[] = [];
 
+    for (let i = 0; i < worldModelCount; i++) {
+        // World model header.
+        const worldModelHeaderOffs = sectionOffsTable[sectionIndex++];
+        stream.goTo(worldModelHeaderOffs);
+
+        let visorFlags: number, modelMatrix: mat4, bbox: AABB;
+        [visorFlags, modelMatrix, bbox] = parseWorldModelHeader(stream);
+
+        const worldModelIndex = worldModels.length;
+        let geometry: Geometry;
+
+        [geometry, sectionIndex] = parseGeometry(stream, materialSet, sectionOffsTable, true, version >= AreaVersion.MP2, sectionIndex, worldModelIndex);
+
+        worldModels.push({ geometry, modelMatrix, bbox });
+    }
+
+    return worldModels;
+}
+
+function parseWorldModels_MP3(stream: InputStream, worldModelCount: number, wobjSectionIndex: number, gpudSectionIndex: number, sectionOffsTable: number[], materialSet: MaterialSet, version: number): WorldModel[] {
+    let worldModels: WorldModel[] = [];
+
+    for (let i = 0; i < worldModelCount; i++) {
+        // World model header.
+        const worldModelHeaderOffs = sectionOffsTable[wobjSectionIndex++];
+        stream.goTo(worldModelHeaderOffs);
+
+        let visorFlags: number, modelMatrix: mat4, bbox: AABB;
+        [visorFlags, modelMatrix, bbox] = parseWorldModelHeader(stream);
+
+        const worldModelIndex = worldModels.length;
+        let geometry: Geometry;
+
+        [geometry, wobjSectionIndex, gpudSectionIndex] = parseGeometry_MP3(stream, materialSet, sectionOffsTable, version === AreaVersion.DKCR, wobjSectionIndex, gpudSectionIndex, worldModelIndex);
+
+        worldModels.push({ geometry, modelMatrix, bbox });
+    }
+
+    return worldModels;
+}
+
+export function parseSurfaces(  stream: InputStream,
+                                surfaceCount: number,
+                                sectionIndex: number,
+                                posSectionOffs: number,
+                                nrmSectionOffs: number,
+                                clrSectionOffs: number,
+                                uvfSectionOffs: number,
+                                uvsSectionOffs: number,
+                                sectionOffsTable: number[],
+                                worldModelIndex: number,
+                                materialSet: MaterialSet,
+                                isEchoes: boolean
+                            ): [Surface[], number]
+{
     function fillVatFormat(nrmType: GX.CompType, tex0Type: GX.CompType, compShift: number): GX_VtxAttrFmt[] {
         const vatFormat: GX_VtxAttrFmt[] = [];
         vatFormat[GX.VertexAttribute.POS] = { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.F32, compShift };
@@ -480,6 +563,8 @@ export function parseGeometry(stream: InputStream, materialSet: MaterialSet, sec
         vatFormat[GX.VertexAttribute.TEX7] = { compCnt: GX.CompCnt.TEX_ST, compType: GX.CompType.F32, compShift };
         return vatFormat;
     }
+
+    let surfaces: Surface[] = [];
 
     for (let i = 0; i < surfaceCount; i++) {
         const surfaceOffs = sectionOffsTable[sectionIndex];
@@ -562,8 +647,44 @@ export function parseGeometry(stream: InputStream, materialSet: MaterialSet, sec
         sectionIndex++;
     }
 
+    return [surfaces, sectionIndex];
+}
+
+export function parseGeometry(stream: InputStream, materialSet: MaterialSet, sectionOffsTable: number[], hasUVShort: boolean, isEchoes: boolean, sectionIndex: number, worldModelIndex: number): [Geometry, number] {
+    const posSectionOffs = sectionOffsTable[sectionIndex++];
+    const nrmSectionOffs = sectionOffsTable[sectionIndex++];
+    const clrSectionOffs = sectionOffsTable[sectionIndex++];
+    const uvfSectionOffs = sectionOffsTable[sectionIndex++];
+    const uvsSectionOffs = hasUVShort ? sectionOffsTable[sectionIndex++] : null;
+
+    const surfaceTableOffs = sectionOffsTable[sectionIndex++];
+    stream.goTo(surfaceTableOffs);
+    const surfaceCount = stream.readUint32();
+
+    let surfaces: Surface[];
+    [surfaces, sectionIndex] = parseSurfaces(stream, surfaceCount, sectionIndex, posSectionOffs, nrmSectionOffs, clrSectionOffs, uvfSectionOffs, uvsSectionOffs, sectionOffsTable, worldModelIndex, materialSet, isEchoes);
+
     const geometry: Geometry = { surfaces };
     return [geometry, sectionIndex];
+}
+
+export function parseGeometry_MP3(stream: InputStream, materialSet: MaterialSet, sectionOffsTable: number[], hasUVShort: boolean, wobjSectionIndex: number, gpudSectionIndex: number, worldModelIndex: number): [Geometry, number, number] {
+    const posSectionOffs = sectionOffsTable[gpudSectionIndex++];
+    const nrmSectionOffs = sectionOffsTable[gpudSectionIndex++];
+    const clrSectionOffs = sectionOffsTable[gpudSectionIndex++];
+    const uvfSectionOffs = sectionOffsTable[gpudSectionIndex++];
+    const uvsSectionOffs = hasUVShort ? sectionOffsTable[gpudSectionIndex++] : null;
+
+    const surfaceTableOffs = sectionOffsTable[wobjSectionIndex++];
+    stream.goTo(surfaceTableOffs);
+    const surfaceCount = stream.readUint32();
+    wobjSectionIndex += 2;
+
+    let surfaces: Surface[];
+    [surfaces, gpudSectionIndex] = parseSurfaces(stream, surfaceCount, gpudSectionIndex, posSectionOffs, nrmSectionOffs, clrSectionOffs, uvfSectionOffs, uvsSectionOffs, sectionOffsTable, worldModelIndex, materialSet, true);
+
+    const geometry: Geometry = { surfaces };
+    return [geometry, wobjSectionIndex, gpudSectionIndex];
 }
 
 export const enum AreaLightType {
@@ -590,7 +711,7 @@ export interface EntityLights {
     ambientColor: GX_Material.Color;
 }
 
-export function parseLightLayer(stream: InputStream): AreaLightLayer {
+export function parseLightLayer(stream: InputStream, version: number): AreaLightLayer {
     let ambientColor: GX_Material.Color = new GX_Material.Color;
     const epsilon = 1.192092896e-07;
 
@@ -602,12 +723,14 @@ export function parseLightLayer(stream: InputStream): AreaLightLayer {
         const lightColorR = stream.readFloat32();
         const lightColorG = stream.readFloat32();
         const lightColorB = stream.readFloat32();
+        if (version >= AreaVersion.MP3) stream.skip(0x4); // color alpha
         const posX = stream.readFloat32();
         const posY = stream.readFloat32();
         const posZ = stream.readFloat32();
         const dirX = stream.readFloat32();
         const dirY = stream.readFloat32();
         const dirZ = stream.readFloat32();
+        if (version >= AreaVersion.MP3) stream.skip(0xC); // codirection
         const brightness = stream.readFloat32();
         const spotCutoff = stream.readFloat32() / 2;
         stream.skip(0x4);
@@ -615,6 +738,7 @@ export function parseLightLayer(stream: InputStream): AreaLightLayer {
         stream.skip(0x4);
         const falloffType = stream.readUint32();
         stream.skip(0x4);
+        if (version >= AreaVersion.MP3) stream.skip(0x14); // unknown data
 
         if (lightType == AreaLightType.LocalAmbient) {
             ambientColor.r = Math.min(lightColorR * brightness, 1);
@@ -758,21 +882,33 @@ function decompressBuffers(stream: InputStream, compressedBlocksIdx: number, com
 function parse_MP1(stream: InputStream, resourceSystem: ResourceSystem): MREA {
     assert(stream.readUint32() === 0xDEADBEEF);
     const version = stream.readUint32();
-    assert(version === 0x0F || version === 0x19);
+    assert(version === AreaVersion.MP1 || version === AreaVersion.MP2 || version === AreaVersion.MP3);
+    stream.assetIdLength = (version >= AreaVersion.MP3 ? 8 : 4);
 
     stream.skip(4*12); // Transform matrix
 
     const worldModelCount = stream.readUint32();
-    let scriptLayerCount = ( version === 0x19 ? stream.readUint32() : 0 );
+    let scriptLayerCount = ( version >= AreaVersion.MP2 ? stream.readUint32() : 0 );
     const dataSectionCount = stream.readUint32();
-    const worldGeometrySectionIndex = stream.readUint32();
-    const scriptLayersSectionIndex = stream.readUint32();
-    if (version >= 0x19) stream.skip(4);
-    const collisionSectionIndex = stream.readUint32();
-    stream.skip(4);
-    const lightsSectionIndex = stream.readUint32();
-    stream.skip( version === 0x19 ? 0x14 : 0xC );
-    const numCompressedBlocks = ( version === 0x19 ? stream.readUint32() : 0 );
+
+    let worldGeometrySectionIndex = -1;
+    let worldGeometryGPUDataSectionIndex = -1;
+    let scriptLayersSectionIndex = -1;
+    let collisionSectionIndex = -1;
+    let lightsSectionIndex = -1;
+
+    if (version <= AreaVersion.MP2) {
+        worldGeometrySectionIndex = stream.readUint32();
+        scriptLayersSectionIndex = stream.readUint32();
+        if (version >= AreaVersion.MP2) stream.skip(4);
+        collisionSectionIndex = stream.readUint32();
+        stream.skip(4);
+        lightsSectionIndex = stream.readUint32();
+        stream.skip( version === AreaVersion.MP2 ? 0x14 : 0xC );
+    }
+
+    const numCompressedBlocks = ( version >= AreaVersion.MP2 ? stream.readUint32() : 0 );
+    const numSectionNumbers = ( version >= AreaVersion.MP3 ? stream.readUint32() : 0 );
     stream.align(32);
 
     const dataSectionSizeTable: number[] = [];
@@ -786,11 +922,30 @@ function parse_MP1(stream: InputStream, resourceSystem: ResourceSystem): MREA {
     let areaDataBuffer: ArrayBufferSlice = null;
 
     if (numCompressedBlocks > 0) {
-        const compressedDataIdx = align(stream.tell() + numCompressedBlocks*16, 32);
+        const compressedDataIdx = align(stream.tell() + align(numCompressedBlocks*16, 32) + align(numSectionNumbers*8, 32), 32);
         const decompressedBuffer = decompressBuffers(stream, compressedDataIdx, numCompressedBlocks, true);
         areaDataBuffer = new ArrayBufferSlice(decompressedBuffer.buffer);
+        stream.align(32);
+    }
+    
+    // Parse MP3 section numbers
+    if (version >= AreaVersion.MP3) {
+        for (let i = 0; i < numSectionNumbers; i++) {
+            const sectionID = stream.readFourCC();
+            const sectionNum = stream.  readUint32();
+
+            switch (sectionID) {
+                case "WOBJ": worldGeometrySectionIndex = sectionNum; break;
+                case "GPUD": worldGeometryGPUDataSectionIndex = sectionNum; break;
+                case "SOBJ": scriptLayersSectionIndex = sectionNum; break;
+                case "COLI": collisionSectionIndex = sectionNum; break;
+                case "LITE": lightsSectionIndex = sectionNum; break;
+            }
+        }
+        stream.align(32);
     }
 
+    // Continue on to parse area data
     if (areaDataBuffer !== null) {
         stream.setBuffer(areaDataBuffer);
     }
@@ -811,58 +966,29 @@ function parse_MP1(stream: InputStream, resourceSystem: ResourceSystem): MREA {
 
     // Parse out materials.
     stream.goTo(materialSectionOffs);
-    const materialSet = parseMaterialSet(stream, resourceSystem, version > 0xF);
+    let materialSet: MaterialSet;
 
-    let geometrySectionIndex = worldGeometrySectionIndex + 1;
-    const worldModels: WorldModel[] = [];
-    for (let i = 0; i < worldModelCount; i++) {
-        // World model header.
-        const worldModelHeaderOffs = dataSectionOffsTable[geometrySectionIndex];
-        stream.goTo(worldModelHeaderOffs);
+    if (version < AreaVersion.MP3) {
+        materialSet = parseMaterialSet(stream, resourceSystem, version === AreaVersion.MP2);
+    }
+    else {
+        materialSet = parseMaterialSet_MP3(stream, resourceSystem);
+    }
 
-        const visorFlags = stream.readUint32();
-        const m00 = stream.readFloat32();
-        const m01 = stream.readFloat32();
-        const m02 = stream.readFloat32();
-        const m03 = stream.readFloat32();
-        const m10 = stream.readFloat32();
-        const m11 = stream.readFloat32();
-        const m12 = stream.readFloat32();
-        const m13 = stream.readFloat32();
-        const m20 = stream.readFloat32();
-        const m21 = stream.readFloat32();
-        const m22 = stream.readFloat32();
-        const m23 = stream.readFloat32();
-        const modelMatrix = mat4.fromValues(
-            m00, m10, m20, 0.0,
-            m01, m11, m21, 0.0,
-            m02, m12, m22, 0.0,
-            m03, m13, m23, 1.0,
-        );
-        const bboxMinX = stream.readFloat32();
-        const bboxMinY = stream.readFloat32();
-        const bboxMinZ = stream.readFloat32();
-        const bboxMaxX = stream.readFloat32();
-        const bboxMaxY = stream.readFloat32();
-        const bboxMaxZ = stream.readFloat32();
-        const bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
+    // Parse out world models.
+    let worldModels: WorldModel[];
 
-        geometrySectionIndex += 1;
-
-        const worldModelIndex = worldModels.length;
-        let geometry: Geometry;
-        [geometry, geometrySectionIndex] = parseGeometry(stream, materialSet, dataSectionOffsTable, true, version > 0xF, geometrySectionIndex, worldModelIndex);
-        worldModels.push({ geometry, modelMatrix, bbox });
-
-        if (version === 0x19) {
-            geometrySectionIndex += 2;
-        }
+    if (version < AreaVersion.MP3) {
+        worldModels = parseWorldModels_MP1(stream, worldModelCount, worldGeometrySectionIndex+1, dataSectionOffsTable, materialSet, version);
+    }
+    else {
+        worldModels = parseWorldModels_MP3(stream, worldModelCount, worldGeometrySectionIndex+1, worldGeometryGPUDataSectionIndex, dataSectionOffsTable, materialSet, version);
     }
 
     // Parse out script layers.
     const scriptLayers: Script.ScriptLayer[] = [];
 
-    if (version === 0xF) {
+    if (version === AreaVersion.MP1) {
         const scriptLayerOffs = dataSectionOffsTable[scriptLayersSectionIndex];
         stream.goTo(scriptLayerOffs);
         
@@ -917,10 +1043,12 @@ function parse_MP1(stream: InputStream, resourceSystem: ResourceSystem): MREA {
     const lightsMagic = stream.readUint32();
     assert(lightsMagic === 0xbabedead);
 
-    const numLightLayers = 2; // number of layers is fixed on a game-by-game basis
+    const numLightLayers = (version <= AreaVersion.MP2 ? 2 :
+                            version <= AreaVersion.MP3 ? 4 :
+                            8);
 
     for (let i = 0; i < numLightLayers; i++) {
-        const lightLayer: AreaLightLayer = parseLightLayer(stream);
+        const lightLayer: AreaLightLayer = parseLightLayer(stream, version);
         lightLayers.push(lightLayer);
     }
 
@@ -929,13 +1057,13 @@ function parse_MP1(stream: InputStream, resourceSystem: ResourceSystem): MREA {
 
 export const enum MaterialFlags_MP3 {
     BLEND = 0x08,
-    PUNCHTHROUGH = 0x10,
+    MASKED = 0x10,
     ADDITIVE_BLEND = 0x20,
     OCCLUDER = 0x100,
     WHITE_AMB = 0x80000,
 }
 
-function makeTevStageFromPass_MP3(passIndex: number, passType: string, passFlags: number, materialFlags: MaterialFlags_MP3, hasOPAC: boolean): GX_Material.TevStage {
+function makeTevStageFromPass_MP3(passIndex: number, passType: string, passFlags: number, materialFlags: MaterialFlags_MP3, hasDIFF: boolean, hasOPAC: boolean): GX_Material.TevStage {
     // Standard texture sample.
     const tevStage: GX_Material.TevStage = {
         index: passIndex,
@@ -988,10 +1116,10 @@ function makeTevStageFromPass_MP3(passIndex: number, passType: string, passFlags
     }
 
     if (passType === 'CLR ') {
-        tevStage.colorInB = GX.CombineColorInput.CPREV;
+        tevStage.colorInB = (hasDIFF ? GX.CombineColorInput.CPREV : GX.CombineColorInput.RASC);
         tevStage.colorInC = GX.CombineColorInput.TEXC;
         tevStage.colorInD = GX.CombineColorInput.ZERO;
-        tevStage.alphaInD = (materialFlags & MaterialFlags_MP3.PUNCHTHROUGH) ? GX.CombineAlphaInput.TEXA : GX.CombineAlphaInput.APREV;
+        tevStage.alphaInD = (materialFlags & MaterialFlags_MP3.MASKED) ? GX.CombineAlphaInput.TEXA : GX.CombineAlphaInput.APREV;
         tevStage.konstAlphaSel = GX.KonstAlphaSel.KASEL_K1_A;
     }
 
@@ -1015,6 +1143,17 @@ function makeTevStageFromPass_MP3(passIndex: number, passType: string, passFlags
         tevStage.colorInD = GX.CombineColorInput.CPREV;
     }
 
+    if (passType === 'BLOL') {
+        // Bloom lightmap.
+        // This actually works by drawing to the framebuffer alpha channel. During the post-process pass, the alpha channel
+        // is sampled to determine the intensity of the bloom effect at this pixel. We don't support bloom for MP3, so instead
+        // we just essentially multiply the color by 2 to simulate the increase in brightness that the bloom effect provides.
+        tevStage.texSwapTable = [GX.TevColorChan.G, GX.TevColorChan.G, GX.TevColorChan.G, GX.TevColorChan.G];
+        tevStage.colorInB = GX.CombineColorInput.CPREV;
+        tevStage.colorInC = GX.CombineColorInput.ONE;
+        tevStage.colorInD = GX.CombineColorInput.CPREV;
+    }
+
     return tevStage;
 }
 
@@ -1022,7 +1161,7 @@ interface Material_MP3 extends Material {
     passTypes: string[];
 }
 
-function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSystem): MaterialSet {
+export function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSystem): MaterialSet {
     const materialCount = stream.readUint32();
 
     const textures: TXTR[] = [];
@@ -1050,6 +1189,7 @@ function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSyste
         const uvAnimations: UVAnimation[] = [];
         const passTypes: string[] = [];
         let hasOPAC = false;
+        let hasDIFF = false;
         while(true) {
             const nodeType = stream.readFourCC();
             if (nodeType === 'END ') {
@@ -1066,11 +1206,14 @@ function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSyste
                 let uvAnimation: UVAnimation | null = null;
                 
                 if (uvAnimationSize !== 0) {
+                    const uvAnimationEnd = stream.tell() + uvAnimationSize;
                     const unk1 = stream.readUint16();
                     const unk2 = stream.readUint16();
                     const uvAnimations: UVAnimation[] = parseMaterialSet_UVAnimations(stream, 1);
                     if (uvAnimations.length !== 0)
                         uvAnimation = uvAnimations[0];
+                    
+                    stream.goTo(uvAnimationEnd);
                 }
                 assert(stream.tell() === passEnd);
 
@@ -1090,11 +1233,15 @@ function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSyste
                     postMatrix: GX.PostTexGenMatrix.PTTEXMTX0 + (passIndex * 3),
                     normalize: false,
                 };
-                tevStages[passIndex] = makeTevStageFromPass_MP3(passIndex, passType, passFlags, materialFlags, hasOPAC);
+                tevStages[passIndex] = makeTevStageFromPass_MP3(passIndex, passType, passFlags, materialFlags, hasDIFF, hasOPAC);
                 textureIndexes[passIndex] = txtrIndex;
                 uvAnimations[passIndex] = uvAnimation;
                 passTypes[passIndex] = passType;
                 passIndex++;
+
+                if (passType === "DIFF") {
+                    hasDIFF = true;
+                }
             } else if (nodeType === 'CLR ') {
                 // Color
                 const subtype = stream.readFourCC();
@@ -1119,7 +1266,23 @@ function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSyste
             }
         }
 
-        assert(passIndex > 0);
+        // some materials don't have any passes apparently?
+        // just make a dummy tev stage in this case
+        if (passIndex === 0) {
+            texGens[0] = { 
+                index: 0,
+                type: GX.TexGenType.MTX2x4,
+                source: GX.TexGenSrc.TEX0,
+                matrix: GX.TexGenMatrix.TEXMTX0,
+                postMatrix: GX.PostTexGenMatrix.PTTEXMTX0,
+                normalize: false,
+            };
+
+            tevStages[0] = makeTevStageFromPass_MP3(0, 'NULL', 0, materialFlags, hasDIFF, hasOPAC);
+            uvAnimations[0] = null;
+            passTypes[0] = 'NULL';
+            passIndex++;
+        }
 
         const index = i;
         const name = `Prime3Gen_${i}`;
@@ -1129,13 +1292,13 @@ function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSyste
         const isOccluder = !!(materialFlags & MaterialFlags_MP3.OCCLUDER);
         const blend = !!(materialFlags & MaterialFlags_MP3.BLEND);
         const additiveBlend = !!(materialFlags & MaterialFlags_MP3.ADDITIVE_BLEND);
-        const punchthrough = !!(materialFlags & MaterialFlags_MP3.PUNCHTHROUGH);
+        const masked = !!(materialFlags & MaterialFlags_MP3.MASKED);
         const isTransparent = blend || additiveBlend;
         const depthWrite = true;
 
         const lightChannels: GX_Material.LightChannelControl[] = [];
         lightChannels.push({
-            colorChannel: { lightingEnabled: true,  ambColorSource: GX.ColorSrc.REG, matColorSource: GX.ColorSrc.REG, litMask: 0, diffuseFunction: GX.DiffuseFunction.NONE, attenuationFunction: GX.AttenuationFunction.NONE },
+            colorChannel: { lightingEnabled: true,  ambColorSource: GX.ColorSrc.REG, matColorSource: GX.ColorSrc.REG, litMask: 0xFF, diffuseFunction: GX.DiffuseFunction.CLAMP, attenuationFunction: GX.AttenuationFunction.SPOT },
             alphaChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.REG, matColorSource: GX.ColorSrc.REG, litMask: 0, diffuseFunction: GX.DiffuseFunction.NONE, attenuationFunction: GX.AttenuationFunction.NONE },
         });
         lightChannels.push({
@@ -1151,7 +1314,7 @@ function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSyste
 
         const alphaTest: GX_Material.AlphaTest = {
             op: GX.AlphaOp.OR,
-            compareA: punchthrough ? GX.CompareType.GREATER : GX.CompareType.ALWAYS,
+            compareA: masked ? GX.CompareType.GREATER : GX.CompareType.ALWAYS,
             referenceA: 0.75,
             compareB: GX.CompareType.NEVER,
             referenceB: 0,
@@ -1361,7 +1524,7 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
     stream.skip(-8);
 
     // Metroid Prime 1
-    if (version === 0x0F || version === 0x19)
+    if (version === AreaVersion.MP1 || version === AreaVersion.MP2 || version === AreaVersion.MP3)
         return parse_MP1(stream, resourceSystem);
 
     // Donkey Kong Country Returns

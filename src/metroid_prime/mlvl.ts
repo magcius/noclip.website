@@ -88,9 +88,7 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
 
         const areaMREAID = stream.readAssetID();
         const areaMREA = resourceSystem.findResourceByID(areaMREAID);
-        assert(areaMREA !== null);
-
-        stream.skip(4);
+        const areaInternalID = stream.readAssetID();
 
         if (version <= WorldVersion.MP3) {
             const attachedAreaCount = stream.readUint32();

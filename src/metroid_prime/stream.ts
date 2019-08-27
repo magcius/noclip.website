@@ -5,7 +5,7 @@ export class InputStream {
     private buffer: ArrayBufferSlice = null;
     private view: DataView = null;
     private offs: number = 0;
-    public assetIdLength: number = 4;
+    public assetIdLength: number = 0;
 
     constructor(buffer: ArrayBufferSlice) {
         this.setBuffer(buffer);
@@ -48,6 +48,7 @@ export class InputStream {
 
     public readAssetID(): string
     {
+        assert(this.assetIdLength !== 0, "Asset ID length has not been set");
         return this.readString(this.assetIdLength, false);
     }
 }

@@ -132,6 +132,8 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
     public addTextures(device: GfxDevice, textureEntries: TextureType[], overwrite: boolean = false): void {
         for (let i = 0; i < textureEntries.length; i++) {
             const texture = textureEntries[i];
+            if (texture === null)
+                continue;
 
             let index = this.textureEntries.findIndex((entry) => entry.name === texture.name);
             // Don't add dupes for the same name.

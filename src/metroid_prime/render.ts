@@ -338,6 +338,9 @@ class MaterialInstance {
                 continue;
 
             const txtr = materialSet.textures[materialSet.textureRemapTable[textureIndex]];
+            if (txtr === null)
+                continue;
+
             textureHolder.fillTextureMapping(this.textureMappings[i], txtr.name);
             this.textureMappings[i].gfxSampler = materialGroup.gfxSampler;
 

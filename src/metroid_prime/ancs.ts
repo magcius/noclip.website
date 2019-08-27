@@ -23,6 +23,7 @@ export interface ANCS {
 }
 
 export function parse(stream: InputStream, resourceSystem: ResourceSystem, assetID: string): ANCS {
+    stream.assetIdLength = 4;
     assert(stream.readUint16() == 1); // ANCS version
     assert(stream.readUint16() == 1); // character set version
     const numChars = stream.readUint32();

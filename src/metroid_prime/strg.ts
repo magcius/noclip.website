@@ -117,7 +117,7 @@ function parse_MP3(stream: InputStream): STRG {
             for (let j = 0; j < stringCount; j++) {
                 const stringOffs = stringDataOffs + stream.readUint32();
                 const stringSize = view.getUint32(stringOffs);
-                const string = utf8Decoder.decode(stream.getBuffer().createTypedArray(Uint8Array, stringOffs, stringSize-1));
+                const string = utf8Decoder.decode(stream.getBuffer().createTypedArray(Uint8Array, stringOffs + 4, stringSize-1));
                 strings.push(string);
             }
 

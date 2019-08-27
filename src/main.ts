@@ -119,6 +119,7 @@ const sceneGroups = [
     Scenes_DarkSouls.sceneGroup,
     Scenes_Elebits.sceneGroup,
     Scenes_MarioAndSonicAtThe2012OlympicGames.sceneGroup,
+    Scenes_MetroidPrime.sceneGroupMP3,
     Scenes_Psychonauts.sceneGroup,
     Scenes_SonicColors.sceneGroup,
     Scenes_Test.sceneGroup,
