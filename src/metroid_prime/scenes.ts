@@ -3,7 +3,7 @@ import * as PAK from './pak';
 import * as MLVL from './mlvl';
 import * as MREA from './mrea';
 import { ResourceSystem, NameData } from './resource';
-import { MREARenderer, RetroTextureHolder, CMDLRenderer, RetroPass, CMDLData, ModelCache } from './render';
+import { MREARenderer, RetroTextureHolder, CMDLRenderer, RetroPass, ModelCache } from './render';
 
 import * as Viewer from '../viewer';
 import * as UI from '../ui';
@@ -48,10 +48,14 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
 
     private prepareToRenderSkybox(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         // Pick an active skybox and render it...
-        let skybox: CMDLRenderer | null = this.defaultSkyRenderer;
+
+        let skybox: CMDLRenderer | null = null;
         for (let i = 0; i < this.areaRenderers.length; i++) {
-            if (this.areaRenderers[i].visible && this.areaRenderers[i].needSky && this.areaRenderers[i].overrideSky !== null) {
-                skybox = this.areaRenderers[i].overrideSky;
+            if (this.areaRenderers[i].visible && this.areaRenderers[i].needSky) {
+                if (this.areaRenderers[i].overrideSky !== null)
+                    skybox = this.areaRenderers[i].overrideSky;
+                else
+                    skybox = this.defaultSkyRenderer;
                 break;
             }
         }
