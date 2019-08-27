@@ -14,9 +14,12 @@ import * as STRG from './strg';
 import * as TXTR from './txtr';
 import * as CMDL from './cmdl';
 import * as ANCS from './ancs';
+import { InputStream } from './stream';
 
-type ParseFunc<T> = (resourceSystem: ResourceSystem, assetID: string, buffer: ArrayBufferSlice) => T;
+type ParseFunc<T> = (stream: InputStream, resourceSystem: ResourceSystem, assetID: string) => T;
 type Resource = any;
+
+export const invalidAssetID: string = "\xFF\xFF\xFF\xFF";
 
 const FourCCLoaders: { [n: string]: ParseFunc<Resource> } = {
     'MLVL': MLVL.parse,
@@ -146,9 +149,13 @@ export class ResourceSystem {
             return null;
 
         const resource = this.findResourceByID(assetID);
+        if (!resource)
+            return null;
+        
         assert(resource.fourCC === fourCC);
         const buffer = this.loadResourceBuffer(resource);
-        const inst = loaderFunc(this, assetID, buffer);
+        const stream = new InputStream(buffer);
+        const inst = loaderFunc(stream, this, assetID);
         this._cache.set(assetID, inst);
         return inst;
     }

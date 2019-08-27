@@ -29,7 +29,7 @@ import * as Scenes_Zelda_OcarinaOfTime3D from './oot3d/oot3d_scenes';
 import * as Scenes_Zelda_MajorasMask3D from './oot3d/mm3d_scenes';
 import * as Scenes_LuigisMansion3D from './oot3d/lm3d_scenes';
 import * as Scenes_DarkSoulsCollision from './dksiv/scenes';
-import * as Scenes_MetroidPrime1 from './metroid_prime/scenes';
+import * as Scenes_MetroidPrime from './metroid_prime/scenes';
 import * as Scenes_DonkeyKongCountryReturns from './metroid_prime/dkcr_scenes';
 import * as Scenes_LuigisMansion from './luigis_mansion/scenes';
 import * as Scenes_PaperMario_TheThousandYearDoor from './ttyd/scenes';
@@ -91,7 +91,8 @@ const sceneGroups = [
     "GameCube",
     Scenes_LuigisMansion.sceneGroup,
     Scenes_MarioKartDoubleDash.sceneGroup,
-    Scenes_MetroidPrime1.sceneGroup,
+    Scenes_MetroidPrime.sceneGroupMP1,
+    Scenes_MetroidPrime.sceneGroupMP2,
     Scenes_PaperMario_TheThousandYearDoor.sceneGroup,
     Scenes_Pikmin2.sceneGroup,
     Scenes_SuperMarioSunshine.sceneGroup,
@@ -116,10 +117,11 @@ const sceneGroups = [
     Scenes_DarkSoulsCollision.sceneGroup,
     Scenes_SonicMania.sceneGroup,
     "Experimental",
-    Scenes_DonkeyKongCountryReturns.sceneGroup,
+//  Scenes_DonkeyKongCountryReturns.sceneGroup,
     Scenes_DarkSouls.sceneGroup,
     Scenes_Elebits.sceneGroup,
     Scenes_MarioAndSonicAtThe2012OlympicGames.sceneGroup,
+    Scenes_MetroidPrime.sceneGroupMP3,
     Scenes_Psychonauts.sceneGroup,
     Scenes_SonicColors.sceneGroup,
     Scenes_Test.sceneGroup,

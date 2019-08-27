@@ -5,6 +5,8 @@ import * as GX_Material from '../gx/gx_material';
 import * as GX from '../gx/gx_enum';
 
 import * as Script from './script';
+import * as Collision from './collision';
+import { InputStream } from './stream'
 import { TXTR } from './txtr';
 
 import { ResourceSystem } from "./resource";
@@ -21,7 +23,15 @@ export interface MREA {
     materialSet: MaterialSet;
     worldModels: WorldModel[];
     scriptLayers: Script.ScriptLayer[];
+    collision: Collision.AreaCollision;
     lightLayers: AreaLightLayer[];
+}
+
+enum AreaVersion {
+    MP1 = 0xF,
+    MP2 = 0x19,
+    MP3 = 0x1E,
+    DKCR = 0x20
 }
 
 export const enum UVAnimationType {
@@ -92,7 +102,7 @@ export interface MaterialSet {
 export const enum MaterialFlags {
     HAS_KONST      = 0x0008,
     IS_TRANSPARENT = 0x0010,
-    ALPHA_TEST  = 0x0020,
+    ALPHA_TEST     = 0x0020,
     HAS_SAMUS_REFL = 0x0040,
     DEPTH_WRITE    = 0x0080,
     OCCLUDER       = 0x0200,
@@ -100,14 +110,11 @@ export const enum MaterialFlags {
     UV_SHORT       = 0x2000,
 }
 
-function parseMaterialSet_UVAnimations(buffer: ArrayBufferSlice, count: number): UVAnimation[] {
-    const view = buffer.createDataView();
+function parseMaterialSet_UVAnimations(stream: InputStream, count: number): UVAnimation[] {
     const uvAnimations: UVAnimation[] = [];
 
-    let offs = 0x00;
     for (let i = 0; i < count; i++) {
-        const type: UVAnimationType = view.getUint32(offs + 0x00);
-        offs += 0x04;
+        const type: UVAnimationType = stream.readUint32();
 
         switch (type) {
         case UVAnimationType.INV_MAT_SKY:
@@ -117,59 +124,51 @@ function parseMaterialSet_UVAnimations(buffer: ArrayBufferSlice, count: number):
             // These guys have no parameters.
             break;
         case UVAnimationType.UV_SCROLL: {
-            const offsetS = view.getFloat32(offs + 0x00);
-            const offsetT = view.getFloat32(offs + 0x04);
-            const scaleS = view.getFloat32(offs + 0x08);
-            const scaleT = view.getFloat32(offs + 0x0C);
+            const offsetS = stream.readFloat32();
+            const offsetT = stream.readFloat32();
+            const scaleS = stream.readFloat32();
+            const scaleT = stream.readFloat32();
             uvAnimations.push({ type, offsetS, offsetT, scaleS, scaleT });
-            offs += 0x10;
             break;
         }
         case UVAnimationType.ROTATION: {
-            const offset = view.getFloat32(offs + 0x00);
-            const scale = view.getFloat32(offs + 0x04);
+            const offset = stream.readFloat32();
+            const scale = stream.readFloat32();
             uvAnimations.push({ type, offset, scale });
-            offs += 0x08;
             break;
         }
         case UVAnimationType.FLIPBOOK_U:
         case UVAnimationType.FLIPBOOK_V: {
-            const scale = view.getFloat32(offs + 0x00);
-            const numFrames = view.getFloat32(offs + 0x04);
-            const step = view.getFloat32(offs + 0x08);
-            const offset = view.getFloat32(offs + 0x0C);
+            const scale = stream.readFloat32();
+            const numFrames = stream.readFloat32();
+            const step = stream.readFloat32();
+            const offset = stream.readFloat32();
             uvAnimations.push({ type, scale, numFrames, step, offset });
-            offs += 0x10;
             break;
         }
         case UVAnimationType.CYLINDER: {
-            const theta = view.getFloat32(offs + 0x00);
-            const phi = view.getFloat32(offs + 0x04);
+            const theta = stream.readFloat32();
+            const phi = stream.readFloat32();
             uvAnimations.push({ type, theta, phi });
-            offs += 0x08;
             break;
         }
         case 0x08: {
             // Unknown (DKCR)
-            offs += 0x24;
+            stream.skip(0x24);
             break;
         }
         }
     }
 
-    assert(offs === buffer.byteLength);
     return uvAnimations;
 }
 
-export function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBufferSlice, offs: number): MaterialSet {
-    const view = buffer.createDataView();
-
-    const textureCount = view.getUint32(offs + 0x00);
-    offs += 0x04;
+export function parseMaterialSet(stream: InputStream, resourceSystem: ResourceSystem, isEchoes: boolean): MaterialSet {
+    const textureCount = stream.readUint32();
     const textures: TXTR[] = [];
     const textureRemapTable: number[] = [];
     for (let i = 0; i < textureCount; i++) {
-        const materialTXTRID = readString(buffer, offs, 0x04, false);
+        const materialTXTRID = stream.readAssetID();
         const txtr: TXTR = resourceSystem.loadAssetByID(materialTXTRID, 'TXTR');
         const txtrIndex = textures.indexOf(txtr);
         if (txtrIndex >= 0) {
@@ -178,50 +177,47 @@ export function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBu
             const newIndex = textures.push(txtr) - 1;
             textureRemapTable.push(newIndex);
         }
-        offs += 0x04;
     }
 
-    const materialCount = view.getUint32(offs + 0x00);
-    offs += 0x04;
+    const materialCount = stream.readUint32();
     const materialEndTable: number[] = [];
     for (let i = 0; i < materialCount; i++) {
-        const materialEndOffs = view.getUint32(offs);
+        const materialEndOffs = stream.readUint32();
         materialEndTable.push(materialEndOffs);
-        offs += 0x04;
     }
 
-    const materialsStart = offs;
+    const materialsStart = stream.tell();
     const materials: Material[] = [];
     for (let i = 0; i < materialCount; i++) {
-        const flags: MaterialFlags = view.getUint32(offs + 0x00);
-        const textureIndexCount = view.getUint32(offs + 0x04);
-        offs += 0x08;
+        const flags: MaterialFlags = stream.readUint32();
+        const textureIndexCount = stream.readUint32();
 
         const textureIndexes: number[] = [];
         assert(textureIndexCount < 8);
         for (let j = 0; j < textureIndexCount; j++) {
-            const textureIndex = view.getUint32(offs);
+            const textureIndex = stream.readUint32();
             textureIndexes.push(textureIndex);
-            offs += 0x04;
         }
 
-        const vtxAttrFormat = view.getUint32(offs + 0x00);
-        const groupIndex = view.getUint32(offs + 0x04);
-        offs += 0x08;
+        const vtxAttrFormat = stream.readUint32();
+
+        if (isEchoes) {
+            stream.skip(8);
+        }
+
+        const groupIndex = stream.readUint32();
 
         let colorConstants: GX_Material.Color[] = [];
 
         if (flags & MaterialFlags.HAS_KONST) {
-            const konstCount = view.getUint32(offs);
-            offs += 0x04;
+            const konstCount = stream.readUint32();
 
             for (let j = 0; j < konstCount; j++) {
-                const r = view.getUint8(offs + 0x00) / 0xFF;
-                const g = view.getUint8(offs + 0x01) / 0xFF;
-                const b = view.getUint8(offs + 0x02) / 0xFF;
-                const a = view.getUint8(offs + 0x03) / 0xFF;
+                const r = stream.readUint8() / 255;
+                const g = stream.readUint8() / 255;
+                const b = stream.readUint8() / 255;
+                const a = stream.readUint8() / 255;
                 colorConstants.push(new GX_Material.Color(r, g, b, a));
-                offs += 0x04;
             }
         }
 
@@ -231,23 +227,20 @@ export function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBu
             colorConstants.push(new GX_Material.Color(0, 0, 0, 0));
         }
 
-        const blendDstFactor: GX.BlendFactor = view.getUint16(offs + 0x00);
-        const blendSrcFactor: GX.BlendFactor = view.getUint16(offs + 0x02);
-        offs += 0x04;
+        const blendDstFactor: GX.BlendFactor = stream.readUint16();
+        const blendSrcFactor: GX.BlendFactor = stream.readUint16();
 
         if (flags & MaterialFlags.HAS_INDTX_REFL) {
-            const reflectionIndtexSlot = view.getUint32(offs);
-            offs += 0x04;
+            const reflectionIndtexSlot = stream.readUint32();
         }
 
-        const colorChannelFlagsTableCount = view.getUint32(offs);
+        const colorChannelFlagsTableCount = stream.readUint32();
         assert(colorChannelFlagsTableCount <= 4);
-        offs += 0x04;
 
         const lightChannels: GX_Material.LightChannelControl[] = [];
         // Only color channel 1 is stored in the format.
         for (let j = 0; j < 1; j++) {
-            const colorChannelFlags = view.getUint32(offs);
+            const colorChannelFlags = stream.readUint32();
             const lightingEnabled = !!(colorChannelFlags & 0x01);
             const ambColorSource: GX.ColorSrc = (colorChannelFlags >>> 1) & 0x01;
             const matColorSource: GX.ColorSrc = (colorChannelFlags >>> 2) & 0x01;
@@ -259,7 +252,7 @@ export function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBu
             const alphaChannel = { lightingEnabled: false, ambColorSource: GX.ColorSrc.REG, matColorSource: GX.ColorSrc.REG, litMask: 0, diffuseFunction: GX.DiffuseFunction.NONE, attenuationFunction: GX.AttenuationFunction.NONE };
             lightChannels.push({ colorChannel, alphaChannel });
         }
-        offs += 0x04 * colorChannelFlagsTableCount;
+        stream.skip(0x04 * (colorChannelFlagsTableCount-1));
 
         // Fake other channel.
         lightChannels.push({
@@ -267,21 +260,21 @@ export function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBu
             alphaChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.REG, matColorSource: GX.ColorSrc.REG, litMask: 0, diffuseFunction: GX.DiffuseFunction.NONE, attenuationFunction: GX.AttenuationFunction.NONE },
         });
 
-        const tevStageCount = view.getUint32(offs);
+        const tevStageCount = stream.readUint32();
         assert(tevStageCount <= 8);
-        offs += 0x04;
-        let tevOrderTableOffs = offs + tevStageCount * 0x14;
+        let tevOrderTableOffs = stream.tell() + tevStageCount * 0x14;
 
         const tevStages: GX_Material.TevStage[] = [];
         for (let j = 0; j < tevStageCount; j++) {
-            const colorInputSel = view.getUint32(offs + 0x00);
-            const alphaInputSel = view.getUint32(offs + 0x04);
-            const colorCombineFlags = view.getUint32(offs + 0x08);
-            const alphaCombineFlags = view.getUint32(offs + 0x0C);
+            const colorInputSel = stream.readUint32();
+            const alphaInputSel = stream.readUint32();
+            const colorCombineFlags = stream.readUint32();
+            const alphaCombineFlags = stream.readUint32();
 
-            const konstAlphaSel: GX.KonstAlphaSel = view.getUint8(offs + 0x11);
-            const konstColorSel: GX.KonstColorSel = view.getUint8(offs + 0x12);
-            const channelId: GX.RasColorChannelID = GX_Material.getRasColorChannelID(view.getUint8(offs + 0x13));
+            stream.skip(1);
+            const konstAlphaSel: GX.KonstAlphaSel = stream.readUint8();
+            const konstColorSel: GX.KonstColorSel = stream.readUint8();
+            const channelId: GX.RasColorChannelID = GX_Material.getRasColorChannelID(stream.readUint8());
 
             const colorInA: GX.CombineColorInput = (colorInputSel >>>  0) & 0x1F;
             const colorInB: GX.CombineColorInput = (colorInputSel >>>  5) & 0x1F;
@@ -305,8 +298,12 @@ export function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBu
             const alphaClamp: boolean     = !!(alphaCombineFlags >>> 8);
             const alphaRegId: GX.Register = (alphaCombineFlags >>> 9) & 0x03;
 
-            const texCoordId: GX.TexCoordID = view.getUint8(tevOrderTableOffs + 0x03);
-            const texMap: number = view.getUint8(tevOrderTableOffs + 0x02);
+            let curOffs = stream.tell();
+            stream.goTo(tevOrderTableOffs + 0x2);
+            const texMap: number = stream.readUint8();
+            const texCoordId: GX.TexCoordID = stream.readUint8();
+            stream.goTo(curOffs);
+            tevOrderTableOffs += 4;
 
             const index = j;
 
@@ -329,21 +326,18 @@ export function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBu
             };
 
             tevStages.push(tevStage);
-
-            offs += 0x14;
-            tevOrderTableOffs += 0x04;
         }
 
         // Skip past TEV order table.
-        offs = tevOrderTableOffs;
+        stream.goTo(tevOrderTableOffs);
 
-        const texGenCount = view.getUint32(offs);
+        const texGenCount = stream.readUint32();
         assert(texGenCount <= 8);
-        offs += 0x04;
+
         const texGens: GX_Material.TexGen[] = [];
         for (let j = 0; j < texGenCount; j++) {
             const index = j;
-            const flags = view.getUint32(offs);
+            const flags = stream.readUint32();
             const type: GX.TexGenType = (flags >>> 0) & 0x0F;
             const source: GX.TexGenSrc = (flags >>> 4) & 0x0F;
             const matrix: GX.TexGenMatrix = ((flags >>> 9) & 0x1F) + 30;
@@ -352,15 +346,12 @@ export function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBu
             const postMatrix: GX.PostTexGenMatrix = ((flags >>> 15) & 0x3F) + 64;
 
             texGens.push({ index, type, source, matrix, normalize, postMatrix });
-            offs += 0x04;
         }
 
-        const uvAnimationsSize = view.getUint32(offs + 0x00) - 0x04;
-        const uvAnimationsCount = view.getUint32(offs + 0x04);
-        offs += 0x08;
-        const uvAnimations: UVAnimation[] = parseMaterialSet_UVAnimations(buffer.subarray(offs, uvAnimationsSize), uvAnimationsCount);
-        offs += uvAnimationsSize;
+        const uvAnimationsSize = stream.readUint32(); - 0x04;
+        const uvAnimationsCount = stream.readUint32();
 
+        const uvAnimations: UVAnimation[] = parseMaterialSet_UVAnimations(stream, uvAnimationsCount);
         const index = i;
 
         const name = `PrimeGen_${i}`;
@@ -422,24 +413,32 @@ export function parseMaterialSet(resourceSystem: ResourceSystem, buffer: ArrayBu
             colorRegisters,
             colorConstants,
          });
-        assert((offs - materialsStart) === materialEndTable[i]);
+        assert((stream.tell() - materialsStart) === materialEndTable[i]);
     }
 
     return { textures, textureRemapTable, materials };
 }
 
 export const vtxAttrFormats = [
-    { vtxAttrib: GX.VertexAttribute.POS,  mask: 0x00000003 },
-    { vtxAttrib: GX.VertexAttribute.NRM,  mask: 0x0000000C },
-    { vtxAttrib: GX.VertexAttribute.CLR0, mask: 0x00000030 },
-    { vtxAttrib: GX.VertexAttribute.CLR1, mask: 0x000000C0 },
-    { vtxAttrib: GX.VertexAttribute.TEX0, mask: 0x00000300 },
-    { vtxAttrib: GX.VertexAttribute.TEX1, mask: 0x00000C00 },
-    { vtxAttrib: GX.VertexAttribute.TEX2, mask: 0x00003000 },
-    { vtxAttrib: GX.VertexAttribute.TEX3, mask: 0x0000C000 },
-    { vtxAttrib: GX.VertexAttribute.TEX4, mask: 0x00030000 },
-    { vtxAttrib: GX.VertexAttribute.TEX5, mask: 0x000C0000 },
-    { vtxAttrib: GX.VertexAttribute.TEX6, mask: 0x00300000 },
+    { vtxAttrib: GX.VertexAttribute.PNMTXIDX,   type: GX.AttrType.DIRECT, mask: 0x01000000 },
+    { vtxAttrib: GX.VertexAttribute.TEX0MTXIDX, type: GX.AttrType.DIRECT, mask: 0x02000000 },
+    { vtxAttrib: GX.VertexAttribute.TEX1MTXIDX, type: GX.AttrType.DIRECT, mask: 0x04000000 },
+    { vtxAttrib: GX.VertexAttribute.TEX2MTXIDX, type: GX.AttrType.DIRECT, mask: 0x08000000 },
+    { vtxAttrib: GX.VertexAttribute.TEX3MTXIDX, type: GX.AttrType.DIRECT, mask: 0x10000000 },
+    { vtxAttrib: GX.VertexAttribute.TEX4MTXIDX, type: GX.AttrType.DIRECT, mask: 0x20000000 },
+    { vtxAttrib: GX.VertexAttribute.TEX5MTXIDX, type: GX.AttrType.DIRECT, mask: 0x40000000 },
+    { vtxAttrib: GX.VertexAttribute.TEX6MTXIDX, type: GX.AttrType.DIRECT, mask: 0x80000000 },
+    { vtxAttrib: GX.VertexAttribute.POS,  type: GX.AttrType.INDEX16, mask: 0x00000003 },
+    { vtxAttrib: GX.VertexAttribute.NRM,  type: GX.AttrType.INDEX16, mask: 0x0000000C },
+    { vtxAttrib: GX.VertexAttribute.CLR0, type: GX.AttrType.INDEX16, mask: 0x00000030 },
+    { vtxAttrib: GX.VertexAttribute.CLR1, type: GX.AttrType.INDEX16, mask: 0x000000C0 },
+    { vtxAttrib: GX.VertexAttribute.TEX0, type: GX.AttrType.INDEX16, mask: 0x00000300 },
+    { vtxAttrib: GX.VertexAttribute.TEX1, type: GX.AttrType.INDEX16, mask: 0x00000C00 },
+    { vtxAttrib: GX.VertexAttribute.TEX2, type: GX.AttrType.INDEX16, mask: 0x00003000 },
+    { vtxAttrib: GX.VertexAttribute.TEX3, type: GX.AttrType.INDEX16, mask: 0x0000C000 },
+    { vtxAttrib: GX.VertexAttribute.TEX4, type: GX.AttrType.INDEX16, mask: 0x00030000 },
+    { vtxAttrib: GX.VertexAttribute.TEX5, type: GX.AttrType.INDEX16, mask: 0x000C0000 },
+    { vtxAttrib: GX.VertexAttribute.TEX6, type: GX.AttrType.INDEX16, mask: 0x00300000 },
 ];
 
 export interface Surface {
@@ -459,21 +458,95 @@ export interface Geometry {
     surfaces: Surface[];
 }
 
-export function parseGeometry(buffer: ArrayBufferSlice, materialSet: MaterialSet, sectionOffsTable: number[], hasUVShort: boolean, sectionIndex: number, worldModelIndex: number): [Geometry, number] {
-    const view = buffer.createDataView();
+export function parseWorldModelHeader(stream: InputStream): [number, mat4, AABB] {
+    const visorFlags = stream.readUint32();
+    const m00 = stream.readFloat32();
+    const m01 = stream.readFloat32();
+    const m02 = stream.readFloat32();
+    const m03 = stream.readFloat32();
+    const m10 = stream.readFloat32();
+    const m11 = stream.readFloat32();
+    const m12 = stream.readFloat32();
+    const m13 = stream.readFloat32();
+    const m20 = stream.readFloat32();
+    const m21 = stream.readFloat32();
+    const m22 = stream.readFloat32();
+    const m23 = stream.readFloat32();
+    const modelMatrix = mat4.fromValues(
+        m00, m10, m20, 0.0,
+        m01, m11, m21, 0.0,
+        m02, m12, m22, 0.0,
+        m03, m13, m23, 1.0,
+    );
+    const bboxMinX = stream.readFloat32();
+    const bboxMinY = stream.readFloat32();
+    const bboxMinZ = stream.readFloat32();
+    const bboxMaxX = stream.readFloat32();
+    const bboxMaxY = stream.readFloat32();
+    const bboxMaxZ = stream.readFloat32();
+    const bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
 
-    const posSectionOffs = sectionOffsTable[sectionIndex++];
-    const nrmSectionOffs = sectionOffsTable[sectionIndex++];
-    const clrSectionOffs = sectionOffsTable[sectionIndex++];
-    const uvfSectionOffs = sectionOffsTable[sectionIndex++];
-    const uvsSectionOffs = hasUVShort ? sectionOffsTable[sectionIndex++] : null;
+    return [visorFlags, modelMatrix, bbox];
+}
 
-    const surfaceTableOffs = sectionOffsTable[sectionIndex++];
-    const firstSurfaceOffs = sectionOffsTable[sectionIndex];
+function parseWorldModels_MP1(stream: InputStream, worldModelCount: number, sectionIndex: number, sectionOffsTable: number[], materialSet: MaterialSet, version: number): WorldModel[] {
+    let worldModels: WorldModel[] = [];
 
-    const surfaceCount = view.getUint32(surfaceTableOffs + 0x00);
-    const surfaces: Surface[] = [];
+    for (let i = 0; i < worldModelCount; i++) {
+        // World model header.
+        const worldModelHeaderOffs = sectionOffsTable[sectionIndex++];
+        stream.goTo(worldModelHeaderOffs);
 
+        let visorFlags: number, modelMatrix: mat4, bbox: AABB;
+        [visorFlags, modelMatrix, bbox] = parseWorldModelHeader(stream);
+
+        const worldModelIndex = worldModels.length;
+        let geometry: Geometry;
+
+        [geometry, sectionIndex] = parseGeometry(stream, materialSet, sectionOffsTable, true, version >= AreaVersion.MP2, false, sectionIndex, worldModelIndex);
+
+        worldModels.push({ geometry, modelMatrix, bbox });
+    }
+
+    return worldModels;
+}
+
+function parseWorldModels_MP3(stream: InputStream, worldModelCount: number, wobjSectionIndex: number, gpudSectionIndex: number, sectionOffsTable: number[], materialSet: MaterialSet, version: number): WorldModel[] {
+    let worldModels: WorldModel[] = [];
+
+    for (let i = 0; i < worldModelCount; i++) {
+        // World model header.
+        const worldModelHeaderOffs = sectionOffsTable[wobjSectionIndex++];
+        stream.goTo(worldModelHeaderOffs);
+
+        let visorFlags: number, modelMatrix: mat4, bbox: AABB;
+        [visorFlags, modelMatrix, bbox] = parseWorldModelHeader(stream);
+
+        const worldModelIndex = worldModels.length;
+        let geometry: Geometry;
+
+        [geometry, wobjSectionIndex, gpudSectionIndex] = parseGeometry_MP3_MREA(stream, materialSet, sectionOffsTable, version === AreaVersion.DKCR, wobjSectionIndex, gpudSectionIndex, worldModelIndex);
+
+        worldModels.push({ geometry, modelMatrix, bbox });
+    }
+
+    return worldModels;
+}
+
+function parseSurfaces(  stream: InputStream,
+                         surfaceCount: number,
+                         sectionIndex: number,
+                         posSectionOffs: number,
+                         nrmSectionOffs: number,
+                         clrSectionOffs: number,
+                         uvfSectionOffs: number,
+                         uvsSectionOffs: number,
+                         sectionOffsTable: number[],
+                         worldModelIndex: number,
+                         materialSet: MaterialSet,
+                         isEchoes: boolean
+                    ): [Surface[], number]
+{
     function fillVatFormat(nrmType: GX.CompType, tex0Type: GX.CompType, compShift: number): GX_VtxAttrFmt[] {
         const vatFormat: GX_VtxAttrFmt[] = [];
         vatFormat[GX.VertexAttribute.POS] = { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.F32, compShift };
@@ -491,24 +564,32 @@ export function parseGeometry(buffer: ArrayBufferSlice, materialSet: MaterialSet
         return vatFormat;
     }
 
+    let surfaces: Surface[] = [];
+
     for (let i = 0; i < surfaceCount; i++) {
         const surfaceOffs = sectionOffsTable[sectionIndex];
-        const surfaceEnd = firstSurfaceOffs + view.getUint32(surfaceTableOffs + 0x04 + i * 0x04);
+        const surfaceEnd = sectionOffsTable[sectionIndex+1];
+        stream.goTo(surfaceOffs);
 
-        const centerX = view.getFloat32(surfaceOffs + 0x00);
-        const centerY = view.getFloat32(surfaceOffs + 0x04);
-        const centerZ = view.getFloat32(surfaceOffs + 0x08);
-        const materialIndex = view.getUint32(surfaceOffs + 0x0C);
-        const mantissa = view.getUint16(surfaceOffs + 0x10);
-        const displayListSizeExceptNotReally = view.getUint16(surfaceOffs + 0x12);
-        const extraDataSize = view.getUint32(surfaceOffs + 0x1C);
-        const normalX = view.getFloat32(surfaceOffs + 0x20);
-        const normalY = view.getFloat32(surfaceOffs + 0x24);
-        const normalZ = view.getFloat32(surfaceOffs + 0x28);
+        const centerX = stream.readFloat32();
+        const centerY = stream.readFloat32();
+        const centerZ = stream.readFloat32();
+        const materialIndex = stream.readUint32();
+        const mantissa = stream.readUint16();
+        const displayListSizeExceptNotReally = stream.readUint16();
+        stream.skip(8);
+        const extraDataSize = stream.readUint32();
+        const normalX = stream.readFloat32();
+        const normalY = stream.readFloat32();
+        const normalZ = stream.readFloat32();
 
-        // XXX(jstpierre): 0x30 or 0x2C?
-        const surfaceHeaderEnd = surfaceOffs + 0x2C + extraDataSize;
-        const primitiveDataOffs = align(surfaceHeaderEnd, 32);
+        if (isEchoes) {
+            stream.skip(4);
+        }
+
+        stream.skip(extraDataSize);
+        stream.align(32);
+        const primitiveDataOffs = stream.tell();
 
         // Build our vertex format.
         const material = materialSet.materials[materialIndex];
@@ -519,24 +600,24 @@ export function parseGeometry(buffer: ArrayBufferSlice, materialSet: MaterialSet
         const useUvsArray = (material.flags & MaterialFlags.UV_SHORT);
 
         const vtxArrays: GX_Array[] = [];
-        vtxArrays[GX.VertexAttribute.POS]  = { buffer, offs: posSectionOffs };
-        vtxArrays[GX.VertexAttribute.NRM]  = { buffer, offs: nrmSectionOffs };
-        vtxArrays[GX.VertexAttribute.CLR0] = { buffer, offs: clrSectionOffs };
-        vtxArrays[GX.VertexAttribute.CLR1] = { buffer, offs: clrSectionOffs };
-        vtxArrays[GX.VertexAttribute.TEX0] = { buffer, offs: useUvsArray ? uvsSectionOffs : uvfSectionOffs };
-        vtxArrays[GX.VertexAttribute.TEX1] = { buffer, offs: uvfSectionOffs };
-        vtxArrays[GX.VertexAttribute.TEX2] = { buffer, offs: uvfSectionOffs };
-        vtxArrays[GX.VertexAttribute.TEX3] = { buffer, offs: uvfSectionOffs };
-        vtxArrays[GX.VertexAttribute.TEX4] = { buffer, offs: uvfSectionOffs };
-        vtxArrays[GX.VertexAttribute.TEX5] = { buffer, offs: uvfSectionOffs };
-        vtxArrays[GX.VertexAttribute.TEX6] = { buffer, offs: uvfSectionOffs };
-        vtxArrays[GX.VertexAttribute.TEX7] = { buffer, offs: uvfSectionOffs };
+        vtxArrays[GX.VertexAttribute.POS]  = { buffer: stream.getBuffer(), offs: posSectionOffs };
+        vtxArrays[GX.VertexAttribute.NRM]  = { buffer: stream.getBuffer(), offs: nrmSectionOffs };
+        vtxArrays[GX.VertexAttribute.CLR0] = { buffer: stream.getBuffer(), offs: clrSectionOffs };
+        vtxArrays[GX.VertexAttribute.CLR1] = { buffer: stream.getBuffer(), offs: clrSectionOffs };
+        vtxArrays[GX.VertexAttribute.TEX0] = { buffer: stream.getBuffer(), offs: useUvsArray ? uvsSectionOffs : uvfSectionOffs };
+        vtxArrays[GX.VertexAttribute.TEX1] = { buffer: stream.getBuffer(), offs: uvfSectionOffs };
+        vtxArrays[GX.VertexAttribute.TEX2] = { buffer: stream.getBuffer(), offs: uvfSectionOffs };
+        vtxArrays[GX.VertexAttribute.TEX3] = { buffer: stream.getBuffer(), offs: uvfSectionOffs };
+        vtxArrays[GX.VertexAttribute.TEX4] = { buffer: stream.getBuffer(), offs: uvfSectionOffs };
+        vtxArrays[GX.VertexAttribute.TEX5] = { buffer: stream.getBuffer(), offs: uvfSectionOffs };
+        vtxArrays[GX.VertexAttribute.TEX6] = { buffer: stream.getBuffer(), offs: uvfSectionOffs };
+        vtxArrays[GX.VertexAttribute.TEX7] = { buffer: stream.getBuffer(), offs: uvfSectionOffs };
 
         const vcd: GX_VtxDesc[] = [];
         for (const format of vtxAttrFormats) {
             if (!(vtxAttrFormat & format.mask))
                 continue;
-            vcd[format.vtxAttrib] = { type: GX.AttrType.INDEX16 };
+            vcd[format.vtxAttrib] = { type: format.type, enableOutput: (format.mask <=0x00FFFFFF) };
         }
 
         // GX_VTXFMT0 | GX_VA_NRM = GX_F32
@@ -551,7 +632,7 @@ export function parseGeometry(buffer: ArrayBufferSlice, materialSet: MaterialSet
         vat[GX.VtxFmt.VTXFMT2] = fillVatFormat(GX.CompType.S16, GX.CompType.S16, compShift);
 
         const vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
-        const dlData = buffer.slice(primitiveDataOffs, surfaceEnd);
+        const dlData = stream.getBuffer().slice(primitiveDataOffs, surfaceEnd);
         const loadedVertexLayout = vtxLoader.loadedVertexLayout;
         const loadedVertexData = vtxLoader.runVertices(vtxArrays, dlData);
 
@@ -566,8 +647,135 @@ export function parseGeometry(buffer: ArrayBufferSlice, materialSet: MaterialSet
         sectionIndex++;
     }
 
+    return [surfaces, sectionIndex];
+}
+
+function parseSurfaces_DKCR(  stream: InputStream,
+                              surfaceCount: number,
+                              sectionIndex: number,
+                              posSectionOffs: number,
+                              nrmSectionOffs: number,
+                              clrSectionOffs: number,
+                              uvfSectionOffs: number,
+                              uvsSectionOffs: number,
+                              sectionOffsTable: number[],
+                              worldModelIndex: number,
+                              materialSet: MaterialSet,
+                            ): [Surface[], number] {
+    const firstSurfaceOffs = sectionOffsTable[sectionIndex];
+    const surfaces: Surface[] = [];
+
+    for (let j = 0; j < surfaceCount; j++) {
+        const surfaceOffset = sectionOffsTable[sectionIndex++];
+        const surfaceEnd = sectionOffsTable[sectionIndex];
+        stream.goTo(surfaceOffset);
+
+        const centerX = stream.readFloat32();
+        const centerY = stream.readFloat32();
+        const centerZ = stream.readFloat32();
+        const mantissa = stream.readUint16();
+        const displayListSizeExceptNotReally = stream.readUint16();
+        stream.skip(8);
+        const skinMatrixBankIndex = stream.readUint16();
+        const materialIndex = stream.readUint16();
+        stream.skip(1);
+        const visibilityGroupIndex = stream.readUint8();
+        const uvArrayIndex = stream.readUint8();
+        const extraDataSize = stream.readUint8();
+        stream.skip(extraDataSize);
+        stream.align(32);
+
+        // Build our vertex format.
+        const material: Material_MP3 = materialSet.materials[materialIndex] as Material_MP3;
+        const vtxAttrFormat = material.vtxAttrFormat;
+
+        const primitiveDataOffs = stream.tell();
+
+        const vcd: GX_VtxDesc[] = [];
+        for (const format of vtxAttrFormats) {
+            if (!(vtxAttrFormat & format.mask))
+                continue;
+            vcd[format.vtxAttrib] = { type: format.type };
+        }
+
+        const vtxArrays: GX_Array[] = [];
+        vtxArrays[GX.VertexAttribute.POS]  = { buffer: stream.getBuffer(), offs: posSectionOffs };
+        vtxArrays[GX.VertexAttribute.NRM]  = { buffer: stream.getBuffer(), offs: nrmSectionOffs };
+        vtxArrays[GX.VertexAttribute.CLR0] = { buffer: stream.getBuffer(), offs: clrSectionOffs };
+        vtxArrays[GX.VertexAttribute.CLR1] = { buffer: stream.getBuffer(), offs: clrSectionOffs };
+
+        const vatFormat: GX_VtxAttrFmt[] = [];
+        vatFormat[GX.VertexAttribute.POS]  = { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.F32, compShift: 0 };
+        vatFormat[GX.VertexAttribute.NRM]  = { compCnt: GX.CompCnt.NRM_XYZ, compType: GX.CompType.F32, compShift: 0 };
+        vatFormat[GX.VertexAttribute.CLR0] = { compCnt: GX.CompCnt.CLR_RGBA, compType: GX.CompType.RGBA8, compShift: 0 };
+        vatFormat[GX.VertexAttribute.CLR1] = { compCnt: GX.CompCnt.CLR_RGBA, compType: GX.CompType.RGBA8, compShift: 0 };
+
+        // TODO(jstpierre): I assume in the real game this comes from the different VAT formats.
+        const isShort = (uvArrayIndex === 1);
+        for (let i = 0; i < 8; i++) {
+            vatFormat[GX.VertexAttribute.TEX0 + i] = { compCnt: GX.CompCnt.TEX_ST, compType: isShort ? GX.CompType.S16 : GX.CompType.F32, compShift: Math.log2(0x2000) };
+            vtxArrays[GX.VertexAttribute.TEX0 + i] = { buffer: stream.getBuffer(), offs: isShort ? uvsSectionOffs : uvfSectionOffs };
+        }
+
+        const vatFormats: GX_VtxAttrFmt[][] = [vatFormat, vatFormat, vatFormat, vatFormat];
+        const vtxLoader = compileVtxLoaderMultiVat(vatFormats, vcd);
+        const loadedVertexLayout = vtxLoader.loadedVertexLayout;
+        const dlData = stream.getBuffer().slice(primitiveDataOffs, surfaceEnd);
+        const loadedVertexData = vtxLoader.runVertices(vtxArrays, dlData);
+
+        surfaces.push({ materialIndex, worldModelIndex, loadedVertexData, loadedVertexLayout });
+    }
+
+    return [surfaces, sectionIndex];
+}
+
+export function parseGeometry(stream: InputStream, materialSet: MaterialSet, sectionOffsTable: number[], hasUVShort: boolean, isEchoes: boolean, isDKCR: boolean, sectionIndex: number, worldModelIndex: number): [Geometry, number] {
+    const posSectionOffs = sectionOffsTable[sectionIndex++];
+    const nrmSectionOffs = sectionOffsTable[sectionIndex++];
+    const clrSectionOffs = sectionOffsTable[sectionIndex++];
+    const uvfSectionOffs = sectionOffsTable[sectionIndex++];
+    const uvsSectionOffs = hasUVShort ? sectionOffsTable[sectionIndex++] : null;
+
+    const surfaceTableOffs = sectionOffsTable[sectionIndex++];
+    stream.goTo(surfaceTableOffs);
+    const surfaceCount = stream.readUint32();
+
+    let surfaces: Surface[];
+
+    if (!isDKCR) {
+        [surfaces, sectionIndex] = parseSurfaces(stream, surfaceCount, sectionIndex, posSectionOffs, nrmSectionOffs, clrSectionOffs, uvfSectionOffs, uvsSectionOffs, sectionOffsTable, worldModelIndex, materialSet, isEchoes);
+    }
+    else {
+        [surfaces, sectionIndex] = parseSurfaces_DKCR(stream, surfaceCount, sectionIndex, posSectionOffs, nrmSectionOffs, clrSectionOffs, uvfSectionOffs, uvsSectionOffs, sectionOffsTable, worldModelIndex, materialSet)
+    }
+
     const geometry: Geometry = { surfaces };
     return [geometry, sectionIndex];
+}
+
+export function parseGeometry_MP3_MREA(stream: InputStream, materialSet: MaterialSet, sectionOffsTable: number[], isDKCR: boolean, wobjSectionIndex: number, gpudSectionIndex: number, worldModelIndex: number): [Geometry, number, number] {
+    const posSectionOffs = sectionOffsTable[gpudSectionIndex++];
+    const nrmSectionOffs = sectionOffsTable[gpudSectionIndex++];
+    const clrSectionOffs = sectionOffsTable[gpudSectionIndex++];
+    const uvfSectionOffs = sectionOffsTable[gpudSectionIndex++];
+    const uvsSectionOffs = isDKCR ? sectionOffsTable[gpudSectionIndex++] : null;
+
+    const surfaceTableOffs = sectionOffsTable[wobjSectionIndex++];
+    stream.goTo(surfaceTableOffs);
+    const surfaceCount = stream.readUint32();
+    wobjSectionIndex += 2;
+
+    let surfaces: Surface[];
+
+    if (!isDKCR) {
+        [surfaces, gpudSectionIndex] = parseSurfaces(stream, surfaceCount, gpudSectionIndex, posSectionOffs, nrmSectionOffs, clrSectionOffs, uvfSectionOffs, uvsSectionOffs, sectionOffsTable, worldModelIndex, materialSet, true);
+    }
+    else {
+        [surfaces, gpudSectionIndex] = parseSurfaces_DKCR(stream, surfaceCount, gpudSectionIndex, posSectionOffs, nrmSectionOffs, clrSectionOffs, uvfSectionOffs, uvsSectionOffs, sectionOffsTable, worldModelIndex, materialSet);
+    }
+
+    const geometry: Geometry = { surfaces };
+    return [geometry, wobjSectionIndex, gpudSectionIndex];
 }
 
 export const enum AreaLightType {
@@ -580,6 +788,7 @@ export const enum AreaLightType {
 export class AreaLight {
     public type: AreaLightType = AreaLightType.Custom;
     public radius: number = 0;
+    public castShadows: boolean = false;
     public gxLight = new GX_Material.Light();
 }
 
@@ -593,30 +802,34 @@ export interface EntityLights {
     ambientColor: GX_Material.Color;
 }
 
-export function parseLightLayer(buffer: ArrayBufferSlice, offs: number): [AreaLightLayer, number] {
-    let ambientColor: GX_Material.Color = new GX_Material.Color();
-    const view = buffer.createDataView();
+export function parseLightLayer(stream: InputStream, version: number): AreaLightLayer {
+    let ambientColor: GX_Material.Color = new GX_Material.Color;
     const epsilon = 1.192092896e-07;
-    const originalOffs = offs;
 
     const lights: AreaLight[] = [];
-    const lightCount = view.getUint32(offs);
-    offs += 4;
+    const lightCount = stream.readUint32();
 
     for (let i=0; i<lightCount; i++) {
-        const lightType = view.getUint32(offs);
-        const lightColorR = view.getFloat32(offs+4);
-        const lightColorG = view.getFloat32(offs+8);
-        const lightColorB = view.getFloat32(offs+12);
-        const posX = view.getFloat32(offs+16);
-        const posY = view.getFloat32(offs+20);
-        const posZ = view.getFloat32(offs+24);
-        const dirX = view.getFloat32(offs+28);
-        const dirY = view.getFloat32(offs+32);
-        const dirZ = view.getFloat32(offs+36);
-        const brightness = view.getFloat32(offs+40);
-        const spotCutoff = view.getFloat32(offs+44) / 2;
-        const falloffType = view.getUint32(offs+57);
+        const lightType = stream.readUint32();
+        const lightColorR = stream.readFloat32();
+        const lightColorG = stream.readFloat32();
+        const lightColorB = stream.readFloat32();
+        if (version >= AreaVersion.MP3) stream.skip(0x4); // color alpha
+        const posX = stream.readFloat32();
+        const posY = stream.readFloat32();
+        const posZ = stream.readFloat32();
+        const dirX = stream.readFloat32();
+        const dirY = stream.readFloat32();
+        const dirZ = stream.readFloat32();
+        if (version >= AreaVersion.MP3) stream.skip(0xC); // codirection
+        const brightness = stream.readFloat32();
+        const spotCutoff = stream.readFloat32() / 2;
+        stream.skip(0x4);
+        const castShadows = stream.readBool();
+        stream.skip(0x4);
+        const falloffType = stream.readUint32();
+        stream.skip(0x4);
+        if (version >= AreaVersion.MP3) stream.skip(0x14); // unknown data
 
         if (lightType == AreaLightType.LocalAmbient) {
             ambientColor.r = Math.min(lightColorR * brightness, 1);
@@ -626,24 +839,27 @@ export function parseLightLayer(buffer: ArrayBufferSlice, offs: number): [AreaLi
         } else {
             const light = new AreaLight();
             light.type = lightType;
+            light.castShadows = castShadows;
             light.gxLight.Color.r = lightColorR;
             light.gxLight.Color.g = lightColorG;
             light.gxLight.Color.b = lightColorB;
             light.gxLight.Color.a = 1;
             vec3.set(light.gxLight.Position, posX, posY, posZ);
             vec3.set(light.gxLight.Direction, dirX, dirY, dirZ);
+            vec3.normalize(light.gxLight.Direction, light.gxLight.Direction);
+            vec3.negate(light.gxLight.Direction, light.gxLight.Direction);
 
             if (lightType == AreaLightType.Directional) {
                 vec3.set(light.gxLight.DistAtten, 1, 0, 0);
                 vec3.set(light.gxLight.CosAtten, 1, 0, 0);
-            } else {
+            }
+            else {
                 const distAttenA = (falloffType == 0) ? (2.0 / brightness) : 0;
                 const distAttenB = (falloffType == 1) ? (250.0 / brightness) : 0;
                 const distAttenC = (falloffType == 2) ? (25000.0 / brightness) : 0;
                 vec3.set(light.gxLight.DistAtten, distAttenA, distAttenB, distAttenC);
 
                 if (lightType == AreaLightType.Spot) {
-                    vec3.negate(light.gxLight.Direction, vec3.normalize(light.gxLight.Direction, light.gxLight.Direction));
 
                     // Calculate angle atten
                     if (spotCutoff < 0 || spotCutoff > 90) {
@@ -659,13 +875,12 @@ export function parseLightLayer(buffer: ArrayBufferSlice, offs: number): [AreaLi
                     vec3.set(light.gxLight.CosAtten, 1, 0, 0);
                 }
             }
-
+            
             // Calculate radius
             if (light.gxLight.DistAtten[1] < epsilon && light.gxLight.DistAtten[2] < epsilon) {
                 // No distance attenuation curve, so the light is effectively a directional.
                 light.radius = 3000000000000000000000000000000000000.0;
             } else {
-                // Calculate the maximum influence radius from the distance attentuation / intensity curves.
                 let intensity = Math.max(lightColorR, lightColorG, lightColorB);
                 if (light.type === AreaLightType.Custom)
                     intensity *= light.gxLight.CosAtten[0];
@@ -681,36 +896,153 @@ export function parseLightLayer(buffer: ArrayBufferSlice, offs: number): [AreaLi
 
             lights.push(light);
         }
-        offs += 65;
     }
 
-    return [ { lights, ambientColor }, offs - originalOffs ]
+    return { lights, ambientColor };
 }
 
-function parse_MP1(resourceSystem: ResourceSystem, assetID: string, buffer: ArrayBufferSlice): MREA {
-    const view = buffer.createDataView();
 
-    assert(view.getUint32(0x00) === 0xDEADBEEF);
-    const version = view.getUint32(0x04);
-    assert(version === 0x0F);
+function decompressBuffers(stream: InputStream, compressedBlocksIdx: number, compressedBlockCount: number, usesLzo: boolean): Uint8Array {
+    // TODO(jstpierre): Instead of decompressing blocks up-front, make something that can
+    // decompress on-demand? We don't use a lot of data in here, so it might save some parse time...
+    const decompressedSegments: Uint8Array[] = [];
+    let totalDecompressedSize = 0;
 
-    // 0x08 - 0x34: Transform matrix
+    for (let i = 0; i < compressedBlockCount; i++) {
+        const blockBufferSize = stream.readUint32();
+        const blockDecompressedSize = stream.readUint32();
+        const blockCompressedSize = stream.readUint32();
+        const blockDataSectionCount = stream.readUint32();
+        const offs = stream.tell();
+        totalDecompressedSize += blockDecompressedSize;
 
-    const worldModelCount = view.getUint32(0x38);
-    const dataSectionCount = view.getUint32(0x3C);
-    const worldGeometrySectionIndex = view.getUint32(0x40);
-    const scriptLayersSectionIndex = view.getUint32(0x44);
-    const lightsSectionIndex = view.getUint32(0x50);
+        if (blockCompressedSize === 0) {
+            // Uncompressed block.
+            decompressedSegments.push(stream.getBuffer().createTypedArray(Uint8Array, compressedBlocksIdx, blockDecompressedSize));
+            compressedBlocksIdx += blockDecompressedSize;
+        } else {
+            // Compressed block.
 
-    const dataSectionSizeTable: number[] = [];
-    let dataSectionSizeTableIdx = 0x60;
-    for (let i = 0; i < dataSectionCount; i++) {
-        const size = view.getUint32(dataSectionSizeTableIdx + 0x00);
-        dataSectionSizeTable.push(size);
-        dataSectionSizeTableIdx += 0x04;
+            // Padding is at the start of the block for some reason.
+            const blockPadding = align(blockCompressedSize, 0x20) - blockCompressedSize;
+
+            compressedBlocksIdx += blockPadding;
+
+            let remainingSize = blockDecompressedSize;
+            while (remainingSize > 0) {
+                stream.goTo(compressedBlocksIdx);
+                compressedBlocksIdx += 0x02;
+                let segmentSize = stream.readInt16();
+                if (segmentSize < 0) {
+                    // Uncompressed segment.
+                    segmentSize = -segmentSize;
+                    decompressedSegments.push(stream.getBuffer().createTypedArray(Uint8Array, compressedBlocksIdx, segmentSize));
+                    compressedBlocksIdx += segmentSize;
+                    remainingSize -= segmentSize;
+                } else {
+                    // Compressed segment.
+                    const compressedSegment = stream.getBuffer().createTypedArray(Uint8Array, compressedBlocksIdx, segmentSize);
+
+                    if (!usesLzo) {
+                        // zlib
+                        const decompressedSegment = Pako.inflate(compressedSegment);
+                        decompressedSegments.push(decompressedSegment);
+                        compressedBlocksIdx += segmentSize;
+                        remainingSize -= decompressedSegment.byteLength;
+                    }
+                    else {
+                        // LZO1X
+                        throw new Error("MREA data is compressed with LZO. This is currently unsupported.");
+                    }
+                }
+            }
+            stream.goTo(offs);
+        }
     }
 
-    const firstDataSectionOffs = align(dataSectionSizeTableIdx, 32);
+    // Combine buffers
+    const totalBuffer = new Uint8Array(totalDecompressedSize);
+    let idx = 0;
+    for (let i = 0; i < decompressedSegments.length; i++) {
+        totalBuffer.set(decompressedSegments[i], idx);
+        idx += decompressedSegments[i].byteLength;
+    }
+    assert(idx === totalDecompressedSize);
+    return totalBuffer;
+}
+
+export function parse(stream: InputStream, resourceSystem: ResourceSystem): MREA {
+    assert(stream.readUint32() === 0xDEADBEEF);
+    const version = stream.readUint32();
+    assert(version === AreaVersion.MP1 || version === AreaVersion.MP2 || version === AreaVersion.MP3 || version === AreaVersion.DKCR);
+    stream.assetIdLength = (version >= AreaVersion.MP3 ? 8 : 4);
+
+    stream.skip(4*12); // Transform matrix
+
+    const worldModelCount = stream.readUint32();
+    let scriptLayerCount = ( version >= AreaVersion.MP2 ? stream.readUint32() : 0 );
+    const dataSectionCount = stream.readUint32();
+
+    let worldGeometrySectionIndex = -1;
+    let worldGeometryGPUDataSectionIndex = -1;
+    let scriptLayersSectionIndex = -1;
+    let collisionSectionIndex = -1;
+    let lightsSectionIndex = -1;
+
+    if (version <= AreaVersion.MP2) {
+        worldGeometrySectionIndex = stream.readUint32();
+        scriptLayersSectionIndex = stream.readUint32();
+        if (version >= AreaVersion.MP2) stream.skip(4);
+        collisionSectionIndex = stream.readUint32();
+        stream.skip(4);
+        lightsSectionIndex = stream.readUint32();
+        stream.skip( version === AreaVersion.MP2 ? 0x14 : 0xC );
+    }
+
+    const numCompressedBlocks = ( version >= AreaVersion.MP2 ? stream.readUint32() : 0 );
+    const numSectionNumbers = ( version >= AreaVersion.MP3 ? stream.readUint32() : 0 );
+    stream.align(32);
+
+    const dataSectionSizeTable: number[] = [];
+    for (let i = 0; i < dataSectionCount; i++) {
+        const size = stream.readUint32();
+        dataSectionSizeTable.push(size);
+    }
+    stream.align(32);
+
+    // Decompress any compressed data
+    let areaDataBuffer: ArrayBufferSlice = null;
+
+    if (numCompressedBlocks > 0) {
+        const compressedDataIdx = align(stream.tell() + align(numCompressedBlocks*16, 32) + align(numSectionNumbers*8, 32), 32);
+        const decompressedBuffer = decompressBuffers(stream, compressedDataIdx, numCompressedBlocks, version !== AreaVersion.DKCR);
+        areaDataBuffer = new ArrayBufferSlice(decompressedBuffer.buffer);
+        stream.align(32);
+    }
+    
+    // Parse MP3 section numbers
+    if (version >= AreaVersion.MP3) {
+        for (let i = 0; i < numSectionNumbers; i++) {
+            const sectionID = stream.readFourCC();
+            const sectionNum = stream.  readUint32();
+
+            switch (sectionID) {
+                case "WOBJ": worldGeometrySectionIndex = sectionNum; break;
+                case "GPUD": worldGeometryGPUDataSectionIndex = sectionNum; break;
+                case "SOBJ": scriptLayersSectionIndex = sectionNum; break;
+                case "COLI": collisionSectionIndex = sectionNum; break;
+                case "LITE": lightsSectionIndex = sectionNum; break;
+            }
+        }
+        stream.align(32);
+    }
+
+    // Continue on to parse area data
+    if (areaDataBuffer !== null) {
+        stream.setBuffer(areaDataBuffer);
+    }
+
+    const firstDataSectionOffs = stream.tell();
     const dataSectionOffsTable: number[] = [firstDataSectionOffs];
     for (let i = 1; i < dataSectionCount; i++) {
         const prevOffs = dataSectionOffsTable[i - 1];
@@ -725,113 +1057,105 @@ function parse_MP1(resourceSystem: ResourceSystem, assetID: string, buffer: Arra
     const materialSectionOffs = dataSectionOffsTable[worldGeometrySectionIndex + 0];
 
     // Parse out materials.
-    const materialSet = parseMaterialSet(resourceSystem, buffer, materialSectionOffs);
+    stream.goTo(materialSectionOffs);
+    let materialSet: MaterialSet;
 
-    let geometrySectionIndex = worldGeometrySectionIndex + 1;
-    const worldModels: WorldModel[] = [];
-    for (let i = 0; i < worldModelCount; i++) {
-        // World model header.
-        let worldModelHeaderOffs = dataSectionOffsTable[geometrySectionIndex];
-        const visorFlags = view.getUint32(worldModelHeaderOffs + 0x00);
-        const m00 = view.getFloat32(worldModelHeaderOffs + 0x04);
-        const m01 = view.getFloat32(worldModelHeaderOffs + 0x08);
-        const m02 = view.getFloat32(worldModelHeaderOffs + 0x0C);
-        const m03 = view.getFloat32(worldModelHeaderOffs + 0x10);
-        const m10 = view.getFloat32(worldModelHeaderOffs + 0x14);
-        const m11 = view.getFloat32(worldModelHeaderOffs + 0x18);
-        const m12 = view.getFloat32(worldModelHeaderOffs + 0x1C);
-        const m13 = view.getFloat32(worldModelHeaderOffs + 0x20);
-        const m20 = view.getFloat32(worldModelHeaderOffs + 0x24);
-        const m21 = view.getFloat32(worldModelHeaderOffs + 0x28);
-        const m22 = view.getFloat32(worldModelHeaderOffs + 0x2C);
-        const m23 = view.getFloat32(worldModelHeaderOffs + 0x30);
-        const modelMatrix = mat4.fromValues(
-            m00, m10, m20, 0.0,
-            m01, m11, m21, 0.0,
-            m02, m12, m22, 0.0,
-            m03, m13, m23, 1.0,
-        );
-        const bboxMinX = view.getFloat32(worldModelHeaderOffs + 0x34);
-        const bboxMinY = view.getFloat32(worldModelHeaderOffs + 0x38);
-        const bboxMinZ = view.getFloat32(worldModelHeaderOffs + 0x3C);
-        const bboxMaxX = view.getFloat32(worldModelHeaderOffs + 0x40);
-        const bboxMaxY = view.getFloat32(worldModelHeaderOffs + 0x44);
-        const bboxMaxZ = view.getFloat32(worldModelHeaderOffs + 0x48);
-        const bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
-        worldModelHeaderOffs += 0x4C;
+    if (version < AreaVersion.MP3) {
+        materialSet = parseMaterialSet(stream, resourceSystem, version === AreaVersion.MP2);
+    }
+    else {
+        materialSet = parseMaterialSet_MP3(stream, resourceSystem);
+    }
 
-        geometrySectionIndex += 1;
+    // Parse out world models.
+    let worldModels: WorldModel[];
 
-        const worldModelIndex = worldModels.length;
-        let geometry: Geometry;
-        [geometry, geometrySectionIndex] = parseGeometry(buffer, materialSet, dataSectionOffsTable, true, geometrySectionIndex, worldModelIndex);
-        worldModels.push({ geometry, modelMatrix, bbox });
+    if (version < AreaVersion.MP3) {
+        worldModels = parseWorldModels_MP1(stream, worldModelCount, worldGeometrySectionIndex+1, dataSectionOffsTable, materialSet, version);
+    }
+    else {
+        worldModels = parseWorldModels_MP3(stream, worldModelCount, worldGeometrySectionIndex+1, worldGeometryGPUDataSectionIndex, dataSectionOffsTable, materialSet, version);
     }
 
     // Parse out script layers.
     const scriptLayers: Script.ScriptLayer[] = [];
-    let scriptLayerOffs = dataSectionOffsTable[scriptLayersSectionIndex];
-    
-    const sclyMagic = readString(buffer, scriptLayerOffs, 4, false);
-    const sclyVersion = view.getUint32(scriptLayerOffs+4);
-    assert(sclyMagic == 'SCLY');
-    assert(sclyVersion == 1);
 
-    const numLayers = view.getUint32(scriptLayerOffs+8);
-    const scriptLayerSizes: number[] = [];
-    scriptLayerOffs += 0x0C;
+    if (version === AreaVersion.MP1) {
+        const scriptLayerOffs = dataSectionOffsTable[scriptLayersSectionIndex];
+        stream.goTo(scriptLayerOffs);
+        
+        const sclyMagic = stream.readFourCC();
+        const sclyVersion = stream.readUint32();
+        assert(sclyMagic === 'SCLY');
+        assert(sclyVersion === 1);
 
-    for (let i = 0; i < numLayers; i++) {
-        scriptLayerSizes.push(view.getUint32(scriptLayerOffs));
-        scriptLayerOffs += 4;
+        scriptLayerCount = stream.readUint32();
+        const scriptLayerSizes: number[] = [];
+
+        for (let i = 0; i < scriptLayerCount; i++) {
+            scriptLayerSizes.push(stream.readUint32());
+        }
+
+        for (let i = 0; i < scriptLayerCount; i++) {
+            const layerEnd = stream.tell() + scriptLayerSizes[i];
+            const layer = Script.parseScriptLayer_MP1(stream.getBuffer(), stream.tell(), resourceSystem);
+            scriptLayers.push(layer);
+            stream.goTo(layerEnd);
+        }
+    }
+    else {
+        let currentSection = scriptLayersSectionIndex;
+
+        for (let i = 0; i < scriptLayerCount; i++) {
+            const scriptLayerOffs = dataSectionOffsTable[currentSection];
+            stream.goTo(scriptLayerOffs);
+            currentSection++;
+
+            const sclyMagic = stream.readFourCC();
+            stream.skip(1);
+            const sclyIndex = stream.readUint32();
+            assert(sclyMagic == 'SCLY');
+            assert(sclyIndex == i);
+
+            const layer = Script.parseScriptLayer_MP2(stream, resourceSystem);
+            scriptLayers.push(layer);
+        }
     }
 
-    for (let i = 0; i < numLayers; i++) {
-        const layer = Script.parseScriptLayer(buffer, scriptLayerOffs, resourceSystem);
-        scriptLayers.push(layer);
-        scriptLayerOffs += scriptLayerSizes[i];
-    }
+    // Parse out collision.
+    const collisionOffs = dataSectionOffsTable[collisionSectionIndex];
+    stream.goTo(collisionOffs);
+    const collision = Collision.parseAreaCollision(stream);
 
     // Parse out lights.
-    let lightOffs = dataSectionOffsTable[lightsSectionIndex];
-    const lightLayers: AreaLightLayer[] = [];
-    const lightsMagic = view.getUint32(lightOffs);
-    assert(lightsMagic == 0xbabedead);
+    const lightOffs = dataSectionOffsTable[lightsSectionIndex];
+    stream.goTo(lightOffs);
 
-    const numLightLayers = 2; // number of layers is fixed on a game-by-game basis
-    lightOffs += 4;
+    const lightLayers: AreaLightLayer[] = [];
+    const lightsMagic = stream.readUint32();
+    assert(lightsMagic === 0xbabedead);
+
+    const numLightLayers = (version <= AreaVersion.MP2 ? 2 :
+                            version <= AreaVersion.MP3 ? 4 :
+                            8);
 
     for (let i = 0; i < numLightLayers; i++) {
-        let lightLayer: AreaLightLayer;
-        let size = 0;
-        [lightLayer, size] = parseLightLayer(buffer, lightOffs);
+        const lightLayer: AreaLightLayer = parseLightLayer(stream, version);
         lightLayers.push(lightLayer);
-        lightOffs += size;
     }
 
-    return { materialSet, worldModels, scriptLayers, lightLayers };
-}
-
-function combineBuffers(totalSize: number, buffers: Uint8Array[]): Uint8Array {
-    const totalBuffer = new Uint8Array(totalSize);
-    let idx = 0;
-    for (let i = 0; i < buffers.length; i++) {
-        totalBuffer.set(buffers[i], idx);
-        idx += buffers[i].byteLength;
-    }
-    assert(idx === totalSize);
-    return totalBuffer;
+    return { materialSet, worldModels, scriptLayers, collision, lightLayers };
 }
 
 export const enum MaterialFlags_MP3 {
     BLEND = 0x08,
-    PUNCHTHROUGH = 0x10,
+    MASKED = 0x10,
     ADDITIVE_BLEND = 0x20,
     OCCLUDER = 0x100,
     WHITE_AMB = 0x80000,
 }
 
-function makeTevStageFromPass_MP3(passIndex: number, passType: string, passFlags: number, materialFlags: MaterialFlags_MP3, hasOPAC: boolean): GX_Material.TevStage {
+function makeTevStageFromPass_MP3(passIndex: number, passType: string, passFlags: number, materialFlags: MaterialFlags_MP3, hasDIFF: boolean, hasOPAC: boolean): GX_Material.TevStage {
     // Standard texture sample.
     const tevStage: GX_Material.TevStage = {
         index: passIndex,
@@ -884,10 +1208,10 @@ function makeTevStageFromPass_MP3(passIndex: number, passType: string, passFlags
     }
 
     if (passType === 'CLR ') {
-        tevStage.colorInB = GX.CombineColorInput.CPREV;
+        tevStage.colorInB = (hasDIFF ? GX.CombineColorInput.CPREV : GX.CombineColorInput.RASC);
         tevStage.colorInC = GX.CombineColorInput.TEXC;
         tevStage.colorInD = GX.CombineColorInput.ZERO;
-        tevStage.alphaInD = (materialFlags & MaterialFlags_MP3.PUNCHTHROUGH) ? GX.CombineAlphaInput.TEXA : GX.CombineAlphaInput.APREV;
+        tevStage.alphaInD = (materialFlags & MaterialFlags_MP3.MASKED) ? GX.CombineAlphaInput.TEXA : GX.CombineAlphaInput.APREV;
         tevStage.konstAlphaSel = GX.KonstAlphaSel.KASEL_K1_A;
     }
 
@@ -911,6 +1235,17 @@ function makeTevStageFromPass_MP3(passIndex: number, passType: string, passFlags
         tevStage.colorInD = GX.CombineColorInput.CPREV;
     }
 
+    if (passType === 'BLOL') {
+        // Bloom lightmap.
+        // This actually works by drawing to the framebuffer alpha channel. During the post-process pass, the alpha channel
+        // is sampled to determine the intensity of the bloom effect at this pixel. We don't support bloom for MP3, so instead
+        // we just essentially multiply the color by 2 to simulate the increase in brightness that the bloom effect provides.
+        tevStage.texSwapTable = [GX.TevColorChan.G, GX.TevColorChan.G, GX.TevColorChan.G, GX.TevColorChan.G];
+        tevStage.colorInB = GX.CombineColorInput.CPREV;
+        tevStage.colorInC = GX.CombineColorInput.ONE;
+        tevStage.colorInD = GX.CombineColorInput.CPREV;
+    }
+
     return tevStage;
 }
 
@@ -918,22 +1253,20 @@ interface Material_MP3 extends Material {
     passTypes: string[];
 }
 
-function parseMaterialSet_MP3(resourceSystem: ResourceSystem, buffer: ArrayBufferSlice): MaterialSet {
-    const view = buffer.createDataView();
-
-    const materialCount = view.getUint32(0x00);
-    let materialTableIdx = 0x04;
+export function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSystem): MaterialSet {
+    const materialCount = stream.readUint32();
 
     const textures: TXTR[] = [];
     const textureRemapTable: number[] = [];
     const materials: Material_MP3[] = [];
     for (let i = 0; i < materialCount; i++) {
-        const materialOffs = materialTableIdx;
-        const materialSize = view.getUint32(materialTableIdx + 0x00);
-        const materialFlags: MaterialFlags_MP3 = view.getUint32(materialTableIdx + 0x04);
-        const groupIndex = view.getUint32(materialTableIdx + 0x08);
-        const vtxAttrFormat = view.getUint32(materialTableIdx + 0x10);
-        materialTableIdx += 0x20;
+        const materialSize = stream.readUint32();
+        const materialEnd = stream.tell() + materialSize;
+        const materialFlags: MaterialFlags_MP3 = stream.readUint32();
+        const groupIndex = stream.readUint32();
+        stream.skip(4);
+        const vtxAttrFormat = stream.readUint32();
+        stream.skip(0xC);
 
         let passIndex = 0;
         const colorConstants: GX_Material.Color[] = [];
@@ -948,31 +1281,33 @@ function parseMaterialSet_MP3(resourceSystem: ResourceSystem, buffer: ArrayBuffe
         const uvAnimations: UVAnimation[] = [];
         const passTypes: string[] = [];
         let hasOPAC = false;
+        let hasDIFF = false;
         while(true) {
-            const nodeType = readString(buffer, materialTableIdx + 0x00, 0x04, false);
-            materialTableIdx += 0x04;
+            const nodeType = stream.readFourCC();
             if (nodeType === 'END ') {
-                assert(materialTableIdx === materialOffs + 0x04 + materialSize);
+                assert(stream.tell() === materialEnd);
                 break;
             } else if (nodeType === 'PASS') {
-                const passOffs = materialTableIdx;
-                const passSize = view.getUint32(materialTableIdx + 0x00);
-                const passType = readString(buffer, materialTableIdx + 0x04, 0x04, false);
-                const passFlags = view.getUint32(materialTableIdx + 0x08);
-                const materialTXTRID = readString(buffer, materialTableIdx + 0x0C, 0x08, false);
-                const texGenSrc: GX.TexGenSrc = GX.TexGenSrc.TEX0 + view.getUint32(materialTableIdx + 0x14) & 0x0F;
-                const uvAnimationSize = view.getUint32(materialTableIdx + 0x18);
+                const passSize = stream.readUint32();
+                const passEnd = stream.tell() + passSize;
+                const passType = stream.readFourCC();
+                const passFlags = stream.readUint32();
+                const materialTXTRID = stream.readAssetID();
+                const texGenSrc: GX.TexGenSrc = GX.TexGenSrc.TEX0 + stream.readUint32() & 0x0F;
+                const uvAnimationSize = stream.readUint32();
                 let uvAnimation: UVAnimation | null = null;
-                materialTableIdx += 0x1C;
+                
                 if (uvAnimationSize !== 0) {
-                    const unk1 = view.getUint16(materialTableIdx + 0x00);
-                    const unk2 = view.getUint16(materialTableIdx + 0x02);
-                    const uvAnimations: UVAnimation[] = parseMaterialSet_UVAnimations(buffer.subarray(materialTableIdx + 0x04, uvAnimationSize - 0x04), 1);
+                    const uvAnimationEnd = stream.tell() + uvAnimationSize;
+                    const unk1 = stream.readUint16();
+                    const unk2 = stream.readUint16();
+                    const uvAnimations: UVAnimation[] = parseMaterialSet_UVAnimations(stream, 1);
                     if (uvAnimations.length !== 0)
                         uvAnimation = uvAnimations[0];
-                    materialTableIdx += uvAnimationSize;
+                    
+                    stream.goTo(uvAnimationEnd);
                 }
-                assert(materialTableIdx === passOffs + 0x04 + passSize);
+                assert(stream.tell() === passEnd);
 
                 const txtr: TXTR = resourceSystem.loadAssetByID(materialTXTRID, 'TXTR');
                 let txtrIndex = textures.indexOf(txtr);
@@ -990,25 +1325,29 @@ function parseMaterialSet_MP3(resourceSystem: ResourceSystem, buffer: ArrayBuffe
                     postMatrix: GX.PostTexGenMatrix.PTTEXMTX0 + (passIndex * 3),
                     normalize: false,
                 };
-                tevStages[passIndex] = makeTevStageFromPass_MP3(passIndex, passType, passFlags, materialFlags, hasOPAC);
+                tevStages[passIndex] = makeTevStageFromPass_MP3(passIndex, passType, passFlags, materialFlags, hasDIFF, hasOPAC);
                 textureIndexes[passIndex] = txtrIndex;
                 uvAnimations[passIndex] = uvAnimation;
                 passTypes[passIndex] = passType;
                 passIndex++;
+
+                if (passType === "DIFF") {
+                    hasDIFF = true;
+                }
             } else if (nodeType === 'CLR ') {
                 // Color
-                const subtype = readString(buffer, materialTableIdx + 0x00, 0x04, false);
-                const value = view.getUint32(materialTableIdx + 0x04);
-                materialTableIdx += 0x08;
+                const subtype = stream.readFourCC();
+                const value = stream.readUint32();
+
                 if (subtype === 'DIFB') {
                     // Lightmap Diffuse Multiplier
                     colorFromRGBA8(colorConstants[0], value);
                 }
             } else if (nodeType === 'INT ') {
                 // Intensity
-                const subtype = readString(buffer, materialTableIdx + 0x00, 0x04, false);
-                const value = view.getUint32(materialTableIdx + 0x04);
-                materialTableIdx += 0x08;
+                const subtype = stream.readFourCC();
+                const value = stream.readUint32();
+
                 if (subtype === 'OPAC') {
                     // Opacity
                     colorConstants[1].a = value;
@@ -1019,7 +1358,23 @@ function parseMaterialSet_MP3(resourceSystem: ResourceSystem, buffer: ArrayBuffe
             }
         }
 
-        assert(passIndex > 0);
+        // some materials don't have any passes apparently?
+        // just make a dummy tev stage in this case
+        if (passIndex === 0) {
+            texGens[0] = { 
+                index: 0,
+                type: GX.TexGenType.MTX2x4,
+                source: GX.TexGenSrc.TEX0,
+                matrix: GX.TexGenMatrix.TEXMTX0,
+                postMatrix: GX.PostTexGenMatrix.PTTEXMTX0,
+                normalize: false,
+            };
+
+            tevStages[0] = makeTevStageFromPass_MP3(0, 'NULL', 0, materialFlags, hasDIFF, hasOPAC);
+            uvAnimations[0] = null;
+            passTypes[0] = 'NULL';
+            passIndex++;
+        }
 
         const index = i;
         const name = `Prime3Gen_${i}`;
@@ -1029,13 +1384,13 @@ function parseMaterialSet_MP3(resourceSystem: ResourceSystem, buffer: ArrayBuffe
         const isOccluder = !!(materialFlags & MaterialFlags_MP3.OCCLUDER);
         const blend = !!(materialFlags & MaterialFlags_MP3.BLEND);
         const additiveBlend = !!(materialFlags & MaterialFlags_MP3.ADDITIVE_BLEND);
-        const punchthrough = !!(materialFlags & MaterialFlags_MP3.PUNCHTHROUGH);
+        const masked = !!(materialFlags & MaterialFlags_MP3.MASKED);
         const isTransparent = blend || additiveBlend;
         const depthWrite = true;
 
         const lightChannels: GX_Material.LightChannelControl[] = [];
         lightChannels.push({
-            colorChannel: { lightingEnabled: true,  ambColorSource: GX.ColorSrc.REG, matColorSource: GX.ColorSrc.REG, litMask: 0, diffuseFunction: GX.DiffuseFunction.NONE, attenuationFunction: GX.AttenuationFunction.NONE },
+            colorChannel: { lightingEnabled: true,  ambColorSource: GX.ColorSrc.REG, matColorSource: GX.ColorSrc.REG, litMask: 0xFF, diffuseFunction: GX.DiffuseFunction.CLAMP, attenuationFunction: GX.AttenuationFunction.SPOT },
             alphaChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.REG, matColorSource: GX.ColorSrc.REG, litMask: 0, diffuseFunction: GX.DiffuseFunction.NONE, attenuationFunction: GX.AttenuationFunction.NONE },
         });
         lightChannels.push({
@@ -1051,7 +1406,7 @@ function parseMaterialSet_MP3(resourceSystem: ResourceSystem, buffer: ArrayBuffe
 
         const alphaTest: GX_Material.AlphaTest = {
             op: GX.AlphaOp.OR,
-            compareA: punchthrough ? GX.CompareType.GREATER : GX.CompareType.ALWAYS,
+            compareA: masked ? GX.CompareType.GREATER : GX.CompareType.ALWAYS,
             referenceA: 0.75,
             compareB: GX.CompareType.NEVER,
             referenceB: 0,
@@ -1098,226 +1453,4 @@ function parseMaterialSet_MP3(resourceSystem: ResourceSystem, buffer: ArrayBuffe
     }
 
     return { textures, textureRemapTable, materials };
-}
-
-function parse_DKCR(resourceSystem: ResourceSystem, assetID: string, buffer: ArrayBufferSlice): MREA {
-    const view = buffer.createDataView();
-
-    assert(view.getUint32(0x00) === 0xDEADBEEF);
-    const version = view.getUint32(0x04);
-    assert(version === 0x20);
-
-    // 0x08 - 0x34: Transform matrix
-
-    const worldModelCount = view.getUint32(0x38);
-    const scriptLayerCount = view.getUint32(0x3C);
-    const dataSectionCount = view.getUint32(0x40);
-    const compressedBlockCount = view.getUint32(0x44);
-    const sectionNumberCount = view.getUint32(0x48);
-
-    const dataSectionSizeTable: number[] = [];
-    let dataSectionSizeTableIdx = 0x60;
-    for (let i = 0; i < dataSectionCount; i++) {
-        const size = view.getUint32(dataSectionSizeTableIdx + 0x00);
-        dataSectionSizeTable.push(size);
-        dataSectionSizeTableIdx += 0x04;
-    }
-
-    // TODO(jstpierre): Instead of decompressing blocks up-front, make something that can
-    // decompress on-demand? We don't use a lot of data in here, so it might save some parse time...
-    let compressedBlocksTableIdx = align(dataSectionSizeTableIdx, 0x20);
-    let sectionNumbersTableIdx = align(compressedBlocksTableIdx + 0x10 * compressedBlockCount, 0x20);
-    let compressedBlocksIdx = align(sectionNumbersTableIdx + 0x08 * sectionNumberCount, 0x20);
-    const decompressedSegments: Uint8Array[] = [];
-    let totalDecompressedSize = 0;
-    for (let i = 0; i < compressedBlockCount; i++) {
-        const blockBufferSize = view.getUint32(compressedBlocksTableIdx + 0x00);
-        const blockDecompressedSize = view.getUint32(compressedBlocksTableIdx + 0x04);
-        const blockCompressedSize = view.getUint32(compressedBlocksTableIdx + 0x08);
-        const blockDataSectionCount = view.getUint32(compressedBlocksTableIdx + 0x0C);
-        compressedBlocksTableIdx += 0x10;
-
-        totalDecompressedSize += blockDecompressedSize;
-
-        if (blockCompressedSize === 0) {
-            // Uncompressed block.
-            decompressedSegments.push(buffer.createTypedArray(Uint8Array, compressedBlocksIdx, blockDecompressedSize));
-            compressedBlocksIdx += blockDecompressedSize;
-        } else {
-            // Compressed block.
-
-            // Padding is at the start of the block for some reason.
-            const blockPadding = align(blockCompressedSize, 0x20) - blockCompressedSize;
-
-            compressedBlocksIdx += blockPadding;
-
-            let remainingSize = blockDecompressedSize;
-            while (remainingSize > 0) {
-                let segmentSize_ = view.getInt16(compressedBlocksIdx);
-                compressedBlocksIdx += 0x02;
-                if (segmentSize_ < 0) {
-                    // Uncompressed segment.
-                    const segmentSize = -segmentSize_;
-                    decompressedSegments.push(buffer.createTypedArray(Uint8Array, compressedBlocksIdx, segmentSize));
-                    compressedBlocksIdx += segmentSize;
-                    remainingSize -= segmentSize;
-                } else {
-                    // Compressed segment.
-                    const segmentSize = segmentSize_;
-                    const compressedSegment = buffer.createTypedArray(Uint8Array, compressedBlocksIdx, segmentSize);
-                    const decompressedSegment = Pako.inflate(compressedSegment);
-                    decompressedSegments.push(decompressedSegment);
-                    compressedBlocksIdx += segmentSize;
-                    remainingSize -= decompressedSegment.byteLength;
-                }
-            }
-        }
-    }
-
-    const sectionsData = combineBuffers(totalDecompressedSize, decompressedSegments);
-    const secBuffer = new ArrayBufferSlice(sectionsData.buffer);
-    const secView = secBuffer.createDataView();
-
-    const dataSectionOffsTable: number[] = [0];
-    for (let i = 1; i < dataSectionCount; i++) {
-        const prevOffs = dataSectionOffsTable[i - 1];
-        const prevSize = dataSectionSizeTable[i - 1];
-        dataSectionOffsTable.push(align(prevOffs + prevSize, 32));
-    }
-
-    let gpudSectionIndex = -1;
-    let aabbSectionIndex = -1;
-    for (let i = 0; i < sectionNumberCount; i++) {
-        const sectionFourCC = readString(buffer, sectionNumbersTableIdx + 0x00, 0x04, false);
-        const sectionIndex = view.getUint32(sectionNumbersTableIdx + 0x04);
-
-        if (sectionFourCC === 'WOBJ') {
-            assert(sectionIndex === 0);
-        } else if (sectionFourCC === 'GPUD') {
-            gpudSectionIndex = sectionIndex;
-        } else if (sectionFourCC === 'AABB') {
-            aabbSectionIndex = sectionIndex;
-        }
-
-        sectionNumbersTableIdx += 0x08;
-    }
-
-    const materialSectionIndex = 0;
-    const materialSet = parseMaterialSet_MP3(resourceSystem, secBuffer.subarray(dataSectionOffsTable[materialSectionIndex], dataSectionSizeTable[materialSectionIndex]));
-
-    // const gpudBuffer = buffer.subarray(dataSectionOffsTable[gpudSectionIndex], dataSectionSizeTable[gpudSectionIndex]);
-    // const aabbBuffer = buffer.subarray(dataSectionOffsTable[aabbSectionIndex], dataSectionSizeTable[aabbSectionIndex]);
-
-    let worldModelSectionIdx = materialSectionIndex + 1;
-    const worldModels: WorldModel[] = [];
-    for (let i = 0; i < worldModelCount; i++) {
-        const worldModelHeaderOffs = dataSectionOffsTable[worldModelSectionIdx++];
-        const surfaceDefinitionTableOffs = dataSectionOffsTable[worldModelSectionIdx++];
-        const surfaceGroupIDTableOffs = worldModelSectionIdx++;
-        const surfaceLookupTableOffs = worldModelSectionIdx++;
-
-        const visorFlags = secView.getUint32(worldModelHeaderOffs + 0x00);
-        const bboxMinX = secView.getFloat32(worldModelHeaderOffs + 0x34);
-        const bboxMinY = secView.getFloat32(worldModelHeaderOffs + 0x38);
-        const bboxMinZ = secView.getFloat32(worldModelHeaderOffs + 0x3C);
-        const bboxMaxX = secView.getFloat32(worldModelHeaderOffs + 0x40);
-        const bboxMaxY = secView.getFloat32(worldModelHeaderOffs + 0x44);
-        const bboxMaxZ = secView.getFloat32(worldModelHeaderOffs + 0x48);
-        const bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
-
-        const posSectionOffs = dataSectionOffsTable[gpudSectionIndex++];
-        const nrmSectionOffs = dataSectionOffsTable[gpudSectionIndex++];
-        const clrSectionOffs = dataSectionOffsTable[gpudSectionIndex++];
-        const uvfSectionOffs = dataSectionOffsTable[gpudSectionIndex++];
-        const uvsSectionOffs = dataSectionOffsTable[gpudSectionIndex++];
-        const firstSurfaceOffs = dataSectionOffsTable[gpudSectionIndex];
-
-        const worldModelIndex: number = worldModels.length;
-
-        const surfaceCount = secView.getUint32(surfaceDefinitionTableOffs + 0x00);
-        let surfaceDefinitionTableIdx = surfaceDefinitionTableOffs + 0x04;
-        const surfaces: Surface[] = [];
-        for (let j = 0; j < surfaceCount; j++) {
-            const surfaceOffs = dataSectionOffsTable[gpudSectionIndex++];
-            const surfaceEnd = firstSurfaceOffs + secView.getUint32(surfaceDefinitionTableIdx + 0x00);
-            surfaceDefinitionTableIdx += 0x04;
-
-            const centerX = secView.getFloat32(surfaceOffs + 0x00);
-            const centerY = secView.getFloat32(surfaceOffs + 0x04);
-            const centerZ = secView.getFloat32(surfaceOffs + 0x08);
-            const mantissa = secView.getUint16(surfaceOffs + 0x0C);
-            const displayListSizeExceptNotReally = secView.getUint16(surfaceOffs + 0x0E);
-            const skinMatrixBankIndex = secView.getUint16(surfaceOffs + 0x18);
-            const materialIndex = secView.getUint16(surfaceOffs + 0x1A);
-            const visibilityGroupIndex = secView.getUint8(surfaceOffs + 0x1D);
-            const uvArrayIndex = secView.getUint8(surfaceOffs + 0x1E);
-            const extraDataSize = secView.getUint8(surfaceOffs + 0x1F);
-
-            // Build our vertex format.
-            const material: Material_MP3 = materialSet.materials[materialIndex] as Material_MP3;
-            const vtxAttrFormat = material.vtxAttrFormat;
-
-            const surfaceHeaderEnd = surfaceOffs + 0x20 + extraDataSize;
-            const primitiveDataOffs = align(surfaceHeaderEnd, 32);
-
-            const vcd: GX_VtxDesc[] = [];
-            for (const format of vtxAttrFormats) {
-                if (!(vtxAttrFormat & format.mask))
-                    continue;
-                vcd[format.vtxAttrib] = { type: GX.AttrType.INDEX16 };
-            }
-
-            const vtxArrays: GX_Array[] = [];
-            vtxArrays[GX.VertexAttribute.POS]  = { buffer: secBuffer, offs: posSectionOffs };
-            vtxArrays[GX.VertexAttribute.NRM]  = { buffer: secBuffer, offs: nrmSectionOffs };
-            vtxArrays[GX.VertexAttribute.CLR0] = { buffer: secBuffer, offs: clrSectionOffs };
-            vtxArrays[GX.VertexAttribute.CLR1] = { buffer: secBuffer, offs: clrSectionOffs };
-
-            const vatFormat: GX_VtxAttrFmt[] = [];
-            vatFormat[GX.VertexAttribute.POS]  = { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.F32, compShift: 0 };
-            vatFormat[GX.VertexAttribute.NRM]  = { compCnt: GX.CompCnt.NRM_XYZ, compType: GX.CompType.F32, compShift: 0 };
-            vatFormat[GX.VertexAttribute.CLR0] = { compCnt: GX.CompCnt.CLR_RGBA, compType: GX.CompType.RGBA8, compShift: 0 };
-            vatFormat[GX.VertexAttribute.CLR1] = { compCnt: GX.CompCnt.CLR_RGBA, compType: GX.CompType.RGBA8, compShift: 0 };
-
-            // TODO(jstpierre): I assume in the real game this comes from the different VAT formats.
-            const isShort = (uvArrayIndex === 1);
-            for (let i = 0; i < 8; i++) {
-                vatFormat[GX.VertexAttribute.TEX0 + i] = { compCnt: GX.CompCnt.TEX_ST, compType: isShort ? GX.CompType.S16 : GX.CompType.F32, compShift: Math.log2(0x2000) };
-                vtxArrays[GX.VertexAttribute.TEX0 + i] = { buffer: secBuffer, offs: isShort ? uvsSectionOffs : uvfSectionOffs };
-            }
-
-            const vatFormats: GX_VtxAttrFmt[][] = [vatFormat, vatFormat, vatFormat, vatFormat];
-            const vtxLoader = compileVtxLoaderMultiVat(vatFormats, vcd);
-            const loadedVertexLayout = vtxLoader.loadedVertexLayout;
-            const dlData = secBuffer.slice(primitiveDataOffs, surfaceEnd);
-            const loadedVertexData = vtxLoader.runVertices(vtxArrays, dlData);
-
-            surfaces.push({ materialIndex, worldModelIndex, loadedVertexData, loadedVertexLayout });
-        }
-
-        const geometry: Geometry = { surfaces };
-        const modelMatrix = mat4.create();
-        worldModels.push({ geometry, bbox, modelMatrix });
-    }
-
-    const scriptLayers: Script.ScriptLayer[] = [];
-    const lightLayers: AreaLightLayer[] = [];
-    return { materialSet, worldModels, scriptLayers, lightLayers };
-}
-
-export function parse(resourceSystem: ResourceSystem, assetID: string, buffer: ArrayBufferSlice): MREA {
-    const view = buffer.createDataView();
-
-    assert(view.getUint32(0x00) === 0xDEADBEEF);
-    const version = view.getUint32(0x04);
-
-    // Metroid Prime 1
-    if (version === 0x0F)
-        return parse_MP1(resourceSystem, assetID, buffer);
-
-    // Donkey Kong Country Returns
-    if (version === 0x20)
-        return parse_DKCR(resourceSystem, assetID, buffer);
-
-    throw "whoops";
 }

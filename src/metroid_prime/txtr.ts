@@ -6,6 +6,7 @@ import { ResourceSystem } from './resource';
 import * as GX from '../gx/gx_enum';
 import * as GX_Texture from '../gx/gx_texture';
 import ArrayBufferSlice from '../ArrayBufferSlice';
+import { InputStream } from './stream';
 
 const txtrFormatRemap = [
     GX.TexFormat.I4,     // 0x00
@@ -32,17 +33,13 @@ export interface TXTR {
     paletteData: ArrayBufferSlice;
 }
 
-export function parse(resourceSystem: ResourceSystem, assetID: string, buffer: ArrayBufferSlice): TXTR {
-    const view = buffer.createDataView();
-
-    const txtrFormat = view.getUint32(0x00);
+export function parse(stream: InputStream, resourceSystem: ResourceSystem, assetID: string): TXTR {
+    const txtrFormat = stream.readUint32();
     const name = resourceSystem.findResourceNameByID(assetID);
     const format: GX.TexFormat = txtrFormatRemap[txtrFormat];
-    const width = view.getUint16(0x04);
-    const height = view.getUint16(0x06);
-    const mipCount = view.getUint32(0x08);
-
-    let offs = 0x0C;
+    const width = stream.readUint16();
+    const height = stream.readUint16();
+    const mipCount = stream.readUint32();
 
     let paletteFormat: GX.TexPalette = 0;
     let paletteData: ArrayBufferSlice = null;
@@ -50,17 +47,18 @@ export function parse(resourceSystem: ResourceSystem, assetID: string, buffer: A
     switch (format) {
     case GX.TexFormat.C4:
     case GX.TexFormat.C8:
-        paletteFormat = view.getUint32(offs + 0x00);
-        const palWidth: number = view.getUint32(offs + 0x04);
-        const palHeight: number = view.getUint32(offs + 0x06);
-        offs += 0x08;
+        paletteFormat = stream.readUint32();
+        const palWidth: number = stream.readUint16();
+        const palHeight: number = stream.readUint16();
         const palSize = GX_Texture.calcPaletteSize(format, paletteFormat);
-        paletteData = buffer.slice(offs, offs + palSize);
-        offs += palSize;
+        paletteData = stream.getBuffer().slice(stream.tell(), stream.tell() + palSize);
+        stream.skip(palSize);
+        break;
+
     case GX.TexFormat.C14X2:
         throw "whoops";
     }
 
-    const data = buffer.slice(offs);
+    const data = stream.getBuffer().slice(stream.tell());
     return { name, format, width, height, mipCount, data, paletteFormat, paletteData };
 }

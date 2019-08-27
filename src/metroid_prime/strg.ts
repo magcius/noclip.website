@@ -4,6 +4,7 @@
 import { ResourceSystem } from "./resource";
 import { assert, readString, getTextDecoder } from "../util";
 import ArrayBufferSlice from "../ArrayBufferSlice";
+import { InputStream } from "./stream";
 
 export interface STRG {
     strings: string[];
@@ -24,65 +25,64 @@ function readUTF16String(buffer: ArrayBufferSlice, offs: number): string {
     return str;
 }
 
-function parse_MP1(buffer: ArrayBufferSlice): STRG {
-    const view = buffer.createDataView();
+function readNameTable(stream: InputStream) : Map<string, number> {
+    const nameTableCount = stream.readUint32();
+    const nameTableSize = stream.readUint32();
+    const nameTableOffs = stream.tell();
+    stream.skip(nameTableSize);
 
-    assert(view.getUint32(0x00) === 0x87654321);
-    const version = view.getUint32(0x04);
-    const hasNameTable = (version === 0x01);
+    const view = stream.getBuffer().createDataView(nameTableOffs, nameTableSize);
+    let nameTable = new Map<string, number>();
 
-    const languageCount = view.getUint32(0x08);
-    const stringCount = view.getUint32(0x0C);
-
-    const languageTableOffs = 0x10;
-
-    let stringsTableOffs: number;
-    let nameTable: Map<string, number> | null;
-    if (hasNameTable) {
-        const nameTableOffs = languageTableOffs + languageCount * 0x08;
-        const nameTableCount = view.getUint32(nameTableOffs + 0x00);
-        const nameTableSize = view.getUint32(nameTableOffs + 0x04);
-
-        nameTable = new Map<string, number>();
-
-        const nameTableEntriesOffs = nameTableOffs + 0x08;
-        let nameTableEntriesIdx = nameTableEntriesOffs;
-        for (let i = 0; i < nameTableCount; i++) {
-            const nameOffset = view.getUint32(nameTableEntriesIdx + 0x00);
-            const stringIndex = view.getUint32(nameTableEntriesIdx + 0x04);
-            const name = readString(buffer, nameTableEntriesOffs + nameOffset, 0xFF, true);
-            nameTable.set(name, stringIndex);
-            nameTableEntriesIdx += 0x08;
-        }
-
-        stringsTableOffs = nameTableEntriesIdx;
-    } else {
-        stringsTableOffs = languageTableOffs + languageCount * 0x08;
-        nameTable = null;
+    for (let i = 0; i < nameTableCount; i++) {
+        const entryOffset = i*8;
+        const offset = view.getUint32(entryOffset+0);
+        const index = view.getUint32(entryOffset+4);
+        const name = readString(stream.getBuffer(), view.byteOffset + offset);
+        nameTable.set(name, index);
     }
 
-    let languageTableIdx = languageTableOffs;
+    return nameTable;
+}
+
+function parse_MP1(stream: InputStream): STRG {
+    assert(stream.readUint32() === 0x87654321);
+    const version = stream.readUint32();
+    const languageCount = stream.readUint32();
+    const stringCount = stream.readUint32();
+
+    // Language table
+    let languageTable = new Map<string, number>();
+    for (let i = 0; i < languageCount; i++) {
+        const languageID = stream.readFourCC();
+        const languageOffset = stream.readUint32();
+        languageTable.set(languageID, languageOffset);
+        if (version === 0x1) stream.skip(4);
+    }
+
+    // Name table
+    let nameTable: Map<string, number> | null = null;
+    if (version === 0x1) {
+        readNameTable(stream);
+    }
+
     const strings: string[] = [];
 
-    for (let i = 0; i < languageCount; i++) {
-        const languageID = readString(buffer, languageTableIdx + 0x00, 4, false);
-        const languageStringsOffs = view.getUint32(languageTableIdx + 0x04);
-        languageTableIdx += 0x08;
+    // Load English for now because I am a dirty American.
+    if (languageTable.has('ENGL')) {
+        // Language offsets are relative to the start of the string table, which is where we are, so we can just skip from here
+        const englishOffs = languageTable.get('ENGL');
+        stream.skip(englishOffs);
 
-        // Load English for now because I am a dirty American.
-        if (languageID === 'ENGL') {
-            let stringTableIdx = stringsTableOffs + languageStringsOffs;
+        if (version === 0x00) {
+            stream.skip(4);
+        }
+        const stringDataOffs = stream.tell();
 
-            const stringTableSize = view.getUint32(stringTableIdx + 0x00);
-            stringTableIdx += 0x04;
-            const stringTableDataOffs = stringTableIdx;
-
-            for (let j = 0; j < stringCount; j++) {
-                const stringOffs = view.getUint32(stringTableIdx);
-                const string = readUTF16String(buffer, stringTableDataOffs + stringOffs);
-                strings.push(string);
-                stringTableIdx += 0x04;
-            }
+        for (let i = 0; i < stringCount; i++) {
+            const stringOffs = stringDataOffs + stream.readUint32();
+            const string = readUTF16String(stream.getBuffer(), stringOffs);
+            strings.push(string);
         }
     }
 
@@ -91,73 +91,53 @@ function parse_MP1(buffer: ArrayBufferSlice): STRG {
 
 const utf8Decoder = getTextDecoder('utf8');
 
-function parse_DKCR(buffer: ArrayBufferSlice): STRG {
-    const view = buffer.createDataView();
+function parse_MP3(stream: InputStream): STRG {
+    assert(stream.readUint32() === 0x87654321);
+    assert(stream.readUint32() === 0x3);
+    const languageCount = stream.readUint32();
+    const stringCount = stream.readUint32();
+    const nameTable = readNameTable(stream);
 
-    assert(view.getUint32(0x00) === 0x87654321);
-    const version = view.getUint32(0x04);
-    assert(version === 0x03);
-
-    const languageCount = view.getUint32(0x08);
-    const stringCount = view.getUint32(0x0C);
-
-    const nameTableOffs = 0x10;
-    const nameTableCount = view.getUint32(nameTableOffs + 0x00);
-    const nameTableSize = view.getUint32(nameTableOffs + 0x04);
-
-    const nameTable = new Map<string, number>();
-
-    const nameTableEntriesOffs = nameTableOffs + 0x08;
-    let nameTableEntriesIdx = nameTableEntriesOffs;
-    for (let i = 0; i < nameTableCount; i++) {
-        const nameOffset = view.getUint32(nameTableEntriesIdx + 0x00);
-        const stringIndex = view.getUint32(nameTableEntriesIdx + 0x04);
-        const name = readString(buffer, nameTableEntriesOffs + nameOffset, 0xFF, true);
-        nameTable.set(name, stringIndex);
-        nameTableEntriesIdx += 0x08;
-    }
-
-    let languageIDTableIdx = nameTableEntriesIdx;
-    let languageTableIdx = languageIDTableIdx + 0x04 * languageCount;
-    const stringsTableDataOffs = languageTableIdx + (0x04 + 0x04 * stringCount) * languageCount;
-
+    const languageIDTableOffs = stream.tell();
+    const languageInfoOffs = languageIDTableOffs + 4*languageCount;
+    const languageInfoSize = 4 + (4*stringCount);
+    const stringDataOffs = languageInfoOffs + languageCount * languageInfoSize;
+    
     const strings: string[] = [];
-    for (let i = 0; i < languageCount; i++) {
-        const languageID = readString(buffer, languageIDTableIdx + 0x00, 0x04, false);
-        languageIDTableIdx += 0x04;
+    const view = stream.getBuffer().createDataView();
 
-        const stringsSize = view.getUint32(languageTableIdx + 0x00);
-        languageTableIdx += 0x04;
+    for (let i = 0; i < languageCount; i++) {
+        const languageID = stream.readFourCC();
 
         // Load English for now because I am a dirty American.
         if (languageID === 'ENGL') {
-            for (let i = 0; i < stringCount; i++) {
-                const stringOffs = stringsTableDataOffs + view.getUint32(languageTableIdx + 0x00);
-                const stringSize = view.getUint32(stringOffs + 0x00);
-                const string = utf8Decoder.decode(buffer.createTypedArray(Uint8Array, stringOffs + 0x04, stringSize - 1));
+            stream.goTo(languageInfoOffs + languageInfoSize*i);
+            stream.skip(4);
+
+            for (let j = 0; j < stringCount; j++) {
+                const stringOffs = stringDataOffs + stream.readUint32();
+                const stringSize = view.getUint32(stringOffs);
+                const string = utf8Decoder.decode(stream.getBuffer().createTypedArray(Uint8Array, stringOffs + 4, stringSize-1));
                 strings.push(string);
-                languageTableIdx += 0x04;
             }
-        } else {
-            // Skip over strings.
-            languageTableIdx += 0x04 * stringCount;
+
+            break;
         }
     }
 
     return { strings, nameTable };
 }
 
-export function parse(resourceSystem: ResourceSystem, assetID: string, buffer: ArrayBufferSlice): STRG {
-    const view = buffer.createDataView();
+export function parse(stream: InputStream, resourceSystem: ResourceSystem, assetID: string): STRG {
+    assert(stream.readUint32() == 0x87654321);
+    const version = stream.readUint32();
+    stream.skip(-8);
 
-    assert(view.getUint32(0x00) === 0x87654321);
-    const version = view.getUint32(0x04);
-
-    if (version === 0x00)
-        return parse_MP1(buffer);
+    if (version === 0x00 || version == 0x01)
+        return parse_MP1(stream);
 
     if (version === 0x03)
-        return parse_DKCR(buffer);
+        return parse_MP3(stream);
 
-    throw "whoops";
+    throw new Error(`Unrecognized STRG version: ${version}`);
 }

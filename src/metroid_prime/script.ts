@@ -7,6 +7,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { mat4, vec3 } from 'gl-matrix';
 import { CMDL } from './cmdl';
 import { ANCS } from './ancs';
+import { InputStream } from './stream';
 import { Color } from "../gx/gx_material";
 import { colorFromRGBA } from "../Color";
 import { computeModelMatrixSRT, MathConstants } from "../MathHelpers";
@@ -41,6 +42,7 @@ export const enum MP1EntityType {
     IceSheegoth             = 0x4B,
     PlayerActor             = 0x4C,
     Flaahgra                = 0x4D,
+    AreaAttributes          = 0x4E,
     FishCloud               = 0x4F,
     JellyZap                = 0x54,
     Thardus                 = 0x58,
@@ -81,14 +83,14 @@ export class AnimationParameters {
 
 export const enum WorldLightingOptions {
     Zero = 0,
-    NormalWorld = 1,
+    NormalLighting = 1,
     NoShadowCast = 2,
-    DisableWorld = 3
+    NoWorldLighting = 3
 }
 
 export class LightParameters {
     public ambient: Color = new Color(1, 1, 1, 1);
-    public options: WorldLightingOptions = WorldLightingOptions.NormalWorld;
+    public options: WorldLightingOptions = WorldLightingOptions.NormalLighting;
     public layerIdx: number = 0;
     public maxAreaLights: Number = 4;
 }
@@ -101,8 +103,11 @@ export class Entity {
     public animParams: AnimationParameters;
     public lightParams: LightParameters = new LightParameters();
 
-    constructor(public entityId: number) {
+    constructor(public type: MP1EntityType | string, public entityId: number) {
     }
+
+    // hook to allow entity subclasses to read additional properties for MP2 / MP3 / DKCR
+    public readProperty_MP2(stream: InputStream, resourceSystem: ResourceSystem, propertyID: number) {}
 
     public getRenderModel() : CMDL {
         if (this.animParams != null) {
@@ -118,6 +123,39 @@ export class Entity {
         }
 
         return this.model;
+    }
+}
+
+export class AreaAttributes extends Entity
+{
+    public needSky: boolean = false;
+    public overrideSky: CMDL = null;
+
+    public readProperty_MP2(stream: InputStream, resourceSystem: ResourceSystem, propertyID: number) {
+        switch (propertyID) {
+            case 0x95D4BEE7:
+                this.needSky = stream.readBool();
+                break;
+
+            case 0xD208C9FA:
+                this.overrideSky = resourceSystem.loadAssetByID( stream.readAssetID(), 'CMDL' );
+                break;
+        }
+    }
+}
+
+function createEntity_MP2(type: string, entityID: number): Entity {
+    switch (type) {
+        // These are skipped because they look bad
+        case "FISH": // FishCloud
+        case "FSWM": // FlyerSwarm
+            return null;
+
+        case "REAA":
+            return new AreaAttributes(type, entityID);
+
+        default:
+            return new Entity(type, entityID);
     }
 }
 
@@ -167,8 +205,8 @@ function readTransform(buffer: ArrayBufferSlice, offs: number, ent: Entity, hasP
     return offs - originalOffs;
 }
 
-function readAssetId(buffer: ArrayBufferSlice, offs: number, type: string, resourceSystem: ResourceSystem): any {
-    const assetId = readString(buffer, offs, 4, false);
+function readAssetId(buffer: ArrayBufferSlice, offs: number, idSize: number, type: string, resourceSystem: ResourceSystem): any {
+    const assetId = readString(buffer, offs, idSize, false);
     return resourceSystem.loadAssetByID(assetId, type);
 }
 
@@ -253,7 +291,7 @@ function readActorParameters(buffer: ArrayBufferSlice, offs: number, ent: Entity
     return offs - originalOffs;
 }
 
-export function parseScriptLayer(buffer: ArrayBufferSlice, layerOffset: number, resourceSystem: ResourceSystem): ScriptLayer {
+export function parseScriptLayer_MP1(buffer: ArrayBufferSlice, layerOffset: number, resourceSystem: ResourceSystem): ScriptLayer {
     const view = buffer.createDataView();
     const entities: Entity[] = [];
     let entityTableIdx = layerOffset;
@@ -272,10 +310,10 @@ export function parseScriptLayer(buffer: ArrayBufferSlice, layerOffset: number, 
         // This code was auto-generated based on Prime World Editor script templates
         switch (entityType) {
             case MP1EntityType.Actor: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
-                entity.model = readAssetId(buffer, entityTableIdx + 0xC4, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0xC4, 4, 'CMDL', resourceSystem);
                 readAnimationParameters(buffer, entityTableIdx + 0xC8, entity, resourceSystem);
                 readActorParameters(buffer, entityTableIdx + 0xD4, entity);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x155));
@@ -284,22 +322,22 @@ export function parseScriptLayer(buffer: ArrayBufferSlice, layerOffset: number, 
             }
     
             case MP1EntityType.Door: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x24, entity, resourceSystem);
                 readActorParameters(buffer, entityTableIdx + 0x30, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x83, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x83, 4, 'CMDL', resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0xD1));
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.Platform: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x3C, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x3C, 4, 'CMDL', resourceSystem);
                 readAnimationParameters(buffer, entityTableIdx + 0x40, entity, resourceSystem);
                 readActorParameters(buffer, entityTableIdx + 0x4C, entity);
                 entity.active = !!(view.getUint8(entityTableIdx + 0xCD));
@@ -308,22 +346,22 @@ export function parseScriptLayer(buffer: ArrayBufferSlice, layerOffset: number, 
             }
     
             case MP1EntityType.NewIntroBoss: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x11C, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x128));
                 readActorParameters(buffer, entityTableIdx + 0x165, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.Pickup: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x54, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x54, 4, 'CMDL', resourceSystem);
                 readAnimationParameters(buffer, entityTableIdx + 0x58, entity, resourceSystem);
                 readActorParameters(buffer, entityTableIdx + 0x64, entity);
                 entity.active = !!(view.getUint8(entityTableIdx + 0xE1));
@@ -332,258 +370,258 @@ export function parseScriptLayer(buffer: ArrayBufferSlice, layerOffset: number, 
             }
     
             case MP1EntityType.Beetle: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x04, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x120, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x12C));
                 readActorParameters(buffer, entityTableIdx + 0x169, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1BC, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1BC, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.Debris: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x55, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x55, 4, 'CMDL', resourceSystem);
                 readActorParameters(buffer, entityTableIdx + 0x59, entity);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.WarWasp: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x04, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x120, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x12C));
                 readActorParameters(buffer, entityTableIdx + 0x169, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1BC, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1BC, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.SpacePirate: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x11C, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x128));
                 readActorParameters(buffer, entityTableIdx + 0x165, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.FlyingPirate: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x11C, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x128));
                 readActorParameters(buffer, entityTableIdx + 0x165, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.ElitePirate: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x11C, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x128));
                 readActorParameters(buffer, entityTableIdx + 0x165, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x29B, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x29B, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.MetroidBeta: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x11C, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x128));
                 readActorParameters(buffer, entityTableIdx + 0x165, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.ChozoGhost: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x11C, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x128));
                 readActorParameters(buffer, entityTableIdx + 0x165, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.BloodFlower: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x11C, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x128));
                 readActorParameters(buffer, entityTableIdx + 0x165, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.FlickerBat: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x04, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x120, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x12C));
                 readActorParameters(buffer, entityTableIdx + 0x169, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1BC, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1BC, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.PuddleSpore: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x04, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x120, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x12C));
                 readActorParameters(buffer, entityTableIdx + 0x169, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1BC, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1BC, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.PuddleToadGamma: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x04, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x120, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x12C));
                 readActorParameters(buffer, entityTableIdx + 0x169, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1BC, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1BC, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.FireFlea: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x11C, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x128));
                 readActorParameters(buffer, entityTableIdx + 0x165, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.MetareeAlpha: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x11C, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x128));
                 readActorParameters(buffer, entityTableIdx + 0x165, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.SpankWeed: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x11C, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x128));
                 readActorParameters(buffer, entityTableIdx + 0x165, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.Parasite: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x04, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x120, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x12C));
                 readActorParameters(buffer, entityTableIdx + 0x169, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1BC, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1BC, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.Ripper: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x04, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x120, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x12C));
                 readActorParameters(buffer, entityTableIdx + 0x169, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1BC, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1BC, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.Drone: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x04, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x124, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x130));
                 readActorParameters(buffer, entityTableIdx + 0x16D, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1C0, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1C0, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.MetroidAlpha: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x04, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x120, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x12C));
                 readActorParameters(buffer, entityTableIdx + 0x169, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1BC, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1BC, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.DebrisExtended: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x8C, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x8C, 4, 'CMDL', resourceSystem);
                 readActorParameters(buffer, entityTableIdx + 0x90, entity);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.IceSheegoth: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x11C, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x128));
                 readActorParameters(buffer, entityTableIdx + 0x165, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.PlayerActor: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
-                entity.model = readAssetId(buffer, entityTableIdx + 0xC4, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0xC4, 4, 'CMDL', resourceSystem);
                 readAnimationParameters(buffer, entityTableIdx + 0xC8, entity, resourceSystem);
                 entity.animParams.charID = 2;
                 readActorParameters(buffer, entityTableIdx + 0xD4, entity);
@@ -593,7 +631,7 @@ export function parseScriptLayer(buffer: ArrayBufferSlice, layerOffset: number, 
             }
     
             case MP1EntityType.Flaahgra: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x11C, entity, resourceSystem);
@@ -602,354 +640,478 @@ export function parseScriptLayer(buffer: ArrayBufferSlice, layerOffset: number, 
                 entities.push(entity);
                 break;
             }
+
+            case MP1EntityType.AreaAttributes: {
+                const entity = new AreaAttributes(entityType, entityId);
+                entity.active = (view.getUint32(entityTableIdx) == 1);
+                entity.needSky = !!(view.getUint8(entityTableIdx + 0x04));
+                entity.overrideSky = readAssetId(buffer, entityTableIdx + 0x19, 4, 'CMDL', resourceSystem);
+                entities.push(entity);
+                break;
+            }
     
             case MP1EntityType.FishCloud: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x25, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x25, 4, 'CMDL', resourceSystem);
                 readAnimationParameters(buffer, entityTableIdx + 0x29, entity, resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.JellyZap: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x11C, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x128));
                 readActorParameters(buffer, entityTableIdx + 0x165, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.Thardus: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x11C, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x128));
                 readActorParameters(buffer, entityTableIdx + 0x165, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.WallCrawlerSwarm: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x24));
                 readActorParameters(buffer, entityTableIdx + 0x25, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x78, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x78, 4, 'CMDL', resourceSystem);
                 readAnimationParameters(buffer, entityTableIdx + 0xA6, entity, resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.FlaahgraTentacle: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x11C, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x128));
                 readActorParameters(buffer, entityTableIdx + 0x165, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.ThardusRockProjectile: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x11C, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x128));
                 readActorParameters(buffer, entityTableIdx + 0x165, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.GunTurret: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x04, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x40, entity, resourceSystem);
                 readActorParameters(buffer, entityTableIdx + 0x4C, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x9F, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x9F, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.Babygoth: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x11C, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x128));
                 readActorParameters(buffer, entityTableIdx + 0x165, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.Eyeball: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x04, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x120, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x12C));
                 readActorParameters(buffer, entityTableIdx + 0x169, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1BC, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1BC, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.Magdolite: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x11C, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x128));
                 readActorParameters(buffer, entityTableIdx + 0x165, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.SnakeWeedSwarm: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, false, true);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x18));
                 readAnimationParameters(buffer, entityTableIdx + 0x19, entity, resourceSystem);
                 readActorParameters(buffer, entityTableIdx + 0x25, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x78, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x78, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.ActorContraption: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0xC4, entity, resourceSystem);
                 readActorParameters(buffer, entityTableIdx + 0xD0, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x123, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x123, 4, 'CMDL', resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x165));
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.Oculus: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x11C, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x128));
                 readActorParameters(buffer, entityTableIdx + 0x165, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.Geemer: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x11C, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x128));
                 readActorParameters(buffer, entityTableIdx + 0x165, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.AtomicAlpha: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x11C, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x128));
                 readActorParameters(buffer, entityTableIdx + 0x165, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.AmbientAI: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0xC0, entity, resourceSystem);
                 readActorParameters(buffer, entityTableIdx + 0xCC, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x11F, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x11F, 4, 'CMDL', resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x159));
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.AtomicBeta: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x11C, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x128));
                 readActorParameters(buffer, entityTableIdx + 0x165, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.IceZoomer: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x11C, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x128));
                 readActorParameters(buffer, entityTableIdx + 0x165, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.Puffer: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x11C, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x128));
                 readActorParameters(buffer, entityTableIdx + 0x165, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.Tryclops: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x11C, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x128));
                 readActorParameters(buffer, entityTableIdx + 0x165, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.Ridley: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x11C, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x128));
                 readActorParameters(buffer, entityTableIdx + 0x165, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.Seedling: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x11C, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x128));
                 readActorParameters(buffer, entityTableIdx + 0x165, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.Burrower: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x11C, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x128));
                 readActorParameters(buffer, entityTableIdx + 0x165, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.MetroidPrimeStage2: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x11C, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x128));
                 readActorParameters(buffer, entityTableIdx + 0x165, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.MetroidPrimeStage1: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += 0x04;
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x24A, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x256));
                 readActorParameters(buffer, entityTableIdx + 0x293, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x2E6, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x2E6, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.OmegaPirate: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x11C, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x128));
                 readActorParameters(buffer, entityTableIdx + 0x165, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x29B, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x29B, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.PhazonPool: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x25, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x25, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.PhazonHealingNodule: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x11C, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x128));
                 readActorParameters(buffer, entityTableIdx + 0x165, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 'CMDL', resourceSystem);
-                entityTableIdx += 0x1E7;
-                entityTableIdx += readString(buffer, entityTableIdx).length + 1;
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
     
             case MP1EntityType.EnergyBall: {
-                const entity = new Entity(entityId);
+                const entity = new Entity(entityType, entityId);
                 entityTableIdx += readName(buffer, entityTableIdx, entity);
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 readAnimationParameters(buffer, entityTableIdx + 0x11C, entity, resourceSystem);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x128));
                 readActorParameters(buffer, entityTableIdx + 0x165, entity);
-                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 'CMDL', resourceSystem);
+                entity.model = readAssetId(buffer, entityTableIdx + 0x1B8, 4, 'CMDL', resourceSystem);
                 entities.push(entity);
                 break;
             }
         }
 
         entityTableIdx = nextEntity;
+    }
+
+    return { entities };
+}
+
+export function parseProperty_MP2(stream: InputStream, entity: Entity, resourceSystem: ResourceSystem) {
+    const propertyID = stream.readUint32();
+    const propertySize = stream.readUint16();
+    const nextProperty = stream.tell() + propertySize;
+
+    switch (propertyID) {
+        // Structs
+        case 0xFFFFFFFF:
+        case 0x255A4580: // EditorProperties
+        case 0x7E397FED: // ActorInformation
+        case 0xB3774750: // PatternedAITypedef
+        {
+            const numSubProperties = stream.readUint16();
+
+            for (let i = 0; i < numSubProperties; i++) {
+                parseProperty_MP2(stream, entity, resourceSystem);
+            }
+
+            break;
+        }
+
+        // EditorProperties
+        case 0x494E414D: // InstanceName
+            readName(stream.getBuffer(), stream.tell(), entity);
+            break;
+
+        case 0x5846524D: // Transform
+            readTransform(stream.getBuffer(), stream.tell(), entity, true, true, true);
+            break;
+
+        case 0x41435456: // Active
+            entity.active = stream.readBool();
+            break;
+
+        // Models
+        case 0xC27FFA8F: // Model
+            entity.model = readAssetId(stream.getBuffer(), stream.tell(), stream.assetIdLength, 'CMDL', resourceSystem);
+            break;
+
+        // AnimationParameters
+        case 0xE25FB08C: // AnimationInformation
+            readAnimationParameters(stream.getBuffer(), stream.tell(), entity, resourceSystem);
+            break;
+
+        // LightParameters
+        case 0xB028DB0E: // LightParameters
+        {
+            const numSubProperties = stream.readUint16();
+
+            for (let i = 0; i < numSubProperties; i++) {
+                const subPropertyID = stream.readUint32();
+                const subPropertySize = stream.readUint16();
+                const nextSubProperty = stream.tell() + subPropertySize;
+
+                // entity.lightParams is allocated by default
+                switch (subPropertyID) {
+                    case 0xA33E5B0E:
+                    {
+                        const r = stream.readFloat32();
+                        const g = stream.readFloat32();
+                        const b = stream.readFloat32();
+                        const a = stream.readFloat32();
+                        colorFromRGBA(entity.lightParams.ambient, r, g, b, a);
+                        break;
+                    }
+                    
+                    case 0x6B5E7509:
+                        entity.lightParams.options = stream.readUint32();
+                        break;
+
+                    case 0xCAC1E778: // TODO: verify this is the right ID and not 0x67F4D3DE
+                        entity.lightParams.maxAreaLights = stream.readUint32();
+                        break;
+
+                    case 0x1F715FD3:
+                        entity.lightParams.layerIdx = stream.readUint32();
+                        break;
+                }
+                stream.goTo(nextSubProperty);
+            }
+            break;
+        }
+
+        default:
+            entity.readProperty_MP2(stream, resourceSystem, propertyID);
+    }
+
+    stream.goTo(nextProperty);
+}
+
+export function parseScriptLayer_MP2(stream: InputStream, resourceSystem: ResourceSystem): ScriptLayer {
+    const entities: Entity[] = [];
+    stream.skip(1); // skipping 'version' byte which is always 0
+    const numEnts = stream.readUint32();
+
+    for (let i = 0; i < numEnts; i++) {
+        const entityType = stream.readFourCC();
+        const entitySize = stream.readUint16(); 
+        const nextEntity = stream.tell() + entitySize;
+        const entityId = stream.readUint32();
+        const numLinks = stream.readUint16();
+        stream.skip(numLinks * 0xC);
+
+        // certain entity types have model/animation fields but are not visible in normal gameplay, so we don't read them
+        const entity = createEntity_MP2(entityType, entityId);
+
+        if (entity !== null) {
+            parseProperty_MP2(stream, entity, resourceSystem);
+            entities.push(entity);
+        }
+
+        stream.goTo(nextEntity);
     }
 
     return { entities };

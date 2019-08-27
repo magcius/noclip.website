@@ -1,5 +1,5 @@
 
-import { mat4 } from 'gl-matrix';
+import { vec3, mat4 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { nArray, assert } from '../util';
@@ -17,11 +17,12 @@ import { GfxRenderInst, GfxRenderInstManager, makeSortKey, GfxRendererLayer, set
 import { computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
 import { LoadedVertexData, LoadedVertexPacket } from '../gx/gx_displaylist';
 import { GXMaterialHacks, Color, lightSetWorldPositionViewMatrix, lightSetWorldDirectionNormalMatrix } from '../gx/gx_material';
-import { LightParameters, WorldLightingOptions } from './script';
+import { LightParameters, WorldLightingOptions, MP1EntityType, AreaAttributes } from './script';
 import { colorMult, colorCopy, colorFromRGBA } from '../Color';
 import { texEnvMtx } from '../MathHelpers';
 import { GXShapeHelperGfx, GXRenderHelperGfx, GXMaterialHelperGfx } from '../gx/gx_render';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { areaCollisionLineCheck } from './collision';
 
 const fixPrimeUsingTheWrongConventionYesIKnowItsFromMayaButMayaIsStillWrong = mat4.fromValues(
     1, 0,  0, 0,
@@ -48,13 +49,15 @@ export const enum RetroPass {
     SKYBOX = 0x02,
 }
 
+const scratchPos = vec3.create();
+
 export class ActorLights {
     public ambient: Color = new Color;
     public lights: AreaLight[] = [];
 
     constructor(actorBounds: AABB, lightParams: LightParameters, mrea: MREA) {
         // DisableWorld indicates the actor doesn't use any area lights (including ambient ones)
-        if (lightParams.options === WorldLightingOptions.DisableWorld) {
+        if (lightParams.options === WorldLightingOptions.NoWorldLighting) {
             colorFromRGBA(this.ambient, 0, 0, 0, 1);
         } else {
             const layerIdx = lightParams.layerIdx;
@@ -71,13 +74,27 @@ export class ActorLights {
                 const light = layer.lights[i];
                 const sqDist = squaredDistanceFromPointToAABB(light.gxLight.Position, actorBounds);
 
-                if (sqDist < (light.radius * light.radius))
-                    actorLights.push({ sqDist, light });
+                if (sqDist < (light.radius * light.radius)) {
+                    // Shadow cast logic
+                    if (light.castShadows && lightParams.options != WorldLightingOptions.NoShadowCast) {
+                        const bb = actorBounds;
+                        const actorPos = scratchPos;
+                        vec3.set(actorPos, (bb.minX + bb.maxX)/2, (bb.minY + bb.maxY)/2, (bb.minZ + bb.maxZ)/2);
+
+                        if (!areaCollisionLineCheck(light.gxLight.Position, actorPos, mrea.collision)) {
+                            actorLights.push({ sqDist, light });
+                        }
+                    }
+                    else {
+                        actorLights.push({ sqDist, light });
+                    }
+                }
             }
 
             actorLights.sort((a, b) => a.sqDist - b.sqDist);
 
-            for (let i = 0; i < actorLights.length && i < lightParams.maxAreaLights && i < 8; i++)
+            // maxAreaLights check removed because currently the light selection logic does not match the game, causing highly influential lights to not render
+            for (let i = 0; i < actorLights.length /*&& i < lightParams.maxAreaLights*/ && i < 8; i++)
                 this.lights.push(actorLights[i].light);
         }
     }
@@ -321,6 +338,9 @@ class MaterialInstance {
                 continue;
 
             const txtr = materialSet.textures[materialSet.textureRemapTable[textureIndex]];
+            if (txtr === null)
+                continue;
+
             textureHolder.fillTextureMapping(this.textureMappings[i], txtr.name);
             this.textureMappings[i].gfxSampler = materialGroup.gfxSampler;
 
@@ -404,6 +424,8 @@ export class MREARenderer {
     private surfaceInstances: SurfaceInstance[] = [];
     private cmdlData: CMDLData[] = [];
     private actors: CMDLRenderer[] = [];
+    public overrideSky: CMDLRenderer = null;
+    public needSky: boolean = false;
     public visible: boolean = true;
 
     constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, public textureHolder: RetroTextureHolder, public name: string, public mrea: MREA) {
@@ -512,6 +534,24 @@ export class MREARenderer {
                     const cmdlData = new CMDLData(device, renderHelper, model);
                     this.cmdlData.push(cmdlData);
                     this.actors.push(new CMDLRenderer(device, renderHelper, this.textureHolder, actorLights, ent.name, ent.modelMatrix, cmdlData));
+                }
+
+                if (ent.type === MP1EntityType.AreaAttributes || ent.type === "REAA") {
+                    const areaAttributes = <AreaAttributes>(ent);
+
+                    // Only process AreaAttributes properties if this is the first one in the area with a sky configured, to avoid mixing and matching different entities
+                    if (!this.needSky && areaAttributes.needSky) {
+                        this.needSky = true;
+
+                        if (areaAttributes.overrideSky !== null) {
+                            const identityMtx = mat4.create();
+                            mat4.identity(identityMtx);
+
+                            const skyData = new CMDLData(device, renderHelper, areaAttributes.overrideSky);
+                            this.overrideSky = new CMDLRenderer(device, renderHelper, this.textureHolder, null, `Sky_AreaAttributes_Layer${i}`, identityMtx, skyData);
+                            this.overrideSky.isSkybox = true;
+                        }
+                    }
                 }
             }
         }
