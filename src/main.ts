@@ -117,7 +117,7 @@ const sceneGroups = [
     Scenes_DarkSoulsCollision.sceneGroup,
     Scenes_SonicMania.sceneGroup,
     "Experimental",
-    Scenes_DonkeyKongCountryReturns.sceneGroup,
+//  Scenes_DonkeyKongCountryReturns.sceneGroup,
     Scenes_DarkSouls.sceneGroup,
     Scenes_Elebits.sceneGroup,
     Scenes_MarioAndSonicAtThe2012OlympicGames.sceneGroup,
