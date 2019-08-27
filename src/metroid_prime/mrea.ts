@@ -503,7 +503,7 @@ function parseWorldModels_MP1(stream: InputStream, worldModelCount: number, sect
         const worldModelIndex = worldModels.length;
         let geometry: Geometry;
 
-        [geometry, sectionIndex] = parseGeometry(stream, materialSet, sectionOffsTable, true, version >= AreaVersion.MP2, sectionIndex, worldModelIndex);
+        [geometry, sectionIndex] = parseGeometry(stream, materialSet, sectionOffsTable, true, version >= AreaVersion.MP2, false, sectionIndex, worldModelIndex);
 
         worldModels.push({ geometry, modelMatrix, bbox });
     }
@@ -525,7 +525,7 @@ function parseWorldModels_MP3(stream: InputStream, worldModelCount: number, wobj
         const worldModelIndex = worldModels.length;
         let geometry: Geometry;
 
-        [geometry, wobjSectionIndex, gpudSectionIndex] = parseGeometry_MP3(stream, materialSet, sectionOffsTable, version === AreaVersion.DKCR, wobjSectionIndex, gpudSectionIndex, worldModelIndex);
+        [geometry, wobjSectionIndex, gpudSectionIndex] = parseGeometry_MP3_MREA(stream, materialSet, sectionOffsTable, version === AreaVersion.DKCR, wobjSectionIndex, gpudSectionIndex, worldModelIndex);
 
         worldModels.push({ geometry, modelMatrix, bbox });
     }
@@ -533,19 +533,19 @@ function parseWorldModels_MP3(stream: InputStream, worldModelCount: number, wobj
     return worldModels;
 }
 
-export function parseSurfaces(  stream: InputStream,
-                                surfaceCount: number,
-                                sectionIndex: number,
-                                posSectionOffs: number,
-                                nrmSectionOffs: number,
-                                clrSectionOffs: number,
-                                uvfSectionOffs: number,
-                                uvsSectionOffs: number,
-                                sectionOffsTable: number[],
-                                worldModelIndex: number,
-                                materialSet: MaterialSet,
-                                isEchoes: boolean
-                            ): [Surface[], number]
+function parseSurfaces(  stream: InputStream,
+                         surfaceCount: number,
+                         sectionIndex: number,
+                         posSectionOffs: number,
+                         nrmSectionOffs: number,
+                         clrSectionOffs: number,
+                         uvfSectionOffs: number,
+                         uvsSectionOffs: number,
+                         sectionOffsTable: number[],
+                         worldModelIndex: number,
+                         materialSet: MaterialSet,
+                         isEchoes: boolean
+                    ): [Surface[], number]
 {
     function fillVatFormat(nrmType: GX.CompType, tex0Type: GX.CompType, compShift: number): GX_VtxAttrFmt[] {
         const vatFormat: GX_VtxAttrFmt[] = [];
@@ -650,7 +650,86 @@ export function parseSurfaces(  stream: InputStream,
     return [surfaces, sectionIndex];
 }
 
-export function parseGeometry(stream: InputStream, materialSet: MaterialSet, sectionOffsTable: number[], hasUVShort: boolean, isEchoes: boolean, sectionIndex: number, worldModelIndex: number): [Geometry, number] {
+function parseSurfaces_DKCR(  stream: InputStream,
+                              surfaceCount: number,
+                              sectionIndex: number,
+                              posSectionOffs: number,
+                              nrmSectionOffs: number,
+                              clrSectionOffs: number,
+                              uvfSectionOffs: number,
+                              uvsSectionOffs: number,
+                              sectionOffsTable: number[],
+                              worldModelIndex: number,
+                              materialSet: MaterialSet,
+                            ): [Surface[], number] {
+    const firstSurfaceOffs = sectionOffsTable[sectionIndex];
+    const surfaces: Surface[] = [];
+
+    for (let j = 0; j < surfaceCount; j++) {
+        const surfaceOffset = sectionOffsTable[sectionIndex++];
+        const surfaceEnd = sectionOffsTable[sectionIndex];
+        stream.goTo(surfaceOffset);
+
+        const centerX = stream.readFloat32();
+        const centerY = stream.readFloat32();
+        const centerZ = stream.readFloat32();
+        const mantissa = stream.readUint16();
+        const displayListSizeExceptNotReally = stream.readUint16();
+        stream.skip(8);
+        const skinMatrixBankIndex = stream.readUint16();
+        const materialIndex = stream.readUint16();
+        stream.skip(1);
+        const visibilityGroupIndex = stream.readUint8();
+        const uvArrayIndex = stream.readUint8();
+        const extraDataSize = stream.readUint8();
+        stream.skip(extraDataSize);
+        stream.align(32);
+
+        // Build our vertex format.
+        const material: Material_MP3 = materialSet.materials[materialIndex] as Material_MP3;
+        const vtxAttrFormat = material.vtxAttrFormat;
+
+        const primitiveDataOffs = stream.tell();
+
+        const vcd: GX_VtxDesc[] = [];
+        for (const format of vtxAttrFormats) {
+            if (!(vtxAttrFormat & format.mask))
+                continue;
+            vcd[format.vtxAttrib] = { type: format.type };
+        }
+
+        const vtxArrays: GX_Array[] = [];
+        vtxArrays[GX.VertexAttribute.POS]  = { buffer: stream.getBuffer(), offs: posSectionOffs };
+        vtxArrays[GX.VertexAttribute.NRM]  = { buffer: stream.getBuffer(), offs: nrmSectionOffs };
+        vtxArrays[GX.VertexAttribute.CLR0] = { buffer: stream.getBuffer(), offs: clrSectionOffs };
+        vtxArrays[GX.VertexAttribute.CLR1] = { buffer: stream.getBuffer(), offs: clrSectionOffs };
+
+        const vatFormat: GX_VtxAttrFmt[] = [];
+        vatFormat[GX.VertexAttribute.POS]  = { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.F32, compShift: 0 };
+        vatFormat[GX.VertexAttribute.NRM]  = { compCnt: GX.CompCnt.NRM_XYZ, compType: GX.CompType.F32, compShift: 0 };
+        vatFormat[GX.VertexAttribute.CLR0] = { compCnt: GX.CompCnt.CLR_RGBA, compType: GX.CompType.RGBA8, compShift: 0 };
+        vatFormat[GX.VertexAttribute.CLR1] = { compCnt: GX.CompCnt.CLR_RGBA, compType: GX.CompType.RGBA8, compShift: 0 };
+
+        // TODO(jstpierre): I assume in the real game this comes from the different VAT formats.
+        const isShort = (uvArrayIndex === 1);
+        for (let i = 0; i < 8; i++) {
+            vatFormat[GX.VertexAttribute.TEX0 + i] = { compCnt: GX.CompCnt.TEX_ST, compType: isShort ? GX.CompType.S16 : GX.CompType.F32, compShift: Math.log2(0x2000) };
+            vtxArrays[GX.VertexAttribute.TEX0 + i] = { buffer: stream.getBuffer(), offs: isShort ? uvsSectionOffs : uvfSectionOffs };
+        }
+
+        const vatFormats: GX_VtxAttrFmt[][] = [vatFormat, vatFormat, vatFormat, vatFormat];
+        const vtxLoader = compileVtxLoaderMultiVat(vatFormats, vcd);
+        const loadedVertexLayout = vtxLoader.loadedVertexLayout;
+        const dlData = stream.getBuffer().slice(primitiveDataOffs, surfaceEnd);
+        const loadedVertexData = vtxLoader.runVertices(vtxArrays, dlData);
+
+        surfaces.push({ materialIndex, worldModelIndex, loadedVertexData, loadedVertexLayout });
+    }
+
+    return [surfaces, sectionIndex];
+}
+
+export function parseGeometry(stream: InputStream, materialSet: MaterialSet, sectionOffsTable: number[], hasUVShort: boolean, isEchoes: boolean, isDKCR: boolean, sectionIndex: number, worldModelIndex: number): [Geometry, number] {
     const posSectionOffs = sectionOffsTable[sectionIndex++];
     const nrmSectionOffs = sectionOffsTable[sectionIndex++];
     const clrSectionOffs = sectionOffsTable[sectionIndex++];
@@ -662,18 +741,24 @@ export function parseGeometry(stream: InputStream, materialSet: MaterialSet, sec
     const surfaceCount = stream.readUint32();
 
     let surfaces: Surface[];
-    [surfaces, sectionIndex] = parseSurfaces(stream, surfaceCount, sectionIndex, posSectionOffs, nrmSectionOffs, clrSectionOffs, uvfSectionOffs, uvsSectionOffs, sectionOffsTable, worldModelIndex, materialSet, isEchoes);
+
+    if (!isDKCR) {
+        [surfaces, sectionIndex] = parseSurfaces(stream, surfaceCount, sectionIndex, posSectionOffs, nrmSectionOffs, clrSectionOffs, uvfSectionOffs, uvsSectionOffs, sectionOffsTable, worldModelIndex, materialSet, isEchoes);
+    }
+    else {
+        [surfaces, sectionIndex] = parseSurfaces_DKCR(stream, surfaceCount, sectionIndex, posSectionOffs, nrmSectionOffs, clrSectionOffs, uvfSectionOffs, uvsSectionOffs, sectionOffsTable, worldModelIndex, materialSet)
+    }
 
     const geometry: Geometry = { surfaces };
     return [geometry, sectionIndex];
 }
 
-export function parseGeometry_MP3(stream: InputStream, materialSet: MaterialSet, sectionOffsTable: number[], hasUVShort: boolean, wobjSectionIndex: number, gpudSectionIndex: number, worldModelIndex: number): [Geometry, number, number] {
+export function parseGeometry_MP3_MREA(stream: InputStream, materialSet: MaterialSet, sectionOffsTable: number[], isDKCR: boolean, wobjSectionIndex: number, gpudSectionIndex: number, worldModelIndex: number): [Geometry, number, number] {
     const posSectionOffs = sectionOffsTable[gpudSectionIndex++];
     const nrmSectionOffs = sectionOffsTable[gpudSectionIndex++];
     const clrSectionOffs = sectionOffsTable[gpudSectionIndex++];
     const uvfSectionOffs = sectionOffsTable[gpudSectionIndex++];
-    const uvsSectionOffs = hasUVShort ? sectionOffsTable[gpudSectionIndex++] : null;
+    const uvsSectionOffs = isDKCR ? sectionOffsTable[gpudSectionIndex++] : null;
 
     const surfaceTableOffs = sectionOffsTable[wobjSectionIndex++];
     stream.goTo(surfaceTableOffs);
@@ -681,7 +766,13 @@ export function parseGeometry_MP3(stream: InputStream, materialSet: MaterialSet,
     wobjSectionIndex += 2;
 
     let surfaces: Surface[];
-    [surfaces, gpudSectionIndex] = parseSurfaces(stream, surfaceCount, gpudSectionIndex, posSectionOffs, nrmSectionOffs, clrSectionOffs, uvfSectionOffs, uvsSectionOffs, sectionOffsTable, worldModelIndex, materialSet, true);
+
+    if (!isDKCR) {
+        [surfaces, gpudSectionIndex] = parseSurfaces(stream, surfaceCount, gpudSectionIndex, posSectionOffs, nrmSectionOffs, clrSectionOffs, uvfSectionOffs, uvsSectionOffs, sectionOffsTable, worldModelIndex, materialSet, true);
+    }
+    else {
+        [surfaces, gpudSectionIndex] = parseSurfaces_DKCR(stream, surfaceCount, gpudSectionIndex, posSectionOffs, nrmSectionOffs, clrSectionOffs, uvfSectionOffs, uvsSectionOffs, sectionOffsTable, worldModelIndex, materialSet);
+    }
 
     const geometry: Geometry = { surfaces };
     return [geometry, wobjSectionIndex, gpudSectionIndex];
@@ -822,6 +913,7 @@ function decompressBuffers(stream: InputStream, compressedBlocksIdx: number, com
         const blockDecompressedSize = stream.readUint32();
         const blockCompressedSize = stream.readUint32();
         const blockDataSectionCount = stream.readUint32();
+        const offs = stream.tell();
         totalDecompressedSize += blockDecompressedSize;
 
         if (blockCompressedSize === 0) {
@@ -835,12 +927,12 @@ function decompressBuffers(stream: InputStream, compressedBlocksIdx: number, com
             const blockPadding = align(blockCompressedSize, 0x20) - blockCompressedSize;
 
             compressedBlocksIdx += blockPadding;
-            stream.goTo(compressedBlocksIdx);
 
             let remainingSize = blockDecompressedSize;
             while (remainingSize > 0) {
-                let segmentSize = stream.readInt16();
+                stream.goTo(compressedBlocksIdx);
                 compressedBlocksIdx += 0x02;
+                let segmentSize = stream.readInt16();
                 if (segmentSize < 0) {
                     // Uncompressed segment.
                     segmentSize = -segmentSize;
@@ -864,7 +956,7 @@ function decompressBuffers(stream: InputStream, compressedBlocksIdx: number, com
                     }
                 }
             }
-            compressedBlocksIdx += blockCompressedSize;
+            stream.goTo(offs);
         }
     }
 
@@ -879,10 +971,10 @@ function decompressBuffers(stream: InputStream, compressedBlocksIdx: number, com
     return totalBuffer;
 }
 
-function parse_MP1(stream: InputStream, resourceSystem: ResourceSystem): MREA {
+export function parse(stream: InputStream, resourceSystem: ResourceSystem): MREA {
     assert(stream.readUint32() === 0xDEADBEEF);
     const version = stream.readUint32();
-    assert(version === AreaVersion.MP1 || version === AreaVersion.MP2 || version === AreaVersion.MP3);
+    assert(version === AreaVersion.MP1 || version === AreaVersion.MP2 || version === AreaVersion.MP3 || version === AreaVersion.DKCR);
     stream.assetIdLength = (version >= AreaVersion.MP3 ? 8 : 4);
 
     stream.skip(4*12); // Transform matrix
@@ -923,7 +1015,7 @@ function parse_MP1(stream: InputStream, resourceSystem: ResourceSystem): MREA {
 
     if (numCompressedBlocks > 0) {
         const compressedDataIdx = align(stream.tell() + align(numCompressedBlocks*16, 32) + align(numSectionNumbers*8, 32), 32);
-        const decompressedBuffer = decompressBuffers(stream, compressedDataIdx, numCompressedBlocks, true);
+        const decompressedBuffer = decompressBuffers(stream, compressedDataIdx, numCompressedBlocks, version !== AreaVersion.DKCR);
         areaDataBuffer = new ArrayBufferSlice(decompressedBuffer.buffer);
         stream.align(32);
     }
@@ -1361,175 +1453,4 @@ export function parseMaterialSet_MP3(stream: InputStream, resourceSystem: Resour
     }
 
     return { textures, textureRemapTable, materials };
-}
-
-function parse_DKCR(stream: InputStream, resourceSystem: ResourceSystem): MREA {
-    /*const view = buffer.createDataView();
-
-    assert(view.getUint32(0x00) === 0xDEADBEEF);
-    const version = view.getUint32(0x04);
-    assert(version === 0x20);
-
-    // 0x08 - 0x34: Transform matrix
-
-    const worldModelCount = view.getUint32(0x38);
-    const scriptLayerCount = view.getUint32(0x3C);
-    const dataSectionCount = view.getUint32(0x40);
-    const compressedBlockCount = view.getUint32(0x44);
-    const sectionNumberCount = view.getUint32(0x48);
-
-    const dataSectionSizeTable: number[] = [];
-    let dataSectionSizeTableIdx = 0x60;
-    for (let i = 0; i < dataSectionCount; i++) {
-        const size = view.getUint32(dataSectionSizeTableIdx + 0x00);
-        dataSectionSizeTable.push(size);
-        dataSectionSizeTableIdx += 0x04;
-    }
-
-    const sectionsData = decompressBuffers(stream, combineBuffers(totalDecompressedSize, decompressedSegments);
-    const secBuffer = new ArrayBufferSlice(sectionsData.buffer);
-    const secView = secBuffer.createDataView();
-
-    const dataSectionOffsTable: number[] = [0];
-    for (let i = 1; i < dataSectionCount; i++) {
-        const prevOffs = dataSectionOffsTable[i - 1];
-        const prevSize = dataSectionSizeTable[i - 1];
-        dataSectionOffsTable.push(align(prevOffs + prevSize, 32));
-    }
-
-    let gpudSectionIndex = -1;
-    let aabbSectionIndex = -1;
-    for (let i = 0; i < sectionNumberCount; i++) {
-        const sectionFourCC = readString(buffer, sectionNumbersTableIdx + 0x00, 0x04, false);
-        const sectionIndex = view.getUint32(sectionNumbersTableIdx + 0x04);
-
-        if (sectionFourCC === 'WOBJ') {
-            assert(sectionIndex === 0);
-        } else if (sectionFourCC === 'GPUD') {
-            gpudSectionIndex = sectionIndex;
-        } else if (sectionFourCC === 'AABB') {
-            aabbSectionIndex = sectionIndex;
-        }
-
-        sectionNumbersTableIdx += 0x08;
-    }
-
-    const materialSectionIndex = 0;
-    const materialSet = parseMaterialSet_MP3(resourceSystem, secBuffer.subarray(dataSectionOffsTable[materialSectionIndex], dataSectionSizeTable[materialSectionIndex]));
-
-    // const gpudBuffer = buffer.subarray(dataSectionOffsTable[gpudSectionIndex], dataSectionSizeTable[gpudSectionIndex]);
-    // const aabbBuffer = buffer.subarray(dataSectionOffsTable[aabbSectionIndex], dataSectionSizeTable[aabbSectionIndex]);
-
-    let worldModelSectionIdx = materialSectionIndex + 1;
-    const worldModels: WorldModel[] = [];
-    for (let i = 0; i < worldModelCount; i++) {
-        const worldModelHeaderOffs = dataSectionOffsTable[worldModelSectionIdx++];
-        const surfaceDefinitionTableOffs = dataSectionOffsTable[worldModelSectionIdx++];
-        const surfaceGroupIDTableOffs = worldModelSectionIdx++;
-        const surfaceLookupTableOffs = worldModelSectionIdx++;
-
-        const visorFlags = secView.getUint32(worldModelHeaderOffs + 0x00);
-        const bboxMinX = secView.getFloat32(worldModelHeaderOffs + 0x34);
-        const bboxMinY = secView.getFloat32(worldModelHeaderOffs + 0x38);
-        const bboxMinZ = secView.getFloat32(worldModelHeaderOffs + 0x3C);
-        const bboxMaxX = secView.getFloat32(worldModelHeaderOffs + 0x40);
-        const bboxMaxY = secView.getFloat32(worldModelHeaderOffs + 0x44);
-        const bboxMaxZ = secView.getFloat32(worldModelHeaderOffs + 0x48);
-        const bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
-
-        const posSectionOffs = dataSectionOffsTable[gpudSectionIndex++];
-        const nrmSectionOffs = dataSectionOffsTable[gpudSectionIndex++];
-        const clrSectionOffs = dataSectionOffsTable[gpudSectionIndex++];
-        const uvfSectionOffs = dataSectionOffsTable[gpudSectionIndex++];
-        const uvsSectionOffs = dataSectionOffsTable[gpudSectionIndex++];
-        const firstSurfaceOffs = dataSectionOffsTable[gpudSectionIndex];
-
-        const worldModelIndex: number = worldModels.length;
-
-        const surfaceCount = secView.getUint32(surfaceDefinitionTableOffs + 0x00);
-        let surfaceDefinitionTableIdx = surfaceDefinitionTableOffs + 0x04;
-        const surfaces: Surface[] = [];
-        for (let j = 0; j < surfaceCount; j++) {
-            const surfaceOffs = dataSectionOffsTable[gpudSectionIndex++];
-            const surfaceEnd = firstSurfaceOffs + secView.getUint32(surfaceDefinitionTableIdx + 0x00);
-            surfaceDefinitionTableIdx += 0x04;
-
-            const centerX = secView.getFloat32(surfaceOffs + 0x00);
-            const centerY = secView.getFloat32(surfaceOffs + 0x04);
-            const centerZ = secView.getFloat32(surfaceOffs + 0x08);
-            const mantissa = secView.getUint16(surfaceOffs + 0x0C);
-            const displayListSizeExceptNotReally = secView.getUint16(surfaceOffs + 0x0E);
-            const skinMatrixBankIndex = secView.getUint16(surfaceOffs + 0x18);
-            const materialIndex = secView.getUint16(surfaceOffs + 0x1A);
-            const visibilityGroupIndex = secView.getUint8(surfaceOffs + 0x1D);
-            const uvArrayIndex = secView.getUint8(surfaceOffs + 0x1E);
-            const extraDataSize = secView.getUint8(surfaceOffs + 0x1F);
-
-            // Build our vertex format.
-            const material: Material_MP3 = materialSet.materials[materialIndex] as Material_MP3;
-            const vtxAttrFormat = material.vtxAttrFormat;
-
-            const surfaceHeaderEnd = surfaceOffs + 0x20 + extraDataSize;
-            const primitiveDataOffs = align(surfaceHeaderEnd, 32);
-
-            const vcd: GX_VtxDesc[] = [];
-            for (const format of vtxAttrFormats) {
-                if (!(vtxAttrFormat & format.mask))
-                    continue;
-                vcd[format.vtxAttrib] = { type: GX.AttrType.INDEX16 };
-            }
-
-            const vtxArrays: GX_Array[] = [];
-            vtxArrays[GX.VertexAttribute.POS]  = { buffer: secBuffer, offs: posSectionOffs };
-            vtxArrays[GX.VertexAttribute.NRM]  = { buffer: secBuffer, offs: nrmSectionOffs };
-            vtxArrays[GX.VertexAttribute.CLR0] = { buffer: secBuffer, offs: clrSectionOffs };
-            vtxArrays[GX.VertexAttribute.CLR1] = { buffer: secBuffer, offs: clrSectionOffs };
-
-            const vatFormat: GX_VtxAttrFmt[] = [];
-            vatFormat[GX.VertexAttribute.POS]  = { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.F32, compShift: 0 };
-            vatFormat[GX.VertexAttribute.NRM]  = { compCnt: GX.CompCnt.NRM_XYZ, compType: GX.CompType.F32, compShift: 0 };
-            vatFormat[GX.VertexAttribute.CLR0] = { compCnt: GX.CompCnt.CLR_RGBA, compType: GX.CompType.RGBA8, compShift: 0 };
-            vatFormat[GX.VertexAttribute.CLR1] = { compCnt: GX.CompCnt.CLR_RGBA, compType: GX.CompType.RGBA8, compShift: 0 };
-
-            // TODO(jstpierre): I assume in the real game this comes from the different VAT formats.
-            const isShort = (uvArrayIndex === 1);
-            for (let i = 0; i < 8; i++) {
-                vatFormat[GX.VertexAttribute.TEX0 + i] = { compCnt: GX.CompCnt.TEX_ST, compType: isShort ? GX.CompType.S16 : GX.CompType.F32, compShift: Math.log2(0x2000) };
-                vtxArrays[GX.VertexAttribute.TEX0 + i] = { buffer: secBuffer, offs: isShort ? uvsSectionOffs : uvfSectionOffs };
-            }
-
-            const vatFormats: GX_VtxAttrFmt[][] = [vatFormat, vatFormat, vatFormat, vatFormat];
-            const vtxLoader = compileVtxLoaderMultiVat(vatFormats, vcd);
-            const loadedVertexLayout = vtxLoader.loadedVertexLayout;
-            const dlData = secBuffer.slice(primitiveDataOffs, surfaceEnd);
-            const loadedVertexData = vtxLoader.runVertices(vtxArrays, dlData);
-
-            surfaces.push({ materialIndex, worldModelIndex, loadedVertexData, loadedVertexLayout });
-        }
-
-        const geometry: Geometry = { surfaces };
-        const modelMatrix = mat4.create();
-        worldModels.push({ geometry, bbox, modelMatrix });
-    }
-
-    const scriptLayers: Script.ScriptLayer[] = [];
-    const lightLayers: AreaLightLayer[] = [];
-    return { materialSet, worldModels, scriptLayers, lightLayers };*/
-    return null;
-}
-
-export function parse(stream: InputStream, resourceSystem: ResourceSystem, assetID: string): MREA {
-    assert(stream.readUint32() == 0xDEADBEEF);
-    const version = stream.readUint32();
-    stream.skip(-8);
-
-    // Metroid Prime 1
-    if (version === AreaVersion.MP1 || version === AreaVersion.MP2 || version === AreaVersion.MP3)
-        return parse_MP1(stream, resourceSystem);
-
-    // Donkey Kong Country Returns
-    if (version === 0x20)
-        return parse_DKCR(stream, resourceSystem);
-
-    throw new Error(`Unrecognized MREA version: ${version}`);
 }

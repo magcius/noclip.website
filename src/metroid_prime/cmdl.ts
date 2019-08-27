@@ -19,19 +19,31 @@ export interface CMDL {
 enum ModelVersion {
     MP1 = 0x2,
     MP2 = 0x4,
-    MP3 = 0x5
+    MP3 = 0x5,
+    DKCR = 0xA
 }
 
 enum Flags {
     SKINNED = 0x01,
     NRM_SHORT = 0x02,
     UV_SHORT = 0x04,
+    VIS_GROUPS = 0x10, // DKCR only
+    POS_SHORT = 0x20, // DKCR only
 }
 
 export function parse(stream: InputStream, resourceSystem: ResourceSystem, assetID: string): CMDL {
-    assert(stream.readUint32() === 0xDEADBABE);
-    const version = stream.readUint32();
-    assert(version === ModelVersion.MP1 || version === ModelVersion.MP2 || version === ModelVersion.MP3, `Unsupported CMDL version: ${version}`);
+    const magic = stream.readUint32();
+    let version: number;
+    
+    if (magic === 0x9381000A) {
+        version = ModelVersion.DKCR;
+    }
+    else {
+        assert(magic === 0xDEADBABE);
+        version = stream.readUint32();
+        assert(version === ModelVersion.MP1 || version === ModelVersion.MP2 || version === ModelVersion.MP3, `Unsupported CMDL version: ${version}`);
+    }
+
     stream.assetIdLength = (version >= ModelVersion.MP3 ? 8 : 4);
 
     const flags: Flags = stream.readUint32();
@@ -45,6 +57,19 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
 
     const dataSectionCount = stream.readUint32();
     const materialSetCount = stream.readUint32();
+
+    if (version === ModelVersion.DKCR) {
+        if (flags & Flags.VIS_GROUPS) {
+            stream.skip(4);
+            const groupCount = stream.readUint32();
+
+            for (let i = 0; i < groupCount; i++) {
+                const nameLen = stream.readUint32();
+                const name = stream.readString(nameLen, false);
+            }
+            stream.skip(0x14);
+        }
+    }
 
     const dataSectionSizeTable: number[] = [];
     for (let i = 0; i < dataSectionCount; i++) {
@@ -77,9 +102,9 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
         }
     }
 
-    const hasUVShort = !!(flags & Flags.UV_SHORT);
+    const hasUVShort = ( !!(flags & Flags.UV_SHORT) || version === ModelVersion.DKCR );
     let geometry;
-    [geometry, dataSectionIndex] = parseGeometry(stream, materialSets[0], dataSectionOffsTable, hasUVShort, version === 0x04, dataSectionIndex, -1);
+    [geometry, dataSectionIndex] = parseGeometry(stream, materialSets[0], dataSectionOffsTable, hasUVShort, version >= ModelVersion.MP2, version >= ModelVersion.DKCR, dataSectionIndex, -1);
 
     return { bbox, assetID, materialSets, geometry };
 }
