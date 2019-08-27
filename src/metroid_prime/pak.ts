@@ -45,7 +45,7 @@ function parse_MP1(stream: InputStream): PAK {
         const fourCC = stream.readFourCC();
         const fileID = stream.readAssetID();
         const fileNameLength = stream.readUint32();
-        const fileName = stream.readString(fileNameLength);
+        const fileName = stream.readString(fileNameLength, false);
         namedResourceTableEntries.push({ fourCC, fileID, fileName });
     }
 

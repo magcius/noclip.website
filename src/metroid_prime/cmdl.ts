@@ -97,7 +97,7 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
         
         materialSets.push(materialSet);
 
-        if (version <= ModelVersion.MP2) {
+        if (version <= ModelVersion.MP2 && i+1 < materialSetCount) {
             stream.goTo(dataSectionOffsTable[dataSectionIndex++]);
         }
     }
