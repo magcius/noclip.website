@@ -10,9 +10,9 @@ import { InputStream } from './stream'
 import { TXTR } from './txtr';
 
 import { ResourceSystem } from "./resource";
-import { assert, readString, align } from "../util";
+import { assert, align } from "../util";
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { compileVtxLoaderMultiVat, GX_VtxDesc, GX_VtxAttrFmt, GX_Array, LoadedVertexData, LoadedVertexLayout, VtxLoader, compileVtxLoader } from '../gx/gx_displaylist';
+import { compileVtxLoaderMultiVat, GX_VtxDesc, GX_VtxAttrFmt, GX_Array, LoadedVertexData, LoadedVertexLayout } from '../gx/gx_displaylist';
 import { mat4, vec3 } from 'gl-matrix';
 import * as Pako from 'pako';
 import { AABB } from '../Geometry';
@@ -163,7 +163,7 @@ function parseMaterialSet_UVAnimations(stream: InputStream, count: number): UVAn
     return uvAnimations;
 }
 
-export function parseMaterialSet(stream: InputStream, resourceSystem: ResourceSystem, isEchoes: boolean): MaterialSet {
+function parseMaterialSet_MP1_MP2(stream: InputStream, resourceSystem: ResourceSystem, version: GameVersion): MaterialSet {
     const textureCount = stream.readUint32();
     const textures: TXTR[] = [];
     const textureRemapTable: number[] = [];
@@ -201,7 +201,7 @@ export function parseMaterialSet(stream: InputStream, resourceSystem: ResourceSy
 
         const vtxAttrFormat = stream.readUint32();
 
-        if (isEchoes) {
+        if (version === GameVersion.MP2) {
             stream.skip(8);
         }
 
@@ -1019,7 +1019,7 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem): MREA
         areaDataBuffer = new ArrayBufferSlice(decompressedBuffer.buffer);
         stream.align(32);
     }
-    
+
     // Parse MP3 section numbers
     if (version >= AreaVersion.MP3) {
         for (let i = 0; i < numSectionNumbers; i++) {
@@ -1058,22 +1058,15 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem): MREA
 
     // Parse out materials.
     stream.goTo(materialSectionOffs);
-    let materialSet: MaterialSet;
 
-    if (version < AreaVersion.MP3) {
-        materialSet = parseMaterialSet(stream, resourceSystem, version === AreaVersion.MP2);
-    }
-    else {
-        materialSet = parseMaterialSet_MP3(stream, resourceSystem);
-    }
+    const materialSet = parseMaterialSet(stream, resourceSystem, areaVersionToGameVersion(version));
 
     // Parse out world models.
     let worldModels: WorldModel[];
 
     if (version < AreaVersion.MP3) {
         worldModels = parseWorldModels_MP1(stream, worldModelCount, worldGeometrySectionIndex+1, dataSectionOffsTable, materialSet, version);
-    }
-    else {
+    } else {
         worldModels = parseWorldModels_MP3(stream, worldModelCount, worldGeometrySectionIndex+1, worldGeometryGPUDataSectionIndex, dataSectionOffsTable, materialSet, version);
     }
 
@@ -1102,8 +1095,7 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem): MREA
             scriptLayers.push(layer);
             stream.goTo(layerEnd);
         }
-    }
-    else {
+    } else {
         let currentSection = scriptLayersSectionIndex;
 
         for (let i = 0; i < scriptLayerCount; i++) {
@@ -1253,7 +1245,7 @@ interface Material_MP3 extends Material {
     passTypes: string[];
 }
 
-export function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSystem): MaterialSet {
+function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSystem): MaterialSet {
     const materialCount = stream.readUint32();
 
     const textures: TXTR[] = [];
@@ -1453,4 +1445,28 @@ export function parseMaterialSet_MP3(stream: InputStream, resourceSystem: Resour
     }
 
     return { textures, textureRemapTable, materials };
+}
+
+export enum GameVersion {
+    MP1, MP2, MP3, DKCR,
+}
+
+function areaVersionToGameVersion(areaVersion: AreaVersion): GameVersion {
+    if (areaVersion === AreaVersion.MP1)
+        return GameVersion.MP1;
+    else if (areaVersion === AreaVersion.MP2)
+        return GameVersion.MP2;
+    else if (areaVersion === AreaVersion.MP3)
+        return GameVersion.MP3;
+    else if (areaVersion === AreaVersion.DKCR)
+        return GameVersion.DKCR;
+    else
+        throw "whoops";
+}
+
+export function parseMaterialSet(stream: InputStream, resourceSystem: ResourceSystem, version: GameVersion): MaterialSet {
+    if (version === GameVersion.MP1 || version === GameVersion.MP2)
+        return parseMaterialSet_MP1_MP2(stream, resourceSystem, version);
+    else
+        return parseMaterialSet_MP3(stream, resourceSystem);
 }

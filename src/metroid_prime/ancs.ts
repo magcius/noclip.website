@@ -1,12 +1,10 @@
 
 // Implements Retro's ANCS format as seen in Metroid Prime 1.
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, align, readString } from "../util";
+import { assert } from "../util";
 
 import { ResourceSystem } from "./resource";
 import { CMDL } from "./cmdl"
-import { AABB } from "../Geometry";
 import { InputStream } from "./stream";
 
 // minimal implementation of ANCS

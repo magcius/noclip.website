@@ -1,11 +1,10 @@
 
 // Implements Retro's CMDL format as seen in Metroid Prime 1.
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, align } from "../util";
 
 import { ResourceSystem } from "./resource";
-import { Geometry, MaterialSet, parseGeometry, parseMaterialSet, parseMaterialSet_MP3 } from "./mrea";
+import { Geometry, MaterialSet, parseGeometry, parseMaterialSet, GameVersion } from "./mrea";
 import { AABB } from "../Geometry";
 import { InputStream } from "./stream";
 
@@ -29,6 +28,19 @@ enum Flags {
     UV_SHORT = 0x04,
     VIS_GROUPS = 0x10, // DKCR only
     POS_SHORT = 0x20, // DKCR only
+}
+
+function modelVersionToGameVersion(modelVersion: ModelVersion): GameVersion {
+    if (modelVersion === ModelVersion.MP1)
+        return GameVersion.MP1;
+    else if (modelVersion === ModelVersion.MP2)
+        return GameVersion.MP2;
+    else if (modelVersion === ModelVersion.MP3)
+        return GameVersion.MP3;
+    else if (modelVersion === ModelVersion.DKCR)
+        return GameVersion.DKCR;
+    else
+        throw "whoops";
 }
 
 export function parse(stream: InputStream, resourceSystem: ResourceSystem, assetID: string): CMDL {
@@ -91,10 +103,7 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
     const materialSets: MaterialSet[] = [];
     stream.goTo(dataSectionOffsTable[dataSectionIndex++]);
     for (let i = 0; i < materialSetCount; i++) {
-        const materialSet = (version <= ModelVersion.MP2 ?
-            parseMaterialSet(stream, resourceSystem, version === ModelVersion.MP2) :
-            parseMaterialSet_MP3(stream, resourceSystem));
-        
+        const materialSet = parseMaterialSet(stream, resourceSystem, modelVersionToGameVersion(version));
         materialSets.push(materialSet);
 
         if (version <= ModelVersion.MP2 && i+1 < materialSetCount) {

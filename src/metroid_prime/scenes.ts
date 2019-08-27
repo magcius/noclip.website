@@ -3,7 +3,7 @@ import * as PAK from './pak';
 import * as MLVL from './mlvl';
 import * as MREA from './mrea';
 import { ResourceSystem, NameData } from './resource';
-import { MREARenderer, RetroTextureHolder, CMDLRenderer, RetroPass, CMDLData } from './render';
+import { MREARenderer, RetroTextureHolder, CMDLRenderer, RetroPass, CMDLData, ModelCache } from './render';
 
 import * as Viewer from '../viewer';
 import * as UI from '../ui';
@@ -21,8 +21,8 @@ import { DataFetcherFlags } from '../DataFetcher';
 export class RetroSceneRenderer implements Viewer.SceneGfx {
     public renderHelper: GXRenderHelperGfx;
     public renderTarget = new BasicRenderTarget();
+    public modelCache = new ModelCache();
     public areaRenderers: MREARenderer[] = [];
-    public cmdlData: CMDLData[] = [];
     public defaultSkyRenderer: CMDLRenderer | null = null;
 
     constructor(device: GfxDevice, public mlvl: MLVL.MLVL, public textureHolder = new RetroTextureHolder()) {
@@ -91,10 +91,9 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
         this.textureHolder.destroy(device);
         this.renderTarget.destroy(device);
         this.renderHelper.destroy(device);
+        this.modelCache.destroy(device);
         for (let i = 0; i < this.areaRenderers.length; i++)
             this.areaRenderers[i].destroy(device);
-        for (let i = 0; i < this.cmdlData.length; i++)
-            this.cmdlData[i].destroy(device);
         if (this.defaultSkyRenderer !== null)
             this.defaultSkyRenderer.destroy(device);
     }
@@ -132,14 +131,14 @@ class RetroSceneDesc implements Viewer.SceneDesc {
                 const mlvl: MLVL.MLVL = resourceSystem.loadAssetByID(mlvlEntry.fileID, mlvlEntry.fourCC);
 
                 const renderer = new RetroSceneRenderer(device, mlvl);
+                const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
 
                 const areas = mlvl.areaTable;
                 const defaultSkyboxCMDL = resourceSystem.loadAssetByID(mlvl.defaultSkyboxID, 'CMDL');
                 if (defaultSkyboxCMDL) {
                     const defaultSkyboxName = resourceSystem.findResourceNameByID(mlvl.defaultSkyboxID);
-                    const defaultSkyboxCMDLData = new CMDLData(device, renderer.renderHelper, defaultSkyboxCMDL);
-                    renderer.cmdlData.push(defaultSkyboxCMDLData);
-                    const defaultSkyboxRenderer = new CMDLRenderer(device, renderer.renderHelper, renderer.textureHolder, null, defaultSkyboxName, mat4.create(), defaultSkyboxCMDLData);
+                    const defaultSkyboxCMDLData = renderer.modelCache.getCMDLData(device, cache, defaultSkyboxCMDL);
+                    const defaultSkyboxRenderer = new CMDLRenderer(device, renderer.textureHolder, null, defaultSkyboxName, mat4.create(), defaultSkyboxCMDLData);
                     defaultSkyboxRenderer.isSkybox = true;
                     renderer.defaultSkyRenderer = defaultSkyboxRenderer;
                 }
@@ -149,7 +148,7 @@ class RetroSceneDesc implements Viewer.SceneDesc {
                     const mrea: MREA.MREA = resourceSystem.loadAssetByID(mreaEntry.areaMREAID, 'MREA');
 
                     if (mrea !== null && mreaEntry.areaName.indexOf("worldarea") === -1) {
-                        const areaRenderer = new MREARenderer(device, renderer.renderHelper, renderer.textureHolder, mreaEntry.areaName, mrea);
+                        const areaRenderer = new MREARenderer(device, renderer.modelCache, cache, renderer.textureHolder, mreaEntry.areaName, mrea);
                         renderer.areaRenderers.push(areaRenderer);
 
                         // By default, set only the first area renderer is visible, so as to not "crash my browser please".

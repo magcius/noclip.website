@@ -99,8 +99,8 @@ export class Entity {
     public active: boolean;
     public name: string;
     public modelMatrix: mat4;
-    public model: CMDL;
-    public animParams: AnimationParameters;
+    public animParams: AnimationParameters | null = null;
+    public model: CMDL | null = null;
     public lightParams: LightParameters = new LightParameters();
 
     constructor(public type: MP1EntityType | string, public entityId: number) {
@@ -111,13 +111,13 @@ export class Entity {
     }
 
     public getRenderModel() : CMDL {
-        if (this.animParams != null) {
+        if (this.animParams !== null) {
             const charID = this.animParams.charID;
             const ancs = this.animParams.ancs;
 
-            if (ancs != null && ancs.characters.length > charID) {
+            if (ancs !== null && ancs.characters.length > charID) {
                 const model = ancs.characters[charID].model;
-                if (model != null) {
+                if (model !== null) {
                     return model;
                 }
             }

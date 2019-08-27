@@ -416,6 +416,21 @@ function mergeSurfaces(surfaces: Surface[]): MergedSurface {
     }
 }
 
+export class ModelCache {
+    public cmdlData = new Map<string, CMDLData>();
+
+    public destroy(device: GfxDevice): void {
+        for (const [, v] of this.cmdlData.entries())
+            v.destroy(device);
+    }
+
+    public getCMDLData(device: GfxDevice, cache: GfxRenderCache, model: CMDL): CMDLData {
+        if (!this.cmdlData.has(model.assetID))
+            this.cmdlData.set(model.assetID, new CMDLData(device, cache, model));
+        return this.cmdlData.get(model.assetID);
+    }
+}
+
 export class MREARenderer {
     private bufferCoalescer: GfxBufferCoalescerCombo;
     private materialGroupInstances: MaterialGroupInstance[] = [];
@@ -428,12 +443,12 @@ export class MREARenderer {
     public needSky: boolean = false;
     public visible: boolean = true;
 
-    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, public textureHolder: RetroTextureHolder, public name: string, public mrea: MREA) {
-        this.translateModel(device, renderHelper);
-        this.translateActors(device, renderHelper);
+    constructor(device: GfxDevice, modelCache: ModelCache, cache: GfxRenderCache, public textureHolder: RetroTextureHolder, public name: string, public mrea: MREA) {
+        this.translateModel(device, cache);
+        this.translateActors(device, cache, modelCache);
     }
 
-    private translateModel(device: GfxDevice, renderHelper: GXRenderHelperGfx): void {
+    private translateModel(device: GfxDevice, cache: GfxRenderCache): void {
         const materialSet = this.mrea.materialSet;
 
         this.textureHolder.addMaterialSetTextures(device, materialSet);
@@ -508,7 +523,7 @@ export class MREARenderer {
                     bbox.union(bbox, this.mrea.worldModels[mergedSurface.origSurfaces[j].worldModelIndex].bbox);
             }
 
-            const surfaceData = new SurfaceData(device, renderHelper.renderInstManager.gfxRenderCache, surface, this.bufferCoalescer.coalescedBuffers[i], bbox);
+            const surfaceData = new SurfaceData(device, cache, surface, this.bufferCoalescer.coalescedBuffers[i], bbox);
             this.surfaceData.push(surfaceData);
             const materialCommand = this.materialInstances[mergedSurfaces[i].materialIndex];
             const materialGroupCommand = this.materialGroupInstances[materialCommand.material.groupIndex];
@@ -517,7 +532,7 @@ export class MREARenderer {
         }
     }
 
-    private translateActors(device: GfxDevice, renderHelper: GXRenderHelperGfx): void {
+    private translateActors(device: GfxDevice, cache: GfxRenderCache, modelCache: ModelCache): void {
         for (let i = 0; i < this.mrea.scriptLayers.length; i++) {
             const scriptLayer = this.mrea.scriptLayers[i];
 
@@ -525,15 +540,14 @@ export class MREARenderer {
                 const ent = scriptLayer.entities[j];
                 const model = ent.getRenderModel();
 
-                if (ent.active && model != null) {
+                if (ent.active && model !== null) {
                     const aabb = new AABB();
                     aabb.transform(model.bbox, ent.modelMatrix);
 
                     const actorLights = new ActorLights(aabb, ent.lightParams, this.mrea);
-                    // TODO(jstpierre): Add a ModelCache.
-                    const cmdlData = new CMDLData(device, renderHelper, model);
+                    const cmdlData = modelCache.getCMDLData(device, cache, model);
                     this.cmdlData.push(cmdlData);
-                    this.actors.push(new CMDLRenderer(device, renderHelper, this.textureHolder, actorLights, ent.name, ent.modelMatrix, cmdlData));
+                    this.actors.push(new CMDLRenderer(device, this.textureHolder, actorLights, ent.name, ent.modelMatrix, cmdlData));
                 }
 
                 if (ent.type === MP1EntityType.AreaAttributes || ent.type === "REAA") {
@@ -544,10 +558,10 @@ export class MREARenderer {
                         this.needSky = true;
 
                         if (areaAttributes.overrideSky !== null) {
-                            const identityMtx = mat4.create();
+                            const modelMatrix = mat4.create();
 
-                            const skyData = new CMDLData(device, renderHelper, areaAttributes.overrideSky);
-                            this.overrideSky = new CMDLRenderer(device, renderHelper, this.textureHolder, null, `Sky_AreaAttributes_Layer${i}`, identityMtx, skyData);
+                            const skyData = modelCache.getCMDLData(device, cache, areaAttributes.overrideSky);
+                            this.overrideSky = new CMDLRenderer(device, this.textureHolder, null, `Sky_AreaAttributes_Layer${i}`, modelMatrix, skyData);
                             this.overrideSky.isSkybox = true;
                         }
                     }
@@ -595,7 +609,7 @@ export class CMDLData {
     private bufferCoalescer: GfxBufferCoalescerCombo;
     public surfaceData: SurfaceData[] = [];
 
-    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, public cmdl: CMDL) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public cmdl: CMDL) {
         const vertexDatas: ArrayBufferSlice[][] = [];
         const indexDatas: ArrayBufferSlice[] = [];
 
@@ -610,7 +624,7 @@ export class CMDLData {
 
         for (let i = 0; i < surfaces.length; i++) {
             const coalescedBuffers = this.bufferCoalescer.coalescedBuffers[i];
-            this.surfaceData[i] = new SurfaceData(device, renderHelper.renderInstManager.gfxRenderCache, surfaces[i], coalescedBuffers, this.cmdl.bbox);
+            this.surfaceData[i] = new SurfaceData(device, cache, surfaces[i], coalescedBuffers, this.cmdl.bbox);
         }
     }
 
@@ -629,11 +643,7 @@ export class CMDLRenderer {
     public visible: boolean = true;
     public isSkybox: boolean = false;
 
-    constructor(device: GfxDevice, renderHelper: GXRenderHelperGfx, public textureHolder: RetroTextureHolder, public actorLights: ActorLights, public name: string, public modelMatrix: mat4, public cmdlData: CMDLData) {
-        this.translateModel(device, renderHelper);
-    }
-
-    private translateModel(device: GfxDevice, renderHelper: GXRenderHelperGfx): void {
+    constructor(device: GfxDevice, public textureHolder: RetroTextureHolder, public actorLights: ActorLights, public name: string, public modelMatrix: mat4, public cmdlData: CMDLData) {
         const materialSet = this.cmdlData.cmdl.materialSets[0];
 
         this.textureHolder.addMaterialSetTextures(device, materialSet);
