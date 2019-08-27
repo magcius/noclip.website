@@ -14,7 +14,7 @@ import * as Viewer from '../../viewer';
 import * as RARC from '../../j3d/rarc';
 import { DrawBufferType, MovementType, CalcAnimType, DrawType } from './NameObj';
 import { BMDModelInstance } from '../render';
-import { assertExists } from '../../util';
+import { assertExists, leftPad } from '../../util';
 import { Camera } from '../../Camera';
 import { isGreaterStep, isFirstStep, calcNerveRate } from './Spine';
 import { LiveActor, startBck, startBtkIfExist, startBrkIfExist, startBvaIfExist, startBpkIfExist } from './LiveActor';
@@ -520,6 +520,7 @@ export class PlanetMap extends LiveActor {
         connectToScenePlanet(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
         this.tryStartAllAnim(this.name);
+        this.tryStartMyEffect(sceneObjHolder);
     }
 
     private initModel(sceneObjHolder: SceneObjHolder, name: string, infoIter: JMapInfoIter): void {
@@ -536,6 +537,18 @@ export class PlanetMap extends LiveActor {
             this.bloomModel = createModelObjBloomModel(this.zoneAndLayer, sceneObjHolder, this.name, bloomModelName, this.getBaseMtx());
             vec3.copy(this.bloomModel.scale, this.scale);
         }
+    }
+
+    private tryStartMyEffect(sceneObjHolder: SceneObjHolder): void {
+        if (this.effectKeeper === null)
+            return;
+
+        // In SMG1, this appears to just start the object name as the emitter.
+        emitEffect(sceneObjHolder, this, this.name);
+
+        // In SMG2, this hasn't been confirmed in source, but it seems to try to start numbered emitters.
+        for (let i = 0; i < this.effectKeeper.multiEmitters.length; i++)
+            emitEffect(sceneObjHolder, this, `${this.name}${leftPad(''+i, 2, '0')}`);
     }
 }
 
