@@ -1,9 +1,9 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
-import { assert, assertExists, align, nArray } from '../../util';
+import { assert, assertExists, align, nArray, hexzero } from '../../util';
 import { DataFetcher, DataFetcherFlags } from '../../DataFetcher';
-import { MathConstants, computeModelMatrixSRT, lerp, computeNormalMatrix, clamp, computeEulerAngleRotationFromSRTMatrix } from '../../MathHelpers';
+import { MathConstants, computeModelMatrixSRT, lerp, computeNormalMatrix, clamp } from '../../MathHelpers';
 import { getPointBezier } from '../../Spline';
 import { Camera, computeClipSpacePointFromWorldSpacePoint } from '../../Camera';
 import { SceneContext } from '../../SceneBase';
@@ -12,7 +12,7 @@ import * as UI from '../../ui';
 
 import { TextureMapping } from '../../TextureHolder';
 import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat } from '../../gfx/platform/GfxPlatform';
-import { executeOnPass, GfxRenderInstManager } from '../../gfx/render/GfxRenderer';
+import { executeOnPass } from '../../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../../gfx/helpers/RenderTargetHelpers';
 
@@ -22,19 +22,20 @@ import * as BCSV from '../../luigis_mansion/bcsv';
 import * as RARC from '../../j3d/rarc';
 import AnimationController from '../../AnimationController';
 
-import { EFB_WIDTH, EFB_HEIGHT } from '../../gx/gx_material';
 import { MaterialParams, PacketParams, fillSceneParamsDataOnTemplate } from '../../gx/gx_render';
 import { LoadedVertexData, LoadedVertexLayout } from '../../gx/gx_displaylist';
 import { GXRenderHelperGfx } from '../../gx/gx_render';
-import { BMD, BRK, BTK, BCK, LoopMode, BVA, BTP, BPK, JSystemFileReaderHelper, ShapeDisplayFlags } from '../../j3d/j3d';
-import { BMDModel, BMDModelInstance, MaterialInstance } from '../../j3d/render';
+import { BMD, LoopMode, BVA, BTP, JSystemFileReaderHelper, ShapeDisplayFlags } from '../../j3d/j3d';
+import { BMDModel, MaterialInstance } from '../../j3d/render';
 import { JMapInfoIter, createCsvParser, getJMapInfoTransLocal, getJMapInfoRotateLocal, getJMapInfoScale } from './JMapInfo';
 import { BloomPostFXParameters, BloomPostFXRenderer } from './Bloom';
-import { LightDataHolder, ActorLightCtrl } from './LightData';
-import { NameObj, SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType } from './NameObj';
-import { EffectSystem, EffectKeeper } from './EffectSystem';
-import { LightType } from './DrawBuffer';
-import { Spine, Nerve } from './Spine';
+import { LightDataHolder } from './LightData';
+import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType } from './NameObj';
+import { EffectSystem } from './EffectSystem';
+
+import { NPCDirector, MiniRoutePoint, createModelObjMapObj, bindColorChangeAnimation, bindTexChangeAnimation, isExistIndirectTexture, connectToSceneIndirectMapObjStrongLight, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneBloom, MiniRouteGalaxy, MiniRoutePart, emitEffect } from './Actors';
+import { getNameObjTableEntry, PlanetMapCreator } from './ActorTable';
+import { LiveActor, setTextureMappingIndirect, startBck, startBrkIfExist, startBtkIfExist, startBckIfExist, startBvaIfExist } from './LiveActor';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -141,19 +142,6 @@ class RailAnimationTico {
 }
 
 const enum RotateAxis { X, Y, Z };
-
-function setTextureMappingIndirect(m: TextureMapping, sceneTexture: GfxTexture): void {
-    m.gfxTexture = sceneTexture;
-    m.width = EFB_WIDTH;
-    m.height = EFB_HEIGHT;
-    m.flipY = true;
-}
-
-function setIndirectTextureOverride(modelInstance: BMDModelInstance, sceneTexture: GfxTexture): void {
-    const m = modelInstance.getTextureMappingReference("IndDummy");
-    if (m !== null)
-        setTextureMappingIndirect(m, sceneTexture);
-}
 
 const scratchVec3 = vec3.create();
 
@@ -674,6 +662,8 @@ function patchBMD(bmd: BMD): void {
     }
 }
 
+const scratchMatrix = mat4.create();
+
 // This is roughly ShapePacketUserData::callDL().
 function fillMaterialParamsCallback(materialParams: MaterialParams, materialInstance: MaterialInstance, viewMatrix: mat4, modelMatrix: mat4, camera: Camera, packetParams: PacketParams): void {
     const material = materialInstance.materialData.material;
@@ -795,163 +785,6 @@ export class ModelCache {
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.models.length; i++)
             this.models[i].destroy(device);
-    }
-}
-
-class ActorAnimDataInfo {
-    public Name: string;
-    public StartFrame: number;
-    public IsKeepAnim: boolean;
-
-    constructor(infoIter: JMapInfoIter, animType: string) {
-        this.Name = infoIter.getValueString(`${animType}Name`);
-        this.StartFrame = infoIter.getValueNumber(`${animType}StartFrame`);
-        this.IsKeepAnim = !!infoIter.getValueNumber(`${animType}IsKeepAnim`);
-    }
-}
-
-function getAnimName(keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): string {
-    if (dataInfo.Name)
-        return dataInfo.Name;
-    else
-        return keeperInfo.ActorAnimName;
-}
-
-class ActorAnimKeeperInfo {
-    public ActorAnimName: string;
-    public Bck: ActorAnimDataInfo;
-    public Btk: ActorAnimDataInfo;
-    public Brk: ActorAnimDataInfo;
-    public Bpk: ActorAnimDataInfo;
-    public Btp: ActorAnimDataInfo;
-    public Bva: ActorAnimDataInfo;
-
-    constructor(infoIter: JMapInfoIter) {
-        this.ActorAnimName = infoIter.getValueString('ActorAnimName').toLowerCase();
-        this.Bck = new ActorAnimDataInfo(infoIter, 'Bck');
-        this.Btk = new ActorAnimDataInfo(infoIter, 'Btk');
-        this.Brk = new ActorAnimDataInfo(infoIter, 'Brk');
-        this.Bpk = new ActorAnimDataInfo(infoIter, 'Bpk');
-        this.Btp = new ActorAnimDataInfo(infoIter, 'Btp');
-        this.Bva = new ActorAnimDataInfo(infoIter, 'Bva');
-    }
-}
-
-export function startBckIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): boolean {
-    const data = arc.findFileData(`${animationName}.bck`);
-    if (data !== null) {
-        const bck = BCK.parse(data);
-        if (animationName.toLowerCase() === 'wait')
-            bck.ank1.loopMode = LoopMode.REPEAT;
-        modelInstance.bindANK1(bck.ank1);
-    }
-    return data !== null;
-}
-
-export function startBtkIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): boolean {
-    const data = arc.findFileData(`${animationName}.btk`);
-    if (data !== null)
-        modelInstance.bindTTK1(BTK.parse(data).ttk1);
-    return data !== null;
-}
-
-export function startBrkIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): boolean {
-    const data = arc.findFileData(`${animationName}.brk`);
-    if (data !== null)
-        modelInstance.bindTRK1(BRK.parse(data).trk1);
-    return data !== null;
-}
-
-export function startBpkIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): boolean {
-    const data = arc.findFileData(`${animationName}.bpk`);
-    if (data !== null)
-        modelInstance.bindTRK1(BPK.parse(data).pak1);
-    return data !== null;
-}
-
-export function startBtpIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): boolean {
-    const data = arc.findFileData(`${animationName}.btp`);
-    if (data !== null)
-        modelInstance.bindTPT1(BTP.parse(data).tpt1);
-    return data !== null;
-}
-
-export function startBvaIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): boolean {
-    const data = arc.findFileData(`${animationName}.bva`);
-    if (data !== null)
-        modelInstance.bindVAF1(BVA.parse(data).vaf1);
-    return data !== null;
-}
-
-export function startBck(actor: LiveActor, animName: string): boolean {
-    const played = startBckIfExist(actor.modelInstance, actor.arc, animName);
-    if (played && actor.effectKeeper !== null)
-        actor.effectKeeper.changeBck(animName);
-    return played;
-}
-
-class ActorAnimKeeper {
-    public keeperInfo: ActorAnimKeeperInfo[] = [];
-
-    constructor(infoIter: JMapInfoIter) {
-        for (let i = 0; i < infoIter.getNumRecords(); i++) {
-            infoIter.setRecord(i);
-            this.keeperInfo.push(new ActorAnimKeeperInfo(infoIter));
-        }
-    }
-
-    public static tryCreate(actor: LiveActor): ActorAnimKeeper | null {
-        let bcsv = actor.arc.findFileData('ActorAnimCtrl.bcsv');
-
-        // Super Mario Galaxy 2 puts these assets in a subfolder.
-        if (bcsv === null)
-            bcsv = actor.arc.findFileData('ActorInfo/ActorAnimCtrl.bcsv');
-
-        if (bcsv === null)
-            return null;
-
-        const infoIter = createCsvParser(bcsv);
-        return new ActorAnimKeeper(infoIter);
-    }
-
-    public start(actor: LiveActor, animationName: string): boolean {
-        animationName = animationName.toLowerCase();
-        const keeperInfo = this.keeperInfo.find((info) => info.ActorAnimName === animationName);
-        if (keeperInfo === undefined)
-            return false;
-
-        // TODO(jstpierre): Separate animation controllers for each player.
-        this.setBckAnimation(actor, keeperInfo, keeperInfo.Bck);
-        this.setBtkAnimation(actor, keeperInfo, keeperInfo.Btk);
-        this.setBrkAnimation(actor, keeperInfo, keeperInfo.Brk);
-        this.setBpkAnimation(actor, keeperInfo, keeperInfo.Bpk);
-        this.setBtpAnimation(actor, keeperInfo, keeperInfo.Btp);
-        this.setBvaAnimation(actor, keeperInfo, keeperInfo.Bva);
-        return true;
-    }
-
-    private setBckAnimation(actor: LiveActor, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
-        startBck(actor, getAnimName(keeperInfo, dataInfo));
-    }
-
-    private setBtkAnimation(actor: LiveActor, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
-        startBtkIfExist(actor.modelInstance, actor.arc, getAnimName(keeperInfo, dataInfo));
-    }
-
-    private setBrkAnimation(actor: LiveActor, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
-        startBrkIfExist(actor.modelInstance, actor.arc, getAnimName(keeperInfo, dataInfo));
-    }
-
-    private setBpkAnimation(actor: LiveActor, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
-        startBpkIfExist(actor.modelInstance, actor.arc, getAnimName(keeperInfo, dataInfo));
-    }
-
-    private setBtpAnimation(actor: LiveActor, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
-        startBtpIfExist(actor.modelInstance, actor.arc, getAnimName(keeperInfo, dataInfo));
-    }
-
-    private setBvaAnimation(actor: LiveActor, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
-        startBvaIfExist(actor.modelInstance, actor.arc, getAnimName(keeperInfo, dataInfo));
     }
 }
 
@@ -1082,11 +915,11 @@ export class SceneObjHolder {
     public stageDataHolder: StageDataHolder;
     public effectSystem: EffectSystem | null;
     public messageDataHolder: MessageDataHolder | null;
-    public captureSceneDirector: CaptureSceneDirector;
+    public captureSceneDirector = new CaptureSceneDirector();
 
     // This is technically stored outside the SceneObjHolder, separately
     // on the same singleton, but c'est la vie...
-    public sceneNameObjListExecutor: SceneNameObjListExecutor;
+    public sceneNameObjListExecutor = new SceneNameObjListExecutor();
 
     public uiSystem: UISystem;
 
@@ -1123,246 +956,6 @@ const enum LayerId {
 export function getObjectName(infoIter: JMapInfoIter): string {
     return infoIter.getValueString(`name`);
 }
-
-export function getJMapInfoTrans(dst: vec3, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
-    getJMapInfoTransLocal(dst, infoIter);
-    const stageDataHolder = sceneObjHolder.stageDataHolder.findPlacedStageDataHolder(infoIter);
-    vec3.transformMat4(dst, dst, stageDataHolder.placementMtx);
-}
-
-const scratchMatrix = mat4.create();
-function getJMapInfoRotate(dst: vec3, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, scratch: mat4 = scratchMatrix): void {
-    getJMapInfoRotateLocal(dst, infoIter);
-
-    // Compute local rotation matrix, combine with stage placement, and extract new rotation.
-    computeModelMatrixSRT(scratch, 1, 1, 1, dst[0], dst[1], dst[2], 0, 0, 0);
-    const stageDataHolder = sceneObjHolder.stageDataHolder.findPlacedStageDataHolder(infoIter);
-    mat4.mul(scratch, stageDataHolder.placementMtx, scratch);
-
-    computeEulerAngleRotationFromSRTMatrix(dst, scratch);
-}
-
-export class LiveActor extends NameObj {
-    public visibleScenario: boolean = true;
-    public visibleAlive: boolean = true;
-    public visibleModel: boolean = true;
-    public boundingSphereRadius: number | null = null;
-
-    public actorAnimKeeper: ActorAnimKeeper | null = null;
-    public actorLightCtrl: ActorLightCtrl | null = null;
-    public effectKeeper: EffectKeeper | null = null;
-    public spine: Spine | null = null;
-
-    // Technically part of ModelManager.
-    public arc: RARC.RARC; // ResourceHolder
-    public modelInstance: BMDModelInstance | null = null; // J3DModel
-
-    public translation = vec3.create();
-    public rotation = vec3.create();
-    public scale = vec3.fromValues(1, 1, 1);
-    public velocity = vec3.create();
-
-    constructor(public zoneAndLayer: ZoneAndLayer, public name: string) {
-        super(name);
-    }
-
-    public makeActorAppeared(): void {
-        this.visibleAlive = true;
-    }
-
-    public makeActorDead(): void {
-        this.visibleAlive = false;
-    }
-
-    public setIndirectTextureOverride(sceneTexture: GfxTexture): void {
-        setIndirectTextureOverride(this.modelInstance, sceneTexture);
-    }
-
-    public getBaseMtx(): mat4 | null {
-        if (this.modelInstance === null)
-            return null;
-        return this.modelInstance.modelMatrix;
-    }
-
-    public getJointMtx(jointName: string): mat4 | null {
-        if (this.modelInstance === null)
-            return null;
-        return this.modelInstance.getJointToWorldMatrixReference(jointName);
-    }
-
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
-        const modelCache = sceneObjHolder.modelCache;
-
-        // By default, we request the object's name.
-        const objName = getObjectName(infoIter);
-        modelCache.requestObjectData(objName);
-    }
-
-    private calcBaseMtxInit(): void {
-        if (this.modelInstance !== null) {
-            computeModelMatrixSRT(this.modelInstance.modelMatrix,
-                1, 1, 1,
-                this.rotation[0], this.rotation[1], this.rotation[2],
-                this.translation[0], this.translation[1], this.translation[2]);
-
-            vec3.copy(this.modelInstance.baseScale, this.scale);
-        }
-    }
-
-    public initModelManagerWithAnm(sceneObjHolder: SceneObjHolder, objName: string): void {
-        const modelCache = sceneObjHolder.modelCache;
-
-        this.arc = modelCache.getObjectData(objName);
-
-        const bmdModel = modelCache.getModel(this.arc, `${objName}.bdl`);
-        this.modelInstance = new BMDModelInstance(bmdModel);
-        this.modelInstance.name = objName;
-        this.modelInstance.animationController.fps = FPS;
-        this.modelInstance.animationController.phaseFrames = Math.random() * 1500;
-
-        this.calcBaseMtxInit();
-
-        // Compute the joint matrices an initial time in case anything wants to rely on them...
-        this.modelInstance.calcJointToWorld();
-
-        // TODO(jstpierre): RE the whole ModelManager / XanimePlayer thing.
-        // Seems like it's possible to have a secondary file for BCK animations?
-        this.actorAnimKeeper = ActorAnimKeeper.tryCreate(this);
-    }
-
-    public initDefaultPos(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
-        getJMapInfoTrans(this.translation, sceneObjHolder, infoIter);
-        getJMapInfoRotate(this.rotation, sceneObjHolder, infoIter);
-        getJMapInfoScale(this.scale, infoIter);
-
-        this.calcBaseMtxInit();
-    }
-
-    public initLightCtrl(sceneObjHolder: SceneObjHolder): void {
-        this.actorLightCtrl = new ActorLightCtrl(this);
-        this.actorLightCtrl.initActorLightInfo(sceneObjHolder);
-        this.actorLightCtrl.setDefaultAreaLight(sceneObjHolder);
-    }
-
-    public initEffectKeeper(sceneObjHolder: SceneObjHolder, groupName: string | null): void {
-        if (sceneObjHolder.effectSystem === null)
-            return;
-        if (groupName === null && this.modelInstance !== null)
-            groupName = this.modelInstance.name;
-        this.effectKeeper = new EffectKeeper(sceneObjHolder, this, groupName);
-    }
-
-    public initNerve(nerve: Nerve): void {
-        this.spine = new Spine();
-        this.spine.setNerve(nerve);
-    }
-
-    public setNerve(nerve: Nerve): void {
-        this.spine.setNerve(nerve);
-    }
-
-    public getCurrentNerve(): Nerve {
-        return this.spine.getCurrentNerve();
-    }
-
-    public getNerveStep(): number {
-        return this.spine.getNerveStep();
-    }
-
-    public startAction(animationName: string): void {
-        if (this.actorAnimKeeper === null || !this.actorAnimKeeper.start(this, animationName))
-            this.tryStartAllAnim(animationName);
-    }
-
-    public tryStartAllAnim(animationName: string): boolean {
-        let anyPlayed = false;
-        anyPlayed = startBck(this, animationName) || anyPlayed;
-        anyPlayed = startBtkIfExist(this.modelInstance, this.arc, animationName) || anyPlayed;
-        anyPlayed = startBrkIfExist(this.modelInstance, this.arc, animationName) || anyPlayed;
-        anyPlayed = startBpkIfExist(this.modelInstance, this.arc, animationName) || anyPlayed;
-        anyPlayed = startBtpIfExist(this.modelInstance, this.arc, animationName) || anyPlayed;
-        anyPlayed = startBvaIfExist(this.modelInstance, this.arc, animationName) || anyPlayed;
-        return anyPlayed;
-    }
-
-    public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
-        computeModelMatrixSRT(this.modelInstance.modelMatrix,
-            1, 1, 1,
-            this.rotation[0], this.rotation[1], this.rotation[2],
-            this.translation[0], this.translation[1], this.translation[2]);
-    }
-
-    protected getActorVisible(camera: Camera): boolean {
-        if (this.visibleScenario && this.visibleAlive) {
-            if (this.boundingSphereRadius !== null)
-                return camera.frustum.containsSphere(this.translation, this.boundingSphereRadius);
-            else
-                return true;
-        } else {
-            return false;
-        }
-    }
-
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        if (this.modelInstance === null)
-            return;
-
-        // calcAnmMtx
-        vec3.copy(this.modelInstance.baseScale, this.scale);
-        this.calcAndSetBaseMtx(viewerInput);
-
-        this.modelInstance.animationController.setTimeFromViewerInput(viewerInput);
-        this.modelInstance.calcAnim(viewerInput.camera);
-
-        const visible = this.getActorVisible(viewerInput.camera) && this.visibleModel;
-        this.modelInstance.visible = visible;
-        if (!visible)
-            return;
-
-        if (this.actorLightCtrl !== null) {
-            const lightInfo = this.actorLightCtrl.getActorLight();
-            if (lightInfo !== null) {
-                // Load the light.
-                lightInfo.setOnModelInstance(this.modelInstance, viewerInput.camera, true);
-            }
-        } else {
-            // TODO(jstpierre): Move this to the LightDirector?
-            const areaLightInfo = sceneObjHolder.lightDataHolder.findDefaultAreaLight(sceneObjHolder);
-            const lightType = sceneObjHolder.sceneNameObjListExecutor.findLightType(this);
-            if (lightType !== LightType.None) {
-                const lightInfo = areaLightInfo.getActorLightInfo(lightType);
-
-                // The reason we don't setAmbient here is a bit funky -- normally how this works
-                // is that the J3DModel's DLs will set up the ambient, but when an actor has its
-                // own ActorLightCtrl, through a long series of convoluted of actions, the
-                // DrawBufferExecutor associated with that actor will stomp on the actor's ambient light
-                // configuration. Without this, we're left with the DrawBufferGroup's light configuration,
-                // and the actor's DL will override the ambient light there...
-                // Rather than emulate the whole DrawBufferGroup system, quirks and all, just hardcode
-                // this logic.
-                lightInfo.setOnModelInstance(this.modelInstance, viewerInput.camera, false);
-            }
-        }
-    }
-
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        if (this.spine !== null) {
-            this.spine.update(getDeltaTimeFrames(viewerInput));
-        }
-
-        // updateBinder
-        vec3.scaleAndAdd(this.translation, this.translation, this.velocity, getDeltaTimeFrames(viewerInput));
-
-        if (this.effectKeeper !== null) {
-            this.effectKeeper.updateSyncBckEffect(sceneObjHolder.effectSystem);
-            this.effectKeeper.followSRT();
-            this.effectKeeper.setVisibleScenario(this.visibleAlive && this.visibleScenario);
-        }
-    }
-}
-
-import { NPCDirector, MiniRoutePoint, createModelObjMapObj, bindColorChangeAnimation, bindTexChangeAnimation, isExistIndirectTexture, connectToSceneIndirectMapObjStrongLight, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneBloom, MiniRouteGalaxy, MiniRoutePart } from './Actors';
-import { getNameObjTableEntry, PlanetMapCreator } from './ActorTable';
 
 // Random actor for other things that otherwise do not have their own actors.
 class NoclipLegacyActor extends LiveActor {
@@ -1600,7 +1193,7 @@ class SMGSpawner {
         };
 
         const name = objinfo.objName;
-        switch (objinfo.objName) {
+        switch (name) {
         case 'PeachCastleTownAfterAttack':
             // Don't show. We want the pristine town state.
             return;
@@ -1799,16 +1392,16 @@ class SMGSpawner {
             });
             break;
         case 'PlantA':
-            spawnGraph(`PlantA00`);
+            spawnGraph(`PlantA${hexzero(infoIter.getValueNumber('ShapeModelNo'), 2)}`);
             break;
         case 'PlantB':
-            spawnGraph(`PlantB00`);
+            spawnGraph(`PlantB${hexzero(infoIter.getValueNumber('ShapeModelNo'), 2)}`);
             break;
         case 'PlantC':
-            spawnGraph(`PlantC00`);
+            spawnGraph(`PlantC${hexzero(infoIter.getValueNumber('ShapeModelNo'), 2)}`);
             break;
         case 'PlantD':
-            spawnGraph(`PlantD01`);
+            spawnGraph(`PlantD${hexzero(infoIter.getValueNumber('ShapeModelNo'), 2)}`);
             break;
         case 'BenefitItemOneUp':
             spawnGraph(`KinokoOneUp`);
@@ -1984,6 +1577,10 @@ class SMGSpawner {
         case 'WanwanRolling':
             spawnGraph(name, SceneGraphTag.Normal, { });
             break;
+        case 'PhantomCandlestand':
+            spawnGraph(name).then(([node, rarc]) => {
+                emitEffect(this.sceneObjHolder, node, 'Fire');
+            });
         default:
             spawnGraph(name);
             break;
@@ -1996,6 +1593,7 @@ class SMGSpawner {
 
     private placeStageData(stageDataHolder: StageDataHolder): ZoneNode {
         const zoneNode = new ZoneNode(stageDataHolder);
+        assert(this.zones[stageDataHolder.zoneId] === undefined);
         this.zones[stageDataHolder.zoneId] = zoneNode;
 
         const legacyPaths = stageDataHolder.legacyParsePaths();
@@ -2130,7 +1728,7 @@ class SMGSpawner {
                 const point = new MiniRoutePoint(zoneAndLayer, this.sceneObjHolder, points[i]);
                 this.addActor(point);
             }
-        })
+        });
 
         const worldMapLinkData = createCsvParser(worldMapRarc.findFileData('ActorInfo/PointLink.bcsv'));
         worldMapLinkData.mapRecords((jmp) => {
@@ -2143,8 +1741,6 @@ class SMGSpawner {
 
     public spawnWorldMapLine(zoneAndLayer: ZoneAndLayer, point1Info: WorldmapPointInfo, point2Info: WorldmapPointInfo, isPink: Boolean): void {
         // TODO(jstpierre): Move to a LiveActor for the lines as well?
-
-        const zoneNode = this.zones[zoneAndLayer.zoneId];
 
         const modelMatrix = mat4.create();
         mat4.fromTranslation(modelMatrix, point1Info.position);
@@ -2201,7 +1797,7 @@ class StageDataHolder {
 
     constructor(sceneDesc: SMGSceneDescBase, modelCache: ModelCache, scenarioData: ScenarioData, public zoneName: string, public zoneId: number, public layerId: LayerId = -1) {
         this.zoneArchive = sceneDesc.getZoneMapArchive(modelCache, zoneName);
-        this.createLocalStageDataHolder(sceneDesc, modelCache, scenarioData);
+        this.createLocalStageDataHolders(sceneDesc, modelCache, scenarioData);
     }
 
     private createCsvParser(buffer: ArrayBufferSlice): JMapInfoIter {
@@ -2305,7 +1901,9 @@ class StageDataHolder {
         }
     }
 
-    public createLocalStageDataHolder(sceneDesc: SMGSceneDescBase, modelCache: ModelCache, scenarioData: ScenarioData): void {
+    public createLocalStageDataHolders(sceneDesc: SMGSceneDescBase, modelCache: ModelCache, scenarioData: ScenarioData): void {
+        let currentZoneId = this.zoneId + 1;
+
         for (let i = LayerId.COMMON; i <= LayerId.LAYER_MAX; i++) {
             const layerDirName = getLayerDirName(i);
             const stageObjInfo = this.zoneArchive.findFileData(`jmp/placement/${layerDirName}/StageObjInfo`);
@@ -2318,8 +1916,9 @@ class StageDataHolder {
             for (let j = 0; j < mapInfoIter.getNumRecords(); j++) {
                 mapInfoIter.setRecord(j);
                 const zoneName = getObjectName(mapInfoIter);
-                const zoneId = scenarioData.zoneNames.indexOf(zoneName);
+                const zoneId = currentZoneId++;
                 const localStage = new StageDataHolder(sceneDesc, modelCache, scenarioData, zoneName, zoneId, i);
+                currentZoneId += localStage.localStageDataHolders.length;
                 localStage.calcPlacementMtx(mapInfoIter);
                 this.localStageDataHolders.push(localStage);
             }
@@ -2448,6 +2047,8 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         modelCache.requestObjectData('NPCData');
 
         const sceneObjHolder = new SceneObjHolder();
+        sceneObjHolder.sceneDesc = this;
+        sceneObjHolder.modelCache = modelCache;
         sceneObjHolder.uiSystem = new UISystem(context.uiContainer);
         context.destroyablePool.push(sceneObjHolder);
 
@@ -2462,15 +2063,10 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
             sceneObjHolder.scenarioData = scenarioData;
             return modelCache.waitForLoad();
         }).then(() => {
-            sceneObjHolder.sceneDesc = this;
-            sceneObjHolder.modelCache = modelCache;
-
             sceneObjHolder.planetMapCreator = new PlanetMapCreator(modelCache.getObjectData(`PlanetMapDataTable`));
             sceneObjHolder.npcDirector = new NPCDirector(modelCache.getObjectData(`NPCData`));
             sceneObjHolder.lightDataHolder = new LightDataHolder(this.getLightData(modelCache));
             sceneObjHolder.stageDataHolder = new StageDataHolder(this, modelCache, sceneObjHolder.scenarioData, sceneObjHolder.scenarioData.getMasterZoneFilename(), 0);
-            sceneObjHolder.sceneNameObjListExecutor = new SceneNameObjListExecutor();
-            sceneObjHolder.captureSceneDirector = new CaptureSceneDirector();
 
             if (modelCache.isArchiveExist(`ParticleData/Effect.arc`))
                 sceneObjHolder.effectSystem = new EffectSystem(device, modelCache.getArchive(`ParticleData/Effect.arc`));

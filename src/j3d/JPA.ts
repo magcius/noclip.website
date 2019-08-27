@@ -2418,7 +2418,7 @@ export class JPABaseParticle {
         if (!!(fieldFadeFlags & 0x40) && time >= field.fadeOut)
             return (field.disTime - time) * field.fadeOutRate;
 
-        if (!!(fieldFadeFlags & 0x20) && time >= field.fadeIn)
+        if (!!(fieldFadeFlags & 0x20) && time < field.fadeIn)
             return (time - field.enTime) * field.fadeInRate;
 
         return 1;

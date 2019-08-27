@@ -2,7 +2,7 @@
 // Misc actors that aren't big enough to have their own file.
 
 import { LightType } from './DrawBuffer';
-import { SceneObjHolder, LiveActor, ZoneAndLayer, getObjectName, startBtkIfExist, startBvaIfExist, WorldmapPointInfo, startBrkIfExist, getDeltaTimeFrames, getTimeFrames, startBck, startBpkIfExist, startBtpIfExist, NameObjFactory, Dot } from './smg_scenes';
+import { SceneObjHolder, ZoneAndLayer, getObjectName, WorldmapPointInfo, getDeltaTimeFrames, getTimeFrames, Dot } from './smg_scenes';
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg6, getJMapInfoArg7 } from './JMapInfo';
 import { mat4, vec3 } from 'gl-matrix';
 import AnimationController from '../../AnimationController';
@@ -17,6 +17,7 @@ import { BMDModelInstance } from '../render';
 import { assertExists } from '../../util';
 import { Camera } from '../../Camera';
 import { isGreaterStep, isFirstStep, calcNerveRate } from './Spine';
+import { LiveActor, startBck, startBtkIfExist, startBrkIfExist, startBvaIfExist, startBpkIfExist } from './LiveActor';
 
 export function connectToScene(sceneObjHolder: SceneObjHolder, actor: LiveActor, movementType: MovementType, calcAnimType: CalcAnimType, drawBufferType: DrawBufferType, drawType: DrawType): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, movementType, calcAnimType, drawBufferType, drawType);
@@ -660,6 +661,9 @@ export class StarPiece extends LiveActor {
 
 export class EarthenPipe extends LiveActor {
     private pipeStream: PartsModel | null = null;
+    private scaleY: number;
+    private axisY = vec3.create();
+    private origTranslation = vec3.create();
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, getObjectName(infoIter));
@@ -676,14 +680,33 @@ export class EarthenPipe extends LiveActor {
 
         this.initEffectKeeper(sceneObjHolder, null);
 
-        const isHidden = getJMapInfoArg2(infoIter, 0);
-        if (isHidden !== 0)
+        const hiddenFlag = getJMapInfoArg2(infoIter, -1);
+        if (hiddenFlag > 0)
             hideModel(this);
+
+        vec3.copy(this.origTranslation, this.translation);
+
+        const obeyLocalGravity = getJMapInfoArg7(infoIter, -1);
+        if (false && obeyLocalGravity) {
+            // TODO(jstpierre): Compute gravity vectors
+        } else {
+            calcUpVec(this.axisY, this);
+        }
+
+        this.scaleY = 100 * this.scale[1];
+        this.scale[1] = 1.0;
+        this.calcTrans();
 
         if (this.name === "EarthenPipeInWater") {
             this.pipeStream = createPartsModelMapObj(sceneObjHolder, this, "EarthenPipeStream");
             this.pipeStream.tryStartAllAnim("EarthenPipeStream");
         }
+    }
+
+    private calcTrans(): void {
+        vec3.copy(this.translation, this.axisY);
+        vec3.scale(this.translation, this.translation, this.scaleY);
+        vec3.add(this.translation, this.translation, this.origTranslation);
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {

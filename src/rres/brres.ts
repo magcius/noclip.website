@@ -17,7 +17,7 @@ import { cv, Graph } from '../DebugJunk';
 import { GXTextureHolder } from '../gx/gx_render';
 import { getFormatCompFlagsComponentCount } from '../gfx/platform/GfxPlatformFormat';
 import { getPointHermite } from '../Spline';
-import { colorToRGBA8, colorFromRGBA8, colorNewCopy, White, Color, colorMult } from '../Color';
+import { colorToRGBA8, colorFromRGBA8, colorNewCopy, White, Color, colorMult, colorNew } from '../Color';
 import { computeModelMatrixSRT, MathConstants, lerp } from '../MathHelpers';
 import BitMap from '../BitMap';
 import { autoOptimizeMaterial } from '../gx/gx_render';
@@ -375,10 +375,10 @@ export interface MDL0_MaterialEntry {
     samplers: MDL0_MaterialSamplerEntry[];
     texSrts: MDL0_TexSrtEntry[];
     indTexMatrices: Float32Array[];
-    colorAmbRegs: GX_Material.Color[];
-    colorMatRegs: GX_Material.Color[];
-    colorRegisters: GX_Material.Color[];
-    colorConstants: GX_Material.Color[];
+    colorAmbRegs: Color[];
+    colorMatRegs: Color[];
+    colorRegisters: Color[];
+    colorConstants: Color[];
 }
 
 export function parseMaterialEntry(r: DisplayListRegisters, index: number, name: string, numTexGens: number, numTevs: number, numInds: number): GX_Material.GXMaterial {
@@ -764,8 +764,8 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
     }
 
     // Colors.
-    const colorRegisters: GX_Material.Color[] = [];
-    const colorConstants: GX_Material.Color[] = [];
+    const colorRegisters: Color[] = [];
+    const colorConstants: Color[] = [];
     for (let i = 0; i < 8; i++) {
         const vl = r.kc[i * 2 + 0];
         const vh = r.kc[i * 2 + 1];
@@ -774,15 +774,15 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
         const ca = ((vl >>> 12) & 0x7FF) / 0xFF;
         const cb = ((vh >>>  0) & 0x7FF) / 0xFF;
         const cg = ((vh >>> 12) & 0x7FF) / 0xFF;
-        const c = new GX_Material.Color(cr, cg, cb, ca);
+        const c = colorNew(cr, cg, cb, ca);
         if (i < 4)
             colorRegisters[i] = c;
         else
             colorConstants[i - 4] = c;
     }
 
-    const colorMatRegs: GX_Material.Color[] = [];
-    const colorAmbRegs: GX_Material.Color[] = [];
+    const colorMatRegs: Color[] = [];
+    const colorAmbRegs: Color[] = [];
     let lightChannelTableIdx = endOfHeaderOffs + 0x3B4;
     for (let i = 0; i < 2; i++) {
         const enum ChanFlags {
@@ -809,8 +809,8 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
         const colorChannel = parseColorChannelControlRegister(chanCtrlC);
         const alphaChannel = parseColorChannelControlRegister(chanCtrlA);
 
-        colorMatRegs.push(new GX_Material.Color(matColorR, matColorG, matColorB, matColorA));
-        colorAmbRegs.push(new GX_Material.Color(ambColorR, ambColorG, ambColorB, ambColorA));
+        colorMatRegs.push(colorNew(matColorR, matColorG, matColorB, matColorA));
+        colorAmbRegs.push(colorNew(ambColorR, ambColorG, ambColorB, ambColorA));
 
         if (i < numChans)
             gxMaterial.lightChannels.push({ colorChannel, alphaChannel });
@@ -2358,7 +2358,7 @@ export class CLR0ColorAnimator {
     constructor(public animationController: AnimationController, public clr0: CLR0, public clrData: CLR0_ColorData) {
     }
 
-    public calcColor(dst: GX_Material.Color, orig: GX_Material.Color): void {
+    public calcColor(dst: Color, orig: Color): void {
         const clrData = this.clrData;
 
         const frame = this.animationController.getTimeInFrames();

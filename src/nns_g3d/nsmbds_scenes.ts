@@ -7,7 +7,7 @@ import * as NSBTA from './nsbta';
 import * as NSBTP from './nsbtp';
 import * as NSBTX from './nsbtx';
 
-import { DataFetcher } from '../DataFetcher';
+import { DataFetcher, DataFetcherFlags } from '../DataFetcher';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { MDL0Renderer, G3DPass } from './render';
@@ -89,7 +89,7 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
     }
 
     private fetchBMD(path: string, dataFetcher: DataFetcher): Promise<NSBMD.BMD0> {
-        return dataFetcher.fetchData(path).then((buffer: ArrayBufferSlice) => {
+        return dataFetcher.fetchData(path, DataFetcherFlags.ALLOW_404).then((buffer: ArrayBufferSlice) => {
             try {
                 return NSBMD.parse(buffer);
             } catch (error) {
@@ -99,7 +99,7 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
     }
 
     private fetchBTX(path: string, dataFetcher: DataFetcher): Promise<NSBTX.BTX0> {
-        return dataFetcher.fetchData(path).then((buffer: ArrayBufferSlice) => {
+        return dataFetcher.fetchData(path, DataFetcherFlags.ALLOW_404).then((buffer: ArrayBufferSlice) => {
             try {
                 return NSBTX.parse(buffer);
             } catch (error) {
@@ -109,7 +109,7 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
     }
 
     private fetchBTA(path: string, dataFetcher: DataFetcher): Promise<NSBTA.BTA0> {
-        return dataFetcher.fetchData(path).then((buffer: ArrayBufferSlice) => {
+        return dataFetcher.fetchData(path, DataFetcherFlags.ALLOW_404).then((buffer: ArrayBufferSlice) => {
             try {
                 return NSBTA.parse(buffer);
             } catch (error) {
@@ -119,7 +119,7 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
     }
 
     private fetchBTP(path: string, dataFetcher: DataFetcher): Promise<NSBTP.BTP0> {
-        return dataFetcher.fetchData(path).then((buffer: ArrayBufferSlice) => {
+        return dataFetcher.fetchData(path, DataFetcherFlags.ALLOW_404).then((buffer: ArrayBufferSlice) => {
             try {
                 return NSBTP.parse(buffer);
             } catch (error) {

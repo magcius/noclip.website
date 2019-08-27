@@ -1,6 +1,6 @@
 
-import { GfxDevice, GfxBuffer, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxCompareMode, makeTextureDescriptor2D, GfxProgram, GfxMegaStateDescriptor } from "../gfx/platform/GfxPlatform";
-import { BINModel, BINTexture, BINModelSector, BINModelPart, GSPixelStorageFormat, psmToString, GSConfiguration, GSTextureFunction, GSAlphaCompareMode, GSDepthCompareMode, GSAlphaFailMode, GSTextureFilter } from "./bin";
+import { GfxDevice, GfxBuffer, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxCompareMode, makeTextureDescriptor2D, GfxProgram, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor } from "../gfx/platform/GfxPlatform";
+import { BINModel, BINTexture, BINModelSector, BINModelPart, GSConfiguration } from "./bin";
 import { DeviceProgram } from "../Program";
 import * as Viewer from "../viewer";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
@@ -12,6 +12,7 @@ import { nArray, assert } from "../util";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers";
+import { GSAlphaCompareMode, GSAlphaFailMode, GSTextureFunction, GSDepthCompareMode, GSTextureFilter, GSPixelStorageFormat, psmToString } from "../Common/PS2/GS";
 
 export class KatamariDamacyProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -104,7 +105,7 @@ void main() {
         return `
 ${KatamariDamacyProgram.reflectionDeclarations}
 void main() {
-    vec4 t_Color = vec4(1.0);
+    vec4 t_Color;
 
     t_Color = texture(u_Texture[0], v_TexCoord);
     t_Color.rgba *= u_Color.rgba;
@@ -218,6 +219,20 @@ export class BINModelPartInstance {
         this.megaStateFlags = {
             depthCompare: reverseDepthForCompareMode(translateDepthCompareMode(ztst)),
         };
+
+        if (gsConfiguration.alpha_1_data0 === -1) {
+            // Do nothing? Not sure what the default is...
+        } else if (gsConfiguration.alpha_1_data0 === 0x44) {
+            this.megaStateFlags.blendMode = GfxBlendMode.ADD;
+            this.megaStateFlags.blendSrcFactor = GfxBlendFactor.SRC_ALPHA;
+            this.megaStateFlags.blendDstFactor = GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
+        } else if (gsConfiguration.alpha_1_data0 === 0x48) {
+            this.megaStateFlags.blendMode = GfxBlendMode.ADD;
+            this.megaStateFlags.blendSrcFactor = GfxBlendFactor.SRC_ALPHA;
+            this.megaStateFlags.blendDstFactor = GfxBlendFactor.ONE;
+        } else {
+            throw "whoops";
+        }
 
         if (this.binModelPart.textureName !== null) {
             this.hasDynamicTexture = this.binModelPart.textureName.endsWith('/0000/0000');

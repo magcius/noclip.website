@@ -87,11 +87,12 @@ function findNameFromHash(hash: number): string {
 }
 
 export const enum BcsvFieldType {
-    Int = 0,
-    String = 1,
-    Float = 2,
-    Short = 4,
-    Byte = 5,
+    S32 = 0,
+    // TODO(jstpierre): Verify
+    STRING = 1,
+    F32 = 2,
+    S16 = 4,
+    S8 = 5,
     SJIS = 6,
 }
 
@@ -144,19 +145,19 @@ export function parse(buffer: ArrayBufferSlice, littleEndian: boolean = false): 
             const fieldOffs = recordTableIdx + field.recordOffset;
             let value;
             switch (field.type) {
-            case BcsvFieldType.Int:
+            case BcsvFieldType.S32:
                 value = (view.getUint32(fieldOffs, littleEndian) >> field.shift) & field.bitmask;
                 break;
-            case BcsvFieldType.String:
+            case BcsvFieldType.STRING:
                 value = readString(buffer, fieldOffs, 0x20, true);
                 break;
-            case BcsvFieldType.Float:
+            case BcsvFieldType.F32:
                 value = view.getFloat32(fieldOffs, littleEndian);
                 break;
-            case BcsvFieldType.Short:
+            case BcsvFieldType.S16:
                 value = (view.getUint16(fieldOffs, littleEndian) >> field.shift) & field.bitmask;
                 break;
-            case BcsvFieldType.Byte:
+            case BcsvFieldType.S8:
                 value = (view.getUint8(fieldOffs) >> field.shift) & field.bitmask;
                 break;
             case BcsvFieldType.SJIS: {

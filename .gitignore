@@ -52,6 +52,7 @@ yarn-error.log
 assemblyscript/
 parcel/
 .cache/
+.parcel-cache/
 
 dist/*
 !dist/.htaccess

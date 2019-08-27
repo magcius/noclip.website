@@ -101,6 +101,7 @@ const ActorTable: ActorTableEntry[] = [
     _("BeyondSummerSky",                Sky),
     _("BeyondTitleSky",                 Sky),
     _("FineAndStormSky",                Sky),
+    _("BeyondDimensionAir",             Air),
 
     // Misc. Map Objects
     _("KoopaShipE",                     SimpleMapObj),

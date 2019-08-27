@@ -1,6 +1,6 @@
 
 import { vec3, mat4, vec2 } from "gl-matrix";
-import { LiveActor, SceneObjHolder, ZoneAndLayer, getObjectName } from "./smg_scenes";
+import { SceneObjHolder, ZoneAndLayer, getObjectName } from "./smg_scenes";
 import { connectToScene } from "./Actors";
 import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputLayout, GfxInputState, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxCullMode } from "../../gfx/platform/GfxPlatform";
 import { ViewerRenderInput } from "../../viewer";
@@ -19,6 +19,7 @@ import { MaterialParams, PacketParams, ColorKind, setTevOrder, setTevColorIn, se
 import { Camera, texProjCamera } from "../../Camera";
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from "../../gfx/render/GfxRenderer";
 import { createFilterKeyForDrawType, DrawType } from "./NameObj";
+import { LiveActor } from "./LiveActor";
 
 function calcHeightStatic(wave1Time: number, wave2Time: number, x: number, z: number): number {
     const wave1 = 40 * Math.sin(wave1Time + 0.003 * z);
@@ -84,7 +85,7 @@ export class OceanBowl extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, getObjectName(infoIter));
 
-        connectToScene(sceneObjHolder, this, 0x22, -1, -1, 0x07);
+        connectToScene(sceneObjHolder, this, 0x22, -1, -1, DrawType.OCEAN_BOWL);
         this.initDefaultPos(sceneObjHolder, infoIter);
 
         const device = sceneObjHolder.modelCache.device;

@@ -15,6 +15,7 @@ import { TextureOverride } from '../TextureHolder';
 import { SceneContext } from '../SceneBase';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
+import { gsMemoryMapNew } from '../Common/PS2/GS';
 
 const pathBase = `katamari_damacy`;
 
@@ -131,7 +132,7 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
 ];
 
 class KatamariDamacyRenderer implements Viewer.SceneGfx {
-    private currentAreaNo: number;
+    private currentAreaNo: number = 0;
     private sceneTexture = new ColorTexture();
     public renderTarget = new BasicRenderTarget();
     public renderHelper: GfxRenderHelper;
@@ -222,7 +223,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
             const areaNo = this.missionSetupBin.activeStageAreas[index];
             this.setCurrentAreaNo(areaNo);
         };
-        areaSelect.selectItem(0);
+        areaSelect.selectItem(this.currentAreaNo);
         areasPanel.contents.appendChild(areaSelect.elem);
 
         return [areasPanel];
@@ -261,7 +262,7 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
         }
 
         return cache.waitForLoad().then(() => {
-            const gsMemoryMap = BIN.gsMemoryMapNew();
+            const gsMemoryMap = gsMemoryMapNew();
 
             const renderer = new KatamariDamacyRenderer(device);
             const gfxCache = renderer.renderHelper.getCache();
@@ -334,7 +335,7 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
             }
 
             if (this.initialAreaNo !== -1)
-                renderer.setCurrentAreaNo(this.initialAreaNo);
+                renderer.setCurrentAreaNo(missionSetupBin.activeStageAreas[this.initialAreaNo]);
 
             return renderer;
         });
@@ -398,6 +399,11 @@ const sceneDescs = [
 
     // Make the North Star seems to have a dummy mission setup as the first area... just display the other one by default...
     new KatamariLevelSceneDesc('clvl9', "Make the North Star",   worldStageAreaGroup, ['144633', '1447b1', '1449ba', '144b78'], 1),
+
+    "Unused Levels",
+    new KatamariLevelSceneDesc('snow', "Snow", [
+        { texFile: '135042', modelFile: '135adb' },
+    ], ['13d9b1', '13d9b3', '13d9b5', '13d9b8']),
 ];
 const sceneIdMap = new Map<string, string>();
 // When I first was testing Katamari, I was testing the Tutorial Level. At some point

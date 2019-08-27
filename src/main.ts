@@ -37,6 +37,7 @@ import * as Scenes_SuperPaperMario from './ttyd/spm_scenes';
 import * as Scenes_MarioKartDS from './nns_g3d/mkds_scenes';
 import * as Scenes_NewSuperMarioBrosDS from './nns_g3d/nsmbds_scenes';
 import * as Scenes_KingdomHearts from './kh/scenes';
+import * as Scenes_KingdomHeartsIIFinalMix from './kh2fm/scenes';
 import * as Scenes_Psychonauts from './psychonauts/scenes';
 import * as Scenes_DarkSouls from './dks/scenes';
 import * as Scenes_KatamariDamacy from './katamari_damacy/scenes';
@@ -111,6 +112,7 @@ const sceneGroups = [
     "PlayStation 2",
     Scenes_KatamariDamacy.sceneGroup,
     Scenes_KingdomHearts.sceneGroup,
+    Scenes_KingdomHeartsIIFinalMix.sceneGroup,
     "Other",
     Scenes_DarkSoulsCollision.sceneGroup,
     Scenes_SonicMania.sceneGroup,

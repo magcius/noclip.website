@@ -22,6 +22,7 @@ import { GfxRenderInst, GfxRenderInstManager, setSortKeyProgramKey } from '../gf
 import { getFormatTypeFlags, FormatTypeFlags } from '../gfx/platform/GfxPlatformFormat';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
+import { Color } from '../Color';
 
 export enum ColorKind {
     MAT0, MAT1, AMB0, AMB1,
@@ -38,7 +39,7 @@ export class SceneParams {
 
 export class MaterialParams {
     public m_TextureMapping: TextureMapping[] = nArray(8, () => new TextureMapping());
-    public u_Color: GX_Material.Color[] = nArray(ColorKind.COUNT, () => new GX_Material.Color());
+    public u_Color: Color[] = nArray(ColorKind.COUNT, () => new GX_Material.Color());
     public u_TexMtx: mat4[] = nArray(10, () => mat4.create());     // mat4x3
     public u_PostTexMtx: mat4[] = nArray(20, () => mat4.create()); // mat4x3
     public u_IndTexMtx: mat4[] = nArray(3, () => mat4.create()); // mat4x2
@@ -49,7 +50,7 @@ export class PacketParams {
     public u_PosMtx: mat4[] = nArray(10, () => mat4.create());
 
     public clear(): void {
-        for (let i = 0; i < 8; i++)
+        for (let i = 0; i < 10; i++)
             mat4.identity(this.u_PosMtx[i]);
     }
 }

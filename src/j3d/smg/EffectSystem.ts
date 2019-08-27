@@ -3,7 +3,7 @@ import * as RARC from '../../j3d/rarc';
 import * as JPA from '../JPA';
 
 import { createCsvParser, JMapInfoIter } from "./JMapInfo";
-import { SceneObjHolder, LiveActor } from "./smg_scenes";
+import { SceneObjHolder } from "./smg_scenes";
 import { leftPad, assert, assertExists } from "../../util";
 import { GfxDevice } from "../../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../../gfx/render/GfxRenderer";
@@ -12,6 +12,7 @@ import { vec3, mat4 } from "gl-matrix";
 import { colorNewCopy, White, colorCopy } from "../../Color";
 import { computeModelMatrixR } from "../../MathHelpers";
 import { DrawType } from "./NameObj";
+import { LiveActor } from './LiveActor';
 
 export class ParticleResourceHolder {
     private effectNames: string[];
@@ -617,6 +618,18 @@ export class EffectSystem {
         this.emitterManager = new JPA.JPAEmitterManager(device, maxParticleCount, maxEmitterCount);
 
         this.particleEmitterHolder = new ParticleEmitterHolder(this, maxParticleCount);
+    }
+
+    public makeMultiEmitterForUniqueName(sceneObjHolder: SceneObjHolder, uniqueName: string): MultiEmitter | null {
+        const autoEffectInfo = this.particleResourceHolder.autoEffectList;
+
+        if (!autoEffectInfo.findRecord((eff) => eff.getValueString('UniqueName') === uniqueName))
+            return null;
+
+        const m = new MultiEmitter(sceneObjHolder, autoEffectInfo.getValueString('EffectName'));
+        m.setName(autoEffectInfo.getValueString('UniqueName'));
+        setupMultiEmitter(m, autoEffectInfo);
+        return m;
     }
 
     public calc(deltaTime: number): void {
