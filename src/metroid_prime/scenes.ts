@@ -22,9 +22,8 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
     public renderHelper: GXRenderHelperGfx;
     public renderTarget = new BasicRenderTarget();
     public areaRenderers: MREARenderer[] = [];
-    public cmdlRenderers: CMDLRenderer[] = [];
     public cmdlData: CMDLData[] = [];
-    public defaultSkyRenderer: CMDLRenderer = null;
+    public defaultSkyRenderer: CMDLRenderer | null = null;
 
     constructor(device: GfxDevice, public mlvl: MLVL.MLVL, public textureHolder = new RetroTextureHolder()) {
         this.renderHelper = new GXRenderHelperGfx(device);
@@ -42,41 +41,23 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
         fillSceneParamsDataOnTemplate(template, viewerInput);
         for (let i = 0; i < this.areaRenderers.length; i++)
             this.areaRenderers[i].prepareToRender(device, this.renderHelper, viewerInput);
-        for (let i = 0; i < this.cmdlRenderers.length; i++)
-            this.cmdlRenderers[i].prepareToRender(device, this.renderHelper, viewerInput);
         this.prepareToRenderSkybox(device, viewerInput);
         this.renderHelper.prepareToRender(device, hostAccessPass);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
     }
 
     private prepareToRenderSkybox(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
-        // set all skyboxes to invisible
-        if (this.defaultSkyRenderer !== null) {
-            this.defaultSkyRenderer.setVisible(false);
-        }
+        // Pick an active skybox and render it...
+        let skybox: CMDLRenderer | null = this.defaultSkyRenderer;
         for (let i = 0; i < this.areaRenderers.length; i++) {
-            if (this.areaRenderers[i].overrideSky !== null) {
-                this.areaRenderers[i].overrideSky.setVisible(false);
-            }
-        }
-
-        // pick an active skybox and render it
-        let skybox: CMDLRenderer = null;
-        for (let i = 0; i < this.areaRenderers.length; i++) {
-            if (this.areaRenderers[i].visible && this.areaRenderers[i].needSky) {
-                if (this.areaRenderers[i].overrideSky !== null) {
-                    skybox = this.areaRenderers[i].overrideSky;
-                }
-                else {
-                    skybox = this.defaultSkyRenderer;
-                }
+            if (this.areaRenderers[i].visible && this.areaRenderers[i].needSky && this.areaRenderers[i].overrideSky !== null) {
+                skybox = this.areaRenderers[i].overrideSky;
                 break;
             }
         }
-        if (skybox !== null) {
-            skybox.setVisible(true);
+
+        if (skybox !== null)
             skybox.prepareToRender(device, this.renderHelper, viewerInput);
-        }
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
@@ -112,10 +93,10 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
         this.renderHelper.destroy(device);
         for (let i = 0; i < this.areaRenderers.length; i++)
             this.areaRenderers[i].destroy(device);
-        for (let i = 0; i < this.cmdlRenderers.length; i++)
-            this.cmdlRenderers[i].destroy(device);
         for (let i = 0; i < this.cmdlData.length; i++)
             this.cmdlData[i].destroy(device);
+        if (this.defaultSkyRenderer !== null)
+            this.defaultSkyRenderer.destroy(device);
     }
 
     public createPanels(): UI.Panel[] {
@@ -157,6 +138,7 @@ class RetroSceneDesc implements Viewer.SceneDesc {
                 if (defaultSkyboxCMDL) {
                     const defaultSkyboxName = resourceSystem.findResourceNameByID(mlvl.defaultSkyboxID);
                     const defaultSkyboxCMDLData = new CMDLData(device, renderer.renderHelper, defaultSkyboxCMDL);
+                    renderer.cmdlData.push(defaultSkyboxCMDLData);
                     const defaultSkyboxRenderer = new CMDLRenderer(device, renderer.renderHelper, renderer.textureHolder, null, defaultSkyboxName, mat4.create(), defaultSkyboxCMDLData);
                     defaultSkyboxRenderer.isSkybox = true;
                     renderer.defaultSkyRenderer = defaultSkyboxRenderer;

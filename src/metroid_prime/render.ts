@@ -537,7 +537,7 @@ export class MREARenderer {
                 }
 
                 if (ent.type === MP1EntityType.AreaAttributes || ent.type === "REAA") {
-                    const areaAttributes = <AreaAttributes>(ent);
+                    const areaAttributes = ent as AreaAttributes;
 
                     // Only process AreaAttributes properties if this is the first one in the area with a sky configured, to avoid mixing and matching different entities
                     if (!this.needSky && areaAttributes.needSky) {
@@ -545,7 +545,6 @@ export class MREARenderer {
 
                         if (areaAttributes.overrideSky !== null) {
                             const identityMtx = mat4.create();
-                            mat4.identity(identityMtx);
 
                             const skyData = new CMDLData(device, renderHelper, areaAttributes.overrideSky);
                             this.overrideSky = new CMDLRenderer(device, renderHelper, this.textureHolder, null, `Sky_AreaAttributes_Layer${i}`, identityMtx, skyData);

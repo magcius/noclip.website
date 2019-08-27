@@ -107,7 +107,8 @@ export class Entity {
     }
 
     // hook to allow entity subclasses to read additional properties for MP2 / MP3 / DKCR
-    public readProperty_MP2(stream: InputStream, resourceSystem: ResourceSystem, propertyID: number) {}
+    public readProperty_MP2(stream: InputStream, resourceSystem: ResourceSystem, propertyID: number) {
+    }
 
     public getRenderModel() : CMDL {
         if (this.animParams != null) {
@@ -126,8 +127,7 @@ export class Entity {
     }
 }
 
-export class AreaAttributes extends Entity
-{
+export class AreaAttributes extends Entity {
     public needSky: boolean = false;
     public overrideSky: CMDL = null;
 
