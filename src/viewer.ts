@@ -13,6 +13,7 @@ export interface Texture {
     name: string;
     surfaces: HTMLCanvasElement[];
     extraInfo?: Map<string, string>;
+    activate?: () => Promise<void>;
 }
 
 export interface ViewerRenderInput {
@@ -28,7 +29,7 @@ export interface SceneGfx {
     createPanels?(): UI.Panel[];
     createCameraController?(): CameraController;
     serializeSaveState?(dst: ArrayBuffer, offs: number): number;
-    deserializeSaveState?(dst: ArrayBuffer, offs: number, byteLength: number): number;
+    deserializeSaveState?(src: ArrayBuffer, offs: number, byteLength: number): number;
     onstatechanged?: () => void;
     render(device: GfxDevice, renderInput: ViewerRenderInput): GfxRenderPass;
     destroy(device: GfxDevice): void;

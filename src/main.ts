@@ -215,14 +215,10 @@ class Main {
 
         this._loadSceneGroups();
 
-        if (this.currentSceneDesc === undefined) {
-            // Load the state from the hash, remove the extra character at the end.
-            const hash = window.location.hash;
-            if (hash.startsWith('#'))
-                this._loadState(decodeURIComponent(hash.slice(1)));
-            // Wipe out the hash from the URL.
-            window.history.replaceState('', '', '/');
-        }
+        window.onhashchange = this._onHashChange.bind(this);
+
+        if (this.currentSceneDesc === undefined)
+            this._onHashChange();
 
         if (this.currentSceneDesc === undefined) {
             // Load the state from session storage.
@@ -260,6 +256,16 @@ class Main {
             Sentry.configureScope((scope) => {
                 scope.setExtra('git-revision', GIT_REVISION);
             });
+        }
+    }
+
+    private _onHashChange(): void {
+        // Load the state from the hash, remove the extra character at the end.
+        const hash = window.location.hash;
+        if (hash.startsWith('#')) {
+            this._loadState(decodeURIComponent(hash.slice(1)));
+            // Wipe out the hash from the URL.
+            window.history.replaceState('', '', '/');
         }
     }
 
@@ -489,7 +495,7 @@ class Main {
 
             const key = this.saveManager.getSaveStateSlotKey(sceneDescId, 1);
             const didLoadCameraState = this._loadSceneSaveState(this.saveManager.loadState(key));
-    
+
             if (!didLoadCameraState)
                 mat4.identity(camera.worldMatrix);
         }
@@ -516,8 +522,10 @@ class Main {
     }
 
     private _loadSceneDesc(sceneGroup: SceneGroup, sceneDesc: SceneDesc, sceneStateStr: string | null = null): void {
-        if (this.currentSceneDesc === sceneDesc)
+        if (this.currentSceneDesc === sceneDesc) {
+            this._loadSceneSaveState(sceneStateStr);
             return;
+        }
 
         const device = this.viewer.gfxDevice;
 

@@ -181,8 +181,8 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
         return offs;
     }
 
-    public deserializeSaveState(dst: ArrayBuffer, offs: number, byteLength: number): number {
-        const view = new DataView(dst);
+    public deserializeSaveState(src: ArrayBuffer, offs: number, byteLength: number): number {
+        const view = new DataView(src);
         if (offs < byteLength)
             this.setCurrentAreaNo(view.getUint8(offs++));
         return offs;

@@ -17,6 +17,18 @@ import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_rende
 import { SceneContext } from '../SceneBase';
 import { FPSCameraController } from '../Camera';
 import { DataFetcherFlags } from '../DataFetcher';
+import BitMap, { bitMapSerialize, bitMapDeserialize } from '../BitMap';
+
+function layerVisibilitySyncToBitMap(layers: UI.Layer[], b: BitMap): void {
+    for (let i = 0; i < layers.length; i++)
+        b.setBit(i, layers[i].visible);
+}
+
+function layerVisibilitySyncFromBitMap(layers: UI.Layer[], b: BitMap): void {
+    assert(b.numBits === layers.length);
+    for (let i = 0; i < layers.length; i++)
+        layers[i].setVisible(b.getBit(i));
+}
 
 export class RetroSceneRenderer implements Viewer.SceneGfx {
     public renderHelper: GXRenderHelperGfx;
@@ -107,6 +119,26 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
         layersPanel.setLayers(this.areaRenderers);
         return [layersPanel];
     }
+
+    public serializeSaveState(dst: ArrayBuffer, offs: number): number {
+        const view = new DataView(dst);
+        const b = new BitMap(this.areaRenderers.length);
+        layerVisibilitySyncToBitMap(this.areaRenderers, b);
+        offs = bitMapSerialize(view, offs, b);
+        return offs;
+    }
+
+    public deserializeSaveState(src: ArrayBuffer, offs: number, byteLength: number): number {
+        const view = new DataView(src);
+        const numBytes = (this.areaRenderers.length + 7) >>> 3;
+        if (offs + numBytes <= byteLength) {
+            const b = new BitMap(this.areaRenderers.length);
+            offs = bitMapDeserialize(view, offs, b);
+            console.log(b);
+            layerVisibilitySyncFromBitMap(this.areaRenderers, b);
+        }
+        return offs;
+    }
 }
 
 class RetroSceneDesc implements Viewer.SceneDesc {
@@ -190,7 +222,7 @@ const sceneDescsMP2: Viewer.SceneDesc[] = [
     new RetroSceneDesc(`mp2/Metroid2.pak`, "Great Temple"),
     new RetroSceneDesc(`mp2/Metroid3.pak`, "Agon Wastes"),
     new RetroSceneDesc(`mp2/Metroid4.pak`, "Torvus Bog"),
-    new RetroSceneDesc(`mp2/metroid5.pak`, "Sanctuary Fortress"),
+    new RetroSceneDesc(`mp2/Metroid5.pak`, "Sanctuary Fortress"),
     new RetroSceneDesc(`mp2/Metroid6.pak`, "Multiplayer - Sidehopper Station", "M01_SidehopperStation"),
     new RetroSceneDesc(`mp2/Metroid6.pak`, "Multiplayer - Spires", "M02_Spires"),
     new RetroSceneDesc(`mp2/Metroid6.pak`, "Multiplayer - Crossfire Chaos", "M03_CrossfireChaos"),

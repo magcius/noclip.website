@@ -154,6 +154,38 @@ export function loadedDataCoalescerComboGfx(device: GfxDevice, loadedVertexDatas
     );
 }
 
+export class GXViewerTexture implements Viewer.Texture {
+    public surfaces: HTMLCanvasElement[] = [];
+
+    constructor(public mipChain: GX_Texture.MipChain, public extraInfo: Map<string, string> | null = null, public name: string = mipChain.name) {
+    }
+
+    public activate(): Promise<void> | null {
+        if (this.surfaces.length !== 0)
+            return null;
+
+        const promises: Promise<void>[] = [];
+        for (let i = 0; i < this.mipChain.mipLevels.length; i++) {
+            const mipLevel = this.mipChain.mipLevels[i];
+
+            const canvas = document.createElement('canvas');
+            canvas.width = mipLevel.width;
+            canvas.height = mipLevel.height;
+            canvas.title = mipLevel.name;
+            this.surfaces.push(canvas);
+
+            promises.push(GX_Texture.decodeTexture(mipLevel).then((rgbaTexture) => {
+                const ctx = canvas.getContext('2d')!;
+                const imgData = new ImageData(mipLevel.width, mipLevel.height);
+                imgData.data.set(new Uint8Array(rgbaTexture.pixels.buffer));
+                ctx.putImageData(imgData, 0, 0);
+            }));
+        }
+
+        return Promise.all(promises) as any as Promise<void>;
+    }
+}
+
 export function loadTextureFromMipChain(device: GfxDevice, mipChain: GX_Texture.MipChain): LoadedTexture {
     const firstMipLevel = mipChain.mipLevels[0];
     const gfxTexture = device.createTexture({
@@ -169,18 +201,8 @@ export function loadTextureFromMipChain(device: GfxDevice, mipChain: GX_Texture.
         const level = i;
         const mipLevel = mipChain.mipLevels[i];
 
-        const canvas = document.createElement('canvas');
-        canvas.width = mipLevel.width;
-        canvas.height = mipLevel.height;
-        canvas.title = mipLevel.name;
-        surfaces.push(canvas);
-
         promises.push(GX_Texture.decodeTexture(mipLevel).then((rgbaTexture) => {
             hostAccessPass.uploadTextureData(gfxTexture, level, [rgbaTexture.pixels]);
-            const ctx = canvas.getContext('2d')!;
-            const imgData = new ImageData(mipLevel.width, mipLevel.height);
-            imgData.data.set(new Uint8Array(rgbaTexture.pixels.buffer));
-            ctx.putImageData(imgData, 0, 0);
         }));
     }
 
@@ -191,7 +213,7 @@ export function loadTextureFromMipChain(device: GfxDevice, mipChain: GX_Texture.
     const viewerExtraInfo = new Map<string, string>();
     viewerExtraInfo.set("Format", GX_Texture.getFormatName(firstMipLevel.format, firstMipLevel.paletteFormat));
 
-    const viewerTexture: Viewer.Texture = { name: mipChain.name, surfaces, extraInfo: viewerExtraInfo };
+    const viewerTexture = new GXViewerTexture(mipChain, viewerExtraInfo);
     return { gfxTexture, viewerTexture };
 }
 

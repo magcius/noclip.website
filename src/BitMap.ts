@@ -50,3 +50,21 @@ export function bitMapIntersect(dst: BitMap, s1: BitMap, s2: BitMap): void {
     for (let i = 0; i < dst.words.length; i++)
         dst.words[i] = s1.words[i] & s2.words[i];
 }
+
+export function bitMapSerialize(view: DataView, offs: number, bitMap: BitMap): number {
+    const numBytes = (bitMap.numBits + 7) >>> 3;
+    for (let i = 0; i < numBytes; i++) {
+        const shift = (i & 0x03) << 3;
+        view.setUint8(offs++, (bitMap.words[i >>> 2] >>> shift) & 0xFF);
+    }
+    return offs;
+}
+
+export function bitMapDeserialize(view: DataView, offs: number, bitMap: BitMap): number {
+    const numBytes = (bitMap.numBits + 7) >>> 3;
+    for (let i = 0; i < numBytes; i++) {
+        const shift = (i & 0x03) << 3;
+        bitMap.words[i >>> 2] |= view.getUint8(offs++) << shift;
+    }
+    return numBytes;
+}

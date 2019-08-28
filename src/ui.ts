@@ -14,6 +14,7 @@ import { GlobalGrabManager } from './GrabManager';
 
 // @ts-ignore
 import logoURL from './logo.png';
+import BitMap from './BitMap';
 
 export const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
 export const COOL_BLUE_COLOR = 'rgb(20, 105, 215)';
@@ -1479,8 +1480,16 @@ export class TextureViewer extends Panel {
         }
     }
 
-    private selectTexture(i: number) {
+    private selectTexture(i: number): void {
         const texture: Viewer.Texture = this.textureList[i];
+
+        if (texture.surfaces.length === 0 && texture.activate !== undefined) {
+            texture.activate().then(() => {
+                this.selectTexture(i);
+            });
+            return;
+        }
+
         this.scrollList.setHighlighted(i);
 
         const properties = new Map<string, string>();
@@ -1507,7 +1516,7 @@ export class TextureViewer extends Panel {
         });
 
         if (texture.surfaces.length > 0)
-        this.showInSurfaceView(texture.surfaces[0]);
+            this.showInSurfaceView(texture.surfaces[0]);
 
         this.showInFullSurfaceView(texture.surfaces);
     }
@@ -1517,7 +1526,7 @@ export class TextureViewer extends Panel {
     }
 
     public setTextureList(textures: Viewer.Texture[]) {
-        textures = textures.filter((tex) => tex.surfaces.length > 0);
+        textures = textures.filter((tex) => tex.surfaces.length > 0 || tex.activate !== undefined);
 
         this.setVisible(textures.length > 0);
         if (textures.length === 0)
