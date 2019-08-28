@@ -913,7 +913,7 @@ export class SceneObjHolder {
     public lightDataHolder: LightDataHolder;
     public npcDirector: NPCDirector;
     public stageDataHolder: StageDataHolder;
-    public effectSystem: EffectSystem | null;
+    public effectSystem: EffectSystem | null = null;
     public messageDataHolder: MessageDataHolder | null;
     public captureSceneDirector = new CaptureSceneDirector();
 
@@ -2070,8 +2070,6 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
 
             if (modelCache.isArchiveExist(`ParticleData/Effect.arc`))
                 sceneObjHolder.effectSystem = new EffectSystem(device, modelCache.getArchive(`ParticleData/Effect.arc`));
-            else
-                sceneObjHolder.effectSystem = null;
 
             if (modelCache.isArchiveExist(`UsEnglish/MessageData/Message.arc`))
                 sceneObjHolder.messageDataHolder = new MessageDataHolder(modelCache.getArchive(`UsEnglish/MessageData/Message.arc`));
