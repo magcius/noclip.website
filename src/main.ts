@@ -358,12 +358,12 @@ class Main {
         if (this.viewer.scene !== null && this.viewer.scene.serializeSaveState)
             offs = this.viewer.scene.serializeSaveState(this._saveStateTmp.buffer, offs);
 
-        const s = atob(this._saveStateTmp, offs);
+        const s = btoa(this._saveStateTmp, offs);
         return s + '=';
     }
 
     private _loadSceneSaveStateVersion2(state: string): boolean {
-        const byteLength = btoa(this._saveStateTmp, 0, state);
+        const byteLength = atob(this._saveStateTmp, 0, state);
         if (byteLength < 4)
             return false;
 
