@@ -23,7 +23,7 @@ export interface MREA {
     materialSet: MaterialSet;
     worldModels: WorldModel[];
     scriptLayers: Script.ScriptLayer[];
-    collision: Collision.AreaCollision;
+    collision: Collision.AreaCollision | null;
     lightLayers: AreaLightLayer[];
 }
 
@@ -700,7 +700,7 @@ function parseSurfaces_DKCR(stream: InputStream, surfaceCount: number, sectionIn
             vtxArrays[GX.VertexAttribute.TEX0 + i] = { buffer: stream.getBuffer(), offs: isShort ? uvsSectionOffs : uvfSectionOffs };
         }
 
-        const vatFormats: GX_VtxAttrFmt[][] = [vatFormat, vatFormat, vatFormat, vatFormat];
+        const vatFormats: GX_VtxAttrFmt[][] = [vatFormat, vatFormat, vatFormat, vatFormat, vatFormat, vatFormat, vatFormat, vatFormat];
         const vtxLoader = compileVtxLoaderMultiVat(vatFormats, vcd);
         const loadedVertexLayout = vtxLoader.loadedVertexLayout;
         const dlData = stream.getBuffer().slice(primitiveDataOffs, surfaceEnd);
@@ -1095,26 +1095,31 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem): MREA
         }
     }
 
-    // Parse out collision.
-    const collisionOffs = dataSectionOffsTable[collisionSectionIndex];
-    stream.goTo(collisionOffs);
-    const collision = Collision.parseAreaCollision(stream);
-
-    // Parse out lights.
-    const lightOffs = dataSectionOffsTable[lightsSectionIndex];
-    stream.goTo(lightOffs);
+    // TODO(jstpierre): DKCR collision
 
     const lightLayers: AreaLightLayer[] = [];
-    const lightsMagic = stream.readUint32();
-    assert(lightsMagic === 0xbabedead);
+    let collision: Collision.AreaCollision | null = null;
+    if (version < AreaVersion.DKCR) {
+        // Parse out collision.
+        const collisionOffs = dataSectionOffsTable[collisionSectionIndex];
+        stream.goTo(collisionOffs);
+        collision = Collision.parseAreaCollision(stream);
 
-    const numLightLayers = (version <= AreaVersion.MP2 ? 2 :
-                            version <= AreaVersion.MP3 ? 4 :
-                            8);
+        // Parse out lights.
+        const lightOffs = dataSectionOffsTable[lightsSectionIndex];
+        stream.goTo(lightOffs);
 
-    for (let i = 0; i < numLightLayers; i++) {
-        const lightLayer: AreaLightLayer = parseLightLayer(stream, version);
-        lightLayers.push(lightLayer);
+        const lightsMagic = stream.readUint32();
+        assert(lightsMagic === 0xbabedead);
+
+        const numLightLayers = (version <= AreaVersion.MP2 ? 2 :
+                                version <= AreaVersion.MP3 ? 4 :
+                                8);
+
+        for (let i = 0; i < numLightLayers; i++) {
+            const lightLayer: AreaLightLayer = parseLightLayer(stream, version);
+            lightLayers.push(lightLayer);
+        }
     }
 
     return { materialSet, worldModels, scriptLayers, collision, lightLayers };

@@ -167,7 +167,7 @@ class RetroSceneDesc implements Viewer.SceneDesc {
                 const mlvl: MLVL.MLVL = resourceSystem.loadAssetByID(mlvlEntry.fileID, mlvlEntry.fourCC);
 
                 const renderer = new RetroSceneRenderer(device, mlvl);
-                const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
+                const cache = renderer.renderHelper.getCache();
 
                 const areas = mlvl.areaTable;
                 const defaultSkyboxCMDL = resourceSystem.loadAssetByID(mlvl.defaultSkyboxID, 'CMDL');

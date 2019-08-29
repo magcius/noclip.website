@@ -15,7 +15,7 @@ import { SceneContext } from '../SceneBase';
 class DKCRSceneDesc implements Viewer.SceneDesc {
     public id: string;
     constructor(public filename: string, public name: string, public worldName: string = "") {
-        this.id = filename;
+        this.id = worldName ? worldName : filename;
     }
 
     public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
@@ -31,7 +31,8 @@ class DKCRSceneDesc implements Viewer.SceneDesc {
                 const mrea: MREA.MREA = resourceSystem.loadAssetByID(area.areaMREAID, 'MREA');
                 const textureHolder = new RetroTextureHolder();
                 const renderer = new RetroSceneRenderer(device, mlvl, textureHolder);
-                const mreaRenderer = new MREARenderer(device, renderer.renderHelper, textureHolder, this.name, mrea);
+                const cache = renderer.renderHelper.getCache();
+                const mreaRenderer = new MREARenderer(device, renderer.modelCache, cache, renderer.textureHolder, this.name, mrea);
                 renderer.areaRenderers.push(mreaRenderer);
                 return renderer;
             }

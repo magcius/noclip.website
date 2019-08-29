@@ -54,7 +54,7 @@ export function bitMapIntersect(dst: BitMap, s1: BitMap, s2: BitMap): void {
 export function bitMapSerialize(view: DataView, offs: number, bitMap: BitMap): number {
     const numBytes = (bitMap.numBits + 7) >>> 3;
     for (let i = 0; i < numBytes; i++) {
-        const shift = 32 - ((i & 0x03) << 3);
+        const shift = 24 - ((i & 0x03) << 3);
         view.setUint8(offs++, (bitMap.words[i >>> 2] >>> shift) & 0xFF);
     }
     return offs;
@@ -63,7 +63,7 @@ export function bitMapSerialize(view: DataView, offs: number, bitMap: BitMap): n
 export function bitMapDeserialize(view: DataView, offs: number, bitMap: BitMap): number {
     const numBytes = (bitMap.numBits + 7) >>> 3;
     for (let i = 0; i < numBytes; i++) {
-        const shift = 32 - ((i & 0x03) << 3);
+        const shift = 24 - ((i & 0x03) << 3);
         bitMap.words[i >>> 2] |= view.getUint8(offs++) << shift;
     }
     return numBytes;

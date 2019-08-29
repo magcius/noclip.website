@@ -64,11 +64,11 @@ export class ActorLights {
             const layer = mrea.lightLayers[layerIdx];
             colorMult(this.ambient, layer.ambientColor, lightParams.ambient);
 
-            class ActorLight {
+            interface ActorLight {
                 sqDist: number;
                 light: AreaLight;
             }
-            let actorLights: ActorLight[] = [];
+            const actorLights: ActorLight[] = [];
 
             for (let i = 0; i < layer.lights.length; i++) {
                 const light = layer.lights[i];
@@ -81,16 +81,17 @@ export class ActorLights {
                         const actorPos = scratchPos;
                         vec3.set(actorPos, (bb.minX + bb.maxX)/2, (bb.minY + bb.maxY)/2, (bb.minZ + bb.maxZ)/2);
 
-                        if (!areaCollisionLineCheck(light.gxLight.Position, actorPos, mrea.collision)) {
+                        let lightIsVisible = true;
+                        if (lightIsVisible && mrea.collision !== null)
+                            lightIsVisible = !areaCollisionLineCheck(light.gxLight.Position, actorPos, mrea.collision);
+
+                        if (lightIsVisible)
                             actorLights.push({ sqDist, light });
-                        }
-                    }
-                    else {
+                    } else {
                         actorLights.push({ sqDist, light });
                     }
                 }
             }
-
             actorLights.sort((a, b) => a.sqDist - b.sqDist);
 
             // maxAreaLights check removed because currently the light selection logic does not match the game, causing highly influential lights to not render
@@ -120,16 +121,14 @@ class SurfaceInstance {
     private materialTextureKey: number;
     public packetParams = new PacketParams();
 
-    constructor(
-        public surfaceData: SurfaceData,
-        public materialInstance: MaterialInstance,
-        public materialGroupInstance: MaterialGroupInstance,
-        public modelMatrix: mat4)
-    {
+    constructor(public surfaceData: SurfaceData, public materialInstance: MaterialInstance, public materialGroupInstance: MaterialGroupInstance, public modelMatrix: mat4) {
         this.materialTextureKey = materialInstance.textureKey;
     }
 
     public prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean): void {
+        if (!this.materialInstance.visible)
+            return;
+
         let posModelMtx;
 
         if (isSkybox) {
@@ -143,9 +142,6 @@ class SurfaceInstance {
             if (!viewerInput.camera.frustum.contains(bboxScratch))
                 return;
         }
-
-        if ((this.surfaceData.surface as any).visible === false)
-            return;
 
         const viewMatrix = viewMatrixScratch;
 
@@ -252,15 +248,12 @@ class MaterialGroupInstance {
             if (!uvAnimation)
                 continue;
 
-            switch (uvAnimation.type) {
-            case UVAnimationType.UV_SCROLL: {
+            if (uvAnimation.type === UVAnimationType.UV_SCROLL) {
                 const transS = animTime * uvAnimation.scaleS + uvAnimation.offsetS;
                 const transT = animTime * uvAnimation.scaleT + uvAnimation.offsetT;
                 texMtx[12] = transS;
                 texMtx[13] = transT;
-                break;
-            }
-            case UVAnimationType.ROTATION: {
+            } else if (uvAnimation.type === UVAnimationType.ROTATION) {
                 const theta = animTime * uvAnimation.scale + uvAnimation.offset;
                 const cosR = Math.cos(theta);
                 const sinR = Math.sin(theta);
@@ -272,20 +265,17 @@ class MaterialGroupInstance {
                 texMtx[5] =  cosR;
                 texMtx[13] = (1.0 - (sinR + cosR)) * 0.5;
                 break;
-            }
-            case UVAnimationType.FLIPBOOK_U: {
+            } else if (uvAnimation.type === UVAnimationType.FLIPBOOK_U) {
                 const n = uvAnimation.step * uvAnimation.scale * (uvAnimation.offset + animTime);
                 const trans = Math.floor(uvAnimation.numFrames * (n % 1.0)) * uvAnimation.step;
                 texMtx[12] = trans;
                 break;
-            }
-            case UVAnimationType.FLIPBOOK_V: {
+            } else if (uvAnimation.type === UVAnimationType.FLIPBOOK_V) {
                 const n = uvAnimation.step * uvAnimation.scale * (uvAnimation.offset + animTime);
                 const trans = Math.floor(uvAnimation.numFrames * (n % 1.0)) * uvAnimation.step;
                 texMtx[13] = trans;
                 break;
-            }
-            case UVAnimationType.INV_MAT_SKY:
+            } else if (uvAnimation.type === UVAnimationType.INV_MAT_SKY) {
                 mat4.invert(texMtx, viewerInput.camera.viewMatrix);
                 if (modelMatrix !== null)
                     mat4.mul(texMtx, texMtx, modelMatrix);
@@ -294,13 +284,13 @@ class MaterialGroupInstance {
                 texMtx[14] = 0;
                 texEnvMtx(postMtx, 0.5, -0.5, 0.5, 0.5);
                 break;
-            case UVAnimationType.INV_MAT:
+            } else if (uvAnimation.type === UVAnimationType.INV_MAT) {
                 mat4.invert(texMtx, viewerInput.camera.viewMatrix);
                 if (modelMatrix !== null)
                     mat4.mul(texMtx, texMtx, modelMatrix);
                 texEnvMtx(postMtx, 0.5, -0.5, 0.5, 0.5);
                 break;
-            case UVAnimationType.MODEL_MAT:
+            } else if (uvAnimation.type === UVAnimationType.MODEL_MAT) {
                 if (modelMatrix !== null)
                     mat4.copy(texMtx, modelMatrix);
                 else
@@ -310,7 +300,7 @@ class MaterialGroupInstance {
                 texMtx[14] = 0;
                 texEnvMtx(postMtx, 0.5, -0.5, modelMatrix[12] * 0.5, modelMatrix[13] * 0.5);
                 break;
-            case UVAnimationType.CYLINDER: {
+            } else if (uvAnimation.type === UVAnimationType.CYLINDER) {
                 mat4.copy(texMtx, viewerInput.camera.viewMatrix);
                 if (modelMatrix !== null)
                     mat4.mul(texMtx, texMtx, modelMatrix);
@@ -324,7 +314,6 @@ class MaterialGroupInstance {
                 texEnvMtx(postMtx, a, -a, xy, z);
                 break;
             }
-            }
         }
     }
 }
@@ -332,8 +321,9 @@ class MaterialGroupInstance {
 class MaterialInstance {
     public textureKey: number;
     public textureMappings = nArray(8, () => new TextureMapping());
+    public visible = true;
 
-    constructor(materialGroup: MaterialGroupInstance, public material: Material, materialSet: MaterialSet, textureHolder: RetroTextureHolder) {
+    constructor(private materialGroup: MaterialGroupInstance, public material: Material, materialSet: MaterialSet, textureHolder: RetroTextureHolder) {
         this.textureKey = 0;
         for (let i = 0; i < material.textureIndexes.length; i++) {
             const textureIndex = material.textureIndexes[i];

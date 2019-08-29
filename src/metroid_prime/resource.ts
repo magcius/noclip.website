@@ -151,7 +151,7 @@ export class ResourceSystem {
         const resource = this.findResourceByID(assetID);
         if (!resource)
             return null;
-        
+
         assert(resource.fourCC === fourCC);
         const buffer = this.loadResourceBuffer(resource);
         const stream = new InputStream(buffer);
