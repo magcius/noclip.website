@@ -50,7 +50,7 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
 
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         const template = this.renderHelper.pushTemplateRenderInst();
-        viewerInput.camera.setClipPlanes(0.2, 750);
+        viewerInput.camera.setClipPlanes(0.2);
         fillSceneParamsDataOnTemplate(template, viewerInput);
         for (let i = 0; i < this.areaRenderers.length; i++)
             this.areaRenderers[i].prepareToRender(device, this.renderHelper, viewerInput);

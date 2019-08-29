@@ -263,17 +263,14 @@ class MaterialGroupInstance {
                 texMtx[1] =  sinR;
                 texMtx[5] =  cosR;
                 texMtx[13] = (1.0 - (sinR + cosR)) * 0.5;
-                break;
             } else if (uvAnimation.type === UVAnimationType.FLIPBOOK_U) {
                 const n = uvAnimation.step * uvAnimation.scale * (uvAnimation.offset + animTime);
                 const trans = Math.floor(uvAnimation.numFrames * (n % 1.0)) * uvAnimation.step;
                 texMtx[12] = trans;
-                break;
             } else if (uvAnimation.type === UVAnimationType.FLIPBOOK_V) {
                 const n = uvAnimation.step * uvAnimation.scale * (uvAnimation.offset + animTime);
                 const trans = Math.floor(uvAnimation.numFrames * (n % 1.0)) * uvAnimation.step;
                 texMtx[13] = trans;
-                break;
             } else if (uvAnimation.type === UVAnimationType.INV_MAT_SKY) {
                 mat4.invert(texMtx, viewerInput.camera.viewMatrix);
                 if (modelMatrix !== null)
@@ -282,13 +279,11 @@ class MaterialGroupInstance {
                 texMtx[13] = 0;
                 texMtx[14] = 0;
                 texEnvMtx(postMtx, 0.5, -0.5, 0.5, 0.5);
-                break;
             } else if (uvAnimation.type === UVAnimationType.INV_MAT) {
                 mat4.invert(texMtx, viewerInput.camera.viewMatrix);
                 if (modelMatrix !== null)
                     mat4.mul(texMtx, texMtx, modelMatrix);
                 texEnvMtx(postMtx, 0.5, -0.5, 0.5, 0.5);
-                break;
             } else if (uvAnimation.type === UVAnimationType.MODEL_MAT) {
                 if (modelMatrix !== null)
                     mat4.copy(texMtx, modelMatrix);
@@ -298,7 +293,6 @@ class MaterialGroupInstance {
                 texMtx[13] = 0;
                 texMtx[14] = 0;
                 texEnvMtx(postMtx, 0.5, -0.5, modelMatrix[12] * 0.5, modelMatrix[13] * 0.5);
-                break;
             } else if (uvAnimation.type === UVAnimationType.CYLINDER) {
                 mat4.copy(texMtx, viewerInput.camera.viewMatrix);
                 if (modelMatrix !== null)
@@ -311,7 +305,6 @@ class MaterialGroupInstance {
                 const z = (matrixScratch2[13] * 0.05 * uvAnimation.phi) % 1.0;
                 const a = uvAnimation.theta * 0.5;
                 texEnvMtx(postMtx, a, -a, xy, z);
-                break;
             }
         }
     }
