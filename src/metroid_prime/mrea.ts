@@ -511,7 +511,7 @@ function parseWorldModels_MP1(stream: InputStream, worldModelCount: number, sect
         const worldModelIndex = worldModels.length;
         let geometry: Geometry;
 
-        [geometry, sectionIndex] = parseGeometry(stream, materialSet, sectionOffsTable, true, version >= AreaVersion.MP2, false, sectionIndex, worldModelIndex);
+        [geometry, sectionIndex] = parseGeometry(stream, materialSet, sectionOffsTable, false, true, version >= AreaVersion.MP2, false, sectionIndex, worldModelIndex);
 
         worldModels.push({ geometry, modelMatrix, bbox });
     }
@@ -612,7 +612,7 @@ function parseSurfaces(stream: InputStream, surfaceCount: number, sectionIndex: 
         for (const format of vtxAttrFormats) {
             if (!(vtxAttrFormat & format.mask))
                 continue;
-            vcd[format.vtxAttrib] = { type: format.type, enableOutput: (format.mask <=0x00FFFFFF) };
+            vcd[format.vtxAttrib] = { type: format.type, enableOutput: (format.mask <= 0x00FFFFFF) };
         }
 
         // GX_VTXFMT0 | GX_VA_NRM = GX_F32
@@ -645,7 +645,7 @@ function parseSurfaces(stream: InputStream, surfaceCount: number, sectionIndex: 
     return [surfaces, sectionIndex];
 }
 
-function parseSurfaces_DKCR(stream: InputStream, surfaceCount: number, sectionIndex: number, posSectionOffs: number, nrmSectionOffs: number, clrSectionOffs: number, uvfSectionOffs: number, uvsSectionOffs: number, sectionOffsTable: number[], worldModelIndex: number, materialSet: MaterialSet): [Surface[], number] {
+function parseSurfaces_DKCR(stream: InputStream, surfaceCount: number, sectionIndex: number, posSectionOffs: number, nrmSectionOffs: number, clrSectionOffs: number, uvfSectionOffs: number, uvsSectionOffs: number, sectionOffsTable: number[], worldModelIndex: number, materialSet: MaterialSet, hasPosShort: boolean): [Surface[], number] {
     const surfaces: Surface[] = [];
 
     for (let j = 0; j < surfaceCount; j++) {
@@ -678,7 +678,7 @@ function parseSurfaces_DKCR(stream: InputStream, surfaceCount: number, sectionIn
         for (const format of vtxAttrFormats) {
             if (!(vtxAttrFormat & format.mask))
                 continue;
-            vcd[format.vtxAttrib] = { type: format.type };
+            vcd[format.vtxAttrib] = { type: format.type, enableOutput: (format.mask <= 0x00FFFFFF) };
         }
 
         const vtxArrays: GX_Array[] = [];
@@ -688,8 +688,11 @@ function parseSurfaces_DKCR(stream: InputStream, surfaceCount: number, sectionIn
         vtxArrays[GX.VertexAttribute.CLR1] = { buffer: stream.getBuffer(), offs: clrSectionOffs };
 
         const vatFormat: GX_VtxAttrFmt[] = [];
-        vatFormat[GX.VertexAttribute.POS]  = { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.F32, compShift: 0 };
-        vatFormat[GX.VertexAttribute.NRM]  = { compCnt: GX.CompCnt.NRM_XYZ, compType: GX.CompType.F32, compShift: 0 };
+        if (hasPosShort)
+            vatFormat[GX.VertexAttribute.POS]  = { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.S16, compShift: 13 };
+        else
+            vatFormat[GX.VertexAttribute.POS]  = { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.F32, compShift: 0 };
+        vatFormat[GX.VertexAttribute.NRM]  = { compCnt: GX.CompCnt.NRM_XYZ, compType: GX.CompType.S16, compShift: 14 };
         vatFormat[GX.VertexAttribute.CLR0] = { compCnt: GX.CompCnt.CLR_RGBA, compType: GX.CompType.RGBA8, compShift: 0 };
         vatFormat[GX.VertexAttribute.CLR1] = { compCnt: GX.CompCnt.CLR_RGBA, compType: GX.CompType.RGBA8, compShift: 0 };
 
@@ -712,7 +715,7 @@ function parseSurfaces_DKCR(stream: InputStream, surfaceCount: number, sectionIn
     return [surfaces, sectionIndex];
 }
 
-export function parseGeometry(stream: InputStream, materialSet: MaterialSet, sectionOffsTable: number[], hasUVShort: boolean, isEchoes: boolean, isDKCR: boolean, sectionIndex: number, worldModelIndex: number): [Geometry, number] {
+export function parseGeometry(stream: InputStream, materialSet: MaterialSet, sectionOffsTable: number[], hasPosShort: boolean, hasUVShort: boolean, isEchoes: boolean, isDKCR: boolean, sectionIndex: number, worldModelIndex: number): [Geometry, number] {
     const posSectionOffs = sectionOffsTable[sectionIndex++];
     const nrmSectionOffs = sectionOffsTable[sectionIndex++];
     const clrSectionOffs = sectionOffsTable[sectionIndex++];
@@ -726,7 +729,7 @@ export function parseGeometry(stream: InputStream, materialSet: MaterialSet, sec
     let surfaces: Surface[];
 
     if (isDKCR) {
-        [surfaces, sectionIndex] = parseSurfaces_DKCR(stream, surfaceCount, sectionIndex, posSectionOffs, nrmSectionOffs, clrSectionOffs, uvfSectionOffs, uvsSectionOffs, sectionOffsTable, worldModelIndex, materialSet)
+        [surfaces, sectionIndex] = parseSurfaces_DKCR(stream, surfaceCount, sectionIndex, posSectionOffs, nrmSectionOffs, clrSectionOffs, uvfSectionOffs, uvsSectionOffs, sectionOffsTable, worldModelIndex, materialSet, hasPosShort);
     } else {
         [surfaces, sectionIndex] = parseSurfaces(stream, surfaceCount, sectionIndex, posSectionOffs, nrmSectionOffs, clrSectionOffs, uvfSectionOffs, uvsSectionOffs, sectionOffsTable, worldModelIndex, materialSet, isEchoes);
     }
@@ -750,7 +753,7 @@ export function parseGeometry_MP3_MREA(stream: InputStream, materialSet: Materia
     let surfaces: Surface[];
 
     if (isDKCR) {
-        [surfaces, gpudSectionIndex] = parseSurfaces_DKCR(stream, surfaceCount, gpudSectionIndex, posSectionOffs, nrmSectionOffs, clrSectionOffs, uvfSectionOffs, uvsSectionOffs, sectionOffsTable, worldModelIndex, materialSet);
+        [surfaces, gpudSectionIndex] = parseSurfaces_DKCR(stream, surfaceCount, gpudSectionIndex, posSectionOffs, nrmSectionOffs, clrSectionOffs, uvfSectionOffs, uvsSectionOffs, sectionOffsTable, worldModelIndex, materialSet, false);
     } else {
         [surfaces, gpudSectionIndex] = parseSurfaces(stream, surfaceCount, gpudSectionIndex, posSectionOffs, nrmSectionOffs, clrSectionOffs, uvfSectionOffs, uvsSectionOffs, sectionOffsTable, worldModelIndex, materialSet, true);
     }
@@ -1183,17 +1186,13 @@ function makeTevStageFromPass_MP3(passIndex: number, passType: string, passFlags
         tevStage.colorInD = GX.CombineColorInput.RASC;
 
         tevStage.alphaInD = GX.CombineAlphaInput.KONST;
-    }
-
-    if (passType === 'CLR ') {
+    } else if (passType === 'CLR ') {
         tevStage.colorInB = (hasDIFF ? GX.CombineColorInput.CPREV : GX.CombineColorInput.RASC);
         tevStage.colorInC = GX.CombineColorInput.TEXC;
         tevStage.colorInD = GX.CombineColorInput.ZERO;
         tevStage.alphaInD = (materialFlags & MaterialFlags_MP3.MASKED) ? GX.CombineAlphaInput.TEXA : GX.CombineAlphaInput.APREV;
         tevStage.konstAlphaSel = GX.KonstAlphaSel.KASEL_K1_A;
-    }
-
-    if (passType === 'TRAN') {
+    } else if (passType === 'TRAN') {
         tevStage.konstAlphaSel = GX.KonstAlphaSel.KASEL_1;
         tevStage.texSwapTable = [ GX.TevColorChan.R, GX.TevColorChan.R, GX.TevColorChan.R, GX.TevColorChan.R ];
 
@@ -1204,16 +1203,12 @@ function makeTevStageFromPass_MP3(passIndex: number, passType: string, passFlags
             tevStage.alphaInB = GX.CombineAlphaInput.KONST;
         tevStage.alphaInC = GX.CombineAlphaInput.TEXA;
         tevStage.alphaInD = GX.CombineAlphaInput.ZERO;
-    }
-
-    if (passType === 'INCA') {
+    } else if (passType === 'INCA') {
         // Emissive.
         tevStage.colorInB = GX.CombineColorInput.TEXC;
         tevStage.colorInC = GX.CombineColorInput.ONE;
         tevStage.colorInD = GX.CombineColorInput.CPREV;
-    }
-
-    if (passType === 'BLOL') {
+    } else if (passType === 'BLOL') {
         // Bloom lightmap.
         // This actually works by drawing to the framebuffer alpha channel. During the post-process pass, the alpha channel
         // is sampled to determine the intensity of the bloom effect at this pixel. We don't support bloom for MP3, so instead
@@ -1221,6 +1216,18 @@ function makeTevStageFromPass_MP3(passIndex: number, passType: string, passFlags
         tevStage.texSwapTable = [GX.TevColorChan.G, GX.TevColorChan.G, GX.TevColorChan.G, GX.TevColorChan.G];
         tevStage.colorInB = GX.CombineColorInput.CPREV;
         tevStage.colorInC = GX.CombineColorInput.ONE;
+        tevStage.colorInD = GX.CombineColorInput.CPREV;
+    } else if (passType === 'RFLV') {
+        tevStage.colorInA = GX.CombineColorInput.ZERO;
+        tevStage.colorInB = GX.CombineColorInput.ZERO;
+        tevStage.colorInC = GX.CombineColorInput.ZERO;
+        tevStage.colorInD = GX.CombineColorInput.TEXC;
+        tevStage.colorRegId = GX.Register.REG2;
+        tevStage.alphaRegId = GX.Register.REG2;
+    } else if (passType === 'RFLD') {
+        tevStage.colorInA = GX.CombineColorInput.ZERO;
+        tevStage.colorInB = GX.CombineColorInput.C2;
+        tevStage.colorInC = GX.CombineColorInput.TEXC;
         tevStage.colorInD = GX.CombineColorInput.CPREV;
     }
 
@@ -1260,8 +1267,9 @@ function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSyste
         const passTypes: string[] = [];
         let hasOPAC = false;
         let hasDIFF = false;
-        while(true) {
+        while (true) {
             const nodeType = stream.readFourCC();
+
             if (nodeType === 'END ') {
                 assert(stream.tell() === materialEnd);
                 break;
@@ -1274,7 +1282,10 @@ function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSyste
                 const texGenSrc: GX.TexGenSrc = GX.TexGenSrc.TEX0 + stream.readUint32() & 0x0F;
                 const uvAnimationSize = stream.readUint32();
                 let uvAnimation: UVAnimation | null = null;
-                
+
+                if (window.debug)
+                    console.log(passIndex, passType);
+
                 if (uvAnimationSize !== 0) {
                     const uvAnimationEnd = stream.tell() + uvAnimationSize;
                     const unk1 = stream.readUint16();
@@ -1392,7 +1403,7 @@ function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSyste
 
         const blendMode: GX_Material.BlendMode = {
             type: isTransparent ? GX.BlendMode.BLEND : GX.BlendMode.NONE,
-            srcFactor: GX.BlendFactor.SRCALPHA,
+            srcFactor: additiveBlend ? GX.BlendFactor.ONE :GX.BlendFactor.SRCALPHA,
             dstFactor: additiveBlend ? GX.BlendFactor.ONE : GX.BlendFactor.INVSRCALPHA,
             logicOp: GX.LogicOp.CLEAR,
         };
@@ -1414,6 +1425,9 @@ function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSyste
             ropInfo,
             indTexStages: [],
         };
+
+        if (window.debug)
+            console.log(gxMaterial, tevStages, passTypes);
 
         const isUVShort = false;
         const isWhiteAmb = !!(materialFlags & MaterialFlags_MP3.WHITE_AMB);

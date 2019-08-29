@@ -96,9 +96,9 @@ export class LightParameters {
 }
 
 export class Entity {
-    public active: boolean;
     public name: string;
-    public modelMatrix: mat4;
+    public active: boolean = true;
+    public modelMatrix: mat4 = mat4.create();
     public animParams: AnimationParameters | null = null;
     public model: CMDL | null = null;
     public lightParams: LightParameters = new LightParameters();
@@ -200,7 +200,6 @@ function readTransform(buffer: ArrayBufferSlice, offs: number, ent: Entity, hasP
         offs += 0x0C;
     }
 
-    ent.modelMatrix = mat4.create();
     computeModelMatrixSRT(ent.modelMatrix, scale[0], scale[1], scale[2], rotation[0], rotation[1], rotation[2], position[0], position[1], position[2]);
     return offs - originalOffs;
 }

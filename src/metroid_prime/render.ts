@@ -49,16 +49,17 @@ export const enum RetroPass {
     SKYBOX = 0x02,
 }
 
-const scratchPos = vec3.create();
-
-export class ActorLights {
+const scratchVec3 = vec3.create();
+class ActorLights {
     public ambient: Color = new Color;
     public lights: AreaLight[] = [];
 
     constructor(actorBounds: AABB, lightParams: LightParameters, mrea: MREA) {
         // DisableWorld indicates the actor doesn't use any area lights (including ambient ones)
         if (lightParams.options === WorldLightingOptions.NoWorldLighting) {
-            colorFromRGBA(this.ambient, 0, 0, 0, 1);
+            colorCopy(this.ambient, OpaqueBlack);
+        } else if (mrea.lightLayers.length === 0) {
+            colorCopy(this.ambient, White);
         } else {
             const layerIdx = lightParams.layerIdx;
             const layer = mrea.lightLayers[layerIdx];
@@ -77,13 +78,11 @@ export class ActorLights {
                 if (sqDist < (light.radius * light.radius)) {
                     // Shadow cast logic
                     if (light.castShadows && lightParams.options != WorldLightingOptions.NoShadowCast) {
-                        const bb = actorBounds;
-                        const actorPos = scratchPos;
-                        vec3.set(actorPos, (bb.minX + bb.maxX)/2, (bb.minY + bb.maxY)/2, (bb.minZ + bb.maxZ)/2);
+                        actorBounds.centerPoint(scratchVec3);
 
                         let lightIsVisible = true;
                         if (lightIsVisible && mrea.collision !== null)
-                            lightIsVisible = !areaCollisionLineCheck(light.gxLight.Position, actorPos, mrea.collision);
+                            lightIsVisible = !areaCollisionLineCheck(light.gxLight.Position, scratchVec3, mrea.collision);
 
                         if (lightIsVisible)
                             actorLights.push({ sqDist, light });
@@ -452,7 +451,7 @@ export class MREARenderer {
         for (let i = 0; i < materialSet.materials.length; i++) {
             const material = materialSet.materials[i];
             if (this.materialGroupInstances[material.groupIndex] === undefined)
-                this.materialGroupInstances[material.groupIndex] = new MaterialGroupInstance(device, material, { lightingFudge: (p) => 'vec4(0, 0, 0, 1)' });
+                this.materialGroupInstances[material.groupIndex] = new MaterialGroupInstance(device, material);
         }
 
         // Now create the material commands.

@@ -1,7 +1,7 @@
 
 // Implements Retro's CMDL format as seen in Metroid Prime 1.
 
-import { assert, align } from "../util";
+import { assert, align, hexzero } from "../util";
 
 import { ResourceSystem } from "./resource";
 import { Geometry, MaterialSet, parseGeometry, parseMaterialSet, GameVersion } from "./mrea";
@@ -49,8 +49,7 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
     
     if (magic === 0x9381000A) {
         version = ModelVersion.DKCR;
-    }
-    else {
+    } else {
         assert(magic === 0xDEADBABE);
         version = stream.readUint32();
         assert(version === ModelVersion.MP1 || version === ModelVersion.MP2 || version === ModelVersion.MP3, `Unsupported CMDL version: ${version}`);
@@ -100,6 +99,11 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
 
     let dataSectionIndex = 0;
 
+    function assetIDHex(h: string): string {
+        return h.split('').map((c) => hexzero(c.charCodeAt(0), 2).toUpperCase()).join('');
+    }
+    window.debug = assetIDHex(assetID) === '71632E8869009695';
+
     const materialSets: MaterialSet[] = [];
     stream.goTo(dataSectionOffsTable[dataSectionIndex++]);
     for (let i = 0; i < materialSetCount; i++) {
@@ -111,9 +115,10 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
         }
     }
 
-    const hasUVShort = ( !!(flags & Flags.UV_SHORT) || version === ModelVersion.DKCR );
+    const hasPosShort = (!!(flags & Flags.POS_SHORT));
+    const hasUVShort = (!!(flags & Flags.UV_SHORT) || version === ModelVersion.DKCR);
     let geometry;
-    [geometry, dataSectionIndex] = parseGeometry(stream, materialSets[0], dataSectionOffsTable, hasUVShort, version >= ModelVersion.MP2, version >= ModelVersion.DKCR, dataSectionIndex, -1);
+    [geometry, dataSectionIndex] = parseGeometry(stream, materialSets[0], dataSectionOffsTable, hasPosShort, hasUVShort, version >= ModelVersion.MP2, version >= ModelVersion.DKCR, dataSectionIndex, -1);
 
     return { bbox, assetID, materialSets, geometry };
 }
