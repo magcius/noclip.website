@@ -35,8 +35,8 @@ enum AreaVersion {
 }
 
 export const enum UVAnimationType {
-    INV_MAT_SKY = 0x00,
-    INV_MAT     = 0x01,
+    ENV_MAPPING_NO_TRANS = 0x00,
+    ENV_MAPPING     = 0x01,
     UV_SCROLL   = 0x02,
     ROTATION    = 0x03,
     FLIPBOOK_U  = 0x04,
@@ -46,7 +46,7 @@ export const enum UVAnimationType {
 }
 
 interface UVAnimation_Mat {
-    type: UVAnimationType.INV_MAT_SKY | UVAnimationType.INV_MAT | UVAnimationType.MODEL_MAT;
+    type: UVAnimationType.ENV_MAPPING_NO_TRANS | UVAnimationType.ENV_MAPPING | UVAnimationType.MODEL_MAT;
 }
 
 interface UVAnimation_UVScroll {
@@ -121,8 +121,8 @@ function parseMaterialSet_UVAnimations(stream: InputStream, count: number): UVAn
         const type: UVAnimationType = stream.readUint32();
 
         switch (type) {
-        case UVAnimationType.INV_MAT_SKY:
-        case UVAnimationType.INV_MAT:
+        case UVAnimationType.ENV_MAPPING_NO_TRANS:
+        case UVAnimationType.ENV_MAPPING:
         case UVAnimationType.MODEL_MAT:
             uvAnimations.push({ type });
             // These guys have no parameters.
@@ -1282,9 +1282,6 @@ function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSyste
                 const texGenSrc: GX.TexGenSrc = GX.TexGenSrc.TEX0 + stream.readUint32() & 0x0F;
                 const uvAnimationSize = stream.readUint32();
                 let uvAnimation: UVAnimation | null = null;
-
-                if (window.debug)
-                    console.log(passIndex, passType);
 
                 if (uvAnimationSize !== 0) {
                     const uvAnimationEnd = stream.tell() + uvAnimationSize;

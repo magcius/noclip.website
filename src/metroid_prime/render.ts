@@ -18,8 +18,8 @@ import { computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
 import { LoadedVertexData, LoadedVertexPacket } from '../gx/gx_displaylist';
 import { GXMaterialHacks, Color, lightSetWorldPositionViewMatrix, lightSetWorldDirectionNormalMatrix } from '../gx/gx_material';
 import { LightParameters, WorldLightingOptions, MP1EntityType, AreaAttributes } from './script';
-import { colorMult, colorCopy, colorFromRGBA, White, OpaqueBlack } from '../Color';
-import { texEnvMtx } from '../MathHelpers';
+import { colorMult, colorCopy, White, OpaqueBlack } from '../Color';
+import { texEnvMtx, computeNormalMatrix } from '../MathHelpers';
 import { GXShapeHelperGfx, GXRenderHelperGfx, GXMaterialHelperGfx } from '../gx/gx_render';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { areaCollisionLineCheck } from './collision';
@@ -271,24 +271,26 @@ class MaterialGroupInstance {
                 const n = uvAnimation.step * uvAnimation.scale * (uvAnimation.offset + animTime);
                 const trans = Math.floor(uvAnimation.numFrames * (n % 1.0)) * uvAnimation.step;
                 texMtx[13] = trans;
-            } else if (uvAnimation.type === UVAnimationType.INV_MAT_SKY) {
-                mat4.invert(texMtx, viewerInput.camera.viewMatrix);
+            } else if (uvAnimation.type === UVAnimationType.ENV_MAPPING_NO_TRANS) {
                 if (modelMatrix !== null)
-                    mat4.mul(texMtx, texMtx, modelMatrix);
+                    mat4.mul(texMtx, viewerInput.camera.viewMatrix, modelMatrix);
+                else
+                    mat4.copy(texMtx, viewerInput.camera.viewMatrix);
+                computeNormalMatrix(texMtx, texMtx);
                 texMtx[12] = 0;
                 texMtx[13] = 0;
                 texMtx[14] = 0;
                 texEnvMtx(postMtx, 0.5, -0.5, 0.5, 0.5);
-            } else if (uvAnimation.type === UVAnimationType.INV_MAT) {
-                mat4.invert(texMtx, viewerInput.camera.viewMatrix);
+            } else if (uvAnimation.type === UVAnimationType.ENV_MAPPING) {
                 if (modelMatrix !== null)
-                    mat4.mul(texMtx, texMtx, modelMatrix);
+                    mat4.mul(texMtx, viewerInput.camera.viewMatrix, modelMatrix);
+                else
+                    mat4.copy(texMtx, viewerInput.camera.viewMatrix);
+                computeNormalMatrix(texMtx, texMtx);
                 texEnvMtx(postMtx, 0.5, -0.5, 0.5, 0.5);
             } else if (uvAnimation.type === UVAnimationType.MODEL_MAT) {
                 if (modelMatrix !== null)
                     mat4.copy(texMtx, modelMatrix);
-                else
-                    mat4.identity(texMtx);
                 texMtx[12] = 0;
                 texMtx[13] = 0;
                 texMtx[14] = 0;

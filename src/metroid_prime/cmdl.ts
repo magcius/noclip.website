@@ -99,11 +99,6 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
 
     let dataSectionIndex = 0;
 
-    function assetIDHex(h: string): string {
-        return h.split('').map((c) => hexzero(c.charCodeAt(0), 2).toUpperCase()).join('');
-    }
-    window.debug = assetIDHex(assetID) === '71632E8869009695';
-
     const materialSets: MaterialSet[] = [];
     stream.goTo(dataSectionOffsTable[dataSectionIndex++]);
     for (let i = 0; i < materialSetCount; i++) {
