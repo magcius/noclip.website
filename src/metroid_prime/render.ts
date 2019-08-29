@@ -18,7 +18,7 @@ import { computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
 import { LoadedVertexData, LoadedVertexPacket } from '../gx/gx_displaylist';
 import { GXMaterialHacks, Color, lightSetWorldPositionViewMatrix, lightSetWorldDirectionNormalMatrix } from '../gx/gx_material';
 import { LightParameters, WorldLightingOptions, MP1EntityType, AreaAttributes } from './script';
-import { colorMult, colorCopy, colorFromRGBA } from '../Color';
+import { colorMult, colorCopy, colorFromRGBA, White, OpaqueBlack } from '../Color';
 import { texEnvMtx } from '../MathHelpers';
 import { GXShapeHelperGfx, GXRenderHelperGfx, GXMaterialHelperGfx } from '../gx/gx_render';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
@@ -209,13 +209,17 @@ class MaterialGroupInstance {
     }
 
     public fillMaterialParamsData(materialParams: MaterialParams, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4 | null, isSkybox: boolean, actorLights: ActorLights | null): void {
-        colorFromRGBA(materialParams.u_Color[ColorKind.MAT0], 1, 1, 1, 1);
+        colorCopy(materialParams.u_Color[ColorKind.MAT0], White);
 
         if (isSkybox) {
-            colorFromRGBA(materialParams.u_Color[ColorKind.AMB0], 1, 1, 1, 1);
+            colorCopy(materialParams.u_Color[ColorKind.AMB0], White);
         } else {
             if (actorLights !== null)
                 colorCopy(materialParams.u_Color[ColorKind.AMB0], actorLights.ambient);
+            else if (this.material.isWhiteAmb)
+                colorCopy(materialParams.u_Color[ColorKind.AMB0], White);
+            else
+                colorCopy(materialParams.u_Color[ColorKind.AMB0], OpaqueBlack);
 
             const viewMatrix = matrixScratch2;
             mat4.mul(viewMatrix, viewerInput.camera.viewMatrix, posMtx);
@@ -261,10 +265,10 @@ class MaterialGroupInstance {
                 const cosR = Math.cos(theta);
                 const sinR = Math.sin(theta);
                 texMtx[0] =  cosR;
-                texMtx[4] =  sinR;
+                texMtx[4] = -sinR;
                 texMtx[12] = (1.0 - (cosR - sinR)) * 0.5;
 
-                texMtx[1] = -sinR;
+                texMtx[1] =  sinR;
                 texMtx[5] =  cosR;
                 texMtx[13] = (1.0 - (sinR + cosR)) * 0.5;
                 break;
@@ -602,6 +606,8 @@ export class MREARenderer {
             this.actors[i].destroy(device);
         for (let i = 0; i < this.surfaceData.length; i++)
             this.surfaceData[i].destroy(device);
+        if (this.overrideSky !== null)
+            this.overrideSky.destroy(device);
     }
 }
 

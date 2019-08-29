@@ -36,6 +36,7 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
     public modelCache = new ModelCache();
     public areaRenderers: MREARenderer[] = [];
     public defaultSkyRenderer: CMDLRenderer | null = null;
+    private layersPanel: UI.LayerPanel;
 
     constructor(device: GfxDevice, public mlvl: MLVL.MLVL, public textureHolder = new RetroTextureHolder()) {
         this.renderHelper = new GXRenderHelperGfx(device);
@@ -115,9 +116,8 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
     }
 
     public createPanels(): UI.Panel[] {
-        const layersPanel = new UI.LayerPanel();
-        layersPanel.setLayers(this.areaRenderers);
-        return [layersPanel];
+        this.layersPanel = new UI.LayerPanel(this.areaRenderers);
+        return [this.layersPanel];
     }
 
     public serializeSaveState(dst: ArrayBuffer, offs: number): number {
@@ -134,8 +134,8 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
         if (offs + numBytes <= byteLength) {
             const b = new BitMap(this.areaRenderers.length);
             offs = bitMapDeserialize(view, offs, b);
-            console.log(b);
             layerVisibilitySyncFromBitMap(this.areaRenderers, b);
+            this.layersPanel.syncLayerVisibility();
         }
         return offs;
     }

@@ -82,7 +82,8 @@ export type UVAnimation = UVAnimation_Mat | UVAnimation_UVScroll | UVAnimation_R
 export interface Material {
     isOccluder: boolean;
     isTransparent: boolean;
-    flags: MaterialFlags;
+    isUVShort: boolean;
+    isWhiteAmb: boolean;
     groupIndex: number;
     textureIndexes: number[];
     vtxAttrFormat: number;
@@ -100,14 +101,17 @@ export interface MaterialSet {
 }
 
 export const enum MaterialFlags {
-    HAS_KONST      = 0x0008,
-    IS_TRANSPARENT = 0x0010,
-    ALPHA_TEST     = 0x0020,
-    HAS_SAMUS_REFL = 0x0040,
-    DEPTH_WRITE    = 0x0080,
-    OCCLUDER       = 0x0200,
-    HAS_INDTX_REFL = 0x0400,
-    UV_SHORT       = 0x2000,
+    HAS_KONST      = 0x00000008,
+    IS_TRANSPARENT = 0x00000010,
+    ALPHA_TEST     = 0x00000020,
+    HAS_SAMUS_REFL = 0x00000040,
+    DEPTH_WRITE    = 0x00000080,
+    OCCLUDER       = 0x00000200,
+    HAS_INDTX_REFL = 0x00000400,
+    UV_SHORT       = 0x00002000,
+
+    // MP3+ flags
+    WHITE_AMB      = 0x00010000,
 }
 
 function parseMaterialSet_UVAnimations(stream: InputStream, count: number): UVAnimation[] {
@@ -401,10 +405,14 @@ function parseMaterialSet_MP1_MP2(stream: InputStream, resourceSystem: ResourceS
             indTexStages: [],
         };
 
+        const isUVShort = !!(flags & MaterialFlags.UV_SHORT);
+        const isWhiteAmb = false;
+
         materials.push({
             isOccluder,
             isTransparent,
-            flags,
+            isUVShort,
+            isWhiteAmb,
             groupIndex,
             textureIndexes,
             vtxAttrFormat,
@@ -533,20 +541,7 @@ function parseWorldModels_MP3(stream: InputStream, worldModelCount: number, wobj
     return worldModels;
 }
 
-function parseSurfaces(  stream: InputStream,
-                         surfaceCount: number,
-                         sectionIndex: number,
-                         posSectionOffs: number,
-                         nrmSectionOffs: number,
-                         clrSectionOffs: number,
-                         uvfSectionOffs: number,
-                         uvsSectionOffs: number,
-                         sectionOffsTable: number[],
-                         worldModelIndex: number,
-                         materialSet: MaterialSet,
-                         isEchoes: boolean
-                    ): [Surface[], number]
-{
+function parseSurfaces(stream: InputStream, surfaceCount: number, sectionIndex: number, posSectionOffs: number, nrmSectionOffs: number, clrSectionOffs: number, uvfSectionOffs: number, uvsSectionOffs: number, sectionOffsTable: number[], worldModelIndex: number, materialSet: MaterialSet, isEchoes: boolean): [Surface[], number] {
     function fillVatFormat(nrmType: GX.CompType, tex0Type: GX.CompType, compShift: number): GX_VtxAttrFmt[] {
         const vatFormat: GX_VtxAttrFmt[] = [];
         vatFormat[GX.VertexAttribute.POS] = { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.F32, compShift };
@@ -597,7 +592,7 @@ function parseSurfaces(  stream: InputStream,
 
         const vat: GX_VtxAttrFmt[][] = [];
 
-        const useUvsArray = (material.flags & MaterialFlags.UV_SHORT);
+        const useUvsArray = material.isUVShort;
 
         const vtxArrays: GX_Array[] = [];
         vtxArrays[GX.VertexAttribute.POS]  = { buffer: stream.getBuffer(), offs: posSectionOffs };
@@ -650,19 +645,7 @@ function parseSurfaces(  stream: InputStream,
     return [surfaces, sectionIndex];
 }
 
-function parseSurfaces_DKCR(  stream: InputStream,
-                              surfaceCount: number,
-                              sectionIndex: number,
-                              posSectionOffs: number,
-                              nrmSectionOffs: number,
-                              clrSectionOffs: number,
-                              uvfSectionOffs: number,
-                              uvsSectionOffs: number,
-                              sectionOffsTable: number[],
-                              worldModelIndex: number,
-                              materialSet: MaterialSet,
-                            ): [Surface[], number] {
-    const firstSurfaceOffs = sectionOffsTable[sectionIndex];
+function parseSurfaces_DKCR(stream: InputStream, surfaceCount: number, sectionIndex: number, posSectionOffs: number, nrmSectionOffs: number, clrSectionOffs: number, uvfSectionOffs: number, uvsSectionOffs: number, sectionOffsTable: number[], worldModelIndex: number, materialSet: MaterialSet): [Surface[], number] {
     const surfaces: Surface[] = [];
 
     for (let j = 0; j < surfaceCount; j++) {
@@ -742,11 +725,10 @@ export function parseGeometry(stream: InputStream, materialSet: MaterialSet, sec
 
     let surfaces: Surface[];
 
-    if (!isDKCR) {
-        [surfaces, sectionIndex] = parseSurfaces(stream, surfaceCount, sectionIndex, posSectionOffs, nrmSectionOffs, clrSectionOffs, uvfSectionOffs, uvsSectionOffs, sectionOffsTable, worldModelIndex, materialSet, isEchoes);
-    }
-    else {
+    if (isDKCR) {
         [surfaces, sectionIndex] = parseSurfaces_DKCR(stream, surfaceCount, sectionIndex, posSectionOffs, nrmSectionOffs, clrSectionOffs, uvfSectionOffs, uvsSectionOffs, sectionOffsTable, worldModelIndex, materialSet)
+    } else {
+        [surfaces, sectionIndex] = parseSurfaces(stream, surfaceCount, sectionIndex, posSectionOffs, nrmSectionOffs, clrSectionOffs, uvfSectionOffs, uvsSectionOffs, sectionOffsTable, worldModelIndex, materialSet, isEchoes);
     }
 
     const geometry: Geometry = { surfaces };
@@ -767,11 +749,10 @@ export function parseGeometry_MP3_MREA(stream: InputStream, materialSet: Materia
 
     let surfaces: Surface[];
 
-    if (!isDKCR) {
-        [surfaces, gpudSectionIndex] = parseSurfaces(stream, surfaceCount, gpudSectionIndex, posSectionOffs, nrmSectionOffs, clrSectionOffs, uvfSectionOffs, uvsSectionOffs, sectionOffsTable, worldModelIndex, materialSet, true);
-    }
-    else {
+    if (isDKCR) {
         [surfaces, gpudSectionIndex] = parseSurfaces_DKCR(stream, surfaceCount, gpudSectionIndex, posSectionOffs, nrmSectionOffs, clrSectionOffs, uvfSectionOffs, uvsSectionOffs, sectionOffsTable, worldModelIndex, materialSet);
+    } else {
+        [surfaces, gpudSectionIndex] = parseSurfaces(stream, surfaceCount, gpudSectionIndex, posSectionOffs, nrmSectionOffs, clrSectionOffs, uvfSectionOffs, uvsSectionOffs, sectionOffsTable, worldModelIndex, materialSet, true);
     }
 
     const geometry: Geometry = { surfaces };
@@ -809,7 +790,7 @@ export function parseLightLayer(stream: InputStream, version: number): AreaLight
     const lights: AreaLight[] = [];
     const lightCount = stream.readUint32();
 
-    for (let i=0; i<lightCount; i++) {
+    for (let i = 0; i < lightCount; i++) {
         const lightType = stream.readUint32();
         const lightColorR = stream.readFloat32();
         const lightColorG = stream.readFloat32();
@@ -1429,10 +1410,14 @@ function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSyste
             indTexStages: [],
         };
 
+        const isUVShort = false;
+        const isWhiteAmb = !!(materialFlags & MaterialFlags_MP3.WHITE_AMB);
+
         materials.push({
             isOccluder,
             isTransparent,
-            flags: 0,
+            isUVShort,
+            isWhiteAmb,
             groupIndex,
             textureIndexes,
             vtxAttrFormat,
