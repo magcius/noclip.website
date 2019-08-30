@@ -17,7 +17,7 @@ import { GfxRenderInst, GfxRenderInstManager, makeSortKey, GfxRendererLayer, set
 import { computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
 import { LoadedVertexData, LoadedVertexPacket } from '../gx/gx_displaylist';
 import { GXMaterialHacks, Color, lightSetWorldPositionViewMatrix, lightSetWorldDirectionNormalMatrix } from '../gx/gx_material';
-import { LightParameters, WorldLightingOptions, MP1EntityType, AreaAttributes } from './script';
+import { LightParameters, WorldLightingOptions, MP1EntityType, AreaAttributes, Entity } from './script';
 import { colorMult, colorCopy, White, OpaqueBlack } from '../Color';
 import { texEnvMtx, computeNormalMatrix } from '../MathHelpers';
 import { GXShapeHelperGfx, GXRenderHelperGfx, GXMaterialHelperGfx } from '../gx/gx_render';
@@ -267,20 +267,18 @@ class MaterialGroupInstance {
                 const trans = Math.floor(uvAnimation.numFrames * (n % 1.0)) * uvAnimation.step;
                 texMtx[13] = trans;
             } else if (uvAnimation.type === UVAnimationType.ENV_MAPPING_NO_TRANS) {
+                mat4.mul(texMtx, viewerInput.camera.viewMatrix, posMtx);
                 if (modelMatrix !== null)
-                    mat4.mul(texMtx, viewerInput.camera.viewMatrix, modelMatrix);
-                else
-                    mat4.copy(texMtx, viewerInput.camera.viewMatrix);
+                    mat4.mul(texMtx, texMtx, modelMatrix);
                 computeNormalMatrix(texMtx, texMtx);
                 texMtx[12] = 0;
                 texMtx[13] = 0;
                 texMtx[14] = 0;
                 texEnvMtx(postMtx, 0.5, -0.5, 0.5, 0.5);
             } else if (uvAnimation.type === UVAnimationType.ENV_MAPPING) {
+                mat4.mul(texMtx, viewerInput.camera.viewMatrix, posMtx);
                 if (modelMatrix !== null)
-                    mat4.mul(texMtx, viewerInput.camera.viewMatrix, modelMatrix);
-                else
-                    mat4.copy(texMtx, viewerInput.camera.viewMatrix);
+                    mat4.mul(texMtx, texMtx, modelMatrix);
                 computeNormalMatrix(texMtx, texMtx);
                 texEnvMtx(postMtx, 0.5, -0.5, 0.5, 0.5);
             } else if (uvAnimation.type === UVAnimationType.MODEL_MAT) {
@@ -409,9 +407,9 @@ export class ModelCache {
             v.destroy(device);
     }
 
-    public getCMDLData(device: GfxDevice, cache: GfxRenderCache, model: CMDL): CMDLData {
+    public getCMDLData(device: GfxDevice, textureHolder: RetroTextureHolder, cache: GfxRenderCache, model: CMDL): CMDLData {
         if (!this.cmdlData.has(model.assetID))
-            this.cmdlData.set(model.assetID, new CMDLData(device, cache, model));
+            this.cmdlData.set(model.assetID, new CMDLData(device, textureHolder, cache, model));
         return this.cmdlData.get(model.assetID);
     }
 }
@@ -423,7 +421,7 @@ export class MREARenderer {
     private surfaceData: SurfaceData[] = [];
     private surfaceInstances: SurfaceInstance[] = [];
     private cmdlData: CMDLData[] = [];
-    private actors: CMDLRenderer[] = [];
+    private actors: Actor[] = [];
     public overrideSky: CMDLRenderer = null;
     public needSky: boolean = false;
     public visible: boolean = true;
@@ -530,10 +528,10 @@ export class MREARenderer {
                     aabb.transform(model.bbox, ent.modelMatrix);
 
                     const actorLights = new ActorLights(aabb, ent.lightParams, this.mrea);
-                    const cmdlData = modelCache.getCMDLData(device, cache, model);
+                    const cmdlData = modelCache.getCMDLData(device, this.textureHolder, cache, model);
                     const cmdlRenderer = new CMDLRenderer(device, this.textureHolder, actorLights, ent.name, ent.modelMatrix, cmdlData);
-                    cmdlRenderer.visible = ent.active;
-                    this.actors.push(cmdlRenderer);
+                    const actor = new Actor(ent, cmdlRenderer);
+                    this.actors.push(actor);
                 }
 
                 if (ent.type === MP1EntityType.AreaAttributes || ent.type === "REAA") {
@@ -546,7 +544,7 @@ export class MREARenderer {
                         if (areaAttributes.overrideSky !== null) {
                             const modelMatrix = mat4.create();
 
-                            const skyData = modelCache.getCMDLData(device, cache, areaAttributes.overrideSky);
+                            const skyData = modelCache.getCMDLData(device, this.textureHolder, cache, areaAttributes.overrideSky);
                             this.overrideSky = new CMDLRenderer(device, this.textureHolder, null, `Sky_AreaAttributes_Layer${i}`, modelMatrix, skyData);
                             this.overrideSky.isSkybox = true;
                         }
@@ -597,7 +595,10 @@ export class CMDLData {
     private bufferCoalescer: GfxBufferCoalescerCombo;
     public surfaceData: SurfaceData[] = [];
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public cmdl: CMDL) {
+    constructor(device: GfxDevice, textureHolder: RetroTextureHolder, cache: GfxRenderCache, public cmdl: CMDL) {
+        const materialSet = this.cmdl.materialSets[0];
+        textureHolder.addMaterialSetTextures(device, materialSet);
+
         const vertexDatas: ArrayBufferSlice[][] = [];
         const indexDatas: ArrayBufferSlice[] = [];
 
@@ -633,8 +634,6 @@ export class CMDLRenderer {
 
     constructor(device: GfxDevice, public textureHolder: RetroTextureHolder, public actorLights: ActorLights, public name: string, public modelMatrix: mat4, public cmdlData: CMDLData) {
         const materialSet = this.cmdlData.cmdl.materialSets[0];
-
-        this.textureHolder.addMaterialSetTextures(device, materialSet);
 
         // First, create our group commands. These will store UBO buffer data which is shared between
         // all groups using that material.
@@ -685,5 +684,25 @@ export class CMDLRenderer {
 
     public destroy(device: GfxDevice): void {
         this.materialGroupInstances.forEach((cmd) => cmd.destroy(device));
+    }
+}
+
+class Actor {
+    constructor(private entity: Entity, public cmdlRenderer: CMDLRenderer) {
+    }
+
+    public prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!this.entity.active)
+            return;
+
+        if (this.entity.autoSpin) {
+            mat4.rotateZ(this.cmdlRenderer.modelMatrix, this.cmdlRenderer.modelMatrix, 0.2);
+        }
+
+        this.cmdlRenderer.prepareToRender(device, renderHelper, viewerInput);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.cmdlRenderer.destroy(device);
     }
 }

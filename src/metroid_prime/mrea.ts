@@ -36,13 +36,13 @@ enum AreaVersion {
 
 export const enum UVAnimationType {
     ENV_MAPPING_NO_TRANS = 0x00,
-    ENV_MAPPING     = 0x01,
-    UV_SCROLL   = 0x02,
-    ROTATION    = 0x03,
-    FLIPBOOK_U  = 0x04,
-    FLIPBOOK_V  = 0x05,
-    MODEL_MAT   = 0x06,
-    CYLINDER    = 0x07,
+    ENV_MAPPING          = 0x01,
+    UV_SCROLL            = 0x02,
+    ROTATION             = 0x03,
+    FLIPBOOK_U           = 0x04,
+    FLIPBOOK_V           = 0x05,
+    MODEL_MAT            = 0x06,
+    CYLINDER             = 0x07,
 }
 
 interface UVAnimation_Mat {

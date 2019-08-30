@@ -104,6 +104,7 @@ export class Entity {
     public model: CMDL | null = null;
     public char: CHAR | null = null;
     public lightParams: LightParameters = new LightParameters();
+    public autoSpin: boolean = false;
 
     constructor(public type: MP1EntityType | string, public entityId: number) {
     }
@@ -1039,12 +1040,12 @@ export function parseProperty_MP2(stream: InputStream, entity: Entity, resourceS
         case 0x255A4580: // EditorProperties
         case 0x7E397FED: // ActorInformation
         case 0xB3774750: // PatternedAITypedef
+        case 0xD545F36B: // PickupData
         {
             const numSubProperties = stream.readUint16();
 
-            for (let i = 0; i < numSubProperties; i++) {
+            for (let i = 0; i < numSubProperties; i++)
                 parseProperty_MP2(stream, entity, resourceSystem);
-            }
 
             break;
         }
@@ -1116,6 +1117,11 @@ export function parseProperty_MP2(stream: InputStream, entity: Entity, resourceS
             }
             break;
         }
+
+        // PickupData::AutoSpin
+        case 0x961C0D17:
+            entity.autoSpin = stream.readBool();
+            break;
 
         default:
             entity.readProperty_MP2(stream, resourceSystem, propertyID);
