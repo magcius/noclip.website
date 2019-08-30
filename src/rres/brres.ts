@@ -3054,7 +3054,7 @@ function parseSCN0(buffer: ArrayBufferSlice): SCN0 {
 
     assert(readString(buffer, 0x00, 0x04) === 'SCN0');
     const version = view.getUint32(0x08);
-    const supportedVersions = [0x05];
+    const supportedVersions = [0x04, 0x05];
     assert(supportedVersions.includes(version));
 
     const scnTopLevelResDicOffs = view.getUint32(0x10);
@@ -3063,7 +3063,8 @@ function parseSCN0(buffer: ArrayBufferSlice): SCN0 {
     let offs = 0x28;
 
     // user data
-    offs += 0x04;
+    if (version >= 0x05)
+        offs += 0x04;
 
     const nameOffs = view.getUint32(offs + 0x00);
     const name = readString(buffer, nameOffs);
