@@ -173,7 +173,7 @@ function parseMaterialSet_MP1_MP2(stream: InputStream, resourceSystem: ResourceS
     const textureRemapTable: number[] = [];
     for (let i = 0; i < textureCount; i++) {
         const materialTXTRID = stream.readAssetID();
-        const txtr: TXTR = resourceSystem.loadAssetByID(materialTXTRID, 'TXTR');
+        const txtr: TXTR = resourceSystem.loadAssetByID<TXTR>(materialTXTRID, 'TXTR');
         const txtrIndex = textures.indexOf(txtr);
         if (txtrIndex >= 0) {
             textureRemapTable.push(txtrIndex);
@@ -959,7 +959,6 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem): MREA
     assert(stream.readUint32() === 0xDEADBEEF);
     const version = stream.readUint32();
     assert(version === AreaVersion.MP1 || version === AreaVersion.MP2 || version === AreaVersion.MP3 || version === AreaVersion.DKCR);
-    stream.assetIdLength = (version >= AreaVersion.MP3 ? 8 : 4);
 
     stream.skip(4*12); // Transform matrix
 
@@ -1295,7 +1294,7 @@ function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSyste
                 }
                 assert(stream.tell() === passEnd);
 
-                const txtr: TXTR = resourceSystem.loadAssetByID(materialTXTRID, 'TXTR');
+                const txtr: TXTR = resourceSystem.loadAssetByID<TXTR>(materialTXTRID, 'TXTR');
                 let txtrIndex = textures.indexOf(txtr);
                 if (txtrIndex < 0) {
                     txtrIndex = textures.push(txtr) - 1;
@@ -1422,9 +1421,6 @@ function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSyste
             ropInfo,
             indTexStages: [],
         };
-
-        if (window.debug)
-            console.log(gxMaterial, tevStages, passTypes);
 
         const isUVShort = false;
         const isWhiteAmb = !!(materialFlags & MaterialFlags_MP3.WHITE_AMB);

@@ -29,17 +29,6 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
     assert(stream.readUint32() == 0xDEAFBABE);
     const version: WorldVersion = stream.readUint32();
 
-    // Version check
-    if (version == WorldVersion.MP1 || version == WorldVersion.MP2) {
-        stream.assetIdLength = 4;
-    }
-    else if (version == WorldVersion.MP3 || version == WorldVersion.DKCR) {
-        stream.assetIdLength = 8;
-    }
-    else {
-        throw new Error(`Unsupported MLVL version: ${version}`);
-    }
-
     const worldNameID = stream.readAssetID();
 
     if (version == WorldVersion.MP2) {
@@ -80,7 +69,7 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
     const areaTable: Area[] = [];
     for (let i = 0; i < areaCount; i++) {
         const areaSTRGID = stream.readAssetID();
-        const areaSTRG: STRG.STRG = resourceSystem.loadAssetByID(areaSTRGID, 'STRG');
+        const areaSTRG: STRG.STRG = resourceSystem.loadAssetByID<STRG.STRG>(areaSTRGID, 'STRG');
         let areaName = (areaSTRG !== null ? areaSTRG.strings[0] : "");
 
         stream.skip(4*12); // Transform matrix

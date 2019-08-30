@@ -11,6 +11,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { RetroSceneRenderer } from './scenes';
 import { SceneContext } from '../SceneBase';
+import { colorFromRGBA } from '../Color';
 
 class DKCRSceneDesc implements Viewer.SceneDesc {
     public id: string;
@@ -25,12 +26,13 @@ class DKCRSceneDesc implements Viewer.SceneDesc {
             const resourceSystem = new ResourceSystem([levelPak], null);
             for (const mlvlEntry of levelPak.namedResourceTable.values()) {
                 if (this.worldName.length !== 0 && this.worldName != mlvlEntry.name) continue;
-                const mlvl: MLVL.MLVL = resourceSystem.loadAssetByID(mlvlEntry.fileID, 'MLVL');
+                const mlvl: MLVL.MLVL = resourceSystem.loadAssetByID<MLVL.MLVL>(mlvlEntry.fileID, 'MLVL');
                 assert(mlvl.areaTable.length === 1);
                 const area: MLVL.Area = mlvl.areaTable[0];
-                const mrea: MREA.MREA = resourceSystem.loadAssetByID(area.areaMREAID, 'MREA');
+                const mrea: MREA.MREA = resourceSystem.loadAssetByID<MREA.MREA>(area.areaMREAID, 'MREA');
                 const textureHolder = new RetroTextureHolder();
                 const renderer = new RetroSceneRenderer(device, mlvl, textureHolder);
+                colorFromRGBA(renderer.worldAmbientColor, 0.5, 0.5, 0.5, 1.0);
                 const cache = renderer.renderHelper.getCache();
                 const mreaRenderer = new MREARenderer(device, renderer.modelCache, cache, renderer.textureHolder, this.name, mrea);
                 renderer.areaRenderers.push(mreaRenderer);

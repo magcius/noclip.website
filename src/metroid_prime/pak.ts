@@ -27,7 +27,6 @@ export interface PAK {
 }
 
 function parse_MP1(stream: InputStream): PAK {
-    stream.assetIdLength = 4;
     assert(stream.readUint32() === 0);
 
     // Named resource table.
@@ -91,7 +90,6 @@ function parse_MP1(stream: InputStream): PAK {
 }
 
 function parse_MP3(stream: InputStream): PAK {
-    stream.assetIdLength = 8;
     assert(stream.readUint32() === 64);
 
     const md5Hash = stream.readString(0x10, false);
@@ -174,16 +172,20 @@ function parse_MP3(stream: InputStream): PAK {
 }
 
 export function parse(buffer: ArrayBufferSlice): PAK {
-    const stream = new InputStream(buffer);
+    const stream = new InputStream(buffer, 0);
     const magic = stream.readUint32();
 
     // Metroid Prime 1/2.
-    if (magic === 0x00030005)
+    if (magic === 0x00030005) {
+        stream.assetIDLength = 4;
         return parse_MP1(stream);
+    }
 
     // Metroid Prime 3/Donkey Kong Country Returns.
-    if (magic === 0x00000002)
+    if (magic === 0x00000002) {
+        stream.assetIDLength = 8;
         return parse_MP3(stream);
+    }
 
     throw "whoops";
 }

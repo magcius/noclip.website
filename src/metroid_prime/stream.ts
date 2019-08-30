@@ -5,9 +5,8 @@ export class InputStream {
     private buffer: ArrayBufferSlice = null;
     private view: DataView = null;
     private offs: number = 0;
-    public assetIdLength: number = 0;
 
-    constructor(buffer: ArrayBufferSlice) {
+    constructor(buffer: ArrayBufferSlice, public assetIDLength: number) {
         this.setBuffer(buffer);
     }
 
@@ -33,22 +32,19 @@ export class InputStream {
     public readUint32(): number { const v = this.view.getUint32(this.offs); this.offs += 4; return v; }
     public readFloat32(): number { const v = this.view.getFloat32(this.offs); this.offs += 4; return v; }
     
-    public readString(length: number = -1, nullTerminated: boolean = true): string
-    {
+    public readString(length: number = -1, nullTerminated: boolean = true): string {
         const v = readString(this.buffer, this.offs, length, nullTerminated);
         this.offs += v.length;
         if (nullTerminated) this.offs++;
         return v;
     }
 
-    public readFourCC(): string
-    {
+    public readFourCC(): string {
         return this.readString(4, false);
     }
 
-    public readAssetID(): string
-    {
-        assert(this.assetIdLength !== 0, "Asset ID length has not been set");
-        return this.readString(this.assetIdLength, false);
+    public readAssetID(): string {
+        assert(this.assetIDLength !== 0, "Asset ID length has not been set");
+        return this.readString(this.assetIDLength, false);
     }
 }

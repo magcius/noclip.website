@@ -55,8 +55,6 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
         assert(version === ModelVersion.MP1 || version === ModelVersion.MP2 || version === ModelVersion.MP3, `Unsupported CMDL version: ${version}`);
     }
 
-    stream.assetIdLength = (version >= ModelVersion.MP3 ? 8 : 4);
-
     const flags: Flags = stream.readUint32();
     const minX = stream.readFloat32();
     const minY = stream.readFloat32();

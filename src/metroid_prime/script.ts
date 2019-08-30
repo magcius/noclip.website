@@ -2,11 +2,12 @@
 // Implements support for Retro Studios actor data
 
 import { ResourceSystem } from "./resource";
-import { readString, assert, hexzero } from "../util";
+import { readString, assert, hexdump } from "../util";
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { mat4, vec3 } from 'gl-matrix';
 import { CMDL } from './cmdl';
 import { ANCS } from './ancs';
+import { CHAR } from "./char";
 import { InputStream } from './stream';
 import { Color } from "../gx/gx_material";
 import { colorFromRGBA } from "../Color";
@@ -101,6 +102,7 @@ export class Entity {
     public modelMatrix: mat4 = mat4.create();
     public animParams: AnimationParameters | null = null;
     public model: CMDL | null = null;
+    public char: CHAR | null = null;
     public lightParams: LightParameters = new LightParameters();
 
     constructor(public type: MP1EntityType | string, public entityId: number) {
@@ -123,6 +125,10 @@ export class Entity {
             }
         }
 
+        if (this.char !== null && this.char.cmdl !== null) {
+            return this.char.cmdl;
+        }
+
         return this.model;
     }
 }
@@ -138,7 +144,7 @@ export class AreaAttributes extends Entity {
                 break;
 
             case 0xD208C9FA:
-                this.overrideSky = resourceSystem.loadAssetByID( stream.readAssetID(), 'CMDL' );
+                this.overrideSky = resourceSystem.loadAssetByID<CMDL>(stream.readAssetID(), 'CMDL');
                 break;
         }
     }
@@ -149,6 +155,7 @@ function createEntity_MP2(type: string, entityID: number): Entity {
         // These are skipped because they look bad
         case "FISH": // FishCloud
         case "FSWM": // FlyerSwarm
+        case "GUCH": // GuiCharacter
             return null;
 
         case "REAA":
@@ -204,16 +211,16 @@ function readTransform(buffer: ArrayBufferSlice, offs: number, ent: Entity, hasP
     return offs - originalOffs;
 }
 
-function readAssetId(buffer: ArrayBufferSlice, offs: number, idSize: number, type: string, resourceSystem: ResourceSystem): any {
+function readAssetId<T>(buffer: ArrayBufferSlice, offs: number, idSize: number, type: string, resourceSystem: ResourceSystem): T {
     const assetId = readString(buffer, offs, idSize, false);
-    return resourceSystem.loadAssetByID(assetId, type);
+    return resourceSystem.loadAssetByID<T>(assetId, type);
 }
 
 function readAnimationParameters(buffer: ArrayBufferSlice, offs: number, ent: Entity, resourceSystem: ResourceSystem): number {
     const view = buffer.createDataView();
     ent.animParams = new AnimationParameters();
     const ancsID = readString(buffer, offs, 4, false);
-    ent.animParams.ancs = resourceSystem.loadAssetByID(ancsID, 'ANCS');
+    ent.animParams.ancs = resourceSystem.loadAssetByID<ANCS>(ancsID, 'ANCS');
     ent.animParams.charID = view.getUint32(offs + 0x04);
     ent.animParams.animID = view.getUint32(offs + 0x08);
     return 0x0C;
@@ -999,6 +1006,28 @@ export function parseScriptLayer_MP1(buffer: ArrayBufferSlice, layerOffset: numb
     return { entities };
 }
 
+function readCharacterAnimationSet(buffer: ArrayBufferSlice, offs: number, ent: Entity, resourceSystem: ResourceSystem): void {
+    const stream = new InputStream(buffer.slice(offs), 8);
+    const flags = stream.readUint8();
+
+    if (!!(flags & 0x80)) {
+        // Empty
+        return;
+    }
+
+    const charID = stream.readAssetID();
+    ent.char = resourceSystem.loadAssetByID<CHAR>(charID, 'CHAR');
+
+    let animIndex = -1;
+    if (!!(flags & 0x20))
+        animIndex = stream.readUint32();
+
+    if (!!(flags & 0x40)) {
+        const unk2 = stream.readUint32();
+        const unk3 = stream.readUint32();
+    }
+}
+
 export function parseProperty_MP2(stream: InputStream, entity: Entity, resourceSystem: ResourceSystem) {
     const propertyID = stream.readUint32();
     const propertySize = stream.readUint16();
@@ -1035,12 +1064,18 @@ export function parseProperty_MP2(stream: InputStream, entity: Entity, resourceS
 
         // Models
         case 0xC27FFA8F: // Model
-            entity.model = readAssetId(stream.getBuffer(), stream.tell(), stream.assetIdLength, 'CMDL', resourceSystem);
+            entity.model = readAssetId(stream.getBuffer(), stream.tell(), stream.assetIDLength, 'CMDL', resourceSystem);
             break;
 
         // AnimationParameters
         case 0xE25FB08C: // AnimationInformation
             readAnimationParameters(stream.getBuffer(), stream.tell(), entity, resourceSystem);
+            break;
+
+        // CharacterAnimationSet
+        case 0xA3D63F44: // Animation
+        case 0xA244C9D8: // CharacterAnimationInformation
+            readCharacterAnimationSet(stream.getBuffer(), stream.tell(), entity, resourceSystem);
             break;
 
         // LightParameters
@@ -1064,7 +1099,7 @@ export function parseProperty_MP2(stream: InputStream, entity: Entity, resourceS
                         colorFromRGBA(entity.lightParams.ambient, r, g, b, a);
                         break;
                     }
-                    
+
                     case 0x6B5E7509:
                         entity.lightParams.options = stream.readUint32();
                         break;

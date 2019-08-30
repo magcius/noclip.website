@@ -196,14 +196,9 @@ class MaterialGroupInstance {
         renderInst.sortKey = makeSortKey(layer, this.materialHelper.programKey);
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4 | null, isSkybox: boolean, actorLights: ActorLights | null): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4 | null, isSkybox: boolean, actorLights: ActorLights | null, worldAmbientColor: Color): void {
         this.materialParamsBlockOffs = this.materialHelper.allocateMaterialParamsBlock(renderInstManager);
 
-        this.fillMaterialParamsData(materialParams, viewerInput, modelMatrix, isSkybox, actorLights);
-        this.materialHelper.fillMaterialParamsData(renderInstManager, this.materialParamsBlockOffs, materialParams);
-    }
-
-    public fillMaterialParamsData(materialParams: MaterialParams, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4 | null, isSkybox: boolean, actorLights: ActorLights | null): void {
         colorCopy(materialParams.u_Color[ColorKind.MAT0], White);
 
         if (isSkybox) {
@@ -214,7 +209,7 @@ class MaterialGroupInstance {
             else if (this.material.isWhiteAmb)
                 colorCopy(materialParams.u_Color[ColorKind.AMB0], White);
             else
-                colorCopy(materialParams.u_Color[ColorKind.AMB0], OpaqueBlack);
+                colorCopy(materialParams.u_Color[ColorKind.AMB0], worldAmbientColor);
 
             const viewMatrix = matrixScratch2;
             mat4.mul(viewMatrix, viewerInput.camera.viewMatrix, posMtx);
@@ -309,6 +304,8 @@ class MaterialGroupInstance {
                 texEnvMtx(postMtx, a, -a, xy, z);
             }
         }
+
+        this.materialHelper.fillMaterialParamsData(renderInstManager, this.materialParamsBlockOffs, materialParams);
     }
 }
 
@@ -528,14 +525,15 @@ export class MREARenderer {
                 const ent = scriptLayer.entities[j];
                 const model = ent.getRenderModel();
 
-                if (ent.active && model !== null) {
+                if (model !== null) {
                     const aabb = new AABB();
                     aabb.transform(model.bbox, ent.modelMatrix);
 
                     const actorLights = new ActorLights(aabb, ent.lightParams, this.mrea);
                     const cmdlData = modelCache.getCMDLData(device, cache, model);
-                    this.cmdlData.push(cmdlData);
-                    this.actors.push(new CMDLRenderer(device, this.textureHolder, actorLights, ent.name, ent.modelMatrix, cmdlData));
+                    const cmdlRenderer = new CMDLRenderer(device, this.textureHolder, actorLights, ent.name, ent.modelMatrix, cmdlData);
+                    cmdlRenderer.visible = ent.active;
+                    this.actors.push(cmdlRenderer);
                 }
 
                 if (ent.type === MP1EntityType.AreaAttributes || ent.type === "REAA") {
@@ -562,7 +560,7 @@ export class MREARenderer {
         this.visible = visible;
     }
 
-    public prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput, worldAmbientColor: Color): void {
         if (!this.visible)
             return;
 
@@ -571,7 +569,7 @@ export class MREARenderer {
 
         // Render the MREA's native surfaces.
         for (let i = 0; i < this.materialGroupInstances.length; i++)
-            this.materialGroupInstances[i].prepareToRender(renderHelper.renderInstManager, viewerInput, null, false, null);
+            this.materialGroupInstances[i].prepareToRender(renderHelper.renderInstManager, viewerInput, null, false, null, worldAmbientColor);
         for (let i = 0; i < this.surfaceInstances.length; i++)
             this.surfaceInstances[i].prepareToRender(device, renderHelper, viewerInput, false);
 
@@ -678,7 +676,7 @@ export class CMDLRenderer {
         templateRenderInst.filterKey = this.isSkybox ? RetroPass.SKYBOX : RetroPass.MAIN;
 
         for (let i = 0; i < this.materialGroupInstances.length; i++)
-            this.materialGroupInstances[i].prepareToRender(renderHelper.renderInstManager, viewerInput, this.modelMatrix, this.isSkybox, this.actorLights);
+            this.materialGroupInstances[i].prepareToRender(renderHelper.renderInstManager, viewerInput, this.modelMatrix, this.isSkybox, this.actorLights, OpaqueBlack);
         for (let i = 0; i < this.surfaceInstances.length; i++)
             this.surfaceInstances[i].prepareToRender(device, renderHelper, viewerInput, this.isSkybox);
 
