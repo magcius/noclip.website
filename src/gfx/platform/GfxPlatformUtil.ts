@@ -87,11 +87,12 @@ function gfxAttachmentsStateEquals(a: GfxAttachmentState, b: GfxAttachmentState)
 }
 
 function gfxMegaStateDescriptorEquals(a: GfxMegaStateDescriptor, b: GfxMegaStateDescriptor): boolean {
-    if (a.attachmentsState !== undefined && b.attachmentsState !== undefined)
+    if (a.attachmentsState !== undefined && b.attachmentsState !== undefined) {
         if (!arrayEqual(a.attachmentsState, b.attachmentsState, gfxAttachmentsStateEquals))
             return false;
-    else if (a.attachmentsState !== undefined || b.attachmentsState !== undefined)
+    } else if (a.attachmentsState !== undefined || b.attachmentsState !== undefined) {
         return false;
+    }
 
     return (
         a.blendDstFactor === b.blendDstFactor &&
