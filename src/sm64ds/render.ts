@@ -573,7 +573,7 @@ export interface CRG1Level {
     Background: number;
     TextureAnimations: CRG1TextureAnimation[];
     Objects: CRG1Object[];
-    SetupNames: string[]
+    SetupNames: string[];
 }
 
 export interface Sm64DSCRG1 {

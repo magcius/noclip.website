@@ -590,6 +590,7 @@ class SM64DSRenderer implements Viewer.SceneGfx {
         };
         scenarioSelect.selectItem(0);
 
+        scenarioPanel.setVisible(scenarioNames.length > 0);
         scenarioPanel.contents.appendChild(scenarioSelect.elem);
 
         return [scenarioPanel, renderHacksPanel];
