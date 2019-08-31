@@ -95,12 +95,16 @@ function gfxMegaStateDescriptorEquals(a: GfxMegaStateDescriptor, b: GfxMegaState
     }
 
     return (
-        a.blendDstFactor === b.blendDstFactor &&
-        a.blendSrcFactor === b.blendSrcFactor &&
+        a.colorWrite === b.colorWrite &&
         a.blendMode === b.blendMode &&
-        a.cullMode === b.cullMode &&
+        a.blendSrcFactor === b.blendSrcFactor &&
+        a.blendDstFactor === b.blendDstFactor &&
         a.depthCompare === b.depthCompare &&
         a.depthWrite === b.depthWrite &&
+        a.stencilCompare === b.stencilCompare &&
+        a.stencilWrite === b.stencilWrite &&
+        a.stencilPassOp === b.stencilPassOp &&
+        a.cullMode === b.cullMode &&
         a.frontFace === b.frontFace &&
         a.polygonOffset === b.polygonOffset
     );
