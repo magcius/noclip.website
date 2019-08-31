@@ -8,8 +8,8 @@ import * as Viewer from '../viewer';
 
 import { DeviceProgram } from '../Program';
 import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
-import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
-import { GfxFormat, GfxBufferUsage, GfxBlendMode, GfxBlendFactor, GfxDevice, GfxBuffer, GfxVertexAttributeFrequency, GfxTexFilterMode, GfxMipFilterMode, GfxInputState, GfxInputLayout, GfxVertexAttributeDescriptor, GfxSampler, makeTextureDescriptor2D, GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
+import { TextureMapping } from '../TextureHolder';
+import { GfxFormat, GfxBufferUsage, GfxBlendMode, GfxBlendFactor, GfxDevice, GfxBuffer, GfxVertexAttributeFrequency, GfxTexFilterMode, GfxMipFilterMode, GfxInputState, GfxInputLayout, GfxVertexAttributeDescriptor, GfxSampler, makeTextureDescriptor2D, GfxMegaStateDescriptor, GfxTexture } from '../gfx/platform/GfxPlatform';
 import { fillMatrix4x3, fillVec4, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxRenderInstManager, GfxRenderInst, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
@@ -145,19 +145,6 @@ function textureToCanvas(bmdTex: BMD.Texture): Viewer.Texture {
     return { name: bmdTex.name, surfaces, extraInfo };
 }
 
-export class NITROTextureHolder extends TextureHolder<BMD.Texture> {
-    public loadTexture(device: GfxDevice, texture: BMD.Texture): LoadedTexture {
-        const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA, texture.width, texture.height, 1));
-        device.setResourceName(gfxTexture, texture.name);
-        const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadTextureData(gfxTexture, 0, [texture.pixels]);
-        device.submitPass(hostAccessPass);
-
-        const viewerTexture: Viewer.Texture = textureToCanvas(texture);
-        return { gfxTexture, viewerTexture };
-    }
-}
-
 export class VertexData {
     public vertexBuffer: GfxBuffer;
     public indexBuffer: GfxBuffer;
@@ -230,18 +217,63 @@ class BatchData {
     }
 }
 
-export class BMDData {
-    public batchData: BatchData[] = [];
+class MaterialData {
+    private gfxTexture: GfxTexture | null = null;
+    private gfxSampler: GfxSampler | null = null;
 
-    constructor(device: GfxDevice, public bmd: BMD.BMD) {
-        for (let i = 0; i < this.bmd.joints.length; i++) {
-            const rootJoint = this.bmd.joints[i];
-            for (let j = 0; j < rootJoint.batches.length; j++)
-                this.batchData.push(new BatchData(device, rootJoint, rootJoint.batches[j]));
+    public textureMapping = nArray(1, () => new TextureMapping());
+
+    constructor(device: GfxDevice, public material: BMD.Material) {
+        const texture = this.material.texture;
+
+        if (texture !== null) {
+            this.gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA, texture.width, texture.height, 1));
+            device.setResourceName(this.gfxTexture, texture.name);
+            const hostAccessPass = device.createHostAccessPass();
+            hostAccessPass.uploadTextureData(this.gfxTexture, 0, [texture.pixels]);
+            device.submitPass(hostAccessPass);
+
+            this.gfxSampler = device.createSampler({
+                minFilter: GfxTexFilterMode.POINT,
+                magFilter: GfxTexFilterMode.POINT,
+                mipFilter: GfxMipFilterMode.NO_MIP,
+                wrapS: parseTexImageParamWrapModeS(this.material.texParams),
+                wrapT: parseTexImageParamWrapModeT(this.material.texParams),
+                minLOD: 0,
+                maxLOD: 100,
+            });
+
+            this.textureMapping[0].gfxTexture = this.gfxTexture;
+            this.textureMapping[0].gfxSampler = this.gfxSampler;
         }
     }
 
     public destroy(device: GfxDevice): void {
+        if (this.gfxTexture !== null)
+            device.destroyTexture(this.gfxTexture);
+        if (this.gfxSampler !== null)
+            device.destroySampler(this.gfxSampler);
+    }
+}
+
+export class BMDData {
+    public materialData: MaterialData[] = [];
+    public batchData: BatchData[] = [];
+
+    constructor(device: GfxDevice, public bmd: BMD.BMD) {
+        for (let i = 0; i < this.bmd.materials.length; i++)
+            this.materialData.push(new MaterialData(device, this.bmd.materials[i]));
+
+        for (let i = 0; i < this.bmd.joints.length; i++) {
+            const joint = this.bmd.joints[i];
+            for (let j = 0; j < joint.batches.length; j++)
+                this.batchData.push(new BatchData(device, joint, joint.batches[j]));
+        }
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.materialData.length; i++)
+            this.materialData[i].destroy(device);
         for (let i = 0; i < this.batchData.length; i++)
             this.batchData[i].destroy(device);
     }
@@ -255,30 +287,16 @@ const scratchMat2d = mat2d.create();
 const scratchMatrix = mat4.create();
 const scratchVec2 = vec2.create();
 class MaterialInstance {
-    private gfxSampler: GfxSampler | null = null;
     private crg1TextureAnimation: CRG1TextureAnimation | null = null;
     private texCoordMode: BMD.TexCoordMode;
-    private textureMapping = nArray(1, () => new TextureMapping());
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
     private program: NITRO_Program;
 
     private texturesEnabled: boolean = true;
     private vertexColorsEnabled: boolean = true;
 
-    constructor(device: GfxDevice, textureHolder: NITROTextureHolder, crg1Level: CRG1Level | null, public material: BMD.Material) {
-        if (this.material.texture !== null) {
-            textureHolder.fillTextureMapping(this.textureMapping[0], this.material.texture.name);
-            this.gfxSampler = device.createSampler({
-                minFilter: GfxTexFilterMode.POINT,
-                magFilter: GfxTexFilterMode.POINT,
-                mipFilter: GfxMipFilterMode.NO_MIP,
-                wrapS: parseTexImageParamWrapModeS(this.material.texParams),
-                wrapT: parseTexImageParamWrapModeT(this.material.texParams),
-                minLOD: 0,
-                maxLOD: 100,
-            });
-            this.textureMapping[0].gfxSampler = this.gfxSampler;
-        }
+    constructor(device: GfxDevice, crg1Level: CRG1Level | null, public materialData: MaterialData) {
+        const material = this.materialData.material;
 
         // Find any possible material animations.
         if (crg1Level !== null) {
@@ -302,7 +320,8 @@ class MaterialInstance {
 
     private createProgram(): void {
         const program = new NITRO_Program();
-        if (this.texturesEnabled && this.material.texture !== null)
+        const material = this.materialData.material;
+        if (this.texturesEnabled && material.texture !== null)
             program.defines.set('USE_TEXTURE', '1');
         if (this.vertexColorsEnabled)
             program.defines.set('USE_VERTEX_COLOR', '1');
@@ -324,16 +343,18 @@ class MaterialInstance {
         template.setGfxProgram(gfxProgram);
         template.setMegaStateFlags(this.megaStateFlags);
 
-        const layer = this.material.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
+        const material = this.materialData.material;
+
+        const layer = material.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         template.sortKey = makeSortKey(layer);
 
-        if (this.material.texture !== null) {
+        if (material.texture !== null) {
             if (this.texCoordMode === BMD.TexCoordMode.NORMAL) {
                 mat4.copy(scratchMatrix, normalMatrix);
 
                 // Game seems to use this to offset the center of the reflection.
-                scratchMatrix[12] += this.material.texCoordMat[4];
-                scratchMatrix[13] += -this.material.texCoordMat[5];
+                scratchMatrix[12] += material.texCoordMat[4];
+                scratchMatrix[13] += -material.texCoordMat[5];
 
                 // We shouldn't have any texture animations on normal-mapped textures.
                 assert(this.crg1TextureAnimation === null);
@@ -348,9 +369,9 @@ class MaterialInstance {
                     mat2d.scale(scratchMat2d, scratchMat2d, vec2.set(scratchVec2, scale, scale));
                     mat2d.rotate(scratchMat2d, scratchMat2d, rotation / 180 * Math.PI);
                     mat2d.translate(scratchMat2d, scratchMat2d, vec2.set(scratchVec2, -x, y));
-                    mat2d.mul(scratchMat2d, scratchMat2d, this.material.texCoordMat);
+                    mat2d.mul(scratchMat2d, scratchMat2d, material.texCoordMat);
                 } else {
-                    mat2d.copy(scratchMat2d, this.material.texCoordMat);
+                    mat2d.copy(scratchMat2d, material.texCoordMat);
                 }
 
                 if (extraTexCoordMat !== null)
@@ -365,12 +386,7 @@ class MaterialInstance {
             offs += fillVec4(materialParamsMapped, offs, this.texCoordMode);
         }
 
-        template.setSamplerBindingsFromTextureMappings(this.textureMapping);
-    }
-
-    public destroy(device: GfxDevice): void {
-        if (this.gfxSampler !== null)
-            device.destroySampler(this.gfxSampler);
+        template.setSamplerBindingsFromTextureMappings(this.materialData.textureMapping);
     }
 }
 
@@ -424,15 +440,13 @@ export class BMDModelInstance {
     private jointMatrices: mat4[];
     private bcaAnimator: BCAAnimator | null = null;
 
-    constructor(device: GfxDevice, public textureHolder: NITROTextureHolder, public bmdData: BMDData, public crg1Level: CRG1Level | null = null) {
-        const bmd = this.bmdData.bmd;
-        this.textureHolder.addTextures(device, bmd.textures);
-
+    constructor(device: GfxDevice, public bmdData: BMDData, public crg1Level: CRG1Level | null = null) {
         this.jointMatrices = nArray(this.bmdData.bmd.joints.length, () => mat4.create());
 
         for (let i = 0; i < this.bmdData.batchData.length; i++) {
             const batchData = this.bmdData.batchData[i];
-            const materialInstance = new MaterialInstance(device, this.textureHolder, this.crg1Level, batchData.batch.material);
+            const materialData = bmdData.materialData[batchData.batch.materialIdx];
+            const materialInstance = new MaterialInstance(device, this.crg1Level, materialData);
             this.materialInstances.push(materialInstance);
             const shapeInstance = new ShapeInstance(materialInstance, batchData);
             this.shapeInstances.push(shapeInstance);
@@ -521,11 +535,6 @@ export class BMDModelInstance {
         dst[14] = 0;
 
         mat4.mul(dst, dst, scratchModelMatrix);
-    }
-
-    public destroy(device: GfxDevice) {
-        for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].destroy(device);
     }
 }
 

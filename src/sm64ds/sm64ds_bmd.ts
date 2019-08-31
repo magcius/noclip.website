@@ -20,12 +20,12 @@ export class Material {
     public diffuse: NITRO_GX.Color;
     public alpha: number;
     public texCoordMat: mat2d;
-    public texture: Texture;
+    public texture: Texture | null;
     public texParams: number;
 }
 
 export interface Batch {
-    material: Material;
+    materialIdx: number;
     matrixTable: Uint8Array;
     vertexData: NITRO_GX.VertexData;
 }
@@ -85,7 +85,7 @@ function parseJoint(bmd: BMD, buffer: ArrayBufferSlice, idx: number) {
 
     for (let i = 0; i < batchCount; i++) {
         const materialIdx = view.getUint8(batchMaterialOffs + i);
-        const material = parseMaterial(bmd, buffer, materialIdx);
+        const material = bmd.materials[materialIdx];
         const baseCtx = { color: material.diffuse, alpha: material.alpha };
 
         const polyIdx = view.getUint8(batchPolyOffs + i);
@@ -102,7 +102,7 @@ function parseJoint(bmd: BMD, buffer: ArrayBufferSlice, idx: number) {
 
         const vertexData = NITRO_GX.readCmds(gxCmdBuf, baseCtx, bmd.scaleFactor);
 
-        joint.batches.push({ material, matrixTable, vertexData });
+        joint.batches.push({ materialIdx, matrixTable, vertexData });
     }
 
     return joint;
@@ -270,6 +270,7 @@ function parseTexture(bmd: BMD, buffer: ArrayBufferSlice, key: TextureKey): Text
 
 export class BMD {
     public scaleFactor: number;
+    public materials: Material[];
     public joints: Joint[];
     public matrixToJointTable: Uint16Array;
     public textures: Texture[];
@@ -304,7 +305,12 @@ export function parse(buffer: ArrayBufferSlice): BMD {
 
     bmd.textureCache = new Map<string, Texture>();
     bmd.textures = [];
+    bmd.materials = [];
     bmd.joints = [];
+
+    for (let i = 0; i < materialCount; i++)
+        bmd.materials.push(parseMaterial(bmd, buffer, i));
+
     for (let i = 0; i < jointCount; i++)
         bmd.joints.push(parseJoint(bmd, buffer, i));
 

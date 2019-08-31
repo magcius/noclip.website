@@ -10,7 +10,7 @@ import * as BCA from './sm64ds_bca';
 
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { NITROTextureHolder, BMDData, Sm64DSCRG1, BMDModelInstance, SM64DSPass, CRG1Level, CRG1Object, NITRO_Program } from './render';
+import { BMDData, Sm64DSCRG1, BMDModelInstance, SM64DSPass, CRG1Level, CRG1Object, NITRO_Program } from './render';
 import { BasicRenderTarget, transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { vec3, mat4, mat2d } from 'gl-matrix';
 import { assertExists, assert, leftPad } from '../util';
@@ -456,10 +456,6 @@ class ObjectRenderer {
 
         this.modelInstance.prepareToRender(device, renderInstManager, viewerInput);
     }
-
-    public destroy(device: GfxDevice): void {
-        this.modelInstance.destroy(device);
-    }
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
@@ -474,7 +470,7 @@ class SM64DSRenderer implements Viewer.SceneGfx {
     private uniformBuffer: GfxRenderDynamicUniformBuffer;
     private renderInstManager = new GfxRenderInstManager();
 
-    constructor(device: GfxDevice, public modelCache: ModelCache, public textureHolder: NITROTextureHolder) {
+    constructor(device: GfxDevice, public modelCache: ModelCache) {
         this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
     }
 
@@ -549,13 +545,7 @@ class SM64DSRenderer implements Viewer.SceneGfx {
         this.renderInstManager.destroy(device);
         this.uniformBuffer.destroy(device);
         this.renderTarget.destroy(device);
-        this.textureHolder.destroy(device);
-
         this.modelCache.destroy(device);
-        for (let i = 0; i < this.bmdRenderers.length; i++)
-            this.bmdRenderers[i].destroy(device);
-        for (let i = 0; i < this.objectRenderers.length; i++)
-            this.objectRenderers[i].destroy(device);
     }
 }
 
@@ -582,7 +572,7 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
     private async _createBMDRenderer(device: GfxDevice, renderer: SM64DSRenderer, filename: string, scale: number, level: CRG1Level, isSkybox: boolean): Promise<BMDModelInstance> {
         const modelCache = renderer.modelCache;
         const bmdData = await modelCache.fetchModel(device, filename);
-        const bmdRenderer = new BMDModelInstance(device, renderer.textureHolder, bmdData, level);
+        const bmdRenderer = new BMDModelInstance(device, bmdData, level);
         mat4.scale(bmdRenderer.modelMatrix, bmdRenderer.modelMatrix, [scale, scale, scale]);
         bmdRenderer.isSkybox = isSkybox;
         renderer.bmdRenderers.push(bmdRenderer);
@@ -590,7 +580,7 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
     }
 
     private _createObjectRenderer(device: GfxDevice, renderer: SM64DSRenderer, bmdData: BMDData, translation: vec3, rotationY: number, scale: number = 1, spinSpeed: number = 0): ObjectRenderer {
-        const modelInstance = new BMDModelInstance(device, renderer.textureHolder, bmdData);
+        const modelInstance = new BMDModelInstance(device, bmdData);
         const objectRenderer = new ObjectRenderer(modelInstance);
 
         vec3.scale(translation, translation, GLOBAL_SCALE);
@@ -789,8 +779,7 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
         const crg1 = BYML.parse<Sm64DSCRG1>(crg1Buffer, BYML.FileType.CRG1);
         const level = crg1.Levels[this.levelId];
 
-        const textureHolder = new NITROTextureHolder();
-        const renderer = new SM64DSRenderer(device, modelCache, textureHolder);
+        const renderer = new SM64DSRenderer(device, modelCache);
         context.destroyablePool.push(renderer);
 
         this._createBMDRenderer(device, renderer, level.MapBmdFile, GLOBAL_SCALE, level, false);
