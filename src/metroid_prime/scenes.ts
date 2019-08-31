@@ -41,6 +41,8 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
     public worldAmbientColor = colorNewCopy(OpaqueBlack);
     private layersPanel: UI.LayerPanel;
 
+    public onstatechanged!: () => void;
+
     constructor(device: GfxDevice, public mlvl: MLVL.MLVL, public textureHolder = new RetroTextureHolder()) {
         this.renderHelper = new GXRenderHelperGfx(device);
     }
@@ -120,6 +122,9 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
 
     public createPanels(): UI.Panel[] {
         this.layersPanel = new UI.LayerPanel(this.areaRenderers);
+        this.layersPanel.onlayertoggled = () => {
+            this.onstatechanged();
+        };
         return [this.layersPanel];
     }
 

@@ -499,6 +499,10 @@ class SM64DSRenderer implements Viewer.SceneGfx {
 
     private uniformBuffer: GfxRenderDynamicUniformBuffer;
     private renderInstManager = new GfxRenderInstManager();
+    private currentScenarioIndex: number = -1;
+
+    private scenarioSelect: UI.SingleSelect;
+    public onstatechanged!: () => void;
 
     constructor(device: GfxDevice, public modelCache: ModelCache, public crg1Level: CRG1Level) {
         this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
@@ -550,6 +554,11 @@ class SM64DSRenderer implements Viewer.SceneGfx {
     }
 
     private setCurrentScenario(index: number): void {
+        if (this.currentScenarioIndex === index)
+            return;
+
+        this.currentScenarioIndex = index;
+
         const setup = index + 1;
         const showAllScenarios = index === this.crg1Level.SetupNames.length;
         for (let i = 0; i < this.objectRenderers.length; i++) {
@@ -557,9 +566,30 @@ class SM64DSRenderer implements Viewer.SceneGfx {
             // '0' means visible in all setups.
             obj.visible = (obj.setup === 0) || (obj.setup === setup) || showAllScenarios;
         }
+        this.onstatechanged();
+        this.scenarioSelect.selectItem(index);
     }
 
     public createPanels(): UI.Panel[] {
+        const scenarioPanel = new UI.Panel();
+        scenarioPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        scenarioPanel.setTitle(UI.TIME_OF_DAY_ICON, 'Scenario');
+
+        const scenarioNames: string[] = this.crg1Level.SetupNames.slice();
+
+        if (scenarioNames.length > 0)
+            scenarioNames.push('All Scenarios');
+
+        this.scenarioSelect = new UI.SingleSelect();
+        this.scenarioSelect.setStrings(scenarioNames);
+        this.scenarioSelect.onselectionchange = (scenarioIndex: number) => {
+            this.setCurrentScenario(scenarioIndex);
+        };
+        this.scenarioSelect.selectItem(0);
+        scenarioPanel.contents.appendChild(this.scenarioSelect.elem);
+
+        scenarioPanel.setVisible(scenarioNames.length > 0);
+
         const renderHacksPanel = new UI.Panel();
         renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
@@ -578,26 +608,20 @@ class SM64DSRenderer implements Viewer.SceneGfx {
         };
         renderHacksPanel.contents.appendChild(enableTextures.elem);
 
-        const scenarioPanel = new UI.Panel();
-        scenarioPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
-        scenarioPanel.setTitle(UI.TIME_OF_DAY_ICON, 'Scenario');
-
-        const scenarioNames: string[] = this.crg1Level.SetupNames.slice();
-
-        if (scenarioNames.length > 0)
-            scenarioNames.push('All Scenarios');
-
-        const scenarioSelect = new UI.SingleSelect();
-        scenarioSelect.setStrings(scenarioNames);
-        scenarioSelect.onselectionchange = (scenarioIndex: number) => {
-            this.setCurrentScenario(scenarioIndex);
-        };
-        scenarioSelect.selectItem(0);
-
-        scenarioPanel.setVisible(scenarioNames.length > 0);
-        scenarioPanel.contents.appendChild(scenarioSelect.elem);
-
         return [scenarioPanel, renderHacksPanel];
+    }
+
+    public serializeSaveState(dst: ArrayBuffer, offs: number): number {
+        const view = new DataView(dst);
+        view.setUint8(offs++, this.currentScenarioIndex);
+        return offs;
+    }
+
+    public deserializeSaveState(src: ArrayBuffer, offs: number, byteLength: number): number {
+        const view = new DataView(src);
+        if (offs < byteLength)
+            this.setCurrentScenario(view.getUint8(offs++));
+        return offs;
     }
 
     public destroy(device: GfxDevice): void {

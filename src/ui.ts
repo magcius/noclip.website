@@ -2182,6 +2182,7 @@ export interface Layer {
 export class LayerPanel extends Panel {
     private multiSelect: MultiSelect;
     private layers: Layer[] = [];
+    public onlayertoggled: (() => void) | null = null;
 
     constructor(layers: Layer[] | null = null) {
         super();
@@ -2196,6 +2197,8 @@ export class LayerPanel extends Panel {
 
     private _onItemChanged(index: number, visible: boolean): void {
         this.layers[index].setVisible(visible);
+        if (this.onlayertoggled !== null)
+            this.onlayertoggled();
     }
 
     public syncLayerVisibility(): void {
