@@ -160,7 +160,7 @@ class SurfaceInstance {
     }
 }
 
-const matrixScratch2 = mat4.create();
+const scratchMatrix = mat4.create();
 const materialParams = new MaterialParams();
 class MaterialGroupInstance {
     public materialHelper: GXMaterialHelperGfx;
@@ -211,7 +211,7 @@ class MaterialGroupInstance {
             else
                 colorCopy(materialParams.u_Color[ColorKind.AMB0], worldAmbientColor);
 
-            const viewMatrix = matrixScratch2;
+            const viewMatrix = scratchMatrix;
             mat4.mul(viewMatrix, viewerInput.camera.viewMatrix, posMtx);
 
             for (let i = 0; i < 8; i++) {
@@ -242,7 +242,27 @@ class MaterialGroupInstance {
             if (!uvAnimation)
                 continue;
 
-            if (uvAnimation.type === UVAnimationType.UV_SCROLL) {
+            if (uvAnimation.type === UVAnimationType.ENV_MAPPING_NO_TRANS) {
+                mat4.mul(texMtx, viewerInput.camera.viewMatrix, posMtx);
+                if (modelMatrix !== null)
+                    mat4.mul(texMtx, texMtx, modelMatrix);
+                computeNormalMatrix(texMtx, texMtx);
+                texEnvMtx(postMtx, 0.5, -0.5, 0.5, 0.5);
+            } else if (uvAnimation.type === UVAnimationType.ENV_MAPPING) {
+                mat4.mul(texMtx, viewerInput.camera.viewMatrix, posMtx);
+                if (modelMatrix !== null)
+                    mat4.mul(texMtx, texMtx, modelMatrix);
+                computeNormalMatrix(texMtx, texMtx);
+                if (modelMatrix !== null) {
+                    mat4.invert(scratchMatrix, viewerInput.camera.viewMatrix);
+                    vec3.set(scratchVec3, modelMatrix[12], modelMatrix[13], modelMatrix[14]);
+                    vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
+                    texMtx[12] = scratchVec3[0];
+                    texMtx[13] = scratchVec3[1];
+                    texMtx[14] = scratchVec3[2];
+                }
+                texEnvMtx(postMtx, 0.5, -0.5, 0.5, 0.5);
+            } else if (uvAnimation.type === UVAnimationType.UV_SCROLL) {
                 const transS = animTime * uvAnimation.scaleS + uvAnimation.offsetS;
                 const transT = animTime * uvAnimation.scaleT + uvAnimation.offsetT;
                 texMtx[12] = transS;
@@ -266,38 +286,20 @@ class MaterialGroupInstance {
                 const n = uvAnimation.step * uvAnimation.scale * (uvAnimation.offset + animTime);
                 const trans = Math.floor(uvAnimation.numFrames * (n % 1.0)) * uvAnimation.step;
                 texMtx[13] = trans;
-            } else if (uvAnimation.type === UVAnimationType.ENV_MAPPING_NO_TRANS) {
-                mat4.mul(texMtx, viewerInput.camera.viewMatrix, posMtx);
-                if (modelMatrix !== null)
-                    mat4.mul(texMtx, texMtx, modelMatrix);
-                computeNormalMatrix(texMtx, texMtx);
-                texMtx[12] = 0;
-                texMtx[13] = 0;
-                texMtx[14] = 0;
-                texEnvMtx(postMtx, 0.5, -0.5, 0.5, 0.5);
-            } else if (uvAnimation.type === UVAnimationType.ENV_MAPPING) {
-                mat4.mul(texMtx, viewerInput.camera.viewMatrix, posMtx);
-                if (modelMatrix !== null)
-                    mat4.mul(texMtx, texMtx, modelMatrix);
-                computeNormalMatrix(texMtx, texMtx);
-                texEnvMtx(postMtx, 0.5, -0.5, 0.5, 0.5);
-            } else if (uvAnimation.type === UVAnimationType.MODEL_MAT) {
+            } else if (uvAnimation.type === UVAnimationType.ENV_MAPPING_MODEL) {
                 if (modelMatrix !== null)
                     mat4.copy(texMtx, modelMatrix);
                 texMtx[12] = 0;
                 texMtx[13] = 0;
                 texMtx[14] = 0;
                 texEnvMtx(postMtx, 0.5, -0.5, modelMatrix[12] * 0.5, modelMatrix[13] * 0.5);
-            } else if (uvAnimation.type === UVAnimationType.CYLINDER) {
-                mat4.copy(texMtx, viewerInput.camera.viewMatrix);
+            } else if (uvAnimation.type === UVAnimationType.ENV_MAPPING_CYLINDER) {
+                mat4.mul(texMtx, viewerInput.camera.viewMatrix, posMtx);
                 if (modelMatrix !== null)
                     mat4.mul(texMtx, texMtx, modelMatrix);
-                texMtx[12] = 0;
-                texMtx[13] = 0;
-                texMtx[14] = 0;
-                mat4.invert(matrixScratch2, viewerInput.camera.viewMatrix);
-                const xy = ((matrixScratch2[12] + matrixScratch2[14]) * 0.025 * uvAnimation.phi) % 1.0;
-                const z = (matrixScratch2[13] * 0.05 * uvAnimation.phi) % 1.0;
+                computeNormalMatrix(texMtx, texMtx);
+                const xy = ((scratchMatrix[12] + scratchMatrix[14]) * 0.025 * uvAnimation.phi) % 1.0;
+                const z = (scratchMatrix[13] * 0.05 * uvAnimation.phi) % 1.0;
                 const a = uvAnimation.theta * 0.5;
                 texEnvMtx(postMtx, a, -a, xy, z);
             }

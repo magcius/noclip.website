@@ -41,12 +41,12 @@ export const enum UVAnimationType {
     ROTATION             = 0x03,
     FLIPBOOK_U           = 0x04,
     FLIPBOOK_V           = 0x05,
-    MODEL_MAT            = 0x06,
-    CYLINDER             = 0x07,
+    ENV_MAPPING_MODEL    = 0x06,
+    ENV_MAPPING_CYLINDER = 0x07,
 }
 
 interface UVAnimation_Mat {
-    type: UVAnimationType.ENV_MAPPING_NO_TRANS | UVAnimationType.ENV_MAPPING | UVAnimationType.MODEL_MAT;
+    type: UVAnimationType.ENV_MAPPING_NO_TRANS | UVAnimationType.ENV_MAPPING | UVAnimationType.ENV_MAPPING_MODEL;
 }
 
 interface UVAnimation_UVScroll {
@@ -72,7 +72,7 @@ interface UVAnimation_Flipbook {
 }
 
 interface UVAnimation_Cylinder {
-    type: UVAnimationType.CYLINDER;
+    type: UVAnimationType.ENV_MAPPING_CYLINDER;
     theta: number;
     phi: number;
 }
@@ -123,7 +123,7 @@ function parseMaterialSet_UVAnimations(stream: InputStream, count: number): UVAn
         switch (type) {
         case UVAnimationType.ENV_MAPPING_NO_TRANS:
         case UVAnimationType.ENV_MAPPING:
-        case UVAnimationType.MODEL_MAT:
+        case UVAnimationType.ENV_MAPPING_MODEL:
             uvAnimations.push({ type });
             // These guys have no parameters.
             break;
@@ -150,7 +150,7 @@ function parseMaterialSet_UVAnimations(stream: InputStream, count: number): UVAn
             uvAnimations.push({ type, scale, numFrames, step, offset });
             break;
         }
-        case UVAnimationType.CYLINDER: {
+        case UVAnimationType.ENV_MAPPING_CYLINDER: {
             const theta = stream.readFloat32();
             const phi = stream.readFloat32();
             uvAnimations.push({ type, theta, phi });
@@ -1302,13 +1302,24 @@ function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSyste
                     textureRemapTable[txtrIndex] = txtrIndex;
                 }
 
+                let normalize: boolean = false;
+                if (uvAnimation !== null) {
+                    switch (uvAnimation.type) {
+                    case UVAnimationType.ENV_MAPPING:
+                    case UVAnimationType.ENV_MAPPING_NO_TRANS:
+                    case UVAnimationType.ENV_MAPPING_MODEL:
+                    case UVAnimationType.ENV_MAPPING_CYLINDER:
+                        normalize = true;
+                    }
+                }
+
                 texGens[passIndex] = {
                     index: passIndex,
                     type: GX.TexGenType.MTX2x4,
                     source: texGenSrc,
                     matrix: GX.TexGenMatrix.TEXMTX0 + (passIndex * 3),
                     postMatrix: GX.PostTexGenMatrix.PTTEXMTX0 + (passIndex * 3),
-                    normalize: false,
+                    normalize,
                 };
                 tevStages[passIndex] = makeTevStageFromPass_MP3(passIndex, passType, passFlags, materialFlags, hasDIFF, hasOPAC);
                 textureIndexes[passIndex] = txtrIndex;
