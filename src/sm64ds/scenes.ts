@@ -466,8 +466,9 @@ class ObjectRenderer {
     public animationController = new AnimationController();
     public animation: Animation | null = null;
     public modelMatrix = mat4.create();
+    public visible: boolean = true;
 
-    constructor(public modelInstance: BMDModelInstance) {
+    constructor(public modelInstance: BMDModelInstance, public setup: number = 0) {
     }
 
     public calcAnim(viewerInput: Viewer.ViewerRenderInput): void {
@@ -479,8 +480,10 @@ class ObjectRenderer {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        this.calcAnim(viewerInput);
+        if (!this.visible)
+            return;
 
+        this.calcAnim(viewerInput);
         this.modelInstance.prepareToRender(device, renderInstManager, viewerInput);
     }
 }
@@ -497,30 +500,8 @@ class SM64DSRenderer implements Viewer.SceneGfx {
     private uniformBuffer: GfxRenderDynamicUniformBuffer;
     private renderInstManager = new GfxRenderInstManager();
 
-    constructor(device: GfxDevice, public modelCache: ModelCache) {
+    constructor(device: GfxDevice, public modelCache: ModelCache, public crg1Level: CRG1Level) {
         this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
-    }
-
-    public createPanels(): UI.Panel[] {
-        const renderHacksPanel = new UI.Panel();
-        renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
-        renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
-        const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
-        enableVertexColorsCheckbox.onchanged = () => {
-            const v = enableVertexColorsCheckbox.checked;
-            for (let i = 0; i < this.bmdRenderers.length; i++)
-                this.bmdRenderers[i].setVertexColorsEnabled(v);
-        };
-        renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
-        const enableTextures = new UI.Checkbox('Enable Textures', true);
-        enableTextures.onchanged = () => {
-            const v = enableTextures.checked;
-            for (let i = 0; i < this.bmdRenderers.length; i++)
-                this.bmdRenderers[i].setTexturesEnabled(v);
-        };
-        renderHacksPanel.contents.appendChild(enableTextures.elem);
-
-        return [renderHacksPanel];
     }
 
     protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
@@ -568,6 +549,52 @@ class SM64DSRenderer implements Viewer.SceneGfx {
         return mainPassRenderer;
     }
 
+    private setCurrentScenario(index: number): void {
+        const setup = index + 1;
+        for (let i = 0; i < this.objectRenderers.length; i++) {
+            const obj = this.objectRenderers[i];
+            // '0' means visible in all setups.
+            obj.visible = (obj.setup === 0) || (obj.setup === setup);
+        }
+    }
+
+    public createPanels(): UI.Panel[] {
+        const renderHacksPanel = new UI.Panel();
+        renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
+        const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
+        enableVertexColorsCheckbox.onchanged = () => {
+            const v = enableVertexColorsCheckbox.checked;
+            for (let i = 0; i < this.bmdRenderers.length; i++)
+                this.bmdRenderers[i].setVertexColorsEnabled(v);
+        };
+        renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
+        const enableTextures = new UI.Checkbox('Enable Textures', true);
+        enableTextures.onchanged = () => {
+            const v = enableTextures.checked;
+            for (let i = 0; i < this.bmdRenderers.length; i++)
+                this.bmdRenderers[i].setTexturesEnabled(v);
+        };
+        renderHacksPanel.contents.appendChild(enableTextures.elem);
+
+        const scenarioPanel = new UI.Panel();
+        scenarioPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        scenarioPanel.setTitle(UI.TIME_OF_DAY_ICON, 'Scenario');
+
+        const scenarioNames: string[] = this.crg1Level.SetupNames;
+
+        const scenarioSelect = new UI.SingleSelect();
+        scenarioSelect.setStrings(scenarioNames);
+        scenarioSelect.onselectionchange = (scenarioIndex: number) => {
+            this.setCurrentScenario(scenarioIndex);
+        };
+        scenarioSelect.selectItem(0);
+
+        scenarioPanel.contents.appendChild(scenarioSelect.elem);
+
+        return [scenarioPanel, renderHacksPanel];
+    }
+
     public destroy(device: GfxDevice): void {
         this.renderInstManager.destroy(device);
         this.uniformBuffer.destroy(device);
@@ -606,38 +633,39 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
         return bmdRenderer;
     }
 
-    private _createObjectRenderer(device: GfxDevice, renderer: SM64DSRenderer, bmdData: BMDData, translation: vec3, rotationY: number, scale: number = 1, spinSpeed: number = 0): ObjectRenderer {
+    private async _createBMDObjRenderer(device: GfxDevice, renderer: SM64DSRenderer, filename: string): Promise<ObjectRenderer> {
+        const modelCache = renderer.modelCache;
+        const bmdData = await modelCache.fetchModel(device, filename);
         const modelInstance = new BMDModelInstance(device, bmdData);
         const objectRenderer = new ObjectRenderer(modelInstance);
-
-        vec3.scale(translation, translation, GLOBAL_SCALE);
-        mat4.translate(objectRenderer.modelMatrix, objectRenderer.modelMatrix, translation);
-        mat4.rotateY(objectRenderer.modelMatrix, objectRenderer.modelMatrix, rotationY);
-
-        // Don't ask, ugh.
-        scale = scale * (GLOBAL_SCALE / 100);
-        mat4.scale(objectRenderer.modelMatrix, objectRenderer.modelMatrix, [scale, scale, scale]);
-
-        if (spinSpeed > 0)
-            objectRenderer.animation = new YSpinAnimation(spinSpeed, 0);
-
         renderer.objectRenderers.push(objectRenderer);
+        objectRenderer.modelInstance.name = filename;
         return objectRenderer;
     }
 
-    private async _createBMDObjRenderer(device: GfxDevice, renderer: SM64DSRenderer, filename: string, translation: vec3, rotationY: number, scale: number = 1, spinSpeed: number = 0): Promise<ObjectRenderer> {
-        const modelCache = renderer.modelCache;
-        const bmdData = await modelCache.fetchModel(device, filename);
-        const b = this._createObjectRenderer(device, renderer, bmdData, translation, rotationY, scale, spinSpeed);
-        b.modelInstance.name = filename;
-        return b;
+    private modelMatrixFromObjectAndScale(m: mat4, object: CRG1Object, scale: number, extraRotationY: number = 0): void {
+        const translation = vec3.fromValues(object.Position.X, object.Position.Y, object.Position.Z);
+        const rotationY = (object.Rotation.Y + extraRotationY) * MathConstants.DEG_TO_RAD;
+
+        vec3.scale(translation, translation, GLOBAL_SCALE);
+        mat4.translate(m, m, translation);
+        mat4.rotateY(m, m, rotationY);
+
+        // Don't ask, ugh.
+        scale = scale * (GLOBAL_SCALE / 100);
+        mat4.scale(m, m, [scale, scale, scale]);
     }
 
     private async _createBMDRendererForStandardObject(device: GfxDevice, renderer: SM64DSRenderer, object: CRG1StandardObject): Promise<void> {
-        const spawnObject = (filename: string, scale: number = 0.8, spinSpeed: number = 0) => {
-            const translation = vec3.fromValues(object.Position.X, object.Position.Y, object.Position.Z);
-            const rotationY = object.Rotation.Y * MathConstants.DEG_TO_RAD;
-            return this._createBMDObjRenderer(device, renderer, filename, translation, rotationY, scale, spinSpeed);
+        const spawnObject = async (filename: string, scale: number = 0.8, spinSpeed: number = 0) => {
+            const b = await this._createBMDObjRenderer(device, renderer, filename);
+            this.modelMatrixFromObjectAndScale(b.modelMatrix, object, scale);
+
+            if (spinSpeed > 0)
+                b.animation = new YSpinAnimation(spinSpeed, 0);
+
+            b.setup = object.Setup;
+            return b;
         };
 
         const bindBCA = async (b: ObjectRenderer, filename: string) => {
@@ -786,12 +814,10 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
     }
 
     private async _createBMDRendererForDoorObject(device: GfxDevice, renderer: SM64DSRenderer, object: CRG1DoorObject): Promise<void> {
-        const spawnObject = (filename: string, extraRotationY: number = 0) => {
-            const translation = vec3.fromValues(object.Position.X, object.Position.Y, object.Position.Z);
-            const rotationY = (object.Rotation.Y + extraRotationY) * MathConstants.DEG_TO_RAD;
-            const spinSpeed = 0; // Doors don't spin.
+        const spawnObject = async (filename: string, extraRotationY: number = 0) => {
+            const b = await this._createBMDObjRenderer(device, renderer, filename);
             const scale = 0.8;
-            return this._createBMDObjRenderer(device, renderer, filename, translation, rotationY, scale, spinSpeed);
+            this.modelMatrixFromObjectAndScale(b.modelMatrix, object, scale, extraRotationY);
         };
 
         if (object.DoorType === DoorType.PLANE) {
@@ -887,7 +913,7 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
         const crg1 = BYML.parse<Sm64DSCRG1>(crg1Buffer, BYML.FileType.CRG1);
         const level = crg1.Levels[this.levelId];
 
-        const renderer = new SM64DSRenderer(device, modelCache);
+        const renderer = new SM64DSRenderer(device, modelCache, level);
         context.destroyablePool.push(renderer);
 
         this._createBMDRenderer(device, renderer, level.MapBmdFile, GLOBAL_SCALE, level, false);
@@ -897,10 +923,13 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
             this._createBMDRenderer(device, renderer, vrbox, 0.8, level, true);
         }
 
+        const promises: Promise<void>[] = [];
+
         for (let i = 0; i < level.Objects.length; i++)
-            this._createBMDRendererForObject(device, renderer, level.Objects[i]);
+            promises.push(this._createBMDRendererForObject(device, renderer, level.Objects[i]));
 
         await modelCache.waitForLoad();
+        await Promise.all(promises);
 
         return renderer;
     }
