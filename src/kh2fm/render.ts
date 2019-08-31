@@ -5,7 +5,7 @@ import * as Viewer from '../viewer';
 // @ts-ignore
 import { readFileSync } from 'fs';
 import { DeviceProgram } from "../Program";
-import { GfxProgram, GfxMegaStateDescriptor, GfxDevice, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxCompareMode, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxHostAccessPass, GfxRenderPass, GfxTextureDimension, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
+import { GfxProgram, GfxMegaStateDescriptor, GfxDevice, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxCompareMode, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxHostAccessPass, GfxRenderPass, GfxTextureDimension, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxBindingLayoutDescriptor, GfxColorWriteMask } from '../gfx/platform/GfxPlatform';
 import { mat4, vec2, vec4 } from 'gl-matrix';
 import { GfxRenderInstManager, executeOnPass } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
@@ -15,6 +15,7 @@ import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers'
 import { nArray } from '../util';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { fillMatrix4x4, fillMatrix4x3 } from '../gfx/helpers/UniformBufferHelpers';
+import { TransparentBlack } from '../Color';
 
 export function textureToCanvas(texture: MAP.Texture, baseName: string): Viewer.Texture {
     const canvas = document.createElement("canvas");
@@ -94,6 +95,7 @@ class DrawCall {
     public textureAnim: MAP.TextureAnimation | null = null;
 
     public translucent: boolean = false;
+    public addAlpha: boolean = false;
     public cullBackfaces: boolean = true;
     public layer: Layer | null = null;
 }
@@ -111,6 +113,7 @@ interface RenderBatchKey {
     group: MeshGroup;
     layerIndex: number;
     textureIndex: number;
+    addAlpha: boolean;
 };
 
 export class MapData {
@@ -278,7 +281,7 @@ export class MapData {
             if (mesh.texture.textureAnim) {
                 textureIndex = mesh.texture.textureAnim.index + 1;
             }
-            const batchKey: RenderBatchKey = {group: meshPair.group, layerIndex: mesh.layer, textureIndex};
+            const batchKey: RenderBatchKey = {group: meshPair.group, layerIndex: mesh.layer, textureIndex, addAlpha: mesh.addAlpha};
             const batchKeyStr = JSON.stringify(batchKey);
             if (!mesh.translucent) {
                 if (!opaqueMeshMap.has(batchKeyStr)) {
@@ -346,6 +349,7 @@ export class MapData {
         }
         drawCall.textureIndex = batchKey.textureIndex;
         drawCall.translucent = translucent;
+        drawCall.addAlpha = batchKey.addAlpha;
         if (batchKey.textureIndex > 0) {
             drawCall.textureAnim = this.textureAnimations[batchKey.textureIndex - 1];
         }
@@ -480,8 +484,23 @@ class DrawCallInstance {
             this.megaStateFlags.cullMode = GfxCullMode.NONE;
         }
         if (drawCall.translucent) {
-            this.megaStateFlags.blendMode = GfxBlendMode.ADD;
             this.megaStateFlags.depthWrite = false;
+            this.megaStateFlags.attachmentsState = [
+                {
+                    blendConstant: TransparentBlack,
+                    colorWriteMask: GfxColorWriteMask.ALL ^ (drawCall.addAlpha ? GfxColorWriteMask.ALPHA : 0),
+                    rgbBlendState: {
+                        blendMode: GfxBlendMode.ADD,
+                        blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
+                        blendDstFactor: drawCall.addAlpha ? GfxBlendFactor.ONE : GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+                    },
+                    alphaBlendState: {
+                        blendMode: GfxBlendMode.ADD,
+                        blendSrcFactor: GfxBlendFactor.ONE,
+                        blendDstFactor: GfxBlendFactor.ZERO,
+                    },
+                }
+            ];
         }
 
         const textureMapping = this.textureMappings[0];
