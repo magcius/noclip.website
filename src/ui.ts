@@ -2106,7 +2106,7 @@ but I could not have done it alone. I've been assisted by so many others through
 <a href="https://twitter.com/Jawchewa">Jawchewa</a>,
 <a href="https://twitter.com/Starschulz">Starschulz</a>,
 <a href="https://twitter.com/kittensandals">SpaceCats</a>,
-<a href="https://twitter.com/pupperuki">Aruki</a>,
+<a href="https://twitter.com/arukidev">Aruki</a>,
 <a href="https://twitter.com/TanukiMatthew">TanukiMatthew</a>,
 <a href="https://twitter.com/QuadeZaban">Quade Zaban</a>,
 <a href="https://twitter.com/Murugalstudio">Murugo</a>,
