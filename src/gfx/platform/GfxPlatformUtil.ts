@@ -1,7 +1,8 @@
 
-import { GfxSamplerBinding, GfxBufferBinding, GfxBindingsDescriptor, GfxRenderPipelineDescriptor, GfxBindingLayoutDescriptor, GfxInputLayoutDescriptor, GfxVertexAttributeDescriptor, GfxProgram, GfxMegaStateDescriptor } from './GfxPlatform';
+import { GfxSamplerBinding, GfxBufferBinding, GfxBindingsDescriptor, GfxRenderPipelineDescriptor, GfxBindingLayoutDescriptor, GfxInputLayoutDescriptor, GfxVertexAttributeDescriptor, GfxProgram, GfxMegaStateDescriptor, GfxAttachmentState, GfxChannelBlendState } from './GfxPlatform';
 import { copyMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
 import { EqualFunc } from '../../HashMap';
+import { colorEqual } from '../../Color';
 
 export type CopyFunc<T> = (a: T) => T;
 
@@ -73,7 +74,25 @@ export function gfxBindingsDescriptorEquals(a: GfxBindingsDescriptor, b: GfxBind
     return true;
 }
 
+function gfxChannelBlendStateEquals(a: GfxChannelBlendState, b: GfxChannelBlendState): boolean {
+    return a.blendMode == b.blendMode && a.blendSrcFactor === b.blendSrcFactor && a.blendDstFactor === b.blendDstFactor;
+}
+
+function gfxAttachmentsStateEquals(a: GfxAttachmentState, b: GfxAttachmentState): boolean {
+    if (!colorEqual(a.blendConstant, b.blendConstant)) return false;
+    if (!gfxChannelBlendStateEquals(a.rgbBlendState, b.rgbBlendState)) return false;
+    if (!gfxChannelBlendStateEquals(a.alphaBlendState, b.alphaBlendState)) return false;
+    if (a.colorWriteMask !== b.colorWriteMask) return false;
+    return true;
+}
+
 function gfxMegaStateDescriptorEquals(a: GfxMegaStateDescriptor, b: GfxMegaStateDescriptor): boolean {
+    if (a.attachmentsState !== undefined && b.attachmentsState !== undefined)
+        if (!arrayEqual(a.attachmentsState, b.attachmentsState, gfxAttachmentsStateEquals))
+            return false;
+    else if (a.attachmentsState !== undefined || b.attachmentsState !== undefined)
+        return false;
+
     return (
         a.blendDstFactor === b.blendDstFactor &&
         a.blendSrcFactor === b.blendSrcFactor &&
