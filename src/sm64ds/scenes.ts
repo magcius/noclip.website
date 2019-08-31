@@ -551,10 +551,11 @@ class SM64DSRenderer implements Viewer.SceneGfx {
 
     private setCurrentScenario(index: number): void {
         const setup = index + 1;
+        const showAllScenarios = index === this.crg1Level.SetupNames.length;
         for (let i = 0; i < this.objectRenderers.length; i++) {
             const obj = this.objectRenderers[i];
             // '0' means visible in all setups.
-            obj.visible = (obj.setup === 0) || (obj.setup === setup);
+            obj.visible = (obj.setup === 0) || (obj.setup === setup) || showAllScenarios;
         }
     }
 
@@ -581,7 +582,10 @@ class SM64DSRenderer implements Viewer.SceneGfx {
         scenarioPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         scenarioPanel.setTitle(UI.TIME_OF_DAY_ICON, 'Scenario');
 
-        const scenarioNames: string[] = this.crg1Level.SetupNames;
+        const scenarioNames: string[] = this.crg1Level.SetupNames.slice();
+
+        if (scenarioNames.length > 0)
+            scenarioNames.push('All Scenarios');
 
         const scenarioSelect = new UI.SingleSelect();
         scenarioSelect.setStrings(scenarioNames);
@@ -897,7 +901,8 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
         const [crg1Buffer, ... narcBuffers] = await Promise.all([
-            dataFetcher.fetchData(`${pathBase}/sm64ds.crg1`),
+            // Increment this every time the format of the CRG1 changes
+            dataFetcher.fetchData(`${pathBase}/sm64ds.crg1?cache_bust=0`),
             dataFetcher.fetchData(`${pathBase}/ARCHIVE/ar1.narc`),
             dataFetcher.fetchData(`${pathBase}/ARCHIVE/arc0.narc`),
             dataFetcher.fetchData(`${pathBase}/ARCHIVE/vs1.narc`),
