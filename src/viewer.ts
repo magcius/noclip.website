@@ -143,18 +143,9 @@ export class Viewer {
         this.cameraController.forceUpdate = true;
     }
 
-    private destroyScenes(): void {
-        if (this.scene) {
-            this.scene.destroy(this.gfxDevice);
-            this.scene = null;
-        }
-
-        this.cameraController = null;
-    }
-
     public setScene(scene: SceneGfx | null): void {
-        this.destroyScenes();
         this.scene = scene;
+        this.cameraController = null;
     }
 
     public setSceneTime(newTime: number): void {

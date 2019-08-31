@@ -533,6 +533,8 @@ class Main {
         if (this.abortController !== null)
             this.abortController.abort();
         this.ui.destroyScene();
+        if (this.viewer.scene && !this.destroyablePool.includes(this.viewer.scene))
+            this.destroyablePool.push(this.viewer.scene);
         this.viewer.setScene(null);
         for (let i = 0; i < this.destroyablePool.length; i++)
             this.destroyablePool[i].destroy(device);

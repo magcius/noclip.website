@@ -737,7 +737,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             this.roomRenderers[i].destroy(device);
         if (this.effectSystem !== null)
             this.effectSystem.destroy(device);
-        this.modelCache.destroy(device);
     }
 }
 
@@ -850,6 +849,7 @@ class SceneDesc {
 
     public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const modelCache = new ModelCache(context.dataFetcher);
+        context.destroyablePool.push(modelCache);
 
         modelCache.fetchArchive(`${pathBase}/Object/System.arc`);
         modelCache.fetchArchive(`${pathBase}/Stage/${this.stageDir}/Stage.arc`);
@@ -875,6 +875,7 @@ class SceneDesc {
             const isSea = this.stageDir === 'sea';
             const isFullSea = isSea && this.rooms.length > 1;
             const renderer = new WindWakerRenderer(device, modelCache, extraTextures, isSea, isFullSea, stageRarc);
+            context.destroyablePool.push(renderer);
             const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
             for (let i = 0; i < this.rooms.length; i++) {
                 const roomIdx = Math.abs(this.rooms[i]);
