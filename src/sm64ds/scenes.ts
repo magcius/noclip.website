@@ -10,7 +10,7 @@ import * as BCA from './sm64ds_bca';
 
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { BMDData, Sm64DSCRG1, BMDModelInstance, SM64DSPass, CRG1Level, CRG1Object, NITRO_Program } from './render';
+import { BMDData, Sm64DSCRG1, BMDModelInstance, SM64DSPass, CRG1Level, CRG1Object, NITRO_Program, CRG1StandardObject, CRG1DoorObject } from './render';
 import { BasicRenderTarget, transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { vec3, mat4, mat2d } from 'gl-matrix';
 import { assertExists, assert, leftPad } from '../util';
@@ -20,6 +20,7 @@ import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { SceneContext } from '../SceneBase';
 import { DataFetcher } from '../DataFetcher';
+import { MathConstants } from '../MathHelpers';
 
 // https://github.com/Arisotura/SM64DSe/blob/master/obj_list.txt
 enum ObjectId {
@@ -354,6 +355,32 @@ enum ObjectId {
     TRG_MINIMAP_CHANGE = 0x1ff,
 }
 
+const enum DoorType {
+    PLANE          = 0x00,
+    DOOR_NORMAL    = 0x01,
+    DOOR_STAR      = 0x02,
+    DOOR_STAR_1_0  = 0x03,
+    DOOR_STAR_3_0  = 0x04,
+    DOOR_STAR_10   = 0x05,
+    DOOR_KEYHOLE_0 = 0x06,
+    DOOR_KEYHOLE_1 = 0x07,
+    STAR_GATE_0    = 0x09,
+    STAR_GATE_1    = 0x0A,
+    STAR_GATE_2    = 0x0B,
+    STAR_GATE_3    = 0x0C,
+    DOOR_STAR_1_1  = 0x0D,
+    DOOR_STAR_3_1  = 0x0E,
+    DOOR_2_BORO    = 0x0F,
+    DOOR_3_TETSU   = 0x10,
+    DOOR_4_YAMI    = 0x11,
+    DOOR_5_HORROR  = 0x12,
+    DOOR_KEYHOLE_2 = 0x13,
+    DOOR_KEYHOLE_3 = 0x14,
+    DOOR_KEYHOLE_4 = 0x15,
+    DOOR_KEYHOLE_5 = 0x16,
+    DOOR_KEYHOLE_6 = 0x17,
+}
+
 const GLOBAL_SCALE = 1500;
 
 const pathBase = `sm64ds`;
@@ -606,11 +633,10 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
         return b;
     }
 
-    private async _createBMDRendererForObject(device: GfxDevice, renderer: SM64DSRenderer, object: CRG1Object): Promise<void> {
-        const translation = vec3.fromValues(object.Position.X, object.Position.Y, object.Position.Z);
-        const rotationY = object.Rotation.Y / 180 * Math.PI;
-
+    private async _createBMDRendererForStandardObject(device: GfxDevice, renderer: SM64DSRenderer, object: CRG1StandardObject): Promise<void> {
         const spawnObject = (filename: string, scale: number = 0.8, spinSpeed: number = 0) => {
+            const translation = vec3.fromValues(object.Position.X, object.Position.Y, object.Position.Z);
+            const rotationY = object.Rotation.Y * MathConstants.DEG_TO_RAD;
             return this._createBMDObjRenderer(device, renderer, filename, translation, rotationY, scale, spinSpeed);
         };
 
@@ -757,6 +783,88 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
         } else {
             console.warn(`Unknown object type ${object.ObjectId} / ${ObjectId[object.ObjectId]}`);
         }
+    }
+
+    private async _createBMDRendererForDoorObject(device: GfxDevice, renderer: SM64DSRenderer, object: CRG1DoorObject): Promise<void> {
+        const spawnObject = (filename: string, extraRotationY: number = 0) => {
+            const translation = vec3.fromValues(object.Position.X, object.Position.Y, object.Position.Z);
+            const rotationY = (object.Rotation.Y + extraRotationY) * MathConstants.DEG_TO_RAD;
+            const spinSpeed = 0; // Doors don't spin.
+            const scale = 0.8;
+            return this._createBMDObjRenderer(device, renderer, filename, translation, rotationY, scale, spinSpeed);
+        };
+
+        if (object.DoorType === DoorType.PLANE) {
+            // TODO(jstpierre)
+        } else if (object.DoorType === DoorType.DOOR_NORMAL) {
+            await spawnObject('/data/normal_obj/door/obj_door0.bmd');
+        } else if (object.DoorType === DoorType.DOOR_STAR) {
+            await spawnObject('/data/normal_obj/door/obj_door0.bmd');
+            await spawnObject('/data/normal_obj/door/obj_door0_star.bmd');
+        } else if (object.DoorType === DoorType.DOOR_STAR_1_0) {
+            await spawnObject('/data/normal_obj/door/obj_door0.bmd');
+            await spawnObject('/data/normal_obj/door/obj_door0_star1.bmd');
+        } else if (object.DoorType === DoorType.DOOR_STAR_3_0) {
+            await spawnObject('/data/normal_obj/door/obj_door0.bmd');
+            await spawnObject('/data/normal_obj/door/obj_door0_star3.bmd');
+        } else if (object.DoorType === DoorType.DOOR_STAR_10) {
+            await spawnObject('/data/normal_obj/door/obj_door0.bmd');
+            await spawnObject('/data/normal_obj/door/obj_door0_star10.bmd');
+        } else if (object.DoorType === DoorType.DOOR_KEYHOLE_0) {
+            await spawnObject('/data/normal_obj/door/obj_door0.bmd');
+            await spawnObject('/data/normal_obj/door/obj_door0_keyhole.bmd');
+        } else if (object.DoorType === DoorType.DOOR_KEYHOLE_1) {
+            await spawnObject('/data/normal_obj/door/obj_door0.bmd');
+            await spawnObject('/data/normal_obj/door/obj_door0_keyhole.bmd');
+        } else if (object.DoorType === DoorType.STAR_GATE_0) {
+            await spawnObject('/data/normal_obj/stargate/obj_stargate.bmd', 0);
+            await spawnObject('/data/normal_obj/stargate/obj_stargate.bmd', 180);
+        } else if (object.DoorType === DoorType.STAR_GATE_1) {
+            await spawnObject('/data/normal_obj/stargate/obj_stargate.bmd', 0);
+            await spawnObject('/data/normal_obj/stargate/obj_stargate.bmd', 180);
+        } else if (object.DoorType === DoorType.STAR_GATE_2) {
+            await spawnObject('/data/normal_obj/stargate/obj_stargate.bmd', 0);
+            await spawnObject('/data/normal_obj/stargate/obj_stargate.bmd', 180);
+        } else if (object.DoorType === DoorType.STAR_GATE_3) {
+            await spawnObject('/data/normal_obj/stargate/obj_stargate.bmd', 0);
+            await spawnObject('/data/normal_obj/stargate/obj_stargate.bmd', 180);
+        } else if (object.DoorType === DoorType.DOOR_STAR_1_1) {
+            await spawnObject('/data/normal_obj/door/obj_door0.bmd');
+            await spawnObject('/data/normal_obj/door/obj_door0_star1.bmd');
+        } else if (object.DoorType === DoorType.DOOR_STAR_3_1) {
+            await spawnObject('/data/normal_obj/door/obj_door0.bmd');
+            await spawnObject('/data/normal_obj/door/obj_door0_star3.bmd');
+        } else if (object.DoorType === DoorType.DOOR_2_BORO) {
+            await spawnObject('/data/normal_obj/door/obj_door2_boro.bmd');
+        } else if (object.DoorType === DoorType.DOOR_3_TETSU) {
+            await spawnObject('/data/normal_obj/door/obj_door3_tetsu.bmd');
+        } else if (object.DoorType === DoorType.DOOR_4_YAMI) {
+            await spawnObject('/data/normal_obj/door/obj_door4_yami.bmd');
+        } else if (object.DoorType === DoorType.DOOR_5_HORROR) {
+            await spawnObject('/data/normal_obj/door/obj_door5_horror.bmd');
+        } else if (object.DoorType === DoorType.DOOR_KEYHOLE_2) {
+            await spawnObject('/data/normal_obj/door/obj_door0.bmd');
+            await spawnObject('/data/normal_obj/door/obj_door0_keyhole.bmd');
+        } else if (object.DoorType === DoorType.DOOR_KEYHOLE_3) {
+            await spawnObject('/data/normal_obj/door/obj_door0.bmd');
+            await spawnObject('/data/normal_obj/door/obj_door0_keyhole.bmd');
+        } else if (object.DoorType === DoorType.DOOR_KEYHOLE_4) {
+            await spawnObject('/data/normal_obj/door/obj_door0.bmd');
+            await spawnObject('/data/normal_obj/door/obj_door0_keyhole.bmd');
+        } else if (object.DoorType === DoorType.DOOR_KEYHOLE_5) {
+            await spawnObject('/data/normal_obj/door/obj_door0.bmd');
+            await spawnObject('/data/normal_obj/door/obj_door0_keyhole.bmd');
+        } else if (object.DoorType === DoorType.DOOR_KEYHOLE_6) {
+            await spawnObject('/data/normal_obj/door/obj_door0.bmd');
+            await spawnObject('/data/normal_obj/door/obj_door0_keyhole.bmd');
+        }
+    }
+
+    private async _createBMDRendererForObject(device: GfxDevice, renderer: SM64DSRenderer, object: CRG1Object): Promise<void> {
+        if (object.Type === 'Standard' || object.Type === 'Simple')
+            return this._createBMDRendererForStandardObject(device, renderer, object);
+        else if (object.Type === 'Door')
+            return this._createBMDRendererForDoorObject(device, renderer, object);
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {

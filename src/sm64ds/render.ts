@@ -547,14 +547,26 @@ export interface CRG1TextureAnimation {
     Y: Float32Array;
 }
 
-export interface CRG1Object {
+export interface CRG1ObjectBase {
     Area: number;
-    Setup: number;
-    ObjectId: number;
     Position: { X: number, Y: number, Z: number };
     Rotation: { Y: number };
+}
+
+export interface CRG1StandardObject extends CRG1ObjectBase {
+    Type: 'Simple' | 'Standard';
+    ObjectId: number;
+    Setup: number;
     Parameters: number[];
 }
+
+export interface CRG1DoorObject extends CRG1ObjectBase {
+    Type: 'Door';
+    DoorType: number;
+    PlaneSize: { X: number, Y: number };
+}
+
+export type CRG1Object = CRG1StandardObject | CRG1DoorObject;
 
 export interface CRG1Level {
     MapBmdFile: string;
