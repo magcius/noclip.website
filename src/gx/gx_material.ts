@@ -4,7 +4,7 @@
 import * as GX from './gx_enum';
 
 import { DeviceProgram } from '../Program';
-import { colorCopy, colorFromRGBA } from '../Color';
+import { colorCopy, colorFromRGBA, colorNew, TransparentBlack, colorNewCopy } from '../Color';
 import { GfxFormat } from '../gfx/platform/GfxPlatformFormat';
 import { GfxCompareMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
 import { vec3, vec4, mat4 } from 'gl-matrix';
@@ -45,17 +45,16 @@ export interface GXMaterial {
     hasLightsBlock?: boolean;
 }
 
-export class Color {
-    constructor(public r: number = 0, public g: number = 0, public b: number = 0, public a: number = 0) {
-    }
-}
-
 export class Light {
     public Position = vec3.create();
-    public Direction = vec3.fromValues(0, 0, -1);
+    public Direction = vec3.create();
     public DistAtten = vec3.create();
     public CosAtten = vec3.create();
-    public Color = new Color();
+    public Color = colorNewCopy(TransparentBlack);
+
+    constructor() {
+        this.reset();
+    }
 
     public reset(): void {
         vec3.set(this.Position, 0, 0, 0);

@@ -16,9 +16,9 @@ import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../gfx/helper
 import { GfxRenderInst, GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepthKey } from '../gfx/render/GfxRenderer';
 import { computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
 import { LoadedVertexData, LoadedVertexPacket } from '../gx/gx_displaylist';
-import { GXMaterialHacks, Color, lightSetWorldPositionViewMatrix, lightSetWorldDirectionNormalMatrix } from '../gx/gx_material';
+import { GXMaterialHacks, lightSetWorldPositionViewMatrix, lightSetWorldDirectionNormalMatrix } from '../gx/gx_material';
 import { LightParameters, WorldLightingOptions, MP1EntityType, AreaAttributes, Entity } from './script';
-import { colorMult, colorCopy, White, OpaqueBlack } from '../Color';
+import { colorMult, colorCopy, White, OpaqueBlack, colorNewCopy, TransparentBlack, Color } from '../Color';
 import { texEnvMtx, computeNormalMatrix } from '../MathHelpers';
 import { GXShapeHelperGfx, GXRenderHelperGfx, GXMaterialHelperGfx } from '../gx/gx_render';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
@@ -51,7 +51,7 @@ export const enum RetroPass {
 
 const scratchVec3 = vec3.create();
 class ActorLights {
-    public ambient: Color = new Color;
+    public ambient: Color = colorNewCopy(TransparentBlack);
     public lights: AreaLight[] = [];
 
     constructor(actorBounds: AABB, lightParams: LightParameters, mrea: MREA) {
