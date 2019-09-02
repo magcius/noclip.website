@@ -137,9 +137,9 @@ export function getSortKeyDepth(sortKey: number): number {
 }
 
 const enum GfxRenderInstFlags {
-    TEMPLATE_RENDER_INST = 1 << 1,
-    DRAW_RENDER_INST = 1 << 2,
-    DRAW_INDEXED = 1 << 3,
+    TEMPLATE_RENDER_INST = 1 << 0,
+    DRAW_RENDER_INST = 1 << 1,
+    DRAW_INDEXED = 1 << 2,
 }
 
 interface GfxRendererTransientState {
@@ -167,6 +167,7 @@ export class GfxRenderInst {
     private _inputState: GfxInputState | null = null;
     private _drawStart: number;
     private _drawCount: number;
+    private _drawInstanceCount: number = 1;
 
     constructor() {
         this._renderPipelineDescriptor = {
@@ -228,6 +229,13 @@ export class GfxRenderInst {
         this._flags |= GfxRenderInstFlags.DRAW_INDEXED;
         this._drawCount = indexCount;
         this._drawStart = indexStart;
+    }
+
+    public drawIndexesInstanced(indexCount: number, instanceCount: number, indexStart: number = 0): void {
+        this._flags |= GfxRenderInstFlags.DRAW_INDEXED;
+        this._drawCount = indexCount;
+        this._drawStart = indexStart;
+        this._drawInstanceCount = instanceCount;
     }
 
     public drawPrimitives(primitiveCount: number, primitiveStart: number = 0): void {
@@ -337,10 +345,14 @@ export class GfxRenderInst {
 
         passRenderer.setBindings(0, state.currentBindings, this._dynamicUniformBufferOffsets);
 
-        if ((this._flags & GfxRenderInstFlags.DRAW_INDEXED))
+        if (this._drawInstanceCount > 1) {
+            assert(!!(this._flags & GfxRenderInstFlags.DRAW_INDEXED));
+            passRenderer.drawIndexedInstanced(this._drawCount, this._drawCount, this._drawInstanceCount);
+        } else if ((this._flags & GfxRenderInstFlags.DRAW_INDEXED)) {
             passRenderer.drawIndexed(this._drawCount, this._drawStart);
-        else
+        } else {
             passRenderer.draw(this._drawCount, this._drawStart);
+        }
     }
 
     public drawOnPass(device: GfxDevice, cache: GfxRenderCache, passRenderer: GfxRenderPass): void {
@@ -362,10 +374,14 @@ export class GfxRenderInst {
         const gfxBindings = cache.createBindings(device, this._bindingDescriptors[0]);
         passRenderer.setBindings(0, gfxBindings, this._dynamicUniformBufferOffsets);
 
-        if ((this._flags & GfxRenderInstFlags.DRAW_INDEXED))
+        if (this._drawInstanceCount > 1) {
+            assert(!!(this._flags & GfxRenderInstFlags.DRAW_INDEXED));
+            passRenderer.drawIndexedInstanced(this._drawCount, this._drawCount, this._drawInstanceCount);
+        } else if ((this._flags & GfxRenderInstFlags.DRAW_INDEXED)) {
             passRenderer.drawIndexed(this._drawCount, this._drawStart);
-        else
+        } else {
             passRenderer.draw(this._drawCount, this._drawStart);
+        }
     }
 }
 

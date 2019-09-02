@@ -288,7 +288,7 @@ class Growable<T extends ArrayBufferView2> {
     }
 }
 
-const enum RenderPassCmd { setRenderPassParameters = 471, setViewport, setBindings, setPipeline, setInputState, setStencilRef, draw, drawIndexed, endPass, invalid = 0x1234 };
+const enum RenderPassCmd { setRenderPassParameters = 471, setViewport, setBindings, setPipeline, setInputState, setStencilRef, draw, drawIndexed, drawIndexedInstanced, endPass, invalid = 0x1234 };
 class GfxRenderPassP_GL implements GfxRenderPass {
     public u32: Growable<Uint32Array> = new Growable((n) => new Uint32Array(n));
     public f32: Growable<Float32Array> = new Growable((n) => new Float32Array(n));
@@ -310,6 +310,7 @@ class GfxRenderPassP_GL implements GfxRenderPass {
     public setStencilRef(v: number)               { this.pcmd(RenderPassCmd.setStencilRef); this.pf32(v); }
     public draw(a: number, b: number)             { this.pcmd(RenderPassCmd.draw); this.pu32(a); this.pu32(b); }
     public drawIndexed(a: number, b: number)      { this.pcmd(RenderPassCmd.drawIndexed); this.pu32(a); this.pu32(b); }
+    public drawIndexedInstanced(a: number, b: number, c: number) { this.pcmd(RenderPassCmd.drawIndexedInstanced); this.pu32(a); this.pu32(b); this.pu32(c); }
     public endPass(r: GfxTexture | null)          { this.pcmd(RenderPassCmd.endPass); this.po(r); }
 }
 
@@ -1256,6 +1257,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                 this.draw(u32[iu32++], u32[iu32++]);
             } else if (cmd === RenderPassCmd.drawIndexed) {
                 this.drawIndexed(u32[iu32++], u32[iu32++]);
+            } else if (cmd === RenderPassCmd.drawIndexedInstanced) {
+                this.drawIndexedInstanced(u32[iu32++], u32[iu32++], u32[iu32++]);
             } else if (cmd === RenderPassCmd.endPass) {
                 this.endPass(gfxr[igfxr++] as GfxTexture | null);
                 return;
@@ -1491,6 +1494,16 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         gl.drawElements(pipeline.drawMode, count, assertExists(inputState.indexBufferType), byteOffset);
         this._debugGroupStatisticsDrawCall();
         this._debugGroupStatisticsTriangles(count / 3);
+    }
+
+    private drawIndexedInstanced(count: number, firstIndex: number, instanceCount: number): void {
+        const gl = this.gl;
+        const pipeline = this._currentPipeline;
+        const inputState = this._currentInputState;
+        const byteOffset = assertExists(inputState.indexBufferByteOffset) + firstIndex * assertExists(inputState.indexBufferCompByteSize);
+        gl.drawElementsInstanced(pipeline.drawMode, count, assertExists(inputState.indexBufferType), byteOffset, instanceCount);
+        this._debugGroupStatisticsDrawCall();
+        this._debugGroupStatisticsTriangles((count / 3) * instanceCount);
     }
 
     private endPass(resolveColorTo_: GfxTexture | null): void {

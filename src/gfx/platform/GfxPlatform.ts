@@ -272,6 +272,7 @@ export interface GfxRenderPass {
     // Draw commands.
     draw(vertexCount: number, firstVertex: number): void;
     drawIndexed(indexCount: number, firstIndex: number): void;
+    drawIndexedInstanced(indexCount: number, firstIndex: number, instanceCount: number): void;
 
     // Pass resolution.
     endPass(resolveColorAttachmentTo: GfxTexture | null): void;
