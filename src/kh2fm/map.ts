@@ -130,14 +130,17 @@ export class TextureAnimation {
         if (this.frames.length === 0) {
             return;
         }
-        this.frameTimer -= deltaTime / 1000;
+        this.frameTimer -= Math.abs(deltaTime) / 1000;
         if (this.frameTimer > 0) {
             return;
         }
-        this.frameIndex = (this.frameIndex + 1) % this.frames.length;
         const minTime = this.frames[this.frameIndex].minLength / 60;
         const maxTime = this.frames[this.frameIndex].maxLength / 60;
-        this.frameTimer += Math.random() * (maxTime - minTime) + minTime;
+        const nextFrame = deltaTime < 0 ? -1 : 1;
+        while (this.frameTimer < 0) {
+            this.frameIndex = ((this.frameIndex + nextFrame) % this.frames.length + this.frames.length) % this.frames.length;
+            this.frameTimer += Math.random() * (maxTime - minTime) + minTime;
+        }
     }
 
     public fillUVOffset(uvOffset: vec2) {
