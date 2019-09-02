@@ -1,5 +1,5 @@
 
-import { LiveActor } from "./smg_scenes";
+import { LiveActor } from "./LiveActor";
 import { BMDModelInstance } from "../render";
 import { Camera } from "../../Camera";
 import { GfxDevice } from "../../gfx/platform/GfxPlatform";

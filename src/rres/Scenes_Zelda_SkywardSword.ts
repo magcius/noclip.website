@@ -11,7 +11,7 @@ import { assert, readString, assertExists, hexzero } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render';
 import { TextureOverride } from '../TextureHolder';
-import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks, Color } from '../gx/gx_material';
+import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks } from '../gx/gx_material';
 import { mat4, quat } from 'gl-matrix';
 import AnimationController from '../AnimationController';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
@@ -20,6 +20,7 @@ import { executeOnPass, hasAnyVisible, GfxRendererLayer } from '../gfx/render/Gf
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { ColorKind } from '../gx/gx_render';
 import { SceneContext } from '../SceneBase';
+import { colorNewCopy, White } from '../Color';
 
 const materialHacks: GXMaterialHacks = {
     lightingFudge: (p) => `vec4((0.5 * ${p.matSource}).rgb, 1.0)`,
@@ -456,8 +457,8 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             modelInstance.passMask = ZSSPass.SKYBOX;
             modelInstance.isSkybox = true;
             // This color is probably set by the day/night system...
-            modelInstance.setColorOverride(ColorKind.C2, new Color(1, 1, 1, 1));
-            modelInstance.setColorOverride(ColorKind.K3, new Color(1, 1, 1, 1));
+            modelInstance.setColorOverride(ColorKind.C2, colorNewCopy(White));
+            modelInstance.setColorOverride(ColorKind.K3, colorNewCopy(White));
             mat4.scale(modelInstance.modelMatrix, modelInstance.modelMatrix, [0.001, 0.001, 0.001]);
         } else if (name === 'CmCloud') {
             // Cumulus Cloud

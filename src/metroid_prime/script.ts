@@ -9,8 +9,7 @@ import { CMDL } from './cmdl';
 import { ANCS } from './ancs';
 import { CHAR } from "./char";
 import { InputStream } from './stream';
-import { Color } from "../gx/gx_material";
-import { colorFromRGBA } from "../Color";
+import { colorFromRGBA, colorNew, Color } from "../Color";
 import { computeModelMatrixSRT, MathConstants } from "../MathHelpers";
 
 export const enum MP1EntityType {
@@ -90,7 +89,7 @@ export const enum WorldLightingOptions {
 }
 
 export class LightParameters {
-    public ambient: Color = new Color(1, 1, 1, 1);
+    public ambient: Color = colorNew(1, 1, 1, 1);
     public options: WorldLightingOptions = WorldLightingOptions.NormalLighting;
     public layerIdx: number = 0;
     public maxAreaLights: Number = 4;

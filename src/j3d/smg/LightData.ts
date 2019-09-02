@@ -1,13 +1,14 @@
 
 import { vec3 } from "gl-matrix";
-import { colorNew, colorCopy, colorFromRGBA } from "../../Color";
+import { colorNew, colorCopy, colorFromRGBA, Color } from "../../Color";
 import { Camera } from "../../Camera";
-import { Light, Color } from "../../gx/gx_material";
+import { Light } from "../../gx/gx_material";
 import { BMDModelInstance } from "../render";
 import { JMapInfoIter } from "./JMapInfo";
 import { LightType } from "./DrawBuffer";
-import { SceneObjHolder, LiveActor } from "./smg_scenes";
+import { SceneObjHolder } from "./smg_scenes";
 import { ColorKind } from "../../gx/gx_render";
+import { LiveActor } from "./LiveActor";
 
 function getValueColor(color: Color, infoIter: JMapInfoIter, prefix: string): void {
     const colorR = infoIter.getValueNumber(`${prefix}R`, 0) / 0xFF;

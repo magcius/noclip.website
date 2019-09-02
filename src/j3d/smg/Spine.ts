@@ -1,6 +1,6 @@
 
 import { clamp } from "../../MathHelpers";
-import { LiveActor } from "./smg_scenes";
+import { LiveActor } from "./LiveActor";
 
 export type Nerve = number;
 
