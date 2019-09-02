@@ -233,11 +233,9 @@ function cmd_END_VTXS(ctx: ContextInternal) {
     const baseVertex = ctx.s_startVertexIndex;
     const numVertices = ctx.vtxs.length - baseVertex;
 
-    const startIndex = ctx.indexes.length;
     const newIndexBuffer = makeTriangleIndexBuffer(translatePolyType(ctx.s_polyType), baseVertex, numVertices);
     for (let i = 0; i < newIndexBuffer.length; i++)
         ctx.indexes.push(newIndexBuffer[i]);
-    const numIndices = newIndexBuffer.length;
 }
 
 function runCmd(ctx: ContextInternal, cmd: number) {

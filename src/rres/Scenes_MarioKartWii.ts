@@ -343,11 +343,12 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
         } else if (gobj.objectId === 0x014c) { // truckChimSmk
             spawnObject(`truckChimSmk`);
         } else if (gobj.objectId === 0x014D) { // MiiObj01
-            spawnObject(`MiiObj01`);
+            // Don't spawn the MiiObj's as they have placeholder textures for faces that don't look good.
+            // spawnObject(`MiiObj01`);
         } else if (gobj.objectId === 0x014E) { // MiiObj02
-            spawnObject(`MiiObj02`);
+            // spawnObject(`MiiObj02`);
         } else if (gobj.objectId === 0x014F) { // MiiObj03
-            spawnObject(`MiiObj03`);
+            // spawnObject(`MiiObj03`);
         } else if (gobj.objectId === 0x0150) { // gardentreeDS
             spawnObject(`gardentreeDS`);
         } else if (gobj.objectId === 0x0151) { // gardentreeDSc

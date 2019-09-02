@@ -66,10 +66,6 @@ function range(start: number, length: number): Uint16Array {
     return r;
 }
 
-export function convertTopologyRangeToTriangles(dstBuffer: Uint16Array, dstOffs: number, topology: GfxTopology, baseVertex: number, numVertices: number): void {
-    return convertToTriangles(dstBuffer, dstOffs, topology, range(baseVertex, numVertices));
-}
-
 export function makeTriangleIndexBuffer(topology: GfxTopology, baseVertex: number, numVertices: number): Uint16Array {
     return convertToTriangleIndexBuffer(topology, range(baseVertex, numVertices));
 }

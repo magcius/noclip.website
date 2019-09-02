@@ -12,7 +12,7 @@ import { mat4 } from 'gl-matrix';
 import { AABB } from '../Geometry';
 import AnimationController from '../AnimationController';
 import { GfxMegaStateDescriptor, GfxFormat } from '../gfx/platform/GfxPlatform';
-import { colorFromRGBA8, colorNewFromRGBA8, Color } from '../Color';
+import { colorNewFromRGBA8, Color } from '../Color';
 import { computeModelMatrixSRT, MathConstants } from '../MathHelpers';
 import { getPointHermite } from '../Spline';
 import { autoOptimizeMaterial } from '../gx/gx_render';
