@@ -2949,10 +2949,10 @@ function parseSCN0_Fog(buffer: ArrayBufferSlice, version: number, numKeyframes: 
     };
     const flags: Flags = view.getUint32(0x14);
 
-    const fogType: GX.FogType = view.getUint32(0x14);
-    const startZ = parseAnimationTrackF96OrConst(buffer.slice(0x18), !!(flags & Flags.STARTZ_CONSTANT));
-    const endZ = parseAnimationTrackF96OrConst(buffer.slice(0x1C), !!(flags & Flags.ENDZ_CONSTANT));
-    const color = parseAnimationTrackColor(buffer.slice(0x20), numKeyframes, !!(flags & Flags.COLOR_CONSTANT));
+    const fogType: GX.FogType = view.getUint32(0x18);
+    const startZ = parseAnimationTrackF96OrConst(buffer.slice(0x1C), !!(flags & Flags.STARTZ_CONSTANT));
+    const endZ = parseAnimationTrackF96OrConst(buffer.slice(0x20), !!(flags & Flags.ENDZ_CONSTANT));
+    const color = parseAnimationTrackColor(buffer.slice(0x24), numKeyframes, !!(flags & Flags.COLOR_CONSTANT));
 
     return { name, refNumber, fogType,
         startZ, endZ, color,
