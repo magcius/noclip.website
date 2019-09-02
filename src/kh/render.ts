@@ -368,8 +368,8 @@ export class MapData {
         return device.createSampler({
             wrapS: GfxWrapMode.REPEAT,
             wrapT: GfxWrapMode.REPEAT,
-            minFilter: GfxTexFilterMode.POINT,
-            magFilter: GfxTexFilterMode.POINT,
+            minFilter: GfxTexFilterMode.BILINEAR,
+            magFilter: GfxTexFilterMode.BILINEAR,
             mipFilter: GfxMipFilterMode.NO_MIP,
             minLOD: 0, maxLOD: 0,
         });
