@@ -30,6 +30,8 @@ export class MapMesh {
     public layer = 0;
     public translucent: boolean = false;
     public uvScroll = vec2.fromValues(0, 0);
+    // Sets GS register ALPHA_1: {A = 0, B = 1, C = 0, D = 1, FIX = 0x80}
+    public addAlpha: boolean = false;
 }
 
 export class TextureBlock {
@@ -128,14 +130,17 @@ export class TextureAnimation {
         if (this.frames.length === 0) {
             return;
         }
-        this.frameTimer -= deltaTime / 1000;
+        this.frameTimer -= Math.abs(deltaTime) / 1000;
         if (this.frameTimer > 0) {
             return;
         }
-        this.frameIndex = (this.frameIndex + 1) % this.frames.length;
         const minTime = this.frames[this.frameIndex].minLength / 60;
         const maxTime = this.frames[this.frameIndex].maxLength / 60;
-        this.frameTimer += Math.random() * (maxTime - minTime) + minTime;
+        const nextFrame = deltaTime < 0 ? -1 : 1;
+        while (this.frameTimer < 0) {
+            this.frameIndex = ((this.frameIndex + nextFrame) % this.frames.length + this.frames.length) % this.frames.length;
+            this.frameTimer += Math.random() * (maxTime - minTime) + minTime;
+        }
     }
 
     public fillUVOffset(uvOffset: vec2) {
@@ -451,6 +456,7 @@ function parseGeometry(buffer: ArrayBufferSlice, geometryFile: BarFile, mapGroup
             mesh.texture = mapGroup.textureIndexMap.get(textureIndex)[1];
         }
         mesh.translucent = view.getUint16(i * 0x10 + 0x2A, true) === 0x1;
+        mesh.addAlpha = (view.getUint8(i * 0x10 + 0x2C) & 0x40) > 0;
         const uvScrollIndex = (view.getUint16(i * 0x10 + 0x2C, true) >> 1) & 0xF;
         if (uvScrollIndex > 0 && (mesh.texture.tiledU || mesh.texture.tiledV)) {
             mesh.uvScroll = vec2.fromValues(
