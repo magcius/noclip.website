@@ -148,12 +148,6 @@ export class ShapeInstance {
         const shape = this.shapeData.shape;
         const materialJointMatrix = shapeInstanceState.jointToWorldMatrixArray[materialInstance.materialData.jointData.jointIndex];
 
-        if (!shape.bbox.isEmpty()) {
-            bboxScratch.transform(shape.bbox, materialJointMatrix);
-            if (!camera.frustum.contains(bboxScratch))
-                return;
-        }
-
         packetParams.clear();
 
         const template = renderInstManager.pushTemplateRenderInst();
