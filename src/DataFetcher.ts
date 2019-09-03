@@ -50,14 +50,20 @@ class DataFetcherRequest {
             this.ondone();
     }
 
-    private resolveError(): void {
+    private resolveError404(): void {
         const allow404 = !!(this.flags & DataFetcherFlags.ALLOW_404);
         if (allow404) {
             const emptySlice = new ArrayBufferSlice(new ArrayBuffer(0)) as NamedArrayBufferSlice;
             emptySlice.name = this.url;
             this.resolve(emptySlice);
             this.done();
-        } else if (this.retriesLeft > 0) {
+        } else {
+            this.resolveErrorOther();
+        }
+    }
+
+    private resolveErrorOther(): void {
+        if (this.retriesLeft > 0) {
             this.retriesLeft--;
             this.destroy();
             this.start();
@@ -73,9 +79,13 @@ class DataFetcherRequest {
         this.request.responseType = "arraybuffer";
         this.request.send();
         this.request.onload = (e) => {
-            if (this.request.status !== 200 || this.request.getResponseHeader('Content-Type').startsWith('text/html')) {
+            // The text/html check is for development purposes, as Parcel will return the
+            // index page for non-existent data.
+            if (this.request.status === 404 || this.request.getResponseHeader('Content-Type').startsWith('text/html')) {
+                this.resolveError404();
+            } else if (this.request.status !== 200) {
                 console.error(`DataFetcherRequest: Received non-success status code ${this.request.status} when fetching file ${this.url}. Status: ${this.request.status}`);
-                this.resolveError();
+                this.resolveErrorOther();
             } else {
                 const buffer: ArrayBuffer = this.request.response;
                 const slice = new ArrayBufferSlice(buffer) as NamedArrayBufferSlice;

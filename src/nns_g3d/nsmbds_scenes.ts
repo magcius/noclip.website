@@ -88,64 +88,56 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
     constructor(public worldNumber: number, public name: string, public id: string = '' + worldNumber) {
     }
 
-    private fetchBMD(path: string, dataFetcher: DataFetcher): Promise<NSBMD.BMD0> {
+    private fetchBMD(path: string, dataFetcher: DataFetcher): Promise<NSBMD.BMD0 | null> {
         return dataFetcher.fetchData(path, DataFetcherFlags.ALLOW_404).then((buffer: ArrayBufferSlice) => {
-            try {
-                return NSBMD.parse(buffer);
-            } catch (error) {
+            if (buffer.byteLength === 0)
                 return null;
-            }
+            return NSBMD.parse(buffer);
         });
     }
 
-    private fetchBTX(path: string, dataFetcher: DataFetcher): Promise<NSBTX.BTX0> {
+    private fetchBTX(path: string, dataFetcher: DataFetcher): Promise<NSBTX.BTX0 | null> {
         return dataFetcher.fetchData(path, DataFetcherFlags.ALLOW_404).then((buffer: ArrayBufferSlice) => {
-            try {
-                return NSBTX.parse(buffer);
-            } catch (error) {
+            if (buffer.byteLength === 0)
                 return null;
-            }
+            return NSBTX.parse(buffer);
         });
     }
 
-    private fetchBTA(path: string, dataFetcher: DataFetcher): Promise<NSBTA.BTA0> {
+    private fetchBTA(path: string, dataFetcher: DataFetcher): Promise<NSBTA.BTA0 | null> {
         return dataFetcher.fetchData(path, DataFetcherFlags.ALLOW_404).then((buffer: ArrayBufferSlice) => {
-            try {
-                return NSBTA.parse(buffer);
-            } catch (error) {
+            if (buffer.byteLength === 0)
                 return null;
-            }
+            return NSBTA.parse(buffer);
         });
     }
 
-    private fetchBTP(path: string, dataFetcher: DataFetcher): Promise<NSBTP.BTP0> {
+    private fetchBTP(path: string, dataFetcher: DataFetcher): Promise<NSBTP.BTP0 | null> {
         return dataFetcher.fetchData(path, DataFetcherFlags.ALLOW_404).then((buffer: ArrayBufferSlice) => {
-            try {
-                return NSBTP.parse(buffer);
-            } catch (error) {
+            if (buffer.byteLength === 0)
                 return null;
-            }
+            return NSBTP.parse(buffer);
         });
     }
 
-    private fetchObjectData(path: string, dataFetcher: DataFetcher): Promise<ObjectData> {
-        return Promise.all<any>([
+    private async fetchObjectData(path: string, dataFetcher: DataFetcher): Promise<ObjectData> {
+        const [_bmd, _btx, _bta, _btp] = await Promise.all<any>([
             this.fetchBMD(path + `.nsbmd`, dataFetcher),
             this.fetchBTX(path + `.nsbtx`, dataFetcher),
             this.fetchBTA(path + `.nsbta`, dataFetcher),
             this.fetchBTP(path + `.nsbtp`, dataFetcher),
-        ]).then(([_bmd, _btx, _bta, _btp]) => {
-            const bmd = _bmd as NSBMD.BMD0 | null;
-            const btx = _btx as NSBTX.BTX0 | null;
-            const bta = _bta as NSBTA.BTA0 | null;
-            const btp = _btp as NSBTP.BTP0 | null;
+        ]);
 
-            if (bmd === null)
-                return null;
-            assert(bmd.models.length === 1);
+        const bmd = _bmd as NSBMD.BMD0 | null;
+        const btx = _btx as NSBTX.BTX0 | null;
+        const bta = _bta as NSBTA.BTA0 | null;
+        const btp = _btp as NSBTP.BTP0 | null;
 
-            return new ObjectData(bmd, btx, bta, btp);
-        });
+        if (bmd === null)
+            return null;
+        assert(bmd.models.length === 1);
+
+        return new ObjectData(bmd, btx, bta, btp);
     }
 
     private createRendererFromData(device: GfxDevice, objectData: ObjectData, position: number[] | null = null): MDL0Renderer {
