@@ -54,12 +54,13 @@ class DataFetcherRequest {
         if (this.request.status === 404)
             return true;
 
-        // This check is for development purposes, as Parcel will return the index page for non-existent data.
-        if (this.request.getResponseHeader('Content-Type').startsWith('text/html'))
-            return true;
-
         // In production environments, 404s sometimes show up as CORS errors, which come back as status 0.
         if (this.request.status === 0)
+            return true;
+
+        // This check is for development purposes, as Parcel will return the index page for non-existent data.
+        const contentType = this.request.getResponseHeader('Content-Type');
+        if (contentType !== null && contentType.startsWith('text/html'))
             return true;
 
         return false;
