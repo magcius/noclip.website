@@ -311,12 +311,16 @@ export class SunshineRenderer implements Viewer.SceneGfx {
 
     private setIndirectTextureOverride(): void {
         for (let i = 0; i < this.modelInstances.length; i++) {
-            const m = this.modelInstances[i].getTextureMappingReference("indirectdummy");
-            if (m !== null) {
-                m.gfxTexture = this.opaqueSceneTexture.gfxTexture;
-                m.width = EFB_WIDTH;
-                m.height = EFB_HEIGHT;
-                m.flipY = true;
+            // In options.szs, the seaindirect appears to have more than one sampler named "indirectdummy". WTF?
+            const samplers = this.modelInstances[i].bmdModel.tex1Data.tex1.samplers;
+            for (let j = 0; j < samplers.length; j++) {
+                const m = this.modelInstances[i].materialInstanceState.textureMappings[j];
+                if (samplers[j].name === "indirectdummy") {
+                    m.gfxTexture = this.opaqueSceneTexture.gfxTexture;
+                    m.width = EFB_WIDTH;
+                    m.height = EFB_HEIGHT;
+                    m.flipY = true;
+                }
             }
         }
     }
