@@ -98,7 +98,9 @@ class DataFetcherRequest {
             // TODO(jstpierre): Proper error handling.
             console.error(`DataFetcherRequest: Received error`, this, this.request, e);
 
-            this.resolveError();
+            // TODO(jstpierre): In production, 404 errors show up as CORS errors, so we can't
+            // actually get the status result. Detect this case and resolve more properly...
+            this.resolveErrorOther();
         };
         this.request.onprogress = (e) => {
             if (e.lengthComputable)
