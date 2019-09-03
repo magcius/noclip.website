@@ -50,24 +50,35 @@ class DataFetcherRequest {
             this.ondone();
     }
 
-    private resolveError404(): void {
+    private isConsidered404Error(): boolean {
+        if (this.request.status === 404)
+            return true;
+
+        // This check is for development purposes, as Parcel will return the index page for non-existent data.
+        if (this.request.getResponseHeader('Content-Type').startsWith('text/html'))
+            return true;
+
+        // In production environments, 404s sometimes show up as CORS errors, which come back as status 0.
+        if (this.request.status === 0)
+            return true;
+
+        return false;
+    }
+
+    private resolveError(): void {
         const allow404 = !!(this.flags & DataFetcherFlags.ALLOW_404);
-        if (allow404) {
+        const is404 = this.isConsidered404Error();
+        if (is404 && allow404) {
             const emptySlice = new ArrayBufferSlice(new ArrayBuffer(0)) as NamedArrayBufferSlice;
             emptySlice.name = this.url;
             this.resolve(emptySlice);
             this.done();
-        } else {
-            this.resolveErrorOther();
-        }
-    }
-
-    private resolveErrorOther(): void {
-        if (this.retriesLeft > 0) {
+        } else if (this.retriesLeft > 0) {
             this.retriesLeft--;
             this.destroy();
             this.start();
         } else {
+            console.error(`DataFetcherRequest: Received non-success status code ${this.request.status} when fetching file ${this.url}.`);
             this.reject(null);
             this.done();
         }
@@ -79,28 +90,21 @@ class DataFetcherRequest {
         this.request.responseType = "arraybuffer";
         this.request.send();
         this.request.onload = (e) => {
-            // The text/html check is for development purposes, as Parcel will return the
-            // index page for non-existent data.
-            if (this.request.status === 404 || this.request.getResponseHeader('Content-Type').startsWith('text/html')) {
-                this.resolveError404();
-            } else if (this.request.status !== 200) {
-                console.error(`DataFetcherRequest: Received non-success status code ${this.request.status} when fetching file ${this.url}. Status: ${this.request.status}`);
-                this.resolveErrorOther();
-            } else {
+            if (this.request.status === 200) {
                 const buffer: ArrayBuffer = this.request.response;
                 const slice = new ArrayBufferSlice(buffer) as NamedArrayBufferSlice;
                 slice.name = this.url;
                 this.resolve(slice);
                 this.done();
+            } else {
+                this.resolveError();
             }
         };
         this.request.onerror = (e) => {
             // TODO(jstpierre): Proper error handling.
             console.error(`DataFetcherRequest: Received error`, this, this.request, e);
 
-            // TODO(jstpierre): In production, 404 errors show up as CORS errors, so we can't
-            // actually get the status result. Detect this case and resolve more properly...
-            this.resolveErrorOther();
+            this.resolveError();
         };
         this.request.onprogress = (e) => {
             if (e.lengthComputable)
