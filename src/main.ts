@@ -637,8 +637,9 @@ class Main {
         convertCanvasToPNG(canvas).then((blob) => downloadBlob(filename, blob));
     }
 
-    private _makeTextureZipFile(): Promise<ZipFileEntry[]> | null {
-        const viewerTextures = this.ui.textureViewer.getViewerTextureList();
+    private async _makeTextureZipFile(): Promise<ZipFileEntry[]> {
+        const viewerTextures = await this.ui.textureViewer.getViewerTextureList();
+
         const zipFileEntries: ZipFileEntry[] = [];
         const promises: Promise<void>[] = [];
         for (let i = 0; i < viewerTextures.length; i++) {
@@ -650,8 +651,9 @@ class Main {
                 }));
             }
         }
+        await Promise.all(promises);
 
-        return Promise.all(promises).then(() => zipFileEntries);
+        return zipFileEntries;
     }
 
     private _downloadTextures() {

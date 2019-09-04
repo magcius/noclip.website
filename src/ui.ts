@@ -1454,7 +1454,11 @@ export class TextureViewer extends Panel {
         this.extraRack.appendChild(this.fullSurfaceView);
     }
 
-    public getViewerTextureList(): Viewer.Texture[] {
+    public async getViewerTextureList(): Promise<Viewer.Texture[]> {
+        const promises: Promise<void>[] = [];
+        for (let i = 0; i < this.textureList.length; i++)
+            promises.push(this.maybeActivateTexture(this.textureList[i]));
+        await Promise.all(promises);
         return this.textureList;
     }
 
@@ -1477,6 +1481,14 @@ export class TextureViewer extends Panel {
             newCanvas.style.backgroundImage = CHECKERBOARD_IMAGE;
 
             this.fullSurfaceView.appendChild(newCanvas);
+        }
+    }
+
+    private async maybeActivateTexture(texture: Viewer.Texture): Promise<void> {
+        if (texture.surfaces.length === 0 && texture.activate !== undefined) {
+            await texture.activate();
+        } else {
+            // We're good.
         }
     }
 
