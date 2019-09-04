@@ -677,7 +677,8 @@ export class CMDLRenderer {
         templateRenderInst.filterKey = this.isSkybox ? RetroPass.SKYBOX : RetroPass.MAIN;
 
         for (let i = 0; i < this.materialGroupInstances.length; i++)
-            this.materialGroupInstances[i].prepareToRender(renderHelper.renderInstManager, viewerInput, this.modelMatrix, this.isSkybox, this.actorLights, OpaqueBlack);
+            if (this.materialGroupInstances[i] !== undefined)
+                this.materialGroupInstances[i].prepareToRender(renderHelper.renderInstManager, viewerInput, this.modelMatrix, this.isSkybox, this.actorLights, OpaqueBlack);
         for (let i = 0; i < this.surfaceInstances.length; i++)
             this.surfaceInstances[i].prepareToRender(device, renderHelper, viewerInput, this.isSkybox);
 
