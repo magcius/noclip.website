@@ -5,6 +5,7 @@ import { assert, readString } from "../util";
 import { TextureHolder, LoadedTexture } from "../TextureHolder";
 import { GfxDevice, GfxTextureDimension, GfxFormat } from "../gfx/platform/GfxPlatform";
 import { decompressBC, DecodedSurfaceSW } from "../Common/bc_texture";
+import { textureFormatIsTranslucent } from '../sm64ds/nitro_tex';
 
 export interface Level {
     width: number;
@@ -118,10 +119,22 @@ export class DDSTextureHolder extends TextureHolder<DDS> {
     public loadTexture(device: GfxDevice, textureEntry: DDS): LoadedTexture {
         const surfaces: HTMLCanvasElement[] = [];
 
+        let pixelFormat: GfxFormat;
+        if (textureEntry.format === 'RGB')
+            pixelFormat = GfxFormat.U8_RGB_SRGB;
+        else if (textureEntry.format === 'DXT1' && device.queryTextureFormatSupported(GfxFormat.BC1_SRGB))
+            pixelFormat = GfxFormat.BC1_SRGB;
+        // TODO(jstpierre): Support native BC3. Seems like texture sizes are too goofy right now?
+        // else if (textureEntry.format === 'DXT5' && device.queryTextureFormatSupported(GfxFormat.BC3_SRGB))
+        //     pixelFormat = GfxFormat.BC3_SRGB;
+        else
+            pixelFormat = GfxFormat.U8_RGBA_SRGB;
+
         const levelDatas: Uint8Array[] = [];
         for (let i = 0; i < textureEntry.levels.length; i++) {
             const level = textureEntry.levels[i];
-            if (textureEntry.format === 'DXT1') {
+
+            if (pixelFormat === GfxFormat.BC1_SRGB || pixelFormat === GfxFormat.BC3_SRGB) {
                 levelDatas.push(level.data.createTypedArray(Uint8Array));
             } else {
                 const decodedSurface = decompressDDSLevel(textureEntry, level);
@@ -132,14 +145,6 @@ export class DDSTextureHolder extends TextureHolder<DDS> {
             // Delete expensive data
             level.data = null;
         }
-
-        let pixelFormat: GfxFormat;
-        if (textureEntry.format === 'DXT1')
-            pixelFormat = GfxFormat.BC1_SRGB;
-        else if (textureEntry.format === 'DXT5')
-            pixelFormat = GfxFormat.U8_RGBA_SRGB;
-        else if (textureEntry.format === 'RGB')
-            pixelFormat = GfxFormat.U8_RGB_SRGB;
         const gfxTexture = device.createTexture({
             dimension: GfxTextureDimension.n2D, pixelFormat,
             width: textureEntry.width, height: textureEntry.height, depth: 1, numLevels: textureEntry.levels.length,

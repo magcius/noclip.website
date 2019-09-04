@@ -532,9 +532,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _fullscreenCopyMegaState = fullscreenMegaState;
     private _fullscreenCopyProgram: GfxProgramP_GL;
 
-    private _WEBGL_compressed_texture_s3tc: WEBGL_compressed_texture_s3tc | null;
-    private _WEBGL_compressed_texture_s3tc_srgb: WEBGL_compressed_texture_s3tc_srgb | null;
-    private _KHR_parallel_shader_compile: KHR_parallel_shader_compile | null;
+    private _WEBGL_compressed_texture_s3tc: WEBGL_compressed_texture_s3tc | null = null;
+    private _WEBGL_compressed_texture_s3tc_srgb: WEBGL_compressed_texture_s3tc_srgb | null = null;
+    private _KHR_parallel_shader_compile: KHR_parallel_shader_compile | null = null;
 
     private _currentColorAttachments: GfxColorAttachmentP_GL[] = [];
     private _currentDepthStencilAttachment: GfxDepthStencilAttachmentP_GL | null;
