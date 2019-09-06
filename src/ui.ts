@@ -2554,6 +2554,7 @@ export class UI {
 
         for (let i = 0; i < this.floatingPanels.length; i++)
             this.floatingPanels[i].destroy();
+        this.floatingPanels = [];
     }
 
     public setScenePanels(scenePanels: Panel[] | null): void {
