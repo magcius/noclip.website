@@ -66,22 +66,29 @@ class DataFetcherRequest {
         return false;
     }
 
-    private resolveError(): void {
+    private resolveError(): boolean {
         const allow404 = !!(this.flags & DataFetcherFlags.ALLOW_404);
-        const is404 = this.isConsidered404Error();
-        if (is404 && allow404) {
+        if (allow404 && this.isConsidered404Error()) {
             const emptySlice = new ArrayBufferSlice(new ArrayBuffer(0)) as NamedArrayBufferSlice;
             emptySlice.name = this.url;
             this.resolve(emptySlice);
             this.done();
-        } else if (this.retriesLeft > 0) {
+            return true;
+        }
+
+        if (this.request.status === 200)
+            return false;
+
+        if (this.retriesLeft > 0) {
             this.retriesLeft--;
             this.destroy();
             this.start();
+            return true;
         } else {
             console.error(`DataFetcherRequest: Received non-success status code ${this.request.status} when fetching file ${this.url}.`);
             this.reject(null);
             this.done();
+            return true;
         }
     }
 
@@ -91,14 +98,13 @@ class DataFetcherRequest {
         this.request.responseType = "arraybuffer";
         this.request.send();
         this.request.onload = (e) => {
-            if (this.request.status === 200) {
+            const hadError = this.resolveError();
+            if (!hadError) {
                 const buffer: ArrayBuffer = this.request.response;
                 const slice = new ArrayBufferSlice(buffer) as NamedArrayBufferSlice;
                 slice.name = this.url;
                 this.resolve(slice);
                 this.done();
-            } else {
-                this.resolveError();
             }
         };
         this.request.onerror = (e) => {
