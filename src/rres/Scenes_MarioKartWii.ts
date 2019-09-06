@@ -585,7 +585,10 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
         } else if (gobj.objectId === 0x025f) { // DonkyCannon_wii
             spawnObject(`DonkyCannon_wii`);
         } else if (gobj.objectId === 0x0260) { // escalator_group
-            spawnObject(`escalator`);
+            const left = spawnObject(`escalator`);
+            mat4.translate(left.modelMatrix, left.modelMatrix, [-1450, 250, -600]);
+            const right = spawnObject(`escalator`);
+            mat4.translate(right.modelMatrix, right.modelMatrix, [1450, 250, -600]);
         } else if (gobj.objectId === 0x0261) { // tree_cannon
             spawnObject(`tree_cannon`);
         } else if (gobj.objectId === 0x02bd) { // group_enemy_b
