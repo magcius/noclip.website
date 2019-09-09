@@ -134,11 +134,11 @@ export class TextureAnimation {
         if (this.frameTimer > 0) {
             return;
         }
-        const minTime = this.frames[this.frameIndex].minLength / 60;
-        const maxTime = this.frames[this.frameIndex].maxLength / 60;
         const nextFrame = deltaTime < 0 ? -1 : 1;
         while (this.frameTimer < 0) {
             this.frameIndex = ((this.frameIndex + nextFrame) % this.frames.length + this.frames.length) % this.frames.length;
+            const minTime = this.frames[this.frameIndex].minLength / 60;
+            const maxTime = this.frames[this.frameIndex].maxLength / 60;
             this.frameTimer += Math.random() * (maxTime - minTime) + minTime;
         }
     }
@@ -439,7 +439,9 @@ function parseTextureAnimation(buffer: ArrayBufferSlice, offs: number, gsMemoryM
         const minLength = view.getUint16(frameOffs + 0x2, true);
         const maxLength = view.getUint16(frameOffs + 0x4, true);
         const spriteIndex = view.getUint16(frameOffs + 0x6, true);
-        texture.textureAnim.frames.push({minLength, maxLength, spriteIndex: control > 0 ? 0 : spriteIndex + 1});
+        if (maxLength >= minLength && maxLength > 0) {
+            texture.textureAnim.frames.push({minLength, maxLength, spriteIndex: control > 0 ? 0 : spriteIndex + 1});
+        }
         frameOffs += 0x8;
     }
 }
