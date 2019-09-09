@@ -439,7 +439,7 @@ function parseTextureAnimation(buffer: ArrayBufferSlice, offs: number, gsMemoryM
         const minLength = view.getUint16(frameOffs + 0x2, true);
         const maxLength = view.getUint16(frameOffs + 0x4, true);
         const spriteIndex = view.getUint16(frameOffs + 0x6, true);
-        if (maxLength >= minLength) {
+        if (maxLength >= minLength && maxLength > 0) {
             texture.textureAnim.frames.push({minLength, maxLength, spriteIndex: control > 0 ? 0 : spriteIndex + 1});
         }
         frameOffs += 0x8;
