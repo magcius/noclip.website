@@ -152,7 +152,7 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
 class RetroSceneDesc implements Viewer.SceneDesc {
     public id: string;
     constructor(public filename: string, public name: string, public worldName: string = "") {
-        this.id = filename;
+        this.id = worldName ? worldName : filename;
     }
 
     public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
