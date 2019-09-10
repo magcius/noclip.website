@@ -157,7 +157,6 @@ class RetroSceneDesc implements Viewer.SceneDesc {
 
     public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
-        const folder = this.id.substring(0, this.id.indexOf(`/`));
         const levelPakP = dataFetcher.fetchData(`metroid_prime/${this.filename}`);
         const nameDataP = dataFetcher.fetchData(`metroid_prime/mp1/MP1_NameData.crg1`, DataFetcherFlags.ALLOW_404);
 
