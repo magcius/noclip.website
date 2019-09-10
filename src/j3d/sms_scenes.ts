@@ -268,7 +268,7 @@ export const enum SMSPass {
     TRANSPARENT = 1 << 3,
 }
 
-const sunshineClearDescriptor = makeClearRenderPassDescriptor(true, colorNew(0, 0, 0.125, 1));
+const sunshineClearDescriptor = makeClearRenderPassDescriptor(true, colorNew(0, 0, 0, 1));
 
 export class SunshineRenderer implements Viewer.SceneGfx {
     public renderHelper: GXRenderHelperGfx;
