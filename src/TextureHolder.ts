@@ -70,6 +70,10 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
 
     public destroy(device: GfxDevice): void {
         this.gfxTextures.forEach((texture) => device.destroyTexture(texture));
+        this.viewerTextures.length = 0;
+        this.gfxTextures.length = 0;
+        this.textureEntries.length = 0;
+        this.textureOverrides.clear();
     }
 
     protected searchTextureEntryIndex(name: string): number {

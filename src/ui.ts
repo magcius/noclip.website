@@ -449,7 +449,7 @@ export abstract class ScrollSelect implements Widget {
     protected abstract itemFocused(index: number, first: boolean): void;
 }
 
-function ensureFlairIndex(flairs: Flair[], index: number): Flair {
+export function ensureFlairIndex(flairs: Flair[], index: number): Flair {
     const flairIndex = flairs.findIndex((f) => f.index === index);
     if (flairIndex >= 0) {
         flairs[flairIndex] = Object.assign({}, flairs[flairIndex]);
