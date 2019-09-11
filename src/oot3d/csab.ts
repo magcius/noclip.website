@@ -106,7 +106,9 @@ function parseTrackOcarina(version: Version, buffer: ArrayBufferSlice): Animatio
 function parseTrackMajora(version: Version, buffer: ArrayBufferSlice): AnimationTrack {
     const view = buffer.createDataView();
 
-    assert(view.getUint8(0x00) === 0x00);
+    // TODO(jstpierre): zelda2_snowman.gar/anim/sm_wait.csab CSAB has this as 1???
+    const unk0 = view.getUint8(0x00);
+    assert(unk0 === 0x00 || unk0 === 0x01);
     const type = view.getUint8(0x01);
     assert(type === AnimationTrackType.LINEAR);
     const numKeyframes = view.getUint16(0x02, true);
