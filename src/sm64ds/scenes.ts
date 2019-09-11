@@ -13,14 +13,14 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { BMDData, Sm64DSCRG1, BMDModelInstance, SM64DSPass, CRG1Level, CRG1Object, NITRO_Program, CRG1StandardObject, CRG1DoorObject } from './render';
 import { BasicRenderTarget, transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { vec3, mat4, mat2d } from 'gl-matrix';
-import { assertExists, assert, leftPad } from '../util';
+import { assertExists, assert, leftPad, hexzero } from '../util';
 import AnimationController from '../AnimationController';
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { SceneContext } from '../SceneBase';
 import { DataFetcher } from '../DataFetcher';
-import { MathConstants } from '../MathHelpers';
+import { MathConstants, clamp } from '../MathHelpers';
 
 // https://github.com/Arisotura/SM64DSe/blob/master/obj_list.txt
 enum ObjectId {
@@ -706,46 +706,105 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
         }
 
         const objectId: ObjectId = object.ObjectId;
-        if (objectId === ObjectId.UPDOWN_LIFT) {
-            const b = await spawnObject(`/data/normal_obj/obj_updnlift/obj_updnlift.bmd`);
-        } else if (objectId === ObjectId.IRONBALL) {
-            const b = await spawnObject(`/data/enemy/iron_ball/iron_ball.bmd`);
-        } else if (objectId === ObjectId.KURIBO) {
+
+        if (objectId === ObjectId.EWB_ICE_A) {		 			//ID 001
+            const b = await spawnObject(`/data/special_obj/ewb_ice/ewb_ice_a.bmd`);
+        } else if (objectId === ObjectId.EWB_ICE_B) {			//ID 002
+            const b = await spawnObject(`/data/special_obj/ewb_ice/ewb_ice_b.bmd`);				
+        } else if (objectId === ObjectId.EWB_ICE_C) {			//ID 003
+            const b = await spawnObject(`/data/special_obj/ewb_ice/ewb_ice_c.bmd`);		
+        } else if (objectId === ObjectId.EWM_ICE_BLOCK) {		//ID 004
+            const b = await spawnObject(`/data/special_obj/ewm_ice_brock/ewm_ice_brock.bmd`);	
+        } else if (objectId === ObjectId.EMM_LOG) {				//ID 005
+            const b = await spawnObject(`/data/special_obj/emm_log/emm_log.bmd`);					
+        } else if (objectId === ObjectId.EMM_YUKA) {			//ID 006
+            const b = await spawnObject(`/data/special_obj/emm_yuka/emm_yuka.bmd`);					
+        } else if (objectId === ObjectId.UPDOWN_LIFT) {			//ID 007
+            const b = await spawnObject(`/data/normal_obj/obj_updnlift/obj_updnlift.bmd`);		
+		} else if (objectId === ObjectId.HS_UPDOWN_LIFT) {		//ID 008		
+			const b = await spawnObject(`/data/special_obj/hs_updown_lift/hs_updown_lift.bmd`);			
+        } else if (objectId === ObjectId.PATH_LIFT) {			//ID 009
+            const b = await spawnObject(`/data/normal_obj/obj_pathlift/obj_pathlift.bmd`);		
+        } else if (objectId === ObjectId.WANWAN) {				//ID 010
+            const b = await spawnObject(`/data/enemy/wanwan/wanwan.bmd`);
+			mat4.translate(b.modelMatrix, b.modelMatrix, [0, 32, 0]);								
+            await bindBCA(b, '/data/enemy/wanwan/wanwan_wait.bca');					
+		} else if (objectId === ObjectId.CAMERA_TAG) {			//ID 011
+			// Invisible (Not used in maps?)		
+		} else if (objectId === ObjectId.SEESAW) {				//ID 012			
+			const b = await spawnObject(`/data/normal_obj/obj_seesaw/obj_seesaw.bmd`);							
+        } else if (objectId === ObjectId.IRONBALL) {			//ID 013
+            const b = await spawnObject(`/data/enemy/iron_ball/iron_ball.bmd`);	
+			mat4.translate(b.modelMatrix, b.modelMatrix, [0, 16, 0]);			
+        } else if (objectId === ObjectId.GORO_ROCK) {			//ID 014
+            const b = await spawnObject(`/data/special_obj/cv_goro_rock/cv_goro_rock.bmd`);			
+        } else if (objectId === ObjectId.KURIBO) {				//ID 015
             const b = await spawnObject(`/data/enemy/kuribo/kuribo_model.bmd`);
             await bindBCA(b, `/data/enemy/kuribo/kuribo_wait.bca`);
-        } else if (objectId === ObjectId.KURIBO_S) {
+        } else if (objectId === ObjectId.KURIBO_S) {			//ID 016
             const b = await spawnObject(`/data/enemy/kuribo/kuribo_model.bmd`, 0.2);
             await bindBCA(b, `/data/enemy/kuribo/kuribo_wait.bca`);
-        } else if (objectId === ObjectId.KURIBO_L) {
+        } else if (objectId === ObjectId.KURIBO_L) {			//ID 017
             const b = await spawnObject(`/data/enemy/kuribo/kuribo_model.bmd`, 1.6);
             await bindBCA(b, `/data/enemy/kuribo/kuribo_wait.bca`);
-        } else if (objectId === ObjectId.BOMBHEI) {
+        } else if (objectId === ObjectId.KURIKING) {			//ID 018
+            const b = await spawnObject(`/data/enemy/kuriking/kuriking_model.bmd`);		
+             await bindBCA(b, '/data/enemy/kuriking/kuriking_wait.bca');				
+        } else if (objectId === ObjectId.BOMBHEI) {				//ID 019
             const b = await spawnObject(`/data/enemy/bombhei/bombhei.bmd`);
             await bindBCA(b, `/data/enemy/bombhei/bombhei_walk.bca`);
-        } else if (objectId === ObjectId.RED_BOMBHEI) {
+        } else if (objectId === ObjectId.RED_BOMBHEI) {			//ID 020
             const b = await spawnObject(`/data/enemy/bombhei/red_bombhei.bmd`);
             await bindBCA(b, `/data/enemy/bombhei/red_wait.bca`);
-        } else if (objectId === ObjectId.BLOCK_L) {
+        } else if (objectId === ObjectId.NOKONOKO) {			//ID 021
+            const b = await spawnObject(`/data/enemy/nokonoko/nokonoko.bmd`);	
+            await bindBCA(b, '/data/enemy/nokonoko/nokonoko_walk.bca');		
+        } else if (objectId === ObjectId.NOKONOKO_S) {			//ID 022
+            const b = await spawnObject(`/data/enemy/nokonoko/shell_green.bmd`);					
+        } else if (objectId === ObjectId.BLOCK_L) {				//ID 023
             const b = await spawnObject(`/data/normal_obj/obj_block/broken_block_l.bmd`);
-        } else if (objectId === ObjectId.CANNON_SHUTTER) {
+        } else if (objectId === ObjectId.DP_BLOCK_L) {			//ID 024
+            const b = await spawnObject(`/data/normal_obj/obj_block/broken_block_l.bmd`, 1.2);		
+        } else if (objectId === ObjectId.SW_BLOCK_L) {			//ID 025
+            const b = await spawnObject(`/data/normal_obj/obj_block/broken_block_l.bmd`);	
+        } else if (objectId === ObjectId.POWER_UP_ITEM) {		//ID 026
+			const b = await spawnObject(`/data/normal_obj/obj_power_flower/p_flower_open.bmd`);	
+		} else if (objectId === ObjectId.HATENA_SWITCH) {		//ID 027
+			const b = await spawnObject(`/data/normal_obj/obj_hatena_switch/hatena_switch.bmd`);
+        } else if (objectId === ObjectId.BLOCK_S) {				//ID 028
+            const b = await spawnObject(`/data/normal_obj/obj_block/broken_block_s.bmd`);			
+        } else if (objectId === ObjectId.CANNON_SHUTTER) {		//ID 029
             const b = await spawnObject(`/data/normal_obj/obj_cannon_shutter/cannon_shutter.bmd`);
-        } else if (objectId === ObjectId.HATENA_BLOCK) {
+        } else if (objectId === ObjectId.HATENA_BLOCK) {		//ID 030
             const b = await spawnObject(`/data/normal_obj/obj_hatena_box/hatena_box.bmd`);
-        } else if (objectId === ObjectId.PILE) {
+        } else if (objectId === ObjectId.ITEM_BLOCK) {			//ID 031
+            const b = await spawnObject(`/data/normal_obj/obj_hatena_box/obj_hatena_y_box.bmd`);	
+        } else if (objectId === ObjectId.VS_ITEM_BLOCK) {		//ID 032
+			const b = await spawnObject(`/data/normal_obj/obj_hatena_box/obj_hatena_y_box.bmd`);	
+        } else if (objectId === ObjectId.CAP_BLOCK_M) {			//ID 033
+            const b = await spawnObject(`/data/normal_obj/obj_hatena_box/obj_cap_box_m.bmd`);		
+        } else if (objectId === ObjectId.CAP_BLOCK_W) {			//ID 034
+            const b = await spawnObject(`/data/normal_obj/obj_hatena_box/obj_cap_box_w.bmd`);		
+        } else if (objectId === ObjectId.CAP_BLOCK_L) {			//ID 035
+            const b = await spawnObject(`/data/normal_obj/obj_hatena_box/obj_cap_box_l.bmd`);				
+        } else if (objectId === ObjectId.PILE) {				//ID 036
             const b = await spawnObject(`/data/normal_obj/obj_pile/pile.bmd`);
-        } else if (objectId === ObjectId.COIN) {
+        } else if (objectId === ObjectId.COIN) {				//ID 037
             const b = await spawnObject(`/data/normal_obj/coin/coin_poly32.bmd`, 0.7, 0.1);
-        } else if (objectId === ObjectId.RED_COIN) {
+        } else if (objectId === ObjectId.RED_COIN) {			//ID 038
             const b = await spawnObject(`/data/normal_obj/coin/coin_red_poly32.bmd`, 0.7, 0.1);
-        } else if (objectId === ObjectId.BLUE_COIN) {
+        } else if (objectId === ObjectId.BLUE_COIN) {			//ID 039
             const b = await spawnObject(`/data/normal_obj/coin/coin_blue_poly32.bmd`, 0.7, 0.1);
-        } else if (objectId === ObjectId.TREE) {
+        } else if (objectId === ObjectId.KOOPA) {				//ID 040
+            //const b = await spawnObject(`/data/enemy/koopa/koopa_model.bmd`);	  //Crashes
+            // await bindBCA(b, '/data/enemy/koopa/koopa_wait1.bca');							
+        } else if (objectId === ObjectId.TREE) {				//ID 041
             const treeType = (object.Parameters[0] >>> 4) & 0x07;
             const treeFilenames = ['bomb', 'toge', 'yuki', 'yashi', 'castle', 'castle', 'castle', 'castle'];
             const filename = `/data/normal_obj/tree/${treeFilenames[treeType]}_tree.bmd`;
             const b = await spawnObject(filename);
-        } else if (objectId === ObjectId.PICTURE_GATE) { // Castle Painting
-            const painting = (object.Parameters[0] >>> 8) & 0x1F;
+        } else if (objectId === ObjectId.PICTURE_GATE) {		//ID 042
+            const painting = (object.Parameters[0] >>> 8) & 0x1F; // Castle Painting
             const filenames = [
                 'for_bh', 'for_bk', 'for_ki', 'for_sm', 'for_cv_ex5', 'for_fl', 'for_dl', 'for_wl', 'for_sl', 'for_wc',
                 'for_hm', 'for_hs', 'for_td_tt', 'for_ct', 'for_ex_mario', 'for_ex_luigi', 'for_ex_wario', 'for_vs_cross', 'for_vs_island',
@@ -763,25 +822,57 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
                 b.modelInstance.extraTexCoordMat = mat2d.create();
                 b.modelInstance.extraTexCoordMat[0] *= -1;
             }
-        } else if (objectId === ObjectId.HANSWITCH) {
+        } else if (objectId === ObjectId.HANSWITCH) {			//ID 043
             const b = await spawnObject(`/data/normal_obj/obj_box_switch/obj_box_switch.bmd`);
-        } else if (objectId === ObjectId.SWITCHDOOR) {
+        } else if (objectId === ObjectId.STAR_SWITCH) {			//ID 044
+            const b = await spawnObject(`/data/normal_obj/obj_star_switch/obj_star_switch.bmd`);				
+        } else if (objectId === ObjectId.SWITCHDOOR) {			//ID 045
             const b = await spawnObject(`/data/special_obj/b_ana_shutter/b_ana_shutter.bmd`);
-        } else if (objectId === ObjectId.ONEUPKINOKO) {
+        } else if (objectId === ObjectId.CV_SHUTTER) {			//ID 046
+            const b = await spawnObject(`/data/special_obj/cv_shutter/cv_shutter.bmd`);		
+        } else if (objectId === ObjectId.CV_NEWS_LIFT) {		//ID 047
+            const b = await spawnObject(`/data/special_obj/cv_news_lift/cv_news_lift.bmd`);		
+        } else if (objectId === ObjectId.WANWAN2) {				//ID 048
+			const b = await spawnObject(`/data/enemy/wanwan/wanwan.bmd`);	
+			mat4.translate(b.modelMatrix, b.modelMatrix, [0, 32, 0]);				
+            await bindBCA(b, '/data/enemy/wanwan/wanwan_wait.bca');					
+        } else if (objectId === ObjectId.ONEUPKINOKO) {			//ID 049
             const b = await spawnObject(`/data/normal_obj/oneup_kinoko/oneup_kinoko.bmd`);
-        } else if (objectId === ObjectId.CANNON) {
+        } else if (objectId === ObjectId.CANNON) {				//ID 050
             const b = await spawnObject(`/data/normal_obj/obj_cannon/houdai.bmd`);
-        } else if (objectId === ObjectId.BOMBKING) {
+        } else if (objectId === ObjectId.WANWAN_SHUTTER) {		//ID 051
+            const b = await spawnObject(`/data/special_obj/b_wan_shutter/b_wan_shutter.bmd`);
+        } else if (objectId === ObjectId.WATERBOMB) {			//ID 052
+            const b = await spawnObject(`/data/enemy/water_bomb/water_bomb.bmd`);	
+        } else if (objectId === ObjectId.SBIRD) {				//ID 053
+			const b = await spawnObject(`/data/normal_obj/bird/bird.bmd`);		
+			//await bindBCA(b, '/data/normal_obj/bird/bird_fly.bca');		
+        } else if (objectId === ObjectId.FISH) {				//ID 054
+            const b = await spawnObject(`/data/normal_obj/fish/fish.bmd`);	
+            await bindBCA(b, '/data/normal_obj/fish/fish_wait.bca');		
+        } else if (objectId === ObjectId.BUTTERFLY) {			//ID 055
+            const b = await spawnObject(`/data/normal_obj/butterfly/butterfly.bmd`);			
+        } else if (objectId === ObjectId.BOMBKING) {			//ID 056
             const b = await spawnObject(`/data/enemy/bombking/bomb_king.bmd`);
             await bindBCA(b, `/data/enemy/bombking/bombking_wait1.bca`);
-        } else if (objectId === ObjectId.STAR_CAMERA) { // Star Camera Path
-            return null;
-        } else if (objectId === ObjectId.STAR) { // Star Target
-            return null;
-        } else if (objectId === ObjectId.SILVER_STAR) { // Silver Star
-            const b = await spawnObject(`/data/normal_obj/star/obj_star_silver.bmd`, 0.08);
-        } else if (objectId === ObjectId.STARBASE) { // Star
-            let filename = `/data/normal_obj/star/obj_star.bmd`;
+		        } else if (objectId === ObjectId.SNOWMAN) {		//ID 057	
+            const b = await spawnObject(`/data/enemy/snowman/snowman_model.bmd`);	
+			await bindBCA(b, '/data/enemy/snowman/snowman_wait.bca');	
+        } else if (objectId === ObjectId.PIANO) {				//ID 058
+            const b = await spawnObject(`/data/enemy/piano/piano.bmd`);	
+			await bindBCA(b, '/data/enemy/piano/piano_attack.bca');			
+        } else if (objectId === ObjectId.PAKUN) {				//ID 059
+            const b = await spawnObject(`/data/enemy/pakkun/pakkun_model.bmd`);		
+            await bindBCA(b, '/data/enemy/pakkun/pakkun_sleep_loop.bca');			
+        } else if (objectId === ObjectId.STAR_CAMERA) { 		//ID 060
+            return null; // Star Camera Path
+        } else if (objectId === ObjectId.STAR) { 				//ID 061
+            const b = await spawnObject(`/data/normal_obj/star/obj_star.bmd`, 0.8, 0.08);		
+            //return null; // Star Target			
+        } else if (objectId === ObjectId.SILVER_STAR) { 		//ID 062
+            const b = await spawnObject(`/data/normal_obj/star/obj_star_silver.bmd`, 0.8, 0.08); // Silver Star
+        } else if (objectId === ObjectId.STARBASE) { 			//ID 063
+            let filename = `/data/normal_obj/star/obj_star.bmd`; // Star
             let startype = (object.Parameters[0] >>> 4) & 0x0F;
             let rotateSpeed = 0.08;
             switch (startype) {
@@ -796,47 +887,589 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
                 break;
             }
             const b = await spawnObject(filename, 0.8, rotateSpeed);
-        } else if (objectId === ObjectId.PL_CLOSET) { // Minigame Cabinet Trigger (Invisible)
-            // Invisible
-        } else if (objectId === ObjectId.KANBAN) {
-            const b = await spawnObject(`/data/normal_obj/obj_kanban/obj_kanban.bmd`);
-        } else if (objectId === ObjectId.TATEFUDA) {
-            const b = await spawnObject(`/data/normal_obj/obj_tatefuda/obj_tatefuda.bmd`);
-        } else if (objectId === ObjectId.HEART) {
-            const b = await spawnObject(`/data/normal_obj/obj_heart/obj_heart.bmd`, 0.8, 0.05);
-        } else if (objectId === ObjectId.BOMB_SEESAW) {
+        } else if (objectId === ObjectId.BATAN) {				//ID 064
+            const b = await spawnObject(`/data/enemy/battan/battan.bmd`);
+            await bindBCA(b, '/data/enemy/battan/battan_walk.bca');			
+        } else if (objectId === ObjectId.BATANKING) {			//ID 065
+            const b = await spawnObject(`/data/enemy/battan_king/battan_king.bmd`);		
+            await bindBCA(b, '/data/enemy/battan_king/battan_king_walk.bca');			
+        } else if (objectId === ObjectId.DOSUN) {				//ID 066	
+            const b = await spawnObject(`/data/enemy/dosune/dosune.bmd`);	
+        } else if (objectId === ObjectId.TERESA) {				//ID 067		
+            const b = await spawnObject(`/data/enemy/teresa/teresa.bmd`);			
+			await bindBCA(b, '/data/enemy/teresa/teresa_wait.bca');			
+        } else if (objectId === ObjectId.BOSS_TERESA) {			//ID 068	
+            const b = await spawnObject(`/data/enemy/boss_teresa/boss_teresa.bmd`);	
+			await bindBCA(b, '/data/enemy/boss_teresa/boss_teresa_wait.bca');	
+        } else if (objectId === ObjectId.ICON_TERESA) {			//ID 069		
+			//Invisible
+        } else if (objectId === ObjectId.KAIDAN) {				//ID 070
+            //const b = await spawnObject(`/data/special_obj/th_kaidan/th_kaidan.bmd`); //Loads in an odd manner
+        } else if (objectId === ObjectId.BOOKSHELF) {			//ID 071
+            const b = await spawnObject(`/data/special_obj/th_hondana/th_hondana.bmd`);				
+        } else if (objectId === ObjectId.MERRYGOROUND) {		//ID 072		
+            const b = await spawnObject(`/data/special_obj/th_mery_go/th_mery_go.bmd`);	
+        } else if (objectId === ObjectId.TERESAPIT) {			//ID 073
+            const b = await spawnObject(`/data/special_obj/th_trap/th_trap.bmd`);			
+        } else if (objectId === ObjectId.PL_CLOSET) { 			//ID 074
+            // Invisible			
+        } else if (objectId === ObjectId.KANBAN) {				//ID 075
+            const b = await spawnObject(`/data/normal_obj/obj_kanban/obj_kanban.bmd`);		
+        } else if (objectId === ObjectId.TATEFUDA) {			//ID 076
+            const b = await spawnObject(`/data/normal_obj/obj_tatefuda/obj_tatefuda.bmd`);	
+        } else if (objectId === ObjectId.ICE_BOARD) {			//ID 077		
+            const b = await spawnObject(`/data/normal_obj/obj_ice_board/obj_ice_board.bmd`);				
+        } else if (objectId === ObjectId.WAKAME) {				//ID 078
+            const b = await spawnObject(`/data/normal_obj/obj_wakame/obj_wakame.bmd`);				
+            await bindBCA(b, '/data/normal_obj/obj_wakame/obj_wakame_wait.bca');			
+        } else if (objectId === ObjectId.HEART) {				//ID 079
+            const b = await spawnObject(`/data/normal_obj/obj_heart/obj_heart.bmd`, 0.8, 0.05);		
+        } else if (objectId === ObjectId.KINOPIO) {				//ID 080
+            const b = await spawnObject(`/data/enemy/kinopio/kinopio.bmd`);	
+            await bindBCA(b, '/data/enemy/kinopio/kinopio_wait1.bca');				
+        } else if (objectId === ObjectId.KOOPA2BG) {			//ID 082
+            const b = await spawnObject(`/data/special_obj/kb2_stage/kb2_stage.bmd`);	 		
+		} else if (objectId === ObjectId.KOOPA3BG) {			//ID 083		
+			const b = await spawnObject(`/data/special_obj/kb3_stage/kb3_a.bmd`);	
+			await spawnObject(`/data/special_obj/kb3_stage/kb3_b.bmd`);	
+			await spawnObject(`/data/special_obj/kb3_stage/kb3_c.bmd`);	
+			await spawnObject(`/data/special_obj/kb3_stage/kb3_d.bmd`);	
+			await spawnObject(`/data/special_obj/kb3_stage/kb3_e.bmd`);	
+			await spawnObject(`/data/special_obj/kb3_stage/kb3_f.bmd`);	
+			await spawnObject(`/data/special_obj/kb3_stage/kb3_g.bmd`);	
+			await spawnObject(`/data/special_obj/kb3_stage/kb3_h.bmd`);	
+			await spawnObject(`/data/special_obj/kb3_stage/kb3_i.bmd`);	
+			await spawnObject(`/data/special_obj/kb3_stage/kb3_j.bmd`);		
+		} else if (objectId === ObjectId.SHELL) {				//ID 084
+			const b = await spawnObject(`/data/enemy/nokonoko/shell_green.bmd`);			
+        } else if (objectId === ObjectId.SHARK) {				//ID 085
+            const b = await spawnObject(`/data/enemy/hojiro/hojiro.bmd`);	
+			await bindBCA(b, '/data/enemy/hojiro/hojiro_swim.bca');					
+        } else if (objectId === ObjectId.CT_MECHA01) {			//ID 086
+            const b = await spawnObject(`/data/special_obj/ct_mecha_obj01/ct_mecha_obj01.bmd`);					
+        } else if (objectId === ObjectId.CT_MECHA03) {			//ID 088
+            const b = await spawnObject(`/data/special_obj/ct_mecha_obj03/ct_mecha_obj03.bmd`);			 
+        } else if (objectId === ObjectId.CT_MECHA04L) {			//ID 089
+            const b = await spawnObject(`/data/special_obj/ct_mecha_obj04l/ct_mecha_obj04l.bmd`);		
+        } else if (objectId === ObjectId.CT_MECHA04S) {			//ID 090
+            const b = await spawnObject(`/data/special_obj/ct_mecha_obj04s/ct_mecha_obj04s.bmd`);	
+        } else if (objectId === ObjectId.CT_MECHA05) {			//ID 091
+            const b = await spawnObject(`/data/special_obj/ct_mecha_obj05/ct_mecha_obj05.bmd`);	 
+        } else if (objectId === ObjectId.CT_MECHA06) {			//ID 092
+            const b = await spawnObject(`/data/special_obj/ct_mecha_obj06/ct_mecha_obj06.bmd`);	 
+        } else if (objectId === ObjectId.CT_MECHA09) {			//ID 096
+            const b = await spawnObject(`/data/special_obj/ct_mecha_obj09/ct_mecha_obj09.bmd`);	  
+        } else if (objectId === ObjectId.CT_MECHA10) {			//ID 097
+            const b = await spawnObject(`/data/special_obj/ct_mecha_obj10/ct_mecha_obj10.bmd`);	  
+        } else if (objectId === ObjectId.CT_MECHA11) {			//ID 098
+            const b = await spawnObject(`/data/special_obj/ct_mecha_obj11/ct_mecha_obj11.bmd`);	  
+        } else if (objectId === ObjectId.CT_MECHA12L) {			//ID 099
+            const b = await spawnObject(`/data/special_obj/ct_mecha_obj12l/ct_mecha_obj12l.bmd`);	  
+        } else if (objectId === ObjectId.CT_MECHA12S) {			//ID 100
+            const b = await spawnObject(`/data/special_obj/ct_mecha_obj12s/ct_mecha_obj12s.bmd`);	
+        } else if (objectId === ObjectId.DP_BROCK) {			//ID 101
+            const b = await spawnObject(`/data/special_obj/dp_brock/dp_brock.bmd`);	
+        } else if (objectId === ObjectId.DP_LIFT) {				//ID 102
+            const b = await spawnObject(`/data/special_obj/dp_lift/dp_lift.bmd`);	
+        } else if (objectId === ObjectId.DL_PYRAMID) {			//ID 103
+            const b = await spawnObject(`/data/special_obj/dl_pyramid/dl_pyramid.bmd`);					
+		} else if (objectId === ObjectId.DL_PYRAMID_DUMMY) {	//ID 104
+			// Invisible				
+        } else if (objectId === ObjectId.WL_POLELIFT) {			//ID 105	
+            const b = await spawnObject(`/data/special_obj/wl_pole_lift/wl_pole_lift.bmd`);				
+        } else if (objectId === ObjectId.WL_SUBMARINE) {		//ID 106		
+            const b = await spawnObject(`/data/special_obj/wl_submarine/wl_submarine.bmd`);	
+        } else if (objectId === ObjectId.WL_KOOPA_SHUTTER) {	//ID 107	
+            const b = await spawnObject(`/data/special_obj/wl_kupa_shutter/wl_kupa_shutter.bmd`);				
+        } else if (objectId === ObjectId.RC_DORIFU) {			//ID 108
+            const b = await spawnObject(`/data/special_obj/rc_dorifu/rc_dorifu0.bmd`);	  
+        } else if (objectId === ObjectId.RC_RIFT01) {			//ID 109
+            const b = await spawnObject(`/data/special_obj/rc_rift01/rc_rift01.bmd`);	  
+        } else if (objectId === ObjectId.RC_HANE) {				//ID 110
+            const b = await spawnObject(`/data/special_obj/rc_hane/rc_hane.bmd`);	  
+        } else if (objectId === ObjectId.RC_TIKUWA) {			//ID 111
+            const b = await spawnObject(`/data/special_obj/rc_tikuwa/rc_tikuwa.bmd`);	  			
+        } else if (objectId === ObjectId.RC_BURANKO) {			//ID 112
+            const b = await spawnObject(`/data/special_obj/rc_buranko/rc_buranko.bmd`);	  		
+        } else if (objectId === ObjectId.RC_SEESAW) {			//ID 113
+            const b = await spawnObject(`/data/special_obj/rc_shiso/rc_shiso.bmd`);	  	
+        } else if (objectId === ObjectId.RC_KAITEN) {			//ID 114
+            const b = await spawnObject(`/data/special_obj/rc_kaiten/rc_kaiten.bmd`);	  	
+        } else if (objectId === ObjectId.RC_GURUGURU) {			//ID 115
+            const b = await spawnObject(`/data/special_obj/rc_guruguru/rc_guruguru.bmd`);	
+        } else if (objectId === ObjectId.SL_ICEBLOCK) {			//ID 116
+            const b = await spawnObject(`/data/special_obj/sl_ice_brock/sl_ice_brock.bmd`);				
+        } else if (objectId === ObjectId.HM_MARUTA) {			//ID 117
+            const b = await spawnObject(`/data/special_obj/hm_maruta/hm_maruta.bmd`);				
+        } else if (objectId === ObjectId.TT_FUTA) {				//ID 118
+            const b = await spawnObject(`/data/special_obj/tt_obj_futa/tt_obj_futa.bmd`);					
+        } else if (objectId === ObjectId.TT_WATER) {			//ID 119
+            const b = await spawnObject(`/data/special_obj/tt_obj_water/tt_obj_water.bmd`);	
+        } else if (objectId === ObjectId.TD_FUTA) {				//ID 120
+            const b = await spawnObject(`/data/special_obj/td_obj_futa/td_obj_futa.bmd`);	
+        } else if (objectId === ObjectId.TD_WATER) {			//ID 121
+            const b = await spawnObject(`/data/special_obj/td_obj_water/td_obj_water.bmd`);		
+        } else if (objectId === ObjectId.WC_UKISIMA) {			//ID 122
+            const b = await spawnObject(`/data/special_obj/wc_obj07/wc_obj07.bmd`, 1, 0.05); //Spinning may not be accurate?
+        } else if (objectId === ObjectId.WC_OBJ01) {			//ID 123
+            const b = await spawnObject(`/data/special_obj/wc_obj01/wc_obj01.bmd`);	
+        } else if (objectId === ObjectId.WC_OBJ02) {			//ID 124
+            const b = await spawnObject(`/data/special_obj/wc_obj02/wc_obj02.bmd`);	
+        } else if (objectId === ObjectId.WC_OBJ03) {			//ID 125
+            const b = await spawnObject(`/data/special_obj/wc_obj03/wc_obj03.bmd`);	
+        } else if (objectId === ObjectId.WC_OBJ04) {			//ID 126
+            const b = await spawnObject(`/data/special_obj/wc_obj04/wc_obj04.bmd`);	
+        } else if (objectId === ObjectId.WC_OBJ05) {			//ID 127
+            const b = await spawnObject(`/data/special_obj/wc_obj05/wc_obj05.bmd`);	
+        } else if (objectId === ObjectId.WC_OBJ06) {			//ID 128
+            const b = await spawnObject(`/data/special_obj/wc_obj06/wc_obj06.bmd`);				
+        } else if (objectId === ObjectId.WC_MIZU) {				//ID 129
+            const b = await spawnObject(`/data/special_obj/wc_mizu/wc_mizu.bmd`);				
+        } else if (objectId === ObjectId.FL_RING) {				//ID 131
+            const b = await spawnObject(`/data/special_obj/fl_ring/fl_ring.bmd`);	
+        } else if (objectId === ObjectId.FL_GURA) {				//ID 132			
+            const b = await spawnObject(`/data/special_obj/fl_gura/fl_gura.bmd`);	
+        } else if (objectId === ObjectId.FL_LONDON) {			//ID 133			
+            const b = await spawnObject(`/data/special_obj/fl_london/fl_london.bmd`);	
+        } else if (objectId === ObjectId.FL_BLOCK) {			//ID 134			
+            const b = await spawnObject(`/data/special_obj/fl_block/fl_block.bmd`);	
+        } else if (objectId === ObjectId.FL_UKIYUKA) {			//ID 135
+            const b = await spawnObject(`/data/special_obj/fl_uki_yuka/fl_uki_yuka.bmd`);	
+        } else if (objectId === ObjectId.FL_UKIYUKA_L) {		//ID 136
+            const b = await spawnObject(`/data/special_obj/fl_shiso/fl_shiso.bmd`);	
+        } else if (objectId === ObjectId.FL_SEESAW) {			//ID 137	
+            const b = await spawnObject(`/data/special_obj/fl_shiso/fl_shiso.bmd`);	
+        } else if (objectId === ObjectId.FL_KOMA_D) {			//ID 138
+            const b = await spawnObject(`/data/special_obj/fl_koma_d/fl_koma_d.bmd`);	
+        } else if (objectId === ObjectId.FL_KOMA_U) {			//ID 139
+            const b = await spawnObject(`/data/special_obj/fl_koma_u/fl_koma_u.bmd`);	
+        } else if (objectId === ObjectId.FL_UKI_KI) {			//ID 140
+            const b = await spawnObject(`/data/special_obj/fl_uki_ki/fl_uki_ki.bmd`);
+        } else if (objectId === ObjectId.FL_KUZURE) {			//ID 141
+            const b = await spawnObject(`/data/special_obj/fl_kuzure/fl_kuzure.bmd`);	
+        } else if (objectId === ObjectId.FM_BATTAN) {			//ID 142	
+            const b = await spawnObject(`/data/special_obj/fm_battan/fm_battan.bmd`);	//invisible?	
+		} else if (objectId === ObjectId.LAVA) {				//ID 143
+			//TODO?							
+		} else if (objectId === ObjectId.WATERFALL) {			//ID 144
+			//TODO				
+		} else if (objectId === ObjectId.MANTA) {				//ID 145
+			const b = await spawnObject(`/data/enemy/manta/manta.bmd`);		
+			await bindBCA(b, '/data/enemy/manta/manta_swim.bca');
+        } else if (objectId === ObjectId.SPIDER) {				//ID 146
+            const b = await spawnObject(`/data/enemy/spider/spider.bmd`);	
+			await bindBCA(b, '/data/enemy/spider/spider_walk.bca');			
+        } else if (objectId === ObjectId.JUGEM) {				//ID 148
+            const b = await spawnObject(`/data/enemy/jugem/jugem.bmd`);	
+            await bindBCA(b, '/data/enemy/jugem/jugem_wait.bca');				
+        } else if (objectId === ObjectId.GAMAGUCHI) {			//ID 149
+            const b = await spawnObject(`/data/enemy/gamaguchi/gamaguchi.bmd`);	
+			await bindBCA(b, '/data/enemy/gamaguchi/gamaguchi_walk.bca');		
+        } else if (objectId === ObjectId.EYEKUN) {				//ID 150
+            const b = await spawnObject(`/data/enemy/eyekun/eyekun.bmd`);	
+        } else if (objectId === ObjectId.EYEKUN_BOSS) {			//ID 151
+            const b = await spawnObject(`/data/enemy/eyekun/eyekun.bmd`, 2.0);			
+        } else if (objectId === ObjectId.BATTA_BLOCK) {			//ID 152
+            const b = await spawnObject(`/data/enemy/batta_block/batta_block.bmd`);			
+        } else if (objectId === ObjectId.BIRIKYU) {				//ID 153
+            const b = await spawnObject(`/data/enemy/birikyu/birikyu.bmd`);	
+			await spawnObject(`/data/enemy/birikyu/birikyu_elec.bmd`);	
+			await bindBCA(b, '/data/enemy/birikyu/birikyu_elec.bca');				
+        } else if (objectId === ObjectId.HM_BASKET) {			//ID 154
+            const b = await spawnObject(`/data/special_obj/hm_basket/hm_basket.bmd`);				
+        } else if (objectId === ObjectId.MONKEY_THIEF) {		//ID 155
+            const b = await spawnObject(`/data/enemy/monkey/monkey.bmd`);	
+			await bindBCA(b, '/data/enemy/monkey/monkey_wait1.bca');					
+		} else if (objectId === ObjectId.MONKEY_STAR) {			//ID 156
+		//Invisible			
+        } else if (objectId === ObjectId.PENGUIN_BABY) {		//ID 157		
+            const b = await spawnObject(`/data/enemy/penguin/penguin_child.bmd`, 0.25);	
+			await bindBCA(b, '/data/enemy/penguin/penguin_walk2.bca');
+        } else if (objectId === ObjectId.PENGUIN_MOTHER) {		//ID 158
+            const b = await spawnObject(`/data/enemy/penguin/penguin.bmd`);	
+			await bindBCA(b, '/data/enemy/penguin/penguin_wait1.bca');
+        } else if (objectId === ObjectId.PENGUIN_RACER) {		//ID 159
+            const b = await spawnObject(`/data/enemy/penguin/penguin.bmd`);	
+			await bindBCA(b, '/data/enemy/penguin/penguin_wait1.bca');
+        } else if (objectId === ObjectId.PENGUIN_DEFENDER) {	//ID 160
+            const b = await spawnObject(`/data/enemy/penguin/penguin.bmd`);	
+			await bindBCA(b, '/data/enemy/penguin/penguin_walk.bca');
+        } else if (objectId === ObjectId.KERONPA) {				//ID 161
+            const b = await spawnObject(`/data/enemy/keronpa/keronpa.bmd`);			
+		} else if (objectId === ObjectId.BIG_SNOWMAN) {			//ID 162
+			const body = await spawnObject(`/data/enemy/big_snowman/big_snowman_body.bmd`, 1.25);	
+			const head = await spawnObject(`/data/enemy/big_snowman/big_snowman_head.bmd`, 1.25);
+			mat4.translate(body.modelMatrix, body.modelMatrix, [0, 5, 0]);					
+        } else if (objectId === ObjectId.BIG_SNOWMAN_BODY) {	//ID 163
+            const b = await spawnObject(`/data/enemy/big_snowman/big_snowman_body.bmd`);	
+        } else if (objectId === ObjectId.BIG_SNOWMAN_HEAD) {	//ID 164
+            const b = await spawnObject(`/data/enemy/big_snowman/big_snowman_head.bmd`);				
+		} else if (objectId === ObjectId.SNOWMAN_BREATH) {		//ID 165
+		//TODO?				
+        } else if (objectId === ObjectId.PUKUPUKU) {			//ID 166
+            const b = await spawnObject(`/data/enemy/pukupuku/pukupuku.bmd`);	
+			await bindBCA(b, '/data/enemy/pukupuku/pukupuku_swim.bca');				
+        } else if (objectId === ObjectId.CLOCK_SHORT) {			//ID 167
+			const b = await spawnObject(`/data/special_obj/c2_hari_short/c2_hari_short.bmd`);	
+        } else if (objectId === ObjectId.CLOCK_LONG) {			//ID 168
+			const b = await spawnObject(`/data/special_obj/c2_hari_long/c2_hari_long.bmd`);	
+        } else if (objectId === ObjectId.CLOCK_HURIKO) {		//ID 169
+			const b = await spawnObject(`/data/special_obj/c2_huriko/c2_huriko.bmd`);						
+			const chain = await spawnObject(`/data/enemy/wanwan/chain.bmd`);	
+        } else if (objectId === ObjectId.MENBO) {				//ID 170
+            const b = await spawnObject(`/data/enemy/menbo/menbo.bmd`);	
+			await bindBCA(b, '/data/enemy/menbo/menbo_wait1.bca');
+        } else if (objectId === ObjectId.CASKET) {				//ID 171
+            //const b = await spawnObject(`/data/special_obj/casket/casket.bmd`); //Pokes out of walls			
+       } else if (objectId === ObjectId.HYUHYU) {				//ID 172
+            const b = await spawnObject(`/data/enemy/hyuhyu/hyuhyu.bmd`);	
+			await bindBCA(b, '/data/enemy/hyuhyu/hyuhyu_wait.bca');					
+        } else if (objectId === ObjectId.BOMB_SEESAW) {			//ID 173
             const b = await spawnObject(`/data/special_obj/b_si_so/b_si_so.bmd`);
-        } else if (objectId === ObjectId.YAJIRUSI_L) {
+        } else if (objectId === ObjectId.KM1_SEESAW) {			//ID 174
+            const b = await spawnObject(`/data/special_obj/km1_shiso/km1_shiso.bmd`);	  		
+        } else if (objectId === ObjectId.KM1_DORIFU) {			//ID 175
+            const b = await spawnObject(`/data/special_obj/km1_dorifu/km1_dorifu0.bmd`);	  		
+        } else if (objectId === ObjectId.KM1_UKISHIMA) {		//ID 176
+            const b = await spawnObject(`/data/special_obj/km1_ukishima/km1_ukishima.bmd`);	  				
+		} else if (objectId === ObjectId.KM1_KURUMAJIKU) {		//ID 177
+			const b = await spawnObject(`/data/special_obj/km1_kuruma/km1_kurumajiku.bmd`);	
+			const up = await spawnObject(`/data/special_obj/km1_kuruma/km1_kuruma.bmd`);
+			const down = await spawnObject(`/data/special_obj/km1_kuruma/km1_kuruma.bmd`);
+			const left = await spawnObject(`/data/special_obj/km1_kuruma/km1_kuruma.bmd`);
+			const right = await spawnObject(`/data/special_obj/km1_kuruma/km1_kuruma.bmd`);
+			mat4.translate(up.modelMatrix, up.modelMatrix, [0, 50, 37.5]);		
+			mat4.translate(right.modelMatrix, right.modelMatrix, [50, 0, 37.5]);	
+			mat4.translate(left.modelMatrix, left.modelMatrix, [-50, 0, 37.5]);	
+			mat4.translate(down.modelMatrix, down.modelMatrix, [0, -50, 37.5]);		
+        } else if (objectId === ObjectId.KM1_DERU) {			//ID 178
+            const b = await spawnObject(`/data/special_obj/km1_deru/km1_deru.bmd`);	 
+		} else if (objectId === ObjectId.KI_FUNE) {				//ID 179
+			//const b = await spawnObject(`/data/special_obj/ki_fune/ki_fune_down_a.bmd`);				
+        } else if (objectId === ObjectId.KI_FUNE_UP) {			//ID 180
+            const b = await spawnObject(`/data/special_obj/ki_fune/ki_fune_up.bmd`);	
+        } else if (objectId === ObjectId.KI_HASIRA) {			//ID 181
+            const b = await spawnObject(`/data/special_obj/ki_hasira/ki_hasira.bmd`);	//Not entirely accurate?
+        } else if (objectId === ObjectId.KI_ITA) {				//ID 183
+            const b = await spawnObject(`/data/special_obj/ki_ita/ki_ita.bmd`);				
+        } else if (objectId === ObjectId.KI_IWA) {				//ID 184
+            const b = await spawnObject(`/data/special_obj/ki_iwa/ki_iwa.bmd`);	
+        } else if (objectId === ObjectId.KS_MIZU) {				//ID 185
+            //const b = await spawnObject(`/data/special_obj/ks_mizu/ks_mizu.bmd`);
+			//Considered accurate to code but visually obstructing					
+        } else if (objectId === ObjectId.DOKAN) {				//ID 186
+            const b = await spawnObject(`/data/normal_obj/obj_dokan/obj_dokan.bmd`);				
+        } else if (objectId === ObjectId.YAJIRUSI_L) {			//ID 187
             const b = await spawnObject(`/data/normal_obj/obj_yajirusi_l/yajirusi_l.bmd`);
-        } else if (objectId === ObjectId.YAJIRUSI_R) {
+        } else if (objectId === ObjectId.YAJIRUSI_R) {			//ID 188
             const b = await spawnObject(`/data/normal_obj/obj_yajirusi_r/yajirusi_r.bmd`);
-        } else if (objectId === ObjectId.BK_UKISIMA) {
-            const b = await spawnObject(`/data/special_obj/bk_ukisima/bk_ukisima.bmd`, 1, 0.05);
-        } else if (objectId === ObjectId.BLK_SKINOKO_TAG) {
-            // Invisible
-        } else if (objectId === ObjectId.RACE_NOKO) {
-            const b = await spawnObject(`/data/enemy/nokonoko/nokonoko.bmd`, 1);
-            await bindBCA(b, '/data/enemy/nokonoko/nokonoko_wait1.bca');
-        } else if (objectId === ObjectId.BLOCK_LL) {
-            const b = await spawnObject(`/data/normal_obj/obj_block/broken_block_l.bmd`, 1.2);
-        } else if (objectId === ObjectId.MC_WATER) {
+        } else if (objectId === ObjectId.PROPELLER_HEYHO) {		//ID 189
+            const b = await spawnObject(`/data/enemy/propeller_heyho/propeller_heyho.bmd`);	
+			await bindBCA(b, '/data/enemy/propeller_heyho/propeller_heyho_wait.bca');					
+        } else if (objectId === ObjectId.KB1_BILLBOARD) {		//ID 191
+            const b = await spawnObject(`/data/special_obj/kb1_ball/kb1_ball.bmd`);	  				
+        } else if (objectId === ObjectId.HS_MOON) {				//ID 192
+            const b = await spawnObject(`/data/special_obj/hs_moon/hs_moon.bmd`);		
+        } else if (objectId === ObjectId.HS_STAR) {				//ID 193
+            const b = await spawnObject(`/data/special_obj/hs_star/hs_star.bmd`);		
+        } else if (objectId === ObjectId.HS_Y_STAR) {			//ID 194
+            const b = await spawnObject(`/data/special_obj/hs_y_star/hs_y_star.bmd`);		
+        } else if (objectId === ObjectId.HS_B_STAR) {			//ID 195
+            const b = await spawnObject(`/data/special_obj/hs_b_star/hs_b_star.bmd`);				
+        } else if (objectId === ObjectId.BK_BILLBOARD) {		//ID 196
+            const b = await spawnObject(`/data/special_obj/bk_billbord/bk_billbord.bmd`);	
+        } else if (objectId === ObjectId.BK_KILLER_DAI) {		//ID 197
+            const b = await spawnObject(`/data/special_obj/bk_killer_dai/bk_killer_dai.bmd`);				
+        } else if (objectId === ObjectId.BK_BOTAOSI) {			//ID 198
+            const b = await spawnObject(`/data/special_obj/bk_botaosi/bk_botaosi.bmd`);		
+        } else if (objectId === ObjectId.BK_DOWN_B) {			//ID 199
+            const b = await spawnObject(`/data/special_obj/bk_down_b/bk_down_b.bmd`);	
+        } else if (objectId === ObjectId.BK_FUTA) {				//ID 200
+            const b = await spawnObject(`/data/special_obj/bk_futa/bk_futa.bmd`);
+        } else if (objectId === ObjectId.BK_KABE01) {			//ID 201
+            const b = await spawnObject(`/data/special_obj/bk_kabe01/bk_kabe01.bmd`);				
+        } else if (objectId === ObjectId.BK_KABE00) {			//ID 202
+            const b = await spawnObject(`/data/special_obj/bk_kabe00/bk_kabe00.bmd`);
+        } else if (objectId === ObjectId.BK_TOWER) {			//ID 203
+            const b = await spawnObject(`/data/special_obj/bk_tower/bk_tower.bmd`);		
+        } else if (objectId === ObjectId.BK_UKISIMA) {			//ID 204
+            const b = await spawnObject(`/data/special_obj/bk_ukisima/bk_ukisima.bmd`, 1, 0.05);			
+        } else if (objectId === ObjectId.BK_ROTEBAR) {			//ID 205
+            const b = await spawnObject(`/data/special_obj/bk_rotebar/bk_rotebar.bmd`);			
+        } else if (objectId === ObjectId.BK_LIFT01) {			//ID 206
+            const b = await spawnObject(`/data/special_obj/bk_lift01/bk_lift01.bmd`);				
+        } else if (objectId === ObjectId.BK_DOSSUNBAR_S) {		//ID 207
+            const b = await spawnObject(`/data/special_obj/bk_dossunbar_s/bk_dossunbar_s.bmd`);
+        } else if (objectId === ObjectId.BK_DOSSUNBAR_L) {		//ID 208
+            const b = await spawnObject(`/data/special_obj/bk_dossunbar_l/bk_dossunbar_l.bmd`);
+        } else if (objectId === ObjectId.BK_TRANSBAR) {			//ID 209
+            const b = await spawnObject(`/data/special_obj/bk_transbar/bk_transbar.bmd`);		
+        } else if (objectId === ObjectId.TH_DOWN_B) {			//ID 210
+            const b = await spawnObject(`/data/special_obj/th_down_b/th_down_b.bmd`);				
+        } else if (objectId === ObjectId.KM2_KUZURE) {			//ID 211
+            const b = await spawnObject(`/data/special_obj/km2_kuzure/km2_kuzure.bmd`);	 
+        } else if (objectId === ObjectId.KM2_AGARU) {			//ID 212
+            const b = await spawnObject(`/data/special_obj/km2_agaru/km2_agaru.bmd`);	 			
+        } else if (objectId === ObjectId.KM2_GURA) {			//ID 213
+            const b = await spawnObject(`/data/special_obj/km2_gura/km2_gura.bmd`);	 	
+        } else if (objectId === ObjectId.KM2_AMI_BOU) {			//ID 214
+            const b = await spawnObject(`/data/special_obj/km2_ami_bou/km2_ami_bou.bmd`);	 	
+        } else if (objectId === ObjectId.KM2_YOKOSEESAW) {		//ID 215
+            const b = await spawnObject(`/data/special_obj/km2_yokoshiso/km2_yokoshiso.bmd`);	
+        } else if (objectId === ObjectId.KM2_SUSUMU) {			//ID 216
+            const b = await spawnObject(`/data/special_obj/km2_susumu/km2_susumu.bmd`);	
+        } else if (objectId === ObjectId.KM2_UKISHIMA) {		//ID 217
+            const b = await spawnObject(`/data/special_obj/km2_ukishima/km2_ukishima.bmd`);	
+        } else if (objectId === ObjectId.KM2_RIFUT02) {			//ID 218
+            const b = await spawnObject(`/data/special_obj/km2_rift02/km2_rift02.bmd`);	
+        } else if (objectId === ObjectId.KM2_RIFUT01) {			//ID 219
+            const b = await spawnObject(`/data/special_obj/km2_rift01/km2_rift01.bmd`);	
+        } else if (objectId === ObjectId.KM2_NOBIRU) {			//ID 220
+            const b = await spawnObject(`/data/special_obj/km2_nobiru/km2_nobiru.bmd`);	
+        } else if (objectId === ObjectId.KM3_SEESAW) {			//ID 221
+            const b = await spawnObject(`/data/special_obj/km3_shiso/km3_shiso.bmd`);	
+        } else if (objectId === ObjectId.KM3_YOKOSEESAW) {		//ID 222
+            const b = await spawnObject(`/data/special_obj/km3_yokoshiso/km3_yokoshiso.bmd`);	
+		} else if (objectId === ObjectId.KM3_KURUMAJIKU) {		//ID 223
+			const b = await spawnObject(`/data/special_obj/km3_kuruma/km3_kurumajiku.bmd`);	
+			const up = await spawnObject(`/data/special_obj/km3_kuruma/km3_kuruma.bmd`);
+			const down = await spawnObject(`/data/special_obj/km3_kuruma/km3_kuruma.bmd`);
+			const left = await spawnObject(`/data/special_obj/km3_kuruma/km3_kuruma.bmd`);
+			const right = await spawnObject(`/data/special_obj/km3_kuruma/km3_kuruma.bmd`);
+			mat4.translate(up.modelMatrix, up.modelMatrix, [0, 50, 37.5]);		
+			mat4.translate(right.modelMatrix, right.modelMatrix, [50, 0, 37.5]);	
+			mat4.translate(left.modelMatrix, left.modelMatrix, [-50, 0, 37.5]);	
+			mat4.translate(down.modelMatrix, down.modelMatrix, [0, -50, 37.5]);				
+        } else if (objectId === ObjectId.KM3_DORIFU) {			//ID 224
+            const b = await spawnObject(`/data/special_obj/km3_dan/km3_dan0.bmd`);		
+        } else if (objectId === ObjectId.KM3_DERU01) {			//ID 225
+            const b = await spawnObject(`/data/special_obj/km3_deru01/km3_deru01.bmd`);		
+        } else if (objectId === ObjectId.KM3_DERU02) {			//ID 226
+            const b = await spawnObject(`/data/special_obj/km3_deru02/km3_deru02.bmd`);		
+        } else if (objectId === ObjectId.KM3_KAITENDAI) {		//ID 227
+            const b = await spawnObject(`/data/special_obj/km3_kaitendai/km3_kaitendai.bmd`);
+        } else if (objectId === ObjectId.C0_SWITCH) {			//ID 228
+			const b = await spawnObject(`/data/special_obj/c0_switch/c0_switch.bmd`);
+        } else if (objectId === ObjectId.SM_LIFT) {				//ID 229
+            const b = await spawnObject(`/data/special_obj/sm_lift/sm_lift.bmd`);
+        } else if (objectId === ObjectId.FL_MARUTA) {			//ID 230
+            const b = await spawnObject(`/data/special_obj/fl_log/fl_log.bmd`);
+        } else if (objectId === ObjectId.UDLIFT_TERESA) {		//ID 231
+            const b = await spawnObject(`/data/special_obj/th_lift/th_lift.bmd`);	
+        } else if (objectId === ObjectId.UDLIFT) {				//ID 232
+            const b = await spawnObject(`/data/special_obj/cv_ud_lift/cv_ud_lift.bmd`);
+        } else if (objectId === ObjectId.RC_RIFT02) {			//ID 233
+            const b = await spawnObject(`/data/special_obj/rc_rift02/rc_rift02.bmd`);
+        } else if (objectId === ObjectId.BAKUBAKU) {			//ID 234
+            const b = await spawnObject(`/data/enemy/bakubaku/bakubaku.bmd`);	
+            await bindBCA(b, '/data/enemy/bakubaku/bakubaku_swim.bca');			
+        } else if (objectId === ObjectId.KM3_LIFT) {			//ID 235
+            const b = await spawnObject(`/data/special_obj/km3_rift/km3_rift.bmd`);					
+        } else if (objectId === ObjectId.KIRAI) {				//ID 236
+            const b = await spawnObject(`/data/enemy/koopa_bomb/koopa_bomb.bmd`);	 	
+        } else if (objectId === ObjectId.MIP) {					//ID 237
+			const b = await spawnObject(`/data/enemy/mip/mip.bmd`);		
+			await bindBCA(b, '/data/enemy/mip/mip_wait.bca');					
+        } else if (objectId === ObjectId.OWL) {					//ID 239	
+            const b = await spawnObject(`/data/enemy/owl/owl.bmd`);		
+            await bindBCA(b, '/data/enemy/owl/owl_fly_free.bca');			
+        } else if (objectId === ObjectId.DONKETU) {				//ID 240
+            const b = await spawnObject(`/data/enemy/donketu/donketu.bmd`);		
+			await bindBCA(b, '/data/enemy/donketu/donketu_walk.bca');				
+        } else if (objectId === ObjectId.BOSS_DONKETU) {		//ID 241		
+            const b = await spawnObject(`/data/enemy/donketu/boss_donketu.bmd`);	
+			mat4.translate(b.modelMatrix, b.modelMatrix, [0, 10, 0]);			
+			await bindBCA(b, '/data/enemy/donketu/donketu_walk.bca');		
+        } else if (objectId === ObjectId.ONIMASU) {				//ID 242
+            const b = await spawnObject(`/data/enemy/onimasu/onimasu.bmd`);	
+			mat4.translate(b.modelMatrix, b.modelMatrix, [0, 32, 0]);					
+		} else if (objectId === ObjectId.BAR) {					//ID 243
+			// Invisible			
+        } else if (objectId === ObjectId.C_JUGEM) {				//ID 244
+            const b = await spawnObject(`/data/enemy/c_jugem/c_jugem.bmd`);	
+            await bindBCA(b, '/data/enemy/c_jugem/c_jugem_wait.bca');			
+        } else if (objectId === ObjectId.PUSHBLOCK) {			//ID 245
+            const b = await spawnObject(`/data/normal_obj/obj_pushblock/obj_pushblock.bmd`);	
+        } else if (objectId === ObjectId.FL_AMILIFT) {			//ID 246
+            const b = await spawnObject(`/data/special_obj/fl_amilift/fl_amilift.bmd`);	
+        } else if (objectId === ObjectId.YUREI_MUCHO) {			//ID 247
+            const b = await spawnObject(`/data/enemy/yurei_mucho/yurei_mucho.bmd`);
+			await bindBCA(b, '/data/enemy/yurei_mucho/yurei_mucho_wait.bca');		
+        } else if (objectId === ObjectId.CHOROPU) {				//ID 248
+            const b = await spawnObject(`/data/enemy/choropu/choropu.bmd`);
+			await bindBCA(b, '/data/enemy/choropu/choropu_search.bca');		
+        } else if (objectId === ObjectId.BASABASA) {			//ID 250
+           //const b = await spawnObject(`/data/enemy/basabasa/basabasa.bmd`); //Crashes?
+		   //await bindBCA(b, '/data/enemy/basabasa/basabasa_wait.bca');				
+		} else if (objectId === ObjectId.POPOI) {				//ID 251
+			const b = await spawnObject(`/data/enemy/popoi/popoi.bmd`);
+			await bindBCA(b, '/data/enemy/popoi/popoi_move1.bca');		
+        } else if (objectId === ObjectId.JANGO) {				//ID 252
+            const b = await spawnObject(`/data/enemy/jango/jango.bmd`);	
+			await bindBCA(b, '/data/enemy/jango/jango_fly.bca');				
+		} else if (objectId === ObjectId.SANBO) {				//ID 253
+			const head = await spawnObject(`/data/enemy/sanbo/sanbo_head.bmd`);	
+			const body1 = await spawnObject(`/data/enemy/sanbo/sanbo_body.bmd`);	
+			const body2 = await spawnObject(`/data/enemy/sanbo/sanbo_body.bmd`);	
+			const body3 = await spawnObject(`/data/enemy/sanbo/sanbo_body.bmd`);	
+			const body4 = await spawnObject(`/data/enemy/sanbo/sanbo_body.bmd`);	
+			
+			mat4.translate(body1.modelMatrix, body1.modelMatrix, [0, 5, 0]);	
+			mat4.translate(body2.modelMatrix, body2.modelMatrix, [0, 20, 0]);	
+			mat4.translate(body3.modelMatrix, body3.modelMatrix, [0, 35, 0]);	
+			mat4.translate(body4.modelMatrix, body4.modelMatrix, [0, 50, 0]);	
+			mat4.translate(head.modelMatrix, head.modelMatrix, [0, 65, 0]);		
+        } else if (objectId === ObjectId.OBJ_MARIO_CAP) {		//ID 254
+            // TODO: Find models, distinction between M/L/W					
+		} else if (objectId === ObjectId.FL_PUZZLE) {			//ID 255
+            const npart = clamp((object.Parameters[0] & 0xFF), 0, 13);
+            const b = await spawnObject(`/data/special_obj/fl_puzzle/fl_14_${leftPad(''+npart, 2)}.bmd`);		
+		} else if (objectId === ObjectId.FL_COIN) {				//ID 256
+			// Invisible			
+        } else if (objectId === ObjectId.DOSSY) {				//ID 257
+            const b = await spawnObject(`/data/enemy/dossy/dossy.bmd`);
+			await bindBCA(b, '/data/enemy/dossy/dossy_swim.bca');			
+        } else if (objectId === ObjectId.DOSSY_CAP) {			//ID 258
+            // TODO: Find model				
+        } else if (objectId === ObjectId.HUWAHUWA) {			//ID 259
+            const b = await spawnObject(`/data/enemy/huwahuwa/huwahuwa_model.bmd`);	
+			await bindBCA(b, '/data/enemy/huwahuwa/huwahuwa_move.bca');						
+        } else if (objectId === ObjectId.SLIDE_BOX) {			//ID 260
+            const b = await spawnObject(`/data/special_obj/ki_slide_box/ki_slide_box.bmd`);	
+        } else if (objectId === ObjectId.MORAY) {				//ID 261
+            const b = await spawnObject(`/data/enemy/moray/moray.bmd`);	
+            await bindBCA(b, '/data/enemy/moray/moray_swim.bca');				
+        } else if (objectId === ObjectId.OBJ_KUMO) {			//ID 262
+            const b = await spawnObject(`/data/normal_obj/obj_kumo/obj_kumo.bmd`);					
+        } else if (objectId === ObjectId.OBJ_SHELL) {			//ID 263
+            const b = await spawnObject(`/data/normal_obj/obj_shell/obj_shell.bmd`);	
+			await bindBCA(b, '/data/normal_obj/obj_shell/obj_shell_open.bca');		
+        } else if (objectId === ObjectId.OBJ_RED_FIRE) {		//ID 264
+			//TODO			
+        } else if (objectId === ObjectId.OBJ_BLUE_FIRE) {		//ID 265
+			//TODO						
+		} else if (objectId === ObjectId.OBJ_FLAMETHROWER) {	//ID 266
+			//TODO?			
+		} else if (objectId === ObjectId.KINOKO_CREATE_TAG) {	//ID 267
+		//Invisible(?)			
+		} else if (objectId === ObjectId.KINOKO_TAG) {			//ID 268
+		//Invisible(?)			
+		} else if (objectId === ObjectId.BLK_OKINOKO_TAG) {		//ID 269
+			// Invisible		
+        } else if (objectId === ObjectId.BLK_SKINOKO_TAG) {		//ID 270
+            // Invisible			
+		} else if (objectId === ObjectId.BLK_GNSHELL_TAG) {		//ID 271
+			// Invisible			
+		} else if (objectId === ObjectId.BLK_SLVSTAR_TAG) {		//ID 272
+			// Invisible				
+        } else if (objectId === ObjectId.C1_TRAP) {				//ID 273
+			const right = await spawnObject(`/data/special_obj/c1_trap/c1_trap.bmd`);
+			const left = await spawnObject(`/data/special_obj/c1_trap/c1_trap.bmd`);
+			mat4.translate(left.modelMatrix, left.modelMatrix, [-44, 0, 0]);			
+        } else if (objectId === ObjectId.C1_PEACH) {			//ID 275
+			const b = await spawnObject(`/data/special_obj/c1_peach/c1_peach.bmd`);		
+        } else if (objectId === ObjectId.RC_CARPET) {			//ID 276
+            const b = await spawnObject(`/data/special_obj/rc_carpet/rc_carpet.bmd`);	  				
+             await bindBCA(b, '/data/special_obj/rc_carpet/rc_carpet_wait.bca');		
+		} else if (objectId === ObjectId.IWANTE) {				//ID 279
+			const b = await spawnObject(`/data/enemy/iwante/iwante_dummy.bmd`);				 
+		} else if (objectId === ObjectId.HANACHAN) {			//ID 280
+			const head = await spawnObject(`/data/enemy/hanachan/hanachan_head.bmd`);	
+			const body1 = await spawnObject(`/data/enemy/hanachan/hanachan_body01.bmd`);	
+			const body2 = await spawnObject(`/data/enemy/hanachan/hanachan_body02.bmd`);	
+			const body3 = await spawnObject(`/data/enemy/hanachan/hanachan_body03.bmd`);	
+			const body4 = await spawnObject(`/data/enemy/hanachan/hanachan_body04.bmd`);	
+			mat4.translate(head.modelMatrix, head.modelMatrix, [0, 16, -5]);	
+			mat4.translate(body1.modelMatrix, body1.modelMatrix, [0, 16, -15]);	
+			mat4.translate(body2.modelMatrix, body2.modelMatrix, [0, 16, -30]);	
+			mat4.translate(body3.modelMatrix, body3.modelMatrix, [0, 16, -45]);	
+			mat4.translate(body4.modelMatrix, body4.modelMatrix, [0, 16, -60]);		
+        } else if (objectId === ObjectId.RACE_NOKO) {			//ID 281
+            const b = await spawnObject(`/data/enemy/nokonoko/nokonoko.bmd`, 1);	
+            await bindBCA(b, '/data/enemy/nokonoko/nokonoko_wait1.bca');				
+		} else if (objectId === ObjectId.RACE_FLAG) {			//ID 282
+			const b = await spawnObject(`/data/normal_obj/obj_race_flag/obj_race_flag.bmd`);
+			await bindBCA(b, '/data/normal_obj/obj_race_flag/obj_race_flag_wait.bca');				
+        } else if (objectId === ObjectId.BLOCK_LL) {			//ID 284
+            const b = await spawnObject(`/data/normal_obj/obj_block/broken_block_ll.bmd`);	
+        } else if (objectId === ObjectId.ICE_BLOCK_LL) {		//ID 285
+            const b = await spawnObject(`/data/normal_obj/obj_block/ice_block_ll.bmd`);				
+		} else if (objectId === ObjectId.KILLER_BOOK) {			//ID 287
+			// Invisible			
+		} else if (objectId === ObjectId.BOOK_GENERATOR) {		//ID 288
+			// Invisible			
+        } else if (objectId === ObjectId.ICE_DONKETU) {			//ID 290
+            const b = await spawnObject(`/data/enemy/donketu/ice_donketu.bmd`);	
+			await bindBCA(b, '/data/enemy/donketu/ice_donketu_walk.bca');				
+        } else if (objectId === ObjectId.KING_DONKETU) {		//ID 291
+            const b = await spawnObject(`/data/enemy/king_ice_donketu/king_ice_donketu_model.bmd`);	
+			await bindBCA(b, '/data/enemy/king_ice_donketu/king_ice_donketu_wait.bca');				
+        } else if (objectId === ObjectId.TREASURE_BOX) {		//ID 292
+            const b = await spawnObject(`/data/normal_obj/t_box/t_box.bmd`);		
+			await bindBCA(b, '/data/normal_obj/t_box/t_box_open.bca'); //can comment out when idle treasure box is no longer glitched			
+        } else if (objectId === ObjectId.MC_WATER) {			//ID 293
             const b = await spawnObject(`/data/special_obj/mc_water/mc_water.bmd`);
-        } else if (objectId === ObjectId.MC_METALNET) {
+        } else if (objectId === ObjectId.CHAIR) {				//ID 294
+            const b = await spawnObject(`/data/enemy/chair/chair.bmd`);				
+        } else if (objectId === ObjectId.MC_METALNET) {			//ID 295
             const b = await spawnObject(`/data/special_obj/mc_metalnet/mc_metalnet.bmd`);
-        } else if (objectId === ObjectId.MC_FLAG) {
+        } else if (objectId === ObjectId.MC_DODAI) {			//ID 296
+			const b = await spawnObject(`/data/special_obj/mc_dodai/mc_dodai.bmd`);		
+        } else if (objectId === ObjectId.MC_HAZAD) {			//ID 297
+			const b = await spawnObject(`/data/special_obj/mc_hazad/mc_hazad.bmd`);					
+        } else if (objectId === ObjectId.MC_FLAG) {				//ID 298
             const b = await spawnObject(`/data/special_obj/mc_flag/mc_flag.bmd`);
-        } else if (objectId === ObjectId.BC_SWITCH) {
-            const b = await spawnObject(`/data/normal_obj/b_coin_switch/b_coin_switch.bmd`);
-        } else if (objectId === ObjectId.ENEMY_SWITCH) {
+			await bindBCA(b, '/data/special_obj/mc_flag/mc_flag_wait.bca');		
+        } else if (objectId === ObjectId.DONKAKU) {				//ID 299
+            const b = await spawnObject(`/data/enemy/donkaku/donkaku.bmd`);	
+        } else if (objectId === ObjectId.DONGURU) {				//ID 300
+            const b = await spawnObject(`/data/enemy/donguru/donguru.bmd`);				
+        } else if (objectId === ObjectId.HOLHEI) {				//ID 301
+            const b = await spawnObject(`/data/enemy/horuhei/horuhei.bmd`);	
+			await bindBCA(b, '/data/enemy/horuhei/horuhei_walk.bca');					
+        } else if (objectId === ObjectId.SCALEUP_KINOKO) {		//ID 302
+            const b = await spawnObject(`/data/normal_obj/scale_up_kinoko/scale_up_kinoko.bmd`);	
+        } else if (objectId === ObjectId.C0_WATER) {			//ID 303
+			const b = await spawnObject(`/data/special_obj/c0_water/c0_water.bmd`);		
+		} else if (objectId === ObjectId.SECRET_COIN) {			//ID 304
+			// Invisible			
+        } else if (objectId === ObjectId.BC_SWITCH) {			//ID 305
+            const b = await spawnObject(`/data/normal_obj/b_coin_switch/b_coin_switch.bmd`);	
+		} else if (objectId === ObjectId.BUBBLE) {				//ID 307
+			//TODO?			
+		} else if (objectId === ObjectId.STAR_CREATE) {			//ID 308
+			// Invisible
+		} else if (objectId === ObjectId.SLIDER_MANAGER) {		//ID 309
+			// Invisible			
+        } else if (objectId === ObjectId.FIREPAKUN) {			//ID 312
+            const b = await spawnObject(`/data/enemy/pakkun/pakkun_model.bmd`, 2);		
+            await bindBCA(b, '/data/enemy/pakkun/pakkun_attack.bca');						
+        } else if (objectId === ObjectId.FIREPAKUN_S) {			//ID 313
+            const b = await spawnObject(`/data/enemy/pakkun/pakkun_model.bmd`, 0.5);		
+            await bindBCA(b, '/data/enemy/pakkun/pakkun_attack.bca');						
+        } else if (objectId === ObjectId.PAKUN2) {				//ID 314
+            const b = await spawnObject(`/data/enemy/pakkun/pakkun_model.bmd`);		
+            await bindBCA(b, '/data/enemy/pakkun/pakkun_attack.bca');				
+        } else if (objectId === ObjectId.ENEMY_SWITCH) {		//ID 315
             // Invisible
-        } else if (objectId === ObjectId.ENEMY_CREATE) {
+        } else if (objectId === ObjectId.ENEMY_CREATE) {		//ID 316
             // Invisible
-        } else if (objectId === ObjectId.SET_SE) {
+		} else if (objectId === ObjectId.WATER_HAKIDASI) {		//ID 317
+			// Invisible			
+        } else if (objectId === ObjectId.WATER_TATUMAKI) {		//ID 318
+            const b = await spawnObject(`/data/normal_obj/water_tatumaki/water_tatumaki.bmd`);	
+			await bindBCA(b, '/data/normal_obj/water_tatumaki/water_tatumaki.bca');		
+        } else if (objectId === ObjectId.TORNADO) {				//ID 320
+            const b = await spawnObject(`/data/enemy/sand_tornado/sand_tornado.bmd`);	
+			await bindBCA(b, '/data/enemy/sand_tornado/sand_tornado.bca');					
+		} else if (objectId === ObjectId.LUIGI) {				//ID 322
+			// Invisible				
+        } else if (objectId === ObjectId.SET_SE) {				//ID 323
             // Invisible
-        } else if (objectId === ObjectId.MUGEN_BGM) {
+        } else if (objectId === ObjectId.MUGEN_BGM) {			//ID 324
             // Invisible
-        } else if (objectId === ObjectId.TRG_MINIMAP_CHANGE) {
-            // Invisible
+        } else if (objectId === ObjectId.TRG_MINIMAP_CHANGE) {	//ID 511(?)
+            // Invisible			
         } else {
             console.warn(`Unknown object type ${object.ObjectId} / ${ObjectId[object.ObjectId]}`);
         }
@@ -968,44 +1601,47 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
 const id = "sm64ds";
 const name = "Super Mario 64 DS";
 const sceneDescs = [
-    "Princess Peach's Castle",
+    "Mushroom Castle",
     new SM64DSSceneDesc(1, "Outdoor Gardens"),
     new SM64DSSceneDesc(2, "Main Foyer"),
     new SM64DSSceneDesc(4, "Basement"),
     new SM64DSSceneDesc(5, "Upstairs"),
     new SM64DSSceneDesc(3, "Courtyard"),
-    new SM64DSSceneDesc(50, "Playroom"),
-    "Levels",
+    new SM64DSSceneDesc(50, "Rec Room"),
+    "First Floor Courses",
     new SM64DSSceneDesc(6, 'Bob-omb Battlefield'),
     new SM64DSSceneDesc(7, "Whomp's Fortress"),
     new SM64DSSceneDesc(8, 'Jolly Roger Bay'),
-    new SM64DSSceneDesc(9, 'Jolly Roger Bay - Inside the Ship'),
+    new SM64DSSceneDesc(9, 'Jolly Roger Bay (Inside the Ship)'),
     new SM64DSSceneDesc(10, 'Cool, Cool Mountain'),
-    new SM64DSSceneDesc(11, 'Cool, Cool Mountain - Inside the Slide'),
+    new SM64DSSceneDesc(11, 'Cool, Cool Mountain (Inside the Slide)'),
     new SM64DSSceneDesc(12, "Big Boo's Haunt"),
+	"Basement Courses",
     new SM64DSSceneDesc(13, 'Hazy Maze Cave'),
     new SM64DSSceneDesc(14, 'Lethal Lava Land'),
-    new SM64DSSceneDesc(15, 'Lethal Lava Land - Inside the Volcano'),
+    new SM64DSSceneDesc(15, 'Lethal Lava Land (Inside the Volcano)'),
     new SM64DSSceneDesc(16, 'Shifting Sand Land'),
-    new SM64DSSceneDesc(17, 'Shifting Sand Land - Inside the Pyramid'),
+    new SM64DSSceneDesc(17, 'Shifting Sand Land (Inside the Pyramid)'),
     new SM64DSSceneDesc(18, 'Dire, Dire Docks'),
+	"Second Floor Courses",
     new SM64DSSceneDesc(19, "Snowman's Land"),
-    new SM64DSSceneDesc(20, "Snowman's Land - Inside the Igloo"),
+    new SM64DSSceneDesc(20, "Snowman's Land (Inside the Igloo)"),
     new SM64DSSceneDesc(21, 'Wet-Dry World'),
     new SM64DSSceneDesc(22, 'Tall Tall Mountain'),
-    new SM64DSSceneDesc(23, 'Tall Tall Mountain - Inside the Slide'),
-    new SM64DSSceneDesc(25, 'Tiny-Huge Island - Tiny'),
-    new SM64DSSceneDesc(24, 'Tiny-Huge Island - Huge'),
-    new SM64DSSceneDesc(26, "Tiny-Huge Island - Inside Wiggler's Cavern"),
+    new SM64DSSceneDesc(23, 'Tall Tall Mountain (Inside the Slide)'),
+    new SM64DSSceneDesc(25, 'Tiny-Huge Island (Tiny)'),
+    new SM64DSSceneDesc(24, 'Tiny-Huge Island (Huge)'),
+    new SM64DSSceneDesc(26, "Tiny-Huge Island (Inside Wiggler's Cavern)"),
+	"Third Floor Courses",	
     new SM64DSSceneDesc(27, 'Tick Tock Clock'),
     new SM64DSSceneDesc(28, 'Rainbow Ride'),
     "Bowser Levels",
     new SM64DSSceneDesc(35, 'Bowser in the Dark World'),
-    new SM64DSSceneDesc(36, 'Bowser in the Dark World - Boss Arena'),
+    new SM64DSSceneDesc(36, 'Bowser in the Dark World (Boss Arena)'),
     new SM64DSSceneDesc(37, 'Bowser in the Fire Sea'),
-    new SM64DSSceneDesc(38, 'Bowser in the Fire Sea - Boss Arena'),
+    new SM64DSSceneDesc(38, 'Bowser in the Fire Sea (Boss Arena)'),
     new SM64DSSceneDesc(39, 'Bowser in the Sky'),
-    new SM64DSSceneDesc(40, 'Bowser in the Sky - Boss Arena'),
+    new SM64DSSceneDesc(40, 'Bowser in the Sky (Boss Arena)'),
     "Secret Levels",
     new SM64DSSceneDesc(29, 'The Princess\'s Secret Slide'),
     new SM64DSSceneDesc(30, 'The Secret Aquarium'),
@@ -1015,11 +1651,11 @@ const sceneDescs = [
     new SM64DSSceneDesc(33, 'Cavern of the Metal Cap'),
     "Extra DS Levels",
     new SM64DSSceneDesc(46, 'Big Boo Battle'),
-    new SM64DSSceneDesc(47, 'Big Boo Battle - Boss Arena'),
+    new SM64DSSceneDesc(47, 'Big Boo Battle (Boss Arena)'),
     new SM64DSSceneDesc(44, 'Goomboss Battle'),
-    new SM64DSSceneDesc(45, 'Goomboss Battle - Boss Arena'),
+    new SM64DSSceneDesc(45, 'Goomboss Battle (Boss Arena)'),
     new SM64DSSceneDesc(48, 'Chief Chilly Challenge'),
-    new SM64DSSceneDesc(49, 'Chief Chilly Challenge - Boss Arena'),
+    new SM64DSSceneDesc(49, 'Chief Chilly Challenge (Boss Arena)'),
     "VS Maps",
     new SM64DSSceneDesc(42, 'The Secret of Battle Fort'),
     new SM64DSSceneDesc(43, 'Sunshine Isles'),
