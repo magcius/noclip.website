@@ -802,6 +802,64 @@ class SceneDesc implements Viewer.SceneDesc {
                 buildModel(zar, `item00/model/drop_gi_hearts_1.cmb`, 0.05);
             } else console.warn(`Unknown Item00 drop: ${hexzero(actor.variable, 4)}`);
         });
+
+        else if (actor.actorId === ActorId.Bg_Haka_Trap) {
+            const whichModel = actor.variable & 0x0F;
+            if (whichModel === 0x00) //Guillotine Blade (Slow)
+                fetchArchive(`zelda_haka_objects.zar`).then((zar) => buildModel(zar, `model/m_Hgiro_model.cmb`, 0.1));
+            else if (whichModel === 0x01) //Spiked Box on Chain
+                fetchArchive(`zelda_haka_objects.zar`).then((zar) => buildModel(zar, `model/m_Hkenzan_model.cmb`, 0.1));
+            else if (whichModel === 0x02) //Spiked wooden wall
+                fetchArchive(`zelda_haka_objects.zar`).then((zar) => buildModel(zar, `model/m_HhasamiN_model.cmb`, 0.1));
+            else if (whichModel === 0x03) //Spiked wooden wall, opposite
+                fetchArchive(`zelda_haka_objects.zar`).then((zar) => buildModel(zar, `model/m_HhasamiS_model.cmb`, 0.1)); 
+            else if (whichModel === 0x04) //Propeller, blows wind
+                fetchArchive(`zelda_haka_objects.zar`).then((zar) => buildModel(zar, `model/m_Hfofo_model.cmb`, 0.1));
+            else if (whichModel === 0x05) //Guillotine Blade (Fast)
+                fetchArchive(`zelda_haka_objects.zar`).then((zar) => buildModel(zar, `model/m_Hgiro_model.cmb`, 0.1));
+            else
+                throw "whoops";
+        }
+
+        else if (actor.actorId === ActorId.Bg_Haka_Megane) {
+            const whichModel = actor.variable & 0x0F;
+            if (whichModel === 0x03)  //Rock wall with skull, style that can have glowing eyes
+                fetchArchive(`zelda_haka_objects.zar`).then((zar) => buildModel(zar, `model/m_HADsec00_model.cmb`, 0.1));
+            else if (whichModel === 0x04) //Black square with large skull face
+                fetchArchive(`zelda_haka_objects.zar`).then((zar) => buildModel(zar, `model/m_HADsec02_model.cmb`, 0.1));
+            else if (whichModel === 0x05) // shadow temple boss room platforms 
+                console.warn(`unimplemented: Bg_Haka_Megane 0x05`);
+            else if (whichModel === 0x06) //wall of skulls
+                fetchArchive(`zelda_haka_objects.zar`).then((zar) => buildModel(zar, `model/m_HADsec05_model.cmb`, 0.1));
+            else if (whichModel === 0x07) // shadow temple floor with "bluish" textures
+                console.warn(`unimplemented: Bg_Haka_Megane 0x07`);
+            else if (whichModel === 0x08) // massive platform
+                console.warn(`unimplemented: Bg_Haka_Megane 0x08`);
+            else if (whichModel === 0x09) //wall with "bluish" fat bricks textures one sided
+                fetchArchive(`zelda_haka_objects.zar`).then((zar) => buildModel(zar, `model/m_HADsec12_model.cmb`, 0.1));
+            else if (whichModel === 0x0A) // shadow temple diamond room (before big key)
+                console.warn(`unimplemented: Bg_Haka_Megane 0x0A`);
+            else if (whichModel === 0x0B) // wall with "purplish" fat brick texture, double sided
+                console.warn(`unimplemented: Bg_Haka_Megane 0x0B`);
+            else if (whichModel === 0x0C) //room 11's invisible spikes/hookshot
+                fetchArchive(`zelda_haka_objects.zar`).then((zar) => buildModel(zar, `model/m_HADinv0b_model.cmb`, 0.1));
+            else
+                throw "whoops";
+        }
+        else if (actor.actorId === ActorId.Bg_Haka_Sgami) {
+            const whichModel = actor.variable & 0xFFFF;
+            if (whichModel === 0x00)  //shadow temple scythes, visible
+                fetchArchive(`zelda_haka_objects.zar`).then((zar) => buildModel(zar, `model/m_Hsgami_model.cmb`, 0.1));
+            else if (whichModel === 0x01)   //shadow temple scythes, invisible
+                fetchArchive(`zelda_haka_objects.zar`).then((zar) => buildModel(zar, `model/m_Hsgami_model.cmb`, 0.1));
+            else if (whichModel === 0x0100)   //ice cavern spinning blade
+                fetchArchive(`zelda_ice_objects.zar`).then((zar) => buildModel (zar, `model/ice_trap_model.cmb`, 0.1));
+            else 
+                throw "whoops";
+        }
+
+        else if (actor.actorId === ActorId.Bg_Haka_Ship) fetchArchive(`zelda_haka_objects.zar`).then((zar) => buildModel(zar, `model/m_Hship_model.cmb`, 0.1));
+
         else if (actor.actorId === ActorId.En_Kusa) fetchArchive(`zelda_field_keep.zar`).then((zar) => buildModel(zar, `model/grass05_model.cmb`, 0.4));
         else if (actor.actorId === ActorId.En_Kanban) fetchArchive(`zelda_keep.zar`).then((zar) => {
             const b = buildModel(zar, `objects/model/kanban1_model.cmb`);
