@@ -601,7 +601,7 @@ class MaterialInstance {
     
                 if (this.srtAnimators[i]) {
                     this.srtAnimators[i].calcTexMtx(scratchTexMatrix);
-                    mat4.mul(scratchTexMatrix, this.material.textureMatrices[i], scratchTexMatrix);
+                    mat4.mul(scratchTexMatrix, scratchTexMatrix,this.material.textureMatrices[i]);
                 } else {
                     mat4.copy(scratchTexMatrix, this.material.textureMatrices[i]);
                 }

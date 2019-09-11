@@ -19,9 +19,9 @@ import { mat4 } from 'gl-matrix';
 import AnimationController from '../AnimationController';
 import { TransparentBlack, colorNew, White } from '../Color';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
-import { GfxRenderInstManager, executeOnPass } from '../gfx/render/GfxRenderer';
-import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
+import { executeOnPass } from '../gfx/render/GfxRenderer';
 import { SceneContext } from '../SceneBase';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numSamplers: 3, numUniformBuffers: 3 }];
 
@@ -29,25 +29,22 @@ const enum OoT3DPass { MAIN = 0x01, SKYBOX = 0x02 };
 export class OoT3DRenderer implements Viewer.SceneGfx {
     public renderTarget = new BasicRenderTarget();
     public roomRenderers: RoomRenderer[] = [];
-    private renderInstManager = new GfxRenderInstManager();
-    private uniformBuffer: GfxRenderDynamicUniformBuffer;
+    private renderHelper: GfxRenderHelper;
 
     constructor(device: GfxDevice, public textureHolder: CtrTextureHolder, public zsi: ZSI.ZSIScene, public modelCache: ModelCache) {
-        this.renderInstManager = new GfxRenderInstManager();
-        this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
+        this.renderHelper = new GfxRenderHelper(device);
     }
 
     protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        const template = this.renderInstManager.pushTemplateRenderInst();
-        template.setUniformBuffer(this.uniformBuffer);
+        const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
         fillSceneParamsDataOnTemplate(template, viewerInput.camera);
 
         for (let i = 0; i < this.roomRenderers.length; i++)
-            this.roomRenderers[i].prepareToRender(device, this.renderInstManager, hostAccessPass, viewerInput);
+            this.roomRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, hostAccessPass, viewerInput);
 
-        this.renderInstManager.popTemplateRenderInst();
-        this.uniformBuffer.prepareToRender(device, hostAccessPass);
+        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.prepareToRender(device, hostAccessPass);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
@@ -60,20 +57,19 @@ export class OoT3DRenderer implements Viewer.SceneGfx {
         // First, render the skybox.
         const skyboxPassRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
         skyboxPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
-        executeOnPass(this.renderInstManager, device, skyboxPassRenderer, OoT3DPass.SKYBOX);
+        executeOnPass(this.renderHelper.renderInstManager, device, skyboxPassRenderer, OoT3DPass.SKYBOX);
         skyboxPassRenderer.endPass(null);
         device.submitPass(skyboxPassRenderer);
         // Now do main pass.
         const mainPassRenderer = this.renderTarget.createRenderPass(device, depthClearRenderPassDescriptor);
         mainPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
-        executeOnPass(this.renderInstManager, device, mainPassRenderer, OoT3DPass.MAIN);
-        this.renderInstManager.resetRenderInsts();
+        executeOnPass(this.renderHelper.renderInstManager, device, mainPassRenderer, OoT3DPass.MAIN);
+        this.renderHelper.renderInstManager.resetRenderInsts();
         return mainPassRenderer;
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderInstManager.destroy(device);
-        this.uniformBuffer.destroy(device);
+        this.renderHelper.destroy(device);
         this.renderTarget.destroy(device);
 
         this.textureHolder.destroy(device);
@@ -885,7 +881,6 @@ class SceneDesc implements Viewer.SceneDesc {
             } else if (whichModel === 0x01) {
                 const b = buildModel(zar, `model/bowling_p2_model.cmb`, 1);
                 b.bindCMAB(parseCMAB(zar, `misc/bowling_p2_model.cmab`));
-
             } else {
                 throw "Starschulz";
             }
@@ -1387,17 +1382,29 @@ class SceneDesc implements Viewer.SceneDesc {
             b.setVertexColorScale(characterLightScale);
         });
         else if (actor.actorId === ActorId.En_Heishi2) fetchArchive(`zelda_sd.zar`).then((zar) => {
-            // Purple Royal Guards. They are without an animation as it causes them to spaghettify...
-            const b = buildModel(zar, `model/soldier2.cmb`);
-            b.setVertexColorScale(characterLightScale);
+            const whichGuard = actor.variable & 0xFF;
+            if (whichGuard === 0x02) { // Hyrule Castle Guard
+                const b = buildModel(zar, `model/soldier.cmb`);
+                b.bindCSAB(parseCSAB(zar, `anim/sd_matsu.csab`)); 
+                b.setVertexColorScale(characterLightScale);
+            } else if (whichGuard === 0x05) { // Death Mountain Guard
+                const b = buildModel(zar, `model/soldier.cmb`);
+                b.bindCSAB(parseCSAB(zar, `anim/sd_matsu.csab`)); 
+                b.setVertexColorScale(characterLightScale);
+            } else if (whichGuard === 0x06) { // Ceremonial Guards
+                const b = buildModel(zar, `model/soldier2.cmb`);
+                b.setVertexColorScale(characterLightScale);
+            } else {
+                throw "whoops";
+            }
         });
         else if (actor.actorId === ActorId.En_Ssh) fetchArchive(`zelda_ssh.zar`).then((zar) => {
-            const b = buildModel(zar, `model/spiderman.cmb`, 0.03 );
+            const b = buildModel(zar, `model/spiderman.cmb`, 0.03);
             b.bindCSAB(parseCSAB(zar, `anim/st_matsu.csab`));
             b.setVertexColorScale(characterLightScale);
         });
         else if (actor.actorId === ActorId.Boss_Sst) fetchArchive(`zelda_sst.zar`).then((zar) => {
-            const b = buildModel(zar, `model/bongobongo.cmb`, 0.015 );
+            const b = buildModel(zar, `model/bongobongo.cmb`, 0.015);
             b.modelMatrix[14] += -500; // looks nicer offset a bit
             b.bindCSAB(parseCSAB(zar, `anim/ss_wait_open.csab`));
             b.setVertexColorScale(characterLightScale);
@@ -1405,12 +1412,12 @@ class SceneDesc implements Viewer.SceneDesc {
             // the boss in there instead.
         });
         else if (actor.actorId === ActorId.En_Go2) fetchArchive(`zelda_oF1d.zar`).then((zar) => {
-            const b = buildModel(zar, `model/goronpeople.cmb` );
+            const b = buildModel(zar, `model/goronpeople.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/oF1d_dai_goron_kaii.csab`));
             b.setVertexColorScale(characterLightScale);
         });
         else if (actor.actorId === ActorId.En_Cs) fetchArchive(`zelda_cs.zar`).then((zar) => {
-            const b = buildModel(zar, `model/childstalker.cmb`, 0.01 );
+            const b = buildModel(zar, `model/childstalker.cmb`, 0.01);
             b.bindCSAB(parseCSAB(zar, `anim/cs_matsu03.csab`));
             b.setVertexColorScale(characterLightScale);
         });
