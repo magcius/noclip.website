@@ -13,7 +13,7 @@ import { GfxFormat, GfxBufferUsage, GfxBlendMode, GfxBlendFactor, GfxDevice, Gfx
 import { fillMatrix4x3, fillVec4, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxRenderInstManager, GfxRenderInst, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { getFormatName, parseTexImageParamWrapModeS, parseTexImageParamWrapModeT } from './nitro_tex';
+import { parseTexImageParamWrapModeS, parseTexImageParamWrapModeT } from './nitro_tex';
 import { assert, nArray } from '../util';
 import { BCA, bindBCAAnimator, BCAAnimator } from './sm64ds_bca';
 import AnimationController from '../AnimationController';
@@ -77,7 +77,7 @@ layout(row_major, std140) uniform ub_MaterialParams {
 #define u_TexCoordMode (u_Misc0.x)
 
 layout(row_major, std140) uniform ub_PacketParams {
-    Mat4x3 u_PosMtx[16];
+    Mat4x3 u_PosMtx[32];
 };
 
 uniform sampler2D u_Texture;
@@ -127,22 +127,6 @@ void main() {
         discard;
 }
 `;
-}
-
-function textureToCanvas(bmdTex: BMD.Texture): Viewer.Texture {
-    const canvas = document.createElement("canvas");
-    canvas.width = bmdTex.width;
-    canvas.height = bmdTex.height;
-    canvas.title = bmdTex.name;
-
-    const ctx = canvas.getContext("2d")!;
-    const imgData = ctx.createImageData(canvas.width, canvas.height);
-    imgData.data.set(bmdTex.pixels);
-    ctx.putImageData(imgData, 0, 0);
-    const surfaces = [ canvas ];
-    const extraInfo = new Map<string, string>();
-    extraInfo.set('Format', getFormatName(bmdTex.format));
-    return { name: bmdTex.name, surfaces, extraInfo };
 }
 
 export class VertexData {
@@ -394,7 +378,7 @@ class ShapeInstance {
     public visible = true;
 
     constructor(private materialInstance: MaterialInstance, private batchData: BatchData) {
-        assert(this.batchData.batch.matrixTable.length <= 16);
+        assert(this.batchData.batch.matrixTable.length <= 32);
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, normalMatrix: mat4, extraTexCoordMat: mat2d | null, modelInstance: BMDModelInstance): void {
@@ -407,7 +391,7 @@ class ShapeInstance {
         template.setInputLayoutAndState(vertexData.inputLayout, vertexData.inputState);
         this.materialInstance.prepareToRender(device, renderInstManager, template, viewerInput, normalMatrix, extraTexCoordMat);
 
-        let offs = template.allocateUniformBuffer(NITRO_Program.ub_PacketParams, 12*16);
+        let offs = template.allocateUniformBuffer(NITRO_Program.ub_PacketParams, 12*32);
         const d = template.mapUniformBufferF32(NITRO_Program.ub_PacketParams);
         const rootJoint = this.batchData.rootJoint;
         for (let i = 0; i < this.batchData.batch.matrixTable.length; i++) {
@@ -464,7 +448,6 @@ export class BMDModelInstance {
     }
 
     public bindBCA(animationController: AnimationController, bca: BCA): void {
-        assert(bca.jointAnimationEntries.length === this.jointMatrices.length);
         this.bcaAnimator = bindBCAAnimator(animationController, bca);
     }
 

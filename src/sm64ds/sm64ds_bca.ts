@@ -104,11 +104,8 @@ function sampleAnimationData(animationTrack: AnimationTrack, animFrame: number):
     if (animationTrack.interpolate)
         animFrame *= 0.5;
 
-    if (animFrame >= animationTrack.values.length - 1)
-        return animationTrack.values[animationTrack.values.length - 1];
-
     const v0 = animationTrack.values[animFrame | 0];
-    const v1 = animationTrack.values[(animFrame + 1) | 0];
+    const v1 = animationTrack.values[((animFrame + 1) | 0) % (animationTrack.values.length - 1)];
     return lerp(v0, v1, animFrame - (animFrame | 0));
 }
 
@@ -125,7 +122,7 @@ function sampleAnimationDataRotation(animationTrack: AnimationTrack, animFrame: 
         return animationTrack.values[animationTrack.values.length - 1];
 
     const v0 = animationTrack.values[animFrame | 0];
-    const v1 = animationTrack.values[(animFrame + 1) | 0];
+    const v1 = animationTrack.values[((animFrame + 1) | 0) % (animationTrack.values.length - 1)];
     return lerpAngle(v0, v1, animFrame - (animFrame | 0), 1.0);
 }
 

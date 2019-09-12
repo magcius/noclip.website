@@ -13,7 +13,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { BMDData, Sm64DSCRG1, BMDModelInstance, SM64DSPass, CRG1Level, CRG1Object, NITRO_Program, CRG1StandardObject, CRG1DoorObject } from './render';
 import { BasicRenderTarget, transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { vec3, mat4, mat2d } from 'gl-matrix';
-import { assertExists, assert, leftPad, hexzero } from '../util';
+import { assertExists, assert, leftPad } from '../util';
 import AnimationController from '../AnimationController';
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
@@ -796,8 +796,8 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
         } else if (objectId === ObjectId.BLUE_COIN) {			//ID 039
             const b = await spawnObject(`/data/normal_obj/coin/coin_blue_poly32.bmd`, 0.7, 0.1);
         } else if (objectId === ObjectId.KOOPA) {				//ID 040
-            //const b = await spawnObject(`/data/enemy/koopa/koopa_model.bmd`);	  //Crashes
-            // await bindBCA(b, '/data/enemy/koopa/koopa_wait1.bca');							
+            const b = await spawnObject(`/data/enemy/koopa/koopa_model.bmd`);
+            await bindBCA(b, '/data/enemy/koopa/koopa_wait1.bca');							
         } else if (objectId === ObjectId.TREE) {				//ID 041
             const treeType = (object.Parameters[0] >>> 4) & 0x07;
             const treeFilenames = ['bomb', 'toge', 'yuki', 'yashi', 'castle', 'castle', 'castle', 'castle'];
@@ -1299,8 +1299,8 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
             const b = await spawnObject(`/data/enemy/choropu/choropu.bmd`);
             await bindBCA(b, '/data/enemy/choropu/choropu_search.bca');		
         } else if (objectId === ObjectId.BASABASA) {			//ID 250
-            //const b = await spawnObject(`/data/enemy/basabasa/basabasa.bmd`); //Crashes?
-            //await bindBCA(b, '/data/enemy/basabasa/basabasa_wait.bca');				
+            const b = await spawnObject(`/data/enemy/basabasa/basabasa.bmd`);
+            await bindBCA(b, '/data/enemy/basabasa/basabasa_wait.bca');				
         } else if (objectId === ObjectId.POPOI) {				//ID 251
             const b = await spawnObject(`/data/enemy/popoi/popoi.bmd`);
             await bindBCA(b, '/data/enemy/popoi/popoi_move1.bca');		
