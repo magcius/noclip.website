@@ -279,7 +279,7 @@ class MaterialInstance {
     private texturesEnabled: boolean = true;
     private vertexColorsEnabled: boolean = true;
 
-    constructor(device: GfxDevice, crg1Level: CRG1Level | null, public materialData: MaterialData) {
+    constructor(crg1Level: CRG1Level | null, public materialData: MaterialData) {
         const material = this.materialData.material;
 
         // Find any possible material animations.
@@ -424,13 +424,13 @@ export class BMDModelInstance {
     private jointMatrices: mat4[];
     private bcaAnimator: BCAAnimator | null = null;
 
-    constructor(device: GfxDevice, public bmdData: BMDData, public crg1Level: CRG1Level | null = null) {
+    constructor(public bmdData: BMDData, public crg1Level: CRG1Level | null = null) {
         this.jointMatrices = nArray(this.bmdData.bmd.joints.length, () => mat4.create());
 
         for (let i = 0; i < this.bmdData.batchData.length; i++) {
             const batchData = this.bmdData.batchData[i];
             const materialData = bmdData.materialData[batchData.batch.materialIdx];
-            const materialInstance = new MaterialInstance(device, this.crg1Level, materialData);
+            const materialInstance = new MaterialInstance(this.crg1Level, materialData);
             this.materialInstances.push(materialInstance);
             const shapeInstance = new ShapeInstance(materialInstance, batchData);
             this.shapeInstances.push(shapeInstance);
