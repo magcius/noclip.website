@@ -379,12 +379,12 @@ class MaterialInstance {
 
                 mat4_from_mat2d(scratchMatrix, scratchMat2d);
             }
-
-            let offs = template.allocateUniformBuffer(NITRO_Program.ub_MaterialParams, 8+4);
-            const materialParamsMapped = template.mapUniformBufferF32(NITRO_Program.ub_MaterialParams);
-            offs += fillMatrix4x2(materialParamsMapped, offs, scratchMatrix);
-            offs += fillVec4(materialParamsMapped, offs, this.texCoordMode);
         }
+
+        let offs = template.allocateUniformBuffer(NITRO_Program.ub_MaterialParams, 8+4);
+        const materialParamsMapped = template.mapUniformBufferF32(NITRO_Program.ub_MaterialParams);
+        offs += fillMatrix4x2(materialParamsMapped, offs, scratchMatrix);
+        offs += fillVec4(materialParamsMapped, offs, this.texCoordMode);
 
         template.setSamplerBindingsFromTextureMappings(this.materialData.textureMapping);
     }

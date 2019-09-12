@@ -350,7 +350,7 @@ enum ObjectId {
     SET_SE = 0x143,
     MUGEN_BGM = 0x144,
     SOUND_OBJ = 0x145,
-
+    
     // Unofficial names
     TRG_MINIMAP_CHANGE = 0x1ff,
 }
@@ -388,22 +388,22 @@ class ModelCache {
     private filePromiseCache = new Map<string, Promise<ArrayBufferSlice>>();
     private fileDataCache = new Map<string, ArrayBufferSlice>();
     private modelCache = new Map<string, BMDData>();
-
+    
     constructor(private dataFetcher: DataFetcher) {
     }
-
+    
     public waitForLoad(): Promise<any> {
         const p: Promise<any>[] = [... this.filePromiseCache.values()];
         return Promise.all(p);
     }
-
+    
     public mountNARC(narc: NARC.NitroFS): void {
         for (let i = 0; i < narc.files.length; i++) {
             const file = narc.files[i];
             this.fileDataCache.set(file.path, file.buffer);
         }
     }
-
+    
     private fetchFile(path: string): Promise<ArrayBufferSlice> {
         assert(!this.filePromiseCache.has(path));
         assert(path.startsWith('/data'));
@@ -411,13 +411,13 @@ class ModelCache {
         this.filePromiseCache.set(path, p);
         return p;
     }
-
+    
     public fetchFileData(path: string): Promise<ArrayBufferSlice> {
         const d = this.fileDataCache.get(path);
         if (d !== undefined) {
             return Promise.resolve(d);
         }
-
+        
         const p = this.filePromiseCache.get(path);
         if (p !== undefined) {
             return p.then(() => this.getFileData(path));
@@ -428,14 +428,14 @@ class ModelCache {
             });
         }
     }
-
+    
     public getFileData(path: string): ArrayBufferSlice {
         return assertExists(this.fileDataCache.get(path));
     }
-
+    
     public getModel(device: GfxDevice, modelPath: string): BMDData {
         let p = this.modelCache.get(modelPath);
-
+        
         if (p === undefined) {
             const buffer = assertExists(this.fileDataCache.get(modelPath));
             const result = LZ77.maybeDecompress(buffer);
@@ -443,18 +443,18 @@ class ModelCache {
             p = new BMDData(device, bmd);
             this.modelCache.set(modelPath, p);
         }
-
+        
         return p;
     }
-
+    
     public async fetchModel(device: GfxDevice, filename: string): Promise<BMDData> {
         await this.fetchFileData(filename);
         return this.getModel(device, filename);
     }
-
+    
     public destroy(device: GfxDevice): void {
         for (const model of this.modelCache.values())
-            model.destroy(device);
+        model.destroy(device);
     }
 }
 
@@ -467,22 +467,22 @@ class ObjectRenderer {
     public animation: Animation | null = null;
     public modelMatrix = mat4.create();
     public visible: boolean = true;
-
+    
     constructor(public modelInstance: BMDModelInstance, public setup: number = 0) {
     }
-
+    
     public calcAnim(viewerInput: Viewer.ViewerRenderInput): void {
         this.animationController.setTimeFromViewerInput(viewerInput);
-
+        
         mat4.copy(this.modelInstance.modelMatrix, this.modelMatrix);
         if (this.animation !== null)
-            this.animation.updateModelMatrix(viewerInput.time, this.modelInstance.modelMatrix);
+        this.animation.updateModelMatrix(viewerInput.time, this.modelInstance.modelMatrix);
     }
-
+    
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.visible)
-            return;
-
+        return;
+        
         this.calcAnim(viewerInput);
         this.modelInstance.prepareToRender(device, renderInstManager, viewerInput);
     }
@@ -496,45 +496,45 @@ class SM64DSRenderer implements Viewer.SceneGfx {
     public objectRenderers: ObjectRenderer[] = [];
     public bmdRenderers: BMDModelInstance[] = [];
     public animationController = new AnimationController();
-
+    
     private uniformBuffer: GfxRenderDynamicUniformBuffer;
     private renderInstManager = new GfxRenderInstManager();
     private currentScenarioIndex: number = -1;
-
+    
     private scenarioSelect: UI.SingleSelect;
     public onstatechanged!: () => void;
-
+    
     constructor(device: GfxDevice, public modelCache: ModelCache, public crg1Level: CRG1Level) {
         this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
     }
-
+    
     protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         this.animationController.setTimeFromViewerInput(viewerInput);
-
+        
         const template = this.renderInstManager.pushTemplateRenderInst();
         template.setUniformBuffer(this.uniformBuffer);
         template.setBindingLayouts(bindingLayouts);
         let offs = template.allocateUniformBuffer(NITRO_Program.ub_SceneParams, 16);
         const sceneParamsMapped = template.mapUniformBufferF32(NITRO_Program.ub_SceneParams);
         offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
-
+        
         for (let i = 0; i < this.bmdRenderers.length; i++)
-            this.bmdRenderers[i].prepareToRender(device, this.renderInstManager, viewerInput);
+        this.bmdRenderers[i].prepareToRender(device, this.renderInstManager, viewerInput);
         for (let i = 0; i < this.objectRenderers.length; i++)
-            this.objectRenderers[i].prepareToRender(device, this.renderInstManager, viewerInput);
-
+        this.objectRenderers[i].prepareToRender(device, this.renderInstManager, viewerInput);
+        
         this.renderInstManager.popTemplateRenderInst();
-
+        
         this.uniformBuffer.prepareToRender(device, hostAccessPass);
     }
-
+    
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
         const hostAccessPass = device.createHostAccessPass();
         this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
-
+        
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-
+        
         // First, render the skybox.
         const skyboxPassRenderer = this.renderTarget.createRenderPass(device, transparentBlackFullClearRenderPassDescriptor);
         skyboxPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
@@ -547,18 +547,18 @@ class SM64DSRenderer implements Viewer.SceneGfx {
         mainPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
         this.renderInstManager.setVisibleByFilterKeyExact(SM64DSPass.MAIN);
         this.renderInstManager.drawOnPassRenderer(device, mainPassRenderer);
-
+        
         this.renderInstManager.resetRenderInsts();
-
+        
         return mainPassRenderer;
     }
-
+    
     private setCurrentScenario(index: number): void {
         if (this.currentScenarioIndex === index)
-            return;
-
+        return;
+        
         this.currentScenarioIndex = index;
-
+        
         const setup = index + 1;
         const showAllScenarios = index === this.crg1Level.SetupNames.length;
         for (let i = 0; i < this.objectRenderers.length; i++) {
@@ -569,17 +569,17 @@ class SM64DSRenderer implements Viewer.SceneGfx {
         this.onstatechanged();
         this.scenarioSelect.selectItem(index);
     }
-
+    
     public createPanels(): UI.Panel[] {
         const scenarioPanel = new UI.Panel();
         scenarioPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         scenarioPanel.setTitle(UI.TIME_OF_DAY_ICON, 'Scenario');
-
+        
         const scenarioNames: string[] = this.crg1Level.SetupNames.slice();
-
+        
         if (scenarioNames.length > 0)
-            scenarioNames.push('All Scenarios');
-
+        scenarioNames.push('All Scenarios');
+        
         this.scenarioSelect = new UI.SingleSelect();
         this.scenarioSelect.setStrings(scenarioNames);
         this.scenarioSelect.onselectionchange = (scenarioIndex: number) => {
@@ -587,9 +587,9 @@ class SM64DSRenderer implements Viewer.SceneGfx {
         };
         this.scenarioSelect.selectItem(0);
         scenarioPanel.contents.appendChild(this.scenarioSelect.elem);
-
+        
         scenarioPanel.setVisible(scenarioNames.length > 0);
-
+        
         const renderHacksPanel = new UI.Panel();
         renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
@@ -597,33 +597,33 @@ class SM64DSRenderer implements Viewer.SceneGfx {
         enableVertexColorsCheckbox.onchanged = () => {
             const v = enableVertexColorsCheckbox.checked;
             for (let i = 0; i < this.bmdRenderers.length; i++)
-                this.bmdRenderers[i].setVertexColorsEnabled(v);
+            this.bmdRenderers[i].setVertexColorsEnabled(v);
         };
         renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
         const enableTextures = new UI.Checkbox('Enable Textures', true);
         enableTextures.onchanged = () => {
             const v = enableTextures.checked;
             for (let i = 0; i < this.bmdRenderers.length; i++)
-                this.bmdRenderers[i].setTexturesEnabled(v);
+            this.bmdRenderers[i].setTexturesEnabled(v);
         };
         renderHacksPanel.contents.appendChild(enableTextures.elem);
-
+        
         return [scenarioPanel, renderHacksPanel];
     }
-
+    
     public serializeSaveState(dst: ArrayBuffer, offs: number): number {
         const view = new DataView(dst);
         view.setUint8(offs++, this.currentScenarioIndex);
         return offs;
     }
-
+    
     public deserializeSaveState(src: ArrayBuffer, offs: number, byteLength: number): number {
         const view = new DataView(src);
         if (offs < byteLength)
-            this.setCurrentScenario(view.getUint8(offs++));
+        this.setCurrentScenario(view.getUint8(offs++));
         return offs;
     }
-
+    
     public destroy(device: GfxDevice): void {
         this.renderInstManager.destroy(device);
         this.uniformBuffer.destroy(device);
@@ -634,12 +634,12 @@ class SM64DSRenderer implements Viewer.SceneGfx {
 
 class YSpinAnimation {
     constructor(public speed: number, public phase: number) {}
-
+    
     public updateNormalMatrix(time: number, normalMatrix: mat4) {
         const theta = this.phase + (time / 30 * this.speed);
         mat4.rotateY(normalMatrix, normalMatrix, theta);
     }
-
+    
     public updateModelMatrix(time: number, modelMatrix: mat4) {
         this.updateNormalMatrix(time, modelMatrix);
     }
@@ -647,11 +647,11 @@ class YSpinAnimation {
 
 export class SM64DSSceneDesc implements Viewer.SceneDesc {
     public id: string;
-
+    
     constructor(public levelId: number, public name: string) {
         this.id = '' + this.levelId;
     }
-
+    
     private async _createBMDRenderer(device: GfxDevice, renderer: SM64DSRenderer, filename: string, scale: number, level: CRG1Level, isSkybox: boolean): Promise<BMDModelInstance> {
         const modelCache = renderer.modelCache;
         const bmdData = await modelCache.fetchModel(device, filename);
@@ -661,7 +661,7 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
         renderer.bmdRenderers.push(bmdRenderer);
         return bmdRenderer;
     }
-
+    
     private async _createBMDObjRenderer(device: GfxDevice, renderer: SM64DSRenderer, filename: string): Promise<ObjectRenderer> {
         const modelCache = renderer.modelCache;
         const bmdData = await modelCache.fetchModel(device, filename);
@@ -671,32 +671,32 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
         objectRenderer.modelInstance.name = filename;
         return objectRenderer;
     }
-
+    
     private modelMatrixFromObjectAndScale(m: mat4, object: CRG1Object, scale: number, extraRotationY: number = 0): void {
         const translation = vec3.fromValues(object.Position.X, object.Position.Y, object.Position.Z);
         const rotationY = (object.Rotation.Y + extraRotationY) * MathConstants.DEG_TO_RAD;
-
+        
         vec3.scale(translation, translation, GLOBAL_SCALE);
         mat4.translate(m, m, translation);
         mat4.rotateY(m, m, rotationY);
-
+        
         // Don't ask, ugh.
         scale = scale * (GLOBAL_SCALE / 100);
         mat4.scale(m, m, [scale, scale, scale]);
     }
-
+    
     private async _createBMDRendererForStandardObject(device: GfxDevice, renderer: SM64DSRenderer, object: CRG1StandardObject): Promise<void> {
         const spawnObject = async (filename: string, scale: number = 0.8, spinSpeed: number = 0) => {
             const b = await this._createBMDObjRenderer(device, renderer, filename);
             this.modelMatrixFromObjectAndScale(b.modelMatrix, object, scale);
-
+            
             if (spinSpeed > 0)
-                b.animation = new YSpinAnimation(spinSpeed, 0);
-
+            b.animation = new YSpinAnimation(spinSpeed, 0);
+            
             b.setup = object.Setup;
             return b;
         };
-
+        
         const bindBCA = async (b: ObjectRenderer, filename: string) => {
             const data = await renderer.modelCache.fetchFileData(filename);
             const bca = BCA.parse(LZ77.maybeDecompress(data));
@@ -704,9 +704,9 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
             b.animationController.phaseFrames += Math.random() * bca.duration;
             b.modelInstance.bindBCA(b.animationController, bca);
         }
-
+        
         const objectId: ObjectId = object.ObjectId;
-
+        
         if (objectId === ObjectId.EWB_ICE_A) {		 			//ID 001
             const b = await spawnObject(`/data/special_obj/ewb_ice/ewb_ice_a.bmd`);
         } else if (objectId === ObjectId.EWB_ICE_B) {			//ID 002
@@ -721,21 +721,21 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
             const b = await spawnObject(`/data/special_obj/emm_yuka/emm_yuka.bmd`);					
         } else if (objectId === ObjectId.UPDOWN_LIFT) {			//ID 007
             const b = await spawnObject(`/data/normal_obj/obj_updnlift/obj_updnlift.bmd`);		
-		} else if (objectId === ObjectId.HS_UPDOWN_LIFT) {		//ID 008		
-			const b = await spawnObject(`/data/special_obj/hs_updown_lift/hs_updown_lift.bmd`);			
+        } else if (objectId === ObjectId.HS_UPDOWN_LIFT) {		//ID 008		
+            const b = await spawnObject(`/data/special_obj/hs_updown_lift/hs_updown_lift.bmd`);			
         } else if (objectId === ObjectId.PATH_LIFT) {			//ID 009
             const b = await spawnObject(`/data/normal_obj/obj_pathlift/obj_pathlift.bmd`);		
         } else if (objectId === ObjectId.WANWAN) {				//ID 010
             const b = await spawnObject(`/data/enemy/wanwan/wanwan.bmd`);
-			mat4.translate(b.modelMatrix, b.modelMatrix, [0, 32, 0]);								
+            mat4.translate(b.modelMatrix, b.modelMatrix, [0, 32, 0]);								
             await bindBCA(b, '/data/enemy/wanwan/wanwan_wait.bca');					
-		} else if (objectId === ObjectId.CAMERA_TAG) {			//ID 011
-			// Invisible (Not used in maps?)		
-		} else if (objectId === ObjectId.SEESAW) {				//ID 012			
-			const b = await spawnObject(`/data/normal_obj/obj_seesaw/obj_seesaw.bmd`);							
+        } else if (objectId === ObjectId.CAMERA_TAG) {			//ID 011
+            // Invisible (Not used in maps?)		
+        } else if (objectId === ObjectId.SEESAW) {				//ID 012			
+            const b = await spawnObject(`/data/normal_obj/obj_seesaw/obj_seesaw.bmd`);							
         } else if (objectId === ObjectId.IRONBALL) {			//ID 013
             const b = await spawnObject(`/data/enemy/iron_ball/iron_ball.bmd`);	
-			mat4.translate(b.modelMatrix, b.modelMatrix, [0, 16, 0]);			
+            mat4.translate(b.modelMatrix, b.modelMatrix, [0, 16, 0]);			
         } else if (objectId === ObjectId.GORO_ROCK) {			//ID 014
             const b = await spawnObject(`/data/special_obj/cv_goro_rock/cv_goro_rock.bmd`);			
         } else if (objectId === ObjectId.KURIBO) {				//ID 015
@@ -749,7 +749,7 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
             await bindBCA(b, `/data/enemy/kuribo/kuribo_wait.bca`);
         } else if (objectId === ObjectId.KURIKING) {			//ID 018
             const b = await spawnObject(`/data/enemy/kuriking/kuriking_model.bmd`);		
-             await bindBCA(b, '/data/enemy/kuriking/kuriking_wait.bca');				
+            await bindBCA(b, '/data/enemy/kuriking/kuriking_wait.bca');				
         } else if (objectId === ObjectId.BOMBHEI) {				//ID 019
             const b = await spawnObject(`/data/enemy/bombhei/bombhei.bmd`);
             await bindBCA(b, `/data/enemy/bombhei/bombhei_walk.bca`);
@@ -768,9 +768,9 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
         } else if (objectId === ObjectId.SW_BLOCK_L) {			//ID 025
             const b = await spawnObject(`/data/normal_obj/obj_block/broken_block_l.bmd`);	
         } else if (objectId === ObjectId.POWER_UP_ITEM) {		//ID 026
-			const b = await spawnObject(`/data/normal_obj/obj_power_flower/p_flower_open.bmd`);	
-		} else if (objectId === ObjectId.HATENA_SWITCH) {		//ID 027
-			const b = await spawnObject(`/data/normal_obj/obj_hatena_switch/hatena_switch.bmd`);
+            const b = await spawnObject(`/data/normal_obj/obj_power_flower/p_flower_open.bmd`);	
+        } else if (objectId === ObjectId.HATENA_SWITCH) {		//ID 027
+            const b = await spawnObject(`/data/normal_obj/obj_hatena_switch/hatena_switch.bmd`);
         } else if (objectId === ObjectId.BLOCK_S) {				//ID 028
             const b = await spawnObject(`/data/normal_obj/obj_block/broken_block_s.bmd`);			
         } else if (objectId === ObjectId.CANNON_SHUTTER) {		//ID 029
@@ -780,7 +780,7 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
         } else if (objectId === ObjectId.ITEM_BLOCK) {			//ID 031
             const b = await spawnObject(`/data/normal_obj/obj_hatena_box/obj_hatena_y_box.bmd`);	
         } else if (objectId === ObjectId.VS_ITEM_BLOCK) {		//ID 032
-			const b = await spawnObject(`/data/normal_obj/obj_hatena_box/obj_hatena_y_box.bmd`);	
+            const b = await spawnObject(`/data/normal_obj/obj_hatena_box/obj_hatena_y_box.bmd`);	
         } else if (objectId === ObjectId.CAP_BLOCK_M) {			//ID 033
             const b = await spawnObject(`/data/normal_obj/obj_hatena_box/obj_cap_box_m.bmd`);		
         } else if (objectId === ObjectId.CAP_BLOCK_W) {			//ID 034
@@ -833,8 +833,8 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
         } else if (objectId === ObjectId.CV_NEWS_LIFT) {		//ID 047
             const b = await spawnObject(`/data/special_obj/cv_news_lift/cv_news_lift.bmd`);		
         } else if (objectId === ObjectId.WANWAN2) {				//ID 048
-			const b = await spawnObject(`/data/enemy/wanwan/wanwan.bmd`);	
-			mat4.translate(b.modelMatrix, b.modelMatrix, [0, 32, 0]);				
+            const b = await spawnObject(`/data/enemy/wanwan/wanwan.bmd`);	
+            mat4.translate(b.modelMatrix, b.modelMatrix, [0, 32, 0]);				
             await bindBCA(b, '/data/enemy/wanwan/wanwan_wait.bca');					
         } else if (objectId === ObjectId.ONEUPKINOKO) {			//ID 049
             const b = await spawnObject(`/data/normal_obj/oneup_kinoko/oneup_kinoko.bmd`);
@@ -845,8 +845,8 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
         } else if (objectId === ObjectId.WATERBOMB) {			//ID 052
             const b = await spawnObject(`/data/enemy/water_bomb/water_bomb.bmd`);	
         } else if (objectId === ObjectId.SBIRD) {				//ID 053
-			const b = await spawnObject(`/data/normal_obj/bird/bird.bmd`);		
-			//await bindBCA(b, '/data/normal_obj/bird/bird_fly.bca');		
+            const b = await spawnObject(`/data/normal_obj/bird/bird.bmd`);		
+            //await bindBCA(b, '/data/normal_obj/bird/bird_fly.bca');		
         } else if (objectId === ObjectId.FISH) {				//ID 054
             const b = await spawnObject(`/data/normal_obj/fish/fish.bmd`);	
             await bindBCA(b, '/data/normal_obj/fish/fish_wait.bca');		
@@ -855,12 +855,12 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
         } else if (objectId === ObjectId.BOMBKING) {			//ID 056
             const b = await spawnObject(`/data/enemy/bombking/bomb_king.bmd`);
             await bindBCA(b, `/data/enemy/bombking/bombking_wait1.bca`);
-		        } else if (objectId === ObjectId.SNOWMAN) {		//ID 057	
+        } else if (objectId === ObjectId.SNOWMAN) {		//ID 057	
             const b = await spawnObject(`/data/enemy/snowman/snowman_model.bmd`);	
-			await bindBCA(b, '/data/enemy/snowman/snowman_wait.bca');	
+            await bindBCA(b, '/data/enemy/snowman/snowman_wait.bca');	
         } else if (objectId === ObjectId.PIANO) {				//ID 058
             const b = await spawnObject(`/data/enemy/piano/piano.bmd`);	
-			await bindBCA(b, '/data/enemy/piano/piano_attack.bca');			
+            await bindBCA(b, '/data/enemy/piano/piano_attack.bca');			
         } else if (objectId === ObjectId.PAKUN) {				//ID 059
             const b = await spawnObject(`/data/enemy/pakkun/pakkun_model.bmd`);		
             await bindBCA(b, '/data/enemy/pakkun/pakkun_sleep_loop.bca');			
@@ -876,12 +876,12 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
             let startype = (object.Parameters[0] >>> 4) & 0x0F;
             let rotateSpeed = 0.08;
             switch (startype) {
-            case 0:
+                case 0:
                 filename = `/data/normal_obj/star/star_base.bmd`;
                 break;
-            case 1:
-            case 4:
-            case 6:
+                case 1:
+                case 4:
+                case 6:
                 filename = `/data/normal_obj/star_box/star_box.bmd`;
                 rotateSpeed = 0;
                 break;
@@ -897,12 +897,12 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
             const b = await spawnObject(`/data/enemy/dosune/dosune.bmd`);	
         } else if (objectId === ObjectId.TERESA) {				//ID 067		
             const b = await spawnObject(`/data/enemy/teresa/teresa.bmd`);			
-			await bindBCA(b, '/data/enemy/teresa/teresa_wait.bca');			
+            await bindBCA(b, '/data/enemy/teresa/teresa_wait.bca');			
         } else if (objectId === ObjectId.BOSS_TERESA) {			//ID 068	
             const b = await spawnObject(`/data/enemy/boss_teresa/boss_teresa.bmd`);	
-			await bindBCA(b, '/data/enemy/boss_teresa/boss_teresa_wait.bca');	
+            await bindBCA(b, '/data/enemy/boss_teresa/boss_teresa_wait.bca');	
         } else if (objectId === ObjectId.ICON_TERESA) {			//ID 069		
-			//Invisible
+            //Invisible
         } else if (objectId === ObjectId.KAIDAN) {				//ID 070
             //const b = await spawnObject(`/data/special_obj/th_kaidan/th_kaidan.bmd`); //Loads in an odd manner
         } else if (objectId === ObjectId.BOOKSHELF) {			//ID 071
@@ -929,22 +929,22 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
             await bindBCA(b, '/data/enemy/kinopio/kinopio_wait1.bca');				
         } else if (objectId === ObjectId.KOOPA2BG) {			//ID 082
             const b = await spawnObject(`/data/special_obj/kb2_stage/kb2_stage.bmd`);	 		
-		} else if (objectId === ObjectId.KOOPA3BG) {			//ID 083		
-			const b = await spawnObject(`/data/special_obj/kb3_stage/kb3_a.bmd`);	
-			await spawnObject(`/data/special_obj/kb3_stage/kb3_b.bmd`);	
-			await spawnObject(`/data/special_obj/kb3_stage/kb3_c.bmd`);	
-			await spawnObject(`/data/special_obj/kb3_stage/kb3_d.bmd`);	
-			await spawnObject(`/data/special_obj/kb3_stage/kb3_e.bmd`);	
-			await spawnObject(`/data/special_obj/kb3_stage/kb3_f.bmd`);	
-			await spawnObject(`/data/special_obj/kb3_stage/kb3_g.bmd`);	
-			await spawnObject(`/data/special_obj/kb3_stage/kb3_h.bmd`);	
-			await spawnObject(`/data/special_obj/kb3_stage/kb3_i.bmd`);	
-			await spawnObject(`/data/special_obj/kb3_stage/kb3_j.bmd`);		
-		} else if (objectId === ObjectId.SHELL) {				//ID 084
-			const b = await spawnObject(`/data/enemy/nokonoko/shell_green.bmd`);			
+        } else if (objectId === ObjectId.KOOPA3BG) {			//ID 083		
+            const b = await spawnObject(`/data/special_obj/kb3_stage/kb3_a.bmd`);	
+            await spawnObject(`/data/special_obj/kb3_stage/kb3_b.bmd`);	
+            await spawnObject(`/data/special_obj/kb3_stage/kb3_c.bmd`);	
+            await spawnObject(`/data/special_obj/kb3_stage/kb3_d.bmd`);	
+            await spawnObject(`/data/special_obj/kb3_stage/kb3_e.bmd`);	
+            await spawnObject(`/data/special_obj/kb3_stage/kb3_f.bmd`);	
+            await spawnObject(`/data/special_obj/kb3_stage/kb3_g.bmd`);	
+            await spawnObject(`/data/special_obj/kb3_stage/kb3_h.bmd`);	
+            await spawnObject(`/data/special_obj/kb3_stage/kb3_i.bmd`);	
+            await spawnObject(`/data/special_obj/kb3_stage/kb3_j.bmd`);		
+        } else if (objectId === ObjectId.SHELL) {				//ID 084
+            const b = await spawnObject(`/data/enemy/nokonoko/shell_green.bmd`);			
         } else if (objectId === ObjectId.SHARK) {				//ID 085
             const b = await spawnObject(`/data/enemy/hojiro/hojiro.bmd`);	
-			await bindBCA(b, '/data/enemy/hojiro/hojiro_swim.bca');					
+            await bindBCA(b, '/data/enemy/hojiro/hojiro_swim.bca');					
         } else if (objectId === ObjectId.CT_MECHA01) {			//ID 086
             const b = await spawnObject(`/data/special_obj/ct_mecha_obj01/ct_mecha_obj01.bmd`);					
         } else if (objectId === ObjectId.CT_MECHA03) {			//ID 088
@@ -973,8 +973,8 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
             const b = await spawnObject(`/data/special_obj/dp_lift/dp_lift.bmd`);	
         } else if (objectId === ObjectId.DL_PYRAMID) {			//ID 103
             const b = await spawnObject(`/data/special_obj/dl_pyramid/dl_pyramid.bmd`);					
-		} else if (objectId === ObjectId.DL_PYRAMID_DUMMY) {	//ID 104
-			// Invisible				
+        } else if (objectId === ObjectId.DL_PYRAMID_DUMMY) {	//ID 104
+            // Invisible				
         } else if (objectId === ObjectId.WL_POLELIFT) {			//ID 105	
             const b = await spawnObject(`/data/special_obj/wl_pole_lift/wl_pole_lift.bmd`);				
         } else if (objectId === ObjectId.WL_SUBMARINE) {		//ID 106		
@@ -1049,22 +1049,22 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
             const b = await spawnObject(`/data/special_obj/fl_kuzure/fl_kuzure.bmd`);	
         } else if (objectId === ObjectId.FM_BATTAN) {			//ID 142	
             const b = await spawnObject(`/data/special_obj/fm_battan/fm_battan.bmd`);	//invisible?	
-		} else if (objectId === ObjectId.LAVA) {				//ID 143
-			//TODO?							
-		} else if (objectId === ObjectId.WATERFALL) {			//ID 144
-			//TODO				
-		} else if (objectId === ObjectId.MANTA) {				//ID 145
-			const b = await spawnObject(`/data/enemy/manta/manta.bmd`);		
-			await bindBCA(b, '/data/enemy/manta/manta_swim.bca');
+        } else if (objectId === ObjectId.LAVA) {				//ID 143
+            //TODO?							
+        } else if (objectId === ObjectId.WATERFALL) {			//ID 144
+            //TODO				
+        } else if (objectId === ObjectId.MANTA) {				//ID 145
+            const b = await spawnObject(`/data/enemy/manta/manta.bmd`);		
+            await bindBCA(b, '/data/enemy/manta/manta_swim.bca');
         } else if (objectId === ObjectId.SPIDER) {				//ID 146
             const b = await spawnObject(`/data/enemy/spider/spider.bmd`);	
-			await bindBCA(b, '/data/enemy/spider/spider_walk.bca');			
+            await bindBCA(b, '/data/enemy/spider/spider_walk.bca');			
         } else if (objectId === ObjectId.JUGEM) {				//ID 148
             const b = await spawnObject(`/data/enemy/jugem/jugem.bmd`);	
             await bindBCA(b, '/data/enemy/jugem/jugem_wait.bca');				
         } else if (objectId === ObjectId.GAMAGUCHI) {			//ID 149
             const b = await spawnObject(`/data/enemy/gamaguchi/gamaguchi.bmd`);	
-			await bindBCA(b, '/data/enemy/gamaguchi/gamaguchi_walk.bca');		
+            await bindBCA(b, '/data/enemy/gamaguchi/gamaguchi_walk.bca');		
         } else if (objectId === ObjectId.EYEKUN) {				//ID 150
             const b = await spawnObject(`/data/enemy/eyekun/eyekun.bmd`);	
         } else if (objectId === ObjectId.EYEKUN_BOSS) {			//ID 151
@@ -1073,57 +1073,57 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
             const b = await spawnObject(`/data/enemy/batta_block/batta_block.bmd`);			
         } else if (objectId === ObjectId.BIRIKYU) {				//ID 153
             const b = await spawnObject(`/data/enemy/birikyu/birikyu.bmd`);	
-			await spawnObject(`/data/enemy/birikyu/birikyu_elec.bmd`);	
-			await bindBCA(b, '/data/enemy/birikyu/birikyu_elec.bca');				
+            await spawnObject(`/data/enemy/birikyu/birikyu_elec.bmd`);	
+            await bindBCA(b, '/data/enemy/birikyu/birikyu_elec.bca');				
         } else if (objectId === ObjectId.HM_BASKET) {			//ID 154
             const b = await spawnObject(`/data/special_obj/hm_basket/hm_basket.bmd`);				
         } else if (objectId === ObjectId.MONKEY_THIEF) {		//ID 155
             const b = await spawnObject(`/data/enemy/monkey/monkey.bmd`);	
-			await bindBCA(b, '/data/enemy/monkey/monkey_wait1.bca');					
-		} else if (objectId === ObjectId.MONKEY_STAR) {			//ID 156
-		//Invisible			
+            await bindBCA(b, '/data/enemy/monkey/monkey_wait1.bca');					
+        } else if (objectId === ObjectId.MONKEY_STAR) {			//ID 156
+            //Invisible			
         } else if (objectId === ObjectId.PENGUIN_BABY) {		//ID 157		
             const b = await spawnObject(`/data/enemy/penguin/penguin_child.bmd`, 0.25);	
-			await bindBCA(b, '/data/enemy/penguin/penguin_walk2.bca');
+            await bindBCA(b, '/data/enemy/penguin/penguin_walk2.bca');
         } else if (objectId === ObjectId.PENGUIN_MOTHER) {		//ID 158
             const b = await spawnObject(`/data/enemy/penguin/penguin.bmd`);	
-			await bindBCA(b, '/data/enemy/penguin/penguin_wait1.bca');
+            await bindBCA(b, '/data/enemy/penguin/penguin_wait1.bca');
         } else if (objectId === ObjectId.PENGUIN_RACER) {		//ID 159
             const b = await spawnObject(`/data/enemy/penguin/penguin.bmd`);	
-			await bindBCA(b, '/data/enemy/penguin/penguin_wait1.bca');
+            await bindBCA(b, '/data/enemy/penguin/penguin_wait1.bca');
         } else if (objectId === ObjectId.PENGUIN_DEFENDER) {	//ID 160
             const b = await spawnObject(`/data/enemy/penguin/penguin.bmd`);	
-			await bindBCA(b, '/data/enemy/penguin/penguin_walk.bca');
+            await bindBCA(b, '/data/enemy/penguin/penguin_walk.bca');
         } else if (objectId === ObjectId.KERONPA) {				//ID 161
             const b = await spawnObject(`/data/enemy/keronpa/keronpa.bmd`);			
-		} else if (objectId === ObjectId.BIG_SNOWMAN) {			//ID 162
-			const body = await spawnObject(`/data/enemy/big_snowman/big_snowman_body.bmd`, 1.25);	
-			const head = await spawnObject(`/data/enemy/big_snowman/big_snowman_head.bmd`, 1.25);
-			mat4.translate(body.modelMatrix, body.modelMatrix, [0, 5, 0]);					
+        } else if (objectId === ObjectId.BIG_SNOWMAN) {			//ID 162
+            const body = await spawnObject(`/data/enemy/big_snowman/big_snowman_body.bmd`, 1.25);	
+            const head = await spawnObject(`/data/enemy/big_snowman/big_snowman_head.bmd`, 1.25);
+            mat4.translate(body.modelMatrix, body.modelMatrix, [0, 5, 0]);					
         } else if (objectId === ObjectId.BIG_SNOWMAN_BODY) {	//ID 163
             const b = await spawnObject(`/data/enemy/big_snowman/big_snowman_body.bmd`);	
         } else if (objectId === ObjectId.BIG_SNOWMAN_HEAD) {	//ID 164
             const b = await spawnObject(`/data/enemy/big_snowman/big_snowman_head.bmd`);				
-		} else if (objectId === ObjectId.SNOWMAN_BREATH) {		//ID 165
-		//TODO?				
+        } else if (objectId === ObjectId.SNOWMAN_BREATH) {		//ID 165
+            //TODO?				
         } else if (objectId === ObjectId.PUKUPUKU) {			//ID 166
             const b = await spawnObject(`/data/enemy/pukupuku/pukupuku.bmd`);	
-			await bindBCA(b, '/data/enemy/pukupuku/pukupuku_swim.bca');				
+            await bindBCA(b, '/data/enemy/pukupuku/pukupuku_swim.bca');				
         } else if (objectId === ObjectId.CLOCK_SHORT) {			//ID 167
-			const b = await spawnObject(`/data/special_obj/c2_hari_short/c2_hari_short.bmd`);	
+            const b = await spawnObject(`/data/special_obj/c2_hari_short/c2_hari_short.bmd`);	
         } else if (objectId === ObjectId.CLOCK_LONG) {			//ID 168
-			const b = await spawnObject(`/data/special_obj/c2_hari_long/c2_hari_long.bmd`);	
+            const b = await spawnObject(`/data/special_obj/c2_hari_long/c2_hari_long.bmd`);	
         } else if (objectId === ObjectId.CLOCK_HURIKO) {		//ID 169
-			const b = await spawnObject(`/data/special_obj/c2_huriko/c2_huriko.bmd`);						
-			const chain = await spawnObject(`/data/enemy/wanwan/chain.bmd`);	
+            const b = await spawnObject(`/data/special_obj/c2_huriko/c2_huriko.bmd`);						
+            const chain = await spawnObject(`/data/enemy/wanwan/chain.bmd`);	
         } else if (objectId === ObjectId.MENBO) {				//ID 170
             const b = await spawnObject(`/data/enemy/menbo/menbo.bmd`);	
-			await bindBCA(b, '/data/enemy/menbo/menbo_wait1.bca');
+            await bindBCA(b, '/data/enemy/menbo/menbo_wait1.bca');
         } else if (objectId === ObjectId.CASKET) {				//ID 171
             //const b = await spawnObject(`/data/special_obj/casket/casket.bmd`); //Pokes out of walls			
-       } else if (objectId === ObjectId.HYUHYU) {				//ID 172
+        } else if (objectId === ObjectId.HYUHYU) {				//ID 172
             const b = await spawnObject(`/data/enemy/hyuhyu/hyuhyu.bmd`);	
-			await bindBCA(b, '/data/enemy/hyuhyu/hyuhyu_wait.bca');					
+            await bindBCA(b, '/data/enemy/hyuhyu/hyuhyu_wait.bca');					
         } else if (objectId === ObjectId.BOMB_SEESAW) {			//ID 173
             const b = await spawnObject(`/data/special_obj/b_si_so/b_si_so.bmd`);
         } else if (objectId === ObjectId.KM1_SEESAW) {			//ID 174
@@ -1132,20 +1132,20 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
             const b = await spawnObject(`/data/special_obj/km1_dorifu/km1_dorifu0.bmd`);	  		
         } else if (objectId === ObjectId.KM1_UKISHIMA) {		//ID 176
             const b = await spawnObject(`/data/special_obj/km1_ukishima/km1_ukishima.bmd`);	  				
-		} else if (objectId === ObjectId.KM1_KURUMAJIKU) {		//ID 177
-			const b = await spawnObject(`/data/special_obj/km1_kuruma/km1_kurumajiku.bmd`);	
-			const up = await spawnObject(`/data/special_obj/km1_kuruma/km1_kuruma.bmd`);
-			const down = await spawnObject(`/data/special_obj/km1_kuruma/km1_kuruma.bmd`);
-			const left = await spawnObject(`/data/special_obj/km1_kuruma/km1_kuruma.bmd`);
-			const right = await spawnObject(`/data/special_obj/km1_kuruma/km1_kuruma.bmd`);
-			mat4.translate(up.modelMatrix, up.modelMatrix, [0, 50, 37.5]);		
-			mat4.translate(right.modelMatrix, right.modelMatrix, [50, 0, 37.5]);	
-			mat4.translate(left.modelMatrix, left.modelMatrix, [-50, 0, 37.5]);	
-			mat4.translate(down.modelMatrix, down.modelMatrix, [0, -50, 37.5]);		
+        } else if (objectId === ObjectId.KM1_KURUMAJIKU) {		//ID 177
+            const b = await spawnObject(`/data/special_obj/km1_kuruma/km1_kurumajiku.bmd`);	
+            const up = await spawnObject(`/data/special_obj/km1_kuruma/km1_kuruma.bmd`);
+            const down = await spawnObject(`/data/special_obj/km1_kuruma/km1_kuruma.bmd`);
+            const left = await spawnObject(`/data/special_obj/km1_kuruma/km1_kuruma.bmd`);
+            const right = await spawnObject(`/data/special_obj/km1_kuruma/km1_kuruma.bmd`);
+            mat4.translate(up.modelMatrix, up.modelMatrix, [0, 50, 37.5]);		
+            mat4.translate(right.modelMatrix, right.modelMatrix, [50, 0, 37.5]);	
+            mat4.translate(left.modelMatrix, left.modelMatrix, [-50, 0, 37.5]);	
+            mat4.translate(down.modelMatrix, down.modelMatrix, [0, -50, 37.5]);		
         } else if (objectId === ObjectId.KM1_DERU) {			//ID 178
             const b = await spawnObject(`/data/special_obj/km1_deru/km1_deru.bmd`);	 
-		} else if (objectId === ObjectId.KI_FUNE) {				//ID 179
-			//const b = await spawnObject(`/data/special_obj/ki_fune/ki_fune_down_a.bmd`);				
+        } else if (objectId === ObjectId.KI_FUNE) {				//ID 179
+            //const b = await spawnObject(`/data/special_obj/ki_fune/ki_fune_down_a.bmd`);				
         } else if (objectId === ObjectId.KI_FUNE_UP) {			//ID 180
             const b = await spawnObject(`/data/special_obj/ki_fune/ki_fune_up.bmd`);	
         } else if (objectId === ObjectId.KI_HASIRA) {			//ID 181
@@ -1156,7 +1156,7 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
             const b = await spawnObject(`/data/special_obj/ki_iwa/ki_iwa.bmd`);	
         } else if (objectId === ObjectId.KS_MIZU) {				//ID 185
             //const b = await spawnObject(`/data/special_obj/ks_mizu/ks_mizu.bmd`);
-			//Considered accurate to code but visually obstructing					
+            //Considered accurate to code but visually obstructing					
         } else if (objectId === ObjectId.DOKAN) {				//ID 186
             const b = await spawnObject(`/data/normal_obj/obj_dokan/obj_dokan.bmd`);				
         } else if (objectId === ObjectId.YAJIRUSI_L) {			//ID 187
@@ -1165,7 +1165,7 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
             const b = await spawnObject(`/data/normal_obj/obj_yajirusi_r/yajirusi_r.bmd`);
         } else if (objectId === ObjectId.PROPELLER_HEYHO) {		//ID 189
             const b = await spawnObject(`/data/enemy/propeller_heyho/propeller_heyho.bmd`);	
-			await bindBCA(b, '/data/enemy/propeller_heyho/propeller_heyho_wait.bca');					
+            await bindBCA(b, '/data/enemy/propeller_heyho/propeller_heyho_wait.bca');					
         } else if (objectId === ObjectId.KB1_BILLBOARD) {		//ID 191
             const b = await spawnObject(`/data/special_obj/kb1_ball/kb1_ball.bmd`);	  				
         } else if (objectId === ObjectId.HS_MOON) {				//ID 192
@@ -1230,16 +1230,16 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
             const b = await spawnObject(`/data/special_obj/km3_shiso/km3_shiso.bmd`);	
         } else if (objectId === ObjectId.KM3_YOKOSEESAW) {		//ID 222
             const b = await spawnObject(`/data/special_obj/km3_yokoshiso/km3_yokoshiso.bmd`);	
-		} else if (objectId === ObjectId.KM3_KURUMAJIKU) {		//ID 223
-			const b = await spawnObject(`/data/special_obj/km3_kuruma/km3_kurumajiku.bmd`);	
-			const up = await spawnObject(`/data/special_obj/km3_kuruma/km3_kuruma.bmd`);
-			const down = await spawnObject(`/data/special_obj/km3_kuruma/km3_kuruma.bmd`);
-			const left = await spawnObject(`/data/special_obj/km3_kuruma/km3_kuruma.bmd`);
-			const right = await spawnObject(`/data/special_obj/km3_kuruma/km3_kuruma.bmd`);
-			mat4.translate(up.modelMatrix, up.modelMatrix, [0, 50, 37.5]);		
-			mat4.translate(right.modelMatrix, right.modelMatrix, [50, 0, 37.5]);	
-			mat4.translate(left.modelMatrix, left.modelMatrix, [-50, 0, 37.5]);	
-			mat4.translate(down.modelMatrix, down.modelMatrix, [0, -50, 37.5]);				
+        } else if (objectId === ObjectId.KM3_KURUMAJIKU) {		//ID 223
+            const b = await spawnObject(`/data/special_obj/km3_kuruma/km3_kurumajiku.bmd`);	
+            const up = await spawnObject(`/data/special_obj/km3_kuruma/km3_kuruma.bmd`);
+            const down = await spawnObject(`/data/special_obj/km3_kuruma/km3_kuruma.bmd`);
+            const left = await spawnObject(`/data/special_obj/km3_kuruma/km3_kuruma.bmd`);
+            const right = await spawnObject(`/data/special_obj/km3_kuruma/km3_kuruma.bmd`);
+            mat4.translate(up.modelMatrix, up.modelMatrix, [0, 50, 37.5]);		
+            mat4.translate(right.modelMatrix, right.modelMatrix, [50, 0, 37.5]);	
+            mat4.translate(left.modelMatrix, left.modelMatrix, [-50, 0, 37.5]);	
+            mat4.translate(down.modelMatrix, down.modelMatrix, [0, -50, 37.5]);				
         } else if (objectId === ObjectId.KM3_DORIFU) {			//ID 224
             const b = await spawnObject(`/data/special_obj/km3_dan/km3_dan0.bmd`);		
         } else if (objectId === ObjectId.KM3_DERU01) {			//ID 225
@@ -1249,7 +1249,7 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
         } else if (objectId === ObjectId.KM3_KAITENDAI) {		//ID 227
             const b = await spawnObject(`/data/special_obj/km3_kaitendai/km3_kaitendai.bmd`);
         } else if (objectId === ObjectId.C0_SWITCH) {			//ID 228
-			const b = await spawnObject(`/data/special_obj/c0_switch/c0_switch.bmd`);
+            const b = await spawnObject(`/data/special_obj/c0_switch/c0_switch.bmd`);
         } else if (objectId === ObjectId.SM_LIFT) {				//ID 229
             const b = await spawnObject(`/data/special_obj/sm_lift/sm_lift.bmd`);
         } else if (objectId === ObjectId.FL_MARUTA) {			//ID 230
@@ -1268,23 +1268,23 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
         } else if (objectId === ObjectId.KIRAI) {				//ID 236
             const b = await spawnObject(`/data/enemy/koopa_bomb/koopa_bomb.bmd`);	 	
         } else if (objectId === ObjectId.MIP) {					//ID 237
-			const b = await spawnObject(`/data/enemy/mip/mip.bmd`);		
-			await bindBCA(b, '/data/enemy/mip/mip_wait.bca');					
+            const b = await spawnObject(`/data/enemy/mip/mip.bmd`);		
+            await bindBCA(b, '/data/enemy/mip/mip_wait.bca');					
         } else if (objectId === ObjectId.OWL) {					//ID 239	
             const b = await spawnObject(`/data/enemy/owl/owl.bmd`);		
             await bindBCA(b, '/data/enemy/owl/owl_fly_free.bca');			
         } else if (objectId === ObjectId.DONKETU) {				//ID 240
             const b = await spawnObject(`/data/enemy/donketu/donketu.bmd`);		
-			await bindBCA(b, '/data/enemy/donketu/donketu_walk.bca');				
+            await bindBCA(b, '/data/enemy/donketu/donketu_walk.bca');				
         } else if (objectId === ObjectId.BOSS_DONKETU) {		//ID 241		
             const b = await spawnObject(`/data/enemy/donketu/boss_donketu.bmd`);	
-			mat4.translate(b.modelMatrix, b.modelMatrix, [0, 10, 0]);			
-			await bindBCA(b, '/data/enemy/donketu/donketu_walk.bca');		
+            mat4.translate(b.modelMatrix, b.modelMatrix, [0, 10, 0]);			
+            await bindBCA(b, '/data/enemy/donketu/donketu_walk.bca');		
         } else if (objectId === ObjectId.ONIMASU) {				//ID 242
             const b = await spawnObject(`/data/enemy/onimasu/onimasu.bmd`);	
-			mat4.translate(b.modelMatrix, b.modelMatrix, [0, 32, 0]);					
-		} else if (objectId === ObjectId.BAR) {					//ID 243
-			// Invisible			
+            mat4.translate(b.modelMatrix, b.modelMatrix, [0, 32, 0]);					
+        } else if (objectId === ObjectId.BAR) {					//ID 243
+            // Invisible			
         } else if (objectId === ObjectId.C_JUGEM) {				//ID 244
             const b = await spawnObject(`/data/enemy/c_jugem/c_jugem.bmd`);	
             await bindBCA(b, '/data/enemy/c_jugem/c_jugem_wait.bca');			
@@ -1294,46 +1294,46 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
             const b = await spawnObject(`/data/special_obj/fl_amilift/fl_amilift.bmd`);	
         } else if (objectId === ObjectId.YUREI_MUCHO) {			//ID 247
             const b = await spawnObject(`/data/enemy/yurei_mucho/yurei_mucho.bmd`);
-			await bindBCA(b, '/data/enemy/yurei_mucho/yurei_mucho_wait.bca');		
+            await bindBCA(b, '/data/enemy/yurei_mucho/yurei_mucho_wait.bca');		
         } else if (objectId === ObjectId.CHOROPU) {				//ID 248
             const b = await spawnObject(`/data/enemy/choropu/choropu.bmd`);
-			await bindBCA(b, '/data/enemy/choropu/choropu_search.bca');		
+            await bindBCA(b, '/data/enemy/choropu/choropu_search.bca');		
         } else if (objectId === ObjectId.BASABASA) {			//ID 250
-           //const b = await spawnObject(`/data/enemy/basabasa/basabasa.bmd`); //Crashes?
-		   //await bindBCA(b, '/data/enemy/basabasa/basabasa_wait.bca');				
-		} else if (objectId === ObjectId.POPOI) {				//ID 251
-			const b = await spawnObject(`/data/enemy/popoi/popoi.bmd`);
-			await bindBCA(b, '/data/enemy/popoi/popoi_move1.bca');		
+            //const b = await spawnObject(`/data/enemy/basabasa/basabasa.bmd`); //Crashes?
+            //await bindBCA(b, '/data/enemy/basabasa/basabasa_wait.bca');				
+        } else if (objectId === ObjectId.POPOI) {				//ID 251
+            const b = await spawnObject(`/data/enemy/popoi/popoi.bmd`);
+            await bindBCA(b, '/data/enemy/popoi/popoi_move1.bca');		
         } else if (objectId === ObjectId.JANGO) {				//ID 252
             const b = await spawnObject(`/data/enemy/jango/jango.bmd`);	
-			await bindBCA(b, '/data/enemy/jango/jango_fly.bca');				
-		} else if (objectId === ObjectId.SANBO) {				//ID 253
-			const head = await spawnObject(`/data/enemy/sanbo/sanbo_head.bmd`);	
-			const body1 = await spawnObject(`/data/enemy/sanbo/sanbo_body.bmd`);	
-			const body2 = await spawnObject(`/data/enemy/sanbo/sanbo_body.bmd`);	
-			const body3 = await spawnObject(`/data/enemy/sanbo/sanbo_body.bmd`);	
-			const body4 = await spawnObject(`/data/enemy/sanbo/sanbo_body.bmd`);	
-			
-			mat4.translate(body1.modelMatrix, body1.modelMatrix, [0, 5, 0]);	
-			mat4.translate(body2.modelMatrix, body2.modelMatrix, [0, 20, 0]);	
-			mat4.translate(body3.modelMatrix, body3.modelMatrix, [0, 35, 0]);	
-			mat4.translate(body4.modelMatrix, body4.modelMatrix, [0, 50, 0]);	
-			mat4.translate(head.modelMatrix, head.modelMatrix, [0, 65, 0]);		
+            await bindBCA(b, '/data/enemy/jango/jango_fly.bca');				
+        } else if (objectId === ObjectId.SANBO) {				//ID 253
+            const head = await spawnObject(`/data/enemy/sanbo/sanbo_head.bmd`);	
+            const body1 = await spawnObject(`/data/enemy/sanbo/sanbo_body.bmd`);	
+            const body2 = await spawnObject(`/data/enemy/sanbo/sanbo_body.bmd`);	
+            const body3 = await spawnObject(`/data/enemy/sanbo/sanbo_body.bmd`);	
+            const body4 = await spawnObject(`/data/enemy/sanbo/sanbo_body.bmd`);	
+            
+            mat4.translate(body1.modelMatrix, body1.modelMatrix, [0, 5, 0]);	
+            mat4.translate(body2.modelMatrix, body2.modelMatrix, [0, 20, 0]);	
+            mat4.translate(body3.modelMatrix, body3.modelMatrix, [0, 35, 0]);	
+            mat4.translate(body4.modelMatrix, body4.modelMatrix, [0, 50, 0]);	
+            mat4.translate(head.modelMatrix, head.modelMatrix, [0, 65, 0]);		
         } else if (objectId === ObjectId.OBJ_MARIO_CAP) {		//ID 254
             // TODO: Find models, distinction between M/L/W					
-		} else if (objectId === ObjectId.FL_PUZZLE) {			//ID 255
+        } else if (objectId === ObjectId.FL_PUZZLE) {			//ID 255
             const npart = clamp((object.Parameters[0] & 0xFF), 0, 13);
             const b = await spawnObject(`/data/special_obj/fl_puzzle/fl_14_${leftPad(''+npart, 2)}.bmd`);		
-		} else if (objectId === ObjectId.FL_COIN) {				//ID 256
-			// Invisible			
+        } else if (objectId === ObjectId.FL_COIN) {				//ID 256
+            // Invisible			
         } else if (objectId === ObjectId.DOSSY) {				//ID 257
             const b = await spawnObject(`/data/enemy/dossy/dossy.bmd`);
-			await bindBCA(b, '/data/enemy/dossy/dossy_swim.bca');			
+            await bindBCA(b, '/data/enemy/dossy/dossy_swim.bca');			
         } else if (objectId === ObjectId.DOSSY_CAP) {			//ID 258
             // TODO: Find model				
         } else if (objectId === ObjectId.HUWAHUWA) {			//ID 259
             const b = await spawnObject(`/data/enemy/huwahuwa/huwahuwa_model.bmd`);	
-			await bindBCA(b, '/data/enemy/huwahuwa/huwahuwa_move.bca');						
+            await bindBCA(b, '/data/enemy/huwahuwa/huwahuwa_move.bca');						
         } else if (objectId === ObjectId.SLIDE_BOX) {			//ID 260
             const b = await spawnObject(`/data/special_obj/ki_slide_box/ki_slide_box.bmd`);	
         } else if (objectId === ObjectId.MORAY) {				//ID 261
@@ -1343,70 +1343,70 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
             const b = await spawnObject(`/data/normal_obj/obj_kumo/obj_kumo.bmd`);					
         } else if (objectId === ObjectId.OBJ_SHELL) {			//ID 263
             const b = await spawnObject(`/data/normal_obj/obj_shell/obj_shell.bmd`);	
-			await bindBCA(b, '/data/normal_obj/obj_shell/obj_shell_open.bca');		
+            await bindBCA(b, '/data/normal_obj/obj_shell/obj_shell_open.bca');		
         } else if (objectId === ObjectId.OBJ_RED_FIRE) {		//ID 264
-			//TODO			
+            //TODO			
         } else if (objectId === ObjectId.OBJ_BLUE_FIRE) {		//ID 265
-			//TODO						
-		} else if (objectId === ObjectId.OBJ_FLAMETHROWER) {	//ID 266
-			//TODO?			
-		} else if (objectId === ObjectId.KINOKO_CREATE_TAG) {	//ID 267
-		//Invisible(?)			
-		} else if (objectId === ObjectId.KINOKO_TAG) {			//ID 268
-		//Invisible(?)			
-		} else if (objectId === ObjectId.BLK_OKINOKO_TAG) {		//ID 269
-			// Invisible		
+            //TODO						
+        } else if (objectId === ObjectId.OBJ_FLAMETHROWER) {	//ID 266
+            //TODO?			
+        } else if (objectId === ObjectId.KINOKO_CREATE_TAG) {	//ID 267
+            //Invisible(?)			
+        } else if (objectId === ObjectId.KINOKO_TAG) {			//ID 268
+            //Invisible(?)			
+        } else if (objectId === ObjectId.BLK_OKINOKO_TAG) {		//ID 269
+            // Invisible		
         } else if (objectId === ObjectId.BLK_SKINOKO_TAG) {		//ID 270
             // Invisible			
-		} else if (objectId === ObjectId.BLK_GNSHELL_TAG) {		//ID 271
-			// Invisible			
-		} else if (objectId === ObjectId.BLK_SLVSTAR_TAG) {		//ID 272
-			// Invisible				
+        } else if (objectId === ObjectId.BLK_GNSHELL_TAG) {		//ID 271
+            // Invisible			
+        } else if (objectId === ObjectId.BLK_SLVSTAR_TAG) {		//ID 272
+            // Invisible				
         } else if (objectId === ObjectId.C1_TRAP) {				//ID 273
-			const right = await spawnObject(`/data/special_obj/c1_trap/c1_trap.bmd`);
-			const left = await spawnObject(`/data/special_obj/c1_trap/c1_trap.bmd`);
-			mat4.translate(left.modelMatrix, left.modelMatrix, [-44, 0, 0]);			
+            const right = await spawnObject(`/data/special_obj/c1_trap/c1_trap.bmd`);
+            const left = await spawnObject(`/data/special_obj/c1_trap/c1_trap.bmd`);
+            mat4.translate(left.modelMatrix, left.modelMatrix, [-44, 0, 0]);			
         } else if (objectId === ObjectId.C1_PEACH) {			//ID 275
-			const b = await spawnObject(`/data/special_obj/c1_peach/c1_peach.bmd`);		
+            const b = await spawnObject(`/data/special_obj/c1_peach/c1_peach.bmd`);		
         } else if (objectId === ObjectId.RC_CARPET) {			//ID 276
             const b = await spawnObject(`/data/special_obj/rc_carpet/rc_carpet.bmd`);	  				
-             await bindBCA(b, '/data/special_obj/rc_carpet/rc_carpet_wait.bca');		
-		} else if (objectId === ObjectId.IWANTE) {				//ID 279
-			const b = await spawnObject(`/data/enemy/iwante/iwante_dummy.bmd`);				 
-		} else if (objectId === ObjectId.HANACHAN) {			//ID 280
-			const head = await spawnObject(`/data/enemy/hanachan/hanachan_head.bmd`);	
-			const body1 = await spawnObject(`/data/enemy/hanachan/hanachan_body01.bmd`);	
-			const body2 = await spawnObject(`/data/enemy/hanachan/hanachan_body02.bmd`);	
-			const body3 = await spawnObject(`/data/enemy/hanachan/hanachan_body03.bmd`);	
-			const body4 = await spawnObject(`/data/enemy/hanachan/hanachan_body04.bmd`);	
-			mat4.translate(head.modelMatrix, head.modelMatrix, [0, 16, -5]);	
-			mat4.translate(body1.modelMatrix, body1.modelMatrix, [0, 16, -15]);	
-			mat4.translate(body2.modelMatrix, body2.modelMatrix, [0, 16, -30]);	
-			mat4.translate(body3.modelMatrix, body3.modelMatrix, [0, 16, -45]);	
-			mat4.translate(body4.modelMatrix, body4.modelMatrix, [0, 16, -60]);		
+            await bindBCA(b, '/data/special_obj/rc_carpet/rc_carpet_wait.bca');		
+        } else if (objectId === ObjectId.IWANTE) {				//ID 279
+            const b = await spawnObject(`/data/enemy/iwante/iwante_dummy.bmd`);				 
+        } else if (objectId === ObjectId.HANACHAN) {			//ID 280
+            const head = await spawnObject(`/data/enemy/hanachan/hanachan_head.bmd`);	
+            const body1 = await spawnObject(`/data/enemy/hanachan/hanachan_body01.bmd`);	
+            const body2 = await spawnObject(`/data/enemy/hanachan/hanachan_body02.bmd`);	
+            const body3 = await spawnObject(`/data/enemy/hanachan/hanachan_body03.bmd`);	
+            const body4 = await spawnObject(`/data/enemy/hanachan/hanachan_body04.bmd`);	
+            mat4.translate(head.modelMatrix, head.modelMatrix, [0, 16, -5]);	
+            mat4.translate(body1.modelMatrix, body1.modelMatrix, [0, 16, -15]);	
+            mat4.translate(body2.modelMatrix, body2.modelMatrix, [0, 16, -30]);	
+            mat4.translate(body3.modelMatrix, body3.modelMatrix, [0, 16, -45]);	
+            mat4.translate(body4.modelMatrix, body4.modelMatrix, [0, 16, -60]);		
         } else if (objectId === ObjectId.RACE_NOKO) {			//ID 281
             const b = await spawnObject(`/data/enemy/nokonoko/nokonoko.bmd`, 1);	
             await bindBCA(b, '/data/enemy/nokonoko/nokonoko_wait1.bca');				
-		} else if (objectId === ObjectId.RACE_FLAG) {			//ID 282
-			const b = await spawnObject(`/data/normal_obj/obj_race_flag/obj_race_flag.bmd`);
-			await bindBCA(b, '/data/normal_obj/obj_race_flag/obj_race_flag_wait.bca');				
+        } else if (objectId === ObjectId.RACE_FLAG) {			//ID 282
+            const b = await spawnObject(`/data/normal_obj/obj_race_flag/obj_race_flag.bmd`);
+            await bindBCA(b, '/data/normal_obj/obj_race_flag/obj_race_flag_wait.bca');				
         } else if (objectId === ObjectId.BLOCK_LL) {			//ID 284
             const b = await spawnObject(`/data/normal_obj/obj_block/broken_block_ll.bmd`);	
         } else if (objectId === ObjectId.ICE_BLOCK_LL) {		//ID 285
             const b = await spawnObject(`/data/normal_obj/obj_block/ice_block_ll.bmd`);				
-		} else if (objectId === ObjectId.KILLER_BOOK) {			//ID 287
-			// Invisible			
-		} else if (objectId === ObjectId.BOOK_GENERATOR) {		//ID 288
-			// Invisible			
+        } else if (objectId === ObjectId.KILLER_BOOK) {			//ID 287
+            // Invisible			
+        } else if (objectId === ObjectId.BOOK_GENERATOR) {		//ID 288
+            // Invisible			
         } else if (objectId === ObjectId.ICE_DONKETU) {			//ID 290
             const b = await spawnObject(`/data/enemy/donketu/ice_donketu.bmd`);	
-			await bindBCA(b, '/data/enemy/donketu/ice_donketu_walk.bca');				
+            await bindBCA(b, '/data/enemy/donketu/ice_donketu_walk.bca');				
         } else if (objectId === ObjectId.KING_DONKETU) {		//ID 291
             const b = await spawnObject(`/data/enemy/king_ice_donketu/king_ice_donketu_model.bmd`);	
-			await bindBCA(b, '/data/enemy/king_ice_donketu/king_ice_donketu_wait.bca');				
+            await bindBCA(b, '/data/enemy/king_ice_donketu/king_ice_donketu_wait.bca');				
         } else if (objectId === ObjectId.TREASURE_BOX) {		//ID 292
             const b = await spawnObject(`/data/normal_obj/t_box/t_box.bmd`);		
-			await bindBCA(b, '/data/normal_obj/t_box/t_box_open.bca'); //can comment out when idle treasure box is no longer glitched			
+            await bindBCA(b, '/data/normal_obj/t_box/t_box_open.bca'); //can comment out when idle treasure box is no longer glitched			
         } else if (objectId === ObjectId.MC_WATER) {			//ID 293
             const b = await spawnObject(`/data/special_obj/mc_water/mc_water.bmd`);
         } else if (objectId === ObjectId.CHAIR) {				//ID 294
@@ -1414,33 +1414,33 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
         } else if (objectId === ObjectId.MC_METALNET) {			//ID 295
             const b = await spawnObject(`/data/special_obj/mc_metalnet/mc_metalnet.bmd`);
         } else if (objectId === ObjectId.MC_DODAI) {			//ID 296
-			const b = await spawnObject(`/data/special_obj/mc_dodai/mc_dodai.bmd`);		
+            const b = await spawnObject(`/data/special_obj/mc_dodai/mc_dodai.bmd`);		
         } else if (objectId === ObjectId.MC_HAZAD) {			//ID 297
-			const b = await spawnObject(`/data/special_obj/mc_hazad/mc_hazad.bmd`);					
+            const b = await spawnObject(`/data/special_obj/mc_hazad/mc_hazad.bmd`);					
         } else if (objectId === ObjectId.MC_FLAG) {				//ID 298
             const b = await spawnObject(`/data/special_obj/mc_flag/mc_flag.bmd`);
-			await bindBCA(b, '/data/special_obj/mc_flag/mc_flag_wait.bca');		
+            await bindBCA(b, '/data/special_obj/mc_flag/mc_flag_wait.bca');		
         } else if (objectId === ObjectId.DONKAKU) {				//ID 299
             const b = await spawnObject(`/data/enemy/donkaku/donkaku.bmd`);	
         } else if (objectId === ObjectId.DONGURU) {				//ID 300
             const b = await spawnObject(`/data/enemy/donguru/donguru.bmd`);				
         } else if (objectId === ObjectId.HOLHEI) {				//ID 301
             const b = await spawnObject(`/data/enemy/horuhei/horuhei.bmd`);	
-			await bindBCA(b, '/data/enemy/horuhei/horuhei_walk.bca');					
+            await bindBCA(b, '/data/enemy/horuhei/horuhei_walk.bca');					
         } else if (objectId === ObjectId.SCALEUP_KINOKO) {		//ID 302
             const b = await spawnObject(`/data/normal_obj/scale_up_kinoko/scale_up_kinoko.bmd`);	
         } else if (objectId === ObjectId.C0_WATER) {			//ID 303
-			const b = await spawnObject(`/data/special_obj/c0_water/c0_water.bmd`);		
-		} else if (objectId === ObjectId.SECRET_COIN) {			//ID 304
-			// Invisible			
+            const b = await spawnObject(`/data/special_obj/c0_water/c0_water.bmd`);		
+        } else if (objectId === ObjectId.SECRET_COIN) {			//ID 304
+            // Invisible			
         } else if (objectId === ObjectId.BC_SWITCH) {			//ID 305
             const b = await spawnObject(`/data/normal_obj/b_coin_switch/b_coin_switch.bmd`);	
-		} else if (objectId === ObjectId.BUBBLE) {				//ID 307
-			//TODO?			
-		} else if (objectId === ObjectId.STAR_CREATE) {			//ID 308
-			// Invisible
-		} else if (objectId === ObjectId.SLIDER_MANAGER) {		//ID 309
-			// Invisible			
+        } else if (objectId === ObjectId.BUBBLE) {				//ID 307
+            //TODO?			
+        } else if (objectId === ObjectId.STAR_CREATE) {			//ID 308
+            // Invisible
+        } else if (objectId === ObjectId.SLIDER_MANAGER) {		//ID 309
+            // Invisible			
         } else if (objectId === ObjectId.FIREPAKUN) {			//ID 312
             const b = await spawnObject(`/data/enemy/pakkun/pakkun_model.bmd`, 2);		
             await bindBCA(b, '/data/enemy/pakkun/pakkun_attack.bca');						
@@ -1454,16 +1454,16 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
             // Invisible
         } else if (objectId === ObjectId.ENEMY_CREATE) {		//ID 316
             // Invisible
-		} else if (objectId === ObjectId.WATER_HAKIDASI) {		//ID 317
-			// Invisible			
+        } else if (objectId === ObjectId.WATER_HAKIDASI) {		//ID 317
+            // Invisible			
         } else if (objectId === ObjectId.WATER_TATUMAKI) {		//ID 318
             const b = await spawnObject(`/data/normal_obj/water_tatumaki/water_tatumaki.bmd`);	
-			await bindBCA(b, '/data/normal_obj/water_tatumaki/water_tatumaki.bca');		
+            await bindBCA(b, '/data/normal_obj/water_tatumaki/water_tatumaki.bca');		
         } else if (objectId === ObjectId.TORNADO) {				//ID 320
             const b = await spawnObject(`/data/enemy/sand_tornado/sand_tornado.bmd`);	
-			await bindBCA(b, '/data/enemy/sand_tornado/sand_tornado.bca');					
-		} else if (objectId === ObjectId.LUIGI) {				//ID 322
-			// Invisible				
+            await bindBCA(b, '/data/enemy/sand_tornado/sand_tornado.bca');					
+        } else if (objectId === ObjectId.LUIGI) {				//ID 322
+            // Invisible				
         } else if (objectId === ObjectId.SET_SE) {				//ID 323
             // Invisible
         } else if (objectId === ObjectId.MUGEN_BGM) {			//ID 324
@@ -1474,14 +1474,14 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
             console.warn(`Unknown object type ${object.ObjectId} / ${ObjectId[object.ObjectId]}`);
         }
     }
-
+    
     private async _createBMDRendererForDoorObject(device: GfxDevice, renderer: SM64DSRenderer, object: CRG1DoorObject): Promise<void> {
         const spawnObject = async (filename: string, extraRotationY: number = 0) => {
             const b = await this._createBMDObjRenderer(device, renderer, filename);
             const scale = 0.8;
             this.modelMatrixFromObjectAndScale(b.modelMatrix, object, scale, extraRotationY);
         };
-
+        
         if (object.DoorType === DoorType.PLANE) {
             // TODO(jstpierre)
         } else if (object.DoorType === DoorType.DOOR_NORMAL) {
@@ -1547,14 +1547,14 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
             await spawnObject('/data/normal_obj/door/obj_door0_keyhole.bmd');
         }
     }
-
+    
     private async _createBMDRendererForObject(device: GfxDevice, renderer: SM64DSRenderer, object: CRG1Object): Promise<void> {
         if (object.Type === 'Standard' || object.Type === 'Simple')
-            return this._createBMDRendererForStandardObject(device, renderer, object);
+        return this._createBMDRendererForStandardObject(device, renderer, object);
         else if (object.Type === 'Door')
-            return this._createBMDRendererForDoorObject(device, renderer, object);
+        return this._createBMDRendererForDoorObject(device, renderer, object);
     }
-
+    
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
         const [crg1Buffer, ... narcBuffers] = await Promise.all([
@@ -1567,33 +1567,33 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
             dataFetcher.fetchData(`${pathBase}/ARCHIVE/vs3.narc`),
             dataFetcher.fetchData(`${pathBase}/ARCHIVE/vs4.narc`),
         ]);
-
+        
         const modelCache = new ModelCache(dataFetcher);
-
+        
         for (let i = 0; i < narcBuffers.length; i++)
-            modelCache.mountNARC(NARC.parse(narcBuffers[i]));
-
+        modelCache.mountNARC(NARC.parse(narcBuffers[i]));
+        
         const crg1 = BYML.parse<Sm64DSCRG1>(crg1Buffer, BYML.FileType.CRG1);
         const level = crg1.Levels[this.levelId];
-
+        
         const renderer = new SM64DSRenderer(device, modelCache, level);
         context.destroyablePool.push(renderer);
-
+        
         this._createBMDRenderer(device, renderer, level.MapBmdFile, GLOBAL_SCALE, level, false);
-
+        
         if (level.Background) {
             const vrbox = `/data/vrbox/vr${leftPad('' + level.Background, 2, '0')}.bmd`;
             this._createBMDRenderer(device, renderer, vrbox, 0.8, level, true);
         }
-
+        
         const promises: Promise<void>[] = [];
-
+        
         for (let i = 0; i < level.Objects.length; i++)
-            promises.push(this._createBMDRendererForObject(device, renderer, level.Objects[i]));
-
+        promises.push(this._createBMDRendererForObject(device, renderer, level.Objects[i]));
+        
         await modelCache.waitForLoad();
         await Promise.all(promises);
-
+        
         return renderer;
     }
 }
@@ -1616,14 +1616,14 @@ const sceneDescs = [
     new SM64DSSceneDesc(10, 'Cool, Cool Mountain'),
     new SM64DSSceneDesc(11, 'Cool, Cool Mountain (Inside the Slide)'),
     new SM64DSSceneDesc(12, "Big Boo's Haunt"),
-	"Basement Courses",
+    "Basement Courses",
     new SM64DSSceneDesc(13, 'Hazy Maze Cave'),
     new SM64DSSceneDesc(14, 'Lethal Lava Land'),
     new SM64DSSceneDesc(15, 'Lethal Lava Land (Inside the Volcano)'),
     new SM64DSSceneDesc(16, 'Shifting Sand Land'),
     new SM64DSSceneDesc(17, 'Shifting Sand Land (Inside the Pyramid)'),
     new SM64DSSceneDesc(18, 'Dire, Dire Docks'),
-	"Second Floor Courses",
+    "Second Floor Courses",
     new SM64DSSceneDesc(19, "Snowman's Land"),
     new SM64DSSceneDesc(20, "Snowman's Land (Inside the Igloo)"),
     new SM64DSSceneDesc(21, 'Wet-Dry World'),
@@ -1632,7 +1632,7 @@ const sceneDescs = [
     new SM64DSSceneDesc(25, 'Tiny-Huge Island (Tiny)'),
     new SM64DSSceneDesc(24, 'Tiny-Huge Island (Huge)'),
     new SM64DSSceneDesc(26, "Tiny-Huge Island (Inside Wiggler's Cavern)"),
-	"Third Floor Courses",	
+    "Third Floor Courses",	
     new SM64DSSceneDesc(27, 'Tick Tock Clock'),
     new SM64DSSceneDesc(28, 'Rainbow Ride'),
     "Bowser Levels",
