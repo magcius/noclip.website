@@ -61,11 +61,10 @@ async function fetchCarc(dataFetcher: DataFetcher, path: string): Promise<U8.U8A
     return U8.parse(g);
 }
 
-function fetchAndMount(resourceSystem: ResourceSystem, dataFetcher: DataFetcher, paths: string[]): Promise<any> {
-    return Promise.all(paths.map((path) => fetchCarc(dataFetcher, path))).then((arcs) => {
-        for (let i = 0; i < arcs.length; i++)
-            resourceSystem.mountArchive(arcs[i]);
-    });
+async function fetchAndMount(resourceSystem: ResourceSystem, dataFetcher: DataFetcher, paths: string[]): Promise<any> {
+    const arcs = await Promise.all(paths.map((path) => fetchCarc(dataFetcher, path)));
+    for (let i = 0; i < arcs.length; i++)
+        resourceSystem.mountArchive(arcs[i]);
 }
 
 interface PMPEntry {

@@ -2028,7 +2028,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
     public abstract requestGlobalArchives(modelCache: ModelCache): void;
     public abstract requestZoneArchives(modelCache: ModelCache, zoneName: string): void;
 
-    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const renderHelper = new GXRenderHelperGfx(device);
         context.destroyablePool.push(renderHelper);
 
@@ -2052,38 +2052,39 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         sceneObjHolder.uiSystem = new UISystem(context.uiContainer);
         context.destroyablePool.push(sceneObjHolder);
 
-        return modelCache.waitForLoad().then(() => {
-            const scenarioData = new ScenarioData(modelCache.getArchive(scenarioDataFilename));
+        await modelCache.waitForLoad();
 
-            for (let i = 0; i < scenarioData.zoneNames.length; i++) {
-                const zoneName = scenarioData.zoneNames[i];
-                this.requestZoneArchives(modelCache, zoneName);
-            }
+        const scenarioData = new ScenarioData(modelCache.getArchive(scenarioDataFilename));
 
-            sceneObjHolder.scenarioData = scenarioData;
-            return modelCache.waitForLoad();
-        }).then(() => {
-            sceneObjHolder.planetMapCreator = new PlanetMapCreator(modelCache.getObjectData(`PlanetMapDataTable`));
-            sceneObjHolder.npcDirector = new NPCDirector(modelCache.getObjectData(`NPCData`));
-            sceneObjHolder.lightDataHolder = new LightDataHolder(this.getLightData(modelCache));
-            sceneObjHolder.stageDataHolder = new StageDataHolder(this, modelCache, sceneObjHolder.scenarioData, sceneObjHolder.scenarioData.getMasterZoneFilename(), 0);
+        for (let i = 0; i < scenarioData.zoneNames.length; i++) {
+            const zoneName = scenarioData.zoneNames[i];
+            this.requestZoneArchives(modelCache, zoneName);
+        }
 
-            if (modelCache.isArchiveExist(`ParticleData/Effect.arc`))
-                sceneObjHolder.effectSystem = new EffectSystem(device, modelCache.getArchive(`ParticleData/Effect.arc`));
+        sceneObjHolder.scenarioData = scenarioData;
 
-            if (modelCache.isArchiveExist(`UsEnglish/MessageData/Message.arc`))
-                sceneObjHolder.messageDataHolder = new MessageDataHolder(modelCache.getArchive(`UsEnglish/MessageData/Message.arc`));
-            else
-                sceneObjHolder.messageDataHolder = null;
+        await modelCache.waitForLoad();
 
-            const spawner = new SMGSpawner(galaxyName, this.pathBase, sceneObjHolder);
-            context.destroyablePool.push(spawner);
-            spawner.requestArchives();
+        sceneObjHolder.planetMapCreator = new PlanetMapCreator(modelCache.getObjectData(`PlanetMapDataTable`));
+        sceneObjHolder.npcDirector = new NPCDirector(modelCache.getObjectData(`NPCData`));
+        sceneObjHolder.lightDataHolder = new LightDataHolder(this.getLightData(modelCache));
+        sceneObjHolder.stageDataHolder = new StageDataHolder(this, modelCache, sceneObjHolder.scenarioData, sceneObjHolder.scenarioData.getMasterZoneFilename(), 0);
 
-            return modelCache.waitForLoad().then(() => {
-                spawner.place();
-                return new SMGRenderer(device, renderHelper, spawner, sceneObjHolder);
-            });
-        });
+        if (modelCache.isArchiveExist(`ParticleData/Effect.arc`))
+            sceneObjHolder.effectSystem = new EffectSystem(device, modelCache.getArchive(`ParticleData/Effect.arc`));
+
+        if (modelCache.isArchiveExist(`UsEnglish/MessageData/Message.arc`))
+            sceneObjHolder.messageDataHolder = new MessageDataHolder(modelCache.getArchive(`UsEnglish/MessageData/Message.arc`));
+        else
+            sceneObjHolder.messageDataHolder = null;
+
+        const spawner = new SMGSpawner(galaxyName, this.pathBase, sceneObjHolder);
+        context.destroyablePool.push(spawner);
+        spawner.requestArchives();
+
+        await modelCache.waitForLoad();
+
+        spawner.place();
+        return new SMGRenderer(device, renderHelper, spawner, sceneObjHolder);
     }
 }

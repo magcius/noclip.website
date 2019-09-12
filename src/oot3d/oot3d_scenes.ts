@@ -2008,46 +2008,46 @@ class SceneDesc implements Viewer.SceneDesc {
 
         modelCache.fetchArchive(`${pathBase}/kankyo/BlueSky.zar`);
 
-        return modelCache.waitForLoad().then(() => {
-            for (let i = 0; i < roomZSINames.length; i++) {
-                const roomSetups = ZSI.parseRooms(modelCache.getFileData(roomZSINames[i]));
+        await modelCache.waitForLoad();
 
-                let roomSetup: ZSI.ZSIRoomSetup;
-                if (this.setupIndex === -1)
-                    roomSetup = roomSetups.find((setup) => setup.mesh !== null);
-                else
-                    roomSetup = roomSetups[this.setupIndex];
+        for (let i = 0; i < roomZSINames.length; i++) {
+            const roomSetups = ZSI.parseRooms(modelCache.getFileData(roomZSINames[i]));
 
-                assert(roomSetup.mesh !== null);
-                const filename = roomZSINames[i].split('/').pop();
-                const roomRenderer = new RoomRenderer(device, textureHolder, roomSetup.mesh, filename);
-                roomRenderer.roomSetups = roomSetups;
-                if (zar !== null) {
-                    const cmabFile = zar.files.find((file) => file.name.startsWith(`ROOM${i}\\`) && file.name.endsWith('.cmab') && !file.name.endsWith('_t.cmab'));
-                    if (cmabFile) {
-                        const cmab = CMAB.parse(CMB.Version.Ocarina, cmabFile.buffer);
-                        textureHolder.addTextures(device, cmab.textures);
-                        roomRenderer.bindCMAB(cmab);
-                    }
+            let roomSetup: ZSI.ZSIRoomSetup;
+            if (this.setupIndex === -1)
+                roomSetup = roomSetups.find((setup) => setup.mesh !== null);
+            else
+                roomSetup = roomSetups[this.setupIndex];
+
+            assert(roomSetup.mesh !== null);
+            const filename = roomZSINames[i].split('/').pop();
+            const roomRenderer = new RoomRenderer(device, textureHolder, roomSetup.mesh, filename);
+            roomRenderer.roomSetups = roomSetups;
+            if (zar !== null) {
+                const cmabFile = zar.files.find((file) => file.name.startsWith(`ROOM${i}\\`) && file.name.endsWith('.cmab') && !file.name.endsWith('_t.cmab'));
+                if (cmabFile) {
+                    const cmab = CMAB.parse(CMB.Version.Ocarina, cmabFile.buffer);
+                    textureHolder.addTextures(device, cmab.textures);
+                    roomRenderer.bindCMAB(cmab);
                 }
-                renderer.roomRenderers.push(roomRenderer);
-
-                for (let j = 0; j < roomSetup.actors.length; j++)
-                    this.spawnActorForRoom(device, scene, renderer, roomRenderer, roomSetup.actors[j], j);
             }
+            renderer.roomRenderers.push(roomRenderer);
 
-            // We stick doors into the first roomRenderer to keep things simple.
-            for (let j = 0; j < zsi.doorActors.length; j++)
-                this.spawnActorForRoom(device, scene, renderer, renderer.roomRenderers[0], zsi.doorActors[j], j);
+            for (let j = 0; j < roomSetup.actors.length; j++)
+                this.spawnActorForRoom(device, scene, renderer, roomRenderer, roomSetup.actors[j], j);
+        }
 
-            const skyboxZAR = modelCache.getArchive(`${pathBase}/kankyo/BlueSky.zar`);
-            this.spawnSkybox(device, renderer, skyboxZAR, zsi.skyboxSettings);
+        // We stick doors into the first roomRenderer to keep things simple.
+        for (let j = 0; j < zsi.doorActors.length; j++)
+            this.spawnActorForRoom(device, scene, renderer, renderer.roomRenderers[0], zsi.doorActors[j], j);
 
-            return modelCache.waitForLoad().then(() => {
-                renderer.setEnvironmentSettingsIndex(0);
-                return renderer;
-            });
-        });
+        const skyboxZAR = modelCache.getArchive(`${pathBase}/kankyo/BlueSky.zar`);
+        this.spawnSkybox(device, renderer, skyboxZAR, zsi.skyboxSettings);
+
+        await modelCache.waitForLoad();
+
+        renderer.setEnvironmentSettingsIndex(0);
+        return renderer;
     }
 }
 

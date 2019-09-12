@@ -11,25 +11,30 @@ class TTYDSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string = id) {
     }
 
-    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
         const pathBase = `ttyd/${this.id}`;
         const bgPath = `ttyd/b/${this.id}.tpl`;
-        return Promise.all([dataFetcher.fetchData(`${pathBase}/d.blob`), dataFetcher.fetchData(`${pathBase}/t.blob`), dataFetcher.fetchData(bgPath, DataFetcherFlags.ALLOW_404)]).then(([dBuffer, tBuffer, bgBuffer]) => {
-            const d = World.parse(dBuffer);
-            const textureHolder = new TPLTextureHolder();
-            const tpl = TPL.parse(tBuffer, d.textureNameTable);
-            textureHolder.addTPLTextures(device, tpl);
 
-            let backgroundTextureName: string | null = null;
-            if (bgBuffer.byteLength > 0) {
-                backgroundTextureName = `bg_${this.id}`;
-                const bgTpl = TPL.parse(bgBuffer, [backgroundTextureName]);
-                textureHolder.addTPLTextures(device, bgTpl);
-            }
+        const [dBuffer, tBuffer, bgBuffer] = await Promise.all([
+            dataFetcher.fetchData(`${pathBase}/d.blob`),
+            dataFetcher.fetchData(`${pathBase}/t.blob`),
+            dataFetcher.fetchData(bgPath, DataFetcherFlags.ALLOW_404),
+        ]);
 
-            return new WorldRenderer(device, d, textureHolder, backgroundTextureName);
-        });
+        const d = World.parse(dBuffer);
+        const textureHolder = new TPLTextureHolder();
+        const tpl = TPL.parse(tBuffer, d.textureNameTable);
+        textureHolder.addTPLTextures(device, tpl);
+
+        let backgroundTextureName: string | null = null;
+        if (bgBuffer.byteLength > 0) {
+            backgroundTextureName = `bg_${this.id}`;
+            const bgTpl = TPL.parse(bgBuffer, [backgroundTextureName]);
+            textureHolder.addTPLTextures(device, bgTpl);
+        }
+
+        return new WorldRenderer(device, d, textureHolder, backgroundTextureName);
     }
 }
 

@@ -631,11 +631,21 @@ class SceneDesc implements Viewer.SceneDesc {
             return a;
         }
 
+        const characterLightScale = 0.5;
+
         if (actor.actorId === ActorId.En_Dno) fetchArchive(`zelda2_dnj.gar.lzs`).then((gar) => {
             const b = buildModel(gar, `model/deknuts_butler.cmb`);
             b.bindCSAB(parseCSAB(gar, `anim/dnj_wait.csab`));
         });
-        else console.warn(`Unknown actor ${j} / ${stringifyActorId(actor.actorId)} / ${hexzero(actor.variable, 4)}`);
+        else if (actor.actorId === ActorId.En_Slime) fetchArchive(`zelda2_slime.gar.lzs`).then((gar) => {
+            const b = buildModel(gar, `model/chuchu.cmb`);
+            b.setVertexColorScale(characterLightScale);
+        });
+        else if (actor.actorId === ActorId.En_Snowman) fetchArchive(`zelda2_snowman.gar.lzs`).then((gar) => {
+            const b = buildModel(gar, `model/snowman.cmb`);
+            b.bindCSAB(parseCSAB(gar, `anim/sm_wait.csab`));
+        });
+        else console.warn(`Unknown actor ${j} / ${hexzero(actor.actorId, 2)} / ${stringifyActorId(actor.actorId)} / ${hexzero(actor.variable, 4)}`);
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
