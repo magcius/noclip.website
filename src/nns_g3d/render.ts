@@ -208,7 +208,7 @@ class ShapeInstance {
         const template = renderInstManager.pushTemplateRenderInst();
         template.setInputLayoutAndState(this.vertexData.inputLayout, this.vertexData.inputState);
 
-        let offs = template.allocateUniformBuffer(NITRO_Program.ub_PacketParams, 12*16);
+        let offs = template.allocateUniformBuffer(NITRO_Program.ub_PacketParams, 12*32);
         const packetParamsMapped = template.mapUniformBufferF32(NITRO_Program.ub_PacketParams);
 
         this.computeModelView(scratchMat4, viewerInput, isSkybox);
