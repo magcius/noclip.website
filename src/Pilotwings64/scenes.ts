@@ -14,6 +14,7 @@ import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget } from "../gfx/helpers/RenderTargetHelpers";
 import { computeViewMatrix } from "../Camera";
 import { MathConstants } from "../MathHelpers";
+import { IS_DEVELOPMENT } from "../BuildVersion";
 
 interface Pilotwings64FSFileChunk {
     tag: string;
@@ -376,14 +377,14 @@ class Pilotwings64SceneDesc implements SceneDesc {
 
         for (let i = 0; i < uvtr[0].maps.length; i++) {
             const map = uvtr[0].maps[i];
-            const baseY = i * 5000;
+            const baseY = i * 1000;
             for (let j = 0; j < map.contourPlacements.length; j++) {
                 const ct = map.contourPlacements[j];
                 const instance = new UVCTInstance(uvctData[ct.contourIndex]);
+                const position = vec3.fromValues(ct.position[0], baseY, -ct.position[1]);
+                mat4.scale(instance.modelMatrix, instance.modelMatrix, [50, 50, 50]);
+                mat4.translate(instance.modelMatrix, instance.modelMatrix, position);
                 mat4.rotateX(instance.modelMatrix, instance.modelMatrix, -90 * MathConstants.DEG_TO_RAD);
-                instance.modelMatrix[12] += ct.position[0];
-                instance.modelMatrix[13] += baseY;
-                instance.modelMatrix[14] += -ct.position[1];
                 renderer.uvctInstance.push(instance);
             }
         }
@@ -398,4 +399,4 @@ const sceneDescs = [
     new Pilotwings64SceneDesc('uvcttest', 'UVCT Test'),
 ];
 
-export const sceneGroup: SceneGroup = { id, name, sceneDescs, hidden: true };
+export const sceneGroup: SceneGroup = { id, name, sceneDescs, hidden: !IS_DEVELOPMENT };
