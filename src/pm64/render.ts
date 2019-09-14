@@ -15,7 +15,8 @@ import { assert, nArray, assertExists } from "../util";
 import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
 import { computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
 import { AABB } from "../Geometry";
-import { getFormatString } from "../bk/f3dex";
+import { getImageFormatString } from "../bk/f3dex";
+import { TexCM, TextFilt } from '../Common/N64/Image';
 
 class PaperMario64Program extends DeviceProgram {
     public static a_Position = 0;
@@ -103,7 +104,7 @@ function textureToCanvas(texture: Tex.Image): Viewer.Texture {
     }
 
     const extraInfo = new Map<string, string>();
-    extraInfo.set('Format', getFormatString(texture.format, texture.siz));
+    extraInfo.set('Format', getImageFormatString(texture.format, texture.siz));
 
     return { name: texture.name, extraInfo, surfaces };
 }
@@ -129,11 +130,11 @@ export class PaperMario64TextureHolder extends TextureHolder<Tex.Image> {
     }
 }
 
-function translateCM(cm: Tex.TexCM): GfxWrapMode {
+function translateCM(cm: TexCM): GfxWrapMode {
     switch (cm) {
-    case Tex.TexCM.WRAP:   return GfxWrapMode.REPEAT;
-    case Tex.TexCM.MIRROR: return GfxWrapMode.MIRROR;
-    case Tex.TexCM.CLAMP:  return GfxWrapMode.CLAMP;
+    case TexCM.WRAP:   return GfxWrapMode.REPEAT;
+    case TexCM.MIRROR: return GfxWrapMode.MIRROR;
+    case TexCM.CLAMP:  return GfxWrapMode.CLAMP;
     }
 }
 
@@ -420,11 +421,11 @@ class ModelTreeLeafInstance {
             program.defines.set('USE_TEXTURE', '1');
 
             const textFilt = this.textureEnvironment.texFilter;
-            if (textFilt === Tex.TextFilt.G_TF_POINT)
+            if (textFilt === TextFilt.G_TF_POINT)
                 program.defines.set(`USE_TEXTFILT_POINT`, '1');
-            else if (textFilt === Tex.TextFilt.G_TF_AVERAGE)
+            else if (textFilt === TextFilt.G_TF_AVERAGE)
                 program.defines.set(`USE_TEXTFILT_AVERAGE`, '1');
-            else if (textFilt === Tex.TextFilt.G_TF_BILERP)
+            else if (textFilt === TextFilt.G_TF_BILERP)
                 program.defines.set(`USE_TEXTFILT_BILERP`, '1');
 
             if (this.textureEnvironment.hasSecondImage) {

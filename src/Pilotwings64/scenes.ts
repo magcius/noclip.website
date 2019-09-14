@@ -3,7 +3,7 @@ import { GfxDevice, GfxBuffer, GfxInputLayout, GfxInputState, GfxBufferUsage, Gf
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { SceneDesc, SceneContext, SceneGroup } from "../SceneBase";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString, assert, hexzero } from "../util";
+import { readString, assert, hexzero, assertExists, nArray } from "../util";
 import { decompress } from "../compression/MIO0";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { DeviceProgram } from "../Program";
@@ -15,6 +15,7 @@ import { standardFullClearRenderPassDescriptor, BasicRenderTarget } from "../gfx
 import { computeViewMatrix } from "../Camera";
 import { MathConstants } from "../MathHelpers";
 import { IS_DEVELOPMENT } from "../BuildVersion";
+import { TextureCache, TextureState, TextureImageState, TileState } from "../bk/f3dex";
 
 interface Pilotwings64FSFileChunk {
     tag: string;
@@ -36,7 +37,7 @@ interface UVCT_Chunk {
     indexData: Uint16Array;
 }
 
-function parseUVCT_Chunk(fs: Pilotwings64FS, chunk: Pilotwings64FSFileChunk): UVCT_Chunk {
+function parseUVCT_Chunk(chunk: Pilotwings64FSFileChunk): UVCT_Chunk {
     assert(chunk.tag === 'COMM');
     const view = chunk.buffer.createDataView();
 
@@ -74,10 +75,10 @@ function parseUVCT_Chunk(fs: Pilotwings64FS, chunk: Pilotwings64FSFileChunk): UV
     return { vertexData, indexData };
 }
 
-function parseUVCT(fs: Pilotwings64FS, file: Pilotwings64FSFile): UVCT_Chunk {
+function parseUVCT(file: Pilotwings64FSFile): UVCT_Chunk {
     assert(file.chunks.length === 1);
     assert(file.chunks[0].tag === 'COMM');
-    return parseUVCT_Chunk(fs, file.chunks[0]);
+    return parseUVCT_Chunk(file.chunks[0]);
 }
 
 interface UVTR_ContourPlacement {
@@ -93,7 +94,7 @@ interface UVTR_Chunk {
     contourPlacements: UVTR_ContourPlacement[];
 }
 
-function parseUVTR_Chunk(fs: Pilotwings64FS, chunk: Pilotwings64FSFileChunk): UVTR_Chunk {
+function parseUVTR_Chunk(chunk: Pilotwings64FSFileChunk): UVTR_Chunk {
     const view = chunk.buffer.createDataView();
 
     const minX = view.getFloat32(0x00);
@@ -153,11 +154,245 @@ interface UVTR {
     maps: UVTR_Chunk[];
 }
 
-function parseUVTR(fs: Pilotwings64FS, file: Pilotwings64FSFile): UVTR {
+function parseUVTR(file: Pilotwings64FSFile): UVTR {
     const maps: UVTR_Chunk[] = [];
     for (let i = 0; i < file.chunks.length; i++)
-        maps.push(parseUVTR_Chunk(fs, file.chunks[i]));
+        maps.push(parseUVTR_Chunk(file.chunks[i]));
     return { maps };
+}
+
+enum F3D_GBI {
+    // DMA
+    G_MTX               = 0x01,
+    G_MOVEMEM           = 0x03,
+    G_VTX               = 0x04,
+    G_DL                = 0x06,
+
+    // IMM
+    G_TRI1              = 0xBF,
+    G_CULLDL            = 0xBE,
+    G_POPMTX            = 0xBD,
+    G_MOVEWORD          = 0xBC,
+    G_TEXTURE           = 0xBB,
+    G_SETOTHERMODE_H    = 0xBA,
+    G_SETOTHERMODE_L    = 0xB9,
+    G_ENDDL             = 0xB8,
+    G_SETGEOMETRYMODE   = 0xB7,
+    G_CLEARGEOMETRYMODE = 0xB6,
+    G_LINE3D            = 0xB5,
+    G_RDPHALF_1         = 0xB4,
+    G_RDPHALF_2         = 0xB3,
+    G_MODIFYVTX         = 0xB2,
+    G_TRI2              = 0xB1,
+    G_BRANCH_Z          = 0xB0,
+    G_LOAD_UCODE        = 0xAF,
+
+    // RDP
+    G_SETCIMG           = 0xFF,
+    G_SETZIMG           = 0xFE,
+    G_SETTIMG           = 0xFD,
+    G_SETCOMBINE        = 0xFC,
+    G_SETENVCOLOR       = 0xFB,
+    G_SETPRIMCOLOR      = 0xFA,
+    G_SETBLENDCOLOR     = 0xF9,
+    G_SETFOGCOLOR       = 0xF8,
+    G_SETFILLCOLOR      = 0xF7,
+    G_FILLRECT          = 0xF6,
+    G_SETTILE           = 0xF5,
+    G_LOADTILE          = 0xF4,
+    G_LOADBLOCK         = 0xF3,
+    G_SETTILESIZE       = 0xF2,
+    G_LOADTLUT          = 0xF0,
+    G_RDPSETOTHERMODE   = 0xEF,
+    G_SETPRIMDEPTH      = 0xEE,
+    G_SETSCISSOR        = 0xED,
+    G_SETCONVERT        = 0xEC,
+    G_SETKEYR           = 0xEB,
+    G_SETKEYFB          = 0xEA,
+    G_RDPFULLSYNC       = 0xE9,
+    G_RDPTILESYNC       = 0xE8,
+    G_RDPPIPESYNC       = 0xE7,
+    G_RDPLOADSYNC       = 0xE6,
+    G_TEXRECTFLIP       = 0xE5,
+    G_TEXRECT           = 0xE4,
+}
+
+interface UVTX {
+}
+
+/*
+class RSPState {
+    private textureCache = new TextureCache();
+
+    private SP_GeometryMode: number = 0;
+    private SP_TextureState = new TextureState();
+
+    private DP_OtherModeL: number = 0;
+    private DP_OtherModeH: number = 0;
+    private DP_CombineL: number = 0;
+    private DP_CombineH: number = 0;
+    private DP_TextureImageState = new TextureImageState();
+    private DP_TileState = nArray(8, () => new TileState());
+
+    public gSPTexture(on: boolean, tile: number, level: number, s: number, t: number): void {
+        // This is the texture we're using to rasterize triangles going forward.
+        this.SP_TextureState.set(on, tile, level, s, t);
+    }
+
+    private _translateTileTexture(tileIndex: number): number {
+        const tile = this.DP_TileState[tileIndex];
+
+        const dramAddr = assertExists(this.DP_TMemTracker.get(tile.tmem));
+
+        let dramPalAddr: number;
+        if (tile.fmt === ImageFormat.G_IM_FMT_CI) {
+            const textlut = (this.DP_OtherModeH >>> 14) & 0x03;
+            assert(textlut === TextureLUT.G_TT_RGBA16);
+
+            const palTmem = 0x100 + (tile.palette << 4);
+            dramPalAddr = assertExists(this.DP_TMemTracker.get(palTmem));
+        } else {
+            dramPalAddr = 0;
+        }
+
+        return this.textureCache.translateTileTexture(this.segmentBuffers, dramAddr, dramPalAddr, tile);
+    }
+
+    public gDPSetTextureImage(fmt: number, siz: number, w: number, addr: number): void {
+        this.DP_TextureImageState.set(fmt, siz, w, addr);
+    }
+
+    public gDPSetTile(fmt: number, siz: number, line: number, tmem: number, tile: number, palette: number, cmt: number, maskt: number, shiftt: number, cms: number, masks: number, shifts: number): void {
+        this.DP_TileState[tile].set(fmt, siz, line, tmem, palette, cmt, maskt, shiftt, cms, masks, shifts);
+    }
+
+    public gDPLoadTLUT(tile: number, count: number): void {
+        // Track the TMEM destination back to the originating DRAM address.
+        const tmemDst = this.DP_TileState[tile].tmem;
+        this.DP_TMemTracker.set(tmemDst, this.DP_TextureImageState.addr);
+    }
+
+    public gDPLoadBlock(tileIndex: number, uls: number, ult: number, lrs: number, dxt: number): void {
+        // First, verify that we're loading the whole texture.
+        assert(uls === 0 && ult === 0);
+        // Verify that we're loading into LOADTILE.
+        assert(tileIndex === 7);
+
+        const tile = this.DP_TileState[tileIndex];
+        // Compute the texture size from lrs/dxt. This is required for mipmapping to work correctly
+        // in B-K due to hackery.
+        const numWordsTotal = lrs + 1;
+        const numWordsInLine = (1 << 11) / dxt;
+        const numPixelsInLine = (numWordsInLine * 8 * 8) / getSizBitsPerPixel(tile.siz);
+        tile.lrs = (numPixelsInLine - 1) << 2;
+        tile.lrt = (((numWordsTotal / numWordsInLine) / 4) - 1) << 2;
+
+        // Track the TMEM destination back to the originating DRAM address.
+        this.DP_TMemTracker.set(tile.tmem, this.DP_TextureImageState.addr);
+        this.stateChanged = true;
+    }
+
+    public gDPSetTileSize(tile: number, uls: number, ult: number, lrs: number, lrt: number): void {
+        this.DP_TileState[tile].setSize(uls, ult, lrs, lrt);
+    }
+
+    public gDPSetOtherModeL(sft: number, len: number, w1: number): void {
+        const mask = ((1 << len) - 1) << sft;
+        this.DP_OtherModeL = (this.DP_OtherModeL & ~mask) | (w1 & mask);
+        this.stateChanged = true;
+    }
+
+    public gDPSetOtherModeH(sft: number, len: number, w1: number): void {
+        const mask = ((1 << len) - 1) << sft;
+        this.DP_OtherModeH = (this.DP_OtherModeH & ~mask) | (w1 & mask);
+        this.stateChanged = true;
+    }
+
+    public gDPSetCombine(w0: number, w1: number): void {
+        this.DP_CombineH = w0;
+        this.DP_CombineL = w1;
+        this.stateChanged = true;
+    }
+}
+*/
+
+function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk): UVTX {
+    const view = chunk.buffer.createDataView();
+    const dataSize = view.getUint16(0x00);
+    const dlSize = view.getUint16(0x02) * 0x08;
+
+    const addr = 0x14 + dataSize;
+    const dlEnd = addr + dlSize;
+    for (let i = (addr & 0x00FFFFFF); i < dlEnd; i += 0x08) {
+        const w0 = view.getUint32(i + 0x00);
+        const w1 = view.getUint32(i + 0x04);
+
+        const cmd: F3D_GBI = w0 >>> 24;
+        console.log(hexzero(i, 8), F3D_GBI[cmd], hexzero(w0, 8), hexzero(w1, 8));
+
+        if (cmd === F3D_GBI.G_TEXTURE) {
+            const level = (w0 >>> 11) & 0x07;
+            const tile  = (w0 >>> 8) & 0x07;
+            const on    = !!((w0 >>> 0) & 0x7F);
+            const s     = (w1 >>> 16) & 0xFFFF;
+            const t     = (w1 >>> 0)  & 0xFFFF;
+        } else if (cmd === F3D_GBI.G_SETCOMBINE) {
+            // state.gDPSetCombine(w0 & 0x00FFFFFF, w1);
+        } else if (cmd === F3D_GBI.G_SETOTHERMODE_H) {
+            const len = (w0 >>> 0) & 0xFF;
+            const sft = (w0 >>> 8) & 0xFF;
+            // state.gDPSetOtherModeH(sft, len, w1);
+        } else if (cmd === F3D_GBI.G_RDPLOADSYNC) {
+            // No need to do anything.
+        } else if (cmd === F3D_GBI.G_RDPTILESYNC) {
+            // No need to do anything.
+        } else if (cmd === F3D_GBI.G_SETTIMG) {
+            const fmt = (w0 >>> 21) & 0x07;
+            const siz = (w0 >>> 19) & 0x03;
+            const w   = (w0 & 0x0FFF) + 1;
+            // w1 (the address) is written dynamically by the game engine, so it should
+            // always be 0 here.
+            assert(w1 === 0);
+            // state.gDPSetTextureImage(fmt, siz, w, w1);
+        } else if (cmd === F3D_GBI.G_SETTILE) {
+            const fmt =     (w0 >>> 21) & 0x07;
+            const siz =     (w0 >>> 19) & 0x03;
+            const line =    (w0 >>>  9) & 0x1FF;
+            const tmem =    (w0 >>>  0) & 0x1FF;
+            const tile    = (w1 >>> 24) & 0x07;
+            const palette = (w1 >>> 20) & 0x0F;
+            const cmt =     (w1 >>> 18) & 0x03;
+            const maskt =   (w1 >>> 14) & 0x0F;
+            const shiftt =  (w1 >>> 10) & 0x0F;
+            const cms =     (w1 >>>  8) & 0x03;
+            const masks =   (w1 >>>  4) & 0x0F;
+            const shifts =  (w1 >>>  0) & 0x0F;
+            // state.gDPSetTile(fmt, siz, line, tmem, tile, palette, cmt, maskt, shiftt, cms, masks, shifts);
+        } else if (cmd === F3D_GBI.G_LOADBLOCK) {
+            const uls =  (w0 >>> 12) & 0x0FFF;
+            const ult =  (w0 >>>  0) & 0x0FFF;
+            const tile = (w1 >>> 24) & 0x07;
+            const lrs =  (w1 >>> 12) & 0x0FFF;
+            const dxt =  (w1 >>>  0) & 0x0FFF;
+        } else if (cmd === F3D_GBI.G_SETTILESIZE) {
+            const uls =  (w0 >>> 12) & 0x0FFF;
+            const ult =  (w0 >>>  0) & 0x0FFF;
+            const tile = (w1 >>> 24) & 0x07;
+            const lrs =  (w1 >>> 12) & 0x0FFF;
+            const lrt =  (w1 >>>  0) & 0x0FFF;
+        } else if (cmd === F3D_GBI.G_ENDDL) {
+            break;
+        } else {
+            throw "whoops";
+        }
+    }
+
+    return {};
+}
+
+function parseUVTX(file: Pilotwings64FSFile): UVTX {
+    assert(file.chunks.length === 1);
+    return parseUVTX_Chunk(file.chunks[0]);
 }
 
 function parsePilotwings64FS(buffer: ArrayBufferSlice): Pilotwings64FS {
@@ -367,13 +602,15 @@ class Pilotwings64SceneDesc implements SceneDesc {
 
         const renderer = new Pilotwings64Renderer(device);
 
-        const uvct = fs.files.filter((file) => file.type === 'UVCT').map((file) => parseUVCT(fs, file));
+        const uvct = fs.files.filter((file) => file.type === 'UVCT').map((file) => parseUVCT(file));
 
-        const uvtr = fs.files.filter((file) => file.type === 'UVTR').map((file) => parseUVTR(fs, file));
+        const uvtr = fs.files.filter((file) => file.type === 'UVTR').map((file) => parseUVTR(file));
         assert(uvtr.length === 1);
 
         const uvctData = uvct.map((uvct) => new UVCTData(device, uvct));
         renderer.uvctData = uvctData;
+
+        const uvtx = parseUVTX(fs.files.find((file) => file.type === 'UVTX'));
 
         for (let i = 0; i < uvtr[0].maps.length; i++) {
             const map = uvtr[0].maps[i];

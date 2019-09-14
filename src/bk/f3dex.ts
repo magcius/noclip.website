@@ -1,6 +1,7 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { nArray, assert, assertExists, hexzero } from "../util";
+import { parseTLUT, ImageFormat, getImageFormatName, ImageSize, getImageSizeName, TextureLUT, decodeTex_RGBA16, decodeTex_IA8, decodeTex_RGBA32, decodeTex_CI4, decodeTex_CI8 } from "../Common/N64/Image";
 
 // Interpreter for N64 F3DEX microcode.
 
@@ -8,7 +9,7 @@ export const enum GeometryMode {
     G_SHADE = 0x04,
 }
 
-class TextureState {
+export class TextureState {
     public on: boolean = false;
     public tile: number = 0;
     public level: number = 0;
@@ -24,7 +25,7 @@ class TextureState {
     }
 }
 
-class TextureImageState {
+export class TextureImageState {
     public fmt: number = 0;
     public siz: number = 0;
     public w: number = 0;
@@ -35,7 +36,7 @@ class TextureImageState {
     }
 }
 
-class TileState {
+export class TileState {
     public fmt: number = 0;
     public siz: number = 0;
     public line: number = 0;
@@ -116,22 +117,8 @@ export class Texture {
     }
 }
 
-function getFormatName(fmt: ImageFormat): string {
-    switch (fmt) {
-    case ImageFormat.G_IM_FMT_CI:   return 'CI';
-    case ImageFormat.G_IM_FMT_I:    return 'I';
-    case ImageFormat.G_IM_FMT_IA:   return 'IA';
-    case ImageFormat.G_IM_FMT_RGBA: return 'RGBA';
-    case ImageFormat.G_IM_FMT_YUV:  return 'YUV';
-    }
-}
-
-function getSizeName(siz: ImageSize): string {
-    return '' + getSizBitsPerPixel(siz);
-}
-
-export function getFormatString(fmt: ImageFormat, siz: ImageSize): string {
-    return `${getFormatName(fmt)}${getSizeName(siz)}`;
+export function getImageFormatString(fmt: ImageFormat, siz: ImageSize): string {
+    return `${getImageFormatName(fmt)}${getImageSizeName(siz)}`;
 }
 
 export class DrawCall {
@@ -184,58 +171,10 @@ export const enum OtherModeH_CycleType {
     G_CYC_FILL   = 0x03,
 }
 
-export const enum ImageFormat {
-    G_IM_FMT_RGBA = 0x00,
-    G_IM_FMT_YUV  = 0x01,
-    G_IM_FMT_CI   = 0x02,
-    G_IM_FMT_IA   = 0x03,
-    G_IM_FMT_I    = 0x04,
-}
-
-export const enum ImageSize {
-    G_IM_SIZ_4b   = 0x00,
-    G_IM_SIZ_8b   = 0x01,
-    G_IM_SIZ_16b  = 0x02,
-    G_IM_SIZ_32b  = 0x03,
-}
-
-const enum TextureLUT {
-    G_TT_NONE     = 0x00,
-    G_TT_RGBA16   = 0x02,
-    G_TT_IA16     = 0x03,
-}
-
-function expand4to8(n: number): number {
-    return (n << (8 - 4)) | (n >>> (8 - 8));
-}
-
-function expand5to8(n: number): number {
-    return (n << (8 - 5)) | (n >>> (10 - 8));
-}
-
-function r5g5b5a1(dst: Uint8Array, dstOffs: number, p: number) {
-    dst[dstOffs + 0] = expand5to8((p & 0xF800) >> 11);
-    dst[dstOffs + 1] = expand5to8((p & 0x07C0) >> 6);
-    dst[dstOffs + 2] = expand5to8((p & 0x003E) >> 1);
-    dst[dstOffs + 3] = (p & 0x0001) ? 0xFF : 0x00;
-}
-
-// TODO(jstpierre): non-RGBA16 TLUT modes (comes from TEXTLUT field in SETOTHERMODE_H)
-function translateTLUT(dst: Uint8Array, segmentBuffers: ArrayBufferSlice[], dramAddr: number, count: number): void {
+function translateTLUT(dst: Uint8Array, segmentBuffers: ArrayBufferSlice[], dramAddr: number, siz: ImageSize): void {
     const view = segmentBuffers[(dramAddr >>> 24)].createDataView();
-    let srcIdx = dramAddr & 0x00FFFFFF;
-    for (let dstIdx = 0; dstIdx < count * 4; dstIdx += 4) {
-        const p = view.getUint16(srcIdx);
-        r5g5b5a1(dst, dstIdx, p);
-        srcIdx += 0x02;
-    }
-}
-
-function copyTLUTColor(dst: Uint8Array, dstOffs: number, colorTable: Uint8Array, i: number): void {
-    dst[dstOffs + 0] = colorTable[(i * 4) + 0];
-    dst[dstOffs + 1] = colorTable[(i * 4) + 1];
-    dst[dstOffs + 2] = colorTable[(i * 4) + 2];
-    dst[dstOffs + 3] = colorTable[(i * 4) + 3];
+    const srcIdx = dramAddr & 0x00FFFFFF;
+    parseTLUT(dst, view, srcIdx, siz, TextureLUT.G_TT_RGBA16);
 }
 
 const tlutColorTable = new Uint8Array(256 * 4);
@@ -256,7 +195,7 @@ function getTileHeight(tile: TileState): number {
 
 function translateTile_CI4(segmentBuffers: ArrayBufferSlice[], dramAddr: number, dramPalAddr: number, tile: TileState): Texture {
     const view = segmentBuffers[(dramAddr >>> 24)].createDataView();
-    translateTLUT(tlutColorTable, segmentBuffers, dramPalAddr, 16);
+    translateTLUT(tlutColorTable, segmentBuffers, dramPalAddr, ImageSize.G_IM_SIZ_4b);
 
     const tileW = getTileWidth(tile);
     const tileH = getTileHeight(tile);
@@ -266,24 +205,14 @@ function translateTile_CI4(segmentBuffers: ArrayBufferSlice[], dramAddr: number,
     assert(tile.shiftt === 0); // G_TX_NOLOD
 
     const dst = new Uint8Array(tileW * tileH * 4);
-    let srcIdx = dramAddr & 0x00FFFFFF;
-    let dstIdx = 0;
-    for (let y = 0; y < tileH; y++) {
-        for (let x = 0; x < tileW; x += 2) {
-            const b = view.getUint8(srcIdx);
-            copyTLUTColor(dst, dstIdx + 0, tlutColorTable, (b >>> 4) & 0x0F);
-            copyTLUTColor(dst, dstIdx + 4, tlutColorTable, (b >>> 0) & 0x0F);
-            srcIdx += 0x01;
-            dstIdx += 0x08;
-        }
-    }
-
+    const srcIdx = dramAddr & 0x00FFFFFF;
+    decodeTex_CI4(dst, view, srcIdx, tileW, tileH, tlutColorTable);
     return new Texture(tile, dramAddr, dramPalAddr, tileW, tileH, dst);
 }
 
 function translateTile_CI8(segmentBuffers: ArrayBufferSlice[], dramAddr: number, dramPalAddr: number, tile: TileState): Texture {
     const view = segmentBuffers[(dramAddr >>> 24)].createDataView();
-    translateTLUT(tlutColorTable, segmentBuffers, dramPalAddr, 256);
+    translateTLUT(tlutColorTable, segmentBuffers, dramPalAddr, ImageSize.G_IM_SIZ_8b);
 
     const tileW = getTileWidth(tile);
     const tileH = getTileHeight(tile);
@@ -293,17 +222,8 @@ function translateTile_CI8(segmentBuffers: ArrayBufferSlice[], dramAddr: number,
     assert(tile.shiftt === 0); // G_TX_NOLOD
 
     const dst = new Uint8Array(tileW * tileH * 4);
-    let srcIdx = dramAddr & 0x00FFFFFF;
-    let dstIdx = 0;
-    for (let y = 0; y < tileH; y++) {
-        for (let x = 0; x < tileW; x++) {
-            const b = view.getUint8(srcIdx);
-            copyTLUTColor(dst, dstIdx + 0, tlutColorTable, b);
-            srcIdx += 0x01;
-            dstIdx += 0x04;
-        }
-    }
-
+    const srcIdx = dramAddr & 0x00FFFFFF;
+    decodeTex_CI8(dst, view, srcIdx, tileW, tileH, tlutColorTable);
     return new Texture(tile, dramAddr, dramPalAddr, tileW, tileH, dst);
 }
 
@@ -320,17 +240,8 @@ function translateTile_RGBA16(segmentBuffers: ArrayBufferSlice[], dramAddr: numb
     assert(tile.maskt === 0 || (1 << tile.maskt) === tileH);
 
     const dst = new Uint8Array(tileW * tileH * 4);
-    let srcIdx = dramAddr & 0x00FFFFFF;
-    let dstIdx = 0;
-    for (let y = 0; y < tileH; y++) {
-        for (let x = 0; x < tileW; x++) {
-            const p = view.getUint16(srcIdx);
-            r5g5b5a1(dst, dstIdx, p);
-            srcIdx += 0x02;
-            dstIdx += 0x04;
-        }
-    }
-
+    const srcIdx = dramAddr & 0x00FFFFFF;
+    decodeTex_RGBA16(dst, view, srcIdx, tileW, tileH);
     return new Texture(tile, dramAddr, 0, tileW, tileH, dst);
 }
 
@@ -347,22 +258,8 @@ function translateTile_IA8(segmentBuffers: ArrayBufferSlice[], dramAddr: number,
     assert(tile.maskt === 0 || (1 << tile.maskt) === tileH);
 
     const dst = new Uint8Array(tileW * tileH * 4);
-    let srcIdx = dramAddr & 0x00FFFFFF;
-    let dstIdx = 0;
-    for (let y = 0; y < tileH; y++) {
-        for (let x = 0; x < tileW; x++) {
-            const p = view.getUint8(srcIdx);
-            const i = expand4to8((p >>> 4) & 0x0F);
-            const a = expand4to8((p >>> 0) & 0x0F);
-            dst[dstIdx + 0] = i;
-            dst[dstIdx + 1] = i;
-            dst[dstIdx + 2] = i;
-            dst[dstIdx + 3] = a;
-            srcIdx += 0x01;
-            dstIdx += 0x04;
-        }
-    }
-
+    const srcIdx = dramAddr & 0x00FFFFFF;
+    decodeTex_IA8(dst, view, srcIdx, tileW, tileH);
     return new Texture(tile, dramAddr, 0, tileW, tileH, dst);
 }
 
@@ -379,20 +276,8 @@ function translateTile_RGBA32(segmentBuffers: ArrayBufferSlice[], dramAddr: numb
     assert(tile.maskt === 0 || (1 << tile.maskt) === tileH);
 
     const dst = new Uint8Array(tileW * tileH * 4);
-    let srcIdx = dramAddr & 0x00FFFFFF;
-    let dstIdx = 0;
-    for (let y = 0; y < tileH; y++) {
-        for (let x = 0; x < tileW; x++) {
-            const p = view.getUint32(srcIdx);
-            dst[dstIdx + 0] = (p >>> 24) & 0xFF;
-            dst[dstIdx + 1] = (p >>> 16) & 0xFF;
-            dst[dstIdx + 2] = (p >>>  8) & 0xFF;
-            dst[dstIdx + 3] = (p >>>  0) & 0xFF;
-            srcIdx += 0x04;
-            dstIdx += 0x04;
-        }
-    }
-
+    const srcIdx = dramAddr & 0x00FFFFFF;
+    decodeTex_RGBA32(dst, view, srcIdx, tileW, tileH);
     return new Texture(tile, dramAddr, 0, tileW, tileH, dst);
 }
 
@@ -408,7 +293,7 @@ function translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAddr: numb
     }
 }
 
-class TextureCache {
+export class TextureCache {
     public textures: Texture[] = [];
 
     public translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAddr: number, dramPalAddr: number, tile: TileState): number {
@@ -627,7 +512,7 @@ export class RSPState {
     }
 }
 
-const enum F3DEX_GBI {
+enum F3DEX_GBI {
     // DMA
     G_MTX               = 0x01,
     G_MOVEMEM           = 0x03,
@@ -683,57 +568,6 @@ const enum F3DEX_GBI {
     G_TEXRECT           = 0xE4,
 }
 
-const F3DEX_GBI_NameTable = {
-    [F3DEX_GBI.G_MTX]               : "G_MTX",
-    [F3DEX_GBI.G_MOVEMEM]           : "G_MOVEMEM",
-    [F3DEX_GBI.G_VTX]               : "G_VTX",
-    [F3DEX_GBI.G_DL]                : "G_DL",
-    [F3DEX_GBI.G_TRI1]              : "G_TRI1",
-    [F3DEX_GBI.G_CULLDL]            : "G_CULLDL",
-    [F3DEX_GBI.G_POPMTX]            : "G_POPMTX",
-    [F3DEX_GBI.G_MOVEWORD]          : "G_MOVEWORD",
-    [F3DEX_GBI.G_TEXTURE]           : "G_TEXTURE",
-    [F3DEX_GBI.G_SETOTHERMODE_H]    : "G_SETOTHERMODE_H",
-    [F3DEX_GBI.G_SETOTHERMODE_L]    : "G_SETOTHERMODE_L",
-    [F3DEX_GBI.G_ENDDL]             : "G_ENDDL",
-    [F3DEX_GBI.G_SETGEOMETRYMODE]   : "G_SETGEOMETRYMODE",
-    [F3DEX_GBI.G_CLEARGEOMETRYMODE] : "G_CLEARGEOMETRYMODE",
-    [F3DEX_GBI.G_LINE3D]            : "G_LINE3D",
-    [F3DEX_GBI.G_RDPHALF_1]         : "G_RDPHALF_1",
-    [F3DEX_GBI.G_RDPHALF_2]         : "G_RDPHALF_2",
-    [F3DEX_GBI.G_MODIFYVTX]         : "G_MODIFYVTX",
-    [F3DEX_GBI.G_TRI2]              : "G_TRI2",
-    [F3DEX_GBI.G_BRANCH_Z]          : "G_BRANCH_Z",
-    [F3DEX_GBI.G_LOAD_UCODE]        : "G_LOAD_UCODE",
-    [F3DEX_GBI.G_SETCIMG]           : "G_SETCIMG",
-    [F3DEX_GBI.G_SETZIMG]           : "G_SETZIMG",
-    [F3DEX_GBI.G_SETTIMG]           : "G_SETTIMG",
-    [F3DEX_GBI.G_SETCOMBINE]        : "G_SETCOMBINE",
-    [F3DEX_GBI.G_SETENVCOLOR]       : "G_SETENVCOLOR",
-    [F3DEX_GBI.G_SETPRIMCOLOR]      : "G_SETPRIMCOLOR",
-    [F3DEX_GBI.G_SETBLENDCOLOR]     : "G_SETBLENDCOLOR",
-    [F3DEX_GBI.G_SETFOGCOLOR]       : "G_SETFOGCOLOR",
-    [F3DEX_GBI.G_SETFILLCOLOR]      : "G_SETFILLCOLOR",
-    [F3DEX_GBI.G_FILLRECT]          : "G_FILLRECT",
-    [F3DEX_GBI.G_SETTILE]           : "G_SETTILE",
-    [F3DEX_GBI.G_LOADTILE]          : "G_LOADTILE",
-    [F3DEX_GBI.G_LOADBLOCK]         : "G_LOADBLOCK",
-    [F3DEX_GBI.G_SETTILESIZE]       : "G_SETTILESIZE",
-    [F3DEX_GBI.G_LOADTLUT]          : "G_LOADTLUT",
-    [F3DEX_GBI.G_RDPSETOTHERMODE]   : "G_RDPSETOTHERMODE",
-    [F3DEX_GBI.G_SETPRIMDEPTH]      : "G_SETPRIMDEPTH",
-    [F3DEX_GBI.G_SETSCISSOR]        : "G_SETSCISSOR",
-    [F3DEX_GBI.G_SETCONVERT]        : "G_SETCONVERT",
-    [F3DEX_GBI.G_SETKEYR]           : "G_SETKEYR",
-    [F3DEX_GBI.G_SETKEYFB]          : "G_SETKEYFB",
-    [F3DEX_GBI.G_RDPFULLSYNC]       : "G_RDPFULLSYNC",
-    [F3DEX_GBI.G_RDPTILESYNC]       : "G_RDPTILESYNC",
-    [F3DEX_GBI.G_RDPPIPESYNC]       : "G_RDPPIPESYNC",
-    [F3DEX_GBI.G_RDPLOADSYNC]       : "G_RDPLOADSYNC",
-    [F3DEX_GBI.G_TEXRECTFLIP]       : "G_TEXRECTFLIP",
-    [F3DEX_GBI.G_TEXRECT]           : "G_TEXRECT",
-};
-
 export function runDL_F3DEX(state: RSPState, addr: number): void {
     const segmentBuffer = state.segmentBuffers[(addr >>> 24) & 0xFF];
     const view = segmentBuffer.createDataView();
@@ -743,7 +577,7 @@ export function runDL_F3DEX(state: RSPState, addr: number): void {
         const w1 = view.getUint32(i + 0x04);
 
         const cmd: F3DEX_GBI = w0 >>> 24;
-        // console.log(hexzero(i, 8), F3DEX_GBI_NameTable[cmd], hexzero(w0, 8), hexzero(w1, 8));
+        // console.log(hexzero(i, 8), F3DEX_GBI[cmd], hexzero(w0, 8), hexzero(w1, 8));
 
         switch (cmd) {
         case F3DEX_GBI.G_ENDDL:

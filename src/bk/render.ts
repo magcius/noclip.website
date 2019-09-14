@@ -1,7 +1,7 @@
 
 import * as Viewer from '../viewer';
 import { DeviceProgram } from "../Program";
-import { Texture, getFormatString, RSPOutput, Vertex, DrawCall, GeometryMode, OtherModeH_CycleType } from "./f3dex";
+import { Texture, getImageFormatString, RSPOutput, Vertex, DrawCall, GeometryMode, OtherModeH_CycleType } from "./f3dex";
 import { GfxDevice, GfxTextureDimension, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { assert, nArray } from '../util';
@@ -151,7 +151,7 @@ export function textureToCanvas(texture: Texture): Viewer.Texture {
     ctx.putImageData(imgData, 0, 0);
     const surfaces = [ canvas ];
     const extraInfo = new Map<string, string>();
-    extraInfo.set('Format', getFormatString(texture.tile.fmt, texture.tile.siz));
+    extraInfo.set('Format', getImageFormatString(texture.tile.fmt, texture.tile.siz));
     return { name: texture.name, surfaces, extraInfo };
 }
 
