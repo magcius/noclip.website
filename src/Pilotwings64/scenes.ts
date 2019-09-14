@@ -9,7 +9,7 @@ import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { DeviceProgram } from "../Program";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { fillMatrix4x3, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
-import { mat4 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget } from "../gfx/helpers/RenderTargetHelpers";
 import { computeViewMatrix } from "../Camera";
@@ -30,16 +30,14 @@ interface Pilotwings64FS {
     files: Pilotwings64FSFile[];
 }
 
-interface UVCT {
+interface UVCT_Chunk {
     vertexData: Float32Array;
     indexData: Uint16Array;
 }
 
-function parseUVCT(fs: Pilotwings64FS, file: Pilotwings64FSFile): UVCT {
-    assert(file.chunks.length === 1);
-    assert(file.chunks[0].tag === 'COMM');
-
-    const view = file.chunks[0].buffer.createDataView();
+function parseUVCT_Chunk(fs: Pilotwings64FS, chunk: Pilotwings64FSFileChunk): UVCT_Chunk {
+    assert(chunk.tag === 'COMM');
+    const view = chunk.buffer.createDataView();
 
     const vertCount = view.getUint16(0x00);
     const faceCount = view.getUint16(0x02);
@@ -73,6 +71,92 @@ function parseUVCT(fs: Pilotwings64FS, file: Pilotwings64FSFile): UVCT {
     }
 
     return { vertexData, indexData };
+}
+
+function parseUVCT(fs: Pilotwings64FS, file: Pilotwings64FSFile): UVCT_Chunk {
+    assert(file.chunks.length === 1);
+    assert(file.chunks[0].tag === 'COMM');
+    return parseUVCT_Chunk(fs, file.chunks[0]);
+}
+
+interface UVTR_ContourPlacement {
+    contourIndex: number;
+    position: vec3;
+}
+
+interface UVTR_Chunk {
+    gridWidth: number;
+    gridHeight: number;
+    cellX: number;
+    cellY: number;
+    contourPlacements: UVTR_ContourPlacement[];
+}
+
+function parseUVTR_Chunk(fs: Pilotwings64FS, chunk: Pilotwings64FSFileChunk): UVTR_Chunk {
+    const view = chunk.buffer.createDataView();
+
+    const minX = view.getFloat32(0x00);
+    const minY = view.getFloat32(0x04);
+
+    const gridWidth = view.getUint8(0x18);
+    const gridHeight = view.getUint8(0x19);
+    const cellX = view.getFloat32(0x1A);
+    const cellY = view.getFloat32(0x1E);
+    const unk = view.getFloat32(0x22);
+
+    const contourPlacements: UVTR_ContourPlacement[] = [];
+    let offs = 0x26;
+    for (let i = 0; i < gridWidth * gridHeight; i++) {
+        const flag = view.getUint8(offs++);
+
+        if (flag === 0) {
+            // No data in this cell.
+            continue;
+        }
+
+        const m00 = view.getFloat32(offs + 0x00);
+        const m01 = view.getFloat32(offs + 0x04);
+        const m02 = view.getFloat32(offs + 0x08);
+        const m03 = view.getFloat32(offs + 0x0C);
+        const m10 = view.getFloat32(offs + 0x10);
+        const m11 = view.getFloat32(offs + 0x14);
+        const m12 = view.getFloat32(offs + 0x18);
+        const m13 = view.getFloat32(offs + 0x1C);
+        const m20 = view.getFloat32(offs + 0x20);
+        const m21 = view.getFloat32(offs + 0x24);
+        const m22 = view.getFloat32(offs + 0x28);
+        const m23 = view.getFloat32(offs + 0x2C);
+        assert(m00 === 1.0 && m01 === 0.0 && m02 === 0.0 && m03 === 0.0);
+        assert(m10 === 0.0 && m11 === 1.0 && m12 === 0.0 && m13 === 0.0);
+        assert(m20 === 0.0 && m21 === 0.0 && m22 === 1.0 && m23 === 0.0);
+
+        const x = view.getFloat32(offs + 0x30);
+        const y = view.getFloat32(offs + 0x34);
+        const z = view.getFloat32(offs + 0x38);
+        assert(z === 0.0);
+        const position = vec3.fromValues(x, y, z);
+        const one = view.getFloat32(offs + 0x3C);
+        assert(one === 1.0);
+        const rotation = view.getInt8(offs + 0x40);
+        assert(rotation === 0x00);
+        const contourIndex = view.getUint16(offs + 0x41);
+
+        contourPlacements.push({ contourIndex, position });
+        offs += 0x43;
+    }
+
+    return { gridWidth, gridHeight, cellX, cellY, contourPlacements };
+}
+
+interface UVTR {
+    maps: UVTR_Chunk[];
+}
+
+function parseUVTR(fs: Pilotwings64FS, file: Pilotwings64FSFile): UVTR {
+    const maps: UVTR_Chunk[] = [];
+    for (let i = 0; i < file.chunks.length; i++)
+        maps.push(parseUVTR_Chunk(fs, file.chunks[i]));
+    return { maps };
 }
 
 function parsePilotwings64FS(buffer: ArrayBufferSlice): Pilotwings64FS {
@@ -168,7 +252,7 @@ class UVCTData {
     public inputLayout: GfxInputLayout;
     public inputState: GfxInputState;
 
-    constructor(device: GfxDevice, public uvct: UVCT) {
+    constructor(device: GfxDevice, public uvct: UVCT_Chunk) {
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, uvct.vertexData.buffer);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, uvct.indexData.buffer);
 
@@ -280,19 +364,30 @@ class Pilotwings64SceneDesc implements SceneDesc {
         const fsBin = await context.dataFetcher.fetchData(`${pathBase}/fs.bin`);
         const fs = parsePilotwings64FS(fsBin);
 
+        const renderer = new Pilotwings64Renderer(device);
+
         const uvct = fs.files.filter((file) => file.type === 'UVCT').map((file) => parseUVCT(fs, file));
-        console.log(uvct);
+
+        const uvtr = fs.files.filter((file) => file.type === 'UVTR').map((file) => parseUVTR(fs, file));
+        assert(uvtr.length === 1);
 
         const uvctData = uvct.map((uvct) => new UVCTData(device, uvct));
-        const uvctInstance = uvctData.map((uvctData) => new UVCTInstance(uvctData));
-        for (let i = 0; i < uvctInstance.length; i++) {
-            mat4.rotateX(uvctInstance[i].modelMatrix, uvctInstance[i].modelMatrix, -90 * MathConstants.DEG_TO_RAD);
-            uvctInstance[i].modelMatrix[12] = i * 500;
+        renderer.uvctData = uvctData;
+
+        for (let i = 0; i < uvtr[0].maps.length; i++) {
+            const map = uvtr[0].maps[i];
+            const baseY = i * 5000;
+            for (let j = 0; j < map.contourPlacements.length; j++) {
+                const ct = map.contourPlacements[j];
+                const instance = new UVCTInstance(uvctData[ct.contourIndex]);
+                mat4.rotateX(instance.modelMatrix, instance.modelMatrix, -90 * MathConstants.DEG_TO_RAD);
+                instance.modelMatrix[12] += ct.position[0];
+                instance.modelMatrix[13] += baseY;
+                instance.modelMatrix[14] += -ct.position[1];
+                renderer.uvctInstance.push(instance);
+            }
         }
 
-        const renderer = new Pilotwings64Renderer(device);
-        renderer.uvctData = uvctData;
-        renderer.uvctInstance = uvctInstance;
         return renderer;
     }
 }
