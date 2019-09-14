@@ -256,7 +256,6 @@ export interface GXMaterialHacks {
     disableTextures?: boolean;
     disableVertexColors?: boolean;
     disableLighting?: boolean;
-    useTextureCoords?: boolean;
 }
 
 function colorChannelsEqual(a: ColorChannelControl, b: ColorChannelControl): boolean {
@@ -631,9 +630,6 @@ export class GX_Program extends DeviceProgram {
     }
 
     private generateTextureSample(index: number, coord: string): string {
-        if (this.hacks !== null && this.hacks.useTextureCoords)
-            return `vec4(${coord}.xy, 1.0, 1.0)`;
-
         return `texture(u_Texture[${index}], ${coord}, TextureLODBias(${index}))`;
     }
 

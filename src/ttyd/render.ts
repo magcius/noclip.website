@@ -1,26 +1,28 @@
 
-import { GXTextureHolder, MaterialParams, PacketParams, ColorKind, translateWrapModeGfx, ub_MaterialParams, loadedDataCoalescerComboGfx, ub_SceneParams, fillSceneParamsData, u_SceneParamsBufferSize, SceneParams, fillSceneParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
+import { GXTextureHolder, MaterialParams, PacketParams, ColorKind, translateWrapModeGfx, ub_MaterialParams, loadedDataCoalescerComboGfx, ub_SceneParams, fillSceneParamsData, u_SceneParamsBufferSize, SceneParams, fillSceneParams, fillSceneParamsDataOnTemplate, setIndTexOrder, setTevColorIn, setTevAlphaIn, setTevAlphaOp, setTevColorOp, setTevIndirect, setTevOrder, autoOptimizeMaterial } from '../gx/gx_render';
 import { GXMaterialHelperGfx, GXShapeHelperGfx, BasicGXRendererHelper } from '../gx/gx_render';
 
 import * as TPL from './tpl';
-import { TTYDWorld, Material, SceneGraphNode, Batch, SceneGraphPart, Sampler, MaterialAnimator, bindMaterialAnimator, AnimationEntry, MeshAnimator, bindMeshAnimator, MaterialLayer, DrawModeFlags } from './world';
+import { TTYDWorld, Material, SceneGraphNode, Batch, SceneGraphPart, Sampler, MaterialAnimator, bindMaterialAnimator, AnimationEntry, MeshAnimator, bindMeshAnimator, MaterialLayer, DrawModeFlags, CollisionFlags } from './world';
 
 import * as Viewer from '../viewer';
-import { mat4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 import { assert, nArray } from '../util';
 import AnimationController from '../AnimationController';
 import { DeviceProgram } from '../Program';
-import { GfxDevice, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxProgram } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxProgram, GfxMegaStateDescriptor, GfxCullMode } from '../gfx/platform/GfxPlatform';
 import { fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
 import { TextureMapping } from '../TextureHolder';
 import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
 import { GfxRenderInstManager, GfxRenderInst, GfxRendererLayer, makeSortKey, makeSortKeyOpaque, setSortKeyDepth } from '../gfx/render/GfxRenderer';
 import { Camera, computeViewMatrix, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
 import { AABB } from '../Geometry';
-import { colorCopy } from '../Color';
+import { colorCopy, colorNew, White, Color, colorNewCopy, colorFromRGBA } from '../Color';
 import * as UI from '../ui';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { GXMaterialHacks } from '../gx/gx_material';
+import { GXMaterialHacks, GXMaterial } from '../gx/gx_material';
+import * as GX from '../gx/gx_enum';
+import { setMegaStateFlags } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 
 export class TPLTextureHolder extends GXTextureHolder<TPL.TPLTexture> {
     public addTPLTextures(device: GfxDevice, tpl: TPL.TPL): void {
@@ -104,16 +106,18 @@ class BackgroundBillboardRenderer {
     }
 }
 
+const materialParams = new MaterialParams();
 class MaterialInstance {
-    private materialParams = new MaterialParams();
-    private materialHelper: GXMaterialHelperGfx;
     private materialAnimators: MaterialAnimator[] = [];
     private gfxSamplers: GfxSampler[] = [];
-    public materialParamsBlockOffs: number = 0;
+    public materialHelper: GXMaterialHelperGfx;
+    public konst0 = colorNewCopy(White);
     public isTranslucent: boolean;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public material: Material) {
         this.materialHelper = new GXMaterialHelperGfx(this.material.gxMaterial);
+        // Cull mode is set by the node
+        this.materialHelper.megaStateFlags.cullMode = undefined;
         this.materialHelper.cacheProgram(device, cache);
 
         this.gfxSamplers = this.material.samplers.map((sampler) => {
@@ -121,6 +125,8 @@ class MaterialInstance {
         });
 
         this.isTranslucent = material.materialLayer === MaterialLayer.BLEND;
+
+        this.materialHelper.megaStateFlags.polygonOffset = material.materialLayer === MaterialLayer.ALPHA_TEST;
     }
 
     public setMaterialHacks(materialHacks: GXMaterialHacks): void {
@@ -170,6 +176,7 @@ class MaterialInstance {
         }
 
         colorCopy(materialParams.u_Color[ColorKind.MAT0], this.material.matColorReg);
+        colorCopy(materialParams.u_Color[ColorKind.K0], this.konst0);
     }
 
     public stopAnimation(): void {
@@ -189,25 +196,19 @@ class MaterialInstance {
         return hasAnimation;
     }
 
-    public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, renderInst: GfxRenderInst): void {
+    public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, renderInst: GfxRenderInst, textureHolder: TPLTextureHolder): void {
         // Set up the program.
         this.materialHelper.setOnRenderInst(device, cache, renderInst);
 
-        renderInst.setUniformBufferOffset(ub_MaterialParams, this.materialParamsBlockOffs, this.materialHelper.materialParamsBufferSize);
-        renderInst.setSamplerBindingsFromTextureMappings(this.materialParams.m_TextureMapping);
+        const offs = this.materialHelper.allocateMaterialParams(renderInst);
+        this.fillMaterialParams(materialParams, textureHolder);
+        this.materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
+
+        renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+        renderInst.setMegaStateFlags(this.materialHelper.megaStateFlags);
 
         const layer = this.getRendererLayer(this.material.materialLayer);
         renderInst.sortKey = makeSortKey(layer, this.materialHelper.programKey);
-        const megaStateFlags = renderInst.getMegaStateFlags();
-        megaStateFlags.polygonOffset = this.material.materialLayer === MaterialLayer.ALPHA_TEST;
-    }
-
-    public prepareToRender(renderInstManager: GfxRenderInstManager, textureHolder: TPLTextureHolder): void {
-        assert(this.materialParamsBlockOffs === 0);
-        this.materialParamsBlockOffs = this.materialHelper.allocateMaterialParamsBlock(renderInstManager);
-
-        this.fillMaterialParams(this.materialParams, textureHolder);
-        this.materialHelper.fillMaterialParamsData(renderInstManager, this.materialParamsBlockOffs, this.materialParams);
     }
 
     public destroy(device: GfxDevice) {
@@ -220,7 +221,7 @@ class BatchInstance {
     private shapeHelper: GXShapeHelperGfx;
     private packetParams = new PacketParams();
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, private materialInstance: MaterialInstance, private nodeInstance: NodeInstance, private batch: Batch, private coalescedBuffers: GfxCoalescedBuffersCombo) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public materialInstance: MaterialInstance, private nodeInstance: NodeInstance, private batch: Batch, private coalescedBuffers: GfxCoalescedBuffersCombo) {
         this.shapeHelper = new GXShapeHelperGfx(device, cache, coalescedBuffers, batch.loadedVertexLayout, batch.loadedVertexData);
     }
 
@@ -229,22 +230,33 @@ class BatchInstance {
         mat4.mul(dst, dst, this.nodeInstance.modelMatrix);
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        if (!this.nodeInstance.visible)
-            return;
-
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, textureHolder: TPLTextureHolder, materialInstanceOverride: MaterialInstance | null = null): void {
         const renderInst = this.shapeHelper.pushRenderInst(renderInstManager);
-        this.nodeInstance.setOnRenderInst(renderInst, viewerInput);
-        this.materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
-        renderInst.setMegaStateFlags(this.nodeInstance.node.renderFlags);
+        const materialInstance = materialInstanceOverride !== null ? materialInstanceOverride : this.materialInstance;
+        materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst, textureHolder);
         this.computeModelView(this.packetParams.u_PosMtx[0], viewerInput.camera);
         this.shapeHelper.fillPacketParams(this.packetParams, renderInst);
-        renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, this.nodeInstance.depth);
     }
 
     public destroy(device: GfxDevice): void {
         this.shapeHelper.destroy(device);
     }
+}
+
+function fillDebugColorFromCollisionFlags(dst: Color, flags: CollisionFlags): void {
+    if (!!(flags & CollisionFlags.WALK_SLOW)) {
+        colorFromRGBA(dst, 0.0, 0.0, 1.0);
+    } else if (!!(flags & CollisionFlags.HAZARD_RESPAWN_ENABLED)) {
+        colorFromRGBA(dst, 0.0, 1.0, 0.0);
+    } else if (!!(flags & 0x200000)) {
+        colorFromRGBA(dst, 1.0, 0.0, 1.0);
+    } else if (flags !== 0) {
+        colorFromRGBA(dst, 1.0, 0.0, 0.0);
+    } else {
+        colorFromRGBA(dst, 1.0, 1.0, 1.0);
+    }
+
+    dst.a = 0.25;
 }
 
 const sceneParams = new SceneParams();
@@ -254,13 +266,17 @@ class NodeInstance {
     public children: NodeInstance[] = [];
     public modelMatrix: mat4 = mat4.create();
     public meshAnimator: MeshAnimator | null = null;
-    public depth: number = 0;
+    public batchInstances: BatchInstance[] = [];
     public namePath: string;
     public isDecal: boolean;
+    private showCollisionAttrib: boolean = false;
+    private collisionMaterialInstance: MaterialInstance | null = null;
+    private megaStateFlags: Partial<GfxMegaStateDescriptor>;
 
     constructor(public node: SceneGraphNode, parentNamePath: string, private childIndex: number) {
         this.namePath = `${parentNamePath}/${node.nameStr}`;
         this.isDecal = !!(node.drawModeFlags & DrawModeFlags.IS_DECAL);
+        this.megaStateFlags = Object.assign({}, this.node.renderFlags);
     }
 
     public updateModelMatrix(parentMatrix: mat4): void {
@@ -273,10 +289,25 @@ class NodeInstance {
         }
     }
 
-    public setOnRenderInst(renderInst: GfxRenderInst, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, textureHolder: TPLTextureHolder): void {
+        if (!this.visible)
+            return;
+
+        bboxScratch.transform(this.node.bbox, this.modelMatrix);
+        const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, bboxScratch);
+
+        for (let i = 0; i < this.children.length; i++) {
+            this.children[i].updateModelMatrix(this.modelMatrix);
+            this.children[i].prepareToRender(device, renderInstManager, viewerInput, textureHolder);
+        }
+
+        const template = renderInstManager.pushTemplateRenderInst();
+        template.sortKey = setSortKeyDepth(template.sortKey, depth);
+        template.setMegaStateFlags(this.megaStateFlags);
+
         if (this.isDecal) {
-            let offs = renderInst.allocateUniformBuffer(ub_SceneParams, u_SceneParamsBufferSize);
-            const d = renderInst.mapUniformBufferF32(ub_SceneParams);
+            let offs = template.allocateUniformBuffer(ub_SceneParams, u_SceneParamsBufferSize);
+            const d = template.mapUniformBufferF32(ub_SceneParams);
             fillSceneParams(sceneParams, viewerInput.camera, viewerInput.viewportWidth, viewerInput.viewportHeight);
             // The game will actually adjust the projection matrix based on the child index, if the decal flag
             // is set. This happens in _mapDispMapObj.
@@ -292,13 +323,77 @@ class NodeInstance {
             sceneParams.u_Projection[10] *= depthBias;
             fillSceneParamsData(d, offs, sceneParams);
         }
+
+        const materialInstanceOverride = this.getMaterialInstanceOverride(device, renderInstManager.gfxRenderCache);
+
+        for (let i = 0; i < this.batchInstances.length; i++)
+            this.batchInstances[i].prepareToRender(device, renderInstManager, viewerInput, textureHolder, materialInstanceOverride);
+
+        renderInstManager.popTemplateRenderInst();
     }
 
-    public prepareToRender(camera: Camera): void {
-        // Compute depth from camera.
-        if (this.visible) {
-            bboxScratch.transform(this.node.bbox, this.modelMatrix);
-            this.depth = computeViewSpaceDepthFromWorldSpaceAABB(camera, bboxScratch);
+    private createCollisionMaterialInstance(device: GfxDevice, cache: GfxRenderCache): void {
+        const collisionGxMaterial: GXMaterial = {
+            index: -1,
+            name: "Collision",
+            alphaTest: { 
+                op: GX.AlphaOp.OR,
+                compareA: GX.CompareType.ALWAYS,
+                compareB: GX.CompareType.ALWAYS,
+                referenceA: 0.0,
+                referenceB: 0.0,
+            },
+            cullMode: GX.CullMode.NONE,
+            indTexStages: [],
+            texGens: [],
+            ropInfo: {
+                blendMode: {
+                    type: GX.BlendMode.BLEND,
+                    srcFactor: GX.BlendFactor.SRCALPHA,
+                    dstFactor: GX.BlendFactor.INVSRCALPHA,
+                    logicOp: GX.LogicOp.NOOP,
+                },
+                depthFunc: GX.CompareType.LESS,
+                depthTest: true,
+                depthWrite: false,
+            },
+            lightChannels: [],
+            tevStages: [
+                {
+                    index: 0,
+                    ... setTevOrder(GX.TexCoordID.NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0),
+                    ... setTevColorIn(GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.KONST),
+                    ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.KONST),
+                    ... setTevColorOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV),
+                    ... setTevAlphaOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV),
+                    ... setTevIndirect(GX.IndTexStageID.STAGE0, GX.IndTexFormat._8, GX.IndTexBiasSel.NONE, GX.IndTexMtxID.OFF, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, false, false, GX.IndTexAlphaSel.OFF),
+                    konstColorSel: GX.KonstColorSel.KCSEL_K0,
+                    konstAlphaSel: GX.KonstAlphaSel.KASEL_K0_A,
+                }
+            ],
+        };
+        const collisionMaterial: Material = {
+            index: -1,
+            samplers: [],
+            texMtx: [],
+            matColorReg: White,
+            materialLayer: MaterialLayer.BLEND,
+            name: "Collision",
+            gxMaterial: collisionGxMaterial,
+        };
+        this.collisionMaterialInstance = new MaterialInstance(device, cache, collisionMaterial);
+        this.collisionMaterialInstance.materialHelper.megaStateFlags.polygonOffset = true;
+        this.collisionMaterialInstance.materialHelper.megaStateFlags.cullMode = GfxCullMode.NONE;
+        fillDebugColorFromCollisionFlags(this.collisionMaterialInstance.konst0, this.node.collisionFlags);
+    }
+
+    private getMaterialInstanceOverride(device: GfxDevice, cache: GfxRenderCache): MaterialInstance | null {
+        if (this.showCollisionAttrib) {
+            if (this.collisionMaterialInstance === null)
+                this.createCollisionMaterialInstance(device, cache);
+            return this.collisionMaterialInstance;
+        } else {
+            return null;
         }
     }
 
@@ -315,6 +410,13 @@ class NodeInstance {
             this.children[i].setVisible(visible);
     }
 
+    public setShowCollisionAttrib(v: boolean): void {
+        this.showCollisionAttrib = v;
+
+        for (let i = 0; i < this.children.length; i++)
+            this.children[i].setShowCollisionAttrib(v);
+    }
+
     public playAnimation(animationController: AnimationController, animation: AnimationEntry): void {
         const m = bindMeshAnimator(animationController, animation, this.node.nameStr);
         if (m)
@@ -322,6 +424,14 @@ class NodeInstance {
 
         for (let i = 0; i < this.children.length; i++)
             this.children[i].playAnimation(animationController, animation);
+    }
+
+    public destroy(device: GfxDevice): void {
+        if (this.collisionMaterialInstance !== null)
+            this.collisionMaterialInstance.destroy(device);
+
+        for (let i = 0; i < this.children.length; i++)
+            this.children[i].destroy(device);
     }
 }
 
@@ -403,26 +513,8 @@ export class WorldRenderer extends BasicGXRendererHelper {
 
         fillSceneParamsDataOnTemplate(template, viewerInput);
 
-        // Recursively update node model matrices.
-        const updateNode = (nodeInstance: NodeInstance, parentMatrix: mat4) => {
-            nodeInstance.updateModelMatrix(parentMatrix);
-            nodeInstance.prepareToRender(viewerInput.camera);
-            for (let i = 0; i < nodeInstance.children.length; i++)
-                updateNode(nodeInstance.children[i], nodeInstance.modelMatrix);
-        };
-
-        updateNode(this.rootNode, this.rootMatrix);
-
-        // First, go through materials and reset their material params blocks...
-        for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].prepareToRender(this.renderHelper.renderInstManager, this.textureHolder);
-
-        // Update shapes
-        for (let i = 0; i < this.batchInstances.length; i++)
-            this.batchInstances[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
-
-        for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].materialParamsBlockOffs = 0;
+        this.rootNode.updateModelMatrix(this.rootMatrix);
+        this.rootNode.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput, this.textureHolder);
 
         renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender(device, hostAccessPass);
@@ -443,18 +535,18 @@ export class WorldRenderer extends BasicGXRendererHelper {
                 this.materialInstances[i].setMaterialHacks({ disableTextures: !enableTextures.checked });
         };
         renderHacksPanel.contents.appendChild(enableTextures.elem);
-        const showTextureCoords = new UI.Checkbox('Show Texture Coordinates', false);
-        showTextureCoords.onchanged = () => {
-            for (let i = 0; i < this.materialInstances.length; i++)
-                this.materialInstances[i].setMaterialHacks({ useTextureCoords: showTextureCoords.checked });
-        };
-        renderHacksPanel.contents.appendChild(showTextureCoords.elem);
         const enableANode = new UI.Checkbox('Enable Collision', false);
         enableANode.onchanged = () => {
             const aNodeInst = this.rootNode.children.find((nodeInstance) => nodeInstance.node.nameStr === this.d.information.aNodeStr);
             aNodeInst.setVisible(enableANode.checked);
         };
         renderHacksPanel.contents.appendChild(enableANode.elem);
+        const enableAAttrib = new UI.Checkbox('Show Collision Attributes', false);
+        enableAAttrib.onchanged = () => {
+            const aNodeInst = this.rootNode.children.find((nodeInstance) => nodeInstance.node.nameStr === this.d.information.aNodeStr);
+            aNodeInst.setShowCollisionAttrib(enableAAttrib.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableAAttrib.elem);
         const enableSNode = new UI.Checkbox('Enable Render Root', true);
         enableSNode.onchanged = () => {
             const sNodeInst = this.rootNode.children.find((nodeInstance) => nodeInstance.node.nameStr === this.d.information.sNodeStr);
@@ -481,6 +573,7 @@ export class WorldRenderer extends BasicGXRendererHelper {
         this.textureHolder.destroy(device);
         if (this.backgroundRenderer !== null)
             this.backgroundRenderer.destroy(device);
+        this.rootNode.destroy(device);
     }
 
     private translatePart(device: GfxDevice, nodeInstance: NodeInstance, part: SceneGraphPart): void {
@@ -490,6 +583,7 @@ export class WorldRenderer extends BasicGXRendererHelper {
         const materialInstance = this.materialInstances[part.material.index];
         const cache = this.getCache();
         const batchInstance = new BatchInstance(device, cache, materialInstance, nodeInstance, batch, this.bufferCoalescer.coalescedBuffers[batchIndex]);
+        nodeInstance.batchInstances.push(batchInstance);
         this.batchInstances.push(batchInstance);
     }
 

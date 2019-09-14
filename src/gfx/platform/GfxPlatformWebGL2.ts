@@ -494,7 +494,7 @@ function applyMegaState(gl: WebGL2RenderingContext, currentMegaState: GfxMegaSta
 
     if (currentMegaState.polygonOffset !== newMegaState.polygonOffset) {
         if (newMegaState.polygonOffset) {
-            gl.polygonOffset(-0.5, -0.5);
+            gl.polygonOffset(1, 1);
             gl.enable(gl.POLYGON_OFFSET_FILL);
         } else {
             gl.disable(gl.POLYGON_OFFSET_FILL);

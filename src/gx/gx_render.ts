@@ -87,27 +87,7 @@ export function fillTextureMappingInfo(d: Float32Array, offs: number, textureMap
     return fillVec4(d, offs, 1 / textureMapping.width, (textureMapping.flipY ? -1 : 1) / textureMapping.height, 0, textureMapping.lodBias);
 }
 
-export function fillMaterialParamsData(d: Float32Array, bOffs: number, materialParams: MaterialParams): void {
-    let offs = bOffs;
-
-    for (let i = 0; i < 12; i++)
-        offs += fillColor(d, offs, materialParams.u_Color[i]);
-    for (let i = 0; i < 10; i++)
-        offs += fillMatrix4x3(d, offs, materialParams.u_TexMtx[i]);
-    for (let i = 0; i < 8; i++)
-        offs += fillTextureMappingInfo(d, offs, materialParams.m_TextureMapping[i]);
-    for (let i = 0; i < 3; i++)
-        offs += fillMatrix4x2(d, offs, materialParams.u_IndTexMtx[i]);
-    for (let i = 0; i < 20; i++)
-        offs += fillMatrix4x3(d, offs, materialParams.u_PostTexMtx[i]);
-    for (let i = 0; i < 8; i++)
-        offs += fillLightData(d, offs, materialParams.u_Lights[i]);
-
-    assert(offs === bOffs + u_MaterialParamsBufferSize);
-    assert(d.length >= offs);
-}
-
-export function fillMaterialParamsDataWithOptimizations(material: GX_Material.GXMaterial, d: Float32Array, bOffs: number, materialParams: MaterialParams): void {
+function fillMaterialParamsDataWithOptimizations(material: GX_Material.GXMaterial, d: Float32Array, bOffs: number, materialParams: MaterialParams): void {
     let offs = bOffs;
 
     for (let i = 0; i < 12; i++)
@@ -255,7 +235,6 @@ export class GXTextureHolder<TextureType extends GX_Texture.Texture = GX_Texture
         return loadTextureFromMipChain(device, mipChain);
     }
 }
-
 
 export function setTevOrder(texCoordId: GX.TexCoordID, texMap: GX.TexMapID, channelId: GX.RasColorChannelID) {
     return { texCoordId, texMap, channelId };
@@ -414,6 +393,11 @@ export class GXMaterialHelperGfx {
     public setMaterialHacks(materialHacks: GX_Material.GXMaterialHacks): void {
         Object.assign(this.materialHacks, materialHacks);
         this.createProgram();
+    }
+
+    public fillMaterialParamsDataOnInst(renderInst: GfxRenderInst, offs: number, materialParams: MaterialParams): void {
+        const d = renderInst.mapUniformBufferF32(ub_MaterialParams);
+        fillMaterialParamsDataWithOptimizations(this.material, d, offs, materialParams);
     }
 
     public fillMaterialParamsData(renderInstManager: GfxRenderInstManager, offs: number, materialParams: MaterialParams): void {

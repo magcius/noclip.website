@@ -430,8 +430,8 @@ export class OceanBowl extends LiveActor {
         renderInst.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT, this.materialHelper.programKey);
         renderInst.allocateUniformBuffer(ub_MaterialParams, this.materialHelper.materialParamsBufferSize);
 
-        let offs = renderInst.getUniformBufferOffset(ub_MaterialParams);
-        this.materialHelper.fillMaterialParamsData(renderInstManager, offs, materialParams);
+        const offs = renderInst.getUniformBufferOffset(ub_MaterialParams);
+        this.materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
 
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 

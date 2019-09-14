@@ -6,7 +6,7 @@ import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } fr
 
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
-import { PacketParams, ColorKind, translateTexFilterGfx, translateWrapModeGfx, ub_MaterialParams, loadTextureFromMipChain, loadedDataCoalescerComboGfx, MaterialParams, fillIndTexMtx, fillMaterialParamsDataWithOptimizations } from '../gx/gx_render';
+import { PacketParams, ColorKind, translateTexFilterGfx, translateWrapModeGfx, ub_MaterialParams, loadTextureFromMipChain, loadedDataCoalescerComboGfx, MaterialParams, fillIndTexMtx } from '../gx/gx_render';
 import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../gx/gx_render';
 
 import { computeViewMatrix, Camera, computeViewSpaceDepthFromWorldSpaceAABB, texProjCamera } from '../Camera';
@@ -709,9 +709,8 @@ export class MaterialInstance {
         if (this.materialData.fillMaterialParamsCallback !== null)
             this.materialData.fillMaterialParamsCallback(materialParams, this, viewMatrix, modelMatrix, camera, packetParams);
 
-        let offs = renderInst.allocateUniformBuffer(ub_MaterialParams, this.materialHelper.materialParamsBufferSize);
-        const d = renderInst.mapUniformBufferF32(ub_MaterialParams);
-        fillMaterialParamsDataWithOptimizations(this.materialHelper.material, d, offs, materialParams);
+        const offs = renderInst.allocateUniformBuffer(ub_MaterialParams, this.materialHelper.materialParamsBufferSize);
+        this.materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
 
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
     }

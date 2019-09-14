@@ -432,7 +432,7 @@ export class FlowerObjectRenderer implements ObjectRenderer {
         const renderInst = this.flowerData.shapeHelperMain.pushRenderInst(renderInstManager);
 
         const materialParamsOffs = renderInst.allocateUniformBuffer(ub_MaterialParams, this.materialHelper.materialParamsBufferSize);
-        this.materialHelper.fillMaterialParamsData(renderInstManager, materialParamsOffs, materialParams);
+        this.materialHelper.fillMaterialParamsDataOnInst(renderInst, materialParamsOffs, materialParams);
         this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 

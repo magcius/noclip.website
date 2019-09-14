@@ -15,7 +15,7 @@ import { GfxMegaStateDescriptor, GfxFormat } from '../gfx/platform/GfxPlatform';
 import { colorNewFromRGBA8, Color } from '../Color';
 import { computeModelMatrixSRT, MathConstants } from '../MathHelpers';
 import { getPointHermite } from '../Spline';
-import { autoOptimizeMaterial } from '../gx/gx_render';
+import { autoOptimizeMaterial, setTevOrder, setTevColorIn, setTevAlphaIn, setTevColorOp, setTevAlphaOp, setTevIndirect } from '../gx/gx_render';
 import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { getSystemEndianness, Endianness } from '../endian';
 
@@ -72,6 +72,11 @@ export const enum DrawModeFlags {
     IS_DECAL = 0x10,
 }
 
+export const enum CollisionFlags {
+    WALK_SLOW              = 0x00000100,
+    HAZARD_RESPAWN_ENABLED = 0x40000000,
+}
+
 export interface SceneGraphNode {
     nameStr: string;
     typeStr: string;
@@ -82,6 +87,7 @@ export interface SceneGraphNode {
     isTranslucent: boolean;
     renderFlags: Partial<GfxMegaStateDescriptor>;
     drawModeFlags: DrawModeFlags;
+    collisionFlags: CollisionFlags;
     visible?: boolean;
 }
 
@@ -165,26 +171,6 @@ function calcTexMtx(dst: mat4, translationS: number, translationT: number, scale
     mat4.fromTranslation(trans2, t(translationS, -translationT, 0.0));
     mat4.mul(dst, scale, rot);
     mat4.mul(dst, trans2, dst);
-}
-
-function setTevOrder(texCoordId: GX.TexCoordID, texMap: GX.TexMapID, channelId: GX.RasColorChannelID) {
-    return { texCoordId, texMap, channelId };
-}
-
-function setTevColorIn(colorInA: GX.CombineColorInput, colorInB: GX.CombineColorInput, colorInC: GX.CombineColorInput, colorInD: GX.CombineColorInput) {
-    return { colorInA, colorInB, colorInC, colorInD };
-}
-
-function setTevAlphaIn(alphaInA: GX.CombineAlphaInput, alphaInB: GX.CombineAlphaInput, alphaInC: GX.CombineAlphaInput, alphaInD: GX.CombineAlphaInput) {
-    return { alphaInA, alphaInB, alphaInC, alphaInD };
-}
-
-function setTevColorOp(colorOp: GX.TevOp, colorBias: GX.TevBias, colorScale: GX.TevScale, colorClamp: boolean, colorRegId: GX.Register) {
-    return { colorOp, colorBias, colorScale, colorClamp, colorRegId };
-}
-
-function setTevAlphaOp(alphaOp: GX.TevOp, alphaBias: GX.TevBias, alphaScale: GX.TevScale, alphaClamp: boolean, alphaRegId: GX.Register) {
-    return { alphaOp, alphaBias, alphaScale, alphaClamp, alphaRegId };
 }
 
 export function parse(buffer: ArrayBufferSlice): TTYDWorld {
@@ -479,17 +465,18 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             tevMode = view.getUint8(tevConfigOffs + 0x00);
         }
 
-        const noIndTex = {
-            // We don't use indtex.
-            indTexStage: GX.IndTexStageID.STAGE0,
-            indTexMatrix: GX.IndTexMtxID.OFF,
-            indTexFormat: GX.IndTexFormat._8,
-            indTexBiasSel: GX.IndTexBiasSel.NONE,
-            indTexWrapS: GX.IndTexWrap.OFF,
-            indTexWrapT: GX.IndTexWrap.OFF,
-            indTexAddPrev: false,
-            indTexUseOrigLOD: false,
-        };
+        // We don't use indtex.
+        const noIndTex = setTevIndirect(
+            GX.IndTexStageID.STAGE0,
+            GX.IndTexFormat._8,
+            GX.IndTexBiasSel.NONE,
+            GX.IndTexMtxID.OFF,
+            GX.IndTexWrap.OFF,
+            GX.IndTexWrap.OFF,
+            false,
+            false,
+            GX.IndTexAlphaSel.OFF,
+        );
 
         const tevStages: GX_Material.TevStage[] = [];
         if (samplerEntryTableCount === 0) {
@@ -1041,6 +1028,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         const cullMode: GX.CullMode = cullModes[view.getUint8(drawModeStructOffs + 0x01)];
 
         const drawModeFlags: DrawModeFlags = view.getUint8(drawModeStructOffs + 0x02);
+        const collisionFlags: CollisionFlags = view.getUint32(drawModeStructOffs + 0x08);
 
         const partTableCount = view.getUint32(offs + 0x5C);
         let partTableIdx = offs + 0x60;
@@ -1314,7 +1302,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             nextSibling = readSceneGraph(mainDataOffs + nextSiblingOffs);
 
         const renderFlags: Partial<GfxMegaStateDescriptor> = { cullMode: GX_Material.translateCullMode(cullMode) };
-        return { nameStr, typeStr, modelMatrix, bbox, children, parts, isTranslucent, renderFlags, drawModeFlags, nextSibling };
+        return { nameStr, typeStr, modelMatrix, bbox, children, parts, isTranslucent, renderFlags, drawModeFlags, collisionFlags, nextSibling };
     }
 
     const rootNode = readSceneGraph(sceneGraphRootOffs);
