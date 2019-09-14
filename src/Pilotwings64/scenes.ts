@@ -1,9 +1,9 @@
 
-import { GfxDevice, GfxBuffer, GfxInputLayout, GfxInputState, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexAttributeFrequency, GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor } from "../gfx/platform/GfxPlatform";
-import { SceneGfx, ViewerRenderInput } from "../viewer";
+import { GfxDevice, GfxBuffer, GfxInputLayout, GfxInputState, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexAttributeFrequency, GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxTextureDimension } from "../gfx/platform/GfxPlatform";
+import { SceneGfx, ViewerRenderInput, Texture } from "../viewer";
 import { SceneDesc, SceneContext, SceneGroup } from "../SceneBase";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString, assert, hexzero, assertExists, nArray } from "../util";
+import { readString, assert, hexzero, nArray } from "../util";
 import { decompress } from "../compression/MIO0";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { DeviceProgram } from "../Program";
@@ -15,7 +15,9 @@ import { standardFullClearRenderPassDescriptor, BasicRenderTarget } from "../gfx
 import { computeViewMatrix } from "../Camera";
 import { MathConstants } from "../MathHelpers";
 import { IS_DEVELOPMENT } from "../BuildVersion";
-import { TextureCache, TextureState, TextureImageState, TileState } from "../bk/f3dex";
+import { TextureState, TileState } from "../bk/f3dex";
+import { ImageFormat, ImageSize, getImageFormatName, decodeTex_RGBA16, getImageSizeName, decodeTex_I4, decodeTex_I8, decodeTex_IA4, decodeTex_IA8 } from "../Common/N64/Image";
+import { TextureHolder, LoadedTexture } from "../TextureHolder";
 
 interface Pilotwings64FSFileChunk {
     tag: string;
@@ -217,109 +219,43 @@ enum F3D_GBI {
     G_TEXRECT           = 0xE4,
 }
 
+interface UVTX_Level {
+    width: number;
+    height: number;
+    pixels: Uint8Array;
+}
+
 interface UVTX {
+    name: string;
+    width: number;
+    height: number;
+    fmt: ImageFormat;
+    siz: ImageSize;
+    levels: UVTX_Level[];
 }
 
-/*
-class RSPState {
-    private textureCache = new TextureCache();
-
-    private SP_GeometryMode: number = 0;
-    private SP_TextureState = new TextureState();
-
-    private DP_OtherModeL: number = 0;
-    private DP_OtherModeH: number = 0;
-    private DP_CombineL: number = 0;
-    private DP_CombineH: number = 0;
-    private DP_TextureImageState = new TextureImageState();
-    private DP_TileState = nArray(8, () => new TileState());
-
-    public gSPTexture(on: boolean, tile: number, level: number, s: number, t: number): void {
-        // This is the texture we're using to rasterize triangles going forward.
-        this.SP_TextureState.set(on, tile, level, s, t);
-    }
-
-    private _translateTileTexture(tileIndex: number): number {
-        const tile = this.DP_TileState[tileIndex];
-
-        const dramAddr = assertExists(this.DP_TMemTracker.get(tile.tmem));
-
-        let dramPalAddr: number;
-        if (tile.fmt === ImageFormat.G_IM_FMT_CI) {
-            const textlut = (this.DP_OtherModeH >>> 14) & 0x03;
-            assert(textlut === TextureLUT.G_TT_RGBA16);
-
-            const palTmem = 0x100 + (tile.palette << 4);
-            dramPalAddr = assertExists(this.DP_TMemTracker.get(palTmem));
-        } else {
-            dramPalAddr = 0;
-        }
-
-        return this.textureCache.translateTileTexture(this.segmentBuffers, dramAddr, dramPalAddr, tile);
-    }
-
-    public gDPSetTextureImage(fmt: number, siz: number, w: number, addr: number): void {
-        this.DP_TextureImageState.set(fmt, siz, w, addr);
-    }
-
-    public gDPSetTile(fmt: number, siz: number, line: number, tmem: number, tile: number, palette: number, cmt: number, maskt: number, shiftt: number, cms: number, masks: number, shifts: number): void {
-        this.DP_TileState[tile].set(fmt, siz, line, tmem, palette, cmt, maskt, shiftt, cms, masks, shifts);
-    }
-
-    public gDPLoadTLUT(tile: number, count: number): void {
-        // Track the TMEM destination back to the originating DRAM address.
-        const tmemDst = this.DP_TileState[tile].tmem;
-        this.DP_TMemTracker.set(tmemDst, this.DP_TextureImageState.addr);
-    }
-
-    public gDPLoadBlock(tileIndex: number, uls: number, ult: number, lrs: number, dxt: number): void {
-        // First, verify that we're loading the whole texture.
-        assert(uls === 0 && ult === 0);
-        // Verify that we're loading into LOADTILE.
-        assert(tileIndex === 7);
-
-        const tile = this.DP_TileState[tileIndex];
-        // Compute the texture size from lrs/dxt. This is required for mipmapping to work correctly
-        // in B-K due to hackery.
-        const numWordsTotal = lrs + 1;
-        const numWordsInLine = (1 << 11) / dxt;
-        const numPixelsInLine = (numWordsInLine * 8 * 8) / getSizBitsPerPixel(tile.siz);
-        tile.lrs = (numPixelsInLine - 1) << 2;
-        tile.lrt = (((numWordsTotal / numWordsInLine) / 4) - 1) << 2;
-
-        // Track the TMEM destination back to the originating DRAM address.
-        this.DP_TMemTracker.set(tile.tmem, this.DP_TextureImageState.addr);
-        this.stateChanged = true;
-    }
-
-    public gDPSetTileSize(tile: number, uls: number, ult: number, lrs: number, lrt: number): void {
-        this.DP_TileState[tile].setSize(uls, ult, lrs, lrt);
-    }
-
-    public gDPSetOtherModeL(sft: number, len: number, w1: number): void {
-        const mask = ((1 << len) - 1) << sft;
-        this.DP_OtherModeL = (this.DP_OtherModeL & ~mask) | (w1 & mask);
-        this.stateChanged = true;
-    }
-
-    public gDPSetOtherModeH(sft: number, len: number, w1: number): void {
-        const mask = ((1 << len) - 1) << sft;
-        this.DP_OtherModeH = (this.DP_OtherModeH & ~mask) | (w1 & mask);
-        this.stateChanged = true;
-    }
-
-    public gDPSetCombine(w0: number, w1: number): void {
-        this.DP_CombineH = w0;
-        this.DP_CombineL = w1;
-        this.stateChanged = true;
-    }
+function getTileWidth(tile: TileState): number {
+    if (tile.masks !== 0)
+        return 1 << tile.masks;
+    else
+        return ((tile.lrs - tile.uls) >>> 2) + 1;
 }
-*/
+
+function getTileHeight(tile: TileState): number {
+    if (tile.maskt !== 0)
+        return 1 << tile.maskt;
+    else
+        return ((tile.lrt - tile.ult) >>> 2) + 1;
+}
 
 function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk): UVTX {
     const view = chunk.buffer.createDataView();
     const dataSize = view.getUint16(0x00);
     const dlSize = view.getUint16(0x02) * 0x08;
+
+    const textureState = new TextureState();
+    const tiles: TileState[] = nArray(8, () => new TileState());
+    const levels: UVTX_Level[] = [];
 
     const addr = 0x14 + dataSize;
     const dlEnd = addr + dlSize;
@@ -328,7 +264,7 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk): UVTX {
         const w1 = view.getUint32(i + 0x04);
 
         const cmd: F3D_GBI = w0 >>> 24;
-        console.log(hexzero(i, 8), F3D_GBI[cmd], hexzero(w0, 8), hexzero(w1, 8));
+        // console.log(hexzero(i, 8), F3D_GBI[cmd], hexzero(w0, 8), hexzero(w1, 8));
 
         if (cmd === F3D_GBI.G_TEXTURE) {
             const level = (w0 >>> 11) & 0x07;
@@ -336,6 +272,8 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk): UVTX {
             const on    = !!((w0 >>> 0) & 0x7F);
             const s     = (w1 >>> 16) & 0xFFFF;
             const t     = (w1 >>> 0)  & 0xFFFF;
+            assert(on);
+            textureState.set(on, tile, level, s, t);
         } else if (cmd === F3D_GBI.G_SETCOMBINE) {
             // state.gDPSetCombine(w0 & 0x00FFFFFF, w1);
         } else if (cmd === F3D_GBI.G_SETOTHERMODE_H) {
@@ -353,7 +291,6 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk): UVTX {
             // w1 (the address) is written dynamically by the game engine, so it should
             // always be 0 here.
             assert(w1 === 0);
-            // state.gDPSetTextureImage(fmt, siz, w, w1);
         } else if (cmd === F3D_GBI.G_SETTILE) {
             const fmt =     (w0 >>> 21) & 0x07;
             const siz =     (w0 >>> 19) & 0x03;
@@ -367,27 +304,58 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk): UVTX {
             const cms =     (w1 >>>  8) & 0x03;
             const masks =   (w1 >>>  4) & 0x0F;
             const shifts =  (w1 >>>  0) & 0x0F;
-            // state.gDPSetTile(fmt, siz, line, tmem, tile, palette, cmt, maskt, shiftt, cms, masks, shifts);
+            tiles[tile].set(fmt, siz, line, tmem, palette, cmt, maskt, shiftt, cms, masks, shifts);
         } else if (cmd === F3D_GBI.G_LOADBLOCK) {
             const uls =  (w0 >>> 12) & 0x0FFF;
             const ult =  (w0 >>>  0) & 0x0FFF;
             const tile = (w1 >>> 24) & 0x07;
             const lrs =  (w1 >>> 12) & 0x0FFF;
             const dxt =  (w1 >>>  0) & 0x0FFF;
+            // Uploads the tile to TMEM. Should always use the load tile (7).
+            assert(tile === 0x07);
         } else if (cmd === F3D_GBI.G_SETTILESIZE) {
             const uls =  (w0 >>> 12) & 0x0FFF;
             const ult =  (w0 >>>  0) & 0x0FFF;
             const tile = (w1 >>> 24) & 0x07;
             const lrs =  (w1 >>> 12) & 0x0FFF;
             const lrt =  (w1 >>>  0) & 0x0FFF;
+            tiles[tile].setSize(uls, ult, lrs, lrt);
         } else if (cmd === F3D_GBI.G_ENDDL) {
             break;
+        } else if (cmd === F3D_GBI.G_SETPRIMCOLOR) {
+            // TODO(jstpierre)
         } else {
-            throw "whoops";
+            console.warn(`Unsupported command ${F3D_GBI[cmd]}`);
         }
     }
 
-    return {};
+    const lastTile = textureState.level + textureState.tile + 1;
+    for (let i = textureState.tile; i < lastTile; i++) {
+        const tile = tiles[i];
+
+        const tileW = getTileWidth(tile);
+        const tileH = getTileHeight(tile);
+        if (tileW === 0 || tileH === 0)
+            break;
+
+        const dst = new Uint8Array(tileW * tileH * 4);
+        const srcIdx = 0x14 + tile.tmem;
+        if (tile.fmt === ImageFormat.G_IM_FMT_RGBA && tile.siz === ImageSize.G_IM_SIZ_16b) decodeTex_RGBA16(dst, view, srcIdx, tileW, tileH);
+        else if (tile.fmt === ImageFormat.G_IM_FMT_I && tile.siz === ImageSize.G_IM_SIZ_4b) decodeTex_I4(dst, view, srcIdx, tileW, tileH);
+        else if (tile.fmt === ImageFormat.G_IM_FMT_I && tile.siz === ImageSize.G_IM_SIZ_8b) decodeTex_I8(dst, view, srcIdx, tileW, tileH);
+        else if (tile.fmt === ImageFormat.G_IM_FMT_IA && tile.siz === ImageSize.G_IM_SIZ_4b) decodeTex_IA4(dst, view, srcIdx, tileW, tileH);
+        else if (tile.fmt === ImageFormat.G_IM_FMT_IA && tile.siz === ImageSize.G_IM_SIZ_8b) decodeTex_IA8(dst, view, srcIdx, tileW, tileH);
+        else console.warn(`Unsupported texture format ${getImageFormatName(tile.fmt)} / ${getImageSizeName(tile.siz)}`);
+
+        levels.push({ width: tileW, height: tileH, pixels: dst });
+    }
+
+    const name = `UVTX_${hexzero(chunk.buffer.byteOffset, 8)}`;
+    const width = levels[0].width, height = levels[0].height;
+    const fmt = tiles[textureState.tile].fmt;
+    const siz = tiles[textureState.tile].siz;
+
+    return { name, width, height, fmt, siz, levels };
 }
 
 function parseUVTX(file: Pilotwings64FSFile): UVTX {
@@ -541,6 +509,46 @@ class UVCTInstance {
     }
 }
 
+function textureToCanvas(texture: UVTX): Texture {
+    const surfaces: HTMLCanvasElement[] = [];
+
+    for (let i = 0; i < texture.levels.length; i++) {
+        const level = texture.levels[i];
+        const canvas = document.createElement("canvas");
+        canvas.width = level.width;
+        canvas.height = level.height;
+
+        const ctx = canvas.getContext("2d");
+        const imgData = ctx.createImageData(canvas.width, canvas.height);
+        imgData.data.set(level.pixels);
+        ctx.putImageData(imgData, 0, 0);
+
+        surfaces.push(canvas);
+    }
+
+    const extraInfo = new Map<string, string>();
+    extraInfo.set('Format', `${getImageFormatName(texture.fmt)}${getImageSizeName(texture.siz)}`);
+
+    return { name: texture.name, extraInfo, surfaces };
+}
+
+class Pilotwings64TextureHolder extends TextureHolder<UVTX> {
+    public loadTexture(device: GfxDevice, texture: UVTX): LoadedTexture {
+        const gfxTexture = device.createTexture({
+            dimension: GfxTextureDimension.n2D, pixelFormat: GfxFormat.U8_RGBA,
+            width: texture.width, height: texture.height, depth: 1, numLevels: texture.levels.length,
+        });
+        device.setResourceName(gfxTexture, texture.name);
+        const hostAccessPass = device.createHostAccessPass();
+        const levels = texture.levels.map((t) => t.pixels);
+        hostAccessPass.uploadTextureData(gfxTexture, 0, levels);
+        device.submitPass(hostAccessPass);
+
+        const viewerTexture: Texture = textureToCanvas(texture);
+        return { gfxTexture, viewerTexture };
+    }
+}
+
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 2, numSamplers: 0 },
 ];
@@ -549,6 +557,7 @@ class Pilotwings64Renderer implements SceneGfx {
     public uvctData: UVCTData[] = [];
     public uvctInstance: UVCTInstance[] = [];
     public renderHelper: GfxRenderHelper;
+    public textureHolder = new Pilotwings64TextureHolder();
     private renderTarget = new BasicRenderTarget();
 
     constructor(device: GfxDevice) {
@@ -584,6 +593,7 @@ class Pilotwings64Renderer implements SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
+        this.textureHolder.destroy(device);
         this.renderHelper.destroy(device);
         this.renderTarget.destroy(device);
         for (let i = 0; i < this.uvctData.length; i++)
@@ -610,7 +620,14 @@ class Pilotwings64SceneDesc implements SceneDesc {
         const uvctData = uvct.map((uvct) => new UVCTData(device, uvct));
         renderer.uvctData = uvctData;
 
-        const uvtx = parseUVTX(fs.files.find((file) => file.type === 'UVTX'));
+        const uvtx = fs.files.filter((file => file.type === 'UVTX')).map((file) => {
+            try {
+                return parseUVTX(file);
+            } catch(e) {
+                return null;
+            }
+        });
+        renderer.textureHolder.addTextures(device, uvtx.filter((e) => !!e));
 
         for (let i = 0; i < uvtr[0].maps.length; i++) {
             const map = uvtr[0].maps[i];
