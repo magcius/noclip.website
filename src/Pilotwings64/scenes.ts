@@ -16,7 +16,7 @@ import { computeViewMatrix } from "../Camera";
 import { MathConstants } from "../MathHelpers";
 import { IS_DEVELOPMENT } from "../BuildVersion";
 import { TextureState, TileState } from "../bk/f3dex";
-import { ImageFormat, ImageSize, getImageFormatName, decodeTex_RGBA16, getImageSizeName, decodeTex_I4, decodeTex_I8, decodeTex_IA4, decodeTex_IA8 } from "../Common/N64/Image";
+import { ImageFormat, ImageSize, getImageFormatName, decodeTex_RGBA16, getImageSizeName, decodeTex_I4, decodeTex_I8, decodeTex_IA4, decodeTex_IA8, decodeTex_IA16 } from "../Common/N64/Image";
 import { TextureHolder, LoadedTexture } from "../TextureHolder";
 
 interface Pilotwings64FSFileChunk {
@@ -234,21 +234,7 @@ interface UVTX {
     levels: UVTX_Level[];
 }
 
-function getTileWidth(tile: TileState): number {
-    if (tile.masks !== 0)
-        return 1 << tile.masks;
-    else
-        return ((tile.lrs - tile.uls) >>> 2) + 1;
-}
-
-function getTileHeight(tile: TileState): number {
-    if (tile.maskt !== 0)
-        return 1 << tile.maskt;
-    else
-        return ((tile.lrt - tile.ult) >>> 2) + 1;
-}
-
-function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk): UVTX {
+function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
     const view = chunk.buffer.createDataView();
     const dataSize = view.getUint16(0x00);
     const dlSize = view.getUint16(0x02) * 0x08;
@@ -313,6 +299,8 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk): UVTX {
             const dxt =  (w1 >>>  0) & 0x0FFF;
             // Uploads the tile to TMEM. Should always use the load tile (7).
             assert(tile === 0x07);
+            // Make sure we're loading the whole block.
+            assert(uls === 0x00 && ult === 0x00);
         } else if (cmd === F3D_GBI.G_SETTILESIZE) {
             const uls =  (w0 >>> 12) & 0x0FFF;
             const ult =  (w0 >>>  0) & 0x0FFF;
@@ -324,6 +312,8 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk): UVTX {
             break;
         } else if (cmd === F3D_GBI.G_SETPRIMCOLOR) {
             // TODO(jstpierre)
+        } else if (cmd === F3D_GBI.G_SETENVCOLOR) {
+            // TODO(jstpierre)
         } else {
             console.warn(`Unsupported command ${F3D_GBI[cmd]}`);
         }
@@ -333,11 +323,16 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk): UVTX {
     for (let i = textureState.tile; i < lastTile; i++) {
         const tile = tiles[i];
 
-        const tileW = getTileWidth(tile);
-        const tileH = getTileHeight(tile);
-        if (tileW === 0 || tileH === 0)
+        const tileW = ((tile.lrs - tile.uls) >>> 2) + 1;
+        const tileH = ((tile.lrt - tile.ult) >>> 2) + 1;
+
+        if (tile.lrs === 0 || tile.lrt === 0)
             break;
 
+        if (tile.masks !== 0 && (1 << tile.masks) !== tileW) {
+            console.log(name, tile, tile.masks, tileW, tile.lrs);
+        }
+    
         const dst = new Uint8Array(tileW * tileH * 4);
         const srcIdx = 0x14 + tile.tmem;
         if (tile.fmt === ImageFormat.G_IM_FMT_RGBA && tile.siz === ImageSize.G_IM_SIZ_16b) decodeTex_RGBA16(dst, view, srcIdx, tileW, tileH);
@@ -345,12 +340,15 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk): UVTX {
         else if (tile.fmt === ImageFormat.G_IM_FMT_I && tile.siz === ImageSize.G_IM_SIZ_8b) decodeTex_I8(dst, view, srcIdx, tileW, tileH);
         else if (tile.fmt === ImageFormat.G_IM_FMT_IA && tile.siz === ImageSize.G_IM_SIZ_4b) decodeTex_IA4(dst, view, srcIdx, tileW, tileH);
         else if (tile.fmt === ImageFormat.G_IM_FMT_IA && tile.siz === ImageSize.G_IM_SIZ_8b) decodeTex_IA8(dst, view, srcIdx, tileW, tileH);
+        else if (tile.fmt === ImageFormat.G_IM_FMT_IA && tile.siz === ImageSize.G_IM_SIZ_16b) decodeTex_IA16(dst, view, srcIdx, tileW, tileH);
         else console.warn(`Unsupported texture format ${getImageFormatName(tile.fmt)} / ${getImageSizeName(tile.siz)}`);
 
         levels.push({ width: tileW, height: tileH, pixels: dst });
+
+        // For now, use only one LOD.
+        break;
     }
 
-    const name = `UVTX_${hexzero(chunk.buffer.byteOffset, 8)}`;
     const width = levels[0].width, height = levels[0].height;
     const fmt = tiles[textureState.tile].fmt;
     const siz = tiles[textureState.tile].siz;
@@ -360,7 +358,7 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk): UVTX {
 
 function parseUVTX(file: Pilotwings64FSFile): UVTX {
     assert(file.chunks.length === 1);
-    return parseUVTX_Chunk(file.chunks[0]);
+    return parseUVTX_Chunk(file.chunks[0], file.name);
 }
 
 function parsePilotwings64FS(buffer: ArrayBufferSlice): Pilotwings64FS {
