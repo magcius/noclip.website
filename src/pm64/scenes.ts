@@ -9,9 +9,8 @@ import { makeClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers
 import { OpaqueBlack, Color } from '../Color';
 import * as BYML from '../byml';
 import { ScriptExecutor } from './script';
-import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { SceneContext } from '../SceneBase';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 
 const pathBase = `pm64`;
 
@@ -24,27 +23,25 @@ class PaperMario64Renderer implements Viewer.SceneGfx {
     public scriptExecutor: ScriptExecutor | null = null;
 
     public renderTarget = new BasicRenderTarget();
-    public renderInstManager = new GfxRenderInstManager();
-    public uniformBuffer: GfxRenderDynamicUniformBuffer;
+    public renderHelper: GfxRenderHelper;
 
     constructor(device: GfxDevice) {
-        this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
+        this.renderHelper = new GfxRenderHelper(device);
         this.clearRenderPassDescriptor = makeClearRenderPassDescriptor(true, OpaqueBlack);
     }
 
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        const template = this.renderInstManager.pushTemplateRenderInst();
-        template.setUniformBuffer(this.uniformBuffer);
+        this.renderHelper.pushTemplateRenderInst();
 
         if (this.scriptExecutor !== null)
             this.scriptExecutor.stepTime(viewerInput.time);
         if (this.bgTextureRenderer !== null)
-            this.bgTextureRenderer.prepareToRender(this.renderInstManager, viewerInput);
+            this.bgTextureRenderer.prepareToRender(this.renderHelper.renderInstManager, viewerInput);
         for (let i = 0; i < this.modelTreeRenderers.length; i++)
-            this.modelTreeRenderers[i].prepareToRender(device, this.renderInstManager, viewerInput);
+            this.modelTreeRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
 
-        this.renderInstManager.popTemplateRenderInst();
-        this.uniformBuffer.prepareToRender(device, hostAccessPass);
+        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.prepareToRender(device, hostAccessPass);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
@@ -52,7 +49,7 @@ class PaperMario64Renderer implements Viewer.SceneGfx {
         this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
 
-        const renderInstManager = this.renderInstManager;
+        const renderInstManager = this.renderHelper.renderInstManager;
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
         const passRenderer = this.renderTarget.createRenderPass(device, this.clearRenderPassDescriptor);
         passRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
@@ -62,9 +59,8 @@ class PaperMario64Renderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderInstManager.destroy(device);
+        this.renderHelper.destroy(device);
         this.renderTarget.destroy(device);
-        this.uniformBuffer.destroy(device);
         this.textureHolder.destroy(device);
         if (this.bgTextureRenderer !== null)
             this.bgTextureRenderer.destroy(device);

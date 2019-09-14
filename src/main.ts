@@ -54,6 +54,7 @@ import * as Scenes_Test from './Scenes_Test';
 import * as Scenes_WiiSportsResort from './rres/Scenes_WiiSportsResort';
 import * as Scenes_Zelda_SkywardSword from './rres/Scenes_Zelda_SkywardSword';
 import * as Scenes_InteractiveExamples from './interactive_examples/Scenes';
+import * as Scenes_Pilotwings64 from './Pilotwings64/scenes';
 
 import { DroppedFileSceneDesc } from './Scenes_FileDrops';
 
@@ -126,6 +127,7 @@ const sceneGroups = [
     Scenes_SonicColors.sceneGroup,
     Scenes_Test.sceneGroup,
     Scenes_InteractiveExamples.sceneGroup,
+    Scenes_Pilotwings64.sceneGroup,
 ];
 
 function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
