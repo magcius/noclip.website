@@ -12,7 +12,7 @@ import { BasicRenderTarget, transparentBlackFullClearRenderPassDescriptor } from
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 import { TextureHolder, TextureMapping } from '../TextureHolder';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
-import { nArray } from '../util';
+import { nArray, assertExists, assert } from '../util';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { fillMatrix4x4, fillMatrix4x3 } from '../gfx/helpers/UniformBufferHelpers';
 import { TransparentBlack } from '../Color';
@@ -26,7 +26,7 @@ export function textureToCanvas(texture: MAP.Texture, baseName: string): Viewer.
     canvas.height = height;
     canvas.title = name;
 
-    const context = canvas.getContext("2d");
+    const context = canvas.getContext("2d")!;
     const imgData = context.createImageData(canvas.width, canvas.height);
     imgData.data.set(texture.pixels());
     context.putImageData(imgData, 0, 0);
@@ -45,7 +45,7 @@ export function textureAnimationToCanvas(textureAnim: MAP.TextureAnimation, pare
     canvas.height = height;
     canvas.title = name;
 
-    const context = canvas.getContext("2d");
+    const context = canvas.getContext("2d")!;
     const imgData = context.createImageData(canvas.width, canvas.height);
     imgData.data.set(textureAnim.pixels);
     context.putImageData(imgData, 0, 0);
@@ -188,9 +188,7 @@ export class MapData {
             textureBlocks.push(textureBlock);
             area += textureBlock.width * textureBlock.height;
         }
-        if (textureBlocks.length === 0) {
-            return null;
-        }
+        assert(textureBlocks.length > 0);
 
         // Greedily place textures in order of decreasing height into row bins.
         textureBlocks.sort(function(a: MAP.TextureBlock, b: MAP.TextureBlock): number {
@@ -278,16 +276,17 @@ export class MapData {
                 continue;
             }
             let textureIndex = 0;  // Use atlas by default
-            if (mesh.texture.textureAnim) {
-                textureIndex = mesh.texture.textureAnim.index + 1;
+            const texture = assertExists(mesh.texture);
+            if (texture.textureAnim) {
+                textureIndex = texture.textureAnim.index + 1;
             }
-            const batchKey: RenderBatchKey = {group: meshPair.group, layerIndex: mesh.layer, textureIndex, addAlpha: mesh.addAlpha};
+            const batchKey: RenderBatchKey = { group: meshPair.group, layerIndex: mesh.layer, textureIndex, addAlpha: mesh.addAlpha };
             const batchKeyStr = JSON.stringify(batchKey);
             if (!mesh.translucent) {
                 if (!opaqueMeshMap.has(batchKeyStr)) {
                     opaqueMeshMap.set(batchKeyStr, []);
                 }
-                opaqueMeshMap.get(batchKeyStr).push(mesh);
+                opaqueMeshMap.get(batchKeyStr)!.push(mesh);
             } else if (lastIndex >= 0 && translucentMeshes[lastIndex][0] === batchKeyStr) {
                 translucentMeshes[lastIndex][1].push(mesh);
             } else {
@@ -343,9 +342,9 @@ export class MapData {
     }
 
     private createDrawCall(batchKey: RenderBatchKey, translucent: boolean, layerMap: Map<string, Layer>): DrawCall {
-        const drawCall = new DrawCall;
+        const drawCall = new DrawCall();
         if (layerMap.has(`${batchKey.group}_${batchKey.layerIndex}`)) {
-            drawCall.layer = layerMap.get(`${batchKey.group}_${batchKey.layerIndex}`);
+            drawCall.layer = layerMap.get(`${batchKey.group}_${batchKey.layerIndex}`)!;
         }
         drawCall.textureIndex = batchKey.textureIndex;
         drawCall.translucent = translucent;
@@ -380,12 +379,13 @@ export class MapData {
             const texScaleOffs = vec4.create();
             const texClip = vec4.create();
             const texRepeat = vec2.create();
-            if (mesh.texture.textureAnim) {
+            const texture = assertExists(mesh.texture);
+            if (texture.textureAnim) {
                 texScaleOffs.set([
-                    mesh.textureBlock.width / mesh.texture.textureAnim.sheetWidth,
-                    mesh.textureBlock.height / mesh.texture.textureAnim.sheetHeight,
-                    -mesh.texture.clipLeft / mesh.texture.textureAnim.sheetWidth,
-                    -mesh.texture.clipTop / mesh.texture.textureAnim.sheetHeight
+                    mesh.textureBlock.width / texture.textureAnim.sheetWidth,
+                    mesh.textureBlock.height / texture.textureAnim.sheetHeight,
+                    -texture.clipLeft / texture.textureAnim.sheetWidth,
+                    -texture.clipTop / texture.textureAnim.sheetHeight
                 ]);
             } else {
                 texScaleOffs.set([
@@ -396,14 +396,14 @@ export class MapData {
                 ]);
             }
             texClip.set([
-                (mesh.texture.clipLeft + 0.5) / mesh.textureBlock.width,
-                (mesh.texture.clipRight + 0.5) / mesh.textureBlock.width,
-                (mesh.texture.clipTop + 0.5) / mesh.textureBlock.height,
-                (mesh.texture.clipBottom + 0.5) / mesh.textureBlock.height
+                (texture.clipLeft + 0.5) / mesh.textureBlock.width,
+                (texture.clipRight + 0.5) / mesh.textureBlock.width,
+                (texture.clipTop + 0.5) / mesh.textureBlock.height,
+                (texture.clipBottom + 0.5) / mesh.textureBlock.height
             ]);
             texRepeat.set([
-                mesh.texture.tiledU ? mesh.textureBlock.width / mesh.texture.width() : 0.5,
-                mesh.texture.tiledV ? mesh.textureBlock.height / mesh.texture.height() : 0.5
+                texture.tiledU ? mesh.textureBlock.width / texture.width() : 0.5,
+                texture.tiledV ? mesh.textureBlock.height / texture.height() : 0.5
             ]);
             for (let i = 0; i < mesh.vtx.length; i++) {
                 vBuffer[vBufferIndex++] = mesh.vtx[i][0];
@@ -509,7 +509,7 @@ class DrawCallInstance {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelMatrix: mat4, viewerInput: Viewer.ViewerRenderInput) {
-        if (!this.drawCall.layer.visible) {
+        if (!this.drawCall.layer!.visible) {
             return;
         }
         const renderInst = renderInstManager.pushRenderInst();

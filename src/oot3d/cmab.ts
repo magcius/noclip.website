@@ -76,7 +76,7 @@ const enum LoopMode {
     ONCE, REPEAT,
 }
 
-function parseTrack(version: Version, buffer: ArrayBufferSlice): AnimationTrack {
+function parseTrack(version: Version, buffer: ArrayBufferSlice): AnimationTrack | null {
     const view = buffer.createDataView();
 
     let type: AnimationTrackType;
@@ -96,13 +96,15 @@ function parseTrack(version: Version, buffer: ArrayBufferSlice): AnimationTrack 
         timeEnd = view.getUint32(0x04, true);
         unk1 = view.getFloat32(0x08, true);
         unk2 = view.getUint32(0x0C, true);
+    } else {
+        throw "whoops";
     }
 
     let keyframeTableIdx: number = 0x10;
 
     // WTF does this mean?
     if (numKeyframes === 0)
-        return undefined;
+        return null;
 
     if (type === AnimationTrackType.LINEAR) {
         const frames: AnimationKeyframeLinear[] = [];
@@ -201,7 +203,9 @@ function parseMmad(version: Version, buffer: ArrayBufferSlice): AnimationEntry {
             if (trackOffs === 0x00)
                 continue;
 
-            tracks[i] = parseTrack(version, buffer.slice(trackOffs));
+            const track = parseTrack(version, buffer.slice(trackOffs));
+            if (track !== null)
+                tracks[i] = track;
         }
     } else if (animationType === AnimationType.TEXTURE_PALETTE) {
         for (let i = 0; i < 1; i++) {
@@ -211,7 +215,9 @@ function parseMmad(version: Version, buffer: ArrayBufferSlice): AnimationEntry {
             if (trackOffs === 0x00)
                 continue;
 
-            tracks[i] = parseTrack(version, buffer.slice(trackOffs));
+            const track = parseTrack(version, buffer.slice(trackOffs));
+            if (track !== null)
+                tracks[i] = track;
         }
     } else if (animationType === AnimationType.COLOR) {
         for (let i = 0; i < 4; i++) {
@@ -221,7 +227,9 @@ function parseMmad(version: Version, buffer: ArrayBufferSlice): AnimationEntry {
             if (trackOffs === 0x00)
                 continue;
 
-            tracks[i] = parseTrack(version, buffer.slice(trackOffs));
+            const track = parseTrack(version, buffer.slice(trackOffs));
+            if (track !== null)
+                tracks[i] = track;
         }
     } else if (animationType === AnimationType.ROTATION) {
         for (let i = 0; i < 1; i++) {
@@ -231,7 +239,9 @@ function parseMmad(version: Version, buffer: ArrayBufferSlice): AnimationEntry {
             if (trackOffs === 0x00)
                 continue;
 
-            tracks[i] = parseTrack(version, buffer.slice(trackOffs));
+            const track = parseTrack(version, buffer.slice(trackOffs));
+            if (track !== null)
+                tracks[i] = track;
         }
     }
 

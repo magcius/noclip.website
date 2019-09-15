@@ -12,7 +12,7 @@ import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, Gf
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { mat4, vec2, vec4 } from 'gl-matrix';
 import { TextureHolder, TextureMapping } from '../TextureHolder';
-import { nArray } from '../util';
+import { nArray, assertExists } from '../util';
 import { GfxRenderInstManager, executeOnPass } from '../gfx/render/GfxRenderer';
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
@@ -26,7 +26,7 @@ export function textureToCanvas(texture: BinTex.Texture): Viewer.Texture {
     canvas.height = height;
     canvas.title = name;
 
-    const context = canvas.getContext("2d");
+    const context = canvas.getContext("2d")!;
     const imgData = context.createImageData(canvas.width, canvas.height);
     imgData.data.set(texture.pixels());
     context.putImageData(imgData, 0, 0);
@@ -77,8 +77,8 @@ class DrawCall {
     public translucent: boolean = false;
     public cullBackfaces: boolean = true;
     public rotYFactor: number = 0;  // Rotation used for SKY1.
-    public layer: Layer = null;
-    public spriteAnim: BinTex.TextureSpriteAnim = null;
+    public layer: Layer | null = null;
+    public spriteAnim: BinTex.TextureSpriteAnim | null = null;
 }
 
 interface RenderBatchKey {
@@ -276,7 +276,7 @@ export class MapData {
                 }
                 let textureIndex = 0;
                 if (submesh.textureBlock.bank < 0 && skyboxTexIndexMap.has(submesh.textureBlock.dataOffs)) {
-                    textureIndex = skyboxTexIndexMap.get(submesh.textureBlock.dataOffs)
+                    textureIndex = skyboxTexIndexMap.get(submesh.textureBlock.dataOffs)!;
                 }
                 const batchKey: RenderBatchKey = {layerIndex, textureIndex, spriteAnimIndex};
                 const batchKeyStr = JSON.stringify(batchKey);
@@ -284,7 +284,7 @@ export class MapData {
                     if (!opaqueSubmeshMap.has(batchKeyStr)) {
                         opaqueSubmeshMap.set(batchKeyStr, []);
                     }
-                    opaqueSubmeshMap.get(batchKeyStr).push(submesh);
+                    opaqueSubmeshMap.get(batchKeyStr)!.push(submesh);
                 } else if (lastIndex >= 0 && translucentSubmeshes[lastIndex][0] == batchKeyStr) {
                     translucentSubmeshes[lastIndex][1].push(submesh);
                 } else {
@@ -328,7 +328,7 @@ export class MapData {
     private createDrawCall(batchKey: RenderBatchKey, translucent: boolean, layerMap: Map<number, Layer>, spriteAnims: BinTex.TextureSpriteAnim[]): DrawCall {
         const drawCall = new DrawCall;
         if (layerMap.has(batchKey.layerIndex)) {
-            drawCall.layer = layerMap.get(batchKey.layerIndex);
+            drawCall.layer = layerMap.get(batchKey.layerIndex)!;
         }
         if (batchKey.spriteAnimIndex >= 0) {
             drawCall.spriteAnim = spriteAnims[batchKey.spriteAnimIndex];
@@ -359,7 +359,7 @@ export class MapData {
         });
         // device.setResourceName(gfxTexture, texture.name());
         const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadTextureData(gfxTexture, 0, [textureAtlas.pixels]);
+        hostAccessPass.uploadTextureData(gfxTexture, 0, [assertExists(textureAtlas.pixels)]);
         device.submitPass(hostAccessPass);
         return gfxTexture;
     }
@@ -416,7 +416,7 @@ class DrawCallInstance {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, isSkybox: boolean, modelMatrix: mat4, viewerInput: Viewer.ViewerRenderInput) {
-        if (!this.drawCall.layer.visible)
+        if (!this.drawCall.layer!.visible)
             return;
 
         const renderInst = renderInstManager.pushRenderInst();

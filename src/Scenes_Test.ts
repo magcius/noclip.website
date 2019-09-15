@@ -26,7 +26,7 @@ class H3DScene implements Viewer.SceneGfx {
     public textureHolder = new CtrTextureHolder();
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
-        return null;
+        return null as unknown as GfxRenderPass;
     }
 
     public destroy(device: GfxDevice): void {

@@ -5,6 +5,7 @@ import { DataFetcher } from '../DataFetcher';
 import * as PPF from './ppf';
 import { PsychonautsRenderer, SceneRenderer } from './render';
 import { SceneContext } from '../SceneBase';
+import { assertExists } from '../util';
 
 class PsychonautsSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
@@ -25,7 +26,7 @@ class PsychonautsSceneDesc implements Viewer.SceneDesc {
             renderer.textureHolder.addTextures(device, commonPPF.textures);
             renderer.textureHolder.addTextures(device, scenePPF.textures);
 
-            const sceneRenderer = new SceneRenderer(device, renderer.textureHolder, scenePPF.mainScene);
+            const sceneRenderer = new SceneRenderer(device, renderer.textureHolder, assertExists(scenePPF.mainScene));
             renderer.sceneRenderers.push(sceneRenderer);
             return renderer;
         });

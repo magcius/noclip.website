@@ -15,7 +15,7 @@ import { mat4 } from "gl-matrix";
 import { computeViewMatrix, Camera } from "../Camera";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
-import { nArray } from "../util";
+import { nArray, assertExists } from "../util";
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget } from "../gfx/helpers/RenderTargetHelpers";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 
@@ -40,7 +40,7 @@ export class PsychonautsTextureHolder extends TextureHolder<PPAK_Texture> {
     private ppakTextures: PPAK_Texture[] = [];
 
     public findPPAKTexture(name: string): PPAK_Texture {
-        return this.ppakTextures.find((t) => t.name === name);
+        return assertExists(this.ppakTextures.find((t) => t.name === name));
     }
 
     public loadTexture(device: GfxDevice, texture: PPAK_Texture): LoadedTexture | null {
@@ -74,7 +74,7 @@ export class PsychonautsTextureHolder extends TextureHolder<PPAK_Texture> {
 
         const extraInfo = new Map<string, string>();
         extraInfo.set('Format', getTextureFormatName(texture.format));
-        const displayName = texture.name.split('/').pop();
+        const displayName = texture.name.split('/').pop()!;
         const viewerTexture: Viewer.Texture = { name: displayName, surfaces, extraInfo };
 
         this.ppakTextures.push(texture);
@@ -124,7 +124,7 @@ class MeshFragData {
         this.colorBuffer = meshFrag.streamColor ? makeStaticDataBufferFromSlice(device, GfxBufferUsage.VERTEX, meshFrag.streamColor) : null;
 
         if (meshFrag.streamUVCount > 0) {
-            const uvData = decodeStreamUV(meshFrag.streamUV, meshFrag.iVertCount, meshFrag.streamUVCount, meshFrag.uvCoordScale);
+            const uvData = decodeStreamUV(meshFrag.streamUV!, meshFrag.iVertCount, meshFrag.streamUVCount, meshFrag.uvCoordScale);
             this.uvBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, uvData.buffer);
         } else {
             this.uvBuffer = null;
@@ -146,7 +146,7 @@ class MeshFragData {
             vertexAttributeDescriptors,
             indexBufferFormat: GfxFormat.U16_R,
         });
-        const buffers: GfxVertexBufferDescriptor[] = [
+        const buffers = [
             { buffer: this.posNrmBuffer, byteStride: 0x10, byteOffset: 0 },
             this.colorBuffer ? { buffer: this.colorBuffer, byteStride: 0x04, byteOffset: 0 } : null,
             this.uvBuffer    ? { buffer: this.uvBuffer, byteStride: 0x08 * meshFrag.streamUVCount, byteOffset: 0 } : null,
@@ -270,7 +270,6 @@ class MeshFragInstance {
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyProgram(this.gfxProgram);
         for (let i = 0; i < this.gfxSamplers.length; i++)
             device.destroySampler(this.gfxSamplers[i]);
     }

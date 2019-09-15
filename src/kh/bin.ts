@@ -24,7 +24,7 @@ interface UVAnimInfo {
 }
 
 export class Submesh {
-    public textureBlock: BinTex.TextureBlock = null;
+    public textureBlock: BinTex.TextureBlock | null = null;
     public textureIndex = -1;
     public vtx: vec3[] = [];
     public ind: number[] = [];
@@ -142,7 +142,7 @@ function processTextureTag(view: DataView, offs: number, mesh: Mesh, submeshOut:
     const dataOffs = (bank == 0) ? dataOffsBase - 0x260000 : dataOffsBase / 4;
     const colorTableOffs = ((view.getUint16(propertiesOffs + 0x4, true) & 0x3FF0) >> 4) * 0x80;
 
-    let textureBlock: BinTex.TextureBlock = null;
+    let textureBlock: BinTex.TextureBlock | null = null;
     for (let i = 0; i < textureBlocksOut.length; i++) {
         if (textureBlocksOut[i].bank == bank && textureBlocksOut[i].dataOffs == dataOffs) {
             textureBlock = textureBlocksOut[i];
@@ -241,8 +241,8 @@ function parseTextureBounds(view: DataView, offs: number, textureOut: BinTex.Tex
 }
 
 function parseVifPackets(view: DataView, offs: number, endOffs: number, first: boolean, meshOut: Mesh, textureBlocksOut: BinTex.TextureBlock[]) {
-    let submesh: Submesh = null;
-    let lastTextureBlock: BinTex.TextureBlock = null;
+    let submesh: Submesh | null = null;
+    let lastTextureBlock: BinTex.TextureBlock | null = null;
     let lastTextureIndex = -1;
     while (offs < endOffs) {
         let cmd = view.getUint16(offs, true);
@@ -253,36 +253,36 @@ function parseVifPackets(view: DataView, offs: number, endOffs: number, first: b
                 break;
             }
             case 0x8000: {  // Begin unpack
-                submesh = new Submesh;
+                submesh = new Submesh();
                 meshOut.submeshes.push(submesh);
                 offs += first ? 0x12 : 0x16;
                 break;
             }
             case 0x8001:  {  // Triangle strips
-                offs = processTriangleStrips(view, offs, submesh);
+                offs = processTriangleStrips(view, offs, submesh!);
                 break;
             }
             case 0xC002: {  // Vertex colors
-                offs = processVertexColors(view, offs, submesh);
+                offs = processVertexColors(view, offs, submesh!);
                 break;
             }
             case 0x8003: {  // UVs
-                offs = processUVs(view, offs, submesh);
+                offs = processUVs(view, offs, submesh!);
                 break;
             }
             case 0x1100: {  // FLUSH (texture tag)
-                offs = processTextureTag(view, offs, meshOut, submesh, textureBlocksOut);
-                lastTextureBlock = submesh.textureBlock;
-                lastTextureIndex = submesh.textureIndex;
+                offs = processTextureTag(view, offs, meshOut, submesh!, textureBlocksOut);
+                lastTextureBlock = submesh!.textureBlock;
+                lastTextureIndex = submesh!.textureIndex;
                 break;
             }
             case 0x0: {
                 break;
             }
             case 0x1700: {  // MSCNT (End submesh)
-                if (!submesh.textureBlock) {
-                    submesh.textureBlock = lastTextureBlock;
-                    submesh.textureIndex = lastTextureIndex;
+                if (!submesh!.textureBlock) {
+                    submesh!.textureBlock = lastTextureBlock;
+                    submesh!.textureIndex = lastTextureIndex;
                 }
                 break;
             }
@@ -410,9 +410,6 @@ function parseUVAnimSectors(view: DataView, mapTextureBlocks: BinTex.TextureBloc
 }
 
 export function parse(binBuffer: ArrayBufferSlice, imgBuffer: ArrayBufferSlice): BIN {
-    if (binBuffer.byteLength < 0x80 || imgBuffer.byteLength < 0x80) {
-        return null;
-    }
     const binView = binBuffer.createDataView();
     const imgView = imgBuffer.createDataView();
 

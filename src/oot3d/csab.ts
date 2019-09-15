@@ -403,7 +403,7 @@ export function calcBoneMatrix(dst: mat4, animationController: AnimationControll
 
     if (node !== null) {
         const frame = assertExists(animationController).getTimeInFrames();
-        const animFrame = getAnimFrame(csab, frame);
+        const animFrame = getAnimFrame(csab!, frame);
 
         if (node.scaleX !== null) scaleX = sampleAnimationTrack(node.scaleX, animFrame);
         if (node.scaleY !== null) scaleY = sampleAnimationTrack(node.scaleY, animFrame);

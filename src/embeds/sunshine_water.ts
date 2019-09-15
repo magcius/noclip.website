@@ -24,6 +24,7 @@ import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHel
 import { computeViewMatrix } from '../Camera';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { SceneContext } from '../SceneBase';
+import { assertExists } from '../util';
 
 const scale = 200;
 const posMtx = mat4.create();
@@ -134,7 +135,7 @@ class SeaPlaneScene {
         this.bmdModel = new BMDModel(device, cache, bmd);
         this.materialInstanceState.textureMappings = this.bmdModel.createDefaultTextureMappings();
 
-        const seaMaterial = bmd.mat3.materialEntries.find((m) => m.name === '_umi');
+        const seaMaterial = assertExists(bmd.mat3.materialEntries.find((m) => m.name === '_umi'));
         this.mangleMaterial(seaMaterial, configName);
         const seaMaterialData = new MaterialData(seaMaterial);
         this.seaMaterialInstance = new MaterialInstance(seaMaterialData, {});
@@ -228,13 +229,11 @@ export function createScene(context: SceneContext, name: string): Promise<SceneG
 
         const renderer = new SeaRenderer(device, rarc);
         const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
-        const skyScene = SunshineSceneDesc.createSunshineSceneForBasename(device, cache, SMSPass.SKYBOX, rarc, 'map/map/sky', true);
+        const skyScene = assertExists(SunshineSceneDesc.createSunshineSceneForBasename(device, cache, SMSPass.SKYBOX, rarc, 'map/map/sky', true));
         renderer.modelInstances.push(skyScene);
 
-        const bmdFile = rarc.findFile('map/map/sea.bmd');
-        const btkFile = rarc.findFile('map/map/sea.btk');
-        const bmd = BMD.parse(bmdFile.buffer);
-        const btk = BTK.parse(btkFile.buffer);
+        const bmd = BMD.parse(rarc.findFileData('map/map/sea.bmd')!);
+        const btk = BTK.parse(rarc.findFileData('map/map/sea.btk')!);
 
         const seaScene = new SeaPlaneScene(device, cache, bmd, btk, name);
         renderer.seaPlaneScene = seaScene;

@@ -21,7 +21,7 @@ import { computeViewMatrix, OrbitCameraController, computeViewSpaceDepthFromWorl
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { SceneDesc, SceneContext } from '../SceneBase';
-import { readString, nArray, concat } from '../util';
+import { readString, nArray, concat, assertExists } from '../util';
 import { getColorsFromDZS, Colors } from '../j3d/WindWaker/zww_scenes';
 import { GfxRenderInstManager, setSortKeyDepth } from '../gfx/render/GfxRenderer';
 import { FakeTextureHolder } from '../TextureHolder';
@@ -298,18 +298,18 @@ export class WindWakerWater implements SceneDesc {
             fetchArc(`j3d/ww/Stage/sea/Room44.arc`, dataFetcher),
         ]).then(([stageRarc, roomRarc]) => {
             const dzsFile = stageRarc.findFileData(`dzs/stage.dzs`)!;
-            const colors = getColorsFromDZS(dzsFile, 0, 2);
+            const colors = assertExists(getColorsFromDZS(dzsFile, 0, 2));
     
             const renderer = new WindWakerRenderer(device, stageRarc, colors);
 
             const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
-            const model_bmd = new BMDModel(device, cache, BMD.parse(roomRarc.findFileData('bdl/model.bdl')));
+            const model_bmd = new BMDModel(device, cache, BMD.parse(roomRarc.findFileData('bdl/model.bdl')!));
             concat(renderer.textureHolder.viewerTextures, model_bmd.tex1Data.viewerTextures);
             renderer.modelData.push(model_bmd);
-            const model1_bmd = new BMDModel(device, cache, BMD.parse(roomRarc.findFileData('bdl/model1.bdl')));
+            const model1_bmd = new BMDModel(device, cache, BMD.parse(roomRarc.findFileData('bdl/model1.bdl')!));
             concat(renderer.textureHolder.viewerTextures, model1_bmd.tex1Data.viewerTextures);
             renderer.modelData.push(model1_bmd);
-            const model1_btk = BTK.parse(roomRarc.findFileData('btk/model1.btk'));
+            const model1_btk = BTK.parse(roomRarc.findFileData('btk/model1.btk')!);
 
             function setEnvColors(p: Plane): void {
                 p.materialInstanceState.colorOverrides[ColorKind.K0] = colors.ocean;
@@ -338,7 +338,7 @@ export class WindWakerWater implements SceneDesc {
                 // Sand
                 plane = new Plane(device, cache, model_bmd, null, 6);
                 plane.modelMatrix[14] -= 200;
-                const tex0 = plane.materialInstance.materialData.material.texMatrices[0].matrix;
+                const tex0 = plane.materialInstance.materialData.material.texMatrices[0]!.matrix;
                 tex0[5] = 1/8;
                 tex0[13] = -0.25;
                 pushPlane(plane);

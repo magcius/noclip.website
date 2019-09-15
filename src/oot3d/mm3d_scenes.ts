@@ -681,10 +681,10 @@ class SceneDesc implements Viewer.SceneDesc {
             for (let i = 0; i < roomZSINames.length; i++) {
                 const roomSetups = ZSI.parseRooms(maybeDecompress(modelCache.getFileData(roomZSINames[i])));
 
-                const roomSetup: ZSI.ZSIRoomSetup = roomSetups.find((setup) => setup.mesh !== null);
+                const roomSetup: ZSI.ZSIRoomSetup = assertExists(roomSetups.find((setup) => setup.mesh !== null));
 
                 assert(roomSetup.mesh !== null);
-                const filename = roomZSINames[i].split('/').pop();
+                const filename = roomZSINames[i].split('/').pop()!;
                 const roomRenderer = new RoomRenderer(device, textureHolder, roomSetup.mesh, filename);
                 roomRenderer.roomSetups = roomSetups;
                 if (gar !== null) {

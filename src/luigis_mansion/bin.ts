@@ -46,7 +46,7 @@ export interface SceneGraphPart {
 export interface SceneGraphNode {
     children: SceneGraphNode[];
     modelMatrix: mat4;
-    bbox: AABB;
+    bbox: AABB | null;
     parts: SceneGraphPart[];
 }
 
@@ -93,7 +93,7 @@ export function parse(buffer: ArrayBufferSlice, name: string): BIN {
             samplers[index] = parseSampler(index);
     }
 
-    function parseBatch(index: number): Batch {
+    function parseBatch(index: number): Batch | null {
         const offs = batchChunkOffs + (0x18 * index);
 
         // Not used in-game.
@@ -297,7 +297,7 @@ export function parse(buffer: ArrayBufferSlice, name: string): BIN {
         const bboxMaxZ = view.getFloat32(nodeOffs + 0x44, false);
         // const unk = view.getFloat32(nodeOffs + 0x48, false);
 
-        let bbox: AABB = null;
+        let bbox: AABB | null = null;
         if (bboxMinX !== 0 || bboxMinY !== 0 || bboxMinZ !== 0 || bboxMaxX !== 0 || bboxMaxY !== 0 || bboxMaxZ !== 0) {
             bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
         }

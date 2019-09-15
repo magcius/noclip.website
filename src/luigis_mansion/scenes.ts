@@ -7,19 +7,22 @@ import * as BIN from './bin';
 import { LuigisMansionRenderer } from './render';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
+import { assertExists } from '../util';
 
 function fetchBin(path: string, dataFetcher: DataFetcher): Promise<BIN.BIN> {
     return dataFetcher.fetchData(`luigis_mansion/${path}`).then((buffer: ArrayBufferSlice) => {
-        let binBuffer;
+        let binBuffer: ArrayBufferSlice;
         if (path.endsWith('.bin')) {
             binBuffer = buffer;
         } else if (path.endsWith('.arc')) {
             const rarc = RARC.parse(buffer);
-            const roomBinFile = rarc.findFile('room.bin');
+            const roomBinFile = assertExists(rarc.findFile('room.bin'));
             binBuffer = roomBinFile.buffer;
+        } else {
+            throw "whoops";
         }
 
-        const name = path.split('/').pop();
+        const name = path.split('/').pop()!;
         return BIN.parse(binBuffer, name);
     });
 }

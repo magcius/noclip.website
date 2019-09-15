@@ -247,7 +247,7 @@ export function parse(buffer: ArrayBufferSlice, hasScene: boolean): PPAK {
         // mesh.push(PLB.parse(slice, name));
     }
 
-    let mainScene: PLB.EScene | null;
+    let mainScene: PLB.EScene | null = null;
     if (hasScene) {
         EScriptVM_ReadPackFile(stream);
 

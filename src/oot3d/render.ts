@@ -29,7 +29,7 @@ function surfaceToCanvas(textureLevel: CMB.TextureLevel): HTMLCanvasElement {
     canvas.height = textureLevel.height;
     canvas.title = textureLevel.name;
 
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d")!;
     const imgData = ctx.createImageData(canvas.width, canvas.height);
 
     imgData.data.set(textureLevel.pixels, 0);
@@ -574,7 +574,7 @@ class MaterialInstance {
         template.setMegaStateFlags(this.material.renderFlags);
 
         if (this.gfxProgram === null)
-            this.gfxProgram = cache.createProgram(device, this.program);
+            this.gfxProgram = cache.createProgram(device, this.program!);
         template.setGfxProgram(this.gfxProgram);
 
         const mapped = template.mapUniformBufferF32(DMPProgram.ub_MaterialParams);

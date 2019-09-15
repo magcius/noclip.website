@@ -1,6 +1,6 @@
 import { vec2, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert } from "../util";
+import { assert, assertExists } from "../util";
 import { psmToString, gsMemoryMapReadImagePSMT8_PSMCT32, gsMemoryMapReadImagePSMT4_PSMCT32, gsMemoryMapUploadImage, GSRegisterBITBLTBUF, getGSRegisterBITBLTBUF, getGSRegisterTRXPOS, getGSRegisterTRXREG, GSRegister, GSMemoryMap, gsMemoryMapNew, GSRegisterTRXPOS, GSRegisterTRXREG, GSRegisterTEX0, GSRegisterCLAMP, getGSRegisterTEX0, getGSRegisterCLAMP, GSPixelStorageFormat, GSWrapMode, GSTextureColorComponent } from "../Common/PS2/GS";
 
 export interface KingdomHeartsIIMap {
@@ -65,9 +65,6 @@ export class Texture {
     }
 
     public pixels(): Uint8Array {
-        if (!this.parent || !this.parent.pixels || this.parent.pixels.length === 0) {
-            return null;
-        }
         const width = this.clipRight - this.clipLeft + 1;
         const height = this.clipBottom - this.clipTop + 1;
         if (width === this.parent.width && height === this.parent.height) {
@@ -194,9 +191,6 @@ interface BarFile {
 }
 
 export function parseMap(buffer: ArrayBufferSlice): KingdomHeartsIIMap {
-    if (buffer.byteLength < 0x80) {
-        return null;
-    }
     const view = buffer.createDataView();
 
     // Parse files in BAR header.
@@ -251,7 +245,7 @@ function parseTextures(buffer: ArrayBufferSlice, textureFile: BarFile, gsMemoryM
     }
     for (let i = 0; i < numTextures; i++) {
         const blockIndex = view.getUint8(textureToBlockTableOffset + i) + 1;
-        textureBlockMap.get(blockIndex).push(i);
+        textureBlockMap.get(blockIndex)!.push(i);
     }
 
     const gsWriteTableOffs = view.getUint32(0x14, true);
@@ -261,7 +255,7 @@ function parseTextures(buffer: ArrayBufferSlice, textureFile: BarFile, gsMemoryM
         const blockOffs = gsWriteTableOffs + blockIndex * 0x90;
         processTextureUpload(buffer, blockOffs, gsMemoryMap, textureFile);
 
-        let textureBlock: TextureBlock = null;
+        let textureBlock: TextureBlock | null = null;
         for (const textureIndex of kv[1]) {
             const textureOffs = gsReadTableOffs + textureIndex * 0xA0;
             // Parse GIFtag and GS data minimally for image read.
@@ -269,8 +263,8 @@ function parseTextures(buffer: ArrayBufferSlice, textureFile: BarFile, gsMemoryM
             const reg = view.getUint8(textureOffs + 0x18);
             assert(nloop === 0x7, "Expected GIFtag with nloop 7 for texture read");
             assert(reg === 0xE, "Expected A+E register in GIFtag for texture read");
-            let tex0: GSRegisterTEX0;
-            let clamp: GSRegisterCLAMP;
+            let tex0: GSRegisterTEX0 | null = null;
+            let clamp: GSRegisterCLAMP | null = null;
             for (let i = 0; i < nloop; i++) {
                 const dataLower = view.getUint32(textureOffs + 0x10 * i + 0x20, true);
                 const dataUpper = view.getUint32(textureOffs + 0x10 * i + 0x24, true);
@@ -281,6 +275,10 @@ function parseTextures(buffer: ArrayBufferSlice, textureFile: BarFile, gsMemoryM
                     clamp = getGSRegisterCLAMP(dataLower, dataUpper);
                 }
             }
+
+            if (tex0 === null || clamp === null)
+                throw "whoops";
+
             if (!textureBlock) {
                 textureBlock = new TextureBlock;
                 textureBlock.format = psmToString(tex0.psm);
@@ -337,9 +335,9 @@ function processTextureUpload(buffer: ArrayBufferSlice, offs: number, gsMemoryMa
     const reg = view.getUint8(offs + 0x18);
     assert(nloop === 0x4, "Expected GIFtag with nloop 4 for texture upload");
     assert(reg === 0xE, "Expected A+E register in GIFtag for texture upload");
-    let bitbltbuf: GSRegisterBITBLTBUF;
-    let trxpos: GSRegisterTRXPOS;
-    let trxreg: GSRegisterTRXREG;
+    let bitbltbuf: GSRegisterBITBLTBUF | null = null;
+    let trxpos: GSRegisterTRXPOS | null = null;
+    let trxreg: GSRegisterTRXREG | null = null;
     for (let i = 0; i < nloop; i++) {
         const dataLower = view.getUint32(offs + 0x10 * i + 0x20, true);
         const dataUpper = view.getUint32(offs + 0x10 * i + 0x24, true);
@@ -352,6 +350,8 @@ function processTextureUpload(buffer: ArrayBufferSlice, offs: number, gsMemoryMa
             trxreg = getGSRegisterTRXREG(dataLower, dataUpper);
         }
     }
+    if (bitbltbuf === null || trxpos === null || trxreg === null)
+        throw "whoops";
     const imageOffs = textureFile.offset + view.getUint32(offs + 0x74, true);
     let imageBytesize = (view.getUint32(offs + 0x70, true) & 0xFFFFFFF) * 0x10;
     if (imageOffs + imageBytesize > buffer.byteLength) {
@@ -399,8 +399,8 @@ function parseTextureAnimation(buffer: ArrayBufferSlice, offs: number, gsMemoryM
 
     const textureIndex = view.getUint16(0x2, true);
     assert(mapGroup.textureIndexMap.has(textureIndex), `Failed to parse TEXA block due to missing texture index ${textureIndex}`);
-    const textureBlock = mapGroup.textureIndexMap.get(textureIndex)[0];
-    const texture = mapGroup.textureIndexMap.get(textureIndex)[1];
+    const textureBlock = mapGroup.textureIndexMap.get(textureIndex)![0];
+    const texture = mapGroup.textureIndexMap.get(textureIndex)![1];
     const numSprites = view.getUint16(0xE, true);
     const dsax = view.getUint16(0x10, true);
     const dsay = view.getUint16(0x12, true);
@@ -454,13 +454,14 @@ function parseGeometry(buffer: ArrayBufferSlice, geometryFile: BarFile, mapGroup
         const offs = view.getUint32(i * 0x10 + 0x20, true);
         const textureIndex = view.getUint16(i * 0x10 + 0x24, true);
         if (mapGroup.textureIndexMap.has(textureIndex)) {
-            mesh.textureBlock = mapGroup.textureIndexMap.get(textureIndex)[0];
-            mesh.texture = mapGroup.textureIndexMap.get(textureIndex)[1];
+            mesh.textureBlock = mapGroup.textureIndexMap.get(textureIndex)![0];
+            mesh.texture = mapGroup.textureIndexMap.get(textureIndex)![1];
         }
         mesh.translucent = view.getUint16(i * 0x10 + 0x2A, true) === 0x1;
         mesh.addAlpha = (view.getUint8(i * 0x10 + 0x2C) & 0x40) > 0;
         const uvScrollIndex = (view.getUint16(i * 0x10 + 0x2C, true) >> 1) & 0xF;
-        if (uvScrollIndex > 0 && (mesh.texture.tiledU || mesh.texture.tiledV)) {
+        const texture = assertExists(mesh.texture);
+        if (uvScrollIndex > 0 && (texture.tiledU || texture.tiledV)) {
             mesh.uvScroll = vec2.fromValues(
                 mapGroup.uvScrollArray[(uvScrollIndex - 1) * 2],
                 mapGroup.uvScrollArray[(uvScrollIndex - 1) * 2 + 1]

@@ -7,7 +7,7 @@ export class Texture {
     public clipBottom = 0;
     public tiledU: boolean = false;
     public tiledV: boolean = false;
-    public spriteAnim: TextureSpriteAnim = null;
+    public spriteAnim: TextureSpriteAnim | null = null;
 
     constructor(public index: number, public parent: TextureBlock, public colorTableOffs: number, public translucent: boolean) {
     }
@@ -25,9 +25,6 @@ export class Texture {
     }
 
     public pixels(): Uint8Array {
-        if (!this.parent || !this.parent.pixels || this.parent.pixels.length == 0) {
-            return null;
-        }
         const width = this.clipRight - this.clipLeft + 1;
         const height = this.clipBottom - this.clipTop + 1;
         if (width == this.parent.width && height == this.parent.height) {
@@ -114,7 +111,7 @@ export class TextureBlock {
 export class TextureAtlas {
     public width: number = 0;
     public height: number = 0;
-    public pixels: Uint8Array = null;
+    public pixels: Uint8Array | null = null;
     // TextureBlock key -> [x, y]
     private blockMap: Map<string, [number, number]> = new Map();
 
@@ -122,12 +119,12 @@ export class TextureAtlas {
         this._buildAtlas(textureBlocks);
     }
 
-    public getTextureBlockPos(textureBlock: TextureBlock): [number, number] {
+    public getTextureBlockPos(textureBlock: TextureBlock): [number, number] | null {
         const key = textureBlock.key();
-        if (!this.blockMap.has(key)) {
+        if (this.blockMap.has(key))
+            return this.blockMap.get(key)!;
+        else
             return null;
-        }
-        return this.blockMap.get(key);
     }
 
     private _buildAtlas(textureBlocks: TextureBlock[]) {

@@ -2236,12 +2236,12 @@ class SceneDesc implements Viewer.SceneDesc {
 
             let roomSetup: ZSI.ZSIRoomSetup;
             if (this.setupIndex === -1)
-                roomSetup = roomSetups.find((setup) => setup.mesh !== null);
+                roomSetup = assertExists(roomSetups.find((setup) => setup.mesh !== null));
             else
                 roomSetup = roomSetups[this.setupIndex];
 
             assert(roomSetup.mesh !== null);
-            const filename = roomZSINames[i].split('/').pop();
+            const filename = roomZSINames[i].split('/').pop()!;
             const roomRenderer = new RoomRenderer(device, textureHolder, roomSetup.mesh, filename);
             roomRenderer.roomSetups = roomSetups;
             if (zar !== null) {
