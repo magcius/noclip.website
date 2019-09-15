@@ -614,5 +614,6 @@ export class KingdomHeartsRenderer implements Viewer.SceneGfx {
         this.renderTarget.destroy(device);
         this.uniformBuffer.destroy(device);
         this.textureHolder.destroy(device);
+        this.mapData.destroy(device);
     }
-};
+}
