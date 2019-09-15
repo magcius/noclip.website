@@ -35,12 +35,12 @@ interface Pilotwings64FS {
     files: Pilotwings64FSFile[];
 }
 
-interface UVCT_Chunk {
+interface Mesh_Chunk {
     vertexData: Float32Array;
     indexData: Uint16Array;
 }
 
-function parseUVCT_Chunk(chunk: Pilotwings64FSFileChunk): UVCT_Chunk {
+function parseUVCT_Chunk(chunk: Pilotwings64FSFileChunk): Mesh_Chunk {
     assert(chunk.tag === 'COMM');
     const view = chunk.buffer.createDataView();
 
@@ -78,7 +78,7 @@ function parseUVCT_Chunk(chunk: Pilotwings64FSFileChunk): UVCT_Chunk {
     return { vertexData, indexData };
 }
 
-function parseUVCT(file: Pilotwings64FSFile): UVCT_Chunk {
+function parseUVCT(file: Pilotwings64FSFile): Mesh_Chunk {
     assert(file.chunks.length === 1);
     assert(file.chunks[0].tag === 'COMM');
     return parseUVCT_Chunk(file.chunks[0]);
@@ -423,6 +423,7 @@ interface UVMD {
     vertexData: Float32Array;
     partPlacements: mat4[];
     lods: ModelLOD[];
+    inverseScale: number;
 }
 
 function parseUVMD(file: Pilotwings64FSFile): UVMD {
@@ -431,6 +432,7 @@ function parseUVMD(file: Pilotwings64FSFile): UVMD {
     const vertCount = view.getUint16(0);
     const LODCount = view.getUint8(2);
     const transformCount = view.getUint8(3);
+    const unknownCount = view.getUint8(4);
     // unknown byte, short
 
     let offs = 8;
@@ -512,7 +514,9 @@ function parseUVMD(file: Pilotwings64FSFile): UVMD {
         partPlacements.push(mat4.fromValues(m00,m02,-m01,m03,m20,m22,-m21,m23,-m10,-m12,m11,m13,x,z,-y,1.0));
         offs += 0x40;
     }
-    return {vertexData, partPlacements, lods}
+    offs += unknownCount * 0x24;
+    const inverseScale = view.getFloat32(offs+4);
+    return {vertexData, partPlacements, lods, inverseScale};
 }
 
 
@@ -603,13 +607,13 @@ void main() {
 `;
 }
 
-class UVCTData {
+class MeshData {
     public vertexBuffer: GfxBuffer;
     public indexBuffer: GfxBuffer;
     public inputLayout: GfxInputLayout;
     public inputState: GfxInputState;
 
-    constructor(device: GfxDevice, public uvct: UVCT_Chunk) {
+    constructor(device: GfxDevice, public uvct: Mesh_Chunk) {
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, uvct.vertexData.buffer);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, uvct.indexData.buffer);
 
@@ -637,11 +641,11 @@ class UVCTData {
 }
 
 const scratchMatrix = mat4.create();
-class UVCTInstance {
+class MeshInstance {
     public modelMatrix = mat4.create();
     public program = new PW64Program();
 
-    constructor(private uvctData: UVCTData) {
+    constructor(private uvctData: MeshData) {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -766,10 +770,10 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
 ];
 
 class Pilotwings64Renderer implements SceneGfx {
-    public uvctData: UVCTData[] = [];
-    public uvmdData: ModelPartData[][] = [];
-    public uvctInstance: UVCTInstance[] = [];
-    public uvmdInstance: ModelPartInstance[] = [];
+    public uvctData: MeshData[] = [];
+    public uvmdData: MeshData[][] = [];
+    public uvctInstance: MeshInstance[] = [];
+    public uvmdInstance: MeshInstance[] = [];
     public renderHelper: GfxRenderHelper;
     public textureHolder = new Pilotwings64TextureHolder();
     private renderTarget = new BasicRenderTarget();
@@ -840,10 +844,10 @@ class Pilotwings64SceneDesc implements SceneDesc {
 
         const uvmd = fs.files.filter((file) => file.type === 'UVMD').map((file) => parseUVMD(file));
 
-        const uvctData = uvct.map((uvct) => new UVCTData(device, uvct));
+        const uvctData = uvct.map((uvct) => new MeshData(device, uvct));
         renderer.uvctData = uvctData;
 
-        const uvmdData = uvmd.map((uvmd) => uvmd.lods[0].parts.map((part) => new ModelPartData(device, part, uvmd.vertexData)));
+        const uvmdData = uvmd.map((uvmd) => uvmd.lods[0].parts.map((part) => new MeshData(device, {indexData: part.indexData, vertexData: uvmd.vertexData})));
         renderer.uvmdData = uvmdData;
 
         const uvtx = fs.files.filter((file => file.type === 'UVTX')).map((file) => {
@@ -862,7 +866,7 @@ class Pilotwings64SceneDesc implements SceneDesc {
             const baseY = 0;
             for (let j = 0; j < map.contourPlacements.length; j++) {
                 const ct = map.contourPlacements[j];
-                const instance = new UVCTInstance(uvctData[ct.contourIndex]);
+                const instance = new MeshInstance(uvctData[ct.contourIndex]);
                 const position = vec3.fromValues(ct.position[0], baseY, -ct.position[1]);
                 mat4.scale(instance.modelMatrix, instance.modelMatrix, [50, 50, 50]);
                 mat4.translate(instance.modelMatrix, instance.modelMatrix, position);
@@ -871,11 +875,11 @@ class Pilotwings64SceneDesc implements SceneDesc {
             }
         }
         for (let modelIndex of levelData.models) {
-            const instances = uvmdData[modelIndex].map((part) => new ModelPartInstance(part));
+            const instances = uvmdData[modelIndex].map((part) => new MeshInstance(part));
             const positions = uvmd[modelIndex].partPlacements;
             for (let j = 0; j < instances.length; j++) {
                 mat4.multiply(instances[j].modelMatrix, instances[j].modelMatrix, positions[j]);
-                mat4.scale(instances[j].modelMatrix, instances[j].modelMatrix, [500, 500, 500]);
+                // mat4.scale(instances[j].modelMatrix, instances[j].modelMatrix, [500, 500, 500]);
                 mat4.rotateX(instances[j].modelMatrix, instances[j].modelMatrix, -90 * MathConstants.DEG_TO_RAD);
                 renderer.uvmdInstance.push(instances[j]);
             }
