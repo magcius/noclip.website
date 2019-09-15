@@ -40,7 +40,7 @@ class OceanBowlPoint {
     }
 }
 
-function setTextureMatrixST(m: mat4, scale: number, v: vec2): void {
+function setTextureMatrixST(m: mat4, scale: number, v: vec2 | null): void {
     mat4.identity(m);
     m[0] = scale;
     m[5] = scale;
@@ -91,10 +91,10 @@ export class OceanBowl extends LiveActor {
         const device = sceneObjHolder.modelCache.device;
         this.initPoints(device);
 
-        const waterWaveArc = sceneObjHolder.modelCache.getObjectData('WaterWave');
-        this.water = new BTIData(device, BTI.parse(waterWaveArc.findFileData('Water.bti'), "Water").texture);
-        this.waterIndirect = new BTIData(device, BTI.parse(waterWaveArc.findFileData('WaterIndirect.bti'), "WaterIndirect").texture);
-        this.mask = new BTIData(device, BTI.parse(waterWaveArc.findFileData('Mask.bti'), "Mask").texture);
+        const waterWaveArc = sceneObjHolder.modelCache.getObjectData('WaterWave')!;
+        this.water = new BTIData(device, BTI.parse(waterWaveArc.findFileData('Water.bti')!, "Water").texture);
+        this.waterIndirect = new BTIData(device, BTI.parse(waterWaveArc.findFileData('WaterIndirect.bti')!, "WaterIndirect").texture);
+        this.mask = new BTIData(device, BTI.parse(waterWaveArc.findFileData('Mask.bti')!, "Mask").texture);
     }
 
     public initPoints(device: GfxDevice): void {

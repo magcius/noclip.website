@@ -34,7 +34,7 @@
 // standard formats.
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { align, assert } from '../util';
+import { align, assert, assertExists } from '../util';
 
 import * as GX from './gx_enum';
 import { Endianness, getSystemEndianness } from '../endian';
@@ -84,7 +84,7 @@ export interface LoadedVertexLayout {
 
 interface VertexLayout extends LoadedVertexLayout {
     // Source layout.
-    vatLayouts: VatLayout[];
+    vatLayouts: (VatLayout | undefined)[];
 }
 
 export interface LoadedVertexPacket {
@@ -346,7 +346,7 @@ function getAttributeBaseFormat(vtxAttrib: GX.VertexAttribute): GfxFormat {
     return GfxFormat.F32_R;
 }
 
-function getAttributeFormat(vatLayouts: VatLayout[], vtxAttrib: GX.VertexAttribute): GfxFormat {
+function getAttributeFormat(vatLayouts: (VatLayout | undefined)[], vtxAttrib: GX.VertexAttribute): GfxFormat {
     let formatCompFlags = 0;
 
     const baseFormat = getAttributeBaseFormat(vtxAttrib);
@@ -359,14 +359,17 @@ function getAttributeFormat(vatLayouts: VatLayout[], vtxAttrib: GX.VertexAttribu
         formatCompFlags = FormatCompFlags.COMP_RGBA;
     } else {
         // Go over all layouts and pick the best one.
-        for (let i = 0; i < vatLayouts.length; i++)
-            formatCompFlags = Math.max(formatCompFlags, getAttributeFormatCompFlags(vtxAttrib, vatLayouts[i].vatFormat[vtxAttrib]));
+        for (let i = 0; i < vatLayouts.length; i++) {
+            const vatLayout = vatLayouts[i];
+            if (vatLayout !== undefined)
+                formatCompFlags = Math.max(formatCompFlags, getAttributeFormatCompFlags(vtxAttrib, vatLayout.vatFormat[vtxAttrib]));
+        }
     }
 
     return makeFormat(getFormatTypeFlags(baseFormat), formatCompFlags, getFormatFlags(baseFormat));
 }
 
-function translateVatLayout(vatFormat: GX_VtxAttrFmt[], vcd: GX_VtxDesc[]): VatLayout {
+function translateVatLayout(vatFormat: GX_VtxAttrFmt[], vcd: GX_VtxDesc[]): VatLayout | undefined {
     if (vatFormat === undefined)
         return undefined;
 
@@ -433,7 +436,7 @@ export function compileLoadedVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDes
 
             if (texMtxIdxLayout[layoutIdx] !== null) {
                 // Don't allocate a field in the packed data if we already have one...
-                fieldBase = texMtxIdxLayout[layoutIdx].bufferOffset;
+                fieldBase = texMtxIdxLayout[layoutIdx]!.bufferOffset;
             }
         }
 
@@ -530,15 +533,16 @@ function _compileVtxLoader(desc: VtxLoaderDesc): VtxLoader {
     function compileVatLayoutAttribute(vatLayout: VatLayout, vtxAttrib: GX.VertexAttribute): string {
         const vtxAttrFmt = vatLayout.vatFormat[vtxAttrib];
         const vtxAttrDesc = vatLayout.vcd[vtxAttrib];
-        const dstAttribLayout = loadedVertexLayout.dstVertexAttributeLayouts.find((layout) => layout.vtxAttrib === vtxAttrib);
 
         if (!vtxAttrDesc || vtxAttrDesc.type === GX.AttrType.NONE)
             return '';
 
+        const dstAttribLayout = loadedVertexLayout.dstVertexAttributeLayouts.find((layout) => layout.vtxAttrib === vtxAttrib);
+
         // If we don't have a destination for the data, then don't bother outputting.
         const outputEnabled = !!dstAttribLayout;
 
-        let srcAttrByteSize: number;
+        let srcAttrByteSize: number = -1;
 
         // We only need vtxAttrFmt if we're going to read the data.
         if (vtxAttrDesc.type === GX.AttrType.DIRECT || outputEnabled)
@@ -588,8 +592,8 @@ function _compileVtxLoader(desc: VtxLoaderDesc): VtxLoader {
         function compileWriteOneComponent(offs: number, value: string): string {
             const dstOffs = `dstVertexDataOffs + ${offs}`;
 
-            const typeFlags = getFormatTypeFlags(dstAttribLayout.format);
-            const isNorm = getFormatFlags(dstAttribLayout.format) & FormatFlags.NORMALIZED;
+            const typeFlags = getFormatTypeFlags(dstAttribLayout!.format);
+            const isNorm = getFormatFlags(dstAttribLayout!.format) & FormatFlags.NORMALIZED;
             if (typeFlags === FormatTypeFlags.F32)
                 return compileWriteOneComponentF32(dstOffs, value);
             else if (typeFlags === FormatTypeFlags.U8 && isNorm)
@@ -607,11 +611,11 @@ function _compileVtxLoader(desc: VtxLoaderDesc): VtxLoader {
                 const srcAttrCompSize = getAttributeComponentByteSize(vtxAttrib, vtxAttrFmt);
                 const srcAttrCompCount = getAttributeComponentCount(vtxAttrib, vtxAttrFmt);
 
-                const dstComponentSize = getFormatCompByteSize(dstAttribLayout.format);
-                const dstComponentCount = getFormatComponentCount(dstAttribLayout.format);
+                const dstComponentSize = getFormatCompByteSize(dstAttribLayout!.format);
+                const dstComponentCount = getFormatComponentCount(dstAttribLayout!.format);
 
                 for (let i = 0; i < dstComponentCount; i++) {
-                    const dstOffs: number = dstAttribLayout.bufferOffset + (i * dstComponentSize);
+                    const dstOffs: number = dstAttribLayout!.bufferOffset + (i * dstComponentSize);
                     const srcOffs: string = `${attrOffs} + ${i * srcAttrCompSize}`;
 
                     // Fill in components not in the source with zero.
@@ -633,8 +637,8 @@ function _compileVtxLoader(desc: VtxLoaderDesc): VtxLoader {
             let S = ``;
 
             if (outputEnabled) {
-                const dstComponentCount = getFormatComponentCount(dstAttribLayout.format);
-                const dstOffs: number = dstAttribLayout.bufferOffset;
+                const dstComponentCount = getFormatComponentCount(dstAttribLayout!.format);
+                const dstOffs: number = dstAttribLayout!.bufferOffset;
                 assert(dstComponentCount === 4);
 
                 const temp = `_T${vtxAttrib}`;

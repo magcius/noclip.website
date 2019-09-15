@@ -11,7 +11,7 @@ import { compileVtxLoader, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
 import AnimationController from '../AnimationController';
-import { ColorKind } from '../gx/gx_render';
+import { ColorKind, GXViewerTexture } from '../gx/gx_render';
 import { AABB } from '../Geometry';
 import { getPointHermite } from '../Spline';
 import { computeModelMatrixSRT } from '../MathHelpers';
@@ -51,7 +51,7 @@ export class JSystemFileReaderHelper {
         this.offs = 0x20;
     }
 
-    public maybeNextChunk(maybeChunkId: string, sizeBias: number = 0): ArrayBufferSlice {
+    public maybeNextChunk(maybeChunkId: string, sizeBias: number = 0): ArrayBufferSlice | null {
         const chunkStart = this.offs;
         const chunkId = readString(this.buffer, chunkStart + 0x00, 4);
         const chunkSize = this.view.getUint32(chunkStart + 0x04) + sizeBias;
@@ -588,7 +588,7 @@ export interface MaterialEntry {
     translucent: boolean;
     textureIndexes: number[];
     gxMaterial: GX_Material.GXMaterial;
-    texMatrices: TexMtx[];
+    texMatrices: (TexMtx | null)[];
     indTexMatrices: Float32Array[];
     colorMatRegs: Color[];
     colorAmbRegs: Color[];
@@ -693,7 +693,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         const depthModeIndex = view.getUint8(materialEntryIdx + 0x06);
         // unk
 
-        const colorMatRegs: Color[] = [null, null];
+        const colorMatRegs: Color[] = [];
         for (let j = 0; j < 2; j++) {
             const matColorIndex = view.getUint16(materialEntryIdx + 0x08 + j * 0x02);
             const matColorOffs = materialColorTableOffs + matColorIndex * 0x04;
@@ -701,7 +701,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             colorMatRegs[j] = matColorReg;
         }
 
-        const colorAmbRegs: Color[] = [null, null];
+        const colorAmbRegs: Color[] = [];
         for (let j = 0; j < 2; j++) {
             const ambColorIndex = view.getUint16(materialEntryIdx + 0x14 + j * 0x02);
             const ambColorOffs = ambientColorTableOffs + ambColorIndex * 0x04;
@@ -749,11 +749,11 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             texGens[j] = texGen;
         }
 
-        const texMatrices: TexMtx[] = [];
+        const texMatrices: (TexMtx | null)[] = [];
         for (let j = 0; j < 10; j++) {
             const texMtxIndex = view.getInt16(materialEntryIdx + 0x48 + j * 0x02);
-            if (texMtxIndex >= 0)
-                texMatrices[j] = readTexMatrix(texMtxTableOffs, j, texMtxIndex);
+            if (texMtxTableOffs > 0 && texMtxIndex >= 0)
+                texMatrices[j] = readTexMatrix(texMtxTableOffs, texMtxIndex);
             else
                 texMatrices[j] = null;
         }
@@ -761,13 +761,13 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         assert(texMatrices[8] === null);
         assert(texMatrices[9] === null);
 
-        const postTexMatrices: TexMtx[] = [];
+        const postTexMatrices: (TexMtx | null)[] = [];
         for (let j = 0; j < 20; j++) {
-            postTexMatrices[j] = null;
             const postTexMtxIndex = view.getInt16(materialEntryIdx + 0x5C + j * 0x02);
-            if (postTexMtxIndex < 0)
-                continue;
-            postTexMatrices[j] = readTexMatrix(postTexMtxTableOffs, j, postTexMtxIndex);
+            if (postTexMtxTableOffs > 0 && postTexMtxIndex >= 0)
+                postTexMatrices[j] = readTexMatrix(postTexMtxTableOffs, postTexMtxIndex);
+            else
+                postTexMatrices[j] = null;
         }
 
         const colorConstants: Color[] = [];
@@ -1011,9 +1011,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         return colorChan;
     }
 
-    function readTexMatrix(tableOffs: number, j: number, texMtxIndex: number): TexMtx {
-        if (tableOffs === 0)
-            return null;
+    function readTexMatrix(tableOffs: number, texMtxIndex: number): TexMtx {
         const texMtxOffs = tableOffs + texMtxIndex * 0x64;
         const projection: TexMtxProjection = view.getUint8(texMtxOffs + 0x00);
         const info = view.getUint8(texMtxOffs + 0x01);
@@ -1122,8 +1120,9 @@ function readTEX1Chunk(buffer: ArrayBufferSlice): TEX1 {
         let textureDataIndex: number = -1;
 
         // Try to find existing texture data.
-        if (btiTexture.data !== null) {
-            textureDataIndex = textureDatas.findIndex((tex) => tex.data && tex.data.byteOffset === btiTexture.data.byteOffset);
+        const textureData = btiTexture.data;
+        if (textureData) {
+            textureDataIndex = textureDatas.findIndex((tex) => tex.data && tex.data.byteOffset === textureData.byteOffset);
         }
 
         if (textureDataIndex < 0) {
@@ -1240,7 +1239,7 @@ export class BMT {
         return bmt;
     }
 
-    public mat3: MAT3;
+    public mat3: MAT3 | null;
     public tex1: TEX1;
 }
 //#endregion
@@ -1791,8 +1790,8 @@ export function calcJointMatrix(dst: mat4, jointIndex: number, bmd: BMD, ank1Ani
         entry = ank1Animator.ank1.jointAnimationEntries[jointIndex] || null;
 
     if (entry !== null) {
-        const frame = ank1Animator.animationController.getTimeInFrames();
-        const animFrame = getAnimFrame(ank1Animator.ank1, frame);
+        const frame = ank1Animator!.animationController.getTimeInFrames();
+        const animFrame = getAnimFrame(ank1Animator!.ank1, frame);
 
         scaleX = sampleAnimationData(entry.scaleX, animFrame);
         scaleY = sampleAnimationData(entry.scaleY, animFrame);
@@ -1907,7 +1906,7 @@ export class TPT1Animator {
     }
 }
 
-export function bindTPT1Animator(animationController: AnimationController, tpt1: TPT1, materialName: string, texMap: GX.TexMapID): TPT1Animator {
+export function bindTPT1Animator(animationController: AnimationController, tpt1: TPT1, materialName: string, texMap: GX.TexMapID): TPT1Animator | null {
     // TODO(jstpierre): How does TPT1 determine the TexMap used?
     if (texMap !== 0)
         return null;

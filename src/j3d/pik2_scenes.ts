@@ -37,7 +37,7 @@ class Pik2SceneDesc implements Viewer.SceneDesc {
     public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
         const path = `j3d/pik2/${this.path}`;
-        return dataFetcher.fetchData(path).then((result: ArrayBufferSlice) => {
+        return dataFetcher.fetchData(path).then((result) => {
             return Yaz0.decompress(result);
         }).then((buffer: ArrayBufferSlice) => {
             const rarc = RARC.parse(buffer);

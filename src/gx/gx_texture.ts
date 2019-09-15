@@ -28,10 +28,10 @@ export interface Texture {
     format: GX.TexFormat;
     width: number;
     height: number;
-    data: ArrayBufferSlice;
+    data: ArrayBufferSlice | null;
     mipCount: number;
     paletteFormat?: GX.TexPalette;
-    paletteData?: ArrayBufferSlice;
+    paletteData?: ArrayBufferSlice | null;
 }
 
 export interface DecodedTexture {
@@ -134,7 +134,7 @@ const _wasmInstance = gx_texture_asInstance();
 
 function decode_Wasm(wasmInstance: gx_texture_asExports, texture: Texture, decoder: TextureDecoder, scratchSize: number = 0): DecodedTexture {
     const dstSize = texture.width * texture.height * 4;
-    const srcSize = texture.data.byteLength;
+    const srcSize = texture.data!.byteLength;
 
     const pScratch = 0;
     const pDst = align(pScratch + scratchSize, 0x10);
@@ -145,7 +145,7 @@ function decode_Wasm(wasmInstance: gx_texture_asExports, texture: Texture, decod
     const heap = wasmMemory.resize(heapSize);
 
     // Copy src buffer.
-    heap.set(texture.data.createTypedArray(Uint8Array), pSrc);
+    heap.set(texture.data!.createTypedArray(Uint8Array), pSrc);
 
     decoder(pScratch, pDst, pSrc, texture.width, texture.height);
 
@@ -258,7 +258,7 @@ function decode_Tiled(texture: Texture, bw: number, bh: number, decoder: (pixels
 
 function decode_C4(texture: Texture): DecodedTexture {
     if (!texture.paletteData || texture.paletteFormat === undefined) return decode_Dummy(texture);
-    const view = texture.data.createDataView();
+    const view = texture.data!.createDataView();
     const paletteData: Uint8Array = decodePalette(texture.paletteFormat, texture.paletteData);
     let srcOffs = 0;
     return decode_Tiled(texture, 8, 8, (dst: Uint8Array, dstOffs: number): void => {
@@ -273,8 +273,8 @@ function decode_C4(texture: Texture): DecodedTexture {
 }
 
 function decode_C8(texture: Texture): DecodedTexture {
-    if (!texture.paletteData) return decode_Dummy(texture);
-    const view = texture.data.createDataView();
+    if (!texture.paletteData || texture.paletteFormat === undefined) return decode_Dummy(texture);
+    const view = texture.data!.createDataView();
     const paletteData: Uint8Array = decodePalette(texture.paletteFormat, texture.paletteData);
     let srcOffs = 0;
     return decode_Tiled(texture, 8, 4, (dst: Uint8Array, dstOffs: number): void => {
@@ -288,8 +288,8 @@ function decode_C8(texture: Texture): DecodedTexture {
 }
 
 function decode_C14X2(texture: Texture): DecodedTexture {
-    if (!texture.paletteData) return decode_Dummy(texture);
-    const view = texture.data.createDataView();
+    if (!texture.paletteData || texture.paletteFormat === undefined) return decode_Dummy(texture);
+    const view = texture.data!.createDataView();
     const paletteData: Uint8Array = decodePalette(texture.paletteFormat, texture.paletteData);
     let srcOffs = 0;
     return decode_Tiled(texture, 4, 4, (dst: Uint8Array, dstOffs: number): void => {

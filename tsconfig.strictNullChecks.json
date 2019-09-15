@@ -1,26 +1,38 @@
 {
     "compilerOptions": {
-        "target": "es6",
+        "target": "es2017",
         "alwaysStrict": true,
         "downlevelIteration": true,
         "noImplicitReturns": true,
         "noImplicitThis": true,
         "noImplicitAny": true,
+        "strictFunctionTypes": true,
         "strictNullChecks": true,
-        "noEmit": true,
         "lib": [
             "es2015",
             "es2015.promise",
             "es2016.array.include",
             "dom"
         ],
+        "noEmit": true
     },
     "include": [
+        // Common code
         "./src/gfx/",
+        "./src/Common/",
+        "./src/Common/CTR_H3D",
+        "./src/Common/N64",
+        "./src/Common/PS2",
+        "./src/compression/",
+        "./src/Program",
+        "./src/CodeEditor",
+
+        "./src/bk/",
+        "./src/dksiv/",
+        "./src/j3d/"
     ],
     "exclude": [
         "**/assembly/*.ts",
-        "**/worker/*.ts",
-        "**/tools/*.ts",
+        "**/tools/*.ts"
     ]
 }

@@ -30,8 +30,8 @@ class DataFetcherRequest {
     public ondone: (() => void) | null = null;
     public onprogress: (() => void) | null = null;
 
-    public promise: Promise<NamedArrayBufferSlice | null>;
-    private resolve: (slice: NamedArrayBufferSlice | null) => void;
+    public promise: Promise<NamedArrayBufferSlice>;
+    private resolve: (slice: NamedArrayBufferSlice) => void;
     private reject: (e: Error | null) => void;
     private retriesLeft = 2;
 
@@ -51,15 +51,17 @@ class DataFetcherRequest {
     }
 
     private isConsidered404Error(): boolean {
-        if (this.request.status === 404)
+        const request = this.request!;
+
+        if (request.status === 404)
             return true;
 
         // In production environments, 404s sometimes show up as CORS errors, which come back as status 0.
-        if (this.request.status === 0)
+        if (request.status === 0)
             return true;
 
         // This check is for development purposes, as Parcel will return the index page for non-existent data.
-        const contentType = this.request.getResponseHeader('Content-Type');
+        const contentType = request.getResponseHeader('Content-Type');
         if (contentType !== null && contentType.startsWith('text/html'))
             return true;
 
@@ -67,6 +69,8 @@ class DataFetcherRequest {
     }
 
     private resolveError(): boolean {
+        const request = this.request!;
+
         const allow404 = !!(this.flags & DataFetcherFlags.ALLOW_404);
         if (allow404 && this.isConsidered404Error()) {
             const emptySlice = new ArrayBufferSlice(new ArrayBuffer(0)) as NamedArrayBufferSlice;
@@ -76,7 +80,7 @@ class DataFetcherRequest {
             return true;
         }
 
-        if (this.request.status === 200)
+        if (request.status === 200)
             return false;
 
         if (this.retriesLeft > 0) {
@@ -85,7 +89,7 @@ class DataFetcherRequest {
             this.start();
             return true;
         } else {
-            console.error(`DataFetcherRequest: Received non-success status code ${this.request.status} when fetching file ${this.url}.`);
+            console.error(`DataFetcherRequest: Received non-success status code ${request.status} when fetching file ${this.url}.`);
             this.reject(null);
             this.done();
             return true;
@@ -100,7 +104,7 @@ class DataFetcherRequest {
         this.request.onload = (e) => {
             const hadError = this.resolveError();
             if (!hadError) {
-                const buffer: ArrayBuffer = this.request.response;
+                const buffer: ArrayBuffer = this.request!.response;
                 const slice = new ArrayBufferSlice(buffer) as NamedArrayBufferSlice;
                 slice.name = this.url;
                 this.resolve(slice);
@@ -128,6 +132,7 @@ class DataFetcherRequest {
             this.request.onerror = null;
             this.request.onprogress = null;
         }
+
         this.request = null;
     }
 
@@ -176,7 +181,7 @@ export class DataFetcher {
         }
     }
 
-    public fetchURL(url: string, flags: DataFetcherFlags = 0): Promise<NamedArrayBufferSlice | null> {
+    public fetchURL(url: string, flags: DataFetcherFlags = 0): Promise<NamedArrayBufferSlice> {
         if (this.aborted)
             throw new Error("Tried to fetch new data while aborted; should not happen");
 
@@ -195,7 +200,7 @@ export class DataFetcher {
         return request.promise!;
     }
 
-    public fetchData(path: string, flags: DataFetcherFlags = 0): Promise<NamedArrayBufferSlice | null> {
+    public fetchData(path: string, flags: DataFetcherFlags = 0): Promise<NamedArrayBufferSlice> {
         const url = getDataURLForPath(path);
         return this.fetchURL(url, flags);
     }

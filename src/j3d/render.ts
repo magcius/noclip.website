@@ -12,7 +12,7 @@ import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../gx/gx_render';
 import { computeViewMatrix, Camera, computeViewSpaceDepthFromWorldSpaceAABB, texProjCamera } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
 import AnimationController from '../AnimationController';
-import { nArray, assert } from '../util';
+import { nArray, assert, assertExists } from '../util';
 import { AABB } from '../Geometry';
 import { GfxDevice, GfxSampler, GfxTexture } from '../gfx/platform/GfxPlatform';
 import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
@@ -146,7 +146,7 @@ export class ShapeInstance {
             return;
 
         const shape = this.shapeData.shape;
-        const materialJointMatrix = shapeInstanceState.jointToWorldMatrixArray[materialInstance.materialData.jointData.jointIndex];
+        const materialJointMatrix = shapeInstanceState.jointToWorldMatrixArray[materialInstance.materialData.jointData!.jointIndex];
 
         packetParams.clear();
 
@@ -309,7 +309,7 @@ export class MaterialInstance {
     public visible: boolean = true;
     public sortKey: number = 0;
 
-    constructor(public materialData: MaterialData, materialHacks: GX_Material.GXMaterialHacks) {
+    constructor(public materialData: MaterialData, materialHacks?: GX_Material.GXMaterialHacks) {
         const material = this.materialData.material;
         this.materialHelper = new GXMaterialHelperGfx(material.gxMaterial, materialHacks);
         this.name = material.name;
@@ -372,7 +372,7 @@ export class MaterialInstance {
 
     private calcColor(dst: Color, i: ColorKind, materialInstanceState: MaterialInstanceState, fallbackColor: Color, clampTo8Bit: boolean): void {
         if (this.trk1Animators[i]) {
-            this.trk1Animators[i].calcColor(dst);
+            this.trk1Animators[i]!.calcColor(dst);
         } else if (materialInstanceState.colorOverrides[i] !== undefined) {
             if (materialInstanceState.alphaOverrides[i])
                 colorCopy(dst, materialInstanceState.colorOverrides[i]);
@@ -460,10 +460,10 @@ export class MaterialInstance {
     }
 
     public calcTexSRT(dst: mat4, i: number): void {
-        const texMtx = this.materialData.material.texMatrices[i];
+        const texMtx = this.materialData.material.texMatrices[i]!;
         const isMaya = !!(texMtx.info >>> 7);
         if (this.ttk1Animators[i]) {
-            this.ttk1Animators[i].calcTexMtx(dst, isMaya);
+            this.ttk1Animators[i]!.calcTexMtx(dst, isMaya);
         } else {
             mat4.copy(dst, texMtx.matrix);
         }
@@ -669,8 +669,9 @@ export class MaterialInstance {
             m.reset();
 
             let samplerIndex: number;
-            if (this.tpt1Animators[i])
-                samplerIndex = this.tpt1Animators[i].calcTextureIndex();
+            const animator = this.tpt1Animators[i];
+            if (animator)
+                samplerIndex = animator.calcTextureIndex();
             else
                 samplerIndex = material.textureIndexes[i];
 
@@ -818,7 +819,7 @@ export class TEX1Data {
             device.destroySampler(this.gfxSamplers[i]);
         for (let i = 0; i < this.gfxTextures.length; i++)
             if (this.gfxTextures[i] !== null)
-                device.destroyTexture(this.gfxTextures[i]);
+                device.destroyTexture(this.gfxTextures[i]!);
     }
 }
 
@@ -1075,12 +1076,12 @@ export class BMDModelInstance {
     }
 
     /**
-     * Sets whether a certain material with name {@param name} should be shown ({@param v} is
+     * Sets whether a certain material with name {@param materialName} should be shown ({@param v} is
      * {@constant true}), or hidden ({@param v} is {@constant false}). All materials are shown
      * by default.
      */
-    public setMaterialVisible(name: string, v: boolean): void {
-        const materialInstance = this.materialInstances.find((matInst) => matInst.name === name);
+    public setMaterialVisible(materialName: string, v: boolean): void {
+        const materialInstance = assertExists(this.materialInstances.find((matInst) => matInst.name === materialName));
         materialInstance.visible = v;
     }
 
@@ -1093,7 +1094,8 @@ export class BMDModelInstance {
      * eyes so it can draw them on top of the hair.
      */
     public setMaterialColorWriteEnabled(materialName: string, colorWrite: boolean): void {
-        this.materialInstances.find((m) => m.name === materialName).setColorWriteEnabled(colorWrite);
+        const materialInstance = assertExists(this.materialInstances.find((matInst) => matInst.name === materialName));
+        materialInstance.setColorWriteEnabled(colorWrite);
     }
 
     /**
@@ -1111,7 +1113,10 @@ export class BMDModelInstance {
      * To unset a color override, pass {@constant undefined} as for {@param color}.
      */
     public setColorOverride(colorKind: ColorKind, color: Color | undefined, useAlpha: boolean = false): void {
-        this.materialInstanceState.colorOverrides[colorKind] = color;
+        if (color !== undefined)
+            this.materialInstanceState.colorOverrides[colorKind] = color;
+        else
+            delete this.materialInstanceState.colorOverrides[colorKind];
         this.materialInstanceState.alphaOverrides[colorKind] = useAlpha;
     }
 

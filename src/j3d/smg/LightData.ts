@@ -9,6 +9,7 @@ import { LightType } from "./DrawBuffer";
 import { SceneObjHolder } from "./smg_scenes";
 import { ColorKind } from "../../gx/gx_render";
 import { LiveActor } from "./LiveActor";
+import { assertExists } from "../../util";
 
 function getValueColor(color: Color, infoIter: JMapInfoIter, prefix: string): void {
     const colorR = infoIter.getValueNumber(`${prefix}R`, 0) / 0xFF;
@@ -59,7 +60,7 @@ export class ActorLightInfo {
         this.Light0 = new LightInfo(infoIter, `${prefix}Light0`);
         this.Light1 = new LightInfo(infoIter, `${prefix}Light1`);
         getValueColor(this.Ambient, infoIter, `${prefix}Ambient`);
-        this.Alpha2 = infoIter.getValueNumber(`${prefix}Alpha2`) / 0xFF;
+        this.Alpha2 = infoIter.getValueNumber(`${prefix}Alpha2`, 0) / 0xFF;
     }
 
     public setOnModelInstance(modelInstance: BMDModelInstance, camera: Camera, setAmbient: boolean): void {
@@ -87,8 +88,8 @@ export class AreaLightInfo {
     public Planet: ActorLightInfo;
 
     constructor(infoIter: JMapInfoIter) {
-        this.AreaLightName = infoIter.getValueString('AreaLightName');
-        this.Interpolate = infoIter.getValueNumber('Interpolate');
+        this.AreaLightName = assertExists(infoIter.getValueString('AreaLightName'));
+        this.Interpolate = assertExists(infoIter.getValueNumber('Interpolate'));
         this.Player = new ActorLightInfo(infoIter, 'Player');
         this.Strong = new ActorLightInfo(infoIter, 'Strong');
         this.Weak = new ActorLightInfo(infoIter, 'Weak');
@@ -151,14 +152,14 @@ class LightZoneInfo {
     constructor(public zoneId: number, public zoneName: string, infoIter: JMapInfoIter) {
         for (let i = 0; i < infoIter.getNumRecords(); i++) {
             infoIter.setRecord(i);
-            const lightID = infoIter.getValueNumber('LightID');
-            const areaLightName = infoIter.getValueString('AreaLightName');
+            const lightID = assertExists(infoIter.getValueNumber('LightID'));
+            const areaLightName = assertExists(infoIter.getValueString('AreaLightName'));
             this.lightIDToAreaLightName.set(lightID, areaLightName);
         }
     }
 
     public getAreaLightName(lightID: number): string {
-        return this.lightIDToAreaLightName.get(lightID);
+        return this.lightIDToAreaLightName.get(lightID)!;
     }
 }
 
@@ -201,6 +202,6 @@ export class LightDataHolder {
 
     public findAreaLightFromZoneAndId(sceneObjHolder: SceneObjHolder, zoneId: number, lightId: number): AreaLightInfo {
         const areaLightName = this.getAreaLightName(sceneObjHolder, zoneId, lightId);
-        return this.findAreaLight(areaLightName);
+        return assertExists(this.findAreaLight(areaLightName));
     }
 }

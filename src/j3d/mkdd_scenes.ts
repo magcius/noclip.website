@@ -64,9 +64,8 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
         this.id = this.path;
     }
 
-    private spawnBMD(device: GfxDevice, renderer: BasicRenderer, rarc: RARC.RARC, basename: string, modelMatrix: mat4 = null): BMDModelInstance {
-        const bmdFileData = rarc.findFileData(`${basename}.bmd`);
-        assertExists(bmdFileData);
+    private spawnBMD(device: GfxDevice, renderer: BasicRenderer, rarc: RARC.RARC, basename: string, modelMatrix: mat4 | null = null): BMDModelInstance {
+        const bmdFileData = assertExists(rarc.findFileData(`${basename}.bmd`));
         const bmdModel = new BMDModel(device, renderer.renderHelper.renderInstManager.gfxRenderCache, BMD.parse(bmdFileData));
 
         const modelInstance = new BMDModelInstance(bmdModel);
@@ -93,10 +92,10 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
     public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
         const path = `j3d/mkdd/Course/${this.path}`;
-        return dataFetcher.fetchData(path).then((buffer: ArrayBufferSlice) => {
+        return dataFetcher.fetchData(path).then((buffer) => {
             const rarc = RARC.parse(buffer);
             // Find course name.
-            const bolFile = rarc.files.find((f) => f.name.endsWith('_course.bol'));
+            const bolFile = assertExists(rarc.files.find((f) => f.name.endsWith('_course.bol')));
             const courseName = bolFile.name.replace('_course.bol', '');
 
             const renderer = new BasicRenderer(device);
@@ -106,13 +105,12 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
 
             renderer.addModelInstance(this.spawnBMD(device, renderer, rarc, `${courseName}_course`));
 
-            const spawnObject = (obj: Obj, basename: string, animName: string = null) => {
+            const spawnObject = (obj: Obj, basename: string, animName: string | null = null) => {
                 const scene = this.spawnBMD(device, renderer, rarc, basename, obj.modelMatrix);
                 renderer.addModelInstance(scene);
                 let bckFile;
                 if (animName !== null) {
-                    bckFile = rarc.findFile(animName);
-                    assertExists(bckFile);
+                    bckFile = assertExists(rarc.findFile(animName));
                 } else {
                     bckFile = rarc.findFile(`${basename}_wait.bck`);
                 }

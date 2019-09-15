@@ -203,6 +203,8 @@ export function getEntriesWithField<T extends BcsvValue>(bcsv: Bcsv, name: strin
     return { fields, records };
 }
 
+export function getField<T extends BcsvValue>(bcsv: Bcsv, record: BcsvRecord, name: string): T | null;
+export function getField<T extends BcsvValue>(bcsv: Bcsv, record: BcsvRecord, name: string, fallback: T): T;
 export function getField<T extends BcsvValue>(bcsv: Bcsv, record: BcsvRecord, name: string, fallback: T | null = null): T | null {
     const index = getFieldIndexFromName(bcsv, name);
     if (index === -1)

@@ -944,7 +944,7 @@ export class JPAEmitterManager {
         if (this.deadEmitterPool.length === 0)
             return null;
 
-        const emitter = this.deadEmitterPool.pop();
+        const emitter = assertExists(this.deadEmitterPool.pop());
         emitter.init(resData);
         assert(emitter.aliveParticlesBase.length === 0);
         this.aliveEmitters.push(emitter);
@@ -1126,23 +1126,25 @@ function calcTexIdx(workData: JPAEmitterWorkData, tick: number, time: number, ra
     const isEnableTextureAnm = !!(bsp1.texFlags & 0x00000001);
     assert(isEnableTextureAnm);
 
+    const texIdxAnimData = assertExists(bsp1.texIdxAnimData);
+
     const calcTexIdxType: CalcIdxType = (bsp1.texFlags >>> 2) & 0x07;
     let anmIdx: number;
     if (calcTexIdxType === CalcIdxType.Normal) {
-        anmIdx = Math.min(bsp1.texIdxAnimData.length - 1, tick);
+        anmIdx = Math.min(texIdxAnimData.length - 1, tick);
     } else if (calcTexIdxType === CalcIdxType.Repeat) {
-        anmIdx = ((tick | 0) + randomPhase) % bsp1.texIdxAnimData.length;
+        anmIdx = ((tick | 0) + randomPhase) % texIdxAnimData.length;
     } else if (calcTexIdxType === CalcIdxType.Reverse) {
-        anmIdx = mirroredRepeat((tick | 0) + randomPhase, bsp1.texIdxAnimData.length - 1);
+        anmIdx = mirroredRepeat((tick | 0) + randomPhase, texIdxAnimData.length - 1);
     } else if (calcTexIdxType === CalcIdxType.Merge) {
-        anmIdx = (((time * bsp1.texIdxAnimData.length) | 0) + randomPhase) % bsp1.texIdxAnimData.length;
+        anmIdx = (((time * texIdxAnimData.length) | 0) + randomPhase) % texIdxAnimData.length;
     } else if (calcTexIdxType === CalcIdxType.Random) {
-        anmIdx = randomPhase % bsp1.texIdxAnimData.length;
+        anmIdx = randomPhase % texIdxAnimData.length;
     } else {
         throw "whoops";
     }
 
-    return bsp1.texIdxAnimData[anmIdx];
+    return texIdxAnimData[anmIdx];
 }
 
 function calcColor(dstPrm: Color, dstEnv: Color, workData: JPAEmitterWorkData, tick: number, time: number, randomPhase: number): void {
@@ -1167,10 +1169,14 @@ function calcColor(dstPrm: Color, dstEnv: Color, workData: JPAEmitterWorkData, t
     const calcPrmColor = !!(bsp1.colorFlags & 0x02);
     const calcEnvColor = !!(bsp1.colorFlags & 0x08);
 
-    if (calcPrmColor)
-        colorCopy(dstPrm, bsp1.colorPrmAnimData[anmIdx]);
-    if (calcEnvColor)
-        colorCopy(dstEnv, bsp1.colorEnvAnimData[anmIdx]);
+    if (calcPrmColor) {
+        const colorPrmAnimData = assertExists(bsp1.colorPrmAnimData);
+        colorCopy(dstPrm, colorPrmAnimData[anmIdx]);
+    }
+    if (calcEnvColor) {
+        const colorEnvAnimData = assertExists(bsp1.colorEnvAnimData);
+        colorCopy(dstEnv, colorEnvAnimData[anmIdx]);
+    }
 }
 
 function isNearZero(v: vec3, min: number): boolean {
@@ -1311,9 +1317,9 @@ export class JPABaseEmitter {
 
     public createChild(parent: JPABaseParticle): void {
         if (this.emitterManager.deadParticlePool.length === 0)
-            return null;
+            return;
 
-        const particle = this.emitterManager.deadParticlePool.pop();
+        const particle = this.emitterManager.deadParticlePool.pop()!;
         this.aliveParticlesChild.push(particle);
         particle.init_c(this.emitterManager.workData, parent);
     }
@@ -1511,7 +1517,7 @@ export class JPABaseEmitter {
         if (this.emitterManager.deadParticlePool.length === 0)
             return null;
 
-        const particle = this.emitterManager.deadParticlePool.pop();
+        const particle = this.emitterManager.deadParticlePool.pop()!;
         this.aliveParticlesBase.push(particle);
         this.calcVolume(this.emitterManager.workData);
         particle.init_p(this.emitterManager.workData);
@@ -1935,7 +1941,7 @@ export class JPABaseEmitter {
 
     private drawC(device: GfxDevice, renderInstManager: GfxRenderInstManager, workData: JPAEmitterWorkData): void {
         const bsp1 = this.resData.res.bsp1;
-        const ssp1 = this.resData.res.ssp1;
+        const ssp1 = this.resData.res.ssp1!;
 
         const materialParams = workData.materialParams;
 
@@ -2308,7 +2314,7 @@ export class JPABaseParticle {
     public init_c(workData: JPAEmitterWorkData, parent: JPABaseParticle): void {
         const baseEmitter = workData.baseEmitter;
         const bem1 = baseEmitter.resData.res.bem1;
-        const ssp1 = baseEmitter.resData.res.ssp1;
+        const ssp1 = baseEmitter.resData.res.ssp1!;
 
         this.tick = -1;
         this.time = 0;
@@ -2664,7 +2670,7 @@ export class JPABaseParticle {
         if (!workData.baseEmitter.resData.supportedChild)
             return false;
 
-        const ssp1 = workData.baseEmitter.resData.res.ssp1;
+        const ssp1 = workData.baseEmitter.resData.res.ssp1!;
 
         const timing = this.tick - ((this.lifeTime - 1) * ssp1.timing);
         if (timing < 0)
@@ -2812,7 +2818,7 @@ export class JPABaseParticle {
             return false;
 
         const res = workData.baseEmitter.resData.res;
-        const ssp1 = res.ssp1;
+        const ssp1 = res.ssp1!;
 
         this.time = this.tick / this.lifeTime;
 
@@ -3226,7 +3232,7 @@ export class JPABaseParticle {
     }
 
     public drawC(device: GfxDevice, renderInstManager: GfxRenderInstManager, workData: JPAEmitterWorkData, materialParams: MaterialParams): void {
-        const ssp1 = workData.baseEmitter.resData.res.ssp1;
+        const ssp1 = workData.baseEmitter.resData.res.ssp1!;
 
         // mpDrawParticleChildFuncList
 
@@ -3536,9 +3542,8 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             if (shapeType === ShapeType.DirectionCross || shapeType === ShapeType.RotationCross)
                 planeType = PlaneType.X;
 
-            assertExists(bsp1);
             const isEnableDrawParent = !!(flags & 0x00080000);
-            bsp1.stopDrawParent = !isEnableDrawParent;
+            assertExists(bsp1).stopDrawParent = !isEnableDrawParent;
     
             const posRndm = view.getFloat32(dataBegin + 0x04);
             const baseVel = view.getFloat32(dataBegin + 0x08);

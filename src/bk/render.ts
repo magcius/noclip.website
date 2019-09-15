@@ -90,6 +90,8 @@ void main() {
             texFiltStr = 'Average';
         else if (textFilt === TextFilt.G_TF_BILERP)
             texFiltStr = 'Bilerp';
+        else
+            throw "whoops";
 
         return `
 vec4 Texture2D_N64_Point(sampler2D t_Texture, vec2 t_TexCoord) {
@@ -145,7 +147,7 @@ export function textureToCanvas(texture: Texture): Viewer.Texture {
     canvas.height = texture.height;
     canvas.title = texture.name;
 
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d")!;
     const imgData = ctx.createImageData(canvas.width, canvas.height);
     imgData.data.set(texture.pixels);
     ctx.putImageData(imgData, 0, 0);

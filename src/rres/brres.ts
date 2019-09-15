@@ -357,7 +357,7 @@ export interface MDL0_TexSrtEntry {
 
 interface MDL0_MaterialSamplerEntry {
     name: string;
-    namePalette: string;
+    namePalette: string | null;
     wrapS: GX.WrapMode;
     wrapT: GX.WrapMode;
     minFilter: GX.TexFilter;
@@ -456,6 +456,8 @@ export function parseMaterialEntry(r: DisplayListRegisters, index: number, name:
         } else if (tgType === TexGenType.COLOR_STRGBC1) {
             texGenType = GX.TexGenType.SRTG;
             texGenSrc = GX.TexGenSrc.COLOR1;
+        } else {
+            throw "whoops";
         }
 
         const matrix: GX.TexGenMatrix = GX.TexGenMatrix.IDENTITY;
@@ -1179,7 +1181,7 @@ export interface MDL0_NodeEntry {
     billboardMode: BillboardMode;
     billboardRefNodeId: number;
     modelMatrix: mat4;
-    bbox: AABB;
+    bbox: AABB | null;
     visible: boolean;
     parentNodeId: number;
     forwardBindPose: mat4;
@@ -1417,8 +1419,7 @@ interface MDL0_SceneGraph {
 }
 
 function parseMDL0_SceneGraph(buffer: ArrayBufferSlice, byteCodeResDic: ResDicEntry[]): MDL0_SceneGraph {
-    const nodeTreeResDicEntry = byteCodeResDic.find((entry) => entry.name === "NodeTree");
-    assert(nodeTreeResDicEntry !== null);
+    const nodeTreeResDicEntry = assertExists(byteCodeResDic.find((entry) => entry.name === "NodeTree"));
     const nodeTreeBuffer = buffer.subarray(nodeTreeResDicEntry.offs);
     const nodeTreeOps = parseMDL0_NodeTreeBytecode(nodeTreeBuffer);
 
@@ -1888,11 +1889,11 @@ export interface SRT0 extends AnimationBase {
 }
 
 function findAnimationData_SRT0(srt0: SRT0, materialName: string, texMtxIndex: number): SRT0_TexData | null {
-    const matData: SRT0_MatData = srt0.matAnimations.find((m) => m.materialName === materialName);
+    const matData = srt0.matAnimations.find((m) => m.materialName === materialName);
     if (matData === undefined)
         return null;
 
-    const texData: SRT0_TexData = matData.texAnimations[texMtxIndex];
+    const texData = matData.texAnimations[texMtxIndex];
     if (texData === undefined)
         return null;
 
@@ -2083,11 +2084,11 @@ export interface PAT0 extends AnimationBase {
 }
 
 function findAnimationData_PAT0(pat0: PAT0, materialName: string, texMapID: GX.TexMapID): PAT0_TexData | null {
-    const matData: PAT0_MatData = pat0.matAnimations.find((m) => m.materialName === materialName);
+    const matData = pat0.matAnimations.find((m) => m.materialName === materialName);
     if (matData === undefined)
         return null;
 
-    const texData: PAT0_TexData = matData.texAnimations[texMapID];
+    const texData = matData.texAnimations[texMapID];
     if (texData === undefined)
         return null;
 
@@ -2277,11 +2278,11 @@ export interface CLR0 extends AnimationBase {
 }
 
 function findAnimationData_CLR0(clr0: CLR0, materialName: string, color: AnimatableColor): CLR0_ColorData | null {
-    const matData: CLR0_MatData = clr0.matAnimations.find((m) => m.materialName === materialName);
+    const matData = clr0.matAnimations.find((m) => m.materialName === materialName);
     if (matData === undefined)
         return null;
 
-    const clrData: CLR0_ColorData = matData.clrAnimations[color];
+    const clrData = matData.clrAnimations[color];
     if (clrData === undefined)
         return null;
 
@@ -2465,8 +2466,7 @@ function parseCHR0_NodeData(buffer: ArrayBufferSlice, numKeyframes: number): CHR
             const animationTrackOffs = view.getUint32(animationTableIdx);
             animationTrack = parseAnimationTrackC32(buffer.slice(animationTrackOffs), numKeyframes);
         } else {
-            console.warn("Unsupported animation track format", trackFormat);
-            animationTrack = null;
+            throw new Error(`Unsupported animation track format ${trackFormat}`);
         }
         animationTableIdx += 0x04;
         return animationTrack;
@@ -2554,7 +2554,7 @@ export class CHR0NodesAnimator {
     constructor(public animationController: AnimationController, public chr0: CHR0, private nodeData: CHR0_NodeData[]) {
     }
 
-    private vizNodeId: number = undefined;
+    private vizNodeId: number | undefined = undefined;
     private vizGraph: Graph;
     public viz(nodeId: number) {
         this.vizNodeId = nodeId;
@@ -2575,21 +2575,21 @@ export class CHR0NodesAnimator {
         if (nodeData.rotationX) {
             this.vizGraph.graphF('red', (t: number) => {
                 const animFrame = getAnimFrame(this.chr0, t + offt);
-                return sampleFloatAnimationTrack(nodeData.rotationX, animFrame);
+                return sampleFloatAnimationTrack(nodeData.rotationX!, animFrame);
             }, maxt);
         }
 
         if (nodeData.rotationY) {
             this.vizGraph.graphF('green', (t: number) => {
                 const animFrame = getAnimFrame(this.chr0, t + offt);
-                return sampleFloatAnimationTrack(nodeData.rotationY, animFrame);
+                return sampleFloatAnimationTrack(nodeData.rotationY!, animFrame);
             }, maxt);
         }
 
         if (nodeData.rotationZ) {
             this.vizGraph.graphF('blue', (t: number) => {
                 const animFrame = getAnimFrame(this.chr0, t + offt);
-                return sampleFloatAnimationTrack(nodeData.rotationZ, animFrame);
+                return sampleFloatAnimationTrack(nodeData.rotationZ!, animFrame);
             }, maxt);
         }
 

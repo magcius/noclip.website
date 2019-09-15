@@ -151,7 +151,7 @@ export class PlanetMapCreator {
     public planetMapDataTable: JMapInfoIter;
 
     constructor(arc: RARC.RARC) {
-        this.planetMapDataTable = createCsvParser(arc.findFileData('PlanetMapDataTable.bcsv'));
+        this.planetMapDataTable = createCsvParser(arc.findFileData('PlanetMapDataTable.bcsv')!);
     }
 
     private setPlanetRecordFromName(objName: string): boolean {

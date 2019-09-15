@@ -51,7 +51,7 @@ export class RARC {
     public findFile(path: string): RARCFile | null {
         path = path.toLowerCase();
         const parts = path.split('/');
-        const filename = parts.pop();
+        const filename = parts.pop()!;
         const dir = this.findDirParts(parts);
         if (dir === null)
             return null;

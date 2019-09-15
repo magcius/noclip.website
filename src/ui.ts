@@ -910,12 +910,12 @@ export class FloatingPanel implements Widget {
     }
 
     public destroy(): void {
-        this.toplevel.parentElement.removeChild(this.toplevel);
+        this.toplevel.parentElement!.removeChild(this.toplevel);
     }
 
     public onMotion(dx: number, dy: number): void {
-        this.toplevel.style.left = (parseFloat(this.toplevel.style.left) + dx) + 'px';
-        this.toplevel.style.top = (parseFloat(this.toplevel.style.top) + dy) + 'px';
+        this.toplevel.style.left = (parseFloat(this.toplevel.style.left!) + dx) + 'px';
+        this.toplevel.style.top = (parseFloat(this.toplevel.style.top!) + dy) + 'px';
     }
 
     public onGrabReleased(): void {
@@ -1068,7 +1068,7 @@ class SceneSelect extends Panel {
                 let visible = false;
                 let explicitlyInvisible = false;
 
-                explicitlyInvisible = item.sceneDescs.length <= 0 || item.hidden;
+                explicitlyInvisible = item.sceneDescs.length <= 0 || !!item.hidden;
                 if (!explicitlyInvisible) {
                     // If header matches, then we are explicitly visible.
                     if (!visible == lastGroupHeaderVisible)
@@ -1611,7 +1611,7 @@ export class Slider implements Widget {
 </div>
 `;
 
-        this.sliderInput = this.toplevel.querySelector('.Slider');
+        this.sliderInput = this.toplevel.querySelector('.Slider') as HTMLInputElement;
         this.sliderInput.oninput = this.onInput.bind(this);
 
         this.elem = this.toplevel;
@@ -1629,7 +1629,7 @@ export class Slider implements Widget {
     }
 
     public setLabel(label: string): void {
-        this.toplevel.querySelector('.Label').textContent = label;
+        this.toplevel.querySelector('.Label')!.textContent = label;
     }
 
     public getValue(): number {
@@ -1688,7 +1688,7 @@ class ViewerSettings extends Panel {
 `;
         this.contents.style.lineHeight = '36px';
 
-        const sliderContainer = this.contents.querySelector('.SliderContainer');
+        const sliderContainer = this.contents.querySelector('.SliderContainer')!;
         this.fovSlider = new Slider();
         this.fovSlider.setLabel("Field of View");
         this.fovSlider.setRange(1, 100);
@@ -1937,7 +1937,7 @@ class About extends Panel {
 <p class="BuildVersion"><a href="${GITHUB_REVISION_URL}">build ${GIT_SHORT_REVISION}</a></p>
 </div>
 `;
-        const faqLink: HTMLAnchorElement = this.contents.querySelector('.FAQLink');
+        const faqLink = this.contents.querySelector('.FAQLink') as HTMLAnchorElement;
         faqLink.onclick = () => {
             if (this.onfaq !== null)
                 this.onfaq();
@@ -2300,7 +2300,7 @@ class TimeScrubber implements Widget {
         this.track.width = w;
         this.track.height = h;
 
-        const ctx = this.track.getContext('2d');
+        const ctx = this.track.getContext('2d')!;
 
         // sceneTime is in milliseconds.
         const sceneTimeSeconds = sceneTime / 1000;
@@ -2605,7 +2605,7 @@ export class UI {
         const slider = new Slider();
         slider.onvalue = (newValue: number) => {
             obj[paramName] = newValue;
-            window.debugObj = obj;
+            (window as any).debugObj = obj;
             update();
         };
         update();
@@ -2646,6 +2646,6 @@ export class UI {
 
         this.bindSlidersRecurse(obj, '', panel);
 
-        window.debugObj = obj;
+        (window as any).debugObj = obj;
     }
 }

@@ -5,15 +5,15 @@ import { LiveActor } from "./LiveActor";
 export type Nerve = number;
 
 export function isFirstStep(actor: LiveActor): boolean {
-    return actor.spine.getNerveStep() === 0;
+    return actor.spine!.getNerveStep() === 0;
 }
 
 export function isGreaterStep(actor: LiveActor, v: number): boolean {
-    return actor.spine.getNerveStep() > v;
+    return actor.spine!.getNerveStep() > v;
 }
 
 export function calcNerveRate(actor: LiveActor, v: number): number {
-    return actor.spine.getNerveStep() / v;
+    return actor.spine!.getNerveStep() / v;
 }
 
 export class Spine {

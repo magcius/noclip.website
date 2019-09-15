@@ -140,9 +140,8 @@ export class GXViewerTexture implements Viewer.Texture {
     constructor(public mipChain: GX_Texture.MipChain, public extraInfo: Map<string, string> | null = null, public name: string = mipChain.name) {
     }
 
-    public activate(): Promise<void> | null {
-        if (this.surfaces.length !== 0)
-            return null;
+    public activate(): Promise<void> {
+        assert(this.surfaces.length === 0);
 
         const promises: Promise<void>[] = [];
         for (let i = 0; i < this.mipChain.mipLevels.length; i++) {
@@ -418,7 +417,7 @@ export class GXMaterialHelperGfx {
     public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, renderInst: GfxRenderInst): void {
         this.cacheProgram(device, cache);
         renderInst.setMegaStateFlags(this.megaStateFlags);
-        renderInst.setGfxProgram(this.gfxProgram);
+        renderInst.setGfxProgram(this.gfxProgram!);
         setSortKeyProgramKey(renderInst.sortKey, this.programKey);
     }
 

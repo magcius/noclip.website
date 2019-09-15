@@ -7,15 +7,15 @@ import { RARC } from '../rarc';
 class SMG2SceneDesc extends SMGSceneDescBase {
     protected pathBase: string = `j3d/smg2`;
     public getLightData(modelCache: ModelCache): JMapInfoIter {
-        const lightDataRarc = modelCache.getArchive(`LightData/LightData.arc`);
-        return createCsvParser(lightDataRarc.findFileData(`LightData.bcsv`));
+        const lightDataRarc = modelCache.getArchive(`LightData/LightData.arc`)!;
+        return createCsvParser(lightDataRarc.findFileData(`LightData.bcsv`)!);
     }
     public getZoneLightData(modelCache: ModelCache, zoneName: string): JMapInfoIter {
-        const lightDataRarc = modelCache.getArchive(`StageData/${zoneName}/${zoneName}Light.arc`);
-        return createCsvParser(lightDataRarc.findFileData(`csv/${zoneName}Light.bcsv`));
+        const lightDataRarc = modelCache.getArchive(`StageData/${zoneName}/${zoneName}Light.arc`)!;
+        return createCsvParser(lightDataRarc.findFileData(`csv/${zoneName}Light.bcsv`)!);
     }
     public getZoneMapArchive(modelCache: ModelCache, zoneName: string): RARC {
-        return modelCache.getArchive(`StageData/${zoneName}/${zoneName}Map.arc`);
+        return modelCache.getArchive(`StageData/${zoneName}/${zoneName}Map.arc`)!;
     }
     public requestGlobalArchives(modelCache: ModelCache): void {
         modelCache.requestArchiveData(`LightData/LightData.arc`);

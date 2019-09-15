@@ -133,13 +133,13 @@ export class DrawBufferGroup {
 
     public registerDrawBuffer(actor: LiveActor): number {
         // The original does far more than this...
-        this.models.push(actor.modelInstance);
+        this.models.push(actor.modelInstance!);
         return this.models.length - 1;
     }
 
     public findLightInfo(actor: LiveActor, drawBufferIndex: number): void {
         // Will also set the mpDrawBuffer on the ActorLightCtrl -- not sure why yet...
-        actor.actorLightCtrl.lightType = this.tableEntry.LightType;
+        actor.actorLightCtrl!.lightType = this.tableEntry.LightType;
     }
 
     public hasVisible(): boolean {

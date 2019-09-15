@@ -322,11 +322,11 @@ export function interactiveVisTestBisect(items: VisTestItem[]): void {
 }
 
 export function interactiveSliderSelect(items: any[], testItem: (itemIndex: number, v: boolean) => void, done: (itemIndex: number) => void): void {
-    const ui: UI = window.main.ui;
+    const ui: UI = (window as any).main.ui;
     const debugFloater = ui.makeFloatingPanel('SliderSelect');
     const slider = new Slider();
     // Revert to default style for clarity
-    slider.elem.querySelector('input').classList.remove('Slider');
+    slider.elem.querySelector('input')!.classList.remove('Slider');
     debugFloater.contents.append(slider.elem);
 
     const doneButton = document.createElement('div');

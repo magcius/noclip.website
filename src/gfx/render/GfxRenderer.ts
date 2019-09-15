@@ -3,7 +3,7 @@ import { GfxMegaStateDescriptor, GfxInputState, GfxDevice, GfxRenderPass, GfxRen
 import { defaultMegaState, copyMegaState, setMegaStateFlags } from "../helpers/GfxMegaStateDescriptorHelpers";
 import { GfxRenderCache } from "./GfxRenderCache";
 import { GfxRenderDynamicUniformBuffer } from "./GfxRenderDynamicUniformBuffer";
-import { nArray, assert } from "../../util";
+import { nArray, assert, assertExists } from "../../util";
 import { clamp } from "../../MathHelpers";
 import { gfxRenderPipelineDescriptorEquals, gfxBindingsDescriptorEquals } from "../platform/GfxPlatformUtil";
 
@@ -343,7 +343,7 @@ export class GfxRenderInst {
             state.currentBindings = cache.createBindings(device, state.currentBindingDescriptors);
         }
 
-        passRenderer.setBindings(0, state.currentBindings, this._dynamicUniformBufferOffsets);
+        passRenderer.setBindings(0, assertExists(state.currentBindings), this._dynamicUniformBufferOffsets);
 
         if (this._drawInstanceCount > 1) {
             assert(!!(this._flags & GfxRenderInstFlags.DRAW_INDEXED));
@@ -508,7 +508,7 @@ export class GfxRenderInstManager {
         this.visibleRenderInsts.length = 0;
     }
 
-    public drawOnPassRenderer(device: GfxDevice, passRenderer: GfxRenderPass, state: GfxRendererTransientState = null): void {
+    public drawOnPassRenderer(device: GfxDevice, passRenderer: GfxRenderPass, state: GfxRendererTransientState | null = null): void {
         if (this.visibleRenderInsts.length === 0)
             return;
 
@@ -537,7 +537,7 @@ export class GfxRenderInstManager {
 }
 
 // Convenience for porting.
-export function executeOnPass(renderInstManager: GfxRenderInstManager, device: GfxDevice, passRenderer: GfxRenderPass, passMask: number, state: GfxRendererTransientState = null): void {
+export function executeOnPass(renderInstManager: GfxRenderInstManager, device: GfxDevice, passRenderer: GfxRenderPass, passMask: number, state: GfxRendererTransientState | null = null): void {
     renderInstManager.setVisibleByFilterKeyExact(passMask);
     renderInstManager.drawOnPassRenderer(device, passRenderer, state);
 }

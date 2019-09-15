@@ -18,6 +18,7 @@ import { LightType } from "./DrawBuffer";
 
 import * as RARC from '../../j3d/rarc';
 import * as Viewer from '../../viewer';
+import { assertExists } from "../../util";
 
 function setIndirectTextureOverride(modelInstance: BMDModelInstance, sceneTexture: GfxTexture): void {
     const m = modelInstance.getTextureMappingReference("IndDummy");
@@ -38,8 +39,8 @@ class ActorAnimDataInfo {
     public IsKeepAnim: boolean;
 
     constructor(infoIter: JMapInfoIter, animType: string) {
-        this.Name = infoIter.getValueString(`${animType}Name`);
-        this.StartFrame = infoIter.getValueNumber(`${animType}StartFrame`);
+        this.Name = assertExists(infoIter.getValueString(`${animType}Name`));
+        this.StartFrame = assertExists(infoIter.getValueNumber(`${animType}StartFrame`));
         this.IsKeepAnim = !!infoIter.getValueNumber(`${animType}IsKeepAnim`);
     }
 }
@@ -61,7 +62,7 @@ class ActorAnimKeeperInfo {
     public Bva: ActorAnimDataInfo;
 
     constructor(infoIter: JMapInfoIter) {
-        this.ActorAnimName = infoIter.getValueString('ActorAnimName').toLowerCase();
+        this.ActorAnimName = assertExists(infoIter.getValueString('ActorAnimName')).toLowerCase();
         this.Bck = new ActorAnimDataInfo(infoIter, 'Bck');
         this.Btk = new ActorAnimDataInfo(infoIter, 'Btk');
         this.Brk = new ActorAnimDataInfo(infoIter, 'Brk');
@@ -118,7 +119,7 @@ export function startBvaIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC,
 }
 
 export function startBck(actor: LiveActor, animName: string): boolean {
-    const played = startBckIfExist(actor.modelInstance, actor.arc, animName);
+    const played = startBckIfExist(actor.modelInstance!, actor.arc, animName);
     if (played && actor.effectKeeper !== null)
         actor.effectKeeper.changeBck(animName);
     return played;
@@ -169,29 +170,29 @@ class ActorAnimKeeper {
     }
 
     private setBtkAnimation(actor: LiveActor, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
-        startBtkIfExist(actor.modelInstance, actor.arc, getAnimName(keeperInfo, dataInfo));
+        startBtkIfExist(actor.modelInstance!, actor.arc, getAnimName(keeperInfo, dataInfo));
     }
 
     private setBrkAnimation(actor: LiveActor, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
-        startBrkIfExist(actor.modelInstance, actor.arc, getAnimName(keeperInfo, dataInfo));
+        startBrkIfExist(actor.modelInstance!, actor.arc, getAnimName(keeperInfo, dataInfo));
     }
 
     private setBpkAnimation(actor: LiveActor, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
-        startBpkIfExist(actor.modelInstance, actor.arc, getAnimName(keeperInfo, dataInfo));
+        startBpkIfExist(actor.modelInstance!, actor.arc, getAnimName(keeperInfo, dataInfo));
     }
 
     private setBtpAnimation(actor: LiveActor, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
-        startBtpIfExist(actor.modelInstance, actor.arc, getAnimName(keeperInfo, dataInfo));
+        startBtpIfExist(actor.modelInstance!, actor.arc, getAnimName(keeperInfo, dataInfo));
     }
 
     private setBvaAnimation(actor: LiveActor, keeperInfo: ActorAnimKeeperInfo, dataInfo: ActorAnimDataInfo): void {
-        startBvaIfExist(actor.modelInstance, actor.arc, getAnimName(keeperInfo, dataInfo));
+        startBvaIfExist(actor.modelInstance!, actor.arc, getAnimName(keeperInfo, dataInfo));
     }
 }
 
 export function getJMapInfoTrans(dst: vec3, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
     getJMapInfoTransLocal(dst, infoIter);
-    const stageDataHolder = sceneObjHolder.stageDataHolder.findPlacedStageDataHolder(infoIter);
+    const stageDataHolder = assertExists(sceneObjHolder.stageDataHolder.findPlacedStageDataHolder(infoIter));
     vec3.transformMat4(dst, dst, stageDataHolder.placementMtx);
 }
 
@@ -201,7 +202,7 @@ function getJMapInfoRotate(dst: vec3, sceneObjHolder: SceneObjHolder, infoIter: 
 
     // Compute local rotation matrix, combine with stage placement, and extract new rotation.
     computeModelMatrixSRT(scratch, 1, 1, 1, dst[0], dst[1], dst[2], 0, 0, 0);
-    const stageDataHolder = sceneObjHolder.stageDataHolder.findPlacedStageDataHolder(infoIter);
+    const stageDataHolder = assertExists(sceneObjHolder.stageDataHolder.findPlacedStageDataHolder(infoIter));
     mat4.mul(scratch, stageDataHolder.placementMtx, scratch);
 
     computeEulerAngleRotationFromSRTMatrix(dst, scratch);
@@ -240,7 +241,7 @@ export class LiveActor extends NameObj {
     }
 
     public setIndirectTextureOverride(sceneTexture: GfxTexture): void {
-        setIndirectTextureOverride(this.modelInstance, sceneTexture);
+        setIndirectTextureOverride(this.modelInstance!, sceneTexture);
     }
 
     public getBaseMtx(): mat4 | null {
@@ -277,9 +278,9 @@ export class LiveActor extends NameObj {
     public initModelManagerWithAnm(sceneObjHolder: SceneObjHolder, objName: string): void {
         const modelCache = sceneObjHolder.modelCache;
 
-        this.arc = modelCache.getObjectData(objName);
+        this.arc = modelCache.getObjectData(objName)!;
 
-        const bmdModel = modelCache.getModel(this.arc, `${objName}.bdl`);
+        const bmdModel = modelCache.getModel(this.arc, `${objName}.bdl`)!;
         this.modelInstance = new BMDModelInstance(bmdModel);
         this.modelInstance.name = objName;
         this.modelInstance.animationController.fps = FPS;
@@ -314,7 +315,7 @@ export class LiveActor extends NameObj {
             return;
         if (groupName === null && this.modelInstance !== null)
             groupName = this.modelInstance.name;
-        this.effectKeeper = new EffectKeeper(sceneObjHolder, this, groupName);
+        this.effectKeeper = new EffectKeeper(sceneObjHolder, this, assertExists(groupName));
     }
 
     public initNerve(nerve: Nerve): void {
@@ -323,15 +324,15 @@ export class LiveActor extends NameObj {
     }
 
     public setNerve(nerve: Nerve): void {
-        this.spine.setNerve(nerve);
+        this.spine!.setNerve(nerve);
     }
 
     public getCurrentNerve(): Nerve {
-        return this.spine.getCurrentNerve();
+        return this.spine!.getCurrentNerve();
     }
 
     public getNerveStep(): number {
-        return this.spine.getNerveStep();
+        return this.spine!.getNerveStep();
     }
 
     public startAction(animationName: string): void {
@@ -342,16 +343,16 @@ export class LiveActor extends NameObj {
     public tryStartAllAnim(animationName: string): boolean {
         let anyPlayed = false;
         anyPlayed = startBck(this, animationName) || anyPlayed;
-        anyPlayed = startBtkIfExist(this.modelInstance, this.arc, animationName) || anyPlayed;
-        anyPlayed = startBrkIfExist(this.modelInstance, this.arc, animationName) || anyPlayed;
-        anyPlayed = startBpkIfExist(this.modelInstance, this.arc, animationName) || anyPlayed;
-        anyPlayed = startBtpIfExist(this.modelInstance, this.arc, animationName) || anyPlayed;
-        anyPlayed = startBvaIfExist(this.modelInstance, this.arc, animationName) || anyPlayed;
+        anyPlayed = startBtkIfExist(this.modelInstance!, this.arc, animationName) || anyPlayed;
+        anyPlayed = startBrkIfExist(this.modelInstance!, this.arc, animationName) || anyPlayed;
+        anyPlayed = startBpkIfExist(this.modelInstance!, this.arc, animationName) || anyPlayed;
+        anyPlayed = startBtpIfExist(this.modelInstance!, this.arc, animationName) || anyPlayed;
+        anyPlayed = startBvaIfExist(this.modelInstance!, this.arc, animationName) || anyPlayed;
         return anyPlayed;
     }
 
     public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
-        computeModelMatrixSRT(this.modelInstance.modelMatrix,
+        computeModelMatrixSRT(this.modelInstance!.modelMatrix,
             1, 1, 1,
             this.rotation[0], this.rotation[1], this.rotation[2],
             this.translation[0], this.translation[1], this.translation[2]);
@@ -419,7 +420,7 @@ export class LiveActor extends NameObj {
         vec3.scaleAndAdd(this.translation, this.translation, this.velocity, getDeltaTimeFrames(viewerInput));
 
         if (this.effectKeeper !== null) {
-            this.effectKeeper.updateSyncBckEffect(sceneObjHolder.effectSystem);
+            this.effectKeeper.updateSyncBckEffect(sceneObjHolder.effectSystem!);
             this.effectKeeper.followSRT();
             this.effectKeeper.setVisibleScenario(this.visibleAlive && this.visibleScenario);
         }

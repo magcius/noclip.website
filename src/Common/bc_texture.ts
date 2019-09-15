@@ -389,7 +389,7 @@ export function decompressBC(surface: DecodedSurfaceBC): DecodedSurfaceSW {
 export function surfaceToCanvas(canvas: HTMLCanvasElement, surface: DecodedSurfaceSW, slice: number) {
     canvas.width = surface.width;
     canvas.height = surface.height;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d')!;
     const width = surface.width;
     const height = surface.height;
     const pitch = surface.width * surface.height * 4;

@@ -102,7 +102,7 @@ export class GrabManager {
 
         // Call onGrabReleased after we set the grabListener to null so that if the callback calls
         // isDragging() or hasDragListener() we appear as if we have no grab.
-        const grabListener = this.grabListener;
+        const grabListener = this.grabListener!;
         this.grabListener = null;
         grabListener.onGrabReleased();
     }

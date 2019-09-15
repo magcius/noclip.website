@@ -3,7 +3,7 @@
 // ECMAScript WeakMap does not allow two independent key objects to be "equivalent",
 // which is the exact thing we want in our case. Currently not optimized at all.
 
-import { nArray } from "./util";
+import { nArray, assertExists } from "./util";
 
 // Jenkins One-at-a-Time hash from http://www.burtleburtle.net/bob/hash/doobs.html
 export function hashCodeNumberUpdate(hash: number, v: number): number {
@@ -117,7 +117,7 @@ export class HashMap<K, V> {
         if (this.needsReconfigure)
             return;
 
-        let numBuckets = Math.ceil(this.size() / this.autoLoadFactor);
+        let numBuckets = Math.ceil(this.size() / assertExists(this.autoLoadFactor));
         if (numBuckets <= this.buckets.length)
             return;
 
@@ -126,7 +126,7 @@ export class HashMap<K, V> {
     }
 
     public manuallyReconfigure(): void {
-        let numBuckets = Math.ceil(this.size() / this.autoLoadFactor);
+        let numBuckets = Math.ceil(this.size() / assertExists(this.autoLoadFactor));
         if (numBuckets <= this.buckets.length)
             return;
 

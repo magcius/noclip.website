@@ -126,7 +126,7 @@ class SceneDesc implements Viewer.SceneDesc {
     public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
         return dataFetcher.fetchData(`${pathBase}/${this.id}_arc.crg1`).then((data) => {
-            const obj: any = BYML.parse(data, BYML.FileType.CRG1);
+            const obj: any = BYML.parse(data!, BYML.FileType.CRG1);
 
             const viewerTextures: Viewer.Texture[] = [];
             const fakeTextureHolder = new FakeTextureHolder(viewerTextures);

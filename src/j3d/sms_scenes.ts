@@ -5,7 +5,7 @@ import * as Yaz0 from '../compression/Yaz0';
 import * as RARC from './rarc';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { readString, assert, getTextDecoder } from '../util';
+import { readString, assert, getTextDecoder, assertExists } from '../util';
 
 import { BMDModelInstance, BMDModel } from './render';
 import { createModelInstance } from './scenes';
@@ -19,7 +19,7 @@ import { colorNew } from '../Color';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { SceneContext } from '../SceneBase';
 
-const sjisDecoder = getTextDecoder('sjis');
+const sjisDecoder = getTextDecoder('sjis')!;
 
 function unpack(buffer: ArrayBufferSlice, sig: string): any[] {
     const view = buffer.createDataView();
@@ -380,7 +380,7 @@ export class SunshineRenderer implements Viewer.SceneGfx {
 }
 
 export class SunshineSceneDesc implements Viewer.SceneDesc {
-    public static createSunshineSceneForBasename(device: GfxDevice, cache: GfxRenderCache, passMask: number, rarc: RARC.RARC, basename: string, isSkybox: boolean): BMDModelInstance {
+    public static createSunshineSceneForBasename(device: GfxDevice, cache: GfxRenderCache, passMask: number, rarc: RARC.RARC, basename: string, isSkybox: boolean): BMDModelInstance | null {
         const bmdFile = rarc.findFile(`${basename}.bmd`);
         if (!bmdFile)
             return null;
@@ -407,8 +407,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
         }).then((buffer: ArrayBufferSlice) => {
             const rarc = RARC.parse(buffer);
 
-            const sceneBin = rarc.findFile('map/scene.bin');
-            const sceneBinObj = readSceneBin(sceneBin.buffer);
+            const sceneBinObj = readSceneBin(rarc.findFileData('map/scene.bin')!);
             console.log(rarc, sceneBinObj);
 
             const renderer = new SunshineRenderer(device, rarc);
@@ -445,29 +444,32 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
         switch (obj.type) {
         case 'Group':
             const childTs: BMDModelInstance[][] = obj.children.map(c => this.createSceneBinObjects(device, cache, rarc, c));
-            const flattened: BMDModelInstance[] = flatten(childTs).filter(o => !!o);
-            return flattened;
+            return flatten(childTs);
         case 'Model':
-            return [this.createSceneForSceneBinModel(device, cache, rarc, obj)];
+            const g = this.createRendererForSceneBinModel(device, cache, rarc, obj);
+            if (g !== null)
+                return [g];
+            else
+                return [];
         default:
             // Don't care.
-            return undefined;
+            return [];
         }
     }
 
-    private createSceneForSceneBinModel(device: GfxDevice, cache: GfxRenderCache, rarc: RARC.RARC, obj: SceneBinObjModel): BMDModelInstance {
+    private createRendererForSceneBinModel(device: GfxDevice, cache: GfxRenderCache, rarc: RARC.RARC, obj: SceneBinObjModel): BMDModelInstance | null {
         interface ModelLookup {
             k: string; // klass
             m: string; // model
             p?: string; // resulting file prefix
-            s?: () => BMDModelInstance;
+            s?: () => BMDModelInstance | null;
         };
 
         const modelCache = new Map<RARC.RARCFile, BMDModel>();
         function lookupModel(bmdFile: RARC.RARCFile, bmtFile: RARC.RARCFile | null): BMDModel {
             assert(!!bmdFile);
             if (modelCache.has(bmdFile)) {
-                return modelCache.get(bmdFile);
+                return modelCache.get(bmdFile)!;
             } else {
                 const bmd = BMD.parse(bmdFile.buffer);
                 const bmt = bmtFile !== null ? BMT.parse(bmtFile.buffer) : null;
@@ -478,8 +480,8 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
         }
 
         function bmtm(bmd: string, bmt: string): BMDModelInstance {
-            const bmdFile = rarc.findFile(bmd);
-            const bmtFile = rarc.findFile(bmt);
+            const bmdFile = assertExists(rarc.findFile(bmd));
+            const bmtFile = assertExists(rarc.findFile(bmt));
             const bmdModel = lookupModel(bmdFile, bmtFile);
             const modelInstance = new BMDModelInstance(bmdModel);
             modelInstance.passMask = SMSPass.OPAQUE;
@@ -487,11 +489,11 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
         }
 
         function bckm(bmdFilename: string, bckFilename: string, loopMode: LoopMode = LoopMode.REPEAT): BMDModelInstance {
-            const bmdFile = rarc.findFile(bmdFilename);
+            const bmdFile = assertExists(rarc.findFile(bmdFilename));
             const bmdModel = lookupModel(bmdFile, null);
             const modelInstance = new BMDModelInstance(bmdModel);
             modelInstance.passMask = SMSPass.OPAQUE;
-            const bckFile = rarc.findFile(bckFilename);
+            const bckFile = assertExists(rarc.findFile(bckFilename));
             const bck = BCK.parse(bckFile.buffer);
             bck.ank1.loopMode = loopMode;
             modelInstance.bindANK1(bck.ank1);

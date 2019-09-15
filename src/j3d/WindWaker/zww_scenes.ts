@@ -465,11 +465,11 @@ class SimpleEffectSystem {
 
     private getResourceData(device: GfxDevice, userIndex: number): JPA.JPAResourceData | null {
         if (!this.resourceDatas.has(userIndex)) {
-            const resData = new JPA.JPAResourceData(device, this.jpacData, this.jpac.effects.find((resource) => resource.resourceId === userIndex));
+            const resData = new JPA.JPAResourceData(device, this.jpacData, this.jpac.effects.find((resource) => resource.resourceId === userIndex)!);
             this.resourceDatas.set(userIndex, resData);
         }
 
-        return this.resourceDatas.get(userIndex);
+        return this.resourceDatas.get(userIndex)!;
     }
 
     public setDrawInfo(posCamMtx: mat4, prjMtx: mat4, texPrjMtx: mat4 | null): void {
@@ -488,23 +488,23 @@ class SimpleEffectSystem {
     }
 
     public createEmitter(device: GfxDevice, resourceId: number = 0x14) {
-        const emitter = this.emitterManager.createEmitter(this.getResourceData(device, resourceId));
+        const emitter = this.emitterManager.createEmitter(assertExists(this.getResourceData(device, resourceId)));
         if (emitter !== null) {
             emitter.globalTranslation[0] = -275;
             emitter.globalTranslation[1] = 150;
             emitter.globalTranslation[2] = 2130;
-        }
 
-        const orig = vec3.clone(emitter.globalTranslation);
-        let t = 0;
-        function move() {
-            t += 0.1;
-            emitter.globalTranslation[0] = orig[0] + Math.sin(t) * 50;
-            emitter.globalTranslation[1] = orig[1] + Math.sin(t * 0.777) * 50;
-            emitter.globalTranslation[2] = orig[2] + Math.cos(t) * 50;
+            const orig = vec3.clone(emitter.globalTranslation);
+            let t = 0;
+            function move() {
+                t += 0.1;
+                emitter!.globalTranslation[0] = orig[0] + Math.sin(t) * 50;
+                emitter!.globalTranslation[1] = orig[1] + Math.sin(t * 0.777) * 50;
+                emitter!.globalTranslation[2] = orig[2] + Math.cos(t) * 50;
+                requestAnimationFrame(move);
+            }
             requestAnimationFrame(move);
         }
-        requestAnimationFrame(move);
 
         return emitter;
     }

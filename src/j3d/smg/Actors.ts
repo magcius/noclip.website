@@ -113,7 +113,7 @@ export function emitEffect(sceneObjHolder: SceneObjHolder, actor: LiveActor, nam
 export function setEffectEnvColor(actor: LiveActor, name: string, color: Color): void {
     if (actor.effectKeeper === null)
         return;
-    const emitter = actor.effectKeeper.getEmitter(name);
+    const emitter = assertExists(actor.effectKeeper.getEmitter(name));
     emitter.setGlobalEnvColor(color, -1);
 }
 
@@ -144,7 +144,7 @@ export function showModel(actor: LiveActor): void {
 }
 
 export function calcUpVec(v: vec3, actor: LiveActor): void {
-    const mtx = actor.getBaseMtx();
+    const mtx = assertExists(actor.getBaseMtx());
     vec3.set(v, mtx[4], mtx[5], mtx[6]);
 }
 
@@ -352,11 +352,11 @@ function setupInitInfoTypical(initInfo: MapObjActorInitInfo, objName: string): v
 }
 
 function setupInitInfoColorChangeArg0(initInfo: MapObjActorInitInfo, infoIter: JMapInfoIter): void {
-    initInfo.colorChangeFrame = getJMapInfoArg0(infoIter, -1);
+    initInfo.colorChangeFrame = getJMapInfoArg0(infoIter, -1)!;
 }
 
 function setupInitInfoTextureChangeArg1(initInfo: MapObjActorInitInfo, infoIter: JMapInfoIter): void {
-    initInfo.texChangeFrame = getJMapInfoArg1(infoIter, -1);
+    initInfo.texChangeFrame = getJMapInfoArg1(infoIter, -1)!;
 }
 
 function setupInitInfoPlanet(initInfo: MapObjActorInitInfo): void {
@@ -413,14 +413,14 @@ class MapObjActor extends LiveActor {
             this.initEffectKeeper(sceneObjHolder, initInfo.effectFilename);
 
         if (initInfo.colorChangeFrame !== -1)
-            bindColorChangeAnimation(this.modelInstance, this.arc, initInfo.colorChangeFrame);
+            bindColorChangeAnimation(this.modelInstance!, this.arc, initInfo.colorChangeFrame);
 
         if (initInfo.texChangeFrame !== -1)
-            bindTexChangeAnimation(this.modelInstance, this.arc, initInfo.texChangeFrame);
+            bindTexChangeAnimation(this.modelInstance!, this.arc, initInfo.texChangeFrame);
 
         const bloomObjName = `${this.objName}Bloom`;
         if (sceneObjHolder.modelCache.isObjectDataExist(bloomObjName)) {
-            this.bloomModel = createModelObjBloomModel(zoneAndLayer, sceneObjHolder, this.name, bloomObjName, this.modelInstance.modelMatrix);
+            this.bloomModel = createModelObjBloomModel(zoneAndLayer, sceneObjHolder, this.name, bloomObjName, this.modelInstance!.modelMatrix);
         }
     }
 
@@ -462,7 +462,7 @@ export class ModelObj extends LiveActor {
     public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
         if (this.transformMatrix !== null) {
             mat4.getTranslation(this.translation, this.transformMatrix);
-            mat4.copy(this.modelInstance.modelMatrix, this.transformMatrix);
+            mat4.copy(this.modelInstance!.modelMatrix, this.transformMatrix);
         } else {
             super.calcAndSetBaseMtx(viewerInput);
         }
@@ -470,21 +470,10 @@ export class ModelObj extends LiveActor {
 }
 
 class NPCActorItem {
-    public goods0: string | null;
-    public goods1: string | null;
-    public goodsJoint0: string | null;
-    public goodsJoint1: string | null;
-
-    constructor() {
-        this.reset();
-    }
-
-    public reset(): void {
-        this.goods0 = null;
-        this.goods1 = null;
-        this.goodsJoint0 = null;
-        this.goodsJoint1 = null;
-    }
+    public goods0: string = "";
+    public goods1: string = "";
+    public goodsJoint0: string = "";
+    public goodsJoint1: string = "";
 }
 
 export class NPCDirector {
@@ -497,12 +486,12 @@ export class NPCDirector {
         if (index === -1)
             return null;
 
-        const infoIter = createCsvParser(this.npcDataArc.findFileData(`${npcName}Item.bcsv`));
+        const infoIter = createCsvParser(this.npcDataArc.findFileData(`${npcName}Item.bcsv`)!);
         infoIter.setRecord(index);
-        npcActorItem.goods0 = infoIter.getValueString('mGoods0');
-        npcActorItem.goods1 = infoIter.getValueString('mGoods1');
-        npcActorItem.goodsJoint0 = infoIter.getValueString('mGoodsJoint0');
-        npcActorItem.goodsJoint1 = infoIter.getValueString('mGoodsJoint1');
+        npcActorItem.goods0 = assertExists(infoIter.getValueString('mGoods0'));
+        npcActorItem.goods1 = assertExists(infoIter.getValueString('mGoods1'));
+        npcActorItem.goodsJoint0 = assertExists(infoIter.getValueString('mGoodsJoint0'));
+        npcActorItem.goodsJoint1 = assertExists(infoIter.getValueString('mGoodsJoint1'));
         return npcActorItem;
     }
 }
@@ -534,7 +523,7 @@ export class PlanetMap extends LiveActor {
     private initBloomModel(sceneObjHolder: SceneObjHolder, name: string): void {
         const bloomModelName = `${name}Bloom`;
         if (sceneObjHolder.modelCache.isObjectDataExist(bloomModelName)) {
-            this.bloomModel = createModelObjBloomModel(this.zoneAndLayer, sceneObjHolder, this.name, bloomModelName, this.getBaseMtx());
+            this.bloomModel = createModelObjBloomModel(this.zoneAndLayer, sceneObjHolder, this.name, bloomModelName, this.getBaseMtx()!);
             vec3.copy(this.bloomModel.scale, this.scale);
         }
     }
@@ -557,9 +546,6 @@ class NPCActor extends LiveActor {
     public goods1: PartsModel | null = null;
 
     protected equipment(sceneObjHolder: SceneObjHolder, itemGoods: NPCActorItem, isIndirect: boolean = false): void {
-        if (itemGoods === null)
-            return;
-
         if (isIndirect) {
             if (itemGoods.goods0)
                 this.goods0 = createNPCGoods(sceneObjHolder, this, itemGoods.goods0, itemGoods.goodsJoint0);
@@ -614,16 +600,16 @@ class PartsModel extends LiveActor {
     }
 
     public initFixedPositionRelative(localTrans: vec3 | null): void {
-        this.fixedPosition = new FixedPosition(this.parentActor.modelInstance.modelMatrix, localTrans);
+        this.fixedPosition = new FixedPosition(this.parentActor.modelInstance!.modelMatrix, localTrans);
     }
 
     public initFixedPositionJoint(jointName: string, localTrans: vec3 | null): void {
-        this.fixedPosition = new FixedPosition(this.parentActor.getJointMtx(jointName), localTrans);
+        this.fixedPosition = new FixedPosition(this.parentActor.getJointMtx(jointName)!, localTrans);
     }
 
     public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
         if (this.fixedPosition !== null)
-            this.fixedPosition.calc(this.modelInstance.modelMatrix);
+            this.fixedPosition.calc(this.modelInstance!.modelMatrix);
     }
 }
 
@@ -653,15 +639,15 @@ export class StarPiece extends LiveActor {
         this.initModelManagerWithAnm(sceneObjHolder, this.name);
         connectToSceneNoSilhouettedMapObj(sceneObjHolder, this);
 
-        let starPieceColorIndex = getJMapInfoArg3(infoIter, -1);
+        let starPieceColorIndex: number = getJMapInfoArg3(infoIter, -1);
         if (starPieceColorIndex < 0 || starPieceColorIndex > 5)
             starPieceColorIndex = ((Math.random() * 6.0) | 0) + 1;
 
-        this.modelInstance.setColorOverride(ColorKind.MAT0, starPieceColorTable[starPieceColorIndex]);
+        this.modelInstance!.setColorOverride(ColorKind.MAT0, starPieceColorTable[starPieceColorIndex]);
 
         const animationController = new AnimationController();
         animationController.setTimeInFrames(5);
-        this.modelInstance.bindTTK1(BTK.parse(this.arc.findFileData(`Gift.btk`)).ttk1, animationController);
+        this.modelInstance!.bindTTK1(BTK.parse(this.arc.findFileData(`Gift.btk`)!).ttk1, animationController);
     }
 
     public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
@@ -687,7 +673,7 @@ export class EarthenPipe extends LiveActor {
         const colorFrame = getJMapInfoArg7(infoIter, 0);
         const animationController = new AnimationController();
         animationController.setTimeInFrames(colorFrame);
-        this.modelInstance.bindTRK1(BRK.parse(this.arc.findFileData(`EarthenPipe.brk`)).trk1, animationController);
+        this.modelInstance!.bindTRK1(BRK.parse(this.arc.findFileData(`EarthenPipe.brk`)!).trk1, animationController);
 
         connectToSceneCollisionMapObjStrongLight(sceneObjHolder, this);
 
@@ -741,19 +727,19 @@ export class BlackHole extends LiveActor {
         this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, 'BlackHoleRange');
         connectToSceneCollisionMapObj(sceneObjHolder, this);
-        this.blackHoleModel = createModelObjMapObj(zoneAndLayer, sceneObjHolder, 'BlackHole', 'BlackHole', this.modelInstance.modelMatrix);
+        this.blackHoleModel = createModelObjMapObj(zoneAndLayer, sceneObjHolder, 'BlackHole', 'BlackHole', this.modelInstance!.modelMatrix);
         this.initEffectKeeper(sceneObjHolder, 'BlackHoleRange');
 
         startBck(this, `BlackHoleRange`);
-        startBtkIfExist(this.modelInstance, this.arc, `BlackHoleRange`);
-        startBtkIfExist(this.blackHoleModel.modelInstance, this.blackHoleModel.arc, `BlackHole`);
+        startBtkIfExist(this.modelInstance!, this.arc, `BlackHoleRange`);
+        startBtkIfExist(this.blackHoleModel.modelInstance!, this.blackHoleModel.arc, `BlackHole`);
 
         let rangeScale: number;
         const arg0 = getJMapInfoArg0(infoIter, -1);
         if (arg0 < 0) {
             // If this is a cube, we behave slightly differently wrt. scaling.
             if (this.name !== 'BlackHoleCube')
-                rangeScale = infoIter.getValueNumber('scale_x');
+                rangeScale = infoIter.getValueNumber('scale_x', 1.0);
             else
                 rangeScale = 1.0;
         } else {
@@ -818,7 +804,7 @@ export class HatchWaterPlanet extends LiveActor {
         this.initEffectKeeper(sceneObjHolder, null);
 
         this.tryStartAllAnim('HatchWaterPlanet');
-        this.modelInstance.ank1Animator.ank1.loopMode = LoopMode.ONCE;
+        this.modelInstance!.ank1Animator!.ank1.loopMode = LoopMode.ONCE;
     }
 }
 
@@ -834,8 +820,8 @@ export class Kinopio extends NPCActor {
 
         this.boundingSphereRadius = 100;
 
-        const itemGoodsIdx = getJMapInfoArg7(infoIter);
-        const itemGoods = sceneObjHolder.npcDirector.getNPCItemData('Kinopio', itemGoodsIdx);
+        const itemGoodsIdx = assertExists(getJMapInfoArg7(infoIter));
+        const itemGoods = assertExists(sceneObjHolder.npcDirector.getNPCItemData('Kinopio', itemGoodsIdx));
         this.equipment(sceneObjHolder, itemGoods);
 
         const arg2 = getJMapInfoArg2(infoIter);
@@ -876,7 +862,7 @@ export class Kinopio extends NPCActor {
         }
 
         // Bind the color change animation.
-        bindColorChangeAnimation(this.modelInstance, this.arc, getJMapInfoArg1(infoIter, 0));
+        bindColorChangeAnimation(this.modelInstance!, this.arc, getJMapInfoArg1(infoIter, 0));
 
         // If we have an SW_APPEAR, then hide us until that switch triggers...
         if (infoIter.getValueNumber('SW_APPEAR') !== -1)
@@ -885,7 +871,7 @@ export class Kinopio extends NPCActor {
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         super.requestArchives(sceneObjHolder, infoIter);
-        const itemGoodsIdx = getJMapInfoArg7(infoIter);
+        const itemGoodsIdx = getJMapInfoArg7(infoIter, -1);
         requestArchivesForNPCGoods(sceneObjHolder, 'Kinopio', itemGoodsIdx);
     }
 }
@@ -907,7 +893,7 @@ export class Peach extends NPCActor {
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         super.requestArchives(sceneObjHolder, infoIter);
-        const itemGoodsIdx = getJMapInfoArg7(infoIter);
+        const itemGoodsIdx = getJMapInfoArg7(infoIter, -1);
         requestArchivesForNPCGoods(sceneObjHolder, 'Kinopio', itemGoodsIdx);
     }
 }
@@ -924,7 +910,7 @@ export class Penguin extends NPCActor {
 
         this.boundingSphereRadius = 100;
 
-        const arg0 = getJMapInfoArg0(infoIter, -1);
+        const arg0: number = getJMapInfoArg0(infoIter, -1);
         if (arg0 === 0) {
             this.startAction(`SitDown`);
         } else if (arg0 === 1) {
@@ -942,7 +928,7 @@ export class Penguin extends NPCActor {
         }
 
         // Bind the color change animation.
-        bindColorChangeAnimation(this.modelInstance, this.arc, getJMapInfoArg7(infoIter, 0));
+        bindColorChangeAnimation(this.modelInstance!, this.arc, getJMapInfoArg7(infoIter, 0));
     }
 }
 
@@ -957,15 +943,15 @@ export class PenguinRacer extends NPCActor {
 
         this.boundingSphereRadius = 100;
 
-        const itemGoods = sceneObjHolder.npcDirector.getNPCItemData(this.name, 0);
+        const itemGoods = sceneObjHolder.npcDirector.getNPCItemData(this.name, 0)!;
         this.equipment(sceneObjHolder, itemGoods);
 
         const arg7 = getJMapInfoArg7(infoIter, 0);
-        bindColorChangeAnimation(this.modelInstance, this.arc, arg7);
+        bindColorChangeAnimation(this.modelInstance!, this.arc, arg7);
         this.startAction('RacerWait');
 
         // Bind the color change animation.
-        bindColorChangeAnimation(this.modelInstance, this.arc, getJMapInfoArg7(infoIter, 0));
+        bindColorChangeAnimation(this.modelInstance!, this.arc, getJMapInfoArg7(infoIter, 0));
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -988,17 +974,17 @@ export class TicoComet extends NPCActor {
         this.boundingSphereRadius = 100;
 
         const itemGoodsIdx = 0;
-        const itemGoods = sceneObjHolder.npcDirector.getNPCItemData('TicoComet', itemGoodsIdx);
+        const itemGoods = sceneObjHolder.npcDirector.getNPCItemData('TicoComet', itemGoodsIdx)!;
         this.equipment(sceneObjHolder, itemGoods);
 
-        this.goods0.startAction('LeftRotate');
-        this.goods1.startAction('RightRotate');
+        this.goods0!.startAction('LeftRotate');
+        this.goods1!.startAction('RightRotate');
 
-        startBtkIfExist(this.modelInstance, this.arc, "TicoComet");
-        startBvaIfExist(this.modelInstance, this.arc, "Small0");
+        startBtkIfExist(this.modelInstance!, this.arc, "TicoComet");
+        startBvaIfExist(this.modelInstance!, this.arc, "Small0");
 
         // TODO(jstpierre): setBrkFrameAndStop
-        bindColorChangeAnimation(this.modelInstance, this.arc, 0, "Normal");
+        bindColorChangeAnimation(this.modelInstance!, this.arc, 0, "Normal");
 
         this.startAction('Wait');
     }
@@ -1041,7 +1027,7 @@ export class Coin extends LiveActor {
         const rotationY = getTimeFrames(viewerInput) * SPEED;
         computeModelMatrixSRT(scratchMatrix, 1, 1, 1, 0, rotationY, 0, 0, 0, 0);
         super.calcAndSetBaseMtx(viewerInput);
-        mat4.mul(this.modelInstance.modelMatrix, this.modelInstance.modelMatrix, scratchMatrix);
+        mat4.mul(this.modelInstance!.modelMatrix, this.modelInstance!.modelMatrix, scratchMatrix);
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -1060,9 +1046,9 @@ export class MiniRoutePoint extends LiveActor {
 
         this.tryStartAllAnim('Open');
         if (pointInfo.isPink)
-            startBrkIfExist(this.modelInstance, this.arc, 'TicoBuild');
+            startBrkIfExist(this.modelInstance!, this.arc, 'TicoBuild');
         else
-            startBrkIfExist(this.modelInstance, this.arc, 'Normal');
+            startBrkIfExist(this.modelInstance!, this.arc, 'Normal');
 
         if (pointInfo.isSmall)
             vec3.set(this.scale, 0.5, 1, 0.5);
@@ -1077,13 +1063,13 @@ export class MiniRouteGalaxy extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, pointInfo: WorldmapPointInfo) {
         super(zoneAndLayer, 'MiniRouteGalaxy');
 
-        const miniatureName = infoIter.getValueString('MiniatureName');
-        const miniatureType = infoIter.getValueString('StageType');
-        const miniatureScale = infoIter.getValueNumber('ScaleMin');
+        const miniatureName = assertExists(infoIter.getValueString('MiniatureName'));
+        const miniatureType = assertExists(infoIter.getValueString('StageType'));
+        const miniatureScale = assertExists(infoIter.getValueNumber('ScaleMin'));
         const miniatureOffset = vec3.fromValues(
-            infoIter.getValueNumber('PosOffsetX'),
-            infoIter.getValueNumber('PosOffsetY'),
-            infoIter.getValueNumber('PosOffsetZ'));
+            assertExists(infoIter.getValueNumber('PosOffsetX')),
+            assertExists(infoIter.getValueNumber('PosOffsetY')),
+            assertExists(infoIter.getValueNumber('PosOffsetZ')));
 
         vec3.add(this.translation, pointInfo.position, miniatureOffset);
         vec3.set(this.scale, miniatureScale, miniatureScale, miniatureScale);
@@ -1108,7 +1094,7 @@ export class MiniRouteGalaxy extends LiveActor {
         super.calcAndSetBaseMtx(viewerInput);
 
         const rotateY = getTimeFrames(viewerInput) * this.rotateSpeed;
-        mat4.rotateY(this.modelInstance.modelMatrix, this.modelInstance.modelMatrix, rotateY);
+        mat4.rotateY(this.modelInstance!.modelMatrix, this.modelInstance!.modelMatrix, rotateY);
     }
 }
 
@@ -1136,9 +1122,9 @@ export class MiniRoutePart extends LiveActor {
 
         this.tryStartAllAnim('Open');
         if (pointInfo.isPink)
-            startBrkIfExist(this.modelInstance, this.arc, 'TicoBuild');
+            startBrkIfExist(this.modelInstance!, this.arc, 'TicoBuild');
         else
-            startBrkIfExist(this.modelInstance, this.arc, 'Normal');
+            startBrkIfExist(this.modelInstance!, this.arc, 'Normal');
 
         this.initEffectKeeper(sceneObjHolder, null);
 
@@ -1277,7 +1263,7 @@ export class GCaptureTarget extends LiveActor {
         connectToSceneNoSilhouettedMapObjStrongLight(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
         startBck(this, 'Wait');
-        bindColorChangeAnimation(this.modelInstance, this.arc, 1, 'Switch');
+        bindColorChangeAnimation(this.modelInstance!, this.arc, 1, 'Switch');
 
         emitEffect(sceneObjHolder, this, 'TargetLight');
         emitEffect(sceneObjHolder, this, 'TouchAble');
@@ -1303,7 +1289,7 @@ export class FountainBig extends LiveActor {
         vec3.scaleAndAdd(this.upVec, this.translation, this.upVec, 300);
 
         hideModel(this);
-        startBtkIfExist(this.modelInstance, this.arc, "FountainBig");
+        startBtkIfExist(this.modelInstance!, this.arc, "FountainBig");
 
         // TODO(jstpierre): Figure out what causes this phase for realsies. Might just be culling...
         this.randomPhase = (Math.random() * 300) | 0;
@@ -1412,9 +1398,9 @@ export class WarpPod extends LiveActor {
 
         if (this.visible) {
             startBck(this, 'Active');
-            startBrkIfExist(this.modelInstance, this.arc, 'Active');
+            startBrkIfExist(this.modelInstance!, this.arc, 'Active');
             // This is a bit hokey, but we don't have an XanimePlayer, so this is our solution...
-            this.modelInstance.ank1Animator.ank1.loopMode = LoopMode.ONCE;
+            this.modelInstance!.ank1Animator!.ank1.loopMode = LoopMode.ONCE;
         }
 
         // The game normally will check a few different save file bits
@@ -1424,7 +1410,7 @@ export class WarpPod extends LiveActor {
 
         if (inactive) {
             startBck(this, 'Wait');
-            startBrkIfExist(this.modelInstance, this.arc, 'Wait');
+            startBrkIfExist(this.modelInstance!, this.arc, 'Wait');
         } else {
             this.glowEffect(sceneObjHolder);
         }
@@ -1448,7 +1434,7 @@ export class AstroCountDownPlate extends LiveActor {
         this.initEffectKeeper(sceneObjHolder, null);
         emitEffect(sceneObjHolder, this, "Light");
 
-        startBrkIfExist(this.modelInstance, this.arc, "Green");
+        startBrkIfExist(this.modelInstance!, this.arc, "Green");
     }
 }
 
@@ -1496,7 +1482,7 @@ export class Rosetta extends NPCActor {
 
         // "Rosetta Encounter" -- she looks dim without this.
         // Total hack.
-        this.actorLightCtrl.setAreaLightFromName(sceneObjHolder, `ロゼッタ出会い`);
+        this.actorLightCtrl!.setAreaLightFromName(sceneObjHolder, `ロゼッタ出会い`);
     }
 }
 
@@ -1512,11 +1498,11 @@ export class Tico extends NPCActor {
 
         const color = getJMapInfoArg0(infoIter, -1);
         if (color !== -1) {
-            bindColorChangeAnimation(this.modelInstance, this.arc, color);
+            bindColorChangeAnimation(this.modelInstance!, this.arc, color);
         }
 
         this.startAction('Wait');
-        this.modelInstance.animationController.phaseFrames += Math.random() * 1000;
+        this.modelInstance!.animationController.phaseFrames += Math.random() * 1000;
     }
 }
 
@@ -1577,11 +1563,11 @@ export class Air extends LiveActor {
 
         if (currentNerve === AirNrv.OUT && distanceToPlayer < this.distInThresholdSq) {
             if (this.tryStartAllAnim('Appear'))
-                this.modelInstance.animationController.setPhaseToCurrent();
+                this.modelInstance!.animationController.setPhaseToCurrent();
             this.setNerve(AirNrv.IN);
         } else if (currentNerve === AirNrv.IN && distanceToPlayer > this.distOutThresholdSq) {
             if (this.tryStartAllAnim('Disappear'))
-                this.modelInstance.animationController.setPhaseToCurrent();
+                this.modelInstance!.animationController.setPhaseToCurrent();
             this.setNerve(AirNrv.OUT);
         }
     }
@@ -1620,7 +1606,7 @@ export class ShootingStar extends LiveActor {
         this.initNerve(ShootingStarNrv.PRE_SHOOTING);
         this.initEffectKeeper(sceneObjHolder, 'ShootingStar');
 
-        startBpkIfExist(this.modelInstance, this.arc, 'ShootingStar');
+        startBpkIfExist(this.modelInstance!, this.arc, 'ShootingStar');
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
@@ -1672,7 +1658,7 @@ export class AstroMapObj extends MapObjActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         const initInfo = new MapObjActorInitInfo();
         const objectName = getObjectName(infoIter);
-        const domeId = getJMapInfoArg0(infoIter);
+        const domeId = assertExists(getJMapInfoArg0(infoIter));
         initInfo.setupModelName(AstroMapObj.getModelName(objectName, domeId));
         initInfo.setupConnectToScene();
         initInfo.setupEffect(objectName);
@@ -1692,7 +1678,7 @@ export class AstroMapObj extends MapObjActor {
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         const objectName = getObjectName(infoIter);
-        const domeId = getJMapInfoArg0(infoIter);
+        const domeId = assertExists(getJMapInfoArg0(infoIter));
         sceneObjHolder.modelCache.requestObjectData(AstroMapObj.getModelName(objectName, domeId));
     }
 

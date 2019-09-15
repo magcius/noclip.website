@@ -12,7 +12,7 @@ import { RenderStatistics, RenderStatisticsTracker } from './RenderStatistics';
 export interface Texture {
     name: string;
     surfaces: HTMLCanvasElement[];
-    extraInfo?: Map<string, string>;
+    extraInfo?: Map<string, string> | null;
     activate?: () => Promise<void>;
 }
 
@@ -228,7 +228,7 @@ export function initializeViewer(out: ViewerOut, canvas: HTMLCanvasElement): Ini
 
     const gl = canvas.getContext("webgl2", { alpha: false, antialias: false });
     // For debugging purposes, add a hook for this.
-    window.gl = gl;
+    (window as any).gl = gl;
     if (!gl) {
         if (navigator.vendor.includes('Apple'))
             return InitErrorCode.NO_WEBGL2_SAFARI;
