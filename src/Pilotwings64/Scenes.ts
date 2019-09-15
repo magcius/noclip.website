@@ -18,6 +18,7 @@ import { IS_DEVELOPMENT } from "../BuildVersion";
 import { TextureState, TileState } from "../bk/f3dex";
 import { ImageFormat, ImageSize, getImageFormatName, decodeTex_RGBA16, getImageSizeName, decodeTex_I4, decodeTex_I8, decodeTex_IA4, decodeTex_IA8, decodeTex_IA16 } from "../Common/N64/Image";
 import { TextureHolder, LoadedTexture } from "../TextureHolder";
+import { Endianness } from "../endian";
 
 interface Pilotwings64FSFileChunk {
     tag: string;
@@ -374,23 +375,20 @@ interface UVLV_Chunk {
     textures: Uint16Array;
     sqs: Uint16Array;
     anims: Uint16Array;
-    fts: Uint16Array;
+    fonts: Uint16Array;
     blits: Uint16Array;
 }
 
 function parseUVLV_Chunk(chunk: Pilotwings64FSFileChunk): UVLV_Chunk {
-    const view = chunk.buffer.createDataView();
-    let offset = 0x00;
+    const buffer = chunk.buffer;
+    const view = buffer.createDataView();
     const allIndices: Uint16Array[] = [];
+    let idx = 0x00;
     for (let i = 0; i < 10; i++) {
-        const num = view.getUint16(offset);
-        offset += 2
-        const indices = new Uint16Array(num);
-        for (let j = 0; j < num; j++) {
-            indices[j] = view.getUint16(offset + 2 * j);
-        }
+        const indicesCount = view.getUint16(idx + 0x00);
+        const indices = buffer.createTypedArray(Uint16Array, idx + 0x02, indicesCount, Endianness.BIG_ENDIAN);
         allIndices.push(indices);
-        offset += 2 * num;
+        idx += 0x02 + 0x02 * indicesCount;
     }
     return {
         terras: allIndices[0],
@@ -401,7 +399,7 @@ function parseUVLV_Chunk(chunk: Pilotwings64FSFileChunk): UVLV_Chunk {
         textures: allIndices[5],
         sqs: allIndices[6],
         anims: allIndices[7],
-        fts: allIndices[8],
+        fonts: allIndices[8],
         blits: allIndices[9],
     };
 }
