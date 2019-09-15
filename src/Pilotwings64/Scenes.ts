@@ -361,6 +361,58 @@ function parseUVTX(file: Pilotwings64FSFile): UVTX {
     return parseUVTX_Chunk(file.chunks[0], file.name);
 }
 
+interface UVLV {
+    levels: UVLV_Chunk[];
+}
+
+interface UVLV_Chunk {
+    terras: Uint16Array;
+    lights: Uint16Array;
+    envs: Uint16Array;
+    models: Uint16Array;
+    contours: Uint16Array;
+    textures: Uint16Array;
+    sqs: Uint16Array;
+    anims: Uint16Array;
+    fts: Uint16Array;
+    blits: Uint16Array;
+}
+
+function parseUVLV_Chunk(chunk: Pilotwings64FSFileChunk): UVLV_Chunk {
+    const view = chunk.buffer.createDataView();
+    let offset = 0x00;
+    const allIndices: Uint16Array[] = [];
+    for (let i = 0; i < 10; i++) {
+        const num = view.getUint16(offset);
+        offset += 2
+        const indices = new Uint16Array(num);
+        for (let j = 0; j < num; j++) {
+            indices[j] = view.getUint16(offset + 2 * j);
+        }
+        allIndices.push(indices);
+        offset += 2 * num;
+    }
+    return {
+        terras: allIndices[0],
+        lights: allIndices[1],
+        envs: allIndices[2],
+        models: allIndices[3],
+        contours: allIndices[4],
+        textures: allIndices[5],
+        sqs: allIndices[6],
+        anims: allIndices[7],
+        fts: allIndices[8],
+        blits: allIndices[9],
+    };
+}
+
+function parseUVLV(file: Pilotwings64FSFile): UVLV {
+    const levels: UVLV_Chunk[] = [];
+    for (let i = 0; i < file.chunks.length; i++)
+        levels.push(parseUVLV_Chunk(file.chunks[i]));
+    return { levels };
+}
+
 function parsePilotwings64FS(buffer: ArrayBufferSlice): Pilotwings64FS {
     const view = buffer.createDataView();
 
@@ -601,7 +653,9 @@ class Pilotwings64Renderer implements SceneGfx {
 
 const pathBase = `Pilotwings64`;
 class Pilotwings64SceneDesc implements SceneDesc {
-    constructor(public id: string, public name: string) {
+    public id: string;
+    constructor(public levelID: number, public name: string) {
+        this.id = '' + levelID;
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
@@ -627,9 +681,11 @@ class Pilotwings64SceneDesc implements SceneDesc {
         });
         renderer.textureHolder.addTextures(device, uvtx.filter((e) => !!e));
 
-        for (let i = 0; i < uvtr[0].maps.length; i++) {
-            const map = uvtr[0].maps[i];
-            const baseY = i * 1000;
+        const levelData = parseUVLV(fs.files.filter((file) => file.type === 'UVLV')[0]).levels[this.levelID];
+
+        for (let terraIndex of levelData.terras) {
+            const map = uvtr[0].maps[terraIndex];
+            const baseY = 0;
             for (let j = 0; j < map.contourPlacements.length; j++) {
                 const ct = map.contourPlacements[j];
                 const instance = new UVCTInstance(uvctData[ct.contourIndex]);
@@ -648,7 +704,10 @@ class Pilotwings64SceneDesc implements SceneDesc {
 const id = 'Pilotwings64';
 const name = "Pilotwings 64";
 const sceneDescs = [
-    new Pilotwings64SceneDesc('uvcttest', 'UVCT Test'),
+    new Pilotwings64SceneDesc(1, 'Holiday Island'),
+    new Pilotwings64SceneDesc(3, 'Crescent Island'),
+    new Pilotwings64SceneDesc(5, 'Little States'),
+    new Pilotwings64SceneDesc(10, 'Ever-Frost Island'),
 ];
 
 export const sceneGroup: SceneGroup = { id, name, sceneDescs, hidden: !IS_DEVELOPMENT };
