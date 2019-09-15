@@ -1,6 +1,6 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString } from "../util";
+import { readString, assertExists } from "../util";
 import { parseTLUT, ImageFormat, ImageSize, TextFilt, TexCM, getSizBitsPerPixel, decodeTex_RGBA16, decodeTex_RGBA32, decodeTex_CI4, decodeTex_CI8, decodeTex_IA4, decodeTex_IA8, decodeTex_IA16, decodeTex_I4, decodeTex_I8, TextureLUT, getTLUTSize } from "../Common/N64/Image";
 
 export interface Image {
@@ -70,8 +70,8 @@ export function parseTextureArchive(buffer: ArrayBufferSlice): TextureArchive {
 
         if (format === ImageFormat.G_IM_FMT_RGBA && siz === ImageSize.G_IM_SIZ_16b) return decodeTex_RGBA16(dst, view, dataOffs, width, height);
         if (format === ImageFormat.G_IM_FMT_RGBA && siz === ImageSize.G_IM_SIZ_32b) return decodeTex_RGBA32(dst, view, dataOffs, width, height);
-        if (format === ImageFormat.G_IM_FMT_CI   && siz === ImageSize.G_IM_SIZ_4b)  return decodeTex_CI4(dst, view, dataOffs, width, height, tlut);
-        if (format === ImageFormat.G_IM_FMT_CI   && siz === ImageSize.G_IM_SIZ_8b)  return decodeTex_CI8(dst, view, dataOffs, width, height, tlut);
+        if (format === ImageFormat.G_IM_FMT_CI   && siz === ImageSize.G_IM_SIZ_4b)  return decodeTex_CI4(dst, view, dataOffs, width, height, assertExists(tlut));
+        if (format === ImageFormat.G_IM_FMT_CI   && siz === ImageSize.G_IM_SIZ_8b)  return decodeTex_CI8(dst, view, dataOffs, width, height, assertExists(tlut));
         if (format === ImageFormat.G_IM_FMT_IA   && siz === ImageSize.G_IM_SIZ_4b)  return decodeTex_IA4(dst, view, dataOffs, width, height);
         if (format === ImageFormat.G_IM_FMT_IA   && siz === ImageSize.G_IM_SIZ_8b)  return decodeTex_IA8(dst, view, dataOffs, width, height);
         if (format === ImageFormat.G_IM_FMT_IA   && siz === ImageSize.G_IM_SIZ_16b) return decodeTex_IA16(dst, view, dataOffs, width, height);

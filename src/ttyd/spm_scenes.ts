@@ -10,6 +10,7 @@ import { WorldRenderer, TPLTextureHolder } from './render';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
+import { assertExists } from '../util';
 
 class SPMSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string = id) {
@@ -20,12 +21,12 @@ class SPMSceneDesc implements Viewer.SceneDesc {
         return dataFetcher.fetchData(`spm/${this.id}.bin`).then((buffer: ArrayBufferSlice) => {
             const decompressed = CX.decompress(buffer);
             const arc = U8.parse(decompressed);
-            const dFile = arc.findFile(`./dvd/map/*/map.dat`);
-            const d = World.parse(dFile.buffer);
+            const dFile = assertExists(arc.findFileData(`./dvd/map/*/map.dat`));
+            const d = World.parse(dFile);
 
             const textureHolder = new TPLTextureHolder();
-            const tFile = arc.findFile(`./dvd/map/*/texture.tpl`);
-            const tpl = TPL.parse(tFile.buffer, d.textureNameTable);
+            const tFile = assertExists(arc.findFileData(`./dvd/map/*/texture.tpl`));
+            const tpl = TPL.parse(tFile, d.textureNameTable);
             textureHolder.addTPLTextures(device, tpl);
 
             const bDir = arc.findDir(`./dvd/bg`);

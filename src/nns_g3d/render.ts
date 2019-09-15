@@ -14,7 +14,7 @@ import { TextureMapping } from "../TextureHolder";
 import { fillMatrix4x3, fillMatrix4x4, fillMatrix3x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { computeViewMatrix, computeViewMatrixSkybox, computeModelMatrixYBillboard } from "../Camera";
 import AnimationController from "../AnimationController";
-import { nArray } from "../util";
+import { nArray, assertExists } from "../util";
 
 function textureToCanvas(bmdTex: TEX0Texture, pixels: Uint8Array, name: string): Viewer.Texture {
     const canvas = document.createElement("canvas");
@@ -22,7 +22,7 @@ function textureToCanvas(bmdTex: TEX0Texture, pixels: Uint8Array, name: string):
     canvas.height = bmdTex.height;
     canvas.title = name;
 
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d")!;
     const imgData = ctx.createImageData(canvas.width, canvas.height);
     imgData.data.set(pixels);
     ctx.putImageData(imgData, 0, 0);
@@ -47,7 +47,7 @@ class MaterialInstance {
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
 
     constructor(device: GfxDevice, tex0: TEX0, private model: NSBMD.MDL0Model, public material: NSBMD.MDL0Material) {
-        this.texture = tex0.textures.find((t) => t.name === this.material.textureName);
+        this.texture = assertExists(tex0.textures.find((t) => t.name === this.material.textureName));
         this.translateTexture(device, tex0, this.material.textureName, this.material.paletteName);
         this.baseCtx = { color: { r: 0xFF, g: 0xFF, b: 0xFF }, alpha: this.material.alpha };
 
@@ -99,7 +99,7 @@ class MaterialInstance {
             return;
 
         while (this.gfxTextures.length > 1) {
-            device.destroyTexture(this.gfxTextures.pop());
+            device.destroyTexture(this.gfxTextures.pop()!);
             this.textureNames.pop();
             this.viewerTextures.pop();
         }
@@ -110,9 +110,12 @@ class MaterialInstance {
         }
     }
 
-    private translateTexture(device: GfxDevice, tex0: TEX0, textureName: string, paletteName: string) {
-        const texture = tex0.textures.find((t) => t.name === textureName);
-        const palette = paletteName !== null ? tex0.palettes.find((t) => t.name === paletteName) : null;
+    private translateTexture(device: GfxDevice, tex0: TEX0 | null, textureName: string | null, paletteName: string | null) {
+        if (tex0 === null || textureName === null)
+            return;
+
+        const texture = assertExists(tex0.textures.find((t) => t.name === textureName));
+        const palette = paletteName !== null ? assertExists(tex0.palettes.find((t) => t.name === paletteName)) : null;
         const fullTextureName = `${textureName}/${paletteName}`;
         if (this.textureNames.indexOf(fullTextureName) >= 0)
             return;
@@ -292,8 +295,8 @@ export class MDL0Renderer {
         };
 
         let idx = 0;
-        let currentNode: Node;
-        let currentMaterial: MaterialInstance;
+        let currentNode: Node | null = null;
+        let currentMaterial: MaterialInstance | null = null;
         while (true) {
             const w0 = view.getUint8(idx++);
             const cmd = w0 & 0x1F;
@@ -314,7 +317,7 @@ export class MDL0Renderer {
             } else if (cmd === Op.SHP) {
                 const shpIdx = view.getUint8(idx++);
                 const shape = model.shapes[shpIdx];
-                this.shapeInstances.push(new ShapeInstance(device, currentMaterial, currentNode, shape, this.model.posScale));
+                this.shapeInstances.push(new ShapeInstance(device, assertExists(currentMaterial), assertExists(currentNode), shape, this.model.posScale));
             } else if (cmd === Op.NODEDESC) {
                 const idxNode = view.getUint8(idx++);
                 const idxNodeParent = view.getUint8(idx++);

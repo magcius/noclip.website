@@ -6,7 +6,7 @@ import { ResourceSystem } from './resource';
 import { MREARenderer, RetroTextureHolder } from './render';
 
 import * as Viewer from '../viewer';
-import { assert } from '../util';
+import { assert, assertExists } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { RetroSceneRenderer } from './scenes';
@@ -26,10 +26,10 @@ class DKCRSceneDesc implements Viewer.SceneDesc {
             const resourceSystem = new ResourceSystem([levelPak], null);
             for (const mlvlEntry of levelPak.namedResourceTable.values()) {
                 if (this.worldName.length !== 0 && this.worldName != mlvlEntry.name) continue;
-                const mlvl: MLVL.MLVL = resourceSystem.loadAssetByID<MLVL.MLVL>(mlvlEntry.fileID, 'MLVL');
+                const mlvl: MLVL.MLVL = assertExists(resourceSystem.loadAssetByID<MLVL.MLVL>(mlvlEntry.fileID, 'MLVL'));
                 assert(mlvl.areaTable.length === 1);
                 const area: MLVL.Area = mlvl.areaTable[0];
-                const mrea: MREA.MREA = resourceSystem.loadAssetByID<MREA.MREA>(area.areaMREAID, 'MREA');
+                const mrea: MREA.MREA = assertExists(resourceSystem.loadAssetByID<MREA.MREA>(area.areaMREAID, 'MREA'));
                 const textureHolder = new RetroTextureHolder();
                 const renderer = new RetroSceneRenderer(device, mlvl, textureHolder);
                 colorFromRGBA(renderer.worldAmbientColor, 0.5, 0.5, 0.5, 1.0);
@@ -38,7 +38,7 @@ class DKCRSceneDesc implements Viewer.SceneDesc {
                 renderer.areaRenderers.push(mreaRenderer);
                 return renderer;
             }
-            return null;
+            throw "whoops";
         });
     }
 }

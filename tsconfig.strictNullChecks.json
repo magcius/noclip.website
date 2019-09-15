@@ -28,8 +28,17 @@
         "./src/CodeEditor",
 
         "./src/bk/",
+        "./src/dks/",
         "./src/dksiv/",
-        "./src/j3d/"
+        "./src/j3d/",
+        "./src/katamari_damacy/",
+        "./src/metroid_prime/",
+        "./src/nns_g3d/",
+        "./src/Pilotwings64/",
+        "./src/pm64/",
+        "./src/sm64ds/",
+        "./src/sonic_mania/",
+        "./src/ttyd/"
     ],
     "exclude": [
         "**/assembly/*.ts",

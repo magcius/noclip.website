@@ -11,7 +11,7 @@ export interface STRG {
     nameTable: Map<string, number> | null;
 }
 
-const utf16Decoder = getTextDecoder('utf-16be');
+const utf16Decoder = getTextDecoder('utf-16be')!;
 
 function readUTF16String(buffer: ArrayBufferSlice, offs: number): string {
     const arr = buffer.createTypedArray(Uint8Array, offs, 0xFF);
@@ -71,7 +71,7 @@ function parse_MP1(stream: InputStream): STRG {
     // Load English for now because I am a dirty American.
     if (languageTable.has('ENGL')) {
         // Language offsets are relative to the start of the string table, which is where we are, so we can just skip from here
-        const englishOffs = languageTable.get('ENGL');
+        const englishOffs = languageTable.get('ENGL')!;
         stream.skip(englishOffs);
 
         if (version === 0x00) {
@@ -89,7 +89,7 @@ function parse_MP1(stream: InputStream): STRG {
     return { strings, nameTable };
 }
 
-const utf8Decoder = getTextDecoder('utf8');
+const utf8Decoder = getTextDecoder('utf8')!;
 
 function parse_MP3(stream: InputStream): STRG {
     assert(stream.readUint32() === 0x87654321);

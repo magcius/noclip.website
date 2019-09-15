@@ -42,8 +42,11 @@ class ResourceSystem {
         this.files.set(fileName, buffer);
     }
 
-    public lookupFile(filename: string) {
-        return this.files.get(filename);
+    public lookupFile(filename: string): ArrayBufferSlice | null {
+        if (this.files.has(filename))
+            return this.files.get(filename)!;
+        else
+            return null;
     }
 }
 
@@ -103,13 +106,13 @@ export class ModelHolder {
     constructor(device: GfxDevice, flver: (FLVER.FLVER | undefined)[]) {
         for (let i = 0; i < flver.length; i++)
             if (flver[i] !== undefined)
-                this.flverData[i] = new FLVERData(device, flver[i]);
+                this.flverData[i] = new FLVERData(device, flver[i]!);
     }
 
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.flverData.length; i++)
             if (this.flverData[i] !== undefined)
-                this.flverData[i].destroy(device);
+                this.flverData[i]!.destroy(device);
     }
 }
 
@@ -147,15 +150,15 @@ class DKSSceneDesc implements Viewer.SceneDesc {
     }
 
     private loadTextureTPFDCX(device: GfxDevice, textureHolder: DDSTextureHolder, resourceSystem: ResourceSystem, baseName: string): void {
-        const buffer = resourceSystem.lookupFile(`${baseName}.tpf.dcx`);
+        const buffer = assertExists(resourceSystem.lookupFile(`${baseName}.tpf.dcx`));
         const decompressed = new ArrayBufferSlice(DCX.decompressBuffer(buffer));
         const tpf = TPF.parse(decompressed);
         textureHolder.addTextures(device, tpf.textures);
     }
 
     private loadTextureBHD(device: GfxDevice, textureHolder: DDSTextureHolder, resourceSystem: ResourceSystem, baseName: string): void {
-        const bhdBuffer = resourceSystem.lookupFile(`${baseName}.tpfbhd`);
-        const bdtBuffer = resourceSystem.lookupFile(`${baseName}.tpfbdt`);
+        const bhdBuffer = assertExists(resourceSystem.lookupFile(`${baseName}.tpfbhd`));
+        const bdtBuffer = assertExists(resourceSystem.lookupFile(`${baseName}.tpfbdt`));
         const bhd = BHD.parse(bhdBuffer, bdtBuffer);
         for (let i = 0; i < bhd.fileRecords.length; i++) {
             const r = bhd.fileRecords[i];
@@ -185,16 +188,16 @@ class DKSSceneDesc implements Viewer.SceneDesc {
         const renderer = new DKSRenderer(device, textureHolder);
 
         const msbPath = `/map/MapStudio/${this.id}.msb`;
-        const msbBuffer = resourceSystem.lookupFile(msbPath);
+        const msbBuffer = assertExists(resourceSystem.lookupFile(msbPath));
         const msb = MSB.parse(msbBuffer, this.id);
 
-        const mtdBnd = BND3.parse(resourceSystem.lookupFile(`mtd/Mtd.mtdbnd`));
+        const mtdBnd = BND3.parse(assertExists(resourceSystem.lookupFile(`mtd/Mtd.mtdbnd`)));
         const materialDataHolder = new MaterialDataHolder(mtdBnd);
 
         const flver: (FLVER.FLVER | undefined)[] = [];
         for (let i = 0; i < msb.models.length; i++) {
             if (msb.models[i].type === 0) {
-                const flverBuffer = resourceSystem.lookupFile(msb.models[i].flverPath);
+                const flverBuffer = assertExists(resourceSystem.lookupFile(msb.models[i].flverPath));
                 const flver_ = FLVER.parse(new ArrayBufferSlice(DCX.decompressBuffer(flverBuffer)));
                 if (flver_.batches.length > 0)
                     flver[i] = flver_;
@@ -222,15 +225,15 @@ class DKSEverySceneDesc implements Viewer.SceneDesc {
     }
 
     private loadTextureTPFDCX(device: GfxDevice, textureHolder: DDSTextureHolder, resourceSystem: ResourceSystem, baseName: string): void {
-        const buffer = resourceSystem.lookupFile(`${baseName}.tpf.dcx`);
+        const buffer = assertExists(resourceSystem.lookupFile(`${baseName}.tpf.dcx`));
         const decompressed = new ArrayBufferSlice(DCX.decompressBuffer(buffer));
         const tpf = TPF.parse(decompressed);
         textureHolder.addTextures(device, tpf.textures);
     }
 
     private loadTextureBHD(device: GfxDevice, textureHolder: DDSTextureHolder, resourceSystem: ResourceSystem, baseName: string): void {
-        const bhdBuffer = resourceSystem.lookupFile(`${baseName}.tpfbhd`);
-        const bdtBuffer = resourceSystem.lookupFile(`${baseName}.tpfbdt`);
+        const bhdBuffer = assertExists(resourceSystem.lookupFile(`${baseName}.tpfbhd`));
+        const bdtBuffer = assertExists(resourceSystem.lookupFile(`${baseName}.tpfbdt`));
         const bhd = BHD.parse(bhdBuffer, bdtBuffer);
         for (let i = 0; i < bhd.fileRecords.length; i++) {
             const r = bhd.fileRecords[i];
@@ -287,16 +290,16 @@ class DKSEverySceneDesc implements Viewer.SceneDesc {
         for (let i = 0; i < allMaps.length; i++) {
             const mapID = allMaps[i];
             const msbPath = `/map/MapStudio/${mapID}.msb`;
-            const msbBuffer = resourceSystem.lookupFile(msbPath);
+            const msbBuffer = assertExists(resourceSystem.lookupFile(msbPath));
             const msb = MSB.parse(msbBuffer, mapID);
 
-            const mtdBnd = BND3.parse(resourceSystem.lookupFile(`mtd/Mtd.mtdbnd`));
+            const mtdBnd = BND3.parse(assertExists(resourceSystem.lookupFile(`mtd/Mtd.mtdbnd`)));
             const materialDataHolder = new MaterialDataHolder(mtdBnd);
 
             const flver: (FLVER.FLVER | undefined)[] = [];
             for (let i = 0; i < msb.models.length; i++) {
                 if (msb.models[i].type === 0) {
-                    const flverBuffer = resourceSystem.lookupFile(msb.models[i].flverPath);
+                    const flverBuffer = assertExists(resourceSystem.lookupFile(msb.models[i].flverPath));
                     const flver_ = FLVER.parse(new ArrayBufferSlice(DCX.decompressBuffer(flverBuffer)));
                     if (flver_.batches.length > 0)
                         flver[i] = flver_;

@@ -95,7 +95,7 @@ function textureToCanvas(texture: Tex.Image): Viewer.Texture {
         canvas.width = texture.width >>> i;
         canvas.height = texture.height >>> i;
 
-        const ctx = canvas.getContext("2d");
+        const ctx = canvas.getContext("2d")!;
         const imgData = ctx.createImageData(canvas.width, canvas.height);
         imgData.data.set(texture.levels[i]);
         ctx.putImageData(imgData, 0, 0);
@@ -318,8 +318,8 @@ class ModelTreeLeafInstance {
         this.createProgram();
     }
 
-    private computeTextureMatrix(dst: mat4, texAnimGroups: TexAnimGroup[], tileId: number): void {
-        const image = this.textureEnvironment.images[tileId];
+    private computeTextureMatrix(dst: mat4, texAnimGroups: TexAnimGroup[], tileId: 0 | 1): void {
+        const image = this.textureEnvironment!.images[tileId];
 
         mat4.identity(dst);
 
@@ -340,6 +340,8 @@ class ModelTreeLeafInstance {
         } else if (tileId === 1) {
             scaleS = calcScaleForShift(this.secondaryTileShiftS);
             scaleT = calcScaleForShift(this.secondaryTileShiftT);
+        } else {
+            throw "whoops";
         }
 
         dst[0] *= scaleS;
@@ -538,7 +540,7 @@ export class PaperMario64ModelTreeRenderer {
     }
 
     public setModelTexAnimGroupEnabled(modelId: number, enabled: boolean): void {
-        const modelInstance = this.modelTreeRootInstance.findModelInstance(modelId);
+        const modelInstance = assertExists(this.modelTreeRootInstance.findModelInstance(modelId));
         modelInstance.setTexAnimEnabled(enabled);
     }
 
@@ -546,7 +548,7 @@ export class PaperMario64ModelTreeRenderer {
         if (!this.texAnimGroup[groupId])
             this.texAnimGroup[groupId] = new TexAnimGroup();
 
-        const modelInstance = this.modelTreeRootInstance.findModelInstance(modelId);
+        const modelInstance = assertExists(this.modelTreeRootInstance.findModelInstance(modelId));
         modelInstance.setTexAnimGroup(groupId);
         modelInstance.setTexAnimEnabled(true);
     }

@@ -400,7 +400,7 @@ class ModelCache {
     public mountNARC(narc: NARC.NitroFS): void {
         for (let i = 0; i < narc.files.length; i++) {
             const file = narc.files[i];
-            this.fileDataCache.set(file.path, file.buffer);
+            this.fileDataCache.set(assertExists(file.path), file.buffer);
         }
     }
 
@@ -952,10 +952,9 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
             const b = await spawnObject(`/data/enemy/pakkun/pakkun_model.bmd`);
             await bindBCA(b, '/data/enemy/pakkun/pakkun_sleep_loop.bca');
         } else if (objectId === ObjectId.STAR_CAMERA) { 		//ID 060
-            return null; // Star Camera Path
+            return; // Star Camera Path
         } else if (objectId === ObjectId.STAR) { 				//ID 061
             const b = await spawnObject(`/data/normal_obj/star/obj_star.bmd`, 0.8, 0.08);
-            //return null; // Star Target
         } else if (objectId === ObjectId.SILVER_STAR) { 		//ID 062
             const b = await spawnObject(`/data/normal_obj/star/obj_star_silver.bmd`, 0.8, 0.08); // Silver Star
         } else if (objectId === ObjectId.STARBASE) { 			//ID 063

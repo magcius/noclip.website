@@ -56,7 +56,7 @@ class BatchData {
         const buffers: GfxVertexBufferDescriptor[] = [{ buffer: vertexBuffer.buffer, byteOffset: vertexBuffer.wordOffset * 0x04, byteStride: flverInputState.vertexSize }];
 
         for (let j = 0; j < batch.primitiveIndexes.length; j++) {
-            const coaIndexBuffer = indexBuffers.shift();
+            const coaIndexBuffer = assertExists(indexBuffers.shift());
             const indexBuffer: GfxVertexBufferDescriptor = { buffer: coaIndexBuffer.buffer, byteOffset: coaIndexBuffer.wordOffset * 0x04, byteStride: 0x02 };
             const inputState = device.createInputState(flverData.inputLayouts[flverInputState.inputLayoutIndex], buffers, indexBuffer);
             this.inputStates.push(inputState);
@@ -107,7 +107,7 @@ export class FLVERData {
         const indexBufferDatas: ArrayBufferSlice[] = [];
         for (let i = 0; i < flver.inputStates.length; i++) {
             vertexBufferDatas.push(flver.inputStates[i].vertexData);
-            flver.inputStates[i].vertexData = null;
+            flver.inputStates[i].vertexData = null as unknown as ArrayBufferSlice;
         }
         const vertexBuffers = coalesceBuffer(device, GfxBufferUsage.VERTEX, vertexBufferDatas);
         this.vertexBuffer = vertexBuffers[0].buffer;
@@ -118,7 +118,7 @@ export class FLVERData {
                 const primitive = flver.primitives[batch.primitiveIndexes[j]];
                 const triangleIndexData = convertToTriangleIndexBuffer(GfxTopology.TRISTRIP, primitive.indexData.createTypedArray(Uint16Array));
                 indexBufferDatas.push(new ArrayBufferSlice(triangleIndexData.buffer));
-                primitive.indexData = null;
+                primitive.indexData = null as unknown as ArrayBufferSlice;
             }
         }
 
@@ -566,8 +566,6 @@ function linkTextureParameter(textureMapping: TextureMapping[], textureHolder: D
     }
 }
 
-window.debug = 0.0;
-
 const scratchVec4 = vec4.create();
 class BatchInstance {
     private visible = true;
@@ -586,7 +584,7 @@ class BatchInstance {
 
         // If this is a Phong shader, then turn on lighting.
         if (mtd.shaderPath.includes('_Phn_')) {
-            const lightingType: LightingType = getMaterialParam(mtd, 'g_LightingType')[0];
+            const lightingType: LightingType = assertExists(getMaterialParam(mtd, 'g_LightingType'))[0];
 
             if (lightingType !== LightingType.None)
                 program.defines.set('USE_LIGHTING', '1');
@@ -693,7 +691,7 @@ class BatchInstance {
         vec4.normalize(scratchVec4, scratchVec4);
         offs += fillVec4v(d, offs, scratchVec4);
 
-        offs += fillVec4(d, offs, this.specularPower, window.debug);
+        offs += fillVec4(d, offs, this.specularPower);
 
         const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, bboxScratch);
 
@@ -738,7 +736,7 @@ export class FLVERInstance {
             const material = this.flverData.flver.materials[batch.materialIndex];
 
             const mtdFilePath = material.mtdName;
-            const mtdName = mtdFilePath.split('\\').pop();
+            const mtdName = mtdFilePath.split('\\').pop()!;
             const mtd = materialDataHolder.getMaterial(mtdName);
 
             this.batchInstances.push(new BatchInstance(device, flverData, batchData, textureHolder, material, mtd));

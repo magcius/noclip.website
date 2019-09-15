@@ -10,7 +10,7 @@ import { InputStream } from './stream'
 import { TXTR } from './txtr';
 
 import { ResourceSystem } from "./resource";
-import { assert, align } from "../util";
+import { assert, align, assertExists } from "../util";
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { compileVtxLoaderMultiVat, GX_VtxDesc, GX_VtxAttrFmt, GX_Array, LoadedVertexData, LoadedVertexLayout } from '../gx/gx_displaylist';
 import { mat4, vec3 } from 'gl-matrix';
@@ -88,7 +88,7 @@ export interface Material {
     textureIndexes: number[];
     vtxAttrFormat: number;
     gxMaterial: GX_Material.GXMaterial;
-    uvAnimations: UVAnimation[];
+    uvAnimations: (UVAnimation | null)[];
     colorRegisters: Color[];
     colorConstants: Color[];
 }
@@ -173,7 +173,7 @@ function parseMaterialSet_MP1_MP2(stream: InputStream, resourceSystem: ResourceS
     const textureRemapTable: number[] = [];
     for (let i = 0; i < textureCount; i++) {
         const materialTXTRID = stream.readAssetID();
-        const txtr: TXTR = resourceSystem.loadAssetByID<TXTR>(materialTXTRID, 'TXTR');
+        const txtr: TXTR = assertExists(resourceSystem.loadAssetByID<TXTR>(materialTXTRID, 'TXTR'));
         const txtrIndex = textures.indexOf(txtr);
         if (txtrIndex >= 0) {
             textureRemapTable.push(txtrIndex);
@@ -541,7 +541,7 @@ function parseWorldModels_MP3(stream: InputStream, worldModelCount: number, wobj
     return worldModels;
 }
 
-function parseSurfaces(stream: InputStream, surfaceCount: number, sectionIndex: number, posSectionOffs: number, nrmSectionOffs: number, clrSectionOffs: number, uvfSectionOffs: number, uvsSectionOffs: number, sectionOffsTable: number[], worldModelIndex: number, materialSet: MaterialSet, isEchoes: boolean): [Surface[], number] {
+function parseSurfaces(stream: InputStream, surfaceCount: number, sectionIndex: number, posSectionOffs: number, nrmSectionOffs: number, clrSectionOffs: number, uvfSectionOffs: number, uvsSectionOffs: number | null, sectionOffsTable: number[], worldModelIndex: number, materialSet: MaterialSet, isEchoes: boolean): [Surface[], number] {
     function fillVatFormat(nrmType: GX.CompType, tex0Type: GX.CompType, compShift: number): GX_VtxAttrFmt[] {
         const vatFormat: GX_VtxAttrFmt[] = [];
         vatFormat[GX.VertexAttribute.POS] = { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.F32, compShift };
@@ -599,7 +599,7 @@ function parseSurfaces(stream: InputStream, surfaceCount: number, sectionIndex: 
         vtxArrays[GX.VertexAttribute.NRM]  = { buffer: stream.getBuffer(), offs: nrmSectionOffs };
         vtxArrays[GX.VertexAttribute.CLR0] = { buffer: stream.getBuffer(), offs: clrSectionOffs };
         vtxArrays[GX.VertexAttribute.CLR1] = { buffer: stream.getBuffer(), offs: clrSectionOffs };
-        vtxArrays[GX.VertexAttribute.TEX0] = { buffer: stream.getBuffer(), offs: useUvsArray ? uvsSectionOffs : uvfSectionOffs };
+        vtxArrays[GX.VertexAttribute.TEX0] = { buffer: stream.getBuffer(), offs: useUvsArray ? assertExists(uvsSectionOffs) : uvfSectionOffs };
         vtxArrays[GX.VertexAttribute.TEX1] = { buffer: stream.getBuffer(), offs: uvfSectionOffs };
         vtxArrays[GX.VertexAttribute.TEX2] = { buffer: stream.getBuffer(), offs: uvfSectionOffs };
         vtxArrays[GX.VertexAttribute.TEX3] = { buffer: stream.getBuffer(), offs: uvfSectionOffs };
@@ -645,7 +645,7 @@ function parseSurfaces(stream: InputStream, surfaceCount: number, sectionIndex: 
     return [surfaces, sectionIndex];
 }
 
-function parseSurfaces_DKCR(stream: InputStream, surfaceCount: number, sectionIndex: number, posSectionOffs: number, nrmSectionOffs: number, clrSectionOffs: number, uvfSectionOffs: number, uvsSectionOffs: number, sectionOffsTable: number[], worldModelIndex: number, materialSet: MaterialSet, hasPosShort: boolean): [Surface[], number] {
+function parseSurfaces_DKCR(stream: InputStream, surfaceCount: number, sectionIndex: number, posSectionOffs: number, nrmSectionOffs: number, clrSectionOffs: number, uvfSectionOffs: number, uvsSectionOffs: number | null, sectionOffsTable: number[], worldModelIndex: number, materialSet: MaterialSet, hasPosShort: boolean): [Surface[], number] {
     const surfaces: Surface[] = [];
 
     for (let j = 0; j < surfaceCount; j++) {
@@ -700,7 +700,7 @@ function parseSurfaces_DKCR(stream: InputStream, surfaceCount: number, sectionIn
         const isShort = (uvArrayIndex === 1);
         for (let i = 0; i < 8; i++) {
             vatFormat[GX.VertexAttribute.TEX0 + i] = { compCnt: GX.CompCnt.TEX_ST, compType: isShort ? GX.CompType.S16 : GX.CompType.F32, compShift: Math.log2(0x2000) };
-            vtxArrays[GX.VertexAttribute.TEX0 + i] = { buffer: stream.getBuffer(), offs: isShort ? uvsSectionOffs : uvfSectionOffs };
+            vtxArrays[GX.VertexAttribute.TEX0 + i] = { buffer: stream.getBuffer(), offs: isShort ? assertExists(uvsSectionOffs) : uvfSectionOffs };
         }
 
         const vatFormats: GX_VtxAttrFmt[][] = [vatFormat, vatFormat, vatFormat, vatFormat, vatFormat, vatFormat, vatFormat, vatFormat];
@@ -994,7 +994,7 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem): MREA
     stream.align(32);
 
     // Decompress any compressed data
-    let areaDataBuffer: ArrayBufferSlice = null;
+    let areaDataBuffer: ArrayBufferSlice | null = null;
 
     if (numCompressedBlocks > 0) {
         const compressedDataIdx = align(stream.tell() + align(numCompressedBlocks*16, 32) + align(numSectionNumbers*8, 32), 32);
@@ -1262,7 +1262,7 @@ function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSyste
         const texGens: GX_Material.TexGen[] = [];
         const tevStages: GX_Material.TevStage[] = [];
         const textureIndexes: number[] = [];
-        const uvAnimations: UVAnimation[] = [];
+        const uvAnimations: (UVAnimation | null)[] = [];
         const passTypes: string[] = [];
         let hasOPAC = false;
         let hasDIFF = false;
@@ -1294,7 +1294,7 @@ function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSyste
                 }
                 assert(stream.tell() === passEnd);
 
-                const txtr: TXTR = resourceSystem.loadAssetByID<TXTR>(materialTXTRID, 'TXTR');
+                const txtr: TXTR = assertExists(resourceSystem.loadAssetByID<TXTR>(materialTXTRID, 'TXTR'));
                 let txtrIndex = textures.indexOf(txtr);
                 if (txtrIndex < 0) {
                     txtrIndex = textures.push(txtr) - 1;

@@ -2,7 +2,7 @@
 // Implements support for Retro Studios actor data
 
 import { ResourceSystem } from "./resource";
-import { readString, assert, hexdump } from "../util";
+import { readString, assert, hexdump, assertExists } from "../util";
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { mat4, vec3 } from 'gl-matrix';
 import { CMDL } from './cmdl';
@@ -112,22 +112,20 @@ export class Entity {
     public readProperty_MP2(stream: InputStream, resourceSystem: ResourceSystem, propertyID: number) {
     }
 
-    public getRenderModel() : CMDL {
+    public getRenderModel(): CMDL | null {
         if (this.animParams !== null) {
             const charID = this.animParams.charID;
             const ancs = this.animParams.ancs;
 
             if (ancs !== null && ancs.characters.length > charID) {
                 const model = ancs.characters[charID].model;
-                if (model !== null) {
+                if (model !== null)
                     return model;
-                }
             }
         }
 
-        if (this.char !== null && this.char.cmdl !== null) {
+        if (this.char !== null && this.char.cmdl !== null)
             return this.char.cmdl;
-        }
 
         return this.model;
     }
@@ -135,7 +133,7 @@ export class Entity {
 
 export class AreaAttributes extends Entity {
     public needSky: boolean = false;
-    public overrideSky: CMDL = null;
+    public overrideSky: CMDL | null = null;
 
     public readProperty_MP2(stream: InputStream, resourceSystem: ResourceSystem, propertyID: number) {
         switch (propertyID) {
@@ -150,7 +148,7 @@ export class AreaAttributes extends Entity {
     }
 }
 
-function createEntity_MP2(type: string, entityID: number): Entity {
+function createEntity_MP2(type: string, entityID: number): Entity | null {
     switch (type) {
         // These are skipped because they look bad
         case "FISH": // FishCloud
@@ -213,14 +211,14 @@ function readTransform(buffer: ArrayBufferSlice, offs: number, ent: Entity, hasP
 
 function readAssetId<T>(buffer: ArrayBufferSlice, offs: number, idSize: number, type: string, resourceSystem: ResourceSystem): T {
     const assetId = readString(buffer, offs, idSize, false);
-    return resourceSystem.loadAssetByID<T>(assetId, type);
+    return assertExists(resourceSystem.loadAssetByID<T>(assetId, type));
 }
 
 function readAnimationParameters(buffer: ArrayBufferSlice, offs: number, ent: Entity, resourceSystem: ResourceSystem): number {
     const view = buffer.createDataView();
     ent.animParams = new AnimationParameters();
     const ancsID = readString(buffer, offs, 4, false);
-    ent.animParams.ancs = resourceSystem.loadAssetByID<ANCS>(ancsID, 'ANCS');
+    ent.animParams.ancs = assertExists(resourceSystem.loadAssetByID<ANCS>(ancsID, 'ANCS'));
     ent.animParams.charID = view.getUint32(offs + 0x04);
     ent.animParams.animID = view.getUint32(offs + 0x08);
     return 0x0C;
@@ -629,7 +627,7 @@ export function parseScriptLayer_MP1(buffer: ArrayBufferSlice, layerOffset: numb
                 readTransform(buffer, entityTableIdx + 0x00, entity, true, true, true);
                 entity.model = readAssetId(buffer, entityTableIdx + 0xC4, 4, 'CMDL', resourceSystem);
                 readAnimationParameters(buffer, entityTableIdx + 0xC8, entity, resourceSystem);
-                entity.animParams.charID = 2;
+                entity.animParams!.charID = 2;
                 readActorParameters(buffer, entityTableIdx + 0xD4, entity);
                 entity.active = !!(view.getUint8(entityTableIdx + 0x154));
                 entities.push(entity);

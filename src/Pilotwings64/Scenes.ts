@@ -562,11 +562,11 @@ function textureToCanvas(texture: UVTX): Texture {
 
     for (let i = 0; i < texture.levels.length; i++) {
         const level = texture.levels[i];
-        const canvas = document.createElement("canvas");
+        const canvas = document.createElement("canvas")!;
         canvas.width = level.width;
         canvas.height = level.height;
 
-        const ctx = canvas.getContext("2d");
+        const ctx = canvas.getContext("2d")!;
         const imgData = ctx.createImageData(canvas.width, canvas.height);
         imgData.data.set(level.pixels);
         ctx.putImageData(imgData, 0, 0);
@@ -676,8 +676,8 @@ class Pilotwings64SceneDesc implements SceneDesc {
             } catch(e) {
                 return null;
             }
-        });
-        renderer.textureHolder.addTextures(device, uvtx.filter((e) => !!e));
+        }).filter((e) => !!e) as UVTX[];
+        renderer.textureHolder.addTextures(device, uvtx);
 
         const levelData = parseUVLV(fs.files.filter((file) => file.type === 'UVLV')[0]).levels[this.levelID];
 

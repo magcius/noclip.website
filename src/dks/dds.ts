@@ -73,6 +73,8 @@ export function parse(buffer: ArrayBufferSlice, name: string): DDS {
         const dwBBitMask = view.getUint32(0x64, true);
         assert(dwBBitMask === 0x000000FF);
         format = 'RGB';
+    } else {
+        throw "whoops";
     }
 
     const levels: Level[] = [];
@@ -139,11 +141,11 @@ export class DDSTextureHolder extends TextureHolder<DDS> {
             } else {
                 const decodedSurface = decompressDDSLevel(textureEntry, level);
                 levelDatas.push(decodedSurface.pixels as Uint8Array);
-                decodedSurface.pixels = null;
+                decodedSurface.pixels = null as unknown as Uint8Array;
             }
 
             // Delete expensive data
-            level.data = null;
+            level.data = null as unknown as ArrayBufferSlice;
         }
         const gfxTexture = device.createTexture({
             dimension: GfxTextureDimension.n2D, pixelFormat,

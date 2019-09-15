@@ -2,7 +2,7 @@
 import { CMDL } from "./cmdl";
 import { InputStream } from "./stream";
 import { ResourceSystem } from "./resource";
-import { assert } from "../util";
+import { assert, assertExists } from "../util";
 
 // CHAR (DKCR)
 
@@ -26,6 +26,6 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
     const cmdlID = stream.readAssetID();
     const cskrID = stream.readAssetID();
 
-    const cmdl = resourceSystem.loadAssetByID<CMDL>(cmdlID, 'CMDL');
+    const cmdl = assertExists(resourceSystem.loadAssetByID<CMDL>(cmdlID, 'CMDL'));
     return { name, cmdl };
 }

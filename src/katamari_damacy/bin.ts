@@ -73,7 +73,7 @@ export interface BINModelPart {
     indexOffset: number;
     indexCount: number;
     textureName: string | null;
-    gsConfiguration: GSConfiguration | null;
+    gsConfiguration: GSConfiguration;
 }
 
 export interface BINModel {
@@ -247,7 +247,7 @@ export function parseStageTextureBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMe
     assert(offs === buffer.byteLength);
 }
 
-function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, namePrefix: string, sectorOffs: number): BINModelSector {
+function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, namePrefix: string, sectorOffs: number): BINModelSector | null {
     const view = buffer.createDataView();
 
     const modelObjCount = view.getUint16(sectorOffs + 0x00, true);
@@ -296,7 +296,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
             vertexRunCount: number;
             indexRunData: Uint16Array;
             vertexRunColor: Color;
-            textureName: string;
+            textureName: string | null;
             gsConfiguration: GSConfiguration;
         }
         const modelVertexRuns: BINModelRun[] = [];
@@ -551,7 +551,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
                     let indexDataIdx = 0;
 
                     for (let j = 0; j < vertexRunCount; j++) {
-                        const w = vertexRunData[j * WORKING_VERTEX_STRIDE + 3];
+                        const w = vertexRunData![j * WORKING_VERTEX_STRIDE + 3];
 
                         if (isStrip) {
                             if (j < 2)
@@ -575,7 +575,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
                     const indexRunData = indexData.slice(0, indexDataIdx);
                     const textureName = currentTextureName;
                     const gsConfiguration: GSConfiguration = Object.assign({}, currentGSConfiguration);
-                    modelVertexRuns.push({ vertexRunData, vertexRunCount, indexRunData, vertexRunColor, textureName, gsConfiguration });
+                    modelVertexRuns.push({ vertexRunData: vertexRunData!, vertexRunCount, indexRunData, vertexRunColor: vertexRunColor!, textureName: textureName!, gsConfiguration });
                 }
 
                 vertexRunFlags0 = 0;
@@ -620,11 +620,11 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
 
             // Check if we can coalesce this into the existing model part.
             let modelPartsCompatible = currentModelPart !== null;
-            if (modelPartsCompatible && !colorEqual(vertexRun.vertexRunColor, currentModelPart.diffuseColor))
+            if (modelPartsCompatible && !colorEqual(vertexRun.vertexRunColor, currentModelPart!.diffuseColor))
                 modelPartsCompatible = false;
-            if (modelPartsCompatible && vertexRun.textureName !== currentModelPart.textureName)
+            if (modelPartsCompatible && vertexRun.textureName !== currentModelPart!.textureName)
                 modelPartsCompatible = false;
-            if (modelPartsCompatible && !gsConfigurationEqual(vertexRun.gsConfiguration, currentModelPart.gsConfiguration))
+            if (modelPartsCompatible && !gsConfigurationEqual(vertexRun.gsConfiguration, currentModelPart!.gsConfiguration))
                 modelPartsCompatible = false;
 
             // TODO(jstpierre): Texture settings
@@ -651,7 +651,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
             const indexRunData = vertexRun.indexRunData;
             for (let k = 0; k < indexRunData.length; k++) {
                 indexData[indexDst++] = indexOffset + indexRunData[k];
-                currentModelPart.indexCount++;
+                currentModelPart!.indexCount++;
             }
 
             indexOffset += vertexRun.vertexRunCount;
@@ -688,7 +688,7 @@ export function parseLevelModelBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemo
         sectorTableIdx += 0x04;
         if (sectorIsNIL(buffer, sectorOffs))
             continue;
-        const sectorModel = parseModelSector(buffer, gsMemoryMap, namePrefix, sectorOffs);
+        const sectorModel = assertExists(parseModelSector(buffer, gsMemoryMap, namePrefix, sectorOffs));
         sectors.push(sectorModel);
     }
 

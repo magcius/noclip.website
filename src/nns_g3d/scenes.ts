@@ -8,6 +8,7 @@ import * as NSBMD from './nsbmd';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { GfxRenderDynamicUniformBuffer } from "../gfx/render/GfxRenderDynamicUniformBuffer";
+import { assertExists } from "../util";
 
 class BasicNSBMDRenderer implements SceneGfx {
     public renderTarget = new BasicRenderTarget();
@@ -60,7 +61,7 @@ export function createBasicNSBMDRendererFromNSBMD(device: GfxDevice, buffer: Arr
     const bmd = NSBMD.parse(buffer);
     for (let i = 0; i < bmd.models.length; i++) {
         const mdl0 = bmd.models[0];
-        const mdl0Renderer = new MDL0Renderer(device, mdl0, bmd.tex0);
+        const mdl0Renderer = new MDL0Renderer(device, mdl0, assertExists(bmd.tex0));
         for (let j = 0; j < mdl0Renderer.viewerTextures.length; j++)
             textureHolder.viewerTextures.push(mdl0Renderer.viewerTextures[j]);
         renderer.mdl0Renderers.push(mdl0Renderer);

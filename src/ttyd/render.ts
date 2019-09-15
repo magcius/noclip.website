@@ -537,19 +537,19 @@ export class WorldRenderer extends BasicGXRendererHelper {
         renderHacksPanel.contents.appendChild(enableTextures.elem);
         const enableANode = new UI.Checkbox('Enable Collision', false);
         enableANode.onchanged = () => {
-            const aNodeInst = this.rootNode.children.find((nodeInstance) => nodeInstance.node.nameStr === this.d.information.aNodeStr);
+            const aNodeInst = this.rootNode.children.find((nodeInstance) => nodeInstance.node.nameStr === this.d.information.aNodeStr)!;
             aNodeInst.setVisible(enableANode.checked);
         };
         renderHacksPanel.contents.appendChild(enableANode.elem);
         const enableAAttrib = new UI.Checkbox('Show Collision Attributes', false);
         enableAAttrib.onchanged = () => {
-            const aNodeInst = this.rootNode.children.find((nodeInstance) => nodeInstance.node.nameStr === this.d.information.aNodeStr);
+            const aNodeInst = this.rootNode.children.find((nodeInstance) => nodeInstance.node.nameStr === this.d.information.aNodeStr)!;
             aNodeInst.setShowCollisionAttrib(enableAAttrib.checked);
         };
         renderHacksPanel.contents.appendChild(enableAAttrib.elem);
         const enableSNode = new UI.Checkbox('Enable Render Root', true);
         enableSNode.onchanged = () => {
-            const sNodeInst = this.rootNode.children.find((nodeInstance) => nodeInstance.node.nameStr === this.d.information.sNodeStr);
+            const sNodeInst = this.rootNode.children.find((nodeInstance) => nodeInstance.node.nameStr === this.d.information.sNodeStr)!;
             sNodeInst.setVisible(enableSNode.checked);
         };
         renderHacksPanel.contents.appendChild(enableSNode.elem);

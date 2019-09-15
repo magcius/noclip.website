@@ -37,20 +37,18 @@ export const enum CollisionOctreeNodeType {
     None = 0, Branch = 1, Leaf = 2
 }
 
-export interface CollisionOctreeNode {
-    type: CollisionOctreeNodeType;
-}
-
-export class CollisionOctreeLeaf implements CollisionOctreeNode {
+export class CollisionOctreeLeaf {
     public type: CollisionOctreeNodeType = CollisionOctreeNodeType.Leaf;
     public bounds: AABB;
     public triangles: number[] = [];
 }
 
-export class CollisionOctreeBranch implements CollisionOctreeNode {
+export class CollisionOctreeBranch {
     public type: CollisionOctreeNodeType = CollisionOctreeNodeType.Branch;
     public children: CollisionOctreeNode[] = [null, null, null, null, null, null, null, null];
 }
+
+export type CollisionOctreeNode = CollisionOctreeBranch | CollisionOctreeLeaf | null;
 
 export class CollisionOctree {
     public bounds: AABB;
@@ -195,7 +193,7 @@ function parseOctree(stream: InputStream): CollisionOctree {
     return octree;
 }
 
-export function parseAreaCollision(stream: InputStream): AreaCollision {
+export function parseAreaCollision(stream: InputStream): AreaCollision | null {
     assert(stream.readUint32() === 0x01000000);
     const size = stream.readUint32();
     const magic = stream.readUint32();
@@ -329,8 +327,7 @@ function octreeNodeLineCheck(p0: vec3, p1: vec3, node: CollisionOctreeNode, boun
 
         // No children had intersections
         return false;
-    }
-    else {
+    } else {
         const leaf = node as CollisionOctreeLeaf;
         if (!aabbLineCheck(p0, p1, leaf.bounds)) return false;
 

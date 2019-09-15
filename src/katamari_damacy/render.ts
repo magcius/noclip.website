@@ -268,7 +268,7 @@ export class BINModelPartInstance {
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setMegaStateFlags(this.megaStateFlags);
 
-        if (this.hasDynamicTexture)
+        if (this.hasDynamicTexture && this.binModelPart.textureName)
             textureHolder.fillTextureMapping(this.textureMapping[0], this.binModelPart.textureName);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
 

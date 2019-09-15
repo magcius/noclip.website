@@ -67,6 +67,8 @@ export function parse(buffer: ArrayBufferSlice): MDL0 {
                 j += 4;
             }
             idxData = new ArrayBufferSlice(newArr.buffer);
+        } else {
+            throw "whoops";
         }
     }
 

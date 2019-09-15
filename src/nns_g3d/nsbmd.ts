@@ -42,7 +42,7 @@ export interface MDL0Model {
 
 export interface BMD0 {
     models: MDL0Model[];
-    tex0: TEX0;
+    tex0: TEX0 | null;
 }
 
 export function fx16(n: number): number {

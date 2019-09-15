@@ -2,7 +2,7 @@
 // Implements Retro's MLVL format as seen in Metroid Prime 1.
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString } from "../util";
+import { assert, readString, assertExists } from "../util";
 
 import { InputStream } from "./stream"
 import { ResourceSystem, invalidAssetID } from "./resource";
@@ -69,7 +69,7 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
     const areaTable: Area[] = [];
     for (let i = 0; i < areaCount; i++) {
         const areaSTRGID = stream.readAssetID();
-        const areaSTRG: STRG.STRG = resourceSystem.loadAssetByID<STRG.STRG>(areaSTRGID, 'STRG');
+        const areaSTRG: STRG.STRG = assertExists(resourceSystem.loadAssetByID<STRG.STRG>(areaSTRGID, 'STRG'));
         let areaName = (areaSTRG !== null ? areaSTRG.strings[0] : "");
 
         stream.skip(4*12); // Transform matrix

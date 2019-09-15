@@ -30,7 +30,7 @@ export interface TXTR {
     mipCount: number;
     data: ArrayBufferSlice;
     paletteFormat: GX.TexPalette;
-    paletteData: ArrayBufferSlice;
+    paletteData: ArrayBufferSlice | null;
 }
 
 export function parse(stream: InputStream, resourceSystem: ResourceSystem, assetID: string): TXTR {
@@ -42,7 +42,7 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
     const mipCount = stream.readUint32();
 
     let paletteFormat: GX.TexPalette = 0;
-    let paletteData: ArrayBufferSlice = null;
+    let paletteData: ArrayBufferSlice | null = null;
 
     switch (format) {
     case GX.TexFormat.C4:

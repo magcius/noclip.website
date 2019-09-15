@@ -196,7 +196,7 @@ class MaterialGroupInstance {
         renderInst.sortKey = makeSortKey(layer, this.materialHelper.programKey);
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4 | null, isSkybox: boolean, actorLights: ActorLights | null, worldAmbientColor: Color): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, isSkybox: boolean, actorLights: ActorLights | null, worldAmbientColor: Color): void {
         this.materialParamsBlockOffs = this.materialHelper.allocateMaterialParamsBlock(renderInstManager);
 
         colorCopy(materialParams.u_Color[ColorKind.MAT0], White);
@@ -244,23 +244,19 @@ class MaterialGroupInstance {
 
             if (uvAnimation.type === UVAnimationType.ENV_MAPPING_NO_TRANS) {
                 mat4.mul(texMtx, viewerInput.camera.viewMatrix, posMtx);
-                if (modelMatrix !== null)
-                    mat4.mul(texMtx, texMtx, modelMatrix);
+                mat4.mul(texMtx, texMtx, modelMatrix);
                 computeNormalMatrix(texMtx, texMtx);
                 texEnvMtx(postMtx, 0.5, -0.5, 0.5, 0.5);
             } else if (uvAnimation.type === UVAnimationType.ENV_MAPPING) {
                 mat4.mul(texMtx, viewerInput.camera.viewMatrix, posMtx);
-                if (modelMatrix !== null)
-                    mat4.mul(texMtx, texMtx, modelMatrix);
+                mat4.mul(texMtx, texMtx, modelMatrix);
                 computeNormalMatrix(texMtx, texMtx);
-                if (modelMatrix !== null) {
-                    mat4.invert(scratchMatrix, viewerInput.camera.viewMatrix);
-                    vec3.set(scratchVec3, modelMatrix[12], modelMatrix[13], modelMatrix[14]);
-                    vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
-                    texMtx[12] = scratchVec3[0];
-                    texMtx[13] = scratchVec3[1];
-                    texMtx[14] = scratchVec3[2];
-                }
+                mat4.invert(scratchMatrix, viewerInput.camera.viewMatrix);
+                vec3.set(scratchVec3, modelMatrix[12], modelMatrix[13], modelMatrix[14]);
+                vec3.transformMat4(scratchVec3, scratchVec3, scratchMatrix);
+                texMtx[12] = scratchVec3[0];
+                texMtx[13] = scratchVec3[1];
+                texMtx[14] = scratchVec3[2];
                 texEnvMtx(postMtx, 0.5, -0.5, 0.5, 0.5);
             } else if (uvAnimation.type === UVAnimationType.UV_SCROLL) {
                 const transS = animTime * uvAnimation.scaleS + uvAnimation.offsetS;
@@ -287,16 +283,14 @@ class MaterialGroupInstance {
                 const trans = Math.floor(uvAnimation.numFrames * (n % 1.0)) * uvAnimation.step;
                 texMtx[13] = trans;
             } else if (uvAnimation.type === UVAnimationType.ENV_MAPPING_MODEL) {
-                if (modelMatrix !== null)
-                    mat4.copy(texMtx, modelMatrix);
+                mat4.copy(texMtx, modelMatrix);
                 texMtx[12] = 0;
                 texMtx[13] = 0;
                 texMtx[14] = 0;
                 texEnvMtx(postMtx, 0.5, -0.5, modelMatrix[12] * 0.5, modelMatrix[13] * 0.5);
             } else if (uvAnimation.type === UVAnimationType.ENV_MAPPING_CYLINDER) {
                 mat4.mul(texMtx, viewerInput.camera.viewMatrix, posMtx);
-                if (modelMatrix !== null)
-                    mat4.mul(texMtx, texMtx, modelMatrix);
+                mat4.mul(texMtx, texMtx, modelMatrix);
                 computeNormalMatrix(texMtx, texMtx);
                 const xy = ((scratchMatrix[12] + scratchMatrix[14]) * 0.025 * uvAnimation.phi) % 1.0;
                 const z = (scratchMatrix[13] * 0.05 * uvAnimation.phi) % 1.0;
@@ -412,7 +406,7 @@ export class ModelCache {
     public getCMDLData(device: GfxDevice, textureHolder: RetroTextureHolder, cache: GfxRenderCache, model: CMDL): CMDLData {
         if (!this.cmdlData.has(model.assetID))
             this.cmdlData.set(model.assetID, new CMDLData(device, textureHolder, cache, model));
-        return this.cmdlData.get(model.assetID);
+        return this.cmdlData.get(model.assetID)!;
     }
 }
 
@@ -424,7 +418,8 @@ export class MREARenderer {
     private surfaceInstances: SurfaceInstance[] = [];
     private cmdlData: CMDLData[] = [];
     private actors: Actor[] = [];
-    public overrideSky: CMDLRenderer = null;
+    public overrideSky: CMDLRenderer | null = null;
+    public modelMatrix = mat4.create();
     public needSky: boolean = false;
     public visible: boolean = true;
 
@@ -569,7 +564,7 @@ export class MREARenderer {
 
         // Render the MREA's native surfaces.
         for (let i = 0; i < this.materialGroupInstances.length; i++)
-            this.materialGroupInstances[i].prepareToRender(renderHelper.renderInstManager, viewerInput, null, false, null, worldAmbientColor);
+            this.materialGroupInstances[i].prepareToRender(renderHelper.renderInstManager, viewerInput, this.modelMatrix, false, null, worldAmbientColor);
         for (let i = 0; i < this.surfaceInstances.length; i++)
             this.surfaceInstances[i].prepareToRender(device, renderHelper, viewerInput, false);
 
@@ -634,7 +629,7 @@ export class CMDLRenderer {
     public visible: boolean = true;
     public isSkybox: boolean = false;
 
-    constructor(device: GfxDevice, public textureHolder: RetroTextureHolder, public actorLights: ActorLights, public name: string, public modelMatrix: mat4, public cmdlData: CMDLData) {
+    constructor(device: GfxDevice, public textureHolder: RetroTextureHolder, public actorLights: ActorLights | null, public name: string, public modelMatrix: mat4, public cmdlData: CMDLData) {
         const materialSet = this.cmdlData.cmdl.materialSets[0];
 
         // First, create our group commands. These will store UBO buffer data which is shared between

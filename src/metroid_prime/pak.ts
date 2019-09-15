@@ -12,7 +12,7 @@ export const enum CompressionMethod {
 }
 
 export interface FileResource {
-    name: string;
+    name: string | null;
     fourCC: string;
     fileID: string;
     fileSize: number;
@@ -62,7 +62,7 @@ function parse_MP1(stream: InputStream): PAK {
         let fileOffset = stream.readUint32();
 
         if (resourceTable.has(fileID)) {
-            const existingResource = resourceTable.get(fileID);
+            const existingResource = resourceTable.get(fileID)!;
             // Skip files that are apparently the same.
             assert(fourCC === existingResource.fourCC);
             assert(fileSize === existingResource.fileSize);
@@ -82,7 +82,7 @@ function parse_MP1(stream: InputStream): PAK {
         const compressionMethod = isCompressed ? CompressionMethod.ZLIB : CompressionMethod.NONE;
         const fileResource: FileResource = { name, fourCC, fileID, fileSize, fileOffset, compressionMethod, buffer: fileBuffer };
         resourceTable.set(fileResource.fileID, fileResource);
-        if (name !== null)
+        if (fileResource.name !== null)
             namedResourceTable.set(fileResource.name, fileResource);
     }
 
@@ -144,7 +144,7 @@ function parse_MP3(stream: InputStream): PAK {
         const fileOffset = stream.readUint32() + dataOffs;
 
         if (resourceTable.has(fileID)) {
-            const existingResource = resourceTable.get(fileID);
+            const existingResource = resourceTable.get(fileID)!;
             // Skip files that are apparently the same.
             assert(fourCC === existingResource.fourCC);
             assert(fileSize === existingResource.fileSize);
@@ -164,7 +164,7 @@ function parse_MP3(stream: InputStream): PAK {
         const compressionMethod = isCompressed ? CompressionMethod.CMPD_ZLIB : CompressionMethod.NONE;
         const fileResource: FileResource = { name, fourCC, fileID, fileSize, fileOffset, compressionMethod, buffer: fileBuffer };
         resourceTable.set(fileResource.fileID, fileResource);
-        if (name !== null)
+        if (fileResource.name !== null)
             namedResourceTable.set(fileResource.name, fileResource);
     }
 

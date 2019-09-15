@@ -172,7 +172,7 @@ function parseMaterial(bmd: BMD, buffer: ArrayBufferSlice, idx: number): Materia
     // A transparent polygon is one that has an alpha of < 0xFF, or uses
     // A5I3 / A3I5 textures.
 
-    material.isTranslucent = (material.alpha < 0xFF) || (material.texture && material.texture.isTranslucent);
+    material.isTranslucent = (material.alpha < 0xFF) || !!(material.texture && material.texture.isTranslucent);
 
     // Do transparent polys write to the depth buffer?
     const xl = (polyAttribs >>> 11) & 0x01;
@@ -220,7 +220,7 @@ export class Texture {
 
 function parseTexture(bmd: BMD, buffer: ArrayBufferSlice, key: TextureKey): Texture {
     if (bmd.textureCache.has(key.toString()))
-        return bmd.textureCache.get(key.toString());
+        return bmd.textureCache.get(key.toString())!;
 
     const view = buffer.createDataView();
     const texOffs = bmd.textureOffsBase + key.texIdx * 0x14;

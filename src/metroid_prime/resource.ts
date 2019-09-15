@@ -128,7 +128,7 @@ export class ResourceSystem {
         return assetIDHex;
     }
 
-    public findResourceByID(assetID: string): FileResource {
+    public findResourceByID(assetID: string): FileResource | null {
         assert(assetID.length === 4 || assetID.length === 8);
         for (const pak of this.paks) {
             const resource = pak.resourceTable.get(assetID);

@@ -180,7 +180,7 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
         function spawnModel(filePath: string): MDL0Renderer {
             const bmd = NSBMD.parse(getFileBuffer(filePath));
             assert(bmd.models.length === 1);
-            const mdl0Renderer = new MDL0Renderer(device, bmd.models[0], bmd.tex0);
+            const mdl0Renderer = new MDL0Renderer(device, bmd.models[0], assertExists(bmd.tex0));
             setModelMtx(mdl0Renderer);
             renderer.objectRenderers.push(mdl0Renderer);
             return mdl0Renderer;
@@ -329,21 +329,21 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
             this.fetchCARC(`mkds/Course/${this.id}.carc`, dataFetcher),
             this.fetchCARC(`mkds/Course/${this.id}Tex.carc`, dataFetcher),
         ]).then(([courseNARC, textureNARC]) => {
-            const courseBmdFile = courseNARC.files.find((file) => file.path === '/course_model.nsbmd');
+            const courseBmdFile = assertExists(courseNARC.files.find((file) => file.path === '/course_model.nsbmd'));
             const courseBmd = NSBMD.parse(courseBmdFile.buffer);
             const courseBtxFile = textureNARC.files.find((file) => file.path === '/course_model.nsbtx');
             const courseBtx = courseBtxFile !== undefined ? NSBTX.parse(courseBtxFile.buffer) : null;
             assert(courseBmd.models.length === 1);
-            const courseRenderer = new MDL0Renderer(device, courseBmd.models[0], courseBtx !== null ? courseBtx.tex0 : courseBmd.tex0);
+            const courseRenderer = new MDL0Renderer(device, courseBmd.models[0], courseBtx !== null ? courseBtx.tex0 : assertExists(courseBmd.tex0));
 
             let skyboxRenderer: MDL0Renderer | null = null;
             const skyboxBmdFile = courseNARC.files.find((file) => file.path === '/course_model_V.nsbmd');
             if (skyboxBmdFile !== undefined) {
-                const skyboxBmd = skyboxBmdFile !== undefined ? NSBMD.parse(skyboxBmdFile.buffer) : null;
+                const skyboxBmd = NSBMD.parse(skyboxBmdFile.buffer);
                 const skyboxBtxFile = textureNARC.files.find((file) => file.path === '/course_model_V.nsbtx');
                 const skyboxBtx = skyboxBtxFile !== undefined ? NSBTX.parse(skyboxBtxFile.buffer) : null;
                 assert(skyboxBmd.models.length === 1);
-                skyboxRenderer = new MDL0Renderer(device, skyboxBmd.models[0], skyboxBtx !== null ? skyboxBtx.tex0 : skyboxBmd.tex0);
+                skyboxRenderer = new MDL0Renderer(device, skyboxBmd.models[0], skyboxBtx !== null ? skyboxBtx.tex0 : assertExists(skyboxBmd.tex0));
                 skyboxRenderer.modelMatrix[13] -= 1500;
                 skyboxRenderer.isSkybox = true;
             }

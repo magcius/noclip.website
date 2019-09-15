@@ -2,11 +2,10 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { readString, assert, align } from "../util";
 
 export class InputStream {
-    private buffer: ArrayBufferSlice = null;
-    private view: DataView = null;
+    private view!: DataView;
     private offs: number = 0;
 
-    constructor(buffer: ArrayBufferSlice, public assetIDLength: number) {
+    constructor(private buffer: ArrayBufferSlice, public assetIDLength: number) {
         this.setBuffer(buffer);
     }
 

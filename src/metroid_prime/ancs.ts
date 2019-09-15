@@ -1,7 +1,7 @@
 
 // Implements Retro's ANCS format as seen in Metroid Prime 1.
 
-import { assert } from "../util";
+import { assert, assertExists } from "../util";
 
 import { ResourceSystem } from "./resource";
 import { CMDL } from "./cmdl"
@@ -34,7 +34,7 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
         const skinID = stream.readAssetID();
         const skelID = stream.readAssetID();
 
-        const model = resourceSystem.loadAssetByID<CMDL>(modelID, 'CMDL');
+        const model = assertExists(resourceSystem.loadAssetByID<CMDL>(modelID, 'CMDL'));
         const char: MetroidCharacter = { charID, name, model, skinID, skelID };
         charSet.push(char);
 
