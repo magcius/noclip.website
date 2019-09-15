@@ -45,13 +45,13 @@ class ResourceSystem {
             textureHolder.addRRESTextures(device, b);
             this.brresCache.set(path, b);
         }
-        return this.brresCache.get(path);
+        return this.brresCache.get(path)!;
     }
 
     public mountMDL0(device: GfxDevice, cache: GfxRenderCache, rres: BRRES.RRES, modelName: string): MDL0Model {
         if (!this.mdl0Cache.has(modelName))
             this.mdl0Cache.set(modelName, new MDL0Model(device, cache, assertExists(rres.mdl0.find((m) => m.name === modelName))));
-        return this.mdl0Cache.get(modelName);
+        return this.mdl0Cache.get(modelName)!;
     }
 }
 
@@ -228,7 +228,7 @@ class IslandSceneDesc implements Viewer.SceneDesc {
             `${dataPath}/Stage/Static/StageArc.carc`,
         ]);
 
-        const pmp = parsePMPF(resourceSystem.findFileData('WS2_omk_island_tag.pmp'));
+        const pmp = parsePMPF(assertExists(resourceSystem.findFileData('WS2_omk_island_tag.pmp')));
 
         const renderer = new WS2_Renderer(device, resourceSystem);
         renderer.mountRRES(device, 'Island/G3D/WS2_common_seatex.brres');

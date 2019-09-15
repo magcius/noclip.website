@@ -87,7 +87,7 @@ class KlonoaRenderer implements Viewer.SceneGfx {
             opaquePassRenderer.endPass(this.opaqueSceneTexture.gfxTexture);
             device.submitPass(opaquePassRenderer);
 
-            const textureOverride: TextureOverride = { gfxTexture: this.opaqueSceneTexture.gfxTexture, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
+            const textureOverride: TextureOverride = { gfxTexture: this.opaqueSceneTexture.gfxTexture!, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
             this.textureHolder.setTextureOverride("ph_dummy128", textureOverride);
 
             const indTexPassRenderer = this.mainRenderTarget.createRenderPass(device, noClearRenderPassDescriptor);

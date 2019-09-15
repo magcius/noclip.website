@@ -750,7 +750,7 @@ class OkamiSceneDesc implements Viewer.SceneDesc {
             const tscTableFile = datArc.files.find((file) => file.type === 'TSC')!;
             this.spawnObjectTable(device, renderer, modelCache, tscTableFile.buffer);
 
-            const treTableFile = datArc.files.find((file) => file.type === 'TRE');
+            const treTableFile = datArc.files.find((file) => file.type === 'TRE')!;
             this.spawnObjectTable(device, renderer, modelCache, treTableFile.buffer);
 
             return modelCache.waitForLoad().then(() => {

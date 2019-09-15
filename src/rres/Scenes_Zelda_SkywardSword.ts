@@ -94,11 +94,11 @@ class ResourceSystem {
 
     public getRRES(device: GfxDevice, textureHolder: RRESTextureHolder, path: string): BRRES.RRES {
         if (this.brresCache.has(path))
-            return this.brresCache.get(path);
+            return this.brresCache.get(path)!;
 
         const file = assertExists(this.findFile(path));
-        const arch = U8.parse(file.buffer);
-        const rres = BRRES.parse(arch.findFile('g3d/model.brres').buffer);
+        const arc = U8.parse(file.buffer);
+        const rres = BRRES.parse(assertExists(arc.findFileData('g3d/model.brres')));
         textureHolder.addRRESTextures(device, rres);
         this.brresCache.set(path, rres);
         return rres;
@@ -110,7 +110,7 @@ class ModelCache {
 
     public getModel(device: GfxDevice, renderHelper: GXRenderHelperGfx, mdl0: BRRES.MDL0, materialHacks: GXMaterialHacks): MDL0Model {
         if (this.cache.has(mdl0))
-            return this.cache.get(mdl0);
+            return this.cache.get(mdl0)!;
 
         const cache = renderHelper.renderInstManager.gfxRenderCache;
         const mdl0Model = new MDL0Model(device, cache, mdl0, materialHacks);
@@ -151,7 +151,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
     public textureHolder: RRESTextureHolder;
     public animationController: AnimationController;
     private stageRRES: BRRES.RRES;
-    private stageBZS: BZS = null;
+    private stageBZS: BZS | null = null;
     private roomBZSes: BZS[] = [];
     private commonRRES: BRRES.RRES;
     private resourceSystem = new ResourceSystem();
@@ -169,7 +169,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         this.resourceSystem.mountArchive(this.stageArchive);
         this.resourceSystem.mountArchive(this.objPackArchive);
 
-        const systemRRES = BRRES.parse(systemArchive.findFile('g3d/model.brres').buffer);
+        const systemRRES = BRRES.parse(systemArchive.findFileData('g3d/model.brres')!);
         this.textureHolder.addRRESTextures(device, systemRRES);
 
         // Override the "Add" textures with a black texture to prevent things from being overly bright.
@@ -188,10 +188,10 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         this.commonRRES = this.resourceSystem.getRRES(device, this.textureHolder, 'oarc/Common.arc');
 
         // Load stage.
-        this.stageRRES = BRRES.parse(stageArchive.findFile('g3d/stage.brres').buffer);
+        this.stageRRES = BRRES.parse(stageArchive.findFileData('g3d/stage.brres')!);
         this.textureHolder.addRRESTextures(device, this.stageRRES);
 
-        this.stageBZS = this.parseBZS(stageArchive.findFile('dat/stage.bzs').buffer);
+        this.stageBZS = this.parseBZS(stageArchive.findFileData('dat/stage.bzs')!);
         const stageLayout = this.stageBZS.layouts[0];
         this.spawnLayout(device, stageLayout);
 
@@ -201,7 +201,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             for (let i = 0; i < roomArchivesDir.files.length; i++) {
                 const roomArchiveFile = roomArchivesDir.files[i];
                 const roomArchive = U8.parse(roomArchiveFile.buffer);
-                const roomRRES = BRRES.parse(roomArchive.findFile('g3d/room.brres').buffer);
+                const roomRRES = BRRES.parse(roomArchive.findFileData('g3d/room.brres')!);
 
                 this.textureHolder.addRRESTextures(device, roomRRES);
 
@@ -222,7 +222,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
                         modelInstance.setSortKeyLayer(GfxRendererLayer.TRANSLUCENT + 1);
                 }
 
-                const roomBZS = this.parseBZS(roomArchive.findFile('dat/room.bzs').buffer);
+                const roomBZS = this.parseBZS(roomArchive.findFileData('dat/room.bzs')!);
                 this.roomBZSes.push(roomBZS);
                 const layout = roomBZS.layouts[0];
                 this.spawnLayout(device, layout);
@@ -352,7 +352,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             device.submitPass(opaquePassRenderer);
 
             // IndTex.
-            const textureOverride: TextureOverride = { gfxTexture: this.opaqueSceneTexture.gfxTexture, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
+            const textureOverride: TextureOverride = { gfxTexture: this.opaqueSceneTexture.gfxTexture!, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
             this.textureHolder.setTextureOverride("DummyWater", textureOverride);
 
             const indTexPassRenderer = this.mainRenderTarget.createRenderPass(device, noClearRenderPassDescriptor);
@@ -376,7 +376,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
 
         const renderHelper = this.renderHelper;
         const spawnModel = (rres: BRRES.RRES, modelName: string) => {
-            const mdl0 = rres.mdl0.find((model) => model.name === modelName);
+            const mdl0 = assertExists(rres.mdl0.find((model) => model.name === modelName));
 
             const model = this.modelCache.getModel(device, renderHelper, mdl0, materialHacks);
             const modelRenderer = new MDL0ModelInstance(this.textureHolder, model, obj.name);
@@ -404,7 +404,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         };
 
         const findCHR0 = (rres: BRRES.RRES, name: string) => {
-            return rres.chr0.find((chr0) => chr0.name === name);
+            return assertExists(rres.chr0.find((chr0) => chr0.name === name));
         };
 
         const stageRRES = this.stageRRES;
@@ -590,7 +590,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             return { unk1, unk2, tx, ty, tz, sx, sy, sz, rotY, unk4, unk5, unk6, name };
         }
 
-        const layoutsChunk = roomChunkTable.find((chunk) => chunk.name === 'LAY ');
+        const layoutsChunk = assertExists(roomChunkTable.find((chunk) => chunk.name === 'LAY '));
 
         // Parse layouts table.
 

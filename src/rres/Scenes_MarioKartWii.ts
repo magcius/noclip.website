@@ -28,7 +28,7 @@ class ModelCache {
 
     public ensureRRES(device: GfxDevice, renderer: MarioKartWiiRenderer, arc: U8.U8Archive, path: string): BRRES.RRES {
         if (!this.rresCache.has(path)) {
-            const rres = BRRES.parse(arc.findFileData(path));
+            const rres = BRRES.parse(arc.findFileData(path)!);
             renderer.textureHolder.addRRESTextures(device, rres);
             this.rresCache.set(path, rres);
 
@@ -39,7 +39,7 @@ class ModelCache {
             }
         }
 
-        return this.rresCache.get(path);
+        return this.rresCache.get(path)!;
     }
 }
 
@@ -173,7 +173,7 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
 
     private static spawnObjectFromRRES(device: GfxDevice, renderer: MarioKartWiiRenderer, rres: BRRES.RRES, objectName: string): MDL0ModelInstance {
         const modelCache = renderer.modelCache;
-        const mdl0Model = modelCache.modelCache.get(objectName);
+        const mdl0Model = assertExists(modelCache.modelCache.get(objectName));
         const mdl0Instance = new MDL0ModelInstance(renderer.textureHolder, mdl0Model, objectName);
         mdl0Instance.bindRRESAnimations(renderer.animationController, rres, null);
         renderer.modelInstances.push(mdl0Instance);
@@ -327,7 +327,7 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
         } else if (gobj.objectId === 0x0144) { // pylon01
             const b = spawnObject(`pylon01`);
             const rres = getRRES(`pylon01`);
-            b.bindCLR0(animFrame(gobj.objectArg0), rres.clr0.find((clr0) => clr0.name === `pylon01`));
+            b.bindCLR0(animFrame(gobj.objectArg0), assertExists(rres.clr0.find((clr0) => clr0.name === `pylon01`)));
         } else if (gobj.objectId === 0x0145) { // PalmTree
             spawnObject(`PalmTree`);
         } else if (gobj.objectId === 0x0146) { // parasol
@@ -458,7 +458,7 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
         } else if (gobj.objectId === 0x0191) { // kuribo
             const b = spawnObject(`kuribo`);
             const rres = getRRES(`kuribo`);
-            b.bindCHR0(renderer.animationController, rres.chr0.find((chr0) => chr0.name === 'walk_l'));
+            b.bindCHR0(renderer.animationController, assertExists(rres.chr0.find((chr0) => chr0.name === 'walk_l')));
         } else if (gobj.objectId === 0x0192) { // choropu
             spawnObject(`choropu`);
         } else if (gobj.objectId === 0x0193) { // cow
@@ -671,7 +671,7 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
     }
 
     public static createSceneFromU8Archive(device: GfxDevice, arc: U8.U8Archive): MarioKartWiiRenderer {
-        const kmp = parseKMP(arc.findFileData(`./course.kmp`));
+        const kmp = parseKMP(assertExists(arc.findFileData(`./course.kmp`)));
         console.log(arc, kmp);
         const renderer = new MarioKartWiiRenderer(device);
 

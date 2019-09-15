@@ -30,7 +30,7 @@ export interface Texture {
     height: number;
     data: ArrayBufferSlice | null;
     mipCount: number;
-    paletteFormat?: GX.TexPalette;
+    paletteFormat?: GX.TexPalette | null;
     paletteData?: ArrayBufferSlice | null;
 }
 
@@ -257,7 +257,7 @@ function decode_Tiled(texture: Texture, bw: number, bh: number, decoder: (pixels
 }
 
 function decode_C4(texture: Texture): DecodedTexture {
-    if (!texture.paletteData || texture.paletteFormat === undefined) return decode_Dummy(texture);
+    if (!texture.paletteData || !texture.paletteFormat) return decode_Dummy(texture);
     const view = texture.data!.createDataView();
     const paletteData: Uint8Array = decodePalette(texture.paletteFormat, texture.paletteData);
     let srcOffs = 0;
@@ -273,7 +273,7 @@ function decode_C4(texture: Texture): DecodedTexture {
 }
 
 function decode_C8(texture: Texture): DecodedTexture {
-    if (!texture.paletteData || texture.paletteFormat === undefined) return decode_Dummy(texture);
+    if (!texture.paletteData || !texture.paletteFormat) return decode_Dummy(texture);
     const view = texture.data!.createDataView();
     const paletteData: Uint8Array = decodePalette(texture.paletteFormat, texture.paletteData);
     let srcOffs = 0;
@@ -288,7 +288,7 @@ function decode_C8(texture: Texture): DecodedTexture {
 }
 
 function decode_C14X2(texture: Texture): DecodedTexture {
-    if (!texture.paletteData || texture.paletteFormat === undefined) return decode_Dummy(texture);
+    if (!texture.paletteData || !texture.paletteFormat) return decode_Dummy(texture);
     const view = texture.data!.createDataView();
     const paletteData: Uint8Array = decodePalette(texture.paletteFormat, texture.paletteData);
     let srcOffs = 0;
@@ -302,7 +302,7 @@ function decode_C14X2(texture: Texture): DecodedTexture {
     });
 }
 
-function getPaletteFormatName(paletteFormat?: GX.TexPalette): string {
+function getPaletteFormatName(paletteFormat: GX.TexPalette | undefined | null): string {
     switch (assertExists(paletteFormat)) {
     case GX.TexPalette.IA8:
         return "IA8";
@@ -315,7 +315,7 @@ function getPaletteFormatName(paletteFormat?: GX.TexPalette): string {
     }
 }
 
-export function getFormatName(format: GX.TexFormat, paletteFormat?: GX.TexPalette): string {
+export function getFormatName(format: GX.TexFormat, paletteFormat?: GX.TexPalette | null): string {
     switch (format) {
     case GX.TexFormat.I4:
         return "I4";

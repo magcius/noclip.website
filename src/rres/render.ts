@@ -13,7 +13,7 @@ import { GfxDevice, GfxSampler } from "../gfx/platform/GfxPlatform";
 import { ViewerRenderInput } from "../viewer";
 import { GfxRenderInst, GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth, setSortKeyBias } from "../gfx/render/GfxRenderer";
 import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
-import { nArray } from '../util';
+import { nArray, assertExists } from '../util';
 import { getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
 import { colorCopy, Color } from '../Color';
 import { computeNormalMatrix, texEnvMtx } from '../MathHelpers';
@@ -40,7 +40,7 @@ export class MDL0Model {
     public materialData: MaterialData[] = [];
     private bufferCoalescer: GfxBufferCoalescerCombo;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public mdl0: BRRES.MDL0, private materialHacks: GX_Material.GXMaterialHacks | null = null) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public mdl0: BRRES.MDL0, private materialHacks?: GX_Material.GXMaterialHacks) {
         this.bufferCoalescer = loadedDataCoalescerComboGfx(device, this.mdl0.shapes.map((shape) => shape.loadedVertexData));
  
         for (let i = 0; i < this.mdl0.shapes.length; i++) {
@@ -143,9 +143,9 @@ function lightChannelCopy(o: GX_Material.LightChannelControl): GX_Material.Light
 
 const materialParams = new MaterialParams();
 class MaterialInstance {
-    private srt0Animators: BRRES.SRT0TexMtxAnimator[] = [];
-    private pat0Animators: BRRES.PAT0TexAnimator[] = [];
-    private clr0Animators: BRRES.CLR0ColorAnimator[] = [];
+    private srt0Animators: (BRRES.SRT0TexMtxAnimator | null)[] = [];
+    private pat0Animators: (BRRES.PAT0TexAnimator | null)[] = [];
+    private clr0Animators: (BRRES.CLR0ColorAnimator | null)[] = [];
     public materialHelper: GXMaterialHelperGfx;
     public sortKey: number = 0;
 
@@ -164,7 +164,7 @@ class MaterialInstance {
         for (let i = 0; i < this.materialData.material.texSrts.length; i++) {
             const mapMode = this.materialData.material.texSrts[i].mapMode;
             if (mapMode === BRRES.MapMode.ENV_CAMERA || mapMode === BRRES.MapMode.ENV_SPEC || mapMode === BRRES.MapMode.ENV_LIGHT)
-                this.materialHelper.material.useTexMtxIdx[i] = v;
+                this.materialHelper.material.useTexMtxIdx![i] = v;
         }
 
         this.materialHelper.createProgram();
@@ -184,7 +184,7 @@ class MaterialInstance {
         if (srt0 !== null) {
             const material = this.materialData.material;
             for (let i: BRRES.TexMtxIndex = 0; i < BRRES.TexMtxIndex.COUNT; i++) {
-                const srtAnimator = BRRES.bindSRT0Animator(animationController, srt0, material.name, i);
+                const srtAnimator = BRRES.bindSRT0Animator(assertExists(animationController), srt0, material.name, i);
                 if (srtAnimator)
                     this.srt0Animators[i] = srtAnimator;
             }
@@ -198,7 +198,7 @@ class MaterialInstance {
         if (pat0 !== null) {
             const material = this.materialData.material;
             for (let i = 0; i < 8; i++) {
-                const patAnimator = BRRES.bindPAT0Animator(animationController, pat0, material.name, i);
+                const patAnimator = BRRES.bindPAT0Animator(assertExists(animationController), pat0, material.name, i);
                 if (patAnimator)
                     this.pat0Animators[i] = patAnimator;
             }
@@ -212,7 +212,7 @@ class MaterialInstance {
         if (clr0 !== null) {
             const material = this.materialData.material;
             for (let i = 0; i < BRRES.AnimatableColor.COUNT; i++) {
-                const clrAnimator = BRRES.bindCLR0Animator(animationController, clr0, material.name, i);
+                const clrAnimator = BRRES.bindCLR0Animator(assertExists(animationController), clr0, material.name, i);
                 if (clrAnimator)
                     this.clr0Animators[i] = clrAnimator;
             }
@@ -226,7 +226,7 @@ class MaterialInstance {
         const material = this.materialData.material;
         const texMtxIdx: BRRES.TexMtxIndex = BRRES.TexMtxIndex.IND0 + indIdx;
         if (this.srt0Animators[texMtxIdx]) {
-            this.srt0Animators[texMtxIdx].calcIndTexMtx(dst);
+            this.srt0Animators[texMtxIdx]!.calcIndTexMtx(dst);
             // TODO(jstpierre): What scale is used here?
             dst[12] = 1.0;
         } else {
@@ -246,7 +246,7 @@ class MaterialInstance {
         const material = this.materialData.material;
         const texMtxIdx: BRRES.TexMtxIndex = BRRES.TexMtxIndex.TEX0 + texIdx;
         if (this.srt0Animators[texMtxIdx]) {
-            this.srt0Animators[texMtxIdx].calcTexMtx(dst);
+            this.srt0Animators[texMtxIdx]!.calcTexMtx(dst);
         } else {
             mat4.copy(dst, material.texSrts[texMtxIdx].srtMtx);
         }
@@ -307,7 +307,7 @@ class MaterialInstance {
         }
 
         if (this.clr0Animators[a]) {
-            this.clr0Animators[a].calcColor(dst, color);
+            this.clr0Animators[a]!.calcColor(dst, color);
         } else {
             colorCopy(dst, color);
         }
@@ -365,7 +365,7 @@ class MaterialInstance {
         this.calcColor(materialParams, ColorKind.C2, material.colorRegisters[3], BRRES.AnimatableColor.C2);
 
         const lightSetting = instanceStateData.lightSetting;
-        if (instanceStateData.lightSetting !== null) {
+        if (lightSetting !== null) {
             const lightSet = lightSetting.lightSet[this.materialData.material.lightSetIdx];
             if (lightSet !== undefined) {
                 lightSet.calcLights(materialParams.u_Lights, lightSetting, camera.viewMatrix);
@@ -384,7 +384,7 @@ class MaterialInstance {
         const material = this.materialData.material;
         dst.reset();
         if (this.pat0Animators[i]) {
-            this.pat0Animators[i].fillTextureMapping(dst, textureHolder);
+            this.pat0Animators[i]!.fillTextureMapping(dst, textureHolder);
         } else {
             const name: string = material.samplers[i].name;
             textureHolder.fillTextureMapping(dst, name);

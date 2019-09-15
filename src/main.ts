@@ -60,7 +60,7 @@ import { DroppedFileSceneDesc } from './Scenes_FileDrops';
 
 import { UI, SaveStatesAction, Panel } from './ui';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera';
-import { hexdump } from './util';
+import { hexdump, assertExists } from './util';
 import { DataFetcher } from './DataFetcher';
 import { ZipFileEntry, makeZipFile } from './ZipFile';
 import { atob, btoa } from './Ascii85';
@@ -135,7 +135,7 @@ function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
 }
 
 function convertCanvasToPNG(canvas: HTMLCanvasElement): Promise<Blob> {
-    return new Promise((resolve) => canvas.toBlob((b) => resolve(b), 'image/png'));
+    return new Promise((resolve) => canvas.toBlob((b) => resolve(assertExists(b)), 'image/png'));
 }
 
 function writeString(d: Uint8Array, offs: number, m: string): number {
@@ -167,7 +167,7 @@ class Main {
     private currentSceneGroup: SceneGroup;
     private currentSceneDesc: SceneDesc;
 
-    private loadingSceneDesc: SceneDesc = null;
+    private loadingSceneDesc: SceneDesc | null = null;
     private abortController: AbortController | null = null;
     private destroyablePool: Destroyable[] = [];
 
@@ -245,8 +245,8 @@ class Main {
                 dsn: 'https://a3b5f6c50bc04555835f9a83d6e76b23@sentry.io/1448331',
                 beforeSend: (event) => {
                     // Filter out aborted XHRs.
-                    if (event.exception.values.length) {
-                        const exc = event.exception.values[0];
+                    if (event.exception!.values!.length) {
+                        const exc = event.exception!.values![0];
                         if (exc.type === 'AbortedError')
                             return null;
                     }
@@ -328,7 +328,7 @@ class Main {
     private _onDrop(e: DragEvent) {
         this.ui.dragHighlight.style.display = 'none';
         e.preventDefault();
-        const transfer = e.dataTransfer;
+        const transfer = assertExists(e.dataTransfer);
         if (transfer.files.length === 0)
             return;
         const file = transfer.files[0];
@@ -428,12 +428,15 @@ class Main {
 
         const group = this.groups.find((g) => typeof g !== 'string' && g.id === groupId) as SceneGroup;
         if (!group)
-            return null;
+            return;
 
         if (group.sceneIdMap !== undefined && group.sceneIdMap.has(sceneId))
-            sceneId = group.sceneIdMap.get(sceneId);
+            sceneId = group.sceneIdMap.get(sceneId)!;
 
         const desc = getSceneDescs(group).find((d) => d.id === sceneId);
+        if (!desc)
+            return;
+
         this._loadSceneDesc(group, desc, sceneState);
     }
 
@@ -473,7 +476,7 @@ class Main {
         return this.saveManager.getSaveStateSlotKey(this._getCurrentSceneDescId(), slotIndex);
     }
 
-    private _onSceneChanged(scene: SceneGfx, sceneStateStr: string): void {
+    private _onSceneChanged(scene: SceneGfx, sceneStateStr: string | null): void {
         scene.onstatechanged = () => {
             this._saveState();
         };

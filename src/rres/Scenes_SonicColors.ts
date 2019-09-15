@@ -157,7 +157,7 @@ class SonicColorsSceneDesc implements Viewer.SceneDesc {
                 for (let i = 0; i < mapFile.entries.length; i++) {
                     const entry = mapFile.entries[i];
                     const entryArc = U8.parse(entryArcDatas[i]);
-                    const dir = entryArc.findDir(`arc`);
+                    const dir = assertExists(entryArc.findDir(`arc`));
 
                     for (let j = 0; j < dir.files.length; j++) {
                         const rres = BRRES.parse(dir.files[j].buffer);
