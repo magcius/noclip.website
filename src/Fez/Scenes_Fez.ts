@@ -3,15 +3,16 @@ import * as Viewer from '../viewer';
 import { DataFetcher, getDataURLForPath } from '../DataFetcher';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
-import { getTextDecoder } from '../util';
+import { getTextDecoder, assertExists } from '../util';
 import { FezRenderer } from './FezRenderer';
 import { TrilesetData } from './TrileData';
 import { ArtObjectData } from './ArtObjectData';
+import { BackgroundPlaneData } from './BackgroundPlaneData';
 
 const pathBase = 'Fez';
 
 async function fetchXML(dataFetcher: DataFetcher, path: string): Promise<Document> {
-    const buffer = await dataFetcher.fetchData(`${path}`);
+    const buffer = await dataFetcher.fetchData(path);
     const fileContents = getTextDecoder('utf8')!.decode(buffer.arrayBuffer);
     const parser = new DOMParser();
     return parser.parseFromString(fileContents, `application/xml`);
@@ -38,6 +39,7 @@ function fetchPNG(path: string): Promise<ImageData> {
 class ModelCache {
     public trilesetPromiseCache = new Map<string, Promise<TrilesetData>>();
     public artObjectPromiseCache = new Map<string, Promise<ArtObjectData>>();
+    public backgroundPlanePromiseCache = new Map<string, Promise<BackgroundPlaneData>>();
 
     constructor(private dataFetcher: DataFetcher) {
     }
@@ -58,6 +60,19 @@ class ModelCache {
         return new ArtObjectData(device, path, xml, png);
     }
 
+    private async fetchBackgroundPlaneInternal(device: GfxDevice, path: string, isAnimated: boolean): Promise<BackgroundPlaneData> {
+        if (isAnimated) {
+            const [png, xml] = await Promise.all([
+                fetchPNG(`${pathBase}/background planes/${path}.ani.png`),
+                fetchXML(this.dataFetcher, `${pathBase}/background planes/${path}.xml`),
+            ]);
+            return new BackgroundPlaneData(device, path, png, xml);
+        } else {
+            const png = await fetchPNG(`${pathBase}/background planes/${path}.png`);
+            return new BackgroundPlaneData(device, path, png, null);
+        }
+    }
+
     public fetchTrileset(device: GfxDevice, path: string): Promise<TrilesetData> {
         if (!this.trilesetPromiseCache.has(path))
             this.trilesetPromiseCache.set(path, this.fetchTrilesetInternal(device, path));
@@ -69,6 +84,21 @@ class ModelCache {
             this.artObjectPromiseCache.set(path, this.fetchArtObjectInternal(device, path));
         return this.artObjectPromiseCache.get(path)!;
     }
+
+    public fetchBackgroundPlane(device: GfxDevice, path: string, isAnimated: boolean): Promise<BackgroundPlaneData> {
+        if (!this.backgroundPlanePromiseCache.has(path))
+            this.backgroundPlanePromiseCache.set(path, this.fetchBackgroundPlaneInternal(device, path, isAnimated));
+        return this.backgroundPlanePromiseCache.get(path)!;
+    }
+}
+
+function parseBoolean(str: string): boolean {
+    if (str === 'True')
+        return true;
+    else if (str === 'False')
+        return false;
+    else
+        throw "whoops";
 }
 
 class FezSceneDesc implements Viewer.SceneDesc {
@@ -85,12 +115,24 @@ class FezSceneDesc implements Viewer.SceneDesc {
         const artObjectsXml = levelDocument.querySelectorAll('ArtObjects Entry ArtObjectInstance')!;
         const artObjectPromises: Promise<ArtObjectData>[] = [];
         for (let i = 0; i < artObjectsXml.length; i++) {
-            const artObjectName = artObjectsXml[i].attributes.getNamedItem('name')!.textContent!.toLowerCase();
+            const artObjectName = artObjectsXml[i].getAttribute('name')!.toLowerCase();
             artObjectPromises.push(cache.fetchArtObject(device, artObjectName));
         }
 
-        const [trilesetData, artObjectDatas] = await Promise.all([trilesetPromise, Promise.all(artObjectPromises)]);
-        return new FezRenderer(device, levelDocument, trilesetData, artObjectDatas);
+        const backgroundPlanes = levelDocument.querySelectorAll('BackgroundPlanes Entry BackgroundPlane');
+        const backgroundPlanePromises: Promise<BackgroundPlaneData>[] = [];
+        for (let i = 0; i < backgroundPlanes.length; i++) {
+            const backgroundPlane = backgroundPlanes[i].getAttribute('textureName')!.toLowerCase();
+            const isAnimated = parseBoolean(backgroundPlanes[i].getAttribute('animated')!);
+            backgroundPlanePromises.push(cache.fetchBackgroundPlane(device, backgroundPlane, isAnimated));
+        }
+
+        const [trilesetData, artObjectDatas, backgroundPlaneDatas] = await Promise.all([
+            trilesetPromise,
+            Promise.all(artObjectPromises),
+            Promise.all(backgroundPlanePromises),
+        ]);
+        return new FezRenderer(device, levelDocument, trilesetData, artObjectDatas, backgroundPlaneDatas);
     }
 }
 

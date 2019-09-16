@@ -2,8 +2,9 @@
 // Code ported and subsequently butchered from https://github.com/halogenica/FezViewer
 import { vec3, vec2 } from 'gl-matrix';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { GfxBufferUsage, GfxDevice, GfxVertexAttributeDescriptor,GfxFormat,GfxVertexAttributeFrequency, GfxInputLayout, GfxInputState, GfxBuffer, GfxTexture, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode   } from '../gfx/platform/GfxPlatform';
+import { GfxBufferUsage, GfxDevice, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexAttributeFrequency, GfxInputLayout, GfxInputState, GfxBuffer, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from '../gfx/platform/GfxPlatform';
 import { assert } from '../util';
+import { makeTextureFromImageData } from './Texture';
 
 const gc_normals = [
     vec3.fromValues(-1, 0, 0),
@@ -105,21 +106,12 @@ function flat(L: Float32Array[]): Float32Array {
 }
 
 export class TrilesetData {
-    fez_parser: DOMParser;
-    trilesetArray: TrileData[];
-    public trileTex: GfxTexture;
+    public triles: TrileData[] = [];
+    public texture: GfxTexture;
     public sampler: GfxSampler;
 
-    constructor(device: GfxDevice, file: Document, tex: ImageData) {
-        this.fez_parser = new DOMParser();
-        this.trilesetArray = [];
-        let trileList = file.getElementsByTagName('TrileEntry');
-
-        this.trileTex = device.createTexture({dimension: GfxTextureDimension.n2D, pixelFormat: GfxFormat.U8_RGBA,
-            width: tex.width, height: tex.height, depth: 1, numLevels: 1,});
-        const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadTextureData(this.trileTex, 0, [new Uint8Array(tex.data.buffer)]);
-        device.submitPass(hostAccessPass);
+    constructor(device: GfxDevice, file: Document, texImageData: ImageData) {
+        this.texture = makeTextureFromImageData(device, texImageData);
 
         this.sampler = device.createSampler({
             wrapS: GfxWrapMode.CLAMP,
@@ -130,16 +122,16 @@ export class TrilesetData {
             minLOD: 0, maxLOD: 0,
         });
 
-        for (var a = 0; a < trileList.length; a++) {
-            this.trilesetArray.push(new TrileData(device, trileList[a], this.trileTex, this.sampler));
-        }
+        const trileList = file.getElementsByTagName('TrileEntry');
+        for (let i = 0; i < trileList.length; i++)
+            this.triles.push(new TrileData(device, trileList[i], this.texture, this.sampler));
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroyTexture(this.trileTex);
+        device.destroyTexture(this.texture);
         device.destroySampler(this.sampler);
 
-        for (let i = 0; i < this.trilesetArray.length; i++)
-            this.trilesetArray[i].destroy(device);
+        for (let i = 0; i < this.triles.length; i++)
+            this.triles[i].destroy(device);
     }
 }

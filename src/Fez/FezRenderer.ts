@@ -1,11 +1,11 @@
 
 import { DeviceProgram } from "../Program";
 import * as Viewer from '../viewer';
-import { GfxDevice, GfxRenderPass, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxRenderPass, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor } from "../gfx/platform/GfxPlatform";
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
-import { fillMatrix4x4, fillMatrix4x3 } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2 } from "../gfx/helpers/UniformBufferHelpers";
 import { mat4, vec3, quat } from "gl-matrix";
 import { computeViewMatrix } from "../Camera";
 import { nArray, assert, assertExists } from "../util";
@@ -14,6 +14,7 @@ import { MathConstants } from "../MathHelpers";
 
 import { TrilesetData, TrileData } from "./TrileData";
 import { ArtObjectData } from "./ArtObjectData";
+import { BackgroundPlaneData, BackgroundPlaneStaticData } from "./BackgroundPlaneData";
 
 class FezProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
@@ -26,6 +27,7 @@ layout(row_major, std140) uniform ub_SceneParams {
 
 layout(row_major, std140) uniform ub_ShapeParams {
     Mat4x3 u_BoneMatrix[1];
+    Mat4x2 u_TexMatrix[1];
 };
 
 layout(location = 0) in vec3 a_Position;
@@ -35,7 +37,7 @@ out vec2 v_TexCoord;
 
 void main() {
     gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix[0]), vec4(a_Position, 1.0)));
-    v_TexCoord = a_TexCoord;
+    v_TexCoord = Mul(u_TexMatrix[0], vec4(a_TexCoord, 1.0, 1.0));
 }
 `;
 
@@ -79,16 +81,18 @@ export class FezRenderer implements Viewer.SceneGfx {
     private renderTarget = new BasicRenderTarget();
     private renderHelper: GfxRenderHelper;
     private modelMatrix: mat4 = mat4.create();
+    private backgroundPlaneStaticData: BackgroundPlaneStaticData;
     public trileRenderers: FezObjectRenderer[] = [];
     public artObjectRenderers: FezObjectRenderer[] = [];
+    public backgroundPlaneRenderers: BackgroundPlaneRenderer[] = [];
 
-    constructor(device: GfxDevice, levelDocument: Document, public trilesetData: TrilesetData, public artObjectDatas: ArtObjectData[]) {
+    constructor(device: GfxDevice, levelDocument: Document, public trilesetData: TrilesetData, public artObjectDatas: ArtObjectData[], public backgroundPlaneDatas: BackgroundPlaneData[]) {
         this.renderHelper = new GfxRenderHelper(device);
         this.program = new FezProgram();
 
         mat4.fromScaling(this.modelMatrix, [50, 50, 50]);
 
-        const xmlTrileInstance = levelDocument.getElementsByTagName('TrileInstance');
+        const xmlTrileInstance = levelDocument.querySelectorAll('TrileInstance');
         for(var i = 0; i < xmlTrileInstance.length; i++) {
             const trileId = Number(xmlTrileInstance[i].getAttribute('trileId'));
 
@@ -100,7 +104,7 @@ export class FezRenderer implements Viewer.SceneGfx {
             const orientation = Number(xmlTrileInstance[i].getAttribute('orientation'));
             const rotateY = gc_orientations[orientation] * MathConstants.DEG_TO_RAD;
 
-            const trileData = this.trilesetData.trilesetArray.find((trileData) => trileData.key === trileId)!;
+            const trileData = this.trilesetData.triles.find((trileData) => trileData.key === trileId)!;
             const trileRenderer = new FezObjectRenderer(trileData);
 
             mat4.translate(trileRenderer.modelMatrix, trileRenderer.modelMatrix, position);
@@ -109,7 +113,7 @@ export class FezRenderer implements Viewer.SceneGfx {
             this.trileRenderers.push(trileRenderer);
         }
 
-        const artObjectInstances = levelDocument.getElementsByTagName('ArtObjectInstance');
+        const artObjectInstances = levelDocument.querySelectorAll('ArtObjects Entry ArtObjectInstance');
         for (let i = 0; i < artObjectInstances.length; i++) {
             const artObjectName = artObjectInstances[i].getAttribute('name')!.toLowerCase();
             const artObjectData = assertExists(this.artObjectDatas.find((artObject) => artObject.name === artObjectName));
@@ -124,12 +128,40 @@ export class FezRenderer implements Viewer.SceneGfx {
 
             const rotationMatrix = mat4.create();
             mat4.fromQuat(rotationMatrix, rotation);
-            const aoRenderer = new FezObjectRenderer(artObjectData);
+            const renderer = new FezObjectRenderer(artObjectData);
 
-            mat4.translate(aoRenderer.modelMatrix, aoRenderer.modelMatrix, position);
-            mat4.mul(aoRenderer.modelMatrix, aoRenderer.modelMatrix, rotationMatrix);
-            mat4.mul(aoRenderer.modelMatrix, this.modelMatrix, aoRenderer.modelMatrix);
-            this.artObjectRenderers.push(aoRenderer);
+            mat4.translate(renderer.modelMatrix, renderer.modelMatrix, position);
+            mat4.mul(renderer.modelMatrix, renderer.modelMatrix, rotationMatrix);
+            mat4.mul(renderer.modelMatrix, this.modelMatrix, renderer.modelMatrix);
+            this.artObjectRenderers.push(renderer);
+        }
+
+        this.backgroundPlaneStaticData = new BackgroundPlaneStaticData(device);
+
+        const backgroundPlanes = levelDocument.querySelectorAll('BackgroundPlanes Entry BackgroundPlane');
+        for (let i = 0; i < backgroundPlanes.length; i++) {
+            const backgroundPlaneName = backgroundPlanes[i].getAttribute('textureName')!.toLowerCase();
+            const backgroundPlaneData = assertExists(this.backgroundPlaneDatas.find((bp) => bp.name === backgroundPlaneName));
+
+            const position = parseVec3(backgroundPlanes[i].querySelector('Position Vector3')!);
+            // All art objects seem to have this offset applied to them for some reason?
+            position[0] -= 0.5;
+            position[1] -= 0.5;
+            position[2] -= 0.5;
+
+            const rotation = parseQuaternion(backgroundPlanes[i].querySelector('Rotation Quaternion')!);
+
+            const rotationMatrix = mat4.create();
+            mat4.fromQuat(rotationMatrix, rotation);
+            const renderer = new BackgroundPlaneRenderer(backgroundPlanes[i], backgroundPlaneData, this.backgroundPlaneStaticData);
+
+            mat4.translate(renderer.modelMatrix, renderer.modelMatrix, position);
+            const scaleX = backgroundPlaneData.dimensions[0] / 16;
+            const scaleY = backgroundPlaneData.dimensions[1] / 16;
+            mat4.mul(renderer.modelMatrix, renderer.modelMatrix, rotationMatrix);
+            mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [scaleX, scaleY, 1]);
+            mat4.mul(renderer.modelMatrix, this.modelMatrix, renderer.modelMatrix);
+            this.backgroundPlaneRenderers.push(renderer);
         }
     }
     
@@ -144,10 +176,11 @@ export class FezRenderer implements Viewer.SceneGfx {
         offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
 
         for (let i = 0; i < this.trileRenderers.length; i++)
-            this.trileRenderers[i].prepareToRender(viewerInput, renderInstManager);
-
+            this.trileRenderers[i].prepareToRender(renderInstManager, viewerInput);
         for (let i = 0; i < this.artObjectRenderers.length; i++)
-            this.artObjectRenderers[i].prepareToRender(viewerInput, renderInstManager);
+            this.artObjectRenderers[i].prepareToRender(renderInstManager, viewerInput);
+        for (let i = 0; i < this.backgroundPlaneRenderers.length; i++)
+            this.backgroundPlaneRenderers[i].prepareToRender(renderInstManager, viewerInput);
 
         renderInstManager.popTemplateRenderInst();
 
@@ -173,6 +206,9 @@ export class FezRenderer implements Viewer.SceneGfx {
         this.trilesetData.destroy(device);
         for (let i = 0; i < this.artObjectDatas.length; i++)
             this.artObjectDatas[i].destroy(device);
+        for (let i = 0; i < this.backgroundPlaneDatas.length; i++)
+            this.backgroundPlaneDatas[i].destroy(device);
+        this.backgroundPlaneStaticData.destroy(device);
 
         this.renderHelper.destroy(device);
         this.renderTarget.destroy(device);
@@ -181,8 +217,10 @@ export class FezRenderer implements Viewer.SceneGfx {
 
 type FezObjectData = TrileData | ArtObjectData;
 
+const texMatrixScratch = mat4.create();
 export class FezObjectRenderer {
     public modelMatrix = mat4.create();
+    public textureMatrix = mat4.create();
     private textureMapping = nArray(1, () => new TextureMapping());
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
 
@@ -194,20 +232,59 @@ export class FezObjectRenderer {
         this.megaStateFlags.cullMode = GfxCullMode.BACK;
     }
 
-    public prepareToRender(viewerInput: Viewer.ViewerRenderInput, renderInstManager: GfxRenderInstManager) {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
         const template = renderInstManager.pushTemplateRenderInst();
         template.setInputLayoutAndState(this.data.inputLayout, this.data.inputState);
         template.setSamplerBindingsFromTextureMappings(this.textureMapping);
         template.setMegaStateFlags(this.megaStateFlags);
 
-        let offs = template.allocateUniformBuffer(FezProgram.ub_ShapeParams, 12);
+        let offs = template.allocateUniformBuffer(FezProgram.ub_ShapeParams, 12+8);
         const d = template.mapUniformBufferF32(FezProgram.ub_ShapeParams);
         computeViewMatrix(modelViewScratch, viewerInput.camera);
         mat4.mul(modelViewScratch, modelViewScratch, this.modelMatrix);
         offs += fillMatrix4x3(d, offs, modelViewScratch);
+        mat4.identity(texMatrixScratch);
+        offs += fillMatrix4x2(d, offs, texMatrixScratch);
 
         const renderInst = renderInstManager.pushRenderInst();
         renderInstManager.popTemplateRenderInst();
         renderInst.drawIndexes(this.data.indexCount);
+    }
+}
+
+export class BackgroundPlaneRenderer {
+    public modelMatrix = mat4.create();
+    private textureMapping = nArray(1, () => new TextureMapping());
+    private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
+
+    constructor(private planeEl: Element, private planeData: BackgroundPlaneData, private staticData: BackgroundPlaneStaticData) {
+        this.textureMapping[0].gfxTexture = this.planeData.texture;
+        this.textureMapping[0].gfxSampler = this.planeData.sampler;
+
+        this.megaStateFlags.frontFace = GfxFrontFaceMode.CW;
+        this.megaStateFlags.cullMode = GfxCullMode.BACK;
+        this.megaStateFlags.blendMode = GfxBlendMode.ADD;
+        this.megaStateFlags.blendSrcFactor = GfxBlendFactor.SRC_ALPHA;
+        this.megaStateFlags.blendDstFactor = GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
+    }
+
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
+        const template = renderInstManager.pushTemplateRenderInst();
+        template.setInputLayoutAndState(this.staticData.inputLayout, this.staticData.inputState);
+        template.setSamplerBindingsFromTextureMappings(this.textureMapping);
+        template.setMegaStateFlags(this.megaStateFlags);
+
+        let offs = template.allocateUniformBuffer(FezProgram.ub_ShapeParams, 12+8);
+        const d = template.mapUniformBufferF32(FezProgram.ub_ShapeParams);
+        computeViewMatrix(modelViewScratch, viewerInput.camera);
+        mat4.mul(modelViewScratch, modelViewScratch, this.modelMatrix);
+        offs += fillMatrix4x3(d, offs, modelViewScratch);
+        const timeInSeconds = viewerInput.time / 1000;
+        this.planeData.calcTexMatrix(texMatrixScratch, timeInSeconds);
+        offs += fillMatrix4x2(d, offs, texMatrixScratch);
+
+        const renderInst = renderInstManager.pushRenderInst();
+        renderInstManager.popTemplateRenderInst();
+        renderInst.drawIndexes(this.staticData.indexCount);
     }
 }
