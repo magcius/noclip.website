@@ -5,6 +5,7 @@ import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { GfxBufferUsage, GfxDevice, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexAttributeFrequency, GfxInputLayout, GfxInputState, GfxBuffer, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from '../gfx/platform/GfxPlatform';
 import { assert } from '../util';
 import { makeTextureFromImageData } from './Texture';
+import { parseVector3, parseVector2 } from './DocumentHelpers';
 
 const gc_normals = [
     vec3.fromValues(-1, 0, 0),
@@ -15,29 +16,14 @@ const gc_normals = [
     vec3.fromValues(0, 0, 1),
 ];
 
-function parseVec2(e: Element): vec2 {
-    assert(e.tagName === 'Vector2');
-    const x = Number(e.getAttribute('x'));
-    const y = Number(e.getAttribute('y'));
-    return vec2.fromValues(x, y);
-}
-
-function parseVec3(e: Element): vec3 {
-    assert(e.tagName === 'Vector3');
-    const x = Number(e.getAttribute('x'));
-    const y = Number(e.getAttribute('y'));
-    const z = Number(e.getAttribute('z'));
-    return vec3.fromValues(x, y, z);
-}
-
 export class TrileData {
-    inputLayout: GfxInputLayout;
-    inputState: GfxInputState;
-    vertexBuffer: GfxBuffer;
-    texcoordBuffer: GfxBuffer;
-    indexBuffer: GfxBuffer;
-    indexCount: number;
-    key: number;
+    private vertexBuffer: GfxBuffer;
+    private texcoordBuffer: GfxBuffer;
+    private indexBuffer: GfxBuffer;
+    public inputLayout: GfxInputLayout;
+    public inputState: GfxInputState;
+    public indexCount: number;
+    public key: number;
 
     constructor(device: GfxDevice, element: Element, public texture: GfxTexture, public sampler: GfxSampler) {
         this.key = Number(element.getAttribute('key'));
@@ -49,9 +35,9 @@ export class TrileData {
 
         const xmlVPNTI = element.getElementsByTagName('VertexPositionNormalTextureInstance');
         for (let i = 0; i < xmlVPNTI.length; i++) {
-            positions.push(parseVec3(xmlVPNTI[i].querySelector('Position Vector3')!));
+            positions.push(parseVector3(xmlVPNTI[i].querySelector('Position Vector3')!));
             normals.push(gc_normals[Number(xmlVPNTI[i].querySelector('Normal')!.textContent)]);
-            texcoords.push(parseVec2(xmlVPNTI[i].querySelector('TextureCoord Vector2')!));
+            texcoords.push(parseVector2(xmlVPNTI[i].querySelector('TextureCoord Vector2')!));
         }
 
         const indexXmlList = element.getElementsByTagName('Indices');

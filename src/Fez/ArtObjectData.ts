@@ -4,6 +4,7 @@ import { vec3, vec2 } from "gl-matrix";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { assert } from "../util";
 import { makeTextureFromImageData } from "./Texture";
+import { parseVector3, parseVector2 } from "./DocumentHelpers";
 
 const gc_normals = [
     vec3.fromValues(-1, 0, 0), 
@@ -13,21 +14,6 @@ const gc_normals = [
     vec3.fromValues(0, 1, 0), 
     vec3.fromValues(0, 0, 1),
 ];
-
-function parseVec2(e: Element): vec2 {
-    assert(e.tagName === 'Vector2');
-    const x = Number(e.getAttribute('x'));
-    const y = Number(e.getAttribute('y'));
-    return vec2.fromValues(x, y);
-}
-
-function parseVec3(e: Element): vec3 {
-    assert(e.tagName === 'Vector3');
-    const x = Number(e.getAttribute('x'));
-    const y = Number(e.getAttribute('y'));
-    const z = Number(e.getAttribute('z'));
-    return vec3.fromValues(x, y, z);
-}
 
 export class ArtObjectData {
     private vertexBuffer: GfxBuffer;
@@ -47,9 +33,9 @@ export class ArtObjectData {
 
         const xmlVPNTI = file.getElementsByTagName('VertexPositionNormalTextureInstance');
         for (let i = 0; i < xmlVPNTI.length; i++) {
-            positions.push(parseVec3(xmlVPNTI[i].querySelector('Position Vector3')!));
+            positions.push(parseVector3(xmlVPNTI[i].querySelector('Position Vector3')!));
             normals.push(gc_normals[Number(xmlVPNTI[i].querySelector('Normal')!.textContent)]);
-            texcoords.push(parseVec2(xmlVPNTI[i].querySelector('TextureCoord Vector2')!));
+            texcoords.push(parseVector2(xmlVPNTI[i].querySelector('TextureCoord Vector2')!));
         }
 
         const indexXmlList = file.getElementsByTagName('Indices');

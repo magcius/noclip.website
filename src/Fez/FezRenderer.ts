@@ -5,16 +5,16 @@ import { GfxDevice, GfxRenderPass, GfxBindingLayoutDescriptor, GfxHostAccessPass
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
-import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x4, fillMatrix4x3, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { mat4, vec3, quat, vec2 } from "gl-matrix";
 import { computeViewMatrix } from "../Camera";
 import { nArray, assert, assertExists } from "../util";
 import { TextureMapping } from "../TextureHolder";
 import { MathConstants } from "../MathHelpers";
-
 import { TrilesetData, TrileData } from "./TrileData";
 import { ArtObjectData } from "./ArtObjectData";
 import { BackgroundPlaneData, BackgroundPlaneStaticData } from "./BackgroundPlaneData";
+import { parseVector3, parseQuaternion } from "./DocumentHelpers";
 
 class FezProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
@@ -62,23 +62,6 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
 
 const modelViewScratch = mat4.create();
 
-function parseVec3(e: Element): vec3 {
-    assert(e.tagName === 'Vector3');
-    const x = Number(e.getAttribute('x'));
-    const y = Number(e.getAttribute('y'));
-    const z = Number(e.getAttribute('z'));
-    return vec3.fromValues(x, y, z);
-}
-
-function parseQuaternion(e: Element): quat {
-    assert(e.tagName === 'Quaternion');
-    const x = Number(e.getAttribute('x'));
-    const y = Number(e.getAttribute('y'));
-    const z = Number(e.getAttribute('z'));
-    const w = Number(e.getAttribute('w'));
-    return quat.fromValues(x, y, z, w);
-}
-
 const gc_orientations = [180, 270, 0, 90];
 
 export class FezRenderer implements Viewer.SceneGfx {
@@ -105,7 +88,7 @@ export class FezRenderer implements Viewer.SceneGfx {
             if (trileId < 0)
                 continue;
 
-            const position = parseVec3(trileInstances[i].querySelector('Position Vector3')!);
+            const position = parseVector3(trileInstances[i].querySelector('Position Vector3')!);
             const orientation = Number(trileInstances[i].getAttribute('orientation'));
             const rotateY = gc_orientations[orientation] * MathConstants.DEG_TO_RAD;
 
@@ -123,7 +106,7 @@ export class FezRenderer implements Viewer.SceneGfx {
             const artObjectName = artObjectInstances[i].getAttribute('name')!.toLowerCase();
             const artObjectData = assertExists(this.artObjectDatas.find((artObject) => artObject.name === artObjectName));
 
-            const position = parseVec3(artObjectInstances[i].querySelector('Position Vector3')!);
+            const position = parseVector3(artObjectInstances[i].querySelector('Position Vector3')!);
             // All art objects seem to have this offset applied to them for some reason?
             position[0] -= 0.5;
             position[1] -= 0.5;
@@ -133,7 +116,7 @@ export class FezRenderer implements Viewer.SceneGfx {
             const rotationMatrix = mat4.create();
             mat4.fromQuat(rotationMatrix, rotation);
 
-            const scale = parseVec3(artObjectInstances[i].querySelector('Scale Vector3')!);
+            const scale = parseVector3(artObjectInstances[i].querySelector('Scale Vector3')!);
 
             const renderer = new FezObjectRenderer(artObjectData);
             mat4.translate(renderer.modelMatrix, renderer.modelMatrix, position);
@@ -265,7 +248,7 @@ export class BackgroundPlaneRenderer {
     private sampler: GfxSampler;
 
     constructor(device: GfxDevice, private planeEl: Element, private planeData: BackgroundPlaneData, private staticData: BackgroundPlaneStaticData) {
-        const position = parseVec3(planeEl.querySelector('Position Vector3')!);
+        const position = parseVector3(planeEl.querySelector('Position Vector3')!);
         position[0] -= 0.5;
         position[1] -= 0.5;
         position[2] -= 0.5;
@@ -279,7 +262,7 @@ export class BackgroundPlaneRenderer {
         vec3.transformMat4(scratchVec3, scratchVec3, rotationMatrix);
         vec3.scaleAndAdd(position, position, scratchVec3, 0.005);
 
-        const scale = parseVec3(planeEl.querySelector('Scale Vector3')!);
+        const scale = parseVector3(planeEl.querySelector('Scale Vector3')!);
         vec2.set(this.rawScale, scale[0], scale[1]);
 
         mat4.translate(this.modelMatrix, this.modelMatrix, position);
