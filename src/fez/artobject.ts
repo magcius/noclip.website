@@ -1,4 +1,4 @@
-import { GfxTexture, GfxDevice, GfxTextureDimension, GfxFormat, GfxInputLayout, GfxInputState, GfxBuffer, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency } from "../gfx/platform/GfxPlatform";
+import { GfxTexture, GfxDevice, GfxTextureDimension, GfxFormat, GfxInputLayout, GfxInputState, GfxBuffer, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform";
 import { vec3, vec2 } from "gl-matrix";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 
@@ -18,12 +18,11 @@ export class ArtObjectData {
     indexCount: number;
     aoTex: GfxTexture;
 
-    constructor(device: GfxDevice, file: Document, tex: ImageData) {
-
+    constructor(device: GfxDevice, file: Document, tex: ImageData, public sampler: GfxSampler) {
         let positions: vec3[] = [];
         let normals: vec3[] = [];
         let texcoords: vec2[] = [];
-        let indices: Number[] = [];
+        let indices: number[] = [];
 
         let xmlVPNTI = file.getElementsByTagName('VertexPositionNormalTextureInstance');
         for(var i = 0; i < xmlVPNTI.length; i++) {
@@ -71,7 +70,9 @@ export class ArtObjectData {
             width: tex.width, height: tex.height, depth: 1, numLevels: 1,})
         hostAccessPass.uploadTextureData(this.aoTex, 0, [new Uint8Array(tex.data.buffer)]);
         device.submitPass(hostAccessPass);
+        
     }
+
     destroy(device: GfxDevice): void {
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.vertexBuffer);
@@ -85,13 +86,31 @@ export class ArtObjectData {
 export class ArtObjectSetData {
     fez_parser: DOMParser;
     aoArray: ArtObjectData[];
+    public sampler: GfxSampler;
 
     constructor(device: GfxDevice, aoFiles: Document[], aoTex: ImageData[]) {
         this.fez_parser = new DOMParser();
         this.aoArray = [];
+
+        this.sampler = device.createSampler({
+            wrapS: GfxWrapMode.CLAMP,
+            wrapT: GfxWrapMode.CLAMP,
+            minFilter: GfxTexFilterMode.POINT,
+            magFilter: GfxTexFilterMode.POINT,
+            mipFilter: GfxMipFilterMode.NO_MIP,
+            minLOD: 0, maxLOD: 0,
+        });
+
         for(var a = 0; a < aoFiles.length; a++) {
-            this.aoArray.push(new ArtObjectData(device, aoFiles[a], aoTex[a]))
+            this.aoArray.push(new ArtObjectData(device, aoFiles[a], aoTex[a], this.sampler));
         }
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroySampler(this.sampler);
+
+        for (let i = 0; i < this.aoArray.length; i++)
+            this.aoArray[i].destroy(device);
     }
 }
 

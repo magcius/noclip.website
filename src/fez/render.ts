@@ -149,18 +149,9 @@ export class FezRenderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        for(var i = 0; i < this.trileset.trilesetArray.length; i++) {
-            this.trileset.trilesetArray[i].destroy(device); 
-        }
-        for(var i = 0; i < this.trileRenderers.length; i++) {
-            device.destroySampler(this.trileRenderers[i].textureMapping[0].gfxSampler!);
-        }
-        for(var i = 0; i < this.aoset.aoArray.length; i++) {
-            this.aoset.aoArray[i].destroy(device);
-        }
-        for(var i = 0; i < this.AORenderers.length; i++) {
-            device.destroySampler(this.AORenderers[i].textureMapping[0].gfxSampler!);
-        }
+        this.trileset.destroy(device);
+        this.aoset.destroy(device);
+
         this.renderHelper.destroy(device);
         this.renderTarget.destroy(device);
     }
@@ -172,18 +163,7 @@ export class TrileRenderer {
 
     constructor(device: GfxDevice, private trileData: TrileData) {
         this.textureMapping[0].gfxTexture = this.trileData.texture;
-        this.textureMapping[0].gfxSampler = this.translateSampler(device);
-    }
-
-    private translateSampler(device: GfxDevice): GfxSampler {
-        return device.createSampler({
-            wrapS: GfxWrapMode.CLAMP,
-            wrapT: GfxWrapMode.CLAMP,
-            minFilter: GfxTexFilterMode.POINT,
-            magFilter: GfxTexFilterMode.POINT,
-            mipFilter: GfxMipFilterMode.NO_MIP,
-            minLOD: 0, maxLOD: 0,
-        });
+        this.textureMapping[0].gfxSampler = this.trileData.sampler;
     }
 
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput, renderInstManager: GfxRenderInstManager) {
@@ -210,19 +190,9 @@ export class ArtObjectRenderer {
 
     constructor(device: GfxDevice, private aoData: ArtObjectData) {
         this.textureMapping[0].gfxTexture = this.aoData.aoTex;
-        this.textureMapping[0].gfxSampler = this.translateSampler(device);
+        this.textureMapping[0].gfxSampler = this.aoData.sampler;
     }
 
-    private translateSampler(device: GfxDevice): GfxSampler {
-        return device.createSampler({
-            wrapS: GfxWrapMode.CLAMP,
-            wrapT: GfxWrapMode.CLAMP,
-            minFilter: GfxTexFilterMode.POINT,
-            magFilter: GfxTexFilterMode.POINT,
-            mipFilter: GfxMipFilterMode.NO_MIP,
-            minLOD: 0, maxLOD: 0,
-        });
-    }
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput, renderInstManager: GfxRenderInstManager) {
         const template = renderInstManager.pushTemplateRenderInst();
         template.setInputLayoutAndState(this.aoData.inputLayout,this.aoData.inputState);

@@ -1,7 +1,7 @@
 //Code ported and subsequently butchered from https://github.com/halogenica/FezViewer
 import { vec3, vec2 } from 'gl-matrix';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { GfxBufferUsage, GfxDevice, GfxVertexAttributeDescriptor,GfxFormat,GfxVertexAttributeFrequency, GfxInputLayout, GfxInputState, GfxBuffer, GfxTexture, GfxTextureDimension   } from '../gfx/platform/GfxPlatform';
+import { GfxBufferUsage, GfxDevice, GfxVertexAttributeDescriptor,GfxFormat,GfxVertexAttributeFrequency, GfxInputLayout, GfxInputState, GfxBuffer, GfxTexture, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode   } from '../gfx/platform/GfxPlatform';
 
 const gc_normals = [vec3.fromValues(-1, 0, 0), 
                     vec3.fromValues(0, -1, 0), 
@@ -18,18 +18,14 @@ export class TrileData {
     indexBuffer: GfxBuffer;
     indexCount: number;
     key: number;
-    texture: GfxTexture;
 
-    constructor(device: GfxDevice, element: Element, tex: GfxTexture) {
-
+    constructor(device: GfxDevice, element: Element, public texture: GfxTexture, public sampler: GfxSampler) {
         let positions: vec3[] = [];
         let normals: vec3[] = [];
         let texcoords: vec2[] = [];
-        let indices: Number[] = [];
+        let indices: number[] = [];
 
-        this.texture = tex;
-
-        this.key = Number(element.getAttribute('key'))
+        this.key = Number(element.getAttribute('key'));
 
         let xmlVPNTI = element.getElementsByTagName('VertexPositionNormalTextureInstance');
         for(var i = 0; i < xmlVPNTI.length; i++) {
@@ -73,13 +69,13 @@ export class TrileData {
             { buffer: this.texcoordBuffer, byteOffset: 0, byteStride: 2*0x04, }],
             { buffer: this.indexBuffer, byteOffset: 0, byteStride: 0x04 });
     }
+
     destroy(device: GfxDevice): void {
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.texcoordBuffer);
         device.destroyInputLayout(this.inputLayout);
         device.destroyInputState(this.inputState);
-        device.destroyTexture(this.texture)
     }
 }
 
@@ -98,7 +94,8 @@ function flat(L: Float32Array[]): Float32Array {
 export class TrilesetData {
     fez_parser: DOMParser;
     trilesetArray: TrileData[];
-    trileTex: GfxTexture;
+    public trileTex: GfxTexture;
+    public sampler: GfxSampler;
 
     constructor(device: GfxDevice, file: Document, tex: ImageData) {
         this.fez_parser = new DOMParser();
@@ -106,13 +103,30 @@ export class TrilesetData {
         let trileList = file.getElementsByTagName('TrileEntry');
 
         this.trileTex = device.createTexture({dimension: GfxTextureDimension.n2D, pixelFormat: GfxFormat.U8_RGBA,
-            width: tex.width, height: tex.height, depth: 1, numLevels: 1,})
+            width: tex.width, height: tex.height, depth: 1, numLevels: 1,});
         const hostAccessPass = device.createHostAccessPass();
         hostAccessPass.uploadTextureData(this.trileTex, 0, [new Uint8Array(tex.data.buffer)]);
         device.submitPass(hostAccessPass);
 
-        for(var a = 0; a < trileList.length; a++) {
-            this.trilesetArray.push(new TrileData(device, trileList[a], this.trileTex))
+        this.sampler = device.createSampler({
+            wrapS: GfxWrapMode.CLAMP,
+            wrapT: GfxWrapMode.CLAMP,
+            minFilter: GfxTexFilterMode.POINT,
+            magFilter: GfxTexFilterMode.POINT,
+            mipFilter: GfxMipFilterMode.NO_MIP,
+            minLOD: 0, maxLOD: 0,
+        });
+
+        for (var a = 0; a < trileList.length; a++) {
+            this.trilesetArray.push(new TrileData(device, trileList[a], this.trileTex, this.sampler));
         }
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyTexture(this.trileTex);
+        device.destroySampler(this.sampler);
+
+        for (let i = 0; i < this.trilesetArray.length; i++)
+            this.trilesetArray[i].destroy(device);
     }
 }
