@@ -10,7 +10,7 @@ import * as Viewer from '../viewer';
 import { RoomRenderer, CtrTextureHolder, CmbInstance } from './render';
 import { SceneGroup } from '../viewer';
 import { assert, assertExists, hexzero } from '../util';
-import { NamedArrayBufferSlice, DataFetcher, DataFetcherFlags } from '../DataFetcher';
+import { DataFetcherFlags } from '../DataFetcher';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { OoT3DRenderer, ModelCache, maybeDecompress } from './oot3d_scenes';
 import { TransparentBlack } from '../Color';

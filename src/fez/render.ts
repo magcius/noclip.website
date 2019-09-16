@@ -1,6 +1,7 @@
+
 import { DeviceProgram } from "../Program";
 import * as Viewer from '../viewer';
-import { GfxDevice, GfxRenderPass, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxRenderPass, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode } from "../gfx/platform/GfxPlatform";
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
@@ -8,43 +9,43 @@ import { TrilesetData, TrileData } from "./trile";
 import { fillMatrix4x4, fillMatrix4x3 } from "../gfx/helpers/UniformBufferHelpers";
 import { mat4, vec3, quat } from "gl-matrix";
 import { computeViewMatrix } from "../Camera";
-import { nArray } from "../util";
+import { nArray, assert, assertExists } from "../util";
 import { TextureMapping } from "../TextureHolder";
 import { MathConstants } from "../MathHelpers";
-import { ArtObjectSetData, ArtObjectData } from "./artobject";
-
-const gc_orientations = [180, 270, 0, 90];
+import { ArtObjectData } from "./artobject";
 
 class FezProgram extends DeviceProgram {
-
     public static ub_SceneParams = 0;
     public static ub_ShapeParams = 1;
 
-    vert = `layout(row_major, std140) uniform ub_SceneParams {
-        Mat4x4 u_Projection;
-    };
-    
-    layout(row_major, std140) uniform ub_ShapeParams {
-        Mat4x3 u_BoneMatrix[1];
-    };
+    public vert = `
+layout(row_major, std140) uniform ub_SceneParams {
+    Mat4x4 u_Projection;
+};
 
-    layout(location = 0) in vec3 a_Position;
-    layout(location = 1) in vec2 a_TexCoord;
-    
-    out vec2 v_TexCoord;
-    
-    void main() {
-        gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix[0]), vec4(a_Position, 1.0)));
-        v_TexCoord = a_TexCoord;
-    }`
-    frag = `
-    in vec2 v_TexCoord;
+layout(row_major, std140) uniform ub_ShapeParams {
+    Mat4x3 u_BoneMatrix[1];
+};
 
-    uniform sampler2D u_Texture[1]; 
-    void main() {
-        gl_FragColor = texture(u_Texture[0], v_TexCoord.xy);
-    }
-    `
+layout(location = 0) in vec3 a_Position;
+layout(location = 1) in vec2 a_TexCoord;
+
+out vec2 v_TexCoord;
+
+void main() {
+    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix[0]), vec4(a_Position, 1.0)));
+    v_TexCoord = a_TexCoord;
+}
+`;
+
+    public frag = `
+in vec2 v_TexCoord;
+
+uniform sampler2D u_Texture[1]; 
+void main() {
+    gl_FragColor = texture(u_Texture[0], v_TexCoord.xy);
+}
+`;
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
@@ -53,80 +54,99 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
 
 const modelViewScratch = mat4.create();
 
+function parseVec3(e: Element): vec3 {
+    assert(e.tagName === 'Vector3');
+    const x = Number(e.getAttribute('x'));
+    const y = Number(e.getAttribute('y'));
+    const z = Number(e.getAttribute('z'));
+    return vec3.fromValues(x, y, z);
+}
+
+function parseQuaternion(e: Element): quat {
+    assert(e.tagName === 'Quaternion');
+    const x = Number(e.getAttribute('x'));
+    const y = Number(e.getAttribute('y'));
+    const z = Number(e.getAttribute('z'));
+    const w = Number(e.getAttribute('w'));
+    return quat.fromValues(x, y, z, w);
+}
+
+const gc_orientations = [180, 270, 0, 90];
+
 export class FezRenderer implements Viewer.SceneGfx {
-    fez_parser: DOMParser;
     private program: FezProgram;
     private renderTarget = new BasicRenderTarget();
     private renderHelper: GfxRenderHelper;
-    public trileset: TrilesetData;
-    public aoset: ArtObjectSetData;
-    private device: GfxDevice;
-    public clearRenderPassDescriptor = standardFullClearRenderPassDescriptor;
-    public trileRenderers: TrileRenderer[] = [];
-    public AORenderers: ArtObjectRenderer[] = [];
+    private modelMatrix: mat4 = mat4.create();
+    public trileRenderers: FezObjectRenderer[] = [];
+    public artObjectRenderers: FezObjectRenderer[] = [];
 
-    public visible: boolean = true;
-
-    constructor(device: GfxDevice, file: Document, trileFile: Document, trilesetTex: ImageData, aoXmlFiles: Document[], aoSetTex: ImageData[]) {
-        this.fez_parser = new DOMParser();
-        this.trileset = new TrilesetData(device,trileFile,trilesetTex);
-        this.aoset = new ArtObjectSetData(device, aoXmlFiles, aoSetTex);
+    constructor(device: GfxDevice, levelDocument: Document, public trilesetData: TrilesetData, public artObjectDatas: ArtObjectData[]) {
         this.renderHelper = new GfxRenderHelper(device);
-        this.device = device;
         this.program = new FezProgram();
 
-        let xmlTrileInstance = file.getElementsByTagName('TrileInstance');
+        mat4.fromScaling(this.modelMatrix, [50, 50, 50]);
+
+        const xmlTrileInstance = levelDocument.getElementsByTagName('TrileInstance');
         for(var i = 0; i < xmlTrileInstance.length; i++) {
-            let trileID = Number(xmlTrileInstance[i].getAttribute('trileId'));
-            let trileOrient = Number(xmlTrileInstance[i].getAttribute('orientation'));
-            let xmlTrilePos = xmlTrileInstance[i].getElementsByTagName('Vector3');
-            let trilePos = vec3.fromValues(Number(xmlTrilePos[0].getAttribute('x')),Number(xmlTrilePos[0].getAttribute('y')),Number(xmlTrilePos[0].getAttribute('z')));
+            const trileId = Number(xmlTrileInstance[i].getAttribute('trileId'));
 
-            const trileData = this.trileset.trilesetArray.find((trileData) => trileData.key === trileID)!;
-            const trileRenderer = new TrileRenderer(device, trileData);
+            // No clue WTF this means. Seen in globe.xml.
+            if (trileId < 0)
+                continue;
 
-            mat4.translate(trileRenderer.modelMatrix, trileRenderer.modelMatrix, trilePos);
-            mat4.rotateY(trileRenderer.modelMatrix, trileRenderer.modelMatrix, gc_orientations[trileOrient] * MathConstants.DEG_TO_RAD);
+            const position = parseVec3(xmlTrileInstance[i].querySelector('Position Vector3')!);
+            const orientation = Number(xmlTrileInstance[i].getAttribute('orientation'));
+            const rotateY = gc_orientations[orientation] * MathConstants.DEG_TO_RAD;
+
+            const trileData = this.trilesetData.trilesetArray.find((trileData) => trileData.key === trileId)!;
+            const trileRenderer = new FezObjectRenderer(trileData);
+
+            mat4.translate(trileRenderer.modelMatrix, trileRenderer.modelMatrix, position);
+            mat4.rotateY(trileRenderer.modelMatrix, trileRenderer.modelMatrix, rotateY);
+            mat4.mul(trileRenderer.modelMatrix, this.modelMatrix, trileRenderer.modelMatrix);
             this.trileRenderers.push(trileRenderer);
         }
-        let xmlAOInstance = file.getElementsByTagName('ArtObjectInstance');
-        for(var i = 0; i < xmlAOInstance.length; i++) {
-            let xmlAOPos = xmlAOInstance[i].querySelectorAll('Position Vector3');
-            let xmlAORot = xmlAOInstance[i].querySelectorAll('Rotation Quaternion');
-            let aoPos = vec3.fromValues(Number(xmlAOPos[0].getAttribute('x')),Number(xmlAOPos[0].getAttribute('y')),Number(xmlAOPos[0].getAttribute('z')));
-            let aoRotQuat = quat.fromValues(Number(xmlAORot[0].getAttribute('x')),Number(xmlAORot[0].getAttribute('y')),Number(xmlAORot[0].getAttribute('z')),Number(xmlAORot[0].getAttribute('w')));
-            let aoRot = mat4.create();
-            mat4.fromQuat(aoRot,aoRotQuat);
 
-            const aoData = this.aoset.aoArray[i];
-            const aoRenderer = new ArtObjectRenderer(device, aoData);
+        const artObjectInstances = levelDocument.getElementsByTagName('ArtObjectInstance');
+        for (let i = 0; i < artObjectInstances.length; i++) {
+            const artObjectName = artObjectInstances[i].getAttribute('name')!.toLowerCase();
+            const artObjectData = assertExists(this.artObjectDatas.find((artObject) => artObject.name === artObjectName));
 
-            mat4.translate(aoRenderer.modelMatrix, aoRenderer.modelMatrix, aoPos);
-            mat4.mul(aoRenderer.modelMatrix, aoRenderer.modelMatrix, aoRot);
-            this.AORenderers.push(aoRenderer);
+            const position = parseVec3(artObjectInstances[i].querySelector('Position Vector3')!);
+            // All art objects seem to have this offset applied to them for some reason?
+            position[0] -= 0.5;
+            position[1] -= 0.5;
+            position[2] -= 0.5;
+
+            const rotation = parseQuaternion(artObjectInstances[i].querySelector('Rotation Quaternion')!);
+
+            const rotationMatrix = mat4.create();
+            mat4.fromQuat(rotationMatrix, rotation);
+            const aoRenderer = new FezObjectRenderer(artObjectData);
+
+            mat4.translate(aoRenderer.modelMatrix, aoRenderer.modelMatrix, position);
+            mat4.mul(aoRenderer.modelMatrix, aoRenderer.modelMatrix, rotationMatrix);
+            mat4.mul(aoRenderer.modelMatrix, this.modelMatrix, aoRenderer.modelMatrix);
+            this.artObjectRenderers.push(aoRenderer);
         }
     }
     
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput, renderInstManager: GfxRenderInstManager) {
-        if (!this.visible) {
-            return;
-        }
-        
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
-        const gfxProgram = renderInstManager.gfxRenderCache.createProgram(this.device, this.program);
+        const gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
         template.setGfxProgram(gfxProgram);
-        let sc_offs = template.allocateUniformBuffer(FezProgram.ub_SceneParams, 16);
-        const sc_mappedF32 = template.mapUniformBufferF32(FezProgram.ub_SceneParams);
-        sc_offs += fillMatrix4x4(sc_mappedF32, sc_offs, viewerInput.camera.projectionMatrix);
 
-        for(var i = 0; i < this.trileRenderers.length; i++) {
-            this.trileRenderers[i].prepareToRender(device, hostAccessPass, viewerInput, renderInstManager)
-        }
+        let offs = template.allocateUniformBuffer(FezProgram.ub_SceneParams, 16);
+        const d = template.mapUniformBufferF32(FezProgram.ub_SceneParams);
+        offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
 
-        for(var i = 0; i < this.AORenderers.length; i++) {
-            this.AORenderers[i].prepareToRender(device, hostAccessPass, viewerInput, renderInstManager)
-        }
+        for (let i = 0; i < this.trileRenderers.length; i++)
+            this.trileRenderers[i].prepareToRender(viewerInput, renderInstManager);
+
+        for (let i = 0; i < this.artObjectRenderers.length; i++)
+            this.artObjectRenderers[i].prepareToRender(viewerInput, renderInstManager);
 
         renderInstManager.popTemplateRenderInst();
 
@@ -141,7 +161,7 @@ export class FezRenderer implements Viewer.SceneGfx {
         device.submitPass(hostAccessPass);
 
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        const passRenderer = this.renderTarget.createRenderPass(device, this.clearRenderPassDescriptor);
+        const passRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
         passRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
         renderInstManager.drawOnPassRenderer(device, passRenderer);
         renderInstManager.resetRenderInsts();
@@ -149,65 +169,44 @@ export class FezRenderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        this.trileset.destroy(device);
-        this.aoset.destroy(device);
+        this.trilesetData.destroy(device);
+        for (let i = 0; i < this.artObjectDatas.length; i++)
+            this.artObjectDatas[i].destroy(device);
 
         this.renderHelper.destroy(device);
         this.renderTarget.destroy(device);
     }
 }
 
-export class TrileRenderer {
-    public modelMatrix = mat4.create();
-    public textureMapping = nArray(1, () => new TextureMapping())
+type FezObjectData = TrileData | ArtObjectData;
 
-    constructor(device: GfxDevice, private trileData: TrileData) {
-        this.textureMapping[0].gfxTexture = this.trileData.texture;
-        this.textureMapping[0].gfxSampler = this.trileData.sampler;
+export class FezObjectRenderer {
+    public modelMatrix = mat4.create();
+    private textureMapping = nArray(1, () => new TextureMapping());
+    private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
+
+    constructor(private data: FezObjectData) {
+        this.textureMapping[0].gfxTexture = this.data.texture;
+        this.textureMapping[0].gfxSampler = this.data.sampler;
+
+        this.megaStateFlags.frontFace = GfxFrontFaceMode.CW;
+        this.megaStateFlags.cullMode = GfxCullMode.BACK;
     }
 
-    public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput, renderInstManager: GfxRenderInstManager) {
+    public prepareToRender(viewerInput: Viewer.ViewerRenderInput, renderInstManager: GfxRenderInstManager) {
         const template = renderInstManager.pushTemplateRenderInst();
-        template.setInputLayoutAndState(this.trileData.inputLayout,this.trileData.inputState);
+        template.setInputLayoutAndState(this.data.inputLayout, this.data.inputState);
         template.setSamplerBindingsFromTextureMappings(this.textureMapping);
+        template.setMegaStateFlags(this.megaStateFlags);
 
-        let sh_offs = template.allocateUniformBuffer(FezProgram.ub_ShapeParams, 12);
-        const sh_mappedF32 = template.mapUniformBufferF32(FezProgram.ub_ShapeParams);
+        let offs = template.allocateUniformBuffer(FezProgram.ub_ShapeParams, 12);
+        const d = template.mapUniformBufferF32(FezProgram.ub_ShapeParams);
         computeViewMatrix(modelViewScratch, viewerInput.camera);
         mat4.mul(modelViewScratch, modelViewScratch, this.modelMatrix);
-        sh_offs += fillMatrix4x3(sh_mappedF32, sh_offs, modelViewScratch);
+        offs += fillMatrix4x3(d, offs, modelViewScratch);
 
-        let renderInst = renderInstManager.pushRenderInst();
-
+        const renderInst = renderInstManager.pushRenderInst();
         renderInstManager.popTemplateRenderInst();
-
-        renderInst.drawIndexes(this.trileData.indexCount);
-    }
-}
-export class ArtObjectRenderer {
-    public modelMatrix = mat4.create();
-    public textureMapping = nArray(1, () => new TextureMapping())
-
-    constructor(device: GfxDevice, private aoData: ArtObjectData) {
-        this.textureMapping[0].gfxTexture = this.aoData.aoTex;
-        this.textureMapping[0].gfxSampler = this.aoData.sampler;
-    }
-
-    public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput, renderInstManager: GfxRenderInstManager) {
-        const template = renderInstManager.pushTemplateRenderInst();
-        template.setInputLayoutAndState(this.aoData.inputLayout,this.aoData.inputState);
-        template.setSamplerBindingsFromTextureMappings(this.textureMapping);
-
-        let sh_offs = template.allocateUniformBuffer(FezProgram.ub_ShapeParams, 12);
-        const sh_mappedF32 = template.mapUniformBufferF32(FezProgram.ub_ShapeParams);
-        computeViewMatrix(modelViewScratch, viewerInput.camera);
-        mat4.mul(modelViewScratch, modelViewScratch, this.modelMatrix);
-        sh_offs += fillMatrix4x3(sh_mappedF32, sh_offs, modelViewScratch);
-
-        let renderInst = renderInstManager.pushRenderInst();
-
-        renderInstManager.popTemplateRenderInst();
-
-        renderInst.drawIndexes(this.aoData.indexCount);
+        renderInst.drawIndexes(this.data.indexCount);
     }
 }

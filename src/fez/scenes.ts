@@ -1,48 +1,23 @@
-import { FezRenderer } from './render';
 
 import * as Viewer from '../viewer';
 import { DataFetcher, getDataURLForPath } from '../DataFetcher';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
 import { getTextDecoder } from '../util';
-import { IS_DEVELOPMENT } from '../BuildVersion';
+import { FezRenderer } from './render';
+import { ArtObjectData } from './artobject';
+import { TrilesetData } from './trile';
 
 const pathBase = 'Fez';
 
-class SceneDesc implements Viewer.SceneDesc {
-    private trilesetID: string;
-    constructor(public id: string, public name: string) {
-    }
-
-    public async createScene(gfxDevice: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        const dataFetcher = context.dataFetcher;
-        const parsed_level = await fetchXMLFile(dataFetcher, `${pathBase}/levels/${this.id}.xml`);
-
-        this.trilesetID = parsed_level.getElementsByTagName('Level')[0].getAttribute('trileSetName')!.toLowerCase();
-        const trileFileContents = await fetchXMLFile(dataFetcher, `${pathBase}/trile sets/${this.trilesetID}.xml`)
-        const trilesetTex = await fetchPNG(`${pathBase}/trile sets/${this.trilesetID}.png`)
-
-        const artObjectsXml = parsed_level.querySelectorAll('ArtObjects Entry')!;
-        const artObjectPromises: Promise<Document>[] = [];
-        const artObjectTexPromises: Promise<ImageData>[] = [];
-        for (let i = 0; i < artObjectsXml.length; i++) {
-            const artObjectName = artObjectsXml[i].getElementsByTagName('ArtObjectInstance').item(0)!.attributes.getNamedItem('name')!.textContent!.toLowerCase();
-            const promise = fetchXMLFile(dataFetcher, `${pathBase}/art objects/${artObjectName}.xml`);
-            const texPromise = fetchPNG(`${pathBase}/art objects/${artObjectName}.png`)
-            artObjectPromises.push(promise);
-            artObjectTexPromises.push(texPromise);
-        }
-
-        const artObjectXmlFiles = await Promise.all(artObjectPromises);
-        const artObjectSetTex = await Promise.all(artObjectTexPromises);
-
-        return new FezRenderer(gfxDevice, parsed_level, trileFileContents, trilesetTex, artObjectXmlFiles, artObjectSetTex);
-
-        
-    }
+async function fetchXML(dataFetcher: DataFetcher, path: string): Promise<Document> {
+    const buffer = await dataFetcher.fetchData(`${path}`);
+    const fileContents = getTextDecoder('utf8')!.decode(buffer.arrayBuffer);
+    const parser = new DOMParser();
+    return parser.parseFromString(fileContents, `application/xml`);
 }
 
-export function fetchPNG(path: string): Promise<ImageData> {
+function fetchPNG(path: string): Promise<ImageData> {
     path = getDataURLForPath(path);
     const img = document.createElement('img');
     img.crossOrigin = 'anonymous';
@@ -60,11 +35,63 @@ export function fetchPNG(path: string): Promise<ImageData> {
     return p;
 }
 
-async function fetchXMLFile(dataFetcher: DataFetcher, path: string): Promise<Document> {
-    const buffer = await dataFetcher.fetchData(`${path}`);
-    const fileContents = getTextDecoder('utf8')!.decode(buffer.arrayBuffer);
-    const parser = new DOMParser();
-    return parser.parseFromString(fileContents, `application/xml`);
+class ModelCache {
+    public trilesetPromiseCache = new Map<string, Promise<TrilesetData>>();
+    public artObjectPromiseCache = new Map<string, Promise<ArtObjectData>>();
+
+    constructor(private dataFetcher: DataFetcher) {
+    }
+
+    private async fetchTrilesetInternal(device: GfxDevice, path: string): Promise<TrilesetData> {
+        const [xml, png] = await Promise.all([
+            fetchXML(this.dataFetcher, `${pathBase}/trile sets/${path}.xml`),
+            fetchPNG(`${pathBase}/trile sets/${path}.png`),
+        ]);
+        return new TrilesetData(device, xml, png);
+    }
+
+    private async fetchArtObjectInternal(device: GfxDevice, path: string): Promise<ArtObjectData> {
+        const [xml, png] = await Promise.all([
+            fetchXML(this.dataFetcher, `${pathBase}/art objects/${path}.xml`),
+            fetchPNG(`${pathBase}/art objects/${path}.png`),
+        ]);
+        return new ArtObjectData(device, path, xml, png);
+    }
+
+    public fetchTrileset(device: GfxDevice, path: string): Promise<TrilesetData> {
+        if (!this.trilesetPromiseCache.has(path))
+            this.trilesetPromiseCache.set(path, this.fetchTrilesetInternal(device, path));
+        return this.trilesetPromiseCache.get(path)!;
+    }
+
+    public fetchArtObject(device: GfxDevice, path: string): Promise<ArtObjectData> {
+        if (!this.artObjectPromiseCache.has(path))
+            this.artObjectPromiseCache.set(path, this.fetchArtObjectInternal(device, path));
+        return this.artObjectPromiseCache.get(path)!;
+    }
+}
+
+class SceneDesc implements Viewer.SceneDesc {
+    constructor(public id: string, public name: string) {
+    }
+
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const cache = new ModelCache(context.dataFetcher);
+        const levelDocument = await fetchXML(context.dataFetcher, `${pathBase}/levels/${this.id}.xml`);
+
+        const trilesetID = levelDocument.querySelector('Level')!.getAttribute('trileSetName')!.toLowerCase();
+        const trilesetPromise = cache.fetchTrileset(device, trilesetID);
+
+        const artObjectsXml = levelDocument.querySelectorAll('ArtObjects Entry ArtObjectInstance')!;
+        const artObjectPromises: Promise<ArtObjectData>[] = [];
+        for (let i = 0; i < artObjectsXml.length; i++) {
+            const artObjectName = artObjectsXml[i].attributes.getNamedItem('name')!.textContent!.toLowerCase();
+            artObjectPromises.push(cache.fetchArtObject(device, artObjectName));
+        }
+
+        const [trilesetData, artObjectDatas] = await Promise.all([trilesetPromise, Promise.all(artObjectPromises)]);
+        return new FezRenderer(device, levelDocument, trilesetData, artObjectDatas);
+    }
 }
 
 const id = 'fez';
@@ -229,4 +256,4 @@ const sceneDescs = [
     new SceneDesc('zu_zuish', 'zu_zuish'),
 ]
 
-export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs, hidden: !IS_DEVELOPMENT};
+export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };

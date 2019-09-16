@@ -2121,6 +2121,8 @@ but I could not have done it alone. I've been assisted by so many others through
 <a href="https://twitter.com/TanukiMatthew">TanukiMatthew</a>,
 <a href="https://twitter.com/QuadeZaban">Quade Zaban</a>,
 <a href="https://twitter.com/Murugalstudio">Murugo</a>,
+<a href="https://twitter.com/ambienttiger">pat</a>,
+<a href="https://github.com/agentcatcat/">catcat</a>,
 <a href="https://twitter.com/PistonMiner">PistonMiner</a>,
 <a href="https://twitter.com/LordNed">LordNed</a>,
 <a href="https://twitter.com/SageOfMirrors">SageOfMirrors</a>,
