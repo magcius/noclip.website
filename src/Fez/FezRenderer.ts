@@ -5,14 +5,15 @@ import { GfxDevice, GfxRenderPass, GfxBindingLayoutDescriptor, GfxHostAccessPass
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
-import { TrilesetData, TrileData } from "./trile";
 import { fillMatrix4x4, fillMatrix4x3 } from "../gfx/helpers/UniformBufferHelpers";
 import { mat4, vec3, quat } from "gl-matrix";
 import { computeViewMatrix } from "../Camera";
 import { nArray, assert, assertExists } from "../util";
 import { TextureMapping } from "../TextureHolder";
 import { MathConstants } from "../MathHelpers";
-import { ArtObjectData } from "./artobject";
+
+import { TrilesetData, TrileData } from "./TrileData";
+import { ArtObjectData } from "./ArtObjectData";
 
 class FezProgram extends DeviceProgram {
     public static ub_SceneParams = 0;

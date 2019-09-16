@@ -55,7 +55,7 @@ import * as Scenes_WiiSportsResort from './rres/Scenes_WiiSportsResort';
 import * as Scenes_Zelda_SkywardSword from './rres/Scenes_Zelda_SkywardSword';
 import * as Scenes_InteractiveExamples from './interactive_examples/Scenes';
 import * as Scenes_Pilotwings64 from './Pilotwings64/Scenes';
-import * as Scenes_Fez from './fez/scenes';
+import * as Scenes_Fez from './Fez/Scenes_Fez';
 
 import { DroppedFileSceneDesc } from './Scenes_FileDrops';
 

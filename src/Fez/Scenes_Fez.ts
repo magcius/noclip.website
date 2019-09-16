@@ -4,9 +4,9 @@ import { DataFetcher, getDataURLForPath } from '../DataFetcher';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
 import { getTextDecoder } from '../util';
-import { FezRenderer } from './render';
-import { ArtObjectData } from './artobject';
-import { TrilesetData } from './trile';
+import { FezRenderer } from './FezRenderer';
+import { TrilesetData } from './TrileData';
+import { ArtObjectData } from './ArtObjectData';
 
 const pathBase = 'Fez';
 
