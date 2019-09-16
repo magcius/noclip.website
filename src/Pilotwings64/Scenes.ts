@@ -429,13 +429,13 @@ interface UVMD {
 function parseUVMD(file: Pilotwings64FSFile): UVMD {
     assert(file.chunks.length == 1);
     const view = file.chunks[0].buffer.createDataView();
-    const vertCount = view.getUint16(0);
-    const LODCount = view.getUint8(2);
-    const transformCount = view.getUint8(3);
-    const unknownCount = view.getUint8(4);
+    const vertCount = view.getUint16(0x0);
+    const lodCount = view.getUint8(0x02);
+    const transformCount = view.getUint8(0x03);
+    const unknownCount = view.getUint8(0x04);
     // unknown byte, short
 
-    let offs = 8;
+    let offs = 0x08;
     const vertexData = new Float32Array(9 * vertCount);
     for (let i = 0; i < vertexData.length;) {
         vertexData[i++] = view.getInt16(offs + 0x00);
@@ -452,44 +452,44 @@ function parseUVMD(file: Pilotwings64FSFile): UVMD {
     }
 
     const lods: ModelLOD[] = [];
-    for (let i = 0; i < LODCount; i++) {
-        const partCount = view.getUint8(offs);
+    const vertBuffer = new Uint16Array(16);
+    for (let i = 0; i < lodCount; i++) {
+        const partCount = view.getUint8(offs + 0x00);
         assert(partCount <= transformCount);
-        offs += 2;
+        offs += 0x02;
         const parts: ModelPart[] = [];
         for (let p = 0; p < partCount; p++) {
-            const texCount = view.getUint8(offs);
-            offs += 3;
+            const texCount = view.getUint8(offs + 0x00);
+            offs += 0x03;
 
             const indexData: number[] = [];
             for (let t = 0; t < texCount; t++) {
                 // 8 bytes texture info
-                const otherCount = view.getUint16(offs+4);
-                const faceCount = view.getUint16(offs+6);
-                const commandCount = view.getUint16(offs + 8);
-                offs += 0xa;
+                const otherCount = view.getUint16(offs + 0x04);
+                const faceCount = view.getUint16(offs + 0x06);
+                const commandCount = view.getUint16(offs + 0x08);
+                offs += 0x0A;
                 const prevIndexLength = indexData.length;
-                const vertBuffer = new Uint16Array(16);
                 for (let c = 0; c < commandCount; c++) {
                     const index = view.getUint16(offs);
-                    offs += 2;
+                    offs += 0x02;
                     if (index & 0x4000) { // draw face, emulate 0xbf G_TRI1
                         indexData.push(
-                            vertBuffer[(index & 0xf00) >> 8], 
-                            vertBuffer[(index & 0x0f0) >> 4], 
-                            vertBuffer[(index & 0x00f) >> 0], 
+                            vertBuffer[(index & 0xF00) >> 8], 
+                            vertBuffer[(index & 0x0F0) >> 4], 
+                            vertBuffer[(index & 0x00F) >> 0], 
                         );
                     } else { // load verts, emulate 0x04 G_VTX
                         const loadCount = view.getUint8(offs++);
-                        for (let read = 0, write = loadCount & 0xf; read <= (loadCount >> 4); read++, write++)
-                            vertBuffer[write] = (index & 0x3fff) + read;
+                        for (let read = 0, write = loadCount & 0x0F; read <= (loadCount >> 4); read++, write++)
+                            vertBuffer[write] = (index & 0x3FFF) + read;
                     }
                 }
                 assert(indexData.length - prevIndexLength == 3*faceCount);
             }
             parts.push({indexData: new Uint16Array(indexData)});
         }
-        lods.push({parts})
+        lods.push({ parts });
         offs += 4; // float
     }
     const partPlacements: mat4[] = [];
@@ -511,12 +511,18 @@ function parseUVMD(file: Pilotwings64FSFile): UVMD {
         const z = view.getFloat32(offs + 0x38);
         const one = view.getFloat32(offs + 0x3C);
         assert(one == 1.0);
-        partPlacements.push(mat4.fromValues(m00,m02,-m01,m03,m20,m22,-m21,m23,-m10,-m12,m11,m13,x,z,-y,1.0));
+        const m = mat4.fromValues(
+             m00,  m02, -m01, m03,
+             m20,  m22, -m21, m23,
+            -m10, -m12,  m11, m13,
+            x, z, -y, 1.0
+        );
+        partPlacements.push();
         offs += 0x40;
     }
     offs += unknownCount * 0x24;
-    const inverseScale = view.getFloat32(offs+4);
-    return {vertexData, partPlacements, lods, inverseScale};
+    const inverseScale = view.getFloat32(offs + 0x4);
+    return { vertexData, partPlacements, lods, inverseScale };
 }
 
 
@@ -663,65 +669,6 @@ class MeshInstance {
         renderInst.setGfxProgram(gfxProgram);
         renderInst.setInputLayoutAndState(this.uvctData.inputLayout, this.uvctData.inputState);
         renderInst.drawIndexes(this.uvctData.uvct.indexData.length);
-    }
-}
-
-
-class ModelPartData {
-    public vertexBuffer: GfxBuffer;
-    public indexBuffer: GfxBuffer;
-    public inputLayout: GfxInputLayout;
-    public inputState: GfxInputState;
-
-    constructor(device: GfxDevice, public part: ModelPart, verts: Float32Array ) {
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, verts);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, part.indexData.buffer);
-
-        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: PW64Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB,  bufferByteOffset: 0*0x04, frequency: GfxVertexAttributeFrequency.PER_VERTEX, },
-            { location: PW64Program.a_Color   , bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 5*0x04, frequency: GfxVertexAttributeFrequency.PER_VERTEX, },
-        ];
-
-        this.inputLayout = device.createInputLayout({
-            indexBufferFormat: GfxFormat.U16_R,
-            vertexAttributeDescriptors,
-        });
-
-        this.inputState = device.createInputState(this.inputLayout, [
-            { buffer: this.vertexBuffer, byteOffset: 0, byteStride: 9*0x04, },
-        ], { buffer: this.indexBuffer, byteOffset: 0, byteStride: 0x02 });
-    }
-
-    public destroy(device: GfxDevice): void {
-        device.destroyBuffer(this.indexBuffer);
-        device.destroyBuffer(this.vertexBuffer);
-        device.destroyInputLayout(this.inputLayout);
-        device.destroyInputState(this.inputState);
-    }
-}
-
-class ModelPartInstance {
-    public modelMatrix = mat4.create();
-    public program = new PW64Program();
-
-    constructor(private partData: ModelPartData) {
-    }
-
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        const renderInst = renderInstManager.pushRenderInst();
-
-        let offs = renderInst.allocateUniformBuffer(PW64Program.ub_DrawParams, 12);
-        const d = renderInst.mapUniformBufferF32(PW64Program.ub_DrawParams);
-
-        computeViewMatrix(scratchMatrix, viewerInput.camera);
-        mat4.mul(scratchMatrix, scratchMatrix, this.modelMatrix);
-
-        offs += fillMatrix4x3(d, offs, scratchMatrix);
-
-        const gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
-        renderInst.setGfxProgram(gfxProgram);
-        renderInst.setInputLayoutAndState(this.partData.inputLayout, this.partData.inputState);
-        renderInst.drawIndexes(this.partData.part.indexData.length);
     }
 }
 

@@ -98,8 +98,6 @@ export interface GfxTextureDescriptor {
     width: number;
     height: number;
     depth: number;
-    // TODO(jstpierre): The number of mipmaps is not explicitly choosable on Metal. I assume WebGPU
-    // will not allow this either. At some point, I will have to move this into the sampler.
     numLevels: number;
 }
 

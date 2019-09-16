@@ -14,7 +14,6 @@ import { GlobalGrabManager } from './GrabManager';
 
 // @ts-ignore
 import logoURL from './logo.png';
-import BitMap from './BitMap';
 
 export const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
 export const COOL_BLUE_COLOR = 'rgb(20, 105, 215)';
@@ -862,8 +861,8 @@ export class FloatingPanel implements Widget {
         this.toplevel.style.outline = 'none';
         this.toplevel.style.minWidth = '300px';
         this.toplevel.style.position = 'absolute';
-        this.toplevel.style.left = '20px';
-        this.toplevel.style.top = '20px';
+        this.toplevel.style.left = '82px';
+        this.toplevel.style.top = '32px';
         this.toplevel.tabIndex = -1;
 
         this.mainPanel = document.createElement('div');
@@ -2598,7 +2597,7 @@ export class UI {
         return this.debugFloater;
     }
 
-    public bindSlider(obj: { [k: string]: number }, paramName: string, min = 0, max = 1, labelName: string = paramName, panel: FloatingPanel): void {
+    public bindSlider(obj: { [k: string]: number }, panel: FloatingPanel, paramName: string, min = 0, max = 1, labelName: string = paramName): void {
         let value = obj[paramName];
         assert(typeof value === "number");
 
@@ -2627,24 +2626,25 @@ export class UI {
         panel.contents.appendChild(slider.elem);
     }
 
-    private bindSlidersRecurse(obj: { [k: string]: any }, parentName: string, panel: FloatingPanel): void {
-        for (const keyName in obj) {
+    private bindSlidersRecurse(obj: { [k: string]: any }, panel: FloatingPanel, parentName: string, keys: string[]): void {
+        for (let i = 0; i < keys.length; i++) {
+            const keyName = keys[i];
             const v = obj[keyName];
             if (typeof v === "number")
-                this.bindSlider(obj, keyName, 0, 1, `${parentName}.${keyName}`, panel);
+                this.bindSlider(obj, panel, keyName, 0, 1, `${parentName}.${keyName}`);
             if (v instanceof Float32Array)
-                this.bindSlidersRecurse(v, `${parentName}.${keyName}`, panel);
+                this.bindSlidersRecurse(v, panel, `${parentName}.${keyName}`, keys);
         }
     }
 
-    public bindSliders(obj: { [k: string]: any }, panel: FloatingPanel | null = null): void {
+    public bindSliders(obj: { [k: string]: any }, keys: string[] = Object.keys(obj), panel: FloatingPanel | null = null): void {
         if (panel === null)
             panel = this.getDebugFloater();
 
         while (panel.contents.firstChild)
             panel.contents.removeChild(panel.contents.firstChild);
 
-        this.bindSlidersRecurse(obj, '', panel);
+        this.bindSlidersRecurse(obj, panel, '', keys);
 
         (window as any).debugObj = obj;
     }
