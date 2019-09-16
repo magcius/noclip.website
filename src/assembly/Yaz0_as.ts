@@ -1,9 +1,4 @@
 @inline
-function bswap(value: u16): u16 {
-  return (value << 8) | (value >> 8);
-}
-
-@inline
 function get(offs: u32): u8 {
     return load<u8>(offs);
 }

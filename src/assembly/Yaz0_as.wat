@@ -2,10 +2,7 @@
  (type $FUNCSIG$viii (func (param i32 i32 i32)))
  (type $FUNCSIG$v (func))
  (memory $0 0)
- (table $0 1 funcref)
- (elem (i32.const 0) $null)
  (export "memory" (memory $0))
- (export "table" (table $0))
  (export "decompress" (func $Yaz0_as/decompress))
  (func $Yaz0_as/decompress (; 0 ;) (type $FUNCSIG$viii) (param $0 i32) (param $1 i32) (param $2 i32)
   (local $3 i32)
@@ -26,17 +23,19 @@
    i32.const 8
    local.set $6
    loop $continue|1
-    local.get $6
-    local.tee $3
-    i32.const 1
-    i32.sub
-    local.set $6
-    local.get $3
-    if
-     local.get $7
+    block $break|1
+     local.get $6
+     local.tee $3
+     i32.const 1
+     i32.sub
+     local.set $6
+     local.get $3
+     i32.eqz
+     br_if $break|1
      i32.const 1
      local.get $6
      i32.shl
+     local.get $7
      i32.and
      if
       local.get $2
@@ -57,13 +56,15 @@
       local.get $4
       i32.load8_u
       i32.store8
-     else      
+     else
       local.get $1
       i32.load16_u
       local.tee $3
       i32.const 8
       i32.shl
       local.get $3
+      i32.const 65535
+      i32.and
       i32.const 8
       i32.shr_u
       i32.or
@@ -144,15 +145,12 @@
      end
      local.get $2
      i32.const 0
-     i32.le_s
-     if
-      return
-     end
-     br $continue|1
+     i32.gt_s
+     br_if $continue|1
+     return
     end
    end
    br $continue|0
-   unreachable
   end
   unreachable
  )

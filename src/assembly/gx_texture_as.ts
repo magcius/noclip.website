@@ -1,8 +1,3 @@
-@inline
-function bswap(value: u16): u16 {
-  return (value << 8) | (value >> 8);
-}
-
 // http://www.mindcontrol.org/~hplus/graphics/expand-bits.html
 @inline
 function expand3to8(n: u8): u8 {
