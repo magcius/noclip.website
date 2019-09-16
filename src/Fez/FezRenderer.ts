@@ -110,8 +110,8 @@ export class FezRenderer implements Viewer.SceneGfx {
             const rotateY = gc_orientations[orientation] * MathConstants.DEG_TO_RAD;
 
             const trileData = this.trilesetData.triles.find((trileData) => trileData.key === trileId)!;
-            const trileRenderer = new FezObjectRenderer(trileData);
 
+            const trileRenderer = new FezObjectRenderer(trileData);
             mat4.translate(trileRenderer.modelMatrix, trileRenderer.modelMatrix, position);
             mat4.rotateY(trileRenderer.modelMatrix, trileRenderer.modelMatrix, rotateY);
             mat4.mul(trileRenderer.modelMatrix, this.modelMatrix, trileRenderer.modelMatrix);
@@ -134,13 +134,12 @@ export class FezRenderer implements Viewer.SceneGfx {
             mat4.fromQuat(rotationMatrix, rotation);
 
             const scale = parseVec3(artObjectInstances[i].querySelector('Scale Vector3')!);
-            assert(vec3.equals(scale, [1, 1, 1]));
 
             const renderer = new FezObjectRenderer(artObjectData);
-
             mat4.translate(renderer.modelMatrix, renderer.modelMatrix, position);
             mat4.mul(renderer.modelMatrix, renderer.modelMatrix, rotationMatrix);
             mat4.mul(renderer.modelMatrix, this.modelMatrix, renderer.modelMatrix);
+            mat4.scale(renderer.modelMatrix, renderer.modelMatrix, scale);
             this.artObjectRenderers.push(renderer);
         }
 
