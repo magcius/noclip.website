@@ -40,13 +40,23 @@ interface Mesh_Chunk {
     indexData: Uint16Array;
 }
 
-function parseUVCT_Chunk(chunk: Pilotwings64FSFileChunk): Mesh_Chunk {
+interface UVCT_ModelPlacement {
+    modelIndex: number;
+    placement: mat4;
+}
+
+interface UVCT_Chunk {
+    mesh: Mesh_Chunk;
+    models: UVCT_ModelPlacement[];
+}
+
+function parseUVCT_Chunk(chunk: Pilotwings64FSFileChunk): UVCT_Chunk {
     assert(chunk.tag === 'COMM');
     const view = chunk.buffer.createDataView();
 
     const vertCount = view.getUint16(0x00);
     const faceCount = view.getUint16(0x02);
-    const unkCount = view.getUint16(0x04);
+    const modelCount = view.getUint16(0x04);
     const planeCount = view.getUint16(0x06);
 
     let offs = 0x08;
@@ -75,10 +85,64 @@ function parseUVCT_Chunk(chunk: Pilotwings64FSFileChunk): Mesh_Chunk {
         offs += 0x08;
     }
 
-    return { vertexData, indexData };
+    const models: UVCT_ModelPlacement[] = [];
+    for (let i = 0; i < modelCount; i++) {
+        const matrixCount = view.getUint8(offs + 0x00);
+        offs += 0x01;
+
+        let placement: mat4 = mat4.create();
+        for (let j = 0; j < matrixCount; j++) {
+            const wholes = offs;
+            const fracs = offs + 0x20;
+            const m00 = view.getInt16(wholes + 0x00) + view.getUint16(fracs + 0x00) / 0x10000;
+            const m01 = view.getInt16(wholes + 0x02) + view.getUint16(fracs + 0x02) / 0x10000;
+            const m02 = view.getInt16(wholes + 0x04) + view.getUint16(fracs + 0x04) / 0x10000;
+            const m03 = view.getInt16(wholes + 0x06) + view.getUint16(fracs + 0x06) / 0x10000;
+            const m10 = view.getInt16(wholes + 0x08) + view.getUint16(fracs + 0x08) / 0x10000;
+            const m11 = view.getInt16(wholes + 0x0a) + view.getUint16(fracs + 0x0a) / 0x10000;
+            const m12 = view.getInt16(wholes + 0x0c) + view.getUint16(fracs + 0x0c) / 0x10000;
+            const m13 = view.getInt16(wholes + 0x0e) + view.getUint16(fracs + 0x0e) / 0x10000;
+            const m20 = view.getInt16(wholes + 0x10) + view.getUint16(fracs + 0x10) / 0x10000;
+            const m21 = view.getInt16(wholes + 0x12) + view.getUint16(fracs + 0x12) / 0x10000;
+            const m22 = view.getInt16(wholes + 0x14) + view.getUint16(fracs + 0x14) / 0x10000;
+            const m23 = view.getInt16(wholes + 0x16) + view.getUint16(fracs + 0x16) / 0x10000;
+            const matx = view.getInt16(wholes + 0x18) + view.getUint16(fracs + 0x18) / 0x10000;
+            const maty = view.getInt16(wholes + 0x1a) + view.getUint16(fracs + 0x1a) / 0x10000;
+            const matz = view.getInt16(wholes + 0x1c) + view.getUint16(fracs + 0x1c) / 0x10000;
+            const one = view.getInt16(wholes + 0x1e) + view.getUint16(fracs + 0x1e) / 0x10000;
+            if (j == 0) { // not sure what other matrices are for yet
+                placement = mat4.fromValues(
+                    m00, m01, m02, m03,
+                    m10, m11, m12, m13,
+                    m20, m21, m22, m23,
+                    matx, maty, matz, one,
+                );
+            }
+            assert(one === 1);
+
+            offs += 0x40;
+        }
+
+        const modelIndex = view.getInt16(offs + 0x00);
+        // these are redundant with the matrix, though could differ due to precision
+        const x = view.getFloat32(offs + 0x02);
+        const y = view.getFloat32(offs + 0x06);
+        const z = view.getFloat32(offs + 0x0a);
+        if (matrixCount === 0) {
+            assert(x === 0.0);
+            assert(y === 0.0);
+            assert(z === 0.0);
+        }
+        offs += 0x12;
+
+        if (modelIndex >= 0)
+            models.push({ modelIndex, placement });
+    }
+
+    return { mesh: { vertexData, indexData }, models };
 }
 
-function parseUVCT(file: Pilotwings64FSFile): Mesh_Chunk {
+function parseUVCT(file: Pilotwings64FSFile): UVCT_Chunk {
     assert(file.chunks.length === 1);
     assert(file.chunks[0].tag === 'COMM');
     return parseUVCT_Chunk(file.chunks[0]);
@@ -417,6 +481,7 @@ interface ModelPart {
 
 interface ModelLOD {
     parts: ModelPart[];
+    radius: number;
 }
 
 interface UVMD {
@@ -475,22 +540,23 @@ function parseUVMD(file: Pilotwings64FSFile): UVMD {
                     offs += 0x02;
                     if (index & 0x4000) { // draw face, emulate 0xbf G_TRI1
                         indexData.push(
-                            vertBuffer[(index & 0xF00) >> 8], 
-                            vertBuffer[(index & 0x0F0) >> 4], 
-                            vertBuffer[(index & 0x00F) >> 0], 
+                            vertBuffer[(index & 0xF00) >> 8],
+                            vertBuffer[(index & 0x0F0) >> 4],
+                            vertBuffer[(index & 0x00F) >> 0],
                         );
                     } else { // load verts, emulate 0x04 G_VTX
                         const loadCount = view.getUint8(offs++);
-                        for (let read = 0, write = loadCount & 0x0F; read <= (loadCount >> 4); read++, write++)
+                        for (let read = 0, write = loadCount & 0x0F; read <= (loadCount >> 4); read++ , write++)
                             vertBuffer[write] = (index & 0x3FFF) + read;
                     }
                 }
-                assert(indexData.length - prevIndexLength == 3*faceCount);
+                assert(indexData.length - prevIndexLength == 3 * faceCount);
             }
-            parts.push({indexData: new Uint16Array(indexData)});
+            parts.push({ indexData: new Uint16Array(indexData) });
         }
-        lods.push({ parts });
-        offs += 4; // float
+        const radius = view.getFloat32(offs);
+        offs += 0x04;
+        lods.push({ parts, radius });
     }
     const partPlacements: mat4[] = [];
     for (let i = 0; i < transformCount; i++) {
@@ -510,14 +576,14 @@ function parseUVMD(file: Pilotwings64FSFile): UVMD {
         const y = view.getFloat32(offs + 0x34);
         const z = view.getFloat32(offs + 0x38);
         const one = view.getFloat32(offs + 0x3C);
-        assert(one == 1.0);
+        assert(one === 1.0);
         const m = mat4.fromValues(
-             m00,  m02, -m01, m03,
-             m20,  m22, -m21, m23,
-            -m10, -m12,  m11, m13,
-            x, z, -y, 1.0
+            m00, m01, m02, m03,
+            m10, m11, m12, m13,
+            m20, m21, m22, m23,
+            x, y, z, 1.0
         );
-        partPlacements.push();
+        partPlacements.push(m);
         offs += 0x40;
     }
     offs += unknownCount * 0x24;
@@ -791,7 +857,7 @@ class Pilotwings64SceneDesc implements SceneDesc {
 
         const uvmd = fs.files.filter((file) => file.type === 'UVMD').map((file) => parseUVMD(file));
 
-        const uvctData = uvct.map((uvct) => new MeshData(device, uvct));
+        const uvctData = uvct.map((uvct) => new MeshData(device, uvct.mesh));
         renderer.uvctData = uvctData;
 
         const uvmdData = uvmd.map((uvmd) => uvmd.lods[0].parts.map((part) => new MeshData(device, {indexData: part.indexData, vertexData: uvmd.vertexData})));
@@ -808,30 +874,34 @@ class Pilotwings64SceneDesc implements SceneDesc {
 
         const levelData = parseUVLV(fs.files.filter((file) => file.type === 'UVLV')[0]).levels[this.levelID];
 
+        const levelScaleVector = vec3.fromValues(50, 50, 50);
+
         for (let terraIndex of levelData.terras) {
             const map = uvtr[0].maps[terraIndex];
             const baseY = 0;
             for (let j = 0; j < map.contourPlacements.length; j++) {
                 const ct = map.contourPlacements[j];
                 const instance = new MeshInstance(uvctData[ct.contourIndex]);
-                const position = vec3.fromValues(ct.position[0], baseY, -ct.position[1]);
-                mat4.scale(instance.modelMatrix, instance.modelMatrix, [50, 50, 50]);
-                mat4.translate(instance.modelMatrix, instance.modelMatrix, position);
                 mat4.rotateX(instance.modelMatrix, instance.modelMatrix, -90 * MathConstants.DEG_TO_RAD);
+                mat4.scale(instance.modelMatrix, instance.modelMatrix, levelScaleVector);
+                mat4.translate(instance.modelMatrix, instance.modelMatrix, ct.position);
                 renderer.uvctInstance.push(instance);
-            }
-        }
-        for (let modelIndex of levelData.models) {
-            const instances = uvmdData[modelIndex].map((part) => new MeshInstance(part));
-            const positions = uvmd[modelIndex].partPlacements;
-            for (let j = 0; j < instances.length; j++) {
-                mat4.multiply(instances[j].modelMatrix, instances[j].modelMatrix, positions[j]);
-                // mat4.scale(instances[j].modelMatrix, instances[j].modelMatrix, [500, 500, 500]);
-                mat4.rotateX(instances[j].modelMatrix, instances[j].modelMatrix, -90 * MathConstants.DEG_TO_RAD);
-                renderer.uvmdInstance.push(instances[j]);
-            }
-        }
 
+                // render attached static models (Sobjs)
+                for (let model of uvct[ct.contourIndex].models) {
+                    const instances = uvmdData[model.modelIndex].map((part) => new MeshInstance(part));
+                    const relPositions = uvmd[model.modelIndex].partPlacements;
+                    for (let k = 0; k < instances.length; k++) {
+                        mat4.rotateX(instances[k].modelMatrix, instances[k].modelMatrix, -90 * MathConstants.DEG_TO_RAD);
+                        mat4.scale(instances[k].modelMatrix, instances[k].modelMatrix, levelScaleVector);
+                        mat4.translate(instances[k].modelMatrix, instances[k].modelMatrix, ct.position);
+                        mat4.multiply(instances[k].modelMatrix, instances[k].modelMatrix, model.placement);
+                        mat4.multiply(instances[k].modelMatrix, instances[k].modelMatrix, relPositions[k]);
+                        renderer.uvmdInstance.push(instances[k]);
+                    }
+                }
+            }
+        }
         return renderer;
     }
 }
