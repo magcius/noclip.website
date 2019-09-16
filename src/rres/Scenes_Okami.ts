@@ -78,6 +78,9 @@ interface SCR {
 
 class MapPartInstance {
     private animationController = new AnimationController();
+    public visible = true;
+    public transS = 0.0;
+    public transT = 0.0;
 
     constructor(private scrMapEntry: SCREntry, private modelMatrix: mat4, private modelInstance: MDL0ModelInstance) {
         mat4.copy(this.modelInstance.modelMatrix, this.modelMatrix);
@@ -87,6 +90,9 @@ class MapPartInstance {
     }
 
     public prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!this.visible)
+            return;
+
         this.animationController.setTimeInMilliseconds(viewerInput.time);
 
         const frames = this.animationController.getTimeInFrames();
@@ -108,8 +114,8 @@ class MapPartInstance {
         }
 
         const dst = this.modelInstance.materialInstances[0].materialData.material.texSrts[0].srtMtx;
-        dst[12] = transS;
-        dst[13] = transT;
+        dst[12] = transS + this.transS;
+        dst[13] = transT + this.transT;
 
         if (!!(this.scrMapEntry.flags_08 & 0x03)) {
             computeModelMatrixYBillboard(this.modelInstance.modelMatrix, viewerInput.camera);
