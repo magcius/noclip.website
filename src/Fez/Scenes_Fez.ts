@@ -3,7 +3,7 @@ import * as Viewer from '../viewer';
 import { DataFetcher, getDataURLForPath } from '../DataFetcher';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
-import { getTextDecoder, assertExists } from '../util';
+import { getTextDecoder } from '../util';
 import { FezRenderer } from './FezRenderer';
 import { TrilesetData } from './TrileData';
 import { ArtObjectData } from './ArtObjectData';

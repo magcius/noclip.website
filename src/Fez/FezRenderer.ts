@@ -1,12 +1,12 @@
 
 import { DeviceProgram } from "../Program";
 import * as Viewer from '../viewer';
-import { GfxDevice, GfxRenderPass, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxRenderPass, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform";
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
-import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2 } from "../gfx/helpers/UniformBufferHelpers";
-import { mat4, vec3, quat } from "gl-matrix";
+import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
+import { mat4, vec3, quat, vec2 } from "gl-matrix";
 import { computeViewMatrix } from "../Camera";
 import { nArray, assert, assertExists } from "../util";
 import { TextureMapping } from "../TextureHolder";
@@ -20,16 +20,19 @@ class FezProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
     public static ub_ShapeParams = 1;
 
-    public vert = `
+    public both = `
 layout(row_major, std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
 };
 
 layout(row_major, std140) uniform ub_ShapeParams {
     Mat4x3 u_BoneMatrix[1];
-    Mat4x2 u_TexMatrix[1];
+    vec4 u_TexScaleBiasPre;
+    vec4 u_TexScaleBiasPost;
 };
+`;
 
+    public vert = `
 layout(location = 0) in vec3 a_Position;
 layout(location = 1) in vec2 a_TexCoord;
 
@@ -37,7 +40,7 @@ out vec2 v_TexCoord;
 
 void main() {
     gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix[0]), vec4(a_Position, 1.0)));
-    v_TexCoord = Mul(u_TexMatrix[0], vec4(a_TexCoord, 1.0, 1.0));
+    v_TexCoord = a_TexCoord.xy * u_TexScaleBiasPre.xy + u_TexScaleBiasPre.zw;
 }
 `;
 
@@ -46,7 +49,9 @@ in vec2 v_TexCoord;
 
 uniform sampler2D u_Texture[1]; 
 void main() {
-    gl_FragColor = texture(u_Texture[0], v_TexCoord.xy);
+    vec2 t_TexCoord = mod(v_TexCoord, vec2(1.0, 1.0));
+    t_TexCoord = t_TexCoord.xy * u_TexScaleBiasPost.xy + u_TexScaleBiasPost.zw;
+    gl_FragColor = texture(u_Texture[0], t_TexCoord.xy);
 }
 `;
 }
@@ -92,16 +97,16 @@ export class FezRenderer implements Viewer.SceneGfx {
 
         mat4.fromScaling(this.modelMatrix, [50, 50, 50]);
 
-        const xmlTrileInstance = levelDocument.querySelectorAll('TrileInstance');
-        for(var i = 0; i < xmlTrileInstance.length; i++) {
-            const trileId = Number(xmlTrileInstance[i].getAttribute('trileId'));
+        const trileInstances = levelDocument.querySelectorAll('TrileInstance');
+        for(var i = 0; i < trileInstances.length; i++) {
+            const trileId = Number(trileInstances[i].getAttribute('trileId'));
 
             // No clue WTF this means. Seen in globe.xml.
             if (trileId < 0)
                 continue;
 
-            const position = parseVec3(xmlTrileInstance[i].querySelector('Position Vector3')!);
-            const orientation = Number(xmlTrileInstance[i].getAttribute('orientation'));
+            const position = parseVec3(trileInstances[i].querySelector('Position Vector3')!);
+            const orientation = Number(trileInstances[i].getAttribute('orientation'));
             const rotateY = gc_orientations[orientation] * MathConstants.DEG_TO_RAD;
 
             const trileData = this.trilesetData.triles.find((trileData) => trileData.key === trileId)!;
@@ -125,9 +130,12 @@ export class FezRenderer implements Viewer.SceneGfx {
             position[2] -= 0.5;
 
             const rotation = parseQuaternion(artObjectInstances[i].querySelector('Rotation Quaternion')!);
-
             const rotationMatrix = mat4.create();
             mat4.fromQuat(rotationMatrix, rotation);
+
+            const scale = parseVec3(artObjectInstances[i].querySelector('Scale Vector3')!);
+            assert(vec3.equals(scale, [1, 1, 1]));
+
             const renderer = new FezObjectRenderer(artObjectData);
 
             mat4.translate(renderer.modelMatrix, renderer.modelMatrix, position);
@@ -142,24 +150,7 @@ export class FezRenderer implements Viewer.SceneGfx {
         for (let i = 0; i < backgroundPlanes.length; i++) {
             const backgroundPlaneName = backgroundPlanes[i].getAttribute('textureName')!.toLowerCase();
             const backgroundPlaneData = assertExists(this.backgroundPlaneDatas.find((bp) => bp.name === backgroundPlaneName));
-
-            const position = parseVec3(backgroundPlanes[i].querySelector('Position Vector3')!);
-            // All art objects seem to have this offset applied to them for some reason?
-            position[0] -= 0.5;
-            position[1] -= 0.5;
-            position[2] -= 0.5;
-
-            const rotation = parseQuaternion(backgroundPlanes[i].querySelector('Rotation Quaternion')!);
-
-            const rotationMatrix = mat4.create();
-            mat4.fromQuat(rotationMatrix, rotation);
-            const renderer = new BackgroundPlaneRenderer(backgroundPlanes[i], backgroundPlaneData, this.backgroundPlaneStaticData);
-
-            mat4.translate(renderer.modelMatrix, renderer.modelMatrix, position);
-            const scaleX = backgroundPlaneData.dimensions[0] / 16;
-            const scaleY = backgroundPlaneData.dimensions[1] / 16;
-            mat4.mul(renderer.modelMatrix, renderer.modelMatrix, rotationMatrix);
-            mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [scaleX, scaleY, 1]);
+            const renderer = new BackgroundPlaneRenderer(device, backgroundPlanes[i], backgroundPlaneData, this.backgroundPlaneStaticData);
             mat4.mul(renderer.modelMatrix, this.modelMatrix, renderer.modelMatrix);
             this.backgroundPlaneRenderers.push(renderer);
         }
@@ -208,6 +199,8 @@ export class FezRenderer implements Viewer.SceneGfx {
             this.artObjectDatas[i].destroy(device);
         for (let i = 0; i < this.backgroundPlaneDatas.length; i++)
             this.backgroundPlaneDatas[i].destroy(device);
+        for (let i = 0; i < this.backgroundPlaneRenderers.length; i++)
+            this.backgroundPlaneRenderers[i].destroy(device);
         this.backgroundPlaneStaticData.destroy(device);
 
         this.renderHelper.destroy(device);
@@ -238,13 +231,13 @@ export class FezObjectRenderer {
         template.setSamplerBindingsFromTextureMappings(this.textureMapping);
         template.setMegaStateFlags(this.megaStateFlags);
 
-        let offs = template.allocateUniformBuffer(FezProgram.ub_ShapeParams, 12+8);
+        let offs = template.allocateUniformBuffer(FezProgram.ub_ShapeParams, 12+4+4);
         const d = template.mapUniformBufferF32(FezProgram.ub_ShapeParams);
         computeViewMatrix(modelViewScratch, viewerInput.camera);
         mat4.mul(modelViewScratch, modelViewScratch, this.modelMatrix);
         offs += fillMatrix4x3(d, offs, modelViewScratch);
-        mat4.identity(texMatrixScratch);
-        offs += fillMatrix4x2(d, offs, texMatrixScratch);
+        offs += fillVec4(d, offs, 1, 1, 0, 0);
+        offs += fillVec4(d, offs, 1, 1, 0, 0);
 
         const renderInst = renderInstManager.pushRenderInst();
         renderInstManager.popTemplateRenderInst();
@@ -252,20 +245,78 @@ export class FezObjectRenderer {
     }
 }
 
+function parseBoolean(str: string): boolean {
+    if (str === 'True')
+        return true;
+    else if (str === 'False')
+        return false;
+    else
+        throw "whoops";
+}
+
+const scratchVec3 = vec3.create();
 export class BackgroundPlaneRenderer {
     public modelMatrix = mat4.create();
     private textureMapping = nArray(1, () => new TextureMapping());
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
+    private rawScale = vec2.create();
+    private xTextureRepeat = false;
+    private yTextureRepeat = false;
+    private clampTexture = false;
+    private sampler: GfxSampler;
 
-    constructor(private planeEl: Element, private planeData: BackgroundPlaneData, private staticData: BackgroundPlaneStaticData) {
-        this.textureMapping[0].gfxTexture = this.planeData.texture;
-        this.textureMapping[0].gfxSampler = this.planeData.sampler;
+    constructor(device: GfxDevice, private planeEl: Element, private planeData: BackgroundPlaneData, private staticData: BackgroundPlaneStaticData) {
+        const position = parseVec3(planeEl.querySelector('Position Vector3')!);
+        position[0] -= 0.5;
+        position[1] -= 0.5;
+        position[2] -= 0.5;
+
+        const rotation = parseQuaternion(planeEl.querySelector('Rotation Quaternion')!);
+        const rotationMatrix = mat4.create();
+        mat4.fromQuat(rotationMatrix, rotation);
+
+        // Offset just a bit to prevent Z fighting.
+        vec3.set(scratchVec3, 0, 0, 1);
+        vec3.transformMat4(scratchVec3, scratchVec3, rotationMatrix);
+        vec3.scaleAndAdd(position, position, scratchVec3, 0.005);
+
+        const scale = parseVec3(planeEl.querySelector('Scale Vector3')!);
+        vec2.set(this.rawScale, scale[0], scale[1]);
+
+        mat4.translate(this.modelMatrix, this.modelMatrix, position);
+        const scaleX = this.planeData.dimensions[0] / 16;
+        const scaleY = this.planeData.dimensions[1] / 16;
+        mat4.mul(this.modelMatrix, this.modelMatrix, rotationMatrix);
+        mat4.scale(this.modelMatrix, this.modelMatrix, scale);
+        mat4.scale(this.modelMatrix, this.modelMatrix, [scaleX, scaleY, 1]);
 
         this.megaStateFlags.frontFace = GfxFrontFaceMode.CW;
-        this.megaStateFlags.cullMode = GfxCullMode.BACK;
+
+        const doubleSided = parseBoolean(planeEl.getAttribute('doubleSided')!);
+        if (doubleSided)
+            this.megaStateFlags.cullMode = GfxCullMode.NONE;
+        else
+            this.megaStateFlags.cullMode = GfxCullMode.BACK;
+
+        this.xTextureRepeat = parseBoolean(planeEl.getAttribute('xTextureRepeat')!);
+        this.yTextureRepeat = parseBoolean(planeEl.getAttribute('yTextureRepeat')!);
+        this.clampTexture = parseBoolean(planeEl.getAttribute('clampTexture')!);
+
         this.megaStateFlags.blendMode = GfxBlendMode.ADD;
         this.megaStateFlags.blendSrcFactor = GfxBlendFactor.SRC_ALPHA;
         this.megaStateFlags.blendDstFactor = GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
+
+        this.sampler = device.createSampler({
+            wrapS: this.xTextureRepeat ? GfxWrapMode.REPEAT : GfxWrapMode.CLAMP,
+            wrapT: this.yTextureRepeat ? GfxWrapMode.REPEAT : GfxWrapMode.CLAMP,
+            minFilter: GfxTexFilterMode.POINT,
+            magFilter: GfxTexFilterMode.POINT,
+            mipFilter: GfxMipFilterMode.NO_MIP,
+            minLOD: 0, maxLOD: 0,
+        });
+
+        this.textureMapping[0].gfxTexture = this.planeData.texture;
+        this.textureMapping[0].gfxSampler = this.sampler;
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
@@ -281,10 +332,16 @@ export class BackgroundPlaneRenderer {
         offs += fillMatrix4x3(d, offs, modelViewScratch);
         const timeInSeconds = viewerInput.time / 1000;
         this.planeData.calcTexMatrix(texMatrixScratch, timeInSeconds);
-        offs += fillMatrix4x2(d, offs, texMatrixScratch);
+
+        offs += fillVec4(d, offs, this.rawScale[0], this.rawScale[1], 0, 0);
+        offs += fillVec4(d, offs, texMatrixScratch[0], texMatrixScratch[5], texMatrixScratch[12], texMatrixScratch[13]);
 
         const renderInst = renderInstManager.pushRenderInst();
         renderInstManager.popTemplateRenderInst();
         renderInst.drawIndexes(this.staticData.indexCount);
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroySampler(this.sampler);
     }
 }

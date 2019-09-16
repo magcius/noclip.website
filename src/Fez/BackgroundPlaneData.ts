@@ -1,5 +1,5 @@
 
-import { GfxTexture, GfxDevice, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexAttributeFrequency, GfxBuffer, GfxBufferUsage, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform";
+import { GfxTexture, GfxDevice, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexAttributeFrequency, GfxBuffer, GfxBufferUsage, GfxSampler } from "../gfx/platform/GfxPlatform";
 import { makeTextureFromImageData } from "./Texture";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { vec2, mat4 } from "gl-matrix";
@@ -19,14 +19,6 @@ export class BackgroundPlaneData {
 
     constructor(device: GfxDevice, public name: string, texImageData: ImageData, private animatedTexture: Document | null) {
         this.texture = makeTextureFromImageData(device, texImageData);
-        this.sampler = device.createSampler({
-            wrapS: GfxWrapMode.CLAMP,
-            wrapT: GfxWrapMode.CLAMP,
-            minFilter: GfxTexFilterMode.POINT,
-            magFilter: GfxTexFilterMode.POINT,
-            mipFilter: GfxMipFilterMode.NO_MIP,
-            minLOD: 0, maxLOD: 0,
-        });
 
         if (animatedTexture !== null) {
             const animatedTexturePC = animatedTexture.querySelector('AnimatedTexturePC')!;
@@ -84,7 +76,6 @@ export class BackgroundPlaneData {
 
     public destroy(device: GfxDevice): void {
         device.destroyTexture(this.texture);
-        device.destroySampler(this.sampler);
     }
 }
 
