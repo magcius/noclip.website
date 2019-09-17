@@ -15,6 +15,7 @@ import { TrilesetData, TrileData } from "./TrileData";
 import { ArtObjectData } from "./ArtObjectData";
 import { BackgroundPlaneData, BackgroundPlaneStaticData } from "./BackgroundPlaneData";
 import { parseVector3, parseQuaternion } from "./DocumentHelpers";
+import { AABB } from "../Geometry";
 
 class FezProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
@@ -193,6 +194,7 @@ export class FezRenderer implements Viewer.SceneGfx {
 type FezObjectData = TrileData | ArtObjectData;
 
 const texMatrixScratch = mat4.create();
+const bboxScratch = new AABB();
 export class FezObjectRenderer {
     public modelMatrix = mat4.create();
     public textureMatrix = mat4.create();
@@ -208,21 +210,23 @@ export class FezObjectRenderer {
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
-        const template = renderInstManager.pushTemplateRenderInst();
-        template.setInputLayoutAndState(this.data.inputLayout, this.data.inputState);
-        template.setSamplerBindingsFromTextureMappings(this.textureMapping);
-        template.setMegaStateFlags(this.megaStateFlags);
+        bboxScratch.transform(this.data.bbox, this.modelMatrix);
+        if (!viewerInput.camera.frustum.contains(bboxScratch))
+            return;
 
-        let offs = template.allocateUniformBuffer(FezProgram.ub_ShapeParams, 12+4+4);
-        const d = template.mapUniformBufferF32(FezProgram.ub_ShapeParams);
+        const renderInst = renderInstManager.pushRenderInst();
+        renderInst.setInputLayoutAndState(this.data.inputLayout, this.data.inputState);
+        renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+        renderInst.setMegaStateFlags(this.megaStateFlags);
+
+        let offs = renderInst.allocateUniformBuffer(FezProgram.ub_ShapeParams, 12+4+4);
+        const d = renderInst.mapUniformBufferF32(FezProgram.ub_ShapeParams);
         computeViewMatrix(modelViewScratch, viewerInput.camera);
         mat4.mul(modelViewScratch, modelViewScratch, this.modelMatrix);
         offs += fillMatrix4x3(d, offs, modelViewScratch);
         offs += fillVec4(d, offs, 1, 1, 0, 0);
         offs += fillVec4(d, offs, 1, 1, 0, 0);
 
-        const renderInst = renderInstManager.pushRenderInst();
-        renderInstManager.popTemplateRenderInst();
         renderInst.drawIndexes(this.data.indexCount);
     }
 }
@@ -302,13 +306,13 @@ export class BackgroundPlaneRenderer {
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
-        const template = renderInstManager.pushTemplateRenderInst();
-        template.setInputLayoutAndState(this.staticData.inputLayout, this.staticData.inputState);
-        template.setSamplerBindingsFromTextureMappings(this.textureMapping);
-        template.setMegaStateFlags(this.megaStateFlags);
+        const renderInst = renderInstManager.pushTemplateRenderInst();
+        renderInst.setInputLayoutAndState(this.staticData.inputLayout, this.staticData.inputState);
+        renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+        renderInst.setMegaStateFlags(this.megaStateFlags);
 
-        let offs = template.allocateUniformBuffer(FezProgram.ub_ShapeParams, 12+8);
-        const d = template.mapUniformBufferF32(FezProgram.ub_ShapeParams);
+        let offs = renderInst.allocateUniformBuffer(FezProgram.ub_ShapeParams, 12+8);
+        const d = renderInst.mapUniformBufferF32(FezProgram.ub_ShapeParams);
         computeViewMatrix(modelViewScratch, viewerInput.camera);
         mat4.mul(modelViewScratch, modelViewScratch, this.modelMatrix);
         offs += fillMatrix4x3(d, offs, modelViewScratch);
@@ -318,8 +322,6 @@ export class BackgroundPlaneRenderer {
         offs += fillVec4(d, offs, this.rawScale[0], this.rawScale[1], 0, 0);
         offs += fillVec4(d, offs, texMatrixScratch[0], texMatrixScratch[5], texMatrixScratch[12], texMatrixScratch[13]);
 
-        const renderInst = renderInstManager.pushRenderInst();
-        renderInstManager.popTemplateRenderInst();
         renderInst.drawIndexes(this.staticData.indexCount);
     }
 

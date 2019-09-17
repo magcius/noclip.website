@@ -5,6 +5,7 @@ import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { assert } from "../util";
 import { makeTextureFromImageData } from "./Texture";
 import { parseVector3, parseVector2 } from "./DocumentHelpers";
+import { AABB } from "../Geometry";
 
 const gc_normals = [
     vec3.fromValues(-1, 0, 0), 
@@ -24,6 +25,7 @@ export class ArtObjectData {
     public sampler: GfxSampler;
     public inputLayout: GfxInputLayout;
     public inputState: GfxInputState;
+    public bbox = new AABB();
 
     constructor(device: GfxDevice, public name: string, file: Document, texImageData: ImageData) {
         const positions: vec3[] = [];
@@ -37,6 +39,8 @@ export class ArtObjectData {
             normals.push(gc_normals[Number(xmlVPNTI[i].querySelector('Normal')!.textContent)]);
             texcoords.push(parseVector2(xmlVPNTI[i].querySelector('TextureCoord Vector2')!));
         }
+
+        this.bbox.set(positions);
 
         const indexXmlList = file.getElementsByTagName('Indices');
         for (let i = 0; i < indexXmlList.length; i++) {

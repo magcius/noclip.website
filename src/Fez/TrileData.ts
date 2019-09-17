@@ -3,9 +3,9 @@
 import { vec3, vec2 } from 'gl-matrix';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { GfxBufferUsage, GfxDevice, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexAttributeFrequency, GfxInputLayout, GfxInputState, GfxBuffer, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from '../gfx/platform/GfxPlatform';
-import { assert } from '../util';
 import { makeTextureFromImageData } from './Texture';
 import { parseVector3, parseVector2 } from './DocumentHelpers';
+import { AABB } from '../Geometry';
 
 const gc_normals = [
     vec3.fromValues(-1, 0, 0),
@@ -24,6 +24,7 @@ export class TrileData {
     public inputState: GfxInputState;
     public indexCount: number;
     public key: number;
+    public bbox = new AABB();
 
     constructor(device: GfxDevice, element: Element, public texture: GfxTexture, public sampler: GfxSampler) {
         this.key = Number(element.getAttribute('key'));
@@ -39,6 +40,8 @@ export class TrileData {
             normals.push(gc_normals[Number(xmlVPNTI[i].querySelector('Normal')!.textContent)]);
             texcoords.push(parseVector2(xmlVPNTI[i].querySelector('TextureCoord Vector2')!));
         }
+
+        this.bbox.set(positions);
 
         const indexXmlList = element.getElementsByTagName('Indices');
         for (let i = 0; i < indexXmlList.length; i++) {
