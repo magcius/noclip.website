@@ -8,7 +8,7 @@ import { decompress } from "../compression/MIO0";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { DeviceProgram } from "../Program";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
-import { fillMatrix4x3, fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x3, fillMatrix4x4, fillMatrix4x2 } from "../gfx/helpers/UniformBufferHelpers";
 import { mat4, vec3 } from "gl-matrix";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget } from "../gfx/helpers/RenderTargetHelpers";
@@ -17,7 +17,7 @@ import { MathConstants } from "../MathHelpers";
 import { IS_DEVELOPMENT } from "../BuildVersion";
 import { TextureState, TileState } from "../bk/f3dex";
 import { ImageFormat, ImageSize, getImageFormatName, decodeTex_RGBA16, getImageSizeName, decodeTex_I4, decodeTex_I8, decodeTex_IA4, decodeTex_IA8, decodeTex_IA16 } from "../Common/N64/Image";
-import { TextureHolder, LoadedTexture } from "../TextureHolder";
+import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
 import { Endianness } from "../endian";
 
 interface Pilotwings64FSFileChunk {
@@ -35,9 +35,17 @@ interface Pilotwings64FS {
     files: Pilotwings64FSFile[];
 }
 
+interface MaterialData {
+    rspModeInfo: number;
+    textureIndex: number;
+    indexOffset: number;
+    triCount: number;
+}
+
 interface Mesh_Chunk {
     vertexData: Float32Array;
     indexData: Uint16Array;
+    materials: MaterialData[];
 }
 
 interface UVCT_ModelPlacement {
@@ -57,7 +65,7 @@ function parseUVCT_Chunk(chunk: Pilotwings64FSFileChunk): UVCT_Chunk {
     const vertCount = view.getUint16(0x00);
     const faceCount = view.getUint16(0x02);
     const modelCount = view.getUint16(0x04);
-    const planeCount = view.getUint16(0x06);
+    const materialCount = view.getUint16(0x06);
 
     let offs = 0x08;
 
@@ -67,8 +75,8 @@ function parseUVCT_Chunk(chunk: Pilotwings64FSFileChunk): UVCT_Chunk {
         vertexData[i++] = view.getInt16(offs + 0x02);
         vertexData[i++] = view.getInt16(offs + 0x04);
         // Unknown
-        vertexData[i++] = (view.getInt16(offs + 0x08) / 0x40) + 0.5;
-        vertexData[i++] = (view.getInt16(offs + 0x0A) / 0x40) + 0.5;
+        vertexData[i++] = (view.getInt16(offs + 0x08) / 0x20) + 0.5;
+        vertexData[i++] = (view.getInt16(offs + 0x0A) / 0x20) + 0.5;
         vertexData[i++] = view.getUint8(offs + 0x0C) / 0xFF;
         vertexData[i++] = view.getUint8(offs + 0x0D) / 0xFF;
         vertexData[i++] = view.getUint8(offs + 0x0E) / 0xFF;
@@ -110,7 +118,7 @@ function parseUVCT_Chunk(chunk: Pilotwings64FSFileChunk): UVCT_Chunk {
             const maty = view.getInt16(wholes + 0x1a) + view.getUint16(fracs + 0x1a) / 0x10000;
             const matz = view.getInt16(wholes + 0x1c) + view.getUint16(fracs + 0x1c) / 0x10000;
             const one = view.getInt16(wholes + 0x1e) + view.getUint16(fracs + 0x1e) / 0x10000;
-            if (j == 0) { // not sure what other matrices are for yet
+            if (j == 0) { // TODO: figure out what other matrices are for
                 placement = mat4.fromValues(
                     m00, m01, m02, m03,
                     m10, m11, m12, m13,
@@ -139,7 +147,28 @@ function parseUVCT_Chunk(chunk: Pilotwings64FSFileChunk): UVCT_Chunk {
             models.push({ modelIndex, placement });
     }
 
-    return { mesh: { vertexData, indexData }, models };
+    const materials: MaterialData[] = [];
+    for (let i = 0; i < materialCount; i++) {
+        const rspModeInfo = view.getUint16(offs + 0x00);
+        const textureIndex = view.getUint16(offs + 0x02);
+        const vertCount = view.getUint16(offs + 0x04);
+        const triCount = view.getUint16(offs + 0x06);
+        const numCommands = view.getUint16(offs + 0x08);
+        offs += 0x0a;
+
+        for (let j = 0; j < numCommands; j++) {
+            const indexData = view.getUint16(offs + 0x00);
+            offs += 0x02;
+            if ((indexData & 0x4000) === 0)
+                offs += 0x01; // vertex load count
+        }
+        const indexOffset = view.getUint16(offs + 0x00) * 3;
+        offs += 0x18;
+
+        materials.push({ rspModeInfo, textureIndex, indexOffset, triCount })
+    }
+
+    return { mesh: { vertexData, indexData, materials }, models };
 }
 
 function parseUVCT(file: Pilotwings64FSFile): UVCT_Chunk {
@@ -388,11 +417,14 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
     for (let i = textureState.tile; i < lastTile; i++) {
         const tile = tiles[i];
 
+        if (tile.lrs === 0 || tile.lrt === 0) {
+            // TODO: handle animated texture, assuming that's what this means
+            tile.lrs = view.getUint16(dlEnd + 0x00);
+            tile.lrt = view.getUint16(dlEnd + 0x02);
+        }
+
         const tileW = ((tile.lrs - tile.uls) >>> 2) + 1;
         const tileH = ((tile.lrt - tile.ult) >>> 2) + 1;
-
-        if (tile.lrs === 0 || tile.lrt === 0)
-            break;
 
         if (tile.masks !== 0 && (1 << tile.masks) !== tileW) {
             console.log(name, tile, tile.masks, tileW, tile.lrs);
@@ -477,6 +509,7 @@ function parseUVLV(file: Pilotwings64FSFile): UVLV {
 
 interface ModelPart {
     indexData: Uint16Array;
+    materials: MaterialData[];
 }
 
 interface ModelLOD {
@@ -507,8 +540,8 @@ function parseUVMD(file: Pilotwings64FSFile): UVMD {
         vertexData[i++] = view.getInt16(offs + 0x02);
         vertexData[i++] = view.getInt16(offs + 0x04);
         // Unknown
-        vertexData[i++] = (view.getInt16(offs + 0x08) / 0x40) + 0.5;
-        vertexData[i++] = (view.getInt16(offs + 0x0A) / 0x40) + 0.5;
+        vertexData[i++] = (view.getInt16(offs + 0x08) / 0x20) + 0.5;
+        vertexData[i++] = (view.getInt16(offs + 0x0A) / 0x20) + 0.5;
         vertexData[i++] = view.getUint8(offs + 0x0C) / 0xFF;
         vertexData[i++] = view.getUint8(offs + 0x0D) / 0xFF;
         vertexData[i++] = view.getUint8(offs + 0x0E) / 0xFF;
@@ -528,13 +561,15 @@ function parseUVMD(file: Pilotwings64FSFile): UVMD {
             offs += 0x03;
 
             const indexData: number[] = [];
+            const materials: MaterialData[] = [];
             for (let t = 0; t < texCount; t++) {
-                // 8 bytes texture info
+                const rspModeInfo = view.getUint16(offs + 0x00);
+                const textureIndex = view.getUint16(offs + 0x02);
                 const otherCount = view.getUint16(offs + 0x04);
-                const faceCount = view.getUint16(offs + 0x06);
+                const triCount = view.getUint16(offs + 0x06);
                 const commandCount = view.getUint16(offs + 0x08);
                 offs += 0x0A;
-                const prevIndexLength = indexData.length;
+                const indexOffset = indexData.length;
                 for (let c = 0; c < commandCount; c++) {
                     const index = view.getUint16(offs);
                     offs += 0x02;
@@ -550,9 +585,10 @@ function parseUVMD(file: Pilotwings64FSFile): UVMD {
                             vertBuffer[write] = (index & 0x3FFF) + read;
                     }
                 }
-                assert(indexData.length - prevIndexLength == 3 * faceCount);
+                assert(indexData.length - indexOffset == 3 * triCount);
+                materials.push({ rspModeInfo, textureIndex, indexOffset, triCount });
             }
-            parts.push({ indexData: new Uint16Array(indexData) });
+            parts.push({ indexData: new Uint16Array(indexData), materials });
         }
         const radius = view.getFloat32(offs);
         offs += 0x04;
@@ -644,6 +680,7 @@ function parsePilotwings64FS(buffer: ArrayBufferSlice): Pilotwings64FS {
 class PW64Program extends DeviceProgram {
     public static a_Position = 0;
     public static a_Color = 1;
+    public static a_TexCoord = 2;
 
     public static ub_SceneParams = 0;
     public static ub_DrawParams = 1;
@@ -657,24 +694,68 @@ layout(row_major, std140) uniform ub_SceneParams {
 
 layout(row_major, std140) uniform ub_DrawParams {
     Mat4x3 u_BoneMatrix[1];
+    Mat4x2 u_TexMatrix[1];
 };
 
+uniform sampler2D u_Texture[1];
+
 varying vec4 v_Color;
+varying vec2 v_TexCoord;
 `;
 
     public vert = `
 layout(location = ${PW64Program.a_Position}) in vec3 a_Position;
 layout(location = ${PW64Program.a_Color}) in vec4 a_Color;
+layout(location = ${PW64Program.a_TexCoord}) in vec2 a_TexCoord;
 
 void main() {
     gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix[0]), vec4(a_Position, 1.0)));
     v_Color = a_Color;
+    v_TexCoord.xy = Mul(u_TexMatrix[0], vec4(a_TexCoord, 1.0, 1.0));
 }
 `;
 
     public frag = `
+vec4 Texture2D_N64_Point(sampler2D t_Texture, vec2 t_TexCoord) {
+    return texture(t_Texture, t_TexCoord);
+}
+
+vec4 Texture2D_N64_Average(sampler2D t_Texture, vec2 t_TexCoord) {
+    // Unimplemented.
+    return texture(t_Texture, t_TexCoord);
+}
+
+// Implements N64-style "triangle bilienar filtering" with three taps.
+// Based on ArthurCarvalho's implementation, modified by NEC and Jasper for noclip.
+vec4 Texture2D_N64_Bilerp(sampler2D t_Texture, vec2 t_TexCoord) {
+    vec2 t_Size = vec2(textureSize(t_Texture, 0));
+    vec2 t_Offs = fract(t_TexCoord*t_Size - vec2(0.5));
+    t_Offs -= step(1.0, t_Offs.x + t_Offs.y);
+    vec4 t_S0 = texture(t_Texture, t_TexCoord - t_Offs / t_Size);
+    vec4 t_S1 = texture(t_Texture, t_TexCoord - vec2(t_Offs.x - sign(t_Offs.x), t_Offs.y) / t_Size);
+    vec4 t_S2 = texture(t_Texture, t_TexCoord - vec2(t_Offs.x, t_Offs.y - sign(t_Offs.y)) / t_Size);
+    return t_S0 + abs(t_Offs.x)*(t_S1-t_S0) + abs(t_Offs.y)*(t_S2-t_S0);
+}
+
+#define Texture2D_N64 Texture2D_N64_Point
+
 void main() {
-    gl_FragColor = v_Color;
+    vec4 t_Color = vec4(1.0);
+
+#ifdef USE_TEXTURE
+    t_Color *= Texture2D_N64(u_Texture[0], v_TexCoord.xy);
+#endif
+
+#ifdef USE_VERTEX_COLOR
+    t_Color.rgba *= v_Color.rgba;
+#endif
+
+#ifdef USE_ALPHA_VISUALIZER
+    t_Color.rgb = vec3(v_Color.a);
+    t_Color.a = 1.0;
+#endif
+
+    gl_FragColor = t_Color;
 }
 `;
 }
@@ -685,13 +766,14 @@ class MeshData {
     public inputLayout: GfxInputLayout;
     public inputState: GfxInputState;
 
-    constructor(device: GfxDevice, public uvct: Mesh_Chunk) {
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, uvct.vertexData.buffer);
-        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, uvct.indexData.buffer);
+    constructor(device: GfxDevice, public mesh: Mesh_Chunk) {
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, mesh.vertexData.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, mesh.indexData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: PW64Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB,  bufferByteOffset: 0*0x04, frequency: GfxVertexAttributeFrequency.PER_VERTEX, },
-            { location: PW64Program.a_Color   , bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 5*0x04, frequency: GfxVertexAttributeFrequency.PER_VERTEX, },
+            { location: PW64Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 * 0x04, frequency: GfxVertexAttributeFrequency.PER_VERTEX, },
+            { location: PW64Program.a_TexCoord, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 3 * 0x04, frequency: GfxVertexAttributeFrequency.PER_VERTEX, },
+            { location: PW64Program.a_Color, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 5 * 0x04, frequency: GfxVertexAttributeFrequency.PER_VERTEX, },
         ];
 
         this.inputLayout = device.createInputLayout({
@@ -700,7 +782,7 @@ class MeshData {
         });
 
         this.inputState = device.createInputState(this.inputLayout, [
-            { buffer: this.vertexBuffer, byteOffset: 0, byteStride: 9*0x04, },
+            { buffer: this.vertexBuffer, byteOffset: 0, byteStride: 9 * 0x04, },
         ], { buffer: this.indexBuffer, byteOffset: 0, byteStride: 0x02 });
     }
 
@@ -712,29 +794,65 @@ class MeshData {
     }
 }
 
-const scratchMatrix = mat4.create();
-class MeshInstance {
+class MeshRenderer {
     public modelMatrix = mat4.create();
-    public program = new PW64Program();
+    private materials: MaterialInstance[] = [];
 
-    constructor(private uvctData: MeshData) {
+    constructor(private meshData: MeshData, textureHolder: Pilotwings64TextureHolder) {
+        for (let material of meshData.mesh.materials)
+            this.materials.push(new MaterialInstance(material, meshData, textureHolder));
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        const template = renderInstManager.pushTemplateRenderInst();
+
+        template.setInputLayoutAndState(this.meshData.inputLayout, this.meshData.inputState);
+        for (let material of this.materials) {
+            material.prepareToRender(device, renderInstManager, viewerInput, this.modelMatrix);
+        }
+        renderInstManager.popTemplateRenderInst();
+    }
+
+}
+
+const scratchMatrix = mat4.create();
+const texMatrixScratch = mat4.create();
+class MaterialInstance {
+    public program = new PW64Program();
+    private hasTexture: boolean = false;
+    private textureMappings: TextureMapping[] = [new TextureMapping()];
+
+
+    constructor(private materialData: MaterialData, private meshData: MeshData, textureHolder: Pilotwings64TextureHolder) {
+        this.hasTexture = materialData.textureIndex < 0xfff;
+        if (this.hasTexture) {
+            textureHolder.fillTextureMappingDirectly(this.textureMappings[0], materialData.textureIndex);
+        }
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, modelMatrix: mat4): void {
         const renderInst = renderInstManager.pushRenderInst();
 
-        let offs = renderInst.allocateUniformBuffer(PW64Program.ub_DrawParams, 12);
+        let offs = renderInst.allocateUniformBuffer(PW64Program.ub_DrawParams, 12 + 8);
         const d = renderInst.mapUniformBufferF32(PW64Program.ub_DrawParams);
 
         computeViewMatrix(scratchMatrix, viewerInput.camera);
-        mat4.mul(scratchMatrix, scratchMatrix, this.modelMatrix);
+        mat4.mul(scratchMatrix, scratchMatrix, modelMatrix);
 
         offs += fillMatrix4x3(d, offs, scratchMatrix);
+        if (this.hasTexture) {
+            renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
 
+            mat4.fromScaling(texMatrixScratch,
+                [1 / this.textureMappings[0].width, 1 / this.textureMappings[0].height, 1]);
+            offs += fillMatrix4x2(d, offs, texMatrixScratch);
+            this.program.defines.set('USE_TEXTURE', '1');
+        }
+
+        this.program.defines.set('USE_VERTEX_COLOR', '1');
         const gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
         renderInst.setGfxProgram(gfxProgram);
-        renderInst.setInputLayoutAndState(this.uvctData.inputLayout, this.uvctData.inputState);
-        renderInst.drawIndexes(this.uvctData.uvct.indexData.length);
+        renderInst.drawIndexes(3 * this.materialData.triCount, this.materialData.indexOffset);
     }
 }
 
@@ -776,17 +894,20 @@ class Pilotwings64TextureHolder extends TextureHolder<UVTX> {
         const viewerTexture: Texture = textureToCanvas(texture);
         return { gfxTexture, viewerTexture };
     }
+    public fillTextureMappingDirectly(textureMapping: TextureMapping, index: number) {
+        this.fillTextureMappingFromEntry(textureMapping, index);
+    }
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 2, numSamplers: 0 },
+    { numUniformBuffers: 3, numSamplers: 1 },
 ];
 
 class Pilotwings64Renderer implements SceneGfx {
     public uvctData: MeshData[] = [];
     public uvmdData: MeshData[][] = [];
-    public uvctInstance: MeshInstance[] = [];
-    public uvmdInstance: MeshInstance[] = [];
+    public uvctInstance: MeshRenderer[] = [];
+    public uvmdInstance: MeshRenderer[] = [];
     public renderHelper: GfxRenderHelper;
     public textureHolder = new Pilotwings64TextureHolder();
     private renderTarget = new BasicRenderTarget();
@@ -837,6 +958,10 @@ class Pilotwings64Renderer implements SceneGfx {
     }
 }
 
+const toNoclipSpace = mat4.create();
+mat4.fromXRotation(toNoclipSpace, -90 * MathConstants.DEG_TO_RAD);
+mat4.scale(toNoclipSpace, toNoclipSpace, [50, 50, 50]);
+
 const pathBase = `Pilotwings64`;
 class Pilotwings64SceneDesc implements SceneDesc {
     public id: string;
@@ -860,41 +985,57 @@ class Pilotwings64SceneDesc implements SceneDesc {
         const uvctData = uvct.map((uvct) => new MeshData(device, uvct.mesh));
         renderer.uvctData = uvctData;
 
-        const uvmdData = uvmd.map((uvmd) => uvmd.lods[0].parts.map((part) => new MeshData(device, {indexData: part.indexData, vertexData: uvmd.vertexData})));
+        const uvmdData = uvmd.map((uvmd) => uvmd.lods[0].parts.map((part) =>
+            new MeshData(device, {
+                indexData: part.indexData,
+                vertexData: uvmd.vertexData,
+                materials: part.materials
+            })));
         renderer.uvmdData = uvmdData;
+
+        const dummy: UVTX = {
+            name: "dummyTexture",
+            width: 2,
+            height: 2,
+            fmt: ImageFormat.G_IM_FMT_I,
+            siz: ImageSize.G_IM_SIZ_4b,
+            levels: [{
+                width: 2,
+                height: 2,
+                pixels: new Uint8Array([
+                    0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff,
+                    0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00
+                ]),
+            }],
+        };
 
         const uvtx = fs.files.filter((file => file.type === 'UVTX')).map((file) => {
             try {
                 return parseUVTX(file);
-            } catch(e) {
-                return null;
+            } catch (e) {
+                return dummy;
             }
         }).filter((e) => !!e) as UVTX[];
         renderer.textureHolder.addTextures(device, uvtx);
 
         const levelData = parseUVLV(fs.files.filter((file) => file.type === 'UVLV')[0]).levels[this.levelID];
 
-        const levelScaleVector = vec3.fromValues(50, 50, 50);
-
         for (let terraIndex of levelData.terras) {
             const map = uvtr[0].maps[terraIndex];
             const baseY = 0;
             for (let j = 0; j < map.contourPlacements.length; j++) {
                 const ct = map.contourPlacements[j];
-                const instance = new MeshInstance(uvctData[ct.contourIndex]);
-                mat4.rotateX(instance.modelMatrix, instance.modelMatrix, -90 * MathConstants.DEG_TO_RAD);
-                mat4.scale(instance.modelMatrix, instance.modelMatrix, levelScaleVector);
-                mat4.translate(instance.modelMatrix, instance.modelMatrix, ct.position);
-                renderer.uvctInstance.push(instance);
+                const contourInstance = new MeshRenderer(uvctData[ct.contourIndex], renderer.textureHolder);
+                mat4.multiply(contourInstance.modelMatrix, contourInstance.modelMatrix, toNoclipSpace);
+                mat4.translate(contourInstance.modelMatrix, contourInstance.modelMatrix, ct.position);
+                renderer.uvctInstance.push(contourInstance);
 
                 // render attached static models (Sobjs)
                 for (let model of uvct[ct.contourIndex].models) {
-                    const instances = uvmdData[model.modelIndex].map((part) => new MeshInstance(part));
+                    const instances = uvmdData[model.modelIndex].map((part) => new MeshRenderer(part, renderer.textureHolder));
                     const relPositions = uvmd[model.modelIndex].partPlacements;
                     for (let k = 0; k < instances.length; k++) {
-                        mat4.rotateX(instances[k].modelMatrix, instances[k].modelMatrix, -90 * MathConstants.DEG_TO_RAD);
-                        mat4.scale(instances[k].modelMatrix, instances[k].modelMatrix, levelScaleVector);
-                        mat4.translate(instances[k].modelMatrix, instances[k].modelMatrix, ct.position);
+                        mat4.multiply(instances[k].modelMatrix, instances[k].modelMatrix, contourInstance.modelMatrix);
                         mat4.multiply(instances[k].modelMatrix, instances[k].modelMatrix, model.placement);
                         mat4.multiply(instances[k].modelMatrix, instances[k].modelMatrix, relPositions[k]);
                         renderer.uvmdInstance.push(instances[k]);
