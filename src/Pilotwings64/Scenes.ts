@@ -1,5 +1,5 @@
 
-import { GfxDevice, GfxBuffer, GfxInputLayout, GfxInputState, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexAttributeFrequency, GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxTextureDimension, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxBuffer, GfxInputLayout, GfxInputState, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexAttributeFrequency, GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxTextureDimension, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode, GfxTexture, GfxSampler } from "../gfx/platform/GfxPlatform";
 import { SceneGfx, ViewerRenderInput, Texture } from "../viewer";
 import { SceneDesc, SceneContext, SceneGroup } from "../SceneBase";
 import ArrayBufferSlice from "../ArrayBufferSlice";
@@ -319,6 +319,11 @@ interface UVTX_Level {
     pixels: Uint8Array;
 }
 
+interface UV_Scroll {
+    scaleS: number;
+    scaleT: number;
+}
+
 interface UVTX {
     name: string;
     width: number;
@@ -328,12 +333,22 @@ interface UVTX {
     levels: UVTX_Level[];
     cms: number;
     cmt: number;
+    blendLayer: number;
+    uvScroll?: UV_Scroll;
+    blendScroll?: UV_Scroll;
 }
 
 function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
     const view = chunk.buffer.createDataView();
     const dataSize = view.getUint16(0x00);
     const dlSize = view.getUint16(0x02) * 0x08;
+
+    const scaleS = view.getFloat32(0x04);
+    const scaleT = view.getFloat32(0x08);
+    const blendScaleS = view.getFloat32(0x0c);
+    const blendScaleT = view.getFloat32(0x10);
+    const uvScroll: UV_Scroll = { scaleS, scaleT };
+    const blendScroll: UV_Scroll = { scaleS: blendScaleS, scaleT: blendScaleT };
 
     const textureState = new TextureState();
     const tiles: TileState[] = nArray(8, () => new TileState());
@@ -458,7 +473,9 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
     const fmt = tiles[textureState.tile].fmt;
     const siz = tiles[textureState.tile].siz;
 
-    return { name, width, height, fmt, siz, levels, cms, cmt };
+    const blendLayer = view.getUint16(dlEnd + 0x09);
+
+    return { name, width, height, fmt, siz, levels, cms, cmt, blendLayer, uvScroll, blendScroll };
 }
 
 function parseUVTX(file: Pilotwings64FSFile): UVTX {
@@ -702,13 +719,13 @@ layout(row_major, std140) uniform ub_SceneParams {
 
 layout(row_major, std140) uniform ub_DrawParams {
     Mat4x3 u_BoneMatrix[1];
-    Mat4x2 u_TexMatrix[1];
+    Mat4x2 u_TexMatrix[2];
 };
 
-uniform sampler2D u_Texture[1];
+uniform sampler2D u_Texture[2];
 
 varying vec4 v_Color;
-varying vec2 v_TexCoord;
+varying vec4 v_TexCoord;
 `;
 
     public vert = `
@@ -720,8 +737,11 @@ void main() {
     gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix[0]), vec4(a_Position, 1.0)));
     v_Color = a_Color;
     v_TexCoord.xy = Mul(u_TexMatrix[0], vec4(a_TexCoord, 1.0, 1.0));
+    v_TexCoord.zw = Mul(u_TexMatrix[1], vec4(a_TexCoord, 1.0, 1.0));
 }
 `;
+
+
 
     public frag = `
 vec4 Texture2D_N64_Point(sampler2D t_Texture, vec2 t_TexCoord) {
@@ -752,6 +772,10 @@ void main() {
 
 #ifdef USE_TEXTURE
     t_Color *= Texture2D_N64(u_Texture[0], v_TexCoord.xy);
+#endif
+
+#ifdef HAS_BLEND
+    t_Color *= Texture2D_N64(u_Texture[1], v_TexCoord.zw);
 #endif
 
 #ifdef USE_VERTEX_COLOR
@@ -827,21 +851,26 @@ const scratchMatrix = mat4.create();
 const texMatrixScratch = mat4.create();
 class MaterialInstance {
     public program = new PW64Program();
-    private hasTexture: boolean = false;
-    private textureMappings: TextureMapping[] = [new TextureMapping()];
-
+    private hasTexture = false;
+    private hasBlend = false;
+    private textureMappings: TextureMapping[] = nArray(2, () => new TextureMapping());
+    private uvtx: UVTX;
 
     constructor(device: GfxDevice, private materialData: MaterialData, private meshData: MeshData, textureHolder: Pilotwings64TextureHolder) {
         this.hasTexture = materialData.textureIndex < 0xfff;
         if (this.hasTexture) {
-            textureHolder.fillTextureMappingDirectly(device, this.textureMappings[0], materialData.textureIndex);
+            this.uvtx = textureHolder.mappingByIndex(this.textureMappings[0], materialData.textureIndex);
+            if (this.uvtx.blendLayer < 0xfff) {
+                this.hasBlend = true;
+                textureHolder.mappingByIndex(this.textureMappings[1], this.uvtx.blendLayer);
+            }
         }
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, modelMatrix: mat4): void {
         const renderInst = renderInstManager.pushRenderInst();
 
-        let offs = renderInst.allocateUniformBuffer(PW64Program.ub_DrawParams, 12 + 8);
+        let offs = renderInst.allocateUniformBuffer(PW64Program.ub_DrawParams, 12 + 2 * 8);
         const d = renderInst.mapUniformBufferF32(PW64Program.ub_DrawParams);
 
         computeViewMatrix(scratchMatrix, viewerInput.camera);
@@ -853,8 +882,23 @@ class MaterialInstance {
 
             mat4.fromScaling(texMatrixScratch,
                 [1 / this.textureMappings[0].width, 1 / this.textureMappings[0].height, 1]);
+            if (this.uvtx.uvScroll) {
+                texMatrixScratch[12] = -((viewerInput.time / 1000) * this.uvtx.uvScroll.scaleS) % 1;
+                texMatrixScratch[13] = -((viewerInput.time / 1000) * this.uvtx.uvScroll.scaleT) % 1;
+            }
             offs += fillMatrix4x2(d, offs, texMatrixScratch);
             this.program.defines.set('USE_TEXTURE', '1');
+
+            if (this.hasBlend) {
+                mat4.fromScaling(texMatrixScratch,
+                    [1 / this.textureMappings[1].width, 1 / this.textureMappings[1].height, 1]);
+                if (this.uvtx.blendScroll) {
+                    texMatrixScratch[12] = -((viewerInput.time / 1000) * this.uvtx.blendScroll.scaleS) % 1;
+                    texMatrixScratch[13] = -((viewerInput.time / 1000) * this.uvtx.blendScroll.scaleT) % 1;
+                }
+                offs += fillMatrix4x2(d, offs, texMatrixScratch);
+                this.program.defines.set('HAS_BLEND', '1');
+            }
         }
 
         this.program.defines.set('USE_VERTEX_COLOR', '1');
@@ -900,6 +944,8 @@ function translateCM(cm: TexCM): GfxWrapMode {
 }
 
 class Pilotwings64TextureHolder extends TextureHolder<UVTX> {
+    private samplers: GfxSampler[] = [];
+
     public loadTexture(device: GfxDevice, texture: UVTX): LoadedTexture {
         const gfxTexture = device.createTexture({
             dimension: GfxTextureDimension.n2D, pixelFormat: GfxFormat.U8_RGBA,
@@ -911,13 +957,14 @@ class Pilotwings64TextureHolder extends TextureHolder<UVTX> {
         hostAccessPass.uploadTextureData(gfxTexture, 0, levels);
         device.submitPass(hostAccessPass);
 
+        this.samplers.push(this.translateSampler(device, texture));
+
         const viewerTexture: Texture = textureToCanvas(texture);
         return { gfxTexture, viewerTexture };
     }
-    public fillTextureMappingDirectly(device: GfxDevice, textureMapping: TextureMapping, index: number) {
-        this.fillTextureMappingFromEntry(textureMapping, index);
-        const texture = this.textureEntries[index];
-        textureMapping.gfxSampler = device.createSampler({
+
+    private translateSampler(device: GfxDevice, texture: UVTX): GfxSampler {
+        return device.createSampler({
             wrapS: translateCM(texture.cms),
             wrapT: translateCM(texture.cmt),
             minFilter: GfxTexFilterMode.POINT,
@@ -926,10 +973,16 @@ class Pilotwings64TextureHolder extends TextureHolder<UVTX> {
             minLOD: 0, maxLOD: 0,
         });
     }
+
+    public mappingByIndex(mapping: TextureMapping, index: number): UVTX {
+        this.fillTextureMappingFromEntry(mapping, index);
+        mapping.gfxSampler = this.samplers[index];
+        return this.textureEntries[index];
+    }
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 3, numSamplers: 1 },
+    { numUniformBuffers: 3, numSamplers: 2 },
 ];
 
 class Pilotwings64Renderer implements SceneGfx {
@@ -1024,7 +1077,7 @@ class Pilotwings64SceneDesc implements SceneDesc {
 
         function dummy(name: string): UVTX {
             return {
-                name: "dummy_"+name,
+                name: "dummy_" + name,
                 width: 2,
                 height: 2,
                 fmt: ImageFormat.G_IM_FMT_I,
@@ -1039,9 +1092,9 @@ class Pilotwings64SceneDesc implements SceneDesc {
                 }],
                 cms: 0,
                 cmt: 0,
+                blendLayer: 0xfff,
             };
         }
-
         const uvtx = fs.files.filter((file => file.type === 'UVTX')).map((file) => {
             try {
                 return parseUVTX(file);
