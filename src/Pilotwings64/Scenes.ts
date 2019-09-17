@@ -13,8 +13,8 @@ import { decompress } from "../compression/MIO0";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { DeviceProgram } from "../Program";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
-import { fillMatrix4x3, fillMatrix4x4, fillMatrix4x2 } from "../gfx/helpers/UniformBufferHelpers";
-import { mat4, vec3 } from "gl-matrix";
+import { fillMatrix4x3, fillMatrix4x4, fillMatrix4x2, fillVec4v, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
+import { mat4, vec3, vec4 } from "gl-matrix";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget } from "../gfx/helpers/RenderTargetHelpers";
 import { computeViewMatrix } from "../Camera";
@@ -329,6 +329,13 @@ interface UV_Scroll {
     scaleT: number;
 }
 
+interface CombineParams {
+    a: number;
+    b: number;
+    c: number;
+    d: number;
+}
+
 interface UVTX {
     name: string;
     width: number;
@@ -338,9 +345,13 @@ interface UVTX {
     levels: UVTX_Level[];
     cms: number;
     cmt: number;
-    blendLayer: number;
+    combine: CombineParams[];
+
+    combineIndex?: number;
     uvScroll?: UV_Scroll;
-    blendScroll?: UV_Scroll;
+    combineScroll?: UV_Scroll;
+    primitive?: vec4;
+    environment?: vec4;
 }
 
 function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
@@ -350,10 +361,12 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
 
     const scaleS = view.getFloat32(0x04);
     const scaleT = view.getFloat32(0x08);
-    const blendScaleS = view.getFloat32(0x0c);
-    const blendScaleT = view.getFloat32(0x10);
-    const uvScroll: UV_Scroll = { scaleS, scaleT };
-    const blendScroll: UV_Scroll = { scaleS: blendScaleS, scaleT: blendScaleT };
+    const combineScaleS = view.getFloat32(0x0c);
+    const combineScaleT = view.getFloat32(0x10);
+
+    let primitive: vec4 | undefined;
+    let environment: vec4 | undefined;
+    const combine: CombineParams[] = [];
 
     const textureState = new TextureState();
     const tiles: TileState[] = nArray(8, () => new TileState());
@@ -377,6 +390,31 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
             assert(on);
             textureState.set(on, tile, level, s, t);
         } else if (cmd === F3D_GBI.G_SETCOMBINE) {
+            // many of these 0x07 should be 0x0f, but noise isn't implemented
+            // so this sends noise to 0, along with 0xf (which should be 0)
+            const a0  = (w0 >> 20) & 0x07;
+            const c0  = (w0 >> 15) & 0x0f;
+            const Aa0 = (w0 >> 12) & 0x07;
+            const Ac0 = (w0 >> 9) & 0x07;
+            const a1  = (w0 >> 5) & 0x07;
+            const c1  = (w0 >> 0) & 0x0f;
+            const b0  = (w1 >> 28) & 0x07;
+            const b1  = (w1 >> 24) & 0x07;
+            const Aa1 = (w1 >> 21) & 0x07;
+            const Ac1 = (w1 >> 18) & 0x07;
+            const d0  = (w1 >> 15) & 0x07;
+            const Ab0 = (w1 >> 12) & 0x07;
+            const Ad0 = (w1 >> 9) & 0x07;
+            const d1  = (w1 >> 6) & 0x07;
+            const Ab1 = (w1 >> 3) & 0x07;
+            const Ad1 = (w1 >> 0) & 0x07;
+
+
+            combine.push({ a: a0, b: b0, c: c0, d: d0 })
+            combine.push({ a: Aa0, b: Ab0, c: Ac0, d: Ad0 })
+            combine.push({ a: a1, b: b1, c: c1, d: d1 })
+            combine.push({ a: Aa1, b: Ab1, c: Ac1, d: Ad1 })
+
             // state.gDPSetCombine(w0 & 0x00FFFFFF, w1);
         } else if (cmd === F3D_GBI.G_SETOTHERMODE_H) {
             const len = (w0 >>> 0) & 0xFF;
@@ -429,9 +467,23 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
         } else if (cmd === F3D_GBI.G_ENDDL) {
             break;
         } else if (cmd === F3D_GBI.G_SETPRIMCOLOR) {
-            // TODO(jstpierre)
+            // skipping LOD params
+            primitive = vec4.fromValues(
+                ((w1 >>> 24) & 0xff) / 0xff,
+                ((w1 >>> 16) & 0xff) / 0xff,
+                ((w1 >>> 8) & 0xff) / 0xff,
+                ((w1 >>> 0) & 0xff) / 0xff,
+            );
+            if (primitive[1] > .5) {
+                console.log("prim", name, primitive)
+            }
         } else if (cmd === F3D_GBI.G_SETENVCOLOR) {
-            // TODO(jstpierre)
+            environment = vec4.fromValues(
+                ((w1 >>> 24) & 0xff) / 0xff,
+                ((w1 >>> 16) & 0xff) / 0xff,
+                ((w1 >>> 8) & 0xff) / 0xff,
+                ((w1 >>> 0) & 0xff) / 0xff,
+            );
         } else {
             console.warn(`Unsupported command ${F3D_GBI[cmd]}`);
         }
@@ -453,8 +505,9 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
         const tileW = ((tile.lrs - tile.uls) >>> 2) + 1;
         const tileH = ((tile.lrt - tile.ult) >>> 2) + 1;
 
-        if (tile.lrs === 0 || tile.lrt === 0)
-            break;
+        if (tile.masks !== 0 && (1 << tile.masks) !== tileW) {
+            console.log(name, tile, tile.masks, tileW, tile.lrs);
+        }
 
         assert(tile.cms == cms)
         assert(tile.cmt == cmt)
@@ -479,9 +532,27 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
     const fmt = tiles[textureState.tile].fmt;
     const siz = tiles[textureState.tile].siz;
 
-    const blendLayer = view.getUint16(dlEnd + 0x09);
+    const combineIndex = view.getUint16(dlEnd + 0x09);
 
-    return { name, width, height, fmt, siz, levels, cms, cmt, blendLayer, uvScroll, blendScroll };
+    const uvtx: UVTX = { name, width, height, fmt, siz, levels, cms, cmt, combine };
+
+    if (scaleS !== 0.0 || scaleT !== 0.0) {
+        uvtx.uvScroll = { scaleS, scaleT };
+    }
+    if (combineScaleS !== 0.0 || combineScaleT !== 0.0) {
+        uvtx.combineScroll = { scaleS: combineScaleS, scaleT: combineScaleT };
+    }
+    if (!!primitive) {
+        uvtx.primitive = primitive;
+    }
+    if (!!environment) {
+        uvtx.environment = environment;
+    }
+    if (combineIndex < 0xfff) {
+        uvtx.combineIndex = combineIndex;
+    }
+
+    return uvtx;
 }
 
 function parseUVTX(file: Pilotwings64FSFile): UVTX {
@@ -715,6 +786,7 @@ class PW64Program extends DeviceProgram {
 
     public static ub_SceneParams = 0;
     public static ub_DrawParams = 1;
+    public static ub_CombineParams = 2;
 
     public both = `
 precision mediump float;
@@ -728,10 +800,20 @@ layout(row_major, std140) uniform ub_DrawParams {
     Mat4x2 u_TexMatrix[2];
 };
 
+uniform ub_CombineParameters {
+    vec4 u_Params;
+    vec4 u_PrimColor;
+    vec4 u_EnvColor;
+};
+
 uniform sampler2D u_Texture[2];
 
 varying vec4 v_Color;
 varying vec4 v_TexCoord;
+
+const vec4 zero = vec4(0.0);
+const vec4 one = vec4(1.0);
+
 `;
 
     public vert = `
@@ -747,9 +829,17 @@ void main() {
 }
 `;
 
-
-
     public frag = `
+ivec4 getParams(float val) {
+    vec4 params;
+    params.x = val*16.0;
+    params.y = fract(params.x)*16.0;
+    params.z = fract(params.y)*16.0;
+    params.w = fract(params.z)*16.0;
+
+    return ivec4(params);
+}
+
 vec4 Texture2D_N64_Point(sampler2D t_Texture, vec2 t_TexCoord) {
     return texture(t_Texture, t_TexCoord);
 }
@@ -771,25 +861,66 @@ vec4 Texture2D_N64_Bilerp(sampler2D t_Texture, vec2 t_TexCoord) {
     return t_S0 + abs(t_Offs.x)*(t_S1-t_S0) + abs(t_Offs.y)*(t_S2-t_S0);
 }
 
+vec3 combineColorCycle(vec4 combColor, vec4 tex0, vec4 tex1, float params) {
+
+    vec3 colorInputs[8] = vec3[8](
+        combColor.rgb, tex0.rgb, tex1.rgb, u_PrimColor.rgb, 
+        v_Color.rgb, u_EnvColor.rgb, one.rgb, zero.rgb
+    );
+    
+    vec3 multInputs[16] = vec3[16](
+        combColor.rgb, tex0.rgb, tex1.rgb, u_PrimColor.rgb, 
+        v_Color.rgb, u_EnvColor.rgb, zero.rgb /* key */, combColor.aaa,
+        tex0.aaa, tex1.aaa, u_PrimColor.aaa, v_Color.aaa,
+        u_EnvColor.aaa, zero.rgb /* LOD */, zero.rgb /* prim LOD */, zero.rgb
+    );
+
+    ivec4 p = getParams(params);
+
+    return (colorInputs[p.x]-colorInputs[p.y])*colorInputs[p.z] + colorInputs[p.w];
+}
+
+float combineAlphaCycle(float combAlpha, float tex0, float tex1, float params) {
+    float alphaInputs[8] = float[8](
+        combAlpha, tex0, tex1, u_PrimColor.a, 
+        v_Color.a, 0.0, 1.0, 0.0
+    );
+
+    ivec4 p = getParams(params);
+
+    return (alphaInputs[p.x]-alphaInputs[p.y])*alphaInputs[p.z] + alphaInputs[p.w];
+}
+
 #define Texture2D_N64 Texture2D_N64_Bilerp
 
 void main() {
-    vec4 t_Color = vec4(1.0);
-
+    vec4 tex0;
+    vec4 tex1;
 #ifdef USE_TEXTURE
-    t_Color *= Texture2D_N64(u_Texture[0], v_TexCoord.xy);
+    tex0 = Texture2D_N64(u_Texture[0], v_TexCoord.xy);
+    tex1 = tex0;
 #endif
 
-#ifdef HAS_BLEND
-    t_Color *= Texture2D_N64(u_Texture[1], v_TexCoord.zw);
+#ifdef HAS_COMBINE
+    tex1 = Texture2D_N64(u_Texture[1], v_TexCoord.zw);
 #endif
+
+    vec4 t_Color = vec4(
+        combineColorCycle(zero, tex0, tex1, u_Params.x).rgb, 
+        combineAlphaCycle(zero.a, tex0.a, tex1.a, u_Params.y)    
+    );
+
+    t_Color = vec4(
+        combineColorCycle(t_Color, tex0, tex1, u_Params.z).rgb, 
+        combineAlphaCycle(t_Color.a, tex0.a, tex1.a, u_Params.w)    
+    );
 
 #ifdef USE_VERTEX_COLOR
-    t_Color.rgba *= v_Color.rgba;
+    t_Color.rgba = v_Color.rgba;
 #endif
 
 #ifdef USE_ALPHA_VISUALIZER
-    t_Color.rgb = vec3(v_Color.a);
+    t_Color.rgb = vec3(t_Color.a);
     t_Color.a = 1.0;
 #endif
 
@@ -836,9 +967,9 @@ class MeshRenderer {
     public modelMatrix = mat4.create();
     private materials: MaterialInstance[] = [];
 
-    constructor(device: GfxDevice, private meshData: MeshData, textureData: TextureData[]) {
+    constructor(private meshData: MeshData, textureData: TextureData[]) {
         for (let material of meshData.mesh.materials)
-            this.materials.push(new MaterialInstance(device, material, textureData));
+            this.materials.push(new MaterialInstance(material, textureData));
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -852,24 +983,28 @@ class MeshRenderer {
     }
 }
 
+function floatify(params: CombineParams): number {
+    return params.a / 16 + params.b / 256 + params.c / 4096 + params.d / 65536;
+}
+
 const scratchMatrix = mat4.create();
 const texMatrixScratch = mat4.create();
 class MaterialInstance {
     public program = new PW64Program();
     private hasTexture = false;
-    private hasBlend = false;
+    private hasCombineTexture = false;
     private textureMappings: TextureMapping[] = nArray(2, () => new TextureMapping());
     private uvtx: UVTX;
 
-    constructor(device: GfxDevice, private materialData: MaterialData, textureData: TextureData[]) {
+    constructor(private materialData: MaterialData, textureData: TextureData[]) {
         this.hasTexture = materialData.textureIndex < 0x0FFF;
         if (this.hasTexture) {
             const mainTextureData = textureData[materialData.textureIndex];
             this.uvtx = mainTextureData.uvtx;
             mainTextureData.fillTextureMapping(this.textureMappings[0]);
-            if (this.uvtx.blendLayer < 0x0FFF) {
-                this.hasBlend = true;
-                textureData[this.uvtx.blendLayer].fillTextureMapping(this.textureMappings[1]);
+            if (this.uvtx.combineIndex) {
+                this.hasCombineTexture = true;
+                textureData[this.uvtx.combineIndex].fillTextureMapping(this.textureMappings[1]);
             }
         }
     }
@@ -896,19 +1031,31 @@ class MaterialInstance {
             offs += fillMatrix4x2(d, offs, texMatrixScratch);
             this.program.defines.set('USE_TEXTURE', '1');
 
-            if (this.hasBlend) {
+            if (this.hasCombineTexture) {
                 mat4.fromScaling(texMatrixScratch,
                     [1 / this.textureMappings[1].width, 1 / this.textureMappings[1].height, 1]);
-                if (this.uvtx.blendScroll) {
-                    texMatrixScratch[12] = -((viewerInput.time / 1000) * this.uvtx.blendScroll.scaleS) % 1;
-                    texMatrixScratch[13] = -((viewerInput.time / 1000) * this.uvtx.blendScroll.scaleT) % 1;
+                if (this.uvtx.combineScroll) {
+                    texMatrixScratch[12] = -((viewerInput.time / 1000) * this.uvtx.combineScroll.scaleS) % 1;
+                    texMatrixScratch[13] = -((viewerInput.time / 1000) * this.uvtx.combineScroll.scaleT) % 1;
                 }
                 offs += fillMatrix4x2(d, offs, texMatrixScratch);
-                this.program.defines.set('HAS_BLEND', '1');
+                this.program.defines.set('HAS_COMBINE', '1');
             }
+            offs = renderInst.allocateUniformBuffer(PW64Program.ub_CombineParams, 12);
+            const comb = renderInst.mapUniformBufferF32(PW64Program.ub_CombineParams);
+            const asFloats = this.uvtx.combine.map(floatify);
+            offs += fillVec4(comb, offs, asFloats[0], asFloats[1], asFloats[2], asFloats[3]);
+
+            if (this.uvtx.primitive) {
+                fillVec4v(comb, offs, this.uvtx.primitive)
+            }
+            if (this.uvtx.environment) {
+                fillVec4v(comb, offs + 4, this.uvtx.environment)
+            }
+        } else {
+            this.program.defines.set('USE_VERTEX_COLOR', '1');
         }
 
-        this.program.defines.set('USE_VERTEX_COLOR', '1');
         const gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
         renderInst.setGfxProgram(gfxProgram);
         renderInst.drawIndexes(3 * this.materialData.triCount, this.materialData.indexOffset);
@@ -1062,6 +1209,33 @@ const toNoclipSpace = mat4.create();
 mat4.fromXRotation(toNoclipSpace, -90 * MathConstants.DEG_TO_RAD);
 mat4.scale(toNoclipSpace, toNoclipSpace, [50, 50, 50]);
 
+function dummyTexture(name: string): UVTX {
+    return {
+        name: "dummy_" + name,
+        width: 2,
+        height: 2,
+        fmt: ImageFormat.G_IM_FMT_I,
+        siz: ImageSize.G_IM_SIZ_4b,
+        levels: [{
+            width: 2,
+            height: 2,
+            pixels: new Uint8Array([
+                0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff,
+                0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00
+            ]),
+        }],
+        cms: 0,
+        cmt: 0,
+        combine: [
+            { a: 1, b: 7, c: 4, d: 7, }, // multiply texture with vertex
+            { a: 1, b: 7, c: 4, d: 7, },
+            { a: 1, b: 7, c: 4, d: 7, },
+            { a: 1, b: 7, c: 4, d: 7, },
+        ]
+    };
+}
+
+
 const pathBase = `Pilotwings64`;
 class Pilotwings64SceneDesc implements SceneDesc {
     public id: string;
@@ -1093,32 +1267,13 @@ class Pilotwings64SceneDesc implements SceneDesc {
             })));
         renderer.uvmdData = uvmdData;
 
-        function dummy(name: string): UVTX {
-            return {
-                name: "dummy_" + name,
-                width: 2,
-                height: 2,
-                fmt: ImageFormat.G_IM_FMT_I,
-                siz: ImageSize.G_IM_SIZ_4b,
-                levels: [{
-                    width: 2,
-                    height: 2,
-                    pixels: new Uint8Array([
-                        0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff,
-                        0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00
-                    ]),
-                }],
-                cms: 0,
-                cmt: 0,
-                blendLayer: 0xfff,
-            };
-        }
+
         const uvtx = fs.files.filter((file => file.type === 'UVTX')).map((file) => {
             try {
                 return parseUVTX(file);
             } catch (e) {
                 // preserve the ordering of the textures for indexing
-                return dummy(file.name);
+                return dummyTexture(file.name);
             }
         });
 
@@ -1134,7 +1289,7 @@ class Pilotwings64SceneDesc implements SceneDesc {
             const map = uvtr[0].maps[terraIndex];
             for (let j = 0; j < map.contourPlacements.length; j++) {
                 const ct = map.contourPlacements[j];
-                const contourInstance = new MeshRenderer(device, uvctData[ct.contourIndex], renderer.textureData);
+                const contourInstance = new MeshRenderer(uvctData[ct.contourIndex], renderer.textureData);
                 mat4.multiply(contourInstance.modelMatrix, contourInstance.modelMatrix, toNoclipSpace);
                 mat4.translate(contourInstance.modelMatrix, contourInstance.modelMatrix, ct.position);
                 renderer.uvctInstance.push(contourInstance);
@@ -1142,7 +1297,7 @@ class Pilotwings64SceneDesc implements SceneDesc {
                 // render attached static models (Sobjs)
                 for (let model of uvct[ct.contourIndex].models) {
                     const instances = uvmdData[model.modelIndex].map(
-                        (part) => new MeshRenderer(device, part, renderer.textureData)
+                        (part) => new MeshRenderer(part, renderer.textureData)
                     );
                     const relPositions = uvmd[model.modelIndex].partPlacements;
                     for (let k = 0; k < instances.length; k++) {
