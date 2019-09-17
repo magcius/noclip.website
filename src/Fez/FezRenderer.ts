@@ -306,7 +306,7 @@ export class BackgroundPlaneRenderer {
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
-        const renderInst = renderInstManager.pushTemplateRenderInst();
+        const renderInst = renderInstManager.pushRenderInst();
         renderInst.setInputLayoutAndState(this.staticData.inputLayout, this.staticData.inputState);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
         renderInst.setMegaStateFlags(this.megaStateFlags);
