@@ -1,5 +1,10 @@
 
-import { GfxDevice, GfxBuffer, GfxInputLayout, GfxInputState, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexAttributeFrequency, GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxTextureDimension, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode, GfxTexture, GfxSampler } from "../gfx/platform/GfxPlatform";
+import {
+    GfxDevice, GfxBuffer, GfxInputLayout, GfxInputState, GfxBufferUsage,
+    GfxVertexAttributeDescriptor, GfxFormat, GfxVertexAttributeFrequency, GfxRenderPass,
+    GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxTextureDimension, GfxWrapMode,
+    GfxMipFilterMode, GfxTexFilterMode, GfxSampler, GfxBlendFactor, GfxBlendMode
+} from "../gfx/platform/GfxPlatform";
 import { SceneGfx, ViewerRenderInput, Texture } from "../viewer";
 import { SceneDesc, SceneContext, SceneGroup } from "../SceneBase";
 import ArrayBufferSlice from "../ArrayBufferSlice";
@@ -1001,6 +1006,11 @@ class Pilotwings64Renderer implements SceneGfx {
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
+        template.setMegaStateFlags({
+            blendMode: GfxBlendMode.ADD,
+            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
+            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+        });
 
         let offs = template.allocateUniformBuffer(PW64Program.ub_SceneParams, 16);
         const d = template.mapUniformBufferF32(PW64Program.ub_SceneParams);
