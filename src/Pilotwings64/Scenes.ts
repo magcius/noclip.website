@@ -1,5 +1,5 @@
 
-import { GfxDevice, GfxBuffer, GfxInputLayout, GfxInputState, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexAttributeFrequency, GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxTextureDimension } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxBuffer, GfxInputLayout, GfxInputState, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexAttributeFrequency, GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxTextureDimension, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode } from "../gfx/platform/GfxPlatform";
 import { SceneGfx, ViewerRenderInput, Texture } from "../viewer";
 import { SceneDesc, SceneContext, SceneGroup } from "../SceneBase";
 import ArrayBufferSlice from "../ArrayBufferSlice";
@@ -326,6 +326,8 @@ interface UVTX {
     fmt: ImageFormat;
     siz: ImageSize;
     levels: UVTX_Level[];
+    cms: number;
+    cmt: number;
 }
 
 function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
@@ -413,6 +415,9 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
         }
     }
 
+    const cms = tiles[textureState.tile].cms;
+    const cmt = tiles[textureState.tile].cmt;
+
     const lastTile = textureState.level + textureState.tile + 1;
     for (let i = textureState.tile; i < lastTile; i++) {
         const tile = tiles[i];
@@ -429,7 +434,10 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
         if (tile.masks !== 0 && (1 << tile.masks) !== tileW) {
             console.log(name, tile, tile.masks, tileW, tile.lrs);
         }
-    
+
+        assert(tile.cms == cms)
+        assert(tile.cmt == cmt)
+
         const dst = new Uint8Array(tileW * tileH * 4);
         const srcIdx = 0x14 + tile.tmem;
         if (tile.fmt === ImageFormat.G_IM_FMT_RGBA && tile.siz === ImageSize.G_IM_SIZ_16b) decodeTex_RGBA16(dst, view, srcIdx, tileW, tileH);
@@ -450,7 +458,7 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
     const fmt = tiles[textureState.tile].fmt;
     const siz = tiles[textureState.tile].siz;
 
-    return { name, width, height, fmt, siz, levels };
+    return { name, width, height, fmt, siz, levels, cms, cmt };
 }
 
 function parseUVTX(file: Pilotwings64FSFile): UVTX {
@@ -737,7 +745,7 @@ vec4 Texture2D_N64_Bilerp(sampler2D t_Texture, vec2 t_TexCoord) {
     return t_S0 + abs(t_Offs.x)*(t_S1-t_S0) + abs(t_Offs.y)*(t_S2-t_S0);
 }
 
-#define Texture2D_N64 Texture2D_N64_Point
+#define Texture2D_N64 Texture2D_N64_Bilerp
 
 void main() {
     vec4 t_Color = vec4(1.0);
@@ -798,9 +806,9 @@ class MeshRenderer {
     public modelMatrix = mat4.create();
     private materials: MaterialInstance[] = [];
 
-    constructor(private meshData: MeshData, textureHolder: Pilotwings64TextureHolder) {
+    constructor(device: GfxDevice, private meshData: MeshData, textureHolder: Pilotwings64TextureHolder) {
         for (let material of meshData.mesh.materials)
-            this.materials.push(new MaterialInstance(material, meshData, textureHolder));
+            this.materials.push(new MaterialInstance(device, material, meshData, textureHolder));
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -823,10 +831,10 @@ class MaterialInstance {
     private textureMappings: TextureMapping[] = [new TextureMapping()];
 
 
-    constructor(private materialData: MaterialData, private meshData: MeshData, textureHolder: Pilotwings64TextureHolder) {
+    constructor(device: GfxDevice, private materialData: MaterialData, private meshData: MeshData, textureHolder: Pilotwings64TextureHolder) {
         this.hasTexture = materialData.textureIndex < 0xfff;
         if (this.hasTexture) {
-            textureHolder.fillTextureMappingDirectly(this.textureMappings[0], materialData.textureIndex);
+            textureHolder.fillTextureMappingDirectly(device, this.textureMappings[0], materialData.textureIndex);
         }
     }
 
@@ -879,6 +887,18 @@ function textureToCanvas(texture: UVTX): Texture {
     return { name: texture.name, extraInfo, surfaces };
 }
 
+const enum TexCM {
+    WRAP = 0x00, MIRROR = 0x01, CLAMP = 0x02,
+}
+
+function translateCM(cm: TexCM): GfxWrapMode {
+    switch (cm) {
+        case TexCM.WRAP: return GfxWrapMode.REPEAT;
+        case TexCM.MIRROR: return GfxWrapMode.MIRROR;
+        case TexCM.CLAMP: return GfxWrapMode.CLAMP;
+    }
+}
+
 class Pilotwings64TextureHolder extends TextureHolder<UVTX> {
     public loadTexture(device: GfxDevice, texture: UVTX): LoadedTexture {
         const gfxTexture = device.createTexture({
@@ -894,8 +914,17 @@ class Pilotwings64TextureHolder extends TextureHolder<UVTX> {
         const viewerTexture: Texture = textureToCanvas(texture);
         return { gfxTexture, viewerTexture };
     }
-    public fillTextureMappingDirectly(textureMapping: TextureMapping, index: number) {
+    public fillTextureMappingDirectly(device: GfxDevice, textureMapping: TextureMapping, index: number) {
         this.fillTextureMappingFromEntry(textureMapping, index);
+        const texture = this.textureEntries[index];
+        textureMapping.gfxSampler = device.createSampler({
+            wrapS: translateCM(texture.cms),
+            wrapT: translateCM(texture.cmt),
+            minFilter: GfxTexFilterMode.POINT,
+            magFilter: GfxTexFilterMode.POINT,
+            mipFilter: GfxMipFilterMode.NO_MIP,
+            minLOD: 0, maxLOD: 0,
+        });
     }
 }
 
@@ -993,29 +1022,34 @@ class Pilotwings64SceneDesc implements SceneDesc {
             })));
         renderer.uvmdData = uvmdData;
 
-        const dummy: UVTX = {
-            name: "dummyTexture",
-            width: 2,
-            height: 2,
-            fmt: ImageFormat.G_IM_FMT_I,
-            siz: ImageSize.G_IM_SIZ_4b,
-            levels: [{
+        function dummy(name: string): UVTX {
+            return {
+                name: "dummy_"+name,
                 width: 2,
                 height: 2,
-                pixels: new Uint8Array([
-                    0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff,
-                    0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00
-                ]),
-            }],
-        };
+                fmt: ImageFormat.G_IM_FMT_I,
+                siz: ImageSize.G_IM_SIZ_4b,
+                levels: [{
+                    width: 2,
+                    height: 2,
+                    pixels: new Uint8Array([
+                        0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff,
+                        0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00
+                    ]),
+                }],
+                cms: 0,
+                cmt: 0,
+            };
+        }
 
         const uvtx = fs.files.filter((file => file.type === 'UVTX')).map((file) => {
             try {
                 return parseUVTX(file);
             } catch (e) {
-                return dummy;
+                // preserve the ordering of the textures for indexing
+                return dummy(file.name);
             }
-        }).filter((e) => !!e) as UVTX[];
+        }) as UVTX[];
         renderer.textureHolder.addTextures(device, uvtx);
 
         const levelData = parseUVLV(fs.files.filter((file) => file.type === 'UVLV')[0]).levels[this.levelID];
@@ -1025,14 +1059,16 @@ class Pilotwings64SceneDesc implements SceneDesc {
             const baseY = 0;
             for (let j = 0; j < map.contourPlacements.length; j++) {
                 const ct = map.contourPlacements[j];
-                const contourInstance = new MeshRenderer(uvctData[ct.contourIndex], renderer.textureHolder);
+                const contourInstance = new MeshRenderer(device, uvctData[ct.contourIndex], renderer.textureHolder);
                 mat4.multiply(contourInstance.modelMatrix, contourInstance.modelMatrix, toNoclipSpace);
                 mat4.translate(contourInstance.modelMatrix, contourInstance.modelMatrix, ct.position);
                 renderer.uvctInstance.push(contourInstance);
 
                 // render attached static models (Sobjs)
                 for (let model of uvct[ct.contourIndex].models) {
-                    const instances = uvmdData[model.modelIndex].map((part) => new MeshRenderer(part, renderer.textureHolder));
+                    const instances = uvmdData[model.modelIndex].map(
+                        (part) => new MeshRenderer(device, part, renderer.textureHolder)
+                    );
                     const relPositions = uvmd[model.modelIndex].partPlacements;
                     for (let k = 0; k < instances.length; k++) {
                         mat4.multiply(instances[k].modelMatrix, instances[k].modelMatrix, contourInstance.modelMatrix);
