@@ -105,7 +105,7 @@ export class HashMap<K, V> {
         for (let i = 0; i < this.buckets.length; i++) {
             const bucket = this.buckets[i];
             if (bucket === null) continue;
-            for (let j = bucket.keys.length; j >= 0; j--)
+            for (let j = bucket.keys.length - 1; j >= 0; j--)
                 yield [bucket.keys[j], bucket.values[j]];
         }
     }
