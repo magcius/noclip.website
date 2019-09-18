@@ -137,7 +137,7 @@ export function decodeTex_CI8(dst: Uint8Array, view: DataView, srcIdx: number, t
 export function decodeTex_IA4(dst: Uint8Array, view: DataView, srcOffs: number, tileW: number, tileH: number, line: number = 0, deinterleave: boolean = false): void {
     let dstIdx = 0;
     let srcIdx = 0;
-    const padW = (line !== 0) ? (((line << 4) - tileW) << 1) : 0x00;
+    const padW = (line !== 0) ? (((line << 4) - tileW) >>> 1) : 0x00;
     for (let y = 0; y < tileH; y++) {
         const di = deinterleave ? ((y & 1) << 2) : 0;
         for (let x = 0; x < tileW; x += 2) {
@@ -164,7 +164,7 @@ export function decodeTex_IA4(dst: Uint8Array, view: DataView, srcOffs: number, 
 export function decodeTex_IA8(dst: Uint8Array, view: DataView, srcOffs: number, tileW: number, tileH: number, line: number = 0, deinterleave: boolean = false): void {
     let dstIdx = 0;
     let srcIdx = 0;
-    const padW = (line !== 0) ? (((line << 3) - tileW) << 1) : 0x00;
+    const padW = (line !== 0) ? ((line << 3) - tileW) : 0x00;
     for (let y = 0; y < tileH; y++) {
         const di = deinterleave ? ((y & 1) << 2) : 0;
         for (let x = 0; x < tileW; x++) {
@@ -205,7 +205,7 @@ export function decodeTex_IA16(dst: Uint8Array, view: DataView, srcOffs: number,
 export function decodeTex_I4(dst: Uint8Array, view: DataView, srcOffs: number, tileW: number, tileH: number, line: number = 0, deinterleave: boolean = false): void {
     let dstIdx = 0;
     let srcIdx = 0;
-    const padW = (line !== 0) ? (((line << 4) - tileW) << 1) : 0x00;
+    const padW = (line !== 0) ? (((line << 4) - tileW) >>> 1) : 0x00;
     for (let y = 0; y < tileH; y++) {
         const di = deinterleave ? ((y & 1) << 2) : 0;
         for (let x = 0; x < tileW; x += 2) {

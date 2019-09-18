@@ -16,11 +16,11 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { fillMatrix4x3, fillMatrix4x4, fillMatrix4x2, fillVec4v, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { mat4, vec3, vec4 } from "gl-matrix";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
-import { standardFullClearRenderPassDescriptor, BasicRenderTarget } from "../gfx/helpers/RenderTargetHelpers";
+import { standardFullClearRenderPassDescriptor, BasicRenderTarget, makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { computeViewMatrix } from "../Camera";
 import { MathConstants } from "../MathHelpers";
-import { TextureState, TileState } from "../bk/f3dex";
-import { ImageFormat, ImageSize, getImageFormatName, decodeTex_RGBA16, getImageSizeName, decodeTex_I4, decodeTex_I8, decodeTex_IA4, decodeTex_IA8, decodeTex_IA16 } from "../Common/N64/Image";
+import { TextureState, TileState, getTextFiltFromOtherModeH, OtherModeH_CycleType, getCycleTypeFromOtherModeH } from "../bk/f3dex";
+import { ImageFormat, ImageSize, getImageFormatName, decodeTex_RGBA16, getImageSizeName, decodeTex_I4, decodeTex_I8, decodeTex_IA4, decodeTex_IA8, decodeTex_IA16, TextFilt } from "../Common/N64/Image";
 import { TextureMapping } from "../TextureHolder";
 import { Endianness } from "../endian";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
@@ -322,6 +322,9 @@ interface UVTX_Level {
     width: number;
     height: number;
     pixels: Uint8Array;
+    shiftS: number;
+    shiftT: number;
+    usesPaired?: boolean;
 }
 
 interface UV_Scroll {
@@ -346,6 +349,7 @@ interface UVTX {
     cms: number;
     cmt: number;
     combine: CombineParams[];
+    otherModeH: number;
 
     pairedIndex?: number;
     uvScroll?: UV_Scroll;
@@ -366,7 +370,11 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
 
     let primitive: vec4 | undefined;
     let environment: vec4 | undefined;
+    let otherModeH = 0;
     const combine: CombineParams[] = [];
+
+    let setTextureImageCount = 0;
+    let pairedTile = -1;
 
     const textureState = new TextureState();
     const tiles: TileState[] = nArray(8, () => new TileState());
@@ -420,6 +428,7 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
             const len = (w0 >>> 0) & 0xFF;
             const sft = (w0 >>> 8) & 0xFF;
             // state.gDPSetOtherModeH(sft, len, w1);
+            otherModeH |= w1; // assume each mode is only set once
         } else if (cmd === F3D_GBI.G_RDPLOADSYNC) {
             // No need to do anything.
         } else if (cmd === F3D_GBI.G_RDPTILESYNC) {
@@ -431,6 +440,8 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
             // w1 (the address) is written dynamically by the game engine, so it should
             // always be 0 here.
             assert(w1 === 0);
+            setTextureImageCount++;
+            assert(setTextureImageCount <= 2);
         } else if (cmd === F3D_GBI.G_SETTILE) {
             const fmt =     (w0 >>> 21) & 0x07;
             const siz =     (w0 >>> 19) & 0x03;
@@ -445,6 +456,12 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
             const masks =   (w1 >>>  4) & 0x0F;
             const shifts =  (w1 >>>  0) & 0x0F;
             tiles[tile].set(fmt, siz, line, tmem, palette, cmt, maskt, shiftt, cms, masks, shifts);
+            if (setTextureImageCount === 2) {
+                // we're seen two SETTIMG, either this is the first set_tile
+                // or we've seen one to load the texture, using tile 7
+                assert(pairedTile === -1 || pairedTile === 7);
+                pairedTile = tile;
+            }
         } else if (cmd === F3D_GBI.G_LOADBLOCK) {
             const uls =  (w0 >>> 12) & 0x0FFF;
             const ult =  (w0 >>>  0) & 0x0FFF;
@@ -486,48 +503,60 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
         }
     }
 
-    const cms = tiles[textureState.tile].cms;
-    const cmt = tiles[textureState.tile].cmt;
+    const pairedIndex = view.getUint16(dlEnd + 0x09);
+    if (setTextureImageCount > 1) {
+        // we load another texture, make sure it's there
+        assert(pairedIndex < 0xfff);
+    }
 
     const lastTile = textureState.level + textureState.tile + 1;
-    for (let i = textureState.tile; i < lastTile; i++) {
+    // since we're ignoring mipmapping for now, only allow two tiles,
+    // and only when there is a paired texture
+    for (let i = textureState.tile; i <= textureState.tile + 1; i++) {
         const tile = tiles[i];
 
-        if (tile.lrs === 0 || tile.lrt === 0) {
-            // TODO: handle animated texture, assuming that's what this means
-            tile.lrs = view.getUint16(dlEnd + 0x00);
-            tile.lrt = view.getUint16(dlEnd + 0x02);
+        if (tile.lrs === 0 && tile.lrt === 0) { // technically a 1x1 texture
+            assert(scaleS != 0 || scaleT != 0 || combineScaleS != 0 || combineScaleT != 0)
+            // convert stored dimensions to fixed point
+            tile.lrs = view.getUint16(dlEnd + 0x00) * 4 - 4;
+            tile.lrt = view.getUint16(dlEnd + 0x02) * 4 - 4;
         }
+
+        const usesPaired = pairedTile === i;
 
         const tileW = ((tile.lrs - tile.uls) >>> 2) + 1;
         const tileH = ((tile.lrt - tile.ult) >>> 2) + 1;
 
-        assert(tile.cms == cms)
-        assert(tile.cmt == cmt)
-
         const dst = new Uint8Array(tileW * tileH * 4);
         const srcOffs = 0x14 + tile.tmem;
-        if (tile.fmt === ImageFormat.G_IM_FMT_RGBA && tile.siz === ImageSize.G_IM_SIZ_16b) decodeTex_RGBA16(dst, view, srcOffs, tileW, tileH, tile.line, true);
-        else if (tile.fmt === ImageFormat.G_IM_FMT_I && tile.siz === ImageSize.G_IM_SIZ_4b) decodeTex_I4(dst, view, srcOffs, tileW, tileH, tile.line, true);
-        else if (tile.fmt === ImageFormat.G_IM_FMT_I && tile.siz === ImageSize.G_IM_SIZ_8b) decodeTex_I8(dst, view, srcOffs, tileW, tileH, tile.line, true);
-        else if (tile.fmt === ImageFormat.G_IM_FMT_IA && tile.siz === ImageSize.G_IM_SIZ_4b) decodeTex_IA4(dst, view, srcOffs, tileW, tileH, tile.line, true);
-        else if (tile.fmt === ImageFormat.G_IM_FMT_IA && tile.siz === ImageSize.G_IM_SIZ_8b) decodeTex_IA8(dst, view, srcOffs, tileW, tileH, tile.line, true);
-        else if (tile.fmt === ImageFormat.G_IM_FMT_IA && tile.siz === ImageSize.G_IM_SIZ_16b) decodeTex_IA16(dst, view, srcOffs, tileW, tileH, tile.line, true);
-        else console.warn(`Unsupported texture format ${getImageFormatName(tile.fmt)} / ${getImageSizeName(tile.siz)}`);
 
-        levels.push({ width: tileW, height: tileH, pixels: dst });
+        if (!usesPaired) { // only store this texture's data if it's used
+            if (tile.fmt === ImageFormat.G_IM_FMT_RGBA && tile.siz === ImageSize.G_IM_SIZ_16b) decodeTex_RGBA16(dst, view, srcOffs, tileW, tileH, tile.line, true);
+            else if (tile.fmt === ImageFormat.G_IM_FMT_I && tile.siz === ImageSize.G_IM_SIZ_4b) decodeTex_I4(dst, view, srcOffs, tileW, tileH, tile.line, true);
+            else if (tile.fmt === ImageFormat.G_IM_FMT_I && tile.siz === ImageSize.G_IM_SIZ_8b) decodeTex_I8(dst, view, srcOffs, tileW, tileH, tile.line, true);
+            else if (tile.fmt === ImageFormat.G_IM_FMT_IA && tile.siz === ImageSize.G_IM_SIZ_4b) decodeTex_IA4(dst, view, srcOffs, tileW, tileH, tile.line, true);
+            else if (tile.fmt === ImageFormat.G_IM_FMT_IA && tile.siz === ImageSize.G_IM_SIZ_8b) decodeTex_IA8(dst, view, srcOffs, tileW, tileH, tile.line, true);
+            else if (tile.fmt === ImageFormat.G_IM_FMT_IA && tile.siz === ImageSize.G_IM_SIZ_16b) decodeTex_IA16(dst, view, srcOffs, tileW, tileH, tile.line, true);
+            else console.warn(`Unsupported texture format ${getImageFormatName(tile.fmt)} / ${getImageSizeName(tile.siz)}`);
+        }
+
+        levels.push({ width: tileW, height: tileH, pixels: dst, shiftS: tile.shifts, shiftT: tile.shiftt, usesPaired });
 
         // For now, use only one LOD.
-        break;
+        if (pairedIndex == 0xfff)
+            break;
     }
 
-    const width = levels[0].width, height = levels[0].height;
-    const fmt = tiles[textureState.tile].fmt;
-    const siz = tiles[textureState.tile].siz;
+    // skip over the main tile if it uses a paired
+    const tileOffset = textureState.tile === pairedTile ? 1 : 0;
+    const mainTile = tiles[textureState.tile + tileOffset]
 
-    const pairedIndex = view.getUint16(dlEnd + 0x09);
+    const cms = mainTile.cms, cmt = mainTile.cmt;
+    const width = levels[tileOffset].width, height = levels[tileOffset].height;
+    const fmt = mainTile.fmt;
+    const siz = mainTile.siz;
 
-    const uvtx: UVTX = { name, width, height, fmt, siz, levels, cms, cmt, combine };
+    const uvtx: UVTX = { name, width, height, fmt, siz, levels, cms, cmt, combine, otherModeH };
 
     if (scaleS !== 0.0 || scaleT !== 0.0) {
         uvtx.uvScroll = { scaleS, scaleT };
@@ -884,8 +913,12 @@ float combineAlphaCycle(float combAlpha, float tex0, float tex1, float params) {
 
     return (alphaInputs[p.x]-alphaInputs[p.y])*alphaInputs[p.z] + alphaInputs[p.w];
 }
-
+#ifdef BILERP_FILTER
 #define Texture2D_N64 Texture2D_N64_Bilerp
+#else
+#define Texture2D_N64 Texture2D_N64_Point
+#endif
+
 
 void main() {
     vec4 tex0;
@@ -904,10 +937,12 @@ void main() {
         combineAlphaCycle(zero.a, tex0.a, tex1.a, u_Params.y)
     );
 
+#ifdef TWO_CYCLE
     t_Color = vec4(
         combineColorCycle(t_Color, tex0, tex1, u_Params.z).rgb,
         combineAlphaCycle(t_Color.a, tex0.a, tex1.a, u_Params.w)
     );
+#endif
 
 #ifdef USE_VERTEX_COLOR
     t_Color.rgba = v_Color.rgba;
@@ -978,7 +1013,15 @@ class MeshRenderer {
 }
 
 function packParams(params: CombineParams): number {
-    return (params.a << 12) | (params.b << 8) | (params.c << 4) | params.d ;
+    return (params.a << 12) | (params.b << 8) | (params.c << 4) | params.d;
+}
+
+function calcScaleForShift(shift: number): number {
+    if (shift <= 10) {
+        return 1 / (1 << shift);
+    } else {
+        return 1 << (16 - shift);
+    }
 }
 
 const scratchMatrix = mat4.create();
@@ -998,7 +1041,14 @@ class MaterialInstance {
             mainTextureData.fillTextureMapping(this.textureMappings[0]);
             if (this.uvtx.pairedIndex !== undefined) {
                 this.hasPairedTexture = true;
+                assert(this.uvtx.levels.length > 1);
                 textureData[this.uvtx.pairedIndex].fillTextureMapping(this.textureMappings[1]);
+                if (this.uvtx.levels[0].usesPaired) {
+                    // the paired texture is actually loaded into the first tile,
+                    // so swap the underlying texture and sampler
+                    assert(!this.uvtx.levels[1].usesPaired);
+                    this.textureMappings.reverse()
+                }
             }
         }
     }
@@ -1014,10 +1064,19 @@ class MaterialInstance {
 
         offs += fillMatrix4x3(d, offs, scratchMatrix);
         if (this.hasTexture) {
-            renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
+            if (getTextFiltFromOtherModeH(this.uvtx.otherModeH) === TextFilt.G_TF_BILERP) {
+                // ignore average filtering mode
+                this.program.defines.set('BILERP_FILTER', '1');
+            }
+            if (getCycleTypeFromOtherModeH(this.uvtx.otherModeH) == OtherModeH_CycleType.G_CYC_2CYCLE) {
+                this.program.defines.set('TWO_CYCLE', '1');
+            }
 
+            renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
+            const scaleS0 = calcScaleForShift(this.uvtx.levels[0].shiftS);
+            const scaleT0 = calcScaleForShift(this.uvtx.levels[0].shiftT);
             mat4.fromScaling(texMatrixScratch,
-                [1 / this.textureMappings[0].width, 1 / this.textureMappings[0].height, 1]);
+                [scaleS0 / this.textureMappings[0].width, scaleT0 / this.textureMappings[0].height, 1]);
             if (this.uvtx.uvScroll) {
                 texMatrixScratch[12] = -((viewerInput.time / 1000) * this.uvtx.uvScroll.scaleS) % 1;
                 texMatrixScratch[13] = -((viewerInput.time / 1000) * this.uvtx.uvScroll.scaleT) % 1;
@@ -1026,8 +1085,10 @@ class MaterialInstance {
             this.program.defines.set('USE_TEXTURE', '1');
 
             if (this.hasPairedTexture) {
+                const scaleS1 = calcScaleForShift(this.uvtx.levels[1].shiftS);
+                const scaleT1 = calcScaleForShift(this.uvtx.levels[1].shiftT);
                 mat4.fromScaling(texMatrixScratch,
-                    [1 / this.textureMappings[1].width, 1 / this.textureMappings[1].height, 1]);
+                    [scaleS1 / this.textureMappings[1].width, scaleT1 / this.textureMappings[1].height, 1]);
                 if (this.uvtx.combineScroll) {
                     texMatrixScratch[12] = -((viewerInput.time / 1000) * this.uvtx.combineScroll.scaleS) % 1;
                     texMatrixScratch[13] = -((viewerInput.time / 1000) * this.uvtx.combineScroll.scaleT) % 1;
@@ -1109,7 +1170,7 @@ class TextureData {
         });
         device.setResourceName(this.gfxTexture, texture.name);
         const hostAccessPass = device.createHostAccessPass();
-        const levels = texture.levels.map((t) => t.pixels);
+        const levels = texture.levels.filter((t) => !t.usesPaired).map((t) => t.pixels);
         hostAccessPass.uploadTextureData(this.gfxTexture, 0, levels);
         device.submitPass(hostAccessPass);
 
@@ -1214,10 +1275,13 @@ function dummyTexture(name: string): UVTX {
             width: 2,
             height: 2,
             pixels: new Uint8Array([
-                0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff,
-                0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00
+                0xff, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff,
+                0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0xff
             ]),
+            shiftS: 0,
+            shiftT: 0,
         }],
+        otherModeH: 0,
         cms: 0,
         cmt: 0,
         combine: [
@@ -1267,6 +1331,7 @@ class Pilotwings64SceneDesc implements SceneDesc {
                 return parseUVTX(file);
             } catch (e) {
                 // preserve the ordering of the textures for indexing
+                console.warn(file.name, e)
                 return dummyTexture(file.name);
             }
         });
