@@ -347,7 +347,7 @@ interface UVTX {
     cmt: number;
     combine: CombineParams[];
 
-    combineIndex?: number;
+    pairedIndex?: number;
     uvScroll?: UV_Scroll;
     combineScroll?: UV_Scroll;
     primitive?: vec4;
@@ -390,25 +390,25 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
             assert(on);
             textureState.set(on, tile, level, s, t);
         } else if (cmd === F3D_GBI.G_SETCOMBINE) {
-            // many of these 0x07 should be 0x0f, but noise isn't implemented
-            // so this sends noise to 0, along with 0xf (which should be 0)
-            const a0  = (w0 >> 20) & 0x07;
-            const c0  = (w0 >> 15) & 0x0f;
-            const Aa0 = (w0 >> 12) & 0x07;
-            const Ac0 = (w0 >> 9) & 0x07;
-            const a1  = (w0 >> 5) & 0x07;
-            const c1  = (w0 >> 0) & 0x0f;
-            const b0  = (w1 >> 28) & 0x07;
-            const b1  = (w1 >> 24) & 0x07;
-            const Aa1 = (w1 >> 21) & 0x07;
-            const Ac1 = (w1 >> 18) & 0x07;
-            const d0  = (w1 >> 15) & 0x07;
-            const Ab0 = (w1 >> 12) & 0x07;
-            const Ad0 = (w1 >> 9) & 0x07;
-            const d1  = (w1 >> 6) & 0x07;
-            const Ab1 = (w1 >> 3) & 0x07;
-            const Ad1 = (w1 >> 0) & 0x07;
-
+            // because we aren't implementing all the combine input options (notably, not noise)
+            // and the highest values are just 0, we can get away with throwing away high bits:
+            // ax,bx,dx can be 4 bits, and cx can be 5
+            const a0  = (w0 >>> 20) & 0x07;
+            const c0  = (w0 >>> 15) & 0x0f;
+            const Aa0 = (w0 >>> 12) & 0x07;
+            const Ac0 = (w0 >>> 9) & 0x07;
+            const a1  = (w0 >>> 5) & 0x07;
+            const c1  = (w0 >>> 0) & 0x0f;
+            const b0  = (w1 >>> 28) & 0x07;
+            const b1  = (w1 >>> 24) & 0x07;
+            const Aa1 = (w1 >>> 21) & 0x07;
+            const Ac1 = (w1 >>> 18) & 0x07;
+            const d0  = (w1 >>> 15) & 0x07;
+            const Ab0 = (w1 >>> 12) & 0x07;
+            const Ad0 = (w1 >>> 9) & 0x07;
+            const d1  = (w1 >>> 6) & 0x07;
+            const Ab1 = (w1 >>> 3) & 0x07;
+            const Ad1 = (w1 >>> 0) & 0x07;
 
             combine.push({ a: a0, b: b0, c: c0, d: d0 })
             combine.push({ a: Aa0, b: Ab0, c: Ac0, d: Ad0 })
@@ -474,9 +474,6 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
                 ((w1 >>> 8) & 0xff) / 0xff,
                 ((w1 >>> 0) & 0xff) / 0xff,
             );
-            if (primitive[1] > .5) {
-                console.log("prim", name, primitive)
-            }
         } else if (cmd === F3D_GBI.G_SETENVCOLOR) {
             environment = vec4.fromValues(
                 ((w1 >>> 24) & 0xff) / 0xff,
@@ -505,10 +502,6 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
         const tileW = ((tile.lrs - tile.uls) >>> 2) + 1;
         const tileH = ((tile.lrt - tile.ult) >>> 2) + 1;
 
-        if (tile.masks !== 0 && (1 << tile.masks) !== tileW) {
-            console.log(name, tile, tile.masks, tileW, tile.lrs);
-        }
-
         assert(tile.cms == cms)
         assert(tile.cmt == cmt)
 
@@ -532,7 +525,7 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
     const fmt = tiles[textureState.tile].fmt;
     const siz = tiles[textureState.tile].siz;
 
-    const combineIndex = view.getUint16(dlEnd + 0x09);
+    const pairedIndex = view.getUint16(dlEnd + 0x09);
 
     const uvtx: UVTX = { name, width, height, fmt, siz, levels, cms, cmt, combine };
 
@@ -548,8 +541,8 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
     if (!!environment) {
         uvtx.environment = environment;
     }
-    if (combineIndex < 0xfff) {
-        uvtx.combineIndex = combineIndex;
+    if (pairedIndex < 0xfff) {
+        uvtx.pairedIndex = pairedIndex;
     }
 
     return uvtx;
@@ -831,13 +824,14 @@ void main() {
 
     public frag = `
 ivec4 getParams(float val) {
-    vec4 params;
-    params.x = val*16.0;
-    params.y = fract(params.x)*16.0;
-    params.z = fract(params.y)*16.0;
-    params.w = fract(params.z)*16.0;
+    int orig = int(val);
+    ivec4 params;
+    params.x = (orig >> 12) & 0xf;
+    params.y = (orig >> 8) & 0xf;
+    params.z = (orig >> 4) & 0xf;
+    params.w = (orig >> 0) & 0xf;
 
-    return ivec4(params);
+    return params;
 }
 
 vec4 Texture2D_N64_Point(sampler2D t_Texture, vec2 t_TexCoord) {
@@ -864,12 +858,12 @@ vec4 Texture2D_N64_Bilerp(sampler2D t_Texture, vec2 t_TexCoord) {
 vec3 combineColorCycle(vec4 combColor, vec4 tex0, vec4 tex1, float params) {
 
     vec3 colorInputs[8] = vec3[8](
-        combColor.rgb, tex0.rgb, tex1.rgb, u_PrimColor.rgb, 
+        combColor.rgb, tex0.rgb, tex1.rgb, u_PrimColor.rgb,
         v_Color.rgb, u_EnvColor.rgb, one.rgb, zero.rgb
     );
-    
+
     vec3 multInputs[16] = vec3[16](
-        combColor.rgb, tex0.rgb, tex1.rgb, u_PrimColor.rgb, 
+        combColor.rgb, tex0.rgb, tex1.rgb, u_PrimColor.rgb,
         v_Color.rgb, u_EnvColor.rgb, zero.rgb /* key */, combColor.aaa,
         tex0.aaa, tex1.aaa, u_PrimColor.aaa, v_Color.aaa,
         u_EnvColor.aaa, zero.rgb /* LOD */, zero.rgb /* prim LOD */, zero.rgb
@@ -877,12 +871,12 @@ vec3 combineColorCycle(vec4 combColor, vec4 tex0, vec4 tex1, float params) {
 
     ivec4 p = getParams(params);
 
-    return (colorInputs[p.x]-colorInputs[p.y])*colorInputs[p.z] + colorInputs[p.w];
+    return (colorInputs[p.x]-colorInputs[p.y])*multInputs[p.z] + colorInputs[p.w];
 }
 
 float combineAlphaCycle(float combAlpha, float tex0, float tex1, float params) {
     float alphaInputs[8] = float[8](
-        combAlpha, tex0, tex1, u_PrimColor.a, 
+        combAlpha, tex0, tex1, u_PrimColor.a,
         v_Color.a, 0.0, 1.0, 0.0
     );
 
@@ -901,18 +895,18 @@ void main() {
     tex1 = tex0;
 #endif
 
-#ifdef HAS_COMBINE
+#ifdef HAS_PAIRED_TEXTURE
     tex1 = Texture2D_N64(u_Texture[1], v_TexCoord.zw);
 #endif
 
     vec4 t_Color = vec4(
-        combineColorCycle(zero, tex0, tex1, u_Params.x).rgb, 
-        combineAlphaCycle(zero.a, tex0.a, tex1.a, u_Params.y)    
+        combineColorCycle(zero, tex0, tex1, u_Params.x).rgb,
+        combineAlphaCycle(zero.a, tex0.a, tex1.a, u_Params.y)
     );
 
     t_Color = vec4(
-        combineColorCycle(t_Color, tex0, tex1, u_Params.z).rgb, 
-        combineAlphaCycle(t_Color.a, tex0.a, tex1.a, u_Params.w)    
+        combineColorCycle(t_Color, tex0, tex1, u_Params.z).rgb,
+        combineAlphaCycle(t_Color.a, tex0.a, tex1.a, u_Params.w)
     );
 
 #ifdef USE_VERTEX_COLOR
@@ -983,8 +977,8 @@ class MeshRenderer {
     }
 }
 
-function floatify(params: CombineParams): number {
-    return params.a / 16 + params.b / 256 + params.c / 4096 + params.d / 65536;
+function packParams(params: CombineParams): number {
+    return (params.a << 12) | (params.b << 8) | (params.c << 4) | params.d ;
 }
 
 const scratchMatrix = mat4.create();
@@ -992,7 +986,7 @@ const texMatrixScratch = mat4.create();
 class MaterialInstance {
     public program = new PW64Program();
     private hasTexture = false;
-    private hasCombineTexture = false;
+    private hasPairedTexture = false;
     private textureMappings: TextureMapping[] = nArray(2, () => new TextureMapping());
     private uvtx: UVTX;
 
@@ -1002,9 +996,9 @@ class MaterialInstance {
             const mainTextureData = textureData[materialData.textureIndex];
             this.uvtx = mainTextureData.uvtx;
             mainTextureData.fillTextureMapping(this.textureMappings[0]);
-            if (this.uvtx.combineIndex) {
-                this.hasCombineTexture = true;
-                textureData[this.uvtx.combineIndex].fillTextureMapping(this.textureMappings[1]);
+            if (this.uvtx.pairedIndex !== undefined) {
+                this.hasPairedTexture = true;
+                textureData[this.uvtx.pairedIndex].fillTextureMapping(this.textureMappings[1]);
             }
         }
     }
@@ -1031,7 +1025,7 @@ class MaterialInstance {
             offs += fillMatrix4x2(d, offs, texMatrixScratch);
             this.program.defines.set('USE_TEXTURE', '1');
 
-            if (this.hasCombineTexture) {
+            if (this.hasPairedTexture) {
                 mat4.fromScaling(texMatrixScratch,
                     [1 / this.textureMappings[1].width, 1 / this.textureMappings[1].height, 1]);
                 if (this.uvtx.combineScroll) {
@@ -1039,11 +1033,11 @@ class MaterialInstance {
                     texMatrixScratch[13] = -((viewerInput.time / 1000) * this.uvtx.combineScroll.scaleT) % 1;
                 }
                 offs += fillMatrix4x2(d, offs, texMatrixScratch);
-                this.program.defines.set('HAS_COMBINE', '1');
+                this.program.defines.set('HAS_PAIRED_TEXTURE', '1');
             }
             offs = renderInst.allocateUniformBuffer(PW64Program.ub_CombineParams, 12);
             const comb = renderInst.mapUniformBufferF32(PW64Program.ub_CombineParams);
-            const asFloats = this.uvtx.combine.map(floatify);
+            const asFloats = this.uvtx.combine.map(packParams);
             offs += fillVec4(comb, offs, asFloats[0], asFloats[1], asFloats[2], asFloats[3]);
 
             if (this.uvtx.primitive) {
