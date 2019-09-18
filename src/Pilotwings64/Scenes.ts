@@ -417,6 +417,8 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
             assert(tile === 0x07);
             // Make sure we're loading the whole block.
             assert(uls === 0x00 && ult === 0x00);
+            // dxt should be 0, this means we need to apply deinterleaving....
+            assert(dxt === 0);
         } else if (cmd === F3D_GBI.G_SETTILESIZE) {
             const uls =  (w0 >>> 12) & 0x0FFF;
             const ult =  (w0 >>>  0) & 0x0FFF;
@@ -451,21 +453,20 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
         const tileW = ((tile.lrs - tile.uls) >>> 2) + 1;
         const tileH = ((tile.lrt - tile.ult) >>> 2) + 1;
 
-        if (tile.masks !== 0 && (1 << tile.masks) !== tileW) {
-            console.log(name, tile, tile.masks, tileW, tile.lrs);
-        }
+        if (tile.lrs === 0 || tile.lrt === 0)
+            break;
 
         assert(tile.cms == cms)
         assert(tile.cmt == cmt)
 
         const dst = new Uint8Array(tileW * tileH * 4);
-        const srcIdx = 0x14 + tile.tmem;
-        if (tile.fmt === ImageFormat.G_IM_FMT_RGBA && tile.siz === ImageSize.G_IM_SIZ_16b) decodeTex_RGBA16(dst, view, srcIdx, tileW, tileH);
-        else if (tile.fmt === ImageFormat.G_IM_FMT_I && tile.siz === ImageSize.G_IM_SIZ_4b) decodeTex_I4(dst, view, srcIdx, tileW, tileH);
-        else if (tile.fmt === ImageFormat.G_IM_FMT_I && tile.siz === ImageSize.G_IM_SIZ_8b) decodeTex_I8(dst, view, srcIdx, tileW, tileH);
-        else if (tile.fmt === ImageFormat.G_IM_FMT_IA && tile.siz === ImageSize.G_IM_SIZ_4b) decodeTex_IA4(dst, view, srcIdx, tileW, tileH);
-        else if (tile.fmt === ImageFormat.G_IM_FMT_IA && tile.siz === ImageSize.G_IM_SIZ_8b) decodeTex_IA8(dst, view, srcIdx, tileW, tileH);
-        else if (tile.fmt === ImageFormat.G_IM_FMT_IA && tile.siz === ImageSize.G_IM_SIZ_16b) decodeTex_IA16(dst, view, srcIdx, tileW, tileH);
+        const srcOffs = 0x14 + tile.tmem;
+        if (tile.fmt === ImageFormat.G_IM_FMT_RGBA && tile.siz === ImageSize.G_IM_SIZ_16b) decodeTex_RGBA16(dst, view, srcOffs, tileW, tileH, tile.line, true);
+        else if (tile.fmt === ImageFormat.G_IM_FMT_I && tile.siz === ImageSize.G_IM_SIZ_4b) decodeTex_I4(dst, view, srcOffs, tileW, tileH, tile.line, true);
+        else if (tile.fmt === ImageFormat.G_IM_FMT_I && tile.siz === ImageSize.G_IM_SIZ_8b) decodeTex_I8(dst, view, srcOffs, tileW, tileH, tile.line, true);
+        else if (tile.fmt === ImageFormat.G_IM_FMT_IA && tile.siz === ImageSize.G_IM_SIZ_4b) decodeTex_IA4(dst, view, srcOffs, tileW, tileH, tile.line, true);
+        else if (tile.fmt === ImageFormat.G_IM_FMT_IA && tile.siz === ImageSize.G_IM_SIZ_8b) decodeTex_IA8(dst, view, srcOffs, tileW, tileH, tile.line, true);
+        else if (tile.fmt === ImageFormat.G_IM_FMT_IA && tile.siz === ImageSize.G_IM_SIZ_16b) decodeTex_IA16(dst, view, srcOffs, tileW, tileH, tile.line, true);
         else console.warn(`Unsupported texture format ${getImageFormatName(tile.fmt)} / ${getImageSizeName(tile.siz)}`);
 
         levels.push({ width: tileW, height: tileH, pixels: dst });
