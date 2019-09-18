@@ -1,5 +1,5 @@
 
-import { GfxSamplerBinding, GfxBufferBinding, GfxBindingsDescriptor, GfxRenderPipelineDescriptor, GfxBindingLayoutDescriptor, GfxInputLayoutDescriptor, GfxVertexAttributeDescriptor, GfxProgram, GfxMegaStateDescriptor, GfxAttachmentState, GfxChannelBlendState } from './GfxPlatform';
+import { GfxSamplerBinding, GfxBufferBinding, GfxBindingsDescriptor, GfxRenderPipelineDescriptor, GfxBindingLayoutDescriptor, GfxInputLayoutDescriptor, GfxVertexAttributeDescriptor, GfxProgram, GfxMegaStateDescriptor, GfxAttachmentState, GfxChannelBlendState, GfxSamplerDescriptor } from './GfxPlatform';
 import { copyMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
 import { EqualFunc } from '../../HashMap';
 import { colorEqual } from '../../Color';
@@ -142,4 +142,16 @@ export function gfxInputLayoutDescriptorEquals(a: GfxInputLayoutDescriptor, b: G
     if (a.indexBufferFormat !== b.indexBufferFormat) return false;
     if (!arrayEqual(a.vertexAttributeDescriptors, b.vertexAttributeDescriptors, gfxVertexAttributeDesciptorEquals)) return false;
     return true;
+}
+
+export function gfxSamplerDescriptorEquals(a: GfxSamplerDescriptor, b: GfxSamplerDescriptor): boolean {
+    return (
+        a.wrapS === b.wrapS &&
+        a.wrapT === b.wrapT &&
+        a.minFilter === b.minFilter &&
+        a.magFilter === b.magFilter &&
+        a.mipFilter === b.mipFilter &&
+        a.minLOD === b.minLOD &&
+        a.maxLOD === b.maxLOD
+    );
 }

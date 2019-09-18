@@ -12,6 +12,7 @@ import { transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDesc
 import { SceneContext } from '../SceneBase';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { executeOnPass } from '../gfx/render/GfxRenderer';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 const pathBase = `bk`;
 
@@ -112,11 +113,11 @@ class SceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
 
-    private addGeo(device: GfxDevice, viewerTextures: Viewer.Texture[], sceneRenderer: BKRenderer, geo: Geo.Geometry): N64Renderer {
+    private addGeo(device: GfxDevice, cache: GfxRenderCache, viewerTextures: Viewer.Texture[], sceneRenderer: BKRenderer, geo: Geo.Geometry): N64Renderer {
         for (let i = 0; i < geo.rspOutput.textures.length; i++)
             viewerTextures.push(textureToCanvas(geo.rspOutput.textures[i]));
 
-        const n64Data = new N64Data(device, geo.rspOutput);
+        const n64Data = new N64Data(device, cache, geo.rspOutput);
         sceneRenderer.n64Datas.push(n64Data);
         const n64Renderer = new N64Renderer(n64Data);
         sceneRenderer.n64Renderers.push(n64Renderer);
@@ -131,27 +132,28 @@ class SceneDesc implements Viewer.SceneDesc {
             const viewerTextures: Viewer.Texture[] = [];
             const fakeTextureHolder = new FakeTextureHolder(viewerTextures);
             const sceneRenderer = new BKRenderer(device, fakeTextureHolder);
+            const cache = sceneRenderer.renderHelper.getCache();
 
             if (obj.OpaGeoFileId >= 0) {
                 const geo = Geo.parse(obj.Files[obj.OpaGeoFileId].Data, true);
-                this.addGeo(device, viewerTextures, sceneRenderer, geo);
+                this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
             }
 
             if (obj.XluGeoFileId >= 0) {
                 const geo = Geo.parse(obj.Files[obj.XluGeoFileId].Data, false);
-                this.addGeo(device, viewerTextures, sceneRenderer, geo);
+                this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
             }
 
             if (obj.OpaSkyboxFileId >= 0) {
                 const geo = Geo.parse(obj.Files[obj.OpaSkyboxFileId].Data, true);
-                const renderer = this.addGeo(device, viewerTextures, sceneRenderer, geo);
+                const renderer = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
                 renderer.isSkybox = true;
                 mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [obj.OpaSkyboxScale, obj.OpaSkyboxScale, obj.OpaSkyboxScale]);
             }
 
             if (obj.XluSkyboxFileId >= 0) {
                 const geo = Geo.parse(obj.Files[obj.XluSkyboxFileId].Data, false);
-                const renderer = this.addGeo(device, viewerTextures, sceneRenderer, geo);
+                const renderer = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
                 renderer.isSkybox = true;
                 mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [obj.OpaSkyboxScale, obj.OpaSkyboxScale, obj.OpaSkyboxScale]);
             }

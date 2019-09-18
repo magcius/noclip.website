@@ -11,6 +11,7 @@ import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
 import { interactiveVizSliderSelect } from '../DebugJunk';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 class F3DEX_Program extends DeviceProgram {
     public static a_Position = 0;
@@ -197,11 +198,11 @@ export class N64Data {
     public inputLayout: GfxInputLayout;
     public inputState: GfxInputState;
 
-    constructor(device: GfxDevice, public rspOutput: RSPOutput) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public rspOutput: RSPOutput) {
         for (let i = 0; i < this.rspOutput.textures.length; i++) {
             const tex = this.rspOutput.textures[i];
             this.textures.push(this.translateTexture(device, tex));
-            this.samplers.push(this.translateSampler(device, tex));
+            this.samplers.push(this.translateSampler(device, cache, tex));
         }
 
         const vertexBufferData = makeVertexBufferData(this.rspOutput.vertices);
@@ -238,8 +239,8 @@ export class N64Data {
         return gfxTexture;
     }
 
-    private translateSampler(device: GfxDevice, texture: Texture): GfxSampler {
-        return device.createSampler({
+    private translateSampler(device: GfxDevice, cache: GfxRenderCache, texture: Texture): GfxSampler {
+        return cache.createSampler(device, {
             wrapS: translateCM(texture.tile.cms),
             wrapT: translateCM(texture.tile.cmt),
             minFilter: GfxTexFilterMode.POINT,
@@ -252,8 +253,6 @@ export class N64Data {
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.textures.length; i++)
             device.destroyTexture(this.textures[i]);
-        for (let i = 0; i < this.samplers.length; i++)
-            device.destroySampler(this.samplers[i]);
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.vertexBuffer);
         device.destroyInputLayout(this.inputLayout);
