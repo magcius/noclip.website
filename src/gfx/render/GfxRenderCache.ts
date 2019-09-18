@@ -1,8 +1,8 @@
 
-import { GfxBindingsDescriptor, GfxBindings, GfxDevice, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxProgram, GfxInputLayoutDescriptor, GfxInputLayout } from "../platform/GfxPlatform";
+import { GfxBindingsDescriptor, GfxBindings, GfxDevice, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxProgram, GfxInputLayoutDescriptor, GfxInputLayout, GfxSamplerDescriptor, GfxSampler } from "../platform/GfxPlatform";
 import { HashMap, nullHashFunc, hashCodeNumberFinish, hashCodeNumberUpdate } from "../../HashMap";
 import { DeviceProgram } from "../../Program";
-import { gfxBindingsDescriptorCopy, gfxRenderPipelineDescriptorCopy, gfxBindingsDescriptorEquals, gfxRenderPipelineDescriptorEquals, gfxInputLayoutDescriptorEquals } from '../platform/GfxPlatformUtil';
+import { gfxBindingsDescriptorCopy, gfxRenderPipelineDescriptorCopy, gfxBindingsDescriptorEquals, gfxRenderPipelineDescriptorEquals, gfxInputLayoutDescriptorEquals, gfxSamplerDescriptorEquals } from '../platform/GfxPlatformUtil';
 
 function deviceProgramEquals(a: DeviceProgram, b: DeviceProgram): boolean {
     return DeviceProgram.equals(a, b);
@@ -31,6 +31,7 @@ export class GfxRenderCache {
     private gfxRenderPipelinesCache = new HashMap<GfxRenderPipelineDescriptor, GfxRenderPipeline>(gfxRenderPipelineDescriptorEquals, gfxRenderPipelineDescriptorHash, 16, 4);
     private gfxInputLayoutsCache = new HashMap<GfxInputLayoutDescriptor, GfxInputLayout>(gfxInputLayoutDescriptorEquals, nullHashFunc);
     private gfxProgramCache = new HashMap<DeviceProgram, GfxProgram>(deviceProgramEquals, nullHashFunc, 16, 4);
+    private gfxSamplerCache = new HashMap<GfxSamplerDescriptor, GfxSampler>(gfxSamplerDescriptorEquals, nullHashFunc, 16, 4);
 
     public createBindings(device: GfxDevice, descriptor: GfxBindingsDescriptor): GfxBindings {
         let bindings = this.gfxBindingsCache.get(descriptor);
@@ -70,6 +71,15 @@ export class GfxRenderCache {
         return program;
     }
 
+    public createSampler(device: GfxDevice, descriptor: GfxSamplerDescriptor): GfxSampler {
+        let sampler = this.gfxSamplerCache.get(descriptor);
+        if (sampler === null) {
+            sampler = device.createSampler(descriptor);
+            this.gfxSamplerCache.add(descriptor, sampler);
+        }
+        return sampler;
+    }
+
     public numBindings(): number {
         return this.gfxBindingsCache.size();
     }
@@ -83,6 +93,8 @@ export class GfxRenderCache {
             device.destroyInputLayout(inputLayout);
         for (const [descriptor, program] of this.gfxProgramCache.entries())
             device.destroyProgram(program);
+        for (const [descriptor, sampler] of this.gfxSamplerCache.entries())
+            device.destroySampler(sampler);
         this.gfxBindingsCache.clear();
         this.gfxRenderPipelinesCache.clear();
     }
