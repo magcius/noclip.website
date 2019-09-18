@@ -3,7 +3,7 @@ import {
     GfxDevice, GfxBuffer, GfxInputLayout, GfxInputState, GfxBufferUsage,
     GfxVertexAttributeDescriptor, GfxFormat, GfxVertexAttributeFrequency, GfxRenderPass,
     GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxTextureDimension, GfxWrapMode,
-    GfxMipFilterMode, GfxTexFilterMode, GfxSampler, GfxBlendFactor, GfxBlendMode
+    GfxMipFilterMode, GfxTexFilterMode, GfxSampler, GfxBlendFactor, GfxBlendMode, GfxTexture
 } from "../gfx/platform/GfxPlatform";
 import { SceneGfx, ViewerRenderInput, Texture } from "../viewer";
 import { SceneDesc, SceneContext, SceneGroup } from "../SceneBase";
@@ -22,8 +22,9 @@ import { MathConstants } from "../MathHelpers";
 import { IS_DEVELOPMENT } from "../BuildVersion";
 import { TextureState, TileState } from "../bk/f3dex";
 import { ImageFormat, ImageSize, getImageFormatName, decodeTex_RGBA16, getImageSizeName, decodeTex_I4, decodeTex_I8, decodeTex_IA4, decodeTex_IA8, decodeTex_IA16 } from "../Common/N64/Image";
-import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
+import { TextureMapping } from "../TextureHolder";
 import { Endianness } from "../endian";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
 interface Pilotwings64FSFileChunk {
     tag: string;
@@ -836,9 +837,9 @@ class MeshRenderer {
     public modelMatrix = mat4.create();
     private materials: MaterialInstance[] = [];
 
-    constructor(device: GfxDevice, private meshData: MeshData, textureHolder: Pilotwings64TextureHolder) {
+    constructor(device: GfxDevice, private meshData: MeshData, textureData: TextureData[]) {
         for (let material of meshData.mesh.materials)
-            this.materials.push(new MaterialInstance(device, material, meshData, textureHolder));
+            this.materials.push(new MaterialInstance(device, material, textureData));
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -850,7 +851,6 @@ class MeshRenderer {
         }
         renderInstManager.popTemplateRenderInst();
     }
-
 }
 
 const scratchMatrix = mat4.create();
@@ -862,13 +862,15 @@ class MaterialInstance {
     private textureMappings: TextureMapping[] = nArray(2, () => new TextureMapping());
     private uvtx: UVTX;
 
-    constructor(device: GfxDevice, private materialData: MaterialData, private meshData: MeshData, textureHolder: Pilotwings64TextureHolder) {
-        this.hasTexture = materialData.textureIndex < 0xfff;
+    constructor(device: GfxDevice, private materialData: MaterialData, textureData: TextureData[]) {
+        this.hasTexture = materialData.textureIndex < 0x0FFF;
         if (this.hasTexture) {
-            this.uvtx = textureHolder.mappingByIndex(this.textureMappings[0], materialData.textureIndex);
-            if (this.uvtx.blendLayer < 0xfff) {
+            const mainTextureData = textureData[materialData.textureIndex];
+            this.uvtx = mainTextureData.uvtx;
+            mainTextureData.fillTextureMapping(this.textureMappings[0]);
+            if (this.uvtx.blendLayer < 0x0FFF) {
                 this.hasBlend = true;
-                textureHolder.mappingByIndex(this.textureMappings[1], this.uvtx.blendLayer);
+                textureData[this.uvtx.blendLayer].fillTextureMapping(this.textureMappings[1]);
             }
         }
     }
@@ -914,6 +916,22 @@ class MaterialInstance {
     }
 }
 
+const enum TexCM {
+    WRAP = 0x00, MIRROR = 0x01, CLAMP = 0x02,
+}
+
+function translateCM(cm: TexCM): GfxWrapMode {
+    switch (cm) {
+        case TexCM.WRAP: return GfxWrapMode.REPEAT;
+        case TexCM.MIRROR: return GfxWrapMode.MIRROR;
+        case TexCM.CLAMP: return GfxWrapMode.CLAMP;
+    }
+}
+
+const bindingLayouts: GfxBindingLayoutDescriptor[] = [
+    { numUniformBuffers: 3, numSamplers: 2 },
+];
+
 function textureToCanvas(texture: UVTX): Texture {
     const surfaces: HTMLCanvasElement[] = [];
 
@@ -937,40 +955,25 @@ function textureToCanvas(texture: UVTX): Texture {
     return { name: texture.name, extraInfo, surfaces };
 }
 
-const enum TexCM {
-    WRAP = 0x00, MIRROR = 0x01, CLAMP = 0x02,
-}
+class TextureData {
+    public gfxTexture: GfxTexture;
+    public gfxSampler: GfxSampler;
+    public viewerTexture: Texture;
 
-function translateCM(cm: TexCM): GfxWrapMode {
-    switch (cm) {
-        case TexCM.WRAP: return GfxWrapMode.REPEAT;
-        case TexCM.MIRROR: return GfxWrapMode.MIRROR;
-        case TexCM.CLAMP: return GfxWrapMode.CLAMP;
-    }
-}
+    constructor(device: GfxDevice, cache: GfxRenderCache, public uvtx: UVTX) {
+        const texture = this.uvtx;
 
-class Pilotwings64TextureHolder extends TextureHolder<UVTX> {
-    private samplers: GfxSampler[] = [];
-
-    public loadTexture(device: GfxDevice, texture: UVTX): LoadedTexture {
-        const gfxTexture = device.createTexture({
+        this.gfxTexture = device.createTexture({
             dimension: GfxTextureDimension.n2D, pixelFormat: GfxFormat.U8_RGBA,
             width: texture.width, height: texture.height, depth: 1, numLevels: texture.levels.length,
         });
-        device.setResourceName(gfxTexture, texture.name);
+        device.setResourceName(this.gfxTexture, texture.name);
         const hostAccessPass = device.createHostAccessPass();
         const levels = texture.levels.map((t) => t.pixels);
-        hostAccessPass.uploadTextureData(gfxTexture, 0, levels);
+        hostAccessPass.uploadTextureData(this.gfxTexture, 0, levels);
         device.submitPass(hostAccessPass);
 
-        this.samplers.push(this.translateSampler(device, texture));
-
-        const viewerTexture: Texture = textureToCanvas(texture);
-        return { gfxTexture, viewerTexture };
-    }
-
-    private translateSampler(device: GfxDevice, texture: UVTX): GfxSampler {
-        return device.createSampler({
+        this.gfxSampler = cache.createSampler(device, {
             wrapS: translateCM(texture.cms),
             wrapT: translateCM(texture.cmt),
             minFilter: GfxTexFilterMode.POINT,
@@ -978,18 +981,22 @@ class Pilotwings64TextureHolder extends TextureHolder<UVTX> {
             mipFilter: GfxMipFilterMode.NO_MIP,
             minLOD: 0, maxLOD: 0,
         });
+
+        this.viewerTexture = textureToCanvas(uvtx);
     }
 
-    public mappingByIndex(mapping: TextureMapping, index: number): UVTX {
-        this.fillTextureMappingFromEntry(mapping, index);
-        mapping.gfxSampler = this.samplers[index];
-        return this.textureEntries[index];
+    public fillTextureMapping(m: TextureMapping): void {
+        m.gfxTexture = this.gfxTexture;
+        m.gfxSampler = this.gfxSampler;
+        m.width = this.uvtx.width;
+        m.height = this.uvtx.height;
+        m.lodBias = 0;
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyTexture(this.gfxTexture);
     }
 }
-
-const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 3, numSamplers: 2 },
-];
 
 class Pilotwings64Renderer implements SceneGfx {
     public uvctData: MeshData[] = [];
@@ -997,7 +1004,7 @@ class Pilotwings64Renderer implements SceneGfx {
     public uvctInstance: MeshRenderer[] = [];
     public uvmdInstance: MeshRenderer[] = [];
     public renderHelper: GfxRenderHelper;
-    public textureHolder = new Pilotwings64TextureHolder();
+    public textureData: TextureData[] = [];
     private renderTarget = new BasicRenderTarget();
 
     constructor(device: GfxDevice) {
@@ -1040,9 +1047,10 @@ class Pilotwings64Renderer implements SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        this.textureHolder.destroy(device);
         this.renderHelper.destroy(device);
         this.renderTarget.destroy(device);
+        for (let i = 0; i < this.textureData.length; i++)
+            this.textureData[i].destroy(device);
         for (let i = 0; i < this.uvctData.length; i++)
             this.uvctData[i].destroy(device);
         for (let i = 0; i < this.uvmdData.length; i++)
@@ -1113,17 +1121,21 @@ class Pilotwings64SceneDesc implements SceneDesc {
                 // preserve the ordering of the textures for indexing
                 return dummy(file.name);
             }
-        }) as UVTX[];
-        renderer.textureHolder.addTextures(device, uvtx);
+        });
+
+        const cache = renderer.renderHelper.getCache();
+        for (let i = 0; i < uvtx.length; i++) {
+            const data = new TextureData(device, cache, uvtx[i]);
+            renderer.textureData.push(data);
+        }
 
         const levelData = parseUVLV(fs.files.filter((file) => file.type === 'UVLV')[0]).levels[this.levelID];
 
         for (let terraIndex of levelData.terras) {
             const map = uvtr[0].maps[terraIndex];
-            const baseY = 0;
             for (let j = 0; j < map.contourPlacements.length; j++) {
                 const ct = map.contourPlacements[j];
-                const contourInstance = new MeshRenderer(device, uvctData[ct.contourIndex], renderer.textureHolder);
+                const contourInstance = new MeshRenderer(device, uvctData[ct.contourIndex], renderer.textureData);
                 mat4.multiply(contourInstance.modelMatrix, contourInstance.modelMatrix, toNoclipSpace);
                 mat4.translate(contourInstance.modelMatrix, contourInstance.modelMatrix, ct.position);
                 renderer.uvctInstance.push(contourInstance);
@@ -1131,7 +1143,7 @@ class Pilotwings64SceneDesc implements SceneDesc {
                 // render attached static models (Sobjs)
                 for (let model of uvct[ct.contourIndex].models) {
                     const instances = uvmdData[model.modelIndex].map(
-                        (part) => new MeshRenderer(device, part, renderer.textureHolder)
+                        (part) => new MeshRenderer(device, part, renderer.textureData)
                     );
                     const relPositions = uvmd[model.modelIndex].partPlacements;
                     for (let k = 0; k < instances.length; k++) {
