@@ -19,7 +19,6 @@ import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget } from "../gfx/helpers/RenderTargetHelpers";
 import { computeViewMatrix } from "../Camera";
 import { MathConstants } from "../MathHelpers";
-import { IS_DEVELOPMENT } from "../BuildVersion";
 import { TextureState, TileState } from "../bk/f3dex";
 import { ImageFormat, ImageSize, getImageFormatName, decodeTex_RGBA16, getImageSizeName, decodeTex_I4, decodeTex_I8, decodeTex_IA4, decodeTex_IA8, decodeTex_IA16 } from "../Common/N64/Image";
 import { TextureMapping } from "../TextureHolder";
@@ -1168,4 +1167,4 @@ const sceneDescs = [
     new Pilotwings64SceneDesc(10, 'Ever-Frost Island'),
 ];
 
-export const sceneGroup: SceneGroup = { id, name, sceneDescs, hidden: !IS_DEVELOPMENT };
+export const sceneGroup: SceneGroup = { id, name, sceneDescs };
