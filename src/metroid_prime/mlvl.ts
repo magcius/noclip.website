@@ -1,11 +1,10 @@
 
 // Implements Retro's MLVL format as seen in Metroid Prime 1.
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString, assertExists } from "../util";
+import { assert, assertExists } from "../util";
 
 import { InputStream } from "./stream"
-import { ResourceSystem, invalidAssetID } from "./resource";
+import { ResourceSystem } from "./resource";
 import * as STRG from "./strg";
 
 export interface Area {
@@ -34,6 +33,7 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
     if (version == WorldVersion.MP2) {
         const darkWorldNameID = stream.readAssetID();
     }
+
     if (version >= WorldVersion.MP2 && version <= WorldVersion.MP3) {
         const templeKeyWorldIndex = stream.readInt32();
     }
@@ -62,14 +62,13 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
     // Areas
     const areaCount = stream.readUint32();
 
-    if (version == WorldVersion.MP1) {
+    if (version == WorldVersion.MP1)
         assert(stream.readInt32() == 1);
-    }
 
     const areaTable: Area[] = [];
     for (let i = 0; i < areaCount; i++) {
         const areaSTRGID = stream.readAssetID();
-        const areaSTRG: STRG.STRG = assertExists(resourceSystem.loadAssetByID<STRG.STRG>(areaSTRGID, 'STRG'));
+        const areaSTRG = resourceSystem.loadAssetByID<STRG.STRG>(areaSTRGID, 'STRG');
         let areaName = (areaSTRG !== null ? areaSTRG.strings[0] : "");
 
         stream.skip(4*12); // Transform matrix
@@ -83,7 +82,7 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
             const attachedAreaCount = stream.readUint32();
             stream.skip(attachedAreaCount*2);
         }
-        
+
         if (version <= WorldVersion.MP2) {
             stream.skip(4);
             const dependencyTableCount = stream.readUint32();
@@ -105,9 +104,8 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
         if (version == WorldVersion.MP2) {
             const numModules = stream.readUint32();
 
-            for (let j = 0; j < numModules; j++) {
+            for (let j = 0; j < numModules; j++)
                 stream.readString();
-            }
 
             const numOffsets = stream.readUint32();
             stream.skip(numOffsets*4);
@@ -120,9 +118,8 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
         if (version >= WorldVersion.MP2) {
             const internalAreaName = stream.readString();
 
-            if (areaName.length == 0) {
+            if (areaName.length === 0)
                 areaName = "!" + internalAreaName;
-            }
         }
 
         areaTable.push({ areaName, areaMREAID });
