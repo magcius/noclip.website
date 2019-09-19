@@ -628,8 +628,9 @@ export class CMDLRenderer {
     private surfaceInstances: SurfaceInstance[] = [];
     public visible: boolean = true;
     public isSkybox: boolean = false;
+    public modelMatrix: mat4 = mat4.create();
 
-    constructor(device: GfxDevice, public textureHolder: RetroTextureHolder, public actorLights: ActorLights | null, public name: string, public modelMatrix: mat4, public cmdlData: CMDLData) {
+    constructor(device: GfxDevice, public textureHolder: RetroTextureHolder, public actorLights: ActorLights | null, public name: string, modelMatrix: mat4 | null, public cmdlData: CMDLData) {
         const materialSet = this.cmdlData.cmdl.materialSets[0];
 
         // First, create our group commands. These will store UBO buffer data which is shared between
@@ -658,6 +659,9 @@ export class CMDLRenderer {
 
             this.surfaceInstances.push(new SurfaceInstance(surfaceData, materialCommand, materialGroupCommand, this.modelMatrix));
         }
+
+        if (modelMatrix !== null)
+            mat4.copy(this.modelMatrix, modelMatrix);
     }
 
     public setVisible(visible: boolean): void {
@@ -693,9 +697,8 @@ class Actor {
         if (!this.entity.active)
             return;
 
-        if (this.entity.autoSpin) {
-            mat4.rotateZ(this.cmdlRenderer.modelMatrix, this.cmdlRenderer.modelMatrix, 0.2);
-        }
+        if (this.entity.autoSpin)
+            mat4.rotateZ(this.cmdlRenderer.modelMatrix, this.entity.modelMatrix, 8 * (viewerInput.time / 1000));
 
         this.cmdlRenderer.prepareToRender(device, renderHelper, viewerInput);
     }
