@@ -221,7 +221,6 @@ const sceneDescsMP1: Viewer.SceneDesc[] = [
 
 export const sceneGroupMP1: Viewer.SceneGroup = { id: idMP1, name: nameMP1, sceneDescs: sceneDescsMP1 };
 
-
 const idMP2 = "mp2";
 const nameMP2 = "Metroid Prime 2: Echoes";
 const sceneDescsMP2: Viewer.SceneDesc[] = [

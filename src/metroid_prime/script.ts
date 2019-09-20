@@ -2,7 +2,7 @@
 // Implements support for Retro Studios actor data
 
 import { ResourceSystem } from "./resource";
-import { readString, assert, assertExists } from "../util";
+import { readString, assert } from "../util";
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { mat4, vec3 } from 'gl-matrix';
 import { CMDL } from './cmdl';
@@ -76,7 +76,7 @@ export const enum MP1EntityType {
 }
 
 export class AnimationParameters {
-    ancs: ANCS;
+    ancs: ANCS | null;
     charID: number;
     animID: number;
 }
@@ -218,7 +218,7 @@ function readAnimationParameters(buffer: ArrayBufferSlice, offs: number, ent: En
     const view = buffer.createDataView();
     ent.animParams = new AnimationParameters();
     const ancsID = readString(buffer, offs, 4, false);
-    ent.animParams.ancs = assertExists(resourceSystem.loadAssetByID<ANCS>(ancsID, 'ANCS'));
+    ent.animParams.ancs = resourceSystem.loadAssetByID<ANCS>(ancsID, 'ANCS');
     ent.animParams.charID = view.getUint32(offs + 0x04);
     ent.animParams.animID = view.getUint32(offs + 0x08);
     return 0x0C;
