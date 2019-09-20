@@ -1780,10 +1780,6 @@ class SMGSpawner {
 
         this.addActor(obj);
     }
-
-    public destroy(device: GfxDevice): void {
-        this.sceneObjHolder.destroy(device);
-    }
 }
 
 interface JMapInfoIter_StageDataHolder extends JMapInfoIter {
@@ -2085,7 +2081,6 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
             sceneObjHolder.messageDataHolder = new MessageDataHolder(modelCache.getArchive(`UsEnglish/MessageData/Message.arc`)!);
 
         const spawner = new SMGSpawner(galaxyName, this.pathBase, sceneObjHolder);
-        context.destroyablePool.push(spawner);
         spawner.requestArchives();
 
         await modelCache.waitForLoad();

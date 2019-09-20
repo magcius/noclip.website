@@ -57,8 +57,6 @@ export class ParticleResourceHolder {
 
     public destroy(device: GfxDevice): void {
         this.jpacData.destroy(device);
-        for (const [, resourceData] of this.resourceDatas.entries())
-            resourceData.destroy(device);
     }
 }
 

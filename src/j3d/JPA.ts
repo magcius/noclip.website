@@ -562,12 +562,6 @@ export class JPAResourceData {
         if (this.texData[idx] === undefined)
             this.texData[idx] = this.jpacData.translateTexture(device, cache, this.res.tdb1[idx]);
     }
-
-    public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.texData.length; i++)
-            if (this.texData[i] !== undefined)
-                this.texData[i].destroy(device);
-    }
 }
 
 function hermiteInterpolate(k: Float32Array, i1: number, tn: number): number {

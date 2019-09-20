@@ -510,8 +510,6 @@ class SimpleEffectSystem {
 
     public destroy(device: GfxDevice): void {
         this.jpacData.destroy(device);
-        for (const [, resourceData] of this.resourceDatas.entries())
-            resourceData.destroy(device);
         this.emitterManager.destroy(device);
     }
 }

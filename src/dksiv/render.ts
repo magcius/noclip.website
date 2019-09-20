@@ -181,7 +181,6 @@ export class Scene implements Viewer.SceneGfx {
     private program: GfxProgram;
     private renderTarget = new BasicRenderTarget();
     private ivRenderers: IVRenderer[] = [];
-    private sceneUniformBufferBinding: GfxBindings;
     private renderHelper: GfxRenderHelper;
 
     constructor(device: GfxDevice, public ivs: IV.IV[]) {
@@ -234,7 +233,6 @@ export class Scene implements Viewer.SceneGfx {
     public destroy(device: GfxDevice): void {
         device.destroyInputLayout(this.inputLayout);
         device.destroyProgram(this.program);
-        device.destroyBindings(this.sceneUniformBufferBinding);
         this.ivRenderers.forEach((r) => r.destroy(device));
         this.renderHelper.destroy(device);
         this.renderTarget.destroy(device);

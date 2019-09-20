@@ -5,7 +5,7 @@ import * as CX from "../compression/CX";
 import * as UI from '../ui';
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString, align, hexdump } from "../util";
+import { assert, readString, align } from "../util";
 import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
 import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render';
 import AnimationController from '../AnimationController';
@@ -104,7 +104,6 @@ class BrawlRenderer extends BasicGXRendererHelper {
         super.destroy(device);
 
         this.textureHolder.destroy(device);
-        this.renderHelper.destroy(device);
 
         for (let i = 0; i < this.models.length; i++)
             this.models[i].destroy(device);

@@ -3,7 +3,7 @@ import * as Viewer from '../viewer';
 import { DataFetcher, getDataURLForPath } from '../DataFetcher';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
-import { getTextDecoder } from '../util';
+import { getTextDecoder, assert } from '../util';
 import { FezRenderer } from './FezRenderer';
 import { TrilesetData } from './TrileData';
 import { ArtObjectData } from './ArtObjectData';
@@ -37,58 +37,60 @@ function fetchPNG(path: string): Promise<ImageData> {
 }
 
 class ModelCache {
-    public trilesetPromiseCache = new Map<string, Promise<TrilesetData>>();
-    public artObjectPromiseCache = new Map<string, Promise<ArtObjectData>>();
-    public backgroundPlanePromiseCache = new Map<string, Promise<BackgroundPlaneData>>();
+    public promiseCache = new Map<string, Promise<void>>();
+    public trilesetDatas: TrilesetData[] = [];
+    public artObjectDatas: ArtObjectData[] = [];
+    public backgroundPlaneDatas: BackgroundPlaneData[] = [];
 
     constructor(private dataFetcher: DataFetcher) {
     }
 
-    private async fetchTrilesetInternal(device: GfxDevice, path: string): Promise<TrilesetData> {
+    public waitForLoad(): Promise<void> {
+        return Promise.all(this.promiseCache.values()) as unknown as Promise<void>;
+    }
+
+    private async fetchTrilesetInternal(device: GfxDevice, path: string): Promise<void> {
         const [xml, png] = await Promise.all([
             fetchXML(this.dataFetcher, `${pathBase}/trile sets/${path}.xml`),
             fetchPNG(`${pathBase}/trile sets/${path}.png`),
         ]);
-        return new TrilesetData(device, xml, png);
+        this.trilesetDatas.push(new TrilesetData(device, xml, png));
     }
 
-    private async fetchArtObjectInternal(device: GfxDevice, path: string): Promise<ArtObjectData> {
+    private async fetchArtObjectInternal(device: GfxDevice, path: string): Promise<void> {
         const [xml, png] = await Promise.all([
             fetchXML(this.dataFetcher, `${pathBase}/art objects/${path}.xml`),
             fetchPNG(`${pathBase}/art objects/${path}.png`),
         ]);
-        return new ArtObjectData(device, path, xml, png);
+        this.artObjectDatas.push(new ArtObjectData(device, path, xml, png));
     }
 
-    private async fetchBackgroundPlaneInternal(device: GfxDevice, path: string, isAnimated: boolean): Promise<BackgroundPlaneData> {
+    private async fetchBackgroundPlaneInternal(device: GfxDevice, path: string, isAnimated: boolean): Promise<void> {
         if (isAnimated) {
             const [png, xml] = await Promise.all([
                 fetchPNG(`${pathBase}/background planes/${path}.ani.png`),
                 fetchXML(this.dataFetcher, `${pathBase}/background planes/${path}.xml`),
             ]);
-            return new BackgroundPlaneData(device, path, png, xml);
+            this.backgroundPlaneDatas.push(new BackgroundPlaneData(device, path, png, xml));
         } else {
             const png = await fetchPNG(`${pathBase}/background planes/${path}.png`);
-            return new BackgroundPlaneData(device, path, png, null);
+            this.backgroundPlaneDatas.push(new BackgroundPlaneData(device, path, png, null));
         }
     }
 
-    public fetchTrileset(device: GfxDevice, path: string): Promise<TrilesetData> {
-        if (!this.trilesetPromiseCache.has(path))
-            this.trilesetPromiseCache.set(path, this.fetchTrilesetInternal(device, path));
-        return this.trilesetPromiseCache.get(path)!;
+    public fetchTrileset(device: GfxDevice, path: string): void {
+        if (!this.promiseCache.has(path))
+            this.promiseCache.set(path, this.fetchTrilesetInternal(device, path));
     }
 
-    public fetchArtObject(device: GfxDevice, path: string): Promise<ArtObjectData> {
-        if (!this.artObjectPromiseCache.has(path))
-            this.artObjectPromiseCache.set(path, this.fetchArtObjectInternal(device, path));
-        return this.artObjectPromiseCache.get(path)!;
+    public fetchArtObject(device: GfxDevice, path: string): void {
+        if (!this.promiseCache.has(path))
+            this.promiseCache.set(path, this.fetchArtObjectInternal(device, path));
     }
 
-    public fetchBackgroundPlane(device: GfxDevice, path: string, isAnimated: boolean): Promise<BackgroundPlaneData> {
-        if (!this.backgroundPlanePromiseCache.has(path))
-            this.backgroundPlanePromiseCache.set(path, this.fetchBackgroundPlaneInternal(device, path, isAnimated));
-        return this.backgroundPlanePromiseCache.get(path)!;
+    public fetchBackgroundPlane(device: GfxDevice, path: string, isAnimated: boolean): void {
+        if (!this.promiseCache.has(path))
+            this.promiseCache.set(path, this.fetchBackgroundPlaneInternal(device, path, isAnimated));
     }
 }
 
@@ -113,25 +115,26 @@ class FezSceneDesc implements Viewer.SceneDesc {
         const trilesetPromise = cache.fetchTrileset(device, trilesetID);
 
         const artObjectsXml = levelDocument.querySelectorAll('ArtObjects Entry ArtObjectInstance')!;
-        const artObjectPromises: Promise<ArtObjectData>[] = [];
         for (let i = 0; i < artObjectsXml.length; i++) {
             const artObjectName = artObjectsXml[i].getAttribute('name')!.toLowerCase();
-            artObjectPromises.push(cache.fetchArtObject(device, artObjectName));
+            cache.fetchArtObject(device, artObjectName);
         }
 
         const backgroundPlanes = levelDocument.querySelectorAll('BackgroundPlanes Entry BackgroundPlane');
-        const backgroundPlanePromises: Promise<BackgroundPlaneData>[] = [];
         for (let i = 0; i < backgroundPlanes.length; i++) {
             const backgroundPlane = backgroundPlanes[i].getAttribute('textureName')!.toLowerCase();
             const isAnimated = parseBoolean(backgroundPlanes[i].getAttribute('animated')!);
-            backgroundPlanePromises.push(cache.fetchBackgroundPlane(device, backgroundPlane, isAnimated));
+            cache.fetchBackgroundPlane(device, backgroundPlane, isAnimated);
         }
 
-        const [trilesetData, artObjectDatas, backgroundPlaneDatas] = await Promise.all([
-            trilesetPromise,
-            Promise.all(artObjectPromises),
-            Promise.all(backgroundPlanePromises),
-        ]);
+        await cache.waitForLoad();
+
+        assert(cache.trilesetDatas.length === 1);
+        const trilesetData = cache.trilesetDatas[0];
+
+        const artObjectDatas = cache.artObjectDatas;
+        const backgroundPlaneDatas = cache.backgroundPlaneDatas;
+
         return new FezRenderer(device, levelDocument, trilesetData, artObjectDatas, backgroundPlaneDatas);
     }
 }
