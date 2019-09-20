@@ -188,7 +188,7 @@ class RetroSceneDesc implements Viewer.SceneDesc {
 
                 for (let i = 0; i < areas.length; i++) {
                     const mreaEntry = areas[i];
-                    const mrea: MREA.MREA = assertExists(resourceSystem.loadAssetByID<MREA.MREA>(mreaEntry.areaMREAID, 'MREA'));
+                    const mrea = resourceSystem.loadAssetByID<MREA.MREA>(mreaEntry.areaMREAID, 'MREA');
 
                     if (mrea !== null && mreaEntry.areaName.indexOf("worldarea") === -1) {
                         const areaRenderer = new MREARenderer(device, renderer.modelCache, cache, renderer.textureHolder, mreaEntry.areaName, mrea);
