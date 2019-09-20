@@ -545,17 +545,19 @@ class NPCActor extends LiveActor {
     public goods0: PartsModel | null = null;
     public goods1: PartsModel | null = null;
 
-    protected equipment(sceneObjHolder: SceneObjHolder, itemGoods: NPCActorItem, isIndirect: boolean = false): void {
-        if (isIndirect) {
-            if (itemGoods.goods0)
-                this.goods0 = createNPCGoods(sceneObjHolder, this, itemGoods.goods0, itemGoods.goodsJoint0);
-            if (itemGoods.goods1)
-                this.goods1 = createNPCGoods(sceneObjHolder, this, itemGoods.goods1, itemGoods.goodsJoint1);
-        } else {
-            if (itemGoods.goods0)
-                this.goods0 = createIndirectNPCGoods(sceneObjHolder, this, itemGoods.goods0, itemGoods.goodsJoint0);
-            if (itemGoods.goods1)
-                this.goods1 = createIndirectNPCGoods(sceneObjHolder, this, itemGoods.goods1, itemGoods.goodsJoint1);
+    protected equipment(sceneObjHolder: SceneObjHolder, itemGoods: NPCActorItem | null, isIndirect: boolean = false): void {
+        if (itemGoods !== null) {
+            if (isIndirect) {
+                if (itemGoods.goods0)
+                    this.goods0 = createNPCGoods(sceneObjHolder, this, itemGoods.goods0, itemGoods.goodsJoint0);
+                if (itemGoods.goods1)
+                    this.goods1 = createNPCGoods(sceneObjHolder, this, itemGoods.goods1, itemGoods.goodsJoint1);
+            } else {
+                if (itemGoods.goods0)
+                    this.goods0 = createIndirectNPCGoods(sceneObjHolder, this, itemGoods.goods0, itemGoods.goodsJoint0);
+                if (itemGoods.goods1)
+                    this.goods1 = createIndirectNPCGoods(sceneObjHolder, this, itemGoods.goods1, itemGoods.goodsJoint1);
+            }
         }
     }
 }
@@ -821,7 +823,7 @@ export class Kinopio extends NPCActor {
         this.boundingSphereRadius = 100;
 
         const itemGoodsIdx = assertExists(getJMapInfoArg7(infoIter));
-        const itemGoods = assertExists(sceneObjHolder.npcDirector.getNPCItemData('Kinopio', itemGoodsIdx));
+        const itemGoods = sceneObjHolder.npcDirector.getNPCItemData('Kinopio', itemGoodsIdx);
         this.equipment(sceneObjHolder, itemGoods);
 
         const arg2 = getJMapInfoArg2(infoIter);
@@ -943,7 +945,7 @@ export class PenguinRacer extends NPCActor {
 
         this.boundingSphereRadius = 100;
 
-        const itemGoods = sceneObjHolder.npcDirector.getNPCItemData(this.name, 0)!;
+        const itemGoods = sceneObjHolder.npcDirector.getNPCItemData(this.name, 0);
         this.equipment(sceneObjHolder, itemGoods);
 
         const arg7 = getJMapInfoArg7(infoIter, 0);
@@ -974,7 +976,7 @@ export class TicoComet extends NPCActor {
         this.boundingSphereRadius = 100;
 
         const itemGoodsIdx = 0;
-        const itemGoods = sceneObjHolder.npcDirector.getNPCItemData('TicoComet', itemGoodsIdx)!;
+        const itemGoods = sceneObjHolder.npcDirector.getNPCItemData('TicoComet', itemGoodsIdx);
         this.equipment(sceneObjHolder, itemGoods);
 
         this.goods0!.startAction('LeftRotate');
