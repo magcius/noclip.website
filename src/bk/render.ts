@@ -1,7 +1,7 @@
 
 import * as Viewer from '../viewer';
 import { DeviceProgram } from "../Program";
-import { Texture, getImageFormatString, RSPOutput, Vertex, DrawCall, GeometryMode, OtherModeH_CycleType } from "./f3dex";
+import { Texture, getImageFormatString, RSPOutput, Vertex, DrawCall, GeometryMode, OtherModeH_CycleType, getTextFiltFromOtherModeH } from "./f3dex";
 import { GfxDevice, GfxTextureDimension, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { assert, nArray } from '../util';
@@ -12,6 +12,7 @@ import { TextureMapping } from '../TextureHolder';
 import { interactiveVizSliderSelect } from '../DebugJunk';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { TextFilt } from '../Common/N64/Image';
 
 class F3DEX_Program extends DeviceProgram {
     public static a_Position = 0;
@@ -83,7 +84,7 @@ void main() {
         const drawCall = this.drawCall;
         const cycletype: OtherModeH_CycleType = (drawCall.DP_OtherModeH >>> 20) & 0x03;
 
-        const textFilt = (this.drawCall.DP_OtherModeH >>> 12) & 0x03;
+        const textFilt = getTextFiltFromOtherModeH(drawCall.DP_OtherModeH);
         let texFiltStr: string;
         if (textFilt === TextFilt.G_TF_POINT)
             texFiltStr = 'Point';
@@ -271,12 +272,6 @@ function translateCullMode(m: number): GfxCullMode {
         return GfxCullMode.BACK;
     else
         return GfxCullMode.NONE;
-}
-
-const enum TextFilt {
-    G_TF_POINT   = 0x00,
-    G_TF_AVERAGE = 0x03,
-    G_TF_BILERP  = 0x02,
 }
 
 const modelViewScratch = mat4.create();

@@ -1,7 +1,7 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { nArray, assert, assertExists, hexzero } from "../util";
-import { parseTLUT, ImageFormat, getImageFormatName, ImageSize, getImageSizeName, TextureLUT, decodeTex_RGBA16, decodeTex_IA8, decodeTex_RGBA32, decodeTex_CI4, decodeTex_CI8 } from "../Common/N64/Image";
+import { parseTLUT, ImageFormat, getImageFormatName, ImageSize, getImageSizeName, TextureLUT, decodeTex_RGBA16, decodeTex_IA8, decodeTex_RGBA32, decodeTex_CI4, decodeTex_CI8, TextFilt } from "../Common/N64/Image";
 
 // Interpreter for N64 F3DEX microcode.
 
@@ -164,11 +164,35 @@ export class RSPOutput {
     }
 }
 
+const enum OtherModeH_Layout {
+    G_MDSFT_BLENDMASK   = 0,
+    G_MDSFT_ALPHADITHER = 4,
+    G_MDSFT_RGBDITHER   = 6,
+    G_MDSFT_COMBKEY     = 8,
+    G_MDSFT_TEXTCONV    = 9,
+    G_MDSFT_TEXTFILT    = 12,
+    G_MDSFT_TEXTLUT     = 14,
+    G_MDSFT_TEXTLOD     = 16,
+    G_MDSFT_TEXTDETAIL  = 17,
+    G_MDSFT_TEXTPERSP   = 19,
+    G_MDSFT_CYCLETYPE   = 20,
+    G_MDSFT_COLORDITHER = 22,
+    G_MDSFT_PIPELINE    = 23,
+}
+
 export const enum OtherModeH_CycleType {
     G_CYC_1CYCLE = 0x00,
     G_CYC_2CYCLE = 0x01,
     G_CYC_COPY   = 0x02,
     G_CYC_FILL   = 0x03,
+}
+
+export function getCycleTypeFromOtherModeH(modeH: number): OtherModeH_CycleType {
+    return (modeH >>> OtherModeH_Layout.G_MDSFT_CYCLETYPE) & 0x03;
+}
+
+export function getTextFiltFromOtherModeH(modeH: number): TextFilt {
+    return (modeH >>> OtherModeH_Layout.G_MDSFT_TEXTFILT) & 0x03;
 }
 
 function translateTLUT(dst: Uint8Array, segmentBuffers: ArrayBufferSlice[], dramAddr: number, siz: ImageSize): void {
@@ -407,7 +431,7 @@ export class RSPState {
             assert(false);
         } else {
             // We're in TILE mode. Now check if we're in two-cycle mode.
-            const cycletype: OtherModeH_CycleType = (this.DP_OtherModeH >>> 20) & 0x03;
+            const cycletype = getCycleTypeFromOtherModeH(this.DP_OtherModeH);
             assert(cycletype === OtherModeH_CycleType.G_CYC_1CYCLE || cycletype === OtherModeH_CycleType.G_CYC_2CYCLE);
 
             // XXX(jstpierre): Hack for Banjo-Kazooie mipmaps. If we want to use mipmaps,
