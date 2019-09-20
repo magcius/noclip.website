@@ -101,8 +101,6 @@ class BKRenderer implements Viewer.SceneGfx {
     public destroy(device: GfxDevice): void {
         this.renderTarget.destroy(device);
         this.renderHelper.destroy(device);
-        for (let i = 0; i < this.n64Renderers.length; i++)
-            this.n64Renderers[i].destroy(device);
         for (let i = 0; i < this.n64Datas.length; i++)
             this.n64Datas[i].destroy(device);
         this.textureHolder.destroy(device);

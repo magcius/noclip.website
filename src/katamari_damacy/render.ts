@@ -256,7 +256,7 @@ export class BINModelPartInstance {
         const wrapS = translateWrapMode(wms);
         const wrapT = translateWrapMode(wmt);
 
-        this.gfxSampler = device.createSampler({
+        this.gfxSampler = cache.createSampler(device, {
             minFilter, magFilter, mipFilter,
             wrapS, wrapT,
             minLOD: 1, maxLOD: 1,
@@ -287,10 +287,6 @@ export class BINModelPartInstance {
         offs += fillMatrix4x3(mapped, offs, modelMatrix);
         offs += fillMatrix4x2(mapped, offs, textureMatrix);
         offs += fillColor(mapped, offs, this.binModelPart.diffuseColor);
-    }
-
-    public destroy(device: GfxDevice): void {
-        device.destroySampler(this.gfxSampler);
     }
 }
 
@@ -329,11 +325,6 @@ export class BINModelInstance {
             this.modelParts[i].prepareToRender(renderInstManager, textureHolder, scratchMat4, this.modelMatrix);
 
         renderInstManager.popTemplateRenderInst();
-    }
-
-    public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.modelParts.length; i++)
-            this.modelParts[i].destroy(device);
     }
 }
 

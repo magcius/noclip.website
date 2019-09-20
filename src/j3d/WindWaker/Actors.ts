@@ -186,7 +186,7 @@ export class WhiteFlowerData {
             minFilter: GX.TexFilter.LINEAR, magFilter: GX.TexFilter.LINEAR,
             minLOD: 1, maxLOD: 1, lodBias: 0,
         };
-        this.textureData = new BTIData(device, texture);
+        this.textureData = new BTIData(device, cache, texture);
         this.textureData.fillTextureMapping(this.textureMapping);
 
         const vtxArrays: GX_Array[] = [];
@@ -271,7 +271,7 @@ export class PinkFlowerData {
             minFilter: GX.TexFilter.LINEAR, magFilter: GX.TexFilter.LINEAR,
             minLOD: 1, maxLOD: 1, lodBias: 0,
         };
-        this.textureData = new BTIData(device, texture);
+        this.textureData = new BTIData(device, cache, texture);
         this.textureData.fillTextureMapping(this.textureMapping);
 
         const vtxArrays: GX_Array[] = [];
@@ -356,7 +356,7 @@ export class BessouFlowerData {
             minFilter: GX.TexFilter.LINEAR, magFilter: GX.TexFilter.LINEAR,
             minLOD: 1, maxLOD: 1, lodBias: 0,
         };
-        this.textureData = new BTIData(device, texture);
+        this.textureData = new BTIData(device, cache, texture);
         this.textureData.fillTextureMapping(this.textureMapping);
 
         const vtxArrays: GX_Array[] = [];
@@ -446,6 +446,5 @@ export class FlowerObjectRenderer implements ObjectRenderer {
     }
 
     public destroy(device: GfxDevice): void {
-        this.materialHelper.destroy(device);
     }
 }

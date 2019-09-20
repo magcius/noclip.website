@@ -726,11 +726,11 @@ interface TEX1_SamplerSub {
     maxLOD: number;
 }
 
-function translateSampler(device: GfxDevice, sampler: TEX1_SamplerSub): GfxSampler {
+function translateSampler(device: GfxDevice, cache: GfxRenderCache, sampler: TEX1_SamplerSub): GfxSampler {
     const [minFilter, mipFilter] = translateTexFilterGfx(sampler.minFilter);
     const [magFilter]            = translateTexFilterGfx(sampler.magFilter);
 
-    const gfxSampler = device.createSampler({
+    const gfxSampler = cache.createSampler(device, {
         wrapS: translateWrapModeGfx(sampler.wrapS),
         wrapT: translateWrapModeGfx(sampler.wrapT),
         minFilter, mipFilter, magFilter,
@@ -748,8 +748,8 @@ export class BTIData {
     private gfxTexture: GfxTexture;
     public viewerTexture: Texture;
 
-    constructor(device: GfxDevice, public btiTexture: BTI_Texture) {
-        this.gfxSampler = translateSampler(device, btiTexture);
+    constructor(device: GfxDevice, cache: GfxRenderCache, public btiTexture: BTI_Texture) {
+        this.gfxSampler = translateSampler(device, cache, btiTexture);
         const mipChain = calcMipChain(this.btiTexture, this.btiTexture.mipCount);
         const { viewerTexture, gfxTexture } = loadTextureFromMipChain(device, mipChain);
         this.gfxTexture = gfxTexture;
@@ -766,7 +766,6 @@ export class BTIData {
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroySampler(this.gfxSampler);
         device.destroyTexture(this.gfxTexture);
     }
 }
@@ -776,10 +775,10 @@ export class TEX1Data {
     private gfxTextures: (GfxTexture | null)[] = [];
     public viewerTextures: (Texture | null)[] = [];
 
-    constructor(device: GfxDevice, public tex1: TEX1) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public tex1: TEX1) {
         for (let i = 0; i < this.tex1.samplers.length; i++) {
             const tex1Sampler = this.tex1.samplers[i];
-            this.gfxSamplers.push(translateSampler(device, tex1Sampler));
+            this.gfxSamplers.push(translateSampler(device, cache, tex1Sampler));
         }
 
         for (let i = 0; i < this.tex1.textureDatas.length; i++) {
@@ -815,8 +814,6 @@ export class TEX1Data {
     }
 
     public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.gfxSamplers.length; i++)
-            device.destroySampler(this.gfxSamplers[i]);
         for (let i = 0; i < this.gfxTextures.length; i++)
             if (this.gfxTextures[i] !== null)
                 device.destroyTexture(this.gfxTextures[i]!);
@@ -845,7 +842,7 @@ export class BMDModel {
     ) {
         const mat3 = (bmt !== null && bmt.mat3 !== null) ? bmt.mat3 : bmd.mat3;
         const tex1 = (bmt !== null && bmt.tex1 !== null) ? bmt.tex1 : bmd.tex1;
-        this.tex1Data = new TEX1Data(device, tex1);
+        this.tex1Data = new TEX1Data(device, cache, tex1);
 
         // Load shape data.
         const loadedVertexDatas = [];

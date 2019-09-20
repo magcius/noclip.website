@@ -420,11 +420,6 @@ export class GXMaterialHelperGfx {
         renderInst.setGfxProgram(this.gfxProgram!);
         setSortKeyProgramKey(renderInst.sortKey, this.programKey);
     }
-
-    public destroy(device: GfxDevice): void {
-        if (this.gfxProgram !== null)
-            device.destroyProgram(this.gfxProgram);
-    }
 }
 
 export class GXShapeHelperGfx {

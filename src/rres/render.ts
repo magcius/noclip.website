@@ -406,7 +406,6 @@ class MaterialInstance {
     }
 
     public destroy(device: GfxDevice): void {
-        this.materialHelper.destroy(device);
     }
 }
 

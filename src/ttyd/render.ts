@@ -121,7 +121,7 @@ class MaterialInstance {
         this.materialHelper.cacheProgram(device, cache);
 
         this.gfxSamplers = this.material.samplers.map((sampler) => {
-            return MaterialInstance.translateSampler(device, sampler);
+            return MaterialInstance.translateSampler(device, cache, sampler);
         });
 
         this.isTranslucent = material.materialLayer === MaterialLayer.BLEND;
@@ -148,8 +148,8 @@ class MaterialInstance {
         }
     }
 
-    private static translateSampler(device: GfxDevice, sampler: Sampler): GfxSampler {
-        return device.createSampler({
+    private static translateSampler(device: GfxDevice, cache: GfxRenderCache, sampler: Sampler): GfxSampler {
+        return cache.createSampler(device, {
             minFilter: GfxTexFilterMode.BILINEAR,
             magFilter: GfxTexFilterMode.POINT,
             mipFilter: GfxMipFilterMode.LINEAR,
@@ -209,11 +209,6 @@ class MaterialInstance {
 
         const layer = this.getRendererLayer(this.material.materialLayer);
         renderInst.sortKey = makeSortKey(layer, this.materialHelper.programKey);
-    }
-
-    public destroy(device: GfxDevice) {
-        this.materialHelper.destroy(device);
-        this.gfxSamplers.forEach((sampler) => device.destroySampler(sampler));
     }
 }
 
@@ -427,9 +422,6 @@ class NodeInstance {
     }
 
     public destroy(device: GfxDevice): void {
-        if (this.collisionMaterialInstance !== null)
-            this.collisionMaterialInstance.destroy(device);
-
         for (let i = 0; i < this.children.length; i++)
             this.children[i].destroy(device);
     }
@@ -568,7 +560,6 @@ export class WorldRenderer extends BasicGXRendererHelper {
         super.destroy(device);
 
         this.bufferCoalescer.destroy(device);
-        this.materialInstances.forEach((cmd) => cmd.destroy(device));
         this.batchInstances.forEach((cmd) => cmd.destroy(device));
         this.textureHolder.destroy(device);
         if (this.backgroundRenderer !== null)

@@ -32,10 +32,6 @@ class Command_Material {
             }
         }
     }
-
-    public destroy(device: GfxDevice): void {
-        this.materialHelper.destroy(device);
-    }
 }
 
 const bboxScratch = new AABB();
@@ -107,7 +103,6 @@ class Command_Bin {
         this.gfxTextures.forEach((t) => device.destroyTexture(t));
         this.gfxSamplers.forEach((t) => device.destroySampler(t));
         this.batchCommands.forEach((t) => t.destroy(device));
-        this.materialCommands.forEach((t) => t.destroy(device));
         this.bufferCoalescer.destroy(device);
     }
 

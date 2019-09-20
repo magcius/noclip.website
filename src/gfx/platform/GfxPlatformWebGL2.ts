@@ -514,6 +514,8 @@ class ResourceCreationTracker {
 
     public trackResourceDestroyed(o: GfxResource): void {
         if (!TRACK_RESOURCES) return;
+        if (!this.creationStacks.has(o))
+            console.warn(`Object double freed:`, o);
         this.creationStacks.delete(o);
     }
 

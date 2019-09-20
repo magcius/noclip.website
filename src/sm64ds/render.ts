@@ -18,6 +18,7 @@ import { assert, nArray } from '../util';
 import { BCA, bindBCAAnimator, BCAAnimator } from './sm64ds_bca';
 import AnimationController from '../AnimationController';
 import { computeRotationMatrixFromSRTMatrix } from '../MathHelpers';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 function calcBBoardMtx(dst: mat4, m: mat4): void {
     // Modifies m in-place.
@@ -207,7 +208,7 @@ class MaterialData {
 
     public textureMapping = nArray(1, () => new TextureMapping());
 
-    constructor(device: GfxDevice, public material: BMD.Material) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public material: BMD.Material) {
         const texture = this.material.texture;
 
         if (texture !== null) {
@@ -217,7 +218,7 @@ class MaterialData {
             hostAccessPass.uploadTextureData(this.gfxTexture, 0, [texture.pixels]);
             device.submitPass(hostAccessPass);
 
-            this.gfxSampler = device.createSampler({
+            this.gfxSampler = cache.createSampler(device, {
                 minFilter: GfxTexFilterMode.POINT,
                 magFilter: GfxTexFilterMode.POINT,
                 mipFilter: GfxMipFilterMode.NO_MIP,
@@ -235,8 +236,6 @@ class MaterialData {
     public destroy(device: GfxDevice): void {
         if (this.gfxTexture !== null)
             device.destroyTexture(this.gfxTexture);
-        if (this.gfxSampler !== null)
-            device.destroySampler(this.gfxSampler);
     }
 }
 
@@ -244,9 +243,9 @@ export class BMDData {
     public materialData: MaterialData[] = [];
     public batchData: BatchData[] = [];
 
-    constructor(device: GfxDevice, public bmd: BMD.BMD) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public bmd: BMD.BMD) {
         for (let i = 0; i < this.bmd.materials.length; i++)
-            this.materialData.push(new MaterialData(device, this.bmd.materials[i]));
+            this.materialData.push(new MaterialData(device, cache, this.bmd.materials[i]));
 
         for (let i = 0; i < this.bmd.joints.length; i++) {
             const joint = this.bmd.joints[i];

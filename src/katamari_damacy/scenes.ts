@@ -85,11 +85,6 @@ class ObjectRenderer {
         const visible = areaNo >= this.objectSpawn.dispOnAreaNo && ((areaNo < this.objectSpawn.dispOffAreaNo) || this.objectSpawn.dispOffAreaNo === -1);
         this.setVisible(visible);
     }
-
-    public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.modelInstance.length; i++)
-            this.modelInstance[i].destroy(device);
-    }
 }
 
 class StageAreaSector {
@@ -115,11 +110,6 @@ class StageAreaRenderer {
 
     public setActiveAreaNo(areaNo: number): void {
         this.setVisible(areaNo === this.areaIndex);
-    }
-
-    public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.modelInstance.length; i++)
-            this.modelInstance[i].destroy(device);
     }
 }
 
@@ -237,10 +227,6 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
 
         for (let i = 0; i < this.modelSectorData.length; i++)
             this.modelSectorData[i].destroy(device);
-        for (let i = 0; i < this.stageAreaRenderers.length; i++)
-            this.stageAreaRenderers[i].destroy(device);
-        for (let i = 0; i < this.objectRenderers.length; i++)
-            this.objectRenderers[i].destroy(device);
     }
 }
 

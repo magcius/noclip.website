@@ -45,9 +45,10 @@ export class ParticleResourceHolder {
         if (idx < 0)
             return null;
 
-        const device = sceneObjHolder.modelCache.device;
         if (!this.resourceDatas.has(idx)) {
-            const resData = new JPA.JPAResourceData(device, this.jpacData, this.jpac.effects[idx]);
+            const device = sceneObjHolder.modelCache.device;
+            const cache = sceneObjHolder.modelCache.cache;
+            const resData = new JPA.JPAResourceData(device, cache, this.jpacData, this.jpac.effects[idx]);
             resData.name = name;
             this.resourceDatas.set(idx, resData);
         }

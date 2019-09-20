@@ -19,7 +19,6 @@
         "module": "commonjs",
         "types": [
             "gl-matrix",
-            "webassembly-js-api",
             "webgl2",
             "pako"
         ]

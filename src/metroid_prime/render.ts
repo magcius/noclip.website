@@ -182,7 +182,6 @@ class MaterialGroupInstance {
     }
 
     public destroy(device: GfxDevice) {
-        this.materialHelper.destroy(device);
         device.destroySampler(this.gfxSampler);
     }
 

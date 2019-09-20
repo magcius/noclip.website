@@ -399,11 +399,6 @@ class DrawCallInstance {
         this.computeTextureMatrix(texMatrixScratch, 1);
         offs += fillMatrix4x2(mappedF32, offs, texMatrixScratch);
     }
-
-    public destroy(device: GfxDevice): void {
-        if (this.gfxProgram !== null)
-            device.destroyProgram(this.gfxProgram);
-    }
 }
 
 export const enum BKPass {
@@ -475,10 +470,5 @@ export class N64Renderer {
 
         for (let i = 0; i < this.drawCallInstances.length; i++)
             this.drawCallInstances[i].prepareToRender(device, renderInstManager, viewerInput, this.isSkybox, this.modelMatrix);
-    }
-
-    public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.drawCallInstances.length; i++)
-            this.drawCallInstances[i].destroy(device);
     }
 }

@@ -21,6 +21,7 @@ import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { SceneContext } from '../SceneBase';
 import { DataFetcher } from '../DataFetcher';
 import { MathConstants, clamp } from '../MathHelpers';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 // https://github.com/Arisotura/SM64DSe/blob/master/obj_list.txt
 enum ObjectId {
@@ -433,23 +434,23 @@ class ModelCache {
         return assertExists(this.fileDataCache.get(path));
     }
 
-    public getModel(device: GfxDevice, modelPath: string): BMDData {
+    public getModel(device: GfxDevice, cache: GfxRenderCache, modelPath: string): BMDData {
         let p = this.modelCache.get(modelPath);
 
         if (p === undefined) {
             const buffer = assertExists(this.fileDataCache.get(modelPath));
             const result = LZ77.maybeDecompress(buffer);
             const bmd = BMD.parse(result);
-            p = new BMDData(device, bmd);
+            p = new BMDData(device, cache, bmd);
             this.modelCache.set(modelPath, p);
         }
 
         return p;
     }
 
-    public async fetchModel(device: GfxDevice, filename: string): Promise<BMDData> {
+    public async fetchModel(device: GfxDevice, cache: GfxRenderCache, filename: string): Promise<BMDData> {
         await this.fetchFileData(filename);
-        return this.getModel(device, filename);
+        return this.getModel(device, cache, filename);
     }
 
     public destroy(device: GfxDevice): void {
@@ -466,9 +467,9 @@ class SM64DSRenderer implements Viewer.SceneGfx {
     public objectRenderers: ObjectRenderer[] = [];
     public bmdRenderers: BMDModelInstance[] = [];
     public animationController = new AnimationController();
+    public renderInstManager = new GfxRenderInstManager();
 
     private uniformBuffer: GfxRenderDynamicUniformBuffer;
-    private renderInstManager = new GfxRenderInstManager();
     private currentScenarioIndex: number = -1;
 
     private scenarioSelect: UI.SingleSelect;
@@ -739,7 +740,8 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
 
     private async _createBMDRenderer(device: GfxDevice, renderer: SM64DSRenderer, filename: string, scale: number, level: CRG1Level, isSkybox: boolean): Promise<BMDModelInstance> {
         const modelCache = renderer.modelCache;
-        const bmdData = await modelCache.fetchModel(device, filename);
+        const cache = renderer.renderInstManager.gfxRenderCache;
+        const bmdData = await modelCache.fetchModel(device, cache, filename);
         const bmdRenderer = new BMDModelInstance(bmdData, level);
         mat4.scale(bmdRenderer.modelMatrix, bmdRenderer.modelMatrix, [scale, scale, scale]);
         bmdRenderer.isSkybox = isSkybox;
@@ -749,7 +751,8 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
 
     private async _createBMDObjRenderer(device: GfxDevice, renderer: SM64DSRenderer, filename: string): Promise<SimpleObjectRenderer> {
         const modelCache = renderer.modelCache;
-        const bmdData = await modelCache.fetchModel(device, filename);
+        const cache = renderer.renderInstManager.gfxRenderCache;
+        const bmdData = await modelCache.fetchModel(device, cache, filename);
         const modelInstance = new BMDModelInstance(bmdData);
         const objectRenderer = new SimpleObjectRenderer(modelInstance);
         renderer.objectRenderers.push(objectRenderer);
@@ -771,6 +774,7 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
     }
 
     private async _createBMDRendererForStandardObject(device: GfxDevice, renderer: SM64DSRenderer, object: CRG1StandardObject): Promise<void> {
+        const cache = renderer.renderInstManager.gfxRenderCache;
         const modelCache = renderer.modelCache;
 
         const spawnObject = async (filename: string, scale: number = 0.8, spinSpeed: number = 0) => {
@@ -1394,8 +1398,8 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
             const b = await spawnObject(`/data/enemy/jango/jango.bmd`);
             await bindBCA(b, '/data/enemy/jango/jango_fly.bca');
         } else if (objectId === ObjectId.SANBO) {				//ID 253
-            const bodyData = await modelCache.fetchModel(device, `/data/enemy/sanbo/sanbo_body.bmd`);
-            const headData = await modelCache.fetchModel(device, `/data/enemy/sanbo/sanbo_head.bmd`);
+            const bodyData = await modelCache.fetchModel(device, cache, `/data/enemy/sanbo/sanbo_body.bmd`);
+            const headData = await modelCache.fetchModel(device, cache, `/data/enemy/sanbo/sanbo_head.bmd`);
             const b = new Sanbo(bodyData, headData);
             this.modelMatrixFromObjectAndScale(b.modelMatrix, object, 0.8);
             renderer.objectRenderers.push(b);

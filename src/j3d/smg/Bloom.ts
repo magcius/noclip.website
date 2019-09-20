@@ -227,7 +227,7 @@ export class BloomPostFXRenderer {
     private scratch2ColorTexture = new ColorTexture();
 
     constructor(device: GfxDevice, cache: GfxRenderCache, mainRenderTarget: BasicRenderTarget) {
-        this.bloomSampler = device.createSampler({
+        this.bloomSampler = cache.createSampler(device, {
             wrapS: GfxWrapMode.CLAMP,
             wrapT: GfxWrapMode.CLAMP,
             minFilter: GfxTexFilterMode.BILINEAR,
@@ -356,7 +356,6 @@ export class BloomPostFXRenderer {
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroySampler(this.bloomSampler);
         this.bloomObjectsTexture.destroy(device);
         this.bloomObjectsTarget.destroy(device);
         this.scratch1ColorTarget.destroy(device);

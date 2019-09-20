@@ -22,6 +22,7 @@ import { GfxRenderInst, GfxRenderInstManager, makeSortKeyTranslucent, GfxRendere
 import { fillMatrix4x3, fillColor, fillMatrix4x2 } from "../gfx/helpers/UniformBufferHelpers";
 import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
 import { makeTriangleIndexBuffer, GfxTopology, getTriangleIndexCountForTopologyIndexCount } from "../gfx/helpers/TopologyHelpers";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
 export interface JPAResourceRaw {
     resourceId: number;
@@ -370,9 +371,9 @@ export class JPACData {
     constructor(public jpac: JPAC) {
     }
 
-    public translateTexture(device: GfxDevice, index: number): BTIData {
+    public translateTexture(device: GfxDevice, cache: GfxRenderCache, index: number): BTIData {
         if (this.texData[index] === undefined)
-            this.texData[index] = new BTIData(device, this.jpac.textures[index].texture);
+            this.texData[index] = new BTIData(device, cache, this.jpac.textures[index].texture);
         return this.texData[index];
     }
 
@@ -392,7 +393,7 @@ export class JPAResourceData {
     public texData: BTIData[] = [];
     public materialHelper: GXMaterialHelperGfx;
 
-    constructor(device: GfxDevice, private jpacData: JPACData, resRaw: JPAResourceRaw) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, private jpacData: JPACData, resRaw: JPAResourceRaw) {
         this.res = parseResource(this.jpacData.jpac.version, resRaw);
         this.resourceId = resRaw.resourceId;
 
@@ -413,21 +414,21 @@ export class JPAResourceData {
         // Translate all of the texture data.
         if (bsp1.texIdxAnimData !== null) {
             for (let i = 0; i < bsp1.texIdxAnimData.length; i++)
-                this.translateTDB1Index(device, bsp1.texIdxAnimData[i]);
+                this.translateTDB1Index(device, cache, bsp1.texIdxAnimData[i]);
         } else {
-            this.translateTDB1Index(device, bsp1.texIdx);
+            this.translateTDB1Index(device, cache, bsp1.texIdx);
         }
 
         if (etx1 !== null) {
             if (!!(etx1.flags & 0x00000001))
-                this.translateTDB1Index(device, etx1.indTextureID);
+                this.translateTDB1Index(device, cache, etx1.indTextureID);
 
             if (!!(etx1.flags & 0x00000100))
-                this.translateTDB1Index(device, etx1.subTextureID);
+                this.translateTDB1Index(device, cache, etx1.subTextureID);
         }
 
         if (ssp1 !== null)
-            this.translateTDB1Index(device, ssp1.texIdx);
+            this.translateTDB1Index(device, cache, ssp1.texIdx);
 
         const ropInfo: RopInfo = {
             blendMode: {
@@ -557,16 +558,15 @@ export class JPAResourceData {
         this.materialHelper = new GXMaterialHelperGfx(gxMaterial);
     }
 
-    private translateTDB1Index(device: GfxDevice, idx: number): void {
+    private translateTDB1Index(device: GfxDevice, cache: GfxRenderCache, idx: number): void {
         if (this.texData[idx] === undefined)
-            this.texData[idx] = this.jpacData.translateTexture(device, this.res.tdb1[idx]);
+            this.texData[idx] = this.jpacData.translateTexture(device, cache, this.res.tdb1[idx]);
     }
 
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.texData.length; i++)
             if (this.texData[i] !== undefined)
                 this.texData[i].destroy(device);
-        this.materialHelper.destroy(device);
     }
 }
 

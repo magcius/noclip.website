@@ -20,6 +20,7 @@ import { Camera, texProjCamera } from "../../Camera";
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from "../../gfx/render/GfxRenderer";
 import { createFilterKeyForDrawType, DrawType } from "./NameObj";
 import { LiveActor } from "./LiveActor";
+import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
 
 function calcHeightStatic(wave1Time: number, wave2Time: number, x: number, z: number): number {
     const wave1 = 40 * Math.sin(wave1Time + 0.003 * z);
@@ -89,15 +90,16 @@ export class OceanBowl extends LiveActor {
         this.initDefaultPos(sceneObjHolder, infoIter);
 
         const device = sceneObjHolder.modelCache.device;
-        this.initPoints(device);
+        const cache = sceneObjHolder.modelCache.cache;
+        this.initPoints(device, cache);
 
         const waterWaveArc = sceneObjHolder.modelCache.getObjectData('WaterWave')!;
-        this.water = new BTIData(device, BTI.parse(waterWaveArc.findFileData('Water.bti')!, "Water").texture);
-        this.waterIndirect = new BTIData(device, BTI.parse(waterWaveArc.findFileData('WaterIndirect.bti')!, "WaterIndirect").texture);
-        this.mask = new BTIData(device, BTI.parse(waterWaveArc.findFileData('Mask.bti')!, "Mask").texture);
+        this.water = new BTIData(device, cache, BTI.parse(waterWaveArc.findFileData('Water.bti')!, "Water").texture);
+        this.waterIndirect = new BTIData(device, cache, BTI.parse(waterWaveArc.findFileData('WaterIndirect.bti')!, "WaterIndirect").texture);
+        this.mask = new BTIData(device, cache, BTI.parse(waterWaveArc.findFileData('Mask.bti')!, "Mask").texture);
     }
 
-    public initPoints(device: GfxDevice): void {
+    public initPoints(device: GfxDevice, cache: GfxRenderCache): void {
         const m = scratchMatrix;
 
         computeModelMatrixSRT(m,
@@ -198,7 +200,7 @@ export class OceanBowl extends LiveActor {
             { location: getVertexAttribLocation(GX.VertexAttribute.TEX3), format: GfxFormat.S16_RG_NORM, bufferIndex: 2, bufferByteOffset: 0, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
         ];
 
-        this.inputLayout = device.createInputLayout({
+        this.inputLayout = cache.createInputLayout(device, {
             indexBufferFormat: GfxFormat.U16_R,
             vertexAttributeDescriptors,
         });

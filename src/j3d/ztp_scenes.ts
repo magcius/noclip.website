@@ -20,8 +20,8 @@ import { SceneContext } from '../SceneBase';
 class ZTPExtraTextures {
     public extraTextures: BTIData[] = [];
 
-    public addBTI(device: GfxDevice, btiTexture: BTI_Texture): void {
-        this.extraTextures.push(new BTIData(device, btiTexture));
+    public addBTI(device: GfxDevice, cache: GfxRenderCache, btiTexture: BTI_Texture): void {
+        this.extraTextures.push(new BTIData(device, cache, btiTexture));
     }
 
     public destroy(device: GfxDevice): void {
@@ -281,16 +281,15 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
             const texcFolder = stageRarc.findDir(`texc`);
             const extraTextureFiles = texcFolder !== null ? texcFolder.files : [];
 
+            const renderer = new TwilightPrincessRenderer(device, extraTextures, stageRarc);
+            const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
+
             for (let i = 0; i < extraTextureFiles.length; i++) {
                 const file = extraTextureFiles[i];
                 const name = file.name.split('.')[0];
                 const bti = BTI.parse(file.buffer, name).texture;
-                extraTextures.addBTI(device, bti);
+                extraTextures.addBTI(device, cache, bti);
             }
-
-            const renderer = new TwilightPrincessRenderer(device, extraTextures, stageRarc);
-
-            const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
 
             [`vrbox_sora`, `vrbox_kasumim`].forEach((basename) => {
                 const bmdFile = stageRarc.findFile(`bmdp/${basename}.bmd`);
