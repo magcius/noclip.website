@@ -545,6 +545,7 @@ class Main {
         this.viewer.setScene(null);
         for (let i = 0; i < this.destroyablePool.length; i++)
             this.destroyablePool[i].destroy(device);
+        this.destroyablePool.length = 0;
         this.abortController = new AbortController();
         gfxDeviceGetImpl(this.viewer.gfxDevice).checkForLeaks();
 
