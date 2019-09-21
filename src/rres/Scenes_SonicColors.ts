@@ -197,19 +197,19 @@ const sceneDescs = [
     "Planet Wisp",
     new SonicColorsSceneDesc("stg410", "Act 1-4"),
     new SonicColorsSceneDesc("stg420", "Act 5-6"),
-    new SonicColorsSceneDesc("stg490", "Refreshinator Boss"),
+    new SonicColorsSceneDesc("stg490", "Refreshinator Boss Arena"),
     "Aquarium Park",
     new SonicColorsSceneDesc("stg510", "Act 1, 3-5"),
     new SonicColorsSceneDesc("stg520", "Act 2, 6"),
-    new SonicColorsSceneDesc("stg590", "Admiral Jelly Boss"),
+    new SonicColorsSceneDesc("stg590", "Admiral Jelly Boss Arena"),
     "Asteroid Coaster",
     new SonicColorsSceneDesc("stg610", "Act 1-5"),
     new SonicColorsSceneDesc("stg620", "Act 6"),
-    new SonicColorsSceneDesc("stg690", "Figate Skullian Boss"),
+    new SonicColorsSceneDesc("stg690", "Figate Skullian Boss Arena"),
     "Terminal Velocity",
     new SonicColorsSceneDesc("stg710", "Act 1"),
     new SonicColorsSceneDesc("stg720", "Act 2"),
-    new SonicColorsSceneDesc("stg790", "Nega-Wisp Armor Boss"),
+    new SonicColorsSceneDesc("stg790", "Nega-Wisp Armor Boss Arena"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
