@@ -1,9 +1,8 @@
 
 import {
-    GfxDevice, GfxBuffer, GfxInputLayout, GfxInputState, GfxBufferUsage,
-    GfxVertexAttributeDescriptor, GfxFormat, GfxVertexAttributeFrequency, GfxRenderPass,
-    GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxTextureDimension, GfxWrapMode,
-    GfxMipFilterMode, GfxTexFilterMode, GfxSampler, GfxBlendFactor, GfxBlendMode, GfxTexture
+    GfxDevice, GfxBuffer, GfxInputLayout, GfxInputState, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexAttributeFrequency,
+    GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxTextureDimension, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode,
+    GfxSampler, GfxBlendFactor, GfxBlendMode, GfxTexture, GfxMegaStateDescriptor, GfxCullMode, GfxCompareMode,
 } from "../gfx/platform/GfxPlatform";
 import { SceneGfx, ViewerRenderInput, Texture } from "../viewer";
 import { SceneDesc, SceneContext, SceneGroup } from "../SceneBase";
@@ -12,11 +11,11 @@ import { readString, assert, hexzero, nArray } from "../util";
 import { decompress } from "../compression/MIO0";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { DeviceProgram } from "../Program";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth, getSortKeyLayer } from "../gfx/render/GfxRenderer";
 import { fillMatrix4x3, fillMatrix4x4, fillMatrix4x2, fillVec4v, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { mat4, vec3, vec4 } from "gl-matrix";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
-import { standardFullClearRenderPassDescriptor, BasicRenderTarget, makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { standardFullClearRenderPassDescriptor, BasicRenderTarget } from "../gfx/helpers/RenderTargetHelpers";
 import { computeViewMatrix } from "../Camera";
 import { MathConstants } from "../MathHelpers";
 import { TextureState, TileState, getTextFiltFromOtherModeH, OtherModeH_CycleType, getCycleTypeFromOtherModeH } from "../bk/f3dex";
@@ -332,6 +331,35 @@ interface UV_Scroll {
     scaleT: number;
 }
 
+const enum CCMUX {
+    COMBINED    = 0,
+    TEXEL0      = 1,
+    TEXEL1      = 2,
+    PRIMITIVE   = 3,
+    SHADE       = 4,
+    ENVIRONMENT = 5,
+    ADD_ZERO    = 7,
+    // param C only
+    COMBINED_A  = 7, // only for C
+    TEXEL0_A    = 8,
+    TEXEL1_A    = 9,
+    PRIMITIVE_A = 10,
+    SHADE_A     = 11,
+    ENV_A       = 12,
+    MUL_ZERO    = 15, // should really be 31
+}
+
+const enum ACMUX {
+    ADD_COMBINED = 0,
+    TEXEL0 = 1,
+    TEXEL1 = 2,
+    PRIMITIVE = 3,
+    SHADE = 4,
+    ENVIRONMENT = 5,
+    ADD_ONE = 6,
+    ZERO = 7,
+}
+
 interface CombineParams {
     a: number;
     b: number;
@@ -350,6 +378,9 @@ interface UVTX {
     cmt: number;
     combine: CombineParams[];
     otherModeH: number;
+    cutOutTransparent: boolean;
+    // TODO: actual name
+    otherModeLByte: number;
 
     pairedIndex?: number;
     uvScroll?: UV_Scroll;
@@ -418,11 +449,12 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
             const Ab1 = (w1 >>> 3) & 0x07;
             const Ad1 = (w1 >>> 0) & 0x07;
 
-            combine.push({ a: a0, b: b0, c: c0, d: d0 })
-            combine.push({ a: Aa0, b: Ab0, c: Ac0, d: Ad0 })
-            combine.push({ a: a1, b: b1, c: c1, d: d1 })
-            combine.push({ a: Aa1, b: Ab1, c: Ac1, d: Ad1 })
-
+            combine.push(
+                { a: a0, b: b0, c: c0, d: d0 },
+                { a: Aa0, b: Ab0, c: Ac0, d: Ad0 },
+                { a: a1, b: b1, c: c1, d: d1 },
+                { a: Aa1, b: Ab1, c: Ac1, d: Ad1 }
+            );
             // state.gDPSetCombine(w0 & 0x00FFFFFF, w1);
         } else if (cmd === F3D_GBI.G_SETOTHERMODE_H) {
             const len = (w0 >>> 0) & 0xFF;
@@ -503,7 +535,9 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
         }
     }
 
+    const cutOutTransparent = (view.getUint16(dlEnd + 0x07) >>> 15) === 0;
     const pairedIndex = view.getUint16(dlEnd + 0x09);
+    const otherModeLByte = view.getUint8(dlEnd + 0x0d);
     if (setTextureImageCount > 1) {
         // we load another texture, make sure it's there
         assert(pairedIndex < 0xfff);
@@ -556,7 +590,10 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
     const fmt = mainTile.fmt;
     const siz = mainTile.siz;
 
-    const uvtx: UVTX = { name, width, height, fmt, siz, levels, cms, cmt, combine, otherModeH };
+    const uvtx: UVTX = {
+        name, width, height, fmt, siz, levels, cms, cmt,
+        combine, otherModeH, cutOutTransparent, otherModeLByte
+    };
 
     if (scaleS !== 0.0 || scaleT !== 0.0) {
         uvtx.uvScroll = { scaleS, scaleT };
@@ -647,6 +684,7 @@ interface UVMD {
     partPlacements: mat4[];
     lods: ModelLOD[];
     inverseScale: number;
+    hasTransparency: boolean;
 }
 
 function parseUVMD(file: Pilotwings64FSFile): UVMD {
@@ -656,6 +694,7 @@ function parseUVMD(file: Pilotwings64FSFile): UVMD {
     const lodCount = view.getUint8(0x02);
     const transformCount = view.getUint8(0x03);
     const unknownCount = view.getUint8(0x04);
+    const hasTransparency = view.getInt8(0x05) > 0;
     // unknown byte, short
 
     let offs = 0x08;
@@ -750,7 +789,7 @@ function parseUVMD(file: Pilotwings64FSFile): UVMD {
     }
     offs += unknownCount * 0x24;
     const inverseScale = view.getFloat32(offs + 0x4);
-    return { vertexData, partPlacements, lods, inverseScale };
+    return { vertexData, partPlacements, lods, inverseScale, hasTransparency };
 }
 
 
@@ -956,6 +995,17 @@ void main() {
 #endif
 
     gl_FragColor = t_Color;
+
+#ifdef CVG_X_ALPHA
+    // this line is taken from GlideN64, but here's some rationale:
+    // With this bit set, the pixel coverage value is multiplied by alpha
+    // before being sent to the blender. While coverage mostly matters for
+    // the n64 antialiasing, a pixel with zero coverage will be ignored.
+    // Since coverage is really an integer from 0 to 8, we assume anything
+    // less than 1 would be truncated to 0, leading to the value below.
+    if (gl_FragColor.a < 0.125)
+        discard;
+#endif
 }
 `;
 }
@@ -1045,6 +1095,8 @@ class ModelRenderer {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        const template = renderInstManager.pushTemplateRenderInst();
+        template.sortKey = makeSortKey(this.model.uvmd.hasTransparency ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE);
         mat4.copy(this.partMatrices[0], this.modelMatrix)
         for (let i = 0; i < this.parts.length; i++) {
             const level = this.model.partLevels[i];
@@ -1052,6 +1104,7 @@ class ModelRenderer {
                 mat4.copy(this.partMatrices[level], this.partMatrices[level - 1]);
             this.parts[i].prepareToRender(device, renderInstManager, viewerInput, this.partMatrices[level]);
         }
+        renderInstManager.popTemplateRenderInst();
     }
 }
 
@@ -1105,6 +1158,299 @@ function calcScaleForShift(shift: number): number {
     }
 }
 
+const enum F3D_RSP_Geometry_Flags {
+    G_ZBUFFER            = 1 << 0,
+    G_SHADE              = 1 << 2,
+    G_SHADING_SMOOTH     = 1 << 9,
+    G_CULL_FRONT         = 1 << 12,
+    G_CULL_BACK          = 1 << 13,
+    G_FOG                = 1 << 16,
+    G_LIGHTING           = 1 << 17,
+    G_TEXTURE_GEN        = 1 << 18,
+    G_TEXTURE_GEN_LINEAR = 1 << 19,
+    G_CLIPPING           = 1 << 23,
+}
+
+const enum OtherModeL_Layout {
+    // cycle-independent
+    AA_EN         = 3,
+    Z_CMP         = 4,
+    Z_UPD         = 5,
+    IM_RD         = 6,
+    CLR_ON_CVG    = 7,
+    CVG_DST       = 8,
+    ZMODE         = 10,
+    CVG_X_ALPHA   = 12,
+    ALPHA_CVG_SEL = 13,
+    FORCE_BL      = 14,
+    // bit 15 unused, was "TEX_EDGE"
+    // cycle-dependent
+    B_2 = 16,
+    B_1 = 18,
+    M_2 = 20,
+    M_1 = 22,
+    A_2 = 24,
+    A_1 = 26,
+    P_2 = 28,
+    P_1 = 30,
+}
+
+const enum ZMode {
+    ZMODE_OPA   = 0,
+    ZMODE_INTER = 1,
+    ZMODE_XLU   = 2, // translucent
+    ZMODE_DEC   = 3,
+}
+
+const enum BlendParam_PM_Color {
+    G_BL_CLR_IN  = 0,
+    G_BL_CLR_MEM = 1,
+    G_BL_CLR_BL  = 2,
+    G_BL_CLR_FOG = 3,
+}
+
+const enum BlendParam_A {
+    G_BL_A_IN    = 0,
+    G_BL_A_FOG   = 1,
+    G_BL_A_SHADE = 2,
+    G_BL_0       = 3,
+}
+
+const enum BlendParam_B {
+    G_BL_1MA   = 0,
+    G_BL_A_MEM = 1,
+    G_BL_1     = 2,
+    G_BL_0     = 3,
+}
+
+interface decodeMaterialResult {
+    geoMode: number;
+    renderMode: number;
+    scaleOverride?: number;
+    combineOverride?: CombineParams[];
+}
+
+const enum PilotwingsRSPFlag {
+    GOURAUD     = 1 << 1,
+    CULL_FRONT  = 1 << 3,
+    CULL_BACK   = 1 << 4,
+    // mode index
+    ZBUFFER     = 1 << 5, // for non-decal modes, anyway
+    ANTIALIAS   = 1 << 6,
+    TRANSPARENT = 1 << 7,
+    DECAL       = 1 << 8,
+
+    LIGHTING    = 1 << 11,
+    FOG         = 1 << 15,
+}
+
+const pilotWingsRenderModeList = [
+    0x03024000, // 0x0, forced pass through
+    0x00112230, // 0x1, RM_ZB_OPA_SURF
+    0x00102048, // 0x2, RM_AA_OPA_TERR
+    0x00102078, // 0X3, RM_AA_ZB_OPA_TERR
+    0x00104240, // 0X4, RM_XLU_SURF
+    0x00104a50, // 0X5, RM_ZB_XLU_SURF
+    0x001041c8, // 0X6, RM_AA_XLU_SURF
+    0x001045d8, // 0X7, RM_AA_ZB_XLU_INTER
+    // decal modes must use Z buffer, so the lowest bit stops mattering
+    0x00112e10, // 0X8, RM_ZB_OPA_DECAL
+    0x00112e10,
+    0x00112d58, // 0XA, RM_AA_ZB_OPA_DECAL
+    0x00112d58,
+    0x00104e50, // 0XC, RM_ZB_XLU_DECAL
+    0x00104e50,
+    0x00104dd8, // 0XE, RM_AA_ZB_XLU_DECAL
+    0x00104dd8,
+];
+
+function decodeMaterial(rspMode: number, hasTexture: boolean, cutOutTransparent: boolean, textureByte: number): decodeMaterialResult {
+    // all of the combine commands actually generated by the original code have two separate cycles,
+    // with the second cycle generally passing through the first value
+
+    // TODO: figure these out, float @ 249208
+    // if (mysteryFloat < 0) {
+    //     rspMode |= PilotwingsRSPFlag.FOG | PilotwingsRSPFlag.GOURAUD
+    // }
+    if (rspMode & (1 << 9)) {
+        // build dlist from fn_221e08
+        throw "found alternate dlist: " + rspMode;
+    }
+
+    let geoMode = 0;
+    if (rspMode & PilotwingsRSPFlag.LIGHTING)
+        geoMode |= F3D_RSP_Geometry_Flags.G_LIGHTING | F3D_RSP_Geometry_Flags.G_TEXTURE_GEN;
+    if (rspMode & PilotwingsRSPFlag.CULL_BACK)
+        geoMode |= F3D_RSP_Geometry_Flags.G_CULL_BACK;
+    if (rspMode & PilotwingsRSPFlag.CULL_FRONT)
+        geoMode |= F3D_RSP_Geometry_Flags.G_CULL_FRONT;
+    if (rspMode & PilotwingsRSPFlag.GOURAUD)
+        geoMode |= F3D_RSP_Geometry_Flags.G_SHADING_SMOOTH;
+    if (rspMode & PilotwingsRSPFlag.ZBUFFER)
+        geoMode |= F3D_RSP_Geometry_Flags.G_ZBUFFER;
+    if (rspMode & PilotwingsRSPFlag.FOG)
+        geoMode |= F3D_RSP_Geometry_Flags.G_FOG;
+
+    let combineOverride: CombineParams[] = [];
+    let scaleOverride = 0;
+
+    if (hasTexture && (rspMode & PilotwingsRSPFlag.LIGHTING)) {
+        combineOverride = [
+            { a: CCMUX.ADD_ZERO, b: CCMUX.ADD_ZERO, c: CCMUX.MUL_ZERO, d: CCMUX.TEXEL0 },
+            { a: ACMUX.ZERO, b: ACMUX.ZERO, c: ACMUX.ZERO, d: ACMUX.SHADE },
+            { a: CCMUX.ADD_ZERO, b: CCMUX.ADD_ZERO, c: CCMUX.MUL_ZERO, d: CCMUX.TEXEL0 },
+            { a: ACMUX.ZERO, b: ACMUX.ZERO, c: ACMUX.ZERO, d: ACMUX.SHADE },
+        ];
+        scaleOverride = 0x7c00 / 0x10000;
+    }
+
+    if (rspMode & PilotwingsRSPFlag.DECAL) {
+        // another G_TEXTURE command with the same scale as the given texture, 
+        // but setting an unknown flag: 0xbb10____
+    }
+
+    const modeIndex = (rspMode >>> 5) & 0x0f
+    const invalidMode = 0x03024000; // used for invalid mode index, though that's impossible
+    let renderMode = pilotWingsRenderModeList[modeIndex];
+
+    if (modeIndex === 6 && cutOutTransparent) {
+        renderMode = 0x00103048 // RM_AA_TEX_TERR
+    }
+    if (modeIndex === 7 && hasTexture) {
+        if (!cutOutTransparent || textureByte === 1 || (rspMode >>> 10) & 1) {
+            renderMode = 0x001049d8 // RM_AA_ZB_XLU_SURF
+        } else {
+            renderMode = 0x00103078 // RM_AA_ZB_TEX_TERR
+        }
+    }
+    if ((rspMode >>> 12) & 1) {
+        renderMode = 0x111103f0 // custom mode, scale memory value based on fog
+    }
+    if (rspMode & PilotwingsRSPFlag.FOG) {
+        // blend with fog first cycle
+        renderMode |=
+            (BlendParam_PM_Color.G_BL_CLR_FOG << OtherModeL_Layout.P_1) |
+            (BlendParam_A.G_BL_A_FOG << OtherModeL_Layout.A_1);
+        if (modeIndex === 7) {
+            if (hasTexture) {
+                combineOverride = [
+                    { a: CCMUX.TEXEL0, b: CCMUX.ADD_ZERO, c: CCMUX.SHADE, d: CCMUX.ADD_ZERO },
+                    { a: ACMUX.ZERO, b: ACMUX.ZERO, c: ACMUX.ZERO, d: ACMUX.TEXEL0 },
+                    { a: CCMUX.ADD_ZERO, b: CCMUX.ADD_ZERO, c: CCMUX.MUL_ZERO, d: CCMUX.COMBINED },
+                    { a: ACMUX.ZERO, b: ACMUX.ZERO, c: ACMUX.ZERO, d: ACMUX.ADD_COMBINED }
+                ];
+            } else {
+                combineOverride = [
+                    { a: CCMUX.ADD_ZERO, b: CCMUX.ADD_ZERO, c: CCMUX.MUL_ZERO, d: CCMUX.SHADE },
+                    { a: ACMUX.ZERO, b: ACMUX.ZERO, c: ACMUX.ZERO, d: ACMUX.SHADE },
+                    { a: CCMUX.ADD_ZERO, b: CCMUX.ADD_ZERO, c: CCMUX.MUL_ZERO, d: CCMUX.COMBINED },
+                    { a: ACMUX.ZERO, b: ACMUX.ZERO, c: ACMUX.ZERO, d: ACMUX.ADD_COMBINED },
+                ];
+            }
+        }
+    } else {
+        // pass through input in first cycle
+        renderMode |=
+            (BlendParam_A.G_BL_0 << OtherModeL_Layout.A_1) |
+            (BlendParam_B.G_BL_1 << OtherModeL_Layout.B_1);
+    }
+
+    const result: decodeMaterialResult = { geoMode, renderMode };
+    if (combineOverride.length > 0) {
+        result.combineOverride = combineOverride;
+    }
+    if (scaleOverride > 0) {
+        result.scaleOverride = scaleOverride
+    }
+
+    return result;
+}
+
+function translateBlendParamB(paramB: BlendParam_B, srcParam: GfxBlendFactor): GfxBlendFactor {
+    if (paramB === BlendParam_B.G_BL_1MA) {
+        if (srcParam === GfxBlendFactor.SRC_ALPHA)
+            return GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
+        if (srcParam === GfxBlendFactor.ONE)
+            return GfxBlendFactor.ZERO;
+        return GfxBlendFactor.ONE;
+    }
+    if (paramB === BlendParam_B.G_BL_A_MEM)
+        return GfxBlendFactor.DST_ALPHA;
+    if (paramB === BlendParam_B.G_BL_1)
+        return GfxBlendFactor.ONE;
+    if (paramB === BlendParam_B.G_BL_0)
+        return GfxBlendFactor.ZERO;
+
+    throw "Unknown Blend Param B: "+paramB;
+}
+
+function translateZMode(zmode: ZMode): GfxCompareMode {
+    if (zmode === ZMode.ZMODE_OPA)
+        return GfxCompareMode.GREATER;
+    if (zmode === ZMode.ZMODE_INTER) // TODO: understand this better
+        return GfxCompareMode.GREATER;
+    if (zmode === ZMode.ZMODE_XLU)
+        return GfxCompareMode.GREATER;
+    if (zmode === ZMode.ZMODE_DEC)
+        return GfxCompareMode.GEQUAL;
+    throw "Unknown Z mode: " + zmode;
+}
+
+function translateBlendMode(geoMode: number, renderMode: number): Partial<GfxMegaStateDescriptor> {
+    const out: Partial<GfxMegaStateDescriptor> = {};
+
+    if (renderMode && (1 << OtherModeL_Layout.FORCE_BL)) {
+        const srcColor: BlendParam_PM_Color = (renderMode >>> OtherModeL_Layout.P_2) & 0x03;
+        const srcFactor: BlendParam_A = (renderMode >>> OtherModeL_Layout.A_2) & 0x03;
+        const dstColor: BlendParam_PM_Color = (renderMode >>> OtherModeL_Layout.M_2) & 0x03;
+        const dstFactor: BlendParam_B = (renderMode >>> OtherModeL_Layout.B_2) & 0x03;
+
+        assert(srcColor === BlendParam_PM_Color.G_BL_CLR_IN);
+        assert(dstColor === BlendParam_PM_Color.G_BL_CLR_MEM || dstFactor === BlendParam_B.G_BL_0);
+
+        if (srcFactor === BlendParam_A.G_BL_0) {
+            out.blendSrcFactor = GfxBlendFactor.ZERO;
+        } else if ((renderMode & (1 << OtherModeL_Layout.ALPHA_CVG_SEL)) &&
+            !(renderMode & (1 << OtherModeL_Layout.CVG_X_ALPHA))) {
+            // this is technically "coverage", admitting blending on edges
+            out.blendSrcFactor = GfxBlendFactor.ONE;
+        } else {
+            out.blendSrcFactor = GfxBlendFactor.SRC_ALPHA;
+        }
+        out.blendDstFactor = translateBlendParamB(dstFactor, out.blendSrcFactor);
+    } else {
+        // without FORCE_BL, blending only happens for AA of internal edges
+        // since we are ignoring n64 coverage values and AA, this means "never"
+        out.blendSrcFactor = GfxBlendFactor.ONE;
+        out.blendDstFactor = GfxBlendFactor.ZERO;
+    }
+
+    if (geoMode & F3D_RSP_Geometry_Flags.G_CULL_BACK) {
+        if (geoMode & F3D_RSP_Geometry_Flags.G_CULL_FRONT) {
+            out.cullMode = GfxCullMode.FRONT_AND_BACK;
+        } else {
+            out.cullMode = GfxCullMode.BACK;
+        }
+    } else if (geoMode & F3D_RSP_Geometry_Flags.G_CULL_FRONT) {
+        out.cullMode = GfxCullMode.FRONT;
+    } else {
+        out.cullMode = GfxCullMode.NONE;
+    }
+
+    if (renderMode & (1 << OtherModeL_Layout.Z_CMP)) {
+        const zmode: ZMode = (renderMode >>> OtherModeL_Layout.ZMODE) & 0x03;
+        out.depthCompare = translateZMode(zmode);
+    }
+
+    const zmode:ZMode = (renderMode >>> OtherModeL_Layout.ZMODE) & 0x03;
+    if (zmode === ZMode.ZMODE_DEC)
+        out.polygonOffset = true;
+
+    out.depthWrite = (renderMode & (1 << OtherModeL_Layout.Z_UPD)) !== 0;
+
+    return out;
+}
+
 const scratchMatrix = mat4.create();
 const texMatrixScratch = mat4.create();
 class MaterialInstance {
@@ -1113,6 +1459,8 @@ class MaterialInstance {
     private hasPairedTexture = false;
     private textureMappings: TextureMapping[] = nArray(2, () => new TextureMapping());
     private uvtx: UVTX;
+    private decodedMaterial: decodeMaterialResult;
+    private stateFlags: Partial<GfxMegaStateDescriptor>;
 
     constructor(private materialData: MaterialData, textureData: TextureData[]) {
         this.hasTexture = materialData.textureIndex < 0x0FFF;
@@ -1131,19 +1479,32 @@ class MaterialInstance {
                     this.textureMappings.reverse()
                 }
             }
+            this.decodedMaterial = decodeMaterial(materialData.rspModeInfo, true, this.uvtx.cutOutTransparent, this.uvtx.otherModeLByte);
+        } else {
+            this.decodedMaterial = decodeMaterial(materialData.rspModeInfo, false, true, 0);
         }
+        this.stateFlags = translateBlendMode(this.decodedMaterial.geoMode, this.decodedMaterial.renderMode);
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, modelMatrix: mat4): void {
         const renderInst = renderInstManager.pushRenderInst();
-
+        renderInst.setMegaStateFlags(this.stateFlags);
         let offs = renderInst.allocateUniformBuffer(PW64Program.ub_DrawParams, 12 + 2 * 8);
         const d = renderInst.mapUniformBufferF32(PW64Program.ub_DrawParams);
 
         computeViewMatrix(scratchMatrix, viewerInput.camera);
         mat4.mul(scratchMatrix, scratchMatrix, modelMatrix);
 
+        // TODO: look further into game logic for this
+        if (getSortKeyLayer(renderInst.sortKey) & GfxRendererLayer.TRANSLUCENT ) {
+            renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, -scratchMatrix[14]);
+        }
+
         offs += fillMatrix4x3(d, offs, scratchMatrix);
+
+        if (this.decodedMaterial.renderMode & (1 << OtherModeL_Layout.CVG_X_ALPHA))
+            this.program.defines.set('CVG_X_ALPHA', '1')
+
         if (this.hasTexture) {
             if (getTextFiltFromOtherModeH(this.uvtx.otherModeH) === TextFilt.G_TF_BILERP) {
                 // ignore average filtering mode
@@ -1154,8 +1515,14 @@ class MaterialInstance {
             }
 
             renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
-            const scaleS0 = calcScaleForShift(this.uvtx.levels[0].shiftS);
-            const scaleT0 = calcScaleForShift(this.uvtx.levels[0].shiftT);
+            let scaleS0 = calcScaleForShift(this.uvtx.levels[0].shiftS);
+            let scaleT0 = calcScaleForShift(this.uvtx.levels[0].shiftT);
+            // should maybe be careful here because the G_TEXTURE command is overridden,
+            // which could affect which tiles get used
+            if (this.decodedMaterial.scaleOverride) {
+                scaleS0 /= this.decodedMaterial.scaleOverride;
+                scaleT0 /= this.decodedMaterial.scaleOverride;
+            }
             mat4.fromScaling(texMatrixScratch,
                 [scaleS0 / this.textureMappings[0].width, scaleT0 / this.textureMappings[0].height, 1]);
             if (this.uvtx.uvScroll) {
@@ -1179,7 +1546,8 @@ class MaterialInstance {
             }
             offs = renderInst.allocateUniformBuffer(PW64Program.ub_CombineParams, 12);
             const comb = renderInst.mapUniformBufferF32(PW64Program.ub_CombineParams);
-            const asFloats = this.uvtx.combine.map(packParams);
+            const chosenCombine = (this.decodedMaterial.combineOverride) ? this.decodedMaterial.combineOverride : this.uvtx.combine;
+            const asFloats = chosenCombine.map(packParams);
             offs += fillVec4(comb, offs, asFloats[0], asFloats[1], asFloats[2], asFloats[3]);
 
             if (this.uvtx.primitive) {
@@ -1189,6 +1557,7 @@ class MaterialInstance {
                 fillVec4v(comb, offs + 4, this.uvtx.environment)
             }
         } else {
+            // game actually sets 2 cycle mode for some reason, and enables shading
             this.program.defines.set('USE_VERTEX_COLOR', '1');
         }
 
@@ -1351,6 +1720,8 @@ function dummyTexture(name: string): UVTX {
         height: 2,
         fmt: ImageFormat.G_IM_FMT_I,
         siz: ImageSize.G_IM_SIZ_4b,
+        otherModeLByte : 0,
+        cutOutTransparent : false,
         levels: [{
             width: 2,
             height: 2,
@@ -1365,11 +1736,11 @@ function dummyTexture(name: string): UVTX {
         cms: 0,
         cmt: 0,
         combine: [
-            { a: 1, b: 7, c: 4, d: 7, }, // multiply texture with vertex
-            { a: 1, b: 7, c: 4, d: 7, },
-            { a: 1, b: 7, c: 4, d: 7, },
-            { a: 1, b: 7, c: 4, d: 7, },
-        ]
+            { a: CCMUX.TEXEL0, b: CCMUX.ADD_ZERO, c: CCMUX.SHADE, d: CCMUX.ADD_ZERO },
+            { a: ACMUX.TEXEL0, b: ACMUX.ZERO, c: ACMUX.SHADE, d: ACMUX.ZERO },
+            { a: CCMUX.ADD_ZERO, b: CCMUX.ADD_ZERO, c: CCMUX.MUL_ZERO, d: CCMUX.COMBINED },
+            { a: ACMUX.ZERO, b: ACMUX.ZERO, c: ACMUX.ZERO, d: ACMUX.ADD_COMBINED },
+        ],
     };
 }
 
