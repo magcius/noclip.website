@@ -120,13 +120,16 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private async fetchObjectData(path: string, dataFetcher: DataFetcher): Promise<ObjectData> {
+    private async fetchObjectData(path: string, dataFetcher: DataFetcher): Promise<ObjectData | null> {
         const [_bmd, _btx, _bta, _btp] = await Promise.all<any>([
             this.fetchBMD(path + `.nsbmd`, dataFetcher),
             this.fetchBTX(path + `.nsbtx`, dataFetcher),
             this.fetchBTA(path + `.nsbta`, dataFetcher),
             this.fetchBTP(path + `.nsbtp`, dataFetcher),
         ]);
+
+        if (_bmd === null)
+            return null;
 
         const bmd = assertExists(_bmd as NSBMD.BMD0 | null);
         const btx = _btx as NSBTX.BTX0 | null;
@@ -163,22 +166,22 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
             this.fetchObjectData(`${basePath}/map/map_point`, dataFetcher),
         ]).then(([mainObjData, treeObjData, castleObjData, bigCastleObjData, towerObjData, mapPointObjData]) => {
             // Adjust the nodes/bones to emulate the flag animations.
-            mat4.fromTranslation(castleObjData.bmd.models[0].nodes[3].jointMatrix, [0, 88, 0]);
-            mat4.fromTranslation(castleObjData.bmd.models[0].nodes[4].jointMatrix, [12, 88, 0]);
-            mat4.fromTranslation(bigCastleObjData.bmd.models[0].nodes[5].jointMatrix, [-40, 0, -19]);
-            mat4.fromTranslation(bigCastleObjData.bmd.models[0].nodes[6].jointMatrix, [-40, 84, -19]);
-            mat4.fromTranslation(bigCastleObjData.bmd.models[0].nodes[7].jointMatrix, [-26, 84, -19]);
-            mat4.fromTranslation(bigCastleObjData.bmd.models[0].nodes[8].jointMatrix, [40, 0, -19]);
-            mat4.fromTranslation(bigCastleObjData.bmd.models[0].nodes[9].jointMatrix, [40, 84, -19]);
-            mat4.fromTranslation(bigCastleObjData.bmd.models[0].nodes[10].jointMatrix, [54, 84, -19]);
-            mat4.fromTranslation(towerObjData.bmd.models[0].nodes[2].jointMatrix, [0, 88, 0]);
-            mat4.fromTranslation(towerObjData.bmd.models[0].nodes[3].jointMatrix, [12, 88, 0]);
+            mat4.fromTranslation(castleObjData!.bmd.models[0].nodes[3].jointMatrix, [0, 88, 0]);
+            mat4.fromTranslation(castleObjData!.bmd.models[0].nodes[4].jointMatrix, [12, 88, 0]);
+            mat4.fromTranslation(bigCastleObjData!.bmd.models[0].nodes[5].jointMatrix, [-40, 0, -19]);
+            mat4.fromTranslation(bigCastleObjData!.bmd.models[0].nodes[6].jointMatrix, [-40, 84, -19]);
+            mat4.fromTranslation(bigCastleObjData!.bmd.models[0].nodes[7].jointMatrix, [-26, 84, -19]);
+            mat4.fromTranslation(bigCastleObjData!.bmd.models[0].nodes[8].jointMatrix, [40, 0, -19]);
+            mat4.fromTranslation(bigCastleObjData!.bmd.models[0].nodes[9].jointMatrix, [40, 84, -19]);
+            mat4.fromTranslation(bigCastleObjData!.bmd.models[0].nodes[10].jointMatrix, [54, 84, -19]);
+            mat4.fromTranslation(towerObjData!.bmd.models[0].nodes[2].jointMatrix, [0, 88, 0]);
+            mat4.fromTranslation(towerObjData!.bmd.models[0].nodes[3].jointMatrix, [12, 88, 0]);
 
             const objects = worldMapDescs[this.worldNumber - 1];
 
             const renderers: MDL0Renderer[] = [];
 
-            const mainObj = this.createRendererFromData(device, mainObjData);
+            const mainObj = this.createRendererFromData(device, assertExists(mainObjData));
             renderers.push(mainObj);
 
             let treeObj: MDL0Renderer | null = null;
@@ -190,19 +193,19 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
             for (let i = 0; i < objects.length; i++) {
                 const element = objects[i];
                 if (element.type == WorldMapObjType.ROUTE_POINT) {
-                    const obj = this.createRendererFromData(device, mapPointObjData, element.position);
-                    obj.bindPAT0(device, assertExists(mapPointObjData.btp).pat0[3]);
+                    const obj = this.createRendererFromData(device, mapPointObjData!, element.position);
+                    obj.bindPAT0(device, assertExists(mapPointObjData!.btp).pat0[3]);
                     renderers.push(obj);
                 } else if (element.type == WorldMapObjType.START_POINT) {
-                    const obj = this.createRendererFromData(device, mapPointObjData, element.position);
-                    obj.bindPAT0(device, assertExists(mapPointObjData.btp).pat0[2]);
+                    const obj = this.createRendererFromData(device, mapPointObjData!, element.position);
+                    obj.bindPAT0(device, assertExists(mapPointObjData!.btp).pat0[2]);
                     renderers.push(obj);
                 } else if (element.type == WorldMapObjType.TOWER) {
-                    renderers.push(this.createRendererFromData(device, towerObjData, element.position));
+                    renderers.push(this.createRendererFromData(device, towerObjData!, element.position));
                 } else if (element.type == WorldMapObjType.CASTLE) {
-                    renderers.push(this.createRendererFromData(device, castleObjData, element.position));
+                    renderers.push(this.createRendererFromData(device, castleObjData!, element.position));
                 } else if (element.type == WorldMapObjType.BIG_CASTLE) {
-                    renderers.push(this.createRendererFromData(device, bigCastleObjData, element.position));
+                    renderers.push(this.createRendererFromData(device, bigCastleObjData!, element.position));
                 }
             }
 

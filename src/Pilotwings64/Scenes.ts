@@ -400,7 +400,7 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
         } else if (cmd === F3D_GBI.G_SETCOMBINE) {
             // because we aren't implementing all the combine input options (notably, not noise)
             // and the highest values are just 0, we can get away with throwing away high bits:
-            // ax,bx,dx can be 4 bits, and cx can be 5
+            // ax,bx,dx can be 3 bits, and cx can be 4
             const a0  = (w0 >>> 20) & 0x07;
             const c0  = (w0 >>> 15) & 0x0f;
             const Aa0 = (w0 >>> 12) & 0x07;
