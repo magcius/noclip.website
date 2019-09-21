@@ -601,8 +601,13 @@ export class GX_Program extends DeviceProgram {
     }
 
     private generateTexCoordGetters(): string {
-        return this.material.texGens.map((n, i) => {
-            return `vec2 ReadTexCoord${i}() { return v_TexCoord${i}.xy / v_TexCoord${i}.z; }\n`;
+        return this.material.texGens.map((tg, i) => {
+            if (tg.type === GX.TexGenType.MTX2x4 || tg.type === GX.TexGenType.SRTG)
+                return `vec2 ReadTexCoord${i}() { return v_TexCoord${i}.xy; }\n`;
+            else if (tg.type === GX.TexGenType.MTX3x4)
+                return `vec2 ReadTexCoord${i}() { return v_TexCoord${i}.xy / v_TexCoord${i}.z; }\n`;
+            else
+                throw "whoops";
         }).join('');
     }
 
@@ -1155,8 +1160,9 @@ void main() {
     vec4 t_Color1    = u_Color[2];
     vec4 t_Color2    = u_Color[3];
 
-    vec2 t_TexCoord = vec2(0.0, 0.0);
 ${this.generateIndTexStages(indTexStages)}
+
+    vec2 t_TexCoord = vec2(0.0, 0.0);
     vec4 t_TevA, t_TevB, t_TevC, t_TevD;
 ${this.generateTevStages(tevStages)}
 
