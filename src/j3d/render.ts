@@ -954,7 +954,7 @@ export class BMDModelInstance {
     public vaf1Animator: VAF1Animator | null = null;
 
     public materialInstanceState = new MaterialInstanceState();
-    private materialInstances: MaterialInstance[] = [];
+    public materialInstances: MaterialInstance[] = [];
     private shapeInstances: ShapeInstance[] = [];
     private shapeInstanceState = new ShapeInstanceState();
 

@@ -11,7 +11,7 @@ import { BMDModel, BMDModelInstance, BTIData } from './render';
 import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks } from '../gx/gx_material';
 import { TextureMapping } from '../TextureHolder';
 import { readString, leftPad, assertExists } from '../util';
-import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxFrontFaceMode } from '../gfx/platform/GfxPlatform';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
@@ -93,6 +93,14 @@ class TwilightPrincessRenderer implements Viewer.SceneGfx {
         this.renderHelper = new GXRenderHelperGfx(device);
     }
 
+    private setMirrored(mirror: boolean): void {
+        for (let i = 0; i < this.modelInstances.length; i++) {
+            this.modelInstances[i].modelMatrix[0] = mirror ? -1 : 1;
+            for (let j = 0; j < this.modelInstances[i].materialInstances.length; j++)
+                this.modelInstances[i].materialInstances[j].materialHelper.megaStateFlags.frontFace = mirror ? GfxFrontFaceMode.CCW : GfxFrontFaceMode.CW;
+        }
+    }
+
     public createPanels(): UI.Panel[] {
         const layers = new UI.LayerPanel();
         layers.setLayers(this.modelInstances);
@@ -100,6 +108,11 @@ class TwilightPrincessRenderer implements Viewer.SceneGfx {
         const renderHacksPanel = new UI.Panel();
         renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
+        const mirrorCheckbox = new UI.Checkbox('Mirror Levels (Like Wii)');
+        mirrorCheckbox.onchanged = () => {
+            this.setMirrored(mirrorCheckbox.checked);
+        };
+        renderHacksPanel.contents.appendChild(mirrorCheckbox.elem);
         const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
         enableVertexColorsCheckbox.onchanged = () => {
             for (let i = 0; i < this.modelInstances.length; i++)
