@@ -347,7 +347,7 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
             const courseBtxFile = textureNARC.files.find((file) => file.path === '/course_model.nsbtx');
             const courseBtx = courseBtxFile !== undefined ? NSBTX.parse(courseBtxFile.buffer) : null;
             assert(courseBmd.models.length === 1);
-            const courseRenderer = new MDL0Renderer(device, courseBmd.models[0], courseBtx !== null ? courseBtx.tex0 : assertExists(courseBmd.tex0));
+            const courseRenderer = new MDL0Renderer(device, courseBmd.models[0], courseBmd.tex0 !== null ? courseBmd.tex0 : assertExists(assertExists(courseBtx).tex0));
 
             let skyboxRenderer: MDL0Renderer | null = null;
             const skyboxBmdFile = courseNARC.files.find((file) => file.path === '/course_model_V.nsbmd');
@@ -465,6 +465,8 @@ const sceneDescs = [
     new MarioKartDSSceneDesc("mini_block_course", "mini_block_course"),
     new MarioKartDSSceneDesc("nokonoko_course", "nokonoko_course"),
     new MarioKartDSSceneDesc("old_mario_gc", "old_mario_gc"),
+
+    new MarioKartDSSceneDesc("kiosk_mini_stage1", "kiosk_mini_stage1"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
