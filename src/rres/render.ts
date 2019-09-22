@@ -74,6 +74,9 @@ class ShapeInstance {
     public prepareToRender(device: GfxDevice, textureHolder: GXTextureHolder, renderInstManager: GfxRenderInstManager, depth: number, camera: Camera, instanceStateData: InstanceStateData, isSkybox: boolean): void {
         const materialInstance = this.materialInstance;
 
+        if (!materialInstance.visible)
+            return;
+
         const template = renderInstManager.pushTemplateRenderInst();
         template.sortKey = materialInstance.sortKey;
         template.sortKey = setSortKeyDepth(template.sortKey, depth);
@@ -148,6 +151,7 @@ class MaterialInstance {
     private clr0Animators: (BRRES.CLR0ColorAnimator | null)[] = [];
     public materialHelper: GXMaterialHelperGfx;
     public sortKey: number = 0;
+    public visible = true;
 
     constructor(private modelInstance: MDL0ModelInstance, public materialData: MaterialData) {
         // Create a copy of the GX material, so we can patch in custom channel controls without affecting the original.

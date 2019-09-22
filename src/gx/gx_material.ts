@@ -4,7 +4,7 @@
 import * as GX from './gx_enum';
 
 import { DeviceProgram } from '../Program';
-import { colorCopy, colorFromRGBA, colorNew, TransparentBlack, colorNewCopy } from '../Color';
+import { colorCopy, colorFromRGBA, TransparentBlack, colorNewCopy } from '../Color';
 import { GfxFormat } from '../gfx/platform/GfxPlatformFormat';
 import { GfxCompareMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
 import { vec3, vec4, mat4 } from 'gl-matrix';

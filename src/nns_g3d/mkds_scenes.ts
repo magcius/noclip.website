@@ -165,8 +165,12 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
     }
 
     private spawnObjectFromNKM(device: GfxDevice, courseNARC: NARC.NitroFS, renderer: MKDSRenderer, obji: OBJI): void {
-        function getFileBuffer(filePath: string): ArrayBufferSlice {
-            return assertExists(courseNARC.files.find((file) => file.path === filePath)).buffer;
+        function getFileBuffer(filePath: string): ArrayBufferSlice | null {
+            const file = courseNARC.files.find((file) => file.path === filePath);
+            if (file !== undefined)
+                return file.buffer;
+            else
+                return null;
         }
 
         function setModelMtx(mdl0Renderer: MDL0Renderer, bby: boolean = false): void {
@@ -178,7 +182,8 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
         }
 
         function spawnModel(filePath: string): MDL0Renderer {
-            const bmd = NSBMD.parse(getFileBuffer(filePath));
+            const buffer = assertExists(getFileBuffer(filePath));
+            const bmd = NSBMD.parse(buffer);
             assert(bmd.models.length === 1);
             const mdl0Renderer = new MDL0Renderer(device, bmd.models[0], assertExists(bmd.tex0));
             setModelMtx(mdl0Renderer);
@@ -187,12 +192,12 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
         }
 
         function parseBTA(filePath: string): NSBTA.SRT0 {
-            const bta = NSBTA.parse(getFileBuffer(filePath));
+            const bta = NSBTA.parse(assertExists(getFileBuffer(filePath)));
             return bta.srt0;
         }
 
         function parseBTP(filePath: string): NSBTP.PAT0 {
-            const btp = NSBTP.parse(getFileBuffer(filePath));
+            const btp = NSBTP.parse(assertExists(getFileBuffer(filePath)));
             assert(btp.pat0.length === 1);
             return btp.pat0[0];
         }
@@ -222,7 +227,8 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
             const b = spawnModel(`/MapObj/woodbox1.nsbmd`);
             b.modelMatrix[13] += 32;
         } else if (obji.objectId === 0x00CA) { // koopa_block
-            spawnModel(`/MapObj/koopa_block.nsbmd`);
+            if (getFileBuffer(`/MapObj/koopa_block.nsbmd`) !== null)
+                spawnModel(`/MapObj/koopa_block.nsbmd`);
         } else if (obji.objectId === 0x00CB) { // gear
             spawnModel(`/MapObj/gear_black.nsbmd`);
         } else if (obji.objectId === 0x00CC) { // bridge
@@ -299,21 +305,28 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
             const b = spawnModel(`/MapObj/om6Tree1.nsbmd`);
             setModelMtx(b, true);
         } else if (obji.objectId === 0x0154) { // RainStar
-            spawnModel(`/MapObj/RainStar.nsbmd`).bindSRT0(parseBTA(`/MapObj/RainStar.nsbta`));
+            const b = spawnModel(`/MapObj/RainStar.nsbmd`);
+            b.bindSRT0(parseBTA(`/MapObj/RainStar.nsbta`));
         } else if (obji.objectId === 0x0156) { // Of6Tree1
             spawnModel(`/MapObj/Of6Tree1.nsbmd`);
         } else if (obji.objectId === 0x0157) { // TownMonte
             const whichFrame = obji.objectArg0;
-            spawnModel(`/MapObj/TownMonte.nsbmd`).bindPAT0(device, parseBTP(`/MapObj/TownMonte.nsbtp`), animFrame(whichFrame));
+            const b = spawnModel(`/MapObj/TownMonte.nsbmd`);
+            b.bindPAT0(device, parseBTP(`/MapObj/TownMonte.nsbtp`), animFrame(whichFrame));
         } else if (obji.objectId === 0x01A6) { // ob_pakkun_sf
             const b = spawnModel(`/MapObj/ob_pakkun_sf.nsbmd`);
             b.modelMatrix[13] += 30;
         } else if (obji.objectId === 0x01A8) { // bound
-            spawnModel(`/MapObj/bound.nsbmd`).bindPAT0(device, parseBTP(`/MapObj/bound.nsbtp`));
+            const b = spawnModel(`/MapObj/bound.nsbmd`)!;
+            b.bindPAT0(device, parseBTP(`/MapObj/bound.nsbtp`));
         } else if (obji.objectId === 0x01A9) { // flipper
+            if (getFileBuffer(`/MapObj/flipper.nsbmd`) === null)
+                return;
             const b = spawnModel(`/MapObj/flipper.nsbmd`);
-            b.bindPAT0(device, parseBTP(`/MapObj/flipper.nsbtp`));
-            b.bindSRT0(parseBTA(`/MapObj/flipper.nsbta`));
+            if (getFileBuffer(`/MapObj/flipper.nsbtp`) !== null)
+                b.bindPAT0(device, parseBTP(`/MapObj/flipper.nsbtp`));
+            if (getFileBuffer(`/MapObj/flipper.nsbta`) !== null)
+                b.bindSRT0(parseBTA(`/MapObj/flipper.nsbta`));
             if (obji.objectArg0 === 0x01)
                 mat4.rotateY(b.modelMatrix, b.modelMatrix, Math.PI * 9/8);
         } else if (obji.objectId === 0x01B4) { // cream
@@ -444,9 +457,9 @@ const sceneDescs = [
 
     // These try to reference items that aren't in the archive, so we crash.
     // TODO(jstpierre): Put these back and don't crash on the missing items.
-    // new MarioKartDSSceneDesc("donkey_course", "donkey_course"),
-    // new MarioKartDSSceneDesc("luigi_course", "luigi_course"),
-    // new MarioKartDSSceneDesc("test1_course", "test1_course"),
+    new MarioKartDSSceneDesc("donkey_course", "donkey_course"),
+    new MarioKartDSSceneDesc("luigi_course", "luigi_course"),
+    new MarioKartDSSceneDesc("test1_course", "test1_course"),
 
     new MarioKartDSSceneDesc("test_circle", "test_circle"),
     new MarioKartDSSceneDesc("mini_block_course", "mini_block_course"),
