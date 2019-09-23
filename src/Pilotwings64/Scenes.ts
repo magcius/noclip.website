@@ -634,6 +634,7 @@ function parseUVLV(file: Pilotwings64FSFile): UVLV {
 interface ModelPart {
     indexData: Uint16Array;
     materials: MaterialData[];
+    attachmentLevel: number;
 }
 
 interface ModelLOD {
@@ -682,6 +683,7 @@ function parseUVMD(file: Pilotwings64FSFile): UVMD {
         const parts: ModelPart[] = [];
         for (let p = 0; p < partCount; p++) {
             const texCount = view.getUint8(offs + 0x00);
+            const attachmentLevel = view.getUint8(offs + 0x02);
             offs += 0x03;
 
             const indexData: number[] = [];
@@ -712,7 +714,7 @@ function parseUVMD(file: Pilotwings64FSFile): UVMD {
                 assert(indexData.length - indexOffset == 3 * triCount);
                 materials.push({ rspModeInfo, textureIndex, indexOffset, triCount });
             }
-            parts.push({ indexData: new Uint16Array(indexData), materials });
+            parts.push({ indexData: new Uint16Array(indexData), materials, attachmentLevel });
         }
         const radius = view.getFloat32(offs);
         offs += 0x04;
@@ -958,13 +960,33 @@ void main() {
 `;
 }
 
+class ModelData {
+    public parts: MeshData[];
+    public partLevels: number[];
+
+    constructor(device: GfxDevice, public uvmd: UVMD, modelIndex: number) {
+        this.parts = uvmd.lods[0].parts.map((part, partNumber) =>
+            new MeshData(device,
+                { vertexData: uvmd.vertexData, indexData: part.indexData, materials: part.materials },
+                getToyMotion(modelIndex, partNumber)
+            )
+        );
+        this.partLevels = uvmd.lods[0].parts.map((part) => part.attachmentLevel);
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let part of this.parts)
+            part.destroy(device);
+    }
+}
+
 class MeshData {
     public vertexBuffer: GfxBuffer;
     public indexBuffer: GfxBuffer;
     public inputLayout: GfxInputLayout;
     public inputState: GfxInputState;
 
-    constructor(device: GfxDevice, public mesh: Mesh_Chunk) {
+    constructor(device: GfxDevice, public mesh: Mesh_Chunk, public toyMotion?: ToyMotion) {
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, mesh.vertexData.buffer);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, mesh.indexData.buffer);
 
@@ -992,6 +1014,47 @@ class MeshData {
     }
 }
 
+function badAtan2(x: number, y:number): number {
+    if (x === 0 && y === 0) {
+        return 0;
+    }
+    const absX = Math.abs(x), absY = Math.abs(y);
+    const ratio = absX < absY? absX/absY : absY/absX;
+    const delta = Math.abs(absX-absY);
+    const baseValue = ratio*(0.785398+delta*0.309);
+    let corrected = absX < absY? baseValue : Math.PI/2 - baseValue;
+    if (y < 0)
+        corrected = Math.PI - corrected;
+    if (x >= 0)
+        return corrected;
+    else
+        return -corrected;
+}
+
+class ModelRenderer {
+    public modelMatrix = mat4.create();
+    private parts: MeshRenderer[] = [];
+    public partMatrices: mat4[] = [];
+
+    constructor(private model: ModelData, textureData: TextureData[]) {
+        for (let i = 0; i < model.parts.length; i++) {
+            this.parts.push(new MeshRenderer(model.parts[i], textureData));
+            this.parts[i].modelMatrix = model.uvmd.partPlacements[i];
+        }
+        this.partMatrices = nArray(Math.max(...model.partLevels) + 1, () => mat4.create());
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        mat4.copy(this.partMatrices[0], this.modelMatrix)
+        for (let i = 0; i < this.parts.length; i++) {
+            const level = this.model.partLevels[i];
+            if (level > 0)
+                mat4.copy(this.partMatrices[level], this.partMatrices[level - 1]);
+            this.parts[i].prepareToRender(device, renderInstManager, viewerInput, this.partMatrices[level]);
+        }
+    }
+}
+
 class MeshRenderer {
     public modelMatrix = mat4.create();
     private materials: MaterialInstance[] = [];
@@ -1001,12 +1064,30 @@ class MeshRenderer {
             this.materials.push(new MaterialInstance(material, textureData));
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, parentMatrix?: mat4): void {
         const template = renderInstManager.pushTemplateRenderInst();
+
+        let finalMatrix = this.modelMatrix;
+
+        if (parentMatrix) {
+            finalMatrix = parentMatrix;
+            mat4.mul(finalMatrix, finalMatrix, this.modelMatrix)
+
+            if (this.meshData.toyMotion) {
+                if (this.meshData.toyMotion.rotation) {
+                    const rotation = this.meshData.toyMotion.rotation;
+                    mat4.rotate(finalMatrix, finalMatrix, rotation.speed * viewerInput.time / 1000, rotation.axis)
+                } else if (this.meshData.toyMotion.oscillation) {
+                    const osc = this.meshData.toyMotion.oscillation;
+                    const radians = badAtan2(osc.xScale * Math.sin(osc.speed * viewerInput.time / 1000), osc.yScale);
+                    mat4.rotate(finalMatrix, finalMatrix, radians, osc.axis)
+                }
+            }
+        }
 
         template.setInputLayoutAndState(this.meshData.inputLayout, this.meshData.inputState);
         for (let material of this.materials) {
-            material.prepareToRender(device, renderInstManager, viewerInput, this.modelMatrix);
+            material.prepareToRender(device, renderInstManager, viewerInput, finalMatrix);
         }
         renderInstManager.popTemplateRenderInst();
     }
@@ -1201,9 +1282,9 @@ class TextureData {
 
 class Pilotwings64Renderer implements SceneGfx {
     public uvctData: MeshData[] = [];
-    public uvmdData: MeshData[][] = [];
+    public uvmdData: ModelData[] = [];
     public uvctInstance: MeshRenderer[] = [];
-    public uvmdInstance: MeshRenderer[] = [];
+    public uvmdInstance: ModelRenderer[] = [];
     public renderHelper: GfxRenderHelper;
     public textureData: TextureData[] = [];
     private renderTarget = new BasicRenderTarget();
@@ -1255,8 +1336,7 @@ class Pilotwings64Renderer implements SceneGfx {
         for (let i = 0; i < this.uvctData.length; i++)
             this.uvctData[i].destroy(device);
         for (let i = 0; i < this.uvmdData.length; i++)
-            for (let j = 0; j < this.uvmdData[i].length; j++)
-                this.uvmdData[i][j].destroy(device);
+            this.uvmdData[i].destroy(device);
     }
 }
 
@@ -1293,6 +1373,66 @@ function dummyTexture(name: string): UVTX {
     };
 }
 
+const xAxis = vec3.fromValues(1,0,0);
+const yAxis = vec3.fromValues(0,1,0);
+const zAxis = vec3.fromValues(0,0,1);
+
+interface ToyRotation {
+    axis: vec3;
+    speed: number;
+    offset?: number;
+}
+
+interface ToyOscillation {
+    axis: vec3;
+    speed: number;
+    xScale: number;
+    yScale: number;
+}
+
+interface ToyMotion {
+    rotation?: ToyRotation;
+    oscillation?: ToyOscillation;
+}
+
+// the game actually specifies animated models by listing their final coordinates
+// we assume all instances of a given model are animated
+function getToyMotion(modelIndex: number, partIndex: number): ToyMotion | undefined {
+    // carousel
+    if (modelIndex === 0x09 && partIndex === 1) {
+        const rotation = { axis: zAxis, speed: 10 * MathConstants.DEG_TO_RAD };
+        return { rotation };
+    }
+    // ferris wheel
+    if (modelIndex === 0x0c && partIndex >= 1) {
+        const rotation = { axis: yAxis, speed: 17 * MathConstants.DEG_TO_RAD };
+        if (partIndex > 1)
+            rotation.speed *= -1;
+        return { rotation };
+    }
+    // water wheel
+    if (modelIndex === 0x0d && partIndex === 0) {
+        const rotation = { axis: yAxis, speed: 40 * MathConstants.DEG_TO_RAD };
+        return { rotation };
+    }
+    // derrick
+    if (modelIndex === 0x54) {
+        if (partIndex === 1) {
+            const rotation = { axis: xAxis, speed: 65 * MathConstants.DEG_TO_RAD, offset: 4.71239 };
+            return { rotation };
+        }
+        const oscillation = { axis: xAxis, speed: 65 * MathConstants.DEG_TO_RAD, xScale: 1.16, yScale: 55 }
+        if (partIndex === 2) {
+            return { oscillation };
+        }
+        if (partIndex === 3) {
+            oscillation.xScale *= -1;
+            return { oscillation };
+        }
+    }
+    // the mount rushmore head (modelIndex 0x55 or 0x99) also has a "toy type", but no motion
+    return;
+}
 
 const pathBase = `Pilotwings64`;
 class Pilotwings64SceneDesc implements SceneDesc {
@@ -1317,12 +1457,7 @@ class Pilotwings64SceneDesc implements SceneDesc {
         const uvctData = uvct.map((uvct) => new MeshData(device, uvct.mesh));
         renderer.uvctData = uvctData;
 
-        const uvmdData = uvmd.map((uvmd) => uvmd.lods[0].parts.map((part) =>
-            new MeshData(device, {
-                indexData: part.indexData,
-                vertexData: uvmd.vertexData,
-                materials: part.materials
-            })));
+        const uvmdData = uvmd.map((uvmd, modelIndex) => new ModelData(device, uvmd, modelIndex));
         renderer.uvmdData = uvmdData;
 
 
@@ -1353,18 +1488,12 @@ class Pilotwings64SceneDesc implements SceneDesc {
                 mat4.translate(contourInstance.modelMatrix, contourInstance.modelMatrix, ct.position);
                 renderer.uvctInstance.push(contourInstance);
 
-                // render attached static models (Sobjs)
+                // render attached models (Sobjs)
                 for (let model of uvct[ct.contourIndex].models) {
-                    const instances = uvmdData[model.modelIndex].map(
-                        (part) => new MeshRenderer(part, renderer.textureData)
-                    );
-                    const relPositions = uvmd[model.modelIndex].partPlacements;
-                    for (let k = 0; k < instances.length; k++) {
-                        mat4.multiply(instances[k].modelMatrix, instances[k].modelMatrix, contourInstance.modelMatrix);
-                        mat4.multiply(instances[k].modelMatrix, instances[k].modelMatrix, model.placement);
-                        mat4.multiply(instances[k].modelMatrix, instances[k].modelMatrix, relPositions[k]);
-                        renderer.uvmdInstance.push(instances[k]);
-                    }
+                    const modelInstance = new ModelRenderer(uvmdData[model.modelIndex], renderer.textureData);
+                    mat4.multiply(modelInstance.modelMatrix, modelInstance.modelMatrix, contourInstance.modelMatrix);
+                    mat4.multiply(modelInstance.modelMatrix, modelInstance.modelMatrix, model.placement);
+                    renderer.uvmdInstance.push(modelInstance);
                 }
             }
         }
