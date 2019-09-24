@@ -133,7 +133,7 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
 
     protected abstract loadTexture(device: GfxDevice, textureEntry: TextureType): LoadedTexture | null;
 
-    public addTextures(device: GfxDevice, textureEntries: TextureType[], overwrite: boolean = false): void {
+    public addTextures(device: GfxDevice, textureEntries: (TextureType | null)[], overwrite: boolean = false): void {
         for (let i = 0; i < textureEntries.length; i++) {
             const texture = textureEntries[i];
             if (texture === null)

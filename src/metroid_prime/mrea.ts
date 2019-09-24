@@ -1294,12 +1294,18 @@ function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSyste
                 }
                 assert(stream.tell() === passEnd);
 
-                const txtr: TXTR = assertExists(resourceSystem.loadAssetByID<TXTR>(materialTXTRID, 'TXTR'));
-                let txtrIndex = textures.indexOf(txtr);
-                if (txtrIndex < 0) {
-                    txtrIndex = textures.push(txtr) - 1;
-                    // TODO(jstpierre): Remove remap table.
-                    textureRemapTable[txtrIndex] = txtrIndex;
+                const txtr: TXTR | null = resourceSystem.loadAssetByID<TXTR>(materialTXTRID, 'TXTR');
+
+                let txtrIndex: number;
+                if (txtr !== null) {
+                    txtrIndex = textures.indexOf(txtr);
+                    if (txtrIndex < 0) {
+                        txtrIndex = textures.push(txtr) - 1;
+                        // TODO(jstpierre): Remove remap table.
+                        textureRemapTable[txtrIndex] = txtrIndex;
+                    }
+                } else {
+                    txtrIndex = -1;
                 }
 
                 let normalize: boolean = false;
