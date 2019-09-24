@@ -11,8 +11,6 @@ import * as RARC from '../rarc';
 import * as Yaz0 from '../../compression/Yaz0';
 import * as UI from '../../ui';
 
-import * as GX_Material from '../../gx/gx_material';
-
 import * as DZB from './DZB';
 import * as JPA from '../JPA';
 import { BMD, BTK, BRK, BCK, BTI, LoopMode, BMT } from '../j3d';
@@ -829,14 +827,12 @@ class ModelCache {
         return p;
     }
 
-    public getModel(device: GfxDevice, cache: GfxRenderCache, rarc: RARC.RARC, modelPath: string, hacks?: (bmd: BMD) => void): BMDModel {
+    public getModel(device: GfxDevice, cache: GfxRenderCache, rarc: RARC.RARC, modelPath: string): BMDModel {
         let p = this.modelCache.get(modelPath);
 
         if (p === undefined) {
             const bmdData = rarc.findFileData(modelPath)!;
             const bmd = BMD.parse(bmdData);
-            if (hacks !== undefined)
-                hacks(bmd);
             p = new BMDModel(device, cache, bmd);
             this.modelCache.set(modelPath, p);
         }

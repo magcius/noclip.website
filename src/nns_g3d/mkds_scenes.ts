@@ -23,6 +23,47 @@ import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 import { SceneContext } from '../SceneBase';
 
+const pathBase = `mkds`;
+class ModelCache {
+    private filePromiseCache = new Map<string, Promise<ArrayBufferSlice>>();
+    private fileDataCache = new Map<string, ArrayBufferSlice>();
+
+    constructor(private dataFetcher: DataFetcher) {
+    }
+
+    public waitForLoad(): Promise<any> {
+        const p: Promise<any>[] = [... this.filePromiseCache.values()];
+        return Promise.all(p);
+    }
+
+    private mountNARC(narc: NARC.NitroFS): void {
+        for (let i = 0; i < narc.files.length; i++) {
+            const file = narc.files[i];
+            this.fileDataCache.set(assertExists(file.path), file.buffer);
+        }
+    }
+
+    private fetchFile(path: string): Promise<ArrayBufferSlice> {
+        assert(!this.filePromiseCache.has(path));
+        const p = this.dataFetcher.fetchData(`${pathBase}/${path}`);
+        this.filePromiseCache.set(path, p);
+        return p;
+    }
+
+    public async fetchNARC(path: string) {
+        const fileData = await this.fetchFile(path);
+        const narc = NARC.parse(CX.decompress(fileData));
+        this.mountNARC(narc);
+    }
+
+    public getFileData(path: string): ArrayBufferSlice | null {
+        if (this.fileDataCache.has(path))
+            return this.fileDataCache.get(path)!;
+        else
+            return null;
+    }
+}
+
 export class MKDSRenderer implements Viewer.SceneGfx {
     public renderTarget = new BasicRenderTarget();
     public renderInstManager = new GfxRenderInstManager();
@@ -158,21 +199,7 @@ const scratchMatrix = mat4.create();
 class MarioKartDSSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
 
-    private fetchCARC(path: string, dataFetcher: DataFetcher): Promise<NARC.NitroFS> {
-        return dataFetcher.fetchData(path).then((buffer: ArrayBufferSlice) => {
-            return NARC.parse(CX.decompress(buffer));
-        });
-    }
-
-    private spawnObjectFromNKM(device: GfxDevice, courseNARC: NARC.NitroFS, renderer: MKDSRenderer, obji: OBJI): void {
-        function getFileBuffer(filePath: string): ArrayBufferSlice | null {
-            const file = courseNARC.files.find((file) => file.path === filePath);
-            if (file !== undefined)
-                return file.buffer;
-            else
-                return null;
-        }
-
+    private spawnObjectFromNKM(device: GfxDevice, modelCache: ModelCache, renderer: MKDSRenderer, obji: OBJI): void {
         function setModelMtx(mdl0Renderer: MDL0Renderer, bby: boolean = false): void {
             const rotationY = bby ? 0 : obji.rotationY;
             computeModelMatrixSRT(scratchMatrix, obji.scaleX, obji.scaleY, obji.scaleZ, obji.rotationX, rotationY, obji.rotationZ, obji.translationX, obji.translationY, obji.translationZ);
@@ -182,7 +209,7 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
         }
 
         function spawnModel(filePath: string): MDL0Renderer {
-            const buffer = assertExists(getFileBuffer(filePath));
+            const buffer = assertExists(modelCache.getFileData(filePath));
             const bmd = NSBMD.parse(buffer);
             assert(bmd.models.length === 1);
             const mdl0Renderer = new MDL0Renderer(device, bmd.models[0], assertExists(bmd.tex0));
@@ -192,12 +219,12 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
         }
 
         function parseBTA(filePath: string): NSBTA.SRT0 {
-            const bta = NSBTA.parse(assertExists(getFileBuffer(filePath)));
+            const bta = NSBTA.parse(assertExists(modelCache.getFileData(filePath)));
             return bta.srt0;
         }
 
         function parseBTP(filePath: string): NSBTP.PAT0 {
-            const btp = NSBTP.parse(assertExists(getFileBuffer(filePath)));
+            const btp = NSBTP.parse(assertExists(modelCache.getFileData(filePath)));
             assert(btp.pat0.length === 1);
             return btp.pat0[0];
         }
@@ -227,7 +254,7 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
             const b = spawnModel(`/MapObj/woodbox1.nsbmd`);
             b.modelMatrix[13] += 32;
         } else if (obji.objectId === 0x00CA) { // koopa_block
-            if (getFileBuffer(`/MapObj/koopa_block.nsbmd`) !== null)
+            if (modelCache.getFileData(`/MapObj/koopa_block.nsbmd`) !== null)
                 spawnModel(`/MapObj/koopa_block.nsbmd`);
         } else if (obji.objectId === 0x00CB) { // gear
             spawnModel(`/MapObj/gear_black.nsbmd`);
@@ -320,12 +347,12 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
             const b = spawnModel(`/MapObj/bound.nsbmd`)!;
             b.bindPAT0(device, parseBTP(`/MapObj/bound.nsbtp`));
         } else if (obji.objectId === 0x01A9) { // flipper
-            if (getFileBuffer(`/MapObj/flipper.nsbmd`) === null)
+            if (modelCache.getFileData(`/MapObj/flipper.nsbmd`) === null)
                 return;
             const b = spawnModel(`/MapObj/flipper.nsbmd`);
-            if (getFileBuffer(`/MapObj/flipper.nsbtp`) !== null)
+            if (modelCache.getFileData(`/MapObj/flipper.nsbtp`) !== null)
                 b.bindPAT0(device, parseBTP(`/MapObj/flipper.nsbtp`));
-            if (getFileBuffer(`/MapObj/flipper.nsbta`) !== null)
+            if (modelCache.getFileData(`/MapObj/flipper.nsbta`) !== null)
                 b.bindSRT0(parseBTA(`/MapObj/flipper.nsbta`));
             if (obji.objectArg0 === 0x01)
                 mat4.rotateY(b.modelMatrix, b.modelMatrix, Math.PI * 9/8);
@@ -336,63 +363,61 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
         }
     }
 
-    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
-        return Promise.all([
-            this.fetchCARC(`mkds/Course/${this.id}.carc`, dataFetcher),
-            this.fetchCARC(`mkds/Course/${this.id}Tex.carc`, dataFetcher),
-        ]).then(([courseNARC, textureNARC]) => {
-            const courseBmdFile = assertExists(courseNARC.files.find((file) => file.path === '/course_model.nsbmd'));
-            const courseBmd = NSBMD.parse(courseBmdFile.buffer);
-            const courseBtxFile = textureNARC.files.find((file) => file.path === '/course_model.nsbtx');
-            const courseBtx = courseBtxFile !== undefined ? NSBTX.parse(courseBtxFile.buffer) : null;
-            assert(courseBmd.models.length === 1);
-            const courseRenderer = new MDL0Renderer(device, courseBmd.models[0], courseBmd.tex0 !== null ? courseBmd.tex0 : assertExists(assertExists(courseBtx).tex0));
 
-            let skyboxRenderer: MDL0Renderer | null = null;
-            const skyboxBmdFile = courseNARC.files.find((file) => file.path === '/course_model_V.nsbmd');
-            if (skyboxBmdFile !== undefined) {
-                const skyboxBmd = NSBMD.parse(skyboxBmdFile.buffer);
-                const skyboxBtxFile = textureNARC.files.find((file) => file.path === '/course_model_V.nsbtx');
-                const skyboxBtx = skyboxBtxFile !== undefined ? NSBTX.parse(skyboxBtxFile.buffer) : null;
-                assert(skyboxBmd.models.length === 1);
-                skyboxRenderer = new MDL0Renderer(device, skyboxBmd.models[0], skyboxBtx !== null ? skyboxBtx.tex0 : assertExists(skyboxBmd.tex0));
-                skyboxRenderer.modelMatrix[13] -= 1500;
-                skyboxRenderer.isSkybox = true;
-            }
+        const modelCache = new ModelCache(dataFetcher);
+        modelCache.fetchNARC(`Main/MapObj.carc`);
+        modelCache.fetchNARC(`Course/${this.id}.carc`);
+        modelCache.fetchNARC(`Course/${this.id}Tex.carc`);
+        await modelCache.waitForLoad();
 
-            const renderer = new MKDSRenderer(device, courseRenderer, skyboxRenderer);
+        const courseBmd = NSBMD.parse(assertExists(modelCache.getFileData(`/course_model.nsbmd`)));
+        assert(courseBmd.models.length === 1);
 
-            const courseBtaFile = courseNARC.files.find((file) => file.path === '/course_model.nsbta');
-            const courseBta = courseBtaFile !== undefined ? NSBTA.parse(courseBtaFile.buffer) : null;
-            if (courseBta !== null)
-                courseRenderer.bindSRT0(courseBta.srt0);
+        const courseBtxFile = modelCache.getFileData(`/course_model.nsbtx`);
+        const courseBtx = courseBtxFile !== null ? NSBTX.parse(courseBtxFile) : null;
+        const courseRenderer = new MDL0Renderer(device, courseBmd.models[0], courseBmd.tex0 !== null ? courseBmd.tex0 : assertExists(assertExists(courseBtx).tex0));
 
-            const courseBtpFile = courseNARC.files.find((file) => file.path === '/course_model.nsbtp');
-            const courseBtp = courseBtpFile !== undefined ? NSBTP.parse(courseBtpFile.buffer) : null;
-            if (courseBtp !== null) {
-                assert(courseBtp.pat0.length === 1);
-                courseRenderer.bindPAT0(device, courseBtp.pat0[0]);
-            }
+        let skyboxRenderer: MDL0Renderer | null = null;
+        const skyboxBmdFile = modelCache.getFileData(`/course_model_V.nsbmd`);
+        if (skyboxBmdFile !== null) {
+            const skyboxBmd = NSBMD.parse(skyboxBmdFile);
+            const skyboxBtxFile = modelCache.getFileData(`/course_model_V.nsbtx`);
+            const skyboxBtx = skyboxBtxFile !== null ? NSBTX.parse(skyboxBtxFile) : null;
+            assert(skyboxBmd.models.length === 1);
+            skyboxRenderer = new MDL0Renderer(device, skyboxBmd.models[0], skyboxBtx !== null ? skyboxBtx.tex0 : assertExists(skyboxBmd.tex0));
+            skyboxRenderer.modelMatrix[13] -= 1500;
+            skyboxRenderer.isSkybox = true;
+            
+            const skyboxBtaFile = modelCache.getFileData(`/course_model_V.nsbta`);
+            if (skyboxBtaFile !== null)
+                skyboxRenderer.bindSRT0(NSBTA.parse(skyboxBtaFile).srt0);
+        }
 
-            if (skyboxRenderer !== null) {
-                const skyboxBtaFile = courseNARC.files.find((file) => file.path === '/course_model_V.nsbta');
-                const skyboxBta = skyboxBtaFile !== undefined ? NSBTA.parse(skyboxBtaFile.buffer) : null;
-                if (skyboxBta !== null)
-                    skyboxRenderer.bindSRT0(skyboxBta.srt0);
-            }
+        const renderer = new MKDSRenderer(device, courseRenderer, skyboxRenderer);
 
-            // Now spawn objects
-            const courseNKM = courseNARC.files.find((file) => file.path === '/course_map.nkm');
-            if (courseNKM !== undefined) {
-                const nkm = parseNKM(courseNKM.buffer);
-                (renderer as any).nkm = nkm;
-                for (let i = 0; i < nkm.obji.length; i++)
-                    this.spawnObjectFromNKM(device, courseNARC, renderer, nkm.obji[i]);
-            }
+        const courseBtaFile = modelCache.getFileData(`/course_model.nsbta`);
+        if (courseBtaFile !== null)
+            courseRenderer.bindSRT0(NSBTA.parse(courseBtaFile).srt0);
 
-            return renderer;
-        });
+        const courseBtpFile = modelCache.getFileData(`/course_model.nsbtp`);
+        if (courseBtpFile !== null) {
+            const courseBtp = NSBTP.parse(courseBtpFile);
+            assert(courseBtp.pat0.length === 1);
+            courseRenderer.bindPAT0(device, courseBtp.pat0[0]);
+        }
+
+        // Now spawn objects
+        const courseNKM = modelCache.getFileData(`/course_map.nkm`);
+        if (courseNKM !== null) {
+            const nkm = parseNKM(courseNKM);
+            (renderer as any).nkm = nkm;
+            for (let i = 0; i < nkm.obji.length; i++)
+                this.spawnObjectFromNKM(device, modelCache, renderer, nkm.obji[i]);
+        }
+
+        return renderer;
     }
 }
 
