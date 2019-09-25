@@ -1097,7 +1097,7 @@ class ModelRenderer {
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         const template = renderInstManager.pushTemplateRenderInst();
         template.sortKey = makeSortKey(this.model.uvmd.hasTransparency ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE);
-        mat4.copy(this.partMatrices[0], this.modelMatrix)
+        mat4.copy(this.partMatrices[0], this.modelMatrix);
         for (let i = 0; i < this.parts.length; i++) {
             const level = this.model.partLevels[i];
             if (level > 0)
@@ -1111,6 +1111,7 @@ class ModelRenderer {
 class MeshRenderer {
     public modelMatrix = mat4.create();
     private materials: MaterialInstance[] = [];
+    private visible = true;
 
     constructor(private meshData: MeshData, textureData: TextureData[]) {
         for (let material of meshData.mesh.materials)
@@ -1118,6 +1119,9 @@ class MeshRenderer {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, parentMatrix?: mat4): void {
+        if (!this.visible)
+            return;
+
         const template = renderInstManager.pushTemplateRenderInst();
 
         let finalMatrix = this.modelMatrix;
@@ -1139,9 +1143,8 @@ class MeshRenderer {
         }
 
         template.setInputLayoutAndState(this.meshData.inputLayout, this.meshData.inputState);
-        for (let material of this.materials) {
-            material.prepareToRender(device, renderInstManager, viewerInput, finalMatrix);
-        }
+        for (let i = 0; i < this.materials.length; i++)
+            this.materials[i].prepareToRender(device, renderInstManager, viewerInput, finalMatrix);
         renderInstManager.popTemplateRenderInst();
     }
 }
@@ -1461,6 +1464,7 @@ class MaterialInstance {
     private uvtx: UVTX;
     private decodedMaterial: decodeMaterialResult;
     private stateFlags: Partial<GfxMegaStateDescriptor>;
+    private visible = true;
 
     constructor(private materialData: MaterialData, textureData: TextureData[]) {
         this.hasTexture = materialData.textureIndex < 0x0FFF;
@@ -1487,6 +1491,9 @@ class MaterialInstance {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, modelMatrix: mat4): void {
+        if (!this.visible)
+            return;
+
         const renderInst = renderInstManager.pushRenderInst();
         renderInst.setMegaStateFlags(this.stateFlags);
         let offs = renderInst.allocateUniformBuffer(PW64Program.ub_DrawParams, 12 + 2 * 8);
@@ -1496,7 +1503,7 @@ class MaterialInstance {
         mat4.mul(scratchMatrix, scratchMatrix, modelMatrix);
 
         // TODO: look further into game logic for this
-        if (getSortKeyLayer(renderInst.sortKey) & GfxRendererLayer.TRANSLUCENT ) {
+        if (!!(getSortKeyLayer(renderInst.sortKey) & GfxRendererLayer.TRANSLUCENT)) {
             renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, -scratchMatrix[14]);
         }
 
@@ -1547,15 +1554,16 @@ class MaterialInstance {
             offs = renderInst.allocateUniformBuffer(PW64Program.ub_CombineParams, 12);
             const comb = renderInst.mapUniformBufferF32(PW64Program.ub_CombineParams);
             const chosenCombine = (this.decodedMaterial.combineOverride) ? this.decodedMaterial.combineOverride : this.uvtx.combine;
-            const asFloats = chosenCombine.map(packParams);
-            offs += fillVec4(comb, offs, asFloats[0], asFloats[1], asFloats[2], asFloats[3]);
+            const cc0 = packParams(chosenCombine[0]);
+            const cc1 = packParams(chosenCombine[1]);
+            const cc2 = packParams(chosenCombine[2]);
+            const cc3 = packParams(chosenCombine[3]);
+            offs += fillVec4(comb, offs, cc0, cc1, cc2, cc3);
 
-            if (this.uvtx.primitive) {
-                fillVec4v(comb, offs, this.uvtx.primitive)
-            }
-            if (this.uvtx.environment) {
-                fillVec4v(comb, offs + 4, this.uvtx.environment)
-            }
+            if (this.uvtx.primitive)
+                fillVec4v(comb, offs + 0x00, this.uvtx.primitive);
+            if (this.uvtx.environment)
+                fillVec4v(comb, offs + 0x04, this.uvtx.environment);
         } else {
             // game actually sets 2 cycle mode for some reason, and enables shading
             this.program.defines.set('USE_VERTEX_COLOR', '1');
