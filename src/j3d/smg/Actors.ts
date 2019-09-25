@@ -6,17 +6,17 @@ import { SceneObjHolder, ZoneAndLayer, getObjectName, WorldmapPointInfo, getDelt
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg6, getJMapInfoArg7 } from './JMapInfo';
 import { mat4, vec3 } from 'gl-matrix';
 import AnimationController from '../../AnimationController';
-import { MathConstants, computeModelMatrixSRT, clamp } from '../../MathHelpers';
+import { MathConstants, computeModelMatrixSRT, clamp, computeModelMatrixR } from '../../MathHelpers';
 import { colorNewFromRGBA8, Color } from '../../Color';
 import { ColorKind } from '../../gx/gx_render';
 import { BTK, BRK, LoopMode, BTP } from '../j3d';
 import * as Viewer from '../../viewer';
 import * as RARC from '../../j3d/rarc';
-import { DrawBufferType, MovementType, CalcAnimType, DrawType } from './NameObj';
+import { DrawBufferType, MovementType, CalcAnimType, DrawType, NameObj } from './NameObj';
 import { BMDModelInstance } from '../render';
 import { assertExists, leftPad } from '../../util';
 import { Camera } from '../../Camera';
-import { isGreaterStep, isFirstStep, calcNerveRate } from './Spine';
+import { isGreaterStep, isFirstStep, calcNerveRate, Spine } from './Spine';
 import { LiveActor, startBck, startBtkIfExist, startBrkIfExist, startBvaIfExist, startBpkIfExist } from './LiveActor';
 
 export function connectToScene(sceneObjHolder: SceneObjHolder, actor: LiveActor, movementType: MovementType, calcAnimType: CalcAnimType, drawBufferType: DrawBufferType, drawType: DrawType): void {
@@ -340,6 +340,161 @@ function requestArchivesForNPCGoods(sceneObjHolder: SceneObjHolder, npcName: str
     }
 }
 
+const enum AxisType { X, Y, Z }
+const enum AccelType { NORMAL, REVERSE, TIMED }
+
+const enum MapPartsRotatorNrv { NEVER_MOVE, WAIT, ROTATE_START, ROTATE, STOP_AT_END }
+
+function hasMapPartsMoveStartSignMotion(signMotionType: number): boolean {
+    // TODO(jstpierre)
+    return false;
+}
+
+class MapPartsRotator extends NameObj {
+    private rotateAngle: number;
+    private rotateAxis: AxisType;
+    private rotateAccelType: AccelType;
+    private rotateStopTime: number;
+    private rotateType: number;
+    private rotateSpeed: number;
+    private signMotionType: number;
+    private targetAngle: number = 0;
+    private velocity: number = 0;
+    private isOnReverse: boolean = false;
+    private angle: number = 0;
+    private spine: Spine;
+
+    private baseHostMtx = mat4.create();
+    public rotateMtx = mat4.create();
+
+    constructor(private actor: LiveActor, infoIter: JMapInfoIter) {
+        super('MapPartsRotator');
+
+        this.spine = new Spine();
+
+        this.rotateAngle = assertExists(infoIter.getValueNumber('RotateSpeed'));
+        this.rotateAxis = assertExists(infoIter.getValueNumber('RotateAxis'));
+        this.rotateAccelType = assertExists(infoIter.getValueNumber('RotateAccelType'));
+        this.rotateStopTime = assertExists(infoIter.getValueNumber('RotateStopTime'));
+        this.rotateType = assertExists(infoIter.getValueNumber('RotateType'));
+        this.signMotionType = assertExists(infoIter.getValueNumber('SignMotionType'));
+
+        if (this.rotateAccelType === AccelType.TIMED) {
+            const rotateTime = assertExists(infoIter.getValueNumber('RotateTime'));
+            this.rotateSpeed = this.rotateAngle / rotateTime;
+        } else {
+            this.rotateSpeed = assertExists(infoIter.getValueNumber('RotateSpeed')) * 0.01;
+        }
+
+        if (this.rotateSpeed !== 0) {
+            this.spine.setNerve(MapPartsRotatorNrv.WAIT);
+        } else {
+            this.spine.setNerve(MapPartsRotatorNrv.NEVER_MOVE);
+        }
+
+        this.updateBaseHostMtx();
+    }
+
+    public isWorking(): boolean {
+        return (
+            this.spine.getCurrentNerve() !== MapPartsRotatorNrv.NEVER_MOVE &&
+            this.spine.getCurrentNerve() !== MapPartsRotatorNrv.WAIT
+        );
+    }
+
+    private updateTargetAngle(): void {
+        if (this.rotateSpeed > 0) {
+            this.targetAngle = this.angle + this.rotateAngle;
+        } else {
+            this.targetAngle = this.angle - this.rotateAngle;
+        }
+    }
+
+    private updateBaseHostMtx(): void {
+        computeModelMatrixR(this.baseHostMtx, this.actor.rotation[0], this.actor.rotation[1], this.actor.rotation[2]);
+    }
+
+    private calcRotateAxisDir(v: vec3, axisType: AxisType): void {
+        if (axisType === AxisType.X) {
+            vec3.set(v, this.baseHostMtx[0], this.baseHostMtx[1], this.baseHostMtx[2]);
+        } else if (axisType === AxisType.Y) {
+            vec3.set(v, this.baseHostMtx[4], this.baseHostMtx[5], this.baseHostMtx[6]);
+        } else if (axisType === AxisType.Z) {
+            vec3.set(v, this.baseHostMtx[8], this.baseHostMtx[9], this.baseHostMtx[10]);
+        }
+    }
+
+    private updateRotateMtx(): void {
+        this.calcRotateAxisDir(scratchVec3, this.rotateAxis);
+        vec3.normalize(scratchVec3, scratchVec3);
+        mat4.identity(this.rotateMtx);
+        mat4.rotate(this.rotateMtx, this.rotateMtx, MathConstants.DEG_TO_RAD * this.angle, scratchVec3);
+        mat4.mul(this.rotateMtx, this.rotateMtx, this.baseHostMtx);
+    }
+
+    public start(): void {
+        this.updateTargetAngle();
+        this.updateRotateMtx();
+        this.spine.setNerve(MapPartsRotatorNrv.ROTATE);
+    }
+
+    private updateVelocity(): void {
+        if (this.rotateAngle !== 0 && this.rotateAccelType === AccelType.REVERSE) {
+            // TODO(jstpierre): Reverse accel type
+        }
+
+        this.isOnReverse = false;
+        this.velocity = this.rotateSpeed;
+    }
+
+    private updateAngle(dt: number): void {
+        this.angle = this.angle + this.velocity * dt;
+        while (this.angle > 360.0)
+            this.angle -= 360.0;
+        while (this.angle < 0)
+            this.angle += 360.0;
+    }
+
+    private isReachedTargetAngle(): boolean {
+        // TODO(jstpierre)
+        return false;
+    }
+
+    private restartAtEnd(): void {
+        if (this.rotateType !== 0) {
+            if (this.rotateType === 1)
+                this.rotateSpeed = this.rotateSpeed * -1;
+            this.updateTargetAngle();
+            if (hasMapPartsMoveStartSignMotion(this.signMotionType))
+                this.spine.setNerve(MapPartsRotatorNrv.ROTATE_START);
+            else
+                this.spine.setNerve(MapPartsRotatorNrv.ROTATE);
+        }
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        if (this.spine.getCurrentNerve() === MapPartsRotatorNrv.ROTATE) {
+            this.updateVelocity();
+            this.updateAngle(getDeltaTimeFrames(viewerInput));
+
+            if ((this.rotateAccelType === AccelType.NORMAL || this.rotateAccelType === AccelType.TIMED) && this.isReachedTargetAngle()) {
+                this.angle = this.targetAngle;
+                this.updateRotateMtx();
+
+                if (this.rotateStopTime < 1)
+                    this.restartAtEnd();
+                else
+                    this.spine.setNerve(MapPartsRotatorNrv.STOP_AT_END);
+            } else {
+                if (this.rotateAccelType === AccelType.REVERSE && this.velocity === 0)
+                    this.spine.setNerve(MapPartsRotatorNrv.STOP_AT_END);
+                else
+                    this.updateRotateMtx();
+            }
+        }
+    }
+}
+
 function setupInitInfoSimpleMapObj(initInfo: MapObjActorInitInfo): void {
     initInfo.setupDefaultPos = true;
     initInfo.connectToScene = true;
@@ -376,6 +531,7 @@ class MapObjActorInitInfo {
     public effectFilename: string | null = null;
     public colorChangeFrame: number = -1;
     public texChangeFrame: number = -1;
+    public rotator: boolean = false;
 
     public setupConnectToScene(): void {
         this.connectToScene = true;
@@ -389,11 +545,16 @@ class MapObjActorInitInfo {
         this.initEffect = true;
         this.effectFilename = name;
     }
+
+    public setupRotator(): void {
+        this.rotator = true;
+    }
 }
 
 class MapObjActor extends LiveActor {
     private bloomModel: ModelObj | null = null;
     private objName: string;
+    protected rotator: MapPartsRotator | null = null;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, initInfo: MapObjActorInitInfo) {
         super(zoneAndLayer, getObjectName(infoIter));
@@ -411,6 +572,8 @@ class MapObjActor extends LiveActor {
             this.initLightCtrl(sceneObjHolder);
         if (initInfo.initEffect !== null)
             this.initEffectKeeper(sceneObjHolder, initInfo.effectFilename);
+        if (initInfo.rotator)
+            this.rotator = new MapPartsRotator(this, infoIter);
 
         if (initInfo.colorChangeFrame !== -1)
             bindColorChangeAnimation(this.modelInstance!, this.arc, initInfo.colorChangeFrame);
@@ -436,6 +599,36 @@ class MapObjActor extends LiveActor {
 
     public isObjectName(name: string): boolean {
         return this.objName === name;
+    }
+
+    public startMapPartsFunctions(): void {
+        if (this.rotator !== null)
+            this.rotator.start();
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        if (this.rotator !== null)
+            this.rotator.movement(sceneObjHolder, viewerInput);
+    }
+
+    public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
+        const hasAnyMapFunction = (
+            (this.rotator !== null && this.rotator.isWorking())
+        );
+
+        if (hasAnyMapFunction) {
+            const m = this.modelInstance!.modelMatrix;
+            mat4.identity(m);
+
+            if (this.rotator !== null && this.rotator.isWorking())
+                mat4.mul(m, m, this.rotator.rotateMtx);
+
+            m[12] = this.translation[0];
+            m[13] = this.translation[1];
+            m[14] = this.translation[2];
+        } else {
+            super.calcAndSetBaseMtx(viewerInput);
+        }
     }
 }
 
@@ -466,6 +659,25 @@ export class ModelObj extends LiveActor {
         } else {
             super.calcAndSetBaseMtx(viewerInput);
         }
+    }
+}
+
+export class RotateMoveObj extends MapObjActor {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        const initInfo = new MapObjActorInitInfo();
+        setupInitInfoSimpleMapObj(initInfo);
+        initInfo.setupRotator();
+        setupInitInfoTypical(initInfo, getObjectName(infoIter));
+        setupInitInfoColorChangeArg0(initInfo, infoIter);
+        setupInitInfoTextureChangeArg1(initInfo, infoIter);
+        super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
+
+        const moveConditionType = infoIter.getValueNumber('MoveConditionType');
+        const startRotating = (moveConditionType === 0); // Unconditionally
+        // TODO(jstpierre): Also check SwitchB
+
+        if (startRotating)
+            this.startMapPartsFunctions();
     }
 }
 
@@ -1664,10 +1876,17 @@ export class AstroMapObj extends MapObjActor {
         initInfo.setupModelName(AstroMapObj.getModelName(objectName, domeId));
         initInfo.setupConnectToScene();
         initInfo.setupEffect(objectName);
+
+        if (objectName === 'AstroRotateStepA' || objectName === 'AstroRotateStepB' || objectName === 'AstroDecoratePartsA')
+            initInfo.setupRotator();
+
         super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
 
         this.tryStartAllAnim('Open');
         this.tryStartAllAnimAndEffect(sceneObjHolder, 'AliveWait');
+
+        if (this.rotator !== null)
+            this.startMapPartsFunctions();
     }
 
     private tryStartAllAnimAndEffect(sceneObjHolder: SceneObjHolder, name: string): void {
@@ -1705,6 +1924,8 @@ export class AstroMapObj extends MapObjActor {
                 'AstroStarPlateTower',
             ];
             return table[domeId - 1];
+        } else if (objName === 'AstroRotateStepA' || objName === 'AstroRotateStepB' || objName === 'AstroDecoratePartsA') {
+            return objName;
         } else {
             throw "whoops";
         }

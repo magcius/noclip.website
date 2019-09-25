@@ -162,6 +162,7 @@ class ArchiveCmbScene implements Viewer.SceneGfx {
     public textureHolder = new GrezzoTextureHolder();
     public cmbData: CmbData[] = [];
     public cmbRenderers: CmbInstance[] = [];
+    private clearRenderPassDescriptor = standardFullClearRenderPassDescriptor;
 
     constructor(private device: GfxDevice, private archive: ZAR.ZAR) {
         this.renderHelper = new GfxRenderHelper(device);
@@ -186,7 +187,7 @@ class ArchiveCmbScene implements Viewer.SceneGfx {
 
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
 
-        const mainPassRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
+        const mainPassRenderer = this.renderTarget.createRenderPass(device, this.clearRenderPassDescriptor);
         mainPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
         this.renderHelper.renderInstManager.drawOnPassRenderer(device, mainPassRenderer);
         this.renderHelper.renderInstManager.resetRenderInsts();
