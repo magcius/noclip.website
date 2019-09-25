@@ -1402,7 +1402,7 @@ function translateZMode(zmode: ZMode): GfxCompareMode {
 function translateBlendMode(geoMode: number, renderMode: number): Partial<GfxMegaStateDescriptor> {
     const out: Partial<GfxMegaStateDescriptor> = {};
 
-    if (renderMode && (1 << OtherModeL_Layout.FORCE_BL)) {
+    if (renderMode & (1 << OtherModeL_Layout.FORCE_BL)) {
         const srcColor: BlendParam_PM_Color = (renderMode >>> OtherModeL_Layout.P_2) & 0x03;
         const srcFactor: BlendParam_A = (renderMode >>> OtherModeL_Layout.A_2) & 0x03;
         const dstColor: BlendParam_PM_Color = (renderMode >>> OtherModeL_Layout.M_2) & 0x03;
