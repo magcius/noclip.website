@@ -394,10 +394,10 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
     const dataSize = view.getUint16(0x00);
     const dlSize = view.getUint16(0x02) * 0x08;
 
-    const scaleS = view.getFloat32(0x04);
-    const scaleT = view.getFloat32(0x08);
-    const combineScaleS = view.getFloat32(0x0c);
-    const combineScaleT = view.getFloat32(0x10);
+    const combineScaleS = view.getFloat32(0x04);
+    const combineScaleT = view.getFloat32(0x08);
+    const scaleS = view.getFloat32(0x0c);
+    const scaleT = view.getFloat32(0x10);
 
     let primitive: vec4 | undefined;
     let environment: vec4 | undefined;
@@ -1454,6 +1454,13 @@ function translateBlendMode(geoMode: number, renderMode: number): Partial<GfxMeg
     return out;
 }
 
+function scrollTexture(dest: mat4, millis: number, scroll: UV_Scroll) {
+    const sOffset = ((millis / 1000) * scroll.scaleS) % 1;
+    const tOffset = ((millis / 1000) * scroll.scaleT) % 1;
+    dest[12] = -(sOffset >= 0 ? sOffset : sOffset + 1);
+    dest[13] = -(tOffset >= 0 ? tOffset : tOffset + 1);
+}
+
 const scratchMatrix = mat4.create();
 const texMatrixScratch = mat4.create();
 class MaterialInstance {
@@ -1533,8 +1540,7 @@ class MaterialInstance {
             mat4.fromScaling(texMatrixScratch,
                 [scaleS0 / this.textureMappings[0].width, scaleT0 / this.textureMappings[0].height, 1]);
             if (this.uvtx.uvScroll) {
-                texMatrixScratch[12] = -((viewerInput.time / 1000) * this.uvtx.uvScroll.scaleS) % 1;
-                texMatrixScratch[13] = -((viewerInput.time / 1000) * this.uvtx.uvScroll.scaleT) % 1;
+                scrollTexture(texMatrixScratch, viewerInput.time, this.uvtx.uvScroll)
             }
             offs += fillMatrix4x2(d, offs, texMatrixScratch);
             this.program.defines.set('USE_TEXTURE', '1');
@@ -1545,8 +1551,7 @@ class MaterialInstance {
                 mat4.fromScaling(texMatrixScratch,
                     [scaleS1 / this.textureMappings[1].width, scaleT1 / this.textureMappings[1].height, 1]);
                 if (this.uvtx.combineScroll) {
-                    texMatrixScratch[12] = -((viewerInput.time / 1000) * this.uvtx.combineScroll.scaleS) % 1;
-                    texMatrixScratch[13] = -((viewerInput.time / 1000) * this.uvtx.combineScroll.scaleT) % 1;
+                    scrollTexture(texMatrixScratch, viewerInput.time, this.uvtx.combineScroll)
                 }
                 offs += fillMatrix4x2(d, offs, texMatrixScratch);
                 this.program.defines.set('HAS_PAIRED_TEXTURE', '1');
