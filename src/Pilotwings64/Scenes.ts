@@ -1708,6 +1708,7 @@ class TextureData {
 class Pilotwings64Renderer implements SceneGfx {
     public dataHolder: DataHolder = new DataHolder();
     public uvtrRenderers: UVTRRenderer[] = [];
+    public dobjRenderers: DynamicObjectRenderer[] = [];
     public renderHelper: GfxRenderHelper;
     private renderTarget = new BasicRenderTarget();
 
@@ -1730,6 +1731,8 @@ class Pilotwings64Renderer implements SceneGfx {
 
         for (let i = 0; i < this.uvtrRenderers.length; i++)
             this.uvtrRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+        for (let i = 0; i < this.dobjRenderers.length; i++)
+            this.dobjRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender(device, hostAccessPass);
@@ -1809,6 +1812,81 @@ class OilDerrick extends ObjectRenderer {
         } else if (partIndex === 3) {
             const theta = Math.sin(MathConstants.DEG_TO_RAD * 65 * timeInSeconds);
             mat4.rotateX(dst, dst, getOscillation(-1.16, 55, theta));
+        }
+    }
+}
+
+class DynamicObjectRenderer extends ObjectRenderer {
+    public static toNoclip: mat4;
+
+    protected translationScale: number;
+
+    constructor(model: ModelData, textureData: TextureData[]) {
+        super(model, textureData);
+        const modelScale = 1/model.uvmd.inverseScale;
+        mat4.scale(this.modelMatrix, this.modelMatrix, [modelScale, modelScale, modelScale]);
+        this.translationScale = model.uvmd.inverseScale;
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
+        super.prepareToRender(device, renderInstManager, viewerInput, DynamicObjectRenderer.toNoclip);
+    }
+}
+
+interface LooperParams {
+    angularVelocity: number;
+    center: vec3;
+    radius: number;
+    roll: number;
+    bounce?: BoatBounceParams;
+}
+
+interface BoatBounceParams {
+    bouncingPart: number;
+    maxAngle: number;
+    maxHeight: number;
+    maxVelocity: number;
+}
+
+class Looper extends DynamicObjectRenderer {
+    private bounceHeight = 0;
+    private bounceVelocity = 0;
+
+    constructor(model: ModelData, textureData: TextureData[], private params: LooperParams) {
+        super(model, textureData);
+        if (params.bounce)
+            this.bounceVelocity = params.bounce.maxVelocity;
+        vec3.scale(this.params.center, this.params.center, this.translationScale);
+        mat4.translate(this.modelMatrix, this.modelMatrix, this.params.center);
+    }
+
+    protected calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void {
+        const timeInSeconds = viewerInput.time / 1000;
+        if (partIndex === 0) {
+            mat4.fromZRotation(dst, this.params.angularVelocity * timeInSeconds * MathConstants.DEG_TO_RAD);
+            mat4.translate(dst, dst, [this.params.radius*this.translationScale, 0, 0]);
+            if (this.params.roll !== 0)
+                mat4.rotateY(dst, dst, this.params.roll * MathConstants.DEG_TO_RAD);
+        } else if (this.params.bounce && this.params.bounce.bouncingPart === partIndex) {
+            const timeStep = 0.75 * viewerInput.deltaTime / 1000;
+            const bounce = this.params.bounce;
+
+            this.bounceVelocity -= 9.8 * timeStep;
+            this.bounceHeight += this.bounceVelocity * timeStep;
+            if (this.bounceHeight <= 0) {
+                this.bounceHeight = 0;
+                this.bounceVelocity = bounce.maxVelocity * Math.random();
+            }
+            let bounceAngle = this.bounceHeight / bounce.maxHeight * bounce.maxAngle;
+            if (this.bounceVelocity > 0)
+                bounceAngle *= 2;
+            if (bounceAngle > bounce.maxAngle)
+                bounceAngle = bounce.maxAngle;
+            if (this.params.angularVelocity < 0)
+                bounceAngle *= -1
+
+            mat4.rotateX(dst, dst, bounceAngle * MathConstants.DEG_TO_RAD);
+            mat4.translate(dst, dst, [0, 0, this.bounceHeight*this.translationScale]);
         }
     }
 }
@@ -1911,6 +1989,152 @@ class UVTRRenderer {
     }
 }
 
+// the game picks characters in order, skipping the player
+function chooseFlyers(): number[] {
+    return [0x10a, 0x10b, 0x10c, 0x10d, 0x10e, 0x10f];
+}
+
+function getLevelDobjs(levelID: number, dataHolder: DataHolder): DynamicObjectRenderer[] {
+    const flyerIDs = chooseFlyers();
+    if (levelID === 1) { // Holiday Island
+        return [
+            // boats
+            new Looper(dataHolder.uvmdData[3], dataHolder.textureData, { // from 2d1dfc
+                angularVelocity: -4,
+                center: vec3.fromValues(-600, -600, 0),
+                radius: 300,
+                roll: -5,
+                bounce: {
+                    bouncingPart: 1,
+                    maxAngle: 10,
+                    maxHeight: 1.5,
+                    maxVelocity: 7,
+                },
+                // TODO: figure out what's going on with the attached model 0x02
+            }),
+            new Looper(dataHolder.uvmdData[1], dataHolder.textureData, {  // from 2d1e70
+                angularVelocity: 10,
+                center: vec3.fromValues(700,-500,0),
+                radius: 300,
+                roll: 15,
+            }),
+            // gliders
+            new Looper(dataHolder.uvmdData[flyerIDs[0]], dataHolder.textureData, {
+                angularVelocity: 20,
+                center: vec3.fromValues(-66, 320, 125),
+                radius: 80,
+                roll: -15,
+            }),
+            new Looper(dataHolder.uvmdData[flyerIDs[1]], dataHolder.textureData, {
+                angularVelocity: 18,
+                center: vec3.fromValues(-66, 320, 135),
+                radius: 70,
+                roll: -15,
+            }),
+            new Looper(dataHolder.uvmdData[flyerIDs[2]], dataHolder.textureData, {
+                angularVelocity: 18,
+                center: vec3.fromValues(-70, 320, 155),
+                radius: 90,
+                roll: -15,
+            }),
+        ];
+    }
+    if (levelID === 3) { // Crescent Island
+        return [
+            // boats
+            new Looper(dataHolder.uvmdData[3], dataHolder.textureData, { // from 2d1b88
+                angularVelocity: -4,
+                center: vec3.fromValues(400, -300, 0),
+                radius: 400,
+                roll: -5,
+                bounce: {
+                    bouncingPart: 1,
+                    maxAngle: 10,
+                    maxHeight: 1.5,
+                    maxVelocity: 7,
+                },
+                // also has 2 attached
+            }),
+            new Looper(dataHolder.uvmdData[0x29], dataHolder.textureData, {  // from 2d1c04
+                angularVelocity: 2,
+                center: vec3.fromValues(300, -200, 0),
+                radius: 275,
+                roll: 0,
+            }),
+            // gliders
+            new Looper(dataHolder.uvmdData[flyerIDs[0]], dataHolder.textureData, {
+                angularVelocity: 10,
+                center: vec3.fromValues(-891.24, 602.16, 450),
+                radius: 220,
+                roll: -15,
+            }),
+            new Looper(dataHolder.uvmdData[flyerIDs[1]], dataHolder.textureData, {
+                angularVelocity: 18,
+                center: vec3.fromValues(1100.06, 686.22, 250),
+                radius: 70,
+                roll: -15,
+            }),
+            new Looper(dataHolder.uvmdData[flyerIDs[2]], dataHolder.textureData, {
+                angularVelocity: 18,
+                center: vec3.fromValues(1050.06, 686.22, 265),
+                radius: 90,
+                roll: -15,
+            }),
+        ];
+    }
+    if (levelID === 5) { // Little States
+        return [
+            new Looper(dataHolder.uvmdData[flyerIDs[0]], dataHolder.textureData, {
+                angularVelocity: 17,
+                center: vec3.fromValues(1666.32, -1099.06, 100),
+                radius: 30,
+                roll: -15,
+            }),
+            new Looper(dataHolder.uvmdData[flyerIDs[1]], dataHolder.textureData, {
+                angularVelocity: 13,
+                center: vec3.fromValues(3293.09, 931.19, 150),
+                radius: 60,
+                roll: -15,
+            }),
+            new Looper(dataHolder.uvmdData[flyerIDs[2]], dataHolder.textureData, {
+                angularVelocity: 18,
+                center: vec3.fromValues(-2294.23, -791.48, 150),
+                radius: 30,
+                roll: -15,
+            }),
+            new Looper(dataHolder.uvmdData[flyerIDs[3]], dataHolder.textureData, {
+                angularVelocity: 18,
+                center: vec3.fromValues(-2290.23, -791.48, 170),
+                radius: 50,
+                roll: -15,
+            }),
+        ];
+    }
+    if (levelID === 10) { // Everfrost Island
+        return [
+            new Looper(dataHolder.uvmdData[flyerIDs[0]], dataHolder.textureData, {
+                angularVelocity: 7,
+                center: vec3.fromValues(80.03, -162.16, 600),
+                radius: 250,
+                roll: -15,
+            }),
+            new Looper(dataHolder.uvmdData[flyerIDs[1]], dataHolder.textureData, {
+                angularVelocity: 17,
+                center: vec3.fromValues(745.26, 1107.29, 150),
+                radius: 70,
+                roll: -15,
+            }),
+            new Looper(dataHolder.uvmdData[flyerIDs[2]], dataHolder.textureData, {
+                angularVelocity: 17,
+                center: vec3.fromValues(800.26, 1107.29, 170),
+                radius: 168,
+                roll: -15,
+            }),
+        ];
+    }
+    return [];
+}
+
 const pathBase = `Pilotwings64`;
 class Pilotwings64SceneDesc implements SceneDesc {
     public id: string;
@@ -1962,6 +2186,13 @@ class Pilotwings64SceneDesc implements SceneDesc {
             const uvtrRenderer = new UVTRRenderer(dataHolder, uvtrChunk);
             mat4.copy(uvtrRenderer.modelMatrix, toNoclipSpace);
             renderer.uvtrRenderers.push(uvtrRenderer);
+        }
+
+        DynamicObjectRenderer.toNoclip = toNoclipSpace;
+
+        const levelDobjs = getLevelDobjs(this.levelID, dataHolder);
+        for (let i = 0; i < levelDobjs.length; i++) {
+            renderer.dobjRenderers.push(levelDobjs[i]);
         }
 
         return renderer;
