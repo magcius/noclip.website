@@ -5,7 +5,7 @@ import { assert, assertExists, align, nArray, hexzero } from '../../util';
 import { DataFetcher, DataFetcherFlags } from '../../DataFetcher';
 import { MathConstants, computeModelMatrixSRT, lerp, computeNormalMatrix, clamp } from '../../MathHelpers';
 import { getPointBezier } from '../../Spline';
-import { Camera, computeClipSpacePointFromWorldSpacePoint } from '../../Camera';
+import { Camera, computeClipSpacePointFromWorldSpacePoint, texProjCamera } from '../../Camera';
 import { SceneContext } from '../../SceneBase';
 import * as Viewer from '../../viewer';
 import * as UI from '../../ui';
@@ -260,13 +260,25 @@ class SMGRenderer implements Viewer.SceneGfx {
         }
     }
 
-    private drawAllEffects(): void {
+    private drawAllEffects(viewerInput: Viewer.ViewerRenderInput): void {
         if (this.sceneObjHolder.effectSystem === null)
             return;
+
+        const effectSystem = this.sceneObjHolder.effectSystem;
+
         for (let drawType = DrawType.EFFECT_DRAW_3D; drawType <= DrawType.EFFECT_DRAW_AFTER_IMAGE_EFFECT; drawType++) {
             const template = this.renderHelper.renderInstManager.pushTemplateRenderInst();
             template.filterKey = createFilterKeyForDrawType(drawType);
-            this.sceneObjHolder.effectSystem.draw(this.sceneObjHolder.modelCache.device, this.renderHelper.renderInstManager, drawType);
+
+            let texPrjMtx: mat4 | null = null;
+            if (drawType === DrawType.EFFECT_DRAW_INDIRECT) {
+                texPrjMtx = scratchMatrix;
+                texProjCamera(texPrjMtx, viewerInput.camera, 0.5, -0.5, 0.5, 0.5);
+            }
+
+            effectSystem.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, texPrjMtx);
+            effectSystem.draw(this.sceneObjHolder.modelCache.device, this.renderHelper.renderInstManager, drawType);
+
             this.renderHelper.renderInstManager.popTemplateRenderInst();
         }
     }
@@ -310,7 +322,10 @@ class SMGRenderer implements Viewer.SceneGfx {
         if (effectSystem !== null) {
             const deltaTime = getDeltaTimeFrames(viewerInput);
             effectSystem.calc(deltaTime);
-            effectSystem.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, null);
+
+            const indDummy = effectSystem.particleResourceHolder.getTextureMappingReference('IndDummy');
+            if (indDummy !== null)
+                setTextureMappingIndirect(indDummy, this.sceneTexture.gfxTexture!);
         }
 
         // Prepare all of our NameObjs.
@@ -319,7 +334,7 @@ class SMGRenderer implements Viewer.SceneGfx {
 
         // Push to the renderinst.
         executor.drawAllBuffers(this.sceneObjHolder.modelCache.device, this.renderHelper.renderInstManager, camera);
-        this.drawAllEffects();
+        this.drawAllEffects(viewerInput);
 
         let bloomParameterBufferOffs = -1;
         if (this.isNormalBloomOn()) {

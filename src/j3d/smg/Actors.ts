@@ -6,7 +6,7 @@ import { SceneObjHolder, ZoneAndLayer, getObjectName, WorldmapPointInfo, getDelt
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg6, getJMapInfoArg7 } from './JMapInfo';
 import { mat4, vec3 } from 'gl-matrix';
 import AnimationController from '../../AnimationController';
-import { MathConstants, computeModelMatrixSRT, clamp, computeModelMatrixR } from '../../MathHelpers';
+import { MathConstants, computeModelMatrixSRT, clamp, computeModelMatrixR, lerp } from '../../MathHelpers';
 import { colorNewFromRGBA8, Color } from '../../Color';
 import { ColorKind } from '../../gx/gx_render';
 import { BTK, BRK, LoopMode, BTP } from '../j3d';
@@ -117,10 +117,16 @@ export function setEffectEnvColor(actor: LiveActor, name: string, color: Color):
     emitter.setGlobalEnvColor(color, -1);
 }
 
-export function deleteEffect(actor: LiveActor, name: string): void {
+export function deleteEffect(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string): void {
     if (actor.effectKeeper === null)
         return;
-    actor.effectKeeper.deleteEmitter(name);
+    actor.effectKeeper.deleteEmitter(sceneObjHolder, name);
+}
+
+export function forceDeleteEffect(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string): void {
+    if (actor.effectKeeper === null)
+        return;
+    actor.effectKeeper.forceDeleteEmitter(sceneObjHolder, name);
 }
 
 export function deleteEffectAll(actor: LiveActor): void {
@@ -184,6 +190,16 @@ export function isExistIndirectTexture(actor: LiveActor): boolean {
     if (modelInstance.getTextureMappingReference('IndDummy') !== null)
         return true;
     return false;
+}
+
+function getEaseInValue(v0: number, v1: number, v2: number, v3: number): number {
+    const t = Math.cos((v0 / v3) * Math.PI * 0.5);
+    return lerp(v1, v2, 1 - t);
+}
+
+function getEaseOutValue(v0: number, v1: number, v2: number, v3: number): number {
+    const t = Math.cos((v0 / v3) * Math.PI * 0.5);
+    return lerp(v1, v2, t);
 }
 
 function setXYZDir(dst: mat4, x: vec3, y: vec3, z: vec3): void {
@@ -930,10 +946,21 @@ export class EarthenPipe extends LiveActor {
     }
 }
 
+function setEffectHostMtx(actor: LiveActor, effectName: string, hostMtx: mat4): void {
+    const emitter = assertExists(actor.effectKeeper!.getEmitter(effectName));
+    emitter.setHostMtx(hostMtx);
+}
+
+function setEffectHostSRT(actor: LiveActor, effectName: string, translation: vec3 | null, rotation: vec3 | null, scale: vec3 | null): void {
+    const emitter = assertExists(actor.effectKeeper!.getEmitter(effectName));
+    emitter.setHostSRT(translation, rotation, scale);
+}
+
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 export class BlackHole extends LiveActor {
     private blackHoleModel: ModelObj;
+    private effectHostMtx = mat4.create();
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, getObjectName(infoIter));
@@ -943,6 +970,7 @@ export class BlackHole extends LiveActor {
         connectToSceneCollisionMapObj(sceneObjHolder, this);
         this.blackHoleModel = createModelObjMapObj(zoneAndLayer, sceneObjHolder, 'BlackHole', 'BlackHole', this.modelInstance!.modelMatrix);
         this.initEffectKeeper(sceneObjHolder, 'BlackHoleRange');
+        setEffectHostMtx(this, 'BlackHoleSuction', this.effectHostMtx);
 
         startBck(this, `BlackHoleRange`);
         startBtkIfExist(this.modelInstance!, this.arc, `BlackHoleRange`);
@@ -973,9 +1001,8 @@ export class BlackHole extends LiveActor {
             getCamPos(front, viewerInput.camera);
             vec3.sub(front, front, this.translation);
             getCamYdir(up, viewerInput.camera);
-            makeMtxFrontUpPos(scratchMatrix, front, up, this.translation);
-            scaleMatrixScalar(scratchMatrix, this.scale[0]);
-            this.effectKeeper.setSRTFromHostMtx(scratchMatrix);
+            makeMtxFrontUpPos(this.effectHostMtx, front, up, this.translation);
+            scaleMatrixScalar(this.effectHostMtx, this.scale[0]);
         }
     }
 
@@ -1536,7 +1563,7 @@ export class FountainBig extends LiveActor {
             }
         } else if (currentNerve === FountainBigNrv.SIGN_STOP) {
             if (isFirstStep(this))
-                deleteEffect(this, 'FountainBigSign');
+                deleteEffect(sceneObjHolder, this, 'FountainBigSign');
 
             if (isGreaterStep(this, 30)) {
                 this.setNerve(FountainBigNrv.SPOUT);
@@ -1554,7 +1581,7 @@ export class FountainBig extends LiveActor {
             }
 
             if (isGreaterStep(this, 180)) {
-                deleteEffect(this, 'FountainBig');
+                deleteEffect(sceneObjHolder, this, 'FountainBig');
                 this.setNerve(FountainBigNrv.SPOUT_END);
                 return;
             }
@@ -1852,7 +1879,7 @@ export class ShootingStar extends LiveActor {
 
             if (isGreaterStep(this, 360)) {
                 this.setNerve(ShootingStarNrv.WAIT_FOR_NEXT_SHOOT);
-                deleteEffect(this, 'ShootingStarBlur');
+                deleteEffect(sceneObjHolder, this, 'ShootingStarBlur');
             }
         } else if (currentNerve === ShootingStarNrv.WAIT_FOR_NEXT_SHOOT) {
             if (isFirstStep(this)) {
@@ -1994,5 +2021,58 @@ export class CrystalCage extends LiveActor {
 
         if (this.size === CrystalCageSize.L)
             this.initEffectKeeper(sceneObjHolder, null);
+    }
+}
+
+const enum LavaSteamNrv { WAIT, STEAM }
+
+export class LavaSteam extends LiveActor {
+    private effectScale = vec3.create();
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, getObjectName(infoIter));
+
+        this.initDefaultPos(sceneObjHolder, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, 'LavaSteam');
+        this.initEffectKeeper(sceneObjHolder, null);
+        setEffectHostSRT(this, 'Sign', this.translation, this.rotation, this.effectScale);
+
+        this.initNerve(LavaSteamNrv.WAIT);
+
+        connectToSceneNoSilhouettedMapObj(sceneObjHolder, this);
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.movement(sceneObjHolder, viewerInput);
+
+        const currentNerve = this.getCurrentNerve();
+        if (currentNerve === LavaSteamNrv.WAIT) {
+            if (isFirstStep(this)) {
+                emitEffect(sceneObjHolder, this, 'Sign');
+                vec3.set(this.effectScale, 1, 1, 1);
+            }
+
+            if (isGreaterStep(this, 0x52)) {
+                const scale = getEaseInValue((0x5a - this.getNerveStep()) * 0.125, 0.001, 1.0, 1.0);
+                vec3.set(this.effectScale, scale, scale, scale);
+            }
+
+            if (isGreaterStep(this, 0x5a)) {
+                forceDeleteEffect(sceneObjHolder, this, 'Sign');
+            }
+
+            if (isGreaterStep(this, 0x78)) {
+                this.setNerve(LavaSteamNrv.STEAM);
+            }
+        } else if (currentNerve === LavaSteamNrv.STEAM) {
+            if (isFirstStep(this)) {
+                emitEffect(sceneObjHolder, this, 'Steam');
+            }
+
+            if (isGreaterStep(this, 0x5a)) {
+                deleteEffect(sceneObjHolder, this, 'Steam');
+                this.setNerve(LavaSteamNrv.WAIT);
+            }
+        }
     }
 }

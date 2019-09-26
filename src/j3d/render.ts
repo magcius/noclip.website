@@ -803,13 +803,12 @@ export class TEX1Data {
             return false;
         }
 
+        const textureData = this.tex1.textureDatas[sampler.textureDataIndex];
         m.gfxTexture = this.gfxTextures[sampler.textureDataIndex];
         m.gfxSampler = this.gfxSamplers[sampler.index];
         m.lodBias = sampler.lodBias;
-        const textureData = this.tex1.textureDatas[sampler.textureDataIndex];
         m.width = textureData.width;
         m.height = textureData.height;
-
         return true;
     }
 

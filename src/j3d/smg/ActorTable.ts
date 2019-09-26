@@ -2,7 +2,7 @@
 import * as RARC from '../rarc';
 
 import { NameObjFactory, SceneObjHolder } from "./smg_scenes";
-import { Kinopio, TicoComet, EarthenPipe, StarPiece, CollapsePlane, BlackHole, Peach, PenguinRacer, Coin, Penguin, SimpleEffectObj, EffectObjR1000F50, GCaptureTarget, FountainBig, AstroEffectObj, WarpPod, AstroCountDownPlate, Butler, Rosetta, Tico, Sky, Air, ShootingStar, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObj10x10x10SyncClipping, AstroMapObj, EffectObjR100F50SyncClipping, PriorDrawAir, BlueChip, YellowChip, PeachCastleGardenPlanet, SimpleMapObj, CrystalCage, PlanetMap, HatchWaterPlanet, RotateMoveObj } from "./Actors";
+import { Kinopio, TicoComet, EarthenPipe, StarPiece, CollapsePlane, BlackHole, Peach, PenguinRacer, Coin, Penguin, SimpleEffectObj, EffectObjR1000F50, GCaptureTarget, FountainBig, AstroEffectObj, WarpPod, AstroCountDownPlate, Butler, Rosetta, Tico, Sky, Air, ShootingStar, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObj10x10x10SyncClipping, AstroMapObj, EffectObjR100F50SyncClipping, PriorDrawAir, BlueChip, YellowChip, PeachCastleGardenPlanet, SimpleMapObj, CrystalCage, PlanetMap, HatchWaterPlanet, RotateMoveObj, LavaSteam } from "./Actors";
 import { OceanBowl } from "./OceanBowl";
 import { JMapInfoIter, createCsvParser } from "./JMapInfo";
 
@@ -203,6 +203,7 @@ const ActorTable: ActorTableEntry[] = [
     _("TwinFallLakeWaterFall",          EffectObjR1000F50),
     _("WaterfallL",                     EffectObjR1000F50),
     _("WaterfallS",                     EffectObj20x20x10SyncClipping),
+    _("LavaSteam",                      LavaSteam),
 ];
 
 export function getNameObjTableEntry(objName: string, table: ActorTableEntry[] = ActorTable): ActorTableEntry | null {

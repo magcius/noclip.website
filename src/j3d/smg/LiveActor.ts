@@ -421,7 +421,6 @@ export class LiveActor extends NameObj {
 
         if (this.effectKeeper !== null) {
             this.effectKeeper.updateSyncBckEffect(sceneObjHolder.effectSystem!);
-            this.effectKeeper.followSRT();
             this.effectKeeper.setVisibleScenario(this.visibleAlive && this.visibleScenario);
         }
     }
