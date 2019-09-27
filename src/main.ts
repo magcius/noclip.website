@@ -111,6 +111,7 @@ const sceneGroups = [
     "Nintendo 64",
     Scenes_BanjoKazooie.sceneGroup,
     Scenes_PaperMario64.sceneGroup,
+    Scenes_Pilotwings64.sceneGroup,
     "PlayStation 2",
     Scenes_KatamariDamacy.sceneGroup,
     Scenes_KingdomHearts.sceneGroup,
@@ -129,7 +130,6 @@ const sceneGroups = [
     Scenes_SonicColors.sceneGroup,
     Scenes_Test.sceneGroup,
     Scenes_InteractiveExamples.sceneGroup,
-    Scenes_Pilotwings64.sceneGroup,
 ];
 
 function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
