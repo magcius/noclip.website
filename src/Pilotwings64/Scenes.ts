@@ -1089,10 +1089,10 @@ function badAtan2(x: number, y:number): number {
 // The original code uses an "in-order depth list" like: [0, 1, 1, 2, 3, 1, 2, 2]
 // Each increment upwards pushes a new stack (only increments of one are allowed)
 // Decrement pops back up to that list depth. Same number means siblings...
-//
-// TODO(jstpierre): Figure out what [1, 1, 2, 3] means... the first node should always
-// be a parent of the root... right?
 function interpretPartHierarchy(partLevels: number[]): number[] {
+    // UVMD index 0xCF has parts list that starts at 1 instead of 0...
+    const base = partLevels[0];
+
     // Translate to a list of parents for each node. -1 means "above root" node.
     const parents: number[] = [-1];
 
@@ -1101,11 +1101,10 @@ function interpretPartHierarchy(partLevels: number[]): number[] {
 
     for (let i = 1; i < partLevels.length; i++) {
         const last = partLevels[i - 1], cur = partLevels[i];
-        assert(cur > 0);
         if (cur > last)
             assert(cur === last + 1);
-        parents[i] = depthStack[cur - 1];
-        depthStack[cur] = i;
+        parents[i] = depthStack[cur - base - 1];
+        depthStack[cur - base] = i;
     }
 
     return parents;
@@ -1119,6 +1118,9 @@ class ObjectRenderer {
     private visible = true;
 
     constructor(protected model: ModelData, textureData: TextureData[]) {
+        if (model.modelIndex === 0xCF)
+            console.log(this);
+
         for (let i = 0; i < model.parts.length; i++) {
             const partRenderer = new MeshRenderer(model.parts[i], textureData);
             this.partRenderers.push(partRenderer);
