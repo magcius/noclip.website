@@ -13,7 +13,7 @@ import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { DeviceProgram } from "../Program";
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth, getSortKeyLayer } from "../gfx/render/GfxRenderer";
 import { fillMatrix4x3, fillMatrix4x4, fillMatrix4x2, fillVec4v, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
-import { mat4, vec3, vec4, mat2 } from "gl-matrix";
+import { mat4, vec3, vec4 } from "gl-matrix";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget } from "../gfx/helpers/RenderTargetHelpers";
 import { computeViewMatrix } from "../Camera";
@@ -23,7 +23,6 @@ import { ImageFormat, ImageSize, getImageFormatName, decodeTex_RGBA16, getImageS
 import { TextureMapping } from "../TextureHolder";
 import { Endianness } from "../endian";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { calcJointMatrix } from "../j3d/j3d";
 
 interface Pilotwings64FSFileChunk {
     tag: string;
@@ -1112,7 +1111,7 @@ function interpretPartHierarchy(partLevels: number[]): number[] {
     return parents;
 }
 
-abstract class ObjectRenderer {
+class ObjectRenderer {
     private static jointMatrixScratch = nArray(16, () => mat4.create());
 
     public modelMatrix = mat4.create();
@@ -1128,7 +1127,9 @@ abstract class ObjectRenderer {
         assert((model.parts.length + 1) <= ObjectRenderer.jointMatrixScratch.length);
     }
 
-    protected abstract calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void;
+    protected calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void {
+        // Nothing by default.
+    }
 
     protected calcAnim(dst: mat4[], viewerInput: ViewerRenderInput, parentModelMatrix: mat4): void {
         for (let i = 0; i < this.partRenderers.length; i++) {
@@ -1165,36 +1166,6 @@ abstract class ObjectRenderer {
         renderInstManager.popTemplateRenderInst();
     }
 }
-
-class LegacyToyObjectRenderer extends ObjectRenderer {
-    private partToyMotions: (ToyMotion | null)[] = [];
-
-    constructor(model: ModelData, textureData: TextureData[]) {
-        super(model, textureData);
-
-        for (let i = 0; i < model.parts.length; i++) {
-            const toyMotion = getToyMotion(this.model.modelIndex, i);
-            this.partToyMotions.push(toyMotion);
-        }
-    }
-
-    private calcAnimToyMotion(dst: mat4, viewerInput: ViewerRenderInput, toyMotion: ToyMotion): void {
-        if (toyMotion.rotation) {
-            const rotation = toyMotion.rotation;
-            mat4.rotate(dst, dst, rotation.speed * viewerInput.time / 1000, rotation.axis);
-        } else if (toyMotion.oscillation) {
-            const osc = toyMotion.oscillation;
-            const radians = badAtan2(osc.xScale * Math.sin(osc.speed * viewerInput.time / 1000), osc.yScale);
-            mat4.rotate(dst, dst, radians, osc.axis);
-        }
-    }
-
-    protected calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void {
-        const toyMotion = this.partToyMotions[partIndex];
-        if (toyMotion !== null)
-            this.calcAnimToyMotion(dst, viewerInput, toyMotion);
-    }
- }
 
 class MeshRenderer {
     public static scratchMatrix = mat4.create();
@@ -1783,27 +1754,6 @@ class Pilotwings64Renderer implements SceneGfx {
     }
 }
 
-const xAxis = vec3.fromValues(1,0,0);
-const yAxis = vec3.fromValues(0,1,0);
-
-interface ToyRotation {
-    axis: vec3;
-    speed: number;
-    offset?: number;
-}
-
-interface ToyOscillation {
-    axis: vec3;
-    speed: number;
-    xScale: number;
-    yScale: number;
-}
-
-interface ToyMotion {
-    rotation?: ToyRotation;
-    oscillation?: ToyOscillation;
-}
-
 // the game actually specifies animated models by listing their final coordinates
 // we assume all instances of a given model are animated
 
@@ -1830,30 +1780,35 @@ class FerrisWheel extends ObjectRenderer {
     }
 }
 
-// Legacy motion system
-function getToyMotion(modelIndex: number, partIndex: number): ToyMotion | null {
-    // water wheel
-    if (modelIndex === 0x0d && partIndex === 0) {
-        const rotation = { axis: yAxis, speed: 40 * MathConstants.DEG_TO_RAD };
-        return { rotation };
+class WaterWheel extends ObjectRenderer {
+    protected calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void {
+        const timeInSeconds = viewerInput.time / 1000;
+        if (partIndex === 0) {
+            const speed = 40 * MathConstants.DEG_TO_RAD;
+            mat4.rotateY(dst, dst, speed * timeInSeconds);
+        }
     }
-    // derrick
-    if (modelIndex === 0x54) {
+}
+
+function getOscillation(xScale: number, yScale: number, theta: number): number {
+    return badAtan2(xScale * theta, yScale);
+}
+
+class OilDerrick extends ObjectRenderer {
+    protected calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void {
+        const timeInSeconds = viewerInput.time / 1000;
         if (partIndex === 1) {
-            const rotation = { axis: xAxis, speed: 65 * MathConstants.DEG_TO_RAD, offset: 4.71239 };
-            return { rotation };
-        }
-        const oscillation = { axis: xAxis, speed: 65 * MathConstants.DEG_TO_RAD, xScale: 1.16, yScale: 55 }
-        if (partIndex === 2) {
-            return { oscillation };
-        }
-        if (partIndex === 3) {
-            oscillation.xScale *= -1;
-            return { oscillation };
+            // offset: 4.71239
+            const speed = 65 * MathConstants.DEG_TO_RAD;
+            mat4.rotateX(dst, dst, speed * timeInSeconds);
+        } else if (partIndex === 2) {
+            const theta = Math.sin(65 * MathConstants.DEG_TO_RAD * timeInSeconds);
+            mat4.rotateX(dst, dst, getOscillation(1.16, 55, theta));
+        } else if (partIndex === 3) {
+            const theta = Math.sin(65 * MathConstants.DEG_TO_RAD * timeInSeconds);
+            mat4.rotateX(dst, dst, getOscillation(-1.16, 55, theta));
         }
     }
-    // the mount rushmore head (modelIndex 0x55 or 0x99) also has a "toy type", but no motion
-    return null;
 }
 
 class UVCTData {
@@ -1889,10 +1844,14 @@ function spawnObject(dataHolder: DataHolder, uvmdIndex: number): ObjectRenderer 
 
     if (uvmdIndex === 0x09) {
         return new Carousel(uvmdData, textureData);
-    } else if (uvmdIndex === 0x0c) {
+    } else if (uvmdIndex === 0x0C) {
         return new FerrisWheel(uvmdData, textureData);
+    } else if (uvmdIndex === 0x0D) {
+        return new WaterWheel(uvmdData, textureData);
+    } else if (uvmdIndex === 0x54) {
+        return new OilDerrick(uvmdData, textureData);
     } else {
-        return new LegacyToyObjectRenderer(uvmdData, textureData);
+        return new ObjectRenderer(uvmdData, textureData);
     }
 }
 
