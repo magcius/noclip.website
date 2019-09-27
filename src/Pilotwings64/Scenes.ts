@@ -17,13 +17,14 @@ import { mat4, vec3, vec4 } from "gl-matrix";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget, depthClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { computeViewMatrix } from "../Camera";
-import { MathConstants } from "../MathHelpers";
+import { MathConstants, clamp } from "../MathHelpers";
 import { TextureState, TileState, getTextFiltFromOtherModeH, OtherModeH_CycleType, getCycleTypeFromOtherModeH } from "../bk/f3dex";
 import { ImageFormat, ImageSize, getImageFormatName, decodeTex_RGBA16, getImageSizeName, decodeTex_I4, decodeTex_I8, decodeTex_IA4, decodeTex_IA8, decodeTex_IA16, TextFilt } from "../Common/N64/Image";
 import { TextureMapping } from "../TextureHolder";
 import { Endianness } from "../endian";
 import { DataFetcher } from "../DataFetcher";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { getPointCubic } from "../Spline";
 
 interface Pilotwings64FSFileChunk {
     tag: string;
@@ -793,6 +794,110 @@ function parseUVMD(file: Pilotwings64FSFile): UVMD {
     return { vertexData, partPlacements, lods, inverseScale, hasTransparency };
 }
 
+interface AnimationKeyframe {
+    time: number;
+    value: number;
+}
+
+interface SPTH {
+    xTrack: AnimationKeyframe[];
+    yTrack: AnimationKeyframe[];
+    zTrack: AnimationKeyframe[];
+    hTrack: AnimationKeyframe[];
+    pTrack: AnimationKeyframe[];
+    rTrack: AnimationKeyframe[];
+}
+
+function parseSPTH(file: Pilotwings64FSFile): SPTH {
+    const xTrack: AnimationKeyframe[] = [];
+    const yTrack: AnimationKeyframe[] = [];
+    const zTrack: AnimationKeyframe[] = [];
+    const hTrack: AnimationKeyframe[] = [];
+    const pTrack: AnimationKeyframe[] = [];
+    const rTrack: AnimationKeyframe[] = [];
+
+
+    for (let i = 0; i < file.chunks.length; i++) {
+        const tag = file.chunks[i].tag;
+        const view = file.chunks[i].buffer.createDataView();
+        const pointCount = view.getUint32(0x00);
+
+        let currTrack: AnimationKeyframe[];
+        if (tag === 'SCPX') {
+            currTrack = xTrack;
+        } else if (tag === 'SCPY') {
+            currTrack = yTrack;
+        } else if (tag === 'SCPZ') {
+            currTrack = zTrack;
+        } else if (tag === 'SCPH') {
+            currTrack = hTrack;
+        } else if (tag === 'SCPP') {
+            currTrack = pTrack;
+        } else if (tag === 'SCPR') {
+            currTrack = rTrack;
+        } else {
+            assert(tag === 'SCP#' && i == file.chunks.length - 1);
+            break;
+        }
+
+        let offs = 0x04;
+        for (let j = 0; j < pointCount; j++) {
+            const time = view.getFloat32(offs + 0x00);
+            const value = view.getFloat32(offs + 0x04);
+            currTrack.push({time, value});
+            offs += 0x08;
+        }
+    }
+    return { xTrack, yTrack, zTrack, hTrack, pTrack, rTrack};
+}
+
+function getTwoDerivativeHermite(dst: AnimationTrackSample, p0: number, p1: number, s0: number, s1: number, t: number): void {
+    const cf0 = (p0 * 2) + (p1 * -2) + (s0 * 1) + (s1 * 1);
+    const cf1 = (p0 * -3) + (p1 * 3) + (s0 * -2) + (s1 * -1);
+    const cf2 = (p0 * 0) + (p1 * 0) + (s0 * 1) + (s1 * 0);
+    const cf3 = (p0 * 1) + (p1 * 0) + (s0 * 0) + (s1 * 0);
+    dst.pos = getPointCubic(cf0, cf1, cf2, cf3, t);
+    dst.vel = getDerivativeCubic(cf0, cf1, cf2, t);
+    dst.acc = 6 * cf0 * t + 2 * cf1;
+}
+
+function getDerivativeCubic(cf0: number, cf1: number, cf2: number, t: number): number {
+    return (3 * cf0 * t + 2 * cf1) * t + cf2;
+}
+
+function hermiteInterpolate(dst: AnimationTrackSample, k0: AnimationKeyframe, k1: AnimationKeyframe, t0: AnimationKeyframe, t1: AnimationKeyframe, time: number): void {
+    const length = k1.time - k0.time;
+    const t = (time - k0.time) / length;
+    const p0 = k0.value;
+    const p1 = k1.value;
+    const s0 = t0.value * length;
+    const s1 = t1.value * length;
+    getTwoDerivativeHermite(dst, p0, p1, s0, s1, t);
+}
+
+class AnimationTrackSample {
+    public pos = 0;
+    public vel = 0;
+    public acc = 0;
+}
+
+const animFrameScratch = nArray(3, () => new AnimationTrackSample());
+function sampleFloatAnimationTrackHermite(dst: AnimationTrackSample, track: AnimationKeyframe[], tangentTrack: AnimationKeyframe[], time: number): void {
+    let idx1 = 1;
+    for (; idx1 < track.length; idx1++) {
+        if (time <= track[idx1].time)
+            break;
+    }
+
+    const idx0 = idx1 - 1;
+
+    const k0 = track[idx0];
+    const k1 = track[idx1];
+    const t0 = tangentTrack[idx0];
+    const t1 = tangentTrack[idx1];
+
+    hermiteInterpolate(dst, k0, k1, t0, t1, time);
+}
 
 function parsePilotwings64FS(buffer: ArrayBufferSlice): Pilotwings64FS {
     const view = buffer.createDataView();
@@ -1075,7 +1180,7 @@ function badAtan2(x: number, y:number): number {
     const absX = Math.abs(x), absY = Math.abs(y);
     const ratio = absX < absY? absX/absY : absY/absX;
     const delta = Math.abs(absX-absY);
-    const baseValue = ratio*(0.785398+delta*0.309);
+    const baseValue = ratio*(Math.PI/4+delta*0.309);
     let corrected = absX < absY? baseValue : Math.PI/2 - baseValue;
     if (y < 0)
         corrected = Math.PI - corrected;
@@ -1831,6 +1936,96 @@ class Looper extends DynamicObjectRenderer {
     }
 }
 
+function tracksMatch(a: AnimationKeyframe[], b: AnimationKeyframe[]): boolean {
+    if (a.length !== b.length) {
+        return false;
+    }
+    for (let i = 0; i < a.length; i++)
+        if (a[i].time !== b[i].time)
+            return false;
+
+    return true;
+}
+
+interface AirplaneParams {
+    pathLength: number;
+    minHeight: number;
+    rollFactor: number;
+}
+
+class Airplane extends DynamicObjectRenderer {
+    private pos = vec3.create();
+    private angles = vec3.create();
+    private speed = 0;
+    private yawSpeed = 0;
+    private oldPitch = 0;
+
+    constructor(model: ModelData, textureData: TextureData[], private spline: SPTH, private params: AirplaneParams) {
+        super(model, textureData);
+        this.fly(params.pathLength);
+        this.pos[2] = params.minHeight;
+        this.angles[2] = 0;
+        assert(tracksMatch(spline.xTrack, spline.hTrack));
+        assert(tracksMatch(spline.yTrack, spline.pTrack));
+        assert(tracksMatch(spline.zTrack, spline.rTrack));
+    }
+
+    private fly(progress: number) {
+        const phase = progress / this.params.pathLength * 100;
+        sampleFloatAnimationTrackHermite(animFrameScratch[0], this.spline.xTrack, this.spline.hTrack, phase);
+        sampleFloatAnimationTrackHermite(animFrameScratch[1],this.spline.yTrack, this.spline.pTrack, phase);
+        sampleFloatAnimationTrackHermite(animFrameScratch[2],this.spline.zTrack, this.spline.rTrack, phase);
+
+        const xPt = animFrameScratch[0];
+        const yPt = animFrameScratch[1];
+        const zPt = animFrameScratch[2];
+
+        const tNorm = Math.sqrt(xPt.vel * xPt.vel + yPt.vel * yPt.vel);
+        const norm = Math.sqrt(xPt.pos * xPt.pos + yPt.pos * yPt.pos);
+        const proj = Math.abs(xPt.pos * xPt.vel + yPt.pos * yPt.vel) / norm;
+        const lastNorm = Math.sqrt(zPt.vel * zPt.vel + proj * proj);
+
+        this.angles[0] = badAtan2(-xPt.vel / tNorm, yPt.vel / tNorm);
+        this.angles[1] = badAtan2(zPt.vel / lastNorm, proj / lastNorm);
+        vec3.set(this.pos, xPt.pos, yPt.pos, zPt.pos);
+
+        // the game computes these derivatives by dividing the change by the frame time
+        this.speed = Math.sqrt(tNorm * tNorm + zPt.vel * zPt.vel);
+        this.yawSpeed = (yPt.acc * xPt.vel - xPt.acc * yPt.vel) / (tNorm * tNorm);
+    }
+
+    protected calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void {
+        const timeInSeconds = viewerInput.time / 1000;
+        const maxTurn = Math.abs(viewerInput.deltaTime / 1000 / 10);
+
+        this.oldPitch = this.angles[1];
+        this.fly(timeInSeconds % this.params.pathLength);
+        if (this.pos[2] < this.params.minHeight) {
+            this.pos[2] = this.params.minHeight;
+        }
+        this.angles[1] = clamp(this.angles[1], this.oldPitch - maxTurn, this.oldPitch + maxTurn)
+        const turnRate = -this.params.rollFactor * this.yawSpeed / this.speed;
+        if (Math.abs(turnRate) > 1e-5) {
+            let angle: number;
+            if (turnRate < -1) {
+                angle = -Math.PI / 2;
+            } else if (turnRate > 1) {
+                angle = Math.PI / 2;
+            } else {
+                angle = badAtan2(turnRate, Math.sqrt(1 - turnRate * turnRate));
+            }
+            this.angles[2] = clamp(angle, this.angles[2] - maxTurn, this.angles[2] + maxTurn)
+        } else {
+            this.angles[2] = 0;
+        }
+        vec3.scale(this.pos, this.pos, this.translationScale);
+        mat4.fromTranslation(dst, this.pos);
+        mat4.rotateZ(dst, dst, this.angles[0]);
+        mat4.rotateX(dst, dst, this.angles[1]);
+        mat4.rotateY(dst, dst, this.angles[2]);
+    }
+}
+
 class UVCTData {
     public meshData: MeshData;
 
@@ -1850,6 +2045,7 @@ class DataHolder {
     public uvtr: UVTR[] = [];
     public uvlv: UVLV[] = [];
     public gfxRenderCache = new GfxRenderCache(true);
+    public splineData = new Map<number, SPTH>();
 
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.textureData.length; i++)
@@ -2063,6 +2259,17 @@ function getLevelDobjs(levelID: number, dataHolder: DataHolder): ObjectRenderer[
             radius: 50,
             roll: -15,
         }));
+        // airplanes
+        dobjs.push(new Airplane(dataHolder.uvmdData[0x27], dataHolder.textureData, dataHolder.splineData.get(0x6d)!, {
+            pathLength: 120,
+            minHeight: 42.4323081970215,
+            rollFactor: 150,
+        }));
+        dobjs.push(new Airplane(dataHolder.uvmdData[0x1b], dataHolder.textureData, dataHolder.splineData.get(0x6e)!, {
+            pathLength: 120,
+            minHeight: 33.757682800293,
+            rollFactor: 150,
+        }));
     } else if (levelID === 10) { // Everfrost Island
         // Ocean plane
         const oceanPlane = spawnObject(dataHolder, 0x169);
@@ -2096,7 +2303,7 @@ async function fetchDataHolder(dataFetcher: DataFetcher, device: GfxDevice): Pro
     const fs = parsePilotwings64FS(fsBin);
 
     const dataHolder = new DataHolder();
-
+    let userFileCounter = 0;
     for (let i = 0; i < fs.files.length; i++) {
         const file = fs.files[i];
         if (file.type === 'UVCT') {
@@ -2112,7 +2319,11 @@ async function fetchDataHolder(dataFetcher: DataFetcher, device: GfxDevice): Pro
             dataHolder.uvtr.push(parseUVTR(file));
         } else if (file.type === 'UVLV') {
             dataHolder.uvlv.push(parseUVLV(file));
+        } else if (file.type === 'SPTH') {
+            dataHolder.splineData.set(userFileCounter, parseSPTH(file));
         }
+        if (!file.type.startsWith('UV'))
+            userFileCounter++;
     }
 
     return dataHolder;
