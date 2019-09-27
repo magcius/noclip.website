@@ -1113,8 +1113,8 @@ class SMGSpawner {
     private isWorldMap = false;
 
     constructor(private galaxyName: string, pathBase: string, private sceneObjHolder: SceneObjHolder) {
-        this.isSMG1 = pathBase === 'j3d/smg';
-        this.isSMG2 = pathBase === 'j3d/smg2';
+        this.isSMG1 = pathBase === 'SuperMarioGalaxy';
+        this.isSMG2 = pathBase === 'SuperMarioGalaxy2';
         this.isWorldMap = this.isSMG2 && galaxyName.startsWith('WorldMap');
     }
 
