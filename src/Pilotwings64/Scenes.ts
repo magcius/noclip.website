@@ -1761,8 +1761,8 @@ class Carousel extends ObjectRenderer {
     protected calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void {
         const timeInSeconds = viewerInput.time / 1000;
         if (partIndex === 1) {
-            const speed = 10 * MathConstants.DEG_TO_RAD;
-            mat4.rotateZ(dst, dst, speed * timeInSeconds);
+            const speed = 10;
+            mat4.rotateZ(dst, dst, MathConstants.DEG_TO_RAD * speed * timeInSeconds);
         }
     }
 }
@@ -1771,11 +1771,11 @@ class FerrisWheel extends ObjectRenderer {
     protected calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void {
         const timeInSeconds = viewerInput.time / 1000;
         if (partIndex === 1) {
-            const speed = 17 * MathConstants.DEG_TO_RAD;
-            mat4.rotateY(dst, dst, speed * timeInSeconds);
+            const speed = 17;
+            mat4.rotateY(dst, dst, MathConstants.DEG_TO_RAD * speed * timeInSeconds);
         } else if (partIndex >= 2) {
-            const speed = -17 * MathConstants.DEG_TO_RAD;
-            mat4.rotateY(dst, dst, speed * timeInSeconds);
+            const speed = -17;
+            mat4.rotateY(dst, dst, MathConstants.DEG_TO_RAD * speed * timeInSeconds);
         }
     }
 }
@@ -1784,8 +1784,8 @@ class WaterWheel extends ObjectRenderer {
     protected calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void {
         const timeInSeconds = viewerInput.time / 1000;
         if (partIndex === 0) {
-            const speed = 40 * MathConstants.DEG_TO_RAD;
-            mat4.rotateY(dst, dst, speed * timeInSeconds);
+            const speed = 40;
+            mat4.rotateY(dst, dst, MathConstants.DEG_TO_RAD * speed * timeInSeconds);
         }
     }
 }
@@ -1799,13 +1799,13 @@ class OilDerrick extends ObjectRenderer {
         const timeInSeconds = viewerInput.time / 1000;
         if (partIndex === 1) {
             // offset: 4.71239
-            const speed = 65 * MathConstants.DEG_TO_RAD;
-            mat4.rotateX(dst, dst, speed * timeInSeconds);
+            const speed = 65;
+            mat4.rotateX(dst, dst, MathConstants.DEG_TO_RAD * (270 + (speed * timeInSeconds)));
         } else if (partIndex === 2) {
-            const theta = Math.sin(65 * MathConstants.DEG_TO_RAD * timeInSeconds);
+            const theta = Math.sin(MathConstants.DEG_TO_RAD * 65 * timeInSeconds);
             mat4.rotateX(dst, dst, getOscillation(1.16, 55, theta));
         } else if (partIndex === 3) {
-            const theta = Math.sin(65 * MathConstants.DEG_TO_RAD * timeInSeconds);
+            const theta = Math.sin(MathConstants.DEG_TO_RAD * 65 * timeInSeconds);
             mat4.rotateX(dst, dst, getOscillation(-1.16, 55, theta));
         }
     }
