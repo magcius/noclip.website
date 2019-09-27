@@ -1013,7 +1013,7 @@ void main() {
 
 class ModelData {
     public parts: MeshData[];
-    public partLevels: number[];
+    public partParentIndices: number[];
 
     constructor(device: GfxDevice, public uvmd: UVMD, public modelIndex: number) {
         // Only load LOD 0 for now...
@@ -1026,7 +1026,8 @@ class ModelData {
         });
 
         // TODO(jstpierre): Replace with a PartData (???)
-        this.partLevels = lod.parts.map((part) => part.attachmentLevel);
+        const partLevels = lod.parts.map((part) => part.attachmentLevel);
+        this.partParentIndices = interpretPartHierarchy(partLevels);
     }
 
     public destroy(device: GfxDevice): void {
@@ -1086,9 +1087,33 @@ function badAtan2(x: number, y:number): number {
         return -corrected;
 }
 
+// The original code uses an "in-order depth list" like: [0, 1, 1, 2, 3, 1, 2, 2]
+// Each increment upwards pushes a new stack (only increments of one are allowed)
+// Decrement pops back up to that list depth. Same number means siblings...
+//
+// TODO(jstpierre): Figure out what [1, 1, 2, 3] means... the first node should always
+// be a parent of the root... right?
+function interpretPartHierarchy(partLevels: number[]): number[] {
+    // Translate to a list of parents for each node. -1 means "above root" node.
+    const parents: number[] = [-1];
+
+    // The depth stack.
+    const depthStack: number[] = [0];
+
+    for (let i = 1; i < partLevels.length; i++) {
+        const last = partLevels[i - 1], cur = partLevels[i];
+        assert(cur > 0);
+        if (cur > last)
+            assert(cur === last + 1);
+        parents[i] = depthStack[cur - 1];
+        depthStack[cur] = i;
+    }
+
+    return parents;
+}
+
 abstract class ObjectRenderer {
     private static jointMatrixScratch = nArray(16, () => mat4.create());
-    private static jointMatrixLevelsScratch = nArray(8, () => mat4.create());
 
     public modelMatrix = mat4.create();
     protected partRenderers: MeshRenderer[] = [];
@@ -1101,32 +1126,26 @@ abstract class ObjectRenderer {
         }
 
         assert((model.parts.length + 1) <= ObjectRenderer.jointMatrixScratch.length);
-
-        const maxJointDepth = Math.max(...this.model.partLevels) + 1;
-        assert(maxJointDepth <= ObjectRenderer.jointMatrixLevelsScratch.length);
     }
 
     protected abstract calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void;
 
     protected calcAnim(dst: mat4[], viewerInput: ViewerRenderInput, parentModelMatrix: mat4): void {
-        const levelsScratch = ObjectRenderer.jointMatrixLevelsScratch;
-
-        // Update the root level.
-        mat4.mul(levelsScratch[0], parentModelMatrix, this.modelMatrix);
-
         for (let i = 0; i < this.partRenderers.length; i++) {
-            const level = this.model.partLevels[i];
+            const parentIndex = this.model.partParentIndices[i];
 
-            if (level > 0) {
-                mat4.copy(dst[i], this.model.uvmd.partPlacements[i]);
-                this.calcAnimJoint(dst[i], viewerInput, i);
-                mat4.mul(dst[i], levelsScratch[level - 1], dst[i]);
-                // TODO(jstpierre): Don't update leaf nodes.
-                // We could do this by interpreting the tree up-front.
-                mat4.copy(levelsScratch[level], dst[i]);
+            let parentMatrix: mat4;
+            if (parentIndex === -1) {
+                // Root matrix.
+                parentMatrix = scratchMatrix;
+                mat4.mul(parentMatrix, parentModelMatrix, this.modelMatrix);
             } else {
-                mat4.copy(dst[i], levelsScratch[level]);
+                parentMatrix = ObjectRenderer.jointMatrixScratch[parentIndex];
             }
+
+            mat4.copy(dst[i], this.model.uvmd.partPlacements[i]);
+            this.calcAnimJoint(dst[i], viewerInput, i);
+            mat4.mul(dst[i], parentMatrix, dst[i]);
         }
     }
 
