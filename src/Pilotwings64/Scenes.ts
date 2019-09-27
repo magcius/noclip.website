@@ -13,7 +13,7 @@ import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { DeviceProgram } from "../Program";
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth, getSortKeyLayer } from "../gfx/render/GfxRenderer";
 import { fillMatrix4x3, fillMatrix4x4, fillMatrix4x2, fillVec4v, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
-import { mat4, vec3, vec4 } from "gl-matrix";
+import { mat4, vec3, vec4, mat2 } from "gl-matrix";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget } from "../gfx/helpers/RenderTargetHelpers";
 import { computeViewMatrix } from "../Camera";
@@ -23,6 +23,7 @@ import { ImageFormat, ImageSize, getImageFormatName, decodeTex_RGBA16, getImageS
 import { TextureMapping } from "../TextureHolder";
 import { Endianness } from "../endian";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { calcJointMatrix } from "../j3d/j3d";
 
 interface Pilotwings64FSFileChunk {
     tag: string;
@@ -1014,14 +1015,18 @@ class ModelData {
     public parts: MeshData[];
     public partLevels: number[];
 
-    constructor(device: GfxDevice, public uvmd: UVMD, modelIndex: number) {
-        this.parts = uvmd.lods[0].parts.map((part, partNumber) =>
-            new MeshData(device,
-                { vertexData: uvmd.vertexData, indexData: part.indexData, materials: part.materials },
-                getToyMotion(modelIndex, partNumber)
-            )
-        );
-        this.partLevels = uvmd.lods[0].parts.map((part) => part.attachmentLevel);
+    constructor(device: GfxDevice, public uvmd: UVMD, public modelIndex: number) {
+        // Only load LOD 0 for now...
+        const lod = uvmd.lods[0];
+
+        this.parts = lod.parts.map((part) => {
+            // TODO(jstpierre): Don't create this fake mesh chunk...
+            const meshChunk = { vertexData: uvmd.vertexData, indexData: part.indexData, materials: part.materials };
+            return new MeshData(device, meshChunk);
+        });
+
+        // TODO(jstpierre): Replace with a PartData (???)
+        this.partLevels = lod.parts.map((part) => part.attachmentLevel);
     }
 
     public destroy(device: GfxDevice): void {
@@ -1036,7 +1041,7 @@ class MeshData {
     public inputLayout: GfxInputLayout;
     public inputState: GfxInputState;
 
-    constructor(device: GfxDevice, public mesh: Mesh_Chunk, public toyMotion?: ToyMotion) {
+    constructor(device: GfxDevice, public mesh: Mesh_Chunk) {
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, mesh.vertexData.buffer);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, mesh.indexData.buffer);
 
@@ -1081,23 +1086,48 @@ function badAtan2(x: number, y:number): number {
         return -corrected;
 }
 
-class ModelRenderer {
-    private static jointMatrixScratch = nArray(8, () => mat4.create());
+abstract class ObjectRenderer {
+    private static jointMatrixScratch = nArray(16, () => mat4.create());
+    private static jointMatrixLevelsScratch = nArray(8, () => mat4.create());
 
     public modelMatrix = mat4.create();
-    private partRenderers: MeshRenderer[] = [];
+    protected partRenderers: MeshRenderer[] = [];
     private visible = true;
 
-    constructor(private model: ModelData, textureData: TextureData[]) {
+    constructor(protected model: ModelData, textureData: TextureData[]) {
         for (let i = 0; i < model.parts.length; i++) {
             const partRenderer = new MeshRenderer(model.parts[i], textureData);
-            mat4.copy(partRenderer.modelMatrix, model.uvmd.partPlacements[i]);
             this.partRenderers.push(partRenderer);
         }
 
-        // Look out for our highest numbered parent joint matrix.
-        const highestParentJoint = Math.max(...this.model.partLevels) + 1;
-        assert(highestParentJoint < ModelRenderer.jointMatrixScratch.length);
+        assert((model.parts.length + 1) <= ObjectRenderer.jointMatrixScratch.length);
+
+        const maxJointDepth = Math.max(...this.model.partLevels) + 1;
+        assert(maxJointDepth <= ObjectRenderer.jointMatrixLevelsScratch.length);
+    }
+
+    protected abstract calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void;
+
+    protected calcAnim(dst: mat4[], viewerInput: ViewerRenderInput, parentModelMatrix: mat4): void {
+        const levelsScratch = ObjectRenderer.jointMatrixLevelsScratch;
+
+        // Update the root level.
+        mat4.mul(levelsScratch[0], parentModelMatrix, this.modelMatrix);
+
+        for (let i = 0; i < this.partRenderers.length; i++) {
+            const level = this.model.partLevels[i];
+
+            if (level > 0) {
+                mat4.copy(dst[i], this.model.uvmd.partPlacements[i]);
+                this.calcAnimJoint(dst[i], viewerInput, i);
+                mat4.mul(dst[i], levelsScratch[level - 1], dst[i]);
+                // TODO(jstpierre): Don't update leaf nodes.
+                // We could do this by interpreting the tree up-front.
+                mat4.copy(levelsScratch[level], dst[i]);
+            } else {
+                mat4.copy(dst[i], levelsScratch[level]);
+            }
+        }
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, parentModelMatrix: mat4): void {
@@ -1107,52 +1137,54 @@ class ModelRenderer {
         const template = renderInstManager.pushTemplateRenderInst();
         template.sortKey = makeSortKey(this.model.uvmd.hasTransparency ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE);
 
-        const jointMatrixScratch = ModelRenderer.jointMatrixScratch;
+        const jointMatrixScratch = ObjectRenderer.jointMatrixScratch;
+        this.calcAnim(jointMatrixScratch, viewerInput, parentModelMatrix);
 
-        // Update the root joint.
-        mat4.mul(jointMatrixScratch[0], parentModelMatrix, this.modelMatrix);
-
-        for (let i = 0; i < this.partRenderers.length; i++) {
-            const partRenderer = this.partRenderers[i];
-
-            const parentJointIndex = this.model.partLevels[i];
-            // TODO(jstpierre): Find a way to avoid updating leaf joints.
-            if (parentJointIndex > 0)
-                partRenderer.calcAnim(jointMatrixScratch[parentJointIndex], viewerInput, jointMatrixScratch[parentJointIndex - 1])
-
-            partRenderer.prepareToRender(device, renderInstManager, viewerInput, jointMatrixScratch[parentJointIndex]);
-        }
+        for (let i = 0; i < this.partRenderers.length; i++)
+            this.partRenderers[i].prepareToRender(device, renderInstManager, viewerInput, jointMatrixScratch[i]);
 
         renderInstManager.popTemplateRenderInst();
     }
 }
 
+class LegacyToyObjectRenderer extends ObjectRenderer {
+    private partToyMotions: (ToyMotion | null)[] = [];
+
+    constructor(model: ModelData, textureData: TextureData[]) {
+        super(model, textureData);
+
+        for (let i = 0; i < model.parts.length; i++) {
+            const toyMotion = getToyMotion(this.model.modelIndex, i);
+            this.partToyMotions.push(toyMotion);
+        }
+    }
+
+    private calcAnimToyMotion(dst: mat4, viewerInput: ViewerRenderInput, toyMotion: ToyMotion): void {
+        if (toyMotion.rotation) {
+            const rotation = toyMotion.rotation;
+            mat4.rotate(dst, dst, rotation.speed * viewerInput.time / 1000, rotation.axis);
+        } else if (toyMotion.oscillation) {
+            const osc = toyMotion.oscillation;
+            const radians = badAtan2(osc.xScale * Math.sin(osc.speed * viewerInput.time / 1000), osc.yScale);
+            mat4.rotate(dst, dst, radians, osc.axis);
+        }
+    }
+
+    protected calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void {
+        const toyMotion = this.partToyMotions[partIndex];
+        if (toyMotion !== null)
+            this.calcAnimToyMotion(dst, viewerInput, toyMotion);
+    }
+ }
+
 class MeshRenderer {
     public static scratchMatrix = mat4.create();
-    public modelMatrix = mat4.create();
     private materials: MaterialInstance[] = [];
     private visible = true;
 
     constructor(private meshData: MeshData, textureData: TextureData[]) {
         for (let material of meshData.mesh.materials)
             this.materials.push(new MaterialInstance(material, textureData));
-    }
-
-    public calcAnim(dst: mat4, viewerInput: ViewerRenderInput, parentModelMatrix: mat4): void {
-        mat4.copy(dst, this.modelMatrix);
-
-        if (this.meshData.toyMotion) {
-            if (this.meshData.toyMotion.rotation) {
-                const rotation = this.meshData.toyMotion.rotation;
-                mat4.rotate(dst, dst, rotation.speed * viewerInput.time / 1000, rotation.axis);
-            } else if (this.meshData.toyMotion.oscillation) {
-                const osc = this.meshData.toyMotion.oscillation;
-                const radians = badAtan2(osc.xScale * Math.sin(osc.speed * viewerInput.time / 1000), osc.yScale);
-                mat4.rotate(dst, dst, radians, osc.axis);
-            }
-        }
-
-        mat4.mul(dst, parentModelMatrix, dst);
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, jointMatrix: mat4): void {
@@ -1734,7 +1766,6 @@ class Pilotwings64Renderer implements SceneGfx {
 
 const xAxis = vec3.fromValues(1,0,0);
 const yAxis = vec3.fromValues(0,1,0);
-const zAxis = vec3.fromValues(0,0,1);
 
 interface ToyRotation {
     axis: vec3;
@@ -1756,19 +1787,32 @@ interface ToyMotion {
 
 // the game actually specifies animated models by listing their final coordinates
 // we assume all instances of a given model are animated
-function getToyMotion(modelIndex: number, partIndex: number): ToyMotion | undefined {
-    // carousel
-    if (modelIndex === 0x09 && partIndex === 1) {
-        const rotation = { axis: zAxis, speed: 10 * MathConstants.DEG_TO_RAD };
-        return { rotation };
+
+class Carousel extends ObjectRenderer {
+    protected calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void {
+        const timeInSeconds = viewerInput.time / 1000;
+        if (partIndex === 1) {
+            const speed = 10 * MathConstants.DEG_TO_RAD;
+            mat4.rotateZ(dst, dst, speed * timeInSeconds);
+        }
     }
-    // ferris wheel
-    if (modelIndex === 0x0c && partIndex >= 1) {
-        const rotation = { axis: yAxis, speed: 17 * MathConstants.DEG_TO_RAD };
-        if (partIndex > 1)
-            rotation.speed *= -1;
-        return { rotation };
+}
+
+class FerrisWheel extends ObjectRenderer {
+    protected calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void {
+        const timeInSeconds = viewerInput.time / 1000;
+        if (partIndex === 1) {
+            const speed = 17 * MathConstants.DEG_TO_RAD;
+            mat4.rotateY(dst, dst, speed * timeInSeconds);
+        } else if (partIndex >= 2) {
+            const speed = -17 * MathConstants.DEG_TO_RAD;
+            mat4.rotateY(dst, dst, speed * timeInSeconds);
+        }
     }
+}
+
+// Legacy motion system
+function getToyMotion(modelIndex: number, partIndex: number): ToyMotion | null {
     // water wheel
     if (modelIndex === 0x0d && partIndex === 0) {
         const rotation = { axis: yAxis, speed: 40 * MathConstants.DEG_TO_RAD };
@@ -1790,7 +1834,7 @@ function getToyMotion(modelIndex: number, partIndex: number): ToyMotion | undefi
         }
     }
     // the mount rushmore head (modelIndex 0x55 or 0x99) also has a "toy type", but no motion
-    return;
+    return null;
 }
 
 class UVCTData {
@@ -1820,12 +1864,26 @@ class DataHolder {
     }
 }
 
+function spawnObject(dataHolder: DataHolder, uvmdIndex: number): ObjectRenderer {
+    const uvmdData = dataHolder.uvmdData[uvmdIndex];
+    const textureData = dataHolder.textureData;
+
+    if (uvmdIndex === 0x09) {
+        return new Carousel(uvmdData, textureData);
+    } else if (uvmdIndex === 0x0c) {
+        return new FerrisWheel(uvmdData, textureData);
+    } else {
+        return new LegacyToyObjectRenderer(uvmdData, textureData);
+    }
+}
+
 class UVCTRenderer {
     public static scratchMatrix = mat4.create();
 
     public modelMatrix = mat4.create();
     public meshRenderer: MeshRenderer;
-    public sobjRenderers: ModelRenderer[] = [];
+    public sobjRenderers: ObjectRenderer[] = [];
+    private visible = true;
 
     constructor(dataHolder: DataHolder, private uvctData: UVCTData) {
         this.meshRenderer = new MeshRenderer(uvctData.meshData, dataHolder.textureData);
@@ -1833,13 +1891,16 @@ class UVCTRenderer {
         const sobjPlacements = this.uvctData.uvct.models;
         for (let i = 0; i < sobjPlacements.length; i++) {
             const placement = sobjPlacements[i];
-            const sobjRenderer = new ModelRenderer(dataHolder.uvmdData[placement.modelIndex], dataHolder.textureData);
+            const sobjRenderer = spawnObject(dataHolder, placement.modelIndex);
             mat4.copy(sobjRenderer.modelMatrix, placement.modelMatrix);
             this.sobjRenderers.push(sobjRenderer);
         }
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, parentModelMatrix: mat4): void {
+        if (!this.visible)
+            return;
+
         mat4.mul(UVCTRenderer.scratchMatrix, parentModelMatrix, this.modelMatrix);
 
         this.meshRenderer.prepareToRender(device, renderInstManager, viewerInput, UVCTRenderer.scratchMatrix);
