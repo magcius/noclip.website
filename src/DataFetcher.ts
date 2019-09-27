@@ -149,7 +149,7 @@ export class DataFetcher {
     public maxParallelRequests: number = 2;
     public aborted: boolean = false;
 
-    constructor(private abortSignal: AbortSignal, public progressMeter: ProgressMeter) {
+    constructor(abortSignal: AbortSignal, public progressMeter: ProgressMeter) {
         abortSignal.addEventListener('abort', () => {
             this.aborted = true;
             for (let i = 0; i < this.requests.length; i++)

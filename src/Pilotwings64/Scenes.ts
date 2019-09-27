@@ -54,7 +54,7 @@ interface Mesh_Chunk {
 
 interface UVCT_ModelPlacement {
     modelIndex: number;
-    placement: mat4;
+    modelMatrix: mat4;
 }
 
 interface UVCT_Chunk {
@@ -148,7 +148,7 @@ function parseUVCT_Chunk(chunk: Pilotwings64FSFileChunk): UVCT_Chunk {
         offs += 0x12;
 
         if (modelIndex >= 0)
-            models.push({ modelIndex, placement });
+            models.push({ modelIndex, modelMatrix: placement });
     }
 
     const materials: MaterialData[] = [];
@@ -1082,33 +1082,53 @@ function badAtan2(x: number, y:number): number {
 }
 
 class ModelRenderer {
+    private static jointMatrixScratch = nArray(8, () => mat4.create());
+
     public modelMatrix = mat4.create();
-    private parts: MeshRenderer[] = [];
-    public partMatrices: mat4[] = [];
+    private partRenderers: MeshRenderer[] = [];
+    private visible = true;
 
     constructor(private model: ModelData, textureData: TextureData[]) {
         for (let i = 0; i < model.parts.length; i++) {
-            this.parts.push(new MeshRenderer(model.parts[i], textureData));
-            this.parts[i].modelMatrix = model.uvmd.partPlacements[i];
+            const partRenderer = new MeshRenderer(model.parts[i], textureData);
+            mat4.copy(partRenderer.modelMatrix, model.uvmd.partPlacements[i]);
+            this.partRenderers.push(partRenderer);
         }
-        this.partMatrices = nArray(Math.max(...model.partLevels) + 1, () => mat4.create());
+
+        // Look out for our highest numbered parent joint matrix.
+        const highestParentJoint = Math.max(...this.model.partLevels) + 1;
+        assert(highestParentJoint < ModelRenderer.jointMatrixScratch.length);
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, parentModelMatrix: mat4): void {
+        if (!this.visible)
+            return;
+
         const template = renderInstManager.pushTemplateRenderInst();
         template.sortKey = makeSortKey(this.model.uvmd.hasTransparency ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE);
-        mat4.copy(this.partMatrices[0], this.modelMatrix);
-        for (let i = 0; i < this.parts.length; i++) {
-            const level = this.model.partLevels[i];
-            if (level > 0)
-                mat4.copy(this.partMatrices[level], this.partMatrices[level - 1]);
-            this.parts[i].prepareToRender(device, renderInstManager, viewerInput, this.partMatrices[level]);
+
+        const jointMatrixScratch = ModelRenderer.jointMatrixScratch;
+
+        // Update the root joint.
+        mat4.mul(jointMatrixScratch[0], parentModelMatrix, this.modelMatrix);
+
+        for (let i = 0; i < this.partRenderers.length; i++) {
+            const partRenderer = this.partRenderers[i];
+
+            const parentJointIndex = this.model.partLevels[i];
+            // TODO(jstpierre): Find a way to avoid updating leaf joints.
+            if (parentJointIndex > 0)
+                partRenderer.calcAnim(jointMatrixScratch[parentJointIndex], viewerInput, jointMatrixScratch[parentJointIndex - 1])
+
+            partRenderer.prepareToRender(device, renderInstManager, viewerInput, jointMatrixScratch[parentJointIndex]);
         }
+
         renderInstManager.popTemplateRenderInst();
     }
 }
 
 class MeshRenderer {
+    public static scratchMatrix = mat4.create();
     public modelMatrix = mat4.create();
     private materials: MaterialInstance[] = [];
     private visible = true;
@@ -1118,33 +1138,32 @@ class MeshRenderer {
             this.materials.push(new MaterialInstance(material, textureData));
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, parentMatrix?: mat4): void {
+    public calcAnim(dst: mat4, viewerInput: ViewerRenderInput, parentModelMatrix: mat4): void {
+        mat4.copy(dst, this.modelMatrix);
+
+        if (this.meshData.toyMotion) {
+            if (this.meshData.toyMotion.rotation) {
+                const rotation = this.meshData.toyMotion.rotation;
+                mat4.rotate(dst, dst, rotation.speed * viewerInput.time / 1000, rotation.axis);
+            } else if (this.meshData.toyMotion.oscillation) {
+                const osc = this.meshData.toyMotion.oscillation;
+                const radians = badAtan2(osc.xScale * Math.sin(osc.speed * viewerInput.time / 1000), osc.yScale);
+                mat4.rotate(dst, dst, radians, osc.axis);
+            }
+        }
+
+        mat4.mul(dst, parentModelMatrix, dst);
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, jointMatrix: mat4): void {
         if (!this.visible)
             return;
 
         const template = renderInstManager.pushTemplateRenderInst();
 
-        let finalMatrix = this.modelMatrix;
-
-        if (parentMatrix) {
-            finalMatrix = parentMatrix;
-            mat4.mul(finalMatrix, finalMatrix, this.modelMatrix)
-
-            if (this.meshData.toyMotion) {
-                if (this.meshData.toyMotion.rotation) {
-                    const rotation = this.meshData.toyMotion.rotation;
-                    mat4.rotate(finalMatrix, finalMatrix, rotation.speed * viewerInput.time / 1000, rotation.axis)
-                } else if (this.meshData.toyMotion.oscillation) {
-                    const osc = this.meshData.toyMotion.oscillation;
-                    const radians = badAtan2(osc.xScale * Math.sin(osc.speed * viewerInput.time / 1000), osc.yScale);
-                    mat4.rotate(finalMatrix, finalMatrix, radians, osc.axis)
-                }
-            }
-        }
-
         template.setInputLayoutAndState(this.meshData.inputLayout, this.meshData.inputState);
         for (let i = 0; i < this.materials.length; i++)
-            this.materials[i].prepareToRender(device, renderInstManager, viewerInput, finalMatrix);
+            this.materials[i].prepareToRender(device, renderInstManager, viewerInput, jointMatrix);
         renderInstManager.popTemplateRenderInst();
     }
 }
@@ -1663,12 +1682,9 @@ class TextureData {
 }
 
 class Pilotwings64Renderer implements SceneGfx {
-    public uvctData: MeshData[] = [];
-    public uvmdData: ModelData[] = [];
-    public uvctInstance: MeshRenderer[] = [];
-    public uvmdInstance: ModelRenderer[] = [];
+    public dataHolder: DataHolder = new DataHolder();
+    public uvtrRenderers: UVTRRenderer[] = [];
     public renderHelper: GfxRenderHelper;
-    public textureData: TextureData[] = [];
     private renderTarget = new BasicRenderTarget();
 
     constructor(device: GfxDevice) {
@@ -1688,10 +1704,9 @@ class Pilotwings64Renderer implements SceneGfx {
         const d = template.mapUniformBufferF32(PW64Program.ub_SceneParams);
         offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
 
-        for (let i = 0; i < this.uvctInstance.length; i++)
-            this.uvctInstance[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
-        for (let i = 0; i < this.uvmdInstance.length; i++)
-            this.uvmdInstance[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+        for (let i = 0; i < this.uvtrRenderers.length; i++)
+            this.uvtrRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender(device, hostAccessPass);
     }
@@ -1713,48 +1728,8 @@ class Pilotwings64Renderer implements SceneGfx {
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy(device);
         this.renderTarget.destroy(device);
-        for (let i = 0; i < this.textureData.length; i++)
-            this.textureData[i].destroy(device);
-        for (let i = 0; i < this.uvctData.length; i++)
-            this.uvctData[i].destroy(device);
-        for (let i = 0; i < this.uvmdData.length; i++)
-            this.uvmdData[i].destroy(device);
+        this.dataHolder.destroy(device);
     }
-}
-
-const toNoclipSpace = mat4.create();
-mat4.fromXRotation(toNoclipSpace, -90 * MathConstants.DEG_TO_RAD);
-mat4.scale(toNoclipSpace, toNoclipSpace, [50, 50, 50]);
-
-function dummyTexture(name: string): UVTX {
-    return {
-        name: "dummy_" + name,
-        width: 2,
-        height: 2,
-        fmt: ImageFormat.G_IM_FMT_I,
-        siz: ImageSize.G_IM_SIZ_4b,
-        otherModeLByte : 0,
-        cutOutTransparent : false,
-        levels: [{
-            width: 2,
-            height: 2,
-            pixels: new Uint8Array([
-                0xff, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff,
-                0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0xff
-            ]),
-            shiftS: 0,
-            shiftT: 0,
-        }],
-        otherModeH: 0,
-        cms: 0,
-        cmt: 0,
-        combine: [
-            { a: CCMUX.TEXEL0, b: CCMUX.ADD_ZERO, c: CCMUX.SHADE, d: CCMUX.ADD_ZERO },
-            { a: ACMUX.TEXEL0, b: ACMUX.ZERO, c: ACMUX.SHADE, d: ACMUX.ZERO },
-            { a: CCMUX.ADD_ZERO, b: CCMUX.ADD_ZERO, c: CCMUX.MUL_ZERO, d: CCMUX.COMBINED },
-            { a: ACMUX.ZERO, b: ACMUX.ZERO, c: ACMUX.ZERO, d: ACMUX.ADD_COMBINED },
-        ],
-    };
 }
 
 const xAxis = vec3.fromValues(1,0,0);
@@ -1818,6 +1793,83 @@ function getToyMotion(modelIndex: number, partIndex: number): ToyMotion | undefi
     return;
 }
 
+class UVCTData {
+    public meshData: MeshData;
+
+    constructor(device: GfxDevice, public uvct: UVCT_Chunk) {
+        this.meshData = new MeshData(device, uvct.mesh);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.meshData.destroy(device);
+    }
+}
+
+class DataHolder {
+    public textureData: TextureData[] = [];
+    public uvmdData: ModelData[] = [];
+    public uvctData: UVCTData[] = [];
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.textureData.length; i++)
+            this.textureData[i].destroy(device);
+        for (let i = 0; i < this.uvmdData.length; i++)
+            this.uvmdData[i].destroy(device);
+        for (let i = 0; i < this.uvctData.length; i++)
+            this.uvctData[i].destroy(device);
+    }
+}
+
+class UVCTRenderer {
+    public static scratchMatrix = mat4.create();
+
+    public modelMatrix = mat4.create();
+    public meshRenderer: MeshRenderer;
+    public sobjRenderers: ModelRenderer[] = [];
+
+    constructor(dataHolder: DataHolder, private uvctData: UVCTData) {
+        this.meshRenderer = new MeshRenderer(uvctData.meshData, dataHolder.textureData);
+
+        const sobjPlacements = this.uvctData.uvct.models;
+        for (let i = 0; i < sobjPlacements.length; i++) {
+            const placement = sobjPlacements[i];
+            const sobjRenderer = new ModelRenderer(dataHolder.uvmdData[placement.modelIndex], dataHolder.textureData);
+            mat4.copy(sobjRenderer.modelMatrix, placement.modelMatrix);
+            this.sobjRenderers.push(sobjRenderer);
+        }
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, parentModelMatrix: mat4): void {
+        mat4.mul(UVCTRenderer.scratchMatrix, parentModelMatrix, this.modelMatrix);
+
+        this.meshRenderer.prepareToRender(device, renderInstManager, viewerInput, UVCTRenderer.scratchMatrix);
+
+        for (let i = 0; i < this.sobjRenderers.length; i++)
+            this.sobjRenderers[i].prepareToRender(device, renderInstManager, viewerInput, UVCTRenderer.scratchMatrix);
+    }
+}
+
+class UVTRRenderer {
+    public uvctRenderers: UVCTRenderer[] = [];
+    public modelMatrix = mat4.create();
+
+    constructor(dataHolder: DataHolder, private uvtrChunk: UVTR_Chunk) {
+        for (let i = 0; i < this.uvtrChunk.contourPlacements.length; i++) {
+            const contourPlacement = this.uvtrChunk.contourPlacements[i];
+            const uvctData = dataHolder.uvctData[contourPlacement.contourIndex];
+            const uvctRenderer = new UVCTRenderer(dataHolder, uvctData);
+            mat4.translate(uvctRenderer.modelMatrix, uvctRenderer.modelMatrix, contourPlacement.position);
+
+            this.uvctRenderers.push(uvctRenderer);
+        }
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        for (let i = 0; i < this.uvctRenderers.length; i++)
+            this.uvctRenderers[i].prepareToRender(device, renderInstManager, viewerInput, this.modelMatrix);
+    }
+}
+
 const pathBase = `Pilotwings64`;
 class Pilotwings64SceneDesc implements SceneDesc {
     public id: string;
@@ -1831,56 +1883,46 @@ class Pilotwings64SceneDesc implements SceneDesc {
 
         const renderer = new Pilotwings64Renderer(device);
 
-        const uvct = fs.files.filter((file) => file.type === 'UVCT').map((file) => parseUVCT(file));
-
-        const uvtr = fs.files.filter((file) => file.type === 'UVTR').map((file) => parseUVTR(file));
-        assert(uvtr.length === 1);
-
-        const uvmd = fs.files.filter((file) => file.type === 'UVMD').map((file) => parseUVMD(file));
-
-        const uvctData = uvct.map((uvct) => new MeshData(device, uvct.mesh));
-        renderer.uvctData = uvctData;
-
-        const uvmdData = uvmd.map((uvmd, modelIndex) => new ModelData(device, uvmd, modelIndex));
-        renderer.uvmdData = uvmdData;
-
-
-        const uvtx = fs.files.filter((file => file.type === 'UVTX')).map((file) => {
-            try {
-                return parseUVTX(file);
-            } catch (e) {
-                // preserve the ordering of the textures for indexing
-                console.warn(file.name, e)
-                return dummyTexture(file.name);
-            }
-        });
-
         const cache = renderer.renderHelper.getCache();
-        for (let i = 0; i < uvtx.length; i++) {
-            const data = new TextureData(device, cache, uvtx[i]);
-            renderer.textureData.push(data);
-        }
+        const dataHolder = renderer.dataHolder;
 
-        const levelData = parseUVLV(fs.files.filter((file) => file.type === 'UVLV')[0]).levels[this.levelID];
-
-        for (let terraIndex of levelData.terras) {
-            const map = uvtr[0].maps[terraIndex];
-            for (let j = 0; j < map.contourPlacements.length; j++) {
-                const ct = map.contourPlacements[j];
-                const contourInstance = new MeshRenderer(uvctData[ct.contourIndex], renderer.textureData);
-                mat4.multiply(contourInstance.modelMatrix, contourInstance.modelMatrix, toNoclipSpace);
-                mat4.translate(contourInstance.modelMatrix, contourInstance.modelMatrix, ct.position);
-                renderer.uvctInstance.push(contourInstance);
-
-                // render attached models (Sobjs)
-                for (let model of uvct[ct.contourIndex].models) {
-                    const modelInstance = new ModelRenderer(uvmdData[model.modelIndex], renderer.textureData);
-                    mat4.multiply(modelInstance.modelMatrix, modelInstance.modelMatrix, contourInstance.modelMatrix);
-                    mat4.multiply(modelInstance.modelMatrix, modelInstance.modelMatrix, model.placement);
-                    renderer.uvmdInstance.push(modelInstance);
-                }
+        const uvtrs: UVTR[] = [];
+        const uvlvs: UVLV[] = [];
+        for (let i = 0; i < fs.files.length; i++) {
+            const file = fs.files[i];
+            if (file.type === 'UVCT') {
+                const uvct = parseUVCT(file);
+                dataHolder.uvctData.push(new UVCTData(device, uvct));
+            } else if (file.type === 'UVTX') {
+                const uvtx = parseUVTX(file);
+                dataHolder.textureData.push(new TextureData(device, cache, uvtx));
+            } else if (file.type === 'UVMD') {
+                const uvmd = parseUVMD(file);
+                dataHolder.uvmdData.push(new ModelData(device, uvmd, dataHolder.uvmdData.length));
+            } else if (file.type === 'UVTR') {
+                uvtrs.push(parseUVTR(file));
+            } else if (file.type === 'UVLV') {
+                uvlvs.push(parseUVLV(file));
             }
         }
+
+        assert(uvtrs.length === 1);
+        assert(uvlvs.length === 1);
+
+        const levelData = uvlvs[0].levels[this.levelID];
+
+        const toNoclipSpace = mat4.create();
+        mat4.fromXRotation(toNoclipSpace, -90 * MathConstants.DEG_TO_RAD);
+        mat4.scale(toNoclipSpace, toNoclipSpace, [50, 50, 50]);
+        
+        for (let i = 0; i < levelData.terras.length; i++) {
+            const terraIndex = levelData.terras[i];
+            const uvtrChunk = uvtrs[0].maps[terraIndex];
+            const uvtrRenderer = new UVTRRenderer(dataHolder, uvtrChunk);
+            mat4.copy(uvtrRenderer.modelMatrix, toNoclipSpace);
+            renderer.uvtrRenderers.push(uvtrRenderer);
+        }
+
         return renderer;
     }
 }

@@ -16,7 +16,7 @@ import { GXMaterial, AlphaTest, RopInfo, TexGen, TevStage, getVertexAttribLocati
 import { Color, colorNew, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8 } from "../Color";
 import { MaterialParams, ColorKind, ub_PacketParams, u_PacketParamsBufferSize, PacketParams, ub_MaterialParams, setIndTexOrder, setIndTexCoordScale, setTevIndirect, setTevOrder, setTevColorIn, setTevColorOp, setTevAlphaIn, setTevAlphaOp, fillIndTexMtx, fillTextureMappingInfo } from "../gx/gx_render";
 import { GXMaterialHelperGfx } from "../gx/gx_render";
-import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, computeMatrixWithoutTranslation, texEnvMtx } from "../MathHelpers";
+import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, computeMatrixWithoutTranslation } from "../MathHelpers";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { GfxRenderInst, GfxRenderInstManager, makeSortKeyTranslucent, GfxRendererLayer, setSortKeyBias, setSortKeyDepth } from "../gfx/render/GfxRenderer";
 import { fillMatrix4x3, fillColor, fillMatrix4x2 } from "../gfx/helpers/UniformBufferHelpers";
