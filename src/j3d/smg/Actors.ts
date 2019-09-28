@@ -1951,10 +1951,8 @@ export class AstroMapObj extends MapObjActor {
                 'AstroStarPlateTower',
             ];
             return table[domeId - 1];
-        } else if (objName === 'AstroRotateStepA' || objName === 'AstroRotateStepB' || objName === 'AstroDecoratePartsA') {
-            return objName;
         } else {
-            throw "whoops";
+            return objName;
         }
     }
 }
@@ -2074,5 +2072,28 @@ export class LavaSteam extends LiveActor {
                 this.setNerve(LavaSteamNrv.WAIT);
             }
         }
+    }
+}
+
+export class SignBoard extends NPCActor {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, getObjectName(infoIter));
+
+        const objName = this.name;
+        this.initDefaultPos(sceneObjHolder, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, objName);
+        connectToSceneNpc(sceneObjHolder, this);
+    }
+}
+
+export class WoodBox extends LiveActor {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, getObjectName(infoIter));
+
+        this.initDefaultPos(sceneObjHolder, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, "WoodBox");
+        connectToSceneMapObjStrongLight(sceneObjHolder, this);
+        this.initLightCtrl(sceneObjHolder);
+        this.initEffectKeeper(sceneObjHolder, null);
     }
 }
