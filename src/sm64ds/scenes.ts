@@ -19,7 +19,7 @@ import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUni
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { SceneContext } from '../SceneBase';
-import { DataFetcher } from '../DataFetcher';
+import { DataFetcher, DataFetcherFlags } from '../DataFetcher';
 import { MathConstants, clamp } from '../MathHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
@@ -409,7 +409,10 @@ class ModelCache {
     private fetchFile(path: string): Promise<ArrayBufferSlice> {
         assert(!this.filePromiseCache.has(path));
         assert(path.startsWith('/data'));
-        const p = this.dataFetcher.fetchData(`${pathBase}${path}`);
+
+        const p = this.dataFetcher.fetchData(`${pathBase}${path}`, DataFetcherFlags.NONE, () => {
+            this.filePromiseCache.delete(path);
+        });
         this.filePromiseCache.set(path, p);
         return p;
     }

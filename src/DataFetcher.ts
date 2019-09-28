@@ -21,8 +21,11 @@ export function getDataURLForPath(url: string): string {
 }
 
 export const enum DataFetcherFlags {
+    NONE = 0x00,
     ALLOW_404 = 0x01,
 }
+
+export type AbortedCallback = () => void;
 
 class DataFetcherRequest {
     public request: XMLHttpRequest | null = null;
@@ -35,7 +38,7 @@ class DataFetcherRequest {
     private reject: (e: Error | null) => void;
     private retriesLeft = 2;
 
-    constructor(public url: string, private flags: DataFetcherFlags) {
+    constructor(public url: string, private flags: DataFetcherFlags, private abortedCallback: AbortedCallback | null) {
         this.promise = new Promise((resolve, reject) => {
             this.resolve = resolve;
             this.reject = reject;
@@ -139,6 +142,8 @@ class DataFetcherRequest {
     public abort(): void {
         if (this.request !== null)
             this.request.abort();
+        if (this.abortedCallback !== null)
+            this.abortedCallback();
         this.destroy();
     }
 }
@@ -189,11 +194,11 @@ export class DataFetcher {
         }
     }
 
-    public fetchURL(url: string, flags: DataFetcherFlags = 0): Promise<NamedArrayBufferSlice> {
+    public fetchURL(url: string, flags: DataFetcherFlags = 0, abortedCallback: AbortedCallback | null = null): Promise<NamedArrayBufferSlice> {
         if (this.aborted)
             throw new Error("Tried to fetch new data while aborted; should not happen");
 
-        const request = new DataFetcherRequest(url, flags);
+        const request = new DataFetcherRequest(url, flags, abortedCallback);
         this.requests.push(request);
         request.ondone = () => {
             this.doneRequestCount++;
@@ -208,8 +213,8 @@ export class DataFetcher {
         return request.promise!;
     }
 
-    public fetchData(path: string, flags: DataFetcherFlags = 0): Promise<NamedArrayBufferSlice> {
+    public fetchData(path: string, flags: DataFetcherFlags = 0, abortedCallback: AbortedCallback | null = null): Promise<NamedArrayBufferSlice> {
         const url = getDataURLForPath(path);
-        return this.fetchURL(url, flags);
+        return this.fetchURL(url, flags, abortedCallback);
     }
 }

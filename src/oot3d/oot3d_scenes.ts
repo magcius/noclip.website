@@ -73,8 +73,6 @@ export class OoT3DRenderer implements Viewer.SceneGfx {
         this.renderHelper.destroy(device);
         this.renderTarget.destroy(device);
 
-        this.textureHolder.destroy(device);
-        this.modelCache.destroy(device);
         for (let i = 0; i < this.roomRenderers.length; i++)
             this.roomRenderers[i].destroy(device);
     }
@@ -176,19 +174,21 @@ export class ModelCache {
         return Promise.all(v);
     }
 
-    private fetchFile(path: string): Promise<ArrayBufferSlice> {
+    private fetchFile(path: string, flags: DataFetcherFlags): Promise<ArrayBufferSlice> {
         assert(!this.filePromiseCache.has(path));
-        const p = this.dataFetcher.fetchData(path);
+        const p = this.dataFetcher.fetchData(path, flags, () => {
+            this.filePromiseCache.delete(path);
+        });
         this.filePromiseCache.set(path, p);
         return p;
     }
 
-    public fetchFileData(path: string): Promise<ArrayBufferSlice> {
+    public fetchFileData(path: string, flags: DataFetcherFlags = DataFetcherFlags.NONE): Promise<ArrayBufferSlice> {
         const p = this.filePromiseCache.get(path);
         if (p !== undefined) {
             return p.then(() => this.getFileData(path));
         } else {
-            return this.fetchFile(path).then((data) => {
+            return this.fetchFile(path, flags).then((data) => {
                 this.fileDataCache.set(path, data);
                 return data;
             });
@@ -746,6 +746,16 @@ function isAdultDungeon(scene: Scene) {
 }
 
 const pathBase = `oot3d`;
+
+class DataHolder {
+    constructor(public modelCache: ModelCache, public textureHolder: CtrTextureHolder) {
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.modelCache.destroy(device);
+        this.textureHolder.destroy(device);
+    }
+}
 
 class SceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string, public setupIndex: number = -1) {
@@ -2201,16 +2211,23 @@ class SceneDesc implements Viewer.SceneDesc {
         const path_info_zsi = `${pathBase}/scene/${this.id}_info.zsi`;
         const dataFetcher = context.dataFetcher;
 
-        const [zarBuffer, zsiBuffer] = await Promise.all([
-            dataFetcher.fetchData(path_zar, DataFetcherFlags.ALLOW_404),
-            dataFetcher.fetchData(path_info_zsi),
-        ]);
+        const dataHolder = await context.dataShare.ensureObject<DataHolder>(`${pathBase}/DataHolder`, async () => {
+            const modelCache = new ModelCache(dataFetcher);
+            const textureHolder = new CtrTextureHolder();
+            return new DataHolder(modelCache, textureHolder);
+        });
 
-        const textureHolder = new CtrTextureHolder();
-        const modelCache = new ModelCache(dataFetcher);
+        const modelCache = dataHolder.modelCache;
+        const textureHolder = dataHolder.textureHolder;
+
+        const [zarBuffer, zsiBuffer] = await Promise.all([
+            modelCache.fetchFileData(path_zar, DataFetcherFlags.ALLOW_404),
+            modelCache.fetchFileData(path_info_zsi),
+        ]);
 
         const zar = zarBuffer.byteLength ? ZAR.parse(zarBuffer) : null;
 
+        // TODO(jstpierre): Save parsed scene in ModelCache so we don't need to re-decode textures.
         const zsi = ZSI.parseScene(zsiBuffer);
         assert(zsi.rooms !== null);
 

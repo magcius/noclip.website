@@ -2,7 +2,7 @@
 import { mat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
 import { assert, assertExists, align, nArray, hexzero } from '../../util';
-import { DataFetcher, DataFetcherFlags } from '../../DataFetcher';
+import { DataFetcher, DataFetcherFlags, AbortedCallback } from '../../DataFetcher';
 import { MathConstants, computeModelMatrixSRT, lerp, computeNormalMatrix, clamp } from '../../MathHelpers';
 import { getPointBezier } from '../../Spline';
 import { Camera, computeClipSpacePointFromWorldSpacePoint, texProjCamera } from '../../Camera';
@@ -736,8 +736,9 @@ export class ModelCache {
     public archiveCache = new Map<string, RARC.RARC | null>();
     public modelCache = new Map<string, BMDModel | null>();
     private models: BMDModel[] = [];
+    public cache = new GfxRenderCache(true);
 
-    constructor(public device: GfxDevice, public cache: GfxRenderCache, private pathBase: string, private dataFetcher: DataFetcher) {
+    constructor(public device: GfxDevice, private pathBase: string, private dataFetcher: DataFetcher) {
     }
 
     public waitForLoad(): Promise<void> {
@@ -758,9 +759,8 @@ export class ModelCache {
         return bmdModel;
     }
 
-    
-    private async requestArchiveDataInternal(archivePath: string): Promise<RARC.RARC | null> {
-        const buffer = await this.dataFetcher.fetchData(`${this.pathBase}/${archivePath}`, DataFetcherFlags.ALLOW_404);
+    private async requestArchiveDataInternal(archivePath: string, abortedCallback: AbortedCallback): Promise<RARC.RARC | null> {
+        const buffer = await this.dataFetcher.fetchData(`${this.pathBase}/${archivePath}`, DataFetcherFlags.ALLOW_404, abortedCallback);
 
         if (buffer.byteLength === 0) {
             console.warn(`Could not fetch archive ${archivePath}`);
@@ -777,7 +777,9 @@ export class ModelCache {
         if (this.archivePromiseCache.has(archivePath))
             return this.archivePromiseCache.get(archivePath)!;
 
-        const p = this.requestArchiveDataInternal(archivePath);
+        const p = this.requestArchiveDataInternal(archivePath, () => {
+            this.archivePromiseCache.delete(archivePath);
+        });
         this.archivePromiseCache.set(archivePath, p);
         return p;
     }
@@ -944,7 +946,6 @@ export class SceneObjHolder {
     public uiSystem: UISystem;
 
     public destroy(device: GfxDevice): void {
-        this.modelCache.destroy(device);
         this.sceneNameObjListExecutor.destroy(device);
 
         if (this.effectSystem !== null)
@@ -1195,19 +1196,19 @@ class SMGSpawner {
             bindTexChangeAnimation(actor.modelInstance!, rarc, frame);
         };
 
-        const spawnGraphNullable = (arcName: string, tag: SceneGraphTag = SceneGraphTag.Normal, animOptions: AnimOptions | null | undefined = undefined) => {
-            return modelCache.requestObjectData(arcName).then((data): [NoclipLegacyActor, RARC.RARC] | null => {
-                if (data === null)
-                    return null;
+        const spawnGraphNullable = async (arcName: string, tag: SceneGraphTag = SceneGraphTag.Normal, animOptions: AnimOptions | null | undefined = undefined): Promise<[NoclipLegacyActor, RARC.RARC] | null> => {
+            const data = await modelCache.requestObjectData(arcName);
 
-                const actor = new NoclipLegacyActor(zoneAndLayer, arcName, this.sceneObjHolder, infoIter, tag, objinfo);
-                applyAnimations(actor, animOptions);
+            if (data === null)
+                return null;
 
-                this.addActor(actor);
-                this.syncActorVisible(actor);
+            const actor = new NoclipLegacyActor(zoneAndLayer, arcName, this.sceneObjHolder, infoIter, tag, objinfo);
+            applyAnimations(actor, animOptions);
 
-                return [actor, actor.arc];
-            });
+            this.addActor(actor);
+            this.syncActorVisible(actor);
+
+            return [actor, actor.arc];
         };
 
         const spawnGraph = async (arcName: string, tag: SceneGraphTag = SceneGraphTag.Normal, animOptions: AnimOptions | null | undefined = undefined) => {
@@ -2048,11 +2049,12 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
     public abstract requestZoneArchives(modelCache: ModelCache, zoneName: string): void;
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const modelCache = await context.dataShare.ensureObject<ModelCache>(`${this.pathBase}/ModelCache`, async () => {
+            return new ModelCache(device, this.pathBase, context.dataFetcher);
+        });
+
         const renderHelper = new GXRenderHelperGfx(device);
         context.destroyablePool.push(renderHelper);
-
-        const gfxRenderCache = renderHelper.renderInstManager.gfxRenderCache;
-        const modelCache = new ModelCache(device, gfxRenderCache, this.pathBase, context.dataFetcher);
 
         const galaxyName = this.galaxyName;
 
