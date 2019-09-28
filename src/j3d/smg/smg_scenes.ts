@@ -1473,7 +1473,8 @@ class SMGSpawner {
 
         // TODO(jstpierre): Group spawn logic?
         case 'FlowerGroup':
-            spawnGraph(`Flower`);
+            if (this.isSMG1)
+                spawnGraph(`Flower`);
             return;
         case 'FlowerBlueGroup':
             spawnGraph(`FlowerBlue`);

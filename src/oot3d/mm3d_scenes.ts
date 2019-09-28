@@ -599,7 +599,7 @@ class SceneDesc implements Viewer.SceneDesc {
         this.id = id;
     }
 
-    private spawnActorForRoom(device: GfxDevice, renderer: OoT3DRenderer, roomRenderer: RoomRenderer, actor: ZSI.Actor, j: number): void {
+    private async spawnActorForRoom(device: GfxDevice, renderer: OoT3DRenderer, roomRenderer: RoomRenderer, actor: ZSI.Actor, j: number): Promise<void> {
         function fetchArchive(archivePath: string): Promise<ZAR.ZAR> { 
             return renderer.modelCache.fetchArchive(`${pathBase}/actors/${archivePath}`);
         }
@@ -633,18 +633,21 @@ class SceneDesc implements Viewer.SceneDesc {
 
         const characterLightScale = 0.5;
 
-        if (actor.actorId === ActorId.En_Dno) fetchArchive(`zelda2_dnj.gar.lzs`).then((gar) => {
+        if (actor.actorId === ActorId.En_Dno) {
+            const gar = await fetchArchive(`zelda2_dnj.gar.lzs`);
             const b = buildModel(gar, `model/deknuts_butler.cmb`);
             b.bindCSAB(parseCSAB(gar, `anim/dnj_wait.csab`));
-        });
-        else if (actor.actorId === ActorId.En_Slime) fetchArchive(`zelda2_slime.gar.lzs`).then((gar) => {
+        }
+        else if (actor.actorId === ActorId.En_Slime) {
+            const gar = await fetchArchive(`zelda2_slime.gar.lzs`);
             const b = buildModel(gar, `model/chuchu.cmb`);
             b.setVertexColorScale(characterLightScale);
-        });
-        else if (actor.actorId === ActorId.En_Snowman) fetchArchive(`zelda2_snowman.gar.lzs`).then((gar) => {
+        }
+        else if (actor.actorId === ActorId.En_Snowman) {
+            const gar = await fetchArchive(`zelda2_snowman.gar.lzs`);
             const b = buildModel(gar, `model/snowman.cmb`);
             b.bindCSAB(parseCSAB(gar, `anim/sm_wait.csab`));
-        });
+        }
         else console.warn(`Unknown actor ${j} / ${hexzero(actor.actorId, 2)} / ${stringifyActorId(actor.actorId)} / ${hexzero(actor.variable, 4)}`);
     }
 
