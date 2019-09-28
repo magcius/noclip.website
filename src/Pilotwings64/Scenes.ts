@@ -22,6 +22,7 @@ import { TextureState, TileState, getTextFiltFromOtherModeH, OtherModeH_CycleTyp
 import { ImageFormat, ImageSize, getImageFormatName, decodeTex_RGBA16, getImageSizeName, decodeTex_I4, decodeTex_I8, decodeTex_IA4, decodeTex_IA8, decodeTex_IA16, TextFilt } from "../Common/N64/Image";
 import { TextureMapping } from "../TextureHolder";
 import { Endianness } from "../endian";
+import { DataFetcher } from "../DataFetcher";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
 interface Pilotwings64FSFileChunk {
@@ -1680,7 +1681,7 @@ class TextureData {
         hostAccessPass.uploadTextureData(this.gfxTexture, 0, levels);
         device.submitPass(hostAccessPass);
 
-        this.gfxSampler = cache.createSampler(device, {
+        this.gfxSampler = device.createSampler({
             wrapS: translateCM(texture.cms),
             wrapT: translateCM(texture.cmt),
             minFilter: GfxTexFilterMode.POINT,
@@ -1702,11 +1703,11 @@ class TextureData {
 
     public destroy(device: GfxDevice): void {
         device.destroyTexture(this.gfxTexture);
+        device.destroySampler(this.gfxSampler);
     }
 }
 
 class Pilotwings64Renderer implements SceneGfx {
-    public dataHolder: DataHolder = new DataHolder();
     public uvtrRenderers: UVTRRenderer[] = [];
     public dobjRenderers: DynamicObjectRenderer[] = [];
     public renderHelper: GfxRenderHelper;
@@ -1755,7 +1756,6 @@ class Pilotwings64Renderer implements SceneGfx {
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy(device);
         this.renderTarget.destroy(device);
-        this.dataHolder.destroy(device);
     }
 }
 
@@ -1907,6 +1907,9 @@ class DataHolder {
     public textureData: TextureData[] = [];
     public uvmdData: ModelData[] = [];
     public uvctData: UVCTData[] = [];
+    public uvtr: UVTR[] = [];
+    public uvlv: UVLV[] = [];
+    public gfxRenderCache = new GfxRenderCache(true);
 
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.textureData.length; i++)
@@ -1915,6 +1918,7 @@ class DataHolder {
             this.uvmdData[i].destroy(device);
         for (let i = 0; i < this.uvctData.length; i++)
             this.uvctData[i].destroy(device);
+        this.gfxRenderCache.destroy(device);
     }
 }
 
@@ -2135,6 +2139,33 @@ function getLevelDobjs(levelID: number, dataHolder: DataHolder): DynamicObjectRe
     return [];
 }
 
+async function fetchDataHolder(dataFetcher: DataFetcher, device: GfxDevice): Promise<DataHolder> {
+    const fsBin = await dataFetcher.fetchData(`${pathBase}/fs.bin`);
+    const fs = parsePilotwings64FS(fsBin);
+
+    const dataHolder = new DataHolder();
+
+    for (let i = 0; i < fs.files.length; i++) {
+        const file = fs.files[i];
+        if (file.type === 'UVCT') {
+            const uvct = parseUVCT(file);
+            dataHolder.uvctData.push(new UVCTData(device, uvct));
+        } else if (file.type === 'UVTX') {
+            const uvtx = parseUVTX(file);
+            dataHolder.textureData.push(new TextureData(device, dataHolder.gfxRenderCache, uvtx));
+        } else if (file.type === 'UVMD') {
+            const uvmd = parseUVMD(file);
+            dataHolder.uvmdData.push(new ModelData(device, uvmd, dataHolder.uvmdData.length));
+        } else if (file.type === 'UVTR') {
+            dataHolder.uvtr.push(parseUVTR(file));
+        } else if (file.type === 'UVLV') {
+            dataHolder.uvlv.push(parseUVLV(file));
+        }
+    }
+
+    return dataHolder;
+}
+
 const pathBase = `Pilotwings64`;
 class Pilotwings64SceneDesc implements SceneDesc {
     public id: string;
@@ -2143,46 +2174,21 @@ class Pilotwings64SceneDesc implements SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
-        const fsBin = await context.dataFetcher.fetchData(`${pathBase}/fs.bin`);
-        const fs = parsePilotwings64FS(fsBin);
-
         const renderer = new Pilotwings64Renderer(device);
 
-        const cache = renderer.renderHelper.getCache();
-        const dataHolder = renderer.dataHolder;
+        let dataHolder = await context.dataShare.ensureObject<DataHolder>(`${pathBase}/DataHolder`, async () => {
+            return await fetchDataHolder(context.dataFetcher, device);
+        });
 
-        const uvtrs: UVTR[] = [];
-        const uvlvs: UVLV[] = [];
-        for (let i = 0; i < fs.files.length; i++) {
-            const file = fs.files[i];
-            if (file.type === 'UVCT') {
-                const uvct = parseUVCT(file);
-                dataHolder.uvctData.push(new UVCTData(device, uvct));
-            } else if (file.type === 'UVTX') {
-                const uvtx = parseUVTX(file);
-                dataHolder.textureData.push(new TextureData(device, cache, uvtx));
-            } else if (file.type === 'UVMD') {
-                const uvmd = parseUVMD(file);
-                dataHolder.uvmdData.push(new ModelData(device, uvmd, dataHolder.uvmdData.length));
-            } else if (file.type === 'UVTR') {
-                uvtrs.push(parseUVTR(file));
-            } else if (file.type === 'UVLV') {
-                uvlvs.push(parseUVLV(file));
-            }
-        }
-
-        assert(uvtrs.length === 1);
-        assert(uvlvs.length === 1);
-
-        const levelData = uvlvs[0].levels[this.levelID];
+        const levelData = dataHolder.uvlv[0].levels[this.levelID];
 
         const toNoclipSpace = mat4.create();
         mat4.fromXRotation(toNoclipSpace, -90 * MathConstants.DEG_TO_RAD);
         mat4.scale(toNoclipSpace, toNoclipSpace, [50, 50, 50]);
-        
+
         for (let i = 0; i < levelData.terras.length; i++) {
             const terraIndex = levelData.terras[i];
-            const uvtrChunk = uvtrs[0].maps[terraIndex];
+            const uvtrChunk = dataHolder.uvtr[0].maps[terraIndex];
             const uvtrRenderer = new UVTRRenderer(dataHolder, uvtrChunk);
             mat4.copy(uvtrRenderer.modelMatrix, toNoclipSpace);
             renderer.uvtrRenderers.push(uvtrRenderer);

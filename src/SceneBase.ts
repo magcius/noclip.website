@@ -2,6 +2,7 @@
 import { GfxDevice } from "./gfx/platform/GfxPlatform";
 import { SceneGfx } from "./viewer";
 import { DataFetcher } from "./DataFetcher";
+import { DataShare } from "./DataShare";
 
 export interface ProgressMeter {
     setProgress(progress: number): void;
@@ -14,6 +15,7 @@ export interface Destroyable {
 export interface SceneContext {
     device: GfxDevice;
     dataFetcher: DataFetcher;
+    dataShare: DataShare;
     uiContainer: HTMLElement;
     destroyablePool: Destroyable[];
 }

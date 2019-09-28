@@ -503,7 +503,8 @@ function applyMegaState(gl: WebGL2RenderingContext, currentMegaState: GfxMegaSta
     }
 }
 
-const TRACK_RESOURCES = IS_DEVELOPMENT;
+// TODO(jstpierre): Turn this back on at some point in the future. The DataShare really breaks this concept...
+const TRACK_RESOURCES = false && IS_DEVELOPMENT;
 class ResourceCreationTracker {
     public liveObjects = new Set<GfxResource>();
     public creationStacks = new Map<GfxResource, string>();
@@ -524,6 +525,14 @@ class ResourceCreationTracker {
     public checkForLeaks(): void {
         for (const o of this.liveObjects.values())
             console.warn("Object leaked:", o, "Creation stack:", this.creationStacks.get(o));
+    }
+
+    public setResourceLeakCheck(o: GfxResource, v: boolean): void {
+        if (v)
+            this.liveObjects.add(o);
+        else
+            this.liveObjects.delete(o);
+        console.log(o, v, this.liveObjects.has(o));
     }
 }
 
@@ -1237,6 +1246,11 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             assignPlatformName(getPlatformDepthStencilAttachment(o), name);
         else if (o._T === _T.InputState)
             assignPlatformName((o as GfxInputStateP_GL).vao, name);
+    }
+
+    public setResourceLeakCheck(o: GfxResource, v: boolean): void {
+        if (this._resourceCreationTracker !== null)
+            this._resourceCreationTracker.setResourceLeakCheck(o, v);
     }
 
     public pushDebugGroup(debugGroup: GfxDebugGroup): void {

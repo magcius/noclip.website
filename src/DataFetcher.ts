@@ -163,6 +163,9 @@ export class DataFetcher {
     }
 
     private calcProgress(): number {
+        if (this.requests.length === 0)
+            return 1;
+
         let n = 0;
         for (let i = 0; i < this.requests.length; i++)
             n += this.requests[i].progress;
@@ -170,7 +173,7 @@ export class DataFetcher {
         return n / (this.requests.length + this.doneRequestCount);
     }
 
-    private setProgress(): void {
+    public setProgress(): void {
         this.progressMeter.setProgress(this.calcProgress());
     }
 

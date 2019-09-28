@@ -30,14 +30,19 @@ export class GfxRenderCache {
     private gfxBindingsCache = new HashMap<GfxBindingsDescriptor, GfxBindings>(gfxBindingsDescriptorEquals, gfxBindingsDescriptorHash, 64, 4);
     private gfxRenderPipelinesCache = new HashMap<GfxRenderPipelineDescriptor, GfxRenderPipeline>(gfxRenderPipelineDescriptorEquals, gfxRenderPipelineDescriptorHash, 16, 4);
     private gfxInputLayoutsCache = new HashMap<GfxInputLayoutDescriptor, GfxInputLayout>(gfxInputLayoutDescriptorEquals, nullHashFunc);
-    private gfxProgramCache = new HashMap<DeviceProgram, GfxProgram>(deviceProgramEquals, nullHashFunc, 16, 4);
-    private gfxSamplerCache = new HashMap<GfxSamplerDescriptor, GfxSampler>(gfxSamplerDescriptorEquals, nullHashFunc, 16, 4);
+    private gfxProgramCache = new HashMap<DeviceProgram, GfxProgram>(deviceProgramEquals, nullHashFunc);
+    private gfxSamplerCache = new HashMap<GfxSamplerDescriptor, GfxSampler>(gfxSamplerDescriptorEquals, nullHashFunc);
+
+    constructor(private outlivesScene: boolean = false) {
+    }
 
     public createBindings(device: GfxDevice, descriptor: GfxBindingsDescriptor): GfxBindings {
         let bindings = this.gfxBindingsCache.get(descriptor);
         if (bindings === null) {
             const descriptorCopy = gfxBindingsDescriptorCopy(descriptor);
             bindings = device.createBindings(descriptorCopy);
+            if (this.outlivesScene)
+                device.setResourceLeakCheck(bindings, false);
             this.gfxBindingsCache.add(descriptorCopy, bindings);
         }
         return bindings;
@@ -48,6 +53,8 @@ export class GfxRenderCache {
         if (renderPipeline === null) {
             const descriptorCopy = gfxRenderPipelineDescriptorCopy(descriptor);
             renderPipeline = device.createRenderPipeline(descriptorCopy);
+            if (this.outlivesScene)
+                device.setResourceLeakCheck(renderPipeline, false);
             this.gfxRenderPipelinesCache.add(descriptorCopy, renderPipeline);
         }
         return renderPipeline;
@@ -57,6 +64,8 @@ export class GfxRenderCache {
         let inputLayout = this.gfxInputLayoutsCache.get(descriptor);
         if (inputLayout === null) {
             inputLayout = device.createInputLayout(descriptor);
+            if (this.outlivesScene)
+                device.setResourceLeakCheck(inputLayout, false);
             this.gfxInputLayoutsCache.add(descriptor, inputLayout);
         }
         return inputLayout;
@@ -66,6 +75,8 @@ export class GfxRenderCache {
         let program = this.gfxProgramCache.get(deviceProgram);
         if (program === null) {
             program = device.createProgram(deviceProgram);
+            if (this.outlivesScene)
+                device.setResourceLeakCheck(program, false);
             this.gfxProgramCache.add(deviceProgram, program);
         }
         return program;
@@ -75,6 +86,8 @@ export class GfxRenderCache {
         let sampler = this.gfxSamplerCache.get(descriptor);
         if (sampler === null) {
             sampler = device.createSampler(descriptor);
+            if (this.outlivesScene)
+                device.setResourceLeakCheck(sampler, false);
             this.gfxSamplerCache.add(descriptor, sampler);
         }
         return sampler;
@@ -97,5 +110,8 @@ export class GfxRenderCache {
             device.destroySampler(sampler);
         this.gfxBindingsCache.clear();
         this.gfxRenderPipelinesCache.clear();
+        this.gfxInputLayoutsCache.clear();
+        this.gfxProgramCache.clear();
+        this.gfxSamplerCache.clear();
     }
 }

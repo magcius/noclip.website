@@ -77,6 +77,7 @@ import { GIT_REVISION, IS_DEVELOPMENT } from './BuildVersion';
 import { SceneDesc, SceneGroup, SceneContext, getSceneDescs, Destroyable } from './SceneBase';
 import { prepareFrameDebugOverlayCanvas2D } from './DebugJunk';
 import { downloadBlob, downloadBufferSlice, downloadBuffer } from './DownloadUtils';
+import { DataShare } from './DataShare';
 
 const sceneGroups = [
     "Wii",
@@ -172,6 +173,7 @@ class Main {
     private loadingSceneDesc: SceneDesc | null = null;
     private abortController: AbortController | null = null;
     private destroyablePool: Destroyable[] = [];
+    private dataShare = new DataShare();
 
     constructor() {
         this.toplevel = document.createElement('div');
@@ -562,12 +564,16 @@ class Main {
         const abortSignal = this.abortController.signal;
         const progressMeter = this.ui.sceneSelect;
         const dataFetcher = new DataFetcher(abortSignal, progressMeter);
+        const dataShare = this.dataShare;
         const uiContainer: HTMLElement = document.createElement('div');
         this.ui.sceneUIContainer.appendChild(uiContainer);
         const destroyablePool: Destroyable[] = this.destroyablePool;
         const context: SceneContext = {
-            device, dataFetcher, uiContainer, destroyablePool,
+            device, dataFetcher, dataShare, uiContainer, destroyablePool,
         };
+
+        this.dataShare.pruneOldObjects(device);
+        this.dataShare.loadNewScene();
 
         this.loadingSceneDesc = sceneDesc;
         const promise = sceneDesc.createScene(device, context);
@@ -579,6 +585,7 @@ class Main {
 
         promise.then((scene: SceneGfx) => {
             if (this.loadingSceneDesc === sceneDesc) {
+                dataFetcher.setProgress();
                 this.loadingSceneDesc = null;
                 this.viewer.setScene(scene);
                 this._onSceneChanged(scene, sceneStateStr);
