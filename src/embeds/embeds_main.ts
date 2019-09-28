@@ -18,6 +18,7 @@ import * as script from './script';
 import { DataFetcher } from '../DataFetcher';
 import { SceneContext, Destroyable } from '../SceneBase';
 import { setChildren } from '../ui';
+import { DataShare } from '../DataShare';
 
 type CreateSceneFunc = (context: SceneContext, state: string) => Promise<Viewer.SceneGfx>;
 
@@ -147,14 +148,13 @@ class Main {
 
         // TODO(jstpierre): ProgressMeter
         const progressMeter = { setProgress: () => {} };
-        this.abortController = new AbortController();
-        const abortSignal = this.abortController.signal;
         const destroyablePool = this.destroyablePool;
-        const dataFetcher = new DataFetcher(abortSignal, progressMeter);
+        const dataFetcher = new DataFetcher(progressMeter);
+        const dataShare = new DataShare();
         const uiContainer = document.createElement('div');
         this.sceneUIContainer.appendChild(uiContainer);
         uiContainer.style.pointerEvents = 'auto';
-        const context: SceneContext = { device, dataFetcher, destroyablePool, uiContainer };
+        const context: SceneContext = { device, dataFetcher, destroyablePool, uiContainer, dataShare };
         const createScene = embeds[embedId];
         const scene = await createScene(context, state);
         this.viewer.setScene(scene);
