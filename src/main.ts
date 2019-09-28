@@ -171,9 +171,9 @@ class Main {
     private currentSceneDesc: SceneDesc;
 
     private loadingSceneDesc: SceneDesc | null = null;
-    private abortController: AbortController | null = null;
     private destroyablePool: Destroyable[] = [];
     private dataShare = new DataShare();
+    private dataFetcher: DataFetcher;
 
     constructor() {
         this.toplevel = document.createElement('div');
@@ -212,6 +212,8 @@ class Main {
         };
 
         this._makeUI();
+
+        this.dataFetcher = new DataFetcher(this.ui.sceneSelect);
 
         this.groups = sceneGroups;
 
@@ -539,8 +541,8 @@ class Main {
         const device = this.viewer.gfxDevice;
 
         // Tear down old scene.
-        if (this.abortController !== null)
-            this.abortController.abort();
+        if (this.dataFetcher !== null)
+            this.dataFetcher.abort();
         this.ui.destroyScene();
         if (this.viewer.scene && !this.destroyablePool.includes(this.viewer.scene))
             this.destroyablePool.push(this.viewer.scene);
@@ -548,7 +550,6 @@ class Main {
         for (let i = 0; i < this.destroyablePool.length; i++)
             this.destroyablePool[i].destroy(device);
         this.destroyablePool.length = 0;
-        this.abortController = new AbortController();
         gfxDeviceGetImpl(this.viewer.gfxDevice).checkForLeaks();
 
         // Unhide any hidden scene groups upon being loaded.
@@ -561,10 +562,9 @@ class Main {
 
         this.ui.sceneSelect.setProgress(0);
 
-        const abortSignal = this.abortController.signal;
-        const progressMeter = this.ui.sceneSelect;
-        const dataFetcher = new DataFetcher(abortSignal, progressMeter);
         const dataShare = this.dataShare;
+        const dataFetcher = this.dataFetcher;
+        dataFetcher.reset();
         const uiContainer: HTMLElement = document.createElement('div');
         this.ui.sceneUIContainer.appendChild(uiContainer);
         const destroyablePool: Destroyable[] = this.destroyablePool;
