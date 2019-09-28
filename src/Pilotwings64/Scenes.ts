@@ -11,11 +11,11 @@ import { readString, assert, hexzero, nArray } from "../util";
 import { decompress } from "../compression/MIO0";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { DeviceProgram } from "../Program";
-import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth, getSortKeyLayer } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth, getSortKeyLayer, executeOnPass } from "../gfx/render/GfxRenderer";
 import { fillMatrix4x3, fillMatrix4x4, fillMatrix4x2, fillVec4v, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { mat4, vec3, vec4 } from "gl-matrix";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
-import { standardFullClearRenderPassDescriptor, BasicRenderTarget } from "../gfx/helpers/RenderTargetHelpers";
+import { standardFullClearRenderPassDescriptor, BasicRenderTarget, depthClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { computeViewMatrix } from "../Camera";
 import { MathConstants } from "../MathHelpers";
 import { TextureState, TileState, getTextFiltFromOtherModeH, OtherModeH_CycleType, getCycleTypeFromOtherModeH } from "../bk/f3dex";
@@ -1110,15 +1110,15 @@ function interpretPartHierarchy(partLevels: number[]): number[] {
 }
 
 class ObjectRenderer {
-    private static jointMatrixScratch = nArray(16, () => mat4.create());
+    private static jointMatrixScratch = nArray(20, () => mat4.create());
 
     public modelMatrix = mat4.create();
+    public sortKeyBase: number;
     protected partRenderers: MeshRenderer[] = [];
     private visible = true;
 
     constructor(protected model: ModelData, textureData: TextureData[]) {
-        if (model.modelIndex === 0xCF)
-            console.log(this);
+        this.sortKeyBase = makeSortKey(this.model.uvmd.hasTransparency ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE);
 
         for (let i = 0; i < model.parts.length; i++) {
             const partRenderer = new MeshRenderer(model.parts[i], textureData);
@@ -1156,7 +1156,7 @@ class ObjectRenderer {
             return;
 
         const template = renderInstManager.pushTemplateRenderInst();
-        template.sortKey = makeSortKey(this.model.uvmd.hasTransparency ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE);
+        template.sortKey = this.sortKeyBase;
 
         const jointMatrixScratch = ObjectRenderer.jointMatrixScratch;
         this.calcAnim(jointMatrixScratch, viewerInput, parentModelMatrix);
@@ -1705,58 +1705,6 @@ class TextureData {
     }
 }
 
-class Pilotwings64Renderer implements SceneGfx {
-    public uvtrRenderers: UVTRRenderer[] = [];
-    public dobjRenderers: DynamicObjectRenderer[] = [];
-    public renderHelper: GfxRenderHelper;
-    private renderTarget = new BasicRenderTarget();
-
-    constructor(device: GfxDevice) {
-        this.renderHelper = new GfxRenderHelper(device);
-    }
-
-    public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
-        const template = this.renderHelper.pushTemplateRenderInst();
-        template.setBindingLayouts(bindingLayouts);
-        template.setMegaStateFlags({
-            blendMode: GfxBlendMode.ADD,
-            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
-        });
-
-        let offs = template.allocateUniformBuffer(PW64Program.ub_SceneParams, 16);
-        const d = template.mapUniformBufferF32(PW64Program.ub_SceneParams);
-        offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
-
-        for (let i = 0; i < this.uvtrRenderers.length; i++)
-            this.uvtrRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
-        for (let i = 0; i < this.dobjRenderers.length; i++)
-            this.dobjRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
-
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device, hostAccessPass);
-    }
-
-    public render(device: GfxDevice, viewerInput: ViewerRenderInput): GfxRenderPass {
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
-
-        const renderInstManager = this.renderHelper.renderInstManager;
-        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        const passRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
-        passRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
-        renderInstManager.drawOnPassRenderer(device, passRenderer);
-        renderInstManager.resetRenderInsts();
-        return passRenderer;
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.renderHelper.destroy(device);
-        this.renderTarget.destroy(device);
-    }
-}
-
 // the game actually specifies animated models by listing their final coordinates
 // we assume all instances of a given model are animated
 
@@ -1815,8 +1763,6 @@ class OilDerrick extends ObjectRenderer {
 }
 
 class DynamicObjectRenderer extends ObjectRenderer {
-    public static toNoclip: mat4;
-
     protected translationScale: number;
 
     constructor(model: ModelData, textureData: TextureData[]) {
@@ -1824,10 +1770,6 @@ class DynamicObjectRenderer extends ObjectRenderer {
         const modelScale = 1/model.uvmd.inverseScale;
         mat4.scale(this.modelMatrix, this.modelMatrix, [modelScale, modelScale, modelScale]);
         this.translationScale = model.uvmd.inverseScale;
-    }
-
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
-        super.prepareToRender(device, renderInstManager, viewerInput, DynamicObjectRenderer.toNoclip);
     }
 }
 
@@ -1993,148 +1935,160 @@ class UVTRRenderer {
 
 // the game picks characters in order, skipping the player
 function chooseFlyers(): number[] {
-    return [0x10a, 0x10b, 0x10c, 0x10d, 0x10e, 0x10f];
+    return [0x10A, 0x10B, 0x10C, 0x10D, 0x10E, 0x10F];
 }
 
-function getLevelDobjs(levelID: number, dataHolder: DataHolder): DynamicObjectRenderer[] {
+function getLevelDobjs(levelID: number, dataHolder: DataHolder): ObjectRenderer[] {
+    const dobjs: ObjectRenderer[] = [];
+
     const flyerIDs = chooseFlyers();
     if (levelID === 1) { // Holiday Island
-        return [
-            // boats
-            new Looper(dataHolder.uvmdData[3], dataHolder.textureData, { // from 2d1dfc
-                angularVelocity: -4,
-                center: vec3.fromValues(-600, -600, 0),
-                radius: 300,
-                roll: -5,
-                bounce: {
-                    bouncingPart: 1,
-                    maxAngle: 10,
-                    maxHeight: 1.5,
-                    maxVelocity: 7,
-                },
-                // TODO: figure out what's going on with the attached model 0x02
-            }),
-            new Looper(dataHolder.uvmdData[1], dataHolder.textureData, {  // from 2d1e70
-                angularVelocity: 10,
-                center: vec3.fromValues(700,-500,0),
-                radius: 300,
-                roll: 15,
-            }),
-            // gliders
-            new Looper(dataHolder.uvmdData[flyerIDs[0]], dataHolder.textureData, {
-                angularVelocity: 20,
-                center: vec3.fromValues(-66, 320, 125),
-                radius: 80,
-                roll: -15,
-            }),
-            new Looper(dataHolder.uvmdData[flyerIDs[1]], dataHolder.textureData, {
-                angularVelocity: 18,
-                center: vec3.fromValues(-66, 320, 135),
-                radius: 70,
-                roll: -15,
-            }),
-            new Looper(dataHolder.uvmdData[flyerIDs[2]], dataHolder.textureData, {
-                angularVelocity: 18,
-                center: vec3.fromValues(-70, 320, 155),
-                radius: 90,
-                roll: -15,
-            }),
-        ];
-    }
-    if (levelID === 3) { // Crescent Island
-        return [
-            // boats
-            new Looper(dataHolder.uvmdData[3], dataHolder.textureData, { // from 2d1b88
-                angularVelocity: -4,
-                center: vec3.fromValues(400, -300, 0),
-                radius: 400,
-                roll: -5,
-                bounce: {
+        // Ocean plane
+        const oceanPlane = spawnObject(dataHolder, 0x161);
+        oceanPlane.sortKeyBase = makeSortKey(GfxRendererLayer.BACKGROUND);
+        dobjs.push(oceanPlane);
+
+        // Boats
+        dobjs.push(new Looper(dataHolder.uvmdData[3], dataHolder.textureData, { // from 2d1dfc
+            angularVelocity: -4,
+            center: vec3.fromValues(-600, -600, 0),
+            radius: 300,
+            roll: -5,
+            bounce: {
+                bouncingPart: 1,
+                maxAngle: 10,
+                maxHeight: 1.5,
+                maxVelocity: 7,
+            },
+            // TODO: figure out what's going on with the attached model 0x02
+        }));
+        dobjs.push(new Looper(dataHolder.uvmdData[1], dataHolder.textureData, {  // from 2d1e70
+            angularVelocity: 10,
+            center: vec3.fromValues(700,-500,0),
+            radius: 300,
+            roll: 15,
+        }));
+
+        // Gliders
+        dobjs.push(new Looper(dataHolder.uvmdData[flyerIDs[0]], dataHolder.textureData, {
+            angularVelocity: 20,
+            center: vec3.fromValues(-66, 320, 125),
+            radius: 80,
+            roll: -15,
+        }));
+        dobjs.push(new Looper(dataHolder.uvmdData[flyerIDs[1]], dataHolder.textureData, {
+            angularVelocity: 18,
+            center: vec3.fromValues(-66, 320, 135),
+            radius: 70,
+            roll: -15,
+        }));
+        dobjs.push(new Looper(dataHolder.uvmdData[flyerIDs[2]], dataHolder.textureData, {
+            angularVelocity: 18,
+            center: vec3.fromValues(-70, 320, 155),
+            radius: 90,
+            roll: -15,
+        }));
+    } else if (levelID === 3) { // Crescent Island
+        // Ocean plane
+        const oceanPlane = spawnObject(dataHolder, 0x166);
+        oceanPlane.sortKeyBase = makeSortKey(GfxRendererLayer.BACKGROUND);
+        dobjs.push(oceanPlane);
+
+        // Boats
+        dobjs.push(new Looper(dataHolder.uvmdData[3], dataHolder.textureData, { // from 2d1b88
+            angularVelocity: -4,
+            center: vec3.fromValues(400, -300, 0),
+            radius: 400,
+            roll: -5,
+            bounce: {
                     bouncingPart: 1,
                     maxAngle: 10,
                     maxHeight: 1.5,
                     maxVelocity: 7,
                 },
                 // also has 2 attached
-            }),
-            new Looper(dataHolder.uvmdData[0x29], dataHolder.textureData, {  // from 2d1c04
-                angularVelocity: 2,
-                center: vec3.fromValues(300, -200, 0),
-                radius: 275,
-                roll: 0,
-            }),
-            // gliders
-            new Looper(dataHolder.uvmdData[flyerIDs[0]], dataHolder.textureData, {
-                angularVelocity: 10,
-                center: vec3.fromValues(-891.24, 602.16, 450),
-                radius: 220,
-                roll: -15,
-            }),
-            new Looper(dataHolder.uvmdData[flyerIDs[1]], dataHolder.textureData, {
-                angularVelocity: 18,
-                center: vec3.fromValues(1100.06, 686.22, 250),
-                radius: 70,
-                roll: -15,
-            }),
-            new Looper(dataHolder.uvmdData[flyerIDs[2]], dataHolder.textureData, {
-                angularVelocity: 18,
-                center: vec3.fromValues(1050.06, 686.22, 265),
-                radius: 90,
-                roll: -15,
-            }),
-        ];
+        }));
+        dobjs.push(new Looper(dataHolder.uvmdData[0x29], dataHolder.textureData, {  // from 2d1c04
+            angularVelocity: 2,
+            center: vec3.fromValues(300, -200, 0),
+            radius: 275,
+            roll: 0,
+        }));
+        // Gliders
+        dobjs.push(new Looper(dataHolder.uvmdData[flyerIDs[0]], dataHolder.textureData, {
+            angularVelocity: 10,
+            center: vec3.fromValues(-891.24, 602.16, 450),
+            radius: 220,
+            roll: -15,
+        }));
+        dobjs.push(new Looper(dataHolder.uvmdData[flyerIDs[1]], dataHolder.textureData, {
+            angularVelocity: 18,
+            center: vec3.fromValues(1100.06, 686.22, 250),
+            radius: 70,
+            roll: -15,
+        }));
+        dobjs.push(new Looper(dataHolder.uvmdData[flyerIDs[2]], dataHolder.textureData, {
+            angularVelocity: 18,
+            center: vec3.fromValues(1050.06, 686.22, 265),
+            radius: 90,
+            roll: -15,
+        }));
+    } else if (levelID === 5) { // Little States
+        // Ocean plane
+        const oceanPlane = spawnObject(dataHolder, 0x168);
+        oceanPlane.sortKeyBase = makeSortKey(GfxRendererLayer.BACKGROUND);
+        dobjs.push(oceanPlane);
+
+        dobjs.push(new Looper(dataHolder.uvmdData[flyerIDs[0]], dataHolder.textureData, {
+            angularVelocity: 17,
+            center: vec3.fromValues(1666.32, -1099.06, 100),
+            radius: 30,
+            roll: -15,
+        }));
+        dobjs.push(new Looper(dataHolder.uvmdData[flyerIDs[1]], dataHolder.textureData, {
+            angularVelocity: 13,
+            center: vec3.fromValues(3293.09, 931.19, 150),
+            radius: 60,
+            roll: -15,
+        }));
+        dobjs.push(new Looper(dataHolder.uvmdData[flyerIDs[2]], dataHolder.textureData, {
+            angularVelocity: 18,
+            center: vec3.fromValues(-2294.23, -791.48, 150),
+            radius: 30,
+            roll: -15,
+        }));
+        dobjs.push(new Looper(dataHolder.uvmdData[flyerIDs[3]], dataHolder.textureData, {
+            angularVelocity: 18,
+            center: vec3.fromValues(-2290.23, -791.48, 170),
+            radius: 50,
+            roll: -15,
+        }));
+    } else if (levelID === 10) { // Everfrost Island
+        // Ocean plane
+        const oceanPlane = spawnObject(dataHolder, 0x169);
+        oceanPlane.sortKeyBase = makeSortKey(GfxRendererLayer.BACKGROUND);
+        dobjs.push(oceanPlane);
+
+        dobjs.push(new Looper(dataHolder.uvmdData[flyerIDs[0]], dataHolder.textureData, {
+            angularVelocity: 7,
+            center: vec3.fromValues(80.03, -162.16, 600),
+            radius: 250,
+            roll: -15,
+        }));
+        dobjs.push(new Looper(dataHolder.uvmdData[flyerIDs[1]], dataHolder.textureData, {
+            angularVelocity: 17,
+            center: vec3.fromValues(745.26, 1107.29, 150),
+            radius: 70,
+            roll: -15,
+        }));
+        dobjs.push(new Looper(dataHolder.uvmdData[flyerIDs[2]], dataHolder.textureData, {
+            angularVelocity: 17,
+            center: vec3.fromValues(800.26, 1107.29, 170),
+            radius: 168,
+            roll: -15,
+        }));
     }
-    if (levelID === 5) { // Little States
-        return [
-            new Looper(dataHolder.uvmdData[flyerIDs[0]], dataHolder.textureData, {
-                angularVelocity: 17,
-                center: vec3.fromValues(1666.32, -1099.06, 100),
-                radius: 30,
-                roll: -15,
-            }),
-            new Looper(dataHolder.uvmdData[flyerIDs[1]], dataHolder.textureData, {
-                angularVelocity: 13,
-                center: vec3.fromValues(3293.09, 931.19, 150),
-                radius: 60,
-                roll: -15,
-            }),
-            new Looper(dataHolder.uvmdData[flyerIDs[2]], dataHolder.textureData, {
-                angularVelocity: 18,
-                center: vec3.fromValues(-2294.23, -791.48, 150),
-                radius: 30,
-                roll: -15,
-            }),
-            new Looper(dataHolder.uvmdData[flyerIDs[3]], dataHolder.textureData, {
-                angularVelocity: 18,
-                center: vec3.fromValues(-2290.23, -791.48, 170),
-                radius: 50,
-                roll: -15,
-            }),
-        ];
-    }
-    if (levelID === 10) { // Everfrost Island
-        return [
-            new Looper(dataHolder.uvmdData[flyerIDs[0]], dataHolder.textureData, {
-                angularVelocity: 7,
-                center: vec3.fromValues(80.03, -162.16, 600),
-                radius: 250,
-                roll: -15,
-            }),
-            new Looper(dataHolder.uvmdData[flyerIDs[1]], dataHolder.textureData, {
-                angularVelocity: 17,
-                center: vec3.fromValues(745.26, 1107.29, 150),
-                radius: 70,
-                roll: -15,
-            }),
-            new Looper(dataHolder.uvmdData[flyerIDs[2]], dataHolder.textureData, {
-                angularVelocity: 17,
-                center: vec3.fromValues(800.26, 1107.29, 170),
-                radius: 168,
-                roll: -15,
-            }),
-        ];
-    }
-    return [];
+    return dobjs;
 }
 
 async function fetchDataHolder(dataFetcher: DataFetcher, device: GfxDevice): Promise<DataHolder> {
@@ -2164,6 +2118,92 @@ async function fetchDataHolder(dataFetcher: DataFetcher, device: GfxDevice): Pro
     return dataHolder;
 }
 
+const enum PW64Pass { SKYBOX, NORMAL }
+
+const toNoclipSpace = mat4.create();
+mat4.fromXRotation(toNoclipSpace, -90 * MathConstants.DEG_TO_RAD);
+mat4.scale(toNoclipSpace, toNoclipSpace, [50, 50, 50]);
+
+class Pilotwings64Renderer implements SceneGfx {
+    private static scratchMatrix = mat4.create();
+
+    public uvtrRenderers: UVTRRenderer[] = [];
+    public dobjRenderers: ObjectRenderer[] = [];
+    public skyRenderers: ObjectRenderer[] = [];
+    public renderHelper: GfxRenderHelper;
+    private renderTarget = new BasicRenderTarget();
+
+    constructor(device: GfxDevice, private dataHolder: DataHolder) {
+        this.renderHelper = new GfxRenderHelper(device);
+    }
+
+    public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
+        const template = this.renderHelper.pushTemplateRenderInst();
+        template.setBindingLayouts(bindingLayouts);
+        template.setMegaStateFlags({
+            blendMode: GfxBlendMode.ADD,
+            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
+            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+        });
+
+        let offs = template.allocateUniformBuffer(PW64Program.ub_SceneParams, 16);
+        const d = template.mapUniformBufferF32(PW64Program.ub_SceneParams);
+        offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
+
+        template.filterKey = PW64Pass.SKYBOX;
+        const skyMatrix = Pilotwings64Renderer.scratchMatrix;
+        mat4.copy(skyMatrix, toNoclipSpace);
+        skyMatrix[12] = viewerInput.camera.worldMatrix[12];
+        skyMatrix[13] = viewerInput.camera.worldMatrix[13] - 5000;
+        skyMatrix[14] = viewerInput.camera.worldMatrix[14];
+        for (let i = 0; i < this.skyRenderers.length; i++)
+            this.skyRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput, skyMatrix);
+
+        template.filterKey = PW64Pass.NORMAL;
+        for (let i = 0; i < this.uvtrRenderers.length; i++)
+            this.uvtrRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+        for (let i = 0; i < this.dobjRenderers.length; i++)
+            this.dobjRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput, toNoclipSpace);
+
+        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        this.renderHelper.prepareToRender(device, hostAccessPass);
+    }
+
+    // For console runtime debugging.
+    private spawnObject(objIndex: number) {
+        const dobjRenderer = spawnObject(this.dataHolder, objIndex);
+        this.dobjRenderers.push(dobjRenderer);
+        return dobjRenderer;
+    }
+
+    public render(device: GfxDevice, viewerInput: ViewerRenderInput): GfxRenderPass {
+        const hostAccessPass = device.createHostAccessPass();
+        this.prepareToRender(device, hostAccessPass, viewerInput);
+        device.submitPass(hostAccessPass);
+
+        const renderInstManager = this.renderHelper.renderInstManager;
+        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+
+        const skyPassRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
+        skyPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        executeOnPass(renderInstManager, device, skyPassRenderer, PW64Pass.SKYBOX);
+        skyPassRenderer.endPass(null);
+        device.submitPass(skyPassRenderer);
+
+        const passRenderer = this.renderTarget.createRenderPass(device, depthClearRenderPassDescriptor);
+        passRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        executeOnPass(renderInstManager, device, passRenderer, PW64Pass.NORMAL);
+
+        renderInstManager.resetRenderInsts();
+        return skyPassRenderer;
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.renderHelper.destroy(device);
+        this.renderTarget.destroy(device);
+    }
+}
+
 const pathBase = `Pilotwings64`;
 class Pilotwings64SceneDesc implements SceneDesc {
     public id: string;
@@ -2172,17 +2212,18 @@ class Pilotwings64SceneDesc implements SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
-        const renderer = new Pilotwings64Renderer(device);
-
         let dataHolder = await context.dataShare.ensureObject<DataHolder>(`${pathBase}/DataHolder`, async () => {
             return await fetchDataHolder(context.dataFetcher, device);
         });
 
+        const renderer = new Pilotwings64Renderer(device, dataHolder);
+
         const levelData = dataHolder.uvlv[0].levels[this.levelID];
 
-        const toNoclipSpace = mat4.create();
-        mat4.fromXRotation(toNoclipSpace, -90 * MathConstants.DEG_TO_RAD);
-        mat4.scale(toNoclipSpace, toNoclipSpace, [50, 50, 50]);
+        // TODO(jstpierre): Dynamically choose sky based on weather / time of day conditions.
+        // This is probably in the UPWT?
+        const sky = spawnObject(dataHolder, 0x160);
+        renderer.skyRenderers.push(sky);
 
         for (let i = 0; i < levelData.terras.length; i++) {
             const terraIndex = levelData.terras[i];
@@ -2191,8 +2232,6 @@ class Pilotwings64SceneDesc implements SceneDesc {
             mat4.copy(uvtrRenderer.modelMatrix, toNoclipSpace);
             renderer.uvtrRenderers.push(uvtrRenderer);
         }
-
-        DynamicObjectRenderer.toNoclip = toNoclipSpace;
 
         const levelDobjs = getLevelDobjs(this.levelID, dataHolder);
         for (let i = 0; i < levelDobjs.length; i++) {
