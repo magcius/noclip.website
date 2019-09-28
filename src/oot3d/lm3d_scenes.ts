@@ -92,7 +92,7 @@ class SceneDesc implements Viewer.SceneDesc {
                         if (cmbFile === undefined)
                             continue;
 
-                        let cmbData: CmbData = assertExists(modelCache.get(cmbFilename));
+                        let cmbData: CmbData | undefined = modelCache.get(cmbFilename);
                         if (cmbData === undefined) {
                             const cmb = CMB.parse(cmbFile.buffer);
                             cmbData = new CmbData(device, cmb);
