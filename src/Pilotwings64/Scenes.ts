@@ -1248,11 +1248,11 @@ class ObjectRenderer {
     protected partRenderers: MeshRenderer[] = [];
     private visible = true;
 
-    constructor(protected model: ModelData, textureData: TextureData[]) {
+    constructor(protected model: ModelData, textureData: TextureData[], isEnv?: boolean) {
         this.sortKeyBase = makeSortKey(this.model.uvmd.hasTransparency ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE);
 
         for (let i = 0; i < model.parts.length; i++) {
-            const partRenderer = new MeshRenderer(model.parts[i], textureData);
+            const partRenderer = new MeshRenderer(model.parts[i], textureData, isEnv);
             this.partRenderers.push(partRenderer);
         }
 
@@ -1304,9 +1304,9 @@ class MeshRenderer {
     private materials: MaterialInstance[] = [];
     private visible = true;
 
-    constructor(private meshData: MeshData, textureData: TextureData[]) {
+    constructor(private meshData: MeshData, textureData: TextureData[], isEnv?: boolean) {
         for (let material of meshData.mesh.materials)
-            this.materials.push(new MaterialInstance(material, textureData));
+            this.materials.push(new MaterialInstance(material, textureData, isEnv));
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, jointMatrix: mat4): void {
@@ -1646,8 +1646,11 @@ class MaterialInstance {
     private stateFlags: Partial<GfxMegaStateDescriptor>;
     private visible = true;
 
-    constructor(private materialData: MaterialData, textureData: TextureData[]) {
+    constructor(private materialData: MaterialData, textureData: TextureData[], isEnv?: boolean) {
         this.hasTexture = materialData.textureIndex < 0x0FFF;
+        let modeInfo = materialData.rspModeInfo;
+        if (!!isEnv)
+            modeInfo &= ~PilotwingsRSPFlag.ZBUFFER;
         if (this.hasTexture) {
             const mainTextureData = textureData[materialData.textureIndex];
             this.uvtx = mainTextureData.uvtx;
@@ -1663,9 +1666,9 @@ class MaterialInstance {
                     this.textureMappings.reverse()
                 }
             }
-            this.decodedMaterial = decodeMaterial(materialData.rspModeInfo, true, this.uvtx.cutOutTransparent, this.uvtx.otherModeLByte);
+            this.decodedMaterial = decodeMaterial(modeInfo, true, this.uvtx.cutOutTransparent, this.uvtx.otherModeLByte);
         } else {
-            this.decodedMaterial = decodeMaterial(materialData.rspModeInfo, false, true, 0);
+            this.decodedMaterial = decodeMaterial(modeInfo, false, true, 0);
         }
         this.stateFlags = translateBlendMode(this.decodedMaterial.geoMode, this.decodedMaterial.renderMode);
     }
@@ -2146,6 +2149,12 @@ class DataHolder {
     }
 }
 
+function spawnEnvObject(dataHolder: DataHolder, uvmdIndex: number): ObjectRenderer {
+    const uvmdData = dataHolder.uvmdData[uvmdIndex];
+    const textureData = dataHolder.textureData;
+    return new ObjectRenderer(uvmdData, textureData, true);
+}
+
 function spawnObject(dataHolder: DataHolder, uvmdIndex: number): ObjectRenderer {
     const uvmdData = dataHolder.uvmdData[uvmdIndex];
     const textureData = dataHolder.textureData;
@@ -2189,7 +2198,10 @@ class UVCTRenderer {
 
         mat4.mul(UVCTRenderer.scratchMatrix, parentModelMatrix, this.modelMatrix);
 
+        const template = renderInstManager.pushTemplateRenderInst();
+        template.sortKey = makeSortKey(GfxRendererLayer.OPAQUE);
         this.meshRenderer.prepareToRender(device, renderInstManager, viewerInput, UVCTRenderer.scratchMatrix);
+        renderInstManager.popTemplateRenderInst();
 
         for (let i = 0; i < this.sobjRenderers.length; i++)
             this.sobjRenderers[i].prepareToRender(device, renderInstManager, viewerInput, UVCTRenderer.scratchMatrix);
@@ -2228,7 +2240,7 @@ function getLevelDobjs(levelID: number, dataHolder: DataHolder): ObjectRenderer[
     const flyerIDs = chooseFlyers();
     if (levelID === 1) { // Holiday Island
         // Ocean plane
-        const oceanPlane = spawnObject(dataHolder, 0x161);
+        const oceanPlane = spawnEnvObject(dataHolder, 0x161);
         oceanPlane.sortKeyBase = makeSortKey(GfxRendererLayer.BACKGROUND);
         dobjs.push(oceanPlane);
 
@@ -2274,7 +2286,7 @@ function getLevelDobjs(levelID: number, dataHolder: DataHolder): ObjectRenderer[
         }));
     } else if (levelID === 3) { // Crescent Island
         // Ocean plane
-        const oceanPlane = spawnObject(dataHolder, 0x166);
+        const oceanPlane = spawnEnvObject(dataHolder, 0x166);
         oceanPlane.sortKeyBase = makeSortKey(GfxRendererLayer.BACKGROUND);
         dobjs.push(oceanPlane);
 
@@ -2319,7 +2331,7 @@ function getLevelDobjs(levelID: number, dataHolder: DataHolder): ObjectRenderer[
         }));
     } else if (levelID === 5) { // Little States
         // Ocean plane
-        const oceanPlane = spawnObject(dataHolder, 0x168);
+        const oceanPlane = spawnEnvObject(dataHolder, 0x168);
         oceanPlane.sortKeyBase = makeSortKey(GfxRendererLayer.BACKGROUND);
         dobjs.push(oceanPlane);
 
@@ -2360,7 +2372,7 @@ function getLevelDobjs(levelID: number, dataHolder: DataHolder): ObjectRenderer[
         }));
     } else if (levelID === 10) { // Everfrost Island
         // Ocean plane
-        const oceanPlane = spawnObject(dataHolder, 0x169);
+        const oceanPlane = spawnEnvObject(dataHolder, 0x169);
         oceanPlane.sortKeyBase = makeSortKey(GfxRendererLayer.BACKGROUND);
         dobjs.push(oceanPlane);
 
