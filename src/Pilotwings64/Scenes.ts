@@ -24,7 +24,7 @@ import { TextureMapping } from "../TextureHolder";
 import { Endianness } from "../endian";
 import { DataFetcher } from "../DataFetcher";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { getPointCubic } from "../Spline";
+import { getPointCubic, getPointHermite } from "../Spline";
 
 interface Pilotwings64FSFileChunk {
     tag: string;
@@ -808,6 +808,12 @@ interface SPTH {
     rTrack: AnimationKeyframe[];
 }
 
+function posKeyframe(dst: vec3, spth: SPTH, index: number): void {
+    dst[0] = spth.xTrack[index].value;
+    dst[1] = spth.yTrack[index].value;
+    dst[2] = spth.zTrack[index].value;
+}
+
 function parseSPTH(file: Pilotwings64FSFile): SPTH {
     const xTrack: AnimationKeyframe[] = [];
     const yTrack: AnimationKeyframe[] = [];
@@ -897,6 +903,26 @@ function sampleFloatAnimationTrackHermite(dst: AnimationTrackSample, track: Anim
     const t1 = tangentTrack[idx1];
 
     hermiteInterpolate(dst, k0, k1, t0, t1, time);
+}
+
+function sampleFloatAnimationTrackSimple(track: AnimationKeyframe[], time: number, t0: number, t1: number): number {
+    if (time <= track[0].time)
+        return track[0].value;
+    if (time >= track[track.length - 1].time)
+        return track[track.length - 1].value;
+
+    let idx1 = 1;
+    for (; idx1 < track.length; idx1++) {
+        if (time <= track[idx1].time)
+            break;
+    }
+    const idx0 = idx1 - 1;
+    const k0 = track[idx0];
+    const k1 = track[idx1];
+    const length = k1.time - k0.time;
+    const t = (time - k0.time) / length;
+
+    return getPointHermite(k0.value, k1.value, t0, t1, t);
 }
 
 function parsePilotwings64FS(buffer: ArrayBufferSlice): Pilotwings64FS {
@@ -2026,6 +2052,68 @@ class Airplane extends DynamicObjectRenderer {
     }
 }
 
+class ChairliftChair extends DynamicObjectRenderer {
+    private static scratchVectors: vec3[] = nArray(4, () => vec3.create());
+
+    private pos = vec3.create();
+
+    constructor(model: ModelData, textureData: TextureData[], private spline: SPTH, private offset: number) {
+        super(model, textureData);
+        assert(tracksMatch(spline.xTrack, spline.yTrack));
+        assert(tracksMatch(spline.xTrack, spline.zTrack));
+    }
+
+    protected calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void {
+        const timeInSeconds = viewerInput.time / 1000;
+
+        const cyclePhase = (timeInSeconds + this.offset) % 100;
+
+        const posPathLength = this.spline.xTrack.length;
+        let idx = 1;
+        for (; idx < posPathLength; idx++) {
+            if (cyclePhase <= this.spline.xTrack[idx].time)
+                break;
+        }
+
+        const vecs = ChairliftChair.scratchVectors;
+
+        const nxt = idx < posPathLength - 1 ? idx + 1 : 0;
+        const prev = idx - 1;
+        const twoPrev = idx > 1 ? idx - 2 : posPathLength - 1;
+        posKeyframe(vecs[0], this.spline, twoPrev);
+        posKeyframe(vecs[1], this.spline, prev);
+        posKeyframe(vecs[2], this.spline, idx);
+        posKeyframe(vecs[3], this.spline, nxt);
+
+        const tangentScale = 512 * Math.abs(this.spline.xTrack[idx].time - this.spline.xTrack[prev].time) / 100;
+
+        vec3.sub(vecs[1], vecs[1], vecs[0]);
+        vec3.normalize(vecs[1], vecs[1]);
+        vec3.scale(vecs[1], vecs[1], tangentScale);
+
+        vec3.sub(vecs[3], vecs[3], vecs[2]);
+        vec3.normalize(vecs[3], vecs[3]);
+        vec3.scale(vecs[3], vecs[3], tangentScale);
+
+        const t0 = vecs[1];
+        const t1 = vecs[3];
+
+        this.pos[0] = sampleFloatAnimationTrackSimple(this.spline.xTrack, cyclePhase, t0[0], t1[0])
+        this.pos[1] = sampleFloatAnimationTrackSimple(this.spline.yTrack, cyclePhase, t0[1], t1[1])
+        this.pos[2] = sampleFloatAnimationTrackSimple(this.spline.zTrack, cyclePhase, t0[2], t1[2])
+        vec3.scale(this.pos, this.pos, this.translationScale);
+
+        const heading = sampleFloatAnimationTrackSimple(this.spline.hTrack, cyclePhase, 1, -1);
+        const pitch = sampleFloatAnimationTrackSimple(this.spline.pTrack, cyclePhase, 1, -1);
+        const roll = sampleFloatAnimationTrackSimple(this.spline.rTrack, cyclePhase, 1, -1);
+
+        mat4.fromTranslation(dst, this.pos);
+        mat4.rotateZ(dst, dst, heading * MathConstants.DEG_TO_RAD);
+        mat4.rotateX(dst, dst, pitch * MathConstants.DEG_TO_RAD);
+        mat4.rotateY(dst, dst, roll * MathConstants.DEG_TO_RAD);
+    }
+}
+
 class UVCTData {
     public meshData: MeshData;
 
@@ -2294,6 +2382,13 @@ function getLevelDobjs(levelID: number, dataHolder: DataHolder): ObjectRenderer[
             radius: 168,
             roll: -15,
         }));
+        for (let i = 0; i < 20; i++) {
+            dobjs.push(new ChairliftChair(
+                dataHolder.uvmdData[0xa7],
+                dataHolder.textureData,
+                dataHolder.splineData.get(4)!,
+                5 * i));
+        }
     }
     return dobjs;
 }
