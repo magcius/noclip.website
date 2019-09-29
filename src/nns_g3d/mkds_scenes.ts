@@ -360,6 +360,11 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
             spawnModel(`/MapObj/cream.nsbmd`);
         } else if (obji.objectId === 0x01B5) { // berry
             spawnModel(`/MapObj/berry.nsbmd`);
+            //pat: note to self, look more into this section
+        } else if (obji.objectId === 0x0065) { // itembox
+            const b = spawnModel(`/itembox.nsbmd`);
+            mat4.translate(b.modelMatrix, b.modelMatrix, [0, 1, 0]);             
+            //b.bindSRT0(parseBTA(`/itembox.nsbta`));                       
         }
     }
 
@@ -440,9 +445,9 @@ const sceneDescs = [
     new MarioKartDSSceneDesc("mario_course", "Mario Circuit"),
     new MarioKartDSSceneDesc("airship_course", "Airship Fortress"),
     "Special Cup",
-    new MarioKartDSSceneDesc("stadium_course", "Wario's Stadium"),
+    new MarioKartDSSceneDesc("stadium_course", "Wario Stadium"),
     new MarioKartDSSceneDesc("garden_course", "Peach Gardens"),
-    new MarioKartDSSceneDesc("koopa_course", "Bowser's Castle"),
+    new MarioKartDSSceneDesc("koopa_course", "Bowser Castle"),
     new MarioKartDSSceneDesc("rainbow_course", "Rainbow Road"),
     "Shell Cup",
     new MarioKartDSSceneDesc("old_mario_sfc", "SNES Mario Circuit 1"),
@@ -469,29 +474,55 @@ const sceneDescs = [
     new MarioKartDSSceneDesc("mini_stage2", "Twilight House"),
     new MarioKartDSSceneDesc("mini_stage3", "Palm Shore"),
     new MarioKartDSSceneDesc("mini_stage4", "Tart Top"),
-    new MarioKartDSSceneDesc("mini_block_64", "Block Fort"),
-    new MarioKartDSSceneDesc("mini_dokan_gc", "Pipe Plaza"),
+    new MarioKartDSSceneDesc("mini_block_64", "N64 Block Fort"),
+    new MarioKartDSSceneDesc("mini_dokan_gc", "GCN Pipe Plaza"),
     "Mission Stages",
     new MarioKartDSSceneDesc("MR_stage1", "Big Bully's Stage; Chief Chilly's Stage"),
     new MarioKartDSSceneDesc("MR_stage2", "Eyerok's Stage; Big Bomb-omb's Stage"),
     new MarioKartDSSceneDesc("MR_stage3", "King Boo's Stage"),
-    new MarioKartDSSceneDesc("MR_stage4", "Wiggler's Stage"),
-    "Unused Test Courses",
-    new MarioKartDSSceneDesc("dokan_course", "dokan_course"),
-    new MarioKartDSSceneDesc("wario_course", "wario_course"),
-
-    // These try to reference items that aren't in the archive, so we crash.
-    // TODO(jstpierre): Put these back and don't crash on the missing items.
-    new MarioKartDSSceneDesc("donkey_course", "donkey_course"),
-    new MarioKartDSSceneDesc("luigi_course", "luigi_course"),
-    new MarioKartDSSceneDesc("test1_course", "test1_course"),
-
-    new MarioKartDSSceneDesc("test_circle", "test_circle"),
-    new MarioKartDSSceneDesc("mini_block_course", "mini_block_course"),
+    "Other",
+    new MarioKartDSSceneDesc("Award", "Figure-8 Circuit (Award)"),
+    new MarioKartDSSceneDesc("StaffRoll", "Staff Roll"),     
+    "Unused Courses",
+    new MarioKartDSSceneDesc("donkey_course", "donkey_course (Waluigi Pinball Draft)"),
+    new MarioKartDSSceneDesc("luigi_course", "luigi_course (Waluigi Pinball Draft)"),
+    new MarioKartDSSceneDesc("mini_block_course", "mini_block_course (GCN Block City)"),
+    new MarioKartDSSceneDesc("MR_stage4", "MR_stage4 (GCN Mushroom Bridge Boss)"),
+    new MarioKartDSSceneDesc("old_mario_gc", "old_mario_gc (GCN Mario Circuit)"),   
+    new MarioKartDSSceneDesc("wario_course", "wario_course (Wario Stadium Draft)"),     
+    new MarioKartDSSceneDesc("dokan_course", "dokan_course"),    
     new MarioKartDSSceneDesc("nokonoko_course", "nokonoko_course"),
-    new MarioKartDSSceneDesc("old_mario_gc", "old_mario_gc"),
-
-    new MarioKartDSSceneDesc("kiosk_mini_stage1", "kiosk_mini_stage1"),
+    new MarioKartDSSceneDesc("test_circle", "test_circle"),
+    new MarioKartDSSceneDesc("test1_course", "test1_course"),
+    "Kiosk Demo Courses (Used)",
+    new MarioKartDSSceneDesc("kiosk_cross_course", "Figure-Eight Circuit"),    
+    new MarioKartDSSceneDesc("kiosk_bank_course", "Yoshi Falls"),
+    new MarioKartDSSceneDesc("kiosk_beach_course", "Cheep Cheep Beach"),
+    new MarioKartDSSceneDesc("kiosk_mansion_course", "Luigi's Mansion"),
+    new MarioKartDSSceneDesc("kiosk_old_mario_sfc", "SNES Mario Circuit 1"),
+    //new MarioKartDSSceneDesc("kiosk_old_luigi_gc", "GCN Luigi Circuit"),
+    "Kiosk Demo Courses (Unused)",
+    new MarioKartDSSceneDesc("kiosk_desert_course", "Desert Hills"),    
+    new MarioKartDSSceneDesc("kiosk_town_course", "Delfino Square"),
+    new MarioKartDSSceneDesc("kiosk_ridge_course", "Shroom Ridge"),
+    new MarioKartDSSceneDesc("kiosk_snow_course", "DK Pass"),
+    //new MarioKartDSSceneDesc("kiosk_clock_course", "Tick Tock Clock"), //missing object crashes
+    new MarioKartDSSceneDesc("kiosk_mario_course", "Mario Circuit"),
+    //new MarioKartDSSceneDesc("kiosk_airship_course", "Airship Fortress"),
+    new MarioKartDSSceneDesc("kiosk_stadium_course", "Wario Stadium"),
+    new MarioKartDSSceneDesc("kiosk_garden_course", "Peach Gardens"),
+    new MarioKartDSSceneDesc("kiosk_koopa_course", "Bowser Castle"),
+    //new MarioKartDSSceneDesc("kiosk_rainbow_course", "Rainbow Road"),
+    new MarioKartDSSceneDesc("kiosk_old_donut_sfc", "SNES Donut Plains 1"),
+    //new MarioKartDSSceneDesc("kiosk_old_frappe_64", "N64 Frappe Snowland"),
+    new MarioKartDSSceneDesc("kiosk_old_baby_gc", "GCN Baby Park"),
+    new MarioKartDSSceneDesc("kiosk_old_choco_64", "N64 Choco Mountain"),
+    new MarioKartDSSceneDesc("kiosk_old_choco_sfc", "SNES Choco Island 2"),
+    new MarioKartDSSceneDesc("kiosk_mini_stage1", "Nintendo DS"),
+    new MarioKartDSSceneDesc("kiosk_mini_block_64", "N64 Block Fort"),    
+    new MarioKartDSSceneDesc("kiosk_mini_dokan_gc", "GCN Pipe Plaza"),
+    new MarioKartDSSceneDesc("kiosk_donkey_course", "donkey_course (DK Pass Draft)"),
+    new MarioKartDSSceneDesc("kiosk_MR_stage1", "MR_stage1 (Boss Room Draft)"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
