@@ -11,6 +11,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assert, assertExists } from '../util';
 import { mat4, quat, vec3 } from 'gl-matrix';
 import { SceneContext } from '../SceneBase';
+import { computeModelMatrixSRT, MathConstants } from '../MathHelpers';
 
 const pathBase = `smo`;
 
@@ -123,12 +124,11 @@ type UnitConfig = {
     PlacementTargetFile: string,
 };
 
-const q = quat.create(), v = vec3.create(), s = vec3.create();
 function calcModelMtxFromTRSVectors(dst: mat4, tv: Vector, rv: Vector, sv: Vector): void {
-    quat.fromEuler(q, rv.X, rv.Y, rv.Z);
-    vec3.set(v, tv.X, tv.Y, tv.Z);
-    vec3.set(s, sv.X, sv.Y, sv.Z);
-    mat4.fromRotationTranslationScale(dst, q, v, s);
+    computeModelMatrixSRT(dst,
+        sv.X, sv.Y, sv.Z,
+        rv.X * MathConstants.DEG_TO_RAD, rv.Y * MathConstants.DEG_TO_RAD, rv.Z * MathConstants.DEG_TO_RAD,
+        tv.X, tv.Y, tv.Z);
 }
 
 export class OdysseyRenderer extends BasicFRESRenderer {
@@ -229,6 +229,7 @@ const sceneDescs = [
     new OdysseySceneDesc("PushBlockExStage"),
     new OdysseySceneDesc("FrogSearchExStage"),
     "Waterfall",
+    new OdysseySceneDesc("WaterfallWorldHomeStage"),
     new OdysseySceneDesc("CapAppearExStage"),
     new OdysseySceneDesc("WanwanClashExStage"),
     new OdysseySceneDesc("Lift2DExStage"),
