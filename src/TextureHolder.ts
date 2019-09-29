@@ -61,6 +61,7 @@ export interface LoadedTexture {
     viewerTexture: Viewer.Texture;
 }
 
+// TODO(jstpierre): TextureHolder needs to die.
 export abstract class TextureHolder<TextureType extends TextureBase> {
     public viewerTextures: Viewer.Texture[] = [];
     public gfxTextures: GfxTexture[] = [];
@@ -114,7 +115,8 @@ export abstract class TextureHolder<TextureType extends TextureBase> {
             return true;
         }
 
-        throw new Error(`Cannot find texture ${name}`);
+        // throw new Error(`Cannot find texture ${name}`);
+        return false;
     }
 
     public findTexture(name: string): TextureType | null {

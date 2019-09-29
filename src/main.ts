@@ -56,6 +56,7 @@ import * as Scenes_Zelda_SkywardSword from './rres/Scenes_Zelda_SkywardSword';
 import * as Scenes_InteractiveExamples from './interactive_examples/Scenes';
 import * as Scenes_Pilotwings64 from './Pilotwings64/Scenes';
 import * as Scenes_Fez from './Fez/Scenes_Fez';
+import * as Scenes_SuperMarioOdyssey from './fres_nx/smo_scenes';
 
 import { DroppedFileSceneDesc } from './Scenes_FileDrops';
 
@@ -129,6 +130,7 @@ const sceneGroups = [
     Scenes_MetroidPrime.sceneGroupMP3,
     Scenes_Psychonauts.sceneGroup,
     Scenes_SonicColors.sceneGroup,
+    Scenes_SuperMarioOdyssey.sceneGroup,
     Scenes_Test.sceneGroup,
     Scenes_InteractiveExamples.sceneGroup,
 ];
