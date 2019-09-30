@@ -13,7 +13,7 @@ import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { DeviceProgram } from "../Program";
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth, getSortKeyLayer, executeOnPass } from "../gfx/render/GfxRenderer";
 import { fillMatrix4x3, fillMatrix4x4, fillMatrix4x2, fillVec4v, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
-import { mat4, vec3, vec4 } from "gl-matrix";
+import { mat4, vec3, vec4, quat } from "gl-matrix";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget, depthClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { computeViewMatrix } from "../Camera";
@@ -925,6 +925,74 @@ function sampleFloatAnimationTrackSimple(track: AnimationKeyframe[], time: numbe
     const t = (time - k0.time) / length;
 
     return getPointHermite(k0.value, k1.value, t0, t1, t);
+}
+
+interface WindObjectParams {
+    position: vec3;
+    modelIndex: number;
+}
+
+interface LandingPadParams {
+    position: vec3;
+    heading: number;
+}
+
+interface UPWL {
+    windObjects: WindObjectParams[];
+    landingPads: LandingPadParams[];
+    bonusStar: vec3;
+}
+
+function parseUPWL(file: Pilotwings64FSFile): UPWL {
+    const windObjects: WindObjectParams[] = [];
+    const landingPads: LandingPadParams[] = [];
+    let bonusStar = vec3.create();
+
+    for (let i = 0; i < file.chunks.length; i++) {
+        const view = file.chunks[i].buffer.createDataView();
+        let offs = 0;
+        // ignore LEVL (just the lengths of the other lists),
+        // ESND (environment sound), TOYS (since we already handle them),
+        // TPTS (terrain transitions), and APTS (audio transitions)
+        if (file.chunks[i].tag === 'LEVL') {
+
+        } else if (file.chunks[i].tag === 'WOBJ') {
+            while (offs < view.byteLength) {
+                const position = vec3.fromValues(
+                    view.getFloat32(offs + 0x00),
+                    view.getFloat32(offs + 0x04),
+                    view.getFloat32(offs + 0x08),
+                );
+                const wobjType = view.getUint8(offs + 0x0c);
+                // 0 is windsock, 1 is wind turbine
+                const modelIndex = wobjType === 0 ? 0x40 : 0x53;
+                // game has wobjType 2 (unused), which is also a windsock
+                // but the part matrices don't get used?
+
+                windObjects.push({ position, modelIndex });
+                offs += 0x10;
+            }
+        } else if (file.chunks[i].tag === 'LPAD') {
+            while (offs < view.byteLength) {
+                const position = vec3.fromValues(
+                    view.getFloat32(offs + 0x00),
+                    view.getFloat32(offs + 0x04),
+                    view.getFloat32(offs + 0x08),
+                );
+                const heading = view.getFloat32(offs + 0x0c);
+                landingPads.push({ position, heading });
+                offs += 0x18;
+            }
+        } else if (file.chunks[i].tag === 'BNUS') {
+            vec3.set(bonusStar,
+                view.getFloat32(offs + 0x00),
+                view.getFloat32(offs + 0x04),
+                view.getFloat32(offs + 0x08),
+            );
+            // next byte is always 0x80
+        }
+    }
+    return { windObjects, landingPads, bonusStar };
 }
 
 function parsePilotwings64FS(buffer: ArrayBufferSlice): Pilotwings64FS {
@@ -1952,6 +2020,13 @@ class DynamicObjectRenderer extends ObjectRenderer {
     }
 }
 
+class BirdmanStar extends ObjectRenderer {
+    protected calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void {
+        const timeInSeconds = viewerInput.time / 1000;
+        mat4.rotateZ(dst, dst, MathConstants.TAU * timeInSeconds);
+    }
+}
+
 interface LooperParams {
     angularVelocity: number;
     center: vec3;
@@ -2180,6 +2255,7 @@ class DataHolder {
     public uvctData: UVCTData[] = [];
     public uvtr: UVTR[] = [];
     public uvlv: UVLV[] = [];
+    public upwl: UPWL[] = [];
     public gfxRenderCache = new GfxRenderCache(true);
     public splineData = new Map<number, SPTH>();
 
@@ -2215,6 +2291,23 @@ function spawnObject(dataHolder: DataHolder, uvmdIndex: number): ObjectRenderer 
     } else {
         return new ObjectRenderer(uvmdData, textureData);
     }
+}
+
+function fromYawTranslationScale(dst: mat4, heading: number, pos: vec3, scale: number): void {
+    mat4.fromRotationTranslationScale(dst,
+        quat.fromValues(0, 0, Math.sin(heading / 2), Math.cos(heading / 2)), // rotation about Z axis
+        pos,
+        nArray(3, () => scale)); // uniform scale
+}
+
+// helper for those "dynamic" objects that don't really move
+function spawnObjectAt(dataHolder: DataHolder, uvmdIndex: number, pos: vec3, heading: number): ObjectRenderer {
+    const uvmdData = dataHolder.uvmdData[uvmdIndex];
+    const textureData = dataHolder.textureData;
+
+    const obj = new ObjectRenderer(uvmdData, textureData);
+    fromYawTranslationScale(obj.modelMatrix, heading, pos, 1 / uvmdData.uvmd.inverseScale)
+    return obj;
 }
 
 class UVCTRenderer {
@@ -2283,7 +2376,7 @@ function getLevelDobjs(levelID: number, dataHolder: DataHolder): ObjectRenderer[
     const dobjs: ObjectRenderer[] = [];
 
     const flyerIDs = chooseFlyers();
-    if (levelID === 1) { // Holiday Island
+    if (levelID === 0) { // Holiday Island
         // Ocean plane
         const oceanPlane = spawnEnvObject(dataHolder, 0x161);
         oceanPlane.sortKeyBase = makeSortKey(GfxRendererLayer.BACKGROUND);
@@ -2329,7 +2422,7 @@ function getLevelDobjs(levelID: number, dataHolder: DataHolder): ObjectRenderer[
             radius: 90,
             roll: -15,
         }));
-    } else if (levelID === 3) { // Crescent Island
+    } else if (levelID === 1) { // Crescent Island
         // Ocean plane
         const oceanPlane = spawnEnvObject(dataHolder, 0x166);
         oceanPlane.sortKeyBase = makeSortKey(GfxRendererLayer.BACKGROUND);
@@ -2374,7 +2467,7 @@ function getLevelDobjs(levelID: number, dataHolder: DataHolder): ObjectRenderer[
             radius: 90,
             roll: -15,
         }));
-    } else if (levelID === 5) { // Little States
+    } else if (levelID === 2) { // Little States
         // Ocean plane
         const oceanPlane = spawnEnvObject(dataHolder, 0x168);
         oceanPlane.sortKeyBase = makeSortKey(GfxRendererLayer.BACKGROUND);
@@ -2415,7 +2508,7 @@ function getLevelDobjs(levelID: number, dataHolder: DataHolder): ObjectRenderer[
             minHeight: 33.757682800293,
             rollFactor: 150,
         }));
-    } else if (levelID === 10) { // Everfrost Island
+    } else if (levelID === 3) { // Everfrost Island
         // Ocean plane
         const oceanPlane = spawnEnvObject(dataHolder, 0x169);
         oceanPlane.sortKeyBase = makeSortKey(GfxRendererLayer.BACKGROUND);
@@ -2471,6 +2564,9 @@ async function fetchDataHolder(dataFetcher: DataFetcher, device: GfxDevice): Pro
             dataHolder.uvtr.push(parseUVTR(file));
         } else if (file.type === 'UVLV') {
             dataHolder.uvlv.push(parseUVLV(file));
+        } else if (file.type === 'UPWL') {
+            // technically "user files", but lookup is done by relative order
+            dataHolder.upwl.push(parseUPWL(file));
         } else if (file.type === 'SPTH') {
             dataHolder.splineData.set(userFileCounter, parseSPTH(file));
         }
@@ -2567,6 +2663,8 @@ class Pilotwings64Renderer implements SceneGfx {
     }
 }
 
+const uvlvIDList = [1, 3, 5, 10];
+
 const pathBase = `Pilotwings64`;
 class Pilotwings64SceneDesc implements SceneDesc {
     public id: string;
@@ -2581,7 +2679,7 @@ class Pilotwings64SceneDesc implements SceneDesc {
 
         const renderer = new Pilotwings64Renderer(device, dataHolder);
 
-        const levelData = dataHolder.uvlv[0].levels[this.levelID];
+        const levelData = dataHolder.uvlv[0].levels[uvlvIDList[this.levelID]];
 
         // TODO(jstpierre): Dynamically choose sky based on weather / time of day conditions.
         // This is probably in the UPWT?
@@ -2601,6 +2699,22 @@ class Pilotwings64SceneDesc implements SceneDesc {
             renderer.dobjRenderers.push(levelDobjs[i]);
         }
 
+        const currUPWL = dataHolder.upwl[this.levelID];
+        for (let i = 0; i < currUPWL.windObjects.length; i++) {
+            // TODO: move these based on wind
+            const windObject = spawnObjectAt(dataHolder, currUPWL.windObjects[i].modelIndex, currUPWL.windObjects[i].position, 0);
+            renderer.dobjRenderers.push(windObject);
+        }
+        for (let i = 0; i < currUPWL.landingPads.length; i++) {
+            // TODO: select based on mission if we add UPWT
+            const landingPad = spawnObjectAt(dataHolder, i === 0? 0x104 : 0xd4, currUPWL.landingPads[i].position, currUPWL.landingPads[i].heading);
+            renderer.dobjRenderers.push(landingPad);
+        }
+        const starData = dataHolder.uvmdData[0xf2];
+        const star = new BirdmanStar(starData, dataHolder.textureData);
+        fromYawTranslationScale(star.modelMatrix, 0, currUPWL.bonusStar, 1 / starData.uvmd.inverseScale)
+        renderer.dobjRenderers.push(star);
+
         return renderer;
     }
 }
@@ -2608,10 +2722,10 @@ class Pilotwings64SceneDesc implements SceneDesc {
 const id = 'Pilotwings64';
 const name = "Pilotwings 64";
 const sceneDescs = [
-    new Pilotwings64SceneDesc(1, 'Holiday Island'),
-    new Pilotwings64SceneDesc(3, 'Crescent Island'),
-    new Pilotwings64SceneDesc(5, 'Little States'),
-    new Pilotwings64SceneDesc(10, 'Ever-Frost Island'),
+    new Pilotwings64SceneDesc(0, 'Holiday Island'),
+    new Pilotwings64SceneDesc(1, 'Crescent Island'),
+    new Pilotwings64SceneDesc(2, 'Little States'),
+    new Pilotwings64SceneDesc(3, 'Ever-Frost Island'),
 ];
 
 export const sceneGroup: SceneGroup = { id, name, sceneDescs };
