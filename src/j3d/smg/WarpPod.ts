@@ -276,12 +276,12 @@ class WarpPodPathDrawer {
 
 export class WarpPod extends LiveActor {
     private visible: boolean;
-    private colorIndex: number;
     private groupId: number;
     private pairedWarpPod: WarpPod | null = null;
     private isPairPrimary: boolean = false;
     private warpPathPoints: vec3[] | null = null;
     private pathDrawer: WarpPodPathDrawer | null = null;
+    private color: Color;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, getObjectName(infoIter));
@@ -292,7 +292,14 @@ export class WarpPod extends LiveActor {
         this.visible = !!getJMapInfoArg1(infoIter, 0);
         const hasSaveFlag = !!getJMapInfoArg3(infoIter, 0);
         const astroDomeNum = !!getJMapInfoArg4(infoIter, 0);
-        this.colorIndex = getJMapInfoArg6(infoIter, 0);
+        const colorIndex = getJMapInfoArg6(infoIter, 0);
+        
+        let color = warpPodColorTable[colorIndex];
+        if (color === undefined) {
+            // Seems to happen in SMG2 sometimes; they might have expanded the color table.
+            color = warpPodColorTable[0];
+        }
+        this.color = color;
 
         this.initEffectKeeper(sceneObjHolder, null);
 
@@ -395,7 +402,7 @@ export class WarpPod extends LiveActor {
             this.warpPathPoints.push(v);
         }
 
-        this.pathDrawer = new WarpPodPathDrawer(sceneObjHolder, this.arc, this.warpPathPoints, warpPodColorTable[this.colorIndex]);
+        this.pathDrawer = new WarpPodPathDrawer(sceneObjHolder, this.arc, this.warpPathPoints, this.color);
     }
 
     private lookForPair(sceneObjHolder: SceneObjHolder): WarpPod | null {
@@ -426,7 +433,7 @@ export class WarpPod extends LiveActor {
     private glowEffect(sceneObjHolder: SceneObjHolder): void {
         if (this.visible) {
             emitEffect(sceneObjHolder, this, 'EndGlow');
-            setEffectEnvColor(this, 'EndGlow', warpPodColorTable[this.colorIndex]);
+            setEffectEnvColor(this, 'EndGlow', this.color);
         }
     }
     
