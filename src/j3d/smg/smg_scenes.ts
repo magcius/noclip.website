@@ -416,6 +416,8 @@ class SMGRenderer implements Viewer.SceneGfx {
         // if not PriorDrawAir, they would go here...
 
         // executeDrawListOpa();
+        this.execute(passRenderer, DrawType.WARP_POD_PATH);
+
         this.drawOpa(passRenderer, 0x18);
 
         // executeDrawBufferListNormalXlu()
@@ -1133,7 +1135,7 @@ class SMGSpawner {
             this.syncActorVisible(this.sceneObjHolder.sceneNameObjListExecutor.nameObjExecuteInfos[i].nameObj as LiveActor);
     }
 
-    private getNameObjFactory(objName: string): NameObjFactory | null {
+    private getNameObjFactory(objName: string): NameObjFactory | null | undefined {
         const actorFactory = getNameObjTableEntry(objName);
         if (actorFactory !== null)
             return actorFactory.factory;
@@ -1142,7 +1144,7 @@ class SMGSpawner {
         if (planetFactory !== null)
             return planetFactory;
 
-        return null;
+        return undefined;
     }
 
     public spawnObjectLegacy(zoneAndLayer: ZoneAndLayer, infoIter: JMapInfoIter, objinfo: ObjInfo): void {
@@ -1217,16 +1219,8 @@ class SMGSpawner {
 
         const name = objinfo.objName;
         switch (name) {
-        case 'PeachCastleTownAfterAttack':
-            // Don't show. We want the pristine town state.
-            return;
-
         case 'ElectricRail':
             // Covers the path with the rail -- will require special spawn logic.
-            return;
-
-        case 'ShootingStar':
-            // Actor implementation in the works, but it requires stripe particles to look good...
             return;
 
         case 'MeteorCannon':
@@ -1253,38 +1247,6 @@ class SMGSpawner {
         case 'RingBeamerAreaObj':
         case 'StatusFloor':
             // Archives just contain the textures. Mesh geometry appears to be generated at runtime by the game.
-            return;
-
-        case 'InvisibleWall10x10':
-        case 'InvisibleWall10x20':
-        case 'InvisibleWallJump10x20':
-        case 'InvisibleWallGCapture10x20':
-        case 'InvisibleWaterfallTwinFallLake':
-        case 'GhostShipCavePipeCollision':
-            // Invisible / Collision only.
-            return;
-
-        case 'TimerSwitch':
-        case 'ClipFieldSwitch':
-        case 'SoundSyncSwitch':
-        case 'ExterminationSwitch':
-        case 'SwitchSynchronizerReverse':
-        case 'PrologueDirector':
-        case 'MovieStarter':
-        case 'ScenarioStarter':
-        case 'LuigiEvent':
-        case 'MameMuimuiScorer':
-        case 'MameMuimuiScorerLv2':
-        case 'ScoreAttackCounter':
-        case 'RepeartTimerSwitch':
-        case 'FlipPanelObserver':
-            // Logic objects.
-            return;
-
-        case 'OpeningDemoObj':
-        case 'NormalEndingDemoObj':
-        case 'MeetKoopaDemoObj':
-            // Cutscenes.
             return;
 
         case 'StarPieceFollowGroup':
@@ -1378,10 +1340,6 @@ class SMGSpawner {
         case 'AstroCore':
             spawnGraph(name, SceneGraphTag.Normal, { bck: 'revival4.bck', brk: 'revival4.brk', btk: 'astrocore.btk' });
             break;
-        case 'SignBoard':
-            // SignBoard has a single animation for falling over which we don't want to play.
-            spawnGraph('SignBoard', SceneGraphTag.Normal, null);
-            break;
         case 'Rabbit':
             spawnGraph('TrickRabbit');
             break;
@@ -1462,10 +1420,6 @@ class SMGSpawner {
         case 'TreasureBoxEmpty':
         case 'TreasureBoxKinokoOneUp':
             spawnGraph(`TreasureBox`);
-            break;
-        case 'SuperSpinDriverPink':
-            // TODO(jstpierre): Adjust color override.
-            spawnGraph(`SuperSpinDriver`);
             break;
         case 'JetTurtle':
             // spawnGraph(`Koura`);
@@ -1624,8 +1578,14 @@ class SMGSpawner {
 
         stageDataHolder.iterPlacement((infoIter, layerId) => {
             const factory = this.getNameObjFactory(getObjectName(infoIter));
+
+            if (factory === null) {
+                // Explicitly null. Don't spawn anything.
+                return;
+            }
+
             const zoneAndLayer: ZoneAndLayer = { zoneId: stageDataHolder.zoneId, layerId };
-            if (factory !== null) {
+            if (factory !== undefined) {
                 const actor = new factory(zoneAndLayer, this.sceneObjHolder, infoIter);
                 this.addActor(actor);
             } else {
@@ -1663,7 +1623,7 @@ class SMGSpawner {
         }
 
         const factory = this.getNameObjFactory(objName);
-        if (factory !== null && factory.requestArchives !== undefined)
+        if (factory !== null && factory !== undefined && factory.requestArchives !== undefined)
             factory.requestArchives(this.sceneObjHolder, infoIter);
 
         const entry = getNameObjTableEntry(objName);

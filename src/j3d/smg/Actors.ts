@@ -3,17 +3,18 @@
 
 import { LightType } from './DrawBuffer';
 import { SceneObjHolder, ZoneAndLayer, getObjectName, WorldmapPointInfo, getDeltaTimeFrames, getTimeFrames, Dot } from './smg_scenes';
-import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg6, getJMapInfoArg7 } from './JMapInfo';
+import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg7 } from './JMapInfo';
 import { mat4, vec3 } from 'gl-matrix';
 import AnimationController from '../../AnimationController';
 import { MathConstants, computeModelMatrixSRT, clamp, computeModelMatrixR, lerp } from '../../MathHelpers';
 import { colorNewFromRGBA8, Color } from '../../Color';
 import { ColorKind } from '../../gx/gx_render';
 import { BTK, BRK, LoopMode, BTP } from '../j3d';
+import { BTI } from "../j3d";
 import * as Viewer from '../../viewer';
 import * as RARC from '../../j3d/rarc';
 import { DrawBufferType, MovementType, CalcAnimType, DrawType, NameObj } from './NameObj';
-import { BMDModelInstance } from '../render';
+import { BMDModelInstance, BTIData } from '../render';
 import { assertExists, leftPad } from '../../util';
 import { Camera } from '../../Camera';
 import { isGreaterStep, isFirstStep, calcNerveRate, Spine } from './Spine';
@@ -267,7 +268,7 @@ export function bindColorChangeAnimation(modelInstance: BMDModelInstance, arc: R
 
 export function bindTexChangeAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, frame: number, baseName: string = 'TexChange'): void {
     const btpName = `${baseName}.btp`;
-    const btkName = `${baseName}.btp`;
+    const btkName = `${baseName}.btk`;
 
     const animationController = new AnimationController();
     animationController.setTimeInFrames(frame);
@@ -281,6 +282,15 @@ export function bindTexChangeAnimation(modelInstance: BMDModelInstance, arc: RAR
         const btk = BTK.parse(assertExists(arc.findFileData(btkName)));
         modelInstance.bindTTK1(btk.ttk1, animationController);
     }
+}
+
+export function loadBTIData(sceneObjHolder: SceneObjHolder, arc: RARC.RARC, filename: string): BTIData {
+    const device = sceneObjHolder.modelCache.device;
+    const cache = sceneObjHolder.modelCache.cache;
+
+    const buffer = arc.findFileData(filename);
+    const btiData = new BTIData(device, cache, BTI.parse(buffer!, filename).texture);
+    return btiData;
 }
 
 function createSubModelObjName(parentActor: LiveActor, suffix: string): string {
@@ -1438,6 +1448,12 @@ export class SimpleEffectObj extends LiveActor {
     }
 }
 
+export class EffectObjR500F50 extends SimpleEffectObj {
+    protected getClippingRadius(): number {
+        return 500;
+    }
+}
+
 export class EffectObjR1000F50 extends SimpleEffectObj {
     protected getClippingRadius(): number {
         return 1000;
@@ -1601,68 +1617,6 @@ export class FountainBig extends LiveActor {
 export class AstroEffectObj extends SimpleEffectObj {
     // The game will check whether the user has the correct dome enabled,
     // but it is otherwise identical to SimpleEffectObj.
-}
-
-const warpPodColorTable = [
-    colorNewFromRGBA8(0x0064C8FF),
-    colorNewFromRGBA8(0x2CFF2AFF),
-    colorNewFromRGBA8(0xFF3C3CFF),
-    colorNewFromRGBA8(0xC4A600FF),
-    colorNewFromRGBA8(0x00FF00FF),
-    colorNewFromRGBA8(0xFF00FFFF),
-    colorNewFromRGBA8(0xFFFF00FF),
-    colorNewFromRGBA8(0xFFFFFFFF),
-];
-
-export class WarpPod extends LiveActor {
-    private visible: boolean;
-    private colorIndex: number;
-
-    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
-
-        this.initDefaultPos(sceneObjHolder, infoIter);
-        this.initModelManagerWithAnm(sceneObjHolder, "WarpPod");
-
-        this.visible = !!getJMapInfoArg1(infoIter, 0);
-        const hasSaveFlag = !!getJMapInfoArg3(infoIter, 0);
-        const astroDomeNum = !!getJMapInfoArg4(infoIter, 0);
-        this.colorIndex = getJMapInfoArg6(infoIter, 0);
-
-        if (this.visible) {
-            connectToScene(sceneObjHolder, this, 0x22, 5, DrawBufferType.MAP_OBJ, -1);
-        } else {
-            connectToScene(sceneObjHolder, this, 0x22, -1, -1, -1);
-        }
-
-        this.initEffectKeeper(sceneObjHolder, null);
-
-        if (this.visible) {
-            startBck(this, 'Active');
-            startBrkIfExist(this.modelInstance!, this.arc, 'Active');
-            // This is a bit hokey, but we don't have an XanimePlayer, so this is our solution...
-            this.modelInstance!.ank1Animator!.ank1.loopMode = LoopMode.ONCE;
-        }
-
-        // The game normally will check a few different save file bits
-        // or the highest unlocked AstroDome, but we just declare all
-        // WarpPods are active.
-        const inactive = false;
-
-        if (inactive) {
-            startBck(this, 'Wait');
-            startBrkIfExist(this.modelInstance!, this.arc, 'Wait');
-        } else {
-            this.glowEffect(sceneObjHolder);
-        }
-    }
-
-    private glowEffect(sceneObjHolder: SceneObjHolder): void {
-        if (this.visible) {
-            emitEffect(sceneObjHolder, this, 'EndGlow');
-            setEffectEnvColor(this, 'EndGlow', warpPodColorTable[this.colorIndex]);
-        }
-    }
 }
 
 export class AstroCountDownPlate extends LiveActor {
@@ -2095,5 +2049,60 @@ export class WoodBox extends LiveActor {
         connectToSceneMapObjStrongLight(sceneObjHolder, this);
         this.initLightCtrl(sceneObjHolder);
         this.initEffectKeeper(sceneObjHolder, null);
+    }
+}
+
+export class SurprisedGalaxy extends LiveActor {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, getObjectName(infoIter));
+
+        this.initDefaultPos(sceneObjHolder, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, "MiniSurprisedGalaxy");
+        connectToSceneMapObj(sceneObjHolder, this);
+        this.startAction('MiniSurprisedGalaxy');
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        sceneObjHolder.modelCache.requestObjectData("MiniSurprisedGalaxy");
+    }
+}
+
+abstract class SuperSpinDriver extends LiveActor {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, getObjectName(infoIter));
+
+        this.initDefaultPos(sceneObjHolder, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, "SuperSpinDriver");
+        connectToSceneNoSilhouettedMapObjStrongLight(sceneObjHolder, this);
+
+        this.initColor();
+        startBck(this, 'Wait');
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        sceneObjHolder.modelCache.requestObjectData("SuperSpinDriver");
+    }
+
+    protected abstract initColor(): void;
+}
+
+export class SuperSpinDriverYellow extends SuperSpinDriver {
+    protected initColor(): void {
+        bindTexChangeAnimation(this.modelInstance!, this.arc, 0, 'SuperSpinDriver');
+        startBrkIfExist(this.modelInstance!, this.arc, 'Yellow');
+    }
+}
+
+export class SuperSpinDriverGreen extends SuperSpinDriver {
+    protected initColor(): void {
+        bindTexChangeAnimation(this.modelInstance!, this.arc, 1, 'SuperSpinDriver');
+        startBrkIfExist(this.modelInstance!, this.arc, 'Green');
+    }
+}
+
+export class SuperSpinDriverPink extends SuperSpinDriver {
+    protected initColor(): void {
+        bindTexChangeAnimation(this.modelInstance!, this.arc, 2, 'SuperSpinDriver');
+        startBrkIfExist(this.modelInstance!, this.arc, 'Pink');
     }
 }

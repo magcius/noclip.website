@@ -54,6 +54,14 @@ export function getJMapInfoScale(dst: vec3, infoIter: JMapInfoIter): void {
     dst[2] = infoIter.getValueNumber('scale_z', 1);
 }
 
+export function getJMapInfoGroupId(infoIter: JMapInfoIter): number | null {
+    const groupId = infoIter.getValueNumber('GroupId');
+    if (groupId !== null)
+        return groupId;
+
+    return infoIter.getValueNumber('ClippingGroupId');
+}
+
 type Callback<T> = (jmp: JMapInfoIter, i: number) => T;
 
 export class JMapInfoIter {

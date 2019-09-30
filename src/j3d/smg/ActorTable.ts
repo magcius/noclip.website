@@ -2,17 +2,18 @@
 import * as RARC from '../rarc';
 
 import { NameObjFactory, SceneObjHolder } from "./smg_scenes";
-import { Kinopio, TicoComet, EarthenPipe, StarPiece, CollapsePlane, BlackHole, Peach, PenguinRacer, Coin, Penguin, SimpleEffectObj, EffectObjR1000F50, GCaptureTarget, FountainBig, AstroEffectObj, WarpPod, AstroCountDownPlate, Butler, Rosetta, Tico, Sky, Air, ShootingStar, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObj10x10x10SyncClipping, AstroMapObj, EffectObjR100F50SyncClipping, PriorDrawAir, BlueChip, YellowChip, PeachCastleGardenPlanet, SimpleMapObj, CrystalCage, PlanetMap, HatchWaterPlanet, RotateMoveObj, LavaSteam, SignBoard, WoodBox } from "./Actors";
+import { Kinopio, TicoComet, EarthenPipe, StarPiece, CollapsePlane, BlackHole, Peach, PenguinRacer, Coin, Penguin, SimpleEffectObj, EffectObjR1000F50, GCaptureTarget, FountainBig, AstroEffectObj, AstroCountDownPlate, Butler, Rosetta, Tico, Sky, Air, ShootingStar, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObj10x10x10SyncClipping, AstroMapObj, EffectObjR100F50SyncClipping, PriorDrawAir, BlueChip, YellowChip, PeachCastleGardenPlanet, SimpleMapObj, CrystalCage, PlanetMap, HatchWaterPlanet, RotateMoveObj, LavaSteam, SignBoard, WoodBox, EffectObjR500F50, SurprisedGalaxy, SuperSpinDriverYellow, SuperSpinDriverGreen, SuperSpinDriverPink } from "./Actors";
 import { OceanBowl } from "./OceanBowl";
 import { JMapInfoIter, createCsvParser } from "./JMapInfo";
+import { WarpPod } from './WarpPod';
 
 interface ActorTableEntry {
     objName: string;
-    factory: NameObjFactory;
+    factory: NameObjFactory | null;
     extraObjectDataArchiveNames: string[];
 }
 
-function _(objName: string, factory: NameObjFactory, extraObjectDataArchiveNames: string[] = []): ActorTableEntry {
+function _(objName: string, factory: NameObjFactory | null, extraObjectDataArchiveNames: string[] = []): ActorTableEntry {
     return { objName, factory, extraObjectDataArchiveNames };
 }
 
@@ -50,6 +51,9 @@ const ActorTable: ActorTableEntry[] = [
     _("WarpPod",                        WarpPod),
     _("WoodBox",                        WoodBox),
     _("YellowChip",                     YellowChip),
+    _("SuperSpinDriver",                SuperSpinDriverYellow),
+    _("SuperSpinDriverGreen",           SuperSpinDriverGreen),
+    _("SuperSpinDriverPink",            SuperSpinDriverPink),
 
     // Sky/Air
     _("AstroDomeSky",                   Sky),
@@ -140,7 +144,7 @@ const ActorTable: ActorTableEntry[] = [
     _("TeresaRaceSpaceStickB",          SimpleMapObj),
     _("TeresaRaceSpaceStickC",          SimpleMapObj),
     // We don't include this because we want to show the pristine map state...
-    // "PeachCastleTownAfterAttack"
+    _("PeachCastleTownAfterAttack",     null),
     _("PeachCastleTownBeforeAttack",    SimpleMapObj, ["PeachCastleTownBeforeAttackBloom"]),
     _("PeachCastleTownGate",            SimpleMapObj),
     _("CocoonStepA",                    SimpleMapObj),
@@ -325,6 +329,19 @@ const ActorTable: ActorTableEntry[] = [
     _("AstroChildRoom",                 AstroMapObj),
     _("AstroParking",                   AstroMapObj),
     _("AstroLibrary",                   AstroMapObj),
+    // AstroOverlookObj is a logic actor to show some UI when Mario enters a trigger volume...
+    _("AstroOverlookObj",               null),
+
+    _("SurpBeltConveyerExGalaxy",       SurprisedGalaxy),
+    _("SurpSnowCapsuleGalaxy",          SurprisedGalaxy),
+    _("SurpSurfingLv2Galaxy",           SurprisedGalaxy),
+    _("SurpCubeBubbleExLv2Galaxy",      SurprisedGalaxy),
+    _("SurpTamakoroExLv2Galaxy",        SurprisedGalaxy),
+    _("SurpPeachCastleFinalGalaxy",     SurprisedGalaxy),
+    _("SurpFishTunnelGalaxy",           SurprisedGalaxy),
+    _("SurpTearDropGalaxy",             SurprisedGalaxy),
+    _("SurpTeresaMario2DGalaxy",        SurprisedGalaxy),
+    _("SurpTransformationExGalaxy",     SurprisedGalaxy),
 
     // Effects
     _("AstroTorchLightRed",             SimpleEffectObj),
@@ -347,6 +364,37 @@ const ActorTable: ActorTableEntry[] = [
     _("WaterfallL",                     EffectObjR1000F50),
     _("WaterfallS",                     EffectObj20x20x10SyncClipping),
     _("LavaSteam",                      LavaSteam),
+    _("UFOKinokoLandingBlackSmoke",     EffectObjR500F50),
+
+    // Invisible / Collision only.
+    _("InvisibleWall10x10",              null),
+    _("InvisibleWall10x20",              null),
+    _("InvisibleWallJump10x20",          null),
+    _("InvisibleWallGCapture10x20",      null),
+    _("InvisibleWaterfallTwinFallLake",  null),
+    _("GhostShipCavePipeCollision",      null),
+
+    // Logic objects
+    _("TimerSwitch",                     null),
+    _("ClipFieldSwitch",                 null),
+    _("SoundSyncSwitch",                 null),
+    _("ExterminationSwitch",             null),
+    _("ExterminationCheckerLuribo",      null),
+    _("SwitchSynchronizerReverse",       null),
+    _("PrologueDirector",                null),
+    _("MovieStarter",                    null),
+    _("ScenarioStarter",                 null),
+    _("LuigiEvent",                      null),
+    _("MameMuimuiScorer",                null),
+    _("MameMuimuiScorerLv2",             null),
+    _("ScoreAttackCounter",              null),
+    _("RepeartTimerSwitch",              null),
+    _("FlipPanelObserver",               null),
+
+    // Cutscenes
+    _("OpeningDemoObj",                  null),
+    _("NormalEndingDemoObj",             null),
+    _("MeetKoopaDemoObj",                null),
 ];
 
 export function getNameObjTableEntry(objName: string, table: ActorTableEntry[] = ActorTable): ActorTableEntry | null {

@@ -15,7 +15,7 @@ export const enum CalcAnimType {
 
 export const enum DrawType {
     OCEAN_BOWL                     = 0x07,
-
+    WARP_POD_PATH                  = 0x18,
     WATER_CAMERA_FILTER            = 0x3A,
 
     EFFECT_DRAW_3D                 = 0x47,
@@ -166,8 +166,20 @@ export class SceneNameObjListExecutor {
 
     public executeDrawAll(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         for (let i = 0; i < this.nameObjExecuteInfos.length; i++) {
-            const nameObj = this.nameObjExecuteInfos[i].nameObj;
-            nameObj.draw(sceneObjHolder, renderInstManager, viewerInput);
+            const executeInfo = this.nameObjExecuteInfos[i];
+            const nameObj = executeInfo.nameObj;
+
+            if (this.nameObjExecuteInfos[i].drawType !== -1) {
+                // If this is an execute draw, then set up our filter key correctly...
+                const template = renderInstManager.pushTemplateRenderInst();
+                template.filterKey = createFilterKeyForDrawType(executeInfo.drawType);
+                nameObj.draw(sceneObjHolder, renderInstManager, viewerInput);
+                renderInstManager.popTemplateRenderInst();
+            } else {
+                // Otherwise, well, uh, we shouldn't be using this, because DrawBuffer exists,
+                // but oops....
+                nameObj.draw(sceneObjHolder, renderInstManager, viewerInput);
+            }
         }
     }
 
