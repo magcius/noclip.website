@@ -15,7 +15,6 @@ import { connectToScene, calcUpVec, loadBTIData, emitEffect, setEffectEnvColor }
 import { MathConstants, lerp } from "../../MathHelpers";
 import { GfxRenderInstManager } from "../../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../../viewer";
-import { getDebugOverlayCanvas2D, drawWorldSpacePoint } from "../../DebugJunk";
 import { makeStaticDataBuffer } from "../../gfx/helpers/BufferHelpers";
 import { makeTriangleIndexBuffer, GfxTopology, getTriangleIndexCountForTopologyIndexCount } from "../../gfx/helpers/TopologyHelpers";
 import { Camera } from "../../Camera";
@@ -417,17 +416,11 @@ export class WarpPod extends LiveActor {
     public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
+        if (!this.visibleScenario || !this.visibleAlive)
+            return;
+
         if (this.pathDrawer !== null)
             this.pathDrawer.draw(sceneObjHolder.modelCache.device, renderInstManager, viewerInput);
-
-        /*
-        if (this.warpPathPoints !== null) {
-            for (let i = 0; i < this.warpPathPoints.length; i++) {
-                const ctx = getDebugOverlayCanvas2D();
-                drawWorldSpacePoint(ctx, viewerInput.camera, this.warpPathPoints[i], warpPodColorTable[this.colorIndex], 6);
-            }
-        }
-        */
     }
 
     private glowEffect(sceneObjHolder: SceneObjHolder): void {
