@@ -88,7 +88,7 @@ class WarpPodPathDrawer {
         const totalVertexCount = oneStripVertexCount * 2;
         const totalWordCount = totalVertexCount * 5;
 
-        const indexData = makeTriangleIndexBuffer(GfxTopology.QUADSTRIP, 0, totalVertexCount);
+        const indexData = makeTriangleIndexBuffer(GfxTopology.TRISTRIP, 0, totalVertexCount);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexData.buffer);
 
         this.vertexBuffer = device.createBuffer(totalWordCount, GfxBufferUsage.VERTEX, GfxBufferFrequencyHint.DYNAMIC);
@@ -183,15 +183,14 @@ class WarpPodPathDrawer {
     }
 
     private updateStripeBuffer(device: GfxDevice, camera: Camera): void {
-        camera.getWorldForward(scratchVec3a);
-
-        let idx0 = 0;
+        let idx0 = 0, idx1 = (this.points.length * 10);
         for (let i = 0; i < this.points.length - 1; i++) {
+            camera.getWorldForward(scratchVec3a);
             vec3.sub(scratchVec3b, this.points[i + 1], this.points[i]);
             vecKillElement(scratchVec3c, scratchVec3b, scratchVec3a);
             vec3.normalize(scratchVec3c, scratchVec3c);
 
-            vec3.cross(scratchVec3b, scratchVec3a, scratchVec3c);
+            vec3.cross(scratchVec3b, scratchVec3c, scratchVec3a);
             vec3.normalize(scratchVec3b, scratchVec3b);
 
             vec3.cross(scratchVec3a, scratchVec3b, scratchVec3c);
@@ -216,7 +215,6 @@ class WarpPodPathDrawer {
             this.shadowBufferF32[idx0++] = 1.0;
             this.shadowBufferF32[idx0++] = texCoordY;
 
-            /*
             vec3.add(scratchVec3c, this.points[i], scratchVec3a);
             this.shadowBufferF32[idx1++] = scratchVec3c[0];
             this.shadowBufferF32[idx1++] = scratchVec3c[1];
@@ -230,7 +228,6 @@ class WarpPodPathDrawer {
             this.shadowBufferF32[idx1++] = scratchVec3c[2];
             this.shadowBufferF32[idx1++] = 1.0;
             this.shadowBufferF32[idx1++] = texCoordY;
-            */
         }
 
         const hostAccessPass = device.createHostAccessPass();
@@ -259,12 +256,12 @@ class WarpPodPathDrawer {
         this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
 
         const oneStripVertexCount = (this.points.length - 1) * 2;
-        const oneStripIndexCount = getTriangleIndexCountForTopologyIndexCount(GfxTopology.QUADSTRIP, oneStripVertexCount);
+        const oneStripIndexCount = getTriangleIndexCountForTopologyIndexCount(GfxTopology.TRISTRIP, oneStripVertexCount);
 
         const renderInst1 = renderInstManager.pushRenderInst();
         renderInst1.drawIndexes(oneStripIndexCount);
-        // const renderInst2 = renderInstManager.pushRenderInst();
-        // renderInst2.drawIndexes(oneStripIndexCount, oneStripIndexCount + 6);
+        const renderInst2 = renderInstManager.pushRenderInst();
+        renderInst2.drawIndexes(oneStripIndexCount, oneStripIndexCount + 12);
 
         renderInstManager.popTemplateRenderInst();
     }
