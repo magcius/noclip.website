@@ -679,6 +679,7 @@ interface ModelPart {
 interface ModelLOD {
     parts: ModelPart[];
     radius: number;
+    billboard: boolean;
 }
 
 interface UVMD {
@@ -719,6 +720,7 @@ function parseUVMD(file: Pilotwings64FSFile): UVMD {
     const vertBuffer = new Uint16Array(16);
     for (let i = 0; i < lodCount; i++) {
         const partCount = view.getUint8(offs + 0x00);
+        const billboard = view.getUint8(offs + 0x01) !== 0;
         assert(partCount <= transformCount);
         offs += 0x02;
         const parts: ModelPart[] = [];
@@ -759,7 +761,7 @@ function parseUVMD(file: Pilotwings64FSFile): UVMD {
         }
         const radius = view.getFloat32(offs);
         offs += 0x04;
-        lods.push({ parts, radius });
+        lods.push({ parts, radius, billboard });
     }
     const partPlacements: mat4[] = [];
     for (let i = 0; i < transformCount; i++) {
@@ -1252,7 +1254,7 @@ class ObjectRenderer {
         this.sortKeyBase = makeSortKey(this.model.uvmd.hasTransparency ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE);
 
         for (let i = 0; i < model.parts.length; i++) {
-            const partRenderer = new MeshRenderer(model.parts[i], textureData, isEnv);
+            const partRenderer = new MeshRenderer(model.parts[i], textureData, isEnv, this.model.uvmd.lods[0].billboard);
             this.partRenderers.push(partRenderer);
         }
 
@@ -1304,9 +1306,9 @@ class MeshRenderer {
     private materials: MaterialInstance[] = [];
     private visible = true;
 
-    constructor(private meshData: MeshData, textureData: TextureData[], isEnv?: boolean) {
+    constructor(private meshData: MeshData, textureData: TextureData[], isEnv?: boolean, isBillboard?: boolean) {
         for (let material of meshData.mesh.materials)
-            this.materials.push(new MaterialInstance(material, textureData, isEnv));
+            this.materials.push(new MaterialInstance(material, textureData, isEnv, isBillboard));
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, jointMatrix: mat4): void {
@@ -1634,6 +1636,43 @@ function scrollTexture(dest: mat4, millis: number, scroll: UV_Scroll) {
     dest[13] = -(tOffset >= 0 ? tOffset : tOffset + 1);
 }
 
+
+export function calcZBBoardMtx(dst: mat4, m: mat4): void {
+    // Modifies m in-place.
+
+    // rotate around the model's Z-axis (up in PW64)
+    // so that the Y-axis (forward in PW64 model space)
+    // is as towards-camera as possible (+Z in noclip)
+
+    // The column vectors lengths here are the scale.
+    const mx = Math.hypot(m[0], m[1], m[2]);
+    const my = Math.hypot(m[4], m[5], m[6]);
+
+    const h = Math.hypot(m[9], m[10]);
+
+    dst[0] = -mx;
+    dst[4] = 0;
+    dst[8] = m[8]; // we assume this is negligible
+    dst[12] = m[12];
+
+    dst[1] = 0;
+    dst[5] = -my * m[10] / h;
+    dst[9] = m[9];
+    dst[13] = m[13];
+
+    dst[2] = 0;
+    dst[6] = my * m[9] / h;
+    dst[10] = m[10];
+    dst[14] = m[14];
+
+    // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
+    // since this is supposed to generate a mat4x3 matrix.
+    m[3] = 9999.0;
+    m[7] = 9999.0;
+    m[11] = 9999.0;
+    m[15] = 9999.0;
+}
+
 const scratchMatrix = mat4.create();
 const texMatrixScratch = mat4.create();
 class MaterialInstance {
@@ -1646,7 +1685,7 @@ class MaterialInstance {
     private stateFlags: Partial<GfxMegaStateDescriptor>;
     private visible = true;
 
-    constructor(private materialData: MaterialData, textureData: TextureData[], isEnv?: boolean) {
+    constructor(private materialData: MaterialData, textureData: TextureData[], isEnv?: boolean, private isBillboard?: boolean) {
         this.hasTexture = materialData.textureIndex < 0x0FFF;
         let modeInfo = materialData.rspModeInfo;
         if (!!isEnv)
@@ -1689,6 +1728,12 @@ class MaterialInstance {
         if (!!(getSortKeyLayer(renderInst.sortKey) & GfxRendererLayer.TRANSLUCENT)) {
             renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, -scratchMatrix[14]);
         }
+
+        // note that the game actually rotates the model placement matrix, allowing for a model
+        // with multiple parts to face towards the camera overall, while individual parts might not
+        // however, every billboard in the game has only one part, so we ignore this detail
+        if (this.isBillboard)
+            calcZBBoardMtx(scratchMatrix, scratchMatrix);
 
         offs += fillMatrix4x3(d, offs, scratchMatrix);
 
@@ -2009,17 +2054,17 @@ class Airplane extends DynamicObjectRenderer {
         const yPt = animFrameScratch[1];
         const zPt = animFrameScratch[2];
 
-        const tNorm = Math.sqrt(xPt.vel * xPt.vel + yPt.vel * yPt.vel);
-        const norm = Math.sqrt(xPt.pos * xPt.pos + yPt.pos * yPt.pos);
+        const tNorm = Math.hypot(xPt.vel, yPt.vel);
+        const norm = Math.hypot(xPt.pos, yPt.pos);
         const proj = Math.abs(xPt.pos * xPt.vel + yPt.pos * yPt.vel) / norm;
-        const lastNorm = Math.sqrt(zPt.vel * zPt.vel + proj * proj);
+        const lastNorm = Math.hypot(zPt.vel, proj);
 
         this.angles[0] = badAtan2(-xPt.vel / tNorm, yPt.vel / tNorm);
         this.angles[1] = badAtan2(zPt.vel / lastNorm, proj / lastNorm);
         vec3.set(this.pos, xPt.pos, yPt.pos, zPt.pos);
 
         // the game computes these derivatives by dividing the change by the frame time
-        this.speed = Math.sqrt(tNorm * tNorm + zPt.vel * zPt.vel);
+        this.speed = Math.hypot(tNorm, zPt.vel);
         this.yawSpeed = (yPt.acc * xPt.vel - xPt.acc * yPt.vel) / (tNorm * tNorm);
     }
 
