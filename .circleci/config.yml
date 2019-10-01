@@ -24,7 +24,7 @@ jobs:
 
       - run: yarn install
 
-      - run: ./node_modules/.bin/parcel build --public-url=./ src/index.html src/embed.html
+      - run: yarn run build
 
       - save_cache:
           paths:
