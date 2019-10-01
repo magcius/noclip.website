@@ -239,7 +239,10 @@ class MultiEmitterCallBack implements JPA.JPAEmitterCallBack {
 
     private setEffectSRT(emitter: JPA.JPABaseEmitter, scale: vec3 | null, rot: mat4 | null, trans: vec3 | null, srtFlags: SRTFlags, isInit: boolean): void {
         if (!!(srtFlags & SRTFlags.T)) {
-            if (!!(srtFlags & SRTFlags.R))
+            // Bizarrely enough, whether rotation for offset is respect seems to differ between setSRTFromHostMtx
+            // and setSRTFromHostSRT. It's always applied in setSRTFromHostMtx, regardless of FlagSRT, and but it
+            // checks FlagSRT in setSRTFromHostSRT... Here, we emulate that by checking whether rot is non-null.
+            if (rot !== null)
                 vec3.transformMat4(scratchVec3c, this.offset, rot!);
             else
                 vec3.copy(scratchVec3c, this.offset);
@@ -280,9 +283,14 @@ class MultiEmitterCallBack implements JPA.JPAEmitterCallBack {
     }
 
     private setSRTFromHostSRT(emitter: JPA.JPABaseEmitter, scale: vec3 | null, rot: vec3 | null, trans: vec3 | null, srtFlags: SRTFlags, isInit: boolean): void {
-        if (!!(srtFlags & SRTFlags.R))
-            computeModelMatrixR(scratchMatrix, rot![0], rot![1], rot![2]);
-        this.setEffectSRT(emitter, scale, scratchMatrix, trans, srtFlags, isInit);
+        let rotMatrix: mat4 | null;
+        if (!!(srtFlags & SRTFlags.R)) {
+            rotMatrix = scratchMatrix;
+            computeModelMatrixR(rotMatrix, rot![0], rot![1], rot![2]);
+        } else {
+            rotMatrix = null;
+        }
+        this.setEffectSRT(emitter, scale, rotMatrix, trans, srtFlags, isInit);
     }
 
     private isFollowSRT(isInit: boolean): SRTFlags {
@@ -313,6 +321,7 @@ class MultiEmitterCallBack implements JPA.JPAEmitterCallBack {
 
     private followSRT(emitter: JPA.JPABaseEmitter, isInit: boolean): void {
         const srtFlags = this.isFollowSRT(isInit);
+
         if (this.hostMtx !== null)
             this.setSRTFromHostMtx(emitter, this.hostMtx, srtFlags, isInit);
         else
