@@ -11,7 +11,7 @@ import { BTIData } from "../render";
 import { LoopMode } from "../j3d";
 import { assertExists } from "../../util";
 import { DrawBufferType, DrawType } from "./NameObj";
-import { connectToScene, calcUpVec, loadBTIData, emitEffect, setEffectEnvColor } from "./Actors";
+import { connectToScene, calcUpVec, loadBTIData, emitEffect, setEffectEnvColor, getCamZdir } from "./Actors";
 import { MathConstants, lerp } from "../../MathHelpers";
 import { GfxRenderInstManager } from "../../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../../viewer";
@@ -184,44 +184,44 @@ class WarpPodPathDrawer {
     private updateStripeBuffer(device: GfxDevice, camera: Camera): void {
         let idx0 = 0, idx1 = (this.points.length * 10);
         for (let i = 0; i < this.points.length - 1; i++) {
-            camera.getWorldForward(scratchVec3a);
-            vec3.sub(scratchVec3b, this.points[i + 1], this.points[i]);
-            vecKillElement(scratchVec3c, scratchVec3b, scratchVec3a);
+            vec3.sub(scratchVec3a, this.points[i + 1], this.points[i]);
+            getCamZdir(scratchVec3b, camera);
+            vecKillElement(scratchVec3c, scratchVec3a, scratchVec3b);
             vec3.normalize(scratchVec3c, scratchVec3c);
 
-            vec3.cross(scratchVec3b, scratchVec3c, scratchVec3a);
-            vec3.normalize(scratchVec3b, scratchVec3b);
-
-            vec3.cross(scratchVec3a, scratchVec3b, scratchVec3c);
+            vec3.cross(scratchVec3a, scratchVec3c, scratchVec3b);
             vec3.normalize(scratchVec3a, scratchVec3a);
+
+            vec3.cross(scratchVec3b, scratchVec3a, scratchVec3c);
+            vec3.normalize(scratchVec3b, scratchVec3b);
 
             normToLength(scratchVec3b, 30);
             normToLength(scratchVec3a, 30);
 
-            const texCoordY = (2.0 * (i / this.points.length)) - 1.0;
+            const texCoordY = Math.abs((2.0 * (i / this.points.length)) - 1.0);
 
-            vec3.add(scratchVec3c, this.points[i], scratchVec3b);
+            vec3.add(scratchVec3c, this.points[i], scratchVec3a);
             this.shadowBufferF32[idx0++] = scratchVec3c[0];
             this.shadowBufferF32[idx0++] = scratchVec3c[1];
             this.shadowBufferF32[idx0++] = scratchVec3c[2];
             this.shadowBufferF32[idx0++] = 0.0;
             this.shadowBufferF32[idx0++] = texCoordY;
 
-            vec3.sub(scratchVec3c, this.points[i], scratchVec3b);
+            vec3.sub(scratchVec3c, this.points[i], scratchVec3a);
             this.shadowBufferF32[idx0++] = scratchVec3c[0];
             this.shadowBufferF32[idx0++] = scratchVec3c[1];
             this.shadowBufferF32[idx0++] = scratchVec3c[2];
             this.shadowBufferF32[idx0++] = 1.0;
             this.shadowBufferF32[idx0++] = texCoordY;
 
-            vec3.add(scratchVec3c, this.points[i], scratchVec3a);
+            vec3.add(scratchVec3c, this.points[i], scratchVec3b);
             this.shadowBufferF32[idx1++] = scratchVec3c[0];
             this.shadowBufferF32[idx1++] = scratchVec3c[1];
             this.shadowBufferF32[idx1++] = scratchVec3c[2];
             this.shadowBufferF32[idx1++] = 0.0;
             this.shadowBufferF32[idx1++] = texCoordY;
 
-            vec3.sub(scratchVec3c, this.points[i], scratchVec3a);
+            vec3.sub(scratchVec3c, this.points[i], scratchVec3b);
             this.shadowBufferF32[idx1++] = scratchVec3c[0];
             this.shadowBufferF32[idx1++] = scratchVec3c[1];
             this.shadowBufferF32[idx1++] = scratchVec3c[2];

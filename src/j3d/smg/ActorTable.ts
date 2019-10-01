@@ -333,15 +333,16 @@ const ActorTable: ActorTableEntry[] = [
     _("AstroOverlookObj",               null),
 
     _("SurpBeltConveyerExGalaxy",       SurprisedGalaxy),
-    _("SurpSnowCapsuleGalaxy",          SurprisedGalaxy),
-    _("SurpSurfingLv2Galaxy",           SurprisedGalaxy),
-    _("SurpCubeBubbleExLv2Galaxy",      SurprisedGalaxy),
-    _("SurpTamakoroExLv2Galaxy",        SurprisedGalaxy),
-    _("SurpPeachCastleFinalGalaxy",     SurprisedGalaxy),
-    _("SurpFishTunnelGalaxy",           SurprisedGalaxy),
+    _("SurpCocoonExGalaxy",             SurprisedGalaxy),
     _("SurpTearDropGalaxy",             SurprisedGalaxy),
     _("SurpTeresaMario2DGalaxy",        SurprisedGalaxy),
+    _("SurpSnowCapsuleGalaxy",          SurprisedGalaxy),
     _("SurpTransformationExGalaxy",     SurprisedGalaxy),
+    _("SurpFishTunnelGalaxy",           SurprisedGalaxy),
+    _("SurpTamakoroExLv2Galaxy",        SurprisedGalaxy),
+    _("SurpSurfingLv2Galaxy",           SurprisedGalaxy),
+    _("SurpCubeBubbleExLv2Galaxy",      SurprisedGalaxy),
+    _("SurpPeachCastleFinalGalaxy",     SurprisedGalaxy),
 
     // Effects
     _("AstroTorchLightRed",             SimpleEffectObj),
@@ -395,6 +396,8 @@ const ActorTable: ActorTableEntry[] = [
     _("OpeningDemoObj",                  null),
     _("NormalEndingDemoObj",             null),
     _("MeetKoopaDemoObj",                null),
+    _("StarReturnDemoStarter",           null),
+    _("GrandStarReturnDemoStarter",      null),
 ];
 
 export function getNameObjTableEntry(objName: string, table: ActorTableEntry[] = ActorTable): ActorTableEntry | null {

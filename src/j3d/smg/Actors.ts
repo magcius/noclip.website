@@ -164,6 +164,12 @@ export function getCamYdir(v: vec3, camera: Camera): void {
     camera.getWorldUp(v);
 }
 
+export function getCamZdir(v: vec3, camera: Camera): void {
+    camera.getWorldForward(v);
+    // SMG uses different Z conventions than noclip.
+    v[2] *= -1;
+}
+
 export function calcSqDistanceToPlayer(actor: LiveActor, camera: Camera, scratch: vec3 = scratchVec3): number {
     getCamPos(scratch, camera);
     return vec3.squaredDistance(actor.translation, scratch);
