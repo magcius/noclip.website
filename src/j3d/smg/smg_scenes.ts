@@ -1775,6 +1775,21 @@ class StageDataHolder {
         return iter;
     }
 
+    public getCommonPathPointInfo(railId: number): [JMapInfoIter, JMapInfoIter] {
+        const commonPathInfo = this.createCsvParser(this.zoneArchive.findFileData(`jmp/path/CommonPathInfo`)!);
+
+        for (let i = 0; i < commonPathInfo.getNumRecords(); i++) {
+            commonPathInfo.setRecord(i);
+            if (commonPathInfo.getValueNumber(`l_id`) === railId)
+                break;
+        }
+
+        const no = commonPathInfo.getValueNumber('no')!;
+        const pointInfo = this.createCsvParser(this.zoneArchive.findFileData(`jmp/path/CommonPathPointInfo.${no}`)!);
+
+        return [commonPathInfo, pointInfo];
+    }
+
     public legacyCreateObjinfo(infoIter: JMapInfoIter, paths: Path[]): ObjInfo {
         const objId = infoIter.getValueNumber('l_id', -1);
         const objName = infoIter.getValueString('name', 'Unknown');

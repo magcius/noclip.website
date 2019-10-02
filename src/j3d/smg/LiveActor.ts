@@ -19,6 +19,7 @@ import { LightType } from "./DrawBuffer";
 import * as RARC from '../../j3d/rarc';
 import * as Viewer from '../../viewer';
 import { assertExists } from "../../util";
+import { RailRider } from "./RailRider";
 
 function setIndirectTextureOverride(modelInstance: BMDModelInstance, sceneTexture: GfxTexture): void {
     const m = modelInstance.getTextureMappingReference("IndDummy");
@@ -218,6 +219,7 @@ export class LiveActor extends NameObj {
     public actorLightCtrl: ActorLightCtrl | null = null;
     public effectKeeper: EffectKeeper | null = null;
     public spine: Spine | null = null;
+    public railRider: RailRider | null = null;
 
     // Technically part of ModelManager.
     public arc: RARC.RARC; // ResourceHolder
@@ -316,6 +318,10 @@ export class LiveActor extends NameObj {
         if (groupName === null && this.modelInstance !== null)
             groupName = this.modelInstance.name;
         this.effectKeeper = new EffectKeeper(sceneObjHolder, this, assertExists(groupName));
+    }
+
+    public initRailRider(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        this.railRider = new RailRider(sceneObjHolder, this, infoIter);
     }
 
     public initNerve(nerve: Nerve): void {
