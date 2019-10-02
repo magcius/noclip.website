@@ -931,7 +931,7 @@ function sampleFloatAnimationTrackSimple(track: AnimationKeyframe[], time: numbe
 interface SimpleModelPlacement {
     modelIndex: number;
     position: vec3;
-    scale?: number;
+    scale?: vec3;
     angles?: vec3;
 }
 
@@ -997,6 +997,9 @@ const enum Vehicle {
     HangGlider = 0,
     RocketBelt = 1,
     Gyrocopter = 2,
+    Cannonball = 3,
+    Skydiving = 4,
+    JumbleHopper = 5,
     Birdman = 6,
 }
 
@@ -1021,21 +1024,23 @@ interface TaskLabel{
 }
 
 const taskClassNames = ["Beginner", "Class A", "Class B", "Pilot"];
+const vehicleNames = ["Hang Glider", "Rocket Belt", "Gyrocopter", "Cannonball", "Skydiving", "Jumble Hopper", "Birdman"];
 
 function simpleTaskName(label: TaskLabel): string {
+    const vehicle = vehicleNames[label.vehicle];
     if (label.vehicle <= Vehicle.Gyrocopter) {
         const taskClass = taskClassNames[label.taskClass];
-        let vehicle = "";
-        if (label.vehicle === Vehicle.HangGlider) {
-            vehicle = "Hang Glider";
-        } else if (label.vehicle === Vehicle.RocketBelt) {
-            vehicle = "Rocket Belt";
-        } else if (label.vehicle === Vehicle.Gyrocopter) {
-            vehicle = "Gyrocopter";
-        }
-        return `${taskClass} ${vehicle} #${label.taskStage + 1}`;
+        return `${vehicle} ${taskClass} #${label.taskStage + 1}`;
     }
-    return `${label.taskClass} ${label.vehicle} ${label.taskStage}`;
+    if (label.vehicle === Vehicle.Cannonball) {
+        return `${vehicle} Level ${label.taskClass + 1} Target #${label.taskStage + 1}`;
+    }
+    if (label.vehicle < Vehicle.Birdman) {
+        assert(label.taskStage === 0);
+        return `${vehicle} Level ${label.taskClass + 1}`;
+    }
+    // not actually displaying birdman tasks
+    return `${vehicle} ${label.taskClass} ${label.taskStage}`;
 }
 
 interface UPWT {
@@ -1088,7 +1093,7 @@ function parseUPWT(file: Pilotwings64FSFile): UPWT {
             const vehicle = view.getUint8(offs + 0x01);
             const taskStage = view.getUint8(offs + 0x02);
             const level = view.getUint8(offs + 0x03);
-            label = {taskClass, vehicle, taskStage, level};
+            label = { taskClass, vehicle, taskStage, level };
             // TODO: understand all the data here
             // ends with object counts
         } else if (file.chunks[i].tag === 'LPAD') {
@@ -1103,9 +1108,9 @@ function parseUPWT(file: Pilotwings64FSFile): UPWT {
                 view.getFloat32(offs + 0x14),
             );
             // not actually used
-            assert(vec3.equals(angles, [0,0,0]));
-            const modelIndex = 0x101 + view.getUint8(offs + 0x2c);
-            landingPad = {modelIndex, position};
+            assert(vec3.equals(angles, [0, 0, 0]));
+            const modelIndex = 0x102 + view.getUint8(offs + 0x2c);
+            landingPad = { modelIndex, position };
         } else if (file.chunks[i].tag === 'THER') {
             while (offs < view.byteLength - 0x28) {
                 const position = vec3.fromValues(
@@ -1114,8 +1119,9 @@ function parseUPWT(file: Pilotwings64FSFile): UPWT {
                     view.getFloat32(offs + 0x08),
                 );
                 const scale = view.getFloat32(offs + 0x0c);
+                const heightScale = view.getFloat32(offs + 0x10);
                 // other info?
-                models.push({ modelIndex: 0x101, position, scale });
+                models.push({ modelIndex: 0x101, position, scale: vec3.fromValues(scale, scale, heightScale) });
                 offs += 0x28;
             }
         } else if (file.chunks[i].tag === 'RNGS') {
@@ -1130,13 +1136,14 @@ function parseUPWT(file: Pilotwings64FSFile): UPWT {
                     view.getFloat32(offs + 0x10),
                     view.getFloat32(offs + 0x14),
                 );
+                vec3.scale(angles, angles, MathConstants.DEG_TO_RAD);
                 // other motion info?
-                const other = view.getUint8(offs + 0x1d);
+                const other = view.getUint8(offs + 0x1d) === 0 ? 0 : 1;
                 const size = view.getUint8(offs + 0x54);
                 const axis = view.getUint8(offs + 0x70);
                 const special = view.getUint8(offs + 0x72);
                 // this is read from a table
-                let modelIndex = 0xd9 + special + 2*other + 4 * size;
+                let modelIndex = 0xd9 + special + 2 * other + 4 * size;
                 if (special > 1) {
                     // goal ring, game skips if special != 3
                     modelIndex = 0xf1;
@@ -1153,7 +1160,7 @@ function parseUPWT(file: Pilotwings64FSFile): UPWT {
                 );
                 const ballType = view.getUint8(offs + 0x20);
                 const scale = view.getFloat32(offs + 0x30);
-                models.push({ modelIndex: 0xf4 + ballType, position, scale });
+                models.push({ modelIndex: 0xf4 + ballType, position, scale: vec3.fromValues(scale, scale, scale) });
                 offs += 0x68;
             }
         } else if (file.chunks[i].tag === 'TARG') {
@@ -1168,6 +1175,7 @@ function parseUPWT(file: Pilotwings64FSFile): UPWT {
                     view.getFloat32(offs + 0x10),
                     view.getFloat32(offs + 0x14),
                 );
+                vec3.scale(angles, angles, MathConstants.DEG_TO_RAD);
                 const type = view.getUint8(offs + 0x18);
                 models.push({ modelIndex: 0xf9 - type, position, angles });
                 offs += 0x20;
@@ -2537,9 +2545,11 @@ function spawnObjectAt(dataHolder: DataHolder, placement: SimpleModelPlacement, 
         obj.syncTaskVisibility(-1); // set to default visibility
     }
     let scale = 1 / uvmdData.uvmd.inverseScale;
-    if (placement.scale)
-        scale *= placement.scale;
     fromTranslationScaleEuler(obj.modelMatrix, placement.position, scale, placement.angles)
+    if (placement.scale) {
+        // additional scaling is relative to default model size
+        mat4.scale(obj.modelMatrix, obj.modelMatrix, placement.scale);
+    }
     return obj;
 }
 
@@ -2996,7 +3006,7 @@ class Pilotwings64SceneDesc implements SceneDesc {
         taskList.sort(taskSort);
         for (let i = 0; i < taskList.length; i++) {
             const upwt = taskList[i];
-            if (isEmptyTask(upwt) || upwt.label.vehicle > Vehicle.Gyrocopter)
+            if (isEmptyTask(upwt))
                 continue;
             renderer.taskLabels.push(upwt.label);
             renderer.strIndexToTask.push(i);
@@ -3008,11 +3018,10 @@ class Pilotwings64SceneDesc implements SceneDesc {
                 const ringModel = dataHolder.uvmdData[ringData.modelIndex];
                 const ringObj = new Ring(ringModel, dataHolder.textureData, ringData.axis);
                 ringObj.taskNumber = i;
-                fromTranslationScaleEuler(ringObj.modelMatrix, ringData.position, 1 / ringModel.uvmd.inverseScale, ringData.angles);
+                fromTranslationScaleEuler(ringObj.modelMatrix, ringData.position, 1 / ringModel.uvmd.inverseScale);
                 renderer.dobjRenderers.push(ringObj);
             }
             if (upwt.landingPad) {
-                console.log(upwt.label)
                 for (let j = 0; j < currUPWL.landingPads.length; j++) {
                     // when a task is chosen, the game finds a nearby inactive pad and replaces its model and flags
                     if (vec3.distance(upwt.landingPad.position, currUPWL.landingPads[j].position) < 100) {
