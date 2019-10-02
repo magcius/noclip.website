@@ -13,7 +13,7 @@ import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { DeviceProgram } from "../Program";
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth, getSortKeyLayer, executeOnPass } from "../gfx/render/GfxRenderer";
 import { fillMatrix4x3, fillMatrix4x4, fillMatrix4x2, fillVec4v, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
-import { mat4, vec3, vec4, quat } from "gl-matrix";
+import { mat4, vec3, vec4 } from "gl-matrix";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget, depthClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { computeViewMatrix } from "../Camera";
@@ -25,6 +25,7 @@ import { Endianness } from "../endian";
 import { DataFetcher } from "../DataFetcher";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { getPointCubic, getPointHermite } from "../Spline";
+import { SingleSelect, Panel, TIME_OF_DAY_ICON, COOL_BLUE_COLOR } from "../ui";
 
 interface Pilotwings64FSFileChunk {
     tag: string;
@@ -927,25 +928,22 @@ function sampleFloatAnimationTrackSimple(track: AnimationKeyframe[], time: numbe
     return getPointHermite(k0.value, k1.value, t0, t1, t);
 }
 
-interface WindObjectParams {
-    position: vec3;
+interface SimpleModelPlacement {
     modelIndex: number;
-}
-
-interface LandingPadParams {
     position: vec3;
-    heading: number;
+    scale?: number;
+    angles?: vec3;
 }
 
 interface UPWL {
-    windObjects: WindObjectParams[];
-    landingPads: LandingPadParams[];
+    windObjects: SimpleModelPlacement[];
+    landingPads: SimpleModelPlacement[];
     bonusStar: vec3;
 }
 
 function parseUPWL(file: Pilotwings64FSFile): UPWL {
-    const windObjects: WindObjectParams[] = [];
-    const landingPads: LandingPadParams[] = [];
+    const windObjects: SimpleModelPlacement[] = [];
+    const landingPads: SimpleModelPlacement[] = [];
     let bonusStar = vec3.create();
 
     for (let i = 0; i < file.chunks.length; i++) {
@@ -980,7 +978,7 @@ function parseUPWL(file: Pilotwings64FSFile): UPWL {
                     view.getFloat32(offs + 0x08),
                 );
                 const heading = view.getFloat32(offs + 0x0c);
-                landingPads.push({ position, heading });
+                landingPads.push({ modelIndex: 0xd4, position, angles: vec3.fromValues(heading, 0, 0) });
                 offs += 0x18;
             }
         } else if (file.chunks[i].tag === 'BNUS') {
@@ -993,6 +991,190 @@ function parseUPWL(file: Pilotwings64FSFile): UPWL {
         }
     }
     return { windObjects, landingPads, bonusStar };
+}
+
+const enum Vehicle {
+    HangGlider = 0,
+    RocketBelt = 1,
+    Gyrocopter = 2,
+    Birdman = 6,
+}
+
+const enum RotationAxis {
+    X = 0x78,
+    Y = 0x79,
+    Z = 0x7A,
+}
+
+interface RingParams {
+    position: vec3;
+    angles: vec3;
+    axis: RotationAxis;
+    modelIndex: number;
+}
+
+interface TaskLabel{
+    taskClass: number;
+    vehicle: Vehicle;
+    taskStage: number;
+    level: number;
+}
+
+const taskClassNames = ["Beginner", "Class A", "Class B", "Pilot"];
+
+function simpleTaskName(label: TaskLabel): string {
+    if (label.vehicle <= Vehicle.Gyrocopter) {
+        const taskClass = taskClassNames[label.taskClass];
+        let vehicle = "";
+        if (label.vehicle === Vehicle.HangGlider) {
+            vehicle = "Hang Glider";
+        } else if (label.vehicle === Vehicle.RocketBelt) {
+            vehicle = "Rocket Belt";
+        } else if (label.vehicle === Vehicle.Gyrocopter) {
+            vehicle = "Gyrocopter";
+        }
+        return `${taskClass} ${vehicle} #${label.taskStage + 1}`;
+    }
+    return `${label.taskClass} ${label.vehicle} ${label.taskStage}`;
+}
+
+interface UPWT {
+    jptx: string;
+    name: string;
+    info: string;
+    label: TaskLabel;
+    models: SimpleModelPlacement[];
+    rings: RingParams[];
+    landingPad?: SimpleModelPlacement;
+}
+
+function isEmptyTask(task: UPWT): boolean {
+    return task.rings.length === 0 && task.models.length === 0 && !task.landingPad;
+}
+
+function taskSort(a: UPWT, b: UPWT): number {
+    if (a.label.taskClass !== b.label.taskClass) {
+        return a.label.taskClass - b.label.taskClass;
+    }
+    if (a.label.vehicle !== b.label.vehicle) {
+        return a.label.vehicle - b.label.vehicle;
+    }
+    return a.label.taskStage - b.label.taskStage;
+}
+
+function parseUPWT(file: Pilotwings64FSFile): UPWT {
+    let jptx = "";
+    let name = "";
+    let info = "";
+    let models: SimpleModelPlacement[] = [];
+    let rings: RingParams[] = [];
+    let label!: TaskLabel;
+    let landingPad: SimpleModelPlacement | undefined;
+    for (let i = 0; i < file.chunks.length; i++) {
+        const view = file.chunks[i].buffer.createDataView();
+
+        let offs = 0;
+        // ignoring TPAD and LSTP for now since they don't change display
+        // could add player models there or something
+
+        if (file.chunks[i].tag === 'JPTX') {
+            jptx = readString(file.chunks[i].buffer, offs + 0x00, file.chunks[i].buffer.byteLength, true);
+        } else if (file.chunks[i].tag === 'INFO') {
+            info = readString(file.chunks[i].buffer, offs + 0x00, file.chunks[i].buffer.byteLength, true);
+        } else if (file.chunks[i].tag === 'NAME') {
+            name = readString(file.chunks[i].buffer, offs + 0x00, file.chunks[i].buffer.byteLength, true);
+        } else if (file.chunks[i].tag === 'COMM') {
+            const taskClass = view.getUint8(offs + 0x00);
+            const vehicle = view.getUint8(offs + 0x01);
+            const taskStage = view.getUint8(offs + 0x02);
+            const level = view.getUint8(offs + 0x03);
+            label = {taskClass, vehicle, taskStage, level};
+            // TODO: understand all the data here
+            // ends with object counts
+        } else if (file.chunks[i].tag === 'LPAD') {
+            const position = vec3.fromValues(
+                view.getFloat32(offs + 0x00),
+                view.getFloat32(offs + 0x04),
+                view.getFloat32(offs + 0x08),
+            );
+            const angles = vec3.fromValues(
+                view.getFloat32(offs + 0x0c),
+                view.getFloat32(offs + 0x10),
+                view.getFloat32(offs + 0x14),
+            );
+            // not actually used
+            assert(vec3.equals(angles, [0,0,0]));
+            const modelIndex = 0x101 + view.getUint8(offs + 0x2c);
+            landingPad = {modelIndex, position};
+        } else if (file.chunks[i].tag === 'THER') {
+            while (offs < view.byteLength - 0x28) {
+                const position = vec3.fromValues(
+                    view.getFloat32(offs + 0x00),
+                    view.getFloat32(offs + 0x04),
+                    view.getFloat32(offs + 0x08),
+                );
+                const scale = view.getFloat32(offs + 0x0c);
+                // other info?
+                models.push({ modelIndex: 0x101, position, scale });
+                offs += 0x28;
+            }
+        } else if (file.chunks[i].tag === 'RNGS') {
+            while (offs < view.byteLength - 0x84) {
+                const position = vec3.fromValues(
+                    view.getFloat32(offs + 0x00),
+                    view.getFloat32(offs + 0x04),
+                    view.getFloat32(offs + 0x08),
+                );
+                const angles = vec3.fromValues(
+                    view.getFloat32(offs + 0x0c),
+                    view.getFloat32(offs + 0x10),
+                    view.getFloat32(offs + 0x14),
+                );
+                // other motion info?
+                const other = view.getUint8(offs + 0x1d);
+                const size = view.getUint8(offs + 0x54);
+                const axis = view.getUint8(offs + 0x70);
+                const special = view.getUint8(offs + 0x72);
+                // this is read from a table
+                let modelIndex = 0xd9 + special + 2*other + 4 * size;
+                if (special > 1) {
+                    // goal ring, game skips if special != 3
+                    modelIndex = 0xf1;
+                }
+                rings.push({ position, angles, axis, modelIndex });
+                offs += 0x84;
+            }
+        } else if (file.chunks[i].tag === 'BALS') {
+            while (offs < view.byteLength) {
+                const position = vec3.fromValues(
+                    view.getFloat32(offs + 0x00),
+                    view.getFloat32(offs + 0x04),
+                    view.getFloat32(offs + 0x08),
+                );
+                const ballType = view.getUint8(offs + 0x20);
+                const scale = view.getFloat32(offs + 0x30);
+                models.push({ modelIndex: 0xf4 + ballType, position, scale });
+                offs += 0x68;
+            }
+        } else if (file.chunks[i].tag === 'TARG') {
+            while (offs < view.byteLength) {
+                const position = vec3.fromValues(
+                    view.getFloat32(offs + 0x00),
+                    view.getFloat32(offs + 0x04),
+                    view.getFloat32(offs + 0x08),
+                );
+                const angles = vec3.fromValues(
+                    view.getFloat32(offs + 0x0c),
+                    view.getFloat32(offs + 0x10),
+                    view.getFloat32(offs + 0x14),
+                );
+                const type = view.getUint8(offs + 0x18);
+                models.push({ modelIndex: 0xf9 - type, position, angles });
+                offs += 0x20;
+            }
+        }
+    }
+    return { jptx, name, info, label, rings, models, landingPad };
 }
 
 function parsePilotwings64FS(buffer: ArrayBufferSlice): Pilotwings64FS {
@@ -1316,7 +1498,8 @@ class ObjectRenderer {
     public modelMatrix = mat4.create();
     public sortKeyBase: number;
     protected partRenderers: MeshRenderer[] = [];
-    private visible = true;
+    protected visible = true;
+    public taskNumber = -1;
 
     constructor(protected model: ModelData, textureData: TextureData[], isEnv?: boolean) {
         this.sortKeyBase = makeSortKey(this.model.uvmd.hasTransparency ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE);
@@ -1327,6 +1510,13 @@ class ObjectRenderer {
         }
 
         assert((model.parts.length + 1) <= ObjectRenderer.jointMatrixScratch.length);
+    }
+
+    public syncTaskVisibility(task: number): boolean {
+        if (this.taskNumber < 0) // just in case
+            return this.visible;
+        this.visible = this.taskNumber === task;
+        return this.visible;
     }
 
     protected calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void {
@@ -2027,6 +2217,19 @@ class BirdmanStar extends ObjectRenderer {
     }
 }
 
+class LandingPad extends ObjectRenderer {
+    public alternates: ObjectRenderer[] = [];
+
+    public syncTaskVisibility(task: number): boolean {
+        this.visible = true;
+        for (let i = 0; i < this.alternates.length; i++) {
+            if (this.alternates[i].syncTaskVisibility(task))
+                this.visible = false;
+        }
+        return this.visible;
+    }
+}
+
 interface LooperParams {
     angularVelocity: number;
     center: vec3;
@@ -2168,10 +2371,7 @@ class Airplane extends DynamicObjectRenderer {
             this.angles[2] = 0;
         }
         vec3.scale(this.pos, this.pos, this.translationScale);
-        mat4.fromTranslation(dst, this.pos);
-        mat4.rotateZ(dst, dst, this.angles[0]);
-        mat4.rotateX(dst, dst, this.angles[1]);
-        mat4.rotateY(dst, dst, this.angles[2]);
+        fromTranslationScaleEuler(dst, this.pos, 1, this.angles);
     }
 }
 
@@ -2237,6 +2437,25 @@ class ChairliftChair extends DynamicObjectRenderer {
     }
 }
 
+class Ring extends ObjectRenderer {
+    constructor(model: ModelData, textureData: TextureData[], private axis: RotationAxis) {
+        super(model, textureData);
+    }
+
+    protected calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void {
+        if (partIndex !== 0)
+            return;
+        const radians = viewerInput.time / 1000;
+        if (this.axis === RotationAxis.X) {
+            mat4.fromXRotation(dst, radians);
+        } else if (this.axis === RotationAxis.Y) {
+            mat4.fromYRotation(dst, radians);
+        } else if (this.axis === RotationAxis.Z) {
+            mat4.fromZRotation(dst, radians);
+        }
+    }
+}
+
 class UVCTData {
     public meshData: MeshData;
 
@@ -2256,8 +2475,9 @@ class DataHolder {
     public uvtr: UVTR[] = [];
     public uvlv: UVLV[] = [];
     public upwl: UPWL[] = [];
-    public gfxRenderCache = new GfxRenderCache(true);
+    public upwt: UPWT[][] = nArray(4, () => []);
     public splineData = new Map<number, SPTH>();
+    public gfxRenderCache = new GfxRenderCache(true);
 
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.textureData.length; i++)
@@ -2293,20 +2513,33 @@ function spawnObject(dataHolder: DataHolder, uvmdIndex: number): ObjectRenderer 
     }
 }
 
-function fromYawTranslationScale(dst: mat4, heading: number, pos: vec3, scale: number): void {
-    mat4.fromRotationTranslationScale(dst,
-        quat.fromValues(0, 0, Math.sin(heading / 2), Math.cos(heading / 2)), // rotation about Z axis
-        pos,
-        nArray(3, () => scale)); // uniform scale
+// helper because I don't feel like convertin these Euler angles to glmatrix's representation
+function fromTranslationScaleEuler(dst: mat4, pos: vec3, scale: number, angles?: vec3): void {
+    mat4.fromTranslation(dst, pos);
+    dst[0] = scale;
+    dst[5] = scale;
+    dst[10] = scale;
+    if (angles) {
+        mat4.rotateZ(dst, dst, angles[0]);
+        mat4.rotateX(dst, dst, angles[1]);
+        mat4.rotateY(dst, dst, angles[2]);
+    }
 }
 
 // helper for those "dynamic" objects that don't really move
-function spawnObjectAt(dataHolder: DataHolder, uvmdIndex: number, pos: vec3, heading: number): ObjectRenderer {
-    const uvmdData = dataHolder.uvmdData[uvmdIndex];
+function spawnObjectAt(dataHolder: DataHolder, placement: SimpleModelPlacement, task?: number): ObjectRenderer {
+    const uvmdData = dataHolder.uvmdData[placement.modelIndex];
     const textureData = dataHolder.textureData;
 
     const obj = new ObjectRenderer(uvmdData, textureData);
-    fromYawTranslationScale(obj.modelMatrix, heading, pos, 1 / uvmdData.uvmd.inverseScale)
+    if (task !== undefined) {
+        obj.taskNumber = task;
+        obj.syncTaskVisibility(-1); // set to default visibility
+    }
+    let scale = 1 / uvmdData.uvmd.inverseScale;
+    if (placement.scale)
+        scale *= placement.scale;
+    fromTranslationScaleEuler(obj.modelMatrix, placement.position, scale, placement.angles)
     return obj;
 }
 
@@ -2567,6 +2800,9 @@ async function fetchDataHolder(dataFetcher: DataFetcher, device: GfxDevice): Pro
         } else if (file.type === 'UPWL') {
             // technically "user files", but lookup is done by relative order
             dataHolder.upwl.push(parseUPWL(file));
+        } else if (file.type === 'UPWT') {
+            const task = parseUPWT(file);
+            dataHolder.upwt[task.label.level].push(task);
         } else if (file.type === 'SPTH') {
             dataHolder.splineData.set(userFileCounter, parseSPTH(file));
         }
@@ -2591,6 +2827,12 @@ class Pilotwings64Renderer implements SceneGfx {
     public skyRenderers: ObjectRenderer[] = [];
     public renderHelper: GfxRenderHelper;
     private renderTarget = new BasicRenderTarget();
+
+    public taskLabels: TaskLabel[] = [];
+    public strIndexToTask: number[] = [];
+
+    private currentTaskIndex: number = -1;
+    private taskSelect: SingleSelect;
 
     constructor(device: GfxDevice, private dataHolder: DataHolder) {
         this.renderHelper = new GfxRenderHelper(device);
@@ -2657,6 +2899,39 @@ class Pilotwings64Renderer implements SceneGfx {
         return skyPassRenderer;
     }
 
+    public setCurrentTask(index: number): void {
+        if (this.currentTaskIndex === index)
+            return;
+
+        this.currentTaskIndex = index;
+        for (let i = 0; i < this.dobjRenderers.length; i++) {
+            this.dobjRenderers[i].syncTaskVisibility(index);
+        }
+    }
+
+    public createPanels(): Panel[] {
+        const taskPanel = new Panel();
+        taskPanel.customHeaderBackgroundColor = COOL_BLUE_COLOR;
+        taskPanel.setTitle(TIME_OF_DAY_ICON, 'Task');
+
+        const taskNames: string[] = ['None'];
+        for (let i = 0; i < this.taskLabels.length; i++) {
+            taskNames.push(simpleTaskName(this.taskLabels[i]));
+        }
+
+        this.taskSelect = new SingleSelect();
+        this.taskSelect.setStrings(taskNames);
+        this.taskSelect.onselectionchange = (strIndex: number) => {
+            const taskNumber = this.strIndexToTask[strIndex - 1];
+            this.setCurrentTask(taskNumber);
+        };
+        this.taskSelect.selectItem(0);
+
+        taskPanel.contents.appendChild(this.taskSelect.elem);
+
+        return [taskPanel];
+    }
+
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy(device);
         this.renderTarget.destroy(device);
@@ -2702,18 +2977,55 @@ class Pilotwings64SceneDesc implements SceneDesc {
         const currUPWL = dataHolder.upwl[this.levelID];
         for (let i = 0; i < currUPWL.windObjects.length; i++) {
             // TODO: move these based on wind
-            const windObject = spawnObjectAt(dataHolder, currUPWL.windObjects[i].modelIndex, currUPWL.windObjects[i].position, 0);
-            renderer.dobjRenderers.push(windObject);
+            renderer.dobjRenderers.push(spawnObjectAt(dataHolder, currUPWL.windObjects[i]));
         }
+        const landingPads: LandingPad[] = [];
         for (let i = 0; i < currUPWL.landingPads.length; i++) {
-            // TODO: select based on mission if we add UPWT
-            const landingPad = spawnObjectAt(dataHolder, i === 0? 0x104 : 0xd4, currUPWL.landingPads[i].position, currUPWL.landingPads[i].heading);
-            renderer.dobjRenderers.push(landingPad);
+            const padData = dataHolder.uvmdData[currUPWL.landingPads[i].modelIndex];
+            const pad = new LandingPad(padData, dataHolder.textureData);
+            fromTranslationScaleEuler(pad.modelMatrix, currUPWL.landingPads[i].position, 1 / padData.uvmd.inverseScale, currUPWL.landingPads[i].angles)
+            renderer.dobjRenderers.push(pad);
+            landingPads.push(pad);
         }
         const starData = dataHolder.uvmdData[0xf2];
         const star = new BirdmanStar(starData, dataHolder.textureData);
-        fromYawTranslationScale(star.modelMatrix, 0, currUPWL.bonusStar, 1 / starData.uvmd.inverseScale)
+        fromTranslationScaleEuler(star.modelMatrix, currUPWL.bonusStar, 1 / starData.uvmd.inverseScale)
         renderer.dobjRenderers.push(star);
+
+        const taskList = dataHolder.upwt[this.levelID];
+        taskList.sort(taskSort);
+        for (let i = 0; i < taskList.length; i++) {
+            const upwt = taskList[i];
+            if (isEmptyTask(upwt) || upwt.label.vehicle > Vehicle.Gyrocopter)
+                continue;
+            renderer.taskLabels.push(upwt.label);
+            renderer.strIndexToTask.push(i);
+            for (let j = 0; j < upwt.models.length; j++) {
+                renderer.dobjRenderers.push(spawnObjectAt(dataHolder, upwt.models[j], i));
+            }
+            for (let j = 0; j < upwt.rings.length; j++) {
+                const ringData = upwt.rings[j];
+                const ringModel = dataHolder.uvmdData[ringData.modelIndex];
+                const ringObj = new Ring(ringModel, dataHolder.textureData, ringData.axis);
+                ringObj.taskNumber = i;
+                fromTranslationScaleEuler(ringObj.modelMatrix, ringData.position, 1 / ringModel.uvmd.inverseScale, ringData.angles);
+                renderer.dobjRenderers.push(ringObj);
+            }
+            if (upwt.landingPad) {
+                console.log(upwt.label)
+                for (let j = 0; j < currUPWL.landingPads.length; j++) {
+                    // when a task is chosen, the game finds a nearby inactive pad and replaces its model and flags
+                    if (vec3.distance(upwt.landingPad.position, currUPWL.landingPads[j].position) < 100) {
+                        currUPWL.landingPads[j].modelIndex = upwt.landingPad.modelIndex;
+                        // the UPWT pad doesn't have the real position, copy from UPWL
+                        const activePad = spawnObjectAt(dataHolder, currUPWL.landingPads[j], i);
+                        renderer.dobjRenderers.push(activePad);
+                        landingPads[j].alternates.push(activePad);
+                        break;
+                    }
+                }
+            }
+        }
 
         return renderer;
     }
