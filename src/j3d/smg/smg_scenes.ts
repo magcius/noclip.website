@@ -547,10 +547,6 @@ interface ObjInfo {
     objArg1: number;
     objArg2: number;
     objArg3: number;
-    moveConditionType: number;
-    rotateSpeed: number;
-    rotateAxis: number;
-    rotateAccelType: number;
     modelMatrix: mat4;
     path: Path | null;
 }
@@ -1022,11 +1018,6 @@ class NoclipLegacyActor extends LiveActor {
     }
 
     public setupAnimations(): void {
-        if (this.objinfo.moveConditionType === 0) {
-            this.rotateSpeed = this.objinfo.rotateSpeed;
-            this.rotateAxis = this.objinfo.rotateAxis;
-        }
-
         const objName = this.objinfo.objName;
         if (objName.startsWith('HoleBeltConveyerParts') && this.objinfo.path) {
             this.modelMatrixAnimator = new RailAnimationMapPart(this.objinfo.path, this.translation);
@@ -1337,9 +1328,6 @@ class SMGSpawner {
             break;
 
         // SMG1.
-        case 'AstroCore':
-            spawnGraph(name, SceneGraphTag.Normal, { bck: 'revival4.bck', brk: 'revival4.brk', btk: 'astrocore.btk' });
-            break;
         case 'Rabbit':
             spawnGraph('TrickRabbit');
             break;
@@ -1794,10 +1782,6 @@ class StageDataHolder {
         const objArg1 = infoIter.getValueNumber('Obj_arg1', -1);
         const objArg2 = infoIter.getValueNumber('Obj_arg2', -1);
         const objArg3 = infoIter.getValueNumber('Obj_arg3', -1);
-        const moveConditionType = infoIter.getValueNumber('MoveConditionType', 0);
-        const rotateSpeed = infoIter.getValueNumber('RotateSpeed', 0);
-        const rotateAccelType = infoIter.getValueNumber('RotateAccelType', 0);
-        const rotateAxis = infoIter.getValueNumber('RotateAxis', 0);
         const pathId: number = infoIter.getValueNumber('CommonPath_ID', -1);
         const path = paths.find((path) => path.l_id === pathId) || null;
         const modelMatrix = mat4.create();
@@ -1811,7 +1795,7 @@ class StageDataHolder {
             rotation[0], rotation[1], rotation[2],
             translation[0], translation[1], translation[2]);
 
-        return { objId, objName, objArg0, objArg1, objArg2, objArg3, moveConditionType, rotateSpeed, rotateAccelType, rotateAxis, modelMatrix, path };
+        return { objId, objName, objArg0, objArg1, objArg2, objArg3, modelMatrix, path };
     }
 
     public legacyParsePaths(): Path[] {

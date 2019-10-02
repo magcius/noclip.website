@@ -290,6 +290,10 @@ export function bindTexChangeAnimation(modelInstance: BMDModelInstance, arc: RAR
     }
 }
 
+export function isEqualStageName(sceneObjHolder: SceneObjHolder, stageName: string): boolean {
+    return sceneObjHolder.scenarioData.getMasterZoneFilename() === stageName;
+}
+
 export function loadBTIData(sceneObjHolder: SceneObjHolder, arc: RARC.RARC, filename: string): BTIData {
     const device = sceneObjHolder.modelCache.device;
     const cache = sceneObjHolder.modelCache.cache;
@@ -607,6 +611,7 @@ class MapObjActor extends LiveActor {
         if (initInfo.rotator)
             this.rotator = new MapPartsRotator(this, infoIter);
 
+        this.tryStartAllAnim(this.objName);
         if (initInfo.colorChangeFrame !== -1)
             bindColorChangeAnimation(this.modelInstance!, this.arc, initInfo.colorChangeFrame);
 
@@ -1069,9 +1074,9 @@ export class Kinopio extends NPCActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, getObjectName(infoIter));
 
-        const objName = this.name;
         this.initDefaultPos(sceneObjHolder, infoIter);
-        this.initModelManagerWithAnm(sceneObjHolder, objName);
+        vec3.set(this.scale, 1.2, 1.2, 1.2);
+        this.initModelManagerWithAnm(sceneObjHolder, 'Kinopio');
         connectToSceneNpc(sceneObjHolder, this);
         this.initLightCtrl(sceneObjHolder);
 
@@ -1127,10 +1132,15 @@ export class Kinopio extends NPCActor {
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
-        super.requestArchives(sceneObjHolder, infoIter);
+        sceneObjHolder.modelCache.requestObjectData('Kinopio');
         const itemGoodsIdx = getJMapInfoArg7(infoIter, -1);
         requestArchivesForNPCGoods(sceneObjHolder, 'Kinopio', itemGoodsIdx);
     }
+}
+
+export class KinopioAstro extends Kinopio {
+    // Toads living on the Astro Observatory. The game has some special casing for the mail toad,
+    // but we don't need that too much here...
 }
 
 export class Peach extends NPCActor {
@@ -1705,6 +1715,14 @@ export class Tico extends NPCActor {
         this.startAction('Wait');
         this.modelInstance!.animationController.phaseFrames += Math.random() * 1000;
     }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        sceneObjHolder.modelCache.requestObjectData('Tico');
+    }
+}
+
+export class TicoAstro extends Tico {
+    // TicoAstro checks current number of green stars against arg2 and shows/hides respectively...
 }
 
 export class Sky extends LiveActor {
@@ -1914,6 +1932,34 @@ export class AstroMapObj extends MapObjActor {
         } else {
             return objName;
         }
+    }
+}
+
+export class AstroCore extends MapObjActor {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        const initInfo = new MapObjActorInitInfo();
+        setupInitInfoSimpleMapObj(initInfo);
+        super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
+
+        // We pick Revival4 because it's the most interesting of the bunch.
+        this.tryStartAllAnim('Revival4');
+    }
+}
+
+export class UFOKinokoUnderConstruction extends MapObjActor {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        const initInfo = new MapObjActorInitInfo();
+        setupInitInfoSimpleMapObj(initInfo);
+        setupInitInfoColorChangeArg0(initInfo, infoIter);
+        setupInitInfoTextureChangeArg1(initInfo, infoIter);
+        // Original actor tests isUFOKinokoBeforeConstruction() / isUFOKinokoUnderConstruction()
+        // to determine which model to show. Here, we assume the player has unlocked the relevant flag...
+        initInfo.setupModelName('UFOKinokoLandingAstro');
+        super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        sceneObjHolder.modelCache.requestObjectData('UFOKinokoLandingAstro');
     }
 }
 

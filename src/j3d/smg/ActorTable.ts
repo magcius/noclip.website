@@ -2,7 +2,7 @@
 import * as RARC from '../rarc';
 
 import { NameObjFactory, SceneObjHolder } from "./smg_scenes";
-import { Kinopio, TicoComet, EarthenPipe, StarPiece, CollapsePlane, BlackHole, Peach, PenguinRacer, Coin, Penguin, SimpleEffectObj, EffectObjR1000F50, GCaptureTarget, FountainBig, AstroEffectObj, AstroCountDownPlate, Butler, Rosetta, Tico, Sky, Air, ShootingStar, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObj10x10x10SyncClipping, AstroMapObj, EffectObjR100F50SyncClipping, PriorDrawAir, BlueChip, YellowChip, PeachCastleGardenPlanet, SimpleMapObj, CrystalCage, PlanetMap, HatchWaterPlanet, RotateMoveObj, LavaSteam, SignBoard, WoodBox, EffectObjR500F50, SurprisedGalaxy, SuperSpinDriverYellow, SuperSpinDriverGreen, SuperSpinDriverPink } from "./Actors";
+import { Kinopio, TicoComet, EarthenPipe, StarPiece, CollapsePlane, BlackHole, Peach, PenguinRacer, Coin, Penguin, SimpleEffectObj, EffectObjR1000F50, GCaptureTarget, FountainBig, AstroEffectObj, AstroCountDownPlate, Butler, Rosetta, Tico, Sky, Air, ShootingStar, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObj10x10x10SyncClipping, AstroMapObj, EffectObjR100F50SyncClipping, PriorDrawAir, BlueChip, YellowChip, PeachCastleGardenPlanet, SimpleMapObj, CrystalCage, PlanetMap, HatchWaterPlanet, RotateMoveObj, LavaSteam, SignBoard, WoodBox, EffectObjR500F50, SurprisedGalaxy, SuperSpinDriverYellow, SuperSpinDriverGreen, SuperSpinDriverPink, AstroCore, TicoAstro, UFOKinokoUnderConstruction, KinopioAstro } from "./Actors";
 import { OceanBowl } from "./OceanBowl";
 import { JMapInfoIter, createCsvParser } from "./JMapInfo";
 import { WarpPod } from './WarpPod';
@@ -21,6 +21,7 @@ const ActorTable: ActorTableEntry[] = [
     // NPCs
     _("Butler",                         Butler),
     _("Kinopio",                        Kinopio),
+    _("KinopioAstro",                   KinopioAstro),
     _("Peach",                          Peach),
     _("Penguin",                        Penguin),
     _("PenguinRacer",                   PenguinRacer),
@@ -28,7 +29,7 @@ const ActorTable: ActorTableEntry[] = [
     _("Rosetta",                        Rosetta),
     _("SignBoard",                      SignBoard),
     _("Tico",                           Tico),
-    _("TicoAstro",                      Tico),
+    _("TicoAstro",                      TicoAstro),
     _("TicoComet",                      TicoComet),
 
     // Misc objects
@@ -311,6 +312,7 @@ const ActorTable: ActorTableEntry[] = [
     _("OceanRingRuinsGearBig",          RotateMoveObj),
 
     // Astro
+    _("AstroCore",                      AstroCore),
     _("AstroCountDownPlate",            AstroCountDownPlate),
     _("AstroDomeEntrance",              AstroMapObj),
     _("AstroStarPlate",                 AstroMapObj),
@@ -331,6 +333,7 @@ const ActorTable: ActorTableEntry[] = [
     _("AstroLibrary",                   AstroMapObj),
     // AstroOverlookObj is a logic actor to show some UI when Mario enters a trigger volume...
     _("AstroOverlookObj",               null),
+    _("UFOKinokoUnderConstruction",     UFOKinokoUnderConstruction),
 
     _("SurpBeltConveyerExGalaxy",       SurprisedGalaxy),
     _("SurpCocoonExGalaxy",             SurprisedGalaxy),
