@@ -151,7 +151,7 @@ class MaterialInstance {
     private static translateSampler(device: GfxDevice, cache: GfxRenderCache, sampler: Sampler): GfxSampler {
         return cache.createSampler(device, {
             minFilter: GfxTexFilterMode.BILINEAR,
-            magFilter: GfxTexFilterMode.LINEAR,
+            magFilter: GfxTexFilterMode.BILINEAR,
             mipFilter: GfxMipFilterMode.LINEAR,
             wrapS: translateWrapModeGfx(sampler.wrapS),
             wrapT: translateWrapModeGfx(sampler.wrapT),
