@@ -1021,6 +1021,7 @@ interface TaskLabel{
     vehicle: Vehicle;
     taskStage: number;
     level: number;
+    weather: number;
 }
 
 const taskClassNames = ["Beginner", "Class A", "Class B", "Pilot"];
@@ -1093,7 +1094,8 @@ function parseUPWT(file: Pilotwings64FSFile): UPWT {
             const vehicle = view.getUint8(offs + 0x01);
             const taskStage = view.getUint8(offs + 0x02);
             const level = view.getUint8(offs + 0x03);
-            label = { taskClass, vehicle, taskStage, level };
+            const weather = view.getUint8(offs + 0x08);
+            label = { taskClass, vehicle, taskStage, level, weather };
             // TODO: understand all the data here
             // ends with object counts
         } else if (file.chunks[i].tag === 'LPAD') {
@@ -1183,6 +1185,86 @@ function parseUPWT(file: Pilotwings64FSFile): UPWT {
         }
     }
     return { jptx, name, info, label, rings, models, landingPad };
+}
+
+interface UVEN {
+    skyboxModel?: number;
+    skyboxFlags?: number;
+    oceanModel?: number;
+    oceanFlags?: number;
+    clearColor: vec4;
+    fogColor: vec4;
+    otherColor: vec4;
+}
+
+function parseUVEN_Chunk(chunk: Pilotwings64FSFileChunk): UVEN {
+    const view = chunk.buffer.createDataView();
+    const modelCount = view.getUint8(0x00);
+    let skyboxModel: number | undefined;
+    let skyboxFlags: number | undefined;
+    let oceanModel: number | undefined;
+    let oceanFlags: number | undefined;
+    let offs = 0x01;
+    if (modelCount == 2) {
+        skyboxModel = view.getUint16(offs + 0x00);
+        skyboxFlags = view.getUint8(offs + 0x02);
+        offs += 0x03;
+    }
+    if (modelCount > 0) {
+        oceanModel = view.getUint16(offs + 0x00);
+        oceanFlags = view.getUint8(offs + 0x02);
+        offs += 0x03;
+    }
+    const clearColor = vec4.fromValues(
+        view.getUint8(offs + 0x00)/0xff,
+        view.getUint8(offs + 0x01)/0xff,
+        view.getUint8(offs + 0x02)/0xff,
+        view.getUint8(offs + 0x03)/0xff,
+    );
+    const fogColor = vec4.fromValues(
+        view.getUint8(offs + 0x04)/0xff,
+        view.getUint8(offs + 0x05)/0xff,
+        view.getUint8(offs + 0x06)/0xff,
+        view.getUint8(offs + 0x07)/0xff,
+    );
+    const otherColor = vec4.fromValues(
+        view.getUint8(offs + 0x08)/0xff,
+        view.getUint8(offs + 0x09)/0xff,
+        view.getUint8(offs + 0x0a)/0xff,
+        view.getUint8(offs + 0x0b)/0xff,
+    );
+    return {skyboxModel, skyboxFlags, oceanModel, oceanFlags, clearColor, fogColor, otherColor};
+}
+
+function parseUVEN(file: Pilotwings64FSFile): UVEN[] {
+    const environments: UVEN[] = [];
+    for (let i = 0; i < file.chunks.length; i++) {
+        environments.push(parseUVEN_Chunk(file.chunks[i]));
+    }
+    return environments;
+}
+
+type UVTP = Map<number, number>;
+
+function parseUVTP_Chunk(chunk: Pilotwings64FSFileChunk): UVTP {
+    const palette = new Map<number, number>();
+    const view = chunk.buffer.createDataView();
+    const entryCount = view.getUint16(0x00);
+    let offs = 0x02;
+    for (let i = 0; i < entryCount; i++) {
+        const original = view.getUint16(offs + 0x00);
+        const swap = view.getUint16(offs + 0x02);
+        palette.set(original, swap);
+        offs += 0x04;
+    }
+    return palette;
+}
+
+function parseUVTP(file: Pilotwings64FSFile): UVTP[] {
+    const palettes: Map<number, number>[] = [];
+    for (let i = 0; i < file.chunks.length; i++)
+        palettes.push(parseUVTP_Chunk(file.chunks[i]));
+    return palettes;
 }
 
 function parsePilotwings64FS(buffer: ArrayBufferSlice): Pilotwings64FS {
@@ -1509,11 +1591,11 @@ class ObjectRenderer {
     protected visible = true;
     public taskNumber = -1;
 
-    constructor(protected model: ModelData, textureData: TextureData[], isEnv?: boolean) {
+    constructor(protected model: ModelData, texturePalette: TexturePalette, isEnv?: boolean) {
         this.sortKeyBase = makeSortKey(this.model.uvmd.hasTransparency ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE);
 
         for (let i = 0; i < model.parts.length; i++) {
-            const partRenderer = new MeshRenderer(model.parts[i], textureData, isEnv, this.model.uvmd.lods[0].billboard);
+            const partRenderer = new MeshRenderer(model.parts[i], texturePalette, isEnv, this.model.uvmd.lods[0].billboard);
             this.partRenderers.push(partRenderer);
         }
 
@@ -1572,9 +1654,9 @@ class MeshRenderer {
     private materials: MaterialInstance[] = [];
     private visible = true;
 
-    constructor(private meshData: MeshData, textureData: TextureData[], isEnv?: boolean, isBillboard?: boolean) {
+    constructor(private meshData: MeshData, texturePalette: TexturePalette, isEnv?: boolean, isBillboard?: boolean) {
         for (let material of meshData.mesh.materials)
-            this.materials.push(new MaterialInstance(material, textureData, isEnv, isBillboard));
+            this.materials.push(new MaterialInstance(material, texturePalette, isEnv, isBillboard));
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, jointMatrix: mat4): void {
@@ -1951,19 +2033,19 @@ class MaterialInstance {
     private stateFlags: Partial<GfxMegaStateDescriptor>;
     private visible = true;
 
-    constructor(private materialData: MaterialData, textureData: TextureData[], isEnv?: boolean, private isBillboard?: boolean) {
+    constructor(private materialData: MaterialData, texturePalette: TexturePalette, isEnv?: boolean, private isBillboard?: boolean) {
         this.hasTexture = materialData.textureIndex < 0x0FFF;
         let modeInfo = materialData.rspModeInfo;
         if (!!isEnv)
             modeInfo &= ~PilotwingsRSPFlag.ZBUFFER;
         if (this.hasTexture) {
-            const mainTextureData = textureData[materialData.textureIndex];
+            const mainTextureData = texturePalette.get(materialData.textureIndex);
             this.uvtx = mainTextureData.uvtx;
             mainTextureData.fillTextureMapping(this.textureMappings[0]);
             if (this.uvtx.pairedIndex !== undefined) {
                 this.hasPairedTexture = true;
                 assert(this.uvtx.levels.length > 1);
-                textureData[this.uvtx.pairedIndex].fillTextureMapping(this.textureMappings[1]);
+                texturePalette.get(this.uvtx.pairedIndex).fillTextureMapping(this.textureMappings[1]);
                 if (this.uvtx.levels[0].usesPaired) {
                     // the paired texture is actually loaded into the first tile,
                     // so swap the underlying texture and sampler
@@ -2210,8 +2292,8 @@ class OilDerrick extends ObjectRenderer {
 class DynamicObjectRenderer extends ObjectRenderer {
     protected translationScale: number;
 
-    constructor(model: ModelData, textureData: TextureData[]) {
-        super(model, textureData);
+    constructor(model: ModelData, texturePalette: TexturePalette) {
+        super(model, texturePalette);
         const modelScale = 1/model.uvmd.inverseScale;
         mat4.scale(this.modelMatrix, this.modelMatrix, [modelScale, modelScale, modelScale]);
         this.translationScale = model.uvmd.inverseScale;
@@ -2257,8 +2339,8 @@ class Looper extends DynamicObjectRenderer {
     private bounceHeight = 0;
     private bounceVelocity = 0;
 
-    constructor(model: ModelData, textureData: TextureData[], private params: LooperParams) {
-        super(model, textureData);
+    constructor(model: ModelData, texturePalette: TexturePalette, private params: LooperParams) {
+        super(model, texturePalette);
         if (params.bounce)
             this.bounceVelocity = params.bounce.maxVelocity;
         vec3.scale(this.params.center, this.params.center, this.translationScale);
@@ -2320,8 +2402,8 @@ class Airplane extends DynamicObjectRenderer {
     private yawSpeed = 0;
     private oldPitch = 0;
 
-    constructor(model: ModelData, textureData: TextureData[], private spline: SPTH, private params: AirplaneParams) {
-        super(model, textureData);
+    constructor(model: ModelData, texturePalette: TexturePalette, private spline: SPTH, private params: AirplaneParams) {
+        super(model, texturePalette);
         this.fly(params.pathLength);
         this.pos[2] = params.minHeight;
         this.angles[2] = 0;
@@ -2388,8 +2470,8 @@ class ChairliftChair extends DynamicObjectRenderer {
 
     private pos = vec3.create();
 
-    constructor(model: ModelData, textureData: TextureData[], private spline: SPTH, private offset: number) {
-        super(model, textureData);
+    constructor(model: ModelData, texturePalette: TexturePalette, private spline: SPTH, private offset: number) {
+        super(model, texturePalette);
         assert(tracksMatch(spline.xTrack, spline.yTrack));
         assert(tracksMatch(spline.xTrack, spline.zTrack));
     }
@@ -2446,8 +2528,8 @@ class ChairliftChair extends DynamicObjectRenderer {
 }
 
 class Ring extends ObjectRenderer {
-    constructor(model: ModelData, textureData: TextureData[], private axis: RotationAxis) {
-        super(model, textureData);
+    constructor(model: ModelData, texturePalette: TexturePalette, private axis: RotationAxis) {
+        super(model, texturePalette);
     }
 
     protected calcAnimJoint(dst: mat4, viewerInput: ViewerRenderInput, partIndex: number): void {
@@ -2484,6 +2566,8 @@ class DataHolder {
     public uvlv: UVLV[] = [];
     public upwl: UPWL[] = [];
     public upwt: UPWT[][] = nArray(4, () => []);
+    public uven: UVEN[] = [];
+    public uvtp: UVTP[] = [];
     public splineData = new Map<number, SPTH>();
     public gfxRenderCache = new GfxRenderCache(true);
 
@@ -2498,26 +2582,25 @@ class DataHolder {
     }
 }
 
-function spawnEnvObject(dataHolder: DataHolder, uvmdIndex: number): ObjectRenderer {
-    const uvmdData = dataHolder.uvmdData[uvmdIndex];
-    const textureData = dataHolder.textureData;
-    return new ObjectRenderer(uvmdData, textureData, true);
+function spawnEnvObject(modelBuilder: ModelBuilder, uvmdIndex: number): ObjectRenderer {
+    const uvmdData = modelBuilder.uvmdData[uvmdIndex];
+    return new ObjectRenderer(uvmdData, modelBuilder.palette, true);
 }
 
-function spawnObject(dataHolder: DataHolder, uvmdIndex: number): ObjectRenderer {
-    const uvmdData = dataHolder.uvmdData[uvmdIndex];
-    const textureData = dataHolder.textureData;
+function spawnObject(builder: ModelBuilder, uvmdIndex: number): ObjectRenderer {
+    const uvmdData = builder.uvmdData[uvmdIndex];
+    const texturePalette = builder.palette;
 
     if (uvmdIndex === 0x09) {
-        return new Carousel(uvmdData, textureData);
+        return new Carousel(uvmdData, texturePalette);
     } else if (uvmdIndex === 0x0C) {
-        return new FerrisWheel(uvmdData, textureData);
+        return new FerrisWheel(uvmdData, texturePalette);
     } else if (uvmdIndex === 0x0D) {
-        return new WaterWheel(uvmdData, textureData);
+        return new WaterWheel(uvmdData, texturePalette);
     } else if (uvmdIndex === 0x54) {
-        return new OilDerrick(uvmdData, textureData);
+        return new OilDerrick(uvmdData, texturePalette);
     } else {
-        return new ObjectRenderer(uvmdData, textureData);
+        return new ObjectRenderer(uvmdData, texturePalette);
     }
 }
 
@@ -2535,11 +2618,10 @@ function fromTranslationScaleEuler(dst: mat4, pos: vec3, scale: number, angles?:
 }
 
 // helper for those "dynamic" objects that don't really move
-function spawnObjectAt(dataHolder: DataHolder, placement: SimpleModelPlacement, task?: number): ObjectRenderer {
-    const uvmdData = dataHolder.uvmdData[placement.modelIndex];
-    const textureData = dataHolder.textureData;
+function spawnObjectAt(modelBuilder: ModelBuilder, placement: SimpleModelPlacement, task?: number): ObjectRenderer {
+    const uvmdData = modelBuilder.uvmdData[placement.modelIndex];
 
-    const obj = new ObjectRenderer(uvmdData, textureData);
+    const obj = new ObjectRenderer(uvmdData, modelBuilder.palette);
     if (task !== undefined) {
         obj.taskNumber = task;
         obj.syncTaskVisibility(-1); // set to default visibility
@@ -2561,13 +2643,13 @@ class UVCTRenderer {
     public sobjRenderers: ObjectRenderer[] = [];
     private visible = true;
 
-    constructor(dataHolder: DataHolder, private uvctData: UVCTData) {
-        this.meshRenderer = new MeshRenderer(uvctData.meshData, dataHolder.textureData);
+    constructor(modelBuilder: ModelBuilder, private uvctData: UVCTData) {
+        this.meshRenderer = new MeshRenderer(uvctData.meshData, modelBuilder.palette);
 
         const sobjPlacements = this.uvctData.uvct.models;
         for (let i = 0; i < sobjPlacements.length; i++) {
             const placement = sobjPlacements[i];
-            const sobjRenderer = spawnObject(dataHolder, placement.modelIndex);
+            const sobjRenderer = spawnObject(modelBuilder, placement.modelIndex);
             mat4.copy(sobjRenderer.modelMatrix, placement.modelMatrix);
             this.sobjRenderers.push(sobjRenderer);
         }
@@ -2593,11 +2675,11 @@ class UVTRRenderer {
     public uvctRenderers: UVCTRenderer[] = [];
     public modelMatrix = mat4.create();
 
-    constructor(dataHolder: DataHolder, private uvtrChunk: UVTR_Chunk) {
+    constructor(dataHolder: DataHolder, modelBuilder: ModelBuilder, private uvtrChunk: UVTR_Chunk) {
         for (let i = 0; i < this.uvtrChunk.contourPlacements.length; i++) {
             const contourPlacement = this.uvtrChunk.contourPlacements[i];
             const uvctData = dataHolder.uvctData[contourPlacement.contourIndex];
-            const uvctRenderer = new UVCTRenderer(dataHolder, uvctData);
+            const uvctRenderer = new UVCTRenderer(modelBuilder, uvctData);
             mat4.translate(uvctRenderer.modelMatrix, uvctRenderer.modelMatrix, contourPlacement.position);
 
             this.uvctRenderers.push(uvctRenderer);
@@ -2615,18 +2697,13 @@ function chooseFlyers(): number[] {
     return [0x10A, 0x10B, 0x10C, 0x10D, 0x10E, 0x10F];
 }
 
-function getLevelDobjs(levelID: number, dataHolder: DataHolder): ObjectRenderer[] {
+function getLevelDobjs(levelID: number, modelBuilder: ModelBuilder, dataHolder: DataHolder): ObjectRenderer[] {
     const dobjs: ObjectRenderer[] = [];
 
     const flyerIDs = chooseFlyers();
     if (levelID === 0) { // Holiday Island
-        // Ocean plane
-        const oceanPlane = spawnEnvObject(dataHolder, 0x161);
-        oceanPlane.sortKeyBase = makeSortKey(GfxRendererLayer.BACKGROUND);
-        dobjs.push(oceanPlane);
-
         // Boats
-        dobjs.push(new Looper(dataHolder.uvmdData[3], dataHolder.textureData, { // from 2d1dfc
+        dobjs.push(new Looper(modelBuilder.uvmdData[3], modelBuilder.palette, { // from 2d1dfc
             angularVelocity: -4,
             center: vec3.fromValues(-600, -600, 0),
             radius: 300,
@@ -2639,7 +2716,7 @@ function getLevelDobjs(levelID: number, dataHolder: DataHolder): ObjectRenderer[
             },
             // TODO: figure out what's going on with the attached model 0x02
         }));
-        dobjs.push(new Looper(dataHolder.uvmdData[1], dataHolder.textureData, {  // from 2d1e70
+        dobjs.push(new Looper(modelBuilder.uvmdData[1], modelBuilder.palette, {  // from 2d1e70
             angularVelocity: 10,
             center: vec3.fromValues(700,-500,0),
             radius: 300,
@@ -2647,32 +2724,27 @@ function getLevelDobjs(levelID: number, dataHolder: DataHolder): ObjectRenderer[
         }));
 
         // Gliders
-        dobjs.push(new Looper(dataHolder.uvmdData[flyerIDs[0]], dataHolder.textureData, {
+        dobjs.push(new Looper(modelBuilder.uvmdData[flyerIDs[0]], modelBuilder.palette, {
             angularVelocity: 20,
             center: vec3.fromValues(-66, 320, 125),
             radius: 80,
             roll: -15,
         }));
-        dobjs.push(new Looper(dataHolder.uvmdData[flyerIDs[1]], dataHolder.textureData, {
+        dobjs.push(new Looper(modelBuilder.uvmdData[flyerIDs[1]], modelBuilder.palette, {
             angularVelocity: 18,
             center: vec3.fromValues(-66, 320, 135),
             radius: 70,
             roll: -15,
         }));
-        dobjs.push(new Looper(dataHolder.uvmdData[flyerIDs[2]], dataHolder.textureData, {
+        dobjs.push(new Looper(modelBuilder.uvmdData[flyerIDs[2]], modelBuilder.palette, {
             angularVelocity: 18,
             center: vec3.fromValues(-70, 320, 155),
             radius: 90,
             roll: -15,
         }));
     } else if (levelID === 1) { // Crescent Island
-        // Ocean plane
-        const oceanPlane = spawnEnvObject(dataHolder, 0x166);
-        oceanPlane.sortKeyBase = makeSortKey(GfxRendererLayer.BACKGROUND);
-        dobjs.push(oceanPlane);
-
         // Boats
-        dobjs.push(new Looper(dataHolder.uvmdData[3], dataHolder.textureData, { // from 2d1b88
+        dobjs.push(new Looper(modelBuilder.uvmdData[3], modelBuilder.palette, { // from 2d1b88
             angularVelocity: -4,
             center: vec3.fromValues(400, -300, 0),
             radius: 400,
@@ -2685,91 +2757,81 @@ function getLevelDobjs(levelID: number, dataHolder: DataHolder): ObjectRenderer[
                 },
                 // also has 2 attached
         }));
-        dobjs.push(new Looper(dataHolder.uvmdData[0x29], dataHolder.textureData, {  // from 2d1c04
+        dobjs.push(new Looper(modelBuilder.uvmdData[0x29], modelBuilder.palette, {  // from 2d1c04
             angularVelocity: 2,
             center: vec3.fromValues(300, -200, 0),
             radius: 275,
             roll: 0,
         }));
         // Gliders
-        dobjs.push(new Looper(dataHolder.uvmdData[flyerIDs[0]], dataHolder.textureData, {
+        dobjs.push(new Looper(modelBuilder.uvmdData[flyerIDs[0]], modelBuilder.palette, {
             angularVelocity: 10,
             center: vec3.fromValues(-891.24, 602.16, 450),
             radius: 220,
             roll: -15,
         }));
-        dobjs.push(new Looper(dataHolder.uvmdData[flyerIDs[1]], dataHolder.textureData, {
+        dobjs.push(new Looper(modelBuilder.uvmdData[flyerIDs[1]], modelBuilder.palette, {
             angularVelocity: 18,
             center: vec3.fromValues(1100.06, 686.22, 250),
             radius: 70,
             roll: -15,
         }));
-        dobjs.push(new Looper(dataHolder.uvmdData[flyerIDs[2]], dataHolder.textureData, {
+        dobjs.push(new Looper(modelBuilder.uvmdData[flyerIDs[2]], modelBuilder.palette, {
             angularVelocity: 18,
             center: vec3.fromValues(1050.06, 686.22, 265),
             radius: 90,
             roll: -15,
         }));
     } else if (levelID === 2) { // Little States
-        // Ocean plane
-        const oceanPlane = spawnEnvObject(dataHolder, 0x168);
-        oceanPlane.sortKeyBase = makeSortKey(GfxRendererLayer.BACKGROUND);
-        dobjs.push(oceanPlane);
-
-        dobjs.push(new Looper(dataHolder.uvmdData[flyerIDs[0]], dataHolder.textureData, {
+        dobjs.push(new Looper(modelBuilder.uvmdData[flyerIDs[0]], modelBuilder.palette, {
             angularVelocity: 17,
             center: vec3.fromValues(1666.32, -1099.06, 100),
             radius: 30,
             roll: -15,
         }));
-        dobjs.push(new Looper(dataHolder.uvmdData[flyerIDs[1]], dataHolder.textureData, {
+        dobjs.push(new Looper(modelBuilder.uvmdData[flyerIDs[1]], modelBuilder.palette, {
             angularVelocity: 13,
             center: vec3.fromValues(3293.09, 931.19, 150),
             radius: 60,
             roll: -15,
         }));
-        dobjs.push(new Looper(dataHolder.uvmdData[flyerIDs[2]], dataHolder.textureData, {
+        dobjs.push(new Looper(modelBuilder.uvmdData[flyerIDs[2]], modelBuilder.palette, {
             angularVelocity: 18,
             center: vec3.fromValues(-2294.23, -791.48, 150),
             radius: 30,
             roll: -15,
         }));
-        dobjs.push(new Looper(dataHolder.uvmdData[flyerIDs[3]], dataHolder.textureData, {
+        dobjs.push(new Looper(modelBuilder.uvmdData[flyerIDs[3]], modelBuilder.palette, {
             angularVelocity: 18,
             center: vec3.fromValues(-2290.23, -791.48, 170),
             radius: 50,
             roll: -15,
         }));
         // airplanes
-        dobjs.push(new Airplane(dataHolder.uvmdData[0x27], dataHolder.textureData, dataHolder.splineData.get(0x6d)!, {
+        dobjs.push(new Airplane(modelBuilder.uvmdData[0x27], modelBuilder.palette, dataHolder.splineData.get(0x6d)!, {
             pathLength: 120,
             minHeight: 42.4323081970215,
             rollFactor: 150,
         }));
-        dobjs.push(new Airplane(dataHolder.uvmdData[0x1b], dataHolder.textureData, dataHolder.splineData.get(0x6e)!, {
+        dobjs.push(new Airplane(modelBuilder.uvmdData[0x1b], modelBuilder.palette, dataHolder.splineData.get(0x6e)!, {
             pathLength: 120,
             minHeight: 33.757682800293,
             rollFactor: 150,
         }));
     } else if (levelID === 3) { // Everfrost Island
-        // Ocean plane
-        const oceanPlane = spawnEnvObject(dataHolder, 0x169);
-        oceanPlane.sortKeyBase = makeSortKey(GfxRendererLayer.BACKGROUND);
-        dobjs.push(oceanPlane);
-
-        dobjs.push(new Looper(dataHolder.uvmdData[flyerIDs[0]], dataHolder.textureData, {
+        dobjs.push(new Looper(modelBuilder.uvmdData[flyerIDs[0]], modelBuilder.palette, {
             angularVelocity: 7,
             center: vec3.fromValues(80.03, -162.16, 600),
             radius: 250,
             roll: -15,
         }));
-        dobjs.push(new Looper(dataHolder.uvmdData[flyerIDs[1]], dataHolder.textureData, {
+        dobjs.push(new Looper(modelBuilder.uvmdData[flyerIDs[1]], modelBuilder.palette, {
             angularVelocity: 17,
             center: vec3.fromValues(745.26, 1107.29, 150),
             radius: 70,
             roll: -15,
         }));
-        dobjs.push(new Looper(dataHolder.uvmdData[flyerIDs[2]], dataHolder.textureData, {
+        dobjs.push(new Looper(modelBuilder.uvmdData[flyerIDs[2]], modelBuilder.palette, {
             angularVelocity: 17,
             center: vec3.fromValues(800.26, 1107.29, 170),
             radius: 168,
@@ -2777,8 +2839,8 @@ function getLevelDobjs(levelID: number, dataHolder: DataHolder): ObjectRenderer[
         }));
         for (let i = 0; i < 20; i++) {
             dobjs.push(new ChairliftChair(
-                dataHolder.uvmdData[0xa7],
-                dataHolder.textureData,
+                modelBuilder.uvmdData[0xa7],
+                modelBuilder.palette,
                 dataHolder.splineData.get(4)!,
                 5 * i));
         }
@@ -2813,6 +2875,10 @@ async function fetchDataHolder(dataFetcher: DataFetcher, device: GfxDevice): Pro
         } else if (file.type === 'UPWT') {
             const task = parseUPWT(file);
             dataHolder.upwt[task.label.level].push(task);
+        } else if (file.type === 'UVTP') {
+            dataHolder.uvtp = parseUVTP(file);
+        } else if (file.type === 'UVEN') {
+            dataHolder.uven = parseUVEN(file);
         } else if (file.type === 'SPTH') {
             dataHolder.splineData.set(userFileCounter, parseSPTH(file));
         }
@@ -2844,7 +2910,7 @@ class Pilotwings64Renderer implements SceneGfx {
     private currentTaskIndex: number = -1;
     private taskSelect: SingleSelect;
 
-    constructor(device: GfxDevice, private dataHolder: DataHolder) {
+    constructor(device: GfxDevice, private dataHolder: DataHolder, private modelBuilder: ModelBuilder) {
         this.renderHelper = new GfxRenderHelper(device);
     }
 
@@ -2882,7 +2948,7 @@ class Pilotwings64Renderer implements SceneGfx {
 
     // For console runtime debugging.
     private spawnObject(objIndex: number) {
-        const dobjRenderer = spawnObject(this.dataHolder, objIndex);
+        const dobjRenderer = spawnObject(this.modelBuilder, objIndex);
         this.dobjRenderers.push(dobjRenderer);
         return dobjRenderer;
     }
@@ -2950,11 +3016,58 @@ class Pilotwings64Renderer implements SceneGfx {
 
 const uvlvIDList = [1, 3, 5, 10];
 
+// mapping from 2e12b4
+function envIndex(level: number, weather: number): number {
+    const base = 2 + 5 * level + weather; // roughly 5 per level, 0 and 1 aren't used for this
+    if (level === 0) {
+        return weather < 3 ? base : base - 1; // skip 3
+    } else if (level === 1) {
+        return weather < 4 ? base : base - 1; // skip 4
+    } else if (level === 2) { // states has six consecutive UVEN
+        return base;
+    } else if (level === 3) {
+        return weather < 3 ? base + 1 : base; // skip 3, but states has an extra
+    }
+    throw "Unknown level " + level;
+}
+
+// mapping from env_loadtpal (2e1990) combined with envIndex
+function paletteIndex(level: number, weather: number): number {
+    // everfrost always has a palette to make the landing pads snowy
+    if (level === 3) {
+        if (weather === 2)
+            return 4;
+        if (weather === 4)
+            return 3;
+        return 5;
+    }
+    // for other levels, only set palette if night
+    return weather === 5 ? level : -1;
+}
+
+interface ModelBuilder {
+    uvmdData: ModelData[];
+    palette: TexturePalette;
+}
+
+class TexturePalette {
+    constructor(private textureData: TextureData[], public palette?: UVTP) { }
+
+    public get(index: number): TextureData {
+        if (this.palette && this.palette.has(index))
+            return this.textureData[this.palette.get(index)!];
+        return this.textureData[index];
+    }
+}
+
 const pathBase = `Pilotwings64`;
 class Pilotwings64SceneDesc implements SceneDesc {
     public id: string;
-    constructor(public levelID: number, public name: string) {
-        this.id = '' + levelID;
+    constructor(public levelID: number, public weatherConditions: number, public name: string) {
+        if (weatherConditions > 0)
+            this.id = `${levelID}:${weatherConditions}`;
+        else // preserve previous levelID
+            this.id = '' + levelID;
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
@@ -2962,24 +3075,37 @@ class Pilotwings64SceneDesc implements SceneDesc {
             return await fetchDataHolder(context.dataFetcher, device);
         });
 
-        const renderer = new Pilotwings64Renderer(device, dataHolder);
-
         const levelData = dataHolder.uvlv[0].levels[uvlvIDList[this.levelID]];
 
-        // TODO(jstpierre): Dynamically choose sky based on weather / time of day conditions.
-        // This is probably in the UPWT?
-        const sky = spawnObject(dataHolder, 0x160);
-        renderer.skyRenderers.push(sky);
+        const skybox = dataHolder.uven[envIndex(this.levelID, this.weatherConditions)];
+        const activePalette: Map<number, number> | undefined = dataHolder.uvtp[paletteIndex(this.levelID, this.weatherConditions)];
+
+        const modelBuilder = {
+            uvmdData: dataHolder.uvmdData,
+            palette: new TexturePalette(dataHolder.textureData, activePalette),
+        };
+
+        const renderer = new Pilotwings64Renderer(device, dataHolder, modelBuilder);
+
+        if (skybox.skyboxModel !== undefined) {
+            const sky = spawnObject(modelBuilder, skybox.skyboxModel);
+            renderer.skyRenderers.push(sky);
+        }
+        if (skybox.oceanModel !== undefined) {
+            const oceanPlane = spawnEnvObject(modelBuilder, skybox.oceanModel);
+            oceanPlane.sortKeyBase = makeSortKey(GfxRendererLayer.BACKGROUND);
+            renderer.dobjRenderers.push(oceanPlane);
+        }
 
         for (let i = 0; i < levelData.terras.length; i++) {
             const terraIndex = levelData.terras[i];
             const uvtrChunk = dataHolder.uvtr[0].maps[terraIndex];
-            const uvtrRenderer = new UVTRRenderer(dataHolder, uvtrChunk);
+            const uvtrRenderer = new UVTRRenderer(dataHolder, modelBuilder, uvtrChunk);
             mat4.copy(uvtrRenderer.modelMatrix, toNoclipSpace);
             renderer.uvtrRenderers.push(uvtrRenderer);
         }
 
-        const levelDobjs = getLevelDobjs(this.levelID, dataHolder);
+        const levelDobjs = getLevelDobjs(this.levelID, modelBuilder, dataHolder);
         for (let i = 0; i < levelDobjs.length; i++) {
             renderer.dobjRenderers.push(levelDobjs[i]);
         }
@@ -2987,18 +3113,18 @@ class Pilotwings64SceneDesc implements SceneDesc {
         const currUPWL = dataHolder.upwl[this.levelID];
         for (let i = 0; i < currUPWL.windObjects.length; i++) {
             // TODO: move these based on wind
-            renderer.dobjRenderers.push(spawnObjectAt(dataHolder, currUPWL.windObjects[i]));
+            renderer.dobjRenderers.push(spawnObjectAt(modelBuilder, currUPWL.windObjects[i]));
         }
         const landingPads: LandingPad[] = [];
         for (let i = 0; i < currUPWL.landingPads.length; i++) {
             const padData = dataHolder.uvmdData[currUPWL.landingPads[i].modelIndex];
-            const pad = new LandingPad(padData, dataHolder.textureData);
+            const pad = new LandingPad(padData, modelBuilder.palette);
             fromTranslationScaleEuler(pad.modelMatrix, currUPWL.landingPads[i].position, 1 / padData.uvmd.inverseScale, currUPWL.landingPads[i].angles)
             renderer.dobjRenderers.push(pad);
             landingPads.push(pad);
         }
         const starData = dataHolder.uvmdData[0xf2];
-        const star = new BirdmanStar(starData, dataHolder.textureData);
+        const star = new BirdmanStar(starData, modelBuilder.palette);
         fromTranslationScaleEuler(star.modelMatrix, currUPWL.bonusStar, 1 / starData.uvmd.inverseScale)
         renderer.dobjRenderers.push(star);
 
@@ -3011,23 +3137,24 @@ class Pilotwings64SceneDesc implements SceneDesc {
             renderer.taskLabels.push(upwt.label);
             renderer.strIndexToTask.push(i);
             for (let j = 0; j < upwt.models.length; j++) {
-                renderer.dobjRenderers.push(spawnObjectAt(dataHolder, upwt.models[j], i));
+                renderer.dobjRenderers.push(spawnObjectAt(modelBuilder, upwt.models[j], i));
             }
             for (let j = 0; j < upwt.rings.length; j++) {
                 const ringData = upwt.rings[j];
                 const ringModel = dataHolder.uvmdData[ringData.modelIndex];
-                const ringObj = new Ring(ringModel, dataHolder.textureData, ringData.axis);
+                const ringObj = new Ring(ringModel, modelBuilder.palette, ringData.axis);
                 ringObj.taskNumber = i;
-                fromTranslationScaleEuler(ringObj.modelMatrix, ringData.position, 1 / ringModel.uvmd.inverseScale);
+                fromTranslationScaleEuler(ringObj.modelMatrix, ringData.position, 1 / ringModel.uvmd.inverseScale, ringData.angles);
                 renderer.dobjRenderers.push(ringObj);
             }
             if (upwt.landingPad) {
                 for (let j = 0; j < currUPWL.landingPads.length; j++) {
                     // when a task is chosen, the game finds a nearby inactive pad and replaces its model and flags
                     if (vec3.distance(upwt.landingPad.position, currUPWL.landingPads[j].position) < 100) {
-                        currUPWL.landingPads[j].modelIndex = upwt.landingPad.modelIndex;
                         // the UPWT pad doesn't have the real position, copy from UPWL
-                        const activePad = spawnObjectAt(dataHolder, currUPWL.landingPads[j], i);
+                        upwt.landingPad.position = currUPWL.landingPads[j].position;
+                        upwt.landingPad.angles = currUPWL.landingPads[j].angles;
+                        const activePad = spawnObjectAt(modelBuilder, upwt.landingPad, i);
                         renderer.dobjRenderers.push(activePad);
                         landingPads[j].alternates.push(activePad);
                         break;
@@ -3043,10 +3170,30 @@ class Pilotwings64SceneDesc implements SceneDesc {
 const id = 'Pilotwings64';
 const name = "Pilotwings 64";
 const sceneDescs = [
-    new Pilotwings64SceneDesc(0, 'Holiday Island'),
-    new Pilotwings64SceneDesc(1, 'Crescent Island'),
-    new Pilotwings64SceneDesc(2, 'Little States'),
-    new Pilotwings64SceneDesc(3, 'Ever-Frost Island'),
+    'Holiday Island',
+    new Pilotwings64SceneDesc(0, 0, 'Holiday Island (Sunny)'),
+    new Pilotwings64SceneDesc(0, 1, 'Holiday Island (Sunny Part 2)'),
+    new Pilotwings64SceneDesc(0, 2, 'Holiday Island (Cloudy)'),
+    new Pilotwings64SceneDesc(0, 4, 'Holiday Island (Evening)'),
+    new Pilotwings64SceneDesc(0, 5, 'Holiday Island (Starry Night)'),
+    'Crescent Island',
+    new Pilotwings64SceneDesc(1, 0, 'Crescent Island (Sunny)'),
+    new Pilotwings64SceneDesc(1, 1, 'Crescent Island (Sunny Part 2)'),
+    new Pilotwings64SceneDesc(1, 2, 'Crescent Island (Cloudy)'),
+    new Pilotwings64SceneDesc(1, 3, 'Crescent Island (Cloudy Night)'),
+    new Pilotwings64SceneDesc(1, 5, 'Crescent Island (Starry Night)'),
+    'Little States',
+    new Pilotwings64SceneDesc(2, 0, 'Little States (Sunny)'),
+    new Pilotwings64SceneDesc(2, 1, 'Little States (Sunny Part 2)'),
+    new Pilotwings64SceneDesc(2, 2, 'Little States (Cloudy)'),
+    new Pilotwings64SceneDesc(2, 3, 'Little States (Cloudy Night)'),
+    new Pilotwings64SceneDesc(2, 4, 'Little States (Evening)'),
+    new Pilotwings64SceneDesc(2, 5, 'Little States (Starry Night)'),
+    'Ever-Frost Island',
+    new Pilotwings64SceneDesc(3, 0, 'Ever-Frost Island (Sunny)'),
+    new Pilotwings64SceneDesc(3, 1, 'Ever-Frost Island (Sunny Part 2)'),
+    new Pilotwings64SceneDesc(3, 2, 'Ever-Frost Island (Snowing)'),
+    new Pilotwings64SceneDesc(3, 4, 'Ever-Frost Island (Starry Night)'),
 ];
 
 export const sceneGroup: SceneGroup = { id, name, sceneDescs };
