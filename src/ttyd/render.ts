@@ -439,7 +439,7 @@ export class WorldRenderer extends BasicGXRendererHelper {
     private rootMatrix: mat4 = mat4.create();
 
     private backgroundRenderer: BackgroundBillboardRenderer | null = null;
-    private animationController = new AnimationController();
+    private animationController = new AnimationController(60);
     public animationNames: string[];
 
     constructor(device: GfxDevice, private d: TTYDWorld, public textureHolder: TPLTextureHolder, backgroundTextureName: string | null) {
