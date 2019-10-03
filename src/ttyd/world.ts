@@ -781,8 +781,8 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                 index: 1,
 
                 ... setTevOrder(GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO),
-                ... setTevColorIn(GX.CombineColorInput.CPREV, GX.CombineColorInput.TEXC, GX.CombineColorInput.APREV, GX.CombineColorInput.TEXC),
-                ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.TEXA),
+                ... setTevColorIn(GX.CombineColorInput.CPREV, GX.CombineColorInput.TEXC, GX.CombineColorInput.APREV, GX.CombineColorInput.ZERO),
+                ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.ZERO),
                 ... setTevColorOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV),
                 ... setTevAlphaOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV),
 
