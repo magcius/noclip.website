@@ -3,7 +3,7 @@ import * as rw from "librw";
 // @ts-ignore
 import { readFileSync } from "fs";
 import { TextureHolder, LoadedTexture, TextureMapping, TextureBase } from "../TextureHolder";
-import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxInputLayout, GfxInputState, GfxVertexBufferDescriptor, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxProgram, GfxHostAccessPass, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxTextureDimension, GfxRenderPass } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxInputLayout, GfxInputState, GfxVertexBufferDescriptor, GfxBindingLayoutDescriptor, GfxProgram, GfxHostAccessPass, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxTextureDimension, GfxRenderPass, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from "../gfx/helpers/BufferHelpers";
 import { DeviceProgram } from "../Program";
 import { convertToTriangleIndexBuffer, filterDegenerateTriangleIndexBuffer, GfxTopology } from "../gfx/helpers/TopologyHelpers";
@@ -13,9 +13,9 @@ import { computeViewMatrix, Camera } from "../Camera";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { nArray, assertExists } from "../util";
-import { standardFullClearRenderPassDescriptor, BasicRenderTarget, makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
-import { ItemInstance } from "./item";
+import { BasicRenderTarget, makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { GfxRenderInstManager, GfxRendererLayer, makeSortKey } from "../gfx/render/GfxRenderer";
+import { ItemInstance, ObjectDefinition, ObjectFlags } from "./item";
 import { Color, colorNew } from "../Color";
 
 export class RWTexture implements TextureBase {
@@ -120,6 +120,7 @@ class MeshFragData {
     public program: GTA3Program;
     public textureMapping = nArray(1, () => new TextureMapping());
     public baseColor: Color = colorNew(1,1,1,1);
+    public transparent = false;
 
     constructor(device: GfxDevice, textureHolder: RWTextureHolder, header: rw.MeshHeader, mesh: rw.Mesh, public parent: MeshData) {
         const triIdxData = convertToTriangleIndexBuffer(header.tristrip ? GfxTopology.TRISTRIP : GfxTopology.TRIANGLES, assertExists(mesh.indices));
@@ -134,6 +135,7 @@ class MeshFragData {
 
         const col = mesh.material.color;
         if (col) this.baseColor = colorNew(col[0]/0xff, col[1]/0xff, col[2]/0xff, col[3]/0xff);
+        if (this.baseColor.a < 1) this.transparent = true;
 
         const texture = mesh.material.texture;
         if (texture) {
@@ -144,6 +146,8 @@ class MeshFragData {
             }
             const textureMapping = this.textureMapping[0];
             textureHolder.fillTextureMapping(textureMapping, texName);
+
+            if (rw.Raster.formatHasAlpha(texture.raster.format)) this.transparent = true;
 
             this.program.defines.set('USE_TEXTURE', '1');
 
@@ -179,7 +183,7 @@ class MeshData {
     public buffers: (GfxVertexBufferDescriptor | null)[];
     public meshFragData: MeshFragData[] = [];
 
-    constructor(device: GfxDevice, textureHolder: RWTextureHolder, atomic: rw.Atomic) {
+    constructor(device: GfxDevice, textureHolder: RWTextureHolder, atomic: rw.Atomic, public obj: ObjectDefinition) {
         let geom = atomic.geometry;
 
         let positions = assertExists(geom.morphTarget(0).vertices);
@@ -247,7 +251,7 @@ class MeshData {
 class DomainData {
     public meshData = new Map<string, MeshData>();
 
-    public addModel(device: GfxDevice, textureHolder: RWTextureHolder, modelName: string, model: rw.Clump) {
+    public addModel(device: GfxDevice, textureHolder: RWTextureHolder, modelName: string, model: rw.Clump, obj: ObjectDefinition) {
         let node = null;
         for (let lnk = model.atomics.begin; !lnk.is(model.atomics.end); lnk = lnk.next) {
             const atomic = rw.Atomic.fromClump(lnk);
@@ -257,7 +261,7 @@ class DomainData {
                 node = atomic;
             }
         }
-        this.meshData.set(modelName, new MeshData(device, textureHolder, assertExists(node)));
+        this.meshData.set(modelName, new MeshData(device, textureHolder, assertExists(node), obj));
     }
 
     public destroy(device: GfxDevice): void {
@@ -269,8 +273,15 @@ class DomainData {
 const scratchMat4 = mat4.create();
 class MeshFragInstance {
     private gfxProgram: GfxProgram | null = null;
+    public megaStateFlags: Partial<GfxMegaStateDescriptor> = {
+        blendMode: GfxBlendMode.ADD,
+        blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+        blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
+    };
+    public layer = GfxRendererLayer.OPAQUE;
 
     constructor(public meshFragData: MeshFragData) {
+        if (this.meshFragData.transparent) this.layer &= GfxRendererLayer.TRANSLUCENT;
     }
 
     private computeModelMatrix(camera: Camera, modelMatrix: mat4): mat4 {
@@ -288,7 +299,9 @@ class MeshFragInstance {
             this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.meshFragData.program);
 
         renderInst.setGfxProgram(this.gfxProgram);
+        renderInst.setMegaStateFlags(this.megaStateFlags);
         renderInst.setSamplerBindingsFromTextureMappings(this.meshFragData.textureMapping);
+        renderInst.sortKey = makeSortKey(this.layer);
 
         let offs = renderInst.allocateUniformBuffer(GTA3Program.ub_MeshFragParams, 12 + 4);
         const mapped = renderInst.mapUniformBufferF32(GTA3Program.ub_MeshFragParams);
@@ -305,8 +318,16 @@ class MeshInstance {
         mat4.fromRotationTranslationScale(this.modelMatrix, this.item.rotation, this.item.translation, this.item.scale);
         mat4.fromQuat(scratchMat4, quat.fromValues(0.5, 0.5, 0.5, -0.5)); // convert Z-up to Y-up
         mat4.multiply(this.modelMatrix, scratchMat4, this.modelMatrix);
-        for (let i = 0; i < this.meshData.meshFragData.length; i++)
-            this.meshFragInstance[i] = new MeshFragInstance(this.meshData.meshFragData[i])
+        for (let i = 0; i < this.meshData.meshFragData.length; i++) {
+            const frag = new MeshFragInstance(this.meshData.meshFragData[i]);
+            if (meshData.obj.flags & ObjectFlags.NO_ZBUFFER_WRITE) {
+                frag.megaStateFlags.depthWrite = false;
+                frag.layer += 1;
+            } else if (meshData.obj.flags & ObjectFlags.DRAW_LAST) {
+                frag.layer += 2;
+            }
+            this.meshFragInstance[i] = frag;
+        }
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
@@ -342,8 +363,8 @@ export class SceneRenderer {
     private domainData = new DomainData();
     private domainInstance = new DomainInstance(this.domainData);
 
-    public addModel(device: GfxDevice, textureHolder: RWTextureHolder, modelName: string, model: rw.Clump) {
-        this.domainData.addModel(device, textureHolder, modelName, model);
+    public addModel(device: GfxDevice, textureHolder: RWTextureHolder, modelName: string, model: rw.Clump, obj: ObjectDefinition) {
+        this.domainData.addModel(device, textureHolder, modelName, model, obj);
     }
 
     public addItem(item: ItemInstance) {
