@@ -20,7 +20,7 @@ import { Color, colorNew } from "../Color";
 
 export class RWTexture implements TextureBase {
     private texture: rw.Texture;
-    image: rw.Image;
+    image: rw.Image | null;
     name: string;
     width: number;
     height: number;
@@ -33,7 +33,7 @@ export class RWTexture implements TextureBase {
         this.height = this.image.height;
     }
     destroy() {
-        this.image.delete();
+        if (this.image) this.image.delete();
     }
 }
 
@@ -51,7 +51,8 @@ export class RWTextureHolder extends TextureHolder<RWTexture> {
     }
 
     public loadTexture(device: GfxDevice, texture: RWTexture): LoadedTexture | null {
-        if (texture.image.depth < 24) {
+        const image = assertExists(texture.image);
+        if (image.depth < 24) {
             console.error("16-bit texture", texture.name);
             return null;
         }
@@ -63,8 +64,8 @@ export class RWTextureHolder extends TextureHolder<RWTexture> {
 
         const ctx = canvas.getContext('2d')!;
         const buf = ctx.createImageData(texture.width, texture.height);
-        let pixels = assertExists(texture.image.pixels);
-        if (texture.image.depth === 32) {
+        let pixels = assertExists(image.pixels);
+        if (image.depth === 32) {
             buf.data.set(pixels);
         } else {
             for (let i = 0, j = 0; i < buf.data.length;) {
@@ -79,7 +80,7 @@ export class RWTextureHolder extends TextureHolder<RWTexture> {
 
         const gfxTexture = device.createTexture({
             dimension: GfxTextureDimension.n2D,
-            pixelFormat: (texture.image.depth === 32) ? GfxFormat.U8_RGBA : GfxFormat.U8_RGB,
+            pixelFormat: (image.depth === 32) ? GfxFormat.U8_RGBA : GfxFormat.U8_RGB,
             width: texture.width, height: texture.height, depth: 1, numLevels: 1
         });
         const hostAccessPass = device.createHostAccessPass();
@@ -87,9 +88,11 @@ export class RWTextureHolder extends TextureHolder<RWTexture> {
         device.submitPass(hostAccessPass);
 
         const extraInfo = new Map<string, string>();
-        extraInfo.set('Colour depth', texture.image.depth + ' bits');
+        extraInfo.set('Colour depth', image.depth + ' bits');
         const viewerTexture: Viewer.Texture = { name: texture.name, surfaces, extraInfo };
 
+        image.delete();
+        texture.image = null;
         this.textures.push(texture);
 
         return { gfxTexture, viewerTexture };
