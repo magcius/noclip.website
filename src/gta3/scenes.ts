@@ -21,34 +21,6 @@ class GTA3SceneDesc implements Viewer.SceneDesc {
         this.initialised = true;
     }
 
-    private async fetchTXD(id: string, dataFetcher: DataFetcher): Promise<rw.TexDictionary> {
-        let path = (id === 'generic') ? 'gta3/models/generic.txd' : `gta3/models/gta3/${id}.txd`;
-        let buffer = await dataFetcher.fetchData(path);
-        let stream = new rw.StreamMemory(buffer.arrayBuffer);
-        let header = new rw.ChunkHeaderInfo(stream);
-        assert(header.type === rw.PluginID.ID_TEXDICTIONARY);
-        let txd = new rw.TexDictionary(stream);
-        header.delete();
-        stream.delete();
-        return txd;
-    }
-
-    private async fetchDFF(id: string, dataFetcher: DataFetcher): Promise<rw.Clump> {
-        let path = `gta3/models/gta3/${id}.dff`;
-        let buffer = await dataFetcher.fetchData(path);
-
-        let stream = new rw.StreamMemory(buffer.arrayBuffer);
-        let header = new rw.ChunkHeaderInfo(stream);
-
-        assert(header.type === rw.PluginID.ID_CLUMP);
-        let clump = rw.Clump.streamRead(stream);
-
-        header.delete();
-        stream.delete();
-        return clump;
-    }
-
-
     private async fetchIDE(name: string, dataFetcher: DataFetcher): Promise<ItemDefinition> {
         const buffer = await dataFetcher.fetchData(`gta3/data/maps/${name}`);
         const text = getTextDecoder('utf8')!.decode(buffer.arrayBuffer);
@@ -99,16 +71,30 @@ class GTA3SceneDesc implements Viewer.SceneDesc {
             if (!loaded.has(name + '.dff')) {
                 let txdLoaded = loaded.get(txdName + '.txd');
                 if (!txdLoaded) {
-                    txdLoaded = this.fetchTXD(txdName, dataFetcher).then(txd => {
+                    const txdPath = (txdName === 'generic') ? 'gta3/models/generic.txd' : `gta3/models/gta3/${txdName}.txd`;
+                    txdLoaded = dataFetcher.fetchData(txdPath).then(buffer => {
+                        const stream = new rw.StreamMemory(buffer.arrayBuffer);
+                        const header = new rw.ChunkHeaderInfo(stream);
+                        assert(header.type === rw.PluginID.ID_TEXDICTIONARY);
+                        const txd = new rw.TexDictionary(stream);
+                        header.delete();
+                        stream.delete();
                         renderer.textureHolder.addTXD(device, txd);
                         txd.delete();
                     });
                     loaded.set(txdName + '.txd', txdLoaded);
                 }
-                loaded.set(name + '.dff', this.fetchDFF(name, dataFetcher).then(async dff => {
+                const dffPath = `gta3/models/gta3/${name}.dff`;
+                loaded.set(name + '.dff', dataFetcher.fetchData(dffPath).then(async buffer => {
                     await txdLoaded;
-                    sceneRenderer.addModel(device, renderer.textureHolder, name, dff);
-                    dff.delete();
+                    const stream = new rw.StreamMemory(buffer.arrayBuffer);
+                    const header = new rw.ChunkHeaderInfo(stream);
+                    assert(header.type === rw.PluginID.ID_CLUMP);
+                    const clump = rw.Clump.streamRead(stream);
+                    header.delete();
+                    stream.delete();
+                    sceneRenderer.addModel(device, renderer.textureHolder, name, clump);
+                    clump.delete();
                 }));
             }
         }
