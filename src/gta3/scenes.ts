@@ -5,7 +5,7 @@ import { DataFetcher } from '../DataFetcher';
 import { GTA3Renderer, SceneRenderer } from './render';
 import { SceneContext } from '../SceneBase';
 import { getTextDecoder, assert } from '../util';
-import { parseItemPlacement, ItemPlacement, parseItemDefinition, ItemDefinition } from './item';
+import { parseItemPlacement, ItemPlacement, parseItemDefinition, ItemDefinition, ObjectDefinition } from './item';
 import { quat, vec3 } from 'gl-matrix';
 
 class GTA3SceneDesc implements Viewer.SceneDesc {
@@ -45,13 +45,13 @@ class GTA3SceneDesc implements Viewer.SceneDesc {
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         await GTA3SceneDesc.initialise();
         const dataFetcher = context.dataFetcher;
-        const modelTXD = new Map<String, string>();
+        const objects = new Map<String, ObjectDefinition>();
 
         const gta3IDE = await this.fetchIDE('gta3.IDE', dataFetcher);
-        for (const obj of gta3IDE.objects) modelTXD.set(obj.modelName, obj.txdName);
+        for (const obj of gta3IDE.objects) objects.set(obj.modelName, obj);
         if (this.id.match(/\//)) {
             const ide = await this.fetchIDE(this.id.toLowerCase() + '.ide', dataFetcher);
-            for (const obj of ide.objects) modelTXD.set(obj.modelName, obj.txdName);
+            for (const obj of ide.objects) objects.set(obj.modelName, obj);
         }
 
         const renderer = new GTA3Renderer(device);
@@ -62,7 +62,12 @@ class GTA3SceneDesc implements Viewer.SceneDesc {
             const name = item.modelName;
             if (name.startsWith('lod')) continue; // ignore LOD objects
 
-            const txdName = modelTXD.get(name);
+            const obj = objects.get(name);
+            if (!obj) {
+                console.warn('No definition for object', name);
+                continue;
+            }
+            const txdName = obj.txdName;
             if (!txdName) {
                 console.warn('Cannot find textures for model', name);
                 continue;
@@ -93,7 +98,7 @@ class GTA3SceneDesc implements Viewer.SceneDesc {
                     const clump = rw.Clump.streamRead(stream);
                     header.delete();
                     stream.delete();
-                    sceneRenderer.addModel(device, renderer.textureHolder, name, clump);
+                    sceneRenderer.addModel(device, renderer.textureHolder, name, clump, obj);
                     clump.delete();
                 }));
             }

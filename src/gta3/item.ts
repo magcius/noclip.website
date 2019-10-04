@@ -16,6 +16,16 @@ function readItems(text: string, cb: (section: string, line: string) => void) {
     }
 }
 
+// https://gtamods.com/wiki/Item_Definition
+export enum ObjectFlags {
+    DO_NOT_FADE = 0x02,
+    DRAW_LAST = 0x04,
+    ADDITIVE = 0x08,
+    IS_SUBWAY = 0x10,
+    IGNORE_LIGHTING = 0x20,
+    NO_ZBUFFER_WRITE = 0x40,
+}
+
 export interface ObjectDefinition {
     id: number;
     modelName: string;
