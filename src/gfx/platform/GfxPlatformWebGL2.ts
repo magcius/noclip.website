@@ -214,6 +214,8 @@ function translatePrimitiveTopology(topology: GfxPrimitiveTopology): GLenum {
     switch (topology) {
     case GfxPrimitiveTopology.TRIANGLES:
         return WebGL2RenderingContext.TRIANGLES;
+    case GfxPrimitiveTopology.POINTS:
+        return WebGL2RenderingContext.POINTS;
     default:
         throw new Error("Unknown primitive topology mode");
     }

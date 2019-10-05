@@ -55,7 +55,7 @@ export const enum GfxLoadDisposition { CLEAR, LOAD }
 export const enum GfxWrapMode { CLAMP, REPEAT, MIRROR }
 export const enum GfxTexFilterMode { POINT, BILINEAR }
 export const enum GfxMipFilterMode { NO_MIP, NEAREST, LINEAR }
-export const enum GfxPrimitiveTopology { TRIANGLES }
+export const enum GfxPrimitiveTopology { TRIANGLES, POINTS }
 
 export const enum GfxBufferUsage {
     INDEX   = 0x01,

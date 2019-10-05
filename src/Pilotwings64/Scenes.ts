@@ -1,8 +1,7 @@
-
 import {
     GfxDevice, GfxBuffer, GfxInputLayout, GfxInputState, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexAttributeFrequency,
     GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxTextureDimension, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode,
-    GfxSampler, GfxBlendFactor, GfxBlendMode, GfxTexture, GfxMegaStateDescriptor, GfxCullMode, GfxCompareMode,
+    GfxSampler, GfxBlendFactor, GfxBlendMode, GfxTexture, GfxMegaStateDescriptor, GfxCullMode, GfxCompareMode, GfxPrimitiveTopology, GfxRenderPipeline, GfxBufferFrequencyHint,
 } from "../gfx/platform/GfxPlatform";
 import { SceneGfx, ViewerRenderInput, Texture } from "../viewer";
 import { SceneDesc, SceneContext, SceneGroup } from "../SceneBase";
@@ -26,6 +25,7 @@ import { DataFetcher } from "../DataFetcher";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { getPointCubic, getPointHermite } from "../Spline";
 import { SingleSelect, Panel, TIME_OF_DAY_ICON, COOL_BLUE_COLOR } from "../ui";
+import { makeMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 
 interface Pilotwings64FSFileChunk {
     tag: string;
@@ -2546,6 +2546,148 @@ class Ring extends ObjectRenderer {
     }
 }
 
+class SnowProgram extends DeviceProgram {
+    public name = "PW64_Snow";
+    public static a_Position = 0;
+
+    public static ub_SceneParams = 0;
+    public static ub_DrawParams = 1;
+
+    public both = `
+layout(row_major, std140) uniform ub_SceneParams {
+    Mat4x4 u_Projection;
+};
+
+layout(row_major, std140) uniform ub_DrawParams {
+    Mat4x3 u_BoneMatrix;
+};`
+    public vert = `
+layout(location = 0) in vec3 a_Position;
+
+void main() {
+    gl_PointSize = 2.0; // pretty arbitrary, could scale with viewport size or something fancy
+    gl_Position = Mul(_Mat4x4(u_BoneMatrix), vec4(a_Position, 1.0));
+    gl_Position.z -= 100.0; // shift center to 100 in front of camera, technically half of flakeBounds
+    gl_Position = Mul(u_Projection, gl_Position);
+    // game writes snow directly to pixels, with a very basic simple projection
+    // this effectively leads to a slightly larger FOV, so apply the same multiplier here
+    gl_Position = gl_Position * vec4(0.81778, 0.81778, 1.0, 1.0);
+}`;
+    public frag = `
+void main() {
+    gl_FragColor = vec4(1.0); // flakes are just white
+}`;
+}
+
+function wrapValueWithin(x: number, radius: number): number {
+    const modded = x % (2 * radius);
+    if (modded > radius) {
+        return modded - 2 * radius;
+    }
+    if (modded < -radius) {
+        return modded + 2 * radius;
+    }
+    return modded;
+}
+
+class SnowRenderer {
+    public vertexBuffer: GfxBuffer;
+    public inputLayout: GfxInputLayout;
+    public inputState: GfxInputState;
+    public flakePositions: Float32Array;
+    private visible = true;
+    private snowFlakePipeline: GfxRenderPipeline;
+
+    private snowCenter = vec3.create();
+    private deltaScratch = vec3.create();
+
+    private flakeBounds = 100;
+
+    constructor(device: GfxDevice, cache: GfxRenderCache, private flakeCount: number) {
+        this.flakePositions = new Float32Array(3 * flakeCount);
+        // randomize initial positions in a cube
+        for (let i = 0; i < 3 * flakeCount; i++) {
+            this.flakePositions[i] = 2 * this.flakeBounds * (Math.random() - 0.5);
+        }
+
+        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
+            { location: PW64Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0, frequency: GfxVertexAttributeFrequency.PER_VERTEX, },
+        ];
+
+        this.vertexBuffer = device.createBuffer(3 * this.flakeCount, GfxBufferUsage.VERTEX, GfxBufferFrequencyHint.DYNAMIC);
+
+        // no indices, these are just points
+        this.inputLayout = device.createInputLayout({
+            vertexAttributeDescriptors,
+            indexBufferFormat: null,
+        });
+        this.inputState = device.createInputState(this.inputLayout, [{ buffer: this.vertexBuffer, byteOffset: 0, byteStride: 3 * 0x04 }], null);
+
+        this.snowFlakePipeline = cache.createRenderPipeline(device, {
+            bindingLayouts: [{ numUniformBuffers: 2, numSamplers: 0 }],
+            inputLayout: this.inputLayout,
+            megaStateDescriptor: makeMegaState({ depthCompare: GfxCompareMode.ALWAYS }),
+            topology: GfxPrimitiveTopology.POINTS,
+            program: cache.createProgram(device, new SnowProgram()),
+        });
+    }
+
+    private updateFlakes(cameraMatrix: mat4, deltaSeconds: number) {
+        vec3.copy(this.deltaScratch, this.snowCenter);
+        // set new center to 100 pw64 units in front of the camera
+        vec3.set(this.snowCenter, 0, 0, -100 * 50);
+        vec3.transformMat4(this.snowCenter, this.snowCenter, cameraMatrix);
+        // find camera movement in pw64 units
+        // game adds an extra 3x movement to exaggerate the effect
+        vec3.sub(this.deltaScratch, this.snowCenter, this.deltaScratch);
+        vec3.scale(this.deltaScratch, this.deltaScratch, -4 / 50);
+
+        const fall = deltaSeconds * 15;
+
+        // snowflakes outside of the bounding box actually don't get drawn that frame
+        // also the game has some hard-coded checks to stop generating new snowflakes in caves based on bounding boxes
+        for (let i = 0; i < this.flakeCount; i++) {
+            this.flakePositions[3 * i + 0] = wrapValueWithin(this.flakePositions[3 * i + 0] + this.deltaScratch[0], this.flakeBounds);
+            this.flakePositions[3 * i + 1] = wrapValueWithin(this.flakePositions[3 * i + 1] + this.deltaScratch[1] - fall, this.flakeBounds);
+            this.flakePositions[3 * i + 2] = wrapValueWithin(this.flakePositions[3 * i + 2] + this.deltaScratch[2], this.flakeBounds);
+        }
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!this.visible)
+            return;
+
+        const renderInst = renderInstManager.pushRenderInst();
+        renderInst.filterKey = PW64Pass.SNOW;
+
+        const offs = renderInst.allocateUniformBuffer(SnowProgram.ub_DrawParams, 12);
+        const d = renderInst.mapUniformBufferF32(SnowProgram.ub_DrawParams);
+        computeViewMatrix(scratchMatrix, viewerInput.camera);
+        // snowflake coordinates are relative to camera already
+        scratchMatrix[12] = 0;
+        scratchMatrix[13] = 0;
+        scratchMatrix[14] = 0;
+        fillMatrix4x3(d, offs, scratchMatrix);
+
+        this.updateFlakes(viewerInput.camera.worldMatrix, viewerInput.deltaTime / 1000);
+
+        const hostAccessPass = device.createHostAccessPass();
+        hostAccessPass.uploadBufferData(this.vertexBuffer, 0, new Uint8Array(this.flakePositions.buffer));
+        device.submitPass(hostAccessPass);
+
+        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        renderInst.setGfxRenderPipeline(this.snowFlakePipeline);
+        renderInst.drawPrimitives(this.flakeCount, 0);
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyBuffer(this.vertexBuffer);
+        device.destroyInputLayout(this.inputLayout);
+        device.destroyInputState(this.inputState);
+        device.destroyRenderPipeline(this.snowFlakePipeline);
+    }
+}
+
 class UVCTData {
     public meshData: MeshData;
 
@@ -2889,7 +3031,7 @@ async function fetchDataHolder(dataFetcher: DataFetcher, device: GfxDevice): Pro
     return dataHolder;
 }
 
-const enum PW64Pass { SKYBOX, NORMAL }
+const enum PW64Pass { SKYBOX, NORMAL, SNOW }
 
 const toNoclipSpace = mat4.create();
 mat4.fromXRotation(toNoclipSpace, -90 * MathConstants.DEG_TO_RAD);
@@ -2901,6 +3043,7 @@ class Pilotwings64Renderer implements SceneGfx {
     public uvtrRenderers: UVTRRenderer[] = [];
     public dobjRenderers: ObjectRenderer[] = [];
     public skyRenderers: ObjectRenderer[] = [];
+    public snowRenderer: SnowRenderer;
     public renderHelper: GfxRenderHelper;
     private renderTarget = new BasicRenderTarget();
 
@@ -2941,6 +3084,8 @@ class Pilotwings64Renderer implements SceneGfx {
             this.uvtrRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         for (let i = 0; i < this.dobjRenderers.length; i++)
             this.dobjRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput, toNoclipSpace);
+        if (this.snowRenderer)
+            this.snowRenderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender(device, hostAccessPass);
@@ -2970,6 +3115,7 @@ class Pilotwings64Renderer implements SceneGfx {
         const passRenderer = this.renderTarget.createRenderPass(device, depthClearRenderPassDescriptor);
         passRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
         executeOnPass(renderInstManager, device, passRenderer, PW64Pass.NORMAL);
+        executeOnPass(renderInstManager, device, passRenderer, PW64Pass.SNOW);
 
         renderInstManager.resetRenderInsts();
         return skyPassRenderer;
@@ -3093,6 +3239,8 @@ class Pilotwings64SceneDesc implements SceneDesc {
             oceanPlane.sortKeyBase = makeSortKey(GfxRendererLayer.BACKGROUND);
             renderer.dobjRenderers.push(oceanPlane);
         }
+        if (this.levelID === 3 && this.weatherConditions === 2)
+            renderer.snowRenderer = new SnowRenderer(device, renderer.renderHelper.renderInstManager.gfxRenderCache, 800);
 
         for (let i = 0; i < levelData.terras.length; i++) {
             const terraIndex = levelData.terras[i];
