@@ -15,7 +15,7 @@
         ],
         "module": "commonjs",
         "moduleResolution": "node",
-        "outDir": "build/",
+        "outDir": "build/"
     },
-    "include": ["*.ts"],
+    "include": ["*.ts"]
 }

@@ -57,7 +57,7 @@ import * as Scenes_InteractiveExamples from './interactive_examples/Scenes';
 import * as Scenes_Pilotwings64 from './Pilotwings64/Scenes';
 import * as Scenes_Fez from './Fez/Scenes_Fez';
 import * as Scenes_SuperMarioOdyssey from './fres_nx/smo_scenes';
-import * as Scenes_GTA3 from './gta3/scenes';
+import * as Scenes_GTA3 from './GrandTheftAuto3/scenes';
 
 import { DroppedFileSceneDesc } from './Scenes_FileDrops';
 

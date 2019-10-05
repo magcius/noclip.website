@@ -107,7 +107,7 @@ class GTA3Program extends DeviceProgram {
     public static ub_SceneParams = 0;
     public static ub_MeshFragParams = 1;
 
-    private static program = readFileSync('src/gta3/program.glsl', { encoding: 'utf8' });
+    private static program = readFileSync('src/GrandTheftAuto3/program.glsl', { encoding: 'utf8' });
     public both = GTA3Program.program;
 }
 
@@ -406,6 +406,7 @@ export class GTA3Renderer {
     }
 
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        viewerInput.camera.setClipPlanes(1);
         this.renderHelper.pushTemplateRenderInst();
         for (let i = 0; i < this.sceneRenderers.length; i++)
             this.sceneRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);

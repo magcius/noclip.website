@@ -8,13 +8,17 @@ import { getTextDecoder, assert } from '../util';
 import { parseItemPlacement, ItemPlacement, parseItemDefinition, ItemDefinition, ObjectDefinition } from './item';
 import { quat, vec3 } from 'gl-matrix';
 
+const pathBase = `GrandTheftAuto3`;
+
 class GTA3SceneDesc implements Viewer.SceneDesc {
     private static initialised = false;
     constructor(public id: string, public name: string) {
     }
 
     private static async initialise() {
-        if (this.initialised) return;
+        if (this.initialised)
+            return;
+
         await rw.init({ gtaPlugins: true, platform: rw.Platform.PLATFORM_D3D8 });
         rw.Texture.setCreateDummies(true);
         rw.Texture.setLoadTextures(false);
@@ -22,7 +26,7 @@ class GTA3SceneDesc implements Viewer.SceneDesc {
     }
 
     private async fetchIDE(name: string, dataFetcher: DataFetcher): Promise<ItemDefinition> {
-        const buffer = await dataFetcher.fetchData(`gta3/data/maps/${name}`);
+        const buffer = await dataFetcher.fetchData(`${pathBase}/data/maps/${name}`);
         const text = getTextDecoder('utf8')!.decode(buffer.arrayBuffer);
         return parseItemDefinition(text);
     }
@@ -37,7 +41,7 @@ class GTA3SceneDesc implements Viewer.SceneDesc {
                 scale: vec3.fromValues(10,10,10),
             }]
         };
-        const buffer = await dataFetcher.fetchData(`gta3/data/maps/${id}.ipl`);
+        const buffer = await dataFetcher.fetchData(`${pathBase}/data/maps/${id}.ipl`);
         const text = getTextDecoder('utf8')!.decode(buffer.arrayBuffer);
         return parseItemPlacement(text);
     }
@@ -76,7 +80,7 @@ class GTA3SceneDesc implements Viewer.SceneDesc {
             if (!loaded.has(name + '.dff')) {
                 let txdLoaded = loaded.get(txdName + '.txd');
                 if (!txdLoaded) {
-                    const txdPath = (txdName === 'generic') ? 'gta3/models/generic.txd' : `gta3/models/gta3/${txdName}.txd`;
+                    const txdPath = (txdName === 'generic') ? `${pathBase}/models/generic.txd` : `${pathBase}/models/gta3/${txdName}.txd`;
                     txdLoaded = dataFetcher.fetchData(txdPath).then(buffer => {
                         const stream = new rw.StreamMemory(buffer.arrayBuffer);
                         const header = new rw.ChunkHeaderInfo(stream);
@@ -89,7 +93,7 @@ class GTA3SceneDesc implements Viewer.SceneDesc {
                     });
                     loaded.set(txdName + '.txd', txdLoaded);
                 }
-                const dffPath = `gta3/models/gta3/${name}.dff`;
+                const dffPath = `${pathBase}/models/gta3/${name}.dff`;
                 loaded.set(name + '.dff', dataFetcher.fetchData(dffPath).then(async buffer => {
                     await txdLoaded;
                     const stream = new rw.StreamMemory(buffer.arrayBuffer);
@@ -113,7 +117,7 @@ class GTA3SceneDesc implements Viewer.SceneDesc {
     }
 }
 
-const id = "gta3";
+const id = `GrandTheftAuto3`;
 const name = "Grand Theft Auto III";
 const sceneDescs = [
     //new GTA3SceneDesc("test", "Test"),
