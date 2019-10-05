@@ -3064,10 +3064,7 @@ const pathBase = `Pilotwings64`;
 class Pilotwings64SceneDesc implements SceneDesc {
     public id: string;
     constructor(public levelID: number, public weatherConditions: number, public name: string) {
-        if (weatherConditions > 0)
-            this.id = `${levelID}:${weatherConditions}`;
-        else // preserve previous levelID
-            this.id = '' + levelID;
+        this.id = `${levelID}:${weatherConditions}`;
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
