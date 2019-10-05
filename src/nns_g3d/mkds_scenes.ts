@@ -2,7 +2,7 @@
 // Mario Kart DS
 
 import * as Viewer from '../viewer';
-import * as CX from '../compression/CX';
+import * as CX from '../Common/Compression/CX';
 import * as NARC from './narc';
 import * as NSBMD from './nsbmd';
 import * as NSBTA from './nsbta';

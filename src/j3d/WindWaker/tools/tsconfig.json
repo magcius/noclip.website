@@ -8,14 +8,14 @@
         "noImplicitAny": true,
         "strictFunctionTypes": true,
         "lib": [
-            "es2017",
+            "es2017"
         ],
         "types": [
             "node"
         ],
         "module": "commonjs",
         "moduleResolution": "node",
-        "outDir": "build/",
+        "outDir": "build/"
     },
-    "include": ["*.ts"],
+    "include": ["*.ts"]
 }

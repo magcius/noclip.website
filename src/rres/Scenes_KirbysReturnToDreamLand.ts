@@ -3,7 +3,7 @@
 
 import * as Viewer from '../viewer';
 import * as BRRES from './brres';
-import * as CX from '../compression/CX';
+import * as CX from '../Common/Compression/CX';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';

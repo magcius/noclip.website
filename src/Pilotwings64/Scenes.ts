@@ -8,7 +8,7 @@ import { SceneGfx, ViewerRenderInput, Texture } from "../viewer";
 import { SceneDesc, SceneContext, SceneGroup } from "../SceneBase";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { readString, assert, hexzero, nArray } from "../util";
-import { decompress } from "../compression/MIO0";
+import { decompress } from "../Common/Compression/MIO0";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { DeviceProgram } from "../Program";
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth, getSortKeyLayer, executeOnPass } from "../gfx/render/GfxRenderer";

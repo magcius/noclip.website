@@ -2,7 +2,7 @@
 // A decompressor for Haruhiko Okumura's LZSS, with MATCHLEN 18
 // http://read.pudn.com/downloads4/sourcecode/zip/14045/LZSS.C__.htm
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
+import ArrayBufferSlice from "../../ArrayBufferSlice";
 
 export function decompress(srcView: DataView) {
     let uncompressedSize = srcView.getUint32(0x08, true);

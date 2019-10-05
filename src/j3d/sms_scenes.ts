@@ -1,7 +1,7 @@
 
 import * as Viewer from '../viewer';
 import * as UI from '../ui';
-import * as Yaz0 from '../compression/Yaz0';
+import * as Yaz0 from '../Common/Compression/Yaz0';
 import * as RARC from './rarc';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';

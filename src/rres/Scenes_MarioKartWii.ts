@@ -5,7 +5,7 @@ import * as Viewer from '../viewer';
 import * as UI from '../ui';
 import * as BRRES from './brres';
 import * as U8 from './u8';
-import * as Yaz0 from '../compression/Yaz0';
+import * as Yaz0 from '../Common/Compression/Yaz0';
 
 import { assert, readString, hexzero, assertExists } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';

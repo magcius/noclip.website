@@ -6,7 +6,7 @@ import * as UI from '../ui';
 import * as Viewer from '../viewer';
 
 import { BMD, BMT, BTK, BRK, BCK } from './j3d';
-import * as Yaz0 from '../compression/Yaz0';
+import * as Yaz0 from '../Common/Compression/Yaz0';
 import * as RARC from './rarc';
 import { BMDModelInstance, BMDModel } from './render';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';

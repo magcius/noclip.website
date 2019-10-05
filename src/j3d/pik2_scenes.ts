@@ -2,7 +2,7 @@
 import * as Viewer from '../viewer';
 
 import { createModelInstance, BasicRenderer } from './scenes';
-import * as Yaz0 from '../compression/Yaz0';
+import * as Yaz0 from '../Common/Compression/Yaz0';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assertExists } from '../util';

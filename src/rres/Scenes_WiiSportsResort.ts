@@ -2,7 +2,7 @@
 import * as Viewer from "../viewer";
 import { GfxDevice, GfxHostAccessPass } from "../gfx/platform/GfxPlatform";
 import * as U8 from "./u8";
-import * as Yaz0 from "../compression/Yaz0";
+import * as Yaz0 from "../Common/Compression/Yaz0";
 import * as BRRES from "./brres";
 import { assertExists, readString, assert } from "../util";
 import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from "../gx/gx_render";

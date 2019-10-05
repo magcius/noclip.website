@@ -2,7 +2,7 @@
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { DataFetcher, DataFetcherFlags } from '../DataFetcher';
 import * as Viewer from '../viewer';
-import * as Yaz0 from '../compression/Yaz0';
+import * as Yaz0 from '../Common/Compression/Yaz0';
 import * as UI from '../ui';
 
 import { BMD, BMT, BTK, BTI, BRK, BCK, BTI_Texture } from './j3d';

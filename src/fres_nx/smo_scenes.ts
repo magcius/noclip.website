@@ -1,6 +1,6 @@
 
 import * as Viewer from '../viewer';
-import * as Yaz0 from '../compression/Yaz0';
+import * as Yaz0 from '../Common/Compression/Yaz0';
 import * as BYML from '../byml';
 import { DataFetcher, DataFetcherFlags } from '../DataFetcher';
 import * as SARC from './sarc';
@@ -9,7 +9,7 @@ import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { BRTITextureHolder, BasicFRESRenderer, FMDLRenderer, FMDLData } from './render';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assert, assertExists } from '../util';
-import { mat4, quat, vec3 } from 'gl-matrix';
+import { mat4 } from 'gl-matrix';
 import { SceneContext } from '../SceneBase';
 import { computeModelMatrixSRT, MathConstants } from '../MathHelpers';
 

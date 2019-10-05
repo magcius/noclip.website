@@ -4,7 +4,7 @@ import * as CMAB from './cmab';
 import * as CSAB from './csab';
 import * as ZAR from './zar';
 import * as ZSI from './zsi';
-import * as LzS from '../compression/LzS';
+import * as LzS from '../Common/Compression/LzS';
 
 import * as Viewer from '../viewer';
 import * as UI from '../ui';

@@ -4,8 +4,8 @@ import ArrayBufferSlice from "./ArrayBufferSlice";
 import { GfxDevice } from "./gfx/platform/GfxPlatform";
 import { readString } from "./util";
 
-import * as Yaz0 from './compression/Yaz0';
-import * as CX from './compression/CX';
+import * as Yaz0 from './Common/Compression/Yaz0';
+import * as CX from './Common/Compression/CX';
 
 import * as Grezzo3DS from './oot3d/scenes';
 import * as NNS_G3D from './nns_g3d/scenes';

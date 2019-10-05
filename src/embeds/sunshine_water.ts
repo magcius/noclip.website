@@ -13,7 +13,7 @@ import { BMD, BTK, MaterialEntry } from '../j3d/j3d';
 import * as RARC from '../j3d/rarc';
 import { BMDModel, MaterialInstance, MaterialInstanceState, ShapeInstanceState, MaterialData } from '../j3d/render';
 import { SunshineRenderer, SunshineSceneDesc, SMSPass } from '../j3d/sms_scenes';
-import * as Yaz0 from '../compression/Yaz0';
+import * as Yaz0 from '../Common/Compression/Yaz0';
 import { ub_PacketParams, PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, ub_MaterialParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import AnimationController from '../AnimationController';

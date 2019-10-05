@@ -8,7 +8,7 @@ import { DataFetcher } from '../../DataFetcher';
 import * as Viewer from '../../viewer';
 import * as BYML from '../../byml';
 import * as RARC from '../rarc';
-import * as Yaz0 from '../../compression/Yaz0';
+import * as Yaz0 from '../../Common/Compression/Yaz0';
 import * as UI from '../../ui';
 
 import * as DZB from './DZB';

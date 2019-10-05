@@ -17,7 +17,7 @@ import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../../gfx/helpers/RenderTargetHelpers';
 
 import * as GX from '../../gx/gx_enum';
-import * as Yaz0 from '../../compression/Yaz0';
+import * as Yaz0 from '../../Common/Compression/Yaz0';
 import * as BCSV from '../../luigis_mansion/bcsv';
 import * as RARC from '../../j3d/rarc';
 import AnimationController from '../../AnimationController';

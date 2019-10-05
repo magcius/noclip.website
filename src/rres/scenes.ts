@@ -1,5 +1,5 @@
 
-import * as Yaz0 from '../compression/Yaz0';
+import * as Yaz0 from '../Common/Compression/Yaz0';
 import * as BRRES from './brres';
 import * as U8 from './u8';
 import * as Viewer from '../viewer';

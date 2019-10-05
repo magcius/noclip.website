@@ -2,7 +2,7 @@
 // Klonoa
 
 import * as Viewer from '../viewer';
-import * as CX from '../compression/CX';
+import * as CX from '../Common/Compression/CX';
 import * as BRRES from './brres';
 import * as U8 from './u8';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';

@@ -1,7 +1,7 @@
 
 import * as Viewer from '../viewer';
 import * as BRRES from './brres';
-import * as CX from "../compression/CX";
+import * as CX from "../Common/Compression/CX";
 import * as UI from '../ui';
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
