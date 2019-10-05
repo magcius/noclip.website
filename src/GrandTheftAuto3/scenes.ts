@@ -90,7 +90,7 @@ class GTA3SceneDesc implements Viewer.SceneDesc {
                         const txd = new rw.TexDictionary(stream);
                         header.delete();
                         stream.delete();
-                        renderer.textureHolder.addTXD(device, txd);
+                        renderer._textureHolder.addTXD(device, txd);
                         txd.delete();
                     });
                     loaded.set(txdName + '.txd', txdLoaded);
@@ -104,7 +104,7 @@ class GTA3SceneDesc implements Viewer.SceneDesc {
                     const clump = rw.Clump.streamRead(stream);
                     header.delete();
                     stream.delete();
-                    sceneRenderer.addModel(device, renderer.textureHolder, name, clump, obj);
+                    sceneRenderer.addModel(device, renderer._textureHolder, name, clump, obj);
                     clump.delete();
                 }));
             }

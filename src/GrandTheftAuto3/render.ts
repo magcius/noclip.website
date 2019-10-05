@@ -1,3 +1,4 @@
+
 import * as Viewer from "../viewer";
 import * as rw from "librw";
 // @ts-ignore
@@ -16,7 +17,7 @@ import { nArray, assertExists } from "../util";
 import { BasicRenderTarget, makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { GfxRenderInstManager, GfxRendererLayer, makeSortKey } from "../gfx/render/GfxRenderer";
 import { ItemInstance, ObjectDefinition, ObjectFlags } from "./item";
-import { Color, colorNew } from "../Color";
+import { Color, colorNew, White, colorNewCopy } from "../Color";
 
 export class RWTexture implements TextureBase {
     private texture: rw.Texture;
@@ -122,7 +123,7 @@ class MeshFragData {
     public gfxSamplers: GfxSampler[] = [];
     public program: GTA3Program;
     public textureMapping = nArray(1, () => new TextureMapping());
-    public baseColor: Color = colorNew(1,1,1,1);
+    public baseColor = colorNewCopy(White);
     public transparent = false;
 
     constructor(device: GfxDevice, textureHolder: RWTextureHolder, header: rw.MeshHeader, mesh: rw.Mesh, public parent: MeshData) {
@@ -137,8 +138,11 @@ class MeshFragData {
         this.program = new GTA3Program();
 
         const col = mesh.material.color;
-        if (col) this.baseColor = colorNew(col[0]/0xff, col[1]/0xff, col[2]/0xff, col[3]/0xff);
-        if (this.baseColor.a < 1) this.transparent = true;
+        if (col)
+            this.baseColor = colorNew(col[0] / 0xFF, col[1] / 0xFF, col[2] / 0xFF, col[3] / 0xFF);
+
+        if (this.baseColor.a < 1)
+            this.transparent = true;
 
         const texture = mesh.material.texture;
         if (texture) {
@@ -178,6 +182,11 @@ class MeshFragData {
     }
 }
 
+function makeStaticDataBufferFromTypedArray(device: GfxDevice, usage: GfxBufferUsage, v: Float32Array | Uint8Array): GfxBuffer {
+    const slice = new ArrayBufferSlice(v.buffer, v.byteOffset, v.byteLength);
+    return makeStaticDataBufferFromSlice(device, usage, slice);
+}
+
 class MeshData {
     private posBuffer: GfxBuffer;
     private colorBuffer: GfxBuffer | null;
@@ -187,29 +196,26 @@ class MeshData {
     public meshFragData: MeshFragData[] = [];
 
     constructor(device: GfxDevice, textureHolder: RWTextureHolder, atomic: rw.Atomic, public obj: ObjectDefinition) {
-        let geom = atomic.geometry;
+        const geom = atomic.geometry;
 
-        let positions = assertExists(geom.morphTarget(0).vertices);
-        this.posBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.VERTEX,
-            new ArrayBufferSlice(positions.buffer, positions.byteOffset, positions.byteLength));
+        const positions = assertExists(geom.morphTarget(0).vertices);
+        this.posBuffer = makeStaticDataBufferFromTypedArray(device, GfxBufferUsage.VERTEX, positions);
 
-        let normals = geom.morphTarget(0).normals;
+        const normals = geom.morphTarget(0).normals;
         if (normals) {
             // TODO
         }
 
         if (geom.numTexCoordSets) {
-            let texCoords = geom.texCoords(0)!;
-            this.uvBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.VERTEX,
-                new ArrayBufferSlice(texCoords.buffer, texCoords.byteOffset, texCoords.byteLength));
+            const texCoords = geom.texCoords(0)!;
+            this.uvBuffer = makeStaticDataBufferFromTypedArray(device, GfxBufferUsage.VERTEX, texCoords);
         } else {
             this.uvBuffer = null;
         }
 
         let colors = geom.colors;
-        if (colors) {
-            this.colorBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.VERTEX,
-                new ArrayBufferSlice(colors.buffer, colors.byteOffset, colors.byteLength));
+        if (colors !== null) {
+            this.colorBuffer = makeStaticDataBufferFromTypedArray(device, GfxBufferUsage.VERTEX, colors);
         } else {
             this.colorBuffer = null;
         }
@@ -225,9 +231,9 @@ class MeshData {
             indexBufferFormat: GfxFormat.U16_R,
         });
         this.buffers = [
-            { buffer: this.posBuffer, byteStride: 12, byteOffset: 0 },
-            this.colorBuffer ? { buffer: this.colorBuffer, byteStride: 4, byteOffset: 0 } : null,
-            this.uvBuffer    ? { buffer: this.uvBuffer, byteStride: 8, byteOffset: 0 } : null,
+            { buffer: this.posBuffer, byteStride: 0x0C, byteOffset: 0 },
+            this.colorBuffer ? { buffer: this.colorBuffer, byteStride: 0x04, byteOffset: 0 } : null,
+            this.uvBuffer    ? { buffer: this.uvBuffer, byteStride: 0x08, byteOffset: 0 } : null,
         ];
 
         let h = geom.meshHeader;
@@ -251,11 +257,11 @@ class MeshData {
     }
 }
 
-class DomainData {
+class ModelCache {
     public meshData = new Map<string, MeshData>();
 
     public addModel(device: GfxDevice, textureHolder: RWTextureHolder, modelName: string, model: rw.Clump, obj: ObjectDefinition) {
-        let node = null;
+        let node: rw.Atomic | null = null;
         for (let lnk = model.atomics.begin; !lnk.is(model.atomics.end); lnk = lnk.next) {
             const atomic = rw.Atomic.fromClump(lnk);
             const atomicName = atomic.frame.name.toLowerCase();
@@ -281,10 +287,13 @@ class MeshFragInstance {
         blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
         blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
     };
-    public layer = GfxRendererLayer.OPAQUE;
+    public layer: GfxRendererLayer;
 
     constructor(public meshFragData: MeshFragData) {
-        if (this.meshFragData.transparent) this.layer &= GfxRendererLayer.TRANSLUCENT;
+        if (this.meshFragData.transparent)
+            this.layer = GfxRendererLayer.TRANSLUCENT;
+        else
+            this.layer = GfxRendererLayer.OPAQUE;
     }
 
     private computeModelMatrix(camera: Camera, modelMatrix: mat4): mat4 {
@@ -321,6 +330,7 @@ class MeshInstance {
         mat4.fromRotationTranslationScale(this.modelMatrix, this.item.rotation, this.item.translation, this.item.scale);
         mat4.fromQuat(scratchMat4, quat.fromValues(0.5, 0.5, 0.5, -0.5)); // convert Z-up to Y-up
         mat4.multiply(this.modelMatrix, scratchMat4, this.modelMatrix);
+
         for (let i = 0; i < this.meshData.meshFragData.length; i++) {
             const frag = new MeshFragInstance(this.meshData.meshFragData[i]);
             if (meshData.obj.flags & ObjectFlags.NO_ZBUFFER_WRITE) {
@@ -339,22 +349,6 @@ class MeshInstance {
     }
 }
 
-class DomainInstance {
-    public meshInstance: MeshInstance[] = [];
-
-    constructor(public domainData: DomainData) {}
-
-    addItem(item: ItemInstance) {
-        const model = this.domainData.meshData.get(item.modelName);
-        this.meshInstance.push(new MeshInstance(assertExists(model), item));
-    }
-
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        for (let i = 0; i < this.meshInstance.length; i++)
-            this.meshInstance[i].prepareToRender(device, renderInstManager, viewerInput);
-    }
-}
-
 function fillSceneParamsData(d: Float32Array, camera: Camera, offs: number = 0): void {
     offs += fillMatrix4x4(d, offs, camera.projectionMatrix);
 }
@@ -362,16 +356,18 @@ function fillSceneParamsData(d: Float32Array, camera: Camera, offs: number = 0):
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 2, numSamplers: 1 },
 ];
-export class SceneRenderer {
-    private domainData = new DomainData();
-    private domainInstance = new DomainInstance(this.domainData);
 
-    public addModel(device: GfxDevice, textureHolder: RWTextureHolder, modelName: string, model: rw.Clump, obj: ObjectDefinition) {
-        this.domainData.addModel(device, textureHolder, modelName, model, obj);
+export class SceneRenderer {
+    private modelCache = new ModelCache();
+    public meshInstance: MeshInstance[] = [];
+
+    public addModel(device: GfxDevice, textureHolder: RWTextureHolder, modelName: string, model: rw.Clump, obj: ObjectDefinition): void {
+        this.modelCache.addModel(device, textureHolder, modelName, model, obj);
     }
 
-    public addItem(item: ItemInstance) {
-        this.domainInstance.addItem(item);
+    public addItem(item: ItemInstance): void {
+        const model = this.modelCache.meshData.get(item.modelName);
+        this.meshInstance.push(new MeshInstance(assertExists(model), item));
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
@@ -382,23 +378,24 @@ export class SceneRenderer {
         const sceneParamsMapped = template.mapUniformBufferF32(GTA3Program.ub_SceneParams);
         fillSceneParamsData(sceneParamsMapped, viewerInput.camera, offs);
 
-        this.domainInstance.prepareToRender(device, renderInstManager, viewerInput);
+        for (let i = 0; i < this.meshInstance.length; i++)
+            this.meshInstance[i].prepareToRender(device, renderInstManager, viewerInput);
+
         renderInstManager.popTemplateRenderInst();
     }
 
     public destroy(device: GfxDevice): void {
-        this.domainData.destroy(device);
+        this.modelCache.destroy(device);
     }
 }
 
 export class GTA3Renderer {
     public renderTarget = new BasicRenderTarget();
     public clearRenderPassDescriptor = makeClearRenderPassDescriptor(true, colorNew(0.1, 0.1, 0.1, 0.0));
-
-    public textureHolder = new RWTextureHolder();
     public sceneRenderers: SceneRenderer[] = [];
 
     private renderHelper: GfxRenderHelper;
+    public _textureHolder = new RWTextureHolder();
 
     constructor(device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
@@ -435,7 +432,7 @@ export class GTA3Renderer {
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy(device);
         this.renderTarget.destroy(device);
-        this.textureHolder.destroy(device);
+        this._textureHolder.destroy(device);
         for (let i = 0; i < this.sceneRenderers.length; i++)
             this.sceneRenderers[i].destroy(device);
     }
