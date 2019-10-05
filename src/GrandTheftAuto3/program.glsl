@@ -4,6 +4,7 @@ precision mediump float;
 // Expected to be constant across the entire scene.
 layout(row_major, std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
+    vec4 u_AmbientColor;
 };
 
 layout(row_major, std140) uniform ub_MeshFragParams {
@@ -36,7 +37,7 @@ void main() {
     t_Color *= v_Color;
 #endif
 
-    t_Color.rgb += 0.1; // TODO: ambient lighting
+    t_Color.rgb += u_AmbientColor.rgb;
 
     t_Color *= u_Color;
 

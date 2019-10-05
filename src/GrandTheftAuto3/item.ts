@@ -33,17 +33,26 @@ export interface ObjectDefinition {
     txdName: string;
     drawDistance: number;
     flags: number;
+    tobj: boolean;
+    timeOn?: number;
+    timeOff?: number;
 }
 
 function parseObjectDefinition(line: string, tobj: boolean): ObjectDefinition {
     const row = line.split(", ");
-    return {
+    const def: ObjectDefinition = {
         id: Number(row[0]),
         modelName: row[1],
         txdName: row[2],
         drawDistance: Number((row.length > 5) ? row[4] : row[3]),
-        flags: Number(tobj ? row[row.length - 3] : row[row.length - 1])
+        flags: Number(tobj ? row[row.length - 3] : row[row.length - 1]),
+        tobj
     };
+    if (tobj) {
+        def.timeOn  = Number(row[row.length - 2]);
+        def.timeOff = Number(row[row.length - 1]);
+    }
+    return def;
 }
 
 export interface ItemDefinition {

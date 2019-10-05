@@ -7,6 +7,7 @@ import { GTA3Renderer, SceneRenderer } from './render';
 import { SceneContext } from '../SceneBase';
 import { getTextDecoder, assert } from '../util';
 import { parseItemPlacement, ItemPlacement, parseItemDefinition, ItemDefinition, ObjectDefinition } from './item';
+import { parseTimeCycle, ColorSet } from './time';
 import { quat, vec3 } from 'gl-matrix';
 
 const pathBase = `GrandTheftAuto3`;
@@ -27,8 +28,8 @@ class GTA3SceneDesc implements Viewer.SceneDesc {
         this.initialised = true;
     }
 
-    private async fetchIDE(name: string, dataFetcher: DataFetcher): Promise<ItemDefinition> {
-        const buffer = await dataFetcher.fetchData(`${pathBase}/data/maps/${name}`);
+    private async fetchIDE(id: string, dataFetcher: DataFetcher): Promise<ItemDefinition> {
+        const buffer = await dataFetcher.fetchData(`${pathBase}/data/maps/${id}.ide`);
         const text = getTextDecoder('utf8')!.decode(buffer.arrayBuffer);
         return parseItemDefinition(text);
     }
@@ -48,21 +49,24 @@ class GTA3SceneDesc implements Viewer.SceneDesc {
         return parseItemPlacement(text);
     }
 
+    private async fetchTimeCycle(dataFetcher: DataFetcher): Promise<ColorSet[]> {
+        const buffer = await dataFetcher.fetchData(`${pathBase}/data/timecyc.dat`);
+        const text = getTextDecoder('utf8')!.decode(buffer.arrayBuffer);
+        return parseTimeCycle(text);
+    }
+
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         await GTA3SceneDesc.initialise();
         const dataFetcher = context.dataFetcher;
         const objects = new Map<String, ObjectDefinition>();
+        const ideids = ['generic', 'temppart/temppart', 'comroad/comroad', 'indroads/indroads', 'making/making', 'subroads/subroads'];
+        if (this.id.match(/\//)) ideids.push(this.id.toLowerCase());
+        const ides = await Promise.all(ideids.map(id => this.fetchIDE(id, dataFetcher)));
+        for (const ide of ides) for (const obj of ide.objects) objects.set(obj.modelName, obj);
 
-        const gta3IDE = await this.fetchIDE('gta3.IDE', dataFetcher);
-        for (const obj of gta3IDE.objects) objects.set(obj.modelName, obj);
-        if (this.id.match(/\//)) {
-            const ide = await this.fetchIDE(this.id.toLowerCase() + '.ide', dataFetcher);
-            for (const obj of ide.objects) objects.set(obj.modelName, obj);
-        }
-
-        const renderer = new GTA3Renderer(device);
+        const [colorSets, ipl] = await Promise.all([this.fetchTimeCycle(dataFetcher), this.fetchIPL(this.id, dataFetcher)]);
+        const renderer = new GTA3Renderer(device, colorSets);
         const sceneRenderer = new SceneRenderer();
-        const ipl = await this.fetchIPL(this.id, dataFetcher);
         const loaded = new Map<String, Promise<void>>();
         for (const item of ipl.instances) {
             const name = item.modelName;

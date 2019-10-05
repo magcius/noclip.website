@@ -17,7 +17,10 @@ import { nArray, assertExists } from "../util";
 import { BasicRenderTarget, makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { GfxRenderInstManager, GfxRendererLayer, makeSortKey } from "../gfx/render/GfxRenderer";
 import { ItemInstance, ObjectDefinition, ObjectFlags } from "./item";
-import { Color, colorNew, White, colorNewCopy } from "../Color";
+import { Color, colorNew, White, colorNewCopy, colorLerp } from "../Color";
+import { ColorSet } from "./time";
+
+const TIME_FACTOR = 2500; // one day cycle per minute
 
 export class RWTexture implements TextureBase {
     private texture: rw.Texture;
@@ -43,10 +46,6 @@ export class RWTexture implements TextureBase {
 
 export class RWTextureHolder extends TextureHolder<RWTexture> {
     private textures: RWTexture[] = [];
-
-    public findTexture(name: string): RWTexture {
-        return assertExists(this.textures.find((t) => t.name === name));
-    }
 
     public addTXD(device: GfxDevice, txd: rw.TexDictionary) {
         for (let lnk = txd.textures.begin; !lnk.is(txd.textures.end); lnk = lnk.next) {
@@ -344,13 +343,16 @@ class MeshInstance {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        const hour = Math.floor(viewerInput.time / TIME_FACTOR) % 24;
+        if (this.meshData.obj.tobj) {
+            const timeOn = this.meshData.obj.timeOn!;
+            const timeOff = this.meshData.obj.timeOff!;
+            if (timeOn < timeOff && (hour < timeOn || timeOff < hour)) return;
+            if (timeOff < timeOn && (hour < timeOn && timeOff < hour)) return;
+        }
         for (let i = 0; i < this.meshFragInstance.length; i++)
             this.meshFragInstance[i].prepareToRender(device, renderInstManager, this.modelMatrix, viewerInput);
     }
-}
-
-function fillSceneParamsData(d: Float32Array, camera: Camera, offs: number = 0): void {
-    offs += fillMatrix4x4(d, offs, camera.projectionMatrix);
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
@@ -370,13 +372,14 @@ export class SceneRenderer {
         this.meshInstance.push(new MeshInstance(assertExists(model), item));
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, ambient: Color): void {
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
 
-        let offs = template.allocateUniformBuffer(GTA3Program.ub_SceneParams, 16);
+        let offs = template.allocateUniformBuffer(GTA3Program.ub_SceneParams, 16 + 4);
         const sceneParamsMapped = template.mapUniformBufferF32(GTA3Program.ub_SceneParams);
-        fillSceneParamsData(sceneParamsMapped, viewerInput.camera, offs);
+        offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
+        offs += fillColor(sceneParamsMapped, offs, ambient);
 
         for (let i = 0; i < this.meshInstance.length; i++)
             this.meshInstance[i].prepareToRender(device, renderInstManager, viewerInput);
@@ -392,12 +395,14 @@ export class SceneRenderer {
 export class GTA3Renderer {
     public renderTarget = new BasicRenderTarget();
     public clearRenderPassDescriptor = makeClearRenderPassDescriptor(true, colorNew(0.1, 0.1, 0.1, 0.0));
+    private ambient = colorNew(0.1, 0.1, 0.1);
+
     public sceneRenderers: SceneRenderer[] = [];
 
     private renderHelper: GfxRenderHelper;
     public _textureHolder = new RWTextureHolder();
 
-    constructor(device: GfxDevice) {
+    constructor(device: GfxDevice, private colorSets: ColorSet[]) {
         this.renderHelper = new GfxRenderHelper(device);
     }
 
@@ -406,10 +411,20 @@ export class GTA3Renderer {
     }
 
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        const t = viewerInput.time / TIME_FACTOR;
+        const cs1 = this.colorSets[Math.floor(t)   % this.colorSets.length];
+        const cs2 = this.colorSets[Math.floor(t+1) % this.colorSets.length];
+        const skyTop = colorNew(1,1,1);
+        const skyBot = colorNew(0,0,0);
+        colorLerp(this.ambient, cs1.amb, cs2.amb, t % 1);
+        colorLerp(skyTop, cs1.skyTop, cs2.skyTop, t % 1);
+        colorLerp(skyBot, cs1.skyBot, cs2.skyBot, t % 1);
+        colorLerp(this.clearRenderPassDescriptor.colorClearColor, skyTop, skyBot, 0.67); // fog
+
         viewerInput.camera.setClipPlanes(1);
         this.renderHelper.pushTemplateRenderInst();
         for (let i = 0; i < this.sceneRenderers.length; i++)
-            this.sceneRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+            this.sceneRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput, this.ambient);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender(device, hostAccessPass);
     }
