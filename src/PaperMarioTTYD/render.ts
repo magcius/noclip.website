@@ -1,12 +1,12 @@
 
-import { GXTextureHolder, MaterialParams, PacketParams, ColorKind, translateWrapModeGfx, ub_MaterialParams, loadedDataCoalescerComboGfx, ub_SceneParams, fillSceneParamsData, u_SceneParamsBufferSize, SceneParams, fillSceneParams, fillSceneParamsDataOnTemplate, setIndTexOrder, setTevColorIn, setTevAlphaIn, setTevAlphaOp, setTevColorOp, setTevIndirect, setTevOrder, autoOptimizeMaterial } from '../gx/gx_render';
+import { GXTextureHolder, MaterialParams, PacketParams, ColorKind, translateWrapModeGfx, loadedDataCoalescerComboGfx, ub_SceneParams, fillSceneParamsData, u_SceneParamsBufferSize, SceneParams, fillSceneParams, fillSceneParamsDataOnTemplate, setTevColorIn, setTevAlphaIn, setTevAlphaOp, setTevColorOp, setTevIndirect, setTevOrder } from '../gx/gx_render';
 import { GXMaterialHelperGfx, GXShapeHelperGfx, BasicGXRendererHelper } from '../gx/gx_render';
 
 import * as TPL from './tpl';
 import { TTYDWorld, Material, SceneGraphNode, Batch, SceneGraphPart, Sampler, MaterialAnimator, bindMaterialAnimator, AnimationEntry, MeshAnimator, bindMeshAnimator, MaterialLayer, DrawModeFlags, CollisionFlags } from './world';
 
 import * as Viewer from '../viewer';
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4 } from 'gl-matrix';
 import { assert, nArray } from '../util';
 import AnimationController from '../AnimationController';
 import { DeviceProgram } from '../Program';
@@ -17,12 +17,12 @@ import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../gfx/helper
 import { GfxRenderInstManager, GfxRenderInst, GfxRendererLayer, makeSortKey, makeSortKeyOpaque, setSortKeyDepth } from '../gfx/render/GfxRenderer';
 import { Camera, computeViewMatrix, computeViewSpaceDepthFromWorldSpaceAABB } from '../Camera';
 import { AABB } from '../Geometry';
-import { colorCopy, colorNew, White, Color, colorNewCopy, colorFromRGBA } from '../Color';
+import { colorCopy, White, Color, colorNewCopy, colorFromRGBA } from '../Color';
 import * as UI from '../ui';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { GXMaterialHacks, GXMaterial } from '../gx/gx_material';
 import * as GX from '../gx/gx_enum';
-import { setMegaStateFlags } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
+import { projectionMatrixD3DFromOpenGL, projectionMatrixOpenGLFromD3D } from '../gfx/helpers/ProjectionHelpers';
 
 export class TPLTextureHolder extends GXTextureHolder<TPL.TPLTexture> {
     public addTPLTextures(device: GfxDevice, tpl: TPL.TPL): void {
@@ -309,13 +309,13 @@ class NodeInstance {
             //
             //      proj[5] = proj[5] * (1.0 + (indexBias * -2.0 * pCam->far * pCam->near) /
             //                          (1.0 * (pCam->far + pCam->near) * (1.0 + indexBias)));
-            //
-            // TODO(jstpierre): This is designed for a GX viewport transform. Port it to OpenGL.
 
             const indexBias = this.childIndex * 0.01;
             const frustum = viewerInput.camera.frustum, far = frustum.far, near = frustum.near;
             const depthBias = (1.0 + (indexBias * -2 * far * near) / (far + near) * (1.0 + indexBias));
+            projectionMatrixD3DFromOpenGL(sceneParams.u_Projection);
             sceneParams.u_Projection[10] *= depthBias;
+            projectionMatrixOpenGLFromD3D(sceneParams.u_Projection);
             fillSceneParamsData(d, offs, sceneParams);
         }
 
