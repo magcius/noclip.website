@@ -1,3 +1,4 @@
+
 import * as Viewer from '../viewer';
 import * as rw from 'librw';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
@@ -12,6 +13,7 @@ const pathBase = `GrandTheftAuto3`;
 
 class GTA3SceneDesc implements Viewer.SceneDesc {
     private static initialised = false;
+
     constructor(public id: string, public name: string) {
     }
 

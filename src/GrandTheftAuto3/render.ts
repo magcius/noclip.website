@@ -20,10 +20,11 @@ import { Color, colorNew } from "../Color";
 
 export class RWTexture implements TextureBase {
     private texture: rw.Texture;
-    image: rw.Image | null;
-    name: string;
-    width: number;
-    height: number;
+    public image: rw.Image | null;
+    public name: string;
+    public width: number;
+    public height: number;
+
     constructor(texture: rw.Texture) {
         this.texture = texture;
         this.image = texture.raster.toImage();
@@ -32,8 +33,10 @@ export class RWTexture implements TextureBase {
         this.width = this.image.width;
         this.height = this.image.height;
     }
-    destroy() {
-        if (this.image) this.image.delete();
+
+    public destroy() {
+        if (this.image !== null)
+            this.image.delete();
     }
 }
 
