@@ -250,6 +250,8 @@ class ModelTreeLeafInstance {
     private renderMode: RenderMode;
     private visible = true;
     private texAnimGroup: number = -1;
+    private secondaryTileOffsetS: number = 0;
+    private secondaryTileOffsetT: number = 0;
     private secondaryTileShiftS: number = 0;
     private secondaryTileShiftT: number = 0;
     private texAnimEnabled: boolean = false;
@@ -271,6 +273,8 @@ class ModelTreeLeafInstance {
             this.texAnimGroup = (texSettingsProp.value1 >>> 0) & 0x0F;
             this.secondaryTileShiftS = (texSettingsProp.value1 >>> 12) & 0x0F;
             this.secondaryTileShiftT = (texSettingsProp.value1 >>> 16) & 0x0F;
+            this.secondaryTileOffsetS = (texSettingsProp.value0 >>> 0) & 0x0FF;
+            this.secondaryTileOffsetT = (texSettingsProp.value0 >>> 12) & 0x0FF;
         }
 
         if (this.renderModeProperty === 0x01 || this.renderModeProperty === 0x04) {
@@ -324,28 +328,33 @@ class ModelTreeLeafInstance {
         mat4.identity(dst);
 
         // tileMatrix[tileId] is specified in pixel units, so we need to convert to abstract space.
-        // The 2.0 is because the game sets gsSPTexture with a scale of 0.5.
-        dst[0] = 2 / image.width;
-        dst[5] = 2 / image.height;
+        dst[0] = 1 / image.width;
+        dst[5] = 1 / image.height;
         if (this.texAnimEnabled && texAnimGroups[this.texAnimGroup] !== undefined)
             mat4.mul(dst, dst, texAnimGroups[this.texAnimGroup].tileMatrix[tileId]);
 
         // Apply the shift scale.
-        let scaleS;
-        let scaleT;
+        let scaleS, scaleT, offsetS, offsetT;
         if (tileId === 0) {
             // Tile 0's shift seems to always be 0x00.
             scaleS = calcScaleForShift(0x00);
             scaleT = calcScaleForShift(0x00);
+            offsetS = 0;
+            offsetT = 0;
         } else if (tileId === 1) {
             scaleS = calcScaleForShift(this.secondaryTileShiftS);
             scaleT = calcScaleForShift(this.secondaryTileShiftT);
+            // Offset is in 10.2 coordinates (e.g. G_SETTILESIZE).
+            offsetS = this.secondaryTileOffsetS / 0x04;
+            offsetT = this.secondaryTileOffsetT / 0x04;
         } else {
             throw "whoops";
         }
 
         dst[0] *= scaleS;
         dst[5] *= scaleT;
+        dst[12] += offsetS;
+        dst[13] += offsetT;
     }
 
     public setTexAnimEnabled(enabled: boolean): void {

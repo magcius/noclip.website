@@ -240,7 +240,7 @@ export function parse(buffer: ArrayBufferSlice): MapShapeBinary {
                 bbox,
                 children,
                 modelMatrix,
-            }
+            };
         }
     }
 
