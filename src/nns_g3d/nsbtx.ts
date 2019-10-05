@@ -4,7 +4,7 @@
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString } from "../util";
 import { parseResDictGeneric } from "./nsbmd";
-import * as NITRO_TEX from "../sm64ds/nitro_tex";
+import * as NITRO_TEX from "../SuperMario64DS/nitro_tex";
 
 export interface TEX0Texture {
     name: string;

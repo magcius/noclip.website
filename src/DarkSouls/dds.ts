@@ -5,7 +5,6 @@ import { assert, readString } from "../util";
 import { TextureHolder, LoadedTexture } from "../TextureHolder";
 import { GfxDevice, GfxTextureDimension, GfxFormat } from "../gfx/platform/GfxPlatform";
 import { decompressBC, DecodedSurfaceSW } from "../Common/bc_texture";
-import { textureFormatIsTranslucent } from '../sm64ds/nitro_tex';
 
 export interface Level {
     width: number;
