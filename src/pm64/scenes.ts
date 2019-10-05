@@ -367,7 +367,7 @@ const sceneDescs = [
     new PaperMario64SceneDesc('arn_05', 'Gusty Gulch 2'),
     new PaperMario64SceneDesc('arn_02', 'Gusty Gulch 3'),
     new PaperMario64SceneDesc('arn_04', 'Gusty Gulch 4'),
-    new PaperMario64SceneDesc('arn_20', "Tubba Blubba's Castle Entrance"),
+    new PaperMario64SceneDesc('dgb_00', "Outside Tubba Blubba's Castle"),
     new PaperMario64SceneDesc('arn_08', 'Inside Windy Mill'),
     new PaperMario64SceneDesc('arn_09', 'Windy Mill Well Entrance'),
     new PaperMario64SceneDesc('arn_10', 'Windy Mill Well 1'),

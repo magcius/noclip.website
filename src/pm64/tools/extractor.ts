@@ -33,6 +33,9 @@ interface AssetEntry {
     isCompressed: boolean;
 }
 
+const mapOverrides = new Map<string, string>();
+mapOverrides.set('dgb_00', 'arn_20');
+
 function main() {
     const buffer = fetchDataSync(`${pathBaseIn}/rom.z64`);
     const view = buffer.createDataView();
@@ -102,7 +105,9 @@ function main() {
 
             mapTableIdx += 0x20;
 
-            const ShapeFile = findAsset(`${mapName}_shape`);
+            const mapPrefix = mapOverrides.has(mapName) ? mapOverrides.get(mapName) : mapName;
+
+            const ShapeFile = findAsset(`${mapPrefix}_shape`);
             if (ShapeFile === null) {
                 console.log(`Skipping map ${mapName}...`);
                 continue;
@@ -110,9 +115,9 @@ function main() {
 
             console.log(`Extracting map ${mapName}...`);
 
-            const areaId = mapName.slice(0, 3);
+            const areaId = mapPrefix.slice(0, 3);
             const TexFile = findAsset(`${areaId}_tex`);
-            const HitFile = findAsset(`${mapName}_hit`);
+            const HitFile = findAsset(`${mapPrefix}_hit`);
 
             let BGTexName: string | null = null;
             let BGTexFile: ArrayBufferSlice | null = null;
