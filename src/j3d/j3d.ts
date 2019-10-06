@@ -161,7 +161,7 @@ export interface INF1 {
 
 function readINF1Chunk(buffer: ArrayBufferSlice): INF1 {
     const view = buffer.createDataView();
-    const matrixCalcType: MatrixCalcType = view.getUint16(0x08) & 0x0F;
+    const matrixCalcType: MatrixCalcType = view.getUint32(0x08) & 0x0F;
     const packetCount = view.getUint32(0x0C);
     const vertexCount = view.getUint32(0x10);
     const hierarchyOffs = view.getUint32(0x14);
@@ -406,10 +406,10 @@ function readJNT1Chunk(buffer: ArrayBufferSlice): JNT1 {
     for (let i = 0; i < jointDataCount; i++) {
         const name = nameTable[i];
         const jointDataTableIdx = jointDataTableOffs + (remapTable[i] * 0x40);
-        const mtxTypeFlags = view.getUint16(jointDataTableIdx + 0x00);
+        const matrixTypeFlags = view.getUint16(jointDataTableIdx + 0x00);
         // Used in J3DMtxCalcCalcTransformMaya::calcTransform.
         // Doesn't appear to be used in basic transforms...
-        const ignoreParentScale = view.getUint16(jointDataTableIdx + 0x02);
+        const ignoreParentScale = view.getUint8(jointDataTableIdx + 0x02);
         const scaleX = view.getFloat32(jointDataTableIdx + 0x04);
         const scaleY = view.getFloat32(jointDataTableIdx + 0x08);
         const scaleZ = view.getFloat32(jointDataTableIdx + 0x0C);
