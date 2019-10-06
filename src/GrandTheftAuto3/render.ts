@@ -1,4 +1,5 @@
 
+import * as UI from "../ui";
 import * as Viewer from "../viewer";
 import * as rw from "librw";
 // @ts-ignore
@@ -392,7 +393,7 @@ export class SceneRenderer {
     }
 }
 
-export class GTA3Renderer {
+export class GTA3Renderer implements Viewer.SceneGfx {
     public renderTarget = new BasicRenderTarget();
     public clearRenderPassDescriptor = makeClearRenderPassDescriptor(true, colorNew(0.1, 0.1, 0.1, 0.0));
     private ambient = colorNew(0.1, 0.1, 0.1);
@@ -401,6 +402,10 @@ export class GTA3Renderer {
 
     private renderHelper: GfxRenderHelper;
     public _textureHolder = new RWTextureHolder();
+
+    private weather = 0;
+    private scenarioSelect: UI.SingleSelect;
+    public onstatechanged!: () => void;
 
     constructor(device: GfxDevice, private colorSets: ColorSet[]) {
         this.renderHelper = new GfxRenderHelper(device);
@@ -412,10 +417,10 @@ export class GTA3Renderer {
 
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         const t = viewerInput.time / TIME_FACTOR;
-        const cs1 = this.colorSets[Math.floor(t)   % this.colorSets.length];
-        const cs2 = this.colorSets[Math.floor(t+1) % this.colorSets.length];
-        const skyTop = colorNew(1,1,1);
-        const skyBot = colorNew(0,0,0);
+        const cs1 = this.colorSets[Math.floor(t)   % 24 + 24 * this.weather];
+        const cs2 = this.colorSets[Math.floor(t+1) % 24 + 24 * this.weather];
+        const skyTop = colorNewCopy(White);
+        const skyBot = colorNewCopy(White);
         colorLerp(this.ambient, cs1.amb, cs2.amb, t % 1);
         colorLerp(skyTop, cs1.skyTop, cs2.skyTop, t % 1);
         colorLerp(skyBot, cs1.skyBot, cs2.skyBot, t % 1);
@@ -442,6 +447,29 @@ export class GTA3Renderer {
         this.renderHelper.renderInstManager.resetRenderInsts();
 
         return finalPassRenderer;
+    }
+
+    public createPanels(): UI.Panel[] {
+        const scenarioPanel = new UI.Panel();
+        scenarioPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        scenarioPanel.setTitle(UI.TIME_OF_DAY_ICON, 'Weather');
+
+        const scenarioNames = ['Sunny', 'Cloudy', 'Rainy', 'Foggy'];
+
+        this.scenarioSelect = new UI.SingleSelect();
+        this.scenarioSelect.setStrings(scenarioNames);
+        this.scenarioSelect.onselectionchange = (index: number) => {
+            if (this.weather === index) return;
+            this.weather = index;
+            this.onstatechanged();
+            this.scenarioSelect.selectItem(index);
+        };
+        this.scenarioSelect.selectItem(0);
+        scenarioPanel.contents.appendChild(this.scenarioSelect.elem);
+
+        scenarioPanel.setVisible(scenarioNames.length > 0);
+
+        return [scenarioPanel];
     }
 
     public destroy(device: GfxDevice): void {
