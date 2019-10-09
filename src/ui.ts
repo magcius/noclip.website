@@ -14,6 +14,7 @@ import { GlobalGrabManager } from './GrabManager';
 
 // @ts-ignore
 import logoURL from './logo.png';
+import { clamp } from './MathHelpers';
 
 export const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
 export const COOL_BLUE_COLOR = 'rgb(20, 105, 215)';
@@ -1658,7 +1659,7 @@ class ViewerSettings extends Panel {
     private invertYCheckbox: Checkbox;
     private invertXCheckbox: Checkbox;
 
-    constructor(private viewer: Viewer.Viewer) {
+    constructor(private ui: UI, private viewer: Viewer.Viewer) {
         super();
 
         this.setTitle(FRUSTUM_ICON, 'Viewer Settings');
@@ -1740,8 +1741,9 @@ class ViewerSettings extends Panel {
     }
 
     private onScrollWheel(): void {
-        const v = this.camSpeedSlider.getValue() + Math.sign(this.viewer.inputManager.dz)*4;
+        const v = clamp(this.camSpeedSlider.getValue() + Math.sign(this.viewer.inputManager.dz)*4, 0, 200);
         this.camSpeedSlider.setValue(v);
+        this.ui.cameraSpeedIndicator.setCameraSpeed(v);
         this.updateCameraSpeed();
     }
 
@@ -2435,6 +2437,48 @@ export class TimePanel extends Panel {
     }
 }
 
+export class CameraSpeedIndicator {
+    public elem: HTMLElement;
+
+    private currentValue: number = -1;
+    private currentAnimation: Animation | null = null;
+
+    constructor() {
+        this.elem = document.createElement('div');
+        this.elem.style.position = 'absolute';
+        this.elem.style.left = '32px';
+        this.elem.style.bottom = '32px';
+        this.elem.style.opacity = '0';
+        this.elem.style.textShadow = `0 0 8px black`;
+        this.elem.style.padding = '8px';
+        this.elem.style.font = 'bold 16px monospace';
+        this.elem.style.color = 'white';
+        this.elem.style.pointerEvents = 'none';
+    }
+
+    public setCameraSpeed(v: number, displayIndicator: boolean = true): void {
+        if (this.currentValue === v)
+            return;
+
+        this.currentValue = v;
+        this.elem.textContent = `Camera Speed: ${v.toFixed(0)}`;
+
+        const pct = `${(v / 200) * 100}%`;
+        this.elem.style.backgroundImage = `linear-gradient(to right, ${HIGHLIGHT_COLOR} ${pct}, rgba(0, 0, 0, 0.75) ${pct})`;
+
+        if (displayIndicator) {
+            if (this.currentAnimation !== null)
+                this.currentAnimation.cancel();
+
+            this.currentAnimation = this.elem.animate([
+                { opacity: 1, offset: 0 },
+                { opacity: 1, offset: 0.5 },
+                { opacity: 0, offset: 1.0 },
+            ], 2000);
+        }
+    }
+}
+
 export class UI {
     public elem: HTMLElement;
 
@@ -2442,6 +2486,7 @@ export class UI {
 
     public dragHighlight: HTMLElement;
     public sceneUIContainer: HTMLElement;
+    public cameraSpeedIndicator: CameraSpeedIndicator;
 
     private floatingPanelContainer: HTMLElement;
     private floatingPanels: FloatingPanel[] = [];
@@ -2506,10 +2551,13 @@ export class UI {
         this.floatingPanelContainer = document.createElement('div');
         this.toplevel.appendChild(this.floatingPanelContainer);
 
+        this.cameraSpeedIndicator = new CameraSpeedIndicator();
+        this.toplevel.appendChild(this.cameraSpeedIndicator.elem);
+
         this.sceneSelect = new SceneSelect(viewer);
         this.saveStatesPanel = new SaveStatesPanel(viewer.inputManager);
         this.textureViewer = new TextureViewer();
-        this.viewerSettings = new ViewerSettings(viewer);
+        this.viewerSettings = new ViewerSettings(this, viewer);
         this.statisticsPanel = new StatisticsPanel(viewer);
         this.timePanel = new TimePanel();
         this.about = new About();
