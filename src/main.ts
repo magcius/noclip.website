@@ -250,6 +250,9 @@ class Main {
 
         this._updateLoop(window.performance.now());
 
+        // Update the URL every 2s or so...
+        setInterval(this._updateURL, 2000);
+
         if (!IS_DEVELOPMENT) {
             Sentry.init({
                 dsn: 'https://a3b5f6c50bc04555835f9a83d6e76b23@sentry.io/1448331',
@@ -272,13 +275,9 @@ class Main {
     }
 
     private _onHashChange(): void {
-        // Load the state from the hash, remove the extra character at the end.
         const hash = window.location.hash;
-        if (hash.startsWith('#')) {
+        if (hash.startsWith('#'))
             this._loadState(decodeURIComponent(hash.slice(1)));
-            // Wipe out the hash from the URL.
-            window.history.replaceState('', '', '/');
-        }
     }
 
     private _exportSaveData() {
@@ -482,6 +481,12 @@ class Main {
         this.ui.saveStatesPanel.setSaveState(saveState);
     }
 
+    private _updateURL = (): void => {
+        const sceneStateStr = this._getSceneSaveState();
+        const currentDescId = this._getCurrentSceneDescId();
+        window.history.replaceState('', document.title, `#${currentDescId};${sceneStateStr}`);
+    };
+
     private _getSaveStateSlotKey(slotIndex: number): string {
         return this.saveManager.getSaveStateSlotKey(this._getCurrentSceneDescId(), slotIndex);
     }
@@ -515,6 +520,7 @@ class Main {
                 mat4.identity(camera.worldMatrix);
         }
 
+        this._updateURL();
         this.ui.sceneChanged();
     }
 
