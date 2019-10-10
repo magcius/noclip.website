@@ -171,8 +171,8 @@ class Main {
 
     private droppedFileGroup: SceneGroup;
 
-    private currentSceneGroup: SceneGroup;
-    private currentSceneDesc: SceneDesc;
+    private currentSceneGroup: SceneGroup | null = null;
+    private currentSceneDesc: SceneDesc | null = null;
 
     private loadingSceneDesc: SceneDesc | null = null;
     private destroyablePool: Destroyable[] = [];
@@ -229,10 +229,10 @@ class Main {
 
         window.onhashchange = this._onHashChange.bind(this);
 
-        if (this.currentSceneDesc === undefined)
+        if (this.currentSceneDesc === null)
             this._onHashChange();
 
-        if (this.currentSceneDesc === undefined) {
+        if (this.currentSceneDesc === null) {
             // Load the state from session storage.
             const currentDescId = this.saveManager.getCurrentSceneDescId();
             if (currentDescId !== null) {
@@ -243,7 +243,7 @@ class Main {
             }
         }
 
-        if (this.currentSceneDesc === undefined) {
+        if (this.currentSceneDesc === null) {
             // Make the user choose a scene if there's nothing loaded by default...
             this.ui.sceneSelect.setExpanded(true);
         }
@@ -463,17 +463,20 @@ class Main {
     }
 
     private _getCurrentSceneDescId() {
+        if (this.currentSceneGroup === null || this.currentSceneDesc === null)
+            return null;
+
         const groupId = this.currentSceneGroup.id;
         const sceneId = this.currentSceneDesc.id;
         return `${groupId}/${sceneId}`;
     }
 
     private _saveState() {
-        if (this.currentSceneDesc === null)
+        if (this.currentSceneGroup === null || this.currentSceneDesc === null)
             return;
 
         const sceneStateStr = this._getSceneSaveState();
-        const currentDescId = this._getCurrentSceneDescId();
+        const currentDescId = this._getCurrentSceneDescId()!;
         const key = this.saveManager.getSaveStateSlotKey(currentDescId, 0);
         this.saveManager.saveTemporaryState(key, sceneStateStr);
 
@@ -482,13 +485,16 @@ class Main {
     }
 
     private _updateURL = (): void => {
+        if (this.currentSceneGroup === null || this.currentSceneDesc === null)
+            return;
+
         const sceneStateStr = this._getSceneSaveState();
-        const currentDescId = this._getCurrentSceneDescId();
+        const currentDescId = this._getCurrentSceneDescId()!;
         window.history.replaceState('', document.title, `#${currentDescId};${sceneStateStr}`);
     };
 
     private _getSaveStateSlotKey(slotIndex: number): string {
-        return this.saveManager.getSaveStateSlotKey(this._getCurrentSceneDescId(), slotIndex);
+        return this.saveManager.getSaveStateSlotKey(assertExists(this._getCurrentSceneDescId()), slotIndex);
     }
 
     private _onSceneChanged(scene: SceneGfx, sceneStateStr: string | null): void {
@@ -501,7 +507,7 @@ class Main {
             scenePanels = scene.createPanels();
         this.ui.setScenePanels(scenePanels);
 
-        const sceneDescId = this._getCurrentSceneDescId();
+        const sceneDescId = this._getCurrentSceneDescId()!;
         this.saveManager.setCurrentSceneDescId(sceneDescId);
         this.ui.saveStatesPanel.setCurrentSceneDescId(sceneDescId);
 
@@ -605,7 +611,7 @@ class Main {
         // Set window title.
         document.title = `${sceneDesc.name} - ${sceneGroup.name} - noclip`;
 
-        const sceneDescId = this._getCurrentSceneDescId();
+        const sceneDescId = this._getCurrentSceneDescId()!;
 
         if (typeof gtag !== 'undefined') {
             gtag("event", "loadScene", {
@@ -649,8 +655,8 @@ class Main {
     }
 
     private _getSceneDownloadPrefix() {
-        const groupId = this.currentSceneGroup.id;
-        const sceneId = this.currentSceneDesc.id;
+        const groupId = this.currentSceneGroup!.id;
+        const sceneId = this.currentSceneDesc!.id;
         const date = new Date();
         return `${groupId}_${sceneId}_${date.toISOString()}`;
     }
