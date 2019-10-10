@@ -249,7 +249,8 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
             const b = spawnModel(`/MapObj/mini_stage3_waterC.nsbmd`);
             b.modelMatrix[13] += 150;
         } else if (obji.objectId === 0x000D) { // puddle
-            spawnModel(`/MapObj/puddle.nsbmd`);
+            const b = spawnModel(`/MapObj/puddle.nsbmd`);
+            mat4.translate(b.modelMatrix, b.modelMatrix, [0, 0.01, 0]);
         } else if (obji.objectId === 0x0067) { // woodbox
             const b = spawnModel(`/MapObj/woodbox1.nsbmd`);
             b.modelMatrix[13] += 32;
@@ -342,6 +343,7 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
             b.bindPAT0(device, parseBTP(`/MapObj/TownMonte.nsbtp`), animFrame(whichFrame));
         } else if (obji.objectId === 0x01A6) { // ob_pakkun_sf
             const b = spawnModel(`/MapObj/ob_pakkun_sf.nsbmd`);
+            //b.bindPAT0(device, parseBTP(`/MapObj/ob_pakkun_sf.nsbtp`)); //way too fast?
             b.modelMatrix[13] += 30;
         } else if (obji.objectId === 0x01A8) { // bound
             const b = spawnModel(`/MapObj/bound.nsbmd`)!;
@@ -360,12 +362,119 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
             spawnModel(`/MapObj/cream.nsbmd`);
         } else if (obji.objectId === 0x01B5) { // berry
             spawnModel(`/MapObj/berry.nsbmd`);
-            //pat: note to self, look more into this section
         } else if (obji.objectId === 0x0065) { // itembox
             const b = spawnModel(`/itembox.nsbmd`);
-            mat4.translate(b.modelMatrix, b.modelMatrix, [0, 1, 0]);             
-            //b.bindSRT0(parseBTA(`/itembox.nsbta`));                       
-        }
+            mat4.translate(b.modelMatrix, b.modelMatrix, [0, 1, 0]);
+            mat4.rotateY(b.modelMatrix, b.modelMatrix, 180*MathConstants.DEG_TO_RAD);
+            //b.bindSRT0(parseBTA(`/itembox.nsbta`));                
+        } else if (obji.objectId === 313) { // kamome
+            const b = spawnModel(`/MapObj/kamome.nsbmd`);
+            b.bindPAT0(device, parseBTP(`/MapObj/kamome.nsbtp`));  
+        } else if (obji.objectId === 5) { // water_efct
+            const b = spawnModel(`/MapObj/water_efct.nsbmd`);
+        } else if (obji.objectId === 324) { // pin1
+            const b = spawnModel(`/MapObj/pin1.nsbmd`);
+            mat4.rotateY(b.modelMatrix, b.modelMatrix, 180*MathConstants.DEG_TO_RAD);
+        } else if (obji.objectId === 401) { // kuribo
+            const b = spawnModel(`/MapObj/kuribo.nsbmd`);
+            b.bindPAT0(device, parseBTP(`/MapObj/kuribo.nsbtp`));
+        } else if (obji.objectId === 409) { // choropu
+            const b = spawnModel(`/MapObj/choropu.nsbmd`);
+        } else if (obji.objectId === 403) { // dossun
+            const b = spawnModel(`/MapObj/dossun.nsbmd`);
+        } else if (obji.objectId === 408) { // mkd_ef_bubble
+            const b = spawnModel(`/MapObj/mkd_ef_bubble.nsbmd`);
+        } else if (obji.objectId === 421) { // wanwan
+            const b = spawnModel(`/MapObj/wanwan.nsbmd`);
+            mat4.translate(b.modelMatrix, b.modelMatrix, [0, 2, 0]);
+        } else if (obji.objectId === 411) { // pukupuku
+            const b = spawnModel(`/MapObj/pukupuku.nsbmd`);
+            mat4.translate(b.modelMatrix, b.modelMatrix, [0, 1, 0]);
+        } else if (obji.objectId === 413) { // sman
+            const head = spawnModel(`/MapObj/sman_top.nsbmd`);
+            const body = spawnModel(`/MapObj/sman_bottom.nsbmd`);
+            mat4.translate(head.modelMatrix, head.modelMatrix, [0, 1, 0]);
+        } else if (obji.objectId === 419) { // move_tree
+            const b = spawnModel(`/MapObj/move_tree.nsbmd`);
+        } else if (obji.objectId === 320) { // chandelier
+            const b = spawnModel(`/MapObj/chandelier.nsbmd`);
+        } else if (obji.objectId === 337) { // picture1
+            const b = spawnModel(`/MapObj/picture1.nsbmd`);
+        } else if (obji.objectId === 338) { // picture2
+            const b = spawnModel(`/MapObj/picture2.nsbmd`);
+        } else if (obji.objectId === 317) { // teresa
+            const b = spawnModel(`/MapObj/teresa.nsbmd`);
+            mat4.rotateY(b.modelMatrix, b.modelMatrix, 90*MathConstants.DEG_TO_RAD);
+            mat4.translate(b.modelMatrix, b.modelMatrix, [0, 1, 0]);
+        } else if (obji.objectId === 423) { // poo (lol)
+            const a = spawnModel(`/MapObj/cover.nsbmd`);
+            //const b = spawnModel(`/MapObj/poo.nsbmd`);
+            //const c = spawnModel(`/MapObj/hole.nsbmd`);
+            mat4.translate(a.modelMatrix, a.modelMatrix, [0, 0.01, 0]);
+        } else if (obji.objectId === 417) { // NsCannon1
+            const b = spawnModel(`/MapObj/NsKiller1.nsbmd`);
+        } else if (obji.objectId === 420) { // mkd_ef_burner
+            const b = spawnModel(`/MapObj/mkd_ef_burner.nsbmd`);
+            b.bindSRT0(parseBTA(`/MapObj/mkd_ef_burner.nsbta`));
+            mat4.rotateY(b.modelMatrix, b.modelMatrix, 90*MathConstants.DEG_TO_RAD);   
+        } else if (obji.objectId === 309) { // NsKiller
+            const b = spawnModel(`/MapObj/NsCannon1.nsbmd`);
+        } else if (obji.objectId === 414) { // kanoke_64
+            const b = spawnModel(`/MapObj/kanoke_64.nsbmd`);
+        } else if (obji.objectId === 416) { // basabasa
+            const b = spawnModel(`/MapObj/basabasa.nsbmd`);
+            b.bindPAT0(device, parseBTP(`/MapObj/basabasa.nsbtp`));
+        } else if (obji.objectId === 316) { // bakubaku
+            const b = spawnModel(`/MapObj/bakubaku.nsbmd`);            
+        } else if (obji.objectId === 405) { // bus_a
+            const b = spawnModel(`/MapObj/bus_a.nsbmd`);            
+        } else if (obji.objectId === 412) { // truck_a
+            const b = spawnModel(`/MapObj/truck_a.nsbmd`);            
+        } else if (obji.objectId === 410) { // car_a
+            const b = spawnModel(`/MapObj/car_a.nsbmd`);            
+        } else if (obji.objectId === 426) { // Pakkun
+            /*const b = spawnModel(`/MapObj/PakkunBody.nsbmd`);
+            const c = spawnModel(`/MapObj/PakkunMouth.nsbmd`);
+            const d = spawnModel(`/MapObj/PakkunZHead.nsbmd`);
+            mat4.translate(c.modelMatrix, c.modelMatrix, [0, 1, 0]);
+            mat4.translate(d.modelMatrix, d.modelMatrix, [0, 2, 0]);*/
+        } else if (obji.objectId === 434) { // sanbo
+            const body1 = spawnModel(`/MapObj/sanbo_b.nsbmd`);
+            const body2 = spawnModel(`/MapObj/sanbo_b.nsbmd`);
+            const body3 = spawnModel(`/MapObj/sanbo_b.nsbmd`);
+            const head = spawnModel(`/MapObj/sanbo_h.nsbmd`); 
+            mat4.translate(body1.modelMatrix, body1.modelMatrix, [0, 1, 0]);
+            mat4.translate(body2.modelMatrix, body2.modelMatrix, [0, 2.3, 0]);
+            mat4.translate(body3.modelMatrix, body3.modelMatrix, [0, 3.6, 0]);
+            mat4.translate(head.modelMatrix, head.modelMatrix, [0, 4.9, 0]);
+        } else if (obji.objectId === 429) { // sun
+            const b = spawnModel(`/MapObj/sun.nsbmd`);
+            mat4.rotateY(b.modelMatrix, b.modelMatrix, 180*MathConstants.DEG_TO_RAD);          
+        } else if (obji.objectId === 340) { // RainStar
+            const b = spawnModel(`/MapObj/RainStar.nsbmd`);            
+        } else if (obji.objectId === 402) { // rock
+            const b = spawnModel(`/MapObj/rock.nsbmd`);            
+        } else if (obji.objectId === 428) { // crab
+            const b = spawnModel(`/MapObj/crab.nsbmd`);
+            //b.bindPAT0(device, parseBTP(`/MapObj/crab.nsbtp`));       
+        } else if (obji.objectId === 432) { // IronBall
+            const b = spawnModel(`/MapObj/IronBall.nsbmd`);            
+        } else if (obji.objectId === 431) { // fireball2
+            //const b = spawnModel(`/MapObj/fireball2.nsbmd`);            
+        } else if (obji.objectId === 433) { // rock2
+            const b = spawnModel(`/MapObj/rock2.nsbmd`);            
+        } else if (obji.objectId === 344) { // airship
+            const b = spawnModel(`/MapObj/airship.nsbmd`);        
+        } else if (obji.objectId === 107) { // shine16
+            if (modelCache.getFileData(`/MapObj/shine16.nsbmd`) === null) {
+            const a = spawnModel(`/MapObj/shine.nsbmd`);
+            //a.bindPAT0(device, parseBTP(`/MapObj/shine.nsbtp`));
+            mat4.translate(a.modelMatrix, a.modelMatrix, [0, 1, 0]);}
+            if (modelCache.getFileData(`/MapObj/shine16.nsbmd`) !== null) {
+            const b = spawnModel(`/MapObj/shine16.nsbmd`);
+            b.bindPAT0(device, parseBTP(`/MapObj/shine16.nsbtp`));
+            mat4.translate(b.modelMatrix, b.modelMatrix, [0, 1, 0]);}
+        } 
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
@@ -392,8 +501,9 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
             const skyboxBtx = skyboxBtxFile !== null ? NSBTX.parse(skyboxBtxFile) : null;
             assert(skyboxBmd.models.length === 1);
             skyboxRenderer = new MDL0Renderer(device, skyboxBmd.models[0], skyboxBtx !== null ? skyboxBtx.tex0 : assertExists(skyboxBmd.tex0));
-            skyboxRenderer.modelMatrix[13] -= 1500;
-            skyboxRenderer.isSkybox = true;
+            //skyboxRenderer.modelMatrix[13] -= 1500;
+            //skyboxRenderer.isSkybox = true;
+            skyboxRenderer.isSkybox = false;
             
             const skyboxBtaFile = modelCache.getFileData(`/course_model_V.nsbta`);
             if (skyboxBtaFile !== null)
@@ -500,21 +610,21 @@ const sceneDescs = [
     new MarioKartDSSceneDesc("kiosk_beach_course", "Cheep Cheep Beach"),
     new MarioKartDSSceneDesc("kiosk_mansion_course", "Luigi's Mansion"),
     new MarioKartDSSceneDesc("kiosk_old_mario_sfc", "SNES Mario Circuit 1"),
-    //new MarioKartDSSceneDesc("kiosk_old_luigi_gc", "GCN Luigi Circuit"),
+    //new MarioKartDSSceneDesc("kiosk_old_luigi_gc", "GCN Luigi Circuit"), //missing object crash
     "Kiosk Demo Courses (Unused)",
     new MarioKartDSSceneDesc("kiosk_desert_course", "Desert Hills"),    
     new MarioKartDSSceneDesc("kiosk_town_course", "Delfino Square"),
     new MarioKartDSSceneDesc("kiosk_ridge_course", "Shroom Ridge"),
     new MarioKartDSSceneDesc("kiosk_snow_course", "DK Pass"),
-    //new MarioKartDSSceneDesc("kiosk_clock_course", "Tick Tock Clock"), //missing object crashes
+    //new MarioKartDSSceneDesc("kiosk_clock_course", "Tick Tock Clock"), //missing object crash
     new MarioKartDSSceneDesc("kiosk_mario_course", "Mario Circuit"),
-    //new MarioKartDSSceneDesc("kiosk_airship_course", "Airship Fortress"),
+    //new MarioKartDSSceneDesc("kiosk_airship_course", "Airship Fortress"), //missing object crash
     new MarioKartDSSceneDesc("kiosk_stadium_course", "Wario Stadium"),
-    new MarioKartDSSceneDesc("kiosk_garden_course", "Peach Gardens"),
-    new MarioKartDSSceneDesc("kiosk_koopa_course", "Bowser Castle"),
-    //new MarioKartDSSceneDesc("kiosk_rainbow_course", "Rainbow Road"),
+    //new MarioKartDSSceneDesc("kiosk_garden_course", "Peach Gardens"), //missing object crash
+    //new MarioKartDSSceneDesc("kiosk_koopa_course", "Bowser Castle"), //missing object crash
+    //new MarioKartDSSceneDesc("kiosk_rainbow_course", "Rainbow Road"), //missing object crash
     new MarioKartDSSceneDesc("kiosk_old_donut_sfc", "SNES Donut Plains 1"),
-    //new MarioKartDSSceneDesc("kiosk_old_frappe_64", "N64 Frappe Snowland"),
+    //new MarioKartDSSceneDesc("kiosk_old_frappe_64", "N64 Frappe Snowland"), //missing object crash
     new MarioKartDSSceneDesc("kiosk_old_baby_gc", "GCN Baby Park"),
     new MarioKartDSSceneDesc("kiosk_old_choco_64", "N64 Choco Mountain"),
     new MarioKartDSSceneDesc("kiosk_old_choco_sfc", "SNES Choco Island 2"),
