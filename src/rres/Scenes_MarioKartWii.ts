@@ -530,7 +530,7 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
         } else if (gobj.objectId === 0x01fb) { // Crane
             spawnObject(`Crane`);
         } else if (gobj.objectId === 0x01fc) { // VolcanoPiece
-            spawnObject(`VolcanoPiece1`);
+            spawnObject(`VolcanoPiece1`, `VolcanoPiece${gobj.objectArg0}`);
         } else if (gobj.objectId === 0x01fd) { // FlamePole
             spawnObject(`FlamePole`);
         } else if (gobj.objectId === 0x01fe) { // TwistedWay
