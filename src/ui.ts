@@ -289,11 +289,13 @@ export abstract class ScrollSelect implements Widget {
 
             if (item.type === ScrollSelectItemType.Selectable) {
                 outer.style.cursor = 'pointer';
-                outer.style.paddingLeft = hasHeader ? '20px' : '';
+                outer.style.paddingLeft = hasHeader ? '24px' : '';
 
                 const selector = document.createElement('div');
                 selector.classList.add('selector');
                 selector.style.display = 'list-item';
+                selector.style.lineHeight = '24px';
+                selector.style.textShadow = `0 0 8px black`;
                 outer.appendChild(selector);
                 const textSpan = document.createElement('span');
                 textSpan.classList.add('text');
@@ -327,6 +329,10 @@ export abstract class ScrollSelect implements Widget {
                 const textSpan = document.createElement('span');
                 textSpan.classList.add('header');
                 textSpan.style.fontWeight = 'bold';
+                textSpan.style.lineHeight = `36px`;
+                textSpan.style.textShadow = `0 0 8px black`;
+                textSpan.style.paddingLeft = `8px`;
+                textSpan.style.verticalAlign = `baseline`;
                 textSpan.innerHTML = item.html;
                 outer.appendChild(textSpan);
                 hasHeader = true;
@@ -530,7 +536,6 @@ export class SingleSelect extends ScrollSelect {
         if (this.setHighlightFlair && this.highlightedIndex >= 0) {
             const flair = ensureFlairIndex(flairs, this.highlightedIndex);
             flair.background = HIGHLIGHT_COLOR;
-            flair.color = 'black';
             flair.fontWeight = 'bold';
         }
         this.setInternalFlairs(flairs);
@@ -721,7 +726,7 @@ export class Panel implements Widget {
 
         this.header = document.createElement('h1');
         this.header.style.lineHeight = '28px';
-        this.header.style.width = '400px';
+        this.header.style.width = '440px';
         this.header.style.margin = '0';
         this.header.style.fontSize = '100%';
         this.header.style.textAlign = 'center';
@@ -744,7 +749,7 @@ export class Panel implements Widget {
         this.headerContainer.appendChild(this.header);
 
         this.contents = document.createElement('div');
-        this.contents.style.width = '400px';
+        this.contents.style.width = '440px';
         this.mainPanel.appendChild(this.contents);
 
         this.elem = this.toplevel;
@@ -760,7 +765,7 @@ export class Panel implements Widget {
 
     private syncSize() {
         const widthExpanded = this.expanded || this.mainPanel.matches(':hover');
-        this.mainPanel.style.width = widthExpanded ? '400px' : '28px';
+        this.mainPanel.style.width = widthExpanded ? '440px' : '28px';
 
         const heightExpanded = this.expanded;
         if (heightExpanded) {
@@ -1169,7 +1174,6 @@ class SceneSelect extends Panel {
         if (selectedDescIndex >= 0) {
             const flair = ensureFlairIndex(sceneDescFlairs, selectedDescIndex);
             flair.background = this.getLoadingGradient('transparent');
-            flair.color = this.loadProgress > 0.5 ? 'black' : undefined;
             flair.fontWeight = 'bold';
             const pct = `${Math.round(this.loadProgress * 100)}%`;
             flair.extraHTML = this.loadProgress < 1.0 ? `<span style="font-weight: bold; color: #aaa">${pct}</span>` : ``;
@@ -2461,9 +2465,10 @@ export class CameraSpeedIndicator {
             return;
 
         this.currentValue = v;
-        this.elem.textContent = `Camera Speed: ${v.toFixed(0)}`;
+        const dispV = Math.max(v, 1);
+        this.elem.textContent = `Camera Speed: ${dispV.toFixed(0)}`;
 
-        const pct = `${(v / 200) * 100}%`;
+        const pct = `${(dispV / 200) * 100}%`;
         this.elem.style.backgroundImage = `linear-gradient(to right, ${HIGHLIGHT_COLOR} ${pct}, rgba(0, 0, 0, 0.75) ${pct})`;
 
         if (displayIndicator) {
