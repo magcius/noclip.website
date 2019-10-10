@@ -2719,7 +2719,7 @@ export class VIS0NodesAnimator {
         const frame = this.animationController.getTimeInFrames();
         const animFrame = getAnimFrame(this.vis0, frame);
 
-        return sampleAnimationTrackBoolean(nodeData.nodeVisibility, frame);
+        return sampleAnimationTrackBoolean(nodeData.nodeVisibility, animFrame);
     }
 }
 
