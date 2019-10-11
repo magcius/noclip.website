@@ -1,7 +1,8 @@
 
 import { vec3, quat } from "gl-matrix";
+import { AABB } from "../Geometry";
 
-function readItems(text: string, cb: (section: string, line: string) => void) {
+function readItems(text: string, cb: (section: string, line: string[]) => void) {
     const lines = text.split("\n");
     let section = null;
     for (const s of lines) {
@@ -12,7 +13,7 @@ function readItems(text: string, cb: (section: string, line: string) => void) {
         } else if (line === "end") {
             section = null;
         } else {
-            cb(section, line);
+            cb(section, line.split(", "));
         }
     }
 }
@@ -38,8 +39,7 @@ export interface ObjectDefinition {
     timeOff?: number;
 }
 
-function parseObjectDefinition(line: string, tobj: boolean): ObjectDefinition {
-    const row = line.split(", ");
+function parseObjectDefinition(row: string[], tobj: boolean): ObjectDefinition {
     const def: ObjectDefinition = {
         id: Number(row[0]),
         modelName: row[1],
@@ -77,8 +77,7 @@ export interface ItemInstance {
     rotation: quat;
 }
 
-function parseItemInstance(line: string): ItemInstance {
-    const [id, model, posX, posY, posZ, scaleX, scaleY, scaleZ, rotX, rotY, rotZ, rotW] = line.split(", ");
+function parseItemInstance([id, model, posX, posY, posZ, scaleX, scaleY, scaleZ, rotX, rotY, rotZ, rotW]: string[]): ItemInstance {
     return {
         id: Number(id),
         modelName: model,
@@ -98,4 +97,14 @@ export function parseItemPlacement(text: string): ItemPlacement {
         if (section === "inst") instances.push(parseItemInstance(line));
     });
     return { instances };
+}
+
+export function parseZones(text: string): Map<string, AABB> {
+    let zones = new Map<string, AABB>();
+    readItems(text, function(section, [name, type, x1, y1, z1, x2, y2, z2, level]) {
+        if (section === "zone" && type === "0")
+            zones.set(name, new AABB(Number(x1), Number(y1), Number(z1),
+                                     Number(x2), Number(y2), Number(z2)));
+    });
+    return zones;
 }
