@@ -11,7 +11,7 @@ import { compileVtxLoader, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
 import AnimationController from '../AnimationController';
-import { ColorKind, GXViewerTexture } from '../gx/gx_render';
+import { ColorKind } from '../gx/gx_render';
 import { AABB } from '../Geometry';
 import { getPointHermite } from '../Spline';
 import { computeModelMatrixSRT } from '../MathHelpers';

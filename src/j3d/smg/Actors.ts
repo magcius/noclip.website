@@ -1738,6 +1738,8 @@ export class AstroMapObj extends MapObjActor {
 
         if (this.rotator !== null)
             this.startMapPartsFunctions();
+
+        this.setStateAlive(sceneObjHolder);
     }
 
     private tryStartAllAnimAndEffect(sceneObjHolder: SceneObjHolder, name: string): void {
@@ -1746,6 +1748,12 @@ export class AstroMapObj extends MapObjActor {
             emitEffect(sceneObjHolder, this, 'KitchenSmoke');
         if (isRegisteredEffect(this, name))
             emitEffect(sceneObjHolder, this, name);
+    }
+
+    private setStateAlive(sceneObjHolder: SceneObjHolder): void {
+        this.tryStartAllAnim('Revival');
+        this.tryStartAllAnimAndEffect(sceneObjHolder, 'AliveWait');
+        this.tryStartAllAnim('Open');
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
