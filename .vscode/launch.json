@@ -2,15 +2,6 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "type": "firefox",
-            "request": "launch",
-            "reAttach": true,
-            "name": "Launch localhost",
-            "url": "http://localhost:1234/",
-            "webRoot": "${workspaceFolder}/src/test/",
-            "firefoxExecutable": "C:\\Program Files\\Nightly\\firefox.exe"
-        },
-        {
             "type": "chrome",
             "request": "launch",
             "name": "Launch Chrome",

@@ -4,11 +4,11 @@ import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from "../gfx/platform/Gfx
 import { FakeTextureHolder } from "../TextureHolder";
 import { ViewerRenderInput, SceneGfx } from "../viewer";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import * as NSBMD from './nsbmd';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { GfxRenderDynamicUniformBuffer } from "../gfx/render/GfxRenderDynamicUniformBuffer";
 import { assertExists } from "../util";
+import { parseNSBMD } from "./NNS_G3D";
 
 class BasicNSBMDRenderer implements SceneGfx {
     public renderTarget = new BasicRenderTarget();
@@ -58,7 +58,7 @@ export function createBasicNSBMDRendererFromNSBMD(device: GfxDevice, buffer: Arr
     const textureHolder = new FakeTextureHolder([]);
     const renderer = new BasicNSBMDRenderer(device, textureHolder);
 
-    const bmd = NSBMD.parse(buffer);
+    const bmd = parseNSBMD(buffer);
     for (let i = 0; i < bmd.models.length; i++) {
         const mdl0 = bmd.models[0];
         const mdl0Renderer = new MDL0Renderer(device, mdl0, assertExists(bmd.tex0));

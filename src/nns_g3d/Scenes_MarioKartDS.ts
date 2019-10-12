@@ -4,10 +4,6 @@
 import * as Viewer from '../viewer';
 import * as CX from '../Common/Compression/CX';
 import * as NARC from './narc';
-import * as NSBMD from './nsbmd';
-import * as NSBTA from './nsbta';
-import * as NSBTP from './nsbtp';
-import * as NSBTX from './nsbtx';
 
 import { DataFetcher } from '../DataFetcher';
 import ArrayBufferSlice from '../ArrayBufferSlice';
@@ -22,6 +18,7 @@ import { computeModelMatrixSRT, MathConstants } from '../MathHelpers';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 import { SceneContext } from '../SceneBase';
+import { fx32, parseNSBMD, SRT0, parseNSBTA, parseNSBTP, PAT0, parseNSBTX } from './NNS_G3D';
 
 const pathBase = `mkds`;
 class ModelCache {
@@ -167,15 +164,15 @@ function parseNKM(buffer: ArrayBufferSlice): NKM {
 
     const obji: OBJI[] = [];
     for (let i = 0; i < objiTableCount; i++) {
-        const translationX = NSBMD.fx32(view.getInt32(objiTableIdx + 0x00, true)) / 16;
-        const translationY = NSBMD.fx32(view.getInt32(objiTableIdx + 0x04, true)) / 16;
-        const translationZ = NSBMD.fx32(view.getInt32(objiTableIdx + 0x08, true)) / 16;
-        const rotationX = NSBMD.fx32(view.getInt32(objiTableIdx + 0x0C, true)) * MathConstants.DEG_TO_RAD;
-        const rotationY = NSBMD.fx32(view.getInt32(objiTableIdx + 0x10, true)) * MathConstants.DEG_TO_RAD;
-        const rotationZ = NSBMD.fx32(view.getInt32(objiTableIdx + 0x14, true)) * MathConstants.DEG_TO_RAD;
-        const scaleX = NSBMD.fx32(view.getInt32(objiTableIdx + 0x18, true));
-        const scaleY = NSBMD.fx32(view.getInt32(objiTableIdx + 0x1C, true));
-        const scaleZ = NSBMD.fx32(view.getInt32(objiTableIdx + 0x20, true));
+        const translationX = fx32(view.getInt32(objiTableIdx + 0x00, true)) / 16;
+        const translationY = fx32(view.getInt32(objiTableIdx + 0x04, true)) / 16;
+        const translationZ = fx32(view.getInt32(objiTableIdx + 0x08, true)) / 16;
+        const rotationX = fx32(view.getInt32(objiTableIdx + 0x0C, true)) * MathConstants.DEG_TO_RAD;
+        const rotationY = fx32(view.getInt32(objiTableIdx + 0x10, true)) * MathConstants.DEG_TO_RAD;
+        const rotationZ = fx32(view.getInt32(objiTableIdx + 0x14, true)) * MathConstants.DEG_TO_RAD;
+        const scaleX = fx32(view.getInt32(objiTableIdx + 0x18, true));
+        const scaleY = fx32(view.getInt32(objiTableIdx + 0x1C, true));
+        const scaleZ = fx32(view.getInt32(objiTableIdx + 0x20, true));
 
         const objectId = view.getUint16(objiTableIdx + 0x24, true);
         const routeId = view.getUint16(objiTableIdx + 0x26, true);
@@ -210,7 +207,7 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
 
         function spawnModel(filePath: string): MDL0Renderer {
             const buffer = assertExists(modelCache.getFileData(filePath));
-            const bmd = NSBMD.parse(buffer);
+            const bmd = parseNSBMD(buffer);
             assert(bmd.models.length === 1);
             const mdl0Renderer = new MDL0Renderer(device, bmd.models[0], assertExists(bmd.tex0));
             setModelMtx(mdl0Renderer);
@@ -218,13 +215,13 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
             return mdl0Renderer;
         }
 
-        function parseBTA(filePath: string): NSBTA.SRT0 {
-            const bta = NSBTA.parse(assertExists(modelCache.getFileData(filePath)));
+        function parseBTA(filePath: string): SRT0 {
+            const bta = parseNSBTA(assertExists(modelCache.getFileData(filePath)));
             return bta.srt0;
         }
 
-        function parseBTP(filePath: string): NSBTP.PAT0 {
-            const btp = NSBTP.parse(assertExists(modelCache.getFileData(filePath)));
+        function parseBTP(filePath: string): PAT0 {
+            const btp = parseNSBTP(assertExists(modelCache.getFileData(filePath)));
             assert(btp.pat0.length === 1);
             return btp.pat0[0];
         }
@@ -486,19 +483,19 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
         modelCache.fetchNARC(`Course/${this.id}Tex.carc`);
         await modelCache.waitForLoad();
 
-        const courseBmd = NSBMD.parse(assertExists(modelCache.getFileData(`/course_model.nsbmd`)));
+        const courseBmd = parseNSBMD(assertExists(modelCache.getFileData(`/course_model.nsbmd`)));
         assert(courseBmd.models.length === 1);
 
         const courseBtxFile = modelCache.getFileData(`/course_model.nsbtx`);
-        const courseBtx = courseBtxFile !== null ? NSBTX.parse(courseBtxFile) : null;
+        const courseBtx = courseBtxFile !== null ? parseNSBTX(courseBtxFile) : null;
         const courseRenderer = new MDL0Renderer(device, courseBmd.models[0], courseBmd.tex0 !== null ? courseBmd.tex0 : assertExists(assertExists(courseBtx).tex0));
 
         let skyboxRenderer: MDL0Renderer | null = null;
         const skyboxBmdFile = modelCache.getFileData(`/course_model_V.nsbmd`);
         if (skyboxBmdFile !== null) {
-            const skyboxBmd = NSBMD.parse(skyboxBmdFile);
+            const skyboxBmd = parseNSBMD(skyboxBmdFile);
             const skyboxBtxFile = modelCache.getFileData(`/course_model_V.nsbtx`);
-            const skyboxBtx = skyboxBtxFile !== null ? NSBTX.parse(skyboxBtxFile) : null;
+            const skyboxBtx = skyboxBtxFile !== null ? parseNSBTX(skyboxBtxFile) : null;
             assert(skyboxBmd.models.length === 1);
             skyboxRenderer = new MDL0Renderer(device, skyboxBmd.models[0], skyboxBtx !== null ? skyboxBtx.tex0 : assertExists(skyboxBmd.tex0));
             //skyboxRenderer.modelMatrix[13] -= 1500;
@@ -507,18 +504,18 @@ class MarioKartDSSceneDesc implements Viewer.SceneDesc {
             
             const skyboxBtaFile = modelCache.getFileData(`/course_model_V.nsbta`);
             if (skyboxBtaFile !== null)
-                skyboxRenderer.bindSRT0(NSBTA.parse(skyboxBtaFile).srt0);
+                skyboxRenderer.bindSRT0(parseNSBTA(skyboxBtaFile).srt0);
         }
 
         const renderer = new MKDSRenderer(device, courseRenderer, skyboxRenderer);
 
         const courseBtaFile = modelCache.getFileData(`/course_model.nsbta`);
         if (courseBtaFile !== null)
-            courseRenderer.bindSRT0(NSBTA.parse(courseBtaFile).srt0);
+            courseRenderer.bindSRT0(parseNSBTA(courseBtaFile).srt0);
 
         const courseBtpFile = modelCache.getFileData(`/course_model.nsbtp`);
         if (courseBtpFile !== null) {
-            const courseBtp = NSBTP.parse(courseBtpFile);
+            const courseBtp = parseNSBTP(courseBtpFile);
             assert(courseBtp.pat0.length === 1);
             courseRenderer.bindPAT0(device, courseBtp.pat0[0]);
         }

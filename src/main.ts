@@ -34,7 +34,7 @@ import * as Scenes_DonkeyKongCountryReturns from './metroid_prime/dkcr_scenes';
 import * as Scenes_LuigisMansion from './luigis_mansion/scenes';
 import * as Scenes_PaperMario_TheThousandYearDoor from './PaperMarioTTYD/scenes';
 import * as Scenes_SuperPaperMario from './PaperMarioTTYD/spm_scenes';
-import * as Scenes_MarioKartDS from './nns_g3d/mkds_scenes';
+import * as Scenes_MarioKartDS from './nns_g3d/Scenes_MarioKartDS';
 import * as Scenes_NewSuperMarioBrosDS from './nns_g3d/nsmbds_scenes';
 import * as Scenes_KingdomHearts from './kh/scenes';
 import * as Scenes_KingdomHeartsIIFinalMix from './kh2fm/scenes';

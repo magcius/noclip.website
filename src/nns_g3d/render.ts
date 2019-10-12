@@ -2,19 +2,16 @@
 import { mat4, mat2d } from "gl-matrix";
 import { GfxFormat, GfxDevice, GfxProgram, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxTexture, GfxBlendMode, GfxBlendFactor, GfxMipFilterMode, GfxTexFilterMode, GfxSampler, GfxTextureDimension, GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
 import * as Viewer from '../viewer';
-import * as NSBMD from './nsbmd';
-import * as NSBTA from "./nsbta";
-import * as NSBTP from "./nsbtp";
 import * as NITRO_GX from '../SuperMario64DS/nitro_gx';
 import { readTexture, getFormatName, Texture, parseTexImageParamWrapModeS, parseTexImageParamWrapModeT, textureFormatIsTranslucent } from "../SuperMario64DS/nitro_tex";
 import { NITRO_Program, VertexData } from '../SuperMario64DS/render';
 import { GfxRenderInstManager, GfxRenderInst, GfxRendererLayer, makeSortKeyOpaque } from "../gfx/render/GfxRenderer";
-import { TEX0, TEX0Texture } from "./nsbtx";
 import { TextureMapping } from "../TextureHolder";
 import { fillMatrix4x3, fillMatrix4x4, fillMatrix3x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { computeViewMatrix, computeViewMatrixSkybox, computeModelMatrixYBillboard } from "../Camera";
 import AnimationController from "../AnimationController";
 import { nArray, assertExists } from "../util";
+import { TEX0Texture, SRT0TexMtxAnimator, PAT0TexAnimator, TEX0, MDL0Model, MDL0Material, SRT0, PAT0, bindPAT0, bindSRT0, MDL0Node, MDL0Shape } from "./NNS_G3D";
 
 function textureToCanvas(bmdTex: TEX0Texture, pixels: Uint8Array, name: string): Viewer.Texture {
     const canvas = document.createElement("canvas");
@@ -41,12 +38,12 @@ class MaterialInstance {
     private textureMappings: TextureMapping[] = nArray(1, () => new TextureMapping());
     public viewerTextures: Viewer.Texture[] = [];
     public baseCtx: NITRO_GX.Context;
-    public srt0Animator: NSBTA.SRT0TexMtxAnimator | null = null;
-    public pat0Animator: NSBTP.PAT0TexAnimator | null = null;
+    public srt0Animator: SRT0TexMtxAnimator | null = null;
+    public pat0Animator: PAT0TexAnimator | null = null;
     private sortKey: number;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
 
-    constructor(device: GfxDevice, tex0: TEX0, private model: NSBMD.MDL0Model, public material: NSBMD.MDL0Material) {
+    constructor(device: GfxDevice, tex0: TEX0, private model: MDL0Model, public material: MDL0Material) {
         this.texture = assertExists(tex0.textures.find((t) => t.name === this.material.textureName));
         this.translateTexture(device, tex0, this.material.textureName, this.material.paletteName);
         this.baseCtx = { color: { r: 0xFF, g: 0xFF, b: 0xFF }, alpha: this.material.alpha };
@@ -85,12 +82,12 @@ class MaterialInstance {
         };
     }
 
-    public bindSRT0(animationController: AnimationController, srt0: NSBTA.SRT0): void {
-        this.srt0Animator = NSBTA.bindSRT0(animationController, srt0, this.material.name);
+    public bindSRT0(animationController: AnimationController, srt0: SRT0): void {
+        this.srt0Animator = bindSRT0(animationController, srt0, this.material.name);
     }
 
-    public bindPAT0(animationController: AnimationController, pat0: NSBTP.PAT0): boolean {
-        this.pat0Animator = NSBTP.bindPAT0(animationController, pat0, this.material.name);
+    public bindPAT0(animationController: AnimationController, pat0: PAT0): boolean {
+        this.pat0Animator = bindPAT0(animationController, pat0, this.material.name);
         return this.pat0Animator !== null;
     }
 
@@ -172,7 +169,7 @@ class Node {
     public modelMatrix = mat4.create();
     public billboardY: boolean = false;
 
-    constructor(public node: NSBMD.MDL0Node) {
+    constructor(public node: MDL0Node) {
     }
 
     public calcMatrix(baseModelMatrix: mat4, viewerInput: Viewer.ViewerRenderInput): void {
@@ -191,7 +188,7 @@ const scratchMat4 = mat4.create();
 class ShapeInstance {
     private vertexData: VertexData;
 
-    constructor(device: GfxDevice, private materialInstance: MaterialInstance, public node: Node, public shape: NSBMD.MDL0Shape, posScale: number) {
+    constructor(device: GfxDevice, private materialInstance: MaterialInstance, public node: Node, public shape: MDL0Shape, posScale: number) {
         const baseCtx = this.materialInstance.baseCtx;
         const nitroVertexData = NITRO_GX.readCmds(shape.dlBuffer, baseCtx, posScale);
         this.vertexData = new VertexData(device, nitroVertexData);
@@ -251,7 +248,7 @@ export class MDL0Renderer {
     private nodes: Node[] = [];
     public viewerTextures: Viewer.Texture[] = [];
 
-    constructor(device: GfxDevice, public model: NSBMD.MDL0Model, private tex0: TEX0) {
+    constructor(device: GfxDevice, public model: MDL0Model, private tex0: TEX0) {
         const program = new NITRO_Program();
         program.defines.set('USE_VERTEX_COLOR', '1');
         program.defines.set('USE_TEXTURE', '1');
@@ -272,12 +269,12 @@ export class MDL0Renderer {
         this.execSBC(device);
     }
 
-    public bindSRT0(srt0: NSBTA.SRT0, animationController: AnimationController = this.animationController): void {
+    public bindSRT0(srt0: SRT0, animationController: AnimationController = this.animationController): void {
         for (let i = 0; i < this.materialInstances.length; i++)
             this.materialInstances[i].bindSRT0(animationController, srt0);
     }
 
-    public bindPAT0(device: GfxDevice, pat0: NSBTP.PAT0, animationController: AnimationController = this.animationController): void {
+    public bindPAT0(device: GfxDevice, pat0: PAT0, animationController: AnimationController = this.animationController): void {
         const hostAccessPass = device.createHostAccessPass();
         for (let i = 0; i < this.materialInstances.length; i++) {
             if (this.materialInstances[i].bindPAT0(animationController, pat0))
