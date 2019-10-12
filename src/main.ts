@@ -116,6 +116,7 @@ const sceneGroups = [
     Scenes_PaperMario64.sceneGroup,
     Scenes_Pilotwings64.sceneGroup,
     "PlayStation 2",
+    Scenes_GTA3.sceneGroup,
     Scenes_KatamariDamacy.sceneGroup,
     Scenes_KingdomHearts.sceneGroup,
     Scenes_KingdomHeartsIIFinalMix.sceneGroup,
@@ -134,7 +135,6 @@ const sceneGroups = [
     Scenes_SuperMarioOdyssey.sceneGroup,
     Scenes_Test.sceneGroup,
     Scenes_InteractiveExamples.sceneGroup,
-    Scenes_GTA3.sceneGroup,
 ];
 
 function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {

@@ -367,7 +367,8 @@ export class SceneRenderer {
 
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setMegaStateFlags(this.megaStateFlags);
-        if (dual) renderInst.setMegaStateFlags({ depthWrite: false });
+        if (dual)
+            renderInst.setMegaStateFlags({ depthWrite: false });
         if (this.atlas !== undefined)
             renderInst.setSamplerBindingsFromTextureMappings([this.atlas]);
         renderInst.sortKey = setSortKeyDepth(makeSortKey(renderLayer), depth);
@@ -430,9 +431,10 @@ export class GTA3Renderer implements Viewer.SceneGfx {
         offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
         offs += fillColor(sceneParamsMapped, offs, this.ambient);
 
-        for (const sceneRenderer of this.sceneRenderers) {
+        for (let i = 0; i < this.sceneRenderers.length; i++) {
+            const sceneRenderer = this.sceneRenderers[i];
             sceneRenderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput, false);
-            if (sceneRenderer.key.renderLayer & GfxRendererLayer.TRANSLUCENT) {
+            if (!!(sceneRenderer.key.renderLayer & GfxRendererLayer.TRANSLUCENT)) {
                 // PS2 alpha test emulation, see http://skygfx.rockstarvision.com/skygfx.html
                 sceneRenderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput, true);
             }
