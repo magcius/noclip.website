@@ -1,10 +1,6 @@
 
 // Nintendo NITRO-System (DS) G3D
 
-//#region NSBMD
-
-// NITRO System Binary MoDel
-
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { readString, assert } from "../util";
 import * as NITRO_TEX from "../SuperMario64DS/nitro_tex";
@@ -13,44 +9,7 @@ import { GfxCullMode } from "../gfx/platform/GfxPlatform";
 import AnimationController from "../AnimationController";
 import { lerp } from "../MathHelpers";
 
-export interface MDL0Node {
-    name: string;
-    jointMatrix: mat4;
-}
-
-export interface MDL0Material {
-    name: string;
-    textureName: string | null;
-    paletteName: string | null;
-    cullMode: GfxCullMode;
-    alpha: number;
-    polyAttribs: number;
-    texParams: number;
-    texMatrix: mat2d;
-    texScaleS: number;
-    texScaleT: number;
-}
-
-export interface MDL0Shape {
-    name: string;
-    dlBuffer: ArrayBufferSlice;
-}
-
-export interface MDL0Model {
-    name: string;
-    nodes: MDL0Node[];
-    materials: MDL0Material[];
-    shapes: MDL0Shape[];
-    sbcBuffer: ArrayBufferSlice;
-    posScale: number;
-    texMtxMode: TexMtxMode;
-}
-
-export interface BMD0 {
-    models: MDL0Model[];
-    tex0: TEX0 | null;
-}
-
+//#region Misc Helpers
 export function fx16(n: number): number {
     return n / (1 << 12);
 }
@@ -94,6 +53,49 @@ export function parseResDict(buffer: ArrayBufferSlice, tableOffs: number): ResDi
         return view.getUint32(entryTableIdx + 0x00, true);
     });
 }
+//#endregion
+
+//#region NSBMD
+
+// NITRO System Binary MoDel
+
+export interface MDL0Node {
+    name: string;
+    jointMatrix: mat4;
+}
+
+export interface MDL0Material {
+    name: string;
+    textureName: string | null;
+    paletteName: string | null;
+    cullMode: GfxCullMode;
+    alpha: number;
+    polyAttribs: number;
+    texParams: number;
+    texMatrix: mat2d;
+    texScaleS: number;
+    texScaleT: number;
+}
+
+export interface MDL0Shape {
+    name: string;
+    dlBuffer: ArrayBufferSlice;
+}
+
+export interface MDL0Model {
+    name: string;
+    nodes: MDL0Node[];
+    materials: MDL0Material[];
+    shapes: MDL0Shape[];
+    sbcBuffer: ArrayBufferSlice;
+    posScale: number;
+    texMtxMode: TexMtxMode;
+}
+
+export interface BMD0 {
+    models: MDL0Model[];
+    tex0: TEX0 | null;
+}
 
 function parseNode(buffer: ArrayBufferSlice, name: string): MDL0Node {
     const view = buffer.createDataView();
@@ -103,7 +105,6 @@ function parseNode(buffer: ArrayBufferSlice, name: string): MDL0Node {
         ROT_ZERO = 0x0002,
         SCALE_ONE = 0x0004,
         PIVOT_EXIST = 0x0008,
-        PIVOT_MASK  = 0x00F0,
         PIVOT_MINUS = 0x0100,
         SIGN_REVC = 0x0200,
         SIGN_REVD = 0x0400,
@@ -124,10 +125,72 @@ function parseNode(buffer: ArrayBufferSlice, name: string): MDL0Node {
     if (!(flags & NodeFlags.ROT_ZERO)) {
         if (flags & NodeFlags.PIVOT_EXIST) {
             // Pivot is compressed form.
+            const pivotIdx = (flags >>> 4) & 0x0F;
+            const pivotValue = (flags & NodeFlags.PIVOT_MINUS) ? -1 : 1;
             const A = fx16(view.getInt16(idx + 0x00, true));
             const B = fx16(view.getInt16(idx + 0x02, true));
             const C = (flags & NodeFlags.SIGN_REVC) ? -B : B;
             const D = (flags & NodeFlags.SIGN_REVD) ? -A : A;
+
+            // The pivot determines the identity value. The row and column it contains is
+            // omitted entirely.
+
+            if (pivotIdx === 0) {
+                // Top left
+                jointMatrix[0] = pivotValue;
+                jointMatrix[1] = 0;
+                jointMatrix[2] = 0;
+
+                jointMatrix[4] = 0;
+                jointMatrix[5] = A;
+                jointMatrix[6] = B;
+
+                jointMatrix[9] = 0;
+                jointMatrix[10] = C;
+                jointMatrix[11] = D;
+            } else if (pivotIdx === 2) {
+                // Top right
+                jointMatrix[0] = 0;
+                jointMatrix[1] = A;
+                jointMatrix[2] = B;
+
+                jointMatrix[4] = 0;
+                jointMatrix[5] = C;
+                jointMatrix[6] = D;
+
+                jointMatrix[9] = pivotValue;
+                jointMatrix[10] = 0;
+                jointMatrix[11] = 0;
+            } else if (pivotIdx === 4) {
+                // Center center
+                jointMatrix[0] = A;
+                jointMatrix[1] = 0;
+                jointMatrix[2] = B;
+
+                jointMatrix[4] = 0;
+                jointMatrix[5] = pivotValue;
+                jointMatrix[6] = 0;
+
+                jointMatrix[8] = C;
+                jointMatrix[9] = 0;
+                jointMatrix[10] = D;
+            } else if (pivotIdx === 8) {
+                // Bottom right
+                jointMatrix[0] = A;
+                jointMatrix[1] = B;
+                jointMatrix[2] = 0;
+
+                jointMatrix[4] = C;
+                jointMatrix[5] = D;
+                jointMatrix[6] = 0;
+
+                jointMatrix[8] = 0;
+                jointMatrix[9] = 0;
+                jointMatrix[10] = pivotValue;
+            } else {
+                console.warn(`Unsupported joint pivot ${pivotIdx}`);
+            }
+
             idx += 0x04;
         } else {
             jointMatrix[0]  = _00;
@@ -407,6 +470,7 @@ export function parseNSBMD(buffer: ArrayBufferSlice): BMD0 {
 //#region NSBTA
 
 // NITRO System Binary Texture Animation
+
 export interface BTA0 {
     srt0: SRT0;
 }
@@ -641,6 +705,7 @@ export function bindSRT0(animationController: AnimationController, srt0: SRT0, m
 //#endregion
 
 //#region NSBTP
+
 // NITRO System Binary Texture Palette Animation
 
 export interface BTP0 {
@@ -772,9 +837,18 @@ export function bindPAT0(animationController: AnimationController, pat0: PAT0, m
 }
 //#endregion
 
+//#region NSBCA
+
+// NITRO System Binary Character Animation
+
+// TODO(jstpierre): Implement this
+
+//#endregion
+
 //#region NSBTX
 
 // Nitro System Binary TeXture
+
 export interface TEX0Texture {
     name: string;
     format: NITRO_TEX.Format;

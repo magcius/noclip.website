@@ -70,8 +70,6 @@ class JointData {
 }
 
 function J3DCalcBBoardMtx(dst: mat4, m: mat4): void {
-    // Modifies m in-place.
-
     // The column vectors lengths here are the scale.
     const mx = Math.hypot(m[0], m[1], m[2]);
     const my = Math.hypot(m[4], m[5], m[6]);
@@ -102,8 +100,6 @@ function J3DCalcBBoardMtx(dst: mat4, m: mat4): void {
 
 const scratchVec3 = vec3.create();
 function J3DCalcYBBoardMtx(dst: mat4, m: mat4, v: vec3 = scratchVec3): void {
-    // Modifies m in-place.
-
     // The column vectors lengths here are the scale.
     const mx = Math.hypot(m[0], m[1], m[2]);
     const mz = Math.hypot(m[8], m[9], m[10]);

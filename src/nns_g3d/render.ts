@@ -1,5 +1,5 @@
 
-import { mat4, mat2d } from "gl-matrix";
+import { mat4, mat2d, vec3 } from "gl-matrix";
 import { GfxFormat, GfxDevice, GfxProgram, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxTexture, GfxBlendMode, GfxBlendFactor, GfxMipFilterMode, GfxTexFilterMode, GfxSampler, GfxTextureDimension, GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
 import * as Viewer from '../viewer';
 import * as NITRO_GX from '../SuperMario64DS/nitro_gx';
@@ -167,21 +167,75 @@ class MaterialInstance {
 
 class Node {
     public modelMatrix = mat4.create();
-    public billboardY: boolean = false;
+    public billboardMode = BillboardMode.NONE;
 
     constructor(public node: MDL0Node) {
     }
 
-    public calcMatrix(baseModelMatrix: mat4, viewerInput: Viewer.ViewerRenderInput): void {
-        if (this.billboardY) {
-            computeModelMatrixYBillboard(this.modelMatrix, viewerInput.camera);
-            mat4.mul(this.modelMatrix, this.node.jointMatrix, this.modelMatrix);
-        } else {
-            mat4.copy(this.modelMatrix, this.node.jointMatrix);
-        }
-
-        mat4.mul(this.modelMatrix, baseModelMatrix, this.modelMatrix);
+    public calcMatrix(baseModelMatrix: mat4): void {
+        mat4.mul(this.modelMatrix, baseModelMatrix, this.node.jointMatrix);
     }
+}
+
+function calcBBoardMtx(dst: mat4, m: mat4): void {
+    // The column vectors lengths here are the scale.
+    const mx = Math.hypot(m[0], m[1], m[2]);
+    const my = Math.hypot(m[4], m[5], m[6]);
+    const mz = Math.hypot(m[8], m[9], m[10]);
+
+    dst[0] = mx;
+    dst[4] = 0;
+    dst[8] = 0;
+    dst[12] = m[12];
+
+    dst[1] = 0;
+    dst[5] = my;
+    dst[9] = 0;
+    dst[13] = m[13];
+
+    dst[2] = 0;
+    dst[6] = 0;
+    dst[10] = mz;
+    dst[14] = m[14];
+
+    // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
+    // since this is supposed to generate a mat4x3 matrix.
+    dst[3] = 9999.0;
+    dst[7] = 9999.0;
+    dst[11] = 9999.0;
+    dst[15] = 9999.0;
+}
+
+const scratchVec3 = vec3.create();
+function calcYBBoardMtx(dst: mat4, m: mat4, v: vec3 = scratchVec3): void {
+    // The column vectors lengths here are the scale.
+    const mx = Math.hypot(m[0], m[1], m[2]);
+    const mz = Math.hypot(m[8], m[9], m[10]);
+
+    vec3.set(v, 0.0, -m[6], m[5]);
+    vec3.normalize(v, v);
+
+    dst[0] = mx;
+    dst[4] = m[4];
+    dst[8] = 0;
+    dst[12] = m[12];
+
+    dst[1] = 0;
+    dst[5] = m[5];
+    dst[9] = v[1] * mz;
+    dst[13] = m[13];
+
+    dst[2] = 0;
+    dst[6] = m[6];
+    dst[10] = v[2] * mz;
+    dst[14] = m[14];
+
+    // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
+    // since this is supposed to generate a mat4x3 matrix.
+    m[3] = 9999.0;
+    m[7] = 9999.0;
+    m[11] = 9999.0;
+    m[15] = 9999.0;
 }
 
 const scratchMat4 = mat4.create();
@@ -202,6 +256,11 @@ class ShapeInstance {
         }
 
         mat4.mul(dst, dst, this.node.modelMatrix);
+
+        if (this.node.billboardMode === BillboardMode.BB)
+            calcBBoardMtx(dst, dst);
+        else if (this.node.billboardMode === BillboardMode.BBY)
+            calcYBBoardMtx(dst, dst);
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean): void {
@@ -236,6 +295,10 @@ export const enum G3DPass {
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 3, numSamplers: 1 }];
+
+const enum BillboardMode {
+    NONE, BB, BBY,
+}
 
 export class MDL0Renderer {
     public modelMatrix = mat4.create();
@@ -325,12 +388,15 @@ export class MDL0Renderer {
                 if (opt & 0x02)
                     srcIdx = view.getUint8(idx++);
             } else if (cmd === Op.BB) {
-                const nodeId = view.getUint8(idx++);
+                const nodeIdx = view.getUint8(idx++);
                 let destIdx = -1, srcIdx = -1;
                 if (opt & 0x01)
                     destIdx = view.getUint8(idx++);
                 if (opt & 0x02)
                     srcIdx = view.getUint8(idx++);
+
+                if (opt === 0)
+                    this.nodes[nodeIdx].billboardMode = BillboardMode.BB;
             } else if (cmd === Op.BBY) {
                 const nodeIdx = view.getUint8(idx++);
                 let destIdx = -1, srcIdx = -1;
@@ -340,7 +406,7 @@ export class MDL0Renderer {
                     srcIdx = view.getUint8(idx++);
 
                 if (opt === 0)
-                    this.nodes[nodeIdx].billboardY = true;
+                    this.nodes[nodeIdx].billboardMode = BillboardMode.BBY;
             } else if (cmd === Op.POSSCALE) {
                 //
             } else {
@@ -353,7 +419,7 @@ export class MDL0Renderer {
         this.animationController.setTimeInMilliseconds(viewerInput.time);
 
         for (let i = 0; i < this.nodes.length; i++)
-            this.nodes[i].calcMatrix(this.modelMatrix, viewerInput);
+            this.nodes[i].calcMatrix(this.modelMatrix);
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
