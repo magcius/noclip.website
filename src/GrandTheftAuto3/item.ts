@@ -29,7 +29,7 @@ export enum ObjectFlags {
 }
 
 export interface ObjectDefinition {
-    id: number;
+    id?: number;
     modelName: string;
     txdName: string;
     drawDistance: number;
@@ -70,7 +70,7 @@ export function parseItemDefinition(text: string): ItemDefinition {
 }
 
 export interface ItemInstance {
-    id: number;
+    id?: number;
     modelName: string;
     translation: vec3;
     scale: vec3;

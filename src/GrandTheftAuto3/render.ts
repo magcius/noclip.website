@@ -17,7 +17,7 @@ import { assert } from "../util";
 import { BasicRenderTarget, makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderer";
 import { ItemInstance, ObjectDefinition } from "./item";
-import { colorNew, White, colorNewCopy, colorLerp, colorMult } from "../Color";
+import { colorNew, White, colorNewCopy, colorLerp, colorMult, Color } from "../Color";
 import { ColorSet } from "./time";
 import { AABB } from "../Geometry";
 
@@ -147,7 +147,16 @@ class GTA3Program extends DeviceProgram {
 
 const program = new GTA3Program();
 
-class MeshFragData {
+export interface MeshFragData {
+    indices: Uint16Array;
+    vertices: number;
+    texName?: string;
+    position(vertex: number): vec3;
+    color(vertex: number): Color;
+    texCoord(vertex: number): vec2;
+}
+
+class RWMeshFragData implements MeshFragData {
     public indices: Uint16Array;
     public texName?: string;
 
@@ -171,7 +180,7 @@ class MeshFragData {
             mesh.indices!.map(index => this.indexMap.indexOf(index))));
     }
 
-    public vertices() {
+    public get vertices() {
         return this.indexMap.length;
     }
 
@@ -199,26 +208,22 @@ class MeshFragData {
     }
 }
 
-class MeshData {
-    public meshFragData: MeshFragData[] = [];
+export class ModelCache {
+    public meshData = new Map<string, MeshFragData[]>();
 
-    constructor(atomic: rw.Atomic, public obj: ObjectDefinition) {
+    private addAtomic(atomic: rw.Atomic, obj: ObjectDefinition) {
         const geom = atomic.geometry;
-
         const positions = geom.morphTarget(0).vertices!.slice();
         const texCoords = (geom.numTexCoordSets > 0) ? geom.texCoords(0)!.slice() : null;
         const colors = (geom.colors !== null) ? geom.colors.slice() : null;
-
-        let h = geom.meshHeader;
+        const h = geom.meshHeader;
+        const frags: MeshFragData[] = [];
         for (let i = 0; i < h.numMeshes; i++) {
-            const frag = new MeshFragData(h.mesh(i), h.tristrip, obj.txdName, positions, texCoords, colors);
-            this.meshFragData.push(frag);
+            const frag = new RWMeshFragData(h.mesh(i), h.tristrip, obj.txdName, positions, texCoords, colors);
+            frags.push(frag);
         }
+        this.meshData.set(obj.modelName, frags);
     }
-}
-
-export class ModelCache {
-    public meshData = new Map<string, MeshData>();
 
     public addModel(model: rw.Clump, obj: ObjectDefinition) {
         let node: rw.Atomic | null = null;
@@ -231,14 +236,14 @@ export class ModelCache {
             }
         }
         if (node !== null)
-            this.meshData.set(obj.modelName, new MeshData(node, obj));
+            this.addAtomic(node, obj);
     }
 }
 
 export class MeshInstance {
     public modelMatrix = mat4.create();
 
-    constructor(public meshData: MeshData, public item: ItemInstance) {
+    constructor(public frags: MeshFragData[], public item: ItemInstance) {
         mat4.fromRotationTranslationScale(this.modelMatrix, this.item.rotation, this.item.translation, this.item.scale);
         // convert Z-up to Y-up
         mat4.multiply(this.modelMatrix, mat4.fromQuat(mat4.create(), quat.fromValues(0.5, 0.5, 0.5, -0.5)), this.modelMatrix);
@@ -285,9 +290,9 @@ export class SceneRenderer {
             atlas !== undefined && frag.texName !== undefined && !atlas.subimages.has(frag.texName);
 
         for (const inst of meshes) {
-            for (const frag of inst.meshData.meshFragData) {
+            for (const frag of inst.frags) {
                 if (skipFrag(frag)) continue;
-                this.vertices += frag.vertices();
+                this.vertices += frag.vertices;
                 this.indices += frag.indices.length;
             }
         }
@@ -299,9 +304,9 @@ export class SceneRenderer {
         let ioffs = 0;
         let lastIndex = 0;
         for (const inst of meshes) {
-            for (const frag of inst.meshData.meshFragData) {
+            for (const frag of inst.frags) {
                 if (skipFrag(frag)) continue;
-                const n = frag.vertices();
+                const n = frag.vertices;
                 const texLayer = (frag.texName === undefined || atlas === undefined) ? undefined : atlas.subimages.get(frag.texName);
                 for (let i = 0; i < n; i++) {
                     const pos = vec3.transformMat4(vec3.create(), frag.position(i), inst.modelMatrix);
