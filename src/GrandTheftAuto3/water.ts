@@ -3,8 +3,7 @@ import { vec3, vec2, vec4, quat } from 'gl-matrix';
 import { OpaqueBlack } from '../Color';
 import { ItemPlacement, ItemInstance, ObjectDefinition } from './item';
 
-export function parseWaterPro(buf: ArrayBuffer, bounds = vec4.fromValues(-2048, -2048, 2048, 2048)): ItemPlacement {
-    const view = new DataView(buf);
+export function parseWaterPro(view: DataView, bounds = vec4.fromValues(-2048, -2048, 2048, 2048)): ItemPlacement {
     const numLevels = view.getInt32(0, true);
     const heights: number[] = [];
     for (let i = 0; i < numLevels; i++) {
