@@ -14,11 +14,11 @@ import { mat4, quat, vec3, vec2 } from "gl-matrix";
 import { computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { assert } from "../util";
-import { BasicRenderTarget, makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth, GfxRenderInst } from "../gfx/render/GfxRenderer";
 import { ItemInstance, ObjectDefinition } from "./item";
-import { colorNew, White, colorNewCopy, colorLerp, colorMult, Color } from "../Color";
-import { ColorSet } from "./time";
+import { colorNew, White, colorNewCopy, colorMult, Color } from "../Color";
+import { ColorSet, emptyColorSet, lerpColorSet } from "./time";
 import { AABB } from "../Geometry";
 
 const TIME_FACTOR = 2500; // one day cycle per minute
@@ -60,7 +60,7 @@ function halve(pixels: Uint8Array, width: number, height: number): Uint8Array {
     return halved;
 }
 
-export class TextureAtlas extends TextureMapping {
+export class TextureArray extends TextureMapping {
     public subimages = new Map<string, number>();
 
     constructor(device: GfxDevice, textures: Texture[]) {
@@ -159,9 +159,9 @@ class Renderer {
 
     protected indices: number;
 
-    constructor(protected program: DeviceProgram, protected atlas?: TextureAtlas) {}
+    constructor(protected program: DeviceProgram, protected atlas?: TextureArray) {}
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): GfxRenderInst | undefined {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, colorSet: ColorSet): GfxRenderInst | undefined {
         const renderInst = renderInstManager.pushRenderInst();
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         renderInst.drawIndexes(this.indices);
@@ -189,7 +189,7 @@ class Renderer {
 }
 
 export class SkyRenderer extends Renderer {
-    constructor(device: GfxDevice, atlas?: TextureAtlas) {
+    constructor(device: GfxDevice, atlas?: TextureArray) {
         super(skyProgram, atlas);
         // fullscreen quad
         const vbuf = new Float32Array([
@@ -212,18 +212,24 @@ export class SkyRenderer extends Renderer {
         this.megaStateFlags = { depthWrite: false };
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): undefined {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, colorSet: ColorSet): undefined {
         if (viewerInput.camera.isOrthographic) return;
-        const renderInst = super.prepareToRender(device, renderInstManager, viewerInput)!;
+        const renderInst = super.prepareToRender(device, renderInstManager, viewerInput, colorSet)!;
         renderInst.sortKey = makeSortKey(GfxRendererLayer.BACKGROUND);
-        let offs = renderInst.allocateUniformBuffer(GTA3Program.ub_MeshFragParams, 12 + 12 + 4);
+        let offs = renderInst.allocateUniformBuffer(GTA3Program.ub_MeshFragParams, 12 + 4 + 12 + 4 + 4 + 4);
         const mapped = renderInst.mapUniformBufferF32(GTA3Program.ub_MeshFragParams);
         offs += fillMatrix4x3(mapped, offs, viewerInput.camera.viewMatrix);
+        mapped[offs++] = colorSet.amb.r + colorSet.dir.r;
+        mapped[offs++] = colorSet.amb.g + colorSet.dir.g;
+        mapped[offs++] = colorSet.amb.b + colorSet.dir.b;
+        mapped[offs++] = colorSet.amb.a + colorSet.dir.a;
         offs += fillMatrix4x3(mapped, offs, viewerInput.camera.worldMatrix);
         mapped[offs++] = viewerInput.camera.frustum.right;
         mapped[offs++] = viewerInput.camera.frustum.top;
         mapped[offs++] = viewerInput.camera.frustum.near;
         mapped[offs++] = viewerInput.camera.frustum.far;
+        offs += fillColor(mapped, offs, colorSet.skyTop);
+        offs += fillColor(mapped, offs, colorSet.skyBot);
         return;
     }
 }
@@ -336,6 +342,7 @@ export class DrawKey {
     public drawDistance?: number;
     public timeOn?: number;
     public timeOff?: number;
+    public dynamic: boolean;
 
     constructor(obj: ObjectDefinition, public zone: string) {
         if (obj.drawDistance < 99) {
@@ -345,13 +352,14 @@ export class DrawKey {
             this.timeOn = obj.timeOn;
             this.timeOff = obj.timeOff;
         }
+        this.dynamic = obj.dynamic;
     }
 }
 
 export class SceneRenderer extends Renderer {
     public bbox = new AABB();
 
-    constructor(device: GfxDevice, public key: DrawKey, meshes: MeshInstance[], atlas?: TextureAtlas) {
+    constructor(device: GfxDevice, public key: DrawKey, meshes: MeshInstance[], atlas?: TextureArray) {
         super(mainProgram, atlas);
         const skipFrag = (frag: MeshFragData) =>
             atlas !== undefined && frag.texName !== undefined && !atlas.subimages.has(frag.texName);
@@ -420,7 +428,7 @@ export class SceneRenderer extends Renderer {
         };
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, dual = false): undefined {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, colorSet: ColorSet, dual = false): undefined {
         const hour = Math.floor(viewerInput.time / TIME_FACTOR) % 24;
         const { timeOn, timeOff } = this.key;
         let renderLayer = this.key.renderLayer;
@@ -437,19 +445,27 @@ export class SceneRenderer extends Renderer {
         if (this.key.drawDistance !== undefined && depth > this.bbox.boundingSphereRadius() + 3 * this.key.drawDistance)
             return;
 
-        const renderInst = super.prepareToRender(device, renderInstManager, viewerInput)!;
+        const renderInst = super.prepareToRender(device, renderInstManager, viewerInput, colorSet)!;
         renderInst.sortKey = setSortKeyDepth(makeSortKey(renderLayer), depth);
 
-        let offs = renderInst.allocateUniformBuffer(GTA3Program.ub_MeshFragParams, 12 + 4);
+        let offs = renderInst.allocateUniformBuffer(GTA3Program.ub_MeshFragParams, 12 + 4 + 4);
         const mapped = renderInst.mapUniformBufferF32(GTA3Program.ub_MeshFragParams);
         offs += fillMatrix4x3(mapped, offs, viewerInput.camera.viewMatrix);
+        if (this.key.dynamic) {
+            mapped[offs++] = colorSet.amb.r + colorSet.dir.r;
+            mapped[offs++] = colorSet.amb.g + colorSet.dir.g;
+            mapped[offs++] = colorSet.amb.b + colorSet.dir.b;
+            mapped[offs++] = colorSet.amb.a + colorSet.dir.a;
+        } else {
+            offs += fillColor(mapped, offs, colorSet.amb);
+        }
         mapped[offs++] = !(renderLayer & GfxRendererLayer.TRANSLUCENT) ? 0.01 : dual ? -0.9 : 0.9;
 
         // PS2 alpha test emulation, see http://skygfx.rockstarvision.com/skygfx.html
         if (dual) {
             renderInst.setMegaStateFlags({ depthWrite: false });
         } else if (!!(this.key.renderLayer & GfxRendererLayer.TRANSLUCENT)) {
-            this.prepareToRender(device, renderInstManager, viewerInput, true);
+            this.prepareToRender(device, renderInstManager, viewerInput, colorSet, true);
         }
         return;
     }
@@ -464,8 +480,8 @@ export class GTA3Renderer implements Viewer.SceneGfx {
     public onstatechanged!: () => void;
 
     private renderTarget = new BasicRenderTarget();
-    private clearRenderPassDescriptor = makeClearRenderPassDescriptor(true, colorNewCopy(White));
-    private ambient = colorNewCopy(White);
+    private clearRenderPassDescriptor = standardFullClearRenderPassDescriptor;
+    private currentColors = emptyColorSet();
     private renderHelper: GfxRenderHelper;
     private weather = 0;
     private scenarioSelect: UI.SingleSelect;
@@ -478,26 +494,20 @@ export class GTA3Renderer implements Viewer.SceneGfx {
         const t = viewerInput.time / TIME_FACTOR;
         const cs1 = this.colorSets[Math.floor(t)   % 24 + 24 * this.weather];
         const cs2 = this.colorSets[Math.floor(t+1) % 24 + 24 * this.weather];
-        const skyTop = colorNewCopy(White);
-        const skyBot = colorNewCopy(White);
-        colorLerp(this.ambient, cs1.amb, cs2.amb, t % 1);
-        colorLerp(skyTop, cs1.skyTop, cs2.skyTop, t % 1);
-        colorLerp(skyBot, cs1.skyBot, cs2.skyBot, t % 1);
-        colorLerp(this.clearRenderPassDescriptor.colorClearColor, skyTop, skyBot, 0.67); // fog
+        lerpColorSet(this.currentColors, cs1, cs2, t % 1);
 
         viewerInput.camera.setClipPlanes(1);
         this.renderHelper.pushTemplateRenderInst();
         const template = this.renderHelper.renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
 
-        let offs = template.allocateUniformBuffer(GTA3Program.ub_SceneParams, 16 + 4);
+        let offs = template.allocateUniformBuffer(GTA3Program.ub_SceneParams, 16);
         const sceneParamsMapped = template.mapUniformBufferF32(GTA3Program.ub_SceneParams);
         offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
-        offs += fillColor(sceneParamsMapped, offs, this.ambient);
 
         for (let i = 0; i < this.sceneRenderers.length; i++) {
             const sceneRenderer = this.sceneRenderers[i];
-            sceneRenderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+            sceneRenderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput, this.currentColors);
         }
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();

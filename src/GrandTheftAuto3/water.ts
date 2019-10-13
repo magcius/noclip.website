@@ -1,6 +1,6 @@
 
 import { vec3, vec2, vec4, quat } from 'gl-matrix';
-import { colorNew } from '../Color';
+import { OpaqueBlack } from '../Color';
 import { ItemPlacement, ItemInstance, ObjectDefinition } from './item';
 
 export function parseWaterPro(buf: ArrayBuffer, bounds = vec4.fromValues(-2048, -2048, 2048, 2048)): ItemPlacement {
@@ -39,7 +39,8 @@ export const waterDefinition: ObjectDefinition = {
     txdName: 'particle',
     drawDistance: 1000,
     flags: 0,
-    tobj: false
+    tobj: false,
+    dynamic: true
 };
 
 const squarePositions = [
@@ -56,13 +57,11 @@ const squareTexCoords = [
     vec2.fromValues(1,0),
 ];
 
-const color = colorNew(100/0xFF, 100/0xFF, 107/0xFF);
-
 export const waterMeshFragData = {
     texName: 'particle/water_old',
     indices: new Uint16Array([0,1,2,0,2,3]),
     vertices: 4,
     position: (i: number) => squarePositions[i],
     texCoord: (i: number) => squareTexCoords[i],
-    color: (i: number) => color,
+    color: (i: number) => OpaqueBlack,
 };

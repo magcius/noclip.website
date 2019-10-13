@@ -1,4 +1,5 @@
-import { Color, colorNew } from '../Color';
+import { Color, colorNew, colorLerp, colorNewCopy, White } from '../Color';
+import { lerp } from '../MathHelpers';
 
 function colorNorm(r: number, g: number, b: number, a: number = 255.0): Color {
     return colorNew(r/255.0, g/255.0, b/255.0, a/255.0);
@@ -70,4 +71,55 @@ export async function parseTimeCycle(text: string) {
         });
     }
     return sets;
+}
+
+export function emptyColorSet(): ColorSet {
+    return {
+        amb: colorNewCopy(White),
+        dir: colorNewCopy(White),
+        skyTop: colorNewCopy(White),
+        skyBot: colorNewCopy(White),
+
+        sunCore: colorNewCopy(White),
+        sunCorona: colorNewCopy(White),
+        sunSz: 0,
+        sprSz: 0,
+        sprBght: 0,
+        shad: 0,
+        lightShad: 0,
+        treeShad: 0,
+        farClp: 0,
+        fogSt: 0,
+        lightGnd: 0,
+
+        cloud: colorNewCopy(White),
+        fluffyTop: colorNewCopy(White),
+        fluffyBot: colorNewCopy(White),
+        blur: colorNewCopy(White),
+    };
+}
+
+export function lerpColorSet(dst: ColorSet, a: ColorSet, b: ColorSet, t: number) {
+    colorLerp(dst.amb, a.amb, b.amb, t);
+    colorLerp(dst.dir, a.dir, b.dir, t);
+    colorLerp(dst.skyTop, a.skyTop, b.skyTop, t);
+    colorLerp(dst.skyBot, a.skyBot, b.skyBot, t);
+
+    colorLerp(dst.sunCore, a.sunCore, b.sunCore, t);
+    colorLerp(dst.sunCorona, a.sunCorona, b.sunCorona, t);
+
+    dst.sunSz = lerp(a.sunSz, b.sunSz, t);
+    dst.sprSz = lerp(a.sprSz, b.sprSz, t);
+    dst.sprBght = lerp(a.sprBght, b.sprBght, t);
+    dst.shad = lerp(a.shad, b.shad, t);
+    dst.lightShad = lerp(a.lightShad, b.lightShad, t);
+    dst.treeShad = lerp(a.treeShad, b.treeShad, t);
+    dst.farClp = lerp(a.farClp, b.farClp, t);
+    dst.fogSt = lerp(a.fogSt, b.fogSt, t);
+    dst.lightGnd = lerp(a.lightGnd, b.lightGnd, t);
+
+    colorLerp(dst.cloud, a.cloud, b.cloud, t);
+    colorLerp(dst.fluffyTop, a.fluffyTop, b.fluffyTop, t);
+    colorLerp(dst.fluffyBot, a.fluffyBot, b.fluffyBot, t);
+    colorLerp(dst.blur, a.blur, b.blur, t);
 }

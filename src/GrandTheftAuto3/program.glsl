@@ -3,14 +3,16 @@ precision mediump float; precision lowp sampler2DArray;
 
 layout(row_major, std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
-    vec4 u_AmbientColor;
 };
 
 layout(row_major, std140) uniform ub_MeshFragParams {
     Mat4x3 u_ViewMatrix;
+    vec4 u_AmbientColor;
 #ifdef SKY
     Mat4x3 u_WorldMatrix;
     vec4 u_Frustum;
+    vec4 u_SkyTopColor;
+    vec4 u_SkyBotColor;
 #else
     float alphaThreshold;
 #endif
@@ -51,18 +53,17 @@ void main() {
     vec3 cameraRay = Mul(u_WorldMatrix, vec4(nearPlane, 0.0));
     vec3 cameraPos = Mul(u_WorldMatrix, vec4(vec3(0.0), 1.0));
     float t = -cameraPos.y / cameraRay.y;
+    vec3 oceanPlane = cameraPos + t * cameraRay;
 
-    if (t > 0.0) {
-        vec3 oceanPlane = cameraPos + t * cameraRay;
+    if (t > 0.0 && (abs(oceanPlane.z) > 2000.0 || abs(oceanPlane.x) > 2000.0)) {
         vec2 uv = fract(oceanPlane.zx / 32.0);
-        if (abs(oceanPlane.z) < 2000.0 && abs(oceanPlane.x) < 2000.0) discard;
-
-        vec4 t_Color = vec4(100.0 / 255.0, 100.0 / 255.0, 107.0 / 255.0, 1.0);
+        vec4 t_Color = vec4(0,0,0,1);
         t_Color.rgb += u_AmbientColor.rgb;
         t_Color *= texture(u_Texture, vec3(uv, 0));
         gl_FragColor = t_Color;
     } else {
-        discard;
+        float elevation = atan(cameraRay.y, length(cameraRay.zx)) * 180.0 / radians(180.0);
+        gl_FragColor = mix(u_SkyBotColor, u_SkyTopColor, clamp(abs(elevation / 45.0), 0.0, 1.0));
     }
 }
 #else

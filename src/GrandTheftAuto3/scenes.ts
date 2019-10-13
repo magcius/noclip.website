@@ -3,7 +3,7 @@ import * as Viewer from '../viewer';
 import * as rw from 'librw';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { DataFetcher } from '../DataFetcher';
-import { GTA3Renderer, SceneRenderer, DrawKey, Texture, TextureAtlas, MeshInstance, ModelCache, SkyRenderer } from './render';
+import { GTA3Renderer, SceneRenderer, DrawKey, Texture, TextureArray, MeshInstance, ModelCache, SkyRenderer } from './render';
 import { SceneContext } from '../SceneBase';
 import { getTextDecoder, assert } from '../util';
 import { parseItemPlacement, ItemPlacement, parseItemDefinition, ItemDefinition, ObjectDefinition, ItemInstance, parseZones } from './item';
@@ -144,7 +144,7 @@ class GTA3SceneDesc implements Viewer.SceneDesc {
                 console.warn('No definition for object', name);
                 continue;
             }
-            if (name.startsWith('lod') || name.startsWith('islandlod')) continue; // ignore LOD objects
+            if ((name.startsWith('lod') && name !== 'lodistancoast01') || name.startsWith('islandlod')) continue; // ignore LOD objects
 
             let zone = 'cityzon';
             for (const [name, bb] of zones) {
@@ -174,7 +174,7 @@ class GTA3SceneDesc implements Viewer.SceneDesc {
 
         loadedTXD.get('particle')!.then(() =>
             renderer.sceneRenderers.push(new SkyRenderer(device,
-                new TextureAtlas(device, [textures.get('particle/water_old')!]))));
+                new TextureArray(device, [textures.get('particle/water_old')!]))));
 
         for (const [drawKey, items] of layers) (async () => {
             const promises: Promise<void>[] = [];
@@ -214,7 +214,7 @@ class GTA3SceneDesc implements Viewer.SceneDesc {
                 const key = Object.assign({}, drawKey);
                 if (res.endsWith('alpha'))
                     key.renderLayer = GfxRendererLayer.TRANSLUCENT;
-                const atlas = (textures.size > 0) ? new TextureAtlas(device, Array.from(textures)) : undefined;
+                const atlas = (textures.size > 0) ? new TextureArray(device, Array.from(textures)) : undefined;
                 const sceneRenderer = new SceneRenderer(device, key, layerMeshes, atlas);
                 renderer.sceneRenderers.push(sceneRenderer);
             }

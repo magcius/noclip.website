@@ -37,6 +37,7 @@ export interface ObjectDefinition {
     tobj: boolean;
     timeOn?: number;
     timeOff?: number;
+    dynamic: boolean;
 }
 
 function parseObjectDefinition(row: string[], tobj: boolean): ObjectDefinition {
@@ -46,7 +47,8 @@ function parseObjectDefinition(row: string[], tobj: boolean): ObjectDefinition {
         txdName: row[2],
         drawDistance: Number((row.length > 5) ? row[4] : row[3]),
         flags: Number(tobj ? row[row.length - 3] : row[row.length - 1]),
-        tobj
+        tobj,
+        dynamic: false
     };
     if (tobj) {
         def.timeOn  = Number(row[row.length - 2]);
