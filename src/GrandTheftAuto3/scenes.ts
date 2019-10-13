@@ -3,7 +3,7 @@ import * as Viewer from '../viewer';
 import * as rw from 'librw';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { DataFetcher } from '../DataFetcher';
-import { GTA3Renderer, SceneRenderer, DrawKey, Texture, TextureAtlas, MeshInstance, ModelCache } from './render';
+import { GTA3Renderer, SceneRenderer, DrawKey, Texture, TextureAtlas, MeshInstance, ModelCache, SkyRenderer } from './render';
 import { SceneContext } from '../SceneBase';
 import { getTextDecoder, assert } from '../util';
 import { parseItemPlacement, ItemPlacement, parseItemDefinition, ItemDefinition, ObjectDefinition, ItemInstance, parseZones } from './item';
@@ -171,6 +171,10 @@ class GTA3SceneDesc implements Viewer.SceneDesc {
         loadedTXD.set('particle', this.fetchTXD(dataFetcher, 'particle', textures));
         loadedDFF.set('water', (async () => {})());
         modelCache.meshData.set('water', [waterMeshFragData]);
+
+        loadedTXD.get('particle')!.then(() =>
+            renderer.sceneRenderers.push(new SkyRenderer(device,
+                new TextureAtlas(device, [textures.get('particle/water_old')!]))));
 
         for (const [drawKey, items] of layers) (async () => {
             const promises: Promise<void>[] = [];
