@@ -945,7 +945,7 @@ export class GX_Program extends DeviceProgram {
     }
 
     private generateTevTexCoordIndirectTranslation(stage: TevStage): string {
-        return `(${this.generateTevTexCoordIndirectMtx(stage)} * TextureScale(${stage.texMap}))`;
+        return `(${this.generateTevTexCoordIndirectMtx(stage)} * TextureInvScale(${stage.texMap}))`;
     }
 
     private generateTevTexCoordIndirect(stage: TevStage): string {
@@ -1134,6 +1134,7 @@ ${this.generateTexGens(this.material.texGens)}
 ${this.generateTexCoordGetters()}
 
 float TextureLODBias(int index) { return u_SceneTextureLODBias + u_TextureParams[index].w; }
+vec2 TextureInvScale(int index) { return 1.0 / u_TextureParams[index].xy; }
 vec2 TextureScale(int index) { return u_TextureParams[index].xy; }
 
 vec3 TevBias(vec3 a, float b) { return a + vec3(b); }

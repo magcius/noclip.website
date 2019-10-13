@@ -2444,7 +2444,6 @@ export class TimePanel extends Panel {
 export class CameraSpeedIndicator {
     public elem: HTMLElement;
 
-    private currentValue: number = -1;
     private currentAnimation: Animation | null = null;
 
     constructor() {
@@ -2461,10 +2460,6 @@ export class CameraSpeedIndicator {
     }
 
     public setCameraSpeed(v: number, displayIndicator: boolean = true): void {
-        if (this.currentValue === v)
-            return;
-
-        this.currentValue = v;
         const dispV = Math.max(v, 1);
         this.elem.textContent = `Camera Speed: ${dispV.toFixed(0)}`;
 

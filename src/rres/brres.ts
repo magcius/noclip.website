@@ -5,7 +5,7 @@
 import * as GX from '../gx/gx_enum';
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString, assertExists, nArray } from "../util";
+import { assert, readString, assertExists, nArray, hexzero } from "../util";
 import * as GX_Material from '../gx/gx_material';
 import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, compileVtxLoader, LoadedVertexLayout, getAttributeComponentByteSizeRaw, getAttributeFormatCompFlagsRaw } from '../gx/gx_displaylist';
 import { mat4, vec3 } from 'gl-matrix';
@@ -207,6 +207,7 @@ function parseTEX0(buffer: ArrayBufferSlice): TEX0 {
     return { name, width, height, format, mipCount, minLOD, maxLOD, data, paletteFormat, paletteData };
 }
 //#endregion
+
 //#region MDL0
 export class DisplayListRegisters {
     public bp: Uint32Array = new Uint32Array(0x100);
@@ -243,6 +244,7 @@ export class DisplayListRegisters {
             this.kc[bank * 4 * 2 + kci] = regValue;
         }
     }
+
     public xfs(idx: GX.XFRegister, sub: number, v: number): void {
         assert(idx >= 0x1000);
         idx -= 0x1000;
@@ -256,7 +258,7 @@ export class DisplayListRegisters {
     }
 }
 
-export function runDisplayListRegisters(r: DisplayListRegisters, buffer: ArrayBufferSlice): void {
+export function displayListRegistersRun(r: DisplayListRegisters, buffer: ArrayBufferSlice): void {
     const view = buffer.createDataView();
 
     for (let i = 0; i < buffer.byteLength;) {
@@ -310,6 +312,18 @@ export function runDisplayListRegisters(r: DisplayListRegisters, buffer: ArrayBu
     }
 }
 
+function setBPReg(addr: number, value: number): number {
+    return (addr << 24) | (value & 0x00FFFFFF);
+}
+
+export function displayListRegistersInitGX(r: DisplayListRegisters): void {
+    // Init swap tables.
+    for (let i = 0; i < 8; i += 2) {
+        r.bps(setBPReg(GX.BPRegister.TEV_KSEL_0_ID + i + 0, 0b0100));
+        r.bps(setBPReg(GX.BPRegister.TEV_KSEL_0_ID + i + 1, 0b1110));
+    }
+}
+
 function findTevOp(bias: GX.TevBias, scale: GX.TevScale, sub: boolean): GX.TevOp {
     if (bias === GX.TevBias.$HWB_COMPARE) {
         switch (scale) {
@@ -336,7 +350,7 @@ function parseMDL0_TevEntry(buffer: ArrayBufferSlice, r: DisplayListRegisters, n
     assert(numStages === numStagesCheck);
 
     const dlOffs = 0x20;
-    runDisplayListRegisters(r, buffer.subarray(dlOffs, 480));
+    displayListRegistersRun(r, buffer.subarray(dlOffs, 480));
 }
 
 export const enum MapMode {
@@ -726,7 +740,7 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
 
     const matDLOffs = view.getUint32(endOfHeaderOffs);
     const matDLSize = 32 + 128 + 64 + 160;
-    runDisplayListRegisters(r, buffer.subarray(matDLOffs, matDLSize));
+    displayListRegistersRun(r, buffer.subarray(matDLOffs, matDLSize));
 
     // Run the TEV registers as well.
     parseMDL0_TevEntry(buffer.subarray(tevOffs), r, numTevs);
@@ -1054,7 +1068,7 @@ function parseMDL0_ShapeEntry(buffer: ArrayBufferSlice, inputBuffers: InputVerte
 
     // Run preprim. This should get us our VAT / VCD.
     const r = new DisplayListRegisters();
-    runDisplayListRegisters(r, buffer.subarray(prePrimDLOffs, prePrimDLSize));
+    displayListRegistersRun(r, buffer.subarray(prePrimDLOffs, prePrimDLSize));
 
     // VCD. Describes primitive data.
     const vcdL = r.cp[GX.CPRegister.VCD_LO_ID];

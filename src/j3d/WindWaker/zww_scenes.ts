@@ -21,7 +21,7 @@ import { colorToCSS, Color, colorNew } from '../../Color';
 import { ColorKind, fillSceneParamsDataOnTemplate } from '../../gx/gx_render';
 import { GXRenderHelperGfx } from '../../gx/gx_render';
 import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBufferUsage, GfxFormat, GfxVertexAttributeFrequency, GfxInputLayout, GfxInputState, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor, GfxCompareMode, GfxBufferFrequencyHint, GfxVertexAttributeDescriptor } from '../../gfx/platform/GfxPlatform';
-import { GfxRenderInstManager, GfxRendererLayer, GfxRenderInst } from '../../gfx/render/GfxRenderer';
+import { GfxRenderInstManager, GfxRendererLayer } from '../../gfx/render/GfxRenderer';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../../gfx/helpers/RenderTargetHelpers';
 import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers';
 import { fillMatrix4x4, fillMatrix4x3, fillColor } from '../../gfx/helpers/UniformBufferHelpers';
@@ -686,6 +686,8 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         const template = this.renderHelper.pushTemplateRenderInst();
         const renderInstManager = this.renderHelper.renderInstManager;
 
+        template.filterKey = WindWakerPass.MAIN;
+
         fillSceneParamsDataOnTemplate(template, viewerInput);
         if (this.seaPlane)
             this.seaPlane.prepareToRender(renderInstManager, viewerInput);
@@ -695,12 +697,9 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             this.roomRenderers[i].prepareToRender(device, renderInstManager, viewerInput);
 
         if (this.effectSystem !== null) {
-            const template = renderInstManager.pushTemplateRenderInst();
-            template.filterKey = WindWakerPass.MAIN;
             this.effectSystem.calc(viewerInput);
             this.effectSystem.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, null);
             this.effectSystem.draw(device, this.renderHelper.renderInstManager);
-            this.renderHelper.renderInstManager.popTemplateRenderInst();
         }
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();

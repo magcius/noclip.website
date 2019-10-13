@@ -84,7 +84,7 @@ export function fillLightData(d: Float32Array, offs: number, light: GX_Material.
 }
 
 export function fillTextureMappingInfo(d: Float32Array, offs: number, textureMapping: TextureMapping): number {
-    return fillVec4(d, offs, 1 / textureMapping.width, (textureMapping.flipY ? -1 : 1) / textureMapping.height, 0, textureMapping.lodBias);
+    return fillVec4(d, offs, textureMapping.width, (textureMapping.flipY ? -1 : 1) * textureMapping.height, 0, textureMapping.lodBias);
 }
 
 function fillMaterialParamsDataWithOptimizations(material: GX_Material.GXMaterial, d: Float32Array, bOffs: number, materialParams: MaterialParams): void {

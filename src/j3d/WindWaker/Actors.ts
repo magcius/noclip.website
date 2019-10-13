@@ -15,7 +15,7 @@ import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB, 
 import { GfxDevice } from '../../gfx/platform/GfxPlatform';
 import ArrayBufferSlice from '../../ArrayBufferSlice';
 import { assertExists } from '../../util';
-import { DisplayListRegisters, runDisplayListRegisters, parseMaterialEntry } from '../../rres/brres';
+import { DisplayListRegisters, displayListRegistersRun, parseMaterialEntry, displayListRegistersInitGX } from '../../rres/brres';
 import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader } from '../../gx/gx_displaylist';
 import { GfxBufferCoalescerCombo } from '../../gfx/helpers/BufferHelpers';
 import { TextureMapping } from '../../TextureHolder';
@@ -153,7 +153,8 @@ export class WhiteFlowerData {
         const l_color2 = findSymbol(symbolMap, `d_flower.o`, `l_color2`);
 
         const matRegisters = new DisplayListRegisters();
-        runDisplayListRegisters(matRegisters, l_matDL);
+        displayListRegistersInitGX(matRegisters);
+        displayListRegistersRun(matRegisters, l_matDL);
 
         const genMode = matRegisters.bp[GX.BPRegister.GEN_MODE_ID];
         const numTexGens = (genMode >>> 0) & 0x0F;
@@ -238,7 +239,8 @@ export class PinkFlowerData {
         const l_color2 = findSymbol(symbolMap, `d_flower.o`, `l_color2`);
 
         const matRegisters = new DisplayListRegisters();
-        runDisplayListRegisters(matRegisters, l_matDL2);
+        displayListRegistersInitGX(matRegisters);
+        displayListRegistersRun(matRegisters, l_matDL2);
 
         const genMode = matRegisters.bp[GX.BPRegister.GEN_MODE_ID];
         const numTexGens = (genMode >>> 0) & 0x0F;
@@ -323,7 +325,8 @@ export class BessouFlowerData {
         const l_color2 = findSymbol(symbolMap, `d_flower.o`, `l_color2`);
 
         const matRegisters = new DisplayListRegisters();
-        runDisplayListRegisters(matRegisters, l_matDL3);
+        displayListRegistersInitGX(matRegisters);
+        displayListRegistersRun(matRegisters, l_matDL3);
 
         const genMode = matRegisters.bp[GX.BPRegister.GEN_MODE_ID];
         const numTexGens = (genMode >>> 0) & 0x0F;
@@ -398,6 +401,7 @@ const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 export class FlowerObjectRenderer implements ObjectRenderer {
     public modelMatrix = mat4.create();
+    public visible = true;
 
     private materialHelper: GXMaterialHelperGfx;
 
@@ -412,6 +416,9 @@ export class FlowerObjectRenderer implements ObjectRenderer {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!this.visible)
+            return;
+
         // Do some basic distance culling.
         mat4.getTranslation(scratchVec3a, viewerInput.camera.worldMatrix);
         mat4.getTranslation(scratchVec3b, this.modelMatrix);
@@ -426,8 +433,6 @@ export class FlowerObjectRenderer implements ObjectRenderer {
         materialParams.m_TextureMapping[0].copy(this.flowerData.textureMapping);
         colorFromRGBA(materialParams.u_Color[ColorKind.C0], 1.0, 1.0, 1.0, 1.0);
         colorFromRGBA(materialParams.u_Color[ColorKind.C1], 1.0, 1.0, 1.0, 1.0);
-        const S = 0.5;
-        mat4.fromScaling(materialParams.u_PostTexMtx[0], [S, S, S]);
 
         const renderInst = this.flowerData.shapeHelperMain.pushRenderInst(renderInstManager);
 
