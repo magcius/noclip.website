@@ -3166,10 +3166,10 @@ levn@~0.3.0:
     prelude-ls "~1.1.2"
     type-check "~0.3.2"
 
-librw@^0.2.0:
-  version "0.2.0"
-  resolved "https://registry.yarnpkg.com/librw/-/librw-0.2.0.tgz#179cd8b9d731f4e578cae8c1e16978740ec825a5"
-  integrity sha512-PF5s1PqoeTZiYn7d9tXQFcdEqg2RByOkY9uR0mmXcRtdxzn6SyWJEB/0gtE0JFHUcS96cyRcSd64zxwEVEZUUQ==
+librw@^0.3.0:
+  version "0.3.0"
+  resolved "https://registry.yarnpkg.com/librw/-/librw-0.3.0.tgz#62fcbb771196b673ccef3d61ef3a7ecdf0bc28eb"
+  integrity sha512-q4hCUQ5aB/sBVHeu52BuWCo/a/4b1r5JcmOzUofYbM6y1wpdFcy+ImWtA7rPiqKzstl314Mc6D5xPyIB9puVuA==
 
 lodash.clone@^4.5.0:
   version "4.5.0"

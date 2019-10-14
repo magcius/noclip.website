@@ -697,10 +697,14 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             return this._WEBGL_compressed_texture_s3tc!.COMPRESSED_RGBA_S3TC_DXT1_EXT;
         case GfxFormat.BC1_SRGB:
             return this._WEBGL_compressed_texture_s3tc_srgb!.COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT;
-        case GfxFormat.BC3:
+        case GfxFormat.BC2:
             return this._WEBGL_compressed_texture_s3tc!.COMPRESSED_RGBA_S3TC_DXT3_EXT;
+        case GfxFormat.BC2_SRGB:
+            return this._WEBGL_compressed_texture_s3tc_srgb!.COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT;
+        case GfxFormat.BC3:
+            return this._WEBGL_compressed_texture_s3tc!.COMPRESSED_RGBA_S3TC_DXT5_EXT;
         case GfxFormat.BC3_SRGB:
-            return this._WEBGL_compressed_texture_s3tc_srgb!.COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT;
+            return this._WEBGL_compressed_texture_s3tc_srgb!.COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT;
         default:
             throw "whoops";
         }
@@ -712,10 +716,14 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             return this._WEBGL_compressed_texture_s3tc!.COMPRESSED_RGBA_S3TC_DXT1_EXT;
         case GfxFormat.BC1_SRGB:
             return this._WEBGL_compressed_texture_s3tc_srgb!.COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT;
-        case GfxFormat.BC3:
+        case GfxFormat.BC2:
             return this._WEBGL_compressed_texture_s3tc!.COMPRESSED_RGBA_S3TC_DXT3_EXT;
+        case GfxFormat.BC2_SRGB:
+            return this._WEBGL_compressed_texture_s3tc_srgb!.COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT;
+        case GfxFormat.BC3:
+            return this._WEBGL_compressed_texture_s3tc!.COMPRESSED_RGBA_S3TC_DXT5_EXT;
         case GfxFormat.BC3_SRGB:
-            return this._WEBGL_compressed_texture_s3tc_srgb!.COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT;
+            return this._WEBGL_compressed_texture_s3tc_srgb!.COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT;
         default:
             break;
         }
@@ -749,6 +757,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const typeFlags: FormatTypeFlags = getFormatTypeFlags(fmt);
         switch (typeFlags) {
         case FormatTypeFlags.BC1:
+        case FormatTypeFlags.BC2:
         case FormatTypeFlags.BC3:
             return true;
         default:
@@ -1189,9 +1198,11 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     public queryTextureFormatSupported(format: GfxFormat): boolean {
         switch (format) {
         case GfxFormat.BC1_SRGB:
+        case GfxFormat.BC2_SRGB:
         case GfxFormat.BC3_SRGB:
             return this._WEBGL_compressed_texture_s3tc_srgb !== null;
         case GfxFormat.BC1:
+        case GfxFormat.BC2:
         case GfxFormat.BC3:
             return this._WEBGL_compressed_texture_s3tc !== null;
         default:
@@ -1342,7 +1353,13 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                     if (i >= firstMipLevel) {
                         const levelData = bufr[ibufr++] as ArrayBufferView;
 
-                        if (is3D) {
+                        if (gl_target === WebGL2RenderingContext.TEXTURE_2D_ARRAY && isCompressed) {
+                            // Workaround for https://bugs.chromium.org/p/chromium/issues/detail?id=1004511
+                            const imageSize = levelData.byteLength / depth;
+                            for (let z = 0; z < depth; z++) {
+                                gl.compressedTexSubImage3D(gl_target, i, 0, 0, z, w, h, 1, gl_format, levelData, z * imageSize, imageSize);
+                            }
+                        } else if (is3D) {
                             if (isCompressed) {
                                 gl.compressedTexSubImage3D(gl_target, i, 0, 0, 0, w, h, d, gl_format, levelData);
                             } else {

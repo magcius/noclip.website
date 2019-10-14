@@ -20,12 +20,17 @@ function readItems(text: string, cb: (section: string, line: string[]) => void) 
 
 // https://gtamods.com/wiki/Item_Definition
 export enum ObjectFlags {
+    IS_ROAD = 0x01,
     DO_NOT_FADE = 0x02,
     DRAW_LAST = 0x04,
     ADDITIVE = 0x08,
     IS_SUBWAY = 0x10,
     IGNORE_LIGHTING = 0x20,
     NO_ZBUFFER_WRITE = 0x40,
+    DONT_RECEIVE_SHADOWS = 0x80,
+    IGNORE_DRAW_DISTANCE = 0x100,
+    IS_GLASS_TYPE_1 = 0x200,
+    IS_GLASS_TYPE_2 = 0x400,
 }
 
 export interface ObjectDefinition {
@@ -37,7 +42,6 @@ export interface ObjectDefinition {
     tobj: boolean;
     timeOn?: number;
     timeOff?: number;
-    dynamic: boolean;
 }
 
 function parseObjectDefinition(row: string[], tobj: boolean): ObjectDefinition {
@@ -48,7 +52,6 @@ function parseObjectDefinition(row: string[], tobj: boolean): ObjectDefinition {
         drawDistance: Number((row.length > 5) ? row[4] : row[3]),
         flags: Number(tobj ? row[row.length - 3] : row[row.length - 1]),
         tobj,
-        dynamic: false
     };
     if (tobj) {
         def.timeOn  = Number(row[row.length - 2]);
@@ -77,15 +80,32 @@ export interface ItemInstance {
     translation: vec3;
     scale: vec3;
     rotation: quat;
+    interior?: number;
+    lod?: number;
 }
 
-function parseItemInstance([id, model, posX, posY, posZ, scaleX, scaleY, scaleZ, rotX, rotY, rotZ, rotW]: string[]): ItemInstance {
+export const INTERIOR_EVERYWHERE = 13;
+
+function parseItemInstance(line: string[]): ItemInstance {
+    let [id, model, interior, posX, posY, posZ, scaleX, scaleY, scaleZ, rotX, rotY, rotZ, rotW, lod] = [] as (string | undefined)[];
+    if (line.length === 12) { // III
+        [id, model, posX, posY, posZ, scaleX, scaleY, scaleZ, rotX, rotY, rotZ, rotW] = line;
+    } else if (line.length === 13) { // VC
+        [id, model, interior, posX, posY, posZ, scaleX, scaleY, scaleZ, rotX, rotY, rotZ, rotW] = line;
+    } else if (line.length === 11) { // SA
+        [id, model, interior, posX, posY, posZ, rotX, rotY, rotZ, rotW, lod] = line;
+        scaleX = scaleY = scaleZ = '1';
+    } else {
+        throw new Error('error parsing INST');
+    }
     return {
         id: Number(id),
         modelName: model,
         translation: vec3.fromValues(Number(posX), Number(posY), Number(posZ)),
         scale: vec3.fromValues(Number(scaleX), Number(scaleY), Number(scaleZ)),
-        rotation: quat.fromValues(Number(rotX), Number(rotY), Number(rotZ), -Number(rotW))
+        rotation: quat.fromValues(Number(rotX), Number(rotY), Number(rotZ), -Number(rotW)),
+        interior: (interior === undefined) ? undefined : Number(interior),
+        lod: (lod === undefined) ? undefined : Number(lod),
     };
 }
 

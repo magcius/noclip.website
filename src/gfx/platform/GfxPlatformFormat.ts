@@ -13,6 +13,7 @@ export const enum FormatTypeFlags {
 
     // Special texture formats.
     BC1 = 0x41,
+    BC2,
     BC3,
 };
 
@@ -75,6 +76,8 @@ export enum GfxFormat {
     S32_R         = makeFormat(FormatTypeFlags.S32, FormatCompFlags.COMP_R,    FormatFlags.NONE),
     BC1           = makeFormat(FormatTypeFlags.BC1, FormatCompFlags.COMP_RGBA, FormatFlags.NONE),
     BC1_SRGB      = makeFormat(FormatTypeFlags.BC1, FormatCompFlags.COMP_RGBA, FormatFlags.SRGB),
+    BC2           = makeFormat(FormatTypeFlags.BC2, FormatCompFlags.COMP_RGBA, FormatFlags.NONE),
+    BC2_SRGB      = makeFormat(FormatTypeFlags.BC2, FormatCompFlags.COMP_RGBA, FormatFlags.SRGB),
     BC3           = makeFormat(FormatTypeFlags.BC3, FormatCompFlags.COMP_RGBA, FormatFlags.NONE),
     BC3_SRGB      = makeFormat(FormatTypeFlags.BC3, FormatCompFlags.COMP_RGBA, FormatFlags.SRGB),
 }

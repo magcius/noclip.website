@@ -5,6 +5,13 @@ function colorNorm(r: number, g: number, b: number, a: number = 255.0): Color {
     return colorNew(r/255.0, g/255.0, b/255.0, a/255.0);
 }
 
+function colorSum(dst: Color, a: Color, b: Color) {
+    dst.r = a.r + b.r;
+    dst.g = a.g + b.g;
+    dst.b = a.b + b.b;
+    dst.a = a.a + b.a;
+}
+
 export interface ColorSet {
     amb: Color;
     dir: Color;
@@ -18,7 +25,7 @@ export interface ColorSet {
     sprBght: number;
     shad: number;
     lightShad: number;
-    treeShad: number;
+    poleShad: number;
     farClp: number;
     fogSt: number;
     lightGnd: number;
@@ -27,6 +34,7 @@ export interface ColorSet {
     fluffyTop: Color;
     fluffyBot: Color;
     blur: Color;
+    water: Color;
 }
 
 export async function parseTimeCycle(text: string) {
@@ -35,39 +43,92 @@ export async function parseTimeCycle(text: string) {
     for (const s of lines) {
         const line = s.trim().toLowerCase();
         if (line === '' || line.startsWith('//')) continue;
-        const [
+        const row = line.split(/\s+/).map(Number);
+        let [
             ambR, ambG, ambB,
+            ambR_obj, ambG_obj, ambB_obj,
+            ambR_bl, ambG_bl, ambB_bl,
+            ambR_obj_bl, ambG_obj_bl, ambB_obj_bl,
             dirR, dirG, dirB,
             skyTopR, skyTopG, skyTopB,
             skyBotR, skyBotG, skyBotB,
-
             sunCoreR, sunCoreG, sunCoreB,
             sunCoronaR, sunCoronaG, sunCoronaB,
             sunSz, sprSz, sprBght,
-            shad, lightShad, treeShad,
+            shad, lightShad, poleShad,
             farClp, fogSt, lightGnd,
-
             cloudR, cloudG, cloudB,
             fluffyTopR, fluffyTopG, fluffyTopB,
             fluffyBotR, fluffyBotG, fluffyBotB,
-            blurR, blurG, blurB, blurA
-        ] = line.split(/\s+/).map(Number);
+            blurR, blurG, blurB, blurA,
+            waterR, waterG, waterB, waterA,
+        ] = [] as (number | undefined)[];
+        if (row.length === 40) { // III
+            [
+                ambR, ambG, ambB,
+                dirR, dirG, dirB,
+                skyTopR, skyTopG, skyTopB,
+                skyBotR, skyBotG, skyBotB,
+
+                sunCoreR, sunCoreG, sunCoreB,
+                sunCoronaR, sunCoronaG, sunCoronaB,
+                sunSz, sprSz, sprBght,
+                shad, lightShad, poleShad,
+                farClp, fogSt, lightGnd,
+
+                cloudR, cloudG, cloudB,
+                fluffyTopR, fluffyTopG, fluffyTopB,
+                fluffyBotR, fluffyBotG, fluffyBotB,
+                blurR, blurG, blurB, blurA,
+            ] = row;
+        } else if (row.length === 52) { // VC
+            [
+                ambR, ambG, ambB,
+                ambR_obj, ambG_obj, ambB_obj,
+                ambR_bl, ambG_bl, ambB_bl,
+                ambR_obj_bl, ambG_obj_bl, ambB_obj_bl,
+                dirR, dirG, dirB,
+                skyTopR, skyTopG, skyTopB,
+                skyBotR, skyBotG, skyBotB,
+                sunCoreR, sunCoreG, sunCoreB,
+                sunCoronaR, sunCoronaG, sunCoronaB,
+                sunSz, sprSz, sprBght,
+                shad, lightShad, poleShad,
+                farClp, fogSt, lightGnd,
+                cloudR, cloudG, cloudB,
+                fluffyTopR, fluffyTopG, fluffyTopB,
+                fluffyBotR, fluffyBotG, fluffyBotB,
+                blurR, blurG, blurB,
+                waterR, waterG, waterB, waterA,
+            ] = row;
+        } else {
+            throw new Error('unable to parse time cycle');
+        }
+        const amb = colorNorm(ambR, ambG, ambB, 0);
+        const dir = colorNorm(dirR, dirG, dirB);
+        const skyTop = colorNorm(skyTopR, skyTopG, skyTopB);
+        const skyBot = colorNorm(skyBotR, skyBotG, skyBotB);
+        const sunCore = colorNorm(sunCoreR, sunCoreG, sunCoreB);
+        const sunCorona = colorNorm(sunCoronaR, sunCoronaG, sunCoronaB);
+        const cloud = colorNorm(cloudR, cloudG, cloudB);
+        const fluffyTop = colorNorm(fluffyTopR, fluffyTopG, fluffyTopB);
+        const fluffyBot = colorNorm(fluffyBotR, fluffyBotG, fluffyBotB);
+        const blur = colorNorm(blurR, blurG, blurB, blurA);
+        const water = colorNewCopy(White);
+        if (waterR !== undefined && waterG !== undefined && waterB !== undefined && waterA !== undefined) {
+            water.r = waterR / 0xFF;
+            water.g = waterG / 0xFF;
+            water.b = waterB / 0xFF;
+            water.a = waterA / 0xFF;
+        } else {
+            colorSum(water, amb, dir);
+        }
         sets.push({
-            amb: colorNorm(ambR, ambG, ambB),
-            dir: colorNorm(dirR, dirG, dirB),
-            skyTop: colorNorm(skyTopR, skyTopG, skyTopB),
-            skyBot: colorNorm(skyBotR, skyBotG, skyBotB),
-
-            sunCore: colorNorm(sunCoreR, sunCoreG, sunCoreB),
-            sunCorona: colorNorm(sunCoronaR, sunCoronaG, sunCoronaB),
-            sunSz, sprSz, sprBght,
-            shad, lightShad, treeShad,
+            amb, dir, skyTop, skyBot,
+            sunCore, sunCorona, sunSz, sprSz, sprBght,
+            shad, lightShad, poleShad,
             farClp, fogSt, lightGnd,
-
-            cloud: colorNorm(cloudR, cloudG, cloudB),
-            fluffyTop: colorNorm(fluffyTopR, fluffyTopG, fluffyTopB),
-            fluffyBot: colorNorm(fluffyBotR, fluffyBotG, fluffyBotB),
-            blur: colorNorm(blurR, blurG, blurB, blurA)
+            cloud, fluffyTop, fluffyBot, blur, water,
         });
     }
     return sets;
@@ -87,7 +148,7 @@ export function emptyColorSet(): ColorSet {
         sprBght: 0,
         shad: 0,
         lightShad: 0,
-        treeShad: 0,
+        poleShad: 0,
         farClp: 0,
         fogSt: 0,
         lightGnd: 0,
@@ -96,6 +157,7 @@ export function emptyColorSet(): ColorSet {
         fluffyTop: colorNewCopy(White),
         fluffyBot: colorNewCopy(White),
         blur: colorNewCopy(White),
+        water: colorNewCopy(White),
     };
 }
 
@@ -113,7 +175,7 @@ export function lerpColorSet(dst: ColorSet, a: ColorSet, b: ColorSet, t: number)
     dst.sprBght = lerp(a.sprBght, b.sprBght, t);
     dst.shad = lerp(a.shad, b.shad, t);
     dst.lightShad = lerp(a.lightShad, b.lightShad, t);
-    dst.treeShad = lerp(a.treeShad, b.treeShad, t);
+    dst.poleShad = lerp(a.poleShad, b.poleShad, t);
     dst.farClp = lerp(a.farClp, b.farClp, t);
     dst.fogSt = lerp(a.fogSt, b.fogSt, t);
     dst.lightGnd = lerp(a.lightGnd, b.lightGnd, t);
@@ -122,4 +184,5 @@ export function lerpColorSet(dst: ColorSet, a: ColorSet, b: ColorSet, t: number)
     colorLerp(dst.fluffyTop, a.fluffyTop, b.fluffyTop, t);
     colorLerp(dst.fluffyBot, a.fluffyBot, b.fluffyBot, t);
     colorLerp(dst.blur, a.blur, b.blur, t);
+    colorLerp(dst.water, a.water, b.water, t);
 }

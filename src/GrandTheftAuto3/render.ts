@@ -16,7 +16,7 @@ import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { assert } from "../util";
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth, GfxRenderInst } from "../gfx/render/GfxRenderer";
-import { ItemInstance, ObjectDefinition } from "./item";
+import { ItemInstance, ObjectDefinition, ObjectFlags } from "./item";
 import { colorNew, White, colorNewCopy, colorMult, Color } from "../Color";
 import { ColorSet, emptyColorSet, lerpColorSet } from "./time";
 import { AABB } from "../Geometry";
@@ -28,32 +28,68 @@ export class Texture implements TextureBase {
     public format: number;
     public width: number;
     public height: number;
-    public depth: number;
     public pixels: Uint8Array;
+    public pixelFormat: GfxFormat;
 
-    constructor(texture: rw.Texture, txdName: string) {
+    constructor(texture: rw.Texture, txdName: string, useDXT = true) {
         this.name = txdName + '/' + texture.name.toLowerCase();
         this.format = texture.raster.format;
-        const image = texture.raster.toImage();
-        image.unindex();
-        this.width = image.width;
-        this.height = image.height;
-        this.depth = image.depth;
-        this.pixels = image.pixels!.slice();
-        image.delete();
+        if (useDXT && texture.raster.platform === rw.Platform.PLATFORM_D3D8) {
+            const r = texture.raster.toD3dRaster();
+            if (r.customFormat) {
+                switch(r.format) {
+                    case rw.Raster.Format.D3DFMT_DXT1:
+                        this.pixelFormat = GfxFormat.BC1;
+                        break;
+                    case rw.Raster.Format.D3DFMT_DXT2:
+                    case rw.Raster.Format.D3DFMT_DXT3:
+                        this.pixelFormat = GfxFormat.BC2;
+                        break;
+                    case rw.Raster.Format.D3DFMT_DXT4:
+                    case rw.Raster.Format.D3DFMT_DXT5:
+                        this.pixelFormat = GfxFormat.BC3;
+                        break;
+                    default:
+                        throw new Error('unrecognised custom texture format');
+                }
+                assert(r.texture.length > 0);
+                const level = r.texture.level(0);
+                this.width  = level.width;
+                this.height = level.height;
+                this.pixels = level.data!.slice();
+            }
+        }
+        if (this.pixels === undefined) {
+            const image = texture.raster.toImage();
+            image.unindex();
+            this.width  = image.width;
+            this.height = image.height;
+            this.pixels = image.pixels!.slice();
+            this.pixelFormat = (image.depth === 32) ? GfxFormat.U8_RGBA : GfxFormat.U8_RGB;
+            image.delete();
+        }
     }
 }
 
-function halve(pixels: Uint8Array, width: number, height: number): Uint8Array {
-    const halved = new Uint8Array(width * height);
-    for (let y = 0; y < height/2; y++) {
-        for (let x = 0; x < width/2; x++) {
-            for (let i = 0; i < 4; i++) {
-                halved[4 * (x + y * width/2) + i] =
-                    ( pixels[4 * ((2*x+0) + (2*y+0) * width) + i]
-                    + pixels[4 * ((2*x+1) + (2*y+0) * width) + i]
-                    + pixels[4 * ((2*x+0) + (2*y+1) * width) + i]
-                    + pixels[4 * ((2*x+1) + (2*y+1) * width) + i] ) / 4;
+function mod(a: number, b: number) {
+    return (a % b + b) % b;
+}
+
+function halve(pixels: Uint8Array, width: number, height: number, bpp: number): Uint8Array {
+    const w = Math.max((width / 2) | 0, 1);
+    const h = Math.max((height / 2) | 0, 1);
+    const UNPACK_ALIGNMENT = 4;
+    const rowSize = bpp * width + mod(-(bpp * width), UNPACK_ALIGNMENT);
+    const halvedRowSize = bpp * w + mod(-(bpp * w), UNPACK_ALIGNMENT);
+    const halved = new Uint8Array(halvedRowSize * h);
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            for (let i = 0; i < bpp; i++) {
+                halved[bpp * x + halvedRowSize * y + i] =
+                    ( pixels[bpp * (2*x+0) + rowSize * (2*y+0) + i]
+                    + pixels[bpp * (2*x+1) + rowSize * (2*y+0) + i]
+                    + pixels[bpp * (2*x+0) + rowSize * (2*y+1) + i]
+                    + pixels[bpp * (2*x+1) + rowSize * (2*y+1) + i] ) / 4;
             }
         }
     }
@@ -63,48 +99,48 @@ function halve(pixels: Uint8Array, width: number, height: number): Uint8Array {
 export class TextureArray extends TextureMapping {
     public subimages = new Map<string, number>();
 
-    constructor(device: GfxDevice, textures: Texture[]) {
+    constructor(device: GfxDevice, textures: Texture[], public transparent: boolean) {
         super();
         assert(textures.length > 0);
         const width = textures[0].width;
         const height = textures[0].height;
+        const size = textures[0].pixels.byteLength;
+        const pixelFormat = textures[0].pixelFormat;
         for (let i = 0; i < textures.length; i++) {
             const texture = textures[i];
-            assert(texture.width === width && texture.height === height);
+            assert(texture.width === width && texture.height === height && texture.pixelFormat === pixelFormat && texture.pixels.byteLength === size);
             this.subimages.set(texture.name, i);
         }
 
-        const pixels = new Uint8Array(4 * width * height * textures.length);
-        let offs = 0;
-        for (const texture of textures) {
-            let srcOffs = 0;
-            for (let y = 0; y < texture.height; y++) {
-                for (let x = 0; x < texture.width; x++) {
-                    pixels[offs++] = texture.pixels[srcOffs++];
-                    pixels[offs++] = texture.pixels[srcOffs++];
-                    pixels[offs++] = texture.pixels[srcOffs++];
-                    if (texture.depth === 32) {
-                        pixels[offs++] = texture.pixels[srcOffs++];
-                    } else {
-                        pixels[offs++] = 0xFF;
-                    }
-                }
+        let bpp = 0;
+        let mipFilter = GfxMipFilterMode.LINEAR;
+        if (pixelFormat === GfxFormat.U8_RGBA) {
+            bpp = 4;
+        } else if (pixelFormat === GfxFormat.U8_RGB) {
+            bpp = 3;
+        } else {
+            mipFilter = GfxMipFilterMode.NO_MIP;
+        }
+
+        const pixels = new Uint8Array(size * textures.length);
+        for (let i = 0; i < textures.length; i++)
+            pixels.set(textures[i].pixels, i * size);
+
+        const mipmaps = [pixels];
+        if (mipFilter !== GfxMipFilterMode.NO_MIP) {
+            let mip = pixels;
+            let w = width;
+            let h = height;
+            while (w > 1 && h > 1) {
+                mip = halve(mip, w, h * textures.length, bpp);
+                mipmaps.push(mip);
+                w = Math.max((w / 2) | 0, 1);
+                h = Math.max((h / 2) | 0, 1);
             }
         }
 
-        const mipmaps = [pixels];
-        let mip = pixels;
-        let w = width;
-        let h = height;
-        while (w > 1) {
-            mip = halve(mip, w, h * textures.length);
-            mipmaps.push(mip);
-            w = Math.max((w / 2) | 0, 1);
-            h = Math.max((h / 2) | 0, 1);
-        }
-
         const gfxTexture = device.createTexture({
-            dimension: GfxTextureDimension.n2D_ARRAY, pixelFormat: GfxFormat.U8_RGBA,
+            dimension: GfxTextureDimension.n2D_ARRAY, pixelFormat,
             width, height, depth: textures.length, numLevels: mipmaps.length
         });
         const hostAccessPass = device.createHostAccessPass();
@@ -119,7 +155,7 @@ export class TextureArray extends TextureMapping {
         this.gfxSampler = device.createSampler({
             magFilter: GfxTexFilterMode.BILINEAR,
             minFilter: GfxTexFilterMode.BILINEAR,
-            mipFilter: GfxMipFilterMode.LINEAR,
+            mipFilter,
             minLOD: 0,
             maxLOD: 1000,
             wrapS: GfxWrapMode.REPEAT,
@@ -133,33 +169,50 @@ export class TextureArray extends TextureMapping {
     }
 }
 
+interface GTA3ProgramDef {
+    ALPHA_TEST?: string;
+    SKY?: string;
+    WATER?: string;
+}
+
 class GTA3Program extends DeviceProgram {
     public static a_Position = 0;
     public static a_Color = 1;
     public static a_TexCoord = 2;
 
     public static ub_SceneParams = 0;
-    public static ub_MeshFragParams = 1;
 
     private static program = readFileSync('src/GrandTheftAuto3/program.glsl', { encoding: 'utf8' });
     public both = GTA3Program.program;
+
+    constructor(def: GTA3ProgramDef = {}) {
+        super();
+        if (def.ALPHA_TEST !== undefined)
+            this.defines.set('ALPHA_TEST', def.ALPHA_TEST);
+        if (def.SKY !== undefined)
+            this.defines.set('SKY', def.SKY);
+        if (def.WATER !== undefined)
+            this.defines.set('WATER', def.WATER);
+    }
 }
 
-const mainProgram = new GTA3Program();
-const skyProgram = new GTA3Program();
-skyProgram.defines.set('SKY', '1');
+const opaqueProgram = new GTA3Program();
+const dualPassCoreProgram = new GTA3Program({ ALPHA_TEST: '< 0.9' });
+const dualPassEdgeProgram = new GTA3Program({ ALPHA_TEST: '>= 0.9' });
+const waterProgram = new GTA3Program({ WATER: '1' });
+const skyProgram = new GTA3Program({ SKY: '1' });
 
 class Renderer {
     protected vertexBuffer: GfxBuffer;
     protected indexBuffer: GfxBuffer;
     protected inputLayout: GfxInputLayout;
     protected inputState: GfxInputState;
-    protected megaStateFlags: Partial<GfxMegaStateDescriptor>;
+    protected megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
     protected gfxProgram?: GfxProgram;
 
     protected indices: number;
 
-    constructor(protected program: DeviceProgram, protected atlas?: TextureArray) {}
+    constructor(protected program: DeviceProgram, protected atlas: TextureArray) {}
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, colorSet: ColorSet): GfxRenderInst | undefined {
         const renderInst = renderInstManager.pushRenderInst();
@@ -189,7 +242,7 @@ class Renderer {
 }
 
 export class SkyRenderer extends Renderer {
-    constructor(device: GfxDevice, atlas?: TextureArray) {
+    constructor(device: GfxDevice, atlas: TextureArray) {
         super(skyProgram, atlas);
         // fullscreen quad
         const vbuf = new Float32Array([
@@ -198,38 +251,23 @@ export class SkyRenderer extends Renderer {
              1,  1, 1,
              1, -1, 1,
         ]);
-        const ibuf = new Uint16Array([0,1,2,0,2,3]);
+        const ibuf = new Uint32Array([0,1,2,0,2,3]);
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vbuf.buffer);
         this.indexBuffer  = makeStaticDataBuffer(device, GfxBufferUsage.INDEX,  ibuf.buffer);
         this.indices = ibuf.length;
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: GTA3Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 * 0x04, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
+            { location: GTA3Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
         ];
-        this.inputLayout = device.createInputLayout({ indexBufferFormat: GfxFormat.U16_R, vertexAttributeDescriptors });
+        this.inputLayout = device.createInputLayout({ indexBufferFormat: GfxFormat.U32_R, vertexAttributeDescriptors });
         const buffers = [{ buffer: this.vertexBuffer, byteOffset: 0, byteStride: 3 * 0x04}];
         const indexBuffer = { buffer: this.indexBuffer, byteOffset: 0, byteStride: 0 };
         this.inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
-        this.megaStateFlags = { depthWrite: false };
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, colorSet: ColorSet): undefined {
         if (viewerInput.camera.isOrthographic) return;
         const renderInst = super.prepareToRender(device, renderInstManager, viewerInput, colorSet)!;
         renderInst.sortKey = makeSortKey(GfxRendererLayer.BACKGROUND);
-        let offs = renderInst.allocateUniformBuffer(GTA3Program.ub_MeshFragParams, 12 + 4 + 12 + 4 + 4 + 4);
-        const mapped = renderInst.mapUniformBufferF32(GTA3Program.ub_MeshFragParams);
-        offs += fillMatrix4x3(mapped, offs, viewerInput.camera.viewMatrix);
-        mapped[offs++] = colorSet.amb.r + colorSet.dir.r;
-        mapped[offs++] = colorSet.amb.g + colorSet.dir.g;
-        mapped[offs++] = colorSet.amb.b + colorSet.dir.b;
-        mapped[offs++] = colorSet.amb.a + colorSet.dir.a;
-        offs += fillMatrix4x3(mapped, offs, viewerInput.camera.worldMatrix);
-        mapped[offs++] = viewerInput.camera.frustum.right;
-        mapped[offs++] = viewerInput.camera.frustum.top;
-        mapped[offs++] = viewerInput.camera.frustum.near;
-        mapped[offs++] = viewerInput.camera.frustum.far;
-        offs += fillColor(mapped, offs, colorSet.skyTop);
-        offs += fillColor(mapped, offs, colorSet.skyBot);
         return;
     }
 }
@@ -342,37 +380,62 @@ export class DrawKey {
     public drawDistance?: number;
     public timeOn?: number;
     public timeOff?: number;
-    public dynamic: boolean;
+    public water: boolean;
+    public additive: boolean;
 
     constructor(obj: ObjectDefinition, public zone: string) {
-        if (obj.drawDistance < 99) {
+        if (obj.flags & ObjectFlags.DRAW_LAST)
+            this.renderLayer = GfxRendererLayer.TRANSLUCENT;
+        if (obj.drawDistance < 99 && !(obj.flags & ObjectFlags.IGNORE_DRAW_DISTANCE))
             this.drawDistance = 99;
-        }
         if (obj.tobj) {
             this.timeOn = obj.timeOn;
             this.timeOff = obj.timeOff;
         }
-        this.dynamic = obj.dynamic;
+        this.water = (obj.modelName === 'water');
+        this.additive = !!(obj.flags & ObjectFlags.ADDITIVE);
     }
 }
 
 export class SceneRenderer extends Renderer {
     public bbox = new AABB();
 
-    constructor(device: GfxDevice, public key: DrawKey, meshes: MeshInstance[], atlas?: TextureArray) {
-        super(mainProgram, atlas);
-        const skipFrag = (frag: MeshFragData) =>
-            atlas !== undefined && frag.texName !== undefined && !atlas.subimages.has(frag.texName);
+    private static programFor(key: DrawKey, dual: boolean) {
+        if (key.water) return waterProgram;
+
+        // PS2 alpha test emulation, see http://skygfx.rockstarvision.com/skygfx.html
+        if (dual) return dualPassEdgeProgram;
+        if (!!(key.renderLayer & GfxRendererLayer.TRANSLUCENT)) return dualPassCoreProgram;
+
+        return opaqueProgram;
+    }
+
+    private static skipFrag(frag: MeshFragData, atlas: TextureArray) {
+        return frag.texName !== undefined && !atlas.subimages.has(frag.texName);
+    }
+
+    public static applicable(meshes: MeshInstance[], atlas: TextureArray) {
+        for (const inst of meshes) {
+            for (const frag of inst.frags) {
+                if (!SceneRenderer.skipFrag(frag, atlas)) return true;
+            }
+        }
+        return false;
+    }
+
+    constructor(device: GfxDevice, public key: DrawKey, meshes: MeshInstance[], atlas: TextureArray, dual = false) {
+        super(SceneRenderer.programFor(key, dual), atlas);
 
         let vertices = 0;
         this.indices = 0;
         for (const inst of meshes) {
             for (const frag of inst.frags) {
-                if (skipFrag(frag)) continue;
+                if (SceneRenderer.skipFrag(frag, atlas)) continue;
                 vertices += frag.vertices;
                 this.indices += frag.indices.length;
             }
         }
+        assert(this.indices > 0);
 
         const points = [] as vec3[];
         const vbuf = new Float32Array(vertices * 10);
@@ -382,7 +445,7 @@ export class SceneRenderer extends Renderer {
         let lastIndex = 0;
         for (const inst of meshes) {
             for (const frag of inst.frags) {
-                if (skipFrag(frag)) continue;
+                if (SceneRenderer.skipFrag(frag, atlas)) continue;
                 const n = frag.vertices;
                 const texLayer = (frag.texName === undefined || atlas === undefined) ? undefined : atlas.subimages.get(frag.texName);
                 for (let i = 0; i < n; i++) {
@@ -402,6 +465,7 @@ export class SceneRenderer extends Renderer {
                     }
                 }
                 for (const index of frag.indices) {
+                    assert(index + lastIndex < vertices);
                     ibuf[ioffs++] = index + lastIndex;
                 }
                 lastIndex += n;
@@ -423,8 +487,9 @@ export class SceneRenderer extends Renderer {
         this.inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
         this.megaStateFlags = {
             blendMode: GfxBlendMode.ADD,
-            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+            blendDstFactor: this.key.additive ? GfxBlendFactor.ONE : GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
             blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
+            depthWrite: !dual,
         };
     }
 
@@ -432,6 +497,10 @@ export class SceneRenderer extends Renderer {
         const hour = Math.floor(viewerInput.time / TIME_FACTOR) % 24;
         const { timeOn, timeOff } = this.key;
         let renderLayer = this.key.renderLayer;
+        if (!this.atlas.transparent)
+            renderLayer = GfxRendererLayer.OPAQUE;
+        if (this.key.water)
+            renderLayer = GfxRendererLayer.TRANSLUCENT;
         if (timeOn !== undefined && timeOff !== undefined) {
             if (timeOn < timeOff && (hour < timeOn || timeOff < hour)) return;
             if (timeOff < timeOn && (hour < timeOn && timeOff < hour)) return;
@@ -447,32 +516,12 @@ export class SceneRenderer extends Renderer {
 
         const renderInst = super.prepareToRender(device, renderInstManager, viewerInput, colorSet)!;
         renderInst.sortKey = setSortKeyDepth(makeSortKey(renderLayer), depth);
-
-        let offs = renderInst.allocateUniformBuffer(GTA3Program.ub_MeshFragParams, 12 + 4 + 4);
-        const mapped = renderInst.mapUniformBufferF32(GTA3Program.ub_MeshFragParams);
-        offs += fillMatrix4x3(mapped, offs, viewerInput.camera.viewMatrix);
-        if (this.key.dynamic) {
-            mapped[offs++] = colorSet.amb.r + colorSet.dir.r;
-            mapped[offs++] = colorSet.amb.g + colorSet.dir.g;
-            mapped[offs++] = colorSet.amb.b + colorSet.dir.b;
-            mapped[offs++] = colorSet.amb.a + colorSet.dir.a;
-        } else {
-            offs += fillColor(mapped, offs, colorSet.amb);
-        }
-        mapped[offs++] = !(renderLayer & GfxRendererLayer.TRANSLUCENT) ? 0.01 : dual ? -0.9 : 0.9;
-
-        // PS2 alpha test emulation, see http://skygfx.rockstarvision.com/skygfx.html
-        if (dual) {
-            renderInst.setMegaStateFlags({ depthWrite: false });
-        } else if (!!(this.key.renderLayer & GfxRendererLayer.TRANSLUCENT)) {
-            this.prepareToRender(device, renderInstManager, viewerInput, colorSet, true);
-        }
         return;
     }
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 2, numSamplers: 1 },
+    { numUniformBuffers: 1, numSamplers: 1 },
 ];
 
 export class GTA3Renderer implements Viewer.SceneGfx {
@@ -486,7 +535,7 @@ export class GTA3Renderer implements Viewer.SceneGfx {
     private weather = 0;
     private scenarioSelect: UI.SingleSelect;
 
-    constructor(device: GfxDevice, private colorSets: ColorSet[]) {
+    constructor(device: GfxDevice, private colorSets: ColorSet[], private weatherTypes: string[], private waterOrigin: vec3) {
         this.renderHelper = new GfxRenderHelper(device);
     }
 
@@ -501,9 +550,24 @@ export class GTA3Renderer implements Viewer.SceneGfx {
         const template = this.renderHelper.renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
 
-        let offs = template.allocateUniformBuffer(GTA3Program.ub_SceneParams, 16);
-        const sceneParamsMapped = template.mapUniformBufferF32(GTA3Program.ub_SceneParams);
-        offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
+        let offs = template.allocateUniformBuffer(GTA3Program.ub_SceneParams, 16 + 2 * 12 + 6 * 4);
+        const mapped = template.mapUniformBufferF32(GTA3Program.ub_SceneParams);
+        offs += fillMatrix4x4(mapped, offs, viewerInput.camera.projectionMatrix);
+        offs += fillMatrix4x3(mapped, offs, viewerInput.camera.viewMatrix);
+        offs += fillMatrix4x3(mapped, offs, viewerInput.camera.worldMatrix);
+        mapped[offs++] = viewerInput.camera.frustum.right;
+        mapped[offs++] = viewerInput.camera.frustum.top;
+        mapped[offs++] = viewerInput.camera.frustum.near;
+        mapped[offs++] = viewerInput.camera.frustum.far;
+        offs += fillColor(mapped, offs, this.currentColors.amb);
+        offs += fillColor(mapped, offs, this.currentColors.skyTop);
+        offs += fillColor(mapped, offs, this.currentColors.skyBot);
+        offs += fillColor(mapped, offs, this.currentColors.water);
+        // rotate axes from Z-up to Y-up
+        mapped[offs++] = this.waterOrigin[1];
+        mapped[offs++] = this.waterOrigin[2];
+        mapped[offs++] = this.waterOrigin[0];
+        mapped[offs++] = 0;
 
         for (let i = 0; i < this.sceneRenderers.length; i++) {
             const sceneRenderer = this.sceneRenderers[i];
@@ -535,7 +599,7 @@ export class GTA3Renderer implements Viewer.SceneGfx {
         scenarioPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         scenarioPanel.setTitle(UI.TIME_OF_DAY_ICON, 'Weather');
 
-        const scenarioNames = ['Sunny', 'Cloudy', 'Rainy', 'Foggy'];
+        const scenarioNames = this.weatherTypes;
 
         this.scenarioSelect = new UI.SingleSelect();
         this.scenarioSelect.setStrings(scenarioNames);
