@@ -1,9 +1,9 @@
 
-import { vec3, vec2, vec4, quat } from 'gl-matrix';
-import { OpaqueBlack } from '../Color';
-import { ItemPlacement, ItemInstance, ObjectDefinition } from './item';
+import { vec3, vec2, quat } from 'gl-matrix';
+import { TransparentBlack } from '../Color';
+import { ItemPlacement, ItemInstance, ObjectDefinition, INTERIOR_EVERYWHERE } from './item';
 
-export function parseWaterPro(view: DataView, bounds = vec4.fromValues(-2048, -2048, 2048, 2048)): ItemPlacement {
+export function parseWaterPro(view: DataView, origin: vec3): ItemPlacement {
     const numLevels = view.getInt32(0, true);
     const heights: number[] = [];
     for (let i = 0; i < numLevels; i++) {
@@ -11,9 +11,8 @@ export function parseWaterPro(view: DataView, bounds = vec4.fromValues(-2048, -2
     }
     const instances: ItemInstance[] = [];
     const offs = 0x4 + 48 * 0x4 + 48 * 0x10 + 64 * 64;
-    const width = (bounds[2] - bounds[0]) / 128;
-    const height = (bounds[3] - bounds[1]) / 128;
-    const scale = vec3.fromValues(width, height, 1);
+    const size = 32;
+    const scale = vec3.fromValues(size, size, 1);
     const rotation = quat.identity(quat.create());
     for (let i = 0; i < 128; i++) {
         for (let j = 0; j < 128; j++) {
@@ -21,9 +20,10 @@ export function parseWaterPro(view: DataView, bounds = vec4.fromValues(-2048, -2
             if (level & 0x80) continue;
             instances.push({
                 modelName: 'water',
+                interior: INTERIOR_EVERYWHERE,
                 translation: vec3.fromValues(
-                    i * width + bounds[0],
-                    j * height + bounds[1],
+                    i * size + origin[0] - 2048,
+                    j * size + origin[1] - 2048,
                     heights[level]
                 ),
                 scale, rotation
@@ -39,7 +39,6 @@ export const waterDefinition: ObjectDefinition = {
     drawDistance: 1000,
     flags: 0,
     tobj: false,
-    dynamic: true
 };
 
 const squarePositions = [
@@ -56,11 +55,13 @@ const squareTexCoords = [
     vec2.fromValues(1,0),
 ];
 
-export const waterMeshFragData = {
-    texName: 'particle/water_old',
-    indices: new Uint16Array([0,1,2,0,2,3]),
-    vertices: 4,
-    position: (i: number) => squarePositions[i],
-    texCoord: (i: number) => squareTexCoords[i],
-    color: (i: number) => OpaqueBlack,
-};
+export function waterMeshFragData(texture: string) {
+    return {
+        texName: `particle/${texture}`,
+        indices: new Uint16Array([0,1,2,0,2,3]),
+        vertices: 4,
+        position: (i: number) => squarePositions[i],
+        texCoord: (i: number) => squareTexCoords[i],
+        color: (i: number) => TransparentBlack,
+    };
+}

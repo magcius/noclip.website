@@ -3,19 +3,14 @@ precision mediump float; precision lowp sampler2DArray;
 
 layout(row_major, std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
-};
-
-layout(row_major, std140) uniform ub_MeshFragParams {
     Mat4x3 u_ViewMatrix;
-    vec4 u_AmbientColor;
-#ifdef SKY
     Mat4x3 u_WorldMatrix;
     vec4 u_Frustum;
+    vec4 u_AmbientColor;
     vec4 u_SkyTopColor;
     vec4 u_SkyBotColor;
-#else
-    float alphaThreshold;
-#endif
+    vec4 u_WaterColor;
+    vec4 u_WaterOrigin;
 };
 
 uniform sampler2DArray u_Texture;
@@ -52,27 +47,39 @@ void main() {
     vec3 nearPlane = v_Position * u_Frustum.xyz;
     vec3 cameraRay = Mul(u_WorldMatrix, vec4(nearPlane, 0.0));
     vec3 cameraPos = Mul(u_WorldMatrix, vec4(vec3(0.0), 1.0));
-    float t = -cameraPos.y / cameraRay.y;
-    vec3 oceanPlane = cameraPos + t * cameraRay;
+    float elevation = atan(cameraRay.y, length(cameraRay.zx)) * 180.0 / radians(180.0);
+    gl_FragColor = mix(u_SkyBotColor, u_SkyTopColor, clamp(abs(elevation / 45.0), 0.0, 1.0));
+    gl_FragDepth = 0.0;
 
-    if (t > 0.0 && (abs(oceanPlane.z) > 2000.0 || abs(oceanPlane.x) > 2000.0)) {
-        vec2 uv = fract(oceanPlane.zx / 32.0);
-        vec4 t_Color = vec4(0,0,0,1);
-        t_Color.rgb += u_AmbientColor.rgb;
+    float t = (u_WaterOrigin.y - cameraPos.y) / cameraRay.y;
+    vec3 oceanPlane = cameraPos + t * cameraRay;
+    if (t > 0.0 && (abs(oceanPlane.z - u_WaterOrigin.z) >= 2e3 || abs(oceanPlane.x - u_WaterOrigin.x) >= 2e3)) {
+        vec2 uv = (oceanPlane.zx - u_WaterOrigin.zx) / 32.0;
+        vec4 t_Color = u_WaterColor;
         t_Color *= texture(u_Texture, vec3(uv, 0));
-        gl_FragColor = t_Color;
-    } else {
-        float elevation = atan(cameraRay.y, length(cameraRay.zx)) * 180.0 / radians(180.0);
-        gl_FragColor = mix(u_SkyBotColor, u_SkyTopColor, clamp(abs(elevation / 45.0), 0.0, 1.0));
+        gl_FragColor = mix(gl_FragColor, t_Color, t_Color.a);
+
+        // slightly overlap water tiles to avoid seam
+        vec4 clipOffset = 0.01 * vec4(0,0,1,0);
+        vec4 clipSpacePos = Mul(u_Projection, Mul(_Mat4x4(u_ViewMatrix), vec4(oceanPlane, 1.0)) + clipOffset);
+        float depthNDC = clipSpacePos.z / clipSpacePos.w;
+        gl_FragDepth = 0.5 + 0.5 * depthNDC;
     }
 }
 #else
 void main() {
+#ifdef WATER
+    vec4 t_Color = u_WaterColor;
+#else
     vec4 t_Color = v_Color;
     t_Color.rgb += u_AmbientColor.rgb;
+#endif
     if (v_TexCoord.z >= 0.0)
         t_Color *= texture(u_Texture, v_TexCoord);
-    if (alphaThreshold >= 0.0 ? t_Color.a < alphaThreshold : t_Color.a >= -alphaThreshold) discard;
+#ifdef ALPHA_TEST
+    if (t_Color.a ALPHA_TEST) discard;
+#endif
+    if (t_Color.a == 0.0) discard;
     gl_FragColor = t_Color;
 }
 #endif
