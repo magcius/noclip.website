@@ -115,7 +115,7 @@ class SceneDesc implements Viewer.SceneDesc {
         for (let i = 0; i < geo.rspOutput.textures.length; i++)
             viewerTextures.push(textureToCanvas(geo.rspOutput.textures[i]));
 
-        const n64Data = new N64Data(device, cache, geo.rspOutput);
+        const n64Data = new N64Data(device, cache, geo);
         sceneRenderer.n64Datas.push(n64Data);
         const n64Renderer = new N64Renderer(n64Data);
         sceneRenderer.n64Renderers.push(n64Renderer);

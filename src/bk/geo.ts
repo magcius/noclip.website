@@ -2,11 +2,55 @@
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, align } from "../util";
 import * as F3DEX from "./f3dex";
+import { vec3 } from "gl-matrix";
 
 // Banjo-Kazooie Geometry
 
 export interface Geometry {
     rspOutput: F3DEX.RSPOutput;
+    vertexEffects: VertexAnimationEffect[];
+}
+
+export const enum VertexEffectType {
+    // id mapping is different from game table index (in comment)
+    FlowingWater = 1,       // 1
+    ColorFlicker = 2,       // 0
+    StillWater = 3,         // 3
+    ColorPulse = 5,         // 4
+    RipplingWater = 7,      // 5
+    AlphaBlink = 8,         // 6
+    LightningBolt = 9,      // 8
+    LightningLighting = 10, // 7
+
+    // these are still speculative
+    Interactive = 4,        // 2
+    OtherInteractive = 6,   // 2 again
+}
+
+interface BlinkStateMachine {
+    currBlink: number;
+    strength: number;
+    count: number;
+    duration: number;
+    timer: number;
+}
+
+export interface VertexAnimationEffect {
+    type: VertexEffectType;
+    subID: number;
+    vertexIndices: number[];
+    baseVertexValues: F3DEX.Vertex[];
+    xPhase: number;
+    yPhase: number;
+    dtx: number;
+    dty: number;
+    dy: number;
+    colorFactor: number;
+
+    bbMin?: vec3;
+    bbMax?: vec3;
+    blinker?: BlinkStateMachine;
+    pairedEffect?: VertexAnimationEffect;
 }
 
 export function parse(buffer: ArrayBufferSlice, initialZUpd: boolean): Geometry {
@@ -37,7 +81,9 @@ export function parse(buffer: ArrayBufferSlice, initialZUpd: boolean): Geometry 
     segmentBuffers[0x09] = f3dexData;
     segmentBuffers[0x0F] = textureData;
 
-    const state = new F3DEX.RSPState(segmentBuffers);
+    // pass the vertex data to prefill the buffer, since effects rely on its ordering
+    // TODO: figure out the unreferenced vertices
+    const state = new F3DEX.RSPState(segmentBuffers, vertexData.createDataView());
     // Z_UPD
     state.gDPSetOtherModeL(5, 1, initialZUpd ? 0x20 : 0x00);
     // G_TF_BILERP
@@ -52,13 +98,15 @@ export function parse(buffer: ArrayBufferSlice, initialZUpd: boolean): Geometry 
         const cmd = view.getUint32(geoIdx + 0x00);
         // console.log(hexzero(cmd, 0x08));
         if (cmd === 0x00) {
-            // NOOP?
+            // set custom model matrix?
             geoIdx += 0x04;
         } else if (cmd === 0x01) {
-            // Unknown. Skip.
+            // sort. Skip.
+            const drawCloserOnly = !!(view.getUint16(geoIdx + 0x20) & 1);
             geoIdx += 0x28;
         } else if (cmd === 0x02) {
             // BONE. Skip.
+            const jointIndex = view.getInt8(geoIdx + 0x9);
             geoIdx += 0x10;
         } else if (cmd === 0x03) {
             // LOAD DL.
@@ -69,13 +117,14 @@ export function parse(buffer: ArrayBufferSlice, initialZUpd: boolean): Geometry 
             F3DEX.runDL_F3DEX(state, 0x09000000 + segmentStart * 0x08);
             geoIdx += 0x10;
         } else if (cmd === 0x08) {
-            // Unknown. Skip.
+            // more draw distance?. Skip.
             geoIdx += 0x20;
         } else if (cmd === 0x0A) {
-            // Unknown. Skip.
+            // push vector?. Skip.
             geoIdx += 0x18;
         } else if (cmd === 0x0C) {
-            // Unknown. Skip.
+            // select children. Skip.
+            // used for showing only collected jiggies
             const dataSize = view.getUint32(geoIdx + 0x0C);
             // hexdump(buffer, geoIdx, 0x100);
             geoIdx += dataSize;
@@ -83,7 +132,8 @@ export function parse(buffer: ArrayBufferSlice, initialZUpd: boolean): Geometry 
             // DRAW DISTANCE. Skip.
             geoIdx += 0x18;
         } else if (cmd === 0x0E) {
-            // Unknown. Skip.
+            // view frustum culling. Skip.
+            const jointIndex = view.getInt16(geoIdx + 0x12);
             // hexdump(buffer, geoIdx, 0x100);
             geoIdx += 0x30;
         } else if (cmd === 0x0F) {
@@ -91,14 +141,95 @@ export function parse(buffer: ArrayBufferSlice, initialZUpd: boolean): Geometry 
             // hexdump(buffer, geoIdx, 0x20);
             geoIdx += 0x0C + align(count, 4);
         } else if (cmd === 0x10) {
-            // Unknown. Skip.
+            // set mipmaps. Skip.
             const contFlag = view.getUint32(geoIdx + 0x04);
+            // 1 for clamp, 2 for wrap
+            const wrapMode = view.getInt32(geoIdx + 0x08);
             geoIdx += 0x10;
         } else {
             throw "whoops";
         }
     }
-
     const rspOutput = state.finish();
-    return { rspOutput };
+
+    const effectSetupOffs = view.getUint32(0x24);
+    const vertexEffects: VertexAnimationEffect[] = [];
+    if (effectSetupOffs > 0) {
+        const numEffects = view.getUint16(effectSetupOffs);
+        let offs = effectSetupOffs + 0x02;
+        for (let i = 0; i < numEffects; i++) {
+            const rawID = view.getUint16(offs + 0x00);
+            const type: VertexEffectType = Math.floor(rawID / 100);
+            const subID = rawID % 100;
+            const vertexCount = view.getUint16(offs + 0x02);
+            offs += 0x04;
+
+            if (rawID <= 100 || type === VertexEffectType.Interactive || type === VertexEffectType.OtherInteractive) {
+                // TODO: understand what the effects with id <= 100 are for
+                offs += vertexCount * 0x02;
+                continue;
+            }
+
+            const vertexIndices: number[] = [];
+            const baseVertexValues: F3DEX.Vertex[] = [];
+            for (let j = 0; j < vertexCount; j++) {
+                const index = view.getUint16(offs);
+                vertexIndices.push(index);
+                baseVertexValues.push(rspOutput.vertices[index]);
+                offs += 0x02;
+            }
+
+            const effect: VertexAnimationEffect = {
+                type, subID, vertexIndices, baseVertexValues,
+                xPhase: 0, yPhase: 0, dy: 0, dtx: 0, dty: 0, colorFactor: 1
+            };
+
+            if (type === VertexEffectType.RipplingWater) {
+                // rippling water computes its amplitude from the bounding box
+                const vertexPos = vec3.create();
+                const bbMin = vec3.fromValues(baseVertexValues[0].x, baseVertexValues[0].y, baseVertexValues[0].z);
+                const bbMax = vec3.clone(bbMin);
+                for (let j = 0; j < baseVertexValues.length; j++) {
+                    vec3.set(vertexPos, baseVertexValues[j].x, baseVertexValues[j].y, baseVertexValues[j].z);
+                    vec3.min(bbMin, bbMin, vertexPos)
+                    vec3.max(bbMax, bbMax, vertexPos)
+                }
+                effect.bbMin = bbMin;
+                effect.bbMax = bbMax;
+            }
+            if (type === VertexEffectType.LightningLighting) {
+                // search for the paired lightning bolt
+                for (let j = 0; j < vertexEffects.length; j++) {
+                    if (vertexEffects[j].type === VertexEffectType.LightningBolt && vertexEffects[j].subID === subID) {
+                        effect.pairedEffect = vertexEffects[j];
+                    }
+                }
+                assert(!!effect.pairedEffect);
+            }
+            initEffectState(effect);
+            vertexEffects.push(effect);
+        }
+    }
+
+    return { rspOutput, vertexEffects };
+}
+
+function initEffectState(effect: VertexAnimationEffect) {
+    if (effect.type === VertexEffectType.StillWater) {
+        effect.xPhase = Math.random();
+    } else if (effect.type === VertexEffectType.RipplingWater) {
+        const baseline = (effect.bbMax![1] + effect.bbMin![1]) / 2;
+        for (let i = 0; i < effect.baseVertexValues.length; i++) {
+            effect.baseVertexValues[i].y = baseline;
+        }
+    } else if (effect.type === VertexEffectType.LightningBolt) {
+        // set blinker so next state is long pause
+        effect.blinker = {
+            currBlink: 0,
+            strength: 0,
+            count: 0,
+            duration: 1,
+            timer: 0,
+        };
+    }
 }
