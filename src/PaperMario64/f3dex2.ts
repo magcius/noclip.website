@@ -53,7 +53,11 @@ export class RSPOutput {
     public indices: number[] = [];
     public drawCalls: DrawCall[] = [];
 
-    public currentDrawCall = new DrawCall();
+    private currentDrawCall: DrawCall;
+
+    constructor() {
+        this.newDrawCall();
+    }
 
     public pushVertex(v: StagingVertex): void {
         if (v.outputIndex === -1) {

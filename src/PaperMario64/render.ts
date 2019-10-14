@@ -471,7 +471,7 @@ class ModelTreeLeafInstance {
 class ModelTreeGroupInstance {
     private modelMatrixScratch = mat4.create();
 
-    constructor(private group: ModelTreeGroup, private children: ModelTreeNodeInstance[]) {
+    constructor(private group: ModelTreeGroup, private children: ModelTreeNodeInstance[], private name = group.name) {
     }
 
     public findModelInstance(modelId: number): ModelTreeLeafInstance | null {

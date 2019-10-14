@@ -142,7 +142,11 @@ export class RSPOutput {
     public drawCalls: DrawCall[] = [];
     public textures: Texture[] = [];
 
-    public currentDrawCall = new DrawCall();
+    public currentDrawCall: DrawCall;
+
+    constructor() {
+        this.newDrawCall();
+    }
 
     public pushVertex(v: StagingVertex): void {
         if (v.outputIndex === -1) {
@@ -153,7 +157,7 @@ export class RSPOutput {
         }
 
         this.indices.push(v.outputIndex);
-        this.currentDrawCall.indexCount++;
+        this.currentDrawCall!.indexCount++;
     }
 
     public newDrawCall(): DrawCall {
@@ -367,6 +371,7 @@ export class RSPState {
     }
 
     public finish(): RSPOutput {
+        this.output.finish();
         this.output.textures = this.textureCache.textures;
         return this.output;
     }
