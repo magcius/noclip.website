@@ -1,10 +1,10 @@
 
 import * as Viewer from '../viewer';
 import { DeviceProgram } from "../Program";
-import { Texture, getImageFormatString, RSPOutput, Vertex, DrawCall, GeometryMode, OtherModeH_CycleType, getTextFiltFromOtherModeH } from "./f3dex";
-import { GfxDevice, GfxTextureDimension, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram } from "../gfx/platform/GfxPlatform";
+import { Texture, getImageFormatString, Vertex, DrawCall, GeometryMode, OtherModeH_CycleType, getTextFiltFromOtherModeH } from "./f3dex";
+import { GfxDevice, GfxTextureDimension, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { assert, nArray } from '../util';
+import { assert, nArray, align } from '../util';
 import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers';
 import { mat4 } from 'gl-matrix';
 import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
@@ -13,6 +13,8 @@ import { interactiveVizSliderSelect } from '../DebugJunk';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { TextFilt } from '../Common/N64/Image';
+import { Geometry, VertexAnimationEffect, VertexEffectType } from './geo';
+import { clamp } from '../MathHelpers';
 
 class F3DEX_Program extends DeviceProgram {
     public static a_Position = 0;
@@ -171,7 +173,7 @@ function translateCM(cm: TexCM): GfxWrapMode {
     }
 }
 
-function makeVertexBufferData(v: Vertex[]): ArrayBuffer {
+function makeVertexBufferData(v: Vertex[]): Float32Array {
     const buf = new Float32Array(10 * v.length);
     let j = 0;
     for (let i = 0; i < v.length; i++) {
@@ -188,7 +190,124 @@ function makeVertexBufferData(v: Vertex[]): ArrayBuffer {
         buf[j++] = v[i].c2;
         buf[j++] = v[i].a;
     }
-    return buf.buffer;
+    return buf;
+}
+
+function updateVertexEffectState(effect: VertexAnimationEffect, timeInSeconds: number, deltaSeconds: number) {
+    if (effect.type === VertexEffectType.ColorFlicker) {
+        // game updates once per frame
+        const delta = (.08 * Math.random() - .04) * deltaSeconds * 30;
+        effect.colorFactor = clamp(effect.colorFactor + delta, 0.8, 1.0);
+    } else if (effect.type === VertexEffectType.FlowingWater) {
+        effect.dty = (timeInSeconds * effect.subID) % 0x100;
+    } else if (effect.type === VertexEffectType.OtherInteractive || effect.type === VertexEffectType.Interactive) {
+        effect.dy = Math.sin(timeInSeconds * Math.PI / 3) * 20;
+    } else if (effect.type === VertexEffectType.StillWater || effect.type === VertexEffectType.RipplingWater) {
+        const anglePhase = effect.type === VertexEffectType.StillWater ? effect.xPhase : 0;
+        const angle = (anglePhase + timeInSeconds) * Math.PI;
+        // uv coordinates must be rescaled to respect the fixed point format
+        effect.dtx = 80 * (Math.sin(angle * .08) + Math.cos(angle * .2) * 1.5) / 0x40;
+        effect.dty = 80 * (Math.cos(angle * .22) + Math.sin(angle * .5) * .5) / 0x40;
+        if (effect.type === VertexEffectType.StillWater) {
+            // TODO: understand the extra water level changing logic which is off by default
+            effect.dy = effect.subID * (Math.sin(angle * .11) * .25 + Math.cos(angle * .5) * .75);
+        } else if (effect.type === VertexEffectType.RipplingWater) {
+            const waveSpeed = effect.subID < 10 ? effect.subID / 10 : 1;
+            effect.xPhase = 3 * waveSpeed * timeInSeconds;
+            effect.yPhase = 3 * (waveSpeed + .01) * timeInSeconds;
+        }
+    } else if (effect.type === VertexEffectType.ColorPulse) {
+        const distance = (0.5 + timeInSeconds * (effect.subID + 1) / 100) % 1.4;
+        effect.colorFactor = 0.3 + (distance < .7 ? distance : 1.4 - distance);
+    } else if (effect.type === VertexEffectType.AlphaBlink) {
+        // kind of hacky, there's a 1-second wait after the blink, so add in more to the cycle
+        const distance = (0.5 + timeInSeconds * (effect.subID + 1) / 100) % (2 + (effect.subID + 1) / 100);
+        if (distance < 1)
+            effect.colorFactor = distance;
+        else if (distance < 2)
+            effect.colorFactor = 2 - distance;
+        else
+            effect.colorFactor = 0;
+    } else if (effect.type === VertexEffectType.LightningBolt) {
+        const blinker = effect.blinker!;
+        blinker.timer -= Math.max(deltaSeconds, 0); // pause on reversing time
+        if (blinker.duration === 0) { // not blinking
+            effect.colorFactor = 0;
+            if (blinker.timer <= 0) {
+                blinker.currBlink++;
+                blinker.strength = (100 + 155 * Math.random()) / 255;
+                blinker.duration = .08 + .04 * Math.random();
+                blinker.timer = blinker.duration;
+            }
+        }
+        if (blinker.duration > 0) { // blinking
+            // compute blink envelope
+            if (blinker.timer < .04)
+                effect.colorFactor = blinker.strength * Math.max(blinker.timer, 0) / .04;
+            else if (blinker.timer < blinker.duration - .04)
+                effect.colorFactor = blinker.strength;
+            else
+                effect.colorFactor = blinker.strength * (blinker.duration - blinker.timer) / .04;
+
+            if (blinker.timer <= 0) {
+                effect.colorFactor = 0;
+                blinker.duration = 0;
+                if (blinker.currBlink < blinker.count) {
+                    blinker.timer = .1 + .1 * Math.random();
+                } else {
+                    blinker.currBlink = 0;
+                    blinker.count = 1 + Math.floor(4 * Math.random());
+                    blinker.timer = 4 + 2 * Math.random();
+                }
+            }
+        }
+    } else if (effect.type === VertexEffectType.LightningLighting) {
+        effect.colorFactor = effect.pairedEffect!.colorFactor * 100 / 255;
+    }
+}
+
+function applyVertexEffect(effect: VertexAnimationEffect, vertexBuffer: Float32Array, base: Vertex, index: number) {
+    // per vertex setup
+    if (effect.type === VertexEffectType.RipplingWater) {
+        const waveHeight = Math.sin((base.x - effect.bbMin![0]) * 200 + effect.xPhase)
+            + Math.cos((base.z - effect.bbMin![2]) * 200 + effect.yPhase);
+
+        effect.dy = waveHeight * (effect.bbMax![1] - effect.bbMin![1]) / 4;
+        effect.colorFactor = (205 + 50 * (waveHeight / 2)) / 255;
+    }
+
+    // vertex movement
+    if (effect.type === VertexEffectType.StillWater || effect.type === VertexEffectType.RipplingWater) {
+        vertexBuffer[index * 10 + 1] = base.y + effect.dy;
+    }
+
+    // texture coordinates
+    if (effect.type === VertexEffectType.FlowingWater ||
+        effect.type === VertexEffectType.StillWater ||
+        effect.type === VertexEffectType.RipplingWater) {
+        vertexBuffer[index * 10 + 4] = base.tx + effect.dtx;
+        vertexBuffer[index * 10 + 5] = base.ty + effect.dty;
+    }
+
+    // color
+    if (effect.type === VertexEffectType.ColorFlicker ||
+        effect.type === VertexEffectType.ColorPulse ||
+        effect.type === VertexEffectType.RipplingWater) {
+        vertexBuffer[index * 10 + 6] = base.c0 * effect.colorFactor;
+        vertexBuffer[index * 10 + 7] = base.c1 * effect.colorFactor;
+        vertexBuffer[index * 10 + 8] = base.c2 * effect.colorFactor;
+    } else if (effect.type === VertexEffectType.LightningLighting) {
+        vertexBuffer[index * 10 + 6] = clamp(base.c0 + effect.colorFactor, 0, 1);
+        vertexBuffer[index * 10 + 7] = clamp(base.c1 + effect.colorFactor, 0, 1);
+        vertexBuffer[index * 10 + 8] = clamp(base.c2 + effect.colorFactor, 0, 1);
+    }
+
+    // alpha
+    if (effect.type === VertexEffectType.AlphaBlink) {
+        vertexBuffer[index * 10 + 9] = base.a * effect.colorFactor;
+    } else if (effect.type === VertexEffectType.LightningBolt) {
+        vertexBuffer[index * 10 + 9] = effect.colorFactor;
+    }
 }
 
 export class N64Data {
@@ -199,17 +318,28 @@ export class N64Data {
     public inputLayout: GfxInputLayout;
     public inputState: GfxInputState;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public rspOutput: RSPOutput) {
-        for (let i = 0; i < this.rspOutput.textures.length; i++) {
-            const tex = this.rspOutput.textures[i];
+    public vertexBufferData: Float32Array;
+
+    constructor(device: GfxDevice, cache: GfxRenderCache, public geo: Geometry) {
+        for (let i = 0; i < this.geo.rspOutput.textures.length; i++) {
+            const tex = this.geo.rspOutput.textures[i];
             this.textures.push(this.translateTexture(device, tex));
             this.samplers.push(this.translateSampler(device, cache, tex));
         }
 
-        const vertexBufferData = makeVertexBufferData(this.rspOutput.vertices);
-        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vertexBufferData);
-        assert(this.rspOutput.vertices.length <= 0xFFFFFFFF);
-        const indexBufferData = new Uint32Array(this.rspOutput.indices);
+        this.vertexBufferData = makeVertexBufferData(this.geo.rspOutput.vertices);
+        if (this.geo.vertexEffects.length > 0) {
+            // there are vertex effects, so the vertex buffer data will change
+            this.vertexBuffer = device.createBuffer(
+                align(this.vertexBufferData.byteLength, 4) / 4,
+                GfxBufferUsage.VERTEX,
+                GfxBufferFrequencyHint.DYNAMIC
+            );
+        } else {
+            this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, this.vertexBufferData.buffer);
+        }
+        assert(this.geo.rspOutput.vertices.length <= 0xFFFFFFFF);
+        const indexBufferData = new Uint32Array(this.geo.rspOutput.indices);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexBufferData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
@@ -292,7 +422,7 @@ class DrawCallInstance {
         for (let i = 0; i < this.textureMappings.length; i++) {
             if (i < this.drawCall.textureIndices.length) {
                 const idx = this.drawCall.textureIndices[i];
-                this.textureEntry[i] = n64Data.rspOutput.textures[idx];
+                this.textureEntry[i] = n64Data.geo.rspOutput.textures[idx];
                 this.textureMappings[i].gfxTexture = n64Data.textures[idx];
                 this.textureMappings[i].gfxSampler = n64Data.samplers[idx];
             }
@@ -418,8 +548,8 @@ export class N64Renderer {
             blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
         };
 
-        for (let i = 0; i < this.n64Data.rspOutput.drawCalls.length; i++)
-            this.drawCallInstances.push(new DrawCallInstance(this.n64Data, this.n64Data.rspOutput.drawCalls[i]));
+        for (let i = 0; i < this.n64Data.geo.rspOutput.drawCalls.length; i++)
+            this.drawCallInstances.push(new DrawCallInstance(this.n64Data, this.n64Data.geo.rspOutput.drawCalls[i]));
     }
 
     public slider(): void {
@@ -462,6 +592,19 @@ export class N64Renderer {
         let offs = template.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, 16);
         const mappedF32 = template.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
         offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);
+
+        if (this.n64Data.geo.vertexEffects.length > 0) {
+            for (let i = 0; i < this.n64Data.geo.vertexEffects.length; i++) {
+                const effect = this.n64Data.geo.vertexEffects[i];
+                updateVertexEffectState(effect, viewerInput.time / 1000, viewerInput.deltaTime / 1000);
+                for (let j = 0; j < effect.vertexIndices.length; j++) {
+                    applyVertexEffect(effect, this.n64Data.vertexBufferData, effect.baseVertexValues[j], effect.vertexIndices[j]);
+                }
+            }
+            const hostAccessPass = device.createHostAccessPass();
+            hostAccessPass.uploadBufferData(this.n64Data.vertexBuffer, 0, new Uint8Array(this.n64Data.vertexBufferData.buffer));
+            device.submitPass(hostAccessPass);
+        }
 
         for (let i = 0; i < this.drawCallInstances.length; i++)
             this.drawCallInstances[i].prepareToRender(device, renderInstManager, viewerInput, this.isSkybox, this.modelMatrix);

@@ -363,7 +363,18 @@ export class RSPState {
     private DP_TileState = nArray(8, () => new TileState());
     private DP_TMemTracker = new Map<number, number>();
 
-    constructor(public segmentBuffers: ArrayBufferSlice[]) {
+    private prefilledVertexBuffer = false;
+
+    constructor(public segmentBuffers: ArrayBufferSlice[], vertexBuffer?: DataView) {
+        if (vertexBuffer) {
+            this.prefilledVertexBuffer = true;
+            const scratchVertex = new StagingVertex();
+
+            for (let offs = 0; offs < vertexBuffer.byteLength; offs += 0x10) {
+                scratchVertex.setFromView(vertexBuffer, offs);
+                this.output.pushVertex(scratchVertex);
+            }
+        }
     }
 
     public finish(): RSPOutput {
@@ -397,6 +408,10 @@ export class RSPState {
         let addrIdx = dramAddr & 0x00FFFFFF;
         for (let i = 0; i < n; i++) {
             this.vertexCache[v0 + i].setFromView(view, addrIdx);
+            if (this.prefilledVertexBuffer) {
+                // this vertex is already in the output buffer, so we know its index
+                this.vertexCache[v0 + i].outputIndex = addrIdx / 0x10;
+            }
             addrIdx += 0x10;
         }
     }
