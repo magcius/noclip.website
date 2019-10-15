@@ -2631,7 +2631,6 @@ class SnowRenderer {
             flakeIndices[6 * i + 5] = 4 * i + 3;
         }
 
-
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, flakeVertices.buffer);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, flakeIndices.buffer);
 
@@ -3052,7 +3051,7 @@ class Pilotwings64Renderer implements SceneGfx {
     public uvtrRenderers: UVTRRenderer[] = [];
     public dobjRenderers: ObjectRenderer[] = [];
     public skyRenderers: ObjectRenderer[] = [];
-    public snowRenderer: SnowRenderer;
+    public snowRenderer: SnowRenderer | null = null;
     public renderHelper: GfxRenderHelper;
     private renderTarget = new BasicRenderTarget();
 
@@ -3093,7 +3092,7 @@ class Pilotwings64Renderer implements SceneGfx {
             this.uvtrRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         for (let i = 0; i < this.dobjRenderers.length; i++)
             this.dobjRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput, toNoclipSpace);
-        if (this.snowRenderer)
+        if (this.snowRenderer !== null)
             this.snowRenderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
@@ -3166,6 +3165,8 @@ class Pilotwings64Renderer implements SceneGfx {
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy(device);
         this.renderTarget.destroy(device);
+        if (this.snowRenderer !== null)
+            this.snowRenderer.destroy(device);
     }
 }
 
