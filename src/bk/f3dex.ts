@@ -382,7 +382,6 @@ export class RSPState {
     }
 
     public finish(): RSPOutput {
-        this.output.finish();
         this.output.textures = this.textureCache.textures;
         return this.output;
     }
