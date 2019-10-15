@@ -1,4 +1,3 @@
-
 import {
     GfxDevice, GfxBuffer, GfxInputLayout, GfxInputState, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexAttributeFrequency,
     GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxTextureDimension, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode,
@@ -12,12 +11,12 @@ import { decompress } from "../Common/Compression/MIO0";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { DeviceProgram } from "../Program";
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth, getSortKeyLayer, executeOnPass } from "../gfx/render/GfxRenderer";
-import { fillMatrix4x3, fillMatrix4x4, fillMatrix4x2, fillVec4v, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x3, fillMatrix4x4, fillMatrix4x2, fillVec4v, fillVec4, fillVec3 } from "../gfx/helpers/UniformBufferHelpers";
 import { mat4, vec3, vec4 } from "gl-matrix";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget, depthClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { computeViewMatrix } from "../Camera";
-import { MathConstants, clamp } from "../MathHelpers";
+import { MathConstants, clamp, computeMatrixWithoutTranslation } from "../MathHelpers";
 import { TextureState, TileState, getTextFiltFromOtherModeH, OtherModeH_CycleType, getCycleTypeFromOtherModeH } from "../bk/f3dex";
 import { ImageFormat, ImageSize, getImageFormatName, decodeTex_RGBA16, getImageSizeName, decodeTex_I4, decodeTex_I8, decodeTex_IA4, decodeTex_IA8, decodeTex_IA16, TextFilt } from "../Common/N64/Image";
 import { TextureMapping } from "../TextureHolder";
@@ -26,6 +25,7 @@ import { DataFetcher } from "../DataFetcher";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { getPointCubic, getPointHermite } from "../Spline";
 import { SingleSelect, Panel, TIME_OF_DAY_ICON, COOL_BLUE_COLOR } from "../ui";
+import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 
 interface Pilotwings64FSFileChunk {
     tag: string;
@@ -2546,6 +2546,157 @@ class Ring extends ObjectRenderer {
     }
 }
 
+class SnowProgram extends DeviceProgram {
+    public name = "PW64_Snow";
+    public static a_Position = 0;
+    public static a_Corner = 1;
+
+    public static ub_SceneParams = 0;
+    public static ub_DrawParams = 1;
+
+    public both = `
+layout(row_major, std140) uniform ub_SceneParams {
+    Mat4x4 u_Projection;
+};
+
+layout(row_major, std140) uniform ub_DrawParams {
+    Mat4x3 u_BoneMatrix;
+    vec4 u_Shift;
+};`
+    public vert = `
+layout(location = 0) in vec3 a_Position;
+
+void main() {
+    gl_Position = vec4(a_Position, 1.0) + vec4(u_Shift.xyz, 0.0);
+    // slightly clumsy, force into 0-10k cube, then shift center to origin
+    // just easier than dealing with negative mod values
+    float cubeSide = 5000.0;
+    gl_Position = mod(gl_Position, 2.0*vec4(cubeSide)) - vec4(vec3(cubeSide), 0.0);
+    gl_Position = Mul(_Mat4x4(u_BoneMatrix), gl_Position);
+    // shift snow cube in front of camera
+    gl_Position.z -= cubeSide;
+    // add offset based on which corner this is, undoing perspective correction so every flake is the same size
+    gl_Position += (u_Shift.w * gl_Position.z) * vec4(float(gl_VertexID & 1) - 0.5, float((gl_VertexID >> 1) & 1) - 0.5, 0.0, 0.0);
+    gl_Position = Mul(u_Projection, gl_Position);
+    // game writes snow directly to the frame buffer, with a very simple projection
+    // this effectively leads to a slightly larger FOV, so apply the same multiplier here
+    gl_Position = gl_Position * vec4(0.81778, 0.81778, 1.0, 1.0);
+}`;
+    public frag = `
+void main() {
+    gl_FragColor = vec4(1.0); // flakes are just white
+}`;
+}
+
+const snowBindingLayouts: GfxBindingLayoutDescriptor[] = [
+    { numUniformBuffers: 2, numSamplers: 0 },
+];
+const snowScratchVector = vec3.create();
+class SnowRenderer {
+    public vertexBuffer: GfxBuffer;
+    public indexBuffer: GfxBuffer;
+    public inputLayout: GfxInputLayout;
+    public inputState: GfxInputState;
+    private visible = true;
+    private snowProgram = new SnowProgram();
+    private snowShift = vec3.create();
+
+    private flakeBounds = 200 * 50; // 200 in game, scale up to make things simpler
+    private flakeScale = .005; // somewhat arbitrary, apparent size of flake at z = 1
+
+    constructor(device: GfxDevice, private flakeCount: number) {
+        const flakeVertices = new Float32Array(4 * 3 * flakeCount);
+        const flakeIndices = new Uint16Array(6 * flakeCount);
+        // randomize initial positions in a cube
+        for (let i = 0; i < flakeCount; i++) {
+            const flakeCenter = vec3.fromValues(
+                this.flakeBounds * Math.random(),
+                this.flakeBounds * Math.random(),
+                this.flakeBounds * Math.random(),
+            );
+
+            // put all four quad vertices at the flake center, but with different corner values
+            for (let j = 0; j < 4; j++) {
+                flakeVertices[12 * i + 3 * j + 0] = flakeCenter[0];
+                flakeVertices[12 * i + 3 * j + 1] = flakeCenter[1];
+                flakeVertices[12 * i + 3 * j + 2] = flakeCenter[2];
+            }
+
+            flakeIndices[6 * i + 0] = 4 * i + 0;
+            flakeIndices[6 * i + 1] = 4 * i + 1;
+            flakeIndices[6 * i + 2] = 4 * i + 2;
+
+            flakeIndices[6 * i + 3] = 4 * i + 2;
+            flakeIndices[6 * i + 4] = 4 * i + 1;
+            flakeIndices[6 * i + 5] = 4 * i + 3;
+        }
+
+
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, flakeVertices.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, flakeIndices.buffer);
+
+        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
+            { location: SnowProgram.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0, frequency: GfxVertexAttributeFrequency.PER_VERTEX, },
+        ];
+
+        this.inputLayout = device.createInputLayout({
+            indexBufferFormat: GfxFormat.U16_R,
+            vertexAttributeDescriptors,
+        });
+
+        this.inputState = device.createInputState(this.inputLayout, [
+            { buffer: this.vertexBuffer, byteOffset: 0, byteStride: 3 * 0x04, },
+        ], { buffer: this.indexBuffer, byteOffset: 0, byteStride: 0x02 });
+
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!this.visible)
+            return;
+
+        const renderInst = renderInstManager.pushRenderInst();
+        renderInst.filterKey = PW64Pass.SNOW;
+
+        renderInst.setBindingLayouts(snowBindingLayouts);
+        renderInst.setMegaStateFlags(fullscreenMegaState);
+
+        let offs = renderInst.allocateUniformBuffer(SnowProgram.ub_DrawParams, 12 + 4);
+        const d = renderInst.mapUniformBufferF32(SnowProgram.ub_DrawParams);
+        // snowflake coordinates are relative to camera already
+        computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.viewMatrix);
+        offs += fillMatrix4x3(d, offs, scratchMatrix);
+
+        // determine how much the snow cube center moved
+        vec3.set(this.snowShift, 0, 0, -this.flakeBounds / 2);
+        vec3.transformMat4(this.snowShift, this.snowShift, viewerInput.camera.worldMatrix);
+        vec3.scale(this.snowShift, this.snowShift, -1);
+        // this would be physically correct, but the game adds extra to exaggerate motion
+        mat4.getTranslation(snowScratchVector, viewerInput.camera.worldMatrix);
+        vec3.scaleAndAdd(this.snowShift, this.snowShift, snowScratchVector, -3);
+
+        // include gravity
+        this.snowShift[1] -= viewerInput.time * .75;
+        // wrap to a positive output here so the shader doesn't have to
+        for (let i = 0; i < 3; i++) {
+            this.snowShift[i] = this.snowShift[i] % this.flakeBounds;
+            if (this.snowShift[i] < 0)
+                this.snowShift[i] += this.flakeBounds;
+        }
+        fillVec3(d, offs, this.snowShift, this.flakeScale);
+
+        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        renderInst.setGfxProgram(renderInstManager.gfxRenderCache.createProgram(device, this.snowProgram));
+        renderInst.drawIndexes(6 * this.flakeCount);
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyBuffer(this.indexBuffer);
+        device.destroyBuffer(this.vertexBuffer);
+        device.destroyInputLayout(this.inputLayout);
+        device.destroyInputState(this.inputState);
+    }
+}
+
 class UVCTData {
     public meshData: MeshData;
 
@@ -2889,7 +3040,7 @@ async function fetchDataHolder(dataFetcher: DataFetcher, device: GfxDevice): Pro
     return dataHolder;
 }
 
-const enum PW64Pass { SKYBOX, NORMAL }
+const enum PW64Pass { SKYBOX, NORMAL, SNOW }
 
 const toNoclipSpace = mat4.create();
 mat4.fromXRotation(toNoclipSpace, -90 * MathConstants.DEG_TO_RAD);
@@ -2901,6 +3052,7 @@ class Pilotwings64Renderer implements SceneGfx {
     public uvtrRenderers: UVTRRenderer[] = [];
     public dobjRenderers: ObjectRenderer[] = [];
     public skyRenderers: ObjectRenderer[] = [];
+    public snowRenderer: SnowRenderer;
     public renderHelper: GfxRenderHelper;
     private renderTarget = new BasicRenderTarget();
 
@@ -2941,6 +3093,8 @@ class Pilotwings64Renderer implements SceneGfx {
             this.uvtrRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         for (let i = 0; i < this.dobjRenderers.length; i++)
             this.dobjRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput, toNoclipSpace);
+        if (this.snowRenderer)
+            this.snowRenderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender(device, hostAccessPass);
@@ -2970,6 +3124,7 @@ class Pilotwings64Renderer implements SceneGfx {
         const passRenderer = this.renderTarget.createRenderPass(device, depthClearRenderPassDescriptor);
         passRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
         executeOnPass(renderInstManager, device, passRenderer, PW64Pass.NORMAL);
+        executeOnPass(renderInstManager, device, passRenderer, PW64Pass.SNOW);
 
         renderInstManager.resetRenderInsts();
         return skyPassRenderer;
@@ -3093,6 +3248,8 @@ class Pilotwings64SceneDesc implements SceneDesc {
             oceanPlane.sortKeyBase = makeSortKey(GfxRendererLayer.BACKGROUND);
             renderer.dobjRenderers.push(oceanPlane);
         }
+        if (this.levelID === 3 && this.weatherConditions === 2)
+            renderer.snowRenderer = new SnowRenderer(device, 800);
 
         for (let i = 0; i < levelData.terras.length; i++) {
             const terraIndex = levelData.terras[i];
