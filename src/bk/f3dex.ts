@@ -142,22 +142,25 @@ export class RSPOutput {
     public drawCalls: DrawCall[] = [];
     public textures: Texture[] = [];
 
-    public currentDrawCall: DrawCall;
+    private currentDrawCall = new DrawCall();
 
     constructor() {
         this.newDrawCall();
     }
 
-    public pushVertex(v: StagingVertex): void {
+    public loadVertex(v: StagingVertex): void {
         if (v.outputIndex === -1) {
             const n = new Vertex();
             n.copy(v);
             this.vertices.push(n);
             v.outputIndex = this.vertices.length - 1;
         }
+    }
 
+    public pushVertex(v: StagingVertex): void {
+        this.loadVertex(v);
         this.indices.push(v.outputIndex);
-        this.currentDrawCall!.indexCount++;
+        this.currentDrawCall.indexCount++;
     }
 
     public newDrawCall(): DrawCall {
@@ -369,14 +372,14 @@ export class RSPState {
 
     private prefilledVertexBuffer = false;
 
-    constructor(public segmentBuffers: ArrayBufferSlice[], vertexBuffer?: DataView) {
-        if (vertexBuffer) {
+    constructor(public segmentBuffers: ArrayBufferSlice[], vertexBuffer: DataView) {
+        if (vertexBuffer !== null) {
             this.prefilledVertexBuffer = true;
             const scratchVertex = new StagingVertex();
 
             for (let offs = 0; offs < vertexBuffer.byteLength; offs += 0x10) {
                 scratchVertex.setFromView(vertexBuffer, offs);
-                this.output.pushVertex(scratchVertex);
+                this.output.loadVertex(scratchVertex);
             }
         }
     }
