@@ -178,6 +178,7 @@ class Main {
     private destroyablePool: Destroyable[] = [];
     private dataShare = new DataShare();
     private dataFetcher: DataFetcher;
+    private lastUpdatedURLTimeSeconds: number = -1;
 
     constructor() {
         this.toplevel = document.createElement('div');
@@ -249,9 +250,6 @@ class Main {
         }
 
         this._updateLoop(window.performance.now());
-
-        // Update the URL every 2s or so...
-        setInterval(this._updateURL, 2000);
 
         if (!IS_DEVELOPMENT) {
             Sentry.init({
@@ -471,6 +469,26 @@ class Main {
         return `${groupId}/${sceneId}`;
     }
 
+    private _updateURL(): void {
+        if (this.currentSceneGroup === null || this.currentSceneDesc === null)
+            return;
+
+        const sceneStateStr = this._getSceneSaveState();
+        const currentDescId = this._getCurrentSceneDescId()!;
+        window.history.replaceState('', document.title, `#${currentDescId};${sceneStateStr}`);
+
+        const timeSeconds = window.performance.now() / 1000;
+        this.lastUpdatedURLTimeSeconds = timeSeconds;
+    }
+
+    private _maybeUpdateURL(): void {
+        const timeSeconds = window.performance.now() / 1000;
+        const secondsElapsedSinceLastUpdatedURL = timeSeconds - this.lastUpdatedURLTimeSeconds;
+
+        if (secondsElapsedSinceLastUpdatedURL >= 2)
+            this._updateURL();
+    }
+
     private _saveState() {
         if (this.currentSceneGroup === null || this.currentSceneDesc === null)
             return;
@@ -482,16 +500,8 @@ class Main {
 
         const saveState = `${currentDescId};${sceneStateStr}`;
         this.ui.saveStatesPanel.setSaveState(saveState);
+        this._maybeUpdateURL();
     }
-
-    private _updateURL = (): void => {
-        if (this.currentSceneGroup === null || this.currentSceneDesc === null)
-            return;
-
-        const sceneStateStr = this._getSceneSaveState();
-        const currentDescId = this._getCurrentSceneDescId()!;
-        window.history.replaceState('', document.title, `#${currentDescId};${sceneStateStr}`);
-    };
 
     private _getSaveStateSlotKey(slotIndex: number): string {
         return this.saveManager.getSaveStateSlotKey(assertExists(this._getCurrentSceneDescId()), slotIndex);
@@ -526,7 +536,6 @@ class Main {
                 mat4.identity(camera.worldMatrix);
         }
 
-        this._updateURL();
         this.ui.sceneChanged();
     }
 
