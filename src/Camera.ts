@@ -743,40 +743,40 @@ export class OrthoCameraController implements CameraController {
     }
 }
 
-export function serializeMat4(dst: Float32Array, offs: number, m: mat4): number {
-    dst[offs++] = m[0];
-    dst[offs++] = m[4];
-    dst[offs++] = m[8];
-    dst[offs++] = m[12];
-    dst[offs++] = m[1];
-    dst[offs++] = m[5];
-    dst[offs++] = m[9];
-    dst[offs++] = m[13];
-    dst[offs++] = m[2];
-    dst[offs++] = m[6];
-    dst[offs++] = m[10];
-    dst[offs++] = m[14];
+export function serializeMat4(view: DataView, byteOffs: number, m: mat4): number {
+    view.setFloat32(byteOffs + 0x00, m[0],  true);
+    view.setFloat32(byteOffs + 0x04, m[4],  true);
+    view.setFloat32(byteOffs + 0x08, m[8],  true);
+    view.setFloat32(byteOffs + 0x0C, m[12], true);
+    view.setFloat32(byteOffs + 0x10, m[1],  true);
+    view.setFloat32(byteOffs + 0x14, m[5],  true);
+    view.setFloat32(byteOffs + 0x18, m[9],  true);
+    view.setFloat32(byteOffs + 0x1C, m[13], true);
+    view.setFloat32(byteOffs + 0x20, m[2],  true);
+    view.setFloat32(byteOffs + 0x24, m[6],  true);
+    view.setFloat32(byteOffs + 0x28, m[10], true);
+    view.setFloat32(byteOffs + 0x2C, m[14], true);
     return 4*3;
 }
 
-export function serializeCamera(dst: Float32Array, offs: number, camera: Camera): number {
-    return serializeMat4(dst, offs, camera.worldMatrix);
+export function serializeCamera(view: DataView, byteOffs: number, camera: Camera): number {
+    return serializeMat4(view, byteOffs, camera.worldMatrix);
 }
 
-export function deserializeCamera(camera: Camera, src: Float32Array, offs: number): number {
+export function deserializeCamera(camera: Camera, view: DataView, byteOffs: number): number {
     const m = camera.worldMatrix;
-    m[0]  = src[offs++];
-    m[4]  = src[offs++];
-    m[8]  = src[offs++];
-    m[12] = src[offs++];
-    m[1]  = src[offs++];
-    m[5]  = src[offs++];
-    m[9]  = src[offs++];
-    m[13] = src[offs++];
-    m[2]  = src[offs++];
-    m[6]  = src[offs++];
-    m[10] = src[offs++];
-    m[14] = src[offs++];
+    m[0]  = view.getFloat32(byteOffs + 0x00, true);
+    m[4]  = view.getFloat32(byteOffs + 0x04, true);
+    m[8]  = view.getFloat32(byteOffs + 0x08, true);
+    m[12] = view.getFloat32(byteOffs + 0x0C, true);
+    m[1]  = view.getFloat32(byteOffs + 0x10, true);
+    m[5]  = view.getFloat32(byteOffs + 0x14, true);
+    m[9]  = view.getFloat32(byteOffs + 0x18, true);
+    m[13] = view.getFloat32(byteOffs + 0x1C, true);
+    m[2]  = view.getFloat32(byteOffs + 0x20, true);
+    m[6]  = view.getFloat32(byteOffs + 0x24, true);
+    m[10] = view.getFloat32(byteOffs + 0x28, true);
+    m[14] = view.getFloat32(byteOffs + 0x2C, true);
     m[3]  = 0;
     m[7]  = 0;
     m[11] = 0;
