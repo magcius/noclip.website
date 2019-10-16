@@ -59,8 +59,6 @@ class FsButton {
     }
 
     private isFS() {
-        // @ts-ignore
-        // https://github.com/Microsoft/TSJS-lib-generator/pull/597
         return document.fullscreenElement === document.body;
     }
 

@@ -2479,6 +2479,79 @@ export class CameraSpeedIndicator {
     }
 }
 
+class BottomRightBar {
+    public elem: HTMLElement;
+
+    constructor() {
+        this.elem = document.createElement('div');
+        this.elem.style.position = 'absolute';
+        this.elem.style.bottom = '32px';
+        this.elem.style.right = '32px';
+        this.elem.style.display = 'grid';
+        this.elem.style.gridAutoFlow = 'columns';
+        this.elem.style.gridGap = '8px';
+        this.elem.style.transition = '.1s ease-out';
+    }
+
+    public setShouldShow(active: boolean): void {
+        this.elem.style.opacity = active ? '1' : '0';
+    }
+}
+
+abstract class SingleIconButton {
+    public elem: HTMLElement;
+
+    constructor() {
+        this.elem = document.createElement('div');
+        this.elem.style.width = '32px';
+        this.elem.style.height = '32px';
+        this.elem.style.cursor = 'pointer';
+        this.elem.style.font = '16px monospace';
+        this.elem.style.color = 'white';
+        this.elem.style.lineHeight = '32px';
+        this.elem.style.textAlign = 'center';
+        this.elem.style.textShadow = '0px 0px 6px rgba(0, 0, 0, 0.5)';
+        this.elem.style.transition = '.1s ease-out';
+        this.elem.onclick = this.onClick.bind(this);
+        this.elem.onmouseover = () => {
+            this.setHover(true);
+        };
+        this.elem.onmouseout = () => {
+            this.setHover(false);
+        };
+    }
+
+    public abstract onClick(): void;
+
+    private setHover(isHover: boolean): void {
+        this.elem.style.background = isHover ? 'rgba(0, 0, 0, 0.75)' : 'rgba(0, 0, 0, 0)';
+    }
+}
+
+class FullscreenButton extends SingleIconButton {
+    constructor() {
+        super();
+        document.addEventListener('fullscreenchange', this.style.bind(this));
+        this.style();
+        this.elem.title = 'Fullscreen';
+    }
+
+    private isFS() {
+        return document.fullscreenElement === document.body;
+    }
+
+    private style() {
+        this.elem.textContent = this.isFS() ? '🡼' : '🡾';
+    }
+
+    public onClick() {
+        if (this.isFS())
+            document.exitFullscreen();
+        else
+            document.body.requestFullscreen();
+    }
+}
+
 export class UI {
     public elem: HTMLElement;
 
@@ -2503,6 +2576,9 @@ export class UI {
     public panels: Panel[];
     private about: About;
     private faqPanel: FAQPanel;
+
+    private bottomRightBar: BottomRightBar;
+    private fullscreenButton: FullscreenButton;
 
     constructor(public viewer: Viewer.Viewer) {
         this.toplevel = document.createElement('div');
@@ -2554,6 +2630,12 @@ export class UI {
         this.cameraSpeedIndicator = new CameraSpeedIndicator();
         this.toplevel.appendChild(this.cameraSpeedIndicator.elem);
 
+        this.bottomRightBar = new BottomRightBar();
+        this.toplevel.appendChild(this.bottomRightBar.elem);
+
+        this.fullscreenButton = new FullscreenButton();
+        this.bottomRightBar.elem.appendChild(this.fullscreenButton.elem);
+
         this.sceneSelect = new SceneSelect(viewer);
         this.saveStatesPanel = new SaveStatesPanel(viewer.inputManager);
         this.textureViewer = new TextureViewer();
@@ -2562,21 +2644,17 @@ export class UI {
         this.timePanel = new TimePanel();
         this.about = new About();
 
-        this.about.onfaq = () => {
-            this._onFAQ();
-        };
-
         this.faqPanel = new FAQPanel();
         this.faqPanel.elem.style.display = 'none';
         this.toplevel.appendChild(this.faqPanel.elem);
 
+        this.about.onfaq = () => {
+            this.faqPanel.elem.style.display = 'block';
+        };
+
         this.setScenePanels(null);
 
         this.elem = this.toplevel;
-    }
-
-    private _onFAQ(): void {
-        this.faqPanel.elem.style.display = 'block';
     }
 
     public sceneChanged() {
@@ -2627,6 +2705,7 @@ export class UI {
 
     public setIsDragging(isDragging: boolean): void {
         this.elem.style.pointerEvents = isDragging ? 'none' : '';
+        this.bottomRightBar.setShouldShow(!isDragging);
         if (isDragging && this.shouldPanelsAutoClose())
             this.setPanelsAutoClosed(true);
     }
