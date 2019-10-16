@@ -210,10 +210,10 @@ function createModelInstance(device: GfxDevice, cache: GfxRenderCache, extraText
 }
 
 class WindWakerRoomRenderer {
-    public model: BMDModelInstance;
-    public model1: BMDModelInstance;
-    public model2: BMDModelInstance;
-    public model3: BMDModelInstance;
+    public model: BMDModelInstance | null;
+    public model1: BMDModelInstance | null;
+    public model2: BMDModelInstance | null;
+    public model3: BMDModelInstance | null;
     public name: string;
     public visible: boolean = true;
     public objectsVisible = true;
@@ -225,29 +225,29 @@ class WindWakerRoomRenderer {
 
         this.dzb = DZB.parse(assertExists(roomRarc.findFileData(`dzb/room.dzb`)));
 
-        this.model = createModelInstance(device, cache, extraTextures, roomRarc, `model`)!;
+        this.model = createModelInstance(device, cache, extraTextures, roomRarc, `model`);
 
         // Ocean.
-        this.model1 = createModelInstance(device, cache, extraTextures, roomRarc, `model1`)!;
+        this.model1 = createModelInstance(device, cache, extraTextures, roomRarc, `model1`);
 
         // Special effects / Skybox as seen in Hyrule.
-        this.model2 = createModelInstance(device, cache, extraTextures, roomRarc, `model2`)!;
+        this.model2 = createModelInstance(device, cache, extraTextures, roomRarc, `model2`);
 
         // Windows / doors.
-        this.model3 = createModelInstance(device, cache, extraTextures, roomRarc, `model3`)!;
+        this.model3 = createModelInstance(device, cache, extraTextures, roomRarc, `model3`);
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.visible)
             return;
 
-        if (this.model)
+        if (this.model !== null)
             this.model.prepareToRender(device, renderInstManager, viewerInput);
-        if (this.model1)
+        if (this.model1 !== null)
             this.model1.prepareToRender(device, renderInstManager, viewerInput);
-        if (this.model2)
+        if (this.model2 !== null)
             this.model2.prepareToRender(device, renderInstManager, viewerInput);
-        if (this.model3)
+        if (this.model3 !== null)
             this.model3.prepareToRender(device, renderInstManager, viewerInput);
 
         if (this.objectsVisible)
@@ -256,45 +256,47 @@ class WindWakerRoomRenderer {
     }
 
     public setModelMatrix(modelMatrix: mat4): void {
-        if (this.model)
+        if (this.model !== null)
             mat4.copy(this.model.modelMatrix, modelMatrix);
-        if (this.model1)
+        if (this.model1 !== null)
             mat4.copy(this.model1.modelMatrix, modelMatrix);
-        if (this.model3)
+        if (this.model3 !== null)
             mat4.copy(this.model3.modelMatrix, modelMatrix);
     }
 
-    public setColors(colors?: Colors): void {
+    public setColors(colors: Colors | undefined): void {
         if (colors !== undefined) {
-            if (this.model) {
+            if (this.model !== null) {
                 this.model.setColorOverride(ColorKind.K0, colors.light);
                 this.model.setColorOverride(ColorKind.C0, colors.amb);
             }
 
-            if (this.model1) {
+            if (this.model1 !== null) {
                 this.model1.setColorOverride(ColorKind.K0, colors.ocean);
                 this.model1.setColorOverride(ColorKind.C0, colors.wave);
                 this.model1.setColorOverride(ColorKind.C1, colors.splash);
                 this.model1.setColorOverride(ColorKind.K1, colors.splash2);
             }
-            if (this.model3)
+
+            if (this.model3 !== null)
                 this.model3.setColorOverride(ColorKind.C0, colors.doors);
 
             for (let i = 0; i < this.objectRenderers.length; i++)
                 this.objectRenderers[i].setColors(colors);
         } else {
-            if (this.model) {
+            if (this.model !== null) {
                 this.model.setColorOverride(ColorKind.K0, undefined);
                 this.model.setColorOverride(ColorKind.C0, undefined);
             }
 
-            if (this.model1) {
+            if (this.model1 !== null) {
                 this.model1.setColorOverride(ColorKind.K0, undefined);
                 this.model1.setColorOverride(ColorKind.C0, undefined);
                 this.model1.setColorOverride(ColorKind.C1, undefined);
                 this.model1.setColorOverride(ColorKind.K1, undefined);
             }
-            if (this.model3)
+
+            if (this.model3 !== null)
                 this.model3.setColorOverride(ColorKind.C0, undefined);
         }
     }
@@ -304,39 +306,39 @@ class WindWakerRoomRenderer {
     }
 
     public setVertexColorsEnabled(v: boolean): void {
-        if (this.model)
+        if (this.model !== null)
             this.model.setVertexColorsEnabled(v);
-        if (this.model1)
+        if (this.model1 !== null)
             this.model1.setVertexColorsEnabled(v);
-        if (this.model2)
+        if (this.model2 !== null)
             this.model2.setVertexColorsEnabled(v);
-        if (this.model3)
+        if (this.model3 !== null)
             this.model3.setVertexColorsEnabled(v);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].setVertexColorsEnabled(v);
     }
 
     public setTexturesEnabled(v: boolean): void {
-        if (this.model)
+        if (this.model !== null)
             this.model.setTexturesEnabled(v);
-        if (this.model1)
+        if (this.model1 !== null)
             this.model1.setTexturesEnabled(v);
-        if (this.model2)
+        if (this.model2 !== null)
             this.model2.setTexturesEnabled(v);
-        if (this.model3)
+        if (this.model3 !== null)
             this.model3.setTexturesEnabled(v);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].setTexturesEnabled(v);
     }
 
     public destroy(device: GfxDevice): void {
-        if (this.model)
+        if (this.model !== null)
             this.model.destroy(device);
-        if (this.model1)
+        if (this.model1 !== null)
             this.model1.destroy(device);
-        if (this.model2)
+        if (this.model2 !== null)
             this.model2.destroy(device);
-        if (this.model3)
+        if (this.model3 !== null)
             this.model3.destroy(device);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].destroy(device);
