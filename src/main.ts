@@ -61,7 +61,7 @@ import * as Scenes_GTA3 from './GrandTheftAuto3/scenes';
 
 import { DroppedFileSceneDesc } from './Scenes_FileDrops';
 
-import { UI, SaveStatesAction, Panel } from './ui';
+import { UI, Panel } from './ui';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera';
 import { hexdump, assertExists, assert } from './util';
 import { DataFetcher } from './DataFetcher';
@@ -80,6 +80,7 @@ import { SceneDesc, SceneGroup, SceneContext, getSceneDescs, Destroyable } from 
 import { prepareFrameDebugOverlayCanvas2D } from './DebugJunk';
 import { downloadBlob, downloadBufferSlice, downloadBuffer } from './DownloadUtils';
 import { DataShare } from './DataShare';
+import InputManager from './InputManager';
 
 const sceneGroups = [
     "Wii",
@@ -147,9 +148,16 @@ function convertCanvasToPNG(canvas: HTMLCanvasElement): Promise<Blob> {
 
 // Ideas for option bits. Not used yet.
 const enum OptionsBitsV3 {
-    HAS_SCENE_TIME       = 0b00000001,
-    SCENE_PAUSED         = 0b00000010,
-    LOW_CAMERA_PRECISION = 0b00000100,
+    HasSceneTime       = 0b00000001,
+    ScenePaused        = 0b00000010,
+    LowCameraPrecision = 0b00000100,
+};
+
+const enum SaveStatesAction {
+    Load,
+    LoadDefault,
+    Save,
+    Delete
 };
 
 class Main {
@@ -275,6 +283,15 @@ class Main {
         downloadBlob(`noclip_export_${date.toISOString()}.nclsp`, new Blob([saveData]));
     }
 
+    private pickSaveStatesAction(inputManager: InputManager): SaveStatesAction {
+        if (inputManager.isKeyDown('ShiftLeft'))
+            return SaveStatesAction.Save;
+        else if (inputManager.isKeyDown('AltLeft'))
+            return SaveStatesAction.Delete;
+        else
+            return SaveStatesAction.Load;
+    }
+
     private checkKeyShortcuts() {
         const inputManager = this.viewer.inputManager;
         if (inputManager.isKeyDownEventTriggered('KeyZ'))
@@ -283,13 +300,11 @@ class Main {
             this._downloadTextures();
         if (inputManager.isKeyDownEventTriggered('KeyT'))
             this.ui.sceneSelect.expandAndFocus();
-        if (inputManager.isKeyDownEventTriggered('KeyG'))
-            this.ui.saveStatesPanel.expandAndFocus();
         for (let i = 1; i <= 9; i++) {
             if (inputManager.isKeyDownEventTriggered('Digit'+i)) {
                 if (this.currentSceneDesc) {
                     const key = this._getSaveStateSlotKey(i);
-                    const action = this.ui.saveStatesPanel.pickSaveStatesAction(inputManager);
+                    const action = this.pickSaveStatesAction(inputManager);
                     this.doSaveStatesAction(action, key);
                 }
             }
@@ -518,7 +533,6 @@ class Main {
 
         const sceneDescId = this._getCurrentSceneDescId()!;
         this.saveManager.setCurrentSceneDescId(sceneDescId);
-        this.ui.saveStatesPanel.setCurrentSceneDescId(sceneDescId);
 
         if (scene.createCameraController !== undefined)
             this.viewer.setCameraController(scene.createCameraController());
@@ -646,9 +660,6 @@ class Main {
         this.ui = new UI(this.viewer);
         this.toplevel.appendChild(this.ui.elem);
         this.ui.sceneSelect.onscenedescselected = this._onSceneDescSelected.bind(this);
-        this.ui.saveStatesPanel.onsavestatesaction = (action: SaveStatesAction, key: string) => {
-            this.doSaveStatesAction(action, key);
-        };
         this.ui.timePanel.ontimescrub = (adj: number) => {
             this.viewer.setSceneTime(Math.max(this.viewer.sceneTime + adj, 0));
         };

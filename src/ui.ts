@@ -7,9 +7,8 @@ import { CameraControllerClass, OrbitCameraController, FPSCameraController, Orth
 import { Color, colorToCSS } from './Color';
 import { TextureHolder } from './TextureHolder';
 import { GITHUB_REVISION_URL, GITHUB_URL, GIT_SHORT_REVISION } from './BuildVersion';
-import { SaveManager, GlobalSaveManager, SaveStateLocation } from "./SaveManager";
+import { SaveManager, GlobalSaveManager } from "./SaveManager";
 import { RenderStatistics } from './RenderStatistics';
-import InputManager from './InputManager';
 import { GlobalGrabManager } from './GrabManager';
 import { clamp } from './MathHelpers';
 
@@ -1226,188 +1225,6 @@ function makeHashSafe(s: string): string {
 function buildShareURL(saveState: string): string {
     const loc = window.location;
     return `${loc.origin}${loc.pathname}#${makeHashSafe(saveState)}`;
-}
-
-export const enum SaveStatesAction { Load, LoadDefault, Save, Delete };
-
-export class SaveStatesPanel extends Panel {
-    public currentShareURLEntry: TextField;
-    public currentSceneDescIdEntry: TextField;
-    private currentSceneDescId: string;
-    private stateButtonsHeader: HTMLElement;
-    private stateButtons: HTMLElement[] = [];
-    private defaultStateButtons: HTMLElement[] = [];
-
-    public onsavestatesaction: (action: SaveStatesAction, key: string) => void;
-
-    constructor(private inputManager: InputManager) {
-        super();
-
-        this.setTitle(SAVE_ICON, 'Save States and Sharing');
-
-        GlobalSaveManager.addSaveStateListener(this._onSaveStateChanged.bind(this));
-        this.inputManager.addListener(this._onKeyEvent.bind(this));
-
-        this.stateButtonsHeader = document.createElement('div');
-        this.stateButtonsHeader.style.fontWeight = 'bold';
-        this.contents.appendChild(this.stateButtonsHeader);
-
-        const stateButtons = document.createElement('div');
-        stateButtons.style.display = 'grid';
-        stateButtons.style.gridAutoFlow = 'column';
-        stateButtons.style.gridGap = '8px';
-        for (let i = 1; i <= 9; i++) {
-            const button = document.createElement('div');
-            button.textContent = '' + i;
-            button.style.textAlign = 'center';
-            button.style.lineHeight = '1.2em';
-            button.style.userSelect = 'none';
-            this.stateButtons.push(button);
-            stateButtons.appendChild(button);
-        }
-        this.contents.appendChild(stateButtons);
-
-        const defaultStateButtonsHeader = document.createElement('div');
-        defaultStateButtonsHeader.textContent = 'Load Default Save State';
-        defaultStateButtonsHeader.style.fontWeight = 'bold';
-        defaultStateButtonsHeader.style.marginTop = '1em';
-        this.contents.appendChild(defaultStateButtonsHeader);
-
-        const defaultStateButtons = document.createElement('div');
-        defaultStateButtons.style.display = 'grid';
-        defaultStateButtons.style.gridAutoFlow = 'column';
-        defaultStateButtons.style.gridGap = '8px';
-        for (let i = 1; i <= 9; i++) {
-            const button = document.createElement('div');
-            button.textContent = '' + i;
-            button.style.textAlign = 'center';
-            button.style.lineHeight = '1.2em';
-            button.style.userSelect = 'none';
-            this.defaultStateButtons.push(button);
-            defaultStateButtons.appendChild(button);
-        }
-        this.contents.appendChild(defaultStateButtons);
-
-        const shareURLHeader = document.createElement('div');
-        shareURLHeader.textContent = 'Share URL';
-        shareURLHeader.style.fontWeight = 'bold';
-        shareURLHeader.style.marginTop = '1em';
-        this.contents.appendChild(shareURLHeader);
-
-        this.currentShareURLEntry = new TextField();
-        this.currentShareURLEntry.textarea.readOnly = true;
-        this.currentShareURLEntry.textarea.onfocus = () => {
-            this.currentShareURLEntry.selectAll();
-        };
-        this.contents.appendChild(this.currentShareURLEntry.elem);
-
-        const sceneDescIdHeader = document.createElement('div');
-        sceneDescIdHeader.textContent = 'Internal Scene ID';
-        sceneDescIdHeader.style.fontWeight = 'bold';
-        sceneDescIdHeader.style.marginTop = '1em';
-        this.contents.appendChild(sceneDescIdHeader);
-
-        this.currentSceneDescIdEntry = new TextField();
-        this.currentSceneDescIdEntry.textarea.readOnly = true;
-        this.currentSceneDescIdEntry.textarea.onfocus = () => {
-            this.currentSceneDescIdEntry.selectAll();
-        };
-        this.contents.appendChild(this.currentSceneDescIdEntry.elem);
-
-        const helpText = document.createElement('div');
-        helpText.style.marginTop = '1em';
-        helpText.innerHTML = `
-Hold <b>Shift</b> to save new save states<br>
-Hold <b>Alt</b> to delete saves you made<br>
-Use <b>&lt;Num&gt;</b> on keyboard for quick access
-`.trim();
-        this.contents.appendChild(helpText);
-    }
-
-    public pickSaveStatesAction(inputManager: InputManager): SaveStatesAction {
-        if (inputManager.isKeyDown('ShiftLeft'))
-            return SaveStatesAction.Save;
-        else if (inputManager.isKeyDown('AltLeft'))
-            return SaveStatesAction.Delete;
-        else
-            return SaveStatesAction.Load;
-    }
-
-    private initLoadStateButton(button: HTMLElement, action: SaveStatesAction, saveManager: SaveManager, key: string): void {
-        let active = false;
-        if (action !== SaveStatesAction.LoadDefault && saveManager.hasStateInLocation(key, SaveStateLocation.LocalStorage)) {
-            button.style.backgroundColor = COOL_BLUE_COLOR;
-            button.style.fontWeight = 'bold';
-            button.style.color = '';
-            active = true;
-        } else if (action === SaveStatesAction.LoadDefault && saveManager.hasStateInLocation(key, SaveStateLocation.Defaults)) {
-            button.style.backgroundColor = '#8fa88f';
-            button.style.fontWeight = 'bold';
-            button.style.color = '';
-            active = true;
-        } else if (action === SaveStatesAction.Save) {
-            button.style.backgroundColor = '#666';
-            button.style.fontWeight = 'bold';
-            button.style.color = 'white';
-            active = true;
-        } else {
-            button.style.backgroundColor = '#333';
-            button.style.fontWeight = '';
-            button.style.color = '#aaa';
-        }
-
-        if (active) {
-            button.style.cursor = 'pointer';
-            button.onclick = () => {
-                this.onsavestatesaction(action, key);
-            };
-        } else {
-            button.style.cursor = 'default';
-            button.onclick = null;
-        }
-    }
-
-    private initButtons(saveManager: SaveManager): void {
-        const sceneDescId = this.currentSceneDescId;
-        const action = this.pickSaveStatesAction(this.inputManager);
-
-        if (action === SaveStatesAction.Load)
-            this.stateButtonsHeader.textContent = `Load Save State`;
-        else if (action === SaveStatesAction.Save)
-            this.stateButtonsHeader.textContent = `Save Save State`;
-        else if (action === SaveStatesAction.Delete)
-            this.stateButtonsHeader.textContent = `Delete Save State`;
-
-        for (let i = 0; i < this.stateButtons.length; i++) {
-            const key = saveManager.getSaveStateSlotKey(sceneDescId, i + 1);
-            this.initLoadStateButton(this.stateButtons[i], action, saveManager, key);
-            this.initLoadStateButton(this.defaultStateButtons[i], SaveStatesAction.LoadDefault, saveManager, key);
-        }
-    }
-
-    private _onSaveStateChanged(saveManager: SaveManager): void {
-        this.initButtons(saveManager);
-    }
-
-    private _onKeyEvent(): void {
-        this.initButtons(GlobalSaveManager);
-    }
-
-    public expandAndFocus(): void {
-        this.setExpanded(true);
-        this.setAutoClosed(false);
-        this.currentShareURLEntry.textarea.focus({ preventScroll: true });
-    }
-
-    public setCurrentSceneDescId(sceneDescId: string): void {
-        this.currentSceneDescId = sceneDescId;
-        this.currentSceneDescIdEntry.setValue(sceneDescId);
-        this.initButtons(GlobalSaveManager);
-    }
-
-    public setShareURL(shareURL: string) {
-        this.currentShareURLEntry.setValue(shareURL);
-    }
 }
 
 function cloneCanvas(dst: HTMLCanvasElement, src: HTMLCanvasElement): void {
@@ -2750,7 +2567,6 @@ export class UI {
     private panelContainer: HTMLElement;
 
     public sceneSelect: SceneSelect;
-    public saveStatesPanel: SaveStatesPanel;
     public textureViewer: TextureViewer;
     public viewerSettings: ViewerSettings;
     public statisticsPanel: StatisticsPanel;
@@ -2825,7 +2641,6 @@ export class UI {
         this.bottomRightBar.addButton(this.fullscreenButton);
 
         this.sceneSelect = new SceneSelect(viewer);
-        this.saveStatesPanel = new SaveStatesPanel(viewer.inputManager);
         this.textureViewer = new TextureViewer();
         this.viewerSettings = new ViewerSettings(this, viewer);
         this.statisticsPanel = new StatisticsPanel(viewer);
@@ -2856,7 +2671,6 @@ export class UI {
 
     public setSaveState(saveState: string) {
         const shareURL = buildShareURL(saveState);
-        this.saveStatesPanel.setShareURL(shareURL);
         this.shareButton.setShareURL(shareURL);
     }
 
@@ -2889,7 +2703,7 @@ export class UI {
 
     public setScenePanels(scenePanels: Panel[] | null): void {
         if (scenePanels !== null)
-            this.setPanels([this.sceneSelect, ...scenePanels, this.textureViewer, this.timePanel, this.saveStatesPanel, this.viewerSettings, this.statisticsPanel, this.about]);
+            this.setPanels([this.sceneSelect, ...scenePanels, this.textureViewer, this.timePanel, this.viewerSettings, this.statisticsPanel, this.about]);
         else
             this.setPanels([this.sceneSelect, this.about]);
     }
