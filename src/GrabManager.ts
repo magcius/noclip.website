@@ -6,6 +6,9 @@ interface GrabListener {
 
 interface GrabOptions {
     takePointerLock: boolean;
+    useGrabbingCursor: boolean;
+    releaseOnMouseUp: boolean;
+    grabElement?: HTMLElement;
 }
 
 class CursorOverride {
@@ -32,8 +35,19 @@ class CursorOverride {
 
 export const GlobalCursorOverride = new CursorOverride();
 
+function containsElement(sub_: HTMLElement, searchFor: HTMLElement): boolean {
+    let sub: HTMLElement | null = sub_;
+    while (sub !== null) {
+        if (sub === searchFor)
+            return true;
+        sub = sub.parentElement;
+    }
+    return false;
+}
+
 export class GrabManager {
     private grabListener: GrabListener | null = null;
+    private grabOptions: GrabOptions | null = null;
 
     private lastX: number = -1;
     private lastY: number = -1;
@@ -56,6 +70,12 @@ export class GrabManager {
         this.grabListener.onMotion(dx, dy);
     };
 
+    private _onMouseDown = (e: MouseEvent) => {
+        const grabElement = this.grabOptions!.grabElement;
+        if (grabElement && !containsElement(e.target as HTMLElement, grabElement))
+            this.releaseGrab();
+    };
+
     private _onMouseUp = (e: MouseEvent) => {
         this.releaseGrab();
     };
@@ -68,13 +88,15 @@ export class GrabManager {
         return this.grabListener !== null;
     }
 
-    public takeGrab(grabListener: GrabListener, e: MouseEvent, options: GrabOptions): void {
+    public takeGrab(grabListener: GrabListener, e: MouseEvent, grabOptions: GrabOptions): void {
         if (this.grabListener !== null)
             return;
 
         this.grabListener = grabListener;
+        this.grabOptions = grabOptions;
 
-        GlobalCursorOverride.setCursor(['grabbing', '-webkit-grabbing']);
+        if (grabOptions.useGrabbingCursor)
+            GlobalCursorOverride.setCursor(['grabbing', '-webkit-grabbing']);
 
         this.lastX = e.pageX;
         this.lastY = e.pageY;
@@ -84,16 +106,20 @@ export class GrabManager {
         e.preventDefault();
 
         const target = e.target as HTMLElement;
-        if (options.takePointerLock && target.requestPointerLock !== undefined)
+        if (grabOptions.takePointerLock && target.requestPointerLock !== undefined)
             target.requestPointerLock();
 
         document.addEventListener('mousemove', this._onMouseMove);
-        document.addEventListener('mouseup', this._onMouseUp);
+        if (grabOptions.releaseOnMouseUp)
+            document.addEventListener('mouseup', this._onMouseUp);
+        else
+            document.addEventListener('mousedown', this._onMouseDown, { capture: true });
     }
 
     public releaseGrab(): void {
         document.removeEventListener('mousemove', this._onMouseMove);
         document.removeEventListener('mouseup', this._onMouseUp);
+        document.removeEventListener('mouseup', this._onMouseDown);
 
         if (document.exitPointerLock !== undefined)
             document.exitPointerLock();
@@ -105,6 +131,8 @@ export class GrabManager {
         const grabListener = this.grabListener!;
         this.grabListener = null;
         grabListener.onGrabReleased();
+
+        this.grabOptions = null;
     }
 }
 

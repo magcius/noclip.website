@@ -1,0 +1,28 @@
+{
+  "name": "",
+  "css_prefix_text": "icon-",
+  "css_use_suffix": false,
+  "hinting": true,
+  "units_per_em": 1000,
+  "ascent": 850,
+  "glyphs": [
+    {
+      "uid": "d5937c5767642d0336ad599af0e9c992",
+      "css": "share",
+      "code": 59392,
+      "src": "elusive"
+    },
+    {
+      "uid": "57776e51a50e3b4d92701bdbbba01588",
+      "css": "resize-full",
+      "code": 59393,
+      "src": "elusive"
+    },
+    {
+      "uid": "108c8ac13badc00ce66da014436e6eb1",
+      "css": "resize-small",
+      "code": 59394,
+      "src": "entypo"
+    }
+  ]
+}

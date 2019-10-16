@@ -479,7 +479,7 @@ class Main {
         this.saveManager.saveTemporaryState(key, sceneStateStr);
 
         const saveState = `${currentDescId};${sceneStateStr}`;
-        this.ui.saveStatesPanel.setSaveState(saveState);
+        this.ui.setSaveState(saveState);
 
         let shouldUpdateURL = forceUpdateURL;
         if (!shouldUpdateURL) {

@@ -11,10 +11,10 @@ import { SaveManager, GlobalSaveManager, SaveStateLocation } from "./SaveManager
 import { RenderStatistics } from './RenderStatistics';
 import InputManager from './InputManager';
 import { GlobalGrabManager } from './GrabManager';
+import { clamp } from './MathHelpers';
 
 // @ts-ignore
-import logoURL from './logo.png';
-import { clamp } from './MathHelpers';
+import logoURL from './assets/logo.png';
 
 export const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
 export const COOL_BLUE_COLOR = 'rgb(20, 105, 215)';
@@ -22,6 +22,17 @@ export const PANEL_BG_COLOR = '#411';
 
 export function createDOMFromString(s: string): DocumentFragment {
     return document.createRange().createContextualFragment(s);
+}
+
+const enum FontelloIcon {
+    share = '\ue800',
+    resize_full = '\ue801',
+    resize_small = '\ue802',
+};
+
+function setFontelloIcon(elem: HTMLElement, icon: FontelloIcon): void {
+    elem.style.fontFamily = 'fontello';
+    elem.textContent = icon;
 }
 
 const OPEN_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 2 92 92" height="20" fill="white"><path d="M84.3765045,45.2316481 L77.2336539,75.2316205 L77.2336539,75.2316205 C77.1263996,75.6820886 76.7239081,76 76.2608477,76 L17.8061496,76 C17.2538649,76 16.8061496,75.5522847 16.8061496,75 C16.8061496,74.9118841 16.817796,74.8241548 16.8407862,74.739091 L24.7487983,45.4794461 C24.9845522,44.607157 25.7758952,44.0012839 26.6794815,44.0012642 L83.4036764,44.0000276 L83.4036764,44.0000276 C83.9559612,44.0000156 84.4036862,44.4477211 84.4036982,45.0000058 C84.4036999,45.0780163 84.3945733,45.155759 84.3765045,45.2316481 L84.3765045,45.2316481 Z M15,24 L26.8277004,24 L26.8277004,24 C27.0616369,24 27.2881698,24.0820162 27.4678848,24.2317787 L31.799078,27.8411064 L31.799078,27.8411064 C32.697653,28.5899189 33.8303175,29 35,29 L75,29 C75.5522847,29 76,29.4477153 76,30 L76,38 L76,38 C76,38.5522847 75.5522847,39 75,39 L25.3280454,39 L25.3280454,39 C23.0690391,39 21.0906235,40.5146929 20.5012284,42.6954549 L14.7844016,63.8477139 L14.7844016,63.8477139 C14.7267632,64.0609761 14.5071549,64.1871341 14.2938927,64.1294957 C14.1194254,64.0823423 13.9982484,63.9240598 13.9982563,63.7433327 L13.9999561,25 L14,25 C14.0000242,24.4477324 14.4477324,24.0000439 15,24.0000439 L15,24 Z"/></svg>`;
@@ -120,6 +131,7 @@ class TextField implements Widget {
 
     public selectAll() {
         this.textarea.setSelectionRange(0, this.textarea.value.length);
+        this.textarea.scrollLeft = 0;
     }
 
     public getValue() {
@@ -247,7 +259,6 @@ export abstract class ScrollSelect implements Widget {
         this.setHeight(`200px`);
         this.scrollContainer.style.overflow = 'auto';
         this.scrollContainer.style.userSelect = 'none';
-        this.scrollContainer.style.webkitUserSelect = 'none';
         this.toplevel.appendChild(this.scrollContainer);
 
         this.elem = this.toplevel;
@@ -732,7 +743,6 @@ export class Panel implements Widget {
         this.header.style.textAlign = 'center';
         this.header.style.cursor = 'pointer';
         this.header.style.userSelect = 'none';
-        this.header.style.webkitUserSelect = 'none';
         this.header.style.display = 'grid';
         this.header.style.gridTemplateColumns = '28px 1fr';
         this.header.style.alignItems = 'center';
@@ -887,14 +897,13 @@ export class FloatingPanel implements Widget {
         this.header.style.textAlign = 'center';
         this.header.style.cursor = 'pointer';
         this.header.style.userSelect = 'none';
-        this.header.style.webkitUserSelect = 'none';
         this.header.style.display = 'grid';
         this.header.style.gridTemplateColumns = '28px 1fr';
         this.header.style.alignItems = 'center';
         this.header.style.justifyItems = 'center';
         this.header.style.gridAutoFlow = 'column';
         this.header.addEventListener('mousedown', (e) => {
-            GlobalGrabManager.takeGrab(this, e, { takePointerLock: false });
+            GlobalGrabManager.takeGrab(this, e, { takePointerLock: false, useGrabbingCursor: true, releaseOnMouseUp: true });
         });
 
         this.headerContainer.appendChild(this.header);
@@ -1396,8 +1405,8 @@ Use <b>&lt;Num&gt;</b> on keyboard for quick access
         this.initButtons(GlobalSaveManager);
     }
 
-    public setSaveState(saveState: string) {
-        this.currentShareURLEntry.setValue(buildShareURL(saveState));
+    public setShareURL(shareURL: string) {
+        this.currentShareURLEntry.setValue(shareURL);
     }
 }
 
@@ -2255,7 +2264,7 @@ class TimeScrubber implements Widget {
         this.toplevel.style.cursor = 'grab';
         this.toplevel.style.position = 'relative';
         this.toplevel.addEventListener('mousedown', (e) => {
-            GlobalGrabManager.takeGrab(this, e, { takePointerLock: true });
+            GlobalGrabManager.takeGrab(this, e, { takePointerLock: true, useGrabbingCursor: true, releaseOnMouseUp: true });
         });
 
         this.track = document.createElement('canvas');
@@ -2453,10 +2462,11 @@ export class CameraSpeedIndicator {
         this.elem.style.bottom = '32px';
         this.elem.style.opacity = '0';
         this.elem.style.textShadow = `0 0 8px black`;
-        this.elem.style.padding = '8px';
+        this.elem.style.padding = '0 8px';
         this.elem.style.font = 'bold 16px monospace';
         this.elem.style.color = 'white';
         this.elem.style.pointerEvents = 'none';
+        this.elem.style.lineHeight = '32px';
     }
 
     public setCameraSpeed(v: number, displayIndicator: boolean = true): void {
@@ -2481,6 +2491,7 @@ export class CameraSpeedIndicator {
 
 class BottomRightBar {
     public elem: HTMLElement;
+    public buttons: SingleIconButton[] = [];
 
     constructor() {
         this.elem = document.createElement('div');
@@ -2488,9 +2499,21 @@ class BottomRightBar {
         this.elem.style.bottom = '32px';
         this.elem.style.right = '32px';
         this.elem.style.display = 'grid';
-        this.elem.style.gridAutoFlow = 'columns';
+        this.elem.style.gridAutoFlow = 'column';
         this.elem.style.gridGap = '8px';
         this.elem.style.transition = '.1s ease-out';
+    }
+
+    public addButton(button: SingleIconButton): void {
+        this.buttons.push(button);
+        this.elem.appendChild(button.elem);
+    }
+
+    public isAnyPanelExpanded(): boolean {
+        for (let i = 0; i < this.buttons.length; i++)
+            if (this.buttons[i].isOpen)
+                return true;
+        return false;
     }
 
     public setVisible(active: boolean): void {
@@ -2500,48 +2523,207 @@ class BottomRightBar {
 
 abstract class SingleIconButton {
     public elem: HTMLElement;
+    public icon: HTMLElement;
+    public tooltipElem: HTMLElement;
+    public isOpen: boolean = false;
+    public isHover: boolean = false;
 
     constructor() {
         this.elem = document.createElement('div');
+        this.elem.style.position = 'relative';
+        this.elem.style.transition = '.1s ease-out';
         this.elem.style.width = '32px';
         this.elem.style.height = '32px';
-        this.elem.style.cursor = 'pointer';
-        this.elem.style.font = '16px monospace';
-        this.elem.style.color = 'white';
-        this.elem.style.lineHeight = '32px';
-        this.elem.style.textAlign = 'center';
-        this.elem.style.textShadow = '0px 0px 6px rgba(0, 0, 0, 0.5)';
-        this.elem.style.transition = '.1s ease-out';
         this.elem.onclick = this.onClick.bind(this);
         this.elem.onmouseover = () => {
-            this.setHover(true);
+            this.isHover = true;
+            this.syncStyle();
         };
         this.elem.onmouseout = () => {
-            this.setHover(false);
+            this.isHover = false;
+            this.syncStyle();
         };
+
+        this.icon = document.createElement('div');
+        this.icon.style.width = '32px';
+        this.icon.style.height = '32px';
+        this.icon.style.cursor = 'pointer';
+        this.icon.style.font = '16px monospace';
+        this.icon.style.color = 'white';
+        this.icon.style.lineHeight = '32px';
+        this.icon.style.textAlign = 'center';
+        this.icon.style.textShadow = '0px 0px 6px rgba(0, 0, 0, 0.5)';
+        this.icon.style.transition = '0.1s ease-out';
+        this.icon.style.userSelect = 'none';
+        this.elem.appendChild(this.icon);
+
+        this.tooltipElem = document.createElement('div');
+        this.tooltipElem.style.position = 'absolute';
+        this.tooltipElem.style.top = '0';
+        this.tooltipElem.style.right = '0';
+        this.tooltipElem.style.marginTop = '-32px';
+        this.tooltipElem.style.padding = '0 8px';
+        this.tooltipElem.style.background = 'rgba(0, 0, 0, 0.75)';
+        this.tooltipElem.style.font = 'bold 16px monospace';
+        this.tooltipElem.style.lineHeight = '32px';
+        this.tooltipElem.style.color = 'white';
+        this.tooltipElem.style.textShadow = `0 0 8px black`;
+        this.tooltipElem.style.transition = '0.1s ease-out';
+        this.tooltipElem.style.pointerEvents = 'none';
+        this.tooltipElem.style.userSelect = 'none';
+        this.tooltipElem.style.opacity = '0';
+        this.elem.appendChild(this.tooltipElem);
     }
 
-    public abstract onClick(): void;
+    public abstract onClick(e: MouseEvent): void;
 
-    private setHover(isHover: boolean): void {
-        this.elem.style.background = isHover ? 'rgba(0, 0, 0, 0.75)' : 'rgba(0, 0, 0, 0)';
+    public setIsOpen(v: boolean): void {
+        this.isOpen = v;
+        this.syncStyle();
+    }
+
+    public syncStyle(): void {
+        if (this.isOpen) {
+            this.icon.style.background = 'rgba(0, 0, 0, 0.75)';
+            this.icon.style.color = HIGHLIGHT_COLOR;
+            this.tooltipElem.style.opacity = '0';
+        } else if (this.isHover) {
+            this.icon.style.background = 'rgba(0, 0, 0, 0.75)';
+            this.icon.style.color = 'white';
+            this.tooltipElem.style.opacity = '1';
+        } else {
+            this.icon.style.background = 'rgba(0, 0, 0, 0.0)';
+            this.icon.style.color = 'white';
+            this.tooltipElem.style.opacity = '0';
+        }
+    }
+}
+
+class PanelButton extends SingleIconButton {
+    protected panel: HTMLElement;
+
+    constructor() {
+        super();
+
+        this.panel = document.createElement('div');
+        this.panel.style.position = 'absolute';
+        this.panel.style.top = '0';
+        this.panel.style.right = '0';
+        this.panel.style.marginTop = '-32px';
+        this.panel.style.lineHeight = '32px';
+        this.panel.style.background = 'rgba(0, 0, 0, 0.75)';
+        this.panel.style.transition = '0.1s ease-out';
+
+        this.elem.appendChild(this.panel);
+
+        this.syncStyle();
+    }
+
+    public onClick(e: MouseEvent): void {
+        if (!this.isOpen) {
+            this.setIsOpen(true);
+            GlobalGrabManager.takeGrab(this, e, { takePointerLock: false, useGrabbingCursor: false, releaseOnMouseUp: false, grabElement: this.panel });
+        }
+    }
+
+    public onMotion(): void {
+        // Doesn't matter.
+    }
+
+    public onGrabReleased(): void {
+        this.setIsOpen(false);
+    }
+
+    public syncStyle(): void {
+        super.syncStyle();
+
+        if (this.isOpen) {
+            this.panel.style.opacity = '1';
+            this.panel.style.pointerEvents = '';
+        } else {
+            this.panel.style.opacity = '0';
+            this.panel.style.pointerEvents = 'none';
+        }
+    }
+}
+
+class ShareButton extends PanelButton {
+    public currentShareURLEntry: TextField;
+    public copyButton: HTMLElement;
+    private copyButtonState: 'copy' | 'copied';
+
+    constructor() {
+        super();
+        this.tooltipElem.textContent = 'Share';
+        setFontelloIcon(this.icon, FontelloIcon.share);
+
+        this.panel.style.display = 'grid';
+        this.panel.style.width = '400px';
+        this.panel.style.gridAutoFlow = 'column';
+
+        this.currentShareURLEntry = new TextField();
+        this.currentShareURLEntry.textarea.readOnly = true;
+        this.currentShareURLEntry.textarea.onfocus = () => {
+            this.currentShareURLEntry.selectAll();
+        };
+        this.currentShareURLEntry.elem.style.width = 'auto';
+        this.currentShareURLEntry.elem.style.lineHeight = '32px';
+        this.currentShareURLEntry.elem.style.padding = '0 16px';
+        this.panel.appendChild(this.currentShareURLEntry.elem);
+
+        this.copyButton = document.createElement('div');
+        this.copyButton.style.font = '16px monospace';
+        this.copyButton.style.textShadow = '0px 0px 6px rgba(0, 0, 0, 0.5)';
+        this.copyButton.style.color = 'white';
+        this.copyButton.style.lineHeight = '32px';
+        this.copyButton.style.textAlign = 'center';
+        this.copyButton.style.userSelect = 'none';
+        this.copyButton.onclick = () => {
+            if (this.copyButtonState === 'copy') {
+                window.navigator.clipboard.writeText(this.currentShareURLEntry.getValue());
+                this.currentShareURLEntry.selectAll();
+                this.setCopyButtonState('copied');
+            }
+        };
+        this.setCopyButtonState('copy');
+        this.panel.appendChild(this.copyButton);
+    }
+
+    private setCopyButtonState(state: 'copy' | 'copied'): void {
+        this.copyButtonState = state;
+        if (state === 'copy') {
+            this.copyButton.style.backgroundColor = HIGHLIGHT_COLOR;
+            this.copyButton.style.cursor = 'pointer';
+            this.copyButton.textContent = 'COPY';
+        } else {
+            this.copyButton.style.backgroundColor = '#666';
+            this.copyButton.style.cursor = '';
+            this.copyButton.textContent = 'COPIED';
+        }
+    }
+
+    public setShareURL(shareURL: string) {
+        this.setCopyButtonState('copy');
+        this.currentShareURLEntry.setValue(shareURL);
     }
 }
 
 class FullscreenButton extends SingleIconButton {
     constructor() {
         super();
-        document.addEventListener('fullscreenchange', this.style.bind(this));
-        this.style();
-        this.elem.title = 'Fullscreen';
+        document.addEventListener('fullscreenchange', this.syncStyle.bind(this));
+        this.syncStyle();
     }
 
     private isFS() {
         return document.fullscreenElement === document.body;
     }
 
-    private style() {
-        this.elem.textContent = this.isFS() ? '🡼' : '🡾';
+    public syncStyle() {
+        super.syncStyle();
+        this.icon.textContent = this.isFS() ? '🡼' : '🡾';
+        setFontelloIcon(this.icon, this.isFS() ? FontelloIcon.resize_small : FontelloIcon.resize_full);
+        this.tooltipElem.textContent = this.isFS() ? 'Unfullscreen' : 'Fullscreen';
     }
 
     public onClick() {
@@ -2578,6 +2760,7 @@ export class UI {
     private faqPanel: FAQPanel;
 
     private bottomRightBar: BottomRightBar;
+    private shareButton: ShareButton;
     private fullscreenButton: FullscreenButton;
 
     private isDragging: boolean = false;
@@ -2636,8 +2819,10 @@ export class UI {
         this.bottomRightBar = new BottomRightBar();
         this.toplevel.appendChild(this.bottomRightBar.elem);
 
+        this.shareButton = new ShareButton();
+        this.bottomRightBar.addButton(this.shareButton);
         this.fullscreenButton = new FullscreenButton();
-        this.bottomRightBar.elem.appendChild(this.fullscreenButton.elem);
+        this.bottomRightBar.addButton(this.fullscreenButton);
 
         this.sceneSelect = new SceneSelect(viewer);
         this.saveStatesPanel = new SaveStatesPanel(viewer.inputManager);
@@ -2657,7 +2842,6 @@ export class UI {
 
         window.onmousemove = () => {
             this.lastMouseActiveTime = window.performance.now();
-            this.syncBottomRightBarVisibility();
         };
         this.lastMouseActiveTime = window.performance.now();
 
@@ -2668,6 +2852,12 @@ export class UI {
 
     public update(): void {
         this.syncBottomRightBarVisibility();
+    }
+
+    public setSaveState(saveState: string) {
+        const shareURL = buildShareURL(saveState);
+        this.saveStatesPanel.setShareURL(shareURL);
+        this.shareButton.setShareURL(shareURL);
     }
 
     public sceneChanged() {
@@ -2717,6 +2907,9 @@ export class UI {
     }
 
     private shouldBottomRightBarBeVisible(): boolean {
+        if (this.bottomRightBar.isAnyPanelExpanded())
+            return true;
+
         if (this.isDragging)
             return false;
 

@@ -1,0 +1,4 @@
+
+.icon-share:before { content: '\e800'; } /* '' */
+.icon-resize-full:before { content: '\e801'; } /* '' */
+.icon-resize-small:before { content: '\e802'; } /* '' */
