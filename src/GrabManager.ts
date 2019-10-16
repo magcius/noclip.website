@@ -119,7 +119,7 @@ export class GrabManager {
     public releaseGrab(): void {
         document.removeEventListener('mousemove', this._onMouseMove);
         document.removeEventListener('mouseup', this._onMouseUp);
-        document.removeEventListener('mouseup', this._onMouseDown);
+        document.removeEventListener('mousedown', this._onMouseDown, { capture: true });
 
         if (document.exitPointerLock !== undefined)
             document.exitPointerLock();
