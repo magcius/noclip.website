@@ -319,6 +319,7 @@ class Main {
             this._takeScreenshot();
 
         this.ui.timePanel.update(this.viewer.sceneTime, 1.0);
+        this.ui.update();
 
         window.requestAnimationFrame(this._updateLoop);
     };

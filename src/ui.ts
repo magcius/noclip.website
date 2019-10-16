@@ -2493,7 +2493,7 @@ class BottomRightBar {
         this.elem.style.transition = '.1s ease-out';
     }
 
-    public setShouldShow(active: boolean): void {
+    public setVisible(active: boolean): void {
         this.elem.style.opacity = active ? '1' : '0';
     }
 }
@@ -2580,6 +2580,9 @@ export class UI {
     private bottomRightBar: BottomRightBar;
     private fullscreenButton: FullscreenButton;
 
+    private isDragging: boolean = false;
+    private lastMouseActiveTime: number = -1;
+
     constructor(public viewer: Viewer.Viewer) {
         this.toplevel = document.createElement('div');
 
@@ -2652,9 +2655,19 @@ export class UI {
             this.faqPanel.elem.style.display = 'block';
         };
 
+        window.onmousemove = () => {
+            this.lastMouseActiveTime = window.performance.now();
+            this.syncBottomRightBarVisibility();
+        };
+        this.lastMouseActiveTime = window.performance.now();
+
         this.setScenePanels(null);
 
         this.elem = this.toplevel;
+    }
+
+    public update(): void {
+        this.syncBottomRightBarVisibility();
     }
 
     public sceneChanged() {
@@ -2703,11 +2716,28 @@ export class UI {
         return true;
     }
 
+    private shouldBottomRightBarBeVisible(): boolean {
+        if (this.isDragging)
+            return false;
+
+        // Hide after one second of mouse inactivity
+        const lastMouseActiveHideThreshold = 1000;
+        if (window.performance.now() > this.lastMouseActiveTime + lastMouseActiveHideThreshold)
+            return false;
+
+        return true;
+    }
+
+    private syncBottomRightBarVisibility(): void {
+        this.bottomRightBar.setVisible(this.shouldBottomRightBarBeVisible());
+    }
+
     public setIsDragging(isDragging: boolean): void {
+        this.isDragging = isDragging;
         this.elem.style.pointerEvents = isDragging ? 'none' : '';
-        this.bottomRightBar.setShouldShow(!isDragging);
         if (isDragging && this.shouldPanelsAutoClose())
             this.setPanelsAutoClosed(true);
+        this.syncBottomRightBarVisibility();
     }
 
     public makeFloatingPanel(title: string = 'Floating Panel', icon: string = RENDER_HACKS_ICON): FloatingPanel {
