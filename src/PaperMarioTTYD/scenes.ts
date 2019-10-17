@@ -38,7 +38,7 @@ class TTYDSceneDesc implements Viewer.SceneDesc {
     }
 }
 
-export function createWorldRendererFromBuffers(dBuffer: ArrayBufferSlice, tBuffer: ArrayBufferSlice): WorldRenderer {
+export function createWorldRendererFromBuffers(device: GfxDevice, dBuffer: ArrayBufferSlice, tBuffer: ArrayBufferSlice): WorldRenderer {
     const d = World.parse(dBuffer);
     const textureHolder = new TPLTextureHolder();
     const tpl = TPL.parse(tBuffer, d.textureNameTable);
