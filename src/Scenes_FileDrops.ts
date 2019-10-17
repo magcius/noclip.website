@@ -12,6 +12,7 @@ import * as NNS_G3D from './nns_g3d/scenes';
 import * as J3D from './j3d/scenes';
 import * as CTR_H3D from './Common/CTR_H3D/H3D';
 import * as RRES from './rres/scenes';
+import * as PaperMarioTTYD from './PaperMarioTTYD/scenes';
 import { SceneContext } from "./SceneBase";
 import { DataFetcher, NamedArrayBufferSlice } from "./DataFetcher";
 
@@ -82,6 +83,9 @@ export async function createSceneFromFiles(device: GfxDevice, buffers: NamedArra
 
     if (buffer.name.endsWith('.nsbmd'))
         return NNS_G3D.createBasicNSBMDRendererFromNSBMD(device, buffer);
+
+    if (buffers.length === 2 && buffers[0].name === 'd' && buffers[1].name === 't')
+        return PaperMarioTTYD.createWorldRendererFromBuffers(device, buffers[0], buffers[1]);
 
     if (buffer.name.endsWith('.bch'))
         CTR_H3D.parse(buffer);
