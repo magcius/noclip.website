@@ -67,6 +67,8 @@ function loadArbitraryFile(device: GfxDevice, buffer: ArrayBufferSlice): Promise
 }
 
 export async function createSceneFromFiles(device: GfxDevice, buffers: NamedArrayBufferSlice[]): Promise<SceneGfx> {
+    buffers.sort((a, b) => a.name.localeCompare(b.name));
+
     const buffer = buffers[0];
 
     if (buffer.name.endsWith('.zar') || buffer.name.endsWith('.gar'))
@@ -75,7 +77,7 @@ export async function createSceneFromFiles(device: GfxDevice, buffers: NamedArra
     if (buffer.name.endsWith('.arc') || buffer.name.endsWith('.carc') || buffer.name.endsWith('.szs'))
         return loadArbitraryFile(device, buffer);
 
-    if (buffer.name.endsWith('.brres'))
+    if (buffers.some((b) => b.name.endsWith('.brres')))
         return RRES.createBasicRRESRendererFromBRRES(device, buffers);
 
     if (buffer.name.endsWith('.rarc') || buffer.name.endsWith('.bmd') || buffer.name.endsWith('.bdl'))
