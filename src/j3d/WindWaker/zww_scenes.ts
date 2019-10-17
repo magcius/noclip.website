@@ -28,7 +28,7 @@ import { fillMatrix4x4, fillMatrix4x3, fillColor } from '../../gfx/helpers/Unifo
 import { makeTriangleIndexBuffer, GfxTopology } from '../../gfx/helpers/TopologyHelpers';
 import AnimationController from '../../AnimationController';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
-import { ObjectRenderer, BMDObjectRenderer, SymbolMap, WhiteFlowerData, FlowerObjectRenderer, PinkFlowerData, BessouFlowerData, FlowerData } from './Actors';
+import { ObjectRenderer, BMDObjectRenderer, SymbolMap, WhiteFlowerData, FlowerObjectRenderer, PinkFlowerData, BessouFlowerData, FlowerData, settingTevStruct, LightTevColorType } from './Actors';
 import { SceneContext } from '../../SceneBase';
 import { reverseDepthForCompareMode } from '../../gfx/helpers/ReversedDepthHelpers';
 
@@ -52,20 +52,25 @@ class ZWWExtraTextures {
     }
 }
 
-export interface Colors {
-    actorShadow: Color;
-    actorAmbient: Color;
-    amb: Color;
-    light: Color;
-    ocean: Color;
-    wave: Color;
-    splash: Color;
-    splash2: Color;
-    doors: Color;
+interface VirtColors {
     vr_back_cloud: Color;
     vr_sky: Color;
     vr_uso_umi: Color;
     vr_kasumi_mae: Color;
+}
+
+export interface Colors {
+    actorShadow: Color;
+    actorAmbient: Color;
+    bg0C0: Color;
+    bg0K0: Color;
+    bg1C0: Color;
+    bg1K0: Color;
+    bg2C0: Color;
+    bg2K0: Color;
+    bg3C0: Color;
+    bg3K0: Color;
+    virtColors: VirtColors | null;
 }
 
 interface DZSChunkHeader {
@@ -91,20 +96,15 @@ function parseDZSHeaders(buffer: ArrayBufferSlice): Map<string, DZSChunkHeader> 
     return chunkHeaders;
 }
 
-export function getColorsFromDZS(buffer: ArrayBufferSlice, roomIdx: number, timeOfDay: number): Colors | undefined {
+export function getColorsFromDZS(buffer: ArrayBufferSlice, roomIdx: number, timeOfDay: number): Colors {
     const view = buffer.createDataView();
     const chunkHeaders = parseDZSHeaders(buffer);
-
-    if (!chunkHeaders.has('Virt'))
-        return undefined;
 
     const coloIdx = view.getUint8(chunkHeaders.get('EnvR')!.offs + (roomIdx * 0x08));
     const coloOffs = chunkHeaders.get('Colo')!.offs + (coloIdx * 0x0C);
     const whichPale = timeOfDay;
     const paleIdx = view.getUint8(coloOffs + whichPale);
     const paleOffs = chunkHeaders.get('Pale')!.offs + (paleIdx * 0x2C);
-    const virtIdx = view.getUint8(paleOffs + 0x21);
-    const virtOffs = chunkHeaders.get('Virt')!.offs + (virtIdx * 0x24);
 
     const actorShadowR = view.getUint8(paleOffs + 0x00) / 0xFF;
     const actorShadowG = view.getUint8(paleOffs + 0x01) / 0xFF;
@@ -116,63 +116,80 @@ export function getColorsFromDZS(buffer: ArrayBufferSlice, roomIdx: number, time
     const actorAmbientB = view.getUint8(paleOffs + 0x05) / 0xFF;
     const actorAmbient = colorNew(actorAmbientR, actorAmbientG, actorAmbientB, 1);
 
-    const ambR = view.getUint8(paleOffs + 0x06) / 0xFF;
-    const ambG = view.getUint8(paleOffs + 0x07) / 0xFF;
-    const ambB = view.getUint8(paleOffs + 0x08) / 0xFF;
-    const amb = colorNew(ambR, ambG, ambB, 1);
+    const bg0C0R = view.getUint8(paleOffs + 0x06) / 0xFF;
+    const bg0C0G = view.getUint8(paleOffs + 0x07) / 0xFF;
+    const bg0C0B = view.getUint8(paleOffs + 0x08) / 0xFF;
+    const bg0C0 = colorNew(bg0C0R, bg0C0G, bg0C0B, 1);
 
-    const lightR = view.getUint8(paleOffs + 0x09) / 0xFF;
-    const lightG = view.getUint8(paleOffs + 0x0A) / 0xFF;
-    const lightB = view.getUint8(paleOffs + 0x0B) / 0xFF;
-    const light = colorNew(lightR, lightG, lightB, 1);
+    const bg0K0R = view.getUint8(paleOffs + 0x09) / 0xFF;
+    const bg0K0G = view.getUint8(paleOffs + 0x0A) / 0xFF;
+    const bg0K0B = view.getUint8(paleOffs + 0x0B) / 0xFF;
+    const bg0K0 = colorNew(bg0K0R, bg0K0G, bg0K0B, 1);
 
-    const waveR = view.getUint8(paleOffs + 0x0C) / 0xFF;
-    const waveG = view.getUint8(paleOffs + 0x0D) / 0xFF;
-    const waveB = view.getUint8(paleOffs + 0x0E) / 0xFF;
-    const wave = colorNew(waveR, waveG, waveB, 1);
+    const bg1C0R = view.getUint8(paleOffs + 0x0C) / 0xFF;
+    const bg1C0G = view.getUint8(paleOffs + 0x0D) / 0xFF;
+    const bg1C0B = view.getUint8(paleOffs + 0x0E) / 0xFF;
+    const bg1C0 = colorNew(bg1C0R, bg1C0G, bg1C0B, 1);
 
-    const oceanR = view.getUint8(paleOffs + 0x0F) / 0xFF;
-    const oceanG = view.getUint8(paleOffs + 0x10) / 0xFF;
-    const oceanB = view.getUint8(paleOffs + 0x11) / 0xFF;
-    const ocean = colorNew(oceanR, oceanG, oceanB, 1);
+    const bg1K0R = view.getUint8(paleOffs + 0x0F) / 0xFF;
+    const bg1K0G = view.getUint8(paleOffs + 0x10) / 0xFF;
+    const bg1K0B = view.getUint8(paleOffs + 0x11) / 0xFF;
+    const bg1K0 = colorNew(bg1K0R, bg1K0G, bg1K0B, 1);
 
-    const splashR = view.getUint8(paleOffs + 0x12) / 0xFF;
-    const splashG = view.getUint8(paleOffs + 0x13) / 0xFF;
-    const splashB = view.getUint8(paleOffs + 0x14) / 0xFF;
-    const splash = colorNew(splashR, splashG, splashB, 1);
+    const bg2C0R = view.getUint8(paleOffs + 0x12) / 0xFF;
+    const bg2C0G = view.getUint8(paleOffs + 0x13) / 0xFF;
+    const bg2C0B = view.getUint8(paleOffs + 0x14) / 0xFF;
+    const bg2C0 = colorNew(bg2C0R, bg2C0G, bg2C0B, 1);
 
-    const splash2R = view.getUint8(paleOffs + 0x15) / 0xFF;
-    const splash2G = view.getUint8(paleOffs + 0x16) / 0xFF;
-    const splash2B = view.getUint8(paleOffs + 0x17) / 0xFF;
-    const splash2 = colorNew(splash2R, splash2G, splash2B, 1);
+    const bg2K0R = view.getUint8(paleOffs + 0x15) / 0xFF;
+    const bg2K0G = view.getUint8(paleOffs + 0x16) / 0xFF;
+    const bg2K0B = view.getUint8(paleOffs + 0x17) / 0xFF;
+    const bg2K0 = colorNew(bg2K0R, bg2K0G, bg2K0B, 1);
 
-    const doorsR = view.getUint8(paleOffs + 0x18) / 0xFF;
-    const doorsG = view.getUint8(paleOffs + 0x19) / 0xFF;
-    const doorsB = view.getUint8(paleOffs + 0x1A) / 0xFF;
-    const doors = colorNew(doorsR, doorsG, doorsB, 1);
+    const bg3C0R = view.getUint8(paleOffs + 0x18) / 0xFF;
+    const bg3C0G = view.getUint8(paleOffs + 0x19) / 0xFF;
+    const bg3C0B = view.getUint8(paleOffs + 0x1A) / 0xFF;
+    const bg3C0 = colorNew(bg3C0R, bg3C0G, bg3C0B, 1);
 
-    const vr_back_cloudR = view.getUint8(virtOffs + 0x10) / 0xFF;
-    const vr_back_cloudG = view.getUint8(virtOffs + 0x11) / 0xFF;
-    const vr_back_cloudB = view.getUint8(virtOffs + 0x12) / 0xFF;
-    const vr_back_cloudA = view.getUint8(virtOffs + 0x13) / 0xFF;
-    const vr_back_cloud = colorNew(vr_back_cloudR, vr_back_cloudG, vr_back_cloudB, vr_back_cloudA);
+    const bg3K0R = view.getUint8(paleOffs + 0x1B) / 0xFF;
+    const bg3K0G = view.getUint8(paleOffs + 0x1C) / 0xFF;
+    const bg3K0B = view.getUint8(paleOffs + 0x1D) / 0xFF;
+    const bg3K0 = colorNew(bg3K0R, bg3K0G, bg3K0B, 1);
 
-    const vr_skyR = view.getUint8(virtOffs + 0x18) / 0xFF;
-    const vr_skyG = view.getUint8(virtOffs + 0x19) / 0xFF;
-    const vr_skyB = view.getUint8(virtOffs + 0x1A) / 0xFF;
-    const vr_sky = colorNew(vr_skyR, vr_skyG, vr_skyB, 1);
+    let virtColors: VirtColors | null = null;
+    if (chunkHeaders.has('Virt')) {
+        const virtIdx = view.getUint8(paleOffs + 0x21);
+        const virtOffs = chunkHeaders.get('Virt')!.offs + (virtIdx * 0x24);
+        const vr_back_cloudR = view.getUint8(virtOffs + 0x10) / 0xFF;
+        const vr_back_cloudG = view.getUint8(virtOffs + 0x11) / 0xFF;
+        const vr_back_cloudB = view.getUint8(virtOffs + 0x12) / 0xFF;
+        const vr_back_cloudA = view.getUint8(virtOffs + 0x13) / 0xFF;
+        const vr_back_cloud = colorNew(vr_back_cloudR, vr_back_cloudG, vr_back_cloudB, vr_back_cloudA);
 
-    const vr_uso_umiR = view.getUint8(virtOffs + 0x1B) / 0xFF;
-    const vr_uso_umiG = view.getUint8(virtOffs + 0x1C) / 0xFF;
-    const vr_uso_umiB = view.getUint8(virtOffs + 0x1D) / 0xFF;
-    const vr_uso_umi = colorNew(vr_uso_umiR, vr_uso_umiG, vr_uso_umiB, 1);
+        const vr_skyR = view.getUint8(virtOffs + 0x18) / 0xFF;
+        const vr_skyG = view.getUint8(virtOffs + 0x19) / 0xFF;
+        const vr_skyB = view.getUint8(virtOffs + 0x1A) / 0xFF;
+        const vr_sky = colorNew(vr_skyR, vr_skyG, vr_skyB, 1);
 
-    const vr_kasumi_maeG = view.getUint8(virtOffs + 0x1F) / 0xFF;
-    const vr_kasumi_maeR = view.getUint8(virtOffs + 0x1E) / 0xFF;
-    const vr_kasumi_maeB = view.getUint8(virtOffs + 0x20) / 0xFF;
-    const vr_kasumi_mae = colorNew(vr_kasumi_maeR, vr_kasumi_maeG, vr_kasumi_maeB, 1);
+        const vr_uso_umiR = view.getUint8(virtOffs + 0x1B) / 0xFF;
+        const vr_uso_umiG = view.getUint8(virtOffs + 0x1C) / 0xFF;
+        const vr_uso_umiB = view.getUint8(virtOffs + 0x1D) / 0xFF;
+        const vr_uso_umi = colorNew(vr_uso_umiR, vr_uso_umiG, vr_uso_umiB, 1);
 
-    return { actorShadow, actorAmbient, amb, light, wave, ocean, splash, splash2, doors, vr_back_cloud, vr_sky, vr_uso_umi, vr_kasumi_mae };
+        const vr_kasumi_maeG = view.getUint8(virtOffs + 0x1F) / 0xFF;
+        const vr_kasumi_maeR = view.getUint8(virtOffs + 0x1E) / 0xFF;
+        const vr_kasumi_maeB = view.getUint8(virtOffs + 0x20) / 0xFF;
+        const vr_kasumi_mae = colorNew(vr_kasumi_maeR, vr_kasumi_maeG, vr_kasumi_maeB, 1);
+        virtColors = { vr_back_cloud, vr_sky, vr_uso_umi, vr_kasumi_mae };
+    } else {
+        virtColors = null;
+    }
+
+    return {
+        actorShadow, actorAmbient,
+        bg0C0, bg0K0, bg1C0, bg1K0, bg2C0, bg2K0, bg3C0, bg3K0,
+        virtColors,
+    };
 }
 
 function createModelInstance(device: GfxDevice, cache: GfxRenderCache, extraTextures: ZWWExtraTextures, rarc: RARC.RARC, name: string, isSkybox: boolean = false): BMDModelInstance | null {
@@ -264,41 +281,21 @@ class WindWakerRoomRenderer {
             mat4.copy(this.model3.modelMatrix, modelMatrix);
     }
 
-    public setColors(colors: Colors | undefined): void {
-        if (colors !== undefined) {
-            if (this.model !== null) {
-                this.model.setColorOverride(ColorKind.K0, colors.light);
-                this.model.setColorOverride(ColorKind.C0, colors.amb);
-            }
+    public setColors(colors: Colors): void {
+        if (this.model !== null)
+            settingTevStruct(this.model, LightTevColorType.BG0, colors);
 
-            if (this.model1 !== null) {
-                this.model1.setColorOverride(ColorKind.K0, colors.ocean);
-                this.model1.setColorOverride(ColorKind.C0, colors.wave);
-                this.model1.setColorOverride(ColorKind.C1, colors.splash);
-                this.model1.setColorOverride(ColorKind.K1, colors.splash2);
-            }
+        if (this.model1 !== null)
+            settingTevStruct(this.model1, LightTevColorType.BG1, colors);
 
-            if (this.model3 !== null)
-                this.model3.setColorOverride(ColorKind.C0, colors.doors);
+        if (this.model2 !== null)
+            settingTevStruct(this.model2, LightTevColorType.BG2, colors);
 
-            for (let i = 0; i < this.objectRenderers.length; i++)
-                this.objectRenderers[i].setColors(colors);
-        } else {
-            if (this.model !== null) {
-                this.model.setColorOverride(ColorKind.K0, undefined);
-                this.model.setColorOverride(ColorKind.C0, undefined);
-            }
+        if (this.model3 !== null)
+            settingTevStruct(this.model3, LightTevColorType.BG3, colors);
 
-            if (this.model1 !== null) {
-                this.model1.setColorOverride(ColorKind.K0, undefined);
-                this.model1.setColorOverride(ColorKind.C0, undefined);
-                this.model1.setColorOverride(ColorKind.C1, undefined);
-                this.model1.setColorOverride(ColorKind.K1, undefined);
-            }
-
-            if (this.model3 !== null)
-                this.model3.setColorOverride(ColorKind.C0, undefined);
-        }
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].setColors(colors);
     }
 
     public setVisible(v: boolean): void {
@@ -524,7 +521,7 @@ class SkyEnvironment {
     private vr_uso_umi: BMDModelInstance | null;
     private vr_kasumi_mae: BMDModelInstance | null;
     private vr_back_cloud: BMDModelInstance | null;
-    
+
     constructor(device: GfxDevice, cache: GfxRenderCache, extraTextures: ZWWExtraTextures, stageRarc: RARC.RARC) {
         this.vr_sky = createModelInstance(device, cache, extraTextures, stageRarc, `vr_sky`, true);
         this.vr_uso_umi = createModelInstance(device, cache, extraTextures, stageRarc, `vr_uso_umi`, true);
@@ -532,47 +529,40 @@ class SkyEnvironment {
         this.vr_back_cloud = createModelInstance(device, cache, extraTextures, stageRarc, `vr_back_cloud`, true);
     }
 
-    public setColorOverrides(colors: Colors | undefined): void {
-        if (colors !== undefined) {
-            if (this.vr_sky)
-                this.vr_sky.setColorOverride(ColorKind.K0, colors.vr_sky);
-            if (this.vr_uso_umi)
-                this.vr_uso_umi.setColorOverride(ColorKind.K0, colors.vr_uso_umi);
-            if (this.vr_kasumi_mae)
-                this.vr_kasumi_mae.setColorOverride(ColorKind.C0, colors.vr_kasumi_mae);
-            if (this.vr_back_cloud)
-                this.vr_back_cloud.setColorOverride(ColorKind.K0, colors.vr_back_cloud, true);
-        } else {
-            if (this.vr_sky)
-                this.vr_sky.setColorOverride(ColorKind.K0, undefined);
-            if (this.vr_uso_umi)
-                this.vr_uso_umi.setColorOverride(ColorKind.K0, undefined);
-            if (this.vr_kasumi_mae)
-                this.vr_kasumi_mae.setColorOverride(ColorKind.C0, undefined);
-            if (this.vr_back_cloud)
-                this.vr_back_cloud.setColorOverride(ColorKind.K0, undefined);
-        }
+    public setColors(colors: Colors): void {
+        const virtColors = colors.virtColors;
+        if (virtColors === null)
+            return;
+
+        if (this.vr_sky !== null)
+            this.vr_sky.setColorOverride(ColorKind.K0, virtColors.vr_sky);
+        if (this.vr_uso_umi !== null)
+            this.vr_uso_umi.setColorOverride(ColorKind.K0, virtColors.vr_uso_umi);
+        if (this.vr_kasumi_mae !== null)
+            this.vr_kasumi_mae.setColorOverride(ColorKind.C0, virtColors.vr_kasumi_mae);
+        if (this.vr_back_cloud !== null)
+            this.vr_back_cloud.setColorOverride(ColorKind.K0, virtColors.vr_back_cloud, true);
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
-        if (this.vr_sky)
+        if (this.vr_sky !== null)
             this.vr_sky.prepareToRender(device, renderInstManager, viewerInput);
-        if (this.vr_kasumi_mae)
+        if (this.vr_kasumi_mae !== null)
             this.vr_kasumi_mae.prepareToRender(device, renderInstManager, viewerInput);
-        if (this.vr_uso_umi)
+        if (this.vr_uso_umi !== null)
             this.vr_uso_umi.prepareToRender(device, renderInstManager, viewerInput);
-        if (this.vr_back_cloud)
+        if (this.vr_back_cloud !== null)
             this.vr_back_cloud.prepareToRender(device, renderInstManager, viewerInput);
     }
 
     public destroy(device: GfxDevice): void {
-        if (this.vr_sky)
+        if (this.vr_sky !== null)
             this.vr_sky.destroy(device);
-        if (this.vr_kasumi_mae)
+        if (this.vr_kasumi_mae !== null)
             this.vr_kasumi_mae.destroy(device);
-        if (this.vr_uso_umi)
+        if (this.vr_uso_umi !== null)
             this.vr_uso_umi.destroy(device);
-        if (this.vr_back_cloud)
+        if (this.vr_back_cloud !== null)
             this.vr_back_cloud.destroy(device);
     }
 }
@@ -606,22 +596,22 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             return;
 
         this.currentTimeOfDay = timeOfDay;
-        this.timeOfDaySelector.selectItem(timeOfDay + 1);
+        this.timeOfDaySelector.selectItem(timeOfDay);
         this.onstatechanged();
         const dzsFile = this.stageRarc.findFile(`dzs/stage.dzs`)!;
 
-        const colors = timeOfDay === -1 ? undefined : getColorsFromDZS(dzsFile.buffer, 0, timeOfDay);
+        const colors = getColorsFromDZS(dzsFile.buffer, 0, timeOfDay);
 
         if (this.skyEnvironment !== null)
-            this.skyEnvironment.setColorOverrides(colors);
+            this.skyEnvironment.setColors(colors);
 
         if (colors !== undefined) {
             if (this.seaPlane)
-                this.seaPlane.setColor(colors.ocean);
+                this.seaPlane.setColor(colors.bg1K0);
         }
 
         for (const roomRenderer of this.roomRenderers) {
-            const roomColors = timeOfDay === -1 ? undefined : getColorsFromDZS(dzsFile.buffer, 0, timeOfDay);
+            const roomColors = getColorsFromDZS(dzsFile.buffer, 0, timeOfDay);
             roomRenderer.setColors(roomColors);
         }
     }
@@ -631,24 +621,20 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         timeOfDayPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         timeOfDayPanel.setTitle(UI.TIME_OF_DAY_ICON, "Time of Day");
 
-        const colorPresets = [ '(no palette)', 'Dusk', 'Morning', 'Day', 'Afternoon', 'Evening', 'Night' ];
+        const colorPresets = [ 'Dusk', 'Morning', 'Day', 'Afternoon', 'Evening', 'Night' ];
 
         this.timeOfDaySelector = new UI.SingleSelect();
         this.timeOfDaySelector.setStrings(colorPresets);
         this.timeOfDaySelector.onselectionchange = (index: number) => {
-            const timeOfDay = index - 1;
+            const timeOfDay = index;
             this.setTimeOfDay(timeOfDay);
         };
 
         const dzsFile = this.stageRarc.findFile(`dzs/stage.dzs`)!;
         const flairs: UI.Flair[] = colorPresets.slice(1).map((presetName, i): UI.Flair | null => {
-            const elemIndex = i + 1;
             const timeOfDay = i;
             const stageColors = getColorsFromDZS(dzsFile.buffer, 0, timeOfDay);
-            if (stageColors === undefined)
-                return null;
-            else
-                return { index: elemIndex, background: colorToCSS(stageColors.vr_sky) };
+            return { index: i, background: colorToCSS(stageColors.bg1K0) };
         }).filter((n) => n !== null) as UI.Flair[];
         this.timeOfDaySelector.setFlairs(flairs);
 
@@ -1668,7 +1654,10 @@ class SceneDesc {
         else if (name === 'flower') fetchExtraSymbols().then((symbolMap) => buildWhiteFlowerModel(symbolMap));
         else if (name === 'pflower') fetchExtraSymbols().then((symbolMap) => buildPinkFlowerModel(symbolMap));
         // Bigger trees
-        else if (name === 'lwood') fetchArchive(`Lwood.arc`).then((rarc) => buildModel(rarc, `bdl/alwd.bdl`));
+        else if (name === 'lwood') fetchArchive(`Lwood.arc`).then((rarc) => {
+            const b = buildModel(rarc, `bdl/alwd.bdl`);
+            b.lightTevColorType = LightTevColorType.BG0;
+        });
         else if (name === 'Oyashi') fetchArchive(`Oyashi.arc`).then((rarc) => buildModel(rarc, `bdl/oyashi.bdl`));
         else if (name === 'Vyasi') fetchArchive(`Vyasi.arc`).then((rarc) => buildModel(rarc, `bdl/vyasi.bdl`));
         // Barrels
@@ -1688,7 +1677,10 @@ class SceneDesc {
         // Mailbox
         else if (name === 'Tpost') fetchArchive(`Toripost.arc`).then((rarc) => buildModel(rarc, `bdl/vpost.bdl`).bindANK1(parseBCK(rarc, `bcks/post_wait.bck`)));
         // Sign
-        else if (name === 'Kanban') fetchArchive(`Kanban.arc`).then((rarc) => buildModel(rarc, `bdl/kanban.bdl`));
+        else if (name === 'Kanban') fetchArchive(`Kanban.arc`).then((rarc) => {
+            const b = buildModel(rarc, `bdl/kanban.bdl`);
+            b.lightTevColorType = LightTevColorType.BG0;
+        });
         // Doors: TODO(jstpierre)
         else if (name === 'KNOB00') return;
         // Holes you can fall into

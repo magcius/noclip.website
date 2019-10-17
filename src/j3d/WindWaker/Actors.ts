@@ -25,6 +25,34 @@ import { GfxRenderInstManager } from '../../gfx/render/GfxRenderer';
 
 // Special-case actors
 
+export const enum LightTevColorType {
+    ACTOR = 0,
+    BG0 = 1,
+    BG1 = 2,
+    BG2 = 3,
+    BG3 = 4,
+}
+
+// dScnKy_env_light_c::settingTevStruct
+export function settingTevStruct(actor: BMDModelInstance, type: LightTevColorType, colors: Colors): void {
+    if (type === LightTevColorType.ACTOR) {
+        actor.setColorOverride(ColorKind.C0, colors.actorShadow);
+        actor.setColorOverride(ColorKind.K0, colors.actorAmbient);
+    } else if (type === LightTevColorType.BG0) {
+        actor.setColorOverride(ColorKind.C0, colors.bg0C0);
+        actor.setColorOverride(ColorKind.K0, colors.bg0K0);
+    } else if (type === LightTevColorType.BG1) {
+        actor.setColorOverride(ColorKind.C0, colors.bg1C0);
+        actor.setColorOverride(ColorKind.K0, colors.bg1K0);
+    } else if (type === LightTevColorType.BG2) {
+        actor.setColorOverride(ColorKind.C0, colors.bg2C0);
+        actor.setColorOverride(ColorKind.K0, colors.bg2K0);
+    } else if (type === LightTevColorType.BG3) {
+        actor.setColorOverride(ColorKind.C0, colors.bg3C0);
+        actor.setColorOverride(ColorKind.K0, colors.bg3K0);
+    }
+}
+
 export interface ObjectRenderer {
     prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void;
     setColors(colors: Colors): void;
@@ -38,6 +66,7 @@ const screenProjection = new ScreenSpaceProjection();
 export class BMDObjectRenderer implements ObjectRenderer {
     public visible = true;
     public modelMatrix: mat4 = mat4.create();
+    public lightTevColorType = LightTevColorType.ACTOR;
 
     private childObjects: BMDObjectRenderer[] = [];
     private parentJointMatrix: mat4 | null = null;
@@ -77,8 +106,7 @@ export class BMDObjectRenderer implements ObjectRenderer {
     }
 
     public setColors(colors: Colors): void {
-        this.modelInstance.setColorOverride(ColorKind.C0, colors.actorShadow);
-        this.modelInstance.setColorOverride(ColorKind.K0, colors.actorAmbient);
+        settingTevStruct(this.modelInstance, this.lightTevColorType, colors);
 
         for (let i = 0; i < this.childObjects.length; i++)
             this.childObjects[i].setColors(colors);
