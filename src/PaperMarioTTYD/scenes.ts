@@ -38,6 +38,17 @@ class TTYDSceneDesc implements Viewer.SceneDesc {
     }
 }
 
+export function createWorldRendererFromBuffers(dBuffer: ArrayBufferSlice, tBuffer: ArrayBufferSlice): WorldRenderer {
+    const d = World.parse(dBuffer);
+    const textureHolder = new TPLTextureHolder();
+    const tpl = TPL.parse(tBuffer, d.textureNameTable);
+    textureHolder.addTPLTextures(device, tpl);
+
+    const backgroundTextureName: string | null = null;
+
+    return new WorldRenderer(device, d, textureHolder, backgroundTextureName);
+}
+
 // Room names compiled by Ralf@gc-forever.
 // http://www.gc-forever.com/forums/viewtopic.php?p=30808#p30808
 
