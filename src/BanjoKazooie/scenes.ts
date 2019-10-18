@@ -14,7 +14,7 @@ import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { executeOnPass } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
-const pathBase = `bk`;
+const pathBase = `BanjoKazooie`;
 
 class BKRenderer implements Viewer.SceneGfx {
     public n64Renderers: N64Renderer[] = [];
@@ -124,7 +124,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
     public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
-        return dataFetcher.fetchData(`${pathBase}/${this.id}_arc.crg1?cache_bust=0`).then((data) => {
+        return dataFetcher.fetchData(`${pathBase}/${this.id}_arc.crg1`).then((data) => {
             const obj: any = BYML.parse(data!, BYML.FileType.CRG1);
 
             const viewerTextures: Viewer.Texture[] = [];

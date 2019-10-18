@@ -15,7 +15,7 @@ import { assert, nArray, assertExists } from "../util";
 import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
 import { computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
 import { AABB } from "../Geometry";
-import { getImageFormatString } from "../bk/f3dex";
+import { getImageFormatString } from "../BanjoKazooie/f3dex";
 import { TexCM, TextFilt } from '../Common/N64/Image';
 
 class PaperMario64Program extends DeviceProgram {
