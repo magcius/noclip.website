@@ -98,20 +98,20 @@ function readBTI_Texture(buffer: ArrayBufferSlice, name: string): BTI_Texture {
     const view = buffer.createDataView();
 
     const format: GX.TexFormat = view.getUint8(0x00);
-    const width = view.getUint16(0x02);
-    const height = view.getUint16(0x04);
-    const wrapS = view.getUint8(0x06);
-    const wrapT = view.getUint8(0x07);
-    const paletteFormat = view.getUint8(0x09);
-    const paletteCount = view.getUint16(0x0A);
-    const paletteOffs = view.getUint32(0x0C);
-    const minFilter = view.getUint8(0x14);
-    const magFilter = view.getUint8(0x15);
-    const minLOD = view.getInt8(0x16) * 1/8;
-    const maxLOD = view.getInt8(0x17) * 1/8;
-    const mipCount = view.getUint8(0x18);
-    const lodBias = view.getInt16(0x1A) * 1/100;
-    const dataOffs = view.getUint32(0x1C);
+    const width: number = view.getUint16(0x02);
+    const height: number = view.getUint16(0x04);
+    const wrapS: GX.WrapMode = view.getUint8(0x06);
+    const wrapT: GX.WrapMode = view.getUint8(0x07);
+    const paletteFormat: GX.TexPalette = view.getUint8(0x09);
+    const paletteCount: number = view.getUint16(0x0A);
+    const paletteOffs: number = view.getUint32(0x0C);
+    const minFilter: GX.TexFilter = view.getUint8(0x14);
+    const magFilter: GX.TexFilter = view.getUint8(0x15);
+    const minLOD: number = view.getInt8(0x16) * 1/8;
+    const maxLOD: number = view.getInt8(0x17) * 1/8;
+    const mipCount: number = view.getUint8(0x18);
+    const lodBias: number = view.getInt16(0x1A) * 1/100;
+    const dataOffs: number = view.getUint32(0x1C);
 
     assert(minLOD === 0);
 
