@@ -6,6 +6,9 @@ import * as TPL from './tpl';
 import * as World from './world';
 import { SceneContext } from '../SceneBase';
 import { DataFetcherFlags } from '../DataFetcher';
+import ArrayBufferSlice from '../ArrayBufferSlice';
+
+const pathBase = `PaperMarioTTYD`;
 
 class TTYDSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string = id) {
@@ -13,13 +16,13 @@ class TTYDSceneDesc implements Viewer.SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
-        const pathBase = `ttyd/${this.id}`;
-        const bgPath = `ttyd/b/${this.id}.tpl`;
 
         const [dBuffer, tBuffer, bgBuffer] = await Promise.all([
-            dataFetcher.fetchData(`${pathBase}/d.blob`),
-            dataFetcher.fetchData(`${pathBase}/t.blob`),
-            dataFetcher.fetchData(bgPath, DataFetcherFlags.ALLOW_404),
+            // The ".blob" names are unfortunate. It's a workaround for Parcel being dumb as a bag of rocks
+            // and not allowing files without extensions to be served... sigh...
+            dataFetcher.fetchData(`${pathBase}/m/${this.id}/d.blob`),
+            dataFetcher.fetchData(`${pathBase}/m/${this.id}/t.blob`),
+            dataFetcher.fetchData(`${pathBase}/b/${this.id}.tpl`, DataFetcherFlags.ALLOW_404),
         ]);
 
         const d = World.parse(dBuffer);

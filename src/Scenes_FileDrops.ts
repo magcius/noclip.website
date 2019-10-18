@@ -12,7 +12,7 @@ import * as NNS_G3D from './nns_g3d/scenes';
 import * as J3D from './j3d/scenes';
 import * as CTR_H3D from './Common/CTR_H3D/H3D';
 import * as RRES from './rres/scenes';
-import * as PaperMarioTTYD from './PaperMarioTTYD/scenes';
+import * as PaperMarioTTYD from './PaperMarioTTYD/Scenes_PaperMarioTTYD';
 import { SceneContext } from "./SceneBase";
 import { DataFetcher, NamedArrayBufferSlice } from "./DataFetcher";
 
