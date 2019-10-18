@@ -1031,13 +1031,15 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         const collisionFlags: CollisionFlags = view.getUint32(drawModeStructOffs + 0x08);
 
         const partTableCount = view.getUint32(offs + 0x5C);
-        let partTableIdx = offs + 0x60;
 
         const parts: SceneGraphPart[] = [];
         let isTranslucent = false;
-        for (let i = 0; i < partTableCount; i++) {
-            const materialOffs = mainDataOffs + view.getUint32(partTableIdx + 0x00);
-            const material = assertExists(materialMap.get(materialOffs));
+        for (let i = 0, partTableIdx = offs + 0x60; i < partTableCount; i++, partTableIdx += 0x08) {
+            const materialOffs = view.getUint32(partTableIdx + 0x00);
+            if (materialOffs === 0)
+                continue;
+
+            const material = assertExists(materialMap.get(mainDataOffs + materialOffs));
 
             if (material.materialLayer === MaterialLayer.BLEND)
                 isTranslucent = true;
@@ -1284,8 +1286,6 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
 
                 parts.push({ material, batch });
             }
-
-            partTableIdx += 0x08;
         }
 
         const children: SceneGraphNode[] = [];
