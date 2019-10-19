@@ -210,10 +210,10 @@ export class WindWakerRenderer implements SceneGfx {
         this.vr_kasumi_mae = createModelInstance(device, cache, stageRarc, `vr_kasumi_mae`, true)!;
         this.vr_back_cloud = createModelInstance(device, cache, stageRarc, `vr_back_cloud`, true)!;
 
-        this.vr_sky.setColorOverride(ColorKind.K0, colors.vr_sky);
-        this.vr_uso_umi.setColorOverride(ColorKind.K0, colors.vr_uso_umi);
-        this.vr_kasumi_mae.setColorOverride(ColorKind.C0, colors.vr_kasumi_mae);
-        this.vr_back_cloud.setColorOverride(ColorKind.K0, colors.vr_back_cloud, true);
+        this.vr_sky.setColorOverride(ColorKind.K0, colors.virtColors!.vr_sky);
+        this.vr_uso_umi.setColorOverride(ColorKind.K0, colors.virtColors!.vr_uso_umi);
+        this.vr_kasumi_mae.setColorOverride(ColorKind.C0, colors.virtColors!.vr_kasumi_mae);
+        this.vr_back_cloud.setColorOverride(ColorKind.K0, colors.virtColors!.vr_back_cloud, true);
     }
 
     public createCameraController() {
@@ -312,10 +312,8 @@ export class WindWakerWater implements SceneDesc {
             const model1_btk = BTK.parse(roomRarc.findFileData('btk/model1.btk')!);
 
             function setEnvColors(p: Plane): void {
-                p.materialInstanceState.colorOverrides[ColorKind.K0] = colors.ocean;
-                p.materialInstanceState.colorOverrides[ColorKind.C0] = colors.wave;
-                p.materialInstanceState.colorOverrides[ColorKind.C1] = colors.splash;
-                p.materialInstanceState.colorOverrides[ColorKind.K1] = colors.splash2;
+                p.materialInstanceState.colorOverrides[ColorKind.K0] = colors.bg1K0;
+                p.materialInstanceState.colorOverrides[ColorKind.C0] = colors.bg1C0;
             }
 
             const seaPlane = new Plane(device, cache, model1_bmd, model1_btk, 0);
