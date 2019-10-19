@@ -474,19 +474,19 @@ export class JPAResourceData {
         const texGens: TexGen[] = [];
         const isEnableProjection = !!(bsp1.flags & 0x00100000);
         if (isEnableProjection)
-            texGens.push({ index: 0, type: GX.TexGenType.MTX3x4, source: GX.TexGenSrc.POS,  matrix: GX.TexGenMatrix.TEXMTX0, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
+            texGens.push({ type: GX.TexGenType.MTX3x4, source: GX.TexGenSrc.POS,  matrix: GX.TexGenMatrix.TEXMTX0, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
         else
-            texGens.push({ index: 0, type: GX.TexGenType.MTX2x4, source: GX.TexGenSrc.TEX0, matrix: GX.TexGenMatrix.TEXMTX0, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
+            texGens.push({ type: GX.TexGenType.MTX2x4, source: GX.TexGenSrc.TEX0, matrix: GX.TexGenMatrix.TEXMTX0, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
 
         let texCoord3Id = GX.TexCoordID.TEXCOORD1;
         if (etx1 !== null) {
             if (!!(etx1.flags & 0x00000001)) {
-                texGens.push({ index: 1, type: GX.TexGenType.MTX2x4, source: GX.TexGenSrc.TEX0, matrix: GX.TexGenMatrix.IDENTITY, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
+                texGens.push({ type: GX.TexGenType.MTX2x4, source: GX.TexGenSrc.TEX0, matrix: GX.TexGenMatrix.IDENTITY, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
                 texCoord3Id = GX.TexCoordID.TEXCOORD2;
             }
 
             if (!!(etx1.flags & 0x00000100)) {
-                texGens.push({ index: texCoord3Id, type: GX.TexGenType.MTX2x4, source: GX.TexGenSrc.TEX0, matrix: GX.TexGenMatrix.IDENTITY, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
+                texGens.push({ type: GX.TexGenType.MTX2x4, source: GX.TexGenSrc.TEX0, matrix: GX.TexGenMatrix.IDENTITY, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
             }
         }
 
@@ -495,8 +495,6 @@ export class JPAResourceData {
         const alphaInSelect = (bsp1.flags >>> 0x12) & 0x01;
 
         tevStages.push({
-            index: 0,
-
             texCoordId: GX.TexCoordID.TEXCOORD0,
             texMap: GX.TexMapID.TEXMAP0,
             channelId: GX.RasColorChannelID.COLOR_ZERO,
@@ -530,7 +528,6 @@ export class JPAResourceData {
             if (!!(etx1.flags & 0x00000001)) {
                 // Indirect.
                 indTexStages.push({
-                    index: GX.IndTexStageID.STAGE0,
                     ... setIndTexOrder(GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP2),
                     ... setIndTexCoordScale(GX.IndTexScale._1, GX.IndTexScale._1),
                 });
@@ -542,7 +539,6 @@ export class JPAResourceData {
                 // GX
                 // GXSetTevOrder(1, uVar10)
                 tevStages.push({
-                    index: 1,
                     ... setTevOrder(texCoord3Id, GX.TexMapID.TEXMAP3, GX.RasColorChannelID.COLOR_ZERO),
                     ... setTevColorIn(GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC, GX.CombineColorInput.CPREV, GX.CombineColorInput.ZERO),
                     ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.ZERO),

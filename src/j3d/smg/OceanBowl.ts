@@ -228,16 +228,15 @@ export class OceanBowl extends LiveActor {
         // GXSetTexCoordGen2(GX_TEXCOORD4,GX_TG_MTX2x4,GX_TG_TEX3,GX_TEXMTX4,true,GX_PTIDENTITY);
         // Don't ask me why GXSetTexCoordGen2 is called twice for texgen 4.
         const texGens: TexGen[] = [];
-        texGens.push({ index: 0, type: GX.TexGenType.MTX2x4, source: GX.TexGenSrc.TEX0, matrix: GX.TexGenMatrix.TEXMTX0, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
-        texGens.push({ index: 1, type: GX.TexGenType.MTX2x4, source: GX.TexGenSrc.TEX1, matrix: GX.TexGenMatrix.TEXMTX1, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
-        texGens.push({ index: 2, type: GX.TexGenType.MTX2x4, source: GX.TexGenSrc.TEX2, matrix: GX.TexGenMatrix.TEXMTX2, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
-        texGens.push({ index: 3, type: GX.TexGenType.MTX3x4, source: GX.TexGenSrc.POS,  matrix: GX.TexGenMatrix.TEXMTX3, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
-        texGens.push({ index: 4, type: GX.TexGenType.MTX2x4, source: GX.TexGenSrc.TEX3, matrix: GX.TexGenMatrix.TEXMTX4, normalize: true, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
+        texGens.push({ type: GX.TexGenType.MTX2x4, source: GX.TexGenSrc.TEX0, matrix: GX.TexGenMatrix.TEXMTX0, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
+        texGens.push({ type: GX.TexGenType.MTX2x4, source: GX.TexGenSrc.TEX1, matrix: GX.TexGenMatrix.TEXMTX1, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
+        texGens.push({ type: GX.TexGenType.MTX2x4, source: GX.TexGenSrc.TEX2, matrix: GX.TexGenMatrix.TEXMTX2, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
+        texGens.push({ type: GX.TexGenType.MTX3x4, source: GX.TexGenSrc.POS,  matrix: GX.TexGenMatrix.TEXMTX3, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
+        texGens.push({ type: GX.TexGenType.MTX2x4, source: GX.TexGenSrc.TEX3, matrix: GX.TexGenMatrix.TEXMTX4, normalize: true, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
 
         const indTexStages: IndTexStage[] = [];
         // GXSetIndTexOrder(0,2,2);
         indTexStages.push({
-            index: GX.IndTexStageID.STAGE0,
             ... setIndTexOrder(GX.TexCoordID.TEXCOORD2, GX.TexMapID.TEXMAP2),
             ... setIndTexCoordScale(GX.IndTexScale._1, GX.IndTexScale._1),
         });
@@ -256,7 +255,6 @@ export class OceanBowl extends LiveActor {
 
         const tevStages: TevStage[] = [];
         tevStages.push({
-            index: 0,
             // GXSetTevOrder(0,0,0,0xff);
             // GXSetTevColorIn(0,8,0xf,0xf,0xf);
             // GXSetTevColorOp(0,0,0,0,0,0);
@@ -272,7 +270,6 @@ export class OceanBowl extends LiveActor {
             ... noIndTex,
         });
         tevStages.push({
-            index: 1,
             // GXSetTevOrder(1,1,0,0xff);
             // GXSetTevColorIn(1,0xf,8,0,0xf);
             // GXSetTevColorOp(1,0,0,3,0,0);
@@ -289,7 +286,6 @@ export class OceanBowl extends LiveActor {
         });
 
         tevStages.push({
-            index: 2,
             // GXSetTevOrder(2,4,3,4);
             // GXSetTevColorIn(2,0,3,2,0);
             // GXSetTevColorOp(2,9,0,0,0,0);
@@ -306,7 +302,6 @@ export class OceanBowl extends LiveActor {
         });
 
         tevStages.push({
-            index: 3,
             // GXSetTevOrder(3,3,1,0xff);
             // GXSetTevColorIn(3,0xf,8,4,0);
             // GXSetTevColorOp(3,0,0,0,1,0);

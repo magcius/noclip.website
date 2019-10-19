@@ -309,10 +309,7 @@ function parseMaterialSet_MP1_MP2(stream: InputStream, resourceSystem: ResourceS
             stream.goTo(curOffs);
             tevOrderTableOffs += 4;
 
-            const index = j;
-
             const tevStage: GX_Material.TevStage = {
-                index,
                 colorInA, colorInB, colorInC, colorInD, colorOp, colorBias, colorScale, colorClamp, colorRegId,
                 alphaInA, alphaInB, alphaInC, alphaInD, alphaOp, alphaBias, alphaScale, alphaClamp, alphaRegId,
                 texCoordId, texMap, channelId,
@@ -340,7 +337,6 @@ function parseMaterialSet_MP1_MP2(stream: InputStream, resourceSystem: ResourceS
 
         const texGens: GX_Material.TexGen[] = [];
         for (let j = 0; j < texGenCount; j++) {
-            const index = j;
             const flags = stream.readUint32();
             const type: GX.TexGenType = (flags >>> 0) & 0x0F;
             const source: GX.TexGenSrc = (flags >>> 4) & 0x0F;
@@ -349,7 +345,7 @@ function parseMaterialSet_MP1_MP2(stream: InputStream, resourceSystem: ResourceS
             const normalize: boolean = !!((flags >>> 14) & 0x01);
             const postMatrix: GX.PostTexGenMatrix = ((flags >>> 15) & 0x3F) + 64;
 
-            texGens.push({ index, type, source, matrix, normalize, postMatrix });
+            texGens.push({ type, source, matrix, normalize, postMatrix });
         }
 
         const uvAnimationsSize = stream.readUint32(); - 0x04;
@@ -1138,7 +1134,6 @@ export const enum MaterialFlags_MP3 {
 function makeTevStageFromPass_MP3(passIndex: number, passType: string, passFlags: number, materialFlags: MaterialFlags_MP3, hasDIFF: boolean, hasOPAC: boolean): GX_Material.TevStage {
     // Standard texture sample.
     const tevStage: GX_Material.TevStage = {
-        index: passIndex,
         channelId: GX.RasColorChannelID.COLOR0A0,
 
         colorInA: GX.CombineColorInput.ZERO,
@@ -1320,7 +1315,6 @@ function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSyste
                 }
 
                 texGens[passIndex] = {
-                    index: passIndex,
                     type: GX.TexGenType.MTX2x4,
                     source: texGenSrc,
                     matrix: GX.TexGenMatrix.TEXMTX0 + (passIndex * 3),
@@ -1363,8 +1357,7 @@ function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSyste
         // some materials don't have any passes apparently?
         // just make a dummy tev stage in this case
         if (passIndex === 0) {
-            texGens[0] = { 
-                index: 0,
+            texGens[0] = {
                 type: GX.TexGenType.MTX2x4,
                 source: GX.TexGenSrc.TEX0,
                 matrix: GX.TexGenMatrix.TEXMTX0,

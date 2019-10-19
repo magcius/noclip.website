@@ -480,7 +480,7 @@ export function parseMaterialEntry(r: DisplayListRegisters, index: number, name:
         const postMatrix: GX.PostTexGenMatrix = ((dv >>> 0) & 0xFF) + GX.PostTexGenMatrix.PTTEXMTX0;
         const normalize: boolean = !!((dv >>> 8) & 0x01);
 
-        texGens.push({ index: i, type: texGenType, source: texGenSrc, matrix, normalize, postMatrix });
+        texGens.push({ type: texGenType, source: texGenSrc, matrix, normalize, postMatrix });
     }
 
     // TEV stages.
@@ -599,8 +599,6 @@ export function parseMaterialEntry(r: DisplayListRegisters, index: number, name:
         ];
 
         const tevStage: GX_Material.TevStage = {
-            index: i,
-
             colorInA, colorInB, colorInC, colorInD, colorOp, colorBias, colorClamp, colorScale, colorRegId,
             alphaInA, alphaInB, alphaInC, alphaInD, alphaOp, alphaBias, alphaClamp, alphaScale, alphaRegId,
 
@@ -654,13 +652,12 @@ export function parseMaterialEntry(r: DisplayListRegisters, index: number, name:
     const indTexStages: GX_Material.IndTexStage[] = [];
     const iref = r.bp[GX.BPRegister.RAS1_IREF_ID];
     for (let i = 0; i < numInds; i++) {
-        const index = i;
-        const ss = r.bp[GX.BPRegister.RAS1_SS0_ID + (index >>> 2)];
+        const ss = r.bp[GX.BPRegister.RAS1_SS0_ID + (i >>> 2)];
         const scaleS: GX.IndTexScale = (ss >>> ((0x08 * (i & 1)) + 0x00) & 0x0F);
         const scaleT: GX.IndTexScale = (ss >>> ((0x08 * (i & 1)) + 0x04) & 0x0F);
         const texture: GX.TexMapID = (iref >>> (0x06*i)) & 0x07;
         const texCoordId: GX.TexCoordID = (iref >>> (0x06*i)) & 0x07;
-        indTexStages.push({ index, scaleS, scaleT, texCoordId, texture });
+        indTexStages.push({ scaleS, scaleT, texCoordId, texture });
     }
 
     const lightChannels: GX_Material.LightChannelControl[] = [];

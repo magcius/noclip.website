@@ -112,8 +112,6 @@ export interface LightChannelControl {
 }
 
 export interface TexGen {
-    index: number;
-
     type: GX.TexGenType;
     source: GX.TexGenSrc;
     matrix: GX.TexGenMatrix;
@@ -122,8 +120,6 @@ export interface TexGen {
 }
 
 export interface IndTexStage {
-    index: number;
-
     texCoordId: GX.TexCoordID;
     texture: GX.TexMapID;
     scaleS: GX.IndTexScale;
@@ -131,8 +127,6 @@ export interface IndTexStage {
 }
 
 export interface TevStage {
-    index: number;
-
     colorInA: GX.CombineColorInput;
     colorInB: GX.CombineColorInput;
     colorInC: GX.CombineColorInput;
@@ -539,37 +533,38 @@ export class GX_Program extends DeviceProgram {
     }
 
     // Output is a vec3, src is a vec3.
-    private generateTexGenMatrixMult(texCoordGen: TexGen, src: string) {
+    private generateTexGenMatrixMult(texCoordGenIndex: number, src: string) {
         // Dynamic TexMtxIdx is off by default.
         let useTexMtxIdx = false;
-        if (this.material.useTexMtxIdx !== undefined && !!this.material.useTexMtxIdx[texCoordGen.index])
+        if (this.material.useTexMtxIdx !== undefined && !!this.material.useTexMtxIdx[texCoordGenIndex])
             useTexMtxIdx = true;
         if (useTexMtxIdx) {
-            const attrStr = this.generateTexMtxIdxAttr(texCoordGen.index);
+            const attrStr = this.generateTexMtxIdxAttr(texCoordGenIndex);
             return this.generateMulPntMatrixDynamic(attrStr, src);
         } else {
-            return this.generateMulPntMatrixStatic(texCoordGen.matrix, src);
+            return this.generateMulPntMatrixStatic(this.material.texGens[texCoordGenIndex].matrix, src);
         }
     }
 
     // Output is a vec3, src is a vec4.
-    private generateTexGenType(texCoordGen: TexGen, src: string) {
-        switch (texCoordGen.type) {
+    private generateTexGenType(texCoordGenIndex: number, src: string) {
+        switch (this.material.texGens[texCoordGenIndex].type) {
         case GX.TexGenType.SRTG:
             return `vec3(${src}.xy, 1.0)`;
         case GX.TexGenType.MTX2x4:
-            return `vec3(${this.generateTexGenMatrixMult(texCoordGen, src)}.xy, 1.0)`;
+            return `vec3(${this.generateTexGenMatrixMult(texCoordGenIndex, src)}.xy, 1.0)`;
         case GX.TexGenType.MTX3x4:
-            return `${this.generateTexGenMatrixMult(texCoordGen, src)}`;
+            return `${this.generateTexGenMatrixMult(texCoordGenIndex, src)}`;
         default:
             throw new Error("whoops");
         }
     }
 
     // Output is a vec3.
-    private generateTexGenNrm(texCoordGen: TexGen) {
+    private generateTexGenNrm(texCoordGenIndex: number) {
+        const texCoordGen = this.material.texGens[texCoordGenIndex];
         const src = this.generateTexGenSource(texCoordGen.source);
-        const type = this.generateTexGenType(texCoordGen, src);
+        const type = this.generateTexGenType(texCoordGenIndex, src);
         if (texCoordGen.normalize)
             return `normalize(${type})`;
         else
@@ -577,8 +572,9 @@ export class GX_Program extends DeviceProgram {
     }
 
     // Output is a vec3.
-    private generateTexGenPost(texCoordGen: TexGen) {
-        const src = this.generateTexGenNrm(texCoordGen);
+    private generateTexGenPost(texCoordGenIndex: number) {
+        const texCoordGen = this.material.texGens[texCoordGenIndex];
+        const src = this.generateTexGenNrm(texCoordGenIndex);
 
         if (texCoordGen.postMatrix === GX.PostTexGenMatrix.PTIDENTITY) {
             return src;
@@ -587,16 +583,16 @@ export class GX_Program extends DeviceProgram {
         }
     }
 
-    private generateTexGen(texCoordGen: TexGen) {
-        const i = texCoordGen.index;
+    private generateTexGen(texCoordGenIndex: number) {
+        const texCoordGen = this.material.texGens[texCoordGenIndex];
         return `
-    // TexGen ${i} Type: ${texCoordGen.type} Source: ${texCoordGen.source} Matrix: ${texCoordGen.matrix}
-    v_TexCoord${i} = ${this.generateTexGenPost(texCoordGen)};`;
+    // TexGen ${texCoordGenIndex} Type: ${texCoordGen.type} Source: ${texCoordGen.source} Matrix: ${texCoordGen.matrix}
+    v_TexCoord${texCoordGenIndex} = ${this.generateTexGenPost(texCoordGenIndex)};`;
     }
 
-    private generateTexGens(texGens: TexGen[]) {
-        return texGens.map((tg) => {
-            return this.generateTexGen(tg);
+    private generateTexGens(): string {
+        return this.material.texGens.map((tg, i) => {
+            return this.generateTexGen(i);
         }).join('');
     }
 
@@ -623,6 +619,7 @@ export class GX_Program extends DeviceProgram {
         case GX.IndTexScale._64: return `1.0/64.0`;
         case GX.IndTexScale._128: return `1.0/128.0`;
         case GX.IndTexScale._256: return `1.0/256.0`;
+        default: throw "whoops";
         }
     }
 
@@ -638,18 +635,18 @@ export class GX_Program extends DeviceProgram {
         return `texture(u_Texture[${index}], ${coord}, TextureLODBias(${index}))`;
     }
 
-    private generateIndTexStage(stage: IndTexStage): string {
-        const i = stage.index;
+    private generateIndTexStage(indTexStageIndex: number): string {
+        const stage = this.material.indTexStages[indTexStageIndex];
         return `
-    // Indirect ${i}
-    vec3 t_IndTexCoord${i} = 255.0 * ${this.generateTextureSample(stage.texture, this.generateIndTexStageScale(stage))}.abg;`;
+    // Indirect ${indTexStageIndex}
+    vec3 t_IndTexCoord${indTexStageIndex} = 255.0 * ${this.generateTextureSample(stage.texture, this.generateIndTexStageScale(stage))}.abg;`;
     }
 
-    private generateIndTexStages(stages: IndTexStage[]): string {
-        return stages.map((stage) => {
+    private generateIndTexStages(): string {
+        return this.material.indTexStages.map((stage, i) => {
             if (stage.texCoordId >= this.material.texGens.length)
                 return '';
-            return this.generateIndTexStage(stage);
+            return this.generateIndTexStage(i);
         }).join('');
     }
 
@@ -765,7 +762,6 @@ export class GX_Program extends DeviceProgram {
     }
 
     private generateColorIn(stage: TevStage, colorIn: GX.CombineColorInput) {
-        const i = stage.index;
         switch (colorIn) {
         case GX.CombineColorInput.CPREV: return `t_ColorPrev.rgb`;
         case GX.CombineColorInput.APREV: return `t_ColorPrev.aaa`;
@@ -787,7 +783,6 @@ export class GX_Program extends DeviceProgram {
     }
 
     private generateAlphaIn(stage: TevStage, alphaIn: GX.CombineAlphaInput) {
-        const i = stage.index;
         switch (alphaIn) {
         case GX.CombineAlphaInput.APREV: return `t_ColorPrev.a`;
         case GX.CombineAlphaInput.A0:    return `t_Color0.a`;
@@ -968,11 +963,11 @@ export class GX_Program extends DeviceProgram {
         }
     }
 
-    private generateTevStage(stage: TevStage): string {
-        const i = stage.index;
+    private generateTevStage(tevStageIndex: number): string {
+        const stage = this.material.tevStages[tevStageIndex];
 
         return `
-    // TEV Stage ${i}
+    // TEV Stage ${tevStageIndex}
     ${this.generateTevTexCoord(stage)}
     // Color Combine
     // colorIn: ${stage.colorInA} ${stage.colorInB} ${stage.colorInC} ${stage.colorInD}  colorOp: ${stage.colorOp} colorBias: ${stage.colorBias} colorScale: ${stage.colorScale} colorClamp: ${stage.colorClamp} colorRegId: ${stage.colorRegId}
@@ -983,11 +978,12 @@ export class GX_Program extends DeviceProgram {
     ${this.generateAlphaOp(stage)}`;
     }
 
-    private generateTevStages(tevStages: TevStage[]) {
-        return tevStages.map((s) => this.generateTevStage(s)).join(`\n`);
+    private generateTevStages() {
+        return this.material.tevStages.map((s, i) => this.generateTevStage(i)).join(`\n`);
     }
 
-    private generateTevStagesLastMinuteFixup(tevStages: TevStage[]) {
+    private generateTevStagesLastMinuteFixup() {
+        const tevStages = this.material.tevStages;
         // Despite having a destination register, the output of the last stage
         // is what gets output from the color combinations...
         const lastTevStage = tevStages[tevStages.length - 1];
@@ -1025,7 +1021,8 @@ export class GX_Program extends DeviceProgram {
         }
     }
 
-    private generateAlphaTest(alphaTest: AlphaTest) {
+    private generateAlphaTest() {
+        const alphaTest = this.material.alphaTest;
         return `
     // Alpha Test: Op ${alphaTest.op}
     // Compare A: ${alphaTest.compareA} Reference A: ${this.generateFloat(alphaTest.referenceA)}
@@ -1121,13 +1118,11 @@ void main() {
     float t_LightDeltaDist2, t_LightDeltaDist;
     vec4 t_ColorChanTemp;
 ${this.generateLightChannels()}
-${this.generateTexGens(this.material.texGens)}
+${this.generateTexGens()}
     gl_Position = Mul(u_Projection, vec4(t_Position, 1.0));
 }
 `;
 
-        const tevStages = this.material.tevStages;
-        const indTexStages = this.material.indTexStages;
         const alphaTest = this.material.alphaTest;
 
         this.frag = `
@@ -1161,15 +1156,15 @@ void main() {
     vec4 t_Color1    = u_Color[2];
     vec4 t_Color2    = u_Color[3];
 
-${this.generateIndTexStages(indTexStages)}
+${this.generateIndTexStages()}
 
     vec2 t_TexCoord = vec2(0.0, 0.0);
     vec4 t_TevA, t_TevB, t_TevC, t_TevD;
-${this.generateTevStages(tevStages)}
+${this.generateTevStages()}
 
-${this.generateTevStagesLastMinuteFixup(tevStages)}
+${this.generateTevStagesLastMinuteFixup()}
     t_TevOutput = TevOverflow(t_TevOutput);
-${this.generateAlphaTest(alphaTest)}
+${this.generateAlphaTest()}
     gl_FragColor = t_TevOutput;
 }
 `;

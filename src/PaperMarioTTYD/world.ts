@@ -482,8 +482,6 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         if (samplerEntryTableCount === 0) {
             // rgba = ras.rgba
             tevStages.push({
-                index: 0,
-
                 ... setTevOrder(GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0),
                 ... setTevColorIn(GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.RASC),
                 ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.RASA),
@@ -498,8 +496,6 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         } else if (tevMode === 0x00) {
             // rgba = tex0.rgba * ras.rgba
             tevStages.push({
-                index: 0,
-
                 ... setTevOrder(GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0),
                 ... setTevColorIn(GX.CombineColorInput.ZERO, GX.CombineColorInput.RASC, GX.CombineColorInput.TEXC, GX.CombineColorInput.ZERO),
                 ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.RASA, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.ZERO),
@@ -514,8 +510,6 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         } else if (tevMode === 0x01) {
             // rgba = vec4(mix(tex0.rgb * tex1.rgb, tex1.a), tex0.a) * ras.rgba
             tevStages.push({
-                index: 0,
-
                 ... setTevOrder(GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO),
                 ... setTevColorIn(GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC),
                 ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA),
@@ -529,8 +523,6 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             });
 
             tevStages.push({
-                index: 1,
-
                 ... setTevOrder(GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO),
                 ... setTevColorIn(GX.CombineColorInput.CPREV, GX.CombineColorInput.TEXC, GX.CombineColorInput.TEXA, GX.CombineColorInput.ZERO),
                 ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.APREV),
@@ -545,8 +537,6 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
 
             // Modulate against RASC
             tevStages.push({
-                index: 2,
-
                 ... setTevOrder(GX.TexCoordID.NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0),
                 ... setTevColorIn(GX.CombineColorInput.ZERO, GX.CombineColorInput.CPREV, GX.CombineColorInput.RASC, GX.CombineColorInput.ZERO),
                 ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.RASA, GX.CombineAlphaInput.ZERO),
@@ -561,8 +551,6 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         } else if (tevMode === 0x02) {
             // rgba = tex0.rgba * tex1.aaaa * ras.rgba
             tevStages.push({
-                index: 0,
-
                 ... setTevOrder(GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO),
                 ... setTevColorIn(GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC),
                 ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA),
@@ -576,8 +564,6 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             });
 
             tevStages.push({
-                index: 1,
-
                 ... setTevOrder(GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO),
                 ... setTevColorIn(GX.CombineColorInput.ZERO, GX.CombineColorInput.CPREV, GX.CombineColorInput.TEXA, GX.CombineColorInput.ZERO),
                 ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.ZERO),
@@ -592,8 +578,6 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
 
             // Modulate against RASC
             tevStages.push({
-                index: 2,
-
                 ... setTevOrder(GX.TexCoordID.NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0),
                 ... setTevColorIn(GX.CombineColorInput.ZERO, GX.CombineColorInput.CPREV, GX.CombineColorInput.RASC, GX.CombineColorInput.ZERO),
                 ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.RASA, GX.CombineAlphaInput.ZERO),
@@ -608,8 +592,6 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         } else if (tevMode === 0x03) {
             // rgba = tex0.rgba * (1.0 - tex1.aaaa) * ras.rgba
             tevStages.push({
-                index: 0,
-
                 ... setTevOrder(GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO),
                 ... setTevColorIn(GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC),
                 ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA),
@@ -623,8 +605,6 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             });
 
             tevStages.push({
-                index: 1,
-
                 ... setTevOrder(GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO),
                 ... setTevColorIn(GX.CombineColorInput.CPREV, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXA, GX.CombineColorInput.ZERO),
                 ... setTevAlphaIn(GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.ZERO),
@@ -639,8 +619,6 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
 
             // Modulate against RASC
             tevStages.push({
-                index: 2,
-
                 ... setTevOrder(GX.TexCoordID.NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0),
                 ... setTevColorIn(GX.CombineColorInput.ZERO, GX.CombineColorInput.CPREV, GX.CombineColorInput.RASC, GX.CombineColorInput.ZERO),
                 ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.RASA, GX.CombineAlphaInput.ZERO),
@@ -655,8 +633,6 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         } else if (tevMode === 0x04) {
             // rgba = tex0.rgba * (1.0 - tex1.aaaa) * ras.rgba
             tevStages.push({
-                index: 0,
-
                 ... setTevOrder(GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO),
                 ... setTevColorIn(GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC),
                 ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA),
@@ -670,8 +646,6 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             });
 
             tevStages.push({
-                index: 1,
-
                 ... setTevOrder(GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO),
                 ... setTevColorIn(GX.CombineColorInput.ZERO, GX.CombineColorInput.CPREV, GX.CombineColorInput.TEXC, GX.CombineColorInput.ZERO),
                 ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.ZERO),
@@ -685,8 +659,6 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             });
 
             tevStages.push({
-                index: 2,
-
                 ... setTevOrder(GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO),
                 ... setTevColorIn(GX.CombineColorInput.TEXC, GX.CombineColorInput.CPREV, GX.CombineColorInput.APREV, GX.CombineColorInput.ZERO),
                 ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA),
@@ -703,8 +675,6 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         } else if (tevMode === 0x05) {
             // rgba = mix(tex0.rgba, tex1.rgba, tex2.aaaa) * ras.rgba
             tevStages.push({
-                index: 0,
-
                 ... setTevOrder(GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO),
                 ... setTevColorIn(GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC),
                 ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA),
@@ -718,8 +688,6 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             });
 
             tevStages.push({
-                index: 1,
-
                 ... setTevOrder(GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO),
                 ... setTevColorIn(GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC),
                 ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA),
@@ -733,8 +701,6 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             });
 
             tevStages.push({
-                index: 2,
-
                 ... setTevOrder(GX.TexCoordID.TEXCOORD2, GX.TexMapID.TEXMAP2, GX.RasColorChannelID.COLOR_ZERO),
                 ... setTevColorIn(GX.CombineColorInput.C0, GX.CombineColorInput.C1, GX.CombineColorInput.TEXA, GX.CombineColorInput.ZERO),
                 ... setTevAlphaIn(GX.CombineAlphaInput.A0, GX.CombineAlphaInput.A1, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.ZERO),
@@ -748,8 +714,6 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             });
 
             tevStages.push({
-                index: 3,
-
                 ... setTevOrder(GX.TexCoordID.NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0),
                 ... setTevColorIn(GX.CombineColorInput.ZERO, GX.CombineColorInput.CPREV, GX.CombineColorInput.RASC, GX.CombineColorInput.ZERO),
                 ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.RASA, GX.CombineAlphaInput.ZERO),
@@ -763,8 +727,6 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             });
         } else if (tevMode === 0x06) {
             tevStages.push({
-                index: 0,
-
                 ... setTevOrder(GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO),
                 ... setTevColorIn(GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC),
                 ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA),
@@ -778,8 +740,6 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             });
 
             tevStages.push({
-                index: 1,
-
                 ... setTevOrder(GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO),
                 ... setTevColorIn(GX.CombineColorInput.CPREV, GX.CombineColorInput.TEXC, GX.CombineColorInput.APREV, GX.CombineColorInput.ZERO),
                 ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.ZERO),
@@ -793,8 +753,6 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             });
 
             tevStages.push({
-                index: 2,
-
                 ... setTevOrder(GX.TexCoordID.NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0),
                 ... setTevColorIn(GX.CombineColorInput.ZERO, GX.CombineColorInput.CPREV, GX.CombineColorInput.RASC, GX.CombineColorInput.ZERO),
                 ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.RASA, GX.CombineAlphaInput.ZERO),
@@ -808,8 +766,6 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             });
         } else if (tevMode === 0x07) {
             tevStages.push({
-                index: 0,
-
                 ... setTevOrder(GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO),
                 ... setTevColorIn(GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC),
                 ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA),
@@ -823,8 +779,6 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             });
 
             tevStages.push({
-                index: 1,
-
                 ... setTevOrder(GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO),
                 ... setTevColorIn(GX.CombineColorInput.CPREV, GX.CombineColorInput.TEXC, GX.CombineColorInput.TEXA, GX.CombineColorInput.ZERO),
                 ... setTevAlphaIn(GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.TEXA),
@@ -838,8 +792,6 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             });
 
             tevStages.push({
-                index: 2,
-
                 ... setTevOrder(GX.TexCoordID.NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0),
                 ... setTevColorIn(GX.CombineColorInput.ZERO, GX.CombineColorInput.CPREV, GX.CombineColorInput.RASC, GX.CombineColorInput.ZERO),
                 ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.RASA, GX.CombineAlphaInput.ZERO),
@@ -857,8 +809,6 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             // Push a tev mode 0.
             // rgba = tex0.rgba * ras.rgba
             tevStages.push({
-                index: 0,
-
                 ... setTevOrder(GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0),
                 ... setTevColorIn(GX.CombineColorInput.ZERO, GX.CombineColorInput.RASC, GX.CombineColorInput.TEXC, GX.CombineColorInput.ZERO),
                 ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.RASA, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.ZERO),

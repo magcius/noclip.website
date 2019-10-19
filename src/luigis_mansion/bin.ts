@@ -186,8 +186,6 @@ export function parse(buffer: ArrayBufferSlice, name: string): BIN {
         const lightChannels: GX_Material.LightChannelControl[] = [lightChannel0, lightChannel0];
 
         const tevStage0: GX_Material.TevStage = {
-            index: 0,
-
             channelId: GX.RasColorChannelID.COLOR0A0,
 
             alphaInA: GX.CombineAlphaInput.ZERO,

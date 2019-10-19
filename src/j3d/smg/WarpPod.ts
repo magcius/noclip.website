@@ -121,7 +121,7 @@ class WarpPodPathDrawer {
 
         // GXSetTexCoordGen2(GX_TEXCOORD0,GX_TG_MTX2x4,GX_TG_TEX0,GX_TEXMTX0,false,GX_PTIDENTITY);
         const texGens: TexGen[] = [];
-        texGens.push({ index: 0, type: GX.TexGenType.MTX3x4, source: GX.TexGenSrc.TEX0, matrix: GX.TexGenMatrix.IDENTITY, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
+        texGens.push({ type: GX.TexGenType.MTX3x4, source: GX.TexGenSrc.TEX0, matrix: GX.TexGenMatrix.IDENTITY, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
 
         const indTexStages: IndTexStage[] = [];
 
@@ -139,7 +139,6 @@ class WarpPodPathDrawer {
 
         const tevStages: TevStage[] = [];
         tevStages.push({
-            index: 0,
             // GXSetTevOrder(0,0,0,0xff);
             // GXSetTevColorIn(0,8,0xf,0xf,0xf);
             // GXSetTevColorOp(0,0,0,0,0,0);

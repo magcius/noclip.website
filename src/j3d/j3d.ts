@@ -745,7 +745,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             assert(matrixCheck === GX.TexGenMatrix.IDENTITY || matrixCheck === matrix);
 
             const normalize = false;
-            const texGen: GX_Material.TexGen = { index, type, source, matrix, normalize, postMatrix };
+            const texGen: GX_Material.TexGen = { type, source, matrix, normalize, postMatrix };
             texGens[j] = texGen;
         }
 
@@ -816,7 +816,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
                 const indTexScaleOffs = indirectEntryOffs + 0x04 + (0x04 * 4) + (0x1C * 3) + j * 0x04;
                 const scaleS: GX.IndTexScale = view.getUint8(indTexScaleOffs + 0x00);
                 const scaleT: GX.IndTexScale = view.getUint8(indTexScaleOffs + 0x01);
-                indTexStages.push({ index, texCoordId, texture, scaleS, scaleT });
+                indTexStages.push({ texCoordId, texture, scaleS, scaleT });
             }
 
             // SetIndTexMatrix
@@ -923,7 +923,6 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             }
 
             const tevStage: GX_Material.TevStage = {
-                index,
                 colorInA, colorInB, colorInC, colorInD, colorOp, colorBias, colorScale, colorClamp, colorRegId,
                 alphaInA, alphaInB, alphaInC, alphaInD, alphaOp, alphaBias, alphaScale, alphaClamp, alphaRegId,
                 texCoordId, texMap, channelId,

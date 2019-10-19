@@ -188,8 +188,6 @@ const enum WindWakerPass {
 }
 
 export class WindWakerRenderer implements SceneGfx {
-    public defaultCameraController = OrbitCameraController;
-
     private renderTarget = new BasicRenderTarget();
     public renderHelper: GXRenderHelperGfx;
 
