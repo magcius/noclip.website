@@ -20,7 +20,8 @@
     "crc-32": "^1.2.0",
     "gl-matrix": "^3.0.0",
     "librw": "^0.2.0",
-    "pako": "^1.0.7"
+    "pako": "^1.0.7",
+    "reflect-metadata": "^0.1.13"
   },
   "scripts": {
     "start": "parcel src/index.html",

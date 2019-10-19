@@ -3,6 +3,7 @@
         "target": "es2017",
         "alwaysStrict": true,
         "downlevelIteration": true,
+        "experimentalDecorators": true,
         "noImplicitReturns": true,
         "noImplicitThis": true,
         "noImplicitAny": true,

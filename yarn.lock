@@ -1015,11 +1015,11 @@ asn1@~0.2.3:
   resolved "https://codeload.github.com/AssemblyScript/assemblyscript/tar.gz/3dd69307bb0401a3ac30e9486b9479f94154644c"
   dependencies:
     "@protobufjs/utf8" "^1.1.0"
-    binaryen "84.0.0-nightly.20190522"
+    binaryen "89.0.0-nightly.20190914"
     glob "^7.1.4"
     long "^4.0.0"
     opencollective-postinstall "^2.0.0"
-    source-map-support "^0.5.12"
+    source-map-support "^0.5.13"
 
 assert-plus@1.0.0, assert-plus@^1.0.0:
   version "1.0.0"
@@ -4421,6 +4421,11 @@ readdirp@^2.2.1:
     graceful-fs "^4.1.11"
     micromatch "^3.1.10"
     readable-stream "^2.0.2"
+
+reflect-metadata@^0.1.13:
+  version "0.1.13"
+  resolved "https://registry.yarnpkg.com/reflect-metadata/-/reflect-metadata-0.1.13.tgz#67ae3ca57c972a2aa1642b10fe363fe32d49dc08"
+  integrity sha512-Ts1Y/anZELhSsjMcU605fU9RE4Oi3p5ORujwbIKXfWa+0Zxs510Qrmrce5/Jowq3cHSZSJqBjypxmHarc+vEWg==
 
 regenerate-unicode-properties@^8.0.2:
   version "8.1.0"

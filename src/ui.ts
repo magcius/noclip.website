@@ -4,13 +4,14 @@
 import * as Viewer from './viewer';
 import { assertExists, assert } from './util';
 import { CameraControllerClass, OrbitCameraController, FPSCameraController, OrthoCameraController } from './Camera';
-import { Color, colorToCSS } from './Color';
+import { Color, colorToCSS, objIsColor } from './Color';
 import { TextureHolder } from './TextureHolder';
 import { GITHUB_REVISION_URL, GITHUB_URL, GIT_SHORT_REVISION } from './BuildVersion';
 import { SaveManager, GlobalSaveManager } from "./SaveManager";
 import { RenderStatistics } from './RenderStatistics';
 import { GlobalGrabManager } from './GrabManager';
 import { clamp } from './MathHelpers';
+import "reflect-metadata";
 
 // @ts-ignore
 import logoURL from './assets/logo.png';
@@ -1436,7 +1437,7 @@ export class Slider implements Widget {
 }
 </style>
 <div style="display: grid; grid-template-columns: 1fr 1fr; align-items: center">
-<div style="font-weight: bold" class="Label"></div>
+<div style="font-weight: bold; user-select: none" class="Label"></div>
 <input class="Slider" type="range">
 </div>
 `;
@@ -2763,24 +2764,39 @@ export class UI {
         return this.debugFloater;
     }
 
-    public bindSlider(obj: { [k: string]: number }, panel: FloatingPanel, paramName: string, min = 0, max = 1, labelName: string = paramName): void {
+    public bindSlider(obj: { [k: string]: number }, panel: FloatingPanel, paramName: string, labelName: string = paramName): void {
         let value = obj[paramName];
         assert(typeof value === "number");
 
+        const range = Reflect.getMetadata('df:range', obj, paramName);
+        let min: number = 0, max: number = 1, step: number = 0.01;
+        if (range !== undefined) {
+            min = range.min;
+            max = range.max;
+            step = range.step;
+        }
+
+        const fracDig = Math.max(0, -Math.log10(step));
         const slider = new Slider();
         slider.onvalue = (newValue: number) => {
             obj[paramName] = newValue;
-            (window as any).debugObj = obj;
             update();
         };
         update();
 
         function update() {
             value = obj[paramName];
-            slider.setLabel(`${labelName} = ${value.toFixed(2)}`);
-            min = Math.min(value, min);
-            max = Math.max(value, max);
-            slider.setRange(min, max);
+            slider.setLabel(`${labelName} = ${value.toFixed(fracDig)}`);
+            const localMin = Math.min(value, min);
+            const localMax = Math.max(value, max);
+
+            // Automatically update if we don't have any declarative range values.
+            if (range === undefined) {
+                min = localMin;
+                max = localMax;
+            }
+
+            slider.setRange(localMin, localMax, step);
             slider.setValue(value);
         }
 
@@ -2795,11 +2811,13 @@ export class UI {
     private bindSlidersRecurse(obj: { [k: string]: any }, panel: FloatingPanel, parentName: string, keys: string[]): void {
         for (let i = 0; i < keys.length; i++) {
             const keyName = keys[i];
+            if (Reflect.getMetadata('df:visibility', obj, keyName) === false)
+                continue;
             const v = obj[keyName];
             if (typeof v === "number")
-                this.bindSlider(obj, panel, keyName, 0, 1, `${parentName}.${keyName}`);
-            if (v instanceof Float32Array)
-                this.bindSlidersRecurse(v, panel, `${parentName}.${keyName}`, keys);
+                this.bindSlider(obj, panel, keyName, `${parentName}.${keyName}`);
+            if (v instanceof Float32Array || objIsColor(v))
+                this.bindSlidersRecurse(v, panel, `${parentName}.${keyName}`, Object.keys(v));
         }
     }
 
@@ -2811,7 +2829,17 @@ export class UI {
             panel.contents.removeChild(panel.contents.firstChild);
 
         this.bindSlidersRecurse(obj, panel, '', keys);
-
-        (window as any).debugObj = obj;
     }
+}
+
+export function dfRange(min: number = 0, max: number = 1, step: number = (max - min) / 100) {
+    return Reflect.metadata('df:range', { min, max, step });
+}
+
+export function dfHide() {
+    return Reflect.metadata('df:visibility', false);
+}
+
+export function dfSigFigs(v: number = 2) {
+    return Reflect.metadata('df:sigfigs', v);
 }

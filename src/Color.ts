@@ -112,3 +112,7 @@ export const TransparentBlack = colorNew(0, 0, 0, 0);
 export const OpaqueBlack = colorNew(0, 0, 0, 1);
 export const White = colorNew(1, 1, 1, 1);
 export const Magenta = colorNew(1, 0, 1, 1);
+
+export function objIsColor(v: any): boolean {
+    return typeof v === 'object' && 'r' in v && 'g' in v && 'b' in v && 'a' in v;
+}

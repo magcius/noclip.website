@@ -2,7 +2,6 @@
 import { GfxTexture, GfxDevice, GfxFormat, GfxInputLayout, GfxInputState, GfxBuffer, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform";
 import { vec3, vec2 } from "gl-matrix";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { assert } from "../util";
 import { makeTextureFromImageData } from "./Texture";
 import { parseVector3, parseVector2 } from "./DocumentHelpers";
 import { AABB } from "../Geometry";
