@@ -166,7 +166,7 @@ export class Viewer {
         const aspect = this.canvas.width / this.canvas.height;
         camera.fovY = this.fovY;
         camera.aspect = aspect;
-        camera.setClipPlanes(10);
+        camera.setClipPlanes(5);
 
         if (this.cameraController) {
             const updated = this.cameraController.update(this.inputManager, dt);
