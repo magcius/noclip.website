@@ -1,15 +1,8 @@
-import { Color, colorNew, colorLerp, colorNewCopy, White } from '../Color';
+import { Color, colorNew, colorLerp, colorNewCopy, White, colorSum } from '../Color';
 import { lerp } from '../MathHelpers';
 
 function colorNorm(r: number, g: number, b: number, a: number = 255.0): Color {
     return colorNew(r/255.0, g/255.0, b/255.0, a/255.0);
-}
-
-function colorSum(dst: Color, a: Color, b: Color) {
-    dst.r = a.r + b.r;
-    dst.g = a.g + b.g;
-    dst.b = a.b + b.b;
-    dst.a = a.a + b.a;
 }
 
 export interface ColorSet {

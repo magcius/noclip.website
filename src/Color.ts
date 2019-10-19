@@ -22,6 +22,13 @@ export function colorLerp(dst: Color, k0: Color, k1: Color, t: number): void {
     dst.a = lerp(k0.a, k1.a, t);
 }
 
+export function colorSum(dst: Color, a: Color, b: Color) {
+    dst.r = a.r + b.r;
+    dst.g = a.g + b.g;
+    dst.b = a.b + b.b;
+    dst.a = a.a + b.a;
+}
+
 export function colorMult(dst: Color, k0: Color, k1: Color): void {
     dst.g = k0.g * k1.g;
     dst.r = k0.r * k1.r;
