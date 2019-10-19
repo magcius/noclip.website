@@ -1,0 +1,393 @@
+
+import { OrbitCameraController } from '../Camera';
+
+import { SceneDesc, SceneContext } from "../SceneBase";
+import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxTexture, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexAttributeFrequency, GfxInputLayout, GfxInputState, GfxBindingLayoutDescriptor, GfxProgram, GfxBlendMode, GfxBlendFactor, GfxCullMode, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
+import { SceneGfx, ViewerRenderInput } from "../viewer";
+import { getDataURLForPath } from "../DataFetcher";
+import { BasicRenderTarget, makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { TransparentBlack, colorNewCopy, colorLerp, colorNew } from '../Color';
+import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
+import { makeTextureFromImageData } from '../Fez/Texture';
+import { TextureMapping } from '../TextureHolder';
+import { nArray, getTextDecoder } from '../util';
+import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
+import { DeviceProgram } from '../Program';
+import { fillMatrix4x3, fillMatrix4x4, fillColor, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
+import { mat4 } from 'gl-matrix';
+import { computeModelMatrixSRT, clamp } from '../MathHelpers';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
+import { dfHide, dfRange } from '../ui';
+
+const pathBase = `FoxFur`;
+
+function fetchPNG(path: string): Promise<ImageData> {
+    path = getDataURLForPath(path);
+    const img = document.createElement('img');
+    img.crossOrigin = 'anonymous';
+    img.src = path;
+    const p = new Promise<ImageData>((resolve) => {
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d')!;
+            ctx.drawImage(img, 0, 0);
+            resolve(ctx.getImageData(0, 0, img.width, img.height));
+        };
+    });
+    return p;
+}
+
+interface ObjModel {
+    // pos, nrm, tex
+    vertexBuffer: Float32Array;
+    indexBuffer: Uint16Array;
+}
+
+function parseObjFile(objText: string): ObjModel {
+    const lines = objText.split('\n');
+
+    const v: number[] = [];
+    const vn: number[] = [];
+    const vt: number[] = [];
+
+    const indexData: number[] = [];
+    const vertexData: number[] = [];
+    // 3 + 3 + 2
+    const stride = 8;
+    const vertexCache = new Map<string, number>();
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (line.length === 0 || line.startsWith('#'))
+            continue;
+
+        const cmd = line.split(' ');
+        if (cmd[0] === 'v') {
+            v.push(+cmd[1]);
+            v.push(+cmd[2]);
+            v.push(+cmd[3]);
+        } else if (cmd[0] === 'vn') {
+            const x = +cmd[1], y = +cmd[2], z = +cmd[3];
+            // normalize
+            const d = Math.hypot(x, y, z);
+            const s = d !== 0 ? 1 / d : 1;
+            vn.push(s*x, s*y, s*z);
+        } else if (cmd[0] === 'vt') {
+            vt.push(+cmd[1]);
+            vt.push(+cmd[2]);
+        } else if (cmd[0] === 'f') {
+            for (let j = 1; j <= 3; j++) {
+                let i0: number;
+                if (vertexCache.has(cmd[j])) {
+                    i0 = vertexCache.get(cmd[j])!;
+                } else {
+                    const [vis, vtis, vnis] = cmd[j].split('/');
+
+                    i0 = vertexData.length / stride;
+                    // Copy over position, normal, texture coordinates into the proper place in the buffer...
+                    const vi = (+vis) - 1;
+                    vertexData.push(v[(vi * 3) + 0]);
+                    vertexData.push(v[(vi * 3) + 1]);
+                    vertexData.push(v[(vi * 3) + 2]);
+                    const vni = (+vnis) - 1;
+                    vertexData.push(vn[(vni * 3) + 0]);
+                    vertexData.push(vn[(vni * 3) + 1]);
+                    vertexData.push(vn[(vni * 3) + 2]);
+                    const vti = (+vtis) - 1;
+                    vertexData.push(vt[(vti * 2) + 0]);
+                    vertexData.push(vt[(vti * 2) + 1]);
+
+                    vertexCache.set(cmd[j], i0);
+                }
+
+                indexData.push(i0);
+            }
+        }
+    }
+
+    const vertexBuffer = new Float32Array(vertexData);
+    const indexBuffer = new Uint16Array(indexData);
+    return { vertexBuffer, indexBuffer };
+}
+
+class FurProgram extends DeviceProgram {
+    public static ub_ShapeParams = 0;
+
+    public both = `
+layout(row_major, std140) uniform ub_ShapeParams {
+    Mat4x4 u_Projection;
+    Mat4x3 u_BoneMatrix[1];
+    vec4 u_Misc[2];
+    vec4 u_TintColor;
+};
+
+#define u_LayerMagnitude  (u_Misc[0].x)
+#define u_PoreBaseAlpha   (u_Misc[1].x)
+#define u_PoreMapScale    (u_Misc[1].y)
+#define u_PoreMapIndScale (u_Misc[1].z)
+#define u_PoreMapIndAngle (u_Misc[1].w)
+
+uniform sampler2D u_Texture[3];
+`;
+
+    public vert = `
+layout(location = 0) in vec3 a_Position;
+layout(location = 1) in vec3 a_Normal;
+layout(location = 2) in vec2 a_TexCoord;
+
+out vec2 v_TexCoord;
+
+void main() {
+    vec3 t_Position = a_Position.xyz + (a_Normal.xyz * u_LayerMagnitude);
+    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix[0]), vec4(t_Position, 1.0)));
+    v_TexCoord = a_TexCoord.xy;
+}
+`;
+
+    public frag = `
+in vec2 v_TexCoord;
+
+vec2 rotateZ(vec2 v, float theta) {
+    float s = sin(theta), c = cos(theta);
+    mat2 m = mat2(c, s, -s, c);
+    return m * v;
+}
+
+void main() {
+    gl_FragColor = u_TintColor;
+    gl_FragColor *= texture(u_Texture[0], v_TexCoord.xy);
+
+    // Apply pore map
+    vec2 t_PoreIndTex = (texture(u_Texture[2], v_TexCoord.xy).gr - vec2(0.5, 0.5)) * vec2(1, -1);
+    // Scale and rotate.
+    t_PoreIndTex = rotateZ(t_PoreIndTex, u_PoreMapIndAngle);
+    t_PoreIndTex *= u_PoreMapIndScale;
+
+    vec2 t_PoreTexCoord = (v_TexCoord.xy * u_PoreMapScale) + t_PoreIndTex;
+    vec4 t_PoreMask = texture(u_Texture[1], t_PoreTexCoord).rrrg;
+    t_PoreMask.a += u_PoreBaseAlpha;
+    gl_FragColor *= t_PoreMask;
+}
+`;
+}
+
+const bindingLayouts: GfxBindingLayoutDescriptor[] = [
+    { numSamplers: 4, numUniformBuffers: 1 },
+];
+
+function createPoreMapTexture(device: GfxDevice, width: number, height: number): GfxTexture {
+    const poreTex = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RG_NORM, width, height, 1));
+    const data = new Uint8Array(width * height * 2);
+    // Nintendo's pore maps appear to have mostly white in the color with some sprinklings of black here and there,
+    // and a uniform distribution of noise on the alpha...
+    for (let i = 0; i < data.byteLength;) {
+        // "Color" in R channel, "Alpha" in G channel
+        data[i++] = clamp(Math.random() * 0xFF + 0x80, 0, 0xFF);
+        data[i++] = Math.random() * 0xFF;
+    }
+    const hostAccessPass = device.createHostAccessPass();
+    hostAccessPass.uploadTextureData(poreTex, 0, [data]);
+    device.submitPass(hostAccessPass);
+    return poreTex;
+}
+
+function createIndMapTexture(device: GfxDevice, width: number, height: number): GfxTexture {
+    const indTex = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RG_NORM, width, height, 1));
+    const data = new Uint8Array(width * height * 2);
+    // Nintendo's pore maps appear to have Color values that hover around the ~64
+    // range, while alpha hovers around ~127. Unsure why they did this, but let's replicate it.
+    for (let i = 0; i < data.byteLength;) {
+        // "Color" in R channel, "Alpha" in G channel
+        data[i++] = Math.random() * 0x10 + 0x40;
+        data[i++] = Math.random() * 0x20 + 0x80;
+    }
+    const hostAccessPass = device.createHostAccessPass();
+    hostAccessPass.uploadTextureData(indTex, 0, [data]);
+    device.submitPass(hostAccessPass);
+    return indTex;
+}
+
+const scratchMatrix = mat4.create();
+const scratchColor = colorNewCopy(TransparentBlack);
+class FurObj {
+    private bodyTex: GfxTexture;
+    private poreTex: GfxTexture;
+    private indTex: GfxTexture;
+
+    private textureMapping: TextureMapping[] = nArray(4, () => new TextureMapping());
+    private indexBuffer: GfxBuffer;
+    private inputLayout: GfxInputLayout;
+    private gfxProgram: GfxProgram;
+    private vertexBuffer: GfxBuffer;
+    private inputState: GfxInputState;
+    @dfHide()
+    private indexCount: number;
+    @dfHide()
+    private modelMatrix = mat4.create();
+
+    @dfRange(1, 32, 1)
+    private numLayers: number = 16;
+
+    @dfRange(0, 10)
+    private magnitude: number = 1;
+
+    @dfRange(0, 1)
+    private pow: number = 0.6;
+
+    @dfRange(0, 8)
+    private poreMapScale: number = 1;
+
+    @dfRange(0, 1)
+    private poreMapIndScale: number = 0;
+
+    @dfRange(-Math.PI, Math.PI)
+    private poreMapIndAngle: number = 0;
+
+    // TODO(jstpierre): Color picker UI
+    private rootColor = colorNew(0.2, 0.2, 0.2, 1.0);
+    private tipColor = colorNew(1.0, 1.0, 1.0, 0.2);
+
+    constructor(device: GfxDevice, objText: string, bodyImgData: ImageData) {
+        this.bodyTex = makeTextureFromImageData(device, bodyImgData);
+        device.setResourceName(this.bodyTex, "Body");
+
+        this.poreTex = createPoreMapTexture(device, 256, 256);
+        device.setResourceName(this.poreTex, "Pore");
+
+        this.indTex = createIndMapTexture(device, 64, 64);
+        device.setResourceName(this.poreTex, "Ind");
+
+        this.textureMapping[0].gfxTexture = this.bodyTex;
+        this.textureMapping[1].gfxTexture = this.poreTex;
+        this.textureMapping[2].gfxTexture = this.indTex;
+
+        const obj = parseObjFile(objText);
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, obj.vertexBuffer.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, obj.indexBuffer.buffer);
+        this.indexCount = obj.indexBuffer.length;
+
+        this.inputLayout = device.createInputLayout({
+            indexBufferFormat: GfxFormat.U16_R,
+            vertexAttributeDescriptors: [
+                { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0*0x04, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
+                { location: 1, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 3*0x04, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
+                { location: 2, bufferIndex: 0, format: GfxFormat.F32_RG,  bufferByteOffset: 6*0x04, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
+            ],
+        });
+
+        this.inputState = device.createInputState(this.inputLayout, [
+            { buffer: this.vertexBuffer, byteOffset: 0x00, byteStride: 8*0x04 },
+        ], { buffer: this.indexBuffer, byteOffset: 0x00, byteStride: 0x02 });
+
+        this.gfxProgram = device.createProgram(new FurProgram());
+
+        const s = 10;
+        computeModelMatrixSRT(this.modelMatrix, s, s, s, 0, 0, 0, 0, 0, 0);
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        const template = renderInstManager.pushTemplateRenderInst();
+        template.setBindingLayouts(bindingLayouts);
+        template.setSamplerBindingsFromTextureMappings(this.textureMapping);
+        template.setGfxProgram(this.gfxProgram);
+        template.setInputLayoutAndState(this.inputLayout, this.inputState);
+        template.setMegaStateFlags({ cullMode: GfxCullMode.BACK });
+
+        for (let i = 0; i < this.numLayers; i++) {
+            const renderInst = renderInstManager.pushRenderInst();
+            const isRootLayer = (i === 0);
+            const linearRate = (i + 1) / this.numLayers;
+            const a = Math.pow(linearRate, this.pow);
+
+            let offs = renderInst.allocateUniformBuffer(FurProgram.ub_ShapeParams, 16+12+4+4+4);
+            const d = renderInst.mapUniformBufferF32(FurProgram.ub_ShapeParams);
+            offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
+    
+            mat4.mul(scratchMatrix, viewerInput.camera.viewMatrix, this.modelMatrix);
+            offs += fillMatrix4x3(d, offs, scratchMatrix);
+
+            // u_LayerMagnitude
+            const layerMagnitude = a * this.magnitude;
+            offs += fillVec4(d, offs, layerMagnitude);
+
+            const poreBaseAlpha = isRootLayer ? 1 : 0;
+            const poreMapScale = this.poreMapScale;
+            const poreMapIndScale = a * this.poreMapIndScale;
+            const poreMapIndAngle = this.poreMapIndAngle;
+            offs += fillVec4(d, offs, poreBaseAlpha, poreMapScale, poreMapIndScale, poreMapIndAngle);
+
+            colorLerp(scratchColor, this.rootColor, this.tipColor, a);
+            offs += fillColor(d, offs, scratchColor);
+
+            if (!isRootLayer) {
+                renderInst.setMegaStateFlags({
+                    blendMode: GfxBlendMode.ADD,
+                    blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
+                    blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+                });
+            }
+
+            renderInst.drawIndexes(this.indexCount);
+        }
+
+        renderInstManager.popTemplateRenderInst();
+    }
+}
+
+const clearPass = makeClearRenderPassDescriptor(true, TransparentBlack);
+export class SceneRenderer implements SceneGfx {
+    private renderTarget = new BasicRenderTarget();
+    private renderHelper: GfxRenderHelper;
+    public obj: FurObj[] = [];
+
+    constructor(device: GfxDevice) {
+        this.renderHelper = new GfxRenderHelper(device);
+    }
+
+    public createCameraController() {
+        return new OrbitCameraController();
+    }
+
+    private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
+        this.renderHelper.pushTemplateRenderInst();
+        const renderInstManager = this.renderHelper.renderInstManager;
+        for (let i = 0; i < this.obj.length; i++)
+            this.obj[i].prepareToRender(device, renderInstManager, viewerInput);
+        renderInstManager.popTemplateRenderInst();
+        this.renderHelper.prepareToRender(device, hostAccessPass);
+    }
+
+    public render(device: GfxDevice, viewerInput: ViewerRenderInput): GfxRenderPass {
+        const renderInstManager = this.renderHelper.renderInstManager;
+
+        const hostAccessPass = device.createHostAccessPass();
+        this.prepareToRender(device, hostAccessPass, viewerInput);
+        device.submitPass(hostAccessPass);
+
+        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+
+        const mainPassRenderer = this.renderTarget.createRenderPass(device, clearPass);
+        mainPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        renderInstManager.drawOnPassRenderer(device, mainPassRenderer);
+        renderInstManager.resetRenderInsts();
+        return mainPassRenderer;
+    }
+
+    public destroy(device: GfxDevice) {
+    }
+}
+
+export class FoxFur implements SceneDesc {
+    constructor(public id: string, public name: string) {
+    }
+
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
+        const foxFurObjBuffer = await context.dataFetcher.fetchData(`${pathBase}/foxtail.obj`);
+        const foxFurObjText = getTextDecoder('utf8')!.decode(foxFurObjBuffer.arrayBuffer);
+        const bodyTex = await fetchPNG(`${pathBase}/furtex.png`);
+        const r = new SceneRenderer(device);
+        r.obj.push(new FurObj(device, foxFurObjText, bodyTex));
+        return r;
+    }
+}
