@@ -277,6 +277,8 @@ export class GTA3SceneDesc implements Viewer.SceneDesc {
         }
 
         for (const [key, layerMeshes] of layers) {
+            if (SceneRenderer.applicable(layerMeshes))
+                renderer.sceneRenderers.push(new SceneRenderer(device, key, layerMeshes));
             for (const atlas of textureArrays) {
                 if (!SceneRenderer.applicable(layerMeshes, atlas)) continue;
                 renderer.sceneRenderers.push(new SceneRenderer(device, key, layerMeshes, atlas));

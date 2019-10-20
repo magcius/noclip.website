@@ -212,7 +212,7 @@ class Renderer {
 
     protected indices: number;
 
-    constructor(protected program: DeviceProgram, protected atlas: TextureArray) {}
+    constructor(protected program: DeviceProgram, protected atlas?: TextureArray) {}
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, colorSet: ColorSet): GfxRenderInst | undefined {
         const renderInst = renderInstManager.pushRenderInst();
@@ -410,27 +410,31 @@ export class SceneRenderer extends Renderer {
         return opaqueProgram;
     }
 
-    private static skipFrag(frag: MeshFragData, atlas: TextureArray) {
-        return frag.texName !== undefined && !atlas.subimages.has(frag.texName);
+    private static keepFrag(frag: MeshFragData, atlas?: TextureArray) {
+        if (frag.texName !== undefined && atlas !== undefined) {
+            return atlas.subimages.has(frag.texName);
+        } else { // only draw untextured objects once (i.e. only when no atlas provided)
+            return (frag.texName === undefined && atlas === undefined);
+        }
     }
 
-    public static applicable(meshes: MeshInstance[], atlas: TextureArray) {
+    public static applicable(meshes: MeshInstance[], atlas?: TextureArray) {
         for (const inst of meshes) {
             for (const frag of inst.frags) {
-                if (!SceneRenderer.skipFrag(frag, atlas)) return true;
+                if (SceneRenderer.keepFrag(frag, atlas)) return true;
             }
         }
         return false;
     }
 
-    constructor(device: GfxDevice, public key: DrawKey, meshes: MeshInstance[], atlas: TextureArray, dual = false) {
+    constructor(device: GfxDevice, public key: DrawKey, meshes: MeshInstance[], atlas?: TextureArray, dual = false) {
         super(SceneRenderer.programFor(key, dual), atlas);
 
         let vertices = 0;
         this.indices = 0;
         for (const inst of meshes) {
             for (const frag of inst.frags) {
-                if (SceneRenderer.skipFrag(frag, atlas)) continue;
+                if (!SceneRenderer.keepFrag(frag, atlas)) continue;
                 vertices += frag.vertices;
                 this.indices += frag.indices.length;
             }
@@ -445,7 +449,7 @@ export class SceneRenderer extends Renderer {
         let lastIndex = 0;
         for (const inst of meshes) {
             for (const frag of inst.frags) {
-                if (SceneRenderer.skipFrag(frag, atlas)) continue;
+                if (!SceneRenderer.keepFrag(frag, atlas)) continue;
                 const n = frag.vertices;
                 const texLayer = (frag.texName === undefined || atlas === undefined) ? undefined : atlas.subimages.get(frag.texName);
                 for (let i = 0; i < n; i++) {
@@ -497,8 +501,6 @@ export class SceneRenderer extends Renderer {
         const hour = Math.floor(viewerInput.time / TIME_FACTOR) % 24;
         const { timeOn, timeOff } = this.key;
         let renderLayer = this.key.renderLayer;
-        if (!this.atlas.transparent)
-            renderLayer = GfxRendererLayer.OPAQUE;
         if (this.key.water)
             renderLayer = GfxRendererLayer.TRANSLUCENT;
         if (timeOn !== undefined && timeOff !== undefined) {
