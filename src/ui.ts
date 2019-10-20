@@ -916,6 +916,14 @@ export class FloatingPanel implements Widget {
         this.setWidth(400);
 
         this.elem = this.toplevel;
+
+        this.elem.onmouseover = () => {
+            this.elem.style.opacity = '1';
+        };
+        this.elem.onmouseout = () => {
+            this.elem.style.opacity = '0.2';
+        };
+        this.elem.style.opacity = '0.2';
     }
 
     public setWidth(v: number): void {
@@ -2811,12 +2819,13 @@ export class UI {
     private bindSlidersRecurse(obj: { [k: string]: any }, panel: FloatingPanel, parentName: string, keys: string[]): void {
         for (let i = 0; i < keys.length; i++) {
             const keyName = keys[i];
-            if (Reflect.getMetadata('df:visibility', obj, keyName) === false)
+            const visibility = Reflect.getMetadata('df:visibility', obj, keyName);
+            if (visibility === false)
                 continue;
             const v = obj[keyName];
             if (typeof v === "number")
                 this.bindSlider(obj, panel, keyName, `${parentName}.${keyName}`);
-            if (v instanceof Float32Array || objIsColor(v))
+            if (visibility === true || v instanceof Float32Array || objIsColor(v))
                 this.bindSlidersRecurse(v, panel, `${parentName}.${keyName}`, Object.keys(v));
         }
     }
@@ -2834,6 +2843,10 @@ export class UI {
 
 export function dfRange(min: number = 0, max: number = 1, step: number = (max - min) / 100) {
     return Reflect.metadata('df:range', { min, max, step });
+}
+
+export function dfShow() {
+    return Reflect.metadata('df:visibility', true);
 }
 
 export function dfHide() {

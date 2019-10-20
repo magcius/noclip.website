@@ -17,7 +17,7 @@ import { fillMatrix4x3, fillMatrix4x4, fillColor, fillVec4 } from '../gfx/helper
 import { mat4 } from 'gl-matrix';
 import { computeModelMatrixSRT, clamp } from '../MathHelpers';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
-import { dfHide, dfRange } from '../ui';
+import { dfHide, dfRange, dfShow } from '../ui';
 
 const pathBase = `FoxFur`;
 
@@ -118,15 +118,21 @@ class FurProgram extends DeviceProgram {
 layout(row_major, std140) uniform ub_ShapeParams {
     Mat4x4 u_Projection;
     Mat4x3 u_BoneMatrix[1];
-    vec4 u_Misc[2];
+    vec4 u_Misc[3];
     vec4 u_TintColor;
 };
 
 #define u_LayerMagnitude  (u_Misc[0].x)
-#define u_PoreBaseAlpha   (u_Misc[1].x)
-#define u_PoreMapScale    (u_Misc[1].y)
-#define u_PoreMapIndScale (u_Misc[1].z)
-#define u_PoreMapIndAngle (u_Misc[1].w)
+#define u_PoreBaseAlpha   (u_Misc[0].y)
+#define u_PoreMapScale    (u_Misc[0].z)
+#define u_BodyIndMapOffsS (u_Misc[1].x)
+#define u_BodyIndMapOffsT (u_Misc[1].y)
+#define u_BodyMapIndScale (u_Misc[1].z)
+#define u_BodyMapIndAngle (u_Misc[1].w)
+#define u_PoreIndMapOffsS (u_Misc[2].x)
+#define u_PoreIndMapOffsT (u_Misc[2].y)
+#define u_PoreMapIndScale (u_Misc[2].z)
+#define u_PoreMapIndAngle (u_Misc[2].w)
 
 uniform sampler2D u_Texture[3];
 `;
@@ -156,10 +162,21 @@ vec2 rotateZ(vec2 v, float theta) {
 
 void main() {
     gl_FragColor = u_TintColor;
-    gl_FragColor *= texture(u_Texture[0], v_TexCoord.xy);
 
-    // Apply pore map
-    vec2 t_PoreIndTex = (texture(u_Texture[2], v_TexCoord.xy).gr - vec2(0.5, 0.5)) * vec2(1, -1);
+    // Trying out some ind stuff
+    vec2 t_BodyIndCoord = v_TexCoord.xy + vec2(u_BodyIndMapOffsS, u_BodyIndMapOffsT);
+    vec2 t_BodyIndTex = (texture(u_Texture[2], t_BodyIndCoord).gr - vec2(0.5, 0.5)) * vec2(1, -1);
+    // Scale and rotate.
+    t_BodyIndTex = rotateZ(t_BodyIndTex, u_BodyMapIndAngle);
+    t_BodyIndTex *= u_BodyMapIndScale;
+    vec2 t_BodyTexCoord = (v_TexCoord.xy) + t_BodyIndTex;
+
+    vec4 t_BodyColor = texture(u_Texture[0], t_BodyTexCoord);
+    gl_FragColor *= t_BodyColor;
+
+    // Sample pore map.
+    vec2 t_PoreIndCoord = v_TexCoord.xy + vec2(u_PoreIndMapOffsS, u_PoreIndMapOffsT);
+    vec2 t_PoreIndTex = (texture(u_Texture[2], t_PoreIndCoord).gr - vec2(0.5, 0.5)) * vec2(1, -1);
     // Scale and rotate.
     t_PoreIndTex = rotateZ(t_PoreIndTex, u_PoreMapIndAngle);
     t_PoreIndTex *= u_PoreMapIndScale;
@@ -208,6 +225,25 @@ function createIndMapTexture(device: GfxDevice, width: number, height: number): 
     return indTex;
 }
 
+class IndSettings {
+    @dfRange(0, 1)
+    public mapIndScale: number = 0;
+    @dfRange(-Math.PI, Math.PI)
+    public mapIndAngle: number = 0;
+    @dfRange(-5, 5)
+    public indMapSpeedS: number = 0;
+    @dfRange(-5, 5)
+    public indMapSpeedT: number = 0;
+
+    public fill(d: Float32Array, offs: number, time: number, baseScale: number): number {
+        const indMapOffsS = time * this.indMapSpeedS / 10000;
+        const indMapOffsT = time * this.indMapSpeedT / 10000;
+        const mapIndScale = baseScale * this.mapIndScale;
+        const mapIndAngle = this.mapIndAngle;
+        return fillVec4(d, offs, indMapOffsS, indMapOffsT, mapIndScale, mapIndAngle);
+    }
+}
+
 const scratchMatrix = mat4.create();
 const scratchColor = colorNewCopy(TransparentBlack);
 class FurObj {
@@ -238,11 +274,10 @@ class FurObj {
     @dfRange(0, 8)
     private poreMapScale: number = 1;
 
-    @dfRange(0, 1)
-    private poreMapIndScale: number = 0;
-
-    @dfRange(-Math.PI, Math.PI)
-    private poreMapIndAngle: number = 0;
+    @dfShow()
+    private bodyInd = new IndSettings();
+    @dfShow()
+    private poreInd = new IndSettings();
 
     // TODO(jstpierre): Color picker UI
     private rootColor = colorNew(0.2, 0.2, 0.2, 1.0);
@@ -300,22 +335,21 @@ class FurObj {
             const linearRate = (i + 1) / this.numLayers;
             const a = Math.pow(linearRate, this.pow);
 
-            let offs = renderInst.allocateUniformBuffer(FurProgram.ub_ShapeParams, 16+12+4+4+4);
+            let offs = renderInst.allocateUniformBuffer(FurProgram.ub_ShapeParams, 16+12+4+4+4+4);
             const d = renderInst.mapUniformBufferF32(FurProgram.ub_ShapeParams);
             offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
     
             mat4.mul(scratchMatrix, viewerInput.camera.viewMatrix, this.modelMatrix);
             offs += fillMatrix4x3(d, offs, scratchMatrix);
 
-            // u_LayerMagnitude
             const layerMagnitude = a * this.magnitude;
-            offs += fillVec4(d, offs, layerMagnitude);
-
             const poreBaseAlpha = isRootLayer ? 1 : 0;
             const poreMapScale = this.poreMapScale;
-            const poreMapIndScale = a * this.poreMapIndScale;
-            const poreMapIndAngle = this.poreMapIndAngle;
-            offs += fillVec4(d, offs, poreBaseAlpha, poreMapScale, poreMapIndScale, poreMapIndAngle);
+            offs += fillVec4(d, offs, layerMagnitude, poreBaseAlpha, poreMapScale);
+
+            const time = viewerInput.time;
+            offs += this.bodyInd.fill(d, offs, time, a);
+            offs += this.poreInd.fill(d, offs, time, a);
 
             colorLerp(scratchColor, this.rootColor, this.tipColor, a);
             offs += fillColor(d, offs, scratchColor);
@@ -387,7 +421,9 @@ export class FoxFur implements SceneDesc {
         const foxFurObjText = getTextDecoder('utf8')!.decode(foxFurObjBuffer.arrayBuffer);
         const bodyTex = await fetchPNG(`${pathBase}/furtex.png`);
         const r = new SceneRenderer(device);
-        r.obj.push(new FurObj(device, foxFurObjText, bodyTex));
+        const o = new FurObj(device, foxFurObjText, bodyTex);
+        window.main.ui.bindSliders(o);
+        r.obj.push(o);
         return r;
     }
 }
