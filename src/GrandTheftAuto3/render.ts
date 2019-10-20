@@ -11,7 +11,7 @@ import { DeviceProgram } from "../Program";
 import { convertToTriangleIndexBuffer, filterDegenerateTriangleIndexBuffer, GfxTopology } from "../gfx/helpers/TopologyHelpers";
 import { fillMatrix4x3, fillMatrix4x4, fillColor } from "../gfx/helpers/UniformBufferHelpers";
 import { mat4, quat, vec3, vec2 } from "gl-matrix";
-import { computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
+import { computeViewSpaceDepthFromWorldSpaceAABB, FPSCameraController } from "../Camera";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { assert } from "../util";
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
@@ -537,6 +537,12 @@ export class GTA3Renderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice, private colorSets: ColorSet[], private weatherTypes: string[], private waterOrigin: vec3) {
         this.renderHelper = new GfxRenderHelper(device);
+    }
+
+    public createCameraController() {
+        const controller = new FPSCameraController();
+        controller.sceneKeySpeedMult = 0.5;
+        return controller;
     }
 
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
