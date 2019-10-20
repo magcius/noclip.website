@@ -1437,8 +1437,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
         if (clearBits & WebGL2RenderingContext.DEPTH_BUFFER_BIT) {
             // GL clears obey the masks... bad API or worst API?
-            gl.depthMask(true);
-            this._currentMegaState.depthWrite = true;
+            if (!this._currentMegaState.depthWrite) {
+                gl.depthMask(true);
+                this._currentMegaState.depthWrite = true;
+            }
             gl.clearDepth(depthClearValue);
         }
         if (clearBits & WebGL2RenderingContext.STENCIL_BUFFER_BIT)

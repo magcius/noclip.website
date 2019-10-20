@@ -3,7 +3,7 @@ import { OrbitCameraController } from '../Camera';
 
 import { SceneDesc, SceneContext } from "../SceneBase";
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxTexture, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexAttributeFrequency, GfxInputLayout, GfxInputState, GfxBindingLayoutDescriptor, GfxProgram, GfxBlendMode, GfxBlendFactor, GfxCullMode, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
-import { SceneGfx, ViewerRenderInput } from "../viewer";
+import { SceneGfx, ViewerRenderInput, Viewer } from "../viewer";
 import { getDataURLForPath } from "../DataFetcher";
 import { BasicRenderTarget, makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { TransparentBlack, colorNewCopy, colorLerp, colorNew } from '../Color';
@@ -18,6 +18,9 @@ import { mat4 } from 'gl-matrix';
 import { computeModelMatrixSRT, clamp } from '../MathHelpers';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { dfHide, dfRange, dfShow } from '../ui';
+import { captureScene } from '../CaptureHelpers';
+import { downloadBuffer } from '../DownloadUtils';
+import { makeZipFile } from '../ZipFile';
 
 const pathBase = `FoxFur`;
 
@@ -263,25 +266,25 @@ class FurObj {
     private modelMatrix = mat4.create();
 
     @dfRange(1, 32, 1)
-    private numLayers: number = 16;
+    public numLayers: number = 16;
 
     @dfRange(0, 10)
-    private magnitude: number = 1;
+    public magnitude: number = 1;
 
     @dfRange(0, 1)
-    private pow: number = 0.6;
+    public pow: number = 0.6;
 
     @dfRange(0, 8)
-    private poreMapScale: number = 1;
+    public poreMapScale: number = 1;
 
     @dfShow()
-    private bodyInd = new IndSettings();
+    public bodyInd = new IndSettings();
     @dfShow()
-    private poreInd = new IndSettings();
+    public poreInd = new IndSettings();
 
     // TODO(jstpierre): Color picker UI
-    private rootColor = colorNew(0.2, 0.2, 0.2, 1.0);
-    private tipColor = colorNew(1.0, 1.0, 1.0, 0.2);
+    public rootColor = colorNew(0.2, 0.2, 0.2, 1.0);
+    public tipColor = colorNew(1.0, 1.0, 1.0, 0.2);
 
     constructor(device: GfxDevice, objText: string, bodyImgData: ImageData) {
         this.bodyTex = makeTextureFromImageData(device, bodyImgData);
@@ -332,7 +335,7 @@ class FurObj {
         for (let i = 0; i < this.numLayers; i++) {
             const renderInst = renderInstManager.pushRenderInst();
             const isRootLayer = (i === 0);
-            const linearRate = (i + 1) / this.numLayers;
+            const linearRate = (i + 1) / (this.numLayers | 0);
             const a = Math.pow(linearRate, this.pow);
 
             let offs = renderInst.allocateUniformBuffer(FurProgram.ub_ShapeParams, 16+12+4+4+4+4);
@@ -408,7 +411,32 @@ export class SceneRenderer implements SceneGfx {
         return mainPassRenderer;
     }
 
+    public async film() {
+        const width = 1920, height = 1080;
+        const scene0 = await captureScene(window.main.viewer, {
+            width, height,
+            frameCount: 12,
+            filenamePrefix: 'scene0/scene0',
+            setupCallback: (viewer, t, i) => {
+                const orbit = (viewer.cameraController as OrbitCameraController);
+                orbit.shouldOrbit = false;
+                orbit.x = -Math.PI / 2;
+                orbit.y = 2;
+                orbit.z = -150;
+
+                const obj = this.obj[0];
+                obj.magnitude = t;
+            },
+        });
+
+        const zipFile = makeZipFile([
+            ... scene0,
+        ]);
+        downloadBuffer('FoxFur.zip', zipFile);
+    }
+
     public destroy(device: GfxDevice) {
+        // ayy lmao
     }
 }
 

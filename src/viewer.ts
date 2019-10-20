@@ -44,6 +44,12 @@ function resetGfxDebugGroup(group: GfxDebugGroup): void {
     group.triangleCount = 0;
 }
 
+export function resizeCanvas(canvas: HTMLCanvasElement, width: number, height: number, devicePixelRatio: number): void {
+    canvas.setAttribute('style', `width: ${width}px; height: ${height}px;`);
+    canvas.width = width * devicePixelRatio;
+    canvas.height = height * devicePixelRatio;
+}
+
 export class Viewer {
     public inputManager: InputManager;
     public cameraController: CameraController | null = null;

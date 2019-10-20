@@ -11,7 +11,7 @@ if (module.hot) {
     });
 }
 
-import { Viewer, SceneGfx, InitErrorCode, initializeViewer, makeErrorUI } from './viewer';
+import { Viewer, SceneGfx, InitErrorCode, initializeViewer, makeErrorUI, resizeCanvas } from './viewer';
 
 import ArrayBufferSlice from './ArrayBufferSlice';
 
@@ -169,6 +169,7 @@ class Main {
     public groups: (string | SceneGroup)[];
     public ui: UI;
     public saveManager = GlobalSaveManager;
+    public paused: boolean = false;
 
     private droppedFileGroup: SceneGroup;
 
@@ -319,6 +320,15 @@ class Main {
             this.viewer.sceneTime = 0;
     }
 
+    public setPaused(v: boolean): void {
+        if (this.paused === v)
+            return;
+
+        this.paused = true;
+        if (!this.paused)
+            window.requestAnimationFrame(this._updateLoop);
+    }
+
     private _updateLoop = (time: number) => {
         this.checkKeyShortcuts();
 
@@ -359,9 +369,7 @@ class Main {
 
     private _onResize() {
         const devicePixelRatio = window.devicePixelRatio || 1;
-        this.canvas.setAttribute('style', `width: ${window.innerWidth}px; height: ${window.innerHeight}px;`);
-        this.canvas.width = window.innerWidth * devicePixelRatio;
-        this.canvas.height = window.innerHeight * devicePixelRatio;
+        resizeCanvas(this.canvas, window.innerWidth, window.innerHeight, devicePixelRatio);
     }
 
     private _saveStateTmp = new Uint8Array(512);

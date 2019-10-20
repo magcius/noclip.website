@@ -482,7 +482,10 @@ export class OrbitCameraController implements CameraController {
         }
 
         if (inputManager.isKeyDownEventTriggered('KeyB')) {
+            this.shouldOrbit = false;
+            this.xVel = this.yVel = 0;
             this.txVel = this.tyVel = 0;
+            this.xVel = this.yVel = this.zVel = 0;
             vec3.set(this.translation, 0, 0, 0);
         }
 
