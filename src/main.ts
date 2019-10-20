@@ -729,6 +729,10 @@ class Main {
     public getStandardClearColor(): Color {
         return standardFullClearRenderPassDescriptor.colorClearColor;
     }
+
+    public get scene() { 
+        return this.viewer.scene;
+    }
 }
 
 // Google Analytics

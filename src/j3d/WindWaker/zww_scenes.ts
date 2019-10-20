@@ -31,6 +31,7 @@ import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
 import { ObjectRenderer, BMDObjectRenderer, SymbolMap, WhiteFlowerData, FlowerObjectRenderer, PinkFlowerData, BessouFlowerData, FlowerData, settingTevStruct, LightTevColorType } from './Actors';
 import { SceneContext } from '../../SceneBase';
 import { reverseDepthForCompareMode } from '../../gfx/helpers/ReversedDepthHelpers';
+import { computeModelMatrixSRT } from '../../MathHelpers';
 
 class ZWWExtraTextures {
     constructor(public ZAtoon: BTIData, public ZBtoonEX: BTIData) {
@@ -2078,6 +2079,33 @@ class SceneDesc {
             console.warn(`Unknown object: ${name} ${hexzero(parameters, 8)}`);
     }
 
+    private spawnObjectsFromACTRLayer(device: GfxDevice, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, buffer: ArrayBufferSlice, actrHeader: DZSChunkHeader | undefined, worldModelMatrix: mat4): void {
+        if (actrHeader === undefined)
+            return;
+
+        const view = buffer.createDataView();
+
+        let actrTableIdx = actrHeader.offs;
+        for (let i = 0; i < actrHeader.count; i++) {
+            const name = readString(buffer, actrTableIdx + 0x00, 0x08, true);
+            const parameters = view.getUint32(actrTableIdx + 0x08, false);
+            const posX = view.getFloat32(actrTableIdx + 0x0C);
+            const posY = view.getFloat32(actrTableIdx + 0x10);
+            const posZ = view.getFloat32(actrTableIdx + 0x14);
+            // const auxParam = view.getInt16(actrTableIdx + 0x18);
+            const rotY = view.getInt16(actrTableIdx + 0x1A) / 0x7FFF * Math.PI;
+            const flag = view.getUint16(actrTableIdx + 0x1C);
+            const enemyNum = view.getUint16(actrTableIdx + 0x1E);
+
+            const localModelMatrix = mat4.create();
+            computeModelMatrixSRT(localModelMatrix, 1, 1, 1, 0, rotY, 0, posX, posY, posZ);
+
+            this.spawnObjectsForActor(device, renderer, roomRenderer, name, parameters, localModelMatrix, worldModelMatrix);
+
+            actrTableIdx += 0x20;
+        }
+    }
+
     private spawnObjectsFromTGOBLayer(device: GfxDevice, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, buffer: ArrayBufferSlice, tgobHeader: DZSChunkHeader | undefined, worldModelMatrix: mat4): void {
         if (tgobHeader === undefined)
             return;
@@ -2094,10 +2122,7 @@ class SceneDesc {
             const rotY = view.getInt16(actrTableIdx + 0x1A) / 0x7FFF * Math.PI;
 
             const localModelMatrix = mat4.create();
-            mat4.rotateY(localModelMatrix, localModelMatrix, rotY);
-            localModelMatrix[12] += posX;
-            localModelMatrix[13] += posY;
-            localModelMatrix[14] += posZ;
+            computeModelMatrixSRT(localModelMatrix, 1, 1, 1, 0, rotY, 0, posX, posY, posZ);
 
             this.spawnObjectsForActor(device, renderer, roomRenderer, name, parameters, localModelMatrix, worldModelMatrix);
 
@@ -2105,7 +2130,7 @@ class SceneDesc {
         }
     }
 
-    private spawnObjectsFromACTRLayer(device: GfxDevice, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, buffer: ArrayBufferSlice, actrHeader: DZSChunkHeader | undefined, worldModelMatrix: mat4): void {
+    private spawnObjectsFromSCOBLayer(device: GfxDevice, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, buffer: ArrayBufferSlice, actrHeader: DZSChunkHeader | undefined, worldModelMatrix: mat4): void {
         if (actrHeader === undefined)
             return;
 
@@ -2118,41 +2143,41 @@ class SceneDesc {
             const posX = view.getFloat32(actrTableIdx + 0x0C);
             const posY = view.getFloat32(actrTableIdx + 0x10);
             const posZ = view.getFloat32(actrTableIdx + 0x14);
-            // const rotX = view.getInt16(actrTableIdx + 0x18) / 0x7FFF;
+            // const auxParam = view.getInt16(actrTableIdx + 0x18);
             const rotY = view.getInt16(actrTableIdx + 0x1A) / 0x7FFF * Math.PI;
-            const flag = view.getUint16(actrTableIdx + 0x1C);
-            const enemyNum = view.getUint16(actrTableIdx + 0x1E);
+            // const unk1 = view.getInt16(actrTableIdx + 0x1C);
+            // const unk2 = view.getInt16(actrTableIdx + 0x1E);
+            const scaleX = view.getUint8(actrTableIdx + 0x20) / 10.0;
+            const scaleY = view.getUint8(actrTableIdx + 0x21) / 10.0;
+            const scaleZ = view.getUint8(actrTableIdx + 0x22) / 10.0;
+            // const pad = view.getUint8(actrTableIdx + 0x23);
 
             const localModelMatrix = mat4.create();
-            mat4.rotateY(localModelMatrix, localModelMatrix, rotY);
-            localModelMatrix[12] += posX;
-            localModelMatrix[13] += posY;
-            localModelMatrix[14] += posZ;
+            computeModelMatrixSRT(localModelMatrix, scaleX, scaleY, scaleZ, 0, rotY, 0, posX, posY, posZ);
 
             this.spawnObjectsForActor(device, renderer, roomRenderer, name, parameters, localModelMatrix, worldModelMatrix);
 
-            actrTableIdx += 0x20;
+            actrTableIdx += 0x24;
         }
     }
 
     private spawnObjectsFromDZR(device: GfxDevice, renderer: WindWakerRenderer, roomRenderer: WindWakerRoomRenderer, buffer: ArrayBufferSlice, modelMatrix: mat4): void {
         const chunkHeaders = parseDZSHeaders(buffer);
 
-        this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, chunkHeaders.get('ACTR'), modelMatrix);
-        this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, chunkHeaders.get('ACT0'), modelMatrix);
-        this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, chunkHeaders.get('ACT1'), modelMatrix);
-        this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, chunkHeaders.get('ACT2'), modelMatrix);
-        this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, chunkHeaders.get('ACT3'), modelMatrix);
-        this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, chunkHeaders.get('ACT4'), modelMatrix);
-        this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, chunkHeaders.get('ACT5'), modelMatrix);
-        this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, chunkHeaders.get('ACT6'), modelMatrix);
-        this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, chunkHeaders.get('ACT7'), modelMatrix);
-        this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, chunkHeaders.get('ACT8'), modelMatrix);
-        this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, chunkHeaders.get('ACT9'), modelMatrix);
-        this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, chunkHeaders.get('ACTA'), modelMatrix);
-        this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, chunkHeaders.get('ACTB'), modelMatrix);
+        function buildChunkLayerName(base: string, i: number): string {
+            if (i === -1) {
+                return base;
+            } else {
+                return base.slice(0, 3) + i.toString(16).toLowerCase();
+            }
+        }
 
-        this.spawnObjectsFromTGOBLayer(device, renderer, roomRenderer, buffer, chunkHeaders.get('TGOB'), modelMatrix);
+        for (let i = -1; i < 16; i++) {
+            this.spawnObjectsFromACTRLayer(device, renderer, roomRenderer, buffer, chunkHeaders.get(buildChunkLayerName('ACTR', i)), modelMatrix);
+            this.spawnObjectsFromTGOBLayer(device, renderer, roomRenderer, buffer, chunkHeaders.get(buildChunkLayerName('TGOB', i)), modelMatrix);
+            this.spawnObjectsFromSCOBLayer(device, renderer, roomRenderer, buffer, chunkHeaders.get(buildChunkLayerName('SCOB', i)), modelMatrix);
+            // TODO(jstpierre): TRES, TGSC
+        }
     }
 }
 

@@ -2,7 +2,7 @@
 import { OrbitCameraController } from '../Camera';
 
 import { SceneDesc, SceneContext } from "../SceneBase";
-import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxTexture, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexAttributeFrequency, GfxInputLayout, GfxInputState, GfxBindingLayoutDescriptor, GfxProgram, GfxBlendMode, GfxBlendFactor, GfxCullMode, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxTexture, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexAttributeFrequency, GfxInputLayout, GfxInputState, GfxBindingLayoutDescriptor, GfxProgram, GfxBlendMode, GfxBlendFactor, GfxCullMode, makeTextureDescriptor2D, GfxColorWriteMask } from "../gfx/platform/GfxPlatform";
 import { SceneGfx, ViewerRenderInput, Viewer } from "../viewer";
 import { getDataURLForPath } from "../DataFetcher";
 import { BasicRenderTarget, makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
@@ -359,9 +359,22 @@ class FurObj {
 
             if (!isRootLayer) {
                 renderInst.setMegaStateFlags({
-                    blendMode: GfxBlendMode.ADD,
-                    blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-                    blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+                    attachmentsState: [
+                        {
+                            blendConstant: TransparentBlack,
+                            colorWriteMask: GfxColorWriteMask.ALL,
+                            rgbBlendState: {
+                                blendMode: GfxBlendMode.ADD,
+                                blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
+                                blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+                            },
+                            alphaBlendState: {
+                                blendMode: GfxBlendMode.ADD,
+                                blendSrcFactor: GfxBlendFactor.ONE,
+                                blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+                            },
+                        }
+                    ],
                 });
             }
 
