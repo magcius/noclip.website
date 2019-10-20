@@ -251,18 +251,18 @@ export class GTA3SceneDesc implements Viewer.SceneDesc {
 
                 let res = '';
                 res += texture.width + 'x' + texture.height + '.' + texture.pixelFormat;
-                if (rw.Raster.formatHasAlpha(texture.format))
-                    res += 'alpha';
                 if (!textureSets.has(res)) textureSets.set(res, new Set());
                 textureSets.get(res)!.add(texture);
             }
 
-            const drawKeyObj = new DrawKey(obj, zone);
-            if (haslod) delete drawKeyObj.drawDistance;
-            const drawKeyStr = JSON.stringify(drawKeyObj);
-            if (!drawKeys.has(drawKeyStr))
-                drawKeys.set(drawKeyStr, drawKeyObj);
-            const drawKey = drawKeys.get(drawKeyStr)!;
+            let drawKey = new DrawKey(obj, zone);
+            if (haslod) delete drawKey.drawDistance;
+            const drawKeyStr = JSON.stringify(drawKey);
+            if (drawKeys.has(drawKeyStr)) {
+                drawKey = drawKeys.get(drawKeyStr)!;
+            } else {
+                drawKeys.set(drawKeyStr, drawKey);
+            }
             if (!layers.has(drawKey)) layers.set(drawKey, []);
             const mesh = new MeshInstance(model, item);
             layers.get(drawKey)!.push(mesh);
@@ -270,26 +270,26 @@ export class GTA3SceneDesc implements Viewer.SceneDesc {
 
         const textureArrays = [] as TextureArray[];
         for (const [res, textureSet] of textureSets) {
-            const transparent = res.endsWith('alpha');
             const textures = Array.from(textureSet);
             for (let i = 0; i < textures.length; i += 0x100)
-                textureArrays.push(new TextureArray(device, textures.slice(i, i + 0x100), transparent));
+                textureArrays.push(new TextureArray(device, textures.slice(i, i + 0x100)));
         }
 
+        const sealevel = this.water.origin[2];
         for (const [key, layerMeshes] of layers) {
             if (SceneRenderer.applicable(layerMeshes))
-                renderer.sceneRenderers.push(new SceneRenderer(device, key, layerMeshes));
+                renderer.sceneRenderers.push(new SceneRenderer(device, key, layerMeshes, sealevel));
             for (const atlas of textureArrays) {
                 if (!SceneRenderer.applicable(layerMeshes, atlas)) continue;
-                renderer.sceneRenderers.push(new SceneRenderer(device, key, layerMeshes, atlas));
+                renderer.sceneRenderers.push(new SceneRenderer(device, key, layerMeshes, sealevel, atlas));
                 if (key.renderLayer === GfxRendererLayer.TRANSLUCENT)
-                    renderer.sceneRenderers.push(new SceneRenderer(device, key, layerMeshes, atlas, true));
+                    renderer.sceneRenderers.push(new SceneRenderer(device, key, layerMeshes, sealevel, atlas, true));
             }
         }
 
         await loadedTXD.get('particle')!;
         const waterTex = textures.get(`particle/${this.water.texture}`)!;
-        const waterAtlas = new TextureArray(device, [waterTex], false);
+        const waterAtlas = new TextureArray(device, [waterTex]);
         renderer.sceneRenderers.push(new SkyRenderer(device, waterAtlas));
 
         return renderer;

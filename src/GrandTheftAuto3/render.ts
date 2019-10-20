@@ -99,7 +99,7 @@ function halve(pixels: Uint8Array, width: number, height: number, bpp: number): 
 export class TextureArray extends TextureMapping {
     public subimages = new Map<string, number>();
 
-    constructor(device: GfxDevice, textures: Texture[], public transparent: boolean) {
+    constructor(device: GfxDevice, textures: Texture[]) {
         super();
         assert(textures.length > 0);
         const width = textures[0].width;
@@ -377,6 +377,7 @@ export class MeshInstance {
 
 export class DrawKey {
     public renderLayer: GfxRendererLayer = GfxRendererLayer.OPAQUE;
+    public modelName?: string;
     public drawDistance?: number;
     public timeOn?: number;
     public timeOff?: number;
@@ -384,8 +385,10 @@ export class DrawKey {
     public additive: boolean;
 
     constructor(obj: ObjectDefinition, public zone: string) {
-        if (obj.flags & ObjectFlags.DRAW_LAST)
+        if (obj.flags & ObjectFlags.DRAW_LAST) {
             this.renderLayer = GfxRendererLayer.TRANSLUCENT;
+            this.modelName = obj.modelName;
+        }
         if (obj.drawDistance < 99 && !(obj.flags & ObjectFlags.IGNORE_DRAW_DISTANCE))
             this.drawDistance = 99;
         if (obj.tobj) {
@@ -399,6 +402,8 @@ export class DrawKey {
 
 export class SceneRenderer extends Renderer {
     public bbox = new AABB();
+
+    private sortKey: number;
 
     private static programFor(key: DrawKey, dual: boolean) {
         if (key.water) return waterProgram;
@@ -427,7 +432,7 @@ export class SceneRenderer extends Renderer {
         return false;
     }
 
-    constructor(device: GfxDevice, public key: DrawKey, meshes: MeshInstance[], atlas?: TextureArray, dual = false) {
+    constructor(device: GfxDevice, public key: DrawKey, meshes: MeshInstance[], sealevel: number, atlas?: TextureArray, dual = false) {
         super(SceneRenderer.programFor(key, dual), atlas);
 
         let vertices = 0;
@@ -495,18 +500,22 @@ export class SceneRenderer extends Renderer {
             blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
             depthWrite: !dual,
         };
+
+        if (this.key.water) {
+            this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + 1);
+        } else if (this.key.renderLayer === GfxRendererLayer.TRANSLUCENT && this.bbox.minY >= sealevel) {
+            this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + 2);
+        } else {
+            this.sortKey = makeSortKey(this.key.renderLayer);
+        }
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, colorSet: ColorSet, dual = false): undefined {
         const hour = Math.floor(viewerInput.time / TIME_FACTOR) % 24;
         const { timeOn, timeOff } = this.key;
-        let renderLayer = this.key.renderLayer;
-        if (this.key.water)
-            renderLayer = GfxRendererLayer.TRANSLUCENT;
         if (timeOn !== undefined && timeOff !== undefined) {
             if (timeOn < timeOff && (hour < timeOn || timeOff < hour)) return;
             if (timeOff < timeOn && (hour < timeOn && timeOff < hour)) return;
-            renderLayer += 1;
         }
 
         if (!viewerInput.camera.frustum.contains(this.bbox))
@@ -517,7 +526,7 @@ export class SceneRenderer extends Renderer {
             return;
 
         const renderInst = super.prepareToRender(device, renderInstManager, viewerInput, colorSet)!;
-        renderInst.sortKey = setSortKeyDepth(makeSortKey(renderLayer), depth);
+        renderInst.sortKey = setSortKeyDepth(this.sortKey, depth);
         return;
     }
 }
