@@ -325,7 +325,7 @@ class SMGRenderer implements Viewer.SceneGfx {
 
             const indDummy = effectSystem.particleResourceHolder.getTextureMappingReference('IndDummy');
             if (indDummy !== null)
-                setTextureMappingIndirect(indDummy, this.sceneTexture.gfxTexture!);
+                this.sceneObjHolder.captureSceneDirector.fillTextureMappingOpaqueSceneTexture(indDummy);
         }
 
         // Prepare all of our NameObjs.

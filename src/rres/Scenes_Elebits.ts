@@ -13,6 +13,7 @@ import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from '../gx/gx_r
 import AnimationController from '../AnimationController';
 import { GXMaterialHacks } from '../gx/gx_material';
 import { SceneContext } from '../SceneBase';
+import { range } from '../MathHelpers';
 
 function makeElbPath(stg: string, room: number): string {
     let z = leftPad(''+room, 2);
@@ -95,13 +96,6 @@ class ElebitsSceneDesc implements Viewer.SceneDesc {
             return new ElebitsRenderer(device, stageRRESes);
         });
     }
-}
-
-function range(start: number, count: number): number[] {
-    const L: number[] = [];
-    for (let i = start; i < start + count; i++)
-        L.push(i);
-    return L;
 }
 
 const id = "elb";

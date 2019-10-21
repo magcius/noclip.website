@@ -340,3 +340,10 @@ export function computeUnitSphericalCoordinates(dst: vec3, azimuthal: number, po
     dst[1] = Math.cos(polar);
     dst[2] = sinP * Math.sin(azimuthal);
 }
+
+export function range(start: number, count: number): number[] {
+    const L: number[] = [];
+    for (let i = start; i < start + count; i++)
+        L.push(i);
+    return L;
+}

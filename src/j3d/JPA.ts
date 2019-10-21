@@ -206,11 +206,17 @@ export interface JPAExtraShapeBlock {
     rotateDirection: number;
 }
 
+const enum IndTextureMode {
+    OFF, NORMAL, SUB,
+}
+
 export interface JPAExTexBlock {
     flags: number;
+    indTextureMode: IndTextureMode;
     indTextureMtx: Float32Array;
     indTextureID: number;
     subTextureID: number;
+    secondTextureIndex: number;
 }
 
 export interface JPAChildShapeBlock {
@@ -440,11 +446,14 @@ export class JPAResourceData {
         }
 
         if (etx1 !== null) {
-            if (!!(etx1.flags & 0x00000001))
+            if (etx1.indTextureMode !== IndTextureMode.OFF) {
                 this.ensureTextureFromTDB1Index(device, cache, etx1.indTextureID);
+                if (etx1.indTextureMode === IndTextureMode.SUB)
+                    this.ensureTextureFromTDB1Index(device, cache, etx1.subTextureID);
+            }
 
             if (!!(etx1.flags & 0x00000100))
-                this.ensureTextureFromTDB1Index(device, cache, etx1.subTextureID);
+                this.ensureTextureFromTDB1Index(device, cache, etx1.secondTextureIndex);
         }
 
         if (ssp1 !== null)
@@ -1919,13 +1928,14 @@ export class JPABaseEmitter {
             this.resData.fillTextureMapping(materialParams.m_TextureMapping[0], this.texAnmIdx);
 
         if (etx1 !== null) {
-            if (!!(etx1.flags & 0x00000001)) {
+            if (etx1.indTextureMode === IndTextureMode.NORMAL) {
                 this.resData.fillTextureMapping(materialParams.m_TextureMapping[2], etx1.indTextureID);
                 fillIndTexMtx(materialParams.u_IndTexMtx[0], etx1.indTextureMtx);
+                // TODO(jstpierre): Subtextures, a JPA1 feature, in JPADrawSetupTev::setupTev.
             }
 
             if (!!(etx1.flags & 0x00000100))
-                this.resData.fillTextureMapping(materialParams.m_TextureMapping[3], etx1.subTextureID);
+                this.resData.fillTextureMapping(materialParams.m_TextureMapping[3], etx1.secondTextureIndex);
         }
 
         workData.forceTexMtxIdentity = false;
@@ -3616,16 +3626,18 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             const p10 = view.getFloat32(dataBegin + 0x10);
             const p11 = view.getFloat32(dataBegin + 0x14);
             const p12 = view.getFloat32(dataBegin + 0x18);
-            const scale = Math.pow(2, view.getInt8(tableIdx + 0x1C));
+            const scale = Math.pow(2, view.getInt8(dataBegin + 0x1C));
             const indTextureMtx = new Float32Array([
                 p00*scale, p01*scale, p02*scale, scale,
                 p10*scale, p11*scale, p12*scale, 0.0,
             ]);
 
-            const indTextureID = view.getUint8(tableIdx + 0x25);
-            const subTextureID = view.getUint8(tableIdx + 0x26);
+            const indTextureMode: IndTextureMode = (flags & 0x03);
+            const indTextureID = view.getUint8(dataBegin + 0x20);
+            const subTextureID = view.getUint8(dataBegin + 0x21);
+            const secondTextureIndex = view.getUint8(dataBegin + 0x22);
 
-            etx1 = { flags, indTextureMtx, indTextureID, subTextureID };
+            etx1 = { flags, indTextureMtx, indTextureMode, indTextureID, subTextureID, secondTextureIndex };
         } else if (fourcc === 'KFA1') {
             // J3DKeyBlock
             // Contains curve animations for various emitter parameters.
@@ -4036,10 +4048,12 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
                 p10*scale, p11*scale, p12*scale, 0.0,
             ]);
 
+            const indTextureMode: IndTextureMode = (flags & 0x01);
             const indTextureID = view.getUint8(tableIdx + 0x25);
-            const subTextureID = view.getUint8(tableIdx + 0x26);
+            const subTextureID = 0;
+            const secondTextureIndex = view.getUint8(tableIdx + 0x26);
 
-            etx1 = { flags, indTextureMtx, indTextureID, subTextureID };
+            etx1 = { flags, indTextureMode, indTextureMtx, indTextureID, subTextureID, secondTextureIndex };
         } else if (fourcc === 'KFA1') {
             // J3DKeyBlock
             // Contains curve animations for various emitter parameters.

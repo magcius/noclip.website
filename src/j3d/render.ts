@@ -30,6 +30,9 @@ export class ShapeInstanceState {
     // Draw (DRW1 matrix definitions, incl. envelopes), which transform into view space.
     public drawViewMatrixArray: mat4[] = [];
 
+    // Visibility of each shape.
+    public shapeVisibility: boolean[] = [];
+
     // View-specific visibility for each of the matrices in drawToViewMatrices.
     // TODO(jstpierre): Currently true for all envelope matrices.
     public drawViewMatrixVisibility: boolean[] = [];
@@ -955,16 +958,14 @@ export class BMDModelInstance {
 
     private jointVisibility: boolean[];
 
-    constructor(
-        public bmdModel: BMDModel,
-        materialHacks?: GX_Material.GXMaterialHacks
-    ) {
+    constructor(public bmdModel: BMDModel, materialHacks?: GX_Material.GXMaterialHacks) {
         this.materialInstances = this.bmdModel.materialData.map((materialData) => {
             return new MaterialInstance(materialData, materialHacks);
         });
         this.shapeInstances = this.bmdModel.shapeData.map((shapeData) => {
             return new ShapeInstance(shapeData, this.materialInstances[shapeData.shape.materialIndex]);
         });
+        this.shapeInstanceState.shapeVisibility = nArray(this.shapeInstances.length, () => true);
 
         this.materialInstanceState.textureMappings = this.bmdModel.createDefaultTextureMappings();
 
@@ -1113,6 +1114,16 @@ export class BMDModelInstance {
     }
 
     /**
+     * Sets the shape at index {@param shapeIndex} to be either visible or invisible depending
+     * on the value of {@param v}. Note that this modifies the same internal visibility structure
+     * as VAF1 animation, and that will be calculated in {@method calcAnim} or {@method prepareToRender}
+     * if a VAF1 animation is bound, so this might have no effect in that case.
+     */
+    public setShapeVisible(shapeIndex: number, v: boolean): void {
+        this.shapeInstanceState.shapeVisibility[shapeIndex] = v;
+    }
+
+    /**
      * Returns the {@link GX_Material.Light} at index {@param i} as used by this model instance.
      *
      * This object is not a copy; setting parameters on this object will directly affect
@@ -1212,6 +1223,10 @@ export class BMDModelInstance {
 
         this.calcJointToWorld();
 
+        if (this.vaf1Animator !== null)
+            for (let i = 0; i < this.shapeInstances.length; i++)
+                this.shapeInstanceState.shapeVisibility[i] = this.vaf1Animator.calcVisibility(i);
+
         // Billboards have their model matrix modified to face the camera, so their world space position doesn't
         // quite match what they kind of do.
         //
@@ -1263,8 +1278,7 @@ export class BMDModelInstance {
         const template = renderInstManager.pushTemplateRenderInst();
         template.filterKey = this.passMask;
         for (let i = 0; i < this.shapeInstances.length; i++) {
-            const shapeVisibility = (this.vaf1Animator !== null ? this.vaf1Animator.calcVisibility(i) : true);
-            if (!shapeVisibility)
+            if (!this.shapeInstanceState.shapeVisibility[i])
                 continue;
             this.shapeInstances[i].prepareToRender(device, renderInstManager, depth, viewerInput.camera, this.materialInstanceState, this.shapeInstanceState);
         }
@@ -1278,8 +1292,7 @@ export class BMDModelInstance {
 
         const depth = this.computeDepth(camera);
         for (let i = 0; i < this.shapeInstances.length; i++) {
-            const shapeVisibility = (this.vaf1Animator !== null ? this.vaf1Animator.calcVisibility(i) : true);
-            if (!shapeVisibility)
+            if (!this.shapeInstanceState.shapeVisibility[i])
                 continue;
             const materialIndex = this.shapeInstances[i].shapeData.shape.materialIndex;
             if (this.materialInstances[materialIndex].materialData.material.translucent !== translucent)

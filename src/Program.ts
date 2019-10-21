@@ -4,6 +4,7 @@ import { assertExists, leftPad } from "./util";
 import { GfxDevice } from "./gfx/platform/GfxPlatform";
 import { gfxDeviceGetImpl } from "./gfx/platform/GfxPlatformWebGL2";
 import { IS_DEVELOPMENT } from "./BuildVersion";
+import { range } from "./MathHelpers";
 
 interface ProgramWithKey extends WebGLProgram {
     uniqueKey: number;
@@ -44,13 +45,6 @@ function findall(haystack: string, needle: RegExp): RegExpExecArray[] {
         results.push(result);
     }
     return results;
-}
-
-function range(start: number, num: number): number[] {
-    const L: number[] = [];
-    for (let i = 0; i < num; i++)
-        L.push(start + i);
-    return L;
 }
 
 function definesEqual(a: DeviceProgram, b: DeviceProgram): boolean {

@@ -58,7 +58,9 @@ export interface ObjectRenderer {
     setColors(colors: Colors): void;
     destroy(device: GfxDevice): void;
     setVertexColorsEnabled(v: boolean): void;
-    setTexturesEnabled(v: boolean): void
+    setTexturesEnabled(v: boolean): void;
+    visible: boolean;
+    layer: number;
 }
 
 const bboxScratch = new AABB();
@@ -67,6 +69,7 @@ export class BMDObjectRenderer implements ObjectRenderer {
     public visible = true;
     public modelMatrix: mat4 = mat4.create();
     public lightTevColorType = LightTevColorType.ACTOR;
+    public layer: number;
 
     private childObjects: BMDObjectRenderer[] = [];
     private parentJointMatrix: mat4 | null = null;
@@ -430,6 +433,7 @@ const scratchVec3b = vec3.create();
 export class FlowerObjectRenderer implements ObjectRenderer {
     public modelMatrix = mat4.create();
     public visible = true;
+    public layer: number;
 
     private materialHelper: GXMaterialHelperGfx;
 
