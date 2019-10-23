@@ -4,7 +4,7 @@ import * as RARC from '../rarc';
 import { SceneObjHolder, ZoneAndLayer } from "./smg_scenes";
 import { JMapInfoIter, createCsvParser } from "./JMapInfo";
 import { LiveActor } from './LiveActor';
-import { Kinopio, TicoComet, EarthenPipe, StarPiece, CollapsePlane, BlackHole, Peach, PenguinRacer, Penguin, SimpleEffectObj, EffectObjR1000F50, GCaptureTarget, FountainBig, AstroEffectObj, AstroCountDownPlate, Butler, Rosetta, Tico, Sky, Air, ShootingStar, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObj10x10x10SyncClipping, AstroMapObj, EffectObjR100F50SyncClipping, PriorDrawAir, BlueChip, YellowChip, PeachCastleGardenPlanet, SimpleMapObj, CrystalCage, PlanetMap, HatchWaterPlanet, RotateMoveObj, LavaSteam, SignBoard, WoodBox, EffectObjR500F50, SurprisedGalaxy, SuperSpinDriverYellow, SuperSpinDriverGreen, SuperSpinDriverPink, AstroCore, TicoAstro, UFOKinokoUnderConstruction, KinopioAstro, createPurpleCoin, createCoin, createRailCoin, createPurpleRailCoin, requestArchivesCoin, requestArchivesPurpleCoin } from "./Actors";
+import { Kinopio, TicoComet, EarthenPipe, StarPiece, CollapsePlane, BlackHole, Peach, PenguinRacer, Penguin, SimpleEffectObj, EffectObjR1000F50, GCaptureTarget, FountainBig, AstroEffectObj, AstroCountDownPlate, Butler, Rosetta, Tico, Sky, Air, ShootingStar, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObj10x10x10SyncClipping, AstroMapObj, EffectObjR100F50SyncClipping, PriorDrawAir, BlueChip, YellowChip, PeachCastleGardenPlanet, SimpleMapObj, CrystalCage, PlanetMap, HatchWaterPlanet, RotateMoveObj, LavaSteam, SignBoard, WoodBox, EffectObjR500F50, SurprisedGalaxy, SuperSpinDriverYellow, SuperSpinDriverGreen, SuperSpinDriverPink, AstroCore, TicoAstro, UFOKinokoUnderConstruction, KinopioAstro, createPurpleCoin, createCoin, createRailCoin, createPurpleRailCoin, requestArchivesCoin, requestArchivesPurpleCoin, createCircleCoinGroup, createPurpleCircleCoinGroup } from "./Actors";
 import { OceanBowl } from "./OceanBowl";
 import { WarpPod } from './WarpPod';
 
@@ -33,24 +33,25 @@ function E(objName: string, factoryFunc: NameObjFactoryFunc, requestArchivesFunc
     return { objName, factoryFunc, requestArchivesFunc };
 }
 
-function _(objName: string, factory: NameObjFactory | null, extraRequestArchivesFunc: NameObjRequestArchivesFunc | null = null): ActorTableEntry {
-    let factoryFunc: NameObjFactoryFunc | null = null;
-    let requestArchivesFunc: NameObjRequestArchivesFunc | null = null;
+function N(objName: string): ActorTableEntry {
+    const factoryFunc = null;const requestArchivesFunc = null;
+    return { objName, factoryFunc, requestArchivesFunc };
+}
 
-    if (factory !== null) {
-        // TODO(jstpierre): Is there a better way to construct dynamically like this? I swear there is.
-        factoryFunc = function(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): LiveActor {
-            return new factory(zoneAndLayer, sceneObjHolder, infoIter);
+function _(objName: string, factory: NameObjFactory, extraRequestArchivesFunc: NameObjRequestArchivesFunc | null = null): ActorTableEntry {
+    // TODO(jstpierre): Is there a better way to construct dynamically like this? I swear there is.
+    const factoryFunc: NameObjFactoryFunc = function(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): LiveActor {
+        return new factory(zoneAndLayer, sceneObjHolder, infoIter);
+    };
+
+    let requestArchivesFunc: NameObjRequestArchivesFunc;
+    if (extraRequestArchivesFunc !== null) {
+        requestArchivesFunc = function(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+            factory.requestArchives(sceneObjHolder, infoIter);
+            extraRequestArchivesFunc(sceneObjHolder, infoIter);
         };
-
-        if (extraRequestArchivesFunc !== null) {
-            requestArchivesFunc = function(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
-                factory.requestArchives(sceneObjHolder, infoIter);
-                extraRequestArchivesFunc(sceneObjHolder, infoIter);
-            };
-        } else {
-            requestArchivesFunc = factory.requestArchives;
-        }
+    } else {
+        requestArchivesFunc = factory.requestArchives;
     }
 
     return { objName, factoryFunc, requestArchivesFunc };
@@ -72,10 +73,12 @@ const ActorTable: ActorTableEntry[] = [
     _("TicoComet",                      TicoComet),
 
     // Coins
-    E("Coin",                           createCoin,           requestArchivesCoin),
-    E("PurpleCoin",                     createPurpleCoin,     requestArchivesPurpleCoin),
-    E("RailCoin",                       createRailCoin,       requestArchivesCoin),
-    E("PurpleRailCoin",                 createPurpleRailCoin, requestArchivesPurpleCoin),
+    E("Coin",                           createCoin,                  requestArchivesCoin),
+    E("PurpleCoin",                     createPurpleCoin,            requestArchivesPurpleCoin),
+    E("RailCoin",                       createRailCoin,              requestArchivesCoin),
+    E("PurpleRailCoin",                 createPurpleRailCoin,        requestArchivesPurpleCoin),
+    E("CircleCoinGroup",                createCircleCoinGroup,       requestArchivesCoin),
+    E("CirclePurpleCoinGroup",          createPurpleCircleCoinGroup, requestArchivesPurpleCoin),
 
     // Misc objects
     _("BlackHole",                      BlackHole),
@@ -188,7 +191,7 @@ const ActorTable: ActorTableEntry[] = [
     _("TeresaRaceSpaceStickB",          SimpleMapObj),
     _("TeresaRaceSpaceStickC",          SimpleMapObj),
     // We don't include this because we want to show the pristine map state...
-    _("PeachCastleTownAfterAttack",     null),
+    N("PeachCastleTownAfterAttack"),
     _("PeachCastleTownBeforeAttack",    SimpleMapObj, makeExtraRequestArchivesFunc(["PeachCastleTownBeforeAttackBloom"])),
     _("PeachCastleTownGate",            SimpleMapObj),
     _("CocoonStepA",                    SimpleMapObj),
@@ -375,7 +378,7 @@ const ActorTable: ActorTableEntry[] = [
     _("AstroParking",                   AstroMapObj),
     _("AstroLibrary",                   AstroMapObj),
     // AstroOverlookObj is a logic actor to show some UI when Mario enters a trigger volume...
-    _("AstroOverlookObj",               null),
+    N("AstroOverlookObj"),
     _("UFOKinokoUnderConstruction",     UFOKinokoUnderConstruction),
 
     _("SurpBeltConveyerExGalaxy",       SurprisedGalaxy),
@@ -414,36 +417,40 @@ const ActorTable: ActorTableEntry[] = [
     _("UFOKinokoLandingBlackSmoke",     EffectObjR500F50),
 
     // Invisible / Collision only.
-    _("InvisibleWall10x10",              null),
-    _("InvisibleWall10x20",              null),
-    _("InvisibleWallJump10x20",          null),
-    _("InvisibleWallGCapture10x20",      null),
-    _("InvisibleWaterfallTwinFallLake",  null),
-    _("GhostShipCavePipeCollision",      null),
+    N("InvisibleWall10x10"),
+    N("InvisibleWall10x20"),
+    N("InvisibleWallJump10x20"),
+    N("InvisibleWallGCapture10x20"),
+    N("InvisibleWaterfallTwinFallLake"),
+    N("GhostShipCavePipeCollision"),
+    N("CollisionBlocker"),
 
     // Logic objects
-    _("TimerSwitch",                     null),
-    _("ClipFieldSwitch",                 null),
-    _("SoundSyncSwitch",                 null),
-    _("ExterminationSwitch",             null),
-    _("ExterminationCheckerLuribo",      null),
-    _("SwitchSynchronizerReverse",       null),
-    _("PrologueDirector",                null),
-    _("MovieStarter",                    null),
-    _("ScenarioStarter",                 null),
-    _("LuigiEvent",                      null),
-    _("MameMuimuiScorer",                null),
-    _("MameMuimuiScorerLv2",             null),
-    _("ScoreAttackCounter",              null),
-    _("RepeartTimerSwitch",              null),
-    _("FlipPanelObserver",               null),
+    N("TimerSwitch"),
+    N("ClipFieldSwitch"),
+    N("SoundSyncSwitch"),
+    N("ExterminationSwitch"),
+    N("ExterminationCheckerLuribo"),
+    N("ExterminationKuriboKeySwitch"),
+    N("SwitchSynchronizerReverse"),
+    N("PrologueDirector"),
+    N("MovieStarter"),
+    N("ScenarioStarter"),
+    N("LuigiEvent"),
+    N("MameMuimuiScorer"),
+    N("MameMuimuiScorerLv2"),
+    N("ScoreAttackCounter"),
+    N("RepeartTimerSwitch"),
+    N("FlipPanelObserver"),
+    N("PurpleCoinStarter"),
+    N("RunawayRabbitCollect"),
 
     // Cutscenes
-    _("OpeningDemoObj",                  null),
-    _("NormalEndingDemoObj",             null),
-    _("MeetKoopaDemoObj",                null),
-    _("StarReturnDemoStarter",           null),
-    _("GrandStarReturnDemoStarter",      null),
+    N("OpeningDemoObj"),
+    N("NormalEndingDemoObj"),
+    N("MeetKoopaDemoObj"),
+    N("StarReturnDemoStarter"),
+    N("GrandStarReturnDemoStarter"),
 ];
 
 export function getActorTableEntry(objName: string, table: ActorTableEntry[] = ActorTable): ActorTableEntry | null {

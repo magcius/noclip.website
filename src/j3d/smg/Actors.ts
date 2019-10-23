@@ -18,7 +18,7 @@ import { BMDModelInstance, BTIData } from '../render';
 import { assertExists, leftPad } from '../../util';
 import { Camera } from '../../Camera';
 import { isGreaterStep, isFirstStep, calcNerveRate } from './Spine';
-import { LiveActor, startBck, startBtkIfExist, startBrkIfExist, startBvaIfExist, startBpkIfExist } from './LiveActor';
+import { LiveActor, startBck, startBtkIfExist, startBrkIfExist, startBvaIfExist, startBpkIfExist, makeMtxTRFromActor } from './LiveActor';
 import { MapPartsRotator } from './MapParts';
 import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceText } from '../../DebugJunk';
 
@@ -153,8 +153,8 @@ export function showModel(actor: LiveActor): void {
 }
 
 export function calcUpVec(v: vec3, actor: LiveActor): void {
-    const mtx = assertExists(actor.getBaseMtx());
-    vec3.set(v, mtx[4], mtx[5], mtx[6]);
+    const m = assertExists(actor.getBaseMtx());
+    vec3.set(v, m[4], m[5], m[6]);
 }
 
 export function getCamPos(v: vec3, camera: Camera): void {
@@ -1310,6 +1310,39 @@ export function createRailCoin(zoneAndLayer: ZoneAndLayer, sceneObjHolder: Scene
 
 export function createPurpleRailCoin(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): RailCoin {
     return new RailCoin(zoneAndLayer, sceneObjHolder, infoIter, true);
+}
+
+class CircleCoinGroup extends CoinGroup {
+    private radius: number;
+
+    protected initCoinArray(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        this.radius = assertExists(getJMapInfoArg2(infoIter));
+        this.initDefaultPos(sceneObjHolder, infoIter);
+    }
+
+    protected placementCoin(): void {
+        makeMtxTRFromActor(scratchMatrix, this);
+        vec3.set(scratchVec3a, scratchMatrix[0], scratchMatrix[1], scratchMatrix[2]);
+        vec3.set(scratchVec3b, scratchMatrix[8], scratchMatrix[9], scratchMatrix[10]);
+
+        const coinCount = this.coinArray.length;
+        for (let i = 0; i < coinCount; i++) {
+            const theta = (i / coinCount) * MathConstants.TAU;
+            vec3.set(scratchVec3, 0, 0, 0);
+            vec3.scaleAndAdd(scratchVec3, scratchVec3, scratchVec3a, this.radius * Math.cos(theta));
+            vec3.scaleAndAdd(scratchVec3, scratchVec3, scratchVec3b, this.radius * Math.sin(theta));
+            vec3.add(scratchVec3, scratchVec3, this.translation);
+            this.setCoinTrans(i, scratchVec3);
+        }
+    }
+}
+
+export function createCircleCoinGroup(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): CircleCoinGroup {
+    return new CircleCoinGroup(zoneAndLayer, sceneObjHolder, infoIter, false);
+}
+
+export function createPurpleCircleCoinGroup(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): CircleCoinGroup {
+    return new CircleCoinGroup(zoneAndLayer, sceneObjHolder, infoIter, true);
 }
 
 export class MiniRoutePoint extends LiveActor {

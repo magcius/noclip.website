@@ -209,6 +209,13 @@ function getJMapInfoRotate(dst: vec3, sceneObjHolder: SceneObjHolder, infoIter: 
     computeEulerAngleRotationFromSRTMatrix(dst, scratch);
 }
 
+export function makeMtxTRFromActor(dst: mat4, actor: LiveActor): void {
+    computeModelMatrixSRT(dst,
+        1, 1, 1,
+        actor.rotation[0], actor.rotation[1], actor.rotation[2],
+        actor.translation[0], actor.translation[1], actor.translation[2]);
+}
+
 export class LiveActor extends NameObj {
     public visibleScenario: boolean = true;
     public visibleAlive: boolean = true;
@@ -358,10 +365,7 @@ export class LiveActor extends NameObj {
     }
 
     public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
-        computeModelMatrixSRT(this.modelInstance!.modelMatrix,
-            1, 1, 1,
-            this.rotation[0], this.rotation[1], this.rotation[2],
-            this.translation[0], this.translation[1], this.translation[2]);
+        makeMtxTRFromActor(this.modelInstance!.modelMatrix, this);
     }
 
     protected getActorVisible(camera: Camera): boolean {
