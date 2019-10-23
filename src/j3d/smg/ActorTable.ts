@@ -4,7 +4,7 @@ import * as RARC from '../rarc';
 import { SceneObjHolder, ZoneAndLayer } from "./smg_scenes";
 import { JMapInfoIter, createCsvParser } from "./JMapInfo";
 import { LiveActor } from './LiveActor';
-import { Kinopio, TicoComet, EarthenPipe, StarPiece, CollapsePlane, BlackHole, Peach, PenguinRacer, Penguin, SimpleEffectObj, EffectObjR1000F50, GCaptureTarget, FountainBig, AstroEffectObj, AstroCountDownPlate, Butler, Rosetta, Tico, Sky, Air, ShootingStar, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObj10x10x10SyncClipping, AstroMapObj, EffectObjR100F50SyncClipping, PriorDrawAir, BlueChip, YellowChip, PeachCastleGardenPlanet, SimpleMapObj, CrystalCage, PlanetMap, HatchWaterPlanet, RotateMoveObj, LavaSteam, SignBoard, WoodBox, EffectObjR500F50, SurprisedGalaxy, SuperSpinDriverYellow, SuperSpinDriverGreen, SuperSpinDriverPink, AstroCore, TicoAstro, UFOKinokoUnderConstruction, KinopioAstro, createPurpleCoin, createCoin, createRailCoin, createPurpleRailCoin, requestArchivesCoin, requestArchivesPurpleCoin, createCircleCoinGroup, createPurpleCircleCoinGroup } from "./Actors";
+import { Kinopio, TicoComet, EarthenPipe, StarPiece, CollapsePlane, BlackHole, Peach, PenguinRacer, Penguin, SimpleEffectObj, EffectObjR1000F50, GCaptureTarget, FountainBig, AstroEffectObj, AstroCountDownPlate, Butler, Rosetta, Tico, Sky, Air, ShootingStar, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObj10x10x10SyncClipping, AstroMapObj, EffectObjR100F50SyncClipping, PriorDrawAir, BlueChip, YellowChip, PeachCastleGardenPlanet, SimpleMapObj, CrystalCage, PlanetMap, HatchWaterPlanet, RotateMoveObj, LavaSteam, SignBoard, WoodBox, EffectObjR500F50, SurprisedGalaxy, SuperSpinDriverYellow, SuperSpinDriverGreen, SuperSpinDriverPink, AstroCore, TicoAstro, UFOKinokoUnderConstruction, KinopioAstro, createPurpleCoin, createCoin, createRailCoin, createPurpleRailCoin, requestArchivesCoin, requestArchivesPurpleCoin, createCircleCoinGroup, createPurpleCircleCoinGroup, Fountain, PhantomTorch, RandomEffectObj } from "./Actors";
 import { OceanBowl } from "./OceanBowl";
 import { WarpPod } from './WarpPod';
 
@@ -90,17 +90,20 @@ const ActorTable: ActorTableEntry[] = [
     _("CrystalCageL",                   CrystalCage),
     _("EarthenPipe",                    EarthenPipe),
     _("EarthenPipeInWater",             EarthenPipe),
+    _("Fountain",                       Fountain),
     _("FountainBig",                    FountainBig),
     _("GCaptureTarget",                 GCaptureTarget),
     _("OceanBowl",                      OceanBowl),
+    _("PhantomBonfire",                 PhantomTorch),
+    _("PhantomTorch",                   PhantomTorch),
     _("ShootingStar",                   ShootingStar),
     _("StarPiece",                      StarPiece),
-    _("WarpPod",                        WarpPod),
-    _("WoodBox",                        WoodBox),
-    _("YellowChip",                     YellowChip),
     _("SuperSpinDriver",                SuperSpinDriverYellow),
     _("SuperSpinDriverGreen",           SuperSpinDriverGreen),
     _("SuperSpinDriverPink",            SuperSpinDriverPink),
+    _("WarpPod",                        WarpPod),
+    _("WoodBox",                        WoodBox),
+    _("YellowChip",                     YellowChip),
 
     // Sky/Air
     _("AstroDomeSky",                   Sky),
@@ -394,36 +397,47 @@ const ActorTable: ActorTableEntry[] = [
     _("SurpPeachCastleFinalGalaxy",     SurprisedGalaxy),
 
     // Effects
-    _("AstroTorchLightRed",             SimpleEffectObj),
     _("AstroTorchLightBlue",            SimpleEffectObj),
+    _("AstroTorchLightRed",             SimpleEffectObj),
+    _("BattleShipExplosionMetal",       EffectObjR500F50),
+    _("BattleShipExplosionRock",        EffectObjR500F50),
     _("BirdLouseS",                     EffectObj20x20x10SyncClipping),
     _("BirdLouseL",                     EffectObj50x50x10SyncClipping),
+    _("EffectTeresa",                   EffectObj50x50x10SyncClipping),
     _("EffectTicoS",                    AstroEffectObj),
     _("EffectTicoL",                    AstroEffectObj),
     _("FallGreenLeaf",                  EffectObj10x10x10SyncClipping),
     _("FallRedLeaf",                    EffectObj10x10x10SyncClipping),
+    _("FireworksA",                     RandomEffectObj),
     _("ForestWaterfallL",               EffectObjR1000F50),
     _("ForestWaterfallS",               EffectObjR1000F50),
     _("IcePlanetLight",                 EffectObjR100F50SyncClipping),
     _("IcicleRockLight",                EffectObjR100F50SyncClipping),
+    _("LavaSparksS",                    EffectObj20x20x10SyncClipping),
+    _("LavaSparksL",                    EffectObj50x50x10SyncClipping),
+    _("LavaSteam",                      LavaSteam),
     _("SandBreezeS",                    EffectObj10x10x10SyncClipping),
+    _("SandBreezeL",                    EffectObj50x50x10SyncClipping),
     _("SnowS",                          EffectObj10x10x10SyncClipping),
+    _("SpaceDustS",                     EffectObj20x20x10SyncClipping),
     _("SpaceDustL",                     EffectObj50x50x10SyncClipping),
     _("Steam",                          SimpleEffectObj),
     _("TwinFallLakeWaterFall",          EffectObjR1000F50),
+    _("WaterDropBottom",                EffectObjR1000F50),
+    _("WaterDropTop",                   EffectObjR1000F50),
     _("WaterfallL",                     EffectObjR1000F50),
     _("WaterfallS",                     EffectObj20x20x10SyncClipping),
-    _("LavaSteam",                      LavaSteam),
     _("UFOKinokoLandingBlackSmoke",     EffectObjR500F50),
 
     // Invisible / Collision only.
+    N("CollisionBlocker"),
+    N("GhostShipCavePipeCollision"),
     N("InvisibleWall10x10"),
     N("InvisibleWall10x20"),
     N("InvisibleWallJump10x20"),
     N("InvisibleWallGCapture10x20"),
     N("InvisibleWaterfallTwinFallLake"),
-    N("GhostShipCavePipeCollision"),
-    N("CollisionBlocker"),
+    N("PoleSquareNoModel"),
 
     // Logic objects
     N("TimerSwitch"),
@@ -451,6 +465,10 @@ const ActorTable: ActorTableEntry[] = [
     N("MeetKoopaDemoObj"),
     N("StarReturnDemoStarter"),
     N("GrandStarReturnDemoStarter"),
+
+    // Ugly actors, hide for now until we have a full impl.
+    N("ElectricRail"),
+    N("ElectricRailMoving"),
 ];
 
 export function getActorTableEntry(objName: string, table: ActorTableEntry[] = ActorTable): ActorTableEntry | null {

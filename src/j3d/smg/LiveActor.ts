@@ -41,7 +41,7 @@ class ActorAnimDataInfo {
 
     constructor(infoIter: JMapInfoIter, animType: string) {
         this.Name = assertExists(infoIter.getValueString(`${animType}Name`));
-        this.StartFrame = assertExists(infoIter.getValueNumber(`${animType}StartFrame`));
+        this.StartFrame = infoIter.getValueNumber(`${animType}StartFrame`, -1);
         this.IsKeepAnim = !!infoIter.getValueNumber(`${animType}IsKeepAnim`);
     }
 }

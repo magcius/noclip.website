@@ -976,7 +976,7 @@ export class Kinopio extends NPCActor {
 
         this.boundingSphereRadius = 100;
 
-        const itemGoodsIdx = assertExists(getJMapInfoArg7(infoIter));
+        const itemGoodsIdx = getJMapInfoArg7(infoIter, -1);
         const itemGoods = sceneObjHolder.npcDirector.getNPCItemData('Kinopio', itemGoodsIdx);
         this.equipment(sceneObjHolder, itemGoods);
 
@@ -1021,7 +1021,7 @@ export class Kinopio extends NPCActor {
         bindColorChangeAnimation(this.modelInstance!, this.arc, getJMapInfoArg1(infoIter, 0));
 
         // If we have an SW_APPEAR, then hide us until that switch triggers...
-        if (infoIter.getValueNumber('SW_APPEAR') !== -1)
+        if (infoIter.getValueNumber('SW_APPEAR', -1) !== -1)
             this.makeActorDead();
     }
 
@@ -1169,7 +1169,7 @@ class Coin extends LiveActor {
         connectToSceneItemStrongLight(sceneObjHolder, this);
         this.initLightCtrl(sceneObjHolder);
 
-        const isNeedBubble = getJMapInfoArg7(infoIter);
+        const isNeedBubble = getJMapInfoArg7(infoIter, -1);
         if (isNeedBubble !== -1) {
             this.airBubble = createPartsModelNoSilhouettedMapObj(sceneObjHolder, this, "AirBubble", vec3.fromValues(0, 70, 0));
             this.airBubble.tryStartAllAnim("Move");
@@ -1202,14 +1202,14 @@ export function createPurpleCoin(zoneAndLayer: ZoneAndLayer, sceneObjHolder: Sce
 
 export function requestArchivesCoin(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
     sceneObjHolder.modelCache.requestObjectData('Coin');
-    const isNeedBubble = getJMapInfoArg7(infoIter);
+    const isNeedBubble = getJMapInfoArg7(infoIter, -1);
     if (isNeedBubble !== -1)
         sceneObjHolder.modelCache.requestObjectData('AirBubble');
 }
 
 export function requestArchivesPurpleCoin(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
     sceneObjHolder.modelCache.requestObjectData('PurpleCoin');
-    const isNeedBubble = getJMapInfoArg7(infoIter);
+    const isNeedBubble = getJMapInfoArg7(infoIter, -1);
     if (isNeedBubble !== -1)
         sceneObjHolder.modelCache.requestObjectData('AirBubble');
 }
@@ -1568,6 +1568,38 @@ export class EffectObj50x50x10SyncClipping extends SimpleEffectObj {
     }
 }
 
+export class RandomEffectObj extends SimpleEffectObj {
+    private counter: number = -1;
+    private randBase: number;
+    private randRange: number;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, infoIter);
+
+        this.randBase = getJMapInfoArg0(infoIter, 600);
+        this.randRange = getJMapInfoArg1(infoIter, 180);
+
+        this.initNerve(0);
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.movement(sceneObjHolder, viewerInput);
+
+        if (this.counter === -1)
+            this.counter = this.randBase + (Math.random() * this.randRange * 2 - this.randRange);
+
+        if (this.getNerveStep() >= this.counter) {
+            emitEffect(sceneObjHolder, this, this.name);
+            this.counter = -1;
+            this.spine!.setNerve(0);
+        }
+    }
+
+    protected getClippingRadius(): number {
+        return 400;
+    }
+}
+
 export class GCaptureTarget extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, getObjectName(infoIter));
@@ -1670,6 +1702,34 @@ export class FountainBig extends LiveActor {
     }
 }
 
+export class Fountain extends LiveActor {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, getObjectName(infoIter));
+        this.initDefaultPos(sceneObjHolder, infoIter);
+        connectToSceneMapObjMovement(sceneObjHolder, this);
+        this.initEffectKeeper(sceneObjHolder, getObjectName(infoIter));
+        emitEffect(sceneObjHolder, this, getObjectName(infoIter));
+    }
+
+    public static requestArchives(): void {
+        // Do nothing; no archive for this object.
+    }
+}
+
+export class PhantomTorch extends LiveActor {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, getObjectName(infoIter));
+        this.initDefaultPos(sceneObjHolder, infoIter);
+        connectToSceneMapObjMovement(sceneObjHolder, this);
+        this.initEffectKeeper(sceneObjHolder, getObjectName(infoIter));
+        emitEffect(sceneObjHolder, this, getObjectName(infoIter));
+    }
+
+    public static requestArchives(): void {
+        // Do nothing; no archive for this object.
+    }
+}
+
 export class AstroEffectObj extends SimpleEffectObj {
     // The game will check whether the user has the correct dome enabled,
     // but it is otherwise identical to SimpleEffectObj.
@@ -1748,9 +1808,8 @@ export class Tico extends NPCActor {
         this.initEffectKeeper(sceneObjHolder, null);
 
         const color = getJMapInfoArg0(infoIter, -1);
-        if (color !== -1) {
+        if (color !== -1)
             bindColorChangeAnimation(this.modelInstance!, this.arc, color);
-        }
 
         this.startAction('Wait');
         this.modelInstance!.animationController.phaseFrames += Math.random() * 1000;
@@ -1917,7 +1976,7 @@ export class AstroMapObj extends MapObjActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         const initInfo = new MapObjActorInitInfo();
         const objectName = getObjectName(infoIter);
-        const domeId = assertExists(getJMapInfoArg0(infoIter));
+        const domeId = getJMapInfoArg0(infoIter, -1);
         initInfo.setupModelName(AstroMapObj.getModelName(objectName, domeId));
         initInfo.setupConnectToScene();
         initInfo.setupEffect(objectName);
@@ -1952,7 +2011,7 @@ export class AstroMapObj extends MapObjActor {
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         const objectName = getObjectName(infoIter);
-        const domeId = assertExists(getJMapInfoArg0(infoIter));
+        const domeId = getJMapInfoArg0(infoIter, -1);
         sceneObjHolder.modelCache.requestObjectData(AstroMapObj.getModelName(objectName, domeId));
     }
 
@@ -2023,7 +2082,7 @@ class ChipBase extends LiveActor {
         this.initEffectKeeper(sceneObjHolder, null);
         this.tryStartAllAnim('Wait');
 
-        const isNeedBubble = getJMapInfoArg3(infoIter);
+        const isNeedBubble = getJMapInfoArg3(infoIter, -1);
         if (isNeedBubble !== -1) {
             this.airBubble = createPartsModelNoSilhouettedMapObj(sceneObjHolder, this, "AirBubble");
             this.airBubble.tryStartAllAnim("Move");
@@ -2032,7 +2091,7 @@ class ChipBase extends LiveActor {
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         super.requestArchives(sceneObjHolder, infoIter);
-        const isNeedBubble = getJMapInfoArg3(infoIter);
+        const isNeedBubble = getJMapInfoArg3(infoIter, -1);
         if (isNeedBubble !== -1)
             sceneObjHolder.modelCache.requestObjectData("AirBubble");
     }

@@ -6,35 +6,83 @@ import ArrayBufferSlice from '../../ArrayBufferSlice';
 
 export function getJMapInfoArg0(infoIter: JMapInfoIter, fallback: number) : number;
 export function getJMapInfoArg0(infoIter: JMapInfoIter) : number | null;
-export function getJMapInfoArg0(infoIter: JMapInfoIter, fallback: number | null = null): number | null { return infoIter.getValueNumber('Obj_arg0', fallback!); }
+export function getJMapInfoArg0(infoIter: JMapInfoIter, fallback: number | null = null): number | null {
+    const v = infoIter.getValueNumber('Obj_arg0', fallback!);
+    if (v === -1)
+        return fallback;
+    else
+        return v;
+}
 
 export function getJMapInfoArg1(infoIter: JMapInfoIter, fallback: number) : number;
 export function getJMapInfoArg1(infoIter: JMapInfoIter) : number | null;
-export function getJMapInfoArg1(infoIter: JMapInfoIter, fallback: number | null = null): number | null { return infoIter.getValueNumber('Obj_arg1', fallback!); }
+export function getJMapInfoArg1(infoIter: JMapInfoIter, fallback: number | null = null): number | null {
+    const v = infoIter.getValueNumber('Obj_arg1', fallback!);
+    if (v === -1)
+        return fallback;
+    else
+        return v;
+}
 
 export function getJMapInfoArg2(infoIter: JMapInfoIter, fallback: number) : number;
 export function getJMapInfoArg2(infoIter: JMapInfoIter) : number | null;
-export function getJMapInfoArg2(infoIter: JMapInfoIter, fallback: number | null = null): number | null { return infoIter.getValueNumber('Obj_arg2', fallback!); }
+export function getJMapInfoArg2(infoIter: JMapInfoIter, fallback: number | null = null): number | null {
+    const v = infoIter.getValueNumber('Obj_arg2', fallback!);
+    if (v === -1)
+        return fallback;
+    else
+        return v;
+}
 
 export function getJMapInfoArg3(infoIter: JMapInfoIter, fallback: number) : number;
 export function getJMapInfoArg3(infoIter: JMapInfoIter) : number | null;
-export function getJMapInfoArg3(infoIter: JMapInfoIter, fallback: number | null = null): number | null { return infoIter.getValueNumber('Obj_arg3', fallback!); }
+export function getJMapInfoArg3(infoIter: JMapInfoIter, fallback: number | null = null): number | null {
+    const v = infoIter.getValueNumber('Obj_arg3', fallback!);
+    if (v === -1)
+        return fallback;
+    else
+        return v;
+}
 
 export function getJMapInfoArg4(infoIter: JMapInfoIter, fallback: number) : number;
 export function getJMapInfoArg4(infoIter: JMapInfoIter) : number | null;
-export function getJMapInfoArg4(infoIter: JMapInfoIter, fallback: number | null = null): number | null { return infoIter.getValueNumber('Obj_arg4', fallback!); }
+export function getJMapInfoArg4(infoIter: JMapInfoIter, fallback: number | null = null): number | null {
+    const v = infoIter.getValueNumber('Obj_arg4', fallback!);
+    if (v === -1)
+        return fallback;
+    else
+        return v;
+}
 
 export function getJMapInfoArg5(infoIter: JMapInfoIter, fallback: number) : number;
 export function getJMapInfoArg5(infoIter: JMapInfoIter) : number | null;
-export function getJMapInfoArg5(infoIter: JMapInfoIter, fallback: number | null = null): number | null { return infoIter.getValueNumber('Obj_arg5', fallback!); }
+export function getJMapInfoArg5(infoIter: JMapInfoIter, fallback: number | null = null): number | null {
+    const v = infoIter.getValueNumber('Obj_arg5', fallback!);
+    if (v === -1)
+        return fallback;
+    else
+        return v;
+}
 
 export function getJMapInfoArg6(infoIter: JMapInfoIter, fallback: number) : number;
 export function getJMapInfoArg6(infoIter: JMapInfoIter) : number | null;
-export function getJMapInfoArg6(infoIter: JMapInfoIter, fallback: number | null = null): number | null { return infoIter.getValueNumber('Obj_arg6', fallback!); }
+export function getJMapInfoArg6(infoIter: JMapInfoIter, fallback: number | null = null): number | null {
+    const v = infoIter.getValueNumber('Obj_arg6', fallback!);
+    if (v === -1)
+        return fallback;
+    else
+        return v;
+}
 
 export function getJMapInfoArg7(infoIter: JMapInfoIter, fallback: number) : number;
 export function getJMapInfoArg7(infoIter: JMapInfoIter) : number | null;
-export function getJMapInfoArg7(infoIter: JMapInfoIter, fallback: number | null = null): number | null { return infoIter.getValueNumber('Obj_arg7', fallback!); }
+export function getJMapInfoArg7(infoIter: JMapInfoIter, fallback: number | null = null): number | null {
+    const v = infoIter.getValueNumber('Obj_arg7', fallback!);
+    if (v === -1)
+        return fallback;
+    else
+        return v;
+}
 
 export function getJMapInfoTransLocal(dst: vec3, infoIter: JMapInfoIter): void {
     dst[0] = infoIter.getValueNumber('pos_x', 0);
@@ -104,6 +152,10 @@ export class JMapInfoIter {
     public getValueNumber(name: string, fallback: number): number;
     public getValueNumber(name: string, fallback: number | null = null): number | null {
         return BCSV.getField<number>(this.bcsv, this.record, name, fallback!);
+    }
+
+    public getValueBoolean(name: string): boolean {
+        return BCSV.getField<number>(this.bcsv, this.record, name, -1) !== -1;
     }
 }
 

@@ -78,7 +78,7 @@ export class MapPartsRotator extends NameObj {
         this.signMotionType = getMapPartsArgSignMotionType(infoIter);
 
         if (this.rotateAccelType === AccelType.TIMED) {
-            const rotateTime = assertExists(infoIter.getValueNumber('RotateTime'));
+            const rotateTime = assertExists(infoIter.getValueNumber('RotateSpeed'));
             this.rotateSpeed = this.rotateAngle / rotateTime;
         } else {
             this.rotateSpeed = assertExists(infoIter.getValueNumber('RotateSpeed')) * 0.01;

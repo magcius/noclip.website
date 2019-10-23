@@ -1133,7 +1133,7 @@ class SMGSpawner {
         return null;
     }
 
-    public spawnObjectLegacy(zoneAndLayer: ZoneAndLayer, infoIter: JMapInfoIter, objinfo: ObjInfo): void {
+    public async spawnObjectLegacy(zoneAndLayer: ZoneAndLayer, infoIter: JMapInfoIter, objinfo: ObjInfo): Promise<void> {
         const modelCache = this.sceneObjHolder.modelCache;
 
         const applyAnimations = (actor: LiveActor, animOptions: AnimOptions | null | undefined) => {
@@ -1205,10 +1205,6 @@ class SMGSpawner {
 
         const name = objinfo.objName;
         switch (name) {
-        case 'ElectricRail':
-            // Covers the path with the rail -- will require special spawn logic.
-            return;
-
         case 'MeteorCannon':
         case 'Plant':
         case 'WaterPlant':
@@ -1255,7 +1251,6 @@ class SMGSpawner {
         case 'CoinLinkGroup':
         case 'CollectTico':
         case 'BrightSun':
-        case 'LavaSparksS':
         case 'InstantInferno':
         case 'FireRing':
         case 'FireBar':
@@ -1274,11 +1269,9 @@ class SMGSpawner {
         case 'RaceRail':
         case 'GliBirdNpc':
         case 'SecretGateCounter':
-        case 'PhantomTorch':
         case 'HammerHeadPackun':
         case 'Hanachan':
         case 'MarinePlant':
-        case 'ForestWaterfallS':
         case 'Nyoropon':
         case 'WaterStream':
         case 'BallRail':
@@ -1313,7 +1306,6 @@ class SMGSpawner {
         case 'LavaProminence':
         case 'LavaProminenceEnvironment':
         case 'LavaProminenceTriple':
-        case 'PeachCastleTownBeforeAttack':
             spawnGraph(name, SceneGraphTag.Normal);
             spawnGraph(`${name}Bloom`, SceneGraphTag.Bloom);
             break;
@@ -1330,13 +1322,6 @@ class SMGSpawner {
         case 'TicoShop':
             spawnGraph(`TicoShop`).then(([node, rarc]) => {
                 startBvaIfExist(node.modelInstance!, rarc, 'Small0');
-            });
-            break;
-
-        case 'SweetsDecoratePartsFork':
-        case 'SweetsDecoratePartsSpoon':
-            spawnGraph(name, SceneGraphTag.Normal, null).then(([node, rarc]) => {
-                bindChangeAnimation(node, rarc, objinfo.objArg1);
             });
             break;
 
@@ -1538,9 +1523,12 @@ class SMGSpawner {
             spawnGraph(name).then(([node, rarc]) => {
                 emitEffect(this.sceneObjHolder, node, 'Fire');
             });
-        default:
-            spawnGraphNullable(name);
+        default: {
+            const node = await spawnGraphNullable(name);
+            if (node === null)
+                console.warn(`Unable to spawn ${name}`, zoneAndLayer, infoIter);
             break;
+        }
         }
     }
 
@@ -1808,8 +1796,6 @@ class StageDataHolder {
             const name = assertExists(BCSV.getField<string>(commonPathInfo, record, 'name'));
             const type = assertExists(BCSV.getField<string>(commonPathInfo, record, 'type'));
             const closed = BCSV.getField<string>(commonPathInfo, record, 'closed', 'OPEN');
-            const path_arg0 = assertExists(BCSV.getField<string>(commonPathInfo, record, 'path_arg0'));
-            const path_arg1 = assertExists(BCSV.getField<string>(commonPathInfo, record, 'path_arg1'));
             const pointinfo = BCSV.parse(RARC.findFileDataInDir(pathDir, `commonpathpointinfo.${i}`)!);
             const points = pointinfo.records.map((record, i) => {
                 const id = BCSV.getField<number>(pointinfo, record, 'id');

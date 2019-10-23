@@ -213,8 +213,8 @@ export function setupMultiEmitter(m: MultiEmitter, autoEffectIter: JMapInfoIter)
     const animName = assertExists(autoEffectIter.getValueString('AnimName'));
     if (animName !== '') {
         m.animNames = animName.toLowerCase().split(' ');
-        m.startFrame = assertExists(autoEffectIter.getValueNumber('StartFrame'));
-        m.endFrame = assertExists(autoEffectIter.getValueNumber('EndFrame'));
+        m.startFrame = autoEffectIter.getValueNumber('StartFrame', 0);
+        m.endFrame = autoEffectIter.getValueNumber('EndFrame', -1);
     } else {
         m.animNames = [];
         m.startFrame = 0;

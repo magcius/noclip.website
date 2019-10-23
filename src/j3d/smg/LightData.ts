@@ -81,7 +81,7 @@ export class ActorLightInfo {
 
 export class AreaLightInfo {
     public AreaLightName: string;
-    public Interpolate: number;
+    public Interpolate: boolean;
     public Player: ActorLightInfo;
     public Strong: ActorLightInfo;
     public Weak: ActorLightInfo;
@@ -89,7 +89,7 @@ export class AreaLightInfo {
 
     constructor(infoIter: JMapInfoIter) {
         this.AreaLightName = assertExists(infoIter.getValueString('AreaLightName'));
-        this.Interpolate = assertExists(infoIter.getValueNumber('Interpolate'));
+        this.Interpolate = infoIter.getValueBoolean('Interpolate');
         this.Player = new ActorLightInfo(infoIter, 'Player');
         this.Strong = new ActorLightInfo(infoIter, 'Strong');
         this.Weak = new ActorLightInfo(infoIter, 'Weak');
@@ -152,7 +152,7 @@ class LightZoneInfo {
     constructor(public zoneId: number, public zoneName: string, infoIter: JMapInfoIter) {
         for (let i = 0; i < infoIter.getNumRecords(); i++) {
             infoIter.setRecord(i);
-            const lightID = assertExists(infoIter.getValueNumber('LightID'));
+            const lightID = infoIter.getValueNumber('LightID', -1);
             const areaLightName = assertExists(infoIter.getValueString('AreaLightName'));
             this.lightIDToAreaLightName.set(lightID, areaLightName);
         }
