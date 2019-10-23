@@ -1,20 +1,59 @@
 
 import * as RARC from '../rarc';
 
-import { NameObjFactory, SceneObjHolder } from "./smg_scenes";
-import { Kinopio, TicoComet, EarthenPipe, StarPiece, CollapsePlane, BlackHole, Peach, PenguinRacer, Coin, Penguin, SimpleEffectObj, EffectObjR1000F50, GCaptureTarget, FountainBig, AstroEffectObj, AstroCountDownPlate, Butler, Rosetta, Tico, Sky, Air, ShootingStar, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObj10x10x10SyncClipping, AstroMapObj, EffectObjR100F50SyncClipping, PriorDrawAir, BlueChip, YellowChip, PeachCastleGardenPlanet, SimpleMapObj, CrystalCage, PlanetMap, HatchWaterPlanet, RotateMoveObj, LavaSteam, SignBoard, WoodBox, EffectObjR500F50, SurprisedGalaxy, SuperSpinDriverYellow, SuperSpinDriverGreen, SuperSpinDriverPink, AstroCore, TicoAstro, UFOKinokoUnderConstruction, KinopioAstro } from "./Actors";
-import { OceanBowl } from "./OceanBowl";
+import { SceneObjHolder, ZoneAndLayer } from "./smg_scenes";
 import { JMapInfoIter, createCsvParser } from "./JMapInfo";
+import { LiveActor } from './LiveActor';
+import { Kinopio, TicoComet, EarthenPipe, StarPiece, CollapsePlane, BlackHole, Peach, PenguinRacer, Penguin, SimpleEffectObj, EffectObjR1000F50, GCaptureTarget, FountainBig, AstroEffectObj, AstroCountDownPlate, Butler, Rosetta, Tico, Sky, Air, ShootingStar, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObj10x10x10SyncClipping, AstroMapObj, EffectObjR100F50SyncClipping, PriorDrawAir, BlueChip, YellowChip, PeachCastleGardenPlanet, SimpleMapObj, CrystalCage, PlanetMap, HatchWaterPlanet, RotateMoveObj, LavaSteam, SignBoard, WoodBox, EffectObjR500F50, SurprisedGalaxy, SuperSpinDriverYellow, SuperSpinDriverGreen, SuperSpinDriverPink, AstroCore, TicoAstro, UFOKinokoUnderConstruction, KinopioAstro, createPurpleCoin, createCoin, createRailCoin, createPurpleRailCoin, requestArchivesCoin, requestArchivesPurpleCoin } from "./Actors";
+import { OceanBowl } from "./OceanBowl";
 import { WarpPod } from './WarpPod';
 
-interface ActorTableEntry {
-    objName: string;
-    factory: NameObjFactory | null;
-    extraObjectDataArchiveNames: string[];
+export interface NameObjFactory {
+    new(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): LiveActor;
+    requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void;
 }
 
-function _(objName: string, factory: NameObjFactory | null, extraObjectDataArchiveNames: string[] = []): ActorTableEntry {
-    return { objName, factory, extraObjectDataArchiveNames };
+export type NameObjFactoryFunc = (zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) => LiveActor;
+export type NameObjRequestArchivesFunc = (sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) => void;
+
+export interface ActorTableEntry {
+    objName: string;
+    factoryFunc: NameObjFactoryFunc | null;
+    requestArchivesFunc: NameObjRequestArchivesFunc | null;
+}
+
+function makeExtraRequestArchivesFunc(extraArchives: string[]): NameObjRequestArchivesFunc {
+    return function (sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        for (let i = 0; i < extraArchives.length; i++)
+            sceneObjHolder.modelCache.requestObjectData(extraArchives[i]);
+    };
+}
+
+function E(objName: string, factoryFunc: NameObjFactoryFunc, requestArchivesFunc: NameObjRequestArchivesFunc): ActorTableEntry {
+    return { objName, factoryFunc, requestArchivesFunc };
+}
+
+function _(objName: string, factory: NameObjFactory | null, extraRequestArchivesFunc: NameObjRequestArchivesFunc | null = null): ActorTableEntry {
+    let factoryFunc: NameObjFactoryFunc | null = null;
+    let requestArchivesFunc: NameObjRequestArchivesFunc | null = null;
+
+    if (factory !== null) {
+        // TODO(jstpierre): Is there a better way to construct dynamically like this? I swear there is.
+        factoryFunc = function(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): LiveActor {
+            return new factory(zoneAndLayer, sceneObjHolder, infoIter);
+        };
+
+        if (extraRequestArchivesFunc !== null) {
+            requestArchivesFunc = function(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+                factory.requestArchives(sceneObjHolder, infoIter);
+                extraRequestArchivesFunc(sceneObjHolder, infoIter);
+            };
+        } else {
+            requestArchivesFunc = factory.requestArchives;
+        }
+    }
+
+    return { objName, factoryFunc, requestArchivesFunc };
 }
 
 const ActorTable: ActorTableEntry[] = [
@@ -32,12 +71,16 @@ const ActorTable: ActorTableEntry[] = [
     _("TicoAstro",                      TicoAstro),
     _("TicoComet",                      TicoComet),
 
+    // Coins
+    E("Coin",                           createCoin,           requestArchivesCoin),
+    E("PurpleCoin",                     createPurpleCoin,     requestArchivesPurpleCoin),
+    E("RailCoin",                       createRailCoin,       requestArchivesCoin),
+    E("PurpleRailCoin",                 createPurpleRailCoin, requestArchivesPurpleCoin),
+
     // Misc objects
     _("BlackHole",                      BlackHole),
     _("BlackHoleCube",                  BlackHole),
     _("BlueChip",                       BlueChip),
-    _("Coin",                           Coin),
-    _("PurpleCoin",                     Coin),
     _("CollapsePlane",                  CollapsePlane),
     _("CrystalCageS",                   CrystalCage),
     _("CrystalCageM",                   CrystalCage),
@@ -146,7 +189,7 @@ const ActorTable: ActorTableEntry[] = [
     _("TeresaRaceSpaceStickC",          SimpleMapObj),
     // We don't include this because we want to show the pristine map state...
     _("PeachCastleTownAfterAttack",     null),
-    _("PeachCastleTownBeforeAttack",    SimpleMapObj, ["PeachCastleTownBeforeAttackBloom"]),
+    _("PeachCastleTownBeforeAttack",    SimpleMapObj, makeExtraRequestArchivesFunc(["PeachCastleTownBeforeAttackBloom"])),
     _("PeachCastleTownGate",            SimpleMapObj),
     _("CocoonStepA",                    SimpleMapObj),
     _("CocoonStepB",                    SimpleMapObj),
@@ -403,7 +446,7 @@ const ActorTable: ActorTableEntry[] = [
     _("GrandStarReturnDemoStarter",      null),
 ];
 
-export function getNameObjTableEntry(objName: string, table: ActorTableEntry[] = ActorTable): ActorTableEntry | null {
+export function getActorTableEntry(objName: string, table: ActorTableEntry[] = ActorTable): ActorTableEntry | null {
     const entry = table.find((entry) => entry.objName === objName);
     if (entry !== undefined)
         return entry;
@@ -417,6 +460,8 @@ const SpecialPlanetTable: ActorTableEntry[] = [
     _("FlagDiscPlanetD",               RotateMoveObj),
     _("StarDustStartPlanet",           RotateMoveObj),
 ];
+
+const genericPlanetMapEntry: ActorTableEntry = _("PlanetMap", PlanetMap);
 
 export class PlanetMapCreator {
     public planetMapDataTable: JMapInfoIter;
@@ -439,13 +484,13 @@ export class PlanetMapCreator {
         return this.setPlanetRecordFromName(objName);
     }
 
-    public getNameObjFactory(objName: string): NameObjFactory | null {
-        const specialPlanetEntry = getNameObjTableEntry(objName, SpecialPlanetTable);
+    public getActorTableEntry(objName: string): ActorTableEntry | null {
+        const specialPlanetEntry = getActorTableEntry(objName, SpecialPlanetTable);
         if (specialPlanetEntry !== null)
-            return specialPlanetEntry.factory;
+            return specialPlanetEntry;
 
         if (this.isRegisteredObj(objName))
-            return PlanetMap;
+            return genericPlanetMapEntry;
 
         return null;
     }

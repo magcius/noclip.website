@@ -7,7 +7,7 @@ import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMa
 import { mat4, vec3 } from 'gl-matrix';
 import AnimationController from '../../AnimationController';
 import { MathConstants, computeModelMatrixSRT, clamp, lerp } from '../../MathHelpers';
-import { colorNewFromRGBA8, Color } from '../../Color';
+import { colorNewFromRGBA8, Color, Magenta, colorLerp, colorNewCopy, Yellow } from '../../Color';
 import { ColorKind } from '../../gx/gx_render';
 import { BTK, BRK, LoopMode, BTP } from '../j3d';
 import { BTI } from "../j3d";
@@ -20,6 +20,7 @@ import { Camera } from '../../Camera';
 import { isGreaterStep, isFirstStep, calcNerveRate } from './Spine';
 import { LiveActor, startBck, startBtkIfExist, startBrkIfExist, startBvaIfExist, startBpkIfExist } from './LiveActor';
 import { MapPartsRotator } from './MapParts';
+import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceText } from '../../DebugJunk';
 
 export function connectToScene(sceneObjHolder: SceneObjHolder, actor: LiveActor, movementType: MovementType, calcAnimType: CalcAnimType, drawBufferType: DrawBufferType, drawType: DrawType): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, movementType, calcAnimType, drawBufferType, drawType);
@@ -179,6 +180,53 @@ export function calcSqDistanceToPlayer(actor: LiveActor, camera: Camera, scratch
 export function calcDistanceToPlayer(actor: LiveActor, camera: Camera, scratch: vec3 = scratchVec3): number {
     getCamPos(scratch, camera);
     return vec3.distance(actor.translation, scratch);
+}
+
+export function getRailTotalLength(actor: LiveActor): number {
+    return actor.railRider!.getTotalLength();
+}
+
+export function isLoopRail(actor: LiveActor): boolean {
+    return actor.railRider!.isLoop();
+}
+
+export function moveCoordToStartPos(actor: LiveActor): void {
+    actor.railRider!.setCoord(0);
+}
+
+export function setRailCoordSpeed(actor: LiveActor, v: number): void {
+    actor.railRider!.setSpeed(Math.abs(v));
+}
+
+export function moveCoordAndTransToNearestRailPos(actor: LiveActor): void {
+    actor.railRider!.moveToNearestPos(scratchVec3);
+    vec3.copy(actor.translation, scratchVec3);
+}
+
+export function moveCoordAndTransToNearestRailPoint(actor: LiveActor): void {
+    actor.railRider!.moveToNearestPoint(scratchVec3);
+    vec3.copy(actor.translation, scratchVec3);
+}
+
+export function moveCoordAndTransToRailStartPoint(actor: LiveActor): void {
+    actor.railRider!.setCoord(0);
+    vec3.copy(actor.translation, actor.railRider!.currentPos);
+}
+
+export function getRailCoord(actor: LiveActor): number {
+    return actor.railRider!.coord;
+}
+
+export function getRailPos(v: vec3, actor: LiveActor): void {
+    vec3.copy(v, actor.railRider!.currentPos);
+}
+
+export function setRailCoord(actor: LiveActor, coord: number): void {
+    actor.railRider!.setCoord(coord);
+}
+
+export function moveRailRider(actor: LiveActor): void {
+    actor.railRider!.move();
 }
 
 export function scaleMatrixScalar(m: mat4, s: number): void {
@@ -1110,14 +1158,14 @@ export class TicoComet extends NPCActor {
 }
 
 const scratchMatrix = mat4.create();
-export class Coin extends LiveActor {
+class Coin extends LiveActor {
     private airBubble: PartsModel | null = null;
 
-    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, protected isPurpleCoin: boolean) {
         super(zoneAndLayer, getObjectName(infoIter));
 
         this.initDefaultPos(sceneObjHolder, infoIter);
-        this.initModelManagerWithAnm(sceneObjHolder, getObjectName(infoIter));
+        this.initModelManagerWithAnm(sceneObjHolder, this.isPurpleCoin ? 'PurpleCoin' : 'Coin');
         connectToSceneItemStrongLight(sceneObjHolder, this);
         this.initLightCtrl(sceneObjHolder);
 
@@ -1142,13 +1190,126 @@ export class Coin extends LiveActor {
         super.calcAndSetBaseMtx(viewerInput);
         mat4.mul(this.modelInstance!.modelMatrix, this.modelInstance!.modelMatrix, scratchMatrix);
     }
+}
 
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
-        super.requestArchives(sceneObjHolder, infoIter);
-        const isNeedBubble = getJMapInfoArg7(infoIter);
-        if (isNeedBubble !== -1)
-            sceneObjHolder.modelCache.requestObjectData("AirBubble");
+export function createCoin(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): Coin {
+    return new Coin(zoneAndLayer, sceneObjHolder, infoIter, false);
+}
+
+export function createPurpleCoin(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): Coin {
+    return new Coin(zoneAndLayer, sceneObjHolder, infoIter, true);
+}
+
+export function requestArchivesCoin(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    sceneObjHolder.modelCache.requestObjectData('Coin');
+    const isNeedBubble = getJMapInfoArg7(infoIter);
+    if (isNeedBubble !== -1)
+        sceneObjHolder.modelCache.requestObjectData('AirBubble');
+}
+
+export function requestArchivesPurpleCoin(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    sceneObjHolder.modelCache.requestObjectData('PurpleCoin');
+    const isNeedBubble = getJMapInfoArg7(infoIter);
+    if (isNeedBubble !== -1)
+        sceneObjHolder.modelCache.requestObjectData('AirBubble');
+}
+
+abstract class CoinGroup extends LiveActor {
+    protected coinArray: Coin[] = [];
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, protected isPurpleCoin: boolean) {
+        super(zoneAndLayer, getObjectName(infoIter));
+
+        const coinCount = assertExists(getJMapInfoArg0(infoIter));
+
+        for (let i = 0; i < coinCount; i++) {
+            if (this.isPurpleCoin) {
+                this.coinArray.push(createPurpleCoin(zoneAndLayer, sceneObjHolder, infoIter));
+            } else {
+                this.coinArray.push(createCoin(zoneAndLayer, sceneObjHolder, infoIter));
+            }
+
+            const coin = this.coinArray[i];
+            // Coin has been default init'd at this point. Set some extra properties on it.
+            vec3.set(coin.scale, 1, 1, 1);
+        }
+
+        this.initCoinArray(sceneObjHolder, infoIter);
+        this.placementCoin();
+
+        connectToSceneMapObjMovement(sceneObjHolder, this);
+        this.makeActorDead();
     }
+
+    protected abstract initCoinArray(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void;
+    protected abstract placementCoin(): void;
+
+    protected setCoinTrans(i: number, trans: vec3): void {
+        vec3.copy(this.coinArray[i].translation, trans);
+    }
+}
+
+class RailCoin extends CoinGroup {
+    protected initCoinArray(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        this.initDefaultPos(sceneObjHolder, infoIter);
+        this.initRailRider(sceneObjHolder, infoIter);
+    }
+
+    protected placementCoin(): void {
+        // TODO(jstpierre): MercatorRail
+        this.placementNormalRail();
+    }
+
+    protected placementNormalRail(): void {
+        const coinCount = this.coinArray.length;
+
+        const totalLength = getRailTotalLength(this);
+
+        let speed: number;
+        if (coinCount < 2) {
+            speed = 0;
+        } else {
+            if (isLoopRail(this))
+                speed = totalLength / coinCount;
+            else
+                speed = totalLength / (coinCount - 1);
+        }
+
+        moveCoordToStartPos(this);
+        setRailCoordSpeed(this, speed);
+
+        for (let i = 0; i < coinCount; i++) {
+            getRailPos(scratchVec3, this);
+            this.setCoinTrans(i, scratchVec3);
+            moveRailRider(this);
+        }
+    }
+
+    // Rail debugging code...
+    /*
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        const ctx = getDebugOverlayCanvas2D();
+
+        const totalLength = getRailTotalLength(this);
+
+        moveCoordToStartPos(this);
+        setRailCoordSpeed(this, totalLength/50);
+        for (let i = 0; i < 50; i++) {
+            getRailPos(scratchVec3, this);
+            drawWorldSpacePoint(ctx, viewerInput.camera, scratchVec3, scratchColor, 5);
+            drawWorldSpaceText(ctx, viewerInput.camera, scratchVec3, ''+i, Yellow);
+            moveRailRider(this);
+        }
+    }
+    */
+}
+
+export function createRailCoin(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): RailCoin {
+    return new RailCoin(zoneAndLayer, sceneObjHolder, infoIter, false);
+}
+
+export function createPurpleRailCoin(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): RailCoin {
+    return new RailCoin(zoneAndLayer, sceneObjHolder, infoIter, true);
 }
 
 export class MiniRoutePoint extends LiveActor {

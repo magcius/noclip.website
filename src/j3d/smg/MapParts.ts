@@ -9,6 +9,7 @@ import { computeModelMatrixR, MathConstants } from '../../MathHelpers';
 import { SceneObjHolder, getDeltaTimeFrames } from './smg_scenes';
 import { ViewerRenderInput } from '../../viewer';
 import { RailDirection } from './RailRider';
+import { moveCoordAndTransToNearestRailPos, moveCoordAndTransToNearestRailPoint, moveCoordAndTransToRailStartPoint, getRailCoord, setRailCoord, getRailPos } from './Actors';
 
 function getMapPartsArgMoveConditionType(infoIter: JMapInfoIter): number {
     return assertExists(infoIter.getValueNumber('MoveConditionType'));
@@ -190,33 +191,6 @@ export class MapPartsRotator extends NameObj {
             }
         }
     }
-}
-
-function moveCoordAndTransToNearestRailPos(actor: LiveActor): void {
-    actor.railRider!.moveToNearestPos(scratchVec3);
-    vec3.copy(actor.translation, scratchVec3);
-}
-
-function moveCoordAndTransToNearestRailPoint(actor: LiveActor): void {
-    actor.railRider!.moveToNearestPoint(scratchVec3);
-    vec3.copy(actor.translation, scratchVec3);
-}
-
-function moveCoordAndTransToRailStartPoint(actor: LiveActor): void {
-    actor.railRider!.setCoord(0);
-    vec3.copy(actor.translation, actor.railRider!.currentPos);
-}
-
-function getRailCoord(actor: LiveActor): number {
-    return actor.railRider!.coord;
-}
-
-function getRailPos(v: vec3, actor: LiveActor): void {
-    vec3.copy(v, actor.railRider!.currentPos);
-}
-
-function setRailCoord(actor: LiveActor, coord: number): void {
-    actor.railRider!.setCoord(coord);
 }
 
 function isNearZero(v: number, min: number): boolean {

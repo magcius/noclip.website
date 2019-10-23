@@ -34,7 +34,7 @@ import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferT
 import { EffectSystem } from './EffectSystem';
 
 import { NPCDirector, MiniRoutePoint, createModelObjMapObj, bindColorChangeAnimation, bindTexChangeAnimation, isExistIndirectTexture, connectToSceneIndirectMapObjStrongLight, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneBloom, MiniRouteGalaxy, MiniRoutePart, emitEffect } from './Actors';
-import { getNameObjTableEntry, PlanetMapCreator } from './ActorTable';
+import { getActorTableEntry, PlanetMapCreator, ActorTableEntry } from './ActorTable';
 import { LiveActor, setTextureMappingIndirect, startBck, startBrkIfExist, startBtkIfExist, startBckIfExist, startBvaIfExist } from './LiveActor';
 
 // Galaxy ticks at 60fps.
@@ -1089,11 +1089,6 @@ class ZoneNode {
     }
 }
 
-export interface NameObjFactory {
-    new(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): LiveActor;
-    requestArchives?(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void;
-}
-
 export interface ZoneAndLayer {
     zoneId: number;
     layerId: LayerId;
@@ -1126,16 +1121,16 @@ class SMGSpawner {
             this.syncActorVisible(this.sceneObjHolder.sceneNameObjListExecutor.nameObjExecuteInfos[i].nameObj as LiveActor);
     }
 
-    private getNameObjFactory(objName: string): NameObjFactory | null | undefined {
-        const actorFactory = getNameObjTableEntry(objName);
-        if (actorFactory !== null)
-            return actorFactory.factory;
+    private getActorTableEntry(objName: string): ActorTableEntry | null {
+        const actorTableEntry = getActorTableEntry(objName);
+        if (actorTableEntry !== null)
+            return actorTableEntry;
 
-        const planetFactory = this.sceneObjHolder.planetMapCreator.getNameObjFactory(objName);
-        if (planetFactory !== null)
-            return planetFactory;
+        const planetTableEntry = this.sceneObjHolder.planetMapCreator.getActorTableEntry(objName);
+        if (planetTableEntry !== null)
+            return planetTableEntry;
 
-        return undefined;
+        return null;
     }
 
     public spawnObjectLegacy(zoneAndLayer: ZoneAndLayer, infoIter: JMapInfoIter, objinfo: ObjInfo): void {
@@ -1246,10 +1241,6 @@ class SMGSpawner {
         case 'StarPieceFlow':
         case 'WingBlockStarPiece':
         case 'YellowChipGroup':
-        case 'RailCoin':
-        case 'PurpleRailCoin':
-        case 'CircleCoinGroup':
-        case 'CirclePurpleCoinGroup':
         case 'PurpleCoinCompleteWatcher':
         case 'CoinAppearSpot':
         case 'GroupSwitchWatcher':
@@ -1565,16 +1556,15 @@ class SMGSpawner {
         const legacyPaths = stageDataHolder.legacyParsePaths();
 
         stageDataHolder.iterPlacement((infoIter, layerId) => {
-            const factory = this.getNameObjFactory(getObjectName(infoIter));
-
-            if (factory === null) {
-                // Explicitly null. Don't spawn anything.
-                return;
-            }
+            const actorTableEntry = this.getActorTableEntry(getObjectName(infoIter));
 
             const zoneAndLayer: ZoneAndLayer = { zoneId: stageDataHolder.zoneId, layerId };
-            if (factory !== undefined) {
-                const actor = new factory(zoneAndLayer, this.sceneObjHolder, infoIter);
+            if (actorTableEntry !== null) {
+                // Explicitly null, don't spawn anything.
+                if (actorTableEntry.factoryFunc === null)
+                    return;
+
+                const actor = actorTableEntry.factoryFunc(zoneAndLayer, this.sceneObjHolder, infoIter);
                 this.addActor(actor);
             } else {
                 const objInfoLegacy = stageDataHolder.legacyCreateObjinfo(infoIter, legacyPaths);
@@ -1610,15 +1600,9 @@ class SMGSpawner {
             return;
         }
 
-        const factory = this.getNameObjFactory(objName);
-        if (factory !== null && factory !== undefined && factory.requestArchives !== undefined)
-            factory.requestArchives(this.sceneObjHolder, infoIter);
-
-        const entry = getNameObjTableEntry(objName);
-        if (entry !== null && entry.extraObjectDataArchiveNames.length) {
-            for (let i = 0; i < entry.extraObjectDataArchiveNames.length; i++)
-                this.sceneObjHolder.modelCache.requestObjectData(entry.extraObjectDataArchiveNames[i]);
-        }
+        const actorTableEntry = this.getActorTableEntry(objName);
+        if (actorTableEntry !== null && actorTableEntry.requestArchivesFunc !== null)
+            actorTableEntry.requestArchivesFunc(this.sceneObjHolder, infoIter);
     }
 
     private requestArchivesForStageDataHolder(stageDataHolder: StageDataHolder): void {

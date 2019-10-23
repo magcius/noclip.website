@@ -167,7 +167,11 @@ class BezierRailPart {
 type RailPart = LinearRailPart | BezierRailPart;
 
 function equalEpsilon(a: number, b: number, ep: number): boolean {
-    return a - ep > b && a + ep < b;
+    if ((a - b) < -ep)
+        return false;
+    if ((a - b) > ep)
+        return false;
+    return true;
 }
 
 function equalEpsilonVec3(a: vec3, b: vec3, ep: number): boolean {
@@ -185,9 +189,17 @@ function isNearZero(v: number, min: number): boolean {
     return v > -min && v < min;
 }
 
+function isNearZeroVec3(v: vec3, min: number): boolean {
+    return (
+        v[0] > -min && v[0] < min &&
+        v[1] > -min && v[1] < min &&
+        v[2] > -min && v[2] < min
+    );
+}
+
 export class BezierRail {
-    private isClosed: boolean;
     private pointRecordCount: number;
+    public isClosed: boolean;
     public railParts: RailPart[] = [];
     public railPartCoords: number[] = [];
     public railIter: JMapInfoIter;
@@ -197,7 +209,7 @@ export class BezierRail {
 
         this.railIter = new JMapInfoIter(railIter.bcsv, railIter.record);
 
-        this.pointRecordCount = railIter.getNumRecords();
+        this.pointRecordCount = pointsInfo.getNumRecords();
         const railPartCount = this.isClosed ? this.pointRecordCount : this.pointRecordCount - 1;
 
         const p0 = vec3.create();
@@ -223,7 +235,7 @@ export class BezierRail {
 
             const partLength = railPart.getTotalLength();
             totalLength += partLength;
-            this.railPartCoords.push(partLength);
+            this.railPartCoords.push(totalLength);
         }
 
         this.railPartCoords.push(totalLength);
@@ -282,6 +294,71 @@ export class BezierRail {
             return clamp(v, 0.0, this.getTotalLength());
         }
     }
+
+    public getIncludedSectionIdx(coord: number, n: number): number {
+        coord = this.normalizePos(coord, n);
+
+        if (n < 1) {
+            // TODO
+            assert(false);
+        } else {
+            for (let i = 0; i < this.railParts.length; i++) {
+                if (coord < this.railPartCoords[i] || i === this.railParts.length - 1)
+                    return i;
+            }
+        }
+
+        // Should be unreachable.
+        throw "whoops";
+    }
+
+    private getCoordForRailPartIdx(railPartIdx: number, coord: number): number {
+        const railPartCoordStart = railPartIdx > 0 ? this.railPartCoords[railPartIdx - 1] : 0;
+        const railPart = this.railParts[railPartIdx];
+        return clamp(coord - railPartCoordStart, 0, railPart.getTotalLength());
+    }
+
+    public calcRailDirection(dst: vec3, part: RailPart, param: number): void {
+        part.calcVelocity(dst, param);
+        if (!isNearZeroVec3(dst, 0.001)) {
+            let p0: number, p1: number;
+            if (param >= 0.5) {
+                p0 = param - 0.1;
+                p1 = param;
+            } else {
+                p0 = param;
+                p1 = param + 0.1;
+            }
+
+            part.calcPos(scratchVec3a, p0);
+            part.calcPos(dst, p1);
+            vec3.sub(dst, dst, scratchVec3a);
+        }
+
+        vec3.normalize(dst, dst);
+    }
+
+    public calcPosDir(dstPos: vec3, dstDir: vec3, coord: number): void {
+        const partIdx = this.getIncludedSectionIdx(coord, 1);
+        const part = this.railParts[partIdx];
+        const partParam = part.getParam(this.getCoordForRailPartIdx(partIdx, coord));
+        part.calcPos(dstPos, partParam);
+        this.calcRailDirection(dstDir, part, partParam);
+    }
+
+    public calcPos(dst: vec3, coord: number): void {
+        const partIdx = this.getIncludedSectionIdx(coord, 1);
+        const part = this.railParts[partIdx];
+        const partParam = part.getParam(this.getCoordForRailPartIdx(partIdx, coord));
+        part.calcPos(dst, partParam);
+    }
+
+    public calcDirection(dst: vec3, coord: number): void {
+        const partIdx = this.getIncludedSectionIdx(coord, 1);
+        const part = this.railParts[partIdx];
+        const partParam = part.getParam(this.getCoordForRailPartIdx(partIdx, coord));
+        this.calcRailDirection(dst, part, partParam);
+    }
 }
 
 export function getBezierRailForActor(sceneObjHolder: SceneObjHolder, actorIter: JMapInfoIter): BezierRail {
@@ -300,7 +377,9 @@ export const enum RailDirection { TOWARDS_END, TOWARDS_START }
 export class RailRider {
     public bezierRail: BezierRail;
     public currentPos = vec3.create();
+    public currentDir = vec3.create();
     public coord: number = 0;
+    public speed: number = 0;
     public direction: RailDirection = RailDirection.TOWARDS_END;
 
     constructor(sceneObjHolder: SceneObjHolder, private actor: LiveActor, actorIter: JMapInfoIter) {
@@ -309,6 +388,20 @@ export class RailRider {
     }
 
     private syncPosDir(): void {
+        if (this.coord > 0.0 && this.coord < this.bezierRail.getTotalLength()) {
+            this.bezierRail.calcPosDir(this.currentPos, this.currentDir, this.coord);
+        } else if (this.coord === 0.0) {
+            this.bezierRail.calcPos(this.currentPos, this.coord);
+            this.bezierRail.calcDirection(this.currentDir, 0.1);
+        } else {
+            this.bezierRail.calcPos(this.currentPos, this.coord);
+            this.bezierRail.calcDirection(this.currentDir, this.bezierRail.getTotalLength() - 0.1);
+        }
+
+        if (this.direction === RailDirection.TOWARDS_START)
+            vec3.negate(this.currentDir, this.currentDir);
+
+        // this.currentPointId = this.bezierRail.calcCurrentRailCtrlPointIter(this.coord, this.direction);
     }
 
     private copyPointPos(v: vec3, m: number): void {
@@ -342,7 +435,29 @@ export class RailRider {
         this.syncPosDir();
     }
 
+    public setSpeed(v: number): void {
+        this.speed = v;
+    }
+
+    public move(): void {
+        if (this.direction === RailDirection.TOWARDS_END)
+            this.coord += this.speed;
+        else
+            this.coord -= this.speed;
+
+        this.coord = this.bezierRail.normalizePos(this.coord, 1);
+        this.syncPosDir();
+    }
+
     public reverse(): void {
         this.direction = this.direction === RailDirection.TOWARDS_END ? RailDirection.TOWARDS_START : RailDirection.TOWARDS_END;
+    }
+
+    public getTotalLength(): number {
+        return this.bezierRail.getTotalLength();
+    }
+
+    public isLoop(): boolean {
+        return this.bezierRail.isClosed;
     }
 }
