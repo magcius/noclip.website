@@ -1,4 +1,4 @@
-<img align="right" src="src/logo.png">
+<img align="right" src="src/assets/logo.png">
 
 # <a href="https://noclip.website">noclip</a>
 
