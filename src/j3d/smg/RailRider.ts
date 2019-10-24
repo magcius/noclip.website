@@ -5,6 +5,9 @@ import { SceneObjHolder } from "./smg_scenes";
 import { assertExists, assert } from "../../util";
 import { clamp } from "../../MathHelpers";
 import { LiveActor } from "./LiveActor";
+import { drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../../DebugJunk";
+import { Camera } from "../../Camera";
+import { Magenta, Yellow } from "../../Color";
 
 function getRailPointPos(dst: vec3, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, prefix: string): void {
     dst[0] = infoIter.getValueNumber(`${prefix}_x`, 0);
@@ -120,7 +123,7 @@ class BezierRailPart {
         this.calcVelocity(scratchVec3a, param1);
         const p1Mag = vec3.length(scratchVec3a);
 
-        return (1/3) * (inv * (4.0 * length0) + (0.5 * (p0Mag + p1Mag)) + (2.0 * length1));
+        return (1/3) * (inv * ((4.0 * length0) + (0.5 * (p0Mag + p1Mag)) + (2.0 * length1)));
     }
 
     public getTotalLength(): number {
@@ -143,20 +146,20 @@ class BezierRailPart {
 
     public getParam(coord: number): number {
         let t = coord / this.length;
-        let maxLength = this.getLength(0, t);
+        let coordIter = this.getLength(0, t);
 
         // Iterative refinement.
-        if ((coord - maxLength) > 0.01) {
+        if (Math.abs(coord - coordIter) > 0.01) {
             for (let i = 0; i < 5; i++) {
                 this.calcVelocity(scratchVec3a, t);
                 const mag = vec3.length(scratchVec3a);
-                t = clamp(t + (coord - maxLength) / mag, 0.0, 1.0);
-                if ((coord - maxLength) < 0.01)
+                t = clamp(t + (coord - coordIter) / mag, 0.0, 1.0);
+                coordIter = this.getLength(0, t);
+                if (Math.abs(coord - coordIter) < 0.01)
                     break;
             }
 
-            // This might be a dumb typo from the original game?
-            if (maxLength < 0 || t > 1)
+            if (coordIter < 0 || t > 1)
                 t = clamp(t, 0.0, 1.0);
         }
 
@@ -237,8 +240,6 @@ export class BezierRail {
             totalLength += partLength;
             this.railPartCoords.push(totalLength);
         }
-
-        this.railPartCoords.push(totalLength);
     }
 
     public calcRailCtrlPointIter(idx: number): JMapInfoIter {
@@ -485,5 +486,22 @@ export class RailRider {
 
     public isLoop(): boolean {
         return this.bezierRail.isClosed;
+    }
+
+    public debugDrawRail(camera: Camera, nPoints: number = 50): void {
+        const totalLength = this.getTotalLength();
+        const speed = totalLength / nPoints;
+        const ctx = getDebugOverlayCanvas2D();
+        for (let i = 0; i < nPoints; i++) {
+            const coord = i * speed;
+            this.bezierRail.calcPos(scratchVec3a, coord);
+            drawWorldSpacePoint(ctx, camera, scratchVec3a, Magenta, 4);
+            /*
+            const partIdx = this.bezierRail.getIncludedSectionIdx(coord, 1);
+            const part = this.bezierRail.railParts[partIdx];
+            const param = part.getParam(this.bezierRail.getCoordForRailPartIdx(partIdx, coord));
+            drawWorldSpaceText(ctx, camera, scratchVec3a, param.toFixed(2), Yellow);
+            */
+        }
     }
 }

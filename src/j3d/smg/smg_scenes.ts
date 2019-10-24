@@ -36,6 +36,7 @@ import { EffectSystem } from './EffectSystem';
 import { NPCDirector, MiniRoutePoint, createModelObjMapObj, bindColorChangeAnimation, bindTexChangeAnimation, isExistIndirectTexture, connectToSceneIndirectMapObjStrongLight, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneBloom, MiniRouteGalaxy, MiniRoutePart, emitEffect } from './Actors';
 import { getActorTableEntry, PlanetMapCreator, ActorTableEntry } from './ActorTable';
 import { LiveActor, setTextureMappingIndirect, startBck, startBrkIfExist, startBtkIfExist, startBckIfExist, startBvaIfExist } from './LiveActor';
+import { BezierRail } from './RailRider';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;

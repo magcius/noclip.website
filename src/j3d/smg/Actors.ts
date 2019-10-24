@@ -7,7 +7,7 @@ import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMa
 import { mat4, vec3 } from 'gl-matrix';
 import AnimationController from '../../AnimationController';
 import { MathConstants, computeModelMatrixSRT, clamp, lerp } from '../../MathHelpers';
-import { colorNewFromRGBA8, Color } from '../../Color';
+import { colorNewFromRGBA8, Color, Magenta, Yellow } from '../../Color';
 import { ColorKind } from '../../gx/gx_render';
 import { BTK, BRK, LoopMode, BTP } from '../j3d';
 import { BTI } from "../j3d";
@@ -20,6 +20,7 @@ import { Camera } from '../../Camera';
 import { isGreaterStep, isFirstStep, calcNerveRate } from './Spine';
 import { LiveActor, startBck, startBtkIfExist, startBrkIfExist, startBvaIfExist, startBpkIfExist, makeMtxTRFromActor } from './LiveActor';
 import { MapPartsRotator } from './MapParts';
+import { getDebugOverlayCanvas2D, drawWorldSpacePoint } from '../../DebugJunk';
 
 export function connectToScene(sceneObjHolder: SceneObjHolder, actor: LiveActor, movementType: MovementType, calcAnimType: CalcAnimType, drawBufferType: DrawBufferType, drawType: DrawType): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, movementType, calcAnimType, drawBufferType, drawType);
@@ -97,6 +98,14 @@ export function connectToScenePlanet(sceneObjHolder: SceneObjHolder, actor: Live
         connectToScene(sceneObjHolder, actor, 0x1D, 0x01, DrawBufferType.PLANET, -1);
 }
 
+export function connectToSceneEnvironment(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x21, 4, DrawBufferType.ENVIRONMENT, -1);
+}
+
+export function connectToSceneEnemyMovement(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x2A, -1, -1, -1);
+}
+
 export function createModelObjBloomModel(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, objName: string, modelName: string, baseMtx: mat4): ModelObj {
     const bloomModel = new ModelObj(zoneAndLayer, sceneObjHolder, objName, modelName, baseMtx, DrawBufferType.BLOOM_MODEL, -2, -2);
     return bloomModel;
@@ -151,6 +160,10 @@ export function showModel(actor: LiveActor): void {
     actor.visibleModel = true;
 }
 
+export function getYDir(v: vec3, m: mat4): void {
+    vec3.set(v, m[4], m[5], m[6]);
+}
+
 export function calcUpVec(v: vec3, actor: LiveActor): void {
     const m = assertExists(actor.getBaseMtx());
     vec3.set(v, m[4], m[5], m[6]);
@@ -185,6 +198,10 @@ export function getRailTotalLength(actor: LiveActor): number {
     return actor.railRider!.getTotalLength();
 }
 
+export function getRailDirection(dst: vec3, actor: LiveActor): void {
+    vec3.copy(dst, actor.railRider!.currentDir);
+}
+
 export function isLoopRail(actor: LiveActor): boolean {
     return actor.railRider!.isLoop();
 }
@@ -198,17 +215,27 @@ export function setRailCoordSpeed(actor: LiveActor, v: number): void {
 }
 
 export function moveCoordAndTransToNearestRailPos(actor: LiveActor): void {
-    actor.railRider!.moveToNearestPos(scratchVec3);
-    vec3.copy(actor.translation, scratchVec3);
+    actor.railRider!.moveToNearestPos(actor.translation);
+    vec3.copy(actor.translation, actor.railRider!.currentPos);
 }
 
 export function moveCoordAndTransToNearestRailPoint(actor: LiveActor): void {
-    actor.railRider!.moveToNearestPoint(scratchVec3);
-    vec3.copy(actor.translation, scratchVec3);
+    actor.railRider!.moveToNearestPoint(actor.translation);
+    vec3.copy(actor.translation, actor.railRider!.currentPos);
 }
 
 export function moveCoordAndTransToRailStartPoint(actor: LiveActor): void {
     actor.railRider!.setCoord(0);
+    vec3.copy(actor.translation, actor.railRider!.currentPos);
+}
+
+export function moveCoord(actor: LiveActor, speed: number): void {
+    actor.railRider!.setSpeed(speed);
+    actor.railRider!.move();
+}
+
+export function moveCoordAndFollowTrans(actor: LiveActor, speed: number): void {
+    moveCoord(actor, speed);
     vec3.copy(actor.translation, actor.railRider!.currentPos);
 }
 
@@ -247,6 +274,14 @@ export function isExistIndirectTexture(actor: LiveActor): boolean {
     return false;
 }
 
+function isNearZeroVec3(v: vec3, min: number): boolean {
+    return (
+        v[0] > -min && v[0] < min &&
+        v[1] > -min && v[1] < min &&
+        v[2] > -min && v[2] < min
+    );
+}
+
 function getEaseInValue(v0: number, v1: number, v2: number, v3: number): number {
     const t = Math.cos((v0 / v3) * Math.PI * 0.5);
     return lerp(v1, v2, 1 - t);
@@ -261,15 +296,15 @@ function setXYZDir(dst: mat4, x: vec3, y: vec3, z: vec3): void {
     dst[0] = x[0];
     dst[1] = x[1];
     dst[2] = x[2];
-    dst[3] = 9999;
+    dst[3] = 0.0;
     dst[4] = y[0];
     dst[5] = y[1];
     dst[6] = y[2];
-    dst[7] = 9999;
+    dst[7] = 0.0;
     dst[8] = z[0];
     dst[9] = z[1];
     dst[10] = z[2];
-    dst[11] = 9999;
+    dst[11] = 0.0;
 }
 
 const scratchVec3 = vec3.create();
@@ -281,6 +316,7 @@ function makeMtxFrontUpPos(dst: mat4, front: vec3, up: vec3, pos: vec3): void {
     dst[12] = pos[0];
     dst[13] = pos[1];
     dst[14] = pos[2];
+    dst[15] = 1;
 }
 
 // ClippingJudge has these distances.
@@ -351,8 +387,12 @@ export function loadBTIData(sceneObjHolder: SceneObjHolder, arc: RARC.RARC, file
     return btiData;
 }
 
-export function getRandom(min: number, max: number): number {
-    return ((Math.random() * (max - min)) + min) | 0;
+export function getRandomFloat(min: number, max: number): number {
+    return ((Math.random() * (max - min)) + min);
+}
+
+export function getRandomInt(min: number, max: number): number {
+    return getRandomFloat(min, max) | 0;
 }
 
 function createSubModelObjName(parentActor: LiveActor, suffix: string): string {
@@ -795,7 +835,7 @@ export class StarPiece extends LiveActor {
 
         let starPieceColorIndex: number = getJMapInfoArg3(infoIter, -1);
         if (starPieceColorIndex < 0 || starPieceColorIndex > 5)
-            starPieceColorIndex = getRandom(1, 7);
+            starPieceColorIndex = getRandomInt(1, 7);
 
         this.modelInstance!.setColorOverride(ColorKind.MAT0, starPieceColorTable[starPieceColorIndex]);
 
@@ -1297,18 +1337,7 @@ class RailCoin extends CoinGroup {
     // Rail debugging code...
     /*
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        const ctx = getDebugOverlayCanvas2D();
-
-        const totalLength = getRailTotalLength(this);
-
-        moveCoordToStartPos(this);
-        setRailCoordSpeed(this, totalLength/50);
-        for (let i = 0; i < 50; i++) {
-            getRailPos(scratchVec3, this);
-            drawWorldSpacePoint(ctx, viewerInput.camera, scratchVec3, scratchColor, 5);
-            drawWorldSpaceText(ctx, viewerInput.camera, scratchVec3, ''+i, Yellow);
-            moveRailRider(this);
-        }
+        this.railRider!.debugDrawRail(viewerInput.camera);
     }
     */
 }
@@ -2365,5 +2394,159 @@ export class OceanWaveFloater extends MapObjActor {
             deleteEffect(sceneObjHolder, this, 'Ripple');
             this.isRippling = false;
         }
+    }
+}
+
+const enum FishNrv { APPROACH, WANDER }
+
+export class Fish extends LiveActor {
+    private followPointPos = vec3.create();
+    private offset = vec3.create();
+    private direction = vec3.create();
+    private counter = 0;
+    private approachThreshold: number;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, private fishGroup: FishGroup, modelName: string) {
+        super(zoneAndLayer, modelName);
+
+        vec3.set(this.offset, getRandomFloat(-150, 150), getRandomFloat(-150, 150), getRandomFloat(-150, 150));
+        this.approachThreshold = getRandomFloat(100, 500);
+
+        this.updateFollowPointPos();
+        vec3.copy(this.translation, this.followPointPos);
+        getRailDirection(this.direction, this.fishGroup);
+
+        this.initModelManagerWithAnm(sceneObjHolder, modelName);
+        startBck(this, 'Swim');
+
+        this.initNerve(FishNrv.WANDER);
+
+        connectToSceneEnvironment(sceneObjHolder, this);
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.movement(sceneObjHolder, viewerInput);
+
+        const currentNerve = this.getCurrentNerve();
+
+        if (currentNerve === FishNrv.APPROACH) {
+            if (isFirstStep(this))
+                this.counter = 0;
+
+            --this.counter;
+            if (this.counter < 1) {
+                vec3.sub(scratchVec3, this.followPointPos, this.translation);
+                vec3.normalize(scratchVec3, scratchVec3);
+
+                if (vec3.dot(scratchVec3, this.direction) <= 0.9) {
+                    vec3.lerp(this.direction, this.direction, scratchVec3, 0.8);
+
+                    if (isNearZeroVec3(this.direction, 0.01))
+                        vec3.copy(this.direction, scratchVec3);
+                    else
+                        vec3.normalize(this.direction, this.direction);
+                } else {
+                    vec3.copy(this.direction, scratchVec3);
+                }
+
+                vec3.scaleAndAdd(this.velocity, this.velocity, this.direction, 5);
+                this.counter = getRandomInt(5, 30);
+            }
+
+            if (vec3.squaredDistance(this.followPointPos, this.translation) < (this.approachThreshold * this.approachThreshold))
+                this.setNerve(FishNrv.WANDER);
+        } else if (currentNerve === FishNrv.WANDER) {
+            if (isFirstStep(this))
+                this.counter = 0;
+
+            --this.counter;
+            if (this.counter < 1) {
+                vec3.add(this.velocity, this.velocity, this.direction);
+                this.counter = getRandomInt(60, 180);
+            }
+
+            if (vec3.squaredDistance(this.followPointPos, this.translation) > (this.approachThreshold * this.approachThreshold))
+                this.setNerve(FishNrv.APPROACH);
+        }
+
+        // TODO(jstpierre): setBckRate
+
+        vec3.scale(this.velocity, this.velocity, 0.95);
+        if (isNearZeroVec3(this.direction, 0.001)) {
+            if (isNearZeroVec3(this.velocity, 0.001)) {
+                vec3.set(this.direction, 1, 0, 0);
+            } else {
+                vec3.copy(this.direction, this.velocity);
+            }
+        }
+
+        this.updateFollowPointPos();
+    }
+
+    public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
+        makeMtxFrontUpPos(this.modelInstance!.modelMatrix, this.direction, this.fishGroup.upVec, this.translation);
+    }
+
+    private updateFollowPointPos(): void {
+        getRailPos(this.followPointPos, this.fishGroup);
+        vec3.add(this.followPointPos, this.followPointPos, this.offset);
+    }
+}
+
+export class FishGroup extends LiveActor {
+    private railSpeed: number = 5;
+    private fish: Fish[] = [];
+    public upVec = vec3.create();
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, getObjectName(infoIter));
+
+        const fishCount = getJMapInfoArg0(infoIter, 10);
+
+        this.initDefaultPos(sceneObjHolder, infoIter);
+        makeMtxTRFromActor(scratchMatrix, this);
+        getYDir(this.upVec, scratchMatrix);
+        this.initRailRider(sceneObjHolder, infoIter);
+        moveCoordAndTransToNearestRailPos(this);
+
+        const modelName = FishGroup.getArchiveName(infoIter);
+        for (let i = 0; i < fishCount; i++)
+            this.fish.push(new Fish(zoneAndLayer, sceneObjHolder, this, modelName));
+
+        connectToSceneEnemyMovement(sceneObjHolder, this);
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.movement(sceneObjHolder, viewerInput);
+
+        // Update up vector from gravity vector
+        // vec3.negate(this.upVec, this.gravityVector);
+
+        moveCoordAndFollowTrans(this, this.railSpeed * getDeltaTimeFrames(viewerInput));
+
+        // this.railRider!.debugDrawRail(viewerInput.camera, 50);
+    }
+
+    private static getArchiveName(infoIter: JMapInfoIter): string {
+        const actorName = getObjectName(infoIter);
+
+        if (actorName === 'FishGroupA')
+            return 'FishA';
+        else if (actorName === 'FishGroupB')
+            return 'FishB';
+        else if (actorName === 'FishGroupC')
+            return 'FishC';
+        else if (actorName === 'FishGroupD')
+            return 'FishD';
+        else if (actorName === 'FishGroupE')
+            return 'FishE';
+        else if (actorName === 'FishGroupF')
+            return 'FishF';
+
+        throw "whoops";
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        sceneObjHolder.modelCache.requestObjectData(FishGroup.getArchiveName(infoIter));
     }
 }
