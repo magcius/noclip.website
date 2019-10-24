@@ -288,10 +288,10 @@ export class WarpPod extends LiveActor {
         this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, "WarpPod");
 
-        this.visible = !!getJMapInfoArg1(infoIter, 0);
-        const hasSaveFlag = !!getJMapInfoArg3(infoIter, 0);
-        const astroDomeNum = !!getJMapInfoArg4(infoIter, 0);
-        const colorIndex = getJMapInfoArg6(infoIter, 0);
+        this.visible = !!getJMapInfoArg1(infoIter, -1);
+        const hasSaveFlag = !!getJMapInfoArg3(infoIter, -1);
+        const astroDomeNum = !!getJMapInfoArg4(infoIter, -1);
+        const colorIndex = getJMapInfoArg6(infoIter, -1);
         
         let color = warpPodColorTable[colorIndex];
         if (color === undefined) {

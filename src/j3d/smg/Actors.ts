@@ -7,7 +7,7 @@ import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMa
 import { mat4, vec3 } from 'gl-matrix';
 import AnimationController from '../../AnimationController';
 import { MathConstants, computeModelMatrixSRT, clamp, lerp } from '../../MathHelpers';
-import { colorNewFromRGBA8, Color, Magenta, colorLerp, colorNewCopy, Yellow } from '../../Color';
+import { colorNewFromRGBA8, Color } from '../../Color';
 import { ColorKind } from '../../gx/gx_render';
 import { BTK, BRK, LoopMode, BTP } from '../j3d';
 import { BTI } from "../j3d";
@@ -20,7 +20,6 @@ import { Camera } from '../../Camera';
 import { isGreaterStep, isFirstStep, calcNerveRate } from './Spine';
 import { LiveActor, startBck, startBtkIfExist, startBrkIfExist, startBvaIfExist, startBpkIfExist, makeMtxTRFromActor } from './LiveActor';
 import { MapPartsRotator } from './MapParts';
-import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceText } from '../../DebugJunk';
 
 export function connectToScene(sceneObjHolder: SceneObjHolder, actor: LiveActor, movementType: MovementType, calcAnimType: CalcAnimType, drawBufferType: DrawBufferType, drawType: DrawType): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, movementType, calcAnimType, drawBufferType, drawType);
@@ -352,6 +351,10 @@ export function loadBTIData(sceneObjHolder: SceneObjHolder, arc: RARC.RARC, file
     return btiData;
 }
 
+export function getRandom(min: number, max: number): number {
+    return ((Math.random() * (max - min)) + min) | 0;
+}
+
 function createSubModelObjName(parentActor: LiveActor, suffix: string): string {
     return `${parentActor.name}${suffix}`;
 }
@@ -426,7 +429,7 @@ function requestArchivesForNPCGoods(sceneObjHolder: SceneObjHolder, npcName: str
 }
 
 function setupInitInfoSimpleMapObj(initInfo: MapObjActorInitInfo): void {
-    initInfo.setupDefaultPos = true;
+    initInfo.setDefaultPos = true;
     initInfo.connectToScene = true;
     initInfo.initEffect = true;
     initInfo.effectFilename = null;
@@ -445,7 +448,7 @@ function setupInitInfoTextureChangeArg1(initInfo: MapObjActorInitInfo, infoIter:
 }
 
 function setupInitInfoPlanet(initInfo: MapObjActorInitInfo): void {
-    initInfo.setupDefaultPos = true;
+    initInfo.setDefaultPos = true;
     initInfo.connectToScene = true;
     initInfo.initEffect = true;
     initInfo.effectFilename = null;
@@ -455,13 +458,17 @@ class MapObjActorInitInfo {
     public lightType: LightType = LightType.Planet;
     public initLightControl: boolean = false;
     public connectToScene: boolean = false;
-    public setupDefaultPos: boolean = true;
+    public setDefaultPos: boolean = true;
     public modelName: string | null = null;
     public initEffect: boolean = false;
     public effectFilename: string | null = null;
     public colorChangeFrame: number = -1;
     public texChangeFrame: number = -1;
     public rotator: boolean = false;
+
+    public setupDefaultPos(): void {
+        this.setDefaultPos = true;
+    }
 
     public setupConnectToScene(): void {
         this.connectToScene = true;
@@ -471,7 +478,7 @@ class MapObjActorInitInfo {
         this.modelName = name;
     }
 
-    public setupEffect(name: string): void {
+    public setupEffect(name: string | null): void {
         this.initEffect = true;
         this.effectFilename = name;
     }
@@ -493,7 +500,7 @@ class MapObjActor extends LiveActor {
         if (initInfo.modelName !== null)
             this.objName = initInfo.modelName;
 
-        if (initInfo.setupDefaultPos)
+        if (initInfo.setDefaultPos)
             this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, this.objName);
         if (initInfo.connectToScene)
@@ -538,6 +545,8 @@ class MapObjActor extends LiveActor {
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.movement(sceneObjHolder, viewerInput);
+
         if (this.rotator !== null)
             this.rotator.movement(sceneObjHolder, viewerInput);
     }
@@ -786,7 +795,7 @@ export class StarPiece extends LiveActor {
 
         let starPieceColorIndex: number = getJMapInfoArg3(infoIter, -1);
         if (starPieceColorIndex < 0 || starPieceColorIndex > 5)
-            starPieceColorIndex = ((Math.random() * 6.0) | 0) + 1;
+            starPieceColorIndex = getRandom(1, 7);
 
         this.modelInstance!.setColorOverride(ColorKind.MAT0, starPieceColorTable[starPieceColorIndex]);
 
@@ -2263,5 +2272,98 @@ export class SuperSpinDriverPink extends SuperSpinDriver {
     protected initColor(): void {
         bindTexChangeAnimation(this.modelInstance!, this.arc, 2, 'SuperSpinDriver');
         startBrkIfExist(this.modelInstance!, this.arc, 'Pink');
+    }
+}
+
+class WaveFloatingForce {
+    private theta: number;
+
+    constructor(private frequency: number, private amplitude: number) {
+        this.theta = Math.random() * MathConstants.TAU;
+    }
+
+    public update(deltaTime: number): void {
+        this.theta += (MathConstants.TAU / this.frequency) * deltaTime;
+        this.theta = this.theta % MathConstants.TAU;
+    }
+
+    public getCurrentValue(): number {
+        return this.amplitude * Math.sin(this.theta);
+    }
+}
+
+export class OceanWaveFloater extends MapObjActor {
+    private waveForce: WaveFloatingForce;
+    private gravityVec: vec3;
+    private upVec: vec3;
+    private isRippling: boolean;
+    private rippleStopThreshold: number;
+    private rippleStartThreshold: number;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        const initInfo = new MapObjActorInitInfo();
+        initInfo.setupDefaultPos();
+        initInfo.setupConnectToScene();
+        initInfo.setupEffect(null);
+        super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
+
+        let frequency: number, amplitude: number;
+        if (this.name === 'OceanPierFloaterA') {
+            frequency = 300;
+            amplitude = 30;
+            this.rippleStopThreshold = 140;
+            this.rippleStartThreshold = 120;
+        } else if (this.name === 'OceanHexagonFloater') {
+            frequency = 330;
+            amplitude = 50;
+            this.rippleStopThreshold = 150;
+            this.rippleStartThreshold = 100;
+        } else {
+            throw "whoops";
+        }
+
+        this.waveForce = new WaveFloatingForce(frequency, amplitude);
+
+        setEffectHostSRT(this, 'Ripple', this.translation, null, null);
+
+        this.upVec = vec3.create();
+        calcUpVec(this.upVec, this);
+
+        // For now.
+        this.gravityVec = vec3.create();
+        vec3.negate(this.gravityVec, this.upVec);
+
+        this.isRippling = false;
+    }
+
+    private getCurrentSinkDepth(): number {
+        mat4.getTranslation(scratchVec3, this.getBaseMtx()!);
+        vec3.subtract(scratchVec3, this.translation, scratchVec3);
+        return vec3.length(scratchVec3) * Math.sign(vec3.dot(scratchVec3, this.gravityVec));
+    }
+
+    public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
+        super.calcAndSetBaseMtx(viewerInput);
+
+        vec3.scale(scratchVec3, this.gravityVec, this.waveForce.getCurrentValue());
+        mat4.translate(this.modelInstance!.modelMatrix, this.modelInstance!.modelMatrix, scratchVec3);
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.movement(sceneObjHolder, viewerInput);
+
+        this.waveForce.update(getDeltaTimeFrames(viewerInput));
+
+        // Check for ripple effect.
+        const sinkDepth = this.getCurrentSinkDepth();
+        if (sinkDepth <= this.rippleStopThreshold || !this.isRippling) {
+            if (sinkDepth < this.rippleStartThreshold && !this.isRippling) {
+                emitEffect(sceneObjHolder, this, 'Ripple');
+                this.isRippling = true;
+            }
+        } else {
+            deleteEffect(sceneObjHolder, this, 'Ripple');
+            this.isRippling = false;
+        }
     }
 }

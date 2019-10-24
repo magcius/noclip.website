@@ -312,6 +312,31 @@ export class BezierRail {
         throw "whoops";
     }
 
+    public getCurrentCtrlPointIndex(coord: number, direction: RailDirection): number {
+        coord = this.normalizePos(coord, direction === RailDirection.TOWARDS_START ? -1 : 1);
+
+        if (isNearZero(coord, 0.001))
+            return 0;
+        if (isNearZero(this.getTotalLength() - coord, 0.001))
+            return this.isClosed ? this.pointRecordCount - 1 : 0;
+
+        if (direction === RailDirection.TOWARDS_END) {
+            for (let i = 0; i < this.railPartCoords.length; i++)
+                if (coord < this.railPartCoords[i])
+                    return i;
+        } else {
+            // TODO(jstpierre): No part of this seems right...
+            for (let i = this.railPartCoords.length - 1; i >= 0; i--) {
+                const railPartCoord = i === 0 ? 0 : this.railPartCoords[i - 1];
+                if (coord > railPartCoord && coord <= this.railPartCoords[i])
+                    return (i + 1) - (((i + 1) / this.pointRecordCount) | 0) * this.pointRecordCount;
+            }
+        }
+
+        // Should never happen.
+        throw "whoops";
+    }
+
     private getCoordForRailPartIdx(railPartIdx: number, coord: number): number {
         const railPartCoordStart = railPartIdx > 0 ? this.railPartCoords[railPartIdx - 1] : 0;
         const railPart = this.railParts[railPartIdx];
@@ -378,6 +403,7 @@ export class RailRider {
     public bezierRail: BezierRail;
     public currentPos = vec3.create();
     public currentDir = vec3.create();
+    public currentPointId: number = -1;
     public coord: number = 0;
     public speed: number = 0;
     public direction: RailDirection = RailDirection.TOWARDS_END;
@@ -401,7 +427,7 @@ export class RailRider {
         if (this.direction === RailDirection.TOWARDS_START)
             vec3.negate(this.currentDir, this.currentDir);
 
-        // this.currentPointId = this.bezierRail.calcCurrentRailCtrlPointIter(this.coord, this.direction);
+        this.currentPointId = this.bezierRail.getCurrentCtrlPointIndex(this.coord, this.direction);
     }
 
     private copyPointPos(v: vec3, m: number): void {
