@@ -2,7 +2,7 @@
 // Misc actors that aren't big enough to have their own file.
 
 import { LightType } from './DrawBuffer';
-import { SceneObjHolder, ZoneAndLayer, getObjectName, WorldmapPointInfo, getDeltaTimeFrames, getTimeFrames, Dot } from './smg_scenes';
+import { SceneObjHolder, ZoneAndLayer, getObjectName, WorldmapPointInfo, getDeltaTimeFrames, getTimeFrames, Dot, FPS } from './smg_scenes';
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg7 } from './JMapInfo';
 import { mat4, vec3 } from 'gl-matrix';
 import AnimationController from '../../AnimationController';
@@ -44,59 +44,63 @@ export function connectToSceneItemStrongLight(sceneObjHolder: SceneObjHolder, ac
 }
 
 export function connectToSceneCollisionMapObjStrongLight(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    connectToScene(sceneObjHolder, actor, 0x1E, 0x02, DrawBufferType.MAP_OBJ_STRONG_LIGHT, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x1E, 0x02, DrawBufferType.MAP_OBJ_STRONG_LIGHT, -1);
 }
 
 export function connectToSceneCollisionMapObjWeakLight(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    connectToScene(sceneObjHolder, actor, 0x1E, 0x02, DrawBufferType.MAP_OBJ_WEAK_LIGHT, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x1E, 0x02, DrawBufferType.MAP_OBJ_WEAK_LIGHT, -1);
 }
 
 export function connectToSceneCollisionMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    connectToScene(sceneObjHolder, actor, 0x1E, 0x02, DrawBufferType.MAP_OBJ, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x1E, 0x02, DrawBufferType.MAP_OBJ, -1);
+}
+
+export function connectToSceneMapObjNoCalcAnim(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x22, -1, DrawBufferType.MAP_OBJ, -1);
 }
 
 export function connectToSceneMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    connectToScene(sceneObjHolder, actor, 0x22, 0x05, DrawBufferType.MAP_OBJ, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x22, 0x05, DrawBufferType.MAP_OBJ, -1);
 }
 
 export function connectToSceneMapObjStrongLight(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    connectToScene(sceneObjHolder, actor, 0x22, 0x05, DrawBufferType.MAP_OBJ_STRONG_LIGHT, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x22, 0x05, DrawBufferType.MAP_OBJ_STRONG_LIGHT, -1);
 }
 
 export function connectToSceneIndirectMapObjStrongLight(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    connectToScene(sceneObjHolder, actor, 0x22, 0x05, DrawBufferType.INDIRECT_MAP_OBJ_STRONG_LIGHT, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x22, 0x05, DrawBufferType.INDIRECT_MAP_OBJ_STRONG_LIGHT, -1);
 }
 
 export function connectToSceneNoSilhouettedMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    connectToScene(sceneObjHolder, actor, 0x22, 0x05, DrawBufferType.NO_SHADOWED_MAP_OBJ, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x22, 0x05, DrawBufferType.NO_SHADOWED_MAP_OBJ, -1);
 }
 
 export function connectToSceneNoSilhouettedMapObjStrongLight(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    connectToScene(sceneObjHolder, actor, 0x22, 0x05, DrawBufferType.NO_SHADOWED_MAP_OBJ_STRONG_LIGHT, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x22, 0x05, DrawBufferType.NO_SHADOWED_MAP_OBJ_STRONG_LIGHT, -1);
 }
 
 export function connectToSceneSky(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    connectToScene(sceneObjHolder, actor, 0x24, 0x05, DrawBufferType.SKY, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x24, 0x05, DrawBufferType.SKY, -1);
 }
 
 export function connectToSceneAir(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    connectToScene(sceneObjHolder, actor, 0x24, 0x05, DrawBufferType.AIR, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x24, 0x05, DrawBufferType.AIR, -1);
 }
 
 export function connectToSceneCrystal(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    connectToScene(sceneObjHolder, actor, 0x22, 0x05, DrawBufferType.CRYSTAL, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x22, 0x05, DrawBufferType.CRYSTAL, -1);
 }
 
 export function connectToSceneBloom(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
     // TODO(jstpierre): Verify
-    connectToScene(sceneObjHolder, actor, 0x22, 0x05, DrawBufferType.BLOOM_MODEL, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x22, 0x05, DrawBufferType.BLOOM_MODEL, -1);
 }
 
 export function connectToScenePlanet(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
     if (isExistIndirectTexture(actor))
-        connectToScene(sceneObjHolder, actor, 0x1D, 0x01, DrawBufferType.INDIRECT_PLANET, -1);
+        sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x1D, 0x01, DrawBufferType.INDIRECT_PLANET, -1);
     else 
-        connectToScene(sceneObjHolder, actor, 0x1D, 0x01, DrawBufferType.PLANET, -1);
+        sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x1D, 0x01, DrawBufferType.PLANET, -1);
 }
 
 export function connectToSceneEnvironment(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
@@ -161,15 +165,19 @@ export function showModel(actor: LiveActor): void {
     actor.visibleModel = true;
 }
 
-export function calcActorAxis(axisX: vec3 | null, axisY: vec3 | null, axisZ: vec3 | null, actor: LiveActor): void {
-    const m = scratchMatrix;
-    makeMtxTRFromActor(m, actor);
+export function calcMtxAxis(axisX: vec3 | null, axisY: vec3 | null, axisZ: vec3 | null, m: mat4): void {
     if (axisX !== null)
         vec3.set(axisX, m[0], m[1], m[2]);
     if (axisY !== null)
         vec3.set(axisY, m[4], m[5], m[6]);
     if (axisZ !== null)
         vec3.set(axisZ, m[8], m[9], m[10]);
+}
+
+export function calcActorAxis(axisX: vec3 | null, axisY: vec3 | null, axisZ: vec3 | null, actor: LiveActor): void {
+    const m = scratchMatrix;
+    makeMtxTRFromActor(m, actor);
+    calcMtxAxis(axisX, axisY, axisZ, m);
 }
 
 export function calcUpVec(v: vec3, actor: LiveActor): void {
@@ -267,6 +275,21 @@ export function moveRailRider(actor: LiveActor): void {
     actor.railRider!.move();
 }
 
+export function getJointNum(actor: LiveActor): number {
+    return actor.modelInstance!.shapeInstanceState.jointToParentMatrixArray.length;
+}
+
+export function getJointMtx(actor: LiveActor, i: number): mat4 {
+    return actor.modelInstance!.shapeInstanceState.jointToParentMatrixArray[i];
+}
+
+export function isBckStopped(actor: LiveActor): boolean {
+    const animator = actor.modelInstance!.ank1Animator!;
+    if (animator.ank1.loopMode !== LoopMode.ONCE)
+        return false;
+    return animator.animationController.getTimeInFrames() >= animator.ank1.duration;
+}
+
 export function scaleMatrixScalar(m: mat4, s: number): void {
     m[0] *= s;
     m[4] *= s;
@@ -304,7 +327,7 @@ function getEaseOutValue(v0: number, v1: number, v2: number, v3: number): number
     return lerp(v1, v2, t);
 }
 
-function setXYZDir(dst: mat4, x: vec3, y: vec3, z: vec3): void {
+function setMtxAxisXYZ(dst: mat4, x: vec3, y: vec3, z: vec3): void {
     dst[0] = x[0];
     dst[1] = x[1];
     dst[2] = x[2];
@@ -331,7 +354,7 @@ function makeMtxFrontUpPos(dst: mat4, front: vec3, up: vec3, pos: vec3): void {
     vec3.normalize(front, front);
     vec3.cross(scratchVec3, front, up);
     vec3.normalize(scratchVec3, scratchVec3);
-    setXYZDir(dst, scratchVec3, up, front);
+    setMtxAxisXYZ(dst, scratchVec3, up, front);
     setTrans(dst, pos);
 }
 
@@ -1132,7 +1155,12 @@ export class Peach extends NPCActor {
     }
 }
 
+const enum PenguinNrv { WAIT, DIVE }
+
 export class Penguin extends NPCActor {
+    private arg0: number;
+    private diveCounter: number = 0;
+
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, getObjectName(infoIter));
 
@@ -1141,6 +1169,8 @@ export class Penguin extends NPCActor {
         this.initModelManagerWithAnm(sceneObjHolder, objName);
         connectToSceneNpc(sceneObjHolder, this);
         this.initLightCtrl(sceneObjHolder);
+        this.initEffectKeeper(sceneObjHolder, null);
+        this.initNerve
 
         this.boundingSphereRadius = 100;
 
@@ -1149,18 +1179,18 @@ export class Penguin extends NPCActor {
             moveCoordAndTransToNearestRailPos(this);
         }
 
-        const arg0: number = getJMapInfoArg0(infoIter, -1);
-        if (arg0 === 0) {
+        this.arg0 = getJMapInfoArg0(infoIter, -1);
+        if (this.arg0 === 0) {
             this.startAction(`SitDown`);
-        } else if (arg0 === 1) {
+        } else if (this.arg0 === 1) {
             this.startAction(`SwimWait`);
-        } else if (arg0 === 2) {
+        } else if (this.arg0 === 2) {
             this.startAction(`SwimWaitSurface`);
-        } else if (arg0 === 3) {
+        } else if (this.arg0 === 3) {
             this.startAction(`SwimWaitSurface`);
-        } else if (arg0 === 4) {
+        } else if (this.arg0 === 4) {
             this.startAction(`SwimTurtleTalk`);
-        } else if (arg0 === 6) {
+        } else if (this.arg0 === 6) {
             this.startAction(`Wait`);
         } else {
             this.startAction(`Wait`);
@@ -1168,6 +1198,34 @@ export class Penguin extends NPCActor {
 
         // Bind the color change animation.
         bindColorChangeAnimation(this.modelInstance!, this.arc, getJMapInfoArg7(infoIter, 0));
+
+        this.initNerve(PenguinNrv.WAIT);
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.movement(sceneObjHolder, viewerInput);
+
+        const currentNerve = this.getCurrentNerve();
+
+        if (currentNerve === PenguinNrv.WAIT) {
+            if (isFirstStep(this))
+                this.diveCounter = getRandomInt(120, 300);
+
+            if (this.arg0 === 3 && isGreaterStep(this, this.diveCounter))
+                this.setNerve(PenguinNrv.DIVE);
+        } else if (currentNerve === PenguinNrv.DIVE) {
+            if (isFirstStep(this)) {
+                startBck(this, `SwimDive`);
+                this.modelInstance!.animationController.setPhaseToCurrent();
+            }
+
+            if (isBckStopped(this)) {
+                // TODO(jstpierre): TalkCtrl
+                this.startAction(`SwimWaitSurface`);
+                this.modelInstance!.animationController.setPhaseToCurrent();
+                this.setNerve(PenguinNrv.WAIT);
+            }
+        }
     }
 }
 
@@ -1879,7 +1937,6 @@ export class Tico extends NPCActor {
             bindColorChangeAnimation(this.modelInstance!, this.arc, color);
 
         this.startAction('Wait');
-        this.modelInstance!.animationController.phaseFrames += Math.random() * 1000;
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -2669,7 +2726,7 @@ class SeaGull extends LiveActor {
             if (isFirstStep(this))
                 this.hoverStep = getRandomInt(0, 60);
 
-            this.bankRotation *= 0.995;
+            this.bankRotation *= 0.995 * getDeltaTimeFrames(viewerInput);
             if (isGreaterStep(this, this.hoverStep)) {
                 const chasePoint = this.seaGullGroup.points[this.chasePointIndex];
                 vec3.subtract(scratchVec3, chasePoint, this.translation);
@@ -2685,7 +2742,7 @@ class SeaGull extends LiveActor {
             if (isFirstStep(this))
                 this.hoverStep = getRandomInt(60, 120);
 
-            this.bankRotation -= 0.1;
+            this.bankRotation -= 0.1 * getDeltaTimeFrames(viewerInput);
 
             if (isGreaterStep(this, this.hoverStep))
                 this.setNerve(SeaGullNrv.HOVER_FRONT);
@@ -2693,7 +2750,7 @@ class SeaGull extends LiveActor {
             if (isFirstStep(this))
                 this.hoverStep = getRandomInt(60, 120);
 
-            this.bankRotation += 0.1;
+            this.bankRotation += 0.1 * getDeltaTimeFrames(viewerInput);
 
             if (isGreaterStep(this, this.hoverStep))
                 this.setNerve(SeaGullNrv.HOVER_FRONT);
@@ -2735,7 +2792,7 @@ class SeaGull extends LiveActor {
     }
 
     public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
-        setXYZDir(this.modelInstance!.modelMatrix, this.axisX, this.axisY, this.axisZ);
+        setMtxAxisXYZ(this.modelInstance!.modelMatrix, this.axisX, this.axisY, this.axisZ);
         setTrans(this.modelInstance!.modelMatrix, this.translation);
     }
 }
@@ -2772,5 +2829,123 @@ export class SeaGullGroup extends LiveActor {
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData('SeaGull');
+    }
+}
+
+class CoconutTreeLeaf extends LiveActor {
+    private axisX = vec3.create();
+    private axisY = vec3.create();
+    private axisZ = vec3.create();
+    private upVec = vec3.create();
+    private currentPoint = vec3.create();
+    private chasePoint = vec3.create();
+    private accelCounter = 0;
+    private waitCounter = 0;
+    private accel = vec3.create();
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, private leafGroup: CoconutTreeLeafGroup, private jointMtx: mat4, private treeAxisZ: vec3) {
+        super(zoneAndLayer, 'CoconutTreeLeaf');
+
+        calcMtxAxis(this.axisX, this.axisY, this.axisZ, this.jointMtx);
+        vec3.copy(this.upVec, this.axisY);
+
+        mat4.getTranslation(this.translation, this.jointMtx);
+
+        vec3.scaleAndAdd(this.chasePoint, this.translation, this.axisZ, 100.0);
+        vec3.copy(this.currentPoint, this.chasePoint);
+    }
+
+    public getBaseMtx(): mat4 {
+        return this.jointMtx;
+    }
+
+    public update(scaleZ: number, scaleX: number, deltaTimeFrames: number): void {
+        const isOnPlayer = false;
+
+        let velUp: number, velDrag: number, velChase: number;
+        if (isOnPlayer) {
+            velUp = 0.2;
+            velDrag = 0.95;
+            velChase = 0.01;
+        } else {
+            velUp = 0.005;
+            velDrag = 0.99;
+            velChase = 0.001;
+
+            if (this.accelCounter < 1) {
+                --this.waitCounter;
+
+                if (this.waitCounter < 1) {
+                    vec3.scale(this.accel, this.treeAxisZ, scaleZ);
+                    vec3.scaleAndAdd(this.accel, this.accel, this.upVec, scaleX * getRandomFloat(-1.0, 1.0));
+                    this.accelCounter = getRandomFloat(10, 30);
+                }
+            } else {
+                vec3.add(this.velocity, this.velocity, this.accel);
+                --this.accelCounter;
+                if (this.accelCounter < 1)
+                    this.waitCounter = getRandomInt(15, 150);
+            }
+        }
+
+        vec3.scaleAndAdd(this.velocity, this.velocity, this.upVec, -velUp);
+
+        vec3.sub(scratchVec3, this.chasePoint, this.currentPoint);
+        const mag = -vec3.dot(this.chasePoint, this.treeAxisZ);
+        vec3.scaleAndAdd(this.velocity, this.velocity, scratchVec3, velChase);
+
+        vec3.scale(this.velocity, this.velocity, velDrag);
+        vec3.scaleAndAdd(this.currentPoint, this.currentPoint, this.velocity, deltaTimeFrames);
+        vec3.sub(this.axisZ, this.currentPoint, this.translation);
+        vec3.normalize(this.axisZ, this.axisZ);
+
+        vec3.scaleAndAdd(scratchVec3, this.upVec, this.treeAxisZ, 0.01 * mag);
+        vec3.cross(this.axisX, scratchVec3, this.axisZ);
+        vec3.normalize(this.axisX, this.axisX);
+
+        vec3.cross(this.axisY, this.axisZ, this.axisX);
+        vec3.normalize(this.axisY, this.axisY);
+        setMtxAxisXYZ(this.jointMtx, this.axisX, this.axisY, this.axisZ);
+    }
+}
+
+export class CoconutTreeLeafGroup extends LiveActor {
+    private leaves: CoconutTreeLeaf[] = [];
+    private axisZ = vec3.fromValues(0, 0, 1);
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, getObjectName(infoIter));
+
+        this.initDefaultPos(sceneObjHolder, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, 'CoconutTreeLeaf');
+        connectToSceneMapObjNoCalcAnim(sceneObjHolder, this);
+
+        const leafCount = getJointNum(this) - 1;
+        for (let i = 0; i < leafCount; i++) {
+            const jointMtx = getJointMtx(this, i);
+            this.leaves.push(new CoconutTreeLeaf(zoneAndLayer, sceneObjHolder, this, jointMtx, this.axisZ));
+        }
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.movement(sceneObjHolder, viewerInput);
+
+        const dist = calcDistanceToPlayer(this, viewerInput.camera);
+        let a = 0, b = 0;
+
+        if (dist > 5000.0) {
+            a = 0.05;
+            b = 0.03;
+        } else if (dist > 3000.0) {
+            a = 0.03;
+            b = 0.01;
+        } else {
+            a = 0.02;
+            b = 0.005;
+        }
+
+        const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+        for (let i = 0; i < this.leaves.length; i++)
+            this.leaves[i].update(a, b, deltaTimeFrames);
     }
 }

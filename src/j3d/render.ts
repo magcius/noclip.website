@@ -24,6 +24,9 @@ import { calcMipChain } from '../gx/gx_texture';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 export class ShapeInstanceState {
+    // One matrix for each joint, which transform into their parent's space.
+    public jointToParentMatrixArray: mat4[] = [];
+
     // One matrix for each joint, which transform into world space.
     public jointToWorldMatrixArray: mat4[] = [];
 
@@ -953,8 +956,8 @@ export class BMDModelInstance {
 
     public materialInstanceState = new MaterialInstanceState();
     public materialInstances: MaterialInstance[] = [];
-    private shapeInstances: ShapeInstance[] = [];
-    private shapeInstanceState = new ShapeInstanceState();
+    public shapeInstances: ShapeInstance[] = [];
+    public shapeInstanceState = new ShapeInstanceState();
 
     private jointVisibility: boolean[];
 
@@ -972,8 +975,10 @@ export class BMDModelInstance {
         const bmd = this.bmdModel.bmd;
 
         const numJoints = bmd.jnt1.joints.length;
+        this.shapeInstanceState.jointToParentMatrixArray = nArray(numJoints, () => mat4.create());
         this.shapeInstanceState.jointToWorldMatrixArray = nArray(numJoints, () => mat4.create());
         this.jointVisibility = nArray(numJoints, () => true);
+        this.calcJointAnim();
 
         const drawViewMatrixCount = bmd.drw1.matrixDefinitions.length;
         this.shapeInstanceState.drawViewMatrixArray = nArray(drawViewMatrixCount, () => mat4.create());
@@ -1194,6 +1199,23 @@ export class BMDModelInstance {
     }
 
     /**
+     * Returns the joint-to-parent matrix for the joint with name {@param jointName}.
+     *
+     * This object is not a copy; if an animation updates the joint, the values in this object will be
+     * updated as well. You can also modify this matrix in order to transform the joints. Note that
+     * this is the same internal joint data as ANK1 animation, and that will be calculated in
+     * {@method calcAnim} or {@method prepareToRender} if an ANK1 animation is bound, so modifiying
+     * this matrix will have no effect in that case.
+     */
+    public getJointToParentMatrixReference(jointName: string): mat4 {
+        const joints = this.bmdModel.bmd.jnt1.joints;
+        for (let i = 0; i < joints.length; i++)
+            if (joints[i].name === jointName)
+                return this.shapeInstanceState.jointToParentMatrixArray[i];
+        throw "could not find joint";
+    }
+
+    /**
      * Returns the joint-to-world matrix for the joint with name {@param jointName}.
      *
      * This object is not a copy; if an animation updates the joint, the values in this object will be
@@ -1220,6 +1242,10 @@ export class BMDModelInstance {
             this.modelMatrix[13] = camera.worldMatrix[13];
             this.modelMatrix[14] = camera.worldMatrix[14];
         }
+
+        // Update joints from ANK1 animator, if we have one bound...
+        if (this.ank1Animator !== null)
+            this.calcJointAnim();
 
         this.calcJointToWorld();
 
@@ -1309,14 +1335,20 @@ export class BMDModelInstance {
         this.draw(device, renderInstManager, camera, true);
     }
 
+    public calcJointAnim(): void {
+        for (let i = 0; i < this.bmdModel.jointData.length; i++) {
+            const joint = this.bmdModel.jointData[i];
+            const jointIndex = joint.jointIndex;
+            calcJointMatrix(this.shapeInstanceState.jointToParentMatrixArray[jointIndex], jointIndex, this.bmdModel.bmd, this.ank1Animator);
+        }
+    }
+
     public calcJointToWorld(): void {
         for (let i = 0; i < this.bmdModel.jointData.length; i++) {
             const joint = this.bmdModel.jointData[i];
 
             const jointIndex = joint.jointIndex;
-            const jointToParentMatrix = matrixScratch2;
-            calcJointMatrix(jointToParentMatrix, jointIndex, this.bmdModel.bmd, this.ank1Animator);
-
+            const jointToParentMatrix = this.shapeInstanceState.jointToParentMatrixArray[jointIndex];
             const dst = this.shapeInstanceState.jointToWorldMatrixArray[jointIndex];
 
             if (joint.parentJointIndex < 0) {

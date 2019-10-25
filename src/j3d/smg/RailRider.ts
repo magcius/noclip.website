@@ -395,7 +395,7 @@ export function getBezierRailForActor(sceneObjHolder: SceneObjHolder, actorIter:
 }
 
 export function isConnectedWithRail(actorIter: JMapInfoIter) {
-    return actorIter.getValueNumber('CommonPath_ID', -1) !== -1;
+    return actorIter.getValueNumber('CommonPath_ID', 0xFFFF) !== 0xFFFF;
 }
 
 export const enum RailDirection { TOWARDS_END, TOWARDS_START }
