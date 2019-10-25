@@ -60,6 +60,8 @@ void main() {
     vec2 t_Thresh = fract(v_SurfCoord.xy * u_CellCount);
 
     gl_FragColor.a = pow(Notch(t_Thresh.x, u_LineWidth), 0.4545) + pow(Notch(t_Thresh.y, u_LineWidth), 0.4545);
+    if (!gl_FrontFacing)
+        gl_FragColor.a *= 0.2;
     gl_FragDepth = gl_FragCoord.z + 1e-6;
 }
 `;
@@ -131,7 +133,6 @@ export class GridPlane {
             blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
             blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
             depthWrite: false,
-            cullMode: GfxCullMode.BACK,
         });
         renderInst.drawIndexes(6);
 
