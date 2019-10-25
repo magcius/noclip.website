@@ -24,7 +24,6 @@ import * as Scenes_Pikmin2 from './j3d/pik2_scenes';
 import * as Scenes_SuperMarioGalaxy1 from './j3d/smg/smg1_scenes';
 import * as Scenes_SuperMarioGalaxy2 from './j3d/smg/smg2_scenes';
 import * as Scenes_SuperMario64DS from './SuperMario64DS/scenes';
-import * as Scenes_SonicMania from './sonic_mania/scenes';
 import * as Scenes_Zelda_OcarinaOfTime3D from './oot3d/oot3d_scenes';
 import * as Scenes_Zelda_MajorasMask3D from './oot3d/mm3d_scenes';
 import * as Scenes_LuigisMansion3D from './oot3d/lm3d_scenes';
@@ -124,7 +123,6 @@ const sceneGroups = [
     Scenes_KingdomHeartsIIFinalMix.sceneGroup,
     "Other",
     Scenes_DarkSoulsCollision.sceneGroup,
-    Scenes_SonicMania.sceneGroup,
     "Experimental",
     Scenes_DarkSouls.sceneGroup,
     Scenes_DonkeyKongCountryReturns.sceneGroup,

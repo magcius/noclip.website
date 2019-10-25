@@ -3,7 +3,7 @@ import { OrbitCameraController } from '../Camera';
 
 import { SceneDesc, SceneContext } from "../SceneBase";
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxTexture, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexAttributeFrequency, GfxInputLayout, GfxInputState, GfxBindingLayoutDescriptor, GfxProgram, GfxBlendMode, GfxBlendFactor, GfxCullMode, makeTextureDescriptor2D, GfxColorWriteMask } from "../gfx/platform/GfxPlatform";
-import { SceneGfx, ViewerRenderInput, Viewer } from "../viewer";
+import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { getDataURLForPath } from "../DataFetcher";
 import { BasicRenderTarget, makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { TransparentBlack, colorNewCopy, colorLerp, colorNew } from '../Color';
