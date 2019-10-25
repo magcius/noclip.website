@@ -177,7 +177,7 @@ export class Explorer implements SceneGfx {
         const jpac = JPA.parse(buffer);
         this.effectSystem = new ExplorerEffectSystem(device, jpac);
 
-        this.sortedResourceIds = jpac.effects.map((res) => res.resourceId).sort();
+        this.sortedResourceIds = jpac.effects.map((res) => res.resourceId).sort((a, b) => a - b);
         this.gridPlane = new GridPlane(device);
 
         this.createUI();
