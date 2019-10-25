@@ -1,6 +1,6 @@
 
 import { vec3, mat4, vec2 } from "gl-matrix";
-import { SceneObjHolder, ZoneAndLayer, getObjectName } from "./smg_scenes";
+import { SceneObjHolder, getObjectName } from "./smg_scenes";
 import { connectToScene, loadBTIData } from "./Actors";
 import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputLayout, GfxInputState, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxCullMode } from "../../gfx/platform/GfxPlatform";
 import { ViewerRenderInput } from "../../viewer";
@@ -18,7 +18,7 @@ import { MaterialParams, PacketParams, ColorKind, setTevOrder, setTevColorIn, se
 import { Camera, texProjCamera } from "../../Camera";
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from "../../gfx/render/GfxRenderer";
 import { createFilterKeyForDrawType, DrawType } from "./NameObj";
-import { LiveActor } from "./LiveActor";
+import { LiveActor, ZoneAndLayer } from "./LiveActor";
 import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
 
 function calcHeightStatic(wave1Time: number, wave2Time: number, x: number, z: number): number {

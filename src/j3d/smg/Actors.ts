@@ -2,9 +2,9 @@
 // Misc actors that aren't big enough to have their own file.
 
 import { LightType } from './DrawBuffer';
-import { SceneObjHolder, ZoneAndLayer, getObjectName, WorldmapPointInfo, getDeltaTimeFrames, getTimeFrames, Dot, FPS } from './smg_scenes';
+import { SceneObjHolder, getObjectName, WorldmapPointInfo, getDeltaTimeFrames, getTimeFrames, Dot, FPS, createSceneObj, SceneObj } from './smg_scenes';
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg7 } from './JMapInfo';
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4, vec3, vec4 } from 'gl-matrix';
 import AnimationController from '../../AnimationController';
 import { MathConstants, computeModelMatrixSRT, clamp, lerp, normToLength, clampRange } from '../../MathHelpers';
 import { colorNewFromRGBA8, Color, Magenta, Green, Red, Blue } from '../../Color';
@@ -18,7 +18,7 @@ import { BMDModelInstance, BTIData } from '../render';
 import { assertExists, leftPad } from '../../util';
 import { Camera } from '../../Camera';
 import { isGreaterStep, isFirstStep, calcNerveRate } from './Spine';
-import { LiveActor, startBck, startBtkIfExist, startBrkIfExist, startBvaIfExist, startBpkIfExist, makeMtxTRFromActor } from './LiveActor';
+import { LiveActor, startBck, startBtkIfExist, startBrkIfExist, startBvaIfExist, startBpkIfExist, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpawnZoneAndLayer } from './LiveActor';
 import { MapPartsRotator } from './MapParts';
 import { isConnectedWithRail } from './RailRider';
 import { drawWorldSpacePoint, getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../../DebugJunk';
@@ -37,6 +37,10 @@ export function connectToSceneNpc(sceneObjHolder: SceneObjHolder, actor: LiveAct
 
 export function connectToSceneIndirectNpc(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x28, 0x06, DrawBufferType.INDIRECT_NPC, -1);
+}
+
+export function connectToSceneItem(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x2C, 0x10, DrawBufferType.NO_SILHOUETTED_MAP_OBJ, -1);
 }
 
 export function connectToSceneItemStrongLight(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
@@ -325,6 +329,10 @@ function getEaseInValue(v0: number, v1: number, v2: number, v3: number): number 
 function getEaseOutValue(v0: number, v1: number, v2: number, v3: number): number {
     const t = Math.cos((v0 / v3) * Math.PI * 0.5);
     return lerp(v1, v2, t);
+}
+
+function getRandomVector(dst: vec3, range: number): void {
+    vec3.set(dst, getRandomFloat(-range, range), getRandomFloat(-range, range), getRandomFloat(-range, range));
 }
 
 function setMtxAxisXYZ(dst: mat4, x: vec3, y: vec3, z: vec3): void {
@@ -926,7 +934,7 @@ export class EarthenPipe extends LiveActor {
 
         vec3.copy(this.origTranslation, this.translation);
 
-        const obeyLocalGravity = getJMapInfoArg7(infoIter, -1);
+        const obeyLocalGravity = getJMapInfoArg7(infoIter, 0);
         if (false && obeyLocalGravity) {
             // TODO(jstpierre): Compute gravity vectors
         } else {
@@ -1069,6 +1077,7 @@ export class Kinopio extends NPCActor {
         this.initModelManagerWithAnm(sceneObjHolder, 'Kinopio');
         connectToSceneNpc(sceneObjHolder, this);
         this.initLightCtrl(sceneObjHolder);
+        this.initEffectKeeper(sceneObjHolder, null);
 
         this.boundingSphereRadius = 100;
 
@@ -1076,7 +1085,7 @@ export class Kinopio extends NPCActor {
         const itemGoods = sceneObjHolder.npcDirector.getNPCItemData('Kinopio', itemGoodsIdx);
         this.equipment(sceneObjHolder, itemGoods);
 
-        const arg2 = getJMapInfoArg2(infoIter);
+        const arg2 = getJMapInfoArg2(infoIter, -1);
         if (arg2 === 0) {
             this.startAction(`SpinWait1`);
         } else if (arg2 === 1) {
@@ -1237,6 +1246,7 @@ export class PenguinRacer extends NPCActor {
         this.initModelManagerWithAnm(sceneObjHolder, "Penguin");
         connectToSceneNpc(sceneObjHolder, this);
         this.initLightCtrl(sceneObjHolder);
+        this.initEffectKeeper(sceneObjHolder, null);
 
         this.boundingSphereRadius = 100;
 
@@ -1252,7 +1262,7 @@ export class PenguinRacer extends NPCActor {
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
-        super.requestArchives(sceneObjHolder, infoIter);
+        sceneObjHolder.modelCache.requestObjectData('Penguin');
         requestArchivesForNPCGoods(sceneObjHolder, getObjectName(infoIter), 0);
     }
 }
@@ -2947,5 +2957,137 @@ export class CoconutTreeLeafGroup extends LiveActor {
         const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
         for (let i = 0; i < this.leaves.length; i++)
             this.leaves[i].update(a, b, deltaTimeFrames);
+    }
+}
+
+const enum AirBubbleNrv { WAIT, MOVE, KILL_WAIT }
+
+export class AirBubble extends LiveActor {
+    private lifetime: number = 180;
+    private gravityVec = vec3.create();
+    private spawnLocation = vec3.create();
+    private accel = vec3.create();
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter | null) {
+        super(zoneAndLayer, `AirBubble`);
+
+        this.initDefaultPos(sceneObjHolder, infoIter);
+        vec3.copy(this.spawnLocation, this.translation);
+        this.initModelManagerWithAnm(sceneObjHolder, 'AirBubble');
+        connectToSceneItem(sceneObjHolder, this);
+
+        this.initEffectKeeper(sceneObjHolder, null);
+        this.initNerve(AirBubbleNrv.WAIT);
+
+        startBck(this, 'Move');
+    }
+
+    public appearMove(pos: vec3, lifetime: number): void {
+        vec3.copy(this.translation, pos);
+        this.makeActorAppeared();
+        showModel(this);
+        this.setNerve(AirBubbleNrv.MOVE);
+
+        if (lifetime <= 0)
+            lifetime = 180;
+
+        this.lifetime = lifetime;
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.movement(sceneObjHolder, viewerInput);
+
+        const currentNerve = this.getCurrentNerve();
+        if (currentNerve === AirBubbleNrv.WAIT) {
+        } else if (currentNerve === AirBubbleNrv.MOVE) {
+            if (isFirstStep(this)) {
+                // Calc gravity.
+                vec3.set(this.gravityVec, 0, -1, 0);
+
+                vec3.negate(scratchVec3, this.gravityVec);
+                vec3.scale(this.velocity, scratchVec3, 7.0);
+            }
+
+            mat4.fromRotation(scratchMatrix, MathConstants.DEG_TO_RAD * 1.5, this.gravityVec);
+            vec3.transformMat4(this.accel, this.accel, scratchMatrix);
+            vec3.scaleAndAdd(this.accel, this.accel, this.gravityVec, -vec3.dot(this.gravityVec, this.accel));
+            if (isNearZeroVec3(this.accel, 0.001))
+                getRandomVector(this.accel, 1.0);
+            vec3.normalize(this.accel, this.accel);
+
+            vec3.scaleAndAdd(this.velocity, this.velocity, this.accel, 0.1);
+            vec3.scaleAndAdd(this.velocity, this.velocity, this.gravityVec, -0.3);
+
+            vec3.scale(this.velocity, this.velocity, 0.85);
+            if (isGreaterStep(this, this.lifetime)) {
+                hideModel(this);
+                emitEffect(sceneObjHolder, this, 'RecoveryBubbleBreak');
+                this.setNerve(AirBubbleNrv.KILL_WAIT);
+            }
+        } else if (currentNerve === AirBubbleNrv.KILL_WAIT) {
+            if (isGreaterStep(this, 90))
+                this.makeActorDead();
+        }
+    }
+}
+
+export class AirBubbleHolder extends LiveActorGroup<AirBubble> {
+    constructor(sceneObjHolder: SceneObjHolder) {
+        super('AirBubbleHolder', 0x40);
+
+        for (let i = 0; i < 0x20; i++) {
+            const bubble = new AirBubble(dynamicSpawnZoneAndLayer, sceneObjHolder, null);
+            bubble.makeActorDead();
+            this.registerActor(bubble);
+        }
+    }
+
+    public appearAirBubble(pos: vec3, lifetime: number): void {
+        const bubble = this.getDeadActor();
+        if (bubble !== null)
+            bubble.appearMove(pos, lifetime);
+    }
+}
+
+const enum AirBubbleGeneratorNrv { WAIT, GENERATE }
+
+export class AirBubbleGenerator extends LiveActor {
+    private delay: number;
+    private lifetime: number;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, getObjectName(infoIter));
+
+        createSceneObj(sceneObjHolder, SceneObj.AIR_BUBBLE_HOLDER);
+
+        this.initDefaultPos(sceneObjHolder, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, 'AirBubbleGenerator');
+        connectToSceneNoSilhouettedMapObj(sceneObjHolder, this);
+        this.initEffectKeeper(sceneObjHolder, null);
+        this.initNerve(AirBubbleGeneratorNrv.WAIT);
+
+        this.delay = getJMapInfoArg0(infoIter, 180);
+        this.lifetime = getJMapInfoArg1(infoIter, -1);
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.movement(sceneObjHolder, viewerInput);
+
+        const currentNerve = this.getCurrentNerve();
+        if (currentNerve === AirBubbleGeneratorNrv.WAIT) {
+            if (isGreaterStep(this, this.delay))
+                this.setNerve(AirBubbleGeneratorNrv.GENERATE);
+        } else if (currentNerve === AirBubbleGeneratorNrv.GENERATE) {
+            if (isFirstStep(this)) {
+                startBck(this, 'Generate');
+            }
+
+            if (isGreaterStep(this, 6)) {
+                calcActorAxis(null, scratchVec3, null, this);
+                vec3.scaleAndAdd(scratchVec3, this.translation, scratchVec3, 120);
+                sceneObjHolder.airBubbleHolder!.appearAirBubble(scratchVec3, this.lifetime);
+                this.setNerve(AirBubbleGeneratorNrv.WAIT);
+            }
+        }
     }
 }

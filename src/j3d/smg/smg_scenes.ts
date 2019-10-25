@@ -33,9 +33,9 @@ import { LightDataHolder } from './LightData';
 import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType } from './NameObj';
 import { EffectSystem } from './EffectSystem';
 
-import { NPCDirector, MiniRoutePoint, createModelObjMapObj, bindColorChangeAnimation, bindTexChangeAnimation, isExistIndirectTexture, connectToSceneIndirectMapObjStrongLight, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneBloom, MiniRouteGalaxy, MiniRoutePart, emitEffect } from './Actors';
+import { NPCDirector, MiniRoutePoint, createModelObjMapObj, bindColorChangeAnimation, bindTexChangeAnimation, isExistIndirectTexture, connectToSceneIndirectMapObjStrongLight, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneBloom, MiniRouteGalaxy, MiniRoutePart, emitEffect, AirBubbleHolder } from './Actors';
 import { getActorTableEntry, PlanetMapCreator, ActorTableEntry } from './ActorTable';
-import { LiveActor, setTextureMappingIndirect, startBck, startBrkIfExist, startBtkIfExist, startBckIfExist, startBvaIfExist } from './LiveActor';
+import { LiveActor, setTextureMappingIndirect, startBck, startBrkIfExist, startBtkIfExist, startBckIfExist, startBvaIfExist, ZoneAndLayer, LayerId, dynamicSpawnZoneAndLayer } from './LiveActor';
 import { BezierRail } from './RailRider';
 
 // Galaxy ticks at 60fps.
@@ -925,6 +925,10 @@ export class UISystem {
     }
 }
 
+export const enum SceneObj {
+    AIR_BUBBLE_HOLDER = 0x39,
+}
+
 export class SceneObjHolder {
     public sceneDesc: SMGSceneDescBase;
     public modelCache: ModelCache;
@@ -936,6 +940,7 @@ export class SceneObjHolder {
     public stageDataHolder: StageDataHolder;
     public effectSystem: EffectSystem | null = null;
     public messageDataHolder: MessageDataHolder | null = null;
+    public airBubbleHolder: AirBubbleHolder | null = null;
     public captureSceneDirector = new CaptureSceneDirector();
 
     // This is technically stored outside the SceneObjHolder, separately
@@ -943,6 +948,23 @@ export class SceneObjHolder {
     public sceneNameObjListExecutor = new SceneNameObjListExecutor();
 
     public uiSystem: UISystem;
+
+    public create(sceneObj: SceneObj): void {
+        if (this.getObj(sceneObj) === null)
+            this.newEachObj(sceneObj);
+    }
+
+    public getObj(sceneObj: SceneObj): any | null {
+        if (sceneObj === SceneObj.AIR_BUBBLE_HOLDER)
+            return this.airBubbleHolder;
+        return null;
+    }
+
+    public newEachObj(sceneObj: SceneObj): void {
+        if (sceneObj === SceneObj.AIR_BUBBLE_HOLDER) {
+            this.airBubbleHolder = new AirBubbleHolder(this);
+        }
+    }
 
     public destroy(device: GfxDevice): void {
         this.sceneNameObjListExecutor.destroy(device);
@@ -952,25 +974,8 @@ export class SceneObjHolder {
     }
 }
 
-const enum LayerId {
-    COMMON = -1,
-    LAYER_A = 0,
-    LAYER_B,
-    LAYER_C,
-    LAYER_D,
-    LAYER_E,
-    LAYER_F,
-    LAYER_G,
-    LAYER_H,
-    LAYER_I,
-    LAYER_J,
-    LAYER_K,
-    LAYER_L,
-    LAYER_M,
-    LAYER_N,
-    LAYER_O,
-    LAYER_P,
-    LAYER_MAX = LAYER_P,
+export function createSceneObj(sceneObjHolder: SceneObjHolder, sceneObj: SceneObj): void {
+    sceneObjHolder.create(sceneObj);
 }
 
 export function getObjectName(infoIter: JMapInfoIter): string {
@@ -1090,11 +1095,6 @@ class ZoneNode {
     }
 }
 
-export interface ZoneAndLayer {
-    zoneId: number;
-    layerId: LayerId;
-}
-
 // TODO(jstpierre): Remove
 class SMGSpawner {
     public zones: ZoneNode[] = [];
@@ -1109,6 +1109,11 @@ class SMGSpawner {
     }
 
     private zoneAndLayerVisible(zoneAndLayer: ZoneAndLayer): boolean {
+        // Dynamic zones are always visible.
+        if (zoneAndLayer.zoneId < 0) {
+            assert(zoneAndLayer.layerId < 0);
+            return true;
+        }
         const zone = this.zones[zoneAndLayer.zoneId];
         return zone.visible && zone.layerVisible && layerVisible(zoneAndLayer.layerId, zone.layerMask);
     }
@@ -1623,8 +1628,8 @@ class SMGSpawner {
         const worldMapRarc = this.sceneObjHolder.modelCache.getObjectData(this.galaxyName.substr(0, 10))!;
         const worldMapPointData = createCsvParser(worldMapRarc.findFileData('ActorInfo/PointPos.bcsv')!);
 
-        // Spawn everything in Zone 0.
-        const zoneAndLayer: ZoneAndLayer = { zoneId: 0, layerId: LayerId.COMMON };
+        // Spawn everything in Zone -1.
+        const zoneAndLayer: ZoneAndLayer = dynamicSpawnZoneAndLayer;
 
         worldMapPointData.mapRecords((infoIter) => {
             const position = vec3.fromValues(

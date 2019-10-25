@@ -4,7 +4,7 @@ import { EffectKeeper } from "./EffectSystem";
 import { Spine, Nerve } from "./Spine";
 import { ActorLightCtrl } from "./LightData";
 import { vec3, mat4 } from "gl-matrix";
-import { ZoneAndLayer, SceneObjHolder, getObjectName, FPS, getDeltaTimeFrames } from "./smg_scenes";
+import { SceneObjHolder, getObjectName, FPS, getDeltaTimeFrames } from "./smg_scenes";
 import { GfxTexture } from "../../gfx/platform/GfxPlatform";
 import { BMDModelInstance } from "../render";
 import { EFB_WIDTH, EFB_HEIGHT } from "../../gx/gx_material";
@@ -216,6 +216,34 @@ export function makeMtxTRFromActor(dst: mat4, actor: LiveActor): void {
         actor.translation[0], actor.translation[1], actor.translation[2]);
 }
 
+export const enum LayerId {
+    COMMON = -1,
+    LAYER_A = 0,
+    LAYER_B,
+    LAYER_C,
+    LAYER_D,
+    LAYER_E,
+    LAYER_F,
+    LAYER_G,
+    LAYER_H,
+    LAYER_I,
+    LAYER_J,
+    LAYER_K,
+    LAYER_L,
+    LAYER_M,
+    LAYER_N,
+    LAYER_O,
+    LAYER_P,
+    LAYER_MAX = LAYER_P,
+}
+
+export interface ZoneAndLayer {
+    zoneId: number;
+    layerId: LayerId;
+}
+
+export const dynamicSpawnZoneAndLayer: ZoneAndLayer = { zoneId: -1, layerId: LayerId.COMMON };
+
 export class LiveActor extends NameObj {
     public visibleScenario: boolean = true;
     public visibleAlive: boolean = true;
@@ -305,10 +333,12 @@ export class LiveActor extends NameObj {
         this.actorAnimKeeper = ActorAnimKeeper.tryCreate(this);
     }
 
-    public initDefaultPos(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
-        getJMapInfoTrans(this.translation, sceneObjHolder, infoIter);
-        getJMapInfoRotate(this.rotation, sceneObjHolder, infoIter);
-        getJMapInfoScale(this.scale, infoIter);
+    public initDefaultPos(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter | null): void {
+        if (infoIter !== null) {
+            getJMapInfoTrans(this.translation, sceneObjHolder, infoIter);
+            getJMapInfoRotate(this.rotation, sceneObjHolder, infoIter);
+            getJMapInfoScale(this.scale, infoIter);
+        }
 
         this.calcBaseMtxInit();
     }
@@ -433,5 +463,57 @@ export class LiveActor extends NameObj {
             this.effectKeeper.updateSyncBckEffect(sceneObjHolder.effectSystem!);
             this.effectKeeper.setVisibleScenario(this.visibleAlive && this.visibleScenario);
         }
+    }
+}
+
+export class NameObjGroup<T extends NameObj> extends NameObj {
+    public objArray: T[] = [];
+
+    constructor(name: string, private maxCount: number) {
+        super(name);
+    }
+
+    protected registerObj(obj: T): void {
+        this.objArray.push(obj);
+    }
+}
+
+export function isDead(actor: LiveActor): boolean {
+    return !actor.visibleAlive;
+}
+
+export class LiveActorGroup<T extends LiveActor> extends NameObjGroup<T> {
+    public appearAll(): void {
+        for (let i = 0; i < this.objArray.length; i++)
+            if (isDead(this.objArray[i]))
+                this.objArray[i].makeActorAppeared();
+    }
+
+    public killAll(): void {
+        for (let i = 0; i < this.objArray.length; i++)
+            this.objArray[i].makeActorAppeared();
+    }
+
+    public getLivingActorNum(): number {
+        let count = 0;
+        for (let i = 0; i < this.objArray.length; i++)
+            if (!isDead(this.objArray[i]))
+                ++count;
+        return count;
+    }
+
+    public getActor(i: number): T {
+        return this.objArray[i];
+    }
+
+    public getDeadActor(): T | null {
+        for (let i = 0; i < this.objArray.length; i++)
+            if (isDead(this.objArray[i]))
+                return this.objArray[i];
+        return null;
+    }
+
+    public registerActor(obj: T): void {
+        this.registerObj(obj);
     }
 }
