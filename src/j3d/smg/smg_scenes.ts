@@ -1398,15 +1398,6 @@ class SMGSpawner {
         case 'FlowerBlueGroup':
             spawnGraph(`FlowerBlue`);
             return;
-        case 'FishGroupA':
-            spawnGraph(`FishA`);
-            break;
-        case 'FishGroupB':
-            spawnGraph(`FishB`);
-            break;
-        case 'FishGroupC':
-            spawnGraph(`FishC`);
-            break;
         case 'SeaGullGroup':
             spawnGraph(`SeaGull`);
             break;

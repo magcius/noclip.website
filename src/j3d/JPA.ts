@@ -16,7 +16,7 @@ import { GXMaterial, AlphaTest, RopInfo, TexGen, TevStage, getVertexAttribLocati
 import { Color, colorNew, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8 } from "../Color";
 import { MaterialParams, ColorKind, ub_PacketParams, u_PacketParamsBufferSize, PacketParams, ub_MaterialParams, setIndTexOrder, setIndTexCoordScale, setTevIndirect, setTevOrder, setTevColorIn, setTevColorOp, setTevAlphaIn, setTevAlphaOp, fillIndTexMtx, fillTextureMappingInfo } from "../gx/gx_render";
 import { GXMaterialHelperGfx } from "../gx/gx_render";
-import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, computeMatrixWithoutTranslation } from "../MathHelpers";
+import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, computeMatrixWithoutTranslation, normToLengthAndAdd, normToLength } from "../MathHelpers";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { GfxRenderInst, GfxRenderInstManager, makeSortKeyTranslucent, GfxRendererLayer, setSortKeyBias, setSortKeyDepth } from "../gfx/render/GfxRenderer";
 import { fillMatrix4x3, fillColor, fillMatrix4x2 } from "../gfx/helpers/UniformBufferHelpers";
@@ -2040,26 +2040,6 @@ export class JPABaseEmitter {
             this.drawP(device, renderInstManager, workData);
         if (!bsp1.stopDrawChild && ssp1 !== null && !drawChildrenBefore)
             this.drawC(device, renderInstManager, workData);
-    }
-}
-
-function normToLength(dst: vec3, len: number): void {
-    const vlen = vec3.length(dst);
-    if (vlen > 0) {
-        const inv = len / vlen;
-        dst[0] = dst[0] * inv;
-        dst[1] = dst[1] * inv;
-        dst[2] = dst[2] * inv;
-    }
-}
-
-function normToLengthAndAdd(dst: vec3, a: vec3, len: number): void {
-    const vlen = vec3.length(a);
-    if (vlen > 0) {
-        const inv = len / vlen;
-        dst[0] += a[0] * inv;
-        dst[1] += a[1] * inv;
-        dst[2] += a[2] * inv;
     }
 }
 

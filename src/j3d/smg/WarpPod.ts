@@ -12,7 +12,7 @@ import { LoopMode } from "../j3d";
 import { assertExists } from "../../util";
 import { DrawBufferType, DrawType } from "./NameObj";
 import { connectToScene, calcUpVec, loadBTIData, emitEffect, setEffectEnvColor, getCamZdir } from "./Actors";
-import { MathConstants, lerp } from "../../MathHelpers";
+import { MathConstants, lerp, normToLength } from "../../MathHelpers";
 import { GfxRenderInstManager } from "../../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../../viewer";
 import { makeStaticDataBuffer } from "../../gfx/helpers/BufferHelpers";
@@ -47,16 +47,6 @@ function vecKillElement(dst: vec3, a: vec3, b: vec3): void {
     dst[0] = a[0] - b[0]*m;
     dst[1] = a[1] - b[1]*m;
     dst[2] = a[2] - b[2]*m;
-}
-
-function normToLength(dst: vec3, len: number): void {
-    const vlen = vec3.length(dst);
-    if (vlen > 0) {
-        const inv = len / vlen;
-        dst[0] = dst[0] * inv;
-        dst[1] = dst[1] * inv;
-        dst[2] = dst[2] * inv;
-    }
 }
 
 const materialParams = new MaterialParams();

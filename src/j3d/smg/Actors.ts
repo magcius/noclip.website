@@ -6,8 +6,8 @@ import { SceneObjHolder, ZoneAndLayer, getObjectName, WorldmapPointInfo, getDelt
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg7 } from './JMapInfo';
 import { mat4, vec3 } from 'gl-matrix';
 import AnimationController from '../../AnimationController';
-import { MathConstants, computeModelMatrixSRT, clamp, lerp } from '../../MathHelpers';
-import { colorNewFromRGBA8, Color, Magenta, Yellow } from '../../Color';
+import { MathConstants, computeModelMatrixSRT, clamp, lerp, normToLength, clampRange } from '../../MathHelpers';
+import { colorNewFromRGBA8, Color, Magenta, Green, Red, Blue } from '../../Color';
 import { ColorKind } from '../../gx/gx_render';
 import { BTK, BRK, LoopMode, BTP } from '../j3d';
 import { BTI } from "../j3d";
@@ -20,7 +20,8 @@ import { Camera } from '../../Camera';
 import { isGreaterStep, isFirstStep, calcNerveRate } from './Spine';
 import { LiveActor, startBck, startBtkIfExist, startBrkIfExist, startBvaIfExist, startBpkIfExist, makeMtxTRFromActor } from './LiveActor';
 import { MapPartsRotator } from './MapParts';
-import { getDebugOverlayCanvas2D, drawWorldSpacePoint } from '../../DebugJunk';
+import { isConnectedWithRail } from './RailRider';
+import { drawWorldSpacePoint, getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../../DebugJunk';
 
 export function connectToScene(sceneObjHolder: SceneObjHolder, actor: LiveActor, movementType: MovementType, calcAnimType: CalcAnimType, drawBufferType: DrawBufferType, drawType: DrawType): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, movementType, calcAnimType, drawBufferType, drawType);
@@ -160,8 +161,15 @@ export function showModel(actor: LiveActor): void {
     actor.visibleModel = true;
 }
 
-export function getYDir(v: vec3, m: mat4): void {
-    vec3.set(v, m[4], m[5], m[6]);
+export function calcActorAxis(axisX: vec3 | null, axisY: vec3 | null, axisZ: vec3 | null, actor: LiveActor): void {
+    const m = scratchMatrix;
+    makeMtxTRFromActor(m, actor);
+    if (axisX !== null)
+        vec3.set(axisX, m[0], m[1], m[2]);
+    if (axisY !== null)
+        vec3.set(axisY, m[4], m[5], m[6]);
+    if (axisZ !== null)
+        vec3.set(axisZ, m[8], m[9], m[10]);
 }
 
 export function calcUpVec(v: vec3, actor: LiveActor): void {
@@ -200,6 +208,10 @@ export function getRailTotalLength(actor: LiveActor): number {
 
 export function getRailDirection(dst: vec3, actor: LiveActor): void {
     vec3.copy(dst, actor.railRider!.currentDir);
+}
+
+export function calcRailPosAtCoord(dst: vec3, actor: LiveActor, coord: number): void {
+    actor.railRider!.calcPosAtCoord(dst, coord);
 }
 
 export function isLoopRail(actor: LiveActor): boolean {
@@ -307,16 +319,20 @@ function setXYZDir(dst: mat4, x: vec3, y: vec3, z: vec3): void {
     dst[11] = 0.0;
 }
 
+function setTrans(dst: mat4, pos: vec3): void {
+    dst[12] = pos[0];
+    dst[13] = pos[1];
+    dst[14] = pos[2];
+    dst[15] = 1.0;
+}
+
 const scratchVec3 = vec3.create();
 function makeMtxFrontUpPos(dst: mat4, front: vec3, up: vec3, pos: vec3): void {
     vec3.normalize(front, front);
     vec3.cross(scratchVec3, front, up);
     vec3.normalize(scratchVec3, scratchVec3);
     setXYZDir(dst, scratchVec3, up, front);
-    dst[12] = pos[0];
-    dst[13] = pos[1];
-    dst[14] = pos[2];
-    dst[15] = 1;
+    setTrans(dst, pos);
 }
 
 // ClippingJudge has these distances.
@@ -393,6 +409,14 @@ export function getRandomFloat(min: number, max: number): number {
 
 export function getRandomInt(min: number, max: number): number {
     return getRandomFloat(min, max) | 0;
+}
+
+function isHalfProbability(): boolean {
+    return Math.random() >= 0.5;
+}
+
+function mod(a: number, b: number): number {
+    return (a + b) % b;
 }
 
 function createSubModelObjName(parentActor: LiveActor, suffix: string): string {
@@ -1119,6 +1143,11 @@ export class Penguin extends NPCActor {
         this.initLightCtrl(sceneObjHolder);
 
         this.boundingSphereRadius = 100;
+
+        if (isConnectedWithRail(infoIter)) {
+            this.initRailRider(sceneObjHolder, infoIter);
+            moveCoordAndTransToNearestRailPos(this);
+        }
 
         const arg0: number = getJMapInfoArg0(infoIter, -1);
         if (arg0 === 0) {
@@ -2399,7 +2428,7 @@ export class OceanWaveFloater extends MapObjActor {
 
 const enum FishNrv { APPROACH, WANDER }
 
-export class Fish extends LiveActor {
+class Fish extends LiveActor {
     private followPointPos = vec3.create();
     private offset = vec3.create();
     private direction = vec3.create();
@@ -2504,8 +2533,7 @@ export class FishGroup extends LiveActor {
         const fishCount = getJMapInfoArg0(infoIter, 10);
 
         this.initDefaultPos(sceneObjHolder, infoIter);
-        makeMtxTRFromActor(scratchMatrix, this);
-        getYDir(this.upVec, scratchMatrix);
+        calcActorAxis(null, this.upVec, null, this);
         this.initRailRider(sceneObjHolder, infoIter);
         moveCoordAndTransToNearestRailPos(this);
 
@@ -2548,5 +2576,201 @@ export class FishGroup extends LiveActor {
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData(FishGroup.getArchiveName(infoIter));
+    }
+}
+
+const enum SeaGullNrv { HOVER_FRONT, HOVER_LEFT, HOVER_RIGHT }
+
+class SeaGull extends LiveActor {
+    private direction: boolean;
+    private updatePosCounter: number;
+    private axisX = vec3.create();
+    private axisY = vec3.create();
+    private axisZ = vec3.create();
+    private upVec = vec3.create();
+    private chasePointIndex: number;
+    private bankRotation: number = 0;
+    private hoverStep: number = 0;
+    private flyUpCounter: number = 0;
+    private maintainHeightCounter: number = 0;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, private seaGullGroup: SeaGullGroup, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, getObjectName(infoIter));
+
+        this.initDefaultPos(sceneObjHolder, infoIter);
+        calcActorAxis(this.axisX, this.axisY, this.axisZ, this);
+        vec3.copy(this.upVec, this.axisY);
+
+        this.initModelManagerWithAnm(sceneObjHolder, 'SeaGull');
+        startBck(this, 'Fly');
+        connectToSceneEnvironment(sceneObjHolder, this);
+
+        const totalLength = getRailTotalLength(this.seaGullGroup);
+        const coord = getRandomFloat(1.0, totalLength - 1.0);
+        this.chasePointIndex = (coord / 500.0) | 0;
+        calcRailPosAtCoord(this.translation, this.seaGullGroup, coord);
+
+        this.direction = isHalfProbability();
+        this.updatePosCounter = getRandomInt(0, 180);
+
+        this.chasePointIndex = this.seaGullGroup.updatePosInfoIndex(this.chasePointIndex, this.direction);
+
+        vec3.scale(scratchVec3a, this.axisX, getRandomFloat(-1.0, 1.0));
+        vec3.scale(scratchVec3b, this.axisZ, getRandomFloat(-1.0, 1.0));
+
+        vec3.add(this.axisZ, scratchVec3a, scratchVec3b);
+        vec3.normalize(this.axisZ, this.axisZ);
+
+        this.initNerve(SeaGullNrv.HOVER_FRONT);
+    }
+
+    private updateHover(): void {
+        if (Math.abs(this.bankRotation) > 0.01) {
+            // vec3.negate(this.upVec, this.gravityVector);
+
+            this.bankRotation = clampRange(this.bankRotation, 30);
+
+            mat4.fromRotation(scratchMatrix, MathConstants.DEG_TO_RAD * this.bankRotation, this.axisZ);
+            vec3.transformMat4(this.axisY, this.upVec, scratchMatrix);
+
+            mat4.fromRotation(scratchMatrix, MathConstants.DEG_TO_RAD * -0.01 * this.bankRotation, this.upVec);
+            vec3.transformMat4(this.axisZ, this.axisZ, scratchMatrix);
+        }
+
+        vec3.scaleAndAdd(this.velocity, this.velocity, this.axisZ, 0.05);
+
+        if (this.flyUpCounter < 1) {
+            this.velocity[1] -= 0.005;
+
+            const chasePoint = this.seaGullGroup.points[this.chasePointIndex];
+            vec3.sub(scratchVec3, chasePoint, this.translation);
+            const dist = vec3.dot(scratchVec3, this.upVec);
+            if (dist >= 500.0) {
+                --this.maintainHeightCounter;
+                if (dist > 500.0 || this.maintainHeightCounter < 1)
+                    this.flyUpCounter = getRandomInt(30, 180);
+            } else {
+                this.maintainHeightCounter = 300;
+            }
+        } else {
+            vec3.scaleAndAdd(this.velocity, this.velocity, this.axisY, 0.04);
+            --this.flyUpCounter;
+            if (this.flyUpCounter < 1)
+                this.maintainHeightCounter = getRandomInt(60, 300);
+        }
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.movement(sceneObjHolder, viewerInput);
+
+        // nerves
+        const currentNerve = this.getCurrentNerve();
+        if (currentNerve === SeaGullNrv.HOVER_FRONT) {
+            if (isFirstStep(this))
+                this.hoverStep = getRandomInt(0, 60);
+
+            this.bankRotation *= 0.995;
+            if (isGreaterStep(this, this.hoverStep)) {
+                const chasePoint = this.seaGullGroup.points[this.chasePointIndex];
+                vec3.subtract(scratchVec3, chasePoint, this.translation);
+                if (vec3.squaredLength(scratchVec3) > 500) {
+                    const p = vec3.dot(this.axisX, scratchVec3);
+                    if (p <= 0)
+                        this.setNerve(SeaGullNrv.HOVER_RIGHT);
+                    else
+                        this.setNerve(SeaGullNrv.HOVER_LEFT);
+                }
+            }
+        } else if (currentNerve === SeaGullNrv.HOVER_LEFT) {
+            if (isFirstStep(this))
+                this.hoverStep = getRandomInt(60, 120);
+
+            this.bankRotation -= 0.1;
+
+            if (isGreaterStep(this, this.hoverStep))
+                this.setNerve(SeaGullNrv.HOVER_FRONT);
+        } else if (currentNerve === SeaGullNrv.HOVER_RIGHT) {
+            if (isFirstStep(this))
+                this.hoverStep = getRandomInt(60, 120);
+
+            this.bankRotation += 0.1;
+
+            if (isGreaterStep(this, this.hoverStep))
+                this.setNerve(SeaGullNrv.HOVER_FRONT);
+        }
+
+        // control
+        this.updateHover();
+
+        if (vec3.squaredLength(this.velocity) > 10*10)
+            normToLength(this.velocity, 10);
+
+        vec3.cross(this.axisX, this.axisY, this.axisZ);
+        vec3.normalize(this.axisX, this.axisX);
+
+        vec3.cross(this.axisY, this.axisZ, this.axisX);
+        vec3.normalize(this.axisY, this.axisY);
+
+        --this.updatePosCounter;
+        if (this.updatePosCounter < 1) {
+            this.chasePointIndex = this.seaGullGroup.updatePosInfoIndex(this.chasePointIndex, this.direction);
+            this.updatePosCounter = 180;
+        }
+
+        // Debugging
+        /*
+        const ctx = getDebugOverlayCanvas2D();
+        const chasePoint = this.seaGullGroup.points[this.chasePointIndex];
+        drawWorldSpacePoint(ctx, viewerInput.camera, chasePoint, Magenta, 10);
+
+        vec3.scaleAndAdd(scratchVec3, this.translation, this.axisX, 20);
+        drawWorldSpaceLine(ctx, viewerInput.camera, this.translation, scratchVec3, Red);
+
+        vec3.scaleAndAdd(scratchVec3, this.translation, this.axisY, 20);
+        drawWorldSpaceLine(ctx, viewerInput.camera, this.translation, scratchVec3, Green);
+
+        vec3.scaleAndAdd(scratchVec3, this.translation, this.axisZ, 20);
+        drawWorldSpaceLine(ctx, viewerInput.camera, this.translation, scratchVec3, Blue);
+        */
+    }
+
+    public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
+        setXYZDir(this.modelInstance!.modelMatrix, this.axisX, this.axisY, this.axisZ);
+        setTrans(this.modelInstance!.modelMatrix, this.translation);
+    }
+}
+
+export class SeaGullGroup extends LiveActor {
+    private seaGulls: SeaGull[] = [];
+    public points: vec3[] = [];
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, getObjectName(infoIter));
+
+        const seaGullCount = getJMapInfoArg0(infoIter, 10);
+
+        this.initRailRider(sceneObjHolder, infoIter);
+        getRailPos(this.translation, this);
+        const railTotalLength = getRailTotalLength(this);
+        const pointCount = ((railTotalLength / 500.0) | 0) + 1;
+        const pointDist = railTotalLength / pointCount;
+
+        for (let i = 0; i < pointCount; i++) {
+            const point = vec3.create();
+            calcRailPosAtCoord(point, this, pointDist * i);
+            this.points.push(point);
+        }
+
+        for (let i = 0; i < seaGullCount; i++)
+            this.seaGulls.push(new SeaGull(zoneAndLayer, sceneObjHolder, this, infoIter));
+    }
+
+    public updatePosInfoIndex(index: number, direction: boolean): number {
+        const step = direction ? -1 : 1;
+        return mod(index + step, this.points.length);
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        sceneObjHolder.modelCache.requestObjectData('SeaGull');
     }
 }

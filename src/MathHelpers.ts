@@ -347,3 +347,23 @@ export function range(start: number, count: number): number[] {
         L.push(i);
     return L;
 }
+
+export function normToLength(dst: vec3, len: number): void {
+    const vlen = vec3.length(dst);
+    if (vlen > 0) {
+        const inv = len / vlen;
+        dst[0] = dst[0] * inv;
+        dst[1] = dst[1] * inv;
+        dst[2] = dst[2] * inv;
+    }
+}
+
+export function normToLengthAndAdd(dst: vec3, a: vec3, len: number): void {
+    const vlen = vec3.length(a);
+    if (vlen > 0) {
+        const inv = len / vlen;
+        dst[0] += a[0] * inv;
+        dst[1] += a[1] * inv;
+        dst[2] += a[2] * inv;
+    }
+}

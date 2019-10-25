@@ -488,6 +488,10 @@ export class RailRider {
         return this.bezierRail.isClosed;
     }
 
+    public calcPosAtCoord(dst: vec3, coord: number): void {
+        this.bezierRail.calcPos(dst, coord);
+    }
+
     public debugDrawRail(camera: Camera, nPoints: number = 50): void {
         const totalLength = this.getTotalLength();
         const speed = totalLength / nPoints;
