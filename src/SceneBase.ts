@@ -1,8 +1,9 @@
 
 import { GfxDevice } from "./gfx/platform/GfxPlatform";
-import { SceneGfx } from "./viewer";
+import { SceneGfx, ViewerRenderInput } from "./viewer";
 import { DataFetcher } from "./DataFetcher";
 import { DataShare } from "./DataShare";
+import { GfxRenderInstManager } from "./gfx/render/GfxRenderer";
 
 export interface ProgressMeter {
     setProgress(progress: number): void;
@@ -10,6 +11,10 @@ export interface ProgressMeter {
 
 export interface Destroyable {
     destroy(device: GfxDevice): void;
+}
+
+export interface GraphObjBase extends Destroyable {
+    prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void;
 }
 
 export interface SceneContext {

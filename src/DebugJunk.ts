@@ -216,7 +216,7 @@ export function drawWorldSpaceAABB(ctx: CanvasRenderingContext2D, camera: Camera
     ctx.stroke();
 }
 
-export function drawWorldSpacePoint(ctx: CanvasRenderingContext2D, camera: Camera, v: vec3, color: Color = Magenta, radius: number = 2): void {
+export function drawWorldSpacePoint(ctx: CanvasRenderingContext2D, camera: Camera, v: vec3, color: Color = Magenta, radius: number = 4): void {
     const cw = ctx.canvas.width;
     const ch = ctx.canvas.height;
     vec4.set(p[0], v[0], v[1], v[2], 1.0);

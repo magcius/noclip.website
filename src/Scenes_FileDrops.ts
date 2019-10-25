@@ -13,6 +13,7 @@ import * as J3D from './j3d/scenes';
 import * as CTR_H3D from './Common/CTR_H3D/H3D';
 import * as RRES from './rres/scenes';
 import * as PaperMarioTTYD from './PaperMarioTTYD/Scenes_PaperMarioTTYD';
+import * as JPAExplorer from './interactive_examples/JPAExplorer';
 import { SceneContext } from "./SceneBase";
 import { DataFetcher, NamedArrayBufferSlice } from "./DataFetcher";
 
@@ -66,7 +67,9 @@ function loadArbitraryFile(device: GfxDevice, buffer: ArrayBufferSlice): Promise
     });
 }
 
-export async function createSceneFromFiles(device: GfxDevice, buffers: NamedArrayBufferSlice[]): Promise<SceneGfx> {
+export async function createSceneFromFiles(context: SceneContext, buffers: NamedArrayBufferSlice[]): Promise<SceneGfx> {
+    const device = context.device;
+
     buffers.sort((a, b) => a.name.localeCompare(b.name));
 
     const buffer = buffers[0];
@@ -89,6 +92,9 @@ export async function createSceneFromFiles(device: GfxDevice, buffers: NamedArra
     if (buffers.length === 2 && buffers[0].name === 'd' && buffers[1].name === 't')
         return PaperMarioTTYD.createWorldRendererFromBuffers(device, buffers[0], buffers[1]);
 
+    if (buffer.name.endsWith('.jpc'))
+        return JPAExplorer.createRendererFromBuffer(context, buffer);
+
     if (buffer.name.endsWith('.bch'))
         CTR_H3D.parse(buffer);
 
@@ -107,6 +113,6 @@ export class DroppedFileSceneDesc implements SceneDesc {
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const dataFetcher = context.dataFetcher;
         const buffers = await Promise.all([...this.files].map((f) => loadFileAsPromise(f, dataFetcher)));
-        return createSceneFromFiles(device, buffers);
+        return createSceneFromFiles(context, buffers);
     }
 }

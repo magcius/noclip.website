@@ -506,7 +506,7 @@ export class GXShapeHelperGfx {
     }
 }
 
-export const bindingLayouts: GfxBindingLayoutDescriptor[] = [
+export const gxBindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 3, numSamplers: 8, },
 ];
 
@@ -522,7 +522,7 @@ export function fillSceneParamsDataOnTemplate(renderInst: GfxRenderInst, viewerI
 export class GXRenderHelperGfx extends GfxRenderHelper {
     public pushTemplateRenderInst(): GfxRenderInst {
         const template = super.pushTemplateRenderInst();
-        template.setBindingLayouts(bindingLayouts);
+        template.setBindingLayouts(gxBindingLayouts);
         template.allocateUniformBuffer(ub_SceneParams, u_SceneParamsBufferSize);
         return template;
     }

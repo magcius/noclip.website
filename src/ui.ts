@@ -112,7 +112,7 @@ function svgStringToCSSBackgroundImage(svgString: string) {
     return `url(data:image/svg+xml,${encodeURI(svgString)})`;
 }
 
-class TextField implements Widget {
+export class TextField implements Widget {
     public textarea: HTMLInputElement;
     public elem: HTMLElement;
 
@@ -175,7 +175,6 @@ export class TextEntry implements Widget {
         };
         textarea.oninput = () => {
             this.textChanged();
-            this.syncClearButtonVisible();
         };
         this.toplevel.appendChild(this.textfield.elem);
 
@@ -879,6 +878,7 @@ export class FloatingPanel implements Widget {
         this.toplevel.style.position = 'absolute';
         this.toplevel.style.left = '82px';
         this.toplevel.style.top = '32px';
+        this.toplevel.style.pointerEvents = 'auto';
         this.toplevel.tabIndex = -1;
 
         this.mainPanel = document.createElement('div');

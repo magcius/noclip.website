@@ -1,7 +1,7 @@
 
 import { OrbitCameraController } from '../Camera';
 
-import { SceneDesc, SceneContext } from "../SceneBase";
+import { SceneDesc, SceneContext, GraphObjBase } from "../SceneBase";
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxTexture, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexAttributeFrequency, GfxInputLayout, GfxInputState, GfxBindingLayoutDescriptor, GfxProgram, GfxBlendMode, GfxBlendFactor, GfxCullMode, makeTextureDescriptor2D, GfxColorWriteMask } from "../gfx/platform/GfxPlatform";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { getDataURLForPath } from "../DataFetcher";
@@ -21,6 +21,7 @@ import { dfHide, dfRange, dfShow } from '../ui';
 import { captureScene } from '../CaptureHelpers';
 import { downloadBuffer } from '../DownloadUtils';
 import { makeZipFile } from '../ZipFile';
+import { GridPlane } from './GridPlane';
 
 const pathBase = `FoxFur`;
 
@@ -383,15 +384,21 @@ class FurObj {
 
         renderInstManager.popTemplateRenderInst();
     }
+
+    public destroy(device: GfxDevice): void {
+        // ayy lmao
+    }
 }
 
 const clearPass = makeClearRenderPassDescriptor(true, TransparentBlack);
 export class SceneRenderer implements SceneGfx {
     private renderTarget = new BasicRenderTarget();
     private renderHelper: GfxRenderHelper;
-    public obj: FurObj[] = [];
+    public fur: FurObj;
+    public obj: GraphObjBase[] = [];
 
     constructor(device: GfxDevice) {
+        this.obj.push(new GridPlane(device));
         this.renderHelper = new GfxRenderHelper(device);
     }
 
@@ -437,7 +444,7 @@ export class SceneRenderer implements SceneGfx {
                 orbit.y = 2;
                 orbit.z = -150;
 
-                const obj = this.obj[0];
+                const obj = this.fur;
                 obj.magnitude = t;
             },
         });
@@ -449,7 +456,8 @@ export class SceneRenderer implements SceneGfx {
     }
 
     public destroy(device: GfxDevice) {
-        // ayy lmao
+        for (let i = 0; i < this.obj.length; i++)
+            this.obj[i].destroy(device);
     }
 }
 
@@ -464,6 +472,7 @@ export class FoxFur implements SceneDesc {
         const r = new SceneRenderer(device);
         const o = new FurObj(device, foxFurObjText, bodyTex);
         window.main.ui.bindSliders(o);
+        r.fur = o;
         r.obj.push(o);
         return r;
     }
