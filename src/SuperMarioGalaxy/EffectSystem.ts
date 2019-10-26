@@ -2,9 +2,9 @@
 import * as RARC from '../j3d/rarc';
 import * as JPA from '../j3d/JPA';
 
-import { createCsvParser, JMapInfoIter } from "./JMapInfo";
+import { createCsvParser, JMapInfoIter, getJMapInfoBool } from "./JMapInfo";
 import { SceneObjHolder } from "./Main";
-import { leftPad, assert, assertExists } from "../util";
+import { leftPad, assert, assertExists, fallback } from "../util";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { vec3, mat4 } from "gl-matrix";
@@ -179,11 +179,11 @@ class SingleEmitter {
 const scratchColor = colorNewCopy(White);
 export function setupMultiEmitter(m: MultiEmitter, autoEffectIter: JMapInfoIter): void {
     vec3.set(m.emitterCallBack.offset,
-        autoEffectIter.getValueNumber('OffsetX', 0),
-        autoEffectIter.getValueNumber('OffsetY', 0),
-        autoEffectIter.getValueNumber('OffsetZ', 0),
+        fallback(autoEffectIter.getValueNumber('OffsetX'), 0),
+        fallback(autoEffectIter.getValueNumber('OffsetY'), 0),
+        fallback(autoEffectIter.getValueNumber('OffsetZ'), 0),
     );
-    const scaleValue = autoEffectIter.getValueNumber('ScaleValue', 1.0);
+    const scaleValue = fallback(autoEffectIter.getValueNumber('ScaleValue'), 1.0);
     if (scaleValue !== 1.0)
         m.emitterCallBack.setBaseScale(scaleValue);
     m.emitterCallBack.affectFlags = parseSRTFlags(assertExists(autoEffectIter.getValueString('Affect')));
@@ -213,15 +213,15 @@ export function setupMultiEmitter(m: MultiEmitter, autoEffectIter: JMapInfoIter)
     const animName = assertExists(autoEffectIter.getValueString('AnimName'));
     if (animName !== '') {
         m.animNames = animName.toLowerCase().split(' ');
-        m.startFrame = autoEffectIter.getValueNumber('StartFrame', 0);
-        m.endFrame = autoEffectIter.getValueNumber('EndFrame', -1);
+        m.startFrame = fallback(autoEffectIter.getValueNumber('StartFrame'), 0);
+        m.endFrame = fallback(autoEffectIter.getValueNumber('EndFrame'), -1);
     } else {
         m.animNames = [];
         m.startFrame = 0;
         m.endFrame = -1;
     }
 
-    m.continueAnimEnd = !!autoEffectIter.getValueNumber('ContinueAnimEnd', 0);
+    m.continueAnimEnd = autoEffectIter.getValueString('ContinueAnimEnd') === 'on';
 }
 
 class MultiEmitterCallBack implements JPA.JPAEmitterCallBack {
@@ -580,7 +580,7 @@ export class EffectKeeper {
 
         setupMultiEmitter(m, autoEffectInfo);
 
-        const parentName = autoEffectInfo.getValueString('ParentName', '');
+        const parentName = fallback(autoEffectInfo.getValueString('ParentName'), '');
         if (parentName !== '') {
             const parentEmitter = assertExists(this.getEmitter(parentName));
             parentEmitter.childEmitters.push(m);

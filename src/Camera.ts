@@ -760,7 +760,7 @@ export function serializeMat4(view: DataView, byteOffs: number, m: mat4): number
     view.setFloat32(byteOffs + 0x24, m[6],  true);
     view.setFloat32(byteOffs + 0x28, m[10], true);
     view.setFloat32(byteOffs + 0x2C, m[14], true);
-    return 4*3;
+    return 0x04*4*3;
 }
 
 export function serializeCamera(view: DataView, byteOffs: number, camera: Camera): number {
@@ -787,7 +787,7 @@ export function deserializeCamera(camera: Camera, view: DataView, byteOffs: numb
     m[15] = 1;
     mat4.invert(camera.viewMatrix, camera.worldMatrix);
     camera.worldMatrixUpdated();
-    return 4*3;
+    return 0x04*4*3;
 }
 
 export function texProjCamera(dst: mat4, camera: Camera, scaleS: number, scaleT: number, transS: number, transT: number): void {

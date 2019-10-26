@@ -4,18 +4,18 @@ import { colorNew, colorCopy, colorFromRGBA, Color } from "../Color";
 import { Camera } from "../Camera";
 import { Light } from "../gx/gx_material";
 import { BMDModelInstance } from "../j3d/render";
-import { JMapInfoIter } from "./JMapInfo";
+import { JMapInfoIter, getJMapInfoBool } from "./JMapInfo";
 import { LightType } from "./DrawBuffer";
 import { SceneObjHolder } from "./Main";
 import { ColorKind } from "../gx/gx_render";
 import { LiveActor } from "./LiveActor";
-import { assertExists } from "../util";
+import { assertExists, fallback } from "../util";
 
 function getValueColor(color: Color, infoIter: JMapInfoIter, prefix: string): void {
-    const colorR = infoIter.getValueNumber(`${prefix}R`, 0) / 0xFF;
-    const colorG = infoIter.getValueNumber(`${prefix}G`, 0) / 0xFF;
-    const colorB = infoIter.getValueNumber(`${prefix}B`, 0) / 0xFF;
-    const colorA = infoIter.getValueNumber(`${prefix}A`, 0) / 0xFF;
+    const colorR = fallback(infoIter.getValueNumber(`${prefix}R`), 0) / 0xFF;
+    const colorG = fallback(infoIter.getValueNumber(`${prefix}G`), 0) / 0xFF;
+    const colorB = fallback(infoIter.getValueNumber(`${prefix}B`), 0) / 0xFF;
+    const colorA = fallback(infoIter.getValueNumber(`${prefix}A`), 0) / 0xFF;
     colorFromRGBA(color, colorR, colorG, colorB, colorA);
 }
 
@@ -27,9 +27,9 @@ export class LightInfo {
     constructor(infoIter: JMapInfoIter, prefix: string) {
         getValueColor(this.Color, infoIter, `${prefix}Color`);
 
-        const posX = infoIter.getValueNumber(`${prefix}PosX`, 0);
-        const posY = infoIter.getValueNumber(`${prefix}PosY`, 0);
-        const posZ = infoIter.getValueNumber(`${prefix}PosZ`, 0);
+        const posX = fallback(infoIter.getValueNumber(`${prefix}PosX`), 0);
+        const posY = fallback(infoIter.getValueNumber(`${prefix}PosY`), 0);
+        const posZ = fallback(infoIter.getValueNumber(`${prefix}PosZ`), 0);
         vec3.set(this.Position, posX, posY, posZ);
 
         this.FollowCamera = infoIter.getValueNumber(`${prefix}FollowCamera`) !== 0;
@@ -60,7 +60,7 @@ export class ActorLightInfo {
         this.Light0 = new LightInfo(infoIter, `${prefix}Light0`);
         this.Light1 = new LightInfo(infoIter, `${prefix}Light1`);
         getValueColor(this.Ambient, infoIter, `${prefix}Ambient`);
-        this.Alpha2 = infoIter.getValueNumber(`${prefix}Alpha2`, 0) / 0xFF;
+        this.Alpha2 = fallback(infoIter.getValueNumber(`${prefix}Alpha2`), 0) / 0xFF;
     }
 
     public setOnModelInstance(modelInstance: BMDModelInstance, camera: Camera, setAmbient: boolean): void {
@@ -89,7 +89,7 @@ export class AreaLightInfo {
 
     constructor(infoIter: JMapInfoIter) {
         this.AreaLightName = assertExists(infoIter.getValueString('AreaLightName'));
-        this.Interpolate = infoIter.getValueBoolean('Interpolate');
+        this.Interpolate = getJMapInfoBool(fallback(infoIter.getValueNumberNoInit('Interpolate'), -1));
         this.Player = new ActorLightInfo(infoIter, 'Player');
         this.Strong = new ActorLightInfo(infoIter, 'Strong');
         this.Weak = new ActorLightInfo(infoIter, 'Weak');
@@ -152,7 +152,7 @@ class LightZoneInfo {
     constructor(public zoneId: number, public zoneName: string, infoIter: JMapInfoIter) {
         for (let i = 0; i < infoIter.getNumRecords(); i++) {
             infoIter.setRecord(i);
-            const lightID = infoIter.getValueNumber('LightID', -1);
+            const lightID = fallback(infoIter.getValueNumber('LightID'), -1);
             const areaLightName = assertExists(infoIter.getValueString('AreaLightName'));
             this.lightIDToAreaLightName.set(lightID, areaLightName);
         }

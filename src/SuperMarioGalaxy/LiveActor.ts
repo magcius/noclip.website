@@ -7,7 +7,7 @@ import { vec3, mat4 } from "gl-matrix";
 import { SceneObjHolder, getObjectName, FPS, getDeltaTimeFrames } from "./Main";
 import { GfxTexture } from "../gfx/platform/GfxPlatform";
 import { EFB_WIDTH, EFB_HEIGHT } from "../gx/gx_material";
-import { JMapInfoIter, createCsvParser, getJMapInfoScale, getJMapInfoTransLocal, getJMapInfoRotateLocal } from "./JMapInfo";
+import { JMapInfoIter, createCsvParser, getJMapInfoScale, getJMapInfoTransLocal, getJMapInfoRotateLocal, getJMapInfoBool } from "./JMapInfo";
 import { TextureMapping } from "../TextureHolder";
 import { computeModelMatrixSRT, computeEulerAngleRotationFromSRTMatrix } from "../MathHelpers";
 import { Camera } from "../Camera";
@@ -18,7 +18,7 @@ import { BMDModelInstance } from "../j3d/render";
 import { BRK, BTK, BCK, LoopMode, BVA, BTP, BPK } from '../j3d/j3d';
 import * as RARC from '../j3d/rarc';
 import * as Viewer from '../viewer';
-import { assertExists } from "../util";
+import { assertExists, fallback } from "../util";
 import { RailRider } from "./RailRider";
 
 function setIndirectTextureOverride(modelInstance: BMDModelInstance, sceneTexture: GfxTexture): void {
@@ -41,8 +41,8 @@ class ActorAnimDataInfo {
 
     constructor(infoIter: JMapInfoIter, animType: string) {
         this.Name = assertExists(infoIter.getValueString(`${animType}Name`));
-        this.StartFrame = infoIter.getValueNumber(`${animType}StartFrame`, -1);
-        this.IsKeepAnim = !!infoIter.getValueNumber(`${animType}IsKeepAnim`);
+        this.StartFrame = fallback(infoIter.getValueNumber(`${animType}StartFrame`), -1);
+        this.IsKeepAnim = getJMapInfoBool(fallback(infoIter.getValueNumber(`${animType}IsKeepAnim`), -1));
     }
 }
 

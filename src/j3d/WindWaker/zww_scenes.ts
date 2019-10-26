@@ -17,7 +17,7 @@ import { BMD, BTK, BRK, BCK, BTI, LoopMode, BMT } from '../j3d';
 import { BMDModelInstance, BMDModel, BTIData } from '../render';
 import { Camera, computeViewMatrix, texProjCamera } from '../../Camera';
 import { DeviceProgram } from '../../Program';
-import { colorToCSS, Color, colorNew } from '../../Color';
+import { colorToCSS, Color, colorNew, colorLerp } from '../../Color';
 import { ColorKind, fillSceneParamsDataOnTemplate } from '../../gx/gx_render';
 import { GXRenderHelperGfx } from '../../gx/gx_render';
 import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBufferUsage, GfxFormat, GfxVertexAttributeFrequency, GfxInputLayout, GfxInputState, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor, GfxCompareMode, GfxBufferFrequencyHint, GfxVertexAttributeDescriptor, GfxTexture } from '../../gfx/platform/GfxPlatform';

@@ -1,7 +1,7 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { assert, assertExists, align, nArray, hexzero } from '../util';
+import { assert, assertExists, align, nArray, hexzero, fallback } from '../util';
 import { DataFetcher, DataFetcherFlags, AbortedCallback } from '../DataFetcher';
 import { MathConstants, computeModelMatrixSRT, lerp, computeNormalMatrix, clamp } from '../MathHelpers';
 import { getPointBezier } from '../Spline';
@@ -504,6 +504,7 @@ class SMGRenderer implements Viewer.SceneGfx {
 
     public deserializeSaveState(src: ArrayBuffer, offs: number, byteLength: number): number {
         const view = new DataView(src);
+        console.log(offs, byteLength);
         if (offs < byteLength)
             this.setCurrentScenario(view.getUint8(offs++));
         return offs;
@@ -1759,13 +1760,13 @@ class StageDataHolder {
     }
 
     public legacyCreateObjinfo(infoIter: JMapInfoIter, paths: Path[]): ObjInfo {
-        const objId = infoIter.getValueNumber('l_id', -1);
-        const objName = infoIter.getValueString('name', 'Unknown');
-        const objArg0 = infoIter.getValueNumber('Obj_arg0', -1);
-        const objArg1 = infoIter.getValueNumber('Obj_arg1', -1);
-        const objArg2 = infoIter.getValueNumber('Obj_arg2', -1);
-        const objArg3 = infoIter.getValueNumber('Obj_arg3', -1);
-        const pathId: number = infoIter.getValueNumber('CommonPath_ID', -1);
+        const objId = fallback(infoIter.getValueNumberNoInit('l_id'), -1);
+        const objName = fallback(infoIter.getValueString('name'), 'Unknown');
+        const objArg0 = fallback(infoIter.getValueNumberNoInit('Obj_arg0'), -1);
+        const objArg1 = fallback(infoIter.getValueNumberNoInit('Obj_arg1'), -1);
+        const objArg2 = fallback(infoIter.getValueNumberNoInit('Obj_arg2'), -1);
+        const objArg3 = fallback(infoIter.getValueNumberNoInit('Obj_arg3'), -1);
+        const pathId: number = fallback(infoIter.getValueNumberNoInit('CommonPath_ID'), -1);
         const path = paths.find((path) => path.l_id === pathId) || null;
         const modelMatrix = mat4.create();
 
@@ -1872,12 +1873,12 @@ class StageDataHolder {
     }
 
     private calcPlacementMtx(infoIter: JMapInfoIter): void {
-        const pos_x = infoIter.getValueNumber('pos_x', 0);
-        const pos_y = infoIter.getValueNumber('pos_y', 0);
-        const pos_z = infoIter.getValueNumber('pos_z', 0);
-        const dir_x = infoIter.getValueNumber('dir_x', 0) * MathConstants.DEG_TO_RAD;
-        const dir_y = infoIter.getValueNumber('dir_y', 0) * MathConstants.DEG_TO_RAD;
-        const dir_z = infoIter.getValueNumber('dir_z', 0) * MathConstants.DEG_TO_RAD;
+        const pos_x = fallback(infoIter.getValueNumber('pos_x'), 0);
+        const pos_y = fallback(infoIter.getValueNumber('pos_y'), 0);
+        const pos_z = fallback(infoIter.getValueNumber('pos_z'), 0);
+        const dir_x = fallback(infoIter.getValueNumber('dir_x'), 0) * MathConstants.DEG_TO_RAD;
+        const dir_y = fallback(infoIter.getValueNumber('dir_y'), 0) * MathConstants.DEG_TO_RAD;
+        const dir_z = fallback(infoIter.getValueNumber('dir_z'), 0) * MathConstants.DEG_TO_RAD;
         computeModelMatrixSRT(this.placementMtx, 1, 1, 1, dir_x, dir_y, dir_z, pos_x, pos_y, pos_z);
     }
 

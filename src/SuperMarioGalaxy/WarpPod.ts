@@ -6,11 +6,11 @@ import { getVertexAttribLocation, TevStage, IndTexStage, TexGen, ColorChannelCon
 import * as GX from "../gx/gx_enum";
 import { LiveActor, startBck, startBrkIfExist, ZoneAndLayer } from "./LiveActor";
 import { SceneObjHolder, getObjectName } from "./Main";
-import { JMapInfoIter, getJMapInfoArg1, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg6, getJMapInfoGroupId } from "./JMapInfo";
+import { JMapInfoIter, getJMapInfoArg1, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg6, getJMapInfoGroupId, getJMapInfoBool } from "./JMapInfo";
 import { BTIData } from "../j3d/render";
 import { LoopMode } from "../j3d/j3d";
 import { RARC } from "../j3d/rarc";
-import { assertExists } from "../util";
+import { assertExists, fallback } from "../util";
 import { DrawBufferType, DrawType } from "./NameObj";
 import { connectToScene, calcUpVec, loadBTIData, emitEffect, setEffectEnvColor, getCamZdir } from "./Actors";
 import { MathConstants, lerp, normToLength } from "../MathHelpers";
@@ -278,10 +278,10 @@ export class WarpPod extends LiveActor {
         this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, "WarpPod");
 
-        this.visible = !!getJMapInfoArg1(infoIter, -1);
-        const hasSaveFlag = !!getJMapInfoArg3(infoIter, -1);
-        const astroDomeNum = !!getJMapInfoArg4(infoIter, -1);
-        const colorIndex = getJMapInfoArg6(infoIter, -1);
+        this.visible = getJMapInfoBool(fallback(getJMapInfoArg1(infoIter), 1));
+        const hasSaveFlag = getJMapInfoBool(fallback(getJMapInfoArg3(infoIter), -1));
+        const astroDomeNum = getJMapInfoBool(fallback(getJMapInfoArg4(infoIter), -1));
+        const colorIndex = fallback(getJMapInfoArg6(infoIter), 0);
         
         let color = warpPodColorTable[colorIndex];
         if (color === undefined) {

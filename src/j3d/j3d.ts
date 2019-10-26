@@ -161,7 +161,7 @@ export interface INF1 {
 
 function readINF1Chunk(buffer: ArrayBufferSlice): INF1 {
     const view = buffer.createDataView();
-    const matrixCalcType: MatrixCalcType = view.getUint32(0x08) & 0x0F;
+    const matrixCalcType: MatrixCalcType = view.getUint16(0x08) & 0x0F;
     const packetCount = view.getUint32(0x0C);
     const vertexCount = view.getUint32(0x10);
     const hierarchyOffs = view.getUint32(0x14);

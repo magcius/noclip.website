@@ -2,18 +2,17 @@
 import { JMapInfoIter } from "./JMapInfo";
 import { vec3 } from "gl-matrix";
 import { SceneObjHolder } from "./Main";
-import { assertExists, assert } from "../util";
+import { assertExists, assert, fallback } from "../util";
 import { clamp, isNearZero, isNearZeroVec3 } from "../MathHelpers";
 import { LiveActor } from "./LiveActor";
 import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { Camera } from "../Camera";
 import { Magenta } from "../Color";
-import { Spine } from "./Spine";
 
 function getRailPointPos(dst: vec3, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, prefix: string): void {
-    dst[0] = infoIter.getValueNumber(`${prefix}_x`, 0);
-    dst[1] = infoIter.getValueNumber(`${prefix}_y`, 0);
-    dst[2] = infoIter.getValueNumber(`${prefix}_z`, 0);
+    dst[0] = fallback(infoIter.getValueNumber(`${prefix}_x`), 0);
+    dst[1] = fallback(infoIter.getValueNumber(`${prefix}_y`), 0);
+    dst[2] = fallback(infoIter.getValueNumber(`${prefix}_z`), 0);
 
     const stageDataHolder = assertExists(sceneObjHolder.stageDataHolder.findPlacedStageDataHolder(infoIter));
     vec3.transformMat4(dst, dst, stageDataHolder.placementMtx);
@@ -381,14 +380,15 @@ export class BezierRail {
 }
 
 export function getBezierRailForActor(sceneObjHolder: SceneObjHolder, actorIter: JMapInfoIter): BezierRail {
-    const railId = actorIter.getValueNumber('CommonPath_ID', -1);
+    assert(isConnectedWithRail(actorIter));
+    const railId = assertExists(actorIter.getValueNumber('CommonPath_ID'));
     const stageDataHolder = sceneObjHolder.stageDataHolder.findPlacedStageDataHolder(actorIter)!;
     const [railIter, pointInfo] = stageDataHolder.getCommonPathPointInfo(railId);
     return new BezierRail(sceneObjHolder, railIter, pointInfo);
 }
 
 export function isConnectedWithRail(actorIter: JMapInfoIter) {
-    return actorIter.getValueNumber('CommonPath_ID', 0xFFFF) !== 0xFFFF;
+    return fallback(actorIter.getValueNumberNoInit('CommonPath_ID'), 0xFFFF) !== 0xFFFF;
 }
 
 export const enum RailDirection { TOWARDS_END, TOWARDS_START }
