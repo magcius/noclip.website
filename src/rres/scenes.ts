@@ -14,6 +14,7 @@ import { GXMaterialHacks } from '../gx/gx_material';
 import AnimationController from '../AnimationController';
 import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
 import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
+import { SceneContext } from '../SceneBase';
 
 const materialHacks: GXMaterialHacks = {
     lightingFudge: (p) => `(0.5 * (${p.ambSource} + 0.2) * ${p.matSource})`,
@@ -128,7 +129,8 @@ export function createBasicRRESRendererFromU8Buffer(device: GfxDevice, buffer: A
     });
 }
 
-export function createSceneFromU8Buffer(device: GfxDevice, buffer: ArrayBufferSlice) {
+export function createSceneFromU8Buffer(context: SceneContext, buffer: ArrayBufferSlice) {
+    const device = context.device;
     const arc = U8.parse(buffer);
 
     // If we have a course.kmp, that means we're a Mario Kart Wii archive.

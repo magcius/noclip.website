@@ -9,14 +9,16 @@ import * as JPA from '../j3d/JPA';
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec3 } from "gl-matrix";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
-import { assertExists, assert, hexzero } from "../util";
+import { assertExists, hexzero } from "../util";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { SceneContext } from "../SceneBase";
 import { FloatingPanel, LAYER_ICON, HIGHLIGHT_COLOR, Checkbox, TextField } from "../ui";
 import { GridPlane } from "./GridPlane";
 import { getDebugOverlayCanvas2D, drawWorldSpacePoint } from "../DebugJunk";
+import { createCsvParser } from "../j3d/smg/JMapInfo";
+import { RARC } from "../j3d/rarc";
 
-class ExplorerEffectSystem {
+class BasicEffectSystem {
     private emitterManager: JPA.JPAEmitterManager;
     private drawInfo = new JPA.JPADrawInfo();
     private jpacData: JPA.JPACData;
@@ -83,10 +85,8 @@ function mod(a: number, b: number): number {
     return (a + b) % b;
 }
 
-function arrayNext<T>(L: T[], v: T, incr: number): T {
-    const n = L.indexOf(v);
-    assert(n >= 0);
-    return L[mod(n + incr, L.length)];
+function arrayNextIdx<T>(L: T[], n: number, incr: number): number {
+    return mod(n + incr, L.length);
 }
 
 export class SimpleButton {
@@ -152,37 +152,69 @@ class SimpleTextEntry {
     }
 }
 
+function makeDataList(strings: string[]): HTMLDataListElement {
+    const datalist = document.createElement('datalist');
+    for (let i = 0; i < strings.length; i++) {
+        const opt = document.createElement('option');
+        opt.textContent = strings[i];
+        datalist.appendChild(opt);
+    }
+    return datalist;
+}
+
 const clearPass = makeClearRenderPassDescriptor(true, colorNew(0.2, 0.2, 0.2, 1.0));
 const scratchVec3 = vec3.create();
 export class Explorer implements SceneGfx {
     private renderTarget = new BasicRenderTarget();
     private renderHelper: GfxRenderHelper;
-    private effectSystem: ExplorerEffectSystem;
+    private effectSystem: BasicEffectSystem;
     private uiContainer: HTMLElement;
     private gridPlane: GridPlane;
     private emitters: JPA.JPABaseEmitter[] = [];
-    private sortedResourceIds: number[];
-    private currentResourceId: number = -1;
+    private currentEffectIndex: number = -1;
     private wiggleEmitters: boolean = false;
     private loopEmitters: boolean = true;
+    private jpac: JPA.JPAC;
 
     // UI
+    private currentEffectIndexEntry: SimpleTextEntry;
     private currentResourceIdEntry: SimpleTextEntry;
+    private currentNameEntry: SimpleTextEntry | null = null;
 
-    constructor(private context: SceneContext, buffer: ArrayBufferSlice) {
+    constructor(private context: SceneContext, buffer: ArrayBufferSlice, private effectNames: string[] | null = null) {
         const device = context.device;
         this.uiContainer = context.uiContainer;
 
         this.renderHelper = new GfxRenderHelper(device);
-        const jpac = JPA.parse(buffer);
-        this.effectSystem = new ExplorerEffectSystem(device, jpac);
+        this.jpac = JPA.parse(buffer);
+        this.effectSystem = new BasicEffectSystem(device, this.jpac);
 
-        this.sortedResourceIds = jpac.effects.map((res) => res.resourceId).sort((a, b) => a - b);
         this.gridPlane = new GridPlane(device);
 
         this.createUI();
 
-        this.setResourceId(this.sortedResourceIds[0]);
+        this.setEffectIndex(0);
+    }
+
+    private getResourceIdString(effectIndex: number): string {
+        const effect = this.jpac.effects[effectIndex];
+        return hexzero(effect.resourceId, 4);
+    }
+
+    private findByEffectName(effectName: string): number | null {
+        const effectIndex = this.effectNames!.findIndex((name) => name.toLowerCase() === effectName.toLowerCase());
+        if (effectIndex >= 0)
+            return effectIndex;
+        else
+            return null;
+    }
+
+    private findByResourceId(resourceId: number): number | null {
+        const effectIndex = this.jpac.effects.findIndex((res) => res.resourceId === resourceId);
+        if (effectIndex >= 0)
+            return effectIndex;
+        else
+            return null;
     }
 
     private createUI(): void {
@@ -191,17 +223,62 @@ export class Explorer implements SceneGfx {
         panel.setWidth(600);
         this.uiContainer.appendChild(panel.elem);
 
+        const effectIndexList = makeDataList(this.jpac.effects.map((r, i) => '' + i));
+        effectIndexList.id = 'EffectIndexList';
+        panel.contents.appendChild(effectIndexList);
+
+        this.currentEffectIndexEntry = new SimpleTextEntry();
+        this.currentEffectIndexEntry.setLabel('Effect Index');
+        const resIndexInput = this.currentEffectIndexEntry.textfield.textarea;
+        resIndexInput.setAttribute('list', effectIndexList.id);
+        this.currentEffectIndexEntry.onsubmit = (newValue: string) => {
+            const effectIndex = parseInt(newValue, 10);
+            if (effectIndex !== null) {
+                this.setEffectIndex(effectIndex);
+            } else {
+                this.setUIToCurrent();
+            }
+        };
+        panel.contents.appendChild(this.currentEffectIndexEntry.elem);
+
+        const resourceIdList = makeDataList(this.jpac.effects.map((r) => this.getResourceIdString(r.resourceId)));
+        resourceIdList.id = 'ResourceIdList';
+        panel.contents.appendChild(resourceIdList);
+
         this.currentResourceIdEntry = new SimpleTextEntry();
         this.currentResourceIdEntry.setLabel('Resource ID');
+        const resIdInput = this.currentResourceIdEntry.textfield.textarea;
+        resIdInput.setAttribute('list', resourceIdList.id);
         this.currentResourceIdEntry.onsubmit = (newValue: string) => {
             const resourceId = parseInt(newValue, 16);
-            if (this.sortedResourceIds.includes(resourceId)) {
-                this.setResourceId(resourceId);
+            const effectIndex = this.findByResourceId(resourceId);
+            if (effectIndex !== null) {
+                this.setEffectIndex(effectIndex);
             } else {
-                this.currentResourceIdEntry.textfield.setValue(hexzero(this.currentResourceId, 4));
+                this.setUIToCurrent();
             }
         };
         panel.contents.appendChild(this.currentResourceIdEntry.elem);
+
+        if (this.effectNames !== null) {
+            const effectNameList = makeDataList(this.effectNames);
+            effectNameList.id = 'EffectNameList';
+            panel.contents.appendChild(effectNameList);
+
+            this.currentNameEntry = new SimpleTextEntry();
+            this.currentNameEntry.setLabel('Name');
+            const resIdInput = this.currentNameEntry.textfield.textarea;
+            resIdInput.setAttribute('list', effectNameList.id);
+            this.currentNameEntry.onsubmit = (newValue: string) => {
+                const effectIndex = this.findByEffectName(newValue);
+                if (effectIndex !== null) {
+                    this.setEffectIndex(effectIndex);
+                } else {
+                    this.setUIToCurrent();
+                }
+            };
+            panel.contents.appendChild(this.currentNameEntry.elem);    
+        }
 
         const playbackControls = document.createElement('div');
         playbackControls.style.display = 'grid';
@@ -213,7 +290,7 @@ export class Explorer implements SceneGfx {
         prevButton.setActive(true);
         prevButton.setLabel('Previous');
         prevButton.onclick = () => {
-            this.setResourceId(arrayNext(this.sortedResourceIds, this.currentResourceId, -1));
+            this.setEffectIndex(arrayNextIdx(this.jpac.effects, this.currentEffectIndex, -1));
         };
         playbackControls.appendChild(prevButton.elem);
 
@@ -221,7 +298,7 @@ export class Explorer implements SceneGfx {
         playButton.setActive(true);
         playButton.setLabel('Play');
         playButton.onclick = () => {
-            this.setResourceId(this.currentResourceId);
+            this.setEffectIndex(this.currentEffectIndex);
         };
         playbackControls.appendChild(playButton.elem);
 
@@ -229,7 +306,7 @@ export class Explorer implements SceneGfx {
         nextButton.setActive(true);
         nextButton.setLabel('Next');
         nextButton.onclick = () => {
-            this.setResourceId(arrayNext(this.sortedResourceIds, this.currentResourceId, +1));
+            this.setEffectIndex(arrayNextIdx(this.jpac.effects, this.currentEffectIndex, +1));
         };
         playbackControls.appendChild(nextButton.elem);
 
@@ -242,18 +319,26 @@ export class Explorer implements SceneGfx {
         const loopCheckbox = new Checkbox('Loop', this.loopEmitters);
         loopCheckbox.onchanged = () => {
             this.loopEmitters = loopCheckbox.checked;
-            this.setResourceId(this.currentResourceId);
         };
         panel.contents.appendChild(loopCheckbox.elem);
     }
 
-    private createEmitter(resourceId = this.currentResourceId): void {
+    private setUIToCurrent(): void {
+        const resource = this.jpac.effects[this.currentEffectIndex];
+        this.currentEffectIndexEntry.textfield.setValue('' + this.currentEffectIndex);
+        this.currentResourceIdEntry.textfield.setValue(this.getResourceIdString(resource.resourceId));
+        if (this.currentNameEntry !== null)
+            this.currentNameEntry.textfield.setValue(this.effectNames![this.currentEffectIndex]);
+    }
+
+    private createEmitter(effectIndex = this.currentEffectIndex): void {
+        const resourceId = this.jpac.effects[effectIndex].resourceId;
         const newEmitter = this.effectSystem.createBaseEmitter(this.context.device, this.renderHelper.getCache(), resourceId);
         this.emitters.push(newEmitter);
     }
 
-    private setResourceId(newResourceId: number): void {
-        this.currentResourceId = newResourceId;
+    private setEffectIndex(newEffectIndex: number): void {
+        this.currentEffectIndex = newEffectIndex;
 
         for (let i = 0; i < this.emitters.length; i++) {
             const emitter = this.emitters[i];
@@ -266,7 +351,7 @@ export class Explorer implements SceneGfx {
         this.emitters.length = 0;
         this.createEmitter();
 
-        this.currentResourceIdEntry.textfield.setValue(hexzero(this.currentResourceId, 4));
+        this.setUIToCurrent();
     }
 
     public createCameraController() {
@@ -334,4 +419,13 @@ export class Explorer implements SceneGfx {
 
 export function createRendererFromBuffer(context: SceneContext, buffer: ArrayBufferSlice) {
     return new Explorer(context, buffer);
+}
+
+export function createRendererFromSMGArchive(context: SceneContext, arc: RARC) {
+    const effectNamesCSV = createCsvParser(arc.findFileData(`ParticleNames.bcsv`)!);
+    const effectNames = effectNamesCSV.mapRecords((iter) => {
+        return assertExists(iter.getValueString('name'));
+    });
+    // TODO(jstpierre): AutoEffect systems?
+    return new Explorer(context, arc.findFileData(`particles.jpc`)!, effectNames);
 }

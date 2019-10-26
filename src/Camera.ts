@@ -567,7 +567,8 @@ export class OrbitCameraController implements CameraController {
             this.forceUpdate = false;
         }
 
-        return updated;
+        // Don't bother updating the Orbit camera since we don't read it from URL.
+        return false;
     }
 }
 

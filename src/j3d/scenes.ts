@@ -6,7 +6,6 @@ import * as UI from '../ui';
 import * as Viewer from '../viewer';
 
 import { BMD, BMT, BTK, BRK, BCK } from './j3d';
-import * as Yaz0 from '../Common/Compression/Yaz0';
 import * as RARC from './rarc';
 import { BMDModelInstance, BMDModel } from './render';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
@@ -14,6 +13,8 @@ import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_rende
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { GXMaterialHacks } from '../gx/gx_material';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import * as JPAExplorer from '../interactive_examples/JPAExplorer';
+import { SceneContext } from '../SceneBase';
 
 export class BasicRenderer implements Viewer.SceneGfx {
     private renderTarget = new BasicRenderTarget();
@@ -112,56 +113,57 @@ export function createModelInstance(device: GfxDevice, cache: GfxRenderCache, bm
     return scene;
 }
 
-function createScenesFromBuffer(device: GfxDevice, renderer: BasicRenderer, buffer: ArrayBufferSlice): Promise<BMDModelInstance[]> {
-    return Promise.resolve(buffer).then((buffer: ArrayBufferSlice) => {
-        if (readString(buffer, 0, 4) === 'Yaz0')
-            return Yaz0.decompress(buffer);
-        else
-            return buffer;
-    }).then((buffer: ArrayBufferSlice) => {
-        if (readString(buffer, 0, 4) === 'RARC') {
-            const rarc = RARC.parse(buffer);
-            renderer.rarc.push(rarc);
-            const bmdFiles = rarc.files.filter((f) => f.name.endsWith('.bmd') || f.name.endsWith('.bdl'));
-            let scenes = bmdFiles.map((bmdFile) => {
-                // Find the corresponding btk.
-                const basename = bmdFile.name.split('.')[0];
-                const btkFile = rarc.files.find((f) => f.name === `${basename}.btk`) || null;
-                const brkFile = rarc.files.find((f) => f.name === `${basename}.brk`) || null;
-                const bckFile = rarc.files.find((f) => f.name === `${basename}.bck`) || null;
-                const bmtFile = rarc.files.find((f) => f.name === `${basename}.bmt`) || null;
-                let scene;
-                try {
-                    scene = createModelInstance(device, renderer.renderHelper.renderInstManager.gfxRenderCache, bmdFile, btkFile, brkFile, bckFile, bmtFile);
-                } catch(e) {
-                    console.warn(`File ${basename} failed to parse:`, e);
-                    return null;
-                }
-                scene.name = basename;
-                if (basename.includes('_sky'))
-                    scene.isSkybox = true;
-                return scene;
-            });
+function createScenesFromBuffer(device: GfxDevice, renderer: BasicRenderer, buffer: ArrayBufferSlice): BMDModelInstance[] {
+    if (readString(buffer, 0, 4) === 'RARC') {
+        const rarc = RARC.parse(buffer);
+        renderer.rarc.push(rarc);
+        const bmdFiles = rarc.files.filter((f) => f.name.endsWith('.bmd') || f.name.endsWith('.bdl'));
+        let scenes = bmdFiles.map((bmdFile) => {
+            // Find the corresponding btk.
+            const basename = bmdFile.name.split('.')[0];
+            const btkFile = rarc.files.find((f) => f.name === `${basename}.btk`) || null;
+            const brkFile = rarc.files.find((f) => f.name === `${basename}.brk`) || null;
+            const bckFile = rarc.files.find((f) => f.name === `${basename}.bck`) || null;
+            const bmtFile = rarc.files.find((f) => f.name === `${basename}.bmt`) || null;
+            let scene;
+            try {
+                scene = createModelInstance(device, renderer.renderHelper.renderInstManager.gfxRenderCache, bmdFile, btkFile, brkFile, bckFile, bmtFile);
+            } catch(e) {
+                console.warn(`File ${basename} failed to parse:`, e);
+                return null;
+            }
+            scene.name = basename;
+            if (basename.includes('_sky'))
+                scene.isSkybox = true;
+            return scene;
+        });
 
-            return scenes.filter((scene) => scene !== null) as BMDModelInstance[];
-        }
+        return scenes.filter((scene) => scene !== null) as BMDModelInstance[];
+    }
 
-        if (['J3D2bmd3', 'J3D2bdl4'].includes(readString(buffer, 0, 8))) {
-            const bmd = BMD.parse(buffer);
-            const bmdModel = new BMDModel(device, renderer.renderHelper.renderInstManager.gfxRenderCache, bmd);
-            const modelInstance = new BMDModelInstance(bmdModel);
-            return [modelInstance];
-        }
+    if (['J3D2bmd3', 'J3D2bdl4'].includes(readString(buffer, 0, 8))) {
+        const bmd = BMD.parse(buffer);
+        const bmdModel = new BMDModel(device, renderer.renderHelper.renderInstManager.gfxRenderCache, bmd);
+        const modelInstance = new BMDModelInstance(bmdModel);
+        return [modelInstance];
+    }
 
-        throw new Error();
-    });
+    return [];
 }
 
-export function createMultiSceneFromBuffer(device: GfxDevice, buffer: ArrayBufferSlice): Promise<BasicRenderer> {
+export function createSceneFromBuffer(context: SceneContext, buffer: ArrayBufferSlice): Viewer.SceneGfx {
+    if (readString(buffer, 0, 4) === 'RARC') {
+        const rarc = RARC.parse(buffer);
+
+        // Special case for SMG's Effect.arc
+        if (rarc.findFile('ParticleNames.bcsv') !== null)
+            return JPAExplorer.createRendererFromSMGArchive(context, rarc);
+    }
+
+    const device = context.device;
     const renderer = new BasicRenderer(device);
-    return createScenesFromBuffer(device, renderer, buffer).then((scenes) => {
-        for (let i = 0; i < scenes.length; i++)
-            renderer.addModelInstance(scenes[i]);
-        return renderer;
-    });
+    const scenes = createScenesFromBuffer(device, renderer, buffer);
+    for (let i = 0; i < scenes.length; i++)
+        renderer.addModelInstance(scenes[i]);
+    return renderer;
 }
