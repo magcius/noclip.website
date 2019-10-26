@@ -1,32 +1,32 @@
 
 import { mat4, vec3 } from 'gl-matrix';
-import ArrayBufferSlice from '../../ArrayBufferSlice';
-import { assert, assertExists, align, nArray, hexzero } from '../../util';
-import { DataFetcher, DataFetcherFlags, AbortedCallback } from '../../DataFetcher';
-import { MathConstants, computeModelMatrixSRT, lerp, computeNormalMatrix, clamp } from '../../MathHelpers';
-import { getPointBezier } from '../../Spline';
-import { Camera, computeClipSpacePointFromWorldSpacePoint, texProjCamera } from '../../Camera';
-import { SceneContext } from '../../SceneBase';
-import * as Viewer from '../../viewer';
-import * as UI from '../../ui';
+import ArrayBufferSlice from '../ArrayBufferSlice';
+import { assert, assertExists, align, nArray, hexzero } from '../util';
+import { DataFetcher, DataFetcherFlags, AbortedCallback } from '../DataFetcher';
+import { MathConstants, computeModelMatrixSRT, lerp, computeNormalMatrix, clamp } from '../MathHelpers';
+import { getPointBezier } from '../Spline';
+import { Camera, computeClipSpacePointFromWorldSpacePoint, texProjCamera } from '../Camera';
+import { SceneContext } from '../SceneBase';
+import * as Viewer from '../viewer';
+import * as UI from '../ui';
 
-import { TextureMapping } from '../../TextureHolder';
-import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat } from '../../gfx/platform/GfxPlatform';
-import { executeOnPass } from '../../gfx/render/GfxRenderer';
-import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
-import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../../gfx/helpers/RenderTargetHelpers';
+import { TextureMapping } from '../TextureHolder';
+import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat } from '../gfx/platform/GfxPlatform';
+import { executeOnPass } from '../gfx/render/GfxRenderer';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 
-import * as GX from '../../gx/gx_enum';
-import * as Yaz0 from '../../Common/Compression/Yaz0';
-import * as BCSV from '../../luigis_mansion/bcsv';
-import * as RARC from '../../j3d/rarc';
-import AnimationController from '../../AnimationController';
+import * as GX from '../gx/gx_enum';
+import * as Yaz0 from '../Common/Compression/Yaz0';
+import * as BCSV from '../luigis_mansion/bcsv';
+import * as RARC from '../j3d/rarc';
+import AnimationController from '../AnimationController';
 
-import { MaterialParams, PacketParams, fillSceneParamsDataOnTemplate } from '../../gx/gx_render';
-import { LoadedVertexData, LoadedVertexLayout } from '../../gx/gx_displaylist';
-import { GXRenderHelperGfx } from '../../gx/gx_render';
-import { BMD, LoopMode, BVA, BTP, JSystemFileReaderHelper, ShapeDisplayFlags } from '../../j3d/j3d';
-import { BMDModel, MaterialInstance } from '../../j3d/render';
+import { MaterialParams, PacketParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
+import { LoadedVertexData, LoadedVertexLayout } from '../gx/gx_displaylist';
+import { GXRenderHelperGfx } from '../gx/gx_render';
+import { BMD, LoopMode, BVA, BTP, JSystemFileReaderHelper, ShapeDisplayFlags } from '../j3d/j3d';
+import { BMDModel, MaterialInstance } from '../j3d/render';
 import { JMapInfoIter, createCsvParser, getJMapInfoTransLocal, getJMapInfoRotateLocal, getJMapInfoScale } from './JMapInfo';
 import { BloomPostFXParameters, BloomPostFXRenderer } from './Bloom';
 import { LightDataHolder } from './LightData';
@@ -36,7 +36,6 @@ import { EffectSystem } from './EffectSystem';
 import { NPCDirector, MiniRoutePoint, createModelObjMapObj, bindColorChangeAnimation, bindTexChangeAnimation, isExistIndirectTexture, connectToSceneIndirectMapObjStrongLight, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneBloom, MiniRouteGalaxy, MiniRoutePart, emitEffect, AirBubbleHolder } from './Actors';
 import { getActorTableEntry, PlanetMapCreator, ActorTableEntry } from './ActorTable';
 import { LiveActor, setTextureMappingIndirect, startBck, startBrkIfExist, startBtkIfExist, startBckIfExist, startBvaIfExist, ZoneAndLayer, LayerId, dynamicSpawnZoneAndLayer } from './LiveActor';
-import { BezierRail } from './RailRider';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;

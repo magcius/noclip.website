@@ -1,15 +1,15 @@
 
-import { DeviceProgram } from "../../Program";
-import { TextureMapping } from "../../TextureHolder";
-import { nArray, assert } from "../../util";
-import { GfxRenderPassDescriptor, GfxLoadDisposition, GfxDevice, GfxRenderPass, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxBindingLayoutDescriptor, GfxMipFilterMode, GfxBufferUsage, GfxBufferFrequencyHint, GfxBlendMode, GfxBlendFactor, GfxHostAccessPass, GfxProgram, GfxRenderPipelineDescriptor, GfxPrimitiveTopology, GfxRenderPipeline, GfxMegaStateDescriptor } from "../../gfx/platform/GfxPlatform";
-import { TransparentBlack } from "../../Color";
-import { copyRenderPassDescriptor, DepthStencilAttachment, DEFAULT_NUM_SAMPLES, makeEmptyRenderPassDescriptor, ColorAttachment, ColorTexture, PostFXRenderTarget, BasicRenderTarget, noClearRenderPassDescriptor } from "../../gfx/helpers/RenderTargetHelpers";
-import { fillVec4 } from "../../gfx/helpers/UniformBufferHelpers";
-import { ViewerRenderInput } from "../../viewer";
-import { GfxRenderInst, GfxRenderInstManager } from "../../gfx/render/GfxRenderer";
-import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
-import { fullscreenMegaState, makeMegaState } from "../../gfx/helpers/GfxMegaStateDescriptorHelpers";
+import { DeviceProgram } from "../Program";
+import { TextureMapping } from "../TextureHolder";
+import { nArray, assert } from "../util";
+import { GfxRenderPassDescriptor, GfxLoadDisposition, GfxDevice, GfxRenderPass, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxBindingLayoutDescriptor, GfxMipFilterMode, GfxBlendMode, GfxBlendFactor, GfxPrimitiveTopology, GfxRenderPipeline, GfxMegaStateDescriptor } from "../gfx/platform/GfxPlatform";
+import { TransparentBlack } from "../Color";
+import { copyRenderPassDescriptor, DepthStencilAttachment, DEFAULT_NUM_SAMPLES, makeEmptyRenderPassDescriptor, ColorAttachment, ColorTexture, PostFXRenderTarget, BasicRenderTarget, noClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
+import { ViewerRenderInput } from "../viewer";
+import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { fullscreenMegaState, makeMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 
 // Should I try to do this with GX? lol.
 class BloomPassBaseProgram extends DeviceProgram {

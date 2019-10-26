@@ -1,25 +1,25 @@
 
 import { vec3, mat4, vec2 } from "gl-matrix";
-import { SceneObjHolder, getObjectName } from "./smg_scenes";
+import { SceneObjHolder, getObjectName } from "./Main";
 import { connectToScene, loadBTIData } from "./Actors";
-import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputLayout, GfxInputState, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxCullMode } from "../../gfx/platform/GfxPlatform";
-import { ViewerRenderInput } from "../../viewer";
+import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputLayout, GfxInputState, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxCullMode } from "../gfx/platform/GfxPlatform";
+import { ViewerRenderInput } from "../viewer";
 import { JMapInfoIter } from "./JMapInfo";
-import { computeModelMatrixSRT, clamp } from "../../MathHelpers";
-import AnimationController from "../../AnimationController";
-import { colorFromRGBA8 } from "../../Color";
-import { BTIData } from "../render";
-import { assert } from "../../util";
-import { makeStaticDataBuffer } from "../../gfx/helpers/BufferHelpers";
-import { getVertexAttribLocation, GXMaterial, ColorChannelControl, TexGen, IndTexStage, TevStage } from "../../gx/gx_material";
-import * as GX from "../../gx/gx_enum";
-import { GXMaterialHelperGfx, autoOptimizeMaterial } from "../../gx/gx_render";
-import { MaterialParams, PacketParams, ColorKind, setTevOrder, setTevColorIn, setTevColorOp, setTevAlphaIn, setTevAlphaOp, setTevIndWarp, setIndTexOrder, setIndTexCoordScale, ub_MaterialParams, u_PacketParamsBufferSize, ub_PacketParams, fillPacketParamsData } from "../../gx/gx_render";
-import { Camera, texProjCamera } from "../../Camera";
-import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from "../../gfx/render/GfxRenderer";
-import { createFilterKeyForDrawType, DrawType } from "./NameObj";
+import { computeModelMatrixSRT, clamp } from "../MathHelpers";
+import AnimationController from "../AnimationController";
+import { colorFromRGBA8 } from "../Color";
+import { BTIData } from "../j3d/render";
+import { assert } from "../util";
+import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
+import { getVertexAttribLocation, GXMaterial, ColorChannelControl, TexGen, IndTexStage, TevStage } from "../gx/gx_material";
+import * as GX from "../gx/gx_enum";
+import { GXMaterialHelperGfx, autoOptimizeMaterial } from "../gx/gx_render";
+import { MaterialParams, PacketParams, ColorKind, setTevOrder, setTevColorIn, setTevColorOp, setTevAlphaIn, setTevAlphaOp, setTevIndWarp, setIndTexOrder, setIndTexCoordScale, ub_MaterialParams, u_PacketParamsBufferSize, ub_PacketParams, fillPacketParamsData } from "../gx/gx_render";
+import { Camera, texProjCamera } from "../Camera";
+import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from "../gfx/render/GfxRenderer";
+import { DrawType } from "./NameObj";
 import { LiveActor, ZoneAndLayer } from "./LiveActor";
-import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
 function calcHeightStatic(wave1Time: number, wave2Time: number, x: number, z: number): number {
     const wave1 = 40 * Math.sin(wave1Time + 0.003 * z);

@@ -1,8 +1,8 @@
 
-import * as BCSV from '../../luigis_mansion/bcsv';
+import * as BCSV from '../luigis_mansion/bcsv';
 import { vec3 } from 'gl-matrix';
-import { MathConstants } from '../../MathHelpers';
-import ArrayBufferSlice from '../../ArrayBufferSlice';
+import { MathConstants } from '../MathHelpers';
+import ArrayBufferSlice from '../ArrayBufferSlice';
 
 export function getJMapInfoArg0(infoIter: JMapInfoIter, fallback: number) : number;
 export function getJMapInfoArg0(infoIter: JMapInfoIter) : number | null;

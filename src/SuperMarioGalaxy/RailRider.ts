@@ -1,13 +1,13 @@
 
 import { JMapInfoIter } from "./JMapInfo";
 import { vec3 } from "gl-matrix";
-import { SceneObjHolder } from "./smg_scenes";
-import { assertExists, assert } from "../../util";
-import { clamp } from "../../MathHelpers";
+import { SceneObjHolder } from "./Main";
+import { assertExists, assert } from "../util";
+import { clamp } from "../MathHelpers";
 import { LiveActor } from "./LiveActor";
-import { drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../../DebugJunk";
-import { Camera } from "../../Camera";
-import { Magenta, Yellow } from "../../Color";
+import { drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
+import { Camera } from "../Camera";
+import { Magenta, Yellow } from "../Color";
 
 function getRailPointPos(dst: vec3, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, prefix: string): void {
     dst[0] = infoIter.getValueNumber(`${prefix}_x`, 0);

@@ -15,7 +15,7 @@ import { SceneContext } from "../SceneBase";
 import { FloatingPanel, LAYER_ICON, HIGHLIGHT_COLOR, Checkbox, TextField } from "../ui";
 import { GridPlane } from "./GridPlane";
 import { getDebugOverlayCanvas2D, drawWorldSpacePoint } from "../DebugJunk";
-import { createCsvParser } from "../j3d/smg/JMapInfo";
+import { createCsvParser } from "../SuperMarioGalaxy/JMapInfo";
 import { RARC } from "../j3d/rarc";
 
 class BasicEffectSystem {

@@ -1,13 +1,13 @@
 
 import { LiveActor } from './LiveActor';
-import { assertExists } from '../../util';
+import { assertExists } from '../util';
 import { Spine } from './Spine';
 import { NameObj } from './NameObj';
 import { mat4, vec3 } from 'gl-matrix';
 import { JMapInfoIter } from './JMapInfo';
-import { computeModelMatrixR, MathConstants } from '../../MathHelpers';
-import { SceneObjHolder, getDeltaTimeFrames } from './smg_scenes';
-import { ViewerRenderInput } from '../../viewer';
+import { computeModelMatrixR, MathConstants } from '../MathHelpers';
+import { SceneObjHolder, getDeltaTimeFrames } from './Main';
+import { ViewerRenderInput } from '../viewer';
 import { RailDirection } from './RailRider';
 import { moveCoordAndTransToNearestRailPos, moveCoordAndTransToNearestRailPoint, moveCoordAndTransToRailStartPoint, getRailCoord, setRailCoord, getRailPos } from './Actors';
 

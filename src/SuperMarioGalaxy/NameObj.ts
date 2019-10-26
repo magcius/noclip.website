@@ -1,10 +1,10 @@
 
 import { DrawBufferHolder, drawBufferInitialTable, LightType } from "./DrawBuffer";
-import { SceneObjHolder } from "./smg_scenes";
-import { ViewerRenderInput } from "../../viewer";
-import { GfxTexture, GfxDevice } from "../../gfx/platform/GfxPlatform";
-import { Camera } from "../../Camera";
-import { GfxRenderInstManager } from "../../gfx/render/GfxRenderer";
+import { SceneObjHolder } from "./Main";
+import { ViewerRenderInput } from "../viewer";
+import { GfxTexture, GfxDevice } from "../gfx/platform/GfxPlatform";
+import { Camera } from "../Camera";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { LiveActor } from "./LiveActor";
 
 export const enum MovementType {

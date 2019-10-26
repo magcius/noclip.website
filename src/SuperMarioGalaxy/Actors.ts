@@ -2,26 +2,25 @@
 // Misc actors that aren't big enough to have their own file.
 
 import { LightType } from './DrawBuffer';
-import { SceneObjHolder, getObjectName, WorldmapPointInfo, getDeltaTimeFrames, getTimeFrames, Dot, FPS, createSceneObj, SceneObj } from './smg_scenes';
+import { SceneObjHolder, getObjectName, WorldmapPointInfo, getDeltaTimeFrames, getTimeFrames, Dot, createSceneObj, SceneObj } from './Main';
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg7 } from './JMapInfo';
-import { mat4, vec3, vec4 } from 'gl-matrix';
-import AnimationController from '../../AnimationController';
-import { MathConstants, computeModelMatrixSRT, clamp, lerp, normToLength, clampRange } from '../../MathHelpers';
-import { colorNewFromRGBA8, Color, Magenta, Green, Red, Blue } from '../../Color';
-import { ColorKind } from '../../gx/gx_render';
-import { BTK, BRK, LoopMode, BTP } from '../j3d';
-import { BTI } from "../j3d";
-import * as Viewer from '../../viewer';
-import * as RARC from '../../j3d/rarc';
+import { mat4, vec3 } from 'gl-matrix';
+import AnimationController from '../AnimationController';
+import { MathConstants, computeModelMatrixSRT, clamp, lerp, normToLength, clampRange } from '../MathHelpers';
+import { colorNewFromRGBA8, Color, Magenta, Green, Red, Blue } from '../Color';
+import { ColorKind } from '../gx/gx_render';
+import { BTK, BRK, LoopMode, BTP, BTI } from '../j3d/j3d';
+import * as Viewer from '../viewer';
+import * as RARC from '../j3d/rarc';
 import { DrawBufferType, MovementType, CalcAnimType, DrawType } from './NameObj';
-import { BMDModelInstance, BTIData } from '../render';
-import { assertExists, leftPad } from '../../util';
-import { Camera } from '../../Camera';
+import { BMDModelInstance, BTIData } from '../j3d/render';
+import { assertExists, leftPad } from '../util';
+import { Camera } from '../Camera';
 import { isGreaterStep, isFirstStep, calcNerveRate } from './Spine';
 import { LiveActor, startBck, startBtkIfExist, startBrkIfExist, startBvaIfExist, startBpkIfExist, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpawnZoneAndLayer } from './LiveActor';
 import { MapPartsRotator } from './MapParts';
 import { isConnectedWithRail } from './RailRider';
-import { drawWorldSpacePoint, getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../../DebugJunk';
+import { drawWorldSpacePoint, getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
 
 export function connectToScene(sceneObjHolder: SceneObjHolder, actor: LiveActor, movementType: MovementType, calcAnimType: CalcAnimType, drawBufferType: DrawBufferType, drawType: DrawType): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, movementType, calcAnimType, drawBufferType, drawType);

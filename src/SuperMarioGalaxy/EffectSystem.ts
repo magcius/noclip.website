@@ -1,18 +1,18 @@
 
-import * as RARC from '../../j3d/rarc';
-import * as JPA from '../JPA';
+import * as RARC from '../j3d/rarc';
+import * as JPA from '../j3d/JPA';
 
 import { createCsvParser, JMapInfoIter } from "./JMapInfo";
-import { SceneObjHolder } from "./smg_scenes";
-import { leftPad, assert, assertExists } from "../../util";
-import { GfxDevice } from "../../gfx/platform/GfxPlatform";
-import { GfxRenderInstManager } from "../../gfx/render/GfxRenderer";
+import { SceneObjHolder } from "./Main";
+import { leftPad, assert, assertExists } from "../util";
+import { GfxDevice } from "../gfx/platform/GfxPlatform";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { vec3, mat4 } from "gl-matrix";
-import { colorNewCopy, White, colorCopy, Color } from "../../Color";
-import { computeModelMatrixR } from "../../MathHelpers";
+import { colorNewCopy, White, colorCopy, Color } from "../Color";
+import { computeModelMatrixR } from "../MathHelpers";
 import { DrawType } from "./NameObj";
 import { LiveActor } from './LiveActor';
-import { TextureMapping } from '../../TextureHolder';
+import { TextureMapping } from '../TextureHolder';
 
 export class ParticleResourceHolder {
     private effectNames: string[];

@@ -1,8 +1,8 @@
 
-import * as Viewer from '../../viewer';
-import { SMGSceneDescBase, ModelCache } from "./smg_scenes";
+import * as Viewer from '../viewer';
+import { SMGSceneDescBase, ModelCache } from "./Main";
 import { JMapInfoIter, createCsvParser } from './JMapInfo';
-import { RARC } from '../rarc';
+import { RARC } from '../j3d/rarc';
 
 class SMG1SceneDesc extends SMGSceneDescBase {
     protected pathBase: string = `SuperMarioGalaxy`;

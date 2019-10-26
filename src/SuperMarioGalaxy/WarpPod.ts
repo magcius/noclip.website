@@ -1,25 +1,25 @@
 
 import { vec3, mat4 } from "gl-matrix";
-import { colorNewFromRGBA8, colorCopy, Color } from "../../Color";
-import { GfxInputState, GfxInputLayout, GfxDevice, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint } from "../../gfx/platform/GfxPlatform";
-import { getVertexAttribLocation, TevStage, IndTexStage, TexGen, ColorChannelControl, GXMaterial } from "../../gx/gx_material";
-import * as GX from "../../gx/gx_enum";
+import { colorNewFromRGBA8, colorCopy, Color } from "../Color";
+import { GfxInputState, GfxInputLayout, GfxDevice, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint } from "../gfx/platform/GfxPlatform";
+import { getVertexAttribLocation, TevStage, IndTexStage, TexGen, ColorChannelControl, GXMaterial } from "../gx/gx_material";
+import * as GX from "../gx/gx_enum";
 import { LiveActor, startBck, startBrkIfExist, ZoneAndLayer } from "./LiveActor";
-import { SceneObjHolder, getObjectName } from "./smg_scenes";
+import { SceneObjHolder, getObjectName } from "./Main";
 import { JMapInfoIter, getJMapInfoArg1, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg6, getJMapInfoGroupId } from "./JMapInfo";
-import { BTIData } from "../render";
-import { LoopMode } from "../j3d";
-import { assertExists } from "../../util";
+import { BTIData } from "../j3d/render";
+import { LoopMode } from "../j3d/j3d";
+import { RARC } from "../j3d/rarc";
+import { assertExists } from "../util";
 import { DrawBufferType, DrawType } from "./NameObj";
 import { connectToScene, calcUpVec, loadBTIData, emitEffect, setEffectEnvColor, getCamZdir } from "./Actors";
-import { MathConstants, lerp, normToLength } from "../../MathHelpers";
-import { GfxRenderInstManager } from "../../gfx/render/GfxRenderer";
-import { ViewerRenderInput } from "../../viewer";
-import { makeStaticDataBuffer } from "../../gfx/helpers/BufferHelpers";
-import { makeTriangleIndexBuffer, GfxTopology, getTriangleIndexCountForTopologyIndexCount } from "../../gfx/helpers/TopologyHelpers";
-import { Camera } from "../../Camera";
-import { RARC } from "../rarc";
-import { setTevOrder, setTevColorIn, setTevColorOp, setTevAlphaIn, setTevAlphaOp, autoOptimizeMaterial, GXMaterialHelperGfx, ub_MaterialParams, u_PacketParamsBufferSize, ub_PacketParams, MaterialParams, PacketParams, fillPacketParamsData, ColorKind } from "../../gx/gx_render";
+import { MathConstants, lerp, normToLength } from "../MathHelpers";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { ViewerRenderInput } from "../viewer";
+import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
+import { makeTriangleIndexBuffer, GfxTopology, getTriangleIndexCountForTopologyIndexCount } from "../gfx/helpers/TopologyHelpers";
+import { Camera } from "../Camera";
+import { setTevOrder, setTevColorIn, setTevColorOp, setTevAlphaIn, setTevAlphaOp, autoOptimizeMaterial, GXMaterialHelperGfx, ub_MaterialParams, u_PacketParamsBufferSize, ub_PacketParams, MaterialParams, PacketParams, fillPacketParamsData, ColorKind } from "../gx/gx_render";
 
 const warpPodColorTable = [
     colorNewFromRGBA8(0x0064C8FF),
