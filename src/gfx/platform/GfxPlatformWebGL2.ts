@@ -40,6 +40,7 @@ interface GfxTextureP_GL extends GfxTexture {
     width: number;
     height: number;
     depth: number;
+    numLevels: number;
 }
 
 interface GfxColorAttachmentP_GL extends GfxColorAttachment {
@@ -769,6 +770,26 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
     }
 
+    private clampNumLevels(descriptor: GfxTextureDescriptor): number {
+        if (descriptor.dimension === GfxTextureDimension.n2D_ARRAY && descriptor.depth > 1) {
+            const typeFlags: FormatTypeFlags = getFormatTypeFlags(descriptor.pixelFormat);
+            if (typeFlags === FormatTypeFlags.BC1) {
+                // Chrome/ANGLE seems to have issues with compressed miplevels of size 1/2, so clamp before they arrive...
+                // https://bugs.chromium.org/p/angleproject/issues/detail?id=4056
+                let w = descriptor.width, h = descriptor.height;
+                for (let i = 0; i < descriptor.numLevels; i++) {
+                    if (w <= 2 || h <= 2)
+                        return i - 1;
+
+                    w = Math.max((w / 2) | 0, 1);
+                    h = Math.max((h / 2) | 0, 1);
+                }
+            }
+        }
+
+        return descriptor.numLevels;
+    }
+    
     private _currentActiveTexture: GLenum | null = null;
     private _setActiveTexture(texture: GLenum): void {
         if (this._currentActiveTexture !== texture) {
@@ -877,15 +898,16 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const internalformat = this.translateTextureInternalFormat(descriptor.pixelFormat);
         this._setActiveTexture(gl.TEXTURE0);
         this._currentTextures[0] = null;
+        const numLevels = this.clampNumLevels(descriptor);
         if (descriptor.dimension === GfxTextureDimension.n2D) {
             gl_target = WebGL2RenderingContext.TEXTURE_2D;
             gl.bindTexture(gl_target, gl_texture);
-            gl.texStorage2D(gl_target, descriptor.numLevels, internalformat, descriptor.width, descriptor.height);
+            gl.texStorage2D(gl_target, numLevels, internalformat, descriptor.width, descriptor.height);
             assert(descriptor.depth === 1);
         } else if (descriptor.dimension === GfxTextureDimension.n2D_ARRAY) {
             gl_target = WebGL2RenderingContext.TEXTURE_2D_ARRAY;
             gl.bindTexture(gl_target, gl_texture);
-            gl.texStorage3D(gl_target, descriptor.numLevels, internalformat, descriptor.width, descriptor.height, descriptor.depth);
+            gl.texStorage3D(gl_target, numLevels, internalformat, descriptor.width, descriptor.height, descriptor.depth);
         } else {
             throw "whoops";
         }
@@ -895,6 +917,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             width: descriptor.width,
             height: descriptor.height,
             depth: descriptor.depth,
+            numLevels,
         };
         return texture;
     }
@@ -1338,23 +1361,23 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             } else if (cmd === HostAccessPassCmd.uploadTextureData) {
                 // Implement inline to prevent allocation.
                 const texture = gfxr[igfxr++] as GfxTexture;
-                const firstMipLevel = u32[iu32++];
-                const numMipLevels = u32[iu32++];
+                const firstMipLevelToUpload = u32[iu32++];
+                const numMipLevelsToUpload = u32[iu32++];
 
                 const gl = this.gl;
-                const { gl_texture, gl_target, pixelFormat, width, height, depth } = texture as GfxTextureP_GL;
+                const { gl_texture, gl_target, pixelFormat, width, height, depth, numLevels } = texture as GfxTextureP_GL;
                 this._setActiveTexture(gl.TEXTURE0);
                 this._currentTextures[0] = null;
                 gl.bindTexture(gl_target, gl_texture);
                 let w = width, h = height, d = depth;
-                const maxMipLevel = firstMipLevel + numMipLevels;
+                const maxMipLevel = Math.min(firstMipLevelToUpload + numMipLevelsToUpload, numLevels);
 
                 const isCompressed = this.isTextureFormatCompressed(pixelFormat);
                 const is3D = gl_target === WebGL2RenderingContext.TEXTURE_3D || gl_target === WebGL2RenderingContext.TEXTURE_2D_ARRAY;
                 const gl_format = this.translateTextureFormat(pixelFormat);
 
                 for (let i = 0; i < maxMipLevel; i++) {
-                    if (i >= firstMipLevel) {
+                    if (i >= firstMipLevelToUpload) {
                         const levelData = bufr[ibufr++] as ArrayBufferView;
 
                         if (gl_target === WebGL2RenderingContext.TEXTURE_2D_ARRAY && isCompressed) {
@@ -1379,7 +1402,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                             }
                         }
                     }
-        
+
                     w = Math.max((w / 2) | 0, 1);
                     h = Math.max((h / 2) | 0, 1);
                 }
