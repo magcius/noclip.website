@@ -6,7 +6,7 @@ import { SceneObjHolder, getObjectName, WorldmapPointInfo, getDeltaTimeFrames, g
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg7 } from './JMapInfo';
 import { mat4, vec3 } from 'gl-matrix';
 import AnimationController from '../AnimationController';
-import { MathConstants, computeModelMatrixSRT, clamp, lerp, normToLength, clampRange } from '../MathHelpers';
+import { MathConstants, computeModelMatrixSRT, clamp, lerp, normToLength, clampRange, isNearZeroVec3 } from '../MathHelpers';
 import { colorNewFromRGBA8, Color, Magenta, Green, Red, Blue } from '../Color';
 import { ColorKind } from '../gx/gx_render';
 import { BTK, BRK, LoopMode, BTP, BTI } from '../j3d/j3d';
@@ -17,9 +17,9 @@ import { BMDModelInstance, BTIData } from '../j3d/render';
 import { assertExists, leftPad } from '../util';
 import { Camera } from '../Camera';
 import { isGreaterStep, isFirstStep, calcNerveRate } from './Spine';
-import { LiveActor, startBck, startBtkIfExist, startBrkIfExist, startBvaIfExist, startBpkIfExist, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpawnZoneAndLayer } from './LiveActor';
-import { MapPartsRotator } from './MapParts';
-import { isConnectedWithRail } from './RailRider';
+import { LiveActor, startBck, startBtkIfExist, startBrkIfExist, startBvaIfExist, startBpkIfExist, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpawnZoneAndLayer, startBckIfExist, MessageType } from './LiveActor';
+import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType } from './MapParts';
+import { isConnectedWithRail, RailDirection } from './RailRider';
 import { drawWorldSpacePoint, getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
 
 export function connectToScene(sceneObjHolder: SceneObjHolder, actor: LiveActor, movementType: MovementType, calcAnimType: CalcAnimType, drawBufferType: DrawBufferType, drawType: DrawType): void {
@@ -221,8 +221,20 @@ export function getRailDirection(dst: vec3, actor: LiveActor): void {
     vec3.copy(dst, actor.railRider!.currentDir);
 }
 
+export function getRailCoordSpeed(actor: LiveActor): number {
+    return actor.railRider!.speed;
+}
+
 export function calcRailPosAtCoord(dst: vec3, actor: LiveActor, coord: number): void {
     actor.railRider!.calcPosAtCoord(dst, coord);
+}
+
+export function isRailGoingToEnd(actor: LiveActor): boolean {
+    return actor.railRider!.direction === RailDirection.TOWARDS_END;
+}
+
+export function reverseRailDirection(actor: LiveActor): void {
+    actor.railRider!.reverse();
 }
 
 export function isLoopRail(actor: LiveActor): boolean {
@@ -260,6 +272,14 @@ export function moveCoord(actor: LiveActor, speed: number): void {
 export function moveCoordAndFollowTrans(actor: LiveActor, speed: number): void {
     moveCoord(actor, speed);
     vec3.copy(actor.translation, actor.railRider!.currentPos);
+}
+
+export function getCurrentRailPointNo(actor: LiveActor): number {
+    return actor.railRider!.currentPointId;
+}
+
+export function getRailPartLength(actor: LiveActor, partIdx: number): number {
+    return actor.railRider!.getPartLength(partIdx);
 }
 
 export function getRailCoord(actor: LiveActor): number {
@@ -310,14 +330,6 @@ export function isExistIndirectTexture(actor: LiveActor): boolean {
     if (modelInstance.getTextureMappingReference('IndDummy') !== null)
         return true;
     return false;
-}
-
-function isNearZeroVec3(v: vec3, min: number): boolean {
-    return (
-        v[0] > -min && v[0] < min &&
-        v[1] > -min && v[1] < min &&
-        v[2] > -min && v[2] < min
-    );
 }
 
 function getEaseInValue(v0: number, v1: number, v2: number, v3: number): number {
@@ -559,6 +571,8 @@ class MapObjActorInitInfo {
     public colorChangeFrame: number = -1;
     public texChangeFrame: number = -1;
     public rotator: boolean = false;
+    public railMover: boolean = false;
+    public initNerve: number | null = null;
 
     public setupDefaultPos(): void {
         this.setDefaultPos = true;
@@ -580,12 +594,21 @@ class MapObjActorInitInfo {
     public setupRotator(): void {
         this.rotator = true;
     }
+
+    public setupRailMover(): void {
+        this.railMover = true;
+    }
+
+    public setupNerve(nerve: number): void {
+        this.initNerve = nerve;
+    }
 }
 
-class MapObjActor extends LiveActor {
+class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
     private bloomModel: ModelObj | null = null;
     private objName: string;
     protected rotator: MapPartsRotator | null = null;
+    protected railMover: MapPartsRailMover | null = null;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, initInfo: MapObjActorInitInfo) {
         super(zoneAndLayer, getObjectName(infoIter));
@@ -603,6 +626,13 @@ class MapObjActor extends LiveActor {
             this.initLightCtrl(sceneObjHolder);
         if (initInfo.initEffect !== null)
             this.initEffectKeeper(sceneObjHolder, initInfo.effectFilename);
+        if (initInfo.initNerve !== null)
+            this.initNerve(initInfo.initNerve as TNerve);
+        const connectedWithRail = isConnectedWithRail(infoIter);
+        if (connectedWithRail)
+            this.initRailRider(sceneObjHolder, infoIter);
+        if (connectedWithRail && initInfo.railMover)
+            this.railMover = new MapPartsRailMover(this, infoIter);
         if (initInfo.rotator)
             this.rotator = new MapPartsRotator(this, infoIter);
 
@@ -636,6 +666,8 @@ class MapObjActor extends LiveActor {
     public startMapPartsFunctions(): void {
         if (this.rotator !== null)
             this.rotator.start();
+        if (this.railMover !== null)
+            this.railMover.start();
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
@@ -643,6 +675,8 @@ class MapObjActor extends LiveActor {
 
         if (this.rotator !== null)
             this.rotator.movement(sceneObjHolder, viewerInput);
+        if (this.railMover !== null)
+            this.railMover.movement(sceneObjHolder, viewerInput);
     }
 
     public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
@@ -655,7 +689,9 @@ class MapObjActor extends LiveActor {
             mat4.identity(m);
 
             if (this.rotator !== null && this.rotator.isWorking())
-                mat4.mul(m, m, this.rotator.rotateMtx);
+                mat4.mul(m, m, this.rotator.mtx);
+            if (this.railMover !== null && this.railMover.isWorking())
+                mat4.mul(m, m, this.railMover.mtx);
 
             m[12] = this.translation[0];
             m[13] = this.translation[1];
@@ -706,12 +742,92 @@ export class RotateMoveObj extends MapObjActor {
         setupInitInfoTextureChangeArg1(initInfo, infoIter);
         super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
 
-        const moveConditionType = infoIter.getValueNumber('MoveConditionType');
-        const startRotating = (moveConditionType === 0); // Unconditionally
+        const moveConditionType = getMapPartsArgMoveConditionType(infoIter);
+        const startRotating = (moveConditionType === MoveConditionType.Unconditionally);
         // TODO(jstpierre): Also check SwitchB
 
         if (startRotating)
             this.startMapPartsFunctions();
+    }
+}
+
+const enum RailMoveObjNrv { Move, Done, WaitForPlayerOn }
+
+export class RailMoveObj extends MapObjActor<RailMoveObjNrv> {
+    private isWorking: boolean;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        const initInfo = new MapObjActorInitInfo();
+        initInfo.setupDefaultPos();
+        initInfo.setupConnectToScene();
+        initInfo.setupEffect(null);
+        initInfo.setupRailMover();
+        // initInfo.setupRailPosture();
+        // initInfo.setupBaseMtxFollowTarget();
+        initInfo.setupNerve(RailMoveObjNrv.Move);
+        setupInitInfoTypical(initInfo, getObjectName(infoIter));
+        
+        super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
+
+        this.isWorking = false;
+
+        if (!isConnectedWithRail(infoIter))
+            this.setNerve(RailMoveObjNrv.Done);
+
+        const moveConditionType = getMapPartsArgMoveConditionType(infoIter);
+        if (moveConditionType === MoveConditionType.WaitForPlayerOn)
+            this.setNerve(RailMoveObjNrv.WaitForPlayerOn);
+    }
+
+    private startMoveInner(): void {
+        // this.tryStageEffectStart();
+        startBck(this, `Move`);
+    }
+
+    public receiveMessage(msgType: MessageType): boolean {
+        if (msgType === MessageType.MapPartsRailMover_Vanish && this.getCurrentNerve() === RailMoveObjNrv.Move) {
+            this.makeActorDead();
+            return true;
+        }
+
+        return super.receiveMessage(msgType);
+    }
+
+    protected move(): void {
+        // this.tryStageEffectMoving();
+    }
+
+    protected doAtEndPoint(): void {
+        // stop bck
+    }
+
+    protected endMove(): boolean {
+        this.doAtEndPoint();
+        return true;
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.movement(sceneObjHolder, viewerInput);
+
+        const currentNerve = this.getCurrentNerve();
+        if (currentNerve === RailMoveObjNrv.Move) {
+            if (isFirstStep(this))
+                this.startMapPartsFunctions();
+
+            const isWorking = this.railMover!.isWorking();
+            if (!this.isWorking && isWorking)
+                this.startMoveInner();
+
+            this.isWorking = this.isWorking;
+            this.move();
+
+            if (this.railMover!.isReachedEnd()) {
+                if (!this.railMover!.isDone() || !this.endMove())
+                    this.doAtEndPoint();
+                else
+                    this.setNerve(RailMoveObjNrv.Done);
+            }
+        }
     }
 }
 
@@ -787,7 +903,7 @@ export class PlanetMap extends LiveActor {
     }
 }
 
-class NPCActor extends LiveActor {
+class NPCActor<TNerve extends number = number> extends LiveActor<TNerve> {
     public goods0: PartsModel | null = null;
     public goods1: PartsModel | null = null;
 
@@ -1165,7 +1281,7 @@ export class Peach extends NPCActor {
 
 const enum PenguinNrv { WAIT, DIVE }
 
-export class Penguin extends NPCActor {
+export class Penguin extends NPCActor<PenguinNrv> {
     private arg0: number;
     private diveCounter: number = 0;
 
@@ -1753,7 +1869,7 @@ const enum FountainBigNrv {
     WAIT_PHASE, WAIT, SIGN, SIGN_STOP, SPOUT, SPOUT_END
 }
 
-export class FountainBig extends LiveActor {
+export class FountainBig extends LiveActor<FountainBigNrv> {
     private upVec = vec3.create();
     private randomPhase: number = 0;
 
@@ -1978,11 +2094,9 @@ export class Sky extends LiveActor {
     }
 }
 
-const enum AirNrv {
-    IN, OUT,
-}
+const enum AirNrv { IN, OUT }
 
-export class Air extends LiveActor {
+export class Air extends LiveActor<AirNrv> {
     private distInThresholdSq: number;
     private distOutThresholdSq: number;
 
@@ -2030,11 +2144,9 @@ export class PriorDrawAir extends Air {
     // routines yet, so we leave this out for now...
 }
 
-const enum ShootingStarNrv {
-    PRE_SHOOTING, SHOOTING, WAIT_FOR_NEXT_SHOOT,
-}
+const enum ShootingStarNrv { PRE_SHOOTING, SHOOTING, WAIT_FOR_NEXT_SHOOT }
 
-export class ShootingStar extends LiveActor {
+export class ShootingStar extends LiveActor<ShootingStarNrv> {
     private delay: number;
     private distance: number;
     private axisY = vec3.create();
@@ -2270,7 +2382,7 @@ export class CrystalCage extends LiveActor {
 
 const enum LavaSteamNrv { WAIT, STEAM }
 
-export class LavaSteam extends LiveActor {
+export class LavaSteam extends LiveActor<LavaSteamNrv> {
     private effectScale = vec3.create();
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
@@ -2494,7 +2606,7 @@ export class OceanWaveFloater extends MapObjActor {
 
 const enum FishNrv { APPROACH, WANDER }
 
-class Fish extends LiveActor {
+class Fish extends LiveActor<FishNrv> {
     private followPointPos = vec3.create();
     private offset = vec3.create();
     private direction = vec3.create();
@@ -2647,7 +2759,7 @@ export class FishGroup extends LiveActor {
 
 const enum SeaGullNrv { HOVER_FRONT, HOVER_LEFT, HOVER_RIGHT }
 
-class SeaGull extends LiveActor {
+class SeaGull extends LiveActor<SeaGullNrv> {
     private direction: boolean;
     private updatePosCounter: number;
     private axisX = vec3.create();
@@ -2961,7 +3073,7 @@ export class CoconutTreeLeafGroup extends LiveActor {
 
 const enum AirBubbleNrv { WAIT, MOVE, KILL_WAIT }
 
-export class AirBubble extends LiveActor {
+export class AirBubble extends LiveActor<AirBubbleNrv> {
     private lifetime: number = 180;
     private gravityVec = vec3.create();
     private spawnLocation = vec3.create();
@@ -3050,7 +3162,7 @@ export class AirBubbleHolder extends LiveActorGroup<AirBubble> {
 
 const enum AirBubbleGeneratorNrv { WAIT, GENERATE }
 
-export class AirBubbleGenerator extends LiveActor {
+export class AirBubbleGenerator extends LiveActor<AirBubbleGeneratorNrv> {
     private delay: number;
     private lifetime: number;
 

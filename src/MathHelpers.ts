@@ -367,3 +367,15 @@ export function normToLengthAndAdd(dst: vec3, a: vec3, len: number): void {
         dst[2] += a[2] * inv;
     }
 }
+
+export function isNearZero(v: number, min: number): boolean {
+    return v > -min && v < min;
+}
+
+export function isNearZeroVec3(v: vec3, min: number): boolean {
+    return (
+        v[0] > -min && v[0] < min &&
+        v[1] > -min && v[1] < min &&
+        v[2] > -min && v[2] < min
+    );
+}

@@ -154,6 +154,13 @@ export class JMapInfoIter {
         return BCSV.getField<number>(this.bcsv, this.record, name, fallback!);
     }
 
+    public getValueNumberNoInit(name: string): number | null {
+        const v = BCSV.getField<number>(this.bcsv, this.record, name);
+        if (v === -1)
+            return null;
+        return v;
+    }
+
     public getValueBoolean(name: string): boolean {
         return BCSV.getField<number>(this.bcsv, this.record, name, -1) !== -1;
     }

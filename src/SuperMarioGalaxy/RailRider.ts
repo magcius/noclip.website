@@ -3,11 +3,12 @@ import { JMapInfoIter } from "./JMapInfo";
 import { vec3 } from "gl-matrix";
 import { SceneObjHolder } from "./Main";
 import { assertExists, assert } from "../util";
-import { clamp } from "../MathHelpers";
+import { clamp, isNearZero, isNearZeroVec3 } from "../MathHelpers";
 import { LiveActor } from "./LiveActor";
-import { drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
+import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { Camera } from "../Camera";
-import { Magenta, Yellow } from "../Color";
+import { Magenta } from "../Color";
+import { Spine } from "./Spine";
 
 function getRailPointPos(dst: vec3, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, prefix: string): void {
     dst[0] = infoIter.getValueNumber(`${prefix}_x`, 0);
@@ -186,18 +187,6 @@ function makeRailPart(p0: vec3, p1: vec3, p2: vec3, p3: vec3): RailPart {
         return new LinearRailPart(p0, p3);
     else
         return new BezierRailPart(p0, p1, p2, p3);
-}
-
-function isNearZero(v: number, min: number): boolean {
-    return v > -min && v < min;
-}
-
-function isNearZeroVec3(v: vec3, min: number): boolean {
-    return (
-        v[0] > -min && v[0] < min &&
-        v[1] > -min && v[1] < min &&
-        v[2] > -min && v[2] < min
-    );
 }
 
 export class BezierRail {
@@ -385,6 +374,10 @@ export class BezierRail {
         const partParam = part.getParam(this.getCoordForRailPartIdx(partIdx, coord));
         this.calcRailDirection(dst, part, partParam);
     }
+
+    public getPartLength(partIdx: number): number {
+        return this.railParts[partIdx].getTotalLength();
+    }
 }
 
 export function getBezierRailForActor(sceneObjHolder: SceneObjHolder, actorIter: JMapInfoIter): BezierRail {
@@ -490,6 +483,24 @@ export class RailRider {
 
     public calcPosAtCoord(dst: vec3, coord: number): void {
         this.bezierRail.calcPos(dst, coord);
+    }
+
+    public isReachedGoal(): boolean {
+        // Closed rails loop forever...
+        if (this.bezierRail.isClosed)
+            return false;
+
+        const dist = (this.direction === RailDirection.TOWARDS_END) ? this.getTotalLength() - this.coord : this.coord;
+        return isNearZero(dist, 0.001);
+    }
+
+    public getCurrentPointArg(argName: string): number | null {
+        const pointIter = this.bezierRail.calcRailCtrlPointIter(this.currentPointId);
+        return pointIter.getValueNumberNoInit(argName);
+    }
+
+    public getPartLength(partIdx: number): number {
+        return this.bezierRail.getPartLength(partIdx);
     }
 
     public debugDrawRail(camera: Camera, nPoints: number = 50): void {

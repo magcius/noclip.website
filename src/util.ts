@@ -109,3 +109,7 @@ export function concat<T>(dst: T[], src: T[]): void {
     for (let i = 0; i < src.length; i++)
         dst.push(src[i]);
 }
+
+export function fallback<T>(v: T | null, fallback: T): T {
+    return v !== null ? v : fallback;
+}

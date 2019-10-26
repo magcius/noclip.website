@@ -1,22 +1,27 @@
 
 import { clamp } from "../MathHelpers";
-import { LiveActor } from "./LiveActor";
 
-export type Nerve = number;
-
-export function isFirstStep(actor: LiveActor): boolean {
-    return actor.spine!.getNerveStep() === 0;
+interface SpineHost {
+    spine: Spine | null;
 }
 
-export function isGreaterStep(actor: LiveActor, v: number): boolean {
-    return actor.spine!.getNerveStep() > v;
+export function isFirstStep(host: SpineHost): boolean {
+    return host.spine!.getNerveStep() === 0;
 }
 
-export function calcNerveRate(actor: LiveActor, v: number): number {
-    return actor.spine!.getNerveStep() / v;
+export function isGreaterStep(host: SpineHost, v: number): boolean {
+    return host.spine!.getNerveStep() > v;
 }
 
-export class Spine {
+export function calcNerveRate(host: SpineHost, v: number): number {
+    return host.spine!.getNerveStep() / v;
+}
+
+export function getStep(host: SpineHost): number {
+    return host.spine!.getNerveStep();
+}
+
+export class Spine<Nerve extends number = number> {
     private nerveStack: Nerve[] = [];
     private tick: number = 0;
 

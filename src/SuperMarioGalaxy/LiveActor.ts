@@ -1,7 +1,7 @@
 
 import { NameObj } from "./NameObj";
 import { EffectKeeper } from "./EffectSystem";
-import { Spine, Nerve } from "./Spine";
+import { Spine } from "./Spine";
 import { ActorLightCtrl } from "./LightData";
 import { vec3, mat4 } from "gl-matrix";
 import { SceneObjHolder, getObjectName, FPS, getDeltaTimeFrames } from "./Main";
@@ -244,7 +244,13 @@ export interface ZoneAndLayer {
 
 export const dynamicSpawnZoneAndLayer: ZoneAndLayer = { zoneId: -1, layerId: LayerId.COMMON };
 
-export class LiveActor extends NameObj {
+export const enum MessageType {
+    MapPartsRailMover_TryRotate = 0xCB,
+    MapPartsRailMover_TryRotateBetweenPoints = 0xCD,
+    MapPartsRailMover_Vanish = 0xCF,
+}
+
+export class LiveActor<TNerve extends number = number> extends NameObj {
     public visibleScenario: boolean = true;
     public visibleAlive: boolean = true;
     public visibleModel: boolean = true;
@@ -253,7 +259,7 @@ export class LiveActor extends NameObj {
     public actorAnimKeeper: ActorAnimKeeper | null = null;
     public actorLightCtrl: ActorLightCtrl | null = null;
     public effectKeeper: EffectKeeper | null = null;
-    public spine: Spine | null = null;
+    public spine: Spine<TNerve> | null = null;
     public railRider: RailRider | null = null;
 
     // Technically part of ModelManager.
@@ -267,6 +273,10 @@ export class LiveActor extends NameObj {
 
     constructor(public zoneAndLayer: ZoneAndLayer, public name: string) {
         super(name);
+    }
+
+    public receiveMessage(msgType: MessageType): boolean {
+        return false;
     }
 
     public makeActorAppeared(): void {
@@ -361,17 +371,17 @@ export class LiveActor extends NameObj {
         this.railRider = new RailRider(sceneObjHolder, this, infoIter);
     }
 
-    public initNerve(nerve: Nerve): void {
-        this.spine = new Spine();
+    public initNerve(nerve: TNerve): void {
+        this.spine = new Spine<TNerve>();
         this.spine.setNerve(nerve);
     }
 
-    public setNerve(nerve: Nerve): void {
+    public setNerve(nerve: TNerve): void {
         this.spine!.setNerve(nerve);
     }
 
-    public getCurrentNerve(): Nerve {
-        return this.spine!.getCurrentNerve();
+    public getCurrentNerve(): TNerve {
+        return this.spine!.getCurrentNerve() as TNerve;
     }
 
     public getNerveStep(): number {

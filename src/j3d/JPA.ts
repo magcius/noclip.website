@@ -16,7 +16,7 @@ import { GXMaterial, AlphaTest, RopInfo, TexGen, TevStage, getVertexAttribLocati
 import { Color, colorNew, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8 } from "../Color";
 import { MaterialParams, ColorKind, ub_PacketParams, u_PacketParamsBufferSize, PacketParams, ub_MaterialParams, setIndTexOrder, setIndTexCoordScale, setTevIndirect, setTevOrder, setTevColorIn, setTevColorOp, setTevAlphaIn, setTevAlphaOp, fillIndTexMtx, fillTextureMappingInfo, gxBindingLayouts } from "../gx/gx_render";
 import { GXMaterialHelperGfx } from "../gx/gx_render";
-import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, computeMatrixWithoutTranslation, normToLengthAndAdd, normToLength } from "../MathHelpers";
+import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, computeMatrixWithoutTranslation, normToLengthAndAdd, normToLength, isNearZeroVec3 } from "../MathHelpers";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { GfxRenderInst, GfxRenderInstManager, makeSortKeyTranslucent, GfxRendererLayer, setSortKeyBias, setSortKeyDepth } from "../gfx/render/GfxRenderer";
 import { fillMatrix4x3, fillColor, fillMatrix4x2 } from "../gfx/helpers/UniformBufferHelpers";
@@ -1209,14 +1209,6 @@ function calcColor(dstPrm: Color, dstEnv: Color, workData: JPAEmitterWorkData, t
     }
 }
 
-function isNearZero(v: vec3, min: number): boolean {
-    return (
-        v[0] > -min && v[0] < min &&
-        v[1] > -min && v[1] < min &&
-        v[2] > -min && v[2] < min
-    );
-}
-
 // JPA appends new particles to the *front* of its linked list. We append
 // particles to the *end* of our array (since adding to the start is expensive).
 //
@@ -1819,12 +1811,12 @@ export class JPABaseEmitter {
             const p = particleList[particleIndex];
 
             applyDir(scratchVec3a, p, sp1.dirType, workData);
-            if (isNearZero(scratchVec3a, 0.001))
+            if (isNearZeroVec3(scratchVec3a, 0.001))
                 vec3.set(scratchVec3a, 0, 1, 0);
             else
                 vec3.normalize(scratchVec3a, scratchVec3a);
             vec3.cross(scratchVec3b, p.prevAxis, scratchVec3a);
-            if (isNearZero(scratchVec3b, 0.001))
+            if (isNearZeroVec3(scratchVec3b, 0.001))
                 vec3.set(scratchVec3b, 1, 0, 0);
             else
                 vec3.normalize(scratchVec3b, scratchVec3b);

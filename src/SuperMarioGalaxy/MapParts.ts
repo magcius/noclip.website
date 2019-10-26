@@ -1,51 +1,93 @@
 
-import { LiveActor } from './LiveActor';
-import { assertExists } from '../util';
-import { Spine } from './Spine';
+import { LiveActor, MessageType } from './LiveActor';
+import { assertExists, fallback } from '../util';
+import { Spine, isFirstStep, getStep, isGreaterStep } from './Spine';
 import { NameObj } from './NameObj';
 import { mat4, vec3 } from 'gl-matrix';
 import { JMapInfoIter } from './JMapInfo';
-import { computeModelMatrixR, MathConstants } from '../MathHelpers';
+import { computeModelMatrixR, MathConstants, isNearZero } from '../MathHelpers';
 import { SceneObjHolder, getDeltaTimeFrames } from './Main';
 import { ViewerRenderInput } from '../viewer';
-import { RailDirection } from './RailRider';
-import { moveCoordAndTransToNearestRailPos, moveCoordAndTransToNearestRailPoint, moveCoordAndTransToRailStartPoint, getRailCoord, setRailCoord, getRailPos } from './Actors';
+import { moveCoordAndTransToNearestRailPos, moveCoordAndTransToNearestRailPoint, moveCoordAndTransToRailStartPoint, getRailCoord, setRailCoord, getRailPos, isRailGoingToEnd, reverseRailDirection, moveCoordAndFollowTrans, getRailCoordSpeed, getCurrentRailPointNo, getRailPartLength, setRailCoordSpeed, moveCoordToStartPos } from './Actors';
 
-function getMapPartsArgMoveConditionType(infoIter: JMapInfoIter): number {
-    return assertExists(infoIter.getValueNumber('MoveConditionType'));
+export const enum MoveConditionType { Unconditionally, WaitForPlayerOn }
+
+export function getMapPartsArgMoveConditionType(infoIter: JMapInfoIter): MoveConditionType {
+    return fallback(infoIter.getValueNumberNoInit('MoveConditionType'), MoveConditionType.Unconditionally);
 }
 
-function getMapPartsArgSignMotionType(infoIter: JMapInfoIter): number {
-    return assertExists(infoIter.getValueNumber('SignMotionType'));
+// Seems to be additional slots at 3, 4, 5...
+const enum SignMotionType { None, MoveStart, MoveWait }
+
+function getMapPartsArgSignMotionType(infoIter: JMapInfoIter): SignMotionType {
+    return fallback(infoIter.getValueNumberNoInit('SignMotionType'), SignMotionType.None);
 }
 
-function getMapPartsArgMoveStopType(actor: LiveActor): number {
-    const railRider = assertExists(actor.railRider);
-    return railRider.bezierRail.railIter.getValueNumber('path_arg1', 1);
+function hasMapPartsMoveStartSignMotion(signMotionType: SignMotionType): boolean {
+    return signMotionType === SignMotionType.MoveStart || signMotionType === SignMotionType.MoveWait;
 }
 
-const enum RailInitPosType {
-    RAIL_POS,
-    RAIL_POINT,
-    RAIL_POINT0,
+const enum MoveStopType { OnceAndWait, Mirror, Loop, OnceAndVanish }
+
+function getMapPartsArgMoveStopType(actor: LiveActor): MoveStopType {
+    return fallback(actor.railRider!.bezierRail.railIter.getValueNumberNoInit('path_arg1'), MoveStopType.Mirror);
 }
+
+function getCurrentRailPointArg0(actor: LiveActor): number | null {
+    return actor.railRider!.getCurrentPointArg('point_arg0');
+}
+
+function getCurrentRailPointArg1(actor: LiveActor): number | null {
+    return actor.railRider!.getCurrentPointArg('point_arg1');
+}
+
+function getCurrentRailPointArg5(actor: LiveActor): number | null {
+    return actor.railRider!.getCurrentPointArg('point_arg5');
+}
+
+function getCurrentRailPointArg7(actor: LiveActor): number | null {
+    return actor.railRider!.getCurrentPointArg('point_arg7');
+}
+
+function getMapPartsArgMoveSpeed(actor: LiveActor): number | null {
+    return getCurrentRailPointArg0(actor);
+}
+
+function getMapPartsArgMoveTimeToNextPoint(actor: LiveActor): number | null {
+    return getCurrentRailPointArg0(actor);
+}
+
+function getMapPartsArgAccelTime(actor: LiveActor): number | null {
+    return getCurrentRailPointArg1(actor);
+}
+
+function getMapPartsArgStopTime(actor: LiveActor): number | null {
+    return getCurrentRailPointArg5(actor);
+}
+
+const enum SpeedCalcType { DIRECT, TIME }
+
+function getMapPartsArgSpeedCalcType(actor: LiveActor): SpeedCalcType | null {
+    return getCurrentRailPointArg7(actor);
+}
+
+function getMoveStartSignalTime(): number {
+    return 50;
+}
+
+const enum RailInitPosType { NearestPos, NearestPoint, Point0 }
 
 function getMapPartsArgRailInitPosType(actor: LiveActor): RailInitPosType {
     const railRider = assertExists(actor.railRider);
     return railRider.bezierRail.railIter.getValueNumber('path_arg4', 1);
 }
 
-const enum MapPartsRotatorNrv { NEVER_MOVE, WAIT, ROTATE_START, ROTATE, STOP_AT_END }
-
-function hasMapPartsMoveStartSignMotion(signMotionType: number): boolean {
-    // TODO(jstpierre)
-    return false;
-}
-
 const enum AxisType { X, Y, Z }
 const enum AccelType { NORMAL, REVERSE, TIMED }
 
 const scratchVec3 = vec3.create();
+
+const enum MapPartsRotatorNrv { NeverMove, Wait, RotateStart, Rotate, StopAtEnd }
 
 // TODO(jstpierre): MapPartsFunction?
 export class MapPartsRotator extends NameObj {
@@ -55,20 +97,20 @@ export class MapPartsRotator extends NameObj {
     private rotateStopTime: number;
     private rotateType: number;
     private rotateSpeed: number;
-    private signMotionType: number;
+    private signMotionType: SignMotionType;
     private targetAngle: number = 0;
     private velocity: number = 0;
     private isOnReverse: boolean = false;
     private angle: number = 0;
-    private spine: Spine;
+    private spine: Spine<MapPartsRotatorNrv>;
 
     private baseHostMtx = mat4.create();
-    public rotateMtx = mat4.create();
+    public mtx = mat4.create();
 
     constructor(private actor: LiveActor, infoIter: JMapInfoIter) {
         super('MapPartsRotator');
 
-        this.spine = new Spine();
+        this.spine = new Spine<MapPartsRotatorNrv>();
 
         this.rotateAngle = assertExists(infoIter.getValueNumber('RotateSpeed'));
         this.rotateAxis = assertExists(infoIter.getValueNumber('RotateAxis'));
@@ -85,9 +127,9 @@ export class MapPartsRotator extends NameObj {
         }
 
         if (this.rotateSpeed !== 0) {
-            this.spine.setNerve(MapPartsRotatorNrv.WAIT);
+            this.spine.setNerve(MapPartsRotatorNrv.Wait);
         } else {
-            this.spine.setNerve(MapPartsRotatorNrv.NEVER_MOVE);
+            this.spine.setNerve(MapPartsRotatorNrv.NeverMove);
         }
 
         this.updateBaseHostMtx();
@@ -95,8 +137,8 @@ export class MapPartsRotator extends NameObj {
 
     public isWorking(): boolean {
         return (
-            this.spine.getCurrentNerve() !== MapPartsRotatorNrv.NEVER_MOVE &&
-            this.spine.getCurrentNerve() !== MapPartsRotatorNrv.WAIT
+            this.spine.getCurrentNerve() !== MapPartsRotatorNrv.NeverMove &&
+            this.spine.getCurrentNerve() !== MapPartsRotatorNrv.Wait
         );
     }
 
@@ -125,15 +167,15 @@ export class MapPartsRotator extends NameObj {
     private updateRotateMtx(): void {
         this.calcRotateAxisDir(scratchVec3, this.rotateAxis);
         vec3.normalize(scratchVec3, scratchVec3);
-        mat4.identity(this.rotateMtx);
-        mat4.rotate(this.rotateMtx, this.rotateMtx, MathConstants.DEG_TO_RAD * this.angle, scratchVec3);
-        mat4.mul(this.rotateMtx, this.rotateMtx, this.baseHostMtx);
+        mat4.identity(this.mtx);
+        mat4.rotate(this.mtx, this.mtx, MathConstants.DEG_TO_RAD * this.angle, scratchVec3);
+        mat4.mul(this.mtx, this.mtx, this.baseHostMtx);
     }
 
     public start(): void {
         this.updateTargetAngle();
         this.updateRotateMtx();
-        this.spine.setNerve(MapPartsRotatorNrv.ROTATE);
+        this.spine.setNerve(MapPartsRotatorNrv.Rotate);
     }
 
     private updateVelocity(): void {
@@ -164,14 +206,14 @@ export class MapPartsRotator extends NameObj {
                 this.rotateSpeed = this.rotateSpeed * -1;
             this.updateTargetAngle();
             if (hasMapPartsMoveStartSignMotion(this.signMotionType))
-                this.spine.setNerve(MapPartsRotatorNrv.ROTATE_START);
+                this.spine.setNerve(MapPartsRotatorNrv.RotateStart);
             else
-                this.spine.setNerve(MapPartsRotatorNrv.ROTATE);
+                this.spine.setNerve(MapPartsRotatorNrv.Rotate);
         }
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
-        if (this.spine.getCurrentNerve() === MapPartsRotatorNrv.ROTATE) {
+        if (this.spine.getCurrentNerve() === MapPartsRotatorNrv.Rotate) {
             this.updateVelocity();
             this.updateAngle(getDeltaTimeFrames(viewerInput));
 
@@ -182,35 +224,74 @@ export class MapPartsRotator extends NameObj {
                 if (this.rotateStopTime < 1)
                     this.restartAtEnd();
                 else
-                    this.spine.setNerve(MapPartsRotatorNrv.STOP_AT_END);
+                    this.spine.setNerve(MapPartsRotatorNrv.StopAtEnd);
             } else {
                 if (this.rotateAccelType === AccelType.REVERSE && this.velocity === 0)
-                    this.spine.setNerve(MapPartsRotatorNrv.STOP_AT_END);
+                    this.spine.setNerve(MapPartsRotatorNrv.StopAtEnd);
                 else
                     this.updateRotateMtx();
             }
         }
+
+        super.movement(sceneObjHolder, viewerInput);
     }
 }
 
-function isNearZero(v: number, min: number): boolean {
-    return v > -min && v < min;
+class MapPartsRailPointPassChecker {
+    public currentRailPointId: number = -1;
+
+    constructor(private actor: LiveActor) {
+    }
+
+    private getCurrentPointId(): number {
+        return this.actor.railRider!.currentPointId;
+    }
+
+    public start(): void {
+        this.currentRailPointId = this.getCurrentPointId();
+    }
+
+    public isPassed(): boolean {
+        return this.currentRailPointId !== this.getCurrentPointId();
+    }
+
+    public isReachedEnd(): boolean {
+        return this.actor.railRider!.isReachedGoal();
+    }
+
+    public movement(): void {
+        this.currentRailPointId = this.getCurrentPointId();
+    }
 }
 
-const enum MapPartsRailMoverNrv { WAIT, MOVE_START, MOVE }
+const enum MapPartsRailMoverNrv {
+    Wait, MoveStart, Move,
+    StopAtPointBeforeRotate, RotateAtPoint, StopAtPointAfterRotate,
+    StopAtEndBeforeRotate, RotateAtEndPoint, StopAtEndAfterRotate,
+    Vanish,
+}
 
 export class MapPartsRailMover extends NameObj {
     private moveConditionType: number;
-    private moveStopType: number;
-    private signMotionType: number;
+    private moveStopType: MoveStopType;
+    private signMotionType: SignMotionType;
     private translation = vec3.create();
     private startRailCoord: number;
-    private spine: Spine;
+    private passChecker: MapPartsRailPointPassChecker;
+    private stopTime: number = 0;
+    private accelTime: number = 0;
+    private accel: number = 0;
+    private moveSpeed: number = 0;
+    private startMoveCoord: number = 0;
+
+    public spine: Spine<MapPartsRailMoverNrv>;
+    public mtx = mat4.create();
 
     constructor(private actor: LiveActor, infoIter: JMapInfoIter) {
         super('MapPartsRailMover');
 
-        this.spine = new Spine();
+        this.passChecker = new MapPartsRailPointPassChecker(this.actor);
+        this.spine = new Spine<MapPartsRailMoverNrv>();
 
         this.moveConditionType = getMapPartsArgMoveConditionType(infoIter);
         this.moveStopType = getMapPartsArgMoveStopType(this.actor);
@@ -218,36 +299,274 @@ export class MapPartsRailMover extends NameObj {
 
         const initPosType = getMapPartsArgRailInitPosType(this.actor);
 
-        if (initPosType === RailInitPosType.RAIL_POS) {
+        if (initPosType === RailInitPosType.NearestPos) {
             moveCoordAndTransToNearestRailPos(this.actor);
-        } else if (initPosType === RailInitPosType.RAIL_POINT) {
+        } else if (initPosType === RailInitPosType.NearestPoint) {
             moveCoordAndTransToNearestRailPoint(this.actor);
-        } else if (initPosType === RailInitPosType.RAIL_POINT0) {
+        } else if (initPosType === RailInitPosType.Point0) {
             moveCoordAndTransToRailStartPoint(this.actor);
         }
 
         vec3.copy(this.translation, this.actor.translation);
         this.startRailCoord = getRailCoord(this.actor);
 
-        this.spine.setNerve(MapPartsRailMoverNrv.WAIT);
+        this.spine.setNerve(MapPartsRailMoverNrv.Wait);
     }
 
-    public moveToInitPos(): void {
-        if (isNearZero(this.startRailCoord - getRailCoord(this.actor), 0.001)) {
-            setRailCoord(this.actor, this.startRailCoord);
-            getRailPos(this.translation, this.actor);
+    public isWorking(): boolean {
+        return (
+            this.spine.getCurrentNerve() === MapPartsRailMoverNrv.Move ||
+            this.spine.getCurrentNerve() === MapPartsRailMoverNrv.MoveStart
+        );
+    }
 
-            if (this.actor.railRider!.direction !== RailDirection.TOWARDS_END)
-                this.actor.railRider!.reverse();
-        }
+    public isReachedEnd(): boolean {
+        const currentNerve = this.spine.getCurrentNerve();
+
+        if (currentNerve === MapPartsRailMoverNrv.Move || currentNerve === MapPartsRailMoverNrv.MoveStart)
+            return this.passChecker.isReachedEnd();
+        else
+            return false;
+    }
+
+    public isDone(): boolean {
+        if (this.moveStopType !== 0 && this.moveStopType !== 3)
+            return false;
+
+        return this.isReachedEnd();
     }
 
     public start(): void {
         this.moveToInitPos();
 
         if (hasMapPartsMoveStartSignMotion(this.signMotionType))
-            this.spine.setNerve(MapPartsRailMoverNrv.MOVE_START);
+            this.spine.setNerve(MapPartsRailMoverNrv.MoveStart);
         else
-            this.spine.setNerve(MapPartsRailMoverNrv.MOVE);
+            this.spine.setNerve(MapPartsRailMoverNrv.Move);
+    }
+
+    private sendMsgToHost(msgType: MessageType): boolean {
+        return this.actor.receiveMessage(msgType);
+    }
+
+    private moveToInitPos(): void {
+        if (isNearZero(this.startRailCoord - getRailCoord(this.actor), 0.001)) {
+            setRailCoord(this.actor, this.startRailCoord);
+            getRailPos(this.translation, this.actor);
+
+            if (!isRailGoingToEnd(this.actor))
+                reverseRailDirection(this.actor);
+        }
+    }
+
+    private calcMoveSpeedTime(): number {
+        const moveTimeToNextPoint = fallback(getMapPartsArgMoveTimeToNextPoint(this.actor), -1);
+        if (moveTimeToNextPoint >= 0) {
+            let currentRailPart = getCurrentRailPointNo(this.actor);
+            if (!isRailGoingToEnd(this.actor))
+                currentRailPart -= 1;
+            const length = getRailPartLength(this.actor, currentRailPart);
+            return length / moveTimeToNextPoint;
+        } else {
+            throw "whoops"; // not sure what to do in this case
+        }
+    }
+
+    private calcMoveSpeedDirect(): number {
+        const moveSpeed = assertExists(getMapPartsArgMoveSpeed(this.actor));
+        return moveSpeed;
+    }
+
+    private calcMoveSpeed(): number {
+        if (isNearZero(this.accel, 0.0001)) {
+            const speedCalcType = fallback(getMapPartsArgSpeedCalcType(this.actor), SpeedCalcType.DIRECT);
+            if (speedCalcType === SpeedCalcType.TIME)
+                return this.calcMoveSpeedTime();
+            else
+                return this.calcMoveSpeedDirect();
+        } else {
+            return getRailCoordSpeed(this.actor);
+        }
+    }
+
+    private updateAccel(): void {
+        this.accelTime = fallback(getMapPartsArgAccelTime(this.actor), 0);
+
+        if (this.accelTime < 1) {
+            this.accel = 0;
+        } else {
+            const moveSpeed = fallback(getMapPartsArgMoveSpeed(this.actor), -1);
+            if (moveSpeed >= 0) {
+                this.accel = (moveSpeed - this.moveSpeed) / this.accelTime;
+            } else {
+                this.accel = 0;
+            }
+        }
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+        const currentNerve = this.spine.getCurrentNerve();
+
+        if (currentNerve === MapPartsRailMoverNrv.Move || currentNerve === MapPartsRailMoverNrv.MoveStart) {
+            this.tryPassPoint();
+        } else {
+            this.tryRestartAtEnd();
+        }
+
+        this.passChecker.movement();
+
+        this.spine.update(getDeltaTimeFrames(viewerInput));
+
+        if (currentNerve === MapPartsRailMoverNrv.Move) {
+            if (isFirstStep(this)) {
+                this.updateAccel();
+                this.moveSpeed = this.calcMoveSpeed();
+                this.sendMsgToHost(MessageType.MapPartsRailMover_TryRotateBetweenPoints);
+            }
+
+            if (!isNearZero(this.accel, 0.0001) && getStep(this) < this.accelTime)
+                this.moveSpeed += this.accel;
+            moveCoordAndFollowTrans(this.actor, this.moveSpeed);
+        } else if (currentNerve === MapPartsRailMoverNrv.MoveStart) {
+            if (isFirstStep(this))
+                this.startMoveCoord = getRailCoord(this.actor);
+
+            if (isGreaterStep(this, getMoveStartSignalTime())) {
+                setRailCoord(this.actor, this.startMoveCoord);
+                getRailPos(this.actor.translation, this.actor);
+                this.spine.setNerve(MapPartsRailMoverNrv.MoveStart);
+            } else {
+                const step = getStep(this);
+                const dir = isRailGoingToEnd(this.actor) ? -1 : 1;
+                const mag = dir * ((((step / 3) & 1) === 0) ? -1 : 1);
+                setRailCoord(this.actor, this.startMoveCoord + (7 * mag * (step % 3)));
+                getRailPos(this.actor.translation, this.actor);
+            }
+        } else if (currentNerve === MapPartsRailMoverNrv.StopAtPointBeforeRotate || currentNerve === MapPartsRailMoverNrv.StopAtPointAfterRotate) {
+            if (isFirstStep(this)) {
+                this.moveSpeed = 0;
+                this.accel = 0;
+                setRailCoordSpeed(this.actor, 0);
+            }
+
+            if (isGreaterStep(this, this.stopTime)) {
+                if (currentNerve === MapPartsRailMoverNrv.StopAtPointBeforeRotate) {
+                    if (this.sendMsgToHost(MessageType.MapPartsRailMover_TryRotate))
+                        this.spine.setNerve(MapPartsRailMoverNrv.RotateAtPoint);
+                    else
+                        this.spine.setNerve(MapPartsRailMoverNrv.StopAtPointAfterRotate);
+                } else {
+                    this.spine.setNerve(MapPartsRailMoverNrv.Move);
+                }
+            }
+        } else if (currentNerve === MapPartsRailMoverNrv.StopAtEndBeforeRotate || currentNerve === MapPartsRailMoverNrv.StopAtEndAfterRotate) {
+            if (!this.tryRestartAtEnd() && isGreaterStep(this, this.stopTime)) {
+                if (currentNerve === MapPartsRailMoverNrv.StopAtEndBeforeRotate) {
+                    if (this.sendMsgToHost(MessageType.MapPartsRailMover_TryRotate))
+                        this.spine.setNerve(MapPartsRailMoverNrv.RotateAtEndPoint);
+                    else
+                        this.spine.setNerve(MapPartsRailMoverNrv.StopAtEndAfterRotate);
+                } else {
+                    this.restartAtEnd();
+                }
+            }
+        } else if (currentNerve === MapPartsRailMoverNrv.Vanish) {
+            if (isFirstStep(this))
+                this.sendMsgToHost(MessageType.MapPartsRailMover_Vanish);
+        }
+
+        super.movement(sceneObjHolder, viewerInput);
+    }
+
+    private reachedEndPlayerOn(): void {
+        // This should never happen -- it would require the player to be on, and we don't have a player!
+    }
+
+    private setStateStopAtEndBeforeRotate(): void {
+        this.moveSpeed = 0;
+        this.accel = 0;
+        setRailCoordSpeed(this.actor, 0);
+        this.stopTime = fallback(getMapPartsArgStopTime(this.actor), 0);
+        if (this.stopTime < 1) {
+            if (this.actor.receiveMessage(MessageType.MapPartsRailMover_TryRotate)) {
+                this.spine.setNerve(MapPartsRailMoverNrv.RotateAtEndPoint);
+            } else {
+                this.restartAtEnd();
+            }
+        } else {
+            this.spine.setNerve(MapPartsRailMoverNrv.StopAtPointBeforeRotate);
+        }
+    }
+
+    private reachedEnd(): void {
+        if (this.moveStopType === MoveStopType.Mirror)
+            reverseRailDirection(this.actor);
+
+        if (this.moveConditionType === 1)
+            this.reachedEndPlayerOn();
+        else
+            this.setStateStopAtEndBeforeRotate();
+    }
+
+    private tryPassPoint(): boolean {
+        if (this.passChecker.isReachedEnd()) {
+            if (this.moveStopType === MoveStopType.OnceAndWait) {
+                this.spine.setNerve(MapPartsRailMoverNrv.Wait);
+                return true;
+            } else {
+                this.reachedEnd();
+                return true;
+            }
+        } else {
+            if (this.passChecker.isPassed()) {
+                this.passPoint();
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private passPoint(): void {
+        this.stopTime = fallback(getMapPartsArgStopTime(this.actor), 0);
+
+        if (this.stopTime < 1) {
+            if (!this.sendMsgToHost(MessageType.MapPartsRailMover_TryRotateBetweenPoints)) {
+                if (this.sendMsgToHost(MessageType.MapPartsRailMover_TryRotate)) {
+                    this.spine.setNerve(MapPartsRailMoverNrv.RotateAtPoint);
+                } else {
+                    this.spine.setNerve(MapPartsRailMoverNrv.Move);
+                }
+            }
+        } else {
+            this.spine.setNerve(MapPartsRailMoverNrv.StopAtPointBeforeRotate);
+        }
+    }
+
+    private tryRestartAtEnd(): boolean {
+        const currentNerve = this.spine.getCurrentNerve();
+
+        // Already moving, nothing to do...
+        if (currentNerve === MapPartsRailMoverNrv.Move || currentNerve === MapPartsRailMoverNrv.MoveStart)
+            return true;
+
+        return false;
+    }
+
+    private restartAtEnd(): void {
+        if (this.moveStopType === MoveStopType.OnceAndWait) {
+            this.spine.setNerve(MapPartsRailMoverNrv.Wait);
+        } else if (this.moveStopType === MoveStopType.Mirror) {
+            if (hasMapPartsMoveStartSignMotion(this.signMotionType))
+                this.spine.setNerve(MapPartsRailMoverNrv.MoveStart);
+            else
+                this.spine.setNerve(MapPartsRailMoverNrv.Move);
+        } else if (this.moveStopType === MoveStopType.Loop) {
+            moveCoordToStartPos(this.actor);
+            getRailPos(this.actor.translation, this.actor);
+            this.spine.setNerve(MapPartsRailMoverNrv.Move);
+        } else if (this.moveStopType === MoveStopType.OnceAndVanish) {
+            this.spine.setNerve(MapPartsRailMoverNrv.Vanish);
+        }
     }
 }
