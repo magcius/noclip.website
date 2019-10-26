@@ -11,6 +11,7 @@ layout(row_major, std140) uniform ub_SceneParams {
     vec4 u_SkyBotColor;
     vec4 u_WaterColor;
     vec4 u_WaterOrigin;
+    float u_Time;
 };
 
 uniform sampler2DArray u_Texture;
@@ -20,6 +21,7 @@ varying vec3 v_Position;
 #else
 varying vec4 v_Color;
 varying vec3 v_TexCoord;
+varying vec3 v_TexScroll;
 #endif
 
 #ifdef VERT
@@ -32,11 +34,13 @@ void main() {
 #else
 layout(location = 1) in vec4 a_Color;
 layout(location = 2) in vec3 a_TexCoord;
+layout(location = 3) in vec3 a_TexScroll;
 
 void main() {
     gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_ViewMatrix), vec4(a_Position, 1.0)));
     v_Color = a_Color;
     v_TexCoord = a_TexCoord;
+    v_TexScroll = a_TexScroll;
 }
 #endif
 #endif
@@ -53,7 +57,8 @@ void main() {
 
     float t = (u_WaterOrigin.y - cameraPos.y) / cameraRay.y;
     vec3 oceanPlane = cameraPos + t * cameraRay;
-    if (t > 0.0 && (abs(oceanPlane.z - u_WaterOrigin.z) >= 2e3 || abs(oceanPlane.x - u_WaterOrigin.x) >= 2e3)) {
+    if (t > 0.0 && (abs(oceanPlane.z - u_WaterOrigin.z) >= u_WaterOrigin.w - 32.0 ||
+                    abs(oceanPlane.x - u_WaterOrigin.x) >= u_WaterOrigin.w - 32.0)) {
         vec2 uv = (oceanPlane.zx - u_WaterOrigin.zx) / 32.0;
         vec4 t_Color = u_WaterColor;
         t_Color *= texture(u_Texture, vec3(uv, 0));
@@ -74,12 +79,17 @@ void main() {
     vec4 t_Color = v_Color;
     t_Color.rgb += u_AmbientColor.rgb;
 #endif
-    if (v_TexCoord.z >= 0.0)
-        t_Color *= texture(u_Texture, v_TexCoord);
+
+    if (v_TexCoord.z >= 0.0) {
+        vec3 uv = v_TexCoord;
+        if (v_TexScroll.z > 0.0)
+            uv.xy += v_TexScroll.xy * fract(u_Time / v_TexScroll.z);
+        t_Color *= texture(u_Texture, uv);
+    }
+
 #ifdef ALPHA_TEST
     if (t_Color.a ALPHA_TEST) discard;
 #endif
-    if (t_Color.a == 0.0) discard;
     gl_FragColor = t_Color;
 }
 #endif

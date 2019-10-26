@@ -30,7 +30,7 @@ export interface ColorSet {
     water: Color;
 }
 
-export async function parseTimeCycle(text: string) {
+export async function parseTimeCycle(text: string, name: string) {
     const lines = text.split("\n");
     const sets = [] as ColorSet[];
     for (const s of lines) {
@@ -55,6 +55,9 @@ export async function parseTimeCycle(text: string) {
             fluffyBotR, fluffyBotG, fluffyBotB,
             blurR, blurG, blurB, blurA,
             waterR, waterG, waterB, waterA,
+            postfx1A, postfx1R, postfx1G, postfx1B,
+            postfx2A, postfx2R, postfx2G, postfx2B,
+            cloudAlpha, radiosityLimit, waterFogAlpha, dirMult,
         ] = [] as (number | undefined)[];
         if (row.length === 40) { // III
             [
@@ -74,7 +77,7 @@ export async function parseTimeCycle(text: string) {
                 fluffyBotR, fluffyBotG, fluffyBotB,
                 blurR, blurG, blurB, blurA,
             ] = row;
-        } else if (row.length === 52) { // VC
+        } else if (row.length === 52 && name.endsWith('timecyc.dat')) { // VC
             [
                 ambR, ambG, ambB,
                 ambR_obj, ambG_obj, ambB_obj,
@@ -94,6 +97,25 @@ export async function parseTimeCycle(text: string) {
                 blurR, blurG, blurB,
                 waterR, waterG, waterB, waterA,
             ] = row;
+        } else if (row.length === 52 && name.endsWith('timecycp.dat')) { // SA
+            [
+                ambR, ambG, ambB,
+                ambR_obj, ambG_obj, ambB_obj,
+                dirR, dirG, dirB,
+                skyTopR, skyTopG, skyTopB,
+                skyBotR, skyBotG, skyBotB,
+                sunCoreR, sunCoreG, sunCoreB,
+                sunCoronaR, sunCoronaG, sunCoronaB,
+                sunSz, sprSz, sprBght,
+                shad, lightShad, poleShad,
+                farClp, fogSt, lightGnd,
+                cloudR, cloudG, cloudB,
+                fluffyBotR, fluffyBotG, fluffyBotB,
+                waterR, waterG, waterB, waterA,
+                postfx1A, postfx1R, postfx1G, postfx1B,
+                postfx2A, postfx2R, postfx2G, postfx2B,
+                cloudAlpha, radiosityLimit, waterFogAlpha, dirMult,
+            ] = row;
         } else {
             throw new Error('unable to parse time cycle');
         }
@@ -104,9 +126,9 @@ export async function parseTimeCycle(text: string) {
         const sunCore = colorNorm(sunCoreR, sunCoreG, sunCoreB);
         const sunCorona = colorNorm(sunCoronaR, sunCoronaG, sunCoronaB);
         const cloud = colorNorm(cloudR, cloudG, cloudB);
-        const fluffyTop = colorNorm(fluffyTopR, fluffyTopG, fluffyTopB);
+        const fluffyTop = (fluffyTopR === undefined) ? colorNewCopy(White) : colorNorm(fluffyTopR!, fluffyTopG!, fluffyTopB!);
         const fluffyBot = colorNorm(fluffyBotR, fluffyBotG, fluffyBotB);
-        const blur = colorNorm(blurR, blurG, blurB, blurA);
+        const blur = (blurR === undefined) ? colorNewCopy(White) : colorNorm(blurR!, blurG!, blurB!, blurA);
         const water = colorNewCopy(White);
         if (waterR !== undefined && waterG !== undefined && waterB !== undefined && waterA !== undefined) {
             water.r = waterR / 0xFF;

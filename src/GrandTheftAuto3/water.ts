@@ -1,9 +1,10 @@
 
-import { vec3, vec2, quat } from 'gl-matrix';
+import { vec4, vec3, vec2, quat } from 'gl-matrix';
 import { TransparentBlack } from '../Color';
 import { ItemPlacement, ItemInstance, ObjectDefinition, INTERIOR_EVERYWHERE } from './item';
+import { MeshFragData } from './render';
 
-export function parseWaterPro(view: DataView, origin: vec3): ItemPlacement {
+export function parseWaterPro(view: DataView, origin: vec4): ItemPlacement {
     const numLevels = view.getInt32(0, true);
     const heights: number[] = [];
     for (let i = 0; i < numLevels; i++) {
@@ -55,7 +56,7 @@ const squareTexCoords = [
     vec2.fromValues(1,0),
 ];
 
-export function waterMeshFragData(texture: string) {
+export function waterMeshFragData(texture: string): MeshFragData {
     return {
         texName: `particle/${texture}`,
         indices: new Uint16Array([0,1,2,0,2,3]),
@@ -64,4 +65,39 @@ export function waterMeshFragData(texture: string) {
         texCoord: (i: number) => squareTexCoords[i],
         color: (i: number) => TransparentBlack,
     };
+}
+
+function parseWaterVertex([posX, posY, posZ, velX, velY, _, waveHeight]: number[]) {
+    return { pos: vec3.fromValues(posX, posY, posZ), velocity: vec2.fromValues(velX, velY), waveHeight };
+}
+
+function parseWaterPolygon(row: number[], texture: string): MeshFragData {
+    const type = row[row.length - 1];
+    const vertices = [
+        parseWaterVertex(row.slice(0, 7)),
+        parseWaterVertex(row.slice(7, 14)),
+        parseWaterVertex(row.slice(14, 21)),
+    ];
+    if (row.length > 22)
+        vertices.push(parseWaterVertex(row.slice(21, 28)));
+    return {
+        texName: `particle/${texture}`,
+        indices: new Uint16Array((vertices.length === 3) ? [0,1,2] : [0,1,2,2,1,3]),
+        vertices: vertices.length,
+        position: (i: number) => vertices[i].pos,
+        texCoord: (i: number) => vec2.fromValues(vertices[i].pos[0] / 32, vertices[i].pos[1] / 32),
+        color: (i: number) => TransparentBlack,
+    };
+}
+
+export function parseWater(text: string, texture: string) {
+    const meshes = [] as MeshFragData[];
+    const lines = text.split("\n");
+    for (const s of lines) {
+        const line = s.trim().toLowerCase();
+        if (line === 'processed' || line === '') continue;
+        const row = line.split(/\s+/).map(Number);
+        meshes.push(parseWaterPolygon(row, texture));
+    }
+    return meshes;
 }
