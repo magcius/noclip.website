@@ -2,7 +2,7 @@
 import { GTA3SceneDesc } from './scenes';
 import { SceneGroup } from '../viewer';
 import { ItemInstance, ObjectDefinition, INTERIOR_EVERYWHERE } from './item';
-import { vec3 } from 'gl-matrix';
+import { vec4 } from 'gl-matrix';
 
 class GTAVCSceneDesc extends GTA3SceneDesc {
     constructor(private interior: number, name: string) {
@@ -10,7 +10,7 @@ class GTAVCSceneDesc extends GTA3SceneDesc {
         this.pathBase = 'GrandTheftAutoViceCity';
         this.complete = true;
         this.water = {
-            origin: vec3.fromValues(-400, 0, 6),
+            origin: vec4.fromValues(-400, 0, 6, 2048),
             texture: 'waterclear256',
         };
         this.weatherTypes = ['Sunny', 'Cloudy', 'Rainy', 'Foggy', 'Extra Sunny', 'Hurricane'];
@@ -18,7 +18,7 @@ class GTAVCSceneDesc extends GTA3SceneDesc {
             zon: 'data/navig.zon',
             dat: {
                 timecyc: 'data/timecyc.dat',
-                waterpro: 'data/WATERPRO.DAT',
+                water: 'data/WATERPRO.DAT',
             },
             ide: [
                 'generic',
@@ -85,6 +85,7 @@ class GTAVCSceneDesc extends GTA3SceneDesc {
                 'washints/washints',
                 'yacht/yacht',
             ],
+            ipl_stream: [],
         };
     }
 

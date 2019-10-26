@@ -58,6 +58,7 @@ import * as Scenes_Fez from './Fez/Scenes_Fez';
 import * as Scenes_SuperMarioOdyssey from './fres_nx/smo_scenes';
 import * as Scenes_GTA3 from './GrandTheftAuto3/scenes';
 import * as Scenes_GTAVC from './GrandTheftAuto3/scenes_vc';
+import * as Scenes_GTASA from './GrandTheftAuto3/scenes_sa';
 
 import { DroppedFileSceneDesc } from './Scenes_FileDrops';
 
@@ -128,6 +129,7 @@ const sceneGroups = [
     Scenes_Elebits.sceneGroup,
     Scenes_Fez.sceneGroup,
     Scenes_GTAVC.sceneGroup,
+    Scenes_GTASA.sceneGroup,
     Scenes_MarioAndSonicAtThe2012OlympicGames.sceneGroup,
     Scenes_MetroidPrime.sceneGroupMP3,
     Scenes_Psychonauts.sceneGroup,
