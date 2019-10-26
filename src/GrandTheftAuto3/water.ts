@@ -1,6 +1,6 @@
 
 import { vec4, vec3, vec2, quat } from 'gl-matrix';
-import { TransparentBlack } from '../Color';
+import { TransparentBlack, colorCopy, Color } from '../Color';
 import { ItemPlacement, ItemInstance, ObjectDefinition, INTERIOR_EVERYWHERE } from './item';
 import { MeshFragData } from './render';
 
@@ -61,9 +61,9 @@ export function waterMeshFragData(texture: string): MeshFragData {
         texName: `particle/${texture}`,
         indices: new Uint16Array([0,1,2,0,2,3]),
         vertices: 4,
-        position: (i: number) => squarePositions[i],
-        texCoord: (i: number) => squareTexCoords[i],
-        color: (i: number) => TransparentBlack,
+        fillPosition: (dst: vec3, i: number) => vec3.copy(dst, squarePositions[i]),
+        fillTexCoord: (dst: vec2, i: number) => vec2.copy(dst, squareTexCoords[i]),
+        fillColor: (dst: Color, i: number) => colorCopy(dst, TransparentBlack),
     };
 }
 
@@ -84,9 +84,9 @@ function parseWaterPolygon(row: number[], texture: string): MeshFragData {
         texName: `particle/${texture}`,
         indices: new Uint16Array((vertices.length === 3) ? [0,1,2] : [0,1,2,2,1,3]),
         vertices: vertices.length,
-        position: (i: number) => vertices[i].pos,
-        texCoord: (i: number) => vec2.fromValues(vertices[i].pos[0] / 32, vertices[i].pos[1] / 32),
-        color: (i: number) => TransparentBlack,
+        fillPosition: (dst: vec3, i: number) => vec3.copy(dst, vertices[i].pos),
+        fillTexCoord: (dst: vec2, i: number) => vec2.set(dst, vertices[i].pos[0] / 32, vertices[i].pos[1] / 32),
+        fillColor: (dst: Color, i: number) => colorCopy(dst, TransparentBlack),
     };
 }
 

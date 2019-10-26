@@ -5,7 +5,7 @@ import * as rw from "librw";
 // @ts-ignore
 import { readFileSync } from "fs";
 import { TextureMapping, TextureBase } from "../TextureHolder";
-import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxInputLayout, GfxInputState, GfxProgram, GfxHostAccessPass, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxTextureDimension, GfxRenderPass, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxBindingLayoutDescriptor } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxInputLayout, GfxInputState, GfxProgram, GfxHostAccessPass, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxTextureDimension, GfxRenderPass, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxBindingLayoutDescriptor, GfxCullMode } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { DeviceProgram } from "../Program";
 import { convertToTriangleIndexBuffer, filterDegenerateTriangleIndexBuffer, GfxTopology } from "../gfx/helpers/TopologyHelpers";
@@ -17,9 +17,10 @@ import { assert } from "../util";
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth, GfxRenderInst } from "../gfx/render/GfxRenderer";
 import { ItemInstance, ObjectDefinition, ObjectFlags } from "./item";
-import { colorNew, White, colorNewCopy, colorMult, Color } from "../Color";
+import { colorNew, White, colorNewCopy, Color, colorCopy } from "../Color";
 import { ColorSet, emptyColorSet, lerpColorSet } from "./time";
 import { AABB } from "../Geometry";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
 const TIME_FACTOR = 2500; // one day cycle per minute
 
@@ -280,9 +281,9 @@ export interface MeshFragData {
     vertices: number;
     texName?: string;
     texScroll?: vec3;
-    position(vertex: number): vec3;
-    color(vertex: number): Color;
-    texCoord(vertex: number): vec2;
+    fillPosition(dst: vec3, vertex: number): void;
+    fillColor(dst: Color, vertex: number): void;
+    fillTexCoord(dst: vec2, vertex: number): void;
 }
 
 class RWMeshFragData implements MeshFragData {
@@ -321,27 +322,32 @@ class RWMeshFragData implements MeshFragData {
         return this.indexMap.length;
     }
 
-    public position(index: number) {
+    public fillPosition(dst: vec3, index: number): void {
         const i = this.indexMap[index];
-        return vec3.fromValues(this.positions[3*i+0], this.positions[3*i+1], this.positions[3*i+2]);
+        dst[0] = this.positions[3*i+0];
+        dst[1] = this.positions[3*i+1];
+        dst[2] = this.positions[3*i+2];
     }
 
-    public color(index: number) {
+    public fillColor(dst: Color, index: number): void {
         const i = this.indexMap[index];
-        const color = colorNewCopy(this.baseColor);
-        if (this.colors !== null)
-            colorMult(color, color, colorNew(this.colors[4*i+0]/0xFF, this.colors[4*i+1]/0xFF, this.colors[4*i+2]/0xFF, this.colors[4*i+3]/0xFF));
-        return color;
-    }
-
-    public texCoord(index: number) {
-        const i = this.indexMap[index];
-        const texCoord = vec2.create();
-        if (this.texCoords !== null) {
-            texCoord[0] = this.texCoords[2*i+0]
-            texCoord[1] = this.texCoords[2*i+1];
+        colorCopy(dst, this.baseColor);
+        if (this.colors !== null) {
+            const r = this.colors[4*i+0]/0xFF;
+            const g = this.colors[4*i+1]/0xFF;
+            const b = this.colors[4*i+2]/0xFF;
+            dst.r *= r;
+            dst.g *= g;
+            dst.b *= b;
         }
-        return texCoord;
+    }
+
+    public fillTexCoord(dst: vec2, index: number): void {
+        const i = this.indexMap[index];
+        if (this.texCoords !== null) {
+            dst[0] = this.texCoords[2*i+0];
+            dst[1] = this.texCoords[2*i+1];
+        }
     }
 }
 
@@ -412,6 +418,9 @@ export class DrawKey {
     }
 }
 
+const scratchVec2 = vec2.create();
+const scratchVec3 = vec3.create();
+const scratchColor = colorNewCopy(White);
 export class SceneRenderer extends Renderer {
     public bbox = new AABB();
 
@@ -458,7 +467,6 @@ export class SceneRenderer extends Renderer {
         }
         assert(this.indices > 0);
 
-        const points = [] as vec3[];
         const attrLen = 13;
         const vbuf = new Float32Array(vertices * attrLen);
         const ibuf = new Uint32Array(this.indices);
@@ -471,15 +479,17 @@ export class SceneRenderer extends Renderer {
                 const n = frag.vertices;
                 const texLayer = (frag.texName === undefined || atlas === undefined) ? undefined : atlas.subimages.get(frag.texName);
                 for (let i = 0; i < n; i++) {
-                    const pos = vec3.transformMat4(vec3.create(), frag.position(i), inst.modelMatrix);
-                    points.push(pos);
-                    vbuf[voffs++] = pos[0];
-                    vbuf[voffs++] = pos[1];
-                    vbuf[voffs++] = pos[2];
-                    voffs += fillColor(vbuf, voffs, frag.color(i));
-                    const texCoord = frag.texCoord(i);
-                    vbuf[voffs++] = texCoord[0];
-                    vbuf[voffs++] = texCoord[1];
+                    frag.fillPosition(scratchVec3, i);
+                    vec3.transformMat4(scratchVec3, scratchVec3, inst.modelMatrix);
+                    vbuf[voffs++] = scratchVec3[0];
+                    vbuf[voffs++] = scratchVec3[1];
+                    vbuf[voffs++] = scratchVec3[2];
+                    this.bbox.unionPoint(scratchVec3);
+                    frag.fillColor(scratchColor, i);
+                    voffs += fillColor(vbuf, voffs, scratchColor);
+                    frag.fillTexCoord(scratchVec2, i);
+                    vbuf[voffs++] = scratchVec2[0];
+                    vbuf[voffs++] = scratchVec2[1];
                     if (texLayer === undefined) {
                         vbuf[voffs++] = -1;
                     } else {
@@ -494,7 +504,8 @@ export class SceneRenderer extends Renderer {
                         voffs += 3;
                     }
                 }
-                for (const index of frag.indices) {
+                for (let i = 0; i < frag.indices.length; i++) {
+                    const index = frag.indices[i];
                     assert(index + lastIndex < vertices);
                     ibuf[ioffs++] = index + lastIndex;
                 }
@@ -502,7 +513,6 @@ export class SceneRenderer extends Renderer {
             }
         }
 
-        this.bbox.set(points);
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vbuf.buffer);
         this.indexBuffer  = makeStaticDataBuffer(device, GfxBufferUsage.INDEX,  ibuf.buffer);
 

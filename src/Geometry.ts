@@ -99,6 +99,15 @@ export class AABB {
         this.maxZ = Math.max(a.maxZ, b.maxZ);
     }
 
+    public unionPoint(v: vec3): void {
+        this.minX = Math.min(this.minX, v[0]);
+        this.minY = Math.min(this.minY, v[1]);
+        this.minZ = Math.min(this.minZ, v[2]);
+        this.maxX = Math.max(this.maxX, v[0]);
+        this.maxY = Math.max(this.maxY, v[1]);
+        this.maxZ = Math.max(this.maxZ, v[2]);
+    }
+
     public static intersect(a: AABB, b: AABB): boolean {
         return !(
             a.minX > b.maxX || b.minX > a.maxX ||

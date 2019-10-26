@@ -13,6 +13,7 @@ import { vec4 } from 'gl-matrix';
 import { AABB } from '../Geometry';
 import { GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import ArrayBufferSlice from '../ArrayBufferSlice';
+import { colorNewCopy, OpaqueBlack } from '../Color';
 
 function UTF8ToString(array: Uint8Array) {
     let length = 0; while (length < array.length && array[length]) length++;
@@ -26,6 +27,7 @@ class AssetCache extends Map<string, ArrayBufferSlice> implements Destroyable {
     }
 }
 
+const scratchColor = colorNewCopy(OpaqueBlack);
 export class GTA3SceneDesc implements Viewer.SceneDesc {
     private static initialised = false;
     private assetCache: AssetCache;
@@ -282,7 +284,8 @@ export class GTA3SceneDesc implements Viewer.SceneDesc {
                 if (!texturesUsed.has(txdName)) texturesUsed.set(txdName, new Set());
                 texturesUsed.get(txdName)!.add(frag.texName);
                 for (let i = 0; i < frag.vertices; i++) {
-                    if (frag.color(i).a < 1) {
+                    frag.fillColor(scratchColor, i);
+                    if (scratchColor.a < 1) {
                         transparent = true;
                         break;
                     }
