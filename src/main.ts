@@ -382,26 +382,24 @@ class Main {
         byteOffs++;
 
         byteOffs += serializeCamera(this._saveStateView, byteOffs, this.viewer.camera);
-        let wordOffs = byteOffs * 4;
 
         // TODO(jstpierre): Pass DataView into serializeSaveState
         if (this.viewer.scene !== null && this.viewer.scene.serializeSaveState)
-            wordOffs = this.viewer.scene.serializeSaveState(this._saveStateTmp.buffer, wordOffs);
+            byteOffs = this.viewer.scene.serializeSaveState(this._saveStateTmp.buffer, byteOffs);
 
-        const s = btoa(this._saveStateTmp, wordOffs);
+        const s = btoa(this._saveStateTmp, byteOffs);
         return `A${s}`;
     }
 
     private _loadSceneSaveStateVersion2(state: string): boolean {
         const byteLength = atob(this._saveStateTmp, 0, state);
 
-        let wordOffs = 0;
-        this.viewer.sceneTime = this._saveStateView.getFloat32(wordOffs + 0x00, true);
-        wordOffs += 0x04;
-        wordOffs += deserializeCamera(this.viewer.camera, this._saveStateView, wordOffs);
-        let offs = wordOffs * 4;
+        let byteOffs = 0;
+        this.viewer.sceneTime = this._saveStateView.getFloat32(byteOffs + 0x00, true);
+        byteOffs += 0x04;
+        byteOffs += deserializeCamera(this.viewer.camera, this._saveStateView, byteOffs);
         if (this.viewer.scene !== null && this.viewer.scene.deserializeSaveState)
-            offs = this.viewer.scene.deserializeSaveState(this._saveStateTmp.buffer, offs, byteLength);
+            byteOffs = this.viewer.scene.deserializeSaveState(this._saveStateTmp.buffer, byteOffs, byteLength);
 
         if (this.viewer.cameraController !== null)
             this.viewer.cameraController.cameraUpdateForced();
@@ -418,9 +416,8 @@ class Main {
         byteOffs++;
 
         byteOffs += deserializeCamera(this.viewer.camera, this._saveStateView, byteOffs);
-        let offs = byteOffs * 4;
         if (this.viewer.scene !== null && this.viewer.scene.deserializeSaveState)
-            offs = this.viewer.scene.deserializeSaveState(this._saveStateTmp.buffer, offs, byteLength);
+            byteOffs = this.viewer.scene.deserializeSaveState(this._saveStateTmp.buffer, byteOffs, byteLength);
 
         if (this.viewer.cameraController !== null)
             this.viewer.cameraController.cameraUpdateForced();
