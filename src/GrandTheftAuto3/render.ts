@@ -521,6 +521,7 @@ export class SceneRenderer extends Renderer {
             blendDstFactor: this.key.additive ? GfxBlendFactor.ONE : GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
             blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
             depthWrite: !dual,
+            cullMode: GfxCullMode.BACK,
         };
 
         let renderLayer = this.key.renderLayer;
