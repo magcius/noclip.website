@@ -327,21 +327,22 @@ export class GTA3SceneDesc implements Viewer.SceneDesc {
         }
 
         const sealevel = this.water.origin[2];
+        const cache = renderer.renderHelper.getCache();
         for (const [key, layerMeshes] of layers) {
             if (SceneRenderer.applicable(layerMeshes))
-                renderer.sceneRenderers.push(new SceneRenderer(device, key, layerMeshes, sealevel));
+                renderer.sceneRenderers.push(new SceneRenderer(device, cache, key, layerMeshes, sealevel));
             for (const atlas of textureArrays) {
                 if (!SceneRenderer.applicable(layerMeshes, atlas)) continue;
-                renderer.sceneRenderers.push(new SceneRenderer(device, key, layerMeshes, sealevel, atlas));
+                renderer.sceneRenderers.push(new SceneRenderer(device, cache, key, layerMeshes, sealevel, atlas));
                 if (key.renderLayer === GfxRendererLayer.TRANSLUCENT && !key.water)
-                    renderer.sceneRenderers.push(new SceneRenderer(device, key, layerMeshes, sealevel, atlas, true));
+                    renderer.sceneRenderers.push(new SceneRenderer(device, cache, key, layerMeshes, sealevel, atlas, true));
             }
         }
 
         await this.fetchTXD(device, dataFetcher, 'particle', texture => {
             if (texture.name === `particle/${this.water.texture}`) {
                 const atlas = new TextureArray(device, [texture]);
-                renderer.sceneRenderers.push(new SkyRenderer(device, atlas));
+                renderer.sceneRenderers.push(new SkyRenderer(device, cache, atlas));
             }
         });
 

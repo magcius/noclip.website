@@ -245,7 +245,7 @@ class Renderer {
 }
 
 export class SkyRenderer extends Renderer {
-    constructor(device: GfxDevice, atlas: TextureArray) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, atlas: TextureArray) {
         super(skyProgram, atlas);
         // fullscreen quad
         const vbuf = new Float32Array([
@@ -261,7 +261,7 @@ export class SkyRenderer extends Renderer {
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: GTA3Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
         ];
-        this.inputLayout = device.createInputLayout({ indexBufferFormat: GfxFormat.U32_R, vertexAttributeDescriptors });
+        this.inputLayout = cache.createInputLayout(device, { indexBufferFormat: GfxFormat.U32_R, vertexAttributeDescriptors });
         const buffers = [{ buffer: this.vertexBuffer, byteOffset: 0, byteStride: 3 * 0x04}];
         const indexBuffer = { buffer: this.indexBuffer, byteOffset: 0, byteStride: 0 };
         this.inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
@@ -444,7 +444,7 @@ export class SceneRenderer extends Renderer {
         return false;
     }
 
-    constructor(device: GfxDevice, public key: DrawKey, meshes: MeshInstance[], sealevel: number, atlas?: TextureArray, dual = false) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public key: DrawKey, meshes: MeshInstance[], sealevel: number, atlas?: TextureArray, dual = false) {
         super(SceneRenderer.programFor(key, dual), atlas);
 
         let vertices = 0;
@@ -512,7 +512,7 @@ export class SceneRenderer extends Renderer {
             { location: GTA3Program.a_TexCoord,    bufferIndex: 0, format: GfxFormat.F32_RGB,  bufferByteOffset:  7 * 0x04, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
             { location: GTA3Program.a_TexScroll,   bufferIndex: 0, format: GfxFormat.F32_RGB,  bufferByteOffset: 10 * 0x04, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
         ];
-        this.inputLayout = device.createInputLayout({ indexBufferFormat: GfxFormat.U32_R, vertexAttributeDescriptors });
+        this.inputLayout = cache.createInputLayout(device, { indexBufferFormat: GfxFormat.U32_R, vertexAttributeDescriptors });
         const buffers = [{ buffer: this.vertexBuffer, byteOffset: 0, byteStride: attrLen * 0x04}];
         const indexBuffer = { buffer: this.indexBuffer, byteOffset: 0, byteStride: 0 };
         this.inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
@@ -568,7 +568,7 @@ export class GTA3Renderer implements Viewer.SceneGfx {
     private renderTarget = new BasicRenderTarget();
     private clearRenderPassDescriptor = standardFullClearRenderPassDescriptor;
     private currentColors = emptyColorSet();
-    private renderHelper: GfxRenderHelper;
+    public renderHelper: GfxRenderHelper;
     private weather = 0;
     private scenarioSelect: UI.SingleSelect;
 
