@@ -504,7 +504,6 @@ class SMGRenderer implements Viewer.SceneGfx {
 
     public deserializeSaveState(src: ArrayBuffer, offs: number, byteLength: number): number {
         const view = new DataView(src);
-        console.log(offs, byteLength);
         if (offs < byteLength)
             this.setCurrentScenario(view.getUint8(offs++));
         return offs;
