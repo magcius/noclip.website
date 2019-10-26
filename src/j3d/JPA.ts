@@ -887,7 +887,7 @@ class StripeEntry {
     }
 }
 
-const MAX_STRIPE_VERTEX_COUNT = 256;
+const MAX_STRIPE_VERTEX_COUNT = 512;
 class StripeBufferManager {
     public stripeEntry: StripeEntry[] = [];
     private indexBuffer: GfxBuffer;
@@ -2056,21 +2056,24 @@ function calcTexCrdMtxAnm(dst: mat4, bsp1: JPABaseShapeBlock, tick: number): voi
     const offsT = 0.5 * bsp1.tilingY;
 
     const translationS = (bsp1.texStaticTransX + tick * bsp1.texScrollTransX) + offsS;
-    const translationT = (bsp1.texStaticTransY + tick * bsp1.texScrollTransY) + offsS;
-    const scaleS = (bsp1.texStaticScaleX + tick * bsp1.texScrollScaleX) * bsp1.tilingX;
-    const scaleT = (bsp1.texStaticScaleY + tick * bsp1.texScrollScaleY) * bsp1.tilingY;
+    const translationT = (bsp1.texStaticTransY + tick * bsp1.texScrollTransY) + offsT;
+    const scaleS = (bsp1.texStaticScaleX + tick * bsp1.texScrollScaleX);
+    const scaleT = (bsp1.texStaticScaleY + tick * bsp1.texScrollScaleY);
     const rotate = (bsp1.texStaticRotate + tick * bsp1.texScrollRotate) * MathConstants.TAU / 0xFFFF;
 
     const sinR = Math.sin(rotate);
     const cosR = Math.cos(rotate);
 
-    dst[0]  = scaleS *  cosR;
-    dst[4]  = scaleS * -sinR;
+    // Normally, the setting of tiling is done by choosing a separate texcoord array through the GXSetArray call in setPTev.
+    // If the tiling bit is on, then it uses a texcoord of 2.0 instead of 1.0. In our case, we just adjust the texture matirx.
+
+    dst[0]  = bsp1.tilingX * scaleS *  cosR;
+    dst[4]  = bsp1.tilingX * scaleS * -sinR;
     dst[8]  = 0.0;
     dst[12] = offsS + scaleS * (sinR * translationT - cosR * translationS);
 
-    dst[1]  = scaleT *  sinR;
-    dst[5]  = scaleT *  cosR;
+    dst[1]  = bsp1.tilingY * scaleT *  sinR;
+    dst[5]  = bsp1.tilingY * scaleT *  cosR;
     dst[9]  = 0.0;
     dst[13] = offsT + -scaleT * (sinR * translationS + cosR * translationT);
 
@@ -2081,10 +2084,8 @@ function calcTexCrdMtxAnm(dst: mat4, bsp1: JPABaseShapeBlock, tick: number): voi
 }
 
 function calcTexCrdMtxIdt(dst: mat4, bsp1: JPABaseShapeBlock): void {
-    // Normally, this is done by choosing a separate texcoord array
-    // through the GXSetArray call in in setPTev. If tiling is on, then
-    // it uses a texcoord of 2.0. In our case, we just set up a matrix
-    // to scale everything instead.
+    // Normally, the choice of tiling is done by choosing a separate texcoord array through the GXSetArray call in setPTev.
+    // If the tiling bit is on, then it uses a texcoord of 2.0 instead of 1.0. In our case, we just adjust the texture matirx.
 
     const scaleS = bsp1.tilingX;
     const scaleT = bsp1.tilingY;
@@ -2113,7 +2114,6 @@ function mat4SwapTranslationColumns(m: mat4): void {
     m[13] = m[9];
     m[9] = ty;
 }
-
 
 function calcTexCrdMtxPrj(dst: mat4, workData: JPAEmitterWorkData, posMtx: mat4, flipY: boolean): boolean {
     const bsp1 = workData.baseEmitter.resData.res.bsp1;
