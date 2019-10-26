@@ -193,7 +193,7 @@ export class Viewer {
         this.viewerRenderInput.deltaTime = 0;
     }
 
-    public takeScreenshotToCanvas(): HTMLCanvasElement {
+    public takeScreenshotToCanvas(opaque: boolean): HTMLCanvasElement {
         const canvas = document.createElement('canvas');
 
         // TODO(jstpierre)
@@ -205,7 +205,7 @@ export class Viewer {
             // TODO(jstpierre): Implement in Gfx somehow.
             const gl = gfxDeviceGetImpl(this.gfxDevice).gl;
             const width = gl.drawingBufferWidth, height = gl.drawingBufferHeight;
-            downloadTextureToCanvas(gl, getPlatformTexture(this.gfxSwapChain.getOnscreenTexture()), width, height, canvas);
+            downloadTextureToCanvas(gl, getPlatformTexture(this.gfxSwapChain.getOnscreenTexture()), width, height, canvas, opaque);
         }
 
         return canvas;

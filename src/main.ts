@@ -688,8 +688,8 @@ class Main {
         return `${groupId}_${sceneId}_${date.toISOString()}`;
     }
 
-    private _takeScreenshot() {
-        const canvas = this.viewer.takeScreenshotToCanvas();
+    private _takeScreenshot(opaque: boolean = true) {
+        const canvas = this.viewer.takeScreenshotToCanvas(opaque);
         const filename = `${this._getSceneDownloadPrefix()}.png`;
         convertCanvasToPNG(canvas).then((blob) => downloadBlob(filename, blob));
     }
