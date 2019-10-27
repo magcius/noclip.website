@@ -11,12 +11,8 @@ export interface CHAR {
     cmdl: CMDL;
 }
 
-export function parse(stream: InputStream, resourceSystem: ResourceSystem, assetID: string): CHAR | null {
-    const magic = stream.readUint32();
-    if (magic !== 0x59BE000E)
-        return null;
-
-    stream.skip(19);
+function parseDKCR(stream: InputStream, resourceSystem: ResourceSystem, assetID: string): CHAR | null {
+    stream.skip(21);
     const name = stream.readString();
     const cinfID = stream.readAssetID();
     const cprmID = stream.readAssetID();
@@ -28,4 +24,27 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem, asset
 
     const cmdl = assertExists(resourceSystem.loadAssetByID<CMDL>(cmdlID, 'CMDL'));
     return { name, cmdl };
+}
+
+function parseMP3(stream: InputStream, resource: ResourceSystem, assetID: string): CHAR | null {
+    const name = stream.readString();
+    const cmdlID = stream.readAssetID();    
+    const cmdl = assertExists(resource.loadAssetByID<CMDL>(cmdlID, 'CMDL'));
+    return { name, cmdl };
+}
+
+export function parse(stream: InputStream, resourceSystem: ResourceSystem, assetID: string): CHAR | null {
+    const magic = stream.readUint16();
+     
+    if (magic !== 0x59BE)
+    {
+        const char = parseMP3(stream, resourceSystem, assetID);
+        return char;
+    } 
+    else 
+    {
+        const char = parseDKCR(stream, resourceSystem, assetID);
+        return char;
+    }
+    return null;
 }

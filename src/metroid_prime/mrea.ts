@@ -27,7 +27,7 @@ export interface MREA {
     lightLayers: AreaLightLayer[];
 }
 
-enum AreaVersion {
+export const enum AreaVersion {
     MP1 = 0xF,
     MP2 = 0x19,
     MP3 = 0x1E,
@@ -1111,7 +1111,7 @@ export function parse(stream: InputStream, resourceSystem: ResourceSystem): MREA
             assert(sclyMagic == 'SCLY');
             assert(sclyIndex == i);
 
-            const layer = Script.parseScriptLayer_MP2(stream, resourceSystem);
+            const layer = Script.parseScriptLayer_MP2(stream, version, resourceSystem);
             scriptLayers.push(layer);
         }
     }

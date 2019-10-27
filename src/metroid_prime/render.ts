@@ -540,7 +540,7 @@ export class MREARenderer {
                     const actor = new Actor(ent, cmdlRenderer);
                     this.actors.push(actor);
                 }
-
+ 
                 if (ent.type === MP1EntityType.AreaAttributes || ent.type === "REAA") {
                     const areaAttributes = ent as AreaAttributes;
 
