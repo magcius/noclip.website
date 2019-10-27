@@ -7,7 +7,7 @@ jobs:
         - master
 
     docker:
-      - image: circleci/node:10.15.1
+      - image: circleci/node:10.16.3
 
     working_directory: ~/repo
 
