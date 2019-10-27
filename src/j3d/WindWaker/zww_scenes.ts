@@ -1278,12 +1278,12 @@ class SceneDesc {
                 type = 0;
 
             setModelMatrix(scratchMatrix);
-            mat4.getTranslation(scratchVec3a, scratchMatrix);
-
+            vec3.set(scratchVec3a, 0, 0, 0);
             if (type === 0 || type === 3) {
                 const m = buildModel(rarc, obm ? `bdl/obm_shokudai1.bdl` : `bdl/vktsd.bdl`);
                 scratchVec3a[1] += 140;
             }
+            vec3.transformMat4(scratchVec3a, scratchVec3a, scratchMatrix);
 
             // Create particle systems.
             const pa = createEmitter(0x0001);
