@@ -808,7 +808,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
         this.opaqueSceneTexture.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
 
-        this.setTimeOfDay(getTimeFrames(viewerInput) / 10000);
+        this.setTimeOfDay(getTimeFrames(viewerInput) / 5000);
 
         // First, render the skybox.
         const skyboxPassRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
