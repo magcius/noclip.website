@@ -1170,6 +1170,7 @@ class SceneDesc {
             const objectRenderer = buildModel(rarc, modelPath);
             const bmt = BMT.parse(rarc.findFileData(bmtPath)!);
             objectRenderer.modelInstance.setModelMaterialData(new BMDModelMaterialData(device, cache, bmt));
+            renderer.extraTextures.fillExtraTextures(objectRenderer.modelInstance);
             return objectRenderer;
         }
 
