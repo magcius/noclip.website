@@ -7,7 +7,7 @@ import * as UI from '../ui';
 
 import { BMD, BMT, BTK, BTI, BRK, BCK, BTI_Texture } from './j3d';
 import * as RARC from './rarc';
-import { BMDModel, BMDModelInstance, BTIData } from './render';
+import { BMDModel, BMDModelInstance, BTIData, BMDModelMaterialData } from './render';
 import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks } from '../gx/gx_material';
 import { TextureMapping } from '../TextureHolder';
 import { readString, leftPad, assertExists } from '../util';
@@ -47,12 +47,14 @@ const materialHacks: GXMaterialHacks = {
 function createModelInstance(device: GfxDevice, cache: GfxRenderCache, extraTextures: ZTPExtraTextures, bmdFile: RARC.RARCFile, btkFile: RARC.RARCFile | null, brkFile: RARC.RARCFile | null, bckFile: RARC.RARCFile | null, bmtFile: RARC.RARCFile | null) {
     const bmd = BMD.parse(bmdFile.buffer);
     const bmt = bmtFile ? BMT.parse(bmtFile.buffer) : null;
-    const bmdModel = new BMDModel(device, cache, bmd, bmt);
+    const bmdModel = new BMDModel(device, cache, bmd);
     const modelInstance = new BMDModelInstance(bmdModel, materialHacks);
+    if (bmt !== null)
+        modelInstance.setModelMaterialData(new BMDModelMaterialData(device, cache, bmt));
 
-    for (let i = 0; i < bmdModel.tex1Data.tex1.samplers.length; i++) {
+    for (let i = 0; i < bmdModel.modelMaterialData.tex1Data.tex1.samplers.length; i++) {
         // Look for any unbound textures and set them.
-        const sampler = bmdModel.tex1Data.tex1.samplers[i];
+        const sampler = bmdModel.modelMaterialData.tex1Data.tex1.samplers[i];
         const m = modelInstance.materialInstanceState.textureMappings[i];
         if (m.gfxTexture === null)
             extraTextures.fillTextureMapping(m, sampler.name);

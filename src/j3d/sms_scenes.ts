@@ -7,7 +7,7 @@ import * as RARC from './rarc';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { readString, assert, getTextDecoder, assertExists } from '../util';
 
-import { BMDModelInstance, BMDModel } from './render';
+import { BMDModelInstance, BMDModel, BMDModelMaterialData } from './render';
 import { createModelInstance } from './scenes';
 import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 import { mat4, quat } from 'gl-matrix';
@@ -312,7 +312,7 @@ export class SunshineRenderer implements Viewer.SceneGfx {
     private setIndirectTextureOverride(): void {
         for (let i = 0; i < this.modelInstances.length; i++) {
             // In options.szs, the seaindirect appears to have more than one sampler named "indirectdummy". WTF?
-            const samplers = this.modelInstances[i].bmdModel.tex1Data.tex1.samplers;
+            const samplers = this.modelInstances[i].modelMaterialData.tex1Data.tex1.samplers;
             for (let j = 0; j < samplers.length; j++) {
                 const m = this.modelInstances[i].materialInstanceState.textureMappings[j];
                 if (samplers[j].name === "indirectdummy") {
@@ -466,14 +466,13 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
         };
 
         const modelCache = new Map<RARC.RARCFile, BMDModel>();
-        function lookupModel(bmdFile: RARC.RARCFile, bmtFile: RARC.RARCFile | null): BMDModel {
+        function lookupModel(bmdFile: RARC.RARCFile): BMDModel {
             assert(!!bmdFile);
             if (modelCache.has(bmdFile)) {
                 return modelCache.get(bmdFile)!;
             } else {
                 const bmd = BMD.parse(bmdFile.buffer);
-                const bmt = bmtFile !== null ? BMT.parse(bmtFile.buffer) : null;
-                const bmdModel = new BMDModel(device, cache, bmd, bmt);
+                const bmdModel = new BMDModel(device, cache, bmd);
                 modelCache.set(bmdFile, bmdModel);
                 return bmdModel;
             }
@@ -482,15 +481,17 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
         function bmtm(bmd: string, bmt: string): BMDModelInstance {
             const bmdFile = assertExists(rarc.findFile(bmd));
             const bmtFile = assertExists(rarc.findFile(bmt));
-            const bmdModel = lookupModel(bmdFile, bmtFile);
+            const bmdModel = lookupModel(bmdFile);
             const modelInstance = new BMDModelInstance(bmdModel);
+            if (bmt !== null)
+                modelInstance.setModelMaterialData(new BMDModelMaterialData(device, cache, BMT.parse(bmtFile.buffer)));
             modelInstance.passMask = SMSPass.OPAQUE;
             return modelInstance;
         }
 
         function bckm(bmdFilename: string, bckFilename: string, loopMode: LoopMode = LoopMode.REPEAT): BMDModelInstance {
             const bmdFile = assertExists(rarc.findFile(bmdFilename));
-            const bmdModel = lookupModel(bmdFile, null);
+            const bmdModel = lookupModel(bmdFile);
             const modelInstance = new BMDModelInstance(bmdModel);
             modelInstance.passMask = SMSPass.OPAQUE;
             const bckFile = assertExists(rarc.findFile(bckFilename));
@@ -509,8 +510,10 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
             const bckFile = rarc.findFile(`${basename}.bck`);
             const bmtFile = rarc.findFile(`${basename}.bmt`);
 
-            const bmdModel = lookupModel(bmdFile, bmtFile);
+            const bmdModel = lookupModel(bmdFile);
             const modelInstance = new BMDModelInstance(bmdModel);
+            if (bmtFile !== null)
+                modelInstance.setModelMaterialData(new BMDModelMaterialData(device, cache, BMT.parse(bmtFile.buffer)));
             modelInstance.passMask = SMSPass.OPAQUE;
 
             if (btkFile !== null) {

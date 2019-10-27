@@ -132,7 +132,7 @@ class Plane {
         // Make it go fast.
         this.animationController.fps = 30;
 
-        this.materialInstanceState.textureMappings = this.bmdModel.createDefaultTextureMappings();
+        this.materialInstanceState.textureMappings = this.bmdModel.modelMaterialData.createDefaultTextureMappings();
 
         const mat = bmdModel.bmd.mat3.materialEntries[materialIndex];
         const matData = new MaterialData(mat);
@@ -175,7 +175,7 @@ function createModelInstance(device: GfxDevice, cache: GfxRenderCache, rarc: RAR
     if (!bdlFile)
         return null;
     const bdl = BMD.parse(bdlFile.buffer);
-    const bmdModel = new BMDModel(device, cache, bdl, null);
+    const bmdModel = new BMDModel(device, cache, bdl);
     const modelInstance = new BMDModelInstance(bmdModel);
     modelInstance.passMask = isSkybox ? WindWakerPass.SKYBOX : WindWakerPass.MAIN;
     modelInstance.isSkybox = isSkybox;
@@ -302,10 +302,10 @@ export class WindWakerWater implements SceneDesc {
 
             const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
             const model_bmd = new BMDModel(device, cache, BMD.parse(roomRarc.findFileData('bdl/model.bdl')!));
-            concat(renderer.textureHolder.viewerTextures, model_bmd.tex1Data.viewerTextures);
+            concat(renderer.textureHolder.viewerTextures, model_bmd.modelMaterialData.tex1Data.viewerTextures);
             renderer.modelData.push(model_bmd);
             const model1_bmd = new BMDModel(device, cache, BMD.parse(roomRarc.findFileData('bdl/model1.bdl')!));
-            concat(renderer.textureHolder.viewerTextures, model1_bmd.tex1Data.viewerTextures);
+            concat(renderer.textureHolder.viewerTextures, model1_bmd.modelMaterialData.tex1Data.viewerTextures);
             renderer.modelData.push(model1_bmd);
             const model1_btk = BTK.parse(roomRarc.findFileData('btk/model1.btk')!);
 

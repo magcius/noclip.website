@@ -14,7 +14,7 @@ import * as UI from '../../ui';
 import * as DZB from './DZB';
 import * as JPA from '../JPA';
 import { BMD, BTK, BRK, BCK, BTI, LoopMode, BMT } from '../j3d';
-import { BMDModelInstance, BMDModel, BTIData } from '../render';
+import { BMDModelInstance, BMDModel, BTIData, BMDModelMaterialData } from '../render';
 import { Camera, computeViewMatrix, texProjCamera } from '../../Camera';
 import { DeviceProgram } from '../../Program';
 import { Color, colorNew, colorLerp, colorCopy, TransparentBlack, colorNewCopy } from '../../Color';
@@ -229,7 +229,7 @@ function createModelInstance(device: GfxDevice, cache: GfxRenderCache, extraText
     const brkFile = rarc.findFile(`brk/${name}.brk`);
     const bckFile = rarc.findFile(`bck/${name}.bck`);
     const bdl = BMD.parse(bdlFile.buffer);
-    const bmdModel = new BMDModel(device, cache, bdl, null);
+    const bmdModel = new BMDModel(device, cache, bdl);
     const modelInstance = new BMDModelInstance(bmdModel);
     extraTextures.fillExtraTextures(modelInstance);
     modelInstance.passMask = isSkybox ? WindWakerPass.SKYBOX : WindWakerPass.MAIN;
@@ -1166,25 +1166,10 @@ class SceneDesc {
             return objectRenderer;
         }
 
-        function buildChildModelBMT(rarc: RARC.RARC, modelPath: string, bmtPath: string): BMDObjectRenderer {
-            const bmd = BMD.parse(rarc.findFileData(modelPath)!);
-            const bmt = BMT.parse(rarc.findFileData(bmtPath)!);
-            const model = new BMDModel(device, cache, bmd, bmt);
-            modelCache.extraModels.push(model);
-            const modelInstance = new BMDModelInstance(model);
-            modelInstance.passMask = WindWakerPass.MAIN;
-            renderer.extraTextures.fillExtraTextures(modelInstance);
-            modelInstance.name = name;
-            modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 1);
-            const objectRenderer = new BMDObjectRenderer(modelInstance);
-            objectRenderer.layer = layer;
-            return objectRenderer;
-        }
-
         function buildModelBMT(rarc: RARC.RARC, modelPath: string, bmtPath: string): BMDObjectRenderer {
-            const objectRenderer = buildChildModelBMT(rarc, modelPath, bmtPath);
-            setModelMatrix(objectRenderer.modelMatrix);
-            roomRenderer.objectRenderers.push(objectRenderer);
+            const objectRenderer = buildModel(rarc, modelPath);
+            const bmt = BMT.parse(rarc.findFileData(bmtPath)!);
+            objectRenderer.modelInstance.setModelMaterialData(new BMDModelMaterialData(device, cache, bmt));
             return objectRenderer;
         }
 
@@ -1287,21 +1272,27 @@ class SceneDesc {
             const rarc = await fetchArchive(`Ep.arc`);
             const ga = !!((parameters >>> 6) & 0x01);
             const obm = !!((parameters >>> 7) & 0x01);
-            const type = (parameters & 0x3F);
+            let type = (parameters & 0x3F);
+            if (type === 0x3F)
+                type = 0;
 
-            if (type === 0 || type === 3) {
-                const m = buildModel(rarc, obm ? `bdl/obm_shokudai1.bdl` : `bdl/vktsd.bdl`);
-            }
-
-            // Create particle systems.
             setModelMatrix(scratchMatrix);
             mat4.getTranslation(scratchVec3a, scratchMatrix);
 
+            if (type === 0 || type === 3) {
+                const m = buildModel(rarc, obm ? `bdl/obm_shokudai1.bdl` : `bdl/vktsd.bdl`);
+                scratchVec3a[1] += 140;
+            }
+
+            // Create particle systems.
             const pa = createEmitter(0x0001);
             vec3.copy(pa.globalTranslation, scratchVec3a);
             pa.globalTranslation[1] += -240 + 235 + 15;
-            const pb = createEmitter(0x4004);
-            vec3.copy(pb.globalTranslation, pa.globalTranslation);
+            if (type !== 2) {
+                const pb = createEmitter(0x4004);
+                vec3.copy(pb.globalTranslation, pa.globalTranslation);
+                pb.globalTranslation[1] += 20;
+            }
             const pc = createEmitter(0x01EA);
             vec3.copy(pc.globalTranslation, scratchVec3a);
             pc.globalTranslation[1] += -240 + 235 + 8;

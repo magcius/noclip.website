@@ -1,7 +1,7 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 
-import { BMD, BMT, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, TTK1Animator, ANK1Animator, bindANK1Animator, bindVAF1Animator, VAF1, VAF1Animator, TPT1, bindTPT1Animator, TPT1Animator, TEX1, BTI_Texture, INF1, calcJointMatrix, HierarchyNodeType, TexMtx } from './j3d';
+import { BMD, BMT, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, TTK1Animator, ANK1Animator, bindANK1Animator, bindVAF1Animator, VAF1, VAF1Animator, TPT1, bindTPT1Animator, TPT1Animator, TEX1, BTI_Texture, INF1, calcJointMatrix, HierarchyNodeType, TexMtx, MAT3 } from './j3d';
 import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } from './j3d';
 
 import * as GX from '../gx/gx_enum';
@@ -63,7 +63,6 @@ class ShapeData {
 }
 
 export class MaterialData {
-    public jointData: JointData | null = null;
     public fillMaterialParamsCallback: ((materialParams: MaterialParams, materialInstance: MaterialInstance, viewMatrix: mat4, modelMatrix: mat4, camera: Camera, packetParams: PacketParams) => void) | null = null;
 
     constructor(public material: MaterialEntry) {
@@ -142,13 +141,15 @@ export class ShapeInstance {
     constructor(public shapeData: ShapeData, private materialInstance: MaterialInstance) {
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, depth: number, camera: Camera, materialInstanceState: MaterialInstanceState, shapeInstanceState: ShapeInstanceState): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, depth: number, camera: Camera, modelData: BMDModel, materialInstanceState: MaterialInstanceState, shapeInstanceState: ShapeInstanceState): void {
         const materialInstance = this.materialInstance;
         if (!materialInstance.visible)
             return;
 
         const shape = this.shapeData.shape;
-        const materialJointMatrix = shapeInstanceState.jointToWorldMatrixArray[materialInstance.materialData.jointData!.jointIndex];
+        const materialIndex = materialInstance.materialData.material.index;
+        const materialJointIndex = modelData.materialJointIndices[materialIndex];
+        const materialJointMatrix = shapeInstanceState.jointToWorldMatrixArray[materialJointIndex];
 
         packetParams.clear();
 
@@ -307,11 +308,17 @@ export class MaterialInstance {
     public tpt1Animators: (TPT1Animator | null)[] = [];
     public trk1Animators: (TRK1Animator | null)[] = [];
     public name: string;
+    public materialData: MaterialData;
     public materialHelper: GXMaterialHelperGfx;
     public visible: boolean = true;
     public sortKey: number = 0;
 
-    constructor(public materialData: MaterialData, materialHacks?: GX_Material.GXMaterialHacks) {
+    constructor(materialData: MaterialData, materialHacks?: GX_Material.GXMaterialHacks) {
+        this.setMaterialData(materialData, materialHacks);
+    }
+
+    public setMaterialData(materialData: MaterialData, materialHacks?: GX_Material.GXMaterialHacks): void {
+        this.materialData = materialData;
         const material = this.materialData.material;
         this.materialHelper = new GXMaterialHelperGfx(material.gxMaterial, materialHacks);
         this.name = material.name;
@@ -319,12 +326,12 @@ export class MaterialInstance {
         this.setSortKeyLayer(layer);
     }
 
-    public setColorWriteEnabled(colorWrite: boolean): void {
-        this.materialHelper.megaStateFlags.colorWrite = colorWrite;
-    }
-
     public setMaterialHacks(materialHacks: GX_Material.GXMaterialHacks) {
         this.materialHelper.setMaterialHacks(materialHacks);
+    }
+
+    public setColorWriteEnabled(colorWrite: boolean): void {
+        this.materialHelper.megaStateFlags.colorWrite = colorWrite;
     }
 
     public setSortKeyLayer(layer: GfxRendererLayer): void {
@@ -821,30 +828,61 @@ export class TEX1Data {
     }
 }
 
+interface MaterialRes {
+    mat3: MAT3 | null;
+    tex1: TEX1;
+}
+
+export class BMDModelMaterialData {
+    private realized: boolean = true;
+
+    public materialData: MaterialData[] | null = null;
+    public tex1Data: TEX1Data;
+
+    constructor(device: GfxDevice, cache: GfxRenderCache, materialRes: MaterialRes) {
+        const mat3 = materialRes.mat3, tex1 = materialRes.tex1;
+        if (mat3 !== null) {
+            this.materialData = [];
+            for (let i = 0; i < mat3.materialEntries.length; i++)
+                this.materialData.push(new MaterialData(mat3.materialEntries[i]));
+        }
+
+        this.tex1Data = new TEX1Data(device, cache, tex1);
+    }
+
+    public createDefaultTextureMappings(): TextureMapping[] {
+        const tex1Data = this.tex1Data;
+        const textureMappings = nArray(tex1Data.tex1.samplers.length, () => new TextureMapping());
+        for (let i = 0; i < tex1Data.tex1.samplers.length; i++)
+            tex1Data.fillTextureMappingFromIndex(textureMappings[i], i);
+        return textureMappings;
+    }
+
+    public destroy(device: GfxDevice): void {
+        if (!this.realized)
+            return;
+
+        this.tex1Data.destroy(device);
+        this.realized = false;
+    }
+}
+
 export class BMDModel {
     private realized: boolean = false;
-    public tex1Data: TEX1Data;
 
     private bufferCoalescer: GfxBufferCoalescerCombo;
 
-    public materialData: MaterialData[] = [];
+    public modelMaterialData: BMDModelMaterialData;
     public shapeData: ShapeData[] = [];
     public jointData: JointData[] = [];
+    // Reference joint indices for all materials.
+    public materialJointIndices: number[] = [];
 
     public hasBillboard: boolean = false;
 
     public bbox = new AABB();
 
-    constructor(
-        device: GfxDevice,
-        cache: GfxRenderCache,
-        public bmd: BMD,
-        public bmt: BMT | null = null,
-    ) {
-        const mat3 = (bmt !== null && bmt.mat3 !== null) ? bmt.mat3 : bmd.mat3;
-        const tex1 = (bmt !== null && bmt.tex1 !== null) ? bmt.tex1 : bmd.tex1;
-        this.tex1Data = new TEX1Data(device, cache, tex1);
-
+    constructor(device: GfxDevice, cache: GfxRenderCache, public bmd: BMD) {
         // Load shape data.
         const loadedVertexDatas = [];
         for (let i = 0; i < bmd.shp1.shapes.length; i++)
@@ -866,8 +904,7 @@ export class BMDModel {
         }
 
         // Load material data.
-        for (let i = 0; i < mat3.materialEntries.length; i++)
-            this.materialData.push(new MaterialData(mat3.materialEntries[i]));
+        this.modelMaterialData = new BMDModelMaterialData(device, cache, bmd);
 
         this.loadHierarchy(bmd.inf1);
 
@@ -900,14 +937,14 @@ export class BMDModel {
                 this.jointData.push(joint);
                 lastJoint = joint;
             } else if (type === HierarchyNodeType.Material) {
-                const materialData = this.materialData[value];
-                assert(materialData.jointData === null);
-                materialData.jointData = jointStack[0];
+                assert(this.materialJointIndices[value] === undefined);
+                this.materialJointIndices[value] = jointStack[0].jointIndex;
             } else if (type === HierarchyNodeType.Shape) {
                 const shapeData = this.shapeData[value];
 
                 // Translucent draws happen in reverse order -- later shapes are drawn first.
-                if (this.materialData[shapeData.shape.materialIndex].material.translucent)
+                // TODO(jstpierre): Verify these flags do not change upon changing BMT...
+                if (this.modelMaterialData.materialData![shapeData.shape.materialIndex].material.translucent)
                     shapeData.sortKeyBias = --translucentDrawIndex;
             }
 
@@ -918,14 +955,6 @@ export class BMDModel {
         assert(this.jointData[0].jointIndex === 0 && this.jointData[0].parentJointIndex === -1);
     }
 
-    public createDefaultTextureMappings(): TextureMapping[] {
-        const tex1Data = this.tex1Data;
-        const textureMappings = nArray(tex1Data.tex1.samplers.length, () => new TextureMapping());
-        for (let i = 0; i < tex1Data.tex1.samplers.length; i++)
-            tex1Data.fillTextureMappingFromIndex(textureMappings[i], i);
-        return textureMappings;
-    }
-
     public destroy(device: GfxDevice): void {
         if (!this.realized)
             return;
@@ -933,7 +962,7 @@ export class BMDModel {
         this.bufferCoalescer.destroy(device);
         for (let i = 0; i < this.shapeData.length; i++)
             this.shapeData[i].destroy(device);
-        this.tex1Data.destroy(device);
+        this.modelMaterialData.destroy(device);
         this.realized = false;
     }
 }
@@ -955,22 +984,26 @@ export class BMDModelInstance {
     public vaf1Animator: VAF1Animator | null = null;
 
     public materialInstanceState = new MaterialInstanceState();
-    public materialInstances: MaterialInstance[] = [];
     public shapeInstances: ShapeInstance[] = [];
+    public materialInstances: MaterialInstance[] = [];
     public shapeInstanceState = new ShapeInstanceState();
+
+    public modelMaterialData: BMDModelMaterialData;
 
     private jointVisibility: boolean[];
 
     constructor(public bmdModel: BMDModel, materialHacks?: GX_Material.GXMaterialHacks) {
-        this.materialInstances = this.bmdModel.materialData.map((materialData) => {
+        this.modelMaterialData = this.bmdModel.modelMaterialData;
+        this.materialInstances = this.modelMaterialData.materialData!.map((materialData) => {
             return new MaterialInstance(materialData, materialHacks);
         });
+
         this.shapeInstances = this.bmdModel.shapeData.map((shapeData) => {
             return new ShapeInstance(shapeData, this.materialInstances[shapeData.shape.materialIndex]);
         });
         this.shapeInstanceState.shapeVisibility = nArray(this.shapeInstances.length, () => true);
 
-        this.materialInstanceState.textureMappings = this.bmdModel.createDefaultTextureMappings();
+        this.materialInstanceState.textureMappings = this.modelMaterialData.createDefaultTextureMappings();
 
         const bmd = this.bmdModel.bmd;
 
@@ -992,6 +1025,20 @@ export class BMDModelInstance {
 
     public setVisible(v: boolean): void {
         this.visible = v;
+    }
+
+    public setModelMaterialData(modelMaterialData: BMDModelMaterialData): void {
+        this.modelMaterialData = modelMaterialData;
+
+        // Set on our material instances.
+        if (modelMaterialData.materialData !== null) {
+            assert(modelMaterialData.materialData.length >= this.materialInstances.length);
+            for (let i = 0; i < this.materialInstances.length; i++)
+                this.materialInstances[i].setMaterialData(modelMaterialData.materialData[i]);
+        }
+
+        // Set up our new texture mappings.
+        this.materialInstanceState.textureMappings = this.modelMaterialData.createDefaultTextureMappings();
     }
 
     public setMaterialHacks(materialHacks: GX_Material.GXMaterialHacks): void {
@@ -1053,7 +1100,7 @@ export class BMDModelInstance {
      */
     public getTextureMappingReference(samplerName: string): TextureMapping | null {
         // Find the correct slot for the texture name.
-        const samplers = this.bmdModel.tex1Data.tex1.samplers;
+        const samplers = this.modelMaterialData.tex1Data.tex1.samplers;
         for (let i = 0; i < samplers.length; i++)
             if (samplers[i].name === samplerName)
                 return this.materialInstanceState.textureMappings[i];
@@ -1066,11 +1113,11 @@ export class BMDModelInstance {
      */
     public fillDefaultTextureMapping(m: TextureMapping, samplerName: string): void {
         // Find the correct slot for the texture name.
-        const samplers = this.bmdModel.tex1Data.tex1.samplers;
+        const samplers = this.modelMaterialData.tex1Data.tex1.samplers;
         const samplerIndex = samplers.findIndex((sampler) => sampler.name === samplerName);
         if (samplerIndex < 0)
             throw new Error(`Cannot find texture by name ${samplerName}`);
-        this.bmdModel.tex1Data.fillTextureMappingFromIndex(m, samplerIndex);
+        this.modelMaterialData.tex1Data.fillTextureMappingFromIndex(m, samplerIndex);
     }
 
     /**
@@ -1306,7 +1353,7 @@ export class BMDModelInstance {
         for (let i = 0; i < this.shapeInstances.length; i++) {
             if (!this.shapeInstanceState.shapeVisibility[i])
                 continue;
-            this.shapeInstances[i].prepareToRender(device, renderInstManager, depth, viewerInput.camera, this.materialInstanceState, this.shapeInstanceState);
+            this.shapeInstances[i].prepareToRender(device, renderInstManager, depth, viewerInput.camera, this.bmdModel, this.materialInstanceState, this.shapeInstanceState);
         }
         renderInstManager.popTemplateRenderInst();
     }
@@ -1323,7 +1370,7 @@ export class BMDModelInstance {
             const materialIndex = this.shapeInstances[i].shapeData.shape.materialIndex;
             if (this.materialInstances[materialIndex].materialData.material.translucent !== translucent)
                 continue;
-            this.shapeInstances[i].prepareToRender(device, renderInstManager, depth, camera, this.materialInstanceState, this.shapeInstanceState);
+            this.shapeInstances[i].prepareToRender(device, renderInstManager, depth, camera, this.bmdModel, this.materialInstanceState, this.shapeInstanceState);
         }
     }
 

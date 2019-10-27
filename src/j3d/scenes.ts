@@ -7,7 +7,7 @@ import * as Viewer from '../viewer';
 
 import { BMD, BMT, BTK, BRK, BCK } from './j3d';
 import * as RARC from './rarc';
-import { BMDModelInstance, BMDModel } from './render';
+import { BMDModelInstance, BMDModel, BMDModelMaterialData } from './render';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
@@ -92,8 +92,10 @@ const materialHacks: GXMaterialHacks = {
 export function createModelInstance(device: GfxDevice, cache: GfxRenderCache, bmdFile: RARC.RARCFile, btkFile: RARC.RARCFile | null, brkFile: RARC.RARCFile | null, bckFile: RARC.RARCFile | null, bmtFile: RARC.RARCFile | null) {
     const bmd = BMD.parse(bmdFile.buffer);
     const bmt = bmtFile ? BMT.parse(bmtFile.buffer) : null;
-    const bmdModel = new BMDModel(device, cache, bmd, bmt);
+    const bmdModel = new BMDModel(device, cache, bmd);
     const scene = new BMDModelInstance(bmdModel, materialHacks);
+    if (bmt !== null)
+        scene.setModelMaterialData(new BMDModelMaterialData(device, cache, bmt));
 
     if (btkFile !== null) {
         const btk = BTK.parse(btkFile.buffer);

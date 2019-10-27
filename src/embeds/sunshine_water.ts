@@ -3,7 +3,6 @@ import { mat4 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 
-import { DataFetcher } from '../DataFetcher';
 import { SceneGfx, ViewerRenderInput } from '../viewer';
 
 import * as GX from '../gx/gx_enum';
@@ -133,7 +132,7 @@ class SeaPlaneScene {
         }
 
         this.bmdModel = new BMDModel(device, cache, bmd);
-        this.materialInstanceState.textureMappings = this.bmdModel.createDefaultTextureMappings();
+        this.materialInstanceState.textureMappings = this.bmdModel.modelMaterialData.createDefaultTextureMappings();
 
         const seaMaterial = assertExists(bmd.mat3.materialEntries.find((m) => m.name === '_umi'));
         this.mangleMaterial(seaMaterial, configName);

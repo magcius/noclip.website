@@ -718,8 +718,9 @@ function patchBMDModel(bmdModel: BMDModel): void {
     for (let i = 0; i < bmdModel.shapeData.length; i++)
         bmdModel.shapeData[i].sortKeyBias = 0;
 
-    for (let i = 0; i < bmdModel.materialData.length; i++) {
-        const materialData = bmdModel.materialData[i];
+    const modelMaterialData = bmdModel.modelMaterialData.materialData!;
+    for (let i = 0; i < modelMaterialData.length; i++) {
+        const materialData = modelMaterialData[i];
 
         const gxMaterial = materialData.material.gxMaterial;
         if (gxMaterial.useTexMtxIdx !== undefined && gxMaterial.useTexMtxIdx.some((v) => v)) {
@@ -750,7 +751,7 @@ export class ModelCache {
 
         const bmd = BMD.parse(assertExists(rarc.findFileData(modelFilename)));
         patchBMD(bmd);
-        const bmdModel = new BMDModel(this.device, this.cache, bmd, null);
+        const bmdModel = new BMDModel(this.device, this.cache, bmd);
         patchBMDModel(bmdModel);
         this.models.push(bmdModel);
         this.modelCache.set(modelFilename, bmdModel);
