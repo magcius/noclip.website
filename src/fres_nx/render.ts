@@ -818,9 +818,8 @@ export class BasicFRESRenderer {
         this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
 
-        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        const passRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
-        passRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
         this.renderHelper.renderInstManager.drawOnPassRenderer(device, passRenderer);
         this.renderHelper.renderInstManager.resetRenderInsts();
         return passRenderer;

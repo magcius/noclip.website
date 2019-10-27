@@ -4,7 +4,7 @@ import { TextureMapping } from "../TextureHolder";
 import { nArray, assert } from "../util";
 import { GfxRenderPassDescriptor, GfxLoadDisposition, GfxDevice, GfxRenderPass, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxBindingLayoutDescriptor, GfxMipFilterMode, GfxBlendMode, GfxBlendFactor, GfxPrimitiveTopology, GfxRenderPipeline, GfxMegaStateDescriptor } from "../gfx/platform/GfxPlatform";
 import { TransparentBlack } from "../Color";
-import { copyRenderPassDescriptor, DepthStencilAttachment, DEFAULT_NUM_SAMPLES, makeEmptyRenderPassDescriptor, ColorAttachment, ColorTexture, PostFXRenderTarget, BasicRenderTarget, noClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { copyRenderPassDescriptor, DepthStencilAttachment, DEFAULT_NUM_SAMPLES, makeEmptyRenderPassDescriptor, ColorAttachment, ColorTexture, PostFXRenderTarget, BasicRenderTarget, noClearRenderPassDescriptor, NormalizedViewportCoords, setViewportOnRenderPass } from "../gfx/helpers/RenderTargetHelpers";
 import { fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { ViewerRenderInput } from "../viewer";
 import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderer";
@@ -173,11 +173,13 @@ export class WeirdFancyRenderTarget {
         this.colorAttachment.destroy(device);
     }
 
-    public createRenderPass(device: GfxDevice, renderPassDescriptor: GfxRenderPassDescriptor): GfxRenderPass {
+    public createRenderPass(device: GfxDevice, viewport: NormalizedViewportCoords, renderPassDescriptor: GfxRenderPassDescriptor): GfxRenderPass {
         copyRenderPassDescriptor(this.renderPassDescriptor, renderPassDescriptor);
         this.renderPassDescriptor.colorAttachment = this.colorAttachment.gfxColorAttachment;
         this.renderPassDescriptor.depthStencilAttachment = this.depthStencilAttachment.gfxDepthStencilAttachment;
-        return device.createRenderPass(this.renderPassDescriptor);
+        const passRenderer = device.createRenderPass(this.renderPassDescriptor);
+        setViewportOnRenderPass(passRenderer, viewport, this.colorAttachment);
+        return passRenderer;
     }
 }
 
@@ -276,11 +278,9 @@ export class BloomPostFXRenderer {
     public renderBeginObjects(device: GfxDevice, viewerInput: ViewerRenderInput): GfxRenderPass {
         assert(this.pipelinesReady(device));
 
-        this.bloomObjectsTexture.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        this.bloomObjectsTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        const rt = this.bloomObjectsTarget.createRenderPass(device, bloomClearRenderPassDescriptor);
-        rt.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
-        return rt;
+        this.bloomObjectsTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        this.bloomObjectsTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        return this.bloomObjectsTarget.createRenderPass(device, viewerInput.viewport, bloomClearRenderPassDescriptor);
     }
 
     public renderEndObjects(device: GfxDevice, objectsPassRenderer: GfxRenderPass, renderInstManager: GfxRenderInstManager, mainRenderTarget: BasicRenderTarget, viewerInput: ViewerRenderInput, template: GfxRenderInst, parameterBufferOffs: number): GfxRenderPass {
@@ -288,8 +288,8 @@ export class BloomPostFXRenderer {
         device.submitPass(objectsPassRenderer);
 
         // Downsample.
-        const targetWidth = viewerInput.viewportWidth >> 2;
-        const targetHeight = viewerInput.viewportHeight >> 2;
+        const targetWidth = viewerInput.backbufferWidth >> 2;
+        const targetHeight = viewerInput.backbufferHeight >> 2;
 
         const downsampleColorTarget = this.scratch1ColorTarget;
         const downsampleColorTexture = this.scratch1ColorTexture;
@@ -304,8 +304,7 @@ export class BloomPostFXRenderer {
         renderInst.drawPrimitives(3);
 
         // Downsample.
-        const downsamplePassRenderer = downsampleColorTarget.createRenderPass(device, noClearRenderPassDescriptor);
-        downsamplePassRenderer.setViewport(targetWidth, targetHeight);
+        const downsamplePassRenderer = downsampleColorTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor);
         renderInst.setGfxRenderPipeline(this.fullscreenCopyPipeline);
         this.textureMapping[0].gfxTexture = this.bloomObjectsTexture.gfxTexture!;
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
@@ -318,8 +317,7 @@ export class BloomPostFXRenderer {
         const blurColorTexture = this.scratch2ColorTexture;
         blurColorTarget.setParameters(device, targetWidth, targetHeight, 1);
         blurColorTexture.setParameters(device, targetWidth, targetHeight);
-        const blurPassRenderer = blurColorTarget.createRenderPass(device, noClearRenderPassDescriptor);
-        blurPassRenderer.setViewport(targetWidth, targetHeight);
+        const blurPassRenderer = blurColorTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor);
         renderInst.setGfxRenderPipeline(this.blurPipeline);
         this.textureMapping[0].gfxTexture = downsampleColorTexture.gfxTexture!;
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
@@ -333,8 +331,7 @@ export class BloomPostFXRenderer {
         // We can ditch the second render target now, so just reuse it.
         const bokehColorTarget = this.scratch1ColorTarget;
         const bokehColorTexture = this.scratch1ColorTexture;
-        const bokehPassRenderer = bokehColorTarget.createRenderPass(device, noClearRenderPassDescriptor);
-        bokehPassRenderer.setViewport(targetWidth, targetHeight);
+        const bokehPassRenderer = bokehColorTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor);
         renderInst.setGfxRenderPipeline(this.bokehPipeline);
         this.textureMapping[0].gfxTexture = blurColorTexture.gfxTexture!;
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
@@ -343,8 +340,7 @@ export class BloomPostFXRenderer {
         device.submitPass(bokehPassRenderer);
 
         // Combine.
-        const combinePassRenderer = mainRenderTarget.createRenderPass(device, noClearRenderPassDescriptor);
-        combinePassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        const combinePassRenderer = mainRenderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor);
         renderInst.setGfxRenderPipeline(this.fullscreenCombinePipeline);
         this.textureMapping[0].gfxTexture = bokehColorTexture.gfxTexture!;
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);

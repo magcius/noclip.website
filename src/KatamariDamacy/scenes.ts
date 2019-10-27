@@ -142,17 +142,16 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
         this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
 
-        this.sceneTexture.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        const tvTextureOverride: TextureOverride = { gfxTexture: this.sceneTexture.gfxTexture!, width: viewerInput.viewportWidth, height: viewerInput.viewportHeight, flipY: true };
+        this.sceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        const tvTextureOverride: TextureOverride = { gfxTexture: this.sceneTexture.gfxTexture!, width: viewerInput.backbufferWidth, height: viewerInput.backbufferHeight, flipY: true };
         if (this.textureHolder.hasTexture('0290/0000/0000'))
             this.textureHolder.setTextureOverride('0290/0000/0000', tvTextureOverride);
         if (this.textureHolder.hasTexture('01c6/0000/0000'))
             this.textureHolder.setTextureOverride('01c6/0000/0000', tvTextureOverride);
 
-        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
-        const passRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
-        passRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
 
         this.renderHelper.renderInstManager.drawOnPassRenderer(device, passRenderer);
         this.renderHelper.renderInstManager.resetRenderInsts();
@@ -161,7 +160,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
         passRenderer.endPass(this.sceneTexture.gfxTexture);
         device.submitPass(passRenderer);
 
-        const passRenderer2 = this.renderTarget.createRenderPass(device, noClearRenderPassDescriptor);
+        const passRenderer2 = this.renderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor);
         return passRenderer2;
     }
 

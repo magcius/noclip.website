@@ -20,8 +20,9 @@ export interface ViewerRenderInput {
     camera: Camera;
     time: number;
     deltaTime: number;
-    viewportWidth: number;
-    viewportHeight: number;
+    backbufferWidth: number;
+    backbufferHeight: number;
+    viewport: NormalizedViewportCoords;
 }
 
 export interface SceneGfx {
@@ -65,6 +66,7 @@ export class Viewer {
     public gfxDevice: GfxDevice;
     public viewerRenderInput: ViewerRenderInput;
     public renderStatisticsTracker = new RenderStatisticsTracker();
+    public viewport: NormalizedViewportCoords = { x: 0, y: 0, w: 1, h: 1 };
 
     public scene: SceneGfx | null = null;
 
@@ -83,8 +85,9 @@ export class Viewer {
             camera: this.camera,
             time: this.sceneTime,
             deltaTime: 0,
-            viewportWidth: 0,
-            viewportHeight: 0,
+            backbufferWidth: 0,
+            backbufferHeight: 0,
+            viewport: this.viewport,
         };
     }
 
@@ -106,8 +109,8 @@ export class Viewer {
 
     private renderGfxPlatform(): void {
         this.viewerRenderInput.time = this.sceneTime;
-        this.viewerRenderInput.viewportWidth = this.canvas.width;
-        this.viewerRenderInput.viewportHeight = this.canvas.height;
+        this.viewerRenderInput.backbufferWidth = this.canvas.width;
+        this.viewerRenderInput.backbufferHeight = this.canvas.height;
         this.gfxSwapChain.configureSwapChain(this.canvas.width, this.canvas.height);
 
         this.renderStatisticsTracker.beginFrame();
@@ -213,6 +216,7 @@ export class Viewer {
 }
 
 import { SceneDesc, SceneGroup } from "./SceneBase"
+import { NormalizedViewportCoords } from './gfx/helpers/RenderTargetHelpers';
 export { SceneDesc, SceneGroup };
 
 interface ViewerOut {

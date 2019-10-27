@@ -286,9 +286,8 @@ export class OkamiRenderer implements Viewer.SceneGfx {
         device.submitPass(hostAccessPass);
 
         const renderInstManager = this.renderHelper.renderInstManager;
-        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        const passRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
-        passRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
         renderInstManager.drawOnPassRenderer(device, passRenderer);
         renderInstManager.resetRenderInsts();
         return passRenderer;

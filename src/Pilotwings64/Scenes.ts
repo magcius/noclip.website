@@ -3112,16 +3112,14 @@ class Pilotwings64Renderer implements SceneGfx {
         device.submitPass(hostAccessPass);
 
         const renderInstManager = this.renderHelper.renderInstManager;
-        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
-        const skyPassRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
-        skyPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        const skyPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
         executeOnPass(renderInstManager, device, skyPassRenderer, PW64Pass.SKYBOX);
         skyPassRenderer.endPass(null);
         device.submitPass(skyPassRenderer);
 
-        const passRenderer = this.renderTarget.createRenderPass(device, depthClearRenderPassDescriptor);
-        passRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor);
         executeOnPass(renderInstManager, device, passRenderer, PW64Pass.NORMAL);
         executeOnPass(renderInstManager, device, passRenderer, PW64Pass.SNOW);
 

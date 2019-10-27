@@ -91,9 +91,8 @@ class ScriptRenderer implements SceneGfx {
         device.submitPass(hostAccessPass);
     
         const renderInstManager = this.renderHelper.renderInstManager;
-        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        const passRenderer = this.renderTarget.createRenderPass(device, this.clearRenderPassDescriptor);
-        passRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, this.clearRenderPassDescriptor);
         renderInstManager.drawOnPassRenderer(device, passRenderer);
         renderInstManager.resetRenderInsts();
         return passRenderer;

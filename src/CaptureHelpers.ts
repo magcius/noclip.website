@@ -8,6 +8,7 @@ type Callback = (viewer: Viewer, t: number, f: number) => void;
 interface CaptureOptions {
     width: number;
     height: number;
+    opaque: boolean;
     frameCount: number;
     filenamePrefix: string;
     setupCallback: Callback;
@@ -34,7 +35,7 @@ export async function captureScene(viewer: Viewer, options: CaptureOptions): Pro
         viewer.rafTime = 0;
         options.setupCallback(viewer, t, i);
         viewer.update(0);
-        const canvas = viewer.takeScreenshotToCanvas();
+        const canvas = viewer.takeScreenshotToCanvas(options.opaque);
         const blob = await convertCanvasToPNG(canvas);
         const data = await blobToArrayBuffer(blob);
         const filename = `${options.filenamePrefix}_${leftPad('' + i, 4)}.png`;

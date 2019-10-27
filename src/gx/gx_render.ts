@@ -512,7 +512,7 @@ export const gxBindingLayouts: GfxBindingLayoutDescriptor[] = [
 
 const sceneParams = new SceneParams();
 export function fillSceneParamsDataOnTemplate(renderInst: GfxRenderInst, viewerInput: Viewer.ViewerRenderInput, sceneParamsScratch = sceneParams): void {
-    fillSceneParams(sceneParamsScratch, viewerInput.camera, viewerInput.viewportWidth, viewerInput.viewportHeight);
+    fillSceneParams(sceneParamsScratch, viewerInput.camera, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
     let offs = renderInst.getUniformBufferOffset(ub_SceneParams);
     const d = renderInst.mapUniformBufferF32(ub_SceneParams);
@@ -549,9 +549,8 @@ export abstract class BasicGXRendererHelper implements Viewer.SceneGfx {
         device.submitPass(hostAccessPass);
 
         const renderInstManager = this.renderHelper.renderInstManager;
-        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        const passRenderer = this.renderTarget.createRenderPass(device, this.clearRenderPassDescriptor);
-        passRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, this.clearRenderPassDescriptor);
         renderInstManager.drawOnPassRenderer(device, passRenderer);
         renderInstManager.resetRenderInsts();
         return passRenderer;

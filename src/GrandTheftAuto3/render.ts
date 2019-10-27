@@ -638,9 +638,8 @@ export class GTA3Renderer implements Viewer.SceneGfx {
         this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
 
-        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        const finalPassRenderer = this.renderTarget.createRenderPass(device, this.clearRenderPassDescriptor);
-        finalPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        const finalPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, this.clearRenderPassDescriptor);
         this.renderHelper.renderInstManager.drawOnPassRenderer(device, finalPassRenderer);
 
         this.renderHelper.renderInstManager.resetRenderInsts();

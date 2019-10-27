@@ -1,5 +1,5 @@
 
-import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxProgramReflection, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxLoadDisposition, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxInputStateReflection, GfxVertexAttributeFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor, GfxAttachmentState as GfxAttachmentStateDescriptor, GfxColorWriteMask } from './GfxPlatform';
+import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxLoadDisposition, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxInputStateReflection, GfxVertexAttributeFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor, GfxAttachmentState as GfxAttachmentStateDescriptor, GfxColorWriteMask, GfxViewport } from './GfxPlatform';
 import { _T, GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource } from "./GfxPlatformImpl";
 import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags } from "./GfxPlatformFormat";
 
@@ -304,7 +304,7 @@ class GfxRenderPassP_GL implements GfxRenderPass {
 
     public end() { this.pcmd(RenderPassCmd.invalid); }
     public setRenderPassParameters(ca: GfxColorAttachment | null, dsa: GfxDepthStencilAttachment | null, c: number, r: number, g: number, b: number, a: number, d: number, s: number) { this.pcmd(RenderPassCmd.setRenderPassParameters); this.pu32(ca !== null ? 1 : 0); if (ca !== null) this.po(ca); this.po(dsa); this.pu32(c); this.pf32(r); this.pf32(g); this.pf32(b); this.pf32(a); this.pf32(d); this.pf32(s); }
-    public setViewport(w: number, h: number)      { this.pcmd(RenderPassCmd.setViewport); this.pf32(w); this.pf32(h); }
+    public setViewport(v: GfxViewport)        { this.pcmd(RenderPassCmd.setViewport); this.pf32(v.x); this.pf32(v.y); this.pf32(v.w); this.pf32(v.h); }
     public setPipeline(r: GfxRenderPipeline)      { this.pcmd(RenderPassCmd.setPipeline); this.po(r); }
     public setBindings(n: number, r: GfxBindings, o: number[]) { this.pcmd(RenderPassCmd.setBindings); this.pu32(n); this.po(r); this.pu32(o.length); for (let i = 0; i < o.length; i++) this.pu32(o[i]); }
     public setInputState(r: GfxInputState | null) { this.pcmd(RenderPassCmd.setInputState); this.po(r); }
@@ -664,6 +664,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._setActiveTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, getPlatformTexture(texture));
         gl.bindSampler(0, null);
+        gl.viewport(0, 0, this._scWidth, this._scHeight);
         this._currentTextures[0] = null;
         this._currentSamplers[0] = null;
         this._useDeviceProgram(this._fullscreenCopyProgram.deviceProgram);
@@ -1325,7 +1326,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                 igfxr += numColorAttachments;
                 this.setRenderPassParameters(gfxr as GfxColorAttachment[], numColorAttachments, gfxr[igfxr++] as GfxDepthStencilAttachment, u32[iu32++], f32[if32++], f32[if32++], f32[if32++], f32[if32++], f32[if32++], f32[if32++]);
             } else if (cmd === RenderPassCmd.setViewport) {
-                this.setViewport(f32[if32++], f32[if32++]);
+                this.setViewport(f32[if32++], f32[if32++], f32[if32++], f32[if32++]);
             } else if (cmd === RenderPassCmd.setBindings) {
                 const index = u32[iu32++], numOffsets = u32[iu32++];
                 this.setBindings(index, gfxr[igfxr++] as GfxBindings, numOffsets, u32, iu32);
@@ -1531,9 +1532,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
     }
 
-    private setViewport(w: number, h: number): void {
+    private setViewport(x: number, y: number, w: number, h: number): void {
         const gl = this.gl;
-        gl.viewport(0, 0, w, h);
+        gl.viewport(x, y, w, h);
     }
 
     private _setMegaState(newMegaState: GfxMegaStateDescriptor): void {

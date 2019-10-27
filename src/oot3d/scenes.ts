@@ -77,10 +77,9 @@ export class MultiCmbScene implements Viewer.SceneGfx {
         this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
 
-        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
-        const mainPassRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
-        mainPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
         this.renderInstManager.drawOnPassRenderer(device, mainPassRenderer);
         this.renderInstManager.resetRenderInsts();
         return mainPassRenderer;
@@ -185,10 +184,9 @@ class ArchiveCmbScene implements Viewer.SceneGfx {
         this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
 
-        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
-        const mainPassRenderer = this.renderTarget.createRenderPass(device, this.clearRenderPassDescriptor);
-        mainPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, this.clearRenderPassDescriptor);
         this.renderHelper.renderInstManager.drawOnPassRenderer(device, mainPassRenderer);
         this.renderHelper.renderInstManager.resetRenderInsts();
         return mainPassRenderer;

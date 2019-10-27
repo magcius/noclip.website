@@ -805,21 +805,19 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
 
-        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        this.opaqueSceneTexture.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        this.opaqueSceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
         this.setTimeOfDay(getTimeFrames(viewerInput) / 5000);
 
         // First, render the skybox.
-        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
-        skyboxPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
         renderInstManager.setVisibleByFilterKeyExact(WindWakerPass.SKYBOX);
         renderInstManager.drawOnPassRenderer(device, skyboxPassRenderer);
         skyboxPassRenderer.endPass(null);
         device.submitPass(skyboxPassRenderer);
         // Now do main pass.
-        const mainPassRenderer = this.renderTarget.createRenderPass(device, depthClearRenderPassDescriptor);
-        mainPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor);
         renderInstManager.setVisibleByFilterKeyExact(WindWakerPass.MAIN);
         renderInstManager.drawOnPassRenderer(device, mainPassRenderer);
         renderInstManager.setVisibleByFilterKeyExact(WindWakerPass.EFFECT_MAIN);
@@ -829,8 +827,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         device.submitPass(mainPassRenderer);
 
         // Now indirect stuff.
-        const indirectPassRenderer = this.renderTarget.createRenderPass(device, noClearRenderPassDescriptor);
-        indirectPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        const indirectPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor);
         renderInstManager.setVisibleByFilterKeyExact(WindWakerPass.EFFECT_INDIRECT);
         renderInstManager.drawOnPassRenderer(device, indirectPassRenderer);
 

@@ -403,10 +403,9 @@ export class Explorer implements SceneGfx {
         this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
 
-        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
-        const mainPassRenderer = this.renderTarget.createRenderPass(device, clearPass);
-        mainPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, clearPass);
         renderInstManager.drawOnPassRenderer(device, mainPassRenderer);
         renderInstManager.resetRenderInsts();
         return mainPassRenderer;

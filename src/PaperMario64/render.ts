@@ -217,7 +217,7 @@ export class BackgroundBillboardRenderer {
         // Extract yaw
         const view = renderInput.camera.viewMatrix;
         const o = Math.atan2(-view[2], view[0]) / (Math.PI * 2) * 4;
-        const aspect = renderInput.viewportWidth / renderInput.viewportHeight;
+        const aspect = renderInput.backbufferWidth / renderInput.backbufferHeight;
 
         offs += fillVec4(d, offs, aspect, -1, o, 0);
     }
@@ -541,7 +541,7 @@ export class PaperMario64ModelTreeRenderer {
         offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);
         // XXX(jstpierre): Empirically matched to the @SupperMarioBroth screenshot. No clue why it's necessary.
         const lodBias = -1.5;
-        offs += fillVec4(mappedF32, offs, viewerInput.viewportWidth, viewerInput.viewportHeight, lodBias);
+        offs += fillVec4(mappedF32, offs, viewerInput.backbufferWidth, viewerInput.backbufferHeight, lodBias);
 
         this.modelTreeRootInstance.prepareToRender(device, renderInstManager, this.texAnimGroup, this.modelMatrix, viewerInput);
 

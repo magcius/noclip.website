@@ -310,8 +310,8 @@ class SMGRenderer implements Viewer.SceneGfx {
         executor.executeMovement(this.sceneObjHolder, viewerInput);
         executor.executeCalcAnim(this.sceneObjHolder, viewerInput);
 
-        this.mainRenderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        this.sceneTexture.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.mainRenderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        this.sceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
         this.sceneObjHolder.captureSceneDirector.opaqueSceneTexture = this.sceneTexture.gfxTexture!;
 
@@ -349,8 +349,7 @@ class SMGRenderer implements Viewer.SceneGfx {
 
         let passRenderer;
 
-        passRenderer = this.mainRenderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
-        passRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        passRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
 
         // GameScene::draw3D()
         // drawOpa(0);
@@ -378,7 +377,7 @@ class SMGRenderer implements Viewer.SceneGfx {
         // Clear depth buffer.
         passRenderer.endPass(null);
         device.submitPass(passRenderer);
-        passRenderer = this.mainRenderTarget.createRenderPass(device, depthClearRenderPassDescriptor);
+        passRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor);
 
         this.drawOpa(passRenderer, DrawBufferType.CRYSTAL);
         this.drawXlu(passRenderer, DrawBufferType.CRYSTAL);
@@ -453,8 +452,7 @@ class SMGRenderer implements Viewer.SceneGfx {
         passRenderer.endPass(this.sceneTexture.gfxTexture);
         device.submitPass(passRenderer);
 
-        passRenderer = this.mainRenderTarget.createRenderPass(device, noClearRenderPassDescriptor);
-        passRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        passRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor);
 
         // executeDrawAfterIndirect()
         this.drawOpa(passRenderer, DrawBufferType.INDIRECT_PLANET);

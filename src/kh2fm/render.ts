@@ -672,11 +672,10 @@ export class KingdomHeartsIIRenderer implements Viewer.SceneGfx {
         const hostAccessPass = device.createHostAccessPass();
         this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
-        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
         // Create main render pass.
-        const passRenderer = this.renderTarget.createRenderPass(device, transparentBlackFullClearRenderPassDescriptor);
-        passRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, transparentBlackFullClearRenderPassDescriptor);
         executeOnPass(this.renderInstManager, device, passRenderer, RenderPass.MAIN);
         this.renderInstManager.resetRenderInsts();
         return passRenderer;

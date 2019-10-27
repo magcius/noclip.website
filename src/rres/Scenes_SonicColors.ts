@@ -86,15 +86,14 @@ class SonicColorsRenderer implements Viewer.SceneGfx {
         this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
 
-        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
         // First, render the skybox.
-        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
-        skyboxPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
         executeOnPass(this.renderHelper.renderInstManager, device, skyboxPassRenderer, SonicColorsPass.SKYBOX);
         skyboxPassRenderer.endPass(null);
         device.submitPass(skyboxPassRenderer);
         // Now do main pass.
-        const mainPassRenderer = this.renderTarget.createRenderPass(device, depthClearRenderPassDescriptor);
+        const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor);
         executeOnPass(this.renderHelper.renderInstManager, device, mainPassRenderer, SonicColorsPass.MAIN);
         this.renderHelper.renderInstManager.resetRenderInsts();
         return mainPassRenderer;

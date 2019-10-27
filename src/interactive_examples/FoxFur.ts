@@ -422,10 +422,9 @@ export class SceneRenderer implements SceneGfx {
         this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
 
-        this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
-        const mainPassRenderer = this.renderTarget.createRenderPass(device, clearPass);
-        mainPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, clearPass);
         renderInstManager.drawOnPassRenderer(device, mainPassRenderer);
         renderInstManager.resetRenderInsts();
         return mainPassRenderer;
@@ -435,6 +434,7 @@ export class SceneRenderer implements SceneGfx {
         const width = 1920, height = 1080;
         const scene0 = await captureScene(window.main.viewer, {
             width, height,
+            opaque: false,
             frameCount: 12,
             filenamePrefix: 'scene0/scene0',
             setupCallback: (viewer, t, i) => {

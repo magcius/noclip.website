@@ -96,7 +96,7 @@ class BackgroundBillboardRenderer {
         // Extract yaw
         const view = renderInput.camera.viewMatrix;
         const o = Math.atan2(-view[2], view[0]) / (Math.PI * 2) * 4;
-        const aspect = renderInput.viewportWidth / renderInput.viewportHeight;
+        const aspect = renderInput.backbufferWidth / renderInput.backbufferHeight;
 
         offs += fillVec4(d, offs, aspect, -1, o, 0);
     }
@@ -303,7 +303,7 @@ class NodeInstance {
         if (this.isDecal) {
             let offs = template.allocateUniformBuffer(ub_SceneParams, u_SceneParamsBufferSize);
             const d = template.mapUniformBufferF32(ub_SceneParams);
-            fillSceneParams(sceneParams, viewerInput.camera, viewerInput.viewportWidth, viewerInput.viewportHeight);
+            fillSceneParams(sceneParams, viewerInput.camera, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
             // The game will actually adjust the projection matrix based on the child index, if the decal flag
             // is set. This happens in _mapDispMapObj.
             //

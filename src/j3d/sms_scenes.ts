@@ -335,18 +335,16 @@ export class SunshineRenderer implements Viewer.SceneGfx {
         // IndTex.
         this.setIndirectTextureOverride();
 
-        this.mainRenderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
-        this.opaqueSceneTexture.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.mainRenderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        this.opaqueSceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
-        const skyboxPassRenderer = this.mainRenderTarget.createRenderPass(device, sunshineClearDescriptor);
-        skyboxPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        const skyboxPassRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, sunshineClearDescriptor);
         renderInstManager.setVisibleByFilterKeyExact(SMSPass.SKYBOX);
         renderInstManager.drawOnPassRenderer(device, skyboxPassRenderer);
         skyboxPassRenderer.endPass(null);
         device.submitPass(skyboxPassRenderer);
 
-        const opaquePassRenderer = this.mainRenderTarget.createRenderPass(device, depthClearRenderPassDescriptor);
-        opaquePassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        const opaquePassRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor);
         renderInstManager.setVisibleByFilterKeyExact(SMSPass.OPAQUE);
         renderInstManager.drawOnPassRenderer(device, opaquePassRenderer);
 
@@ -356,8 +354,7 @@ export class SunshineRenderer implements Viewer.SceneGfx {
             opaquePassRenderer.endPass(this.opaqueSceneTexture.gfxTexture);
             device.submitPass(opaquePassRenderer);
 
-            const indTexPassRenderer = this.mainRenderTarget.createRenderPass(device, noClearRenderPassDescriptor);
-            indTexPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+            const indTexPassRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor);
             renderInstManager.drawOnPassRenderer(device, indTexPassRenderer);
             lastPassRenderer = indTexPassRenderer;
         } else {

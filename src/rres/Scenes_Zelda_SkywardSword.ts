@@ -333,21 +333,19 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
 
-        this.mainRenderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+        this.mainRenderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
-        const skyboxPassRenderer = this.mainRenderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
-        skyboxPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        const skyboxPassRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
         executeOnPass(this.renderHelper.renderInstManager, device, skyboxPassRenderer, ZSSPass.SKYBOX);
         skyboxPassRenderer.endPass(null);
         device.submitPass(skyboxPassRenderer);
 
-        const opaquePassRenderer = this.mainRenderTarget.createRenderPass(device, depthClearRenderPassDescriptor);
-        opaquePassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+        const opaquePassRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor);
         executeOnPass(this.renderHelper.renderInstManager, device, opaquePassRenderer, ZSSPass.OPAQUE);
 
         let lastPassRenderer: GfxRenderPass;
         if (hasAnyVisible(this.renderHelper.renderInstManager, ZSSPass.INDIRECT)) {
-            this.opaqueSceneTexture.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+            this.opaqueSceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
             opaquePassRenderer.endPass(this.opaqueSceneTexture.gfxTexture);
             device.submitPass(opaquePassRenderer);
 
@@ -355,8 +353,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
             const textureOverride: TextureOverride = { gfxTexture: this.opaqueSceneTexture.gfxTexture!, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
             this.textureHolder.setTextureOverride("DummyWater", textureOverride);
 
-            const indTexPassRenderer = this.mainRenderTarget.createRenderPass(device, noClearRenderPassDescriptor);
-            indTexPassRenderer.setViewport(viewerInput.viewportWidth, viewerInput.viewportHeight);
+            const indTexPassRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor);
             executeOnPass(this.renderHelper.renderInstManager, device, indTexPassRenderer, ZSSPass.INDIRECT);
             lastPassRenderer = indTexPassRenderer;
         } else {
