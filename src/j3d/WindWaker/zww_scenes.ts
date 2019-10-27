@@ -34,6 +34,8 @@ import { reverseDepthForCompareMode } from '../../gfx/helpers/ReversedDepthHelpe
 import { computeModelMatrixSRT, range } from '../../MathHelpers';
 import { TextureMapping } from '../../TextureHolder';
 import { EFB_WIDTH, EFB_HEIGHT } from '../../gx/gx_material';
+import { Scene } from '../../DarkSoulsCollisionData/render';
+import { getTimeFrames } from '../../SuperMarioGalaxy/Main';
 
 class ZWWExtraTextures {
     constructor(public ZAtoon: BTIData, public ZBtoonEX: BTIData) {
@@ -802,8 +804,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     public extraTextures: ZWWExtraTextures;
 
     private currentTimeOfDay: number;
-    private timeOfDaySelector: UI.Slider;
-    private realTimeCheckBox: UI.Checkbox;
 
     public onstatechanged!: () => void;
 
@@ -845,34 +845,8 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     }
 
     public createPanels(): UI.Panel[] {
-        const timeOfDayPanel = new UI.Panel();
-        timeOfDayPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
-        timeOfDayPanel.setTitle(UI.TIME_OF_DAY_ICON, "Time of Day");
-
-        this.timeOfDaySelector = new UI.Slider();
-        this.timeOfDaySelector.setLabel("Current Time");
-        this.timeOfDaySelector.setValue(0);
-        this.timeOfDaySelector.setRange(0, 6, 0.01);
-        this.timeOfDaySelector.onvalue = (index: number) => {
-            const timeOfDay = index;
-            this.setTimeOfDay(timeOfDay);
-        };
 
         const dzsFile = this.stageRarc.findFile(`dzs/stage.dzs`)!;
-
-        this.setTimeOfDay(2);
-        timeOfDayPanel.contents.appendChild(this.timeOfDaySelector.elem);
-
-        this.realTimeCheckBox = new UI.Checkbox();
-        this.realTimeCheckBox.setLabel("Enable Real-time Hours");
-        this.realTimeCheckBox.onchanged = () => {
-            if (this.realTimeCheckBox.checked) {
-                var datetime = Date.now() - (Date.now() - (Date.now() % (86400 * 1000)));
-                this.setTimeOfDay((datetime / 86400000) * 5);
-            }
-        };
-
-        timeOfDayPanel.contents.appendChild(this.realTimeCheckBox.elem);
 
         const getScenarioMask = () => {
             let mask: number = 0;
@@ -921,7 +895,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         };
         renderHacksPanel.contents.appendChild(enableObjects.elem);
 
-        return [timeOfDayPanel, roomsPanel, scenarioPanel, renderHacksPanel];
+        return [roomsPanel, scenarioPanel, renderHacksPanel];
     }
 
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
@@ -972,11 +946,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
         this.opaqueSceneTexture.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
 
-        if (this.realTimeCheckBox.checked) {
-            var datetime = Date.now() - (Date.now() - (Date.now() % (86400 * 1000)));
-            this.setTimeOfDay((datetime / 86400000) * 5);
-            this.timeOfDaySelector.setValue((datetime / 86400000) * 5);
-        }
+        this.setTimeOfDay(mod(getTimeFrames(viewerInput) / 10000, 6));
 
         // First, render the skybox.
         const skyboxPassRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
