@@ -43,6 +43,7 @@ export const enum UVAnimationType {
     FLIPBOOK_V           = 0x05,
     ENV_MAPPING_MODEL    = 0x06,
     ENV_MAPPING_CYLINDER = 0x07,
+    MODE8                = 0x08,
 }
 
 interface UVAnimation_Mat {
@@ -76,8 +77,20 @@ interface UVAnimation_Cylinder {
     theta: number;
     phi: number;
 }
+interface UVAnimation_Mode8 {
+    type: UVAnimationType.MODE8;
+    transformType: number;
+    param0: number;
+    param1: number;
+    param2: number;
+    param3: number;
+    param4: number; // Unused
+    param5: number;
+    param6: number;
+    param7: number;
+}
 
-export type UVAnimation = UVAnimation_Mat | UVAnimation_UVScroll | UVAnimation_Rotation | UVAnimation_Flipbook | UVAnimation_Cylinder;
+export type UVAnimation = UVAnimation_Mat | UVAnimation_UVScroll | UVAnimation_Rotation | UVAnimation_Flipbook | UVAnimation_Cylinder | UVAnimation_Mode8;
 
 export interface Material {
     isOccluder: boolean;
@@ -156,9 +169,17 @@ function parseMaterialSet_UVAnimations(stream: InputStream, count: number): UVAn
             uvAnimations.push({ type, theta, phi });
             break;
         }
-        case 0x08: {
-            // Unknown (DKCR)
-            stream.skip(0x24);
+        case UVAnimationType.MODE8: {
+            const transformType = stream.readUint32();
+            const param0 = stream.readFloat32();
+            const param1 = stream.readFloat32();
+            const param2 = stream.readFloat32();
+            const param3 = stream.readFloat32();
+            const param4 = stream.readFloat32();
+            const param5 = stream.readFloat32();
+            const param6 = stream.readFloat32();
+            const param7 = stream.readFloat32();
+            uvAnimations.push({ type, transformType, param0, param1, param2, param3, param4, param5, param6, param7 });
             break;
         }
         }

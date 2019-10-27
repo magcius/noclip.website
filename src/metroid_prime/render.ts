@@ -295,6 +295,17 @@ class MaterialGroupInstance {
                 const z = (scratchMatrix[13] * 0.05 * uvAnimation.phi) % 1.0;
                 const a = uvAnimation.theta * 0.5;
                 texEnvMtx(postMtx, a, -a, xy, z);
+            } else if (uvAnimation.type === UVAnimationType.MODE8) {
+                const theta = uvAnimation.param2 + (animTime * uvAnimation.param3);
+                const sinR = Math.sin(theta);
+                const cosR = Math.cos(theta);
+                texMtx[0] = uvAnimation.param0 * cosR;
+                texMtx[1] = uvAnimation.param1 * -sinR;
+                texMtx[4] = uvAnimation.param0 * sinR;
+                texMtx[5] = uvAnimation.param1 * cosR;
+                texMtx[12] = uvAnimation.param0 * (uvAnimation.param5 + (uvAnimation.param6 * animTime)) + (0.5 - (0.5 * (cosR - sinR)));
+                texMtx[13] = uvAnimation.param1 * (uvAnimation.param5 + (uvAnimation.param7 * animTime)) + (0.5 - (0.5 * (sinR + cosR)));
+                // TODO: Handle uvAnimation.transformType
             }
         }
 
