@@ -34,7 +34,6 @@ import { reverseDepthForCompareMode } from '../../gfx/helpers/ReversedDepthHelpe
 import { computeModelMatrixSRT, range } from '../../MathHelpers';
 import { TextureMapping } from '../../TextureHolder';
 import { EFB_WIDTH, EFB_HEIGHT } from '../../gx/gx_material';
-import { Scene } from '../../DarkSoulsCollisionData/render';
 import { getTimeFrames } from '../../SuperMarioGalaxy/Main';
 
 class ZWWExtraTextures {
