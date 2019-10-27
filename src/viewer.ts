@@ -4,7 +4,7 @@ import * as UI from './ui';
 import InputManager from './InputManager';
 import { CameraController, Camera } from './Camera';
 import { TextureHolder } from './TextureHolder';
-import { GfxDevice, GfxSwapChain, GfxRenderPass, GfxDebugGroup } from './gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSwapChain, GfxRenderPass, GfxDebugGroup, GfxLoadDisposition } from './gfx/platform/GfxPlatform';
 import { createSwapChainForWebGL2, gfxDeviceGetImpl, getPlatformTexture } from './gfx/platform/GfxPlatformWebGL2';
 import { downloadTextureToCanvas } from './Screenshot';
 import { RenderStatistics, RenderStatisticsTracker } from './RenderStatistics';
@@ -107,6 +107,36 @@ export class Viewer {
         this.keyMoveSpeedListeners.push(listener);
     }
 
+    private renderViewport(): void {
+        const renderPass = this.scene!.render(this.gfxDevice, this.viewerRenderInput);
+        if (renderPass !== null) {
+            const onscreenTexture = this.gfxSwapChain.getOnscreenTexture();
+            renderPass.endPass(onscreenTexture);
+            this.gfxDevice.submitPass(renderPass);
+        }
+    }
+
+    private renderVR(): void {
+        // Set projection and view matrices here.
+        this.viewport.w = 0.5;
+        this.viewport.x = 0;
+        this.renderViewport();
+
+        // Set projection and view matrices here.
+        this.viewport.w = 0.5;
+        this.viewport.x = 0.5;
+        // TODO(jstpierre): This is ugly and terrible.
+        standardFullClearRenderPassDescriptor.colorLoadDisposition = GfxLoadDisposition.LOAD;
+        this.renderViewport();
+        standardFullClearRenderPassDescriptor.colorLoadDisposition = GfxLoadDisposition.CLEAR;
+    }
+
+    private renderNormal(): void {
+        this.viewport.w = 1;
+        this.viewport.x = 0;
+        this.renderViewport();
+    }
+
     private renderGfxPlatform(): void {
         this.viewerRenderInput.time = this.sceneTime;
         this.viewerRenderInput.backbufferWidth = this.canvas.width;
@@ -118,12 +148,9 @@ export class Viewer {
         resetGfxDebugGroup(this.debugGroup);
         this.gfxDevice.pushDebugGroup(this.debugGroup);
 
-        const renderPass = this.scene!.render(this.gfxDevice, this.viewerRenderInput);
-        if (renderPass !== null) {
-            const onscreenTexture = this.gfxSwapChain.getOnscreenTexture();
-            renderPass.endPass(onscreenTexture);
-            this.gfxDevice.submitPass(renderPass);
-        }
+        this.renderNormal();
+        // this.renderVR();
+
         this.gfxSwapChain.present();
 
         this.gfxDevice.popDebugGroup();
@@ -216,7 +243,7 @@ export class Viewer {
 }
 
 import { SceneDesc, SceneGroup } from "./SceneBase"
-import { NormalizedViewportCoords } from './gfx/helpers/RenderTargetHelpers';
+import { NormalizedViewportCoords, standardFullClearRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
 export { SceneDesc, SceneGroup };
 
 interface ViewerOut {
