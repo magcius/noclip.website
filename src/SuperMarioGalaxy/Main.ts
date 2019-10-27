@@ -5,7 +5,7 @@ import { assert, assertExists, align, nArray, hexzero, fallback } from '../util'
 import { DataFetcher, DataFetcherFlags, AbortedCallback } from '../DataFetcher';
 import { MathConstants, computeModelMatrixSRT, lerp, computeNormalMatrix, clamp } from '../MathHelpers';
 import { getPointBezier } from '../Spline';
-import { Camera, computeClipSpacePointFromWorldSpacePoint, texProjCamera } from '../Camera';
+import { Camera, computeClipSpacePointFromWorldSpacePoint, texProjCameraSceneTex } from '../Camera';
 import { SceneContext } from '../SceneBase';
 import * as Viewer from '../viewer';
 import * as UI from '../ui';
@@ -14,7 +14,7 @@ import { TextureMapping } from '../TextureHolder';
 import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat } from '../gfx/platform/GfxPlatform';
 import { executeOnPass } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor, depthClearRenderPassDescriptor, NormalizedViewportCoords } from '../gfx/helpers/RenderTargetHelpers';
 
 import * as GX from '../gx/gx_enum';
 import * as Yaz0 from '../Common/Compression/Yaz0';
@@ -273,7 +273,7 @@ class SMGRenderer implements Viewer.SceneGfx {
             let texPrjMtx: mat4 | null = null;
             if (drawType === DrawType.EFFECT_DRAW_INDIRECT) {
                 texPrjMtx = scratchMatrix;
-                texProjCamera(texPrjMtx, viewerInput.camera, 0.5, -0.5, 0.5, 0.5);
+                texProjCameraSceneTex(texPrjMtx, viewerInput.camera, viewerInput.viewport);
             }
 
             effectSystem.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, texPrjMtx);
@@ -333,7 +333,7 @@ class SMGRenderer implements Viewer.SceneGfx {
         executor.setIndirectTextureOverride(this.sceneTexture.gfxTexture!);
 
         // Push to the renderinst.
-        executor.drawAllBuffers(this.sceneObjHolder.modelCache.device, this.renderHelper.renderInstManager, camera);
+        executor.drawAllBuffers(this.sceneObjHolder.modelCache.device, this.renderHelper.renderInstManager, camera, viewerInput.viewport);
         this.drawAllEffects(viewerInput);
 
         let bloomParameterBufferOffs = -1;
@@ -677,7 +677,7 @@ function patchBMD(bmd: BMD): void {
 const scratchMatrix = mat4.create();
 
 // This is roughly ShapePacketUserData::callDL().
-function fillMaterialParamsCallback(materialParams: MaterialParams, materialInstance: MaterialInstance, viewMatrix: mat4, modelMatrix: mat4, camera: Camera, packetParams: PacketParams): void {
+function fillMaterialParamsCallback(materialParams: MaterialParams, materialInstance: MaterialInstance, viewMatrix: mat4, modelMatrix: mat4, camera: Camera, viewport: NormalizedViewportCoords, packetParams: PacketParams): void {
     const material = materialInstance.materialData.material;
     let hasAnyEnvMap = false;
 
@@ -698,7 +698,7 @@ function fillMaterialParamsCallback(materialParams: MaterialParams, materialInst
         materialInstance.calcPostTexMtxInput(dst, texMtx, viewMatrix);
         const texSRT = scratchMatrix;
         materialInstance.calcTexSRT(texSRT, i);
-        materialInstance.calcTexMtx(dst, texMtx, texSRT, modelMatrix, camera, flipY);
+        materialInstance.calcTexMtx(dst, texMtx, texSRT, modelMatrix, camera, viewport, flipY);
     }
 
     if (hasAnyEnvMap) {

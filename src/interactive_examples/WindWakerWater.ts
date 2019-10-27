@@ -155,7 +155,7 @@ class Plane {
         computeViewMatrix(this.shapeInstanceState.worldToViewMatrix, viewerInput.camera);
         mat4.mul(packetParams.u_PosMtx[0], this.shapeInstanceState.worldToViewMatrix, this.modelMatrix);
 
-        this.materialInstance.fillMaterialParams(template, this.materialInstanceState, this.shapeInstanceState.worldToViewMatrix, this.modelMatrix, viewerInput.camera, packetParams);
+        this.materialInstance.fillMaterialParams(template, this.materialInstanceState, this.shapeInstanceState.worldToViewMatrix, this.modelMatrix, viewerInput.camera, viewerInput.viewport, packetParams);
 
         const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(packetParams.u_PosMtx[0], this.origin);
         this.plane.prepareToRender(renderInstManager, packetParams, depth);

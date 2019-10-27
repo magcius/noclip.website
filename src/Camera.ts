@@ -4,6 +4,7 @@ import InputManager from './InputManager';
 import { Frustum, AABB } from './Geometry';
 import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates, computeProjectionMatrixFromCuboid, texProjPerspMtx, texProjOrthoMtx, lerpAngle, lerp, MathConstants } from './MathHelpers';
 import { reverseDepthForOrthographicProjectionMatrix, reverseDepthForPerspectiveProjectionMatrix } from './gfx/helpers/ReversedDepthHelpers';
+import { NormalizedViewportCoords } from './gfx/helpers/RenderTargetHelpers';
 
 export class Camera {
     // Converts to view space from world space.
@@ -790,9 +791,23 @@ export function deserializeCamera(camera: Camera, view: DataView, byteOffs: numb
     return 0x04*4*3;
 }
 
-export function texProjCamera(dst: mat4, camera: Camera, scaleS: number, scaleT: number, transS: number, transT: number): void {
+function texProjCamera(dst: mat4, camera: Camera, scaleS: number, scaleT: number, transS: number, transT: number): void {
     if (camera.isOrthographic)
         texProjOrthoMtx(dst, camera.frustum.left, camera.frustum.right, camera.frustum.bottom, camera.frustum.top, scaleS, scaleT, transS, transT);
     else
         texProjPerspMtx(dst, camera.fovY, camera.aspect, scaleS, scaleT, transS, transT);
+}
+
+export function texProjCameraSceneTex(dst: mat4, camera: Camera, viewport: NormalizedViewportCoords, flipYScale: number = -1): void {
+    // Map from -1 to 1, to viewport coords.
+
+    // Map from -1 to 1 to 0 to 1.
+    let scaleS = 0.5, scaleT = -0.5 * flipYScale, transS = 0.5, transT = 0.5;
+    // Map from 0 to 1 to viewport.
+    scaleS = scaleS * viewport.w;
+    scaleT = scaleT * viewport.h;
+    transS = transS * viewport.w + viewport.x;
+    transT = transT * viewport.h + viewport.y;
+
+    texProjCamera(dst, camera, scaleS, scaleT, transS, transT);
 }

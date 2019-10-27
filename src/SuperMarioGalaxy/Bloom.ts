@@ -4,7 +4,7 @@ import { TextureMapping } from "../TextureHolder";
 import { nArray, assert } from "../util";
 import { GfxRenderPassDescriptor, GfxLoadDisposition, GfxDevice, GfxRenderPass, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxBindingLayoutDescriptor, GfxMipFilterMode, GfxBlendMode, GfxBlendFactor, GfxPrimitiveTopology, GfxRenderPipeline, GfxMegaStateDescriptor } from "../gfx/platform/GfxPlatform";
 import { TransparentBlack } from "../Color";
-import { copyRenderPassDescriptor, DepthStencilAttachment, DEFAULT_NUM_SAMPLES, makeEmptyRenderPassDescriptor, ColorAttachment, ColorTexture, PostFXRenderTarget, BasicRenderTarget, noClearRenderPassDescriptor, NormalizedViewportCoords, setViewportOnRenderPass } from "../gfx/helpers/RenderTargetHelpers";
+import { copyRenderPassDescriptor, DepthStencilAttachment, DEFAULT_NUM_SAMPLES, makeEmptyRenderPassDescriptor, ColorAttachment, ColorTexture, PostFXRenderTarget, BasicRenderTarget, noClearRenderPassDescriptor, NormalizedViewportCoords, setViewportOnRenderPass, identityViewportCoords, setScissorOnRenderPass } from "../gfx/helpers/RenderTargetHelpers";
 import { fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { ViewerRenderInput } from "../viewer";
 import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderer";
@@ -43,7 +43,7 @@ void main() {
 class BloomPassFullscreenCopyProgram extends BloomPassBaseProgram {
     public frag: string = `
 ${BloomPassBaseProgram.BindingsDefinition}
-    
+
 in vec2 v_TexCoord;
 
 void main() {
@@ -304,7 +304,7 @@ export class BloomPostFXRenderer {
         renderInst.drawPrimitives(3);
 
         // Downsample.
-        const downsamplePassRenderer = downsampleColorTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor);
+        const downsamplePassRenderer = downsampleColorTarget.createRenderPass(device, identityViewportCoords, noClearRenderPassDescriptor);
         renderInst.setGfxRenderPipeline(this.fullscreenCopyPipeline);
         this.textureMapping[0].gfxTexture = this.bloomObjectsTexture.gfxTexture!;
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
@@ -317,7 +317,7 @@ export class BloomPostFXRenderer {
         const blurColorTexture = this.scratch2ColorTexture;
         blurColorTarget.setParameters(device, targetWidth, targetHeight, 1);
         blurColorTexture.setParameters(device, targetWidth, targetHeight);
-        const blurPassRenderer = blurColorTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor);
+        const blurPassRenderer = blurColorTarget.createRenderPass(device, identityViewportCoords, noClearRenderPassDescriptor);
         renderInst.setGfxRenderPipeline(this.blurPipeline);
         this.textureMapping[0].gfxTexture = downsampleColorTexture.gfxTexture!;
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
@@ -331,7 +331,7 @@ export class BloomPostFXRenderer {
         // We can ditch the second render target now, so just reuse it.
         const bokehColorTarget = this.scratch1ColorTarget;
         const bokehColorTexture = this.scratch1ColorTexture;
-        const bokehPassRenderer = bokehColorTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor);
+        const bokehPassRenderer = bokehColorTarget.createRenderPass(device, identityViewportCoords, noClearRenderPassDescriptor);
         renderInst.setGfxRenderPipeline(this.bokehPipeline);
         this.textureMapping[0].gfxTexture = blurColorTexture.gfxTexture!;
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
@@ -340,7 +340,8 @@ export class BloomPostFXRenderer {
         device.submitPass(bokehPassRenderer);
 
         // Combine.
-        const combinePassRenderer = mainRenderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor);
+        const combinePassRenderer = mainRenderTarget.createRenderPass(device, identityViewportCoords, noClearRenderPassDescriptor);
+        setScissorOnRenderPass(combinePassRenderer, viewerInput.viewport, mainRenderTarget.colorAttachment);
         renderInst.setGfxRenderPipeline(this.fullscreenCombinePipeline);
         this.textureMapping[0].gfxTexture = bokehColorTexture.gfxTexture!;
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);

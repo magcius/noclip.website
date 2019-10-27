@@ -6,6 +6,7 @@ import { GfxTexture, GfxDevice } from "../gfx/platform/GfxPlatform";
 import { Camera } from "../Camera";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { LiveActor } from "./LiveActor";
+import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
 
 export const enum MovementType {
 }
@@ -183,8 +184,8 @@ export class SceneNameObjListExecutor {
         }
     }
 
-    public drawAllBuffers(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera): void {
-        this.drawBufferHolder.drawAllBuffers(device, renderInstManager, camera);
+    public drawAllBuffers(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: NormalizedViewportCoords): void {
+        this.drawBufferHolder.drawAllBuffers(device, renderInstManager, camera, viewport);
     }
 
     public drawBufferHasVisible(drawBufferType: DrawBufferType): boolean {

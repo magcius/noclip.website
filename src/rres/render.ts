@@ -5,7 +5,7 @@ import * as GX_Material from '../gx/gx_material';
 import { mat4, vec3 } from "gl-matrix";
 import { MaterialParams, GXTextureHolder, ColorKind, translateTexFilterGfx, translateWrapModeGfx, PacketParams, ub_MaterialParams, loadedDataCoalescerComboGfx } from "../gx/gx_render";
 import { GXShapeHelperGfx, GXMaterialHelperGfx, autoOptimizeMaterial } from "../gx/gx_render";
-import { computeViewMatrix, computeViewMatrixSkybox, Camera, computeViewSpaceDepthFromWorldSpaceAABB, texProjCamera } from "../Camera";
+import { computeViewMatrix, computeViewMatrixSkybox, Camera, computeViewSpaceDepthFromWorldSpaceAABB, texProjCameraSceneTex } from "../Camera";
 import AnimationController from "../AnimationController";
 import { TextureMapping } from "../TextureHolder";
 import { IntersectionState, AABB } from "../Geometry";
@@ -20,6 +20,7 @@ import { computeNormalMatrix, texEnvMtx } from '../MathHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { arrayCopy } from '../gfx/platform/GfxPlatformUtil';
 import { LoadedVertexPacket } from '../gx/gx_displaylist';
+import { NormalizedViewportCoords } from '../gfx/helpers/RenderTargetHelpers';
 
 export class RRESTextureHolder extends GXTextureHolder<BRRES.TEX0> {
     public addRRESTextures(device: GfxDevice, rres: BRRES.RRES): void {
@@ -71,7 +72,7 @@ class ShapeInstance {
     constructor(public shape: BRRES.MDL0_ShapeEntry, public shapeData: GXShapeHelperGfx, public sortVizNode: BRRES.MDL0_NodeEntry, public materialInstance: MaterialInstance) {
     }
 
-    public prepareToRender(device: GfxDevice, textureHolder: GXTextureHolder, renderInstManager: GfxRenderInstManager, depth: number, camera: Camera, instanceStateData: InstanceStateData, isSkybox: boolean): void {
+    public prepareToRender(device: GfxDevice, textureHolder: GXTextureHolder, renderInstManager: GfxRenderInstManager, depth: number, camera: Camera, viewport: NormalizedViewportCoords, instanceStateData: InstanceStateData, isSkybox: boolean): void {
         const materialInstance = this.materialInstance;
 
         if (!materialInstance.visible)
@@ -86,7 +87,7 @@ class ShapeInstance {
 
         const usesSkinning = this.shape.mtxIdx < 0;
         if (!usesSkinning)
-            materialInstance.fillMaterialParams(template, textureHolder, instanceStateData, this.shape.mtxIdx, null, camera);
+            materialInstance.fillMaterialParams(template, textureHolder, instanceStateData, this.shape.mtxIdx, null, camera, viewport);
 
         packetParams.clear();
         for (let p = 0; p < this.shape.loadedVertexData.packets.length; p++) {
@@ -118,7 +119,7 @@ class ShapeInstance {
             this.shapeData.fillPacketParams(packetParams, renderInst);
 
             if (usesSkinning)
-                materialInstance.fillMaterialParams(renderInst, textureHolder, instanceStateData, this.shape.mtxIdx, packet, camera);
+                materialInstance.fillMaterialParams(renderInst, textureHolder, instanceStateData, this.shape.mtxIdx, packet, camera, viewport);
         }
 
         renderInstManager.popTemplateRenderInst();
@@ -256,7 +257,7 @@ class MaterialInstance {
         }
     }
 
-    private calcTexMatrix(materialParams: MaterialParams, texIdx: number, camera: Camera): void {
+    private calcTexMatrix(materialParams: MaterialParams, texIdx: number, camera: Camera, viewport: NormalizedViewportCoords): void {
         const material = this.materialData.material;
         const texSrt = material.texSrts[texIdx];
         const flipY = materialParams.m_TextureMapping[texIdx].flipY;
@@ -270,7 +271,7 @@ class MaterialInstance {
         }
 
         if (texSrt.mapMode === BRRES.MapMode.PROJECTION) {
-            texProjCamera(dstPost, camera, 0.5, -0.5 * flipYScale, 0.5, 0.5);
+            texProjCameraSceneTex(dstPost, camera, viewport);
 
             // Apply effect matrix.
             mat4.mul(dstPost, texSrt.effectMtx, dstPost);
@@ -317,7 +318,7 @@ class MaterialInstance {
         }
     }
 
-    private fillMaterialParamsData(materialParams: MaterialParams, textureHolder: GXTextureHolder, instanceStateData: InstanceStateData, posNrmMatrixIdx: number, packet: LoadedVertexPacket | null = null, camera: Camera): void {
+    private fillMaterialParamsData(materialParams: MaterialParams, textureHolder: GXTextureHolder, instanceStateData: InstanceStateData, posNrmMatrixIdx: number, packet: LoadedVertexPacket | null = null, camera: Camera, viewport: NormalizedViewportCoords): void {
         const material = this.materialData.material;
 
         for (let i = 0; i < 8; i++) {
@@ -349,7 +350,7 @@ class MaterialInstance {
         }
 
         for (let i = 0; i < 8; i++)
-            this.calcTexMatrix(materialParams, i, camera);
+            this.calcTexMatrix(materialParams, i, camera, viewport);
         for (let i = 0; i < 3; i++)
             this.calcIndTexMatrix(materialParams.u_IndTexMtx[i], i);
 
@@ -400,8 +401,8 @@ class MaterialInstance {
         this.materialHelper.setOnRenderInst(device, cache, renderInst);
     }
 
-    public fillMaterialParams(renderInst: GfxRenderInst, textureHolder: GXTextureHolder, instanceStateData: InstanceStateData, posNrmMatrixIdx: number, packet: LoadedVertexPacket | null, camera: Camera): void {
-        this.fillMaterialParamsData(materialParams, textureHolder, instanceStateData, posNrmMatrixIdx, packet, camera);
+    public fillMaterialParams(renderInst: GfxRenderInst, textureHolder: GXTextureHolder, instanceStateData: InstanceStateData, posNrmMatrixIdx: number, packet: LoadedVertexPacket | null, camera: Camera, viewport: NormalizedViewportCoords): void {
+        this.fillMaterialParamsData(materialParams, textureHolder, instanceStateData, posNrmMatrixIdx, packet, camera, viewport);
 
         const offs = renderInst.allocateUniformBuffer(ub_MaterialParams, this.materialHelper.materialParamsBufferSize);
         this.materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
@@ -766,7 +767,7 @@ export class MDL0ModelInstance {
         if (depth < 0)
             return;
 
-        this.calcView(viewerInput.camera);
+        this.calcView(camera);
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.filterKey = this.passMask;
@@ -775,7 +776,7 @@ export class MDL0ModelInstance {
             const shapeVisibility = (this.vis0NodeAnimator !== null ? this.vis0NodeAnimator.calcVisibility(shapeInstance.sortVizNode.id) : shapeInstance.sortVizNode.visible);
             if (!shapeVisibility)
                 continue;
-            shapeInstance.prepareToRender(device, this.textureHolder, renderInstManager, depth, camera, this.instanceStateData, this.isSkybox);
+            shapeInstance.prepareToRender(device, this.textureHolder, renderInstManager, depth, camera, viewerInput.viewport, this.instanceStateData, this.isSkybox);
         }
         renderInstManager.popTemplateRenderInst();
     }

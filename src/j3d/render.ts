@@ -9,7 +9,7 @@ import * as GX_Material from '../gx/gx_material';
 import { PacketParams, ColorKind, translateTexFilterGfx, translateWrapModeGfx, ub_MaterialParams, loadTextureFromMipChain, loadedDataCoalescerComboGfx, MaterialParams, fillIndTexMtx } from '../gx/gx_render';
 import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../gx/gx_render';
 
-import { computeViewMatrix, Camera, computeViewSpaceDepthFromWorldSpaceAABB, texProjCamera } from '../Camera';
+import { computeViewMatrix, Camera, computeViewSpaceDepthFromWorldSpaceAABB, texProjCameraSceneTex } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
 import AnimationController from '../AnimationController';
 import { nArray, assert, assertExists } from '../util';
@@ -22,6 +22,7 @@ import { colorCopy, Color } from '../Color';
 import { computeNormalMatrix, texEnvMtx } from '../MathHelpers';
 import { calcMipChain } from '../gx/gx_texture';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { NormalizedViewportCoords } from '../gfx/helpers/RenderTargetHelpers';
 
 export class ShapeInstanceState {
     // One matrix for each joint, which transform into their parent's space.
@@ -63,7 +64,7 @@ class ShapeData {
 }
 
 export class MaterialData {
-    public fillMaterialParamsCallback: ((materialParams: MaterialParams, materialInstance: MaterialInstance, viewMatrix: mat4, modelMatrix: mat4, camera: Camera, packetParams: PacketParams) => void) | null = null;
+    public fillMaterialParamsCallback: ((materialParams: MaterialParams, materialInstance: MaterialInstance, viewMatrix: mat4, modelMatrix: mat4, camera: Camera, viewport: NormalizedViewportCoords, packetParams: PacketParams) => void) | null = null;
 
     constructor(public material: MaterialEntry) {
     }
@@ -141,7 +142,7 @@ export class ShapeInstance {
     constructor(public shapeData: ShapeData, private materialInstance: MaterialInstance) {
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, depth: number, camera: Camera, modelData: BMDModel, materialInstanceState: MaterialInstanceState, shapeInstanceState: ShapeInstanceState): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, depth: number, camera: Camera, viewport: NormalizedViewportCoords, modelData: BMDModel, materialInstanceState: MaterialInstanceState, shapeInstanceState: ShapeInstanceState): void {
         const materialInstance = this.materialInstance;
         if (!materialInstance.visible)
             return;
@@ -163,7 +164,7 @@ export class ShapeInstance {
         const usesSkinning = shape.displayFlags === ShapeDisplayFlags.USE_PNMTXIDX;
 
         if (!usesSkinning)
-            materialInstance.fillMaterialParams(template, materialInstanceState, shapeInstanceState.worldToViewMatrix, materialJointMatrix, camera, packetParams);
+            materialInstance.fillMaterialParams(template, materialInstanceState, shapeInstanceState.worldToViewMatrix, materialJointMatrix, camera, viewport, packetParams);
 
         for (let p = 0; p < shape.packets.length; p++) {
             const packet = shape.packets[p];
@@ -197,7 +198,7 @@ export class ShapeInstance {
             this.shapeData.shapeHelpers[p].fillPacketParams(packetParams, renderInst);
 
             if (usesSkinning)
-                materialInstance.fillMaterialParams(renderInst, materialInstanceState, shapeInstanceState.worldToViewMatrix, materialJointMatrix, camera, packetParams);
+                materialInstance.fillMaterialParams(renderInst, materialInstanceState, shapeInstanceState.worldToViewMatrix, materialJointMatrix, camera, viewport, packetParams);
         }
 
         renderInstManager.popTemplateRenderInst();
@@ -478,7 +479,7 @@ export class MaterialInstance {
         }
     }
 
-    public calcTexMtx(dst: mat4, texMtx: TexMtx, texSRT: mat4, modelMatrix: mat4, camera: Camera, flipY: boolean): void {
+    public calcTexMtx(dst: mat4, texMtx: TexMtx, texSRT: mat4, modelMatrix: mat4, camera: Camera, viewport: NormalizedViewportCoords, flipY: boolean): void {
         // The input matrix is passed in in dst.
 
         const matrixMode = texMtx.info & 0x3F;
@@ -589,7 +590,7 @@ export class MaterialInstance {
                     // In Galaxy, this is done in ViewProjmapEffectMtxSetter.
 
                     // Replaces the effectMatrix (this->_24). B8 is built into this call, as well.
-                    texProjCamera(tmp48, camera, 0.5, -0.5 * flipYScale, 0.5, 0.5);
+                    texProjCameraSceneTex(tmp48, camera, viewport, flipYScale);
                     // J3DMtxProjConcat(_88, this->_24, _48)
                     J3DMtxProjConcat(tmp48, tmp88, tmp48);
                 } else if (matrixMode === 0x08) {
@@ -656,7 +657,7 @@ export class MaterialInstance {
         }
     }
 
-    public fillMaterialParams(renderInst: GfxRenderInst, materialInstanceState: MaterialInstanceState, viewMatrix: mat4, modelMatrix: mat4, camera: Camera, packetParams: PacketParams): void {
+    public fillMaterialParams(renderInst: GfxRenderInst, materialInstanceState: MaterialInstanceState, viewMatrix: mat4, modelMatrix: mat4, camera: Camera, viewport: NormalizedViewportCoords, packetParams: PacketParams): void {
         const material = this.materialData.material;
 
         this.calcColor(materialParams.u_Color[ColorKind.MAT0],  ColorKind.MAT0,  materialInstanceState, material.colorMatRegs[0],   false);
@@ -702,7 +703,7 @@ export class MaterialInstance {
             this.calcTexMtxInput(dst, texMtx, scratchModelViewMatrix, modelMatrix);
             const texSRT = matrixScratch3;
             this.calcTexSRT(texSRT, i);
-            this.calcTexMtx(dst, texMtx, texSRT, modelMatrix, camera, flipY);
+            this.calcTexMtx(dst, texMtx, texSRT, modelMatrix, camera, viewport, flipY);
         }
 
         for (let i = 0; i < material.indTexMatrices.length; i++) {
@@ -717,7 +718,7 @@ export class MaterialInstance {
             materialParams.u_Lights[i].copy(materialInstanceState.lights[i]);
 
         if (this.materialData.fillMaterialParamsCallback !== null)
-            this.materialData.fillMaterialParamsCallback(materialParams, this, viewMatrix, modelMatrix, camera, packetParams);
+            this.materialData.fillMaterialParamsCallback(materialParams, this, viewMatrix, modelMatrix, camera, viewport, packetParams);
 
         const offs = renderInst.allocateUniformBuffer(ub_MaterialParams, this.materialHelper.materialParamsBufferSize);
         this.materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
@@ -1353,13 +1354,13 @@ export class BMDModelInstance {
         for (let i = 0; i < this.shapeInstances.length; i++) {
             if (!this.shapeInstanceState.shapeVisibility[i])
                 continue;
-            this.shapeInstances[i].prepareToRender(device, renderInstManager, depth, viewerInput.camera, this.bmdModel, this.materialInstanceState, this.shapeInstanceState);
+            this.shapeInstances[i].prepareToRender(device, renderInstManager, depth, viewerInput.camera, viewerInput.viewport, this.bmdModel, this.materialInstanceState, this.shapeInstanceState);
         }
         renderInstManager.popTemplateRenderInst();
     }
 
     // TODO(jstpierre): Sort shapeInstances based on translucent material?
-    private draw(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, translucent: boolean): void {
+    private draw(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: NormalizedViewportCoords, translucent: boolean): void {
         if (!this.isAnyShapeVisible())
             return;
 
@@ -1370,16 +1371,16 @@ export class BMDModelInstance {
             const materialIndex = this.shapeInstances[i].shapeData.shape.materialIndex;
             if (this.materialInstances[materialIndex].materialData.material.translucent !== translucent)
                 continue;
-            this.shapeInstances[i].prepareToRender(device, renderInstManager, depth, camera, this.bmdModel, this.materialInstanceState, this.shapeInstanceState);
+            this.shapeInstances[i].prepareToRender(device, renderInstManager, depth, camera, viewport, this.bmdModel, this.materialInstanceState, this.shapeInstanceState);
         }
     }
 
-    public drawOpa(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera): void {
-        this.draw(device, renderInstManager, camera, false);
+    public drawOpa(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: NormalizedViewportCoords): void {
+        this.draw(device, renderInstManager, camera, viewport, false);
     }
 
-    public drawXlu(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera): void {
-        this.draw(device, renderInstManager, camera, true);
+    public drawXlu(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: NormalizedViewportCoords): void {
+        this.draw(device, renderInstManager, camera, viewport, true);
     }
 
     public calcJointAnim(): void {

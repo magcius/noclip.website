@@ -259,16 +259,10 @@ export interface GfxHostAccessPass {
     uploadTextureData(texture: GfxTexture, firstMipLevel: number, levelDatas: ArrayBufferView[]): void;
 }
 
-export interface GfxViewport {
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-}
-
 export interface GfxRenderPass {
     // State management.
-    setViewport(v: GfxViewport): void;
+    setViewport(x: number, y: number, w: number, h: number): void;
+    setScissor(x: number, y: number, w: number, h: number): void;
     setPipeline(pipeline: GfxRenderPipeline): void;
     setBindings(bindingLayoutIndex: number, bindings: GfxBindings, dynamicWordOffsets: number[]): void;
     setInputState(inputState: GfxInputState | null): void;

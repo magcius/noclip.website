@@ -1,5 +1,5 @@
 
-import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxLoadDisposition, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxInputStateReflection, GfxVertexAttributeFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor, GfxAttachmentState as GfxAttachmentStateDescriptor, GfxColorWriteMask, GfxViewport } from './GfxPlatform';
+import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxLoadDisposition, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxInputStateReflection, GfxVertexAttributeFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor, GfxAttachmentState as GfxAttachmentStateDescriptor, GfxColorWriteMask } from './GfxPlatform';
 import { _T, GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource } from "./GfxPlatformImpl";
 import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags } from "./GfxPlatformFormat";
 
@@ -289,7 +289,7 @@ class Growable<T extends ArrayBufferView2> {
     }
 }
 
-const enum RenderPassCmd { setRenderPassParameters = 471, setViewport, setBindings, setPipeline, setInputState, setStencilRef, draw, drawIndexed, drawIndexedInstanced, endPass, invalid = 0x1234 };
+const enum RenderPassCmd { setRenderPassParameters = 471, setViewport, setScissor, setBindings, setPipeline, setInputState, setStencilRef, draw, drawIndexed, drawIndexedInstanced, endPass, invalid = 0x1234 };
 class GfxRenderPassP_GL implements GfxRenderPass {
     public u32: Growable<Uint32Array> = new Growable((n) => new Uint32Array(n));
     public f32: Growable<Float32Array> = new Growable((n) => new Float32Array(n));
@@ -304,7 +304,8 @@ class GfxRenderPassP_GL implements GfxRenderPass {
 
     public end() { this.pcmd(RenderPassCmd.invalid); }
     public setRenderPassParameters(ca: GfxColorAttachment | null, dsa: GfxDepthStencilAttachment | null, c: number, r: number, g: number, b: number, a: number, d: number, s: number) { this.pcmd(RenderPassCmd.setRenderPassParameters); this.pu32(ca !== null ? 1 : 0); if (ca !== null) this.po(ca); this.po(dsa); this.pu32(c); this.pf32(r); this.pf32(g); this.pf32(b); this.pf32(a); this.pf32(d); this.pf32(s); }
-    public setViewport(v: GfxViewport)        { this.pcmd(RenderPassCmd.setViewport); this.pf32(v.x); this.pf32(v.y); this.pf32(v.w); this.pf32(v.h); }
+    public setViewport(x: number, y: number, w: number, h: number) { this.pcmd(RenderPassCmd.setViewport); this.pf32(x); this.pf32(y); this.pf32(w); this.pf32(h); }
+    public setScissor(x: number, y: number, w: number, h: number)  { this.pcmd(RenderPassCmd.setScissor); this.pf32(x); this.pf32(y); this.pf32(w); this.pf32(h); }
     public setPipeline(r: GfxRenderPipeline)      { this.pcmd(RenderPassCmd.setPipeline); this.po(r); }
     public setBindings(n: number, r: GfxBindings, o: number[]) { this.pcmd(RenderPassCmd.setBindings); this.pu32(n); this.po(r); this.pu32(o.length); for (let i = 0; i < o.length; i++) this.pu32(o[i]); }
     public setInputState(r: GfxInputState | null) { this.pcmd(RenderPassCmd.setInputState); this.po(r); }
@@ -664,6 +665,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._setActiveTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, getPlatformTexture(texture));
         gl.bindSampler(0, null);
+        gl.disable(gl.SCISSOR_TEST);
         gl.viewport(0, 0, this._scWidth, this._scHeight);
         this._currentTextures[0] = null;
         this._currentSamplers[0] = null;
@@ -1327,6 +1329,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                 this.setRenderPassParameters(gfxr as GfxColorAttachment[], numColorAttachments, gfxr[igfxr++] as GfxDepthStencilAttachment, u32[iu32++], f32[if32++], f32[if32++], f32[if32++], f32[if32++], f32[if32++], f32[if32++]);
             } else if (cmd === RenderPassCmd.setViewport) {
                 this.setViewport(f32[if32++], f32[if32++], f32[if32++], f32[if32++]);
+            } else if (cmd === RenderPassCmd.setScissor) {
+                this.setScissor(f32[if32++], f32[if32++], f32[if32++], f32[if32++]);
             } else if (cmd === RenderPassCmd.setBindings) {
                 const index = u32[iu32++], numOffsets = u32[iu32++];
                 this.setBindings(index, gfxr[igfxr++] as GfxBindings, numOffsets, u32, iu32);
@@ -1347,6 +1351,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                 this.endPass(gfxr[igfxr++] as GfxTexture | null);
                 return;
             } else {
+                const m: RenderPassCmd.invalid = cmd;
                 throw new Error("Invalid execution");
             }
         }
@@ -1456,6 +1461,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             gl.framebufferRenderbuffer(gl.DRAW_FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.RENDERBUFFER, platformDepthStencilAttachment);
         }
 
+        gl.disable(gl.SCISSOR_TEST);
         if (clearBits & WebGL2RenderingContext.COLOR_BUFFER_BIT) {
             gl.clearColor(clearColorR, clearColorG, clearColorB, clearColorA);
         }
@@ -1537,6 +1543,12 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         gl.viewport(x, y, w, h);
     }
 
+    private setScissor(x: number, y: number, w: number, h: number): void {
+        const gl = this.gl;
+        gl.enable(gl.SCISSOR_TEST);
+        gl.scissor(x, y, w, h);
+    }
+
     private _setMegaState(newMegaState: GfxMegaStateDescriptor): void {
         applyMegaState(this.gl, this._currentMegaState, newMegaState);
     }
@@ -1607,6 +1619,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
             assert(resolveColorFrom.width === resolveColorTo.width && resolveColorFrom.height === resolveColorTo.height);
 
+            gl.disable(gl.SCISSOR_TEST);
             gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this._resolveReadFramebuffer);
             gl.framebufferRenderbuffer(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, resolveColorFrom.gl_renderbuffer);
             gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._resolveDrawFramebuffer);

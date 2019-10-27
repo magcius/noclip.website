@@ -5,6 +5,7 @@ import { Camera } from "../Camera";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu } from "./NameObj";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
 
 export const enum DrawBufferFlags {
     // TODO(jstpierre): Fill in.
@@ -119,16 +120,16 @@ export class DrawBufferGroup {
     constructor(public tableEntry: DrawBufferInitialTableEntry) {
     }
 
-    public drawOpa(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera): void {
+    public drawOpa(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: NormalizedViewportCoords): void {
         for (let i = 0; i < this.models.length; i++)
             if (this.models[i].visible)
-                this.models[i].drawOpa(device, renderInstManager, camera);
+                this.models[i].drawOpa(device, renderInstManager, camera, viewport);
     }
 
-    public drawXlu(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera): void {
+    public drawXlu(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: NormalizedViewportCoords): void {
         for (let i = 0; i < this.models.length; i++)
             if (this.models[i].visible)
-                this.models[i].drawXlu(device, renderInstManager, camera);
+                this.models[i].drawXlu(device, renderInstManager, camera, viewport);
     }
 
     public registerDrawBuffer(actor: LiveActor): number {
@@ -174,27 +175,27 @@ export class DrawBufferHolder {
         return this.groups[drawBufferType].tableEntry.LightType;
     }
 
-    public drawAllBuffers(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera): void {
+    public drawAllBuffers(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: NormalizedViewportCoords): void {
         for (let i = 0; i < this.groups.length; i++) {
             const group = this.groups[i];
             if (group === undefined)
                 continue;
-            this.drawOpa(device, renderInstManager, camera, i);
-            this.drawXlu(device, renderInstManager, camera, i);
+            this.drawOpa(device, renderInstManager, camera, viewport, i);
+            this.drawXlu(device, renderInstManager, camera, viewport, i);
         }
     }
 
-    private drawOpa(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, drawBufferType: DrawBufferType): void {
+    private drawOpa(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: NormalizedViewportCoords, drawBufferType: DrawBufferType): void {
         const template = renderInstManager.pushTemplateRenderInst();
         template.filterKey = createFilterKeyForDrawBufferType(OpaXlu.OPA, drawBufferType);
-        this.groups[drawBufferType].drawOpa(device, renderInstManager, camera);
+        this.groups[drawBufferType].drawOpa(device, renderInstManager, camera, viewport);
         renderInstManager.popTemplateRenderInst();
     }
 
-    private drawXlu(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, drawBufferType: DrawBufferType): void {
+    private drawXlu(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: NormalizedViewportCoords, drawBufferType: DrawBufferType): void {
         const template = renderInstManager.pushTemplateRenderInst();
         template.filterKey = createFilterKeyForDrawBufferType(OpaXlu.XLU, drawBufferType);
-        this.groups[drawBufferType].drawXlu(device, renderInstManager, camera);
+        this.groups[drawBufferType].drawXlu(device, renderInstManager, camera, viewport);
         renderInstManager.popTemplateRenderInst();
     }
 

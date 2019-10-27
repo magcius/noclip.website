@@ -15,11 +15,12 @@ import { getVertexAttribLocation, GXMaterial, ColorChannelControl, TexGen, IndTe
 import * as GX from "../gx/gx_enum";
 import { GXMaterialHelperGfx, autoOptimizeMaterial } from "../gx/gx_render";
 import { MaterialParams, PacketParams, ColorKind, setTevOrder, setTevColorIn, setTevColorOp, setTevAlphaIn, setTevAlphaOp, setTevIndWarp, setIndTexOrder, setIndTexCoordScale, ub_MaterialParams, u_PacketParamsBufferSize, ub_PacketParams, fillPacketParamsData } from "../gx/gx_render";
-import { Camera, texProjCamera } from "../Camera";
+import { Camera, texProjCameraSceneTex } from "../Camera";
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from "../gfx/render/GfxRenderer";
 import { DrawType } from "./NameObj";
 import { LiveActor, ZoneAndLayer } from "./LiveActor";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
 
 function calcHeightStatic(wave1Time: number, wave2Time: number, x: number, z: number): number {
     const wave1 = 40 * Math.sin(wave1Time + 0.003 * z);
@@ -51,8 +52,8 @@ function setTextureMatrixST(m: mat4, scale: number, v: vec2 | null): void {
     }
 }
 
-function loadTexProjectionMtx(m: mat4, camera: Camera): void {
-    texProjCamera(m, camera, 0.5, -0.5 * -1, 0.5, 0.5);
+function loadTexProjectionMtx(m: mat4, camera: Camera, viewport: NormalizedViewportCoords): void {
+    texProjCameraSceneTex(m, camera, viewport);
     mat4.mul(m, m, camera.viewMatrix);
 }
 
@@ -398,7 +399,7 @@ export class OceanBowl extends LiveActor {
         setTextureMatrixST(materialParams.u_TexMtx[1], scale0, this.tex1Trans);
         setTextureMatrixST(materialParams.u_TexMtx[2], scale2, this.tex2Trans);
         const camera = viewerInput.camera;
-        loadTexProjectionMtx(materialParams.u_TexMtx[3], camera);
+        loadTexProjectionMtx(materialParams.u_TexMtx[3], camera, viewerInput.viewport);
         setTextureMatrixST(materialParams.u_IndTexMtx[0], 0.1, null);
 
         setTextureMatrixST(materialParams.u_TexMtx[4], scale4, null);

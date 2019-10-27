@@ -1,5 +1,5 @@
 
-import { GfxColorAttachment, GfxDevice, GfxDepthStencilAttachment, GfxLoadDisposition, GfxRenderPassDescriptor, GfxFormat, GfxTexture, GfxTextureDimension, GfxRenderPass, GfxViewport } from "../platform/GfxPlatform";
+import { GfxColorAttachment, GfxDevice, GfxDepthStencilAttachment, GfxLoadDisposition, GfxRenderPassDescriptor, GfxFormat, GfxTexture, GfxTextureDimension, GfxRenderPass } from "../platform/GfxPlatform";
 import { colorNew, TransparentBlack, Color } from "../../Color";
 import { reverseDepthForClearValue } from "./ReversedDepthHelpers";
 import { Camera } from "../../Camera";
@@ -109,19 +109,23 @@ export interface NormalizedViewportCoords {
     h: number;
 }
 
-const scratchViewport: GfxViewport = { x: 0, y: 0, w: 0, h: 0 };
-
-function setGfxViewport(dst: GfxViewport, viewport: NormalizedViewportCoords, targetWidth: number, targetHeight: number): void {
-    dst.x = targetWidth * viewport.x;
-    dst.w = targetWidth * viewport.w;
-    dst.y = targetHeight * viewport.y;
-    dst.h = targetHeight * viewport.h;
+export function setViewportOnRenderPass(renderPass: GfxRenderPass, viewport: NormalizedViewportCoords, attachment: ColorAttachment): void {
+    const x = attachment.width * viewport.x;
+    const w = attachment.width * viewport.w;
+    const y = attachment.height * viewport.y;
+    const h = attachment.height * viewport.h;
+    renderPass.setViewport(x, y, w, h);
 }
 
-export function setViewportOnRenderPass(renderPass: GfxRenderPass, viewport: NormalizedViewportCoords, attachment: ColorAttachment, scratch = scratchViewport): void {
-    setGfxViewport(scratch, viewport, attachment.width, attachment.height);
-    renderPass.setViewport(scratch);
+export function setScissorOnRenderPass(renderPass: GfxRenderPass, viewport: NormalizedViewportCoords, attachment: ColorAttachment): void {
+    const x = attachment.width * viewport.x;
+    const w = attachment.width * viewport.w;
+    const y = attachment.height * viewport.y;
+    const h = attachment.height * viewport.h;
+    renderPass.setScissor(x, y, w, h);
 }
+
+export const identityViewportCoords = { x: 0, y: 0, w: 1, h: 1 };
 
 export class BasicRenderTarget {
     public colorAttachment = new ColorAttachment();

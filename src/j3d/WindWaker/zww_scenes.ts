@@ -15,7 +15,7 @@ import * as DZB from './DZB';
 import * as JPA from '../JPA';
 import { BMD, BTK, BRK, BCK, BTI, LoopMode, BMT } from '../j3d';
 import { BMDModelInstance, BMDModel, BTIData, BMDModelMaterialData } from '../render';
-import { Camera, computeViewMatrix, texProjCamera } from '../../Camera';
+import { Camera, computeViewMatrix, texProjCameraSceneTex } from '../../Camera';
 import { DeviceProgram } from '../../Program';
 import { Color, colorNew, colorLerp, colorCopy, TransparentBlack, colorNewCopy } from '../../Color';
 import { ColorKind, fillSceneParamsDataOnTemplate } from '../../gx/gx_render';
@@ -785,7 +785,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
                 let texPrjMtx: mat4 | null = null;
                 if (drawType === WindWakerPass.EFFECT_INDIRECT) {
                     texPrjMtx = scratchMatrix;
-                    texProjCamera(texPrjMtx, viewerInput.camera, 0.5, -0.5, 0.5, 0.5);
+                    texProjCameraSceneTex(texPrjMtx, viewerInput.camera, viewerInput.viewport, 1);
                 }
 
                 this.effectSystem.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, texPrjMtx);
