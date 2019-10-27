@@ -34,6 +34,7 @@ import { reverseDepthForCompareMode } from '../../gfx/helpers/ReversedDepthHelpe
 import { computeModelMatrixSRT, range } from '../../MathHelpers';
 import { TextureMapping } from '../../TextureHolder';
 import { EFB_WIDTH, EFB_HEIGHT } from '../../gx/gx_material';
+import { getTimeFrames } from '../../SuperMarioGalaxy/Main';
 
 class ZWWExtraTextures {
     constructor(public ZAtoon: BTIData, public ZBtoonEX: BTIData) {
@@ -99,90 +100,250 @@ function parseDZSHeaders(buffer: ArrayBufferSlice): Map<string, DZSChunkHeader> 
     return chunkHeaders;
 }
 
+function frac(f: number) {
+    return f % 1;
+}
+
+function mod(a: number, b: number)
+{
+    var c = frac(a / b) * b;
+    return a < 0 ? -c : c;
+}
+
 export function getColorsFromDZS(buffer: ArrayBufferSlice, roomIdx: number, timeOfDay: number): Colors {
     const view = buffer.createDataView();
     const chunkHeaders = parseDZSHeaders(buffer);
 
     const coloIdx = view.getUint8(chunkHeaders.get('EnvR')!.offs + (roomIdx * 0x08));
     const coloOffs = chunkHeaders.get('Colo')!.offs + (coloIdx * 0x0C);
-    const whichPale = timeOfDay;
-    const paleIdx = view.getUint8(coloOffs + whichPale);
-    const paleOffs = chunkHeaders.get('Pale')!.offs + (paleIdx * 0x2C);
+    const whichPale1 = timeOfDay;
+    const whichPale2 = timeOfDay + 1;
+    const paleIdx1 = view.getUint8(coloOffs + whichPale1);
+    const paleIdx2 = view.getUint8(coloOffs + whichPale2);
+    const paleOffs1 = chunkHeaders.get('Pale')!.offs + (paleIdx1 * 0x2C);
+    const paleOffs2 = chunkHeaders.get('Pale')!.offs + (paleIdx2 * 0x2C);
 
-    const actorShadowR = view.getUint8(paleOffs + 0x00) / 0xFF;
-    const actorShadowG = view.getUint8(paleOffs + 0x01) / 0xFF;
-    const actorShadowB = view.getUint8(paleOffs + 0x02) / 0xFF;
-    const actorShadow = colorNew(actorShadowR, actorShadowG, actorShadowB, 1);
 
-    const actorAmbientR = view.getUint8(paleOffs + 0x03) / 0xFF;
-    const actorAmbientG = view.getUint8(paleOffs + 0x04) / 0xFF;
-    const actorAmbientB = view.getUint8(paleOffs + 0x05) / 0xFF;
-    const actorAmbient = colorNew(actorAmbientR, actorAmbientG, actorAmbientB, 1);
 
-    const bg0C0R = view.getUint8(paleOffs + 0x06) / 0xFF;
-    const bg0C0G = view.getUint8(paleOffs + 0x07) / 0xFF;
-    const bg0C0B = view.getUint8(paleOffs + 0x08) / 0xFF;
-    const bg0C0 = colorNew(bg0C0R, bg0C0G, bg0C0B, 1);
+    const actorShadowR1 = view.getUint8(paleOffs1 + 0x00) / 0xFF;
+    const actorShadowG1 = view.getUint8(paleOffs1 + 0x01) / 0xFF;
+    const actorShadowB1 = view.getUint8(paleOffs1 + 0x02) / 0xFF;
+    const actorShadow1 = colorNew(actorShadowR1, actorShadowG1, actorShadowB1, 1);
 
-    const bg0K0R = view.getUint8(paleOffs + 0x09) / 0xFF;
-    const bg0K0G = view.getUint8(paleOffs + 0x0A) / 0xFF;
-    const bg0K0B = view.getUint8(paleOffs + 0x0B) / 0xFF;
-    const bg0K0 = colorNew(bg0K0R, bg0K0G, bg0K0B, 1);
+    const actorShadowR2 = view.getUint8(paleOffs2 + 0x00) / 0xFF;
+    const actorShadowG2 = view.getUint8(paleOffs2 + 0x01) / 0xFF;
+    const actorShadowB2 = view.getUint8(paleOffs2 + 0x02) / 0xFF;
+    const actorShadow2 = colorNew(actorShadowR2, actorShadowG2, actorShadowB2, 1);
 
-    const bg1C0R = view.getUint8(paleOffs + 0x0C) / 0xFF;
-    const bg1C0G = view.getUint8(paleOffs + 0x0D) / 0xFF;
-    const bg1C0B = view.getUint8(paleOffs + 0x0E) / 0xFF;
-    const bg1C0 = colorNew(bg1C0R, bg1C0G, bg1C0B, 1);
+    var actorShadow = colorNew(0, 0, 0, 1);
+    colorLerp(actorShadow, actorShadow1, actorShadow2, mod(timeOfDay, 1));
 
-    const bg1K0R = view.getUint8(paleOffs + 0x0F) / 0xFF;
-    const bg1K0G = view.getUint8(paleOffs + 0x10) / 0xFF;
-    const bg1K0B = view.getUint8(paleOffs + 0x11) / 0xFF;
-    const bg1K0 = colorNew(bg1K0R, bg1K0G, bg1K0B, 1);
 
-    const bg2C0R = view.getUint8(paleOffs + 0x12) / 0xFF;
-    const bg2C0G = view.getUint8(paleOffs + 0x13) / 0xFF;
-    const bg2C0B = view.getUint8(paleOffs + 0x14) / 0xFF;
-    const bg2C0 = colorNew(bg2C0R, bg2C0G, bg2C0B, 1);
 
-    const bg2K0R = view.getUint8(paleOffs + 0x15) / 0xFF;
-    const bg2K0G = view.getUint8(paleOffs + 0x16) / 0xFF;
-    const bg2K0B = view.getUint8(paleOffs + 0x17) / 0xFF;
-    const bg2K0 = colorNew(bg2K0R, bg2K0G, bg2K0B, 1);
+    const actorAmbientR1 = view.getUint8(paleOffs1 + 0x03) / 0xFF;
+    const actorAmbientG1 = view.getUint8(paleOffs1 + 0x04) / 0xFF;
+    const actorAmbientB1 = view.getUint8(paleOffs1 + 0x05) / 0xFF;
+    const actorAmbient1 = colorNew(actorAmbientR1, actorAmbientG1, actorAmbientB1, 1);
 
-    const bg3C0R = view.getUint8(paleOffs + 0x18) / 0xFF;
-    const bg3C0G = view.getUint8(paleOffs + 0x19) / 0xFF;
-    const bg3C0B = view.getUint8(paleOffs + 0x1A) / 0xFF;
-    const bg3C0 = colorNew(bg3C0R, bg3C0G, bg3C0B, 1);
+    const actorAmbientR2 = view.getUint8(paleOffs2 + 0x03) / 0xFF;
+    const actorAmbientG2 = view.getUint8(paleOffs2 + 0x04) / 0xFF;
+    const actorAmbientB2 = view.getUint8(paleOffs2 + 0x05) / 0xFF;
+    const actorAmbient2 = colorNew(actorAmbientR2, actorAmbientG2, actorAmbientB2, 1);
 
-    const bg3K0R = view.getUint8(paleOffs + 0x1B) / 0xFF;
-    const bg3K0G = view.getUint8(paleOffs + 0x1C) / 0xFF;
-    const bg3K0B = view.getUint8(paleOffs + 0x1D) / 0xFF;
-    const bg3K0 = colorNew(bg3K0R, bg3K0G, bg3K0B, 1);
+    var actorAmbient = colorNew(0, 0, 0, 1);
+    colorLerp(actorAmbient, actorAmbient1, actorAmbient2, mod(timeOfDay, 1));
+
+
+
+    const bg0C0R1 = view.getUint8(paleOffs1 + 0x06) / 0xFF;
+    const bg0C0G1 = view.getUint8(paleOffs1 + 0x07) / 0xFF;
+    const bg0C0B1 = view.getUint8(paleOffs1 + 0x08) / 0xFF;
+    const bg0C01 = colorNew(bg0C0R1, bg0C0G1, bg0C0B1, 1);
+
+    const bg0C0R2 = view.getUint8(paleOffs2 + 0x06) / 0xFF;
+    const bg0C0G2 = view.getUint8(paleOffs2 + 0x07) / 0xFF;
+    const bg0C0B2 = view.getUint8(paleOffs2 + 0x08) / 0xFF;
+    const bg0C02 = colorNew(bg0C0R2, bg0C0G2, bg0C0B2, 1);
+
+    var bg0C0 = colorNew(0, 0, 0, 1);
+    colorLerp(bg0C01, bg0C01, bg0C02, mod(timeOfDay, 1));
+
+
+
+    const bg0K0R1 = view.getUint8(paleOffs1 + 0x09) / 0xFF;
+    const bg0K0G1 = view.getUint8(paleOffs1 + 0x0A) / 0xFF;
+    const bg0K0B1 = view.getUint8(paleOffs1 + 0x0B) / 0xFF;
+    const bg0K01 = colorNew(bg0K0R1, bg0K0G1, bg0K0B1, 1);
+
+    const bg0K0R2 = view.getUint8(paleOffs2 + 0x09) / 0xFF;
+    const bg0K0G2 = view.getUint8(paleOffs2 + 0x0A) / 0xFF;
+    const bg0K0B2 = view.getUint8(paleOffs2 + 0x0B) / 0xFF;
+    const bg0K02 = colorNew(bg0K0R2, bg0K0G2, bg0K0B2, 1);
+
+    var bg0K0 = colorNew(0, 0, 0, 1);
+    colorLerp(bg0K0, bg0K01, bg0K02, mod(timeOfDay, 1));
+
+
+    const bg1C0R1 = view.getUint8(paleOffs1 + 0x0C) / 0xFF;
+    const bg1C0G1 = view.getUint8(paleOffs1 + 0x0D) / 0xFF;
+    const bg1C0B1 = view.getUint8(paleOffs1 + 0x0E) / 0xFF;
+    const bg1C01 = colorNew(bg1C0R1, bg1C0G1, bg1C0B1, 1);
+
+    const bg1C0R2 = view.getUint8(paleOffs2 + 0x0C) / 0xFF;
+    const bg1C0G2 = view.getUint8(paleOffs2 + 0x0D) / 0xFF;
+    const bg1C0B2 = view.getUint8(paleOffs2 + 0x0E) / 0xFF;
+    const bg1C02 = colorNew(bg1C0R2, bg1C0G2, bg1C0B2, 1);
+
+    var bg1C0 = colorNew(0, 0, 0, 1);
+    colorLerp(bg1C0, bg1C01, bg1C02, mod(timeOfDay, 1));
+
+
+
+    const bg1K0R1 = view.getUint8(paleOffs1 + 0x0F) / 0xFF;
+    const bg1K0G1 = view.getUint8(paleOffs1 + 0x10) / 0xFF;
+    const bg1K0B1 = view.getUint8(paleOffs1 + 0x11) / 0xFF;
+    const bg1K01 = colorNew(bg1K0R1, bg1K0G1, bg1K0B1, 1);
+
+    const bg1K0R2 = view.getUint8(paleOffs2 + 0x0F) / 0xFF;
+    const bg1K0G2 = view.getUint8(paleOffs2 + 0x10) / 0xFF;
+    const bg1K0B2 = view.getUint8(paleOffs2 + 0x11) / 0xFF;
+    const bg1K02 = colorNew(bg1K0R2, bg1K0G2, bg1K0B2, 1);
+
+    var bg1K0 = colorNew(0, 0, 0, 1);
+    colorLerp(bg1K0, bg1K01, bg1K02, mod(timeOfDay, 1));
+
+
+
+    const bg2C0R1 = view.getUint8(paleOffs1 + 0x12) / 0xFF;
+    const bg2C0G1 = view.getUint8(paleOffs1 + 0x13) / 0xFF;
+    const bg2C0B1 = view.getUint8(paleOffs1 + 0x14) / 0xFF;
+    const bg2C01 = colorNew(bg2C0R1, bg2C0G1, bg2C0B1, 1);
+
+    const bg2C0R2 = view.getUint8(paleOffs2 + 0x12) / 0xFF;
+    const bg2C0G2 = view.getUint8(paleOffs2 + 0x13) / 0xFF;
+    const bg2C0B2 = view.getUint8(paleOffs2 + 0x14) / 0xFF;
+    const bg2C02 = colorNew(bg2C0R2, bg2C0G2, bg2C0B2, 1);
+
+    var bg2C0 = colorNew(0, 0, 0, 1);
+    colorLerp(bg2C0, bg2C01, bg2C02, mod(timeOfDay, 1));
+
+
+
+    const bg2K0R1 = view.getUint8(paleOffs1 + 0x15) / 0xFF;
+    const bg2K0G1 = view.getUint8(paleOffs1 + 0x16) / 0xFF;
+    const bg2K0B1 = view.getUint8(paleOffs1 + 0x17) / 0xFF;
+    const bg2K01 = colorNew(bg2K0R1, bg2K0G1, bg2K0B1, 1);
+
+    const bg2K0R2 = view.getUint8(paleOffs2 + 0x15) / 0xFF;
+    const bg2K0G2 = view.getUint8(paleOffs2 + 0x16) / 0xFF;
+    const bg2K0B2 = view.getUint8(paleOffs2 + 0x17) / 0xFF;
+    const bg2K02 = colorNew(bg2K0R2, bg2K0G2, bg2K0B2, 1);
+
+    var bg2K0 = colorNew(0, 0, 0, 1);
+    colorLerp(bg2K0, bg2K01, bg2K02, mod(timeOfDay, 1));
+
+
+
+    const bg3C0R1 = view.getUint8(paleOffs1 + 0x18) / 0xFF;
+    const bg3C0G1 = view.getUint8(paleOffs1 + 0x19) / 0xFF;
+    const bg3C0B1 = view.getUint8(paleOffs1 + 0x1A) / 0xFF;
+    const bg3C01 = colorNew(bg3C0R1, bg3C0G1, bg3C0B1, 1);
+
+    const bg3C0R2 = view.getUint8(paleOffs2 + 0x18) / 0xFF;
+    const bg3C0G2 = view.getUint8(paleOffs2 + 0x19) / 0xFF;
+    const bg3C0B2 = view.getUint8(paleOffs2 + 0x1A) / 0xFF;
+    const bg3C02 = colorNew(bg3C0R2, bg3C0G2, bg3C0B2, 1);
+
+    var bg3C0 = colorNew(0, 0, 0, 1);
+    colorLerp(bg3C0, bg3C01, bg3C02, mod(timeOfDay, 1));
+
+
+
+    const bg3K0R1 = view.getUint8(paleOffs1 + 0x1B) / 0xFF;
+    const bg3K0G1 = view.getUint8(paleOffs1 + 0x1C) / 0xFF;
+    const bg3K0B1 = view.getUint8(paleOffs1 + 0x1D) / 0xFF;
+    const bg3K01 = colorNew(bg3K0R1, bg3K0G1, bg3K0B1, 1);
+
+    const bg3K0R2 = view.getUint8(paleOffs2 + 0x1B) / 0xFF;
+    const bg3K0G2 = view.getUint8(paleOffs2 + 0x1C) / 0xFF;
+    const bg3K0B2 = view.getUint8(paleOffs2 + 0x1D) / 0xFF;
+    const bg3K02 = colorNew(bg3K0R2, bg3K0G2, bg3K0B2, 1);
+
+    var bg3K0 = colorNew(0, 0, 0, 1);
+    colorLerp(bg3K0, bg3K01, bg3K02, mod(timeOfDay, 1));
+
 
     let virtColors: VirtColors | null = null;
     if (chunkHeaders.has('Virt')) {
-        const virtIdx = view.getUint8(paleOffs + 0x21);
-        const virtOffs = chunkHeaders.get('Virt')!.offs + (virtIdx * 0x24);
-        const vr_back_cloudR = view.getUint8(virtOffs + 0x10) / 0xFF;
-        const vr_back_cloudG = view.getUint8(virtOffs + 0x11) / 0xFF;
-        const vr_back_cloudB = view.getUint8(virtOffs + 0x12) / 0xFF;
-        const vr_back_cloudA = view.getUint8(virtOffs + 0x13) / 0xFF;
-        const vr_back_cloud = colorNew(vr_back_cloudR, vr_back_cloudG, vr_back_cloudB, vr_back_cloudA);
+        const virtIdx1 = view.getUint8(paleOffs1 + 0x21);
+        const virtIdx2 = view.getUint8(paleOffs2 + 0x21);
+        const virtOffs1 = chunkHeaders.get('Virt')!.offs + (virtIdx1 * 0x24);
+        const virtOffs2 = chunkHeaders.get('Virt')!.offs + (virtIdx2 * 0x24);
 
-        const vr_skyR = view.getUint8(virtOffs + 0x18) / 0xFF;
-        const vr_skyG = view.getUint8(virtOffs + 0x19) / 0xFF;
-        const vr_skyB = view.getUint8(virtOffs + 0x1A) / 0xFF;
-        const vr_sky = colorNew(vr_skyR, vr_skyG, vr_skyB, 1);
 
-        const vr_uso_umiR = view.getUint8(virtOffs + 0x1B) / 0xFF;
-        const vr_uso_umiG = view.getUint8(virtOffs + 0x1C) / 0xFF;
-        const vr_uso_umiB = view.getUint8(virtOffs + 0x1D) / 0xFF;
-        const vr_uso_umi = colorNew(vr_uso_umiR, vr_uso_umiG, vr_uso_umiB, 1);
 
-        const vr_kasumi_maeG = view.getUint8(virtOffs + 0x1F) / 0xFF;
-        const vr_kasumi_maeR = view.getUint8(virtOffs + 0x1E) / 0xFF;
-        const vr_kasumi_maeB = view.getUint8(virtOffs + 0x20) / 0xFF;
-        const vr_kasumi_mae = colorNew(vr_kasumi_maeR, vr_kasumi_maeG, vr_kasumi_maeB, 1);
+        const vr_back_cloudR1 = view.getUint8(virtOffs1 + 0x10) / 0xFF;
+        const vr_back_cloudG1 = view.getUint8(virtOffs1 + 0x11) / 0xFF;
+        const vr_back_cloudB1 = view.getUint8(virtOffs1 + 0x12) / 0xFF;
+        const vr_back_cloudA1 = view.getUint8(virtOffs1 + 0x13) / 0xFF;
+        const vr_back_cloud1 = colorNew(vr_back_cloudR1, vr_back_cloudG1, vr_back_cloudB1, vr_back_cloudA1);
+
+        const vr_back_cloudR2 = view.getUint8(virtOffs2 + 0x10) / 0xFF;
+        const vr_back_cloudG2 = view.getUint8(virtOffs2 + 0x11) / 0xFF;
+        const vr_back_cloudB2 = view.getUint8(virtOffs2 + 0x12) / 0xFF;
+        const vr_back_cloudA2 = view.getUint8(virtOffs2 + 0x13) / 0xFF;
+        const vr_back_cloud2 = colorNew(vr_back_cloudR2, vr_back_cloudG2, vr_back_cloudB2, vr_back_cloudA2);
+
+        var vr_back_cloud = colorNew(0, 0, 0, 1);
+        colorLerp(vr_back_cloud, vr_back_cloud1, vr_back_cloud2, mod(timeOfDay, 1));
+
+
+
+        const vr_skyR1 = view.getUint8(virtOffs1 + 0x18) / 0xFF;
+        const vr_skyG1 = view.getUint8(virtOffs1 + 0x19) / 0xFF;
+        const vr_skyB1 = view.getUint8(virtOffs1 + 0x1A) / 0xFF;
+        const vr_sky1 = colorNew(vr_skyR1, vr_skyG1, vr_skyB1, 1);
+
+        const vr_skyR2 = view.getUint8(virtOffs2 + 0x18) / 0xFF;
+        const vr_skyG2 = view.getUint8(virtOffs2 + 0x19) / 0xFF;
+        const vr_skyB2 = view.getUint8(virtOffs2 + 0x1A) / 0xFF;
+        const vr_sky2 = colorNew(vr_skyR2, vr_skyG2, vr_skyB2, 1);
+
+        var vr_sky = colorNew(0, 0, 0, 1);
+        colorLerp(vr_sky, vr_sky1, vr_sky2, mod(timeOfDay, 1));
+
+
+
+        const vr_uso_umiR1 = view.getUint8(virtOffs1 + 0x1B) / 0xFF;
+        const vr_uso_umiG1 = view.getUint8(virtOffs1 + 0x1C) / 0xFF;
+        const vr_uso_umiB1 = view.getUint8(virtOffs1 + 0x1D) / 0xFF;
+        const vr_uso_umi1 = colorNew(vr_uso_umiR1, vr_uso_umiG1, vr_uso_umiB1, 1);
+
+        const vr_uso_umiR2 = view.getUint8(virtOffs2 + 0x1B) / 0xFF;
+        const vr_uso_umiG2 = view.getUint8(virtOffs2 + 0x1C) / 0xFF;
+        const vr_uso_umiB2 = view.getUint8(virtOffs2 + 0x1D) / 0xFF;
+        const vr_uso_umi2 = colorNew(vr_uso_umiR2, vr_uso_umiG2, vr_uso_umiB2, 1);
+
+        var vr_uso_umi = colorNew(0, 0, 0, 1);
+        colorLerp(vr_uso_umi, vr_uso_umi1, vr_uso_umi2, mod(timeOfDay, 1));
+
+
+
+        const vr_kasumi_maeG1 = view.getUint8(virtOffs1 + 0x1F) / 0xFF;
+        const vr_kasumi_maeR1 = view.getUint8(virtOffs1 + 0x1E) / 0xFF;
+        const vr_kasumi_maeB1 = view.getUint8(virtOffs1 + 0x20) / 0xFF;
+        const vr_kasumi_mae1 = colorNew(vr_kasumi_maeR1, vr_kasumi_maeG1, vr_kasumi_maeB1, 1);
+
+        const vr_kasumi_maeG2 = view.getUint8(virtOffs2 + 0x1F) / 0xFF;
+        const vr_kasumi_maeR2 = view.getUint8(virtOffs2 + 0x1E) / 0xFF;
+        const vr_kasumi_maeB2 = view.getUint8(virtOffs2 + 0x20) / 0xFF;
+        const vr_kasumi_mae2 = colorNew(vr_kasumi_maeR2, vr_kasumi_maeG2, vr_kasumi_maeB2, 1);
+
+        var vr_kasumi_mae = colorNew(0, 0, 0, 1);
+        colorLerp(vr_kasumi_mae, vr_kasumi_mae1, vr_kasumi_mae2, mod(timeOfDay, 1));
+
+
+
         virtColors = { vr_back_cloud, vr_sky, vr_uso_umi, vr_kasumi_mae };
     } else {
         virtColors = null;
@@ -642,7 +803,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     public extraTextures: ZWWExtraTextures;
 
     private currentTimeOfDay: number;
-    private timeOfDaySelector: UI.SingleSelect;
 
     public onstatechanged!: () => void;
 
@@ -659,7 +819,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             return;
 
         this.currentTimeOfDay = timeOfDay;
-        this.timeOfDaySelector.selectItem(timeOfDay);
         this.onstatechanged();
         const dzsFile = this.stageRarc.findFile(`dzs/stage.dzs`)!;
 
@@ -685,29 +844,8 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     }
 
     public createPanels(): UI.Panel[] {
-        const timeOfDayPanel = new UI.Panel();
-        timeOfDayPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
-        timeOfDayPanel.setTitle(UI.TIME_OF_DAY_ICON, "Time of Day");
-
-        const colorPresets = [ 'Dusk', 'Morning', 'Day', 'Afternoon', 'Evening', 'Night' ];
-
-        this.timeOfDaySelector = new UI.SingleSelect();
-        this.timeOfDaySelector.setStrings(colorPresets);
-        this.timeOfDaySelector.onselectionchange = (index: number) => {
-            const timeOfDay = index;
-            this.setTimeOfDay(timeOfDay);
-        };
 
         const dzsFile = this.stageRarc.findFile(`dzs/stage.dzs`)!;
-        const flairs: UI.Flair[] = colorPresets.slice(1).map((presetName, i): UI.Flair | null => {
-            const timeOfDay = i;
-            const stageColors = getColorsFromDZS(dzsFile.buffer, 0, timeOfDay);
-            return { index: i, background: colorToCSS(stageColors.bg1K0) };
-        }).filter((n) => n !== null) as UI.Flair[];
-        this.timeOfDaySelector.setFlairs(flairs);
-
-        this.setTimeOfDay(2);
-        timeOfDayPanel.contents.appendChild(this.timeOfDaySelector.elem);
 
         const getScenarioMask = () => {
             let mask: number = 0;
@@ -718,7 +856,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         };
         const scenarioPanel = new UI.Panel();
         scenarioPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
-        scenarioPanel.setTitle(UI.TIME_OF_DAY_ICON, 'Layer Select');
+        scenarioPanel.setTitle(UI.LAYER_ICON, 'Layer Select');
         const scenarioSelect = new UI.MultiSelect();
         scenarioSelect.onitemchanged = () => {
             this.setVisibleLayerMask(getScenarioMask());
@@ -756,7 +894,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         };
         renderHacksPanel.contents.appendChild(enableObjects.elem);
 
-        return [timeOfDayPanel, roomsPanel, scenarioPanel, renderHacksPanel];
+        return [roomsPanel, scenarioPanel, renderHacksPanel];
     }
 
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
@@ -806,6 +944,8 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
         this.renderTarget.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
         this.opaqueSceneTexture.setParameters(device, viewerInput.viewportWidth, viewerInput.viewportHeight);
+
+        this.setTimeOfDay(mod(getTimeFrames(viewerInput) / 10000, 6));
 
         // First, render the skybox.
         const skyboxPassRenderer = this.renderTarget.createRenderPass(device, standardFullClearRenderPassDescriptor);
