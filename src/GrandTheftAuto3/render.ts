@@ -373,7 +373,7 @@ export class ModelCache {
         for (let lnk = model.atomics.begin; !lnk.is(model.atomics.end); lnk = lnk.next) {
             const atomic = rw.Atomic.fromClump(lnk);
             const atomicName = atomic.frame.name.toLowerCase();
-            if (node === null || atomicName.endsWith('_l0')) {
+            if (node === null || atomicName.endsWith('_l0') || atomicName === obj.modelName) {
                 // only use the unbroken variant of breakable objects
                 node = atomic;
             }
@@ -422,7 +422,7 @@ const scratchVec2 = vec2.create();
 const scratchVec3 = vec3.create();
 const scratchColor = colorNewCopy(White);
 export class SceneRenderer extends Renderer {
-    public bbox = new AABB();
+    public bbox = new AABB(Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity);
 
     private sortKey: number;
 
@@ -531,7 +531,7 @@ export class SceneRenderer extends Renderer {
             blendDstFactor: this.key.additive ? GfxBlendFactor.ONE : GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
             blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
             depthWrite: !dual,
-            cullMode: GfxCullMode.BACK,
+            cullMode: this.key.water ? GfxCullMode.NONE : GfxCullMode.BACK,
         };
 
         let renderLayer = this.key.renderLayer;
