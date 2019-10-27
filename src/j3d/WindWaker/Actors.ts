@@ -7,7 +7,7 @@ import { mat4, vec3 } from "gl-matrix";
 import { BMDModelInstance, BTIData } from "../render";
 import { ANK1, TTK1, TRK1, BTI_Texture } from "../j3d";
 import AnimationController from "../../AnimationController";
-import { Colors } from "./zww_scenes";
+import { KyankoColors } from "./zww_scenes";
 import { ColorKind, PacketParams, MaterialParams, ub_MaterialParams, loadedDataCoalescerComboGfx } from "../../gx/gx_render";
 import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../../gx/gx_render';
 import { AABB } from '../../Geometry';
@@ -34,7 +34,7 @@ export const enum LightTevColorType {
 }
 
 // dScnKy_env_light_c::settingTevStruct
-export function settingTevStruct(actor: BMDModelInstance, type: LightTevColorType, colors: Colors): void {
+export function settingTevStruct(actor: BMDModelInstance, type: LightTevColorType, colors: KyankoColors): void {
     if (type === LightTevColorType.ACTOR) {
         actor.setColorOverride(ColorKind.C0, colors.actorShadow);
         actor.setColorOverride(ColorKind.K0, colors.actorAmbient);
@@ -55,7 +55,7 @@ export function settingTevStruct(actor: BMDModelInstance, type: LightTevColorTyp
 
 export interface ObjectRenderer {
     prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void;
-    setColors(colors: Colors): void;
+    setKyankoColors(colors: KyankoColors): void;
     destroy(device: GfxDevice): void;
     setVertexColorsEnabled(v: boolean): void;
     setTexturesEnabled(v: boolean): void;
@@ -108,11 +108,11 @@ export class BMDObjectRenderer implements ObjectRenderer {
         this.childObjects.forEach((child)=> child.setTexturesEnabled(v));
     }
 
-    public setColors(colors: Colors): void {
+    public setKyankoColors(colors: KyankoColors): void {
         settingTevStruct(this.modelInstance, this.lightTevColorType, colors);
 
         for (let i = 0; i < this.childObjects.length; i++)
-            this.childObjects[i].setColors(colors);
+            this.childObjects[i].setKyankoColors(colors);
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
@@ -479,7 +479,7 @@ export class FlowerObjectRenderer implements ObjectRenderer {
         this.flowerData.shapeHelperMain.fillPacketParams(packetParams, renderInst);
     }
 
-    public setColors(colors: Colors): void {
+    public setKyankoColors(colors: KyankoColors): void {
     }
 
     public destroy(device: GfxDevice): void {

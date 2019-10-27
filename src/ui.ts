@@ -1597,6 +1597,7 @@ class ViewerSettings extends Panel {
 
     private onScrollWheel(): void {
         const v = clamp(this.camSpeedSlider.getValue() + Math.sign(this.viewer.inputManager.dz)*4, 0, 200);
+        this.ui.setMouseActive();
         this.viewer.setKeyMoveSpeed(v);
     }
 
@@ -2783,13 +2784,17 @@ export class UI {
         };
 
         window.onmousemove = () => {
-            this.lastMouseActiveTime = window.performance.now();
+            this.setMouseActive();
         };
-        this.lastMouseActiveTime = window.performance.now();
+        this.setMouseActive();
 
         this.setScenePanels(null);
 
         this.elem = this.toplevel;
+    }
+
+    public setMouseActive(): void {
+        this.lastMouseActiveTime = window.performance.now();
     }
 
     public update(): void {
@@ -2852,9 +2857,7 @@ export class UI {
             return true;
 
         if (this.isDragging)
-            return false;
-
-        return true;
+            return true;
 
         // Hide after one second of mouse inactivity
         const lastMouseActiveHideThreshold = 1000;

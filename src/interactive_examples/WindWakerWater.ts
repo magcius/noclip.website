@@ -22,7 +22,7 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { SceneDesc, SceneContext } from '../SceneBase';
 import { readString, nArray, concat, assertExists } from '../util';
-import { getColorsFromDZS, Colors } from '../j3d/WindWaker/zww_scenes';
+import { getKyankoColorsFromDZS, KyankoColors } from '../j3d/WindWaker/zww_scenes';
 import { GfxRenderInstManager, setSortKeyDepth } from '../gfx/render/GfxRenderer';
 import { FakeTextureHolder } from '../TextureHolder';
 
@@ -199,7 +199,7 @@ export class WindWakerRenderer implements SceneGfx {
     public modelData: BMDModel[] = [];
     public textureHolder = new FakeTextureHolder([]);
 
-    constructor(device: GfxDevice, private stageRarc: RARC.RARC, colors: Colors) {
+    constructor(device: GfxDevice, private stageRarc: RARC.RARC, colors: KyankoColors) {
         this.renderHelper = new GXRenderHelperGfx(device);
         const cache = this.renderHelper.renderInstManager.gfxRenderCache;
 
@@ -296,7 +296,7 @@ export class WindWakerWater implements SceneDesc {
             fetchArc(`j3d/ww/Stage/sea/Room44.arc`, dataFetcher),
         ]).then(([stageRarc, roomRarc]) => {
             const dzsFile = stageRarc.findFileData(`dzs/stage.dzs`)!;
-            const colors = assertExists(getColorsFromDZS(dzsFile, 0, 2));
+            const colors = assertExists(getKyankoColorsFromDZS(dzsFile, 0, 2));
     
             const renderer = new WindWakerRenderer(device, stageRarc, colors);
 
