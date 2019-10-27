@@ -52,10 +52,9 @@ yarn-error.log
 assemblyscript/
 parcel/
 .cache/
-.parcel-cache/
-
-dist/*
-!dist/.htaccess
+.parcel-cache/??/
+.parcel-cache/dist/*
+!.parcel-cache/dist/data
 post*.html
 
 deploy_rsa
