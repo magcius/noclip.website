@@ -64,8 +64,8 @@ interface VirtColors {
 }
 
 export interface KyankoColors {
-    actorShadow: Color;
-    actorAmbient: Color;
+    actorC0: Color;
+    actorK0: Color;
     bg0C0: Color;
     bg0K0: Color;
     bg1C0: Color;
@@ -101,8 +101,8 @@ function parseDZSHeaders(buffer: ArrayBufferSlice): Map<string, DZSChunkHeader> 
 }
 
 function kyankoColorsLerp(dst: KyankoColors, a: KyankoColors, b: KyankoColors, t: number): void {
-    colorLerp(dst.actorAmbient, a.actorAmbient, b.actorAmbient, t);
-    colorLerp(dst.actorShadow, a.actorShadow, b.actorShadow, t);
+    colorLerp(dst.actorK0, a.actorK0, b.actorK0, t);
+    colorLerp(dst.actorC0, a.actorC0, b.actorC0, t);
     colorLerp(dst.bg0C0, a.bg0C0, b.bg0C0, t);
     colorLerp(dst.bg0K0, a.bg0K0, b.bg0K0, t);
     colorLerp(dst.bg1C0, a.bg1C0, b.bg1C0, t);
@@ -213,7 +213,7 @@ export function getKyankoColorsFromDZS(buffer: ArrayBufferSlice, roomIdx: number
     }
 
     return {
-        actorShadow, actorAmbient,
+        actorC0: actorShadow, actorK0: actorAmbient,
         bg0C0, bg0K0, bg1C0, bg1K0, bg2C0, bg2K0, bg3C0, bg3K0,
         virtColors,
     };

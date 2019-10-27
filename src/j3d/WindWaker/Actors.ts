@@ -19,7 +19,7 @@ import { DisplayListRegisters, displayListRegistersRun, parseMaterialEntry, disp
 import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader } from '../../gx/gx_displaylist';
 import { GfxBufferCoalescerCombo } from '../../gfx/helpers/BufferHelpers';
 import { TextureMapping } from '../../TextureHolder';
-import { colorFromRGBA } from '../../Color';
+import { colorFromRGBA, White, colorNewCopy, colorCopy } from '../../Color';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
 import { GfxRenderInstManager } from '../../gfx/render/GfxRenderer';
 
@@ -36,8 +36,8 @@ export const enum LightTevColorType {
 // dScnKy_env_light_c::settingTevStruct
 export function settingTevStruct(actor: BMDModelInstance, type: LightTevColorType, colors: KyankoColors): void {
     if (type === LightTevColorType.ACTOR) {
-        actor.setColorOverride(ColorKind.C0, colors.actorShadow);
-        actor.setColorOverride(ColorKind.K0, colors.actorAmbient);
+        actor.setColorOverride(ColorKind.C0, colors.actorC0);
+        actor.setColorOverride(ColorKind.K0, colors.actorK0);
     } else if (type === LightTevColorType.BG0) {
         actor.setColorOverride(ColorKind.C0, colors.bg0C0);
         actor.setColorOverride(ColorKind.K0, colors.bg0K0);
@@ -436,6 +436,8 @@ export class FlowerObjectRenderer implements ObjectRenderer {
     public layer: number;
 
     private materialHelper: GXMaterialHelperGfx;
+    private c0 = colorNewCopy(White);
+    private k0 = colorNewCopy(White);
 
     constructor(private flowerData: FlowerData) {
         this.materialHelper = new GXMaterialHelperGfx(this.flowerData.gxMaterial);
@@ -463,8 +465,8 @@ export class FlowerObjectRenderer implements ObjectRenderer {
             return;
 
         materialParams.m_TextureMapping[0].copy(this.flowerData.textureMapping);
-        colorFromRGBA(materialParams.u_Color[ColorKind.C0], 1.0, 1.0, 1.0, 1.0);
-        colorFromRGBA(materialParams.u_Color[ColorKind.C1], 1.0, 1.0, 1.0, 1.0);
+        colorCopy(materialParams.u_Color[ColorKind.C0], this.c0);
+        colorCopy(materialParams.u_Color[ColorKind.C1], this.k0);
 
         const renderInst = this.flowerData.shapeHelperMain.pushRenderInst(renderInstManager);
 
@@ -480,6 +482,8 @@ export class FlowerObjectRenderer implements ObjectRenderer {
     }
 
     public setKyankoColors(colors: KyankoColors): void {
+        colorCopy(this.c0, colors.actorC0);
+        colorCopy(this.k0, colors.actorK0);
     }
 
     public destroy(device: GfxDevice): void {
