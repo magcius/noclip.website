@@ -55,6 +55,8 @@ parcel/
 .parcel-cache/??/
 .parcel-cache/dist/*
 !.parcel-cache/dist/data
+dist/*
+!dist/.htaccess
 post*.html
 
 deploy_rsa
