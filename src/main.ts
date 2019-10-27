@@ -75,8 +75,6 @@ import { gfxDeviceGetImpl } from './gfx/platform/GfxPlatformWebGL2';
 import { Color } from './Color';
 import { standardFullClearRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
 
-import * as Sentry from '@sentry/browser';
-import { GIT_REVISION, IS_DEVELOPMENT } from './BuildVersion';
 import { SceneDesc, SceneGroup, SceneContext, getSceneDescs, Destroyable } from './SceneBase';
 import { prepareFrameDebugOverlayCanvas2D } from './DebugJunk';
 import { downloadBlob, downloadBufferSlice, downloadBuffer } from './DownloadUtils';
@@ -251,26 +249,6 @@ class Main {
         }
 
         this._updateLoop(window.performance.now());
-
-        if (!IS_DEVELOPMENT) {
-            Sentry.init({
-                dsn: 'https://a3b5f6c50bc04555835f9a83d6e76b23@sentry.io/1448331',
-                beforeSend: (event) => {
-                    // Filter out aborted XHRs.
-                    if (event.exception!.values!.length) {
-                        const exc = event.exception!.values![0];
-                        if (exc.type === 'AbortedError')
-                            return null;
-                    }
-
-                    return event;
-                },
-            });
-
-            Sentry.configureScope((scope) => {
-                scope.setExtra('git-revision', GIT_REVISION);
-            });
-        }
     }
 
     private _onHashChange(): void {
@@ -647,15 +625,6 @@ class Main {
                 'event_label': sceneDescId,
             });
         }
-
-        Sentry.addBreadcrumb({
-            category: 'loadScene',
-            message: sceneDescId,
-        });
-
-        Sentry.configureScope((scope) => {
-            scope.setExtra('sceneDescId', sceneDescId);
-        });
     }
 
     private _loadSceneGroups() {
