@@ -3,6 +3,7 @@
   "private": true,
   "license": "MIT",
   "devDependencies": {
+    "@parcel/transformer-typescript-tsc": "^2.0.0-alpha.2",
     "@types/gl-matrix": "^2.4.4",
     "@types/node": "^11.9.5",
     "@types/pako": "^1.0.0",
@@ -16,7 +17,6 @@
     "typescript": "^3.3.3333"
   },
   "dependencies": {
-    "@parcel/transformer-typescript-tsc": "^2.0.0-alpha.2",
     "crc-32": "^1.2.0",
     "gl-matrix": "^3.0.0",
     "librw": "^0.4.0",
@@ -29,7 +29,7 @@
     "asbuild:gx_tex": "npx asc gx_texture_as.ts --baseDir ./src/assembly -O3 --runtime none -b gx_texture_as.wasm -t gx_texture_as.wat",
     "asbuild:yaz0": "npx asc Yaz0_as.ts --baseDir ./src/assembly -O3 --runtime none --noAssert -b Yaz0_as.wasm -t Yaz0_as.wat",
     "asbuild": "yarn asbuild:gx_tex && yarn asbuild:yaz0 && node src/build_wat.js",
-    "build": "parcel build --no-scope-hoist src/index.html && cp -f node_modules/librw/lib/librw.wasm dist/",
+    "build": "rm -rf .parcel-cache/??/ && parcel build --no-scope-hoist src/index.html && cp -f node_modules/librw/lib/librw.wasm dist/",
     "typecheck": "tsc -w --noEmit"
   },
   "browserslist": [
