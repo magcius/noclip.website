@@ -43,7 +43,7 @@ export const enum UVAnimationType {
     FLIPBOOK_V           = 0x05,
     ENV_MAPPING_MODEL    = 0x06,
     ENV_MAPPING_CYLINDER = 0x07,
-    MODE8                = 0x08,
+    SRT                  = 0x08,
 }
 
 interface UVAnimation_Mat {
@@ -78,16 +78,16 @@ interface UVAnimation_Cylinder {
     phi: number;
 }
 interface UVAnimation_Mode8 {
-    type: UVAnimationType.MODE8;
+    type: UVAnimationType.SRT;
     transformType: number;
-    param0: number;
-    param1: number;
-    param2: number;
-    param3: number;
-    param4: number; // Unused
-    param5: number;
-    param6: number;
-    param7: number;
+    scaleS: number;
+    scaleT: number;
+    rotationStatic: number;
+    rotationScroll: number;
+    transSStatic: number; // Unused
+    transTStatic: number;
+    transSScroll: number;
+    transTScroll: number;
 }
 
 export type UVAnimation = UVAnimation_Mat | UVAnimation_UVScroll | UVAnimation_Rotation | UVAnimation_Flipbook | UVAnimation_Cylinder | UVAnimation_Mode8;
@@ -169,17 +169,19 @@ function parseMaterialSet_UVAnimations(stream: InputStream, count: number): UVAn
             uvAnimations.push({ type, theta, phi });
             break;
         }
-        case UVAnimationType.MODE8: {
+        case UVAnimationType.SRT: {
             const transformType = stream.readUint32();
-            const param0 = stream.readFloat32();
-            const param1 = stream.readFloat32();
-            const param2 = stream.readFloat32();
-            const param3 = stream.readFloat32();
-            const param4 = stream.readFloat32();
-            const param5 = stream.readFloat32();
-            const param6 = stream.readFloat32();
-            const param7 = stream.readFloat32();
-            uvAnimations.push({ type, transformType, param0, param1, param2, param3, param4, param5, param6, param7 });
+            const scaleS = stream.readFloat32();
+            const scaleT = stream.readFloat32();
+            const rotationStatic = stream.readFloat32();
+            const rotationScroll = stream.readFloat32();
+            const transSStatic = stream.readFloat32();
+            const transTStatic = stream.readFloat32();
+            const transSScroll = stream.readFloat32();
+            const transTScroll = stream.readFloat32();
+            uvAnimations.push({ type, transformType, scaleS, scaleT, rotationStatic, rotationScroll, transSStatic, transTStatic, transSScroll, transTScroll });
+            if (transformType !== 0)
+                console.log(`Non-zero transform type`);
             break;
         }
         }
