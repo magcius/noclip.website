@@ -27,7 +27,10 @@ export function createDOMFromString(s: string): DocumentFragment {
 const enum FontelloIcon {
     share = '\ue800',
     resize_full = '\ue801',
-    resize_small = '\ue802',
+    pause = '\ue802',
+    resize_small = '\ue803',
+    play = '\ue804',
+    fast_backward = '\ue805',
 };
 
 function setFontelloIcon(elem: HTMLElement, icon: FontelloIcon): void {
@@ -1538,7 +1541,7 @@ class ViewerSettings extends Panel {
         this.camSpeedSlider = new Slider();
         this.camSpeedSlider.setLabel("Camera Speed");
         this.camSpeedSlider.setRange(0, 200);
-        this.camSpeedSlider.onvalue = this.updateCameraSpeed.bind(this);
+        this.camSpeedSlider.onvalue = this.updateCameraSpeedFromSlider.bind(this);
         sliderContainer.appendChild(this.camSpeedSlider.elem);
 
         this.viewer.addKeyMoveSpeedListener(this.onCameraController.bind(this));
@@ -1576,25 +1579,29 @@ class ViewerSettings extends Panel {
     }
 
     private onCameraController(): void {
-        this.camSpeedSlider.setValue(this.viewer.cameraController!.getKeyMoveSpeed());
-    }
-
-    private onScrollWheel(): void {
-        const v = clamp(this.camSpeedSlider.getValue() + Math.sign(this.viewer.inputManager.dz)*4, 0, 200);
-        this.camSpeedSlider.setValue(v);
-        this.ui.cameraSpeedIndicator.setCameraSpeed(v);
-        this.updateCameraSpeed();
+        const keyMoveSpeed = this.viewer.cameraController!.getKeyMoveSpeed();
+        if (keyMoveSpeed !== null) {
+            setElementVisible(this.camSpeedSlider.elem, true);
+            this.camSpeedSlider.setValue(keyMoveSpeed);
+            this.ui.cameraSpeedIndicator.setCameraSpeed(keyMoveSpeed);
+        } else {
+            setElementVisible(this.camSpeedSlider.elem, false);
+        }
     }
 
     private setCameraControllerClass(cameraControllerClass: CameraControllerClass) {
         this.viewer.setCameraController(new cameraControllerClass());
         this.cameraControllerSelected(cameraControllerClass);
-        this.updateCameraSpeed();
+        this.updateCameraSpeedFromSlider();
     }
 
-    private updateCameraSpeed(): void {
-        if (this.viewer.cameraController !== null)
-            this.viewer.cameraController.setKeyMoveSpeed(this.camSpeedSlider.getValue());
+    private onScrollWheel(): void {
+        const v = clamp(this.camSpeedSlider.getValue() + Math.sign(this.viewer.inputManager.dz)*4, 0, 200);
+        this.viewer.setKeyMoveSpeed(v);
+    }
+
+    private updateCameraSpeedFromSlider(): void {
+        this.viewer.setKeyMoveSpeed(this.camSpeedSlider.getValue());
     }
 
     public cameraControllerSelected(cameraControllerClass: CameraControllerClass) {
@@ -1603,7 +1610,6 @@ class ViewerSettings extends Panel {
         setElementHighlighted(this.cameraControllerOrtho, cameraControllerClass === OrthoCameraController);
 
         setElementVisible(this.fovSlider.elem, cameraControllerClass === FPSCameraController);
-        setElementVisible(this.camSpeedSlider.elem, cameraControllerClass === FPSCameraController);
     }
 
     private invertYChanged(saveManager: SaveManager, key: string): void {
@@ -2192,9 +2198,10 @@ export class TimePanel extends Panel {
     private scrubber: TimeScrubber;
     private rewindButton: HTMLElement;
     private pausePlayButton: HTMLElement;
-    private isPlaying: boolean = true;
     private normalSceneTimeScale = 1;
+    public isPlaying: boolean = true;
 
+    public onplaypause: ((isPlaying: boolean) => void) | null = null;
     public ontimescrub: ((adj: number) => void) | null = null;
     public onrewind: (() => void) | null = null;
 
@@ -2263,8 +2270,10 @@ export class TimePanel extends Panel {
         return this.normalSceneTimeScale;
     }
 
-    public togglePausePlay(): void {
-        this.isPlaying = !this.isPlaying;
+    public togglePausePlay(shouldBePlaying: boolean = !this.isPlaying): void {
+        this.isPlaying = shouldBePlaying;
+        if (this.onplaypause !== null)
+            this.onplaypause(this.isPlaying);
         this.sync();
     }
 
@@ -2277,16 +2286,13 @@ export class TimePanel extends Panel {
     }
 }
 
-export class CameraSpeedIndicator {
+class CameraSpeedIndicator implements BottomBarWidget {
     public elem: HTMLElement;
 
     private currentAnimation: Animation | null = null;
 
     constructor() {
         this.elem = document.createElement('div');
-        this.elem.style.position = 'absolute';
-        this.elem.style.left = '32px';
-        this.elem.style.bottom = '32px';
         this.elem.style.opacity = '0';
         this.elem.style.textShadow = `0 0 8px black`;
         this.elem.style.padding = '0 8px';
@@ -2294,6 +2300,13 @@ export class CameraSpeedIndicator {
         this.elem.style.color = 'white';
         this.elem.style.pointerEvents = 'none';
         this.elem.style.lineHeight = '32px';
+    }
+
+    public setArea(): void {
+    }
+
+    public isAnyPanelExpanded(): boolean {
+        return false;
     }
 
     public setCameraSpeed(v: number, displayIndicator: boolean = true): void {
@@ -2316,29 +2329,76 @@ export class CameraSpeedIndicator {
     }
 }
 
-class BottomRightBar {
+const enum BottomBarArea { Left, Center, Right }
+
+function setAreaAnchor(elem: HTMLElement, area: BottomBarArea) {
+    if (area === BottomBarArea.Left) {
+        elem.style.transform = '';
+        elem.style.marginLeft = '';
+        elem.style.right = '';
+    } else if (area === BottomBarArea.Center) {
+        elem.style.transform = 'translate(-50%, 0)';
+        elem.style.marginLeft = '16px';
+        elem.style.right = '';
+    } else if (area === BottomBarArea.Right) {
+        elem.style.transform = '';
+        elem.style.marginLeft = '';
+        elem.style.right = '0';
+    }
+}
+
+interface BottomBarWidget {
+    elem: HTMLElement;
+    setArea(area: BottomBarArea): void;
+    isAnyPanelExpanded(): boolean;
+}
+
+class BottomBar {
     public elem: HTMLElement;
-    public buttons: SingleIconButton[] = [];
+    public widgets: BottomBarWidget[] = [];
 
     constructor() {
         this.elem = document.createElement('div');
         this.elem.style.position = 'absolute';
         this.elem.style.bottom = '32px';
+        this.elem.style.left = '32px';
         this.elem.style.right = '32px';
         this.elem.style.display = 'grid';
-        this.elem.style.gridAutoFlow = 'column';
+        this.elem.style.gridTemplateColumns = '1fr 1fr 1fr';
         this.elem.style.gridGap = '8px';
         this.elem.style.transition = '.1s ease-out';
+        this.elem.style.pointerEvents = 'none';
+
+        const leftArea = this.newArea();
+        leftArea.style.justifySelf = 'start';
+        this.elem.appendChild(leftArea);
+
+        const centerArea = this.newArea();
+        centerArea.style.justifySelf = 'center';
+        this.elem.appendChild(centerArea);
+
+        const rightArea = this.newArea();
+        rightArea.style.justifySelf = 'end';
+        this.elem.appendChild(rightArea);
     }
 
-    public addButton(button: SingleIconButton): void {
-        this.buttons.push(button);
-        this.elem.appendChild(button.elem);
+    private newArea(): HTMLElement {
+        const area = document.createElement('div');
+        area.style.display = 'grid';
+        area.style.gridAutoFlow = 'column';
+        area.style.gridGap = '8px';
+        return area;
+    }
+
+    public addWidgets(area: BottomBarArea, widget: BottomBarWidget): void {
+        widget.setArea(area);
+        this.widgets.push(widget);
+        this.elem.children.item(area)!.appendChild(widget.elem);
     }
 
     public isAnyPanelExpanded(): boolean {
-        for (let i = 0; i < this.buttons.length; i++)
-            if (this.buttons[i].isOpen)
+        for (let i = 0; i < this.widgets.length; i++)
+            if (this.widgets[i].isAnyPanelExpanded())
                 return true;
         return false;
     }
@@ -2348,7 +2408,7 @@ class BottomRightBar {
     }
 }
 
-abstract class SingleIconButton {
+abstract class SingleIconButton implements BottomBarWidget {
     public elem: HTMLElement;
     public icon: HTMLElement;
     public tooltipElem: HTMLElement;
@@ -2361,6 +2421,7 @@ abstract class SingleIconButton {
         this.elem.style.transition = '.1s ease-out';
         this.elem.style.width = '32px';
         this.elem.style.height = '32px';
+        this.elem.style.pointerEvents = 'auto';
         this.elem.onclick = this.onClick.bind(this);
         this.elem.onmouseover = () => {
             this.isHover = true;
@@ -2387,7 +2448,6 @@ abstract class SingleIconButton {
         this.tooltipElem = document.createElement('div');
         this.tooltipElem.style.position = 'absolute';
         this.tooltipElem.style.top = '0';
-        this.tooltipElem.style.right = '0';
         this.tooltipElem.style.marginTop = '-32px';
         this.tooltipElem.style.padding = '0 8px';
         this.tooltipElem.style.background = 'rgba(0, 0, 0, 0.75)';
@@ -2400,6 +2460,14 @@ abstract class SingleIconButton {
         this.tooltipElem.style.userSelect = 'none';
         this.tooltipElem.style.opacity = '0';
         this.elem.appendChild(this.tooltipElem);
+    }
+
+    public setArea(area: BottomBarArea): void {
+        setAreaAnchor(this.tooltipElem, area);
+    }
+
+    public isAnyPanelExpanded(): boolean {
+        return this.isOpen;
     }
 
     public abstract onClick(e: MouseEvent): void;
@@ -2435,7 +2503,6 @@ class PanelButton extends SingleIconButton {
         this.panel = document.createElement('div');
         this.panel.style.position = 'absolute';
         this.panel.style.top = '0';
-        this.panel.style.right = '0';
         this.panel.style.marginTop = '-32px';
         this.panel.style.lineHeight = '32px';
         this.panel.style.background = 'rgba(0, 0, 0, 0.75)';
@@ -2444,6 +2511,11 @@ class PanelButton extends SingleIconButton {
         this.elem.appendChild(this.panel);
 
         this.syncStyle();
+    }
+
+    public setArea(area: BottomBarArea): void {
+        super.setArea(area);
+        setAreaAnchor(this.panel, area);
     }
 
     public onClick(e: MouseEvent): void {
@@ -2548,7 +2620,6 @@ class FullscreenButton extends SingleIconButton {
 
     public syncStyle() {
         super.syncStyle();
-        this.icon.textContent = this.isFS() ? '🡼' : '🡾';
         setFontelloIcon(this.icon, this.isFS() ? FontelloIcon.resize_small : FontelloIcon.resize_full);
         this.tooltipElem.textContent = this.isFS() ? 'Unfullscreen' : 'Fullscreen';
     }
@@ -2561,6 +2632,42 @@ class FullscreenButton extends SingleIconButton {
     }
 }
 
+class RewindButton extends SingleIconButton {
+    public onrewind: (() => void) | null = null;
+
+    constructor() {
+        super();
+        setFontelloIcon(this.icon, FontelloIcon.fast_backward);
+        this.tooltipElem.textContent = 'Rewind';
+    }
+
+    public onClick() {
+        if (this.onrewind !== null)
+            this.onrewind();
+    }
+}
+
+class PlayPauseButton extends SingleIconButton {
+    public onplaypause: ((shouldBePlaying: boolean) => void) | null = null;
+    public isPlaying: boolean;
+
+    public syncStyle(): void {
+        super.syncStyle();
+        setFontelloIcon(this.icon, this.isPlaying ? FontelloIcon.pause : FontelloIcon.play);
+        this.tooltipElem.textContent = this.isPlaying ? 'Pause' : 'Play';
+    }
+
+    public setIsPlaying(isPlaying: boolean): void {
+        this.isPlaying = isPlaying;
+        this.syncStyle();
+    }
+
+    public onClick() {
+        if (this.onplaypause !== null)
+            this.onplaypause(!this.isPlaying);
+    }
+}
+
 export class UI {
     public elem: HTMLElement;
 
@@ -2568,7 +2675,6 @@ export class UI {
 
     public dragHighlight: HTMLElement;
     public sceneUIContainer: HTMLElement;
-    public cameraSpeedIndicator: CameraSpeedIndicator;
 
     private floatingPanelContainer: HTMLElement;
     private floatingPanels: FloatingPanel[] = [];
@@ -2585,9 +2691,12 @@ export class UI {
     private about: About;
     private faqPanel: FAQPanel;
 
-    private bottomRightBar: BottomRightBar;
-    private shareButton: ShareButton;
-    private fullscreenButton: FullscreenButton;
+    public cameraSpeedIndicator = new CameraSpeedIndicator();
+    private bottomBar = new BottomBar();
+    private rewindButton = new RewindButton();
+    private playPauseButton = new PlayPauseButton();
+    private shareButton = new ShareButton();
+    private fullscreenButton = new FullscreenButton();
 
     private isDragging: boolean = false;
     private lastMouseActiveTime: number = -1;
@@ -2639,16 +2748,12 @@ export class UI {
         this.floatingPanelContainer = document.createElement('div');
         this.toplevel.appendChild(this.floatingPanelContainer);
 
-        this.cameraSpeedIndicator = new CameraSpeedIndicator();
-        this.toplevel.appendChild(this.cameraSpeedIndicator.elem);
-
-        this.bottomRightBar = new BottomRightBar();
-        this.toplevel.appendChild(this.bottomRightBar.elem);
-
-        this.shareButton = new ShareButton();
-        this.bottomRightBar.addButton(this.shareButton);
-        this.fullscreenButton = new FullscreenButton();
-        this.bottomRightBar.addButton(this.fullscreenButton);
+        this.toplevel.appendChild(this.bottomBar.elem);
+        this.bottomBar.addWidgets(BottomBarArea.Left, this.cameraSpeedIndicator);
+        this.bottomBar.addWidgets(BottomBarArea.Center, this.rewindButton);
+        this.bottomBar.addWidgets(BottomBarArea.Center, this.playPauseButton);
+        this.bottomBar.addWidgets(BottomBarArea.Right, this.shareButton);
+        this.bottomBar.addWidgets(BottomBarArea.Right, this.fullscreenButton);
 
         this.sceneSelect = new SceneSelect(viewer);
         this.textureViewer = new TextureViewer();
@@ -2660,6 +2765,18 @@ export class UI {
         this.faqPanel = new FAQPanel();
         this.faqPanel.elem.style.display = 'none';
         this.toplevel.appendChild(this.faqPanel.elem);
+
+        this.rewindButton.onrewind = () => {
+            // Trigger the same callback as the time panel.
+            this.timePanel.onrewind!();
+        };
+        this.playPauseButton.onplaypause = (shouldBePlaying) => {
+            this.timePanel.togglePausePlay(shouldBePlaying);
+        };
+        this.timePanel.onplaypause = (isPlaying) => {
+            this.playPauseButton.setIsPlaying(isPlaying);
+        };
+        this.playPauseButton.setIsPlaying(this.timePanel.isPlaying);
 
         this.about.onfaq = () => {
             this.faqPanel.elem.style.display = 'block';
@@ -2731,11 +2848,13 @@ export class UI {
     }
 
     private shouldBottomRightBarBeVisible(): boolean {
-        if (this.bottomRightBar.isAnyPanelExpanded())
+        if (this.bottomBar.isAnyPanelExpanded())
             return true;
 
         if (this.isDragging)
             return false;
+
+        return true;
 
         // Hide after one second of mouse inactivity
         const lastMouseActiveHideThreshold = 1000;
@@ -2746,7 +2865,7 @@ export class UI {
     }
 
     private syncBottomRightBarVisibility(): void {
-        this.bottomRightBar.setVisible(this.shouldBottomRightBarBeVisible());
+        this.bottomBar.setVisible(this.shouldBottomRightBarBeVisible());
     }
 
     public setIsDragging(isDragging: boolean): void {

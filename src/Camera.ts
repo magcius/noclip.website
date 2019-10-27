@@ -276,7 +276,7 @@ export interface CameraController {
     forceUpdate: boolean;
     cameraUpdateForced(): void;
     update(inputManager: InputManager, dt: number): boolean;
-    getKeyMoveSpeed(): number;
+    getKeyMoveSpeed(): number | null;
     setKeyMoveSpeed(speed: number): void;
 }
 
@@ -316,7 +316,7 @@ export class FPSCameraController implements CameraController {
         this.keyMoveSpeed = speed;
     }
 
-    public getKeyMoveSpeed(): number {
+    public getKeyMoveSpeed(): number | null {
         return this.keyMoveSpeed;
     }
 
@@ -467,8 +467,8 @@ export class OrbitCameraController implements CameraController {
     public setKeyMoveSpeed(speed: number): void {
     }
 
-    public getKeyMoveSpeed(): number {
-        return 1;
+    public getKeyMoveSpeed(): number | null {
+        return null;
     }
 
     public update(inputManager: InputManager, dt: number): boolean {
@@ -607,8 +607,8 @@ export class OrthoCameraController implements CameraController {
     public setKeyMoveSpeed(speed: number): void {
     }
 
-    public getKeyMoveSpeed(): number {
-        return 1;
+    public getKeyMoveSpeed(): number | null {
+        return null;
     }
 
     public update(inputManager: InputManager, dt: number): boolean {
@@ -659,8 +659,8 @@ export class OrthoCameraController implements CameraController {
             this.txVel += inputManager.dx * (-10 - Math.min(this.z, 0.01)) / -5000;
             this.tyVel += inputManager.dy * (-10 - Math.min(this.z, 0.01)) /  5000;
         } else if (inputManager.isDragging()) {
-            this.xTarget += inputManager.dx / -200 * invertXMult;
-            this.yTarget += inputManager.dy / -200 * invertYMult;
+            this.xTarget += inputManager.dx / 200 * invertXMult;
+            this.yTarget += inputManager.dy / 200 * invertYMult;
         } else if (shouldOrbit) {
             this.xTarget += this.orbitSpeed * 1/25;
         }

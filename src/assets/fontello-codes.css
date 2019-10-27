@@ -1,4 +1,7 @@
 
 .icon-share:before { content: '\e800'; } /* '' */
 .icon-resize-full:before { content: '\e801'; } /* '' */
-.icon-resize-small:before { content: '\e802'; } /* '' */
+.icon-pause:before { content: '\e802'; } /* '' */
+.icon-resize-small-1:before { content: '\e803'; } /* '' */
+.icon-play:before { content: '\e804'; } /* '' */
+.icon-fast-backward:before { content: '\e805'; } /* '' */
