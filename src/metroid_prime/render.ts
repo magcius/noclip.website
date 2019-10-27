@@ -540,7 +540,7 @@ export class MREARenderer {
                     const actor = new Actor(ent, cmdlRenderer);
                     this.actors.push(actor);
                 }
-
+ 
                 if (ent.type === MP1EntityType.AreaAttributes || ent.type === "REAA") {
                     const areaAttributes = ent as AreaAttributes;
 
@@ -704,8 +704,8 @@ class Actor {
     }
 
     public prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: Viewer.ViewerRenderInput): void {
-        if (!this.entity.active)
-            return;
+        //if (!this.entity.active)
+        //    return;
 
         if (this.entity.autoSpin)
             mat4.rotateZ(this.cmdlRenderer.modelMatrix, this.entity.modelMatrix, 8 * (viewerInput.time / 1000));

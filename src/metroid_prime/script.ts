@@ -11,6 +11,7 @@ import { CHAR } from "./char";
 import { InputStream } from './stream';
 import { colorFromRGBA, colorNew, Color } from "../Color";
 import { computeModelMatrixSRT, MathConstants } from "../MathHelpers";
+import { GameVersion, AreaVersion } from "./mrea";
 
 export const enum MP1EntityType {
     Actor                   = 0x00,
@@ -121,7 +122,7 @@ export class Entity {
                 const model = ancs.characters[charID].model;
                 if (model !== null)
                     return model;
-            }
+            } 
         }
 
         if (this.char !== null && this.char.cmdl !== null)
@@ -1004,7 +1005,7 @@ export function parseScriptLayer_MP1(buffer: ArrayBufferSlice, layerOffset: numb
     return { entities };
 }
 
-function readCharacterAnimationSet(buffer: ArrayBufferSlice, offs: number, ent: Entity, resourceSystem: ResourceSystem): void {
+function readCharacterAnimationSet_DKCR(buffer: ArrayBufferSlice, offs: number, ent: Entity, resourceSystem: ResourceSystem): void {
     const stream = new InputStream(buffer.slice(offs), 8);
     const flags = stream.readUint8();
 
@@ -1026,7 +1027,14 @@ function readCharacterAnimationSet(buffer: ArrayBufferSlice, offs: number, ent: 
     }
 }
 
-export function parseProperty_MP2(stream: InputStream, entity: Entity, resourceSystem: ResourceSystem) {
+function readCharacterAnimationSet_MP3(buffer: ArrayBufferSlice, offs: number, ent: Entity, resourceSystem: ResourceSystem): void {
+    const stream = new InputStream(buffer.slice(offs), 8);
+    const charID = stream.readAssetID();
+    const animIndex = stream.readUint32();
+    ent.char = resourceSystem.loadAssetByID<CHAR>(charID, 'CHAR');
+}
+
+export function parseProperty_MP2(stream: InputStream, entity: Entity, version: AreaVersion, resourceSystem: ResourceSystem) {
     const propertyID = stream.readUint32();
     const propertySize = stream.readUint16();
     const nextProperty = stream.tell() + propertySize;
@@ -1037,12 +1045,13 @@ export function parseProperty_MP2(stream: InputStream, entity: Entity, resourceS
         case 0x255A4580: // EditorProperties
         case 0x7E397FED: // ActorInformation
         case 0xB3774750: // PatternedAITypedef
+        case 0x43BBB1DD: // PatternedAITypedef
         case 0xD545F36B: // PickupData
         {
             const numSubProperties = stream.readUint16();
 
             for (let i = 0; i < numSubProperties; i++)
-                parseProperty_MP2(stream, entity, resourceSystem);
+                parseProperty_MP2(stream, entity, version, resourceSystem);
 
             break;
         }
@@ -1060,11 +1069,9 @@ export function parseProperty_MP2(stream: InputStream, entity: Entity, resourceS
             entity.active = stream.readBool();
             break;
 
-        // Models
         case 0xC27FFA8F: // Model
             entity.model = readAssetID(stream.getBuffer(), stream.tell(), stream.assetIDLength, 'CMDL', resourceSystem);
             break;
-
         // AnimationParameters
         case 0xE25FB08C: // AnimationInformation
             readAnimationParameters(stream.getBuffer(), stream.tell(), entity, resourceSystem);
@@ -1072,10 +1079,15 @@ export function parseProperty_MP2(stream: InputStream, entity: Entity, resourceS
 
         // CharacterAnimationSet
         case 0xA3D63F44: // Animation
+        case 0x4044D9E5: // AnimationSet
         case 0xA244C9D8: // CharacterAnimationInformation
-            readCharacterAnimationSet(stream.getBuffer(), stream.tell(), entity, resourceSystem);
+        {
+            if (version === AreaVersion.MP3)
+                readCharacterAnimationSet_MP3(stream.getBuffer(), stream.tell(), entity, resourceSystem);
+            else
+                readCharacterAnimationSet_DKCR(stream.getBuffer(), stream.tell(), entity, resourceSystem);
             break;
-
+        }
         // LightParameters
         case 0xB028DB0E: // LightParameters
         {
@@ -1127,7 +1139,7 @@ export function parseProperty_MP2(stream: InputStream, entity: Entity, resourceS
     stream.goTo(nextProperty);
 }
 
-export function parseScriptLayer_MP2(stream: InputStream, resourceSystem: ResourceSystem): ScriptLayer {
+export function parseScriptLayer_MP2(stream: InputStream, version: AreaVersion, resourceSystem: ResourceSystem): ScriptLayer {
     const entities: Entity[] = [];
     stream.skip(1); // skipping 'version' byte which is always 0
     const numEnts = stream.readUint32();
@@ -1144,7 +1156,7 @@ export function parseScriptLayer_MP2(stream: InputStream, resourceSystem: Resour
         const entity = createEntity_MP2(entityType, entityId);
 
         if (entity !== null) {
-            parseProperty_MP2(stream, entity, resourceSystem);
+            parseProperty_MP2(stream, entity, version, resourceSystem);
             entities.push(entity);
         }
 
