@@ -246,7 +246,7 @@ uniform sampler2D u_Samplers[8];
         else if (kind === 10)
             return `vec4(1.0)`; // TODO(jstpierre): What is this?
         else if (kind === 11) {
-            if (instance === 0 || instance === 2 || instance === 5)
+            if (instance === 0 || instance === 1 || instance === 2 || instance === 5)
                 return `vec4(0.0)`;
             else if (instance === 6)
                 return `vec4(1.0)`;

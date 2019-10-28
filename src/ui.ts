@@ -2828,6 +2828,8 @@ export class UI {
     }
 
     public destroyScene(): void {
+        this.setScenePanels([]);
+
         setChildren(this.sceneUIContainer, []);
 
         for (let i = 0; i < this.floatingPanels.length; i++)
