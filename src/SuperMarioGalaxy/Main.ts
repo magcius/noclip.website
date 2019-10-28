@@ -1067,8 +1067,6 @@ function layerVisible(layer: LayerId, layerMask: number): boolean {
 class ZoneNode {
     public name: string;
 
-    public objects: LiveActor[] = [];
-
     // The current layer mask for objects and sub-zones in this zone.
     public layerMask: number = 0xFFFFFFFF;
     // Game might be able to set the visibility of a zone at runtime in SMG2.
@@ -1197,7 +1195,6 @@ class SMGSpawner {
             const actor = new NoclipLegacyActor(zoneAndLayer, arcName, this.sceneObjHolder, infoIter, tag, objinfo);
             applyAnimations(actor, animOptions);
 
-            this.addActor(actor);
             this.syncActorVisible(actor);
 
             return [actor, actor.arc];
@@ -1527,10 +1524,6 @@ class SMGSpawner {
         }
     }
 
-    private addActor(object: LiveActor): void {
-        this.zones[object.zoneAndLayer.zoneId].objects.push(object);
-    }
-
     private placeStageData(stageDataHolder: StageDataHolder): ZoneNode {
         const zoneNode = new ZoneNode(stageDataHolder);
         assert(this.zones[stageDataHolder.zoneId] === undefined);
@@ -1548,7 +1541,6 @@ class SMGSpawner {
                     return;
 
                 const actor = actorTableEntry.factoryFunc(zoneAndLayer, this.sceneObjHolder, infoIter);
-                this.addActor(actor);
             } else {
                 const objInfoLegacy = stageDataHolder.legacyCreateObjinfo(infoIter, legacyPaths);
                 const infoIterCopy = copyInfoIter(infoIter);
@@ -1649,7 +1641,6 @@ class SMGSpawner {
             const pointIndex = assertExists(infoIter.getValueNumber('PointPosIndex'));
             points[pointIndex].isSmall = false;
             const galaxy = new MiniRouteGalaxy(zoneAndLayer, this.sceneObjHolder, infoIter, points[pointIndex]);
-            this.addActor(galaxy);
         });
 
         // Sometimes it's in the ActorInfo directory, sometimes its not... WTF?
@@ -1658,7 +1649,6 @@ class SMGSpawner {
             const pointIndex = assertExists(infoIter.getValueNumber('PointIndex'));
             points[pointIndex].isSmall = false;
             const pointPart = new MiniRoutePart(zoneAndLayer, this.sceneObjHolder, infoIter, points[pointIndex]);
-            this.addActor(pointPart);
         });
 
         // Spawn our points
@@ -1666,7 +1656,6 @@ class SMGSpawner {
             const isValid = infoIter.getValueString('Valid') === 'o';
             if (isValid) {
                 const point = new MiniRoutePoint(zoneAndLayer, this.sceneObjHolder, points[i]);
-                this.addActor(point);
             }
         });
 
@@ -1709,8 +1698,6 @@ class SMGSpawner {
             startBrkIfExist(obj.modelInstance!, obj.arc, 'TicoBuild');
         else
             startBrkIfExist(obj.modelInstance!, obj.arc, 'Normal');
-
-        this.addActor(obj);
     }
 }
 
