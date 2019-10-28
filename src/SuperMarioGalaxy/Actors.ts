@@ -1563,7 +1563,7 @@ class CircleCoinGroup extends CoinGroup {
     private radius: number;
 
     protected initCoinArray(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
-        this.radius = assertExists(getJMapInfoArg2(infoIter));
+        this.radius = fallback(getJMapInfoArg2(infoIter), 200);
         this.initDefaultPos(sceneObjHolder, infoIter);
     }
 
