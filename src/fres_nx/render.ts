@@ -82,6 +82,9 @@ function translateAddressMode(addrMode: TextureAddressMode): GfxWrapMode {
         return GfxWrapMode.CLAMP;
     case TextureAddressMode.Mirror:
         return GfxWrapMode.MIRROR;
+    case TextureAddressMode.MirrorClampToEdge:
+        // TODO(jstpierre): This requires GL_ARB_texture_mirror_clamp_to_edge
+        return GfxWrapMode.MIRROR;
     default:
         throw "whoops";
     }
