@@ -164,7 +164,8 @@ class SMGRenderer implements Viewer.SceneGfx {
 
     private applyCurrentScenario(): void {
         const scenarioData = this.sceneObjHolder.scenarioData.scenarioDataIter;
-
+        if (this.currentScenarioIndex >= scenarioData.getNumRecords())
+            this.currentScenarioIndex = 0;
         scenarioData.setRecord(this.currentScenarioIndex);
 
         for (let i = 0; i < this.spawner.zones.length; i++) {
@@ -183,10 +184,10 @@ class SMGRenderer implements Viewer.SceneGfx {
             return;
 
         this.currentScenarioIndex = index;
+        this.applyCurrentScenario();
         const strIndex = this.scenarioNoToIndex.indexOf(index) - 1;
         this.scenarioSelect.setHighlighted(strIndex);
         this.onstatechanged();
-        this.applyCurrentScenario();
     }
 
     public createPanels(): UI.Panel[] {
