@@ -877,7 +877,7 @@ class SceneDesc implements Viewer.SceneDesc {
             else if (whichModel === 0x0C) //room 11's invisible spikes/hookshot
                 buildModel(zar, `model/m_HADinv0b_model.cmb`, 0.1);
             else
-                throw "whoops";
+                console.warn(`unimplemented: Bg_Haka_Megane ${hexzero(whichModel, 0x08)}`);
         }
         else if (actor.actorId === ActorId.Bg_Haka_Sgami) {
             const whichModel = actor.variable & 0xFFFF;

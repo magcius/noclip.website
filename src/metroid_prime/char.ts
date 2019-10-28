@@ -36,15 +36,8 @@ function parseMP3(stream: InputStream, resource: ResourceSystem, assetID: string
 export function parse(stream: InputStream, resourceSystem: ResourceSystem, assetID: string): CHAR | null {
     const magic = stream.readUint16();
      
-    if (magic !== 0x59BE)
-    {
-        const char = parseMP3(stream, resourceSystem, assetID);
-        return char;
-    } 
-    else 
-    {
-        const char = parseDKCR(stream, resourceSystem, assetID);
-        return char;
-    }
-    return null;
+    if (magic === 0x59BE)
+        return parseDKCR(stream, resourceSystem, assetID);
+    else
+        return parseMP3(stream, resourceSystem, assetID);
 }
