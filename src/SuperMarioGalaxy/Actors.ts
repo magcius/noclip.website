@@ -1478,7 +1478,7 @@ abstract class CoinGroup extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, protected isPurpleCoin: boolean) {
         super(zoneAndLayer, getObjectName(infoIter));
 
-        const coinCount = assertExists(getJMapInfoArg0(infoIter));
+        const coinCount = fallback(getJMapInfoArg0(infoIter), 0);
 
         for (let i = 0; i < coinCount; i++) {
             if (this.isPurpleCoin) {
@@ -3155,6 +3155,10 @@ export class AirBubbleHolder extends LiveActorGroup<AirBubble> {
         if (bubble !== null)
             bubble.appearMove(pos, lifetime);
     }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        sceneObjHolder.modelCache.requestObjectData('AirBubble');
+    }
 }
 
 const enum AirBubbleGeneratorNrv { WAIT, GENERATE }
@@ -3197,5 +3201,10 @@ export class AirBubbleGenerator extends LiveActor<AirBubbleGeneratorNrv> {
                 this.setNerve(AirBubbleGeneratorNrv.WAIT);
             }
         }
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        super.requestArchives(sceneObjHolder, infoIter);
+        AirBubbleHolder.requestArchives(sceneObjHolder, infoIter);
     }
 }

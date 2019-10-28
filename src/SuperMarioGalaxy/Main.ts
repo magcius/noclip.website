@@ -1397,11 +1397,9 @@ class SMGSpawner {
                 spawnGraph(`Flower`);
             return;
         case 'FlowerBlueGroup':
-            spawnGraph(`FlowerBlue`);
+            if (this.isSMG1)
+                spawnGraph(`FlowerBlue`);
             return;
-        case 'SeaGullGroup':
-            spawnGraph(`SeaGull`);
-            break;
 
         case 'HeavensDoorAppearStepA':
             // This is the transition effect version of the steps that appear after you chase the bunnies in Gateway Galaxy.
