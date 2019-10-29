@@ -156,14 +156,14 @@ export default class InputManager {
         this.callScrollListeners();
     };
 
-    public onMotion = (dx: number, dy: number): void => {
+    public onMotion (dx: number, dy: number) {
         this.dx += dx;
         this.dy += dy;
-    };
+    }
 
-    public onGrabReleased = (): void => {
+    public onGrabReleased () {
         this.button = -1;
         if (this.onisdraggingchanged !== null)
             this.onisdraggingchanged();
-    };
+    }
 }
