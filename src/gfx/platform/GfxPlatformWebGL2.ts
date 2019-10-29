@@ -11,7 +11,7 @@ import { White, colorEqual, colorCopy } from '../../Color';
 
 // This is a workaround for ANGLE not supporting UBOs greater than 64kb (the limit of D3D).
 // https://bugs.chromium.org/p/angleproject/issues/detail?id=3388
-const UBO_PAGE_BYTE_SIZE = 0x10000;
+const UBO_PAGE_MAX_BYTE_SIZE = 0x10000;
 
 export class FullscreenCopyProgram extends FullscreenProgram {
     public frag: string = `
@@ -543,13 +543,36 @@ interface KHR_parallel_shader_compile {
 }
 
 class GfxImplP_GL implements GfxSwapChain, GfxDevice {
-    private _fullscreenCopyMegaState = fullscreenMegaState;
-    private _fullscreenCopyProgram: GfxProgramP_GL;
-
     private _WEBGL_compressed_texture_s3tc: WEBGL_compressed_texture_s3tc | null = null;
     private _WEBGL_compressed_texture_s3tc_srgb: WEBGL_compressed_texture_s3tc_srgb | null = null;
     private _KHR_parallel_shader_compile: KHR_parallel_shader_compile | null = null;
+    private _uniformBufferMaxPageByteSize: number;
 
+    private _hostAccessPassPool: GfxHostAccessPassP_GL[] = [];
+    private _renderPassPool: GfxRenderPassP_GL[] = [];
+
+    public programBugDefines: string = '';
+
+    // Swap Chain
+    private _fullscreenCopyMegaState = fullscreenMegaState;
+    private _fullscreenCopyProgram: GfxProgramP_GL;
+    private _scWidth: number = 0;
+    private _scHeight: number = 0;
+    private _scTexture: GfxTexture | null = null;
+
+    // GfxDevice
+    private _currentActiveTexture: GLenum | null = null;
+    private _currentBoundVAO: WebGLVertexArrayObject | null = null;
+    private _currentBoundUBO: WebGLBuffer | null = null;
+    private _currentBoundIBO: WebGLBuffer | null = null;
+    private _currentBoundVBO: WebGLBuffer | null = null;
+    private _currentProgram: WebGLProgram | null = null;
+    private _resourceCreationTracker: ResourceCreationTracker | null = null;
+    private _resourceUniqueId = 0;
+    private _dummyCompilerVAO: WebGLVertexArrayObject;
+    private _programCache: ProgramCache;
+
+    // Pass Execution
     private _currentColorAttachments: GfxColorAttachmentP_GL[] = [];
     private _currentDepthStencilAttachment: GfxDepthStencilAttachmentP_GL | null;
     private _currentPipeline: GfxRenderPipelineP_GL;
@@ -564,18 +587,13 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _resolveDrawFramebuffer!: WebGLFramebuffer;
     private _renderPassDrawFramebuffer!: WebGLFramebuffer;
     private _blackTexture!: WebGLTexture;
-    private _hostAccessPassPool: GfxHostAccessPassP_GL[] = [];
-    private _renderPassPool: GfxRenderPassP_GL[] = [];
-    private _resourceCreationTracker: ResourceCreationTracker | null = null;
-    private _resourceUniqueId = 0;
-    private _dummyCompilerVAO: WebGLVertexArrayObject;
-
-    public programBugDefines: string = '';
 
     constructor(public gl: WebGL2RenderingContext, programCache: ProgramCache | null = null) {
         this._WEBGL_compressed_texture_s3tc = gl.getExtension('WEBGL_compressed_texture_s3tc');
         this._WEBGL_compressed_texture_s3tc_srgb = gl.getExtension('WEBGL_compressed_texture_s3tc_srgb');
         this._KHR_parallel_shader_compile = gl.getExtension('KHR_parallel_shader_compile');
+
+        this._uniformBufferMaxPageByteSize = Math.min(gl.getParameter(gl.MAX_UNIFORM_BLOCK_SIZE), UBO_PAGE_MAX_BYTE_SIZE);
 
         if (programCache !== null) {
             this._programCache = programCache;
@@ -622,9 +640,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     }
 
     //#region GfxSwapChain
-    private _scWidth: number = 0;
-    private _scHeight: number = 0;
-    private _scTexture: GfxTexture | null = null;
     public configureSwapChain(width: number, height: number): void {
         if (this._scWidth !== width || this._scHeight !== height) {
             const gl = this.gl;
@@ -792,8 +807,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
         return descriptor.numLevels;
     }
-    
-    private _currentActiveTexture: GLenum | null = null;
+
     private _setActiveTexture(texture: GLenum): void {
         if (this._currentActiveTexture !== texture) {
             this.gl.activeTexture(texture);
@@ -801,7 +815,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
     }
 
-    private _currentBoundVAO: WebGLVertexArrayObject | null = null;
     private _bindVAO(vao: WebGLVertexArrayObject | null): void {
         if (this._currentBoundVAO !== vao) {
             this.gl.bindVertexArray(vao);
@@ -809,9 +822,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
     }
 
-    private _currentBoundUBO: WebGLBuffer | null = null;
-    private _currentBoundIBO: WebGLBuffer | null = null;
-    private _currentBoundVBO: WebGLBuffer | null = null;
     private _bindBuffer(gl_target: GLenum, gl_buffer: WebGLBuffer | null): void {
         if (gl_target === WebGL2RenderingContext.UNIFORM_BUFFER) {
             if (this._currentBoundUBO !== gl_buffer) {
@@ -835,7 +845,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
     }
 
-    private _currentProgram: WebGLProgram | null = null;
     private _useDeviceProgram(program: DeviceProgram): void {
         if (this._currentProgram !== program.glProgram) {
             this.gl.useProgram(program.glProgram);
@@ -874,14 +883,14 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
         let pageByteSize: number;
         if (usage === GfxBufferUsage.UNIFORM) {
-            assert((byteSize % UBO_PAGE_BYTE_SIZE) === 0);
+            assert((byteSize % this._uniformBufferMaxPageByteSize) === 0);
             let byteSizeLeft = byteSize;
             while (byteSizeLeft > 0) {
-                gl_buffer_pages.push(this._createBufferPage(Math.min(byteSizeLeft, UBO_PAGE_BYTE_SIZE), usage, hint));
-                byteSizeLeft -= UBO_PAGE_BYTE_SIZE;
+                gl_buffer_pages.push(this._createBufferPage(Math.min(byteSizeLeft, this._uniformBufferMaxPageByteSize), usage, hint));
+                byteSizeLeft -= this._uniformBufferMaxPageByteSize;
             }
 
-            pageByteSize = UBO_PAGE_BYTE_SIZE;
+            pageByteSize = this._uniformBufferMaxPageByteSize;
         } else {
             gl_buffer_pages.push(this._createBufferPage(byteSize, usage, hint));
             pageByteSize = byteSize;
@@ -969,8 +978,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         return depthStencilAttachment;
     }
 
-
-    private _programCache: ProgramCache;
     private _createProgram(deviceProgram: DeviceProgram): GfxProgram {
         deviceProgram.ensurePreprocessed(this);
         const program: GfxProgramP_GL = { _T: _T.Program, ResourceUniqueId: this.getNextUniqueId(), deviceProgram };
@@ -1216,7 +1223,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const gl = this.gl;
         return {
             uniformBufferWordAlignment: gl.getParameter(gl.UNIFORM_BUFFER_OFFSET_ALIGNMENT) / 4,
-            uniformBufferMaxPageWordSize: Math.min(gl.getParameter(gl.MAX_UNIFORM_BLOCK_SIZE), UBO_PAGE_BYTE_SIZE) / 4,
+            uniformBufferMaxPageWordSize: this._uniformBufferMaxPageByteSize / 4,
         };
     }
 
