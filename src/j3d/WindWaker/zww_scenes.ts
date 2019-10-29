@@ -1263,6 +1263,8 @@ class SceneDesc {
                 m.bindTRK1(parseBRK(rarc, `brk/vlupl.brk`), animFrame(3));
                 m.bindTTK1(parseBTK(rarc, `btk/vlupl.btk`));
             });
+            // Small magic jar
+            if (itemId === 0x09) fetchArchive(`Always.arc`).then((rarc) => buildModel(rarc, `bdlm/mpoda.bdl`));
             else console.warn(`Unknown item: ${hexzero(itemId, 2)}`);
         }
         // Generic Torch
