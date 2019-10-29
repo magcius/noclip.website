@@ -1642,10 +1642,14 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const gl = this.gl;
         const { gl_target, byteSize: dstByteSize, pageByteSize: dstPageByteSize } = buffer as GfxBufferP_GL;
         if (gl_target === gl.UNIFORM_BUFFER) {
-            assert((dstByteOffset % dstPageByteSize) === 0);
-            assert((byteSize % dstPageByteSize) === 0);
+            // Manually check asserts for speed.
+            if (!((dstByteOffset % dstPageByteSize) === 0))
+                throw new Error(`Assert fail: (dstByteOffset [${dstByteOffset}] % dstPageByteSize [${dstPageByteSize}]) === 0`);
+            if (!((byteSize % dstPageByteSize) === 0))
+                throw new Error(`Assert fail: (byteSize [${byteSize}] % dstPageByteSize [${dstPageByteSize}]) === 0`);
         }
-        assert((dstByteOffset + byteSize) <= dstByteSize);
+        if (!((dstByteOffset + byteSize) <= dstByteSize))
+            throw new Error(`Assert fail: (dstByteOffset [${dstByteOffset}] + byteSize [${byteSize}]) <= dstByteSize [${dstByteSize}], gl_target ${gl_target}`);
 
         const virtBufferByteOffsetEnd = dstByteOffset + byteSize;
         let virtBufferByteOffset = dstByteOffset;

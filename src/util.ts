@@ -2,7 +2,10 @@
 import ArrayBufferSlice from './ArrayBufferSlice';
 
 export function assert(b: boolean, message: string = ""): void {
-    if (!b) { console.error(new Error().stack); throw new Error(`Assert fail: ${message}`); }
+    if (!b) {
+        console.error(new Error().stack);
+        throw new Error(`Assert fail: ${message}`);
+    }
 }
 
 function makeTextDecoder(encoding: string): TextDecoder | null {
