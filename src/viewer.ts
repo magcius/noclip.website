@@ -107,36 +107,6 @@ export class Viewer {
         this.keyMoveSpeedListeners.push(listener);
     }
 
-    private renderViewport(): void {
-        const renderPass = this.scene!.render(this.gfxDevice, this.viewerRenderInput);
-        if (renderPass !== null) {
-            const onscreenTexture = this.gfxSwapChain.getOnscreenTexture();
-            renderPass.endPass(onscreenTexture);
-            this.gfxDevice.submitPass(renderPass);
-        }
-    }
-
-    private renderVR(): void {
-        // Set projection and view matrices here.
-        this.viewport.w = 0.5;
-        this.viewport.x = 0;
-        this.renderViewport();
-
-        // Set projection and view matrices here.
-        this.viewport.w = 0.5;
-        this.viewport.x = 0.5;
-        // TODO(jstpierre): This is ugly and terrible.
-        standardFullClearRenderPassDescriptor.colorLoadDisposition = GfxLoadDisposition.LOAD;
-        this.renderViewport();
-        standardFullClearRenderPassDescriptor.colorLoadDisposition = GfxLoadDisposition.CLEAR;
-    }
-
-    private renderNormal(): void {
-        this.viewport.w = 1;
-        this.viewport.x = 0;
-        this.renderViewport();
-    }
-
     private renderGfxPlatform(): void {
         this.viewerRenderInput.time = this.sceneTime;
         this.viewerRenderInput.backbufferWidth = this.canvas.width;
@@ -148,8 +118,12 @@ export class Viewer {
         resetGfxDebugGroup(this.debugGroup);
         this.gfxDevice.pushDebugGroup(this.debugGroup);
 
-        this.renderNormal();
-        // this.renderVR();
+        const renderPass = this.scene!.render(this.gfxDevice, this.viewerRenderInput);
+        if (renderPass !== null) {
+            const onscreenTexture = this.gfxSwapChain.getOnscreenTexture();
+            renderPass.endPass(onscreenTexture);
+            this.gfxDevice.submitPass(renderPass);
+        }
 
         this.gfxSwapChain.present();
 

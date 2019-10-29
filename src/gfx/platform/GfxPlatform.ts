@@ -250,7 +250,9 @@ export interface GfxSwapChain {
     configureSwapChain(width: number, height: number): void;
     getDevice(): GfxDevice;
     getOnscreenTexture(): GfxTexture;
-    present(): void;
+    // WebXR requires presenting to a platform-defined framebuffer, for all that is unholy.
+    // This hopefully is less terrible in the future. See https://github.com/immersive-web/webxr/issues/896
+    present(platformFramebuffer?: any): void;
 }
 
 export interface GfxHostAccessPass {

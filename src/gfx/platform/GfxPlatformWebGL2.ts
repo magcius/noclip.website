@@ -670,8 +670,16 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         return this._scTexture!;
     }
 
-    public present(): void {
-        this.blitFullscreenTexture(this._scTexture!);
+    public present(platformFramebuffer?: any): void {
+        if (platformFramebuffer !== undefined) {
+            const gl = this.gl;
+            // TODO(jstpierre): Find a way to copy the depth buffer to WebXR.
+            gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, platformFramebuffer);
+            this.blitFullscreenTexture(this._scTexture!);
+            gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+        } else {
+            this.blitFullscreenTexture(this._scTexture!);
+        }
     }
 
     private blitFullscreenTexture(texture: GfxTexture): void {
