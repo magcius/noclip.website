@@ -1238,7 +1238,7 @@ class SceneDesc {
             const itemId = (parameters & 0x000000FF);
 
             // Heart
-            if (itemId === 0x00) fetchArchive(`Always.arc`).then((rarc) => buildModel(rarc, `bdlm/vlupl.bdl`));
+            if (itemId === 0x00) fetchArchive(`Always.arc`).then((rarc) => buildModel(rarc, `bdl/vhrtl.bdl`));
             // Rupee (Green)
             else if (itemId === 0x01) fetchArchive(`Always.arc`).then((rarc) => {
                 const m = buildModel(rarc, `bdlm/vlupl.bdl`);
