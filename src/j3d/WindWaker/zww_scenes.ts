@@ -1264,7 +1264,7 @@ class SceneDesc {
                 m.bindTTK1(parseBTK(rarc, `btk/vlupl.btk`));
             });
             // Small magic jar
-            if (itemId === 0x09) fetchArchive(`Always.arc`).then((rarc) => buildModel(rarc, `bdlm/mpoda.bdl`));
+            else if (itemId === 0x09) fetchArchive(`Always.arc`).then((rarc) => buildModel(rarc, `bdlm/mpoda.bdl`));
             else console.warn(`Unknown item: ${hexzero(itemId, 2)}`);
         }
         // Generic Torch
@@ -1914,6 +1914,13 @@ class SceneDesc {
         });
         // Doors: TODO(jstpierre)
         else if (name === 'KNOB00') return;
+        // Forsaken Fortress door
+        else if (name === 'SMBdor') fetchArchive(`Mbdoor.arc`).then((rarc) => {
+            buildModel(rarc, `bdl/s_mbdfu.bdl`);
+            buildModel(rarc, `bdl/s_mbd_l.bdl`);
+            buildModel(rarc, `bdl/s_mbd_r.bdl`);
+            // Another sub-model "s_mbdto", a barricade, is also in this archive, and may be used elsewhere
+        });
         // Holes you can fall into
         else if (name === 'Pitfall') fetchArchive(`Aana.arc`).then((rarc) => buildModel(rarc, `bdl/aana.bdl`));
         // Warp Pot
