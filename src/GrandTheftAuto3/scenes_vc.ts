@@ -85,11 +85,10 @@ class GTAVCSceneDesc extends GTA3SceneDesc {
                 'washints/washints',
                 'yacht/yacht',
             ],
-            ipl_stream: [],
         };
     }
 
-    protected filter(item: ItemInstance, obj: ObjectDefinition, zone: string) {
+    protected filter(item: ItemInstance) {
         return item.interior === this.interior || item.interior === INTERIOR_EVERYWHERE;
     }
 }

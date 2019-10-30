@@ -21,8 +21,10 @@ import { colorNew, White, colorNewCopy, Color, colorCopy } from "../Color";
 import { ColorSet, emptyColorSet, lerpColorSet } from "./time";
 import { AABB } from "../Geometry";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { Destroyable } from "../SceneBase";
 
 const TIME_FACTOR = 2500; // one day cycle per minute
+const DRAW_DISTANCE_FACTOR = 2.5;
 
 export interface Texture extends TextureBase {
     levels: Uint8Array[];
@@ -206,7 +208,11 @@ const dualPassEdgeProgram = new GTA3Program({ ALPHA_TEST: '>= 0.9' });
 const waterProgram = new GTA3Program({ WATER: '1' });
 const skyProgram = new GTA3Program({ SKY: '1' });
 
-class Renderer {
+interface Renderer extends Destroyable {
+    prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void;
+}
+
+class BaseRenderer {
     protected vertexBuffer: GfxBuffer;
     protected indexBuffer: GfxBuffer;
     protected inputLayout: GfxInputLayout;
@@ -218,7 +224,7 @@ class Renderer {
 
     constructor(protected program: DeviceProgram, protected atlas?: TextureArray) {}
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, colorSet: ColorSet): GfxRenderInst | undefined {
+    protected prepare(device: GfxDevice, renderInstManager: GfxRenderInstManager): GfxRenderInst {
         const renderInst = renderInstManager.pushRenderInst();
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         renderInst.drawIndexes(this.indices);
@@ -245,7 +251,7 @@ class Renderer {
     }
 }
 
-export class SkyRenderer extends Renderer {
+export class SkyRenderer extends BaseRenderer implements Renderer {
     constructor(device: GfxDevice, cache: GfxRenderCache, atlas: TextureArray) {
         super(skyProgram, atlas);
         // fullscreen quad
@@ -268,11 +274,10 @@ export class SkyRenderer extends Renderer {
         this.inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, colorSet: ColorSet): undefined {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
         if (viewerInput.camera.isOrthographic) return;
-        const renderInst = super.prepareToRender(device, renderInstManager, viewerInput, colorSet)!;
+        const renderInst = super.prepare(device, renderInstManager);
         renderInst.sortKey = makeSortKey(GfxRendererLayer.BACKGROUND);
-        return;
     }
 }
 
@@ -336,9 +341,11 @@ class RWMeshFragData implements MeshFragData {
             const r = this.colors[4*i+0]/0xFF;
             const g = this.colors[4*i+1]/0xFF;
             const b = this.colors[4*i+2]/0xFF;
+            const a = this.colors[4*i+3]/0xFF;
             dst.r *= r;
             dst.g *= g;
             dst.b *= b;
+            dst.a *= a;
         }
     }
 
@@ -393,45 +400,47 @@ export class MeshInstance {
     }
 }
 
-export class DrawKey {
-    public renderLayer: GfxRendererLayer = GfxRendererLayer.OPAQUE;
-    public modelName?: string;
-    public drawDistance?: number;
+export class DrawParams {
+    public renderLayer = GfxRendererLayer.OPAQUE;
+    public minDistance = -Infinity;
+    public maxDistance = Infinity;
     public timeOn?: number;
     public timeOff?: number;
-    public water: boolean;
-    public additive: boolean;
+    public water = false;
+    public additive = false;
+    public backface = false;
 
-    constructor(obj: ObjectDefinition, public zone: string) {
-        if (obj.flags & ObjectFlags.DRAW_LAST) {
-            this.renderLayer = GfxRendererLayer.TRANSLUCENT;
-            //this.modelName = obj.modelName;
+    private static internMap = new Map<string, DrawParams>();
+
+    public intern(): DrawParams {
+        const str = JSON.stringify(this);
+        if (DrawParams.internMap.has(str)) {
+            return DrawParams.internMap.get(str)!;
+        } else {
+            DrawParams.internMap.set(str, this);
+            return this;
         }
-        if (!(obj.flags & ObjectFlags.IGNORE_DRAW_DISTANCE))
-            this.drawDistance = Math.ceil(obj.drawDistance / 50) * 50;
-        if (obj.tobj) {
-            this.timeOn = obj.timeOn;
-            this.timeOff = obj.timeOff;
-        }
-        this.water = (obj.modelName === 'water');
-        this.additive = !!(obj.flags & ObjectFlags.ADDITIVE);
+    }
+
+    public clone(): DrawParams {
+        return Object.assign(new DrawParams(), this);
     }
 }
 
 const scratchVec2 = vec2.create();
 const scratchVec3 = vec3.create();
 const scratchColor = colorNewCopy(White);
-export class SceneRenderer extends Renderer {
+export class SceneRenderer extends BaseRenderer implements Renderer {
     public bbox = new AABB(Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity);
 
     private sortKey: number;
 
-    private static programFor(key: DrawKey, dual: boolean) {
-        if (key.water) return waterProgram;
+    private static programFor(params: DrawParams, dual: boolean) {
+        if (params.water) return waterProgram;
 
         // PS2 alpha test emulation, see http://skygfx.rockstarvision.com/skygfx.html
         if (dual) return dualPassEdgeProgram;
-        if (!!(key.renderLayer & GfxRendererLayer.TRANSLUCENT)) return dualPassCoreProgram;
+        if (!!(params.renderLayer & GfxRendererLayer.TRANSLUCENT)) return dualPassCoreProgram;
 
         return opaqueProgram;
     }
@@ -453,8 +462,8 @@ export class SceneRenderer extends Renderer {
         return false;
     }
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public key: DrawKey, meshes: MeshInstance[], sealevel: number, atlas?: TextureArray, dual = false) {
-        super(SceneRenderer.programFor(key, dual), atlas);
+    constructor(device: GfxDevice, cache: GfxRenderCache, public params: DrawParams, meshes: MeshInstance[], sealevel: number, atlas?: TextureArray, dual = false) {
+        super(SceneRenderer.programFor(params, dual), atlas);
 
         let vertices = 0;
         this.indices = 0;
@@ -528,16 +537,16 @@ export class SceneRenderer extends Renderer {
         this.inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
         this.megaStateFlags = {
             blendMode: GfxBlendMode.ADD,
-            blendDstFactor: this.key.additive ? GfxBlendFactor.ONE : GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+            blendDstFactor: this.params.additive ? GfxBlendFactor.ONE : GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
             blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
             depthWrite: !dual,
-            cullMode: this.key.water ? GfxCullMode.NONE : GfxCullMode.BACK,
+            cullMode: this.params.backface ? GfxCullMode.NONE : GfxCullMode.BACK,
         };
 
-        let renderLayer = this.key.renderLayer;
+        let renderLayer = this.params.renderLayer;
         if (this.atlas !== undefined && this.atlas.transparent)
             renderLayer = GfxRendererLayer.TRANSLUCENT;
-        if (this.key.water) {
+        if (this.params.water) {
             this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + 1);
         } else if (renderLayer === GfxRendererLayer.TRANSLUCENT && this.bbox.minY >= sealevel) {
             this.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + 2);
@@ -546,24 +555,45 @@ export class SceneRenderer extends Renderer {
         }
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, colorSet: ColorSet, dual = false): undefined {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
+        if (!viewerInput.camera.frustum.contains(this.bbox)) return;
+
         const hour = (viewerInput.time / TIME_FACTOR) % 24;
-        const { timeOn, timeOff } = this.key;
+        const { timeOn, timeOff } = this.params;
         if (timeOn !== undefined && timeOff !== undefined) {
             if (timeOn < timeOff && (hour < timeOn || timeOff < hour)) return;
             if (timeOff < timeOn && (hour < timeOn && timeOff < hour)) return;
         }
 
-        if (!viewerInput.camera.frustum.contains(this.bbox))
-            return;
-
         const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, this.bbox);
-        if (this.key.drawDistance !== undefined && depth > this.bbox.boundingSphereRadius() + 3 * this.key.drawDistance)
-            return;
-
-        const renderInst = super.prepareToRender(device, renderInstManager, viewerInput, colorSet)!;
+        const renderInst = super.prepare(device, renderInstManager);
         renderInst.sortKey = setSortKeyDepth(this.sortKey, depth);
-        return;
+    }
+}
+
+export class AreaRenderer implements Renderer {
+    private renderers: SceneRenderer[] = [];
+    private bbox = new AABB(Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity);
+
+    public push(renderer: SceneRenderer) {
+        this.renderers.push(renderer);
+        this.bbox.union(this.bbox, renderer.bbox);
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
+        if (!viewerInput.camera.frustum.contains(this.bbox)) return;
+
+        const depth = (computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, this.bbox) - this.bbox.boundingSphereRadius()) / DRAW_DISTANCE_FACTOR;
+        for (let i = 0; i < this.renderers.length; i++) {
+            const renderer = this.renderers[i];
+            if (renderer.params.minDistance <= depth && depth < renderer.params.maxDistance)
+                renderer.prepareToRender(device, renderInstManager, viewerInput);
+        }
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.renderers.length; i++)
+            this.renderers[i].destroy(device);
     }
 }
 
@@ -572,7 +602,7 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
 ];
 
 export class GTA3Renderer implements Viewer.SceneGfx {
-    public sceneRenderers: Renderer[] = [];
+    public renderers: Renderer[] = [];
     public onstatechanged!: () => void;
 
     private renderTarget = new BasicRenderTarget();
@@ -623,10 +653,8 @@ export class GTA3Renderer implements Viewer.SceneGfx {
         mapped[offs++] = this.waterOrigin[3];
         mapped[offs++] = viewerInput.time / 1e3;
 
-        for (let i = 0; i < this.sceneRenderers.length; i++) {
-            const sceneRenderer = this.sceneRenderers[i];
-            sceneRenderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput, this.currentColors);
-        }
+        for (let i = 0; i < this.renderers.length; i++)
+            this.renderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.renderInstManager.popTemplateRenderInst();
@@ -673,7 +701,7 @@ export class GTA3Renderer implements Viewer.SceneGfx {
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy(device);
         this.renderTarget.destroy(device);
-        for (const sceneRenderer of this.sceneRenderers)
-            sceneRenderer.destroy(device);
+        for (let i = 0; i < this.renderers.length; i++)
+            this.renderers[i].destroy(device);
     }
 }
