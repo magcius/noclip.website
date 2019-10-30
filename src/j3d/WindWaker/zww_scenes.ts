@@ -1921,6 +1921,8 @@ class SceneDesc {
             buildModel(rarc, `bdl/s_mbd_r.bdl`);
             // Another sub-model "s_mbdto", a barricade, is also in this archive, and may be used elsewhere
         });
+        // Forsaken Fortress water gate
+        else if (name === 'MjDoor') fetchArchive(`S_MSPDo.arc`).then((rarc) => buildModel(rarc, `bdl/s_mspdo.bdl`));
         // Holes you can fall into
         else if (name === 'Pitfall') fetchArchive(`Aana.arc`).then((rarc) => buildModel(rarc, `bdl/aana.bdl`));
         // Warp Pot
