@@ -1672,6 +1672,8 @@ export class MiniRoutePart extends LiveActor {
             throw "whoops";
 
         this.initModelManagerWithAnm(sceneObjHolder, modelName);
+        if (partsTypeName === 'WorldWarpPoint')
+            this.modelInstance!.bmdModel.shapeData[0].sortKeyBias = 1;
         vec3.copy(this.translation, pointInfo.position);
 
         this.tryStartAllAnim('Open');
