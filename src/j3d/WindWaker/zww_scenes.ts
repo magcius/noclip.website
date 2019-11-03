@@ -2,7 +2,7 @@
 import { mat4, vec3 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../../ArrayBufferSlice';
-import { readString, assertExists, hexzero, leftPad, assert } from '../../util';
+import { readString, assertExists, hexzero, leftPad, assert, nArray } from '../../util';
 import { DataFetcher } from '../../DataFetcher';
 
 import * as Viewer from '../../viewer';
@@ -20,7 +20,7 @@ import { DeviceProgram } from '../../Program';
 import { Color, colorNew, colorLerp, colorCopy, TransparentBlack, colorNewCopy } from '../../Color';
 import { ColorKind, fillSceneParamsDataOnTemplate } from '../../gx/gx_render';
 import { GXRenderHelperGfx } from '../../gx/gx_render';
-import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBufferUsage, GfxFormat, GfxVertexAttributeFrequency, GfxInputLayout, GfxInputState, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor, GfxCompareMode, GfxBufferFrequencyHint, GfxVertexAttributeDescriptor, GfxTexture } from '../../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBufferUsage, GfxFormat, GfxVertexAttributeFrequency, GfxInputLayout, GfxInputState, GfxBuffer, GfxProgram, GfxBindingLayoutDescriptor, GfxCompareMode, GfxBufferFrequencyHint, GfxVertexAttributeDescriptor, GfxTexture, makeTextureDescriptor2D } from '../../gfx/platform/GfxPlatform';
 import { GfxRenderInstManager, GfxRendererLayer } from '../../gfx/render/GfxRenderer';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, ColorTexture, noClearRenderPassDescriptor } from '../../gfx/helpers/RenderTargetHelpers';
 import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers';
@@ -36,23 +36,89 @@ import { TextureMapping } from '../../TextureHolder';
 import { EFB_WIDTH, EFB_HEIGHT } from '../../gx/gx_material';
 import { getTimeFrames } from '../../SuperMarioGalaxy/Main';
 
-class ZWWExtraTextures {
-    constructor(public ZAtoon: BTIData, public ZBtoonEX: BTIData) {
+function gain(v: number, k: number): number {
+    const a = 0.5 * Math.pow(2*((v < 0.5) ? v : 1.0 - v), k);
+    return v < 0.5 ? a : 1.0 - a;
+}
+
+class DynToonTex {
+    public gfxTexture: GfxTexture;
+    public desiredPower: number = 0;
+    private texPower: number = 0;
+    private textureData: Uint8Array[] = [new Uint8Array(256*1*2)];
+
+    constructor(device: GfxDevice) {
+        this.gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RG_NORM, 256, 1, 1));
+        device.setResourceName(this.gfxTexture, 'DynToonTex');
+    }
+
+    private fillTextureData(k: number): void {
+        let dstOffs = 0;
+        const dst = this.textureData[0];
+        for (let i = 0; i < 256; i++) {
+            const t = i / 255;
+            dst[dstOffs++] = gain(t, k) * 255;
+            // TODO(jstpierre): Lantern
+            dst[dstOffs++] = 0;
+        }
+    }
+
+    public prepareToRender(device: GfxDevice): void {
+        if (this.texPower !== this.desiredPower) {
+            this.texPower = this.desiredPower;
+
+            // Recreate toon texture.
+            this.fillTextureData(this.texPower);
+            const hostAccessPass = device.createHostAccessPass();
+            hostAccessPass.uploadTextureData(this.gfxTexture, 0, this.textureData);
+            device.submitPass(hostAccessPass);
+        }
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyTexture(this.gfxTexture);
+    }
+}
+
+export class ZWWExtraTextures {
+    public textureMapping: TextureMapping[] = nArray(2, () => new TextureMapping());
+    public dynToonTex: DynToonTex;
+
+    @UI.dfRange(1, 15, 0.01)
+    public toonTexPower: number = 15;
+
+    constructor(device: GfxDevice, public ZAtoon: BTIData, public ZBtoonEX: BTIData) {
+        this.ZAtoon.fillTextureMapping(this.textureMapping[0]);
+        this.ZBtoonEX.fillTextureMapping(this.textureMapping[1]);
+        this.dynToonTex = new DynToonTex(device);
+    }
+
+    public powerPopup(): void {
+        this.textureMapping[0].gfxTexture = this.dynToonTex.gfxTexture;
+        this.textureMapping[1].gfxTexture = this.dynToonTex.gfxTexture;
+
+        window.main.ui.bindSliders(this);
+    }
+
+    public prepareToRender(device: GfxDevice): void {
+        this.dynToonTex.desiredPower = this.toonTexPower;
+        this.dynToonTex.prepareToRender(device);
     }
 
     public fillExtraTextures(modelInstance: BMDModelInstance): void {
         const ZAtoon_map = modelInstance.getTextureMappingReference('ZAtoon');
         if (ZAtoon_map !== null)
-            this.ZAtoon.fillTextureMapping(ZAtoon_map);
+            ZAtoon_map.copy(this.textureMapping[0]);
 
         const ZBtoonEX_map = modelInstance.getTextureMappingReference('ZBtoonEX');
         if (ZBtoonEX_map !== null)
-            this.ZBtoonEX.fillTextureMapping(ZBtoonEX_map);
+            ZBtoonEX_map.copy(this.textureMapping[1]);
     }
 
     public destroy(device: GfxDevice): void {
         this.ZAtoon.destroy(device);
         this.ZBtoonEX.destroy(device);
+        this.dynToonTex.destroy(device);
     }
 }
 
@@ -219,7 +285,7 @@ export function getKyankoColorsFromDZS(buffer: ArrayBufferSlice, roomIdx: number
     };
 }
 
-function createModelInstance(device: GfxDevice, cache: GfxRenderCache, extraTextures: ZWWExtraTextures, rarc: RARC.RARC, name: string, isSkybox: boolean = false): BMDModelInstance | null {
+function createModelInstance(device: GfxDevice, cache: GfxRenderCache, rarc: RARC.RARC, name: string, isSkybox: boolean = false): BMDModelInstance | null {
     let bdlFile = rarc.findFile(`bdl/${name}.bdl`);
     if (!bdlFile)
         bdlFile = rarc.findFile(`bmd/${name}.bmd`);
@@ -231,7 +297,6 @@ function createModelInstance(device: GfxDevice, cache: GfxRenderCache, extraText
     const bdl = BMD.parse(bdlFile.buffer);
     const bmdModel = new BMDModel(device, cache, bdl);
     const modelInstance = new BMDModelInstance(bmdModel);
-    extraTextures.fillExtraTextures(modelInstance);
     modelInstance.passMask = isSkybox ? WindWakerPass.SKYBOX : WindWakerPass.MAIN;
 
     if (btkFile !== null) {
@@ -254,72 +319,75 @@ function createModelInstance(device: GfxDevice, cache: GfxRenderCache, extraText
 }
 
 class WindWakerRoomRenderer {
-    public model: BMDModelInstance | null;
-    public model1: BMDModelInstance | null;
-    public model2: BMDModelInstance | null;
-    public model3: BMDModelInstance | null;
+    public bg0: BMDModelInstance | null;
+    public bg1: BMDModelInstance | null;
+    public bg2: BMDModelInstance | null;
+    public bg3: BMDModelInstance | null;
     public name: string;
     public visible: boolean = true;
     public objectsVisible = true;
     public objectRenderers: ObjectRenderer[] = [];
     public dzb: DZB.DZB;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, extraTextures: ZWWExtraTextures, public roomIdx: number, public roomRarc: RARC.RARC) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, private extraTextures: ZWWExtraTextures, public roomIdx: number, public roomRarc: RARC.RARC) {
         this.name = `Room ${roomIdx}`;
 
         this.dzb = DZB.parse(assertExists(roomRarc.findFileData(`dzb/room.dzb`)));
 
-        this.model = createModelInstance(device, cache, extraTextures, roomRarc, `model`);
+        this.bg0 = createModelInstance(device, cache, roomRarc, `model`);
 
         // Ocean.
-        this.model1 = createModelInstance(device, cache, extraTextures, roomRarc, `model1`);
+        this.bg1 = createModelInstance(device, cache, roomRarc, `model1`);
 
         // Special effects / Skybox as seen in Hyrule.
-        this.model2 = createModelInstance(device, cache, extraTextures, roomRarc, `model2`);
+        this.bg2 = createModelInstance(device, cache, roomRarc, `model2`);
 
         // Windows / doors.
-        this.model3 = createModelInstance(device, cache, extraTextures, roomRarc, `model3`);
+        this.bg3 = createModelInstance(device, cache, roomRarc, `model3`);
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.visible)
             return;
 
-        if (this.model !== null)
-            this.model.prepareToRender(device, renderInstManager, viewerInput);
-        if (this.model1 !== null)
-            this.model1.prepareToRender(device, renderInstManager, viewerInput);
-        if (this.model2 !== null)
-            this.model2.prepareToRender(device, renderInstManager, viewerInput);
-        if (this.model3 !== null)
-            this.model3.prepareToRender(device, renderInstManager, viewerInput);
+        if (this.bg0 !== null)
+            this.bg0.prepareToRender(device, renderInstManager, viewerInput);
+        if (this.bg1 !== null)
+            this.bg1.prepareToRender(device, renderInstManager, viewerInput);
+        if (this.bg2 !== null)
+            this.bg2.prepareToRender(device, renderInstManager, viewerInput);
+        if (this.bg3 !== null)
+            this.bg3.prepareToRender(device, renderInstManager, viewerInput);
 
-        if (this.objectsVisible)
-            for (let i = 0; i < this.objectRenderers.length; i++)
+        if (this.objectsVisible) {
+            for (let i = 0; i < this.objectRenderers.length; i++) {
+                this.objectRenderers[i].setExtraTextures(this.extraTextures);
                 this.objectRenderers[i].prepareToRender(device, renderInstManager, viewerInput);
+            }
+        }
     }
 
     public setModelMatrix(modelMatrix: mat4): void {
-        if (this.model !== null)
-            mat4.copy(this.model.modelMatrix, modelMatrix);
-        if (this.model1 !== null)
-            mat4.copy(this.model1.modelMatrix, modelMatrix);
-        if (this.model3 !== null)
-            mat4.copy(this.model3.modelMatrix, modelMatrix);
+        if (this.bg0 !== null)
+            mat4.copy(this.bg0.modelMatrix, modelMatrix);
+        if (this.bg1 !== null)
+            mat4.copy(this.bg1.modelMatrix, modelMatrix);
+        if (this.bg3 !== null)
+            mat4.copy(this.bg3.modelMatrix, modelMatrix);
     }
 
     public setKyankoColors(colors: KyankoColors): void {
-        if (this.model !== null)
-            settingTevStruct(this.model, LightTevColorType.BG0, colors);
+        if (this.bg0 !== null)
+            settingTevStruct(this.bg0, LightTevColorType.BG0, colors);
 
-        if (this.model1 !== null)
-            settingTevStruct(this.model1, LightTevColorType.BG1, colors);
+        if (this.bg1 !== null)
+            settingTevStruct(this.bg1, LightTevColorType.BG1, colors);
 
-        if (this.model2 !== null)
-            settingTevStruct(this.model2, LightTevColorType.BG2, colors);
+        if (this.bg2 !== null)
+            settingTevStruct(this.bg2, LightTevColorType.BG2, colors);
 
-        if (this.model3 !== null)
-            settingTevStruct(this.model3, LightTevColorType.BG3, colors);
+        if (this.bg3 !== null)
+            settingTevStruct(this.bg3, LightTevColorType.BG3, colors);
 
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].setKyankoColors(colors);
@@ -339,40 +407,40 @@ class WindWakerRoomRenderer {
         }
     }
     public setVertexColorsEnabled(v: boolean): void {
-        if (this.model !== null)
-            this.model.setVertexColorsEnabled(v);
-        if (this.model1 !== null)
-            this.model1.setVertexColorsEnabled(v);
-        if (this.model2 !== null)
-            this.model2.setVertexColorsEnabled(v);
-        if (this.model3 !== null)
-            this.model3.setVertexColorsEnabled(v);
+        if (this.bg0 !== null)
+            this.bg0.setVertexColorsEnabled(v);
+        if (this.bg1 !== null)
+            this.bg1.setVertexColorsEnabled(v);
+        if (this.bg2 !== null)
+            this.bg2.setVertexColorsEnabled(v);
+        if (this.bg3 !== null)
+            this.bg3.setVertexColorsEnabled(v);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].setVertexColorsEnabled(v);
     }
 
     public setTexturesEnabled(v: boolean): void {
-        if (this.model !== null)
-            this.model.setTexturesEnabled(v);
-        if (this.model1 !== null)
-            this.model1.setTexturesEnabled(v);
-        if (this.model2 !== null)
-            this.model2.setTexturesEnabled(v);
-        if (this.model3 !== null)
-            this.model3.setTexturesEnabled(v);
+        if (this.bg0 !== null)
+            this.bg0.setTexturesEnabled(v);
+        if (this.bg1 !== null)
+            this.bg1.setTexturesEnabled(v);
+        if (this.bg2 !== null)
+            this.bg2.setTexturesEnabled(v);
+        if (this.bg3 !== null)
+            this.bg3.setTexturesEnabled(v);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].setTexturesEnabled(v);
     }
 
     public destroy(device: GfxDevice): void {
-        if (this.model !== null)
-            this.model.destroy(device);
-        if (this.model1 !== null)
-            this.model1.destroy(device);
-        if (this.model2 !== null)
-            this.model2.destroy(device);
-        if (this.model3 !== null)
-            this.model3.destroy(device);
+        if (this.bg0 !== null)
+            this.bg0.destroy(device);
+        if (this.bg1 !== null)
+            this.bg1.destroy(device);
+        if (this.bg2 !== null)
+            this.bg2.destroy(device);
+        if (this.bg3 !== null)
+            this.bg3.destroy(device);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].destroy(device);
     }
@@ -608,11 +676,11 @@ class SkyEnvironment {
     private vr_kasumi_mae: BMDModelInstance | null;
     private vr_back_cloud: BMDModelInstance | null;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, extraTextures: ZWWExtraTextures, stageRarc: RARC.RARC) {
-        this.vr_sky = createModelInstance(device, cache, extraTextures, stageRarc, `vr_sky`, true);
-        this.vr_uso_umi = createModelInstance(device, cache, extraTextures, stageRarc, `vr_uso_umi`, true);
-        this.vr_kasumi_mae = createModelInstance(device, cache, extraTextures, stageRarc, `vr_kasumi_mae`, true);
-        this.vr_back_cloud = createModelInstance(device, cache, extraTextures, stageRarc, `vr_back_cloud`, true);
+    constructor(device: GfxDevice, cache: GfxRenderCache, stageRarc: RARC.RARC) {
+        this.vr_sky = createModelInstance(device, cache, stageRarc, `vr_sky`, true);
+        this.vr_uso_umi = createModelInstance(device, cache, stageRarc, `vr_uso_umi`, true);
+        this.vr_kasumi_mae = createModelInstance(device, cache, stageRarc, `vr_kasumi_mae`, true);
+        this.vr_back_cloud = createModelInstance(device, cache, stageRarc, `vr_back_cloud`, true);
     }
 
     public setKyankoColors(colors: KyankoColors): void {
@@ -763,6 +831,8 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         const template = this.renderHelper.pushTemplateRenderInst();
         const renderInstManager = this.renderHelper.renderInstManager;
+
+        this.extraTextures.prepareToRender(device);
 
         template.filterKey = WindWakerPass.MAIN;
 
@@ -1049,9 +1119,9 @@ class SceneDesc {
             const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
             const ZAtoon = new BTIData(device, cache, BTI.parse(systemArc.findFileData(`dat/toon.bti`)!, `ZAtoon`).texture);
             const ZBtoonEX = new BTIData(device, cache, BTI.parse(systemArc.findFileData(`dat/toonex.bti`)!, `ZBtoonEX`).texture);
-            renderer.extraTextures = new ZWWExtraTextures(ZAtoon, ZBtoonEX);
+            renderer.extraTextures = new ZWWExtraTextures(device, ZAtoon, ZBtoonEX);
 
-            renderer.skyEnvironment = new SkyEnvironment(device, cache, renderer.extraTextures, stageRarc);
+            renderer.skyEnvironment = new SkyEnvironment(device, cache, stageRarc);
 
             for (let i = 0; i < this.rooms.length; i++) {
                 const roomIdx = Math.abs(this.rooms[i]);

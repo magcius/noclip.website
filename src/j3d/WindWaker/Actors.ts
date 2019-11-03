@@ -7,7 +7,7 @@ import { mat4, vec3 } from "gl-matrix";
 import { BMDModelInstance, BTIData } from "../render";
 import { ANK1, TTK1, TRK1, BTI_Texture } from "../j3d";
 import AnimationController from "../../AnimationController";
-import { KyankoColors } from "./zww_scenes";
+import { KyankoColors, ZWWExtraTextures } from "./zww_scenes";
 import { ColorKind, PacketParams, MaterialParams, ub_MaterialParams, loadedDataCoalescerComboGfx } from "../../gx/gx_render";
 import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../../gx/gx_render';
 import { AABB } from '../../Geometry';
@@ -55,8 +55,9 @@ export function settingTevStruct(actor: BMDModelInstance, type: LightTevColorTyp
 
 export interface ObjectRenderer {
     prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void;
-    setKyankoColors(colors: KyankoColors): void;
     destroy(device: GfxDevice): void;
+    setKyankoColors(colors: KyankoColors): void;
+    setExtraTextures(v: ZWWExtraTextures): void;
     setVertexColorsEnabled(v: boolean): void;
     setTexturesEnabled(v: boolean): void;
     visible: boolean;
@@ -106,6 +107,13 @@ export class BMDObjectRenderer implements ObjectRenderer {
     public setTexturesEnabled(v: boolean): void {
         this.modelInstance.setTexturesEnabled(v);
         this.childObjects.forEach((child)=> child.setTexturesEnabled(v));
+    }
+
+    public setExtraTextures(extraTextures: ZWWExtraTextures): void {
+        extraTextures.fillExtraTextures(this.modelInstance);
+
+        for (let i = 0; i < this.childObjects.length; i++)
+            this.childObjects[i].setExtraTextures(extraTextures);
     }
 
     public setKyankoColors(colors: KyankoColors): void {
@@ -484,6 +492,9 @@ export class FlowerObjectRenderer implements ObjectRenderer {
     public setKyankoColors(colors: KyankoColors): void {
         colorCopy(this.c0, colors.actorC0);
         colorCopy(this.k0, colors.actorK0);
+    }
+
+    public setExtraTextures(extraTextures: ZWWExtraTextures): void {
     }
 
     public destroy(device: GfxDevice): void {
