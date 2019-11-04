@@ -28,10 +28,20 @@ export enum ObjectFlags {
     IS_SUBWAY = 0x10,
     IGNORE_LIGHTING = 0x20,
     NO_ZBUFFER_WRITE = 0x40,
+    // VC
     DONT_RECEIVE_SHADOWS = 0x80,
     IGNORE_DRAW_DISTANCE = 0x100,
     IS_GLASS_TYPE_1 = 0x200,
     IS_GLASS_TYPE_2 = 0x400,
+    // SA
+    IS_GARAGE_DOOR = 0x800,
+    IS_DAMAGABLE = 0x1000,
+    IS_TREE = 0x2000,
+    IS_PALM = 0x4000,
+    DOES_NOT_COLLIDE_WITH_FLYER = 0x8000,
+    IS_TAG = 0x100000,
+    DISABLE_BACKFACE_CULLING = 0x200000,
+    IS_BREAKABLE_STATUE = 0x400000,
 }
 
 export interface ObjectDefinition {
@@ -83,6 +93,7 @@ export interface ItemInstance {
     rotation: quat;
     interior?: number;
     lod?: number;
+    lodDistance?: number;
 }
 
 export const INTERIOR_EVERYWHERE = 13;
@@ -121,15 +132,16 @@ function parseItemInstance(line: string[]): ItemInstance {
 }
 
 export interface ItemPlacement {
+    id: string;
     instances: ItemInstance[];
 }
 
-export function parseItemPlacement(text: string): ItemPlacement {
+export function parseItemPlacement(id: string, text: string): ItemPlacement {
     const instances = [] as ItemInstance[];
     readItems(text, function(section, line) {
         if (section === "inst") instances.push(parseItemInstance(line));
     });
-    return { instances };
+    return { id, instances };
 }
 
 export function parseItemPlacementBinary(view: DataView) {
@@ -158,7 +170,7 @@ export function parseItemPlacementBinary(view: DataView) {
             lod,
         });
     }
-    return { instances };
+    return instances;
 }
 
 export function parseZones(text: string): Map<string, AABB> {

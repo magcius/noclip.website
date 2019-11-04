@@ -3,10 +3,10 @@ import * as Viewer from '../viewer';
 import * as rw from 'librw';
 import { GfxDevice, GfxFormat } from '../gfx/platform/GfxPlatform';
 import { DataFetcher, DataFetcherFlags } from '../DataFetcher';
-import { GTA3Renderer, SceneRenderer, DrawKey, Texture, TextureArray, MeshInstance, ModelCache, SkyRenderer, rwTexture, MeshFragData } from './render';
+import { GTA3Renderer, SceneRenderer, DrawParams, Texture, TextureArray, MeshInstance, ModelCache, SkyRenderer, rwTexture, MeshFragData, AreaRenderer } from './render';
 import { SceneContext, Destroyable } from '../SceneBase';
 import { getTextDecoder, assert } from '../util';
-import { parseItemPlacement, ItemPlacement, parseItemDefinition, ItemDefinition, ObjectDefinition, ItemInstance, parseZones, parseItemPlacementBinary, createItemInstance } from './item';
+import { parseItemPlacement, ItemPlacement, parseItemDefinition, ItemDefinition, ObjectDefinition, ItemInstance, parseZones, parseItemPlacementBinary, createItemInstance, ObjectFlags } from './item';
 import { parseTimeCycle, ColorSet } from './time';
 import { parseWaterPro, waterMeshFragData, waterDefinition, parseWater } from './water';
 import { vec4 } from 'gl-matrix';
@@ -48,8 +48,8 @@ export class GTA3SceneDesc implements Viewer.SceneDesc {
         },
         ide: [] as string[],
         ipl: [] as string[],
-        ipl_stream: [] as string[],
     };
+    protected ipl_stream: { [k: string]: number } = {};
     protected versionIMG = 1;
     protected drawDistanceLimit = 100;
 
@@ -126,15 +126,21 @@ export class GTA3SceneDesc implements Viewer.SceneDesc {
         return parseItemDefinition(text);
     }
 
-    private async fetchIPL(dataFetcher: DataFetcher, id: string, binary = false): Promise<ItemPlacement> {
-        if (binary) {
-            const buffer = await this.fetch(dataFetcher, `models/gta3/${id}.ipl`);
-            return parseItemPlacementBinary(buffer!.createDataView());
-        } else {
-            const buffer = await this.fetch(dataFetcher, (id === 'props') ? `data/maps/props.IPL` : `data/maps/${id}.ipl`);
-            const text = getTextDecoder('utf8')!.decode(buffer!.createDataView());
-            return parseItemPlacement(text);
+    private async fetchIPL(dataFetcher: DataFetcher, id: string): Promise<ItemPlacement> {
+        const buffer = await this.fetch(dataFetcher, (id === 'props') ? `data/maps/props.IPL` : `data/maps/${id}.ipl`);
+        const text = getTextDecoder('utf8')!.decode(buffer!.createDataView());
+        const ipl = parseItemPlacement(id, text);
+        if (!id.match(/\//)) return ipl;
+        const basename = id.split('/')[1].toLowerCase();
+        const n = this.ipl_stream[basename];
+        if (n === undefined) return ipl;
+        for (let i = 0; i < n; i++) {
+            const sid = basename + '_stream' + i;
+            const sbuffer = await this.fetch(dataFetcher, `models/gta3/${sid}.ipl`);
+            const instances = parseItemPlacementBinary(sbuffer!.createDataView());
+            ipl.instances = ipl.instances.concat(instances);
         }
+        return ipl;
     }
 
     private async fetchTimeCycle(dataFetcher: DataFetcher): Promise<ColorSet[]> {
@@ -153,7 +159,7 @@ export class GTA3SceneDesc implements Viewer.SceneDesc {
         const buffer = await this.fetch(dataFetcher, this.paths.dat.water);
         if (this.paths.dat.water.endsWith('water.dat')) {
             const text = getTextDecoder('utf8')!.decode(buffer!.createDataView());
-            return [{ instances: [createItemInstance('water')] }, parseWater(text, this.water.texture)];
+            return [{ id: 'water', instances: [createItemInstance('water')] }, parseWater(text, this.water.texture)];
         } else {
             return [parseWaterPro(buffer!.createDataView(), this.water.origin), [waterMeshFragData(this.water.texture)]];
         }
@@ -200,7 +206,7 @@ export class GTA3SceneDesc implements Viewer.SceneDesc {
         rw.UVAnimDictionary.current = null;
     }
 
-    protected filter(item: ItemInstance, obj: ObjectDefinition, zone: string) {
+    protected filter(item: ItemInstance) {
         return true;
     }
 
@@ -223,28 +229,38 @@ export class GTA3SceneDesc implements Viewer.SceneDesc {
         }
         objects.set('water', waterDefinition);
 
-        const ipls = await Promise.all(
-            this.paths.ipl.map(id => this.fetchIPL(dataFetcher, id)).concat(
-            this.paths.ipl_stream.map(id => this.fetchIPL(dataFetcher, id, true))));
-        const [colorSets, zones] = await Promise.all([this.fetchTimeCycle(dataFetcher), this.fetchZones(dataFetcher)]);
+        const ipls = await Promise.all(this.paths.ipl.map(id => this.fetchIPL(dataFetcher, id)));
+        const colorSets = await this.fetchTimeCycle(dataFetcher);
         const [waterIPL, waterMesh] = await this.fetchWater(dataFetcher);
         ipls.push(waterIPL);
-
-        const renderer = new GTA3Renderer(device, colorSets, this.weatherTypes, this.weatherPeriods, this.water.origin);
-        const loadedDFF = new Map<string, Promise<void>>();
-        const modelCache = new ModelCache();
-        const texturesUsed = new Map<string, Set<string>>();
-        const textureSets = new Map<string, Set<Texture>>();
-        const drawKeys = new Map<string, DrawKey>();
-        const layers = new Map<DrawKey, MeshInstance[]>();
-
-        loadedDFF.set('water', (async () => { })());
-        modelCache.meshData.set('water', waterMesh);
 
         for (const ipl of ipls) for (const item of ipl.instances) {
             if (item.modelName === undefined && item.id !== undefined) {
                 item.modelName = objectIDs.get(item.id);
             }
+        }
+
+        for (const ipl of ipls) {
+            for (let itemIndex = 0; itemIndex < ipl.instances.length; itemIndex++) {
+                const item = ipl.instances[itemIndex];
+                if (item.lod !== undefined && item.lod >= 0) {
+                    const obj = objects.get(item.modelName!)!;
+                    const lod = ipl.instances[item.lod];
+                    lod.lodDistance = obj.drawDistance;
+                }
+            }
+        }
+
+        const renderer = new GTA3Renderer(device, colorSets, this.weatherTypes, this.weatherPeriods, this.water.origin);
+        const loadedDFF = new Map<string, Promise<void>>();
+        const modelCache = new ModelCache();
+        const texturesUsed = new Map<string, Set<string>>();
+        const areas = new Map<string, Map<DrawParams, MeshInstance[]>>();
+
+        loadedDFF.set('water', (async () => { })());
+        modelCache.meshData.set('water', waterMesh);
+
+        for (const ipl of ipls) for (const item of ipl.instances) {
             if (item.modelName === undefined) {
                 console.error('Missing model name for ID', item.id);
                 continue;
@@ -256,16 +272,10 @@ export class GTA3SceneDesc implements Viewer.SceneDesc {
                 console.warn('No definition for object', name);
                 continue;
             }
-            if ((name.startsWith('lod') && name !== 'lodistancoast01') || name.startsWith('islandlod')) continue; // ignore LOD objects
-
-            let zone = 'cityzon';
-            for (const [name, bb] of zones) {
-                if (bb.containsPoint(item.translation)) {
-                    zone = name;
-                    break;
-                }
+            if (item.lod === undefined) {
+                if ((name.startsWith('lod') && name !== 'lodistancoast01') || name.startsWith('islandlod')) continue; // ignore LOD objects
             }
-            if (!this.filter(item, obj, zone)) continue;
+            if (!this.filter(item)) continue;
 
             if (!loadedDFF.has(obj.modelName))
                 loadedDFF.set(obj.modelName, this.fetchDFF(dataFetcher, obj.modelName, clump => modelCache.addModel(clump, obj)));
@@ -292,22 +302,35 @@ export class GTA3SceneDesc implements Viewer.SceneDesc {
                 }
             }
 
-            let drawKey = new DrawKey(obj, zone);
-            if (drawKey.drawDistance !== undefined && (haslod || drawKey.drawDistance > this.drawDistanceLimit))
-                delete drawKey.drawDistance;
-            if (transparent) drawKey.renderLayer = GfxRendererLayer.TRANSLUCENT;
-            const drawKeyStr = JSON.stringify(drawKey);
-            if (drawKeys.has(drawKeyStr)) {
-                drawKey = drawKeys.get(drawKeyStr)!;
-            } else {
-                drawKeys.set(drawKeyStr, drawKey);
+            let params = new DrawParams();
+            if (!(obj.flags & ObjectFlags.IGNORE_DRAW_DISTANCE))
+                params.maxDistance = Math.ceil(obj.drawDistance / 50) * 50;
+            if (obj.tobj) {
+                params.timeOn = obj.timeOn;
+                params.timeOff = obj.timeOff;
             }
-            if (!layers.has(drawKey)) layers.set(drawKey, []);
+            params.water = (obj.modelName === 'water');
+            params.additive = !!(obj.flags & ObjectFlags.ADDITIVE);
+            params.backface = !!(obj.flags & ObjectFlags.DISABLE_BACKFACE_CULLING);
+            if (transparent || !!(obj.flags & ObjectFlags.DRAW_LAST))
+                params.renderLayer = GfxRendererLayer.TRANSLUCENT;
+            if (item.lodDistance !== undefined)
+                params.minDistance = Math.ceil(item.lodDistance / 50) * 50;
+            if ((item.lod === undefined && (haslod || params.maxDistance > this.drawDistanceLimit)) || item.lodDistance !== undefined || name.startsWith('lod'))
+                params.maxDistance = Infinity;
+            params = params.intern();
+
+            const key = ipl.id;
+            if (!areas.has(key)) areas.set(key, new Map());
+            const meshMap = areas.get(key)!;
+            if (!meshMap.has(params)) meshMap.set(params, []);
             const mesh = new MeshInstance(model, item);
-            layers.get(drawKey)!.push(mesh);
+            meshMap.get(params)!.push(mesh);
         }
 
-        const textureArrays = [] as TextureArray[];
+        const textureSets = new Map<string, Set<Texture>>();
+        const textureArrays: TextureArray[] = [];
+        const texturesMissing = new Set<string>();
         for (const [txdName, texNames] of texturesUsed) {
             await this.fetchTXD(device, dataFetcher, txdName, texture => {
                 const texName = texture.name;
@@ -323,29 +346,38 @@ export class GTA3SceneDesc implements Viewer.SceneDesc {
                     textureSet.clear();
                 }
             });
-            if (texNames.size > 0) console.warn('Missing textures', Array.from(texNames).join());
+            for (const texName of texNames) texturesMissing.add(texName);
         }
         for (const textureSet of textureSets.values()) {
             textureArrays.push(new TextureArray(device, Array.from(textureSet)));
         }
 
+        if (texturesMissing.size > 0)
+            console.warn('Missing textures', Array.from(texturesMissing).sort());
+
         const sealevel = this.water.origin[2];
         const cache = renderer.renderHelper.getCache();
-        for (const [key, layerMeshes] of layers) {
-            if (SceneRenderer.applicable(layerMeshes))
-                renderer.sceneRenderers.push(new SceneRenderer(device, cache, key, layerMeshes, sealevel));
-            for (const atlas of textureArrays) {
-                if (!SceneRenderer.applicable(layerMeshes, atlas)) continue;
-                renderer.sceneRenderers.push(new SceneRenderer(device, cache, key, layerMeshes, sealevel, atlas));
-                if (key.renderLayer === GfxRendererLayer.TRANSLUCENT && !key.water)
-                    renderer.sceneRenderers.push(new SceneRenderer(device, cache, key, layerMeshes, sealevel, atlas, true));
+        for (const area of areas.values()) {
+            const areaRenderer = new AreaRenderer();
+            for (const [params, meshes] of area) {
+                for (const inst of meshes) for (const frag of inst.frags)
+                    if (frag.texName !== undefined && texturesMissing.has(frag.texName)) delete frag.texName;
+                if (SceneRenderer.applicable(meshes))
+                    areaRenderer.push(new SceneRenderer(device, cache, params, meshes, sealevel));
+                for (const atlas of textureArrays) {
+                    if (!SceneRenderer.applicable(meshes, atlas)) continue;
+                    areaRenderer.push(new SceneRenderer(device, cache, params, meshes, sealevel, atlas));
+                    if (params.renderLayer === GfxRendererLayer.TRANSLUCENT && !params.water)
+                        areaRenderer.push(new SceneRenderer(device, cache, params, meshes, sealevel, atlas, true));
+                }
             }
+            renderer.renderers.push(areaRenderer);
         }
 
         await this.fetchTXD(device, dataFetcher, 'particle', texture => {
             if (texture.name === `particle/${this.water.texture}`) {
                 const atlas = new TextureArray(device, [texture]);
-                renderer.sceneRenderers.push(new SkyRenderer(device, cache, atlas));
+                renderer.renderers.push(new SkyRenderer(device, cache, atlas));
             }
         });
 

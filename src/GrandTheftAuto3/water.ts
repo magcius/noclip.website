@@ -1,7 +1,7 @@
 
 import { vec4, vec3, vec2, quat } from 'gl-matrix';
 import { TransparentBlack, colorCopy, Color } from '../Color';
-import { ItemPlacement, ItemInstance, ObjectDefinition, INTERIOR_EVERYWHERE } from './item';
+import { ItemPlacement, ItemInstance, ObjectDefinition, INTERIOR_EVERYWHERE, ObjectFlags } from './item';
 import { MeshFragData } from './render';
 
 export function parseWaterPro(view: DataView, origin: vec4): ItemPlacement {
@@ -31,14 +31,14 @@ export function parseWaterPro(view: DataView, origin: vec4): ItemPlacement {
             });
         }
     }
-    return { instances };
+    return { id: 'water', instances };
 }
 
 export const waterDefinition: ObjectDefinition = {
     modelName: 'water',
     txdName: 'particle',
-    drawDistance: 1000,
-    flags: 0,
+    drawDistance: Infinity,
+    flags: ObjectFlags.DISABLE_BACKFACE_CULLING,
     tobj: false,
 };
 
