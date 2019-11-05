@@ -1,6 +1,6 @@
 
 import { DeviceProgram } from "../Program";
-import { GfxBindingLayoutDescriptor, GfxProgram, GfxBuffer, GfxInputLayout, GfxInputState, GfxDevice, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexAttributeFrequency, GfxVertexBufferDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode } from "../gfx/platform/GfxPlatform";
+import { GfxBindingLayoutDescriptor, GfxProgram, GfxBuffer, GfxInputLayout, GfxInputState, GfxDevice, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { makeTriangleIndexBuffer, GfxTopology } from "../gfx/helpers/TopologyHelpers";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
@@ -107,16 +107,16 @@ export class GridPlane {
         this.idxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, makeTriangleIndexBuffer(GfxTopology.TRISTRIP, 0, 4).buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: GridPlaneProgram.a_Position, format: GfxFormat.F32_RGB, bufferByteOffset: 0, bufferIndex: 0, frequency: GfxVertexAttributeFrequency.PER_VERTEX, },
+            { location: GridPlaneProgram.a_Position, format: GfxFormat.F32_RGB, bufferByteOffset: 0, bufferIndex: 0, },
         ];
         this.inputLayout = device.createInputLayout({
             vertexAttributeDescriptors,
             indexBufferFormat: GfxFormat.U16_R,
         })
         const vertexBuffers: GfxVertexBufferDescriptor[] = [
-            { buffer: this.posBuffer, byteOffset: 0, byteStride: 12 },
+            { buffer: this.posBuffer, byteOffset: 0, byteStride: 12, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
         ];
-        this.inputState = device.createInputState(this.inputLayout, vertexBuffers, { buffer: this.idxBuffer, byteOffset: 0, byteStride: 1 });
+        this.inputState = device.createInputState(this.inputLayout, vertexBuffers, { buffer: this.idxBuffer, byteOffset: 0 });
     }
 
     public setSize(n: number): void {

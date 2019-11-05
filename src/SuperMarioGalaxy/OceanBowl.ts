@@ -2,7 +2,7 @@
 import { vec3, mat4, vec2 } from "gl-matrix";
 import { SceneObjHolder, getObjectName } from "./Main";
 import { connectToScene, loadBTIData } from "./Actors";
-import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputLayout, GfxInputState, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxCullMode } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputLayout, GfxInputState, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxCullMode } from "../gfx/platform/GfxPlatform";
 import { ViewerRenderInput } from "../viewer";
 import { JMapInfoIter } from "./JMapInfo";
 import { computeModelMatrixSRT, clamp } from "../MathHelpers";
@@ -192,12 +192,12 @@ export class OceanBowl extends LiveActor {
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: getVertexAttribLocation(GX.VertexAttribute.POS), format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
-            { location: getVertexAttribLocation(GX.VertexAttribute.CLR0), format: GfxFormat.U8_RGBA_NORM, bufferIndex: 1, bufferByteOffset: 0, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
-            { location: getVertexAttribLocation(GX.VertexAttribute.TEX0), format: GfxFormat.S16_RG_NORM, bufferIndex: 2, bufferByteOffset: 0, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
-            { location: getVertexAttribLocation(GX.VertexAttribute.TEX1), format: GfxFormat.S16_RG_NORM, bufferIndex: 2, bufferByteOffset: 0, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
-            { location: getVertexAttribLocation(GX.VertexAttribute.TEX2), format: GfxFormat.S16_RG_NORM, bufferIndex: 2, bufferByteOffset: 0, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
-            { location: getVertexAttribLocation(GX.VertexAttribute.TEX3), format: GfxFormat.S16_RG_NORM, bufferIndex: 2, bufferByteOffset: 0, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
+            { location: getVertexAttribLocation(GX.VertexAttribute.POS), format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0, },
+            { location: getVertexAttribLocation(GX.VertexAttribute.CLR0), format: GfxFormat.U8_RGBA_NORM, bufferIndex: 1, bufferByteOffset: 0, },
+            { location: getVertexAttribLocation(GX.VertexAttribute.TEX0), format: GfxFormat.S16_RG_NORM, bufferIndex: 2, bufferByteOffset: 0, },
+            { location: getVertexAttribLocation(GX.VertexAttribute.TEX1), format: GfxFormat.S16_RG_NORM, bufferIndex: 2, bufferByteOffset: 0, },
+            { location: getVertexAttribLocation(GX.VertexAttribute.TEX2), format: GfxFormat.S16_RG_NORM, bufferIndex: 2, bufferByteOffset: 0, },
+            { location: getVertexAttribLocation(GX.VertexAttribute.TEX3), format: GfxFormat.S16_RG_NORM, bufferIndex: 2, bufferByteOffset: 0, },
         ];
 
         this.inputLayout = cache.createInputLayout(device, {
@@ -206,10 +206,10 @@ export class OceanBowl extends LiveActor {
         });
 
         this.inputState = device.createInputState(this.inputLayout, [
-            { buffer: this.positionBuffer, byteOffset: 0, byteStride: 4*3 },
-            { buffer: this.colorBuffer, byteOffset: 0, byteStride: 4 },
-            { buffer: this.texCoord0Buffer, byteOffset: 0, byteStride: 4 },
-        ], { buffer: this.indexBuffer, byteOffset: 0, byteStride: 2 });
+            { buffer: this.positionBuffer, byteOffset: 0, byteStride: 4*3, frequency: GfxVertexBufferFrequency.PER_VERTEX },
+            { buffer: this.colorBuffer, byteOffset: 0, byteStride: 4, frequency: GfxVertexBufferFrequency.PER_VERTEX },
+            { buffer: this.texCoord0Buffer, byteOffset: 0, byteStride: 4, frequency: GfxVertexBufferFrequency.PER_VERTEX },
+        ], { buffer: this.indexBuffer, byteOffset: 0 });
 
         // Material.
         const lightChannel: ColorChannelControl = {

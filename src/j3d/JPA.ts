@@ -9,7 +9,7 @@ import { assert, readString, assertExists, nArray } from "../util";
 import { BTI } from "./j3d";
 import { vec3, mat4, vec2 } from "gl-matrix";
 import { Endianness } from "../endian";
-import { GfxDevice, GfxInputLayout, GfxInputState, GfxBuffer, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxBufferUsage, GfxBufferFrequencyHint, GfxHostAccessPass, GfxVertexBufferDescriptor } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxInputLayout, GfxInputState, GfxBuffer, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBufferFrequencyHint, GfxHostAccessPass, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { BTIData } from "./render";
 import { getPointHermite } from "../Spline";
 import { GXMaterial, AlphaTest, RopInfo, TexGen, TevStage, getVertexAttribLocation, IndTexStage } from "../gx/gx_material";
@@ -671,8 +671,8 @@ class JPAGlobalRes {
 
     constructor(device: GfxDevice) {
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: getVertexAttribLocation(GX.VertexAttribute.POS), format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
-            { location: getVertexAttribLocation(GX.VertexAttribute.TEX0), format: GfxFormat.F32_RG, bufferIndex: 0, bufferByteOffset: 3*4, frequency: GfxVertexAttributeFrequency.PER_VERTEX },
+            { location: getVertexAttribLocation(GX.VertexAttribute.POS), format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0 },
+            { location: getVertexAttribLocation(GX.VertexAttribute.TEX0), format: GfxFormat.F32_RG, bufferIndex: 0, bufferByteOffset: 3*4 },
         ];
 
         this.inputLayout = device.createInputLayout({
@@ -807,8 +807,8 @@ class JPAGlobalRes {
         ]).buffer);
 
         this.inputStateQuad = device.createInputState(this.inputLayout, [
-            { buffer: this.vertexBufferQuad, byteOffset: 0, byteStride: 3*4+2*4 },
-        ], { buffer: this.indexBufferQuad, byteOffset: 0, byteStride: 2 });
+            { buffer: this.vertexBufferQuad, byteOffset: 0, byteStride: 3*4+2*4, frequency: GfxVertexBufferFrequency.PER_VERTEX },
+        ], { buffer: this.indexBufferQuad, byteOffset: 0 });
     }
 
     public destroy(device: GfxDevice): void {
@@ -891,12 +891,12 @@ const MAX_STRIPE_VERTEX_COUNT = 512;
 class StripeBufferManager {
     public stripeEntry: StripeEntry[] = [];
     private indexBuffer: GfxBuffer;
-    private indexBufferDescriptor: GfxVertexBufferDescriptor;
+    private indexBufferDescriptor: GfxIndexBufferDescriptor;
 
     constructor(device: GfxDevice, public inputLayout: GfxInputLayout) {
         const tristripIndexData = makeTriangleIndexBuffer(GfxTopology.TRISTRIP, 0, MAX_STRIPE_VERTEX_COUNT);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, tristripIndexData.buffer);
-        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0, byteStride: 0 };
+        this.indexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
     }
 
     public allocateVertexBuffer(device: GfxDevice, vertexCount: number): StripeEntry {
@@ -915,7 +915,7 @@ class StripeBufferManager {
 
         const gfxBuffer = device.createBuffer(wordCount, GfxBufferUsage.VERTEX, GfxBufferFrequencyHint.DYNAMIC);
         const inputState = device.createInputState(this.inputLayout, [
-            { buffer: gfxBuffer, byteOffset: 0, byteStride: 5*4 },
+            { buffer: gfxBuffer, byteOffset: 0, byteStride: 5*4, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
         ], this.indexBufferDescriptor);
         const entry = new StripeEntry(wordCount, gfxBuffer, inputState);
         this.stripeEntry.push(entry);

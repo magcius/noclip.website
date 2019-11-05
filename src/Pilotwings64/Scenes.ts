@@ -1,5 +1,5 @@
 import {
-    GfxDevice, GfxBuffer, GfxInputLayout, GfxInputState, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexAttributeFrequency,
+    GfxDevice, GfxBuffer, GfxInputLayout, GfxInputState, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency,
     GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxTextureDimension, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode,
     GfxSampler, GfxBlendFactor, GfxBlendMode, GfxTexture, GfxMegaStateDescriptor, GfxCullMode, GfxCompareMode,
 } from "../gfx/platform/GfxPlatform";
@@ -1518,9 +1518,9 @@ class MeshData {
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, mesh.indexData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: PW64Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 * 0x04, frequency: GfxVertexAttributeFrequency.PER_VERTEX, },
-            { location: PW64Program.a_TexCoord, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 3 * 0x04, frequency: GfxVertexAttributeFrequency.PER_VERTEX, },
-            { location: PW64Program.a_Color, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 5 * 0x04, frequency: GfxVertexAttributeFrequency.PER_VERTEX, },
+            { location: PW64Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 * 0x04, },
+            { location: PW64Program.a_TexCoord, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 3 * 0x04, },
+            { location: PW64Program.a_Color, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 5 * 0x04, },
         ];
 
         this.inputLayout = device.createInputLayout({
@@ -1529,8 +1529,8 @@ class MeshData {
         });
 
         this.inputState = device.createInputState(this.inputLayout, [
-            { buffer: this.vertexBuffer, byteOffset: 0, byteStride: 9 * 0x04, },
-        ], { buffer: this.indexBuffer, byteOffset: 0, byteStride: 0x02 });
+            { buffer: this.vertexBuffer, byteOffset: 0, byteStride: 9 * 0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX },
+        ], { buffer: this.indexBuffer, byteOffset: 0 });
     }
 
     public destroy(device: GfxDevice): void {
@@ -2635,7 +2635,7 @@ class SnowRenderer {
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, flakeIndices.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: SnowProgram.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0, frequency: GfxVertexAttributeFrequency.PER_VERTEX, },
+            { location: SnowProgram.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0, },
         ];
 
         this.inputLayout = device.createInputLayout({
@@ -2644,8 +2644,8 @@ class SnowRenderer {
         });
 
         this.inputState = device.createInputState(this.inputLayout, [
-            { buffer: this.vertexBuffer, byteOffset: 0, byteStride: 3 * 0x04, },
-        ], { buffer: this.indexBuffer, byteOffset: 0, byteStride: 0x02 });
+            { buffer: this.vertexBuffer, byteOffset: 0, byteStride: 3 * 0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+        ], { buffer: this.indexBuffer, byteOffset: 0 });
 
     }
 

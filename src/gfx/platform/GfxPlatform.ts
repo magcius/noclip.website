@@ -69,15 +69,16 @@ export const enum GfxBufferFrequencyHint {
     DYNAMIC = 0x02,
 }
 
+export const enum GfxVertexBufferFrequency {
+    PER_VERTEX = 0x01,
+    PER_INSTANCE = 0x02,
+}
+
 export interface GfxVertexBufferDescriptor {
     buffer: GfxBuffer;
     byteOffset: number;
     byteStride: number;
-}
-
-export const enum GfxVertexAttributeFrequency {
-    PER_VERTEX = 0x01,
-    PER_INSTANCE = 0x02,
+    frequency: GfxVertexBufferFrequency;
 }
 
 export interface GfxVertexAttributeDescriptor {
@@ -85,8 +86,12 @@ export interface GfxVertexAttributeDescriptor {
     format: GfxFormat;
     bufferIndex: number;
     bufferByteOffset: number;
-    frequency: GfxVertexAttributeFrequency;
     usesIntInShader?: boolean;
+}
+
+export interface GfxIndexBufferDescriptor {
+    buffer: GfxBuffer;
+    byteOffset: number;
 }
 
 export const enum GfxTextureDimension {
@@ -293,7 +298,7 @@ export interface GfxDevice {
     createProgram(program: DeviceProgram): GfxProgram;
     createBindings(bindingsDescriptor: GfxBindingsDescriptor): GfxBindings;
     createInputLayout(inputLayoutDescriptor: GfxInputLayoutDescriptor): GfxInputLayout;
-    createInputState(inputLayout: GfxInputLayout, buffers: (GfxVertexBufferDescriptor | null)[], indexBuffer: GfxVertexBufferDescriptor | null): GfxInputState;
+    createInputState(inputLayout: GfxInputLayout, buffers: (GfxVertexBufferDescriptor | null)[], indexBuffer: GfxIndexBufferDescriptor | null): GfxInputState;
     createRenderPipeline(descriptor: GfxRenderPipelineDescriptor): GfxRenderPipeline;
 
     destroyBuffer(o: GfxBuffer): void;

@@ -3,7 +3,7 @@ import * as UI from '../ui';
 import * as Viewer from '../viewer';
 import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
 
-import { GfxDevice, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode, GfxCullMode, GfxCompareMode, GfxInputState, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxVertexBufferDescriptor, GfxBufferBinding, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxHostAccessPass, GfxBlendMode, GfxBlendFactor, GfxProgram, GfxMegaStateDescriptor, GfxRenderPass } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode, GfxCullMode, GfxCompareMode, GfxInputState, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxBufferBinding, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxHostAccessPass, GfxBlendMode, GfxBlendFactor, GfxProgram, GfxMegaStateDescriptor, GfxRenderPass, GfxIndexBufferDescriptor } from '../gfx/platform/GfxPlatform';
 
 import * as BNTX from './bntx';
 import { surfaceToCanvas } from '../Common/bc_texture';
@@ -554,11 +554,15 @@ class FVTXData {
                     bufferIndex: attribBufferIndex,
                     // When we convert the buffer we remove the byte offset.
                     bufferByteOffset: 0,
-                    frequency: GfxVertexAttributeFrequency.PER_VERTEX,
                 });
 
                 const gfxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, convertedAttribute.data);
-                this.vertexBufferDescriptors[attribBufferIndex] = { buffer: gfxBuffer, byteOffset: 0, byteStride: convertedAttribute.stride };
+                this.vertexBufferDescriptors[attribBufferIndex] = {
+                    buffer: gfxBuffer,
+                    byteOffset: 0,
+                    byteStride: convertedAttribute.stride,
+                    frequency: GfxVertexBufferFrequency.PER_VERTEX,
+                };
             } else {
                 // Can use buffer data directly.
                 this.vertexAttributeDescriptors.push({
@@ -566,12 +570,16 @@ class FVTXData {
                     format: translateAttributeFormat(vertexAttribute.format),
                     bufferIndex: bufferIndex,
                     bufferByteOffset: vertexAttribute.offset,
-                    frequency: GfxVertexAttributeFrequency.PER_VERTEX,
                 });
 
                 if (!this.vertexBufferDescriptors[bufferIndex]) {
                     const gfxBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.VERTEX, vertexBuffer.data);
-                    this.vertexBufferDescriptors[bufferIndex] = { buffer: gfxBuffer, byteOffset: 0, byteStride: vertexBuffer.stride };
+                    this.vertexBufferDescriptors[bufferIndex] = {
+                        buffer: gfxBuffer,
+                        byteOffset: 0,
+                        byteStride: vertexBuffer.stride,
+                        frequency: GfxVertexBufferFrequency.PER_VERTEX,
+                    };
                 }
             }
         }
@@ -629,7 +637,7 @@ export class FSHPMeshData {
         });
     
         this.indexBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.INDEX, mesh.indexBufferData);
-        const indexBufferDescriptor: GfxVertexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0, byteStride: 0 };
+        const indexBufferDescriptor: GfxIndexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
         this.inputState = device.createInputState(this.inputLayout, fvtxData.vertexBufferDescriptors, indexBufferDescriptor);
     }
 

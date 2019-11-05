@@ -1,5 +1,5 @@
 
-import { GfxTexture, GfxDevice, GfxFormat, GfxInputLayout, GfxInputState, GfxBuffer, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxVertexAttributeFrequency, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform";
+import { GfxTexture, GfxDevice, GfxFormat, GfxInputLayout, GfxInputState, GfxBuffer, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform";
 import { vec3, vec2 } from "gl-matrix";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { makeTextureFromImageData } from "./Texture";
@@ -57,17 +57,17 @@ export class ArtObjectData {
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX,indicesI32A.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0, frequency: GfxVertexAttributeFrequency.PER_VERTEX, }, // Position
-            { location: 1, bufferIndex: 1, format: GfxFormat.F32_RG,  bufferByteOffset: 0, frequency: GfxVertexAttributeFrequency.PER_VERTEX, }, // TexCoord
+            { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0, }, // Position
+            { location: 1, bufferIndex: 1, format: GfxFormat.F32_RG,  bufferByteOffset: 0, }, // TexCoord
         ];
         this.inputLayout = device.createInputLayout({
             indexBufferFormat: GfxFormat.U32_R,
             vertexAttributeDescriptors,
         });
         this.inputState = device.createInputState(this.inputLayout, [
-            { buffer: this.vertexBuffer, byteOffset: 0, byteStride: 3*0x04, },
-            { buffer: this.texcoordBuffer, byteOffset: 0, byteStride: 2*0x04, }],
-            { buffer: this.indexBuffer, byteOffset: 0, byteStride: 0x04 });
+            { buffer: this.vertexBuffer, byteOffset: 0, byteStride: 3*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { buffer: this.texcoordBuffer, byteOffset: 0, byteStride: 2*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, }],
+            { buffer: this.indexBuffer, byteOffset: 0 });
 
         this.texture = makeTextureFromImageData(device, texImageData);
         this.sampler = device.createSampler({

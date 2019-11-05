@@ -1,5 +1,5 @@
 
-import { GfxTexture, GfxDevice, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexAttributeFrequency, GfxBuffer, GfxBufferUsage, GfxSampler } from "../gfx/platform/GfxPlatform";
+import { GfxTexture, GfxDevice, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxBuffer, GfxBufferUsage, GfxSampler } from "../gfx/platform/GfxPlatform";
 import { makeTextureFromImageData } from "./Texture";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { vec2, mat4 } from "gl-matrix";
@@ -101,16 +101,16 @@ export class BackgroundPlaneStaticData {
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0*0x04, frequency: GfxVertexAttributeFrequency.PER_VERTEX, }, // Position
-            { location: 1, bufferIndex: 0, format: GfxFormat.F32_RG,  bufferByteOffset: 3*0x04, frequency: GfxVertexAttributeFrequency.PER_VERTEX, }, // TexCoord
+            { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0*0x04, }, // Position
+            { location: 1, bufferIndex: 0, format: GfxFormat.F32_RG,  bufferByteOffset: 3*0x04, }, // TexCoord
         ];
         this.inputLayout = device.createInputLayout({
             indexBufferFormat: GfxFormat.U16_R,
             vertexAttributeDescriptors,
         });
         this.inputState = device.createInputState(this.inputLayout, [
-            { buffer: this.vertexBuffer, byteOffset: 0, byteStride: 5*0x04, },
-        ], { buffer: this.indexBuffer, byteOffset: 0, byteStride: 0x04 });
+            { buffer: this.vertexBuffer, byteOffset: 0, byteStride: 5*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+        ], { buffer: this.indexBuffer, byteOffset: 0 });
     }
 
     public destroy(device: GfxDevice): void {
