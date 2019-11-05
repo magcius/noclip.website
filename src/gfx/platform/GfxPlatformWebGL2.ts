@@ -3,17 +3,36 @@ import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, Gfx
 import { _T, GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource } from "./GfxPlatformImpl";
 import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags } from "./GfxPlatformFormat";
 
-import { DeviceProgram, ProgramCache, FullscreenProgram } from '../../Program';
-import { assert, assertExists } from '../../util';
+import { DeviceProgram } from '../../Program';
+import { assert, assertExists, leftPad } from '../../util';
 import { copyMegaState, defaultMegaState, fullscreenMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
 import { IS_DEVELOPMENT } from '../../BuildVersion';
 import { White, colorEqual, colorCopy } from '../../Color';
+import { range } from '../../MathHelpers';
+
+const SHADER_DEBUG = IS_DEVELOPMENT;
+
+// TODO(jstpierre): Turn this back on at some point in the future. The DataShare really breaks this concept...
+const TRACK_RESOURCES = false && IS_DEVELOPMENT;
 
 // This is a workaround for ANGLE not supporting UBOs greater than 64kb (the limit of D3D).
 // https://bugs.chromium.org/p/angleproject/issues/detail?id=3388
 const UBO_PAGE_MAX_BYTE_SIZE = 0x10000;
 
-export class FullscreenCopyProgram extends FullscreenProgram {
+class FullscreenProgram extends DeviceProgram {
+    public vert: string = `
+out vec2 v_TexCoord;
+
+void main() {
+    v_TexCoord.x = (gl_VertexID == 1) ? 2.0 : 0.0;
+    v_TexCoord.y = (gl_VertexID == 2) ? 2.0 : 0.0;
+    gl_Position.xy = v_TexCoord * vec2(2) - vec2(1);
+    gl_Position.zw = vec2(-1, 1);
+}
+`;
+}
+
+class FullscreenCopyProgram extends FullscreenProgram {
     public frag: string = `
 uniform sampler2D u_Texture;
 in vec2 v_TexCoord;
@@ -262,6 +281,17 @@ function createBindingLayouts(bindingLayouts: GfxBindingLayoutDescriptor[]): Gfx
     return { numUniformBuffers: firstUniformBuffer, numSamplers: firstSampler, bindingLayoutTables };
 }
 
+function findall(haystack: string, needle: RegExp): RegExpExecArray[] {
+    const results: RegExpExecArray[] = [];
+    while (true) {
+        const result = needle.exec(haystack);
+        if (!result)
+            break;
+        results.push(result);
+    }
+    return results;
+}
+
 type ArrayBufferView2 = Float32Array | Uint32Array;
 class Growable<T extends ArrayBufferView2> {
     public b: T;
@@ -505,8 +535,6 @@ function applyMegaState(gl: WebGL2RenderingContext, currentMegaState: GfxMegaSta
     }
 }
 
-// TODO(jstpierre): Turn this back on at some point in the future. The DataShare really breaks this concept...
-const TRACK_RESOURCES = false && IS_DEVELOPMENT;
 class ResourceCreationTracker {
     public liveObjects = new Set<GfxResource>();
     public creationStacks = new Map<GfxResource, string>();
@@ -540,6 +568,106 @@ class ResourceCreationTracker {
 
 interface KHR_parallel_shader_compile {
     COMPLETION_STATUS_KHR: number;
+}
+
+function prependLineNo(str: string, lineStart: number = 1) {
+    const lines = str.split('\n');
+    return lines.map((s, i) => `${leftPad('' + (lineStart + i), 4, ' ')}  ${s}`).join('\n');
+}
+
+function compileShader(gl: WebGL2RenderingContext, str: string, type: number) {
+    const shader: WebGLShader = assertExists(gl.createShader(type));
+
+    gl.shaderSource(shader, str);
+    gl.compileShader(shader);
+
+    if (SHADER_DEBUG && !gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        console.error(prependLineNo(str));
+        const debug_shaders = gl.getExtension('WEBGL_debug_shaders');
+        if (debug_shaders)
+            console.error(debug_shaders.getTranslatedShaderSource(shader));
+        console.error(gl.getShaderInfoLog(shader));
+        gl.deleteShader(shader);
+        return null;
+    }
+
+    return shader;
+}
+
+interface ProgramKey {
+    vert: string;
+    frag: string;
+}
+
+abstract class MemoizeCache<TKey, TRes> {
+    private cache = new Map<string, TRes>();
+
+    protected abstract make(key: TKey): TRes | null;
+    protected abstract makeKey(key: TKey): string;
+
+    public get(key: TKey): TRes | null {
+        const keyStr = this.makeKey(key);
+        if (this.cache.has(keyStr)) {
+            return assertExists(this.cache.get(keyStr));
+        } else {
+            const obj = this.make(key);
+            if (obj !== null)
+                this.cache.set(keyStr, obj);
+            return obj;
+        }
+    }
+
+    public clear(): void {
+        this.cache.clear();
+    }
+}
+
+interface ProgramWithKey extends WebGLProgram {
+    uniqueKey: number;
+}
+
+class ProgramCache extends MemoizeCache<ProgramKey, ProgramWithKey> {
+    private _uniqueKey: number = 0;
+
+    constructor(private gl: WebGL2RenderingContext) {
+        super();
+    }
+
+    protected make(key: ProgramKey): ProgramWithKey | null {
+        const gl = this.gl;
+        const vertShader = compileShader(gl, key.vert, gl.VERTEX_SHADER);
+        const fragShader = compileShader(gl, key.frag, gl.FRAGMENT_SHADER);
+        if (!vertShader || !fragShader)
+            return null;
+        const prog = gl.createProgram() as ProgramWithKey;
+        gl.attachShader(prog, vertShader);
+        gl.attachShader(prog, fragShader);
+        gl.linkProgram(prog);
+        gl.deleteShader(vertShader);
+        gl.deleteShader(fragShader);
+        if (SHADER_DEBUG && !gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+            console.error(key.vert);
+            console.error(key.frag);
+            console.error(gl.getProgramInfoLog(prog));
+            gl.deleteProgram(prog);
+            return null;
+        }
+        prog.uniqueKey = ++this._uniqueKey;
+        return prog;
+    }
+
+    protected destroy(obj: ProgramWithKey) {
+        const gl = this.gl;
+        gl.deleteProgram(obj);
+    }
+
+    protected makeKey(key: ProgramKey): string {
+        return `${key.vert}$${key.frag}`;
+    }
+
+    public compileProgram(vert: string, frag: string) {
+        return this.get({ vert, frag });
+    }
 }
 
 class GfxImplP_GL implements GfxSwapChain, GfxDevice {
@@ -602,7 +730,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
 
         this._fullscreenCopyProgram = this._createProgram(new FullscreenCopyProgram()) as GfxProgramP_GL;
-        this._fullscreenCopyProgram.deviceProgram.compile(this, this._programCache);
+        this._tryCompileDeviceProgram(this._fullscreenCopyProgram.deviceProgram);
 
         this._resolveReadFramebuffer = this.ensureResourceExists(gl.createFramebuffer());
         this._resolveDrawFramebuffer = this.ensureResourceExists(gl.createFramebuffer());
@@ -858,7 +986,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _useDeviceProgram(program: DeviceProgram): void {
         if (this._currentProgram !== program.glProgram) {
             this.gl.useProgram(program.glProgram);
-            program.bind(this);
+            this._tryBindDeviceProgram(program);
             this._currentProgram = program.glProgram;
         }
     }
@@ -1109,7 +1237,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             }
         }
 
-        program.deviceProgram.compile(this, this._programCache);
+        this._tryCompileDeviceProgram(program.deviceProgram);
 
         if (inputLayout !== null) {
             for (let i = 0; i < inputLayout.vertexAttributeDescriptors.length; i++) {
@@ -1457,6 +1585,54 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             this._debugGroupStack[i].triangleCount += count;
     }
 
+    private _tryCompileDeviceProgram(deviceProgram: DeviceProgram): void {
+        if (!deviceProgram.compileDirty)
+            return;
+
+        deviceProgram.ensurePreprocessed(this);
+
+        const newProg = this._programCache.compileProgram(deviceProgram.preprocessedVert, deviceProgram.preprocessedFrag);
+        if (newProg === null)
+            throw new Error();
+
+        if (newProg !== deviceProgram.glProgram) {
+            deviceProgram.glProgram = newProg;
+            deviceProgram.uniqueKey = newProg.uniqueKey;
+            deviceProgram.bindDirty = true;
+        }
+
+        deviceProgram.compileDirty = false;
+    }
+
+    private _tryBindDeviceProgram(deviceProgram: DeviceProgram): void {
+        if (!deviceProgram.bindDirty)
+            return;
+
+        const gl = this.gl;
+        const prog = deviceProgram.glProgram;
+
+        // TODO(jstpierre): Remove this reflection.
+
+        const uniformBlocks = findall(deviceProgram.preprocessedVert, /uniform (\w+) {([^]*?)}/g);
+        for (let i = 0; i < uniformBlocks.length; i++) {
+            const [m, blockName, contents] = uniformBlocks[i];
+            gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, blockName), i);
+        }
+
+        const samplers = findall(deviceProgram.preprocessedVert, /^uniform .*sampler\S+ (\w+)(?:\[(\d+)\])?;$/gm);
+        let samplerIndex = 0;
+        for (let i = 0; i < samplers.length; i++) {
+            const [m, name, arraySizeStr] = samplers[i];
+            const arraySize = arraySizeStr ? parseInt(arraySizeStr) : 1;
+            // Assign identities in order.
+            const samplerUniformLocation = gl.getUniformLocation(prog, name);
+            gl.uniform1iv(samplerUniformLocation, range(samplerIndex, arraySize));
+            samplerIndex += arraySize;
+        }
+
+        deviceProgram.bindDirty = false;
+    }
+
     private setRenderPassParameters(colorAttachments: GfxColorAttachment[], numColorAttachments: number, depthStencilAttachment: GfxDepthStencilAttachment | null, clearBits: GLenum, clearColorR: number, clearColorG: number, clearColorB: number, clearColorA: number, depthClearValue: number, stencilClearValue: number): void {
         const gl = this.gl;
 
@@ -1576,8 +1752,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._setMegaState(this._currentPipeline.megaState);
 
         // Hotpatch support.
-        if (this._currentPipeline.program.deviceProgram.compileDirty)
-            this._currentPipeline.program.deviceProgram.compile(this, this._programCache);
+        this._tryCompileDeviceProgram(this._currentPipeline.program.deviceProgram);
 
         this._useDeviceProgram(this._currentPipeline.program.deviceProgram);
     }

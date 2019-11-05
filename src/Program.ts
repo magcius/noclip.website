@@ -1,51 +1,8 @@
 
 import CodeEditor from "./CodeEditor";
-import { assertExists, leftPad } from "./util";
+import { assertExists } from "./util";
 import { GfxDevice } from "./gfx/platform/GfxPlatform";
 import { gfxDeviceGetImpl } from "./gfx/platform/GfxPlatformWebGL2";
-import { IS_DEVELOPMENT } from "./BuildVersion";
-import { range } from "./MathHelpers";
-
-interface ProgramWithKey extends WebGLProgram {
-    uniqueKey: number;
-}
-
-const DEBUG = IS_DEVELOPMENT;
-
-function prependLineNo(str: string, lineStart: number = 1) {
-    const lines = str.split('\n');
-    return lines.map((s, i) => `${leftPad('' + (lineStart + i), 4, ' ')}  ${s}`).join('\n');
-}
-
-function compileShader(gl: WebGL2RenderingContext, str: string, type: number) {
-    const shader: WebGLShader = assertExists(gl.createShader(type));
-
-    gl.shaderSource(shader, str);
-    gl.compileShader(shader);
-
-    if (DEBUG && !gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        console.error(prependLineNo(str));
-        const debug_shaders = gl.getExtension('WEBGL_debug_shaders');
-        if (debug_shaders)
-            console.error(debug_shaders.getTranslatedShaderSource(shader));
-        console.error(gl.getShaderInfoLog(shader));
-        gl.deleteShader(shader);
-        return null;
-    }
-
-    return shader;
-}
-
-function findall(haystack: string, needle: RegExp): RegExpExecArray[] {
-    const results: RegExpExecArray[] = [];
-    while (true) {
-        const result = needle.exec(haystack);
-        if (!result)
-            break;
-        results.push(result);
-    }
-    return results;
-}
 
 function definesEqual(a: DeviceProgram, b: DeviceProgram): boolean {
     if (a.defines.size !== b.defines.size)
@@ -64,11 +21,11 @@ export class DeviceProgram {
     public uniqueKey: number;
 
     // Compiled program.
-    public glProgram: ProgramWithKey;
+    public glProgram: WebGLProgram;
     public compileDirty: boolean = true;
-    private bindDirty: boolean = true;
-    private preprocessedVert: string = '';
-    private preprocessedFrag: string = '';
+    public bindDirty: boolean = true;
+    public preprocessedVert: string = '';
+    public preprocessedFrag: string = '';
 
     // Inputs.
     public both: string = '';
@@ -93,23 +50,6 @@ export class DeviceProgram {
             this.preprocessedVert = this.preprocessShader(device, this.both + this.vert, 'vert');
             this.preprocessedFrag = this.preprocessShader(device, this.both + this.frag, 'frag');
         }
-    }
-
-    public compile(device: GfxDevice, programCache: ProgramCache): void {
-        if (this.compileDirty) {
-            this.ensurePreprocessed(device);
-            const newProg = programCache.compileProgram(this.preprocessedVert, this.preprocessedFrag);
-            if (newProg !== null && newProg !== this.glProgram) {
-                this.glProgram = newProg;
-                this.uniqueKey = newProg.uniqueKey;
-                this.bindDirty = true;
-            }
-
-            this.compileDirty = false;
-        }
-
-        if (!this.glProgram)
-            throw new Error();
     }
 
     protected preprocessShader(device: GfxDevice, source: string, type: "vert" | "frag"): string {
@@ -176,35 +116,6 @@ ${rest}
 `.trim();
     }
 
-    public bind(device: GfxDevice): void {
-        if (!this.bindDirty)
-            return;
-
-        const gl = gfxDeviceGetImpl(device).gl;
-        const prog = this.glProgram;
-
-        // TODO(jstpierre): Remove this reflection.
-
-        const uniformBlocks = findall(this.preprocessedVert, /uniform (\w+) {([^]*?)}/g);
-        for (let i = 0; i < uniformBlocks.length; i++) {
-            const [m, blockName, contents] = uniformBlocks[i];
-            gl.uniformBlockBinding(prog, gl.getUniformBlockIndex(prog, blockName), i);
-        }
-
-        const samplers = findall(this.preprocessedVert, /^uniform .*sampler\S+ (\w+)(?:\[(\d+)\])?;$/gm);
-        let samplerIndex = 0;
-        for (let i = 0; i < samplers.length; i++) {
-            const [m, name, arraySizeStr] = samplers[i];
-            const arraySize = arraySizeStr ? parseInt(arraySizeStr) : 1;
-            // Assign identities in order.
-            const samplerUniformLocation = gl.getUniformLocation(prog, name);
-            gl.uniform1iv(samplerUniformLocation, range(samplerIndex, arraySize));
-            samplerIndex += arraySize;
-        }
-
-        this.bindDirty = false;
-    }
-
     public destroy(gl: WebGL2RenderingContext) {
         // XXX(jstpierre): Should we have refcounting in the program cache?
     }
@@ -257,90 +168,5 @@ ${rest}
 
     public editf() {
         this._editShader('frag');
-    }
-}
-
-export class FullscreenProgram extends DeviceProgram {
-    public vert: string = `
-out vec2 v_TexCoord;
-
-void main() {
-    v_TexCoord.x = (gl_VertexID == 1) ? 2.0 : 0.0;
-    v_TexCoord.y = (gl_VertexID == 2) ? 2.0 : 0.0;
-    gl_Position.xy = v_TexCoord * vec2(2) - vec2(1);
-    gl_Position.zw = vec2(-1, 1);
-}
-`;
-}
-
-interface ProgramKey {
-    vert: string;
-    frag: string;
-}
-
-abstract class MemoizeCache<TKey, TRes> {
-    private cache = new Map<string, TRes>();
-
-    protected abstract make(key: TKey): TRes | null;
-    protected abstract makeKey(key: TKey): string;
-
-    public get(key: TKey): TRes | null {
-        const keyStr = this.makeKey(key);
-        if (this.cache.has(keyStr)) {
-            return assertExists(this.cache.get(keyStr));
-        } else {
-            const obj = this.make(key);
-            if (obj !== null)
-                this.cache.set(keyStr, obj);
-            return obj;
-        }
-    }
-
-    public clear(): void {
-        this.cache.clear();
-    }
-}
-
-export class ProgramCache extends MemoizeCache<ProgramKey, ProgramWithKey> {
-    private _uniqueKey: number = 0;
-
-    constructor(private gl: WebGL2RenderingContext) {
-        super();
-    }
-
-    protected make(key: ProgramKey): ProgramWithKey | null {
-        const gl = this.gl;
-        const vertShader = compileShader(gl, key.vert, gl.VERTEX_SHADER);
-        const fragShader = compileShader(gl, key.frag, gl.FRAGMENT_SHADER);
-        if (!vertShader || !fragShader)
-            return null;
-        const prog = gl.createProgram() as ProgramWithKey;
-        gl.attachShader(prog, vertShader);
-        gl.attachShader(prog, fragShader);
-        gl.linkProgram(prog);
-        gl.deleteShader(vertShader);
-        gl.deleteShader(fragShader);
-        if (DEBUG && !gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-            console.error(key.vert);
-            console.error(key.frag);
-            console.error(gl.getProgramInfoLog(prog));
-            gl.deleteProgram(prog);
-            return null;
-        }
-        prog.uniqueKey = ++this._uniqueKey;
-        return prog;
-    }
-
-    protected destroy(obj: ProgramWithKey) {
-        const gl = this.gl;
-        gl.deleteProgram(obj);
-    }
-
-    protected makeKey(key: ProgramKey): string {
-        return `${key.vert}$${key.frag}`;
-    }
-
-    public compileProgram(vert: string, frag: string) {
-        return this.get({ vert, frag });
     }
 }
