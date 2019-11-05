@@ -25,7 +25,8 @@
         ]
     },
     "include": [
-        "./src/"
+        "./src/",
+        "node_modules/@webgpu/types"
     ],
     "exclude": [
         "**/assembly/*.ts",

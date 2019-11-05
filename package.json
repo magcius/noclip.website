@@ -9,6 +9,8 @@
     "@types/puppeteer": "^1.12.4",
     "@types/systemjs": "^0.20.6",
     "@types/webgl2": "0.0.4",
+    "@webgpu/glslang": "^0.0.8",
+    "@webgpu/types": "^0.0.15",
     "assemblyscript": "github:AssemblyScript/assemblyscript",
     "iconv-lite": "^0.4.24",
     "puppeteer": "^1.16.0",
