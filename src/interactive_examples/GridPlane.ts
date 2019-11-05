@@ -8,6 +8,7 @@ import { ViewerRenderInput } from "../viewer";
 import { fillMatrix4x4, fillMatrix4x3, fillColor, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { White, colorNewCopy } from "../Color";
 import { mat4 } from "gl-matrix";
+import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 
 class GridPlaneProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -128,11 +129,13 @@ export class GridPlane {
         renderInst.setBindingLayouts(bindingLayout);
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
-        renderInst.setMegaStateFlags({
+        const megaState = renderInst.setMegaStateFlags({
+            depthWrite: false,
+        });
+        setAttachmentStateSimple(megaState, {
             blendMode: GfxBlendMode.ADD,
             blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
             blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-            depthWrite: false,
         });
         renderInst.drawIndexes(6);
 

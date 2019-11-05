@@ -11,6 +11,7 @@ import { vec3, vec4, mat4 } from 'gl-matrix';
 import { Camera } from '../Camera';
 import { assert } from '../util';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
+import { AttachmentStateSimple, setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 
 // TODO(jstpierre): Move somewhere better...
 export const EFB_WIDTH = 640;
@@ -1254,21 +1255,26 @@ export function translateGfxMegaState(megaState: Partial<GfxMegaStateDescriptor>
     megaState.depthCompare = material.ropInfo.depthTest ? reverseDepthForCompareMode(translateCompareType(material.ropInfo.depthFunc)) : GfxCompareMode.ALWAYS;
     megaState.frontFace = GfxFrontFaceMode.CW;
 
+    const attachmentStateSimple: Partial<AttachmentStateSimple> = {};
+
     if (material.ropInfo.blendMode.type === GX.BlendMode.NONE) {
-        megaState.blendMode = GfxBlendMode.NONE;
+        attachmentStateSimple.blendMode = GfxBlendMode.NONE;
     } else if (material.ropInfo.blendMode.type === GX.BlendMode.BLEND) {
-        megaState.blendMode = GfxBlendMode.ADD;
-        megaState.blendSrcFactor = translateBlendSrcFactor(material.ropInfo.blendMode.srcFactor);
-        megaState.blendDstFactor = translateBlendDstFactor(material.ropInfo.blendMode.dstFactor);
+        attachmentStateSimple.blendMode = GfxBlendMode.ADD;
+        attachmentStateSimple.blendSrcFactor = translateBlendSrcFactor(material.ropInfo.blendMode.srcFactor);
+        attachmentStateSimple.blendDstFactor = translateBlendDstFactor(material.ropInfo.blendMode.dstFactor);
     } else if (material.ropInfo.blendMode.type === GX.BlendMode.SUBTRACT) {
-        megaState.blendMode = GfxBlendMode.REVERSE_SUBTRACT;
-        megaState.blendSrcFactor = GfxBlendFactor.ONE;
-        megaState.blendDstFactor = GfxBlendFactor.ONE;
+        attachmentStateSimple.blendMode = GfxBlendMode.REVERSE_SUBTRACT;
+        attachmentStateSimple.blendSrcFactor = GfxBlendFactor.ONE;
+        attachmentStateSimple.blendDstFactor = GfxBlendFactor.ONE;
     } else if (material.ropInfo.blendMode.type === GX.BlendMode.LOGIC) {
         // Sonic Colors uses this? WTF?
-        megaState.blendMode = GfxBlendMode.NONE;
+        attachmentStateSimple.blendMode = GfxBlendMode.NONE;
         console.warn(`Unimplemented LOGIC blend mode`);
     }
+
+    setAttachmentStateSimple(megaState, attachmentStateSimple);
+    console.log(megaState, attachmentStateSimple);
 }
 // #endregion
 

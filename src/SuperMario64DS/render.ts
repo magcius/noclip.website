@@ -19,6 +19,7 @@ import { BCA, bindBCAAnimator, BCAAnimator } from './sm64ds_bca';
 import AnimationController from '../AnimationController';
 import { computeRotationMatrixFromSRTMatrix } from '../MathHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 
 function calcBBoardMtx(dst: mat4, m: mat4): void {
     // Modifies m in-place.
@@ -289,12 +290,14 @@ class MaterialInstance {
         }
 
         this.megaStateFlags = {
-            blendMode: GfxBlendMode.ADD,
-            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
-            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
             depthWrite: material.depthWrite,
             cullMode: material.cullMode,
         };
+        setAttachmentStateSimple(this.megaStateFlags, {
+            blendMode: GfxBlendMode.ADD,
+            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
+        });
 
         this.createProgram();
 

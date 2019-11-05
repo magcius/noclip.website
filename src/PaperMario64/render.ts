@@ -17,6 +17,7 @@ import { computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
 import { AABB } from "../Geometry";
 import { getImageFormatString } from "../BanjoKazooie/f3dex";
 import { TexCM, TextFilt } from '../Common/N64/Image';
+import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 
 class PaperMario64Program extends DeviceProgram {
     public static a_Position = 0;
@@ -291,11 +292,13 @@ class ModelTreeLeafInstance {
         } else if (this.renderMode === RenderMode.XLU) {
             this.sortKey = makeSortKeyOpaque(GfxRendererLayer.TRANSLUCENT, 0);
             this.megaStateFlags = {
+                depthWrite: false,
+            };
+            setAttachmentStateSimple(this.megaStateFlags, {
                 blendMode: GfxBlendMode.ADD,
                 blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
                 blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
-                depthWrite: false,
-            };
+            });
         }
 
         // Find the texture environment settings.

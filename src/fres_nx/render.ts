@@ -22,6 +22,7 @@ import { DeviceProgram } from '../Program';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 
 export class BRTITextureHolder extends TextureHolder<BNTX.BRTI> {
     public addFRESTextures(device: GfxDevice, fres: FRES): void {
@@ -469,10 +470,12 @@ class FMATInstance {
             cullMode:       translateCullMode(fmat),
             depthCompare:   reverseDepthForCompareMode(translateDepthCompare(fmat)),
             depthWrite:     isTranslucent ? false : translateDepthWrite(fmat),
+        };
+        setAttachmentStateSimple(this.megaStateFlags, {
             blendMode:      isTranslucent ? GfxBlendMode.ADD : GfxBlendMode.NONE,
             blendSrcFactor: translateBlendSrcFactor(fmat),
             blendDstFactor: translateBlendDstFactor(fmat),
-        };
+        });
     }
 
     public setOnRenderInst(device: GfxDevice, renderInst: GfxRenderInst): void {

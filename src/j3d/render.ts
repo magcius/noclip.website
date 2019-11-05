@@ -23,6 +23,7 @@ import { computeNormalMatrix, texEnvMtx } from '../MathHelpers';
 import { calcMipChain } from '../gx/gx_texture';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { NormalizedViewportCoords } from '../gfx/helpers/RenderTargetHelpers';
+import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 
 export class ShapeInstanceState {
     // One matrix for each joint, which transform into their parent's space.
@@ -332,7 +333,7 @@ export class MaterialInstance {
     }
 
     public setColorWriteEnabled(colorWrite: boolean): void {
-        this.materialHelper.megaStateFlags.colorWrite = colorWrite;
+        setAttachmentStateSimple(this.materialHelper.megaStateFlags, { colorWrite });
     }
 
     public setSortKeyLayer(layer: GfxRendererLayer): void {

@@ -19,6 +19,7 @@ import { MSB, Part } from "./msb";
 import { MathConstants } from "../MathHelpers";
 import { MTD, MTDTexture } from './mtd';
 import { interactiveVizSliderSelect } from '../DebugJunk';
+import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 
 function shouldRenderPrimitive(primitive: Primitive): boolean {
     return primitive.flags === 0;
@@ -611,19 +612,23 @@ class BatchInstance {
             this.megaState = {};
         } else if (blendMode === BlendMode.Blend) {
             this.megaState = {
+                depthWrite: false,
+            };
+            setAttachmentStateSimple(this.megaState, {
                 blendMode: GfxBlendMode.ADD,
                 blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
                 blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
-                depthWrite: false,
-            };
+            });
             isTranslucent = true;
         } else if (blendMode === BlendMode.Add) {
             this.megaState = {
+                depthWrite: false,
+            };
+            setAttachmentStateSimple(this.megaState, {
                 blendMode: GfxBlendMode.ADD,
                 blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
                 blendDstFactor: GfxBlendFactor.ONE,
-                depthWrite: false,
-            };
+            });
             isTranslucent = true;
         } else if (blendMode === BlendMode.TexEdge) {
             this.megaState = {};

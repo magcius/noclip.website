@@ -183,14 +183,7 @@ export interface GfxAttachmentState {
 }
 
 export interface GfxMegaStateDescriptor {
-    // TODO(jstpierre): Remove this old interface.
-    colorWrite: boolean;
-    blendMode: GfxBlendMode;
-    blendSrcFactor: GfxBlendFactor;
-    blendDstFactor: GfxBlendFactor;
-
-    attachmentsState?: GfxAttachmentState[];
-
+    attachmentsState: GfxAttachmentState[];
     depthCompare: GfxCompareMode;
     depthWrite: boolean;
     stencilCompare: GfxCompareMode;

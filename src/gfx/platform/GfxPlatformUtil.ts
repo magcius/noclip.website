@@ -87,18 +87,10 @@ function gfxAttachmentsStateEquals(a: GfxAttachmentState, b: GfxAttachmentState)
 }
 
 function gfxMegaStateDescriptorEquals(a: GfxMegaStateDescriptor, b: GfxMegaStateDescriptor): boolean {
-    if (a.attachmentsState !== undefined && b.attachmentsState !== undefined) {
-        if (!arrayEqual(a.attachmentsState, b.attachmentsState, gfxAttachmentsStateEquals))
-            return false;
-    } else if (a.attachmentsState !== undefined || b.attachmentsState !== undefined) {
+    if (!arrayEqual(a.attachmentsState, b.attachmentsState, gfxAttachmentsStateEquals))
         return false;
-    }
 
     return (
-        a.colorWrite === b.colorWrite &&
-        a.blendMode === b.blendMode &&
-        a.blendSrcFactor === b.blendSrcFactor &&
-        a.blendDstFactor === b.blendDstFactor &&
         a.depthCompare === b.depthCompare &&
         a.depthWrite === b.depthWrite &&
         a.stencilCompare === b.stencilCompare &&

@@ -15,6 +15,7 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { TextFilt } from '../Common/N64/Image';
 import { Geometry, VertexAnimationEffect, VertexEffectType } from './geo';
 import { clamp } from '../MathHelpers';
+import { AttachmentStateSimple, setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 
 class F3DEX_Program extends DeviceProgram {
     public static a_Position = 0;
@@ -542,11 +543,12 @@ export class N64Renderer {
     public modelMatrix = mat4.create();
 
     constructor(private n64Data: N64Data) {
-        this.megaStateFlags = {
+        this.megaStateFlags = {};
+        setAttachmentStateSimple(this.megaStateFlags, {
             blendMode: GfxBlendMode.ADD,
             blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
             blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
-        };
+        });
 
         for (let i = 0; i < this.n64Data.geo.rspOutput.drawCalls.length; i++)
             this.drawCallInstances.push(new DrawCallInstance(this.n64Data, this.n64Data.geo.rspOutput.drawCalls[i]));

@@ -16,6 +16,7 @@ import { nArray, assertExists } from '../util';
 import { GfxRenderInstManager, executeOnPass } from '../gfx/render/GfxRenderer';
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
+import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 
 export function textureToCanvas(texture: BinTex.Texture): Viewer.Texture {
     const canvas = document.createElement("canvas");
@@ -406,7 +407,11 @@ class DrawCallInstance {
         }
 
         if (drawCall.translucent) {
-            this.megaStateFlags.blendMode = GfxBlendMode.ADD;
+            setAttachmentStateSimple(this.megaStateFlags, {
+                blendMode: GfxBlendMode.ADD,
+                blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
+                blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+            });
             this.megaStateFlags.depthWrite = false;
         }
 
@@ -490,9 +495,6 @@ export class SceneRenderer {
     constructor(device: GfxDevice, mapData: MapData, drawCalls: DrawCall[], private isSkybox: boolean) {
         this.megaStateFlags = {
             cullMode: GfxCullMode.BACK,
-            blendMode: GfxBlendMode.NONE,
-            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
             depthWrite: true,
             depthCompare: reverseDepthForCompareMode(GfxCompareMode.LEQUAL),
         };

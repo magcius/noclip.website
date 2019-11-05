@@ -212,8 +212,9 @@ export class GfxRenderInst {
         this._renderPipelineDescriptor.program = program;
     }
 
-    public setMegaStateFlags(r: Partial<GfxMegaStateDescriptor>): void {
+    public setMegaStateFlags(r: Partial<GfxMegaStateDescriptor>): GfxMegaStateDescriptor {
         setMegaStateFlags(this._renderPipelineDescriptor.megaStateDescriptor, r);
+        return this._renderPipelineDescriptor.megaStateDescriptor;
     }
 
     public getMegaStateFlags(): GfxMegaStateDescriptor {

@@ -16,12 +16,13 @@ import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { assert } from "../util";
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth, GfxRenderInst } from "../gfx/render/GfxRenderer";
-import { ItemInstance, ObjectDefinition, ObjectFlags } from "./item";
+import { ItemInstance, ObjectDefinition } from "./item";
 import { colorNew, White, colorNewCopy, Color, colorCopy } from "../Color";
 import { ColorSet, emptyColorSet, lerpColorSet } from "./time";
 import { AABB } from "../Geometry";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { Destroyable } from "../SceneBase";
+import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
+import { GraphObjBase } from "../SceneBase";
 
 const TIME_FACTOR = 2500; // one day cycle per minute
 const DRAW_DISTANCE_FACTOR = 2.5;
@@ -208,10 +209,6 @@ const dualPassEdgeProgram = new GTA3Program({ ALPHA_TEST: '>= 0.9' });
 const waterProgram = new GTA3Program({ WATER: '1' });
 const skyProgram = new GTA3Program({ SKY: '1' });
 
-interface Renderer extends Destroyable {
-    prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void;
-}
-
 class BaseRenderer {
     protected vertexBuffer: GfxBuffer;
     protected indexBuffer: GfxBuffer;
@@ -251,7 +248,7 @@ class BaseRenderer {
     }
 }
 
-export class SkyRenderer extends BaseRenderer implements Renderer {
+export class SkyRenderer extends BaseRenderer {
     constructor(device: GfxDevice, cache: GfxRenderCache, atlas: TextureArray) {
         super(skyProgram, atlas);
         // fullscreen quad
@@ -430,7 +427,7 @@ export class DrawParams {
 const scratchVec2 = vec2.create();
 const scratchVec3 = vec3.create();
 const scratchColor = colorNewCopy(White);
-export class SceneRenderer extends BaseRenderer implements Renderer {
+export class SceneRenderer extends BaseRenderer {
     public bbox = new AABB(Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity);
 
     private sortKey: number;
@@ -536,12 +533,14 @@ export class SceneRenderer extends BaseRenderer implements Renderer {
         const indexBuffer: GfxIndexBufferDescriptor = { buffer: this.indexBuffer, byteOffset: 0 };
         this.inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
         this.megaStateFlags = {
-            blendMode: GfxBlendMode.ADD,
-            blendDstFactor: this.params.additive ? GfxBlendFactor.ONE : GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
-            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
             depthWrite: !dual,
             cullMode: this.params.backface ? GfxCullMode.NONE : GfxCullMode.BACK,
         };
+        setAttachmentStateSimple(this.megaStateFlags, {
+            blendMode: GfxBlendMode.ADD,
+            blendDstFactor: this.params.additive ? GfxBlendFactor.ONE : GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
+        });
 
         let renderLayer = this.params.renderLayer;
         if (this.atlas !== undefined && this.atlas.transparent)
@@ -571,7 +570,7 @@ export class SceneRenderer extends BaseRenderer implements Renderer {
     }
 }
 
-export class AreaRenderer implements Renderer {
+export class AreaRenderer {
     private renderers: SceneRenderer[] = [];
     private bbox = new AABB(Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity);
 
@@ -602,7 +601,7 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
 ];
 
 export class GTA3Renderer implements Viewer.SceneGfx {
-    public renderers: Renderer[] = [];
+    public renderers: GraphObjBase[] = [];
     public onstatechanged!: () => void;
 
     private renderTarget = new BasicRenderTarget();

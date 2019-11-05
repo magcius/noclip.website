@@ -13,6 +13,7 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers";
 import { GSAlphaCompareMode, GSAlphaFailMode, GSTextureFunction, GSDepthCompareMode, GSTextureFilter, GSPixelStorageFormat, psmToString } from "../Common/PS2/GS";
+import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 
 export class KatamariDamacyProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -223,13 +224,17 @@ export class BINModelPartInstance {
         if (gsConfiguration.alpha_1_data0 === -1) {
             // Do nothing? Not sure what the default is...
         } else if (gsConfiguration.alpha_1_data0 === 0x44) {
-            this.megaStateFlags.blendMode = GfxBlendMode.ADD;
-            this.megaStateFlags.blendSrcFactor = GfxBlendFactor.SRC_ALPHA;
-            this.megaStateFlags.blendDstFactor = GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
+            setAttachmentStateSimple(this.megaStateFlags, {
+                blendMode: GfxBlendMode.ADD,
+                blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
+                blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+            });
         } else if (gsConfiguration.alpha_1_data0 === 0x48) {
-            this.megaStateFlags.blendMode = GfxBlendMode.ADD;
-            this.megaStateFlags.blendSrcFactor = GfxBlendFactor.SRC_ALPHA;
-            this.megaStateFlags.blendDstFactor = GfxBlendFactor.ONE;
+            setAttachmentStateSimple(this.megaStateFlags, {
+                blendMode: GfxBlendMode.ADD,
+                blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
+                blendDstFactor: GfxBlendFactor.ONE,
+            });
         } else {
             throw "whoops";
         }

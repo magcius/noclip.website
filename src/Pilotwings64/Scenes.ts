@@ -25,7 +25,7 @@ import { DataFetcher } from "../DataFetcher";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { getPointCubic, getPointHermite } from "../Spline";
 import { SingleSelect, Panel, TIME_OF_DAY_ICON, COOL_BLUE_COLOR } from "../ui";
-import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
+import { fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 
 interface Pilotwings64FSFileChunk {
     tag: string;
@@ -1934,21 +1934,28 @@ function translateBlendMode(geoMode: number, renderMode: number): Partial<GfxMeg
         assert(srcColor === BlendParam_PM_Color.G_BL_CLR_IN);
         assert(dstColor === BlendParam_PM_Color.G_BL_CLR_MEM || dstFactor === BlendParam_B.G_BL_0);
 
+        let blendSrcFactor: GfxBlendFactor;
         if (srcFactor === BlendParam_A.G_BL_0) {
-            out.blendSrcFactor = GfxBlendFactor.ZERO;
+            blendSrcFactor = GfxBlendFactor.ZERO;
         } else if ((renderMode & (1 << OtherModeL_Layout.ALPHA_CVG_SEL)) &&
             !(renderMode & (1 << OtherModeL_Layout.CVG_X_ALPHA))) {
             // this is technically "coverage", admitting blending on edges
-            out.blendSrcFactor = GfxBlendFactor.ONE;
+            blendSrcFactor = GfxBlendFactor.ONE;
         } else {
-            out.blendSrcFactor = GfxBlendFactor.SRC_ALPHA;
+            blendSrcFactor = GfxBlendFactor.SRC_ALPHA;
         }
-        out.blendDstFactor = translateBlendParamB(dstFactor, out.blendSrcFactor);
+        setAttachmentStateSimple(out, {
+            blendSrcFactor: blendSrcFactor,
+            blendDstFactor: translateBlendParamB(dstFactor, blendSrcFactor),
+        });
     } else {
         // without FORCE_BL, blending only happens for AA of internal edges
         // since we are ignoring n64 coverage values and AA, this means "never"
-        out.blendSrcFactor = GfxBlendFactor.ONE;
-        out.blendDstFactor = GfxBlendFactor.ZERO;
+        setAttachmentStateSimple(out, {
+            blendSrcFactor: GfxBlendFactor.ONE,
+            blendDstFactor: GfxBlendFactor.ZERO,
+        });
+
     }
 
     if (geoMode & F3D_RSP_Geometry_Flags.G_CULL_BACK) {
@@ -3068,11 +3075,11 @@ class Pilotwings64Renderer implements SceneGfx {
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
-        template.setMegaStateFlags({
+        template.setMegaStateFlags(setAttachmentStateSimple({}, {
             blendMode: GfxBlendMode.ADD,
             blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
             blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
-        });
+        }));
 
         let offs = template.allocateUniformBuffer(PW64Program.ub_SceneParams, 16);
         const d = template.mapUniformBufferF32(PW64Program.ub_SceneParams);

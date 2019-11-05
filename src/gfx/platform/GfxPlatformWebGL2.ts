@@ -433,44 +433,8 @@ function applyAttachmentState(gl: WebGL2RenderingContext, i: number, currentAtta
 }
 
 function applyMegaState(gl: WebGL2RenderingContext, currentMegaState: GfxMegaStateDescriptor, newMegaState: GfxMegaStateDescriptor): void {
-    const currentAttachmentState = currentMegaState.attachmentsState![0];
-
-    if (newMegaState.attachmentsState && newMegaState.attachmentsState.length > 0) {
-        assert(newMegaState.attachmentsState.length === 1);
-        applyAttachmentState(gl, 0, currentAttachmentState, newMegaState.attachmentsState[0]);
-    } else {
-        const newWriteMask = (newMegaState.colorWrite ? GfxColorWriteMask.ALL : GfxColorWriteMask.NONE);
-        if (currentAttachmentState.colorWriteMask !== newWriteMask) {
-            gl.colorMask(newMegaState.colorWrite, newMegaState.colorWrite, newMegaState.colorWrite, newMegaState.colorWrite);
-            currentAttachmentState.colorWriteMask = newWriteMask;
-        }
-
-        if (currentAttachmentState.rgbBlendState.blendMode !== newMegaState.blendMode ||
-            currentAttachmentState.alphaBlendState.blendMode !== newMegaState.blendMode) {
-            if (currentAttachmentState.rgbBlendState.blendMode === GfxBlendMode.NONE &&
-                currentAttachmentState.alphaBlendState.blendMode === GfxBlendMode.NONE)
-                gl.enable(gl.BLEND);
-            else if (newMegaState.blendMode === GfxBlendMode.NONE)
-                gl.disable(gl.BLEND);
-
-            if (newMegaState.blendMode !== GfxBlendMode.NONE)
-                gl.blendEquation(newMegaState.blendMode);
-
-            currentAttachmentState.rgbBlendState.blendMode = newMegaState.blendMode;
-            currentAttachmentState.alphaBlendState.blendMode = newMegaState.blendMode;
-        }
-
-        if (currentAttachmentState.rgbBlendState.blendSrcFactor !== newMegaState.blendSrcFactor ||
-            currentAttachmentState.alphaBlendState.blendSrcFactor !== newMegaState.blendSrcFactor ||
-            currentAttachmentState.rgbBlendState.blendDstFactor !== newMegaState.blendDstFactor ||
-            currentAttachmentState.alphaBlendState.blendDstFactor !== newMegaState.blendDstFactor) {
-            gl.blendFunc(newMegaState.blendSrcFactor, newMegaState.blendDstFactor);
-            currentAttachmentState.rgbBlendState.blendSrcFactor = newMegaState.blendSrcFactor;
-            currentAttachmentState.alphaBlendState.blendSrcFactor = newMegaState.blendSrcFactor;
-            currentAttachmentState.rgbBlendState.blendDstFactor = newMegaState.blendDstFactor;
-            currentAttachmentState.alphaBlendState.blendDstFactor = newMegaState.blendDstFactor;
-        }
-    }
+    assert(newMegaState.attachmentsState.length === 1);
+    applyAttachmentState(gl, 0, currentMegaState.attachmentsState![0], newMegaState.attachmentsState[0]);
 
     if (currentMegaState.depthCompare !== newMegaState.depthCompare) {
         if (currentMegaState.depthCompare === GfxCompareMode.ALWAYS)

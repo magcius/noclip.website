@@ -575,9 +575,6 @@ class SceneRenderer {
     constructor(device: GfxDevice, mapData: MapData, drawCalls: DrawCall[]) {
         this.megaStateFlags = {
             cullMode: GfxCullMode.BACK,
-            blendMode: GfxBlendMode.NONE,
-            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
             depthWrite: true,
             depthCompare: reverseDepthForCompareMode(GfxCompareMode.LEQUAL),
         };

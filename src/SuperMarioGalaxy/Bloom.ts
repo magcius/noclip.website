@@ -9,7 +9,7 @@ import { fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { ViewerRenderInput } from "../viewer";
 import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { fullscreenMegaState, makeMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
+import { fullscreenMegaState, makeMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 
 // Should I try to do this with GX? lol.
 class BloomPassBaseProgram extends DeviceProgram {
@@ -245,11 +245,11 @@ export class BloomPostFXRenderer {
         this.fullscreenCopyPipeline = makeFullscreenPipeline(device, cache, new BloomPassFullscreenCopyProgram());
         this.blurPipeline = makeFullscreenPipeline(device, cache, new BloomPassBlurProgram());
         this.bokehPipeline = makeFullscreenPipeline(device, cache, new BloomPassBokehProgram());
-        this.fullscreenCombinePipeline = makeFullscreenPipeline(device, cache, new BloomPassFullscreenCopyProgram(), makeMegaState({
+        this.fullscreenCombinePipeline = makeFullscreenPipeline(device, cache, new BloomPassFullscreenCopyProgram(), makeMegaState(setAttachmentStateSimple({}, {
             blendMode: GfxBlendMode.ADD,
             blendSrcFactor: GfxBlendFactor.ONE,
             blendDstFactor: GfxBlendFactor.ONE,
-        }, fullscreenMegaState));
+        }), fullscreenMegaState));
     }
 
     public allocateParameterBuffer(renderInstManager: GfxRenderInstManager, bloomParameters: BloomPostFXParameters): number {
