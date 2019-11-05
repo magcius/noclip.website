@@ -9,7 +9,7 @@ import { assert, readString, assertExists, nArray } from "../util";
 import { BTI } from "./j3d";
 import { vec3, mat4, vec2 } from "gl-matrix";
 import { Endianness } from "../endian";
-import { GfxDevice, GfxInputLayout, GfxInputState, GfxBuffer, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBufferFrequencyHint, GfxHostAccessPass, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxInputLayout, GfxInputState, GfxBuffer, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBufferFrequencyHint, GfxHostAccessPass, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { BTIData } from "./render";
 import { getPointHermite } from "../Spline";
 import { GXMaterial, AlphaTest, RopInfo, TexGen, TevStage, getVertexAttribLocation, IndTexStage } from "../gx/gx_material";
@@ -675,9 +675,14 @@ class JPAGlobalRes {
             { location: getVertexAttribLocation(GX.VertexAttribute.TEX0), format: GfxFormat.F32_RG, bufferIndex: 0, bufferByteOffset: 3*4 },
         ];
 
+        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
+            { byteStride: 3*4+2*4, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+        ];
+
         this.inputLayout = device.createInputLayout({
             indexBufferFormat: GfxFormat.U16_R,
             vertexAttributeDescriptors,
+            vertexBufferDescriptors,
         });
 
         // The original JPA uses a number of different hardcoded vertex buffers
@@ -807,7 +812,7 @@ class JPAGlobalRes {
         ]).buffer);
 
         this.inputStateQuad = device.createInputState(this.inputLayout, [
-            { buffer: this.vertexBufferQuad, byteOffset: 0, byteStride: 3*4+2*4, frequency: GfxVertexBufferFrequency.PER_VERTEX },
+            { buffer: this.vertexBufferQuad, byteOffset: 0 },
         ], { buffer: this.indexBufferQuad, byteOffset: 0 });
     }
 
@@ -915,7 +920,7 @@ class StripeBufferManager {
 
         const gfxBuffer = device.createBuffer(wordCount, GfxBufferUsage.VERTEX, GfxBufferFrequencyHint.DYNAMIC);
         const inputState = device.createInputState(this.inputLayout, [
-            { buffer: gfxBuffer, byteOffset: 0, byteStride: 5*4, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { buffer: gfxBuffer, byteOffset: 0, },
         ], this.indexBufferDescriptor);
         const entry = new StripeEntry(wordCount, gfxBuffer, inputState);
         this.stripeEntry.push(entry);

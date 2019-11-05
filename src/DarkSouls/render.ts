@@ -1,6 +1,6 @@
 
 import { FLVER, VertexInputSemantic, Material, Primitive, Batch, VertexAttribute } from "./flver";
-import { GfxDevice, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBuffer, GfxVertexBufferDescriptor, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBuffer, GfxVertexBufferDescriptor, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { coalesceBuffer, GfxCoalescedBuffer } from "../gfx/helpers/BufferHelpers";
 import { convertToTriangleIndexBuffer, GfxTopology, getTriangleIndexCountForTopologyIndexCount } from "../gfx/helpers/TopologyHelpers";
@@ -20,6 +20,7 @@ import { MathConstants } from "../MathHelpers";
 import { MTD, MTDTexture } from './mtd';
 import { interactiveVizSliderSelect } from '../DebugJunk';
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
 function shouldRenderPrimitive(primitive: Primitive): boolean {
     return primitive.flags === 0;
@@ -49,17 +50,94 @@ function isLODModel(name: string): boolean {
     return lodModels.includes(name);
 }
 
+function translateLocation(attr: VertexAttribute): number {
+    switch (attr.semantic) {
+    case VertexInputSemantic.Position:  return DKSProgram.a_Position;
+    case VertexInputSemantic.Color:     return DKSProgram.a_Color;
+    case VertexInputSemantic.UV:        {
+        if (attr.index === 0)
+            return DKSProgram.a_TexCoord0;
+        else if (attr.index === 1)
+            return DKSProgram.a_TexCoord1;
+        else
+            throw "whoops";
+    }
+    case VertexInputSemantic.Normal:    return DKSProgram.a_Normal;
+    case VertexInputSemantic.Tangent:   return DKSProgram.a_Tangent;
+    case VertexInputSemantic.Bitangent: return DKSProgram.a_Bitangent;
+    default: return -1;
+    }
+}
+
+function translateDataType(dataType: number): GfxFormat {
+    switch (dataType) {
+        case 17:
+            // Bone indices -- four bytes.
+            return GfxFormat.U8_RGBA_NORM;
+        case 19:
+            // Colors and normals -- four bytes.
+            return GfxFormat.U8_RGBA_NORM;
+        case 21:
+            // One set of UVs -- two shorts.
+            return GfxFormat.S16_RG;
+        case 22:
+            // Two sets of UVs -- four shorts.
+            return GfxFormat.S16_RGBA;
+        case 26:
+            // Bone weight -- four shorts.
+            return GfxFormat.S16_RGBA_NORM;
+        case 2:
+        case 18:
+        case 20:
+        case 23:
+        case 24:
+        case 25:
+            // Everything else -- three floats.
+            return GfxFormat.F32_RGBA;
+        default:
+            throw "whoops";
+    }
+}
+
 class BatchData {
+    public inputLayout: GfxInputLayout;
     public inputStates: GfxInputState[] = [];
 
-    constructor(device: GfxDevice, flverData: FLVERData, public batch: Batch, vertexBuffer: GfxCoalescedBuffer, indexBuffers: GfxCoalescedBuffer[]) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, flverData: FLVERData, public batch: Batch, vertexBuffer: GfxCoalescedBuffer, indexBuffers: GfxCoalescedBuffer[]) {
         const flverInputState = flverData.flver.inputStates[batch.inputStateIndex];
-        const buffers: GfxVertexBufferDescriptor[] = [{ buffer: vertexBuffer.buffer, byteOffset: vertexBuffer.wordOffset * 0x04, byteStride: flverInputState.vertexSize, frequency: GfxVertexBufferFrequency.PER_VERTEX, }];
+        const flverInputLayout = flverData.flver.inputLayouts[flverInputState.inputLayoutIndex];
+        const buffers: GfxVertexBufferDescriptor[] = [{ buffer: vertexBuffer.buffer, byteOffset: vertexBuffer.wordOffset * 0x04 }];
+
+        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
+
+        for (let j = 0; j < flverInputLayout.vertexAttributes.length; j++) {
+            const vertexAttributes = flverInputLayout.vertexAttributes[j];
+            const location = translateLocation(vertexAttributes);
+            if (location < 0)
+                continue;
+
+            vertexAttributeDescriptors.push({
+                location,
+                format: translateDataType(vertexAttributes.dataType),
+                bufferByteOffset: vertexAttributes.offset,
+                bufferIndex: 0,
+            });
+        }
+
+        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
+            { byteStride: flverInputState.vertexSize, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+        ];
+
+        this.inputLayout = cache.createInputLayout(device, {
+            indexBufferFormat: GfxFormat.U16_R,
+            vertexAttributeDescriptors,
+            vertexBufferDescriptors,
+        });
 
         for (let j = 0; j < batch.primitiveIndexes.length; j++) {
             const coaIndexBuffer = assertExists(indexBuffers.shift());
             const indexBuffer: GfxIndexBufferDescriptor = { buffer: coaIndexBuffer.buffer, byteOffset: coaIndexBuffer.wordOffset * 0x04 };
-            const inputState = device.createInputState(flverData.inputLayouts[flverInputState.inputLayoutIndex], buffers, indexBuffer);
+            const inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
             this.inputStates.push(inputState);
         }
     }
@@ -71,38 +149,12 @@ class BatchData {
 }
 
 export class FLVERData {
-    public inputLayouts: GfxInputLayout[] = [];
     public batchData: BatchData[] = [];
     public gfxSampler: GfxSampler;
     private indexBuffer: GfxBuffer;
     private vertexBuffer: GfxBuffer;
 
-    constructor(device: GfxDevice, public flver: FLVER) {
-        for (let i = 0; i < flver.inputLayouts.length; i++) {
-            const inputLayout = flver.inputLayouts[i];
-
-            const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
-
-            for (let j = 0; j < inputLayout.vertexAttributes.length; j++) {
-                const vertexAttributes = inputLayout.vertexAttributes[j];
-                const location = this.translateLocation(vertexAttributes);
-                if (location < 0)
-                    continue;
-
-                vertexAttributeDescriptors.push({
-                    location,
-                    format: this.translateDataType(vertexAttributes.dataType),
-                    bufferByteOffset: vertexAttributes.offset,
-                    bufferIndex: 0,
-                });
-            }
-
-            this.inputLayouts[i] = device.createInputLayout({
-                indexBufferFormat: GfxFormat.U16_R,
-                vertexAttributeDescriptors,
-            });
-        }
-
+    constructor(device: GfxDevice, cache: GfxRenderCache, public flver: FLVER) {
         const vertexBufferDatas: ArrayBufferSlice[] = [];
         const indexBufferDatas: ArrayBufferSlice[] = [];
         for (let i = 0; i < flver.inputStates.length; i++) {
@@ -128,7 +180,7 @@ export class FLVERData {
         for (let i = 0; i < flver.batches.length; i++) {
             const batch = flver.batches[i];
             const coaVertexBuffer = vertexBuffers[batch.inputStateIndex];
-            const batchData = new BatchData(device, this, batch, coaVertexBuffer, indexBuffers);
+            const batchData = new BatchData(device, cache, this, batch, coaVertexBuffer, indexBuffers);
             this.batchData.push(batchData);
         }
 
@@ -143,62 +195,11 @@ export class FLVERData {
         });
     }
 
-    private translateLocation(attr: VertexAttribute): number {
-        switch (attr.semantic) {
-        case VertexInputSemantic.Position:  return DKSProgram.a_Position;
-        case VertexInputSemantic.Color:     return DKSProgram.a_Color;
-        case VertexInputSemantic.UV:        {
-            if (attr.index === 0)
-                return DKSProgram.a_TexCoord0;
-            else if (attr.index === 1)
-                return DKSProgram.a_TexCoord1;
-            else
-                throw "whoops";
-        }
-        case VertexInputSemantic.Normal:    return DKSProgram.a_Normal;
-        case VertexInputSemantic.Tangent:   return DKSProgram.a_Tangent;
-        case VertexInputSemantic.Bitangent: return DKSProgram.a_Bitangent;
-        default: return -1;
-        }
-    }
-
-    private translateDataType(dataType: number): GfxFormat {
-        switch (dataType) {
-            case 17:
-                // Bone indices -- four bytes.
-                return GfxFormat.U8_RGBA_NORM;
-            case 19:
-                // Colors and normals -- four bytes.
-                return GfxFormat.U8_RGBA_NORM;
-            case 21:
-                // One set of UVs -- two shorts.
-                return GfxFormat.S16_RG;
-            case 22:
-                // Two sets of UVs -- four shorts.
-                return GfxFormat.S16_RGBA;
-            case 26:
-                // Bone weight -- four shorts.
-                return GfxFormat.S16_RGBA_NORM;
-            case 2:
-            case 18:
-            case 20:
-            case 23:
-            case 24:
-            case 25:
-                // Everything else -- three floats.
-                return GfxFormat.F32_RGBA;
-            default:
-                throw "whoops";
-        }
-    }
-
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.indexBuffer);
         device.destroySampler(this.gfxSampler);
 
-        for (let i = 0; i < this.inputLayouts.length; i++)
-            device.destroyInputLayout(this.inputLayouts[i]);
         for (let i = 0; i < this.batchData.length; i++)
             this.batchData[i].destroy(device);
     }
@@ -704,12 +705,8 @@ class BatchInstance {
             if (!shouldRenderPrimitive(primitive))
                 continue;
 
-            const inputState = this.flverData.flver.inputStates[this.batchData.batch.inputStateIndex];
-            const gfxInputState = this.batchData.inputStates[j];
-            const gfxInputLayout = this.flverData.inputLayouts[inputState.inputLayoutIndex];
-
             const renderInst = renderInstManager.pushRenderInst();
-            renderInst.setInputLayoutAndState(gfxInputLayout, gfxInputState);
+            renderInst.setInputLayoutAndState(this.batchData.inputLayout, this.batchData.inputStates[j]);
             renderInst.setMegaStateFlags(this.megaState);
             if (primitive.cullMode)
                 renderInst.getMegaStateFlags().cullMode = GfxCullMode.BACK;

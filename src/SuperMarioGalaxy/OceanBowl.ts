@@ -2,7 +2,7 @@
 import { vec3, mat4, vec2 } from "gl-matrix";
 import { SceneObjHolder, getObjectName } from "./Main";
 import { connectToScene, loadBTIData } from "./Actors";
-import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputLayout, GfxInputState, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxCullMode } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputLayout, GfxInputState, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxCullMode, GfxInputLayoutBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { ViewerRenderInput } from "../viewer";
 import { JMapInfoIter } from "./JMapInfo";
 import { computeModelMatrixSRT, clamp } from "../MathHelpers";
@@ -199,16 +199,22 @@ export class OceanBowl extends LiveActor {
             { location: getVertexAttribLocation(GX.VertexAttribute.TEX2), format: GfxFormat.S16_RG_NORM, bufferIndex: 2, bufferByteOffset: 0, },
             { location: getVertexAttribLocation(GX.VertexAttribute.TEX3), format: GfxFormat.S16_RG_NORM, bufferIndex: 2, bufferByteOffset: 0, },
         ];
+        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
+            { byteStride: 4*3, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 4, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 4, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+        ];
 
         this.inputLayout = cache.createInputLayout(device, {
             indexBufferFormat: GfxFormat.U16_R,
             vertexAttributeDescriptors,
+            vertexBufferDescriptors,
         });
 
         this.inputState = device.createInputState(this.inputLayout, [
-            { buffer: this.positionBuffer, byteOffset: 0, byteStride: 4*3, frequency: GfxVertexBufferFrequency.PER_VERTEX },
-            { buffer: this.colorBuffer, byteOffset: 0, byteStride: 4, frequency: GfxVertexBufferFrequency.PER_VERTEX },
-            { buffer: this.texCoord0Buffer, byteOffset: 0, byteStride: 4, frequency: GfxVertexBufferFrequency.PER_VERTEX },
+            { buffer: this.positionBuffer, byteOffset: 0, },
+            { buffer: this.colorBuffer, byteOffset: 0, },
+            { buffer: this.texCoord0Buffer, byteOffset: 0, },
         ], { buffer: this.indexBuffer, byteOffset: 0 });
 
         // Material.

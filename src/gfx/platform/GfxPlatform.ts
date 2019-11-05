@@ -77,8 +77,9 @@ export const enum GfxVertexBufferFrequency {
 export interface GfxVertexBufferDescriptor {
     buffer: GfxBuffer;
     byteOffset: number;
-    byteStride: number;
-    frequency: GfxVertexBufferFrequency;
+}
+
+export interface GfxIndexBufferDescriptor extends GfxVertexBufferDescriptor {
 }
 
 export interface GfxVertexAttributeDescriptor {
@@ -89,9 +90,9 @@ export interface GfxVertexAttributeDescriptor {
     usesIntInShader?: boolean;
 }
 
-export interface GfxIndexBufferDescriptor {
-    buffer: GfxBuffer;
-    byteOffset: number;
+export interface GfxInputLayoutBufferDescriptor {
+    byteStride: number;
+    frequency: GfxVertexBufferFrequency;
 }
 
 export const enum GfxTextureDimension {
@@ -145,6 +146,7 @@ export interface GfxBindingsDescriptor {
 }
 
 export interface GfxInputLayoutDescriptor {
+    vertexBufferDescriptors: (GfxInputLayoutBufferDescriptor | null)[];
     vertexAttributeDescriptors: GfxVertexAttributeDescriptor[];
     indexBufferFormat: GfxFormat | null;
 }
@@ -177,13 +179,13 @@ export const enum GfxColorWriteMask {
 
 export interface GfxAttachmentState {
     colorWriteMask: GfxColorWriteMask;
-    blendConstant: Color;
     rgbBlendState: GfxChannelBlendState;
     alphaBlendState: GfxChannelBlendState;
 }
 
 export interface GfxMegaStateDescriptor {
     attachmentsState: GfxAttachmentState[];
+    blendConstant: Color;
     depthCompare: GfxCompareMode;
     depthWrite: boolean;
     stencilCompare: GfxCompareMode;
@@ -267,7 +269,7 @@ export interface GfxRenderPass {
     setViewport(x: number, y: number, w: number, h: number): void;
     setScissor(x: number, y: number, w: number, h: number): void;
     setPipeline(pipeline: GfxRenderPipeline): void;
-    setBindings(bindingLayoutIndex: number, bindings: GfxBindings, dynamicWordOffsets: number[]): void;
+    setBindings(bindingLayoutIndex: number, bindings: GfxBindings, dynamicByteOffsets: number[]): void;
     setInputState(inputState: GfxInputState | null): void;
     setStencilRef(value: number): void;
 

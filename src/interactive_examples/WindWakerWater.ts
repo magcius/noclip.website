@@ -14,7 +14,7 @@ import * as Yaz0 from '../Common/Compression/Yaz0';
 import { ub_PacketParams, PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, ub_MaterialParams, ColorKind, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import AnimationController from '../AnimationController';
-import { GfxDevice, GfxHostAccessPass, GfxBuffer, GfxInputState, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxRenderPass } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxHostAccessPass, GfxBuffer, GfxInputState, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxRenderPass, GfxInputLayoutBufferDescriptor } from '../gfx/platform/GfxPlatform';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { computeViewMatrix, OrbitCameraController, computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from '../Camera';
@@ -80,17 +80,23 @@ class PlaneShape {
             { location: GX_Material.getVertexAttribLocation(GX.VertexAttribute.TEX0), format: GfxFormat.F32_RG, bufferByteOffset: 4*3, bufferIndex: 0, },
             { location: GX_Material.getVertexAttribLocation(GX.VertexAttribute.CLR0), format: GfxFormat.F32_RGBA, bufferByteOffset: 0, bufferIndex: 1, },
         ];
+        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
+            { byteStride: 4*5, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 4*4, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 4, frequency: GfxVertexBufferFrequency.PER_INSTANCE, },
+        ];
 
         this.zeroBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, new Uint8Array(16).buffer);
         this.colorBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, new Float32Array(nArray(16, () => 1)).buffer);
         this.inputLayout = cache.createInputLayout(device, {
             vertexAttributeDescriptors,
+            vertexBufferDescriptors,
             indexBufferFormat: GfxFormat.U16_R,
         });
         const vertexBuffers: GfxVertexBufferDescriptor[] = [
-            { buffer: this.vtxBuffer, byteOffset: 0, byteStride: 4*5, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
-            { buffer: this.colorBuffer, byteOffset: 0, byteStride: 4*4, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
-            { buffer: this.zeroBuffer, byteOffset: 0, byteStride: 4, frequency: GfxVertexBufferFrequency.PER_INSTANCE, },
+            { buffer: this.vtxBuffer, byteOffset: 0, },
+            { buffer: this.colorBuffer, byteOffset: 0, },
+            { buffer: this.zeroBuffer, byteOffset: 0, },
         ];
         this.inputState = device.createInputState(this.inputLayout, vertexBuffers, { buffer: this.idxBuffer, byteOffset: 0 });
     }

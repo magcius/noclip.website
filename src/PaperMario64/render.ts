@@ -3,7 +3,7 @@
 import { readFileSync } from 'fs';
 import * as Viewer from '../viewer';
 import * as Tex from './tex';
-import { GfxBufferUsage, GfxDevice, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxFormat, GfxBuffer, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxProgram, GfxMegaStateDescriptor } from "../gfx/platform/GfxPlatform";
+import { GfxBufferUsage, GfxDevice, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxFormat, GfxBuffer, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxProgram, GfxMegaStateDescriptor, GfxInputLayoutBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { mat4 } from "gl-matrix";
 import { GfxRenderInstManager, makeSortKeyOpaque, GfxRendererLayer, setSortKeyDepth } from "../gfx/render/GfxRenderer";
 import { DeviceProgram } from "../Program";
@@ -69,14 +69,18 @@ export class N64Data {
             { location: PaperMario64Program.a_TexCoord, bufferIndex: 0, format: GfxFormat.F32_RG,   bufferByteOffset: 4*0x04, },
             { location: PaperMario64Program.a_Color   , bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 6*0x04, },
         ];
+        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
+            { byteStride: 10*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+        ];
 
         this.inputLayout = device.createInputLayout({
             indexBufferFormat: GfxFormat.U16_R,
             vertexAttributeDescriptors,
+            vertexBufferDescriptors,
         });
 
         this.inputState = device.createInputState(this.inputLayout, [
-            { buffer: this.vertexBuffer, byteOffset: 0, byteStride: 10*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { buffer: this.vertexBuffer, byteOffset: 0, },
         ], { buffer: this.indexBuffer, byteOffset: 0 });
     }
 

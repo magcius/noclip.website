@@ -1,5 +1,5 @@
 
-import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxLoadDisposition, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxVertexBufferFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor, GfxAttachmentState as GfxAttachmentStateDescriptor, GfxColorWriteMask, GfxPlatformFramebuffer, GfxVendorInfo } from './GfxPlatform';
+import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxLoadDisposition, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxVertexBufferFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor, GfxAttachmentState as GfxAttachmentStateDescriptor, GfxColorWriteMask, GfxPlatformFramebuffer, GfxVendorInfo, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor } from './GfxPlatform';
 import { _T, GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource } from "./GfxPlatformImpl";
 import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags } from "./GfxPlatformFormat";
 
@@ -7,7 +7,7 @@ import { DeviceProgram } from '../../Program';
 import { assert, assertExists, leftPad } from '../../util';
 import { copyMegaState, defaultMegaState, fullscreenMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
 import { IS_DEVELOPMENT } from '../../BuildVersion';
-import { White, colorEqual, colorCopy } from '../../Color';
+import { White, colorEqual, colorCopy, colorNewCopy } from '../../Color';
 import { range } from '../../MathHelpers';
 
 const SHADER_DEBUG = IS_DEVELOPMENT;
@@ -92,6 +92,7 @@ interface GfxBindingsP_GL extends GfxBindings {
 
 interface GfxInputLayoutP_GL extends GfxInputLayout {
     vertexAttributeDescriptors: GfxVertexAttributeDescriptor[];
+    vertexBufferDescriptors: (GfxInputLayoutBufferDescriptor | null)[];
     indexBufferFormat: GfxFormat | null;
 }
 
@@ -425,16 +426,16 @@ function applyAttachmentState(gl: WebGL2RenderingContext, i: number, currentAtta
         currentAttachmentState.rgbBlendState.blendDstFactor = newAttachmentState.rgbBlendState.blendDstFactor;
         currentAttachmentState.alphaBlendState.blendDstFactor = newAttachmentState.alphaBlendState.blendDstFactor;
     }
-
-    if (!colorEqual(currentAttachmentState.blendConstant, newAttachmentState.blendConstant)) {
-        gl.blendColor(newAttachmentState.blendConstant.r, newAttachmentState.blendConstant.g, newAttachmentState.blendConstant.b, newAttachmentState.blendConstant.a);
-        colorCopy(currentAttachmentState.blendConstant, newAttachmentState.blendConstant);
-    }
 }
 
 function applyMegaState(gl: WebGL2RenderingContext, currentMegaState: GfxMegaStateDescriptor, newMegaState: GfxMegaStateDescriptor): void {
     assert(newMegaState.attachmentsState.length === 1);
     applyAttachmentState(gl, 0, currentMegaState.attachmentsState![0], newMegaState.attachmentsState[0]);
+
+    if (!colorEqual(currentMegaState.blendConstant, newMegaState.blendConstant)) {
+        gl.blendColor(newMegaState.blendConstant.r, newMegaState.blendConstant.g, newMegaState.blendConstant.b, newMegaState.blendConstant.a);
+        colorCopy(currentMegaState.blendConstant, newMegaState.blendConstant);
+    }
 
     if (currentMegaState.depthCompare !== newMegaState.depthCompare) {
         if (currentMegaState.depthCompare === GfxCompareMode.ALWAYS)
@@ -711,14 +712,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         this._dummyCompilerVAO = gl.createVertexArray()!;
 
         this._currentMegaState.depthCompare = GfxCompareMode.ALWAYS;
-        this._currentMegaState.attachmentsState = [
-            {
-                colorWriteMask: GfxColorWriteMask.ALL,
-                blendConstant: White,
-                rgbBlendState: { blendMode: GfxBlendMode.NONE, blendSrcFactor: GfxBlendFactor.ONE, blendDstFactor: GfxBlendFactor.ZERO },
-                alphaBlendState: { blendMode: GfxBlendMode.NONE, blendSrcFactor: GfxBlendFactor.ONE, blendDstFactor: GfxBlendFactor.ZERO },
-            },
-        ];
 
         // Set up bug defines.
         this.programBugDefines = '';
@@ -1110,14 +1103,14 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     }
 
     public createInputLayout(inputLayoutDescriptor: GfxInputLayoutDescriptor): GfxInputLayout {
-        const { vertexAttributeDescriptors, indexBufferFormat } = inputLayoutDescriptor;
-        const inputLayout: GfxInputLayoutP_GL = { _T: _T.InputLayout, ResourceUniqueId: this.getNextUniqueId(), vertexAttributeDescriptors, indexBufferFormat };
+        const { vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat } = inputLayoutDescriptor;
+        const inputLayout: GfxInputLayoutP_GL = { _T: _T.InputLayout, ResourceUniqueId: this.getNextUniqueId(), vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat };
         if (this._resourceCreationTracker !== null)
             this._resourceCreationTracker.trackResourceCreated(inputLayout);
         return inputLayout;
     }
 
-    public createInputState(inputLayout_: GfxInputLayout, vertexBuffers: (GfxVertexBufferDescriptor | null)[], indexBufferBinding: GfxVertexBufferDescriptor | null): GfxInputState {
+    public createInputState(inputLayout_: GfxInputLayout, vertexBuffers: (GfxVertexBufferDescriptor | null)[], indexBufferBinding: GfxIndexBufferDescriptor | null): GfxInputState {
         const inputLayout = inputLayout_ as GfxInputLayoutP_GL;
 
         const gl = this.gl;
@@ -1131,6 +1124,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             if (vertexBuffer === null)
                 continue;
 
+            const inputLayoutBuffer = assertExists(inputLayout.vertexBufferDescriptors[attr.bufferIndex]);
+
             const buffer = vertexBuffer.buffer as GfxBufferP_GL;
             assert(buffer.usage === GfxBufferUsage.VERTEX);
             gl.bindBuffer(gl.ARRAY_BUFFER, getPlatformBuffer(vertexBuffer.buffer));
@@ -1138,12 +1133,12 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             const bufferOffset = vertexBuffer.byteOffset + attr.bufferByteOffset;
             // TODO(jstpierre): How do we support glVertexAttribIPointer without too much insanity?
             if (attr.usesIntInShader) {
-                gl.vertexAttribIPointer(attr.location, size, type, vertexBuffer.byteStride, bufferOffset);
+                gl.vertexAttribIPointer(attr.location, size, type, inputLayoutBuffer.byteStride, bufferOffset);
             } else {
-                gl.vertexAttribPointer(attr.location, size, type, normalized, vertexBuffer.byteStride, bufferOffset);
+                gl.vertexAttribPointer(attr.location, size, type, normalized, inputLayoutBuffer.byteStride, bufferOffset);
             }
 
-            if (vertexBuffer.frequency === GfxVertexBufferFrequency.PER_INSTANCE) {
+            if (inputLayoutBuffer.frequency === GfxVertexBufferFrequency.PER_INSTANCE) {
                 gl.vertexAttribDivisor(attr.location, 1);
             }
 
@@ -1190,6 +1185,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             for (let i = 0; i < inputLayout.vertexAttributeDescriptors.length; i++) {
                 const attr = inputLayout.vertexAttributeDescriptors[i];
                 const { size, type, normalized } = translateVertexFormat(attr.format);
+                const inputLayoutBuffer = inputLayout.vertexBufferDescriptors[attr.bufferIndex];
+                if (inputLayoutBuffer === null)
+                    continue;
 
                 this._bindBuffer(gl.ARRAY_BUFFER, null);
 
@@ -1199,6 +1197,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                     gl.vertexAttribPointer(attr.location, size, type, normalized, 0, 0);
                 }
 
+                if (inputLayoutBuffer.frequency === GfxVertexBufferFrequency.PER_INSTANCE) {
+                    gl.vertexAttribDivisor(attr.location, 1);
+                }
+    
                 gl.enableVertexAttribArray(attr.location);
             }
         }
@@ -1561,10 +1563,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         deviceProgram.ensurePreprocessed(this);
 
         const newProg = this._programCache.compileProgram(deviceProgram.preprocessedVert, deviceProgram.preprocessedFrag);
-        if (newProg === null)
-            throw new Error();
-
-        if (newProg !== program.glProgram) {
+        if (newProg !== null && newProg !== program.glProgram) {
             program.glProgram = newProg;
             program.bindDirty = true;
         }
@@ -1641,7 +1640,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             gl.clear(clearBits);
     }
 
-    private setBindings(bindingLayoutIndex: number, bindings_: GfxBindings, dynamicWordOffsetsCount: number, dynamicWordOffsets: Uint32Array, dynamicWordOffsetsStart: number): void {
+    private setBindings(bindingLayoutIndex: number, bindings_: GfxBindings, dynamicByteOffsetsCount: number, dynamicByteOffsets: Uint32Array, dynamicByteOffsetsStart: number): void {
         const gl = this.gl;
 
         assert(bindingLayoutIndex < this._currentPipeline.bindingLayouts.bindingLayoutTables.length);
@@ -1651,7 +1650,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         // Ignore extra bindings.
         assert(uniformBufferBindings.length >= bindingLayoutTable.numUniformBuffers);
         assert(samplerBindings.length >= bindingLayoutTable.numSamplers);
-        assert(dynamicWordOffsetsCount >= uniformBufferBindings.length);
+        assert(dynamicByteOffsetsCount >= uniformBufferBindings.length);
 
         for (let i = 0; i < uniformBufferBindings.length; i++) {
             const binding = uniformBufferBindings[i];
@@ -1659,9 +1658,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                 continue;
             const index = bindingLayoutTable.firstUniformBuffer + i;
             const buffer = binding.buffer as GfxBufferP_GL;
-            const wordOffset = (binding.wordOffset + dynamicWordOffsets[dynamicWordOffsetsStart + i]);
-            const byteOffset = wordOffset * 4;
-            const byteSize = binding.wordCount * 4;
+            const byteOffset = (binding.wordOffset * 4) + dynamicByteOffsets[dynamicByteOffsetsStart + i];
+            const byteSize = (binding.wordCount * 4);
             if (buffer !== this._currentUniformBuffers[index] || byteOffset !== this._currentUniformBufferByteOffsets[index]) {
                 const platformBufferByteOffset = byteOffset % buffer.pageByteSize;
                 const platformBuffer = buffer.gl_buffer_pages[(byteOffset / buffer.pageByteSize) | 0];

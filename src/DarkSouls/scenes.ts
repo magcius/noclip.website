@@ -21,6 +21,7 @@ import * as MTD from "./mtd";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { GfxRenderDynamicUniformBuffer } from "../gfx/render/GfxRenderDynamicUniformBuffer";
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
 interface CRG1Arc {
     Files: { [filename: string]: ArrayBufferSlice };
@@ -58,6 +59,10 @@ class DKSRenderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice, public textureHolder: DDSTextureHolder) {
         this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
+    }
+
+    public getCache(): GfxRenderCache {
+        return this.renderInstManager.gfxRenderCache;
     }
 
     public createPanels(): Panel[] {
@@ -102,10 +107,10 @@ class DKSRenderer implements Viewer.SceneGfx {
 export class ModelHolder {
     public flverData: (FLVERData | undefined)[] = [];
 
-    constructor(device: GfxDevice, flver: (FLVER.FLVER | undefined)[]) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, flver: (FLVER.FLVER | undefined)[]) {
         for (let i = 0; i < flver.length; i++)
             if (flver[i] !== undefined)
-                this.flverData[i] = new FLVERData(device, flver[i]!);
+                this.flverData[i] = new FLVERData(device, cache, flver[i]!);
     }
 
     public destroy(device: GfxDevice): void {
@@ -203,7 +208,7 @@ class DKSSceneDesc implements Viewer.SceneDesc {
             }
         }
 
-        const modelHolder = new ModelHolder(device, flver);
+        const modelHolder = new ModelHolder(device, renderer.getCache(), flver);
 
         const mapKey = this.id.slice(0, 3); // "m10"
         this.loadTextureBHD(device, textureHolder, resourceSystem, `/map/${mapKey}/${mapKey}_0000`);
@@ -305,7 +310,8 @@ class DKSEverySceneDesc implements Viewer.SceneDesc {
                 }
             }
 
-            const modelHolder = new ModelHolder(device, flver);
+            const cache = renderer.getCache();
+            const modelHolder = new ModelHolder(device, cache, flver);
 
             const mapKey = mapID.slice(0, 3); // "m10"
             this.loadTextureBHD(device, textureHolder, resourceSystem, `/map/${mapKey}/${mapKey}_0000`);

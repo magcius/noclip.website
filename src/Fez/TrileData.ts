@@ -2,7 +2,7 @@
 // Code ported and subsequently butchered from https://github.com/halogenica/FezViewer
 import { vec3, vec2 } from 'gl-matrix';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { GfxBufferUsage, GfxDevice, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxBuffer, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from '../gfx/platform/GfxPlatform';
+import { GfxBufferUsage, GfxDevice, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxBuffer, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxInputLayoutBufferDescriptor } from '../gfx/platform/GfxPlatform';
 import { makeTextureFromImageData } from './Texture';
 import { parseVector3, parseVector2 } from './DocumentHelpers';
 import { AABB } from '../Geometry';
@@ -62,13 +62,18 @@ export class TrileData {
             { location: 0, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0, }, // Position
             { location: 1, bufferIndex: 1, format: GfxFormat.F32_RG,  bufferByteOffset: 0, }, // TexCoord
         ];
+        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
+            { byteStride: 3*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 2*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+        ];
         this.inputLayout = device.createInputLayout({
             indexBufferFormat: GfxFormat.U32_R,
             vertexAttributeDescriptors,
+            vertexBufferDescriptors,
         });
         this.inputState = device.createInputState(this.inputLayout, [
-            { buffer: this.vertexBuffer, byteOffset: 0, byteStride: 3*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
-            { buffer: this.texcoordBuffer, byteOffset: 0, byteStride: 2*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, }
+            { buffer: this.vertexBuffer, byteOffset: 0, },
+            { buffer: this.texcoordBuffer, byteOffset: 0, },
         ],
         { buffer: this.indexBuffer, byteOffset: 0 });
     }

@@ -313,10 +313,13 @@ class FurObj {
                 { location: 1, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 3*0x04 },
                 { location: 2, bufferIndex: 0, format: GfxFormat.F32_RG,  bufferByteOffset: 6*0x04 },
             ],
+            vertexBufferDescriptors: [
+                { byteStride: 8*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            ]
         });
 
         this.inputState = device.createInputState(this.inputLayout, [
-            { buffer: this.vertexBuffer, byteOffset: 0x00, byteStride: 8*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { buffer: this.vertexBuffer, byteOffset: 0x00, },
         ], { buffer: this.indexBuffer, byteOffset: 0x00 });
 
         this.gfxProgram = device.createProgram(new FurProgram());
@@ -362,7 +365,6 @@ class FurObj {
                 renderInst.setMegaStateFlags({
                     attachmentsState: [
                         {
-                            blendConstant: TransparentBlack,
                             colorWriteMask: GfxColorWriteMask.ALL,
                             rgbBlendState: {
                                 blendMode: GfxBlendMode.ADD,

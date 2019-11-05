@@ -9,7 +9,7 @@ import * as Viewer from '../viewer';
 import { DeviceProgram } from '../Program';
 import AnimationController from '../AnimationController';
 import { mat4, vec3 } from 'gl-matrix';
-import { GfxBuffer, GfxBufferUsage, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler, GfxDevice, GfxVertexBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxHostAccessPass, GfxRenderPass, GfxTextureDimension, GfxInputState, GfxInputLayout, GfxCompareMode, GfxProgram } from '../gfx/platform/GfxPlatform';
+import { GfxBuffer, GfxBufferUsage, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler, GfxDevice, GfxVertexBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxHostAccessPass, GfxRenderPass, GfxTextureDimension, GfxInputState, GfxInputLayout, GfxCompareMode, GfxProgram, GfxInputLayoutBufferDescriptor } from '../gfx/platform/GfxPlatform';
 import { fillMatrix4x4, fillVec4, fillColor, fillMatrix4x3 } from '../gfx/helpers/UniformBufferHelpers';
 import { colorNew, Color, colorNewCopy, colorCopy, TransparentBlack } from '../Color';
 import { getTextureFormatName } from './pica_texture';
@@ -728,27 +728,40 @@ class SepdData {
         let perInstanceBinding: GfxVertexBufferDescriptor | null = null;
         if (perInstanceBufferWordOffset !== 0) {
             this.perInstanceBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, new Uint8Array(perInstanceBufferData.buffer));
-            perInstanceBinding = { buffer: this.perInstanceBuffer, byteOffset: 0, byteStride: 0, frequency: GfxVertexBufferFrequency.PER_INSTANCE };
+            perInstanceBinding = { buffer: this.perInstanceBuffer, byteOffset: 0 };
         }
+
+        const vertexBufferDescriptors: (GfxInputLayoutBufferDescriptor | null)[] = [
+            { byteStride: 0, frequency: GfxVertexBufferFrequency.PER_INSTANCE, },
+            { byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX, }, // position
+            { byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX, }, // normal
+            null, // tangent
+            { byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX, }, // color
+            { byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX, }, // texCoord0
+            { byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX, }, // texCoord1
+            { byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX, }, // texCoord2
+            { byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX, }, // boneIndices
+            { byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX, }, // boneWeights
+        ];
 
         for (let i = 1; i < sepd.prms.length; i++)
             assert(sepd.prms[i].prm.indexType === sepd.prms[0].prm.indexType);
 
         const indexType = sepd.prms[0].prm.indexType;
         const indexBufferFormat = translateDataType(indexType, 1, false);
-        this.inputLayout = device.createInputLayout({ vertexAttributeDescriptors, indexBufferFormat });
+        this.inputLayout = device.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
 
         this.inputState = device.createInputState(this.inputLayout, [
             perInstanceBinding,
-            { buffer: vertexBuffer, byteOffset: vatr.positionByteOffset, byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX },
-            { buffer: vertexBuffer, byteOffset: vatr.normalByteOffset, byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX },
+            { buffer: vertexBuffer, byteOffset: vatr.positionByteOffset },
+            { buffer: vertexBuffer, byteOffset: vatr.normalByteOffset },
             null, // tangent
-            { buffer: vertexBuffer, byteOffset: vatr.colorByteOffset, byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX },
-            { buffer: vertexBuffer, byteOffset: vatr.texCoord0ByteOffset, byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX },
-            { buffer: vertexBuffer, byteOffset: vatr.texCoord1ByteOffset, byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX },
-            { buffer: vertexBuffer, byteOffset: vatr.texCoord2ByteOffset, byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX },
-            { buffer: vertexBuffer, byteOffset: vatr.boneIndicesByteOffset, byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX },
-            { buffer: vertexBuffer, byteOffset: vatr.boneWeightsByteOffset, byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX },
+            { buffer: vertexBuffer, byteOffset: vatr.colorByteOffset },
+            { buffer: vertexBuffer, byteOffset: vatr.texCoord0ByteOffset },
+            { buffer: vertexBuffer, byteOffset: vatr.texCoord1ByteOffset },
+            { buffer: vertexBuffer, byteOffset: vatr.texCoord2ByteOffset },
+            { buffer: vertexBuffer, byteOffset: vatr.boneIndicesByteOffset },
+            { buffer: vertexBuffer, byteOffset: vatr.boneWeightsByteOffset },
         ], { buffer: indexBuffer, byteOffset: 0 });
     }
 

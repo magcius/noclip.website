@@ -6,7 +6,7 @@ import * as Viewer from '../viewer';
 import * as UI from '../ui';
 
 import * as IV from './iv';
-import { GfxDevice, GfxBufferUsage, GfxBuffer, GfxInputState, GfxFormat, GfxInputLayout, GfxProgram, GfxBindingLayoutDescriptor, GfxRenderPass, GfxBindings, GfxHostAccessPass, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxBufferUsage, GfxBuffer, GfxInputState, GfxFormat, GfxInputLayout, GfxProgram, GfxBindingLayoutDescriptor, GfxRenderPass, GfxBindings, GfxHostAccessPass, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor } from '../gfx/platform/GfxPlatform';
 import { fillColor, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
@@ -114,8 +114,8 @@ class Chunk {
         this.nrmBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, nrmData.buffer);
 
         this.inputState = device.createInputState(inputLayout, [
-            { buffer: this.posBuffer, byteOffset: 0, byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
-            { buffer: this.nrmBuffer, byteOffset: 0, byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { buffer: this.posBuffer, byteOffset: 0, },
+            { buffer: this.nrmBuffer, byteOffset: 0, },
         ], null);
 
         this.numVertices = chunk.indexData.length;
@@ -190,8 +190,12 @@ export class Scene implements Viewer.SceneGfx {
             { location: IVProgram.a_Position, bufferIndex: 0, bufferByteOffset: 0, format: GfxFormat.F32_RGB, },
             { location: IVProgram.a_Normal,   bufferIndex: 1, bufferByteOffset: 0, format: GfxFormat.F32_RGB, },
         ];
+        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
+            { byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+        ];
         const indexBufferFormat: GfxFormat | null = null;
-        this.inputLayout = device.createInputLayout({ vertexAttributeDescriptors, indexBufferFormat });
+        this.inputLayout = device.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
 
         this.ivRenderers = this.ivs.map((iv) => {
             return new IVRenderer(device, iv, this.inputLayout);

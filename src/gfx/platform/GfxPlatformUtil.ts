@@ -1,5 +1,5 @@
 
-import { GfxSamplerBinding, GfxBufferBinding, GfxBindingsDescriptor, GfxRenderPipelineDescriptor, GfxBindingLayoutDescriptor, GfxInputLayoutDescriptor, GfxVertexAttributeDescriptor, GfxProgram, GfxMegaStateDescriptor, GfxAttachmentState, GfxChannelBlendState, GfxSamplerDescriptor } from './GfxPlatform';
+import { GfxSamplerBinding, GfxBufferBinding, GfxBindingsDescriptor, GfxRenderPipelineDescriptor, GfxBindingLayoutDescriptor, GfxInputLayoutDescriptor, GfxVertexAttributeDescriptor, GfxProgram, GfxMegaStateDescriptor, GfxAttachmentState, GfxChannelBlendState, GfxSamplerDescriptor, GfxInputLayoutBufferDescriptor } from './GfxPlatform';
 import { copyMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
 import { EqualFunc } from '../../HashMap';
 import { colorEqual } from '../../Color';
@@ -79,7 +79,6 @@ function gfxChannelBlendStateEquals(a: GfxChannelBlendState, b: GfxChannelBlendS
 }
 
 function gfxAttachmentsStateEquals(a: GfxAttachmentState, b: GfxAttachmentState): boolean {
-    if (!colorEqual(a.blendConstant, b.blendConstant)) return false;
     if (!gfxChannelBlendStateEquals(a.rgbBlendState, b.rgbBlendState)) return false;
     if (!gfxChannelBlendStateEquals(a.alphaBlendState, b.alphaBlendState)) return false;
     if (a.colorWriteMask !== b.colorWriteMask) return false;
@@ -88,6 +87,8 @@ function gfxAttachmentsStateEquals(a: GfxAttachmentState, b: GfxAttachmentState)
 
 function gfxMegaStateDescriptorEquals(a: GfxMegaStateDescriptor, b: GfxMegaStateDescriptor): boolean {
     if (!arrayEqual(a.attachmentsState, b.attachmentsState, gfxAttachmentsStateEquals))
+        return false;
+    if (!colorEqual(a.blendConstant, b.blendConstant))
         return false;
 
     return (
@@ -119,7 +120,7 @@ export function gfxRenderPipelineDescriptorEquals(a: GfxRenderPipelineDescriptor
     return true;
 }
 
-export function gfxVertexAttributeDesciptorEquals(a: GfxVertexAttributeDescriptor, b: GfxVertexAttributeDescriptor): boolean {
+export function gfxVertexAttributeDescriptorEquals(a: GfxVertexAttributeDescriptor, b: GfxVertexAttributeDescriptor): boolean {
     return (
         a.bufferIndex === b.bufferIndex &&
         a.bufferByteOffset === b.bufferByteOffset &&
@@ -129,9 +130,19 @@ export function gfxVertexAttributeDesciptorEquals(a: GfxVertexAttributeDescripto
     );
 }
 
+export function gfxInputLayoutBufferDescriptorEquals(a: GfxInputLayoutBufferDescriptor | null, b: GfxInputLayoutBufferDescriptor | null): boolean {
+    if (a === null) return b === null;
+    if (b === null) return false;
+    return (
+        a.byteStride === b.byteStride &&
+        a.frequency === b.frequency
+    );
+}
+
 export function gfxInputLayoutDescriptorEquals(a: GfxInputLayoutDescriptor, b: GfxInputLayoutDescriptor): boolean {
     if (a.indexBufferFormat !== b.indexBufferFormat) return false;
-    if (!arrayEqual(a.vertexAttributeDescriptors, b.vertexAttributeDescriptors, gfxVertexAttributeDesciptorEquals)) return false;
+    if (!arrayEqual(a.vertexBufferDescriptors, b.vertexBufferDescriptors, gfxInputLayoutBufferDescriptorEquals)) return false;
+    if (!arrayEqual(a.vertexAttributeDescriptors, b.vertexAttributeDescriptors, gfxVertexAttributeDescriptorEquals)) return false;
     return true;
 }
 

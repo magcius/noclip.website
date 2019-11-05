@@ -1,7 +1,7 @@
 
 import { vec3, mat4 } from "gl-matrix";
 import { colorNewFromRGBA8, colorCopy, Color } from "../Color";
-import { GfxInputState, GfxInputLayout, GfxDevice, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint } from "../gfx/platform/GfxPlatform";
+import { GfxInputState, GfxInputLayout, GfxDevice, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { getVertexAttribLocation, TevStage, IndTexStage, TexGen, ColorChannelControl, GXMaterial } from "../gx/gx_material";
 import * as GX from "../gx/gx_enum";
 import { LiveActor, startBck, startBrkIfExist, ZoneAndLayer } from "./LiveActor";
@@ -89,14 +89,18 @@ class WarpPodPathDrawer {
             { location: getVertexAttribLocation(GX.VertexAttribute.POS), format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0, },
             { location: getVertexAttribLocation(GX.VertexAttribute.TEX0), format: GfxFormat.F32_RG, bufferIndex: 0, bufferByteOffset: 0x04*3, },
         ];
+        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
+            { byteStride: 0x04*5, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+        ];
 
         this.inputLayout = cache.createInputLayout(device, {
             indexBufferFormat: GfxFormat.U16_R,
             vertexAttributeDescriptors,
+            vertexBufferDescriptors,
         });
 
         this.inputState = device.createInputState(this.inputLayout, [
-            { buffer: this.vertexBuffer, byteOffset: 0, byteStride: 0x04*5, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { buffer: this.vertexBuffer, byteOffset: 0, },
         ], { buffer: this.indexBuffer, byteOffset: 0 });
 
         // Material.

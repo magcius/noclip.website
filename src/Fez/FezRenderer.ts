@@ -16,6 +16,7 @@ import { ArtObjectData } from "./ArtObjectData";
 import { BackgroundPlaneData, BackgroundPlaneStaticData } from "./BackgroundPlaneData";
 import { parseVector3, parseQuaternion } from "./DocumentHelpers";
 import { AABB } from "../Geometry";
+import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 
 class FezProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
@@ -287,9 +288,11 @@ export class BackgroundPlaneRenderer {
         this.yTextureRepeat = parseBoolean(planeEl.getAttribute('yTextureRepeat')!);
         this.clampTexture = parseBoolean(planeEl.getAttribute('clampTexture')!);
 
-        this.megaStateFlags.blendMode = GfxBlendMode.ADD;
-        this.megaStateFlags.blendSrcFactor = GfxBlendFactor.SRC_ALPHA;
-        this.megaStateFlags.blendDstFactor = GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
+        setAttachmentStateSimple(this.megaStateFlags, {
+            blendMode: GfxBlendMode.ADD,
+            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
+            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+        });
 
         this.sampler = device.createSampler({
             wrapS: this.xTextureRepeat ? GfxWrapMode.REPEAT : GfxWrapMode.CLAMP,

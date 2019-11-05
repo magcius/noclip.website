@@ -9,7 +9,7 @@ import * as Viewer from '../viewer';
 import { DeviceProgram } from '../Program';
 import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
-import { GfxFormat, GfxBufferUsage, GfxBlendMode, GfxBlendFactor, GfxDevice, GfxBuffer, GfxVertexBufferFrequency, GfxTexFilterMode, GfxMipFilterMode, GfxInputState, GfxInputLayout, GfxVertexAttributeDescriptor, GfxSampler, makeTextureDescriptor2D, GfxMegaStateDescriptor, GfxTexture } from '../gfx/platform/GfxPlatform';
+import { GfxFormat, GfxBufferUsage, GfxBlendMode, GfxBlendFactor, GfxDevice, GfxBuffer, GfxVertexBufferFrequency, GfxTexFilterMode, GfxMipFilterMode, GfxInputState, GfxInputLayout, GfxVertexAttributeDescriptor, GfxSampler, makeTextureDescriptor2D, GfxMegaStateDescriptor, GfxTexture, GfxInputLayoutBufferDescriptor } from '../gfx/platform/GfxPlatform';
 import { fillMatrix4x3, fillVec4, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxRenderInstManager, GfxRenderInst, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
@@ -148,11 +148,14 @@ export class VertexData {
             { location: NITRO_Program.a_Normal, format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 9*4 },
             { location: NITRO_Program.a_PosMtxIdx, format: GfxFormat.F32_R, bufferIndex: 0, bufferByteOffset: 12*4 },
         ];
+        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
+            { byteStride: NITRO_GX.VERTEX_BYTES, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+        ];
 
         const indexBufferFormat = GfxFormat.U16_R;
-        this.inputLayout = device.createInputLayout({ vertexAttributeDescriptors, indexBufferFormat });
+        this.inputLayout = device.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
         this.inputState = device.createInputState(this.inputLayout, [
-            { buffer: this.vertexBuffer, byteOffset: 0, byteStride: NITRO_GX.VERTEX_BYTES, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { buffer: this.vertexBuffer, byteOffset: 0, },
         ], { buffer: this.indexBuffer, byteOffset: 0 });
     }
 

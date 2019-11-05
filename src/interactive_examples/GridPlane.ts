@@ -1,6 +1,6 @@
 
 import { DeviceProgram } from "../Program";
-import { GfxBindingLayoutDescriptor, GfxProgram, GfxBuffer, GfxInputLayout, GfxInputState, GfxDevice, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode } from "../gfx/platform/GfxPlatform";
+import { GfxBindingLayoutDescriptor, GfxProgram, GfxBuffer, GfxInputLayout, GfxInputState, GfxDevice, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxInputLayoutBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { makeTriangleIndexBuffer, GfxTopology } from "../gfx/helpers/TopologyHelpers";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
@@ -110,12 +110,16 @@ export class GridPlane {
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: GridPlaneProgram.a_Position, format: GfxFormat.F32_RGB, bufferByteOffset: 0, bufferIndex: 0, },
         ];
+        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
+            { byteStride: 12, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+        ];
         this.inputLayout = device.createInputLayout({
             vertexAttributeDescriptors,
+            vertexBufferDescriptors,
             indexBufferFormat: GfxFormat.U16_R,
         })
         const vertexBuffers: GfxVertexBufferDescriptor[] = [
-            { buffer: this.posBuffer, byteOffset: 0, byteStride: 12, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { buffer: this.posBuffer, byteOffset: 0, },
         ];
         this.inputState = device.createInputState(this.inputLayout, vertexBuffers, { buffer: this.idxBuffer, byteOffset: 0 });
     }

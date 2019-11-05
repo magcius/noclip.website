@@ -12,13 +12,11 @@ function copyAttachmentState(dst: GfxAttachmentState | undefined, src: GfxAttach
         return {
             rgbBlendState: Object.assign({}, src.rgbBlendState),
             alphaBlendState: Object.assign({}, src.alphaBlendState),
-            blendConstant: colorNewCopy(src.blendConstant),
             colorWriteMask: src.colorWriteMask,
         };
     } else {
         Object.assign(dst.rgbBlendState, src.rgbBlendState);
         Object.assign(dst.alphaBlendState, src.alphaBlendState);
-        colorCopy(dst.blendConstant, src.blendConstant);
         dst.colorWriteMask = src.colorWriteMask;
         return dst;
     }
@@ -37,6 +35,9 @@ export function setMegaStateFlags(dst: GfxMegaStateDescriptor, src: Partial<GfxM
         copyAttachmentsState(dst.attachmentsState, src.attachmentsState);
     }
 
+    if (src.blendConstant !== undefined)
+        colorCopy(dst.blendConstant, src.blendConstant);
+
     dst.depthCompare = resolveField(src.depthCompare, dst.depthCompare);
     dst.depthWrite = resolveField(src.depthWrite, dst.depthWrite);
     dst.stencilCompare = resolveField(src.stencilCompare, dst.stencilCompare);
@@ -49,9 +50,10 @@ export function setMegaStateFlags(dst: GfxMegaStateDescriptor, src: Partial<GfxM
 
 export function copyMegaState(src: GfxMegaStateDescriptor): GfxMegaStateDescriptor {
     const dst = Object.assign({}, src);
-    // Make sure not to point to the the attachmentsState field directly.
+    // Copy fields that need copying.
     dst.attachmentsState = [];
     copyAttachmentsState(dst.attachmentsState, src.attachmentsState);
+    dst.blendConstant = colorNewCopy(dst.blendConstant);
     return dst;
 }
 
@@ -110,9 +112,9 @@ export const defaultMegaState: GfxMegaStateDescriptor = {
         colorWriteMask: GfxColorWriteMask.ALL,
         rgbBlendState: defaultBlendState,
         alphaBlendState: defaultBlendState,
-        blendConstant: TransparentBlack,
     }],
 
+    blendConstant: colorNewCopy(TransparentBlack),
     depthWrite: true,
     depthCompare: reverseDepthForCompareMode(GfxCompareMode.LEQUAL),
     stencilCompare: GfxCompareMode.NEVER,

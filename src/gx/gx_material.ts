@@ -1274,7 +1274,6 @@ export function translateGfxMegaState(megaState: Partial<GfxMegaStateDescriptor>
     }
 
     setAttachmentStateSimple(megaState, attachmentStateSimple);
-    console.log(megaState, attachmentStateSimple);
 }
 // #endregion
 

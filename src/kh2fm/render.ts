@@ -5,7 +5,7 @@ import * as Viewer from '../viewer';
 // @ts-ignore
 import { readFileSync } from 'fs';
 import { DeviceProgram } from "../Program";
-import { GfxProgram, GfxMegaStateDescriptor, GfxDevice, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxCompareMode, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxHostAccessPass, GfxRenderPass, GfxTextureDimension, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxColorWriteMask } from '../gfx/platform/GfxPlatform';
+import { GfxProgram, GfxMegaStateDescriptor, GfxDevice, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxCompareMode, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxHostAccessPass, GfxRenderPass, GfxTextureDimension, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxColorWriteMask, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor } from '../gfx/platform/GfxPlatform';
 import { mat4, vec2, vec4 } from 'gl-matrix';
 import { GfxRenderInstManager, executeOnPass } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
@@ -446,11 +446,15 @@ export class MapData {
             { location: KingdomHeartsIIProgram.a_TexScaleOffs, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 15*0x04, },
             { location: KingdomHeartsIIProgram.a_TexScroll, bufferIndex: 0, format: GfxFormat.F32_RG, bufferByteOffset: 19*0x04, },
         ];
+        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
+            { byteStride: 21*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+        ];
         this.inputLayout = device.createInputLayout({
             indexBufferFormat: GfxFormat.U32_R,
             vertexAttributeDescriptors,
+            vertexBufferDescriptors,
         });
-        const buffers = [{ buffer: this.vertexBuffer, byteOffset: 0, byteStride: 21*4, frequency: GfxVertexBufferFrequency.PER_VERTEX, }];
+        const buffers: GfxVertexBufferDescriptor[] = [{ buffer: this.vertexBuffer, byteOffset: 0, }];
         const indexBuffer = { buffer: this.indexBuffer, byteOffset: 0 };
         this.inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
     }
@@ -487,7 +491,6 @@ class DrawCallInstance {
             this.megaStateFlags.depthWrite = false;
             this.megaStateFlags.attachmentsState = [
                 {
-                    blendConstant: TransparentBlack,
                     colorWriteMask: GfxColorWriteMask.ALL ^ (drawCall.addAlpha ? GfxColorWriteMask.ALPHA : 0),
                     rgbBlendState: {
                         blendMode: GfxBlendMode.ADD,

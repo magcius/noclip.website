@@ -1,7 +1,7 @@
 import {
     GfxDevice, GfxBuffer, GfxInputLayout, GfxInputState, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency,
     GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxTextureDimension, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode,
-    GfxSampler, GfxBlendFactor, GfxBlendMode, GfxTexture, GfxMegaStateDescriptor, GfxCullMode, GfxCompareMode,
+    GfxSampler, GfxBlendFactor, GfxBlendMode, GfxTexture, GfxMegaStateDescriptor, GfxCullMode, GfxCompareMode, GfxInputLayoutBufferDescriptor, GfxInputLayoutDescriptor,
 } from "../gfx/platform/GfxPlatform";
 import { SceneGfx, ViewerRenderInput, Texture } from "../viewer";
 import { SceneDesc, SceneContext, SceneGroup } from "../SceneBase";
@@ -1522,14 +1522,18 @@ class MeshData {
             { location: PW64Program.a_TexCoord, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 3 * 0x04, },
             { location: PW64Program.a_Color, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 5 * 0x04, },
         ];
+        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
+            { byteStride: 9 * 0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+        ];
 
         this.inputLayout = device.createInputLayout({
             indexBufferFormat: GfxFormat.U16_R,
             vertexAttributeDescriptors,
+            vertexBufferDescriptors,
         });
 
         this.inputState = device.createInputState(this.inputLayout, [
-            { buffer: this.vertexBuffer, byteOffset: 0, byteStride: 9 * 0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX },
+            { buffer: this.vertexBuffer, byteOffset: 0 },
         ], { buffer: this.indexBuffer, byteOffset: 0 });
     }
 
@@ -2644,14 +2648,18 @@ class SnowRenderer {
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: SnowProgram.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0, },
         ];
+        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
+            { byteStride: 3 * 0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+        ];
 
         this.inputLayout = device.createInputLayout({
             indexBufferFormat: GfxFormat.U16_R,
             vertexAttributeDescriptors,
+            vertexBufferDescriptors,
         });
 
         this.inputState = device.createInputState(this.inputLayout, [
-            { buffer: this.vertexBuffer, byteOffset: 0, byteStride: 3 * 0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { buffer: this.vertexBuffer, byteOffset: 0, },
         ], { buffer: this.indexBuffer, byteOffset: 0 });
 
     }

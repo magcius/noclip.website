@@ -417,7 +417,6 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
         const renderFlags = makeMegaState({
             attachmentsState: [
                 {
-                    blendConstant,
                     colorWriteMask: GfxColorWriteMask.ALL,
                     rgbBlendState,
                     alphaBlendState,

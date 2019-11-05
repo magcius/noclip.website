@@ -3,7 +3,7 @@
 import { readFileSync } from 'fs';
 import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
 import { PPAK_Texture, TextureFormat, getTextureFormatName } from "./ppf";
-import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxVertexBufferDescriptor, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxProgram, GfxHostAccessPass, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxTextureDimension, GfxRenderPass, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxVertexBufferDescriptor, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxProgram, GfxHostAccessPass, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxTextureDimension, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import * as Viewer from "../viewer";
 import { decompressBC, DecodedSurfaceSW, surfaceToCanvas } from "../Common/bc_texture";
 import { EMeshFrag, EMesh, EScene, EDomain } from "./plb";
@@ -141,15 +141,21 @@ class MeshFragData {
             { location: PsychonautsProgram.a_Color, bufferIndex: 1, bufferByteOffset: 0, format: GfxFormat.U8_RGBA_NORM },
             { location: PsychonautsProgram.a_TexCoord, bufferIndex: 2, bufferByteOffset: 0, format: GfxFormat.F32_RG },
         ];
+        const vertexBufferDescriptors: (GfxInputLayoutBufferDescriptor | null)[] = [
+            { byteStride: 0x10, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            this.colorBuffer ? { byteStride: 0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX } : null,
+            this.uvBuffer    ? { byteStride: 0x08 * meshFrag.streamUVCount, frequency: GfxVertexBufferFrequency.PER_VERTEX } : null,
+        ];
 
         this.inputLayout = device.createInputLayout({
             vertexAttributeDescriptors,
+            vertexBufferDescriptors,
             indexBufferFormat: GfxFormat.U16_R,
         });
         const buffers: (GfxVertexBufferDescriptor | null)[] = [
-            { buffer: this.posNrmBuffer, byteStride: 0x10, byteOffset: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX },
-            this.colorBuffer ? { buffer: this.colorBuffer, byteStride: 0x04, byteOffset: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX } : null,
-            this.uvBuffer    ? { buffer: this.uvBuffer, byteStride: 0x08 * meshFrag.streamUVCount, byteOffset: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX } : null,
+            { buffer: this.posNrmBuffer, byteOffset: 0 },
+            this.colorBuffer ? { buffer: this.colorBuffer, byteOffset: 0, } : null,
+            this.uvBuffer    ? { buffer: this.uvBuffer, byteOffset: 0, } : null,
         ];
         const idxBuffer: GfxIndexBufferDescriptor = { buffer: this.idxBuffer, byteOffset: 0 };
         this.inputState = device.createInputState(this.inputLayout, buffers, idxBuffer);

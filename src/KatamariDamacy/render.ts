@@ -1,5 +1,5 @@
 
-import { GfxDevice, GfxBuffer, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxCompareMode, makeTextureDescriptor2D, GfxProgram, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxBuffer, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxCompareMode, makeTextureDescriptor2D, GfxProgram, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxInputLayoutBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { BINModel, BINTexture, BINModelSector, BINModelPart, GSConfiguration } from "./bin";
 import { DeviceProgram } from "../Program";
 import * as Viewer from "../viewer";
@@ -140,13 +140,16 @@ export class BINModelData {
             { location: KatamariDamacyProgram.a_Normal,   bufferIndex: 0, bufferByteOffset: 3*4, format: GfxFormat.F32_RGB },
             { location: KatamariDamacyProgram.a_TexCoord, bufferIndex: 0, bufferByteOffset: 6*4, format: GfxFormat.F32_RG },
         ];
+        const VERTEX_STRIDE = 3+3+2;
+        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
+            { byteStride: VERTEX_STRIDE*4, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+        ];
         const indexBufferFormat = GfxFormat.U16_R;
 
-        this.inputLayout = cache.createInputLayout(device, { vertexAttributeDescriptors, indexBufferFormat });
+        this.inputLayout = cache.createInputLayout(device, { vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
 
-        const VERTEX_STRIDE = 3+3+2;
         this.inputState = device.createInputState(this.inputLayout, [
-            { buffer: this.vertexBuffer, byteOffset: 0, byteStride: VERTEX_STRIDE*4, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { buffer: this.vertexBuffer, byteOffset: 0, },
         ], { buffer: this.indexBuffer, byteOffset: 0 });
     }
 

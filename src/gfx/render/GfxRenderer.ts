@@ -146,7 +146,7 @@ interface GfxRendererTransientState {
     currentRenderPipelineDescriptor: GfxRenderPipelineDescriptor | null;
     currentRenderPipelineReady: boolean;
     currentInputState: GfxInputState | null;
-    currentBindingDescriptors: GfxBindingsDescriptor | null;
+    currentBindingDescriptor: GfxBindingsDescriptor | null;
     currentBindings: GfxBindings | null;
 }
 
@@ -161,7 +161,7 @@ export class GfxRenderInst {
     // Bindings building.
     private _uniformBuffer: GfxRenderDynamicUniformBuffer;
     private _bindingDescriptors: GfxBindingsDescriptor[] = nArray(1, () => ({ bindingLayout: null!, samplerBindings: [], uniformBufferBindings: [] }));
-    private _dynamicUniformBufferOffsets: number[] = nArray(4, () => 0);
+    private _dynamicUniformBufferByteOffsets: number[] = nArray(4, () => 0);
 
     public _flags: number = 0;
     private _inputState: GfxInputState | null = null;
@@ -200,8 +200,8 @@ export class GfxRenderInst {
         for (let i = 0; i < o._bindingDescriptors[0].uniformBufferBindings.length; i++)
             this._bindingDescriptors[0].uniformBufferBindings[i].wordCount = o._bindingDescriptors[0].uniformBufferBindings[i].wordCount;
         this.setSamplerBindingsFromTextureMappings(o._bindingDescriptors[0].samplerBindings);
-        for (let i = 0; i < o._dynamicUniformBufferOffsets.length; i++)
-            this._dynamicUniformBufferOffsets[i] = o._dynamicUniformBufferOffsets[i];
+        for (let i = 0; i < o._dynamicUniformBufferByteOffsets.length; i++)
+            this._dynamicUniformBufferByteOffsets[i] = o._dynamicUniformBufferByteOffsets[i];
     }
 
     public setGfxRenderPipeline(pipeline: GfxRenderPipeline): void {
@@ -245,7 +245,7 @@ export class GfxRenderInst {
     }
 
     private _setBindingLayout(bindingLayout: GfxBindingLayoutDescriptor): void {
-        assert(bindingLayout.numUniformBuffers < this._dynamicUniformBufferOffsets.length);
+        assert(bindingLayout.numUniformBuffers < this._dynamicUniformBufferByteOffsets.length);
         this._renderPipelineDescriptor.bindingLayouts[0] = bindingLayout;
         this._bindingDescriptors[0].bindingLayout = bindingLayout;
 
@@ -266,21 +266,23 @@ export class GfxRenderInst {
     }
 
     public allocateUniformBuffer(bufferIndex: number, wordCount: number): number {
-        assert(this._bindingDescriptors[0].bindingLayout.numUniformBuffers < this._dynamicUniformBufferOffsets.length);
-        this._dynamicUniformBufferOffsets[bufferIndex] = this._uniformBuffer.allocateChunk(wordCount);
+        assert(this._bindingDescriptors[0].bindingLayout.numUniformBuffers < this._dynamicUniformBufferByteOffsets.length);
+        this._dynamicUniformBufferByteOffsets[bufferIndex] = this._uniformBuffer.allocateChunk(wordCount) << 2;
 
         const dst = this._bindingDescriptors[0].uniformBufferBindings[bufferIndex];
         dst.wordOffset = 0;
         dst.wordCount = wordCount;
-        return this._dynamicUniformBufferOffsets[bufferIndex];
+        const wordOffset = this._dynamicUniformBufferByteOffsets[bufferIndex] >>> 2;
+        return wordOffset;
     }
 
     public getUniformBufferOffset(bufferIndex: number) {
-        return this._dynamicUniformBufferOffsets[bufferIndex];
+        const wordOffset = this._dynamicUniformBufferByteOffsets[bufferIndex] >>> 2;
+        return wordOffset;
     }
 
-    public setUniformBufferOffset(bufferIndex: number, offset: number, wordCount: number): void {
-        this._dynamicUniformBufferOffsets[bufferIndex] = offset;
+    public setUniformBufferOffset(bufferIndex: number, wordOffset: number, wordCount: number): void {
+        this._dynamicUniformBufferByteOffsets[bufferIndex] = wordOffset << 2;
 
         const dst = this._bindingDescriptors[0].uniformBufferBindings[bufferIndex];
         dst.wordOffset = 0;
@@ -288,7 +290,8 @@ export class GfxRenderInst {
     }
 
     public mapUniformBufferF32(bufferIndex: number): Float32Array {
-        return this._uniformBuffer.mapBufferF32(this._dynamicUniformBufferOffsets[bufferIndex], this._bindingDescriptors[0].uniformBufferBindings[bufferIndex].wordCount);
+        const wordOffset = this._dynamicUniformBufferByteOffsets[bufferIndex] >>> 2;
+        return this._uniformBuffer.mapBufferF32(wordOffset, this._bindingDescriptors[0].uniformBufferBindings[bufferIndex].wordCount);
     }
 
     public getUniformBuffer(): GfxRenderDynamicUniformBuffer {
@@ -339,12 +342,12 @@ export class GfxRenderInst {
         for (let i = 0; i < this._bindingDescriptors[0].uniformBufferBindings.length; i++)
             this._bindingDescriptors[0].uniformBufferBindings[i].buffer = this._uniformBuffer.gfxBuffer!;
 
-        if (state.currentBindingDescriptors === null || !gfxBindingsDescriptorEquals(this._bindingDescriptors[0], state.currentBindingDescriptors)) {
-            state.currentBindingDescriptors = this._bindingDescriptors[0];
-            state.currentBindings = cache.createBindings(device, state.currentBindingDescriptors);
+        if (state.currentBindingDescriptor === null || !gfxBindingsDescriptorEquals(this._bindingDescriptors[0], state.currentBindingDescriptor)) {
+            state.currentBindingDescriptor = this._bindingDescriptors[0];
+            state.currentBindings = cache.createBindings(device, state.currentBindingDescriptor);
         }
 
-        passRenderer.setBindings(0, assertExists(state.currentBindings), this._dynamicUniformBufferOffsets);
+        passRenderer.setBindings(0, assertExists(state.currentBindings), this._dynamicUniformBufferByteOffsets);
 
         if (this._drawInstanceCount > 1) {
             assert(!!(this._flags & GfxRenderInstFlags.DRAW_INDEXED));
@@ -373,7 +376,7 @@ export class GfxRenderInst {
 
         // TODO(jstpierre): Support multiple binding descriptors.
         const gfxBindings = cache.createBindings(device, this._bindingDescriptors[0]);
-        passRenderer.setBindings(0, gfxBindings, this._dynamicUniformBufferOffsets);
+        passRenderer.setBindings(0, gfxBindings, this._dynamicUniformBufferByteOffsets);
 
         if (this._drawInstanceCount > 1) {
             assert(!!(this._flags & GfxRenderInstFlags.DRAW_INDEXED));
@@ -426,7 +429,7 @@ function gfxRendererTransientStateReset(state: GfxRendererTransientState): void 
     state.currentRenderPipelineDescriptor = null;
     state.currentRenderPipelineReady = false;
     state.currentInputState = null;
-    state.currentBindingDescriptors = null;
+    state.currentBindingDescriptor = null;
     state.currentBindings = null;
 }
 
@@ -435,7 +438,7 @@ export function gfxRendererTransientStateNew(): GfxRendererTransientState {
         currentRenderPipelineDescriptor: null,
         currentRenderPipelineReady: false,
         currentInputState: null,
-        currentBindingDescriptors: null,
+        currentBindingDescriptor: null,
         currentBindings: null,
     };
 }
