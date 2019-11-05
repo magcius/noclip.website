@@ -1,5 +1,5 @@
 
-import { GfxMegaStateDescriptor, GfxFrontFaceMode, GfxCullMode, GfxStencilOp, GfxCompareMode, GfxBlendFactor, GfxBlendMode, GfxAttachmentState } from "../platform/GfxPlatform";
+import { GfxMegaStateDescriptor, GfxFrontFaceMode, GfxCullMode, GfxStencilOp, GfxCompareMode, GfxBlendFactor, GfxBlendMode, GfxAttachmentState, GfxColorWriteMask } from "../platform/GfxPlatform";
 import { colorCopy, colorNewCopy } from "../../Color";
 import { reverseDepthForCompareMode } from "./ReversedDepthHelpers";
 

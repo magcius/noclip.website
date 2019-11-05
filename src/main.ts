@@ -71,7 +71,6 @@ import { atob, btoa } from './Ascii85';
 import { mat4 } from 'gl-matrix';
 import { GlobalSaveManager, SaveStateLocation } from './SaveManager';
 import { RenderStatistics } from './RenderStatistics';
-import { gfxDeviceGetImpl } from './gfx/platform/GfxPlatformWebGL2';
 import { Color } from './Color';
 import { standardFullClearRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
 
@@ -594,7 +593,8 @@ class Main {
         for (let i = 0; i < this.destroyablePool.length; i++)
             this.destroyablePool[i].destroy(device);
         this.destroyablePool.length = 0;
-        gfxDeviceGetImpl(this.viewer.gfxDevice).checkForLeaks();
+        // TODO(jstpierre): Bring back the leak checker, eventually?
+        // gfxDeviceGetImpl_GL(this.viewer.gfxDevice).checkForLeaks();
 
         // Unhide any hidden scene groups upon being loaded.
         if (sceneGroup.hidden)

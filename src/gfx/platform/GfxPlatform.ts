@@ -54,6 +54,7 @@ export enum GfxBlendMode {
 export const enum GfxLoadDisposition { CLEAR, LOAD }
 export const enum GfxWrapMode { CLAMP, REPEAT, MIRROR }
 export const enum GfxTexFilterMode { POINT, BILINEAR }
+// TODO(jstpierre): remove NO_MIP
 export const enum GfxMipFilterMode { NO_MIP, NEAREST, LINEAR }
 export const enum GfxPrimitiveTopology { TRIANGLES }
 
@@ -230,10 +231,6 @@ export interface GfxProgramReflection {
     uniqueKey: number;
 }
 
-export interface GfxInputStateReflection {
-    inputLayout: GfxInputLayout;
-}
-
 export interface GfxRenderPipelineReflection {
     uniqueHash: number;
 }
@@ -246,13 +243,19 @@ export interface GfxDebugGroup {
     triangleCount: number;
 }
 
+export interface GfxVendorInfo {
+    programBugDefines: string;
+}
+
+export type GfxPlatformFramebuffer = WebGLFramebuffer;
+
 export interface GfxSwapChain {
     configureSwapChain(width: number, height: number): void;
     getDevice(): GfxDevice;
     getOnscreenTexture(): GfxTexture;
     // WebXR requires presenting to a platform-defined framebuffer, for all that is unholy.
     // This hopefully is less terrible in the future. See https://github.com/immersive-web/webxr/issues/896
-    present(platformFramebuffer?: any): void;
+    present(platformFramebuffer?: GfxPlatformFramebuffer): void;
 }
 
 export interface GfxHostAccessPass {
@@ -311,16 +314,16 @@ export interface GfxDevice {
     submitPass(o: GfxPass): void;
 
     queryLimits(): GfxDeviceLimits;
-    queryInputState(o: GfxInputState): GfxInputStateReflection;
     queryTextureFormatSupported(format: GfxFormat): boolean;
     queryPipelineReady(o: GfxRenderPipeline): boolean;
     queryPlatformAvailable(): boolean;
+    queryVendorInfo(): GfxVendorInfo;
 
     // Debugging and high-level queries.
     setResourceName(o: GfxResource, s: string): void;
     setResourceLeakCheck(o: GfxResource, v: boolean): void;
     pushDebugGroup(debugGroup: GfxDebugGroup): void;
-    popDebugGroup(): GfxDebugGroup;
+    popDebugGroup(): void;
 }
 
 export { GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings };

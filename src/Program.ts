@@ -2,7 +2,6 @@
 import CodeEditor from "./CodeEditor";
 import { assertExists } from "./util";
 import { GfxDevice } from "./gfx/platform/GfxPlatform";
-import { gfxDeviceGetImpl } from "./gfx/platform/GfxPlatformWebGL2";
 
 function definesEqual(a: DeviceProgram, b: DeviceProgram): boolean {
     if (a.defines.size !== b.defines.size)
@@ -18,12 +17,7 @@ function definesEqual(a: DeviceProgram, b: DeviceProgram): boolean {
 export class DeviceProgram {
     public name: string = '(unnamed)';
 
-    public uniqueKey: number;
-
     // Compiled program.
-    public glProgram: WebGLProgram;
-    public compileDirty: boolean = true;
-    public bindDirty: boolean = true;
     public preprocessedVert: string = '';
     public preprocessedFrag: string = '';
 
@@ -53,9 +47,9 @@ export class DeviceProgram {
     }
 
     protected preprocessShader(device: GfxDevice, source: string, type: "vert" | "frag"): string {
-        const deviceImpl = gfxDeviceGetImpl(device);
+        const vendorInfo = device.queryVendorInfo();
 
-        const bugDefines = deviceImpl.programBugDefines;
+        const bugDefines = vendorInfo.programBugDefines;
 
         // Garbage WebGL2 shader compiler until I get something better down the line...
         const lines = source.split('\n').map((n) => {
@@ -136,7 +130,6 @@ ${rest}
             const tryCompile = () => {
                 timeout = 0;
                 this[n] = editor.getValue();
-                this.compileDirty = true;
                 this.preprocessedVert = '';
             };
 

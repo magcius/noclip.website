@@ -2,12 +2,15 @@
 import * as UI from './ui';
 
 import InputManager from './InputManager';
+import { SceneDesc, SceneGroup } from "./SceneBase";
 import { CameraController, Camera } from './Camera';
 import { TextureHolder } from './TextureHolder';
-import { GfxDevice, GfxSwapChain, GfxRenderPass, GfxDebugGroup, GfxLoadDisposition } from './gfx/platform/GfxPlatform';
-import { createSwapChainForWebGL2, gfxDeviceGetImpl, getPlatformTexture } from './gfx/platform/GfxPlatformWebGL2';
+import { GfxDevice, GfxSwapChain, GfxRenderPass, GfxDebugGroup } from './gfx/platform/GfxPlatform';
+import { createSwapChainForWebGL2, gfxDeviceGetImpl_GL, getPlatformTexture_GL } from './gfx/platform/GfxPlatformWebGL2';
 import { downloadTextureToCanvas } from './Screenshot';
 import { RenderStatistics, RenderStatisticsTracker } from './RenderStatistics';
+import { NormalizedViewportCoords, ColorAttachment, makeClearRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
+import { OpaqueBlack } from './Color';
 
 export interface Texture {
     name: string;
@@ -51,6 +54,26 @@ export function resizeCanvas(canvas: HTMLCanvasElement, width: number, height: n
     canvas.height = height * devicePixelRatio;
 }
 
+// TODO(jstpierre): Find a more elegant way to write this that doesn't take as many resources.
+class ClearScene {
+    public colorAttachment = new ColorAttachment();
+    private renderPassDescriptor = makeClearRenderPassDescriptor(true, OpaqueBlack);
+
+    public minimize(device: GfxDevice): void {
+        this.colorAttachment.setParameters(device, 1, 1, 0);
+    }
+
+    public render(device: GfxDevice, viewerRenderInput: ViewerRenderInput): GfxRenderPass {
+        this.colorAttachment.setParameters(device, viewerRenderInput.backbufferWidth, viewerRenderInput.backbufferHeight);
+        this.renderPassDescriptor.colorAttachment = this.colorAttachment.gfxColorAttachment;
+        return device.createRenderPass(this.renderPassDescriptor);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.colorAttachment.destroy(device);
+    }
+}
+
 export class Viewer {
     public inputManager: InputManager;
     public cameraController: CameraController | null = null;
@@ -72,8 +95,10 @@ export class Viewer {
 
     public oncamerachanged: () => void = (() => {});
     public onstatistics: (statistics: RenderStatistics) => void = (() => {});
+
     private keyMoveSpeedListeners: Listener[] = [];
     private debugGroup: GfxDebugGroup = { name: 'Scene Rendering', drawCallCount: 0, bufferUploadCount: 0, textureBindCount: 0, triangleCount: 0 };
+    private clearScene: ClearScene = new ClearScene();
 
     constructor(private gfxSwapChain: GfxSwapChain, public canvas: HTMLCanvasElement) {
         this.inputManager = new InputManager(this.canvas);
@@ -107,7 +132,7 @@ export class Viewer {
         this.keyMoveSpeedListeners.push(listener);
     }
 
-    private renderGfxPlatform(): void {
+    private render(): void {
         this.viewerRenderInput.time = this.sceneTime;
         this.viewerRenderInput.backbufferWidth = this.canvas.width;
         this.viewerRenderInput.backbufferHeight = this.canvas.height;
@@ -118,12 +143,19 @@ export class Viewer {
         resetGfxDebugGroup(this.debugGroup);
         this.gfxDevice.pushDebugGroup(this.debugGroup);
 
-        const renderPass = this.scene!.render(this.gfxDevice, this.viewerRenderInput);
-        if (renderPass !== null) {
-            const onscreenTexture = this.gfxSwapChain.getOnscreenTexture();
-            renderPass.endPass(onscreenTexture);
-            this.gfxDevice.submitPass(renderPass);
+        let renderPass: GfxRenderPass | null = null;
+        if (this.scene !== null)
+            renderPass = this.scene.render(this.gfxDevice, this.viewerRenderInput);
+
+        if (renderPass === null) {
+            renderPass = this.clearScene.render(this.gfxDevice, this.viewerRenderInput);
+        } else {
+            this.clearScene.minimize(this.gfxDevice);
         }
+
+        const onscreenTexture = this.gfxSwapChain.getOnscreenTexture();
+        renderPass.endPass(onscreenTexture);
+        this.gfxDevice.submitPass(renderPass);
 
         this.gfxSwapChain.present();
 
@@ -132,19 +164,6 @@ export class Viewer {
 
         this.renderStatisticsTracker.applyDebugGroup(this.debugGroup);
         this.onstatistics(this.renderStatisticsTracker);
-    }
-
-    private render(): void {
-        if (this.scene) {
-            this.renderGfxPlatform();
-        } else {
-            // TODO(jstpierre): Rewrite in GfxPlatform.
-            const gl = gfxDeviceGetImpl(this.gfxDevice).gl;
-            // Render black.
-            gl.clearColor(0, 0, 0, 1);
-            gl.clear(gl.COLOR_BUFFER_BIT);
-            return;
-        }
     }
 
     public setCameraController(cameraController: CameraController) {
@@ -207,17 +226,15 @@ export class Viewer {
 
         if (this.scene !== null) {
             // TODO(jstpierre): Implement in Gfx somehow.
-            const gl = gfxDeviceGetImpl(this.gfxDevice).gl;
+            const gl = gfxDeviceGetImpl_GL(this.gfxDevice).gl;
             const width = gl.drawingBufferWidth, height = gl.drawingBufferHeight;
-            downloadTextureToCanvas(gl, getPlatformTexture(this.gfxSwapChain.getOnscreenTexture()), width, height, canvas, opaque);
+            downloadTextureToCanvas(gl, getPlatformTexture_GL(this.gfxSwapChain.getOnscreenTexture()), width, height, canvas, opaque);
         }
 
         return canvas;
     }
 }
 
-import { SceneDesc, SceneGroup } from "./SceneBase"
-import { NormalizedViewportCoords, standardFullClearRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
 export { SceneDesc, SceneGroup };
 
 interface ViewerOut {

@@ -2,7 +2,6 @@
 import { GfxColorAttachment, GfxDevice, GfxDepthStencilAttachment, GfxLoadDisposition, GfxRenderPassDescriptor, GfxFormat, GfxTexture, GfxTextureDimension, GfxRenderPass } from "../platform/GfxPlatform";
 import { colorNew, TransparentBlack, Color } from "../../Color";
 import { reverseDepthForClearValue } from "./ReversedDepthHelpers";
-import { Camera } from "../../Camera";
 
 export const DEFAULT_NUM_SAMPLES = 4;
 
