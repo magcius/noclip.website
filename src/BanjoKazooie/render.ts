@@ -539,6 +539,7 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
 ];
 
 export class N64Renderer {
+    private visible = true;
     private drawCallInstances: DrawCallInstance[] = [];
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
     public isSkybox = false;
@@ -586,6 +587,8 @@ export class N64Renderer {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!this.visible)
+            return
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
         template.setInputLayoutAndState(this.n64Data.inputLayout, this.n64Data.inputState);
@@ -612,5 +615,6 @@ export class N64Renderer {
 
         for (let i = 0; i < this.drawCallInstances.length; i++)
             this.drawCallInstances[i].prepareToRender(device, renderInstManager, viewerInput, this.isSkybox, this.modelMatrix);
+        renderInstManager.popTemplateRenderInst();
     }
 }

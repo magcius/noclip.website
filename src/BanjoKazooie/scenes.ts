@@ -7,12 +7,17 @@ import * as BYML from '../byml';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { FakeTextureHolder, TextureHolder } from '../TextureHolder';
 import { textureToCanvas, N64Renderer, N64Data, BKPass } from './render';
-import { mat4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 import { transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
 import { SceneContext } from '../SceneBase';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { executeOnPass } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import ArrayBufferSlice from '../ArrayBufferSlice';
+import { assert } from '../util';
+import { DataFetcher } from '../DataFetcher';
+import { Endianness } from '../endian';
+import { MathConstants } from '../MathHelpers';
 
 const pathBase = `BanjoKazooie`;
 
@@ -105,6 +110,78 @@ class BKRenderer implements Viewer.SceneGfx {
     }
 }
 
+interface AnimationEntry {
+    id: number;
+    duration: number;
+}
+
+interface ObjectLoadEntry {
+    otherID: number; // not sure what this is
+    spawnID: number;
+    animationTable: AnimationEntry[];
+    animationStartIndex: number;
+    scale: number;
+
+    geoData?: N64Data;
+}
+
+class ObjectData {
+    public entries: ObjectLoadEntry[] = [];
+    public gfxCache = new GfxRenderCache(true);
+
+    public spawnObject(id: number, pos: vec3, yaw = 0): N64Renderer | null {
+        for (let i = 0; i < this.entries.length; i++) {
+            if (this.entries[i].spawnID !== id)
+                continue;
+            const data = this.entries[i].geoData;
+            if (data) {
+                const renderer = new N64Renderer(data);
+                mat4.fromTranslation(renderer.modelMatrix, pos);
+                mat4.rotateY(renderer.modelMatrix, renderer.modelMatrix, yaw * MathConstants.DEG_TO_RAD);
+                return renderer;
+            }
+            return null;
+        }
+        // the game seems to sometimes call this with models that don't exist
+        // should probably figure out why
+        return null;
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.entries.length; i++)
+            if (this.entries[i].geoData)
+                this.entries[i].geoData!.destroy(device);
+    }
+}
+
+async function fetchObjectData(dataFetcher: DataFetcher, device: GfxDevice): Promise<ObjectData> {
+    const objectData = await dataFetcher.fetchData(`${pathBase}/objectSetup_arc.crg1`);
+    const objectSetup: any = BYML.parse(objectData!, BYML.FileType.CRG1);
+
+    const holder = new ObjectData();
+
+    for (let i = 0; i < objectSetup.ObjectSetupTable.length; i++) {
+        const entry = objectSetup.ObjectSetupTable[i] as ObjectLoadEntry;
+        if (entry.spawnID === 480 || entry.spawnID === 411 || entry.spawnID === 693) {
+            // there are three models that look for a texture in a segment we don't have
+            // one also seems to be the only IA16 texture in the game
+            continue;
+        }
+        const file = (entry as any).modelFile;
+        if (file) {
+            const geoData = file.Data as ArrayBufferSlice;
+            // TODO: figure out what these other files are
+            if (geoData.createTypedArray(Uint32Array, 0, 1, Endianness.BIG_ENDIAN)[0] === 0xB) {
+                const geo = Geo.parse(geoData, true);
+                entry.geoData = new N64Data(device, holder.gfxCache, geo);
+            }
+        }
+        holder.entries.push(entry)
+    }
+
+    return holder;
+}
+
 class SceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
@@ -120,7 +197,57 @@ class SceneDesc implements Viewer.SceneDesc {
         return n64Renderer;
     }
 
-    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+    private addObjects(setupFile: ArrayBufferSlice, objectSetupTable: ObjectData, sceneRenderer: BKRenderer) {
+        const view = setupFile.createDataView();
+        assert(view.getInt16(0) === 0x0101);
+        let offs = 2;
+
+        const bounds: number[] = [];
+        for (let i = 0; i < 6; i++) {
+            bounds.push(view.getInt32(offs));
+            offs += 4;
+        }
+        const totalEntries = (bounds[3] + 1 - bounds[0]) * (bounds[4] + 1 - bounds[1]) * (bounds[5] + 1 - bounds[2]);
+        for (let i = 0; i < totalEntries; i++) {
+            let dataType = view.getInt8(offs++);
+            while (dataType !== 1) {
+                if (dataType === 3) {
+                    assert(view.getInt8(offs++) === 0xa);
+                    const groupSize = view.getUint8(offs++);
+                    if (groupSize > 0)
+                        assert(view.getInt8(offs++) === 0xb);
+                    for (let j = 0; j < groupSize; j++) {
+                        const x = view.getInt16(offs + 0x0);
+                        let y = view.getInt16(offs + 0x2);
+                        const z = view.getInt16(offs + 0x4);
+                        const category = (view.getUint8(offs + 7) >>> 1) & 0x3f;
+                        const id = view.getUint16(offs + 0x8);
+                        const yaw = view.getInt16(offs + 0xc) >>> 7;
+                        // skipping a couple of 0xc-bit fields
+                        if (category === 6) {
+                            const objRenderer = objectSetupTable.spawnObject(id, vec3.fromValues(x, y, z), yaw);
+                            if (objRenderer)
+                                sceneRenderer.n64Renderers.push(objRenderer);
+                        }
+                        offs += 0x14;
+                    }
+                    assert(view.getInt8(offs++) === 0x8);
+                    const otherSize = view.getUint8(offs++);
+                    if (otherSize > 0)
+                        assert(view.getInt8(offs++) === 0x9);
+                    offs += otherSize * 0xc;
+                } else {
+                    offs += 12;
+                }
+                dataType = view.getInt8(offs++);
+            }
+        }
+    }
+
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        let dataHolder = await context.dataShare.ensureObject<ObjectData>(`${pathBase}/ObjectData`, async () => {
+            return await fetchObjectData(context.dataFetcher, device);
+        });
         const dataFetcher = context.dataFetcher;
         return dataFetcher.fetchData(`${pathBase}/${this.id}_arc.crg1`).then((data) => {
             const obj: any = BYML.parse(data!, BYML.FileType.CRG1);
@@ -153,6 +280,8 @@ class SceneDesc implements Viewer.SceneDesc {
                 renderer.isSkybox = true;
                 mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [obj.OpaSkyboxScale, obj.OpaSkyboxScale, obj.OpaSkyboxScale]);
             }
+
+            this.addObjects(obj.Files[obj.SetupFileId].Data, dataHolder, sceneRenderer)
 
             return sceneRenderer;
         });

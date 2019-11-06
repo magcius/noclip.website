@@ -99,7 +99,7 @@ export function parse(buffer: ArrayBufferSlice, initialZUpd: boolean): Geometry 
         // console.log(hexzero(cmd, 0x08));
         if (cmd === 0x00) {
             // set custom model matrix?
-            geoIdx += 0x04;
+            geoIdx += 0x18;
         } else if (cmd === 0x01) {
             // sort. Skip.
             const drawCloserOnly = !!(view.getUint16(geoIdx + 0x20) & 1);
@@ -116,6 +116,17 @@ export function parse(buffer: ArrayBufferSlice, initialZUpd: boolean): Geometry 
             const triCount = view.getUint16(geoIdx + 0x0A);
             F3DEX.runDL_F3DEX(state, 0x09000000 + segmentStart * 0x08);
             geoIdx += 0x10;
+        } else if (cmd === 0x05) {
+            // actually a while loop, but the size seems constant
+            // revisit when we do real geo list parsing
+            let segmentStart = 0;
+            for (let i = 0x08; i < 0x18; i += 2) {
+                segmentStart = view.getUint16(geoIdx + i);
+                if (segmentStart === 0 && i > 8) // 0 after the first indicates the end
+                    break;
+                F3DEX.runDL_F3DEX(state, 0x09000000 + segmentStart * 0x08);
+            }
+            geoIdx += 0x18;
         } else if (cmd === 0x08) {
             // more draw distance?. Skip.
             geoIdx += 0x20;
@@ -123,11 +134,11 @@ export function parse(buffer: ArrayBufferSlice, initialZUpd: boolean): Geometry 
             // push vector?. Skip.
             geoIdx += 0x18;
         } else if (cmd === 0x0C) {
-            // select children. Skip.
-            // used for showing only collected jiggies
-            const dataSize = view.getUint32(geoIdx + 0x0C);
+            // select child geo list(s), e.g. eye blink state
+            // TODO: intelligently pick which ones to run
+            const firstChild = view.getUint32(geoIdx + 0x0c);
             // hexdump(buffer, geoIdx, 0x100);
-            geoIdx += dataSize;
+            geoIdx += firstChild;
         } else if (cmd === 0x0D) {
             // DRAW DISTANCE. Skip.
             geoIdx += 0x18;
@@ -139,7 +150,7 @@ export function parse(buffer: ArrayBufferSlice, initialZUpd: boolean): Geometry 
         } else if (cmd === 0x0F) {
             const count = view.getUint8(geoIdx + 0x0A);
             // hexdump(buffer, geoIdx, 0x20);
-            geoIdx += 0x0C + align(count, 4);
+            geoIdx += view.getInt16(geoIdx + 0x08);
         } else if (cmd === 0x10) {
             // set mipmaps. Skip.
             const contFlag = view.getUint32(geoIdx + 0x04);
@@ -147,7 +158,7 @@ export function parse(buffer: ArrayBufferSlice, initialZUpd: boolean): Geometry 
             const wrapMode = view.getInt32(geoIdx + 0x08);
             geoIdx += 0x10;
         } else {
-            throw "whoops";
+            throw `whoops ${cmd}`;
         }
     }
     const rspOutput = state.finish();
@@ -165,7 +176,7 @@ export function parse(buffer: ArrayBufferSlice, initialZUpd: boolean): Geometry 
             offs += 0x04;
 
             if (rawID <= 100 || type === VertexEffectType.Interactive || type === VertexEffectType.OtherInteractive) {
-                // TODO: understand what the effects with id <= 100 are for
+                // effects <= 100 are for changing the colors of the letter tiles in spelling minigames
                 offs += vertexCount * 0x02;
                 continue;
             }

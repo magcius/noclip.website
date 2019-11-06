@@ -685,7 +685,7 @@ export function runDL_F3DEX(state: RSPState, addr: number): void {
         } break;
 
         case F3DEX_GBI.G_VTX: {
-            const v0 = (w0 >>> 16) & 0xFF;
+            const v0 = ((w0 >>> 16) & 0xFF) / 2;
             const n = (w0 >>> 10) & 0x3F;
             state.gSPVertex(w1, n, v0);
         } break;
@@ -739,6 +739,10 @@ export function runDL_F3DEX(state: RSPState, addr: number): void {
             const lrs =  (w1 >>> 12) & 0x0FFF;
             const lrt =  (w1 >>>  0) & 0x0FFF;
             state.gDPSetTileSize(tile, uls, ult, lrs, lrt);
+        } break;
+
+        case F3DEX_GBI.G_POPMTX: {
+            // TODO: handle matrix logic for bones
         } break;
 
         case F3DEX_GBI.G_RDPFULLSYNC:

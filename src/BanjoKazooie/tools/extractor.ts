@@ -1,7 +1,7 @@
 
 import ArrayBufferSlice from "../../ArrayBufferSlice";
 import { readFileSync, writeFileSync } from "fs";
-import { assert, hexzero, hexdump } from "../../util";
+import { assert, hexzero, nArray } from "../../util";
 import * as Pako from 'pako';
 import * as BYML from "../../byml";
 
@@ -59,14 +59,26 @@ interface CRG1File {
     Data: ArrayBufferSlice;
 }
 
-function extractFile(fileTable: CRG1File[], fs: FS, fsfile: FSFile): number {
+function extractFileAndAppend(fileTable: CRG1File[], fs: FS, fsfile: FSFile): number {
     if (fsfile === null)
         return -1;
 
     const index = fileTable.length;
-    const buffer = decompress(getFileBuffer(fs, fsfile));
-    fileTable.push({ Data: buffer });
+    fileTable.push(extractFile(fs, fsfile));
     return index;
+}
+
+function extractFile(fs: FS, fsfile: FSFile): CRG1File {
+    const fileBuffer = getFileBuffer(fs, fsfile);
+    const buffer = (fsfile.flags & 0x00010000) ? decompress(fileBuffer) : fileBuffer;
+    return { Data: buffer };
+}
+
+function decompressBigSlice(fs: FS, offset: number, end: number): ArrayBufferSlice {
+    const romView = fs.buffer.createDataView();
+    const giantBuffer = new ArrayBuffer(romView.getUint32(offset + 2) + (end - offset));
+    new Uint8Array(giantBuffer).set(fs.buffer.createTypedArray(Uint8Array, offset, end - offset));
+    return decompress(new ArrayBufferSlice(giantBuffer));
 }
 
 function extractMap(fs: FS, name: string, sceneID: number): void {
@@ -89,7 +101,7 @@ function extractMap(fs: FS, name: string, sceneID: number): void {
         XluSkyboxScale: 1,
     };
 
-    crg1.SetupFileId = extractFile(fileTable, fs, fs.files[sceneID + 0x71c]);
+    crg1.SetupFileId = extractFileAndAppend(fileTable, fs, fs.files[sceneID + 0x71c]);
 
     const f9cae0 = decompress(fs.buffer.slice(0xF9CAE0));
     const f9cae0View = f9cae0.createDataView();
@@ -100,8 +112,8 @@ function extractMap(fs: FS, name: string, sceneID: number): void {
             const opaId = f9cae0View.getUint16(i + 0x02);
             const xluId = f9cae0View.getUint16(i + 0x04);
 
-            crg1.OpaGeoFileId = extractFile(fileTable, fs, opaId > 0 ? fs.files[opaId] : null);
-            crg1.XluGeoFileId = extractFile(fileTable, fs, xluId > 0 ? fs.files[xluId] : null);
+            crg1.OpaGeoFileId = extractFileAndAppend(fileTable, fs, opaId > 0 ? fs.files[opaId] : null);
+            crg1.XluGeoFileId = extractFileAndAppend(fileTable, fs, xluId > 0 ? fs.files[xluId] : null);
             break;
         }
     }
@@ -114,9 +126,9 @@ function extractMap(fs: FS, name: string, sceneID: number): void {
             const xluSkyboxId    = f9cae0View.getUint16(i + 0x10);
             const xluSkyboxScale = f9cae0View.getFloat32(i + 0x14);
 
-            crg1.OpaSkyboxFileId = extractFile(fileTable, fs, opaSkyboxId > 0 ? fs.files[opaSkyboxId] : null);
+            crg1.OpaSkyboxFileId = extractFileAndAppend(fileTable, fs, opaSkyboxId > 0 ? fs.files[opaSkyboxId] : null);
             crg1.OpaSkyboxScale = opaSkyboxScale;
-            crg1.XluSkyboxFileId = extractFile(fileTable, fs, xluSkyboxId > 0 ? fs.files[xluSkyboxId] : null);
+            crg1.XluSkyboxFileId = extractFileAndAppend(fileTable, fs, xluSkyboxId > 0 ? fs.files[xluSkyboxId] : null);
             crg1.XluSkyboxScale = xluSkyboxScale;
             break;
         }
@@ -124,6 +136,158 @@ function extractMap(fs: FS, name: string, sceneID: number): void {
 
     const data = BYML.write(crg1, BYML.FileType.CRG1);
     writeFileSync(`${pathBaseOut}/${hexzero(sceneID, 2).toUpperCase()}_arc.crg1`, Buffer.from(data));
+}
+
+const enum MIPSOpcode {
+    regBlock = 0x0,
+    JAL = 0x3,
+    ADDIU = 0x9,
+    ORI = 0xd,
+    LUI = 0xf,
+}
+
+interface AnimationEntry {
+    id: number;
+    duration: number;
+}
+
+interface ObjectLoadEntry {
+    otherID: number; // not sure what this is
+    spawnID: number;
+    modelFile?: CRG1File;
+    animationTable: AnimationEntry[];
+    animationStartIndex: number;
+    scale: number;
+}
+
+function parseObjectLoadEntry(fs: FS, map: RAMMapper, startAddress: number): ObjectLoadEntry {
+    const view = map.lookup(startAddress);
+    let offs = 0;
+
+    const otherID = view.getUint16(offs + 0x0);
+    const spawnID = view.getUint16(offs + 0x2);
+    const fileIndex = view.getUint16(offs + 0x4);
+    const animationStartIndex = view.getUint16(offs + 0x6);
+    const animationTableAddress = view.getUint32(offs + 0x8);
+    const scale = view.getFloat32(offs + 0x1c);
+
+    let modelFile: CRG1File | undefined;
+    if (fileIndex !== 0)
+        modelFile = extractFile(fs, fs.files[fileIndex]);
+
+    const animationTable: AnimationEntry[] = [];
+    if (animationTableAddress !== 0) {
+        const animView = map.lookup(animationTableAddress);
+        offs = 0;
+
+        while (true) {
+            const id = animView.getUint32(offs + 0x0);
+            const duration = animView.getFloat32(offs + 0x4);
+            if (id === 0 && animationTable.length > 0)
+                break; // the first entry can be (and often is) zero
+            animationTable.push({ id, duration });
+            offs += 8;
+        }
+    }
+    return { otherID, spawnID, modelFile, animationTable, animationStartIndex, scale };
+}
+
+interface RAMRegion {
+    data: ArrayBufferSlice;
+    start: number;
+}
+
+class RAMMapper {
+    public regions: RAMRegion[] = [];
+
+    public lookup(address: number): DataView {
+        for (let i = 0; i < this.regions.length; i++) {
+            const delta = address - this.regions[i].start
+            if (delta >= 0 && delta < this.regions[i].data.byteLength) {
+                return this.regions[i].data.createDataView(delta);
+            }
+        }
+        throw `couldn't find region for ${address}`;
+    }
+}
+
+function extractObjectLoad(fs: FS) {
+    const setupTable: ObjectLoadEntry[] = [];
+
+    const map = new RAMMapper();
+    // the second file table at 3ffe10 in RAM has a list of addresses of compressed files
+    // some (all?) of these contain code, and are followed by another compressed file with data
+    // the uncompressed files are placed consecutively in RAM, so probably a better way to get these addresses
+    map.regions.push({ data: decompressBigSlice(fs, 0xF37F90, 0xF9CAE0), start: 0x80286F90 });
+    map.regions.push({ data: decompressBigSlice(fs, 0xF9CAE0, 0xFA3FD0), start: 0x80363590 });
+    map.regions.push({ data: decompressBigSlice(fs, 0xFC6F20, 0XFC8AFC), start: 0x803863F0 });
+    map.regions.push({ data: decompressBigSlice(fs, 0xFC8AFC, 0XFC9150), start: 0x8038D350 });
+
+    extractObjectLoadFromAssembly(fs, setupTable, map, 0x802c2c08);
+    extractObjectLoadFromAssembly(fs, setupTable, map, 0x8038c4f4);
+
+    const data = BYML.write({ ObjectSetupTable: setupTable }, BYML.FileType.CRG1);
+    writeFileSync(`${pathBaseOut}/objectSetup_arc.crg1`, Buffer.from(data));
+}
+
+function extractObjectLoadFromAssembly(fs: FS, setupTable: ObjectLoadEntry[], map: RAMMapper, entryAddress: number) {
+    const view = map.lookup(entryAddress);
+
+    let offs = 0;
+    // RAM address of function that appends an entry to the object load table
+    // divide by four to match MIPS function call
+    const appendEntry = 0x3053e8 / 4;
+    // address of a function that appends an entry if a particular bit is set
+    const conditionalAppendEntry = 0x3054a4 / 4;
+
+    // registers to keep track of
+    // only a0-a3 (4-7) change, though r0 is read
+    const regs = nArray(8, () => 0);
+    let delay = false;
+    while (true) {
+        const instr = view.getUint32(offs);
+        const rs = (instr >>> 21) & 0x1f;
+        const rt = (instr >>> 16) & 0x1f;
+        const rd = (instr >>> 11) & 0x1f;
+        const imm = instr & 0xffff;
+        offs += 4;
+        switch (instr >>> 26) {
+            case MIPSOpcode.regBlock:
+                assert((instr & 0x3f) === 0x25, "non-OR register instruction found");
+                assert(rt === 0); // really just a MOV
+                if (rs === 16) // from reg s0
+                    regs[rd] = 0x803272f8;
+                else
+                    regs[rd] = regs[rs];
+                break;
+            case MIPSOpcode.JAL:
+                const funcAddr = instr & 0x00ffffff;
+                assert(funcAddr == appendEntry || funcAddr == conditionalAppendEntry, "unknown function found");
+                delay = true;
+                break;
+            case MIPSOpcode.ADDIU:
+                assert(rs < 8 && rt < 8);
+                regs[rt] = regs[rs] + imm - ((imm >= 0x8000) ? 0x10000 : 0); // sign extend
+                break;
+            case MIPSOpcode.ORI:
+                assert(rs < 8 && rt < 8);
+                regs[rt] = regs[rs] | imm;
+                break;
+            case MIPSOpcode.LUI:
+                assert(rt < 8);
+                regs[rt] = (imm << 16) >>> 0;
+                break;
+            default:
+                // done with the setup portion
+                return;
+        }
+        if (delay && (instr >>> 26) !== MIPSOpcode.JAL) {
+            delay = false;
+            // interpret function arguments
+            // TODO: figure out how much a1 (the init function) and a2 (the flags) matter for our purposes
+            setupTable.push(parseObjectLoadEntry(fs, map, regs[4]));
+        }
+    }
 }
 
 function main() {
@@ -244,6 +408,8 @@ function main() {
     extractMap(fs, "GL - Path to Quiz show",              0x80);
     extractMap(fs, "GL - Furnace Fun",                    0x8E);
     extractMap(fs, "GL - Boss",                           0x90);
+
+    extractObjectLoad(fs);
 }
 
 main();
