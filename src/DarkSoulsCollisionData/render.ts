@@ -52,7 +52,7 @@ void mainVS() {
 void mainPS() {
     float t_LightIntensity = gl_FrontFacing ? v_LightIntensity.x : v_LightIntensity.y;
     float t_LightTint = 0.3 * t_LightIntensity;
-    gl_FragColor = u_Color + t_LightTint;
+    gl_FragColor = u_Color + vec4(t_LightTint, t_LightTint, t_LightTint, 0.0);
 }
 #endif
 `;
@@ -191,8 +191,8 @@ export class Scene implements Viewer.SceneGfx {
             { location: IVProgram.a_Normal,   bufferIndex: 1, bufferByteOffset: 0, format: GfxFormat.F32_RGB, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
-            { byteStride: 0, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 3*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 3*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
         ];
         const indexBufferFormat: GfxFormat | null = null;
         this.inputLayout = device.createInputLayout({ vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });

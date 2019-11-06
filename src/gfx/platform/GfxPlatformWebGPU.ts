@@ -2,7 +2,7 @@
 import { GfxSwapChain, GfxDevice, GfxTexture, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingsDescriptor, GfxColorAttachment, GfxTextureDescriptor, GfxSamplerDescriptor, GfxInputLayoutDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxInputState, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxSampler, GfxDepthStencilAttachment, GfxProgram, GfxBindings, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxDebugGroup, GfxPass, GfxRenderPassDescriptor, GfxRenderPass, GfxHostAccessPass, GfxDeviceLimits, GfxFormat, GfxVendorInfo, GfxTextureDimension, GfxBindingLayoutDescriptor, GfxPrimitiveTopology, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxAttachmentState, GfxChannelBlendState, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxLoadDisposition } from "./GfxPlatform";
 import { _T, GfxResource } from "./GfxPlatformImpl";
 import { DeviceProgram } from "../../Program";
-import { assertExists, assert, leftPad } from "../../util";
+import { assertExists, assert, leftPad, align } from "../../util";
 import glslang, { ShaderStage, Glslang } from '../../vendor/glslang/glslang';
 
 interface GfxBufferP_WebGPU extends GfxBuffer {
@@ -10,6 +10,7 @@ interface GfxBufferP_WebGPU extends GfxBuffer {
 }
 
 interface GfxTextureP_WebGPU extends GfxTexture {
+    pixelFormat: GfxFormat;
     width: number;
     height: number;
     numLevels: number;
@@ -313,6 +314,10 @@ class GfxHostAccessPassP_WebGPU implements GfxHostAccessPass {
         // TODO(jstpierre): Don't create scratch buffers, instead use a larger upload pool.
         const gfxTexture = texture as GfxTextureP_WebGPU;
 
+        // Not sure why, but WebGPU rowPitch is multiples of 256 (?), which is a super large number.
+        const widthInBytes = gfxTexture.pixelFormat;
+        const rowPitch = align(gfxTexture.width, 256);
+
         let bufferSize = 0;
         for (let i = 0; i < levelDatas.length; i++)
             bufferSize += levelDatas[i].byteLength;
@@ -512,6 +517,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         const gpuTextureView = gpuTexture.createView();
         const texture: GfxTextureP_WebGPU = { _T: _T.Texture, ResourceUniqueId: 0,
             gpuTexture, gpuTextureView,
+            pixelFormat: GfxFormat.U8_RGBA_NORM,
             width: 0,
             height: 0,
             numLevels: 1,
@@ -553,6 +559,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         const gpuTextureView = gpuTexture.createView();
         const texture: GfxTextureP_WebGPU = { _T: _T.Texture, ResourceUniqueId: this.getNextUniqueId(),
             gpuTexture, gpuTextureView,
+            pixelFormat: descriptor.pixelFormat,
             width: descriptor.width,
             height: descriptor.height,
             numLevels: mipLevelCount,
@@ -601,14 +608,14 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     }
 
     private async _createShaderStage(sourceText: string, shaderStage: ShaderStage): Promise<GPUProgrammableStageDescriptor> {
-        let res;
+        let res: Uint32Array;
         try {
-            res = this.glslang.compileGLSLZeroCopy(sourceText, shaderStage, true);
+            res = this.glslang.compileGLSL(sourceText, shaderStage, true);
         } catch(e) {
             console.error(prependLineNo(sourceText));
             throw "whoops";
         }
-        const shaderModule = this.device.createShaderModule({ code: res.data });
+        const shaderModule = this.device.createShaderModule({ code: res });
         return { module: shaderModule, entryPoint: 'main' };
     }
 
@@ -654,8 +661,8 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             const gfxBinding = bindingsDescriptor.uniformBufferBindings[i];
             const gpuBufferBinding: GPUBufferBinding = {
                 buffer: getPlatformBuffer(gfxBinding.buffer),
-                offset: gfxBinding.wordOffset >>> 2,
-                size: gfxBinding.wordCount >>> 2,
+                offset: gfxBinding.wordOffset << 2,
+                size: gfxBinding.wordCount << 2,
             };
             gpuBindGroupBindings.push({ binding: numBindings++, resource: gpuBufferBinding });
         }
@@ -691,6 +698,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             if (b === null)
                 continue;
             const stride = b.byteStride;
+            assert(stride > 0);
             const stepMode = translateVertexBufferFrequency(b.frequency);
             const attributeSet: GPUVertexAttributeDescriptor[] = [];
             vertexBuffers[i] = { stride, stepMode, attributeSet };
