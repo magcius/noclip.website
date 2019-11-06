@@ -15,7 +15,7 @@ import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks } from '../gx/gx_material';
 import { mat4, quat } from 'gl-matrix';
 import AnimationController from '../AnimationController';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
-import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxTexture, GfxTextureDimension, GfxFormat } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxTexture, GfxTextureDimension, GfxFormat, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 import { executeOnPass, hasAnyVisible, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { ColorKind } from '../gx/gx_render';
@@ -173,10 +173,7 @@ class SkywardSwordRenderer implements Viewer.SceneGfx {
         this.textureHolder.addRRESTextures(device, systemRRES);
 
         // Override the "Add" textures with a black texture to prevent things from being overly bright.
-        this.blackTexture = device.createTexture({
-            dimension: GfxTextureDimension.n2D, pixelFormat: GfxFormat.U8_RGBA,
-            width: 1, height: 1, depth: 1, numLevels: 1,
-        });
+        this.blackTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 1, 1, 1));
         const hostAccessPass = device.createHostAccessPass();
         hostAccessPass.uploadTextureData(this.blackTexture, 0, [new Uint8Array([0, 0, 0, 0])]);
         this.textureHolder.setTextureOverride('LmChaAdd', { gfxTexture: this.blackTexture, width: 1, height: 1, flipY: false });

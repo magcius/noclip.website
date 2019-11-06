@@ -1,5 +1,5 @@
 
-import { GfxColorAttachment, GfxDevice, GfxDepthStencilAttachment, GfxLoadDisposition, GfxRenderPassDescriptor, GfxFormat, GfxTexture, GfxTextureDimension, GfxRenderPass } from "../platform/GfxPlatform";
+import { GfxColorAttachment, GfxDevice, GfxDepthStencilAttachment, GfxLoadDisposition, GfxRenderPassDescriptor, GfxFormat, GfxTexture, GfxTextureDimension, GfxRenderPass, makeTextureDescriptor2D } from "../platform/GfxPlatform";
 import { colorNew, TransparentBlack, Color } from "../../Color";
 import { reverseDepthForClearValue } from "./ReversedDepthHelpers";
 
@@ -15,10 +15,7 @@ export class ColorTexture {
             this.destroy(device);
             this.width = width;
             this.height = height;
-            this.gfxTexture = device.createTexture({
-                dimension: GfxTextureDimension.n2D, pixelFormat: GfxFormat.U8_RGBA,
-                width, height, depth: 1, numLevels: 1
-            });
+            this.gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, width, height, 1));
             return true;
         } else {
             return false;

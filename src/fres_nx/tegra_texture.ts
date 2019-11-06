@@ -238,7 +238,7 @@ export function translateImageFormat(imageFormat: ImageFormat): GfxFormat {
 
     switch (typeFormat) {
     case TypeFormat.Unorm:
-        return GfxFormat.U8_RGBA;
+        return GfxFormat.U8_RGBA_NORM;
     case TypeFormat.UnormSrgb:
         return GfxFormat.U8_RGBA_SRGB;
     case TypeFormat.Snorm:

@@ -378,7 +378,7 @@ export class KatamariDamacyTextureHolder extends TextureHolder<BINTexture> {
     }
 
     public loadTexture(device: GfxDevice, texture: BINTexture): LoadedTexture {
-        const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA, texture.width, texture.height, 1));
+        const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, 1));
         device.setResourceName(gfxTexture, texture.name);
         const hostAccessPass = device.createHostAccessPass();
         hostAccessPass.uploadTextureData(gfxTexture, 0, [texture.pixels]);

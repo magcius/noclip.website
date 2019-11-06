@@ -742,10 +742,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             if (this._scTexture !== null)
                 this._destroyTexture(this._scTexture);
 
-            this._scTexture = this._createTexture({
-                dimension: GfxTextureDimension.n2D, pixelFormat: GfxFormat.U8_RGBA,
-                width: this._scWidth, height: this._scHeight, depth: 1, numLevels: 1,
-            });
+            this._scTexture = this._createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, this._scWidth, this._scHeight, 1));
             gl.bindTexture(gl.TEXTURE_2D, getPlatformTexture(this._scTexture));
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
@@ -807,12 +804,11 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         case GfxFormat.U8_RG_NORM:
             return WebGL2RenderingContext.RG8;
         // TODO(jsptierre): This should really be U8_RGB_NORM
-        case GfxFormat.U8_RGB:
+        case GfxFormat.U8_RGB_NORM:
             return WebGL2RenderingContext.RGB8;
         case GfxFormat.U8_RGB_SRGB:
             return WebGL2RenderingContext.SRGB8;
-        // TODO(jsptierre): This should really be U8_RGBA_NORM
-        case GfxFormat.U8_RGBA:
+        case GfxFormat.U8_RGBA_NORM:
             return WebGL2RenderingContext.RGBA8;
         case GfxFormat.U8_RGBA_SRGB:
             return WebGL2RenderingContext.SRGB8_ALPHA8;

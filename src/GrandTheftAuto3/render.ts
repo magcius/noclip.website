@@ -70,7 +70,7 @@ export function rwTexture(texture: rw.Texture, txdName: string, useDXT = true): 
     image.unindex();
     const { width, height } = image;
     const levels = [image.pixels!.slice()];
-    const pixelFormat = (image.depth === 32) ? GfxFormat.U8_RGBA : GfxFormat.U8_RGB;
+    const pixelFormat = (image.depth === 32) ? GfxFormat.U8_RGBA_NORM : GfxFormat.U8_RGB_NORM;
     const transparent = image.hasAlpha();
     image.delete();
     return { name, width, height, levels, pixelFormat, transparent };
@@ -118,9 +118,9 @@ export class TextureArray extends TextureMapping {
         }
 
         let bpp = 0;
-        if (pixelFormat === GfxFormat.U8_RGBA) {
+        if (pixelFormat === GfxFormat.U8_RGBA_NORM) {
             bpp = 4;
-        } else if (pixelFormat === GfxFormat.U8_RGB) {
+        } else if (pixelFormat === GfxFormat.U8_RGB_NORM) {
             bpp = 3;
         }
 

@@ -104,8 +104,6 @@ function translateMipFilter(mipFilter: GfxMipFilterMode): GPUFilterMode {
 function translateTextureFormat(format: GfxFormat): GPUTextureFormat {
     if (format === GfxFormat.U8_RGBA_NORM)
         return 'rgba8unorm';
-    else if (format === GfxFormat.U8_RGBA) // TODO(jstpierre): Remove this kludge
-        return 'rgba8unorm';
     else if (format === GfxFormat.U8_RG_NORM)
         return 'rg8unorm';
     else

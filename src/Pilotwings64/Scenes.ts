@@ -1,7 +1,7 @@
 import {
     GfxDevice, GfxBuffer, GfxInputLayout, GfxInputState, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency,
     GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxTextureDimension, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode,
-    GfxSampler, GfxBlendFactor, GfxBlendMode, GfxTexture, GfxMegaStateDescriptor, GfxCullMode, GfxCompareMode, GfxInputLayoutBufferDescriptor, GfxInputLayoutDescriptor,
+    GfxSampler, GfxBlendFactor, GfxBlendMode, GfxTexture, GfxMegaStateDescriptor, GfxCullMode, GfxCompareMode, GfxInputLayoutBufferDescriptor, GfxInputLayoutDescriptor, makeTextureDescriptor2D,
 } from "../gfx/platform/GfxPlatform";
 import { SceneGfx, ViewerRenderInput, Texture } from "../viewer";
 import { SceneDesc, SceneContext, SceneGroup } from "../SceneBase";
@@ -2207,10 +2207,7 @@ class TextureData {
     constructor(device: GfxDevice, cache: GfxRenderCache, public uvtx: UVTX) {
         const texture = this.uvtx;
 
-        this.gfxTexture = device.createTexture({
-            dimension: GfxTextureDimension.n2D, pixelFormat: GfxFormat.U8_RGBA,
-            width: texture.width, height: texture.height, depth: 1, numLevels: texture.levels.length,
-        });
+        this.gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, texture.levels.length));
         device.setResourceName(this.gfxTexture, texture.name);
         const hostAccessPass = device.createHostAccessPass();
         const levels = texture.levels.filter((t) => !t.usesPaired).map((t) => t.pixels);
