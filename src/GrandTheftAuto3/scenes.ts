@@ -1,6 +1,7 @@
 
 import * as Viewer from '../viewer';
 import * as rw from 'librw';
+import { inflate } from 'pako';
 import { GfxDevice, GfxFormat } from '../gfx/platform/GfxPlatform';
 import { DataFetcher, DataFetcherFlags } from '../DataFetcher';
 import { GTA3Renderer, SceneRenderer, DrawParams, Texture, TextureArray, MeshInstance, ModelCache, SkyRenderer, rwTexture, MeshFragData, AreaRenderer } from './render';
@@ -21,6 +22,7 @@ function UTF8ToString(array: Uint8Array) {
 }
 
 class AssetCache extends Map<string, ArrayBufferSlice> implements Destroyable {
+    public primed = false;
     destroy(device: GfxDevice) {
         console.log('Deleting', this.size, 'assets from cache');
         this.clear();
@@ -90,9 +92,9 @@ export class GTA3SceneDesc implements Viewer.SceneDesc {
     }
 
     private async fetchIMG(dataFetcher: DataFetcher): Promise<void> {
-        if (this.assetCache.has(`${this.pathBase}/models/gta3.img`)) return;
+        if (this.assetCache.primed) return;
         const v1 = (this.versionIMG === 1);
-        const bufferIMG = await this.fetch(dataFetcher, 'models/gta3.img');
+        const bufferIMG = await this.fetchUncompressedIMG(dataFetcher);
         const bufferDIR = v1 ? await this.fetch(dataFetcher, 'models/gta3.dir') : bufferIMG;
         const view = bufferDIR!.createDataView();
         const start = v1 ? 0 : 8;
@@ -104,9 +106,20 @@ export class GTA3SceneDesc implements Viewer.SceneDesc {
             const data = bufferIMG!.subarray(2048 * offset, 2048 * size);
             this.assetCache.set(`${this.pathBase}/models/gta3/${name}`, data);
         }
+        this.assetCache.primed = true;
     }
 
-    private async fetch(dataFetcher: DataFetcher, path: string): Promise<ArrayBufferSlice | null> {
+    private async fetchUncompressedIMG(dataFetcher: DataFetcher): Promise<ArrayBufferSlice | null> {
+        const gz = await this.fetch(dataFetcher, 'models/gta3.imgz', false);
+        if (gz === null) {
+            return this.fetch(dataFetcher, 'models/gta3.img', false);
+        }
+        console.log('Decompressing assets...');
+        const bytes = inflate(gz.createTypedArray(Uint8Array));
+        return new ArrayBufferSlice(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    }
+
+    private async fetch(dataFetcher: DataFetcher, path: string, cache = true): Promise<ArrayBufferSlice | null> {
         path = `${this.pathBase}/${path}`;
         let buffer = this.assetCache.get(path);
         if (buffer === undefined) {
@@ -115,7 +128,7 @@ export class GTA3SceneDesc implements Viewer.SceneDesc {
                 console.error('Not found', path);
                 return null;
             }
-            this.assetCache.set(path, buffer);
+            if (cache) this.assetCache.set(path, buffer);
         }
         return buffer;
     }
