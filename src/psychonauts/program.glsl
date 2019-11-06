@@ -32,7 +32,7 @@ void main() {
     vec4 t_Color = vec4(1.0);
 
 #ifdef USE_TEXTURE
-    t_Color *= texture2D(u_Texture[0], v_TexCoord);
+    t_Color *= texture(u_Texture[0], v_TexCoord);
 #endif
 
 #ifdef USE_VERTEX_COLOR

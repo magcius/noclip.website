@@ -1,6 +1,6 @@
 
 import CodeEditor from "./CodeEditor";
-import { assertExists } from "./util";
+import { assertExists, assert } from "./util";
 import { GfxDevice } from "./gfx/platform/GfxPlatform";
 
 function definesEqual(a: DeviceProgram, b: DeviceProgram): boolean {
@@ -63,10 +63,44 @@ export class DeviceProgram {
 
         const defines = [... this.defines.entries()].map(([k, v]) => `#define ${k} ${v}`).join('\n');
         const precision = lines.find((line) => line.startsWith('precision')) || 'precision mediump float;';
-        const rest = lines.filter((line) => !line.startsWith('precision')).join('\n');
+        let rest = lines.filter((line) => !line.startsWith('precision')).join('\n');
+
+        let outLayout = '';
+        if (vendorInfo.explicitBindingLocations) {
+            let set = 0, binding = 0, location = 0;
+
+            rest = rest.replace(/layout\((.*)\)\s+uniform/g, (substr, layout) => {
+                return `layout(${layout}, set = ${set}, binding = ${binding++}) uniform`;
+            });
+
+            assert(vendorInfo.separateSamplerTextures);
+            rest = rest.replace(/uniform sampler2D (.*);/g, (substr, samplerName) => {
+                // Can't have samplers in vertex for some reason.
+                return type === 'frag' ? `
+layout(set = ${set}, binding = ${binding++}) uniform texture2D T_${samplerName};
+layout(set = ${set}, binding = ${binding++}) uniform sampler S_${samplerName};
+` : '';
+            });
+
+            rest = rest.replace(/^varying/gm, (substr, layout) => {
+                return `layout(location = ${location++}) varying`;
+            });
+
+            outLayout = 'layout(location = 0) ';
+        }
+
+        if (vendorInfo.separateSamplerTextures) {
+            rest = rest.replace(/SAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
+                return `sampler2D(T_${samplerName}, S_${samplerName})`;
+            });
+        } else {
+            rest = rest.replace(/SAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
+                return samplerName;
+            });
+        }
 
         return `
-#version 300 es
+${vendorInfo.glslVersion}
 ${bugDefines}
 ${precision}
 #define ${type.toUpperCase()}
@@ -74,7 +108,6 @@ ${precision}
 #define varying ${type === 'vert' ? 'out' : 'in'}
 #define main${type === 'vert' ? 'VS' : 'PS'} main
 #define gl_FragColor o_color
-#define texture2D texture
 
 #ifdef _BUG_AMD_ROW_MAJOR
 struct Mat4x4 { vec4 _m[4]; };
@@ -105,7 +138,7 @@ Mat4x3 _Mat4x3(float n) { Mat4x3 o; o._m[0].x = n; o._m[1].y = n; o._m[2].z = n;
 #endif
 
 ${defines}
-out vec4 o_color;
+${type === 'frag' ? `${outLayout}out vec4 o_color;` : ''}
 ${rest}
 `.trim();
     }

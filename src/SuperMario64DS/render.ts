@@ -118,7 +118,7 @@ void main() {
     gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
 
 #ifdef USE_TEXTURE
-    gl_FragColor *= texture2D(u_Texture, v_TexCoord);
+    gl_FragColor *= texture(u_Texture, v_TexCoord);
 #endif
 
 #ifdef USE_VERTEX_COLOR

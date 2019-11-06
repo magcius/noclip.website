@@ -202,7 +202,7 @@ export class BloomPostFXParameters {
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 1 }];
 
-function makeFullscreenPipeline(device: GfxDevice, cache: GfxRenderCache, program: DeviceProgram, megaStateDescriptor: GfxMegaStateDescriptor = fullscreenMegaState): GfxRenderPipeline {
+function makeFullscreenPipeline(device: GfxDevice, cache: GfxRenderCache, program: DeviceProgram, megaStateDescriptor: GfxMegaStateDescriptor = fullscreenMegaState, sampleCount: number = DEFAULT_NUM_SAMPLES): GfxRenderPipeline {
     const gfxProgram = cache.createProgram(device, program);
     return cache.createRenderPipeline(device, {
         bindingLayouts,
@@ -210,6 +210,7 @@ function makeFullscreenPipeline(device: GfxDevice, cache: GfxRenderCache, progra
         megaStateDescriptor,
         topology: GfxPrimitiveTopology.TRIANGLES,
         program: gfxProgram,
+        sampleCount,
     });
 }
 

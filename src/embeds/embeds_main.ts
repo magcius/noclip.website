@@ -82,12 +82,15 @@ class Main {
     private canvas: HTMLCanvasElement;
     private fsButton: FsButton;
     private destroyablePool: Destroyable[] = [];
-    private abortController: AbortController | null = null;
 
     constructor() {
+        this.init();
+    }
+
+    public async init() {
         this.canvas = document.createElement('canvas');
 
-        const initErrorCode = Viewer.initializeViewer(this, this.canvas);
+        const initErrorCode = await Viewer.initializeViewer(this, this.canvas);
         if (initErrorCode !== Viewer.InitErrorCode.SUCCESS) {
             document.body.appendChild(Viewer.makeErrorUI(initErrorCode));
             return;
@@ -140,9 +143,6 @@ class Main {
             this.destroyablePool[i].destroy(device);
         this.destroyablePool.length = 0;
         setChildren(this.sceneUIContainer, []);
-
-        if (this.abortController !== null)
-            this.abortController.abort();
 
         // TODO(jstpierre): ProgressMeter
         const progressMeter = { setProgress: () => {} };

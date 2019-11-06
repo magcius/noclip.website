@@ -7,6 +7,7 @@ import { CameraController, Camera } from './Camera';
 import { TextureHolder } from './TextureHolder';
 import { GfxDevice, GfxSwapChain, GfxRenderPass, GfxDebugGroup } from './gfx/platform/GfxPlatform';
 import { createSwapChainForWebGL2, gfxDeviceGetImpl_GL, getPlatformTexture_GL } from './gfx/platform/GfxPlatformWebGL2';
+import { createSwapChainForWebGPU } from './gfx/platform/GfxPlatformWebGPU';
 import { downloadTextureToCanvas } from './Screenshot';
 import { RenderStatistics, RenderStatisticsTracker } from './RenderStatistics';
 import { NormalizedViewportCoords, ColorAttachment, makeClearRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
@@ -60,7 +61,7 @@ class ClearScene {
     private renderPassDescriptor = makeClearRenderPassDescriptor(true, OpaqueBlack);
 
     public minimize(device: GfxDevice): void {
-        this.colorAttachment.setParameters(device, 1, 1, 0);
+        this.colorAttachment.setParameters(device, 1, 1, 1);
     }
 
     public render(device: GfxDevice, viewerRenderInput: ViewerRenderInput): GfxRenderPass {
@@ -250,10 +251,7 @@ export const enum InitErrorCode {
     MISSING_MISC_WEB_APIS,
 }
 
-export function initializeViewer(out: ViewerOut, canvas: HTMLCanvasElement): InitErrorCode {
-    if (typeof AbortController === "undefined")
-        return InitErrorCode.MISSING_MISC_WEB_APIS;
-
+async function initializeViewerWebGL2(out: ViewerOut, canvas: HTMLCanvasElement): Promise<InitErrorCode> {
     const gl = canvas.getContext("webgl2", { alpha: false, antialias: false });
     // For debugging purposes, add a hook for this.
     (window as any).gl = gl;
@@ -277,7 +275,25 @@ export function initializeViewer(out: ViewerOut, canvas: HTMLCanvasElement): Ini
 
     const gfxSwapChain = createSwapChainForWebGL2(gl);
     out.viewer = new Viewer(gfxSwapChain, canvas);
+
     return InitErrorCode.SUCCESS;
+}
+
+async function initializeViewerWebGPU(out: ViewerOut, canvas: HTMLCanvasElement): Promise<InitErrorCode> {
+    const gfxSwapChain = await createSwapChainForWebGPU(canvas);
+    if (gfxSwapChain === null)
+        return InitErrorCode.MISSING_MISC_WEB_APIS;
+
+    out.viewer = new Viewer(gfxSwapChain, canvas);
+    return InitErrorCode.SUCCESS;
+}
+
+export async function initializeViewer(out: ViewerOut, canvas: HTMLCanvasElement): Promise<InitErrorCode> {
+    const useWebGPU = window.localStorage.getItem('webgpu');
+    if (useWebGPU)
+        return initializeViewerWebGPU(out, canvas);
+    else
+        return initializeViewerWebGL2(out, canvas);
 }
 
 export function makeErrorMessageUI(message: string): DocumentFragment {

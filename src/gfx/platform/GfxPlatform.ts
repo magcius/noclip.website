@@ -207,6 +207,7 @@ export interface GfxRenderPipelineDescriptor {
     program: GfxProgram;
     topology: GfxPrimitiveTopology;
     megaStateDescriptor: GfxMegaStateDescriptor;
+    sampleCount: number;
 }
 
 // TODO(jstpierre): Support MRT. This might be tricksy.
@@ -245,6 +246,9 @@ export interface GfxDebugGroup {
 
 export interface GfxVendorInfo {
     programBugDefines: string;
+    glslVersion: string;
+    explicitBindingLocations: boolean;
+    separateSamplerTextures: boolean;
 }
 
 export type GfxPlatformFramebuffer = WebGLFramebuffer;

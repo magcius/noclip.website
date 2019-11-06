@@ -7,7 +7,7 @@ import { DeviceProgram } from '../../Program';
 import { assert, assertExists, leftPad } from '../../util';
 import { copyMegaState, defaultMegaState, fullscreenMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
 import { IS_DEVELOPMENT } from '../../BuildVersion';
-import { White, colorEqual, colorCopy, colorNewCopy } from '../../Color';
+import { colorEqual, colorCopy } from '../../Color';
 import { range } from '../../MathHelpers';
 
 const SHADER_DEBUG = IS_DEVELOPMENT;
@@ -684,6 +684,9 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     // GfxVendorInfo
     public programBugDefines: string = '';
+    public glslVersion = `#version 300 es`;
+    public explicitBindingLocations = false;
+    public separateSamplerTextures = false;
 
     constructor(public gl: WebGL2RenderingContext, programCache: ProgramCache | null = null) {
         this._WEBGL_compressed_texture_s3tc = gl.getExtension('WEBGL_compressed_texture_s3tc');

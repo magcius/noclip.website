@@ -45,7 +45,8 @@ export function gfxRenderPipelineDescriptorCopy(a: GfxRenderPipelineDescriptor):
     const program = a.program;
     const topology = a.topology;
     const megaStateDescriptor = copyMegaState(a.megaStateDescriptor);
-    return { bindingLayouts, inputLayout, megaStateDescriptor, program, topology };
+    const sampleCount = a.sampleCount;
+    return { bindingLayouts, inputLayout, megaStateDescriptor, program, topology, sampleCount };
 }
 
 function arrayEqual<T>(a: T[], b: T[], e: EqualFunc<T>): boolean {
@@ -114,6 +115,7 @@ function gfxProgramEquals(a: GfxProgram, b: GfxProgram): boolean {
 export function gfxRenderPipelineDescriptorEquals(a: GfxRenderPipelineDescriptor, b: GfxRenderPipelineDescriptor): boolean {
     if (a.topology !== b.topology) return false;
     if (a.inputLayout !== b.inputLayout) return false;
+    if (a.sampleCount !== b.sampleCount) return false;
     if (!gfxMegaStateDescriptorEquals(a.megaStateDescriptor, b.megaStateDescriptor)) return false;
     if (!gfxProgramEquals(a.program, b.program)) return false;
     if (!arrayEqual(a.bindingLayouts, b.bindingLayouts, gfxBindingLayoutEquals)) return false;

@@ -6,6 +6,7 @@ import { GfxRenderDynamicUniformBuffer } from "./GfxRenderDynamicUniformBuffer";
 import { nArray, assert, assertExists } from "../../util";
 import { clamp } from "../../MathHelpers";
 import { gfxRenderPipelineDescriptorEquals, gfxBindingsDescriptorEquals } from "../platform/GfxPlatformUtil";
+import { DEFAULT_NUM_SAMPLES } from "../helpers/RenderTargetHelpers";
 
 // The "Render" subsystem is a high-level scene graph, built on top of gfx/platform and gfx/helpers.
 // A rough overview of the design:
@@ -176,6 +177,7 @@ export class GfxRenderInst {
             megaStateDescriptor: copyMegaState(defaultMegaState),
             program: null!, // lol
             topology: GfxPrimitiveTopology.TRIANGLES,
+            sampleCount: DEFAULT_NUM_SAMPLES,
         };
     }
 

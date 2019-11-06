@@ -181,12 +181,16 @@ class Main {
     private lastUpdatedURLTimeSeconds: number = -1;
 
     constructor() {
+        this.init();
+    }
+
+    public async init() {
         this.toplevel = document.createElement('div');
         document.body.appendChild(this.toplevel);
 
         this.canvas = document.createElement('canvas');
 
-        const errorCode = initializeViewer(this, this.canvas);
+        const errorCode = await initializeViewer(this, this.canvas);
         if (errorCode !== InitErrorCode.SUCCESS) {
             this.toplevel.appendChild(makeErrorUI(errorCode));
             return;
