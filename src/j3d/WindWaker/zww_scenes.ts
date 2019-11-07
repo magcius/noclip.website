@@ -1989,10 +1989,18 @@ class SceneDesc {
         else if (name === 'KNOB00') return;
         // Forsaken Fortress door
         else if (name === 'SMBdor') fetchArchive(`Mbdoor.arc`).then((rarc) => {
-            buildModel(rarc, `bdl/s_mbdfu.bdl`);
-            buildModel(rarc, `bdl/s_mbd_l.bdl`);
-            buildModel(rarc, `bdl/s_mbd_r.bdl`);
-            // Another sub-model "s_mbdto", a barricade, is also in this archive, and may be used elsewhere
+            // Frame
+            const fu = buildModel(rarc, `bdl/s_mbdfu.bdl`);
+            fu.lightTevColorType = LightTevColorType.BG0;
+            // Left door
+            const l = buildModel(rarc, `bdl/s_mbd_l.bdl`);
+            l.lightTevColorType = LightTevColorType.BG0;
+            // Right door
+            const r = buildModel(rarc, `bdl/s_mbd_r.bdl`);
+            r.lightTevColorType = LightTevColorType.BG0;
+            // Barricade. Not set to the correct default unlocked position.
+            const to = buildModel(rarc, `bdl/s_mbdto.bdl`);
+            to.lightTevColorType = LightTevColorType.BG0;
         });
         // Forsaken Fortress water gate
         else if (name === 'MjDoor') fetchArchive(`S_MSPDo.arc`).then((rarc) => buildModel(rarc, `bdl/s_mspdo.bdl`));
@@ -2369,7 +2377,7 @@ class SceneDesc {
         // Treasure chests
         else if (name === 'takara' || name === 'takara2' || name === 'takara3' || name === 'takara4' || name === 'takara5' || name === 'takara6' || name === 'takara7' || name === 'takara8' ||
                  name === 'takaraK' || name === 'takaraI' || name === 'takaraM' || name === 'tkrASw' || name === 'tkrAGc' || name === 'tkrAKd' || name === 'tkrASw' || name === 'tkrAIk' ||
-                 name === 'tkrBMs' || name === 'tkrCTf' || name === 'tkrAOc' || name === 'tkrAOs') {
+                 name === 'tkrBMs' || name === 'tkrCTf' || name === 'tkrAOc' || name === 'tkrAOs' || name === 'Bitem') {
             // The treasure chest name does not matter, everything is in the parameters.
             // https://github.com/LordNed/Winditor/blob/master/Editor/Editor/Entities/TreasureChest.cs
             const rarc = await fetchArchive('Dalways.arc');
@@ -2383,6 +2391,9 @@ class SceneDesc {
             } else if (type === 2) {
                 // Metal
                 const m = buildModel(rarc, `bdli/boxc.bdl`);
+                const b = parseBRK(rarc, 'brk/boxc.brk');
+                b.loopMode = LoopMode.ONCE;
+                m.bindTRK1(b);
             } else if (type === 3) {
                 // Big Key
                 const m = buildModel(rarc, `bdli/boxd.bdl`);
@@ -2432,7 +2443,7 @@ class SceneDesc {
         // Misc. gameplay data
         else if (name === 'HyoiKam') return;
         // Flags (only contains textures)
-        else if (name === 'MtFlag' || name === 'SieFlag' || name === 'Gflag') return;
+        else if (name === 'MtFlag' || name === 'SieFlag' || name === 'Gflag' || name === 'MjFlag') return;
         // Collision
         else if (name === 'Akabe') return;
         else
