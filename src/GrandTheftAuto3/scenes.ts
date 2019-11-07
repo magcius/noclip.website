@@ -6,7 +6,7 @@ import { GfxDevice, GfxFormat } from '../gfx/platform/GfxPlatform';
 import { DataFetcher, DataFetcherFlags } from '../DataFetcher';
 import { GTA3Renderer, SceneRenderer, DrawParams, Texture, TextureArray, MeshInstance, ModelCache, SkyRenderer, rwTexture, MeshFragData, AreaRenderer } from './render';
 import { SceneContext, Destroyable } from '../SceneBase';
-import { getTextDecoder, assert } from '../util';
+import { getTextDecoder, assert, assertExists } from '../util';
 import { parseItemPlacement, ItemPlacement, parseItemDefinition, ItemDefinition, ObjectDefinition, ItemInstance, parseZones, parseItemPlacementBinary, createItemInstance, ObjectFlags } from './item';
 import { parseTimeCycle, ColorSet } from './time';
 import { parseWaterPro, waterMeshFragData, waterDefinition, parseWater } from './water';
@@ -110,11 +110,7 @@ export class GTA3SceneDesc implements Viewer.SceneDesc {
     }
 
     private async fetchUncompressedIMG(dataFetcher: DataFetcher): Promise<ArrayBufferSlice | null> {
-        const gz = await this.fetch(dataFetcher, 'models/gta3.imgz', false);
-        if (gz === null) {
-            return this.fetch(dataFetcher, 'models/gta3.img', false);
-        }
-        console.log('Decompressing assets...');
+        const gz = assertExists(await this.fetch(dataFetcher, 'models/gta3.imgz', false));
         const bytes = inflate(gz.createTypedArray(Uint8Array));
         return new ArrayBufferSlice(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     }
