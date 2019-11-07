@@ -1989,10 +1989,18 @@ class SceneDesc {
         else if (name === 'KNOB00') return;
         // Forsaken Fortress door
         else if (name === 'SMBdor') fetchArchive(`Mbdoor.arc`).then((rarc) => {
-            buildModel(rarc, `bdl/s_mbdfu.bdl`);
-            buildModel(rarc, `bdl/s_mbd_l.bdl`);
-            buildModel(rarc, `bdl/s_mbd_r.bdl`);
-            // Another sub-model "s_mbdto", a barricade, is also in this archive, and may be used elsewhere
+            // Frame
+            const fu = buildModel(rarc, `bdl/s_mbdfu.bdl`);
+            fu.lightTevColorType = LightTevColorType.BG0;
+            // Left door
+            const l = buildModel(rarc, `bdl/s_mbd_l.bdl`);
+            l.lightTevColorType = LightTevColorType.BG0;
+            // Right door
+            const r = buildModel(rarc, `bdl/s_mbd_r.bdl`);
+            r.lightTevColorType = LightTevColorType.BG0;
+            // Barricade. Not set to the correct default unlocked position.
+            const to = buildModel(rarc, `bdl/s_mbdto.bdl`);
+            to.lightTevColorType = LightTevColorType.BG0;
         });
         // Forsaken Fortress water gate
         else if (name === 'MjDoor') fetchArchive(`S_MSPDo.arc`).then((rarc) => buildModel(rarc, `bdl/s_mspdo.bdl`));
