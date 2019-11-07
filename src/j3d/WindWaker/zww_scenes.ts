@@ -2432,7 +2432,7 @@ class SceneDesc {
         // Misc. gameplay data
         else if (name === 'HyoiKam') return;
         // Flags (only contains textures)
-        else if (name === 'MtFlag' || name === 'SieFlag' || name === 'Gflag') return;
+        else if (name === 'MtFlag' || name === 'SieFlag' || name === 'Gflag' || name === 'MjFlag') return;
         // Collision
         else if (name === 'Akabe') return;
         else
