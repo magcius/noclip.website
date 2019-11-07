@@ -247,7 +247,7 @@ function translateCompareMode(compareMode: GfxCompareMode): GPUCompareFunction {
 
 function translateDepthStencilState(megaStateDescriptor: GfxMegaStateDescriptor): GPUDepthStencilStateDescriptor {
     return {
-        format: 'depth32float',
+        format: 'depth24plus-stencil8',
 
         depthWriteEnabled: megaStateDescriptor.depthWrite,
         depthCompare: translateCompareMode(megaStateDescriptor.depthCompare),
@@ -596,7 +596,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         const gpuTexture = this.device.createTexture({
             size: [width, height, 1],
             sampleCount: numSamples,
-            format: 'depth32float',
+            format: 'depth24plus-stencil8',
             usage: GPUTextureUsage.OUTPUT_ATTACHMENT,
         });
         const gpuTextureView = gpuTexture.createView();
