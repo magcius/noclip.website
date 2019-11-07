@@ -2377,7 +2377,7 @@ class SceneDesc {
         // Treasure chests
         else if (name === 'takara' || name === 'takara2' || name === 'takara3' || name === 'takara4' || name === 'takara5' || name === 'takara6' || name === 'takara7' || name === 'takara8' ||
                  name === 'takaraK' || name === 'takaraI' || name === 'takaraM' || name === 'tkrASw' || name === 'tkrAGc' || name === 'tkrAKd' || name === 'tkrASw' || name === 'tkrAIk' ||
-                 name === 'tkrBMs' || name === 'tkrCTf' || name === 'tkrAOc' || name === 'tkrAOs') {
+                 name === 'tkrBMs' || name === 'tkrCTf' || name === 'tkrAOc' || name === 'tkrAOs' || name === 'Bitem') {
             // The treasure chest name does not matter, everything is in the parameters.
             // https://github.com/LordNed/Winditor/blob/master/Editor/Editor/Entities/TreasureChest.cs
             const rarc = await fetchArchive('Dalways.arc');
@@ -2391,6 +2391,9 @@ class SceneDesc {
             } else if (type === 2) {
                 // Metal
                 const m = buildModel(rarc, `bdli/boxc.bdl`);
+                const b = parseBRK(rarc, 'brk/boxc.brk');
+                b.loopMode = LoopMode.ONCE;
+                m.bindTRK1(b);
             } else if (type === 3) {
                 // Big Key
                 const m = buildModel(rarc, `bdli/boxd.bdl`);
