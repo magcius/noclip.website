@@ -7,7 +7,7 @@ const IS_DEPTH_REVERSED = true;
 
 export function reverseDepthForPerspectiveProjectionMatrix(m: mat4, isDepthReversed = IS_DEPTH_REVERSED): void {
     if (isDepthReversed) {
-        m[10] = -m[10] - 1;
+        m[10] = -m[10];
         m[14] = -m[14];
     }
 }
@@ -15,7 +15,7 @@ export function reverseDepthForPerspectiveProjectionMatrix(m: mat4, isDepthRever
 export function reverseDepthForOrthographicProjectionMatrix(m: mat4, isDepthReversed = IS_DEPTH_REVERSED): void {
     if (isDepthReversed) {
         m[10] = -m[10];
-        m[14] = -m[14];
+        m[14] = -m[14] + 1;
     }
 }
 
