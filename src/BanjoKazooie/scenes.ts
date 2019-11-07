@@ -14,9 +14,8 @@ import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { executeOnPass } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { assert } from '../util';
+import { assert, hexzero } from '../util';
 import { DataFetcher } from '../DataFetcher';
-import { Endianness } from '../endian';
 import { MathConstants } from '../MathHelpers';
 
 const pathBase = `BanjoKazooie`;
@@ -118,11 +117,24 @@ interface AnimationEntry {
 interface ObjectLoadEntry {
     otherID: number; // not sure what this is
     spawnID: number;
+    modelFile?: CRG1File;
     animationTable: AnimationEntry[];
     animationStartIndex: number;
     scale: number;
 
-    geoData?: N64Data;
+    geoData: N64Data | null;
+}
+
+interface ObjectSetupData {
+    ObjectSetupTable: ObjectLoadEntry[];
+}
+
+interface CRG1File {
+    Data: ArrayBufferSlice;
+}
+
+interface CRG1Archive {
+    Files: CRG1File[];
 }
 
 class ObjectData {
@@ -130,53 +142,65 @@ class ObjectData {
     public gfxCache = new GfxRenderCache(true);
 
     public spawnObject(id: number, pos: vec3, yaw = 0): N64Renderer | null {
-        for (let i = 0; i < this.entries.length; i++) {
-            if (this.entries[i].spawnID !== id)
-                continue;
-            const data = this.entries[i].geoData;
-            if (data) {
-                const renderer = new N64Renderer(data);
-                mat4.fromTranslation(renderer.modelMatrix, pos);
-                mat4.rotateY(renderer.modelMatrix, renderer.modelMatrix, yaw * MathConstants.DEG_TO_RAD);
-                return renderer;
-            }
+        const spawnEntry = this.entries.find((entry) => entry.spawnID === id);
+        if (spawnEntry === undefined) {
+            console.warn(`Unknown object ID ${hexzero(id, 4)}`);
             return null;
         }
-        // the game seems to sometimes call this with models that don't exist
-        // should probably figure out why
-        return null;
+
+        const data = spawnEntry.geoData;
+        if (data === null) {
+            console.warn(`Unsupported geo data for object ID ${hexzero(id, 4)}`);
+            return null;
+        }
+
+        // TODO(jstpierre): yaw does not seem to be exact
+        const renderer = new N64Renderer(data);
+        mat4.fromTranslation(renderer.modelMatrix, pos);
+        mat4.rotateY(renderer.modelMatrix, renderer.modelMatrix, yaw * MathConstants.DEG_TO_RAD);
+        return renderer;
     }
 
     public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.entries.length; i++)
-            if (this.entries[i].geoData)
-                this.entries[i].geoData!.destroy(device);
+        for (let i = 0; i < this.entries.length; i++) {
+            const entry = this.entries[i];
+            if (entry.geoData !== null)
+                entry.geoData.destroy(device);
+        }
     }
 }
 
 async function fetchObjectData(dataFetcher: DataFetcher, device: GfxDevice): Promise<ObjectData> {
-    const objectData = await dataFetcher.fetchData(`${pathBase}/objectSetup_arc.crg1`);
-    const objectSetup: any = BYML.parse(objectData!, BYML.FileType.CRG1);
+    const objectData = await dataFetcher.fetchData(`${pathBase}/objectSetup_arc.crg1`)!;
+    const objectSetup = BYML.parse<ObjectSetupData>(objectData, BYML.FileType.CRG1);
 
     const holder = new ObjectData();
 
     for (let i = 0; i < objectSetup.ObjectSetupTable.length; i++) {
         const entry = objectSetup.ObjectSetupTable[i] as ObjectLoadEntry;
+
+        entry.geoData = null;
+
         if (entry.spawnID === 480 || entry.spawnID === 411 || entry.spawnID === 693) {
             // there are three models that look for a texture in a segment we don't have
             // one also seems to be the only IA16 texture in the game
             continue;
         }
-        const file = (entry as any).modelFile;
+
+        const file = entry.modelFile;
         if (file) {
-            const geoData = file.Data as ArrayBufferSlice;
+            const geoData = file.Data;
+            const geoView = geoData.createDataView();
+            const magic = geoView.getUint32(0x00);
+
             // TODO: figure out what these other files are
-            if (geoData.createTypedArray(Uint32Array, 0, 1, Endianness.BIG_ENDIAN)[0] === 0xB) {
+            if (magic === 0x0000000B) {
                 const geo = Geo.parse(geoData, true);
                 entry.geoData = new N64Data(device, holder.gfxCache, geo);
             }
         }
-        holder.entries.push(entry)
+
+        holder.entries.push(entry);
     }
 
     return holder;
@@ -212,19 +236,19 @@ class SceneDesc implements Viewer.SceneDesc {
             let dataType = view.getInt8(offs++);
             while (dataType !== 1) {
                 if (dataType === 3) {
-                    assert(view.getInt8(offs++) === 0xa);
+                    assert(view.getInt8(offs++) === 0x0A);
                     const groupSize = view.getUint8(offs++);
                     if (groupSize > 0)
-                        assert(view.getInt8(offs++) === 0xb);
+                        assert(view.getInt8(offs++) === 0x0B);
                     for (let j = 0; j < groupSize; j++) {
-                        const x = view.getInt16(offs + 0x0);
-                        let y = view.getInt16(offs + 0x2);
-                        const z = view.getInt16(offs + 0x4);
-                        const category = (view.getUint8(offs + 7) >>> 1) & 0x3f;
-                        const id = view.getUint16(offs + 0x8);
-                        const yaw = view.getInt16(offs + 0xc) >>> 7;
+                        const x = view.getInt16(offs + 0x00);
+                        const y = view.getInt16(offs + 0x02);
+                        const z = view.getInt16(offs + 0x04);
+                        const category = (view.getUint8(offs + 0x07) >>> 1) & 0x3F;
+                        const id = view.getUint16(offs + 0x08);
+                        const yaw = view.getUint16(offs + 0x0C) >>> 7;
                         // skipping a couple of 0xc-bit fields
-                        if (category === 6) {
+                        if (category === 0x06) {
                             const objRenderer = objectSetupTable.spawnObject(id, vec3.fromValues(x, y, z), yaw);
                             if (objRenderer)
                                 sceneRenderer.n64Renderers.push(objRenderer);
@@ -278,7 +302,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 const geo = Geo.parse(obj.Files[obj.XluSkyboxFileId].Data, false);
                 const renderer = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
                 renderer.isSkybox = true;
-                mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [obj.OpaSkyboxScale, obj.OpaSkyboxScale, obj.OpaSkyboxScale]);
+                mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [obj.XluSkyboxScale, obj.XluSkyboxScale, obj.XluSkyboxScale]);
             }
 
             this.addObjects(obj.Files[obj.SetupFileId].Data, dataHolder, sceneRenderer)

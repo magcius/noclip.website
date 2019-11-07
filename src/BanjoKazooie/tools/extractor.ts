@@ -40,10 +40,6 @@ function getFileBuffer(fs: FS, file: FSFile): ArrayBufferSlice {
         return fs.buffer.subarray(file.dataOffs);
 }
 
-function getFileOffsetIndex(fs: FS, offset: number): FSFile | null {
-    return fs.files.find((f) => f.fileTableOffs === offset) || null;
-}
-
 function decompress(buffer: ArrayBufferSlice): ArrayBufferSlice {
     const view = buffer.createDataView();
 
