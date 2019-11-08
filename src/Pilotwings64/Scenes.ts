@@ -1951,6 +1951,7 @@ function translateBlendMode(geoMode: number, renderMode: number): Partial<GfxMeg
         setAttachmentStateSimple(out, {
             blendSrcFactor: blendSrcFactor,
             blendDstFactor: translateBlendParamB(dstFactor, blendSrcFactor),
+            blendMode: GfxBlendMode.ADD,
         });
     } else {
         // without FORCE_BL, blending only happens for AA of internal edges
@@ -1958,8 +1959,8 @@ function translateBlendMode(geoMode: number, renderMode: number): Partial<GfxMeg
         setAttachmentStateSimple(out, {
             blendSrcFactor: GfxBlendFactor.ONE,
             blendDstFactor: GfxBlendFactor.ZERO,
+            blendMode: GfxBlendMode.ADD,
         });
-
     }
 
     if (geoMode & F3D_RSP_Geometry_Flags.G_CULL_BACK) {
