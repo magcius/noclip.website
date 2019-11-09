@@ -191,20 +191,11 @@ function translateBlendMode(mode: GfxBlendMode): GPUBlendOperation {
 }
 
 function translateBlendState(blendState: GfxChannelBlendState): GPUBlendDescriptor {
-    // Special case.
-    if (blendState.blendMode === GfxBlendMode.NONE) {
-        return {
-            operation: 'add',
-            srcFactor: 'one',
-            dstFactor: 'zero',
-        };
-    } else {
-        return {
-            operation: translateBlendMode(blendState.blendMode),
-            srcFactor: translateBlendFactor(blendState.blendSrcFactor),
-            dstFactor: translateBlendFactor(blendState.blendDstFactor),
-        };
-    }
+    return {
+        operation: translateBlendMode(blendState.blendMode),
+        srcFactor: translateBlendFactor(blendState.blendSrcFactor),
+        dstFactor: translateBlendFactor(blendState.blendDstFactor),
+    };
 }
 
 function translateColorState(attachmentState: GfxAttachmentState): GPUColorStateDescriptor {

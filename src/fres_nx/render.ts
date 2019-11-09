@@ -472,9 +472,9 @@ class FMATInstance {
             depthWrite:     isTranslucent ? false : translateDepthWrite(fmat),
         };
         setAttachmentStateSimple(this.megaStateFlags, {
-            blendMode:      isTranslucent ? GfxBlendMode.ADD : GfxBlendMode.NONE,
-            blendSrcFactor: translateBlendSrcFactor(fmat),
-            blendDstFactor: translateBlendDstFactor(fmat),
+            blendMode: GfxBlendMode.ADD,
+            blendSrcFactor: isTranslucent ? translateBlendSrcFactor(fmat) : GfxBlendFactor.ONE,
+            blendDstFactor: isTranslucent ? translateBlendDstFactor(fmat) : GfxBlendFactor.ZERO,
         });
     }
 

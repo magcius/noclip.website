@@ -45,7 +45,6 @@ export enum GfxBlendFactor {
 }
 
 export enum GfxBlendMode {
-    NONE             = 0,
     ADD              = WebGLRenderingContext.FUNC_ADD,
     SUBTRACT         = WebGLRenderingContext.FUNC_SUBTRACT,
     REVERSE_SUBTRACT = WebGLRenderingContext.FUNC_REVERSE_SUBTRACT,

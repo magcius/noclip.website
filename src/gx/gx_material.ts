@@ -1258,7 +1258,9 @@ export function translateGfxMegaState(megaState: Partial<GfxMegaStateDescriptor>
     const attachmentStateSimple: Partial<AttachmentStateSimple> = {};
 
     if (material.ropInfo.blendMode.type === GX.BlendMode.NONE) {
-        attachmentStateSimple.blendMode = GfxBlendMode.NONE;
+        attachmentStateSimple.blendMode = GfxBlendMode.ADD;
+        attachmentStateSimple.blendSrcFactor = GfxBlendFactor.ONE;
+        attachmentStateSimple.blendDstFactor = GfxBlendFactor.ZERO;
     } else if (material.ropInfo.blendMode.type === GX.BlendMode.BLEND) {
         attachmentStateSimple.blendMode = GfxBlendMode.ADD;
         attachmentStateSimple.blendSrcFactor = translateBlendSrcFactor(material.ropInfo.blendMode.srcFactor);
@@ -1269,7 +1271,9 @@ export function translateGfxMegaState(megaState: Partial<GfxMegaStateDescriptor>
         attachmentStateSimple.blendDstFactor = GfxBlendFactor.ONE;
     } else if (material.ropInfo.blendMode.type === GX.BlendMode.LOGIC) {
         // Sonic Colors uses this? WTF?
-        attachmentStateSimple.blendMode = GfxBlendMode.NONE;
+        attachmentStateSimple.blendMode = GfxBlendMode.ADD;
+        attachmentStateSimple.blendSrcFactor = GfxBlendFactor.ONE;
+        attachmentStateSimple.blendDstFactor = GfxBlendFactor.ZERO;
         console.warn(`Unimplemented LOGIC blend mode`);
     }
 

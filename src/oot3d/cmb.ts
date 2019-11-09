@@ -389,24 +389,23 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
         assert(view.getUint8(offs + 0x139) == 0);
         assert(view.getUint16(offs + 0x13A, true) == 0);
 
-        const blendSrcFactorRGB: GfxBlendFactor = view.getUint16(offs + 0x13C, true);
-        const blendDstFactorRGB: GfxBlendFactor = view.getUint16(offs + 0x13E, true);
-        const blendFunctionRGB: GfxBlendMode = blendEnabled ? view.getUint16(offs + 0x140, true) : GfxBlendMode.NONE;
+        const blendSrcFactorRGB: GfxBlendFactor = blendEnabled ? view.getUint16(offs + 0x13C, true) : GfxBlendFactor.ONE;
+        const blendDstFactorRGB: GfxBlendFactor = blendEnabled ? view.getUint16(offs + 0x13E, true) : GfxBlendFactor.ZERO;
+        const blendFunctionRGB: GfxBlendMode = blendEnabled ? view.getUint16(offs + 0x140, true) : GfxBlendMode.ADD;
         const rgbBlendState: GfxChannelBlendState = {
             blendMode: blendFunctionRGB,
             blendDstFactor: blendDstFactorRGB,
             blendSrcFactor: blendSrcFactorRGB,
         };
-        // TODO(jstpierre): What is at 0x142?
-        const blendSrcFactorAlpha: GfxBlendFactor = view.getUint16(offs + 0x144, true);
-        const blendDstFactorAlpha: GfxBlendFactor = view.getUint16(offs + 0x146, true);
-        const blendFunctionAlpha: GfxBlendMode = blendEnabled ? view.getUint16(offs + 0x148, true) : GfxBlendMode.NONE;
+        // TODO(jstpierre): What is at 0x142? Logic op?
+        const blendSrcFactorAlpha: GfxBlendFactor = blendEnabled ? view.getUint16(offs + 0x144, true) : GfxBlendFactor.ONE;
+        const blendDstFactorAlpha: GfxBlendFactor = blendEnabled ? view.getUint16(offs + 0x146, true) : GfxBlendFactor.ZERO;
+        const blendFunctionAlpha: GfxBlendMode = blendEnabled ? view.getUint16(offs + 0x148, true) : GfxBlendMode.ADD;
         const alphaBlendState: GfxChannelBlendState = {
             blendMode: blendFunctionAlpha,
             blendDstFactor: blendDstFactorAlpha,
             blendSrcFactor: blendSrcFactorAlpha,
         };
-        // TODO(jstpierre): Padding here at 0x14A?
         const blendColorR = view.getFloat32(offs + 0x14C, true);
         const blendColorG = view.getFloat32(offs + 0x150, true);
         const blendColorB = view.getFloat32(offs + 0x154, true);

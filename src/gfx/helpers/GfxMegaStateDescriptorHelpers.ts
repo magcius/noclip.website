@@ -102,7 +102,7 @@ export function setAttachmentStateSimple(dst: Partial<GfxMegaStateDescriptor>, s
 }
 
 const defaultBlendState: GfxChannelBlendState = {
-    blendMode: GfxBlendMode.NONE,
+    blendMode: GfxBlendMode.ADD,
     blendSrcFactor: GfxBlendFactor.ONE,
     blendDstFactor: GfxBlendFactor.ZERO,
 };
