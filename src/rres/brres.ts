@@ -1159,7 +1159,8 @@ function parseMDL0_ShapeEntry(buffer: ArrayBufferSlice, inputBuffers: InputVerte
     const vtxLoader = compileVtxLoader(vat, vcd);
     const loadedVertexLayout = vtxLoader.loadedVertexLayout;
     const loadedVertexData = vtxLoader.runVertices(vtxArrays, buffer.subarray(primDLOffs, primDLSize));
-    assert(loadedVertexData.totalVertexCount === numVertices);
+    if (loadedVertexData.totalVertexCount !== numVertices)
+        console.warn("Vertex count mismatch", loadedVertexData.totalVertexCount, numVertices);
 
     return { name, mtxIdx, loadedVertexLayout, loadedVertexData };
 }
