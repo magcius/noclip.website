@@ -1934,6 +1934,8 @@ class SceneDesc {
         else if (name === 'Mt') fetchArchive(`Niten.arc`).then((rarc) => buildModel(rarc, `bdlm/mt.bdl`).bindANK1(parseBCK(rarc, `bcks/mt_wait01.bck`)));
         // Great Fairy
         else if (name === 'BigElf') fetchArchive(`bigelf.arc`).then((rarc) => buildModel(rarc, `bdlm/dy.bdl`).bindANK1(parseBCK(rarc, `bcks/wait01.bck`)));
+        // Fairy
+        else if (name === 'Sfairy') fetchArchive(`Always.arc`).then((rarc) => buildModel(rarc, `bdl/fa.bdl`).bindANK1(parseBCK(rarc, `bck/fa.bck`)));
         // Goron Merchants
         else if (name === 'RotenA') fetchArchive(`Ro.arc`).then((rarc) => {
             const m = buildModel(rarc, `bdlm/ro.bdl`);
