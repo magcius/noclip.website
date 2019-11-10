@@ -216,7 +216,7 @@ class MaterialData {
         const texture = this.material.texture;
 
         if (texture !== null) {
-            this.gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA, texture.width, texture.height, 1));
+            this.gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, 1));
             device.setResourceName(this.gfxTexture, texture.name);
             const hostAccessPass = device.createHostAccessPass();
             hostAccessPass.uploadTextureData(this.gfxTexture, 0, [texture.pixels]);
