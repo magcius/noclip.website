@@ -162,7 +162,7 @@ function transformToClipSpace(ctx: CanvasRenderingContext2D, camera: Camera, nPo
 }
 
 function shouldCull(p: vec4): boolean {
-    return p[0] < -1 || p[0] > 1 || p[1] < -1 || p[1] > 1 || p[2] < 0 || p[2] > 1;
+    return p[0] < -1 || p[0] > 1 || p[1] < -1 || p[1] > 1 || p[2] < -1 || p[2] > 1;
 }
 
 function drawLine(ctx: CanvasRenderingContext2D, p0: vec4, p1: vec4): void {
