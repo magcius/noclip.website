@@ -9,6 +9,7 @@ import { decodeTexture, computeTextureByteSize, getTextureFormatFromGLFormat } f
 import { getPointHermite } from "../Spline";
 import { TextureMapping } from "../TextureHolder";
 import { CtrTextureHolder } from "./render";
+import { lerp } from "../MathHelpers";
 
 // CMAB (CTR Material Animation Binary)
 // Seems to be inspired by the .cmata file format. Perhaps an earlier version of NW4C used it?
@@ -308,10 +309,6 @@ export function parse(version: Version, buffer: ArrayBufferSlice, textureNamePre
     return { duration, loopMode, animEntries, textures };
 }
 
-function lerp(k0: AnimationKeyframeLinear, k1: AnimationKeyframeLinear, t: number) {
-    return k0.value + (k1.value - k0.value) * t;
-}
-
 function sampleAnimationTrackLinear(track: AnimationTrackLinear, frame: number): number {
     const frames = track.frames;
 
@@ -327,7 +324,7 @@ function sampleAnimationTrackLinear(track: AnimationTrackLinear, frame: number):
     const k1 = frames[idx1];
 
     const t = (frame - k0.time) / (k1.time - k0.time);
-    return lerp(k0, k1, t);
+    return lerp(k0.value, k1.value, t);
 }
 
 function hermiteInterpolate(k0: AnimationKeyframeHermite, k1: AnimationKeyframeHermite, t: number): number {
