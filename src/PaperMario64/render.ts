@@ -18,6 +18,7 @@ import { AABB } from "../Geometry";
 import { getImageFormatString } from "../BanjoKazooie/f3dex";
 import { TexCM, TextFilt } from '../Common/N64/Image';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
+import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers';
 
 class PaperMario64Program extends DeviceProgram {
     public static a_Position = 0;
@@ -159,7 +160,7 @@ void main() {
     p.x = (gl_VertexID == 1) ? 2.0 : 0.0;
     p.y = (gl_VertexID == 2) ? 2.0 : 0.0;
     gl_Position.xy = p * vec2(2) - vec2(1);
-    gl_Position.zw = vec2(-1, 1);
+    gl_Position.zw = vec2(${reverseDepthForDepthOffset(1)}, 1);
     v_TexCoord = p * u_ScaleOffset.xy + u_ScaleOffset.zw;
 }
 `;

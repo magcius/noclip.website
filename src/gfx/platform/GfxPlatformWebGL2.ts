@@ -19,7 +19,7 @@ const TRACK_RESOURCES = false && IS_DEVELOPMENT;
 // https://bugs.chromium.org/p/angleproject/issues/detail?id=3388
 const UBO_PAGE_MAX_BYTE_SIZE = 0x10000;
 
-class FullscreenProgram extends DeviceProgram {
+class FullscreenCopyProgram extends DeviceProgram {
     public vert: string = `
 out vec2 v_TexCoord;
 
@@ -27,12 +27,9 @@ void main() {
     v_TexCoord.x = (gl_VertexID == 1) ? 2.0 : 0.0;
     v_TexCoord.y = (gl_VertexID == 2) ? 2.0 : 0.0;
     gl_Position.xy = v_TexCoord * vec2(2) - vec2(1);
-    gl_Position.zw = vec2(-1, 1);
+    gl_Position.zw = vec2(1, 1);
 }
 `;
-}
-
-class FullscreenCopyProgram extends FullscreenProgram {
     public frag: string = `
 uniform sampler2D u_Texture;
 in vec2 v_TexCoord;
