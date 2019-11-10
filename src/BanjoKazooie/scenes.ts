@@ -117,16 +117,15 @@ interface AnimationEntry {
 interface ObjectLoadEntry {
     otherID: number; // not sure what this is
     spawnID: number;
-    modelFile?: CRG1File;
+    fileIndex: number;
     animationTable: AnimationEntry[];
     animationStartIndex: number;
     scale: number;
-
-    geoData: N64Data | null;
 }
 
 interface ObjectSetupData {
     ObjectSetupTable: ObjectLoadEntry[];
+    Files: CRG1File[];
 }
 
 interface CRG1File {
@@ -139,6 +138,7 @@ interface CRG1Archive {
 
 class ObjectData {
     public entries: ObjectLoadEntry[] = [];
+    public geoData: (N64Data | null)[] = [];
     public gfxCache = new GfxRenderCache(true);
 
     public spawnObject(id: number, pos: vec3, yaw = 0): N64Renderer | null {
@@ -148,7 +148,10 @@ class ObjectData {
             return null;
         }
 
-        const data = spawnEntry.geoData;
+        if (spawnEntry.fileIndex === 0)
+            return null; // nothing to render
+
+        const data = this.geoData[spawnEntry.fileIndex];
         if (data === null) {
             console.warn(`Unsupported geo data for object ID ${hexzero(id, 4)}`);
             return null;
@@ -162,45 +165,39 @@ class ObjectData {
     }
 
     public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.entries.length; i++) {
-            const entry = this.entries[i];
-            if (entry.geoData !== null)
-                entry.geoData.destroy(device);
+        for (let i = 0; i < this.geoData.length; i++) {
+            const data = this.geoData[i];
+            if (data !== null)
+                data.destroy(device);
         }
     }
 }
 
 async function fetchObjectData(dataFetcher: DataFetcher, device: GfxDevice): Promise<ObjectData> {
-    const objectData = await dataFetcher.fetchData(`${pathBase}/objectSetup_arc.crg1`)!;
+    const objectData = await dataFetcher.fetchData(`${pathBase}/objectSetup_arc.crg1?cache_bust=0`)!;
     const objectSetup = BYML.parse<ObjectSetupData>(objectData, BYML.FileType.CRG1);
 
     const holder = new ObjectData();
+    holder.entries = objectSetup.ObjectSetupTable;
 
-    for (let i = 0; i < objectSetup.ObjectSetupTable.length; i++) {
-        const entry = objectSetup.ObjectSetupTable[i] as ObjectLoadEntry;
-
-        entry.geoData = null;
-
-        if (entry.spawnID === 480 || entry.spawnID === 411 || entry.spawnID === 693) {
-            // there are three models that look for a texture in a segment we don't have
-            // one also seems to be the only IA16 texture in the game
+    for (let i = 0; i < objectSetup.Files.length; i++) {
+        if (i === 50 || i === 51 || i === 52) {
+            // there are three models (objects 480, 411, 693) that look for a texture in a segment we don't have
+            // one also seems to use the only IA16 texture in the game
+            holder.geoData.push(null);
             continue;
         }
+        const geoData = objectSetup.Files[i].Data;
+        const geoView = geoData.createDataView();
+        const magic = geoView.getUint32(0x00);
 
-        const file = entry.modelFile;
-        if (file) {
-            const geoData = file.Data;
-            const geoView = geoData.createDataView();
-            const magic = geoView.getUint32(0x00);
-
-            // TODO: figure out what these other files are
-            if (magic === 0x0000000B) {
-                const geo = Geo.parse(geoData, true);
-                entry.geoData = new N64Data(device, holder.gfxCache, geo);
-            }
+        // TODO: figure out what these other files are
+        if (magic === 0x0000000B) {
+            const geo = Geo.parse(geoData, true);
+            holder.geoData.push(new N64Data(device, holder.gfxCache, geo));
+        } else {
+            holder.geoData.push(null); // preserve indices
         }
-
-        holder.entries.push(entry);
     }
 
     return holder;

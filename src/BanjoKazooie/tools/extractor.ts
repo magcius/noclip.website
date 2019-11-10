@@ -43,12 +43,31 @@ function getFileBuffer(fs: FS, file: FSFile): ArrayBufferSlice {
 function decompress(buffer: ArrayBufferSlice): ArrayBufferSlice {
     const view = buffer.createDataView();
 
-    assert(view.getUint16(0x00) === 0x1172);
-    const decompressedFileSize = view.getUint32(0x02);
+    assert(view.getUint16(0x00) === 0x1172, `bad bytes ${view.getUint32(0).toString(16)} from ${buffer.byteOffset.toString(16)}`);
 
     let srcOffs = 0x06;
-    const decompressed = Pako.inflateRaw(buffer.createTypedArray(Uint8Array, srcOffs, decompressedFileSize), { raw: true });
+    const decompressed = Pako.inflateRaw(buffer.createTypedArray(Uint8Array, srcOffs), { raw: true });
     return new ArrayBufferSlice(decompressed.buffer as ArrayBuffer);
+}
+
+// the second file table at 3ffe10 in RAM has a list of start and end addresses of compressed files
+// each block actually has two compressed files, the first with code, the second with data
+function decompressPairedFiles(buffer: ArrayBufferSlice, ram: number): RAMRegion[] {
+    const view = buffer.createDataView();
+    const out: RAMRegion[] = [];
+
+    assert(view.getUint16(0x00) === 0x1172, `bad bytes ${view.getUint32(0).toString(16)} from ${buffer.byteOffset.toString(16)}`);
+    const decompressedCodeSize = view.getUint32(0x02);
+    let srcOffs = 0x06;
+
+    const inflator = new Pako.Inflate({ raw: true });
+    inflator.push(buffer.createTypedArray(Uint8Array, srcOffs), true);
+    out.push({ data: new ArrayBufferSlice(inflator.result.buffer as ArrayBuffer), start: ram });
+
+    const startPoint = srcOffs + inflator.strm.next_in; // read internal zlib stream state to find the next file
+    const dataFile = decompress(buffer.slice(startPoint));
+    out.push({ data: dataFile, start: ram + decompressedCodeSize }); // files are placed consecutively
+    return out;
 }
 
 interface CRG1File {
@@ -68,13 +87,6 @@ function extractFile(fs: FS, fsfile: FSFile): CRG1File {
     const fileBuffer = getFileBuffer(fs, fsfile);
     const buffer = (fsfile.flags & 0x00010000) ? decompress(fileBuffer) : fileBuffer;
     return { Data: buffer };
-}
-
-function decompressBigSlice(fs: FS, offset: number, end: number): ArrayBufferSlice {
-    const romView = fs.buffer.createDataView();
-    const giantBuffer = new ArrayBuffer(romView.getUint32(offset + 2) + (end - offset));
-    new Uint8Array(giantBuffer).set(fs.buffer.createTypedArray(Uint8Array, offset, end - offset));
-    return decompress(new ArrayBufferSlice(giantBuffer));
 }
 
 function extractMap(fs: FS, name: string, sceneID: number): void {
@@ -150,13 +162,13 @@ interface AnimationEntry {
 interface ObjectLoadEntry {
     otherID: number; // not sure what this is
     spawnID: number;
-    modelFile?: CRG1File;
+    fileIndex: number;
     animationTable: AnimationEntry[];
     animationStartIndex: number;
     scale: number;
 }
 
-function parseObjectLoadEntry(fs: FS, map: RAMMapper, startAddress: number): ObjectLoadEntry {
+function parseObjectLoadEntry(map: RAMMapper, startAddress: number): ObjectLoadEntry {
     const view = map.lookup(startAddress);
     let offs = 0;
 
@@ -166,10 +178,6 @@ function parseObjectLoadEntry(fs: FS, map: RAMMapper, startAddress: number): Obj
     const animationStartIndex = view.getUint16(offs + 0x6);
     const animationTableAddress = view.getUint32(offs + 0x8);
     const scale = view.getFloat32(offs + 0x1c);
-
-    let modelFile: CRG1File | undefined;
-    if (fileIndex !== 0)
-        modelFile = extractFile(fs, fs.files[fileIndex]);
 
     const animationTable: AnimationEntry[] = [];
     if (animationTableAddress !== 0) {
@@ -185,7 +193,8 @@ function parseObjectLoadEntry(fs: FS, map: RAMMapper, startAddress: number): Obj
             offs += 8;
         }
     }
-    return { otherID, spawnID, modelFile, animationTable, animationStartIndex, scale };
+
+    return { otherID, spawnID, fileIndex, animationTable, animationStartIndex, scale };
 }
 
 interface RAMRegion {
@@ -208,33 +217,69 @@ class RAMMapper {
 }
 
 function extractObjectLoad(fs: FS) {
-    const setupTable: ObjectLoadEntry[] = [];
-
     const map = new RAMMapper();
-    // the second file table at 3ffe10 in RAM has a list of addresses of compressed files
-    // some (all?) of these contain code, and are followed by another compressed file with data
-    // the uncompressed files are placed consecutively in RAM, so probably a better way to get these addresses
-    map.regions.push({ data: decompressBigSlice(fs, 0xF37F90, 0xF9CAE0), start: 0x80286F90 });
-    map.regions.push({ data: decompressBigSlice(fs, 0xF9CAE0, 0xFA3FD0), start: 0x80363590 });
-    map.regions.push({ data: decompressBigSlice(fs, 0xFC6F20, 0XFC8AFC), start: 0x803863F0 });
-    map.regions.push({ data: decompressBigSlice(fs, 0xFC8AFC, 0XFC9150), start: 0x8038D350 });
+    // first load the shared data and common objects
+    map.regions.push(...decompressPairedFiles(fs.buffer.slice(0xF37F90, 0xFA3FD0), 0x80286F90));
+    const setupTable = extractObjectLoadFromAssembly(map, 0x802c2c08);
 
-    extractObjectLoadFromAssembly(fs, setupTable, map, 0x802c2c08);
-    extractObjectLoadFromAssembly(fs, setupTable, map, 0x8038c4f4);
+    // then the level-specific object sets
+    // rom addresses are from the file table at 3ffe10
+    // function addresses are from a switch statement starting at 2c3824
+    extractAdditionalObjects(fs.buffer, setupTable, map, 0xFA3FD0, 0XFA5F50, 0x80387DA0);
+    extractAdditionalObjects(fs.buffer, setupTable, map, 0xFA5F50, 0XFA9150, 0x803890E0);
+    extractAdditionalObjects(fs.buffer, setupTable, map, 0XFA9150, 0XFAE860, 0x8038F154);
+    extractAdditionalObjects(fs.buffer, setupTable, map, 0XFAE860, 0XFB24A0, 0x80388AC0);
+    extractAdditionalObjects(fs.buffer, setupTable, map, 0XFB24A0, 0XFB44E0, 0x803888B0);
+    extractAdditionalObjects(fs.buffer, setupTable, map, 0XFB44E0, 0XFB9A30, 0x8038F1E0);
+    extractAdditionalObjects(fs.buffer, setupTable, map, 0XFB9A30, 0XFBEBE0, 0x80386C48);
+    extractAdditionalObjects(fs.buffer, setupTable, map, 0XFBEBE0, 0XFC4810, 0x80391324);
+    extractAdditionalObjects(fs.buffer, setupTable, map, 0XFC4810, 0XFC6F20, 0x80386810);
+    extractAdditionalObjects(fs.buffer, setupTable, map, 0xFC6F20, 0XFC9150, 0x8038C4E0);
+    extractAdditionalObjects(fs.buffer, setupTable, map, 0XFC9150, 0XFD0420, 0x8038A0C4);
+    extractAdditionalObjects(fs.buffer, setupTable, map, 0XFD0420, 0XFD6190, 0x803863F0);
+    extractAdditionalObjects(fs.buffer, setupTable, map, 0XFD6190, 0XFDAA10, 0X8038DB6C);
 
-    const data = BYML.write({ ObjectSetupTable: setupTable }, BYML.FileType.CRG1);
+    // dedup model files and rewrite indices into the new list
+    const fileMap = new Map<number, number>();
+    const fileTable: CRG1File[] = [];
+    for (let i = 0; i < setupTable.length; i++) {
+        const origIndex = setupTable[i].fileIndex;
+        if (fileMap.has(origIndex)) {
+            setupTable[i].fileIndex = fileMap.get(origIndex);
+        } else {
+            const newIndex = extractFileAndAppend(fileTable, fs, fs.files[origIndex]);
+            fileMap.set(origIndex, newIndex);
+            setupTable[i].fileIndex = newIndex;
+        }
+    }
+
+    const data = BYML.write({ ObjectSetupTable: setupTable, Files: fileTable }, BYML.FileType.CRG1);
     writeFileSync(`${pathBaseOut}/objectSetup_arc.crg1`, Buffer.from(data));
 }
 
-function extractObjectLoadFromAssembly(fs: FS, setupTable: ObjectLoadEntry[], map: RAMMapper, entryAddress: number) {
+function extractAdditionalObjects(rom: ArrayBufferSlice, setupTable: ObjectLoadEntry[], map: RAMMapper, start: number, end: number, entryAddress: number) {
+    const commonFileLoadAddress = 0x803863F0;
+    map.regions.push(...decompressPairedFiles(rom.slice(start, end), commonFileLoadAddress));
+    const newObjects = extractObjectLoadFromAssembly(map, entryAddress);
+    setupTable.push(...newObjects);
+    // remove our temporary files
+    map.regions.pop();
+    map.regions.pop();
+}
+
+function extractObjectLoadFromAssembly(map: RAMMapper, entryAddress: number): ObjectLoadEntry[] {
     const view = map.lookup(entryAddress);
 
-    let offs = 0;
+    // skip the first bit of the function, setting stack and s0 register
+    // TODO: make sure these functions actually all look the same
+    let offs = 0x14;
     // RAM address of function that appends an entry to the object load table
     // divide by four to match MIPS function call
     const appendEntry = 0x3053e8 / 4;
     // address of a function that appends an entry if a particular bit is set
     const conditionalAppendEntry = 0x3054a4 / 4;
+
+    const setupTable: ObjectLoadEntry[] = [];
 
     // registers to keep track of
     // only a0-a3 (4-7) change, though r0 is read
@@ -275,13 +320,13 @@ function extractObjectLoadFromAssembly(fs: FS, setupTable: ObjectLoadEntry[], ma
                 break;
             default:
                 // done with the setup portion
-                return;
+                return setupTable;
         }
         if (delay && (instr >>> 26) !== MIPSOpcode.JAL) {
             delay = false;
             // interpret function arguments
             // TODO: figure out how much a1 (the init function) and a2 (the flags) matter for our purposes
-            setupTable.push(parseObjectLoadEntry(fs, map, regs[4]));
+            setupTable.push(parseObjectLoadEntry(map, regs[4]));
         }
     }
 }
