@@ -23,6 +23,7 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { GXMaterialHacks, GXMaterial } from '../gx/gx_material';
 import * as GX from '../gx/gx_enum';
 import { projectionMatrixD3DFromOpenGL, projectionMatrixOpenGLFromD3D } from '../gfx/helpers/ProjectionHelpers';
+import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers';
 
 export class TPLTextureHolder extends GXTextureHolder<TPL.TPLTexture> {
     public addTPLTextures(device: GfxDevice, tpl: TPL.TPL): void {
@@ -301,9 +302,6 @@ class NodeInstance {
         template.setMegaStateFlags(this.megaStateFlags);
 
         if (this.isDecal) {
-            let offs = template.allocateUniformBuffer(ub_SceneParams, u_SceneParamsBufferSize);
-            const d = template.mapUniformBufferF32(ub_SceneParams);
-            fillSceneParams(sceneParams, viewerInput.camera, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
             // The game will actually adjust the projection matrix based on the child index, if the decal flag
             // is set. This happens in _mapDispMapObj.
             //
@@ -312,11 +310,19 @@ class NodeInstance {
 
             const indexBias = this.childIndex * 0.01;
             const frustum = viewerInput.camera.frustum, far = frustum.far, near = frustum.near;
-            const depthBias = (1.0 + (indexBias * -2 * far * near) / (far + near) * (1.0 + indexBias));
-            projectionMatrixD3DFromOpenGL(sceneParams.u_Projection);
-            sceneParams.u_Projection[10] *= depthBias;
-            projectionMatrixOpenGLFromD3D(sceneParams.u_Projection);
-            fillSceneParamsData(d, offs, sceneParams);
+            const depthBias = 1.0 + (indexBias * -2 * far * near) / (far + near) * (1.0 + indexBias);
+
+            // TODO(jstpierre): Figure out how to make this work with reversed depth
+            if (false && depthBias !== 1.0) {
+                let offs = template.allocateUniformBuffer(ub_SceneParams, u_SceneParamsBufferSize);
+                const d = template.mapUniformBufferF32(ub_SceneParams);
+                fillSceneParams(sceneParams, viewerInput.camera, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+
+                projectionMatrixD3DFromOpenGL(sceneParams.u_Projection);
+                sceneParams.u_Projection[10] *= depthBias;
+                projectionMatrixOpenGLFromD3D(sceneParams.u_Projection);
+                fillSceneParamsData(d, offs, sceneParams);
+            }
         }
 
         const materialInstanceOverride = this.getMaterialInstanceOverride(device, renderInstManager.gfxRenderCache);
