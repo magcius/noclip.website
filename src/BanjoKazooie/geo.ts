@@ -6,9 +6,27 @@ import { vec3 } from "gl-matrix";
 
 // Banjo-Kazooie Geometry
 
+export interface Bone {
+    boneIndex: number;
+    parentIndex: number;
+    boneAnimID: number;
+    offset: vec3;
+}
+
+export interface AnimationSetup {
+    translationScale: number;
+    bones: Bone[];
+}
+
+export interface VertexBoneTable {
+}
+
 export interface Geometry {
-    rspOutput: F3DEX.RSPOutput;
+    animationSetup: AnimationSetup | null;
+    vertexBoneTable: VertexBoneTable | null;
     vertexEffects: VertexAnimationEffect[];
+    sharedOutput: F3DEX.RSPSharedOutput;
+    rootNode: GeoNode;
 }
 
 export const enum VertexEffectType {
@@ -53,6 +71,115 @@ export interface VertexAnimationEffect {
     pairedEffect?: VertexAnimationEffect;
 }
 
+interface GeoContext {
+    buffer: ArrayBufferSlice;
+    geoIdx: number;
+
+    segmentBuffers: ArrayBufferSlice[];
+    sharedOutput: F3DEX.RSPSharedOutput;
+    initialZUpd: boolean;
+}
+
+export interface GeoNode {
+    boneIndex: number;
+    rspOutput: F3DEX.RSPOutput | null;
+    children: GeoNode[];
+}
+
+function runGeoLayout(context: GeoContext, end: number, boneIndex: number = 0): GeoNode {
+    const buffer = context.buffer;
+    const view = buffer.createDataView();
+
+    const children: GeoNode[] = [];
+
+    // pass the vertex data to prefill the buffer, since effects rely on its ordering
+    // TODO: figure out the unreferenced vertices
+    const state = new F3DEX.RSPState(context.segmentBuffers, context.sharedOutput);
+    // Z_UPD
+    state.gDPSetOtherModeL(5, 1, context.initialZUpd ? 0x20 : 0x00);
+    // G_TF_BILERP
+    state.gDPSetOtherModeH(12, 2, 0x2000);
+
+    while (context.geoIdx < end) {
+        const cmd = view.getUint32(context.geoIdx + 0x00);
+        if (window.debug) {
+            const end = view.getUint32(context.geoIdx + 0x04);
+            console.log(hexzero(cmd, 0x08), hexzero(end, 0x08));
+        }
+        if (cmd === 0x00) {
+            // set custom model matrix?
+            context.geoIdx += 0x18;
+        } else if (cmd === 0x01) {
+            // sort. Skip.
+            const drawCloserOnly = !!(view.getUint16(context.geoIdx + 0x20) & 1);
+            context.geoIdx += 0x28;
+        } else if (cmd === 0x02) {
+            // BONE. Skip.
+            const length = view.getUint32(context.geoIdx + 0x04);
+            const boneIndex = view.getInt8(context.geoIdx + 0x09);
+            const childEnd = length !== 0 ? context.geoIdx + length : end;
+
+            context.geoIdx += 0x10;
+            const childNode = runGeoLayout(context, childEnd, boneIndex);
+            children.push(childNode);
+        } else if (cmd === 0x03) {
+            // LOAD DL.
+            const unkFlag = view.getUint32(context.geoIdx + 0x04);
+
+            const segmentStart = view.getUint16(context.geoIdx + 0x08);
+            const triCount = view.getUint16(context.geoIdx + 0x0A);
+            F3DEX.runDL_F3DEX(state, 0x09000000 + segmentStart * 0x08);
+            context.geoIdx += 0x10;
+        } else if (cmd === 0x05) {
+            // actually a while loop, but the size seems constant
+            // revisit when we do real geo list parsing
+            for (let idx = 0x08; idx < 0x18; idx += 2) {
+                const segmentStart = view.getUint16(context.geoIdx + idx);
+                if (segmentStart === 0 && idx > 0x08) // 0 after the first indicates the end
+                    break;
+                F3DEX.runDL_F3DEX(state, 0x09000000 + segmentStart * 0x08);
+            }
+            context.geoIdx += 0x18;
+        } else if (cmd === 0x08) {
+            // more draw distance?. Skip.
+            context.geoIdx += 0x20;
+        } else if (cmd === 0x0A) {
+            // push vector?. Skip.
+            context.geoIdx += 0x18;
+        } else if (cmd === 0x0C) {
+            // select child geo list(s), e.g. eye blink state
+            // TODO: intelligently pick which ones to run
+            const firstChild = view.getUint32(context.geoIdx + 0x0c);
+            // hexdump(buffer, geoIdx, 0x100);
+            context.geoIdx += firstChild;
+        } else if (cmd === 0x0D) {
+            // DRAW DISTANCE. Skip.
+            context.geoIdx += 0x18;
+        } else if (cmd === 0x0E) {
+            // view frustum culling. Skip.
+            const jointIndex = view.getInt16(context.geoIdx + 0x12);
+            // hexdump(buffer, geoIdx, 0x100);
+            context.geoIdx += 0x30;
+        } else if (cmd === 0x0F) {
+            const count = view.getUint8(context.geoIdx + 0x0A);
+            // hexdump(buffer, geoIdx, 0x20);
+            context.geoIdx += view.getInt16(context.geoIdx + 0x08);
+        } else if (cmd === 0x10) {
+            // set mipmaps. Skip.
+            const contFlag = view.getUint32(context.geoIdx + 0x04);
+            // 1 for clamp, 2 for wrap
+            const wrapMode = view.getInt32(context.geoIdx + 0x08);
+            context.geoIdx += 0x10;
+        } else {
+            throw `whoops ${cmd}`;
+        }
+    }
+
+    const rspOutput = state.finish();
+
+    return { boneIndex, rspOutput, children };
+}
+
 export function parse(buffer: ArrayBufferSlice, initialZUpd: boolean): Geometry {
     const view = buffer.createDataView();
 
@@ -62,6 +189,37 @@ export function parse(buffer: ArrayBufferSlice, initialZUpd: boolean): Geometry 
     const f3dexOffs = view.getUint32(0x0C);
     const f3dexCount = view.getUint32(f3dexOffs + 0x00);
     const f3dexData = buffer.subarray(f3dexOffs + 0x08, f3dexCount * 0x08);
+
+    const animationSetupOffs = view.getUint32(0x18);
+    let animationSetup: AnimationSetup | null = null;
+    if (animationSetupOffs !== 0) {
+        const translationScale = view.getFloat32(animationSetupOffs + 0x00);
+        const boneCount = view.getUint16(animationSetupOffs + 0x04);
+
+        let boneTableIdx = animationSetupOffs + 0x08;
+        const bones: Bone[] = [];
+        for (let i = 0; i < boneCount; i++) {
+            const x = view.getFloat32(boneTableIdx + 0x00);
+            const y = view.getFloat32(boneTableIdx + 0x04);
+            const z = view.getFloat32(boneTableIdx + 0x08);
+
+            const boneIndex = i;
+            const boneID = view.getUint16(boneTableIdx + 0x0C);
+            const parentIndex = view.getInt16(boneTableIdx + 0x0E);
+            const offset = vec3.fromValues(x, y, z);
+            bones.push({ boneIndex, parentIndex, boneAnimID: boneID, offset });
+
+            boneTableIdx += 0x10;
+        }
+
+        animationSetup = { translationScale, bones };
+    }
+
+    const vertexBoneTableOffs = view.getUint32(0x28);
+    let vertexBoneTable: VertexBoneTable | null = null;
+    if (vertexBoneTableOffs !== 0) {
+        vertexBoneTable = {};
+    }
 
     const vertexDataOffs = view.getUint32(0x10);
     const vertexCount = view.getUint16(0x32);
@@ -74,94 +232,24 @@ export function parse(buffer: ArrayBufferSlice, initialZUpd: boolean): Geometry 
     const textureDataOffs = textureSetupOffs + 0x08 + (textureCount * 0x10);
     const textureData = buffer.slice(textureDataOffs, textureSetupOffs + textureSetupSize);
 
-    // Construct a segment buffer.
     const segmentBuffers: ArrayBufferSlice[] = [];
     segmentBuffers[0x01] = vertexData;
     segmentBuffers[0x02] = textureData;
     segmentBuffers[0x09] = f3dexData;
     segmentBuffers[0x0F] = textureData;
 
-    // pass the vertex data to prefill the buffer, since effects rely on its ordering
-    // TODO: figure out the unreferenced vertices
-    const state = new F3DEX.RSPState(segmentBuffers, vertexData.createDataView());
-    // Z_UPD
-    state.gDPSetOtherModeL(5, 1, initialZUpd ? 0x20 : 0x00);
-    // G_TF_BILERP
-    state.gDPSetOtherModeH(12, 2, 0x2000);
+    const sharedOutput = new F3DEX.RSPSharedOutput();
+    sharedOutput.setVertexBufferFromData(vertexData.createDataView());
 
-    let geoIdx = geoOffs;
+    const geoContext: GeoContext = {
+        buffer,
+        geoIdx: geoOffs,
 
-    // It is common for the file to randomly end in the middle of geometry.
-    // I'm not sure what determines it, or if the game's parser reads until the
-    // end of the decompressed buffer it has...
-    while (geoIdx < buffer.byteLength) {
-        const cmd = view.getUint32(geoIdx + 0x00);
-        // console.log(hexzero(cmd, 0x08));
-        if (cmd === 0x00) {
-            // set custom model matrix?
-            geoIdx += 0x18;
-        } else if (cmd === 0x01) {
-            // sort. Skip.
-            const drawCloserOnly = !!(view.getUint16(geoIdx + 0x20) & 1);
-            geoIdx += 0x28;
-        } else if (cmd === 0x02) {
-            // BONE. Skip.
-            const jointIndex = view.getInt8(geoIdx + 0x9);
-            geoIdx += 0x10;
-        } else if (cmd === 0x03) {
-            // LOAD DL.
-            const unkFlag = view.getUint32(geoIdx + 0x04);
-
-            const segmentStart = view.getUint16(geoIdx + 0x08);
-            const triCount = view.getUint16(geoIdx + 0x0A);
-            F3DEX.runDL_F3DEX(state, 0x09000000 + segmentStart * 0x08);
-            geoIdx += 0x10;
-        } else if (cmd === 0x05) {
-            // actually a while loop, but the size seems constant
-            // revisit when we do real geo list parsing
-            let segmentStart = 0;
-            for (let i = 0x08; i < 0x18; i += 2) {
-                segmentStart = view.getUint16(geoIdx + i);
-                if (segmentStart === 0 && i > 8) // 0 after the first indicates the end
-                    break;
-                F3DEX.runDL_F3DEX(state, 0x09000000 + segmentStart * 0x08);
-            }
-            geoIdx += 0x18;
-        } else if (cmd === 0x08) {
-            // more draw distance?. Skip.
-            geoIdx += 0x20;
-        } else if (cmd === 0x0A) {
-            // push vector?. Skip.
-            geoIdx += 0x18;
-        } else if (cmd === 0x0C) {
-            // select child geo list(s), e.g. eye blink state
-            // TODO: intelligently pick which ones to run
-            const firstChild = view.getUint32(geoIdx + 0x0c);
-            // hexdump(buffer, geoIdx, 0x100);
-            geoIdx += firstChild;
-        } else if (cmd === 0x0D) {
-            // DRAW DISTANCE. Skip.
-            geoIdx += 0x18;
-        } else if (cmd === 0x0E) {
-            // view frustum culling. Skip.
-            const jointIndex = view.getInt16(geoIdx + 0x12);
-            // hexdump(buffer, geoIdx, 0x100);
-            geoIdx += 0x30;
-        } else if (cmd === 0x0F) {
-            const count = view.getUint8(geoIdx + 0x0A);
-            // hexdump(buffer, geoIdx, 0x20);
-            geoIdx += view.getInt16(geoIdx + 0x08);
-        } else if (cmd === 0x10) {
-            // set mipmaps. Skip.
-            const contFlag = view.getUint32(geoIdx + 0x04);
-            // 1 for clamp, 2 for wrap
-            const wrapMode = view.getInt32(geoIdx + 0x08);
-            geoIdx += 0x10;
-        } else {
-            throw `whoops ${cmd}`;
-        }
-    }
-    const rspOutput = state.finish();
+        segmentBuffers,
+        sharedOutput,
+        initialZUpd,
+    };
+    const rootNode = runGeoLayout(geoContext, buffer.byteLength);
 
     const effectSetupOffs = view.getUint32(0x24);
     const vertexEffects: VertexAnimationEffect[] = [];
@@ -186,7 +274,7 @@ export function parse(buffer: ArrayBufferSlice, initialZUpd: boolean): Geometry 
             for (let j = 0; j < vertexCount; j++) {
                 const index = view.getUint16(offs);
                 vertexIndices.push(index);
-                baseVertexValues.push(rspOutput.vertices[index]);
+                baseVertexValues.push(sharedOutput.vertices[index]);
                 offs += 0x02;
             }
 
@@ -202,27 +290,28 @@ export function parse(buffer: ArrayBufferSlice, initialZUpd: boolean): Geometry 
                 const bbMax = vec3.clone(bbMin);
                 for (let j = 0; j < baseVertexValues.length; j++) {
                     vec3.set(vertexPos, baseVertexValues[j].x, baseVertexValues[j].y, baseVertexValues[j].z);
-                    vec3.min(bbMin, bbMin, vertexPos)
-                    vec3.max(bbMax, bbMax, vertexPos)
+                    vec3.min(bbMin, bbMin, vertexPos);
+                    vec3.max(bbMax, bbMax, vertexPos);
                 }
                 effect.bbMin = bbMin;
                 effect.bbMax = bbMax;
             }
+
             if (type === VertexEffectType.LightningLighting) {
                 // search for the paired lightning bolt
-                for (let j = 0; j < vertexEffects.length; j++) {
-                    if (vertexEffects[j].type === VertexEffectType.LightningBolt && vertexEffects[j].subID === subID) {
+                for (let j = 0; j < vertexEffects.length; j++)
+                    if (vertexEffects[j].type === VertexEffectType.LightningBolt && vertexEffects[j].subID === subID)
                         effect.pairedEffect = vertexEffects[j];
-                    }
-                }
+
                 assert(!!effect.pairedEffect);
             }
+
             initEffectState(effect);
             vertexEffects.push(effect);
         }
     }
 
-    return { rspOutput, vertexEffects };
+    return { animationSetup, vertexBoneTable, vertexEffects, rootNode, sharedOutput };
 }
 
 function initEffectState(effect: VertexAnimationEffect) {

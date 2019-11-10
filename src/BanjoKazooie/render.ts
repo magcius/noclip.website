@@ -5,17 +5,18 @@ import { Texture, getImageFormatString, Vertex, DrawCall, GeometryMode, getTextF
 import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { assert, nArray, align } from '../util';
-import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4v, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
-import { mat4, vec4 } from 'gl-matrix';
+import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
+import { mat4 } from 'gl-matrix';
 import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
-import { interactiveVizSliderSelect } from '../DebugJunk';
+import { interactiveVizSliderSelect, getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { TextFilt } from '../Common/N64/Image';
-import { Geometry, VertexAnimationEffect, VertexEffectType } from './geo';
-import { clamp } from '../MathHelpers';
+import { Geometry, VertexAnimationEffect, VertexEffectType, GeoNode, Bone } from './geo';
+import { clamp, lerp, MathConstants } from '../MathHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
+import AnimationController from '../AnimationController';
 
 export class F3DEX_Program extends DeviceProgram {
     public static a_Position = 0;
@@ -387,24 +388,24 @@ function applyVertexEffect(effect: VertexAnimationEffect, vertexBuffer: Float32A
     }
 }
 
-export class N64Data {
-    public textures: GfxTexture[] = [];
-    public samplers: GfxSampler[] = [];
+export class GeometryData {
     public vertexBuffer: GfxBuffer;
-    public indexBuffer: GfxBuffer;
     public inputLayout: GfxInputLayout;
     public inputState: GfxInputState;
-
+    public textures: GfxTexture[] = [];
+    public samplers: GfxSampler[] = [];
     public vertexBufferData: Float32Array;
+    public indexBuffer: GfxBuffer;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public geo: Geometry) {
-        for (let i = 0; i < this.geo.rspOutput.textures.length; i++) {
-            const tex = this.geo.rspOutput.textures[i];
+        const textures = this.geo.sharedOutput.textureCache.textures;
+        for (let i = 0; i < textures.length; i++) {
+            const tex = textures[i];
             this.textures.push(this.translateTexture(device, tex));
             this.samplers.push(this.translateSampler(device, cache, tex));
         }
 
-        this.vertexBufferData = makeVertexBufferData(this.geo.rspOutput.vertices);
+        this.vertexBufferData = makeVertexBufferData(this.geo.sharedOutput.vertices);
         if (this.geo.vertexEffects.length > 0) {
             // there are vertex effects, so the vertex buffer data will change
             this.vertexBuffer = device.createBuffer(
@@ -415,8 +416,9 @@ export class N64Data {
         } else {
             this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, this.vertexBufferData.buffer);
         }
-        assert(this.geo.rspOutput.vertices.length <= 0xFFFFFFFF);
-        const indexBufferData = new Uint32Array(this.geo.rspOutput.indices);
+        assert(this.geo.sharedOutput.vertices.length <= 0xFFFFFFFF);
+
+        const indexBufferData = new Uint32Array(this.geo.sharedOutput.indices);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexBufferData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
@@ -439,7 +441,7 @@ export class N64Data {
             { buffer: this.vertexBuffer, byteOffset: 0, },
         ], { buffer: this.indexBuffer, byteOffset: 0 });
     }
-    
+
     private translateTexture(device: GfxDevice, texture: Texture): GfxTexture {
         const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, 1));
         device.setResourceName(gfxTexture, texture.name);
@@ -497,13 +499,13 @@ class DrawCallInstance {
     private textureMappings = nArray(2, () => new TextureMapping());
     public visible = true;
 
-    constructor(n64Data: N64Data, private drawCall: DrawCall) {
+    constructor(geometryData: GeometryData, private node: GeoNode, private drawMatrix: mat4, private drawCall: DrawCall) {
         for (let i = 0; i < this.textureMappings.length; i++) {
             if (i < this.drawCall.textureIndices.length) {
                 const idx = this.drawCall.textureIndices[i];
-                this.textureEntry[i] = n64Data.geo.rspOutput.textures[idx];
-                this.textureMappings[i].gfxTexture = n64Data.textures[idx];
-                this.textureMappings[i].gfxSampler = n64Data.samplers[idx];
+                this.textureEntry[i] = geometryData.geo.sharedOutput.textureCache.textures[idx];
+                this.textureMappings[i].gfxTexture = geometryData.textures[idx];
+                this.textureMappings[i].gfxSampler = geometryData.samplers[idx];
             }
         }
 
@@ -574,7 +576,7 @@ class DrawCallInstance {
         }
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean, modelMatrix: mat4): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean): void {
         if (!this.visible)
             return;
 
@@ -593,7 +595,7 @@ class DrawCallInstance {
             computeViewMatrixSkybox(modelViewScratch, viewerInput.camera);
         else
             computeViewMatrix(modelViewScratch, viewerInput.camera);
-        mat4.mul(modelViewScratch, modelViewScratch, modelMatrix);
+        mat4.mul(modelViewScratch, modelViewScratch, this.drawMatrix);
         offs += fillMatrix4x3(mappedF32, offs, modelViewScratch);
 
         this.computeTextureMatrix(texMatrixScratch, 0);
@@ -611,6 +613,111 @@ class DrawCallInstance {
     }
 }
 
+export const enum AnimationTrackType {
+    RotationX,
+    RotationY,
+    RotationZ,
+    ScaleX,
+    ScaleY,
+    ScaleZ,
+    TranslationX,
+    TranslationY,
+    TranslationZ,
+}
+
+export interface AnimationKeyframe {
+    unk: number;
+    time: number;
+    value: number;
+}
+
+export interface AnimationTrack {
+    boneID: number;
+    trackType: AnimationTrackType;
+    frames: AnimationKeyframe[];
+}
+
+export interface AnimationFile {
+    startFrame: number;
+    endFrame: number;
+    tracks: AnimationTrack[];
+}
+
+function sampleAnimationTrackLinear(track: AnimationTrack, frame: number): number {
+    const frames = track.frames;
+
+    // Find the first frame.
+    const idx1 = frames.findIndex((key) => (frame < key.time));
+    if (idx1 === 0)
+        return frames[0].value;
+    if (idx1 < 0)
+        return frames[frames.length - 1].value;
+    const idx0 = idx1 - 1;
+
+    const k0 = frames[idx0];
+    const k1 = frames[idx1];
+
+    const t = (frame - k0.time) / (k1.time - k0.time);
+    return lerp(k0.value, k1.value, t);
+}
+
+const scratchVec3 = vec3.create();
+const scratchMatrix = mat4.create();
+export class BoneAnimator {
+    constructor(private animFile: AnimationFile) {
+    }
+
+    public calcBoneToParentMtx(dst: mat4, translationScale: number, bone: Bone, timeInFrames: number): void {
+        timeInFrames = getAnimFrame(this.animFile, timeInFrames);
+
+        mat4.identity(scratchMatrix);
+
+        let scaleX = 1, scaleY = 1, scaleZ = 1;
+        let transX = 0, transY = 0, transZ = 0;
+        for (let i = 0; i < this.animFile.tracks.length; i++) {
+            const track = this.animFile.tracks[i];
+            if (track.boneID !== bone.boneAnimID)
+                continue;
+
+            const value = sampleAnimationTrackLinear(track, timeInFrames);
+
+            if (track.trackType === AnimationTrackType.RotationX)
+                mat4.rotateX(scratchMatrix, scratchMatrix, value * MathConstants.DEG_TO_RAD);
+            else if (track.trackType === AnimationTrackType.RotationY)
+                mat4.rotateY(scratchMatrix, scratchMatrix, value * MathConstants.DEG_TO_RAD);
+            else if (track.trackType === AnimationTrackType.RotationZ)
+                mat4.rotateZ(scratchMatrix, scratchMatrix, value * MathConstants.DEG_TO_RAD);
+            else if (track.trackType === AnimationTrackType.ScaleX)
+                scaleX = value;
+            else if (track.trackType === AnimationTrackType.ScaleY)
+                scaleY = value;
+            else if (track.trackType === AnimationTrackType.ScaleZ)
+                scaleZ = value;
+            else if (track.trackType === AnimationTrackType.TranslationX)
+                transX = value * translationScale;
+            else if (track.trackType === AnimationTrackType.TranslationY)
+                transY = value * translationScale;
+            else if (track.trackType === AnimationTrackType.TranslationZ)
+                transZ = value * translationScale;
+        }
+
+        // transMatrix * +offsetMatrix * rotationMatrix * scaleMatrix * -offsetMatrix;
+
+        vec3.set(scratchVec3, transX, transY, transZ);
+        mat4.fromTranslation(dst, scratchVec3);
+
+        mat4.translate(dst, dst, bone.offset);
+
+        mat4.mul(dst, dst, scratchMatrix);
+
+        vec3.set(scratchVec3, scaleX, scaleY, scaleZ);
+        mat4.scale(dst, dst, scratchVec3);
+
+        vec3.negate(scratchVec3, bone.offset);
+        mat4.translate(dst, dst, scratchVec3);
+    }
+}
+
 export const enum BKPass {
     MAIN = 0x01,
     SKYBOX = 0x02,
@@ -620,14 +727,27 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 3, numSamplers: 2, },
 ];
 
-export class N64Renderer {
+function getAnimFrame(anim: AnimationFile, frame: number): number {
+    const lastFrame = anim.endFrame - anim.startFrame;
+    while (frame > lastFrame)
+        frame -= lastFrame;
+    return frame + anim.startFrame;
+}
+
+const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
+export class GeometryRenderer {
     private visible = true;
     private drawCallInstances: DrawCallInstance[] = [];
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
     public isSkybox = false;
     public modelMatrix = mat4.create();
+    public boneToWorldMatrixArray: mat4[];
+    public boneToParentMatrixArray: mat4[];
+    public boneAnimator: BoneAnimator | null = null;
+    public animationController = new AnimationController(60);
 
-    constructor(private n64Data: N64Data) {
+    constructor(private geometryData: GeometryData) {
         this.megaStateFlags = {};
         setAttachmentStateSimple(this.megaStateFlags, {
             blendMode: GfxBlendMode.ADD,
@@ -635,8 +755,26 @@ export class N64Renderer {
             blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
         });
 
-        for (let i = 0; i < this.n64Data.geo.rspOutput.drawCalls.length; i++)
-            this.drawCallInstances.push(new DrawCallInstance(this.n64Data, this.n64Data.geo.rspOutput.drawCalls[i]));
+        const geo = this.geometryData.geo;
+
+        const boneToWorldMatrixArrayCount = geo.animationSetup !== null ? geo.animationSetup.bones.length : 1;
+        this.boneToWorldMatrixArray = nArray(boneToWorldMatrixArrayCount, () => mat4.create());
+
+        const boneToParentMatrixArrayCount = geo.animationSetup !== null ? geo.animationSetup.bones.length : 0;
+        this.boneToParentMatrixArray = nArray(boneToParentMatrixArrayCount, () => mat4.create());
+
+        // Traverse the node tree.
+        this.buildGeoNode(this.geometryData.geo.rootNode);
+    }
+
+    private buildGeoNode(node: GeoNode): void {
+        if (node.rspOutput !== null) {
+            for (let i = 0; i < node.rspOutput.drawCalls.length; i++)
+                this.drawCallInstances.push(new DrawCallInstance(this.geometryData, node, this.boneToWorldMatrixArray[node.boneIndex], node.rspOutput.drawCalls[i]));
+        }
+
+        for (let i = 0; i < node.children.length; i++)
+            this.buildGeoNode(node.children[i]);
     }
 
     public slider(): void {
@@ -668,12 +806,64 @@ export class N64Renderer {
             this.drawCallInstances[i].setAlphaVisualizerEnabled(v);
     }
 
+    private calcAnim(): void {
+        const animationSetup = this.geometryData.geo.animationSetup;
+        if (this.boneAnimator !== null && animationSetup !== null) {
+            const bones = animationSetup.bones;
+
+            for (let i = 0; i < bones.length; i++)
+                this.boneAnimator.calcBoneToParentMtx(this.boneToParentMatrixArray[i], animationSetup.translationScale, bones[i], this.animationController.getTimeInFrames());
+        }
+    }
+
+    private calcBoneToWorld(): void {
+        const animationSetup = this.geometryData.geo.animationSetup;
+        if (animationSetup !== null) {
+            const bones = animationSetup.bones;
+
+            for (let i = 0; i < bones.length; i++) {
+                const boneDef = bones[i];
+
+                const parentIndex = boneDef.parentIndex;
+                const parentMtx = parentIndex === -1 ? this.modelMatrix : this.boneToWorldMatrixArray[parentIndex];
+                const boneIndex = i;
+                mat4.mul(this.boneToWorldMatrixArray[boneIndex], parentMtx, this.boneToParentMatrixArray[boneIndex]);
+            }
+        } else {
+            mat4.copy(this.boneToWorldMatrixArray[0], this.modelMatrix);
+        }
+    }
+
+    private debugBones: boolean = false;
+
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.visible)
-            return
+            return;
+
+        this.animationController.setTimeFromViewerInput(viewerInput);
+        this.calcAnim();
+        this.calcBoneToWorld();
+
+        const animationSetup = this.geometryData.geo.animationSetup;
+        if (this.debugBones && animationSetup !== null) {
+            const ctx = getDebugOverlayCanvas2D();
+            for (let i = 0; i < animationSetup.bones.length; i++) {
+                const bone = animationSetup.bones[i];
+                if (bone.parentIndex < 0)
+                    continue;
+
+                vec3.set(scratchVec3a, 0, 0, 0);
+                vec3.transformMat4(scratchVec3a, scratchVec3a, this.boneToWorldMatrixArray[bone.parentIndex]);
+                vec3.set(scratchVec3b, 0, 0, 0);
+                vec3.transformMat4(scratchVec3b, scratchVec3b, this.boneToWorldMatrixArray[bone.boneIndex]);
+
+                drawWorldSpaceLine(ctx, viewerInput.camera, scratchVec3a, scratchVec3b);
+            }
+        }
+
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
-        template.setInputLayoutAndState(this.n64Data.inputLayout, this.n64Data.inputState);
+        template.setInputLayoutAndState(this.geometryData.inputLayout, this.geometryData.inputState);
         template.setMegaStateFlags(this.megaStateFlags);
 
         template.filterKey = this.isSkybox ? BKPass.SKYBOX : BKPass.MAIN;
@@ -682,21 +872,21 @@ export class N64Renderer {
         const mappedF32 = template.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
         offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);
 
-        if (this.n64Data.geo.vertexEffects.length > 0) {
-            for (let i = 0; i < this.n64Data.geo.vertexEffects.length; i++) {
-                const effect = this.n64Data.geo.vertexEffects[i];
+        if (this.geometryData.geo.vertexEffects.length > 0) {
+            for (let i = 0; i < this.geometryData.geo.vertexEffects.length; i++) {
+                const effect = this.geometryData.geo.vertexEffects[i];
                 updateVertexEffectState(effect, viewerInput.time / 1000, viewerInput.deltaTime / 1000);
                 for (let j = 0; j < effect.vertexIndices.length; j++) {
-                    applyVertexEffect(effect, this.n64Data.vertexBufferData, effect.baseVertexValues[j], effect.vertexIndices[j]);
+                    applyVertexEffect(effect, this.geometryData.vertexBufferData, effect.baseVertexValues[j], effect.vertexIndices[j]);
                 }
             }
             const hostAccessPass = device.createHostAccessPass();
-            hostAccessPass.uploadBufferData(this.n64Data.vertexBuffer, 0, new Uint8Array(this.n64Data.vertexBufferData.buffer));
+            hostAccessPass.uploadBufferData(this.geometryData.vertexBuffer, 0, new Uint8Array(this.geometryData.vertexBufferData.buffer));
             device.submitPass(hostAccessPass);
         }
 
         for (let i = 0; i < this.drawCallInstances.length; i++)
-            this.drawCallInstances[i].prepareToRender(device, renderInstManager, viewerInput, this.isSkybox, this.modelMatrix);
+            this.drawCallInstances[i].prepareToRender(device, renderInstManager, viewerInput, this.isSkybox);
         renderInstManager.popTemplateRenderInst();
     }
 }

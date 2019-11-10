@@ -71,22 +71,25 @@ function decompressPairedFiles(buffer: ArrayBufferSlice, ram: number): RAMRegion
 }
 
 interface CRG1File {
+    FileID: number;
     Data: ArrayBufferSlice;
 }
 
-function extractFileAndAppend(fileTable: CRG1File[], fs: FS, fsfile: FSFile): number {
-    if (fsfile === null)
+function extractFileAndAppend(fileTable: CRG1File[], fs: FS, fileID: number): number {
+    const file = fs.files[fileID];
+    if (file === undefined)
         return -1;
 
-    const index = fileTable.length;
-    fileTable.push(extractFile(fs, fsfile));
-    return index;
+    if (!fileTable.find((file) => file.FileID === fileID))
+        fileTable.push(extractFile(fs, file));
+    return fileID;
 }
 
-function extractFile(fs: FS, fsfile: FSFile): CRG1File {
-    const fileBuffer = getFileBuffer(fs, fsfile);
-    const buffer = (fsfile.flags & 0x00010000) ? decompress(fileBuffer) : fileBuffer;
-    return { Data: buffer };
+function extractFile(fs: FS, file: FSFile): CRG1File {
+    const fileIndex = fs.files.indexOf(file);
+    const fileBuffer = getFileBuffer(fs, file);
+    const buffer = (file.flags & 0x00010000) ? decompress(fileBuffer) : fileBuffer;
+    return { FileID: fileIndex, Data: buffer };
 }
 
 function extractMap(fs: FS, name: string, sceneID: number): void {
@@ -109,7 +112,7 @@ function extractMap(fs: FS, name: string, sceneID: number): void {
         XluSkyboxScale: 1,
     };
 
-    crg1.SetupFileId = extractFileAndAppend(fileTable, fs, fs.files[sceneID + 0x71c]);
+    crg1.SetupFileId = extractFileAndAppend(fileTable, fs, sceneID + 0x71C);
 
     const f9cae0 = decompress(fs.buffer.slice(0xF9CAE0));
     const f9cae0View = f9cae0.createDataView();
@@ -120,8 +123,8 @@ function extractMap(fs: FS, name: string, sceneID: number): void {
             const opaId = f9cae0View.getUint16(i + 0x02);
             const xluId = f9cae0View.getUint16(i + 0x04);
 
-            crg1.OpaGeoFileId = extractFileAndAppend(fileTable, fs, opaId > 0 ? fs.files[opaId] : null);
-            crg1.XluGeoFileId = extractFileAndAppend(fileTable, fs, xluId > 0 ? fs.files[xluId] : null);
+            crg1.OpaGeoFileId = opaId > 0 ? extractFileAndAppend(fileTable, fs, opaId) : -1;
+            crg1.XluGeoFileId = xluId > 0 ? extractFileAndAppend(fileTable, fs, xluId) : -1;
             break;
         }
     }
@@ -134,9 +137,9 @@ function extractMap(fs: FS, name: string, sceneID: number): void {
             const xluSkyboxId    = f9cae0View.getUint16(i + 0x10);
             const xluSkyboxScale = f9cae0View.getFloat32(i + 0x14);
 
-            crg1.OpaSkyboxFileId = extractFileAndAppend(fileTable, fs, opaSkyboxId > 0 ? fs.files[opaSkyboxId] : null);
+            crg1.OpaSkyboxFileId = opaSkyboxId > 0 ? extractFileAndAppend(fileTable, fs, opaSkyboxId) : -1;
             crg1.OpaSkyboxScale = opaSkyboxScale;
-            crg1.XluSkyboxFileId = extractFileAndAppend(fileTable, fs, xluSkyboxId > 0 ? fs.files[xluSkyboxId] : null);
+            crg1.XluSkyboxFileId = xluSkyboxId > 0 ? extractFileAndAppend(fileTable, fs, xluSkyboxId) : -1;
             crg1.XluSkyboxScale = xluSkyboxScale;
             break;
         }
@@ -146,38 +149,30 @@ function extractMap(fs: FS, name: string, sceneID: number): void {
     writeFileSync(`${pathBaseOut}/${hexzero(sceneID, 2).toUpperCase()}_arc.crg1`, Buffer.from(data));
 }
 
-const enum MIPSOpcode {
-    regBlock = 0x0,
-    JAL = 0x3,
-    ADDIU = 0x9,
-    ORI = 0xd,
-    LUI = 0xf,
-}
-
 interface AnimationEntry {
-    id: number;
-    duration: number;
+    FileID: number;
+    Duration: number;
 }
 
 interface ObjectLoadEntry {
-    otherID: number; // not sure what this is
-    spawnID: number;
-    fileIndex: number;
-    animationTable: AnimationEntry[];
-    animationStartIndex: number;
-    scale: number;
+    OtherID: number; // Not sure what this is...
+    SpawnID: number;
+    GeoFileID: number;
+    AnimationTable: AnimationEntry[];
+    AnimationStartIndex: number;
+    Scale: number;
 }
 
 function parseObjectLoadEntry(map: RAMMapper, startAddress: number): ObjectLoadEntry {
     const view = map.lookup(startAddress);
     let offs = 0;
 
-    const otherID = view.getUint16(offs + 0x0);
-    const spawnID = view.getUint16(offs + 0x2);
-    const fileIndex = view.getUint16(offs + 0x4);
-    const animationStartIndex = view.getUint16(offs + 0x6);
-    const animationTableAddress = view.getUint32(offs + 0x8);
-    const scale = view.getFloat32(offs + 0x1c);
+    const otherID = view.getUint16(offs + 0x00);
+    const spawnID = view.getUint16(offs + 0x02);
+    const fileIndex = view.getUint16(offs + 0x04);
+    const animationStartIndex = view.getUint16(offs + 0x06);
+    const animationTableAddress = view.getUint32(offs + 0x08);
+    const scale = view.getFloat32(offs + 0x1C);
 
     const animationTable: AnimationEntry[] = [];
     if (animationTableAddress !== 0) {
@@ -185,16 +180,33 @@ function parseObjectLoadEntry(map: RAMMapper, startAddress: number): ObjectLoadE
         offs = 0;
 
         while (true) {
-            const id = animView.getUint32(offs + 0x0);
-            const duration = animView.getFloat32(offs + 0x4);
-            if (id === 0 && animationTable.length > 0)
+            const fileID = animView.getUint32(offs + 0x00);
+
+            const duration = animView.getFloat32(offs + 0x04);
+            if (fileID === 0 && animationTable.length > 0)
                 break; // the first entry can be (and often is) zero
-            animationTable.push({ id, duration });
-            offs += 8;
+
+            // TODO(jstpierre): Figure out where the table stops
+            if (fileID > 0x0400) {
+                // console.log(animationStartIndex, offs.toString(16), animationTable);
+                // hexdump(animView.buffer, animView.byteOffset, 0x100);
+                // hexdump(view.buffer, view.byteOffset, 0x100);
+                break;
+            }
+
+            animationTable.push({ FileID: fileID, Duration: duration });
+            offs += 0x08;
         }
     }
 
-    return { otherID, spawnID, fileIndex, animationTable, animationStartIndex, scale };
+    return {
+        OtherID: otherID,
+        SpawnID: spawnID,
+        GeoFileID: fileIndex,
+        AnimationTable: animationTable,
+        AnimationStartIndex: animationStartIndex,
+        Scale: scale,
+    };
 }
 
 interface RAMRegion {
@@ -239,18 +251,13 @@ function extractObjectLoad(fs: FS) {
     extractAdditionalObjects(fs.buffer, setupTable, map, 0XFD0420, 0XFD6190, 0x803863F0);
     extractAdditionalObjects(fs.buffer, setupTable, map, 0XFD6190, 0XFDAA10, 0X8038DB6C);
 
-    // dedup model files and rewrite indices into the new list
-    const fileMap = new Map<number, number>();
     const fileTable: CRG1File[] = [];
     for (let i = 0; i < setupTable.length; i++) {
-        const origIndex = setupTable[i].fileIndex;
-        if (fileMap.has(origIndex)) {
-            setupTable[i].fileIndex = fileMap.get(origIndex);
-        } else {
-            const newIndex = extractFileAndAppend(fileTable, fs, fs.files[origIndex]);
-            fileMap.set(origIndex, newIndex);
-            setupTable[i].fileIndex = newIndex;
-        }
+        const setup = setupTable[i];
+        extractFileAndAppend(fileTable, fs, setup.GeoFileID);
+
+        for (let i = 0; i < setup.AnimationTable.length; i++)
+            extractFileAndAppend(fileTable, fs, setup.AnimationTable[i].FileID);
     }
 
     const data = BYML.write({ ObjectSetupTable: setupTable, Files: fileTable }, BYML.FileType.CRG1);
@@ -265,6 +272,14 @@ function extractAdditionalObjects(rom: ArrayBufferSlice, setupTable: ObjectLoadE
     // remove our temporary files
     map.regions.pop();
     map.regions.pop();
+}
+
+const enum MIPSOpcode {
+    regBlock = 0x0,
+    JAL = 0x3,
+    ADDIU = 0x9,
+    ORI = 0xd,
+    LUI = 0xf,
 }
 
 function extractObjectLoadFromAssembly(map: RAMMapper, entryAddress: number): ObjectLoadEntry[] {

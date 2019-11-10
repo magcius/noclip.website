@@ -6,7 +6,7 @@ import * as BYML from '../byml';
 
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { FakeTextureHolder, TextureHolder } from '../TextureHolder';
-import { textureToCanvas, N64Renderer, N64Data, BKPass } from './render';
+import { textureToCanvas, BKPass, GeometryRenderer, GeometryData, AnimationFile, AnimationTrack, AnimationTrackType, AnimationKeyframe, BoneAnimator } from './render';
 import { mat4, vec3 } from 'gl-matrix';
 import { transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
 import { SceneContext } from '../SceneBase';
@@ -14,15 +14,15 @@ import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { executeOnPass } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { assert, hexzero } from '../util';
+import { assert, hexzero, assertExists, hexdump } from '../util';
 import { DataFetcher } from '../DataFetcher';
 import { MathConstants } from '../MathHelpers';
 
 const pathBase = `BanjoKazooie`;
 
 class BKRenderer implements Viewer.SceneGfx {
-    public n64Renderers: N64Renderer[] = [];
-    public n64Datas: N64Data[] = [];
+    public geoRenderers: GeometryRenderer[] = [];
+    public geoDatas: GeometryData[] = [];
 
     public renderTarget = new BasicRenderTarget();
     public renderHelper: GfxRenderHelper;
@@ -38,32 +38,32 @@ class BKRenderer implements Viewer.SceneGfx {
         renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
         const enableCullingCheckbox = new UI.Checkbox('Enable Culling', true);
         enableCullingCheckbox.onchanged = () => {
-            for (let i = 0; i < this.n64Renderers.length; i++)
-                this.n64Renderers[i].setBackfaceCullingEnabled(enableCullingCheckbox.checked);
+            for (let i = 0; i < this.geoRenderers.length; i++)
+                this.geoRenderers[i].setBackfaceCullingEnabled(enableCullingCheckbox.checked);
         };
         renderHacksPanel.contents.appendChild(enableCullingCheckbox.elem);
         const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
         enableVertexColorsCheckbox.onchanged = () => {
-            for (let i = 0; i < this.n64Renderers.length; i++)
-                this.n64Renderers[i].setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
+            for (let i = 0; i < this.geoRenderers.length; i++)
+                this.geoRenderers[i].setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
         };
         renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
         const enableTextures = new UI.Checkbox('Enable Textures', true);
         enableTextures.onchanged = () => {
-            for (let i = 0; i < this.n64Renderers.length; i++)
-                this.n64Renderers[i].setTexturesEnabled(enableTextures.checked);
+            for (let i = 0; i < this.geoRenderers.length; i++)
+                this.geoRenderers[i].setTexturesEnabled(enableTextures.checked);
         };
         renderHacksPanel.contents.appendChild(enableTextures.elem);
         const enableMonochromeVertexColors = new UI.Checkbox('Grayscale Vertex Colors', false);
         enableMonochromeVertexColors.onchanged = () => {
-            for (let i = 0; i < this.n64Renderers.length; i++)
-                this.n64Renderers[i].setMonochromeVertexColorsEnabled(enableMonochromeVertexColors.checked);
+            for (let i = 0; i < this.geoRenderers.length; i++)
+                this.geoRenderers[i].setMonochromeVertexColorsEnabled(enableMonochromeVertexColors.checked);
         };
         renderHacksPanel.contents.appendChild(enableMonochromeVertexColors.elem);
         const enableAlphaVisualizer = new UI.Checkbox('Visualize Vertex Alpha', false);
         enableAlphaVisualizer.onchanged = () => {
-            for (let i = 0; i < this.n64Renderers.length; i++)
-                this.n64Renderers[i].setAlphaVisualizerEnabled(enableAlphaVisualizer.checked);
+            for (let i = 0; i < this.geoRenderers.length; i++)
+                this.geoRenderers[i].setAlphaVisualizerEnabled(enableAlphaVisualizer.checked);
         };
         renderHacksPanel.contents.appendChild(enableAlphaVisualizer.elem);
 
@@ -72,8 +72,8 @@ class BKRenderer implements Viewer.SceneGfx {
 
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         this.renderHelper.pushTemplateRenderInst();
-        for (let i = 0; i < this.n64Renderers.length; i++)
-            this.n64Renderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+        for (let i = 0; i < this.geoRenderers.length; i++)
+            this.geoRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender(device, hostAccessPass);
     }
@@ -103,8 +103,8 @@ class BKRenderer implements Viewer.SceneGfx {
     public destroy(device: GfxDevice): void {
         this.renderTarget.destroy(device);
         this.renderHelper.destroy(device);
-        for (let i = 0; i < this.n64Datas.length; i++)
-            this.n64Datas[i].destroy(device);
+        for (let i = 0; i < this.geoDatas.length; i++)
+            this.geoDatas[i].destroy(device);
         this.textureHolder.destroy(device);
     }
 }
@@ -114,13 +114,18 @@ interface AnimationEntry {
     duration: number;
 }
 
+interface AnimationEntry {
+    FileID: number;
+    Duration: number;
+}
+
 interface ObjectLoadEntry {
-    otherID: number; // not sure what this is
-    spawnID: number;
-    fileIndex: number;
-    animationTable: AnimationEntry[];
-    animationStartIndex: number;
-    scale: number;
+    OtherID: number; // Not sure what this is...
+    SpawnID: number;
+    GeoFileID: number;
+    AnimationTable: AnimationEntry[];
+    AnimationStartIndex: number;
+    Scale: number;
 }
 
 interface ObjectSetupData {
@@ -129,6 +134,7 @@ interface ObjectSetupData {
 }
 
 interface CRG1File {
+    FileID: number;
     Data: ArrayBufferSlice;
 }
 
@@ -136,88 +142,152 @@ interface CRG1Archive {
     Files: CRG1File[];
 }
 
+function findFileByID(archive: CRG1Archive, fileID: number): CRG1File | null {
+    if (fileID === -1)
+        return null;
+    const file = archive.Files.find((file) => file.FileID === fileID);
+    if (file === undefined)
+        return null;
+    return file;
+}
+
+function parseAnimationFile(buffer: ArrayBufferSlice): AnimationFile {
+    const view = buffer.createDataView();
+
+    const startFrame = view.getUint16(0x00);
+    const endFrame = view.getUint16(0x02);
+    const trackCount = view.getUint16(0x04);
+    assert(view.getUint16(0x06) === 0);
+
+    let trackTableIdx = 0x08;
+    const tracks: AnimationTrack[] = [];
+    for (let i = 0; i < trackCount; i++) {
+        const w = view.getUint16(trackTableIdx + 0x00);
+        const boneID = (w >>> 4);
+        const trackType: AnimationTrackType = (w & 0x0F);
+        const keyframeCount = view.getUint16(trackTableIdx + 0x02);
+
+        trackTableIdx += 0x04;
+        const keyframes: AnimationKeyframe[] = [];
+        for (let j = 0; j < keyframeCount; j++) {
+            const w0 = view.getUint16(trackTableIdx + 0x00);
+            const unk = (w0 >>> 14);
+            const time = (w0 >>> 0) & 0x3FFF;
+            const value = view.getInt16(trackTableIdx + 0x02) / 0x40;
+            keyframes.push({ unk, time, value });
+            trackTableIdx += 0x04;
+        }
+
+        tracks.push({ boneID, trackType, frames: keyframes });
+    }
+
+    return { startFrame, endFrame, tracks };
+}
+
 class ObjectData {
-    public entries: ObjectLoadEntry[] = [];
-    public geoData: (N64Data | null)[] = [];
+    public geoData: (GeometryData | null)[] = [];
     public gfxCache = new GfxRenderCache(true);
 
-    public spawnObject(id: number, pos: vec3, yaw = 0): N64Renderer | null {
-        const spawnEntry = this.entries.find((entry) => entry.spawnID === id);
+    constructor(private objectSetupData: ObjectSetupData) {
+    }
+
+    public ensureGeoData(device: GfxDevice, geoFileID: number): GeometryData | null {
+        if (this.geoData[geoFileID] === undefined) {
+            if (geoFileID === 50 || geoFileID === 51 || geoFileID === 52) {
+                // there are three models (objects 480, 411, 693) that look for a texture in a segment we don't have
+                // one also seems to use the only IA16 texture in the game
+                return null;
+            }
+
+            const file = findFileByID(this.objectSetupData, geoFileID);
+            if (file === null) {
+                return null;
+            }
+
+            const geoData = file.Data;
+            const view = geoData.createDataView();
+            const magic = view.getUint32(0x00);
+
+            // TODO: figure out what these other files are
+            if (magic === 0x0000000B) {
+                window.debug = geoFileID === 0x4ee;
+                const geo = Geo.parse(geoData, true);
+                this.geoData[geoFileID] = new GeometryData(device, this.gfxCache, geo);
+                window.debug = false;
+            } else {
+                this.geoData[geoFileID] = null;
+            }
+        }
+
+        return this.geoData[geoFileID];
+    }
+
+    public spawnObject(device: GfxDevice, id: number, pos: vec3, yaw = 0): GeometryRenderer | null {
+        const spawnEntry = this.objectSetupData.ObjectSetupTable.find((entry) => entry.SpawnID === id);
         if (spawnEntry === undefined) {
             console.warn(`Unknown object ID ${hexzero(id, 4)}`);
             return null;
         }
 
-        if (spawnEntry.fileIndex === 0)
+        if (spawnEntry.GeoFileID === 0)
             return null; // nothing to render
 
-        const data = this.geoData[spawnEntry.fileIndex];
-        if (data === null) {
+        const geoData = this.ensureGeoData(device, spawnEntry.GeoFileID);
+        if (geoData === null) {
             console.warn(`Unsupported geo data for object ID ${hexzero(id, 4)}`);
             return null;
         }
 
-        const renderer = new N64Renderer(data);
+        const renderer = new GeometryRenderer(geoData);
+        (renderer as any).spawnEntry = spawnEntry;
         mat4.fromTranslation(renderer.modelMatrix, pos);
         mat4.rotateY(renderer.modelMatrix, renderer.modelMatrix, yaw * MathConstants.DEG_TO_RAD);
+
+        const animEntry = spawnEntry.AnimationTable[spawnEntry.AnimationStartIndex];
+        if (animEntry !== undefined) {
+            const file = findFileByID(this.objectSetupData, animEntry.FileID);
+            if (file !== null) {
+                const animFile = parseAnimationFile(file.Data);
+                renderer.boneAnimator = new BoneAnimator(animFile);
+            }
+        }
+
         return renderer;
     }
 
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.geoData.length; i++) {
             const data = this.geoData[i];
-            if (data !== null)
+            if (data !== undefined && data !== null)
                 data.destroy(device);
         }
+
+        this.gfxCache.destroy(device);
     }
 }
 
 async function fetchObjectData(dataFetcher: DataFetcher, device: GfxDevice): Promise<ObjectData> {
     const objectData = await dataFetcher.fetchData(`${pathBase}/objectSetup_arc.crg1?cache_bust=0`)!;
     const objectSetup = BYML.parse<ObjectSetupData>(objectData, BYML.FileType.CRG1);
-
-    const holder = new ObjectData();
-    holder.entries = objectSetup.ObjectSetupTable;
-
-    for (let i = 0; i < objectSetup.Files.length; i++) {
-        if (i === 50 || i === 51 || i === 52) {
-            // there are three models (objects 480, 411, 693) that look for a texture in a segment we don't have
-            // one also seems to use the only IA16 texture in the game
-            holder.geoData.push(null);
-            continue;
-        }
-        const geoData = objectSetup.Files[i].Data;
-        const geoView = geoData.createDataView();
-        const magic = geoView.getUint32(0x00);
-
-        // TODO: figure out what these other files are
-        if (magic === 0x0000000B) {
-            const geo = Geo.parse(geoData, true);
-            holder.geoData.push(new N64Data(device, holder.gfxCache, geo));
-        } else {
-            holder.geoData.push(null); // preserve indices
-        }
-    }
-
-    return holder;
+    return new ObjectData(objectSetup);
 }
 
 class SceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
 
-    private addGeo(device: GfxDevice, cache: GfxRenderCache, viewerTextures: Viewer.Texture[], sceneRenderer: BKRenderer, geo: Geo.Geometry): N64Renderer {
-        for (let i = 0; i < geo.rspOutput.textures.length; i++)
-            viewerTextures.push(textureToCanvas(geo.rspOutput.textures[i]));
+    private addGeo(device: GfxDevice, cache: GfxRenderCache, viewerTextures: Viewer.Texture[], sceneRenderer: BKRenderer, geo: Geo.Geometry): GeometryRenderer {
+        for (let i = 0; i < geo.sharedOutput.textureCache.textures.length; i++)
+            viewerTextures.push(textureToCanvas(geo.sharedOutput.textureCache.textures[i]));
 
-        const n64Data = new N64Data(device, cache, geo);
-        sceneRenderer.n64Datas.push(n64Data);
-        const n64Renderer = new N64Renderer(n64Data);
-        sceneRenderer.n64Renderers.push(n64Renderer);
-        return n64Renderer;
+        const geoData = new GeometryData(device, cache, geo);
+        sceneRenderer.geoDatas.push(geoData);
+        const geoRenderer = new GeometryRenderer(geoData);
+        sceneRenderer.geoRenderers.push(geoRenderer);
+        return geoRenderer;
     }
 
-    private addObjects(setupFile: ArrayBufferSlice, objectSetupTable: ObjectData, sceneRenderer: BKRenderer) {
+    private addObjects(device: GfxDevice, setupFile: ArrayBufferSlice, objectSetupTable: ObjectData, sceneRenderer: BKRenderer) {
         const view = setupFile.createDataView();
         assert(view.getInt16(0) === 0x0101);
         let offs = 2;
@@ -245,19 +315,34 @@ class SceneDesc implements Viewer.SceneDesc {
                         const yaw = view.getUint16(offs + 0x0C) >>> 7;
                         // skipping a couple of 0xc-bit fields
                         if (category === 0x06) {
-                            const objRenderer = objectSetupTable.spawnObject(id, vec3.fromValues(x, y, z), yaw);
+                            const objRenderer = objectSetupTable.spawnObject(device, id, vec3.fromValues(x, y, z), yaw);
                             if (objRenderer)
-                                sceneRenderer.n64Renderers.push(objRenderer);
+                                sceneRenderer.geoRenderers.push(objRenderer);
                         }
                         offs += 0x14;
                     }
+
                     assert(view.getInt8(offs++) === 0x8);
-                    const otherSize = view.getUint8(offs++);
-                    if (otherSize > 0)
+                    const structCount = view.getUint8(offs++);
+                    if (structCount > 0) {
                         assert(view.getInt8(offs++) === 0x9);
-                    offs += otherSize * 0xc;
+
+                        for (let i = 0; i < structCount; i++) {
+                            const objectID = view.getUint16(offs + 0x00);
+                            const param1 = view.getUint16(offs + 0x02);
+                            const x = view.getInt16(offs + 0x04);
+                            const y = view.getInt16(offs + 0x06);
+                            const z = view.getInt16(offs + 0x08);
+                            const param2 = view.getUint16(offs + 0x0A);
+                            const yaw = 0;
+                            // const objRenderer = objectSetupTable.spawnObject(objectID, vec3.fromValues(x, y, z), yaw);
+                            // if (objRenderer !== null)
+                            //     sceneRenderer.n64Renderers.push(objRenderer);
+                            offs += 0x0C;
+                        }
+                    }
                 } else {
-                    offs += 12;
+                    offs += 0x0C;
                 }
                 dataType = view.getInt8(offs++);
             }
@@ -265,7 +350,7 @@ class SceneDesc implements Viewer.SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        let dataHolder = await context.dataShare.ensureObject<ObjectData>(`${pathBase}/ObjectData`, async () => {
+        const objectData = await context.dataShare.ensureObject<ObjectData>(`${pathBase}/ObjectData`, async () => {
             return await fetchObjectData(context.dataFetcher, device);
         });
         const dataFetcher = context.dataFetcher;
@@ -277,31 +362,37 @@ class SceneDesc implements Viewer.SceneDesc {
             const sceneRenderer = new BKRenderer(device, fakeTextureHolder);
             const cache = sceneRenderer.renderHelper.getCache();
 
-            if (obj.OpaGeoFileId >= 0) {
-                const geo = Geo.parse(obj.Files[obj.OpaGeoFileId].Data, true);
+            const opaFile = findFileByID(obj, obj.OpaGeoFileId);
+            if (opaFile !== null) {
+                const geo = Geo.parse(opaFile.Data, true);
+                const opa = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
+            }
+
+            const xluFile = findFileByID(obj, obj.XluGeoFileId);
+            if (xluFile !== null) {
+                const geo = Geo.parse(xluFile.Data, false);
                 this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
             }
 
-            if (obj.XluGeoFileId >= 0) {
-                const geo = Geo.parse(obj.Files[obj.XluGeoFileId].Data, false);
-                this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
-            }
-
-            if (obj.OpaSkyboxFileId >= 0) {
-                const geo = Geo.parse(obj.Files[obj.OpaSkyboxFileId].Data, true);
+            const opaSkybox = findFileByID(obj, obj.OpaSkyboxFileId);
+            if (opaSkybox !== null) {
+                const geo = Geo.parse(opaSkybox.Data, true);
                 const renderer = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
                 renderer.isSkybox = true;
                 mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [obj.OpaSkyboxScale, obj.OpaSkyboxScale, obj.OpaSkyboxScale]);
             }
 
-            if (obj.XluSkyboxFileId >= 0) {
-                const geo = Geo.parse(obj.Files[obj.XluSkyboxFileId].Data, false);
+            const xluSkybox = findFileByID(obj, obj.XluSkyboxFileId);
+            if (xluSkybox !== null) {
+                console.log(obj.Files, obj.XluSkyboxFileId);
+                const geo = Geo.parse(xluSkybox.Data, false);
                 const renderer = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
                 renderer.isSkybox = true;
                 mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [obj.XluSkyboxScale, obj.XluSkyboxScale, obj.XluSkyboxScale]);
             }
 
-            this.addObjects(obj.Files[obj.SetupFileId].Data, dataHolder, sceneRenderer)
+            const setupFile = assertExists(findFileByID(obj, obj.SetupFileId));
+            this.addObjects(device, setupFile.Data, objectData, sceneRenderer);
 
             return sceneRenderer;
         });

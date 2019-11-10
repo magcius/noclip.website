@@ -138,15 +138,18 @@ export class DrawCall {
     public indexCount: number = 0;
 }
 
-export class RSPOutput {
+export class RSPSharedOutput {
+    public textureCache: TextureCache = new TextureCache();
     public vertices: Vertex[] = [];
     public indices: number[] = [];
-    public drawCalls: DrawCall[] = [];
-    public textures: Texture[] = [];
 
-    private currentDrawCall = new DrawCall();
+    public setVertexBufferFromData(vertexData: DataView): void {
+        const scratchVertex = new StagingVertex();
 
-    constructor() {
+        for (let offs = 0; offs < vertexData.byteLength; offs += 0x10) {
+            scratchVertex.setFromView(vertexData, offs);
+            this.loadVertex(scratchVertex);
+        }
     }
 
     public loadVertex(v: StagingVertex): void {
@@ -157,16 +160,16 @@ export class RSPOutput {
             v.outputIndex = this.vertices.length - 1;
         }
     }
+}
 
-    public pushVertex(v: StagingVertex): void {
-        this.loadVertex(v);
-        this.indices.push(v.outputIndex);
-        this.currentDrawCall.indexCount++;
-    }
+export class RSPOutput {
+    public drawCalls: DrawCall[] = [];
 
-    public newDrawCall(): DrawCall {
+    public currentDrawCall = new DrawCall();
+
+    public newDrawCall(firstIndex: number): DrawCall {
         this.currentDrawCall = new DrawCall();
-        this.currentDrawCall.firstIndex = this.indices.length;
+        this.currentDrawCall.firstIndex = firstIndex;
         this.drawCalls.push(this.currentDrawCall);
         return this.currentDrawCall;
     }
@@ -611,8 +614,7 @@ export class RSPState {
     private output = new RSPOutput();
 
     private stateChanged: boolean = false;
-    private vertexCache = nArray(64, () => new StagingVertex());
-    private textureCache = new TextureCache();
+    private vertexCache = nArray(64, () => 0);
 
     private SP_GeometryMode: number = 0;
     private SP_TextureState = new TextureState();
@@ -625,22 +627,13 @@ export class RSPState {
     private DP_TileState = nArray(8, () => new TileState());
     private DP_TMemTracker = new Map<number, number>();
 
-    private prefilledVertexBuffer = false;
-
-    constructor(public segmentBuffers: ArrayBufferSlice[], vertexBuffer: DataView) {
-        if (vertexBuffer !== null) {
-            this.prefilledVertexBuffer = true;
-            const scratchVertex = new StagingVertex();
-
-            for (let offs = 0; offs < vertexBuffer.byteLength; offs += 0x10) {
-                scratchVertex.setFromView(vertexBuffer, offs);
-                this.output.loadVertex(scratchVertex);
-            }
-        }
+    constructor(public segmentBuffers: ArrayBufferSlice[], public sharedOutput: RSPSharedOutput) {
     }
 
-    public finish(): RSPOutput {
-        this.output.textures = this.textureCache.textures;
+    public finish(): RSPOutput | null {
+        if (this.output.drawCalls.length === 0)
+            return null;
+
         return this.output;
     }
 
@@ -667,15 +660,10 @@ export class RSPState {
 
     public gSPVertex(dramAddr: number, n: number, v0: number): void {
         const view = this.segmentBuffers[(dramAddr >>> 24)].createDataView();
-        let addrIdx = dramAddr & 0x00FFFFFF;
-        for (let i = 0; i < n; i++) {
-            this.vertexCache[v0 + i].setFromView(view, addrIdx);
-            if (this.prefilledVertexBuffer) {
-                // this vertex is already in the output buffer, so we know its index
-                this.vertexCache[v0 + i].outputIndex = addrIdx / 0x10;
-            }
-            addrIdx += 0x10;
-        }
+        const addrIdx = dramAddr & 0x00FFFFFF;
+        const baseIndex = (addrIdx / 0x10) >>> 0;
+        for (let i = 0; i < n; i++)
+            this.vertexCache[v0 + i] = baseIndex + i;
     }
 
     private _translateTileTexture(tileIndex: number): number {
@@ -694,7 +682,7 @@ export class RSPState {
             dramPalAddr = 0;
         }
 
-        return this.textureCache.translateTileTexture(this.segmentBuffers, dramAddr, dramPalAddr, tile);
+        return this.sharedOutput.textureCache.translateTileTexture(this.segmentBuffers, dramAddr, dramPalAddr, tile);
     }
 
     private _flushTextures(dc: DrawCall): void {
@@ -737,7 +725,7 @@ export class RSPState {
         if (this.stateChanged) {
             this.stateChanged = false;
 
-            const dc = this.output.newDrawCall();
+            const dc = this.output.newDrawCall(this.sharedOutput.indices.length);
             this._flushTextures(dc);
             dc.SP_GeometryMode = this.SP_GeometryMode;
             dc.SP_TextureState.copy(this.SP_TextureState);
@@ -750,9 +738,8 @@ export class RSPState {
     public gSPTri(i0: number, i1: number, i2: number): void {
         this._flushDrawCall();
 
-        this.output.pushVertex(this.vertexCache[i0]);
-        this.output.pushVertex(this.vertexCache[i1]);
-        this.output.pushVertex(this.vertexCache[i2]);
+        this.sharedOutput.indices.push(this.vertexCache[i0], this.vertexCache[i1], this.vertexCache[i2]);
+        this.output.currentDrawCall.indexCount += 3;
     }
 
     public gDPSetTextureImage(fmt: number, siz: number, w: number, addr: number): void {
@@ -795,20 +782,28 @@ export class RSPState {
 
     public gDPSetOtherModeL(sft: number, len: number, w1: number): void {
         const mask = ((1 << len) - 1) << sft;
-        this.DP_OtherModeL = (this.DP_OtherModeL & ~mask) | (w1 & mask);
-        this.stateChanged = true;
+        const DP_OtherModeL = (this.DP_OtherModeL & ~mask) | (w1 & mask);
+        if (DP_OtherModeL !== this.DP_OtherModeL) {
+            this.DP_OtherModeL = DP_OtherModeL;
+            this.stateChanged = true;
+        }
     }
 
     public gDPSetOtherModeH(sft: number, len: number, w1: number): void {
         const mask = ((1 << len) - 1) << sft;
-        this.DP_OtherModeH = (this.DP_OtherModeH & ~mask) | (w1 & mask);
-        this.stateChanged = true;
+        const DP_OtherModeH = (this.DP_OtherModeH & ~mask) | (w1 & mask);
+        if (DP_OtherModeH !== this.DP_OtherModeH) {
+            this.DP_OtherModeH = DP_OtherModeH;
+            this.stateChanged = true;
+        }
     }
 
     public gDPSetCombine(w0: number, w1: number): void {
-        this.DP_CombineH = w0;
-        this.DP_CombineL = w1;
-        this.stateChanged = true;
+        if (this.DP_CombineH !== w0 || this.DP_CombineL !== w1) {
+            this.DP_CombineH = w0;
+            this.DP_CombineL = w1;
+            this.stateChanged = true;
+        }
     }
 }
 
