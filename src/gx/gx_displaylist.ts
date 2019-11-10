@@ -1008,7 +1008,7 @@ interface VtxLoaderDesc {
 
 function arrayEqual<T>(a: T[], b: T[], e: EqualFunc<T>): boolean {
     if (a.length !== b.length) return false;
-    for (let i = a.length - 1; i >= 0; i--)
+    for (let i = 0; i < a.length; i++)
         if (!e(a[i], b[i]))
             return false;
     return true;

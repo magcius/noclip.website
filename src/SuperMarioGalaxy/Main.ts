@@ -662,8 +662,8 @@ function patchBMD(bmd: BMD): void {
         if (bufferStride > 0) {
             bufferStride = align(bufferStride, 4);
 
-            for (let j = 0; j < shape.packets.length; j++) {
-                const packet = shape.packets[j];
+            for (let j = 0; j < shape.mtxGroups.length; j++) {
+                const packet = shape.mtxGroups[j];
                 patchInTexMtxIdxBuffer(shape.loadedVertexLayout, packet.loadedVertexData, bufferStride, texMtxIdxBaseOffsets);
             }
 

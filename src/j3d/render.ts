@@ -51,16 +51,17 @@ class ShapeData {
     public sortKeyBias: number = 0;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public shape: Shape, coalescedBuffers: GfxCoalescedBuffersCombo[]) {
-        for (let i = 0; i < this.shape.packets.length; i++) {
-            const packet = this.shape.packets[i];
+        for (let i = 0; i < this.shape.mtxGroups.length; i++) {
+            const mtxGroup = this.shape.mtxGroups[i];
             // TODO(jstpierre): Use only one ShapeHelper.
-            const shapeHelper = new GXShapeHelperGfx(device, cache, coalescedBuffers.shift()!, this.shape.loadedVertexLayout, packet.loadedVertexData);
+            const shapeHelper = new GXShapeHelperGfx(device, cache, coalescedBuffers.shift()!, this.shape.loadedVertexLayout, mtxGroup.loadedVertexData);
             this.shapeHelpers.push(shapeHelper);
         }
     }
 
     public destroy(device: GfxDevice) {
-        this.shapeHelpers.forEach((shapeHelper) => shapeHelper.destroy(device));
+        for (let i = 0; i < this.shapeHelpers.length; i++)
+            this.shapeHelpers[i].destroy(device);
     }
 }
 
@@ -167,12 +168,12 @@ export class ShapeInstance {
         if (!usesSkinning)
             materialInstance.fillMaterialParams(template, materialInstanceState, shapeInstanceState.worldToViewMatrix, materialJointMatrix, camera, viewport, packetParams);
 
-        for (let p = 0; p < shape.packets.length; p++) {
-            const packet = shape.packets[p];
+        for (let p = 0; p < shape.mtxGroups.length; p++) {
+            const packet = shape.mtxGroups[p];
 
             let instVisible = false;
-            for (let i = 0; i < packet.matrixTable.length; i++) {
-                const matrixIndex = packet.matrixTable[i];
+            for (let i = 0; i < packet.useMtxTable.length; i++) {
+                const matrixIndex = packet.useMtxTable[i];
 
                 // Leave existing matrix.
                 if (matrixIndex === 0xFFFF)
@@ -888,8 +889,8 @@ export class BMDModel {
         // Load shape data.
         const loadedVertexDatas = [];
         for (let i = 0; i < bmd.shp1.shapes.length; i++)
-            for (let j = 0; j < bmd.shp1.shapes[i].packets.length; j++)
-                loadedVertexDatas.push(bmd.shp1.shapes[i].packets[j].loadedVertexData);
+            for (let j = 0; j < bmd.shp1.shapes[i].mtxGroups.length; j++)
+                loadedVertexDatas.push(bmd.shp1.shapes[i].mtxGroups[j].loadedVertexData);
         this.bufferCoalescer = loadedDataCoalescerComboGfx(device, loadedVertexDatas);
 
         for (let i = 0; i < bmd.shp1.shapes.length; i++) {
@@ -1015,7 +1016,9 @@ export class BMDModelInstance {
         this.jointVisibility = nArray(numJoints, () => true);
         this.calcJointAnim();
 
-        const drawViewMatrixCount = bmd.drw1.matrixDefinitions.length;
+        // DRW1 seems to specify each envelope twice. Not sure why. J3D actually corrects for this in
+        // J3DModelLoader::readDraw(). TODO(jstpierre): RE more of J3DMtxBuffer.
+        const drawViewMatrixCount = bmd.drw1.matrixDefinitions.length - bmd.evp1.envelopes.length;
         this.shapeInstanceState.drawViewMatrixArray = nArray(drawViewMatrixCount, () => mat4.create());
         this.shapeInstanceState.drawViewMatrixVisibility = nArray(drawViewMatrixCount, () => true);
         this.shapeInstanceState.worldToViewMatrix = scratchViewMatrix;
@@ -1420,7 +1423,7 @@ export class BMDModelInstance {
         const evp1 = this.bmdModel.bmd.evp1;
 
         // Now update our matrix definition array.
-        for (let i = 0; i < drw1.matrixDefinitions.length; i++) {
+        for (let i = 0; i < this.shapeInstanceState.drawViewMatrixArray.length; i++) {
             const matrixDefinition = drw1.matrixDefinitions[i];
             const dst = this.shapeInstanceState.drawViewMatrixArray[i];
             if (matrixDefinition.kind === DRW1MatrixKind.Joint) {

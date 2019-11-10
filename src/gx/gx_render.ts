@@ -15,7 +15,7 @@ import { TextureMapping, TextureHolder, LoadedTexture } from '../TextureHolder';
 
 import { GfxBufferCoalescerCombo, makeStaticDataBuffer, GfxCoalescedBuffersCombo } from '../gfx/helpers/BufferHelpers';
 import { fillColor, fillMatrix4x3, fillVec4, fillMatrix4x4, fillVec3, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxFormat, GfxDevice, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxTextureDimension, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxBuffer, GfxInputLayout, GfxInputState, GfxMegaStateDescriptor, GfxProgram, GfxVertexBufferFrequency, GfxHostAccessPass, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
+import { GfxFormat, GfxDevice, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxBuffer, GfxInputLayout, GfxInputState, GfxMegaStateDescriptor, GfxProgram, GfxVertexBufferFrequency, GfxHostAccessPass, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 import { Camera } from '../Camera';
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxRenderInst, GfxRenderInstManager, setSortKeyProgramKey } from '../gfx/render/GfxRenderer';
@@ -429,7 +429,6 @@ export class GXShapeHelperGfx {
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
 
         let usesZeroBuffer = false;
-        const zeroBufferIndex = loadedVertexData.vertexBuffers.length;
         for (let vtxAttrib: GX.VertexAttribute = 0; vtxAttrib <= GX.VertexAttribute.MAX; vtxAttrib++) {
             const attribLocation = GX_Material.getVertexAttribLocation(vtxAttrib);
 
@@ -445,8 +444,10 @@ export class GXShapeHelperGfx {
                 const bufferIndex = attrib.bufferIndex;
                 vertexAttributeDescriptors.push({ location: attribLocation, format: attrib.format, bufferIndex, bufferByteOffset, usesIntInShader });
             } else {
+                const bufferByteOffset = 0;
+                const bufferIndex = loadedVertexData.vertexBuffers.length;
+                vertexAttributeDescriptors.push({ location: attribLocation, format: attribGenDef.format, bufferIndex, bufferByteOffset, usesIntInShader });
                 usesZeroBuffer = true;
-                vertexAttributeDescriptors.push({ location: attribLocation, format: attribGenDef.format, bufferIndex: zeroBufferIndex, bufferByteOffset: 0, usesIntInShader });
             }
         }
 
@@ -460,7 +461,7 @@ export class GXShapeHelperGfx {
             vertexBufferDescriptors.push({
                 byteStride: loadedVertexData.vertexBufferStrides[i],
                 frequency: GfxVertexBufferFrequency.PER_VERTEX,
-            })
+            });
         }
 
         if (usesZeroBuffer) {
@@ -473,7 +474,7 @@ export class GXShapeHelperGfx {
             vertexBufferDescriptors.push({
                 byteStride: 0,
                 frequency: GfxVertexBufferFrequency.PER_INSTANCE,
-            })
+            });
         }
 
         const indexBufferFormat = this.loadedVertexData.indexFormat;
@@ -486,7 +487,7 @@ export class GXShapeHelperGfx {
         const indexBuffer: GfxIndexBufferDescriptor = {
             buffer: coalescedBuffers.indexBuffer.buffer,
             byteOffset: coalescedBuffers.indexBuffer.wordOffset * 4,
-        }
+        };
         this.inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
     }
 

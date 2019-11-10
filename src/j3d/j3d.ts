@@ -5,7 +5,7 @@ import { mat4, vec3 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { Endianness } from '../endian';
-import { assert, readString, assertExists } from '../util';
+import { assert, readString, assertExists, hexdump } from '../util';
 
 import { compileVtxLoader, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexLayout } from '../gx/gx_displaylist';
 import * as GX from '../gx/gx_enum';
@@ -20,14 +20,16 @@ import { autoOptimizeMaterial } from '../gx/gx_render';
 import { Color, colorNew } from '../Color';
 
 //#region Helpers
+// ResNTAB / JUTNameTab
 function readStringTable(buffer: ArrayBufferSlice, offs: number): string[] {
     const view = buffer.createDataView(offs);
     const stringCount = view.getUint16(0x00);
 
-    let tableIdx = 0x06;
+    let tableIdx = 0x04;
     const strings = [];
     for (let i = 0; i < stringCount; i++) {
-        const stringOffs = view.getUint16(tableIdx);
+        // const hash = view.getUint16(tableIdx + 0x00);
+        const stringOffs = view.getUint16(tableIdx + 0x02);
         const str = readString(buffer, offs + stringOffs, 255);
         strings.push(str);
         tableIdx += 0x04;
@@ -146,12 +148,14 @@ export const enum MatrixCalcType {
 }
 
 export enum HierarchyNodeType {
-    End = 0x00,
-    Open = 0x01,
-    Close = 0x02,
-    Joint = 0x10,
+    // Structure
+    End      = 0x00,
+    Open     = 0x01,
+    Close    = 0x02,
+    // Children
+    Joint    = 0x10,
     Material = 0x11,
-    Shape = 0x12,
+    Shape    = 0x12,
 };
 
 export interface INF1 {
@@ -162,7 +166,7 @@ export interface INF1 {
 function readINF1Chunk(buffer: ArrayBufferSlice): INF1 {
     const view = buffer.createDataView();
     const matrixCalcType: MatrixCalcType = view.getUint16(0x08) & 0x0F;
-    const packetCount = view.getUint32(0x0C);
+    const mtxGroupCount = view.getUint32(0x0C);
     const vertexCount = view.getUint32(0x10);
     const hierarchyOffs = view.getUint32(0x14);
     const hierarchyData = buffer.slice(hierarchyOffs);
@@ -348,14 +352,14 @@ export interface DRW1 {
 
 function readDRW1Chunk(buffer: ArrayBufferSlice): DRW1 {
     const view = buffer.createDataView();
-    const matrixCount = view.getUint16(0x08);
-    const isWeightedTableOffs = view.getUint32(0x0C);
-    const matrixIndexTableOffs = view.getUint32(0x10);
+    const drawMatrixCount = view.getUint16(0x08);
+    const drawMatrixTypeTableOffs = view.getUint32(0x0C);
+    const dataArrayOffs = view.getUint32(0x10);
 
     const matrixDefinitions: DRW1Matrix[] = [];
-    for (let i = 0; i < matrixCount; i++) {
-        const kind: DRW1MatrixKind = view.getUint8(isWeightedTableOffs + i);
-        const param = view.getUint16(matrixIndexTableOffs + i * 0x02);
+    for (let i = 0; i < drawMatrixCount; i++) {
+        const kind: DRW1MatrixKind = view.getUint8(drawMatrixTypeTableOffs + i);
+        const param = view.getUint16(dataArrayOffs + i * 0x02);
         if (kind === DRW1MatrixKind.Joint) {
             matrixDefinitions.push({ kind, jointIndex: param });
         } else if (kind === DRW1MatrixKind.Envelope) {
@@ -434,9 +438,9 @@ function readJNT1Chunk(buffer: ArrayBufferSlice): JNT1 {
 }
 //#endregion
 //#region SHP1
-// A packet is a series of draw calls that use the same matrix table.
-interface Packet {
-    matrixTable: Uint16Array;
+// A Matrix Group is a series of draw calls that use the same matrix table.
+interface MtxGroup {
+    useMtxTable: Uint16Array;
     indexOffset: number;
     indexCount: number;
     loadedVertexData: LoadedVertexData;
@@ -452,7 +456,7 @@ export const enum ShapeDisplayFlags {
 export interface Shape {
     displayFlags: ShapeDisplayFlags;
     loadedVertexLayout: LoadedVertexLayout;
-    packets: Packet[];
+    mtxGroups: MtxGroup[];
     bbox: AABB;
     boundingSphereRadius: number;
     materialIndex: number;
@@ -467,16 +471,27 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
     const view = buffer.createDataView();
     const shapeCount = view.getUint16(0x08);
     const shapeTableOffs = view.getUint32(0x0C);
+    const remapTableOffs = view.getUint32(0x10);
+    const nameTableOffs = view.getUint32(0x14);
     const attribTableOffs = view.getUint32(0x18);
     const matrixTableOffs = view.getUint32(0x1C);
     const primDataOffs = view.getUint32(0x20);
     const matrixDataOffs = view.getUint32(0x24);
-    const packetTableOffs = view.getUint32(0x28);
+    const matrixGroupTableOffs = view.getUint32(0x28);
+
+    // Ensure that the remap table is identity.
+    for (let i = 0; i < shapeCount; i++) {
+        const index = view.getUint16(remapTableOffs + i * 0x02);
+        assert(index === i);
+    }
+
+    if (nameTableOffs !== 0)
+        console.log('Found a SHP1 that has a name table!');
 
     // We have a number of "shapes". Each shape has a number of vertex attributes
-    // (e.g. pos, nrm, txc) and a list of packets. Each packet has a list of draw
-    // calls, and each draw call has a list of indices into *each* of the vertex
-    // arrays, one per vertex.
+    // (e.g. pos, nrm, txc) and a list of matrix groups. Each matrix group has a
+    // list of draw calls, and each draw call has a list of indices into *each*
+    // of the vertex arrays, one per vertex.
     //
     // Instead of one global index per draw call like OGL and some amount of packed
     // vertex data, the GX instead allows specifying separate indices per attribute.
@@ -500,10 +515,10 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
     for (let i = 0; i < shapeCount; i++) {
         const displayFlags = view.getUint8(shapeIdx + 0x00);
         assert(view.getUint8(shapeIdx + 0x01) == 0xFF);
-        const packetCount = view.getUint16(shapeIdx + 0x02);
+        const mtxGroupCount = view.getUint16(shapeIdx + 0x02);
         const attribOffs = view.getUint16(shapeIdx + 0x04);
         const firstMatrix = view.getUint16(shapeIdx + 0x06);
-        const firstPacket = view.getUint16(shapeIdx + 0x08);
+        const firstMtxGroup = view.getUint16(shapeIdx + 0x08);
 
         const vcd: GX_VtxDesc[] = [];
 
@@ -520,33 +535,38 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
         const vtxLoader = compileVtxLoader(vat, vcd);
         const loadedVertexLayout = vtxLoader.loadedVertexLayout;
 
-        // Now parse out the packets.
-        let packetIdx = packetTableOffs + (firstPacket * 0x08);
-        const packets: Packet[] = [];
+        let mtxGroupIdx = matrixGroupTableOffs + (firstMtxGroup * 0x08);
+        const mtxGroups: MtxGroup[] = [];
 
         let totalIndexCount = 0;
-        for (let j = 0; j < packetCount; j++) {
-            const packetSize = view.getUint32(packetIdx + 0x00);
-            const packetStart = primDataOffs + view.getUint32(packetIdx + 0x04);
+        for (let j = 0; j < mtxGroupCount; j++) {
+            const primSize = view.getUint32(mtxGroupIdx + 0x00);
+            const primStart = primDataOffs + view.getUint32(mtxGroupIdx + 0x04);
 
-            const packetMatrixDataOffs = matrixDataOffs + (firstMatrix + j) * 0x08;
-            const matrixCount = view.getUint16(packetMatrixDataOffs + 0x02);
-            const matrixFirstIndex = view.getUint32(packetMatrixDataOffs + 0x04);
+            const mtxGroupDataOffs = matrixDataOffs + (firstMatrix + j) * 0x08;
+            const useMtxIndex = view.getUint16(mtxGroupDataOffs + 0x00);
+            const useMtxCount = view.getUint16(mtxGroupDataOffs + 0x02);
+            const useMtxFirstIndex = view.getUint32(mtxGroupDataOffs + 0x04);
 
-            const packetMatrixTableOffs = matrixTableOffs + matrixFirstIndex * 0x02;
-            const packetMatrixTableSize = matrixCount;
-            const matrixTable = buffer.createTypedArray(Uint16Array, packetMatrixTableOffs, packetMatrixTableSize, Endianness.BIG_ENDIAN);
+            const useMtxTableOffs = matrixTableOffs + useMtxFirstIndex * 0x02;
+            const useMtxTableSize = useMtxCount;
+            const useMtxTable = buffer.createTypedArray(Uint16Array, useMtxTableOffs, useMtxTableSize, Endianness.BIG_ENDIAN);
 
-            const srcOffs = packetStart;
-            const subBuffer = buffer.subarray(srcOffs, packetSize);
+            if (displayFlags === ShapeDisplayFlags.NORMAL) {
+                assert(useMtxCount === 1);
+                assert(useMtxIndex === useMtxTable[0]);
+            }
+
+            const srcOffs = primStart;
+            const subBuffer = buffer.subarray(srcOffs, primSize);
             const loadedVertexData = vtxLoader.runVertices(vtxArrays, subBuffer);
 
             const indexOffset = totalIndexCount;
             const indexCount = loadedVertexData.totalIndexCount;
             totalIndexCount += indexCount;
 
-            packets.push({ matrixTable, indexOffset, indexCount, loadedVertexData });
-            packetIdx += 0x08;
+            mtxGroups.push({ useMtxTable, indexOffset, indexCount, loadedVertexData });
+            mtxGroupIdx += 0x08;
         }
 
         const boundingSphereRadius = view.getFloat32(shapeIdx + 0x0C);
@@ -561,7 +581,7 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
         const materialIdx = -1;
 
         // Now we should have a complete shape. Onto the next!
-        shapes.push({ displayFlags, loadedVertexLayout, packets, bbox, boundingSphereRadius, materialIndex: materialIdx });
+        shapes.push({ displayFlags, loadedVertexLayout, mtxGroups, bbox, boundingSphereRadius, materialIndex: materialIdx });
 
         shapeIdx += 0x28;
     }
