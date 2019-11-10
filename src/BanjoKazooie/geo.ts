@@ -1,6 +1,6 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, align } from "../util";
+import { assert, align, hexzero } from "../util";
 import * as F3DEX from "./f3dex";
 import { vec3 } from "gl-matrix";
 

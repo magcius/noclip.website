@@ -145,7 +145,6 @@ export class RSPOutput {
     private currentDrawCall = new DrawCall();
 
     constructor() {
-        this.newDrawCall();
     }
 
     public loadVertex(v: StagingVertex): void {

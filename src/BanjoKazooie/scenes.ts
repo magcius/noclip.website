@@ -157,7 +157,6 @@ class ObjectData {
             return null;
         }
 
-        // TODO(jstpierre): yaw does not seem to be exact
         const renderer = new N64Renderer(data);
         mat4.fromTranslation(renderer.modelMatrix, pos);
         mat4.rotateY(renderer.modelMatrix, renderer.modelMatrix, yaw * MathConstants.DEG_TO_RAD);

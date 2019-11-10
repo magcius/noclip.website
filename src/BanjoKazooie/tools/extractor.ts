@@ -1,7 +1,7 @@
 
 import ArrayBufferSlice from "../../ArrayBufferSlice";
 import { readFileSync, writeFileSync } from "fs";
-import { assert, hexzero, nArray } from "../../util";
+import { assert, hexzero, nArray, hexdump } from "../../util";
 import * as Pako from 'pako';
 import * as BYML from "../../byml";
 
@@ -62,9 +62,9 @@ function decompressPairedFiles(buffer: ArrayBufferSlice, ram: number): RAMRegion
 
     const inflator = new Pako.Inflate({ raw: true });
     inflator.push(buffer.createTypedArray(Uint8Array, srcOffs), true);
-    out.push({ data: new ArrayBufferSlice(inflator.result.buffer as ArrayBuffer), start: ram });
+    out.push({ data: new ArrayBufferSlice((inflator.result as Uint8Array).buffer as ArrayBuffer), start: ram });
 
-    const startPoint = srcOffs + inflator.strm.next_in; // read internal zlib stream state to find the next file
+    const startPoint = srcOffs + ((inflator as any).strm.next_in as number); // read internal zlib stream state to find the next file
     const dataFile = decompress(buffer.slice(startPoint));
     out.push({ data: dataFile, start: ram + decompressedCodeSize }); // files are placed consecutively
     return out;
