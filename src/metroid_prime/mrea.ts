@@ -12,7 +12,7 @@ import { TXTR } from './txtr';
 import { ResourceSystem } from "./resource";
 import { assert, align, assertExists } from "../util";
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { compileVtxLoaderMultiVat, GX_VtxDesc, GX_VtxAttrFmt, GX_Array, LoadedVertexData, LoadedVertexLayout } from '../gx/gx_displaylist';
+import { compileVtxLoaderMultiVat, GX_VtxDesc, GX_VtxAttrFmt, GX_Array, LoadedVertexData, LoadedVertexLayout, getAttributeByteSize } from '../gx/gx_displaylist';
 import { mat4, vec3 } from 'gl-matrix';
 import * as Pako from 'pako';
 import { AABB } from '../Geometry';
@@ -613,20 +613,6 @@ function parseSurfaces(stream: InputStream, surfaceCount: number, sectionIndex: 
 
         const useUvsArray = material.isUVShort;
 
-        const vtxArrays: GX_Array[] = [];
-        vtxArrays[GX.VertexAttribute.POS]  = { buffer: stream.getBuffer(), offs: posSectionOffs };
-        vtxArrays[GX.VertexAttribute.NRM]  = { buffer: stream.getBuffer(), offs: nrmSectionOffs };
-        vtxArrays[GX.VertexAttribute.CLR0] = { buffer: stream.getBuffer(), offs: clrSectionOffs };
-        vtxArrays[GX.VertexAttribute.CLR1] = { buffer: stream.getBuffer(), offs: clrSectionOffs };
-        vtxArrays[GX.VertexAttribute.TEX0] = { buffer: stream.getBuffer(), offs: useUvsArray ? assertExists(uvsSectionOffs) : uvfSectionOffs };
-        vtxArrays[GX.VertexAttribute.TEX1] = { buffer: stream.getBuffer(), offs: uvfSectionOffs };
-        vtxArrays[GX.VertexAttribute.TEX2] = { buffer: stream.getBuffer(), offs: uvfSectionOffs };
-        vtxArrays[GX.VertexAttribute.TEX3] = { buffer: stream.getBuffer(), offs: uvfSectionOffs };
-        vtxArrays[GX.VertexAttribute.TEX4] = { buffer: stream.getBuffer(), offs: uvfSectionOffs };
-        vtxArrays[GX.VertexAttribute.TEX5] = { buffer: stream.getBuffer(), offs: uvfSectionOffs };
-        vtxArrays[GX.VertexAttribute.TEX6] = { buffer: stream.getBuffer(), offs: uvfSectionOffs };
-        vtxArrays[GX.VertexAttribute.TEX7] = { buffer: stream.getBuffer(), offs: uvfSectionOffs };
-
         const vcd: GX_VtxDesc[] = [];
         for (const format of vtxAttrFormats) {
             if (!(vtxAttrFormat & format.mask))
@@ -648,6 +634,27 @@ function parseSurfaces(stream: InputStream, surfaceCount: number, sectionIndex: 
         const vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
         const dlData = stream.getBuffer().slice(primitiveDataOffs, surfaceEnd);
         const loadedVertexLayout = vtxLoader.loadedVertexLayout;
+
+        // TODO(jstpierre): Pass a flag through here
+        const vertexFormat = (dlData.createDataView().getUint8(0) & 0x07);
+        const fmtVat = vat[vertexFormat];
+
+        const uvSectionOffs = useUvsArray ? assertExists(uvsSectionOffs) : uvfSectionOffs;
+
+        const vtxArrays: GX_Array[] = [];
+        vtxArrays[GX.VertexAttribute.POS]  = { buffer: stream.getBuffer(), offs: posSectionOffs, stride: getAttributeByteSize(fmtVat, GX.VertexAttribute.POS) };
+        vtxArrays[GX.VertexAttribute.NRM]  = { buffer: stream.getBuffer(), offs: nrmSectionOffs, stride: getAttributeByteSize(fmtVat, GX.VertexAttribute.NRM) };
+        vtxArrays[GX.VertexAttribute.CLR0] = { buffer: stream.getBuffer(), offs: clrSectionOffs, stride: getAttributeByteSize(fmtVat, GX.VertexAttribute.CLR0) };
+        vtxArrays[GX.VertexAttribute.CLR1] = { buffer: stream.getBuffer(), offs: clrSectionOffs, stride: getAttributeByteSize(fmtVat, GX.VertexAttribute.CLR1) };
+        vtxArrays[GX.VertexAttribute.TEX0] = { buffer: stream.getBuffer(), offs: uvSectionOffs,  stride: getAttributeByteSize(fmtVat, GX.VertexAttribute.TEX0) };
+        vtxArrays[GX.VertexAttribute.TEX1] = { buffer: stream.getBuffer(), offs: uvfSectionOffs, stride: getAttributeByteSize(fmtVat, GX.VertexAttribute.TEX1) };
+        vtxArrays[GX.VertexAttribute.TEX2] = { buffer: stream.getBuffer(), offs: uvfSectionOffs, stride: getAttributeByteSize(fmtVat, GX.VertexAttribute.TEX2) };
+        vtxArrays[GX.VertexAttribute.TEX3] = { buffer: stream.getBuffer(), offs: uvfSectionOffs, stride: getAttributeByteSize(fmtVat, GX.VertexAttribute.TEX3) };
+        vtxArrays[GX.VertexAttribute.TEX4] = { buffer: stream.getBuffer(), offs: uvfSectionOffs, stride: getAttributeByteSize(fmtVat, GX.VertexAttribute.TEX4) };
+        vtxArrays[GX.VertexAttribute.TEX5] = { buffer: stream.getBuffer(), offs: uvfSectionOffs, stride: getAttributeByteSize(fmtVat, GX.VertexAttribute.TEX5) };
+        vtxArrays[GX.VertexAttribute.TEX6] = { buffer: stream.getBuffer(), offs: uvfSectionOffs, stride: getAttributeByteSize(fmtVat, GX.VertexAttribute.TEX6) };
+        vtxArrays[GX.VertexAttribute.TEX7] = { buffer: stream.getBuffer(), offs: uvfSectionOffs, stride: getAttributeByteSize(fmtVat, GX.VertexAttribute.TEX7) };
+
         const loadedVertexData = vtxLoader.runVertices(vtxArrays, dlData);
 
         const surface: Surface = {
@@ -700,12 +707,6 @@ function parseSurfaces_DKCR(stream: InputStream, surfaceCount: number, sectionIn
             vcd[format.vtxAttrib] = { type: format.type, enableOutput: (format.mask <= 0x00FFFFFF) };
         }
 
-        const vtxArrays: GX_Array[] = [];
-        vtxArrays[GX.VertexAttribute.POS]  = { buffer: stream.getBuffer(), offs: posSectionOffs };
-        vtxArrays[GX.VertexAttribute.NRM]  = { buffer: stream.getBuffer(), offs: nrmSectionOffs };
-        vtxArrays[GX.VertexAttribute.CLR0] = { buffer: stream.getBuffer(), offs: clrSectionOffs };
-        vtxArrays[GX.VertexAttribute.CLR1] = { buffer: stream.getBuffer(), offs: clrSectionOffs };
-
         const vatFormat: GX_VtxAttrFmt[] = [];
         if (hasPosShort)
             vatFormat[GX.VertexAttribute.POS]  = { compCnt: GX.CompCnt.POS_XYZ, compType: GX.CompType.S16, compShift: 13 };
@@ -715,11 +716,17 @@ function parseSurfaces_DKCR(stream: InputStream, surfaceCount: number, sectionIn
         vatFormat[GX.VertexAttribute.CLR0] = { compCnt: GX.CompCnt.CLR_RGBA, compType: GX.CompType.RGBA8, compShift: 0 };
         vatFormat[GX.VertexAttribute.CLR1] = { compCnt: GX.CompCnt.CLR_RGBA, compType: GX.CompType.RGBA8, compShift: 0 };
 
+        const vtxArrays: GX_Array[] = [];
+        vtxArrays[GX.VertexAttribute.POS]  = { buffer: stream.getBuffer(), offs: posSectionOffs, stride: getAttributeByteSize(vatFormat, GX.VertexAttribute.POS) };
+        vtxArrays[GX.VertexAttribute.NRM]  = { buffer: stream.getBuffer(), offs: nrmSectionOffs, stride: getAttributeByteSize(vatFormat, GX.VertexAttribute.NRM) };
+        vtxArrays[GX.VertexAttribute.CLR0] = { buffer: stream.getBuffer(), offs: clrSectionOffs, stride: getAttributeByteSize(vatFormat, GX.VertexAttribute.CLR0) };
+        vtxArrays[GX.VertexAttribute.CLR1] = { buffer: stream.getBuffer(), offs: clrSectionOffs, stride: getAttributeByteSize(vatFormat, GX.VertexAttribute.CLR1) };
+
         // TODO(jstpierre): I assume in the real game this comes from the different VAT formats.
         const isShort = (uvArrayIndex === 1);
         for (let i = 0; i < 8; i++) {
             vatFormat[GX.VertexAttribute.TEX0 + i] = { compCnt: GX.CompCnt.TEX_ST, compType: isShort ? GX.CompType.S16 : GX.CompType.F32, compShift: Math.log2(0x2000) };
-            vtxArrays[GX.VertexAttribute.TEX0 + i] = { buffer: stream.getBuffer(), offs: isShort ? assertExists(uvsSectionOffs) : uvfSectionOffs };
+            vtxArrays[GX.VertexAttribute.TEX0 + i] = { buffer: stream.getBuffer(), offs: isShort ? assertExists(uvsSectionOffs) : uvfSectionOffs, stride: getAttributeByteSize(vatFormat, GX.VertexAttribute.TEX0 + i) };
         }
 
         const vatFormats: GX_VtxAttrFmt[][] = [vatFormat, vatFormat, vatFormat, vatFormat, vatFormat, vatFormat, vatFormat, vatFormat];

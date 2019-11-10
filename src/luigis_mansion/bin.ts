@@ -4,7 +4,7 @@ import { readString, assert } from "../util";
 import { mat4, vec3, quat } from "gl-matrix";
 
 import * as GX from "../gx/gx_enum";
-import { compileVtxLoader, GX_VtxAttrFmt, GX_VtxDesc, GX_Array, LoadedVertexData, LoadedVertexLayout } from '../gx/gx_displaylist';
+import { compileVtxLoader, GX_VtxAttrFmt, GX_VtxDesc, GX_Array, LoadedVertexData, LoadedVertexLayout, getAttributeByteSize } from '../gx/gx_displaylist';
 import * as GX_Material from '../gx/gx_material';
 import { AABB } from "../Geometry";
 
@@ -138,8 +138,8 @@ export function parse(buffer: ArrayBufferSlice, name: string): BIN {
         const displayListBuffer = buffer.subarray(displayListOffset, displayListSize);
 
         const vtxArrays: GX_Array[] = [];
-        vtxArrays[GX.VertexAttribute.POS] = { buffer, offs: positionBufferOffs };
-        vtxArrays[GX.VertexAttribute.TEX0] = { buffer, offs: tex0BufferOffs };
+        vtxArrays[GX.VertexAttribute.POS] = { buffer, offs: positionBufferOffs,stride: getAttributeByteSize(vat, GX.VertexAttribute.POS) };
+        vtxArrays[GX.VertexAttribute.TEX0] = { buffer, offs: tex0BufferOffs, stride: getAttributeByteSize(vat, GX.VertexAttribute.TEX0) };
 
         let loadedVertexData;
         try {

@@ -5,9 +5,9 @@ import { mat4, vec3 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { Endianness } from '../endian';
-import { assert, readString, assertExists, hexdump } from '../util';
+import { assert, readString, assertExists } from '../util';
 
-import { compileVtxLoader, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexLayout } from '../gx/gx_displaylist';
+import { compileVtxLoader, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexLayout, getAttributeByteSize } from '../gx/gx_displaylist';
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
 import AnimationController from '../AnimationController';
@@ -507,7 +507,7 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
     // J3D only uses VTXFMT0.
     for (const [attr, vertexArray] of bmd.vtx1.vertexArrays.entries()) {
         vat[attr] = { compCnt: vertexArray.compCnt, compType: vertexArray.compType, compShift: vertexArray.compShift };
-        vtxArrays[attr] = { buffer: vertexArray.buffer, offs: 0 };
+        vtxArrays[attr] = { buffer: vertexArray.buffer, offs: 0, stride: getAttributeByteSize(vat, attr) };
     }
 
     const shapes: Shape[] = [];
