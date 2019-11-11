@@ -398,7 +398,7 @@ export class FPSCameraController implements CameraController {
         mouseMovement[0] += dx;
         mouseMovement[1] += dy;
 
-        const keyAngleChangeVel = isShiftPressed ? this.keyAngleChangeVelFast : this.keyAngleChangeVelSlow;
+        const keyAngleChangeVel = (isShiftPressed ? this.keyAngleChangeVelFast : this.keyAngleChangeVelSlow) * (this.keyMoveSpeed / 50);
         if (inputManager.isKeyDown('KeyJ'))
             mouseMovement[0] += keyAngleChangeVel * invertXMult;
         else if (inputManager.isKeyDown('KeyL'))
