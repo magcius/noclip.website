@@ -2,6 +2,9 @@
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { nArray, assert, assertExists, hexzero } from "../util";
 import { parseTLUT, ImageFormat, getImageFormatName, ImageSize, getImageSizeName, TextureLUT, decodeTex_RGBA16, decodeTex_IA8, decodeTex_RGBA32, decodeTex_CI4, decodeTex_CI8, TextFilt } from "../Common/N64/Image";
+import { fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
+import { GfxCullMode, GfxBlendFactor, GfxBlendMode, GfxMegaStateDescriptor, GfxCompareMode } from "../gfx/platform/GfxPlatform";
+import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 
 // Interpreter for N64 F3DEX microcode.
 
@@ -127,8 +130,7 @@ export class DrawCall {
     public SP_TextureState = new TextureState();
     public DP_OtherModeL: number = 0;
     public DP_OtherModeH: number = 0;
-    public DP_CombineL: number = 0;
-    public DP_CombineH: number = 0;
+    public DP_Combine: CombineParams;
 
     public textureIndices: number[] = [];
 
@@ -170,7 +172,7 @@ export class RSPOutput {
     }
 }
 
-const enum OtherModeH_Layout {
+export const enum OtherModeH_Layout {
     G_MDSFT_BLENDMASK   = 0,
     G_MDSFT_ALPHADITHER = 4,
     G_MDSFT_RGBDITHER   = 6,
@@ -199,6 +201,260 @@ export function getCycleTypeFromOtherModeH(modeH: number): OtherModeH_CycleType 
 
 export function getTextFiltFromOtherModeH(modeH: number): TextFilt {
     return (modeH >>> OtherModeH_Layout.G_MDSFT_TEXTFILT) & 0x03;
+}
+
+export const enum F3D_RSP_Geometry_Flags {
+    G_ZBUFFER            = 1 << 0,
+    G_SHADE              = 1 << 2,
+    G_SHADING_SMOOTH     = 1 << 9,
+    G_CULL_FRONT         = 1 << 12,
+    G_CULL_BACK          = 1 << 13,
+    G_FOG                = 1 << 16,
+    G_LIGHTING           = 1 << 17,
+    G_TEXTURE_GEN        = 1 << 18,
+    G_TEXTURE_GEN_LINEAR = 1 << 19,
+    G_CLIPPING           = 1 << 23,
+}
+
+export const enum OtherModeL_Layout {
+    // cycle-independent
+    AA_EN         = 3,
+    Z_CMP         = 4,
+    Z_UPD         = 5,
+    IM_RD         = 6,
+    CLR_ON_CVG    = 7,
+    CVG_DST       = 8,
+    ZMODE         = 10,
+    CVG_X_ALPHA   = 12,
+    ALPHA_CVG_SEL = 13,
+    FORCE_BL      = 14,
+    // bit 15 unused, was "TEX_EDGE"
+    // cycle-dependent
+    B_2 = 16,
+    B_1 = 18,
+    M_2 = 20,
+    M_1 = 22,
+    A_2 = 24,
+    A_1 = 26,
+    P_2 = 28,
+    P_1 = 30,
+}
+
+export const enum ZMode {
+    ZMODE_OPA   = 0,
+    ZMODE_INTER = 1,
+    ZMODE_XLU   = 2, // translucent
+    ZMODE_DEC   = 3,
+}
+
+export const enum BlendParam_PM_Color {
+    G_BL_CLR_IN  = 0,
+    G_BL_CLR_MEM = 1,
+    G_BL_CLR_BL  = 2,
+    G_BL_CLR_FOG = 3,
+}
+
+export const enum BlendParam_A {
+    G_BL_A_IN    = 0,
+    G_BL_A_FOG   = 1,
+    G_BL_A_SHADE = 2,
+    G_BL_0       = 3,
+}
+
+export const enum BlendParam_B {
+    G_BL_1MA   = 0,
+    G_BL_A_MEM = 1,
+    G_BL_1     = 2,
+    G_BL_0     = 3,
+}
+
+export const enum CCMUX {
+    COMBINED    = 0,
+    TEXEL0      = 1,
+    TEXEL1      = 2,
+    PRIMITIVE   = 3,
+    SHADE       = 4,
+    ENVIRONMENT = 5,
+    ONE         = 6,
+    ADD_ZERO    = 7,
+    // param C only
+    COMBINED_A  = 7, // only for C
+    TEXEL0_A    = 8,
+    TEXEL1_A    = 9,
+    PRIMITIVE_A = 10,
+    SHADE_A     = 11,
+    ENV_A       = 12,
+    MUL_ZERO    = 15, // should really be 31
+}
+
+export const enum ACMUX {
+    ADD_COMBINED = 0,
+    TEXEL0 = 1,
+    TEXEL1 = 2,
+    PRIMITIVE = 3,
+    SHADE = 4,
+    ENVIRONMENT = 5,
+    ADD_ONE = 6,
+    ZERO = 7,
+}
+
+interface ColorCombinePass {
+    a: CCMUX;
+    b: CCMUX;
+    c: CCMUX;
+    d: CCMUX;
+}
+
+interface AlphaCombinePass {
+    a: ACMUX;
+    b: ACMUX;
+    c: ACMUX;
+    d: ACMUX;
+}
+
+export interface CombineParams {
+    c0: ColorCombinePass;
+    a0: AlphaCombinePass;
+    c1: ColorCombinePass;
+    a1: AlphaCombinePass;
+}
+
+export function decodeCombineParams(w0: number, w1: number): CombineParams {
+    // because we aren't implementing all the combine input options (notably, not noise)
+    // and the highest values are just 0, we can get away with throwing away high bits:
+    // ax,bx,dx can be 3 bits, and cx can be 4
+    const a0  = (w0 >>> 20) & 0x07;
+    const c0  = (w0 >>> 15) & 0x0f;
+    const Aa0 = (w0 >>> 12) & 0x07;
+    const Ac0 = (w0 >>> 9) & 0x07;
+    const a1  = (w0 >>> 5) & 0x07;
+    const c1  = (w0 >>> 0) & 0x0f;
+    const b0  = (w1 >>> 28) & 0x07;
+    const b1  = (w1 >>> 24) & 0x07;
+    const Aa1 = (w1 >>> 21) & 0x07;
+    const Ac1 = (w1 >>> 18) & 0x07;
+    const d0  = (w1 >>> 15) & 0x07;
+    const Ab0 = (w1 >>> 12) & 0x07;
+    const Ad0 = (w1 >>> 9) & 0x07;
+    const d1  = (w1 >>> 6) & 0x07;
+    const Ab1 = (w1 >>> 3) & 0x07;
+    const Ad1 = (w1 >>> 0) & 0x07;
+
+    // CCMUX.ONE only applies to params a and d, the others are not implemented
+    assert(b0 != CCMUX.ONE && c0 != CCMUX.ONE && b1 != CCMUX.ONE && c1 != CCMUX.ONE);
+
+    return {
+        c0: { a: a0, b: b0, c: c0, d: d0 },
+        a0: { a: Aa0, b: Ab0, c: Ac0, d: Ad0 },
+        c1: { a: a1, b: b1, c: c1, d: d1 },
+        a1: { a: Aa1, b: Ab1, c: Ac1, d: Ad1 }
+    };
+}
+
+function packParams(params: ColorCombinePass | AlphaCombinePass): number {
+    return (params.a << 12) | (params.b << 8) | (params.c << 4) | params.d;
+}
+
+export function fillCombineParams(d: Float32Array, offs: number, params: CombineParams): number {
+    const cc0 = packParams(params.c0);
+    const cc1 = packParams(params.c1);
+    const ac0 = packParams(params.a0);
+    const ac1 = packParams(params.a1);
+    return fillVec4(d, offs, cc0, ac0, cc1, ac1);
+}
+
+function translateBlendParamB(paramB: BlendParam_B, srcParam: GfxBlendFactor): GfxBlendFactor {
+    if (paramB === BlendParam_B.G_BL_1MA) {
+        if (srcParam === GfxBlendFactor.SRC_ALPHA)
+            return GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
+        if (srcParam === GfxBlendFactor.ONE)
+            return GfxBlendFactor.ZERO;
+        return GfxBlendFactor.ONE;
+    }
+    if (paramB === BlendParam_B.G_BL_A_MEM)
+        return GfxBlendFactor.DST_ALPHA;
+    if (paramB === BlendParam_B.G_BL_1)
+        return GfxBlendFactor.ONE;
+    if (paramB === BlendParam_B.G_BL_0)
+        return GfxBlendFactor.ZERO;
+
+    throw "Unknown Blend Param B: "+paramB;
+}
+
+function translateZMode(zmode: ZMode): GfxCompareMode {
+    if (zmode === ZMode.ZMODE_OPA)
+        return GfxCompareMode.GREATER;
+    if (zmode === ZMode.ZMODE_INTER) // TODO: understand this better
+        return GfxCompareMode.GREATER;
+    if (zmode === ZMode.ZMODE_XLU)
+        return GfxCompareMode.GREATER;
+    if (zmode === ZMode.ZMODE_DEC)
+        return GfxCompareMode.GEQUAL;
+    throw "Unknown Z mode: " + zmode;
+}
+
+export function translateBlendMode(geoMode: number, renderMode: number): Partial<GfxMegaStateDescriptor> {
+    const out: Partial<GfxMegaStateDescriptor> = {};
+
+    const srcColor: BlendParam_PM_Color = (renderMode >>> OtherModeL_Layout.P_2) & 0x03;
+    const srcFactor: BlendParam_A = (renderMode >>> OtherModeL_Layout.A_2) & 0x03;
+    const dstColor: BlendParam_PM_Color = (renderMode >>> OtherModeL_Layout.M_2) & 0x03;
+    const dstFactor: BlendParam_B = (renderMode >>> OtherModeL_Layout.B_2) & 0x03;
+
+    const doBlend = !!(renderMode & (1 << OtherModeL_Layout.FORCE_BL)) && (dstColor === BlendParam_PM_Color.G_BL_CLR_MEM);
+    if (doBlend) {
+        assert(srcColor === BlendParam_PM_Color.G_BL_CLR_IN);
+
+        let blendSrcFactor: GfxBlendFactor;
+        if (srcFactor === BlendParam_A.G_BL_0) {
+            blendSrcFactor = GfxBlendFactor.ZERO;
+        } else if ((renderMode & (1 << OtherModeL_Layout.ALPHA_CVG_SEL)) &&
+            !(renderMode & (1 << OtherModeL_Layout.CVG_X_ALPHA))) {
+            // this is technically "coverage", admitting blending on edges
+            blendSrcFactor = GfxBlendFactor.ONE;
+        } else {
+            blendSrcFactor = GfxBlendFactor.SRC_ALPHA;
+        }
+        setAttachmentStateSimple(out, {
+            blendSrcFactor: blendSrcFactor,
+            blendDstFactor: translateBlendParamB(dstFactor, blendSrcFactor),
+            blendMode: GfxBlendMode.ADD,
+        });
+    } else {
+        // without FORCE_BL, blending only happens for AA of internal edges
+        // since we are ignoring n64 coverage values and AA, this means "never"
+        // if dstColor isn't the framebuffer, we'll take care of the "blending" in the shader
+        setAttachmentStateSimple(out, {
+            blendSrcFactor: GfxBlendFactor.ONE,
+            blendDstFactor: GfxBlendFactor.ZERO,
+            blendMode: GfxBlendMode.ADD,
+        });
+    }
+
+    if (geoMode & F3D_RSP_Geometry_Flags.G_CULL_BACK) {
+        if (geoMode & F3D_RSP_Geometry_Flags.G_CULL_FRONT) {
+            out.cullMode = GfxCullMode.FRONT_AND_BACK;
+        } else {
+            out.cullMode = GfxCullMode.BACK;
+        }
+    } else if (geoMode & F3D_RSP_Geometry_Flags.G_CULL_FRONT) {
+        out.cullMode = GfxCullMode.FRONT;
+    } else {
+        out.cullMode = GfxCullMode.NONE;
+    }
+
+    if (renderMode & (1 << OtherModeL_Layout.Z_CMP)) {
+        const zmode: ZMode = (renderMode >>> OtherModeL_Layout.ZMODE) & 0x03;
+        out.depthCompare = translateZMode(zmode);
+    }
+
+    const zmode:ZMode = (renderMode >>> OtherModeL_Layout.ZMODE) & 0x03;
+    if (zmode === ZMode.ZMODE_DEC)
+        out.polygonOffset = true;
+
+    out.depthWrite = (renderMode & (1 << OtherModeL_Layout.Z_UPD)) !== 0;
+
+    return out;
 }
 
 function translateTLUT(dst: Uint8Array, segmentBuffers: ArrayBufferSlice[], dramAddr: number, siz: ImageSize): void {
@@ -485,8 +741,7 @@ export class RSPState {
             this._flushTextures(dc);
             dc.SP_GeometryMode = this.SP_GeometryMode;
             dc.SP_TextureState.copy(this.SP_TextureState);
-            dc.DP_CombineL = this.DP_CombineL;
-            dc.DP_CombineH = this.DP_CombineH;
+            dc.DP_Combine = decodeCombineParams(this.DP_CombineH, this.DP_CombineL);
             dc.DP_OtherModeH = this.DP_OtherModeH;
             dc.DP_OtherModeL = this.DP_OtherModeL;
         }

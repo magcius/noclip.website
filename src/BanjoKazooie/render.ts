@@ -1,12 +1,12 @@
 
 import * as Viewer from '../viewer';
 import { DeviceProgram } from "../Program";
-import { Texture, getImageFormatString, Vertex, DrawCall, GeometryMode, OtherModeH_CycleType, getTextFiltFromOtherModeH } from "./f3dex";
+import { Texture, getImageFormatString, Vertex, DrawCall, GeometryMode, getTextFiltFromOtherModeH, OtherModeL_Layout, fillCombineParams, translateBlendMode } from "./f3dex";
 import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { assert, nArray, align } from '../util';
-import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers';
-import { mat4 } from 'gl-matrix';
+import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4v, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
+import { mat4, vec4 } from 'gl-matrix';
 import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
 import { interactiveVizSliderSelect } from '../DebugJunk';
@@ -17,13 +17,14 @@ import { Geometry, VertexAnimationEffect, VertexEffectType } from './geo';
 import { clamp } from '../MathHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 
-class F3DEX_Program extends DeviceProgram {
+export class F3DEX_Program extends DeviceProgram {
     public static a_Position = 0;
     public static a_Color = 1;
     public static a_TexCoord = 2;
 
     public static ub_SceneParams = 0;
     public static ub_DrawParams = 1;
+    public static ub_CombineParams = 2;
 
     public both = `
 precision mediump float;
@@ -37,16 +38,25 @@ layout(row_major, std140) uniform ub_DrawParams {
     Mat4x2 u_TexMatrix[2];
 };
 
+uniform ub_CombineParameters {
+    vec4 u_Params;
+    vec4 u_PrimColor;
+    vec4 u_EnvColor;
+};
+
 uniform sampler2D u_Texture[2];
 
 varying vec4 v_Color;
 varying vec4 v_TexCoord;
+
+const vec4 t_Zero = vec4(0.0);
+const vec4 t_One = vec4(1.0);
 `;
 
     public vert = `
-layout(location = 0) in vec3 a_Position;
-layout(location = 1) in vec4 a_Color;
-layout(location = 2) in vec2 a_TexCoord;
+layout(location = ${F3DEX_Program.a_Position}) in vec3 a_Position;
+layout(location = ${F3DEX_Program.a_Color}) in vec4 a_Color;
+layout(location = ${F3DEX_Program.a_TexCoord}) in vec2 a_TexCoord;
 
 vec3 Monochrome(vec3 t_Color) {
     // NTSC primaries.
@@ -55,7 +65,11 @@ vec3 Monochrome(vec3 t_Color) {
 
 void main() {
     gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix[0]), vec4(a_Position, 1.0)));
+    v_Color = t_One;
+
+#ifdef USE_VERTEX_COLOR
     v_Color = a_Color;
+#endif
 
 #ifdef USE_MONOCHROME_VERTEX_COLOR
     v_Color.rgb = Monochrome(v_Color.rgb);
@@ -66,16 +80,30 @@ void main() {
 }
 `;
 
-    constructor(private drawCall: DrawCall) {
+    constructor(private DP_OtherModeH: number, private DP_OtherModeL: number) {
         super();
+        // this seems to always get set in setup code, not changed by the model DLs
+        this.defines.set("TWO_CYCLE", "1");
         this.frag = this.generateFrag();
     }
 
     private generateAlphaTest(): string {
-        const alphaCompare = (this.drawCall.DP_OtherModeL >>> 0) & 0x03;
+        const alphaCompare = (this.DP_OtherModeL >>> 0) & 0x03;
+        const cvgXAlpha = (this.DP_OtherModeL >>> OtherModeL_Layout.CVG_X_ALPHA) & 0x01;
         if (alphaCompare !== 0x00) {
             return `
     if (t_Color.a < 0.0125)
+        discard;
+`;
+        } else if (cvgXAlpha != 0x00) {
+            // this line is taken from GlideN64, but here's some rationale:
+            // With this bit set, the pixel coverage value is multiplied by alpha
+            // before being sent to the blender. While coverage mostly matters for
+            // the n64 antialiasing, a pixel with zero coverage will be ignored.
+            // Since coverage is really an integer from 0 to 8, we assume anything
+            // less than 1 would be truncated to 0, leading to the value below.
+            return `
+    if (t_Color.a < 0.125)
         discard;
 `;
         } else {
@@ -84,10 +112,7 @@ void main() {
     }
 
     private generateFrag(): string {
-        const drawCall = this.drawCall;
-        const cycletype: OtherModeH_CycleType = (drawCall.DP_OtherModeH >>> 20) & 0x03;
-
-        const textFilt = getTextFiltFromOtherModeH(drawCall.DP_OtherModeH);
+        const textFilt = getTextFiltFromOtherModeH(this.DP_OtherModeH);
         let texFiltStr: string;
         if (textFilt === TextFilt.G_TF_POINT)
             texFiltStr = 'Point';
@@ -122,15 +147,66 @@ vec4 Texture2D_N64_Bilerp(sampler2D t_Texture, vec2 t_TexCoord) {
 
 #define Texture2D_N64 Texture2D_N64_${texFiltStr}
 
+ivec4 UnpackParams(float val) {
+    int orig = int(val);
+    ivec4 params;
+    params.x = (orig >> 12) & 0xf;
+    params.y = (orig >> 8) & 0xf;
+    params.z = (orig >> 4) & 0xf;
+    params.w = (orig >> 0) & 0xf;
+
+    return params;
+}
+
+vec3 CombineColorCycle(vec4 t_CombColor, vec4 t_Tex0, vec4 t_Tex1, float t_Params) {
+    ivec4 p = UnpackParams(t_Params);
+    vec3 t_ColorInputs[8] = vec3[8](
+        t_CombColor.rgb, t_Tex0.rgb, t_Tex1.rgb, u_PrimColor.rgb,
+        v_Color.rgb, u_EnvColor.rgb, t_One.rgb, t_Zero.rgb
+    );
+    vec3 t_MultInputs[16] = vec3[16](
+        t_CombColor.rgb, t_Tex0.rgb, t_Tex1.rgb, u_PrimColor.rgb,
+        v_Color.rgb, u_EnvColor.rgb, t_Zero.rgb /* key */, t_CombColor.aaa,
+        t_Tex0.aaa, t_Tex1.aaa, u_PrimColor.aaa, v_Color.aaa,
+        u_EnvColor.aaa, t_Zero.rgb /* LOD */, t_Zero.rgb /* prim LOD */, t_Zero.rgb
+    );
+
+    return (t_ColorInputs[p.x] - t_ColorInputs[p.y]) * t_MultInputs[p.z] + t_ColorInputs[p.w];
+}
+
+float CombineAlphaCycle(float combAlpha, float t_Tex0, float t_Tex1, float t_Params) {
+    ivec4 p = UnpackParams(t_Params);
+    float t_AlphaInputs[8] = float[8](
+        combAlpha, t_Tex0, t_Tex1, u_PrimColor.a,
+        v_Color.a, u_EnvColor.a, 1.0, 0.0
+    );
+
+    return (t_AlphaInputs[p.x] - t_AlphaInputs[p.y])* t_AlphaInputs[p.z] + t_AlphaInputs[p.w];
+}
+
 void main() {
-    vec4 t_Color = vec4(1.0);
+    vec4 t_Color = t_One;
+    vec4 t_Tex0 = t_One, t_Tex1 = t_One;
 
 #ifdef USE_TEXTURE
-    t_Color *= Texture2D_N64(u_Texture[0], v_TexCoord.xy);
+    t_Tex0 = Texture2D_N64(u_Texture[0], v_TexCoord.xy);
+    t_Tex1 = Texture2D_N64(u_Texture[1], v_TexCoord.zw);
 #endif
 
-#ifdef USE_VERTEX_COLOR
-    t_Color.rgba *= v_Color.rgba;
+    t_Color = vec4(
+        CombineColorCycle(t_Zero, t_Tex0, t_Tex1, u_Params.x),
+        CombineAlphaCycle(t_Zero.a, t_Tex0.a, t_Tex1.a, u_Params.y)
+    );
+
+#ifdef TWO_CYCLE
+    t_Color = vec4(
+        CombineColorCycle(t_Color, t_Tex0, t_Tex1, u_Params.z),
+        CombineAlphaCycle(t_Color.a, t_Tex0.a, t_Tex1.a, u_Params.w)
+    );
+#endif
+
+#ifdef ONLY_VERTEX_COLOR
+    t_Color.rgba = v_Color.rgba;
 #endif
 
 #ifdef USE_ALPHA_VISUALIZER
@@ -438,9 +514,8 @@ class DrawCallInstance {
     }
 
     private createProgram(): void {
-        const program = new F3DEX_Program(this.drawCall);
+        const program = new F3DEX_Program(this.drawCall.DP_OtherModeH , this.drawCall.DP_OtherModeL);
 
-        // TODO(jstpierre): texture combiners.
         if (this.texturesEnabled && this.drawCall.textureIndices.length)
             program.defines.set('USE_TEXTURE', '1');
 
@@ -526,6 +601,13 @@ class DrawCallInstance {
 
         this.computeTextureMatrix(texMatrixScratch, 1);
         offs += fillMatrix4x2(mappedF32, offs, texMatrixScratch);
+
+        offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 12);
+        const comb = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
+        offs += fillCombineParams(comb, offs, this.drawCall.DP_Combine);
+        // TODO: set these properly, this mostly just reproduces vertex*texture
+        offs += fillVec4(comb, offs, 1, 1, 1, 1);   // primitive color
+        offs += fillVec4(comb, offs, 1, 1, 1, 1);  // environment color
     }
 }
 
@@ -535,7 +617,7 @@ export const enum BKPass {
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 2, numSamplers: 2, },
+    { numUniformBuffers: 3, numSamplers: 2, },
 ];
 
 export class N64Renderer {

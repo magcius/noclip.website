@@ -1,7 +1,7 @@
 import {
     GfxDevice, GfxBuffer, GfxInputLayout, GfxInputState, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency,
-    GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxTextureDimension, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode,
-    GfxSampler, GfxBlendFactor, GfxBlendMode, GfxTexture, GfxMegaStateDescriptor, GfxCullMode, GfxCompareMode, GfxInputLayoutBufferDescriptor, GfxInputLayoutDescriptor, makeTextureDescriptor2D,
+    GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode,
+    GfxSampler, GfxBlendFactor, GfxBlendMode, GfxTexture, GfxMegaStateDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D,
 } from "../gfx/platform/GfxPlatform";
 import { SceneGfx, ViewerRenderInput, Texture } from "../viewer";
 import { SceneDesc, SceneContext, SceneGroup } from "../SceneBase";
@@ -11,14 +11,14 @@ import { decompress } from "../Common/Compression/MIO0";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { DeviceProgram } from "../Program";
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth, getSortKeyLayer, executeOnPass } from "../gfx/render/GfxRenderer";
-import { fillMatrix4x3, fillMatrix4x4, fillMatrix4x2, fillVec4v, fillVec4, fillVec3 } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x3, fillMatrix4x4, fillMatrix4x2, fillVec4v, fillVec3 } from "../gfx/helpers/UniformBufferHelpers";
 import { mat4, vec3, vec4 } from "gl-matrix";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget, depthClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { computeViewMatrix } from "../Camera";
 import { MathConstants, clamp, computeMatrixWithoutTranslation } from "../MathHelpers";
-import { TextureState, TileState, getTextFiltFromOtherModeH, OtherModeH_CycleType, getCycleTypeFromOtherModeH } from "../BanjoKazooie/f3dex";
-import { ImageFormat, ImageSize, getImageFormatName, decodeTex_RGBA16, getImageSizeName, decodeTex_I4, decodeTex_I8, decodeTex_IA4, decodeTex_IA8, decodeTex_IA16, TextFilt } from "../Common/N64/Image";
+import { TextureState, TileState, fillCombineParams, CombineParams, CCMUX, ACMUX, BlendParam_PM_Color, BlendParam_A, OtherModeL_Layout, BlendParam_B, F3D_RSP_Geometry_Flags, decodeCombineParams } from "../BanjoKazooie/f3dex";
+import { ImageFormat, ImageSize, getImageFormatName, decodeTex_RGBA16, getImageSizeName, decodeTex_I4, decodeTex_I8, decodeTex_IA4, decodeTex_IA8, decodeTex_IA16 } from "../Common/N64/Image";
 import { TextureMapping } from "../TextureHolder";
 import { Endianness } from "../endian";
 import { DataFetcher } from "../DataFetcher";
@@ -26,6 +26,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { getPointCubic, getPointHermite } from "../Spline";
 import { SingleSelect, Panel, TIME_OF_DAY_ICON, COOL_BLUE_COLOR } from "../ui";
 import { fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
+import { F3DEX_Program } from "../BanjoKazooie/render";
 
 interface Pilotwings64FSFileChunk {
     tag: string;
@@ -334,42 +335,6 @@ interface UV_Scroll {
     scaleT: number;
 }
 
-const enum CCMUX {
-    COMBINED    = 0,
-    TEXEL0      = 1,
-    TEXEL1      = 2,
-    PRIMITIVE   = 3,
-    SHADE       = 4,
-    ENVIRONMENT = 5,
-    ADD_ZERO    = 7,
-    // param C only
-    COMBINED_A  = 7, // only for C
-    TEXEL0_A    = 8,
-    TEXEL1_A    = 9,
-    PRIMITIVE_A = 10,
-    SHADE_A     = 11,
-    ENV_A       = 12,
-    MUL_ZERO    = 15, // should really be 31
-}
-
-const enum ACMUX {
-    ADD_COMBINED = 0,
-    TEXEL0 = 1,
-    TEXEL1 = 2,
-    PRIMITIVE = 3,
-    SHADE = 4,
-    ENVIRONMENT = 5,
-    ADD_ONE = 6,
-    ZERO = 7,
-}
-
-interface CombineParams {
-    a: number;
-    b: number;
-    c: number;
-    d: number;
-}
-
 interface UVTX {
     name: string;
     width: number;
@@ -379,7 +344,7 @@ interface UVTX {
     levels: UVTX_Level[];
     cms: number;
     cmt: number;
-    combine: CombineParams[];
+    combine: CombineParams;
     otherModeH: number;
     cutOutTransparent: boolean;
     // TODO: actual name
@@ -405,7 +370,7 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
     let primitive: vec4 | undefined;
     let environment: vec4 | undefined;
     let otherModeH = 0;
-    const combine: CombineParams[] = [];
+    let combine: CombineParams | undefined;
 
     let setTextureImageCount = 0;
     let pairedTile = -1;
@@ -432,32 +397,7 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
             assert(on);
             textureState.set(on, tile, level, s, t);
         } else if (cmd === F3D_GBI.G_SETCOMBINE) {
-            // because we aren't implementing all the combine input options (notably, not noise)
-            // and the highest values are just 0, we can get away with throwing away high bits:
-            // ax,bx,dx can be 3 bits, and cx can be 4
-            const a0  = (w0 >>> 20) & 0x07;
-            const c0  = (w0 >>> 15) & 0x0f;
-            const Aa0 = (w0 >>> 12) & 0x07;
-            const Ac0 = (w0 >>> 9) & 0x07;
-            const a1  = (w0 >>> 5) & 0x07;
-            const c1  = (w0 >>> 0) & 0x0f;
-            const b0  = (w1 >>> 28) & 0x07;
-            const b1  = (w1 >>> 24) & 0x07;
-            const Aa1 = (w1 >>> 21) & 0x07;
-            const Ac1 = (w1 >>> 18) & 0x07;
-            const d0  = (w1 >>> 15) & 0x07;
-            const Ab0 = (w1 >>> 12) & 0x07;
-            const Ad0 = (w1 >>> 9) & 0x07;
-            const d1  = (w1 >>> 6) & 0x07;
-            const Ab1 = (w1 >>> 3) & 0x07;
-            const Ad1 = (w1 >>> 0) & 0x07;
-
-            combine.push(
-                { a: a0, b: b0, c: c0, d: d0 },
-                { a: Aa0, b: Ab0, c: Ac0, d: Ad0 },
-                { a: a1, b: b1, c: c1, d: d1 },
-                { a: Aa1, b: Ab1, c: Ac1, d: Ad1 }
-            );
+            combine = decodeCombineParams(w0, w1);
             // state.gDPSetCombine(w0 & 0x00FFFFFF, w1);
         } else if (cmd === F3D_GBI.G_SETOTHERMODE_H) {
             const len = (w0 >>> 0) & 0xFF;
@@ -595,7 +535,7 @@ function parseUVTX_Chunk(chunk: Pilotwings64FSFileChunk, name: string): UVTX {
 
     const uvtx: UVTX = {
         name, width, height, fmt, siz, levels, cms, cmt,
-        combine, otherModeH, cutOutTransparent, otherModeLByte
+        combine: combine!, otherModeH, cutOutTransparent, otherModeLByte
     };
 
     if (scaleS !== 0.0 || scaleT !== 0.0) {
@@ -1316,172 +1256,6 @@ function parsePilotwings64FS(buffer: ArrayBufferSlice): Pilotwings64FS {
     return { files };
 }
 
-class PW64Program extends DeviceProgram {
-    public static a_Position = 0;
-    public static a_Color = 1;
-    public static a_TexCoord = 2;
-
-    public static ub_SceneParams = 0;
-    public static ub_DrawParams = 1;
-    public static ub_CombineParams = 2;
-
-    public both = `
-precision mediump float;
-
-layout(row_major, std140) uniform ub_SceneParams {
-    Mat4x4 u_Projection;
-};
-
-layout(row_major, std140) uniform ub_DrawParams {
-    Mat4x3 u_BoneMatrix[1];
-    Mat4x2 u_TexMatrix[2];
-};
-
-uniform ub_CombineParameters {
-    vec4 u_Params;
-    vec4 u_PrimColor;
-    vec4 u_EnvColor;
-};
-
-uniform sampler2D u_Texture[2];
-
-varying vec4 v_Color;
-varying vec4 v_TexCoord;
-
-const vec4 t_Zero = vec4(0.0);
-const vec4 t_One = vec4(1.0);
-`;
-
-    public vert = `
-layout(location = ${PW64Program.a_Position}) in vec3 a_Position;
-layout(location = ${PW64Program.a_Color}) in vec4 a_Color;
-layout(location = ${PW64Program.a_TexCoord}) in vec2 a_TexCoord;
-
-void main() {
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix[0]), vec4(a_Position, 1.0)));
-    v_Color = a_Color;
-    v_TexCoord.xy = Mul(u_TexMatrix[0], vec4(a_TexCoord, 1.0, 1.0));
-    v_TexCoord.zw = Mul(u_TexMatrix[1], vec4(a_TexCoord, 1.0, 1.0));
-}
-`;
-
-    public frag = `
-ivec4 UnpackParams(float val) {
-    int orig = int(val);
-    ivec4 params;
-    params.x = (orig >> 12) & 0xf;
-    params.y = (orig >> 8) & 0xf;
-    params.z = (orig >> 4) & 0xf;
-    params.w = (orig >> 0) & 0xf;
-
-    return params;
-}
-
-vec4 Texture2D_N64_Point(sampler2D t_Texture, vec2 t_TexCoord) {
-    return texture(t_Texture, t_TexCoord);
-}
-
-vec4 Texture2D_N64_Average(sampler2D t_Texture, vec2 t_TexCoord) {
-    // Unimplemented.
-    return texture(t_Texture, t_TexCoord);
-}
-
-// Implements N64-style "triangle bilienar filtering" with three taps.
-// Based on ArthurCarvalho's implementation, modified by NEC and Jasper for noclip.
-vec4 Texture2D_N64_Bilerp(sampler2D t_Texture, vec2 t_TexCoord) {
-    vec2 t_Size = vec2(textureSize(t_Texture, 0));
-    vec2 t_Offs = fract(t_TexCoord*t_Size - vec2(0.5));
-    t_Offs -= step(1.0, t_Offs.x + t_Offs.y);
-    vec4 t_S0 = texture(t_Texture, t_TexCoord - t_Offs / t_Size);
-    vec4 t_S1 = texture(t_Texture, t_TexCoord - vec2(t_Offs.x - sign(t_Offs.x), t_Offs.y) / t_Size);
-    vec4 t_S2 = texture(t_Texture, t_TexCoord - vec2(t_Offs.x, t_Offs.y - sign(t_Offs.y)) / t_Size);
-    return t_S0 + abs(t_Offs.x)*(t_S1-t_S0) + abs(t_Offs.y)*(t_S2-t_S0);
-}
-
-vec3 CombineColorCycle(vec4 t_CombColor, vec4 t_Tex0, vec4 t_Tex1, float t_Params) {
-    vec3 t_ColorInputs[8] = vec3[8](
-        t_CombColor.rgb, t_Tex0.rgb, t_Tex1.rgb, u_PrimColor.rgb,
-        v_Color.rgb, u_EnvColor.rgb, t_One.rgb, t_Zero.rgb
-    );
-
-    vec3 t_MultInputs[16] = vec3[16](
-        t_CombColor.rgb, t_Tex0.rgb, t_Tex1.rgb, u_PrimColor.rgb,
-        v_Color.rgb, u_EnvColor.rgb, t_Zero.rgb /* key */, t_CombColor.aaa,
-        t_Tex0.aaa, t_Tex1.aaa, u_PrimColor.aaa, v_Color.aaa,
-        u_EnvColor.aaa, t_Zero.rgb /* LOD */, t_Zero.rgb /* prim LOD */, t_Zero.rgb
-    );
-
-    ivec4 p = UnpackParams(t_Params);
-
-    return (t_ColorInputs[p.x] - t_ColorInputs[p.y]) * t_MultInputs[p.z] + t_ColorInputs[p.w];
-}
-
-float CombineAlphaCycle(float combAlpha, float t_Tex0, float t_Tex1, float t_Params) {
-    float t_AlphaInputs[8] = float[8](
-        combAlpha, t_Tex0, t_Tex1, u_PrimColor.a,
-        v_Color.a, 0.0, 1.0, 0.0
-    );
-
-    ivec4 p = UnpackParams(t_Params);
-
-    return (t_AlphaInputs[p.x] - t_AlphaInputs[p.y])* t_AlphaInputs[p.z] + t_AlphaInputs[p.w];
-}
-#ifdef BILERP_FILTER
-#define Texture2D_N64 Texture2D_N64_Bilerp
-#else
-#define Texture2D_N64 Texture2D_N64_Point
-#endif
-
-
-void main() {
-    vec4 t_Tex0, t_Tex1;
-
-#ifdef USE_TEXTURE
-    t_Tex0 = Texture2D_N64(u_Texture[0], v_TexCoord.xy);
-    t_Tex1 = t_Tex1;
-#endif
-
-#ifdef HAS_PAIRED_TEXTURE
-    t_Tex1 = Texture2D_N64(u_Texture[1], v_TexCoord.zw);
-#endif
-
-    vec4 t_Color = vec4(
-        CombineColorCycle(t_Zero, t_Tex0, t_Tex1, u_Params.x),
-        CombineAlphaCycle(t_Zero.a, t_Tex0.a, t_Tex1.a, u_Params.y)
-    );
-
-#ifdef TWO_CYCLE
-    t_Color = vec4(
-        CombineColorCycle(t_Color, t_Tex0, t_Tex1, u_Params.z),
-        CombineAlphaCycle(t_Color.a, t_Tex0.a, t_Tex1.a, u_Params.w)
-    );
-#endif
-
-#ifdef USE_VERTEX_COLOR
-    t_Color.rgba = v_Color.rgba;
-#endif
-
-#ifdef USE_ALPHA_VISUALIZER
-    t_Color.rgb = vec3(t_Color.a);
-    t_Color.a = 1.0;
-#endif
-
-    gl_FragColor = t_Color;
-
-#ifdef CVG_X_ALPHA
-    // this line is taken from GlideN64, but here's some rationale:
-    // With this bit set, the pixel coverage value is multiplied by alpha
-    // before being sent to the blender. While coverage mostly matters for
-    // the n64 antialiasing, a pixel with zero coverage will be ignored.
-    // Since coverage is really an integer from 0 to 8, we assume anything
-    // less than 1 would be truncated to 0, leading to the value below.
-    if (gl_FragColor.a < 0.125)
-        discard;
-#endif
-}
-`;
-}
-
 class ModelData {
     public parts: MeshData[];
     public partParentIndices: number[];
@@ -1518,9 +1292,9 @@ class MeshData {
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, mesh.indexData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: PW64Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 * 0x04, },
-            { location: PW64Program.a_TexCoord, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 3 * 0x04, },
-            { location: PW64Program.a_Color, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 5 * 0x04, },
+            { location: F3DEX_Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 0 * 0x04, },
+            { location: F3DEX_Program.a_TexCoord, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 3 * 0x04, },
+            { location: F3DEX_Program.a_Color, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 5 * 0x04, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: 9 * 0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
@@ -1676,10 +1450,6 @@ class MeshRenderer {
     }
 }
 
-function packParams(params: CombineParams): number {
-    return (params.a << 12) | (params.b << 8) | (params.c << 4) | params.d;
-}
-
 function calcScaleForShift(shift: number): number {
     if (shift <= 10) {
         return 1 / (1 << shift);
@@ -1688,76 +1458,11 @@ function calcScaleForShift(shift: number): number {
     }
 }
 
-const enum F3D_RSP_Geometry_Flags {
-    G_ZBUFFER            = 1 << 0,
-    G_SHADE              = 1 << 2,
-    G_SHADING_SMOOTH     = 1 << 9,
-    G_CULL_FRONT         = 1 << 12,
-    G_CULL_BACK          = 1 << 13,
-    G_FOG                = 1 << 16,
-    G_LIGHTING           = 1 << 17,
-    G_TEXTURE_GEN        = 1 << 18,
-    G_TEXTURE_GEN_LINEAR = 1 << 19,
-    G_CLIPPING           = 1 << 23,
-}
-
-const enum OtherModeL_Layout {
-    // cycle-independent
-    AA_EN         = 3,
-    Z_CMP         = 4,
-    Z_UPD         = 5,
-    IM_RD         = 6,
-    CLR_ON_CVG    = 7,
-    CVG_DST       = 8,
-    ZMODE         = 10,
-    CVG_X_ALPHA   = 12,
-    ALPHA_CVG_SEL = 13,
-    FORCE_BL      = 14,
-    // bit 15 unused, was "TEX_EDGE"
-    // cycle-dependent
-    B_2 = 16,
-    B_1 = 18,
-    M_2 = 20,
-    M_1 = 22,
-    A_2 = 24,
-    A_1 = 26,
-    P_2 = 28,
-    P_1 = 30,
-}
-
-const enum ZMode {
-    ZMODE_OPA   = 0,
-    ZMODE_INTER = 1,
-    ZMODE_XLU   = 2, // translucent
-    ZMODE_DEC   = 3,
-}
-
-const enum BlendParam_PM_Color {
-    G_BL_CLR_IN  = 0,
-    G_BL_CLR_MEM = 1,
-    G_BL_CLR_BL  = 2,
-    G_BL_CLR_FOG = 3,
-}
-
-const enum BlendParam_A {
-    G_BL_A_IN    = 0,
-    G_BL_A_FOG   = 1,
-    G_BL_A_SHADE = 2,
-    G_BL_0       = 3,
-}
-
-const enum BlendParam_B {
-    G_BL_1MA   = 0,
-    G_BL_A_MEM = 1,
-    G_BL_1     = 2,
-    G_BL_0     = 3,
-}
-
 interface DecodeMaterialResult {
     geoMode: number;
     renderMode: number;
     scaleOverride?: number;
-    combineOverride?: CombineParams[];
+    combineOverride?: CombineParams;
 }
 
 const enum PilotwingsRSPFlag {
@@ -1821,16 +1526,16 @@ function decodeMaterial(rspMode: number, hasTexture: boolean, cutOutTransparent:
     if (rspMode & PilotwingsRSPFlag.FOG)
         geoMode |= F3D_RSP_Geometry_Flags.G_FOG;
 
-    let combineOverride: CombineParams[] = [];
+    let combineOverride: CombineParams | undefined;
     let scaleOverride = 0;
 
     if (hasTexture && (rspMode & PilotwingsRSPFlag.LIGHTING)) {
-        combineOverride = [
-            { a: CCMUX.ADD_ZERO, b: CCMUX.ADD_ZERO, c: CCMUX.MUL_ZERO, d: CCMUX.TEXEL0 },
-            { a: ACMUX.ZERO, b: ACMUX.ZERO, c: ACMUX.ZERO, d: ACMUX.SHADE },
-            { a: CCMUX.ADD_ZERO, b: CCMUX.ADD_ZERO, c: CCMUX.MUL_ZERO, d: CCMUX.TEXEL0 },
-            { a: ACMUX.ZERO, b: ACMUX.ZERO, c: ACMUX.ZERO, d: ACMUX.SHADE },
-        ];
+        combineOverride = {
+            c0: { a: CCMUX.ADD_ZERO, b: CCMUX.ADD_ZERO, c: CCMUX.MUL_ZERO, d: CCMUX.TEXEL0 },
+            a0: { a: ACMUX.ZERO, b: ACMUX.ZERO, c: ACMUX.ZERO, d: ACMUX.SHADE },
+            c1: { a: CCMUX.ADD_ZERO, b: CCMUX.ADD_ZERO, c: CCMUX.MUL_ZERO, d: CCMUX.TEXEL0 },
+            a1: { a: ACMUX.ZERO, b: ACMUX.ZERO, c: ACMUX.ZERO, d: ACMUX.SHADE },
+        };
         scaleOverride = 0x7c00 / 0x10000;
     }
 
@@ -1863,19 +1568,19 @@ function decodeMaterial(rspMode: number, hasTexture: boolean, cutOutTransparent:
             (BlendParam_A.G_BL_A_FOG << OtherModeL_Layout.A_1);
         if (modeIndex === 7) {
             if (hasTexture) {
-                combineOverride = [
-                    { a: CCMUX.TEXEL0, b: CCMUX.ADD_ZERO, c: CCMUX.SHADE, d: CCMUX.ADD_ZERO },
-                    { a: ACMUX.ZERO, b: ACMUX.ZERO, c: ACMUX.ZERO, d: ACMUX.TEXEL0 },
-                    { a: CCMUX.ADD_ZERO, b: CCMUX.ADD_ZERO, c: CCMUX.MUL_ZERO, d: CCMUX.COMBINED },
-                    { a: ACMUX.ZERO, b: ACMUX.ZERO, c: ACMUX.ZERO, d: ACMUX.ADD_COMBINED }
-                ];
+                combineOverride = {
+                    c0: { a: CCMUX.TEXEL0, b: CCMUX.ADD_ZERO, c: CCMUX.SHADE, d: CCMUX.ADD_ZERO },
+                    a0: { a: ACMUX.ZERO, b: ACMUX.ZERO, c: ACMUX.ZERO, d: ACMUX.TEXEL0 },
+                    c1: { a: CCMUX.ADD_ZERO, b: CCMUX.ADD_ZERO, c: CCMUX.MUL_ZERO, d: CCMUX.COMBINED },
+                    a1: { a: ACMUX.ZERO, b: ACMUX.ZERO, c: ACMUX.ZERO, d: ACMUX.ADD_COMBINED }
+                };
             } else {
-                combineOverride = [
-                    { a: CCMUX.ADD_ZERO, b: CCMUX.ADD_ZERO, c: CCMUX.MUL_ZERO, d: CCMUX.SHADE },
-                    { a: ACMUX.ZERO, b: ACMUX.ZERO, c: ACMUX.ZERO, d: ACMUX.SHADE },
-                    { a: CCMUX.ADD_ZERO, b: CCMUX.ADD_ZERO, c: CCMUX.MUL_ZERO, d: CCMUX.COMBINED },
-                    { a: ACMUX.ZERO, b: ACMUX.ZERO, c: ACMUX.ZERO, d: ACMUX.ADD_COMBINED },
-                ];
+                combineOverride = {
+                    c0: { a: CCMUX.ADD_ZERO, b: CCMUX.ADD_ZERO, c: CCMUX.MUL_ZERO, d: CCMUX.SHADE },
+                    a0: { a: ACMUX.ZERO, b: ACMUX.ZERO, c: ACMUX.ZERO, d: ACMUX.SHADE },
+                    c1: { a: CCMUX.ADD_ZERO, b: CCMUX.ADD_ZERO, c: CCMUX.MUL_ZERO, d: CCMUX.COMBINED },
+                    a1: { a: ACMUX.ZERO, b: ACMUX.ZERO, c: ACMUX.ZERO, d: ACMUX.ADD_COMBINED },
+                };
             }
         }
     } else {
@@ -1886,7 +1591,7 @@ function decodeMaterial(rspMode: number, hasTexture: boolean, cutOutTransparent:
     }
 
     const result: DecodeMaterialResult = { geoMode, renderMode };
-    if (combineOverride.length > 0) {
+    if (combineOverride !== undefined) {
         result.combineOverride = combineOverride;
     }
     if (scaleOverride > 0) {
@@ -1894,99 +1599,6 @@ function decodeMaterial(rspMode: number, hasTexture: boolean, cutOutTransparent:
     }
 
     return result;
-}
-
-function translateBlendParamB(paramB: BlendParam_B, srcParam: GfxBlendFactor): GfxBlendFactor {
-    if (paramB === BlendParam_B.G_BL_1MA) {
-        if (srcParam === GfxBlendFactor.SRC_ALPHA)
-            return GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
-        if (srcParam === GfxBlendFactor.ONE)
-            return GfxBlendFactor.ZERO;
-        return GfxBlendFactor.ONE;
-    }
-    if (paramB === BlendParam_B.G_BL_A_MEM)
-        return GfxBlendFactor.DST_ALPHA;
-    if (paramB === BlendParam_B.G_BL_1)
-        return GfxBlendFactor.ONE;
-    if (paramB === BlendParam_B.G_BL_0)
-        return GfxBlendFactor.ZERO;
-
-    throw "Unknown Blend Param B: "+paramB;
-}
-
-function translateZMode(zmode: ZMode): GfxCompareMode {
-    if (zmode === ZMode.ZMODE_OPA)
-        return GfxCompareMode.GREATER;
-    if (zmode === ZMode.ZMODE_INTER) // TODO: understand this better
-        return GfxCompareMode.GREATER;
-    if (zmode === ZMode.ZMODE_XLU)
-        return GfxCompareMode.GREATER;
-    if (zmode === ZMode.ZMODE_DEC)
-        return GfxCompareMode.GEQUAL;
-    throw "Unknown Z mode: " + zmode;
-}
-
-function translateBlendMode(geoMode: number, renderMode: number): Partial<GfxMegaStateDescriptor> {
-    const out: Partial<GfxMegaStateDescriptor> = {};
-
-    if (renderMode & (1 << OtherModeL_Layout.FORCE_BL)) {
-        const srcColor: BlendParam_PM_Color = (renderMode >>> OtherModeL_Layout.P_2) & 0x03;
-        const srcFactor: BlendParam_A = (renderMode >>> OtherModeL_Layout.A_2) & 0x03;
-        const dstColor: BlendParam_PM_Color = (renderMode >>> OtherModeL_Layout.M_2) & 0x03;
-        const dstFactor: BlendParam_B = (renderMode >>> OtherModeL_Layout.B_2) & 0x03;
-
-        assert(srcColor === BlendParam_PM_Color.G_BL_CLR_IN);
-        assert(dstColor === BlendParam_PM_Color.G_BL_CLR_MEM || dstFactor === BlendParam_B.G_BL_0);
-
-        let blendSrcFactor: GfxBlendFactor;
-        if (srcFactor === BlendParam_A.G_BL_0) {
-            blendSrcFactor = GfxBlendFactor.ZERO;
-        } else if ((renderMode & (1 << OtherModeL_Layout.ALPHA_CVG_SEL)) &&
-            !(renderMode & (1 << OtherModeL_Layout.CVG_X_ALPHA))) {
-            // this is technically "coverage", admitting blending on edges
-            blendSrcFactor = GfxBlendFactor.ONE;
-        } else {
-            blendSrcFactor = GfxBlendFactor.SRC_ALPHA;
-        }
-        setAttachmentStateSimple(out, {
-            blendSrcFactor: blendSrcFactor,
-            blendDstFactor: translateBlendParamB(dstFactor, blendSrcFactor),
-            blendMode: GfxBlendMode.ADD,
-        });
-    } else {
-        // without FORCE_BL, blending only happens for AA of internal edges
-        // since we are ignoring n64 coverage values and AA, this means "never"
-        setAttachmentStateSimple(out, {
-            blendSrcFactor: GfxBlendFactor.ONE,
-            blendDstFactor: GfxBlendFactor.ZERO,
-            blendMode: GfxBlendMode.ADD,
-        });
-    }
-
-    if (geoMode & F3D_RSP_Geometry_Flags.G_CULL_BACK) {
-        if (geoMode & F3D_RSP_Geometry_Flags.G_CULL_FRONT) {
-            out.cullMode = GfxCullMode.FRONT_AND_BACK;
-        } else {
-            out.cullMode = GfxCullMode.BACK;
-        }
-    } else if (geoMode & F3D_RSP_Geometry_Flags.G_CULL_FRONT) {
-        out.cullMode = GfxCullMode.FRONT;
-    } else {
-        out.cullMode = GfxCullMode.NONE;
-    }
-
-    if (renderMode & (1 << OtherModeL_Layout.Z_CMP)) {
-        const zmode: ZMode = (renderMode >>> OtherModeL_Layout.ZMODE) & 0x03;
-        out.depthCompare = translateZMode(zmode);
-    }
-
-    const zmode:ZMode = (renderMode >>> OtherModeL_Layout.ZMODE) & 0x03;
-    if (zmode === ZMode.ZMODE_DEC)
-        out.polygonOffset = true;
-
-    out.depthWrite = (renderMode & (1 << OtherModeL_Layout.Z_UPD)) !== 0;
-
-    return out;
 }
 
 function scrollTexture(dest: mat4, millis: number, scroll: UV_Scroll) {
@@ -2036,7 +1648,7 @@ export function calcZBBoardMtx(dst: mat4, m: mat4): void {
 const scratchMatrix = mat4.create();
 const texMatrixScratch = mat4.create();
 class MaterialInstance {
-    public program = new PW64Program();
+    public program: F3DEX_Program;
     private hasTexture = false;
     private hasPairedTexture = false;
     private textureMappings: TextureMapping[] = nArray(2, () => new TextureMapping());
@@ -2066,10 +1678,13 @@ class MaterialInstance {
                 }
             }
             this.decodedMaterial = decodeMaterial(modeInfo, true, this.uvtx.cutOutTransparent, this.uvtx.otherModeLByte);
+            this.program = new F3DEX_Program(this.uvtx.otherModeH, this.decodedMaterial.renderMode);
         } else {
             this.decodedMaterial = decodeMaterial(modeInfo, false, true, 0);
+            this.program = new F3DEX_Program(0, this.decodedMaterial.renderMode);
         }
         this.stateFlags = translateBlendMode(this.decodedMaterial.geoMode, this.decodedMaterial.renderMode);
+        this.program.defines.set("USE_VERTEX_COLOR", "1");
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, modelMatrix: mat4): void {
@@ -2078,8 +1693,8 @@ class MaterialInstance {
 
         const renderInst = renderInstManager.pushRenderInst();
         renderInst.setMegaStateFlags(this.stateFlags);
-        let offs = renderInst.allocateUniformBuffer(PW64Program.ub_DrawParams, 12 + 2 * 8);
-        const d = renderInst.mapUniformBufferF32(PW64Program.ub_DrawParams);
+        let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12 + 2 * 8);
+        const d = renderInst.mapUniformBufferF32(F3DEX_Program.ub_DrawParams);
 
         computeViewMatrix(scratchMatrix, viewerInput.camera);
         mat4.mul(scratchMatrix, scratchMatrix, modelMatrix);
@@ -2097,18 +1712,7 @@ class MaterialInstance {
 
         offs += fillMatrix4x3(d, offs, scratchMatrix);
 
-        if (this.decodedMaterial.renderMode & (1 << OtherModeL_Layout.CVG_X_ALPHA))
-            this.program.defines.set('CVG_X_ALPHA', '1')
-
         if (this.hasTexture) {
-            if (getTextFiltFromOtherModeH(this.uvtx.otherModeH) === TextFilt.G_TF_BILERP) {
-                // ignore average filtering mode
-                this.program.defines.set('BILERP_FILTER', '1');
-            }
-            if (getCycleTypeFromOtherModeH(this.uvtx.otherModeH) == OtherModeH_CycleType.G_CYC_2CYCLE) {
-                this.program.defines.set('TWO_CYCLE', '1');
-            }
-
             renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
             let scaleS0 = calcScaleForShift(this.uvtx.levels[0].shiftS);
             let scaleT0 = calcScaleForShift(this.uvtx.levels[0].shiftT);
@@ -2135,16 +1739,11 @@ class MaterialInstance {
                     scrollTexture(texMatrixScratch, viewerInput.time, this.uvtx.combineScroll)
                 }
                 offs += fillMatrix4x2(d, offs, texMatrixScratch);
-                this.program.defines.set('HAS_PAIRED_TEXTURE', '1');
             }
-            offs = renderInst.allocateUniformBuffer(PW64Program.ub_CombineParams, 12);
-            const comb = renderInst.mapUniformBufferF32(PW64Program.ub_CombineParams);
+            offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 12);
+            const comb = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
             const chosenCombine = (this.decodedMaterial.combineOverride) ? this.decodedMaterial.combineOverride : this.uvtx.combine;
-            const cc0 = packParams(chosenCombine[0]);
-            const cc1 = packParams(chosenCombine[1]);
-            const cc2 = packParams(chosenCombine[2]);
-            const cc3 = packParams(chosenCombine[3]);
-            offs += fillVec4(comb, offs, cc0, cc1, cc2, cc3);
+            offs += fillCombineParams(comb, offs, chosenCombine);
 
             if (this.uvtx.primitive)
                 fillVec4v(comb, offs + 0x00, this.uvtx.primitive);
@@ -2152,7 +1751,7 @@ class MaterialInstance {
                 fillVec4v(comb, offs + 0x04, this.uvtx.environment);
         } else {
             // game actually sets 2 cycle mode for some reason, and enables shading
-            this.program.defines.set('USE_VERTEX_COLOR', '1');
+            this.program.defines.set('ONLY_VERTEX_COLOR', '1');
         }
 
         const gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
@@ -3087,8 +2686,8 @@ class Pilotwings64Renderer implements SceneGfx {
             blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
         }));
 
-        let offs = template.allocateUniformBuffer(PW64Program.ub_SceneParams, 16);
-        const d = template.mapUniformBufferF32(PW64Program.ub_SceneParams);
+        let offs = template.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, 16);
+        const d = template.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
         offs += fillMatrix4x4(d, offs, viewerInput.camera.projectionMatrix);
 
         template.filterKey = PW64Pass.SKYBOX;
