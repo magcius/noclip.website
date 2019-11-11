@@ -4,9 +4,9 @@ import { DeviceProgram } from "../Program";
 import { Texture, getImageFormatString, Vertex, DrawCall, GeometryMode, getTextFiltFromOtherModeH, OtherModeL_Layout, fillCombineParams, translateBlendMode } from "./f3dex";
 import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { assert, nArray, align } from '../util';
+import { assert, nArray, align, assertExists } from '../util';
 import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
-import { mat4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
 import { interactiveVizSliderSelect, getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
@@ -35,7 +35,7 @@ layout(row_major, std140) uniform ub_SceneParams {
 };
 
 layout(row_major, std140) uniform ub_DrawParams {
-    Mat4x3 u_BoneMatrix[1];
+    Mat4x3 u_BoneMatrix[BONE_MATRIX_COUNT];
     Mat4x2 u_TexMatrix[2];
 };
 
@@ -55,7 +55,7 @@ const vec4 t_One = vec4(1.0);
 `;
 
     public vert = `
-layout(location = ${F3DEX_Program.a_Position}) in vec3 a_Position;
+layout(location = ${F3DEX_Program.a_Position}) in vec4 a_Position;
 layout(location = ${F3DEX_Program.a_Color}) in vec4 a_Color;
 layout(location = ${F3DEX_Program.a_TexCoord}) in vec2 a_TexCoord;
 
@@ -65,7 +65,8 @@ vec3 Monochrome(vec3 t_Color) {
 }
 
 void main() {
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix[0]), vec4(a_Position, 1.0)));
+    int t_BoneIndex = int(a_Position.w);
+    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix[t_BoneIndex]), vec4(a_Position.xyz, 1.0)));
     v_Color = t_One;
 
 #ifdef USE_VERTEX_COLOR
@@ -258,7 +259,7 @@ function makeVertexBufferData(v: Vertex[]): Float32Array {
         buf[j++] = v[i].x;
         buf[j++] = v[i].y;
         buf[j++] = v[i].z;
-        buf[j++] = 0;
+        buf[j++] = v[i].matrixIndex;
 
         buf[j++] = v[i].tx;
         buf[j++] = v[i].ty;
@@ -422,7 +423,7 @@ export class GeometryData {
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexBufferData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: F3DEX_Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGB,  bufferByteOffset: 0*0x04, },
+            { location: F3DEX_Program.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 0*0x04, },
             { location: F3DEX_Program.a_TexCoord, bufferIndex: 0, format: GfxFormat.F32_RG,   bufferByteOffset: 4*0x04, },
             { location: F3DEX_Program.a_Color   , bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 6*0x04, },
         ];
@@ -485,6 +486,7 @@ function translateCullMode(m: number): GfxCullMode {
         return GfxCullMode.NONE;
 }
 
+const viewMatrixScratch = mat4.create();
 const modelViewScratch = mat4.create();
 const texMatrixScratch = mat4.create();
 class DrawCallInstance {
@@ -499,7 +501,7 @@ class DrawCallInstance {
     private textureMappings = nArray(2, () => new TextureMapping());
     public visible = true;
 
-    constructor(geometryData: GeometryData, private node: GeoNode, private drawMatrix: mat4, private drawCall: DrawCall) {
+    constructor(geometryData: GeometryData, private node: GeoNode, private drawMatrix: mat4[], private drawCall: DrawCall) {
         for (let i = 0; i < this.textureMappings.length; i++) {
             if (i < this.drawCall.textureIndices.length) {
                 const idx = this.drawCall.textureIndices[i];
@@ -517,6 +519,7 @@ class DrawCallInstance {
 
     private createProgram(): void {
         const program = new F3DEX_Program(this.drawCall.DP_OtherModeH , this.drawCall.DP_OtherModeL);
+        program.defines.set('BONE_MATRIX_COUNT', '2');
 
         if (this.texturesEnabled && this.drawCall.textureIndices.length)
             program.defines.set('USE_TEXTURE', '1');
@@ -589,13 +592,18 @@ class DrawCallInstance {
         renderInst.setMegaStateFlags(this.megaStateFlags);
         renderInst.drawIndexes(this.drawCall.indexCount, this.drawCall.firstIndex);
 
-        let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12 + 8*2);
+        let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12*2 + 8*2);
         const mappedF32 = renderInst.mapUniformBufferF32(F3DEX_Program.ub_DrawParams);
+
         if (isSkybox)
-            computeViewMatrixSkybox(modelViewScratch, viewerInput.camera);
+            computeViewMatrixSkybox(viewMatrixScratch, viewerInput.camera);
         else
-            computeViewMatrix(modelViewScratch, viewerInput.camera);
-        mat4.mul(modelViewScratch, modelViewScratch, this.drawMatrix);
+            computeViewMatrix(viewMatrixScratch, viewerInput.camera);
+
+        mat4.mul(modelViewScratch, viewMatrixScratch, this.drawMatrix[0]);
+        offs += fillMatrix4x3(mappedF32, offs, modelViewScratch);
+
+        mat4.mul(modelViewScratch, viewMatrixScratch, this.drawMatrix[1]);
         offs += fillMatrix4x3(mappedF32, offs, modelViewScratch);
 
         this.computeTextureMatrix(texMatrixScratch, 0);
@@ -731,7 +739,7 @@ function getAnimFrame(anim: AnimationFile, frame: number): number {
     const lastFrame = anim.endFrame - anim.startFrame;
     while (frame > lastFrame)
         frame -= lastFrame;
-    return frame + anim.startFrame;
+    return (frame + anim.startFrame) | 0;
 }
 
 const scratchVec3a = vec3.create();
@@ -769,8 +777,26 @@ export class GeometryRenderer {
 
     private buildGeoNode(node: GeoNode): void {
         if (node.rspOutput !== null) {
-            for (let i = 0; i < node.rspOutput.drawCalls.length; i++)
-                this.drawCallInstances.push(new DrawCallInstance(this.geometryData, node, this.boneToWorldMatrixArray[node.boneIndex], node.rspOutput.drawCalls[i]));
+            for (let i = 0; i < node.rspOutput.drawCalls.length; i++) {
+                const drawMatrix = [
+                    this.boneToWorldMatrixArray[node.boneIndex],
+                    this.boneToWorldMatrixArray[node.boneIndex],
+                ];
+
+                // Skinned meshes need the parent bone as the second draw matrix.
+                const animationSetup = this.geometryData.geo.animationSetup;
+                if (animationSetup !== null) {
+                    const parentBoneIndex = animationSetup.bones[node.boneIndex].parentIndex;
+
+                    if (parentBoneIndex === -1) {
+                        // The root bone won't have a skinned DL section, so doing nothing is fine.
+                    } else {
+                        drawMatrix[1] = assertExists(this.boneToWorldMatrixArray[parentBoneIndex]);
+                    }
+                }
+
+                this.drawCallInstances.push(new DrawCallInstance(this.geometryData, node, drawMatrix, node.rspOutput.drawCalls[i]));
+            }
         }
 
         for (let i = 0; i < node.children.length; i++)

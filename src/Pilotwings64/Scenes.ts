@@ -17,7 +17,7 @@ import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget, depthClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { computeViewMatrix } from "../Camera";
 import { MathConstants, clamp, computeMatrixWithoutTranslation } from "../MathHelpers";
-import { TextureState, TileState, fillCombineParams, CombineParams, CCMUX, ACMUX, BlendParam_PM_Color, BlendParam_A, OtherModeL_Layout, BlendParam_B, F3D_RSP_Geometry_Flags, decodeCombineParams } from "../BanjoKazooie/f3dex";
+import { TextureState, TileState, fillCombineParams, CombineParams, CCMUX, ACMUX, BlendParam_PM_Color, BlendParam_A, OtherModeL_Layout, BlendParam_B, F3D_RSP_Geometry_Flags, decodeCombineParams, translateBlendMode } from "../BanjoKazooie/f3dex";
 import { ImageFormat, ImageSize, getImageFormatName, decodeTex_RGBA16, getImageSizeName, decodeTex_I4, decodeTex_I8, decodeTex_IA4, decodeTex_IA8, decodeTex_IA16 } from "../Common/N64/Image";
 import { TextureMapping } from "../TextureHolder";
 import { Endianness } from "../endian";
@@ -1684,6 +1684,7 @@ class MaterialInstance {
             this.program = new F3DEX_Program(0, this.decodedMaterial.renderMode);
         }
         this.stateFlags = translateBlendMode(this.decodedMaterial.geoMode, this.decodedMaterial.renderMode);
+        this.program.defines.set('BONE_MATRIX_COUNT', '1');
         this.program.defines.set("USE_VERTEX_COLOR", "1");
     }
 

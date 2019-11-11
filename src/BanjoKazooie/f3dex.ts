@@ -83,9 +83,13 @@ export class Vertex {
     public c2: number = 0
     // Alpha.
     public a: number = 0;
+    // Pretend.
+    public matrixIndex: number = 0;
 
     public copy(v: Vertex): void {
-        this.x = v.x; this.y = v.y; this.z = v.z; this.tx = v.tx; this.ty = v.ty;
+        this.x = v.x; this.y = v.y; this.z = v.z;
+        this.matrixIndex = v.matrixIndex;
+        this.tx = v.tx; this.ty = v.ty;
         this.c0 = v.c0; this.c1 = v.c1; this.c2 = v.c2; this.a = v.a;
     }
 }
@@ -618,6 +622,7 @@ export class RSPState {
 
     private SP_GeometryMode: number = 0;
     private SP_TextureState = new TextureState();
+    private SP_MatrixStackDepth = 0;
 
     private DP_OtherModeL: number = 0;
     private DP_OtherModeH: number = 0;
@@ -652,6 +657,10 @@ export class RSPState {
         this._setGeometryMode(this.SP_GeometryMode & ~mask);
     }
 
+    public gSPResetMatrixStackDepth(value: number): void {
+        this.SP_MatrixStackDepth = value;
+    }
+
     public gSPTexture(on: boolean, tile: number, level: number, s: number, t: number): void {
         // This is the texture we're using to rasterize triangles going forward.
         this.SP_TextureState.set(on, tile, level, s, t);
@@ -659,11 +668,18 @@ export class RSPState {
     }
 
     public gSPVertex(dramAddr: number, n: number, v0: number): void {
-        const view = this.segmentBuffers[(dramAddr >>> 24)].createDataView();
+        // We've already preloaded vertex data.
+        // const view = this.segmentBuffers[(dramAddr >>> 24)].createDataView();
         const addrIdx = dramAddr & 0x00FFFFFF;
         const baseIndex = (addrIdx / 0x10) >>> 0;
-        for (let i = 0; i < n; i++)
-            this.vertexCache[v0 + i] = baseIndex + i;
+        for (let i = 0; i < n; i++) {
+            const vertexIndex = baseIndex + i;
+
+            this.vertexCache[v0 + i] = vertexIndex;
+
+            // Copy in our matrix indices at time of G_VTX.
+            this.sharedOutput.vertices[vertexIndex].matrixIndex = this.SP_MatrixStackDepth;
+        }
     }
 
     private _translateTileTexture(tileIndex: number): number {
@@ -736,6 +752,8 @@ export class RSPState {
     }
 
     public gSPTri(i0: number, i1: number, i2: number): void {
+        if (window.debug)
+            console.log('EXEC TRI');
         this._flushDrawCall();
 
         this.sharedOutput.indices.push(this.vertexCache[i0], this.vertexCache[i1], this.vertexCache[i2]);
@@ -872,7 +890,8 @@ export function runDL_F3DEX(state: RSPState, addr: number): void {
         const w1 = view.getUint32(i + 0x04);
 
         const cmd: F3DEX_GBI = w0 >>> 24;
-        // console.log(hexzero(i, 8), F3DEX_GBI[cmd], hexzero(w0, 8), hexzero(w1, 8));
+        if (window.debug)
+            console.log(hexzero(i, 8), F3DEX_GBI[cmd], hexzero(w0, 8), hexzero(w1, 8));
 
         switch (cmd) {
         case F3DEX_GBI.G_ENDDL:
@@ -991,7 +1010,7 @@ export function runDL_F3DEX(state: RSPState, addr: number): void {
         } break;
 
         case F3DEX_GBI.G_POPMTX: {
-            // TODO: handle matrix logic for bones
+            // state.gSPPopMatrix();
         } break;
 
         case F3DEX_GBI.G_RDPFULLSYNC:

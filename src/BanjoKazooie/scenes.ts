@@ -210,10 +210,8 @@ class ObjectData {
 
             // TODO: figure out what these other files are
             if (magic === 0x0000000B) {
-                window.debug = geoFileID === 0x4ee;
                 const geo = Geo.parse(geoData, true);
                 this.geoData[geoFileID] = new GeometryData(device, this.gfxCache, geo);
-                window.debug = false;
             } else {
                 this.geoData[geoFileID] = null;
             }

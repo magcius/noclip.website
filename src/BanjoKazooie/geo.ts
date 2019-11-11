@@ -1,6 +1,6 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, align, hexzero } from "../util";
+import { assert, hexzero, assertExists } from "../util";
 import * as F3DEX from "./f3dex";
 import { vec3 } from "gl-matrix";
 
@@ -71,113 +71,185 @@ export interface VertexAnimationEffect {
     pairedEffect?: VertexAnimationEffect;
 }
 
-interface GeoContext {
-    buffer: ArrayBufferSlice;
-    geoIdx: number;
-
-    segmentBuffers: ArrayBufferSlice[];
-    sharedOutput: F3DEX.RSPSharedOutput;
-    initialZUpd: boolean;
-}
-
 export interface GeoNode {
     boneIndex: number;
+    rspState: F3DEX.RSPState;
     rspOutput: F3DEX.RSPOutput | null;
     children: GeoNode[];
 }
 
-function runGeoLayout(context: GeoContext, end: number, boneIndex: number = 0): GeoNode {
+interface GeoContext {
+    buffer: ArrayBufferSlice;
+
+    segmentBuffers: ArrayBufferSlice[];
+    sharedOutput: F3DEX.RSPSharedOutput;
+    initialZUpd: boolean;
+
+    nodeStack: GeoNode[];
+}
+
+function pushGeoNode(context: GeoContext, boneIndex = 0): GeoNode {
+    // TODO: figure out the unreferenced vertices
+    const rspState = new F3DEX.RSPState(context.segmentBuffers, context.sharedOutput);
+    // Z_UPD
+    rspState.gDPSetOtherModeL(5, 1, context.initialZUpd ? 0x20 : 0x00);
+    // G_TF_BILERP
+    rspState.gDPSetOtherModeH(12, 2, 0x2000);
+
+    const geoNode: GeoNode = {
+        boneIndex,
+        children: [],
+        rspState,
+        rspOutput: null,
+    };
+
+    if (context.nodeStack.length > 0)
+        context.nodeStack[0].children.push(geoNode);
+
+    context.nodeStack.unshift(geoNode);
+    return geoNode;
+}
+
+function peekGeoNode(context: GeoContext): GeoNode {
+    return assertExists(context.nodeStack[0]);
+}
+
+function popGeoNode(context: GeoContext): GeoNode {
+    const geoNode = context.nodeStack.shift()!;
+
+    // Finalize geo node.
+    geoNode.rspOutput = geoNode.rspState.finish();
+
+    return geoNode;
+}
+
+function runDL(context: GeoContext, addr: number): void {
+    const node = peekGeoNode(context);
+    F3DEX.runDL_F3DEX(node.rspState, addr);
+}
+
+function runGeoLayout(context: GeoContext, geoIdx_: number): void {
     const buffer = context.buffer;
     const view = buffer.createDataView();
 
-    const children: GeoNode[] = [];
+    while (true) {
+        // Disallow accidental modifications of geoIdx.
+        const geoIdx = geoIdx_;
 
-    // pass the vertex data to prefill the buffer, since effects rely on its ordering
-    // TODO: figure out the unreferenced vertices
-    const state = new F3DEX.RSPState(context.segmentBuffers, context.sharedOutput);
-    // Z_UPD
-    state.gDPSetOtherModeL(5, 1, context.initialZUpd ? 0x20 : 0x00);
-    // G_TF_BILERP
-    state.gDPSetOtherModeH(12, 2, 0x2000);
+        const cmd = view.getUint32(geoIdx + 0x00);
+        const nextSiblingOffs = view.getUint32(geoIdx + 0x04);
 
-    while (context.geoIdx < end) {
-        const cmd = view.getUint32(context.geoIdx + 0x00);
         if (window.debug) {
-            const end = view.getUint32(context.geoIdx + 0x04);
-            console.log(hexzero(cmd, 0x08), hexzero(end, 0x08));
+            const end = view.getUint32(geoIdx + 0x04);
+            console.log(hexzero(geoIdx, 0x04), hexzero(cmd, 0x08), hexzero(end, 0x08));
         }
+
         if (cmd === 0x00) {
             // set custom model matrix?
-            context.geoIdx += 0x18;
+            const childOffs = view.getUint16(geoIdx + 0x08);
+            if (childOffs !== 0)
+                runGeoLayout(context, geoIdx + childOffs);
         } else if (cmd === 0x01) {
-            // sort. Skip.
-            const drawCloserOnly = !!(view.getUint16(context.geoIdx + 0x20) & 1);
-            context.geoIdx += 0x28;
+            // XLU sorting
+            const drawCloserOnly = !!(view.getUint16(geoIdx + 0x20) & 1);
+
+            const child0Offs = view.getUint16(geoIdx + 0x22);
+            const child1Offs = view.getUint32(geoIdx + 0x24);
+            if (child0Offs !== 0)
+                runGeoLayout(context, geoIdx + child0Offs);
+            if (child1Offs !== 0)
+                runGeoLayout(context, geoIdx + child1Offs);
         } else if (cmd === 0x02) {
-            // BONE. Skip.
-            const length = view.getUint32(context.geoIdx + 0x04);
-            const boneIndex = view.getInt8(context.geoIdx + 0x09);
-            const childEnd = length !== 0 ? context.geoIdx + length : end;
+            // Bone.
+            const boneIndex = view.getInt8(geoIdx + 0x09);
 
-            context.geoIdx += 0x10;
-            const childNode = runGeoLayout(context, childEnd, boneIndex);
-            children.push(childNode);
+            pushGeoNode(context, boneIndex);
+            runGeoLayout(context, geoIdx + view.getUint8(geoIdx + 0x08));
+            popGeoNode(context);
         } else if (cmd === 0x03) {
-            // LOAD DL.
-            const unkFlag = view.getUint32(context.geoIdx + 0x04);
-
-            const segmentStart = view.getUint16(context.geoIdx + 0x08);
-            const triCount = view.getUint16(context.geoIdx + 0x0A);
-            F3DEX.runDL_F3DEX(state, 0x09000000 + segmentStart * 0x08);
-            context.geoIdx += 0x10;
+            // DL.
+            const segmentStart = view.getUint16(geoIdx + 0x08);
+            const triCount = view.getUint16(geoIdx + 0x0A);
+            runDL(context, 0x09000000 + segmentStart * 0x08);
         } else if (cmd === 0x05) {
-            // actually a while loop, but the size seems constant
-            // revisit when we do real geo list parsing
-            for (let idx = 0x08; idx < 0x18; idx += 2) {
-                const segmentStart = view.getUint16(context.geoIdx + idx);
-                if (segmentStart === 0 && idx > 0x08) // 0 after the first indicates the end
+            // Skinned DL (?)
+            // Does something fancy with matrices.
+
+            const node = peekGeoNode(context);
+
+            // Matrix index 1 = parent bone.
+            node.rspState.gSPResetMatrixStackDepth(1);
+
+            runDL(context, 0x09000000 + view.getUint16(geoIdx + 0x08) * 0x08);
+
+            let idx = 0x0A;
+            while (true) {
+                // Matrix index 0 = current bone.
+                node.rspState.gSPResetMatrixStackDepth(0);
+
+                const segmentStart = view.getUint16(geoIdx + idx);
+                if (segmentStart === 0) // 0 after the first indicates the end
                     break;
-                F3DEX.runDL_F3DEX(state, 0x09000000 + segmentStart * 0x08);
+                runDL(context, 0x09000000 + segmentStart * 0x08);
+                idx += 0x02;
             }
-            context.geoIdx += 0x18;
         } else if (cmd === 0x08) {
-            // more draw distance?. Skip.
-            context.geoIdx += 0x20;
+            // Draw distance conditional test.
+            runGeoLayout(context, geoIdx + view.getUint32(geoIdx +  0x1C));
         } else if (cmd === 0x0A) {
             // push vector?. Skip.
-            context.geoIdx += 0x18;
         } else if (cmd === 0x0C) {
             // select child geo list(s), e.g. eye blink state
+            const childCount = view.getUint16(geoIdx + 0x08);
+            const stateIdx = view.getUint16(geoIdx + 0x0A);
+
             // TODO: intelligently pick which ones to run
-            const firstChild = view.getUint32(context.geoIdx + 0x0c);
-            // hexdump(buffer, geoIdx, 0x100);
-            context.geoIdx += firstChild;
+            const stateVar = -0xFF;
+
+            const childArrOffs = geoIdx + 0x0C;
+            if (stateVar > 0 && stateVar < childCount) {
+                const childIdx = stateVar - 1;
+                const childOffs = geoIdx + view.getUint32(childArrOffs + (childIdx * 0x04));
+                runGeoLayout(context, childOffs);
+            } else if (stateVar < 0 && childCount > 0) {
+                // Negative values are bitflags.
+                const flagBits = -stateVar;
+                for (let i = 0; i < childCount; i++) {
+                    if (!!(flagBits & (1 << i))) {
+                        const childIdx = i;
+                        const childOffs = geoIdx + view.getUint32(childArrOffs + (childIdx * 0x04));
+                        runGeoLayout(context, childOffs);
+                    }
+                }
+            }
         } else if (cmd === 0x0D) {
-            // DRAW DISTANCE. Skip.
-            context.geoIdx += 0x18;
+            // Draw dist conditional test.
+            // TODO(jstpierre): Conditional
+            const childOffs = view.getUint16(geoIdx + 0x14);
+            if (childOffs !== 0)
+                runGeoLayout(context, geoIdx + childOffs);
         } else if (cmd === 0x0E) {
-            // view frustum culling. Skip.
-            const jointIndex = view.getInt16(context.geoIdx + 0x12);
+            // View frustum culling.
+            const jointIndex = view.getInt16(geoIdx + 0x12);
             // hexdump(buffer, geoIdx, 0x100);
-            context.geoIdx += 0x30;
+            runGeoLayout(context, geoIdx + view.getUint16(geoIdx + 0x10));
         } else if (cmd === 0x0F) {
-            const count = view.getUint8(context.geoIdx + 0x0A);
-            // hexdump(buffer, geoIdx, 0x20);
-            context.geoIdx += view.getInt16(context.geoIdx + 0x08);
+            // Conditionally run geolist.
+            runGeoLayout(context, geoIdx + view.getUint16(geoIdx + 0x08));
         } else if (cmd === 0x10) {
             // set mipmaps. Skip.
-            const contFlag = view.getUint32(context.geoIdx + 0x04);
+            const contFlag = view.getUint32(geoIdx + 0x04);
             // 1 for clamp, 2 for wrap
-            const wrapMode = view.getInt32(context.geoIdx + 0x08);
-            context.geoIdx += 0x10;
+            const wrapMode = view.getInt32(geoIdx + 0x08);
         } else {
             throw `whoops ${cmd}`;
         }
+
+        if (nextSiblingOffs === 0)
+            return;
+        else
+            geoIdx_ += nextSiblingOffs;
     }
-
-    const rspOutput = state.finish();
-
-    return { boneIndex, rspOutput, children };
 }
 
 export function parse(buffer: ArrayBufferSlice, initialZUpd: boolean): Geometry {
@@ -243,13 +315,18 @@ export function parse(buffer: ArrayBufferSlice, initialZUpd: boolean): Geometry 
 
     const geoContext: GeoContext = {
         buffer,
-        geoIdx: geoOffs,
 
         segmentBuffers,
         sharedOutput,
         initialZUpd,
+
+        nodeStack: [],
     };
-    const rootNode = runGeoLayout(geoContext, buffer.byteLength);
+
+    const rootNode = pushGeoNode(geoContext, 0);
+    runGeoLayout(geoContext, geoOffs);
+    const rootNode2 = popGeoNode(geoContext);
+    assert(rootNode === rootNode2);
 
     const effectSetupOffs = view.getUint32(0x24);
     const vertexEffects: VertexAnimationEffect[] = [];
