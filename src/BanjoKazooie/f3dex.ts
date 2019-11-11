@@ -8,10 +8,6 @@ import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorH
 
 // Interpreter for N64 F3DEX microcode.
 
-export const enum GeometryMode {
-    G_SHADE = 0x04,
-}
-
 export class TextureState {
     public on: boolean = false;
     public tile: number = 0;
@@ -825,7 +821,7 @@ export class RSPState {
     }
 }
 
-enum F3DEX_GBI {
+export enum F3DEX_GBI {
     // DMA
     G_MTX               = 0x01,
     G_MOVEMEM           = 0x03,
@@ -981,7 +977,7 @@ export function runDL_F3DEX(state: RSPState, addr: number): void {
         } break;
 
         case F3DEX_GBI.G_DL: {
-            // TODO(jstpierre): Figure out the right segment address that this wants.
+            runDL_F3DEX(state, w1);
         } break;
 
         case F3DEX_GBI.G_SETOTHERMODE_H: {

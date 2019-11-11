@@ -11,7 +11,7 @@ import { mat4, vec3 } from 'gl-matrix';
 import { transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
 import { SceneContext } from '../SceneBase';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
-import { executeOnPass } from '../gfx/render/GfxRenderer';
+import { executeOnPass, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assert, hexzero, assertExists, hexdump } from '../util';
@@ -210,7 +210,8 @@ class ObjectData {
 
             // TODO: figure out what these other files are
             if (magic === 0x0000000B) {
-                const geo = Geo.parse(geoData, true);
+                // TODO: find if models can set different Z/opacity modes
+                const geo = Geo.parse(geoData, Geo.RenderZMode.OPA, true);
                 this.geoData[geoFileID] = new GeometryData(device, this.gfxCache, geo);
             } else {
                 this.geoData[geoFileID] = null;
@@ -314,8 +315,10 @@ class SceneDesc implements Viewer.SceneDesc {
                         // skipping a couple of 0xc-bit fields
                         if (category === 0x06) {
                             const objRenderer = objectSetupTable.spawnObject(device, id, vec3.fromValues(x, y, z), yaw);
-                            if (objRenderer)
+                            if (objRenderer) {
+                                objRenderer.sortKeyBase = makeSortKey(GfxRendererLayer.OPAQUE);
                                 sceneRenderer.geoRenderers.push(objRenderer);
+                            }
                         }
                         offs += 0x14;
                     }
@@ -362,19 +365,21 @@ class SceneDesc implements Viewer.SceneDesc {
 
             const opaFile = findFileByID(obj, obj.OpaGeoFileId);
             if (opaFile !== null) {
-                const geo = Geo.parse(opaFile.Data, true);
+                const geo = Geo.parse(opaFile.Data, Geo.RenderZMode.OPA, true);
                 const opa = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
+                opa.sortKeyBase = makeSortKey(GfxRendererLayer.OPAQUE);
             }
 
             const xluFile = findFileByID(obj, obj.XluGeoFileId);
             if (xluFile !== null) {
-                const geo = Geo.parse(xluFile.Data, false);
-                this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
+                const geo = Geo.parse(xluFile.Data, Geo.RenderZMode.XLU, false);
+                const xlu = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
+                xlu.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT);
             }
 
             const opaSkybox = findFileByID(obj, obj.OpaSkyboxFileId);
             if (opaSkybox !== null) {
-                const geo = Geo.parse(opaSkybox.Data, true);
+                const geo = Geo.parse(opaSkybox.Data, Geo.RenderZMode.OPA, true);
                 const renderer = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
                 renderer.isSkybox = true;
                 mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [obj.OpaSkyboxScale, obj.OpaSkyboxScale, obj.OpaSkyboxScale]);
@@ -382,8 +387,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
             const xluSkybox = findFileByID(obj, obj.XluSkyboxFileId);
             if (xluSkybox !== null) {
-                console.log(obj.Files, obj.XluSkyboxFileId);
-                const geo = Geo.parse(xluSkybox.Data, false);
+                const geo = Geo.parse(xluSkybox.Data, Geo.RenderZMode.XLU, false);
                 const renderer = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
                 renderer.isSkybox = true;
                 mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [obj.XluSkyboxScale, obj.XluSkyboxScale, obj.XluSkyboxScale]);

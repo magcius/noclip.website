@@ -1,6 +1,6 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, hexzero, assertExists } from "../util";
+import { assert, hexzero, assertExists, nArray } from "../util";
 import * as F3DEX from "./f3dex";
 import { vec3 } from "gl-matrix";
 
@@ -71,6 +71,110 @@ export interface VertexAnimationEffect {
     pairedEffect?: VertexAnimationEffect;
 }
 
+function otherModeLEntries(flags: number[]): ArrayBufferSlice {
+    // set bytes individually to avoid endianness issues
+    const out = new Uint8Array(16 * flags.length);
+    for (let i = 0; i < flags.length; i++) {
+        out[16 * i + 0] = F3DEX.F3DEX_GBI.G_SETOTHERMODE_L;
+        out[16 * i + 2] = 0x03;
+        out[16 * i + 3] = 0x1d;
+
+        out[16 * i + 4] = (flags[i] >>> 24) & 0xff;
+        out[16 * i + 5] = (flags[i] >>> 16) & 0xff;
+        out[16 * i + 6] = (flags[i] >>> 8) & 0xff;
+        out[16 * i + 7] = (flags[i] >>> 0) & 0xff;
+
+        out[16 * i + 8] = F3DEX.F3DEX_GBI.G_ENDDL;
+    }
+    return new ArrayBufferSlice(out.buffer);
+}
+
+// labels are approximate, since some have combinations of ZMODE and/or Z_UPD that don't make sense
+const renderModeBuffers: ArrayBufferSlice[] = [
+    // non-z-buffered "opaque"
+    otherModeLEntries([
+        0x0F0A4000, // OPA_SURF
+        0x0C192048, // AA_OPA_SURF
+        0x0C184240, // XLU_SURF
+        0x0C1841C8, // AA_XLU_SURF
+        0x0C184240, // XLU_SURF
+        0x0C1841C8, // AA_XLU_SURF
+        0x0F0A4000, // repeated
+        0x0C192048,
+        0x0C184240,
+        0x0C1841C8,
+        0x0C184240,
+        0x0C1841C8,
+        0x0C1843C8, // AA_CLD_SURF (doesn't actually exist)
+    ]),
+    // z-buffered "opaque"
+    otherModeLEntries([
+        0x0F0A4030, // OPA_SURF
+        0x0C192078, // AA_OPA_SURF
+        0x0C184270, // XLU_SURF
+        0x0C1841F8, // AA_XLU_SURF
+        0x0C184270, // XLU_SURF
+        0x0C1841F8, // AA_XLU_SURF
+        0x0F0A4010, // repeated, but without Z_UPD
+        0x0C192058,
+        0x0C184250,
+        0x0C1841D8,
+        0x0C184250,
+        0x0C1841D8,
+        0x0C1843D8, // ?
+    ]),
+    // z-buffered (no update) "opaque"
+    otherModeLEntries([
+        0x0F0A4010,
+        0x0C192058,
+        0x0C184250,
+        0x0C1841D8,
+        0x0C184250,
+        0x0C1841D8,
+        0x0F0A4010, // repeated
+        0x0C192058,
+        0x0C184250,
+        0x0C1841D8,
+        0x0C184250,
+        0x0C1841D8,
+        0x0C1843D8, // ?
+    ]),
+    // non-z-buffered "translucent"
+    otherModeLEntries(([] as number[]).concat(
+        ...nArray(6, () => [
+            0x0C184240, // XLU_SURF
+            0x0C1841C8, // AA_XLU_SURF
+        ])).concat(
+            [0x0C1843C8], // AA_CLD_SURF (doesn't actually exist)
+        )
+    ),
+    // z-buffered "translucent"
+    otherModeLEntries([
+        0x0C184270, // XLU_SURF
+        0x0C1841F8, // AA_XLU_SURF
+        0x0C184270, // XLU_SURF
+        0x0C1841F8, // AA_XLU_SURF
+        0x0C184270, // XLU_SURF
+        0x0C1841F8, // AA_XLU_SURF
+        0x0C184250, // repeated, but without Z_UPD
+        0x0C1841D8,
+        0x0C184250,
+        0x0C1841D8,
+        0x0C184250,
+        0x0C1841D8,
+        0x0C1843D8, // ?
+    ]),
+    // z-buffered (no update) "translucent"
+    otherModeLEntries(([] as number[]).concat(
+        ...nArray(6, () => [
+            0x0C184250, // XLU_SURF
+            0x0C1841D8, // AA_XLU_SURF
+        ])).concat(
+            [0x0C1843D8], // ?
+        )
+    ),
+];
+
 export interface GeoNode {
     boneIndex: number;
     rspState: F3DEX.RSPState;
@@ -83,7 +187,6 @@ interface GeoContext {
 
     segmentBuffers: ArrayBufferSlice[];
     sharedOutput: F3DEX.RSPSharedOutput;
-    initialZUpd: boolean;
 
     nodeStack: GeoNode[];
 }
@@ -91,8 +194,6 @@ interface GeoContext {
 function pushGeoNode(context: GeoContext, boneIndex = 0): GeoNode {
     // TODO: figure out the unreferenced vertices
     const rspState = new F3DEX.RSPState(context.segmentBuffers, context.sharedOutput);
-    // Z_UPD
-    rspState.gDPSetOtherModeL(5, 1, context.initialZUpd ? 0x20 : 0x00);
     // G_TF_BILERP
     rspState.gDPSetOtherModeH(12, 2, 0x2000);
 
@@ -252,7 +353,13 @@ function runGeoLayout(context: GeoContext, geoIdx_: number): void {
     }
 }
 
-export function parse(buffer: ArrayBufferSlice, initialZUpd: boolean): Geometry {
+export const enum RenderZMode {
+    None = 0,
+    OPA = 1,
+    XLU = 2,
+}
+
+export function parse(buffer: ArrayBufferSlice, zMode: RenderZMode, opaque: boolean): Geometry {
     const view = buffer.createDataView();
 
     assert(view.getUint32(0x00) == 0x0B);
@@ -304,9 +411,12 @@ export function parse(buffer: ArrayBufferSlice, initialZUpd: boolean): Geometry 
     const textureDataOffs = textureSetupOffs + 0x08 + (textureCount * 0x10);
     const textureData = buffer.slice(textureDataOffs, textureSetupOffs + textureSetupSize);
 
+    const renderModeIndex = zMode + (opaque? 0 : 3);
+
     const segmentBuffers: ArrayBufferSlice[] = [];
     segmentBuffers[0x01] = vertexData;
     segmentBuffers[0x02] = textureData;
+    segmentBuffers[0x03] = renderModeBuffers[renderModeIndex];
     segmentBuffers[0x09] = f3dexData;
     segmentBuffers[0x0F] = textureData;
 
@@ -318,7 +428,6 @@ export function parse(buffer: ArrayBufferSlice, initialZUpd: boolean): Geometry 
 
         segmentBuffers,
         sharedOutput,
-        initialZUpd,
 
         nodeStack: [],
     };

@@ -1,7 +1,7 @@
 
 import * as Viewer from '../viewer';
 import { DeviceProgram } from "../Program";
-import { Texture, getImageFormatString, Vertex, DrawCall, GeometryMode, getTextFiltFromOtherModeH, OtherModeL_Layout, fillCombineParams, translateBlendMode } from "./f3dex";
+import { Texture, getImageFormatString, Vertex, DrawCall, getTextFiltFromOtherModeH, OtherModeL_Layout, fillCombineParams, translateBlendMode, F3D_RSP_Geometry_Flags } from "./f3dex";
 import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { assert, nArray, align, assertExists } from '../util';
@@ -79,6 +79,24 @@ void main() {
 
     v_TexCoord.xy = Mul(u_TexMatrix[0], vec4(a_TexCoord, 1.0, 1.0));
     v_TexCoord.zw = Mul(u_TexMatrix[1], vec4(a_TexCoord, 1.0, 1.0));
+
+#ifdef TEXTURE_GEN
+    // generate texture coordinates based on the vertex normal in screen space
+    // TODO: figure out whether to use lookat vectors instead, and find where the light direction gets set
+
+    // convert (unsigned) colors to normal vector components
+    vec4 t_Normal = vec4(2.0*a_Color.rgb - 2.0*trunc(2.0*a_Color.rgb), 0.0);
+    t_Normal = normalize(Mul(_Mat4x4(u_BoneMatrix[t_BoneIndex]), t_Normal));
+    // shift and rescale to tex coordinates - straight towards the camera is the center
+
+#   ifdef TEXTURE_GEN_LINEAR
+        v_TexCoord.xy = acos(t_Normal.xy)/radians(180.0);
+#   else
+        v_TexCoord.xy = (t_Normal.xy + vec2(1.0))/2.0;
+#   endif
+
+    v_TexCoord.zw = v_TexCoord.xy;
+#endif
 }
 `;
 
@@ -511,8 +529,7 @@ class DrawCallInstance {
             }
         }
 
-        const zUpd = !!(this.drawCall.DP_OtherModeL & 0x20);
-        this.megaStateFlags = { depthWrite: zUpd };
+        this.megaStateFlags = translateBlendMode(this.drawCall.SP_GeometryMode, this.drawCall.DP_OtherModeL)
         this.setBackfaceCullingEnabled(true);
         this.createProgram();
     }
@@ -524,9 +541,17 @@ class DrawCallInstance {
         if (this.texturesEnabled && this.drawCall.textureIndices.length)
             program.defines.set('USE_TEXTURE', '1');
 
-        const shade = (this.drawCall.SP_GeometryMode & GeometryMode.G_SHADE) !== 0;
+        const shade = (this.drawCall.SP_GeometryMode & F3D_RSP_Geometry_Flags.G_SHADE) !== 0;
         if (this.vertexColorsEnabled && shade)
             program.defines.set('USE_VERTEX_COLOR', '1');
+
+        if (this.drawCall.SP_GeometryMode & F3D_RSP_Geometry_Flags.G_TEXTURE_GEN)
+            program.defines.set('TEXTURE_GEN', '1');
+
+        // many display lists seem to set this flag without setting texture_gen,
+        // despite this one being dependent on it
+        if (this.drawCall.SP_GeometryMode & F3D_RSP_Geometry_Flags.G_TEXTURE_GEN_LINEAR)
+            program.defines.set('TEXTURE_GEN_LINEAR', '1');
 
         if (this.monochromeVertexColorsEnabled)
             program.defines.set('USE_MONOCHROME_VERTEX_COLOR', '1');
@@ -617,7 +642,7 @@ class DrawCallInstance {
         offs += fillCombineParams(comb, offs, this.drawCall.DP_Combine);
         // TODO: set these properly, this mostly just reproduces vertex*texture
         offs += fillVec4(comb, offs, 1, 1, 1, 1);   // primitive color
-        offs += fillVec4(comb, offs, 1, 1, 1, 1);  // environment color
+        offs += fillVec4(comb, offs, 1, 1, 1, 1);   // environment color
     }
 }
 
@@ -749,6 +774,7 @@ export class GeometryRenderer {
     private drawCallInstances: DrawCallInstance[] = [];
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
     public isSkybox = false;
+    public sortKeyBase: number;
     public modelMatrix = mat4.create();
     public boneToWorldMatrixArray: mat4[];
     public boneToParentMatrixArray: mat4[];
@@ -893,6 +919,7 @@ export class GeometryRenderer {
         template.setMegaStateFlags(this.megaStateFlags);
 
         template.filterKey = this.isSkybox ? BKPass.SKYBOX : BKPass.MAIN;
+        template.sortKey = this.sortKeyBase;
 
         let offs = template.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, 16);
         const mappedF32 = template.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
