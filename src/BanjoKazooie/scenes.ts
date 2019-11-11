@@ -266,7 +266,7 @@ class ObjectData {
 }
 
 async function fetchObjectData(dataFetcher: DataFetcher, device: GfxDevice): Promise<ObjectData> {
-    const objectData = await dataFetcher.fetchData(`${pathBase}/objectSetup_arc.crg1?cache_bust=1`)!;
+    const objectData = await dataFetcher.fetchData(`${pathBase}/objectSetup_arc.crg1?cache_bust=2`)!;
     const objectSetup = BYML.parse<ObjectSetupData>(objectData, BYML.FileType.CRG1);
     return new ObjectData(objectSetup);
 }
@@ -355,7 +355,7 @@ class SceneDesc implements Viewer.SceneDesc {
             return await fetchObjectData(context.dataFetcher, device);
         });
         const dataFetcher = context.dataFetcher;
-        return dataFetcher.fetchData(`${pathBase}/${this.id}_arc.crg1?cache_bust=1`).then((data) => {
+        return dataFetcher.fetchData(`${pathBase}/${this.id}_arc.crg1?cache_bust=2`).then((data) => {
             const obj: any = BYML.parse(data!, BYML.FileType.CRG1);
 
             const viewerTextures: Viewer.Texture[] = [];
