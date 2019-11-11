@@ -2494,6 +2494,20 @@ const sceneDescs = [
     new SceneDesc("ganon_boss", "Second-To-Last Boss Ganondorf"),
     new SceneDesc("ganon_demo", "Final Battle Against Ganon"),
     new SceneDesc("ganon_final", "Ganondorf's Death"),
+
+	"Master Quest",
+	new SceneDesc("ydan_dd", "Inside the Deku Tree"),
+	new SceneDesc("ddan_dd", "Dodongo's Cavern"),
+	new SceneDesc("bdan_dd", "Jabu-Jabu's Belly"),
+	new SceneDesc("bmori1_dd", "Forest Temple"),
+	new SceneDesc("hidan_dd", "Fire Temple"),
+	new SceneDesc("mizusin_dd", "Water Temple"),
+	new SceneDesc("hakadan_dd", "Shadow Temple"),
+	new SceneDesc("jyasinzou_dd", "Spirit Temple"),
+	new SceneDesc("ganontika_dd", "Ganon's Castle"),
+	new SceneDesc("ice_doukutu_dd", "Ice Cavern"),
+	new SceneDesc("hakadan_ch_dd", "Bottom of the Well"),
+	new SceneDesc("men_dd", "Gerudo Training Grounds"),
 ];
 
 export const sceneGroup: SceneGroup = { id, name, sceneDescs };
