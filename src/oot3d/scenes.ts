@@ -142,7 +142,6 @@ class SometimesMultiSelect extends UI.ScrollSelect {
             if (this.itemIsOn[i]) {
                 const flair = UI.ensureFlairIndex(flairs, i);
                 flair.background = UI.HIGHLIGHT_COLOR;
-                flair.color = 'black';
                 flair.fontWeight = 'bold';
             }
         }
