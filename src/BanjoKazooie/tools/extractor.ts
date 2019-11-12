@@ -260,6 +260,14 @@ function extractObjectLoad(fs: FS) {
             extractFileAndAppend(fileTable, fs, setup.AnimationTable[i].FileID);
     }
 
+    // endpoints are pretty arbitrary
+    for (let i = 0x2d1; i <= 0x36e; i++ ) {
+        extractFileAndAppend(fileTable, fs, i);
+    }
+    extractFileAndAppend(fileTable, fs, 0x41a);
+    extractFileAndAppend(fileTable, fs, 0x580);
+    extractFileAndAppend(fileTable, fs, 0x6d1);
+
     const data = BYML.write({ ObjectSetupTable: setupTable, Files: fileTable }, BYML.FileType.CRG1);
     writeFileSync(`${pathBaseOut}/objectSetup_arc.crg1`, Buffer.from(data));
 }

@@ -221,6 +221,21 @@ class ObjectData {
         return this.geoData[geoFileID];
     }
 
+    public spawnObjectByFileID(device: GfxDevice, fileID: number, pos: vec3, yaw = 0, pitch = 0): GeometryRenderer | null {
+        const geoData = this.ensureGeoData(device, fileID);
+        if (geoData === null) {
+            console.warn(`Unsupported geo data for file ID ${hexzero(fileID, 4)}`);
+            return null;
+        }
+
+        const renderer = new GeometryRenderer(geoData);
+        renderer.sortKeyBase = makeSortKey(GfxRendererLayer.OPAQUE);
+        mat4.fromTranslation(renderer.modelMatrix, pos);
+        mat4.rotateY(renderer.modelMatrix, renderer.modelMatrix, yaw * MathConstants.DEG_TO_RAD);
+        mat4.rotateZ(renderer.modelMatrix, renderer.modelMatrix, pitch * MathConstants.DEG_TO_RAD);
+        return renderer;
+    }
+
     public spawnObject(device: GfxDevice, id: number, pos: vec3, yaw = 0): GeometryRenderer | null {
         const spawnEntry = this.objectSetupData.ObjectSetupTable.find((entry) => entry.SpawnID === id);
         if (spawnEntry === undefined) {
@@ -231,16 +246,11 @@ class ObjectData {
         if (spawnEntry.GeoFileID === 0)
             return null; // nothing to render
 
-        const geoData = this.ensureGeoData(device, spawnEntry.GeoFileID);
-        if (geoData === null) {
-            console.warn(`Unsupported geo data for object ID ${hexzero(id, 4)}`);
+        const renderer = this.spawnObjectByFileID(device, spawnEntry.GeoFileID, pos, yaw)
+        if (renderer === null) {
             return null;
         }
-
-        const renderer = new GeometryRenderer(geoData);
         (renderer as any).spawnEntry = spawnEntry;
-        mat4.fromTranslation(renderer.modelMatrix, pos);
-        mat4.rotateY(renderer.modelMatrix, renderer.modelMatrix, yaw * MathConstants.DEG_TO_RAD);
 
         const animEntry = spawnEntry.AnimationTable[spawnEntry.AnimationStartIndex];
         if (animEntry !== undefined) {
@@ -266,7 +276,7 @@ class ObjectData {
 }
 
 async function fetchObjectData(dataFetcher: DataFetcher, device: GfxDevice): Promise<ObjectData> {
-    const objectData = await dataFetcher.fetchData(`${pathBase}/objectSetup_arc.crg1?cache_bust=2`)!;
+    const objectData = await dataFetcher.fetchData(`${pathBase}/objectSetup_arc.crg1?cache_bust=3`)!;
     const objectSetup = BYML.parse<ObjectSetupData>(objectData, BYML.FileType.CRG1);
     return new ObjectData(objectSetup);
 }
@@ -315,10 +325,8 @@ class SceneDesc implements Viewer.SceneDesc {
                         // skipping a couple of 0xc-bit fields
                         if (category === 0x06) {
                             const objRenderer = objectSetupTable.spawnObject(device, id, vec3.fromValues(x, y, z), yaw);
-                            if (objRenderer) {
-                                objRenderer.sortKeyBase = makeSortKey(GfxRendererLayer.OPAQUE);
+                            if (objRenderer)
                                 sceneRenderer.geoRenderers.push(objRenderer);
-                            }
                         }
                         offs += 0x14;
                     }
@@ -329,16 +337,21 @@ class SceneDesc implements Viewer.SceneDesc {
                         assert(view.getInt8(offs++) === 0x9);
 
                         for (let i = 0; i < structCount; i++) {
-                            const objectID = view.getUint16(offs + 0x00);
-                            const param1 = view.getUint16(offs + 0x02);
-                            const x = view.getInt16(offs + 0x04);
-                            const y = view.getInt16(offs + 0x06);
-                            const z = view.getInt16(offs + 0x08);
-                            const param2 = view.getUint16(offs + 0x0A);
-                            const yaw = 0;
-                            // const objRenderer = objectSetupTable.spawnObject(objectID, vec3.fromValues(x, y, z), yaw);
-                            // if (objRenderer !== null)
-                            //     sceneRenderer.n64Renderers.push(objRenderer);
+                            const objectType = view.getUint8(offs + 0x0B) & 0x03;
+                            if (objectType === 2) {
+                                const fileID = (view.getUint16(offs + 0x00) >>> 4) + 0x2d1;
+                                const yaw = view.getUint8(offs + 0x02) * 2;
+                                const pitch = view.getUint8(offs + 0x03) * 2;
+                                const x = view.getInt16(offs + 0x04);
+                                const y = view.getInt16(offs + 0x06);
+                                const z = view.getInt16(offs + 0x08);
+                                const scale = view.getUint8(offs + 0x0A) / 100.0;
+                                const objRenderer = objectSetupTable.spawnObjectByFileID(device, fileID, vec3.fromValues(x, y, z), yaw, pitch);
+                                if (objRenderer !== null) {
+                                    mat4.scale(objRenderer.modelMatrix, objRenderer.modelMatrix, [scale, scale, scale]);
+                                    sceneRenderer.geoRenderers.push(objRenderer);
+                                }
+                            }
                             offs += 0x0C;
                         }
                     }
