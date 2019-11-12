@@ -1077,8 +1077,8 @@ class SceneDesc implements Viewer.SceneDesc {
     //        }
     //    });   
     //   I believe this is the right match of actor and model, but it doesn't really fit right. wrong size, missing something that
-    //   would cause it to warp and animate right, not in the right position etc. 
-
+    //   would cause it to warp / animate right, not quite the right position either?
+    
         else if (actor.actorId === ActorId.Bg_Po_Syokudai) fetchArchive(`zelda_syokudai.zar`).then((zar) => buildModel(zar, `model/syokudai_model.cmb`, 1));
         else if (actor.actorId === ActorId.Obj_Hsblock) {
             const zar = await fetchArchive(`zelda_d_hsblock.zar`);
@@ -1093,6 +1093,21 @@ class SceneDesc implements Viewer.SceneDesc {
                 throw "starschulz";
             }
         }
+        else if (actor.actorId === ActorId.Obj_Mure2) {
+            const zar = await fetchArchive(`zelda_field_keep.zar`); // grass and rock circles. only the middle one spawns?
+            const whichModel = actor.variable & 0xF;
+            if (whichModel === 0x0) {
+                const b = buildModel(zar, 'model/grass05_model.cmb', 0.4);  // circle of shrubs with one in the middle
+            } else if (whichModel === 0x1) {
+                const b = buildModel(zar, 'model/grass05_model.cmb', 0.4);  // scattered shrubs
+            } else if (whichModel === 0x2) {
+                const b = buildModel(zar, 'model/obj_isi01_model.cmb', 0.1);  // circle of rocks
+                b.setVertexColorScale(characterLightScale);
+                b.modelMatrix[13] += 5;
+            } else {
+                throw "starschulz";
+            }
+        }
         else if (actor.actorId === ActorId.Bg_Relay_Objects) {
             const zar = await fetchArchive(`zelda_relay_objects.zar`);
             const whichModel = ((actor.variable) >>> 8) & 0x0F;
@@ -1100,6 +1115,21 @@ class SceneDesc implements Viewer.SceneDesc {
                 buildModel(zar, 'model/relay_usu_model.cmb', 0.1);  // Rotating Center platform
             } else if (whichModel === 0x01) {
                 buildModel(zar, 'model/l_doorpou_model.cmb', 0.1);  // Stone door
+            } else {
+                throw "starschulz";
+            }
+        }
+        else if (actor.actorId === ActorId.Bg_Spot06_Objects) { // lake hylia objects 
+            const zar = await fetchArchive(`zelda_spot06_objects.zar`);
+            const whichModel = actor.variable & 0xFF00;
+            if (whichModel === 0x0000) {
+                buildModel(zar, 'model/c_s06gate_model.cmb', 0.1);  // temple gate
+            } else if (whichModel === 0x0100) {
+                buildModel(zar, 'model/c_s06mizuzou_model.cmb', 0.1);  // gate lock
+            } else if (whichModel === 0x0200) {
+                const b = buildModel(zar, 'model/c_s06beforewater_modelT.cmb', 1); // water plane
+                b.bindCMAB(parseCMAB(zar, `misc/c_s06beforewater_modelT.cmab`));
+                b.setVertexColorScale(characterLightScale);
             } else {
                 throw "starschulz";
             }
@@ -1126,6 +1156,8 @@ class SceneDesc implements Viewer.SceneDesc {
             const b = buildModel(zar, `model/doughnut_aya_modelT.cmb`, 0.1);
             b.bindCMAB(parseCMAB(zar, `misc/doughnut_aya_modelT.cmab`));
         }
+        //beehive actor, TODO check scaling and positioning of it as it didn't seem right
+        else if (actor.actorId === ActorId.Obj_Comb) fetchArchive(`zelda_field_keep.zar`).then((zar) => buildModel(zar, `model/hatisu_model.cmb`, 0.1));
         else if (actor.actorId === ActorId.Bg_Ganon_Otyuka) fetchArchive(`zelda_ganon.zar`).then((zar) => buildModel(zar, `model/ganon_tyuka_ue_model.cmb`, 1));
         else if (actor.actorId === ActorId.Door_Gerudo) fetchArchive(`zelda_door_gerudo.zar`).then((zar) => buildModel(zar, `model/gerudoway_shutter_model.cmb`, 1));
         else if (actor.actorId === ActorId.En_Fz) fetchArchive(`zelda_fz.zar`).then((zar) => buildModel(zar, `model/frezad.cmb`, 0.01));
@@ -1383,7 +1415,7 @@ class SceneDesc implements Viewer.SceneDesc {
         else if (actor.actorId === ActorId.En_Ishi) {
             const zar = await fetchArchive(`zelda_field_keep.zar`);
             const b = buildModel(zar, `model/obj_isi01_model.cmb`, 0.1);
-            b.modelMatrix[13] += 10;
+            b.modelMatrix[13] += 5;
             b.setVertexColorScale(characterLightScale);
         }
         else if (actor.actorId === ActorId.Obj_Hana) {
@@ -1690,6 +1722,18 @@ class SceneDesc implements Viewer.SceneDesc {
             const zar = await fetchArchive(`zelda_gr.zar`);
             const b = buildModel(zar, `model/chickengirl.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/gr_wait.csab`));
+            b.setVertexColorScale(characterLightScale);
+        }
+        else if (actor.actorId === ActorId.En_Kakasi) {
+            const zar = await fetchArchive(`zelda_ka.zar`);
+            const b = buildModel(zar, `model/strawman.cmb`);
+            b.bindCSAB(parseCSAB(zar, `anim/ka_dance.csab`));
+            b.setVertexColorScale(characterLightScale);
+        }
+        else if (actor.actorId === ActorId.En_Kakasi3) {
+            const zar = await fetchArchive(`zelda_ka.zar`);
+            const b = buildModel(zar, `model/strawman.cmb`);
+            b.bindCSAB(parseCSAB(zar, `anim/ka_dance.csab`));
             b.setVertexColorScale(characterLightScale);
         }
         else if (actor.actorId === ActorId.En_Daiku_Kakariko) {
@@ -2322,6 +2366,8 @@ class SceneDesc implements Viewer.SceneDesc {
             b.modelMatrix[12] += +500; // these offset ganon out of the rubble and facing center
             mat4.rotateY(b.modelMatrix, b.modelMatrix, 90 * MathConstants.DEG_TO_RAD);
         }
+        // room changing planes
+        else if (actor.actorId === ActorId.En_Holl) return;
         // Navi message, doesn't have a visible actor.
         else if (actor.actorId === ActorId.Elf_Msg) return;
         else if (actor.actorId === ActorId.Elf_Msg2) return;
