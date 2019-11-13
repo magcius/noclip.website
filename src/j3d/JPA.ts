@@ -1,6 +1,17 @@
 
-// JParticle's JPC resource file, as seen in Super Mario Galaxy, amongst other
-// Nintendo games.
+// Nintendo's JParticle engine, commonly abbreviated "JPA" for short.
+
+// Has support for the following JPA versions, as seen in the following games:
+//
+//  * JPA1, as seen in The Legend of Zelda: The Wind Waker
+//  * JPA2, as seen in Super Mario Galaxy 1 & 2
+//
+// Known gaps in JPA2 support:
+//  * Line and Point shape types
+//
+// Known gaps in JPA1 support:
+//  * Line and Point shape types
+//  * ETX1 SubTexture
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import * as GX from "../gx/gx_enum";
@@ -42,7 +53,7 @@ export interface JPAC {
 }
 
 //#region JPA Engine
-const enum JPAVolumeType {
+const enum VolumeType {
     Cube     = 0x00,
     Sphere   = 0x01,
     Cylinder = 0x02,
@@ -52,9 +63,9 @@ const enum JPAVolumeType {
     Line     = 0x06,
 }
 
-export interface JPADynamicsBlock {
+interface JPADynamicsBlock {
     flags: number;
-    volumeType: JPAVolumeType;
+    volumeType: VolumeType;
     emitterScl: vec3;
     emitterTrs: vec3;
     emitterDir: vec3;
@@ -73,6 +84,8 @@ export interface JPADynamicsBlock {
     airResistRndm: number;
     moment: number;
     momentRndm: number;
+    accel: number;
+    accelRndm: number;
     emitterRot: vec3;
     maxFrame: number;
     startFrame: number;
@@ -125,7 +138,7 @@ interface CommonShapeTypeFields {
     planeType: PlaneType;
 }
 
-export interface JPABaseShapeBlock {
+interface JPABaseShapeBlock {
     flags: number;
     shapeType: ShapeType;
     dirType: DirType;
@@ -165,15 +178,38 @@ export interface JPABaseShapeBlock {
     texAnmRndmMask: number;
 }
 
-export interface JPAExtraShapeBlock {
+const enum CalcIdxType {
+    Normal  = 0x00,
+    Repeat  = 0x01,
+    Reverse = 0x02,
+    Merge   = 0x03,
+    Random  = 0x04,
+}
+
+const enum CalcScaleAnmType {
+    Normal  = 0x00,
+    Repeat  = 0x01,
+    Reverse = 0x02,
+}
+
+const enum CalcAlphaWaveType {
+    None    = -1,
+    NrmSin  = 0x00,
+    AddSin  = 0x01,
+    MultSin = 0x02,
+}
+
+interface JPAExtraShapeBlock {
     flags: number;
     isEnableScale: boolean;
     isDiffXY: boolean;
+    isEnableScaleBySpeedX: boolean;
+    isEnableScaleBySpeedY: boolean;
     scaleAnmTypeX: CalcScaleAnmType;
     scaleAnmTypeY: CalcScaleAnmType;
     isEnableRotate: boolean;
     isEnableAlpha: boolean;
-    isEnableSinWave: boolean;
+    alphaWaveType: CalcAlphaWaveType;
     pivotX: number;
     pivotY: number;
     scaleInTiming: number;
@@ -196,9 +232,10 @@ export interface JPAExtraShapeBlock {
     alphaOutValue: number;
     alphaIncreaseRate: number;
     alphaDecreaseRate: number;
-    alphaWaveAmplitude: number;
+    alphaWaveParam1: number;
+    alphaWaveParam2: number;
+    alphaWaveParam3: number;
     alphaWaveRandom: number;
-    alphaWaveFrequency: number;
     rotateAngle: number;
     rotateAngleRandom: number;
     rotateSpeed: number;
@@ -210,7 +247,7 @@ const enum IndTextureMode {
     OFF, NORMAL, SUB,
 }
 
-export interface JPAExTexBlock {
+interface JPAExTexBlock {
     flags: number;
     indTextureMode: IndTextureMode;
     indTextureMtx: Float32Array;
@@ -219,7 +256,7 @@ export interface JPAExTexBlock {
     secondTextureIndex: number;
 }
 
-export interface JPAChildShapeBlock {
+interface JPAChildShapeBlock {
     flags: number;
     shapeType: ShapeType;
     dirType: DirType;
@@ -244,7 +281,7 @@ export interface JPAChildShapeBlock {
     rotateSpeed: number;
 }
 
-const enum JPAFieldType {
+const enum FieldType {
     Gravity    = 0x00,
     Air        = 0x01,
     Magnet     = 0x02,
@@ -256,16 +293,16 @@ const enum JPAFieldType {
     Spin       = 0x08,
 }
 
-const enum JPAFieldVelType {
-    Unk00 = 0x00,
-    Unk01 = 0x01,
-    Unk02 = 0x02,
+const enum FieldVelType {
+    FieldAccel = 0x00,
+    BaseVelocity = 0x01,
+    FieldVelocity = 0x02,
 }
 
 interface JPAFieldBlock {
     flags: number;
-    type: JPAFieldType;
-    velType: JPAFieldVelType;
+    type: FieldType;
+    velType: FieldVelType;
     pos: vec3;
     dir: vec3;
     fadeIn: number;
@@ -302,13 +339,13 @@ const enum JPAKeyType {
     Scale          = 0x0A,
 }
 
-export interface JPAKeyBlock {
+interface JPAKeyBlock {
     keyType: JPAKeyType;
     keyValues: Float32Array;
     isLoopEnable: boolean;
 }
 
-export interface JPAResource {
+interface JPAResource {
     bem1: JPADynamicsBlock;
     bsp1: JPABaseShapeBlock;
     esp1: JPAExtraShapeBlock | null;
@@ -347,20 +384,6 @@ const noIndTex = {
     indTexAddPrev: false,
     indTexUseOrigLOD: false,
 };
-
-const enum CalcIdxType {
-    Normal  = 0x00,
-    Repeat  = 0x01,
-    Reverse = 0x02,
-    Merge   = 0x03,
-    Random  = 0x04,
-}
-
-const enum CalcScaleAnmType {
-    Normal  = 0x00,
-    Repeat  = 0x01,
-    Reverse = 0x02,
-}
 
 function shapeTypeSupported(shapeType: ShapeType): boolean {
     switch (shapeType) {
@@ -1530,19 +1553,19 @@ export class JPABaseEmitter {
     private calcVolume(workData: JPAEmitterWorkData): void {
         const bem1 = this.resData.res.bem1;
 
-        if (bem1.volumeType === JPAVolumeType.Cube)
+        if (bem1.volumeType === VolumeType.Cube)
             this.calcVolumeCube(workData);
-        else if (bem1.volumeType === JPAVolumeType.Sphere)
+        else if (bem1.volumeType === VolumeType.Sphere)
             this.calcVolumeSphere(workData);
-        else if (bem1.volumeType === JPAVolumeType.Cylinder)
+        else if (bem1.volumeType === VolumeType.Cylinder)
             this.calcVolumeCylinder(workData);
-        else if (bem1.volumeType === JPAVolumeType.Torus)
+        else if (bem1.volumeType === VolumeType.Torus)
             this.calcVolumeTorus(workData);
-        else if (bem1.volumeType === JPAVolumeType.Point)
+        else if (bem1.volumeType === VolumeType.Point)
             this.calcVolumePoint(workData);
-        else if (bem1.volumeType === JPAVolumeType.Circle)
+        else if (bem1.volumeType === VolumeType.Circle)
             this.calcVolumeCircle(workData);
-        else if (bem1.volumeType === JPAVolumeType.Line)
+        else if (bem1.volumeType === VolumeType.Line)
             this.calcVolumeLine(workData);
         else
             throw "whoops";
@@ -1569,7 +1592,7 @@ export class JPABaseEmitter {
         if (!!(this.flags & BaseEmitterFlags.RATE_STEP_EMIT)) {
             if (!!(bem1.flags & 0x02)) {
                 // Fixed Interval
-                if (bem1.volumeType === JPAVolumeType.Sphere)
+                if (bem1.volumeType === VolumeType.Sphere)
                     this.emitCount = bem1.divNumber * bem1.divNumber * 4 + 2;
                 else
                     this.emitCount = bem1.divNumber;
@@ -2215,10 +2238,11 @@ export class JPABaseParticle {
     public localPosition = vec3.create();
     public globalPosition = vec3.create();
     public velocity = vec3.create();
-    public velType1 = vec3.create();
-    public velType0 = vec3.create();
-    public velType2 = vec3.create();
+    public baseVel = vec3.create();
+    public fieldAccel = vec3.create();
+    public fieldVel = vec3.create();
     public prevAxis = vec3.create();
+    public accel = vec3.create();
 
     public scale = vec2.create();
     public scaleOut: number;
@@ -2259,12 +2283,12 @@ export class JPABaseParticle {
         this.position[1] = this.globalPosition[1] + this.localPosition[1] * workData.globalScale[1];
         this.position[2] = this.globalPosition[2] + this.localPosition[2] * workData.globalScale[2];
 
-        vec3.set(this.velType1, 0, 0, 0);
+        vec3.set(this.baseVel, 0, 0, 0);
 
         if (baseEmitter.initialVelOmni !== 0)
-            normToLengthAndAdd(this.velType1, workData.velOmni, baseEmitter.initialVelOmni);
+            normToLengthAndAdd(this.baseVel, workData.velOmni, baseEmitter.initialVelOmni);
         if (baseEmitter.initialVelAxis !== 0)
-            normToLengthAndAdd(this.velType1, workData.velAxis, baseEmitter.initialVelAxis);
+            normToLengthAndAdd(this.baseVel, workData.velAxis, baseEmitter.initialVelAxis);
         if (baseEmitter.initialVelDir !== 0) {
             const randZ = next_rndm(baseEmitter.random) >>> 16;
             const randY = get_r_zp(baseEmitter.random);
@@ -2272,31 +2296,36 @@ export class JPABaseParticle {
             mat4.rotateZ(scratchMatrix, scratchMatrix, randZ / 0xFFFF * Math.PI);
             mat4.rotateY(scratchMatrix, scratchMatrix, baseEmitter.spread * randY * Math.PI);
             mat4.mul(scratchMatrix, workData.emitterDirMtx, scratchMatrix);
-            this.velType1[0] += baseEmitter.initialVelDir * scratchMatrix[8];
-            this.velType1[1] += baseEmitter.initialVelDir * scratchMatrix[9];
-            this.velType1[2] += baseEmitter.initialVelDir * scratchMatrix[10];
+            this.baseVel[0] += baseEmitter.initialVelDir * scratchMatrix[8];
+            this.baseVel[1] += baseEmitter.initialVelDir * scratchMatrix[9];
+            this.baseVel[2] += baseEmitter.initialVelDir * scratchMatrix[10];
         }
         if (baseEmitter.initialVelRndm !== 0) {
             const randZ = get_r_zh(baseEmitter.random);
             const randY = get_r_zh(baseEmitter.random);
             const randX = get_r_zh(baseEmitter.random);
-            this.velType1[0] += baseEmitter.initialVelRndm * randX;
-            this.velType1[1] += baseEmitter.initialVelRndm * randY;
-            this.velType1[2] += baseEmitter.initialVelRndm * randZ;
+            this.baseVel[0] += baseEmitter.initialVelRndm * randX;
+            this.baseVel[1] += baseEmitter.initialVelRndm * randY;
+            this.baseVel[2] += baseEmitter.initialVelRndm * randZ;
         }
         const velRatio = 1.0 + get_r_zp(baseEmitter.random) * bem1.initialVelRatio;
-        this.velType1[0] *= velRatio;
-        this.velType1[1] *= velRatio;
-        this.velType1[2] *= velRatio;
+        this.baseVel[0] *= velRatio;
+        this.baseVel[1] *= velRatio;
+        this.baseVel[2] *= velRatio;
 
         if (!!(bem1.flags & 0x04)) {
-            this.velType1[0] *= baseEmitter.emitterScl[0];
-            this.velType1[1] *= baseEmitter.emitterScl[1];
-            this.velType1[2] *= baseEmitter.emitterScl[2];
+            this.baseVel[0] *= baseEmitter.emitterScl[0];
+            this.baseVel[1] *= baseEmitter.emitterScl[1];
+            this.baseVel[2] *= baseEmitter.emitterScl[2];
         }
 
-        vec3.transformMat4(this.velType1, this.velType1, workData.emitterGlobalRot);
-        vec3.set(this.velType0, 0, 0, 0);
+        vec3.transformMat4(this.baseVel, this.baseVel, workData.emitterGlobalRot);
+
+        vec3.copy(this.accel, this.baseVel);
+        const accel = bem1.accel * (1.0 + (get_r_zp(baseEmitter.random) * bem1.accelRndm));
+        normToLength(this.accel, accel);
+
+        vec3.set(this.fieldAccel, 0, 0, 0);
 
         this.drag = 1.0;
         this.airResist = Math.min(bem1.airResist + (bem1.airResistRndm * get_r_zh(baseEmitter.random)), 1);
@@ -2317,7 +2346,7 @@ export class JPABaseParticle {
 
         this.prmColorAlphaAnm = 1.0;
 
-        if (esp1 !== null && esp1.isEnableSinWave) {
+        if (esp1 !== null && esp1.isEnableAlpha) {
             this.alphaWaveRandom = 1.0 + (get_r_zp(baseEmitter.random) * esp1.alphaWaveRandom);
         } else {
             this.alphaWaveRandom = 1.0;
@@ -2371,8 +2400,8 @@ export class JPABaseParticle {
         const rndZ = get_rndm_f(baseEmitter.random) - 0.5;
         vec3.set(scratchVec3a, rndX, rndY, rndZ);
         normToLength(scratchVec3a, velRndm);
-        vec3.scaleAndAdd(this.velType1, scratchVec3a, parent.velType1, ssp1.velInfRate);
-        vec3.scale(this.velType0, parent.velType2, ssp1.velInfRate);
+        vec3.scaleAndAdd(this.baseVel, scratchVec3a, parent.baseVel, ssp1.velInfRate);
+        vec3.scale(this.fieldAccel, parent.fieldVel, ssp1.velInfRate);
 
         this.moment = parent.moment;
 
@@ -2384,9 +2413,9 @@ export class JPABaseParticle {
             this.drag = 1.0;
         }
 
-        vec3.copy(this.velType2, this.velType0);
+        vec3.copy(this.fieldVel, this.fieldAccel);
 
-        vec3.add(this.velocity, this.velType1, this.velType2);
+        vec3.add(this.velocity, this.baseVel, this.fieldVel);
         const totalMomentum = this.moment * this.drag;
         vec3.scale(this.velocity, this.velocity, totalMomentum);
 
@@ -2462,12 +2491,12 @@ export class JPABaseParticle {
             vec3.scale(v, v, this.calcFieldFadeAffect(field, this.time));
         }
 
-        if (field.velType === JPAFieldVelType.Unk00)
-            vec3.add(this.velType0, this.velType0, v);
-        else if (field.velType === JPAFieldVelType.Unk01)
-            vec3.add(this.velType1, this.velType1, v);
-        else if (field.velType === JPAFieldVelType.Unk02)
-            vec3.add(this.velType2, this.velType2, v);
+        if (field.velType === FieldVelType.FieldAccel)
+            vec3.add(this.fieldAccel, this.fieldAccel, v);
+        else if (field.velType === FieldVelType.BaseVelocity)
+            vec3.add(this.baseVel, this.baseVel, v);
+        else if (field.velType === FieldVelType.FieldVelocity)
+            vec3.add(this.fieldVel, this.fieldVel, v);
     }
 
     private calcFieldGravity(field: JPAFieldBlock, workData: JPAEmitterWorkData): void {
@@ -2657,23 +2686,23 @@ export class JPABaseParticle {
         const fld1 = workData.baseEmitter.resData.res.fld1;
         for (let i = fld1.length - 1; i >= 0; i--) {
             const field = fld1[i];
-            if (field.type === JPAFieldType.Gravity)
+            if (field.type === FieldType.Gravity)
                 this.calcFieldGravity(field, workData);
-            else if (field.type === JPAFieldType.Air)
+            else if (field.type === FieldType.Air)
                 this.calcFieldAir(field, workData);
-            else if (field.type === JPAFieldType.Magnet)
+            else if (field.type === FieldType.Magnet)
                 this.calcFieldMagnet(field, workData);
-            else if (field.type === JPAFieldType.Newton)
+            else if (field.type === FieldType.Newton)
                 this.calcFieldNewton(field, workData);
-            else if (field.type === JPAFieldType.Vortex)
+            else if (field.type === FieldType.Vortex)
                 this.calcFieldVortex(field, workData);
-            else if (field.type === JPAFieldType.Random)
+            else if (field.type === FieldType.Random)
                 this.calcFieldRandom(field, workData);
-            else if (field.type === JPAFieldType.Drag)
+            else if (field.type === FieldType.Drag)
                 this.calcFieldDrag(field, workData);
-            else if (field.type === JPAFieldType.Convection)
+            else if (field.type === FieldType.Convection)
                 this.calcFieldConvection(field, workData);
-            else if (field.type === JPAFieldType.Spin)
+            else if (field.type === FieldType.Spin)
                 this.calcFieldSpin(field, workData);
             else
                 throw "whoops";
@@ -2688,7 +2717,7 @@ export class JPABaseParticle {
         const fld1 = workData.baseEmitter.resData.res.fld1;
         for (let i = fld1.length - 1; i >= 0; i--) {
             const field = fld1[i];
-            if (field.type === JPAFieldType.Drag)
+            if (field.type === FieldType.Drag)
                 this.initFieldDrag(field, workData);
         }
     }
@@ -2748,14 +2777,15 @@ export class JPABaseParticle {
         if (!!(this.flags & 0x20))
             vec3.copy(this.globalPosition, workData.emitterGlobalSRT);
 
-        vec3.set(this.velType2, 0, 0, 0);
+        vec3.set(this.fieldVel, 0, 0, 0);
+        vec3.add(this.baseVel, this.baseVel, this.accel);
 
         if (!(this.flags & 0x40))
             this.calcField(workData);
 
-        vec3.add(this.velType2, this.velType2, this.velType0);
-        vec3.scale(this.velType1, this.velType1, this.airResist);
-        vec3.add(this.velocity, this.velType1, this.velType2);
+        vec3.add(this.fieldVel, this.fieldVel, this.fieldAccel);
+        vec3.scale(this.baseVel, this.baseVel, this.airResist);
+        vec3.add(this.velocity, this.baseVel, this.fieldVel);
         const totalMomentum = this.moment * this.drag;
         vec3.scale(this.velocity, this.velocity, totalMomentum);
 
@@ -2789,16 +2819,22 @@ export class JPABaseParticle {
                     const scaleAnmX = this.calcScaleAnm(esp1.scaleAnmTypeX, esp1.scaleAnmMaxFrameX);
                     this.scale[0] = this.scaleOut * this.calcScaleFade(scaleAnmX, esp1, esp1.scaleInValueX, esp1.scaleIncreaseRateX, esp1.scaleDecreaseRateX);
 
+                    if (esp1.isEnableScaleBySpeedX)
+                        this.scale[0] *= 1 / vec3.length(this.velocity);
+
                     const hasScaleAnmY = esp1.isDiffXY;
                     if (hasScaleAnmY) {
                         const scaleAnmY = this.calcScaleAnm(esp1.scaleAnmTypeY, esp1.scaleAnmMaxFrameY);
                         this.scale[1] = this.scaleOut * this.calcScaleFade(scaleAnmY, esp1, esp1.scaleInValueY, esp1.scaleIncreaseRateY, esp1.scaleDecreaseRateY);
+
+                        if (esp1.isEnableScaleBySpeedY)
+                            this.scale[1] *= 1 / vec3.length(this.velocity);
                     } else {
                         this.scale[1] = this.scale[0];
                     }
                 }
 
-                if (esp1.isEnableAlpha || esp1.isEnableSinWave) {
+                if (esp1.isEnableAlpha || esp1.alphaWaveType !== CalcAlphaWaveType.None) {
                     let alpha: number;
 
                     if (this.time < esp1.alphaInTiming)
@@ -2808,10 +2844,25 @@ export class JPABaseParticle {
                     else
                         alpha = esp1.alphaBaseValue;
 
-                    if (esp1.isEnableSinWave) {
-                        const theta = this.alphaWaveRandom * this.tick * (1.0 - esp1.alphaWaveFrequency) * MathConstants.TAU / 4;
-                        const flickerMult = (0.5 * (Math.sin(theta) - 1.0) * esp1.alphaWaveAmplitude);
-                        this.prmColorAlphaAnm = alpha * (1.0 + flickerMult);
+                    const flickerWaveAmplitude = this.alphaWaveRandom * esp1.alphaWaveParam3;
+                    const flickerWaveTime = this.alphaWaveRandom * this.tick * MathConstants.TAU / 4;
+
+                    if (esp1.alphaWaveType === CalcAlphaWaveType.NrmSin) {
+                        const flickerWave = Math.sin(flickerWaveTime * (1.0 - esp1.alphaWaveParam1));
+                        const flickerMult = 1.0 + (flickerWaveAmplitude * (0.5 * (flickerWave - 1.0)));
+                        this.prmColorAlphaAnm = alpha * flickerMult;
+                    } else if (esp1.alphaWaveType === CalcAlphaWaveType.AddSin) {
+                        const flickerWave1 = Math.sin(flickerWaveTime * (1.0 - esp1.alphaWaveParam1));
+                        const flickerWave2 = Math.sin(flickerWaveTime * (1.0 - esp1.alphaWaveParam2));
+                        const flickerWave = flickerWave1 + flickerWave2;
+                        const flickerMult = 1.0 + (flickerWaveAmplitude * (0.5 * (flickerWave - 1.0)));
+                        this.prmColorAlphaAnm = alpha * flickerMult;
+                    } else if (esp1.alphaWaveType === CalcAlphaWaveType.MultSin) {
+                        const flickerWave1 = Math.sin(flickerWaveTime * (1.0 - esp1.alphaWaveParam1));
+                        const flickerWave2 = Math.sin(flickerWaveTime * (1.0 - esp1.alphaWaveParam2));
+                        const flickerMult1 = 1.0 + (flickerWaveAmplitude * (0.5 * (flickerWave1 - 1.0)));
+                        const flickerMult2 = 1.0 + (flickerWaveAmplitude * (0.5 * (flickerWave2 - 1.0)));
+                        this.prmColorAlphaAnm = alpha * flickerMult1 * flickerMult2;
                     } else {
                         this.prmColorAlphaAnm = alpha;
                     }
@@ -2853,15 +2904,15 @@ export class JPABaseParticle {
             if (!!(this.flags & 0x20))
                 vec3.copy(this.globalPosition, workData.emitterGlobalSRT);
 
-            this.velType1[1] -= ssp1.gravity;
-            vec3.set(this.velType2, 0, 0, 0);
+            this.baseVel[1] -= ssp1.gravity;
+            vec3.set(this.fieldVel, 0, 0, 0);
 
             if (!(this.flags & 0x40))
                 this.calcField(workData);
 
-            vec3.add(this.velType2, this.velType2, this.velType0);
-            vec3.scale(this.velType1, this.velType1, res.bem1.airResist);
-            vec3.add(this.velocity, this.velType1, this.velType2);
+            vec3.add(this.fieldVel, this.fieldVel, this.fieldAccel);
+            vec3.scale(this.baseVel, this.baseVel, res.bem1.airResist);
+            vec3.add(this.velocity, this.baseVel, this.fieldVel);
             const totalMomentum = this.moment * this.drag;
             vec3.scale(this.velocity, this.velocity, totalMomentum);
         }
@@ -3340,7 +3391,7 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             // Contains emitter settings and details about how the particle simulates.
 
             const flags = view.getUint32(dataBegin + 0x00);
-            const volumeType: JPAVolumeType = (flags >>> 8) & 0x07;
+            const volumeType: VolumeType = (flags >>> 8) & 0x07;
 
             const volumeSweep = view.getFloat32(dataBegin + 0x04);
             const volumeMinRad = view.getFloat32(dataBegin + 0x08);
@@ -3367,6 +3418,8 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
 
             const moment = view.getFloat32(dataBegin + 0x44);
             const momentRndm = view.getFloat32(dataBegin + 0x48);
+            const accel = view.getFloat32(dataBegin + 0x4C);
+            const accelRndm = view.getFloat32(dataBegin + 0x50);
 
             const emitterSclX = view.getFloat32(dataBegin + 0x54);
             const emitterSclY = view.getFloat32(dataBegin + 0x58);
@@ -3393,7 +3446,7 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
                 flags, volumeType, emitterScl, emitterTrs, emitterDir, emitterRot,
                 volumeSweep, volumeMinRad, volumeSize, divNumber, spread, rate, rateRndm, rateStep,
                 initialVelOmni, initialVelAxis, initialVelRndm, initialVelDir, initialVelRatio,
-                lifeTime, lifeTimeRndm, maxFrame, startFrame, airResist, airResistRndm, moment, momentRndm,
+                lifeTime, lifeTimeRndm, maxFrame, startFrame, airResist, airResistRndm, moment, momentRndm, accel, accelRndm,
             };
         } else if (fourcc === 'BSP1') {
             // J3DBaseShape
@@ -3485,9 +3538,13 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             const isDiffXY          = !!(flags & 0x00000200);
             const isEnableScaleAnmY = !!(flags & 0x00000400);
             const isEnableScaleAnmX = !!(flags & 0x00000800);
+            const isEnableScaleBySpeedY = !!(flags & 0x00001000);
+            const isEnableScaleBySpeedX = !!(flags & 0x00002000);
             const isEnableAlpha     = !!(flags & 0x00000001);
             const isEnableSinWave   = !!(flags & 0x00000002);
             const isEnableRotate    = !!(flags & 0x01000000);
+            const alphaWaveTypeFlag = ((flags >>> 0x02) & 0x03);
+            const alphaWaveType: CalcAlphaWaveType = isEnableSinWave ? alphaWaveTypeFlag : CalcAlphaWaveType.None;
             const anmTypeX = !!((flags >>> 0x12) & 0x01);
             const anmTypeY = !!((flags >>> 0x13) & 0x01);
             const scaleAnmTypeX = isEnableScaleAnmX ? anmTypeX ? CalcScaleAnmType.Reverse : CalcScaleAnmType.Repeat : CalcScaleAnmType.Normal;
@@ -3542,18 +3599,15 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             const rotateSpeedRandom = view.getFloat32(dataBegin + 0x58);
             const rotateDirection = view.getFloat32(dataBegin + 0x5C);
 
-            // TODO(jstpierre): non-sin alpha waves
-            const alphaWaveAmplitude = alphaWaveParam1;
-            const alphaWaveFrequency = alphaWaveParam2;
-
             esp1 = { flags,
-                isEnableScale, isDiffXY, scaleAnmTypeX, scaleAnmTypeY, isEnableAlpha, isEnableSinWave, isEnableRotate, pivotX, pivotY,
+                isEnableScale, isDiffXY, scaleAnmTypeX, scaleAnmTypeY, isEnableScaleBySpeedX, isEnableScaleBySpeedY,
+                isEnableAlpha, alphaWaveType, isEnableRotate, pivotX, pivotY,
                 scaleInTiming, scaleOutTiming, scaleInValueX, scaleOutValueX, scaleInValueY, scaleOutValueY,
                 scaleIncreaseRateX, scaleIncreaseRateY, scaleDecreaseRateX, scaleDecreaseRateY,
                 scaleOutRandom, scaleAnmMaxFrameX, scaleAnmMaxFrameY,
                 alphaInTiming, alphaOutTiming, alphaInValue, alphaBaseValue, alphaOutValue,
                 alphaIncreaseRate, alphaDecreaseRate,
-                alphaWaveAmplitude, alphaWaveRandom, alphaWaveFrequency,
+                alphaWaveParam1, alphaWaveParam2, alphaWaveParam3, alphaWaveRandom,
                 rotateAngle, rotateAngleRandom, rotateSpeed, rotateSpeedRandom, rotateDirection,
             };
         } else if (fourcc === 'SSP1') {
@@ -3622,7 +3676,7 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             const subTextureID = view.getUint8(dataBegin + 0x21);
             const secondTextureIndex = view.getUint8(dataBegin + 0x22);
 
-            etx1 = { flags, indTextureMtx, indTextureMode, indTextureID, subTextureID, secondTextureIndex };
+            etx1 = { flags, indTextureMode, indTextureMtx, indTextureID, subTextureID, secondTextureIndex };
         } else if (fourcc === 'KFA1') {
             // J3DKeyBlock
             // Contains curve animations for various emitter parameters.
@@ -3640,8 +3694,8 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             // Contains physics simulation fields that act on the particles.
 
             const flags = view.getUint32(dataBegin + 0x00);
-            const type: JPAFieldType = flags & 0x0F;
-            const velType: JPAFieldVelType = (flags >>> 8) & 0x03;
+            const type: FieldType = flags & 0x0F;
+            const velType: FieldVelType = (flags >>> 8) & 0x03;
 
             const mag = view.getFloat32(dataBegin + 0x04);
             const magRndm = view.getFloat32(dataBegin + 0x08);
@@ -3678,20 +3732,20 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             let innerSpeed = -1;
             let outerSpeed = -1;
 
-            if (type === JPAFieldType.Newton) {
+            if (type === FieldType.Newton) {
                 refDistanceSq = param1 * param1;
             }
 
-            if (type === JPAFieldType.Vortex) {
+            if (type === FieldType.Vortex) {
                 innerSpeed = mag;
                 outerSpeed = magRndm;
             }
     
-            if (type === JPAFieldType.Convection) {
+            if (type === FieldType.Convection) {
                 refDistanceSq = param2;
             }
 
-            if (type === JPAFieldType.Spin) {
+            if (type === FieldType.Spin) {
                 innerSpeed = mag;
             }
 
@@ -3752,7 +3806,7 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             // Contains emitter settings and details about how the particle simulates.
 
             const flags = view.getUint32(tableIdx + 0x08);
-            const volumeType: JPAVolumeType = (flags >>> 8) & 0x07;
+            const volumeType: VolumeType = (flags >>> 8) & 0x07;
 
             // 0x08 = unk
             // 0x0C = unk
@@ -3801,14 +3855,17 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             const airResistRndm = 0.0;
             // moment is always 1.0 in JPAC 2.0.
             const moment = 1.0;
+            // accel was removed in JPAC 2.0.
+            const accel = 0.0;
+            // accelRndm was removed in JPAC 2.0.
+            const accelRndm = 0.0;
 
             bem1 = {
                 flags, volumeType, emitterScl, emitterTrs, emitterDir, emitterRot,
                 volumeSweep, volumeMinRad, volumeSize, divNumber, spread, rate, rateRndm, rateStep,
                 initialVelOmni, initialVelAxis, initialVelRndm, initialVelDir, initialVelRatio,
-                lifeTime, lifeTimeRndm, maxFrame, startFrame, airResist, airResistRndm, moment, momentRndm,
+                lifeTime, lifeTimeRndm, maxFrame, startFrame, airResist, airResistRndm, moment, momentRndm, accel, accelRndm,
             };
-
         } else if (fourcc === 'BSP1') {
             // J3DBaseShape
             // Contains particle draw settings.
@@ -3913,9 +3970,14 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             const flags = view.getUint32(tableIdx + 0x08);
             const isEnableScale   = !!(flags & 0x00000001);
             const isDiffXY        = !!(flags & 0x00000002);
+            // isEnableScaleBySpeedX was removed in JPA 2.0.
+            const isEnableScaleBySpeedX = false;
+            // isEnableScaleBySpeedY was removed in JPA 2.0.
+            const isEnableScaleBySpeedY = false;
             const isEnableAlpha   = !!(flags & 0x00010000);
             const isEnableSinWave = !!(flags & 0x00020000);
             const isEnableRotate  = !!(flags & 0x01000000);
+            const alphaWaveType: CalcAlphaWaveType = isEnableSinWave ? CalcAlphaWaveType.NrmSin : CalcAlphaWaveType.None;
             const scaleAnmTypeX   = (flags >>> 0x08) & 0x03;
             const scaleAnmTypeY   = (flags >>> 0x0A) & 0x03;
             const pivotX          = (flags >>> 0x0C) & 0x03;
@@ -3961,6 +4023,11 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             const alphaWaveRandom = view.getFloat32(tableIdx + 0x44);
             const alphaWaveAmplitude = view.getFloat32(tableIdx + 0x48);
 
+            // Put in terms of JPA1 alpha wave parameters.
+            const alphaWaveParam1 = alphaWaveFrequency;
+            const alphaWaveParam2 = 0.0;
+            const alphaWaveParam3 = alphaWaveAmplitude;
+
             const rotateAngle = view.getFloat32(tableIdx + 0x4C) * MathConstants.TAU / 0xFFFF;
             const rotateAngleRandom = view.getFloat32(tableIdx + 0x50) * MathConstants.TAU / 0xFFFF;
             const rotateSpeed = view.getFloat32(tableIdx + 0x54) * MathConstants.TAU / 0xFFFF;
@@ -3968,13 +4035,14 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             const rotateDirection = view.getFloat32(tableIdx + 0x5C);
 
             esp1 = { flags,
-                isEnableScale, isDiffXY, scaleAnmTypeX, scaleAnmTypeY, isEnableAlpha, isEnableSinWave, isEnableRotate, pivotX, pivotY,
+                isEnableScale, isDiffXY, scaleAnmTypeX, scaleAnmTypeY, isEnableScaleBySpeedX, isEnableScaleBySpeedY,
+                isEnableAlpha, alphaWaveType, isEnableRotate, pivotX, pivotY,
                 scaleInTiming, scaleOutTiming, scaleInValueX, scaleOutValueX, scaleInValueY, scaleOutValueY,
                 scaleIncreaseRateX, scaleIncreaseRateY, scaleDecreaseRateX, scaleDecreaseRateY,
                 scaleOutRandom, scaleAnmMaxFrameX, scaleAnmMaxFrameY,
                 alphaInTiming, alphaOutTiming, alphaInValue, alphaBaseValue, alphaOutValue,
                 alphaIncreaseRate, alphaDecreaseRate,
-                alphaWaveAmplitude, alphaWaveRandom, alphaWaveFrequency,
+                alphaWaveParam1, alphaWaveParam2, alphaWaveParam3, alphaWaveRandom,
                 rotateAngle, rotateAngleRandom, rotateSpeed, rotateSpeedRandom, rotateDirection,
             };
         } else if (fourcc === 'SSP1') {
@@ -4056,8 +4124,8 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             // Contains physics simulation fields that act on the particles.
 
             const flags = view.getUint32(tableIdx + 0x08);
-            const type: JPAFieldType = flags & 0x0F;
-            const velType: JPAFieldVelType = (flags >>> 8) & 0x03;
+            const type: FieldType = flags & 0x0F;
+            const velType: FieldVelType = (flags >>> 8) & 0x03;
 
             const posX = view.getFloat32(tableIdx + 0x0C);
             const posY = view.getFloat32(tableIdx + 0x10);
@@ -4093,26 +4161,26 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             let innerSpeed = -1;
             let outerSpeed = -1;
 
-            if (type === JPAFieldType.Gravity || type === JPAFieldType.Air || type === JPAFieldType.Magnet || type === JPAFieldType.Newton || type === JPAFieldType.Random || type === JPAFieldType.Drag || type === JPAFieldType.Convection) {
+            if (type === FieldType.Gravity || type === FieldType.Air || type === FieldType.Magnet || type === FieldType.Newton || type === FieldType.Random || type === FieldType.Drag || type === FieldType.Convection) {
                 mag = param1;
             }
 
             // magRndm should be left at 0.0 in JPA 2.0
 
-            if (type === JPAFieldType.Newton) {
+            if (type === FieldType.Newton) {
                 refDistanceSq = param3 * param3;
             }
 
-            if (type === JPAFieldType.Vortex) {
+            if (type === FieldType.Vortex) {
                 innerSpeed = param1;
                 outerSpeed = param2;
             }
 
-            if (type === JPAFieldType.Convection) {
+            if (type === FieldType.Convection) {
                 refDistanceSq = param3;
             }
 
-            if (type === JPAFieldType.Spin) {
+            if (type === FieldType.Spin) {
                 innerSpeed = param1;
             }
 

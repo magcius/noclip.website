@@ -2,7 +2,7 @@
 import * as RARC from '../j3d/rarc';
 import * as JPA from '../j3d/JPA';
 
-import { createCsvParser, JMapInfoIter, getJMapInfoBool } from "./JMapInfo";
+import { createCsvParser, JMapInfoIter } from "./JMapInfo";
 import { SceneObjHolder } from "./Main";
 import { leftPad, assert, assertExists, fallback } from "../util";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
