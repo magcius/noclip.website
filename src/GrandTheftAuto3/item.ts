@@ -91,7 +91,7 @@ export interface ItemInstance {
     translation: vec3;
     scale: vec3;
     rotation: quat;
-    interior?: number;
+    interior: number;
     lod?: number;
     lodDistance?: number;
 }
@@ -112,6 +112,7 @@ function parseItemInstance(line: string[]): ItemInstance {
     let [id, model, interior, posX, posY, posZ, scaleX, scaleY, scaleZ, rotX, rotY, rotZ, rotW, lod] = [] as (string | undefined)[];
     if (line.length === 12) { // III
         [id, model, posX, posY, posZ, scaleX, scaleY, scaleZ, rotX, rotY, rotZ, rotW] = line;
+        interior = '0';
     } else if (line.length === 13) { // VC
         [id, model, interior, posX, posY, posZ, scaleX, scaleY, scaleZ, rotX, rotY, rotZ, rotW] = line;
     } else if (line.length === 11) { // SA
@@ -126,22 +127,49 @@ function parseItemInstance(line: string[]): ItemInstance {
         translation: vec3.fromValues(Number(posX), Number(posY), Number(posZ)),
         scale: vec3.fromValues(Number(scaleX), Number(scaleY), Number(scaleZ)),
         rotation: quat.fromValues(Number(rotX), Number(rotY), Number(rotZ), -Number(rotW)),
-        interior: (interior === undefined) ? undefined : Number(interior),
+        interior: Number(interior),
         lod: (lod === undefined) ? undefined : Number(lod),
+    };
+}
+
+export interface EntranceExit {
+    enterPos: vec3;
+    enterAngle: number;
+    exitPos: vec3;
+    exitAngle: number;
+    size: vec3;
+    interior: number;
+    name: string;
+}
+
+function parseEntranceExit([enterX, enterY, enterZ, enterAngle, sizeX, sizeY, sizeZ, exitX, exitY, exitZ, exitAngle,
+                            interior, flags, name, sky, numPeds, timeOn, timeOff]: string[]) : EntranceExit {
+    return {
+        enterPos: vec3.fromValues(Number(enterX), Number(enterY), Number(enterZ)),
+        enterAngle: Number(enterAngle),
+        exitPos: vec3.fromValues(Number(exitX), Number(exitY), Number(exitZ)),
+        exitAngle: Number(exitAngle),
+        size: vec3.fromValues(Number(sizeX), Number(sizeY), Number(sizeZ)),
+        interior: Number(interior),
+        name: name.replace(/"/g, ''),
     };
 }
 
 export interface ItemPlacement {
     id: string;
     instances: ItemInstance[];
+    interiors: EntranceExit[];
 }
 
 export function parseItemPlacement(id: string, text: string): ItemPlacement {
-    const instances = [] as ItemInstance[];
+    const instances: ItemInstance[] = [];
+    const interiors: EntranceExit[] = [];
     readItems(text, function(section, line) {
         if (section === "inst") instances.push(parseItemInstance(line));
+        if (section === "enex" && id.startsWith("interior/"))
+            interiors.push(parseEntranceExit(line));
     });
-    return { id, instances };
+    return { id, instances, interiors };
 }
 
 export function parseItemPlacementBinary(view: DataView) {

@@ -31,7 +31,7 @@ export function parseWaterPro(view: DataView, origin: vec4): ItemPlacement {
             });
         }
     }
-    return { id: 'water', instances };
+    return { id: 'water', instances, interiors: [] };
 }
 
 export const waterDefinition: ObjectDefinition = {
