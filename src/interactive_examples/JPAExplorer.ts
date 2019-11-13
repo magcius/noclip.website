@@ -241,7 +241,7 @@ export class Explorer implements SceneGfx {
         };
         panel.contents.appendChild(this.currentEffectIndexEntry.elem);
 
-        const resourceIdList = makeDataList(this.jpac.effects.map((r) => this.getResourceIdString(r.resourceId)));
+        const resourceIdList = makeDataList(this.jpac.effects.map((r, i) => this.getResourceIdString(i)));
         resourceIdList.id = 'ResourceIdList';
         panel.contents.appendChild(resourceIdList);
 
@@ -326,7 +326,7 @@ export class Explorer implements SceneGfx {
     private setUIToCurrent(): void {
         const resource = this.jpac.effects[this.currentEffectIndex];
         this.currentEffectIndexEntry.textfield.setValue('' + this.currentEffectIndex);
-        this.currentResourceIdEntry.textfield.setValue(this.getResourceIdString(resource.resourceId));
+        this.currentResourceIdEntry.textfield.setValue(this.getResourceIdString(this.currentEffectIndex));
         if (this.currentNameEntry !== null)
             this.currentNameEntry.textfield.setValue(this.effectNames![this.currentEffectIndex]);
     }

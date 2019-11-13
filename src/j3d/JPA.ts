@@ -36,14 +36,10 @@ import { makeTriangleIndexBuffer, GfxTopology, getTriangleIndexCountForTopologyI
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { TextureMapping } from "../TextureHolder";
 
+//#region JPA Engine
 export interface JPAResourceRaw {
     resourceId: number;
     data: ArrayBufferSlice;
-}
-
-const enum JPACVersion {
-    JPAC1_00 = 'JPAC1-00',
-    JPAC2_10 = 'JPAC2-10',
 }
 
 export interface JPAC {
@@ -52,7 +48,6 @@ export interface JPAC {
     textures: BTI[];
 }
 
-//#region JPA Engine
 const enum VolumeType {
     Cube     = 0x00,
     Sphere   = 0x01,
@@ -3321,6 +3316,12 @@ export class JPABaseParticle {
 }
 //#endregion
 
+//#region JPA Resource Parsing
+const enum JPACVersion {
+    JPAC1_00 = 'JPAC1-00',
+    JPAC2_10 = 'JPAC2-10',
+}
+
 const scratchColor = colorNew(0, 0, 0, 0);
 function makeColorTable(buffer: ArrayBufferSlice, entryCount: number, duration: number): Color[] {
     const view = buffer.createDataView();
@@ -3887,8 +3888,6 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             const globalScale2DY = view.getFloat32(tableIdx + 0x14);
             const globalScale2D = vec2.fromValues(globalScale2DX, globalScale2DY);
 
-            const texIdx = view.getUint8(tableIdx + 0x20);
-
             const blendModeFlags = view.getUint16(tableIdx + 0x18);
             const alphaCompareFlags = view.getUint8(tableIdx + 0x1A);
             const alphaRef0 = view.getUint8(tableIdx + 0x1B) / 0xFF;
@@ -3896,6 +3895,7 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             const zModeFlags = view.getUint8(tableIdx + 0x1D);
             const texFlags = view.getUint8(tableIdx + 0x1E);
             const texIdxAnimCount = view.getUint8(tableIdx + 0x1F);
+            const texIdx = view.getUint8(tableIdx + 0x20);
             const colorFlags = view.getUint8(tableIdx + 0x21);
 
             const colorPrm = colorNewFromRGBA8(view.getUint32(tableIdx + 0x26));
@@ -4318,3 +4318,4 @@ export function parse(buffer: ArrayBufferSlice): JPAC {
     else
         throw "whoops";
 }
+//#endregion
