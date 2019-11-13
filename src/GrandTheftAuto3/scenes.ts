@@ -1,20 +1,23 @@
 
-import * as Viewer from '../viewer';
 import * as rw from 'librw';
+import { SceneDesc, SceneGroup, SceneGfx } from '../viewer';
 import { inflate } from 'pako';
 import { GfxDevice, GfxFormat } from '../gfx/platform/GfxPlatform';
 import { DataFetcher, DataFetcherFlags } from '../DataFetcher';
 import { GTA3Renderer, SceneRenderer, DrawParams, Texture, TextureArray, MeshInstance, ModelCache, SkyRenderer, rwTexture, MeshFragData, AreaRenderer } from './render';
 import { SceneContext, Destroyable } from '../SceneBase';
 import { getTextDecoder, assert, assertExists } from '../util';
-import { parseItemPlacement, ItemPlacement, parseItemDefinition, ItemDefinition, ObjectDefinition, ItemInstance, parseZones, parseItemPlacementBinary, createItemInstance, ObjectFlags } from './item';
+import { parseItemPlacement, ItemPlacement, parseItemDefinition, ItemDefinition, ObjectDefinition, parseZones, parseItemPlacementBinary, createItemInstance, ObjectFlags, INTERIOR_EVERYWHERE } from './item';
 import { parseTimeCycle, ColorSet } from './time';
 import { parseWaterPro, waterMeshFragData, waterDefinition, parseWater } from './water';
-import { vec4 } from 'gl-matrix';
+import { vec4, mat4 } from 'gl-matrix';
 import { AABB } from '../Geometry';
 import { GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { colorNewCopy, OpaqueBlack } from '../Color';
+import { MathConstants } from '../MathHelpers';
+import { serializeMat4 } from '../Camera';
+import { btoa } from '../Ascii85';
 
 function UTF8ToString(array: Uint8Array) {
     let length = 0; while (length < array.length && array[length]) length++;
@@ -30,12 +33,11 @@ class AssetCache extends Map<string, ArrayBufferSlice> implements Destroyable {
 }
 
 const scratchColor = colorNewCopy(OpaqueBlack);
-export class GTA3SceneDesc implements Viewer.SceneDesc {
+export class GTA3SceneDesc implements SceneDesc {
     private static initialised = false;
     private assetCache: AssetCache;
 
-    protected pathBase: string;
-    protected complete: boolean;
+    protected pathBase = 'GrandTheftAuto3';
     protected water = {
         origin: vec4.fromValues(0, 0, 0, 2048),
         texture: 'water_old',
@@ -48,38 +50,44 @@ export class GTA3SceneDesc implements Viewer.SceneDesc {
             timecyc: 'data/timecyc.dat',
             water: 'data/waterpro.dat',
         },
-        ide: [] as string[],
-        ipl: [] as string[],
+        ide: [
+            'generic',
+            'temppart/temppart',
+            'comroad/comroad',
+            'indroads/indroads',
+            'making/making',
+            'subroads/subroads',
+            'comntop/comntop',
+            'comnbtm/comnbtm',
+            'comse/comse',
+            'comsw/comsw',
+            'industne/industne',
+            'industnw/industnw',
+            'industse/industse',
+            'industsw/industsw',
+            'landne/landne',
+            'landsw/landsw',
+        ],
+        ipl: [
+            'comntop/comNtop',
+            'comnbtm/comNbtm',
+            'comse/comSE',
+            'comsw/comSW',
+            'industne/industNE',
+            'industnw/industNW',
+            'industse/industSE',
+            'industsw/industSW',
+            'landne/landne',
+            'landsw/landsw',
+            'overview',
+            'props',
+        ],
     };
     protected ipl_stream: { [k: string]: number } = {};
     protected versionIMG = 1;
-    protected drawDistanceLimit = 100;
+    protected extraIMG: string[] = [];
 
-    constructor(public id: string, public name: string) {
-        this.pathBase = 'GrandTheftAuto3';
-        this.complete = (this.id === 'all');
-        if (this.complete) {
-            this.paths.ipl = [
-                "comntop/comNtop",
-                "comnbtm/comNbtm",
-                "comse/comSE",
-                "comsw/comSW",
-                "industne/industNE",
-                "industnw/industNW",
-                "industse/industSE",
-                "industsw/industSW",
-                "landne/landne",
-                "landsw/landsw",
-                "overview",
-                "props"
-            ];
-        } else {
-            this.paths.ipl = [this.id];
-        }
-        this.paths.ide = ['generic', 'temppart/temppart', 'comroad/comroad', 'indroads/indroads', 'making/making', 'subroads/subroads'];
-        for (const id of this.paths.ipl)
-            if (id.match(/\//)) this.paths.ide.push(id.toLowerCase());
-    }
+    constructor(public name: string, private interior = 0, public id = String(interior)) {}
 
     private static async initialise() {
         if (this.initialised)
@@ -91,11 +99,12 @@ export class GTA3SceneDesc implements Viewer.SceneDesc {
         this.initialised = true;
     }
 
-    private async fetchIMG(dataFetcher: DataFetcher): Promise<void> {
+    private async fetchIMG(dataFetcher: DataFetcher, basename = 'gta3', compressed = true): Promise<void> {
         if (this.assetCache.primed) return;
         const v1 = (this.versionIMG === 1);
-        const bufferIMG = await this.fetchUncompressedIMG(dataFetcher);
-        const bufferDIR = v1 ? await this.fetch(dataFetcher, 'models/gta3.dir') : bufferIMG;
+        const bufferIMG = compressed ? await this.fetchGZ(dataFetcher, `models/${basename}.imgz`)
+                                       : await this.fetch(dataFetcher, `models/${basename}.img`);
+        const bufferDIR = v1 ? await this.fetch(dataFetcher, `models/${basename}.dir`) : bufferIMG;
         const view = bufferDIR!.createDataView();
         const start = v1 ? 0 : 8;
         const dirLength = v1 ? view.byteLength : 32 * view.getUint32(4, true);
@@ -104,13 +113,14 @@ export class GTA3SceneDesc implements Viewer.SceneDesc {
             const size = v1 ? view.getUint32(i + 4, true) : view.getUint16(i + 4, true);
             const name = UTF8ToString(bufferDIR!.subarray(i + 8, 24).createTypedArray(Uint8Array)).toLowerCase();
             const data = bufferIMG!.subarray(2048 * offset, 2048 * size);
-            this.assetCache.set(`${this.pathBase}/models/gta3/${name}`, data);
+            const path = `${this.pathBase}/models/gta3/${name}`;
+            if (this.assetCache.has(path)) console.warn('Duplicate', path);
+            this.assetCache.set(path, data);
         }
-        this.assetCache.primed = true;
     }
 
-    private async fetchUncompressedIMG(dataFetcher: DataFetcher): Promise<ArrayBufferSlice | null> {
-        const gz = assertExists(await this.fetch(dataFetcher, 'models/gta3.imgz', false));
+    private async fetchGZ(dataFetcher: DataFetcher, path: string): Promise<ArrayBufferSlice> {
+        const gz = assertExists(await this.fetch(dataFetcher, path, false));
         const bytes = inflate(gz.createTypedArray(Uint8Array));
         return new ArrayBufferSlice(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     }
@@ -168,7 +178,7 @@ export class GTA3SceneDesc implements Viewer.SceneDesc {
         const buffer = await this.fetch(dataFetcher, this.paths.dat.water);
         if (this.paths.dat.water.endsWith('water.dat')) {
             const text = getTextDecoder('utf8')!.decode(buffer!.createDataView());
-            return [{ id: 'water', instances: [createItemInstance('water')] }, parseWater(text, this.water.texture)];
+            return [{ id: 'water', instances: [createItemInstance('water')], interiors: [] }, parseWater(text, this.water.texture)];
         } else {
             return [parseWaterPro(buffer!.createDataView(), this.water.origin), [waterMeshFragData(this.water.texture)]];
         }
@@ -215,11 +225,26 @@ export class GTA3SceneDesc implements Viewer.SceneDesc {
         rw.UVAnimDictionary.current = null;
     }
 
-    protected filter(item: ItemInstance) {
-        return true;
+    private generateSaveStates(ipls: ItemPlacement[]): { [k: string]: string } {
+        const worldMatrix = mat4.create();
+        const saveStateTmp = new Uint8Array(512);
+        const saveStateView = new DataView(saveStateTmp.buffer);
+        const saveStates = new Map<string, string>();
+        for (const ipl of ipls) for (const enex of ipl.interiors) {
+            if (enex.interior === 0 || enex.name === 'changer') continue;
+            mat4.identity(worldMatrix);
+            const eyeHeight = 1.6; // metres
+            mat4.translate(worldMatrix, worldMatrix, [enex.exitPos[1], enex.exitPos[2] + eyeHeight, enex.exitPos[0]]);
+            mat4.rotateY(worldMatrix, worldMatrix, MathConstants.DEG_TO_RAD * (enex.exitAngle - 90));
+            const len = 1 + serializeMat4(saveStateView, 1, worldMatrix);
+            const saveState = 'A' + btoa(saveStateTmp, len);
+            const key = `SaveState_${this.pathBase}/${enex.interior}/${enex.name}/1`;
+            saveStates.set(key, saveState);
+        }
+        return Object.assign({}, ...[...saveStates.entries()].sort().map(([k, v]) => ({[k]: v})));
     }
 
-    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         await GTA3SceneDesc.initialise();
         const dataFetcher = context.dataFetcher;
         const objects = new Map<string, ObjectDefinition>();
@@ -227,8 +252,10 @@ export class GTA3SceneDesc implements Viewer.SceneDesc {
         const lodnames = new Set<string>();
 
         this.assetCache = await context.dataShare.ensureObject<AssetCache>(this.pathBase, async () => new AssetCache());
-        if (this.complete)
-            await this.fetchIMG(dataFetcher);
+        await this.fetchIMG(dataFetcher);
+        for (const img of this.extraIMG)
+            await this.fetchIMG(dataFetcher, img, false);
+        this.assetCache.primed = true;
 
         const ides = await Promise.all(this.paths.ide.map(id => this.fetchIDE(dataFetcher, id)));
         for (const ide of ides) for (const obj of ide.objects) {
@@ -260,13 +287,15 @@ export class GTA3SceneDesc implements Viewer.SceneDesc {
             }
         }
 
+        // uncomment to regenerate default save states
+        //console.log(this.generateSaveStates(ipls));
+
         const renderer = new GTA3Renderer(device, colorSets, this.weatherTypes, this.weatherPeriods, this.water.origin);
-        const loadedDFF = new Map<string, Promise<void>>();
         const modelCache = new ModelCache();
-        const texturesUsed = new Map<string, Set<string>>();
+        const texturesUsed = new Set<string>();
+        const txdsUsed = new Set<string>();
         const areas = new Map<string, Map<DrawParams, MeshInstance[]>>();
 
-        loadedDFF.set('water', (async () => { })());
         modelCache.meshData.set('water', waterMesh);
 
         for (const ipl of ipls) for (const item of ipl.instances) {
@@ -284,11 +313,12 @@ export class GTA3SceneDesc implements Viewer.SceneDesc {
             if (item.lod === undefined) {
                 if ((name.startsWith('lod') && name !== 'lodistancoast01') || name.startsWith('islandlod')) continue; // ignore LOD objects
             }
-            if (!this.filter(item)) continue;
+            const interior = item.interior! & 0xFF;
+            const visible = (interior === this.interior || interior === INTERIOR_EVERYWHERE);
+            if (!visible) continue;
 
-            if (!loadedDFF.has(obj.modelName))
-                loadedDFF.set(obj.modelName, this.fetchDFF(dataFetcher, obj.modelName, clump => modelCache.addModel(clump, obj)));
-            await loadedDFF.get(obj.modelName)!;
+            if (!modelCache.meshData.has(obj.modelName))
+                await this.fetchDFF(dataFetcher, obj.modelName, clump => modelCache.addModel(clump, obj));
 
             const model = modelCache.meshData.get(name);
             if (model === undefined) {
@@ -299,9 +329,8 @@ export class GTA3SceneDesc implements Viewer.SceneDesc {
             let transparent = false;
             for (const frag of model) {
                 if (frag.texName === undefined) continue;
-                const txdName = frag.texName.split('/')[0];
-                if (!texturesUsed.has(txdName)) texturesUsed.set(txdName, new Set());
-                texturesUsed.get(txdName)!.add(frag.texName);
+                texturesUsed.add(frag.texName);
+                txdsUsed.add(frag.texName.split('/')[0]);
                 for (let i = 0; i < frag.vertices; i++) {
                     frag.fillColor(scratchColor, i);
                     if (scratchColor.a < 1) {
@@ -311,6 +340,7 @@ export class GTA3SceneDesc implements Viewer.SceneDesc {
                 }
             }
 
+            const drawDistanceLimit = 100;
             let params = new DrawParams();
             if (!(obj.flags & ObjectFlags.IGNORE_DRAW_DISTANCE))
                 params.maxDistance = Math.ceil(obj.drawDistance / 50) * 50;
@@ -325,7 +355,7 @@ export class GTA3SceneDesc implements Viewer.SceneDesc {
                 params.renderLayer = GfxRendererLayer.TRANSLUCENT;
             if (item.lodDistance !== undefined)
                 params.minDistance = Math.ceil(item.lodDistance / 50) * 50;
-            if ((item.lod === undefined && (haslod || params.maxDistance > this.drawDistanceLimit)) || item.lodDistance !== undefined || name.startsWith('lod'))
+            if (this.interior !== 0 || (item.lod === undefined && (haslod || params.maxDistance >= drawDistanceLimit)) || item.lodDistance !== undefined || name.startsWith('lod'))
                 params.maxDistance = Infinity;
             params = params.intern();
 
@@ -339,28 +369,30 @@ export class GTA3SceneDesc implements Viewer.SceneDesc {
 
         const textureSets = new Map<string, Set<Texture>>();
         const textureArrays: TextureArray[] = [];
-        const texturesMissing = new Set<string>();
-        for (const [txdName, texNames] of texturesUsed) {
-            await this.fetchTXD(device, dataFetcher, txdName, texture => {
-                const texName = texture.name;
-                if (!texNames.has(texName)) return;
-                texNames.delete(texName);
-
-                const key = [texture.width, texture.height, texture.pixelFormat, texture.transparent, texture.levels.length].join();
-                if (!textureSets.has(key)) textureSets.set(key, new Set());
-                const textureSet = textureSets.get(key)!;
-                textureSet.add(texture);
-                if (textureSet.size >= 0x100) {
-                    textureArrays.push(new TextureArray(device, Array.from(textureSet)));
-                    textureSet.clear();
+        function handleTexture(texture: Texture) {
+            const key = [texture.width, texture.height, texture.pixelFormat, texture.transparent, texture.levels.length].join();
+            if (!textureSets.has(key)) textureSets.set(key, new Set());
+            const textureSet = textureSets.get(key)!;
+            textureSet.add(texture);
+            if (textureSet.size >= 0x100) {
+                textureArrays.push(new TextureArray(device, Array.from(textureSet)));
+                textureSet.clear();
+            }
+        }
+        for (const txd of txdsUsed) {
+            await this.fetchTXD(device, dataFetcher, txd, texture => {
+                if (texturesUsed.has(texture.name)) {
+                    texturesUsed.delete(texture.name);
+                    handleTexture(texture);
                 }
             });
-            for (const texName of texNames) texturesMissing.add(texName);
         }
         for (const textureSet of textureSets.values()) {
             textureArrays.push(new TextureArray(device, Array.from(textureSet)));
+            textureSet.clear();
         }
 
+        const texturesMissing = texturesUsed;
         if (texturesMissing.size > 0)
             console.warn('Missing textures', Array.from(texturesMissing).sort());
 
@@ -394,23 +426,8 @@ export class GTA3SceneDesc implements Viewer.SceneDesc {
     }
 }
 
-const id = `GrandTheftAuto3`;
-const name = "Grand Theft Auto III";
-const sceneDescs = [
-    new GTA3SceneDesc("all", "Liberty City"),
-    "Portland",
-    new GTA3SceneDesc("industne/industNE", "North-east"),
-    new GTA3SceneDesc("industnw/industNW", "North-west"),
-    new GTA3SceneDesc("industse/industSE", "South-east"),
-    new GTA3SceneDesc("industsw/industSW", "South-west"),
-    "Staunton Island",
-    new GTA3SceneDesc("comntop/comNtop", "North"),
-    new GTA3SceneDesc("comnbtm/comNbtm", "Central"),
-    new GTA3SceneDesc("comse/comSE", "South-east"),
-    new GTA3SceneDesc("comsw/comSW", "South-west"),
-    "Shoreside Vale",
-    new GTA3SceneDesc("landne/landne", "North-east"),
-    new GTA3SceneDesc("landsw/landsw", "South-west"),
-];
-
-export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
+export const sceneGroup: SceneGroup = {
+    id: 'GrandTheftAuto3',
+    name: 'Grand Theft Auto III',
+    sceneDescs: [ new GTA3SceneDesc('Liberty City') ]
+};

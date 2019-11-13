@@ -1,14 +1,12 @@
 
 import { GTA3SceneDesc } from './scenes';
 import { SceneGroup } from '../viewer';
-import { ItemInstance, ObjectDefinition, INTERIOR_EVERYWHERE } from './item';
 import { vec4 } from 'gl-matrix';
 
 class GTAVCSceneDesc extends GTA3SceneDesc {
-    constructor(private interior: number, name: string) {
-        super(String(interior), name);
+    constructor(name: string, interior = 0, suffix = '') {
+        super(name, interior, `${interior}${suffix}`);
         this.pathBase = 'GrandTheftAutoViceCity';
-        this.complete = true;
         this.water = {
             origin: vec4.fromValues(-400, 0, 6, 2048),
             texture: 'waterclear256',
@@ -87,33 +85,32 @@ class GTAVCSceneDesc extends GTA3SceneDesc {
             ],
         };
     }
-
-    protected filter(item: ItemInstance) {
-        return item.interior === this.interior || item.interior === INTERIOR_EVERYWHERE;
-    }
 }
 
 export const sceneGroup: SceneGroup = {
     id: 'GrandTheftAutoViceCity',
     name: 'Grand Theft Auto: Vice City',
     sceneDescs: [
-        new GTAVCSceneDesc(0, 'Vice City'),
-        new GTAVCSceneDesc(1, 'Ocean View Hotel'),
-        new GTAVCSceneDesc(2, 'Vercetti Estate'),
-        new GTAVCSceneDesc(3, 'El Banco Corrupto Grande'),
-        new GTAVCSceneDesc(4, 'North Point Mall'),
-        new GTAVCSceneDesc(5, 'Pole Position Club'),
-        new GTAVCSceneDesc(6, 'Ken Rosenburg\'s office'),
-        new GTAVCSceneDesc(7, 'Cafe Robina'),
-        new GTAVCSceneDesc(8, 'Love Fist concert hall'),
-        new GTAVCSceneDesc(9, 'Love Fist recording studio'),
-        new GTAVCSceneDesc(10, 'Shooting Range'),
-        new GTAVCSceneDesc(11, 'Apartment 3C, Greasy Choppers'),
-        new GTAVCSceneDesc(12, 'VCPD HQ, Auntie Poulet\'s'),
-        new GTAVCSceneDesc(14, 'Dirt Ring'),
-        new GTAVCSceneDesc(15, 'Bloodring'),
-        new GTAVCSceneDesc(16, 'Hotring'),
-        new GTAVCSceneDesc(17, 'The Malibu Club'),
-        new GTAVCSceneDesc(18, 'Print Works'),
+        new GTAVCSceneDesc('Vice City'),
+        'Interiors',
+        new GTAVCSceneDesc('Ocean View Hotel', 1),
+        new GTAVCSceneDesc('Vercetti Estate', 2),
+        new GTAVCSceneDesc('El Banco Corrupto Grande', 3),
+        new GTAVCSceneDesc('North Point Mall', 4),
+        new GTAVCSceneDesc('Pole Position Club', 5),
+        new GTAVCSceneDesc('Ken Rosenburg\'s office', 6),
+        new GTAVCSceneDesc('Cafe Robina', 7),
+        new GTAVCSceneDesc('Love Fist concert hall', 8),
+        new GTAVCSceneDesc('Love Fist recording studio', 9),
+        new GTAVCSceneDesc('Shooting Range', 10),
+        new GTAVCSceneDesc('Apartment 3C', 11, 'a'),
+        new GTAVCSceneDesc('Greasy Choppers', 11, 'b'),
+        new GTAVCSceneDesc('VCPD HQ', 12, 'a'),
+        new GTAVCSceneDesc('Auntie Poulet\'s', 12, 'b'),
+        new GTAVCSceneDesc('Dirt Ring', 14),
+        new GTAVCSceneDesc('Bloodring', 15),
+        new GTAVCSceneDesc('Hotring', 16),
+        new GTAVCSceneDesc('The Malibu Club', 17),
+        new GTAVCSceneDesc('Print Works', 18),
     ]
 };
