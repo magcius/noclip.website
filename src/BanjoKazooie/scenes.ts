@@ -19,6 +19,7 @@ import { assert, hexzero, assertExists, hexdump } from '../util';
 import { DataFetcher } from '../DataFetcher';
 import { MathConstants } from '../MathHelpers';
 import { DrawCall, OtherModeH_Layout, OtherModeH_CycleType, CCMUX, ACMUX, OtherModeL_Layout } from './f3dex';
+import { TextFilt } from '../Common/N64/Image';
 
 const pathBase = `BanjoKazooie`;
 
@@ -260,7 +261,9 @@ class ObjectData {
 
         // TODO: handle this nicely
         const drawCall = new DrawCall();
-        drawCall.DP_OtherModeH = (OtherModeH_CycleType.G_CYC_1CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE);
+        drawCall.DP_OtherModeH =
+            (OtherModeH_CycleType.G_CYC_1CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE) |
+            (TextFilt.G_TF_BILERP << OtherModeH_Layout.G_MDSFT_TEXTFILT);
         drawCall.DP_OtherModeL = (1 << OtherModeL_Layout.Z_CMP) | (1 << OtherModeL_Layout.Z_UPD) | 1 /* alpha test */;
         drawCall.DP_Combine = {
             c0: { a: CCMUX.TEXEL0, b: CCMUX.ADD_ZERO, c: CCMUX.PRIMITIVE, d: CCMUX.ADD_ZERO },
