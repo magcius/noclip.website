@@ -374,7 +374,7 @@ class MaterialInstance {
             const lightSet = lightSetting.lightSet[this.materialData.material.lightSetIdx];
             if (lightSet !== undefined) {
                 lightSet.calcLights(materialParams.u_Lights, lightSetting, camera.viewMatrix);
-                lightSet.calcAmbColorMult(materialParams.u_Color[ColorKind.AMB0], lightSetting);
+                lightSet.calcAmbColorCopy(materialParams.u_Color[ColorKind.AMB0], lightSetting);
                 if (lightSet.calcLightSetLitMask(this.materialHelper.material.lightChannels, lightSetting)) {
                     this.materialHelper.material.hasLightsBlock = undefined;
                     autoOptimizeMaterial(this.materialHelper.material);

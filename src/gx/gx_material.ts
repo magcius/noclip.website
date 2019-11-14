@@ -12,6 +12,7 @@ import { Camera } from '../Camera';
 import { assert } from '../util';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
 import { AttachmentStateSimple, setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
+import { MathConstants } from '../MathHelpers';
 
 // TODO(jstpierre): Move somewhere better...
 export const EFB_WIDTH = 640;
@@ -96,6 +97,45 @@ export function lightSetWorldDirection(light: Light, camera: Camera, x: number, 
     // TODO(jstpierre): In theory, we should multiply by the inverse-transpose of the view matrix.
     // However, I don't want to calculate that right now, and it shouldn't matter too much...
     return lightSetWorldDirectionNormalMatrix(light, camera.viewMatrix, x, y, z, v);
+}
+
+export function lightSetSpot(light: Light, cutoff: number, spotFunc: GX.SpotFunction): void {
+    if (cutoff <= 0 || cutoff >= 90)
+        spotFunc = GX.SpotFunction.OFF;
+
+    const cr = Math.cos(cutoff * MathConstants.DEG_TO_RAD);
+    if (spotFunc === GX.SpotFunction.FLAT) {
+        vec3.set(light.CosAtten, -1000.0 * cr, 1000.0, 0.0);
+    } else if (spotFunc === GX.SpotFunction.COS) {
+        vec3.set(light.CosAtten, -cr / (1.0 - cr), 1.0 / (1.0 - cr), 0.0);
+    } else if (spotFunc === GX.SpotFunction.COS2) {
+        vec3.set(light.CosAtten, 0.0, -cr / (1.0 - cr), 1.0 / (1.0 - cr));
+    } else if (spotFunc === GX.SpotFunction.SHARP) {
+        const d = (1.0 - cr) * (1.0 - cr);
+        vec3.set(light.CosAtten, cr * (cr - 2.0) / d, 2.0 / d, -1.0 / d);
+    } else if (spotFunc === GX.SpotFunction.RING1) {
+        const d = (1.0 - cr) * (1.0 - cr);
+        vec3.set(light.CosAtten, -4.0 * cr / d, 4.0 * (1.0 + cr) / d, -4.0 / d);
+    } else if (spotFunc === GX.SpotFunction.RING2) {
+        const d = (1.0 - cr) * (1.0 - cr);
+        vec3.set(light.CosAtten, 1.0 - 2.0 * cr * cr / d, 4.0 * cr / d, -2.0 / d);
+    } else if (spotFunc === GX.SpotFunction.OFF) {
+        vec3.set(light.CosAtten, 1.0, 0.0, 0.0);
+    }
+}
+
+export function lightSetDistAttn(light: Light, refDist: number, refBrightness: number, distFunc: GX.DistAttnFunction): void {
+    if (refDist < 0 || refBrightness <= 0 || refBrightness >= 1)
+        distFunc = GX.DistAttnFunction.OFF;
+
+    if (distFunc === GX.DistAttnFunction.GENTLE)
+        vec3.set(light.DistAtten, 1.0, (1.0 - refBrightness) / (refBrightness * refDist), 0.0);
+    else if (distFunc === GX.DistAttnFunction.MEDIUM)
+        vec3.set(light.DistAtten, 1.0, 0.5 * (1.0 - refBrightness) / (refBrightness * refDist), 0.5 * (1.0 - refBrightness) / (refBrightness * refDist * refDist));
+    else if (distFunc === GX.DistAttnFunction.STEEP)
+        vec3.set(light.DistAtten, 1.0, 0.0, (1.0 - refBrightness) / (refBrightness * refDist * refDist));
+    else if (distFunc === GX.DistAttnFunction.OFF)
+        vec3.set(light.DistAtten, 1.0, 0.0, 0.0);
 }
 
 export interface ColorChannelControl {

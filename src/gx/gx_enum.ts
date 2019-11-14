@@ -646,6 +646,13 @@ export const enum AttenuationFunction {
     NONE,
 }
 
+export const enum DistAttnFunction {
+    OFF = 0x00,
+    GENTLE,
+    MEDIUM,
+    STEEP,
+}
+
 export const enum SpotFunction {
     OFF = 0x00,
     FLAT,

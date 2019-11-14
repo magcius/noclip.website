@@ -16,6 +16,8 @@ import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from '../gx/gx_r
 import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
 import { computeModelMatrixSRT, MathConstants } from '../MathHelpers';
 import { SceneContext } from '../SceneBase';
+import { EggLightManager, parseBLIGHT } from './Egg';
+import { GfxRendererLayer } from '../gfx/render/GfxRenderer';
 
 class ModelCache {
     public rresCache = new Map<string, BRRES.RRES>();
@@ -47,6 +49,7 @@ class MarioKartWiiRenderer extends BasicGXRendererHelper {
     public textureHolder = new RRESTextureHolder();
     public animationController = new AnimationController();
 
+    public eggLightManager: EggLightManager | null = null;
     public modelInstances: MDL0ModelInstance[] = [];
     public modelCache = new ModelCache();
 
@@ -74,6 +77,10 @@ class MarioKartWiiRenderer extends BasicGXRendererHelper {
 
     protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         this.animationController.setTimeInMilliseconds(viewerInput.time);
+
+        if (this.eggLightManager !== null)
+            for (let i = 0; i < this.modelInstances.length; i++)
+                this.modelInstances[i].bindLightSetting(this.eggLightManager.lightSetting);
 
         const template = this.renderHelper.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput);
@@ -175,6 +182,7 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
         const modelCache = renderer.modelCache;
         const mdl0Model = assertExists(modelCache.modelCache.get(objectName));
         const mdl0Instance = new MDL0ModelInstance(renderer.textureHolder, mdl0Model, objectName);
+        mdl0Instance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 1);
         mdl0Instance.bindRRESAnimations(renderer.animationController, rres, null);
         renderer.modelInstances.push(mdl0Instance);
         return mdl0Instance;
@@ -679,14 +687,23 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
 
         const courseRRES = modelCache.ensureRRES(device, renderer, arc, `./course_model.brres`);
         const courseInstance = this.spawnObjectFromRRES(device, renderer, courseRRES, 'course');
+        courseInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE);
         mat4.copy(courseInstance.modelMatrix, posMtx);
 
         const skyboxRRES = modelCache.ensureRRES(device, renderer, arc, `./vrcorn_model.brres`);
         const skyboxInstance = this.spawnObjectFromRRES(device, renderer, skyboxRRES, 'vrcorn');
+        skyboxInstance.setSortKeyLayer(GfxRendererLayer.BACKGROUND);
         mat4.copy(skyboxInstance.modelMatrix, posMtx);
 
         for (let i = 0; i < kmp.gobj.length; i++)
             this.spawnObjectFromKMP(device, renderer, arc, kmp.gobj[i]);
+
+        const blightData = arc.findFileData(`./posteffect/posteffect.blight`);
+        if (blightData !== null) {
+            const blightRes = parseBLIGHT(blightData);
+            const eggLightManager = new EggLightManager(blightRes);
+            renderer.eggLightManager = eggLightManager;
+        }
 
         return renderer;
     }

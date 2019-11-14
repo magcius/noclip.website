@@ -17,7 +17,7 @@ import { cv, Graph } from '../DebugJunk';
 import { GXTextureHolder } from '../gx/gx_render';
 import { getFormatCompFlagsComponentCount } from '../gfx/platform/GfxPlatformFormat';
 import { getPointHermite } from '../Spline';
-import { colorToRGBA8, colorFromRGBA8, colorNewCopy, White, Color, colorMult, colorNew } from '../Color';
+import { colorToRGBA8, colorFromRGBA8, colorNewCopy, White, Color, colorNew, colorCopy } from '../Color';
 import { computeModelMatrixSRT, MathConstants, lerp } from '../MathHelpers';
 import BitMap from '../BitMap';
 import { autoOptimizeMaterial } from '../gx/gx_render';
@@ -2857,7 +2857,7 @@ export interface SCN0_Light {
     aimY: FloatAnimationTrack;
     aimZ: FloatAnimationTrack;
 
-    distFunc: GX.AttenuationFunction;
+    distFunc: GX.DistAttnFunction;
     refDistance: FloatAnimationTrack;
     refBrightness: FloatAnimationTrack;
 
@@ -2917,7 +2917,7 @@ function parseSCN0_Light(buffer: ArrayBufferSlice, version: number, numKeyframes
     const aimY = parseAnimationTrackF96OrConst(buffer.slice(0x38), !!(flags & Flags.AIMY_CONSTANT));
     const aimZ = parseAnimationTrackF96OrConst(buffer.slice(0x3C), !!(flags & Flags.AIMZ_CONSTANT));
 
-    const distFunc: GX.AttenuationFunction = view.getUint32(0x40);
+    const distFunc: GX.DistAttnFunction = view.getUint32(0x40);
     const refDistance = parseAnimationTrackF96OrConst(buffer.slice(0x44), !!(flags & Flags.REFDISTANCE_CONSTANT));
     const refBrightness = parseAnimationTrackF96OrConst(buffer.slice(0x48), !!(flags & Flags.REFBRIGHTNESS_CONSTANT));
 
@@ -3345,6 +3345,54 @@ export class LightObj {
     public flags: LightObjFlags = 0;
     public light = new GX_Material.Light();
     public space: LightObjSpace = LightObjSpace.WORLD_SPACE;
+
+    public isEnabled(): boolean {
+        return !!(this.flags & LightObjFlags.ENABLE);
+    }
+
+    public enable(): void {
+        this.flags |= LightObjFlags.ENABLE;
+    }
+
+    public disable(): void {
+        this.flags &= LightObjFlags.ENABLE;
+    }
+
+    public enableColor(): void {
+        this.flags |= LightObjFlags.HAS_COLOR;
+    }
+
+    public disableColor(): void {
+        this.flags &= LightObjFlags.HAS_COLOR;
+    }
+
+    public enableAlpha(): void {
+        this.flags |= LightObjFlags.HAS_ALPHA;
+    }
+
+    public disableAlpha(): void {
+        this.flags &= LightObjFlags.HAS_ALPHA;
+    }
+
+    public initLightColor(color: Color): void {
+        colorCopy(this.light.Color, color);
+    }
+
+    public initLightSpot(cutoffAngle: number, spotFunc: GX.SpotFunction): void {
+        GX_Material.lightSetSpot(this.light, cutoffAngle, spotFunc);
+    }
+
+    public initLightAttnA(k0: number, k1: number, k2: number): void {
+        vec3.set(this.light.CosAtten, k0, k1, k2);
+    }
+
+    public initLightDistAttn(refDist: number, refBrightness: number, distFunc: GX.DistAttnFunction): void {
+        GX_Material.lightSetDistAttn(this.light, refDist, refBrightness, distFunc);
+    }
+
+    public initLightAttnK(k0: number, k1: number, k2: number): void {
+        vec3.set(this.light.DistAtten, k0, k1, k2);
+    }
 }
 
 export class LightSet {
@@ -3353,16 +3401,18 @@ export class LightSet {
 
     public calcLights(m: GX_Material.Light[], lightSetting: LightSetting, viewMatrix: mat4): void {
         for (let i = 0; i < this.lightObjIndexes.length; i++) {
-            if (this.lightObjIndexes[i] < 0)
+            const lightObjIndex = this.lightObjIndexes[i];
+
+            if (lightObjIndex < 0)
                 continue;
 
-            const lightObj = lightSetting.lightObj[i];
+            const lightObj = lightSetting.lightObj[lightObjIndex];
             if (!!(lightObj.flags & LightObjFlags.ENABLE)) {
                 m[i].copy(lightObj.light);
 
                 if (lightObj.space === LightObjSpace.WORLD_SPACE) {
                     GX_Material.lightSetWorldPositionViewMatrix(m[i], viewMatrix, lightObj.light.Position[0], lightObj.light.Position[1], lightObj.light.Position[2]);
-                    GX_Material.lightSetWorldDirectionNormalMatrix(lightObj.light, viewMatrix, lightObj.light.Direction[0], lightObj.light.Direction[1], lightObj.light.Direction[2]);
+                    GX_Material.lightSetWorldDirectionNormalMatrix(m[i], viewMatrix, lightObj.light.Direction[0], lightObj.light.Direction[1], lightObj.light.Direction[2]);
                 } else if (lightObj.space === LightObjSpace.VIEW_SPACE) {
                     // Parameters are in view-space; already copied correctly.
                 }
@@ -3370,11 +3420,11 @@ export class LightSet {
         }
     }
 
-    public calcAmbColorMult(m: Color, lightSetting: LightSetting): void {
+    public calcAmbColorCopy(m: Color, lightSetting: LightSetting): void {
         if (this.ambLightObjIndex < 0)
             return;
 
-        colorMult(m, m, lightSetting.ambLightObj[this.ambLightObjIndex]);
+        colorCopy(m, lightSetting.ambLightObj[this.ambLightObjIndex]);
     }
 
     public calcLightSetLitMask(lightChannels: GX_Material.LightChannelControl[], lightSetting: LightSetting): boolean {
@@ -3386,10 +3436,12 @@ export class LightSet {
         let maska1 = 0;
 
         for (let i = 0; i < this.lightObjIndexes.length; i++) {
-            if (this.lightObjIndexes[i] < 0)
+            const lightObjIndex = this.lightObjIndexes[i];
+
+            if (lightObjIndex < 0)
                 continue;
 
-            const lightObj = lightSetting.lightObj[i];
+            const lightObj = lightSetting.lightObj[lightObjIndex];
             const bit = 1 << i;
             if (!!(lightObj.flags & LightObjFlags.ENABLE)) {
                 if (!(lightObj.flags & LightObjFlags.SPECULAR)) {
@@ -3411,8 +3463,6 @@ export class LightSet {
         const chan0 = assertExists(lightChannels[0]);
         let changed = false;
 
-        // TODO(jstpierre): This appear to be required for Olympic Games. But the light makes things worse...
-        /*
         if (!chan0.colorChannel.lightingEnabled) {
             chan0.colorChannel.lightingEnabled = true;
             changed = true;
@@ -3422,7 +3472,6 @@ export class LightSet {
             chan0.alphaChannel.lightingEnabled = true;
             changed = true;
         }
-        */
 
         if (chan0.colorChannel.lightingEnabled && chan0.colorChannel.litMask !== maskc0) {
             chan0.colorChannel.litMask = maskc0;
@@ -3510,21 +3559,40 @@ export class SCN0Animator {
                 if (entry.hasAlpha)
                     dst.flags |= LightObjFlags.HAS_ALPHA;
 
-                if (entry.lightType === SCN0_LightType.DIRECTIONAL) {
-                    colorFromRGBA8(dst.light.Color, sampleAnimationTrackColor(entry.color, animFrame));
+                colorFromRGBA8(dst.light.Color, sampleAnimationTrackColor(entry.color, animFrame));
 
-                    const posX = sampleFloatAnimationTrack(entry.posX, animFrame);
-                    const posY = sampleFloatAnimationTrack(entry.posY, animFrame);
-                    const posZ = sampleFloatAnimationTrack(entry.posZ, animFrame);
+                const posX = sampleFloatAnimationTrack(entry.posX, animFrame);
+                const posY = sampleFloatAnimationTrack(entry.posY, animFrame);
+                const posZ = sampleFloatAnimationTrack(entry.posZ, animFrame);
+
+                if (entry.lightType === SCN0_LightType.DIRECTIONAL) {
                     const aimX = sampleFloatAnimationTrack(entry.aimX, animFrame);
                     const aimY = sampleFloatAnimationTrack(entry.aimY, animFrame);
                     const aimZ = sampleFloatAnimationTrack(entry.aimZ, animFrame);
-
                     // This is in world-space. When copying it to the material params, we'll multiply by the view matrix.
                     vec3.set(dst.light.Position, (aimX - posX) * -1e10, (aimY - posY) * -1e10, (aimZ - posZ) * -1e10);
                     vec3.set(dst.light.Direction, 0, 0, 0);
                     vec3.set(dst.light.DistAtten, 1, 0, 0);
                     vec3.set(dst.light.CosAtten, 1, 0, 0);
+                } else if (entry.lightType === SCN0_LightType.POINT) {
+                    vec3.set(dst.light.Position, posX, posY, posZ);
+                    GX_Material.lightSetSpot(dst.light, 0.0, GX.SpotFunction.OFF);
+                    const refDistance = sampleFloatAnimationTrack(entry.refDistance, animFrame);
+                    const refBrightness = sampleFloatAnimationTrack(entry.refBrightness, animFrame);
+                    GX_Material.lightSetDistAttn(dst.light, refDistance, refBrightness, entry.distFunc);
+                    vec3.set(dst.light.Direction, 0, 0, 0);
+                } else if (entry.lightType === SCN0_LightType.SPOT) {
+                    vec3.set(dst.light.Position, posX, posY, posZ);
+                    const cutoff = sampleFloatAnimationTrack(entry.cutoff, animFrame);
+                    GX_Material.lightSetSpot(dst.light, cutoff, entry.spotFunc);
+                    const refDistance = sampleFloatAnimationTrack(entry.refDistance, animFrame);
+                    const refBrightness = sampleFloatAnimationTrack(entry.refBrightness, animFrame);
+                    GX_Material.lightSetDistAttn(dst.light, refDistance, refBrightness, entry.distFunc);
+                    const aimX = sampleFloatAnimationTrack(entry.aimX, animFrame);
+                    const aimY = sampleFloatAnimationTrack(entry.aimY, animFrame);
+                    const aimZ = sampleFloatAnimationTrack(entry.aimZ, animFrame);
+                    vec3.set(dst.light.Direction, aimX - posX, aimY - posY, aimZ - posZ);
+                    vec3.normalize(dst.light.Direction, dst.light.Direction);
                 }
 
                 // TODO(jstpierre): Specular.
