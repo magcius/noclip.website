@@ -2,12 +2,13 @@
 import * as Viewer from '../viewer';
 import * as UI from '../ui';
 import * as Geo from './geo';
+import * as Flipbook from './flipbook'
 import * as BYML from '../byml';
 
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { FakeTextureHolder, TextureHolder } from '../TextureHolder';
-import { textureToCanvas, BKPass, GeometryRenderer, GeometryData, AnimationFile, AnimationTrack, AnimationTrackType, AnimationKeyframe, BoneAnimator } from './render';
-import { mat4, vec3 } from 'gl-matrix';
+import { textureToCanvas, BKPass, GeometryRenderer, GeometryData, AnimationFile, AnimationTrack, AnimationTrackType, AnimationKeyframe, BoneAnimator, FlipbookRenderer } from './render';
+import { mat4, vec3, vec4 } from 'gl-matrix';
 import { transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
 import { SceneContext } from '../SceneBase';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
@@ -17,11 +18,13 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assert, hexzero, assertExists, hexdump } from '../util';
 import { DataFetcher } from '../DataFetcher';
 import { MathConstants } from '../MathHelpers';
+import { DrawCall, OtherModeH_Layout, OtherModeH_CycleType, CCMUX, ACMUX, OtherModeL_Layout } from './f3dex';
 
 const pathBase = `BanjoKazooie`;
 
 class BKRenderer implements Viewer.SceneGfx {
     public geoRenderers: GeometryRenderer[] = [];
+    public flipbookRenderers: FlipbookRenderer[] = [];
     public geoDatas: GeometryData[] = [];
 
     public renderTarget = new BasicRenderTarget();
@@ -40,30 +43,40 @@ class BKRenderer implements Viewer.SceneGfx {
         enableCullingCheckbox.onchanged = () => {
             for (let i = 0; i < this.geoRenderers.length; i++)
                 this.geoRenderers[i].setBackfaceCullingEnabled(enableCullingCheckbox.checked);
+            for (let i = 0; i < this.flipbookRenderers.length; i++)
+                this.flipbookRenderers[i].setBackfaceCullingEnabled(enableCullingCheckbox.checked);
         };
         renderHacksPanel.contents.appendChild(enableCullingCheckbox.elem);
         const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
         enableVertexColorsCheckbox.onchanged = () => {
             for (let i = 0; i < this.geoRenderers.length; i++)
                 this.geoRenderers[i].setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
+            for (let i = 0; i < this.flipbookRenderers.length; i++)
+                this.flipbookRenderers[i].setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
         };
         renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
         const enableTextures = new UI.Checkbox('Enable Textures', true);
         enableTextures.onchanged = () => {
             for (let i = 0; i < this.geoRenderers.length; i++)
                 this.geoRenderers[i].setTexturesEnabled(enableTextures.checked);
+            for (let i = 0; i < this.flipbookRenderers.length; i++)
+                this.flipbookRenderers[i].setTexturesEnabled(enableTextures.checked);
         };
         renderHacksPanel.contents.appendChild(enableTextures.elem);
         const enableMonochromeVertexColors = new UI.Checkbox('Grayscale Vertex Colors', false);
         enableMonochromeVertexColors.onchanged = () => {
             for (let i = 0; i < this.geoRenderers.length; i++)
                 this.geoRenderers[i].setMonochromeVertexColorsEnabled(enableMonochromeVertexColors.checked);
+            for (let i = 0; i < this.flipbookRenderers.length; i++)
+                this.flipbookRenderers[i].setMonochromeVertexColorsEnabled(enableMonochromeVertexColors.checked);
         };
         renderHacksPanel.contents.appendChild(enableMonochromeVertexColors.elem);
         const enableAlphaVisualizer = new UI.Checkbox('Visualize Vertex Alpha', false);
         enableAlphaVisualizer.onchanged = () => {
             for (let i = 0; i < this.geoRenderers.length; i++)
                 this.geoRenderers[i].setAlphaVisualizerEnabled(enableAlphaVisualizer.checked);
+            for (let i = 0; i < this.flipbookRenderers.length; i++)
+                this.flipbookRenderers[i].setAlphaVisualizerEnabled(enableAlphaVisualizer.checked);
         };
         renderHacksPanel.contents.appendChild(enableAlphaVisualizer.elem);
 
@@ -74,6 +87,8 @@ class BKRenderer implements Viewer.SceneGfx {
         this.renderHelper.pushTemplateRenderInst();
         for (let i = 0; i < this.geoRenderers.length; i++)
             this.geoRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+        for (let i = 0; i < this.flipbookRenderers.length; i++)
+            this.flipbookRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender(device, hostAccessPass);
     }
@@ -201,6 +216,7 @@ class ObjectData {
 
             const file = findFileByID(this.objectSetupData, geoFileID);
             if (file === null) {
+                console.log("missing file", geoFileID.toString(16))
                 return null;
             }
 
@@ -212,18 +228,58 @@ class ObjectData {
             if (magic === 0x0000000B) {
                 // TODO: find if models can set different Z/opacity modes
                 const geo = Geo.parse(geoData, Geo.RenderZMode.OPA, true);
-                this.geoData[geoFileID] = new GeometryData(device, this.gfxCache, geo);
+                this.geoData[geoFileID] = GeometryData.fromGeo(device, this.gfxCache, geo);
             } else {
                 this.geoData[geoFileID] = null;
             }
         }
-
         return this.geoData[geoFileID];
+    }
+
+    public ensureFlipbookData(device: GfxDevice, fileID: number): GeometryData | null {
+        if (this.geoData[fileID] === undefined) {
+            const file = findFileByID(this.objectSetupData, fileID);
+            if (file === null) {
+                console.log("missing file", fileID.toString(16))
+                return null;
+            }
+
+            const spriteOutput = Flipbook.parse(file.Data);
+            this.geoData[fileID] = new GeometryData(device, this.gfxCache, spriteOutput);
+        }
+
+        return this.geoData[fileID];
+    }
+
+    public spawnFlipbookByFileID(device: GfxDevice, fileID: number, pos: vec3, primColor: vec4, startFrame = 0): FlipbookRenderer | null {
+        const geoData = this.ensureFlipbookData(device, fileID);
+        if (geoData === null) {
+            console.warn(`Unsupported geo data for file ID ${hexzero(fileID, 4)}`);
+            return null;
+        }
+
+        // TODO: handle this nicely
+        const drawCall = new DrawCall();
+        drawCall.DP_OtherModeH = (OtherModeH_CycleType.G_CYC_1CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE);
+        drawCall.DP_OtherModeL = (1 << OtherModeL_Layout.Z_CMP) | (1 << OtherModeL_Layout.Z_UPD) | 1 /* alpha test */;
+        drawCall.DP_Combine = {
+            c0: { a: CCMUX.TEXEL0, b: CCMUX.ADD_ZERO, c: CCMUX.PRIMITIVE, d: CCMUX.ADD_ZERO },
+            c1: { a: CCMUX.TEXEL0, b: CCMUX.ADD_ZERO, c: CCMUX.PRIMITIVE, d: CCMUX.ADD_ZERO },
+            a0: { a: ACMUX.TEXEL0, b: ACMUX.ZERO, c: ACMUX.PRIMITIVE, d: ACMUX.ZERO },
+            a1: { a: ACMUX.TEXEL0, b: ACMUX.ZERO, c: ACMUX.PRIMITIVE, d: ACMUX.ZERO },
+        };
+
+        const renderer = new FlipbookRenderer(geoData, drawCall, primColor);
+        renderer.animationController.phaseFrames = startFrame;
+        renderer.sortKeyBase = makeSortKey(GfxRendererLayer.OPAQUE);
+        mat4.fromTranslation(renderer.modelMatrix, pos);
+        return renderer;
     }
 
     public spawnObjectByFileID(device: GfxDevice, fileID: number, pos: vec3, yaw = 0, pitch = 0): GeometryRenderer | null {
         const geoData = this.ensureGeoData(device, fileID);
-        if (geoData === null) {
+        // TODO: figure out how to tell if these are actually sprites
+        if (geoData === null || geoData.geo === undefined) {
             console.warn(`Unsupported geo data for file ID ${hexzero(fileID, 4)}`);
             return null;
         }
@@ -239,13 +295,12 @@ class ObjectData {
     public spawnObject(device: GfxDevice, id: number, pos: vec3, yaw = 0): GeometryRenderer | null {
         const spawnEntry = this.objectSetupData.ObjectSetupTable.find((entry) => entry.SpawnID === id);
         if (spawnEntry === undefined) {
-            console.warn(`Unknown object ID ${hexzero(id, 4)}`);
+            // console.warn(`Unknown object ID ${hexzero(id, 4)}`);
             return null;
         }
 
         if (spawnEntry.GeoFileID === 0)
             return null; // nothing to render
-
         const renderer = this.spawnObjectByFileID(device, spawnEntry.GeoFileID, pos, yaw)
         if (renderer === null) {
             return null;
@@ -276,7 +331,7 @@ class ObjectData {
 }
 
 async function fetchObjectData(dataFetcher: DataFetcher, device: GfxDevice): Promise<ObjectData> {
-    const objectData = await dataFetcher.fetchData(`${pathBase}/objectSetup_arc.crg1?cache_bust=3`)!;
+    const objectData = await dataFetcher.fetchData(`${pathBase}/objectSetup_arc.crg1?cache_bust=4`)!;
     const objectSetup = BYML.parse<ObjectSetupData>(objectData, BYML.FileType.CRG1);
     return new ObjectData(objectSetup);
 }
@@ -289,7 +344,7 @@ class SceneDesc implements Viewer.SceneDesc {
         for (let i = 0; i < geo.sharedOutput.textureCache.textures.length; i++)
             viewerTextures.push(textureToCanvas(geo.sharedOutput.textureCache.textures[i]));
 
-        const geoData = new GeometryData(device, cache, geo);
+        const geoData = GeometryData.fromGeo(device, cache, geo);
         sceneRenderer.geoDatas.push(geoData);
         const geoRenderer = new GeometryRenderer(geoData);
         sceneRenderer.geoRenderers.push(geoRenderer);
@@ -337,16 +392,30 @@ class SceneDesc implements Viewer.SceneDesc {
                         assert(view.getInt8(offs++) === 0x9);
 
                         for (let i = 0; i < structCount; i++) {
+                            const fileIDBase = (view.getUint16(offs + 0x00) >>> 4);
+                            const x = view.getInt16(offs + 0x04);
+                            const y = view.getInt16(offs + 0x06);
+                            const z = view.getInt16(offs + 0x08);
+
                             const objectType = view.getUint8(offs + 0x0B) & 0x03;
-                            if (objectType === 2) {
-                                const fileID = (view.getUint16(offs + 0x00) >>> 4) + 0x2d1;
+                            if (objectType === 0) {
+                                const params = view.getUint32(offs + 0x00);
+                                const r = 1 - ((params >>> 16) & 0x07) * 0x10 / 0xff;
+                                const g = 1 - ((params >>> 13) & 0x07) * 0x10 / 0xff;
+                                const b = 1 - ((params >>> 10) & 0x07) * 0x10 / 0xff;
+                                const scale = ((params >>> 2) & 0xff) / 100.0;
+                                const vertexSegment = (params >>> 1) & 0x01;
+                                const startFrame = view.getUint8(offs + 0x0A) >>> 3;
+                                const flipbook = objectSetupTable.spawnFlipbookByFileID(device, fileIDBase + 0x572, vec3.fromValues(x, y, z), vec4.fromValues(r, g, b, 1), startFrame);
+                                if (flipbook) {
+                                    mat4.scale(flipbook.modelMatrix, flipbook.modelMatrix, [scale, scale, scale]);
+                                    sceneRenderer.flipbookRenderers.push(flipbook);
+                                }
+                            } else if (objectType === 2) {
                                 const yaw = view.getUint8(offs + 0x02) * 2;
                                 const pitch = view.getUint8(offs + 0x03) * 2;
-                                const x = view.getInt16(offs + 0x04);
-                                const y = view.getInt16(offs + 0x06);
-                                const z = view.getInt16(offs + 0x08);
                                 const scale = view.getUint8(offs + 0x0A) / 100.0;
-                                const objRenderer = objectSetupTable.spawnObjectByFileID(device, fileID, vec3.fromValues(x, y, z), yaw, pitch);
+                                const objRenderer = objectSetupTable.spawnObjectByFileID(device, fileIDBase + 0x2d1, vec3.fromValues(x, y, z), yaw, pitch);
                                 if (objRenderer !== null) {
                                     mat4.scale(objRenderer.modelMatrix, objRenderer.modelMatrix, [scale, scale, scale]);
                                     sceneRenderer.geoRenderers.push(objRenderer);

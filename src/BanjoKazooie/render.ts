@@ -1,22 +1,23 @@
 
 import * as Viewer from '../viewer';
 import { DeviceProgram } from "../Program";
-import { Texture, getImageFormatString, Vertex, DrawCall, getTextFiltFromOtherModeH, OtherModeL_Layout, fillCombineParams, translateBlendMode, F3D_RSP_Geometry_Flags } from "./f3dex";
+import { Texture, getImageFormatString, Vertex, DrawCall, getTextFiltFromOtherModeH, OtherModeL_Layout, fillCombineParams, translateBlendMode, F3D_RSP_Geometry_Flags, RSPSharedOutput, getCycleTypeFromOtherModeH, OtherModeH_CycleType } from "./f3dex";
 import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { assert, nArray, align, assertExists } from '../util';
-import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
-import { mat4, vec3 } from 'gl-matrix';
+import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
+import { mat4, vec3, vec4 } from 'gl-matrix';
 import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
 import { interactiveVizSliderSelect, getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { TextFilt } from '../Common/N64/Image';
-import { Geometry, VertexAnimationEffect, VertexEffectType, GeoNode, Bone } from './geo';
+import { Geometry, VertexAnimationEffect, VertexEffectType, GeoNode, Bone, AnimationSetup } from './geo';
 import { clamp, lerp, MathConstants } from '../MathHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import AnimationController from '../AnimationController';
+import { J3DCalcYBBoardMtx } from '../j3d/render';
 
 export class F3DEX_Program extends DeviceProgram {
     public static a_Position = 0;
@@ -102,19 +103,19 @@ void main() {
 
     constructor(private DP_OtherModeH: number, private DP_OtherModeL: number) {
         super();
-        // this seems to always get set in setup code, not changed by the model DLs
-        this.defines.set("TWO_CYCLE", "1");
+        if (getCycleTypeFromOtherModeH(DP_OtherModeH) === OtherModeH_CycleType.G_CYC_2CYCLE)
+            this.defines.set("TWO_CYCLE", "1");
         this.frag = this.generateFrag();
     }
 
     private generateAlphaTest(): string {
         const alphaCompare = (this.DP_OtherModeL >>> 0) & 0x03;
         const cvgXAlpha = (this.DP_OtherModeL >>> OtherModeL_Layout.CVG_X_ALPHA) & 0x01;
-        if (alphaCompare !== 0x00) {
-            return `
-    if (t_Color.a < 0.0125)
-        discard;
-`;
+        let alphaThreshold = 0;
+        if (alphaCompare === 0x01) {
+            alphaThreshold = 0.5; // actually blend color, seems to always be 0.5
+        } else if (alphaCompare != 0x00) {
+            alphaThreshold = .0125; // should be dither
         } else if (cvgXAlpha != 0x00) {
             // this line is taken from GlideN64, but here's some rationale:
             // With this bit set, the pixel coverage value is multiplied by alpha
@@ -122,8 +123,12 @@ void main() {
             // the n64 antialiasing, a pixel with zero coverage will be ignored.
             // Since coverage is really an integer from 0 to 8, we assume anything
             // less than 1 would be truncated to 0, leading to the value below.
+            alphaThreshold = 0.125;
+        }
+
+        if (alphaThreshold > 0) {
             return `
-    if (t_Color.a < 0.125)
+    if (t_Color.a < ${alphaThreshold})
         discard;
 `;
         } else {
@@ -415,17 +420,18 @@ export class GeometryData {
     public samplers: GfxSampler[] = [];
     public vertexBufferData: Float32Array;
     public indexBuffer: GfxBuffer;
+    public geo?: Geometry;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public geo: Geometry) {
-        const textures = this.geo.sharedOutput.textureCache.textures;
+    constructor(device: GfxDevice, cache: GfxRenderCache, public sharedOutput: RSPSharedOutput, dynamic = false) {
+        const textures = sharedOutput.textureCache.textures;
         for (let i = 0; i < textures.length; i++) {
             const tex = textures[i];
             this.textures.push(this.translateTexture(device, tex));
             this.samplers.push(this.translateSampler(device, cache, tex));
         }
 
-        this.vertexBufferData = makeVertexBufferData(this.geo.sharedOutput.vertices);
-        if (this.geo.vertexEffects.length > 0) {
+        this.vertexBufferData = makeVertexBufferData(sharedOutput.vertices);
+        if (dynamic) {
             // there are vertex effects, so the vertex buffer data will change
             this.vertexBuffer = device.createBuffer(
                 align(this.vertexBufferData.byteLength, 4) / 4,
@@ -435,9 +441,9 @@ export class GeometryData {
         } else {
             this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, this.vertexBufferData.buffer);
         }
-        assert(this.geo.sharedOutput.vertices.length <= 0xFFFFFFFF);
+        assert(sharedOutput.vertices.length <= 0xFFFFFFFF);
 
-        const indexBufferData = new Uint32Array(this.geo.sharedOutput.indices);
+        const indexBufferData = new Uint32Array(sharedOutput.indices);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexBufferData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
@@ -459,6 +465,12 @@ export class GeometryData {
         this.inputState = device.createInputState(this.inputLayout, [
             { buffer: this.vertexBuffer, byteOffset: 0, },
         ], { buffer: this.indexBuffer, byteOffset: 0 });
+    }
+
+    public static fromGeo(device: GfxDevice, cache: GfxRenderCache, geo: Geometry): GeometryData {
+        const geoData = new GeometryData(device, cache, geo.sharedOutput, geo.vertexEffects.length > 0);
+        geoData.geo = geo;
+        return geoData;
     }
 
     private translateTexture(device: GfxDevice, texture: Texture): GfxTexture {
@@ -523,7 +535,7 @@ class DrawCallInstance {
         for (let i = 0; i < this.textureMappings.length; i++) {
             if (i < this.drawCall.textureIndices.length) {
                 const idx = this.drawCall.textureIndices[i];
-                this.textureEntry[i] = geometryData.geo.sharedOutput.textureCache.textures[idx];
+                this.textureEntry[i] = geometryData.sharedOutput.textureCache.textures[idx];
                 this.textureMappings[i].gfxTexture = geometryData.textures[idx];
                 this.textureMappings[i].gfxSampler = geometryData.samplers[idx];
             }
@@ -780,6 +792,8 @@ export class GeometryRenderer {
     public boneToParentMatrixArray: mat4[];
     public boneAnimator: BoneAnimator | null = null;
     public animationController = new AnimationController(60);
+    private animationSetup: AnimationSetup | null;
+    private vertexEffects: VertexAnimationEffect[];
 
     constructor(private geometryData: GeometryData) {
         this.megaStateFlags = {};
@@ -789,7 +803,9 @@ export class GeometryRenderer {
             blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
         });
 
-        const geo = this.geometryData.geo;
+        const geo = this.geometryData.geo!;
+        this.animationSetup = geo.animationSetup;
+        this.vertexEffects = geo.vertexEffects;
 
         const boneToWorldMatrixArrayCount = geo.animationSetup !== null ? geo.animationSetup.bones.length : 1;
         this.boneToWorldMatrixArray = nArray(boneToWorldMatrixArrayCount, () => mat4.create());
@@ -798,7 +814,7 @@ export class GeometryRenderer {
         this.boneToParentMatrixArray = nArray(boneToParentMatrixArrayCount, () => mat4.create());
 
         // Traverse the node tree.
-        this.buildGeoNode(this.geometryData.geo.rootNode);
+        this.buildGeoNode(geo.rootNode);
     }
 
     private buildGeoNode(node: GeoNode): void {
@@ -810,7 +826,7 @@ export class GeometryRenderer {
                 ];
 
                 // Skinned meshes need the parent bone as the second draw matrix.
-                const animationSetup = this.geometryData.geo.animationSetup;
+                const animationSetup = this.animationSetup;
                 if (animationSetup !== null) {
                     const parentBoneIndex = animationSetup.bones[node.boneIndex].parentIndex;
 
@@ -859,7 +875,7 @@ export class GeometryRenderer {
     }
 
     private calcAnim(): void {
-        const animationSetup = this.geometryData.geo.animationSetup;
+        const animationSetup = this.animationSetup;
         if (this.boneAnimator !== null && animationSetup !== null) {
             const bones = animationSetup.bones;
 
@@ -869,9 +885,8 @@ export class GeometryRenderer {
     }
 
     private calcBoneToWorld(): void {
-        const animationSetup = this.geometryData.geo.animationSetup;
-        if (animationSetup !== null) {
-            const bones = animationSetup.bones;
+        if (this.animationSetup !== null) {
+            const bones = this.animationSetup.bones;
 
             for (let i = 0; i < bones.length; i++) {
                 const boneDef = bones[i];
@@ -896,7 +911,7 @@ export class GeometryRenderer {
         this.calcAnim();
         this.calcBoneToWorld();
 
-        const animationSetup = this.geometryData.geo.animationSetup;
+        const animationSetup = this.animationSetup;
         if (this.debugBones && animationSetup !== null) {
             const ctx = getDebugOverlayCanvas2D();
             for (let i = 0; i < animationSetup.bones.length; i++) {
@@ -925,9 +940,9 @@ export class GeometryRenderer {
         const mappedF32 = template.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
         offs += fillMatrix4x4(mappedF32, offs, viewerInput.camera.projectionMatrix);
 
-        if (this.geometryData.geo.vertexEffects.length > 0) {
-            for (let i = 0; i < this.geometryData.geo.vertexEffects.length; i++) {
-                const effect = this.geometryData.geo.vertexEffects[i];
+        if (this.vertexEffects.length > 0) {
+            for (let i = 0; i < this.vertexEffects.length; i++) {
+                const effect = this.vertexEffects[i];
                 updateVertexEffectState(effect, viewerInput.time / 1000, viewerInput.deltaTime / 1000);
                 for (let j = 0; j < effect.vertexIndices.length; j++) {
                     applyVertexEffect(effect, this.geometryData.vertexBufferData, effect.baseVertexValues[j], effect.vertexIndices[j]);
@@ -941,5 +956,132 @@ export class GeometryRenderer {
         for (let i = 0; i < this.drawCallInstances.length; i++)
             this.drawCallInstances[i].prepareToRender(device, renderInstManager, viewerInput, this.isSkybox);
         renderInstManager.popTemplateRenderInst();
+    }
+}
+
+const textureMappingScratch = [new TextureMapping()];
+export class FlipbookRenderer {
+    private textureEntry: Texture[] = [];
+    private vertexColorsEnabled = true;
+    private texturesEnabled = true;
+    private monochromeVertexColorsEnabled = false;
+    private alphaVisualizerEnabled = false;
+    private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
+    private program!: DeviceProgram;
+    private gfxProgram: GfxProgram | null = null;
+    private textureMappings: TextureMapping[] = [];
+
+    public visible = true;
+    public modelMatrix = mat4.create();
+    public animationController = new AnimationController(15);
+    public sortKeyBase: number;
+
+    constructor(public geometryData: GeometryData, private drawCall: DrawCall, private primColor: vec4) {
+        for (let i = 0; i < geometryData.textures.length; i++) {
+            this.textureEntry.push(geometryData.sharedOutput.textureCache.textures[i]);
+            this.textureMappings.push(new TextureMapping());
+            this.textureMappings[i].gfxTexture = geometryData.textures[i];
+            this.textureMappings[i].gfxSampler = geometryData.samplers[i];
+        }
+        setAttachmentStateSimple(this.megaStateFlags, {blendSrcFactor: GfxBlendFactor.SRC_ALPHA, blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA});
+        this.createProgram();
+    }
+
+    private createProgram(): void {
+        const program = new F3DEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL);
+        program.defines.set('BONE_MATRIX_COUNT', '1');
+
+        if (this.texturesEnabled)
+            program.defines.set('USE_TEXTURE', '1');
+
+        const shade = (this.drawCall.SP_GeometryMode & F3D_RSP_Geometry_Flags.G_SHADE) !== 0;
+        if (this.vertexColorsEnabled && shade)
+            program.defines.set('USE_VERTEX_COLOR', '1');
+
+        if (this.drawCall.SP_GeometryMode & F3D_RSP_Geometry_Flags.G_TEXTURE_GEN)
+            program.defines.set('TEXTURE_GEN', '1');
+
+        // many display lists seem to set this flag without setting texture_gen,
+        // despite this one being dependent on it
+        if (this.drawCall.SP_GeometryMode & F3D_RSP_Geometry_Flags.G_TEXTURE_GEN_LINEAR)
+            program.defines.set('TEXTURE_GEN_LINEAR', '1');
+
+        if (this.monochromeVertexColorsEnabled)
+            program.defines.set('USE_MONOCHROME_VERTEX_COLOR', '1');
+
+        if (this.alphaVisualizerEnabled)
+            program.defines.set('USE_ALPHA_VISUALIZER', '1');
+
+        this.program = program;
+        this.gfxProgram = null;
+    }
+
+    public setBackfaceCullingEnabled(v: boolean): void {
+        const cullMode = v ? translateCullMode(this.drawCall.SP_GeometryMode) : GfxCullMode.NONE;
+        this.megaStateFlags.cullMode = cullMode;
+    }
+
+    public setVertexColorsEnabled(v: boolean): void {
+        this.vertexColorsEnabled = v;
+        this.createProgram();
+    }
+
+    public setTexturesEnabled(v: boolean): void {
+        this.texturesEnabled = v;
+        this.createProgram();
+    }
+
+    public setMonochromeVertexColorsEnabled(v: boolean): void {
+        this.monochromeVertexColorsEnabled = v;
+        this.createProgram();
+    }
+
+    public setAlphaVisualizerEnabled(v: boolean): void {
+        this.alphaVisualizerEnabled = v;
+        this.createProgram();
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!this.visible)
+            return;
+
+        if (this.gfxProgram === null)
+            this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
+
+        this.animationController.setTimeFromViewerInput(viewerInput);
+        const textureIndex = Math.floor(this.animationController.getTimeInFrames() % this.textureMappings.length);
+        textureMappingScratch[0] = this.textureMappings[textureIndex];
+
+        const renderInst = renderInstManager.pushRenderInst();
+        renderInst.setBindingLayouts(bindingLayouts);
+        renderInst.setInputLayoutAndState(this.geometryData.inputLayout, this.geometryData.inputState);
+        renderInst.setMegaStateFlags(this.megaStateFlags);
+
+        renderInst.sortKey = this.sortKeyBase;
+        renderInst.filterKey = BKPass.MAIN;
+
+        let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, 16);
+        const scene = renderInst.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
+        offs += fillMatrix4x4(scene, offs, viewerInput.camera.projectionMatrix);
+
+        renderInst.setGfxProgram(this.gfxProgram);
+        renderInst.setSamplerBindingsFromTextureMappings(textureMappingScratch);
+        renderInst.drawIndexes(6);
+
+        offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12 + 8 * 2);
+        const draw = renderInst.mapUniformBufferF32(F3DEX_Program.ub_DrawParams);
+
+        computeViewMatrix(viewMatrixScratch, viewerInput.camera);
+        mat4.mul(modelViewScratch, viewMatrixScratch, this.modelMatrix);
+        J3DCalcYBBoardMtx(modelViewScratch, modelViewScratch);
+        offs += fillMatrix4x3(draw, offs, modelViewScratch);
+        // UVs don't need to be shifted or rescaled
+        mat4.identity(texMatrixScratch);
+        offs += fillMatrix4x2(draw, offs, texMatrixScratch);
+
+        offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 12);
+        const comb = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
+        offs += fillCombineParams(comb, offs, this.drawCall.DP_Combine);
+        offs += fillVec4v(comb, offs, this.primColor);
     }
 }

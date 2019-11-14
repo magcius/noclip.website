@@ -726,7 +726,7 @@ export class RSPState {
 
             dc.textureIndices.push(this._translateTileTexture(this.SP_TextureState.tile));
 
-            if (cycletype === OtherModeH_CycleType.G_CYC_2CYCLE) {
+            if (this.SP_TextureState.level > 0) {
                 // In 2CYCLE mode, it uses tile and tile + 1.
                 dc.textureIndices.push(this._translateTileTexture(this.SP_TextureState.tile + 1));
             }

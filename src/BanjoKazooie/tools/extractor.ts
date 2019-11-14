@@ -264,9 +264,31 @@ function extractObjectLoad(fs: FS) {
     for (let i = 0x2d1; i <= 0x36e; i++ ) {
         extractFileAndAppend(fileTable, fs, i);
     }
+
+    // flipbooks
     extractFileAndAppend(fileTable, fs, 0x41a);
     extractFileAndAppend(fileTable, fs, 0x580);
+    extractFileAndAppend(fileTable, fs, 0x5b7);
+    extractFileAndAppend(fileTable, fs, 0x5b8);
+    extractFileAndAppend(fileTable, fs, 0x5b9);
+    extractFileAndAppend(fileTable, fs, 0x5c2);
+    extractFileAndAppend(fileTable, fs, 0x5d7);
+    extractFileAndAppend(fileTable, fs, 0x5d8);
+    extractFileAndAppend(fileTable, fs, 0x648);
+    extractFileAndAppend(fileTable, fs, 0x68c);
+    extractFileAndAppend(fileTable, fs, 0x693);
+    extractFileAndAppend(fileTable, fs, 0x6b1);
+    extractFileAndAppend(fileTable, fs, 0x6b2);
+    extractFileAndAppend(fileTable, fs, 0x6b3);
+    extractFileAndAppend(fileTable, fs, 0x6b7);
     extractFileAndAppend(fileTable, fs, 0x6d1);
+    extractFileAndAppend(fileTable, fs, 0x6d2);
+    extractFileAndAppend(fileTable, fs, 0x6d3);
+    extractFileAndAppend(fileTable, fs, 0x6d4);
+    extractFileAndAppend(fileTable, fs, 0x6d5);
+    extractFileAndAppend(fileTable, fs, 0x6d6);
+    extractFileAndAppend(fileTable, fs, 0x6d7);
+    extractFileAndAppend(fileTable, fs, 0x6d8);
 
     const data = BYML.write({ ObjectSetupTable: setupTable, Files: fileTable }, BYML.FileType.CRG1);
     writeFileSync(`${pathBaseOut}/objectSetup_arc.crg1`, Buffer.from(data));
@@ -366,6 +388,11 @@ function main() {
         files.push({ fileTableOffs: fsTableIdx, dataOffs, flags });
     }
     const fs = { buffer: romData, files };
+
+    // // const data = decompress(fs.buffer.slice(0xFC8AFC));
+    // const data = extractFile(fs, fs.files[0x164 + 0x572]).Data;
+    // writeFileSync(`${pathBaseOut}/note_sprite.bin`, Buffer.from(data.arrayBuffer, data.byteOffset, data.byteLength));
+    // return;
 
     // Names taken from Banjo's Backpack.
     extractMap(fs, "SM - Spiral Mountain",                0x01);

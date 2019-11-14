@@ -196,7 +196,10 @@ function pushGeoNode(context: GeoContext, boneIndex = 0): GeoNode {
     const rspState = new F3DEX.RSPState(context.segmentBuffers, context.sharedOutput);
     // G_TF_BILERP
     rspState.gDPSetOtherModeH(12, 2, 0x2000);
-
+    rspState.gDPSetOtherModeH(
+        F3DEX.OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2,
+        F3DEX.OtherModeH_CycleType.G_CYC_2CYCLE << F3DEX.OtherModeH_Layout.G_MDSFT_CYCLETYPE,
+    )
     const geoNode: GeoNode = {
         boneIndex,
         children: [],
