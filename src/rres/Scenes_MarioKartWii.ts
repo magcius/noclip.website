@@ -14,10 +14,10 @@ import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render';
 import AnimationController from '../AnimationController';
 import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
-import { computeModelMatrixSRT, MathConstants } from '../MathHelpers';
-import { SceneContext } from '../SceneBase';
+import { computeModelMatrixSRT, MathConstants, lerp, clamp } from '../MathHelpers';
+import { SceneContext, GraphObjBase } from '../SceneBase';
 import { EggLightManager, parseBLIGHT } from './Egg';
-import { GfxRendererLayer } from '../gfx/render/GfxRenderer';
+import { GfxRendererLayer, GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 
 class ModelCache {
     public rresCache = new Map<string, BRRES.RRES>();
@@ -45,12 +45,18 @@ class ModelCache {
     }
 }
 
+interface BaseObject extends GraphObjBase {
+    setVertexColorsEnabled(v: boolean): void;
+    setTexturesEnabled(v: boolean): void;
+    bindLightSetting(lightSetting: BRRES.LightSetting): void;
+}
+
 class MarioKartWiiRenderer extends BasicGXRendererHelper {
     public textureHolder = new RRESTextureHolder();
     public animationController = new AnimationController();
 
     public eggLightManager: EggLightManager | null = null;
-    public modelInstances: MDL0ModelInstance[] = [];
+    public baseObjects: BaseObject[] = [];
     public modelCache = new ModelCache();
 
     public createPanels(): UI.Panel[] {
@@ -60,15 +66,15 @@ class MarioKartWiiRenderer extends BasicGXRendererHelper {
         const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
         enableVertexColorsCheckbox.onchanged = () => {
             const v = enableVertexColorsCheckbox.checked;
-            for (let i = 0; i < this.modelInstances.length; i++)
-                this.modelInstances[i].setVertexColorsEnabled(v);
+            for (let i = 0; i < this.baseObjects.length; i++)
+                this.baseObjects[i].setVertexColorsEnabled(v);
         };
         renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
         const enableTextures = new UI.Checkbox('Enable Textures', true);
         enableTextures.onchanged = () => {
             const v = enableTextures.checked;
-            for (let i = 0; i < this.modelInstances.length; i++)
-                this.modelInstances[i].setTexturesEnabled(v);
+            for (let i = 0; i < this.baseObjects.length; i++)
+                this.baseObjects[i].setTexturesEnabled(v);
         };
         renderHacksPanel.contents.appendChild(enableTextures.elem);
 
@@ -79,13 +85,13 @@ class MarioKartWiiRenderer extends BasicGXRendererHelper {
         this.animationController.setTimeInMilliseconds(viewerInput.time);
 
         if (this.eggLightManager !== null)
-            for (let i = 0; i < this.modelInstances.length; i++)
-                this.modelInstances[i].bindLightSetting(this.eggLightManager.lightSetting);
+            for (let i = 0; i < this.baseObjects.length; i++)
+                this.baseObjects[i].bindLightSetting(this.eggLightManager.lightSetting);
 
         const template = this.renderHelper.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput);
-        for (let i = 0; i < this.modelInstances.length; i++)
-            this.modelInstances[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+        for (let i = 0; i < this.baseObjects.length; i++)
+            this.baseObjects[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         this.renderHelper.prepareToRender(device, hostAccessPass);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
     }
@@ -93,8 +99,8 @@ class MarioKartWiiRenderer extends BasicGXRendererHelper {
     public destroy(device: GfxDevice): void {
         super.destroy(device);
         this.textureHolder.destroy(device);
-        for (let i = 0; i < this.modelInstances.length; i++)
-            this.modelInstances[i].destroy(device);
+        for (let i = 0; i < this.baseObjects.length; i++)
+            this.baseObjects[i].destroy(device);
         this.modelCache.destroy(device);
     }
 }
@@ -175,16 +181,77 @@ function parseKMP(buffer: ArrayBufferSlice): KMP {
 const scaleFactor = 0.1;
 const posMtx = mat4.fromScaling(mat4.create(), [scaleFactor, scaleFactor, scaleFactor]);
 
+class SimpleObjectRenderer implements BaseObject {
+    public modelMatrix = mat4.create();
+
+    constructor(public modelInstance: MDL0ModelInstance, public gobj: GOBJ) {
+        computeModelMatrixSRT(this.modelMatrix, gobj.scaleX, gobj.scaleY, gobj.scaleZ, gobj.rotationX, gobj.rotationY, gobj.rotationZ, gobj.translationX, gobj.translationY, gobj.translationZ);
+        mat4.mul(this.modelMatrix, posMtx, this.modelMatrix);
+    }
+
+    public setVertexColorsEnabled(v: boolean): void {
+        this.modelInstance.setVertexColorsEnabled(v);
+    }
+
+    public setTexturesEnabled(v: boolean): void {
+        this.modelInstance.setTexturesEnabled(v);
+    }
+
+    public bindLightSetting(lightSetting: BRRES.LightSetting): void {
+        this.modelInstance.bindLightSetting(lightSetting);
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        mat4.copy(this.modelInstance.modelMatrix, this.modelMatrix);
+        this.modelInstance.prepareToRender(device, renderInstManager, viewerInput);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.modelInstance.destroy(device);
+    }
+}
+
+class Aurora extends SimpleObjectRenderer {
+    private nodeIndices: number[] = [];
+
+    constructor(modelInstance: MDL0ModelInstance, gobj: GOBJ) {
+        super(modelInstance, gobj);
+
+        // Nintendo is really cool lol
+        for (let i = 2; i < 39; i++) {
+            const nodeName = 'joint' + i;
+            this.nodeIndices.push(this.modelInstance.mdl0Model.mdl0.nodes.findIndex((node) => node.name === nodeName)!);
+        }
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        // Update joints.
+        // TODO(jstpierre): Do in a less ugly way lol
+
+        const t = viewerInput.time / 2000;
+        for (let i = 0; i < this.nodeIndices.length; i++) {
+            const nodeIndex = this.nodeIndices[i];
+            const node = this.modelInstance.mdl0Model.mdl0.nodes[nodeIndex];
+            const dst = node.modelMatrix;
+            const g = i / (this.nodeIndices.length - 1);
+            const wave = Math.sin((g + t) * MathConstants.TAU) * 1200;
+            // Lerp to nothing at the ends.
+            dst[13] = lerp(0, wave, g);
+        }
+
+        super.prepareToRender(device, renderInstManager, viewerInput);
+    }
+}
+
 class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {}
 
-    private static spawnObjectFromRRES(device: GfxDevice, renderer: MarioKartWiiRenderer, rres: BRRES.RRES, objectName: string): MDL0ModelInstance {
+    private static createModelInstanceFromRRES(renderer: MarioKartWiiRenderer, rres: BRRES.RRES, objectName: string): MDL0ModelInstance {
         const modelCache = renderer.modelCache;
         const mdl0Model = assertExists(modelCache.modelCache.get(objectName));
         const mdl0Instance = new MDL0ModelInstance(renderer.textureHolder, mdl0Model, objectName);
         mdl0Instance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 1);
         mdl0Instance.bindRRESAnimations(renderer.animationController, rres, null);
-        renderer.modelInstances.push(mdl0Instance);
         return mdl0Instance;
     }
 
@@ -195,24 +262,26 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
             return assertExists(renderer.modelCache.rresCache.get(arcPath));
         };
 
-        const spawnObject = (rresName: string, mdl0Name: string = rresName): MDL0ModelInstance => {
-            const rres = getRRES(rresName);
-            const b = this.spawnObjectFromRRES(device, renderer, rres, mdl0Name);
-            computeModelMatrixSRT(b.modelMatrix, gobj.scaleX, gobj.scaleY, gobj.scaleZ, gobj.rotationX, gobj.rotationY, gobj.rotationZ, gobj.translationX, gobj.translationY, gobj.translationZ);
-            mat4.mul(b.modelMatrix, posMtx, b.modelMatrix);
-            return b;
+        const createModelInstance = (rresName: string, mdl0Name: string = rresName): MDL0ModelInstance => {
+            return this.createModelInstanceFromRRES(renderer, getRRES(rresName), mdl0Name);
+        };
+
+        const spawnSimpleObject = (rresName: string, mdl0Name: string = rresName): SimpleObjectRenderer => {
+            const b = createModelInstance(rresName, mdl0Name);
+            const obj = new SimpleObjectRenderer(b, gobj);
+            renderer.baseObjects.push(obj);
+            return obj;
         };
 
         // Object IDs taken from http://wiki.tockdom.com/wiki/Object
         function animFrame(frame: number): AnimationController { const a = new AnimationController(); a.setTimeInFrames(frame); return a; }
 
         if (gobj.objectId === 0x0002) { // Psea
-            const rres = getRRES(`Psea`);
-            const b1 = this.spawnObjectFromRRES(device, renderer, rres, `Psea1sand`);
-            const b2 = this.spawnObjectFromRRES(device, renderer, rres, `Psea2dark`);
-            const b3 = this.spawnObjectFromRRES(device, renderer, rres, `Psea3nami`);
-            const b4 = this.spawnObjectFromRRES(device, renderer, rres, `Psea4tex`);
-            const b5 = this.spawnObjectFromRRES(device, renderer, rres, `Psea5spc`);
+            const b1 = spawnSimpleObject(`Psea`, `Psea1sand`);
+            const b2 = spawnSimpleObject(`Psea`, `Psea2dark`);
+            const b3 = spawnSimpleObject(`Psea`, `Psea3nami`);
+            const b4 = spawnSimpleObject(`Psea`, `Psea4tex`);
+            const b5 = spawnSimpleObject(`Psea`, `Psea5spc`);
 
             // Value established by trial and error. Needs more research. See
             // http://wiki.tockdom.com/wiki/Object/Psea
@@ -226,130 +295,130 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
         } else if (gobj.objectId === 0x0015) { // sound_Mii
             // sound generator
         } else if (gobj.objectId === 0x00D2) { // skyship
-            spawnObject(`skyship`);
+            spawnSimpleObject(`skyship`);
         } else if (gobj.objectId === 0x0065) { // itembox
-            const b = spawnObject(`itembox`);
+            const b = spawnSimpleObject(`itembox`);
             b.modelMatrix[13] += 20;
         } else if (gobj.objectId === 0x006F) { // sun
             // TODO(jstpierre): Sun doesn't show up? Need to figure out what this is...
-            spawnObject(`sun`);
+            spawnSimpleObject(`sun`);
         } else if (gobj.objectId === 0x0071) { // KmoonZ
-            spawnObject(`KmoonZ`);
+            spawnSimpleObject(`KmoonZ`);
         } else if (gobj.objectId === 0x0072) { // sunDS
-            spawnObject(`sunDS`);
+            spawnSimpleObject(`sunDS`);
         } else if (gobj.objectId === 0x0073) { // coin
-            spawnObject(`coin`);  
+            spawnSimpleObject(`coin`);  
             // Kinda partially clipped into the floor, and doesn't spin
         } else if (gobj.objectId === 0x00ca) { // MashBalloonGC
-            spawnObject(`MashBalloonGC`);
+            spawnSimpleObject(`MashBalloonGC`);
         } else if (gobj.objectId === 0x00cb) { // WLwallGC
-            spawnObject(`WLwallGC`);
+            spawnSimpleObject(`WLwallGC`);
         } else if (gobj.objectId === 0x00cc) { // CarA1
-            spawnObject(`CarA1`);
+            spawnSimpleObject(`CarA1`);
         } else if (gobj.objectId === 0x00cd) { // basabasa
-            spawnObject(`basabasa`);
+            spawnSimpleObject(`basabasa`);
         } else if (gobj.objectId === 0x00ce) { // HeyhoShipGBA
-            spawnObject(`HeyhoShipGBA`);
+            spawnSimpleObject(`HeyhoShipGBA`);
         //} else if (gobj.objectId === 0x00d0) { // kart_truck
         //    spawnObject(`K_truck`);
         //} else if (gobj.objectId === 0x00d1) { // car_body
         //    spawnObject(`K_car_body`);
         } else if (gobj.objectId === 0x00d2) { // skyship
-            spawnObject(`skyship`);
+            spawnSimpleObject(`skyship`);
         } else if (gobj.objectId === 0x00d7) { // penguin_s
-            spawnObject(`penguin_s`);
+            spawnSimpleObject(`penguin_s`);
             // wiki says they should be creating a mirrored one below it, for the fake reflection but it isnt
         } else if (gobj.objectId === 0x00d8) { // penguin_m
-            spawnObject(`penguin_m`);
+            spawnSimpleObject(`penguin_m`);
         } else if (gobj.objectId === 0x00d9) { // penguin_l
-            spawnObject(`penguin_l`);
+            spawnSimpleObject(`penguin_l`);
             // penguins are missing eyes, the horror!
         } else if (gobj.objectId === 0x00da) { // castleballoon1
-            spawnObject(`castleballoon1`);
+            spawnSimpleObject(`castleballoon1`);
         } else if (gobj.objectId === 0x00db) { // dossunc
-            spawnObject(`dossun`);
+            spawnSimpleObject(`dossun`);
         } else if (gobj.objectId === 0x00dd) { // boble
-            spawnObject(`boble`);
+            spawnSimpleObject(`boble`);
         } else if (gobj.objectId === 0x00de) { // K_bomb_car
-            spawnObject(`K_bomb_car`);
+            spawnSimpleObject(`K_bomb_car`);
         //} else if (gobj.objectId === 0x00e2) { // hanachan
         //    spawnObject(`hanachan`);
             // only shows up as his head
         } else if (gobj.objectId === 0x00e3) { // seagull
-            spawnObject(`seagull`);
+            spawnSimpleObject(`seagull`);
         } else if (gobj.objectId === 0x00e4) { // moray
-            spawnObject(`moray`);
+            spawnSimpleObject(`moray`);
         } else if (gobj.objectId === 0x00e5) { // crab
-            spawnObject(`crab`);
+            spawnSimpleObject(`crab`);
         } else if (gobj.objectId === 0x00e7) { // CarA2
-            spawnObject(`CarA2`);
+            spawnSimpleObject(`CarA2`);
         } else if (gobj.objectId === 0x00e8) { // CarA3
-            spawnObject(`CarA3`);
+            spawnSimpleObject(`CarA3`);
         //} else if (gobj.objectId === 0x00e9) { // Hwanwan
         //    spawnObject(`wanwan`);
             // smaller than it should be and half clipped into the floor
         } else if (gobj.objectId === 0x00eb) { // Twanwan
-            const b = spawnObject(`Twanwan`);
+            const b = spawnSimpleObject(`Twanwan`);
             b.modelMatrix[13] += 150;
             // offset a bit so he fits into the pipe nicer.
         } else if (gobj.objectId === 0x00ec) { // cruiserR
-            spawnObject(`cruiser`);
+            spawnSimpleObject(`cruiser`);
         } else if (gobj.objectId === 0x00ed) { // bird
-            spawnObject(`bird`);
+            spawnSimpleObject(`bird`);
         } else if (gobj.objectId === 0x012E) { // dokan_sfc
-            spawnObject(`dokan_sfc`);
+            spawnSimpleObject(`dokan_sfc`);
         } else if (gobj.objectId === 0x012f) { // castletree1
-            spawnObject(`castletree1`);
+            spawnSimpleObject(`castletree1`);
         } else if (gobj.objectId === 0x0130) { // castletree1c
-            spawnObject(`castletree1`);
+            spawnSimpleObject(`castletree1`);
         } else if (gobj.objectId === 0x0131) { // castletree2
-            spawnObject(`castletree2`);
+            spawnSimpleObject(`castletree2`);
         } else if (gobj.objectId === 0x0132) { // castleflower1
-            spawnObject(`castleflower1`);
+            spawnSimpleObject(`castleflower1`);
         } else if (gobj.objectId === 0x0133) { // mariotreeGC
-            spawnObject(`mariotreeGC`);
+            spawnSimpleObject(`mariotreeGC`);
         } else if (gobj.objectId === 0x0134) { // mariotreeGCc
-            spawnObject(`mariotreeGC`);
+            spawnSimpleObject(`mariotreeGC`);
         } else if (gobj.objectId === 0x0135) { // donkytree1GC
-            spawnObject(`donkytree1GC`);
+            spawnSimpleObject(`donkytree1GC`);
         } else if (gobj.objectId === 0x0136) { // donkytree2GC
-            spawnObject(`donkytree2GC`);
+            spawnSimpleObject(`donkytree2GC`);
         } else if (gobj.objectId === 0x0137) { // peachtreeGC
-            spawnObject(`peachtreeGC`);
+            spawnSimpleObject(`peachtreeGC`);
         } else if (gobj.objectId === 0x0138) { // peachtreeGCc
-            spawnObject(`peachtreeGC`);
+            spawnSimpleObject(`peachtreeGC`);
         } else if (gobj.objectId === 0x013c) { // obakeblockSFCc
-            spawnObject(`obakeblockSFC`);
+            spawnSimpleObject(`obakeblockSFC`);
         } else if (gobj.objectId === 0x013d) { // WLarrowGC
-            spawnObject(`WLarrowGC`);
+            spawnSimpleObject(`WLarrowGC`);
         } else if (gobj.objectId === 0x013e) { // WLscreenGC
-            spawnObject(`WLscreenGC`);
+            spawnSimpleObject(`WLscreenGC`);
         } else if (gobj.objectId === 0x013f) { // WLdokanGC
-            spawnObject(`WLdokanGC`);
+            spawnSimpleObject(`WLdokanGC`);
         } else if (gobj.objectId === 0x0140) { // MarioGo64c
-            spawnObject(`MarioGo64`);
+            spawnSimpleObject(`MarioGo64`);
         } else if (gobj.objectId === 0x0141) { // PeachHunsuiGC
-            spawnObject(`PeachHunsuiGC`);
+            spawnSimpleObject(`PeachHunsuiGC`);
         } else if (gobj.objectId === 0x0142) { // kinokoT1
-            spawnObject(`kinokoT1`);
+            spawnSimpleObject(`kinokoT1`);
         } else if (gobj.objectId === 0x0144) { // pylon01
-            const b = spawnObject(`pylon01`);
+            const b = spawnSimpleObject(`pylon01`);
             const rres = getRRES(`pylon01`);
-            b.bindCLR0(animFrame(gobj.objectArg0), assertExists(rres.clr0.find((clr0) => clr0.name === `pylon01`)));
+            b.modelInstance.bindCLR0(animFrame(gobj.objectArg0), assertExists(rres.clr0.find((clr0) => clr0.name === `pylon01`)));
         } else if (gobj.objectId === 0x0145) { // PalmTree
-            spawnObject(`PalmTree`);
+            spawnSimpleObject(`PalmTree`);
         } else if (gobj.objectId === 0x0146) { // parasol
-            spawnObject(`parasol`);
+            spawnSimpleObject(`parasol`);
         } else if (gobj.objectId === 0x0147) { // cruiser
-            spawnObject(`cruiser`);
+            spawnSimpleObject(`cruiser`);
         } else if (gobj.objectId === 0x0148) { // K_sticklift00
-            spawnObject(`K_sticklift00`);
+            spawnSimpleObject(`K_sticklift00`);
         } else if (gobj.objectId === 0x0149) { // heyho2
-            spawnObject(`heyho2`);
+            spawnSimpleObject(`heyho2`);
         } else if (gobj.objectId === 0x014a) { // HeyhoTreeGBAc
-            spawnObject(`HeyhoTreeGBA`);
+            spawnSimpleObject(`HeyhoTreeGBA`);
         } else if (gobj.objectId === 0x014c) { // truckChimSmk
-            spawnObject(`truckChimSmk`);
+            spawnSimpleObject(`truckChimSmk`);
         } else if (gobj.objectId === 0x014D) { // MiiObj01
             // Don't spawn the MiiObj's as they have placeholder textures for faces that don't look good.
             // spawnObject(`MiiObj01`);
@@ -358,319 +427,320 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
         } else if (gobj.objectId === 0x014F) { // MiiObj03
             // spawnObject(`MiiObj03`);
         } else if (gobj.objectId === 0x0150) { // gardentreeDS
-            spawnObject(`gardentreeDS`);
+            spawnSimpleObject(`gardentreeDS`);
         } else if (gobj.objectId === 0x0151) { // gardentreeDSc
-            spawnObject(`gardentreeDS`);
+            spawnSimpleObject(`gardentreeDS`);
         } else if (gobj.objectId === 0x0152) { // FlagA1
-            spawnObject(`FlagA1`);
+            spawnSimpleObject(`FlagA1`);
         } else if (gobj.objectId === 0x0153) { // FlagA2
-            spawnObject(`FlagA2`);
+            spawnSimpleObject(`FlagA2`);
         } else if (gobj.objectId === 0x0154) { // FlagB1
-            spawnObject(`FlagB1`);
+            spawnSimpleObject(`FlagB1`);
         } else if (gobj.objectId === 0x0155) { // FlagB2
-            spawnObject(`FlagB2`);
+            spawnSimpleObject(`FlagB2`);
         } else if (gobj.objectId === 0x0156) { // FlagA3
-            spawnObject(`FlagA3`);
+            spawnSimpleObject(`FlagA3`);
         } else if (gobj.objectId === 0x0157) { // DKtreeA64
-            spawnObject(`DKtreeA64`);
+            spawnSimpleObject(`DKtreeA64`);
         } else if (gobj.objectId === 0x0158) { // DKtreeA64c
-            spawnObject(`DKtreeA64`);
+            spawnSimpleObject(`DKtreeA64`);
         } else if (gobj.objectId === 0x0159) { // DKtreeB64
-            spawnObject(`DKtreeB64`);
+            spawnSimpleObject(`DKtreeB64`);
         } else if (gobj.objectId === 0x015a) { // DKtreeB64c
-            spawnObject(`DKtreeB64`);
+            spawnSimpleObject(`DKtreeB64`);
         } else if (gobj.objectId === 0x015b) { // TownTreeDSc
-            spawnObject(`TownTreeDS`);
+            spawnSimpleObject(`TownTreeDS`);
         } else if (gobj.objectId === 0x015c) { // Piston
-            spawnObject(`Piston`);
+            spawnSimpleObject(`Piston`);
         } else if (gobj.objectId === 0x015d) { // oilSFC
-            spawnObject(`oilSFC`);
+            spawnSimpleObject(`oilSFC`);
         } else if (gobj.objectId === 0x0160) { // mii_balloon
-            spawnObject(`mii_balloon`);
+            spawnSimpleObject(`mii_balloon`);
         } else if (gobj.objectId === 0x0161) { // windmill
-            spawnObject(`windmill`);
+            spawnSimpleObject(`windmill`);
         } else if (gobj.objectId === 0x0162) { // dossun
-            spawnObject(`dossun`);
+            spawnSimpleObject(`dossun`);
         } else if (gobj.objectId === 0x0163) { // TownTreeDS
-            spawnObject(`TownTreeDS`);
+            spawnSimpleObject(`TownTreeDS`);
         } else if (gobj.objectId === 0x0164) { // Ksticketc
-            spawnObject(`Ksticketc`);
+            spawnSimpleObject(`Ksticketc`);
         } else if (gobj.objectId === 0x0165) { // monte_a
-            spawnObject(`monte_a`);
+            spawnSimpleObject(`monte_a`);
         } else if (gobj.objectId === 0x0166) { // MiiStatueM1
-            spawnObject(`MiiStatueM1`);
+            spawnSimpleObject(`MiiStatueM1`);
         } else if (gobj.objectId === 0x0167) { // ShMiiObj01
-            spawnObject(`ShMiiObj01`);
+            spawnSimpleObject(`ShMiiObj01`);
         } else if (gobj.objectId === 0x0168) { // ShMiiObj02
-            spawnObject(`ShMiiObj02`);
+            spawnSimpleObject(`ShMiiObj02`);
         } else if (gobj.objectId === 0x0169) { // ShMiiObj03
-            spawnObject(`ShMiiObj03`);
+            spawnSimpleObject(`ShMiiObj03`);
         } else if (gobj.objectId === 0x016b) { // miiposter
-            spawnObject(`miiposter`);
+            spawnSimpleObject(`miiposter`);
         } else if (gobj.objectId === 0x016c) { // dk_miiobj00
-            spawnObject(`dk_miiobj00`);
+            spawnSimpleObject(`dk_miiobj00`);
         } else if (gobj.objectId === 0x016d) { // light_house
-            spawnObject(`light_house`);
+            spawnSimpleObject(`light_house`);
         } else if (gobj.objectId === 0x016e) { // r_parasol
-            spawnObject(`r_parasol`);
+            spawnSimpleObject(`r_parasol`);
         } else if (gobj.objectId === 0x016f) { // obakeblock2SFCc
-            spawnObject(`obakeblockSFC`);
+            spawnSimpleObject(`obakeblockSFC`);
         } else if (gobj.objectId === 0x0170) { // obakeblock3SFCc
-            spawnObject(`obakeblockSFC`);
+            spawnSimpleObject(`obakeblockSFC`);
         } else if (gobj.objectId === 0x0171) { // koopaFigure
-            spawnObject(`koopaFigure`);
+            spawnSimpleObject(`koopaFigure`);
         } else if (gobj.objectId === 0x0172) { // pukupuku
-            spawnObject(`pukupuku`);
+            spawnSimpleObject(`pukupuku`);
         } else if (gobj.objectId === 0x0176) { // karehayama
-            spawnObject(`karehayama`);
+            spawnSimpleObject(`karehayama`);
         } else if (gobj.objectId === 0x0177) { // EarthRing
-            spawnObject(`EarthRing`);
+            spawnSimpleObject(`EarthRing`);
         } else if (gobj.objectId === 0x0178) { // SpaceSun
-            spawnObject(`SpaceSun`);
+            spawnSimpleObject(`SpaceSun`);
         } else if (gobj.objectId === 0x017a) { // StarRing
-            spawnObject(`StarRing`);
+            spawnSimpleObject(`StarRing`);
         } else if (gobj.objectId === 0x017b) { // M_obj_kanban
-            spawnObject(`M_obj_kanban`);
+            spawnSimpleObject(`M_obj_kanban`);
         } else if (gobj.objectId === 0x017c) { // MiiStatueL1
-            spawnObject(`MiiStatueL1`);
+            spawnSimpleObject(`MiiStatueL1`);
         } else if (gobj.objectId === 0x017d) { // MiiStatueD1
-            spawnObject(`MiiStatueD1`);
+            spawnSimpleObject(`MiiStatueD1`);
         } else if (gobj.objectId === 0x017e) { // MiiSphinxY1
-            spawnObject(`MiiSphinxY1`);
+            spawnSimpleObject(`MiiSphinxY1`);
         } else if (gobj.objectId === 0x017f) { // MiiSphinxY2
-            spawnObject(`MiiSphinxY2`);
+            spawnSimpleObject(`MiiSphinxY2`);
         } else if (gobj.objectId === 0x0180) { // FlagA5
-            spawnObject(`FlagA5`);
+            spawnSimpleObject(`FlagA5`);
         } else if (gobj.objectId === 0x0181) { // CarB
-            spawnObject(`CarB`);
+            spawnSimpleObject(`CarB`);
         } else if (gobj.objectId === 0x0185) { // group_monte_a
-            spawnObject(`group_monte_a`);
+            spawnSimpleObject(`group_monte_a`);
         } else if (gobj.objectId === 0x0186) { // MiiStatueL2
-            spawnObject(`MiiStatueL2`);
+            spawnSimpleObject(`MiiStatueL2`);
         } else if (gobj.objectId === 0x0187) { // MiiStatueD2
-            spawnObject(`MiiStatueD2`);
+            spawnSimpleObject(`MiiStatueD2`);
         } else if (gobj.objectId === 0x0188) { // MiiStatueP1
-            spawnObject(`MiiStatueP1`);
+            spawnSimpleObject(`MiiStatueP1`);
         } else if (gobj.objectId === 0x0189) { // SentakuDS
-            spawnObject(`SentakuDS`);
+            spawnSimpleObject(`SentakuDS`);
         } else if (gobj.objectId === 0x018a) { // fks_screen_wii
-            spawnObject(`fks_screen_wii`);
+            spawnSimpleObject(`fks_screen_wii`);
         } else if (gobj.objectId === 0x018b) { // KoopaFigure64
-            spawnObject(`KoopaFigure64`);
+            spawnSimpleObject(`KoopaFigure64`);
         } else if (gobj.objectId === 0x018c) { // b_teresa
-            spawnObject(`b_teresa`);
+            spawnSimpleObject(`b_teresa`);
         } else if (gobj.objectId === 0x018E) { // MiiKanban
-            spawnObject(`MiiKanban`);
+            spawnSimpleObject(`MiiKanban`);
         } else if (gobj.objectId === 0x018f) { // BGteresaSFC
-            spawnObject(`BGteresaSFC`);
+            spawnSimpleObject(`BGteresaSFC`);
         } else if (gobj.objectId === 0x0191) { // kuribo
-            const b = spawnObject(`kuribo`);
+            const b = spawnSimpleObject(`kuribo`);
             const rres = getRRES(`kuribo`);
-            b.bindCHR0(renderer.animationController, assertExists(rres.chr0.find((chr0) => chr0.name === 'walk_l')));
+            b.modelInstance.bindCHR0(renderer.animationController, assertExists(rres.chr0.find((chr0) => chr0.name === 'walk_l')));
         } else if (gobj.objectId === 0x0192) { // choropu
-            spawnObject(`choropu`);
+            spawnSimpleObject(`choropu`);
         } else if (gobj.objectId === 0x0193) { // cow
-            spawnObject(`cow`);
+            spawnSimpleObject(`cow`);
         } else if (gobj.objectId === 0x0194) { // pakkun_f
-            spawnObject(`pakkun_f`);
+            spawnSimpleObject(`pakkun_f`);
         } else if (gobj.objectId === 0x0195) { // WLfirebarGC
-            spawnObject(`WLfirebarGC`);
+            spawnSimpleObject(`WLfirebarGC`);
         } else if (gobj.objectId === 0x0196) { // wanwan
-            spawnObject(`wanwan`);
+            spawnSimpleObject(`wanwan`);
         } else if (gobj.objectId === 0x0197) { // poihana
-            spawnObject(`poihana`);
+            spawnSimpleObject(`poihana`);
         } else if (gobj.objectId === 0x0198) { // DKrockGC
-            spawnObject(`DKrockGC`);
+            spawnSimpleObject(`DKrockGC`);
         } else if (gobj.objectId === 0x0199) { // sanbo
-            spawnObject(`sanbo`);
+            spawnSimpleObject(`sanbo`);
         } else if (gobj.objectId === 0x019a) { // choropu2
-            spawnObject(`choropu`);
+            spawnSimpleObject(`choropu`);
         } else if (gobj.objectId === 0x019b) { // TruckWagon
-            spawnObject(`TruckWagon`);
+            spawnSimpleObject(`TruckWagon`);
         } else if (gobj.objectId === 0x019c) { // heyho
-            spawnObject(`heyho`);
+            spawnSimpleObject(`heyho`);
         } else if (gobj.objectId === 0x019d) { // Press
-            spawnObject(`Press`);
+            spawnSimpleObject(`Press`);
         } else if (gobj.objectId === 0x01a1) { // WLfireringGC
-            spawnObject(`WLfirebarGC`);
+            spawnSimpleObject(`WLfirebarGC`);
         } else if (gobj.objectId === 0x01a2) { // pakkun_dokan
-            spawnObject(`pakkun_dokan`);
+            spawnSimpleObject(`pakkun_dokan`);
         //} else if (gobj.objectId === 0x01a3) { // begoman_spike
         //    spawnObject(`begoman_spike`);
         } else if (gobj.objectId === 0x01a4) { // FireSnake
-            spawnObject(`FireSnake`);
+            spawnSimpleObject(`FireSnake`);
         } else if (gobj.objectId === 0x01a5) { // koopaFirebar
-            spawnObject(`koopaFirebar`);
+            spawnSimpleObject(`koopaFirebar`);
         } else if (gobj.objectId === 0x01a6) { // Epropeller
-            spawnObject(`Epropeller`);
+            spawnSimpleObject(`Epropeller`);
         } else if (gobj.objectId === 0x01a8) { // FireSnake_v
-            spawnObject(`FireSnake`);
+            spawnSimpleObject(`FireSnake`);
         } else if (gobj.objectId === 0x01aa) { // puchi_pakkun
-            spawnObject(`puchi_pakkun`);
+            spawnSimpleObject(`puchi_pakkun`);
         //} else if (gobj.objectId === 0x01f5) { // kinoko_ud
         //    spawnObject(`kinoko`);
         } else if (gobj.objectId === 0x01f6) { // kinoko_bend
             if (gobj.objectArg0 === 0) {
-                spawnObject(`kinoko`, `kinoko_kuki`);
-                spawnObject(`kinoko`, `kinoko_r`);
+                spawnSimpleObject(`kinoko`, `kinoko_kuki`);
+                spawnSimpleObject(`kinoko`, `kinoko_r`);
             } else if (gobj.objectArg0 === 1) {
-                spawnObject(`kinoko`, `kinoko_d_kuki`);
-                spawnObject(`kinoko`, `kinoko_d_r`);
+                spawnSimpleObject(`kinoko`, `kinoko_d_kuki`);
+                spawnSimpleObject(`kinoko`, `kinoko_d_r`);
             } else {
                 throw "whoops";
             }
         } else if (gobj.objectId === 0x01f7) { // VolcanoRock1
-            spawnObject(`VolcanoRock1`);
+            spawnSimpleObject(`VolcanoRock1`);
         } else if (gobj.objectId === 0x01f8) { // bulldozer_left
-            spawnObject(`bulldozer_left`);
+            spawnSimpleObject(`bulldozer_left`);
         } else if (gobj.objectId === 0x01f9) { // bulldozer_right
-            spawnObject(`bulldozer_right`);
+            spawnSimpleObject(`bulldozer_right`);
         } else if (gobj.objectId === 0x01fa) { // kinoko_nm
             if (gobj.objectArg0 === 0) {
-                spawnObject(`kinoko`, `kinoko_kuki`);
-                spawnObject(`kinoko`, `kinoko_g`);
+                spawnSimpleObject(`kinoko`, `kinoko_kuki`);
+                spawnSimpleObject(`kinoko`, `kinoko_g`);
             } else if (gobj.objectArg0 === 1) {
-                spawnObject(`kinoko`, `kinoko_d_kuki`);
-                spawnObject(`kinoko`, `kinoko_d_g`);
+                spawnSimpleObject(`kinoko`, `kinoko_d_kuki`);
+                spawnSimpleObject(`kinoko`, `kinoko_d_g`);
             } else {
                 throw "whoops";
             }
         } else if (gobj.objectId === 0x01fb) { // Crane
-            spawnObject(`Crane`);
+            spawnSimpleObject(`Crane`);
         } else if (gobj.objectId === 0x01fc) { // VolcanoPiece
-            spawnObject(`VolcanoPiece1`, `VolcanoPiece${gobj.objectArg0}`);
+            spawnSimpleObject(`VolcanoPiece1`, `VolcanoPiece${gobj.objectArg0}`);
         } else if (gobj.objectId === 0x01fd) { // FlamePole
-            spawnObject(`FlamePole`);
+            spawnSimpleObject(`FlamePole`);
         } else if (gobj.objectId === 0x01fe) { // TwistedWay
-            spawnObject(`TwistedWay`);
+            spawnSimpleObject(`TwistedWay`);
         } else if (gobj.objectId === 0x01ff) { // TownBridgeDSc
-            spawnObject(`TownBridgeDS`);
+            spawnSimpleObject(`TownBridgeDS`);
         } else if (gobj.objectId === 0x0200) { // DKship64
-            spawnObject(`DKship64`);
+            spawnSimpleObject(`DKship64`);
         } else if (gobj.objectId === 0x0202) { // DKturibashiGCc
-            spawnObject(`DKturibashiGC`);
+            spawnSimpleObject(`DKturibashiGC`);
         } else if (gobj.objectId === 0x0204) { // aurora
-            spawnObject(`aurora`);
+            const aurora = new Aurora(createModelInstance(`aurora`), gobj);
+            renderer.baseObjects.push(aurora);
         } else if (gobj.objectId === 0x0205) { // venice_saku
-            spawnObject(`venice_saku`);
+            spawnSimpleObject(`venice_saku`);
         } else if (gobj.objectId === 0x0206) { // casino_roulette
-            spawnObject(`casino_roulette`);
+            spawnSimpleObject(`casino_roulette`);
         } else if (gobj.objectId === 0x0209) { // dc_sandcone
-            spawnObject(`dc_sandcone`);
+            spawnSimpleObject(`dc_sandcone`);
         } else if (gobj.objectId === 0x020a) { // venice_hasi 
-            spawnObject(`venice_hasi`);
+            spawnSimpleObject(`venice_hasi`);
         } else if (gobj.objectId === 0x020b) { // bblock
-            spawnObject(`bblock1`);
+            spawnSimpleObject(`bblock1`);
         } else if (gobj.objectId === 0x020e) { // ami
-            spawnObject(`ami`);
+            spawnSimpleObject(`ami`);
         } else if (gobj.objectId === 0x0211) { // RM_ring1
             const ringNames = ['RM_ring1', 'RM_ring2', 'RM_ring3'];
             const ringName = ringNames[gobj.objectArg0 - 1];
-            const b = spawnObject(`RM_ring1`, ringName);
+            const b = spawnSimpleObject(`RM_ring1`, ringName);
             const rres = getRRES(`RM_ring1`);
-            b.bindRRESAnimations(renderer.animationController, rres, ringName);
-            b.bindCLR0(null, null);
+            b.modelInstance.bindRRESAnimations(renderer.animationController, rres, ringName);
+            b.modelInstance.bindCLR0(null, null);
         //} else if (gobj.objectId === 0x0212) { // FlamePole_v
         //    spawnObject(`FlamePole_v`);
         } else if (gobj.objectId === 0x0214) { // InsekiA
-            spawnObject(`InsekiA`);
+            spawnSimpleObject(`InsekiA`);
         } else if (gobj.objectId === 0x0215) { // InsekiB
-            spawnObject(`InsekiB`);
+            spawnSimpleObject(`InsekiB`);
         //} else if (gobj.objectId === 0x0216) { // FlamePole_v_big
         //    spawnObject(`FlamePole_v_big`);
         } else if (gobj.objectId === 0x0217) { // Mdush
-            spawnObject(`Mdush`);
+            spawnSimpleObject(`Mdush`);
         } else if (gobj.objectId === 0x0259) { // DonkyCannonGC
-            spawnObject(`DonkyCannonGC`);
+            spawnSimpleObject(`DonkyCannonGC`);
         } else if (gobj.objectId === 0x025a) { // BeltEasy
-            spawnObject(`BeltEasy`);
+            spawnSimpleObject(`BeltEasy`);
         } else if (gobj.objectId === 0x025b) { // BeltCrossing
-            spawnObject(`BeltCrossing`);
+            spawnSimpleObject(`BeltCrossing`);
         } else if (gobj.objectId === 0x025c) { // BeltCurveA
-            spawnObject(`BeltCurveA`);
+            spawnSimpleObject(`BeltCurveA`);
         } else if (gobj.objectId === 0x025e) { // escalator
-            spawnObject(`escalator`);
+            spawnSimpleObject(`escalator`);
         } else if (gobj.objectId === 0x025f) { // DonkyCannon_wii
-            spawnObject(`DonkyCannon_wii`);
+            spawnSimpleObject(`DonkyCannon_wii`);
         } else if (gobj.objectId === 0x0260) { // escalator_group
-            const left = spawnObject(`escalator`);
+            const left = spawnSimpleObject(`escalator`);
             mat4.translate(left.modelMatrix, left.modelMatrix, [-1450, 250, -600]);
-            const right = spawnObject(`escalator`);
+            const right = spawnSimpleObject(`escalator`);
             mat4.translate(right.modelMatrix, right.modelMatrix, [1450, 250, -600]);
         } else if (gobj.objectId === 0x0261) { // tree_cannon
-            spawnObject(`tree_cannon`);
+            spawnSimpleObject(`tree_cannon`);
         } else if (gobj.objectId === 0x02bd) { // group_enemy_b
-            spawnObject(`group_enemy_b`);
+            spawnSimpleObject(`group_enemy_b`);
         } else if (gobj.objectId === 0x02be) { // group_enemy_c
-            spawnObject(`group_enemy_c`);
+            spawnSimpleObject(`group_enemy_c`);
         //} else if (gobj.objectId === 0x02bf) { // taimatsu
         //    spawnObject(`taimatsu`);
         } else if (gobj.objectId === 0x02c0) { // truckChimSmkW
-            spawnObject(`truckChimSmkW`);
+            spawnSimpleObject(`truckChimSmkW`);
         } else if (gobj.objectId === 0x02c2) { // dkmonitor
-            spawnObject(`dkmonitor`);
+            spawnSimpleObject(`dkmonitor`);
         } else if (gobj.objectId === 0x02c3) { // group_enemy_a
-            spawnObject(`group_enemy_a`);
+            spawnSimpleObject(`group_enemy_a`);
         } else if (gobj.objectId === 0x02c4) { // FlagB3
-            spawnObject(`FlagB3`);
+            spawnSimpleObject(`FlagB3`);
         } else if (gobj.objectId === 0x02c5) { // spot
-            spawnObject(`spot`);
+            spawnSimpleObject(`spot`);
         } else if (gobj.objectId === 0x02c7) { // FlagB4
-            spawnObject(`FlagB4`);
+            spawnSimpleObject(`FlagB4`);
         } else if (gobj.objectId === 0x02c8) { // group_enemy_e
-            spawnObject(`group_enemy_e`);
+            spawnSimpleObject(`group_enemy_e`);
         } else if (gobj.objectId === 0x02c9) { // group_monte_L
-            spawnObject(`group_monte_a`);
+            spawnSimpleObject(`group_monte_a`);
         } else if (gobj.objectId === 0x02ca) { // group_enemy_f
-            spawnObject(`group_enemy_f`);
+            spawnSimpleObject(`group_enemy_f`);
         //} else if (gobj.objectId === 0x02cc) { // FallBsB
         //    spawnObject(`FallBsB`);
         //} else if (gobj.objectId === 0x02ce) { // volsmk
         //    spawnObject(`volsmk`);
         } else if (gobj.objectId === 0x02cf) { // ridgemii00
-            spawnObject(`ridgemii00`);
+            spawnSimpleObject(`ridgemii00`);
         } else if (gobj.objectId === 0x02D0) { // Flash_L
             // particle effect; unsupported
         } else if (gobj.objectId === 0x02d5) { // MiiSignNoko
-            const b = spawnObject(`MiiSignNoko`);
+            const b = spawnSimpleObject(`MiiSignNoko`);
             const rres = getRRES(`MiiSignNoko`);
-            b.bindPAT0(animFrame(0), rres.pat0[0]);
+            b.modelInstance.bindPAT0(animFrame(0), rres.pat0[0]);
         } else if (gobj.objectId === 0x02d6) { // UtsuboDokan
-            spawnObject(`UtsuboDokan`);
+            spawnSimpleObject(`UtsuboDokan`);
         } else if (gobj.objectId === 0x02d7) { // Spot64
-            spawnObject(`Spot64`);
+            spawnSimpleObject(`Spot64`);
         //} else if (gobj.objectId === 0x02d9) { // Fall_MH
         //    spawnObject(`Fall_MH`);
         //} else if (gobj.objectId === 0x02da) { // Fall_Y
         //    spawnObject(`Fall_Y`);
         } else if (gobj.objectId === 0x02df) { // MiiStatueM2
-            spawnObject(`MiiStatueM2`);
+            spawnSimpleObject(`MiiStatueM2`);
         } else if (gobj.objectId === 0x02e0) { // RhMiiKanban
-            spawnObject(`RhMiiKanban`);
+            spawnSimpleObject(`RhMiiKanban`);
         } else if (gobj.objectId === 0x02E1) { // MiiStatueL3
-            spawnObject(`MiiStatueL3`);
+            spawnSimpleObject(`MiiStatueL3`);
         } else if (gobj.objectId === 0x02e2) { // MiiSignWario
-            spawnObject(`MiiSignWario`);
+            spawnSimpleObject(`MiiSignWario`);
         } else if (gobj.objectId === 0x02e3) { // MiiStatueBL1
-            spawnObject(`MiiStatueBL1`);
+            spawnSimpleObject(`MiiStatueBL1`);
         } else if (gobj.objectId === 0x02e4) { // MiiStatueBD1
-            spawnObject(`MiiStatueBD1`);
+            spawnSimpleObject(`MiiStatueBD1`);
         } else if (gobj.objectId === 0x02e5) { // Kamifubuki
-            spawnObject(`Kamifubuki`);
+            spawnSimpleObject(`Kamifubuki`);
         } else if (gobj.objectId === 0x02e6) { // Crescent64
-            spawnObject(`Crescent64`);
+            spawnSimpleObject(`Crescent64`);
         } else if (gobj.objectId === 0x02e7) { // MiiSighKino
-            spawnObject(`MiiSighKino`);
+            spawnSimpleObject(`MiiSighKino`);
         } else if (gobj.objectId === 0x02e8) { // MiiObjD01
-            spawnObject(`MiiObjD01`);
+            spawnSimpleObject(`MiiObjD01`);
         } else if (gobj.objectId === 0x02e9) { // MiiObjD02
-            spawnObject(`MiiObjD02`);
+            spawnSimpleObject(`MiiObjD02`);
         } else if (gobj.objectId === 0x02ea) { // MiiObjD03
-            spawnObject(`MiiObjD03`);
+            spawnSimpleObject(`MiiObjD03`);
         } else if (gobj.objectId === 0x02eb) { // mare_a
-            spawnObject(`mare_a`);
+            spawnSimpleObject(`mare_a`);
         } else if (gobj.objectId === 0x02ec) { // mare_b
-            spawnObject(`mare_b`);
+            spawnSimpleObject(`mare_b`);
         //} else if (gobj.objectId === 0x02f3) { // DKfalls
         //    spawnObject(`DKfalls`);
         } else {
@@ -686,12 +756,14 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
         const modelCache = renderer.modelCache;
 
         const courseRRES = modelCache.ensureRRES(device, renderer, arc, `./course_model.brres`);
-        const courseInstance = this.spawnObjectFromRRES(device, renderer, courseRRES, 'course');
+        const courseInstance = this.createModelInstanceFromRRES(renderer, courseRRES, 'course');
+        renderer.baseObjects.push(courseInstance);
         courseInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE);
         mat4.copy(courseInstance.modelMatrix, posMtx);
 
         const skyboxRRES = modelCache.ensureRRES(device, renderer, arc, `./vrcorn_model.brres`);
-        const skyboxInstance = this.spawnObjectFromRRES(device, renderer, skyboxRRES, 'vrcorn');
+        const skyboxInstance = this.createModelInstanceFromRRES(renderer, skyboxRRES, 'vrcorn');
+        renderer.baseObjects.push(skyboxInstance);
         skyboxInstance.setSortKeyLayer(GfxRendererLayer.BACKGROUND);
         mat4.copy(skyboxInstance.modelMatrix, posMtx);
 
