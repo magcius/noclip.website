@@ -845,7 +845,7 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
         const wrapT: GX.WrapMode = view.getUint32(texPlttInfoOffs + 0x1C);
         const minFilter: GX.TexFilter = view.getUint32(texPlttInfoOffs + 0x20);
         const magFilter: GX.TexFilter = view.getUint32(texPlttInfoOffs + 0x24);
-        const lodBias = view.getFloat32(texPlttInfoOffs + 0x28) * 1/8;
+        const lodBias = view.getFloat32(texPlttInfoOffs + 0x28);
         const maxAniso = view.getUint32(texPlttInfoOffs + 0x2C);
         const biasClamp = view.getUint8(texPlttInfoOffs + 0x30);
         const edgeLod = view.getUint8(texPlttInfoOffs + 0x31);

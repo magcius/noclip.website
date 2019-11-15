@@ -543,7 +543,7 @@ export class OrbitCameraController implements CameraController {
             this.txVel *= drag;
             this.tyVel *= drag;
 
-            this.z += this.zVel * 4;
+            this.z += Math.max(Math.log(Math.abs(this.zVel)), 0) * 4 * Math.sign(this.zVel);
             if (inputManager.dz === 0)
                 this.zVel *= 0.85;
             if (this.z > -10) {
