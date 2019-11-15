@@ -181,6 +181,8 @@ function parseKMP(buffer: ArrayBufferSlice): KMP {
 const scaleFactor = 0.1;
 const posMtx = mat4.fromScaling(mat4.create(), [scaleFactor, scaleFactor, scaleFactor]);
 
+const FIdx2Rad = MathConstants.TAU / 0xFF;
+
 class SimpleObjectRenderer implements BaseObject {
     public modelMatrix = mat4.create();
 
@@ -218,8 +220,8 @@ class Aurora extends SimpleObjectRenderer {
         super(modelInstance, gobj);
 
         // Nintendo is really cool lol
-        for (let i = 2; i < 39; i++) {
-            const nodeName = 'joint' + i;
+        for (let i = 0; i < 37; i++) {
+            const nodeName = 'joint' + (i + 2);
             this.nodeIndices.push(this.modelInstance.mdl0Model.mdl0.nodes.findIndex((node) => node.name === nodeName)!);
         }
     }
@@ -228,15 +230,23 @@ class Aurora extends SimpleObjectRenderer {
         // Update joints.
         // TODO(jstpierre): Do in a less ugly way lol
 
-        const t = viewerInput.time / 2000;
+        const timeInFrames = (viewerInput.time / 1000) * 60;
+        const jointDist = 416.66000366;
+        const freq = 40.74366379;
+
         for (let i = 0; i < this.nodeIndices.length; i++) {
             const nodeIndex = this.nodeIndices[i];
             const node = this.modelInstance.mdl0Model.mdl0.nodes[nodeIndex];
             const dst = node.modelMatrix;
-            const g = i / (this.nodeIndices.length - 1);
-            const wave = Math.sin((g + t) * MathConstants.TAU) * 1200;
-            // Lerp to nothing at the ends.
-            dst[13] = lerp(0, wave, g);
+
+            const thetaA = (((timeInFrames / 60) - 30) / 60);
+            const theta = Math.min(1.0 + (thetaA * thetaA), 4);
+            const waveFade = (MathConstants.TAU * jointDist * i) / 15000;
+            const wave2 = Math.sin(FIdx2Rad * (freq * ((waveFade * theta) + ((Math.PI * timeInFrames) / 50.0))));
+
+            dst[12] = (i + 2) * jointDist;
+            dst[13] = waveFade * wave2 * 80;
+            dst[14] = 0;
         }
 
         super.prepareToRender(device, renderInstManager, viewerInput);
