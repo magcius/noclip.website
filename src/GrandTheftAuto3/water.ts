@@ -1,10 +1,10 @@
 
-import { vec4, vec3, vec2, quat } from 'gl-matrix';
+import { vec3, vec2, quat } from 'gl-matrix';
 import { TransparentBlack, colorCopy, Color } from '../Color';
 import { ItemPlacement, ItemInstance, ObjectDefinition, INTERIOR_EVERYWHERE, ObjectFlags } from './item';
 import { MeshFragData } from './render';
 
-export function parseWaterPro(view: DataView, origin: vec4): ItemPlacement {
+export function parseWaterPro(view: DataView, [originX, originY]: number[]): ItemPlacement {
     const numLevels = view.getInt32(0, true);
     const heights: number[] = [];
     for (let i = 0; i < numLevels; i++) {
@@ -23,8 +23,8 @@ export function parseWaterPro(view: DataView, origin: vec4): ItemPlacement {
                 modelName: 'water',
                 interior: INTERIOR_EVERYWHERE,
                 translation: vec3.fromValues(
-                    i * size + origin[0] - 2048,
-                    j * size + origin[1] - 2048,
+                    i * size + originX - 2048,
+                    j * size + originY - 2048,
                     heights[level]
                 ),
                 scale, rotation

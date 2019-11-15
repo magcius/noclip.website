@@ -56,9 +56,7 @@ import * as Scenes_InteractiveExamples from './interactive_examples/Scenes';
 import * as Scenes_Pilotwings64 from './Pilotwings64/Scenes';
 import * as Scenes_Fez from './Fez/Scenes_Fez';
 import * as Scenes_SuperMarioOdyssey from './fres_nx/smo_scenes';
-import * as Scenes_GTA3 from './GrandTheftAuto3/scenes';
-import * as Scenes_GTAVC from './GrandTheftAuto3/scenes_vc';
-import * as Scenes_GTASA from './GrandTheftAuto3/scenes_sa';
+import * as Scenes_GTA from './GrandTheftAuto3/scenes';
 
 import { DroppedFileSceneDesc } from './Scenes_FileDrops';
 
@@ -117,7 +115,7 @@ const sceneGroups = [
     Scenes_PaperMario64.sceneGroup,
     Scenes_Pilotwings64.sceneGroup,
     "PlayStation 2",
-    Scenes_GTA3.sceneGroup,
+    Scenes_GTA.sceneGroup.iii,
     Scenes_KatamariDamacy.sceneGroup,
     Scenes_KingdomHearts.sceneGroup,
     Scenes_KingdomHeartsIIFinalMix.sceneGroup,
@@ -127,8 +125,8 @@ const sceneGroups = [
     Scenes_DonkeyKongCountryReturns.sceneGroup,
     Scenes_Elebits.sceneGroup,
     Scenes_Fez.sceneGroup,
-    Scenes_GTAVC.sceneGroup,
-    Scenes_GTASA.sceneGroup,
+    Scenes_GTA.sceneGroup.vc,
+    Scenes_GTA.sceneGroup.sa,
     Scenes_MarioAndSonicAtThe2012OlympicGames.sceneGroup,
     Scenes_MetroidPrime.sceneGroupMP3,
     Scenes_Psychonauts.sceneGroup,

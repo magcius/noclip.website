@@ -617,7 +617,7 @@ export class GTA3Renderer implements Viewer.SceneGfx {
     private weather = 0;
     private scenarioSelect: UI.SingleSelect;
 
-    constructor(device: GfxDevice, private colorSets: ColorSet[], private weatherTypes: string[], private weatherPeriods: number, private waterOrigin: vec4) {
+    constructor(device: GfxDevice, private colorSets: ColorSet[], private weatherTypes: string[], private weatherPeriods: number, private waterOrigin: number[]) {
         this.renderHelper = new GfxRenderHelper(device);
     }
 
