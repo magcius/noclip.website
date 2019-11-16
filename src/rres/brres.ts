@@ -47,12 +47,16 @@ function calcTexMtx_Maya(dst: mat4, scaleS: number, scaleT: number, rotation: nu
 
     mat4.identity(dst);
 
+    const sinP = 0.5 * sinR - 0.5;
+    const cosP = -0.5 * cosR;
+
     dst[0]  = scaleS *  cosR;
-    dst[1]  = scaleT * -sinR;
     dst[4]  = scaleS *  sinR;
+    dst[12] = scaleS * (cosP - sinP - translationS);
+
+    dst[1]  = scaleT * -sinR;
     dst[5]  = scaleT *  cosR;
-    dst[12] = scaleS * ((-0.5 * cosR) - (0.5 * sinR - 0.5) - translationS);
-    dst[13] = scaleT * ((-0.5 * cosR) + (0.5 * sinR - 0.5) + translationT) + 1;
+    dst[13] = scaleT * (cosP + sinP + translationT) + 1.0;
 }
 
 function calcTexMtx_XSI(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
@@ -63,11 +67,12 @@ function calcTexMtx_XSI(dst: mat4, scaleS: number, scaleT: number, rotation: num
     mat4.identity(dst);
 
     dst[0]  = scaleS *  cosR;
-    dst[1]  = scaleT *  sinR;
     dst[4]  = scaleS * -sinR;
-    dst[5]  = scaleT *  cosR;
     dst[12] = (scaleS *  sinR) - (scaleS * cosR * translationS) - (scaleS * sinR * translationT);
-    dst[12] = (scaleT * -cosR) - (scaleS * sinR * translationS) + (scaleS * cosR * translationT) + 1;
+
+    dst[1]  = scaleT *  sinR;
+    dst[5]  = scaleT *  cosR;
+    dst[13] = (scaleT * -cosR) - (scaleT * sinR * translationS) + (scaleT * cosR * translationT) + 1.0;
 }
 
 function calcTexMtx_Max(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
@@ -78,11 +83,12 @@ function calcTexMtx_Max(dst: mat4, scaleS: number, scaleT: number, rotation: num
     mat4.identity(dst);
 
     dst[0]  = scaleS *  cosR;
-    dst[1]  = scaleT * -sinR;
     dst[4]  = scaleS *  sinR;
+    dst[12] = scaleS * (-cosR * (translationS + 0.5)) + (sinR * (translationT - 0.5)) + 0.5;
+
+    dst[1]  = scaleT * -sinR;
     dst[5]  = scaleT *  cosR;
-    dst[12] = (scaleS * -cosR * (translationS + 0.5)) + (scaleS * sinR * (translationT - 0.5)) + 0.5;
-    dst[13] = (scaleT *  sinR * (translationS + 0.5)) + (scaleT * cosR * (translationT - 0.5)) + 0.5;
+    dst[13] = scaleT * ( sinR * (translationS + 0.5)) + (cosR * (translationT - 0.5)) + 0.5;
 }
 
 const enum TexMatrixMode {

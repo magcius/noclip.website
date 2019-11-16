@@ -641,22 +641,24 @@ export interface MAT3 {
     materialEntries: MaterialEntry[];
 }
 
-// temp, center, center inverse
-const t = mat4.create(), c = mat4.create(), ci = mat4.create(), tt = vec3.create();
-function calcTexMtx(m: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number, centerS: number, centerT: number, centerQ: number) {
-    mat4.fromTranslation(c, vec3.set(tt, centerS, centerT, centerQ));
-    mat4.fromTranslation(ci, vec3.set(tt, -centerS, -centerT, -centerQ));
-    mat4.fromTranslation(m, vec3.set(tt, translationS, translationT, 0));
-    mat4.fromScaling(t, vec3.set(tt, scaleS, scaleT, 1));
-    mat4.rotateZ(t, t, rotation * Math.PI);
-    mat4.mul(t, t, ci);
-    mat4.mul(t, c, t);
-    mat4.mul(m, m, t);
-    return m;
+function calcTexMtx_Basic(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number, centerS: number, centerT: number, centerQ: number): void {
+    const theta = rotation * Math.PI;
+    const sinR = Math.sin(theta);
+    const cosR = Math.cos(theta);
+
+    mat4.identity(dst);
+
+    dst[0]  = scaleS *  cosR;
+    dst[4]  = scaleS * -sinR;
+    dst[12] = translationS + centerS + scaleS * (sinR * centerT - cosR * centerS);
+
+    dst[1]  = scaleT *  sinR;
+    dst[5]  = scaleT *  cosR;
+    dst[13] = translationT + centerT + -scaleT * (-sinR * centerS + cosR * centerT);
 }
 
 function calcTexMtx_Maya(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
-    const theta = rotation * rotation;
+    const theta = rotation * Math.PI;
     const sinR = Math.sin(theta);
     const cosR = Math.cos(theta);
 
@@ -664,9 +666,10 @@ function calcTexMtx_Maya(dst: mat4, scaleS: number, scaleT: number, rotation: nu
 
     dst[0]  = scaleS *  cosR;
     dst[1]  = scaleT * -sinR;
+    dst[12] = scaleS * ((-0.5 * cosR) - (0.5 * sinR - 0.5) - translationS);
+
     dst[4]  = scaleS *  sinR;
     dst[5]  = scaleT *  cosR;
-    dst[12] = scaleS * ((-0.5 * cosR) - (0.5 * sinR - 0.5) - translationS);
     dst[13] = scaleT * ((-0.5 * cosR) + (0.5 * sinR - 0.5) + translationT) + 1;
 }
 
@@ -1107,12 +1110,13 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             p03, p13, p23, p33,
         );
 
-        const maya = !!((info) & 0x80);
         const matrix = mat4.create();
-        if (maya) {
+
+        const isMaya = !!(info >>> 7);
+        if (isMaya) {
             calcTexMtx_Maya(matrix, scaleS, scaleT, rotation, translationS, translationT);
         } else {
-            calcTexMtx(matrix, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
+            calcTexMtx_Basic(matrix, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
         }
 
         const texMtx: TexMtx = { info, projection, effectMatrix, matrix };
@@ -1507,7 +1511,7 @@ function readTTK1Chunk(buffer: ArrayBufferSlice): TTK1 {
 export class TTK1Animator {
     constructor(public animationController: AnimationController, private ttk1: TTK1, private animationEntry: TTK1AnimationEntry) {}
 
-    public calcTexMtx(dst: mat4, maya: boolean): void {
+    public calcTexMtx(dst: mat4, isMaya: boolean): void {
         const frame = this.animationController.getTimeInFrames();
         const animFrame = getAnimFrame(this.ttk1, frame);
 
@@ -1517,13 +1521,13 @@ export class TTK1Animator {
         const translationS = sampleAnimationData(this.animationEntry.translationS, animFrame);
         const translationT = sampleAnimationData(this.animationEntry.translationT, animFrame);
 
-        if (maya) {
+        if (isMaya) {
             calcTexMtx_Maya(dst, scaleS, scaleT, rotation, translationS, translationT);
         } else {
             const centerS = this.animationEntry.centerS;
             const centerT = this.animationEntry.centerT;
             const centerQ = this.animationEntry.centerQ;
-            calcTexMtx(dst, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
+            calcTexMtx_Basic(dst, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
         }
     }
 }
