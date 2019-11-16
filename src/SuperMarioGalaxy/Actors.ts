@@ -922,6 +922,22 @@ class NPCActor<TNerve extends number = number> extends LiveActor<TNerve> {
             }
         }
     }
+    
+    public makeActorDead(): void {
+        super.makeActorDead();
+        if (this.goods0 !== null)
+            this.goods0.makeActorDead();
+        if (this.goods1 !== null)
+            this.goods1.makeActorDead();
+    }
+
+    public makeActorAppeared(): void {
+        super.makeActorAppeared();
+        if (this.goods0 !== null)
+            this.goods0.makeActorAppeared();
+        if (this.goods1 !== null)
+            this.goods1.makeActorAppeared();
+    }
 }
 
 class FixedPosition {
