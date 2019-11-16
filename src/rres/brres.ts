@@ -2019,8 +2019,6 @@ function parseSRT0(buffer: ArrayBufferSlice): SRT0 {
 }
 
 export class SRT0TexMtxAnimator {
-    private scratch = mat4.create();
-
     constructor(public animationController: AnimationController, public srt0: SRT0, public texData: SRT0_TexData) {
     }
 
@@ -2039,7 +2037,7 @@ export class SRT0TexMtxAnimator {
     }
 
     public calcIndTexMtx(dst: mat4): void {
-        this._calcTexMtx(this.scratch, TexMatrixMode.BASIC);
+        this._calcTexMtx(dst, TexMatrixMode.BASIC);
     }
 
     public calcTexMtx(dst: mat4): void {

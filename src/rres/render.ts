@@ -284,7 +284,7 @@ class MaterialInstance {
                 dstPost[5] = 0;
             }
         } else if (texSrt.mapMode === BRRES.MapMode.ENV_CAMERA) {
-            texEnvMtx(dstPost, 0.5, -0.5 * flipYScale, 0.5, 0.5);
+            texEnvMtx(dstPost, 0.5, 0.5 * flipYScale, 0.5, 0.5);
 
             // Apply effect matrix.
             mat4.mul(dstPost, texSrt.effectMtx, dstPost);
