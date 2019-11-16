@@ -588,28 +588,29 @@ export class GX_Program extends DeviceProgram {
     }
 
     // Output is a vec3, src is a vec4.
-    private generateTexGenType(texCoordGenIndex: number, src: string) {
-        switch (this.material.texGens[texCoordGenIndex].type) {
-        case GX.TexGenType.SRTG:
+    private generateTexGenType(texCoordGenIndex: number) {
+        const texCoordGen = this.material.texGens[texCoordGenIndex];
+        const src = this.generateTexGenSource(texCoordGen.source);
+
+        if (texCoordGen.type === GX.TexGenType.SRTG)
             return `vec3(${src}.xy, 1.0)`;
-        case GX.TexGenType.MTX2x4:
+        else if (texCoordGen.type === GX.TexGenType.MTX2x4)
             return `vec3(${this.generateTexGenMatrixMult(texCoordGenIndex, src)}.xy, 1.0)`;
-        case GX.TexGenType.MTX3x4:
+        else if (texCoordGen.type === GX.TexGenType.MTX3x4)
             return `${this.generateTexGenMatrixMult(texCoordGenIndex, src)}`;
-        default:
+        else
             throw new Error("whoops");
-        }
     }
 
     // Output is a vec3.
     private generateTexGenNrm(texCoordGenIndex: number) {
         const texCoordGen = this.material.texGens[texCoordGenIndex];
-        const src = this.generateTexGenSource(texCoordGen.source);
-        const type = this.generateTexGenType(texCoordGenIndex, src);
+        const src = this.generateTexGenType(texCoordGenIndex);
+
         if (texCoordGen.normalize)
-            return `normalize(${type})`;
+            return `normalize(${src})`;
         else
-            return type;
+            return src;
     }
 
     // Output is a vec3.
