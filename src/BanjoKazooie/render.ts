@@ -1,7 +1,7 @@
 
 import * as Viewer from '../viewer';
 import { DeviceProgram } from "../Program";
-import { Texture, getImageFormatString, Vertex, DrawCall, getTextFiltFromOtherModeH, OtherModeL_Layout, fillCombineParams, translateBlendMode, F3D_RSP_Geometry_Flags, RSPSharedOutput, getCycleTypeFromOtherModeH, OtherModeH_CycleType } from "./f3dex";
+import { Texture, getImageFormatString, Vertex, DrawCall, getTextFiltFromOtherModeH, OtherModeL_Layout, fillCombineParams, translateBlendMode, RSP_Geometry, RSPSharedOutput, getCycleTypeFromOtherModeH, OtherModeH_CycleType, CCMUX, OtherModeH_Layout, ACMUX } from "./f3dex";
 import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { assert, nArray, align, assertExists } from '../util';
@@ -17,7 +17,8 @@ import { Geometry, VertexAnimationEffect, VertexEffectType, GeoNode, Bone, Anima
 import { clamp, lerp, MathConstants } from '../MathHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import AnimationController from '../AnimationController';
-import { J3DCalcYBBoardMtx } from '../j3d/render';
+import { J3DCalcBBoardMtx } from '../j3d/render';
+import { Flipbook, LoopMode, ReverseMode, MirrorMode } from './flipbook';
 
 export class F3DEX_Program extends DeviceProgram {
     public static a_Position = 0;
@@ -412,7 +413,7 @@ function applyVertexEffect(effect: VertexAnimationEffect, vertexBuffer: Float32A
     }
 }
 
-export class GeometryData {
+export class RenderData {
     public vertexBuffer: GfxBuffer;
     public inputLayout: GfxInputLayout;
     public inputState: GfxInputState;
@@ -420,7 +421,6 @@ export class GeometryData {
     public samplers: GfxSampler[] = [];
     public vertexBufferData: Float32Array;
     public indexBuffer: GfxBuffer;
-    public geo?: Geometry;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public sharedOutput: RSPSharedOutput, dynamic = false) {
         const textures = sharedOutput.textureCache.textures;
@@ -465,12 +465,6 @@ export class GeometryData {
         this.inputState = device.createInputState(this.inputLayout, [
             { buffer: this.vertexBuffer, byteOffset: 0, },
         ], { buffer: this.indexBuffer, byteOffset: 0 });
-    }
-
-    public static fromGeo(device: GfxDevice, cache: GfxRenderCache, geo: Geometry): GeometryData {
-        const geoData = new GeometryData(device, cache, geo.sharedOutput, geo.vertexEffects.length > 0);
-        geoData.geo = geo;
-        return geoData;
     }
 
     private translateTexture(device: GfxDevice, texture: Texture): GfxTexture {
@@ -531,7 +525,7 @@ class DrawCallInstance {
     private textureMappings = nArray(2, () => new TextureMapping());
     public visible = true;
 
-    constructor(geometryData: GeometryData, private node: GeoNode, private drawMatrix: mat4[], private drawCall: DrawCall) {
+    constructor(geometryData: RenderData, private node: GeoNode, private drawMatrix: mat4[], private drawCall: DrawCall) {
         for (let i = 0; i < this.textureMappings.length; i++) {
             if (i < this.drawCall.textureIndices.length) {
                 const idx = this.drawCall.textureIndices[i];
@@ -553,16 +547,16 @@ class DrawCallInstance {
         if (this.texturesEnabled && this.drawCall.textureIndices.length)
             program.defines.set('USE_TEXTURE', '1');
 
-        const shade = (this.drawCall.SP_GeometryMode & F3D_RSP_Geometry_Flags.G_SHADE) !== 0;
+        const shade = (this.drawCall.SP_GeometryMode & RSP_Geometry.G_SHADE) !== 0;
         if (this.vertexColorsEnabled && shade)
             program.defines.set('USE_VERTEX_COLOR', '1');
 
-        if (this.drawCall.SP_GeometryMode & F3D_RSP_Geometry_Flags.G_TEXTURE_GEN)
+        if (this.drawCall.SP_GeometryMode & RSP_Geometry.G_TEXTURE_GEN)
             program.defines.set('TEXTURE_GEN', '1');
 
         // many display lists seem to set this flag without setting texture_gen,
         // despite this one being dependent on it
-        if (this.drawCall.SP_GeometryMode & F3D_RSP_Geometry_Flags.G_TEXTURE_GEN_LINEAR)
+        if (this.drawCall.SP_GeometryMode & RSP_Geometry.G_TEXTURE_GEN_LINEAR)
             program.defines.set('TEXTURE_GEN_LINEAR', '1');
 
         if (this.monochromeVertexColorsEnabled)
@@ -779,6 +773,13 @@ function getAnimFrame(anim: AnimationFile, frame: number): number {
     return (frame + anim.startFrame) | 0;
 }
 
+export class GeometryData {
+    public renderData: RenderData;
+    constructor(device: GfxDevice, cache: GfxRenderCache, public geo: Geometry) {
+        this.renderData = new RenderData(device, cache, geo.sharedOutput, geo.vertexEffects.length > 0);
+    }
+}
+
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 export class GeometryRenderer {
@@ -803,7 +804,7 @@ export class GeometryRenderer {
             blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
         });
 
-        const geo = this.geometryData.geo!;
+        const geo = this.geometryData.geo;
         this.animationSetup = geo.animationSetup;
         this.vertexEffects = geo.vertexEffects;
 
@@ -837,7 +838,7 @@ export class GeometryRenderer {
                     }
                 }
 
-                this.drawCallInstances.push(new DrawCallInstance(this.geometryData, node, drawMatrix, node.rspOutput.drawCalls[i]));
+                this.drawCallInstances.push(new DrawCallInstance(this.geometryData.renderData, node, drawMatrix, node.rspOutput.drawCalls[i]));
             }
         }
 
@@ -928,9 +929,11 @@ export class GeometryRenderer {
             }
         }
 
+        const renderData = this.geometryData.renderData;
+
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
-        template.setInputLayoutAndState(this.geometryData.inputLayout, this.geometryData.inputState);
+        template.setInputLayoutAndState(renderData.inputLayout, renderData.inputState);
         template.setMegaStateFlags(this.megaStateFlags);
 
         template.filterKey = this.isSkybox ? BKPass.SKYBOX : BKPass.MAIN;
@@ -945,11 +948,11 @@ export class GeometryRenderer {
                 const effect = this.vertexEffects[i];
                 updateVertexEffectState(effect, viewerInput.time / 1000, viewerInput.deltaTime / 1000);
                 for (let j = 0; j < effect.vertexIndices.length; j++) {
-                    applyVertexEffect(effect, this.geometryData.vertexBufferData, effect.baseVertexValues[j], effect.vertexIndices[j]);
+                    applyVertexEffect(effect, renderData.vertexBufferData, effect.baseVertexValues[j], effect.vertexIndices[j]);
                 }
             }
             const hostAccessPass = device.createHostAccessPass();
-            hostAccessPass.uploadBufferData(this.geometryData.vertexBuffer, 0, new Uint8Array(this.geometryData.vertexBufferData.buffer));
+            hostAccessPass.uploadBufferData(renderData.vertexBuffer, 0, new Uint8Array(renderData.vertexBufferData.buffer));
             device.submitPass(hostAccessPass);
         }
 
@@ -959,7 +962,35 @@ export class GeometryRenderer {
     }
 }
 
-const textureMappingScratch = [new TextureMapping()];
+export class FlipbookData {
+    public renderData: RenderData;
+    public drawCall: DrawCall;
+
+    constructor(device: GfxDevice, cache: GfxRenderCache, public flipbook: Flipbook) {
+        this.renderData = new RenderData(device, cache, flipbook.sharedOutput);
+        // TODO: handle this nicely
+        const drawCall = new DrawCall();
+        drawCall.DP_OtherModeH =
+            (OtherModeH_CycleType.G_CYC_1CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE) |
+            (TextFilt.G_TF_BILERP << OtherModeH_Layout.G_MDSFT_TEXTFILT);
+        drawCall.DP_OtherModeL = (1 << OtherModeL_Layout.Z_CMP) | (1 << OtherModeL_Layout.Z_UPD) | 1 /* alpha test */;
+        drawCall.DP_Combine = {
+            c0: { a: CCMUX.TEXEL0, b: CCMUX.ADD_ZERO, c: CCMUX.PRIMITIVE, d: CCMUX.ADD_ZERO },
+            c1: { a: CCMUX.TEXEL0, b: CCMUX.ADD_ZERO, c: CCMUX.PRIMITIVE, d: CCMUX.ADD_ZERO },
+            a0: { a: ACMUX.TEXEL0, b: ACMUX.ZERO, c: ACMUX.PRIMITIVE, d: ACMUX.ZERO },
+            a1: { a: ACMUX.TEXEL0, b: ACMUX.ZERO, c: ACMUX.PRIMITIVE, d: ACMUX.ZERO },
+        };
+        this.drawCall = drawCall;
+    }
+}
+
+interface FlipbookAnimationParams {
+    initialMirror: boolean;
+    mirrored: boolean;
+    reversed: boolean;
+}
+
+const texMappingScratch = [new TextureMapping()];
 export class FlipbookRenderer {
     private textureEntry: Texture[] = [];
     private vertexColorsEnabled = true;
@@ -973,37 +1004,49 @@ export class FlipbookRenderer {
 
     public visible = true;
     public modelMatrix = mat4.create();
-    public animationController = new AnimationController(15);
+    public animationController: AnimationController;
     public sortKeyBase: number;
 
-    constructor(public geometryData: GeometryData, private drawCall: DrawCall, private primColor: vec4) {
-        for (let i = 0; i < geometryData.textures.length; i++) {
-            this.textureEntry.push(geometryData.sharedOutput.textureCache.textures[i]);
+    public primColor = vec4.fromValues(1, 1, 1, 1);
+    private animationParams: FlipbookAnimationParams;
+
+    constructor(public flipbookData: FlipbookData, phase = 0, initialMirror = false) {
+        const renderData = flipbookData.renderData;
+        for (let i = 0; i < renderData.textures.length; i++) {
+            this.textureEntry.push(renderData.sharedOutput.textureCache.textures[i]);
             this.textureMappings.push(new TextureMapping());
-            this.textureMappings[i].gfxTexture = geometryData.textures[i];
-            this.textureMappings[i].gfxSampler = geometryData.samplers[i];
+            this.textureMappings[i].gfxTexture = renderData.textures[i];
+            this.textureMappings[i].gfxSampler = renderData.samplers[i];
         }
-        setAttachmentStateSimple(this.megaStateFlags, {blendSrcFactor: GfxBlendFactor.SRC_ALPHA, blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA});
+        setAttachmentStateSimple(this.megaStateFlags, { blendSrcFactor: GfxBlendFactor.SRC_ALPHA, blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA });
         this.createProgram();
+
+        this.animationController = new AnimationController(flipbookData.flipbook.frameRate);
+        this.animationController.phaseFrames = (phase / 0x20) * flipbookData.flipbook.frameSequence.length;
+        this.animationParams = {
+            initialMirror,
+            mirrored: !!(phase & 1),
+            reversed: !!(phase & 2),
+        };
     }
 
     private createProgram(): void {
-        const program = new F3DEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL);
+        const program = new F3DEX_Program(this.flipbookData.drawCall.DP_OtherModeH, this.flipbookData.drawCall.DP_OtherModeL);
         program.defines.set('BONE_MATRIX_COUNT', '1');
 
         if (this.texturesEnabled)
             program.defines.set('USE_TEXTURE', '1');
 
-        const shade = (this.drawCall.SP_GeometryMode & F3D_RSP_Geometry_Flags.G_SHADE) !== 0;
+        const shade = (this.flipbookData.drawCall.SP_GeometryMode & RSP_Geometry.G_SHADE) !== 0;
         if (this.vertexColorsEnabled && shade)
             program.defines.set('USE_VERTEX_COLOR', '1');
 
-        if (this.drawCall.SP_GeometryMode & F3D_RSP_Geometry_Flags.G_TEXTURE_GEN)
+        if (this.flipbookData.drawCall.SP_GeometryMode & RSP_Geometry.G_TEXTURE_GEN)
             program.defines.set('TEXTURE_GEN', '1');
 
         // many display lists seem to set this flag without setting texture_gen,
         // despite this one being dependent on it
-        if (this.drawCall.SP_GeometryMode & F3D_RSP_Geometry_Flags.G_TEXTURE_GEN_LINEAR)
+        if (this.flipbookData.drawCall.SP_GeometryMode & RSP_Geometry.G_TEXTURE_GEN_LINEAR)
             program.defines.set('TEXTURE_GEN_LINEAR', '1');
 
         if (this.monochromeVertexColorsEnabled)
@@ -1017,7 +1060,7 @@ export class FlipbookRenderer {
     }
 
     public setBackfaceCullingEnabled(v: boolean): void {
-        const cullMode = v ? translateCullMode(this.drawCall.SP_GeometryMode) : GfxCullMode.NONE;
+        const cullMode = v ? translateCullMode(this.flipbookData.drawCall.SP_GeometryMode) : GfxCullMode.NONE;
         this.megaStateFlags.cullMode = cullMode;
     }
 
@@ -1041,6 +1084,40 @@ export class FlipbookRenderer {
         this.createProgram();
     }
 
+    private animateFlipbook(mapping: TextureMapping[], matrix: mat4): void {
+        const flipbook = this.flipbookData.flipbook;
+        let frame = Math.floor(this.animationController.getTimeInFrames() % flipbook.frameSequence.length);
+
+        mat4.identity(matrix);
+        let mirrored = false;
+        if (flipbook.loopMode === LoopMode.Mirror || flipbook.loopMode === LoopMode.ReverseAndMirror)
+            mirrored = frame >= flipbook.rawFrames;
+        else if (flipbook.mirrorMode === MirrorMode.Constant)
+            mirrored = this.animationParams.initialMirror;
+        else if (flipbook.mirrorMode === MirrorMode.FromPhase)
+            mirrored = this.animationParams.mirrored;
+        else if (flipbook.mirrorMode === MirrorMode.Always)
+            mirrored = true;
+
+        if (mirrored)
+            matrix[0] = -1;
+
+        let reversed = false;
+        if (flipbook.reverseMode === ReverseMode.Always)
+            reversed = true;
+        else if (flipbook.reverseMode === ReverseMode.FromPhase)
+            reversed = this.animationParams.reversed;
+
+        if (reversed)
+            if (flipbook.loopMode === LoopMode.Revese || flipbook.loopMode === LoopMode.ReverseAndMirror)
+                frame = (frame + flipbook.rawFrames - 1) % flipbook.frameSequence.length; // start from other symmetric frame
+            else
+                frame = flipbook.frameSequence.length - 1 - frame;
+
+        const textureIndex = flipbook.frameSequence[frame];
+        mapping[0] = this.textureMappings[textureIndex];
+    }
+
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.visible)
             return;
@@ -1049,12 +1126,11 @@ export class FlipbookRenderer {
             this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
 
         this.animationController.setTimeFromViewerInput(viewerInput);
-        const textureIndex = Math.floor(this.animationController.getTimeInFrames() % this.textureMappings.length);
-        textureMappingScratch[0] = this.textureMappings[textureIndex];
+        this.animateFlipbook(texMappingScratch, texMatrixScratch);
 
         const renderInst = renderInstManager.pushRenderInst();
         renderInst.setBindingLayouts(bindingLayouts);
-        renderInst.setInputLayoutAndState(this.geometryData.inputLayout, this.geometryData.inputState);
+        renderInst.setInputLayoutAndState(this.flipbookData.renderData.inputLayout, this.flipbookData.renderData.inputState);
         renderInst.setMegaStateFlags(this.megaStateFlags);
 
         renderInst.sortKey = this.sortKeyBase;
@@ -1065,7 +1141,7 @@ export class FlipbookRenderer {
         offs += fillMatrix4x4(scene, offs, viewerInput.camera.projectionMatrix);
 
         renderInst.setGfxProgram(this.gfxProgram);
-        renderInst.setSamplerBindingsFromTextureMappings(textureMappingScratch);
+        renderInst.setSamplerBindingsFromTextureMappings(texMappingScratch);
         renderInst.drawIndexes(6);
 
         offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_DrawParams, 12 + 8 * 2);
@@ -1073,15 +1149,13 @@ export class FlipbookRenderer {
 
         computeViewMatrix(viewMatrixScratch, viewerInput.camera);
         mat4.mul(modelViewScratch, viewMatrixScratch, this.modelMatrix);
-        J3DCalcYBBoardMtx(modelViewScratch, modelViewScratch);
+        J3DCalcBBoardMtx(modelViewScratch, modelViewScratch);
         offs += fillMatrix4x3(draw, offs, modelViewScratch);
-        // UVs don't need to be shifted or rescaled
-        mat4.identity(texMatrixScratch);
         offs += fillMatrix4x2(draw, offs, texMatrixScratch);
 
         offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 12);
         const comb = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
-        offs += fillCombineParams(comb, offs, this.drawCall.DP_Combine);
+        offs += fillCombineParams(comb, offs, this.flipbookData.drawCall.DP_Combine);
         offs += fillVec4v(comb, offs, this.primColor);
     }
 }

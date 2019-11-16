@@ -17,7 +17,7 @@ import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget, depthClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { computeViewMatrix } from "../Camera";
 import { MathConstants, clamp, computeMatrixWithoutTranslation } from "../MathHelpers";
-import { TextureState, TileState, fillCombineParams, CombineParams, CCMUX, ACMUX, BlendParam_PM_Color, BlendParam_A, OtherModeL_Layout, BlendParam_B, F3D_RSP_Geometry_Flags, decodeCombineParams, translateBlendMode } from "../BanjoKazooie/f3dex";
+import { TextureState, TileState, fillCombineParams, CombineParams, CCMUX, ACMUX, BlendParam_PM_Color, BlendParam_A, OtherModeL_Layout, BlendParam_B, RSP_Geometry, decodeCombineParams, translateBlendMode } from "../BanjoKazooie/f3dex";
 import { ImageFormat, ImageSize, getImageFormatName, decodeTex_RGBA16, getImageSizeName, decodeTex_I4, decodeTex_I8, decodeTex_IA4, decodeTex_IA8, decodeTex_IA16 } from "../Common/N64/Image";
 import { TextureMapping } from "../TextureHolder";
 import { Endianness } from "../endian";
@@ -1514,17 +1514,17 @@ function decodeMaterial(rspMode: number, hasTexture: boolean, cutOutTransparent:
 
     let geoMode = 0;
     if (rspMode & PilotwingsRSPFlag.LIGHTING)
-        geoMode |= F3D_RSP_Geometry_Flags.G_LIGHTING | F3D_RSP_Geometry_Flags.G_TEXTURE_GEN;
+        geoMode |= RSP_Geometry.G_LIGHTING | RSP_Geometry.G_TEXTURE_GEN;
     if (rspMode & PilotwingsRSPFlag.CULL_BACK)
-        geoMode |= F3D_RSP_Geometry_Flags.G_CULL_BACK;
+        geoMode |= RSP_Geometry.G_CULL_BACK;
     if (rspMode & PilotwingsRSPFlag.CULL_FRONT)
-        geoMode |= F3D_RSP_Geometry_Flags.G_CULL_FRONT;
+        geoMode |= RSP_Geometry.G_CULL_FRONT;
     if (rspMode & PilotwingsRSPFlag.GOURAUD)
-        geoMode |= F3D_RSP_Geometry_Flags.G_SHADING_SMOOTH;
+        geoMode |= RSP_Geometry.G_SHADING_SMOOTH;
     if (rspMode & PilotwingsRSPFlag.ZBUFFER)
-        geoMode |= F3D_RSP_Geometry_Flags.G_ZBUFFER;
+        geoMode |= RSP_Geometry.G_ZBUFFER;
     if (rspMode & PilotwingsRSPFlag.FOG)
-        geoMode |= F3D_RSP_Geometry_Flags.G_FOG;
+        geoMode |= RSP_Geometry.G_FOG;
 
     let combineOverride: CombineParams | undefined;
     let scaleOverride = 0;

@@ -77,7 +77,7 @@ class JointData {
     }
 }
 
-function J3DCalcBBoardMtx(dst: mat4, m: mat4): void {
+export function J3DCalcBBoardMtx(dst: mat4, m: mat4): void {
     // The column vectors lengths here are the scale.
     const mx = Math.hypot(m[0], m[1], m[2]);
     const my = Math.hypot(m[4], m[5], m[6]);

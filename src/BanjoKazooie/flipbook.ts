@@ -1,6 +1,6 @@
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { RSPSharedOutput, TileState, Texture, Vertex } from "./f3dex";
-import { align } from "../util";
+import { align, assert, hexzero } from "../util";
 import { ImageSize, decodeTex_RGBA16, decodeTex_RGBA32, decodeTex_CI4, parseTLUT, TextureLUT, decodeTex_IA16 } from "../Common/N64/Image";
 
 const enum Flags {
@@ -11,14 +11,77 @@ const enum Flags {
     RGBA32 = 0x800,
 }
 
-export function parse(buffer: ArrayBufferSlice): RSPSharedOutput {
+export const enum LoopMode {
+    None = 0,
+    ReverseAndMirror = 1,
+    Reverse = 2,
+    Simple = 3,
+    Mirror = 4,
+}
+
+export const enum ReverseMode {
+    Never = 0,
+    FromPhase = 1,
+    Always = 2,
+    IfMirrored = 3,
+}
+
+export const enum MirrorMode {
+    Constant = 0,
+    FromPhase = 1,
+    Always = 2,
+}
+
+export interface Flipbook {
+    sharedOutput: RSPSharedOutput;
+
+    frameRate: number;
+    frameSequence: number[];
+    rawFrames: number;
+    loopMode: LoopMode;
+    reverseMode: ReverseMode;
+    mirrorMode: MirrorMode;
+}
+
+function computeFrames(rawFrames: number, loopMode: LoopMode): number[] {
+    const seq: number[] = [];
+    for (let i = 0; i < rawFrames; i++)
+        seq.push(i);
+    switch (loopMode) {
+        case LoopMode.None:
+        case LoopMode.Simple:
+            break;
+        case LoopMode.Mirror:
+            for (let i = 0; i < rawFrames; i++)
+                seq.push(i);
+            break;
+        case LoopMode.ReverseAndMirror:
+        case LoopMode.Reverse:
+            for (let i = rawFrames - 2; i > 0; i--)
+                seq.push(i);
+            break;
+        default:
+            throw `bad loop mode ${loopMode}`;
+    }
+    return seq;
+}
+
+export function parse(buffer: ArrayBufferSlice): Flipbook {
     const view = buffer.createDataView();
 
     const frameCount = view.getUint16(0x00);
     const flags = view.getUint16(0x02);
     const width = view.getInt16(0x08);
     const height = view.getInt16(0x0a);
-    // TODO: parse animation modes
+
+    const denominator = view.getUint8(0x0c) >>> 4;
+    const frameRate = denominator > 0 ? 30 / denominator : 0;
+    const loopMode: LoopMode = (view.getUint8(0x0c) >>> 1) & 0x07;
+    const frameSequence = computeFrames(frameCount, loopMode);
+    const reverseMode: ReverseMode = (view.getUint16(0x0c) >>> 7) & 0x03;
+    const mirrorMode: MirrorMode = (view.getUint16(0x0c) >>> 5) & 0x03;
+
+    assert(reverseMode !== ReverseMode.IfMirrored); // haven't implemented this yet
 
     const headerSize = 4 * frameCount + 0x10;
     const sharedOutput = new RSPSharedOutput();
@@ -113,5 +176,5 @@ export function parse(buffer: ArrayBufferSlice): RSPSharedOutput {
     sharedOutput.indices.push(0, 1, 3);
     sharedOutput.indices.push(0, 3, 2);
 
-    return sharedOutput;
+    return {sharedOutput, frameRate, rawFrames: frameCount, frameSequence, loopMode, reverseMode, mirrorMode};
 }

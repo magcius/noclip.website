@@ -206,7 +206,7 @@ export function getTextFiltFromOtherModeH(modeH: number): TextFilt {
     return (modeH >>> OtherModeH_Layout.G_MDSFT_TEXTFILT) & 0x03;
 }
 
-export const enum F3D_RSP_Geometry_Flags {
+export const enum RSP_Geometry {
     G_ZBUFFER            = 1 << 0,
     G_SHADE              = 1 << 2,
     G_SHADING_SMOOTH     = 1 << 9,
@@ -434,13 +434,13 @@ export function translateBlendMode(geoMode: number, renderMode: number): Partial
         });
     }
 
-    if (geoMode & F3D_RSP_Geometry_Flags.G_CULL_BACK) {
-        if (geoMode & F3D_RSP_Geometry_Flags.G_CULL_FRONT) {
+    if (geoMode & RSP_Geometry.G_CULL_BACK) {
+        if (geoMode & RSP_Geometry.G_CULL_FRONT) {
             out.cullMode = GfxCullMode.FRONT_AND_BACK;
         } else {
             out.cullMode = GfxCullMode.BACK;
         }
-    } else if (geoMode & F3D_RSP_Geometry_Flags.G_CULL_FRONT) {
+    } else if (geoMode & RSP_Geometry.G_CULL_FRONT) {
         out.cullMode = GfxCullMode.FRONT;
     } else {
         out.cullMode = GfxCullMode.NONE;
