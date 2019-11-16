@@ -759,8 +759,8 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
             spawnSimpleObject(`MiiStatueBL1`);
         } else if (gobj.objectId === 0x02e4) { // MiiStatueBD1
             spawnSimpleObject(`MiiStatueBD1`);
-        } else if (gobj.objectId === 0x02e5) { // Kamifubuki
-            spawnSimpleObject(`Kamifubuki`);
+        //} else if (gobj.objectId === 0x02e5) { // Kamifubuki
+        //    spawnSimpleObject(`Kamifubuki`);
         } else if (gobj.objectId === 0x02e6) { // Crescent64
             spawnSimpleObject(`Crescent64`);
         } else if (gobj.objectId === 0x02e7) { // MiiSighKino
@@ -866,7 +866,7 @@ const sceneDescs = [
     new MarioKartWiiSceneDesc('old_desert_ds', "DS Desert Hills"),
     new MarioKartWiiSceneDesc('old_koopa_gba', "GBA Bowser's Castle 3"),
     new MarioKartWiiSceneDesc('old_donkey_64', "N64 DK's Jungle Parkway"),
-    new MarioKartWiiSceneDesc('old_mario_gc', "GC Mario Circuit"),
+    new MarioKartWiiSceneDesc('old_mario_gc', "GCN Mario Circuit"),
     "Lightning Cup",
     new MarioKartWiiSceneDesc('old_mario_sfc', "SNES Mario Circuit 3"),
     new MarioKartWiiSceneDesc('old_garden_ds', "DS Peach Gardens"),
@@ -883,7 +883,9 @@ const sceneDescs = [
     new MarioKartWiiSceneDesc('old_matenro_64', "N64 Skyscraper"),
     new MarioKartWiiSceneDesc('old_CookieLand_gc', "GCN Cookie Land"),
     new MarioKartWiiSceneDesc('old_House_ds', "DS Twilight House"),
+    "Extra",
     new MarioKartWiiSceneDesc('ring_mission', "Galaxy Colosseum"),
+    new MarioKartWiiSceneDesc('ending_demo', "Luigi's Circuit (End Credits)"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
