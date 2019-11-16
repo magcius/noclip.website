@@ -15,6 +15,7 @@ export interface U8File {
 export interface U8Dir {
     kind: 'directory';
     name: string;
+    childNodes: U8Node[];
     subdirs: U8Dir[];
     files: U8File[];
     nextNodeIndex: number;
@@ -22,34 +23,64 @@ export interface U8Dir {
 
 type U8Node = U8File | U8Dir;
 
+function findChildNodeByPart(dir: U8Dir, part: string): U8Node | null {
+    if (part === '*' && dir.childNodes.length === 1)
+        return dir.childNodes[0];
+
+    if (part === '.')
+        return dir;
+
+    for (let i = 0; i < dir.childNodes.length; i++) {
+        const child = dir.childNodes[i];
+        if (child.name === part)
+            return child;
+
+        if (child.kind === 'directory' && child.name === '.') {
+            const sub = findChildNodeByPart(child, part);
+            if (sub !== null)
+                return sub;
+        }
+    }
+
+    return null;
+}
+
+function findChildNodeByParts(dir: U8Dir, parts: string[]): U8Node | null {
+    for (let i = 0; i < parts.length; i++) {
+        const child = findChildNodeByPart(dir, parts[i]);
+        if (child === null)
+            return null;
+
+        if (child.kind === 'file') {
+            if (i === parts.length - 1)
+                return child;
+            else
+                return null;
+        }
+
+        dir = child;
+    }
+
+    return dir;
+}
+
 export class U8Archive {
     public root: U8Dir;
 
-    public findDirParts(parts: string[]): U8Dir | null {
-        let dir: U8Dir | undefined = this.root;
-        for (let i = 0; i < parts.length; i++) {
-            const part = parts[i];
-            dir = dir.subdirs.find((subdir) => subdir.name === part || (part === '*' && dir!.subdirs.length === 1));
-            if (dir === undefined)
-                return null;
-        }
-        return dir;
-    }
-
     public findDir(path: string): U8Dir | null {
-        return this.findDirParts(path.split('/'));
+        const child = findChildNodeByParts(this.root, path.split('/'));
+        if (child !== null && child.kind === 'directory')
+            return child;
+        else
+            return null;
     }
 
     public findFile(path: string): U8File | null {
-        const parts = path.split('/');
-        const filename = parts.pop();
-        const dir = this.findDirParts(parts);
-        if (dir === null)
+        const child = findChildNodeByParts(this.root, path.split('/'));
+        if (child !== null && child.kind === 'file')
+            return child;
+        else
             return null;
-        const file = dir.files.find((file) => file.name === filename);
-        if (!file)
-            return null;
-        return file;
     }
 
     public findFileData(path: string): ArrayBufferSlice | null {
@@ -96,11 +127,13 @@ export function parse(buffer: ArrayBufferSlice): U8Archive {
             const nextNodeIndex = view.getUint32(nodeOffs + 0x08, false);
 
             // Recurse.
+            const childNodes: U8Node[] = [];
             const files: U8File[] = [];
             const subdirs: U8Dir[] = [];
 
             for (let i = nodeIndex + 1; i < nextNodeIndex;) {
                 const subNode = readNode(i, nodeIndex);
+                childNodes.push(subNode);
 
                 if (subNode.kind === 'directory') {
                     subdirs.push(subNode);
@@ -111,7 +144,7 @@ export function parse(buffer: ArrayBufferSlice): U8Archive {
                 }
             }
 
-            return { kind: 'directory', name: nodeName, files, subdirs, nextNodeIndex };
+            return { kind: 'directory', name: nodeName, childNodes, subdirs, files, nextNodeIndex };
         } else if (nodeType === NodeType.File) {
             const nodeDataBegin = view.getUint32(nodeOffs + 0x04, false);
             const nodeDataSize = view.getUint32(nodeOffs + 0x08, false);
