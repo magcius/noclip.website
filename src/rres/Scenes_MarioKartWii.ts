@@ -13,7 +13,7 @@ import { mat4 } from 'gl-matrix';
 import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render';
 import AnimationController from '../AnimationController';
 import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
-import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxHostAccessPass, GfxFrontFaceMode } from '../gfx/platform/GfxPlatform';
 import { computeModelMatrixSRT, MathConstants, lerp, clamp } from '../MathHelpers';
 import { SceneContext, GraphObjBase } from '../SceneBase';
 import { EggLightManager, parseBLIGHT } from './Egg';
@@ -46,9 +46,19 @@ class ModelCache {
 }
 
 interface BaseObject extends GraphObjBase {
+    modelMatrix: mat4;
     setVertexColorsEnabled(v: boolean): void;
     setTexturesEnabled(v: boolean): void;
     bindLightSetting(lightSetting: BRRES.LightSetting): void;
+}
+
+function getModelInstance(baseObj: BaseObject): MDL0ModelInstance {
+    if (baseObj instanceof SimpleObjectRenderer)
+        return baseObj.modelInstance;
+    else if (baseObj instanceof MDL0ModelInstance)
+        return baseObj;
+    else
+        throw "Object's class does not have a known model instance.";
 }
 
 class MarioKartWiiRenderer extends BasicGXRendererHelper {
@@ -59,10 +69,24 @@ class MarioKartWiiRenderer extends BasicGXRendererHelper {
     public baseObjects: BaseObject[] = [];
     public modelCache = new ModelCache();
 
+    private setMirrored(mirror: boolean): void {
+        const negScaleMatrix = mat4.fromValues(-1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1);
+        for (let i = 0; i < this.baseObjects.length; i++) {
+            mat4.mul(this.baseObjects[i].modelMatrix, negScaleMatrix, this.baseObjects[i].modelMatrix);
+            for (let j = 0; j < getModelInstance(this.baseObjects[i]).materialInstances.length; j++)
+                getModelInstance(this.baseObjects[i]).materialInstances[j].materialHelper.megaStateFlags.frontFace = mirror ? GfxFrontFaceMode.CCW : GfxFrontFaceMode.CW;
+        }
+    }
+
     public createPanels(): UI.Panel[] {
         const renderHacksPanel = new UI.Panel();
         renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
         renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
+        const mirrorCheckbox = new UI.Checkbox('Mirror Courses');
+        mirrorCheckbox.onchanged = () => {
+            this.setMirrored(mirrorCheckbox.checked);
+        };
+        renderHacksPanel.contents.appendChild(mirrorCheckbox.elem);
         const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
         enableVertexColorsCheckbox.onchanged = () => {
             const v = enableVertexColorsCheckbox.checked;
