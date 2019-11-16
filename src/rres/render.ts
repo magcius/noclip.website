@@ -230,21 +230,24 @@ class MaterialInstance {
     public calcIndTexMatrix(dst: mat4, indIdx: number): void {
         const material = this.materialData.material;
         const texMtxIdx: BRRES.TexMtxIndex = BRRES.TexMtxIndex.IND0 + indIdx;
+
+        let a: number, b: number, c: number, d: number, tx: number, ty: number, scale: number;
         if (this.srt0Animators[texMtxIdx]) {
             this.srt0Animators[texMtxIdx]!.calcIndTexMtx(dst);
-            // TODO(jstpierre): What scale is used here?
-            dst[12] = 1.0;
+            a = dst[0], c = dst[4], tx = dst[12], scale = 1.0;
+            b = dst[1], d = dst[5], ty = dst[13];
         } else {
-            const indTexMtx = material.indTexMatrices[indIdx];
-            const a = indTexMtx[0], c = indTexMtx[1], tx = indTexMtx[2], scale = indTexMtx[3];
-            const b = indTexMtx[4], d = indTexMtx[5], ty = indTexMtx[6];
-            mat4.set(dst,
-                a,     b,  0, 0,
-                c,     d,  0, 0,
-                tx,    ty, 0, 0,
-                scale, 0,  0, 0,
-            );
+            const mtx = material.indTexMatrices[indIdx];
+            a = mtx[0], c = mtx[1], tx = mtx[2], scale = mtx[3];
+            b = mtx[4], d = mtx[5], ty = mtx[6];
         }
+
+        mat4.set(dst,
+            a,     b,  0, 0,
+            c,     d,  0, 0,
+            tx,    ty, 0, 0,
+            scale, 0,  0, 0,
+        );
     }
 
     public calcTexAnimMatrix(dst: mat4, texIdx: number): void {
