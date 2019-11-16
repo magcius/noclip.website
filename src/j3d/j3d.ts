@@ -590,6 +590,27 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
 }
 //#endregion
 //#region MAT3
+export const enum TexMtxMapMode {
+    None = 0x00,
+    // Uses "Basic" conventions, no -1...1 remap.
+    // Peach Beach uses EnvmapBasic, not sure on what yet...
+    EnvmapBasic = 0x01,
+    ProjmapBasic = 0x02,
+    ViewProjmapBasic = 0x03,
+    // Unknown: 0x04, 0x05. No known uses.
+    // Uses "Old" conventions, remaps translation in fourth component
+    // TODO(jstpierre): Figure out the geometric interpretation of old vs. new
+    EnvmapOld = 0x06,
+    // Uses "New" conventions, remaps translation in third component
+    Envmap = 0x07,
+    Projmap = 0x08,
+    ViewProjmap = 0x09,
+    // Environment map, but based on a custom effect matrix instead of the default view
+    // matrix. Used by certain actors in Wind Waker, like zouK1 in Master Sword Chamber.
+    EnvmapOldEffectMtx = 0x0A,
+    EnvmapEffectMtx = 0x0B,
+}
+
 export const enum TexMtxProjection {
     MTX3x4 = 0,
     MTX2x4 = 1,
@@ -1041,6 +1062,16 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         const texMtxOffs = tableOffs + texMtxIndex * 0x64;
         const projection: TexMtxProjection = view.getUint8(texMtxOffs + 0x00);
         const info = view.getUint8(texMtxOffs + 0x01);
+
+        const matrixMode: TexMtxMapMode = info & 0x3F;
+
+        // Detect uses of unlikely map modes.
+        if (matrixMode === TexMtxMapMode.ProjmapBasic || matrixMode === TexMtxMapMode.ViewProjmapBasic ||
+            matrixMode === 0x04 || matrixMode === 0x05) {
+            console.log(`Unusual matrix map mode:`, matrixMode);
+            debugger;
+        }
+
         assert(view.getUint16(texMtxOffs + 0x02) === 0xFFFF);
         const centerS = view.getFloat32(texMtxOffs + 0x04);
         const centerT = view.getFloat32(texMtxOffs + 0x08);

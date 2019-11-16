@@ -25,7 +25,7 @@ import AnimationController from '../AnimationController';
 import { MaterialParams, PacketParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { LoadedVertexData, LoadedVertexLayout } from '../gx/gx_displaylist';
 import { GXRenderHelperGfx } from '../gx/gx_render';
-import { BMD, LoopMode, BVA, BTP, JSystemFileReaderHelper, ShapeDisplayFlags } from '../j3d/j3d';
+import { BMD, LoopMode, BVA, BTP, JSystemFileReaderHelper, ShapeDisplayFlags, TexMtxMapMode } from '../j3d/j3d';
 import { BMDModel, MaterialInstance } from '../j3d/render';
 import { JMapInfoIter, createCsvParser, getJMapInfoTransLocal, getJMapInfoRotateLocal, getJMapInfoScale } from './JMapInfo';
 import { BloomPostFXParameters, BloomPostFXRenderer } from './Bloom';
@@ -607,6 +607,14 @@ function patchInTexMtxIdxBuffer(loadedVertexLayout: LoadedVertexLayout, loadedVe
     }
 }
 
+function mtxModeIsUsingEnvMap(mode: TexMtxMapMode): boolean {
+    return (mode === TexMtxMapMode.EnvmapBasic || mode === TexMtxMapMode.EnvmapOld || mode === TexMtxMapMode.Envmap);
+}
+
+function mtxModeIsUsingProjMap(mode: TexMtxMapMode): boolean {
+    return (mode === TexMtxMapMode.ProjmapBasic || mode === TexMtxMapMode.ViewProjmapBasic || mode === TexMtxMapMode.Projmap || mode === TexMtxMapMode.ViewProjmap);
+}
+
 function patchBMD(bmd: BMD): void {
     for (let i = 0; i < bmd.shp1.shapes.length; i++) {
         const shape = bmd.shp1.shapes[i];
@@ -629,9 +637,9 @@ function patchBMD(bmd: BMD): void {
             const texMtxIdx = (texGen.matrix - GX.TexGenMatrix.TEXMTX0) / 3;
             const texMtx = assertExists(material.texMatrices[texMtxIdx]);
 
-            const matrixMode = texMtx.info & 0x3F;
-            const isUsingEnvMap = (matrixMode === 0x01 || matrixMode === 0x06 || matrixMode === 0x07);
-            const isUsingProjMap = (matrixMode === 0x02 || matrixMode === 0x03 || matrixMode === 0x08 || matrixMode === 0x09);
+            const matrixMode: TexMtxMapMode = texMtx.info & 0x3F;
+            const isUsingEnvMap = mtxModeIsUsingEnvMap(matrixMode);
+            const isUsingProjMap = mtxModeIsUsingProjMap(matrixMode);
 
             if (isUsingEnvMap || isUsingProjMap) {
                 // Mark as requiring TexMtxIdx

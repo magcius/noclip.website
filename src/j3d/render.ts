@@ -1,7 +1,7 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 
-import { BMD, BMT, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, TTK1Animator, ANK1Animator, bindANK1Animator, bindVAF1Animator, VAF1, VAF1Animator, TPT1, bindTPT1Animator, TPT1Animator, TEX1, BTI_Texture, INF1, calcJointMatrix, HierarchyNodeType, TexMtx, MAT3 } from './j3d';
+import { BMD, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, TTK1Animator, ANK1Animator, bindANK1Animator, bindVAF1Animator, VAF1, VAF1Animator, TPT1, bindTPT1Animator, TPT1Animator, TEX1, BTI_Texture, INF1, calcJointMatrix, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode } from './j3d';
 import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } from './j3d';
 
 import * as GX from '../gx/gx_enum';
@@ -214,15 +214,6 @@ export class MaterialInstanceState {
     public textureMappings: TextureMapping[];
 }
 
-function mat4SwapTranslationColumns(m: mat4): void {
-    const tx = m[12];
-    m[12] = m[8];
-    m[8] = tx;
-    const ty = m[13];
-    m[13] = m[9];
-    m[9] = ty;
-}
-
 function J3DMtxProjConcat(dst: mat4, a: mat4, b: mat4): void {
     // This is almost mat4.mul except it only outputs three rows of output.
     // Slightly more efficient.
@@ -281,27 +272,51 @@ function mat43Concat(dst: mat4, a: mat4, b: mat4): void {
 
 function J3DGetTextureMtx(dst: mat4, srt: mat4): void {
     mat4.copy(dst, srt);
-    mat4SwapTranslationColumns(dst);
+
+    // Move translation to third column.
+    dst[8] = dst[12];
+    dst[9] = dst[13];
+    dst[10] = 1.0;
+
+    dst[12] = 0;
+    dst[13] = 0;
+    dst[14] = 0;
 }
 
 function J3DGetTextureMtxOld(dst: mat4, srt: mat4): void {
     mat4.copy(dst, srt);
 }
 
-function J3DBuildE8Mtx(dst: mat4, flipY: boolean): void {
-    const flipYScale = flipY ? -1.0 : 1.0;
-    texEnvMtx(dst, 0.5, 0.5 * flipYScale, 0.5, 0.5);
-    dst[14] = 0.0;
-    dst[10] = 1.0;
+const flipYMatrix = mat4.create();
+function mtxFlipY(dst: mat4, flipY: boolean): void {
+    if (flipY) {
+        texEnvMtx(flipYMatrix, 1, 1, 0, 1);
+        mat4.mul(dst, flipYMatrix, dst);
+    }
 }
 
-function J3DBuildB8Mtx(dst: mat4, flipY: boolean): void {
-    const flipYScale = flipY ? -1.0 : 1.0;
-    // B8 is column-swapped from E8.
+function buildEnvMtxOld(dst: mat4, flipYScale: number): void {
+    // Map from -1...1 range to 0...1 range.
     texEnvMtx(dst, 0.5, 0.5 * flipYScale, 0.5, 0.5);
-    dst[14] = 0.0;
+    // texEnvMtx puts translation in fourth column, which is where we want it.
+    // We just need to punt the Z identity outta here.
     dst[10] = 1.0;
-    mat4SwapTranslationColumns(dst);
+    dst[14] = 0.0;
+}
+
+function buildEnvMtx(dst: mat4, flipYScale: number): void {
+    // Map from -1...1 range to 0...1 range.
+    texEnvMtx(dst, 0.5, 0.5 * flipYScale, 0.5, 0.5);
+    // texEnvMtx puts translation in fourth column, so we need to swap.
+    const tx = dst[12];
+    dst[12] = dst[8];
+    dst[8] = tx;
+    const ty = dst[13];
+    dst[13] = dst[9];
+    dst[9] = ty;
+    const tz = dst[14];
+    dst[14] = dst[10];
+    dst[10] = tz;
 }
 
 const materialParams = new MaterialParams();
@@ -399,33 +414,29 @@ export class MaterialInstance {
     }
 
     private calcTexMtxInput(dst: mat4, texMtx: TexMtx, modelViewMatrix: mat4, modelMatrix: mat4): void {
-        const matrixMode = texMtx.info & 0x3F;
+        const matrixMode: TexMtxMapMode = texMtx.info & 0x3F;
 
         // ref. J3DTexGenBlockPatched::calc()
         switch (matrixMode) {
-        case 0x01:
-        case 0x06:
-        case 0x07:
-            // Environment mapping. Uses an approximation of the normal matrix (MV with the translation lopped off).
+        case TexMtxMapMode.EnvmapBasic:
+        case TexMtxMapMode.EnvmapOld:
+        case TexMtxMapMode.Envmap:
             computeNormalMatrix(dst, modelViewMatrix, true);
             break;
 
-        case 0x02:
-        case 0x08:
-            // Copy over model matrix.
+        case TexMtxMapMode.ProjmapBasic:
+        case TexMtxMapMode.Projmap:
             mat4.copy(dst, modelMatrix);
             break;
 
-        case 0x03:
-        case 0x09:
-            // Projection. Used for indtexwater, mostly.
+        case TexMtxMapMode.ViewProjmapBasic:
+        case TexMtxMapMode.ViewProjmap:
             mat4.copy(dst, modelViewMatrix);
             break;
 
         case 0x05:
-        case 0x0A:
-        case 0x0B:
-            // Environment mapping, but only using the model matrix.
+        case TexMtxMapMode.EnvmapOldEffectMtx:
+        case TexMtxMapMode.EnvmapEffectMtx:
             computeNormalMatrix(dst, modelMatrix, true);
             break;
 
@@ -437,37 +448,37 @@ export class MaterialInstance {
     }
 
     public calcPostTexMtxInput(dst: mat4, texMtx: TexMtx, viewMatrix: mat4): void {
-        const matrixMode = texMtx.info & 0x3F;
+        const matrixMode: TexMtxMapMode = texMtx.info & 0x3F;
 
         // ref. J3DTexGenBlockPatched::calcPostTexMtx()
         switch (matrixMode) {
-            case 0x01:
-            case 0x06:
-            case 0x07:
-                mat4.identity(dst);
-                break;
+        case TexMtxMapMode.EnvmapBasic:
+        case TexMtxMapMode.EnvmapOld:
+        case TexMtxMapMode.Envmap:
+            mat4.identity(dst);
+            break;
 
-            case 0x02:
-            case 0x08:
-                mat4.invert(dst, viewMatrix);
-                break;
+        case TexMtxMapMode.ProjmapBasic:
+        case TexMtxMapMode.Projmap:
+            mat4.invert(dst, viewMatrix);
+            break;
 
-            case 0x03:
-            case 0x09:
-                mat4.identity(dst);
-                break;
+        case TexMtxMapMode.ViewProjmapBasic:
+        case TexMtxMapMode.ViewProjmap:
+            mat4.identity(dst);
+            break;
 
-            case 0x05:
-            case 0x0A:
-            case 0x0B:
-                mat4.invert(dst, viewMatrix);
-                computeNormalMatrix(dst, dst, true);
-                break;
+        case 0x05:
+        case TexMtxMapMode.EnvmapOldEffectMtx:
+        case TexMtxMapMode.EnvmapEffectMtx:
+            mat4.invert(dst, viewMatrix);
+            computeNormalMatrix(dst, dst, true);
+            break;
 
-            default:
-                // No mapping.
-                mat4.identity(dst);
-                break;
+        default:
+            // No mapping.
+            mat4.identity(dst);
+            break;
         }
     }
 
@@ -484,171 +495,146 @@ export class MaterialInstance {
     public calcTexMtx(dst: mat4, texMtx: TexMtx, texSRT: mat4, modelMatrix: mat4, camera: Camera, viewport: NormalizedViewportCoords, flipY: boolean): void {
         // The input matrix is passed in in dst.
 
-        const matrixMode = texMtx.info & 0x3F;
+        const matrixMode: TexMtxMapMode = texMtx.info & 0x3F;
         const flipYScale = flipY ? -1.0 : 1.0;
 
         // Now apply effects.
 
         // ref. J3DTexMtx::calc()
-
-        // J3DGetTextureMtxOld puts the translation into the fourth column.
-        // J3DGetTextureMtx puts the translation into the third column.
-        // Our calcTexMtx uses fourth column, so we need to swap for non-Old.
-
-        // _B8 and _E8 are constant 4x3 matrices
-        // _B8 has the translation mapping in the third column, _E8 has the translation mapping in the fourth column.
-        // _E8 is equivalent to texEnvMtx, and _B8 is the same but column-swapped.
-        // _48 and _88 are scratch space, _24 is effectMatrix,
-        // _94 is input matrix calculated above, _64 is output.
-        const tmp48 = matrixScratch;
-        const tmp88 = matrixScratch2;
+        const tmp1 = matrixScratch;
+        const tmp2 = matrixScratch2;
         switch (matrixMode) {
-        case 0x01:
+        case TexMtxMapMode.EnvmapBasic:
             {
-                // J3DGetTextureMtxOld(_48)
-                J3DGetTextureMtxOld(tmp48, texSRT);
+                // J3DGetTextureMtxOld(tmp1)
+                J3DGetTextureMtxOld(tmp1, texSRT);
 
-                if (flipY) {
-                    texEnvMtx(tmp88, 1, 1, 0, 1);
-                    mat4.mul(tmp48, tmp88, tmp48);
-                }
-
-                // PSMTXConcat(_48, _94, this->_64)
-                mat43Concat(dst, tmp48, dst);
+                // PSMTXConcat(tmp1, inputMatrix, this->finalMatrix)
+                mat43Concat(dst, tmp1, dst);
             }
             break;
 
-        case 0x02:
-        case 0x03:
+        case TexMtxMapMode.ProjmapBasic:
+        case TexMtxMapMode.ViewProjmapBasic:
         case 0x05:
             {
-                // J3DGetTextureMtxOld(_88)
-                J3DGetTextureMtxOld(tmp88, texSRT);
+                // J3DGetTextureMtxOld(tmp2)
+                J3DGetTextureMtxOld(tmp2, texSRT);
 
-                if (flipY) {
-                    texEnvMtx(tmp48, 1, 1, 0, 1);
-                    mat4.mul(tmp88, tmp48, tmp88);
-                }
+                mtxFlipY(dst, flipY);
 
-                // J3DMtxProjConcat(_88, this->_24, _48)
-                J3DMtxProjConcat(tmp48, tmp88, texMtx.effectMatrix);
-                // PSMTXConcat(_48, _94, this->_64)
-                mat43Concat(dst, tmp48, dst);
+                // J3DMtxProjConcat(tmp2, this->effectMtx, tmp1)
+                J3DMtxProjConcat(tmp1, tmp2, texMtx.effectMatrix);
+                // PSMTXConcat(tmp1, inputMatrix, this->finalMatrix)
+                mat43Concat(dst, tmp1, dst);
             }
             break;
 
         case 0x04:
             {
-                // J3DGetTextureMtxOld(_88)
-                J3DGetTextureMtxOld(tmp88, texSRT);
+                // J3DGetTextureMtxOld(tmp2)
+                J3DGetTextureMtxOld(tmp2, texSRT);
 
-                if (flipY) {
-                    texEnvMtx(tmp48, 1, 1, 0, 1);
-                    mat4.mul(tmp88, tmp48, tmp88);
-                }
+                mtxFlipY(dst, flipY);
 
-                // J3DMtxProjConcat(_88, this->_24, this->_64);
-                J3DMtxProjConcat(dst, tmp88, texMtx.effectMatrix);
+                // J3DMtxProjConcat(tmp2, this->effectMtx, this->finalMatrix);
+                J3DMtxProjConcat(dst, tmp2, texMtx.effectMatrix);
             }
             break;
 
-        case 0x06:
+        case TexMtxMapMode.EnvmapOld:
             {
-                // J3DGetTextureMtxOld(_48)
-                J3DGetTextureMtxOld(tmp48, texSRT);
+                // J3DGetTextureMtxOld(tmp1)
+                J3DGetTextureMtxOld(tmp1, texSRT);
 
-                // PSMTXConcat(_48, _E8, _48)
-                J3DBuildE8Mtx(tmp88, flipY);
-                mat43Concat(tmp48, tmp48, tmp88);
+                // PSMTXConcat(tmp1, EnvMtxOld, tmp1)
+                buildEnvMtxOld(tmp2, flipYScale);
+                mat43Concat(tmp1, tmp1, tmp2);
 
-                // PSMTXConcat(_48, _94, this->_64)
-                mat43Concat(dst, tmp48, dst);
+                // PSMTXConcat(tmp1, inputMatrix, this->finalMatrix)
+                mat43Concat(dst, tmp1, dst);
             }
             break;
 
-        case 0x07:
+        case TexMtxMapMode.Envmap:
             {
-                // J3DGetTextureMtx(_48)
-                J3DGetTextureMtx(tmp48, texSRT);
+                // J3DGetTextureMtx(tmp1)
+                J3DGetTextureMtx(tmp1, texSRT);
 
-                // PSMTXConcat(_48, _B8, _48)
-                J3DBuildB8Mtx(tmp88, flipY);
-                mat43Concat(tmp48, tmp48, tmp88);
+                // PSMTXConcat(tmp1, EnvMtx, tmp1)
+                buildEnvMtx(tmp2, flipYScale);
+                mat43Concat(tmp1, tmp1, tmp2);
 
-                // PSMTXConcat(_48, _94, this->_64)
-                mat43Concat(dst, tmp48, dst);
+                // PSMTXConcat(tmp1, inputMatrix, this->finalMatrix)
+                mat43Concat(dst, tmp1, dst);
             }
             break;
 
-        case 0x08:
-        case 0x09:
-        case 0x0B:
+        case TexMtxMapMode.Projmap:
+        case TexMtxMapMode.ViewProjmap:
+        case TexMtxMapMode.EnvmapEffectMtx:
             {
-                // J3DGetTextureMtx(_88)
-                J3DGetTextureMtx(tmp88, texSRT);
+                // J3DGetTextureMtx(tmp2)
+                J3DGetTextureMtx(tmp2, texSRT);
 
-                if (matrixMode === 0x09) {
+                if (matrixMode === TexMtxMapMode.ViewProjmap) {
                     // The effect matrix here is a GameCube projection matrix. Swap it out with out own.
                     // In Galaxy, this is done in ViewProjmapEffectMtxSetter.
 
-                    // Replaces the effectMatrix (this->_24). B8 is built into this call, as well.
-                    texProjCameraSceneTex(tmp48, camera, viewport, flipYScale);
-                    // J3DMtxProjConcat(_88, this->_24, _48)
-                    J3DMtxProjConcat(tmp48, tmp88, tmp48);
-                } else if (matrixMode === 0x08) {
-                    // PSMTXConcat(_88, _B8, _88)
-                    J3DBuildB8Mtx(tmp48, flipY);
-                    mat43Concat(tmp88, tmp88, tmp48);
+                    // Replaces the effectMatrix. EnvMtx is built into this call, as well.
+                    texProjCameraSceneTex(tmp1, camera, viewport, flipYScale);
+
+                    // J3DMtxProjConcat(tmp2, this->effectMtx, tmp1)
+                    J3DMtxProjConcat(tmp1, tmp2, tmp1);
+                } else if (matrixMode === TexMtxMapMode.Projmap) {
+                    // PSMTXConcat(tmp2, EnvMtx, tmp2)
+                    buildEnvMtx(tmp1, flipYScale);
+                    mat43Concat(tmp2, tmp2, tmp1);
 
                     // Multiply the effect matrix by the inverse of the model matrix.
                     // In Galaxy, this is done in ProjmapEffectMtxSetter.
-                    mat4.invert(tmp48, modelMatrix);
-                    mat4.mul(tmp48, texMtx.effectMatrix, tmp48);
+                    mat4.invert(tmp1, modelMatrix);
+                    mat4.mul(tmp1, texMtx.effectMatrix, tmp1);
 
-                    // J3DMtxProjConcat(_88, this->_24, _48)
-                    J3DMtxProjConcat(tmp48, tmp88, tmp48);
+                    // J3DMtxProjConcat(tmp2, this->effectMtx, tmp1)
+                    J3DMtxProjConcat(tmp1, tmp2, tmp1);
                 } else {
-                    // PSMTXConcat(_88, _B8, _88)
-                    J3DBuildB8Mtx(tmp48, flipY);
-                    mat43Concat(tmp88, tmp88, tmp48);
+                    // PSMTXConcat(tmp2, EnvMtx, tmp2)
+                    buildEnvMtx(tmp1, flipYScale);
+                    mat43Concat(tmp2, tmp2, tmp1);
 
-                    mat4.mul(tmp48, texMtx.effectMatrix, tmp48);
-
-                    // J3DMtxProjConcat(_88, this->_24, _48)
-                    J3DMtxProjConcat(tmp48, tmp88, texMtx.effectMatrix);
+                    // J3DMtxProjConcat(tmp2, this->effectMtx, tmp1)
+                    J3DMtxProjConcat(tmp1, tmp2, texMtx.effectMatrix);
                 }
 
-                // PSMTXConcat(_48, _94, this->_64)
-                mat43Concat(dst, tmp48, dst);
+                // PSMTXConcat(tmp1, inputMatrix, this->finalMatrix)
+                mat43Concat(dst, tmp1, dst);
             }
             break;
 
-        case 0x0A:
+        case TexMtxMapMode.EnvmapOldEffectMtx:
             {
-                // J3DGetTextureMtxOld(_88)
-                J3DGetTextureMtxOld(tmp88, texSRT);
+                // J3DGetTextureMtxOld(tmp2)
+                J3DGetTextureMtxOld(tmp2, texSRT);
 
-                // PSMTXConcat(_88, _E8, _88)
-                J3DBuildE8Mtx(tmp48, flipY);
-                mat43Concat(tmp88, tmp88, tmp48);
+                // PSMTXConcat(tmp2, EnvMtxOld, tmp2)
+                buildEnvMtxOld(tmp1, flipYScale);
+                mat43Concat(tmp2, tmp2, tmp1);
 
-                // J3DMtxProjConcat(_88, this->_24, _48)
-                J3DMtxProjConcat(tmp48, tmp88, texMtx.effectMatrix);
+                // J3DMtxProjConcat(tmp2, this->effectMtx, tmp1)
+                J3DMtxProjConcat(tmp1, tmp2, texMtx.effectMatrix);
 
-                // PSMTXConcat(_48, _94, this->_64)
-                mat43Concat(dst, tmp48, dst);
+                // PSMTXConcat(tmp1, inputMatrix, this->finalMatrix)
+                mat43Concat(dst, tmp1, dst);
             }
             break;
 
-        case 0x00:
+        case TexMtxMapMode.None:
             {
-                // J3DGetTextureMtxOld(this->_64)
+                // J3DGetTextureMtxOld(this->finalMatrix)
                 J3DGetTextureMtxOld(dst, texSRT);
 
-                if (flipY) {
-                    texEnvMtx(tmp48, 1, 1, 0, 1);
-                    mat4.mul(dst, tmp48, dst);
-                }
+                mtxFlipY(dst, flipY);
             }
             break;
 
