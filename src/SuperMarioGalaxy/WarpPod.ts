@@ -282,7 +282,7 @@ export class WarpPod extends LiveActor {
         this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, "WarpPod");
 
-        this.visible = getJMapInfoBool(fallback(getJMapInfoArg1(infoIter), 1));
+        this.visible = fallback(getJMapInfoArg1(infoIter), 1) !== 0;
         const hasSaveFlag = getJMapInfoBool(fallback(getJMapInfoArg3(infoIter), -1));
         const astroDomeNum = getJMapInfoBool(fallback(getJMapInfoArg4(infoIter), -1));
         const colorIndex = fallback(getJMapInfoArg6(infoIter), 0);
@@ -323,7 +323,7 @@ export class WarpPod extends LiveActor {
             pairedWarpPod.initPair(sceneObjHolder, this);
         }
 
-        // This isn't quite the same as original, which has a WarpPodMgr which draws all of them...
+        // This isn't quite the same as original, which has a WarpPodMgr which draws all of the paths...
         if (this.visible) {
             connectToScene(sceneObjHolder, this, 0x22, 5, DrawBufferType.MAP_OBJ, DrawType.WARP_POD_PATH);
         } else {
