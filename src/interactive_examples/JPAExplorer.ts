@@ -405,6 +405,15 @@ export class Explorer implements SceneGfx {
 
         this.gridPlane.prepareToRender(device, renderInstManager, viewerInput);
 
+        if (this.loopEmitters) {
+            for (let i = this.emitters.length - 1; i >= 0; i--) {
+                if (!!(this.emitters[i].flags & JPA.BaseEmitterFlags.TERMINATE)) {
+                    this.emitters.splice(i, 1);
+                    this.createEmitter();
+                }
+            }
+        }
+
         if (this.wiggleEmitters) {
             const t = viewerInput.time / 100;
             scratchVec3[0] = (Math.sin(t) * 50);
@@ -419,15 +428,6 @@ export class Explorer implements SceneGfx {
 
             const ctx = getDebugOverlayCanvas2D();
             drawWorldSpacePoint(ctx, viewerInput.camera, this.emitters[i].globalTranslation);
-        }
-
-        if (this.loopEmitters) {
-            for (let i = this.emitters.length - 1; i >= 0; i--) {
-                if (!!(this.emitters[i].flags & JPA.BaseEmitterFlags.TERMINATE)) {
-                    this.emitters.splice(i, 1);
-                    this.createEmitter();
-                }
-            }
         }
 
         this.effectSystem.calc(viewerInput);
