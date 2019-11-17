@@ -378,9 +378,14 @@ class SceneDesc implements Viewer.SceneDesc {
                         const id = view.getUint16(offs + 0x08);
                         const yaw = view.getUint16(offs + 0x0C) >>> 7;
 
-                        const selectorState = nArray(selectorValue + 1, () => 0);
-                        if (selectorValue > 0)
-                            selectorState[selectorValue] = 1;
+                        let selectorState: number[] = [];
+                        // only doors and signs for now
+                        if (id === 0x203 || id === 0x2e3) {
+                            if (selectorValue > 0) {
+                                selectorState = nArray(selectorValue + 1, () => 0);
+                                selectorState[selectorValue] = 1;
+                            }
+                        }
                         // skipping a couple of 0xc-bit fields
                         if (category === 0x06) {
                             const objRenderer = objectSetupTable.spawnObject(device, id, vec3.fromValues(x, y, z), yaw, selectorState);

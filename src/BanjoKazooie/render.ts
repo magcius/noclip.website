@@ -819,8 +819,8 @@ export class GeometryRenderer {
     }
 
     private buildGeoNode(node: GeoNode): void {
-        // terminate early if this node wasn't selected
-        if (node.selector !== undefined) {
+        // terminate early if this node wasn't selected and we have a selector
+        if (node.selector !== undefined && this.selectorState.length > 0) {
             if (node.selector.stateIndex >= this.selectorState.length) {
                 return;
             }
