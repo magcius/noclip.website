@@ -42,6 +42,7 @@ const SORT_PARTICLES = false;
 export interface JPAResourceRaw {
     resourceId: number;
     data: ArrayBufferSlice;
+    texIdBase: number;
 }
 
 export interface JPAC {
@@ -372,7 +373,7 @@ interface JPAResource {
     ssp1: JPAChildShapeBlock | null;
     fld1: JPAFieldBlock[];
     kfa1: JPAKeyBlock[];
-    tdb1: Uint16Array;
+    tdb1: Uint16Array | null;
 }
 
 const st_bm: GX.BlendMode[]   = [ GX.BlendMode.NONE, GX.BlendMode.BLEND, GX.BlendMode.LOGIC ];
@@ -460,7 +461,7 @@ export class JPAResourceData {
     public resourceId: number;
     public name: string;
     public materialHelper: GXMaterialHelperGfx;
-    public textureIDs: number[] = [];
+    public textureIds: number[] = [];
 
     constructor(device: GfxDevice, cache: GfxRenderCache, private jpacData: JPACData, resRaw: JPAResourceRaw) {
         this.res = parseResource(this.jpacData.jpac.version, resRaw);
@@ -481,26 +482,27 @@ export class JPAResourceData {
         }
 
         // Translate all of the texture data.
+        const texIdBase = resRaw.texIdBase;
         if (bsp1.texIdxAnimData !== null) {
             for (let i = 0; i < bsp1.texIdxAnimData.length; i++)
-                this.ensureTextureFromTDB1Index(device, cache, bsp1.texIdxAnimData[i]);
+                this.ensureTextureFromTDB1Index(device, cache, bsp1.texIdxAnimData[i], texIdBase);
         } else {
-            this.ensureTextureFromTDB1Index(device, cache, bsp1.texIdx);
+            this.ensureTextureFromTDB1Index(device, cache, bsp1.texIdx, texIdBase);
         }
 
         if (etx1 !== null) {
             if (etx1.indTextureMode !== IndTextureMode.OFF) {
-                this.ensureTextureFromTDB1Index(device, cache, etx1.indTextureID);
+                this.ensureTextureFromTDB1Index(device, cache, etx1.indTextureID, texIdBase);
                 if (etx1.indTextureMode === IndTextureMode.SUB)
-                    this.ensureTextureFromTDB1Index(device, cache, etx1.subTextureID);
+                    this.ensureTextureFromTDB1Index(device, cache, etx1.subTextureID, texIdBase);
             }
 
             if (etx1.secondTextureIndex !== -1)
-                this.ensureTextureFromTDB1Index(device, cache, etx1.secondTextureIndex);
+                this.ensureTextureFromTDB1Index(device, cache, etx1.secondTextureIndex, texIdBase);
         }
 
         if (ssp1 !== null)
-            this.ensureTextureFromTDB1Index(device, cache, ssp1.texIdx);
+            this.ensureTextureFromTDB1Index(device, cache, ssp1.texIdx, texIdBase);
 
         const ropInfo: RopInfo = {
             blendMode: {
@@ -621,13 +623,15 @@ export class JPAResourceData {
         this.materialHelper = new GXMaterialHelperGfx(gxMaterial);
     }
 
-    private ensureTextureFromTDB1Index(device: GfxDevice, cache: GfxRenderCache, idx: number): void {
-        this.jpacData.ensureTexture(device, cache, this.res.tdb1[idx]);
-        this.textureIDs.push(idx);
+    private ensureTextureFromTDB1Index(device: GfxDevice, cache: GfxRenderCache, idx: number, tdb1Base: number): void {
+        const texIndex = tdb1Base + ((this.res.tdb1 !== null) ? this.res.tdb1[idx] : idx);
+        this.textureIds.push(texIndex);
+
+        this.jpacData.ensureTexture(device, cache, this.textureIds[idx]);
     }
 
     public fillTextureMapping(m: TextureMapping, idx: number): void {
-        this.jpacData.fillTextureMapping(m, this.res.tdb1[idx]);
+        this.jpacData.fillTextureMapping(m, this.textureIds[idx]);
     }
 }
 
@@ -3834,7 +3838,7 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
         ssp1,
         fld1,
         kfa1,
-        tdb1: new Uint16Array([0, 1, 2, 3]),
+        tdb1: null,
     };
 }
 
@@ -4768,7 +4772,7 @@ function parseJEFFjpa1(buffer: ArrayBufferSlice): JPAC {
 
     // Fake a single effect.
     const effects: JPAResourceRaw[] = [];
-    effects.push({ resourceId: 0, data: buffer });
+    effects.push({ resourceId: 0, data: buffer, texIdBase: 0 });
 
     const textures: BTI[] = [];
 
@@ -4820,7 +4824,7 @@ function parseJPAC1_00(buffer: ArrayBufferSlice): JPAC {
         }
 
         const data = buffer.slice(resourceBeginOffs, effectTableIdx);
-        effects.push({ resourceId, data });
+        effects.push({ resourceId, data, texIdBase: 0 });
     }
 
     const textures: BTI[] = [];
@@ -4865,7 +4869,7 @@ function parseJPAC2_10(buffer: ArrayBufferSlice): JPAC {
         }
 
         const data = buffer.slice(resourceBeginOffs, effectTableIdx);
-        effects.push({ resourceId, data });
+        effects.push({ resourceId, data, texIdBase: 0 });
     }
 
     const textures: BTI[] = [];

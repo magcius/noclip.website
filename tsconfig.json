@@ -21,7 +21,8 @@
         "types": [
             "gl-matrix",
             "webgl2",
-            "pako"
+            "pako",
+            "filesystem"
         ]
     },
     "include": [

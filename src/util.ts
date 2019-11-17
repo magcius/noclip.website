@@ -113,6 +113,13 @@ export function concat<T>(dst: T[], src: T[]): void {
         dst.push(src[i]);
 }
 
+export function flatten<T>(L: T[][]): T[] {
+    const R: T[] = [];
+    for (let i = 0; i < L.length; i++)
+        R.push.apply(R, L[i]);
+    return R;
+}
+
 export function fallback<T>(v: T | null, fallback: T): T {
     return v !== null ? v : fallback;
 }

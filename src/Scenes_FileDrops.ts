@@ -2,7 +2,7 @@
 import { SceneDesc, SceneGfx } from "./viewer";
 import ArrayBufferSlice from "./ArrayBufferSlice";
 import { GfxDevice } from "./gfx/platform/GfxPlatform";
-import { readString } from "./util";
+import { readString, flatten } from "./util";
 
 import * as Yaz0 from './Common/Compression/Yaz0';
 import * as CX from './Common/Compression/CX';
@@ -81,8 +81,11 @@ export async function createSceneFromFiles(context: SceneContext, buffers: Named
     if (buffer.name.endsWith('.arc') || buffer.name.endsWith('.carc') || buffer.name.endsWith('.szs'))
         return loadArbitraryFile(context, buffer);
 
-    if (buffer.name.endsWith('.jpc') || buffer.name.endsWith('.jpa'))
-        return JPAExplorer.createRendererFromBuffer(context, buffer);
+    if (buffer.name.endsWith('.jpc'))
+        return JPAExplorer.createRendererFromBuffers(context, [buffer]);
+
+    if (buffers.every((b) => b.name.endsWith('.jpa')))
+        return JPAExplorer.createRendererFromBuffers(context, buffers);
 
     if (buffers.some((b) => b.name.endsWith('.brres')))
         return RRES.createBasicRRESRendererFromBRRES(device, buffers);
@@ -106,7 +109,10 @@ export class DroppedFileSceneDesc implements SceneDesc {
     public id: string;
     public name: string;
 
-    constructor(public file: File, public files: File[]) {
+    constructor(public files: File[]) {
+        // Pick some file as the ID.
+        const file = files[0];
+
         this.id = file.name;
         this.name = file.name;
     }
@@ -116,4 +122,75 @@ export class DroppedFileSceneDesc implements SceneDesc {
         const buffers = await Promise.all([...this.files].map((f) => loadFileAsPromise(f, dataFetcher)));
         return createSceneFromFiles(context, buffers);
     }
+}
+
+async function readAllDirEntries(reader: DirectoryReader): Promise<Entry[]> {
+    function readDirEntries(reader: DirectoryReader): Promise<Entry[]> {
+        return new Promise((resolve, reject) => {
+            return reader.readEntries(resolve, reject);
+        })
+    }
+
+    const entries: Entry[] = [];
+    // We need to keep calling readDirEntries until it returns nothing.
+    while (true) {
+        const result = await readDirEntries(reader);
+        if (result.length === 0)
+            break;
+        for (let i = 0; i < result.length; i++)
+            entries.push(result[i]);
+    }
+
+    return entries;
+}
+
+export interface FileWithPath extends File {
+    path: string;
+}
+
+async function traverseFileSystemEntry(entry: Entry, path: string = ''): Promise<FileWithPath[]> {
+    if (entry.isDirectory) {
+        const dirEntry = entry as DirectoryEntry;
+        const reader = dirEntry.createReader();
+        const entries = await readAllDirEntries(reader);
+
+        return traverseFileSystemEntryTree(entries, `${path}/${entry.name}`);
+    } else if (entry.isFile) {
+        const fileEntry = entry as FileEntry;
+
+        return new Promise((resolve, reject) => {
+            fileEntry.file((file) => {
+                // Inject our own path.
+                const fileWithPath = file as FileWithPath;
+                fileWithPath.path = path;
+                resolve([fileWithPath]);
+            }, (error) => {
+                reject(error);
+            });
+        });
+    } else {
+        throw "whoops";
+    }
+}
+
+async function traverseFileSystemEntryTree(entries: Entry[], path: string): Promise<FileWithPath[]> {
+    const files = await Promise.all(entries.map((entry) => {
+        return traverseFileSystemEntry(entry, path);
+    }));
+
+    return flatten(files);
+}
+
+export async function traverseFileSystemDataTransfer(dataTransfer: DataTransfer): Promise<FileWithPath[]> {
+    const items: DataTransferItem[] = [].slice.call(dataTransfer.items);
+
+    if (items.length === 0)
+        return [];
+
+    const itemFiles = await Promise.all(items.map((item) => {
+        const entry = item.webkitGetAsEntry() as Entry;
+        return traverseFileSystemEntry(entry);
+    }));
+
+    return flatten(itemFiles);
 }

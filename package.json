@@ -3,6 +3,7 @@
   "private": true,
   "license": "MIT",
   "devDependencies": {
+    "@types/filesystem": "^0.0.29",
     "@types/gl-matrix": "^2.4.4",
     "@types/node": "^11.9.5",
     "@types/pako": "^1.0.0",

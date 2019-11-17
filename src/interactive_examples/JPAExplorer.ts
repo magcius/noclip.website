@@ -9,8 +9,7 @@ import * as JPA from '../j3d/JPA';
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec3 } from "gl-matrix";
 import { GfxRenderInstManager, executeOnPass } from "../gfx/render/GfxRenderer";
-import { assertExists, hexzero } from "../util";
-import ArrayBufferSlice from "../ArrayBufferSlice";
+import { assertExists, hexzero, assert } from "../util";
 import { SceneContext } from "../SceneBase";
 import { FloatingPanel, LAYER_ICON, HIGHLIGHT_COLOR, Checkbox, TextField } from "../ui";
 import { GridPlane } from "./GridPlane";
@@ -20,6 +19,7 @@ import { RARC } from "../j3d/rarc";
 import { fillSceneParamsDataOnTemplate, ub_SceneParams, u_SceneParamsBufferSize, gxBindingLayouts } from "../gx/gx_render";
 import { TextureMapping } from "../TextureHolder";
 import { EFB_WIDTH, EFB_HEIGHT } from "../gx/gx_material";
+import { NamedArrayBufferSlice } from "../DataFetcher";
 
 function setTextureMappingIndirect(m: TextureMapping, sceneTexture: GfxTexture): void {
     m.gfxTexture = sceneTexture;
@@ -62,8 +62,8 @@ class BasicEffectSystem {
     }
 
     public resourceDataUsesFB(resourceData: JPA.JPAResourceData): boolean {
-        for (let i = 0; i < resourceData.textureIDs.length; i++) {
-            const texID = resourceData.textureIDs[i];
+        for (let i = 0; i < resourceData.textureIds.length; i++) {
+            const texID = resourceData.textureIds[i];
             const textureName = this.jpacData.jpac.textures[texID].texture.name;
             if (this.fbTextureNames.includes(textureName))
                 return true;
@@ -212,7 +212,7 @@ export class Explorer implements SceneGfx {
     private currentEffectIndex: number = -1;
     private wiggleEmitters: boolean = false;
     private loopEmitters: boolean = true;
-    private jpac: JPA.JPAC;
+    private forceCentered: boolean = false;
     private opaqueSceneTexture = new ColorTexture();
 
     // UI
@@ -220,12 +220,11 @@ export class Explorer implements SceneGfx {
     private currentResourceIdEntry: SimpleTextEntry;
     private currentNameEntry: SimpleTextEntry | null = null;
 
-    constructor(private context: SceneContext, buffer: ArrayBufferSlice, private effectNames: string[] | null = null) {
+    constructor(private context: SceneContext, private jpac: JPA.JPAC, private effectNames: string[] | null = null) {
         const device = context.device;
         this.uiContainer = context.uiContainer;
 
         this.renderHelper = new GfxRenderHelper(device);
-        this.jpac = JPA.parse(buffer);
         this.effectSystem = new BasicEffectSystem(device, this.jpac);
 
         this.gridPlane = new GridPlane(device);
@@ -360,6 +359,12 @@ export class Explorer implements SceneGfx {
             this.loopEmitters = loopCheckbox.checked;
         };
         panel.contents.appendChild(loopCheckbox.elem);
+
+        const forceCenteredCheckbox = new Checkbox('Force Centered', this.forceCentered);
+        forceCenteredCheckbox.onchanged = () => {
+            this.forceCentered = forceCenteredCheckbox.checked;
+        };
+        panel.contents.appendChild(forceCenteredCheckbox.elem);
     }
 
     private setUIToCurrent(): void {
@@ -426,6 +431,9 @@ export class Explorer implements SceneGfx {
         for (let i = 0; i < this.emitters.length; i++) {
             vec3.copy(this.emitters[i].globalTranslation, scratchVec3);
 
+            if (this.forceCentered)
+                vec3.set(this.emitters[i].emitterTrs, 0, 0, 0);
+
             const ctx = getDebugOverlayCanvas2D();
             drawWorldSpacePoint(ctx, viewerInput.camera, this.emitters[i].globalTranslation);
         }
@@ -485,8 +493,44 @@ export class Explorer implements SceneGfx {
     }
 }
 
-export function createRendererFromBuffer(context: SceneContext, buffer: ArrayBufferSlice) {
-    return new Explorer(context, buffer);
+export function createRendererFromBuffers(context: SceneContext, buffers: NamedArrayBufferSlice[]) {
+    const jpacs = buffers.map((buffer) => {
+        return JPA.parse(buffer);
+    });
+
+    // Combine JPACs into one.
+    const dst = jpacs[0];
+    const effectNames: string[] = [];
+    let texIdBase = 0;
+
+    for (let i = 0; i < jpacs.length; i++) {
+        const jpac = jpacs[i];
+        assert(dst.version === jpac.version);
+
+        for (let j = 0; j < jpac.effects.length; j++) {
+            if (jpac !== dst)
+                dst.effects.push(jpac.effects[j]);
+            jpac.effects[j].texIdBase = texIdBase;
+
+            const name = buffers[i].name;
+            effectNames.push(jpac.effects.length === 1 ? name : `${name} ${j}`);
+        }
+
+        for (let j = 0; j < jpac.textures.length; j++) {
+            if (jpac !== dst)
+                dst.textures.push(jpac.textures[j]);
+            texIdBase++;
+        }
+    }
+
+    // Pick new resource IDs if desired... for now just do it for any time we're dragging multiple
+    // files, assuming that's the JPA case.
+    if (jpacs.length > 1) {
+        for (let i = 0; i < dst.effects.length; i++)
+            dst.effects[i].resourceId = i;
+    }
+
+    return new Explorer(context, dst, effectNames);
 }
 
 export function createRendererFromSMGArchive(context: SceneContext, arc: RARC) {
@@ -494,6 +538,9 @@ export function createRendererFromSMGArchive(context: SceneContext, arc: RARC) {
     const effectNames = effectNamesCSV.mapRecords((iter) => {
         return assertExists(iter.getValueString('name'));
     });
+
     // TODO(jstpierre): AutoEffect systems?
-    return new Explorer(context, arc.findFileData(`particles.jpc`)!, effectNames);
+    const jpac = JPA.parse(arc.findFileData(`particles.jpc`)!);
+
+    return new Explorer(context, jpac, effectNames);
 }

@@ -5,7 +5,7 @@ import * as Yaz0 from '../Common/Compression/Yaz0';
 import * as RARC from './rarc';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { readString, assert, getTextDecoder, assertExists } from '../util';
+import { readString, assert, getTextDecoder, assertExists, flatten } from '../util';
 
 import { BMDModelInstance, BMDModel, BMDModelMaterialData } from './render';
 import { createModelInstance } from './scenes';
@@ -431,13 +431,6 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
     }
 
     private createSceneBinObjects(device: GfxDevice, cache: GfxRenderCache, rarc: RARC.RARC, obj: SceneBinObj): BMDModelInstance[] {
-        function flatten<T>(L: T[][]): T[] {
-            const R: T[] = [];
-            for (let i = 0; i < L.length; i++)
-                R.push.apply(R, L[i]);
-            return R;
-        }
-
         switch (obj.type) {
         case 'Group':
             const childTs: BMDModelInstance[][] = obj.children.map(c => this.createSceneBinObjects(device, cache, rarc, c));

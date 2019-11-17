@@ -58,7 +58,7 @@ import * as Scenes_Fez from './Fez/Scenes_Fez';
 import * as Scenes_SuperMarioOdyssey from './fres_nx/smo_scenes';
 import * as Scenes_GTA from './GrandTheftAuto3/scenes';
 
-import { DroppedFileSceneDesc } from './Scenes_FileDrops';
+import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
 import { UI, Panel } from './ui';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera';
@@ -351,17 +351,12 @@ class Main {
         window.requestAnimationFrame(this._updateLoop);
     };
 
-    private _onDrop(e: DragEvent) {
+    private async _onDrop(e: DragEvent) {
         this.ui.dragHighlight.style.display = 'none';
         e.preventDefault();
         const transfer = assertExists(e.dataTransfer);
-        if (transfer.files.length === 0)
-            return;
-        const file = transfer.files[0];
-        const files: File[] = [];
-        for (let i = 0; i < transfer.files.length; i++)
-            files.push(transfer.files[i]);
-        const sceneDesc = new DroppedFileSceneDesc(file, files);
+        const files = await traverseFileSystemDataTransfer(transfer);
+        const sceneDesc = new DroppedFileSceneDesc(files);
         this.droppedFileGroup.sceneDescs.push(sceneDesc);
         this._loadSceneGroups();
         this._loadSceneDesc(this.droppedFileGroup, sceneDesc);
