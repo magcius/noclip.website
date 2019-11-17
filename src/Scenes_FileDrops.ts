@@ -81,7 +81,7 @@ export async function createSceneFromFiles(context: SceneContext, buffers: Named
     if (buffer.name.endsWith('.arc') || buffer.name.endsWith('.carc') || buffer.name.endsWith('.szs'))
         return loadArbitraryFile(context, buffer);
 
-    if (buffer.name.endsWith('.jpc'))
+    if (buffer.name.endsWith('.jpc') || buffer.name.endsWith('.jpa'))
         return JPAExplorer.createRendererFromBuffer(context, buffer);
 
     if (buffers.some((b) => b.name.endsWith('.brres')))
