@@ -15,7 +15,7 @@ import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { executeOnPass, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { assert, hexzero, assertExists, hexdump } from '../util';
+import { assert, hexzero, assertExists, hexdump, nArray } from '../util';
 import { DataFetcher } from '../DataFetcher';
 import { MathConstants } from '../MathHelpers';
 
@@ -268,7 +268,7 @@ class ObjectData {
         return renderer;
     }
 
-    public spawnObjectByFileID(device: GfxDevice, fileID: number, pos: vec3, yaw = 0, pitch = 0): GeometryRenderer | FlipbookRenderer | null {
+    public spawnObjectByFileID(device: GfxDevice, fileID: number, pos: vec3, yaw = 0, pitch = 0, selectorState: number[] = []): GeometryRenderer | FlipbookRenderer | null {
         const geoData = this.ensureGeoData(device, fileID);
         if (geoData === null) {
             console.warn(`Unsupported geo data for file ID ${hexzero(fileID, 4)}`);
@@ -277,7 +277,7 @@ class ObjectData {
         let modelMatrix: mat4;
         let renderer: GeometryRenderer | FlipbookRenderer;
         if (geoData instanceof GeometryData) {
-            renderer = new GeometryRenderer(geoData);
+            renderer = new GeometryRenderer(geoData, selectorState);
         } else {
             renderer = new FlipbookRenderer(geoData)
         }
@@ -288,7 +288,7 @@ class ObjectData {
         return renderer;
     }
 
-    public spawnObject(device: GfxDevice, id: number, pos: vec3, yaw = 0): GeometryRenderer | FlipbookRenderer | null {
+    public spawnObject(device: GfxDevice, id: number, pos: vec3, yaw = 0, selectorState: number[] = []): GeometryRenderer | FlipbookRenderer | null {
         const spawnEntry = this.objectSetupData.ObjectSetupTable.find((entry) => entry.SpawnID === id);
         if (spawnEntry === undefined) {
             // console.warn(`Unknown object ID ${hexzero(id, 4)}`);
@@ -297,7 +297,7 @@ class ObjectData {
 
         if (spawnEntry.GeoFileID === 0)
             return null; // nothing to render
-        const renderer = this.spawnObjectByFileID(device, spawnEntry.GeoFileID, pos, yaw)
+        const renderer = this.spawnObjectByFileID(device, spawnEntry.GeoFileID, pos, yaw, 0, selectorState)
         if (renderer === null) {
             return null;
         }
@@ -373,15 +373,20 @@ class SceneDesc implements Viewer.SceneDesc {
                         const x = view.getInt16(offs + 0x00);
                         const y = view.getInt16(offs + 0x02);
                         const z = view.getInt16(offs + 0x04);
+                        const selectorValue = (view.getUint16(offs + 0x06) >>> 7) & 0x1ff;
                         const category = (view.getUint8(offs + 0x07) >>> 1) & 0x3F;
                         const id = view.getUint16(offs + 0x08);
                         const yaw = view.getUint16(offs + 0x0C) >>> 7;
+
+                        const selectorState = nArray(selectorValue + 1, () => 0);
+                        if (selectorValue > 0)
+                            selectorState[selectorValue] = 1;
                         // skipping a couple of 0xc-bit fields
                         if (category === 0x06) {
-                            const objRenderer = objectSetupTable.spawnObject(device, id, vec3.fromValues(x, y, z), yaw);
-                            if (objRenderer instanceof GeometryRenderer)
+                            const objRenderer = objectSetupTable.spawnObject(device, id, vec3.fromValues(x, y, z), yaw, selectorState);
+                            if (objRenderer instanceof GeometryRenderer) {
                                 sceneRenderer.geoRenderers.push(objRenderer);
-                            else if (objRenderer instanceof FlipbookRenderer) {
+                            } else if (objRenderer instanceof FlipbookRenderer) {
                                 sceneRenderer.flipbookRenderers.push(objRenderer);
                             }
                         }

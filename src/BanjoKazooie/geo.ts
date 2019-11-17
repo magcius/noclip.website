@@ -175,11 +175,17 @@ const renderModeBuffers: ArrayBufferSlice[] = [
     ),
 ];
 
+export interface StateSelector {
+    stateIndex: number;
+    childIndex: number;
+}
+
 export interface GeoNode {
     boneIndex: number;
     rspState: F3DEX.RSPState;
     rspOutput: F3DEX.RSPOutput | null;
     children: GeoNode[];
+    selector?: StateSelector;
 }
 
 interface GeoContext {
@@ -305,26 +311,19 @@ function runGeoLayout(context: GeoContext, geoIdx_: number): void {
         } else if (cmd === 0x0C) {
             // select child geo list(s), e.g. eye blink state
             const childCount = view.getUint16(geoIdx + 0x08);
-            const stateIdx = view.getUint16(geoIdx + 0x0A);
+            const stateIndex = view.getUint16(geoIdx + 0x0A);
 
-            // TODO: intelligently pick which ones to run
-            const stateVar = -0xFF;
+            // this isn't a new bone, so preserve the current bone
+            const parentBoneIndex = context.nodeStack.length > 0 ? context.nodeStack[0].boneIndex : 0;
 
             const childArrOffs = geoIdx + 0x0C;
-            if (stateVar > 0 && stateVar < childCount) {
-                const childIdx = stateVar - 1;
-                const childOffs = geoIdx + view.getUint32(childArrOffs + (childIdx * 0x04));
+            for (let i = 0; i < childCount; i++) {
+                const childOffs = geoIdx + view.getUint32(childArrOffs + (i * 0x04));
+
+                const childNode = pushGeoNode(context, parentBoneIndex);
+                childNode.selector = { stateIndex, childIndex: i }
                 runGeoLayout(context, childOffs);
-            } else if (stateVar < 0 && childCount > 0) {
-                // Negative values are bitflags.
-                const flagBits = -stateVar;
-                for (let i = 0; i < childCount; i++) {
-                    if (!!(flagBits & (1 << i))) {
-                        const childIdx = i;
-                        const childOffs = geoIdx + view.getUint32(childArrOffs + (childIdx * 0x04));
-                        runGeoLayout(context, childOffs);
-                    }
-                }
+                popGeoNode(context);
             }
         } else if (cmd === 0x0D) {
             // Draw dist conditional test.

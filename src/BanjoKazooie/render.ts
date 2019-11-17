@@ -796,7 +796,7 @@ export class GeometryRenderer {
     private animationSetup: AnimationSetup | null;
     private vertexEffects: VertexAnimationEffect[];
 
-    constructor(private geometryData: GeometryData) {
+    constructor(private geometryData: GeometryData, private selectorState: number[] = []) {
         this.megaStateFlags = {};
         setAttachmentStateSimple(this.megaStateFlags, {
             blendMode: GfxBlendMode.ADD,
@@ -819,6 +819,26 @@ export class GeometryRenderer {
     }
 
     private buildGeoNode(node: GeoNode): void {
+        // terminate early if this node wasn't selected
+        if (node.selector !== undefined) {
+            if (node.selector.stateIndex >= this.selectorState.length) {
+                return;
+            }
+
+            const stateVar = this.selectorState[node.selector.stateIndex];
+            if (stateVar > 0) {
+                if (node.selector.childIndex !== stateVar - 1)
+                    return;
+            } else if (stateVar < 0) {
+                // Negative values are bitflags.
+                const flagBits = -stateVar;
+                if (!(flagBits & (1 << node.selector.childIndex)))
+                    return;
+            } else {
+                return;
+            }
+        }
+
         if (node.rspOutput !== null) {
             for (let i = 0; i < node.rspOutput.drawCalls.length; i++) {
                 const drawMatrix = [
@@ -1109,7 +1129,7 @@ export class FlipbookRenderer {
             reversed = this.animationParams.reversed;
 
         if (reversed)
-            if (flipbook.loopMode === LoopMode.Revese || flipbook.loopMode === LoopMode.ReverseAndMirror)
+            if (flipbook.loopMode === LoopMode.Reverse || flipbook.loopMode === LoopMode.ReverseAndMirror)
                 frame = (frame + flipbook.rawFrames - 1) % flipbook.frameSequence.length; // start from other symmetric frame
             else
                 frame = flipbook.frameSequence.length - 1 - frame;
