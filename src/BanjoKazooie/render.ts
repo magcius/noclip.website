@@ -780,11 +780,77 @@ export class GeometryData {
     }
 }
 
-const scratchVec3a = vec3.create();
-const scratchVec3b = vec3.create();
+class GeoNodeRenderer {
+    public drawCallInstances: DrawCallInstance[] = [];
+    public children: GeoNodeRenderer[] = [];
+
+    constructor(private node: GeoNode) {
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean, selectorState: number[], childIndex: number = 0): void {
+        const node = this.node;
+
+        // terminate early if this node wasn't selected and we have a selector
+        if (node.selector !== null && selectorState.length > 0) {
+            const stateVar = selectorState[node.selector.stateIndex];
+            if (stateVar > 0) {
+                if (childIndex !== stateVar - 1)
+                    return;
+            } else if (stateVar < 0) {
+                // Negative values are bitflags.
+                const flagBits = -stateVar;
+                if (!(flagBits & (1 << childIndex)))
+                    return;
+            } else {
+                return;
+            }
+        }
+
+        for (let i = 0; i < this.drawCallInstances.length; i++)
+            this.drawCallInstances[i].prepareToRender(device, renderInstManager, viewerInput, isSkybox);
+
+        for (let i = 0; i < this.children.length; i++)
+            this.children[i].prepareToRender(device, renderInstManager, viewerInput, isSkybox, selectorState, childIndex);
+    }
+
+    public setBackfaceCullingEnabled(v: boolean): void {
+        for (let i = 0; i < this.drawCallInstances.length; i++)
+            this.drawCallInstances[i].setBackfaceCullingEnabled(v);
+        for (let i = 0; i < this.children.length; i++)
+            this.children[i].setBackfaceCullingEnabled(v);
+    }
+
+    public setVertexColorsEnabled(v: boolean): void {
+        for (let i = 0; i < this.drawCallInstances.length; i++)
+            this.drawCallInstances[i].setVertexColorsEnabled(v);
+        for (let i = 0; i < this.children.length; i++)
+            this.children[i].setVertexColorsEnabled(v);
+    }
+
+    public setTexturesEnabled(v: boolean): void {
+        for (let i = 0; i < this.drawCallInstances.length; i++)
+            this.drawCallInstances[i].setTexturesEnabled(v);
+        for (let i = 0; i < this.children.length; i++)
+            this.children[i].setTexturesEnabled(v);
+    }
+
+    public setMonochromeVertexColorsEnabled(v: boolean): void {
+        for (let i = 0; i < this.drawCallInstances.length; i++)
+            this.drawCallInstances[i].setMonochromeVertexColorsEnabled(v);
+        for (let i = 0; i < this.children.length; i++)
+            this.children[i].setMonochromeVertexColorsEnabled(v);
+    }
+
+    public setAlphaVisualizerEnabled(v: boolean): void {
+        for (let i = 0; i < this.drawCallInstances.length; i++)
+            this.drawCallInstances[i].setAlphaVisualizerEnabled(v);
+        for (let i = 0; i < this.children.length; i++)
+            this.children[i].setAlphaVisualizerEnabled(v);
+    }
+}
+
 export class GeometryRenderer {
     private visible = true;
-    private drawCallInstances: DrawCallInstance[] = [];
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
     public isSkybox = false;
     public sortKeyBase: number;
@@ -795,6 +861,7 @@ export class GeometryRenderer {
     public animationController = new AnimationController(60);
     private animationSetup: AnimationSetup | null;
     private vertexEffects: VertexAnimationEffect[];
+    private rootNodeRenderer: GeoNodeRenderer;
 
     constructor(private geometryData: GeometryData, private selectorState: number[] = []) {
         this.megaStateFlags = {};
@@ -815,84 +882,62 @@ export class GeometryRenderer {
         this.boneToParentMatrixArray = nArray(boneToParentMatrixArrayCount, () => mat4.create());
 
         // Traverse the node tree.
-        this.buildGeoNode(geo.rootNode);
+        this.rootNodeRenderer = this.buildGeoNodeRenderer(geo.rootNode);
     }
 
-    private buildGeoNode(node: GeoNode): void {
-        // terminate early if this node wasn't selected and we have a selector
-        if (node.selector !== undefined && this.selectorState.length > 0) {
-            if (node.selector.stateIndex >= this.selectorState.length) {
-                return;
-            }
-
-            const stateVar = this.selectorState[node.selector.stateIndex];
-            if (stateVar > 0) {
-                if (node.selector.childIndex !== stateVar - 1)
-                    return;
-            } else if (stateVar < 0) {
-                // Negative values are bitflags.
-                const flagBits = -stateVar;
-                if (!(flagBits & (1 << node.selector.childIndex)))
-                    return;
-            } else {
-                return;
-            }
-        }
+    private buildGeoNodeRenderer(node: GeoNode): GeoNodeRenderer {
+        const geoNodeRenderer = new GeoNodeRenderer(node);
 
         if (node.rspOutput !== null) {
-            for (let i = 0; i < node.rspOutput.drawCalls.length; i++) {
-                const drawMatrix = [
-                    this.boneToWorldMatrixArray[node.boneIndex],
-                    this.boneToWorldMatrixArray[node.boneIndex],
-                ];
+            const drawMatrix = [
+                this.boneToWorldMatrixArray[node.boneIndex],
+                this.boneToWorldMatrixArray[node.boneIndex],
+            ];
 
-                // Skinned meshes need the parent bone as the second draw matrix.
-                const animationSetup = this.animationSetup;
-                if (animationSetup !== null) {
-                    const parentBoneIndex = animationSetup.bones[node.boneIndex].parentIndex;
+            // Skinned meshes need the parent bone as the second draw matrix.
+            const animationSetup = this.animationSetup;
+            if (animationSetup !== null) {
+                const parentBoneIndex = animationSetup.bones[node.boneIndex].parentIndex;
 
-                    if (parentBoneIndex === -1) {
-                        // The root bone won't have a skinned DL section, so doing nothing is fine.
-                    } else {
-                        drawMatrix[1] = assertExists(this.boneToWorldMatrixArray[parentBoneIndex]);
-                    }
+                if (parentBoneIndex === -1) {
+                    // The root bone won't have a skinned DL section, so doing nothing is fine.
+                } else {
+                    drawMatrix[1] = assertExists(this.boneToWorldMatrixArray[parentBoneIndex]);
                 }
+            }
 
-                this.drawCallInstances.push(new DrawCallInstance(this.geometryData.renderData, node, drawMatrix, node.rspOutput.drawCalls[i]));
+            if (node.rspOutput !== null) {
+                for (let i = 0; i < node.rspOutput.drawCalls.length; i++) {
+                    const drawCallInstance = new DrawCallInstance(this.geometryData.renderData, node, drawMatrix, node.rspOutput.drawCalls[i]);
+                    geoNodeRenderer.drawCallInstances.push(drawCallInstance);
+                }
             }
         }
 
         for (let i = 0; i < node.children.length; i++)
-            this.buildGeoNode(node.children[i]);
-    }
+            geoNodeRenderer.children.push(this.buildGeoNodeRenderer(node.children[i]));
 
-    public slider(): void {
-        interactiveVizSliderSelect(this.drawCallInstances);
+        return geoNodeRenderer;
     }
 
     public setBackfaceCullingEnabled(v: boolean): void {
-        for (let i = 0; i < this.drawCallInstances.length; i++)
-            this.drawCallInstances[i].setBackfaceCullingEnabled(v);
+        this.rootNodeRenderer.setBackfaceCullingEnabled(v);
     }
 
     public setVertexColorsEnabled(v: boolean): void {
-        for (let i = 0; i < this.drawCallInstances.length; i++)
-            this.drawCallInstances[i].setVertexColorsEnabled(v);
+        this.rootNodeRenderer.setVertexColorsEnabled(v);
     }
 
     public setTexturesEnabled(v: boolean): void {
-        for (let i = 0; i < this.drawCallInstances.length; i++)
-            this.drawCallInstances[i].setTexturesEnabled(v);
+        this.rootNodeRenderer.setTexturesEnabled(v);
     }
 
     public setMonochromeVertexColorsEnabled(v: boolean): void {
-        for (let i = 0; i < this.drawCallInstances.length; i++)
-            this.drawCallInstances[i].setMonochromeVertexColorsEnabled(v);
+        this.rootNodeRenderer.setMonochromeVertexColorsEnabled(v);
     }
 
     public setAlphaVisualizerEnabled(v: boolean): void {
-        for (let i = 0; i < this.drawCallInstances.length; i++)
-            this.drawCallInstances[i].setAlphaVisualizerEnabled(v);
+        this.rootNodeRenderer.setAlphaVisualizerEnabled(v);
     }
 
     private calcAnim(): void {
@@ -922,8 +967,6 @@ export class GeometryRenderer {
         }
     }
 
-    private debugBones: boolean = false;
-
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.visible)
             return;
@@ -931,23 +974,6 @@ export class GeometryRenderer {
         this.animationController.setTimeFromViewerInput(viewerInput);
         this.calcAnim();
         this.calcBoneToWorld();
-
-        const animationSetup = this.animationSetup;
-        if (this.debugBones && animationSetup !== null) {
-            const ctx = getDebugOverlayCanvas2D();
-            for (let i = 0; i < animationSetup.bones.length; i++) {
-                const bone = animationSetup.bones[i];
-                if (bone.parentIndex < 0)
-                    continue;
-
-                vec3.set(scratchVec3a, 0, 0, 0);
-                vec3.transformMat4(scratchVec3a, scratchVec3a, this.boneToWorldMatrixArray[bone.parentIndex]);
-                vec3.set(scratchVec3b, 0, 0, 0);
-                vec3.transformMat4(scratchVec3b, scratchVec3b, this.boneToWorldMatrixArray[bone.boneIndex]);
-
-                drawWorldSpaceLine(ctx, viewerInput.camera, scratchVec3a, scratchVec3b);
-            }
-        }
 
         const renderData = this.geometryData.renderData;
 
@@ -976,8 +1002,8 @@ export class GeometryRenderer {
             device.submitPass(hostAccessPass);
         }
 
-        for (let i = 0; i < this.drawCallInstances.length; i++)
-            this.drawCallInstances[i].prepareToRender(device, renderInstManager, viewerInput, this.isSkybox);
+        this.rootNodeRenderer.prepareToRender(device, renderInstManager, viewerInput, this.isSkybox, this.selectorState);
+
         renderInstManager.popTemplateRenderInst();
     }
 }

@@ -177,7 +177,6 @@ const renderModeBuffers: ArrayBufferSlice[] = [
 
 export interface StateSelector {
     stateIndex: number;
-    childIndex: number;
 }
 
 export interface GeoNode {
@@ -185,7 +184,7 @@ export interface GeoNode {
     rspState: F3DEX.RSPState;
     rspOutput: F3DEX.RSPOutput | null;
     children: GeoNode[];
-    selector?: StateSelector;
+    selector: StateSelector | null;
 }
 
 interface GeoContext {
@@ -211,6 +210,7 @@ function pushGeoNode(context: GeoContext, boneIndex = 0): GeoNode {
         children: [],
         rspState,
         rspOutput: null,
+        selector: null,
     };
 
     if (context.nodeStack.length > 0)
@@ -321,7 +321,7 @@ function runGeoLayout(context: GeoContext, geoIdx_: number): void {
                 const childOffs = geoIdx + view.getUint32(childArrOffs + (i * 0x04));
 
                 const childNode = pushGeoNode(context, parentBoneIndex);
-                childNode.selector = { stateIndex, childIndex: i }
+                childNode.selector = { stateIndex };
                 runGeoLayout(context, childOffs);
                 popGeoNode(context);
             }
