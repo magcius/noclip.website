@@ -36,6 +36,8 @@ import { makeTriangleIndexBuffer, GfxTopology, getTriangleIndexCountForTopologyI
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { TextureMapping } from "../TextureHolder";
 
+const SORT_PARTICLES = false;
+
 //#region JPA Engine
 export interface JPAResourceRaw {
     resourceId: number;
@@ -1699,9 +1701,11 @@ export class JPABaseEmitter {
         mat4.mul(workData.emitterGlobalRot, this.globalRotation, scratchMatrix);
         vec3.transformMat4(workData.emitterGlobalDir, this.emitterDir, workData.emitterGlobalRot);
 
-        this.calcEmitterGlobalPosition(scratchVec3a);
-        const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(workData.posCamMtx, scratchVec3a);
-        workData.particleSortKey = setSortKeyDepth(workData.particleSortKey, depth);
+        if (!SORT_PARTICLES) {
+            this.calcEmitterGlobalPosition(scratchVec3a);
+            const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(workData.posCamMtx, scratchVec3a);
+            workData.particleSortKey = setSortKeyDepth(workData.particleSortKey, depth);
+        }
     }
 
     public calc(workData: JPAEmitterWorkData): boolean {
@@ -3096,6 +3100,11 @@ export class JPABaseParticle {
 
         const renderInst = renderInstManager.pushRenderInst();
         renderInst.sortKey = workData.particleSortKey;
+
+        if (SORT_PARTICLES) {
+            const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(workData.posCamMtx, this.position);
+            renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
+        }
 
         const globalRes = workData.emitterManager.globalRes;
         const shapeType = sp1.shapeType;
