@@ -422,9 +422,11 @@ export class Explorer implements SceneGfx {
         }
 
         if (this.loopEmitters) {
-            for (let i = 0; i < this.emitters.length; i++) {
-                if (!!(this.emitters[i].flags & JPA.BaseEmitterFlags.TERMINATE))
+            for (let i = this.emitters.length - 1; i >= 0; i--) {
+                if (!!(this.emitters[i].flags & JPA.BaseEmitterFlags.TERMINATE)) {
+                    this.emitters.splice(i, 1);
                     this.createEmitter();
+                }
             }
         }
 
