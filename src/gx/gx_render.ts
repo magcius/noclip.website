@@ -171,7 +171,6 @@ export function loadTextureFromMipChain(device: GfxDevice, mipChain: GX_Texture.
     device.setResourceName(gfxTexture, mipChain.name);
 
     const hostAccessPass = device.createHostAccessPass();
-    const surfaces: HTMLCanvasElement[] = [];
     const promises: Promise<void>[] = [];
     for (let i = 0; i < mipChain.mipLevels.length; i++) {
         const level = i;

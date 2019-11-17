@@ -20,12 +20,12 @@ import { assert, readString, assertExists, nArray } from "../util";
 import { BTI } from "./j3d";
 import { vec3, mat4, vec2 } from "gl-matrix";
 import { Endianness } from "../endian";
-import { GfxDevice, GfxInputLayout, GfxInputState, GfxBuffer, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBufferFrequencyHint, GfxHostAccessPass, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxInputLayout, GfxInputState, GfxBuffer, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBufferFrequencyHint, GfxHostAccessPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { BTIData } from "./render";
 import { getPointHermite } from "../Spline";
 import { GXMaterial, AlphaTest, RopInfo, TexGen, TevStage, getVertexAttribLocation, IndTexStage } from "../gx/gx_material";
 import { Color, colorNew, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8 } from "../Color";
-import { MaterialParams, ColorKind, ub_PacketParams, u_PacketParamsBufferSize, PacketParams, ub_MaterialParams, setIndTexOrder, setIndTexCoordScale, setTevIndirect, setTevOrder, setTevColorIn, setTevColorOp, setTevAlphaIn, setTevAlphaOp, fillIndTexMtx, fillTextureMappingInfo, gxBindingLayouts } from "../gx/gx_render";
+import { MaterialParams, ColorKind, ub_PacketParams, u_PacketParamsBufferSize, PacketParams, ub_MaterialParams, setIndTexOrder, setIndTexCoordScale, setTevIndirect, setTevOrder, setTevColorIn, setTevColorOp, setTevAlphaIn, setTevAlphaOp, fillIndTexMtx, fillTextureMappingInfo } from "../gx/gx_render";
 import { GXMaterialHelperGfx } from "../gx/gx_render";
 import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, computeMatrixWithoutTranslation, normToLengthAndAdd, normToLength, isNearZeroVec3 } from "../MathHelpers";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
@@ -266,7 +266,13 @@ interface JPAExTexBlock {
 }
 
 interface JPAChildShapeBlock {
-    flags: number;
+    isInheritedScale: boolean;
+    isInheritedRGB: boolean;
+    isInheritedAlpha: boolean;
+    isEnableAlphaOut: boolean;
+    isEnableField: boolean;
+    isEnableRotate: boolean;
+    isEnableScaleOut: boolean;
     shapeType: ShapeType;
     dirType: DirType;
     rotType: RotType;
@@ -452,6 +458,7 @@ export class JPAResourceData {
     public resourceId: number;
     public name: string;
     public materialHelper: GXMaterialHelperGfx;
+    public textureIDs: number[] = [];
 
     constructor(device: GfxDevice, cache: GfxRenderCache, private jpacData: JPACData, resRaw: JPAResourceRaw) {
         this.res = parseResource(this.jpacData.jpac.version, resRaw);
@@ -614,6 +621,7 @@ export class JPAResourceData {
 
     private ensureTextureFromTDB1Index(device: GfxDevice, cache: GfxRenderCache, idx: number): void {
         this.jpacData.ensureTexture(device, cache, this.res.tdb1[idx]);
+        this.textureIDs.push(idx);
     }
 
     public fillTextureMapping(m: TextureMapping, idx: number): void {
@@ -1073,16 +1081,11 @@ export class JPAEmitterManager {
         else
             mat4.identity(this.workData.texPrjMtx);
 
-        const template = renderInstManager.pushTemplateRenderInst();
-        template.setBindingLayouts(gxBindingLayouts);
-
         for (let i = 0; i < this.aliveEmitters.length; i++) {
             const emitter = this.aliveEmitters[i];
             if (emitter.drawGroupId === drawGroupId)
                 this.aliveEmitters[i].draw(device, renderInstManager, this.workData);
         }
-
-        renderInstManager.popTemplateRenderInst();
 
         const hostAccessPass = device.createHostAccessPass();
         this.stripeBufferManager.upload(hostAccessPass);
@@ -1606,7 +1609,7 @@ export class JPABaseEmitter {
             if (!!(this.flags & BaseEmitterFlags.STOP_EMIT_PARTICLES))
                 this.emitCount = 0;
 
-            while (this.emitCount > 1) {
+            while (this.emitCount >= 1) {
                 this.createParticle();
                 this.emitCount--;
             }
@@ -1638,7 +1641,7 @@ export class JPABaseEmitter {
         if (!!(this.flags & BaseEmitterFlags.TERMINATE))
             return true;
 
-        if (this.maxFrame == 0)
+        if (this.maxFrame === 0)
             return false;
 
         if (this.maxFrame < 0) {
@@ -1994,7 +1997,7 @@ export class JPABaseEmitter {
 
         this.flags = this.flags | 0x00000080;
 
-        if (!!(ssp1.flags & 0x00010000))
+        if (ssp1.isInheritedScale)
             vec2.mul(workData.globalScale2D, this.globalScale2D, bsp1.globalScale2D);
         else
             vec2.mul(workData.globalScale2D, this.globalScale2D, ssp1.globalScale2D);
@@ -2387,7 +2390,7 @@ export class JPABaseParticle {
 
         this.moment = parent.moment;
 
-        if (!!(ssp1.flags & 0x00200000)) {
+        if (ssp1.isEnableField) {
             // isEnableField
             this.drag = parent.drag;
         } else {
@@ -2403,7 +2406,7 @@ export class JPABaseParticle {
 
         vec3.copy(this.prevAxis, parent.prevAxis);
 
-        if (!!(ssp1.flags & 0x00010000)) {
+        if (ssp1.isInheritedScale) {
             // isInheritedScale
             const scaleX = parent.scale[0] * ssp1.inheritScale;
             this.scale[0] = scaleX;
@@ -2419,8 +2422,7 @@ export class JPABaseParticle {
             this.alphaWaveRandom = 1;
         }
 
-        if (!!(ssp1.flags & 0x00040000)) {
-            // isInheritedRGB
+        if (ssp1.isInheritedRGB) {
             this.colorPrm.r = parent.colorPrm.r * ssp1.inheritRGB;
             this.colorPrm.g = parent.colorPrm.g * ssp1.inheritRGB;
             this.colorPrm.b = parent.colorPrm.b * ssp1.inheritRGB;
@@ -2434,16 +2436,14 @@ export class JPABaseParticle {
 
         this.prmColorAlphaAnm = 1.0;
 
-        if (!!(ssp1.flags & 0x00020000)) {
-            // isInheritedAlpha
+        if (ssp1.isInheritedAlpha) {
             this.colorPrm.a = (parent.colorPrm.a * parent.prmColorAlphaAnm) * ssp1.inheritAlpha;
         } else {
             this.colorPrm.a = ssp1.colorPrm.a;
         }
 
         this.rotateAngle = parent.rotateAngle;
-        if (!!(ssp1.flags & 0x01000000)) {
-            // isEnableRotate
+        if (ssp1.isEnableRotate) {
             this.rotateSpeed = ssp1.rotateSpeed;
         } else {
             this.rotateSpeed = 0;
@@ -2906,12 +2906,12 @@ export class JPABaseParticle {
 
             const invTime = (1.0 - this.time);
 
-            if (!!(ssp1.flags & 0x00400000)) {
+            if (ssp1.isEnableScaleOut) {
                 this.scale[0] = this.scaleOut * invTime;
                 this.scale[1] = this.alphaWaveRandom * invTime; 
             }
 
-            if (!!(ssp1.flags & 0x00800000)) {
+            if (ssp1.isEnableAlphaOut) {
                 // isEnableAlphaOut
                 this.prmColorAlphaAnm = invTime;
             }
@@ -3475,10 +3475,10 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
             const logicOp = view.getUint8(tableIdx + 0x38);
 
             const alphaCmp0 = view.getUint8(tableIdx + 0x39);
-            const alphaRef0 = view.getUint8(tableIdx + 0x3A);
+            const alphaRef0 = view.getUint8(tableIdx + 0x3A) / 0xFF;
             const alphaOp = view.getUint8(tableIdx + 0x3B);
             const alphaCmp1 = view.getUint8(tableIdx + 0x3C);
-            const alphaRef1 = view.getUint8(tableIdx + 0x3D);
+            const alphaRef1 = view.getUint8(tableIdx + 0x3D) / 0xFF;
 
             // 0x3E is ZCompLoc
             const zTest = view.getUint8(tableIdx + 0x3F);
@@ -3645,7 +3645,56 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
             // J3DChildShape / J3DSweepShape
             // Contains child particle draw settings.
 
-            // TODO(jstpierre): SSP1
+            const shapeType: ShapeType = view.getUint8(tableIdx + 0x10);
+            const dirType: DirType = view.getUint8(tableIdx + 0x11);
+            const rotType: RotType = view.getUint8(tableIdx + 0x12);
+
+            // planeType does not exist in JEFFjpa1.
+            const planeType: PlaneType = PlaneType.XY;
+
+            const life = view.getUint16(tableIdx + 0x14);
+            const rate = view.getUint16(tableIdx + 0x16);
+            const step = view.getUint8(tableIdx + 0x1A);
+            const posRndm = view.getFloat32(tableIdx + 0x28);
+            const baseVel = view.getFloat32(tableIdx + 0x2C);
+            const isEnableField = !!view.getUint8(tableIdx + 0x36);
+
+            const isEnableDrawParent = !!view.getUint8(tableIdx + 0x44);
+            assertExists(bsp1).stopDrawParent = !isEnableDrawParent;
+
+            const isEnableScaleOut = !!view.getUint8(tableIdx + 0x45);
+            const isEnableAlphaOut = !!view.getUint8(tableIdx + 0x46);
+            const texIdx = view.getUint8(tableIdx + 0x47);
+
+            const globalScale2DX = view.getFloat32(tableIdx + 0x4C);
+            const globalScale2DY = view.getFloat32(tableIdx + 0x50);
+            const globalScale2D = vec2.fromValues(globalScale2DX, globalScale2DY);
+
+            const isEnableRotate = !!view.getUint8(tableIdx + 0x56);
+            const flags = view.getUint8(tableIdx + 0x57);
+            const isInheritedRGB = !!(flags & 0x04);
+            const isInheritedAlpha = !!(flags & 0x02);
+            const isInheritedScale = !!(flags & 0x01);
+
+            const colorPrm = colorNewFromRGBA8(view.getUint32(tableIdx + 0x58));
+            const colorEnv = colorNewFromRGBA8(view.getUint32(tableIdx + 0x5C));
+
+            const timing = JPAConvertFixToFloat(view.getUint16(tableIdx + 0x18));
+            const velInfRate = JPAConvertFixToFloat(view.getUint16(tableIdx + 0x30));
+            const baseVelRndm = JPAConvertFixToFloat(view.getUint16(tableIdx + 0x32));
+            const gravity = JPAConvertFixToFloat(view.getUint16(tableIdx + 0x34));
+            const inheritScale = JPAConvertFixToFloat(view.getUint16(tableIdx + 0x32));
+            const inheritAlpha = JPAConvertFixToFloat(view.getUint16(tableIdx + 0x32));
+            const inheritRGB = JPAConvertFixToFloat(view.getUint16(tableIdx + 0x32));
+            const rotateSpeed = JPAConvertFixToFloat(view.getUint16(tableIdx + 0x32));
+
+            ssp1 = {
+                isEnableRotate, isEnableAlphaOut, isEnableScaleOut, isEnableField, isInheritedRGB, isInheritedAlpha, isInheritedScale,
+                shapeType, dirType, rotType, planeType,
+                posRndm, baseVel, baseVelRndm, velInfRate, gravity, globalScale2D,
+                inheritScale, inheritAlpha, inheritRGB, colorPrm, colorEnv, timing,
+                life, rate, step, texIdx, rotateSpeed,
+            };
         } else if (fourcc === 'ETX1') {
             // J3DExTexShape
             // Contains extra texture draw settings.
@@ -4079,6 +4128,14 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
 
             const rotateSpeed = view.getFloat32(dataBegin + 0x2C);
 
+            const isEnableRotate   = !!(flags & 0x01000000);
+            const isEnableAlphaOut = !!(flags & 0x00800000);
+            const isEnableScaleOut = !!(flags & 0x00400000);
+            const isEnableField    = !!(flags & 0x00200000);
+            const isInheritedRGB   = !!(flags & 0x00040000);
+            const isInheritedAlpha = !!(flags & 0x00020000);
+            const isInheritedScale = !!(flags & 0x00010000);
+
             const inheritScale = view.getFloat32(dataBegin + 0x30);
             const inheritAlpha = view.getFloat32(dataBegin + 0x34);
             const inheritRGB = view.getFloat32(dataBegin + 0x38);
@@ -4086,7 +4143,9 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             const colorEnv = colorNewFromRGBA8(view.getUint32(dataBegin + 0x40));
             const texIdx = view.getUint8(dataBegin + 0x44);
 
-            ssp1 = { flags, shapeType, dirType, rotType, planeType,
+            ssp1 = {
+                isEnableRotate, isEnableAlphaOut, isEnableScaleOut, isEnableField, isInheritedRGB, isInheritedAlpha, isInheritedScale,
+                shapeType, dirType, rotType, planeType,
                 posRndm, baseVel, baseVelRndm, velInfRate, gravity, globalScale2D,
                 inheritScale, inheritAlpha, inheritRGB, colorPrm, colorEnv, timing,
                 life, rate, step, texIdx, rotateSpeed,
@@ -4520,6 +4579,14 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             const globalScale2DY = view.getFloat32(tableIdx + 0x24);
             const globalScale2D = vec2.fromValues(globalScale2DX, globalScale2DY);
 
+            const isEnableRotate   = !!(flags & 0x01000000);
+            const isEnableAlphaOut = !!(flags & 0x00800000);
+            const isEnableScaleOut = !!(flags & 0x00400000);
+            const isEnableField    = !!(flags & 0x00200000);
+            const isInheritedRGB   = !!(flags & 0x00040000);
+            const isInheritedAlpha = !!(flags & 0x00020000);
+            const isInheritedScale = !!(flags & 0x00010000);
+
             const inheritScale = view.getFloat32(tableIdx + 0x28);
             const inheritAlpha = view.getFloat32(tableIdx + 0x2C);
             const inheritRGB = view.getFloat32(tableIdx + 0x30);
@@ -4532,7 +4599,9 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             const texIdx = view.getUint8(tableIdx + 0x45);
             const rotateSpeed = view.getUint16(tableIdx + 0x46) / 0xFFFF;
 
-            ssp1 = { flags, shapeType, dirType, rotType, planeType,
+            ssp1 = {
+                isEnableRotate, isEnableAlphaOut, isEnableScaleOut, isEnableField, isInheritedRGB, isInheritedAlpha, isInheritedScale,
+                shapeType, dirType, rotType, planeType,
                 posRndm, baseVel, baseVelRndm, velInfRate, gravity, globalScale2D,
                 inheritScale, inheritAlpha, inheritRGB, colorPrm, colorEnv, timing,
                 life, rate, step, texIdx, rotateSpeed,

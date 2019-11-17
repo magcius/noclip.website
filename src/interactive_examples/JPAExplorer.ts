@@ -1,14 +1,14 @@
 
 import { SceneGfx, ViewerRenderInput } from "../viewer";
-import { BasicRenderTarget, makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
-import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from "../gfx/platform/GfxPlatform";
+import { BasicRenderTarget, makeClearRenderPassDescriptor, ColorTexture, noClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxTexture } from "../gfx/platform/GfxPlatform";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
-import { OrbitCameraController } from "../Camera";
+import { OrbitCameraController, texProjCameraSceneTex } from "../Camera";
 import { colorNew } from "../Color";
 import * as JPA from '../j3d/JPA';
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec3 } from "gl-matrix";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager, executeOnPass } from "../gfx/render/GfxRenderer";
 import { assertExists, hexzero } from "../util";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { SceneContext } from "../SceneBase";
@@ -17,12 +17,28 @@ import { GridPlane } from "./GridPlane";
 import { getDebugOverlayCanvas2D, drawWorldSpacePoint } from "../DebugJunk";
 import { createCsvParser } from "../SuperMarioGalaxy/JMapInfo";
 import { RARC } from "../j3d/rarc";
+import { fillSceneParamsDataOnTemplate, ub_SceneParams, u_SceneParamsBufferSize, gxBindingLayouts } from "../gx/gx_render";
+import { TextureMapping } from "../TextureHolder";
+import { EFB_WIDTH, EFB_HEIGHT } from "../gx/gx_material";
+
+function setTextureMappingIndirect(m: TextureMapping, sceneTexture: GfxTexture): void {
+    m.gfxTexture = sceneTexture;
+    m.width = EFB_WIDTH;
+    m.height = EFB_HEIGHT;
+    m.flipY = true;
+}
 
 class BasicEffectSystem {
     private emitterManager: JPA.JPAEmitterManager;
     private drawInfo = new JPA.JPADrawInfo();
     private jpacData: JPA.JPACData;
     private resourceDatas = new Map<number, JPA.JPAResourceData>();
+
+    private fbTextureNames = [
+        'P_ms_fb_8x8i4',    // Super Mario Sunshine
+        'AK_kagerouSwap00', // The Legend of Zelda: The Wind Waker
+        'IndDummy',         // Super Mario Galaxy
+    ];
 
     constructor(device: GfxDevice, private jpac: JPA.JPAC) {
         this.emitterManager = new JPA.JPAEmitterManager(device, 6000, 300);
@@ -35,6 +51,25 @@ class BasicEffectSystem {
             return [this.jpacData, r];
 
         return null;
+    }
+
+    public setOpaqueSceneTexture(opaqueSceneTexture: GfxTexture): void {
+        for (let i = 0; i < this.fbTextureNames.length; i++) {
+            const m = this.jpacData.getTextureMappingReference(this.fbTextureNames[i]);
+            if (m !== null)
+                setTextureMappingIndirect(m, opaqueSceneTexture);
+        }
+    }
+
+    public resourceDataUsesFB(resourceData: JPA.JPAResourceData): boolean {
+        for (let i = 0; i < resourceData.textureIDs.length; i++) {
+            const texID = resourceData.textureIDs[i];
+            const textureName = this.jpacData.jpac.textures[texID].texture.name;
+            if (this.fbTextureNames.includes(textureName))
+                return true;
+        }
+
+        return false;
     }
 
     private getResourceData(device: GfxDevice, cache: GfxRenderCache, userIndex: number): JPA.JPAResourceData | null {
@@ -162,8 +197,11 @@ function makeDataList(strings: string[]): HTMLDataListElement {
     return datalist;
 }
 
+const enum Pass { MAIN, INDIRECT }
+
 const clearPass = makeClearRenderPassDescriptor(true, colorNew(0.2, 0.2, 0.2, 1.0));
 const scratchVec3 = vec3.create();
+const scratchMatrix = mat4.create();
 export class Explorer implements SceneGfx {
     private renderTarget = new BasicRenderTarget();
     private renderHelper: GfxRenderHelper;
@@ -175,6 +213,7 @@ export class Explorer implements SceneGfx {
     private wiggleEmitters: boolean = false;
     private loopEmitters: boolean = true;
     private jpac: JPA.JPAC;
+    private opaqueSceneTexture = new ColorTexture();
 
     // UI
     private currentEffectIndexEntry: SimpleTextEntry;
@@ -324,7 +363,6 @@ export class Explorer implements SceneGfx {
     }
 
     private setUIToCurrent(): void {
-        const resource = this.jpac.effects[this.currentEffectIndex];
         this.currentEffectIndexEntry.textfield.setValue('' + this.currentEffectIndex);
         this.currentResourceIdEntry.textfield.setValue(this.getResourceIdString(this.currentEffectIndex));
         if (this.currentNameEntry !== null)
@@ -334,6 +372,7 @@ export class Explorer implements SceneGfx {
     private createEmitter(effectIndex = this.currentEffectIndex): void {
         const resourceId = this.jpac.effects[effectIndex].resourceId;
         const newEmitter = this.effectSystem.createBaseEmitter(this.context.device, this.renderHelper.getCache(), resourceId);
+        newEmitter.drawGroupId = this.effectSystem.resourceDataUsesFB(newEmitter.resData) ? Pass.INDIRECT : Pass.MAIN;
         this.emitters.push(newEmitter);
     }
 
@@ -359,8 +398,10 @@ export class Explorer implements SceneGfx {
     }
 
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
-        this.renderHelper.pushTemplateRenderInst();
         const renderInstManager = this.renderHelper.renderInstManager;
+
+        const baseTemplate = this.renderHelper.pushTemplateRenderInst();
+        baseTemplate.filterKey = Pass.MAIN;
 
         this.gridPlane.prepareToRender(device, renderInstManager, viewerInput);
 
@@ -388,9 +429,28 @@ export class Explorer implements SceneGfx {
         }
 
         this.effectSystem.calc(viewerInput);
-        const texPrjMtx: mat4 | null = null;
-        this.effectSystem.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, texPrjMtx);
-        this.effectSystem.draw(device, this.renderHelper.renderInstManager, 0);
+        this.effectSystem.setOpaqueSceneTexture(this.opaqueSceneTexture.gfxTexture!);
+
+        const efTemplate = renderInstManager.pushTemplateRenderInst();
+        efTemplate.setBindingLayouts(gxBindingLayouts);
+        efTemplate.allocateUniformBuffer(ub_SceneParams, u_SceneParamsBufferSize);
+        fillSceneParamsDataOnTemplate(efTemplate, viewerInput);
+
+        {
+            efTemplate.filterKey = Pass.MAIN;
+            this.effectSystem.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, null);
+            this.effectSystem.draw(device, this.renderHelper.renderInstManager, Pass.MAIN);
+        }
+
+        {
+            efTemplate.filterKey = Pass.INDIRECT;
+            const texPrjMtx = scratchMatrix;
+            texProjCameraSceneTex(texPrjMtx, viewerInput.camera, viewerInput.viewport, 1);
+            this.effectSystem.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, texPrjMtx);
+            this.effectSystem.draw(device, this.renderHelper.renderInstManager, Pass.INDIRECT);
+        }
+
+        renderInstManager.popTemplateRenderInst();
 
         renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender(device, hostAccessPass);
@@ -404,11 +464,18 @@ export class Explorer implements SceneGfx {
         device.submitPass(hostAccessPass);
 
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        this.opaqueSceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
         const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, clearPass);
-        renderInstManager.drawOnPassRenderer(device, mainPassRenderer);
+        executeOnPass(renderInstManager, device, mainPassRenderer, Pass.MAIN);
+        mainPassRenderer.endPass(this.opaqueSceneTexture.gfxTexture);
+        device.submitPass(mainPassRenderer);
+
+        const indirectPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor);
+        executeOnPass(renderInstManager, device, indirectPassRenderer, Pass.INDIRECT);
+
         renderInstManager.resetRenderInsts();
-        return mainPassRenderer;
+        return indirectPassRenderer;
     }
 
     public destroy(device: GfxDevice) {

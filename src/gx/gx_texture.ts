@@ -4,7 +4,7 @@
 import ArrayBufferSlice from '../ArrayBufferSlice';
 
 import * as GX from './gx_enum';
-import { align, assert, assertExists } from '../util';
+import { align, assertExists } from '../util';
 import { gx_texture_asInstance, gx_texture_asExports } from '../wat_modules';
 import WasmMemoryManager from '../WasmMemoryManager';
 
