@@ -764,7 +764,9 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
         } else if (gobj.objectId === 0x02e6) { // Crescent64
             spawnSimpleObject(`Crescent64`);
         } else if (gobj.objectId === 0x02e7) { // MiiSighKino
-            spawnSimpleObject(`MiiSighKino`);
+            const b = spawnSimpleObject(`MiiSighKino`);
+            const rres = getRRES(`MiiSighKino`);
+            b.modelInstance.bindPAT0(animFrame(0), rres.pat0[0]);
         } else if (gobj.objectId === 0x02e8) { // MiiObjD01
             spawnSimpleObject(`MiiObjD01`);
         } else if (gobj.objectId === 0x02e9) { // MiiObjD02
