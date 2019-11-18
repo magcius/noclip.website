@@ -315,6 +315,8 @@ function runGeoLayout(context: GeoContext, geoIdx_: number): void {
 
             // this isn't a new bone, so preserve the current bone
             const parentBoneIndex = context.nodeStack.length > 0 ? context.nodeStack[0].boneIndex : 0;
+            // push a new geo node to ensure these are the only children
+            pushGeoNode(context, parentBoneIndex);
 
             const childArrOffs = geoIdx + 0x0C;
             for (let i = 0; i < childCount; i++) {
@@ -325,6 +327,7 @@ function runGeoLayout(context: GeoContext, geoIdx_: number): void {
                 runGeoLayout(context, childOffs);
                 popGeoNode(context);
             }
+            popGeoNode(context);
         } else if (cmd === 0x0D) {
             // Draw dist conditional test.
             // TODO(jstpierre): Conditional

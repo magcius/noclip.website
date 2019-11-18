@@ -810,7 +810,7 @@ class GeoNodeRenderer {
             this.drawCallInstances[i].prepareToRender(device, renderInstManager, viewerInput, isSkybox);
 
         for (let i = 0; i < this.children.length; i++)
-            this.children[i].prepareToRender(device, renderInstManager, viewerInput, isSkybox, selectorState, childIndex);
+            this.children[i].prepareToRender(device, renderInstManager, viewerInput, isSkybox, selectorState, i);
     }
 
     public setBackfaceCullingEnabled(v: boolean): void {
@@ -849,6 +849,22 @@ class GeoNodeRenderer {
     }
 }
 
+const enum ObjectFlags {
+    Blink = 0x100,
+}
+
+export function setSelectorValue(selectorState: SelectorState, index: number, value: number): void {
+    while (selectorState.values.length <= index)
+        selectorState.values.push(0);
+    selectorState.values[index] = value;
+}
+
+interface SelectorState {
+    values: number[];
+    lastFrame: number;
+    blinkState: number;
+}
+
 export class GeometryRenderer {
     private visible = true;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
@@ -858,12 +874,14 @@ export class GeometryRenderer {
     public boneToWorldMatrixArray: mat4[];
     public boneToParentMatrixArray: mat4[];
     public boneAnimator: BoneAnimator | null = null;
-    public animationController = new AnimationController(60);
+    public animationController = new AnimationController(30);
+    public objectFlags = 0;
+    public selectorState: SelectorState;
     private animationSetup: AnimationSetup | null;
     private vertexEffects: VertexAnimationEffect[];
     private rootNodeRenderer: GeoNodeRenderer;
 
-    constructor(private geometryData: GeometryData, private selectorState: number[] = []) {
+    constructor(private geometryData: GeometryData) {
         this.megaStateFlags = {};
         setAttachmentStateSimple(this.megaStateFlags, {
             blendMode: GfxBlendMode.ADD,
@@ -880,6 +898,12 @@ export class GeometryRenderer {
 
         const boneToParentMatrixArrayCount = geo.animationSetup !== null ? geo.animationSetup.bones.length : 0;
         this.boneToParentMatrixArray = nArray(boneToParentMatrixArrayCount, () => mat4.create());
+
+        this.selectorState = {
+            lastFrame: 0,
+            blinkState: 0,
+            values: [],
+        };
 
         // Traverse the node tree.
         this.rootNodeRenderer = this.buildGeoNodeRenderer(geo.rootNode);
@@ -967,6 +991,37 @@ export class GeometryRenderer {
         }
     }
 
+    private calcSelectorState(): void {
+        const currFrame = Math.floor(this.animationController.getTimeInFrames());
+        if (currFrame === this.selectorState.lastFrame)
+            return; // too soon to update
+        this.selectorState.lastFrame = currFrame;
+        if (this.objectFlags & ObjectFlags.Blink) {
+            let eyePos = this.selectorState.values[1];
+            switch (this.selectorState.blinkState) {
+                case 0:
+                    eyePos = 1;
+                    if (Math.random() < 0.03)
+                        this.selectorState.blinkState++;
+                    break;
+                case 1:
+                    if (eyePos < 4)
+                        eyePos++;
+                    else
+                        this.selectorState.blinkState++;
+                    break;
+                case 2:
+                    if (eyePos > 1)
+                        eyePos--;
+                    else
+                        this.selectorState.blinkState = 0;
+                    break;
+            }
+            setSelectorValue(this.selectorState, 1, eyePos);
+            setSelectorValue(this.selectorState, 2, eyePos);
+        }
+    }
+
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.visible)
             return;
@@ -974,6 +1029,7 @@ export class GeometryRenderer {
         this.animationController.setTimeFromViewerInput(viewerInput);
         this.calcAnim();
         this.calcBoneToWorld();
+        this.calcSelectorState();
 
         const renderData = this.geometryData.renderData;
 
@@ -1002,7 +1058,7 @@ export class GeometryRenderer {
             device.submitPass(hostAccessPass);
         }
 
-        this.rootNodeRenderer.prepareToRender(device, renderInstManager, viewerInput, this.isSkybox, this.selectorState);
+        this.rootNodeRenderer.prepareToRender(device, renderInstManager, viewerInput, this.isSkybox, this.selectorState.values);
 
         renderInstManager.popTemplateRenderInst();
     }

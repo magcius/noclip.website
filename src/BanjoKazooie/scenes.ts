@@ -7,7 +7,7 @@ import * as BYML from '../byml';
 
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { FakeTextureHolder, TextureHolder } from '../TextureHolder';
-import { textureToCanvas, BKPass, GeometryRenderer, RenderData, AnimationFile, AnimationTrack, AnimationTrackType, AnimationKeyframe, BoneAnimator, FlipbookRenderer, GeometryData, FlipbookData } from './render';
+import { textureToCanvas, BKPass, GeometryRenderer, RenderData, AnimationFile, AnimationTrack, AnimationTrackType, AnimationKeyframe, BoneAnimator, FlipbookRenderer, GeometryData, FlipbookData, setSelectorValue } from './render';
 import { mat4, vec3, vec4 } from 'gl-matrix';
 import { transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
 import { SceneContext } from '../SceneBase';
@@ -15,7 +15,7 @@ import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { executeOnPass, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { assert, hexzero, assertExists, hexdump, nArray } from '../util';
+import { assert, hexzero, assertExists, hexdump } from '../util';
 import { DataFetcher } from '../DataFetcher';
 import { MathConstants } from '../MathHelpers';
 
@@ -139,6 +139,7 @@ interface ObjectLoadEntry {
     GeoFileID: number;
     AnimationTable: AnimationEntry[];
     AnimationStartIndex: number;
+    Flags: number;
     Scale: number;
 }
 
@@ -163,6 +164,53 @@ function findFileByID(archive: CRG1Archive, fileID: number): CRG1File | null {
     if (file === undefined)
         return null;
     return file;
+}
+
+// from switches starting at 30923c
+const levelGeoSelectors = new Map<number, number[][]>([
+    [0x01, [[1, 1], [2, 0]]], // end game value
+    [0x12, [[1, 0], [2, 0], [5, 0]]], // variable, 0 or 1
+    [0x14, [[5, 0]]], // variable, 0 or 1 (really complicated check)
+    [0x1d, [[1, 0]]],
+
+    // mumbo's huts
+    [0x0e, [[1, 1], [5, 1]]],
+    [0x47, [[1, 2], [5, 2]]],
+    [0x48, [[1, 3], [5, 3]]],
+    [0x30, [[1, 4], [5, 4]]],
+    [0x4A, [[1, 5], [5, 5]]],
+    [0x4B, [[1, 6], [5, 6]]],
+    [0x4C, [[1, 7], [5, 7]]],
+    [0x4D, [[1, 8], [5, 8]]],
+
+    // light under nabnut's door
+    [0x5E, [[1, 1], [2, 0]]],
+    [0x5F, [[1, 1], [2, 0]]],
+    [0x60, [[1, 1], [2, 0]]],
+    [0x61, [[1, 0], [2, 1]]],
+
+    // cutscenes?
+    [0x7B, [[4, 0], [5, 0], [6, 0]]],
+    [0x7C, [[5, 2]]],
+    [0x81, [[4, 0], [5, 0], [6, 0]]],
+    [0x82, [[4, 1], [5, 1], [6, 1]]],
+    [0x83, [[4, 1], [5, 1], [6, 1]]],
+    [0x84, [[4, 1], [5, 1], [6, 1]]],
+    [0x88, [[1, 1], [2, 0]]],
+    [0x89, [[5, 1]]],
+    [0x8A, [[5, 1]]],
+
+    [0x8C, [[5, 1]]],
+    [0x91, [[5, 1]]],
+    [0x93, [[4, 1], [5, 1], [6, 0]]], // last is variable, 0 or 1
+]);
+
+function setLevelGeoSelector(geo: GeometryRenderer, id: number) {
+    const valueList = levelGeoSelectors.get(id);
+    if (valueList === undefined)
+        return;
+    for (let i = 0; i < valueList.length; i++)
+        setSelectorValue(geo.selectorState, valueList[i][0], valueList[i][1]);
 }
 
 function parseAnimationFile(buffer: ArrayBufferSlice): AnimationFile {
@@ -268,7 +316,7 @@ class ObjectData {
         return renderer;
     }
 
-    public spawnObjectByFileID(device: GfxDevice, fileID: number, pos: vec3, yaw = 0, pitch = 0, selectorState: number[] = []): GeometryRenderer | FlipbookRenderer | null {
+    public spawnObjectByFileID(device: GfxDevice, fileID: number, pos: vec3, yaw = 0, pitch = 0): GeometryRenderer | FlipbookRenderer | null {
         const geoData = this.ensureGeoData(device, fileID);
         if (geoData === null) {
             console.warn(`Unsupported geo data for file ID ${hexzero(fileID, 4)}`);
@@ -277,7 +325,7 @@ class ObjectData {
         let modelMatrix: mat4;
         let renderer: GeometryRenderer | FlipbookRenderer;
         if (geoData instanceof GeometryData) {
-            renderer = new GeometryRenderer(geoData, selectorState);
+            renderer = new GeometryRenderer(geoData);
         } else {
             renderer = new FlipbookRenderer(geoData)
         }
@@ -288,20 +336,23 @@ class ObjectData {
         return renderer;
     }
 
-    public spawnObject(device: GfxDevice, id: number, pos: vec3, yaw = 0, selectorState: number[] = []): GeometryRenderer | FlipbookRenderer | null {
+    public spawnObject(device: GfxDevice, id: number, pos: vec3, yaw = 0): GeometryRenderer | FlipbookRenderer | null {
         const spawnEntry = this.objectSetupData.ObjectSetupTable.find((entry) => entry.SpawnID === id);
         if (spawnEntry === undefined) {
-            // console.warn(`Unknown object ID ${hexzero(id, 4)}`);
+            console.warn(`Unknown object ID ${hexzero(id, 4)}`);
             return null;
         }
 
         if (spawnEntry.GeoFileID === 0)
             return null; // nothing to render
-        const renderer = this.spawnObjectByFileID(device, spawnEntry.GeoFileID, pos, yaw, 0, selectorState)
+        const renderer = this.spawnObjectByFileID(device, spawnEntry.GeoFileID, pos, yaw);
         if (renderer === null) {
             return null;
         }
         (renderer as any).spawnEntry = spawnEntry;
+
+        if (renderer instanceof GeometryRenderer)
+            renderer.objectFlags = spawnEntry.Flags;
 
         const animEntry = spawnEntry.AnimationTable[spawnEntry.AnimationStartIndex];
         if (animEntry !== undefined) {
@@ -330,7 +381,7 @@ class ObjectData {
 }
 
 async function fetchObjectData(dataFetcher: DataFetcher, device: GfxDevice): Promise<ObjectData> {
-    const objectData = await dataFetcher.fetchData(`${pathBase}/objectSetup_arc.crg1?cache_bust=4`)!;
+    const objectData = await dataFetcher.fetchData(`${pathBase}/objectSetup_arc.crg1?cache_bust=5`)!;
     const objectSetup = BYML.parse<ObjectSetupData>(objectData, BYML.FileType.CRG1);
     return new ObjectData(objectSetup);
 }
@@ -378,18 +429,14 @@ class SceneDesc implements Viewer.SceneDesc {
                         const id = view.getUint16(offs + 0x08);
                         const yaw = view.getUint16(offs + 0x0C) >>> 7;
 
-                        let selectorState: number[] = [];
-                        // only doors and signs for now
-                        if (id === 0x203 || id === 0x2e3) {
-                            if (selectorValue > 0) {
-                                selectorState = nArray(selectorValue + 1, () => 0);
-                                selectorState[selectorValue] = 1;
-                            }
-                        }
                         // skipping a couple of 0xc-bit fields
                         if (category === 0x06) {
-                            const objRenderer = objectSetupTable.spawnObject(device, id, vec3.fromValues(x, y, z), yaw, selectorState);
+                            const objRenderer = objectSetupTable.spawnObject(device, id, vec3.fromValues(x, y, z), yaw);
                             if (objRenderer instanceof GeometryRenderer) {
+                                // special logic for doors and signs
+                                if ((id === 0x203 || id === 0x2e3) && selectorValue > 0) {
+                                    setSelectorValue(objRenderer.selectorState, selectorValue, 1)
+                                }
                                 sceneRenderer.geoRenderers.push(objRenderer);
                             } else if (objRenderer instanceof FlipbookRenderer) {
                                 sceneRenderer.flipbookRenderers.push(objRenderer);
@@ -468,6 +515,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 const geo = Geo.parse(opaFile.Data, Geo.RenderZMode.OPA, true);
                 const opa = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
                 opa.sortKeyBase = makeSortKey(GfxRendererLayer.OPAQUE);
+                setLevelGeoSelector(opa, obj.SceneID);
             }
 
             const xluFile = findFileByID(obj, obj.XluGeoFileId);

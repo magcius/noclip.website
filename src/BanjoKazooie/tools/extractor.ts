@@ -160,10 +160,11 @@ interface ObjectLoadEntry {
     GeoFileID: number;
     AnimationTable: AnimationEntry[];
     AnimationStartIndex: number;
+    Flags: number;
     Scale: number;
 }
 
-function parseObjectLoadEntry(map: RAMMapper, startAddress: number): ObjectLoadEntry {
+function parseObjectLoadEntry(map: RAMMapper, startAddress: number, flags: number): ObjectLoadEntry {
     const view = map.lookup(startAddress);
     let offs = 0;
 
@@ -205,6 +206,7 @@ function parseObjectLoadEntry(map: RAMMapper, startAddress: number): ObjectLoadE
         GeoFileID: fileIndex,
         AnimationTable: animationTable,
         AnimationStartIndex: animationStartIndex,
+        Flags: flags,
         Scale: scale,
     };
 }
@@ -369,9 +371,10 @@ function extractObjectLoadFromAssembly(map: RAMMapper, entryAddress: number): Ob
         }
         if (delay && (instr >>> 26) !== MIPSOpcode.JAL) {
             delay = false;
-            // interpret function arguments
-            // TODO: figure out how much a1 (the init function) and a2 (the flags) matter for our purposes
-            setupTable.push(parseObjectLoadEntry(map, regs[4]));
+            const loadData = regs[4];
+            const loadFlags = regs[6];
+            // TODO: figure out whether we need a1 (the init function)
+            setupTable.push(parseObjectLoadEntry(map, loadData, loadFlags));
         }
     }
 }
@@ -388,11 +391,6 @@ function main() {
         files.push({ fileTableOffs: fsTableIdx, dataOffs, flags });
     }
     const fs = { buffer: romData, files };
-
-    // // const data = decompress(fs.buffer.slice(0xFC8AFC));
-    // const data = extractFile(fs, fs.files[0x164 + 0x572]).Data;
-    // writeFileSync(`${pathBaseOut}/note_sprite.bin`, Buffer.from(data.arrayBuffer, data.byteOffset, data.byteLength));
-    // return;
 
     // Names taken from Banjo's Backpack.
     extractMap(fs, "SM - Spiral Mountain",                0x01);
