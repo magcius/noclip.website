@@ -625,7 +625,7 @@ export class JPAResourceData {
 
     private ensureTextureFromTDB1Index(device: GfxDevice, cache: GfxRenderCache, idx: number, tdb1Base: number): void {
         const texIndex = tdb1Base + ((this.res.tdb1 !== null) ? this.res.tdb1[idx] : idx);
-        this.textureIds.push(texIndex);
+        this.textureIds[idx] = texIndex;
 
         this.jpacData.ensureTexture(device, cache, this.textureIds[idx]);
     }
