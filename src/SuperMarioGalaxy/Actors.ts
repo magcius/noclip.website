@@ -3310,8 +3310,6 @@ export class TreasureBoxCracked extends LiveActor<TreasureBoxNrv> {
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
-        super.requestArchives(sceneObjHolder, infoIter);
-
         const objectName = getObjectName(infoIter);
 
         if (objectName.includes('TreasureBoxCracked'))
