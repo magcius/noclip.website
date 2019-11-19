@@ -231,6 +231,7 @@ export class GXTextureHolder<TextureType extends GX_Texture.Texture = GX_Texture
     }
 }
 
+// TODO(jstpierre): These are deprecated in favor of GXMaterialBuilder
 export function setTevOrder(texCoordId: GX.TexCoordID, texMap: GX.TexMapID, channelId: GX.RasColorChannelID) {
     return { texCoordId, texMap, channelId };
 }
@@ -262,28 +263,6 @@ export function setTevIndirect(indTexStageID: GX.IndTexStageID, format: GX.IndTe
         indTexAddPrev: addPrev,
         indTexUseOrigLOD: utcLod,
     }
-}
-
-export function setTevIndWarp(indTexStageID: GX.IndTexStageID, signedOffsets: boolean, replaceMode: boolean, matrixSel: GX.IndTexMtxID) {
-    const wrap = replaceMode ? GX.IndTexWrap._0 : GX.IndTexWrap.OFF;
-    return {
-        indTexStage: indTexStageID,
-        indTexFormat: GX.IndTexFormat._8,
-        indTexBiasSel: signedOffsets ? GX.IndTexBiasSel.STU : GX.IndTexBiasSel.NONE,
-        indTexMatrix: matrixSel,
-        indTexWrapS: wrap,
-        indTexWrapT: wrap,
-        indTexAddPrev: false,
-        indTexUseOrigLOD: false,
-    };
-}
-
-export function setIndTexOrder(texCoordId: GX.TexCoordID, texture: GX.TexMapID) {
-    return { texCoordId, texture };
-}
-
-export function setIndTexCoordScale(scaleS: GX.IndTexScale, scaleT: GX.IndTexScale) {
-    return { scaleS, scaleT };
 }
 
 export function fillIndTexMtx(dst: mat4, src: Float32Array): void {

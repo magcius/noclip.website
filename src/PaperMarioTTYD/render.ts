@@ -360,7 +360,7 @@ class NodeInstance {
             lightChannels: [],
             tevStages: [
                 {
-                    ... setTevOrder(GX.TexCoordID.NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0),
+                    ... setTevOrder(GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0),
                     ... setTevColorIn(GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.KONST),
                     ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.KONST),
                     ... setTevColorOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV),

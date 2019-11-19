@@ -2,7 +2,7 @@
 import { vec3, mat4 } from "gl-matrix";
 import { colorNewFromRGBA8, colorCopy, Color } from "../Color";
 import { GfxInputState, GfxInputLayout, GfxDevice, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor } from "../gfx/platform/GfxPlatform";
-import { getVertexAttribLocation, TevStage, IndTexStage, TexGen, ColorChannelControl, GXMaterial } from "../gx/gx_material";
+import { getVertexAttribLocation } from "../gx/gx_material";
 import * as GX from "../gx/gx_enum";
 import { LiveActor, startBck, startBrkIfExist, ZoneAndLayer } from "./LiveActor";
 import { SceneObjHolder, getObjectName } from "./Main";
@@ -19,7 +19,8 @@ import { ViewerRenderInput } from "../viewer";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { makeTriangleIndexBuffer, GfxTopology, getTriangleIndexCountForTopologyIndexCount } from "../gfx/helpers/TopologyHelpers";
 import { Camera } from "../Camera";
-import { setTevOrder, setTevColorIn, setTevColorOp, setTevAlphaIn, setTevAlphaOp, autoOptimizeMaterial, GXMaterialHelperGfx, ub_MaterialParams, u_PacketParamsBufferSize, ub_PacketParams, MaterialParams, PacketParams, fillPacketParamsData, ColorKind } from "../gx/gx_render";
+import { GXMaterialHelperGfx, ub_MaterialParams, u_PacketParamsBufferSize, ub_PacketParams, MaterialParams, PacketParams, fillPacketParamsData, ColorKind } from "../gx/gx_render";
+import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 
 const warpPodColorTable = [
     colorNewFromRGBA8(0x0064C8FF),
@@ -104,73 +105,18 @@ class WarpPodPathDrawer {
         ], { buffer: this.indexBuffer, byteOffset: 0 });
 
         // Material.
-        const lightChannel: ColorChannelControl = {
-            lightingEnabled: false,
-            ambColorSource: GX.ColorSrc.VTX,
-            matColorSource: GX.ColorSrc.VTX,
-            litMask: 0,
-            diffuseFunction: GX.DiffuseFunction.NONE,
-            attenuationFunction: GX.AttenuationFunction.NONE,
-        };
-
-        // GXSetTexCoordGen2(GX_TEXCOORD0,GX_TG_MTX2x4,GX_TG_TEX0,GX_TEXMTX0,false,GX_PTIDENTITY);
-        const texGens: TexGen[] = [];
-        texGens.push({ type: GX.TexGenType.MTX3x4, source: GX.TexGenSrc.TEX0, matrix: GX.TexGenMatrix.IDENTITY, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
-
-        const indTexStages: IndTexStage[] = [];
-
-        const noIndTex = {
-            // We don't use indtex.
-            indTexStage: GX.IndTexStageID.STAGE0,
-            indTexMatrix: GX.IndTexMtxID.OFF,
-            indTexFormat: GX.IndTexFormat._8,
-            indTexBiasSel: GX.IndTexBiasSel.NONE,
-            indTexWrapS: GX.IndTexWrap.OFF,
-            indTexWrapT: GX.IndTexWrap.OFF,
-            indTexAddPrev: false,
-            indTexUseOrigLOD: false,
-        };
-
-        const tevStages: TevStage[] = [];
-        tevStages.push({
-            // GXSetTevOrder(0,0,0,0xff);
-            // GXSetTevColorIn(0,8,0xf,0xf,0xf);
-            // GXSetTevColorOp(0,0,0,0,0,0);
-            // GXSetTevAlphaIn(0,4,7,7,7);
-            // GXSetTevAlphaOp(0,0,0,0,0,0);
-            ... setTevOrder(GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO),
-            ... setTevColorIn(GX.CombineColorInput.C0, GX.CombineColorInput.ONE, GX.CombineColorInput.TEXA, GX.CombineColorInput.ZERO),
-            ... setTevColorOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV),
-            ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.KONST, GX.CombineAlphaInput.ZERO),
-            ... setTevAlphaOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_2, true, GX.Register.PREV),
-            konstColorSel: GX.KonstColorSel.KCSEL_1_4,
-            konstAlphaSel: GX.KonstAlphaSel.KASEL_1,
-            ... noIndTex,
-        });
-
-        const material: GXMaterial = {
-            name: 'WarpPodPathDrawer',
-
-            cullMode: GX.CullMode.NONE,
-            alphaTest: { op: GX.AlphaOp.OR, compareA: GX.CompareType.ALWAYS, compareB: GX.CompareType.ALWAYS, referenceA: 0, referenceB: 0 },
-            ropInfo: {
-                blendMode: { type: GX.BlendMode.BLEND, srcFactor: GX.BlendFactor.SRCALPHA, dstFactor: GX.BlendFactor.ONE, logicOp: GX.LogicOp.NOOP },
-                depthTest: true,
-                depthFunc: GX.CompareType.LEQUAL,
-                depthWrite: false,
-            },
-            lightChannels: [ { colorChannel: lightChannel, alphaChannel: lightChannel }, ],
-            texGens,
-            indTexStages,
-            tevStages,
-
-            usePnMtxIdx: false,
-            useTexMtxIdx: [],
-        };
-
-        autoOptimizeMaterial(material);
-
-        this.materialHelper = new GXMaterialHelperGfx(material);
+        const mb = new GXMaterialBuilder('WarpPodPathDrawer');
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.VTX, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX0);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(0, GX.CombineColorInput.C0, GX.CombineColorInput.ONE, GX.CombineColorInput.TEXA, GX.CombineColorInput.ZERO);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.KONST, GX.CombineAlphaInput.ZERO);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_2, true, GX.Register.PREV);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.ONE);
+        mb.setZMode(true, GX.CompareType.LEQUAL, false);
+        mb.setUsePnMtxIdx(false);
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish());
     }
 
     private updateStripeBuffer(device: GfxDevice, camera: Camera): void {

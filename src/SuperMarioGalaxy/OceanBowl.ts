@@ -2,7 +2,7 @@
 import { vec3, mat4, vec2 } from "gl-matrix";
 import { SceneObjHolder, getObjectName } from "./Main";
 import { connectToScene, loadBTIData } from "./Actors";
-import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputLayout, GfxInputState, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxCullMode, GfxInputLayoutBufferDescriptor } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputLayout, GfxInputState, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayoutBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { ViewerRenderInput } from "../viewer";
 import { JMapInfoIter } from "./JMapInfo";
 import { computeModelMatrixSRT, clamp } from "../MathHelpers";
@@ -11,16 +11,17 @@ import { colorFromRGBA8 } from "../Color";
 import { BTIData } from "../j3d/render";
 import { assert } from "../util";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { getVertexAttribLocation, GXMaterial, ColorChannelControl, TexGen, IndTexStage, TevStage } from "../gx/gx_material";
+import { getVertexAttribLocation } from "../gx/gx_material";
 import * as GX from "../gx/gx_enum";
-import { GXMaterialHelperGfx, autoOptimizeMaterial } from "../gx/gx_render";
-import { MaterialParams, PacketParams, ColorKind, setTevOrder, setTevColorIn, setTevColorOp, setTevAlphaIn, setTevAlphaOp, setTevIndWarp, setIndTexOrder, setIndTexCoordScale, ub_MaterialParams, u_PacketParamsBufferSize, ub_PacketParams, fillPacketParamsData } from "../gx/gx_render";
+import { GXMaterialHelperGfx } from "../gx/gx_render";
+import { MaterialParams, PacketParams, ColorKind, ub_MaterialParams, u_PacketParamsBufferSize, ub_PacketParams, fillPacketParamsData } from "../gx/gx_render";
 import { Camera, texProjCameraSceneTex } from "../Camera";
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from "../gfx/render/GfxRenderer";
 import { DrawType } from "./NameObj";
 import { LiveActor, ZoneAndLayer } from "./LiveActor";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
+import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 
 function calcHeightStatic(wave1Time: number, wave2Time: number, x: number, z: number): number {
     const wave1 = 40 * Math.sin(wave1Time + 0.003 * z);
@@ -218,136 +219,45 @@ export class OceanBowl extends LiveActor {
         ], { buffer: this.indexBuffer, byteOffset: 0 });
 
         // Material.
-        const lightChannel: ColorChannelControl = {
-            lightingEnabled: false,
-            ambColorSource: GX.ColorSrc.VTX,
-            matColorSource: GX.ColorSrc.VTX,
-            litMask: 0,
-            diffuseFunction: GX.DiffuseFunction.NONE,
-            attenuationFunction: GX.AttenuationFunction.NONE,
-        };
+        const mb = new GXMaterialBuilder('OceanBowl');
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.VTX, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
 
-        // GXSetTexCoordGen2(GX_TEXCOORD0,GX_TG_MTX2x4,GX_TG_TEX0,GX_TEXMTX0,false,GX_PTIDENTITY);
-        // GXSetTexCoordGen2(GX_TEXCOORD1,GX_TG_MTX2x4,GX_TG_TEX1,GX_TEXMTX1,false,GX_PTIDENTITY);
-        // GXSetTexCoordGen2(GX_TEXCOORD2,GX_TG_MTX2x4,GX_TG_TEX2,GX_TEXMTX2,false,GX_PTIDENTITY);
-        // GXSetTexCoordGen2(GX_TEXCOORD3,GX_TG_MTX3x4,GX_TG_POS,GX_TEXMTX3,false,GX_PTIDENTITY);
-        // GXSetTexCoordGen2(GX_TEXCOORD4,GX_TG_MTX3x4,GX_TG_TEX3,GX_TEXMTX4,false,GX_PTIDENTITY);
-        // GXSetTexCoordGen2(GX_TEXCOORD4,GX_TG_MTX2x4,GX_TG_TEX3,GX_TEXMTX4,true,GX_PTIDENTITY);
-        // Don't ask me why GXSetTexCoordGen2 is called twice for texgen 4.
-        const texGens: TexGen[] = [];
-        texGens.push({ type: GX.TexGenType.MTX2x4, source: GX.TexGenSrc.TEX0, matrix: GX.TexGenMatrix.TEXMTX0, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
-        texGens.push({ type: GX.TexGenType.MTX2x4, source: GX.TexGenSrc.TEX1, matrix: GX.TexGenMatrix.TEXMTX1, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
-        texGens.push({ type: GX.TexGenType.MTX2x4, source: GX.TexGenSrc.TEX2, matrix: GX.TexGenMatrix.TEXMTX2, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
-        texGens.push({ type: GX.TexGenType.MTX3x4, source: GX.TexGenSrc.POS,  matrix: GX.TexGenMatrix.TEXMTX3, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
-        texGens.push({ type: GX.TexGenType.MTX2x4, source: GX.TexGenSrc.TEX3, matrix: GX.TexGenMatrix.TEXMTX4, normalize: true, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX0);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD1, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX1, GX.TexGenMatrix.TEXMTX1);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD2, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX2, GX.TexGenMatrix.TEXMTX2);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD3, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS,  GX.TexGenMatrix.TEXMTX3);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD4, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX3, GX.TexGenMatrix.TEXMTX4, true);
 
-        const indTexStages: IndTexStage[] = [];
-        // GXSetIndTexOrder(0,2,2);
-        indTexStages.push({
-            ... setIndTexOrder(GX.TexCoordID.TEXCOORD2, GX.TexMapID.TEXMAP2),
-            ... setIndTexCoordScale(GX.IndTexScale._1, GX.IndTexScale._1),
-        });
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(0, GX.CombineColorInput.TEXC, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
 
-        const noIndTex = {
-            // We don't use indtex.
-            indTexStage: GX.IndTexStageID.STAGE0,
-            indTexMatrix: GX.IndTexMtxID.OFF,
-            indTexFormat: GX.IndTexFormat._8,
-            indTexBiasSel: GX.IndTexBiasSel.NONE,
-            indTexWrapS: GX.IndTexWrap.OFF,
-            indTexWrapT: GX.IndTexWrap.OFF,
-            indTexAddPrev: false,
-            indTexUseOrigLOD: false,
-        };
+        mb.setTevOrder(1, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(1, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC, GX.CombineColorInput.CPREV, GX.CombineColorInput.ZERO);
+        mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.DIVIDE_2, false, GX.Register.PREV);
+        mb.setTevAlphaIn(1, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.ZERO);
+        mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_2, false, GX.Register.PREV);
 
-        const tevStages: TevStage[] = [];
-        tevStages.push({
-            // GXSetTevOrder(0,0,0,0xff);
-            // GXSetTevColorIn(0,8,0xf,0xf,0xf);
-            // GXSetTevColorOp(0,0,0,0,0,0);
-            // GXSetTevAlphaIn(0,4,7,7,7);
-            // GXSetTevAlphaOp(0,0,0,0,0,0);
-            ... setTevOrder(GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO),
-            ... setTevColorIn(GX.CombineColorInput.TEXC, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO),
-            ... setTevColorOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV),
-            ... setTevAlphaIn(GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO),
-            ... setTevAlphaOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV),
-            konstColorSel: GX.KonstColorSel.KCSEL_1,
-            konstAlphaSel: GX.KonstAlphaSel.KASEL_1,
-            ... noIndTex,
-        });
-        tevStages.push({
-            // GXSetTevOrder(1,1,0,0xff);
-            // GXSetTevColorIn(1,0xf,8,0,0xf);
-            // GXSetTevColorOp(1,0,0,3,0,0);
-            // GXSetTevAlphaIn(1,7,4,0,7);
-            // GXSetTevAlphaOp(1,0,0,1,0,0);
-            ... setTevOrder(GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO),
-            ... setTevColorIn(GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC, GX.CombineColorInput.CPREV, GX.CombineColorInput.ZERO),
-            ... setTevColorOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.DIVIDE_2, false, GX.Register.PREV),
-            ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.ZERO),
-            ... setTevAlphaOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_2, false, GX.Register.PREV),
-            konstColorSel: GX.KonstColorSel.KCSEL_1,
-            konstAlphaSel: GX.KonstAlphaSel.KASEL_1,
-            ... noIndTex,
-        });
+        mb.setTevOrder(2, GX.TexCoordID.TEXCOORD4, GX.TexMapID.TEXMAP3, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(2, GX.CombineColorInput.CPREV, GX.CombineColorInput.A0, GX.CombineColorInput.C0, GX.CombineColorInput.CPREV);
+        mb.setTevColorOp(2, GX.TevOp.COMP_R8_EQ, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
+        mb.setTevAlphaIn(2, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.RASA, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.ZERO);
+        mb.setTevAlphaOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
 
-        tevStages.push({
-            // GXSetTevOrder(2,4,3,4);
-            // GXSetTevColorIn(2,0,3,2,0);
-            // GXSetTevColorOp(2,9,0,0,0,0);
-            // GXSetTevAlphaIn(2,7,5,4,7);
-            // GXSetTevAlphaOp(2,0,0,0,0,0);
-            ... setTevOrder(GX.TexCoordID.TEXCOORD4, GX.TexMapID.TEXMAP3, GX.RasColorChannelID.COLOR0A0),
-            ... setTevColorIn(GX.CombineColorInput.CPREV, GX.CombineColorInput.A0, GX.CombineColorInput.C0, GX.CombineColorInput.CPREV),
-            ... setTevColorOp(GX.TevOp.COMP_R8_EQ, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV),
-            ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.RASA, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.ZERO),
-            ... setTevAlphaOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV),
-            konstColorSel: GX.KonstColorSel.KCSEL_1,
-            konstAlphaSel: GX.KonstAlphaSel.KASEL_1,
-            ... noIndTex,
-        });
+        mb.setTevOrder(3, GX.TexCoordID.TEXCOORD3, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(3, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC, GX.CombineColorInput.C1, GX.CombineColorInput.CPREV);
+        mb.setTevColorOp(3, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(3, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO);
+        mb.setTevAlphaOp(3, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
+        mb.setIndTexOrder(GX.IndTexStageID.STAGE0, GX.TexCoordID.TEXCOORD2, GX.TexMapID.TEXMAP2);
+        mb.setTevIndWarp(3, GX.IndTexStageID.STAGE0, true, false, GX.IndTexMtxID._0);
 
-        tevStages.push({
-            // GXSetTevOrder(3,3,1,0xff);
-            // GXSetTevColorIn(3,0xf,8,4,0);
-            // GXSetTevColorOp(3,0,0,0,1,0);
-            // GXSetTevAlphaIn(3,0,7,7,7);
-            // GXSetTevAlphaOp(3,0,0,0,0,0);
-            ... setTevOrder(GX.TexCoordID.TEXCOORD3, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO),
-            ... setTevColorIn(GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC, GX.CombineColorInput.C1, GX.CombineColorInput.CPREV),
-            ... setTevColorOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV),
-            ... setTevAlphaIn(GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO),
-            ... setTevAlphaOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV),
-            konstColorSel: GX.KonstColorSel.KCSEL_1,
-            konstAlphaSel: GX.KonstAlphaSel.KASEL_1,
-            // GXSetTevIndWarp(3,0,1,0,1);
-            ... setTevIndWarp(GX.IndTexStageID.STAGE0, true, false, GX.IndTexMtxID._0),
-        });
-
-        const material: GXMaterial = {
-            name: 'OceanBowl',
-
-            cullMode: GX.CullMode.NONE,
-            alphaTest: { op: GX.AlphaOp.OR, compareA: GX.CompareType.ALWAYS, compareB: GX.CompareType.ALWAYS, referenceA: 0, referenceB: 0 },
-            ropInfo: {
-                blendMode: { type: GX.BlendMode.BLEND, srcFactor: GX.BlendFactor.SRCALPHA, dstFactor: GX.BlendFactor.INVSRCALPHA, logicOp: GX.LogicOp.NOOP },
-                depthTest: true,
-                depthFunc: GX.CompareType.LEQUAL,
-                depthWrite: false,
-            },
-            lightChannels: [ { colorChannel: lightChannel, alphaChannel: lightChannel }, ],
-            texGens,
-            indTexStages,
-            tevStages,
-
-            usePnMtxIdx: false,
-            useTexMtxIdx: [],
-        };
-
-        autoOptimizeMaterial(material);
-
-        this.materialHelper = new GXMaterialHelperGfx(material);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
+        mb.setZMode(true, GX.CompareType.LEQUAL, false);
+        mb.setUsePnMtxIdx(false);
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish());
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {

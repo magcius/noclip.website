@@ -235,13 +235,6 @@ export interface RopInfo {
 // #endregion
 
 // #region Material shader generation.
-export const enum UniformStorage {
-    UINT,
-    VEC2,
-    VEC3,
-    VEC4,
-}
-
 interface VertexAttributeGenDef {
     attrib: GX.VertexAttribute;
     format: GfxFormat;
@@ -993,7 +986,7 @@ export class GX_Program extends DeviceProgram {
     }
 
     private generateTevTexCoord(stage: TevStage): string {
-        if (stage.texCoordId === GX.TexCoordID.NULL)
+        if (stage.texCoordId === GX.TexCoordID.TEXCOORD_NULL)
             return '';
 
         const finalCoord = this.generateTevTexCoordIndirect(stage);
@@ -1321,22 +1314,22 @@ export function translateGfxMegaState(megaState: Partial<GfxMegaStateDescriptor>
 }
 // #endregion
 
-export function getRasColorChannelID(v: GX.ColorChannelId): GX.RasColorChannelID {
+export function getRasColorChannelID(v: GX.ColorChannelID): GX.RasColorChannelID {
     switch (v) {
-    case GX.ColorChannelId.COLOR0:
-    case GX.ColorChannelId.ALPHA0:
-    case GX.ColorChannelId.COLOR0A0:
+    case GX.ColorChannelID.COLOR0:
+    case GX.ColorChannelID.ALPHA0:
+    case GX.ColorChannelID.COLOR0A0:
         return GX.RasColorChannelID.COLOR0A0;
-    case GX.ColorChannelId.COLOR1:
-    case GX.ColorChannelId.ALPHA1:
-    case GX.ColorChannelId.COLOR1A1:
+    case GX.ColorChannelID.COLOR1:
+    case GX.ColorChannelID.ALPHA1:
+    case GX.ColorChannelID.COLOR1A1:
         return GX.RasColorChannelID.COLOR1A1;
-    case GX.ColorChannelId.ALPHA_BUMP:
+    case GX.ColorChannelID.ALPHA_BUMP:
         return GX.RasColorChannelID.ALPHA_BUMP;
-    case GX.ColorChannelId.ALPHA_BUMP_N:
+    case GX.ColorChannelID.ALPHA_BUMP_N:
         return GX.RasColorChannelID.ALPHA_BUMP_N;
-    case GX.ColorChannelId.COLOR_ZERO:
-    case GX.ColorChannelId.COLOR_NULL:
+    case GX.ColorChannelID.COLOR_ZERO:
+    case GX.ColorChannelID.COLOR_NULL:
         return GX.RasColorChannelID.COLOR_ZERO;
     default:
         throw "whoops";

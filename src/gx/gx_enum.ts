@@ -432,10 +432,10 @@ export const enum TexCoordID {
     TEXCOORD5 = 5,
     TEXCOORD6 = 6,
     TEXCOORD7 = 7,
-    NULL = 0xFF,
+    TEXCOORD_NULL = 0xFF,
 }
 
-export const enum ColorChannelId {
+export const enum ColorChannelID {
     COLOR0 = 0,
     COLOR1 = 1,
     ALPHA0 = 2,

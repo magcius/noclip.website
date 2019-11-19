@@ -23,9 +23,9 @@ import { Endianness } from "../endian";
 import { GfxDevice, GfxInputLayout, GfxInputState, GfxBuffer, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBufferFrequencyHint, GfxHostAccessPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { BTIData } from "./render";
 import { getPointHermite } from "../Spline";
-import { GXMaterial, AlphaTest, RopInfo, TexGen, TevStage, getVertexAttribLocation, IndTexStage } from "../gx/gx_material";
+import { getVertexAttribLocation } from "../gx/gx_material";
 import { Color, colorNew, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8 } from "../Color";
-import { MaterialParams, ColorKind, ub_PacketParams, u_PacketParamsBufferSize, PacketParams, ub_MaterialParams, setIndTexOrder, setIndTexCoordScale, setTevIndirect, setTevOrder, setTevColorIn, setTevColorOp, setTevAlphaIn, setTevAlphaOp, fillIndTexMtx, fillTextureMappingInfo } from "../gx/gx_render";
+import { MaterialParams, ColorKind, ub_PacketParams, u_PacketParamsBufferSize, PacketParams, ub_MaterialParams, fillIndTexMtx, fillTextureMappingInfo } from "../gx/gx_render";
 import { GXMaterialHelperGfx } from "../gx/gx_render";
 import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, computeMatrixWithoutTranslation, normToLengthAndAdd, normToLength, isNearZeroVec3 } from "../MathHelpers";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
@@ -35,6 +35,7 @@ import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera
 import { makeTriangleIndexBuffer, GfxTopology, getTriangleIndexCountForTopologyIndexCount } from "../gfx/helpers/TopologyHelpers";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { TextureMapping } from "../TextureHolder";
+import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 
 const SORT_PARTICLES = false;
 
@@ -393,18 +394,6 @@ const st_aa: GX.CombineAlphaInput[] = [
     GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.A0  ,
 ];
 
-const noIndTex = {
-    // We don't use indtex.
-    indTexStage: GX.IndTexStageID.STAGE0,
-    indTexMatrix: GX.IndTexMtxID.OFF,
-    indTexFormat: GX.IndTexFormat._8,
-    indTexBiasSel: GX.IndTexBiasSel.NONE,
-    indTexWrapS: GX.IndTexWrap.OFF,
-    indTexWrapT: GX.IndTexWrap.OFF,
-    indTexAddPrev: false,
-    indTexUseOrigLOD: false,
-};
-
 function shapeTypeSupported(shapeType: ShapeType): boolean {
     switch (shapeType) {
     case ShapeType.Point:
@@ -504,122 +493,74 @@ export class JPAResourceData {
         if (ssp1 !== null)
             this.ensureTextureFromTDB1Index(device, cache, ssp1.texIdx, texIdBase);
 
-        const ropInfo: RopInfo = {
-            blendMode: {
-                type:      st_bm[(bsp1.blendModeFlags >>> 0) & 0x03],
-                srcFactor: st_bf[(bsp1.blendModeFlags >>> 2) & 0x0F],
-                dstFactor: st_bf[(bsp1.blendModeFlags >>> 6) & 0x0F],
-                logicOp: GX.LogicOp.CLEAR,
-            },
+        // Material.
+        const mb = new GXMaterialBuilder(`JPA Material`);
+        mb.setBlendMode(
+            st_bm[(bsp1.blendModeFlags >>> 0) & 0x03],
+            st_bf[(bsp1.blendModeFlags >>> 2) & 0x0F],
+            st_bf[(bsp1.blendModeFlags >>> 6) & 0x0F],
+        );
+        mb.setZMode(
+            !!((bsp1.zModeFlags >>> 0) & 0x01),
+            st_c[(bsp1.zModeFlags >>> 1) & 0x07],
+            !!((bsp1.zModeFlags >>> 4) & 0x01),
+        );
+        mb.setAlphaCompare(
+            st_c[(bsp1.alphaCompareFlags >>> 0) & 0x07],
+            bsp1.alphaRef0,
+            st_ao[(bsp1.alphaCompareFlags >>> 3) & 0x03],
+            st_c[(bsp1.alphaCompareFlags >>> 5) & 0x07],
+            bsp1.alphaRef1,
+        );
 
-            depthTest: !!((bsp1.zModeFlags >>> 0) & 0x01),
-            depthFunc: st_c[(bsp1.zModeFlags >>> 1) & 0x07],
-            depthWrite: !!((bsp1.zModeFlags >>> 4) & 0x01),
-        };
-
-        const alphaTest: AlphaTest = {
-            compareA: st_c [(bsp1.alphaCompareFlags >>> 0) & 0x07],
-            referenceA: bsp1.alphaRef0,
-            op:       st_ao[(bsp1.alphaCompareFlags >>> 3) & 0x03],
-            compareB: st_c [(bsp1.alphaCompareFlags >>> 5) & 0x07],
-            referenceB: bsp1.alphaRef1,
-        };
-
-        const texGens: TexGen[] = [];
+        let texCoordId = GX.TexCoordID.TEXCOORD0;
         if (bsp1.isEnableProjection)
-            texGens.push({ type: GX.TexGenType.MTX3x4, source: GX.TexGenSrc.POS,  matrix: GX.TexGenMatrix.TEXMTX0, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
+            mb.setTexCoordGen(texCoordId++, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX0);
         else
-            texGens.push({ type: GX.TexGenType.MTX2x4, source: GX.TexGenSrc.TEX0, matrix: GX.TexGenMatrix.TEXMTX0, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
+            mb.setTexCoordGen(texCoordId++, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX0);
 
-        let texCoord3Id = GX.TexCoordID.TEXCOORD1;
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
+        // GXSetTevColorIn(0) is called in JPABaseShape::setGX()
+        mb.setTevColorIn(0,
+            st_ca[bsp1.colorInSelect * 4 + 0],
+            st_ca[bsp1.colorInSelect * 4 + 1],
+            st_ca[bsp1.colorInSelect * 4 + 2],
+            st_ca[bsp1.colorInSelect * 4 + 3],
+        );
+        // GXSetTevAlphaIn(0) is called in JPABaseShape::setGX()
+        mb.setTevAlphaIn(0,
+            st_aa[bsp1.alphaInSelect * 4 + 0],
+            st_aa[bsp1.alphaInSelect * 4 + 1],
+            st_aa[bsp1.alphaInSelect * 4 + 2],
+            st_aa[bsp1.alphaInSelect * 4 + 3],
+        );
+        // GXSetTevColorOp(0) is called in JPAEmitterManager::draw()
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+        // ETX1 properties are read in JPAResource::setPTev()
         if (etx1 !== null) {
             if (etx1.indTextureMode !== IndTextureMode.OFF) {
-                texGens.push({ type: GX.TexGenType.MTX2x4, source: GX.TexGenSrc.TEX0, matrix: GX.TexGenMatrix.IDENTITY, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
-                texCoord3Id = GX.TexCoordID.TEXCOORD2;
+                mb.setTexCoordGen(texCoordId++, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+                mb.setIndTexOrder(GX.IndTexStageID.STAGE0, texCoordId, GX.TexMapID.TEXMAP2);
+
+                mb.setTevIndirect(0, GX.IndTexStageID.STAGE0, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._0, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, false, false, GX.IndTexAlphaSel.OFF);
             }
 
             if (etx1.secondTextureIndex !== -1) {
-                texGens.push({ type: GX.TexGenType.MTX2x4, source: GX.TexGenSrc.TEX0, matrix: GX.TexGenMatrix.IDENTITY, normalize: false, postMatrix: GX.PostTexGenMatrix.PTIDENTITY });
+                mb.setTexCoordGen(texCoordId++, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+
+                mb.setTevOrder(1, texCoordId, GX.TexMapID.TEXMAP3, GX.RasColorChannelID.COLOR_ZERO);
+                mb.setTevColorIn(1, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC, GX.CombineColorInput.CPREV, GX.CombineColorInput.ZERO);
+                mb.setTevAlphaIn(1, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.ZERO);
+                mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+                mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
             }
         }
 
-        const tevStages: TevStage[] = [];
+        mb.setUsePnMtxIdx(false);
 
-        tevStages.push({
-            texCoordId: GX.TexCoordID.TEXCOORD0,
-            texMap: GX.TexMapID.TEXMAP0,
-            channelId: GX.RasColorChannelID.COLOR_ZERO,
-            konstColorSel: GX.KonstColorSel.KCSEL_1,
-            konstAlphaSel: GX.KonstAlphaSel.KASEL_1,
-
-            // GXSetTevColorIn(0) is called in JPABaseShape::setGX()
-            colorInA: st_ca[bsp1.colorInSelect * 4 + 0],
-            colorInB: st_ca[bsp1.colorInSelect * 4 + 1],
-            colorInC: st_ca[bsp1.colorInSelect * 4 + 2],
-            colorInD: st_ca[bsp1.colorInSelect * 4 + 3],
-
-            // GXSetTevAlphaIn(0) is called in JPABaseShape::setGX()
-            alphaInA: st_aa[bsp1.alphaInSelect * 4 + 0],
-            alphaInB: st_aa[bsp1.alphaInSelect * 4 + 1],
-            alphaInC: st_aa[bsp1.alphaInSelect * 4 + 2],
-            alphaInD: st_aa[bsp1.alphaInSelect * 4 + 3],
-
-            // GXSetTevColorOp(0) is called in JPAEmitterManager::draw()
-            ... setTevColorOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV),
-            ... setTevAlphaOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV),
-
-            // GXSetTevDirect(0) is called in JPABaseShape::setGX()
-            ... noIndTex,
-        });
-
-        const indTexStages: IndTexStage[] = [];
-
-        // ESP properties are read in JPAResource::setPTev()
-        if (etx1 !== null) {
-            if (etx1.indTextureMode !== IndTextureMode.OFF) {
-                // Indirect.
-                indTexStages.push({
-                    ... setIndTexOrder(GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP2),
-                    ... setIndTexCoordScale(GX.IndTexScale._1, GX.IndTexScale._1),
-                });
-                // Add the indirect stage to our TEV.
-                Object.assign(tevStages[0], setTevIndirect(GX.IndTexStageID.STAGE0, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._0, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, false, false, GX.IndTexAlphaSel.OFF));
-            }
-
-            if (etx1.secondTextureIndex !== -1) {
-                tevStages.push({
-                    ... setTevOrder(texCoord3Id, GX.TexMapID.TEXMAP3, GX.RasColorChannelID.COLOR_ZERO),
-                    ... setTevColorIn(GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC, GX.CombineColorInput.CPREV, GX.CombineColorInput.ZERO),
-                    ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.ZERO),
-                    ... setTevColorOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV),
-                    ... setTevAlphaOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV),
-
-                    konstColorSel: GX.KonstColorSel.KCSEL_1,
-                    konstAlphaSel: GX.KonstAlphaSel.KASEL_1,
-                    ... noIndTex,
-                });
-            }
-        }
-
-        // Translate the material.
-        const gxMaterial: GXMaterial = {
-            name: 'JPA Material',
-            // JPAEmitterManager::draw() calls GXSetCullMode(GX_CULL_NONE)
-            cullMode: GX.CullMode.NONE,
-            // JPAEmitterManager::draw() calls GXSetNumChans(0)
-            lightChannels: [],
-            texGens,
-            tevStages,
-            indTexStages,
-            alphaTest,
-            ropInfo,
-            usePnMtxIdx: false,
-            useTexMtxIdx: [],
-            hasLightsBlock: false,
-            hasPostTexMtxBlock: false,
-        };
-
-        this.materialHelper = new GXMaterialHelperGfx(gxMaterial);
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish());
     }
 
     private ensureTextureFromTDB1Index(device: GfxDevice, cache: GfxRenderCache, idx: number, tdb1Base: number): void {
