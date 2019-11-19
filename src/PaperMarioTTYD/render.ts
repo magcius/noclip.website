@@ -1,5 +1,5 @@
 
-import { GXTextureHolder, MaterialParams, PacketParams, ColorKind, translateWrapModeGfx, loadedDataCoalescerComboGfx, ub_SceneParams, fillSceneParamsData, u_SceneParamsBufferSize, SceneParams, fillSceneParams, fillSceneParamsDataOnTemplate, setTevColorIn, setTevAlphaIn, setTevAlphaOp, setTevColorOp, setTevIndirect, setTevOrder } from '../gx/gx_render';
+import { GXTextureHolder, MaterialParams, PacketParams, ColorKind, translateWrapModeGfx, loadedDataCoalescerComboGfx, ub_SceneParams, fillSceneParamsData, u_SceneParamsBufferSize, SceneParams, fillSceneParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GXMaterialHelperGfx, GXShapeHelperGfx, BasicGXRendererHelper } from '../gx/gx_render';
 
 import * as TPL from './tpl';
@@ -20,10 +20,11 @@ import { AABB } from '../Geometry';
 import { colorCopy, White, Color, colorNewCopy, colorFromRGBA } from '../Color';
 import * as UI from '../ui';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { GXMaterialHacks, GXMaterial } from '../gx/gx_material';
+import { GXMaterialHacks } from '../gx/gx_material';
 import * as GX from '../gx/gx_enum';
 import { projectionMatrixD3DFromOpenGL, projectionMatrixOpenGLFromD3D } from '../gfx/helpers/ProjectionHelpers';
 import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers';
+import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 
 export class TPLTextureHolder extends GXTextureHolder<TPL.TPLTexture> {
     public addTPLTextures(device: GfxDevice, tpl: TPL.TPL): void {
@@ -334,43 +335,15 @@ class NodeInstance {
     }
 
     private createCollisionMaterialInstance(device: GfxDevice, cache: GfxRenderCache): void {
-        const collisionGxMaterial: GXMaterial = {
-            name: "Collision",
-            alphaTest: { 
-                op: GX.AlphaOp.OR,
-                compareA: GX.CompareType.ALWAYS,
-                compareB: GX.CompareType.ALWAYS,
-                referenceA: 0.0,
-                referenceB: 0.0,
-            },
-            cullMode: GX.CullMode.NONE,
-            indTexStages: [],
-            texGens: [],
-            ropInfo: {
-                blendMode: {
-                    type: GX.BlendMode.BLEND,
-                    srcFactor: GX.BlendFactor.SRCALPHA,
-                    dstFactor: GX.BlendFactor.INVSRCALPHA,
-                    logicOp: GX.LogicOp.NOOP,
-                },
-                depthFunc: GX.CompareType.LESS,
-                depthTest: true,
-                depthWrite: false,
-            },
-            lightChannels: [],
-            tevStages: [
-                {
-                    ... setTevOrder(GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0),
-                    ... setTevColorIn(GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.KONST),
-                    ... setTevAlphaIn(GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.KONST),
-                    ... setTevColorOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV),
-                    ... setTevAlphaOp(GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV),
-                    ... setTevIndirect(GX.IndTexStageID.STAGE0, GX.IndTexFormat._8, GX.IndTexBiasSel.NONE, GX.IndTexMtxID.OFF, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, false, false, GX.IndTexAlphaSel.OFF),
-                    konstColorSel: GX.KonstColorSel.KCSEL_K0,
-                    konstAlphaSel: GX.KonstAlphaSel.KASEL_K0_A,
-                }
-            ],
-        };
+        const mb = new GXMaterialBuilder('Collision');
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
+        mb.setZMode(true, GX.CompareType.LESS, false);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(0, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.KONST);
+        mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.KONST);
+        mb.setTevKColorSel(0, GX.KonstColorSel.KCSEL_K0);
+        mb.setTevKColorSel(0, GX.KonstColorSel.KCSEL_K0_A);
+
         const collisionMaterial: Material = {
             index: -1,
             samplers: [],
@@ -378,7 +351,7 @@ class NodeInstance {
             matColorReg: White,
             materialLayer: MaterialLayer.BLEND,
             name: "Collision",
-            gxMaterial: collisionGxMaterial,
+            gxMaterial: mb.finish(),
         };
         this.collisionMaterialInstance = new MaterialInstance(device, cache, collisionMaterial);
         this.collisionMaterialInstance.materialHelper.megaStateFlags.polygonOffset = true;

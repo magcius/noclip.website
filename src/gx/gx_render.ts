@@ -231,40 +231,6 @@ export class GXTextureHolder<TextureType extends GX_Texture.Texture = GX_Texture
     }
 }
 
-// TODO(jstpierre): These are deprecated in favor of GXMaterialBuilder
-export function setTevOrder(texCoordId: GX.TexCoordID, texMap: GX.TexMapID, channelId: GX.RasColorChannelID) {
-    return { texCoordId, texMap, channelId };
-}
-
-export function setTevColorIn(colorInA: GX.CombineColorInput, colorInB: GX.CombineColorInput, colorInC: GX.CombineColorInput, colorInD: GX.CombineColorInput) {
-    return { colorInA, colorInB, colorInC, colorInD };
-}
-
-export function setTevAlphaIn(alphaInA: GX.CombineAlphaInput, alphaInB: GX.CombineAlphaInput, alphaInC: GX.CombineAlphaInput, alphaInD: GX.CombineAlphaInput) {
-    return { alphaInA, alphaInB, alphaInC, alphaInD };
-}
-
-export function setTevColorOp(colorOp: GX.TevOp, colorBias: GX.TevBias, colorScale: GX.TevScale, colorClamp: boolean, colorRegId: GX.Register) {
-    return { colorOp, colorBias, colorScale, colorClamp, colorRegId };
-}
-
-export function setTevAlphaOp(alphaOp: GX.TevOp, alphaBias: GX.TevBias, alphaScale: GX.TevScale, alphaClamp: boolean, alphaRegId: GX.Register) {
-    return { alphaOp, alphaBias, alphaScale, alphaClamp, alphaRegId };
-}
-
-export function setTevIndirect(indTexStageID: GX.IndTexStageID, format: GX.IndTexFormat, biasSel: GX.IndTexBiasSel, matrixSel: GX.IndTexMtxID, wrapS: GX.IndTexWrap, wrapT: GX.IndTexWrap, addPrev: boolean, utcLod: boolean, alphaSel: GX.IndTexAlphaSel) {
-    return {
-        indTexStage: indTexStageID,
-        indTexFormat: format,
-        indTexBiasSel: biasSel,
-        indTexMatrix: matrixSel,
-        indTexWrapS: wrapS,
-        indTexWrapT: wrapT,
-        indTexAddPrev: addPrev,
-        indTexUseOrigLOD: utcLod,
-    }
-}
-
 export function fillIndTexMtx(dst: mat4, src: Float32Array): void {
     const a = src[0], c = src[1], tx = src[2], scale = src[3];
     const b = src[4], d = src[5], ty = src[6];
