@@ -31,7 +31,6 @@
   },
   "dependencies": {
     "@sentry/browser": "^5.7.1",
-    "buffer": "^5.4.3",
     "crc-32": "^1.2.0",
     "gl-matrix": "^3.0.0",
     "librw": "^0.4.0",
