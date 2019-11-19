@@ -110,6 +110,10 @@ export function connectToSceneEnvironment(sceneObjHolder: SceneObjHolder, actor:
     sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x21, 4, DrawBufferType.ENVIRONMENT, -1);
 }
 
+export function connectToSceneEnvironmentStrongLight(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x21, 4, DrawBufferType.ENVIRONMENT_STRONG_LIGHT, -1);
+}
+
 export function connectToSceneEnemyMovement(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x2A, -1, -1, -1);
 }
@@ -710,6 +714,22 @@ export class SimpleMapObj extends MapObjActor {
         setupInitInfoColorChangeArg0(initInfo, infoIter);
         setupInitInfoTextureChangeArg1(initInfo, infoIter);
         super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
+    }
+}
+
+export class SimpleEnvironmentObj extends MapObjActor {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        const initInfo = new MapObjActorInitInfo();
+        setupInitInfoSimpleMapObj(initInfo);
+        super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
+    }
+
+    protected connectToScene(sceneObjHolder: SceneObjHolder, initInfo: MapObjActorInitInfo): void {
+        // Default implementation.
+        if (initInfo.lightType === LightType.Strong)
+            connectToSceneEnvironmentStrongLight(sceneObjHolder, this);
+        else
+            connectToSceneEnvironment(sceneObjHolder, this);
     }
 }
 
@@ -3224,5 +3244,81 @@ export class AirBubbleGenerator extends LiveActor<AirBubbleGeneratorNrv> {
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         super.requestArchives(sceneObjHolder, infoIter);
         AirBubbleHolder.requestArchives(sceneObjHolder, infoIter);
+    }
+}
+
+const enum TreasureBoxType {
+    Normal, Cracked, Gold,
+}
+
+const enum TreasureBoxNrv { Wait, AlwaysOpen }
+
+export class TreasureBoxCracked extends LiveActor<TreasureBoxNrv> {
+    private type: TreasureBoxType;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, getObjectName(infoIter));
+
+        this.initDefaultPos(sceneObjHolder, infoIter);
+
+        this.type = TreasureBoxCracked.getBoxType(infoIter);
+
+        if (this.type === TreasureBoxType.Cracked)
+            this.initModelManagerWithAnm(sceneObjHolder, 'TreasureBoxCracked');
+        else if (this.type === TreasureBoxType.Gold)
+            this.initModelManagerWithAnm(sceneObjHolder, 'TreasureBoxGold');
+        else
+            this.initModelManagerWithAnm(sceneObjHolder, 'TreasureBox');
+
+        connectToSceneMapObjStrongLight(sceneObjHolder, this);
+
+        this.initEffectKeeper(sceneObjHolder, null);
+
+        const arg2 = fallback(getJMapInfoArg2(infoIter), 0);
+        if (arg2 === 2) {
+            this.initNerve(TreasureBoxNrv.AlwaysOpen);
+        } else {
+            this.initNerve(TreasureBoxNrv.Wait);
+        }
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.movement(sceneObjHolder, viewerInput);
+
+        const currentNerve = this.getCurrentNerve();
+        if (currentNerve === TreasureBoxNrv.Wait) {
+            if (this.type === TreasureBoxType.Cracked) {
+                startBrkIfExist(this.modelInstance!, this.arc, `Wait`);
+                emitEffect(sceneObjHolder, this, `Light`);
+            } else if (this.type === TreasureBoxType.Gold) {
+                emitEffect(sceneObjHolder, this, `Gold`);
+            }
+        } else if (currentNerve === TreasureBoxNrv.AlwaysOpen) {
+            // TODO(jstpierre): Go to end of Bck animation.
+        }
+    }
+
+    public static getBoxType(infoIter: JMapInfoIter): TreasureBoxType {
+        const objectName = getObjectName(infoIter);
+
+        if (objectName.includes('TreasureBoxCracked'))
+            return TreasureBoxType.Cracked;
+        else if (objectName.includes('TreasureBoxGold'))
+            return TreasureBoxType.Gold;
+        else
+            return TreasureBoxType.Normal;
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        super.requestArchives(sceneObjHolder, infoIter);
+
+        const objectName = getObjectName(infoIter);
+
+        if (objectName.includes('TreasureBoxCracked'))
+            sceneObjHolder.modelCache.requestObjectData('TreasureBoxCracked');
+        else if (objectName.includes('TreasureBoxGold'))
+            sceneObjHolder.modelCache.requestObjectData('TreasureBoxGold');
+        else
+            sceneObjHolder.modelCache.requestObjectData('TreasureBox');
     }
 }

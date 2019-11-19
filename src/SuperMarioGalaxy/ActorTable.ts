@@ -4,7 +4,7 @@ import * as RARC from '../j3d/rarc';
 import { SceneObjHolder } from "./Main";
 import { JMapInfoIter, createCsvParser } from "./JMapInfo";
 import { LiveActor, ZoneAndLayer } from './LiveActor';
-import { Kinopio, TicoComet, EarthenPipe, StarPiece, CollapsePlane, BlackHole, Peach, PenguinRacer, Penguin, SimpleEffectObj, EffectObjR1000F50, GCaptureTarget, FountainBig, AstroEffectObj, AstroCountDownPlate, Butler, Rosetta, Tico, Sky, Air, ShootingStar, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObj10x10x10SyncClipping, AstroMapObj, EffectObjR100F50SyncClipping, PriorDrawAir, BlueChip, YellowChip, PeachCastleGardenPlanet, SimpleMapObj, CrystalCage, PlanetMap, HatchWaterPlanet, RotateMoveObj, LavaSteam, SignBoard, WoodBox, EffectObjR500F50, SurprisedGalaxy, SuperSpinDriverYellow, SuperSpinDriverGreen, SuperSpinDriverPink, AstroCore, TicoAstro, UFOKinokoUnderConstruction, KinopioAstro, createPurpleCoin, createCoin, createRailCoin, createPurpleRailCoin, requestArchivesCoin, requestArchivesPurpleCoin, createCircleCoinGroup, createPurpleCircleCoinGroup, Fountain, PhantomTorch, RandomEffectObj, OceanWaveFloater, FishGroup, SeaGullGroup, CoconutTreeLeafGroup, AirBubble, AirBubbleGenerator, RailMoveObj } from "./Actors";
+import { Kinopio, TicoComet, EarthenPipe, StarPiece, CollapsePlane, BlackHole, Peach, PenguinRacer, Penguin, SimpleEffectObj, EffectObjR1000F50, GCaptureTarget, FountainBig, AstroEffectObj, AstroCountDownPlate, Butler, Rosetta, Tico, Sky, Air, ShootingStar, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObj10x10x10SyncClipping, AstroMapObj, EffectObjR100F50SyncClipping, PriorDrawAir, BlueChip, YellowChip, PeachCastleGardenPlanet, SimpleMapObj, CrystalCage, PlanetMap, HatchWaterPlanet, RotateMoveObj, LavaSteam, SignBoard, WoodBox, EffectObjR500F50, SurprisedGalaxy, SuperSpinDriverYellow, SuperSpinDriverGreen, SuperSpinDriverPink, AstroCore, TicoAstro, UFOKinokoUnderConstruction, KinopioAstro, createPurpleCoin, createCoin, createRailCoin, createPurpleRailCoin, requestArchivesCoin, requestArchivesPurpleCoin, createCircleCoinGroup, createPurpleCircleCoinGroup, Fountain, PhantomTorch, RandomEffectObj, OceanWaveFloater, FishGroup, SeaGullGroup, CoconutTreeLeafGroup, AirBubble, AirBubbleGenerator, RailMoveObj, SimpleEnvironmentObj, TreasureBoxCracked } from "./Actors";
 import { OceanBowl } from "./OceanBowl";
 import { WarpPod } from './WarpPod';
 
@@ -66,6 +66,27 @@ const ActorTable: ActorTableEntry[] = [
     _("FishGroupE",                     FishGroup),
     _("FishGroupF",                     FishGroup),
     _("SeaGullGroup",                   SeaGullGroup),
+    _("AsteroidA",                      SimpleEnvironmentObj),
+    _("AsteroidB",                      SimpleEnvironmentObj),
+    _("AsteroidC",                      SimpleEnvironmentObj),
+    _("AsteroidD",                      SimpleEnvironmentObj),
+    _("SpaceStickA",                    SimpleEnvironmentObj),
+    _("SpaceStickB",                    SimpleEnvironmentObj),
+    _("KillerGunnerDouble",             SimpleEnvironmentObj),
+    _("KillerGunnerTriple",             SimpleEnvironmentObj),
+    _("LavaSpaceStickA",                SimpleEnvironmentObj),
+    _("LavaSpaceStickB",                SimpleEnvironmentObj),
+    _("LavaBlackUFO",                   SimpleEnvironmentObj),
+    _("SpaceDustWoodA",                 SimpleEnvironmentObj),
+    _("SpaceDustWoodB",                 SimpleEnvironmentObj),
+    _("PhantomDecoratePartsA",          SimpleEnvironmentObj),
+    _("PhantomDecoratePartsB",          SimpleEnvironmentObj),
+    _("PhantomDecoratePartsHole",       SimpleEnvironmentObj),
+    _("DeathSandEnvironmentSapotenA",   SimpleEnvironmentObj),
+    _("DeathSandEnvironmentSapotenB",   SimpleEnvironmentObj),
+    _("DeathSandEnvironmentRock",       SimpleEnvironmentObj),
+    _("DeathSandEnvironmentPyramid",    SimpleEnvironmentObj),
+    _("SweetDecoratePartsOrange",       SimpleEnvironmentObj),
 
     // NPCs
     _("Butler",                         Butler),
@@ -115,6 +136,21 @@ const ActorTable: ActorTableEntry[] = [
     _("SuperSpinDriver",                SuperSpinDriverYellow),
     _("SuperSpinDriverGreen",           SuperSpinDriverGreen),
     _("SuperSpinDriverPink",            SuperSpinDriverPink),
+    _("TreasureBoxCrackedEmpty",        TreasureBoxCracked),
+    _("TreasureBoxCrackedCoin",         TreasureBoxCracked),
+    _("TreasureBoxCrackedYellowChip",   TreasureBoxCracked),
+    _("TreasureBoxCrackedBlueChip",     TreasureBoxCracked),
+    _("TreasureBoxCrackedKinokoOneUp",  TreasureBoxCracked),
+    _("TreasureBoxCrackedKinokoLifeUp", TreasureBoxCracked),
+    _("TreasureBoxCrackedAirBubble",    TreasureBoxCracked),
+    _("TreasureBoxCrackedPowerStar",    TreasureBoxCracked),
+    _("TreasureBoxEmpty",               TreasureBoxCracked),
+    _("TreasureBoxCoin",                TreasureBoxCracked),
+    _("TreasureBoxYellowChip",          TreasureBoxCracked),
+    _("TreasureBoxBlueChip",            TreasureBoxCracked),
+    _("TreasureBoxKinokoOneUp",         TreasureBoxCracked),
+    _("TreasureBoxKinokoLifeUp",        TreasureBoxCracked),
+    _("TreasureBoxGoldEmpty",           TreasureBoxCracked),
     _("WarpPod",                        WarpPod),
     _("WoodBox",                        WoodBox),
     _("YellowChip",                     YellowChip),
@@ -224,7 +260,7 @@ const ActorTable: ActorTableEntry[] = [
     _("UFOSandObstacleA",               SimpleMapObj),
     _("UFOSandObstacleB",               SimpleMapObj),
     _("UFOSandObstacleC",               SimpleMapObj),
-    _("KacmeckShipLvl",                 SimpleMapObj),
+    _("KameckShipLv1",                  SimpleMapObj),
     _("StrongBlock",                    SimpleMapObj),
     _("ChoConveyorChocoA",              SimpleMapObj),
     _("ForestHomePartsTree",            SimpleMapObj),
