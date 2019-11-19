@@ -786,7 +786,7 @@ export class RailMoveObj extends MapObjActor<RailMoveObjNrv> {
         // initInfo.setupBaseMtxFollowTarget();
         initInfo.setupNerve(RailMoveObjNrv.Move);
         setupInitInfoTypical(initInfo, getObjectName(infoIter));
-        
+
         super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
 
         this.isWorking = false;

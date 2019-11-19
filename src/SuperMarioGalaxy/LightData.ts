@@ -19,12 +19,15 @@ function getValueColor(color: Color, infoIter: JMapInfoIter, prefix: string): vo
     colorFromRGBA(color, colorR, colorG, colorB, colorA);
 }
 
-export class LightInfo {
+class LightInfo {
     public Position = vec3.create();
     public Color = colorNew(1, 1, 1, 1);
-    public FollowCamera: boolean;
+    public FollowCamera: boolean = false;
 
-    constructor(infoIter: JMapInfoIter, prefix: string) {
+    constructor() {
+    }
+
+    public setFromLightInfo(infoIter: JMapInfoIter, prefix: string): void {
         getValueColor(this.Color, infoIter, `${prefix}Color`);
 
         const posX = fallback(infoIter.getValueNumber(`${prefix}PosX`), 0);
@@ -49,16 +52,18 @@ export class LightInfo {
     }
 }
 
-export class ActorLightInfo {
-    public AreaLightName: string;
-    public Light0: LightInfo;
-    public Light1: LightInfo;
-    public Alpha2: number;
+class ActorLightInfo {
+    public Light0 = new LightInfo();
+    public Light1 = new LightInfo();
+    public Alpha2: number = 0.0;
     public Ambient = colorNew(1, 1, 1, 1);
 
-    constructor(infoIter: JMapInfoIter, prefix: string) {
-        this.Light0 = new LightInfo(infoIter, `${prefix}Light0`);
-        this.Light1 = new LightInfo(infoIter, `${prefix}Light1`);
+    constructor() {
+    }
+
+    public setFromLightInfo(infoIter: JMapInfoIter, prefix: string): void {
+        this.Light0.setFromLightInfo(infoIter, `${prefix}Light0`);
+        this.Light1.setFromLightInfo(infoIter, `${prefix}Light1`);
         getValueColor(this.Ambient, infoIter, `${prefix}Ambient`);
         this.Alpha2 = fallback(infoIter.getValueNumber(`${prefix}Alpha2`), 0) / 0xFF;
     }
@@ -82,18 +87,18 @@ export class ActorLightInfo {
 export class AreaLightInfo {
     public AreaLightName: string;
     public Interpolate: boolean;
-    public Player: ActorLightInfo;
-    public Strong: ActorLightInfo;
-    public Weak: ActorLightInfo;
-    public Planet: ActorLightInfo;
+    public Player = new ActorLightInfo();
+    public Strong = new ActorLightInfo();
+    public Weak = new ActorLightInfo();
+    public Planet = new ActorLightInfo();
 
     constructor(infoIter: JMapInfoIter) {
         this.AreaLightName = assertExists(infoIter.getValueString('AreaLightName'));
         this.Interpolate = getJMapInfoBool(fallback(infoIter.getValueNumberNoInit('Interpolate'), -1));
-        this.Player = new ActorLightInfo(infoIter, 'Player');
-        this.Strong = new ActorLightInfo(infoIter, 'Strong');
-        this.Weak = new ActorLightInfo(infoIter, 'Weak');
-        this.Planet = new ActorLightInfo(infoIter, 'Planet');
+        this.Player.setFromLightInfo(infoIter, 'Player');
+        this.Strong.setFromLightInfo(infoIter, 'Strong');
+        this.Weak.setFromLightInfo(infoIter, 'Weak');
+        this.Planet.setFromLightInfo(infoIter, 'Planet');
     }
 
     public getActorLightInfo(lightType: LightType): ActorLightInfo {
@@ -112,6 +117,7 @@ export class AreaLightInfo {
 
 export class ActorLightCtrl {
     public currentAreaLight: AreaLightInfo | null = null;
+    private currentActorLight = new ActorLightInfo();
 
     constructor(private assocActor: LiveActor, public lightType: LightType = LightType.None) {
     }
@@ -120,6 +126,9 @@ export class ActorLightCtrl {
         if (this.lightType !== LightType.None)
             return;
         sceneObjHolder.sceneNameObjListExecutor.findLightInfo(this.assocActor);
+    }
+
+    private setCurrentAreaLight(): void {
     }
 
     public setAreaLightFromZoneAndId(sceneObjHolder: SceneObjHolder, zoneId: number, lightId: number): void {
@@ -132,6 +141,10 @@ export class ActorLightCtrl {
 
     public setDefaultAreaLight(sceneObjHolder: SceneObjHolder): void {
         this.currentAreaLight = sceneObjHolder.lightDataHolder.findDefaultAreaLight(sceneObjHolder);
+    }
+
+    public update(): void {
+        // Do nothing for now
     }
 
     public getActorLight(): ActorLightInfo | null {

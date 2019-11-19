@@ -256,8 +256,7 @@ export class BezierRail {
         for (let i = 0; i < this.railParts.length; i++) {
             const part = this.railParts[i];
             const partLength = part.getTotalLength();
-            const h = 100 / partLength;
-            part.getNearestParam(v, h);
+            const h = part.getNearestParam(v, 100 / partLength);
             part.calcPos(scratchVec3a, h);
             const sqdist = vec3.squaredDistance(scratchVec3a, v);
             if (sqdist < maxdist) {

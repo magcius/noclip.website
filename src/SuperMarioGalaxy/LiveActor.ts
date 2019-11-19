@@ -436,16 +436,20 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
             return;
 
         if (this.actorLightCtrl !== null) {
+            this.actorLightCtrl.update();
+
             const lightInfo = this.actorLightCtrl.getActorLight();
             if (lightInfo !== null) {
                 // Load the light.
                 lightInfo.setOnModelInstance(this.modelInstance, viewerInput.camera, true);
             }
         } else {
-            // TODO(jstpierre): Move this to the LightDirector?
-            const areaLightInfo = sceneObjHolder.lightDataHolder.findDefaultAreaLight(sceneObjHolder);
+            // If we don't have an individualized actor light control, then load the default area light.
+            // This is basically what DrawBufferExecuter::draw() and DrawBufferGroup::draw() effectively do.
+
             const lightType = sceneObjHolder.sceneNameObjListExecutor.findLightType(this);
             if (lightType !== LightType.None) {
+                const areaLightInfo = sceneObjHolder.lightDataHolder.findDefaultAreaLight(sceneObjHolder);
                 const lightInfo = areaLightInfo.getActorLightInfo(lightType);
 
                 // The reason we don't setAmbient here is a bit funky -- normally how this works
@@ -456,6 +460,12 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
                 // and the actor's DL will override the ambient light there...
                 // Rather than emulate the whole DrawBufferGroup system, quirks and all, just hardcode
                 // this logic.
+                //
+                // Specifically, what's going on is that when an actor has an ActorLightCtrl, then the light
+                // is loaded in DrawBufferShapeDrawer, *after* the material packet DL has been run. Otherwise,
+                // it's loaded in either DrawBufferExecuter or DrawBufferGroup, which run before the material
+                // DL, so the actor will overwrite the ambient light. I'm quite sure this is a bug in the
+                // original game engine, honestly.
                 lightInfo.setOnModelInstance(this.modelInstance, viewerInput.camera, false);
             }
         }

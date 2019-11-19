@@ -79,7 +79,7 @@ const enum RailInitPosType { NearestPos, NearestPoint, Point0 }
 
 function getMapPartsArgRailInitPosType(actor: LiveActor): RailInitPosType {
     const railRider = assertExists(actor.railRider);
-    return fallback(railRider.bezierRail.railIter.getValueNumber('path_arg4'), RailInitPosType.NearestPoint);
+    return fallback(railRider.bezierRail.railIter.getValueNumberNoInit('path_arg4'), RailInitPosType.NearestPos);
 }
 
 const enum AxisType { X, Y, Z }

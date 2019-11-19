@@ -60,35 +60,6 @@ interface ModelMatrixAnimator {
     updateRailAnimation(dst: mat4, time: number): void;
 }
 
-class RailAnimationMapPart {
-    private railPhase: number = 0;
-
-    constructor(public path: Path, translation: vec3) {
-        assert(path.points.length === 2);
-        assert(path.closed === 'OPEN');
-
-        // Project translation onto our line segment to find t.
-        const seg = vec3.create();
-        const prj = vec3.create();
-        vec3.sub(seg, path.points[1].p0, path.points[0].p0);
-        vec3.sub(prj, translation, path.points[0].p0);
-        const n = vec3.dot(prj, seg);
-        const d = vec3.dot(seg, seg);
-        const t = n / d;
-        this.railPhase = t;
-    }
-
-    public updateRailAnimation(dst: mat4, time: number): void {
-        // TODO(jstpierre): Figure out the path speed.
-        const tS = time / 10;
-        const t = (tS + this.railPhase) % 1.0;
-        interpPathPoints(scratchVec3, this.path.points[0], this.path.points[1], t);
-        dst[12] = scratchVec3[0];
-        dst[13] = scratchVec3[1];
-        dst[14] = scratchVec3[2];
-    }
-}
-
 class RailAnimationTico {
     private railPhase: number = 0;
 
@@ -1031,12 +1002,8 @@ class NoclipLegacyActor extends LiveActor {
     }
 
     public setupAnimations(): void {
-        const objName = this.objinfo.objName;
-        if (objName.startsWith('HoleBeltConveyerParts') && this.objinfo.path) {
-            this.modelMatrixAnimator = new RailAnimationMapPart(this.objinfo.path, this.translation);
-        } else if (objName === 'TicoRail') {
+        if (this.objinfo.objName === 'TicoRail')
             this.modelMatrixAnimator = new RailAnimationTico(assertExists(this.objinfo.path));
-        }
     }
 
     public setRotateSpeed(speed: number, axis = RotateAxis.Y): void {
@@ -1832,8 +1799,6 @@ class StageDataHolder {
     }
 
     public createLocalStageDataHolders(sceneDesc: SMGSceneDescBase, modelCache: ModelCache, scenarioData: ScenarioData): void {
-        let currentZoneId = this.zoneId + 1;
-
         for (let i = LayerId.COMMON; i <= LayerId.LAYER_MAX; i++) {
             const layerDirName = getLayerDirName(i);
             const stageObjInfo = this.zoneArchive.findFileData(`jmp/placement/${layerDirName}/StageObjInfo`);
@@ -1846,9 +1811,9 @@ class StageDataHolder {
             for (let j = 0; j < mapInfoIter.getNumRecords(); j++) {
                 mapInfoIter.setRecord(j);
                 const zoneName = getObjectName(mapInfoIter);
-                const zoneId = currentZoneId++;
+                const zoneId = scenarioData.zoneNames.indexOf(zoneName);
+                assert(zoneId >= 0);
                 const localStage = new StageDataHolder(sceneDesc, modelCache, scenarioData, zoneName, zoneId, i);
-                currentZoneId += localStage.localStageDataHolders.length;
                 localStage.calcPlacementMtx(mapInfoIter);
                 this.localStageDataHolders.push(localStage);
             }
