@@ -1,6 +1,6 @@
 
 //@ts-ignore
-import { readFileSync } from 'fs';
+import program_glsl from './program.glsl';
 import * as Viewer from '../viewer';
 import * as Tex from './tex';
 import { GfxBufferUsage, GfxDevice, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxFormat, GfxBuffer, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxTextureDimension, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxProgram, GfxMegaStateDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
@@ -28,7 +28,7 @@ class PaperMario64Program extends DeviceProgram {
     public static ub_SceneParams = 0;
     public static ub_DrawParams = 1;
 
-    private static program = readFileSync('src/PaperMario64/program.glsl', { encoding: 'utf8' });
+    private static program = program_glsl;
     public both = PaperMario64Program.program;
 }
 

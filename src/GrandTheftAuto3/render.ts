@@ -3,7 +3,7 @@ import * as UI from "../ui";
 import * as Viewer from "../viewer";
 import * as rw from "librw";
 // @ts-ignore
-import { readFileSync } from "fs";
+import program_glsl from './program.glsl';
 import { TextureMapping, TextureBase } from "../TextureHolder";
 import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxProgram, GfxHostAccessPass, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxTextureDimension, GfxRenderPass, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxBindingLayoutDescriptor, GfxCullMode, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxInputLayoutDescriptor } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
@@ -189,7 +189,7 @@ class GTA3Program extends DeviceProgram {
 
     public static ub_SceneParams = 0;
 
-    private static program = readFileSync('src/GrandTheftAuto3/program.glsl', { encoding: 'utf8' });
+    private static program = program_glsl;
     public both = GTA3Program.program;
 
     constructor(def: GTA3ProgramDef = {}) {

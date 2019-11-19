@@ -1,6 +1,6 @@
 
 // @ts-ignore
-import { readFileSync } from 'fs';
+import program_glsl from './program.glsl';
 import * as Bin from './bin';
 import * as BinTex from './bin_tex';
 import * as UI from '../ui';
@@ -49,7 +49,7 @@ class KingdomHeartsProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
     public static ub_DrawParams = 1;
 
-    private static program = readFileSync('src/kh/program.glsl', { encoding: 'utf8' });
+    private static program = program_glsl;
     public both = KingdomHeartsProgram.program;
 }
 
@@ -134,7 +134,7 @@ export class MapData {
         const sky1Layers: Layer[] = [];
         const sky1DrawCalls = this.createBatchedDrawCalls(/*isSkybox=*/true, bin.sky1Meshes, skyboxTexIndexMap, submeshes, sky1Layers);
         sky1Layers[0].name = "sky_1";
-        
+
         this.layers.push(sky0Layers[0]);
         this.layers.push(sky1Layers[0]);
         for (let i = 0; i < mapLayers.length; i++) {
@@ -277,7 +277,7 @@ export class MapData {
                     }
                 }
                 if (texture.spriteAnim && !spriteAnims.includes(texture.spriteAnim)) {
-                    
+
                 }
                 let textureIndex = 0;
                 if (submesh.textureBlock.bank < 0 && skyboxTexIndexMap.has(submesh.textureBlock.dataOffs)) {
@@ -395,7 +395,7 @@ class DrawCallInstance {
     private program!: DeviceProgram;
     private gfxProgram: GfxProgram | null = null;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
-    
+
     constructor(private mapData: MapData, private drawCall: DrawCall, private drawCallIndex: number) {
         this.createProgram();
 
@@ -446,7 +446,7 @@ class DrawCallInstance {
         const mapped = renderInst.mapUniformBufferF32(KingdomHeartsProgram.ub_DrawParams);
         offs += fillMatrix4x4(mapped, offs, modelMatrixScratch);
         offs += fillMatrix4x3(mapped, offs, viewerInput.camera.viewMatrix);
-        
+
         if (this.drawCall.spriteAnim) {
             this.drawCall.spriteAnim.getUVOffset(viewerInput.time, uvAnimOffsetScratch);
             mapped[offs++] = uvAnimOffsetScratch[0];

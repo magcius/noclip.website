@@ -3,7 +3,7 @@ import * as UI from '../ui';
 import * as Viewer from '../viewer';
 
 // @ts-ignore
-import { readFileSync } from 'fs';
+import program_glsl from './program.glsl';
 import { DeviceProgram } from "../Program";
 import { GfxProgram, GfxMegaStateDescriptor, GfxDevice, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxCompareMode, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxHostAccessPass, GfxRenderPass, GfxTextureDimension, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxColorWriteMask, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 import { mat4, vec2, vec4 } from 'gl-matrix';
@@ -70,7 +70,7 @@ class KingdomHeartsIIProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
     public static ub_DrawParams = 1;
 
-    private static program = readFileSync('src/kh2fm/program.glsl', { encoding: 'utf8' });
+    private static program = program_glsl;
     public both = KingdomHeartsIIProgram.program;
 }
 
@@ -426,7 +426,7 @@ export class MapData {
                 iBuffer[iBufferIndex++] = mesh.ind[i] + lastInd;
             }
             lastInd += mesh.vtx.length;
-        } 
+        }
 
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vBuffer.buffer);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, iBuffer.buffer);
