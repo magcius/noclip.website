@@ -220,7 +220,7 @@ export class TextEntry implements Widget {
     public setIcon(icon: string): void {
         this.textfield.textarea.style.backgroundImage = svgStringToCSSBackgroundImage(icon);
     }
-    
+
     public setPlaceholder(placeholder: string): void {
         this.textfield.setPlaceholder(placeholder);
     }

@@ -1,14 +1,4 @@
 
-// Parcel HMR workaround.
-// https://github.com/parcel-bundler/parcel/issues/289
-declare var module: any;
-if (module.hot) {
-    module.hot.dispose(() => {
-        window.location.reload();
-        throw new Error();
-    });
-}
-
 import * as Viewer from '../viewer';
 import { OrbitCameraController } from '../Camera';
 

@@ -2,7 +2,7 @@
 import * as Puppeteer from 'puppeteer';
 import { mkdirSync } from 'fs';
 
-const HOST = `http://localhost:1234/`;
+const HOST = `http://localhost:8080/`;
 const OUT_PATH = `Screenshots/`;
 
 // Change to customize width/height.

@@ -1,6 +1,6 @@
 
 // @ts-ignore
-import { readFileSync } from 'fs';
+import program_glsl from './program.glsl';
 import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
 import { PPAK_Texture, TextureFormat, getTextureFormatName } from "./ppf";
 import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxVertexBufferDescriptor, GfxBufferFrequencyHint, GfxBindingLayoutDescriptor, GfxProgram, GfxHostAccessPass, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxTextureDimension, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
@@ -88,7 +88,7 @@ class PsychonautsProgram extends DeviceProgram {
     public static ub_SceneParams = 0;
     public static ub_MeshFragParams = 1;
 
-    private static program = readFileSync('src/psychonauts/program.glsl', { encoding: 'utf8' });
+    private static program = program_glsl;
     public both = PsychonautsProgram.program;
 }
 
@@ -296,7 +296,7 @@ class MeshInstance {
         for (let i = 0; i < this.submeshInstance.length; i++)
             this.submeshInstance[i].prepareToRender(device, renderInstManager, viewerInput);
     }
-    
+
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.meshFragInstance.length; i++)
             this.meshFragInstance[i].destroy(device);
