@@ -669,7 +669,7 @@ export function parseMaterialEntry(r: DisplayListRegisters, index: number, name:
     const lightChannels: GX_Material.LightChannelControl[] = [];
 
     const gxMaterial: GX_Material.GXMaterial = {
-        index, name,
+        name,
         lightChannels, cullMode: GX.CullMode.NONE,
         tevStages, texGens,
         indTexStages, alphaTest, ropInfo,

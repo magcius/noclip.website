@@ -335,7 +335,6 @@ class NodeInstance {
 
     private createCollisionMaterialInstance(device: GfxDevice, cache: GfxRenderCache): void {
         const collisionGxMaterial: GXMaterial = {
-            index: -1,
             name: "Collision",
             alphaTest: { 
                 op: GX.AlphaOp.OR,

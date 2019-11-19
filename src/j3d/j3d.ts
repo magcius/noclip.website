@@ -1014,7 +1014,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         const translucent = !(flags & 0x03);
 
         const gxMaterial: GX_Material.GXMaterial = {
-            index, name,
+            name,
             cullMode,
             lightChannels,
             texGens,

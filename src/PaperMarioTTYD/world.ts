@@ -908,7 +908,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         }
 
         const gxMaterial: GX_Material.GXMaterial = {
-            index: i, name: materialName,
+            name: materialName,
             cullMode: GX.CullMode.BACK,
             lightChannels,
             texGens,

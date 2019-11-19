@@ -414,7 +414,7 @@ function parseMaterialSet_MP1_MP2(stream: InputStream, resourceSystem: ResourceS
         };
 
         const gxMaterial: GX_Material.GXMaterial = {
-            index, name,
+            name,
             cullMode,
             lightChannels,
             texGens,
@@ -1452,7 +1452,7 @@ function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSyste
         };
 
         const gxMaterial: GX_Material.GXMaterial = {
-            index, name,
+            name,
             cullMode,
             lightChannels,
             texGens,

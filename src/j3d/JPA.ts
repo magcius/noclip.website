@@ -603,7 +603,6 @@ export class JPAResourceData {
 
         // Translate the material.
         const gxMaterial: GXMaterial = {
-            index: 0,
             name: 'JPA Material',
             // JPAEmitterManager::draw() calls GXSetCullMode(GX_CULL_NONE)
             cullMode: GX.CullMode.NONE,

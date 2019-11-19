@@ -326,7 +326,6 @@ export class OceanBowl extends LiveActor {
         });
 
         const material: GXMaterial = {
-            index: 0,
             name: 'OceanBowl',
 
             cullMode: GX.CullMode.NONE,

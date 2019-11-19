@@ -149,7 +149,6 @@ class WarpPodPathDrawer {
         });
 
         const material: GXMaterial = {
-            index: 0,
             name: 'WarpPodPathDrawer',
 
             cullMode: GX.CullMode.NONE,

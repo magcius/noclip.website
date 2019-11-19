@@ -249,7 +249,7 @@ export function parse(buffer: ArrayBufferSlice, name: string): BIN {
         };
 
         const gxMaterial: GX_Material.GXMaterial = {
-            index, name: `${name} unknown material ${index}`,
+            name: `${name} unknown material ${index}`,
             cullMode: GX.CullMode.BACK,
             lightChannels,
             texGens,

@@ -21,7 +21,6 @@ export const EFB_HEIGHT = 528;
 // #region Material definition.
 export interface GXMaterial {
     // Debugging & ID
-    index: number;
     name: string;
 
     // Polygon state
