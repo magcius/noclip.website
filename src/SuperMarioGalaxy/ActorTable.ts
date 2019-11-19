@@ -496,8 +496,11 @@ const ActorTable: ActorTableEntry[] = [
     N("ClipFieldSwitch"),
     N("SoundSyncSwitch"),
     N("ExterminationSwitch"),
+    N("RepeartTimerSwitch"),
+    N("ExterminationCheckerWoodBox"),
     N("ExterminationCheckerLuribo"),
     N("ExterminationKuriboKeySwitch"),
+    N("ExterminationPowerStar"),
     N("SwitchSynchronizerReverse"),
     N("PrologueDirector"),
     N("MovieStarter"),
@@ -506,17 +509,19 @@ const ActorTable: ActorTableEntry[] = [
     N("MameMuimuiScorer"),
     N("MameMuimuiScorerLv2"),
     N("ScoreAttackCounter"),
-    N("RepeartTimerSwitch"),
     N("FlipPanelObserver"),
     N("PurpleCoinStarter"),
+    N("PurpleCoinCompleteWatcher")
     N("RunawayRabbitCollect"),
+    N("GroupSwitchWatcher"),
 
-    // Cutscenes
+   // Cutscenes
     N("OpeningDemoObj"),
     N("NormalEndingDemoObj"),
     N("MeetKoopaDemoObj"),
     N("StarReturnDemoStarter"),
     N("GrandStarReturnDemoStarter"),
+    N("SimpleDemoExecutor"),
 
     // Ugly actors, hide for now until we have a full impl.
     N("ElectricRail"),

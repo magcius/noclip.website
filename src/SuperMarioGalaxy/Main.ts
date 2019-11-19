@@ -1247,16 +1247,12 @@ class SMGSpawner {
         case 'StarPieceFlow':
         case 'WingBlockStarPiece':
         case 'YellowChipGroup':
-        case 'PurpleCoinCompleteWatcher':
         case 'CoinAppearSpot':
-        case 'GroupSwitchWatcher':
-        case 'ExterminationPowerStar':
         case 'LuigiIntrusively':
         case 'MameMuimuiAttackMan':
         case 'CutBushGroup':
         case 'SuperDreamer':
         case 'PetitPorterWarpPoint':
-        case 'SimpleDemoExecutor':
         case 'TimerCoinBlock':
         case 'CoinLinkGroup':
         case 'CollectTico':
@@ -1273,7 +1269,6 @@ class SMGSpawner {
         case 'NoteFairy':
         case 'Tongari2D':
         case 'Grapyon':
-        case 'ExterminationCheckerWoodBox':
         case 'GliderShooter':
         case 'CaveInCube':
         case 'RaceRail':
@@ -1390,10 +1385,6 @@ class SMGSpawner {
             break;
         case 'PukupukuWaterSurface':
             spawnGraph(`Pukupuku`);
-            break;
-        case 'TreasureBoxEmpty':
-        case 'TreasureBoxKinokoOneUp':
-            spawnGraph(`TreasureBox`);
             break;
         case 'JetTurtle':
             // spawnGraph(`Koura`);
