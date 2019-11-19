@@ -511,7 +511,7 @@ const ActorTable: ActorTableEntry[] = [
     N("ScoreAttackCounter"),
     N("FlipPanelObserver"),
     N("PurpleCoinStarter"),
-    N("PurpleCoinCompleteWatcher")
+    N("PurpleCoinCompleteWatcher"),
     N("RunawayRabbitCollect"),
     N("GroupSwitchWatcher"),
 
