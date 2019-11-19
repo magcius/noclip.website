@@ -541,8 +541,9 @@ export class JPAResourceData {
         // ETX1 properties are read in JPAResource::setPTev()
         if (etx1 !== null) {
             if (etx1.indTextureMode !== IndTextureMode.OFF) {
-                mb.setTexCoordGen(texCoordId++, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
-                mb.setIndTexOrder(GX.IndTexStageID.STAGE0, texCoordId, GX.TexMapID.TEXMAP2);
+                const indTexCoordId = texCoordId++;
+                mb.setTexCoordGen(indTexCoordId, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+                mb.setIndTexOrder(GX.IndTexStageID.STAGE0, indTexCoordId, GX.TexMapID.TEXMAP2);
 
                 mb.setTevIndirect(0, GX.IndTexStageID.STAGE0, GX.IndTexFormat._8, GX.IndTexBiasSel.STU, GX.IndTexMtxID._0, GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, false, false, GX.IndTexAlphaSel.OFF);
             }

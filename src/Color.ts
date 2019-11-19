@@ -125,6 +125,5 @@ export const Magenta = colorNew(1, 0, 1, 1);
 export const Yellow = colorNew(1, 1, 0, 1);
 
 export function objIsColor(v: any): boolean {
-
     return typeof v === 'object' && v !== null && 'r' in v && 'g' in v && 'b' in v && 'a' in v;
 }
