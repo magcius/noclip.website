@@ -27,7 +27,7 @@ import { BMD, JSystemFileReaderHelper, ShapeDisplayFlags, TexMtxMapMode } from '
 import { BMDModel, MaterialInstance } from '../j3d/render';
 import { JMapInfoIter, createCsvParser, getJMapInfoTransLocal, getJMapInfoRotateLocal, getJMapInfoScale } from './JMapInfo';
 import { BloomPostFXParameters, BloomPostFXRenderer } from './Bloom';
-import { LightDataHolder } from './LightData';
+import { LightDataHolder, LightDirector } from './LightData';
 import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType, NameObj, NameObjHolder } from './NameObj';
 import { EffectSystem } from './EffectSystem';
 
@@ -698,7 +698,7 @@ export class SceneObjHolder {
 
     public scenarioData: ScenarioData;
     public planetMapCreator: PlanetMapCreator;
-    public lightDataHolder: LightDataHolder;
+    public lightDirector: LightDirector;
     public npcDirector: NPCDirector;
     public stageDataHolder: StageDataHolder;
     public effectSystem: EffectSystem | null = null;
@@ -834,6 +834,12 @@ class SMGSpawner {
 
     public place(): void {
         this.placeStageData(this.sceneObjHolder.stageDataHolder);
+
+        // We trigger "after placement" here because legacy objects should not require it,
+        // and nothing should depend on legacy objects being placed. Since legacy objects
+        // are asynchronous, it would just be racy to place it below.
+        this.sceneObjHolder.nameObjHolder.initAfterPlacement(this.sceneObjHolder);
+
         this.legacySpawner.place();
     }
 
@@ -1177,7 +1183,8 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
 
         sceneObjHolder.planetMapCreator = new PlanetMapCreator(modelCache.getObjectData(`PlanetMapDataTable`)!);
         sceneObjHolder.npcDirector = new NPCDirector(modelCache.getObjectData(`NPCData`)!);
-        sceneObjHolder.lightDataHolder = new LightDataHolder(this.getLightData(modelCache));
+        const lightDataHolder = new LightDataHolder(this.getLightData(modelCache));
+        sceneObjHolder.lightDirector = new LightDirector(sceneObjHolder, lightDataHolder);
         sceneObjHolder.stageDataHolder = new StageDataHolder(this, modelCache, sceneObjHolder.scenarioData, sceneObjHolder.scenarioData.getMasterZoneFilename(), 0);
 
         if (modelCache.isArchiveExist(`ParticleData/Effect.arc`))

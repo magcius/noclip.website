@@ -4,12 +4,15 @@ import { colorNew, colorCopy, colorFromRGBA, Color } from "../Color";
 import { Camera } from "../Camera";
 import { Light } from "../gx/gx_material";
 import { BMDModelInstance } from "../j3d/render";
-import { JMapInfoIter, getJMapInfoBool } from "./JMapInfo";
+import { JMapInfoIter, getJMapInfoBool, getJMapInfoArg0, getJMapInfoArg1 } from "./JMapInfo";
 import { LightType } from "./DrawBuffer";
-import { SceneObjHolder } from "./Main";
+import { SceneObjHolder, SceneObj } from "./Main";
 import { ColorKind } from "../gx/gx_render";
-import { LiveActor } from "./LiveActor";
+import { LiveActor, ZoneAndLayer } from "./LiveActor";
 import { assertExists, fallback } from "../util";
+import { AreaObj, AreaFormType, AreaObjMgr } from "./AreaObj";
+import { NameObj } from "./NameObj";
+import { isHiddenModel } from "./Actors";
 
 function getValueColor(color: Color, infoIter: JMapInfoIter, prefix: string): void {
     const colorR = fallback(infoIter.getValueNumber(`${prefix}R`), 0) / 0xFF;
@@ -24,7 +27,10 @@ class LightInfo {
     public Color = colorNew(1, 1, 1, 1);
     public FollowCamera: boolean = false;
 
-    constructor() {
+    public copy(other: LightInfo): void {
+        vec3.copy(this.Position, other.Position);
+        colorCopy(this.Color, other.Color);
+        this.FollowCamera = other.FollowCamera;
     }
 
     public setFromLightInfo(infoIter: JMapInfoIter, prefix: string): void {
@@ -58,7 +64,11 @@ class ActorLightInfo {
     public Alpha2: number = 0.0;
     public Ambient = colorNew(1, 1, 1, 1);
 
-    constructor() {
+    public copy(other: ActorLightInfo): void {
+        this.Light0.copy(other.Light0);
+        this.Light1.copy(other.Light1);
+        this.Alpha2 = other.Alpha2;
+        this.Ambient = other.Ambient;
     }
 
     public setFromLightInfo(infoIter: JMapInfoIter, prefix: string): void {
@@ -86,7 +96,7 @@ class ActorLightInfo {
 
 export class AreaLightInfo {
     public AreaLightName: string;
-    public Interpolate: boolean;
+    public Interpolate: number;
     public Player = new ActorLightInfo();
     public Strong = new ActorLightInfo();
     public Weak = new ActorLightInfo();
@@ -94,7 +104,7 @@ export class AreaLightInfo {
 
     constructor(infoIter: JMapInfoIter) {
         this.AreaLightName = assertExists(infoIter.getValueString('AreaLightName'));
-        this.Interpolate = getJMapInfoBool(fallback(infoIter.getValueNumberNoInit('Interpolate'), -1));
+        this.Interpolate = fallback(infoIter.getValueNumber('Interpolate'), -1);
         this.Player.setFromLightInfo(infoIter, 'Player');
         this.Strong.setFromLightInfo(infoIter, 'Strong');
         this.Weak.setFromLightInfo(infoIter, 'Weak');
@@ -115,64 +125,133 @@ export class AreaLightInfo {
     }
 }
 
+function getDefaultStepInterpolate(): number {
+    return 30;
+}
+
 export class ActorLightCtrl {
     public currentAreaLight: AreaLightInfo | null = null;
-    private currentActorLight = new ActorLightInfo();
+    private blendAnimActorLight = new ActorLightInfo();
+    private blendOutActorLight: ActorLightInfo | null = null;
+    private zoneLightId = new ZoneLightId();
+    private interpolate: number = -1;
+    private blendAmount: number = -1;
 
     constructor(private assocActor: LiveActor, public lightType: LightType = LightType.None) {
     }
 
-    public initActorLightInfo(sceneObjHolder: SceneObjHolder): void {
+    public init(sceneObjHolder: SceneObjHolder): void {
+        this.initActorLightInfo(sceneObjHolder);
+        this.tryFindNewAreaLight(sceneObjHolder, false);
+        const areaLightInfo = sceneObjHolder.lightDirector.getAreaLightInfo(sceneObjHolder, this.zoneLightId);
+        this.currentAreaLight = areaLightInfo;
+        const targetActorLight = this.getTargetActorLight(areaLightInfo);
+        this.blendAnimActorLight.copy(targetActorLight);
+    }
+
+    private getTargetActorLight(areaLight: AreaLightInfo): ActorLightInfo {
+        return areaLight.getActorLightInfo(this.lightType);
+    }
+
+    private initActorLightInfo(sceneObjHolder: SceneObjHolder): void {
         if (this.lightType !== LightType.None)
             return;
         sceneObjHolder.sceneNameObjListExecutor.findLightInfo(this.assocActor);
     }
 
-    private setCurrentAreaLight(): void {
+    public reset(sceneObjHolder: SceneObjHolder): void {
+        this.zoneLightId.clear();
+
+        const found = sceneObjHolder.lightDirector.lightAreaHolder.tryFindLightID(this.zoneLightId, this.assocActor.translation);
+
+        if (found) {
+            this.resetCurrentLightInfo(sceneObjHolder);
+            this.blendOutActorLight = null;
+            this.blendAnimActorLight.copy(this.getTargetActorLight(this.currentAreaLight!));
+        }
+
+        this.currentAreaLight = sceneObjHolder.lightDirector.getAreaLightInfo(sceneObjHolder, this.zoneLightId);
     }
 
-    public setAreaLightFromZoneAndId(sceneObjHolder: SceneObjHolder, zoneId: number, lightId: number): void {
-        this.currentAreaLight = sceneObjHolder.lightDataHolder.findAreaLightFromZoneAndId(sceneObjHolder, zoneId, lightId);
+    private updateLightBlend(deltaTime: number): void {
+        if (this.blendOutActorLight !== null) {
+            this.blendAmount += deltaTime;
+
+            if (this.blendAmount < this.interpolate) {
+                // Blend.
+            } else {
+                this.blendAnimActorLight.copy(this.getTargetActorLight(this.currentAreaLight!));
+                this.blendOutActorLight = null;
+                this.blendAmount = -1;
+            }
+        }
     }
 
-    public setAreaLightFromName(sceneObjHolder: SceneObjHolder, name: string): void {
-        this.currentAreaLight = sceneObjHolder.lightDataHolder.findAreaLight(name);
+    public update(sceneObjHolder: SceneObjHolder, immediate: boolean, deltaTime: number): void {
+        if (!isHiddenModel(this.assocActor)) {
+            this.tryFindNewAreaLight(sceneObjHolder, immediate);
+            this.updateLightBlend(deltaTime);
+        }
     }
 
-    public setDefaultAreaLight(sceneObjHolder: SceneObjHolder): void {
-        this.currentAreaLight = sceneObjHolder.lightDataHolder.findDefaultAreaLight(sceneObjHolder);
+    private resetCurrentLightInfo(sceneObjHolder: SceneObjHolder): void {
+        const areaLightInfo = sceneObjHolder.lightDirector.getAreaLightInfo(sceneObjHolder, this.zoneLightId);
+        this.currentAreaLight = areaLightInfo;
+        this.interpolate = areaLightInfo.Interpolate;
+        const targetActorLight = this.getTargetActorLight(areaLightInfo);
+        this.blendAnimActorLight.Light0.FollowCamera = targetActorLight.Light0.FollowCamera;
+        this.blendAnimActorLight.Light1.FollowCamera = targetActorLight.Light1.FollowCamera;
     }
 
-    public update(): void {
-        // Do nothing for now
+    private tryFindNewAreaLight(sceneObjHolder: SceneObjHolder, immediate: boolean = false): void {
+        const found = sceneObjHolder.lightDirector.lightAreaHolder.tryFindLightID(this.zoneLightId, this.assocActor.translation);
+
+        if (found) {
+            if (this.currentAreaLight !== null) {
+                this.blendOutActorLight = this.getTargetActorLight(this.currentAreaLight);
+                this.blendAnimActorLight.copy(this.blendOutActorLight);
+            }
+
+            this.resetCurrentLightInfo(sceneObjHolder);
+
+            if (this.interpolate === 0 || immediate) {
+                this.interpolate = 0;
+                this.blendOutActorLight = null;
+                const targetLight = this.getTargetActorLight(this.currentAreaLight!);
+                this.blendAnimActorLight.copy(targetLight);
+            }
+
+            if (this.interpolate < 0)
+                this.interpolate = getDefaultStepInterpolate();
+        }
     }
 
-    public getActorLight(): ActorLightInfo | null {
-        if (this.currentAreaLight !== null)
-            return this.getTargetActorLight(this.currentAreaLight);
-        else
-            return null;
-    }
-
-    public getTargetActorLight(areaLight: AreaLightInfo): ActorLightInfo | null {
-        return areaLight.getActorLightInfo(this.lightType);
+    public loadLight(modelInstance: BMDModelInstance, camera: Camera): void {
+        if (this.currentAreaLight !== null) {
+            if (this.blendOutActorLight !== null) {
+                this.blendAnimActorLight.setOnModelInstance(modelInstance, camera, true);
+            } else {
+                const targetLight = this.getTargetActorLight(this.currentAreaLight);
+                targetLight.setOnModelInstance(modelInstance, camera, true);
+            }
+        }
     }
 }
 
 class LightZoneInfo {
-    private lightIDToAreaLightName = new Map<number, string>();
+    private lightIdToAreaLightName = new Map<number, string>();
 
     constructor(public zoneId: number, public zoneName: string, infoIter: JMapInfoIter) {
         for (let i = 0; i < infoIter.getNumRecords(); i++) {
             infoIter.setRecord(i);
             const lightID = fallback(infoIter.getValueNumber('LightID'), -1);
             const areaLightName = assertExists(infoIter.getValueString('AreaLightName'));
-            this.lightIDToAreaLightName.set(lightID, areaLightName);
+            this.lightIdToAreaLightName.set(lightID, areaLightName);
         }
     }
 
     public getAreaLightName(lightID: number): string {
-        return this.lightIDToAreaLightName.get(lightID)!;
+        return this.lightIdToAreaLightName.get(lightID)!;
     }
 }
 
@@ -199,6 +278,8 @@ export class LightDataHolder {
     }
 
     public getAreaLightName(sceneObjHolder: SceneObjHolder, zoneId: number, lightId: number): string {
+        if (zoneId < 0)
+            zoneId = 0;
         return this.ensureZoneInfo(sceneObjHolder, zoneId).getAreaLightName(lightId);
     }
 
@@ -208,13 +289,111 @@ export class LightDataHolder {
                 return this.areaLightInfos[i];
         return null;
     }
+}
+
+export class LightDirector {
+    public lightAreaHolder: LightAreaHolder;
+
+    constructor(sceneObjHolder: SceneObjHolder, public lightDataHolder: LightDataHolder) {
+        this.lightAreaHolder = new LightAreaHolder(sceneObjHolder);
+    }
 
     public findDefaultAreaLight(sceneObjHolder: SceneObjHolder): AreaLightInfo {
         return this.findAreaLightFromZoneAndId(sceneObjHolder, 0, -1);
     }
 
-    public findAreaLightFromZoneAndId(sceneObjHolder: SceneObjHolder, zoneId: number, lightId: number): AreaLightInfo {
-        const areaLightName = this.getAreaLightName(sceneObjHolder, zoneId, lightId);
-        return assertExists(this.findAreaLight(areaLightName));
+    public getAreaLightInfo(sceneObjHolder: SceneObjHolder, zoneLightId: ZoneLightId): AreaLightInfo {
+        return this.findAreaLightFromZoneAndId(sceneObjHolder, zoneLightId.zoneId, zoneLightId.lightId);
     }
+
+    public findAreaLightFromZoneAndId(sceneObjHolder: SceneObjHolder, zoneId: number, lightId: number): AreaLightInfo {
+        const areaLightName = this.lightDataHolder.getAreaLightName(sceneObjHolder, zoneId, lightId);
+        return assertExists(this.lightDataHolder.findAreaLight(areaLightName));
+    }
+}
+
+class ZoneLightId {
+    public zoneId: number;
+    public lightId: number;
+
+    constructor() {
+        this.clear();
+    }
+
+    public clear(): void {
+        this.zoneId = -1;
+        this.lightId = -1;
+    }
+
+    public isOutOfArea(): boolean {
+        return this.zoneId < 0;
+    }
+
+    public isTargetArea(lightArea: LightArea): boolean {
+        return this.zoneId === lightArea.zoneId && this.lightId === lightArea.lightId;
+    }
+}
+
+export class LightAreaHolder extends AreaObjMgr<LightArea> {
+    constructor(sceneObjHolder: SceneObjHolder) {
+        super(sceneObjHolder, "LightArea");
+    }
+
+    public initAfterPlacement(): void {
+        this.sort();
+    }
+
+    private sort(): void {
+        // Sort by lowest priority.
+        this.areaObj.sort((a, b) => {
+            return a.priority - b.priority;
+        });
+    }
+
+    public tryFindLightID(dst: ZoneLightId, v: vec3): boolean {
+        const lightArea = this.find_in(v);
+        if (lightArea !== null) {
+            if (dst.isTargetArea(lightArea)) {
+                // No change.
+                return false;
+            } else {
+                dst.zoneId = lightArea.zoneId;
+                dst.lightId = lightArea.lightId;
+                return true;
+            }
+        } else {
+            if (dst.isOutOfArea()) {
+                // No change.
+                dst.clear();
+                return false;
+            } else {
+                dst.clear();
+                return true;
+            }
+        }
+    }
+}
+
+export class LightArea extends AreaObj {
+    public zoneId: number;
+    public lightId: number;
+    public priority: number;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, formType: AreaFormType) {
+        super(zoneAndLayer, sceneObjHolder, infoIter, formType);
+
+        this.zoneId = zoneAndLayer.zoneId;
+        this.lightId = fallback(getJMapInfoArg0(infoIter), -1);
+        this.priority = fallback(getJMapInfoArg1(infoIter), -1);
+
+        sceneObjHolder.lightDirector.lightAreaHolder.entry(this);
+    }
+}
+
+export function createLightCtrlCube(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
+    return new LightArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.CubeGround);
+}
+
+export function createLightCtrlCylinder(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
+    return new LightArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.Cylinder);
 }

@@ -7,6 +7,7 @@ import { Camera } from "../Camera";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { LiveActor } from "./LiveActor";
 import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
+import { JMapInfoIter } from "./JMapInfo";
 
 export const enum MovementType {
 }
@@ -86,6 +87,10 @@ export class NameObj {
         sceneObjHolder.nameObjHolder.add(this);
     }
 
+    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        // Default implementation; nothing.
+    }
+
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
         // Default implementation; nothing.
     }
@@ -109,6 +114,10 @@ export class NameObj {
 
     // Noclip-specific hook to destroy any dynamically created GPU data.
     public destroy(device: GfxDevice): void {
+        // Default implementation; nothing.
+    }
+
+    public requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         // Default implementation; nothing.
     }
 }
@@ -135,11 +144,28 @@ class NameObjExecuteInfo {
     }
 }
 
+export class NameObjGroup<T extends NameObj> extends NameObj {
+    public objArray: T[] = [];
+
+    constructor(sceneObjHolder: SceneObjHolder, name: string, private maxCount: number) {
+        super(sceneObjHolder, name);
+    }
+
+    protected registerObj(obj: T): void {
+        this.objArray.push(obj);
+    }
+}
+
 export class NameObjHolder {
     private nameObjs: NameObj[] = [];
 
     public add(nameObj: NameObj): void {
         this.nameObjs.push(nameObj);
+    }
+
+    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        for (let i = 0; i < this.nameObjs.length; i++)
+            this.nameObjs[i].initAfterPlacement(sceneObjHolder);
     }
 
     public scenarioChanged(sceneObjHolder: SceneObjHolder): void {

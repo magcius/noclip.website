@@ -1,6 +1,6 @@
 
 import { vec3, mat4 } from "gl-matrix";
-import { JMapInfoIter, getJMapInfoScale, getJMapInfoArg0 } from "./JMapInfo";
+import { JMapInfoIter, getJMapInfoScale, getJMapInfoArg0, getJMapInfoArg1 } from "./JMapInfo";
 import { SceneObjHolder, getObjectName } from "./Main";
 import { getJMapInfoTrans, getJMapInfoRotate, ZoneAndLayer } from "./LiveActor";
 import { computeModelMatrixR } from "../MathHelpers";
@@ -14,7 +14,7 @@ interface AreaFormBase {
     isInVolume(v: vec3): boolean;
 }
 
-const enum AreaFormType {
+export const enum AreaFormType {
     Cube,
     CubeGround,
     Sphere,
@@ -55,9 +55,9 @@ class AreaFormCube implements AreaFormBase {
         this.aabb.minX = -0.5 * scratchVec3a[0] * 1000;
         this.aabb.minY = -0.5 * scratchVec3a[1] * 1000;
         this.aabb.minZ = -0.5 * scratchVec3a[2] * 1000;
-        this.aabb.minX =  0.5 * scratchVec3a[0] * 1000;
-        this.aabb.minY =  0.5 * scratchVec3a[1] * 1000;
-        this.aabb.minZ =  0.5 * scratchVec3a[2] * 1000;
+        this.aabb.maxX =  0.5 * scratchVec3a[0] * 1000;
+        this.aabb.maxY =  0.5 * scratchVec3a[1] * 1000;
+        this.aabb.maxZ =  0.5 * scratchVec3a[2] * 1000;
 
         if (type === AreaFormType.CubeGround)
             this.aabb.minY += 0.5 * scratchVec3a[1] * 1000;
@@ -181,6 +181,7 @@ class AreaFormBowl implements AreaFormBase {
 
 export class AreaObj extends NameObj {
     private form: AreaFormBase;
+    private aliveScenario: boolean = true;
 
     constructor(private zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, formType: AreaFormType) {
         super(sceneObjHolder, getObjectName(infoIter));
@@ -199,22 +200,30 @@ export class AreaObj extends NameObj {
         // TODO(jstpierre): Push to AreaObjMgr?
     }
 
+    public scenarioChanged(sceneObjHolder: SceneObjHolder): void {
+        this.aliveScenario = sceneObjHolder.spawner.checkAliveScenario(this.zoneAndLayer);
+    }
+
     public isInVolume(v: vec3): boolean {
-        // TODO(jstpierre): Check alive status?
-        return this.form.isInVolume(v);
+        return this.aliveScenario && this.form.isInVolume(v);
     }
 }
 
-export class LightArea extends AreaObj {
-    public zoneId: number;
-    public lightId: number;
-    public priority: number;
+export class AreaObjMgr<T extends AreaObj> extends NameObj {
+    public areaObj: T[] = [];
 
-    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, formType: AreaFormType) {
-        super(zoneAndLayer, sceneObjHolder, infoIter, formType);
+    constructor(sceneObjHolder: SceneObjHolder, name: string) {
+        super(sceneObjHolder, name);
+    }
 
-        this.zoneId = zoneAndLayer.zoneId;
-        this.lightId = fallback(getJMapInfoArg0(infoIter), -1);
-        this.priority = fallback(getJMapInfoArg0(infoIter), -1);
+    public entry(areaObj: T): void {
+        this.areaObj.push(areaObj);
+    }
+
+    public find_in(v: vec3): T | null {
+        for (let i = 0; i < this.areaObj.length; i++)
+            if (this.areaObj[i].isInVolume(v))
+                return this.areaObj[i];
+        return null;
     }
 }

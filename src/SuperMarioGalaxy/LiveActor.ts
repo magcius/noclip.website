@@ -1,5 +1,5 @@
 
-import { NameObj } from "./NameObj";
+import { NameObj, NameObjGroup } from "./NameObj";
 import { EffectKeeper } from "./EffectSystem";
 import { Spine } from "./Spine";
 import { ActorLightCtrl } from "./LightData";
@@ -364,8 +364,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
 
     public initLightCtrl(sceneObjHolder: SceneObjHolder): void {
         this.actorLightCtrl = new ActorLightCtrl(this);
-        this.actorLightCtrl.initActorLightInfo(sceneObjHolder);
-        this.actorLightCtrl.setDefaultAreaLight(sceneObjHolder);
+        this.actorLightCtrl.init(sceneObjHolder);
     }
 
     public initEffectKeeper(sceneObjHolder: SceneObjHolder, groupName: string | null): void {
@@ -445,20 +444,14 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
             return;
 
         if (this.actorLightCtrl !== null) {
-            this.actorLightCtrl.update();
-
-            const lightInfo = this.actorLightCtrl.getActorLight();
-            if (lightInfo !== null) {
-                // Load the light.
-                lightInfo.setOnModelInstance(this.modelInstance, viewerInput.camera, true);
-            }
+            this.actorLightCtrl.loadLight(this.modelInstance, viewerInput.camera);
         } else {
             // If we don't have an individualized actor light control, then load the default area light.
             // This is basically what DrawBufferExecuter::draw() and DrawBufferGroup::draw() effectively do.
 
             const lightType = sceneObjHolder.sceneNameObjListExecutor.findLightType(this);
             if (lightType !== LightType.None) {
-                const areaLightInfo = sceneObjHolder.lightDataHolder.findDefaultAreaLight(sceneObjHolder);
+                const areaLightInfo = sceneObjHolder.lightDirector.findDefaultAreaLight(sceneObjHolder);
                 const lightInfo = areaLightInfo.getActorLightInfo(lightType);
 
                 // The reason we don't setAmbient here is a bit funky -- normally how this works
@@ -481,29 +474,23 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        if (this.spine !== null) {
-            this.spine.update(getDeltaTimeFrames(viewerInput));
+        if (this.visibleAlive) {
+            const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+
+            if (this.spine !== null)
+                this.spine.update(deltaTimeFrames);
+
+            // updateBinder
+            vec3.scaleAndAdd(this.translation, this.translation, this.velocity, deltaTimeFrames);
+
+            if (this.effectKeeper !== null) {
+                this.effectKeeper.updateSyncBckEffect(sceneObjHolder.effectSystem!);
+                this.effectKeeper.setVisibleScenario(this.visibleAlive && this.visibleScenario);
+            }
+
+            if (this.actorLightCtrl !== null)
+                this.actorLightCtrl.update(sceneObjHolder, false, deltaTimeFrames);
         }
-
-        // updateBinder
-        vec3.scaleAndAdd(this.translation, this.translation, this.velocity, getDeltaTimeFrames(viewerInput));
-
-        if (this.effectKeeper !== null) {
-            this.effectKeeper.updateSyncBckEffect(sceneObjHolder.effectSystem!);
-            this.effectKeeper.setVisibleScenario(this.visibleAlive && this.visibleScenario);
-        }
-    }
-}
-
-export class NameObjGroup<T extends NameObj> extends NameObj {
-    public objArray: T[] = [];
-
-    constructor(sceneObjHolder: SceneObjHolder, name: string, private maxCount: number) {
-        super(sceneObjHolder, name);
-    }
-
-    protected registerObj(obj: T): void {
-        this.objArray.push(obj);
     }
 }
 

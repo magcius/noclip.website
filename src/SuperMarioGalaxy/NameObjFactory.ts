@@ -3,17 +3,19 @@ import * as RARC from '../j3d/rarc';
 
 import { SceneObjHolder } from "./Main";
 import { JMapInfoIter, createCsvParser } from "./JMapInfo";
-import { LiveActor, ZoneAndLayer } from './LiveActor';
+import { ZoneAndLayer } from './LiveActor';
 import { Kinopio, TicoComet, EarthenPipe, StarPiece, CollapsePlane, BlackHole, Peach, PenguinRacer, Penguin, SimpleEffectObj, EffectObjR1000F50, GCaptureTarget, FountainBig, AstroEffectObj, AstroCountDownPlate, Butler, Rosetta, Tico, Sky, Air, ShootingStar, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObj10x10x10SyncClipping, AstroMapObj, EffectObjR100F50SyncClipping, PriorDrawAir, BlueChip, YellowChip, PeachCastleGardenPlanet, SimpleMapObj, CrystalCage, PlanetMap, HatchWaterPlanet, RotateMoveObj, LavaSteam, SignBoard, WoodBox, EffectObjR500F50, SurprisedGalaxy, SuperSpinDriverYellow, SuperSpinDriverGreen, SuperSpinDriverPink, AstroCore, TicoAstro, UFOKinokoUnderConstruction, KinopioAstro, createPurpleCoin, createCoin, createRailCoin, createPurpleRailCoin, requestArchivesCoin, requestArchivesPurpleCoin, createCircleCoinGroup, createPurpleCircleCoinGroup, Fountain, PhantomTorch, RandomEffectObj, OceanWaveFloater, FishGroup, SeaGullGroup, CoconutTreeLeafGroup, AirBubble, AirBubbleGenerator, RailMoveObj, SimpleEnvironmentObj, TreasureBoxCracked, RailPlanetMap } from "./Actors";
 import { OceanBowl } from "./OceanBowl";
 import { WarpPod } from './WarpPod';
+import { NameObj } from './NameObj';
+import { createLightCtrlCylinder, createLightCtrlCube } from './LightData';
 
 export interface NameObjFactory {
-    new(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): LiveActor;
+    new(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj;
     requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void;
 }
 
-export type NameObjFactoryFunc = (zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) => LiveActor;
+export type NameObjFactoryFunc = (zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) => NameObj;
 export type NameObjRequestArchivesFunc = (sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) => void;
 
 export interface NameObjFactoryTableEntry {
@@ -29,18 +31,19 @@ function makeExtraRequestArchivesFunc(extraArchives: string[]): NameObjRequestAr
     };
 }
 
-function E(objName: string, factoryFunc: NameObjFactoryFunc, requestArchivesFunc: NameObjRequestArchivesFunc): NameObjFactoryTableEntry {
+function E(objName: string, factoryFunc: NameObjFactoryFunc, requestArchivesFunc: NameObjRequestArchivesFunc | null = null): NameObjFactoryTableEntry {
     return { objName, factoryFunc, requestArchivesFunc };
 }
 
 function N(objName: string): NameObjFactoryTableEntry {
-    const factoryFunc = null;const requestArchivesFunc = null;
+    const factoryFunc = null;
+    const requestArchivesFunc = null;
     return { objName, factoryFunc, requestArchivesFunc };
 }
 
 function _(objName: string, factory: NameObjFactory, extraRequestArchivesFunc: NameObjRequestArchivesFunc | null = null): NameObjFactoryTableEntry {
     // TODO(jstpierre): Is there a better way to construct dynamically like this? I swear there is.
-    const factoryFunc: NameObjFactoryFunc = function(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): LiveActor {
+    const factoryFunc: NameObjFactoryFunc = function(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
         return new factory(zoneAndLayer, sceneObjHolder, infoIter);
     };
 
@@ -590,6 +593,10 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     // Gravity
     N("GlobalPointGravity"),
     N("GlobalPlaneGravityInBox"),
+
+    // Areas
+    E("LightCtrlCube",              createLightCtrlCube),
+    E("LightCtrlCylinder",          createLightCtrlCylinder),
 ];
 
 export function getNameObjFactoryTableEntry(objName: string, table: NameObjFactoryTableEntry[] = ActorTable): NameObjFactoryTableEntry | null {

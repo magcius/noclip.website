@@ -172,6 +172,10 @@ export function showModel(actor: LiveActor): void {
     actor.visibleModel = true;
 }
 
+export function isHiddenModel(actor: LiveActor): boolean {
+    return !actor.visibleModel;
+}
+
 export function calcMtxAxis(axisX: vec3 | null, axisY: vec3 | null, axisZ: vec3 | null, m: mat4): void {
     if (axisX !== null)
         vec3.set(axisX, m[0], m[1], m[2]);
@@ -2082,10 +2086,6 @@ export class Rosetta extends NPCActor {
         this.initEffectKeeper(sceneObjHolder, null);
 
         this.startAction('WaitA');
-
-        // "Rosetta Encounter" -- she looks dim without this.
-        // Total hack.
-        this.actorLightCtrl!.setAreaLightFromName(sceneObjHolder, `ロゼッタ出会い`);
     }
 }
 
