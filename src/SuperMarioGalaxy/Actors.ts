@@ -2,7 +2,7 @@
 // Misc actors that aren't big enough to have their own file.
 
 import { LightType } from './DrawBuffer';
-import { SceneObjHolder, getObjectName, WorldmapPointInfo, getDeltaTimeFrames, getTimeFrames, Dot, createSceneObj, SceneObj } from './Main';
+import { SceneObjHolder, getObjectName, getDeltaTimeFrames, getTimeFrames, Dot, createSceneObj, SceneObj } from './Main';
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg7, getJMapInfoBool } from './JMapInfo';
 import { mat4, vec3 } from 'gl-matrix';
 import AnimationController from '../AnimationController';
@@ -21,6 +21,7 @@ import { LiveActor, startBck, startBtkIfExist, startBrkIfExist, startBvaIfExist,
 import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType } from './MapParts';
 import { isConnectedWithRail, RailDirection } from './RailRider';
 import { drawWorldSpacePoint, getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
+import { WorldmapPointInfo } from './LegacyActor';
 
 export function connectToScene(sceneObjHolder: SceneObjHolder, actor: LiveActor, movementType: MovementType, calcAnimType: CalcAnimType, drawBufferType: DrawBufferType, drawType: DrawType): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, movementType, calcAnimType, drawBufferType, drawType);

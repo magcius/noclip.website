@@ -5,7 +5,7 @@ import { JMapInfoIter, createCsvParser } from './JMapInfo';
 import { RARC } from '../j3d/rarc';
 
 class SMG1SceneDesc extends SMGSceneDescBase {
-    protected pathBase: string = `SuperMarioGalaxy`;
+    public pathBase: string = `SuperMarioGalaxy`;
     public getLightData(modelCache: ModelCache): JMapInfoIter {
         const lightDataRarc = modelCache.getArchive(`ObjectData/LightData.arc`)!;
         return createCsvParser(lightDataRarc.findFileData(`LightData.bcsv`)!);
