@@ -215,7 +215,7 @@ export class WarpPod extends LiveActor {
     private color: Color;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, "WarpPod");

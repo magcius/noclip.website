@@ -256,7 +256,7 @@ export const enum MessageType {
 }
 
 export class LiveActor<TNerve extends number = number> extends NameObj {
-    public visibleScenario: boolean = true;
+    protected visibleScenario: boolean = true;
     public visibleAlive: boolean = true;
     public visibleModel: boolean = true;
     public boundingSphereRadius: number | null = null;
@@ -276,8 +276,8 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     public scale = vec3.fromValues(1, 1, 1);
     public velocity = vec3.create();
 
-    constructor(public zoneAndLayer: ZoneAndLayer, public name: string) {
-        super(name);
+    constructor(public zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, public name: string) {
+        super(sceneObjHolder, name);
     }
 
     public receiveMessage(msgType: MessageType): boolean {
@@ -290,6 +290,10 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
 
     public makeActorDead(): void {
         this.visibleAlive = false;
+    }
+
+    public scenarioChanged(sceneObjHolder: SceneObjHolder): void {
+        this.visibleScenario = sceneObjHolder.spawner.checkAliveScenario(this.zoneAndLayer);
     }
 
     public setIndirectTextureOverride(sceneTexture: GfxTexture): void {
@@ -424,7 +428,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         }
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public calcViewAndEntry(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         if (this.modelInstance === null)
             return;
 
@@ -435,7 +439,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         this.modelInstance.animationController.setTimeFromViewerInput(viewerInput);
         this.modelInstance.calcAnim(viewerInput.camera);
 
-        const visible = this.getActorVisible(viewerInput.camera) && this.visibleModel;
+        const visible = this.visibleModel && this.getActorVisible(viewerInput.camera);
         this.modelInstance.visible = visible;
         if (!visible)
             return;
@@ -494,8 +498,8 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
 export class NameObjGroup<T extends NameObj> extends NameObj {
     public objArray: T[] = [];
 
-    constructor(name: string, private maxCount: number) {
-        super(name);
+    constructor(sceneObjHolder: SceneObjHolder, name: string, private maxCount: number) {
+        super(sceneObjHolder, name);
     }
 
     protected registerObj(obj: T): void {

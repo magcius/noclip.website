@@ -182,8 +182,8 @@ class AreaFormBowl implements AreaFormBase {
 export class AreaObj extends NameObj {
     private form: AreaFormBase;
 
-    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, formType: AreaFormType) {
-        super(getObjectName(infoIter));
+    constructor(private zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, formType: AreaFormType) {
+        super(sceneObjHolder, getObjectName(infoIter));
 
         if (formType === AreaFormType.Cube)
             this.form = new AreaFormCube(sceneObjHolder, infoIter, AreaFormType.Cube);

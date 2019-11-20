@@ -147,7 +147,7 @@ export class NoclipLegacyActor extends LiveActor {
     private rotateAxis: RotateAxis = RotateAxis.Y;
 
     constructor(zoneAndLayer: ZoneAndLayer, arcName: string, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, tag: SceneGraphTag, public objinfo: ObjInfo) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, arcName);
@@ -284,7 +284,7 @@ export class NoclipLegacyActorSpawner {
             const actor = new NoclipLegacyActor(zoneAndLayer, arcName, this.sceneObjHolder, infoIter, tag, objinfo);
             applyAnimations(actor, animOptions);
 
-            this.sceneObjHolder.spawner.syncActorVisible(actor);
+            actor.scenarioChanged(this.sceneObjHolder);
 
             return [actor, actor.arc];
         };
@@ -631,7 +631,6 @@ export class NoclipLegacyActorSpawner {
             this.placeWorldMap();
             // This zone appears to be toggled at runtime? Not sure how the WorldMap system is implemented...
             this.sceneObjHolder.spawner.zones[1].visible = false;
-            this.sceneObjHolder.spawner.syncActorsVisible();
         }
     }
 

@@ -82,7 +82,8 @@ export function createFilterKeyForDrawType(drawType: DrawType): number {
 export class NameObj {
     public nameObjExecuteInfoIndex: number = -1;
 
-    constructor(public name: string) {
+    constructor(sceneObjHolder: SceneObjHolder, public name: string) {
+        sceneObjHolder.nameObjHolder.add(this);
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
@@ -93,10 +94,20 @@ export class NameObj {
         // Default implementation; nothing.
     }
 
+    public calcViewAndEntry(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+        // Default implementation; nothing.
+    }
+
     public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         // Default implementation; nothing.
     }
 
+    // Noclip-specific hook to implement scenario changing.
+    public scenarioChanged(sceneObjHolder: SceneObjHolder): void {
+        // Default implementation; nothing.
+    }
+
+    // Noclip-specific hook to destroy any dynamically created GPU data.
     public destroy(device: GfxDevice): void {
         // Default implementation; nothing.
     }
@@ -121,6 +132,24 @@ class NameObjExecuteInfo {
             // NameObjListExecutor::registerDrawBuffer
             this.drawBufferIndex = scn.drawBufferHolder.registerDrawBuffer(actor as LiveActor, drawBufferType);
         }
+    }
+}
+
+export class NameObjHolder {
+    private nameObjs: NameObj[] = [];
+
+    public add(nameObj: NameObj): void {
+        this.nameObjs.push(nameObj);
+    }
+
+    public scenarioChanged(sceneObjHolder: SceneObjHolder): void {
+        for (let i = 0; i < this.nameObjs.length; i++)
+            this.nameObjs[i].scenarioChanged(sceneObjHolder);
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.nameObjs.length; i++)
+            this.nameObjs[i].destroy(device);
     }
 }
 
@@ -170,16 +199,15 @@ export class SceneNameObjListExecutor {
             const executeInfo = this.nameObjExecuteInfos[i];
             const nameObj = executeInfo.nameObj;
 
+            if (this.nameObjExecuteInfos[i].drawBufferType !== -1)
+                nameObj.calcViewAndEntry(sceneObjHolder, viewerInput);
+
             if (this.nameObjExecuteInfos[i].drawType !== -1) {
                 // If this is an execute draw, then set up our filter key correctly...
                 const template = renderInstManager.pushTemplateRenderInst();
                 template.filterKey = createFilterKeyForDrawType(executeInfo.drawType);
                 nameObj.draw(sceneObjHolder, renderInstManager, viewerInput);
                 renderInstManager.popTemplateRenderInst();
-            } else {
-                // Otherwise, well, uh, we shouldn't be using this, because DrawBuffer exists,
-                // but oops....
-                nameObj.draw(sceneObjHolder, renderInstManager, viewerInput);
             }
         }
     }
@@ -200,10 +228,5 @@ export class SceneNameObjListExecutor {
                 actor.setIndirectTextureOverride(sceneTexture);
             }
         }
-    }
-
-    public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.nameObjExecuteInfos.length; i++)
-            this.nameObjExecuteInfos[i].nameObj.destroy(device);
     }
 }

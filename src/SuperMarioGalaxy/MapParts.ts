@@ -107,8 +107,8 @@ export class MapPartsRotator extends NameObj {
     private baseHostMtx = mat4.create();
     public mtx = mat4.create();
 
-    constructor(private actor: LiveActor, infoIter: JMapInfoIter) {
-        super('MapPartsRotator');
+    constructor(sceneObjHolder: SceneObjHolder, private actor: LiveActor, infoIter: JMapInfoIter) {
+        super(sceneObjHolder, 'MapPartsRotator');
 
         this.spine = new Spine<MapPartsRotatorNrv>();
 
@@ -287,8 +287,8 @@ export class MapPartsRailMover extends NameObj {
     public spine: Spine<MapPartsRailMoverNrv>;
     public mtx = mat4.create();
 
-    constructor(private actor: LiveActor, infoIter: JMapInfoIter) {
-        super('MapPartsRailMover');
+    constructor(sceneObjHolder: SceneObjHolder, private actor: LiveActor, infoIter: JMapInfoIter) {
+        super(sceneObjHolder, 'MapPartsRailMover');
 
         this.passChecker = new MapPartsRailPointPassChecker(this.actor);
         this.spine = new Spine<MapPartsRailMoverNrv>();

@@ -2,12 +2,12 @@
 // Misc actors that aren't big enough to have their own file.
 
 import { LightType } from './DrawBuffer';
-import { SceneObjHolder, getObjectName, getDeltaTimeFrames, getTimeFrames, Dot, createSceneObj, SceneObj } from './Main';
+import { SceneObjHolder, getObjectName, getDeltaTimeFrames, getTimeFrames, createSceneObj, SceneObj } from './Main';
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg7, getJMapInfoBool } from './JMapInfo';
 import { mat4, vec3 } from 'gl-matrix';
 import AnimationController from '../AnimationController';
 import { MathConstants, computeModelMatrixSRT, clamp, lerp, normToLength, clampRange, isNearZeroVec3 } from '../MathHelpers';
-import { colorNewFromRGBA8, Color, Magenta, Green, Red, Blue } from '../Color';
+import { colorNewFromRGBA8, Color } from '../Color';
 import { ColorKind } from '../gx/gx_render';
 import { BTK, BRK, LoopMode, BTP, BTI } from '../j3d/j3d';
 import * as Viewer from '../viewer';
@@ -20,7 +20,6 @@ import { isGreaterStep, isFirstStep, calcNerveRate } from './Spine';
 import { LiveActor, startBck, startBtkIfExist, startBrkIfExist, startBvaIfExist, startBpkIfExist, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpawnZoneAndLayer, startBckIfExist, MessageType } from './LiveActor';
 import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType } from './MapParts';
 import { isConnectedWithRail, RailDirection } from './RailRider';
-import { drawWorldSpacePoint, getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
 import { WorldmapPointInfo } from './LegacyActor';
 
 export function connectToScene(sceneObjHolder: SceneObjHolder, actor: LiveActor, movementType: MovementType, calcAnimType: CalcAnimType, drawBufferType: DrawBufferType, drawType: DrawType): void {
@@ -108,11 +107,11 @@ export function connectToScenePlanet(sceneObjHolder: SceneObjHolder, actor: Live
 }
 
 export function connectToSceneEnvironment(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x21, 4, DrawBufferType.ENVIRONMENT, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x21, 0x04, DrawBufferType.ENVIRONMENT, -1);
 }
 
 export function connectToSceneEnvironmentStrongLight(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x21, 4, DrawBufferType.ENVIRONMENT_STRONG_LIGHT, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x21, 0x04, DrawBufferType.ENVIRONMENT_STRONG_LIGHT, -1);
 }
 
 export function connectToSceneEnemyMovement(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
@@ -624,7 +623,7 @@ class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
     protected railMover: MapPartsRailMover | null = null;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, initInfo: MapObjActorInitInfo) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         this.objName = this.name;
         if (initInfo.modelName !== null)
@@ -645,9 +644,9 @@ class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
         if (connectedWithRail)
             this.initRailRider(sceneObjHolder, infoIter);
         if (connectedWithRail && initInfo.railMover)
-            this.railMover = new MapPartsRailMover(this, infoIter);
+            this.railMover = new MapPartsRailMover(sceneObjHolder, this, infoIter);
         if (initInfo.rotator)
-            this.rotator = new MapPartsRotator(this, infoIter);
+            this.rotator = new MapPartsRotator(sceneObjHolder, this, infoIter);
 
         this.tryStartAllAnim(this.objName);
         if (initInfo.colorChangeFrame !== -1)
@@ -744,10 +743,16 @@ export class SimpleEnvironmentObj extends MapObjActor {
 
 export class ModelObj extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, objName: string, modelName: string, private transformMatrix: mat4 | null, drawBufferType: DrawBufferType, movementType: MovementType, calcAnimType: CalcAnimType) {
-        super(zoneAndLayer, objName);
+        super(zoneAndLayer, sceneObjHolder, objName);
         this.initModelManagerWithAnm(sceneObjHolder, modelName);
         if (this.transformMatrix !== null)
             mat4.getTranslation(this.translation, this.transformMatrix);
+        if (movementType < -1)
+            movementType = 0x08;
+        if (calcAnimType < -1)
+            calcAnimType = 0x23;
+        if (drawBufferType < -1)
+            drawBufferType = DrawBufferType.NO_SHADOWED_MAP_OBJ;
         connectToScene(sceneObjHolder, this, movementType, calcAnimType, drawBufferType, -1);
     }
 
@@ -893,7 +898,7 @@ export class PlanetMap extends LiveActor {
     private indirectModel: PartsModel | null = null;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModel(sceneObjHolder, this.name, infoIter);
@@ -998,7 +1003,7 @@ class PartsModel extends LiveActor {
     public fixedPosition: FixedPosition | null = null;
 
     constructor(sceneObjHolder: SceneObjHolder, objName: string, modelName: string, private parentActor: LiveActor, drawBufferType: DrawBufferType) {
-        super(parentActor.zoneAndLayer, objName);
+        super(parentActor.zoneAndLayer, sceneObjHolder, objName);
         this.initModelManagerWithAnm(sceneObjHolder, modelName);
         this.initEffectKeeper(sceneObjHolder, null);
 
@@ -1049,7 +1054,7 @@ const starPieceColorTable = [
 
 export class StarPiece extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, this.name);
@@ -1081,7 +1086,7 @@ export class EarthenPipe extends LiveActor {
     private origTranslation = vec3.create();
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, "EarthenPipe");
@@ -1149,7 +1154,7 @@ export class BlackHole extends LiveActor {
     private effectHostMtx = mat4.create();
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, 'BlackHoleRange');
@@ -1223,7 +1228,7 @@ export class PeachCastleGardenPlanet extends MapObjActor {
 
 export class HatchWaterPlanet extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, 'HatchWaterPlanet');
@@ -1237,7 +1242,7 @@ export class HatchWaterPlanet extends LiveActor {
 
 export class Kinopio extends NPCActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         this.initDefaultPos(sceneObjHolder, infoIter);
         vec3.set(this.scale, 1.2, 1.2, 1.2);
@@ -1311,7 +1316,7 @@ export class KinopioAstro extends Kinopio {
 
 export class Peach extends NPCActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         const objName = this.name;
         this.initDefaultPos(sceneObjHolder, infoIter);
@@ -1338,7 +1343,7 @@ export class Penguin extends NPCActor<PenguinNrv> {
     private diveCounter: number = 0;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         const objName = this.name;
         this.initDefaultPos(sceneObjHolder, infoIter);
@@ -1407,7 +1412,7 @@ export class Penguin extends NPCActor<PenguinNrv> {
 
 export class PenguinRacer extends NPCActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, "Penguin");
@@ -1433,7 +1438,7 @@ export class PenguinRacer extends NPCActor {
 
 export class TicoComet extends NPCActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         const objName = this.name;
         this.initDefaultPos(sceneObjHolder, infoIter);
@@ -1472,7 +1477,7 @@ class Coin extends LiveActor {
     private airBubble: PartsModel | null = null;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, protected isPurpleCoin: boolean) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, this.isPurpleCoin ? 'PurpleCoin' : 'Coin');
@@ -1528,7 +1533,7 @@ abstract class CoinGroup extends LiveActor {
     protected coinArray: Coin[] = [];
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, protected isPurpleCoin: boolean) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         const coinCount = fallback(getJMapInfoArg0(infoIter), 0);
 
@@ -1646,7 +1651,7 @@ export function createPurpleCircleCoinGroup(zoneAndLayer: ZoneAndLayer, sceneObj
 
 export class MiniRoutePoint extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, pointInfo: WorldmapPointInfo) {
-        super(zoneAndLayer, 'MiniRoutePoint');
+        super(zoneAndLayer, sceneObjHolder, 'MiniRoutePoint');
         this.initModelManagerWithAnm(sceneObjHolder, 'MiniRoutePoint');
         vec3.copy(this.translation, pointInfo.position);
 
@@ -1667,7 +1672,7 @@ export class MiniRouteGalaxy extends LiveActor {
     private rotateSpeed: number;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, pointInfo: WorldmapPointInfo) {
-        super(zoneAndLayer, 'MiniRouteGalaxy');
+        super(zoneAndLayer, sceneObjHolder, 'MiniRouteGalaxy');
 
         const miniatureName = assertExists(infoIter.getValueString('MiniatureName'));
         const miniatureType = assertExists(infoIter.getValueString('StageType'));
@@ -1706,7 +1711,7 @@ export class MiniRouteGalaxy extends LiveActor {
 
 export class MiniRoutePart extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, pointInfo: WorldmapPointInfo) {
-        super(zoneAndLayer, 'MiniRoutePart');
+        super(zoneAndLayer, sceneObjHolder, 'MiniRoutePart');
 
         const partsTypeName = infoIter.getValueString('PartsTypeName');
         let modelName: string;
@@ -1744,7 +1749,7 @@ export class SimpleEffectObj extends LiveActor {
     private isVisible: boolean = true;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
         this.initDefaultPos(sceneObjHolder, infoIter);
 
         if (sceneObjHolder.effectSystem === null)
@@ -1903,7 +1908,7 @@ export class RandomEffectObj extends SimpleEffectObj {
 
 export class GCaptureTarget extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
         this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, "GCaptureTarget");
         connectToSceneNoSilhouettedMapObjStrongLight(sceneObjHolder, this);
@@ -1925,7 +1930,7 @@ export class FountainBig extends LiveActor<FountainBigNrv> {
     private randomPhase: number = 0;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
         this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, "FountainBig");
         connectToSceneMapObj(sceneObjHolder, this);
@@ -2005,7 +2010,7 @@ export class FountainBig extends LiveActor<FountainBigNrv> {
 
 export class Fountain extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
         this.initDefaultPos(sceneObjHolder, infoIter);
         connectToSceneMapObjMovement(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, getObjectName(infoIter));
@@ -2019,7 +2024,7 @@ export class Fountain extends LiveActor {
 
 export class PhantomTorch extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
         this.initDefaultPos(sceneObjHolder, infoIter);
         connectToSceneMapObjMovement(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, getObjectName(infoIter));
@@ -2038,7 +2043,7 @@ export class AstroEffectObj extends SimpleEffectObj {
 
 export class AstroCountDownPlate extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, "AstroCountDownPlate");
@@ -2051,10 +2056,8 @@ export class AstroCountDownPlate extends LiveActor {
 }
 
 export class Butler extends NPCActor {
-    private dot: Dot | null = null;
-
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, 'Butler');
@@ -2065,24 +2068,12 @@ export class Butler extends NPCActor {
         const location = getJMapInfoArg0(infoIter);
 
         this.startAction('Wait');
-
-        // this.dot = sceneObjHolder.uiSystem.createDot();
-    }
-
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
-
-        if (this.dot !== null) {
-            vec3.copy(scratchVec3, this.translation);
-            scratchVec3[1] += 50;
-            this.dot.setWorldPosition(viewerInput.camera, scratchVec3);
-        }
     }
 }
 
 export class Rosetta extends NPCActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, 'Rosetta');
@@ -2100,7 +2091,7 @@ export class Rosetta extends NPCActor {
 
 export class Tico extends NPCActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, 'Tico');
@@ -2129,7 +2120,7 @@ export class Sky extends LiveActor {
     private isSkybox = true;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, this.name);
@@ -2152,7 +2143,7 @@ export class Air extends LiveActor<AirNrv> {
     private distOutThresholdSq: number;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, this.name);
@@ -2204,7 +2195,7 @@ export class ShootingStar extends LiveActor<ShootingStarNrv> {
     private initialTranslation = vec3.create();
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         this.initModelManagerWithAnm(sceneObjHolder, this.name);
         connectToSceneMapObj(sceneObjHolder, this);
@@ -2370,7 +2361,7 @@ class ChipBase extends LiveActor {
     private airBubble: PartsModel | null = null;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, modelName: string) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, modelName);
@@ -2411,7 +2402,7 @@ export class CrystalCage extends LiveActor {
     private size: CrystalCageSize;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         this.initDefaultPos(sceneObjHolder, infoIter);
 
@@ -2437,7 +2428,7 @@ export class LavaSteam extends LiveActor<LavaSteamNrv> {
     private effectScale = vec3.create();
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, 'LavaSteam');
@@ -2486,7 +2477,7 @@ export class LavaSteam extends LiveActor<LavaSteamNrv> {
 
 export class SignBoard extends NPCActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         const objName = this.name;
         this.initDefaultPos(sceneObjHolder, infoIter);
@@ -2497,7 +2488,7 @@ export class SignBoard extends NPCActor {
 
 export class WoodBox extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, "WoodBox");
@@ -2509,7 +2500,7 @@ export class WoodBox extends LiveActor {
 
 export class SurprisedGalaxy extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, "MiniSurprisedGalaxy");
@@ -2524,7 +2515,7 @@ export class SurprisedGalaxy extends LiveActor {
 
 abstract class SuperSpinDriver extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, "SuperSpinDriver");
@@ -2665,7 +2656,7 @@ class Fish extends LiveActor<FishNrv> {
     private approachThreshold: number;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, private fishGroup: FishGroup, modelName: string) {
-        super(zoneAndLayer, modelName);
+        super(zoneAndLayer, sceneObjHolder, modelName);
 
         vec3.set(this.offset, getRandomFloat(-150, 150), getRandomFloat(-150, 150), getRandomFloat(-150, 150));
         this.approachThreshold = getRandomFloat(100, 500);
@@ -2757,7 +2748,7 @@ export class FishGroup extends LiveActor {
     public upVec = vec3.create();
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         const fishCount = fallback(getJMapInfoArg0(infoIter), 10);
 
@@ -2824,7 +2815,7 @@ class SeaGull extends LiveActor<SeaGullNrv> {
     private maintainHeightCounter: number = 0;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, private seaGullGroup: SeaGullGroup, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         this.initDefaultPos(sceneObjHolder, infoIter);
         calcActorAxis(this.axisX, this.axisY, this.axisZ, this);
@@ -2974,7 +2965,7 @@ export class SeaGullGroup extends LiveActor {
     public points: vec3[] = [];
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         const seaGullCount = fallback(getJMapInfoArg0(infoIter), 10);
 
@@ -3016,7 +3007,7 @@ class CoconutTreeLeaf extends LiveActor {
     private accel = vec3.create();
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, private leafGroup: CoconutTreeLeafGroup, private jointMtx: mat4, private treeAxisZ: vec3) {
-        super(zoneAndLayer, 'CoconutTreeLeaf');
+        super(zoneAndLayer, sceneObjHolder, 'CoconutTreeLeaf');
 
         calcMtxAxis(this.axisX, this.axisY, this.axisZ, this.jointMtx);
         vec3.copy(this.upVec, this.axisY);
@@ -3086,7 +3077,7 @@ export class CoconutTreeLeafGroup extends LiveActor {
     private axisZ = vec3.fromValues(0, 0, 1);
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         this.initDefaultPos(sceneObjHolder, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, 'CoconutTreeLeaf');
@@ -3131,7 +3122,7 @@ export class AirBubble extends LiveActor<AirBubbleNrv> {
     private accel = vec3.create();
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter | null) {
-        super(zoneAndLayer, `AirBubble`);
+        super(zoneAndLayer, sceneObjHolder, `AirBubble`);
 
         this.initDefaultPos(sceneObjHolder, infoIter);
         vec3.copy(this.spawnLocation, this.translation);
@@ -3195,7 +3186,7 @@ export class AirBubble extends LiveActor<AirBubbleNrv> {
 
 export class AirBubbleHolder extends LiveActorGroup<AirBubble> {
     constructor(sceneObjHolder: SceneObjHolder) {
-        super('AirBubbleHolder', 0x40);
+        super(sceneObjHolder, 'AirBubbleHolder', 0x40);
 
         for (let i = 0; i < 0x20; i++) {
             const bubble = new AirBubble(dynamicSpawnZoneAndLayer, sceneObjHolder, null);
@@ -3222,7 +3213,7 @@ export class AirBubbleGenerator extends LiveActor<AirBubbleGeneratorNrv> {
     private lifetime: number;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         createSceneObj(sceneObjHolder, SceneObj.AIR_BUBBLE_HOLDER);
 
@@ -3273,7 +3264,7 @@ export class TreasureBoxCracked extends LiveActor<TreasureBoxNrv> {
     private type: TreasureBoxType;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         this.initDefaultPos(sceneObjHolder, infoIter);
 

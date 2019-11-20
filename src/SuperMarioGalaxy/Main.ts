@@ -3,8 +3,8 @@ import { mat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assert, assertExists, align, nArray, fallback } from '../util';
 import { DataFetcher, DataFetcherFlags, AbortedCallback } from '../DataFetcher';
-import { MathConstants, computeModelMatrixSRT, computeNormalMatrix, clamp } from '../MathHelpers';
-import { Camera, computeClipSpacePointFromWorldSpacePoint, texProjCameraSceneTex } from '../Camera';
+import { MathConstants, computeModelMatrixSRT, computeNormalMatrix } from '../MathHelpers';
+import { Camera, texProjCameraSceneTex } from '../Camera';
 import { SceneContext } from '../SceneBase';
 import * as Viewer from '../viewer';
 import * as UI from '../ui';
@@ -28,7 +28,7 @@ import { BMDModel, MaterialInstance } from '../j3d/render';
 import { JMapInfoIter, createCsvParser, getJMapInfoTransLocal, getJMapInfoRotateLocal, getJMapInfoScale } from './JMapInfo';
 import { BloomPostFXParameters, BloomPostFXRenderer } from './Bloom';
 import { LightDataHolder } from './LightData';
-import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType } from './NameObj';
+import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType, NameObj, NameObjHolder } from './NameObj';
 import { EffectSystem } from './EffectSystem';
 
 import { NPCDirector, AirBubbleHolder } from './Actors';
@@ -47,8 +47,6 @@ export function getDeltaTimeFrames(viewerInput: Viewer.ViewerRenderInput): numbe
 export function getTimeFrames(viewerInput: Viewer.ViewerRenderInput): number {
     return viewerInput.time * FPS_RATE;
 }
-
-const scratchVec3 = vec3.create();
 
 class SMGRenderer implements Viewer.SceneGfx {
     private bloomRenderer: BloomPostFXRenderer;
@@ -81,7 +79,8 @@ class SMGRenderer implements Viewer.SceneGfx {
         }
 
         this.spawner.zones[0].computeZoneVisibility();
-        this.spawner.syncActorsVisible();
+
+        this.sceneObjHolder.nameObjHolder.scenarioChanged(this.sceneObjHolder);
     }
 
     public setCurrentScenario(index: number): void {
@@ -688,95 +687,6 @@ class CaptureSceneDirector {
     }
 }
 
-export class Dot {
-    public elem: HTMLElement;
-
-    private x: number = 0;
-    private y: number = 0;
-    private radius: number = 0;
-
-    public minRadius = 4;
-    public maxRadius = 50;
-
-    constructor(private uiSystem: UISystem) {
-        this.elem = document.createElement('div');
-        this.elem.style.position = 'absolute';
-        this.elem.style.borderRadius = '100%';
-        this.elem.style.backgroundColor = '#ff00ff';
-        this.elem.style.pointerEvents = 'auto';
-        this.elem.style.cursor = 'pointer';
-        this.elem.style.transition = 'background-color .15s ease-out';
-        this.elem.style.boxShadow = '0px 0px 10px rgba(0, 0, 0, 0.6)';
-        this.elem.onmouseover = () => {
-            this.elem.style.backgroundColor = 'white';
-        };
-        this.elem.onmouseout = () => {
-            this.elem.style.backgroundColor = '#ff00ff';
-        };
-
-        this.uiSystem.uiContainer.appendChild(this.elem);
-    }
-
-    public setWorldPosition(camera: Camera, translation: vec3): void {
-        computeClipSpacePointFromWorldSpacePoint(scratchVec3, camera, translation);
-
-        const screenX = this.uiSystem.convertViewToScreenX(scratchVec3[0]);
-        const screenY = this.uiSystem.convertViewToScreenY(scratchVec3[1]);
-        const radiusRamp = (1.0 - scratchVec3[2]);
-        const radius = clamp(this.maxRadius * radiusRamp, this.minRadius, this.maxRadius);
-        const visible = scratchVec3[2] <= 1.0;
-        this.setScreenPosition(screenX, screenY, radius, visible);
-    }
-
-    private setScreenPosition(x: number, y: number, radius: number, visible: boolean): void {
-        if (visible) {
-            if (x === this.x && y === this.y && radius === this.radius)
-                return;
-
-            this.x = x;
-            this.y = y;
-            this.radius = radius;
-
-            // Clip.
-            const padLeft = radius;
-            const padRight = -radius;
-            const padTop = radius;
-            const padBottom = -radius;
-            visible = (((this.x + padLeft) > 0) && ((this.x + padRight) < this.uiSystem.convertViewToScreenX(1.0)) &&
-                       ((this.y + padTop) > 0) && ((this.y + padBottom) < this.uiSystem.convertViewToScreenY(-1.0)));
-        }
-
-        if (visible) {
-            this.elem.style.left = `${x - radius}px`;
-            this.elem.style.top = `${y - radius}px`;
-            this.elem.style.width = `${radius * 2}px`;
-            this.elem.style.height = `${radius * 2}px`;
-            this.elem.style.display = 'block';
-        } else {
-            this.elem.style.display = 'none';
-        }
-    }
-}
-
-export class UISystem {
-    constructor(public uiContainer: HTMLElement) {
-    }
-
-    public convertViewToScreenX(v: number) {
-        const w = window.innerWidth;
-        return (v * 0.5 + 0.5) * w;
-    }
-
-    public convertViewToScreenY(v: number) {
-        const h = window.innerHeight;
-        return (-v * 0.5 + 0.5) * h;
-    }
-
-    public createDot(): Dot {
-        return new Dot(this);
-    }
-}
-
 export const enum SceneObj {
     AIR_BUBBLE_HOLDER = 0x39,
 }
@@ -799,8 +709,7 @@ export class SceneObjHolder {
     // This is technically stored outside the SceneObjHolder, separately
     // on the same singleton, but c'est la vie...
     public sceneNameObjListExecutor = new SceneNameObjListExecutor();
-
-    public uiSystem: UISystem;
+    public nameObjHolder = new NameObjHolder();
 
     public create(sceneObj: SceneObj): void {
         if (this.getObj(sceneObj) === null)
@@ -814,13 +723,12 @@ export class SceneObjHolder {
     }
 
     public newEachObj(sceneObj: SceneObj): void {
-        if (sceneObj === SceneObj.AIR_BUBBLE_HOLDER) {
+        if (sceneObj === SceneObj.AIR_BUBBLE_HOLDER)
             this.airBubbleHolder = new AirBubbleHolder(this);
-        }
     }
 
     public destroy(device: GfxDevice): void {
-        this.sceneNameObjListExecutor.destroy(device);
+        this.nameObjHolder.destroy(device);
 
         if (this.effectSystem !== null)
             this.effectSystem.destroy(device);
@@ -877,25 +785,6 @@ class SMGSpawner {
 
     constructor(private sceneObjHolder: SceneObjHolder) {
         this.legacySpawner = new NoclipLegacyActorSpawner(this.sceneObjHolder);
-    }
-
-    private zoneAndLayerVisible(zoneAndLayer: ZoneAndLayer): boolean {
-        // Dynamic zones are always visible.
-        if (zoneAndLayer.zoneId < 0) {
-            assert(zoneAndLayer.layerId < 0);
-            return true;
-        }
-        const zone = this.zones[zoneAndLayer.zoneId];
-        return zone.visible && zone.layerVisible && layerVisible(zoneAndLayer.layerId, zone.layerMask);
-    }
-
-    public syncActorVisible(obj: LiveActor): void {
-        obj.visibleScenario = this.zoneAndLayerVisible(obj.zoneAndLayer);
-    }
-
-    public syncActorsVisible(): void {
-        for (let i = 0; i < this.sceneObjHolder.sceneNameObjListExecutor.nameObjExecuteInfos.length; i++)
-            this.syncActorVisible(this.sceneObjHolder.sceneNameObjListExecutor.nameObjExecuteInfos[i].nameObj as LiveActor);
     }
 
     private getActorTableEntry(objName: string): NameObjFactoryTableEntry | null {
@@ -973,6 +862,17 @@ class SMGSpawner {
     public requestArchives(): void {
         this.requestArchivesForStageDataHolder(this.sceneObjHolder.stageDataHolder);
         this.legacySpawner.requestArchives(this.sceneObjHolder);
+    }
+
+    public checkAliveScenario(zoneAndLayer: ZoneAndLayer): boolean {
+        // Dynamic zones are always visible.
+        if (zoneAndLayer.zoneId < 0) {
+            assert(zoneAndLayer.layerId < 0);
+            return true;
+        }
+
+        const zone = this.zones[zoneAndLayer.zoneId];
+        return zone.visible && zone.layerVisible && layerVisible(zoneAndLayer.layerId, zone.layerMask);
     }
 }
 
@@ -1260,7 +1160,6 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         const sceneObjHolder = new SceneObjHolder();
         sceneObjHolder.sceneDesc = this;
         sceneObjHolder.modelCache = modelCache;
-        sceneObjHolder.uiSystem = new UISystem(context.uiContainer);
         context.destroyablePool.push(sceneObjHolder);
 
         await modelCache.waitForLoad();

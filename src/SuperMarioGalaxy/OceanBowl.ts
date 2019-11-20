@@ -85,7 +85,7 @@ export class OceanBowl extends LiveActor {
     private tex4Scale = 0.04;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         connectToScene(sceneObjHolder, this, 0x22, -1, -1, DrawType.OCEAN_BOWL);
         this.initDefaultPos(sceneObjHolder, infoIter);
