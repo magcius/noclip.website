@@ -1709,7 +1709,7 @@ class StatisticsPanel extends Panel {
             this.fpsPoints[i] = this.history[i] !== undefined ? this.history[i].fps : 0;
         }
 
-        this.fpsGraph.beginDraw(440, 200);
+        this.fpsGraph.beginDraw(this.elem.offsetWidth, this.elem.offsetHeight);
         this.fpsGraph.drawPoints(this.fpsPoints, this.fpsColor);
 
         this.fpsGraph.drawText(`FPS: ${renderStatistics.fps | 0}`);
@@ -2146,10 +2146,10 @@ class TimeScrubber implements Widget {
     }
 
     protected drawTrack(sceneTime: number): void {
-        const w = this.toplevel.offsetWidth;
-        const h = this.toplevel.offsetHeight;
-        this.track.width = w;
-        this.track.height = h;
+        Viewer.resizeCanvas(this.track, this.toplevel.offsetWidth, this.toplevel.offsetHeight, window.devicePixelRatio);
+
+        const w = this.track.width;
+        const h = this.track.height;
 
         const ctx = this.track.getContext('2d')!;
 

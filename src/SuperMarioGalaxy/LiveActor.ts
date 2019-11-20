@@ -11,7 +11,6 @@ import { JMapInfoIter, createCsvParser, getJMapInfoScale, getJMapInfoTransLocal,
 import { TextureMapping } from "../TextureHolder";
 import { computeModelMatrixSRT, computeEulerAngleRotationFromSRTMatrix } from "../MathHelpers";
 import { Camera } from "../Camera";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { LightType } from "./DrawBuffer";
 
 import { BMDModelInstance } from "../j3d/render";

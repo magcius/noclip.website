@@ -1,12 +1,12 @@
 
-import { vec3, mat4 } from "gl-matrix";
+import { vec3 } from "gl-matrix";
 import { colorNew, colorCopy, colorFromRGBA, Color, colorLerp } from "../Color";
 import { Camera } from "../Camera";
 import { Light } from "../gx/gx_material";
 import { BMDModelInstance } from "../j3d/render";
-import { JMapInfoIter, getJMapInfoBool, getJMapInfoArg0, getJMapInfoArg1 } from "./JMapInfo";
+import { JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1 } from "./JMapInfo";
 import { LightType } from "./DrawBuffer";
-import { SceneObjHolder, SceneObj } from "./Main";
+import { SceneObjHolder } from "./Main";
 import { ColorKind } from "../gx/gx_render";
 import { LiveActor, ZoneAndLayer } from "./LiveActor";
 import { assertExists, fallback } from "../util";
