@@ -45,7 +45,7 @@ export class RARC {
     }
 
     public findDir(path: string): RARCDir | null {
-        return this.findDirParts(path.split('/'));
+        return this.findDirParts(path.toLowerCase().split('/'));
     }
 
     public findFile(path: string): RARCFile | null {

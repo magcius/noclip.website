@@ -924,6 +924,13 @@ export class PlanetMap extends LiveActor {
     }
 }
 
+export class RailPlanetMap extends PlanetMap {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, infoIter);
+        this.initRailRider(sceneObjHolder, infoIter);
+    }
+}
+
 class NPCActor<TNerve extends number = number> extends LiveActor<TNerve> {
     public goods0: PartsModel | null = null;
     public goods1: PartsModel | null = null;

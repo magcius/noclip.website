@@ -4,7 +4,7 @@ import * as RARC from '../j3d/rarc';
 import { SceneObjHolder } from "./Main";
 import { JMapInfoIter, createCsvParser } from "./JMapInfo";
 import { LiveActor, ZoneAndLayer } from './LiveActor';
-import { Kinopio, TicoComet, EarthenPipe, StarPiece, CollapsePlane, BlackHole, Peach, PenguinRacer, Penguin, SimpleEffectObj, EffectObjR1000F50, GCaptureTarget, FountainBig, AstroEffectObj, AstroCountDownPlate, Butler, Rosetta, Tico, Sky, Air, ShootingStar, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObj10x10x10SyncClipping, AstroMapObj, EffectObjR100F50SyncClipping, PriorDrawAir, BlueChip, YellowChip, PeachCastleGardenPlanet, SimpleMapObj, CrystalCage, PlanetMap, HatchWaterPlanet, RotateMoveObj, LavaSteam, SignBoard, WoodBox, EffectObjR500F50, SurprisedGalaxy, SuperSpinDriverYellow, SuperSpinDriverGreen, SuperSpinDriverPink, AstroCore, TicoAstro, UFOKinokoUnderConstruction, KinopioAstro, createPurpleCoin, createCoin, createRailCoin, createPurpleRailCoin, requestArchivesCoin, requestArchivesPurpleCoin, createCircleCoinGroup, createPurpleCircleCoinGroup, Fountain, PhantomTorch, RandomEffectObj, OceanWaveFloater, FishGroup, SeaGullGroup, CoconutTreeLeafGroup, AirBubble, AirBubbleGenerator, RailMoveObj, SimpleEnvironmentObj, TreasureBoxCracked } from "./Actors";
+import { Kinopio, TicoComet, EarthenPipe, StarPiece, CollapsePlane, BlackHole, Peach, PenguinRacer, Penguin, SimpleEffectObj, EffectObjR1000F50, GCaptureTarget, FountainBig, AstroEffectObj, AstroCountDownPlate, Butler, Rosetta, Tico, Sky, Air, ShootingStar, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObj10x10x10SyncClipping, AstroMapObj, EffectObjR100F50SyncClipping, PriorDrawAir, BlueChip, YellowChip, PeachCastleGardenPlanet, SimpleMapObj, CrystalCage, PlanetMap, HatchWaterPlanet, RotateMoveObj, LavaSteam, SignBoard, WoodBox, EffectObjR500F50, SurprisedGalaxy, SuperSpinDriverYellow, SuperSpinDriverGreen, SuperSpinDriverPink, AstroCore, TicoAstro, UFOKinokoUnderConstruction, KinopioAstro, createPurpleCoin, createCoin, createRailCoin, createPurpleRailCoin, requestArchivesCoin, requestArchivesPurpleCoin, createCircleCoinGroup, createPurpleCircleCoinGroup, Fountain, PhantomTorch, RandomEffectObj, OceanWaveFloater, FishGroup, SeaGullGroup, CoconutTreeLeafGroup, AirBubble, AirBubbleGenerator, RailMoveObj, SimpleEnvironmentObj, TreasureBoxCracked, RailPlanetMap } from "./Actors";
 import { OceanBowl } from "./OceanBowl";
 import { WarpPod } from './WarpPod';
 
@@ -16,7 +16,7 @@ export interface NameObjFactory {
 export type NameObjFactoryFunc = (zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) => LiveActor;
 export type NameObjRequestArchivesFunc = (sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) => void;
 
-export interface ActorTableEntry {
+export interface NameObjFactoryTableEntry {
     objName: string;
     factoryFunc: NameObjFactoryFunc | null;
     requestArchivesFunc: NameObjRequestArchivesFunc | null;
@@ -29,16 +29,16 @@ function makeExtraRequestArchivesFunc(extraArchives: string[]): NameObjRequestAr
     };
 }
 
-function E(objName: string, factoryFunc: NameObjFactoryFunc, requestArchivesFunc: NameObjRequestArchivesFunc): ActorTableEntry {
+function E(objName: string, factoryFunc: NameObjFactoryFunc, requestArchivesFunc: NameObjRequestArchivesFunc): NameObjFactoryTableEntry {
     return { objName, factoryFunc, requestArchivesFunc };
 }
 
-function N(objName: string): ActorTableEntry {
+function N(objName: string): NameObjFactoryTableEntry {
     const factoryFunc = null;const requestArchivesFunc = null;
     return { objName, factoryFunc, requestArchivesFunc };
 }
 
-function _(objName: string, factory: NameObjFactory, extraRequestArchivesFunc: NameObjRequestArchivesFunc | null = null): ActorTableEntry {
+function _(objName: string, factory: NameObjFactory, extraRequestArchivesFunc: NameObjRequestArchivesFunc | null = null): NameObjFactoryTableEntry {
     // TODO(jstpierre): Is there a better way to construct dynamically like this? I swear there is.
     const factoryFunc: NameObjFactoryFunc = function(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): LiveActor {
         return new factory(zoneAndLayer, sceneObjHolder, infoIter);
@@ -57,7 +57,7 @@ function _(objName: string, factory: NameObjFactory, extraRequestArchivesFunc: N
     return { objName, factoryFunc, requestArchivesFunc };
 }
 
-const ActorTable: ActorTableEntry[] = [
+const ActorTable: NameObjFactoryTableEntry[] = [
     // Environment
     _("FishGroupA",                     FishGroup),
     _("FishGroupB",                     FishGroup),
@@ -561,7 +561,7 @@ const ActorTable: ActorTableEntry[] = [
     N("RunawayRabbitCollect"),
     N("GroupSwitchWatcher"),
 
-   // Cutscenes
+    // Cutscenes
     N("OpeningDemoObj"),
     N("NormalEndingDemoObj"),
     N("MeetKoopaDemoObj"),
@@ -572,24 +572,49 @@ const ActorTable: ActorTableEntry[] = [
     // Ugly actors, hide for now until we have a full impl.
     N("ElectricRail"),
     N("ElectricRailMoving"),
+
+    // Stuff we don't care about (yet?)
+    N("CubeCameraBox"),
+    N("CubeCameraCylinder"),
+    N("DemoGroup"),
+    N("DemoSubGroup"),
+    N("SoundEmitter"),
+    N("LensFlare"),
+    N("CelestrialSphere"),
+    N("AstroOverlookAreaCylinder"),
+    N("ViewGroupCtrlCube"),
+    N("PullBackCube"),
+    N("PullBackCylinder"),
+    N("AstroChangeStageCube"),
+
+    // Gravity
+    N("GlobalPointGravity"),
+    N("GlobalPlaneGravityInBox"),
 ];
 
-export function getActorTableEntry(objName: string, table: ActorTableEntry[] = ActorTable): ActorTableEntry | null {
+export function getNameObjFactoryTableEntry(objName: string, table: NameObjFactoryTableEntry[] = ActorTable): NameObjFactoryTableEntry | null {
     const entry = table.find((entry) => entry.objName === objName);
     if (entry !== undefined)
         return entry;
     return null;
 }
 
-const SpecialPlanetTable: ActorTableEntry[] = [
-    _("PeachCastleGardenPlanet",       PeachCastleGardenPlanet),
-    _("HatchWaterPlanet",              HatchWaterPlanet),
+const SpecialPlanetTable: NameObjFactoryTableEntry[] = [
+    _("ChoConveyorPlanetB",            RailPlanetMap),
     _("ChoConveyorPlanetD",            RotateMoveObj),
     _("FlagDiscPlanetD",               RotateMoveObj),
+    _("HatchWaterPlanet",              HatchWaterPlanet),
+    _("HeavensDoorInsidePlanet",       SimpleMapObj),
+    _("PeachCastleGardenPlanet",       PeachCastleGardenPlanet),
+    _("TridentPlanet",                 AstroMapObj),
+    _("Quicksand2DPlanet",             RailPlanetMap),
+    _("SandStreamHighTowerPlanet",     RailPlanetMap),
+    _("SandStreamJointPlanetA",        RailPlanetMap),
+    _("SandStreamJointPlanetB",        RailPlanetMap),
     _("StarDustStartPlanet",           RotateMoveObj),
 ];
 
-const genericPlanetMapEntry: ActorTableEntry = _("PlanetMap", PlanetMap);
+const genericPlanetMapEntry: NameObjFactoryTableEntry = _("PlanetMap", PlanetMap);
 
 export class PlanetMapCreator {
     public planetMapDataTable: JMapInfoIter;
@@ -612,8 +637,8 @@ export class PlanetMapCreator {
         return this.setPlanetRecordFromName(objName);
     }
 
-    public getActorTableEntry(objName: string): ActorTableEntry | null {
-        const specialPlanetEntry = getActorTableEntry(objName, SpecialPlanetTable);
+    public getActorTableEntry(objName: string): NameObjFactoryTableEntry | null {
+        const specialPlanetEntry = getNameObjFactoryTableEntry(objName, SpecialPlanetTable);
         if (specialPlanetEntry !== null)
             return specialPlanetEntry;
 

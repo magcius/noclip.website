@@ -32,7 +32,7 @@ import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferT
 import { EffectSystem } from './EffectSystem';
 
 import { NPCDirector, AirBubbleHolder } from './Actors';
-import { getActorTableEntry, PlanetMapCreator, ActorTableEntry } from './ActorTable';
+import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry } from './NameObjFactory';
 import { LiveActor, setTextureMappingIndirect, ZoneAndLayer, LayerId } from './LiveActor';
 import { ObjInfo, NoclipLegacyActorSpawner, Path } from './LegacyActor';
 
@@ -898,8 +898,8 @@ class SMGSpawner {
             this.syncActorVisible(this.sceneObjHolder.sceneNameObjListExecutor.nameObjExecuteInfos[i].nameObj as LiveActor);
     }
 
-    private getActorTableEntry(objName: string): ActorTableEntry | null {
-        const actorTableEntry = getActorTableEntry(objName);
+    private getActorTableEntry(objName: string): NameObjFactoryTableEntry | null {
+        const actorTableEntry = getNameObjFactoryTableEntry(objName);
         if (actorTableEntry !== null)
             return actorTableEntry;
 
@@ -1075,17 +1075,31 @@ class StageDataHolder {
         });
     }
 
+    private iterLayer(layerId: LayerId, callback: LayerObjInfoCallback, buffer: ArrayBufferSlice): void {
+        const iter = this.createCsvParser(buffer);
+
+        for (let i = 0; i < iter.getNumRecords(); i++) {
+            iter.setRecord(i);
+            callback(iter, layerId);
+        }
+    }
+
+    private iterPlacementDir(layerId: LayerId, callback: LayerObjInfoCallback, dir: RARC.RARCDir): void {
+        for (let i = 0; i < dir.files.length; i++)
+            this.iterLayer(layerId, callback, dir.files[i].buffer);
+    }
+
     public iterPlacement(callback: LayerObjInfoCallback): void {
         for (let i = LayerId.COMMON; i <= LayerId.LAYER_MAX; i++) {
             const layerDirName = getLayerDirName(i);
 
-            const objInfo = this.zoneArchive.findFileData(`jmp/Placement/${layerDirName}/ObjInfo`);
-            if (objInfo !== null)
-                this.iterLayer(i, callback, objInfo);
+            const placementDir = this.zoneArchive.findDir(`jmp/Placement/${layerDirName}`);
+            if (placementDir !== null)
+                this.iterPlacementDir(i, callback, placementDir);
 
-            const mapPartsInfo = this.zoneArchive.findFileData(`jmp/MapParts/${layerDirName}/MapPartsInfo`);
-            if (mapPartsInfo !== null)
-                this.iterLayer(i, callback, mapPartsInfo);
+            const mapPartsDir = this.zoneArchive.findDir(`jmp/MapPartsDir/${layerDirName}`);
+            if (mapPartsDir !== null)
+                this.iterPlacementDir(i, callback, mapPartsDir);
         }
     }
 
@@ -1096,15 +1110,6 @@ class StageDataHolder {
             const areaObjInfo = this.zoneArchive.findFileData(`jmp/Placement/${layerDirName}/AreaObjInfo`);
             if (areaObjInfo !== null)
                 this.iterLayer(i, callback, areaObjInfo);
-        }
-    }
-
-    private iterLayer(layerId: LayerId, callback: LayerObjInfoCallback, buffer: ArrayBufferSlice): void {
-        const iter = this.createCsvParser(buffer);
-
-        for (let i = 0; i < iter.getNumRecords(); i++) {
-            iter.setRecord(i);
-            callback(iter, layerId);
         }
     }
 
