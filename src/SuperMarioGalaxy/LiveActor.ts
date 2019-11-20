@@ -191,6 +191,11 @@ class ActorAnimKeeper {
     }
 }
 
+export function getPlacedZoneId(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): number {
+    const stageDataHolder = assertExists(sceneObjHolder.stageDataHolder.findPlacedStageDataHolder(infoIter));
+    return stageDataHolder.zoneId;
+}
+
 export function getJMapInfoTrans(dst: vec3, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
     getJMapInfoTransLocal(dst, infoIter);
     const stageDataHolder = assertExists(sceneObjHolder.stageDataHolder.findPlacedStageDataHolder(infoIter));
@@ -198,7 +203,7 @@ export function getJMapInfoTrans(dst: vec3, sceneObjHolder: SceneObjHolder, info
 }
 
 const scratchMatrix = mat4.create();
-function getJMapInfoRotate(dst: vec3, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, scratch: mat4 = scratchMatrix): void {
+export function getJMapInfoRotate(dst: vec3, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, scratch: mat4 = scratchMatrix): void {
     getJMapInfoRotateLocal(dst, infoIter);
 
     // Compute local rotation matrix, combine with stage placement, and extract new rotation.

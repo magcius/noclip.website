@@ -12,7 +12,7 @@ import { LoopMode } from "../j3d/j3d";
 import { RARC } from "../j3d/rarc";
 import { assertExists, fallback } from "../util";
 import { DrawBufferType, DrawType } from "./NameObj";
-import { connectToScene, calcUpVec, loadBTIData, emitEffect, setEffectEnvColor, getCamZdir } from "./Actors";
+import { connectToScene, calcUpVec, loadBTIData, emitEffect, setEffectEnvColor, getCamZdir, vecKillElement } from "./Actors";
 import { MathConstants, lerp, normToLength } from "../MathHelpers";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";
@@ -42,13 +42,6 @@ function compareVec3(a: vec3, b: vec3): number {
 
 const scratchMatrix = mat4.create();
 const scratchVec3a = vec3.create(), scratchVec3b = vec3.create(), scratchVec3c = vec3.create();
-
-function vecKillElement(dst: vec3, a: vec3, b: vec3): void {
-    const m = vec3.dot(a, b);
-    dst[0] = a[0] - b[0]*m;
-    dst[1] = a[1] - b[1]*m;
-    dst[2] = a[2] - b[2]*m;
-}
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();

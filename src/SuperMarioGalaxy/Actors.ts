@@ -337,6 +337,14 @@ export function isExistIndirectTexture(actor: LiveActor): boolean {
     return false;
 }
 
+export function vecKillElement(dst: vec3, a: vec3, b: vec3): number {
+    const m = vec3.dot(a, b);
+    dst[0] = a[0] - b[0]*m;
+    dst[1] = a[1] - b[1]*m;
+    dst[2] = a[2] - b[2]*m;
+    return m;
+}
+
 function getEaseInValue(v0: number, v1: number, v2: number, v3: number): number {
     const t = Math.cos((v0 / v3) * Math.PI * 0.5);
     return lerp(v1, v2, 1 - t);
