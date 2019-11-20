@@ -1,6 +1,6 @@
 
-import { vec3 } from "gl-matrix";
-import { colorNew, colorCopy, colorFromRGBA, Color } from "../Color";
+import { vec3, mat4 } from "gl-matrix";
+import { colorNew, colorCopy, colorFromRGBA, Color, colorLerp } from "../Color";
 import { Camera } from "../Camera";
 import { Light } from "../gx/gx_material";
 import { BMDModelInstance } from "../j3d/render";
@@ -13,6 +13,7 @@ import { assertExists, fallback } from "../util";
 import { AreaObj, AreaFormType, AreaObjMgr } from "./AreaObj";
 import { NameObj } from "./NameObj";
 import { isHiddenModel } from "./Actors";
+import { lerp } from "../MathHelpers";
 
 function getValueColor(color: Color, infoIter: JMapInfoIter, prefix: string): void {
     const colorR = fallback(infoIter.getValueNumber(`${prefix}R`), 0) / 0xFF;
@@ -68,7 +69,7 @@ class ActorLightInfo {
         this.Light0.copy(other.Light0);
         this.Light1.copy(other.Light1);
         this.Alpha2 = other.Alpha2;
-        this.Ambient = other.Ambient;
+        colorCopy(this.Ambient, other.Ambient);
     }
 
     public setFromLightInfo(infoIter: JMapInfoIter, prefix: string): void {
@@ -129,6 +130,30 @@ function getDefaultStepInterpolate(): number {
     return 30;
 }
 
+const scratchVec3 = vec3.create();
+function blendActorLightPos(dst: LightInfo, camera: Camera, a: LightInfo, b: LightInfo, t: number): void {
+    if (a.FollowCamera === dst.FollowCamera) {
+        vec3.lerp(dst.Position, a.Position, b.Position, t);
+    } else if (a.FollowCamera) {
+        vec3.transformMat4(scratchVec3, a.Position, camera.worldMatrix);
+        vec3.lerp(dst.Position, scratchVec3, b.Position, t);
+    } else if (dst.FollowCamera) {
+        vec3.transformMat4(scratchVec3, dst.Position, camera.viewMatrix);
+        vec3.lerp(dst.Position, a.Position, b.Position, t);
+    } else {
+        throw "whoops";
+    }
+}
+
+function blendActorLightInfo(dst: ActorLightInfo, camera: Camera, a: ActorLightInfo, b: ActorLightInfo, t: number): void {
+    colorLerp(dst.Light0.Color, a.Light0.Color, b.Light0.Color, t);
+    colorLerp(dst.Light1.Color, a.Light1.Color, b.Light1.Color, t);
+    colorLerp(dst.Ambient, a.Ambient, b.Ambient, t);
+    blendActorLightPos(dst.Light0, camera, a.Light0, b.Light0, t);
+    blendActorLightPos(dst.Light1, camera, a.Light1, b.Light1, t);
+    dst.Alpha2 = lerp(a.Alpha2, b.Alpha2, t);
+}
+
 export class ActorLightCtrl {
     public currentAreaLight: AreaLightInfo | null = null;
     private blendAnimActorLight = new ActorLightInfo();
@@ -173,12 +198,14 @@ export class ActorLightCtrl {
         this.currentAreaLight = sceneObjHolder.lightDirector.getAreaLightInfo(sceneObjHolder, this.zoneLightId);
     }
 
-    private updateLightBlend(deltaTime: number): void {
+    private updateLightBlend(camera: Camera, deltaTime: number): void {
         if (this.blendOutActorLight !== null) {
             this.blendAmount += deltaTime;
 
             if (this.blendAmount < this.interpolate) {
-                // Blend.
+                const blendTime = this.blendAmount / this.interpolate;
+                const targetActorLight = this.getTargetActorLight(this.currentAreaLight!);
+                blendActorLightInfo(this.blendAnimActorLight, camera, this.blendOutActorLight, targetActorLight, blendTime);
             } else {
                 this.blendAnimActorLight.copy(this.getTargetActorLight(this.currentAreaLight!));
                 this.blendOutActorLight = null;
@@ -187,10 +214,10 @@ export class ActorLightCtrl {
         }
     }
 
-    public update(sceneObjHolder: SceneObjHolder, immediate: boolean, deltaTime: number): void {
+    public update(sceneObjHolder: SceneObjHolder, camera: Camera, immediate: boolean, deltaTime: number): void {
         if (!isHiddenModel(this.assocActor)) {
             this.tryFindNewAreaLight(sceneObjHolder, immediate);
-            this.updateLightBlend(deltaTime);
+            this.updateLightBlend(camera, deltaTime);
         }
     }
 

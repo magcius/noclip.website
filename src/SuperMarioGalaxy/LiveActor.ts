@@ -489,7 +489,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
             }
 
             if (this.actorLightCtrl !== null)
-                this.actorLightCtrl.update(sceneObjHolder, false, deltaTimeFrames);
+                this.actorLightCtrl.update(sceneObjHolder, viewerInput.camera, false, deltaTimeFrames);
         }
     }
 }
