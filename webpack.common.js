@@ -20,11 +20,7 @@ module.exports = {
   },
   module: {
     rules: [
-      {
-        test: /\.ts$/,
-        loader: 'ts-loader',
-        exclude: /node_modules/,
-      },
+      // ts-loader defined in dev and prod separately
       {
         test: /\.(png|woff2)$/,
         loader: 'file-loader',
