@@ -353,8 +353,7 @@ class Main {
     }
 
     private _onResize() {
-        const devicePixelRatio = window.devicePixelRatio || 1;
-        resizeCanvas(this.canvas, window.innerWidth, window.innerHeight, devicePixelRatio);
+        resizeCanvas(this.canvas, window.innerWidth, window.innerHeight, window.devicePixelRatio);
     }
 
     private _saveStateTmp = new Uint8Array(512);

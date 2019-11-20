@@ -1636,8 +1636,7 @@ class LineGraph {
     }
 
     public beginDraw(width: number, height: number): void {
-        this.canvas.width = width;
-        this.canvas.height = height;
+        Viewer.resizeCanvas(this.canvas, width, height, window.devicePixelRatio);
 
         const ctx = this.ctx;
         ctx.clearRect(0, 0, width, height);
@@ -1710,7 +1709,7 @@ class StatisticsPanel extends Panel {
             this.fpsPoints[i] = this.history[i] !== undefined ? this.history[i].fps : 0;
         }
 
-        this.fpsGraph.beginDraw(400, 200);
+        this.fpsGraph.beginDraw(440, 200);
         this.fpsGraph.drawPoints(this.fpsPoints, this.fpsColor);
 
         this.fpsGraph.drawText(`FPS: ${renderStatistics.fps | 0}`);
