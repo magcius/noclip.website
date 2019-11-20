@@ -787,23 +787,13 @@ class GeoNodeRenderer {
     constructor(private node: GeoNode) {
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean, selectorState: number[], childIndex: number = 0): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, isSkybox: boolean, selectorState: SelectorState, childIndex: number = 0): void {
         const node = this.node;
 
         // terminate early if this node wasn't selected and we have a selector
-        if (node.selector !== null && selectorState.length > 0) {
-            const stateVar = selectorState[node.selector.stateIndex];
-            if (stateVar > 0) {
-                if (childIndex !== stateVar - 1)
-                    return;
-            } else if (stateVar < 0) {
-                // Negative values are bitflags.
-                const flagBits = -stateVar;
-                if (!(flagBits & (1 << childIndex)))
-                    return;
-            } else {
+        if (node.selector !== null) {
+            if (!shouldDrawNode(selectorState, node.selector.stateIndex, childIndex))
                 return;
-            }
         }
 
         for (let i = 0; i < this.drawCallInstances.length; i++)
@@ -853,16 +843,25 @@ const enum ObjectFlags {
     Blink = 0x100,
 }
 
-export function setSelectorValue(selectorState: SelectorState, index: number, value: number): void {
-    while (selectorState.values.length <= index)
-        selectorState.values.push(0);
-    selectorState.values[index] = value;
-}
-
 interface SelectorState {
-    values: number[];
+    // we leave unknown entries undefined, so everything gets rendered
+    values: (number | undefined)[];
     lastFrame: number;
     blinkState: number;
+}
+
+function shouldDrawNode(selector: SelectorState, stateIndex: number, childIndex: number): boolean {
+    const stateVar = selector.values[stateIndex];
+    if (stateVar === undefined)
+        return true; // assume true if we have no info
+    if (stateVar > 0) {
+        return childIndex === stateVar - 1;
+    } else if (stateVar < 0) {
+        // Negative values are bitflags.
+        const flagBits = -stateVar;
+        return !!(flagBits & (1 << childIndex));
+    }
+    return false;
 }
 
 export class GeometryRenderer {
@@ -998,9 +997,10 @@ export class GeometryRenderer {
         this.selectorState.lastFrame = currFrame;
         if (this.objectFlags & ObjectFlags.Blink) {
             let eyePos = this.selectorState.values[1];
+            if (eyePos === undefined)
+                eyePos = 1;
             switch (this.selectorState.blinkState) {
                 case 0:
-                    eyePos = 1;
                     if (Math.random() < 0.03)
                         this.selectorState.blinkState++;
                     break;
@@ -1017,8 +1017,8 @@ export class GeometryRenderer {
                         this.selectorState.blinkState = 0;
                     break;
             }
-            setSelectorValue(this.selectorState, 1, eyePos);
-            setSelectorValue(this.selectorState, 2, eyePos);
+            this.selectorState.values[1] = eyePos;
+            this.selectorState.values[2] = eyePos;
         }
     }
 
@@ -1058,7 +1058,7 @@ export class GeometryRenderer {
             device.submitPass(hostAccessPass);
         }
 
-        this.rootNodeRenderer.prepareToRender(device, renderInstManager, viewerInput, this.isSkybox, this.selectorState.values);
+        this.rootNodeRenderer.prepareToRender(device, renderInstManager, viewerInput, this.isSkybox, this.selectorState);
 
         renderInstManager.popTemplateRenderInst();
     }

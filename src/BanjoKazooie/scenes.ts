@@ -7,7 +7,7 @@ import * as BYML from '../byml';
 
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { FakeTextureHolder, TextureHolder } from '../TextureHolder';
-import { textureToCanvas, BKPass, GeometryRenderer, RenderData, AnimationFile, AnimationTrack, AnimationTrackType, AnimationKeyframe, BoneAnimator, FlipbookRenderer, GeometryData, FlipbookData, setSelectorValue } from './render';
+import { textureToCanvas, BKPass, GeometryRenderer, RenderData, AnimationFile, AnimationTrack, AnimationTrackType, AnimationKeyframe, BoneAnimator, FlipbookRenderer, GeometryData, FlipbookData } from './render';
 import { mat4, vec3, vec4 } from 'gl-matrix';
 import { transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
 import { SceneContext } from '../SceneBase';
@@ -168,10 +168,11 @@ function findFileByID(archive: CRG1Archive, fileID: number): CRG1File | null {
 
 // from switches starting at 30923c
 const levelGeoSelectors = new Map<number, number[][]>([
-    [0x01, [[1, 1], [2, 0]]], // end game value
-    [0x12, [[1, 0], [2, 0], [5, 0]]], // variable, 0 or 1
-    [0x14, [[5, 0]]], // variable, 0 or 1 (really complicated check)
-    [0x1d, [[1, 0]]],
+    // variable checks, can be enabled or disabled
+    [0x01, [[1, 1], [2, 0]]], // gruntilda-shaped hole
+    [0x12, [[1, 1], [2, 1], [5, 1]]], // gobi's valley water
+    [0x14, [[5, 1]]], // spiked ceiling in sandybutt's tomb
+    [0x1d, [[1, 1]]], // MMM cellar, path to egg room
 
     // mumbo's huts
     [0x0e, [[1, 1], [5, 1]]],
@@ -210,7 +211,7 @@ function setLevelGeoSelector(geo: GeometryRenderer, id: number) {
     if (valueList === undefined)
         return;
     for (let i = 0; i < valueList.length; i++)
-        setSelectorValue(geo.selectorState, valueList[i][0], valueList[i][1]);
+        geo.selectorState.values[valueList[i][0]] = valueList[i][1];
 }
 
 function parseAnimationFile(buffer: ArrayBufferSlice): AnimationFile {
@@ -386,6 +387,31 @@ async function fetchObjectData(dataFetcher: DataFetcher, device: GfxDevice): Pro
     return new ObjectData(objectSetup);
 }
 
+function setObjectSpecificSelectors(objRenderer: GeometryRenderer, id: number, value: number): void {
+    if (value > 0) {
+        const maxValue =
+            id === 0x203 ? 12 : // note doors
+            id === 0x25e ? 6 :  // mystery eggs
+            id === 0x2e3 ? 9 :  // level signs
+            id === 0x2e4 ? 9 :  // exit pads
+            0;
+        for (let stateIndex = 0; stateIndex <= maxValue; stateIndex++)
+            objRenderer.selectorState.values[stateIndex] = (stateIndex === value) ? 1 : 0;
+    }
+    if (id === 7) { // mumbo
+        objRenderer.selectorState.values[4] = 1;
+        objRenderer.selectorState.values[5] = 0;
+        objRenderer.selectorState.values[6] = 1;
+        objRenderer.selectorState.values[7] = 0;
+        objRenderer.selectorState.values[8] = 0;
+        objRenderer.selectorState.values[9] = 0;
+    }
+    // tiptip choir turtles, might actually be from setup params
+    const turtleID = id - 0x27a;
+    if (turtleID >= 1 && turtleID <= 6)
+        objRenderer.selectorState.values[4] = turtleID;
+}
+
 class SceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
@@ -433,10 +459,7 @@ class SceneDesc implements Viewer.SceneDesc {
                         if (category === 0x06) {
                             const objRenderer = objectSetupTable.spawnObject(device, id, vec3.fromValues(x, y, z), yaw);
                             if (objRenderer instanceof GeometryRenderer) {
-                                // special logic for doors and signs
-                                if ((id === 0x203 || id === 0x2e3) && selectorValue > 0) {
-                                    setSelectorValue(objRenderer.selectorState, selectorValue, 1)
-                                }
+                                setObjectSpecificSelectors(objRenderer, id, selectorValue);
                                 sceneRenderer.geoRenderers.push(objRenderer);
                             } else if (objRenderer instanceof FlipbookRenderer) {
                                 sceneRenderer.flipbookRenderers.push(objRenderer);
