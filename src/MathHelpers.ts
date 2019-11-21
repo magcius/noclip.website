@@ -140,15 +140,7 @@ const scratchVec3 = vec3.create();
  */
 export function matrixHasUniformScale(m: mat4, v: vec3 = scratchVec3): boolean {
     mat4.getScaling(v, m);
-
-    // Within reason.
-    return (Math.abs(v[0] - v[1]) <= MathConstants.EPSILON*Math.max(1, Math.abs(v[0]), Math.abs(v[1])) &&
-            Math.abs(v[0] - v[2]) <= MathConstants.EPSILON*Math.max(1, Math.abs(v[0]), Math.abs(v[2])));
-}
-
-// For reference. Please inline where used.
-function compareEpsilon(a: number, b: number) {
-    return Math.abs(a-b) <= MathConstants.EPSILON*Math.max(1, Math.abs(a), Math.abs(b));
+    return isNearZeroVec3(v, MathConstants.EPSILON);
 }
 
 export function texProjPerspMtx(dst: mat4, fov: number, aspect: number, scaleS: number, scaleT: number, transS: number, transT: number): void {
