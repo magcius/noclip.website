@@ -7,19 +7,25 @@ function resolveField<T>(v: T | undefined, parentV: T): T {
     return v !== undefined ? v : parentV;
 }
 
+function copyChannelBlendState(dst: GfxChannelBlendState, src: GfxChannelBlendState): void {
+    dst.blendDstFactor = src.blendDstFactor;
+    dst.blendSrcFactor = src.blendSrcFactor;
+    dst.blendMode = src.blendMode;
+}
+
 function copyAttachmentState(dst: GfxAttachmentState | undefined, src: GfxAttachmentState): GfxAttachmentState {
     if (dst === undefined) {
-        return {
-            rgbBlendState: Object.assign({}, src.rgbBlendState),
-            alphaBlendState: Object.assign({}, src.alphaBlendState),
-            colorWriteMask: src.colorWriteMask,
+        dst = {
+            rgbBlendState: {} as GfxChannelBlendState,
+            alphaBlendState: {} as GfxChannelBlendState,
+            colorWriteMask: 0,
         };
-    } else {
-        Object.assign(dst.rgbBlendState, src.rgbBlendState);
-        Object.assign(dst.alphaBlendState, src.alphaBlendState);
-        dst.colorWriteMask = src.colorWriteMask;
-        return dst;
     }
+
+    copyChannelBlendState(dst.rgbBlendState, src.rgbBlendState);
+    copyChannelBlendState(dst.alphaBlendState, src.alphaBlendState);
+    dst.colorWriteMask = src.colorWriteMask;
+    return dst;
 }
 
 function copyAttachmentsState(dst: GfxAttachmentState[], src: GfxAttachmentState[]): void {

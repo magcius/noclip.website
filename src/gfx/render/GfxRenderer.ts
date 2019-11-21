@@ -168,7 +168,7 @@ export class GfxRenderInst {
     private _inputState: GfxInputState | null = null;
     private _drawStart: number;
     private _drawCount: number;
-    private _drawInstanceCount: number = 1;
+    private _drawInstanceCount: number;
 
     constructor() {
         this._renderPipelineDescriptor = {
@@ -232,6 +232,7 @@ export class GfxRenderInst {
         this._flags |= GfxRenderInstFlags.DRAW_INDEXED;
         this._drawCount = indexCount;
         this._drawStart = indexStart;
+        this._drawInstanceCount = 1;
     }
 
     public drawIndexesInstanced(indexCount: number, instanceCount: number, indexStart: number = 0): void {
@@ -244,6 +245,7 @@ export class GfxRenderInst {
     public drawPrimitives(primitiveCount: number, primitiveStart: number = 0): void {
         this._drawCount = primitiveCount;
         this._drawStart = primitiveStart;
+        this._drawInstanceCount = 1;
     }
 
     private _setBindingLayout(bindingLayout: GfxBindingLayoutDescriptor): void {
