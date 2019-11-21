@@ -9,7 +9,7 @@ import * as GX_Material from '../gx/gx_material';
 
 import { BMD, BTK, TTK1 } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as RARC from '../j3d/rarc';
-import { BMDModel, MaterialInstance, MaterialInstanceState, ShapeInstanceState, MaterialData, BMDModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { J3DModelData, MaterialInstance, MaterialInstanceState, ShapeInstanceState, MaterialData, J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import * as Yaz0 from '../Common/Compression/Yaz0';
 import { ub_PacketParams, PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, ub_MaterialParams, ColorKind, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GXRenderHelperGfx } from '../gx/gx_render';
@@ -131,7 +131,7 @@ class Plane {
     public modelMatrix = mat4.create();
     private origin = vec3.create();
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, private bmdModel: BMDModel, btk: TTK1 | null, materialIndex: number = 0) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, private bmdModel: J3DModelData, btk: TTK1 | null, materialIndex: number = 0) {
         mat4.copy(this.modelMatrix, posMtx);
 
         this.animationController = new AnimationController();
@@ -174,15 +174,15 @@ class Plane {
     }
 }
 
-function createModelInstance(device: GfxDevice, cache: GfxRenderCache, rarc: RARC.RARC, name: string, isSkybox: boolean = false): BMDModelInstance | null {
+function createModelInstance(device: GfxDevice, cache: GfxRenderCache, rarc: RARC.RARC, name: string, isSkybox: boolean = false): J3DModelInstance | null {
     let bdlFile = rarc.findFile(`bdl/${name}.bdl`);
     if (!bdlFile)
         bdlFile = rarc.findFile(`bmd/${name}.bmd`);
     if (!bdlFile)
         return null;
     const bdl = BMD.parse(bdlFile.buffer);
-    const bmdModel = new BMDModel(device, cache, bdl);
-    const modelInstance = new BMDModelInstance(bmdModel);
+    const bmdModel = new J3DModelData(device, cache, bdl);
+    const modelInstance = new J3DModelInstance(bmdModel);
     modelInstance.passMask = isSkybox ? WindWakerPass.SKYBOX : WindWakerPass.MAIN;
     modelInstance.isSkybox = isSkybox;
     return modelInstance;
@@ -197,12 +197,12 @@ export class WindWakerRenderer implements SceneGfx {
     private renderTarget = new BasicRenderTarget();
     public renderHelper: GXRenderHelperGfx;
 
-    private vr_sky: BMDModelInstance;
-    private vr_uso_umi: BMDModelInstance;
-    private vr_kasumi_mae: BMDModelInstance;
-    private vr_back_cloud: BMDModelInstance;
+    private vr_sky: J3DModelInstance;
+    private vr_uso_umi: J3DModelInstance;
+    private vr_kasumi_mae: J3DModelInstance;
+    private vr_back_cloud: J3DModelInstance;
     public plane: Plane[] = [];
-    public modelData: BMDModel[] = [];
+    public modelData: J3DModelData[] = [];
     public textureHolder = new FakeTextureHolder([]);
 
     constructor(device: GfxDevice, private stageRarc: RARC.RARC, colors: KyankoColors) {
@@ -305,10 +305,10 @@ export class WindWakerWater implements SceneDesc {
             const renderer = new WindWakerRenderer(device, stageRarc, colors);
 
             const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
-            const model_bmd = new BMDModel(device, cache, BMD.parse(roomRarc.findFileData('bdl/model.bdl')!));
+            const model_bmd = new J3DModelData(device, cache, BMD.parse(roomRarc.findFileData('bdl/model.bdl')!));
             concat(renderer.textureHolder.viewerTextures, model_bmd.modelMaterialData.tex1Data.viewerTextures);
             renderer.modelData.push(model_bmd);
-            const model1_bmd = new BMDModel(device, cache, BMD.parse(roomRarc.findFileData('bdl/model1.bdl')!));
+            const model1_bmd = new J3DModelData(device, cache, BMD.parse(roomRarc.findFileData('bdl/model1.bdl')!));
             concat(renderer.textureHolder.viewerTextures, model1_bmd.modelMaterialData.tex1Data.viewerTextures);
             renderer.modelData.push(model1_bmd);
             const model1_btk = BTK.parse(roomRarc.findFileData('btk/model1.btk')!);

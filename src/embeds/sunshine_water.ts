@@ -10,7 +10,7 @@ import * as GX_Material from '../gx/gx_material';
 
 import { BMD, BTK, MaterialEntry, TTK1 } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as RARC from '../j3d/rarc';
-import { BMDModel, MaterialInstance, MaterialInstanceState, ShapeInstanceState, MaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { J3DModelData, MaterialInstance, MaterialInstanceState, ShapeInstanceState, MaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { SunshineRenderer, SunshineSceneDesc, SMSPass } from '../j3d/sms_scenes';
 import * as Yaz0 from '../Common/Compression/Yaz0';
 import { ub_PacketParams, PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, ub_MaterialParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
@@ -118,7 +118,7 @@ class SeaPlaneScene {
     private shapeInstanceState = new ShapeInstanceState();
     private materialInstanceState = new MaterialInstanceState();
     private plane: PlaneShape;
-    private bmdModel: BMDModel;
+    private bmdModel: J3DModelData;
     private animationController: AnimationController;
     private modelMatrix = mat4.create();
 
@@ -137,7 +137,7 @@ class SeaPlaneScene {
             }
         }
 
-        this.bmdModel = new BMDModel(device, cache, bmd);
+        this.bmdModel = new J3DModelData(device, cache, bmd);
         this.materialInstanceState.textureMappings = this.bmdModel.modelMaterialData.createDefaultTextureMappings();
 
         const seaMaterial = assertExists(bmd.mat3.materialEntries.find((m) => m.name === '_umi'));

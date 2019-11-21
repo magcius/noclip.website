@@ -1,6 +1,6 @@
 
 import { LiveActor } from "./LiveActor";
-import { BMDModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
+import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { Camera } from "../Camera";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu } from "./NameObj";
@@ -115,7 +115,7 @@ export const drawBufferInitialTable: DrawBufferInitialTableEntry[] = [
 
 export class DrawBufferGroup {
     // TODO(jstpierre): DrawBufferExecuter? Do we need it? How does the lighting system work, exactly?
-    private models: BMDModelInstance[] = [];
+    private models: J3DModelInstance[] = [];
 
     constructor(public tableEntry: DrawBufferInitialTableEntry) {
     }

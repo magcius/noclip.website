@@ -13,14 +13,14 @@ import { computeModelMatrixSRT, computeEulerAngleRotationFromSRTMatrix } from ".
 import { Camera } from "../Camera";
 import { LightType } from "./DrawBuffer";
 
-import { BMDModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
+import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { BRK, BTK, BCK, LoopMode, BVA, BTP, BPK } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as RARC from '../j3d/rarc';
 import * as Viewer from '../viewer';
 import { assertExists, fallback } from "../util";
 import { RailRider } from "./RailRider";
 
-function setIndirectTextureOverride(modelInstance: BMDModelInstance, sceneTexture: GfxTexture): void {
+function setIndirectTextureOverride(modelInstance: J3DModelInstance, sceneTexture: GfxTexture): void {
     const m = modelInstance.getTextureMappingReference("IndDummy");
     if (m !== null)
         setTextureMappingIndirect(m, sceneTexture);
@@ -72,7 +72,7 @@ class ActorAnimKeeperInfo {
     }
 }
 
-export function startBckIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): boolean {
+export function startBckIfExist(modelInstance: J3DModelInstance, arc: RARC.RARC, animationName: string): boolean {
     const data = arc.findFileData(`${animationName}.bck`);
     if (data !== null) {
         const bck = BCK.parse(data);
@@ -83,35 +83,35 @@ export function startBckIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC,
     return data !== null;
 }
 
-export function startBtkIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): boolean {
+export function startBtkIfExist(modelInstance: J3DModelInstance, arc: RARC.RARC, animationName: string): boolean {
     const data = arc.findFileData(`${animationName}.btk`);
     if (data !== null)
         modelInstance.bindTTK1(BTK.parse(data));
     return data !== null;
 }
 
-export function startBrkIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): boolean {
+export function startBrkIfExist(modelInstance: J3DModelInstance, arc: RARC.RARC, animationName: string): boolean {
     const data = arc.findFileData(`${animationName}.brk`);
     if (data !== null)
         modelInstance.bindTRK1(BRK.parse(data));
     return data !== null;
 }
 
-export function startBpkIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): boolean {
+export function startBpkIfExist(modelInstance: J3DModelInstance, arc: RARC.RARC, animationName: string): boolean {
     const data = arc.findFileData(`${animationName}.bpk`);
     if (data !== null)
         modelInstance.bindTRK1(BPK.parse(data));
     return data !== null;
 }
 
-export function startBtpIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): boolean {
+export function startBtpIfExist(modelInstance: J3DModelInstance, arc: RARC.RARC, animationName: string): boolean {
     const data = arc.findFileData(`${animationName}.btp`);
     if (data !== null)
         modelInstance.bindTPT1(BTP.parse(data));
     return data !== null;
 }
 
-export function startBvaIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): boolean {
+export function startBvaIfExist(modelInstance: J3DModelInstance, arc: RARC.RARC, animationName: string): boolean {
     const data = arc.findFileData(`${animationName}.bva`);
     if (data !== null)
         modelInstance.bindVAF1(BVA.parse(data));
@@ -268,7 +268,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
 
     // Technically part of ModelManager.
     public arc: RARC.RARC; // ResourceHolder
-    public modelInstance: BMDModelInstance | null = null; // J3DModel
+    public modelInstance: J3DModelInstance | null = null; // J3DModel
 
     public translation = vec3.create();
     public rotation = vec3.create();
@@ -336,7 +336,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         this.arc = modelCache.getObjectData(objName)!;
 
         const bmdModel = modelCache.getModel(this.arc, `${objName}.bdl`)!;
-        this.modelInstance = new BMDModelInstance(bmdModel);
+        this.modelInstance = new J3DModelInstance(bmdModel);
         this.modelInstance.name = objName;
         this.modelInstance.animationController.fps = FPS;
         this.modelInstance.animationController.phaseFrames = Math.random() * 1500;

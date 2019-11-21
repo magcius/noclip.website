@@ -7,7 +7,7 @@ import * as Viewer from '../viewer';
 
 import { BMD, BMT, BTK, BRK, BCK } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as RARC from './rarc';
-import { BMDModelInstance, BMDModel, BMDModelMaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { J3DModelInstance, J3DModelData, BMDModelMaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
@@ -19,7 +19,7 @@ import { SceneContext } from '../SceneBase';
 export class BasicRenderer implements Viewer.SceneGfx {
     private renderTarget = new BasicRenderTarget();
     public renderHelper: GXRenderHelperGfx;
-    public modelInstances: BMDModelInstance[] = [];
+    public modelInstances: J3DModelInstance[] = [];
     public rarc: RARC.RARC[] = [];
 
     constructor(device: GfxDevice) {
@@ -48,7 +48,7 @@ export class BasicRenderer implements Viewer.SceneGfx {
         return [layersPanel, renderHacksPanel];
     }
 
-    public addModelInstance(scene: BMDModelInstance): void {
+    public addModelInstance(scene: J3DModelInstance): void {
         this.modelInstances.push(scene);
     }
 
@@ -91,8 +91,8 @@ const materialHacks: GXMaterialHacks = {
 export function createModelInstance(device: GfxDevice, cache: GfxRenderCache, bmdFile: RARC.RARCFile, btkFile: RARC.RARCFile | null, brkFile: RARC.RARCFile | null, bckFile: RARC.RARCFile | null, bmtFile: RARC.RARCFile | null) {
     const bmd = BMD.parse(bmdFile.buffer);
     const bmt = bmtFile ? BMT.parse(bmtFile.buffer) : null;
-    const bmdModel = new BMDModel(device, cache, bmd);
-    const scene = new BMDModelInstance(bmdModel, materialHacks);
+    const bmdModel = new J3DModelData(device, cache, bmd);
+    const scene = new J3DModelInstance(bmdModel, materialHacks);
     if (bmt !== null)
         scene.setModelMaterialData(new BMDModelMaterialData(device, cache, bmt));
 
@@ -114,7 +114,7 @@ export function createModelInstance(device: GfxDevice, cache: GfxRenderCache, bm
     return scene;
 }
 
-function createScenesFromBuffer(device: GfxDevice, renderer: BasicRenderer, buffer: ArrayBufferSlice): BMDModelInstance[] {
+function createScenesFromBuffer(device: GfxDevice, renderer: BasicRenderer, buffer: ArrayBufferSlice): J3DModelInstance[] {
     if (readString(buffer, 0, 4) === 'RARC') {
         const rarc = RARC.parse(buffer);
         renderer.rarc.push(rarc);
@@ -139,13 +139,13 @@ function createScenesFromBuffer(device: GfxDevice, renderer: BasicRenderer, buff
             return scene;
         });
 
-        return scenes.filter((scene) => scene !== null) as BMDModelInstance[];
+        return scenes.filter((scene) => scene !== null) as J3DModelInstance[];
     }
 
     if (['J3D2bmd3', 'J3D2bdl4'].includes(readString(buffer, 0, 8))) {
         const bmd = BMD.parse(buffer);
-        const bmdModel = new BMDModel(device, renderer.renderHelper.renderInstManager.gfxRenderCache, bmd);
-        const modelInstance = new BMDModelInstance(bmdModel);
+        const bmdModel = new J3DModelData(device, renderer.renderHelper.renderInstManager.gfxRenderCache, bmd);
+        const modelInstance = new J3DModelInstance(bmdModel);
         return [modelInstance];
     }
 

@@ -13,7 +13,7 @@ import { BTK, BRK, LoopMode, BTP } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as Viewer from '../viewer';
 import * as RARC from '../j3d/rarc';
 import { DrawBufferType, MovementType, CalcAnimType, DrawType } from './NameObj';
-import { BMDModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { assertExists, leftPad, fallback } from '../util';
 import { Camera } from '../Camera';
 import { isGreaterStep, isFirstStep, calcNerveRate, isLessStep, calcNerveValue } from './Spine';
@@ -446,7 +446,7 @@ function setClippingFar(f: number): number {
     throw "whoops";
 }
 
-export function bindColorChangeAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, frame: number, baseName: string = 'ColorChange'): void {
+export function bindColorChangeAnimation(modelInstance: J3DModelInstance, arc: RARC.RARC, frame: number, baseName: string = 'ColorChange'): void {
     const brkName = `${baseName}.brk`;
     if (arc.findFile(brkName) !== null) {
         const animationController = new AnimationController();
@@ -457,7 +457,7 @@ export function bindColorChangeAnimation(modelInstance: BMDModelInstance, arc: R
     }
 }
 
-export function bindTexChangeAnimation(modelInstance: BMDModelInstance, arc: RARC.RARC, frame: number, baseName: string = 'TexChange'): void {
+export function bindTexChangeAnimation(modelInstance: J3DModelInstance, arc: RARC.RARC, frame: number, baseName: string = 'TexChange'): void {
     const btpName = `${baseName}.btp`;
     const btkName = `${baseName}.btk`;
 
@@ -1759,7 +1759,7 @@ export class MiniRoutePart extends LiveActor {
 
         this.initModelManagerWithAnm(sceneObjHolder, modelName);
         if (partsTypeName === 'WorldWarpPoint')
-            this.modelInstance!.bmdModel.shapeData[0].sortKeyBias = 1;
+            this.modelInstance!.modelData.shapeData[0].sortKeyBias = 1;
         vec3.copy(this.translation, pointInfo.position);
 
         this.tryStartAllAnim('Open');

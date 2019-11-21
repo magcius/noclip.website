@@ -24,16 +24,16 @@ import { MaterialParams, PacketParams, fillSceneParamsDataOnTemplate } from '../
 import { LoadedVertexData, LoadedVertexLayout } from '../gx/gx_displaylist';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import { BMD, JSystemFileReaderHelper, ShapeDisplayFlags, TexMtxMapMode } from '../Common/JSYSTEM/J3D/J3DLoader';
-import { BMDModel, MaterialInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { J3DModelData, MaterialInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { JMapInfoIter, createCsvParser, getJMapInfoTransLocal, getJMapInfoRotateLocal, getJMapInfoScale } from './JMapInfo';
 import { BloomPostFXParameters, BloomPostFXRenderer } from './Bloom';
 import { LightDataHolder, LightDirector } from './LightData';
-import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType, NameObj, NameObjHolder } from './NameObj';
+import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType, NameObjHolder } from './NameObj';
 import { EffectSystem } from './EffectSystem';
 
 import { NPCDirector, AirBubbleHolder } from './Actors';
 import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry } from './NameObjFactory';
-import { LiveActor, setTextureMappingIndirect, ZoneAndLayer, LayerId } from './LiveActor';
+import { setTextureMappingIndirect, ZoneAndLayer, LayerId } from './LiveActor';
 import { ObjInfo, NoclipLegacyActorSpawner, Path } from './LegacyActor';
 
 // Galaxy ticks at 60fps.
@@ -563,7 +563,7 @@ function fillMaterialParamsCallback(materialParams: MaterialParams, materialInst
     }
 }
 
-function patchBMDModel(bmdModel: BMDModel): void {
+function patchBMDModel(bmdModel: J3DModelData): void {
     // Kill off the sort-key bias; the game doesn't use the typical J3D rendering algorithm in favor
     // of its own sort, which needs to be RE'd.
     for (let i = 0; i < bmdModel.shapeData.length; i++)
@@ -584,8 +584,8 @@ function patchBMDModel(bmdModel: BMDModel): void {
 export class ModelCache {
     public archivePromiseCache = new Map<string, Promise<RARC.RARC | null>>();
     public archiveCache = new Map<string, RARC.RARC | null>();
-    public modelCache = new Map<string, BMDModel | null>();
-    private models: BMDModel[] = [];
+    public modelCache = new Map<string, J3DModelData | null>();
+    private models: J3DModelData[] = [];
     public cache = new GfxRenderCache(true);
 
     constructor(public device: GfxDevice, private pathBase: string, private dataFetcher: DataFetcher) {
@@ -596,13 +596,13 @@ export class ModelCache {
         return Promise.all(v) as Promise<any>;
     }
 
-    public getModel(rarc: RARC.RARC, modelFilename: string): BMDModel | null {
+    public getModel(rarc: RARC.RARC, modelFilename: string): J3DModelData | null {
         if (this.modelCache.has(modelFilename))
             return this.modelCache.get(modelFilename)!;
 
         const bmd = BMD.parse(assertExists(rarc.findFileData(modelFilename)));
         patchBMD(bmd);
-        const bmdModel = new BMDModel(this.device, this.cache, bmd);
+        const bmdModel = new J3DModelData(this.device, this.cache, bmd);
         patchBMDModel(bmdModel);
         this.models.push(bmdModel);
         this.modelCache.set(modelFilename, bmdModel);

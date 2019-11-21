@@ -3,7 +3,7 @@ import { vec3 } from "gl-matrix";
 import { colorNew, colorCopy, colorFromRGBA, Color, colorLerp } from "../Color";
 import { Camera } from "../Camera";
 import { Light } from "../gx/gx_material";
-import { BMDModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
+import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1 } from "./JMapInfo";
 import { LightType } from "./DrawBuffer";
 import { SceneObjHolder } from "./Main";
@@ -79,7 +79,7 @@ class ActorLightInfo {
         this.Alpha2 = fallback(infoIter.getValueNumber(`${prefix}Alpha2`), 0) / 0xFF;
     }
 
-    public setOnModelInstance(modelInstance: BMDModelInstance, camera: Camera, setAmbient: boolean): void {
+    public setOnModelInstance(modelInstance: J3DModelInstance, camera: Camera, setAmbient: boolean): void {
         this.Light0.setLight(modelInstance.getGXLightReference(0), camera);
         this.Light1.setLight(modelInstance.getGXLightReference(1), camera);
 
@@ -253,7 +253,7 @@ export class ActorLightCtrl {
         }
     }
 
-    public loadLight(modelInstance: BMDModelInstance, camera: Camera): void {
+    public loadLight(modelInstance: J3DModelInstance, camera: Camera): void {
         if (this.currentAreaLight !== null) {
             if (this.blendOutActorLight !== null) {
                 this.blendAnimActorLight.setOnModelInstance(modelInstance, camera, true);

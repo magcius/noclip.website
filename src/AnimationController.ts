@@ -16,7 +16,7 @@ export default class AnimationController {
     }
 
     public setTimeInMilliseconds(ms: number): void {
-        this.setTimeInFrames((ms / 1000) * this.fps);
+        this.setTimeInFrames(getTimeInFrames(ms, this.fps));
     }
 
     public setTimeInFrames(newTime: number): void {
@@ -28,10 +28,15 @@ export default class AnimationController {
     }
 
     public setPhaseInMilliseconds(ms: number): void {
-        this.phaseFrames = (ms / 1000) * this.fps;
+        this.phaseFrames = getTimeInFrames(ms, this.fps);
     }
 
     public setPhaseToCurrent(): void {
         this.phaseFrames = -this.timeInFrames;
     }
+}
+
+export function getTimeInFrames(milliseconds: number, fps: number): number {
+    const fpsRate = fps / 1000;
+    return milliseconds * fpsRate;
 }

@@ -144,7 +144,7 @@ export class ShapeInstance {
     constructor(public shapeData: ShapeData, private materialInstance: MaterialInstance) {
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, depth: number, camera: Camera, viewport: NormalizedViewportCoords, modelData: BMDModel, materialInstanceState: MaterialInstanceState, shapeInstanceState: ShapeInstanceState): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, depth: number, camera: Camera, viewport: NormalizedViewportCoords, modelData: J3DModelData, materialInstanceState: MaterialInstanceState, shapeInstanceState: ShapeInstanceState): void {
         const materialInstance = this.materialInstance;
         if (!materialInstance.visible)
             return;
@@ -805,7 +805,7 @@ export class BMDModelMaterialData {
     }
 }
 
-export class BMDModel {
+export class J3DModelData {
     private realized: boolean = false;
 
     private bufferCoalescer: GfxBufferCoalescerCombo;
@@ -949,7 +949,7 @@ export class JointMatrixCalcNoAnm {
 
 const bboxScratch = new AABB();
 const scratchViewMatrix = mat4.create();
-export class BMDModelInstance {
+export class J3DModelInstance {
     public name: string = '';
     public visible: boolean = true;
     public isSkybox: boolean = false;
@@ -974,20 +974,20 @@ export class BMDModelInstance {
 
     private jointVisibility: boolean[];
 
-    constructor(public bmdModel: BMDModel, materialHacks?: GX_Material.GXMaterialHacks) {
-        this.modelMaterialData = this.bmdModel.modelMaterialData;
+    constructor(public modelData: J3DModelData, materialHacks?: GX_Material.GXMaterialHacks) {
+        this.modelMaterialData = this.modelData.modelMaterialData;
         this.materialInstances = this.modelMaterialData.materialData!.map((materialData) => {
             return new MaterialInstance(materialData, materialHacks);
         });
 
-        this.shapeInstances = this.bmdModel.shapeData.map((shapeData) => {
+        this.shapeInstances = this.modelData.shapeData.map((shapeData) => {
             return new ShapeInstance(shapeData, this.materialInstances[shapeData.shape.materialIndex]);
         });
         this.shapeInstanceState.shapeVisibility = nArray(this.shapeInstances.length, () => true);
 
         this.materialInstanceState.textureMappings = this.modelMaterialData.createDefaultTextureMappings();
 
-        const bmd = this.bmdModel.bmd;
+        const bmd = this.modelData.bmd;
 
         const numJoints = bmd.jnt1.joints.length;
         this.shapeInstanceState.jointToParentMatrixArray = nArray(numJoints, () => mat4.create());
@@ -1005,7 +1005,7 @@ export class BMDModelInstance {
     }
 
     public destroy(device: GfxDevice): void {
-        this.bmdModel.destroy(device);
+        this.modelData.destroy(device);
     }
 
     public setVisible(v: boolean): void {
@@ -1242,7 +1242,7 @@ export class BMDModelInstance {
      * this matrix will have no effect in that case.
      */
     public getJointToParentMatrixReference(jointName: string): mat4 {
-        const joints = this.bmdModel.bmd.jnt1.joints;
+        const joints = this.modelData.bmd.jnt1.joints;
         for (let i = 0; i < joints.length; i++)
             if (joints[i].name === jointName)
                 return this.shapeInstanceState.jointToParentMatrixArray[i];
@@ -1256,7 +1256,7 @@ export class BMDModelInstance {
      * updated as well. You can use this as a way to parent an object to this one.
      */
     public getJointToWorldMatrixReference(jointName: string): mat4 {
-        const joints = this.bmdModel.bmd.jnt1.joints;
+        const joints = this.modelData.bmd.jnt1.joints;
         for (let i = 0; i < joints.length; i++)
             if (joints[i].name === jointName)
                 return this.shapeInstanceState.jointToWorldMatrixArray[i];
@@ -1293,11 +1293,11 @@ export class BMDModelInstance {
         //
         // For now, we simply don't cull both of these special cases, hoping they'll be simple enough to just always
         // render. In theory, we could cull billboards using the bounding sphere.
-        const disableCulling = this.bmdModel.hasBillboard;
+        const disableCulling = this.modelData.hasBillboard;
         computeViewMatrix(this.shapeInstanceState.worldToViewMatrix, camera);
 
-        const jnt1 = this.bmdModel.bmd.jnt1;
-        for (let i = 0; i < this.bmdModel.bmd.jnt1.joints.length; i++) {
+        const jnt1 = this.modelData.bmd.jnt1;
+        for (let i = 0; i < this.modelData.bmd.jnt1.joints.length; i++) {
             const jointToWorldMatrix = this.shapeInstanceState.jointToWorldMatrixArray[i];
 
             // TODO(jstpierre): Use shape visibility if the bbox is empty (?).
@@ -1317,7 +1317,7 @@ export class BMDModelInstance {
 
     private computeDepth(camera: Camera): number {
         // Use the root joint to calculate depth.
-        const rootJoint = this.bmdModel.bmd.jnt1.joints[0];
+        const rootJoint = this.modelData.bmd.jnt1.joints[0];
         bboxScratch.transform(rootJoint.bbox, this.modelMatrix);
         const depth = Math.max(computeViewSpaceDepthFromWorldSpaceAABB(camera, bboxScratch), 0);
         return depth;
@@ -1342,7 +1342,7 @@ export class BMDModelInstance {
         for (let i = 0; i < this.shapeInstances.length; i++) {
             if (!this.shapeInstanceState.shapeVisibility[i])
                 continue;
-            this.shapeInstances[i].prepareToRender(device, renderInstManager, depth, viewerInput.camera, viewerInput.viewport, this.bmdModel, this.materialInstanceState, this.shapeInstanceState);
+            this.shapeInstances[i].prepareToRender(device, renderInstManager, depth, viewerInput.camera, viewerInput.viewport, this.modelData, this.materialInstanceState, this.shapeInstanceState);
         }
         renderInstManager.popTemplateRenderInst();
     }
@@ -1359,7 +1359,7 @@ export class BMDModelInstance {
             const materialIndex = this.shapeInstances[i].shapeData.shape.materialIndex;
             if (this.materialInstances[materialIndex].materialData.material.translucent !== translucent)
                 continue;
-            this.shapeInstances[i].prepareToRender(device, renderInstManager, depth, camera, viewport, this.bmdModel, this.materialInstanceState, this.shapeInstanceState);
+            this.shapeInstances[i].prepareToRender(device, renderInstManager, depth, camera, viewport, this.modelData, this.materialInstanceState, this.shapeInstanceState);
         }
     }
 
@@ -1372,17 +1372,17 @@ export class BMDModelInstance {
     }
 
     public calcJointAnim(): void {
-        for (let i = 0; i < this.bmdModel.jointData.length; i++) {
-            const joint = this.bmdModel.jointData[i];
+        for (let i = 0; i < this.modelData.jointData.length; i++) {
+            const joint = this.modelData.jointData[i];
             const jointIndex = joint.jointIndex;
-            const jointEntry = this.bmdModel.bmd.jnt1.joints[jointIndex];
+            const jointEntry = this.modelData.bmd.jnt1.joints[jointIndex];
             this.jointMatrixCalc.calcJointMatrix(this.shapeInstanceState.jointToParentMatrixArray[jointIndex], jointIndex, jointEntry);
         }
     }
 
     public calcJointToWorld(): void {
-        for (let i = 0; i < this.bmdModel.jointData.length; i++) {
-            const joint = this.bmdModel.jointData[i];
+        for (let i = 0; i < this.modelData.jointData.length; i++) {
+            const joint = this.modelData.jointData[i];
 
             const jointIndex = joint.jointIndex;
             const jointToParentMatrix = this.shapeInstanceState.jointToParentMatrixArray[jointIndex];
@@ -1404,8 +1404,8 @@ export class BMDModelInstance {
     }
 
     private calcDrawMatrixArray(worldToViewMatrix: mat4): void {
-        const drw1 = this.bmdModel.bmd.drw1;
-        const evp1 = this.bmdModel.bmd.evp1;
+        const drw1 = this.modelData.bmd.drw1;
+        const evp1 = this.modelData.bmd.evp1;
 
         // Now update our matrix definition array.
         for (let i = 0; i < this.shapeInstanceState.drawViewMatrixArray.length; i++) {

@@ -10,7 +10,7 @@ import * as RARC from '../j3d/rarc';
 import { BMD, BCK, BRK, BTK, BTP } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { mat4 } from "gl-matrix";
-import { BMDModelInstance, BMDModel } from "../Common/JSYSTEM/J3D/J3DGraphBase";
+import { J3DModelInstance, J3DModelData } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget } from "../gfx/helpers/RenderTargetHelpers";
 import { gxBindingLayouts, ub_SceneParams, u_SceneParamsBufferSize, fillSceneParamsDataOnTemplate } from "../gx/gx_render";
@@ -41,11 +41,11 @@ interface GraphBase {
     destroy(device: GfxDevice): void;
 }
 
-class J3DGraphNode extends BMDModelInstance implements GraphBase {
-    public bindBCK(buffer: ArrayBufferSlice | null) { const x = buffer !== null ? BCK.parse(buffer) : null; this.bindANK1(x !== null ? x.ank1 : null); return x; }
-    public bindBTK(buffer: ArrayBufferSlice | null) { const x = buffer !== null ? BTK.parse(buffer) : null; this.bindTTK1(x !== null ? x.ttk1 : null); return x; }
-    public bindBRK(buffer: ArrayBufferSlice | null) { const x = buffer !== null ? BRK.parse(buffer) : null; this.bindTRK1(x !== null ? x.trk1 : null); return x; }
-    public bindBTP(buffer: ArrayBufferSlice | null) { const x = buffer !== null ? BTP.parse(buffer) : null; this.bindTPT1(x !== null ? x.tpt1 : null); return x; }
+class J3DGraphNode extends J3DModelInstance implements GraphBase {
+    public bindBCK(buffer: ArrayBufferSlice | null) { const x = buffer !== null ? BCK.parse(buffer) : null; this.bindANK1(x !== null ? x : null); return x; }
+    public bindBTK(buffer: ArrayBufferSlice | null) { const x = buffer !== null ? BTK.parse(buffer) : null; this.bindTTK1(x !== null ? x : null); return x; }
+    public bindBRK(buffer: ArrayBufferSlice | null) { const x = buffer !== null ? BRK.parse(buffer) : null; this.bindTRK1(x !== null ? x : null); return x; }
+    public bindBTP(buffer: ArrayBufferSlice | null) { const x = buffer !== null ? BTP.parse(buffer) : null; this.bindTPT1(x !== null ? x : null); return x; }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         const template = renderInstManager.pushTemplateRenderInst();
@@ -140,7 +140,7 @@ class ScriptRenderer implements SceneGfx {
 
     public spawnBMD = (data: ArrayBufferSlice): J3DGraphNode => {
         const bmdData = BMD.parse(data);
-        const bmdModel = new BMDModel(this.context.device, this.renderHelper.getCache(), bmdData);
+        const bmdModel = new J3DModelData(this.context.device, this.renderHelper.getCache(), bmdData);
         const bmdModelInstance = new J3DGraphNode(bmdModel);
         this.graphNodes.push(bmdModelInstance);
         return bmdModelInstance;

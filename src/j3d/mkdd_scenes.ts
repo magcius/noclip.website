@@ -9,7 +9,7 @@ import * as RARC from './rarc';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxFrontFaceMode } from '../gfx/platform/GfxPlatform';
-import { BMDModelInstance, BMDModel } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { J3DModelInstance, J3DModelData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { BCK, BMD, BTK, BRK, BTP } from '../Common/JSYSTEM/J3D/J3DLoader';
 import { SceneContext } from '../SceneBase';
 import { computeModelMatrixS } from '../MathHelpers';
@@ -20,7 +20,7 @@ const name = "Mario Kart: Double Dash!!";
 class MKDDRenderer implements Viewer.SceneGfx {
     private renderTarget = new BasicRenderTarget();
     public renderHelper: GXRenderHelperGfx;
-    public modelInstances: BMDModelInstance[] = [];
+    public modelInstances: J3DModelInstance[] = [];
     public rarc: RARC.RARC[] = [];
 
     constructor(device: GfxDevice) {
@@ -64,7 +64,7 @@ class MKDDRenderer implements Viewer.SceneGfx {
         return [layersPanel, renderHacksPanel];
     }
 
-    public addModelInstance(scene: BMDModelInstance): void {
+    public addModelInstance(scene: J3DModelInstance): void {
         this.modelInstances.push(scene);
     }
 
@@ -149,11 +149,11 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
         this.id = this.path;
     }
 
-    private spawnBMD(device: GfxDevice, renderer: MKDDRenderer, rarc: RARC.RARC, basename: string, modelMatrix: mat4 | null = null): BMDModelInstance {
+    private spawnBMD(device: GfxDevice, renderer: MKDDRenderer, rarc: RARC.RARC, basename: string, modelMatrix: mat4 | null = null): J3DModelInstance {
         const bmdFileData = assertExists(rarc.findFileData(`${basename}.bmd`));
-        const bmdModel = new BMDModel(device, renderer.renderHelper.renderInstManager.gfxRenderCache, BMD.parse(bmdFileData));
+        const bmdModel = new J3DModelData(device, renderer.renderHelper.renderInstManager.gfxRenderCache, BMD.parse(bmdFileData));
 
-        const modelInstance = new BMDModelInstance(bmdModel);
+        const modelInstance = new J3DModelInstance(bmdModel);
 
         const btkFileData = rarc.findFileData(`${basename}.btk`);
         if (btkFileData !== null)

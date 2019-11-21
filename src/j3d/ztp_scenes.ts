@@ -6,7 +6,7 @@ import * as Yaz0 from '../Common/Compression/Yaz0';
 import * as UI from '../ui';
 
 import { BMD, BMT, BTK, BRK, BCK } from '../Common/JSYSTEM/J3D/J3DLoader';
-import { BMDModel, BMDModelInstance, BMDModelMaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { J3DModelData, J3DModelInstance, BMDModelMaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { BTIData, BTI_Texture, BTI } from '../Common/JSYSTEM/JUTTexture';
 import * as RARC from './rarc';
 import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks } from '../gx/gx_material';
@@ -50,8 +50,8 @@ const materialHacks: GXMaterialHacks = {
 function createModelInstance(device: GfxDevice, cache: GfxRenderCache, extraTextures: ZTPExtraTextures, bmdFile: RARC.RARCFile, btkFile: RARC.RARCFile | null, brkFile: RARC.RARCFile | null, bckFile: RARC.RARCFile | null, bmtFile: RARC.RARCFile | null) {
     const bmd = BMD.parse(bmdFile.buffer);
     const bmt = bmtFile ? BMT.parse(bmtFile.buffer) : null;
-    const bmdModel = new BMDModel(device, cache, bmd);
-    const modelInstance = new BMDModelInstance(bmdModel, materialHacks);
+    const bmdModel = new J3DModelData(device, cache, bmd);
+    const modelInstance = new J3DModelInstance(bmdModel, materialHacks);
     if (bmt !== null)
         modelInstance.setModelMaterialData(new BMDModelMaterialData(device, cache, bmt));
 
@@ -92,7 +92,7 @@ class TwilightPrincessRenderer implements Viewer.SceneGfx {
     public renderHelper: GXRenderHelperGfx;
     public mainRenderTarget = new BasicRenderTarget();
     public opaqueSceneTexture = new ColorTexture();
-    public modelInstances: BMDModelInstance[] = [];
+    public modelInstances: J3DModelInstance[] = [];
 
     constructor(device: GfxDevice, public extraTextures: ZTPExtraTextures, public stageRarc: RARC.RARC) {
         this.renderHelper = new GXRenderHelperGfx(device);
@@ -235,7 +235,7 @@ function getRoomListFromDZS(buffer: ArrayBufferSlice): number[] {
     return [... roomList.values()];
 }
 
-function bmdModelUsesTexture(model: BMDModel, textureName: string): boolean {
+function bmdModelUsesTexture(model: J3DModelData, textureName: string): boolean {
     return model.bmd.tex1.samplers.some((sampler) => sampler.name === textureName);
 }
 
@@ -270,7 +270,7 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
             } else if (basename === 'model1') {
                 // "Water". Doesn't always mean indirect, but often can be.
                 // (Snowpeak Ruins has a model1 which is not indirect)
-                const usesIndirectMaterial = bmdModelUsesTexture(modelInstance.bmdModel, 'fbtex_dummy');
+                const usesIndirectMaterial = bmdModelUsesTexture(modelInstance.modelData, 'fbtex_dummy');
                 passMask = usesIndirectMaterial ? ZTPPass.INDIRECT : ZTPPass.OPAQUE;
             } else if (basename === 'model2') {
                 passMask = ZTPPass.TRANSPARENT;

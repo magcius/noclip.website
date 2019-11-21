@@ -7,7 +7,7 @@ import * as RARC from './rarc';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { readString, assert, getTextDecoder, assertExists, flatten } from '../util';
 
-import { BMDModelInstance, BMDModel, BMDModelMaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { J3DModelInstance, J3DModelData, BMDModelMaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { createModelInstance } from './scenes';
 import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 import { mat4, quat } from 'gl-matrix';
@@ -274,7 +274,7 @@ export class SunshineRenderer implements Viewer.SceneGfx {
     public renderHelper: GXRenderHelperGfx;
     public mainRenderTarget = new BasicRenderTarget();
     public opaqueSceneTexture = new ColorTexture();
-    public modelInstances: BMDModelInstance[] = [];
+    public modelInstances: J3DModelInstance[] = [];
 
     constructor(device: GfxDevice, public rarc: RARC.RARC) {
         this.renderHelper = new GXRenderHelperGfx(device);
@@ -377,7 +377,7 @@ export class SunshineRenderer implements Viewer.SceneGfx {
 }
 
 export class SunshineSceneDesc implements Viewer.SceneDesc {
-    public static createSunshineSceneForBasename(device: GfxDevice, cache: GfxRenderCache, passMask: number, rarc: RARC.RARC, basename: string, isSkybox: boolean): BMDModelInstance | null {
+    public static createSunshineSceneForBasename(device: GfxDevice, cache: GfxRenderCache, passMask: number, rarc: RARC.RARC, basename: string, isSkybox: boolean): J3DModelInstance | null {
         const bmdFile = rarc.findFile(`${basename}.bmd`);
         if (!bmdFile)
             return null;
@@ -430,10 +430,10 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
         });
     }
 
-    private createSceneBinObjects(device: GfxDevice, cache: GfxRenderCache, rarc: RARC.RARC, obj: SceneBinObj): BMDModelInstance[] {
+    private createSceneBinObjects(device: GfxDevice, cache: GfxRenderCache, rarc: RARC.RARC, obj: SceneBinObj): J3DModelInstance[] {
         switch (obj.type) {
         case 'Group':
-            const childTs: BMDModelInstance[][] = obj.children.map(c => this.createSceneBinObjects(device, cache, rarc, c));
+            const childTs: J3DModelInstance[][] = obj.children.map(c => this.createSceneBinObjects(device, cache, rarc, c));
             return flatten(childTs);
         case 'Model':
             const g = this.createRendererForSceneBinModel(device, cache, rarc, obj);
@@ -447,42 +447,42 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
         }
     }
 
-    private createRendererForSceneBinModel(device: GfxDevice, cache: GfxRenderCache, rarc: RARC.RARC, obj: SceneBinObjModel): BMDModelInstance | null {
+    private createRendererForSceneBinModel(device: GfxDevice, cache: GfxRenderCache, rarc: RARC.RARC, obj: SceneBinObjModel): J3DModelInstance | null {
         interface ModelLookup {
             k: string; // klass
             m: string; // model
             p?: string; // resulting file prefix
-            s?: () => BMDModelInstance | null;
+            s?: () => J3DModelInstance | null;
         };
 
-        const modelCache = new Map<RARC.RARCFile, BMDModel>();
-        function lookupModel(bmdFile: RARC.RARCFile): BMDModel {
+        const modelCache = new Map<RARC.RARCFile, J3DModelData>();
+        function lookupModel(bmdFile: RARC.RARCFile): J3DModelData {
             assert(!!bmdFile);
             if (modelCache.has(bmdFile)) {
                 return modelCache.get(bmdFile)!;
             } else {
                 const bmd = BMD.parse(bmdFile.buffer);
-                const bmdModel = new BMDModel(device, cache, bmd);
+                const bmdModel = new J3DModelData(device, cache, bmd);
                 modelCache.set(bmdFile, bmdModel);
                 return bmdModel;
             }
         }
 
-        function bmtm(bmd: string, bmt: string): BMDModelInstance {
+        function bmtm(bmd: string, bmt: string): J3DModelInstance {
             const bmdFile = assertExists(rarc.findFile(bmd));
             const bmtFile = assertExists(rarc.findFile(bmt));
             const bmdModel = lookupModel(bmdFile);
-            const modelInstance = new BMDModelInstance(bmdModel);
+            const modelInstance = new J3DModelInstance(bmdModel);
             if (bmt !== null)
                 modelInstance.setModelMaterialData(new BMDModelMaterialData(device, cache, BMT.parse(bmtFile.buffer)));
             modelInstance.passMask = SMSPass.OPAQUE;
             return modelInstance;
         }
 
-        function bckm(bmdFilename: string, bckFilename: string, loopMode: LoopMode = LoopMode.REPEAT): BMDModelInstance {
+        function bckm(bmdFilename: string, bckFilename: string, loopMode: LoopMode = LoopMode.REPEAT): J3DModelInstance {
             const bmdFile = assertExists(rarc.findFile(bmdFilename));
             const bmdModel = lookupModel(bmdFile);
-            const modelInstance = new BMDModelInstance(bmdModel);
+            const modelInstance = new J3DModelInstance(bmdModel);
             modelInstance.passMask = SMSPass.OPAQUE;
             const bckFile = assertExists(rarc.findFile(bckFilename));
             const bck = BCK.parse(bckFile.buffer);
@@ -491,7 +491,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
             return modelInstance;
         }
 
-        function basenameModel(basename: string): BMDModelInstance | null {
+        function basenameModel(basename: string): J3DModelInstance | null {
             const bmdFile = rarc.findFile(`${basename}.bmd`);
             if (!bmdFile)
                 return null;
@@ -501,7 +501,7 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
             const bmtFile = rarc.findFile(`${basename}.bmt`);
 
             const bmdModel = lookupModel(bmdFile);
-            const modelInstance = new BMDModelInstance(bmdModel);
+            const modelInstance = new J3DModelInstance(bmdModel);
             if (bmtFile !== null)
                 modelInstance.setModelMaterialData(new BMDModelMaterialData(device, cache, BMT.parse(bmtFile.buffer)));
             modelInstance.passMask = SMSPass.OPAQUE;
