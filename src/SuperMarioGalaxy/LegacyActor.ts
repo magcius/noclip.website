@@ -1,6 +1,5 @@
 
 import { mat4, vec3 } from "gl-matrix";
-import { getPointBezier } from "../Spline";
 import { assertExists, hexzero } from "../util";
 import { LiveActor, ZoneAndLayer, startBck, startBrkIfExist, startBtkIfExist, startBckIfExist, startBvaIfExist, dynamicSpawnZoneAndLayer } from "./LiveActor";
 import { SceneObjHolder, getObjectName } from "./Main";
@@ -60,88 +59,9 @@ interface AnimOptions {
     brk?: string;
 }
 
-function getPointLinear_3(dst: vec3, p0: vec3, p1: vec3, t: number): void {
-    vec3.lerp(dst, p0, p1, t);
-}
-
-function getPointBezier_3(dst: vec3, p0: vec3, c0: vec3, c1: vec3, p1: vec3, t: number): void {
-    dst[0] = getPointBezier(p0[0], c0[0], c1[0], p1[0], t);
-    dst[1] = getPointBezier(p0[1], c0[1], c1[1], p1[1], t);
-    dst[2] = getPointBezier(p0[2], c0[2], c1[2], p1[2], t);
-}
-
-function interpPathPoints(dst: vec3, pt0: Point, pt1: Point, t: number): void {
-    const p0 = pt0.p0;
-    const c0 = pt0.p2;
-    const c1 = pt1.p1;
-    const p1 = pt1.p0;
-    if (vec3.equals(p0, c0) && vec3.equals(c1, p1))
-        getPointLinear_3(dst, p0, p1, t);
-    else
-        getPointBezier_3(dst, p0, c0, c1, p1, t);
-}
-
-interface ModelMatrixAnimator {
-    updateRailAnimation(dst: mat4, time: number): void;
-}
-
-const scratchVec3 = vec3.create();
-class RailAnimationTico {
-    private railPhase: number = 0;
-
-    constructor(public path: Path) {
-    }
-
-    public updateRailAnimation(dst: mat4, time: number): void {
-        const path = this.path;
-
-        // TODO(jstpierre): calculate speed. probably on the objinfo.
-        const tS = time / 35;
-        const t = (tS + this.railPhase) % 1.0;
-
-        // Which point are we in?
-        let numSegments = path.points.length;
-        if (path.closed === 'OPEN')
-            --numSegments;
-
-        const segmentFrac = t * numSegments;
-        const s0 = segmentFrac | 0;
-        const sT = segmentFrac - s0;
-
-        const s1 = (s0 >= path.points.length - 1) ? 0 : s0 + 1;
-        const pt0 = assertExists(path.points[s0]);
-        const pt1 = assertExists(path.points[s1]);
-
-        const c = scratchVec3;
-        interpPathPoints(c, pt0, pt1, sT);
-        // mat4.identity(dst);
-        dst[12] = c[0];
-        dst[13] = c[1];
-        dst[14] = c[2];
-
-        // Now compute the derivative to rotate.
-        interpPathPoints(c, pt0, pt1, sT + 0.05);
-        c[0] -= dst[12];
-        c[1] -= dst[13];
-        c[2] -= dst[14];
-
-        /*
-        const cx = c[0], cy = c[1], cz = c[2];
-        const yaw = Math.atan2(cz, -cx) - Math.PI / 2;
-        const pitch = Math.atan2(cy, Math.sqrt(cx*cx+cz*cz));
-        mat4.rotateZ(dst, dst, pitch);
-        mat4.rotateY(dst, dst, yaw);
-        */
-
-        const ny = Math.atan2(c[2], -c[0]);
-        mat4.rotateY(dst, dst, ny);
-    }
-}
-
 const enum RotateAxis { X, Y, Z };
 
 export class NoclipLegacyActor extends LiveActor {
-    private modelMatrixAnimator: ModelMatrixAnimator | null = null;
     private rotateSpeed = 0;
     private rotatePhase = 0;
     private rotateAxis: RotateAxis = RotateAxis.Y;
@@ -176,13 +96,6 @@ export class NoclipLegacyActor extends LiveActor {
         }
 
         this.initEffectKeeper(sceneObjHolder, null);
-
-        this.setupAnimations();
-    }
-
-    public setupAnimations(): void {
-        if (this.objinfo.objName === 'TicoRail')
-            this.modelMatrixAnimator = new RailAnimationTico(assertExists(this.objinfo.path));
     }
 
     public setRotateSpeed(speed: number, axis = RotateAxis.Y): void {
@@ -207,8 +120,6 @@ export class NoclipLegacyActor extends LiveActor {
         const time = viewerInput.time / 1000;
         super.calcAndSetBaseMtx(viewerInput);
         this.updateMapPartsRotation(this.modelInstance!.modelMatrix, time);
-        if (this.modelMatrixAnimator !== null)
-            this.modelMatrixAnimator.updateRailAnimation(this.modelInstance!.modelMatrix, time);
     }
 }
 
@@ -398,11 +309,6 @@ export class NoclipLegacyActorSpawner {
             // SMG1.
             case 'Rabbit':
                 spawnGraph('TrickRabbit');
-                break;
-            case 'TicoRail':
-                spawnGraph('Tico').then(([node, rarc]) => {
-                    bindChangeAnimation(node, rarc, objinfo.objArg0);
-                });
                 break;
             case 'TicoShop':
                 spawnGraph(`TicoShop`).then(([node, rarc]) => {
