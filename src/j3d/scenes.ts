@@ -98,17 +98,17 @@ export function createModelInstance(device: GfxDevice, cache: GfxRenderCache, bm
 
     if (btkFile !== null) {
         const btk = BTK.parse(btkFile.buffer);
-        scene.bindTTK1(btk.ttk1);
+        scene.bindTTK1(btk);
     }
 
     if (brkFile !== null) {
         const brk = BRK.parse(brkFile.buffer);
-        scene.bindTRK1(brk.trk1);
+        scene.bindTRK1(brk);
     }
 
     if (bckFile !== null) {
         const bck = BCK.parse(bckFile.buffer);
-        scene.bindANK1(bck.ank1);
+        scene.bindANK1(bck);
     }
 
     return scene;

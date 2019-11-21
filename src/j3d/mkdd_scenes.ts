@@ -157,15 +157,15 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
 
         const btkFileData = rarc.findFileData(`${basename}.btk`);
         if (btkFileData !== null)
-            modelInstance.bindTTK1(BTK.parse(btkFileData).ttk1);
+            modelInstance.bindTTK1(BTK.parse(btkFileData));
 
         const brkFileData = rarc.findFileData(`${basename}.brk`);
         if (brkFileData !== null)
-            modelInstance.bindTRK1(BRK.parse(brkFileData).trk1);
+            modelInstance.bindTRK1(BRK.parse(brkFileData));
 
         const btpFileData = rarc.findFileData(`${basename}.btp`);
         if (btpFileData !== null)
-            modelInstance.bindTPT1(BTP.parse(btpFileData).tpt1);
+            modelInstance.bindTPT1(BTP.parse(btpFileData));
 
         modelInstance.name = basename;
         if (modelMatrix !== null)
@@ -201,7 +201,7 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
                 }
                 if (bckFile !== null) {
                     const bck = BCK.parse(bckFile.buffer);
-                    scene.bindANK1(bck.ank1);
+                    scene.bindANK1(bck);
                 }
             };
 

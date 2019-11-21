@@ -407,7 +407,7 @@ export class NoclipLegacyActorSpawner {
                         animationController.setTimeInFrames(frame);
 
                         const btp = BTP.parse(rarc.findFileData(`powerstar.btp`)!);
-                        node.modelInstance!.bindTPT1(btp.tpt1, animationController);
+                        node.modelInstance!.bindTPT1(btp, animationController);
                     } else {
                         const frame = name === 'GreenStar' ? 2 : 0;
 
@@ -415,7 +415,7 @@ export class NoclipLegacyActorSpawner {
                         animationController.setTimeInFrames(frame);
 
                         const btp = BTP.parse(rarc.findFileData(`PowerStarColor.btp`)!);
-                        node.modelInstance!.bindTPT1(btp.tpt1, animationController);
+                        node.modelInstance!.bindTPT1(btp, animationController);
                     }
 
                     node.modelInstance!.setMaterialVisible('Empty', false);
@@ -437,7 +437,7 @@ export class NoclipLegacyActorSpawner {
             case 'Moc':
                 spawnGraph(name, SceneGraphTag.Normal, { bck: 'turn.bck' }).then(([node, rarc]) => {
                     const bva = BVA.parse(rarc.findFileData(`FaceA.bva`)!);
-                    node.modelInstance!.bindVAF1(bva.vaf1);
+                    node.modelInstance!.bindVAF1(bva);
                 });
                 break;
             case 'CareTakerHunter':

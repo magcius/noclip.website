@@ -486,8 +486,8 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
             modelInstance.passMask = SMSPass.OPAQUE;
             const bckFile = assertExists(rarc.findFile(bckFilename));
             const bck = BCK.parse(bckFile.buffer);
-            bck.ank1.loopMode = loopMode;
-            modelInstance.bindANK1(bck.ank1);
+            bck.loopMode = loopMode;
+            modelInstance.bindANK1(bck);
             return modelInstance;
         }
 
@@ -508,17 +508,17 @@ export class SunshineSceneDesc implements Viewer.SceneDesc {
 
             if (btkFile !== null) {
                 const btk = BTK.parse(btkFile.buffer);
-                modelInstance.bindTTK1(btk.ttk1);
+                modelInstance.bindTTK1(btk);
             }
         
             if (brkFile !== null) {
                 const brk = BRK.parse(brkFile.buffer);
-                modelInstance.bindTRK1(brk.trk1);
+                modelInstance.bindTRK1(brk);
             }
         
             if (bckFile !== null) {
                 const bck = BCK.parse(bckFile.buffer);
-                modelInstance.bindANK1(bck.ank1);
+                modelInstance.bindANK1(bck);
             }
 
             modelInstance.name = basename;

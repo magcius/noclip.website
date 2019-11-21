@@ -705,7 +705,6 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             const texGenIndex = view.getInt16(materialEntryIdx + 0x28 + j * 0x02);
             if (texGenIndex < 0)
                 continue;
-            const index = j;
             const type: GX.TexGenType = view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x00);
             const source: GX.TexGenSrc = view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x01);
             const matrixCheck: GX.TexGenMatrix = view.getUint8(texGenTableOffs + texGenIndex * 0x04 + 0x02);
@@ -1482,19 +1481,13 @@ export function bindTTK1Animator(animationController: AnimationController, ttk1:
 //#endregion
 //#region BTK
 export class BTK {
-    public static parse(buffer: ArrayBufferSlice): BTK {
-        const btk = new BTK();
-
+    public static parse(buffer: ArrayBufferSlice): TTK1 {
         const j3d = new JSystemFileReaderHelper(buffer);
         assert(j3d.magic === 'J3D1btk1');
 
         // For some reason, TTK1 chunks have an invalid size chunk with 0x04 extra bytes.
-        btk.ttk1 = readTTK1Chunk(j3d.nextChunk('TTK1', -0x04));
-
-        return btk;
+        return readTTK1Chunk(j3d.nextChunk('TTK1', -0x04));
     }
-
-    public ttk1: TTK1;
 }
 //#endregion
 //#endregion
@@ -1622,18 +1615,12 @@ export function bindTRK1Animator(animationController: AnimationController, trk1:
 //#endregion
 //#region BRK
 export class BRK {
-    public static parse(buffer: ArrayBufferSlice): BRK {
-        const brk = new BRK();
-
+    public static parse(buffer: ArrayBufferSlice): TRK1 {
         const j3d = new JSystemFileReaderHelper(buffer);
         assert(j3d.magic === 'J3D1brk1');
 
-        brk.trk1 = readTRK1Chunk(j3d.nextChunk('TRK1'));
-
-        return brk;
+        return readTRK1Chunk(j3d.nextChunk('TRK1'));
     }
-
-    public trk1: TRK1;
 }
 //#endregion
 //#endregion
@@ -1691,18 +1678,12 @@ function readPAK1Chunk(buffer: ArrayBufferSlice): TRK1 {
 //#endregion
 //#region BPK
 export class BPK {
-    public static parse(buffer: ArrayBufferSlice): BPK {
-        const bpk = new BPK();
-
+    public static parse(buffer: ArrayBufferSlice): TRK1 {
         const j3d = new JSystemFileReaderHelper(buffer);
         assert(j3d.magic === 'J3D1bpk1');
 
-        bpk.pak1 = readPAK1Chunk(j3d.nextChunk('PAK1'));
-
-        return bpk;
+        return readPAK1Chunk(j3d.nextChunk('PAK1'));
     }
-
-    public pak1: TRK1;
 }
 //#endregion
 //#endregion
@@ -1829,18 +1810,12 @@ export function bindANK1Animator(animationController: AnimationController, ank1:
 //#endregion
 //#region BCK
 export class BCK {
-    public static parse(buffer: ArrayBufferSlice): BCK {
-        const bck = new BCK();
-
+    public static parse(buffer: ArrayBufferSlice): ANK1 {
         const j3d = new JSystemFileReaderHelper(buffer);
         assert(j3d.magic === 'J3D1bck1');
 
-        bck.ank1 = readANK1Chunk(j3d.nextChunk('ANK1'));
-
-        return bck;
+        return readANK1Chunk(j3d.nextChunk('ANK1'));
     }
-
-    public ank1: ANK1;
 }
 //#endregion
 //#endregion
@@ -1921,18 +1896,12 @@ export function bindTPT1Animator(animationController: AnimationController, tpt1:
 //#endregion
 //#region BTP
 export class BTP {
-    public static parse(buffer: ArrayBufferSlice): BTP {
-        const btp = new BTP();
-
+    public static parse(buffer: ArrayBufferSlice): TPT1 {
         const j3d = new JSystemFileReaderHelper(buffer);
         assert(j3d.magic === 'J3D1btp1');
 
-        btp.tpt1 = readTPT1Chunk(j3d.nextChunk('TPT1'));
-
-        return btp;
+        return readTPT1Chunk(j3d.nextChunk('TPT1'));
     }
-
-    public tpt1: TPT1;
 }
 //#endregion
 //#endregion
@@ -2005,15 +1974,11 @@ export function bindVAF1Animator(animationController: AnimationController, vaf1:
 //#endregion
 //#region BVA
 export class BVA {
-    public static parse(buffer: ArrayBufferSlice): BVA {
-        const bva = new BVA();
-
+    public static parse(buffer: ArrayBufferSlice): VAF1 {
         const j3d = new JSystemFileReaderHelper(buffer);
         assert(j3d.magic === 'J3D1bva1');
 
-        bva.vaf1 = readVAF1Chunk(j3d.nextChunk('VAF1'));
-
-        return bva;
+        return readVAF1Chunk(j3d.nextChunk('VAF1'));
     }
 
     public vaf1: VAF1;

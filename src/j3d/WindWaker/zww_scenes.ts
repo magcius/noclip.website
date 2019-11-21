@@ -302,17 +302,17 @@ function createModelInstance(device: GfxDevice, cache: GfxRenderCache, rarc: RAR
 
     if (btkFile !== null) {
         const btk = BTK.parse(btkFile.buffer);
-        modelInstance.bindTTK1(btk.ttk1);
+        modelInstance.bindTTK1(btk);
     }
 
     if (brkFile !== null) {
         const brk = BRK.parse(brkFile.buffer);
-        modelInstance.bindTRK1(brk.trk1);
+        modelInstance.bindTRK1(brk);
     }
 
     if (bckFile !== null) {
         const bck = BCK.parse(bckFile.buffer);
-        modelInstance.bindANK1(bck.ank1);
+        modelInstance.bindANK1(bck);
     }
 
     modelInstance.isSkybox = isSkybox;
@@ -1299,9 +1299,9 @@ class SceneDesc {
             return emitter;
         }
 
-        function parseBCK(rarc: RARC.RARC, path: string) { const g = BCK.parse(rarc.findFileData(path)!).ank1; g.loopMode = LoopMode.REPEAT; return g; }
-        function parseBRK(rarc: RARC.RARC, path: string) { return BRK.parse(rarc.findFileData(path)!).trk1; }
-        function parseBTK(rarc: RARC.RARC, path: string) { return BTK.parse(rarc.findFileData(path)!).ttk1; }
+        function parseBCK(rarc: RARC.RARC, path: string) { const g = BCK.parse(rarc.findFileData(path)!); g.loopMode = LoopMode.REPEAT; return g; }
+        function parseBRK(rarc: RARC.RARC, path: string) { return BRK.parse(rarc.findFileData(path)!); }
+        function parseBTK(rarc: RARC.RARC, path: string) { return BTK.parse(rarc.findFileData(path)!); }
         function animFrame(frame: number): AnimationController { const a = new AnimationController(); a.setTimeInFrames(frame); return a; }
 
         // Tremendous special thanks to LordNed, Sage-of-Mirrors & LugoLunatic for their work on actor mapping

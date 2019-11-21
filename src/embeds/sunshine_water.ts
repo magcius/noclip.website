@@ -8,7 +8,7 @@ import { SceneGfx, ViewerRenderInput } from '../viewer';
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
 
-import { BMD, BTK, MaterialEntry } from '../Common/JSYSTEM/J3D/J3DLoader';
+import { BMD, BTK, MaterialEntry, TTK1 } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as RARC from '../j3d/rarc';
 import { BMDModel, MaterialInstance, MaterialInstanceState, ShapeInstanceState, MaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { SunshineRenderer, SunshineSceneDesc, SMSPass } from '../j3d/sms_scenes';
@@ -122,7 +122,7 @@ class SeaPlaneScene {
     private animationController: AnimationController;
     private modelMatrix = mat4.create();
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, bmd: BMD, btk: BTK, configName: string) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, bmd: BMD, btk: TTK1, configName: string) {
         mat4.copy(this.modelMatrix, posMtx);
 
         this.animationController = new AnimationController();
@@ -144,7 +144,7 @@ class SeaPlaneScene {
         this.mangleMaterial(seaMaterial, configName);
         const seaMaterialData = new MaterialData(seaMaterial);
         this.seaMaterialInstance = new MaterialInstance(seaMaterialData, {});
-        this.seaMaterialInstance.bindTTK1(this.animationController, btk.ttk1);
+        this.seaMaterialInstance.bindTTK1(this.animationController, btk);
         this.plane = new PlaneShape(device, cache);
 
         this.shapeInstanceState.worldToViewMatrix = scratchViewMatrix;

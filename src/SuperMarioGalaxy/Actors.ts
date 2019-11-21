@@ -453,7 +453,7 @@ export function bindColorChangeAnimation(modelInstance: BMDModelInstance, arc: R
         animationController.setTimeInFrames(frame);
 
         const brk = BRK.parse(assertExists(arc.findFileData(brkName)));
-        modelInstance.bindTRK1(brk.trk1, animationController);
+        modelInstance.bindTRK1(brk, animationController);
     }
 }
 
@@ -466,12 +466,12 @@ export function bindTexChangeAnimation(modelInstance: BMDModelInstance, arc: RAR
 
     if (arc.findFile(btpName) !== null) {
         const btp = BTP.parse(assertExists(arc.findFileData(btpName)));
-        modelInstance.bindTPT1(btp.tpt1, animationController);
+        modelInstance.bindTPT1(btp, animationController);
     }
 
     if (arc.findFile(btkName) !== null) {
         const btk = BTK.parse(assertExists(arc.findFileData(btkName)));
-        modelInstance.bindTTK1(btk.ttk1, animationController);
+        modelInstance.bindTTK1(btk, animationController);
     }
 }
 
@@ -1099,7 +1099,7 @@ export class StarPiece extends LiveActor {
 
         const animationController = new AnimationController();
         animationController.setTimeInFrames(5);
-        this.modelInstance!.bindTTK1(BTK.parse(this.arc.findFileData(`Gift.btk`)!).ttk1, animationController);
+        this.modelInstance!.bindTTK1(BTK.parse(this.arc.findFileData(`Gift.btk`)!), animationController);
     }
 
     public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
@@ -1125,7 +1125,7 @@ export class EarthenPipe extends LiveActor {
         const colorFrame = fallback(getJMapInfoArg7(infoIter), 0);
         const animationController = new AnimationController();
         animationController.setTimeInFrames(colorFrame);
-        this.modelInstance!.bindTRK1(BRK.parse(this.arc.findFileData(`EarthenPipe.brk`)!).trk1, animationController);
+        this.modelInstance!.bindTRK1(BRK.parse(this.arc.findFileData(`EarthenPipe.brk`)!), animationController);
 
         connectToSceneCollisionMapObjStrongLight(sceneObjHolder, this);
 

@@ -65,17 +65,17 @@ function createModelInstance(device: GfxDevice, cache: GfxRenderCache, extraText
 
     if (btkFile !== null) {
         const btk = BTK.parse(btkFile.buffer);
-        modelInstance.bindTTK1(btk.ttk1);
+        modelInstance.bindTTK1(btk);
     }
 
     if (brkFile !== null) {
         const brk = BRK.parse(brkFile.buffer);
-        modelInstance.bindTRK1(brk.trk1);
+        modelInstance.bindTRK1(brk);
     }
 
     if (bckFile !== null) {
         const bck = BCK.parse(bckFile.buffer);
-        modelInstance.bindANK1(bck.ank1);
+        modelInstance.bindANK1(bck);
     }
 
     return modelInstance;

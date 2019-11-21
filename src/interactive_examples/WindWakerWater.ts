@@ -7,7 +7,7 @@ import { SceneGfx, ViewerRenderInput } from '../viewer';
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
 
-import { BMD, BTK } from '../Common/JSYSTEM/J3D/J3DLoader';
+import { BMD, BTK, TTK1 } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as RARC from '../j3d/rarc';
 import { BMDModel, MaterialInstance, MaterialInstanceState, ShapeInstanceState, MaterialData, BMDModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import * as Yaz0 from '../Common/Compression/Yaz0';
@@ -131,7 +131,7 @@ class Plane {
     public modelMatrix = mat4.create();
     private origin = vec3.create();
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, private bmdModel: BMDModel, btk: BTK | null, materialIndex: number = 0) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, private bmdModel: BMDModel, btk: TTK1 | null, materialIndex: number = 0) {
         mat4.copy(this.modelMatrix, posMtx);
 
         this.animationController = new AnimationController();
@@ -144,7 +144,7 @@ class Plane {
         const matData = new MaterialData(mat);
         this.materialInstance = new MaterialInstance(matData, {});
         if (btk !== null)
-            this.materialInstance.bindTTK1(this.animationController, btk.ttk1);
+            this.materialInstance.bindTTK1(this.animationController, btk);
         this.plane = new PlaneShape(device, cache);
 
         this.shapeInstanceState.worldToViewMatrix = scratchViewMatrix;

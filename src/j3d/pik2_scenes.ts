@@ -49,7 +49,7 @@ class Pik2SceneDesc implements Viewer.SceneDesc {
                 const m = this.spawnBMD(device, renderer, rarc, `model`);
                 const btk = rarc.findFileData(`texanm_1.btk`);
                 if (btk !== null)
-                    m.bindTTK1(BTK.parse(btk).ttk1);
+                    m.bindTTK1(BTK.parse(btk));
                 renderer.addModelInstance(m);
             }
 

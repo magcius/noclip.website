@@ -77,8 +77,8 @@ export function startBckIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC,
     if (data !== null) {
         const bck = BCK.parse(data);
         if (animationName.toLowerCase() === 'wait')
-            bck.ank1.loopMode = LoopMode.REPEAT;
-        modelInstance.bindANK1(bck.ank1);
+            bck.loopMode = LoopMode.REPEAT;
+        modelInstance.bindANK1(bck);
     }
     return data !== null;
 }
@@ -86,35 +86,35 @@ export function startBckIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC,
 export function startBtkIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): boolean {
     const data = arc.findFileData(`${animationName}.btk`);
     if (data !== null)
-        modelInstance.bindTTK1(BTK.parse(data).ttk1);
+        modelInstance.bindTTK1(BTK.parse(data));
     return data !== null;
 }
 
 export function startBrkIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): boolean {
     const data = arc.findFileData(`${animationName}.brk`);
     if (data !== null)
-        modelInstance.bindTRK1(BRK.parse(data).trk1);
+        modelInstance.bindTRK1(BRK.parse(data));
     return data !== null;
 }
 
 export function startBpkIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): boolean {
     const data = arc.findFileData(`${animationName}.bpk`);
     if (data !== null)
-        modelInstance.bindTRK1(BPK.parse(data).pak1);
+        modelInstance.bindTRK1(BPK.parse(data));
     return data !== null;
 }
 
 export function startBtpIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): boolean {
     const data = arc.findFileData(`${animationName}.btp`);
     if (data !== null)
-        modelInstance.bindTPT1(BTP.parse(data).tpt1);
+        modelInstance.bindTPT1(BTP.parse(data));
     return data !== null;
 }
 
 export function startBvaIfExist(modelInstance: BMDModelInstance, arc: RARC.RARC, animationName: string): boolean {
     const data = arc.findFileData(`${animationName}.bva`);
     if (data !== null)
-        modelInstance.bindVAF1(BVA.parse(data).vaf1);
+        modelInstance.bindVAF1(BVA.parse(data));
     return data !== null;
 }
 
