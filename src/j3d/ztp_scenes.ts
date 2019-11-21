@@ -18,6 +18,7 @@ import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor,
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { SceneContext } from '../SceneBase';
 import { computeModelMatrixS } from '../MathHelpers';
+import { mat4 } from 'gl-matrix';
 
 class ZTPExtraTextures {
     public extraTextures: BTIData[] = [];
@@ -100,6 +101,7 @@ class TwilightPrincessRenderer implements Viewer.SceneGfx {
     private setMirrored(mirror: boolean): void {
         const negScaleMatrix = mat4.create();
         computeModelMatrixS(negScaleMatrix, -1, 1, 1);
+
         for (let i = 0; i < this.modelInstances.length; i++) {
             mat4.mul(this.modelInstances[i].modelMatrix, negScaleMatrix, this.modelInstances[i].modelMatrix);
             for (let j = 0; j < this.modelInstances[i].materialInstances.length; j++)
