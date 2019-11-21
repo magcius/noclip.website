@@ -1,23 +1,24 @@
 
 // Implements Nintendo's J3D formats (BMD, BDL, BTK, etc.)
 
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4 } from 'gl-matrix';
 
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { Endianness } from '../endian';
-import { assert, readString, assertExists } from '../util';
+import ArrayBufferSlice from '../../../ArrayBufferSlice';
+import { Endianness } from '../../../endian';
+import { assert, readString, assertExists } from '../../../util';
 
-import { compileVtxLoader, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexLayout, getAttributeByteSize } from '../gx/gx_displaylist';
-import * as GX from '../gx/gx_enum';
-import * as GX_Material from '../gx/gx_material';
-import AnimationController from '../AnimationController';
-import { ColorKind } from '../gx/gx_render';
-import { AABB } from '../Geometry';
-import { getPointHermite } from '../Spline';
-import { computeModelMatrixSRT } from '../MathHelpers';
-import BitMap from '../BitMap';
-import { autoOptimizeMaterial } from '../gx/gx_render';
-import { Color, colorNew } from '../Color';
+import { compileVtxLoader, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexLayout, getAttributeByteSize } from '../../../gx/gx_displaylist';
+import * as GX from '../../../gx/gx_enum';
+import * as GX_Material from '../../../gx/gx_material';
+import AnimationController from '../../../AnimationController';
+import { ColorKind } from '../../../gx/gx_render';
+import { AABB } from '../../../Geometry';
+import { getPointHermite } from '../../../Spline';
+import { computeModelMatrixSRT } from '../../../MathHelpers';
+import BitMap from '../../../BitMap';
+import { autoOptimizeMaterial } from '../../../gx/gx_render';
+import { Color, colorNew } from '../../../Color';
+import { readBTI_Texture, BTI_Texture } from '../JUTTexture';
 
 //#region Helpers
 // ResNTAB / JUTNameTab
@@ -72,70 +73,6 @@ export class JSystemFileReaderHelper {
         assert(chunkId === expectedChunkId);
         this.offs += chunkSize;
         return this.buffer.subarray(chunkStart, chunkSize);
-    }
-}
-//#endregion
-//#region BTI_Texture
-export interface BTI_Texture {
-    name: string;
-    format: GX.TexFormat;
-    width: number;
-    height: number;
-    wrapS: GX.WrapMode;
-    wrapT: GX.WrapMode;
-    minFilter: GX.TexFilter;
-    magFilter: GX.TexFilter;
-    minLOD: number;
-    maxLOD: number;
-    lodBias: number;
-    mipCount: number;
-    data: ArrayBufferSlice | null;
-
-    // Palette data
-    paletteFormat: GX.TexPalette;
-    paletteData: ArrayBufferSlice | null;
-}
-
-function readBTI_Texture(buffer: ArrayBufferSlice, name: string): BTI_Texture {
-    const view = buffer.createDataView();
-
-    const format: GX.TexFormat = view.getUint8(0x00);
-    const width: number = view.getUint16(0x02);
-    const height: number = view.getUint16(0x04);
-    const wrapS: GX.WrapMode = view.getUint8(0x06);
-    const wrapT: GX.WrapMode = view.getUint8(0x07);
-    const paletteFormat: GX.TexPalette = view.getUint8(0x09);
-    const paletteCount: number = view.getUint16(0x0A);
-    const paletteOffs: number = view.getUint32(0x0C);
-    const minFilter: GX.TexFilter = view.getUint8(0x14);
-    const magFilter: GX.TexFilter = view.getUint8(0x15);
-    const minLOD: number = view.getInt8(0x16) * 1/8;
-    const maxLOD: number = view.getInt8(0x17) * 1/8;
-    const mipCount: number = view.getUint8(0x18);
-    const lodBias: number = view.getInt16(0x1A) * 1/100;
-    const dataOffs: number = view.getUint32(0x1C);
-
-    assert(minLOD === 0);
-
-    let data: ArrayBufferSlice | null = null;
-    if (dataOffs !== 0)
-        data = buffer.slice(dataOffs);
-
-    let paletteData: ArrayBufferSlice | null = null;
-    if (paletteOffs !== 0)
-        paletteData = buffer.subarray(paletteOffs, paletteCount * 2);
-
-    return { name, format, width, height, wrapS, wrapT, minFilter, magFilter, minLOD, maxLOD, mipCount, lodBias, data, paletteFormat, paletteData };
-}
-//#endregion
-//#region BTI
-export class BTI {
-    texture: BTI_Texture;
-
-    public static parse(buffer: ArrayBufferSlice, name: string): BTI {
-        const bti = new BTI();
-        bti.texture = readBTI_Texture(buffer, name);
-        return bti;
     }
 }
 //#endregion

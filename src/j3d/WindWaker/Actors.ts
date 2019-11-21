@@ -4,8 +4,8 @@ import * as GX from '../../gx/gx_enum';
 import * as GX_Material from '../../gx/gx_material';
 
 import { mat4, vec3 } from "gl-matrix";
-import { BMDModelInstance, BTIData } from "../render";
-import { ANK1, TTK1, TRK1, BTI_Texture } from "../j3d";
+import { BMDModelInstance } from "../../Common/JSYSTEM/J3D/J3DGraphBase";
+import { ANK1, TTK1, TRK1 } from "../../Common/JSYSTEM/J3D/J3DLoader";
 import AnimationController from "../../AnimationController";
 import { KyankoColors, ZWWExtraTextures } from "./zww_scenes";
 import { ColorKind, PacketParams, MaterialParams, ub_MaterialParams, loadedDataCoalescerComboGfx } from "../../gx/gx_render";
@@ -22,6 +22,7 @@ import { TextureMapping } from '../../TextureHolder';
 import { colorFromRGBA, White, colorNewCopy, colorCopy } from '../../Color';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
 import { GfxRenderInstManager } from '../../gfx/render/GfxRenderer';
+import { BTIData, BTI_Texture } from '../../Common/JSYSTEM/JUTTexture';
 
 // Special-case actors
 

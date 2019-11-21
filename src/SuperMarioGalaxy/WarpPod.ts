@@ -7,8 +7,7 @@ import * as GX from "../gx/gx_enum";
 import { LiveActor, startBck, startBrkIfExist, ZoneAndLayer } from "./LiveActor";
 import { SceneObjHolder, getObjectName } from "./Main";
 import { JMapInfoIter, getJMapInfoArg1, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg6, getJMapInfoGroupId, getJMapInfoBool } from "./JMapInfo";
-import { BTIData } from "../j3d/render";
-import { LoopMode } from "../j3d/j3d";
+import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { RARC } from "../j3d/rarc";
 import { assertExists, fallback } from "../util";
 import { DrawBufferType, DrawType } from "./NameObj";
@@ -22,6 +21,7 @@ import { Camera } from "../Camera";
 import { GXMaterialHelperGfx, ub_MaterialParams, u_PacketParamsBufferSize, ub_PacketParams, MaterialParams, PacketParams, fillPacketParamsData, ColorKind } from "../gx/gx_render";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { setLoopMode } from "./ActorUtil";
+import { BTIData } from "../Common/JSYSTEM/JUTTexture";
 
 const warpPodColorTable = [
     colorNewFromRGBA8(0x0064C8FF),

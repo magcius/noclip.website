@@ -5,9 +5,9 @@ import { readString } from '../util';
 import * as UI from '../ui';
 import * as Viewer from '../viewer';
 
-import { BMD, BMT, BTK, BRK, BCK } from './j3d';
+import { BMD, BMT, BTK, BRK, BCK } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as RARC from './rarc';
-import { BMDModelInstance, BMDModel, BMDModelMaterialData } from './render';
+import { BMDModelInstance, BMDModel, BMDModelMaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';

@@ -8,9 +8,9 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assertExists } from '../util';
 import { mat4, } from 'gl-matrix';
 import * as RARC from './rarc';
-import { BMDModelInstance } from './render';
+import { BMDModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { BTK } from './j3d';
+import { BTK } from '../Common/JSYSTEM/J3D/J3DLoader';
 import { SceneContext } from '../SceneBase';
 
 const id = "pik2";

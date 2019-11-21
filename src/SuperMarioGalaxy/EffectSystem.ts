@@ -1,6 +1,6 @@
 
 import * as RARC from '../j3d/rarc';
-import * as JPA from '../j3d/JPA';
+import * as JPA from '../Common/JSYSTEM/JPA';
 
 import { createCsvParser, JMapInfoIter } from "./JMapInfo";
 import { SceneObjHolder } from "./Main";

@@ -7,10 +7,10 @@ import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { GfxDevice, GfxRenderPass, GfxHostAccessPass } from "../gfx/platform/GfxPlatform";
 
 import * as RARC from '../j3d/rarc';
-import { BMD, BCK, BRK, BTK, BTP } from "../j3d/j3d";
+import { BMD, BCK, BRK, BTK, BTP } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { mat4 } from "gl-matrix";
-import { BMDModelInstance, BMDModel } from "../j3d/render";
+import { BMDModelInstance, BMDModel } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget } from "../gfx/helpers/RenderTargetHelpers";
 import { gxBindingLayouts, ub_SceneParams, u_SceneParamsBufferSize, fillSceneParamsDataOnTemplate } from "../gx/gx_render";

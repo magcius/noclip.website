@@ -7,11 +7,11 @@ import * as RARC from './rarc';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { readString, assert, getTextDecoder, assertExists, flatten } from '../util';
 
-import { BMDModelInstance, BMDModel, BMDModelMaterialData } from './render';
+import { BMDModelInstance, BMDModel, BMDModelMaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { createModelInstance } from './scenes';
 import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 import { mat4, quat } from 'gl-matrix';
-import { LoopMode, BMD, BMT, BCK, BTK, BRK } from './j3d';
+import { LoopMode, BMD, BMT, BCK, BTK, BRK } from '../Common/JSYSTEM/J3D/J3DLoader';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { BasicRenderTarget, ColorTexture, makeClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';

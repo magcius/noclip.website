@@ -13,8 +13,8 @@ import { computeModelMatrixSRT, computeEulerAngleRotationFromSRTMatrix } from ".
 import { Camera } from "../Camera";
 import { LightType } from "./DrawBuffer";
 
-import { BMDModelInstance } from "../j3d/render";
-import { BRK, BTK, BCK, LoopMode, BVA, BTP, BPK } from '../j3d/j3d';
+import { BMDModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
+import { BRK, BTK, BCK, LoopMode, BVA, BTP, BPK } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as RARC from '../j3d/rarc';
 import * as Viewer from '../viewer';
 import { assertExists, fallback } from "../util";

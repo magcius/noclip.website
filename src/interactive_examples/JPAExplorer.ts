@@ -5,7 +5,7 @@ import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxTexture } from "../gfx/
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { OrbitCameraController, texProjCameraSceneTex } from "../Camera";
 import { colorNew } from "../Color";
-import * as JPA from '../j3d/JPA';
+import * as JPA from '../Common/JSYSTEM/JPA';
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec3 } from "gl-matrix";
 import { GfxRenderInstManager, executeOnPass } from "../gfx/render/GfxRenderer";

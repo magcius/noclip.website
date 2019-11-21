@@ -7,7 +7,7 @@ import { JMapInfoIter, createCsvParser } from "./JMapInfo";
 import { isExistIndirectTexture, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneIndirectMapObjStrongLight, connectToSceneBloom, bindColorChangeAnimation, bindTexChangeAnimation, emitEffect, createModelObjMapObj, MiniRoutePoint, MiniRoutePart, MiniRouteGalaxy } from "./Actors";
 import { ViewerRenderInput } from "../viewer";
 import { RARC } from "../j3d/rarc";
-import { LoopMode, BTP, BVA } from "../j3d/j3d";
+import { LoopMode, BTP, BVA } from "../Common/JSYSTEM/J3D/J3DLoader";
 import AnimationController from "../AnimationController";
 
 // The old actor code, before we started emulating things natively.

@@ -12,9 +12,9 @@ import * as Yaz0 from '../../Common/Compression/Yaz0';
 import * as UI from '../../ui';
 
 import * as DZB from './DZB';
-import * as JPA from '../JPA';
-import { BMD, BTK, BRK, BCK, BTI, LoopMode, BMT } from '../j3d';
-import { BMDModelInstance, BMDModel, BTIData, BMDModelMaterialData } from '../render';
+import * as JPA from '../../Common/JSYSTEM/JPA';
+import { BMD, BTK, BRK, BCK, LoopMode, BMT } from '../../Common/JSYSTEM/J3D/J3DLoader';
+import { BMDModelInstance, BMDModel, BMDModelMaterialData } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
 import { Camera, computeViewMatrix, texProjCameraSceneTex } from '../../Camera';
 import { DeviceProgram } from '../../Program';
 import { Color, colorNew, colorLerp, colorCopy, TransparentBlack, colorNewCopy } from '../../Color';
@@ -35,6 +35,7 @@ import { computeModelMatrixSRT, range } from '../../MathHelpers';
 import { TextureMapping } from '../../TextureHolder';
 import { EFB_WIDTH, EFB_HEIGHT } from '../../gx/gx_material';
 import { getTimeFrames } from '../../SuperMarioGalaxy/Main';
+import { BTIData, BTI } from '../../Common/JSYSTEM/JUTTexture';
 
 function gain(v: number, k: number): number {
     const a = 0.5 * Math.pow(2*((v < 0.5) ? v : 1.0 - v), k);

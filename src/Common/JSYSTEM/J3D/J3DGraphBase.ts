@@ -1,29 +1,29 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 
-import { BMD, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, TTK1Animator, ANK1Animator, bindANK1Animator, bindVAF1Animator, VAF1, VAF1Animator, TPT1, bindTPT1Animator, TPT1Animator, TEX1, BTI_Texture, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, Joint, getAnimFrame, sampleAnimationData } from './j3d';
-import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } from './j3d';
+import { BMD, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, TTK1Animator, ANK1Animator, bindANK1Animator, bindVAF1Animator, VAF1, VAF1Animator, TPT1, bindTPT1Animator, TPT1Animator, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, Joint, getAnimFrame, sampleAnimationData } from './J3DLoader';
+import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } from './J3DLoader';
 
-import * as GX from '../gx/gx_enum';
-import * as GX_Material from '../gx/gx_material';
-import { PacketParams, ColorKind, translateTexFilterGfx, translateWrapModeGfx, ub_MaterialParams, loadTextureFromMipChain, loadedDataCoalescerComboGfx, MaterialParams, fillIndTexMtx } from '../gx/gx_render';
-import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../gx/gx_render';
+import * as GX_Material from '../../../gx/gx_material';
+import { PacketParams, ColorKind, ub_MaterialParams, loadTextureFromMipChain, loadedDataCoalescerComboGfx, MaterialParams, fillIndTexMtx } from '../../../gx/gx_render';
+import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../../../gx/gx_render';
 
-import { computeViewMatrix, Camera, computeViewSpaceDepthFromWorldSpaceAABB, texProjCameraSceneTex } from '../Camera';
-import { TextureMapping } from '../TextureHolder';
-import AnimationController from '../AnimationController';
-import { nArray, assert, assertExists } from '../util';
-import { AABB } from '../Geometry';
-import { GfxDevice, GfxSampler, GfxTexture } from '../gfx/platform/GfxPlatform';
-import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
-import { ViewerRenderInput, Texture } from '../viewer';
-import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, setSortKeyBias, setSortKeyLayer } from '../gfx/render/GfxRenderer';
-import { colorCopy, Color } from '../Color';
-import { computeNormalMatrix, texEnvMtx, computeModelMatrixSRT } from '../MathHelpers';
-import { calcMipChain } from '../gx/gx_texture';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { NormalizedViewportCoords } from '../gfx/helpers/RenderTargetHelpers';
-import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
+import { computeViewMatrix, Camera, computeViewSpaceDepthFromWorldSpaceAABB, texProjCameraSceneTex } from '../../../Camera';
+import { TextureMapping } from '../../../TextureHolder';
+import AnimationController from '../../../AnimationController';
+import { nArray, assert, assertExists } from '../../../util';
+import { AABB } from '../../../Geometry';
+import { GfxDevice, GfxSampler, GfxTexture } from '../../../gfx/platform/GfxPlatform';
+import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../../../gfx/helpers/BufferHelpers';
+import { ViewerRenderInput, Texture } from '../../../viewer';
+import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, setSortKeyBias, setSortKeyLayer } from '../../../gfx/render/GfxRenderer';
+import { colorCopy, Color } from '../../../Color';
+import { computeNormalMatrix, texEnvMtx, computeModelMatrixSRT } from '../../../MathHelpers';
+import { calcMipChain } from '../../../gx/gx_texture';
+import { GfxRenderCache } from '../../../gfx/render/GfxRenderCache';
+import { NormalizedViewportCoords } from '../../../gfx/helpers/RenderTargetHelpers';
+import { setAttachmentStateSimple } from '../../../gfx/helpers/GfxMegaStateDescriptorHelpers';
+import { translateSampler } from '../JUTTexture';
 
 export class ShapeInstanceState {
     // One matrix for each joint, which transform into their parent's space.
@@ -715,59 +715,8 @@ export class MaterialInstance {
     }
 }
 
-interface TEX1_SamplerSub {
-    minFilter: GX.TexFilter;
-    magFilter: GX.TexFilter;
-    wrapS: GX.WrapMode;
-    wrapT: GX.WrapMode;
-    minLOD: number;
-    maxLOD: number;
-}
-
-function translateSampler(device: GfxDevice, cache: GfxRenderCache, sampler: TEX1_SamplerSub): GfxSampler {
-    const [minFilter, mipFilter] = translateTexFilterGfx(sampler.minFilter);
-    const [magFilter]            = translateTexFilterGfx(sampler.magFilter);
-
-    const gfxSampler = cache.createSampler(device, {
-        wrapS: translateWrapModeGfx(sampler.wrapS),
-        wrapT: translateWrapModeGfx(sampler.wrapT),
-        minFilter, mipFilter, magFilter,
-        minLOD: sampler.minLOD,
-        maxLOD: sampler.maxLOD,
-    });
-
-    return gfxSampler;
-}
-
 // TODO(jstpierre): Unify with TEX1Data? Build a unified cache that can deduplicate
 // based on hashing texture data?
-export class BTIData {
-    private gfxSampler: GfxSampler;
-    private gfxTexture: GfxTexture;
-    public viewerTexture: Texture;
-
-    constructor(device: GfxDevice, cache: GfxRenderCache, public btiTexture: BTI_Texture) {
-        this.gfxSampler = translateSampler(device, cache, btiTexture);
-        const mipChain = calcMipChain(this.btiTexture, this.btiTexture.mipCount);
-        const { viewerTexture, gfxTexture } = loadTextureFromMipChain(device, mipChain);
-        this.gfxTexture = gfxTexture;
-        this.viewerTexture = viewerTexture;
-    }
-
-    public fillTextureMapping(m: TextureMapping): boolean {
-        m.gfxTexture = this.gfxTexture;
-        m.gfxSampler = this.gfxSampler;
-        m.lodBias = this.btiTexture.lodBias;
-        m.width = this.btiTexture.width;
-        m.height = this.btiTexture.height;
-        return true;
-    }
-
-    public destroy(device: GfxDevice): void {
-        device.destroyTexture(this.gfxTexture);
-    }
-}
-
 export class TEX1Data {
     private gfxSamplers: GfxSampler[] = [];
     private gfxTextures: (GfxTexture | null)[] = [];

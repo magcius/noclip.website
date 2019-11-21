@@ -6,11 +6,11 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { readString, assert, assertExists } from '../util';
 import { mat4, quat } from 'gl-matrix';
 import * as RARC from './rarc';
-import { BMDModelInstance, BMDModel } from './render';
-import { BCK, BMD, BTK, BRK, BTP } from './j3d';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxFrontFaceMode } from '../gfx/platform/GfxPlatform';
+import { BMDModelInstance, BMDModel } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { BCK, BMD, BTK, BRK, BTP } from '../Common/JSYSTEM/J3D/J3DLoader';
 import { SceneContext } from '../SceneBase';
 import { computeModelMatrixS } from '../MathHelpers';
 

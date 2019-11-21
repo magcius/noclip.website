@@ -8,7 +8,6 @@ import { JMapInfoIter } from "./JMapInfo";
 import { computeModelMatrixSRT, clamp } from "../MathHelpers";
 import AnimationController from "../AnimationController";
 import { colorFromRGBA8 } from "../Color";
-import { BTIData } from "../j3d/render";
 import { assert } from "../util";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { getVertexAttribLocation } from "../gx/gx_material";
@@ -22,6 +21,7 @@ import { LiveActor, ZoneAndLayer } from "./LiveActor";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
+import { BTIData } from "../Common/JSYSTEM/JUTTexture";
 
 function calcHeightStatic(wave1Time: number, wave2Time: number, x: number, z: number): number {
     const wave1 = 40 * Math.sin(wave1Time + 0.003 * z);

@@ -1,6 +1,6 @@
 
 import { LiveActor } from "./LiveActor";
-import { BMDModelInstance } from "../j3d/render";
+import { BMDModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { Camera } from "../Camera";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu } from "./NameObj";

@@ -2,7 +2,7 @@
 // Utilities for various actor implementations.
 
 import { LiveActor } from "./LiveActor";
-import { LoopMode, ANK1 } from "../j3d/j3d";
+import { LoopMode, ANK1 } from "../Common/JSYSTEM/J3D/J3DLoader";
 
 export function isBckStopped(actor: LiveActor): boolean {
     const animator = actor.modelInstance!.ank1Animator!;

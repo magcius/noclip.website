@@ -5,10 +5,10 @@ import * as Viewer from '../viewer';
 import * as Yaz0 from '../Common/Compression/Yaz0';
 import * as UI from '../ui';
 
-import { BMD, BMT, BTK, BTI, BRK, BCK, BTI_Texture } from './j3d';
+import { BMD, BMT, BTK, BRK, BCK } from '../Common/JSYSTEM/J3D/J3DLoader';
+import { BMDModel, BMDModelInstance, BMDModelMaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { BTIData, BTI_Texture, BTI } from '../Common/JSYSTEM/JUTTexture';
 import * as RARC from './rarc';
-import { mat4 } from 'gl-matrix';
-import { BMDModel, BMDModelInstance, BTIData, BMDModelMaterialData } from './render';
 import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks } from '../gx/gx_material';
 import { TextureMapping } from '../TextureHolder';
 import { readString, leftPad, assertExists } from '../util';

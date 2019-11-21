@@ -13,29 +13,28 @@
 //  * Line and Point shape types
 //  * ETX1 SubTexture
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import * as GX from "../gx/gx_enum";
+import ArrayBufferSlice from "../../ArrayBufferSlice";
+import * as GX from "../../gx/gx_enum";
 
-import { assert, readString, assertExists, nArray } from "../util";
-import { BTI } from "./j3d";
+import { assert, readString, assertExists, nArray } from "../../util";
 import { vec3, mat4, vec2 } from "gl-matrix";
-import { Endianness } from "../endian";
-import { GfxDevice, GfxInputLayout, GfxInputState, GfxBuffer, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBufferFrequencyHint, GfxHostAccessPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor } from "../gfx/platform/GfxPlatform";
-import { BTIData } from "./render";
-import { getPointHermite } from "../Spline";
-import { getVertexAttribLocation } from "../gx/gx_material";
-import { Color, colorNew, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8 } from "../Color";
-import { MaterialParams, ColorKind, ub_PacketParams, u_PacketParamsBufferSize, PacketParams, ub_MaterialParams, fillIndTexMtx, fillTextureMappingInfo } from "../gx/gx_render";
-import { GXMaterialHelperGfx } from "../gx/gx_render";
-import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, computeMatrixWithoutTranslation, normToLengthAndAdd, normToLength, isNearZeroVec3 } from "../MathHelpers";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { GfxRenderInst, GfxRenderInstManager, makeSortKeyTranslucent, GfxRendererLayer, setSortKeyBias, setSortKeyDepth } from "../gfx/render/GfxRenderer";
-import { fillMatrix4x3, fillColor, fillMatrix4x2 } from "../gfx/helpers/UniformBufferHelpers";
-import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
-import { makeTriangleIndexBuffer, GfxTopology, getTriangleIndexCountForTopologyIndexCount } from "../gfx/helpers/TopologyHelpers";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { TextureMapping } from "../TextureHolder";
-import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
+import { Endianness } from "../../endian";
+import { GfxDevice, GfxInputLayout, GfxInputState, GfxBuffer, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBufferFrequencyHint, GfxHostAccessPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor } from "../../gfx/platform/GfxPlatform";
+import { getPointHermite } from "../../Spline";
+import { getVertexAttribLocation } from "../../gx/gx_material";
+import { Color, colorNew, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8 } from "../../Color";
+import { MaterialParams, ColorKind, ub_PacketParams, u_PacketParamsBufferSize, PacketParams, ub_MaterialParams, fillIndTexMtx, fillTextureMappingInfo } from "../../gx/gx_render";
+import { GXMaterialHelperGfx } from "../../gx/gx_render";
+import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, computeMatrixWithoutTranslation, normToLengthAndAdd, normToLength, isNearZeroVec3 } from "../../MathHelpers";
+import { makeStaticDataBuffer } from "../../gfx/helpers/BufferHelpers";
+import { GfxRenderInst, GfxRenderInstManager, makeSortKeyTranslucent, GfxRendererLayer, setSortKeyBias, setSortKeyDepth } from "../../gfx/render/GfxRenderer";
+import { fillMatrix4x3, fillColor, fillMatrix4x2 } from "../../gfx/helpers/UniformBufferHelpers";
+import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../../Camera";
+import { makeTriangleIndexBuffer, GfxTopology, getTriangleIndexCountForTopologyIndexCount } from "../../gfx/helpers/TopologyHelpers";
+import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
+import { TextureMapping } from "../../TextureHolder";
+import { GXMaterialBuilder } from "../../gx/GXMaterialBuilder";
+import { BTIData, BTI } from "./JUTTexture";
 
 const SORT_PARTICLES = false;
 

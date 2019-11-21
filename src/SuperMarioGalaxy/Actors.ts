@@ -9,11 +9,11 @@ import AnimationController from '../AnimationController';
 import { MathConstants, computeModelMatrixSRT, clamp, lerp, normToLength, clampRange, isNearZeroVec3 } from '../MathHelpers';
 import { colorNewFromRGBA8, Color } from '../Color';
 import { ColorKind } from '../gx/gx_render';
-import { BTK, BRK, LoopMode, BTP, BTI } from '../j3d/j3d';
+import { BTK, BRK, LoopMode, BTP } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as Viewer from '../viewer';
 import * as RARC from '../j3d/rarc';
 import { DrawBufferType, MovementType, CalcAnimType, DrawType } from './NameObj';
-import { BMDModelInstance, BTIData } from '../j3d/render';
+import { BMDModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { assertExists, leftPad, fallback } from '../util';
 import { Camera } from '../Camera';
 import { isGreaterStep, isFirstStep, calcNerveRate, isLessStep, calcNerveValue } from './Spine';
@@ -22,6 +22,7 @@ import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, Mo
 import { isConnectedWithRail, RailDirection } from './RailRider';
 import { WorldmapPointInfo } from './LegacyActor';
 import { isBckStopped, getBckFrameMax, setLoopMode } from './ActorUtil';
+import { BTIData, BTI } from '../Common/JSYSTEM/JUTTexture';
 
 // Scratchpad
 const scratchVec3 = vec3.create();

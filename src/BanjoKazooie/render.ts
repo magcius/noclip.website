@@ -17,7 +17,7 @@ import { Geometry, VertexAnimationEffect, VertexEffectType, GeoNode, Bone, Anima
 import { clamp, lerp, MathConstants } from '../MathHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import AnimationController from '../AnimationController';
-import { J3DCalcBBoardMtx } from '../j3d/render';
+import { J3DCalcBBoardMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { Flipbook, LoopMode, ReverseMode, MirrorMode } from './flipbook';
 
 export class F3DEX_Program extends DeviceProgram {

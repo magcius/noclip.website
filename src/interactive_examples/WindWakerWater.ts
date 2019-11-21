@@ -7,9 +7,9 @@ import { SceneGfx, ViewerRenderInput } from '../viewer';
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
 
-import { BMD, BTK } from '../j3d/j3d';
+import { BMD, BTK } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as RARC from '../j3d/rarc';
-import { BMDModel, MaterialInstance, MaterialInstanceState, ShapeInstanceState, MaterialData, BMDModelInstance } from '../j3d/render';
+import { BMDModel, MaterialInstance, MaterialInstanceState, ShapeInstanceState, MaterialData, BMDModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import * as Yaz0 from '../Common/Compression/Yaz0';
 import { ub_PacketParams, PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, ub_MaterialParams, ColorKind, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GXRenderHelperGfx } from '../gx/gx_render';

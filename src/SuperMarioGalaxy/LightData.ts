@@ -3,7 +3,7 @@ import { vec3 } from "gl-matrix";
 import { colorNew, colorCopy, colorFromRGBA, Color, colorLerp } from "../Color";
 import { Camera } from "../Camera";
 import { Light } from "../gx/gx_material";
-import { BMDModelInstance } from "../j3d/render";
+import { BMDModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1 } from "./JMapInfo";
 import { LightType } from "./DrawBuffer";
 import { SceneObjHolder } from "./Main";
