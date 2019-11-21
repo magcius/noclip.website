@@ -1709,7 +1709,7 @@ class StatisticsPanel extends Panel {
             this.fpsPoints[i] = this.history[i] !== undefined ? this.history[i].fps : 0;
         }
 
-        this.fpsGraph.beginDraw(this.elem.offsetWidth, this.elem.offsetHeight);
+        this.fpsGraph.beginDraw(this.elem.offsetWidth, 200);
         this.fpsGraph.drawPoints(this.fpsPoints, this.fpsColor);
 
         this.fpsGraph.drawText(`FPS: ${renderStatistics.fps | 0}`);
