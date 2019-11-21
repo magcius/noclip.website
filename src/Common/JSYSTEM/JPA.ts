@@ -2,9 +2,9 @@
 // Nintendo's JParticle engine, commonly abbreviated "JPA" for short.
 
 // Has support for the following JPA versions, as seen in the following games:
-//
-//  * JPA1, as seen in The Legend of Zelda: The Wind Waker
-//  * JPA2, as seen in Super Mario Galaxy 1 & 2
+//  * JEFFjpa1, as seen in Super Mario Sunshine
+//  * JPAC1_00, as seen in The Legend of Zelda: The Wind Waker
+//  * JPAC2_10, as seen in Super Mario Galaxy 1 & 2
 //
 // Known gaps in JPA2 support:
 //  * Line and Point shape types
