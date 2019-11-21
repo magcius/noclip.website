@@ -470,6 +470,7 @@ export class RailRider {
 
     public reverse(): void {
         this.direction = this.direction === RailDirection.TOWARDS_END ? RailDirection.TOWARDS_START : RailDirection.TOWARDS_END;
+        this.syncPosDir();
     }
 
     public getTotalLength(): number {

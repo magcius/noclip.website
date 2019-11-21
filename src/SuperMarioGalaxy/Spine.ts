@@ -1,5 +1,5 @@
 
-import { clamp } from "../MathHelpers";
+import { clamp, lerp } from "../MathHelpers";
 
 interface SpineHost {
     spine: Spine | null;
@@ -13,8 +13,17 @@ export function isGreaterStep(host: SpineHost, v: number): boolean {
     return host.spine!.getNerveStep() > v;
 }
 
+export function isLessStep(host: SpineHost, v: number): boolean {
+    return host.spine!.getNerveStep() < v;
+}
+
 export function calcNerveRate(host: SpineHost, v: number): number {
     return host.spine!.getNerveStep() / v;
+}
+
+export function calcNerveValue(host: SpineHost, nerveStepMax: number, a: number, b: number): number {
+    const t = nerveStepMax > 0 ? (host.spine!.getNerveStep() / nerveStepMax) : 1.0;
+    return lerp(a, b, t);
 }
 
 export function getStep(host: SpineHost): number {

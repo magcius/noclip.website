@@ -16,11 +16,17 @@ import { DrawBufferType, MovementType, CalcAnimType, DrawType } from './NameObj'
 import { BMDModelInstance, BTIData } from '../j3d/render';
 import { assertExists, leftPad, fallback } from '../util';
 import { Camera } from '../Camera';
-import { isGreaterStep, isFirstStep, calcNerveRate } from './Spine';
+import { isGreaterStep, isFirstStep, calcNerveRate, isLessStep, calcNerveValue } from './Spine';
 import { LiveActor, startBck, startBtkIfExist, startBrkIfExist, startBvaIfExist, startBpkIfExist, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpawnZoneAndLayer, startBckIfExist, MessageType } from './LiveActor';
 import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType } from './MapParts';
 import { isConnectedWithRail, RailDirection } from './RailRider';
 import { WorldmapPointInfo } from './LegacyActor';
+
+// Scratchpad
+const scratchVec3 = vec3.create();
+const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
+const scratchVec3c = vec3.create();
 
 export function connectToScene(sceneObjHolder: SceneObjHolder, actor: LiveActor, movementType: MovementType, calcAnimType: CalcAnimType, drawBufferType: DrawBufferType, drawType: DrawType): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, movementType, calcAnimType, drawBufferType, drawType);
@@ -196,6 +202,11 @@ export function calcUpVec(v: vec3, actor: LiveActor): void {
     vec3.set(v, m[4], m[5], m[6]);
 }
 
+export function calcMtxFromGravityAndZAxis(dst: mat4, actor: LiveActor, gravityVec: vec3, front: vec3): void {
+    vec3.negate(scratchVec3b, gravityVec);
+    makeMtxUpFrontPos(dst, scratchVec3b, front, actor.translation);
+}
+
 export function getCamPos(v: vec3, camera: Camera): void {
     const m = camera.worldMatrix;
     vec3.set(v, m[12], m[13], m[14]);
@@ -321,6 +332,11 @@ export function isBckStopped(actor: LiveActor): boolean {
     return animator.animationController.getTimeInFrames() >= animator.ank1.duration;
 }
 
+export function getBckFrameMax(actor: LiveActor): number {
+    const animator = actor.modelInstance!.ank1Animator!;
+    return animator.ank1.duration;
+}
+
 export function scaleMatrixScalar(m: mat4, s: number): void {
     m[0] *= s;
     m[4] *= s;
@@ -362,6 +378,12 @@ function getRandomVector(dst: vec3, range: number): void {
     vec3.set(dst, getRandomFloat(-range, range), getRandomFloat(-range, range), getRandomFloat(-range, range));
 }
 
+function rotateVecDegree(dst: vec3, upVec: vec3, degrees: number, m: mat4 = scratchMatrix): void {
+    const theta = degrees * MathConstants.DEG_TO_RAD;
+    mat4.fromRotation(m, theta, upVec);
+    vec3.transformMat4(dst, dst, m);
+}
+
 function setMtxAxisXYZ(dst: mat4, x: vec3, y: vec3, z: vec3): void {
     dst[0] = x[0];
     dst[1] = x[1];
@@ -384,12 +406,27 @@ function setTrans(dst: mat4, pos: vec3): void {
     dst[15] = 1.0;
 }
 
-const scratchVec3 = vec3.create();
 function makeMtxFrontUpPos(dst: mat4, front: vec3, up: vec3, pos: vec3): void {
-    vec3.normalize(front, front);
-    vec3.cross(scratchVec3, front, up);
-    vec3.normalize(scratchVec3, scratchVec3);
-    setMtxAxisXYZ(dst, scratchVec3, up, front);
+    const frontNorm = scratchVec3a;
+    const upNorm = scratchVec3b;
+    const right = scratchVec3c;
+    vec3.normalize(frontNorm, front);
+    vec3.cross(right, frontNorm, up);
+    vec3.normalize(right, right);
+    vec3.cross(upNorm, frontNorm, right);
+    setMtxAxisXYZ(dst, right, upNorm, frontNorm);
+    setTrans(dst, pos);
+}
+
+function makeMtxUpFrontPos(dst: mat4, up: vec3, front: vec3, pos: vec3): void {
+    const upNorm = scratchVec3b;
+    const frontNorm = scratchVec3a;
+    const right = scratchVec3c;
+    vec3.normalize(upNorm, up);
+    vec3.cross(right, up, front);
+    vec3.normalize(right, right);
+    vec3.cross(frontNorm, right, upNorm);
+    setMtxAxisXYZ(dst, right, upNorm, frontNorm);
     setTrans(dst, pos);
 }
 
@@ -1151,8 +1188,6 @@ function setEffectHostSRT(actor: LiveActor, effectName: string, translation: vec
     emitter.setHostSRT(translation, rotation, scale);
 }
 
-const scratchVec3a = vec3.create();
-const scratchVec3b = vec3.create();
 export class BlackHole extends LiveActor {
     private blackHoleModel: ModelObj;
     private effectHostMtx = mat4.create();
@@ -1340,7 +1375,7 @@ export class Peach extends NPCActor {
     }
 }
 
-const enum PenguinNrv { WAIT, DIVE }
+const enum PenguinNrv { Wait, Dive }
 
 export class Penguin extends NPCActor<PenguinNrv> {
     private arg0: number;
@@ -1384,7 +1419,7 @@ export class Penguin extends NPCActor<PenguinNrv> {
         // Bind the color change animation.
         bindColorChangeAnimation(this.modelInstance!, this.arc, fallback(getJMapInfoArg7(infoIter), 0));
 
-        this.initNerve(PenguinNrv.WAIT);
+        this.initNerve(PenguinNrv.Wait);
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
@@ -1392,13 +1427,13 @@ export class Penguin extends NPCActor<PenguinNrv> {
 
         const currentNerve = this.getCurrentNerve();
 
-        if (currentNerve === PenguinNrv.WAIT) {
+        if (currentNerve === PenguinNrv.Wait) {
             if (isFirstStep(this))
                 this.diveCounter = getRandomInt(120, 300);
 
             if (this.arg0 === 3 && isGreaterStep(this, this.diveCounter))
-                this.setNerve(PenguinNrv.DIVE);
-        } else if (currentNerve === PenguinNrv.DIVE) {
+                this.setNerve(PenguinNrv.Dive);
+        } else if (currentNerve === PenguinNrv.Dive) {
             if (isFirstStep(this)) {
                 startBck(this, `SwimDive`);
                 this.modelInstance!.animationController.setPhaseToCurrent();
@@ -1408,7 +1443,7 @@ export class Penguin extends NPCActor<PenguinNrv> {
                 // TODO(jstpierre): TalkCtrl
                 this.startAction(`SwimWaitSurface`);
                 this.modelInstance!.animationController.setPhaseToCurrent();
-                this.setNerve(PenguinNrv.WAIT);
+                this.setNerve(PenguinNrv.Wait);
             }
         }
     }
@@ -1925,9 +1960,7 @@ export class GCaptureTarget extends LiveActor {
     }
 }
 
-const enum FountainBigNrv {
-    WAIT_PHASE, WAIT, SIGN, SIGN_STOP, SPOUT, SPOUT_END
-}
+const enum FountainBigNrv { WaitPhase, Wait, Sign, SignStop, Spout, SpoutEnd }
 
 export class FountainBig extends LiveActor<FountainBigNrv> {
     private upVec = vec3.create();
@@ -1949,7 +1982,7 @@ export class FountainBig extends LiveActor<FountainBigNrv> {
         // TODO(jstpierre): Figure out what causes this phase for realsies. Might just be culling...
         this.randomPhase = (Math.random() * 300) | 0;
 
-        this.initNerve(FountainBigNrv.WAIT_PHASE);
+        this.initNerve(FountainBigNrv.WaitPhase);
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
@@ -1957,33 +1990,33 @@ export class FountainBig extends LiveActor<FountainBigNrv> {
 
         const currentNerve = this.getCurrentNerve();
 
-        if (currentNerve === FountainBigNrv.WAIT_PHASE) {
+        if (currentNerve === FountainBigNrv.WaitPhase) {
             if (isGreaterStep(this, this.randomPhase)) {
-                this.setNerve(FountainBigNrv.WAIT);
+                this.setNerve(FountainBigNrv.Wait);
                 return;
             }
-        } else if (currentNerve === FountainBigNrv.WAIT) {
+        } else if (currentNerve === FountainBigNrv.Wait) {
             if (isGreaterStep(this, 120)) {
-                this.setNerve(FountainBigNrv.SIGN);
+                this.setNerve(FountainBigNrv.Sign);
                 return;
             }
-        } else if (currentNerve === FountainBigNrv.SIGN) {
+        } else if (currentNerve === FountainBigNrv.Sign) {
             if (isFirstStep(this))
                 emitEffect(sceneObjHolder, this, 'FountainBigSign');
 
             if (isGreaterStep(this, 80)) {
-                this.setNerve(FountainBigNrv.SIGN_STOP);
+                this.setNerve(FountainBigNrv.SignStop);
                 return;
             }
-        } else if (currentNerve === FountainBigNrv.SIGN_STOP) {
+        } else if (currentNerve === FountainBigNrv.SignStop) {
             if (isFirstStep(this))
                 deleteEffect(sceneObjHolder, this, 'FountainBigSign');
 
             if (isGreaterStep(this, 30)) {
-                this.setNerve(FountainBigNrv.SPOUT);
+                this.setNerve(FountainBigNrv.Spout);
                 return;
             }
-        } else if (currentNerve === FountainBigNrv.SPOUT) {
+        } else if (currentNerve === FountainBigNrv.Spout) {
             if (isFirstStep(this)) {
                 showModel(this);
                 emitEffect(sceneObjHolder, this, 'FountainBig');
@@ -1996,16 +2029,16 @@ export class FountainBig extends LiveActor<FountainBigNrv> {
 
             if (isGreaterStep(this, 180)) {
                 deleteEffect(sceneObjHolder, this, 'FountainBig');
-                this.setNerve(FountainBigNrv.SPOUT_END);
+                this.setNerve(FountainBigNrv.SpoutEnd);
                 return;
             }
-        } else if (currentNerve === FountainBigNrv.SPOUT_END) {
+        } else if (currentNerve === FountainBigNrv.SpoutEnd) {
             const t = 1 - calcNerveRate(this, 10);
             this.scale[1] = clamp(t, 0.01, 1);
 
             if (isGreaterStep(this, 10)) {
                 hideModel(this);
-                this.setNerve(FountainBigNrv.WAIT);
+                this.setNerve(FountainBigNrv.Wait);
                 return;
             }
         }
@@ -2136,7 +2169,7 @@ export class Sky extends LiveActor {
     }
 }
 
-const enum AirNrv { IN, OUT }
+const enum AirNrv { In, Out }
 
 export class Air extends LiveActor<AirNrv> {
     private distInThresholdSq: number;
@@ -2159,7 +2192,7 @@ export class Air extends LiveActor<AirNrv> {
         this.distOutThresholdSq = distOutThreshold*distOutThreshold;
 
         this.tryStartAllAnim(getObjectName(infoIter));
-        this.initNerve(AirNrv.IN);
+        this.initNerve(AirNrv.In);
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
@@ -2168,14 +2201,14 @@ export class Air extends LiveActor<AirNrv> {
         const currentNerve = this.getCurrentNerve();
         const distanceToPlayer = calcSqDistanceToPlayer(this, viewerInput.camera);
 
-        if (currentNerve === AirNrv.OUT && distanceToPlayer < this.distInThresholdSq) {
+        if (currentNerve === AirNrv.Out && distanceToPlayer < this.distInThresholdSq) {
             if (this.tryStartAllAnim('Appear'))
                 this.modelInstance!.animationController.setPhaseToCurrent();
-            this.setNerve(AirNrv.IN);
-        } else if (currentNerve === AirNrv.IN && distanceToPlayer > this.distOutThresholdSq) {
+            this.setNerve(AirNrv.In);
+        } else if (currentNerve === AirNrv.In && distanceToPlayer > this.distOutThresholdSq) {
             if (this.tryStartAllAnim('Disappear'))
                 this.modelInstance!.animationController.setPhaseToCurrent();
-            this.setNerve(AirNrv.OUT);
+            this.setNerve(AirNrv.Out);
         }
     }
 }
@@ -2186,7 +2219,7 @@ export class PriorDrawAir extends Air {
     // routines yet, so we leave this out for now...
 }
 
-const enum ShootingStarNrv { PRE_SHOOTING, SHOOTING, WAIT_FOR_NEXT_SHOOT }
+const enum ShootingStarNrv { PreShooting, Shooting, WaitForNextShoot }
 
 export class ShootingStar extends LiveActor<ShootingStarNrv> {
     private delay: number;
@@ -2208,7 +2241,7 @@ export class ShootingStar extends LiveActor<ShootingStarNrv> {
 
         calcUpVec(this.axisY, this);
 
-        this.initNerve(ShootingStarNrv.PRE_SHOOTING);
+        this.initNerve(ShootingStarNrv.PreShooting);
         this.initEffectKeeper(sceneObjHolder, 'ShootingStar');
 
         startBpkIfExist(this.modelInstance!, this.arc, 'ShootingStar');
@@ -2221,7 +2254,7 @@ export class ShootingStar extends LiveActor<ShootingStarNrv> {
         this.rotation[1] = (this.rotation[1] + (SPEED * getDeltaTimeFrames(viewerInput))) % MathConstants.TAU;
         const currentNerve = this.getCurrentNerve();
 
-        if (currentNerve === ShootingStarNrv.PRE_SHOOTING) {
+        if (currentNerve === ShootingStarNrv.PreShooting) {
             if (isFirstStep(this)) {
                 vec3.scaleAndAdd(this.translation, this.initialTranslation, this.axisY, this.distance);
                 showModel(this);
@@ -2232,9 +2265,9 @@ export class ShootingStar extends LiveActor<ShootingStarNrv> {
             vec3.set(this.scale, scale, scale, scale);
 
             if (isGreaterStep(this, 20)) {
-                this.setNerve(ShootingStarNrv.SHOOTING);
+                this.setNerve(ShootingStarNrv.Shooting);
             }
-        } else if (currentNerve === ShootingStarNrv.SHOOTING) {
+        } else if (currentNerve === ShootingStarNrv.Shooting) {
             if (isFirstStep(this)) {
                 vec3.negate(this.velocity, this.axisY);
                 vec3.scale(this.velocity, this.velocity, 25);
@@ -2242,10 +2275,10 @@ export class ShootingStar extends LiveActor<ShootingStarNrv> {
             }
 
             if (isGreaterStep(this, 360)) {
-                this.setNerve(ShootingStarNrv.WAIT_FOR_NEXT_SHOOT);
+                this.setNerve(ShootingStarNrv.WaitForNextShoot);
                 deleteEffect(sceneObjHolder, this, 'ShootingStarBlur');
             }
-        } else if (currentNerve === ShootingStarNrv.WAIT_FOR_NEXT_SHOOT) {
+        } else if (currentNerve === ShootingStarNrv.WaitForNextShoot) {
             if (isFirstStep(this)) {
                 hideModel(this);
                 emitEffect(sceneObjHolder, this, 'ShootingStarBreak');
@@ -2253,7 +2286,7 @@ export class ShootingStar extends LiveActor<ShootingStarNrv> {
             }
 
             if (isGreaterStep(this, this.delay)) {
-                this.setNerve(ShootingStarNrv.PRE_SHOOTING);
+                this.setNerve(ShootingStarNrv.PreShooting);
             }
         }
     }
@@ -2422,7 +2455,7 @@ export class CrystalCage extends LiveActor {
     }
 }
 
-const enum LavaSteamNrv { WAIT, STEAM }
+const enum LavaSteamNrv { Wait, Steam }
 
 export class LavaSteam extends LiveActor<LavaSteamNrv> {
     private effectScale = vec3.create();
@@ -2435,7 +2468,7 @@ export class LavaSteam extends LiveActor<LavaSteamNrv> {
         this.initEffectKeeper(sceneObjHolder, null);
         setEffectHostSRT(this, 'Sign', this.translation, this.rotation, this.effectScale);
 
-        this.initNerve(LavaSteamNrv.WAIT);
+        this.initNerve(LavaSteamNrv.Wait);
 
         connectToSceneNoSilhouettedMapObj(sceneObjHolder, this);
     }
@@ -2444,7 +2477,7 @@ export class LavaSteam extends LiveActor<LavaSteamNrv> {
         super.movement(sceneObjHolder, viewerInput);
 
         const currentNerve = this.getCurrentNerve();
-        if (currentNerve === LavaSteamNrv.WAIT) {
+        if (currentNerve === LavaSteamNrv.Wait) {
             if (isFirstStep(this)) {
                 emitEffect(sceneObjHolder, this, 'Sign');
                 vec3.set(this.effectScale, 1, 1, 1);
@@ -2460,16 +2493,16 @@ export class LavaSteam extends LiveActor<LavaSteamNrv> {
             }
 
             if (isGreaterStep(this, 0x78)) {
-                this.setNerve(LavaSteamNrv.STEAM);
+                this.setNerve(LavaSteamNrv.Steam);
             }
-        } else if (currentNerve === LavaSteamNrv.STEAM) {
+        } else if (currentNerve === LavaSteamNrv.Steam) {
             if (isFirstStep(this)) {
                 emitEffect(sceneObjHolder, this, 'Steam');
             }
 
             if (isGreaterStep(this, 0x5a)) {
                 deleteEffect(sceneObjHolder, this, 'Steam');
-                this.setNerve(LavaSteamNrv.WAIT);
+                this.setNerve(LavaSteamNrv.Wait);
             }
         }
     }
@@ -2646,7 +2679,7 @@ export class OceanWaveFloater extends MapObjActor {
     }
 }
 
-const enum FishNrv { APPROACH, WANDER }
+const enum FishNrv { Approach, Wander }
 
 class Fish extends LiveActor<FishNrv> {
     private followPointPos = vec3.create();
@@ -2668,7 +2701,7 @@ class Fish extends LiveActor<FishNrv> {
         this.initModelManagerWithAnm(sceneObjHolder, modelName);
         startBck(this, 'Swim');
 
-        this.initNerve(FishNrv.WANDER);
+        this.initNerve(FishNrv.Wander);
 
         connectToSceneEnvironment(sceneObjHolder, this);
     }
@@ -2678,7 +2711,7 @@ class Fish extends LiveActor<FishNrv> {
 
         const currentNerve = this.getCurrentNerve();
 
-        if (currentNerve === FishNrv.APPROACH) {
+        if (currentNerve === FishNrv.Approach) {
             if (isFirstStep(this))
                 this.counter = 0;
 
@@ -2703,8 +2736,8 @@ class Fish extends LiveActor<FishNrv> {
             }
 
             if (vec3.squaredDistance(this.followPointPos, this.translation) < (this.approachThreshold * this.approachThreshold))
-                this.setNerve(FishNrv.WANDER);
-        } else if (currentNerve === FishNrv.WANDER) {
+                this.setNerve(FishNrv.Wander);
+        } else if (currentNerve === FishNrv.Wander) {
             if (isFirstStep(this))
                 this.counter = 0;
 
@@ -2715,7 +2748,7 @@ class Fish extends LiveActor<FishNrv> {
             }
 
             if (vec3.squaredDistance(this.followPointPos, this.translation) > (this.approachThreshold * this.approachThreshold))
-                this.setNerve(FishNrv.APPROACH);
+                this.setNerve(FishNrv.Approach);
         }
 
         // TODO(jstpierre): setBckRate
@@ -2799,7 +2832,7 @@ export class FishGroup extends LiveActor {
     }
 }
 
-const enum SeaGullNrv { HOVER_FRONT, HOVER_LEFT, HOVER_RIGHT }
+const enum SeaGullNrv { HoverFront, HoverLeft, HoverRight }
 
 class SeaGull extends LiveActor<SeaGullNrv> {
     private direction: boolean;
@@ -2841,7 +2874,7 @@ class SeaGull extends LiveActor<SeaGullNrv> {
         vec3.add(this.axisZ, scratchVec3a, scratchVec3b);
         vec3.normalize(this.axisZ, this.axisZ);
 
-        this.initNerve(SeaGullNrv.HOVER_FRONT);
+        this.initNerve(SeaGullNrv.HoverFront);
     }
 
     private updateHover(): void {
@@ -2885,7 +2918,7 @@ class SeaGull extends LiveActor<SeaGullNrv> {
 
         // nerves
         const currentNerve = this.getCurrentNerve();
-        if (currentNerve === SeaGullNrv.HOVER_FRONT) {
+        if (currentNerve === SeaGullNrv.HoverFront) {
             if (isFirstStep(this))
                 this.hoverStep = getRandomInt(0, 60);
 
@@ -2896,27 +2929,27 @@ class SeaGull extends LiveActor<SeaGullNrv> {
                 if (vec3.squaredLength(scratchVec3) > 500) {
                     const p = vec3.dot(this.axisX, scratchVec3);
                     if (p <= 0)
-                        this.setNerve(SeaGullNrv.HOVER_RIGHT);
+                        this.setNerve(SeaGullNrv.HoverRight);
                     else
-                        this.setNerve(SeaGullNrv.HOVER_LEFT);
+                        this.setNerve(SeaGullNrv.HoverLeft);
                 }
             }
-        } else if (currentNerve === SeaGullNrv.HOVER_LEFT) {
+        } else if (currentNerve === SeaGullNrv.HoverLeft) {
             if (isFirstStep(this))
                 this.hoverStep = getRandomInt(60, 120);
 
             this.bankRotation -= 0.1 * getDeltaTimeFrames(viewerInput);
 
             if (isGreaterStep(this, this.hoverStep))
-                this.setNerve(SeaGullNrv.HOVER_FRONT);
-        } else if (currentNerve === SeaGullNrv.HOVER_RIGHT) {
+                this.setNerve(SeaGullNrv.HoverFront);
+        } else if (currentNerve === SeaGullNrv.HoverRight) {
             if (isFirstStep(this))
                 this.hoverStep = getRandomInt(60, 120);
 
             this.bankRotation += 0.1 * getDeltaTimeFrames(viewerInput);
 
             if (isGreaterStep(this, this.hoverStep))
-                this.setNerve(SeaGullNrv.HOVER_FRONT);
+                this.setNerve(SeaGullNrv.HoverFront);
         }
 
         // control
@@ -3113,7 +3146,7 @@ export class CoconutTreeLeafGroup extends LiveActor {
     }
 }
 
-const enum AirBubbleNrv { WAIT, MOVE, KILL_WAIT }
+const enum AirBubbleNrv { Wait, Move, KillWait }
 
 export class AirBubble extends LiveActor<AirBubbleNrv> {
     private lifetime: number = 180;
@@ -3130,7 +3163,7 @@ export class AirBubble extends LiveActor<AirBubbleNrv> {
         connectToSceneItem(sceneObjHolder, this);
 
         this.initEffectKeeper(sceneObjHolder, null);
-        this.initNerve(AirBubbleNrv.WAIT);
+        this.initNerve(AirBubbleNrv.Wait);
 
         startBck(this, 'Move');
     }
@@ -3139,7 +3172,7 @@ export class AirBubble extends LiveActor<AirBubbleNrv> {
         vec3.copy(this.translation, pos);
         this.makeActorAppeared();
         showModel(this);
-        this.setNerve(AirBubbleNrv.MOVE);
+        this.setNerve(AirBubbleNrv.Move);
 
         if (lifetime <= 0)
             lifetime = 180;
@@ -3151,8 +3184,8 @@ export class AirBubble extends LiveActor<AirBubbleNrv> {
         super.movement(sceneObjHolder, viewerInput);
 
         const currentNerve = this.getCurrentNerve();
-        if (currentNerve === AirBubbleNrv.WAIT) {
-        } else if (currentNerve === AirBubbleNrv.MOVE) {
+        if (currentNerve === AirBubbleNrv.Wait) {
+        } else if (currentNerve === AirBubbleNrv.Move) {
             if (isFirstStep(this)) {
                 // Calc gravity.
                 vec3.set(this.gravityVec, 0, -1, 0);
@@ -3175,9 +3208,9 @@ export class AirBubble extends LiveActor<AirBubbleNrv> {
             if (isGreaterStep(this, this.lifetime)) {
                 hideModel(this);
                 emitEffect(sceneObjHolder, this, 'RecoveryBubbleBreak');
-                this.setNerve(AirBubbleNrv.KILL_WAIT);
+                this.setNerve(AirBubbleNrv.KillWait);
             }
-        } else if (currentNerve === AirBubbleNrv.KILL_WAIT) {
+        } else if (currentNerve === AirBubbleNrv.KillWait) {
             if (isGreaterStep(this, 90))
                 this.makeActorDead();
         }
@@ -3206,7 +3239,7 @@ export class AirBubbleHolder extends LiveActorGroup<AirBubble> {
     }
 }
 
-const enum AirBubbleGeneratorNrv { WAIT, GENERATE }
+const enum AirBubbleGeneratorNrv { Wait, Generate }
 
 export class AirBubbleGenerator extends LiveActor<AirBubbleGeneratorNrv> {
     private delay: number;
@@ -3221,7 +3254,7 @@ export class AirBubbleGenerator extends LiveActor<AirBubbleGeneratorNrv> {
         this.initModelManagerWithAnm(sceneObjHolder, 'AirBubbleGenerator');
         connectToSceneNoSilhouettedMapObj(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
-        this.initNerve(AirBubbleGeneratorNrv.WAIT);
+        this.initNerve(AirBubbleGeneratorNrv.Wait);
 
         this.delay = fallback(getJMapInfoArg0(infoIter), 180);
         this.lifetime = fallback(getJMapInfoArg1(infoIter), -1);
@@ -3231,10 +3264,10 @@ export class AirBubbleGenerator extends LiveActor<AirBubbleGeneratorNrv> {
         super.movement(sceneObjHolder, viewerInput);
 
         const currentNerve = this.getCurrentNerve();
-        if (currentNerve === AirBubbleGeneratorNrv.WAIT) {
+        if (currentNerve === AirBubbleGeneratorNrv.Wait) {
             if (isGreaterStep(this, this.delay))
-                this.setNerve(AirBubbleGeneratorNrv.GENERATE);
-        } else if (currentNerve === AirBubbleGeneratorNrv.GENERATE) {
+                this.setNerve(AirBubbleGeneratorNrv.Generate);
+        } else if (currentNerve === AirBubbleGeneratorNrv.Generate) {
             if (isFirstStep(this)) {
                 startBck(this, 'Generate');
             }
@@ -3243,7 +3276,7 @@ export class AirBubbleGenerator extends LiveActor<AirBubbleGeneratorNrv> {
                 calcActorAxis(null, scratchVec3, null, this);
                 vec3.scaleAndAdd(scratchVec3, this.translation, scratchVec3, 120);
                 sceneObjHolder.airBubbleHolder!.appearAirBubble(scratchVec3, this.lifetime);
-                this.setNerve(AirBubbleGeneratorNrv.WAIT);
+                this.setNerve(AirBubbleGeneratorNrv.Wait);
             }
         }
     }
@@ -3325,5 +3358,137 @@ export class TreasureBoxCracked extends LiveActor<TreasureBoxNrv> {
             sceneObjHolder.modelCache.requestObjectData('TreasureBoxGold');
         else
             sceneObjHolder.modelCache.requestObjectData('TreasureBox');
+    }
+}
+
+const enum TicoRailNrv { Wait, LookAround, MoveSignAndTurn, MoveSign, Move, Stop }
+
+export class TicoRail extends LiveActor<TicoRailNrv> {
+    private direction = vec3.create();
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+
+        this.initDefaultPos(sceneObjHolder, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, `Tico`);
+        connectToSceneNpc(sceneObjHolder, this);
+        this.initLightCtrl(sceneObjHolder);
+        this.initEffectKeeper(sceneObjHolder, null);
+        this.initRailRider(sceneObjHolder, infoIter);
+        moveCoordAndTransToNearestRailPos(this);
+        getRailDirection(this.direction, this);
+        const colorChangeFrame = fallback(getJMapInfoArg0(infoIter), 0);
+        bindColorChangeAnimation(this.modelInstance!, this.arc, colorChangeFrame);
+
+        const rnd = getRandomInt(0, 2);
+        if (rnd === 0)
+            this.initNerve(TicoRailNrv.Wait);
+        else
+            this.initNerve(TicoRailNrv.Move);
+    }
+
+    public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
+        // Gravity vector
+        vec3.set(scratchVec3, 0, -1, 0);
+        calcMtxFromGravityAndZAxis(this.modelInstance!.modelMatrix, this, scratchVec3, this.direction);
+    }
+
+    private isGreaterEqualStepAndRandom(v: number): boolean {
+        if (isGreaterStep(this, v + 300))
+            return true;
+
+        if (isGreaterStep(this, v)) {
+            if (getRandomInt(0, 300) === 0)
+                return true;
+        }
+
+        return false;
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.movement(sceneObjHolder, viewerInput);
+
+        const currentNerve = this.getCurrentNerve();
+        if (currentNerve === TicoRailNrv.Wait) {
+            if (isFirstStep(this)) {
+                startBck(this, `Turn`);
+                this.modelInstance!.animationController.setPhaseToCurrent();
+            }
+
+            if (this.isGreaterEqualStepAndRandom(60))
+                this.setNerve(TicoRailNrv.LookAround);
+        } else if (currentNerve === TicoRailNrv.LookAround) {
+            if (isFirstStep(this)) {
+                startBck(this, `Turn`);
+                this.modelInstance!.animationController.setPhaseToCurrent();
+            }
+
+            calcUpVec(scratchVec3, this);
+
+            let turnAmt;
+            if (isLessStep(this, 40))
+                turnAmt = 1.2;
+            else if (isLessStep(this, 120))
+                turnAmt = -1.2;
+            else if (isLessStep(this, 160))
+                turnAmt = 1.2;
+            else
+                turnAmt = 0.0;
+            turnAmt *= getDeltaTimeFrames(viewerInput);
+            rotateVecDegree(this.direction, scratchVec3, turnAmt);
+
+            if (isGreaterStep(this, 160)) {
+                const rnd = getRandomInt(0, 2);
+                if (rnd === 0)
+                    this.setNerve(TicoRailNrv.MoveSignAndTurn);
+                else
+                    this.setNerve(TicoRailNrv.MoveSign);
+            }
+        } else if (currentNerve === TicoRailNrv.MoveSign || currentNerve === TicoRailNrv.MoveSignAndTurn) {
+            if (isFirstStep(this)) {
+                startBck(this, `Spin`);
+                this.modelInstance!.animationController.setPhaseToCurrent();
+
+                if (currentNerve === TicoRailNrv.MoveSignAndTurn)
+                    reverseRailDirection(this);
+            }
+
+            const duration = getBckFrameMax(this);
+            const rate = calcNerveRate(this, duration);
+
+            getRailDirection(scratchVec3a, this);
+            vec3.negate(scratchVec3b, scratchVec3a);
+            vec3.lerp(this.direction, scratchVec3b, scratchVec3a, rate);
+
+            if (isBckStopped(this))
+                this.setNerve(TicoRailNrv.Move);
+        } else if (currentNerve === TicoRailNrv.Move) {
+            if (isFirstStep(this)) {
+                startBck(this, `Wait`);
+                this.modelInstance!.animationController.setPhaseToCurrent();
+            }
+
+            const speed = getDeltaTimeFrames(viewerInput) * calcNerveValue(this, 0, 200, 15);
+            moveCoordAndFollowTrans(this, speed);
+
+            getRailDirection(this.direction, this);
+            if (this.isGreaterEqualStepAndRandom(500))
+                this.setNerve(TicoRailNrv.Stop);
+        } else if (currentNerve === TicoRailNrv.Stop) {
+            if (isFirstStep(this)) {
+                startBck(this, `Spin`);
+                this.modelInstance!.animationController.setPhaseToCurrent();
+            }
+
+            const duration = getBckFrameMax(this);
+            const speed = getDeltaTimeFrames(viewerInput) * calcNerveValue(this, duration, 15, 0);
+            moveCoordAndFollowTrans(this, speed);
+            if (isBckStopped(this))
+                this.setNerve(TicoRailNrv.Wait);
+        }
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        sceneObjHolder.modelCache.requestObjectData('Tico');
     }
 }
