@@ -75,7 +75,7 @@ export class GXMaterialBuilder {
     public setChanCtrl(idx: GX.ColorChannelID, enable: boolean, ambSrc: GX.ColorSrc, matSrc: GX.ColorSrc, lightMask: number, diffFn: GX.DiffuseFunction, attnFn: GX.AttenuationFunction): void {
         const lightChannel = this.ensureLightChannel(idx & 0x01);
 
-        const set = idx >>> 1;
+        const set = (idx >>> 1) + 1;
         if (!!(set & 0x01))
             this.setChanCtrlInternal(lightChannel.colorChannel, enable, ambSrc, matSrc, lightMask, diffFn, attnFn);
         if (!!(set & 0x02))
