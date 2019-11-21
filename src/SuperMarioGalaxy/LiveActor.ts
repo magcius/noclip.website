@@ -426,7 +426,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         }
     }
 
-    public calcViewAndEntry(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    public calcAnim(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         if (this.modelInstance === null)
             return;
 
@@ -436,6 +436,14 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
 
         this.modelInstance.animationController.setTimeFromViewerInput(viewerInput);
         this.modelInstance.calcAnim(viewerInput.camera);
+    }
+
+    public calcViewAndEntry(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        if (this.modelInstance === null)
+            return;
+
+        this.modelInstance.animationController.setTimeFromViewerInput(viewerInput);
+        this.modelInstance.calcView(viewerInput.camera);
 
         const visible = this.visibleModel && this.getActorVisible(viewerInput.camera);
         this.modelInstance.visible = visible;

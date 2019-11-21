@@ -1279,7 +1279,9 @@ export class BMDModelInstance {
 
         // Update joints from our matrix calculator.
         this.calcJointAnim();
+    }
 
+    public calcView(camera: Camera): void {
         this.calcJointToWorld();
 
         if (this.vaf1Animator !== null)
@@ -1328,6 +1330,7 @@ export class BMDModelInstance {
 
         this.animationController.setTimeInMilliseconds(viewerInput.time);
         this.calcAnim(viewerInput.camera);
+        this.calcView(viewerInput.camera);
 
         // If entire model is culled away, then we don't need to render anything.
         if (!this.isAnyShapeVisible())
