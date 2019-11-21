@@ -17,10 +17,11 @@ import { BMDModelInstance, BTIData } from '../j3d/render';
 import { assertExists, leftPad, fallback } from '../util';
 import { Camera } from '../Camera';
 import { isGreaterStep, isFirstStep, calcNerveRate, isLessStep, calcNerveValue } from './Spine';
-import { LiveActor, startBck, startBtkIfExist, startBrkIfExist, startBvaIfExist, startBpkIfExist, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpawnZoneAndLayer, startBckIfExist, MessageType } from './LiveActor';
+import { LiveActor, startBck, startBtkIfExist, startBrkIfExist, startBvaIfExist, startBpkIfExist, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpawnZoneAndLayer, MessageType } from './LiveActor';
 import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType } from './MapParts';
 import { isConnectedWithRail, RailDirection } from './RailRider';
 import { WorldmapPointInfo } from './LegacyActor';
+import { isBckStopped, getBckFrameMax, setLoopMode } from './ActorUtil';
 
 // Scratchpad
 const scratchVec3 = vec3.create();
@@ -323,18 +324,6 @@ export function getJointNum(actor: LiveActor): number {
 
 export function getJointMtx(actor: LiveActor, i: number): mat4 {
     return actor.modelInstance!.shapeInstanceState.jointToParentMatrixArray[i];
-}
-
-export function isBckStopped(actor: LiveActor): boolean {
-    const animator = actor.modelInstance!.ank1Animator!;
-    if (animator.ank1.loopMode !== LoopMode.ONCE)
-        return false;
-    return animator.animationController.getTimeInFrames() >= animator.ank1.duration;
-}
-
-export function getBckFrameMax(actor: LiveActor): number {
-    const animator = actor.modelInstance!.ank1Animator!;
-    return animator.ank1.duration;
 }
 
 export function scaleMatrixScalar(m: mat4, s: number): void {
@@ -1275,7 +1264,7 @@ export class HatchWaterPlanet extends LiveActor {
         this.initEffectKeeper(sceneObjHolder, null);
 
         this.tryStartAllAnim('HatchWaterPlanet');
-        this.modelInstance!.ank1Animator!.ank1.loopMode = LoopMode.ONCE;
+        setLoopMode(this, LoopMode.ONCE);
     }
 }
 

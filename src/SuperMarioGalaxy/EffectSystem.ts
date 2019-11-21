@@ -13,6 +13,7 @@ import { computeModelMatrixR } from "../MathHelpers";
 import { DrawType } from "./NameObj";
 import { LiveActor } from './LiveActor';
 import { TextureMapping } from '../TextureHolder';
+import { getBckFrameMax } from './ActorUtil';
 
 export class ParticleResourceHolder {
     private effectNames: string[];
@@ -632,10 +633,13 @@ export class EffectKeeper {
         if (this.currentBckName === null)
             return;
 
-        if (this.actor.modelInstance === null || this.actor.modelInstance.ank1Animator === null)
+        if (this.actor.modelInstance === null)
             return;
 
-        const timeInFrames = this.actor.modelInstance.ank1Animator.animationController.getTimeInFrames();
+        const timeInFrames = getBckFrameMax(this.actor);
+        if (timeInFrames < 0)
+            return;
+
         for (let i = 0; i < this.multiEmitters.length; i++) {
             const multiEmitter = this.multiEmitters[i];
 

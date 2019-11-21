@@ -177,8 +177,9 @@ export class NoclipLegacyActorSpawner {
             }
 
             // Apply a random phase to the animation.
-            if (actor.modelInstance!.ank1Animator !== null && actor.modelInstance!.ank1Animator.ank1.loopMode === LoopMode.REPEAT)
-                actor.modelInstance!.animationController.phaseFrames += Math.random() * actor.modelInstance!.ank1Animator.ank1.duration;
+            const ank1Animator = actor.modelInstance!.ank1Animator;
+            if (ank1Animator !== null && ank1Animator.ank1.loopMode === LoopMode.REPEAT)
+                ank1Animator.animationController.phaseFrames += Math.random() * ank1Animator.ank1.duration;
         }
 
         const bindChangeAnimation = (actor: NoclipLegacyActor, rarc: RARC, frame: number) => {

@@ -21,6 +21,7 @@ import { makeTriangleIndexBuffer, GfxTopology, getTriangleIndexCountForTopologyI
 import { Camera } from "../Camera";
 import { GXMaterialHelperGfx, ub_MaterialParams, u_PacketParamsBufferSize, ub_PacketParams, MaterialParams, PacketParams, fillPacketParamsData, ColorKind } from "../gx/gx_render";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
+import { setLoopMode } from "./ActorUtil";
 
 const warpPodColorTable = [
     colorNewFromRGBA8(0x0064C8FF),
@@ -238,7 +239,7 @@ export class WarpPod extends LiveActor {
             startBck(this, 'Active');
             startBrkIfExist(this.modelInstance!, this.arc, 'Active');
             // This is a bit hokey, but we don't have an XanimePlayer, so this is our solution...
-            this.modelInstance!.ank1Animator!.ank1.loopMode = LoopMode.ONCE;
+            setLoopMode(this, LoopMode.ONCE);
         }
 
         // The game normally will check a few different save file bits
