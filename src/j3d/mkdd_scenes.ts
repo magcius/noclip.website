@@ -1,7 +1,6 @@
 
+import * as UI from '../ui';
 import * as Viewer from '../viewer';
-
-import { BasicRenderer } from './scenes';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { readString, assert, assertExists } from '../util';
@@ -9,11 +8,97 @@ import { mat4, quat } from 'gl-matrix';
 import * as RARC from './rarc';
 import { BMDModelInstance, BMDModel } from './render';
 import { BCK, BMD, BTK, BRK, BTP } from './j3d';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
+import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
+import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxFrontFaceMode } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
+import { computeModelMatrixS } from '../MathHelpers';
 
 const id = "mkdd";
 const name = "Mario Kart: Double Dash!!";
+
+class MKDDRenderer implements Viewer.SceneGfx {
+    private renderTarget = new BasicRenderTarget();
+    public renderHelper: GXRenderHelperGfx;
+    public modelInstances: BMDModelInstance[] = [];
+    public rarc: RARC.RARC[] = [];
+
+    constructor(device: GfxDevice) {
+        this.renderHelper = new GXRenderHelperGfx(device);
+    }
+
+    private setMirrored(mirror: boolean): void {
+        const negScaleMatrix = mat4.create();
+        computeModelMatrixS(negScaleMatrix, -1, 1, 1);
+        for (let i = 0; i < this.modelInstances.length; i++) {
+            mat4.mul(this.modelInstances[i].modelMatrix, negScaleMatrix, this.modelInstances[i].modelMatrix);
+            for (let j = 0; j < this.modelInstances[i].materialInstances.length; j++)
+                this.modelInstances[i].materialInstances[j].materialHelper.megaStateFlags.frontFace = mirror ? GfxFrontFaceMode.CCW : GfxFrontFaceMode.CW;
+        }
+    }
+
+    public createPanels(): UI.Panel[] {
+        const renderHacksPanel = new UI.Panel();
+        renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
+        const mirrorCheckbox = new UI.Checkbox('Mirror Courses');
+        mirrorCheckbox.onchanged = () => {
+            this.setMirrored(mirrorCheckbox.checked);
+        };
+        renderHacksPanel.contents.appendChild(mirrorCheckbox.elem);
+        const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
+        enableVertexColorsCheckbox.onchanged = () => {
+            for (let i = 0; i < this.modelInstances.length; i++)
+                this.modelInstances[i].setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
+        const enableTextures = new UI.Checkbox('Enable Textures', true);
+        enableTextures.onchanged = () => {
+            for (let i = 0; i < this.modelInstances.length; i++)
+                this.modelInstances[i].setTexturesEnabled(enableTextures.checked);
+        };
+        renderHacksPanel.contents.appendChild(enableTextures.elem);
+
+        const layersPanel = new UI.LayerPanel(this.modelInstances);
+
+        return [layersPanel, renderHacksPanel];
+    }
+
+    public addModelInstance(scene: BMDModelInstance): void {
+        this.modelInstances.push(scene);
+    }
+
+    private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        const renderInstManager = this.renderHelper.renderInstManager;
+
+        const template = this.renderHelper.pushTemplateRenderInst();
+        fillSceneParamsDataOnTemplate(template, viewerInput);
+        for (let i = 0; i < this.modelInstances.length; i++)
+            this.modelInstances[i].prepareToRender(device, renderInstManager, viewerInput);
+        renderInstManager.popTemplateRenderInst();
+
+        this.renderHelper.prepareToRender(device, hostAccessPass);
+    }
+
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        const hostAccessPass = device.createHostAccessPass();
+        this.prepareToRender(device, hostAccessPass, viewerInput);
+        device.submitPass(hostAccessPass);
+
+        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
+        this.renderHelper.renderInstManager.drawOnPassRenderer(device, passRenderer);
+        this.renderHelper.renderInstManager.resetRenderInsts();
+        return passRenderer;
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.renderHelper.destroy(device);
+        this.renderTarget.destroy(device);
+        for (let i = 0; i < this.modelInstances.length; i++)
+            this.modelInstances[i].destroy(device);
+    }
+}
 
 interface Obj {
     id: number;
@@ -64,7 +149,7 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
         this.id = this.path;
     }
 
-    private spawnBMD(device: GfxDevice, renderer: BasicRenderer, rarc: RARC.RARC, basename: string, modelMatrix: mat4 | null = null): BMDModelInstance {
+    private spawnBMD(device: GfxDevice, renderer: MKDDRenderer, rarc: RARC.RARC, basename: string, modelMatrix: mat4 | null = null): BMDModelInstance {
         const bmdFileData = assertExists(rarc.findFileData(`${basename}.bmd`));
         const bmdModel = new BMDModel(device, renderer.renderHelper.renderInstManager.gfxRenderCache, BMD.parse(bmdFileData));
 
@@ -98,7 +183,7 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
             const bolFile = assertExists(rarc.files.find((f) => f.name.endsWith('_course.bol')));
             const courseName = bolFile.name.replace('_course.bol', '');
 
-            const renderer = new BasicRenderer(device);
+            const renderer = new MKDDRenderer(device);
 
             if (rarc.findFile(`${courseName}_sky.bmd`))
                 renderer.addModelInstance(this.spawnBMD(device, renderer, rarc, `${courseName}_sky`));
