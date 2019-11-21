@@ -46,6 +46,34 @@ export function computeModelMatrixSRT(dst: mat4, scaleX: number, scaleY: number,
 }
 
 /**
+ * Computes a model matrix {@param dst} from given scale parameters.
+ * 
+ * This is equivalent to {@link computeModelMatrixSRT} with the rotation parameters set to
+ * 0 and the translation set to 0.
+ */
+export function computeModelMatrixS(dst: mat4, scaleX: number, scaleY: number, scaleZ: number): void {
+    dst[0] =  scaleX;
+    dst[1] =  0.0;
+    dst[2] =  0.0;
+    dst[3] =  0.0;
+
+    dst[4] =  0.0;
+    dst[5] =  scaleY;
+    dst[6] =  0.0;
+    dst[7] =  0.0;
+
+    dst[8] =  0.0;
+    dst[9] =  0.0;
+    dst[10] = scaleZ;
+    dst[11] = 0.0;
+
+    dst[12] = 0.0;
+    dst[13] = 0.0;
+    dst[14] = 0.0;
+    dst[15] = 1.0;
+}
+
+/**
  * Computes a model matrix {@param dst} from given rotation parameters. Rotation is assumed
  * to be in radians.
  * 

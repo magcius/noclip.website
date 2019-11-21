@@ -14,7 +14,7 @@ import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render';
 import AnimationController from '../AnimationController';
 import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GfxDevice, GfxHostAccessPass, GfxFrontFaceMode } from '../gfx/platform/GfxPlatform';
-import { computeModelMatrixSRT, MathConstants, lerp, clamp } from '../MathHelpers';
+import { computeModelMatrixSRT, computeModelMatrixS, MathConstants, lerp, clamp } from '../MathHelpers';
 import { SceneContext, GraphObjBase } from '../SceneBase';
 import { EggLightManager, parseBLIGHT } from './Egg';
 import { GfxRendererLayer, GfxRenderInstManager } from '../gfx/render/GfxRenderer';
@@ -70,7 +70,8 @@ class MarioKartWiiRenderer extends BasicGXRendererHelper {
     public modelCache = new ModelCache();
 
     private setMirrored(mirror: boolean): void {
-        const negScaleMatrix = mat4.fromValues(-1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1);
+        const negScaleMatrix = mat4.create();
+        computeModelMatrixS(negScaleMatrix, -1, 1, 1);
         for (let i = 0; i < this.baseObjects.length; i++) {
             mat4.mul(this.baseObjects[i].modelMatrix, negScaleMatrix, this.baseObjects[i].modelMatrix);
             for (let j = 0; j < getModelInstance(this.baseObjects[i]).materialInstances.length; j++)

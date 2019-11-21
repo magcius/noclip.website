@@ -7,6 +7,7 @@ import * as UI from '../ui';
 
 import { BMD, BMT, BTK, BTI, BRK, BCK, BTI_Texture } from './j3d';
 import * as RARC from './rarc';
+import { mat4 } from 'gl-matrix';
 import { BMDModel, BMDModelInstance, BTIData, BMDModelMaterialData } from './render';
 import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks } from '../gx/gx_material';
 import { TextureMapping } from '../TextureHolder';
@@ -16,6 +17,7 @@ import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_rende
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { SceneContext } from '../SceneBase';
+import { computeModelMatrixS } from '../MathHelpers';
 
 class ZTPExtraTextures {
     public extraTextures: BTIData[] = [];
@@ -96,8 +98,10 @@ class TwilightPrincessRenderer implements Viewer.SceneGfx {
     }
 
     private setMirrored(mirror: boolean): void {
+        const negScaleMatrix = mat4.create();
+        computeModelMatrixS(negScaleMatrix, -1, 1, 1);
         for (let i = 0; i < this.modelInstances.length; i++) {
-            this.modelInstances[i].modelMatrix[0] = mirror ? -1 : 1;
+            mat4.mul(this.modelInstances[i].modelMatrix, negScaleMatrix, this.modelInstances[i].modelMatrix);
             for (let j = 0; j < this.modelInstances[i].materialInstances.length; j++)
                 this.modelInstances[i].materialInstances[j].materialHelper.megaStateFlags.frontFace = mirror ? GfxFrontFaceMode.CCW : GfxFrontFaceMode.CW;
         }
