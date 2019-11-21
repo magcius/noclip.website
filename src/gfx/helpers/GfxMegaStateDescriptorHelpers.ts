@@ -23,6 +23,7 @@ function copyAttachmentState(dst: GfxAttachmentState | undefined, src: GfxAttach
 }
 
 function copyAttachmentsState(dst: GfxAttachmentState[], src: GfxAttachmentState[]): void {
+    dst.length = src.length;
     for (let i = 0; i < src.length; i++)
         dst[i] = copyAttachmentState(dst[i], src[i]);
 }
@@ -30,10 +31,8 @@ function copyAttachmentsState(dst: GfxAttachmentState[], src: GfxAttachmentState
 export function setMegaStateFlags(dst: GfxMegaStateDescriptor, src: Partial<GfxMegaStateDescriptor>): void {
     // attachmentsState replaces wholesale; it does not merge.
     // TODO(jstpierre): Should it merge?
-    if (src.attachmentsState !== undefined) {
-        dst.attachmentsState = [];
+    if (src.attachmentsState !== undefined)
         copyAttachmentsState(dst.attachmentsState, src.attachmentsState);
-    }
 
     if (src.blendConstant !== undefined)
         colorCopy(dst.blendConstant, src.blendConstant);
