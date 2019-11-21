@@ -1307,6 +1307,7 @@ export class BMT {
 //#region Animation Core
 export const enum LoopMode {
     ONCE = 0,
+    ONCE_AND_RESET = 1,
     REPEAT = 2,
     MIRRORED_ONCE = 3,
     MIRRORED_REPEAT = 4,
@@ -1337,6 +1338,8 @@ function applyLoopMode(t: number, loopMode: LoopMode) {
     switch (loopMode) {
     case LoopMode.ONCE:
         return Math.min(t, 1);
+    case LoopMode.ONCE_AND_RESET:
+        return Math.min(t, 1) % 1;
     case LoopMode.REPEAT:
         return t % 1;
     case LoopMode.MIRRORED_ONCE:
@@ -1346,7 +1349,7 @@ function applyLoopMode(t: number, loopMode: LoopMode) {
     }
 }
 
-function getAnimFrame(anim: AnimationBase, frame: number, loopMode: LoopMode = anim.loopMode): number {
+export function getAnimFrame(anim: AnimationBase, frame: number, loopMode: LoopMode = anim.loopMode): number {
     const lastFrame = anim.duration;
     const normTime = frame / lastFrame;
     const animFrame = applyLoopMode(normTime, loopMode) * lastFrame;
@@ -1369,7 +1372,7 @@ function findKeyframe(frames: AnimationKeyframe[], time: number): number {
     return -1;
 }
 
-function sampleAnimationData(track: AnimationTrack, frame: number) {
+export function sampleAnimationData(track: AnimationTrack, frame: number) {
     const frames = track.frames;
 
     // Find the first frame.

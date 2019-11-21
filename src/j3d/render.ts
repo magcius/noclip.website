@@ -1,7 +1,7 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 
-import { BMD, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, TTK1Animator, ANK1Animator, bindANK1Animator, bindVAF1Animator, VAF1, VAF1Animator, TPT1, bindTPT1Animator, TPT1Animator, TEX1, BTI_Texture, INF1, calcJointMatrix, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode } from './j3d';
+import { BMD, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, TTK1Animator, ANK1Animator, bindANK1Animator, bindVAF1Animator, VAF1, VAF1Animator, TPT1, bindTPT1Animator, TPT1Animator, TEX1, BTI_Texture, INF1, calcJointMatrix, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, JNT1, Joint, BCK, getAnimFrame, sampleAnimationData } from './j3d';
 import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, TRK1Animator, ANK1 } from './j3d';
 
 import * as GX from '../gx/gx_enum';
@@ -19,7 +19,7 @@ import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../gfx/helper
 import { ViewerRenderInput, Texture } from '../viewer';
 import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, setSortKeyBias, setSortKeyLayer } from '../gfx/render/GfxRenderer';
 import { colorCopy, Color } from '../Color';
-import { computeNormalMatrix, texEnvMtx } from '../MathHelpers';
+import { computeNormalMatrix, texEnvMtx, computeModelMatrixSRT } from '../MathHelpers';
 import { calcMipChain } from '../gx/gx_texture';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { NormalizedViewportCoords } from '../gfx/helpers/RenderTargetHelpers';
@@ -956,6 +956,48 @@ export class BMDModel {
     }
 }
 
+export interface JointMatrixCalc {
+    calcJointMatrix(dst: mat4, i: number, jnt1: Joint): void;
+}
+
+// TODO(jstpierre): Support better recursive calculation here, SoftImage modes, etc.
+export class JointMatrixCalcANK1 {
+    constructor(public animationController: AnimationController, public ank1: ANK1) {
+    }
+
+    public calcJointMatrix(dst: mat4, i: number, jnt1: Joint): void {
+        const frame = this.animationController.getTimeInFrames();
+        const animFrame = getAnimFrame(this.ank1, frame);
+        const entry = this.ank1.jointAnimationEntries[i];
+
+        const scaleX = sampleAnimationData(entry.scaleX, animFrame);
+        const scaleY = sampleAnimationData(entry.scaleY, animFrame);
+        const scaleZ = sampleAnimationData(entry.scaleZ, animFrame);
+        const rotationX = sampleAnimationData(entry.rotationX, animFrame) * Math.PI;
+        const rotationY = sampleAnimationData(entry.rotationY, animFrame) * Math.PI;
+        const rotationZ = sampleAnimationData(entry.rotationZ, animFrame) * Math.PI;
+        const translationX = sampleAnimationData(entry.translationX, animFrame);
+        const translationY = sampleAnimationData(entry.translationY, animFrame);
+        const translationZ = sampleAnimationData(entry.translationZ, animFrame);
+        computeModelMatrixSRT(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+    }
+}
+
+export class JointMatrixCalcNoAnm {
+    public calcJointMatrix(dst: mat4, i: number, jnt1: Joint): void {
+        const scaleX = jnt1.scaleX;
+        const scaleY = jnt1.scaleY;
+        const scaleZ = jnt1.scaleZ;
+        const rotationX = jnt1.rotationX;
+        const rotationY = jnt1.rotationY;
+        const rotationZ = jnt1.rotationZ;
+        const translationX = jnt1.translationX;
+        const translationY = jnt1.translationY;
+        const translationZ = jnt1.translationZ;
+        computeModelMatrixSRT(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+    }
+}
+
 const bboxScratch = new AABB();
 const scratchViewMatrix = mat4.create();
 export class BMDModelInstance {
@@ -969,8 +1011,10 @@ export class BMDModelInstance {
 
     // Animations.
     public animationController = new AnimationController();
+    // TODO(jstpierre): Remove the old Animator interfaces.
     public ank1Animator: ANK1Animator | null = null;
     public vaf1Animator: VAF1Animator | null = null;
+    public jointMatrixCalc: JointMatrixCalc;
 
     public materialInstanceState = new MaterialInstanceState();
     public shapeInstances: ShapeInstance[] = [];
@@ -1000,6 +1044,7 @@ export class BMDModelInstance {
         this.shapeInstanceState.jointToParentMatrixArray = nArray(numJoints, () => mat4.create());
         this.shapeInstanceState.jointToWorldMatrixArray = nArray(numJoints, () => mat4.create());
         this.jointVisibility = nArray(numJoints, () => true);
+        this.bindANK1(null);
         this.calcJointAnim();
 
         // DRW1 seems to specify each envelope twice. Not sure why. J3D actually corrects for this in
@@ -1220,7 +1265,9 @@ export class BMDModelInstance {
      * By default, this will default to this instance's own {@member animationController}.
      */
     public bindANK1(ank1: ANK1 | null, animationController: AnimationController = this.animationController): void {
+        // For public API reasons.
         this.ank1Animator = ank1 !== null ? bindANK1Animator(animationController, ank1) : null;
+        this.jointMatrixCalc = ank1 !== null ? new JointMatrixCalcANK1(animationController, ank1) : new JointMatrixCalcNoAnm();
     }
 
     /**
@@ -1281,9 +1328,8 @@ export class BMDModelInstance {
             this.modelMatrix[14] = camera.worldMatrix[14];
         }
 
-        // Update joints from ANK1 animator, if we have one bound...
-        if (this.ank1Animator !== null)
-            this.calcJointAnim();
+        // Update joints from our matrix calculator.
+        this.calcJointAnim();
 
         this.calcJointToWorld();
 
@@ -1377,7 +1423,8 @@ export class BMDModelInstance {
         for (let i = 0; i < this.bmdModel.jointData.length; i++) {
             const joint = this.bmdModel.jointData[i];
             const jointIndex = joint.jointIndex;
-            calcJointMatrix(this.shapeInstanceState.jointToParentMatrixArray[jointIndex], jointIndex, this.bmdModel.bmd, this.ank1Animator);
+            const jointEntry = this.bmdModel.bmd.jnt1.joints[jointIndex];
+            this.jointMatrixCalc.calcJointMatrix(this.shapeInstanceState.jointToParentMatrixArray[jointIndex], jointIndex, jointEntry);
         }
     }
 
