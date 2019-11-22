@@ -45,7 +45,6 @@ export interface ObjInfo {
     objArg2: number;
     objArg3: number;
     modelMatrix: mat4;
-    path: Path | null;
 }
 
 export interface WorldmapPointInfo {
