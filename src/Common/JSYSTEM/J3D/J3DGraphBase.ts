@@ -35,9 +35,6 @@ export class ShapeInstanceState {
     // Draw (DRW1 matrix definitions, incl. envelopes), which transform into view space.
     public drawViewMatrixArray: mat4[] = [];
 
-    // Visibility of each shape.
-    public shapeVisibility: boolean[] = [];
-
     // View-specific visibility for each of the matrices in drawToViewMatrices.
     // TODO(jstpierre): Currently true for all envelope matrices.
     public drawViewMatrixVisibility: boolean[] = [];
@@ -141,10 +138,15 @@ export function J3DCalcYBBoardMtx(dst: mat4, m: mat4, v: vec3 = scratchVec3): vo
 const scratchModelViewMatrix = mat4.create();
 const packetParams = new PacketParams();
 export class ShapeInstance {
+    public visible: boolean = true;
+
     constructor(public shapeData: ShapeData, private materialInstance: MaterialInstance) {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, depth: number, camera: Camera, viewport: NormalizedViewportCoords, modelData: J3DModelData, materialInstanceState: MaterialInstanceState, shapeInstanceState: ShapeInstanceState): void {
+        if (!this.visible)
+            return;
+
         const materialInstance = this.materialInstance;
         if (!materialInstance.visible)
             return;
@@ -319,12 +321,24 @@ function buildEnvMtx(dst: mat4, flipYScale: number): void {
     dst[10] = tz;
 }
 
+interface ColorCalc {
+    calcColor(dst: Color): void;
+}
+
+interface TexMtxCalc {
+    calcTexMtx(dst: mat4): void;
+}
+
+interface TexNoCalc {
+    calcTextureIndex(): number;
+}
+
 const materialParams = new MaterialParams();
 const matrixScratch = mat4.create(), matrixScratch2 = mat4.create(), matrixScratch3 = mat4.create();
 export class MaterialInstance {
-    public ttk1Animators: (TTK1Animator | null)[] = [];
-    public tpt1Animators: (TPT1Animator | null)[] = [];
-    public trk1Animators: (TRK1Animator | null)[] = [];
+    public colorCalc: (ColorCalc | null)[] = [];
+    public texMtxCalc: (TexMtxCalc | null)[] = [];
+    public texNoCalc: (TexNoCalc | null)[] = [];
     public name: string;
     public materialData: MaterialData;
     public materialHelper: GXMaterialHelperGfx;
@@ -364,9 +378,9 @@ export class MaterialInstance {
             if (trk1 !== null) {
                 const trk1Animator = bindTRK1Animator(animationController, trk1, this.name, i);
                 if (trk1Animator !== null)
-                    this.trk1Animators[i] = trk1Animator;
+                    this.colorCalc[i] = trk1Animator;
             } else {
-                this.trk1Animators[i] = null;
+                this.colorCalc[i] = null;
             }
         }
     }
@@ -374,14 +388,14 @@ export class MaterialInstance {
     public bindTTK1(animationController: AnimationController, ttk1: TTK1 | null): void {
         for (let i = 0; i < 8; i++) {
             const ttk1Animator = ttk1 !== null ? bindTTK1Animator(animationController, ttk1, this.name, i) : null;
-            this.ttk1Animators[i] = ttk1Animator;
+            this.texMtxCalc[i] = ttk1Animator;
         }
     }
 
     public bindTPT1(animationController: AnimationController, tpt1: TPT1 | null): void {
         for (let i = 0; i < 8; i++) {
             const tpt1Animator = tpt1 !== null ? bindTPT1Animator(animationController, tpt1, this.name, i) : null;
-            this.tpt1Animators[i] = tpt1Animator;
+            this.texNoCalc[i] = tpt1Animator;
         }
     }
 
@@ -398,8 +412,8 @@ export class MaterialInstance {
     }
 
     private calcColor(dst: Color, i: ColorKind, materialInstanceState: MaterialInstanceState, fallbackColor: Color, clampTo8Bit: boolean): void {
-        if (this.trk1Animators[i]) {
-            this.trk1Animators[i]!.calcColor(dst);
+        if (this.colorCalc[i]) {
+            this.colorCalc[i]!.calcColor(dst);
         } else if (materialInstanceState.colorOverrides[i] !== undefined) {
             if (materialInstanceState.alphaOverrides[i])
                 colorCopy(dst, materialInstanceState.colorOverrides[i]);
@@ -484,9 +498,9 @@ export class MaterialInstance {
 
     public calcTexSRT(dst: mat4, i: number): void {
         const texMtx = this.materialData.material.texMatrices[i]!;
-        const isMaya = !!(texMtx.info >>> 7);
-        if (this.ttk1Animators[i]) {
-            this.ttk1Animators[i]!.calcTexMtx(dst, isMaya);
+        const ttk1Animator = this.texMtxCalc[i];
+        if (ttk1Animator) {
+            ttk1Animator.calcTexMtx(dst);
         } else {
             mat4.copy(dst, texMtx.matrix);
         }
@@ -667,7 +681,7 @@ export class MaterialInstance {
             m.reset();
 
             let samplerIndex: number;
-            const animator = this.tpt1Animators[i];
+            const animator = this.texNoCalc[i];
             if (animator)
                 samplerIndex = animator.calcTextureIndex();
             else
@@ -983,7 +997,6 @@ export class J3DModelInstance {
         this.shapeInstances = this.modelData.shapeData.map((shapeData) => {
             return new ShapeInstance(shapeData, this.materialInstances[shapeData.shape.materialIndex]);
         });
-        this.shapeInstanceState.shapeVisibility = nArray(this.shapeInstances.length, () => true);
 
         this.materialInstanceState.textureMappings = this.modelMaterialData.createDefaultTextureMappings();
 
@@ -1157,7 +1170,7 @@ export class J3DModelInstance {
      * if a VAF1 animation is bound, so this might have no effect in that case.
      */
     public setShapeVisible(shapeIndex: number, v: boolean): void {
-        this.shapeInstanceState.shapeVisibility[shapeIndex] = v;
+        this.shapeInstances[shapeIndex].visible = v;
     }
 
     /**
@@ -1286,7 +1299,7 @@ export class J3DModelInstance {
 
         if (this.vaf1Animator !== null)
             for (let i = 0; i < this.shapeInstances.length; i++)
-                this.shapeInstanceState.shapeVisibility[i] = this.vaf1Animator.calcVisibility(i);
+                this.shapeInstances[i].visible = this.vaf1Animator.calcVisibility(i);
 
         // Billboards have their model matrix modified to face the camera, so their world space position doesn't
         // quite match what they kind of do.
@@ -1339,11 +1352,8 @@ export class J3DModelInstance {
         const depth = this.computeDepth(viewerInput.camera);
         const template = renderInstManager.pushTemplateRenderInst();
         template.filterKey = this.passMask;
-        for (let i = 0; i < this.shapeInstances.length; i++) {
-            if (!this.shapeInstanceState.shapeVisibility[i])
-                continue;
+        for (let i = 0; i < this.shapeInstances.length; i++)
             this.shapeInstances[i].prepareToRender(device, renderInstManager, depth, viewerInput.camera, viewerInput.viewport, this.modelData, this.materialInstanceState, this.shapeInstanceState);
-        }
         renderInstManager.popTemplateRenderInst();
     }
 
@@ -1354,7 +1364,7 @@ export class J3DModelInstance {
 
         const depth = this.computeDepth(camera);
         for (let i = 0; i < this.shapeInstances.length; i++) {
-            if (!this.shapeInstanceState.shapeVisibility[i])
+            if (!this.shapeInstances[i].visible)
                 continue;
             const materialIndex = this.shapeInstances[i].shapeData.shape.materialIndex;
             if (this.materialInstances[materialIndex].materialData.material.translucent !== translucent)

@@ -12,7 +12,7 @@ import { ColorKind } from '../gx/gx_render';
 import { BTK, BRK, LoopMode, BTP } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as Viewer from '../viewer';
 import * as RARC from '../j3d/rarc';
-import { DrawBufferType, MovementType, CalcAnimType, DrawType } from './NameObj';
+import { DrawBufferType, MovementType, CalcAnimType } from './NameObj';
 import { assertExists, leftPad, fallback } from '../util';
 import { Camera } from '../Camera';
 import { isGreaterStep, isFirstStep, calcNerveRate, isLessStep, calcNerveValue } from './Spine';
@@ -20,8 +20,7 @@ import { LiveActor, startBck, startBtkIfExist, startBrkIfExist, startBvaIfExist,
 import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType } from './MapParts';
 import { isConnectedWithRail, RailDirection } from './RailRider';
 import { WorldmapPointInfo } from './LegacyActor';
-import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight } from './ActorUtil';
-import { BTIData, BTI } from '../Common/JSYSTEM/JUTTexture';
+import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isExistBtk, isExistBtp, startBtp, setBtpFrameAndStop, setBtkFrameAndStop } from './ActorUtil';
 
 // Scratchpad
 const scratchVec3 = vec3.create();
@@ -342,35 +341,6 @@ function setClippingFar(f: number): number {
     throw "whoops";
 }
 
-export function bindColorChangeAnimation(actor: LiveActor, frame: number, baseName: string = 'ColorChange'): void {
-    const brkName = `${baseName}.brk`;
-    if (actor.resourceHolder.arc.findFile(brkName) !== null) {
-        const animationController = new AnimationController();
-        animationController.setTimeInFrames(frame);
-
-        const brk = BRK.parse(assertExists(actor.resourceHolder.arc.findFileData(brkName)));
-        actor.modelInstance!.bindTRK1(brk, animationController);
-    }
-}
-
-export function bindTexChangeAnimation(actor: LiveActor, frame: number, baseName: string = 'TexChange'): void {
-    const btpName = `${baseName}.btp`;
-    const btkName = `${baseName}.btk`;
-
-    const animationController = new AnimationController();
-    animationController.setTimeInFrames(frame);
-
-    if (actor.resourceHolder.arc.findFile(btpName) !== null) {
-        const btp = BTP.parse(assertExists(actor.resourceHolder.arc.findFileData(btpName)));
-        actor.modelInstance!.bindTPT1(btp, animationController);
-    }
-
-    if (actor.resourceHolder.arc.findFile(btkName) !== null) {
-        const btk = BTK.parse(assertExists(actor.resourceHolder.arc.findFileData(btkName)));
-        actor.modelInstance!.bindTTK1(btk, animationController);
-    }
-}
-
 export function isEqualStageName(sceneObjHolder: SceneObjHolder, stageName: string): boolean {
     return sceneObjHolder.scenarioData.getMasterZoneFilename() === stageName;
 }
@@ -567,11 +537,22 @@ class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
             this.rotator = new MapPartsRotator(sceneObjHolder, this, infoIter);
 
         this.tryStartAllAnim(this.objName);
-        if (initInfo.colorChangeFrame !== -1)
-            bindColorChangeAnimation(this, initInfo.colorChangeFrame);
+        if (initInfo.colorChangeFrame !== -1) {
+            startBrk(this, 'ColorChange');
+            setBrkFrameAndStop(this, initInfo.colorChangeFrame);
+        }
 
-        if (initInfo.texChangeFrame !== -1)
-            bindTexChangeAnimation(this, initInfo.texChangeFrame);
+        if (initInfo.texChangeFrame !== -1) {
+            if (isExistBtp(this, 'TexChange')) {
+                startBtp(this, 'TexChange');
+                setBtpFrameAndStop(this, initInfo.texChangeFrame);
+            }
+
+            if (isExistBtk(this, 'TexChange')) {
+                startBtk(this, 'TexChange');
+                setBtkFrameAndStop(this, initInfo.texChangeFrame);
+            }
+        }
 
         const bloomObjName = `${this.objName}Bloom`;
         if (sceneObjHolder.modelCache.isObjectDataExist(bloomObjName)) {
@@ -1211,7 +1192,8 @@ export class Kinopio extends NPCActor {
         }
 
         // Bind the color change animation.
-        bindColorChangeAnimation(this, fallback(getJMapInfoArg1(infoIter), 0));
+        startBrk(this, 'ColorChange');
+        setBrkFrameAndStop(this, fallback(getJMapInfoArg1(infoIter), 0));
 
         // If we have an SW_APPEAR, then hide us until that switch triggers...
         if (fallback(infoIter.getValueNumber('SW_APPEAR'), -1) !== -1)
@@ -1293,8 +1275,8 @@ export class Penguin extends NPCActor<PenguinNrv> {
             this.startAction(`Wait`);
         }
 
-        // Bind the color change animation.
-        bindColorChangeAnimation(this, fallback(getJMapInfoArg7(infoIter), 0));
+        startBrk(this, 'ColorChange');
+        setBrkFrameAndStop(this, fallback(getJMapInfoArg7(infoIter), 0));
 
         this.initNerve(PenguinNrv.Wait);
     }
@@ -1342,7 +1324,9 @@ export class PenguinRacer extends NPCActor {
         this.equipment(sceneObjHolder, itemGoods);
 
         const arg7 = fallback(getJMapInfoArg7(infoIter), 0);
-        bindColorChangeAnimation(this, arg7);
+        startBrk(this, 'ColorChange');
+        setBrkFrameAndStop(this, arg7);
+
         this.startAction('RacerWait');
     }
 
@@ -1372,11 +1356,11 @@ export class TicoComet extends NPCActor {
         this.goods0!.startAction('LeftRotate');
         this.goods1!.startAction('RightRotate');
 
-        startBtkIfExist(this, "TicoComet");
-        startBvaIfExist(this, "Small0");
+        startBtk(this, "TicoComet");
+        startBva(this, "Small0");
 
-        // TODO(jstpierre): setBrkFrameAndStop
-        bindColorChangeAnimation(this, 0, "Normal");
+        startBrk(this, 'Normal');
+        setBrkFrameAndStop(this, 0);
 
         this.startAction('Wait');
     }
@@ -1830,7 +1814,8 @@ export class GCaptureTarget extends LiveActor {
         connectToSceneNoSilhouettedMapObjStrongLight(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
         startBck(this, 'Wait');
-        bindColorChangeAnimation(this, 1, 'Switch');
+        startBrk(this, 'Switch');
+        setBrkFrameAndStop(this, 1);
 
         emitEffect(sceneObjHolder, this, 'TargetLight');
         emitEffect(sceneObjHolder, this, 'TouchAble');
@@ -2010,8 +1995,10 @@ export class Tico extends NPCActor {
         this.initEffectKeeper(sceneObjHolder, null);
 
         const color = fallback(getJMapInfoArg0(infoIter), -1);
-        if (color !== -1)
-            bindColorChangeAnimation(this, color);
+        if (color !== -1) {
+            startBrk(this, 'ColorChange');
+            setBrkFrameAndStop(this, color);
+        }
 
         this.startAction('Wait');
     }
@@ -2425,15 +2412,15 @@ export class SurprisedGalaxy extends LiveActor {
     }
 }
 
-abstract class SuperSpinDriver extends LiveActor {
-    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+class SuperSpinDriver extends LiveActor {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, colorArg: number) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, "SuperSpinDriver");
         connectToSceneNoSilhouettedMapObjStrongLight(sceneObjHolder, this);
 
-        this.initColor();
+        this.initColor(colorArg);
         startBck(this, 'Wait');
     }
 
@@ -2441,28 +2428,34 @@ abstract class SuperSpinDriver extends LiveActor {
         sceneObjHolder.modelCache.requestObjectData("SuperSpinDriver");
     }
 
-    protected abstract initColor(): void;
-}
+    private initColor(colorArg: number): void {
+        startBtp(this, 'SuperSpinDriver');
+        setBtpFrameAndStop(this, colorArg);
 
-export class SuperSpinDriverYellow extends SuperSpinDriver {
-    protected initColor(): void {
-        bindTexChangeAnimation(this, 0, 'SuperSpinDriver');
-        startBrkIfExist(this, 'Yellow');
+        if (colorArg === 0) {
+            startBrk(this, 'Yellow');
+        } else if (colorArg === 1) {
+            startBrk(this, 'Green');
+        } else {
+            startBrk(this, 'Pink');
+        }
     }
 }
 
-export class SuperSpinDriverGreen extends SuperSpinDriver {
-    protected initColor(): void {
-        bindTexChangeAnimation(this, 1, 'SuperSpinDriver');
-        startBrkIfExist(this, 'Green');
-    }
+export function requestArchivesSuperSpinDriver(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    SuperSpinDriver.requestArchives(sceneObjHolder, infoIter);
 }
 
-export class SuperSpinDriverPink extends SuperSpinDriver {
-    protected initColor(): void {
-        bindTexChangeAnimation(this, 2, 'SuperSpinDriver');
-        startBrkIfExist(this, 'Pink');
-    }
+export function createSuperSpinDriverYellow(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): SuperSpinDriver {
+    return new SuperSpinDriver(zoneAndLayer, sceneObjHolder, infoIter, 0);
+}
+
+export function createSuperSpinDriverGreen(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): SuperSpinDriver {
+    return new SuperSpinDriver(zoneAndLayer, sceneObjHolder, infoIter, 1);
+}
+
+export function createSuperSpinDriverPink(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): SuperSpinDriver {
+    return new SuperSpinDriver(zoneAndLayer, sceneObjHolder, infoIter, 2);
 }
 
 class WaveFloatingForce {
@@ -3257,7 +3250,8 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
         moveCoordAndTransToNearestRailPos(this);
         getRailDirection(this.direction, this);
         const colorChangeFrame = fallback(getJMapInfoArg0(infoIter), 0);
-        bindColorChangeAnimation(this, colorChangeFrame);
+        startBrk(this, 'ColorChange');
+        setBrkFrameAndStop(this, colorChangeFrame);
 
         const rnd = getRandomInt(0, 2);
         if (rnd === 0)

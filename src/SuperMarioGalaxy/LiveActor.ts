@@ -7,7 +7,7 @@ import { vec3, mat4 } from "gl-matrix";
 import { SceneObjHolder, getObjectName, FPS, getDeltaTimeFrames, ResourceHolder } from "./Main";
 import { GfxTexture } from "../gfx/platform/GfxPlatform";
 import { EFB_WIDTH, EFB_HEIGHT } from "../gx/gx_material";
-import { JMapInfoIter, createCsvParser, getJMapInfoScale, getJMapInfoTransLocal, getJMapInfoRotateLocal, getJMapInfoBool } from "./JMapInfo";
+import { JMapInfoIter, createCsvParser, getJMapInfoTransLocal, getJMapInfoRotateLocal, getJMapInfoBool } from "./JMapInfo";
 import { TextureMapping } from "../TextureHolder";
 import { computeModelMatrixSRT, computeEulerAngleRotationFromSRTMatrix } from "../MathHelpers";
 import { Camera } from "../Camera";
@@ -18,6 +18,8 @@ import { LoopMode } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as Viewer from '../viewer';
 import { assertExists, fallback } from "../util";
 import { RailRider } from "./RailRider";
+import { BvaPlayer, BrkPlayer, BtkPlayer, BtpPlayer } from "./Animation";
+import { J3DFrameCtrl } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
 
 function setIndirectTextureOverride(modelInstance: J3DModelInstance, sceneTexture: GfxTexture): void {
     const m = modelInstance.getTextureMappingReference("IndDummy");
@@ -84,35 +86,35 @@ export function startBckIfExist(actor: LiveActor, animationName: string): boolea
 export function startBtkIfExist(actor: LiveActor, animationName: string): boolean {
     const btk = actor.resourceHolder.getRes(actor.resourceHolder.btkTable, animationName);
     if (btk !== null)
-        actor.modelInstance!.bindTTK1(btk);
+        actor.modelManager!.startBtk(animationName);
     return btk !== null;
 }
 
 export function startBrkIfExist(actor: LiveActor, animationName: string): boolean {
     const brk = actor.resourceHolder.getRes(actor.resourceHolder.brkTable, animationName);
     if (brk !== null)
-        actor.modelInstance!.bindTRK1(brk);
+        actor.modelManager!.startBrk(animationName);
     return brk !== null;
 }
 
 export function startBpkIfExist(actor: LiveActor, animationName: string): boolean {
     const bpk = actor.resourceHolder.getRes(actor.resourceHolder.bpkTable, animationName);
     if (bpk !== null)
-        actor.modelInstance!.bindTRK1(bpk);
+        actor.modelManager!.startBpk(animationName);
     return bpk !== null;
 }
 
 export function startBtpIfExist(actor: LiveActor, animationName: string): boolean {
     const btp = actor.resourceHolder.getRes(actor.resourceHolder.btpTable, animationName);
     if (btp !== null)
-        actor.modelInstance!.bindTPT1(btp);
+        actor.modelManager!.startBtp(animationName);
     return btp !== null;
 }
 
 export function startBvaIfExist(actor: LiveActor, animationName: string): boolean {
     const bva = actor.resourceHolder.getRes(actor.resourceHolder.bvaTable, animationName);
     if (bva !== null)
-        actor.modelInstance!.bindVAF1(bva);
+        actor.modelManager!.startBva(animationName);
     return bva !== null;
 }
 
@@ -188,9 +190,96 @@ class ActorAnimKeeper {
     }
 }
 
-export function getPlacedZoneId(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): number {
-    const stageDataHolder = assertExists(sceneObjHolder.stageDataHolder.findPlacedStageDataHolder(infoIter));
-    return stageDataHolder.zoneId;
+export class ModelManager {
+    public resourceHolder: ResourceHolder;
+    public modelInstance: J3DModelInstance;
+    public btkPlayer: BtkPlayer | null = null;
+    public brkPlayer: BrkPlayer | null = null;
+    public btpPlayer: BtpPlayer | null = null;
+    public bpkPlayer: BrkPlayer | null = null;
+    public bvaPlayer: BvaPlayer | null = null;
+
+    constructor(sceneObjHolder: SceneObjHolder, objName: string) {
+        this.resourceHolder = sceneObjHolder.modelCache.getResourceHolder(objName);
+
+        const bmdModel = this.resourceHolder.getModel(objName);
+        this.modelInstance = new J3DModelInstance(bmdModel);
+        this.modelInstance.name = objName;
+        this.modelInstance.animationController.fps = FPS;
+        this.modelInstance.animationController.phaseFrames = Math.random() * 1500;
+
+        if (this.resourceHolder.btkTable.size > 0)
+            this.btkPlayer = new BtkPlayer(this.resourceHolder.btkTable, this.modelInstance);
+        if (this.resourceHolder.brkTable.size > 0)
+            this.brkPlayer = new BrkPlayer(this.resourceHolder.brkTable, this.modelInstance);
+        if (this.resourceHolder.btpTable.size > 0)
+            this.btpPlayer = new BtpPlayer(this.resourceHolder.btpTable, this.modelInstance);
+        if (this.resourceHolder.bpkTable.size > 0)
+            this.bpkPlayer = new BrkPlayer(this.resourceHolder.bpkTable, this.modelInstance);
+        if (this.resourceHolder.bvaTable.size > 0)
+            this.bvaPlayer = new BvaPlayer(this.resourceHolder.bvaTable, this.modelInstance);
+    }
+
+    public calcAnim(viewerInput: Viewer.ViewerRenderInput): void {
+        if (this.bvaPlayer !== null)
+            this.bvaPlayer.calc();
+
+        this.modelInstance.animationController.setTimeFromViewerInput(viewerInput);
+        this.modelInstance.calcAnim(viewerInput.camera);
+    }
+
+    public update(deltaTimeFrames: number): void {
+        if (this.btkPlayer !== null)
+            this.btkPlayer.update(deltaTimeFrames);
+        if (this.brkPlayer !== null)
+            this.brkPlayer.update(deltaTimeFrames);
+        if (this.btpPlayer !== null)
+            this.btpPlayer.update(deltaTimeFrames);
+        if (this.bpkPlayer !== null)
+            this.bpkPlayer.update(deltaTimeFrames);
+        if (this.bvaPlayer !== null)
+            this.bvaPlayer.update(deltaTimeFrames);
+    }
+
+    public getBtkCtrl(): J3DFrameCtrl {
+        return this.btkPlayer!.frameCtrl;
+    }
+
+    public startBtk(name: string): void {
+        this.btkPlayer!.start(name);
+    }
+
+    public getBrkCtrl(): J3DFrameCtrl {
+        return this.brkPlayer!.frameCtrl;
+    }
+
+    public startBrk(name: string): void {
+        this.brkPlayer!.start(name);
+    }
+
+    public getBtpCtrl(): J3DFrameCtrl {
+        return this.btpPlayer!.frameCtrl;
+    }
+
+    public startBtp(name: string): void {
+        this.btpPlayer!.start(name);
+    }
+
+    public getBpkCtrl(): J3DFrameCtrl {
+        return this.bpkPlayer!.frameCtrl;
+    }
+
+    public startBpk(name: string): void {
+        this.bpkPlayer!.start(name);
+    }
+
+    public getBvaCtrl(): J3DFrameCtrl {
+        return this.bvaPlayer!.frameCtrl;
+    }
+
+    public startBva(name: string): void {
+        this.bvaPlayer!.start(name);
+    }
 }
 
 export function getJMapInfoTrans(dst: vec3, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -250,21 +339,6 @@ export const enum MessageType {
     MapPartsRailMover_TryRotate = 0xCB,
     MapPartsRailMover_TryRotateBetweenPoints = 0xCD,
     MapPartsRailMover_Vanish = 0xCF,
-}
-
-export class ModelManager {
-    public resourceHolder: ResourceHolder;
-    public modelInstance: J3DModelInstance;
-
-    constructor(sceneObjHolder: SceneObjHolder, objName: string) {
-        this.resourceHolder = sceneObjHolder.modelCache.getResourceHolder(objName);
-
-        const bmdModel = this.resourceHolder.getModel(objName);
-        this.modelInstance = new J3DModelInstance(bmdModel);
-        this.modelInstance.name = objName;
-        this.modelInstance.animationController.fps = FPS;
-        this.modelInstance.animationController.phaseFrames = Math.random() * 1500;
-    }
 }
 
 export class LiveActor<TNerve extends number = number> extends NameObj {
@@ -423,15 +497,13 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     }
 
     public calcAnim(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        if (this.modelInstance === null)
+        if (this.modelManager === null)
             return;
 
         // calcAnmMtx
-        vec3.copy(this.modelInstance.baseScale, this.scale);
+        vec3.copy(this.modelManager.modelInstance.baseScale, this.scale);
         this.calcAndSetBaseMtx(viewerInput);
-
-        this.modelInstance.animationController.setTimeFromViewerInput(viewerInput);
-        this.modelInstance.calcAnim(viewerInput.camera);
+        this.modelManager.calcAnim(viewerInput);
     }
 
     public calcViewAndEntry(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
@@ -479,6 +551,9 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         if (this.visibleAlive) {
             const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+
+            if (this.modelManager !== null)
+                this.modelManager.update(deltaTimeFrames);
 
             if (this.spine !== null)
                 this.spine.update(deltaTimeFrames);

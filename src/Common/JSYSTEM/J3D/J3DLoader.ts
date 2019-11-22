@@ -19,6 +19,7 @@ import BitMap from '../../../BitMap';
 import { autoOptimizeMaterial } from '../../../gx/gx_render';
 import { Color, colorNew } from '../../../Color';
 import { readBTI_Texture, BTI_Texture } from '../JUTTexture';
+import { VAF1_getVisibility } from './J3DGraphAnimator';
 
 //#region Helpers
 // ResNTAB / JUTNameTab
@@ -578,7 +579,7 @@ export interface MAT3 {
     materialEntries: MaterialEntry[];
 }
 
-function calcTexMtx_Basic(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number, centerS: number, centerT: number, centerQ: number): void {
+export function calcTexMtx_Basic(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number, centerS: number, centerT: number, centerQ: number): void {
     const theta = rotation * Math.PI;
     const sinR = Math.sin(theta);
     const cosR = Math.cos(theta);
@@ -594,7 +595,7 @@ function calcTexMtx_Basic(dst: mat4, scaleS: number, scaleT: number, rotation: n
     dst[13] = translationT + centerT + -scaleT * (-sinR * centerS + cosR * centerT);
 }
 
-function calcTexMtx_Maya(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
+export function calcTexMtx_Maya(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
     const theta = rotation * Math.PI;
     const sinR = Math.sin(theta);
     const cosR = Math.cos(theta);
@@ -1265,7 +1266,7 @@ interface AnimationTrack {
     frames: AnimationKeyframe[];
 }
 
-interface AnimationBase {
+export interface AnimationBase {
     duration: number;
     loopMode: LoopMode;
 }
@@ -1360,9 +1361,8 @@ function translateAnimationTrack(data: Float32Array | Int16Array, scale: number,
 //#endregion
 //#region J3DAnmTextureSRTKey
 //#region TTK1
-interface TTK1AnimationEntry {
+export interface TTK1AnimationEntry {
     materialName: string;
-    remapIndex: number;
     texGenIndex: number;
     centerS: number;
     centerT: number;
@@ -1379,6 +1379,7 @@ interface TTK1AnimationEntry {
 }
 
 export interface TTK1 extends AnimationBase {
+    isMaya: boolean;
     uvAnimationEntries: TTK1AnimationEntry[];
 }
 
@@ -1399,6 +1400,7 @@ function readTTK1Chunk(buffer: ArrayBufferSlice): TTK1 {
     const sTableOffs = view.getUint32(0x28);
     const rTableOffs = view.getUint32(0x2C);
     const tTableOffs = view.getUint32(0x30);
+    const isMaya = view.getUint32(0x5C) === 1;
 
     const rotationScale = Math.pow(2, rotationDecimal) / 0x7FFF;
 
@@ -1421,7 +1423,6 @@ function readTTK1Chunk(buffer: ArrayBufferSlice): TTK1 {
     const uvAnimationEntries: TTK1AnimationEntry[] = [];
     for (let i = 0; i < animationCount; i++) {
         const materialName = materialNameTable[i];
-        const remapIndex = view.getUint16(remapTableOffs + i * 0x02);
         const texGenIndex = view.getUint8(texMtxIndexTableOffs + i);
         const centerS = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x00);
         const centerT = view.getFloat32(textureCenterTableOffs + i * 0x0C + 0x04);
@@ -1436,7 +1437,7 @@ function readTTK1Chunk(buffer: ArrayBufferSlice): TTK1 {
         const rotationQ = readAnimationTrack(rTable, rotationScale);
         const translationQ = readAnimationTrack(tTable, 1);
         uvAnimationEntries.push({
-            materialName, remapIndex, texGenIndex,
+            materialName, texGenIndex,
             centerS, centerT, centerQ,
             scaleS, rotationS, translationS,
             scaleT, rotationT, translationT,
@@ -1444,13 +1445,13 @@ function readTTK1Chunk(buffer: ArrayBufferSlice): TTK1 {
          });
     }
 
-    return { duration, loopMode, uvAnimationEntries };
+    return { duration, loopMode, isMaya, uvAnimationEntries };
 }
 
 export class TTK1Animator {
     constructor(public animationController: AnimationController, private ttk1: TTK1, private animationEntry: TTK1AnimationEntry) {}
 
-    public calcTexMtx(dst: mat4, isMaya: boolean): void {
+    public calcTexMtx(dst: mat4): void {
         const frame = this.animationController.getTimeInFrames();
         const animFrame = getAnimFrame(this.ttk1, frame);
 
@@ -1460,7 +1461,7 @@ export class TTK1Animator {
         const translationS = sampleAnimationData(this.animationEntry.translationS, animFrame);
         const translationT = sampleAnimationData(this.animationEntry.translationT, animFrame);
 
-        if (isMaya) {
+        if (this.ttk1.isMaya) {
             calcTexMtx_Maya(dst, scaleS, scaleT, rotation, translationS, translationT);
         } else {
             const centerS = this.animationEntry.centerS;
@@ -1493,9 +1494,8 @@ export class BTK {
 //#endregion
 //#region J3DAnmTevRegKey
 //#region TRK1
-interface TRK1AnimationEntry {
+export interface TRK1AnimationEntry {
     materialName: string;
-    remapIndex: number;
     colorKind: ColorKind;
     r: AnimationTrack;
     g: AnimationTrack;
@@ -1558,7 +1558,6 @@ function readTRK1Chunk(buffer: ArrayBufferSlice): TRK1 {
     animationTableIdx = registerColorAnimationTableOffs;
     for (let i = 0; i < registerColorAnimationTableCount; i++) {
         const materialName = registerNameTable[i];
-        const remapIndex = view.getUint16(registerRemapTableOffs + i * 0x02);
         const r = readAnimationTrack(registerRTable);
         const g = readAnimationTrack(registerGTable);
         const b = readAnimationTrack(registerBTable);
@@ -1566,7 +1565,7 @@ function readTRK1Chunk(buffer: ArrayBufferSlice): TRK1 {
         const colorId = view.getUint8(animationTableIdx);
         const colorKind = ColorKind.C0 + colorId;
         animationTableIdx += 0x04;
-        animationEntries.push({ materialName, remapIndex, colorKind, r, g, b, a });
+        animationEntries.push({ materialName, colorKind, r, g, b, a });
     }
 
     const konstantRTable = buffer.createTypedArray(Int16Array, konstantROffs, konstantRCount, Endianness.BIG_ENDIAN);
@@ -1577,7 +1576,6 @@ function readTRK1Chunk(buffer: ArrayBufferSlice): TRK1 {
     animationTableIdx = konstantColorAnimationTableOffs;
     for (let i = 0; i < konstantColorAnimationTableCount; i++) {
         const materialName = konstantNameTable[i];
-        const remapIndex = view.getUint16(konstantRemapTableOffs + i * 0x02);
         const r = readAnimationTrack(konstantRTable);
         const g = readAnimationTrack(konstantGTable);
         const b = readAnimationTrack(konstantBTable);
@@ -1585,7 +1583,7 @@ function readTRK1Chunk(buffer: ArrayBufferSlice): TRK1 {
         const colorId = view.getUint8(animationTableIdx);
         const colorKind = ColorKind.K0 + colorId;
         animationTableIdx += 0x04;
-        animationEntries.push({ materialName, remapIndex, colorKind, r, g, b, a });
+        animationEntries.push({ materialName, colorKind, r, g, b, a });
     }
 
     return { duration, loopMode, animationEntries };
@@ -1664,13 +1662,12 @@ function readPAK1Chunk(buffer: ArrayBufferSlice): TRK1 {
     animationTableIdx = colorAnimationTableOffs;
     for (let i = 0; i < colorAnimationTableCount; i++) {
         const materialName = nameTable[i];
-        const remapIndex = view.getUint16(remapTableOffs + i * 0x02);
         const r = readAnimationTrack(registerRTable);
         const g = readAnimationTrack(registerGTable);
         const b = readAnimationTrack(registerBTable);
         const a = readAnimationTrack(registerATable);
         const colorKind = ColorKind.MAT0;
-        animationEntries.push({ materialName, remapIndex, colorKind, r, g, b, a });
+        animationEntries.push({ materialName, colorKind, r, g, b, a });
     }
 
     return { duration, loopMode, animationEntries };
@@ -1821,9 +1818,9 @@ export class BCK {
 //#endregion
 //#region J3DAnmTexPattern
 //#region TPT1
-interface TPT1AnimationEntry {
+export interface TPT1AnimationEntry {
     materialName: string;
-    remapIndex: number;
+    texMapIndex: number;
     textureIndices: number[];
 }
 
@@ -1850,10 +1847,10 @@ function readTPT1Chunk(buffer: ArrayBufferSlice): TPT1 {
     animationTableIdx = materialAnimationTableOffs;
     for (let i = 0; i < materialAnimationTableCount; i++) {
         const materialName = nameTable[i];
-        const remapIndex = view.getUint16(remapTableOffs + i * 0x02);
 
         const textureCount = view.getUint16(animationTableIdx + 0x00);
         const textureFirstIndex = view.getUint16(animationTableIdx + 0x02);
+        const texMapIndex = view.getUint8(animationTableIdx + 0x04);
 
         const textureIndices: number[] = [];
         for (let j = 0; j < textureCount; j++) {
@@ -1861,7 +1858,7 @@ function readTPT1Chunk(buffer: ArrayBufferSlice): TPT1 {
             textureIndices.push(textureIndex);
         }
 
-        animationEntries.push({ materialName, remapIndex, textureIndices });
+        animationEntries.push({ materialName, texMapIndex, textureIndices });
         animationTableIdx += 0x08;
     }
 
@@ -1883,11 +1880,7 @@ export class TPT1Animator {
 }
 
 export function bindTPT1Animator(animationController: AnimationController, tpt1: TPT1, materialName: string, texMap: GX.TexMapID): TPT1Animator | null {
-    // TODO(jstpierre): How does TPT1 determine the TexMap used?
-    if (texMap !== 0)
-        return null;
-
-    const animationEntry = tpt1.animationEntries.find((entry) => entry.materialName === materialName);
+    const animationEntry = tpt1.animationEntries.find((entry) => entry.materialName === materialName && entry.texMapIndex === texMap);
     if (animationEntry === undefined)
         return null;
 
@@ -1907,7 +1900,6 @@ export class BTP {
 //#endregion
 //#region J3DAnmVisibilityFull
 //#region VAF1
-
 export interface ShapeVisibilityEntry {
     shapeVisibility: BitMap;
 }
@@ -1950,21 +1942,9 @@ export class VAF1Animator {
     constructor(public animationController: AnimationController, public vaf1: VAF1) {}
 
     public calcVisibility(shapeIndex: number): boolean {
-        const entry = assertExists(this.vaf1.visibilityAnimationTracks[shapeIndex]);
-
         const frame = this.animationController.getTimeInFrames();
         const animFrame = getAnimFrame(this.vaf1, frame);
-
-        // animFrame can return a partial keyframe, but visibility information is frame-specific.
-        // Resolve this by treating this as a stepped track, rounded. e.g. 15.9 is keyframe 16.
-        const animFrameInt = (animFrame + 0.5) | 0;
-
-        if (animFrameInt >= entry.shapeVisibility.numBits) {
-            // If we're past the end, use the last frame.
-            return entry.shapeVisibility.getBit(entry.shapeVisibility.numBits - 1);
-        } else {
-            return entry.shapeVisibility.getBit(animFrameInt);
-        }
+        return VAF1_getVisibility(this.vaf1, shapeIndex, animFrame);
     }
 }
 

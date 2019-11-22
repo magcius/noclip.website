@@ -9,6 +9,7 @@ import { DrawType, DrawBufferType, CalcAnimType, MovementType } from "./NameObj"
 import { assertExists } from "../util";
 import { BTIData, BTI } from "../Common/JSYSTEM/JUTTexture";
 import { RARC } from "../j3d/rarc";
+import { getRes } from "./Animation";
 
 export function isBckStopped(actor: LiveActor): boolean {
     const animator = actor.modelInstance!.ank1Animator!;
@@ -148,4 +149,74 @@ export function connectToSceneEnvironmentStrongLight(sceneObjHolder: SceneObjHol
 
 export function connectToSceneEnemyMovement(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, 0x2A, -1, -1, -1);
+}
+
+export function isExistBtk(actor: LiveActor, name: string): boolean {
+    return getRes(actor.modelManager!.resourceHolder.btkTable, name) !== null;
+}
+
+export function isExistBrk(actor: LiveActor, name: string): boolean {
+    return getRes(actor.modelManager!.resourceHolder.brkTable, name) !== null;
+}
+
+export function isExistBtp(actor: LiveActor, name: string): boolean {
+    return getRes(actor.modelManager!.resourceHolder.btpTable, name) !== null;
+}
+
+export function isExistBpk(actor: LiveActor, name: string): boolean {
+    return getRes(actor.modelManager!.resourceHolder.bpkTable, name) !== null;
+}
+
+export function isExistBva(actor: LiveActor, name: string): boolean {
+    return getRes(actor.modelManager!.resourceHolder.bvaTable, name) !== null;
+}
+
+export function startBtk(actor: LiveActor, name: string): void {
+    actor.modelManager!.startBtk(name);
+}
+
+export function startBrk(actor: LiveActor, name: string): void {
+    actor.modelManager!.startBrk(name);
+}
+
+export function startBtp(actor: LiveActor, name: string): void {
+    actor.modelManager!.startBtp(name);
+}
+
+export function startBpk(actor: LiveActor, name: string): void {
+    actor.modelManager!.startBpk(name);
+}
+
+export function startBva(actor: LiveActor, name: string): void {
+    actor.modelManager!.startBva(name);
+}
+
+export function setBtkFrameAndStop(actor: LiveActor, frame: number): void {
+    const ctrl = actor.modelManager!.getBtkCtrl();
+    ctrl.currentTimeInFrames = frame;
+    ctrl.speedInFrames = 0.0;
+}
+
+export function setBrkFrameAndStop(actor: LiveActor, frame: number): void {
+    const ctrl = actor.modelManager!.getBrkCtrl();
+    ctrl.currentTimeInFrames = frame;
+    ctrl.speedInFrames = 0.0;
+}
+
+export function setBtpFrameAndStop(actor: LiveActor, frame: number): void {
+    const ctrl = actor.modelManager!.getBtpCtrl();
+    ctrl.currentTimeInFrames = frame;
+    ctrl.speedInFrames = 0.0;
+}
+
+export function setBpkFrameAndStop(actor: LiveActor, frame: number): void {
+    const ctrl = actor.modelManager!.getBpkCtrl();
+    ctrl.currentTimeInFrames = frame;
+    ctrl.speedInFrames = 0.0;
+}
+
+export function setBvaFrameAndStop(actor: LiveActor, frame: number): void {
+    const ctrl = actor.modelManager!.getBvaCtrl();
+    ctrl.currentTimeInFrames = frame;
+    ctrl.speedInFrames = 0.0;
 }

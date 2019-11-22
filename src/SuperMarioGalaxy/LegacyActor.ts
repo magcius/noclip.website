@@ -8,8 +8,8 @@ import { ViewerRenderInput } from "../viewer";
 import { RARC } from "../j3d/rarc";
 import { LoopMode, BTP, BVA } from "../Common/JSYSTEM/J3D/J3DLoader";
 import AnimationController from "../AnimationController";
-import { initDefaultPos, isExistIndirectTexture, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneIndirectMapObjStrongLight, connectToSceneBloom } from "./ActorUtil";
-import { bindColorChangeAnimation, bindTexChangeAnimation, emitEffect, MiniRouteGalaxy, MiniRoutePart, MiniRoutePoint, createModelObjMapObj } from "./Actors";
+import { initDefaultPos, isExistIndirectTexture, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneIndirectMapObjStrongLight, connectToSceneBloom, isExistBrk, startBrk, setBrkFrameAndStop, isExistBtk, startBtk, setBtkFrameAndStop, isExistBtp, startBtp, setBtpFrameAndStop } from "./ActorUtil";
+import { emitEffect, MiniRouteGalaxy, MiniRoutePart, MiniRoutePoint, createModelObjMapObj } from "./Actors";
 
 // The old actor code, before we started emulating things natively.
 // Mostly used for SMG2 as we do not have symbols.
@@ -184,8 +184,20 @@ export class NoclipLegacyActorSpawner {
         }
 
         const bindChangeAnimation = (actor: NoclipLegacyActor, rarc: RARC, frame: number) => {
-            bindColorChangeAnimation(actor, frame);
-            bindTexChangeAnimation(actor, frame);
+            if (isExistBrk(actor, 'ColorChange')) {
+                startBrk(actor, 'ColorChange');
+                setBrkFrameAndStop(actor, frame);
+            }
+
+            if (isExistBtk(actor, 'TexChange')) {
+                startBtk(actor, 'TexChange');
+                setBtkFrameAndStop(actor, frame);
+            }
+
+            if (isExistBtp(actor, 'TexChange')) {
+                startBtp(actor, 'TexChange');
+                setBtpFrameAndStop(actor, frame);
+            }
         };
 
         const spawnGraphNullable = async (arcName: string, tag: SceneGraphTag = SceneGraphTag.Normal, animOptions: AnimOptions | null | undefined = undefined): Promise<[NoclipLegacyActor, RARC] | null> => {

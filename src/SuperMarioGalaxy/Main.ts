@@ -582,6 +582,8 @@ function patchBMDModel(bmdModel: J3DModelData): void {
     }
 }
 
+export type ResTable<T> = Map<string, T>;
+
 export class ResourceHolder {
     public modelTable = new Map<string, J3DModelData>();
     public motionTable = new Map<string, ANK1>();
@@ -593,7 +595,7 @@ export class ResourceHolder {
     public banmtTable = new Map<string, BckCtrl>();
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public arc: RARC.RARC) {
-        this.initEachResTable(device, this.modelTable, ['.bdl', '.bmd'], (ext, file) => {
+        this.initEachResTable(this.modelTable, ['.bdl', '.bmd'], (ext, file) => {
             const bmd = BMD.parse(file.buffer);
             patchBMD(bmd);
             const bmdModel = new J3DModelData(device, cache, bmd);
@@ -601,7 +603,7 @@ export class ResourceHolder {
             return bmdModel;
         });
 
-        this.initEachResTable(device, this.motionTable, ['.bck', '.bca'], (ext, file) => {
+        this.initEachResTable(this.motionTable, ['.bck', '.bca'], (ext, file) => {
             if (ext === '.bca')
                 debugger;
 
@@ -609,25 +611,25 @@ export class ResourceHolder {
         });
 
         // .blk
-        this.initEachResTable(device, this.btkTable, ['.btk'], (ext, file) => BTK.parse(file.buffer));
-        this.initEachResTable(device, this.bpkTable, ['.bpk'], (ext, file) => BPK.parse(file.buffer));
-        this.initEachResTable(device, this.btpTable, ['.btp'], (ext, file) => BTP.parse(file.buffer));
-        this.initEachResTable(device, this.brkTable, ['.brk'], (ext, file) => BRK.parse(file.buffer));
+        this.initEachResTable(this.btkTable, ['.btk'], (ext, file) => BTK.parse(file.buffer));
+        this.initEachResTable(this.bpkTable, ['.bpk'], (ext, file) => BPK.parse(file.buffer));
+        this.initEachResTable(this.btpTable, ['.btp'], (ext, file) => BTP.parse(file.buffer));
+        this.initEachResTable(this.brkTable, ['.brk'], (ext, file) => BRK.parse(file.buffer));
         // .bas
         // .bmt
-        this.initEachResTable(device, this.bvaTable, ['.bva'], (ext, file) => BVA.parse(file.buffer));
-        this.initEachResTable(device, this.banmtTable, ['.banmt'], (ext, file) => BckCtrl.parse(file.buffer));
+        this.initEachResTable(this.bvaTable, ['.bva'], (ext, file) => BVA.parse(file.buffer));
+        this.initEachResTable(this.banmtTable, ['.banmt'], (ext, file) => BckCtrl.parse(file.buffer));
     }
 
     public getModel(name: string): J3DModelData {
         return assertExists(this.modelTable.get(name.toLowerCase()));
     }
 
-    public getRes<T>(table: Map<string, T>, name: string): T | null {
+    public getRes<T>(table: ResTable<T>, name: string): T | null {
         return nullify(table.get(name.toLowerCase()));
     }
 
-    private initEachResTable<T>(device: GfxDevice, table: Map<string, T>, extensions: string[], constructor: (ext: string, file: RARC.RARCFile) => T): void {
+    private initEachResTable<T>(table: ResTable<T>, extensions: string[], constructor: (ext: string, file: RARC.RARCFile) => T): void {
         for (let i = 0; i < this.arc.files.length; i++) {
             const file = this.arc.files[i];
 
