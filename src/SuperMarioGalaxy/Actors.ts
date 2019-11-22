@@ -2116,10 +2116,12 @@ export class ShootingStar extends LiveActor<ShootingStarNrv> {
         this.delay = fallback(getJMapInfoArg1(infoIter), 240);
         this.distance = fallback(getJMapInfoArg2(infoIter), 2000);
 
-        calcUpVec(this.axisY, this);
-
         this.initNerve(ShootingStarNrv.PreShooting);
         this.initEffectKeeper(sceneObjHolder, 'ShootingStar');
+
+        this.calcAndSetBaseMtxBase();
+
+        calcUpVec(this.axisY, this);
 
         startBpkIfExist(this, 'ShootingStar');
     }

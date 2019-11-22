@@ -343,7 +343,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         this.modelManager = new ModelManager(sceneObjHolder, objName);
 
         vec3.copy(this.modelManager.modelInstance.baseScale, this.scale);
-        this.calcAndSetBaseMtxTR();
+        this.calcAndSetBaseMtxBase();
 
         // Compute the joint matrices an initial time in case anything wants to rely on them...
         this.modelManager.modelInstance.calcJointToWorld();
@@ -392,7 +392,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
             this.tryStartAllAnim(animationName);
     }
 
-    private calcAndSetBaseMtxTR(): void {
+    public calcAndSetBaseMtxBase(): void {
         makeMtxTRFromActor(this.modelInstance!.modelMatrix, this);
     }
 
@@ -408,7 +408,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     }
 
     public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
-        this.calcAndSetBaseMtxTR();
+        this.calcAndSetBaseMtxBase();
     }
 
     protected getActorVisible(camera: Camera): boolean {
